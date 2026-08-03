@@ -329,22 +329,35 @@ static const GUID TRAY_ICON_GUID =
 // When a High Contrast theme is active, the flyout and the notification
 // popup abandon their custom palettes and follow the system colors, like
 // the original Windows 7 UI did. The state is cached with a short TTL so
-// the paint path does not pay a SystemParametersInfo call on every redraw;
-// the TTL also makes switching into/out of High Contrast take effect on
-// its own, without a dedicated WM_SETTINGCHANGE handler.
+// the paint path does not pay a SystemParametersInfo call on every redraw.
+// A dedicated WM_SETTINGCHANGE/SPI_SETHIGHCONTRAST handler (TrayMsgHandlerProc)
+// force-refreshes the cache and invalidates any open flyout/notify window,
+// so switching into/out of High Contrast is immediate rather than waiting
+// on the TTL to expire on some unrelated repaint (review issue).
 // ----------------------------------------------------------------------------
+static bool g_cachedHighContrast = false;
+static DWORD g_lastHCCheckTick = 0;
 static bool IsHighContrastActive() {
-    static bool s_cachedHighContrast = false;
-    static DWORD s_lastCheckTick = 0;
     DWORD now = GetTickCount();
-    if (now - s_lastCheckTick > 2000) {
+    if (now - g_lastHCCheckTick > 2000) {
         HIGHCONTRASTW hc = { sizeof(hc) };
-        s_cachedHighContrast =
+        g_cachedHighContrast =
             (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
              (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
-        s_lastCheckTick = now;
+        g_lastHCCheckTick = now;
     }
-    return s_cachedHighContrast;
+    return g_cachedHighContrast;
+}
+// Forces an immediate, non-cached re-check of High Contrast state. Used by
+// the WM_SETTINGCHANGE/SPI_SETHIGHCONTRAST handler so an open flyout/notify
+// window can be invalidated right away instead of waiting up to 2s for the
+// paint-time TTL above to expire on its own (review issue).
+static void RefreshHighContrastNow() {
+    HIGHCONTRASTW hc = { sizeof(hc) };
+    g_cachedHighContrast =
+        (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+         (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+    g_lastHCCheckTick = GetTickCount();
 }
 
 // Base64 decoder table
@@ -1575,6 +1588,13 @@ static HICON g_hShieldIcon = NULL;
 static HICON g_hProblemBalloonIcon = NULL;  
 static BOOL g_ProblemBalloonShowing = FALSE;
 static RECT g_CachedTrayIconRect = {0}; // Cached tray icon rect for mouse hook
+// Latches TRUE the instant a button-down lands on the tray icon while the
+// flyout is visible - i.e. before WM_ACTIVATE/WA_INACTIVE can hide the
+// window on the same click. Without this, ToggleFlyout() runs on the later
+// button-up and sees the flyout as already hidden (auto-hidden by the
+// activation change), so it just re-shows it instead of closing it: the
+// flyout blinks and clicking the icon can only ever open it (review issue #1).
+static BOOL g_TrayClickWhileFlyoutOpen = FALSE;
 static DWORD g_LastProblemBalloonTick = 0;
 static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
@@ -2159,9 +2179,9 @@ void FreeAllIcons() {
 // ============================================================================
 // Security State
 // ============================================================================
-static BOOL IsProblemTypeAlreadyDetected(int type) {
-    for (int i = 0; i < g_ActiveProblems && i < MAX_PROBLEMS; i++) {
-        if (g_ProblemTypes[i] == type) return TRUE;
+static BOOL IsProblemTypeAlreadyDetected(const int* problemTypes, int count, int type) {
+    for (int i = 0; i < count && i < MAX_PROBLEMS; i++) {
+        if (problemTypes[i] == type) return TRUE;
     }
     return FALSE;
 }
@@ -2172,34 +2192,38 @@ static BOOL IsProblemTypeCritical(int type) {
     return (type == PROB_FIREWALL || type == PROB_AUTOUPDATE ||
             type == PROB_ANTIVIRUS || type == PROB_RDP_NLA);
 }
-static BOOL AddProblem(int type, int* idx, int* criticalCount) {
+// All Check*() functions below build their results into a caller-owned local
+// array/idx/criticalCount instead of touching g_ProblemTypes directly (review
+// issue #3): CheckSecurityProviders() only takes the exclusive srwLock for the
+// final publish, not for the whole battery of slow checks.
+static BOOL AddProblem(int* problemTypes, int type, int* idx, int* criticalCount) {
     if (*idx >= MAX_PROBLEMS) return FALSE;
-    if (IsProblemTypeAlreadyDetected(type)) return FALSE;
-    g_ProblemTypes[(*idx)++] = type;
+    if (IsProblemTypeAlreadyDetected(problemTypes, *idx, type)) return FALSE;
+    problemTypes[(*idx)++] = type;
     if (IsProblemTypeCritical(type)) (*criticalCount)++;
     return TRUE;
 }
-static void CheckWscProvider(DWORD provider, int problemType, int* idx, int* criticalCount) {
+static void CheckWscProvider(DWORD provider, int problemType, int* problemTypes, int* idx, int* criticalCount) {
     WSC_SECURITY_PROVIDER_HEALTH health;
     if (WscGetSecurityProviderHealth(provider, &health) == S_OK) {
-        if (health == WSC_SECURITY_PROVIDER_HEALTH_POOR) AddProblem(problemType, idx, criticalCount);
+        if (health == WSC_SECURITY_PROVIDER_HEALTH_POOR) AddProblem(problemTypes, problemType, idx, criticalCount);
     }
 }
-static void CheckDefenderRealtime(int* idx, int* criticalCount) {
+static void CheckDefenderRealtime(int* problemTypes, int* idx, int* criticalCount) {
     RegKey hKey;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows Defender\\Real-Time Protection", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD dwDisabled = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"DisableRealtimeMonitoring", NULL, NULL, (LPBYTE)&dwDisabled, &dwSize) == ERROR_SUCCESS) {
-            if (dwDisabled != 0) AddProblem(PROB_DEFENDER_RT, idx, criticalCount);
+            if (dwDisabled != 0) AddProblem(problemTypes, PROB_DEFENDER_RT, idx, criticalCount);
         }
     }
 }
-static void CheckUACRegistry(int* idx, int* criticalCount) {
+static void CheckUACRegistry(int* problemTypes, int* idx, int* criticalCount) {
     RegKey hKey;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD dwEnableLUA = 1, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"EnableLUA", NULL, NULL, (LPBYTE)&dwEnableLUA, &dwSize) == ERROR_SUCCESS) {
-            if (dwEnableLUA == 0) AddProblem(PROB_UAC, idx, criticalCount);
+            if (dwEnableLUA == 0) AddProblem(problemTypes, PROB_UAC, idx, criticalCount);
         }
     }
 }
@@ -2277,7 +2301,7 @@ static BOOL IsServiceStartDisabled(const WCHAR* serviceName) {
     return disabled;
 }
 
-static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
+static void CheckAutoUpdateRegistry(int* problemTypes, int* idx, int* criticalCount) {
     // 1) Modern GPO: NoAutoUpdate (managed / enterprise environments)
     {
         RegKey hKey;
@@ -2287,7 +2311,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
             DWORD dwNoAuto = 0, dwSize = sizeof(DWORD);
             if (RegQueryValueExW(hKey, L"NoAutoUpdate", NULL, NULL, (LPBYTE)&dwNoAuto, &dwSize) == ERROR_SUCCESS) {
                 if (dwNoAuto != 0) {
-                    AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+                    AddProblem(problemTypes, PROB_AUTOUPDATE, idx, criticalCount);
                     return;
                 }
             }
@@ -2297,7 +2321,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
     // 2) Service start type: Update Orchestrator (UsoSvc) and legacy WU (wuauserv).
     // Only SERVICE_DISABLED counts as "updates off"; stopped-but-auto is normal.
     if (IsServiceStartDisabled(L"UsoSvc") || IsServiceStartDisabled(L"wuauserv")) {
-        AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+        AddProblem(problemTypes, PROB_AUTOUPDATE, idx, criticalCount);
         return;
     }
 
@@ -2309,7 +2333,7 @@ static void CheckAutoUpdateRegistry(int* idx, int* criticalCount) {
         DWORD dwAUOptions = 0, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"AUOptions", NULL, NULL, (LPBYTE)&dwAUOptions, &dwSize) == ERROR_SUCCESS) {
             if (dwAUOptions == 1) {
-                AddProblem(PROB_AUTOUPDATE, idx, criticalCount);
+                AddProblem(problemTypes, PROB_AUTOUPDATE, idx, criticalCount);
             }
         }
     }
@@ -2340,7 +2364,7 @@ const WCHAR* GetProblemText(int problemType) {
 // ============================================================================
 // SmartScreen Check
 // ============================================================================
-static void CheckSmartScreen(int* idx, int* criticalCount) {
+static void CheckSmartScreen(int* problemTypes, int* idx, int* criticalCount) {
     // Check Windows Defender SmartScreen status via registry
     // HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -> SmartScreenEnabled
     RegKey hKey;
@@ -2353,7 +2377,7 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)szValue, &dwSize) == ERROR_SUCCESS) {
             // Value can be "On" or "Off" (REG_SZ)
             if (dwType == REG_SZ && _wcsicmp(szValue, L"Off") == 0) {
-                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                AddProblem(problemTypes, PROB_SMARTSCREEN, idx, criticalCount);
                 return;
             }
         }
@@ -2362,7 +2386,7 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKey, L"SmartScreenEnabled", NULL, &dwType, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
             if (dwType == REG_DWORD && dwVal == 0) {
-                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                AddProblem(problemTypes, PROB_SMARTSCREEN, idx, criticalCount);
                 return;
             }
         }
@@ -2376,7 +2400,7 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
         DWORD dwVal = 1, dwSize = sizeof(DWORD);
         if (RegQueryValueExW(hKeyEdge, L"SmartScreenEnabled", NULL, NULL, (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
             if (dwVal == 0) {
-                AddProblem(PROB_SMARTSCREEN, idx, criticalCount);
+                AddProblem(problemTypes, PROB_SMARTSCREEN, idx, criticalCount);
             }
         }
     }
@@ -2386,40 +2410,42 @@ static void CheckSmartScreen(int* idx, int* criticalCount) {
 // Maintenance Checks (non-critical, warning-level)
 // ============================================================================
 
-// Check if system backup is configured and running
-static void CheckBackupStatus(int* idx, int* criticalCount) {
-    // Windows Backup service (SDRSVC) or wbengine
-    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    if (!hSCM) return;
+// Service start-type lookup with a TTL cache, shared by CheckBackupStatus()
+// and CheckWerStatus() (review issue #2). Unlike IsServiceStartDisabled(),
+// this distinguishes "service missing" from "service exists and enabled"
+// from "service exists and disabled", because CheckBackupStatus needs that
+// distinction (missing SDRSVC falls back to checking wbengine) while
+// IsServiceStartDisabled's callers only ever cared about the disabled case.
+// Kept as its own cache (separate from IsServiceStartDisabled's) rather than
+// changing that helper's return contract for its existing callers.
+enum { SVC_STATE_MISSING = 0, SVC_STATE_ENABLED = 1, SVC_STATE_DISABLED = 2 };
+static int GetServiceStartStateCached(const WCHAR* serviceName) {
+    static const DWORD kCacheMs = 3 * 60 * 1000; // 3 minutes - matches IsServiceStartDisabled
+    struct CacheEntry {
+        const WCHAR* name;
+        DWORD tick;
+        int   state;
+        BOOL  valid;
+    };
+    static CacheEntry s_cache[8] = {};
 
-    BOOL backupOk = FALSE;
-    // Check the main Windows Backup service
-    SC_HANDLE hSvc = OpenServiceW(hSCM, L"SDRSVC", SERVICE_QUERY_CONFIG);
-    if (hSvc) {
-        DWORD needed = 0;
-        QueryServiceConfigW(hSvc, NULL, 0, &needed);
-        if (needed > 0 && needed < 64 * 1024) {
-            BYTE* buf = (BYTE*)malloc(needed);
-            if (buf) {
-                QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
-                if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
-                    // If service is disabled, backup is not configured
-                    if (cfg->dwStartType == SERVICE_DISABLED) {
-                        backupOk = FALSE;
-                    } else {
-                        backupOk = TRUE; // service exists and is not disabled
-                    }
-                }
-                free(buf);
+    DWORD now = GetTickCount();
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (s_cache[i].valid && s_cache[i].name == serviceName) {
+            if ((now - s_cache[i].tick) < kCacheMs) {
+                return s_cache[i].state;
             }
+            s_cache[i].valid = FALSE; // expire
+            break;
         }
-        CloseServiceHandle(hSvc);
     }
 
-    if (!backupOk) {
-        // Also check wbengine (Windows Backup Engine)
-        hSvc = OpenServiceW(hSCM, L"wbengine", SERVICE_QUERY_CONFIG);
+    int state = SVC_STATE_MISSING;
+    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (hSCM) {
+        SC_HANDLE hSvc = OpenServiceW(hSCM, serviceName, SERVICE_QUERY_CONFIG);
         if (hSvc) {
+            state = SVC_STATE_ENABLED; // service exists; refine below
             DWORD needed = 0;
             QueryServiceConfigW(hSvc, NULL, 0, &needed);
             if (needed > 0 && needed < 64 * 1024) {
@@ -2427,48 +2453,55 @@ static void CheckBackupStatus(int* idx, int* criticalCount) {
                 if (buf) {
                     QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
                     if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
-                        if (cfg->dwStartType != SERVICE_DISABLED) {
-                            backupOk = TRUE;
-                        }
+                        state = (cfg->dwStartType == SERVICE_DISABLED)
+                                    ? SVC_STATE_DISABLED : SVC_STATE_ENABLED;
                     }
                     free(buf);
                 }
             }
             CloseServiceHandle(hSvc);
         }
+        CloseServiceHandle(hSCM);
+    } else {
+        Wh_Log(L"OpenSCManagerW failed for %s: %lu", serviceName, GetLastError());
     }
 
-    CloseServiceHandle(hSCM);
+    int slot = -1;
+    for (size_t i = 0; i < ARRAYSIZE(s_cache); ++i) {
+        if (!s_cache[i].valid) { slot = (int)i; break; }
+    }
+    if (slot < 0) {
+        // Cache full: evict the oldest entry.
+        slot = 0;
+        for (size_t i = 1; i < ARRAYSIZE(s_cache); ++i) {
+            if (s_cache[i].tick < s_cache[slot].tick) slot = (int)i;
+        }
+    }
+    s_cache[slot].name  = serviceName;
+    s_cache[slot].tick  = now;
+    s_cache[slot].state = state;
+    s_cache[slot].valid = TRUE;
+    return state;
+}
 
+// Check if system backup is configured and running
+static void CheckBackupStatus(int* problemTypes, int* idx, int* criticalCount) {
+    // Windows Backup service (SDRSVC) or wbengine
+    BOOL backupOk = (GetServiceStartStateCached(L"SDRSVC") == SVC_STATE_ENABLED);
     if (!backupOk) {
-        AddProblem(PROB_BACKUP, idx, criticalCount);
+        // Also check wbengine (Windows Backup Engine)
+        backupOk = (GetServiceStartStateCached(L"wbengine") == SVC_STATE_ENABLED);
+    }
+    if (!backupOk) {
+        AddProblem(problemTypes, PROB_BACKUP, idx, criticalCount);
     }
 }
 
 // Check Windows Error Reporting service status
-static void CheckWerStatus(int* idx, int* criticalCount) {
-    SC_HANDLE hSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    if (!hSCM) return;
-
-    SC_HANDLE hSvc = OpenServiceW(hSCM, L"WerSvc", SERVICE_QUERY_CONFIG);
-    if (hSvc) {
-        DWORD needed = 0;
-        QueryServiceConfigW(hSvc, NULL, 0, &needed);
-        if (needed > 0 && needed < 64 * 1024) {
-            BYTE* buf = (BYTE*)malloc(needed);
-            if (buf) {
-                QUERY_SERVICE_CONFIGW* cfg = (QUERY_SERVICE_CONFIGW*)buf;
-                if (QueryServiceConfigW(hSvc, cfg, needed, &needed)) {
-                    if (cfg->dwStartType == SERVICE_DISABLED) {
-                        AddProblem(PROB_WER, idx, criticalCount);
-                    }
-                }
-                free(buf);
-            }
-        }
-        CloseServiceHandle(hSvc);
+static void CheckWerStatus(int* problemTypes, int* idx, int* criticalCount) {
+    if (GetServiceStartStateCached(L"WerSvc") == SVC_STATE_DISABLED) {
+        AddProblem(problemTypes, PROB_WER, idx, criticalCount);
     }
-    CloseServiceHandle(hSCM);
 }
 
 // Battery check: warns when on battery power and charge is critically low.
@@ -2476,7 +2509,7 @@ static void CheckWerStatus(int* idx, int* criticalCount) {
 // (BATTERY_FLAG_NO_SYSTEM_BATTERY). Thresholds: <=10% = critical (STATE_ALERT),
 // <=20% = warning (STATE_WARNING). Does not count as a criticalCount hit to
 // avoid overriding genuine security alerts.
-static void CheckBatteryStatus(int* idx, int* criticalCount) {
+static void CheckBatteryStatus(int* problemTypes, int* idx, int* criticalCount) {
     SYSTEM_POWER_STATUS sps;
     if (!GetSystemPowerStatus(&sps)) return;
     // Skip desktops, VMs without battery, or unknown state
@@ -2488,7 +2521,7 @@ static void CheckBatteryStatus(int* idx, int* criticalCount) {
     BYTE pct = sps.BatteryLifePercent;
     if (pct == 255) return;                        // unknown percentage
     if (pct <= 20) {
-        AddProblem(PROB_BATTERY, idx, criticalCount);
+        AddProblem(problemTypes, PROB_BATTERY, idx, criticalCount);
     }
 }
 
@@ -2496,7 +2529,7 @@ static void CheckBatteryStatus(int* idx, int* criticalCount) {
 // Checks the two well-known registry keys that Windows sets when a reboot
 // is required to finish installing updates. This is maintenance-level
 // (warning only) and never bumps criticalCount.
-static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
+static void CheckWindowsUpdatePending(int* problemTypes, int* idx, int* criticalCount) {
     // Key 1: CBS / component-based servicing reboot pending
     {
         HKEY hKey = NULL;
@@ -2504,7 +2537,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending",
                 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
             RegCloseKey(hKey);
-            AddProblem(PROB_UPDATE_PENDING, idx, criticalCount);
+            AddProblem(problemTypes, PROB_UPDATE_PENDING, idx, criticalCount);
             return;
         }
     }
@@ -2515,7 +2548,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
                 L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired",
                 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
             RegCloseKey(hKey);
-            AddProblem(PROB_UPDATE_PENDING, idx, criticalCount);
+            AddProblem(problemTypes, PROB_UPDATE_PENDING, idx, criticalCount);
             return;
         }
     }
@@ -2525,7 +2558,7 @@ static void CheckWindowsUpdatePending(int* idx, int* criticalCount) {
 // Remote Desktop enabled but without Network Level Authentication: a real
 // network-exposure risk, readable from the registry without elevation.
 // This is treated as critical, same weight as firewall/antivirus/updates.
-static void CheckRdpNla(int* idx, int* criticalCount) {
+static void CheckRdpNla(int* problemTypes, int* idx, int* criticalCount) {
     RegKey hKeyRdp;
     DWORD dwDenyConnections = 1, dwSize = sizeof(DWORD);
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
@@ -2550,7 +2583,7 @@ static void CheckRdpNla(int* idx, int* criticalCount) {
             // manually: doing so used to desync from the rest of the
             // "important" list when AddProblem returned FALSE because the
             // array was full (*idx >= MAX_PROBLEMS).
-            AddProblem(PROB_RDP_NLA, idx, criticalCount);
+            AddProblem(problemTypes, PROB_RDP_NLA, idx, criticalCount);
         }
     }
 }
@@ -2562,7 +2595,7 @@ static void CheckRdpNla(int* idx, int* criticalCount) {
 // Win32_EncryptableVolume which requires admin rights.
 // Result is cached (10 min) to avoid hitting the property store on every
 // refresh tick (tray UI thread).
-static void CheckBitLocker(int* idx, int* criticalCount) {
+static void CheckBitLocker(int* problemTypes, int* idx, int* criticalCount) {
     // Cache: encryption status doesn't change minute-to-minute
     static DWORD s_lastTick = 0;
     static bool s_hasCache = false;
@@ -2574,7 +2607,7 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
 
     if (s_hasCache && s_checkedOnce && (now - s_lastTick < kCacheMs)) {
         if (s_isUnprotected) {
-            AddProblem(PROB_BITLOCKER, idx, criticalCount);
+            AddProblem(problemTypes, PROB_BITLOCKER, idx, criticalCount);
         }
         return;
     }
@@ -2649,7 +2682,7 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
     }
 
     if (unprotected) {
-        AddProblem(PROB_BITLOCKER, idx, criticalCount);
+        AddProblem(problemTypes, PROB_BITLOCKER, idx, criticalCount);
     }
 }
 
@@ -2666,7 +2699,7 @@ static void CheckBitLocker(int* idx, int* criticalCount) {
 // \\.\PhysicalDrive0..7 every refresh tick burns CPU and produces the same
 // value 99% of the time. The cache TTL is 5 minutes, and the first probe
 // always runs so the very first refresh reports the real state.
-static void CheckDiskHealth(int* idx, int* criticalCount) {
+static void CheckDiskHealth(int* problemTypes, int* idx, int* criticalCount) {
     static DWORD s_lastTick = 0;
     static BOOL s_cached = FALSE;
     static BOOL s_diskIssue = FALSE;
@@ -2674,7 +2707,7 @@ static void CheckDiskHealth(int* idx, int* criticalCount) {
     const DWORD kCacheMs = 5 * 60 * 1000; // 5 minutes
     DWORD now = GetTickCount();
     if (s_cached && (now - s_lastTick) < kCacheMs) {
-        if (s_diskIssue) AddProblem(PROB_DISK_HEALTH, idx, criticalCount);
+        if (s_diskIssue) AddProblem(problemTypes, PROB_DISK_HEALTH, idx, criticalCount);
         return;
     }
 
@@ -2713,53 +2746,80 @@ static void CheckDiskHealth(int* idx, int* criticalCount) {
     s_lastTick = now;
 
     if (diskIssue) {
-        AddProblem(PROB_DISK_HEALTH, idx, criticalCount);
+        AddProblem(problemTypes, PROB_DISK_HEALTH, idx, criticalCount);
     }
 }
 
 void CheckSecurityProviders() {
-    SRWGuard guard(g_Ctx.srwLock, true); // exclusive write
-    g_ActiveProblems = 0;
-    g_CriticalProblems = 0;
-    ZeroMemory(g_ProblemTypes, sizeof(g_ProblemTypes));
-    if (g_SimulatedNotificationType > 0) {
-        g_SecurityState = STATE_ALERT;
-        int idx = 0;
-        switch (g_SimulatedNotificationType) {
-            case 1: g_ProblemTypes[0] = PROB_FIREWALL; g_ProblemTypes[1] = PROB_ANTIVIRUS; idx = 2; break;
-            case 2: g_ProblemTypes[0] = PROB_AUTOUPDATE; g_ProblemTypes[1] = PROB_FIREWALL; idx = 2; break;
-            case 3: g_ProblemTypes[0] = PROB_ANTISPYWARE; g_ProblemTypes[1] = PROB_UAC; idx = 2; break;
-            case 4: g_ProblemTypes[0] = PROB_DEFENDER_RT; g_ProblemTypes[1] = PROB_AUTOUPDATE; idx = 2; break;
+    // Review issue #3: run the whole (slow) battery of checks into locals
+    // first, and only take the exclusive srwLock at the very end to publish
+    // the results. Previously the lock was held across seven WSC RPCs, the
+    // SCM/service queries, disk IOCTLs, and a COM property-store call - all
+    // on the tray thread's STA, which pumps messages during outgoing COM
+    // calls. Several window procs on that same thread (WM_PAINT, the
+    // WM_SETTINGCHANGE-driven tooltip rebuild) take a shared lock, and
+    // SRWLOCK is not recursive, so a message arriving mid-COM-call could
+    // deadlock the thread permanently (and hang CleanupModResources(), which
+    // waits on it). Shrinking the lock to just the final assignment removes
+    // both that hang and the flyout-open latency of doing the full scan
+    // before the window is ever positioned/shown.
+    int localProblemTypes[MAX_PROBLEMS] = { 0 };
+    int idx = 0, criticalCount = 0;
+    int localState;
+
+    BOOL simulated = FALSE;
+    int simulatedType;
+    { SRWGuard guard(g_Ctx.srwLock, false); simulated = (g_SimulatedNotificationType > 0); simulatedType = g_SimulatedNotificationType; }
+
+    if (simulated) {
+        localState = STATE_ALERT;
+        switch (simulatedType) {
+            case 1: localProblemTypes[0] = PROB_FIREWALL; localProblemTypes[1] = PROB_ANTIVIRUS; idx = 2; break;
+            case 2: localProblemTypes[0] = PROB_AUTOUPDATE; localProblemTypes[1] = PROB_FIREWALL; idx = 2; break;
+            case 3: localProblemTypes[0] = PROB_ANTISPYWARE; localProblemTypes[1] = PROB_UAC; idx = 2; break;
+            case 4: localProblemTypes[0] = PROB_DEFENDER_RT; localProblemTypes[1] = PROB_AUTOUPDATE; idx = 2; break;
         }
-        g_ActiveProblems = idx;
-        int simCritical = 0;
         for (int i = 0; i < idx; i++) {
-            if (IsProblemTypeCritical(g_ProblemTypes[i])) simCritical++;
+            if (IsProblemTypeCritical(localProblemTypes[i])) criticalCount++;
         }
-        g_CriticalProblems = simCritical;
+        SRWGuard guard(g_Ctx.srwLock, true); // exclusive write - publish only
+        memcpy(g_ProblemTypes, localProblemTypes, sizeof(g_ProblemTypes));
+        g_ActiveProblems = idx;
+        g_CriticalProblems = criticalCount;
+        g_SecurityState = localState;
         return;
     }
-    if (g_Settings.privacyMode) { g_SecurityState = STATE_GOOD; return; }
-    int idx = 0, criticalCount = 0;
-    CheckWscProvider(WSC_SECURITY_PROVIDER_FIREWALL, PROB_FIREWALL, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_AUTOUPDATE_SETTINGS, PROB_AUTOUPDATE, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTIVIRUS, PROB_ANTIVIRUS, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTISPYWARE, PROB_ANTISPYWARE, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_INTERNET_SETTINGS, PROB_INTERNET, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_USER_ACCOUNT_CONTROL, PROB_UAC, &idx, &criticalCount);
-    CheckWscProvider(WSC_SECURITY_PROVIDER_SERVICE, PROB_SERVICE, &idx, &criticalCount);
-    CheckDefenderRealtime(&idx, &criticalCount);
-    CheckUACRegistry(&idx, &criticalCount);
-    CheckAutoUpdateRegistry(&idx, &criticalCount);
-    CheckSmartScreen(&idx, &criticalCount);
+
+    BOOL privacyMode;
+    { SRWGuard guard(g_Ctx.srwLock, false); privacyMode = g_Settings.privacyMode; }
+    if (privacyMode) {
+        SRWGuard guard(g_Ctx.srwLock, true);
+        g_ActiveProblems = 0;
+        g_CriticalProblems = 0;
+        ZeroMemory(g_ProblemTypes, sizeof(g_ProblemTypes));
+        g_SecurityState = STATE_GOOD;
+        return;
+    }
+
+    CheckWscProvider(WSC_SECURITY_PROVIDER_FIREWALL, PROB_FIREWALL, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_AUTOUPDATE_SETTINGS, PROB_AUTOUPDATE, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTIVIRUS, PROB_ANTIVIRUS, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_ANTISPYWARE, PROB_ANTISPYWARE, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_INTERNET_SETTINGS, PROB_INTERNET, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_USER_ACCOUNT_CONTROL, PROB_UAC, localProblemTypes, &idx, &criticalCount);
+    CheckWscProvider(WSC_SECURITY_PROVIDER_SERVICE, PROB_SERVICE, localProblemTypes, &idx, &criticalCount);
+    CheckDefenderRealtime(localProblemTypes, &idx, &criticalCount);
+    CheckUACRegistry(localProblemTypes, &idx, &criticalCount);
+    CheckAutoUpdateRegistry(localProblemTypes, &idx, &criticalCount);
+    CheckSmartScreen(localProblemTypes, &idx, &criticalCount);
     // Maintenance checks (non-critical, warning-level)
-    CheckBackupStatus(&idx, &criticalCount);
-    CheckWerStatus(&idx, &criticalCount);
-    CheckDiskHealth(&idx, &criticalCount);
-    CheckBatteryStatus(&idx, &criticalCount);
-    CheckWindowsUpdatePending(&idx, &criticalCount);
-    CheckRdpNla(&idx, &criticalCount);
-    CheckBitLocker(&idx, &criticalCount);
+    CheckBackupStatus(localProblemTypes, &idx, &criticalCount);
+    CheckWerStatus(localProblemTypes, &idx, &criticalCount);
+    CheckDiskHealth(localProblemTypes, &idx, &criticalCount);
+    CheckBatteryStatus(localProblemTypes, &idx, &criticalCount);
+    CheckWindowsUpdatePending(localProblemTypes, &idx, &criticalCount);
+    CheckRdpNla(localProblemTypes, &idx, &criticalCount);
+    CheckBitLocker(localProblemTypes, &idx, &criticalCount);
     // Action Center Checks registry
     RegKey hKeyChecks;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Action Center\\Checks", 0, KEY_READ, &hKeyChecks) == ERROR_SUCCESS) {
@@ -2828,29 +2888,35 @@ void CheckSecurityProviders() {
                         mappedType = PROB_SMARTSCREEN;
                     }
 
-                    if (mappedType != PROB_NONE && !IsProblemTypeAlreadyDetected(mappedType)) {
-                        AddProblem(mappedType, &idx, &criticalCount);
+                    if (mappedType != PROB_NONE && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, mappedType)) {
+                        AddProblem(localProblemTypes, mappedType, &idx, &criticalCount);
                     } else if (mappedType == PROB_NONE) {
                         // Last fallback: localized DisplayName substring matching (existing behavior)
                         WCHAR szLower[256] = { 0 }; dwSize = sizeof(szLower);
                         RegQueryValueExW(hKeySub, L"DisplayName", NULL, NULL, (LPBYTE)szLower, &dwSize);
                         if (!szLower[0]) StringCchCopyW(szLower, 256, szSubKeyName);
                         CharLowerW(szLower);
-                        if ((wcsstr(szLower, L"firewall") || wcsstr(szLower, L"fw")) && !IsProblemTypeAlreadyDetected(PROB_FIREWALL)) AddProblem(PROB_FIREWALL, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"antivirus") || wcsstr(szLower, L"virus")) && !IsProblemTypeAlreadyDetected(PROB_ANTIVIRUS)) AddProblem(PROB_ANTIVIRUS, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"spyware") || wcsstr(szLower, L"malware")) && !IsProblemTypeAlreadyDetected(PROB_ANTISPYWARE)) AddProblem(PROB_ANTISPYWARE, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"uac") || wcsstr(szLower, L"account")) && !IsProblemTypeAlreadyDetected(PROB_UAC)) AddProblem(PROB_UAC, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"internet") || wcsstr(szLower, L"network")) && !IsProblemTypeAlreadyDetected(PROB_INTERNET)) AddProblem(PROB_INTERNET, &idx, &criticalCount);
-                        else if ((wcsstr(szLower, L"update") || wcsstr(szLower, L"autoupdate")) && !IsProblemTypeAlreadyDetected(PROB_AUTOUPDATE)) AddProblem(PROB_AUTOUPDATE, &idx, &criticalCount);
+                        if ((wcsstr(szLower, L"firewall") || wcsstr(szLower, L"fw")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_FIREWALL)) AddProblem(localProblemTypes, PROB_FIREWALL, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"antivirus") || wcsstr(szLower, L"virus")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_ANTIVIRUS)) AddProblem(localProblemTypes, PROB_ANTIVIRUS, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"spyware") || wcsstr(szLower, L"malware")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_ANTISPYWARE)) AddProblem(localProblemTypes, PROB_ANTISPYWARE, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"uac") || wcsstr(szLower, L"account")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_UAC)) AddProblem(localProblemTypes, PROB_UAC, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"internet") || wcsstr(szLower, L"network")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_INTERNET)) AddProblem(localProblemTypes, PROB_INTERNET, &idx, &criticalCount);
+                        else if ((wcsstr(szLower, L"update") || wcsstr(szLower, L"autoupdate")) && !IsProblemTypeAlreadyDetected(localProblemTypes, idx, PROB_AUTOUPDATE)) AddProblem(localProblemTypes, PROB_AUTOUPDATE, &idx, &criticalCount);
                     }
                 }
             }
             dwIdx++; dwSubKeySize = 256;
         }
     }
+
+    localState = (criticalCount > 0) ? STATE_ALERT : ((idx > 0) ? STATE_WARNING : STATE_GOOD);
+
+    // Publish: exclusive lock held only for this final assignment.
+    SRWGuard guard(g_Ctx.srwLock, true);
+    memcpy(g_ProblemTypes, localProblemTypes, sizeof(g_ProblemTypes));
     g_ActiveProblems = idx;
     g_CriticalProblems = criticalCount;
-    g_SecurityState = (criticalCount > 0) ? STATE_ALERT : ((idx > 0) ? STATE_WARNING : STATE_GOOD);
+    g_SecurityState = localState;
 }
 
 void RefreshSecurityState() {
@@ -3021,13 +3087,6 @@ static DWORD ComputeProblemBalloonSignature(
     return hash;
 }
 
-// A problem counts as "critical" for balloon-wording purposes if it's one of
-// the well-known high-impact categories. Thin wrapper around IsProblemTypeCritical()
-// so the two definitions cannot drift apart (review issue #4 round 2).
-static BOOL IsCriticalProblemType(int problemType) {
-    return IsProblemTypeCritical(problemType);
-}
-
 static void BuildProblemBalloonText(
         WCHAR* text, size_t textCount,
         int activeProblems, const int* problemTypes,
@@ -3041,7 +3100,7 @@ static void BuildProblemBalloonText(
 
     int criticalShown = 0;
     for (int i = 0; i < activeProblems && i < MAX_PROBLEMS; i++) {
-        if (IsCriticalProblemType(problemTypes[i])) criticalShown++;
+        if (IsProblemTypeCritical(problemTypes[i])) criticalShown++;
     }
 
     // List up to 3 concrete problems (not just the first one) so the balloon
@@ -3835,6 +3894,20 @@ void PositionWindowNearTray(HWND hwnd) {
 void ToggleFlyout() {
     if (g_Ctx.isUninitializing) return;
 
+    // If the tray icon was clicked while the flyout was visible, the click
+    // itself deactivated Shell_TrayWnd's owner and WM_ACTIVATE/WA_INACTIVE
+    // already hid the flyout before this (button-up-driven) call. Treat that
+    // as the user closing it, instead of falling into the "was auto-hidden:
+    // re-show" branch below, which would make the icon only ever reopen the
+    // flyout (review issue #1).
+    if (g_TrayClickWhileFlyoutOpen) {
+        g_TrayClickWhileFlyoutOpen = FALSE;
+        if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout)) {
+            CloseFlyout(g_Ctx.hWndFlyout);
+        }
+        return;
+    }
+
     // Dismiss notification popup if showing (Win7 behavior)
     if (g_NotifyShowing && g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify)) {
         ShowWindow(g_Ctx.hWndNotify, SW_HIDE);
@@ -3982,7 +4055,13 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
                 // Use cached tray icon rect (updated when flyout opens)
                 // Avoids expensive cross-process Shell_NotifyIconGetRect call in WH_MOUSE_LL
                 BOOL overTrayIcon = PtInRect(&g_CachedTrayIconRect, pMouse->pt);
-                if (!overTrayIcon) {
+                if (overTrayIcon) {
+                    // Latch now, at button-down, before WM_ACTIVATE can hide
+                    // the flyout on this same click (review issue #1).
+                    if (wParam == WM_LBUTTONDOWN) {
+                        g_TrayClickWhileFlyoutOpen = TRUE;
+                    }
+                } else {
                     PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
                 }
             }
@@ -4356,19 +4435,10 @@ if (activeProblems > 0) {
             totalText = (activeProblems == 1) ? L"totaalbericht" : L"totaalberichten";
             break;
         case 0x0415: // Polski
-            // Flessione polacca: 1 -> "wiadomość" (singolare);
-            // 2-4 (escludendo 12-14) -> "wiadomości" (pochana formas);
-            // tutto il resto -> "wiadomości" (dopełniacz liczby mnogiej).
-            // Con MAX_PROBLEMS=8 il caso 12-14 non si applica mai, ma la
-            // struttura resta formalmente corretta se il limite dovesse
-            // salire in futuro.
-            if (activeProblems == 1) {
-                totalText = L"\u0142\u0105cznie wiadomo\u015B\u0107";
-            } else if (activeProblems >= 2 && activeProblems <= 4) {
-                totalText = L"\u0142\u0105cznie wiadomo\u015Bci";
-            } else {
-                totalText = L"\u0142\u0105cznie wiadomo\u015Bci";
-            }
+            // Flessione polacca: 1 -> "wiadomość" (singolare); tutto il resto
+            // -> "wiadomości" (le forme 2-4 e 5+ coincidono in questa stringa,
+            // quindi non serve un ramo separato per il plurale "poche").
+            totalText = (activeProblems == 1) ? L"\u0142\u0105cznie wiadomo\u015B\u0107" : L"\u0142\u0105cznie wiadomo\u015Bci";
             break;
         case 0x0418: // Română
             totalText = (activeProblems == 1) ? L"mesaj total" : L"mesaje totale";
@@ -4967,6 +5037,14 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     if (uMsg == WM_SETTINGS_CHANGED) {
         // Handle hotkey and timer updates from the tray thread (correct thread affinity)
         if (!g_Ctx.isUninitializing) {
+            // Rebuild the tray tooltip here, on the tray thread, instead of
+            // calling it directly from Wh_ModSettingsChanged() (which can run
+            // on an arbitrary thread). EnsureTrayTooltip() can reach
+            // AddTrayIcon() -> CheckSecurityProviders() + Shell_NotifyIconW +
+            // SetTimer on windows/timers owned by this thread, so calling it
+            // off-thread would race with the tray thread's own timers
+            // (review issue - optional item).
+            EnsureTrayTooltip();
             // Applica subito l'opzione theme (auto/light/dark) e forza il
             // repaint di flyout e popup di notifica con i nuovi colori.
             ApplyThemeToWindows();
@@ -5011,6 +5089,24 @@ LRESULT CALLBACK TrayMsgHandlerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (ui != g_LastDetectedUILang) {
                 DetermineLocale();
                 RefreshLocalizedUI();
+            }
+        }
+        // High Contrast toggled while the mod is running (SPI_SETHIGHCONTRAST
+        // broadcast, e.g. Left Alt+Left Shift+Print Screen). IsHighContrastActive()
+        // is normally cached with a 2s TTL to keep the paint path cheap, but
+        // that means an already-open flyout/notify window wouldn't pick up
+        // the change until its next unrelated repaint. Force the cache fresh
+        // now and invalidate both windows so the system-color swap is
+        // immediate (review issue).
+        if (wParam == SPI_SETHIGHCONTRAST) {
+            RefreshHighContrastNow();
+            if (!g_Ctx.isUninitializing) {
+                if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && IsWindowVisible(g_Ctx.hWndFlyout)) {
+                    InvalidateRect(g_Ctx.hWndFlyout, NULL, TRUE);
+                }
+                if (g_Ctx.hWndNotify && IsWindow(g_Ctx.hWndNotify) && IsWindowVisible(g_Ctx.hWndNotify)) {
+                    InvalidateRect(g_Ctx.hWndNotify, NULL, TRUE);
+                }
             }
         }
         return 0;
@@ -5278,6 +5374,19 @@ bool g_useEmbeddedUifile = false;
 bool g_cplRestoreHubLinks = true;
 
 void CplLoadSettings() {
+    // GetLangPack() picks the hub-link language from g_LastDetectedUILang
+    // (set by DetermineLocale(), which honors the mod's Language setting),
+    // not from GetUserDefaultUILanguage() directly - otherwise the CPL links
+    // would always follow Windows' UI language even when the user picked a
+    // different one in the mod settings, out of step with the tray/flyout
+    // strings (review issue). In control.exe, Wh_ModInit() returns right
+    // after CplInit() and never reaches the LoadSettings()/DetermineLocale()
+    // calls that the explorer.exe tray-UI path makes, so this is the only
+    // place those run for that process - call them here too. Both are cheap
+    // and idempotent, so the redundant call from the explorer.exe path is
+    // harmless.
+    LoadSettings();
+    DetermineLocale();
     g_cplRestoreHubLinks = Wh_GetIntSetting(L"restoreCplHubLinks") != 0;
     g_useEmbeddedUifile = Wh_GetIntSetting(L"useEmbeddedUifile") != 0;
 }
@@ -5311,7 +5420,12 @@ static const LangPack g_langPacks[] = {
 };
 
 static const LangPack* GetLangPack() {
-    WORD ui = PRIMARYLANGID(GetUserDefaultUILanguage());
+    // Match the mod's effective UI language (g_Settings.language, resolved by
+    // DetermineLocale() into g_LastDetectedUILang) instead of always following
+    // GetUserDefaultUILanguage() directly - otherwise setting e.g. Italiano on
+    // an English Windows would give an Italian flyout but English
+    // "Troubleshooting"/"Recovery" CPL links (review issue).
+    WORD ui = PRIMARYLANGID(g_LastDetectedUILang);
     for (const auto& p : g_langPacks) {
         if (p.primaryLang == ui) {
             return &p;
@@ -6569,7 +6683,12 @@ void Wh_ModSettingsChanged(void) {
     LoadSettings();
     DetermineLocale();
     CplSettingsChanged();
-    EnsureTrayTooltip();
+    // EnsureTrayTooltip() is deferred to the WM_SETTINGS_CHANGED handler on
+    // the tray thread instead of being called directly here: this callback
+    // can run on a thread other than the tray thread, and EnsureTrayTooltip()
+    // can reach AddTrayIcon() -> CheckSecurityProviders() + Shell_NotifyIconW
+    // + SetTimer on windows/timers owned by the tray thread (review issue -
+    // optional item).
     if (g_Ctx.hWndMsgHandler && IsWindow(g_Ctx.hWndMsgHandler) && !g_Ctx.isUninitializing) {
         PostMessageW(g_Ctx.hWndMsgHandler, WM_SETTINGS_CHANGED, 0, 0);
     }
