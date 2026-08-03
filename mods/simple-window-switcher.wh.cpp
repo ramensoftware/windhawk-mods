@@ -588,6 +588,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
+#define WM_SWS_SETTINGS_CHANGED (WM_APP + 2)
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -713,8 +714,15 @@ static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
 static HANDLE g_explorerIpcThread = NULL;
+static DWORD g_explorerIpcThreadId = 0;
 static bool g_isPendingShow = false;
 static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
+
+// Forward declarations
+static void LoadSettings();
+static void SWS_RegisterHotkeys();
+static void SWS_UnregisterHotkeys();
+static void ApplySwitcherRegion();
 
 // Helpers
 
@@ -1021,13 +1029,14 @@ static bool ShouldListInAltTab(HWND hwnd) {
     // WS_EX_NOACTIVATE excludes unless WS_EX_APPWINDOW is also set
     if ((ex & WS_EX_NOACTIVATE) && !(ex & WS_EX_APPWINDOW)) return false;
 
-    // Native Alt+Tab usually prefers the active popup (child dialog).
-    // However, as requested, we want to show the PARENT window instead of the child.
-    // Owner chain: if window has a visible, enabled owner, exclude it
-    // unless WS_EX_APPWINDOW forces inclusion
+    // Prefer the owner over the child popup/dialog, but only if the owner is actually listable —
+    // otherwise both windows disappear from the switcher.
     HWND own = GetWindow(hwnd, GW_OWNER);
-    bool ownVis = IsWindow(own) && IsWindowEnabled(own) && IsReallyVisible(own);
-    if (ownVis && !(ex & WS_EX_APPWINDOW)) return false;
+    if (!(ex & WS_EX_APPWINDOW) && IsWindow(own) && IsReallyVisible(own) &&
+        !(GetWindowLongPtrW(own, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) &&
+        !IsOwnerToolWindow(own)) {
+        return false;
+    }
 
     // Check if an ancestor in the owner chain is a tool window
     if (IsOwnerToolWindow(hwnd)) return false;
@@ -1511,8 +1520,12 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
                 ps->Release();
             }
             if (!aumidLocal.empty()) {
+                std::wstring cacheKey = aumidLocal + L"_" + std::to_wstring(desiredSizePx);
+                auto it = g_uwpIconCache.find(cacheKey);
+                if (it != g_uwpIconCache.end()) return it->second;
                 HICON hLocal = ResolveIconFromAumid(aumidLocal.c_str(), desiredSizePx);
                 if (hLocal) {
+                    g_uwpIconCache[cacheKey] = hLocal;
                     Wh_Log(L"TryGetUwpIconFromExplorer: Resolved local icon %p from AUMID", hLocal);
                     return hLocal;
                 }
@@ -2903,7 +2916,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
         // In vertical mode, never reserve space - close button overlays without displacement.
         int btnReserve = 0;
         bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
-        if (!HeaderIsVertical()) {
+        if (g_settings.showCloseButton && !HeaderIsVertical()) {
             if (!isIconOnly && !(g_settings.showThumbnails && ThumbnailIsSide())) {
                 btnReserve = ((g_settings.centerTaskContent) || (i == g_hoverIndex && g_hoverWnd == hWnd))
                          ? closeBtnReserve
@@ -3667,6 +3680,18 @@ static void DestroyMirrorSwitchers() {
 }
 
 
+static void ApplySwitcherRegion() {
+    if (!g_hSwitcher) return;
+    INT cp = GetCornerPref();
+    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+        HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
+        SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
+    } else {
+        SetWindowRgn(g_hSwitcher, NULL, TRUE);
+    }
+}
+
 static void ShowSwitcher(bool sticky) {
     DestroyMirrorSwitchers();
 
@@ -3719,18 +3744,7 @@ static void ShowSwitcher(bool sticky) {
     GetSwitcherPosition(mi.rcWork, &cx, &cy);
 
     ApplyThemeToWindow(g_hSwitcher);
-
-    INT cp = GetCornerPref();
-    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-        HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
-        SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
-        // NOTE: Do NOT call SetWindowRgn on g_hCloseBtnWnd — it is a layered
-        // window using UpdateLayeredWindow, which ignores SetWindowRgn.
-        // Instead, the overlay DC is clipped in PaintSwitcherOverlay.
-    } else {
-        SetWindowRgn(g_hSwitcher, NULL, TRUE);
-    }
+    ApplySwitcherRegion();
 
     g_pendingSwitcherRect = {
         cx,
@@ -3814,16 +3828,16 @@ static void SwitchToSelected() {
         groupWindows = g_windows[g_selectedIndex].groupWindows;
     }
     
-    // Restore sibling windows first so SW_RESTORE doesn't steal focus from target
+    // Restore sibling windows without stealing activation focus from target
     for (HWND hw : groupWindows) {
-        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
+        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_SHOWNOACTIVATE);
     }
     
     if (IsWindow(hT)) {
         HWND hP = GetLastActivePopup(hT);
         HWND hF = IsWindowVisible(hP) ? hP : hT;
         if (IsIconic(hF)) ShowWindow(hF, SW_RESTORE);
-        SetForegroundWindow(hF);
+        if (!SetForegroundWindow(hF)) SwitchToThisWindow(hF, TRUE);
     }
     
     HideSwitcher();
@@ -3887,6 +3901,7 @@ static void RecomputeAndReposition() {
     if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     }
+    ApplySwitcherRegion();
     RegisterThumbnails();
 }
 
@@ -4625,6 +4640,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
         }
         return 0;
+    case WM_SWS_SETTINGS_CHANGED:
+        if (g_isVisible) HideSwitcher();
+        LoadSettings();
+        SWS_UnregisterHotkeys();
+        SWS_RegisterHotkeys();
+        return 0;
     case WM_SETCURSOR:
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         return TRUE;
@@ -4805,14 +4826,18 @@ static void SWS_UnregisterHotkeys() {
 
 // Settings
 
+template <size_t N>
+static void LoadStringSetting(LPCWSTR settingName, WCHAR (&dest)[N], LPCWSTR defaultVal) {
+    LPCWSTR v = Wh_GetStringSetting(settingName);
+    wcsncpy_s(dest, (v && *v) ? v : defaultVal, _TRUNCATE);
+    Wh_FreeStringSetting(v);
+}
+
 static void LoadSettings() {
     LPCWSTR v;
-    v = Wh_GetStringSetting(L"Style.theme");
-    wcscpy_s(g_settings.theme, v ? v : L"none"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.colorScheme");
-    wcscpy_s(g_settings.colorScheme, v ? v : L"system"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Appearance.Corners.cornerPreference");
-    wcscpy_s(g_settings.cornerPreference, v ? v : L"round"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.theme", g_settings.theme, L"none");
+    LoadStringSetting(L"Style.colorScheme", g_settings.colorScheme, L"system");
+    LoadStringSetting(L"Appearance.Corners.cornerPreference", g_settings.cornerPreference, L"round");
     g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
     if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
@@ -4820,28 +4845,18 @@ static void LoadSettings() {
     g_settings.roundThumbnailCorners = Wh_GetIntSetting(L"Appearance.Corners.roundThumbnailCorners");
     g_settings.roundGroupIndicator = Wh_GetIntSetting(L"Appearance.Corners.roundGroupIndicator");
     g_settings.roundBadgeIconBackground = Wh_GetIntSetting(L"Appearance.Corners.roundBadgeIconBackground");
-    v = Wh_GetStringSetting(L"Accessibility.scrollWheelBehavior");
-    wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
-    
-    v = Wh_GetStringSetting(L"Accessibility.scrollWheelAction");
-    wcscpy_s(g_settings.scrollWheelAction, v ? v : L"selection"); Wh_FreeStringSetting(v);
-    
-    v = Wh_GetStringSetting(L"Accessibility.scrollSecondaryAction");
-    wcscpy_s(g_settings.scrollSecondaryAction, v ? v : L"page"); Wh_FreeStringSetting(v);
-    
-    v = Wh_GetStringSetting(L"Accessibility.scrollSecondaryModifier");
-    wcscpy_s(g_settings.scrollSecondaryModifier, v ? v : L"shift"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Appearance.Orientation.taskListOrientation");
-    wcscpy_s(g_settings.taskListOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Appearance.Orientation.headerContentOrientation");
-    wcscpy_s(g_settings.headerContentOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
+    LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
+    LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
+    LoadStringSetting(L"Accessibility.scrollSecondaryModifier", g_settings.scrollSecondaryModifier, L"shift");
+    LoadStringSetting(L"Appearance.Orientation.taskListOrientation", g_settings.taskListOrientation, L"horizontal");
+    LoadStringSetting(L"Appearance.Orientation.headerContentOrientation", g_settings.headerContentOrientation, L"horizontal");
     if (wcscmp(g_settings.headerContentOrientation, L"horizontal") != 0 &&
         wcscmp(g_settings.headerContentOrientation, L"vertical") != 0) {
-        wcscpy_s(g_settings.headerContentOrientation, L"horizontal");
+        wcsncpy_s(g_settings.headerContentOrientation, L"horizontal", _TRUNCATE);
     }
     
-    v = Wh_GetStringSetting(L"Appearance.Position.switcherPosition");
-    wcscpy_s(g_settings.switcherPosition, v ? v : L"center"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Position.switcherPosition", g_settings.switcherPosition, L"center");
     if (wcscmp(g_settings.switcherPosition, L"topLeft") != 0 &&
         wcscmp(g_settings.switcherPosition, L"topCenter") != 0 &&
         wcscmp(g_settings.switcherPosition, L"topRight") != 0 &&
@@ -4851,63 +4866,57 @@ static void LoadSettings() {
         wcscmp(g_settings.switcherPosition, L"bottomLeft") != 0 &&
         wcscmp(g_settings.switcherPosition, L"bottomCenter") != 0 &&
         wcscmp(g_settings.switcherPosition, L"bottomRight") != 0) {
-        wcscpy_s(g_settings.switcherPosition, L"center");
+        wcsncpy_s(g_settings.switcherPosition, L"center", _TRUNCATE);
     }
     g_settings.switcherPositionMargin = Wh_GetIntSetting(L"Appearance.Position.switcherPositionMargin");
     if (g_settings.switcherPositionMargin < 0) g_settings.switcherPositionMargin = 0;
-    v = Wh_GetStringSetting(L"Appearance.HeaderContent.iconSize");
-    wcscpy_s(g_settings.iconSize, v ? v : L"small"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.HeaderContent.iconSize", g_settings.iconSize, L"small");
     if (wcscmp(g_settings.iconSize, L"small") != 0 &&
         wcscmp(g_settings.iconSize, L"medium") != 0 &&
         wcscmp(g_settings.iconSize, L"large") != 0 &&
         wcscmp(g_settings.iconSize, L"xlarge") != 0) {
-        wcscpy_s(g_settings.iconSize, L"small");
+        wcsncpy_s(g_settings.iconSize, L"small", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailPosition");
-    wcscpy_s(g_settings.thumbnailPosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Thumbnails.thumbnailPosition", g_settings.thumbnailPosition, L"bottom");
     if (wcscmp(g_settings.thumbnailPosition, L"bottom") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"top") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"left") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"right") != 0) {
-        wcscpy_s(g_settings.thumbnailPosition, L"bottom");
+        wcsncpy_s(g_settings.thumbnailPosition, L"bottom", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailAlignment");
-    wcscpy_s(g_settings.thumbnailAlignment, v ? v : L"left"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Thumbnails.thumbnailAlignment", g_settings.thumbnailAlignment, L"left");
     if (wcscmp(g_settings.thumbnailAlignment, L"left") != 0 &&
         wcscmp(g_settings.thumbnailAlignment, L"centered") != 0 &&
         wcscmp(g_settings.thumbnailAlignment, L"right") != 0) {
-        wcscpy_s(g_settings.thumbnailAlignment, L"left");
+        wcsncpy_s(g_settings.thumbnailAlignment, L"left", _TRUNCATE);
     }
     v = Wh_GetStringSetting(L"Accessibility.backwardShortcut");
     if (v && *v) {
-        wcscpy_s(g_settings.backwardShortcut, v);
+        wcsncpy_s(g_settings.backwardShortcut, v, _TRUNCATE);
         Wh_FreeStringSetting(v);
     } else {
         Wh_FreeStringSetting(v);
         // Backward compatibility with previous boolean setting.
-        wcscpy_s(g_settings.backwardShortcut,
-                 Wh_GetIntSetting(L"enableAltShiftForBackward") ? L"altShift" : L"altShiftTab");
+        wcsncpy_s(g_settings.backwardShortcut,
+                  Wh_GetIntSetting(L"enableAltShiftForBackward") ? L"altShift" : L"altShiftTab", _TRUNCATE);
     }
     if (wcscmp(g_settings.backwardShortcut, L"altShiftTab") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altShift") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altBacktick") != 0) {
-        wcscpy_s(g_settings.backwardShortcut, L"altShiftTab");
+        wcsncpy_s(g_settings.backwardShortcut, L"altShiftTab", _TRUNCATE);
     }
     
-    v = Wh_GetStringSetting(L"Accessibility.altBacktickBehavior");
-    wcscpy_s(g_settings.altBacktickBehavior, (v && *v) ? v : L"backward"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.altBacktickBehavior", g_settings.altBacktickBehavior, L"backward");
     if (wcscmp(g_settings.altBacktickBehavior, L"none") != 0 &&
         wcscmp(g_settings.altBacktickBehavior, L"backward") != 0 &&
         wcscmp(g_settings.altBacktickBehavior, L"sameApp") != 0) {
-        wcscpy_s(g_settings.altBacktickBehavior, L"backward");
+        wcsncpy_s(g_settings.altBacktickBehavior, L"backward", _TRUNCATE);
     }
 
-    v = Wh_GetStringSetting(L"Accessibility.virtualDesktopBehavior");
-    wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"allDesktops");
-    Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.virtualDesktopBehavior", g_settings.virtualDesktopBehavior, L"allDesktops");
     if (wcscmp(g_settings.virtualDesktopBehavior, L"currentOnly") != 0 &&
         wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
-        wcscpy_s(g_settings.virtualDesktopBehavior, L"allDesktops");
+        wcsncpy_s(g_settings.virtualDesktopBehavior, L"allDesktops", _TRUNCATE);
     }
 
     g_settings.rowHeight = Wh_GetIntSetting(L"Dimensions.rowHeight");
@@ -4939,19 +4948,17 @@ static void LoadSettings() {
     g_settings.restoreAllWindows = Wh_GetIntSetting(L"Grouping.restoreAllWindows");
     g_settings.hideMinimizedWindows = Wh_GetIntSetting(L"Accessibility.hideMinimizedWindows");
     g_settings.sortMinimizedWindowsToEnd = Wh_GetIntSetting(L"Accessibility.sortMinimizedWindowsToEnd");
-    v = Wh_GetStringSetting(L"Grouping.showTitles");
-    wcscpy_s(g_settings.showTitles, v ? v : L"windowTitle"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Grouping.showTitles", g_settings.showTitles, L"windowTitle");
     if (wcscmp(g_settings.showTitles, L"windowTitle") != 0 &&
         wcscmp(g_settings.showTitles, L"appName") != 0 &&
         wcscmp(g_settings.showTitles, L"appNameWindowTitle") != 0) {
-        wcscpy_s(g_settings.showTitles, L"windowTitle");
+        wcsncpy_s(g_settings.showTitles, L"windowTitle", _TRUNCATE);
     }
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
     // Badge layout settings
     g_settings.enableBadgeLayout = Wh_GetIntSetting(L"Appearance.BadgeLayout.enableBadgeLayout");
-    v = Wh_GetStringSetting(L"Appearance.BadgeLayout.badgeIconPosition");
-    wcscpy_s(g_settings.badgeIconPosition, v ? v : L"bottomCenter"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.BadgeLayout.badgeIconPosition", g_settings.badgeIconPosition, L"bottomCenter");
     if (wcscmp(g_settings.badgeIconPosition, L"topLeft") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"topCenter") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"topRight") != 0 &&
@@ -4961,13 +4968,12 @@ static void LoadSettings() {
         wcscmp(g_settings.badgeIconPosition, L"bottomLeft") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"bottomCenter") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"bottomRight") != 0) {
-        wcscpy_s(g_settings.badgeIconPosition, L"bottomCenter");
+        wcsncpy_s(g_settings.badgeIconPosition, L"bottomCenter", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Appearance.BadgeLayout.badgeTitlePosition");
-    wcscpy_s(g_settings.badgeTitlePosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.BadgeLayout.badgeTitlePosition", g_settings.badgeTitlePosition, L"bottom");
     if (wcscmp(g_settings.badgeTitlePosition, L"top") != 0 &&
         wcscmp(g_settings.badgeTitlePosition, L"bottom") != 0) {
-        wcscpy_s(g_settings.badgeTitlePosition, L"bottom");
+        wcsncpy_s(g_settings.badgeTitlePosition, L"bottom", _TRUNCATE);
     }
     g_settings.showBadgeIconBackground = Wh_GetIntSetting(L"Appearance.BadgeLayout.showBadgeIconBackground");
     g_settings.showBadgeIconBackgroundShadow = Wh_GetIntSetting(L"Appearance.BadgeLayout.showBadgeIconBackgroundShadow");
@@ -4978,108 +4984,79 @@ static void LoadSettings() {
     // Grouped indicator
     g_settings.showGroupIndicator = Wh_GetIntSetting(L"Grouping.showGroupIndicator");
     g_settings.showGroupIndicatorShadow = Wh_GetIntSetting(L"Grouping.showGroupIndicatorShadow");
-    v = Wh_GetStringSetting(L"Grouping.groupCloseBehavior");
-    wcscpy_s(g_settings.groupCloseBehavior, v ? v : L"closeRecent"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Grouping.groupCloseBehavior", g_settings.groupCloseBehavior, L"closeRecent");
     if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") != 0 &&
         wcscmp(g_settings.groupCloseBehavior, L"closeRecent") != 0) {
-        wcscpy_s(g_settings.groupCloseBehavior, L"closeRecent");
+        wcsncpy_s(g_settings.groupCloseBehavior, L"closeRecent", _TRUNCATE);
     }
 
     // Global theme settings (apply to both light and dark)
-    v = Wh_GetStringSetting(L"Style.highlightStyle");
-    wcscpy_s(g_settings.highlightStyle, v ? v : L"border"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.highlightStyle", g_settings.highlightStyle, L"border");
     if (wcscmp(g_settings.highlightStyle, L"border") != 0 &&
         wcscmp(g_settings.highlightStyle, L"fillAndBorder") != 0 &&
         wcscmp(g_settings.highlightStyle, L"fillOnly") != 0) {
-        wcscpy_s(g_settings.highlightStyle, L"border");
+        wcsncpy_s(g_settings.highlightStyle, L"border", _TRUNCATE);
     }
     g_settings.opacity = Wh_GetIntSetting(L"Style.opacity");
     if (g_settings.opacity < 0) g_settings.opacity = 0;
     if (g_settings.opacity > 100) g_settings.opacity = 100;
 
     // Dark Mode color settings
-    v = Wh_GetStringSetting(L"Style.DarkMode.borderColorMode");
-    wcscpy_s(g_settings.borderColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.highlightFillColorMode");
-    wcscpy_s(g_settings.highlightFillColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.bgColorMode");
-    wcscpy_s(g_settings.bgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customBorderColor");
-    wcscpy_s(g_settings.customBorderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customHighlightFillColor");
-    wcscpy_s(g_settings.customHighlightFillColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customBgColor");
-    wcscpy_s(g_settings.customBgColorDark, v ? v : L"#202020"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.borderColorMode", g_settings.borderColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.highlightFillColorMode", g_settings.highlightFillColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.bgColorMode", g_settings.bgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customBorderColor", g_settings.customBorderColorDark, L"#FFFFFF");
+    LoadStringSetting(L"Style.DarkMode.customHighlightFillColor", g_settings.customHighlightFillColorDark, L"#FFFFFF");
+    LoadStringSetting(L"Style.DarkMode.customBgColor", g_settings.customBgColorDark, L"#202020");
     
-    v = Wh_GetStringSetting(L"Style.DarkMode.iconBgColorMode");
-    wcscpy_s(g_settings.iconBgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customIconBgColor");
-    wcscpy_s(g_settings.customIconBgColorDark, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.iconBgColorMode", g_settings.iconBgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customIconBgColor", g_settings.customIconBgColorDark, L"#000000");
     g_settings.iconBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.iconBgOpacity");
     if (g_settings.iconBgOpacityDark < 0) g_settings.iconBgOpacityDark = 0;
     if (g_settings.iconBgOpacityDark > 100) g_settings.iconBgOpacityDark = 100;
 
-    v = Wh_GetStringSetting(L"Style.DarkMode.indicatorBgColorMode");
-    wcscpy_s(g_settings.indicatorBgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customIndicatorBgColor");
-    wcscpy_s(g_settings.customIndicatorBgColorDark, v ? v : L"#333333"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.indicatorBgColorMode", g_settings.indicatorBgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customIndicatorBgColor", g_settings.customIndicatorBgColorDark, L"#333333");
     g_settings.indicatorBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityDark < 0) g_settings.indicatorBgOpacityDark = 0;
     if (g_settings.indicatorBgOpacityDark > 100) g_settings.indicatorBgOpacityDark = 100;
     
-    v = Wh_GetStringSetting(L"Style.DarkMode.indicatorTextColorMode");
-    wcscpy_s(g_settings.indicatorTextColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customIndicatorTextColor");
-    wcscpy_s(g_settings.customIndicatorTextColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.indicatorTextColorMode", g_settings.indicatorTextColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customIndicatorTextColor", g_settings.customIndicatorTextColorDark, L"#FFFFFF");
 
     // Light Mode color settings
-    v = Wh_GetStringSetting(L"Style.LightMode.borderColorMode");
-    wcscpy_s(g_settings.borderColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.highlightFillColorMode");
-    wcscpy_s(g_settings.highlightFillColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.bgColorMode");
-    wcscpy_s(g_settings.bgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customBorderColor");
-    wcscpy_s(g_settings.customBorderColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customHighlightFillColor");
-    wcscpy_s(g_settings.customHighlightFillColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customBgColor");
-    wcscpy_s(g_settings.customBgColorLight, v ? v : L"#F3F3F3"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.borderColorMode", g_settings.borderColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.highlightFillColorMode", g_settings.highlightFillColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.bgColorMode", g_settings.bgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customBorderColor", g_settings.customBorderColorLight, L"#000000");
+    LoadStringSetting(L"Style.LightMode.customHighlightFillColor", g_settings.customHighlightFillColorLight, L"#000000");
+    LoadStringSetting(L"Style.LightMode.customBgColor", g_settings.customBgColorLight, L"#F3F3F3");
 
-    v = Wh_GetStringSetting(L"Style.LightMode.iconBgColorMode");
-    wcscpy_s(g_settings.iconBgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customIconBgColor");
-    wcscpy_s(g_settings.customIconBgColorLight, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.iconBgColorMode", g_settings.iconBgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customIconBgColor", g_settings.customIconBgColorLight, L"#FFFFFF");
     g_settings.iconBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.iconBgOpacity");
     if (g_settings.iconBgOpacityLight < 0) g_settings.iconBgOpacityLight = 0;
     if (g_settings.iconBgOpacityLight > 100) g_settings.iconBgOpacityLight = 100;
 
-    v = Wh_GetStringSetting(L"Style.LightMode.indicatorBgColorMode");
-    wcscpy_s(g_settings.indicatorBgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customIndicatorBgColor");
-    wcscpy_s(g_settings.customIndicatorBgColorLight, v ? v : L"#EAEAEA"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.indicatorBgColorMode", g_settings.indicatorBgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customIndicatorBgColor", g_settings.customIndicatorBgColorLight, L"#EAEAEA");
     g_settings.indicatorBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityLight < 0) g_settings.indicatorBgOpacityLight = 0;
     if (g_settings.indicatorBgOpacityLight > 100) g_settings.indicatorBgOpacityLight = 100;
     
-    v = Wh_GetStringSetting(L"Style.LightMode.indicatorTextColorMode");
-    wcscpy_s(g_settings.indicatorTextColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customIndicatorTextColor");
-    wcscpy_s(g_settings.customIndicatorTextColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.indicatorTextColorMode", g_settings.indicatorTextColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customIndicatorTextColor", g_settings.customIndicatorTextColorLight, L"#000000");
 
-    v = Wh_GetStringSetting(L"Appearance.Font.fontFamily");
-    wcscpy_s(g_settings.fontFamily, v ? v : L"Segoe UI"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Font.fontFamily", g_settings.fontFamily, L"Segoe UI");
     
     g_settings.fontSize = Wh_GetIntSetting(L"Appearance.Font.fontSize");
     if (g_settings.fontSize <= 0) g_settings.fontSize = 9;
 
-    v = Wh_GetStringSetting(L"Appearance.Font.fontStyle");
-    wcscpy_s(g_settings.fontStyle, v ? v : L"regular"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Font.fontStyle", g_settings.fontStyle, L"regular");
 
     g_settings.applyToGroupIndicator = Wh_GetIntSetting(L"Appearance.Font.applyToGroupIndicator");
 
-    v = Wh_GetStringSetting(L"Accessibility.switcherDisplayBehavior");
-    wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.switcherDisplayBehavior", g_settings.switcherDisplayBehavior, L"cursorMonitor");
 
     // Exclusion patterns (newline-delimited text fields)
     g_excludeTitlePatterns.clear();
@@ -5277,15 +5254,24 @@ void WhTool_ModUninit() {
         g_hSwitcherThread = NULL;
         g_dwSwitcherThreadId = 0;
     }
+    for (auto& pair : g_uwpIconCache) {
+        if (pair.second) DestroyIcon(pair.second);
+    }
+    g_uwpIconCache.clear();
+    for (auto& pair : g_exeIconCache) {
+        if (pair.second) DestroyIcon(pair.second);
+    }
+    g_exeIconCache.clear();
+    for (auto& pair : g_customIconCache) {
+        if (pair.second) DestroyIcon(pair.second);
+    }
+    g_customIconCache.clear();
 }
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModSettingsChanged");
     if (g_hSwitcher) {
-        LoadSettings();
-        if (g_isVisible) {
-            ShowSwitcher(g_isSticky);
-        }
+        PostMessage(g_hSwitcher, WM_SWS_SETTINGS_CHANGED, 0, 0);
     }
 }
 
@@ -5333,7 +5319,7 @@ BOOL Wh_ModInit() {
         if (!g_WM_SWS_GET_UWP_ICON) {
             g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
         }
-        g_explorerIpcThread = CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, NULL);
+        g_explorerIpcThread = CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, &g_explorerIpcThreadId);
 
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
@@ -5534,14 +5520,12 @@ void Wh_ModUninit() {
         HWND promptWnd = g_restartExplorerPromptWindow;
         if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
 
-        HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
-        if (hIpc) {
-            PostMessageW(hIpc, WM_QUIT, 0, 0);
-        }
+        if (g_explorerIpcThreadId) PostThreadMessage(g_explorerIpcThreadId, WM_QUIT, 0, 0);
         if (g_explorerIpcThread) {
-            WaitForSingleObject(g_explorerIpcThread, 5000);
+            WaitForSingleObject(g_explorerIpcThread, INFINITE);
             CloseHandle(g_explorerIpcThread);
             g_explorerIpcThread = NULL;
+            g_explorerIpcThreadId = 0;
         }
         for (auto& pair : g_uwpIconCache) {
             if (pair.second) DestroyIcon(pair.second);
@@ -5563,7 +5547,11 @@ void Wh_ModUninit() {
         }
 
         if (g_restartExplorerPromptThread) {
-            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT) {
+                HWND wnd = g_restartExplorerPromptWindow;
+                if (wnd) PostMessage(wnd, WM_CLOSE, 0, 0);
+                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            }
             CloseHandle(g_restartExplorerPromptThread);
             g_restartExplorerPromptThread = NULL;
         }
