@@ -158,7 +158,7 @@ mods by Michael Maltsev (m417z).
   - auto: Automatic
   - horizontal: Horizontal taskbar
   - vertical: Vertical taskbar
-- animationCompatibility: "on"
+- animationCompatibility: "off"
   $name: Animation compatibility
   $description: Track animated taskbar icons. Turn off for static separators with no animation-tracking overhead.
   $options:
@@ -206,6 +206,7 @@ namespace
     enum class ReconcileResult
     {
         succeeded,
+        succeededPartial,
         temporarilyNotReady,
         noValidSeparators,
     };
@@ -251,7 +252,7 @@ namespace
         int glowOpacityPercent = 30;
         int doubleGap = 3;
         OrientationSetting orientation = OrientationSetting::automatic;
-        bool animationCompatibility = true;
+        bool animationCompatibility = false;
         bool separatorBeforeFirstApp = false;
         std::vector<SeparatorSettings> separators;
     };
@@ -350,7 +351,6 @@ namespace
         bool animationRenderingSubscribed = false;
         bool animationPointerInside = false;
         bool animationRenderingCallbackActive = false;
-        bool animationSubscriptionOrderRefreshed = false;
         int animationStableFrames = 0;
         AnimationClock::time_point animationLastActivity{};
         bool nativeSettlingActive = false;
@@ -545,8 +545,8 @@ namespace
         PCWSTR animationCompatibilityText =
             Wh_GetStringSetting(L"animationCompatibility");
         settings.animationCompatibility =
-            !animationCompatibilityText ||
-            wcscmp(animationCompatibilityText, L"off") != 0;
+            animationCompatibilityText &&
+            wcscmp(animationCompatibilityText, L"on") == 0;
         Wh_FreeStringSetting(animationCompatibilityText);
         settings.separatorBeforeFirstApp =
             Wh_GetIntSetting(L"separatorBeforeFirstApp") != 0;
@@ -591,56 +591,68 @@ namespace
                left.B == right.B;
     }
 
-    HWND FindCurrentProcessTaskbarWnd()
+    std::vector<HWND> EnumerateCurrentProcessTaskbarWindows()
     {
-        HWND taskbarWnd = nullptr;
+        struct TaskbarWindows
+        {
+            std::vector<HWND> primary;
+            std::vector<HWND> secondary;
+        } taskbarWindows;
 
         EnumWindows(
             [](HWND hWnd, LPARAM lParam) -> BOOL
             {
                 DWORD processId = 0;
-                WCHAR className[32];
+                WCHAR className[32]{};
 
                 if (GetWindowThreadProcessId(hWnd, &processId) &&
                     processId == GetCurrentProcessId() &&
-                    GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                    _wcsicmp(className, L"Shell_TrayWnd") == 0)
+                    GetClassName(hWnd, className, ARRAYSIZE(className)))
                 {
-                    *reinterpret_cast<HWND *>(lParam) = hWnd;
-                    return FALSE;
+                    auto *taskbarWindows =
+                        reinterpret_cast<TaskbarWindows *>(lParam);
+                    if (_wcsicmp(className, L"Shell_TrayWnd") == 0)
+                    {
+                        taskbarWindows->primary.push_back(hWnd);
+                    }
+                    else if (_wcsicmp(className,
+                                      L"Shell_SecondaryTrayWnd") == 0)
+                    {
+                        taskbarWindows->secondary.push_back(hWnd);
+                    }
                 }
 
                 return TRUE;
             },
-            reinterpret_cast<LPARAM>(&taskbarWnd));
+            reinterpret_cast<LPARAM>(&taskbarWindows));
 
-        return taskbarWnd;
+        std::vector<HWND> result;
+        result.reserve(taskbarWindows.primary.size() +
+                       taskbarWindows.secondary.size());
+        result.insert(result.end(), taskbarWindows.primary.begin(),
+                      taskbarWindows.primary.end());
+        result.insert(result.end(), taskbarWindows.secondary.begin(),
+                      taskbarWindows.secondary.end());
+        return result;
     }
 
-    HWND GetTaskbarUiWnd()
+    HWND FindCurrentProcessTaskbarWnd()
     {
-        HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-        if (!taskbarWnd)
+        for (HWND taskbarWnd : EnumerateCurrentProcessTaskbarWindows())
         {
-            EnumWindows(
-                [](HWND hWnd, LPARAM lParam) -> BOOL
-                {
-                    DWORD processId = 0;
-                    WCHAR className[32];
-
-                    if (GetWindowThreadProcessId(hWnd, &processId) &&
-                        processId == GetCurrentProcessId() &&
-                        GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                        _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0)
-                    {
-                        *reinterpret_cast<HWND *>(lParam) = hWnd;
-                        return FALSE;
-                    }
-
-                    return TRUE;
-                },
-                reinterpret_cast<LPARAM>(&taskbarWnd));
+            WCHAR className[32]{};
+            if (GetClassName(taskbarWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0)
+            {
+                return taskbarWnd;
+            }
         }
+
+        return nullptr;
+    }
+
+    HWND GetTaskbarDispatchWindow(HWND taskbarWnd)
+    {
         if (!taskbarWnd)
         {
             return nullptr;
@@ -652,10 +664,19 @@ namespace
         return taskbarUiWnd ? taskbarUiWnd : taskbarWnd;
     }
 
+    HWND GetTaskbarUiWnd()
+    {
+        auto taskbarWindows = EnumerateCurrentProcessTaskbarWindows();
+        return taskbarWindows.empty()
+                   ? nullptr
+                   : GetTaskbarDispatchWindow(taskbarWindows.front());
+    }
+
     using RunFromWindowThreadProc_t = void(WINAPI *)(PVOID parameter);
 
     // Adapted from the official Windows 11 Taskbar Styler mod. SendMessage is
-    // synchronous, so the callback has completed before this function returns.
+    // synchronous; a true return means the hook observed the message and the
+    // callback returned.
     bool RunFromWindowThread(HWND hWnd,
                              RunFromWindowThreadProc_t proc,
                              PVOID procParam)
@@ -667,6 +688,7 @@ namespace
         {
             RunFromWindowThreadProc_t proc;
             PVOID procParam;
+            bool callbackRan;
         };
 
         DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -692,6 +714,7 @@ namespace
                     {
                         auto *param = reinterpret_cast<
                             RUN_FROM_WINDOW_THREAD_PARAM *>(cwp->lParam);
+                        param->callbackRan = true;
                         param->proc(param->procParam);
                     }
                 }
@@ -704,12 +727,12 @@ namespace
             return false;
         }
 
-        RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam};
+        RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam, false};
         SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
                     reinterpret_cast<LPARAM>(&param));
 
         UnhookWindowsHookEx(hook);
-        return true;
+        return param.callbackRan;
     }
 
     void *CTaskBand_ITaskListWndSite_vftable;
@@ -1364,7 +1387,6 @@ namespace
         {
             cache.hasLastPosition = false;
         }
-        taskbar.animationSubscriptionOrderRefreshed = false;
         taskbar.animationStableFrames = 0;
         taskbar.nativeSettlingStableFrames = 0;
         if (logStopped)
@@ -1613,8 +1635,7 @@ namespace
         EnsureGeometryRenderingSubscribed(taskbar);
     }
 
-    void StartAnimationTracking(TrackedTaskbarState &taskbar,
-                                bool refreshSubscription = false)
+    void StartAnimationTracking(TrackedTaskbarState &taskbar)
     {
         if (g_unloading || !taskbar.animationOverlayCanvas.get() ||
             taskbar.animationDividers.empty())
@@ -1624,23 +1645,11 @@ namespace
 
         taskbar.animationLastActivity = AnimationClock::now();
 
-        bool wasSubscribed = taskbar.animationRenderingSubscribed;
         for (auto &cache : taskbar.animationDividers)
         {
             cache.hasLastPosition = false;
         }
         taskbar.animationStableFrames = 0;
-        if (wasSubscribed && !refreshSubscription)
-        {
-            return;
-        }
-        if (wasSubscribed)
-        {
-            // Re-register once after pointer tracking begins. If another mod
-            // subscribed during the first pointer event, this normally places our
-            // callback later without relying on that ordering for correctness.
-            UnsubscribeAnimationRendering(taskbar, false);
-        }
         EnsureGeometryRenderingSubscribed(taskbar);
     }
 
@@ -1661,27 +1670,9 @@ namespace
             return;
         }
 
-        bool wasPointerInside = taskbar.animationPointerInside;
         taskbar.animationPointerInside = true;
         taskbar.animationStableFrames = 0;
-        if (!wasPointerInside)
-        {
-            bool refreshExistingSubscription =
-                taskbar.animationRenderingSubscribed;
-            StartAnimationTracking(taskbar, refreshExistingSubscription);
-            taskbar.animationSubscriptionOrderRefreshed =
-                refreshExistingSubscription;
-        }
-        else if (taskbar.animationRenderingSubscribed &&
-                 !taskbar.animationSubscriptionOrderRefreshed)
-        {
-            StartAnimationTracking(taskbar, true);
-            taskbar.animationSubscriptionOrderRefreshed = true;
-        }
-        else
-        {
-            StartAnimationTracking(taskbar);
-        }
+        StartAnimationTracking(taskbar);
     }
 
     void OnAnimationPointerExited(
@@ -2945,6 +2936,18 @@ namespace
                     return false;
                 }
             }
+            else
+            {
+                auto currentIconPanel =
+                    FindDescendantByName(current.button, L"IconPanel")
+                        .try_as<Controls::Panel>();
+                if (currentIconPanel &&
+                    FindDescendantByName(currentIconPanel, L"Icon"))
+                {
+                    // A previously unrealized button is now placeable.
+                    return false;
+                }
+            }
         }
 
         return CachedSeparatorVisualsAreValid(taskbar, snapshot.rootGrid);
@@ -2998,22 +3001,15 @@ namespace
     ReconcileResult ReconcileTrackedTaskbar(
         TrackedTaskbarState &taskbar,
         FrameworkElement const &repeater,
-        bool enabled,
         bool forceStructuralReconcile)
     {
-        if (enabled &&
-            SuppressEnabledWorkDuringUnload(L"ReconcileTrackedTaskbar"))
-        {
-            return ReconcileResult::noValidSeparators;
-        }
-
         ReconcileResult result = ReconcileResult::temporarilyNotReady;
 
         try
         {
             if (repeater && repeater.Dispatcher().HasThreadAccess())
             {
-                if (forceStructuralReconcile || !enabled)
+                if (forceStructuralReconcile)
                 {
                     InvalidateReconciliationSignature(taskbar);
                 }
@@ -3025,7 +3021,7 @@ namespace
                 // UpdateVisualStates is a hot path. A matching weak/scalar
                 // snapshot proves that structural work is unchanged; active
                 // animation geometry remains the Rendering callback's job.
-                if (enabled && !forceStructuralReconcile &&
+                if (!forceStructuralReconcile &&
                     CanReuseReconciledTaskbar(
                         taskbar, repeater, snapshot,
                         currentSettingsGeneration))
@@ -3048,7 +3044,7 @@ namespace
                 bool settingsChanged =
                     taskbar.appliedSettingsGeneration != settingsGeneration;
 
-                if (!enabled || !settings.animationCompatibility)
+                if (!settings.animationCompatibility)
                 {
                     StopAnimationTracking(taskbar);
                     DetachAnimationPointerHandlers(taskbar);
@@ -3095,36 +3091,27 @@ namespace
 
                 std::vector<ActiveSeparator> activeSeparators;
                 std::vector<int> usedPositions;
-                if (enabled)
+                if (settings.separatorBeforeFirstApp)
                 {
-                    if (settings.separatorBeforeFirstApp)
+                    activeSeparators.push_back(
+                        {SeparatorSettings{}, GetBeforeFirstDividerName(),
+                         true});
+                }
+                for (auto const &separator : settings.separators)
+                {
+                    if (std::find(usedPositions.begin(), usedPositions.end(),
+                                  separator.position) != usedPositions.end())
                     {
-                        activeSeparators.push_back(
-                            {SeparatorSettings{}, GetBeforeFirstDividerName(),
-                             true});
+                        continue;
                     }
-                    for (auto const &separator : settings.separators)
-                    {
-                        if (std::find(usedPositions.begin(), usedPositions.end(),
-                                      separator.position) !=
-                            usedPositions.end())
-                        {
-                            continue;
-                        }
 
-                        usedPositions.push_back(separator.position);
-                        activeSeparators.push_back(
-                            {separator,
-                             GetDividerName(separator.settingsIndex), false});
-                    }
+                    usedPositions.push_back(separator.position);
+                    activeSeparators.push_back(
+                        {separator,
+                         GetDividerName(separator.settingsIndex), false});
                 }
 
                 auto rootGrid = snapshot.rootGrid;
-                if (enabled && SuppressEnabledWorkDuringUnload(
-                                   L"ReconcileTrackedTaskbar mutation"))
-                {
-                    return ReconcileResult::noValidSeparators;
-                }
                 auto trackedRootGrid = taskbar.rootGrid.get();
                 if (trackedRootGrid &&
                     (!rootGrid ||
@@ -3139,7 +3126,7 @@ namespace
                 }
 
                 Controls::Canvas overlayCanvas = nullptr;
-                bool needOverlay = enabled && !activeSeparators.empty();
+                bool needOverlay = !activeSeparators.empty();
 
                 if (rootGrid)
                 {
@@ -3183,11 +3170,6 @@ namespace
 
                     if (needOverlay && !overlayCanvas)
                     {
-                        if (SuppressEnabledWorkDuringUnload(
-                                L"overlay creation"))
-                        {
-                            return ReconcileResult::noValidSeparators;
-                        }
                         Controls::Canvas overlay;
                         overlay.Name(L"WindhawkTaskbarSeparatorOverlay");
                         overlay.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -3236,7 +3218,7 @@ namespace
                 {
                     AttachAnimationPointerHandlers(taskbar, rootGrid);
                 }
-                else if (enabled)
+                else
                 {
                     DetachAnimationPointerHandlers(taskbar);
                 }
@@ -3308,15 +3290,10 @@ namespace
                     reconciledSeparators;
                 reconciledSeparators.reserve(activeSeparators.size());
                 size_t activeDividerCount = 0;
+                bool geometryFailureWasTransient = false;
                 for (size_t activeIndex = 0;
                      activeIndex < activeSeparators.size(); activeIndex++)
                 {
-                    if (enabled && SuppressEnabledWorkDuringUnload(
-                                       L"separator update"))
-                    {
-                        return ReconcileResult::noValidSeparators;
-                    }
-
                     auto const &activeSeparator =
                         activeSeparators[activeIndex];
                     auto const &separator = activeSeparator.settings;
@@ -3357,6 +3334,10 @@ namespace
                     double hostHeight = 0;
                     GetStyleHostSize(settings, taskbarOrientation, &hostWidth,
                                      &hostHeight);
+                    bool geometryExpectedFromCurrentButtons =
+                        activeSeparator.beforeFirst
+                            ? targetIcon && nextIcon
+                            : targetIcon && (nextIcon || previousIcon);
                     DividerGeometry geometry;
                     bool geometryValid = false;
                     if (orientationValid && targetIcon)
@@ -3378,6 +3359,13 @@ namespace
                     }
                     if (!geometryValid)
                     {
+                        if (geometryExpectedFromCurrentButtons)
+                        {
+                            // The required realized icons exist, so a failed
+                            // orientation/transform indicates a rebuilding or
+                            // otherwise transient visual tree.
+                            geometryFailureWasTransient = true;
+                        }
                         auto staleHost = existingHosts[activeIndex];
                         if (staleHost && overlayCanvas)
                         {
@@ -3395,11 +3383,6 @@ namespace
                     auto host = existingHosts[activeIndex];
                     if (!host)
                     {
-                        if (SuppressEnabledWorkDuringUnload(
-                                L"separator creation"))
-                        {
-                            return ReconcileResult::noValidSeparators;
-                        }
                         Controls::Canvas newHost;
                         newHost.Name(activeSeparator.name);
                         newHost.HorizontalAlignment(
@@ -3480,6 +3463,23 @@ namespace
                     activeDividerCount++;
                 }
 
+                if (activeDividerCount == 0 && overlayCanvas && rootGrid)
+                {
+                    uint32_t overlayIndex = 0;
+                    auto rootChildren = rootGrid.Children();
+                    if (rootChildren.IndexOf(overlayCanvas, overlayIndex))
+                    {
+                        rootChildren.RemoveAt(overlayIndex);
+                        overlayCanvas = nullptr;
+                        taskbar.overlayCanvas = {};
+                        needOverlay = false;
+                    }
+                    else
+                    {
+                        geometryFailureWasTransient = true;
+                    }
+                }
+
                 taskbar.animationDividers = std::move(animationDividers);
                 if (!taskbar.animationDividers.empty() && overlayCanvas)
                 {
@@ -3490,19 +3490,24 @@ namespace
                 {
                     StopAllGeometryTracking(taskbar);
                     ClearAnimationElementCache(taskbar);
-                    if (enabled)
-                    {
-                        DetachAnimationPointerHandlers(taskbar);
-                    }
+                    DetachAnimationPointerHandlers(taskbar);
                 }
 
-                if (!enabled || activeSeparators.empty())
+                if (activeSeparators.empty())
                 {
                     result = ReconcileResult::noValidSeparators;
+                }
+                else if (geometryFailureWasTransient)
+                {
+                    result = ReconcileResult::temporarilyNotReady;
                 }
                 else if (activeDividerCount == activeSeparators.size())
                 {
                     result = ReconcileResult::succeeded;
+                }
+                else
+                {
+                    result = ReconcileResult::succeededPartial;
                 }
 
                 if (settingsChanged ||
@@ -3513,6 +3518,12 @@ namespace
                         Wh_Log(L"RECONCILE: failed: active %zu of %zu dividers",
                                activeDividerCount, activeSeparators.size());
                     }
+                    else if (result == ReconcileResult::succeededPartial)
+                    {
+                        Wh_Log(L"RECONCILE: partial success: active %zu of %zu "
+                               L"dividers",
+                               activeDividerCount, activeSeparators.size());
+                    }
                     else
                     {
                         Wh_Log(L"RECONCILE: succeeded with %zu active dividers",
@@ -3521,16 +3532,7 @@ namespace
                     taskbar.lastActiveDividerCount = activeDividerCount;
                 }
 
-                if (enabled && SuppressEnabledWorkDuringUnload(
-                                   L"reconciliation state commit"))
-                {
-                    InvalidateReconciliationSignature(taskbar);
-                    return ReconcileResult::noValidSeparators;
-                }
-
-                if (enabled &&
-                    (result == ReconcileResult::succeeded ||
-                     activeSeparators.empty()))
+                if (result != ReconcileResult::temporarilyNotReady)
                 {
                     taskbar.appliedSettingsGeneration = settingsGeneration;
                     CommitReconciledTaskbar(
@@ -3539,7 +3541,8 @@ namespace
                         settings.animationCompatibility,
                         std::move(reconciledSeparators));
                     if (taskbar.reconciliationSignatureValid &&
-                        result == ReconcileResult::succeeded)
+                        (result == ReconcileResult::succeeded ||
+                         result == ReconcileResult::succeededPartial))
                     {
                         StartNativeSettlingTracking(taskbar);
                         if (settings.animationCompatibility)
@@ -3584,11 +3587,6 @@ namespace
     TaskbarDiscoveryResult DiscoverCurrentThreadTaskbars()
     {
         TaskbarDiscoveryResult result;
-        if (g_unloading.load(std::memory_order_acquire))
-        {
-            return result;
-        }
-
         std::vector<HWND> taskbarWindows;
         EnumThreadWindows(
             GetCurrentThreadId(),
@@ -3609,18 +3607,9 @@ namespace
         result.taskbarWindowCount = taskbarWindows.size();
         for (HWND taskbarWnd : taskbarWindows)
         {
-            if (g_unloading.load(std::memory_order_acquire))
-            {
-                break;
-            }
-
             try
             {
                 auto repeater = DiscoverTaskbarRepeater(taskbarWnd);
-                if (g_unloading.load(std::memory_order_acquire))
-                {
-                    break;
-                }
                 if (!repeater)
                 {
                     continue;
@@ -3674,8 +3663,8 @@ namespace
     void CleanupAllTaskbarsForUnload()
     {
         // Stop every callback source before touching the visual tree. A queued
-        // callback is still harmless because every enabled reconcile boundary
-        // independently checks g_unloading.
+        // callback is still harmless because every asynchronous reconcile entry
+        // checks g_unloading.
         ClearAnimationTrackingForUnload();
 
         size_t trackedCount =
@@ -3833,15 +3822,8 @@ namespace
 
     ReconcileResult ReconcileTaskbarRepeater(
         FrameworkElement const &repeater,
-        bool enabled,
         bool forceStructuralReconcile)
     {
-        if (enabled &&
-            SuppressEnabledWorkDuringUnload(L"ReconcileTaskbarRepeater"))
-        {
-            return ReconcileResult::noValidSeparators;
-        }
-
         if (g_reconcilingTaskbars)
         {
             return ReconcileResult::temporarilyNotReady;
@@ -3857,35 +3839,14 @@ namespace
                 return ReconcileResult::temporarilyNotReady;
             }
 
-            if (!enabled && !g_trackedTaskbars)
-            {
-                return ReconcileResult::noValidSeparators;
-            }
-
             auto *taskbar = TrackTaskbarRepeater(repeater);
             if (!taskbar)
             {
                 return ReconcileResult::temporarilyNotReady;
             }
 
-            size_t taskbarId = taskbar->id;
-            ReconcileResult result =
-                ReconcileTrackedTaskbar(*taskbar, repeater, enabled,
-                                        forceStructuralReconcile);
-            if (!enabled)
-            {
-                RemoveTrackedTaskbarElements(*taskbar);
-                auto &trackedTaskbars = *g_trackedTaskbars;
-                trackedTaskbars.erase(
-                    std::remove_if(
-                        trackedTaskbars.begin(), trackedTaskbars.end(),
-                        [&](TrackedTaskbarState const &trackedTaskbar)
-                        {
-                            return trackedTaskbar.id == taskbarId;
-                        }),
-                    trackedTaskbars.end());
-            }
-            return result;
+            return ReconcileTrackedTaskbar(
+                *taskbar, repeater, forceStructuralReconcile);
         }
         catch (winrt::hresult_error const &e)
         {
@@ -3900,14 +3861,8 @@ namespace
         return ReconcileResult::temporarilyNotReady;
     }
 
-    ReconcileResult ReconcileDividers(bool enabled,
-                                      bool forceStructuralReconcile)
+    ReconcileResult ReconcileDividers(bool forceStructuralReconcile)
     {
-        if (enabled && SuppressEnabledWorkDuringUnload(L"ReconcileDividers"))
-        {
-            return ReconcileResult::noValidSeparators;
-        }
-
         if (g_reconcilingTaskbars)
         {
             return ReconcileResult::temporarilyNotReady;
@@ -3919,32 +3874,23 @@ namespace
 
         try
         {
-            TaskbarDiscoveryResult discovery;
-            bool discoveryComplete = true;
-            if (enabled)
+            PruneExpiredTrackedTaskbars();
+            auto discovery = DiscoverCurrentThreadTaskbars();
+            bool discoveryComplete =
+                discovery.taskbarWindowCount > 0 &&
+                discovery.resolvedRepeaterCount ==
+                    discovery.taskbarWindowCount;
+            for (auto const &repeater : discovery.repeaters)
             {
-                PruneExpiredTrackedTaskbars();
-                discovery = DiscoverCurrentThreadTaskbars();
-                discoveryComplete =
-                    discovery.taskbarWindowCount > 0 &&
-                    discovery.resolvedRepeaterCount ==
-                        discovery.taskbarWindowCount;
-                for (auto const &repeater : discovery.repeaters)
+                if (!TrackTaskbarRepeater(repeater))
                 {
-                    if (SuppressEnabledWorkDuringUnload(
-                            L"taskbar discovery registration"))
-                    {
-                        return ReconcileResult::noValidSeparators;
-                    }
-                    if (!TrackTaskbarRepeater(repeater))
-                    {
-                        discoveryComplete = false;
-                    }
+                    discoveryComplete = false;
                 }
             }
 
             size_t reconciledTaskbarCount = 0;
             size_t succeededTaskbarCount = 0;
+            size_t partiallySucceededTaskbarCount = 0;
             size_t noValidSeparatorTaskbarCount = 0;
             bool anyTemporarilyNotReady = !discoveryComplete;
             if (g_trackedTaskbars)
@@ -3969,11 +3915,15 @@ namespace
 
                         ReconcileResult taskbarResult =
                             ReconcileTrackedTaskbar(
-                                taskbar, repeater, enabled,
-                                forceStructuralReconcile);
+                                taskbar, repeater, forceStructuralReconcile);
                         if (taskbarResult == ReconcileResult::succeeded)
                         {
                             succeededTaskbarCount++;
+                        }
+                        else if (taskbarResult ==
+                                 ReconcileResult::succeededPartial)
+                        {
+                            partiallySucceededTaskbarCount++;
                         }
                         else if (taskbarResult ==
                                  ReconcileResult::temporarilyNotReady)
@@ -3990,20 +3940,6 @@ namespace
                         anyTemporarilyNotReady = true;
                     }
                 }
-            }
-
-            if (!enabled)
-            {
-                if (g_trackedTaskbars)
-                {
-                    for (auto &taskbar : *g_trackedTaskbars)
-                    {
-                        RemoveTrackedTaskbarElements(taskbar);
-                    }
-                    g_trackedTaskbars->clear();
-                    DestroyTrackedTaskbars();
-                }
-                return ReconcileResult::noValidSeparators;
             }
 
             if (reconciledTaskbarCount == 0)
@@ -4025,6 +3961,13 @@ namespace
             else if (noValidSeparatorTaskbarCount == reconciledTaskbarCount)
             {
                 result = ReconcileResult::noValidSeparators;
+            }
+            else if (succeededTaskbarCount +
+                         partiallySucceededTaskbarCount +
+                         noValidSeparatorTaskbarCount ==
+                     reconciledTaskbarCount)
+            {
+                result = ReconcileResult::succeededPartial;
             }
             else
             {
@@ -4079,8 +4022,9 @@ namespace
 
         constexpr int kMaximumAttempts = 20;
         g_initialReconcileAttempts++;
-        ReconcileResult result = ReconcileDividers(true, false);
-        if (result == ReconcileResult::succeeded)
+        ReconcileResult result = ReconcileDividers(false);
+        if (result == ReconcileResult::succeeded ||
+            result == ReconcileResult::succeededPartial)
         {
             CancelInitialReconcileRetry();
         }
@@ -4107,8 +4051,9 @@ namespace
         }
 
         g_initialReconcileAttempts = 1;
-        ReconcileResult result = ReconcileDividers(true, true);
-        if (result == ReconcileResult::succeeded)
+        ReconcileResult result = ReconcileDividers(true);
+        if (result == ReconcileResult::succeeded ||
+            result == ReconcileResult::succeededPartial)
         {
             g_initialReconcileAttempts = 0;
             return;
@@ -4154,7 +4099,7 @@ namespace
                 auto repeater = FindRepeaterAncestor(taskListButton);
                 if (repeater)
                 {
-                    ReconcileTaskbarRepeater(repeater, true, false);
+                    ReconcileTaskbarRepeater(repeater, false);
                 }
             }
         }
@@ -4179,56 +4124,88 @@ namespace
             bool completed;
         };
 
-        HWND taskbarUiWnd = GetTaskbarUiWnd();
-        if (!taskbarUiWnd)
+        std::vector<HWND> taskbarUiWindows;
+        if (enabled)
         {
-            Wh_Log(L"RECONCILE: taskbar UI window not found");
+            if (HWND taskbarUiWnd = GetTaskbarUiWnd())
+            {
+                taskbarUiWindows.push_back(taskbarUiWnd);
+            }
+        }
+        else
+        {
+            for (HWND taskbarWnd : EnumerateCurrentProcessTaskbarWindows())
+            {
+                HWND taskbarUiWnd = GetTaskbarDispatchWindow(taskbarWnd);
+                DWORD processId = 0;
+                DWORD threadId = taskbarUiWnd
+                                     ? GetWindowThreadProcessId(taskbarUiWnd,
+                                                                &processId)
+                                     : 0;
+                if (threadId != 0 && processId == GetCurrentProcessId())
+                {
+                    taskbarUiWindows.push_back(taskbarUiWnd);
+                }
+            }
+        }
+
+        if (taskbarUiWindows.empty())
+        {
+            if (enabled)
+            {
+                Wh_Log(L"RECONCILE: taskbar UI window not found");
+            }
             return false;
         }
 
-        RECONCILE_REQUEST request{enabled, beginBoundedRetry, false};
-        bool dispatched = RunFromWindowThread(
-            taskbarUiWnd,
-            [](PVOID parameter)
+        auto reconcileProc = [](PVOID parameter)
+        {
+            try
             {
-                try
+                auto *request =
+                    static_cast<RECONCILE_REQUEST *>(parameter);
+                if (request->enabled && SuppressEnabledWorkDuringUnload(
+                                            L"queued window callback"))
                 {
-                    auto *request =
-                        static_cast<RECONCILE_REQUEST *>(parameter);
-                    if (request->enabled && SuppressEnabledWorkDuringUnload(
-                                                L"queued window callback"))
-                    {
-                        request->completed = true;
-                        return;
-                    }
-                    if (!request->enabled)
-                    {
-                        CleanupAllTaskbarsForUnload();
-                    }
-                    else if (request->beginBoundedRetry)
-                    {
-                        BeginInitialReconcileOnUiThread();
-                    }
-                    else
-                    {
-                        ReconcileDividers(true, true);
-                    }
                     request->completed = true;
+                    return;
                 }
-                catch (...)
+                if (!request->enabled)
                 {
+                    CleanupAllTaskbarsForUnload();
                 }
-            },
-            &request);
+                else if (request->beginBoundedRetry)
+                {
+                    BeginInitialReconcileOnUiThread();
+                }
+                else
+                {
+                    ReconcileDividers(true);
+                }
+                request->completed = true;
+            }
+            catch (...)
+            {
+            }
+        };
 
-        if (!dispatched || !request.completed)
+        for (HWND taskbarUiWnd : taskbarUiWindows)
+        {
+            RECONCILE_REQUEST request{enabled, beginBoundedRetry, false};
+            bool callbackRan = RunFromWindowThread(
+                taskbarUiWnd, reconcileProc, &request);
+            if (callbackRan && request.completed)
+            {
+                return true;
+            }
+        }
+
+        if (enabled)
         {
             Wh_Log(L"RECONCILE: failed to run synchronously on the taskbar UI "
                    L"thread");
-            return false;
         }
-
-        return true;
+        return false;
     }
 
     bool HookTaskbarDllSymbols()
@@ -4279,7 +4256,7 @@ namespace
 
     bool HookTaskbarViewDllSymbols(HMODULE module)
     {
-        // Taskbar.View.dll
+        // Taskbar.View.dll, ExplorerExtensions.dll
         WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
             {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
