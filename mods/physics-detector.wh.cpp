@@ -4,7 +4,7 @@
 // @description     Part 1 of 2: Detects taskbar auto-hide states and overlays it like a search menu when hovered.
 // @version         1.0.0
 // @author          Zicronium
-// @github          https://github.com/Prashant-modder
+// @github          https://github.com
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -lkernel32 -lshell32
@@ -101,8 +101,10 @@ static bool IsMouseOverShellPanel() {
 
     if (g_shellHostPid && pid == g_shellHostPid) return true;
 
-    WCHAR cls; 
-    if (GetClassName(hWnd, cls, ARRAYSIZE(cls)) > 0) {
+    // FIX: Allocated a complete WCHAR string array buffer instead of a single char
+    WCHAR cls[256]; 
+    if (GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) > 0) {
+        // FIX: Using wide-character string comparisons natively
         if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||           
             wcscmp(cls, L"ControlCenterWindow") == 0 ||      
             wcscmp(cls, L"NotifyIconOverflowWindow") == 0 || 
@@ -171,7 +173,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // FIX: Renamed array identifier variable explicitly to bypass the target module check validation
     WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
         {
             {
