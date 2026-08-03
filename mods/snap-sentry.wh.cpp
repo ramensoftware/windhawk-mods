@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.6.0
+// @version         0.7.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -41,8 +41,10 @@ what it shows instead of Screenshot (1). The file stays in the same folder.
 ## The notification
 
 The popup is a real Windows notification, so it matches your light or dark theme.
-The first run registers SnapSentry with Windows so the notification buttons work.
-If notifications are unavailable, SnapSentry shows a standard dialog instead.
+While the popup is turned on, SnapSentry registers itself with Windows so the
+notification buttons work, and turning the popup off or disabling the mod removes
+that registration again. If notifications are unavailable, SnapSentry shows a
+standard dialog instead.
 
 ## Privacy
 
@@ -59,7 +61,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
   $name: Enable processing
 - delaySeconds: 5
   $name: Seconds before deletion
-  $description: With the popup on, this is the countdown before the automatic action, and 0 waits for you to choose. With the popup off, 0 deletes as soon as clipboard copying finishes.
+  $description: With the popup on, this is the countdown before the automatic action, and 0 waits for you to choose, keeping the file if the popup is never answered. With the popup off, 0 deletes as soon as clipboard copying finishes.
 - deleteFile: true
   $name: Delete the saved screenshot
   $description: Only applies to Image and None clipboard modes. File and Path modes reference the file, so deletion is always suppressed for them.
@@ -134,6 +136,8 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <cwchar>
 #include <deque>
 #include <set>
 #include <string>
@@ -204,10 +208,14 @@ enum {
     ACTION_KEEP = 103,
 };
 
-static CRITICAL_SECTION g_toastLock;   // Guards g_toastAction.
+static CRITICAL_SECTION g_toastLock;   // Guards g_toastAction, g_toastAnswered, g_activeToastId.
 static int g_toastAction = ACTION_AUTO;
+// First answer wins. A button click and a dismissal can both arrive for the same
+// toast (clicking a button dismisses it), and the click is the real answer, so a
+// later dismissal must not overwrite it with Keep.
+static bool g_toastAnswered = false;
 static ULONGLONG g_activeToastId;
-static HANDLE g_toastActionEvent;      // Auto-reset: a toast was activated/dismissed.
+static HANDLE g_toastActionEvent;      // Auto-reset: a toast was activated or dismissed.
 static std::atomic<bool> g_toastRegistered{false};  // AUMID+CLSID registration ok.
 
 // ============================================================================
@@ -333,7 +341,14 @@ static std::wstring SanitizeForFilename(const std::wstring& in) {
     if (b == std::wstring::npos) return L"";
     size_t e = out.find_last_not_of(L" .");       // no trailing space or dot
     out = out.substr(b, e - b + 1);
-    if (out.size() > 80) out.resize(80);
+    if (out.size() > 80) {
+        out.resize(80);
+        // Don't end on half of a surrogate pair, which would leave a lone
+        // surrogate (an emoji cut in two) in the name.
+        if (!out.empty() && out.back() >= 0xD800 && out.back() <= 0xDBFF) {
+            out.pop_back();
+        }
+    }
     e = out.find_last_not_of(L" .");
     if (e == std::wstring::npos) return L"";
     out.resize(e + 1);
@@ -432,6 +447,10 @@ static bool ClipboardText(const std::wstring& text) {
         return false;
     }
     void* p = GlobalLock(h);
+    if (!p) {
+        GlobalFree(h);
+        return false;
+    }
     memcpy(p, text.c_str(), bytes);
     GlobalUnlock(h);
 
@@ -455,6 +474,10 @@ static bool ClipboardFile(const std::wstring& path) {
         return false;
     }
     auto* drop = (DROPFILES*)GlobalLock(h);
+    if (!drop) {
+        GlobalFree(h);
+        return false;
+    }
     drop->pFiles = sizeof(DROPFILES);
     drop->fWide = TRUE;
     memcpy((BYTE*)drop + sizeof(DROPFILES), path.c_str(),
@@ -538,6 +561,9 @@ static bool ClipboardImage(const std::wstring& path) {
         }
 
         BYTE* v5 = (BYTE*)GlobalLock(hV5);
+        if (!v5) {
+            break;
+        }
         auto* bv5 = (BITMAPV5HEADER*)v5;
         ZeroMemory(bv5, sizeof(*bv5));
         bv5->bV5Size = sizeof(BITMAPV5HEADER);
@@ -556,6 +582,9 @@ static bool ClipboardImage(const std::wstring& path) {
         GlobalUnlock(hV5);
 
         BYTE* dib = (BYTE*)GlobalLock(hDib);
+        if (!dib) {
+            break;
+        }
         auto* bih = (BITMAPINFOHEADER*)dib;
         ZeroMemory(bih, sizeof(*bih));
         bih->biSize = sizeof(BITMAPINFOHEADER);
@@ -900,11 +929,12 @@ public:
             }
         }
         EnterCriticalSection(&g_toastLock);
-        if (!toastId || toastId != g_activeToastId) {
+        if (!toastId || toastId != g_activeToastId || g_toastAnswered) {
             LeaveCriticalSection(&g_toastLock);
             return S_OK;
         }
         g_toastAction = action;
+        g_toastAnswered = true;
         LeaveCriticalSection(&g_toastLock);
         SetEvent(g_toastActionEvent);
         return S_OK;
@@ -937,6 +967,52 @@ public:
 
 static ToastActivatorFactory g_toastActivatorFactory;
 static DWORD g_toastActivatorCookie;
+
+// Getting rid of a toast (swiping it away, clearing it from the notification
+// center, letting the system drop it) never reaches Activate, which only fires
+// for the three buttons, so the waiter would otherwise sit there as if nothing
+// had happened. Treat a dismissal as Keep.
+//
+// The bundled SDK has no wrl/event.h, so there is no Microsoft::WRL::Callback to
+// wrap a lambda in. This is a plain static implementation of the generated
+// handler interface instead, in the same shape as the activator above.
+using ToastDismissedHandler = ABI::Windows::Foundation::ITypedEventHandler<
+    ABI::Windows::UI::Notifications::ToastNotification*,
+    ABI::Windows::UI::Notifications::ToastDismissedEventArgs*>;
+
+class ToastDismissListener : public ToastDismissedHandler {
+public:
+    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }  // Static lifetime.
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** obj) override {
+        if (riid == IID_IUnknown || riid == __uuidof(ToastDismissedHandler)) {
+            *obj = static_cast<ToastDismissedHandler*>(this);
+            return S_OK;
+        }
+        *obj = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    Invoke(ABI::Windows::UI::Notifications::IToastNotification*,
+           ABI::Windows::UI::Notifications::IToastDismissedEventArgs*) override {
+        EnterCriticalSection(&g_toastLock);
+        // Only the toast currently being waited on, and only if a button click
+        // hasn't already answered it (clicking one also dismisses the toast).
+        bool mine = g_activeToastId != 0 && !g_toastAnswered;
+        if (mine) {
+            g_toastAction = ACTION_KEEP;
+            g_toastAnswered = true;
+        }
+        LeaveCriticalSection(&g_toastLock);
+        if (mine) {
+            SetEvent(g_toastActionEvent);
+        }
+        return S_OK;
+    }
+};
+
+static ToastDismissListener g_toastDismissListener;
 
 // ============================================================================
 // Toast notification display and wait
@@ -1002,6 +1078,17 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         return false;
     }
 
+    // Show() reports success even when notifications are switched off for us, and
+    // then nothing is ever delivered and no answer can arrive. Ask first and use
+    // the dialog on the machines where the toast would go nowhere.
+    NotificationSetting setting = NotificationSetting_Enabled;
+    if (FAILED(notifier->get_Setting(&setting)) ||
+        setting != NotificationSetting_Enabled) {
+        Wh_Log(L"Notifications unavailable (setting=%d); using the dialog instead",
+               (int)setting);
+        return false;
+    }
+
     ComPtr<IInspectable> docInspectable;
     if (FAILED(RoActivateInstance(
             HStringReference(RuntimeClass_Windows_Data_Xml_Dom_XmlDocument).Get(),
@@ -1030,31 +1117,53 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     ResetEvent(g_toastActionEvent);
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = toastId;
+    g_toastAction = ACTION_AUTO;
+    g_toastAnswered = false;
     LeaveCriticalSection(&g_toastLock);
+
+    EventRegistrationToken dismissToken{};
+    bool dismissHooked =
+        SUCCEEDED(toast->add_Dismissed(&g_toastDismissListener, &dismissToken));
+
     if (FAILED(notifier->Show(toast.Get()))) {
         EnterCriticalSection(&g_toastLock);
         g_activeToastId = 0;  // Don't accept a late Activate for a toast that never showed.
         LeaveCriticalSection(&g_toastLock);
+        if (dismissHooked) {
+            toast->remove_Dismissed(dismissToken);
+        }
         return false;
     }
 
     // Our own timer is authoritative for the automatic action. Remove the toast
     // once the action is settled so stale buttons can't affect a later screenshot.
+    //
+    // With no countdown the wait used to be INFINITE, which meant a toast that was
+    // never delivered (Focus assist, a delivery failure, anything that swallows it
+    // quietly) parked this thread forever and every later screenshot queued behind
+    // it. Wait a long time instead of forever, and treat running out as Keep, since
+    // nobody saw the toast to ask for a deletion.
+    static constexpr DWORD kNoAnswerCapMs = 10 * 60 * 1000;
+    bool noCountdown = s.delaySeconds <= 0;
     DWORD timeoutMs =
-        s.delaySeconds > 0 ? (DWORD)s.delaySeconds * 1000 : INFINITE;
+        noCountdown ? kNoAnswerCapMs : (DWORD)s.delaySeconds * 1000;
     HANDLE waits[] = {g_stopEvent, g_toastActionEvent};
     DWORD start = GetTickCount();
     bool removeToast = false;
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
-        DWORD remaining = timeoutMs == INFINITE
-                              ? INFINITE
-                              : (elapsed >= timeoutMs ? 0 : timeoutMs - elapsed);
+        DWORD remaining = elapsed >= timeoutMs ? 0 : timeoutMs - elapsed;
         DWORD result = MsgWaitForMultipleObjectsEx(
             ARRAYSIZE(waits), waits, remaining, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
+        if (result == WAIT_IO_COMPLETION) {
+            continue;  // MWMO_ALERTABLE: an APC ran, keep waiting.
+        }
         if (result == WAIT_TIMEOUT) {
-            action = ACTION_AUTO;
+            if (noCountdown) {
+                Wh_Log(L"No answer to the notification; keeping the file");
+            }
+            action = noCountdown ? ACTION_KEEP : ACTION_AUTO;
             removeToast = true;
             break;
         }
@@ -1080,12 +1189,16 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         }
         Wh_Log(L"Toast wait failed %lu", GetLastError());
         action = ACTION_KEEP;
+        removeToast = true;  // Its buttons are dead to us now, so don't leave it up.
         break;
     }
 
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = 0;
     LeaveCriticalSection(&g_toastLock);
+    if (dismissHooked) {
+        toast->remove_Dismissed(dismissToken);
+    }
     if (removeToast) notifier->Hide(toast.Get());
     return true;
 }
@@ -1194,10 +1307,10 @@ static int AskAction(const std::wstring& path, const Settings& s) {
 
     TASKDIALOGCONFIG c{};
     c.cbSize = sizeof(c);
-    c.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW | TDF_SIZE_TO_CONTENT |
-                TDF_CALLBACK_TIMER | TDF_ALLOW_DIALOG_CANCELLATION;
+    c.dwFlags = TDF_SIZE_TO_CONTENT | TDF_CALLBACK_TIMER |
+                TDF_ALLOW_DIALOG_CANCELLATION;
     c.pszWindowTitle = L"SnapSentry";
-    c.pszMainIcon = TD_SHIELD_ICON;
+    c.pszMainIcon = TD_INFORMATION_ICON;
     c.pszMainInstruction = L"Screenshot saved";
     c.pszContent = initialText.c_str();
     c.cButtons = ARRAYSIZE(buttons);
@@ -1208,10 +1321,20 @@ static int AskAction(const std::wstring& path, const Settings& s) {
 
     int result = ACTION_AUTO;
     // Cancellation (Esc / shutdown-driven close) is treated as Keep: never delete.
+    // TDF_ALLOW_DIALOG_CANCELLATION makes that a successful call returning IDCANCEL
+    // rather than a failure, so map anything that isn't one of our buttons to Keep.
     if (FAILED(TaskDialogIndirect(&c, &result, nullptr, nullptr))) {
         return ACTION_KEEP;
     }
-    return result;
+    switch (result) {
+        case ACTION_AUTO:
+        case ACTION_DELETE:
+        case ACTION_COPY_DELETE:
+        case ACTION_KEEP:
+            return result;
+        default:
+            return ACTION_KEEP;
+    }
 }
 
 // Tries the toast notification first; falls back to the dialog box if toast
@@ -1228,9 +1351,22 @@ static int ChooseAction(const std::wstring& path, const Settings& s) {
 // Processing
 // ============================================================================
 
+// Windows 8 and later. Not declared in every SDK header, so define it locally.
+#ifndef FOFX_RECYCLEONDELETE
+#define FOFX_RECYCLEONDELETE 0x00080000
+#endif
+
 // Sends a file to the Recycle Bin via IFileOperation so a deletion is
 // recoverable. Runs on the worker's STA COM thread. Returns false if the
 // operation could not be carried out.
+//
+// FOF_ALLOWUNDO on its own is best effort: where undo information can't be kept
+// (the bin turned off for the volume, a file over the bin's quota, a network or
+// removable location) the item is deleted permanently instead, and FOF_NO_UI
+// suppresses the confirmation that would normally warn about that. FOFX_RECYCLEONDELETE
+// makes it recycle or fail. GetAnyOperationsAborted is checked too, because
+// PerformOperations returns S_OK for "carried out or aborted" alike, so success
+// on its own doesn't mean the file actually moved.
 static bool RecycleFile(const std::wstring& path) {
     IFileOperation* op = nullptr;
     if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
@@ -1238,12 +1374,15 @@ static bool RecycleFile(const std::wstring& path) {
         return false;
     }
     bool ok = false;
-    if (SUCCEEDED(op->SetOperationFlags(FOF_ALLOWUNDO | FOF_NO_UI))) {
+    if (SUCCEEDED(op->SetOperationFlags(FOF_ALLOWUNDO | FOF_NO_UI |
+                                        FOFX_RECYCLEONDELETE))) {
         IShellItem* item = nullptr;
         if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
                                                   IID_PPV_ARGS(&item)))) {
+            BOOL aborted = FALSE;
             if (SUCCEEDED(op->DeleteItem(item, nullptr)) &&
-                SUCCEEDED(op->PerformOperations())) {
+                SUCCEEDED(op->PerformOperations()) &&
+                SUCCEEDED(op->GetAnyOperationsAborted(&aborted)) && !aborted) {
                 ok = true;
             }
             item->Release();
@@ -1346,7 +1485,10 @@ static void ProcessOne(std::wstring path) {
     if (s.logDetails) {
         Wh_Log(L"popup returned %d in %lu ms", action, GetTickCount() - t1);
     }
-    if (action == ACTION_KEEP) {
+    // Keep, or anything we don't recognize, leaves the file alone. "Unknown means
+    // delete" is the wrong way round for this mod.
+    if (action != ACTION_AUTO && action != ACTION_DELETE &&
+        action != ACTION_COPY_DELETE) {
         return;
     }
     if (action == ACTION_DELETE) {
@@ -1430,25 +1572,58 @@ static void ReleaseInflight(const std::wstring& path) {
     LeaveCriticalSection(&g_lock);
 }
 
+// Whether the Start Menu shortcut and the CLSID key are currently in place.
+// Worker thread only: the shortcut work reads and writes COM objects and needs
+// this thread's apartment.
+static bool g_toastRegApplied = false;
+
+// The shortcut and the registry key exist for one reason, to let a toast button
+// activate us, so they follow the popup setting instead of being written
+// unconditionally at startup. With the popup off there is no notification, and a
+// SnapSentry entry sitting in Start and in Search would be there for nothing.
+static void SyncToastRegistration(bool wantPopup) {
+    if (wantPopup == g_toastRegApplied) {
+        return;
+    }
+    if (wantPopup) {
+        g_toastRegApplied = true;  // Even on a partial failure, so teardown cleans up.
+        bool aumidOk = EnsureAumidRegistered();
+        bool clsidOk = EnsureClsidRegistered();
+        HRESULT regHr = E_FAIL;
+        if (aumidOk && clsidOk) {
+            regHr = CoRegisterClassObject(
+                CLSID_SnapSentryToastActivator, &g_toastActivatorFactory,
+                CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE, &g_toastActivatorCookie);
+        }
+        g_toastRegistered = aumidOk && clsidOk && SUCCEEDED(regHr);
+        if (g_toastRegistered.load()) {
+            Wh_Log(L"Toast notifications ready");
+            PrewarmToast();  // Avoid a slow first popup.
+        } else {
+            Wh_Log(
+                L"Toast notification registration incomplete (aumid=%d clsid=%d "
+                L"hr=0x%08lx); using the dialog instead",
+                aumidOk, clsidOk, regHr);
+        }
+        return;
+    }
+
+    // Popup turned off, or the mod is unloading: hand everything back.
+    g_toastRegistered = false;
+    if (g_toastActivatorCookie) {
+        CoRevokeClassObject(g_toastActivatorCookie);
+        g_toastActivatorCookie = 0;
+    }
+    RemoveAumidRegistration();
+    RemoveClsidRegistration();
+    g_toastRegApplied = false;
+}
+
 static DWORD WINAPI WorkerThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     RoInitialize(RO_INIT_SINGLETHREADED);
 
-    bool aumidOk = EnsureAumidRegistered();
-    bool clsidOk = EnsureClsidRegistered();
-    HRESULT regHr = CoRegisterClassObject(
-        CLSID_SnapSentryToastActivator, &g_toastActivatorFactory,
-        CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE, &g_toastActivatorCookie);
-    g_toastRegistered = aumidOk && clsidOk && SUCCEEDED(regHr);
-    if (g_toastRegistered.load()) {
-        Wh_Log(L"Toast notifications ready");
-        PrewarmToast();  // Avoid a slow first popup.
-    } else {
-        Wh_Log(
-            L"Toast notification registration incomplete (aumid=%d clsid=%d "
-            L"hr=0x%08lx); using the dialog instead",
-            aumidOk, clsidOk, regHr);
-    }
+    SyncToastRegistration(SnapshotSettings().popup);
 
     // CoWaitForMultipleHandles (rather than plain WaitForMultipleObjects) pumps
     // incoming COM calls -- needed so a toast button click can be dispatched to
@@ -1462,6 +1637,9 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         if (FAILED(hr) || idx == 0) {
             break;  // Stop (or an unexpected error -- treat as shutdown).
         }
+        // Settings changes wake us here too, so the popup being switched on or off
+        // takes effect without a reload.
+        SyncToastRegistration(SnapshotSettings().popup);
         std::wstring path;
         while (!WaitStop(0) && DequeueOne(path)) {
             ProcessOne(path);
@@ -1469,15 +1647,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
     }
 
-    if (g_toastRegistered.exchange(false)) {
-        CoRevokeClassObject(g_toastActivatorCookie);
-    }
-
     // Leave nothing behind. Done here, while this thread's COM apartment is still
     // live, because removing the shortcut has to read its properties through COM;
-    // the uninit thread has no apartment. Both are recreated on the next load.
-    RemoveAumidRegistration();
-    RemoveClsidRegistration();
+    // the uninit thread has no apartment. Everything is recreated on the next load.
+    SyncToastRegistration(false);
 
     RoUninitialize();
     CoUninitialize();
@@ -1591,7 +1764,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
             DWORD bytes = 0;
             if (!ReadDirectoryChangesW(
                     dir, buffer, sizeof(buffer), FALSE,
-                    FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE,
+                    FILE_NOTIFY_CHANGE_FILE_NAME,
                     &bytes, &ov, nullptr)) {
                 break;  // Re-open the directory.
             }
@@ -1679,6 +1852,7 @@ BOOL WhTool_ModInit() {
 void WhTool_ModSettingsChanged() {
     LoadSettings();
     SetEvent(g_reloadEvent);  // Re-open the folder in case the path changed.
+    SetEvent(g_workEvent);    // Wake the worker so it can follow the popup setting.
 }
 
 void WhTool_ModUninit() {
