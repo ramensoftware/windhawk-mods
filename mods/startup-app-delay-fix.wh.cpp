@@ -30,14 +30,15 @@ a session takes effect after the next sign-in or Explorer restart.
 #include <windhawk_utils.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <unordered_set>
+#include <vector>
 
 constexpr wchar_t kKeyPathSuffix[] =
     L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
-constexpr wchar_t kExplorerPathSuffix[] =
-    L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer";
 constexpr wchar_t kUserHivePrefix[] = L"\\REGISTRY\\USER\\";
 constexpr wchar_t kValueName[] = L"WaitforIdleState";
 
@@ -93,6 +94,12 @@ using NtQueryValueKey_t = NTSTATUS(NTAPI*)(
     PVOID keyValueInformation, ULONG length, PULONG resultLength);
 NtQueryValueKey_t NtQueryValueKey_orig;
 
+using NtEnumerateValueKey_t = NTSTATUS(NTAPI*)(
+    HANDLE keyHandle, ULONG index,
+    KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
+    PVOID keyValueInformation, ULONG length, PULONG resultLength);
+NtEnumerateValueKey_t NtEnumerateValueKey_orig;
+
 using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
                                      ACCESS_MASK desiredAccess,
                                      POBJECT_ATTRIBUTES objectAttributes);
@@ -109,8 +116,12 @@ NtClose_t NtClose_orig;
 
 SRWLOCK g_virtualKeyHandlesLock = SRWLOCK_INIT;
 std::unordered_set<HANDLE> g_virtualKeyHandles;
+std::atomic<size_t> g_virtualKeyHandleCount{0};
 
 bool IsVirtualKey(HANDLE key) {
+    if (g_virtualKeyHandleCount.load(std::memory_order_relaxed) == 0) {
+        return false;
+    }
     AcquireSRWLockShared(&g_virtualKeyHandlesLock);
     bool found = g_virtualKeyHandles.find(key) != g_virtualKeyHandles.end();
     ReleaseSRWLockShared(&g_virtualKeyHandlesLock);
@@ -125,7 +136,7 @@ bool GetKeyPath(HANDLE key, std::wstring* path) {
         return false;
     }
 
-    std::wstring buffer((size + sizeof(wchar_t) - 1) / sizeof(wchar_t), L'\0');
+    std::vector<BYTE> buffer(size);
     auto info = reinterpret_cast<KEY_NAME_INFORMATION*>(buffer.data());
     status = NtQueryKey(key, KeyNameInformation, info, size, &size);
     if (status < 0) {
@@ -136,11 +147,15 @@ bool GetKeyPath(HANDLE key, std::wstring* path) {
     return true;
 }
 
-bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
+bool IsTargetValueName(const UNICODE_STRING* valueName) {
     constexpr size_t valueNameLength = ARRAYSIZE(kValueName) - 1;
-    if (!valueName || !valueName->Buffer ||
-        valueName->Length != valueNameLength * sizeof(wchar_t) ||
-        _wcsnicmp(valueName->Buffer, kValueName, valueNameLength) != 0) {
+    return valueName && valueName->Buffer &&
+           valueName->Length == valueNameLength * sizeof(wchar_t) &&
+           _wcsnicmp(valueName->Buffer, kValueName, valueNameLength) == 0;
+}
+
+bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
+    if (!IsTargetValueName(valueName)) {
         return false;
     }
 
@@ -167,6 +182,15 @@ bool IsTargetOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
     }
 
     const UNICODE_STRING* objectName = objectAttributes->ObjectName;
+    std::wstring_view name(objectName->Buffer,
+                           objectName->Length / sizeof(wchar_t));
+    constexpr std::wstring_view serializeName = L"Serialize";
+    if (name.length() < serializeName.length() ||
+        _wcsnicmp(name.data() + name.length() - serializeName.length(),
+                   serializeName.data(), serializeName.length()) != 0) {
+        return false;
+    }
+
     std::wstring path(objectName->Buffer,
                       objectName->Length / sizeof(wchar_t));
     if (objectAttributes->RootDirectory &&
@@ -192,13 +216,16 @@ bool IsTargetOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
 
 void RememberVirtualKey(HANDLE key) {
     AcquireSRWLockExclusive(&g_virtualKeyHandlesLock);
-    g_virtualKeyHandles.insert(key);
+    if (g_virtualKeyHandles.insert(key).second) {
+        g_virtualKeyHandleCount.fetch_add(1, std::memory_order_relaxed);
+    }
     ReleaseSRWLockExclusive(&g_virtualKeyHandlesLock);
 }
 
-NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle,
                                 POBJECT_ATTRIBUTES objectAttributes,
-                                ULONG openOptions, bool useNtOpenKeyEx) {
+                                ULONG openOptions, bool useNtOpenKeyEx,
+                                NTSTATUS originalStatus) {
     const UNICODE_STRING* objectName = objectAttributes->ObjectName;
     std::wstring parentName(objectName->Buffer,
                             objectName->Length / sizeof(wchar_t));
@@ -214,18 +241,16 @@ NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
     } else if (objectAttributes->RootDirectory &&
                _wcsicmp(parentName.c_str(), L"Serialize") == 0) {
         HANDLE duplicate = nullptr;
-        DWORD options = desiredAccess & MAXIMUM_ALLOWED ? DUPLICATE_SAME_ACCESS
-                                                       : 0;
         if (!DuplicateHandle(GetCurrentProcess(), objectAttributes->RootDirectory,
-                             GetCurrentProcess(), &duplicate, desiredAccess,
-                             FALSE, options)) {
-            return STATUS_UNSUCCESSFUL;
+                             GetCurrentProcess(), &duplicate, KEY_QUERY_VALUE,
+                             FALSE, 0)) {
+            return originalStatus;
         }
         *keyHandle = duplicate;
         RememberVirtualKey(duplicate);
         return STATUS_SUCCESS;
     } else {
-        return STATUS_OBJECT_NAME_NOT_FOUND;
+        return originalStatus;
     }
 
     UNICODE_STRING parentObjectName{
@@ -238,9 +263,9 @@ NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
     parentAttributes.ObjectName = &parentObjectName;
 
     NTSTATUS status = useNtOpenKeyEx
-                          ? NtOpenKeyEx_orig(keyHandle, desiredAccess,
+                          ? NtOpenKeyEx_orig(keyHandle, KEY_QUERY_VALUE,
                                              &parentAttributes, openOptions)
-                          : NtOpenKey_orig(keyHandle, desiredAccess,
+                          : NtOpenKey_orig(keyHandle, KEY_QUERY_VALUE,
                                            &parentAttributes);
     if (status == STATUS_SUCCESS) {
         RememberVirtualKey(*keyHandle);
@@ -253,13 +278,18 @@ bool IsMissingStatus(NTSTATUS status) {
            status == STATUS_OBJECT_PATH_NOT_FOUND;
 }
 
+constexpr ACCESS_MASK kNonReadAccess =
+    KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK | DELETE | WRITE_DAC |
+    WRITE_OWNER | GENERIC_WRITE | GENERIC_ALL | MAXIMUM_ALLOWED;
+
 NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                               POBJECT_ATTRIBUTES objectAttributes) {
     NTSTATUS status =
         NtOpenKey_orig(keyHandle, desiredAccess, objectAttributes);
-    if (IsMissingStatus(status) && IsTargetOpen(objectAttributes)) {
-        return OpenParentAsVirtualKey(keyHandle, desiredAccess, objectAttributes,
-                                      0, false);
+    if (IsMissingStatus(status) && !(desiredAccess & kNonReadAccess) &&
+        IsTargetOpen(objectAttributes)) {
+        return OpenParentAsVirtualKey(keyHandle, objectAttributes, 0, false,
+                                      status);
     }
     return status;
 }
@@ -269,17 +299,22 @@ NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                                 ULONG openOptions) {
     NTSTATUS status = NtOpenKeyEx_orig(keyHandle, desiredAccess,
                                        objectAttributes, openOptions);
-    if (IsMissingStatus(status) && IsTargetOpen(objectAttributes)) {
-        return OpenParentAsVirtualKey(keyHandle, desiredAccess, objectAttributes,
-                                      openOptions, true);
+    if (IsMissingStatus(status) && !(desiredAccess & kNonReadAccess) &&
+        IsTargetOpen(objectAttributes)) {
+        return OpenParentAsVirtualKey(keyHandle, objectAttributes, openOptions,
+                                      true, status);
     }
     return status;
 }
 
 NTSTATUS NTAPI NtClose_hook(HANDLE handle) {
-    AcquireSRWLockExclusive(&g_virtualKeyHandlesLock);
-    g_virtualKeyHandles.erase(handle);
-    ReleaseSRWLockExclusive(&g_virtualKeyHandlesLock);
+    if (g_virtualKeyHandleCount.load(std::memory_order_relaxed) != 0) {
+        AcquireSRWLockExclusive(&g_virtualKeyHandlesLock);
+        if (g_virtualKeyHandles.erase(handle)) {
+            g_virtualKeyHandleCount.fetch_sub(1, std::memory_order_relaxed);
+        }
+        ReleaseSRWLockExclusive(&g_virtualKeyHandlesLock);
+    }
     return NtClose_orig(handle);
 }
 
@@ -381,16 +416,20 @@ NTSTATUS NTAPI NtQueryValueKey_hook(
     HANDLE keyHandle, PUNICODE_STRING valueName,
     KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
     PVOID keyValueInformation, ULONG length, PULONG resultLength) {
-    NTSTATUS status = NtQueryValueKey_orig(
-        keyHandle, valueName, keyValueInformationClass, keyValueInformation,
-        length, resultLength);
-
-    if (IsVirtualKey(keyHandle) && !IsTargetQuery(keyHandle, valueName)) {
-        return STATUS_OBJECT_NAME_NOT_FOUND;
-    }
-
-    if (!IsTargetQuery(keyHandle, valueName)) {
-        return status;
+    bool virtualKey = IsVirtualKey(keyHandle);
+    NTSTATUS status;
+    if (virtualKey) {
+        if (!IsTargetValueName(valueName)) {
+            return STATUS_OBJECT_NAME_NOT_FOUND;
+        }
+        status = STATUS_OBJECT_NAME_NOT_FOUND;
+    } else {
+        status = NtQueryValueKey_orig(
+            keyHandle, valueName, keyValueInformationClass,
+            keyValueInformation, length, resultLength);
+        if (!IsTargetQuery(keyHandle, valueName)) {
+            return status;
+        }
     }
 
     if (status != STATUS_SUCCESS && status != STATUS_OBJECT_NAME_NOT_FOUND &&
@@ -418,23 +457,41 @@ NTSTATUS NTAPI NtQueryValueKey_hook(
     return status;
 }
 
+NTSTATUS NTAPI NtEnumerateValueKey_hook(
+    HANDLE keyHandle, ULONG index,
+    KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
+    PVOID keyValueInformation, ULONG length, PULONG resultLength) {
+    if (IsVirtualKey(keyHandle)) {
+        return STATUS_NO_MORE_ENTRIES;
+    }
+    return NtEnumerateValueKey_orig(keyHandle, index,
+                                    keyValueInformationClass,
+                                    keyValueInformation, length, resultLength);
+}
+
 BOOL Wh_ModInit() {
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     auto ntQueryValueKey = reinterpret_cast<NtQueryValueKey_t>(
         GetProcAddress(ntdll, "NtQueryValueKey"));
     auto ntOpenKey = reinterpret_cast<NtOpenKey_t>(
         GetProcAddress(ntdll, "NtOpenKey"));
+    auto ntEnumerateValueKey = reinterpret_cast<NtEnumerateValueKey_t>(
+        GetProcAddress(ntdll, "NtEnumerateValueKey"));
     auto ntOpenKeyEx = reinterpret_cast<NtOpenKeyEx_t>(
         GetProcAddress(ntdll, "NtOpenKeyEx"));
     auto ntClose =
         reinterpret_cast<NtClose_t>(GetProcAddress(ntdll, "NtClose"));
-    if (!ntQueryValueKey || !ntOpenKey || !ntOpenKeyEx || !ntClose) {
+    if (!ntQueryValueKey || !ntEnumerateValueKey || !ntOpenKey ||
+        !ntOpenKeyEx || !ntClose) {
         Wh_Log(L"Failed to find required ntdll registry functions");
         return FALSE;
     }
 
     WindhawkUtils::SetFunctionHook(ntQueryValueKey, NtQueryValueKey_hook,
                                    &NtQueryValueKey_orig);
+    WindhawkUtils::SetFunctionHook(ntEnumerateValueKey,
+                                   NtEnumerateValueKey_hook,
+                                   &NtEnumerateValueKey_orig);
     WindhawkUtils::SetFunctionHook(ntOpenKey, NtOpenKey_hook, &NtOpenKey_orig);
     WindhawkUtils::SetFunctionHook(ntOpenKeyEx, NtOpenKeyEx_hook,
                                    &NtOpenKeyEx_orig);
