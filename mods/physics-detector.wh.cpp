@@ -1,97 +1,184 @@
 // ==WindhawkMod==
-// @id              physics-detector
-// @name            Taskbar Auto-Hide Fine Tuner for Flyouts
-// @description     Prevents the auto-hiding taskbar from hiding while the cursor is over the panel or while the Quick Settings/Notification flyout is actively open.
+// @id              taskbar-auto-hide-flyouts
+// @name            Taskbar Auto-Hide Flyout Fix
+// @description     Prevents the auto-hiding taskbar from disappearing while the Quick Settings, Notification Center, or calendar flyouts are open.
 // @version         1.0.0
 // @author          Zicronium
-// @github          https://github.com/Prashant-modder
+// @github          https://github.com
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -luser32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Auto-Hide Fine Tuner for Flyouts
+# Taskbar Auto-Hide Flyout Fix
 
-This mod improves the stock Windows 11 auto-hide behavior by preventing the taskbar from disappearing under two specific conditions:
-1. When the cursor is actively hovering over the primary taskbar workspace.
-2. When the Quick Settings or Notification Center flyouts are open (supporting both mouse activation and Win+A / Win+N keyboard shortcuts).
+This mod ensures that the Windows 11 auto-hiding taskbar stays reliably visible on screen whenever the system flyouts (Quick Settings, Notification Center, or Calendar) are active. 
 
-## Compatibility
-- Windows 11 only.
+It handles mouse actions as well as Win+A / Win+N hotkeys gracefully by monitoring window cloaking states and intercepting both the legacy TrayUI system and the modern WinRT ViewCoordinator layout controllers.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
-TrayUI__Hide_t TrayUI__Hide_Original;
+#define TIMER_REARM_ID 8821
+#define TIMER_POLL_INTERVAL 250
+#define kTrayUITimerHide 2
 
-// Clean, on-demand utility to check if the shell Flyout window is actively rendering on screen
-static bool IsShellFlyoutOpen() {
-    HWND hFlyout = FindWindowW(L"ControlCenterWindow", nullptr);
-    return (hFlyout && IsWindowVisible(hFlyout));
+// ---------------------------------------------------------------------------
+// Advanced Flyout State Analysis (DWMWA_CLOAKED verification)
+// ---------------------------------------------------------------------------
+static bool IsTargetWindowActive(HWND hWnd) {
+    if (!hWnd || !IsWindowVisible(hWnd)) return false;
+    
+    BOOL cloaked = FALSE;
+    HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    if (SUCCEEDED(hr) && cloaked) {
+        return false; // Window is rendered but hidden/cloaked by the OS shell
+    }
+    return true; 
 }
 
-// Determines if the mouse cursor is physically resting over the main taskbar container window
-static bool IsMouseOverTaskbar() {
-    POINT pt;
-    if (!GetCursorPos(&pt)) return false;
-
-    HWND hWnd = WindowFromPoint(pt);
-    if (!hWnd) return false;
-
-    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-    if (!hRoot) return false;
-
-    WCHAR cls[256]; 
-    if (GetClassNameW(hRoot, cls, ARRAYSIZE(cls)) > 0) {
-        if (wcscmp(cls, L"Shell_TrayWnd") == 0 || 
-            wcscmp(cls, L"TopLevelWindowForOverflowXamlIsland") == 0) {
-            return true;
+static bool AreShellFlyoutsOpen() {
+    // Check 24H2+ architecture (ShellHost modern panels)
+    HWND hFlyout = nullptr;
+    while ((hFlyout = FindWindowExW(nullptr, hFlyout, L"ControlCenterWindow", nullptr)) != nullptr) {
+        if (IsTargetWindowActive(hFlyout)) return true;
+    }
+    
+    // Check 21H2-23H2 legacy architecture (ShellExperienceHost generic UWP panels)
+    HWND hUwpWindow = nullptr;
+    while ((hUwpWindow = FindWindowExW(nullptr, hUwpWindow, L"Windows.UI.Core.CoreWindow", nullptr)) != nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hUwpWindow, &pid);
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProc) {
+            WCHAR imgName[MAX_PATH];
+            DWORD len = ARRAYSIZE(imgName);
+            if (QueryFullProcessImageNameW(hProc, 0, imgName, &len)) {
+                if (wcsstr(imgName, L"ShellExperienceHost.exe") != nullptr) {
+                    if (IsTargetWindowActive(hUwpWindow)) {
+                        CloseHandle(hProc);
+                        return true;
+                    }
+                }
+            }
+            CloseHandle(hProc);
         }
     }
     return false;
 }
 
-// The core engine interceptor hook
-void WINAPI TrayUI__Hide_Hook(void* pThis) {
-    // If a flyout is open or the user is interacting with the taskbar, bypass the hide trigger completely
-    if (IsShellFlyoutOpen() || IsMouseOverTaskbar()) {
-        return; 
-    }
+// ---------------------------------------------------------------------------
+// Legcy Hook Layer: TrayUI Hiding Controls
+// ---------------------------------------------------------------------------
+using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
+TrayUI__Hide_t TrayUI__Hide_Original;
 
-    // Otherwise, allow Windows to safely proceed with hiding the bar layout
+static VOID CALLBACK RearmTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    if (!AreShellFlyoutsOpen()) {
+        KillTimer(hWnd, TIMER_REARM_ID);
+        // Safely trigger standard system taskbar hide sequence dispatch
+        SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
+    }
+}
+
+void WINAPI TrayUI__Hide_Hook(void* pThis) {
+    if (AreShellFlyoutsOpen()) {
+        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (hTaskbar) {
+            // Set a low-overhead tracking loop to re-arm hiding once panels close safely
+            SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, RearmTimerProc);
+        }
+        return; // Suppress legacy hide invocation frame
+    }
     TrayUI__Hide_Original(pThis);
 }
 
+// ---------------------------------------------------------------------------
+// Modern Win11 Hook Layer: ViewCoordinator Layout Suppression
+// ---------------------------------------------------------------------------
+using UpdateIsExpanded_t = void(__cdecl*)(void* pThis, bool isExpanded);
+UpdateIsExpanded_t UpdateIsExpanded_Original;
+
+void __cdecl UpdateIsExpanded_Hook(void* pThis, bool isExpanded) {
+    if (!isExpanded && AreShellFlyoutsOpen()) {
+        // Force layout engine to retain active/expanded visibility state parameters
+        UpdateIsExpanded_Original(pThis, true);
+        
+        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (hTaskbar) {
+            SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, RearmTimerProc);
+        }
+        return;
+    }
+    UpdateIsExpanded_Original(pThis, isExpanded);
+}
+
+// Runtime loader hook to safely trap dynamic runtime module streaming parameters
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+LoadLibraryExW_t LoadLibraryExW_Original;
+
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE hMod = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (hMod && lpLibFileName && (wcsstr(lpLibFileName, L"Taskbar.View.dll") || wcsstr(lpLibFileName, L"ExplorerExtensions.dll"))) {
+        WindhawkUtils::SYMBOL_HOOK viewHooks[] = {
+            {
+                { LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(bool))" },
+                &UpdateIsExpanded_Original,
+                UpdateIsExpanded_Hook,
+                true // True because dynamic targets might contain varying decoration signatures across updates
+            }
+        };
+        WindhawkUtils::HookSymbols(hMod, viewHooks, ARRAYSIZE(viewHooks));
+    }
+    return hMod;
+}
+
+// ---------------------------------------------------------------------------
+// Mod Framework Initializer Context
+// ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     HMODULE hTaskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hTaskbarDll) {
-        return FALSE;
+    if (hTaskbarDll) {
+        WindhawkUtils::SYMBOL_HOOK legacyHooks[] = {
+            {
+                {
+                    LR"(public: virtual void __cdecl TrayUI::_Hide(void))",
+                    LR"(public: void __cdecl TrayUI::_Hide(void))",
+                },
+                &TrayUI__Hide_Original,
+                TrayUI__Hide_Hook,
+                false // Required asset tracking anchor
+            }
+        };
+        WindhawkUtils::HookSymbols(hTaskbarDll, legacyHooks, ARRAYSIZE(legacyHooks));
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
-        {
+    // Attach dynamic module loader hooks to securely track late-loaded modern layout dependencies
+    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (hKernelBase) {
+        WindhawkUtils::SYMBOL_HOOK loaderHooks[] = {
             {
-                LR"(public: virtual void __cdecl TrayUI::_Hide(void))",
-                LR"(public: void __cdecl TrayUI::_Hide(void))",
-            },
-            &TrayUI__Hide_Original,
-            TrayUI__Hide_Hook,
-            false // Changed to false: This hook is strictly required for operation
-        }
-    };
-
-    if (!WindhawkUtils::HookSymbols(hTaskbarDll, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks))) {
-        return FALSE;
+                { LR"(lSystem.LoadLibraryExW)" },
+                &LoadLibraryExW_Original,
+                LoadLibraryExW_Hook,
+                true
+            }
+        };
+        WindhawkUtils::HookSymbols(hKernelBase, loaderHooks, ARRAYSIZE(loaderHooks));
     }
 
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    // Zero state management required on unload since we dropped background thread allocations entirely
+    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (hTaskbar) {
+        KillTimer(hTaskbar, TIMER_REARM_ID);
+    }
 }
