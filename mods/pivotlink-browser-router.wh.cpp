@@ -2,11 +2,12 @@
 // @id             pivotlink-browser-router
 // @name           PivotLink: Browser Router
 // @description    Lightweight link redirection tool with an intuitive 5-tier ranked configuration layout.
-// @version        1.0
+// @version        1.1
 // @author         gauthumj
 // @github         https://github.com/gauthumj
+// @homepage       https://www.gauthumj.in/
 // @include        *
-// @compilerOptions -lshell32
+// @compilerOptions -lshell32 -ladvapi32
 // @license        MIT
 // ==/WindhawkMod==
 
@@ -28,11 +29,14 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 ## Configuration
 
 - **Priority 1–5 Browsers**: Rank up to five browsers by executable name (e.g. `brave.exe`, `firefox.exe`). The first one found running wins.
+- **Bypass Method**: Choose how to skip routing and send a link to the OS default browser instead. Default is Mouse Back + Click (press both simultaneously).
 
 ## Notes
 
 - The mod skips Session 0 processes (system services) automatically.
 - A thread-local guard prevents recursive hook calls during redirection.
+
+If you'd like to see other features or have suggestions, feel free to open an issue on the [GitHub repository](https://github.com/gauthumj/pivotlink-browser-router)
 */
 // ==/WindhawkModReadme==
 
@@ -53,6 +57,15 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 - browser5: ""
   $name: Priority 5 Browser (Lowest)
   $description: Fifth choice browser fallback. Leave blank to skip.
+- bypassMethod: xbutton1
+  $name: Bypass Method
+  $description: Skip routing and let the OS default browser handle a link.
+  $options:
+  - xbutton1: Mouse Back + Click (press together)
+  - xbutton2: Mouse Forward + Click (press together)
+  - rightclick: Right + Left Click (press together)
+  - ctrl: Ctrl (hold while clicking — tab may open in background)
+  - none: Disabled
 */
 // ==/WindhawkModSettings==
 
@@ -63,9 +76,22 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 #include <mutex>
 #include <vector>
 #include <string>
+#include <sddl.h>
 
 std::mutex g_settingsMutex;
 std::vector<std::wstring> g_priorityBrowsers;
+
+enum class BypassMethod { None, XButton1, XButton2, RightClick, Ctrl };
+BypassMethod g_bypassMethod = BypassMethod::XButton1;
+
+struct BypassSharedState {
+    volatile LONG64 lastActiveTickCount;
+};
+HANDLE g_hSharedMem = NULL;
+BypassSharedState* g_pSharedState = NULL;
+HANDLE g_hPollerThread = NULL;
+HANDLE g_hPollerStopEvent = NULL;
+
 thread_local bool t_inHook = false; 
 
 std::wstring TrimString(const std::wstring& str) {
@@ -171,15 +197,66 @@ void LoadSettings() {
         }
     }
 
+    auto bypassSetting = WindhawkUtils::StringSetting::make(L"bypassMethod");
+    std::wstring bypassStr = TrimString(bypassSetting.get());
+    BypassMethod method = BypassMethod::XButton1;
+    if (_wcsicmp(bypassStr.c_str(), L"xbutton2") == 0) method = BypassMethod::XButton2;
+    else if (_wcsicmp(bypassStr.c_str(), L"rightclick") == 0) method = BypassMethod::RightClick;
+    else if (_wcsicmp(bypassStr.c_str(), L"ctrl") == 0) method = BypassMethod::Ctrl;
+    else if (_wcsicmp(bypassStr.c_str(), L"none") == 0) method = BypassMethod::None;
+
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_priorityBrowsers = std::move(browsers);
+    g_bypassMethod = method;
 }
 
 using ShellExecuteExW_t = decltype(&ShellExecuteExW);
 ShellExecuteExW_t ShellExecuteExW_Original;
 
+static int GetBypassVKey() {
+    BypassMethod method;
+    { std::lock_guard<std::mutex> lock(g_settingsMutex); method = g_bypassMethod; }
+    switch (method) {
+        case BypassMethod::XButton1: return VK_XBUTTON1;
+        case BypassMethod::XButton2: return VK_XBUTTON2;
+        case BypassMethod::RightClick: return VK_RBUTTON;
+        case BypassMethod::Ctrl: return VK_CONTROL;
+        default: return 0;
+    }
+}
+
+static bool IsBypassActive() {
+    int vk = GetBypassVKey();
+    if (!vk) return false;
+
+    if (GetAsyncKeyState(vk) & 0x8000) {
+        if (g_pSharedState)
+            InterlockedExchange64(&g_pSharedState->lastActiveTickCount, (LONG64)GetTickCount64());
+        return true;
+    }
+
+    if (g_pSharedState) {
+        LONG64 lastActive = g_pSharedState->lastActiveTickCount;
+        if (lastActive > 0 && ((LONG64)GetTickCount64() - lastActive) < 2000)
+            return true;
+    }
+
+    return false;
+}
+
+static DWORD WINAPI BypassPollerThread(LPVOID) {
+    while (WaitForSingleObject(g_hPollerStopEvent, 50) == WAIT_TIMEOUT) {
+        int vk = GetBypassVKey();
+        if (vk && (GetAsyncKeyState(vk) & 0x8000) && g_pSharedState)
+            InterlockedExchange64(&g_pSharedState->lastActiveTickCount, (LONG64)GetTickCount64());
+    }
+    return 0;
+}
+
 bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, const WCHAR* lpParameters, int nShow) {
     if (!lpFile || t_inHook) return false;
+
+    if (IsBypassActive()) return false;
 
     // Only redirect default (NULL) or "open" verbs
     if (lpVerb && _wcsicmp(lpVerb, L"open") != 0) return false;
@@ -316,6 +393,8 @@ BOOL WINAPI CreateProcessW_Hook(
     LPPROCESS_INFORMATION lpProcessInformation)
 {
     if (lpCommandLine && !t_inHook) {
+        if (IsBypassActive()) goto passthrough;
+
         // Skip if the calling process is itself a configured browser —
         // prevents catching internal browser URLs (cr.brave.com, telemetry)
         // and cascading redirects when the default browser starts up.
@@ -414,6 +493,39 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    // Shared memory for bypass state
+    PSECURITY_DESCRIPTOR pSD = NULL;
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;WD)(A;;GA;;;AC)", SDDL_REVISION_1, &pSD, NULL)) {
+        SECURITY_ATTRIBUTES sa = { sizeof(sa), pSD, FALSE };
+        g_hSharedMem = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa,
+            PAGE_READWRITE, 0, sizeof(BypassSharedState), L"Local\\PivotLinkBypassState");
+        LocalFree(pSD);
+    }
+    if (!g_hSharedMem)
+        g_hSharedMem = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL,
+            PAGE_READWRITE, 0, sizeof(BypassSharedState), L"Local\\PivotLinkBypassState");
+    if (!g_hSharedMem)
+        g_hSharedMem = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE,
+            L"Local\\PivotLinkBypassState");
+    if (g_hSharedMem)
+        g_pSharedState = (BypassSharedState*)MapViewOfFile(
+            g_hSharedMem, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(BypassSharedState));
+
+    // Every non-AppContainer process polls bypass button state into shared memory
+    HANDLE token = NULL;
+    BOOL isAppContainer = FALSE;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        DWORD retLen = 0;
+        GetTokenInformation(token, TokenIsAppContainer,
+            &isAppContainer, sizeof(isAppContainer), &retLen);
+        CloseHandle(token);
+    }
+    if (!isAppContainer && g_pSharedState) {
+        g_hPollerStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+        g_hPollerThread = CreateThread(NULL, 0, BypassPollerThread, NULL, 0, NULL);
+    }
+
     WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook, &ShellExecuteExW_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteExA, ShellExecuteExA_Hook, &ShellExecuteExA_Original);
@@ -423,6 +535,16 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    if (g_hPollerStopEvent) {
+        SetEvent(g_hPollerStopEvent);
+        if (g_hPollerThread) {
+            WaitForSingleObject(g_hPollerThread, 2000);
+            CloseHandle(g_hPollerThread);
+        }
+        CloseHandle(g_hPollerStopEvent);
+    }
+    if (g_pSharedState) UnmapViewOfFile((void*)g_pSharedState);
+    if (g_hSharedMem) CloseHandle(g_hSharedMem);
 }
 
 void Wh_ModSettingsChanged() {
