@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.7.0
+// @version         0.8.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -48,7 +48,9 @@ standard dialog instead.
 
 ## Privacy
 
-SnapSentry only handles files created after it starts. By default a deleted
+SnapSentry only handles image files that are created in the watched folder while
+it is running, and only within a few seconds of being created, so an old picture
+copied in or synced from another device is left alone. By default a deleted
 screenshot goes to the Recycle Bin so it can be restored; if you turn that off,
 deletion is permanent. Deleting a screenshot does not remove copies already
 stored in clipboard history, cloud sync, backups, or other programs.
@@ -91,7 +93,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
   - markdown: Markdown image link
 - folder: ""
   $name: Folder override
-  $description: Leave empty to watch your Windows Screenshots folder, wherever it is located.
+  $description: Leave empty to watch your Windows Screenshots folder, wherever it is located. Whatever you point this at is treated the same way, so with deletion on, new images saved there are deleted too.
 - logDetails: false
   $name: Verbose logging (may include file paths)
   $description: When off, log lines omit file paths. Turn on only while debugging.
@@ -200,6 +202,12 @@ static HANDLE g_workEvent;   // Auto-reset: queue has work.
 static HANDLE g_watchThread;
 static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
+
+// A popup with no countdown (delaySeconds 0) waits for an answer, but not
+// forever: it runs on the single worker thread, so an unanswered one parks every
+// screenshot behind it. Running out is treated as Keep, since nobody chose to
+// delete anything.
+static constexpr DWORD kNoAnswerCapMs = 10 * 60 * 1000;
 
 enum {
     ACTION_AUTO = 100,
@@ -1143,7 +1151,6 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     // quietly) parked this thread forever and every later screenshot queued behind
     // it. Wait a long time instead of forever, and treat running out as Keep, since
     // nobody saw the toast to ask for a deletion.
-    static constexpr DWORD kNoAnswerCapMs = 10 * 60 * 1000;
     bool noCountdown = s.delaySeconds <= 0;
     DWORD timeoutMs =
         noCountdown ? kNoAnswerCapMs : (DWORD)s.delaySeconds * 1000;
@@ -1233,7 +1240,9 @@ static void PrewarmToast() {
 
 struct DialogState {
     DWORD started;
-    DWORD timeoutMs;  // INFINITE when there is no countdown.
+    DWORD timeoutMs;
+    bool showCountdown;   // False when there is no countdown, only the backstop.
+    int expiryAction;     // What running out of time means.
     std::wstring baseText;
 };
 
@@ -1262,11 +1271,11 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
-            if (state->timeoutMs != INFINITE) {
+            {
                 DWORD elapsed = GetTickCount() - state->started;
                 if (elapsed >= state->timeoutMs) {
-                    SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_AUTO, 0);
-                } else {
+                    SendMessageW(hwnd, TDM_CLICK_BUTTON, state->expiryAction, 0);
+                } else if (state->showCountdown) {
                     DWORD left = (state->timeoutMs - elapsed + 999) / 1000;
                     std::wstring text = state->baseText + L"\n\nAutomatic action in " +
                                         std::to_wstring(left) + L" s…";
@@ -1286,14 +1295,19 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
     DialogState state;
     state.started = GetTickCount();
-    state.timeoutMs = s.delaySeconds > 0 ? (DWORD)s.delaySeconds * 1000 : INFINITE;
+    // Same backstop as the toast: without it, a dialog nobody answers holds the
+    // worker and no later screenshot is copied or deleted until someone does.
+    state.showCountdown = s.delaySeconds > 0;
+    state.timeoutMs =
+        state.showCountdown ? (DWORD)s.delaySeconds * 1000 : kNoAnswerCapMs;
+    state.expiryAction = state.showCountdown ? ACTION_AUTO : ACTION_KEEP;
     state.baseText = name + L"\n\nChoose an action, or wait for the configured "
                             L"automatic action.";
 
     // Reserve the countdown line up front so TDF_SIZE_TO_CONTENT sizes the dialog
     // once instead of growing after the first timer tick.
     std::wstring initialText = state.baseText;
-    if (state.timeoutMs != INFINITE) {
+    if (state.showCountdown) {
         initialText += L"\n\nAutomatic action in " +
                        std::to_wstring((state.timeoutMs + 999) / 1000) + L" s…";
     }
@@ -1576,15 +1590,22 @@ static void ReleaseInflight(const std::wstring& path) {
 // Worker thread only: the shortcut work reads and writes COM objects and needs
 // this thread's apartment.
 static bool g_toastRegApplied = false;
+// The first pass always runs, even when there is nothing to register. Windows can
+// be shut down or the tool process killed without the mod ever unloading cleanly,
+// which leaves the shortcut and the key behind; starting with the popup off is the
+// one moment nothing would otherwise reclaim them.
+static bool g_toastRegSynced = false;
 
 // The shortcut and the registry key exist for one reason, to let a toast button
-// activate us, so they follow the popup setting instead of being written
-// unconditionally at startup. With the popup off there is no notification, and a
-// SnapSentry entry sitting in Start and in Search would be there for nothing.
+// activate us, so they follow the settings instead of being written
+// unconditionally at startup. With processing or the popup off there is no
+// notification, and a SnapSentry entry sitting in Start and in Search would be
+// there for nothing.
 static void SyncToastRegistration(bool wantPopup) {
-    if (wantPopup == g_toastRegApplied) {
+    if (g_toastRegSynced && wantPopup == g_toastRegApplied) {
         return;
     }
+    g_toastRegSynced = true;
     if (wantPopup) {
         g_toastRegApplied = true;  // Even on a partial failure, so teardown cleans up.
         bool aumidOk = EnsureAumidRegistered();
@@ -1623,7 +1644,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     RoInitialize(RO_INIT_SINGLETHREADED);
 
-    SyncToastRegistration(SnapshotSettings().popup);
+    {
+        // Registration is only worth anything when a popup can actually appear.
+        Settings s = SnapshotSettings();
+        SyncToastRegistration(s.enabled && s.popup);
+    }
 
     // CoWaitForMultipleHandles (rather than plain WaitForMultipleObjects) pumps
     // incoming COM calls -- needed so a toast button click can be dispatched to
@@ -1637,9 +1662,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         if (FAILED(hr) || idx == 0) {
             break;  // Stop (or an unexpected error -- treat as shutdown).
         }
-        // Settings changes wake us here too, so the popup being switched on or off
-        // takes effect without a reload.
-        SyncToastRegistration(SnapshotSettings().popup);
+        // Settings changes wake us here too, so switching processing or the popup
+        // on or off takes effect without a reload.
+        {
+            Settings s = SnapshotSettings();
+            SyncToastRegistration(s.enabled && s.popup);
+        }
         std::wstring path;
         while (!WaitStop(0) && DequeueOne(path)) {
             ProcessOne(path);
@@ -1657,8 +1685,39 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     return 0;
 }
 
+// A file turning up in the folder is not the same thing as a screenshot being
+// taken. A sync client delivering a capture from another device, an image dragged
+// in, a download saved there, all of them look identical to a new capture, and
+// with deletion on they would be recycled a few seconds later. A file that was
+// just created is the closest signal available: a same-volume move and the sync
+// clients both keep the original creation time, so anything older than this
+// window was not captured just now. Checked on the watch thread, at the moment
+// the event arrives, rather than at processing time, since the worker can be busy
+// with an earlier screenshot's countdown for much longer than the window.
+static constexpr ULONGLONG kFreshCaptureWindowMs = 30000;
+
+static bool JustCreated(const std::wstring& path) {
+    WIN32_FILE_ATTRIBUTE_DATA info;
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &info)) {
+        return true;  // Can't tell, so leave it to the normal handling.
+    }
+    ULONGLONG created = ((ULONGLONG)info.ftCreationTime.dwHighDateTime << 32) |
+                        info.ftCreationTime.dwLowDateTime;
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULONGLONG now =
+        ((ULONGLONG)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
+    if (now <= created) {
+        return true;  // Created in the future: clock skew, treat it as new.
+    }
+    return (now - created) <= kFreshCaptureWindowMs * 10000ull;  // 100ns units.
+}
+
 static void Enqueue(const std::wstring& folder, const std::wstring& name) {
     if (!IsSafeChildName(name) || !IsSupportedImage(name)) {
+        return;
+    }
+    if (!JustCreated(folder + L"\\" + name)) {
         return;
     }
     ULONGLONG now = GetTickCount64();
