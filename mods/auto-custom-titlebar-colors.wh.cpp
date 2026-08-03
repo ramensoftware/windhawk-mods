@@ -146,7 +146,6 @@ static ModSettings g_settings;
 // -----------------------------------------------------------------------------
 
 typedef bool (WINAPI* pShouldSystemUseDarkMode)();
-static pShouldSystemUseDarkMode g_ShouldSystemUseDarkMode = nullptr;
 static std::atomic<BOOL> g_isDarkMode = FALSE;
 
 // App-controlled window state tracking
@@ -192,15 +191,12 @@ static BOOL IsSystemDarkMode()
         RegCloseKey(hKey);
     }
 
-    if (!g_ShouldSystemUseDarkMode) {
+    static pShouldSystemUseDarkMode fn = []() -> pShouldSystemUseDarkMode {
         HMODULE hUxtheme = GetModuleHandleW(L"uxtheme.dll");
-        if (hUxtheme) {
-            g_ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)
-                GetProcAddress(hUxtheme, MAKEINTRESOURCEA(138));
-        }
-    }
-    if (g_ShouldSystemUseDarkMode)
-        return g_ShouldSystemUseDarkMode() != 0;
+        return hUxtheme ? (pShouldSystemUseDarkMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(138)) : nullptr;
+    }();
+    if (fn)
+        return fn() != 0;
 
     return FALSE;
 }
@@ -407,9 +403,10 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
         return;
     }
 
+    bool appOwnsColour;
     {
         std::lock_guard<std::mutex> lock(g_appControlledMutex);
-        if (g_appControlledWindows.count(hWnd)) return;
+        appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
     }
 
     {
@@ -422,6 +419,10 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
     
     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
         &darkMode, sizeof(darkMode));
+
+    if (appOwnsColour) {
+        return;
+    }
 
     BOOL useCustom;
     COLORREF colour;
@@ -606,7 +607,8 @@ static void HandleCreatedWindow(HWND hWnd)
             ApplyTitleBar(hRoot, FALSE);
         }
     }
-    ApplyTitleBar(hWnd, FALSE, FALSE);
+    BOOL isActive = (GetForegroundWindow() == hWnd);
+    ApplyTitleBar(hWnd, isActive, FALSE);
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
