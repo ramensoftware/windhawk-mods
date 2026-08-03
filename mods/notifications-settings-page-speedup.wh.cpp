@@ -36,6 +36,14 @@ icon, and main on/off toggle**, and you can still open any app to see and change
 rather keep it, turn off **Skip per-app summary lookup** below; revisits are
 still cached, just a bit slower.
 
+Normally, with the subtitle:
+
+![The app list with the per-app summary](https://raw.githubusercontent.com/mario0318/windhawk-mods/fb933635e03340ce07d4b8847fa517172235c631/notifications-settings-page-speedup/with-summary.png)
+
+With the summary skipped:
+
+![The app list with the summary skipped](https://raw.githubusercontent.com/mario0318/windhawk-mods/fb933635e03340ce07d4b8847fa517172235c631/notifications-settings-page-speedup/without-summary.png)
+
 The first open after a fresh sign-in is still slow; only revisits are fast. The
 mod hooks internal functions in `SettingsHandlers_Notifications.dll` by symbol,
 so it may need an update after a major Windows release. Tested on Windows 11.
