@@ -7,6 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
+// @architecture    x86-64
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
@@ -21,7 +22,7 @@ This mod restores classic Control Panel applets and classic task links in Catego
 * Printers and Faxes
 * HomeGroup (legacy, partially functional)
 
-Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync",, Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
+Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
 ## Screenshot of the Restored Applets
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/RestoredApplets.png)
@@ -39,7 +40,7 @@ The mod does not commit to restoring task links that open the Settings app inste
 
 ## Credits
 This mod is based on a fork of the original mod by Anixx (https://github.com/Anixx) and parts of the implementation are taken from aubymori (https://github.com/aubymori)'s Control Panel script.
-
+Credits to m417z for the code review and enhancing the mod.
 
 */
 // ==/WindhawkModReadme==
@@ -102,15 +103,19 @@ Anixx's mod is detected and log a warning.
 The original author (Anixx) was contacted about merging these changes but did 
 not reply. As a precaution, automatic detection ensures only one mod runs at a time.
 
-Testing has been limited to Windows 10 1809 x64 (build 17763), where the
-Personalization sort hook is required and works correctly. The hook is gated
-by an explicit allowlist of that single verified build; on any other build or
-architecture it stays disabled and the rest of the mod runs without custom
-applet ordering. Widening the allowlist to a new build requires verifying the
-shell32 offsets on that build first.
+The mod has been tested on Windows 10 1809 x64 (build 17763) The hook drives
+shell32's own applet ranking, through its parameters where shell32 exposes
+that ranking as its own function, and through the applet list where shell32
+inlines it. The second path needs two struct offsets, which it recovers by
+disassembling the comparator rather than assuming them, so neither path
+carries a value that has to be revisited per build. If the offsets cannot be
+read, or the comparator symbol cannot be resolved at all, the rest of the mod
+runs with stock applet ordering.
 */
 #include <string>
+#include <string_view>
 #include <algorithm>
+#include <regex>
 #include <unordered_map>
 #include <mutex>
 #include <vector>
@@ -121,6 +126,7 @@ shell32 offsets on that build first.
 #include <memory>
 #include <new>
 #include <shellapi.h>
+#include <commctrl.h>
 #include <windhawk_utils.h>
 
 struct Settings {
@@ -384,21 +390,27 @@ std::wstring FindAnixxModSourcePath() {
 
 // Allocation-free case-insensitive check for the registry-hook hot path.
 // Most keys opened by Explorer are unrelated, so avoid creating a lowercase
-// std::wstring until a path is actually relevant to this mod.
+// std::wstring until a path is actually relevant to this mod. Both needles
+// are checked in a single pass over the string instead of one full scan per
+// needle, halving the towlower/compare work in the common not-found case.
 bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
     static const wchar_t kClsid[] = L"clsid";
     static const wchar_t kControlPanel[] = L"controlpanel";
-    const auto contains = [&path](const wchar_t* needle) {
-        const size_t needleLength = wcslen(needle);
-        if (path.size() < needleLength) return false;
-        for (size_t i = 0; i + needleLength <= path.size(); ++i) {
-            size_t j = 0;
-            while (j < needleLength && towlower(path[i + j]) == needle[j]) ++j;
-            if (j == needleLength) return true;
-        }
-        return false;
+    static const size_t kClsidLen = wcslen(kClsid);
+    static const size_t kControlPanelLen = wcslen(kControlPanel);
+
+    const auto matchesAt = [&path](size_t i, const wchar_t* needle, size_t needleLength) {
+        if (i + needleLength > path.size()) return false;
+        size_t j = 0;
+        while (j < needleLength && towlower(path[i + j]) == needle[j]) ++j;
+        return j == needleLength;
     };
-    return contains(kClsid) || contains(kControlPanel);
+
+    for (size_t i = 0; i < path.size(); ++i) {
+        if (matchesAt(i, kClsid, kClsidLen)) return true;
+        if (matchesAt(i, kControlPanel, kControlPanelLen)) return true;
+    }
+    return false;
 }
 
 // Guards g_classicTaskLinksFilePath. EnsureClassicTaskLinksFile() is normally
@@ -420,7 +432,14 @@ std::wstring GetClassicTaskLinksFilePath() {
 // classic task links below the Personalization item.
 bool EnsureClassicTaskLinksFile() {
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
-    if (!g_classicTaskLinksFilePath.empty()) return true;
+    if (!g_classicTaskLinksFilePath.empty()) {
+        DWORD attributes = GetFileAttributesW(g_classicTaskLinksFilePath.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return true;
+        // The file vanished (temp cleanup, another instance's Wh_ModUninit, …);
+        // fall through and regenerate instead of trusting the stale path.
+        g_classicTaskLinksFilePath.clear();
+    }
 
     wchar_t tempPath[MAX_PATH] = {};
     DWORD length = GetTempPathW(MAX_PATH, tempPath);
@@ -918,7 +937,8 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
 }
 
 bool IsTargetKey(const std::wstring& path) {
-    return ClassifyPath(path).node != VNode::None;
+    ClassifyResult cr = ClassifyPath(path);
+    return cr.node != VNode::None && cr.kind != ItemKind::Suppressed;
 }
 
 bool IsNameSpaceParentKey(const std::wstring& path) {
@@ -977,10 +997,13 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     if (cr.kind == ItemKind::RealCplTaskUrl) {
         Wh_Log(L"Providing value for: %s (value=%s)", path.c_str(), valueName.c_str());
         if (valueName == L"System.Software.TasksFileUrl" &&
-            g_settings.restoreClassicTaskLinks.load() && EnsureClassicTaskLinksFile()) {
-            if (lpType) *lpType = REG_SZ;
-            outStatus = ProvideStringValue(lpData, lpcbData, GetClassicTaskLinksFilePath());
-            return true;
+            g_settings.restoreClassicTaskLinks.load()) {
+            std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+            if (!taskLinksPath.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
+                return true;
+            }
         }
         if (valueName == L"System.ControlPanel.Category") {
             if (lpType) *lpType = REG_DWORD;
@@ -1005,10 +1028,13 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             return true;
         }
         if (valueName == L"System.Software.TasksFileUrl" &&
-            g_settings.restoreClassicTaskLinks.load() && EnsureClassicTaskLinksFile()) {
-            if (lpType) *lpType = REG_SZ;
-            outStatus = ProvideStringValue(lpData, lpcbData, GetClassicTaskLinksFilePath());
-            return true;
+            g_settings.restoreClassicTaskLinks.load()) {
+            std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+            if (!taskLinksPath.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
+                return true;
+            }
         }
         return false;
     }
@@ -1040,9 +1066,10 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 return true;
             } else if (valueName == L"System.Software.TasksFileUrl") {
                 if (lpType) *lpType = REG_SZ;
+                std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
                 std::wstring taskFileUrl =
-                    (g_settings.restoreClassicTaskLinks.load() && EnsureClassicTaskLinksFile())
-                        ? GetClassicTaskLinksFilePath()
+                    (g_settings.restoreClassicTaskLinks.load() && !taskLinksPath.empty())
+                        ? taskLinksPath
                         : std::wstring(L"Internal");
                 outStatus = ProvideStringValue(lpData, lpcbData, taskFileUrl);
                 return true;
@@ -1100,27 +1127,31 @@ using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
 RegOpenKeyExW_t RegOpenKeyExWOriginal;
 LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
                                  REGSAM samDesired, PHKEY phkResult) {
-    // Hooks run on arbitrary explorer.exe threads with no expectation of C++
-    // exceptions unwinding through them; a stray std::bad_alloc etc. must not
-    // escape into foreign code, so fall back to the real API on any failure.
-    try {
-        std::wstring fullPath;
-        if (g_keyTracker.IsFakeAndGetPath(hKey, fullPath)) {
-            if (lpSubKey && *lpSubKey) {
-                if (!fullPath.empty()) fullPath += L"\\";
-                fullPath += lpSubKey;
-            }
-            if (IsTargetKey(fullPath)) {
-                HKEY fake = g_keyTracker.CreateFake(fullPath);
-                if (!fake) return ERROR_OUTOFMEMORY;
-                Wh_Log(L"Fake handle (child): %s", fullPath.c_str());
-                if (phkResult) *phkResult = fake;
-                return ERROR_SUCCESS;
-            }
-            return ERROR_FILE_NOT_FOUND;
+    std::wstring fullPath;
+    if (g_keyTracker.IsFakeAndGetPath(hKey, fullPath)) {
+        if (lpSubKey && *lpSubKey) {
+            if (!fullPath.empty()) fullPath += L"\\";
+            fullPath += lpSubKey;
         }
-        if (HasActiveSuppression() && lpSubKey) {
-            std::wstring basePath = g_keyTracker.GetPath(hKey);
+        if (IsTargetKey(fullPath)) {
+            HKEY fake = g_keyTracker.CreateFake(fullPath);
+            if (!fake) return ERROR_OUTOFMEMORY;
+            Wh_Log(L"Fake handle (child): %s", fullPath.c_str());
+            if (phkResult) *phkResult = fake;
+            return ERROR_SUCCESS;
+        }
+        return ERROR_FILE_NOT_FOUND;
+    }
+    if (HasActiveSuppression() && lpSubKey) {
+        std::wstring basePath = g_keyTracker.GetPath(hKey);
+        // Cheap bail-out: if the parent key isn't one we're tracking and the
+        // subkey text itself doesn't contain "clsid"/"controlpanel", this
+        // call cannot possibly be a suppressed namespace/CLSID key, so skip
+        // the concatenation, ToLower copy, and rfind entirely. This matters
+        // because HasActiveSuppression() is true out of the box, so every
+        // RegOpenKeyExW call in explorer.exe — not just shell32's — reaches
+        // this branch.
+        if (!basePath.empty() || ContainsRelevantKeywordInsensitive(lpSubKey)) {
             std::wstring fullPath = basePath;
             if (*lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
             if (IsSuppressedNamespaceKey(ToLower(fullPath))) {
@@ -1128,53 +1159,65 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
                 return ERROR_FILE_NOT_FOUND;
             }
         }
+    }
 
-        LSTATUS status = RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
-        if (status == ERROR_SUCCESS && phkResult && *phkResult) {
+    LSTATUS status = RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    if (status == ERROR_SUCCESS && phkResult && *phkResult) {
+        // The real handle is already open at this point. Track() is the only
+        // call in this branch that can throw (std::bad_alloc on map insert);
+        // if it does, the handle is still returned to the caller as-is rather
+        // than re-invoking RegOpenKeyExWOriginal, which would leak the handle
+        // already obtained. Losing tracking for this one handle only means
+        // this mod won't recognize it as "ours" on a later call.
+        try {
             std::wstring basePath = g_keyTracker.GetPath(hKey);
             std::wstring fullPath = basePath;
             if (lpSubKey && *lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
             g_keyTracker.Track(*phkResult, fullPath);
-        } else if (status == ERROR_FILE_NOT_FOUND && phkResult) {
-            std::wstring basePath = g_keyTracker.GetPath(hKey);
-            std::wstring fullPath = basePath;
-            if (lpSubKey && *lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
-            if (IsTargetKey(fullPath)) {
-                HKEY fake = g_keyTracker.CreateFake(fullPath);
-                if (!fake) return ERROR_OUTOFMEMORY;
-                Wh_Log(L"Fake handle (not found): %s", fullPath.c_str());
-                *phkResult = fake;
-                return ERROR_SUCCESS;
-            }
+        } catch (...) {
+            Wh_Log(L"Exception tracking opened key; handle still returned untracked");
         }
-        return status;
-    } catch (...) {
-        Wh_Log(L"Exception caught, falling back to real API");
-        return RegOpenKeyExWOriginal(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    } else if (status == ERROR_FILE_NOT_FOUND && phkResult) {
+        std::wstring basePath = g_keyTracker.GetPath(hKey);
+        std::wstring fullPath = basePath;
+        if (lpSubKey && *lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
+        if (IsTargetKey(fullPath)) {
+            HKEY fake = g_keyTracker.CreateFake(fullPath);
+            if (!fake) return ERROR_OUTOFMEMORY;
+            Wh_Log(L"Fake handle (not found): %s", fullPath.c_str());
+            *phkResult = fake;
+            return ERROR_SUCCESS;
+        }
     }
+    return status;
 }
 
 using RegCloseKey_t = decltype(&RegCloseKey);
 RegCloseKey_t RegCloseKeyOriginal;
 LSTATUS WINAPI RegCloseKeyHook(HKEY hKey) {
-    try {
-        if (g_keyTracker.IsFake(hKey)) {
-            g_keyTracker.FreeFake(hKey);
-            return ERROR_SUCCESS;
-        }
-        LSTATUS status = RegCloseKeyOriginal(hKey);
-        g_keyTracker.Untrack(hKey);
-        return status;
-    } catch (...) {
-        Wh_Log(L"Exception caught, falling back to real API");
-        return RegCloseKeyOriginal(hKey);
+    if (g_keyTracker.IsFake(hKey)) {
+        g_keyTracker.FreeFake(hKey);
+        return ERROR_SUCCESS;
     }
+    LSTATUS status = RegCloseKeyOriginal(hKey);
+    g_keyTracker.Untrack(hKey);
+    return status;
 }
 
 using RegQueryValueExW_t = decltype(&RegQueryValueExW);
 RegQueryValueExW_t RegQueryValueExWOriginal;
 LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
                                     LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {
+    // Unlike RegOpenKeyExW/RegCloseKey/ShellExecuteExW (whose blanket
+    // try/catch was removed — see those hooks), this catch is kept
+    // deliberately. Everything above the fallback call is a read: it only
+    // writes into the caller-provided lpData/lpcbData output buffer, never
+    // touches the registry or the filesystem. If TryProvideValue throws
+    // partway through (e.g. std::bad_alloc building a std::wstring), the
+    // fallback call below simply overwrites that same output buffer with the
+    // real value — there's no external side effect to duplicate, so
+    // re-invoking the original here is safe and prevents a C++ exception
+    // from unwinding into shell32/Explorer, which isn't exception-aware.
     try {
         std::wstring path = g_keyTracker.GetPath(hKey);
         if (!path.empty()) {
@@ -1196,6 +1239,10 @@ using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueWOriginal;
 LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData, LPDWORD pcbData) {
+    // Same reasoning as RegQueryValueExWHook above: everything here only
+    // writes into the caller's output buffer, so a fallback call after an
+    // exception overwrites that buffer once with the real value instead of
+    // duplicating any external side effect. Kept intentionally.
     try {
         std::wstring path = g_keyTracker.GetPath(hkey);
         if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
@@ -1221,6 +1268,18 @@ RegEnumKeyExW_t RegEnumKeyExWOriginal;
 LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
                                  LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
                                  PFILETIME lpftLastWriteTime) {
+    // RegEnumKeyExW is not a cursor-based iterator with hidden progression —
+    // dwIndex is an explicit caller-supplied parameter, and the API always
+    // returns the same entry for the same (hKey, dwIndex) pair. The scan
+    // loop below may call RegEnumKeyExWOriginal several times with various
+    // indices while walking real entries, but each of those is a pure,
+    // side-effect-free read; if an exception interrupts the loop, the
+    // fallback call below re-issues RegEnumKeyExWOriginal with the dwIndex
+    // the *caller* asked for — the same call that would have been made
+    // without this mod's logic at all. Nothing is duplicated or corrupted,
+    // so this catch is kept intentionally (unlike RegOpenKeyExW/RegCloseKey/
+    // ShellExecuteExW, which have real external side effects to avoid
+    // re-invoking).
     try {
         if (g_keyTracker.IsFake(hKey)) {
             std::wstring path = g_keyTracker.GetPath(hKey);
@@ -1311,6 +1370,11 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
 using RegEnumKeyW_t = decltype(&RegEnumKeyW);
 RegEnumKeyW_t RegEnumKeyWOriginal;
 LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cchName) {
+    // Same reasoning as RegEnumKeyExWHook above: dwIndex is an explicit,
+    // caller-supplied parameter, not a hidden cursor, and every call here is
+    // a pure read. Re-issuing the original in the catch after an exception
+    // is the same call the caller would get without this mod, with no
+    // external side effect duplicated — kept intentionally.
     try {
         if (g_keyTracker.IsFake(hKey)) {
             std::wstring path = g_keyTracker.GetPath(hKey);
@@ -1385,7 +1449,6 @@ using ShellExecuteExW_t = BOOL(WINAPI*)(LPSHELLEXECUTEINFOW);
 ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
 
 BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
-  try {
     if (!psei || psei->cbSize < sizeof(SHELLEXECUTEINFOW))
         return ShellExecuteExWOriginal(psei);
 
@@ -1449,217 +1512,206 @@ BOOL WINAPI ShellExecuteExWHook(LPSHELLEXECUTEINFOW psei) {
         }
     }
     return ShellExecuteExWOriginal(psei);
-  } catch (...) {
-      Wh_Log(L"Exception caught, falling back to real API");
-      return ShellExecuteExWOriginal(psei);
-  }
 }
-#define CControlPanelAppletList_HDPA(pThis) ((HDPA)*((void ***)pThis + 2))
-#define CControlPanelAppletList_Category(pThis) *((DWORD *)pThis + 32)
-
-/* Map CPL category ID to array index - credits to aubymori*/
-int MapCategory(int category) {
-    if (category == 5) return 0; /* System and Security */
-    if (category == 3) return 1; /* Network and Internet */
-    if (category == 2) return 2; /* Hardware and Sound */
-    if (category == 8) return 3; /* Programs */
-    if (category == 9) return 4; /* User Accounts and Family Safety */
-    if (category == 1) return 5; /* Appearance and Personalization */
-    if (category == 6) return 6; /* Clock, Language, and Region */
-    if (category == 7) return 7; /* Ease of Access */
-    return -1;
-}
-
-LPCWSTR g_szAppletOrder[8][20] = {
-    /* 0: System and Security (Category 5) */
-    { NULL },
-    /* 1: Network and Internet (Category 3) */
-    { NULL },
-    /* 2: Hardware and Sound (Category 2) */
-    { NULL },
-    /* 3: Programs (Category 8) */
-    { NULL },
-    /* 4: User Accounts (Category 9) */
-    { NULL },
-    /* 5: Appearance and Personalization (Category 1) */
-    {
-        L"::{580722ff-16a7-44c1-bf74-7e1acd00f4f9}", // Personalization (fake GUID)
-        NULL
-    },
-    /* 6: Clock, Language, and Region (Category 6) */
-    { NULL },
-    /* 7: Ease of Access (Category 7) */
-    { NULL }
+/* Applets pulled to the front of their Control Panel category, in the order
+   listed - credits to aubymori for the original ordering table. A Control
+   Panel item belongs to a single category, so one flat list covers every
+   category at once. */
+LPCWSTR g_szAppletOrder[] = {
+    /* Appearance and Personalization */
+    L"::{580722ff-16a7-44c1-bf74-7e1acd00f4f9}", // Personalization (fake GUID)
 };
 
-int FindApplet(LPCWSTR lpszApplet, int category) {
-    if (!lpszApplet || category < 0 || category >= 8) return -1;
-    for (UINT i = 0; i < 20; i++) {
-        if (NULL == g_szAppletOrder[category][i]) {
-            break;
-        }
-        if (0 == wcsicmp(g_szAppletOrder[category][i], lpszApplet)) {
+// Control Panel item monikers appear both bare and with a leading "::", so
+// comparisons skip the prefix on either side.
+static LPCWSTR SkipMonikerPrefix(LPCWSTR lpszApplet) {
+    return (lpszApplet[0] == L':' && lpszApplet[1] == L':') ? lpszApplet + 2
+                                                            : lpszApplet;
+}
+
+// Position of an applet within g_szAppletOrder, or -1 if it isn't listed.
+static int FindApplet(LPCWSTR lpszApplet) {
+    if (!lpszApplet) return -1;
+    LPCWSTR applet = SkipMonikerPrefix(lpszApplet);
+    for (int i = 0; i < (int)ARRAYSIZE(g_szAppletOrder); i++) {
+        if (0 == wcsicmp(SkipMonikerPrefix(g_szAppletOrder[i]), applet)) {
             return i;
         }
     }
     return -1;
 }
 
-// DPA_GetPtr is available from comctl32 (linked via -lcomctl32)
-
+// shell32 orders Control Panel applets by ranking each one against an array
+// of CLSID monikers: a lower rank sorts first, and -1 ("not in the array")
+// sorts last. s_SortAppletsInCategory is the comparator that drives the sort,
+// and the ranking it performs may or may not live in its own function.
+//
+// Where shell32 keeps the ranking in s_FindAppletInSortArray, every value
+// needed to override it arrives as a parameter, so nothing has to know how
+// shell32 lays out its private structures. Whether that function exists is a
+// per-build inlining decision, not a version progression: it is separate on
+// 10.0.19041, 10.0.22621 and 10.0.26100, and inlined into the comparator on
+// 10.0.17763 and 10.0.22000. Resolving the symbol therefore selects between
+// the two paths below, rather than a Windows version check.
+//
+// The ranking function also serves Control Panel search results, which this
+// mod has no business reordering, so the comparator hook doubles as a marker
+// for the calls that come from a category sort.
 int (WINAPI *CControlPanelAppletList_s_SortAppletsInCategory_orig)(void *, void *, LPARAM);
+int (WINAPI *CControlPanelAppletList_s_FindAppletInSortArray_orig)(LPCWSTR, LPCWSTR const *, int);
 
-// The offsets used below (HDPA pointer, category DWORD, applet moniker string)
-// come from reverse-engineering one specific shell32.dll build (Windows 10
-// 1809 x64, build 17763). They are NOT guaranteed to be correct on any other
-// build or architecture. On top of the g_sortHookSafe build gate, every
-// pointer derived from these offsets is validated with VirtualQuery before
-// being dereferenced (see IsSafeToRead/IsLikelyClsidMoniker below), and the
-// resulting "applet name" is checked to actually look like a CLSID moniker
-// before it is used for anything. If any check fails, the hook transparently
-// falls back to the original comparison. Note that this does not make the
-// hook bulletproof: a region can be readable-but-wrong (e.g. reused/freed
-// and reallocated memory that happens to pass VirtualQuery), so the build
-// allowlist in ValidateSortHookOffsets remains the primary safety mechanism.
-static bool g_sortHookSafe = false;
+static thread_local int g_categorySortDepth = 0;
 
-// Returns true only if [ptr, ptr+size) is entirely within a single committed,
-// readable memory region — i.e. safe to dereference without an access
-// violation. This is a best-effort check (see caveat above), not a proof of
-// correctness of the data at that address.
-static bool IsSafeToRead(const void* ptr, size_t size) {
-    if (!ptr || size == 0) return false;
-    // Guard against pointer-arithmetic overflow before ever touching memory.
-    uintptr_t start = (uintptr_t)ptr;
-    if (start + size < start) return false;
+class CategorySortScope {
+public:
+    CategorySortScope() { ++g_categorySortDepth; }
+    ~CategorySortScope() { --g_categorySortDepth; }
+    CategorySortScope(const CategorySortScope&) = delete;
+    CategorySortScope& operator=(const CategorySortScope&) = delete;
+};
 
-    MEMORY_BASIC_INFORMATION mbi{};
-    if (VirtualQuery(ptr, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const DWORD kReadableMask = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                                 PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    if (!(mbi.Protect & kReadableMask)) return false;
-
-    const uint8_t* regionEnd = (const uint8_t*)mbi.BaseAddress + mbi.RegionSize;
-    const uint8_t* rangeEnd = (const uint8_t*)ptr + size;
-    return rangeEnd <= regionEnd;
-}
-
-// Bounded, VirtualQuery-validated wide-string length check. Never reads past
-// maxChars and never touches memory that hasn't just been validated as safe.
-// Returns -1 if no NUL terminator is found within maxChars, or if memory
-// becomes unreadable partway through (e.g. the string runs off the end of
-// its region).
-static int SafeWcsnlen(LPCWSTR s, size_t maxChars) {
-    if (!s) return -1;
-    for (size_t i = 0; i < maxChars; ++i) {
-        if (!IsSafeToRead(s + i, sizeof(wchar_t))) return -1;
-        if (s[i] == L'\0') return (int)i;
+int WINAPI CControlPanelAppletList_s_FindAppletInSortArray_hook(
+    LPCWSTR lpszApplet, LPCWSTR const *ppszSortArray, int cSortArray
+) {
+    if (g_categorySortDepth == 0) {
+        return CControlPanelAppletList_s_FindAppletInSortArray_orig(
+            lpszApplet, ppszSortArray, cSortArray);
     }
-    return -1;
-}
 
-// Verifies the string is safely readable AND matches the shape of a CLSID
-// moniker ("::{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"), so the hook never
-// hands an arbitrary/garbage pointer to wcsicmp.
-static bool IsLikelyClsidMoniker(LPCWSTR s) {
-    const size_t kMonikerLen = 40; // "::{" + 36-char GUID + "}"
-    int len = SafeWcsnlen(s, kMonikerLen + 8);
-    if (len < 0 || (size_t)len < kMonikerLen) return false;
-    if (s[0] != L':' || s[1] != L':' || s[2] != L'{') return false;
-    if (s[(size_t)len - 1] != L'}') return false;
-    // Loose check on hyphen positions is enough here; wcsicmp against the
-    // known-good allowlist in g_szAppletOrder does the real comparison.
-    return s[11] == L'-' && s[16] == L'-' && s[21] == L'-' && s[26] == L'-';
-}
-
-// Sets g_sortHookSafe = true only when running on the single Windows build
-// (10.0.17763, x64) whose shell32 struct offsets were manually verified.
-// This build allowlist is the primary safety mechanism; the hook itself
-// additionally validates every pointer at runtime via IsSafeToRead /
-// IsLikelyClsidMoniker before dereferencing it (see below).
-void ValidateSortHookOffsets() {
-    g_sortHookSafe = false;
-#ifdef _WIN64
-    // The private offsets below were verified only on the author's Windows 10
-    // 1809 x64 shell32 layout. Do not resolve/install the hook elsewhere.
-    if (g_winBuild == 17763) {
-        g_sortHookSafe = true;
-        Wh_Log(L"Enabled for verified Win10 x64 build 17763");
-    } else {
-        Wh_Log(L"Disabled: shell32 layout is unverified on build %u", g_winBuild);
+    int iApplet = FindApplet(lpszApplet);
+    if (iApplet >= 0) {
+        return iApplet;
     }
-#else
-    Wh_Log(L"Disabled: x86 layout is unverified");
-#endif
+
+    // Restored applets occupy ranks 0..N-1, so shell32's own ranks move down
+    // by N. The shift is uniform, which leaves the stock applets in their
+    // original relative order and moves only the restored ones, to the top of
+    // their category.
+    int iOrig = CControlPanelAppletList_s_FindAppletInSortArray_orig(
+        lpszApplet, ppszSortArray, cSortArray);
+    return iOrig >= 0 ? iOrig + (int)ARRAYSIZE(g_szAppletOrder) : -1;
+}
+
+// Everything below serves only the builds that inline the ranking. There the
+// comparator gets two applet indices and the applet list, and the moniker has
+// to be reached through shell32's private structures, at two offsets that the
+// comparator itself spells out:
+//
+//     mov rcx, [r8+0x10]   the applet list's DPA, loaded for DPA_GetPtr
+//     ...
+//     add rsi, 0x208       the moniker within the item DPA_GetPtr returned
+//
+// Reading them back out of the instruction stream keeps the values tied to the
+// shell32 that is actually loaded instead of the one the mod was written
+// against. Both are 0x10 and 0x208 on 10.0.17763.1, 10.0.17763.9020 and
+// 10.0.22000.3147, but nothing here depends on that staying true.
+static size_t g_appletListDpaOffset = 0;
+static size_t g_appletMonikerOffset = 0;
+
+// Walks the comparator looking for the DPA load, which is the last register
+// load before it calls DPA_GetPtr, and then for the moniker displacement,
+// which is the first immediate added to a register afterwards. Returns false
+// if the code doesn't have that shape, leaving applet ordering alone.
+static bool ResolveAppletOffsets(void* pFunc) {
+    const std::regex loadRegex(
+        R"(mov r(?:[a-z]{2}|\d{1,2}), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9a-f]+)\])",
+        std::regex_constants::icase);
+    const std::regex addRegex(
+        R"(add r(?:[a-z]{2}|\d{1,2}), (0x[0-9a-f]+))",
+        std::regex_constants::icase);
+
+    size_t dpaOffset = 0;
+    size_t monikerOffset = 0;
+    bool pastCall = false;
+
+    BYTE* p = (BYTE*)pFunc;
+    for (int i = 0; i < 40; i++) {
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result)) {
+            break;
+        }
+
+        p += result.length;
+
+        std::string_view s = result.text;
+        if (s == "ret") {
+            break;
+        }
+
+        std::match_results<std::string_view::const_iterator> match;
+        if (!pastCall) {
+            if (s.starts_with("call")) {
+                pastCall = true;
+            } else if (std::regex_match(s.begin(), s.end(), match, loadRegex)) {
+                dpaOffset = std::stoull(match[1], nullptr, 16);
+            }
+        } else if (std::regex_match(s.begin(), s.end(), match, addRegex)) {
+            monikerOffset = std::stoull(match[1], nullptr, 16);
+            break;
+        }
+    }
+
+    if (!dpaOffset || !monikerOffset) {
+        return false;
+    }
+
+    g_appletListDpaOffset = dpaOffset;
+    g_appletMonikerOffset = monikerOffset;
+    return true;
+}
+
+// Bounded sanity check that a moniker pointer resolved from a computed
+// offset actually looks like a CLSID moniker ("::{8-4-4-4-12}" or
+// "{8-4-4-4-12}") before it's trusted. This is a plain bounded scan, not a
+// per-character IsBadReadPtr/VirtualQuery probe (that pattern is TOCTOU-racy
+// and gives false confidence rather than real safety) — its job is to catch
+// a wrong offset match producing a plausible-looking pointer to the wrong
+// field, not to substitute for memory-safety guarantees the disassembly
+// match already provides.
+static bool LooksLikeClsidMoniker(LPCWSTR s) {
+    if (!s) return false;
+    constexpr size_t kMaxLen = 64; // "::{"+36-char GUID+"}" = 41, plus slack
+    size_t len = 0;
+    while (len < kMaxLen && s[len] != L'\0') ++len;
+    if (len >= kMaxLen || len < 4) return false;
+    size_t start = (s[0] == L':' && s[1] == L':') ? 2 : 0;
+    if (start + 2 >= len || s[start] != L'{') return false;
+    return s[len - 1] == L'}';
+}
+
+static LPCWSTR GetAppletMoniker(HDPA hDpa, const int* pIndex) {
+    LPVOID pItem = DPA_GetPtr(hDpa, *pIndex);
+    if (!pItem) return NULL;
+    LPCWSTR moniker = (LPCWSTR)((char*)pItem + g_appletMonikerOffset);
+    return LooksLikeClsidMoniker(moniker) ? moniker : NULL;
 }
 
 int WINAPI CControlPanelAppletList_s_SortAppletsInCategory_hook(
     void *p1, void *p2, LPARAM lParam
 ) {
-  try {
-    if (!g_sortHookSafe || !p1 || !p2 || !lParam)
+    // With a separate ranking function that hook does the reordering, and this
+    // one only has to mark the sort as a category sort.
+    if (CControlPanelAppletList_s_FindAppletInSortArray_orig) {
+        CategorySortScope scope;
         return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    // Validate p1/p2 (each read as an int index) and lParam (read at the
-    // HDPA-pointer offset and the category-DWORD offset) before touching
-    // any of them. 640 bytes is a generous margin past the highest known
-    // offset (the DWORD at index 32, i.e. byte 128) to tolerate minor struct
-    // layout drift without under-covering the real read.
-    if (!IsSafeToRead(p1, sizeof(int)) || !IsSafeToRead(p2, sizeof(int)) ||
-        !IsSafeToRead((const void*)lParam, 640))
-        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    HDPA hDpa = (HDPA)CControlPanelAppletList_HDPA(lParam);
-    if (!hDpa) return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    int category = MapCategory(CControlPanelAppletList_Category(lParam));
-    if (category < 0) return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    LPVOID pThing1 = DPA_GetPtr(hDpa, *(int *)p1);
-    LPVOID pThing2 = DPA_GetPtr(hDpa, *(int *)p2);
-    if (!pThing1 || !pThing2)
-        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    // Validate the region the moniker string offset falls in before forming
-    // the pointer, and again (via IsLikelyClsidMoniker/SafeWcsnlen) before
-    // reading through it.
-    const size_t kAppletStructMargin = 520 + sizeof(wchar_t) * 48;
-    if (!IsSafeToRead(pThing1, kAppletStructMargin) || !IsSafeToRead(pThing2, kAppletStructMargin))
-        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    LPCWSTR pszApplet1 = (LPCWSTR)((char *)pThing1 + 520);
-    LPCWSTR pszApplet2 = (LPCWSTR)((char *)pThing2 + 520);
-
-    // If either string doesn't look like a real CLSID moniker, the offsets
-    // have drifted (wrong build/layout) — bail out to the original rather
-    // than risk comparing garbage or running off unmapped memory.
-    bool applet1IsMoniker = IsLikelyClsidMoniker(pszApplet1);
-    bool applet2IsMoniker = IsLikelyClsidMoniker(pszApplet2);
-    if (!applet1IsMoniker && !applet2IsMoniker)
-        return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-
-    int iApplet1 = applet1IsMoniker ? FindApplet(pszApplet1, category) : -1;
-    int iApplet2 = applet2IsMoniker ? FindApplet(pszApplet2, category) : -1;
-
-    if (iApplet1 >= 0 && iApplet2 >= 0) {
-        return iApplet1 - iApplet2;
-    } else if (iApplet1 >= 0) {
-        return -1; // Move our custom applet to the top
-    } else if (iApplet2 >= 0) {
-        return 1;
     }
+
+    if (g_appletMonikerOffset && p1 && p2 && lParam) {
+        HDPA hDpa = *(HDPA*)((BYTE*)lParam + g_appletListDpaOffset);
+        if (hDpa) {
+            int iApplet1 = FindApplet(GetAppletMoniker(hDpa, (const int*)p1));
+            int iApplet2 = FindApplet(GetAppletMoniker(hDpa, (const int*)p2));
+            if (iApplet1 >= 0 && iApplet2 >= 0) {
+                return iApplet1 - iApplet2;
+            } else if (iApplet1 >= 0) {
+                return -1; // Move our custom applet to the top
+            } else if (iApplet2 >= 0) {
+                return 1;
+            }
+        }
+    }
+
     return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-  } catch (...) {
-      // Note: on this Clang/mingw toolchain, catch (...) only catches C++
-      // exceptions, NOT SEH access violations — this is a defense-in-depth
-      // measure for exceptions thrown by std:: calls above, not a crash
-      // guard by itself. The IsSafeToRead validation above is what actually
-      // prevents access violations in this hook.
-      Wh_Log(L"Exception in sort hook, falling back to real comparison");
-      return CControlPanelAppletList_s_SortAppletsInCategory_orig(p1, p2, lParam);
-  }
 }
 
 
@@ -1712,9 +1764,6 @@ BOOL Wh_ModInit() {
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
     Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
-    ValidateSortHookOffsets();
-
-
     // Generate task links file eagerly to avoid data races
     EnsureClassicTaskLinksFile();
 
@@ -1750,7 +1799,6 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook((RegEnumKeyW_t)pRegEnumKeyW,           RegEnumKeyWHook,      &RegEnumKeyWOriginal))      { Wh_Log(L"Failed to hook RegEnumKeyW");      return FALSE; }
 
     HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
     if (hShell32) {
         void* pShellExecuteExW = (void*)GetProcAddress(hShell32, "ShellExecuteExW");
         if (pShellExecuteExW) {
@@ -1759,27 +1807,42 @@ BOOL Wh_ModInit() {
             }
         }
 
-        if (g_sortHookSafe) {
+        // The ranking function is optional because whether it exists at all is
+        // a per-build inlining decision. The comparator is not: it is either
+        // the thing that scopes the ranking or, where the ranking is inlined,
+        // the thing that does the reordering.
+        void* pSortAppletsInCategory = nullptr;
         const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
             {
-                {
-#ifdef _WIN64
-                    L"private: static int __cdecl CControlPanelAppletList::s_SortAppletsInCategory(int const *,int const *,__int64)"
-#else
-                    L"private: static int __stdcall CControlPanelAppletList::s_SortAppletsInCategory(int const *,int const *,long)"
-#endif
-                },
+                {L"private: static int __cdecl CControlPanelAppletList::s_SortAppletsInCategory(int const *,int const *,__int64)"},
                 (void**)&CControlPanelAppletList_s_SortAppletsInCategory_orig,
                 (void*)CControlPanelAppletList_s_SortAppletsInCategory_hook,
                 false
+            },
+            {
+                {L"private: static int __cdecl CControlPanelAppletList::s_FindAppletInSortArray(unsigned short const *,unsigned short const * const *,int)"},
+                (void**)&CControlPanelAppletList_s_FindAppletInSortArray_orig,
+                (void*)CControlPanelAppletList_s_FindAppletInSortArray_hook,
+                true
+            },
+            // For offsets:
+            {
+                {L"private: static int __cdecl CControlPanelAppletList::s_SortAppletsInCategory(int const *,int const *,__int64)"},
+                &pSortAppletsInCategory
             }
         };
 
         if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
-            Wh_Log(L"Failed to hook CControlPanelAppletList::s_SortAppletsInCategory");
+            Wh_Log(L"Failed to hook the applet sorting functions; using stock applet ordering");
+        } else if (CControlPanelAppletList_s_FindAppletInSortArray_orig) {
+            Wh_Log(L"Applet ranking hooked OK");
+        } else if (pSortAppletsInCategory && ResolveAppletOffsets(pSortAppletsInCategory)) {
+            // Hooks are only applied once Wh_ModInit returns, so the
+            // comparator's code is still unpatched at this point.
+            Wh_Log(L"Applet ranking is inlined; DPA offset 0x%zX, moniker offset 0x%zX",
+                g_appletListDpaOffset, g_appletMonikerOffset);
         } else {
-            Wh_Log(L"CControlPanelAppletList::s_SortAppletsInCategory hooked OK");
-        }
+            Wh_Log(L"Applet ranking is inlined and its offsets could not be read; using stock applet ordering");
         }
 
     }
