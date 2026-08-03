@@ -1,3 +1,7 @@
+## 0.1.8 ([Aug 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3ab9b84f90335f699a88178f3b1c486bc1876ab9/mods/win10-taskbar-on-win11-24h2.wh.cpp))
+
+Added a mitigation note for notification toast crashes and linked to relevant fixes.
+
 ## 0.1.7 ([Mar 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5e2b846e45baaa08bd60622c5d694d981ed93f9f/mods/win10-taskbar-on-win11-24h2.wh.cpp))
 
 update readme
