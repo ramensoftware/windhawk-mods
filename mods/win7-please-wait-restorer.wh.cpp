@@ -1,25 +1,28 @@
 // ==WindhawkMod==
 // @id              win7-please-wait-restorer
 // @name            Windows 7/8.1 "Please Wait" Restorer
-// @description     This mod replaces the theme-switch overlay with a self-drawn classic "Please wait" box
+// @description     This mod replaces the theme-switch overlay with the classic "Please wait" box from Windows 7/8.1
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         rundll32.exe
 // @include         explorer.exe
 // @include         SystemSettings.exe
-// @compilerOptions -lgdi32 -lGdiplus
+// @compilerOptions -lgdi32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Windows 7/8.1 "Please Wait" Restorer
 
+
 ## About
 
-When changing the Windows theme, this mod shows the small classic
-"Please wait" box from Windows 7/8.1 instead of the modern full-screen effect.
-The text is shown in the Windows display language when it is supported.
+
+This mod shows the small classic "Please wait" box from Windows 7/8.1 while the
+system changes the theme, instead of the modern full-screen overlay. The
+built-in text is localized for several common display languages while unsupported
+languages use English.
 
 ## Screenshot
 
@@ -27,43 +30,100 @@ The text is shown in the Windows display language when it is supported.
 
 ## Notes
 
-The mod has been tested on Windows 10 1809 (build 17763) and Windows 10 21H2 (build 19044)
-Other Windows 10/11 versions may work, but are not guaranteed. If Windows
-changes the internal theme component used by this mod, Windhawk disables the
-mod safely instead of forcing it to run. Additionally, the mod is a best-effort implementation using
-documented Windows functions where appliable to improve the stability of the mod.
+The mod has been tested on Windows 10 1809 and Windows 10 21H2.
+Additionally, the mod only attaches when `themeui.dll` is actually loaded by one of the
+included processes. If the private themeui symbol is unavailable on a Windows
+build, the mod remains inactive in that process.
+For specific setups (such as unsupported language), it is recommended to apply the required changes using the mod's settings.
 
 ## Credits
-- Nex - Testing on Windows 10 21H2 and providing feedback
+
+- Nex — Testing on Windows 10 21H2 and providing feedback
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
-#include <algorithm>
-#include <gdiplus.h>
-#include <windhawk_utils.h>
 
-using namespace Gdiplus;
+// ==WindhawkModSettings==
+/*
+- desaturationPercent: 20
+  $name: Background desaturation (%)
+  $description: This setting changes the amount of color removed from the captured desktop background.
+- boxSizePercent: 105
+  $name: Box size (%)
+  $description: This setting changes the size of the classic box, its borders, and its decorative details.
+- fontSizePercent: 115
+  $name: Text size (%)
+  $description: This setting changes the size of the bold system message font used for the caption.
+- customText: ""
+  $name: Custom text
+  $description: This setting serves as an optional replacement for the localized caption. Leave it empty to use the Windows display language.
+*/
+// ==/WindhawkModSettings==
+
+
+#include <windows.h>
+#include <shellscalingapi.h>
+#include <windhawk_utils.h>
+#include <algorithm>
+#include <atomic>
+
 
 #ifdef _WIN64
-#define STDCALL __cdecl
+#define THISCALL _cdecl
+#define STHISCALL L"__cdecl"
 #else
-#define STDCALL __stdcall
+#define THISCALL __thiscall
+#define STHISCALL L"__thiscall"
 #endif
 
 class CDimmedWindow;
-typedef void(STDCALL* CDimmedWindow_OnPaint_t)(CDimmedWindow* window, HDC hdc);
+using CDimmedWindow_OnPaint_t = void(THISCALL*)(CDimmedWindow*, HDC);
 static CDimmedWindow_OnPaint_t g_originalOnPaint = nullptr;
-static HMODULE g_themeUi = nullptr;
+
+// This plain flag has no destructor, so no code runs during DLL/process
+// teardown.
+static std::atomic<bool> g_themeUiHandled = false;
+
+struct Settings {
+    int desaturationPercent;
+    int boxSizePercent;
+    int fontSizePercent;
+    wchar_t customText[256];
+};
+
+static Settings g_settings = { 20, 105, 115, L"" };
+
+static void LoadSettings() {
+    constexpr int kDefaultDesaturationPercent = 20;
+    const int desaturationPercent = Wh_GetIntSetting(L"desaturationPercent");
+    // A percentage outside its meaningful 0..100 range is invalid. Restore
+    // the documented default instead of silently turning it into 0 or 100.
+    g_settings.desaturationPercent =
+        desaturationPercent >= 0 && desaturationPercent <= 100
+            ? desaturationPercent
+            : kDefaultDesaturationPercent;
+    g_settings.boxSizePercent = std::clamp(Wh_GetIntSetting(L"boxSizePercent"), 50, 200);
+    g_settings.fontSizePercent = std::clamp(Wh_GetIntSetting(L"fontSizePercent"), 50, 200);
+
+    PCWSTR customText = Wh_GetStringSetting(L"customText");
+    size_t customTextLength = 0;
+    if (customText) {
+        // The caption must be shorter than 100 characters. This bounded scan
+        // also avoids accepting an excessively long setting value.
+        while (customTextLength < 100 && customText[customTextLength]) ++customTextLength;
+    }
+    if (customText && customTextLength < 100)
+        lstrcpynW(g_settings.customText, customText, ARRAYSIZE(g_settings.customText));
+    else
+        g_settings.customText[0] = L'\0';  // fall back to localized text
+    if (customText) Wh_FreeStringSetting(customText);
+}
 
 struct LocalizedText {
     LANGID language;
     const wchar_t* text;
 };
 
-// These strings intentionally have no ellipsis, matching the supplied
-// Windows 8.1 Italian reference ("Attendere"). Unicode escapes keep this
-// source portable even when an editor saves it with a legacy code page.
 static const LocalizedText kPleaseWaitTexts[] = {
     { MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), L"Please wait" },
     { MAKELANGID(LANG_ITALIAN, SUBLANG_DEFAULT), L"Attendere" },
@@ -74,409 +134,259 @@ static const LocalizedText kPleaseWaitTexts[] = {
     { MAKELANGID(LANG_DUTCH, SUBLANG_DEFAULT), L"Een ogenblik geduld" },
     { MAKELANGID(LANG_POLISH, SUBLANG_DEFAULT), L"Prosz\u0119 czeka\u0107" },
     { MAKELANGID(LANG_RUSSIAN, SUBLANG_DEFAULT), L"\u041F\u043E\u0434\u043E\u0436\u0434\u0438\u0442\u0435" },
-    { MAKELANGID(LANG_UKRAINIAN, SUBLANG_DEFAULT), L"\u0417\u0430\u0447\u0435\u043A\u0430\u0439\u0442\u0435" },
-    { MAKELANGID(LANG_TURKISH, SUBLANG_DEFAULT), L"L\u00FCtfen bekleyin" },
-    { MAKELANGID(LANG_SWEDISH, SUBLANG_DEFAULT), L"V\u00E4nta" },
-    { MAKELANGID(LANG_NORWEGIAN, SUBLANG_DEFAULT), L"Vent litt" },
-    { MAKELANGID(LANG_DANISH, SUBLANG_DEFAULT), L"Vent venligst" },
-    { MAKELANGID(LANG_FINNISH, SUBLANG_DEFAULT), L"Odota" },
-    { MAKELANGID(LANG_CZECH, SUBLANG_DEFAULT), L"\u010Cekejte pros\u00EDm" },
-    { MAKELANGID(LANG_SLOVAK, SUBLANG_DEFAULT), L"Pros\u00EDm, \u010Dakajte" },
-    { MAKELANGID(LANG_HUNGARIAN, SUBLANG_DEFAULT), L"K\u00E9rem, v\u00E1rjon" },
-    { MAKELANGID(LANG_ROMANIAN, SUBLANG_DEFAULT), L"V\u0103 rug\u0103m a\u0219tepta\u021Bi" },
-    { MAKELANGID(LANG_GREEK, SUBLANG_DEFAULT), L"\u03A0\u03B1\u03C1\u03B1\u03BA\u03B1\u03BB\u03CE \u03C0\u03B5\u03C1\u03B9\u03BC\u03AD\u03BD\u03B5\u03C4\u03B5" },
-    { MAKELANGID(LANG_ARABIC, SUBLANG_DEFAULT), L"\u064A\u0631\u062C\u0649 \u0627\u0644\u0627\u0646\u062A\u0638\u0627\u0631" },
-    { MAKELANGID(LANG_HEBREW, SUBLANG_DEFAULT), L"\u05E0\u05D0 \u05D4\u05DE\u05EA\u05DF" },
     { MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT), L"\u3057\u3070\u3089\u304F\u304A\u5F85\u3061\u304F\u3060\u3055\u3044" },
     { MAKELANGID(LANG_KOREAN, SUBLANG_DEFAULT), L"\uC7A0\uC2DC \uAE30\uB2E4\uB824 \uC8FC\uC2ED\uC2DC\uC624" },
-    { MAKELANGID(LANG_CHINESE_SIMPLIFIED, SUBLANG_DEFAULT), L"\u8BF7\u7A0D\u5019" },
-    { MAKELANGID(LANG_CHINESE_TRADITIONAL, SUBLANG_DEFAULT), L"\u8ACB\u7A0D\u5019" },
-    { MAKELANGID(LANG_CROATIAN, SUBLANG_DEFAULT), L"Pri\u010Dekajte" },
-    { MAKELANGID(LANG_VIETNAMESE, SUBLANG_DEFAULT), L"Vui l\u00F2ng ch\u1EDD" },
-    { MAKELANGID(LANG_INDONESIAN, SUBLANG_DEFAULT), L"Harap tunggu" },
-    { MAKELANGID(LANG_BULGARIAN, SUBLANG_DEFAULT), L"\u041C\u043E\u043B\u044F, \u0438\u0437\u0447\u0430\u043A\u0430\u0439\u0442\u0435" },
+    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED), L"\u8BF7\u7A0D\u5019" },
+    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL), L"\u8ACB\u7A0D\u5019" },
+    { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_HONGKONG), L"\u8ACB\u7A0D\u5019" },
 };
 
-static const wchar_t* GetPleaseWaitText()
-{
-    const WORD primaryLanguage = PRIMARYLANGID(GetUserDefaultUILanguage());
-    for (const auto& entry : kPleaseWaitTexts) {
-        if (PRIMARYLANGID(entry.language) == primaryLanguage) {
-            return entry.text;
-        }
-    }
+static const wchar_t* GetPleaseWaitText() {
+    if (g_settings.customText[0]) return g_settings.customText;
+    const LANGID uiLanguage = GetUserDefaultUILanguage();
+    for (const auto& entry : kPleaseWaitTexts)
+        if (entry.language == uiLanguage) return entry.text;
+    for (const auto& entry : kPleaseWaitTexts)
+        if (PRIMARYLANGID(entry.language) == PRIMARYLANGID(uiLanguage)) return entry.text;
     return L"Please wait";
 }
 
-// RAII wrappers make all early returns safe: each acquired Win32 handle is
-// released at scope exit, including when a C++ exception is caught above it.
 class ScopedGdiObject {
 public:
     explicit ScopedGdiObject(HGDIOBJ object = nullptr) : object_(object) {}
     ~ScopedGdiObject() { if (object_) DeleteObject(object_); }
     ScopedGdiObject(const ScopedGdiObject&) = delete;
-    ScopedGdiObject& operator=(const ScopedGdiObject&) = delete;
     HGDIOBJ get() const { return object_; }
     explicit operator bool() const { return object_ != nullptr; }
 private:
     HGDIOBJ object_;
 };
 
-class ScopedCompatibleDC {
+class ScopedDc {
 public:
-    explicit ScopedCompatibleDC(HDC referenceDc)
-        : dc_(referenceDc ? CreateCompatibleDC(referenceDc) : nullptr) {}
-    ~ScopedCompatibleDC() { if (dc_) DeleteDC(dc_); }
-    ScopedCompatibleDC(const ScopedCompatibleDC&) = delete;
-    ScopedCompatibleDC& operator=(const ScopedCompatibleDC&) = delete;
+    explicit ScopedDc(HDC dc = nullptr) : dc_(dc) {}
+    ~ScopedDc() { if (dc_) DeleteDC(dc_); }
+    ScopedDc(const ScopedDc&) = delete;
     HDC get() const { return dc_; }
     explicit operator bool() const { return dc_ != nullptr; }
 private:
     HDC dc_;
 };
-
-class ScopedScreenDC {
-public:
-    ScopedScreenDC() : dc_(GetDC(nullptr)) {}
-    ~ScopedScreenDC() { if (dc_) ReleaseDC(nullptr, dc_); }
-    ScopedScreenDC(const ScopedScreenDC&) = delete;
-    ScopedScreenDC& operator=(const ScopedScreenDC&) = delete;
-    HDC get() const { return dc_; }
-    explicit operator bool() const { return dc_ != nullptr; }
-private:
-    HDC dc_;
-};
-
-class ScopedModule {
-public:
-    explicit ScopedModule(HMODULE module = nullptr) : module_(module) {}
-    ~ScopedModule() { if (module_) FreeLibrary(module_); }
-    ScopedModule(const ScopedModule&) = delete;
-    ScopedModule& operator=(const ScopedModule&) = delete;
-    HMODULE get() const { return module_; }
-    HMODULE release() {
-        HMODULE result = module_;
-        module_ = nullptr;
-        return result;
-    }
-    explicit operator bool() const { return module_ != nullptr; }
-private:
-    HMODULE module_;
-};
-
-class ScopedGdiplus {
-public:
-    ScopedGdiplus() : token_(0), ready_(false) {}
-    ~ScopedGdiplus() { Stop(); }
-    ScopedGdiplus(const ScopedGdiplus&) = delete;
-    ScopedGdiplus& operator=(const ScopedGdiplus&) = delete;
-
-    bool Start() {
-        if (ready_) return true;
-        GdiplusStartupInput startupInput;
-        ready_ = GdiplusStartup(&token_, &startupInput, nullptr) == Ok;
-        return ready_;
-    }
-    void Stop() {
-        if (ready_) {
-            GdiplusShutdown(token_);
-            token_ = 0;
-            ready_ = false;
-        }
-    }
-    bool ready() const { return ready_; }
-private:
-    ULONG_PTR token_;
-    bool ready_;
-};
-
-static ScopedGdiplus g_gdiplus;
 
 class ScopedSelection {
 public:
-    ScopedSelection(HDC dc, HGDIOBJ object) : dc_(dc), old_(HGDI_ERROR) {
-        if (dc_ && object) old_ = SelectObject(dc_, object);
-    }
-    ~ScopedSelection() {
-        if (dc_ && old_ && old_ != HGDI_ERROR) SelectObject(dc_, old_);
-    }
-    ScopedSelection(const ScopedSelection&) = delete;
-    ScopedSelection& operator=(const ScopedSelection&) = delete;
+    ScopedSelection(HDC dc, HGDIOBJ object) : dc_(dc), old_(dc && object ? SelectObject(dc, object) : HGDI_ERROR) {}
+    ~ScopedSelection() { if (dc_ && old_ && old_ != HGDI_ERROR) SelectObject(dc_, old_); }
     bool selected() const { return old_ && old_ != HGDI_ERROR; }
 private:
-    HDC dc_;
-    HGDIOBJ old_;
+    HDC dc_; HGDIOBJ old_;
 };
 
-// Restore the previous wider proportions (216 × 76 px), then enlarge every
-// part by 5%, including the font, borders and spacing: 227 × 80 px at 96 DPI.
-static constexpr int kReferenceBoxWidth = 216;
-static constexpr int kReferenceBoxHeight = 76;
-static constexpr int kBoxSizePercent = 105;
-// User-selected visible-but-moderate desaturation. Brightness stays nearly
-// unchanged while the desktop colours are reduced by 25%.
-static constexpr REAL kBackgroundDesaturation = 0.25f;
-
-static int ScaleForDpi(int pixelsAt96Dpi, int dpi)
-{
-    return MulDiv(pixelsAt96Dpi, dpi > 0 ? dpi : 96, 96);
+static int ScaleForDpi(int value, UINT dpi) {
+    return MulDiv(value, dpi ? dpi : 96, 96);
 }
 
-static int ScaleBoxForDpi(int pixelsAt96Dpi, int dpi)
-{
-    return MulDiv(ScaleForDpi(pixelsAt96Dpi, dpi), kBoxSizePercent, 100);
+// In the supplied 96-DPI Windows 7 reference, the outer frame is about
+// 210 x 74 px. The configured box-size percentage is applied uniformly.
+static int ScaleBoxForDpi(int value, UINT dpi) {
+    return MulDiv(ScaleForDpi(value, dpi), g_settings.boxSizePercent, 100);
 }
 
-// Windows 7 displayed one message on the primary monitor. On builds where
-// themeui paints one virtual-desktop surface, convert the primary monitor's
-// screen coordinates to the surface's coordinates. This also keeps the box
-// out of the gap between monitors with different positions/resolutions.
-static RECT GetClassicBoxArea(const RECT& paintArea)
-{
-    const int paintWidth = paintArea.right - paintArea.left;
-    const int paintHeight = paintArea.bottom - paintArea.top;
-    const int virtualWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    const int virtualHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-    if (paintWidth != virtualWidth || paintHeight != virtualHeight) {
-        // This build supplied a monitor-sized paint surface. It is already
-        // the correct coordinate space for the box.
-        return paintArea;
-    }
-
-    const POINT primaryOrigin = { 0, 0 };
-    HMONITOR primaryMonitor = MonitorFromPoint(primaryOrigin, MONITOR_DEFAULTTOPRIMARY);
-    MONITORINFO monitorInfo = {};
-    monitorInfo.cbSize = sizeof(monitorInfo);
-    if (!primaryMonitor || !GetMonitorInfoW(primaryMonitor, &monitorInfo)) {
-        return paintArea;
-    }
-
-    const int virtualLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    const int virtualTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    return {
-        paintArea.left + monitorInfo.rcMonitor.left - virtualLeft,
-        paintArea.top + monitorInfo.rcMonitor.top - virtualTop,
-        paintArea.left + monitorInfo.rcMonitor.right - virtualLeft,
-        paintArea.top + monitorInfo.rcMonitor.bottom - virtualTop
-    };
+static UINT GetPrimaryMonitorDpi() {
+    const POINT origin = { 0, 0 };
+    HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = 96, dpiY = 96;
+    if (monitor) GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    return dpiX;
 }
 
-// The failed first implementation rendered GDI+ directly to CDimmedWindow's
-// paint DC. That DC may be transparent on current builds. This version keeps
-// the same reliable off-screen snapshot/composite/BitBlt design used by Aero
-// Flip 3D Recreation, but uses a true saturation colour matrix instead of its
-// black veil.
-static void PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area)
-{
+// Uses only documented GDI APIs. A 32-bit DIB section gives direct access to
+// the captured pixels, so the desaturation is not dependent on GDI+ behavior.
+static void PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
+    if (!hdc) return;
     const int width = area.right - area.left;
     const int height = area.bottom - area.top;
-    if (!g_gdiplus.ready() || !hdc || width <= 0 || height <= 0) return;
+    if (width <= 0 || height <= 0) return;
 
-    ScopedScreenDC screenDc;
-    if (!screenDc) return;
+    BITMAPINFO bitmapInfo = {};
+    bitmapInfo.bmiHeader.biSize = sizeof(bitmapInfo.bmiHeader);
+    bitmapInfo.bmiHeader.biWidth = width;
+    bitmapInfo.bmiHeader.biHeight = -height;  // top-down, 32-bit BGR DIB
+    bitmapInfo.bmiHeader.biPlanes = 1;
+    bitmapInfo.bmiHeader.biBitCount = 32;
+    bitmapInfo.bmiHeader.biCompression = BI_RGB;
+    void* pixels = nullptr;
+    ScopedGdiObject bitmap(CreateDIBSection(nullptr, &bitmapInfo, DIB_RGB_COLORS,
+                                             &pixels, nullptr, 0));
+    if (!bitmap || !pixels) return;
 
-    ScopedCompatibleDC snapshotDc(screenDc.get());
-    ScopedCompatibleDC compositeDc(hdc);
-    if (!snapshotDc || !compositeDc) return;
+    HDC screen = GetDC(nullptr);
+    if (!screen) return;
+    ScopedDc memoryDc(CreateCompatibleDC(screen));
+    if (!memoryDc) { ReleaseDC(nullptr, screen); return; }
+    {
+        ScopedSelection selection(memoryDc.get(), bitmap.get());
+        if (!selection.selected()) { ReleaseDC(nullptr, screen); return; }
+        const int screenX = GetSystemMetrics(SM_XVIRTUALSCREEN) + area.left;
+        const int screenY = GetSystemMetrics(SM_YVIRTUALSCREEN) + area.top;
+        if (!BitBlt(memoryDc.get(), 0, 0, width, height, screen, screenX, screenY,
+                    SRCCOPY | CAPTUREBLT)) {
+            ReleaseDC(nullptr, screen);
+            return;
+        }
+        ReleaseDC(nullptr, screen);
 
-    ScopedGdiObject snapshotBitmap(CreateCompatibleBitmap(screenDc.get(), width, height));
-    ScopedGdiObject compositeBitmap(CreateCompatibleBitmap(hdc, width, height));
-    if (!snapshotBitmap || !compositeBitmap) return;
-
-    // Selection objects are declared after their bitmaps, so they restore the
-    // old stock bitmaps before the bitmap destructors run.
-    ScopedSelection selectSnapshot(snapshotDc.get(), snapshotBitmap.get());
-    ScopedSelection selectComposite(compositeDc.get(), compositeBitmap.get());
-    if (!selectSnapshot.selected() || !selectComposite.selected()) return;
-
-    const int screenX = GetSystemMetrics(SM_XVIRTUALSCREEN) + area.left;
-    const int screenY = GetSystemMetrics(SM_YVIRTUALSCREEN) + area.top;
-    if (!BitBlt(snapshotDc.get(), 0, 0, width, height, screenDc.get(),
-                screenX, screenY, SRCCOPY | CAPTUREBLT)) {
-        return;
+        // BI_RGB 32-bit DIB pixels are B, G, R, unused/reserved. Blend every
+        // channel toward its luminance while leaving the alpha/reserved byte.
+        auto* pixel = static_cast<BYTE*>(pixels);
+        const float amount = g_settings.desaturationPercent / 100.0f;
+        for (size_t i = 0, count = static_cast<size_t>(width) * height; i < count; ++i) {
+            BYTE* color = pixel + i * 4;
+            const float luminance = color[2] * 0.299f + color[1] * 0.587f + color[0] * 0.114f;
+            color[0] = static_cast<BYTE>(color[0] + (luminance - color[0]) * amount);
+            color[1] = static_cast<BYTE>(color[1] + (luminance - color[1]) * amount);
+            color[2] = static_cast<BYTE>(color[2] + (luminance - color[2]) * amount);
+        }
+        BitBlt(hdc, area.left, area.top, width, height, memoryDc.get(), 0, 0, SRCCOPY);
     }
-
-    Bitmap sourceImage(static_cast<HBITMAP>(snapshotBitmap.get()), nullptr);
-    if (sourceImage.GetLastStatus() != Ok) return;
-
-    const REAL i = kBackgroundDesaturation;
-    const ColorMatrix matrix = {{
-        { 1.0f - 0.70f * i, 0.30f * i,        0.30f * i,        0, 0 },
-        { 0.59f * i,        1.0f - 0.41f * i, 0.59f * i,        0, 0 },
-        { 0.11f * i,        0.11f * i,        1.0f - 0.89f * i, 0, 0 },
-        { 0,                 0,                0,                1, 0 },
-        { 0,                 0,                0,                0, 1 }
-    }};
-
-    ImageAttributes attributes;
-    if (attributes.SetColorMatrix(&matrix, ColorMatrixFlagsDefault,
-                                  ColorAdjustTypeBitmap) != Ok) {
-        return;
-    }
-
-    // Crucially, GDI+ now draws into an ordinary memory DC, not into the
-    // potentially transparent theme overlay DC.
-    Graphics graphics(compositeDc.get());
-    if (graphics.GetLastStatus() != Ok ||
-        graphics.DrawImage(&sourceImage, Rect(0, 0, width, height),
-                           0, 0, width, height, UnitPixel, &attributes) != Ok) {
-        return;
-    }
-
-    // This opaque copy is reliable even when the target overlay does not
-    // support direct GDI+/alpha composition.
-    BitBlt(hdc, area.left, area.top, width, height, compositeDc.get(),
-           0, 0, SRCCOPY);
 }
 
-static void DrawClassicPleaseWaitBox(HDC hdc)
-{
-    if (!hdc) return;
+// The paint DC can represent a virtual-desktop-sized surface. Convert the
+// primary monitor rectangle to that surface only in that case.
+static RECT GetBoxSurfaceArea(const RECT& clientArea) {
+    const int width = clientArea.right - clientArea.left;
+    const int height = clientArea.bottom - clientArea.top;
+    if (width != GetSystemMetrics(SM_CXVIRTUALSCREEN) ||
+        height != GetSystemMetrics(SM_CYVIRTUALSCREEN)) return clientArea;
 
-    // On this paint DC, the clipping rectangle is the complete overlay client
-    // area on supported builds. Unlike the old code, no HWND/object-layout
-    // offset is dereferenced to obtain it.
-    RECT paintArea = {};
-    if (GetClipBox(hdc, &paintArea) == ERROR ||
-        paintArea.right <= paintArea.left || paintArea.bottom <= paintArea.top) {
-        return;
-    }
+    MONITORINFO mi = { sizeof(mi) };
+    const POINT origin = { 0, 0 };
+    HMONITOR primary = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+    if (!primary || !GetMonitorInfoW(primary, &mi)) return clientArea;
+    return { clientArea.left + mi.rcMonitor.left - GetSystemMetrics(SM_XVIRTUALSCREEN),
+             clientArea.top + mi.rcMonitor.top - GetSystemMetrics(SM_YVIRTUALSCREEN),
+             clientArea.left + mi.rcMonitor.right - GetSystemMetrics(SM_XVIRTUALSCREEN),
+             clientArea.top + mi.rcMonitor.bottom - GetSystemMetrics(SM_YVIRTUALSCREEN) };
+}
 
-    // This off-screen snapshot/colour-matrix composition is synchronous. If
-    // it fails, it safely skips the backdrop and still draws the classic box.
-    PaintSnapshotWithGentleDesaturation(hdc, paintArea);
+static void DrawClassicPleaseWaitBox(HWND window, HDC hdc) {
+    RECT clientArea = {};
+    if (!window || !GetClientRect(window, &clientArea)) return;
+    if (clientArea.right <= clientArea.left || clientArea.bottom <= clientArea.top) return;
 
-    const RECT boxArea = GetClassicBoxArea(paintArea);
-    const int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-    const int outerWidth = ScaleBoxForDpi(kReferenceBoxWidth, dpi);   // 227 px at 96 DPI
-    const int outerHeight = ScaleBoxForDpi(kReferenceBoxHeight, dpi); // 80 px at 96 DPI
+    PaintSnapshotWithGentleDesaturation(hdc, clientArea);
+    const RECT boxArea = GetBoxSurfaceArea(clientArea);
+    const UINT dpi = GetPrimaryMonitorDpi();
+    const int boxWidth = ScaleBoxForDpi(210, dpi);   // 221 px at 96 DPI
+    const int boxHeight = ScaleBoxForDpi(74, dpi);   // 78 px at 96 DPI
     const int rim = std::max(1, ScaleBoxForDpi(5, dpi));
     const int border = std::max(1, ScaleBoxForDpi(1, dpi));
-
-    RECT outer = {
-        boxArea.left + ((boxArea.right - boxArea.left) - outerWidth) / 2,
-        boxArea.top + ((boxArea.bottom - boxArea.top) - outerHeight) / 2,
-        0, 0
-    };
-    outer.right = outer.left + outerWidth;
-    outer.bottom = outer.top + outerHeight;
-
+    RECT outer = { boxArea.left + ((boxArea.right - boxArea.left) - boxWidth) / 2,
+                   boxArea.top + ((boxArea.bottom - boxArea.top) - boxHeight) / 2, 0, 0 };
+    outer.right = outer.left + boxWidth; outer.bottom = outer.top + boxHeight;
+    // Restore the previous Aero-like presentation while retaining the current
+    // 221 x 78 px (96-DPI) outer dimensions.
     RECT darkBorder = outer;
     InflateRect(&darkBorder, -rim, -rim);
     RECT content = darkBorder;
     InflateRect(&content, -border, -border);
     if (content.right <= content.left || content.bottom <= content.top) return;
 
-    // Colours sampled/approximated from the supplied Windows 8.1 reference:
-    // pale-blue outer rim, slate-grey one-pixel line, white content.
     ScopedGdiObject outerBrush(CreateSolidBrush(RGB(197, 218, 231)));
     ScopedGdiObject borderBrush(CreateSolidBrush(RGB(118, 131, 139)));
     ScopedGdiObject contentBrush(CreateSolidBrush(RGB(255, 255, 255)));
-    if (!outerBrush || !borderBrush || !contentBrush) return;
-    FillRect(hdc, &outer, static_cast<HBRUSH>(outerBrush.get()));
-
-    // The original frame was not a flat blue fill: it had faint horizontal
-    // Aero-like light streaks. Keep them inside the outer rim, so they never
-    // reduce the white text area or the dark inner border's contrast.
     ScopedGdiObject topStreakBrush(CreateSolidBrush(RGB(231, 241, 247)));
     ScopedGdiObject bottomStreakBrush(CreateSolidBrush(RGB(177, 208, 225)));
+    if (!outerBrush || !borderBrush || !contentBrush) return;
+
+    FillRect(hdc, &outer, (HBRUSH)outerBrush.get());
+    const int inset = std::max(1, ScaleBoxForDpi(1, dpi));
     const int streakHeight = std::max(1, ScaleBoxForDpi(1, dpi));
     if (topStreakBrush && bottomStreakBrush && rim > streakHeight) {
-        RECT topStreak = { outer.left + 1, outer.top + 1,
-                           outer.right - 1, outer.top + 1 + streakHeight };
-        RECT bottomStreak = { outer.left + 1, outer.bottom - 1 - streakHeight,
-                              outer.right - 1, outer.bottom - 1 };
-        FillRect(hdc, &topStreak, static_cast<HBRUSH>(topStreakBrush.get()));
-        FillRect(hdc, &bottomStreak, static_cast<HBRUSH>(bottomStreakBrush.get()));
+        RECT topStreak = { outer.left + inset, outer.top + inset,
+                           outer.right - inset, outer.top + inset + streakHeight };
+        RECT bottomStreak = { outer.left + inset, outer.bottom - inset - streakHeight,
+                              outer.right - inset, outer.bottom - inset };
+        FillRect(hdc, &topStreak, (HBRUSH)topStreakBrush.get());
+        FillRect(hdc, &bottomStreak, (HBRUSH)bottomStreakBrush.get());
     }
+    FillRect(hdc, &darkBorder, (HBRUSH)borderBrush.get());
+    FillRect(hdc, &content, (HBRUSH)contentBrush.get());
 
-    FillRect(hdc, &darkBorder, static_cast<HBRUSH>(borderBrush.get()));
-    FillRect(hdc, &content, static_cast<HBRUSH>(contentBrush.get()));
-
+    NONCLIENTMETRICSW metrics = { sizeof(metrics) };
     LOGFONTW fontDescription = {};
-    fontDescription.lfHeight = -ScaleBoxForDpi(12, dpi);
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
+        fontDescription = metrics.lfMessageFont;
+    else
+        fontDescription.lfHeight = -ScaleForDpi(12, dpi);
+
+    // Keep the system message-font family/charset, but make the caption bold
+    // and 15% larger as requested.
+    fontDescription.lfHeight = MulDiv(fontDescription.lfHeight, g_settings.fontSizePercent, 100);
     fontDescription.lfWeight = FW_BOLD;
-    fontDescription.lfQuality = CLEARTYPE_QUALITY;
-    fontDescription.lfCharSet = DEFAULT_CHARSET;
-    lstrcpynW(fontDescription.lfFaceName, L"Segoe UI", LF_FACESIZE);
     ScopedGdiObject font(CreateFontIndirectW(&fontDescription));
     if (!font) return;
-
-    ScopedSelection selectFont(hdc, font.get());
+    ScopedSelection selection(hdc, font.get());
+    if (!selection.selected()) return;
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(0, 0, 0));
     DrawTextW(hdc, GetPleaseWaitText(), -1, &content,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 }
 
-void STDCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc)
-{
-    // This mod deliberately replaces the original overlay paint. Calling the
-    // original here would restore the full-screen Windows 10/11 dimming that
-    // the mod is intended to remove.
-    (void)window;
-    if (!hdc) return;
-
-    try {
-        DrawClassicPleaseWaitBox(hdc);
-    }
-    catch (...) {
-        // A rendering failure must never bring down Explorer, rundll32 or
-        // Settings. RAII objects created by the drawing path are unwound here.
-        Wh_Log(L"Please Wait Restorer: an unexpected C++ exception occurred while drawing; this frame was skipped safely");
-    }
+void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
+    if (hdc) DrawClassicPleaseWaitBox(WindowFromDC(hdc), hdc);
 }
 
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"Please Wait Restorer 1.0.0: initializing safe classic-overlay mode");
-
-    try {
-        // The box remains available if documented GDI+ colour adjustment is
-        // unavailable; only the optional desaturation is skipped.
-        if (!g_gdiplus.Start()) {
-            Wh_Log(L"Please Wait Restorer: GDI+ unavailable; continuing without desaturation");
-        }
-
-        // If initialization returns early or HookSymbols fails, this wrapper
-        // releases the reference acquired by LoadLibrary automatically.
-        ScopedModule themeUi(LoadLibraryW(L"themeui.dll"));
-        if (!themeUi) {
-            Wh_Log(L"themeui.dll could not be loaded; disabling the mod safely");
-            return FALSE;
-        }
-
-        WindhawkUtils::SYMBOL_HOOK themeUiDllHooks[] = {
-            {
-                { L"private: void __cdecl CDimmedWindow::OnPaint(struct HDC__ *)" },
-                &g_originalOnPaint,
-                CDimmedWindow_OnPaintHook,
-                false
-            }
-        };
-
-        if (!WindhawkUtils::HookSymbols(themeUi.get(), themeUiDllHooks, ARRAYSIZE(themeUiDllHooks))) {
-            Wh_Log(L"CDimmedWindow::OnPaint was not resolved on this Windows build; disabling the mod safely");
-            return FALSE;
-        }
-
-        // Keep the module loaded for the host process. This avoids unloading
-        // code that may still be used by the hooked Windows component.
-        g_themeUi = themeUi.release();
-        return TRUE;
+static bool HookThemeUiSymbols(HMODULE themeUi) {
+    WindhawkUtils::SYMBOL_HOOK hook = {
+        { L"private: void " STHISCALL L" CDimmedWindow::OnPaint(struct HDC__ *)" },
+        &g_originalOnPaint, CDimmedWindow_OnPaintHook, false
+    };
+    if (!WindhawkUtils::HookSymbols(themeUi, &hook, 1)) {
+        Wh_Log(L"CDimmedWindow::OnPaint was not resolved");
+        return false;
     }
-    catch (...) {
-        Wh_Log(L"Please Wait Restorer: an unexpected C++ exception occurred during initialization; disabling safely");
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+
+static void HandleLoadedModule(HMODULE module) {
+    if (GetModuleHandleW(L"themeui.dll") != module ||
+        g_themeUiHandled.exchange(true)) return;
+    if (HookThemeUiSymbols(module)) Wh_ApplyHookOperations();
+}
+
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
+    if (module) HandleLoadedModule(module);
+    return module;
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+    LoadSettings();
+    if (HMODULE themeUi = GetModuleHandleW(L"themeui.dll")) {
+        g_themeUiHandled = true;
+        return HookThemeUiSymbols(themeUi) ? TRUE : FALSE;
+    }
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    auto loadLibraryExW = kernelBase ? (decltype(&LoadLibraryExW))GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
+    if (!loadLibraryExW) { Wh_Log(L"kernelbase!LoadLibraryExW was not found"); return FALSE; }
+    if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                        &LoadLibraryExW_Original)) {
+        Wh_Log(L"Failed to hook kernelbase!LoadLibraryExW");
         return FALSE;
     }
+    return TRUE;
 }
 
-void Wh_ModUninit()
-{
-    // Windhawk removes the hook before unloading the mod. Do not free
-    // themeui.dll here: it is a Windows module that can still be in use by
-    // the host process, and keeping its normal process lifetime is safest.
-    g_gdiplus.Stop();
-    Wh_Log(L"Please Wait Restorer: unloaded");
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
 }
