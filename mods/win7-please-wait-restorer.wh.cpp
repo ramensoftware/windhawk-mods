@@ -367,7 +367,7 @@ static void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
 
 static bool HookThemeUiSymbols(HMODULE themeUi) {
     WindhawkUtils::SYMBOL_HOOK themeuiDllHook = {
-        { { L"private: void " STHICALL L" CDimmedWindow::OnPaint(struct HDC__ *)" } },
+        { L"private: void " STHICALL L" CDimmedWindow::OnPaint(struct HDC__ *)" },
         &g_originalOnPaint, CDimmedWindow_OnPaintHook, false
     };
     if (!WindhawkUtils::HookSymbols(themeUi, &themeuiDllHook, 1)) {
