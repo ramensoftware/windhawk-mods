@@ -618,9 +618,6 @@ static void PositionWindowNearTray(HWND hwnd);
 static void InstallClickOutsideHook(void);
 static void RemoveClickOutsideHook(void);
 static void UpdateCachedTrayIconRect(void);
-static void InstallKeyboardHook(void);
-static void RemoveKeyboardHook(void);
-LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam);
 static void CreateFlyoutWindow(void);
 static void CloseFlyout(HWND hwnd);
 static void HideFlyout(HWND hwnd);
@@ -1599,7 +1596,6 @@ static DWORD g_LastProblemBalloonTick = 0;
 static DWORD g_LastProblemBalloonSignature = 0;
 static int g_LastProblemBalloonState = STATE_GOOD;
 static HHOOK g_hMouseHook = NULL;
-static HHOOK g_hKeyboardHook = NULL;
 static BOOL g_Initialized = FALSE;
 // TRUE for the very first RefreshSecurityState() call after mod startup.
 // Forces a balloon notification even if the cooldown has not elapsed yet,
@@ -3947,7 +3943,6 @@ void ToggleFlyout() {
         SetTimer(g_Ctx.hWndFlyout, AUTOHIDE_TIMER_ID, AUTOHIDE_INACTIVITY_MS, NULL);
         UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
-        InstallKeyboardHook();
         return;
     }
     CreateFlyoutWindow();
@@ -3966,8 +3961,7 @@ void ToggleFlyout() {
 
         UpdateCachedTrayIconRect();
         InstallClickOutsideHook();
-        InstallKeyboardHook();
-    }
+            }
 
 }
 
@@ -4004,42 +3998,10 @@ void RemoveClickOutsideHook() {
     }
 }
 
-// ============================================================================
-// Keyboard Hook (Escape to close flyout)
-// ============================================================================
-void InstallKeyboardHook() {
-    if (g_hKeyboardHook) return;
-    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, GetModInstance(), 0);
-    if (!g_hKeyboardHook) {
-        Wh_Log(L"Failed to install keyboard hook (error: %lu)", GetLastError());
-    } else {
-    }
-}
 
-void RemoveKeyboardHook() {
-    if (g_hKeyboardHook) {
-        UnhookWindowsHookEx(g_hKeyboardHook);
-        g_hKeyboardHook = NULL;
-    }
-}
 
-LRESULT CALLBACK KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (g_Ctx.isUninitializing)
-        return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 
-    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
-        KBDLLHOOKSTRUCT* pKbd = (KBDLLHOOKSTRUCT*)lParam;
-        if (pKbd->vkCode == VK_ESCAPE) {
-            // Close flyout if visible
-            if (g_Ctx.hWndFlyout && IsWindow(g_Ctx.hWndFlyout) && 
-                IsWindowVisible(g_Ctx.hWndFlyout) && !g_FlyoutClosing) {
-                PostMessageW(g_Ctx.hWndFlyout, WM_SAFE_CLOSE, 0, 0);
-                return 1; // Swallow the key
-            }
-        }
-    }
-    return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
-}
+
 
 LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (g_Ctx.isUninitializing)
@@ -4070,24 +4032,9 @@ LRESULT CALLBACK ClickOutsideMouseHookProc(int nCode, WPARAM wParam, LPARAM lPar
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
 
-// ============================================================================
-// Flyout Window
-// ============================================================================
-// HideFlyout: every code path that hides the flyout (click-outside, Escape,
-// Return/Space, footer/problem-link click, autohide timer, WM_ACTIVATE
-// WA_INACTIVE, WM_CLOSE) must go through this function. Its only job is to
-// tear down both low-level hooks so they don't survive the flyout and leak
-// into the next one. We deliberately do NOT restore any previous foreground
-// window: the captured HWND almost always points at Shell_TrayWnd (because
-// clicking the notification area activates it), so a manual restore would
-// steal focus from the app the user just switched to. The standard Aero
-// pattern (and the one used by the Windows 7 network flyout recreation mod)
-// is to dismiss on WA_INACTIVE and let Windows pick the next foreground
-// window (review issue #1).
 void HideFlyout(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     RemoveClickOutsideHook();
-    RemoveKeyboardHook();
     ShowWindow(hwnd, SW_HIDE);
 }
 
@@ -4095,7 +4042,6 @@ void CloseFlyout(HWND hwnd) {
     if (g_FlyoutClosing || !hwnd || !IsWindow(hwnd)) return;
     g_FlyoutClosing = TRUE;
     RemoveClickOutsideHook();
-    RemoveKeyboardHook();
     AnimateWindow(hwnd, 150, AW_HIDE);
     // DestroyWindow posts WM_DESTROY, which clears g_Ctx.hWndFlyout if hwnd matches.
     DestroyWindow(hwnd);
@@ -4639,7 +4585,6 @@ if (activeProblems > 0) {
         // DestroyWindow from the cleanup path (e.g. WM_TRAY_SHUTDOWN) used
         // to leak the keyboard hook.
         RemoveClickOutsideHook();
-        RemoveKeyboardHook();
         g_FlyoutClosing = FALSE;
         g_IsHoveringLink = FALSE;
         if (g_Ctx.hWndFlyout == hwnd)
@@ -5266,16 +5211,10 @@ void CleanupModResources() {
     // 1. Blocca immediatamente nuove operazioni e nuove registrazioni.
     InterlockedExchange(&g_Ctx.isUninitializing, 1L);
 
-    // Remove keyboard hook immediately (no window context needed)
-    RemoveKeyboardHook();
 
-    // 2. Ferma le sorgenti esterne e attendi le callback gia' entrate.
     UnregisterWscNotifications();
     WaitForWscCallbacksToDrain();
     StopRegistryMonitor();
-
-    // Se l'unload arriva immediatamente dopo CreateThread, attendi che il
-    // tray thread abbia creato la propria message window (o sia fallito).
     if (g_Ctx.hTrayThread && g_Ctx.hTrayReadyEvent &&
         (!g_Ctx.hWndMsgHandler || !IsWindow(g_Ctx.hWndMsgHandler))) {
         WaitForSingleObject(g_Ctx.hTrayReadyEvent, 5000);
