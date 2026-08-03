@@ -3582,6 +3582,7 @@ static void RevealPendingSwitcher() {
     int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+    ApplySwitcherRegion();
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
@@ -3682,13 +3683,30 @@ static void DestroyMirrorSwitchers() {
 
 static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
+    static bool s_hasCustomRgn = false;
+    static int s_lastW = 0, s_lastH = 0, s_lastRadius = -1;
+
     INT cp = GetCornerPref();
-    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+    bool isCustom = (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0);
+
+    if (isCustom) {
         int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-        HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
-        SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
+        if (!s_hasCustomRgn || s_lastW != g_winW || s_lastH != g_winH || s_lastRadius != radius) {
+            HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
+            SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
+            s_hasCustomRgn = true;
+            s_lastW = g_winW;
+            s_lastH = g_winH;
+            s_lastRadius = radius;
+        }
     } else {
-        SetWindowRgn(g_hSwitcher, NULL, TRUE);
+        if (s_hasCustomRgn) {
+            SetWindowRgn(g_hSwitcher, NULL, TRUE);
+            s_hasCustomRgn = false;
+            s_lastW = 0;
+            s_lastH = 0;
+            s_lastRadius = -1;
+        }
     }
 }
 
@@ -4642,8 +4660,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     case WM_SWS_SETTINGS_CHANGED:
         if (g_isVisible) HideSwitcher();
-        LoadSettings();
         SWS_UnregisterHotkeys();
+        LoadSettings();
         SWS_RegisterHotkeys();
         return 0;
     case WM_SETCURSOR:
@@ -4806,12 +4824,11 @@ static void SWS_RegisterHotkeys() {
 static void SWS_UnregisterHotkeys() {
     KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     if (!g_hotkeysRegistered || !g_hSwitcher) return;
-    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0) || BackwardShortcutIs(L"altBacktick");
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-    if (wantAltBacktick) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+    UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
     g_hotkeysRegistered = false;
