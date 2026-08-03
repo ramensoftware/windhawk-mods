@@ -417,16 +417,14 @@ BOOL Wh_ModInit() {
     }
     return TRUE;
 }
-
-BOOL Wh_ModAfterInit() {
+void Wh_ModAfterInit() {
     Wh_Log(L">");
     HMODULE themeUi = GetModuleHandleW(L"themeui.dll");
     if (themeUi && !g_themeUiHandled.exchange(true)) {
         if (!HookThemeUiSymbols(themeUi))
-            return FALSE;
+            return;
         Wh_ApplyHookOperations();
     }
-    return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
