@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-03T20:11:40.000Z</updated>
+    <updated>2026-08-03T20:20:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.3]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#4717dc4f00f7a7b85a397e94d1d49ff26c941a11</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-08-03T20:20:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Modern engine now computes its canvas from <code>MonitorFromRect</code> (window) and <code>data-&gt;hMon</code> (dock), clamped to both monitors, instead of <code>GetSystemMetrics(SM_*VIRTUALSCREEN)</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Blob Shape 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-blob-shape#e5d8d9d8d4380fd4f18e08737e3925bc0c48665d</id>
@@ -589,21 +602,6 @@ as well as the ability to configure mouse actions that close them.</p>
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always On Top Windows 1.2]]></title>
-        <id>https://windhawk.net/mods/always-on-top#e34eeb8947a6965e56022b2578334945b74e0ba9</id>
-        <link href="https://windhawk.net/mods/always-on-top"/>
-        <updated>2026-07-24T18:23:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the ability to enable/disable the pin/unpin sound and the option to change it to another .wav sound</li>
-<li>Added floating text mode to know that pin/unpin is working and the option to enable or disable it</li>
-<li>Added support for Windows 7</li>
-</ul>]]></content>
-        <author>
-            <name>AhmedAwad7</name>
-            <uri>https://github.com/AhmedAwad7</uri>
         </author>
     </entry>
 </feed>

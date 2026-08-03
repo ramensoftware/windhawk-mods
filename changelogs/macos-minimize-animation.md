@@ -1,3 +1,7 @@
+## 3.1.3 ([Aug 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4717dc4f00f7a7b85a397e94d1d49ff26c941a11/mods/macos-minimize-animation.wh.cpp))
+
+- Modern engine now computes its canvas from `MonitorFromRect` (window) and `data->hMon` (dock), clamped to both monitors, instead of `GetSystemMetrics(SM_*VIRTUALSCREEN)`.
+
 ## 3.1.2 ([Jul 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4c2a9225de5b346b3565df37d526fafd608d9bb9/mods/macos-minimize-animation.wh.cpp))
 
 The modern genie's render loop paced every frame behind a ~120fps `Sleep()`-based timer AND a per-frame `DwmFlush()`. That makes each frame cost render time plus one vsync, so once the mesh draw takes longer than a single refresh interval the delivered frame rate drops to roughly half the monitor's. The animation then looks visibly choppier than the standalone custom-animations-genie mod this engine was ported from.

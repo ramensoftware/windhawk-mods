@@ -7821,7 +7821,7 @@
           320
         ],
         "ratingUsers": 406,
-        "updated": 1785530561000,
+        "updated": 1785788408000,
         "users": 22617
       },
       "metadata": {
@@ -7834,7 +7834,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.2"
+        "version": "3.1.3"
       }
     },
     "magic-mouse": {
