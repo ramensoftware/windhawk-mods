@@ -2,9 +2,9 @@
 // @id              windows-app-open-close-animation
 // @name            Windows app open/close animation
 // @description     Windows app opening and closing animations (this may not work for some apps)
-// @version         DEMO 1.0
+// @version         1.0
 // @author          Misael Antonio
-// @github          https://github.com/
+// @github          https://github.com/Misaelplayer263
 // @include         *
 // @compilerOptions -ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32
 // @license         MIT
