@@ -114,6 +114,9 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 #include <windows.h>
 #include <dwmapi.h>
 #include <windhawk_utils.h>
+#include <algorithm>
+#include <cstring>
+#include <cwchar>
 #include <unordered_set>
 #include <unordered_map>
 #include <mutex>
@@ -152,8 +155,9 @@ static std::mutex g_appControlledMutex;
 static thread_local bool g_inMod = false;
 
 struct InModGuard {
+    bool prev = g_inMod;
     InModGuard() { g_inMod = true; }
-    ~InModGuard() { g_inMod = false; }
+    ~InModGuard() { g_inMod = prev; }
 };
 
 static std::mutex g_settingsMutex;
@@ -311,14 +315,14 @@ static void LoadSettings()
         if (!HexToColorref(hexInactive.get(), &g_settings.inactiveLight)) g_settings.inactiveLight = RGB(230, 230, 230);
     } else {
         g_settings.activeLight = RGB(
-            (BYTE)Wh_GetIntSetting(L"lightMode.activeColour.r"),
-            (BYTE)Wh_GetIntSetting(L"lightMode.activeColour.g"),
-            (BYTE)Wh_GetIntSetting(L"lightMode.activeColour.b")
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.activeColour.r"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.activeColour.g"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.activeColour.b"), 0, 255)
         );
         g_settings.inactiveLight = RGB(
-            (BYTE)Wh_GetIntSetting(L"lightMode.inactiveColour.r"),
-            (BYTE)Wh_GetIntSetting(L"lightMode.inactiveColour.g"),
-            (BYTE)Wh_GetIntSetting(L"lightMode.inactiveColour.b")
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.inactiveColour.r"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.inactiveColour.g"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.inactiveColour.b"), 0, 255)
         );
     }
 
@@ -331,14 +335,14 @@ static void LoadSettings()
         if (!HexToColorref(hexInactive.get(), &g_settings.inactiveDark)) g_settings.inactiveDark = RGB(50, 50, 50);
     } else {
         g_settings.activeDark = RGB(
-            (BYTE)Wh_GetIntSetting(L"darkMode.activeColour.r"),
-            (BYTE)Wh_GetIntSetting(L"darkMode.activeColour.g"),
-            (BYTE)Wh_GetIntSetting(L"darkMode.activeColour.b")
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.r"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.g"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.b"), 0, 255)
         );
         g_settings.inactiveDark = RGB(
-            (BYTE)Wh_GetIntSetting(L"darkMode.inactiveColour.r"),
-            (BYTE)Wh_GetIntSetting(L"darkMode.inactiveColour.g"),
-            (BYTE)Wh_GetIntSetting(L"darkMode.inactiveColour.b")
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.inactiveColour.r"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.inactiveColour.g"), 0, 255),
+            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.inactiveColour.b"), 0, 255)
         );
     }
 }
@@ -381,11 +385,6 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
         }
         if (!wasApplied) return;
 
-        {
-            std::lock_guard<std::mutex> lock(g_appControlledMutex);
-            if (g_appControlledWindows.count(hWnd)) return; // app owns the colour now
-        }
-
         BOOL dark = FALSE;
         {
             std::lock_guard<std::mutex> lockDark(g_appDarkModeMutex);
@@ -393,10 +392,18 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
             if (it != g_appDarkModeWindows.end()) dark = it->second;
         }
 
+        bool appOwnsColour;
+        {
+            std::lock_guard<std::mutex> lock(g_appControlledMutex);
+            appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
+        }
+
         InModGuard guard;
         DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        const COLORREF def = DWMWA_COLOR_DEFAULT;
-        DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+        if (!appOwnsColour) {
+            const COLORREF def = DWMWA_COLOR_DEFAULT;
+            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+        }
         return;
     }
 
@@ -429,8 +436,9 @@ static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE
     if (useCustom) {
         DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
             &colour, sizeof(colour));
-        Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%06X",
-            hWnd, (BOOL)g_isDarkMode, isActive, colour);
+        Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%02X%02X%02X",
+            hWnd, (BOOL)g_isDarkMode, isActive,
+            GetRValue(colour), GetGValue(colour), GetBValue(colour));
     } else {
         const COLORREF def = DWMWA_COLOR_DEFAULT;
         DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
@@ -516,8 +524,7 @@ static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
             if (!isThemeChange) break;
 
             BOOL newDarkMode = IsSystemDarkMode();
-            if (newDarkMode != g_isDarkMode) {
-                g_isDarkMode = newDarkMode;
+            if (g_isDarkMode.exchange(newDarkMode) != newDarkMode) {
                 Wh_Log(L"[PID %d] Theme changed to %s",
                     GetCurrentProcessId(), newDarkMode ? L"DARK" : L"LIGHT");
                 ApplyToAllWindows();
@@ -638,6 +645,16 @@ HWND WINAPI CreateWindowExA_hook(
 // Windhawk lifecycle
 // -----------------------------------------------------------------------------
 
+template <typename TargetType, typename ReplacementType, typename OrigType>
+static bool Hook(TargetType target, ReplacementType replacement, OrigType orig, const wchar_t* name) {
+    if (!WindhawkUtils::SetFunctionHook(target, replacement, orig)) {
+        Wh_Log(L"WARNING: Failed to hook %s", name);
+        return false;
+    }
+    Wh_Log(L"Hooked %s", name);
+    return true;
+}
+
 BOOL Wh_ModInit()
 {
     Wh_Log(L"=== Auto Custom Titlebar Colors - Init [PID %d] ===",
@@ -647,20 +664,19 @@ BOOL Wh_ModInit()
     g_isDarkMode = IsSystemDarkMode();
     Wh_Log(L"Initial theme: %s", (BOOL)g_isDarkMode ? L"DARK" : L"LIGHT");
 
-    auto hook = [](void* target, void* replacement, void** orig, const wchar_t* name) {
-        if (!Wh_SetFunctionHook(target, replacement, orig))
-            Wh_Log(L"WARNING: Failed to hook %s", name);
-        else
-            Wh_Log(L"Hooked %s", name);
-    };
+    bool success = true;
+    success &= Hook(DefWindowProcW,  DefWindowProcW_hook,  &DefWindowProcW_orig,  L"DefWindowProcW");
+    success &= Hook(DefWindowProcA,  DefWindowProcA_hook,  &DefWindowProcA_orig,  L"DefWindowProcA");
+    success &= Hook(DefDlgProcW,     DefDlgProcW_hook,     &DefDlgProcW_orig,     L"DefDlgProcW");
+    success &= Hook(DefDlgProcA,     DefDlgProcA_hook,     &DefDlgProcA_orig,     L"DefDlgProcA");
+    success &= Hook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_orig, L"CreateWindowExW");
+    success &= Hook(CreateWindowExA, CreateWindowExA_hook, &CreateWindowExA_orig, L"CreateWindowExA");
+    success &= Hook(DwmSetWindowAttribute, DwmSetWindowAttribute_hook, &DwmSetWindowAttribute_orig, L"DwmSetWindowAttribute");
 
-    hook((void*)DefWindowProcW,  (void*)DefWindowProcW_hook,  (void**)&DefWindowProcW_orig,  L"DefWindowProcW");
-    hook((void*)DefWindowProcA,  (void*)DefWindowProcA_hook,  (void**)&DefWindowProcA_orig,  L"DefWindowProcA");
-    hook((void*)DefDlgProcW,     (void*)DefDlgProcW_hook,     (void**)&DefDlgProcW_orig,     L"DefDlgProcW");
-    hook((void*)DefDlgProcA,     (void*)DefDlgProcA_hook,     (void**)&DefDlgProcA_orig,     L"DefDlgProcA");
-    hook((void*)CreateWindowExW, (void*)CreateWindowExW_hook, (void**)&CreateWindowExW_orig, L"CreateWindowExW");
-    hook((void*)CreateWindowExA, (void*)CreateWindowExA_hook, (void**)&CreateWindowExA_orig, L"CreateWindowExA");
-    hook((void*)DwmSetWindowAttribute, (void*)DwmSetWindowAttribute_hook, (void**)&DwmSetWindowAttribute_orig, L"DwmSetWindowAttribute");
+    if (!success) {
+        Wh_Log(L"=== Init failed: one or more hooks could not be set ===");
+        return FALSE;
+    }
 
     Wh_Log(L"=== Init complete ===");
     return TRUE;
@@ -698,20 +714,26 @@ VOID Wh_ModUninit()
 
     for (HWND hWnd : applied) {
         if (!IsWindow(hWnd)) continue;
-        {
-            std::lock_guard<std::mutex> lock(g_appControlledMutex);
-            if (g_appControlledWindows.count(hWnd)) continue;
-        }
+
         BOOL dark = FALSE;
         {
             std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
             auto it = g_appDarkModeWindows.find(hWnd);
             if (it != g_appDarkModeWindows.end()) dark = it->second;
         }
+
+        bool appOwnsColour;
+        {
+            std::lock_guard<std::mutex> lock(g_appControlledMutex);
+            appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
+        }
+
         InModGuard guard;
         DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        const COLORREF def = DWMWA_COLOR_DEFAULT;
-        DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+        if (!appOwnsColour) {
+            const COLORREF def = DWMWA_COLOR_DEFAULT;
+            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
+        }
     }
 
     Wh_Log(L"[PID %d] Cleanup complete", GetCurrentProcessId());
