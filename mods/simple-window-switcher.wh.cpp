@@ -14,7 +14,7 @@
 /*
 # Simple Window Switcher
 A lightweight Alt+Tab replacement for Windows, ported from the [Simple Window Switcher](https://github.com/valinet/sws) project.
-Additional improvements made by [Asteski](https://github.com/Asteski).
+Additional improvements made by [Asteski](https://github.com/Asteski) and [bropines](https://github.com/bropines).
 
 ## Features
 - Grid layout with live DWM thumbnail previews
@@ -22,11 +22,16 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Center align task list content and titles (horizontal and vertical options)
 - Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
 - Mouse click to select, scroll wheel to cycle from anywhere
-- Virtual Desktop Support (Show windows across multiple virtual desktops)
+- Scroll wheel page navigation (hold a secondary modifier to switch pages instead of individual windows)
+- Virtual Desktop Support (defaults to showing windows from all virtual desktops — change under Accessibility → Virtual Desktop Behavior)
 - Group windows by application (macOS Cmd+Tab style, one entry per app)
 - Drill into an app's windows with a Ctrl tap to pick a specific window (Esc backs out)
 - Win+Alt+Tab override to display windows from all monitors when using Per-Monitor mode
 - Alt+Ctrl+Tab sticky mode
+- Alt+` shortcut to cycle backwards or filter to windows of the same active application
+- Keyboard shortcut to close the selected window (Q, Ctrl+W, or Del)
+- Directional overflow chevrons (▲/▼/◀/▶) at the edges when windows extend off-screen
+- Show/hide close button toggle under Appearance → Thumbnails
 - Theme support (None/Backdrop Acrylic) with fully customizable background opacity
 - Works with elevated/admin applications
 - Dark/light mode auto-detection
@@ -269,9 +274,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
         - showCloseButton: true
           $name: Show Close Button
           $description: Show the 'X' button on hover to close windows.
-        - showOverflowIndicator: true
-          $name: Show Overflow Indicator
-          $description: Show chevron indicators at the edges when there are more windows off-screen.
         - showHoverBorder: true
           $name: Show Hover Border
           $description: Show a colored border around the thumbnail when hovered.
@@ -387,6 +389,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $name: Apply to Group Indicator
           $description: Use these custom font settings for the grouped window count indicator badge.
       $name: Font
+    - showOverflowIndicator: true
+      $name: Show Overflow Indicator
+      $description: Show chevron indicators at the edges when there are more windows off-screen.
   $name: Appearance
 - Dimensions:
     - rowHeight: 230
@@ -3491,11 +3496,11 @@ static void PaintSwitcher() {
 // Switcher Show / Hide / Switch
 
 static void GetOffscreenDelayPosition(int* x, int* y) {
-    // Put the 1x1 window far off-screen.
-    // This avoids alpha/layered hacks while keeping the window shown/foreground,
-    // and prevents the momentary top-left flash.
-    *x = -9999;
-    *y = -9999;
+    // Position the 1x1 window safely off every monitor by going 2px past
+    // the virtual screen boundary — arrangement-agnostic and guaranteed
+    // to be off-screen even with multiple 4K displays left/above primary.
+    *x = GetSystemMetrics(SM_XVIRTUALSCREEN) - 2;
+    *y = GetSystemMetrics(SM_YVIRTUALSCREEN) - 2;
 }
 
 static void CancelPendingShow() {
@@ -3661,20 +3666,6 @@ static void DestroyMirrorSwitchers() {
     g_hMirrorSwitchers.clear();
 }
 
-static std::wstring GetExeFromHwnd(HWND hWnd) {
-    WCHAR path[MAX_PATH] = {0};
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid) {
-        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (hProc) {
-            DWORD size = MAX_PATH;
-            QueryFullProcessImageNameW(hProc, 0, path, &size);
-            CloseHandle(hProc);
-        }
-    }
-    return std::wstring(path);
-}
 
 static void ShowSwitcher(bool sticky) {
     DestroyMirrorSwitchers();
@@ -3688,10 +3679,15 @@ static void ShowSwitcher(bool sticky) {
     UnregisterThumbnails(); BuildWindowList();
     
     if (g_isAltBacktickSameApp) {
-        std::wstring activeExe = GetExeFromHwnd(GetForegroundWindow());
-        if (!activeExe.empty()) {
+        WCHAR activeKey[MAX_PATH] = {0};
+        GetWindowGroupKey(GetForegroundWindow(), activeKey, ARRAYSIZE(activeKey));
+        if (activeKey[0]) {
             g_windows.erase(std::remove_if(g_windows.begin(), g_windows.end(),
-                [&](const WindowEntry& e) { return GetExeFromHwnd(e.hWnd) != activeExe; }),
+                [&](const WindowEntry& e) {
+                    WCHAR key[MAX_PATH] = {0};
+                    GetWindowGroupKey(e.hWnd, key, ARRAYSIZE(key));
+                    return wcscmp(key, activeKey) != 0;
+                }),
                 g_windows.end());
         }
         g_isAltBacktickSameApp = false;
@@ -4344,13 +4340,9 @@ static void UpdateEntryForWindow(WindowEntry& e) {
     }
 }
 
-static void SafeCloseWindow(HWND hWnd) {
-    PostMessage(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-}
-
-// Close the window for the entry at idx (graceful WM_CLOSE, same as the close
+// Close the window for the entry at idx (posts SC_CLOSE, same as the close
 // button), remove it from the list and relayout. Shared by the close button,
-// middle-click and the Q key.
+// middle-click, Q, Ctrl+W and Del.
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
     
@@ -4358,12 +4350,12 @@ static void CloseSwitcherEntry(int idx) {
     if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
         if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
             for (HWND hw : g_windows[idx].groupWindows) {
-                SafeCloseWindow(hw);
+                PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
             }
         } else {
             // closeRecent (Default)
             HWND closedHwnd = g_windows[idx].hWnd;
-            SafeCloseWindow(closedHwnd);
+            PostMessage(closedHwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
             
             auto& group = g_windows[idx].groupWindows;
             group.erase(std::remove(group.begin(), group.end(), closedHwnd), group.end());
@@ -4379,7 +4371,7 @@ static void CloseSwitcherEntry(int idx) {
             }
         }
     } else {
-        SafeCloseWindow(g_windows[idx].hWnd);
+        PostMessage(g_windows[idx].hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
     }
 
     if (eraseEntry) {
@@ -4613,7 +4605,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if (wParam == VK_RETURN || wParam == VK_SPACE) { SwitchToSelected(); return 0; }
-            bool isCtrlW = (wParam == 'W' && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+            bool isCtrlW = (wParam == 'W' && (GetKeyState(VK_CONTROL) & 0x8000) != 0);
             if (wParam == 'Q' || wParam == VK_DELETE || isCtrlW) {
                 bool isRepeat = (lParam & 0x40000000) != 0;
                 if (!isRepeat) CloseSwitcherEntry(g_selectedIndex);
@@ -4629,7 +4621,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (action == 1) { // selection
                 CycleLinear(dir);
             } else if (action == 2) { // page
-                g_isPaginatedView = true;
                 CyclePage(dir);
             }
         }
@@ -4888,10 +4879,11 @@ static void LoadSettings() {
         wcscpy_s(g_settings.thumbnailAlignment, L"left");
     }
     v = Wh_GetStringSetting(L"Accessibility.backwardShortcut");
-    if (v) {
+    if (v && *v) {
         wcscpy_s(g_settings.backwardShortcut, v);
         Wh_FreeStringSetting(v);
     } else {
+        Wh_FreeStringSetting(v);
         // Backward compatibility with previous boolean setting.
         wcscpy_s(g_settings.backwardShortcut,
                  Wh_GetIntSetting(L"enableAltShiftForBackward") ? L"altShift" : L"altShiftTab");
@@ -4926,7 +4918,7 @@ static void LoadSettings() {
     g_settings.autoFitTasks = Wh_GetIntSetting(L"Dimensions.autoFitTasks");
     g_settings.showThumbnails = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnails");
     g_settings.showCloseButton = Wh_GetIntSetting(L"Appearance.Thumbnails.showCloseButton");
-    g_settings.showOverflowIndicator = Wh_GetIntSetting(L"Appearance.Thumbnails.showOverflowIndicator");
+    g_settings.showOverflowIndicator = Wh_GetIntSetting(L"Appearance.showOverflowIndicator");
     g_settings.showHoverBorder = Wh_GetIntSetting(L"Appearance.Thumbnails.showHoverBorder");
     g_settings.showThumbnailShadow = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnailShadow");
     g_settings.showTitle = Wh_GetIntSetting(L"Appearance.HeaderContent.showTitle");
