@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-03T20:25:39.000Z</updated>
+    <updated>2026-08-03T22:08:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-action-center-recreation#4f710981ae49bf9530bf615bfc85012888d2a95f</id>
+        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
+        <updated>2026-08-03T22:08:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the high contrast theme</li>
+<li>Startup notification now waits 12 seconds to avoid lost balloons</li>
+<li>Fixed glass/shadow issues</li>
+<li>Improved the multi-monitor positioning</li>
+<li>Added the translations for Dutch, Polish and Romanian</li>
+<li>Fixed some minor DPI scaling issues</li>
+<li>Various stability improvements</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.8]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#3ab9b84f90335f699a88178f3b1c486bc1876ab9</id>
@@ -564,42 +583,6 @@ as well as the ability to configure mouse actions that close them.</p>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.8.0]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#109589023dde428deaee2fe80e4ce446283a7935</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2026-07-26T18:48:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Some settings that can be considered outside the scope of translucent effects are removed due to my limited free time to maintain these features, fortunately the Windhawk community has provided some separate mods for those listed below.</p></li>
-<li><p>Settings removed:</p>
-<ul>
-<li>Border color setting - replacement: <a href="https://windhawk.net/mods/window-border-customizer">Window Border Customizer</a> by <a href="https://github.com/Lockframe">Lockframe</a>.</li>
-<li>Titlebar color - replacement: <a href="https://windhawk.net/mods/auto-custom-titlebar-colors">Auto Custom Title Bar Colors</a> by <a href="https://github.com/Louis047">Louis047</a>.</li>
-<li>Window Corner Type - replacement: <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> by <a href="https://github.com/m417z">m417z</a>.</li>
-<li>Titlebar text color. </li>
-<li>Rainbow effect - Very high performance overhead, e.g. 30% usage on a modern midrange GPU.</li>
-<li>Extend effects into entire window - Will be enabled by default when a translucent effect is selected.</li>
-<li>Immersive darkmode title bar - Will be enabled by default when the system is in dark mode.</li></ul></li>
-<li><p>Added compatibility with <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>.</p></li>
-<li><p>System color improvements without the need to apply the SetSysColors API - Global setting "New system colors". Related topic: <a href="https://github.com/ramensoftware/windhawk-mods/issues/2010">[Translucent Window] Dark/black background artifacts even for excluded apps (e.g. Office)</a></p></li>
-<li><p>Processes launching from given subdirectories can be ruled/excluded as a whole in the mod settings.</p></li>
-<li><p>Numerous improvements and additions to theme customization.</p>
-<ul>
-<li>Fixed chevron arrow scaling in treeview.</li>
-<li>Improved buttons pill (e.g. treeview, tabs)</li>
-<li>Fixed properties window background coloring without the need to restart explorer.</li>
-<li>Adjusted the size of the custom scrollbar close to the original.</li>
-<li>Recolored black text in dark mode (e.g. syslinks, address bar dropdown text, context menu icons)</li>
-<li>Alpha blended more UI elements (e.g. treeview separator, highlighted text accent background)</li>
-<li>Removed dark gray bottom part in explorer dialogs in dark mode (e.g. Open/Save dialogs)</li>
-<li>Removed Windows brand logo background in dialogs (e.g. winver.exe)</li>
-<li>Improved text composition performance.</li></ul></li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

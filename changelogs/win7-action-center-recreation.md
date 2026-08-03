@@ -1,3 +1,13 @@
+## 2.0.0 ([Aug 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4f710981ae49bf9530bf615bfc85012888d2a95f/mods/win7-action-center-recreation.wh.cpp))
+
+- Added support for the high contrast theme
+- Startup notification now waits 12 seconds to avoid lost balloons
+- Fixed glass/shadow issues
+- Improved the multi-monitor positioning
+- Added the translations for Dutch, Polish and Romanian
+- Fixed some minor DPI scaling issues
+- Various stability improvements
+
 ## 1.8.0 ([Jul 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4c3838df0a95bb15de69714e65eb2f6fc8d0a4ba/mods/win7-action-center-recreation.wh.cpp))
 
 - Added the new Auto/Light/Dark theme setting with live updates
