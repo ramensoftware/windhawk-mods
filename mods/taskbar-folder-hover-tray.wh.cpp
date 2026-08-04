@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.26
+// @version         1.27
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -59,6 +59,10 @@ right click any folder in Explorer or on the Desktop and pick
 and its custom icon (Properties > Customize > Change Icon) from the folder
 itself. That same menu appears on files and shortcuts too — use it to move,
 copy, or make a shortcut into a folder that already has a button.
+
+If you would rather the mod stayed entirely on the taskbar side, turn off
+**Explorer right-click menu** in the settings; with it off, Explorer and Desktop
+context menus are left completely untouched.
 
 ### The Taskbar Folders window
 
@@ -188,6 +192,17 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 - openFolderOnClick: true
   $name: 1. Behavior ▸ Click opens the folder
   $description: Left clicking a taskbar button opens the folder in File Explorer.
+
+- explorerMenu: true
+  $name: 1. Behavior ▸ Explorer right-click menu
+  $description: >-
+    Adds a "Taskbar Folders" submenu to Explorer and Desktop context menus, for
+    pinning a folder straight to the taskbar and for moving, copying or making
+    a shortcut into a folder that already has a button. Turn this off to keep
+    the mod entirely on the taskbar side — with it off, Explorer's own context
+    menus are left completely alone. Switching it back on takes effect after
+    the mod is reloaded (toggle the mod off and on, or restart Explorer),
+    because the menu hook is only installed at startup.
 
 - position: beforeApps
   $name: 1. Behavior ▸ Position
@@ -464,6 +479,9 @@ struct Settings {
     int gapAfter = 0;
     int buttonIconSize = 0;
     bool openFolderOnClick = true;
+    // Read from an Explorer window thread inside the TrackPopupMenuEx hook
+    // while LoadSettings may be writing it on another.
+    std::atomic<bool> explorerMenu{true};
 };
 
 Settings g_settings;
@@ -627,6 +645,21 @@ namespace FolderStore {
 
 constexpr int kMaxEntries = 200;
 
+// Read/modify/write runs on three threads: the manager thread, the taskbar UI
+// thread (unpin) and an Explorer window thread (the context-menu pin). Write()
+// rewrites the entries, deletes the tail, then updates entryCount, so an
+// unlocked interleave can persist a truncated or mixed list.
+//
+// Recursive because the read-modify-write callers hold it across Read()+Write()
+// and those lock it too. Lock order is g_foldersMutex then this one, which is
+// what LoadFolders takes; nothing may hold this one across ReloadAndRefreshUI,
+// since that reaches LoadFolders and would invert the order.
+//
+// no_destroy: Wh_ModUninit does not run when Explorer terminates, but CRT
+// destructors of globals do, on a shutdown thread — a mutex must not be
+// destroyed out from under a thread that could still be holding it.
+[[clang::no_destroy]] std::recursive_mutex g_mutex;
+
 struct Entry {
     std::wstring path;
     std::wstring name;
@@ -644,6 +677,7 @@ std::wstring GetString(PCWSTR format, int index) {
 }
 
 std::vector<Entry> Read() {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
     std::vector<Entry> entries;
     int count = Wh_GetIntValue(L"entryCount", 0);
     if (count > kMaxEntries) {
@@ -669,6 +703,7 @@ std::vector<Entry> Read() {
 }
 
 void Write(const std::vector<Entry>& entries) {
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
     int previous = Wh_GetIntValue(L"entryCount", 0);
     int count = (int)entries.size();
     if (count > kMaxEntries) {
@@ -706,19 +741,28 @@ void Write(const std::vector<Entry>& entries) {
     Wh_SetIntValue(L"entryCount", count);
 }
 
-// Index of the entry backing `path`, comparing the resolved filesystem path so
-// that a shell: entry and its real folder count as the same thing. -1 if none.
-int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
-    std::wstring wanted = ResolveFolderPath(ExpandEnv(path));
-    if (wanted.empty()) {
-        wanted = ExpandEnv(path);
+// The comparison key for a stored path: resolved to a filesystem path so that
+// a shell: entry and its real folder count as the same thing.
+std::wstring MatchKey(const std::wstring& path) {
+    std::wstring key = ResolveFolderPath(ExpandEnv(path));
+    return key.empty() ? ExpandEnv(path) : key;
+}
+
+// True if two stored paths name the same folder. Exposed so callers can find
+// an entry by path rather than by a store index another thread may have
+// shifted underneath them.
+bool SamePath(const std::wstring& a, const std::wstring& b) {
+    if (a.empty() || b.empty()) {
+        return false;
     }
+    return _wcsicmp(MatchKey(a).c_str(), MatchKey(b).c_str()) == 0;
+}
+
+// Index of the entry backing `path`, or -1 if none.
+int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
+    std::wstring wanted = MatchKey(path);
     for (size_t i = 0; i < entries.size(); i++) {
-        std::wstring existing = ResolveFolderPath(ExpandEnv(entries[i].path));
-        if (existing.empty()) {
-            existing = ExpandEnv(entries[i].path);
-        }
-        if (_wcsicmp(existing.c_str(), wanted.c_str()) == 0) {
+        if (_wcsicmp(MatchKey(entries[i].path).c_str(), wanted.c_str()) == 0) {
             return (int)i;
         }
     }
@@ -730,6 +774,8 @@ int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
 // Settings rows the user had "unpinned" (the old hidden[] list) come across as
 // drafts rather than vanishing.
 void MigrateLegacy() {
+    // Held across the whole read-modify-write, like every other store mutation.
+    std::lock_guard<std::recursive_mutex> lock(g_mutex);
     if (Wh_GetIntValue(L"storeVersion", 0) >= 2) {
         return;
     }
@@ -867,24 +913,32 @@ void LoadFolders(std::vector<FolderEntry>* out) {
     std::lock_guard<std::mutex> lock(g_foldersMutex);
     out->clear();
 
-    auto stored = FolderStore::Read();
-    bool storeUnchanged = true;
-    for (auto& entry : stored) {
-        FolderEntry loaded;
-        if (!BuildFolderEntry(&entry, &loaded)) {
-            storeUnchanged = false;
+    // Store lock second, and only around the read-modify-write: the rename
+    // fix-up below writes back what it just read. See FolderStore::g_mutex for
+    // why the order is g_foldersMutex first.
+    size_t storedCount = 0;
+    {
+        std::lock_guard<std::recursive_mutex> storeLock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        storedCount = stored.size();
+        bool storeUnchanged = true;
+        for (auto& entry : stored) {
+            FolderEntry loaded;
+            if (!BuildFolderEntry(&entry, &loaded)) {
+                storeUnchanged = false;
+            }
+            // Drafts stay in the store but get no taskbar button.
+            if (entry.pinned) {
+                out->push_back(std::move(loaded));
+            }
         }
-        // Drafts stay in the store but get no taskbar button.
-        if (entry.pinned) {
-            out->push_back(std::move(loaded));
+        if (!storeUnchanged) {
+            FolderStore::Write(stored);
         }
-    }
-    if (!storeUnchanged) {
-        FolderStore::Write(stored);
     }
 
     Wh_Log(L"LoadFolders: %zu button(s) from %zu stored folder(s)",
-           out->size(), stored.size());
+           out->size(), storedCount);
 }
 
 // True if `path` already has a stored entry — pinned or draft. Used to hide
@@ -899,6 +953,9 @@ bool IsAlreadyTaskbarFolder(const std::wstring& path) {
 // Caller must refresh (LoadSettings + UI teardown/rebuild) for it to appear.
 // No-op (returns false) if the folder already has an entry, draft included.
 bool AddPinnedFolder(const std::wstring& path, const std::wstring& name) {
+    // Held across read-modify-write: the manager thread and the taskbar UI
+    // thread mutate the same store.
+    std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
     auto stored = FolderStore::Read();
     if (FolderStore::IndexOfPath(stored, path) >= 0) {
         return false;
@@ -920,6 +977,7 @@ bool AddPinnedFolder(const std::wstring& path, const std::wstring& name) {
 // Unpins without forgetting: the entry stays as a draft, keeping its name and
 // icon, and still blocks a duplicate pin of the same folder.
 void RemovePinnedFolder(const std::wstring& path) {
+    std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
     auto stored = FolderStore::Read();
     int index = FolderStore::IndexOfPath(stored, path);
     if (index < 0) {
@@ -1004,6 +1062,7 @@ void LoadSettings() {
     g_settings.buttonIconSize =
         std::clamp<int>(Wh_GetIntSetting(L"buttonIconSize"), 0, 128);
     g_settings.openFolderOnClick = Wh_GetIntSetting(L"openFolderOnClick");
+    g_settings.explorerMenu = Wh_GetIntSetting(L"explorerMenu") != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2814,6 +2873,27 @@ void StopScanThread() {
         std::swap(workEvent, g_scanWorkEvent);
     }
     if (thread && thread->joinable()) {
+        // Pump sent messages while waiting. The worker delivers button icons
+        // with a blocking SendMessage to the taskbar UI thread
+        // (DeliverButtonIconToUi -> RunFromWindowThread), and the taskbar
+        // right-click unpin reaches here from that very thread — a plain
+        // join() would leave both blocked forever and hang the taskbar. The
+        // g_scanThreadStop check before the delivery narrows that window but
+        // cannot close it. Same shape as StopRetryThread.
+        HANDLE handle = (HANDLE)thread->native_handle();
+        DWORD result;
+        do {
+            result = MsgWaitForMultipleObjects(1, &handle, FALSE, INFINITE,
+                                               QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG msg;
+                PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+            } else if (result == WAIT_FAILED) {
+                Wh_Log(L"StopScanThread: MsgWaitForMultipleObjects failed (%u)",
+                       GetLastError());
+                break;
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
         thread->join();
     }
     if (stopEvent) {
@@ -2916,6 +2996,12 @@ PendingShellCommand g_pendingShellCommand;
 
 // Posted to g_menuOwnerWnd after the context menu loop unwinds.
 constexpr UINT WM_APP_INVOKE_SHELL_VERB = WM_APP + 41;
+
+// Posted to g_menuOwnerWnd so a reload asked for by a XAML flyout item runs
+// after that item's own Click handler has returned. ReloadAndRefreshUI tears
+// down the very button the flyout is anchored to and unhooks the handlers it
+// is running inside, so it must not run inline from there.
+constexpr UINT WM_APP_RELOAD_UI = WM_APP + 42;
 
 // Both take their arguments by value: reopening a level destroys the PopupLevel
 // the caller may have read them from.
@@ -3840,6 +3926,15 @@ LRESULT CALLBACK MenuOwnerWndProc(HWND hWnd,
             ClearPendingShellCommand();
         } else {
             InvokePendingShellCommand(hWnd);
+        }
+        return 0;
+    }
+
+    if (uMsg == WM_APP_RELOAD_UI) {
+        // Runs after the button flyout's Click handler has returned, so the
+        // teardown is not re-entering the flyout item it was invoked from.
+        if (!g_unloading) {
+            ReloadAndRefreshUI();
         }
         return 0;
     }
@@ -5345,14 +5440,77 @@ constexpr int kIdEditOk = 1107;
 constexpr int kIdEditCancel = 1108;
 constexpr int kIdEditPreview = 1109;
 constexpr int kIdEditPinnedHint = 1110;
+// Static labels carry ids too, so WM_DPICHANGED can lay them out from the same
+// table WM_CREATE built them from.
+constexpr int kIdEditNameLabel = 1111;
+constexpr int kIdEditPathLabel = 1112;
+constexpr int kIdEditIconLabel = 1113;
+constexpr int kIdEditIconHint = 1114;
 
+// Every dimension in this window is written at 96 DPI and goes through
+// Scale()/ScaleFor(). explorer.exe is manifested Per-Monitor-DPI-Aware V2 and
+// threads it creates inherit that context, so plain Win32 windows here get no
+// automatic scaling at all: without this a 150% display would show a small
+// window wrapped around a large system font.
 constexpr int kRowHeight = 40;
 constexpr int kRowIconSize = 24;
+constexpr int kIconLeft = 8;      // Row icon inset from the row's left edge.
+constexpr int kTextGap = 10;      // Icon-to-text gap.
+constexpr int kTitleTop = 4;      // Row title band, measured from the row top.
+constexpr int kTitleBottom = 21;  // Also the top of the path band.
+constexpr int kPathBottom = 3;    // Path band inset from the row bottom.
+constexpr int kPreviewIcon = 32;  // Edit-dialog icon preview.
+constexpr int kPreviewInset = 4;
+
+// 96-DPI client size of each window, before AdjustWindowRect.
+constexpr int kMainWidth = 476;
+constexpr int kMainHeight = 400;
+constexpr int kEditWidth = 414;
+constexpr int kEditHeight = 306;
+
+int Scale(int value, int dpi) {
+    return MulDiv(value, dpi, 96);
+}
+
+// The DPI of the monitor a window is on. Read per use rather than cached in a
+// global, so everything stays correct after the window is dragged to another
+// monitor; GetDpiForWindow is a cheap cached window property.
+int DpiOf(HWND hWnd) {
+    UINT dpi = hWnd ? GetDpiForWindow(hWnd) : 0;
+    return dpi ? (int)dpi : 96;
+}
+
+// Where a child sits at 96 DPI. One table per window, so WM_CREATE and
+// WM_DPICHANGED lay out from the same numbers.
+struct ChildRect {
+    int id;
+    int x;
+    int y;
+    int cx;
+    int cy;
+};
+
+void LayoutChildren(HWND hWnd, const ChildRect* items, size_t count, int dpi) {
+    for (size_t i = 0; i < count; i++) {
+        HWND child = GetDlgItem(hWnd, items[i].id);
+        if (child) {
+            MoveWindow(child, Scale(items[i].x, dpi), Scale(items[i].y, dpi),
+                       Scale(items[i].cx, dpi), Scale(items[i].cy, dpi), TRUE);
+        }
+    }
+}
 
 // Owned by the manager thread once it starts; only ever read elsewhere to
 // find an existing window or ask it to close.
 std::atomic<HWND> g_wnd{nullptr};
 std::atomic<bool> g_active{false};
+
+// 96-DPI layout of the main window's children.
+constexpr ChildRect kMainLayout[] = {
+    {kIdList, 12, 12, 452, 300},   {kIdAdd, 12, 324, 76, 26},
+    {kIdEdit, 94, 324, 76, 26},    {kIdRemove, 176, 324, 76, 26},
+    {kIdClose, 388, 324, 76, 26},  {kIdHint, 12, 360, 452, 32},
+};
 
 // The store as last read, in listbox order. Manager-thread only.
 std::vector<FolderStore::Entry> g_rows;
@@ -5428,29 +5586,43 @@ POINT CenterOnMonitor(POINT anchor, int width, int height) {
     return pos;
 }
 
-HFONT UiFont() {
-    static HFONT font = [] {
-        NONCLIENTMETRICSW ncm{};
-        ncm.cbSize = sizeof(ncm);
-        if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm,
-                                  0)) {
-            if (HFONT themed = CreateFontIndirectW(&ncm.lfMessageFont)) {
-                return themed;
-            }
+// The message font at a given DPI. SystemParametersInfoW would hand back
+// metrics sized for the *system* DPI, which is what made a scaled window show
+// an oversized font. Cached per DPI so moving between monitors does not leak
+// an HFONT per WM_DPICHANGED; the manager only ever sees a couple of values.
+//
+// no_destroy for the same reason as every other global here: the CRT teardown
+// at Explorer exit must not touch it.
+[[clang::no_destroy]] std::vector<std::pair<int, HFONT>> g_fontCache;
+
+HFONT UiFont(int dpi) {
+    for (const auto& cached : g_fontCache) {
+        if (cached.first == dpi) {
+            return cached.second;
         }
-        return (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-    }();
+    }
+    HFONT font = nullptr;
+    NONCLIENTMETRICSW ncm{};
+    ncm.cbSize = sizeof(ncm);
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm,
+                                   0, (UINT)dpi)) {
+        font = CreateFontIndirectW(&ncm.lfMessageFont);
+    }
+    if (!font) {
+        font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    }
+    g_fontCache.emplace_back(dpi, font);
     return font;
 }
 
-void ApplyUiFont(HWND parent) {
+void ApplyUiFont(HWND parent, int dpi) {
     EnumChildWindows(
         parent,
         [](HWND child, LPARAM f) -> BOOL {
             SendMessageW(child, WM_SETFONT, (WPARAM)f, TRUE);
             return TRUE;
         },
-        (LPARAM)UiFont());
+        (LPARAM)UiFont(dpi));
 }
 
 // The icon a row should show: its configured icon spec if it has one that is
@@ -5484,6 +5656,10 @@ void FreeRowIcons() {
 
 void PopulateList(HWND hWnd) {
     HWND list = GetDlgItem(hWnd, kIdList);
+    if (!list) {
+        return;
+    }
+    int dpi = DpiOf(hWnd);
     int selected = (int)SendMessageW(list, LB_GETCURSEL, 0, 0);
 
     SendMessageW(list, LB_RESETCONTENT, 0, 0);
@@ -5491,7 +5667,7 @@ void PopulateList(HWND hWnd) {
     g_rows = FolderStore::Read();
 
     for (const auto& entry : g_rows) {
-        g_rowIcons.push_back(IconForEntry(entry, kRowIconSize));
+        g_rowIcons.push_back(IconForEntry(entry, Scale(kRowIconSize, dpi)));
         // Text comes from g_rows during WM_DRAWITEM; the item itself only
         // needs to exist.
         SendMessageW(list, LB_ADDSTRING, 0, (LPARAM)L"");
@@ -5522,13 +5698,32 @@ int SelectedIndex(HWND hWnd) {
     return (sel >= 0 && sel < (int)g_rows.size()) ? sel : -1;
 }
 
-// Applies a changed store and refreshes both the taskbar and this window.
-void CommitStore(HWND hWnd, const std::vector<FolderStore::Entry>& entries) {
-    FolderStore::Write(entries);
+// Refreshes the taskbar and this window after the store was changed.
+//
+// Must be called with FolderStore::g_mutex released: ReloadAndRefreshUI reaches
+// LoadFolders, which takes g_foldersMutex and then the store lock, so holding
+// the store lock across this would invert the order. Every caller therefore
+// scopes its read-modify-write to a block and calls this after it.
+void RefreshAfterStoreChange(HWND hWnd) {
     if (!g_unloading) {
         ReloadAndRefreshUI();
     }
     PopulateList(hWnd);
+}
+
+// True if the store still matches the rows on screen, one for one and in the
+// same order. A reorder commits by index, so it has to be abandoned if the
+// store moved underneath the window (an Explorer pin, a taskbar unpin).
+bool StoreMatchesRows(const std::vector<FolderStore::Entry>& stored) {
+    if (stored.size() != g_rows.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < stored.size(); i++) {
+        if (!FolderStore::SamePath(stored[i].path, g_rows[i].path)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void DrawRow(LPDRAWITEMSTRUCT dis) {
@@ -5537,22 +5732,26 @@ void DrawRow(LPDRAWITEMSTRUCT dis) {
     }
     const FolderStore::Entry& entry = g_rows[dis->itemID];
     bool selected = (dis->itemState & ODS_SELECTED) != 0;
+    int dpi = DpiOf(dis->hwndItem);
+    int iconSize = Scale(kRowIconSize, dpi);
 
     HDC dc = dis->hDC;
     RECT rc = dis->rcItem;
     FillRect(dc, &rc, GetSysColorBrush(selected ? COLOR_HIGHLIGHT
                                                 : COLOR_WINDOW));
 
-    int iconTop = rc.top + (kRowHeight - kRowIconSize) / 2;
+    int iconLeft = rc.left + Scale(kIconLeft, dpi);
+
+    int iconTop = rc.top + (Scale(kRowHeight, dpi) - iconSize) / 2;
     HICON icon = dis->itemID < g_rowIcons.size() ? g_rowIcons[dis->itemID]
                                                  : nullptr;
     if (icon) {
-        DrawIconEx(dc, rc.left + 8, iconTop, icon, kRowIconSize, kRowIconSize,
-                   0, nullptr, DI_NORMAL);
+        DrawIconEx(dc, iconLeft, iconTop, icon, iconSize, iconSize, 0, nullptr,
+                   DI_NORMAL);
     } else if (!entry.icon.empty()) {
         // Emoji icon: draw the text itself, centred in the icon slot.
-        RECT iconRect{rc.left + 8, iconTop, rc.left + 8 + kRowIconSize,
-                      iconTop + kRowIconSize};
+        RECT iconRect{iconLeft, iconTop, iconLeft + iconSize,
+                      iconTop + iconSize};
         SetBkMode(dc, TRANSPARENT);
         SetTextColor(dc, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT
                                               : COLOR_WINDOWTEXT));
@@ -5560,21 +5759,25 @@ void DrawRow(LPDRAWITEMSTRUCT dis) {
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
 
-    int textLeft = rc.left + 8 + kRowIconSize + 10;
+    int textLeft = iconLeft + iconSize + Scale(kTextGap, dpi);
+    int textRight = rc.right - Scale(kIconLeft, dpi);
+    int bandSplit = rc.top + Scale(kTitleBottom, dpi);
     SetBkMode(dc, TRANSPARENT);
 
     std::wstring title = entry.name.empty() ? entry.path : entry.name;
     if (!entry.pinned) {
         title += L"   (not pinned)";
     }
-    RECT titleRect{textLeft, rc.top + 4, rc.right - 8, rc.top + 21};
+    RECT titleRect{textLeft, rc.top + Scale(kTitleTop, dpi), textRight,
+                   bandSplit};
     SetTextColor(dc, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT
                                           : COLOR_WINDOWTEXT));
     DrawTextW(dc, title.c_str(), -1, &titleRect,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
                   DT_NOPREFIX);
 
-    RECT pathRect{textLeft, rc.top + 21, rc.right - 8, rc.bottom - 3};
+    RECT pathRect{textLeft, bandSplit, textRight,
+                  rc.bottom - Scale(kPathBottom, dpi)};
     SetTextColor(dc, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT
                                           : COLOR_GRAYTEXT));
     DrawTextW(dc, entry.path.c_str(), -1, &pathRect,
@@ -5662,11 +5865,32 @@ std::wstring BrowseForIconFile(HWND owner) {
 // Passed to the edit window and written back in place when it is accepted.
 struct EditContext {
     FolderStore::Entry entry;
-    // -1 when adding, otherwise the index being edited — so a path collision
-    // with the entry's own row is not treated as a duplicate.
-    int index = -1;
+    // Path of the entry being edited, empty when adding — so a collision with
+    // the entry's own row is not treated as a duplicate. Matched by path
+    // rather than by a store index, because the store can change on another
+    // thread while this dialog is up.
+    std::wstring originalPath;
     bool accepted = false;
     HICON preview = nullptr;
+};
+
+// 96-DPI layout of the edit dialog. Every control has an id so WM_DPICHANGED
+// can re-run the same table.
+constexpr ChildRect kEditLayout[] = {
+    {kIdEditNameLabel, 14, 14, 300, 16},
+    {kIdEditName, 14, 32, 386, 24},
+    {kIdEditPathLabel, 14, 62, 300, 16},
+    {kIdEditPath, 14, 80, 300, 24},
+    {kIdEditBrowsePath, 322, 80, 78, 24},
+    {kIdEditIconLabel, 14, 110, 300, 16},
+    {kIdEditIcon, 14, 128, 300, 24},
+    {kIdEditBrowseIcon, 322, 128, 78, 24},
+    {kIdEditIconHint, 14, 158, 386, 32},
+    {kIdEditPinned, 14, 198, 340, 22},
+    {kIdEditPinnedHint, 32, 222, 322, 32},
+    {kIdEditPreview, 360, 196, 40, 40},
+    {kIdEditOk, 222, 266, 86, 26},
+    {kIdEditCancel, 314, 266, 86, 26},
 };
 
 std::wstring GetControlText(HWND hWnd, int id) {
@@ -5685,7 +5909,9 @@ void RefreshPreview(HWND hWnd, EditContext* ctx) {
     if (ctx->preview) {
         DestroyIcon(ctx->preview);
     }
-    ctx->preview = probe.path.empty() ? nullptr : IconForEntry(probe, 32);
+    ctx->preview = probe.path.empty()
+                       ? nullptr
+                       : IconForEntry(probe, Scale(kPreviewIcon, DpiOf(hWnd)));
     InvalidateRect(GetDlgItem(hWnd, kIdEditPreview), nullptr, TRUE);
 }
 
@@ -5700,84 +5926,83 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)ctx);
 
             HINSTANCE instance = GetCurrentModuleHandle();
-            struct Field {
-                PCWSTR label;
-                int editId;
-                int browseId;
-                PCWSTR browseText;
-                int y;
+            // Created at 0,0 and positioned by LayoutChildren below, so the
+            // creation path and WM_DPICHANGED share one set of numbers.
+            struct Spec {
+                PCWSTR cls;
+                PCWSTR text;
+                DWORD style;
+                DWORD exStyle;
+                int id;
             };
-            const Field fields[] = {
-                {L"Name", kIdEditName, 0, nullptr, 14},
-                {L"Folder", kIdEditPath, kIdEditBrowsePath, L"Browse...", 62},
-                {L"Icon", kIdEditIcon, kIdEditBrowseIcon, L"Browse...", 110},
+            const Spec specs[] = {
+                {L"STATIC", L"Name", 0, 0, kIdEditNameLabel},
+                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE,
+                 kIdEditName},
+                {L"STATIC", L"Folder", 0, 0, kIdEditPathLabel},
+                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE,
+                 kIdEditPath},
+                {L"BUTTON", L"Browse...", WS_TABSTOP | BS_PUSHBUTTON, 0,
+                 kIdEditBrowsePath},
+                {L"STATIC", L"Icon", 0, 0, kIdEditIconLabel},
+                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE,
+                 kIdEditIcon},
+                {L"BUTTON", L"Browse...", WS_TABSTOP | BS_PUSHBUTTON, 0,
+                 kIdEditBrowseIcon},
+                {L"STATIC",
+                 L"Emoji, an .ico / .png file, or a resource such as "
+                 L"C:\\Windows\\explorer.exe,0. Leave empty to use the "
+                 L"folder's own icon.",
+                 0, 0, kIdEditIconHint},
+                // Pin state lives here rather than as a list button, so that
+                // what "unpinned" actually means — kept, not deleted — is
+                // spelled out right next to the switch.
+                {L"BUTTON", L"Pinned to the taskbar",
+                 WS_TABSTOP | BS_AUTOCHECKBOX, 0, kIdEditPinned},
+                {L"STATIC",
+                 L"Unticked keeps this folder in the list but takes its button "
+                 L"off the taskbar. Nothing is deleted, and the folder still "
+                 L"cannot be added twice.",
+                 0, 0, kIdEditPinnedHint},
+                {L"STATIC", L"", SS_OWNERDRAW, 0, kIdEditPreview},
+                {L"BUTTON", L"Save", WS_TABSTOP | BS_DEFPUSHBUTTON, 0,
+                 kIdEditOk},
+                {L"BUTTON", L"Cancel", WS_TABSTOP | BS_PUSHBUTTON, 0,
+                 kIdEditCancel},
             };
-            for (const auto& f : fields) {
-                CreateWindowExW(0, L"STATIC", f.label, WS_CHILD | WS_VISIBLE,
-                                14, f.y, 300, 16, hWnd, nullptr, instance,
-                                nullptr);
-                int editWidth = f.browseId ? 300 : 386;
-                CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-                                WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                    ES_AUTOHSCROLL,
-                                14, f.y + 18, editWidth, 24, hWnd,
-                                (HMENU)(INT_PTR)f.editId, instance, nullptr);
-                if (f.browseId) {
-                    CreateWindowExW(0, L"BUTTON", f.browseText,
-                                    WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                        BS_PUSHBUTTON,
-                                    322, f.y + 18, 78, 24, hWnd,
-                                    (HMENU)(INT_PTR)f.browseId, instance,
-                                    nullptr);
-                }
+            for (const auto& s : specs) {
+                CreateWindowExW(s.exStyle, s.cls, s.text,
+                                WS_CHILD | WS_VISIBLE | s.style, 0, 0, 0, 0,
+                                hWnd, (HMENU)(INT_PTR)s.id, instance, nullptr);
             }
-
-            CreateWindowExW(0, L"STATIC",
-                            L"Emoji, an .ico / .png file, or a resource such "
-                            L"as C:\\Windows\\explorer.exe,0. Leave empty to "
-                            L"use the folder's own icon.",
-                            WS_CHILD | WS_VISIBLE, 14, 158, 386, 32, hWnd,
-                            nullptr, instance, nullptr);
-
-            // Pin state lives here rather than as a list button, so that what
-            // "unpinned" actually means — kept, not deleted — is spelled out
-            // right next to the switch.
-            CreateWindowExW(0, L"BUTTON", L"Pinned to the taskbar",
-                            WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                BS_AUTOCHECKBOX,
-                            14, 198, 340, 22, hWnd,
-                            (HMENU)(INT_PTR)kIdEditPinned, instance, nullptr);
-            CreateWindowExW(0, L"STATIC",
-                            L"Unticked keeps this folder in the list but takes "
-                            L"its button off the taskbar. Nothing is deleted, "
-                            L"and the folder still cannot be added twice.",
-                            WS_CHILD | WS_VISIBLE, 32, 222, 322, 32, hWnd,
-                            (HMENU)(INT_PTR)kIdEditPinnedHint, instance,
-                            nullptr);
-
-            CreateWindowExW(0, L"STATIC", L"",
-                            WS_CHILD | WS_VISIBLE | SS_OWNERDRAW, 360, 196, 40,
-                            40, hWnd, (HMENU)(INT_PTR)kIdEditPreview, instance,
-                            nullptr);
-
-            CreateWindowExW(0, L"BUTTON", L"Save",
-                            WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                BS_DEFPUSHBUTTON,
-                            222, 266, 86, 26, hWnd,
-                            (HMENU)(INT_PTR)kIdEditOk, instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Cancel",
-                            WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                BS_PUSHBUTTON,
-                            314, 266, 86, 26, hWnd,
-                            (HMENU)(INT_PTR)kIdEditCancel, instance, nullptr);
+            LayoutChildren(hWnd, kEditLayout, ARRAYSIZE(kEditLayout),
+                           DpiOf(hWnd));
 
             SetDlgItemTextW(hWnd, kIdEditName, ctx->entry.name.c_str());
             SetDlgItemTextW(hWnd, kIdEditPath, ctx->entry.path.c_str());
             SetDlgItemTextW(hWnd, kIdEditIcon, ctx->entry.icon.c_str());
             CheckDlgButton(hWnd, kIdEditPinned,
                            ctx->entry.pinned ? BST_CHECKED : BST_UNCHECKED);
-            ApplyUiFont(hWnd);
+            ApplyUiFont(hWnd, DpiOf(hWnd));
             RefreshPreview(hWnd, ctx);
+            return 0;
+        }
+
+        // Dragged to a monitor at another scale: take the frame Windows
+        // suggests, then re-run the layout, the font and the preview icon at
+        // the new DPI.
+        case WM_DPICHANGED: {
+            const RECT* suggested = (const RECT*)lParam;
+            SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
+                         suggested->right - suggested->left,
+                         suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            int dpi = LOWORD(wParam);
+            LayoutChildren(hWnd, kEditLayout, ARRAYSIZE(kEditLayout), dpi);
+            ApplyUiFont(hWnd, dpi);
+            if (ctx) {
+                RefreshPreview(hWnd, ctx);
+            }
             return 0;
         }
 
@@ -5787,9 +6012,12 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                 FillRect(dis->hDC, &dis->rcItem,
                          GetSysColorBrush(COLOR_BTNFACE));
                 if (ctx && ctx->preview) {
-                    DrawIconEx(dis->hDC, dis->rcItem.left + 4,
-                               dis->rcItem.top + 4, ctx->preview, 32, 32, 0,
-                               nullptr, DI_NORMAL);
+                    int dpi = DpiOf(hWnd);
+                    int inset = Scale(kPreviewInset, dpi);
+                    int size = Scale(kPreviewIcon, dpi);
+                    DrawIconEx(dis->hDC, dis->rcItem.left + inset,
+                               dis->rcItem.top + inset, ctx->preview, size,
+                               size, 0, nullptr, DI_NORMAL);
                 } else if (ctx) {
                     std::wstring icon = GetControlText(hWnd, kIdEditIcon);
                     if (!icon.empty()) {
@@ -5845,9 +6073,12 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                 }
                 // Same folder as another row would mean two buttons for one
                 // folder, which is also what blocks re-pinning a draft.
+                // Compared by path, not by index: the store may have been
+                // changed on another thread since this dialog opened.
                 auto stored = FolderStore::Read();
                 int clash = FolderStore::IndexOfPath(stored, path);
-                if (clash >= 0 && clash != ctx->index) {
+                if (clash >= 0 &&
+                    !FolderStore::SamePath(path, ctx->originalPath)) {
                     MessageBoxW(hWnd,
                                 L"That folder is already in the list. Edit "
                                 L"the existing entry instead.",
@@ -5872,12 +6103,16 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
             DestroyWindow(hWnd);
             return 0;
 
+        // No PostQuitMessage: RunEditDialog's nested loop ends on this window
+        // going away instead. A WM_QUIT here would be consumed by that loop,
+        // and if the main window had been closed at the same time (which is
+        // what mod teardown does) its own quit would be the one swallowed,
+        // leaving the outer loop blocked in GetMessage forever.
         case WM_DESTROY:
             if (ctx && ctx->preview) {
                 DestroyIcon(ctx->preview);
                 ctx->preview = nullptr;
             }
-            PostQuitMessage(0);
             return 0;
     }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -5891,8 +6126,12 @@ bool RunEditDialog(HWND owner, EditContext* ctx, PCWSTR title) {
         return false;
     }
 
-    RECT rect{0, 0, 414, 306};
-    AdjustWindowRect(&rect, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, FALSE);
+    // Sized at the owner's DPI: this window opens centred over it, so that is
+    // the monitor it lands on.
+    int dpi = DpiOf(owner);
+    RECT rect{0, 0, Scale(kEditWidth, dpi), Scale(kEditHeight, dpi)};
+    AdjustWindowRectExForDpi(&rect, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+                             FALSE, WS_EX_DLGMODALFRAME, (UINT)dpi);
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
 
@@ -5916,22 +6155,42 @@ bool RunEditDialog(HWND owner, EditContext* ctx, PCWSTR title) {
     ShowWindow(hWnd, SW_SHOW);
     SetFocus(GetDlgItem(hWnd, kIdEditName));
 
+    // Ends when this window is destroyed, rather than on WM_QUIT. DestroyWindow
+    // runs synchronously inside the DispatchMessageW below, so the check right
+    // after it is what breaks the loop. A WM_QUIT that does arrive belongs to
+    // the outer loop (mod teardown posts WM_CLOSE to every window on this
+    // thread) and is put back, so the outer loop still sees it.
     MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    while (IsWindow(hWnd)) {
+        BOOL got = GetMessageW(&msg, nullptr, 0, 0);
+        if (got == 0) {
+            PostQuitMessage((int)msg.wParam);
+            break;
+        }
+        if (got == -1) {
+            break;
+        }
         if (!IsDialogMessageW(hWnd, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
-    EnableWindow(owner, TRUE);
-    SetForegroundWindow(owner);
+    if (IsWindow(owner)) {
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+    }
     return ctx->accepted;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Main window
 
+// Rows are committed by path rather than by their listbox index. The store is
+// shared with the taskbar UI thread (unpin) and an Explorer window thread (the
+// context-menu pin), so it can gain or lose entries while a modal dialog or a
+// confirmation box is up — and an index taken before that would then write to,
+// or delete, a different folder than the one on screen.
 void EditSelected(HWND hWnd) {
     int index = SelectedIndex(hWnd);
     if (index < 0) {
@@ -5939,26 +6198,58 @@ void EditSelected(HWND hWnd) {
     }
     EditContext ctx;
     ctx.entry = g_rows[index];
-    ctx.index = index;
-    if (!RunEditDialog(hWnd, &ctx, L"Edit folder")) {
+    ctx.originalPath = g_rows[index].path;
+    if (!RunEditDialog(hWnd, &ctx, L"Edit folder") || g_unloading) {
         return;
     }
-    auto stored = FolderStore::Read();
-    if (index < (int)stored.size()) {
-        stored[index] = ctx.entry;
-        CommitStore(hWnd, stored);
+
+    bool gone = false;
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        int at = FolderStore::IndexOfPath(stored, ctx.originalPath);
+        if (at < 0) {
+            gone = true;
+        } else {
+            stored[at] = ctx.entry;
+            FolderStore::Write(stored);
+        }
     }
+    if (gone) {
+        Wh_Log(L"Edit: '%s' is no longer in the store; discarding the edit",
+               ctx.originalPath.c_str());
+        PopulateList(hWnd);
+        return;
+    }
+    RefreshAfterStoreChange(hWnd);
 }
 
 void AddNew(HWND hWnd) {
     EditContext ctx;
     ctx.entry.pinned = true;
-    if (!RunEditDialog(hWnd, &ctx, L"Add folder")) {
+    if (!RunEditDialog(hWnd, &ctx, L"Add folder") || g_unloading) {
         return;
     }
-    auto stored = FolderStore::Read();
-    stored.push_back(ctx.entry);
-    CommitStore(hWnd, stored);
+
+    bool duplicate = false;
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        // The dialog already checked, but another thread may have pinned the
+        // same folder while it was open.
+        if (FolderStore::IndexOfPath(stored, ctx.entry.path) >= 0) {
+            duplicate = true;
+        } else {
+            stored.push_back(ctx.entry);
+            FolderStore::Write(stored);
+        }
+    }
+    if (duplicate) {
+        Wh_Log(L"Add: '%s' was added elsewhere first", ctx.entry.path.c_str());
+        PopulateList(hWnd);
+        return;
+    }
+    RefreshAfterStoreChange(hWnd);
 }
 
 void RemoveSelected(HWND hWnd) {
@@ -5966,21 +6257,36 @@ void RemoveSelected(HWND hWnd) {
     if (index < 0) {
         return;
     }
-    std::wstring name = g_rows[index].name.empty() ? g_rows[index].path
-                                                   : g_rows[index].name;
+    std::wstring path = g_rows[index].path;
+    std::wstring name = g_rows[index].name.empty() ? path : g_rows[index].name;
     std::wstring prompt = L"Remove \"" + name +
                           L"\" from the list?\n\nThe folder itself is not "
                           L"touched — only this button. To keep the entry but "
                           L"take it off the taskbar, use Unpin instead.";
     if (MessageBoxW(hWnd, prompt.c_str(), L"Taskbar Folders",
-                    MB_OKCANCEL | MB_ICONQUESTION) != IDOK) {
+                    MB_OKCANCEL | MB_ICONQUESTION) != IDOK ||
+        g_unloading) {
         return;
     }
-    auto stored = FolderStore::Read();
-    if (index < (int)stored.size()) {
-        stored.erase(stored.begin() + index);
-        CommitStore(hWnd, stored);
+
+    bool gone = false;
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        int at = FolderStore::IndexOfPath(stored, path);
+        if (at < 0) {
+            gone = true;
+        } else {
+            stored.erase(stored.begin() + at);
+            FolderStore::Write(stored);
+        }
     }
+    if (gone) {
+        Wh_Log(L"Remove: '%s' is no longer in the store", path.c_str());
+        PopulateList(hWnd);
+        return;
+    }
+    RefreshAfterStoreChange(hWnd);
 }
 
 
@@ -5988,19 +6294,33 @@ void RemoveSelected(HWND hWnd) {
 // than swapping the two ends — dragging row 0 to the bottom should slide
 // everything else up one, not trade places with the last row.
 void MoveRow(HWND hWnd, int from, int to) {
-    auto stored = FolderStore::Read();
-    if (from < 0 || to < 0 || from >= (int)stored.size() ||
-        to >= (int)stored.size() || from == to) {
+    if (from < 0 || to < 0 || from >= (int)g_rows.size() ||
+        to >= (int)g_rows.size() || from == to || g_unloading) {
         return;
     }
-    FolderStore::Entry moved = stored[from];
-    stored.erase(stored.begin() + from);
-    stored.insert(stored.begin() + to, std::move(moved));
-    FolderStore::Write(stored);
-    if (!g_unloading) {
-        ReloadAndRefreshUI();
+
+    // Unlike edit and remove, a reorder is about positions, so there is no
+    // path to re-find it by: if the store no longer matches the rows the drag
+    // started from, the move is meaningless and the list is just refreshed.
+    bool stale = false;
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        if (!StoreMatchesRows(stored)) {
+            stale = true;
+        } else {
+            FolderStore::Entry moved = stored[from];
+            stored.erase(stored.begin() + from);
+            stored.insert(stored.begin() + to, std::move(moved));
+            FolderStore::Write(stored);
+        }
     }
-    PopulateList(hWnd);
+    if (stale) {
+        Wh_Log(L"Reorder: the store changed under the window; refreshing");
+        PopulateList(hWnd);
+        return;
+    }
+    RefreshAfterStoreChange(hWnd);
     SendMessageW(GetDlgItem(hWnd, kIdList), LB_SETCURSEL, to, 0);
 }
 
@@ -6036,7 +6356,8 @@ int InsertIndexAt(HWND list, POINT pt) {
     if (pt.y < 0) {
         return top;
     }
-    int offset = (pt.y + kRowHeight / 2) / kRowHeight;
+    int rowHeight = Scale(kRowHeight, DpiOf(list));
+    int offset = (pt.y + rowHeight / 2) / rowHeight;
     int index = top + offset;
     int count = (int)g_rows.size();
     return index < 0 ? 0 : (index > count ? count : index);
@@ -6049,7 +6370,7 @@ void DrawInsertionLine(HWND list, int index) {
     int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
     RECT client{};
     GetClientRect(list, &client);
-    int y = (index - top) * kRowHeight;
+    int y = (index - top) * Scale(kRowHeight, DpiOf(list));
     if (y < 0) {
         return;
     }
@@ -6113,7 +6434,7 @@ LRESULT CALLBACK ListSubclassProc(HWND list,
         case WM_LBUTTONDOWN: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
-            int row = top + pt.y / kRowHeight;
+            int row = top + pt.y / Scale(kRowHeight, DpiOf(list));
             if (pt.y < 0 || row < 0 || row >= (int)g_rows.size()) {
                 return 0;
             }
@@ -6135,7 +6456,7 @@ LRESULT CALLBACK ListSubclassProc(HWND list,
         case WM_LBUTTONDBLCLK: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
-            int row = top + pt.y / kRowHeight;
+            int row = top + pt.y / Scale(kRowHeight, DpiOf(list));
             if (pt.y >= 0 && row >= 0 && row < (int)g_rows.size()) {
                 SendMessageW(list, LB_SETCURSEL, row, 0);
                 SendMessageW(GetParent(list), WM_COMMAND,
@@ -6224,37 +6545,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 WS_EX_CLIENTEDGE, L"LISTBOX", nullptr,
                 WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | LBS_NOTIFY |
                     LBS_OWNERDRAWFIXED,
-                12, 12, 452, 300, hWnd, (HMENU)(INT_PTR)kIdList, instance,
-                nullptr);
+                0, 0, 0, 0, hWnd, (HMENU)(INT_PTR)kIdList, instance, nullptr);
             WindhawkUtils::SetWindowSubclassFromAnyThread(list,
                                                           ListSubclassProc, 0);
 
             struct ButtonSpec {
                 int id;
                 PCWSTR text;
-                int x;
-                int y;
-                int width;
             };
-            const ButtonSpec buttons[] = {
-                {kIdAdd, L"Add...", 12, 324, 76},
-                {kIdEdit, L"Edit...", 94, 324, 76},
-                {kIdRemove, L"Remove", 176, 324, 76},
-                {kIdClose, L"Close", 388, 324, 76},
-            };
+            const ButtonSpec buttons[] = {{kIdAdd, L"Add..."},
+                                          {kIdEdit, L"Edit..."},
+                                          {kIdRemove, L"Remove"},
+                                          {kIdClose, L"Close"}};
             for (const auto& b : buttons) {
                 CreateWindowExW(0, L"BUTTON", b.text,
                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                                     BS_PUSHBUTTON,
-                                b.x, b.y, b.width, 26, hWnd,
-                                (HMENU)(INT_PTR)b.id, instance, nullptr);
+                                0, 0, 0, 0, hWnd, (HMENU)(INT_PTR)b.id,
+                                instance, nullptr);
             }
 
-            CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 12, 360,
-                            452, 32, hWnd, (HMENU)(INT_PTR)kIdHint, instance,
+            CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 0, 0, 0,
+                            0, hWnd, (HMENU)(INT_PTR)kIdHint, instance,
                             nullptr);
 
-            ApplyUiFont(hWnd);
+            LayoutChildren(hWnd, kMainLayout, ARRAYSIZE(kMainLayout),
+                           DpiOf(hWnd));
+            ApplyUiFont(hWnd, DpiOf(hWnd));
             PopulateList(hWnd);
             return 0;
         }
@@ -6262,10 +6579,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_MEASUREITEM: {
             auto* mis = (LPMEASUREITEMSTRUCT)lParam;
             if (mis->CtlID == kIdList) {
-                mis->itemHeight = kRowHeight;
+                // Sent while the listbox is being created, before its own
+                // HWND exists — hence the parent's DPI, which is the same
+                // monitor.
+                mis->itemHeight = Scale(kRowHeight, DpiOf(hWnd));
                 return TRUE;
             }
             break;
+        }
+
+        // Dragged to a monitor at another scale. LB_SETITEMHEIGHT because
+        // WM_MEASUREITEM is not sent again for an existing owner-draw listbox,
+        // and PopulateList because the row icons were extracted at the old
+        // pixel size.
+        case WM_DPICHANGED: {
+            const RECT* suggested = (const RECT*)lParam;
+            SetWindowPos(hWnd, nullptr, suggested->left, suggested->top,
+                         suggested->right - suggested->left,
+                         suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            int dpi = LOWORD(wParam);
+            LayoutChildren(hWnd, kMainLayout, ARRAYSIZE(kMainLayout), dpi);
+            ApplyUiFont(hWnd, dpi);
+            if (HWND list = GetDlgItem(hWnd, kIdList)) {
+                SendMessageW(list, LB_SETITEMHEIGHT, 0,
+                             Scale(kRowHeight, dpi));
+            }
+            PopulateList(hWnd);
+            return 0;
         }
 
         case WM_DRAWITEM: {
@@ -6336,15 +6677,29 @@ void ThreadMain(POINT anchor) {
         return;
     }
 
-    RECT rect{0, 0, 476, 400};
-    AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-    POINT pos = CenterOnMonitor(anchor, width, height);
-    HWND hWnd = CreateWindowExW(
-        WS_EX_APPWINDOW, kClassName, L"Taskbar Folders",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, pos.x, pos.y,
-        width, height, nullptr, nullptr, instance, nullptr);
+    // explorer.exe is Per-Monitor-DPI-Aware V2 and this thread inherits that,
+    // so nothing here scales on its own. The window is created at the anchor
+    // with a provisional size purely to put it on the right monitor; its DPI
+    // is only knowable once it exists, so the real size is applied below,
+    // before it is ever shown. WM_CREATE already lays the children out at the
+    // final DPI — GetDpiForWindow is correct from creation.
+    const DWORD style =
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    HWND hWnd = CreateWindowExW(WS_EX_APPWINDOW, kClassName, L"Taskbar Folders",
+                                style, anchor.x, anchor.y, kMainWidth,
+                                kMainHeight, nullptr, nullptr, instance,
+                                nullptr);
+    if (hWnd) {
+        int dpi = DpiOf(hWnd);
+        RECT rect{0, 0, Scale(kMainWidth, dpi), Scale(kMainHeight, dpi)};
+        AdjustWindowRectExForDpi(&rect, style, FALSE, WS_EX_APPWINDOW,
+                                 (UINT)dpi);
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
+        POINT pos = CenterOnMonitor(anchor, width, height);
+        SetWindowPos(hWnd, nullptr, pos.x, pos.y, width, height,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     if (!hWnd) {
         Wh_Log(L"Manager: CreateWindowExW failed (error %u)", GetLastError());
         if (SUCCEEDED(comInit)) {
@@ -6373,6 +6728,17 @@ void ThreadMain(POINT anchor) {
     g_active = false;
 }
 
+// The manager thread itself, kept rather than detached so CloseAndWait can
+// wait on the thread instead of polling a flag that is cleared before the
+// thread has finished unwinding through this DLL's image.
+//
+// no_destroy for the same reason as g_scanThread: destroying a joinable
+// std::thread calls std::terminate, and CRT teardown at Explorer exit must not
+// touch it. g_threadMutex guards the slot — Open() can be called from the
+// taskbar UI thread while Wh_ModUninit runs CloseAndWait on another.
+[[clang::no_destroy]] std::optional<std::thread> g_thread;
+[[clang::no_destroy]] std::mutex g_threadMutex;
+
 // Brings an already-open window forward instead of opening a second one.
 void Open() {
     if (HWND existing = g_wnd.load()) {
@@ -6388,21 +6754,98 @@ void Open() {
     if (!GetCursorPos(&anchor)) {
         anchor = POINT{0, 0};
     }
-    std::thread(ThreadMain, anchor).detach();
+    try {
+        std::lock_guard<std::mutex> lock(g_threadMutex);
+        // Reap the previous run before reusing the slot: assigning over a
+        // joinable std::thread calls std::terminate.
+        if (g_thread) {
+            if (g_thread->joinable()) {
+                g_thread->join();
+            }
+            g_thread.reset();
+        }
+        g_thread.emplace(ThreadMain, anchor);
+    } catch (...) {
+        Wh_Log(L"Manager: could not start its thread");
+        g_active = false;
+    }
 }
 
 // Asks the window to close and waits for its thread to unwind, so the DLL is
 // not unloaded out from under a live message loop.
 void CloseAndWait() {
-    if (HWND existing = g_wnd.load()) {
-        PostMessageW(existing, WM_CLOSE, 0, 0);
+    std::optional<std::thread> thread;
+    {
+        std::lock_guard<std::mutex> lock(g_threadMutex);
+        thread.swap(g_thread);
     }
-    for (int i = 0; g_active && i < 250; i++) {
-        Sleep(20);
+    if (!thread) {
+        return;
     }
-    if (g_active) {
-        Wh_Log(L"Uninit: folder manager window still open after wait");
+    if (!thread->joinable() ||
+        GetThreadId((HANDLE)thread->native_handle()) == GetCurrentThreadId()) {
+        // Never reached today (only Wh_ModUninit calls this), but joining
+        // ourselves would deadlock outright.
+        thread->detach();
+        return;
     }
+
+    // WM_CLOSE to *every* window on that thread, not only the main one: a
+    // Remove confirmation MessageBox or an open IFileDialog runs its own modal
+    // loop, and nothing but closing that window dismisses it — which is what
+    // used to leave the thread running past the old five-second give-up, with
+    // the DLL then unloaded out from under it. The main window goes last so a
+    // modal child is never orphaned by its owner being destroyed first.
+    HANDLE handle = (HANDLE)thread->native_handle();
+    auto closeAllWindows = [handle] {
+        HWND main = g_wnd.load();
+        if (DWORD threadId = GetThreadId(handle)) {
+            EnumThreadWindows(
+                threadId,
+                [](HWND hWnd, LPARAM mainWnd) -> BOOL {
+                    if (hWnd != (HWND)mainWnd) {
+                        PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                    }
+                    return TRUE;
+                },
+                (LPARAM)main);
+        }
+        if (main) {
+            PostMessageW(main, WM_CLOSE, 0, 0);
+        }
+    };
+
+    closeAllWindows();
+    // Pumping sent messages matters as much here as in StopScanThread: this
+    // wait must not be what blocks a thread trying to SendMessage into it. The
+    // two-second timeout only exists to re-close a modal that appeared after
+    // the first round; the wait itself is unbounded on purpose, because
+    // returning early is exactly what would let Windhawk unload this DLL with
+    // the manager thread still executing inside it.
+    for (int elapsedMs = 0;;) {
+        DWORD result =
+            MsgWaitForMultipleObjects(1, &handle, FALSE, 2000, QS_SENDMESSAGE);
+        if (result == WAIT_OBJECT_0) {
+            break;
+        }
+        if (result == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+            continue;
+        }
+        if (result == WAIT_FAILED) {
+            Wh_Log(L"CloseAndWait: MsgWaitForMultipleObjects failed (%u)",
+                   GetLastError());
+            break;
+        }
+        elapsedMs += 2000;
+        if (elapsedMs % 10000 == 0) {
+            Wh_Log(L"Uninit: still waiting on the folder manager thread (%d s)",
+                   elapsedMs / 1000);
+        }
+        closeAllWindows();
+    }
+    thread->join();
 }
 
 }  // namespace FolderManager
@@ -6438,7 +6881,14 @@ void PlayPressBounce(UIElement const& element) {
 
 // The open right-click flyout, so teardown can close it before the lambdas
 // behind its items are unmapped.
-MenuFlyout g_buttonMenuFlyout{nullptr};
+//
+// no_destroy: Wh_ModUninit does not run when Explorer terminates (sign-out,
+// restart, reboot) — only the CRT destructors of globals do, on the shutdown
+// thread, after every other thread has been killed. Releasing a strong XAML
+// reference there is exactly the UI-thread-affinity case that crashes. Cleared
+// with `g_buttonMenuFlyout = nullptr` in the Closed handler and in teardown,
+// which is what actually releases it.
+[[clang::no_destroy]] MenuFlyout g_buttonMenuFlyout{nullptr};
 
 FontIcon MakeMenuGlyph(const wchar_t* glyph) {
     FontIcon icon;
@@ -6496,7 +6946,16 @@ void OnButtonRightClicked(int folderIndex, Button const& button) {
             // name and icon survive and it can be pinned again from the
             // manager.
             RemovePinnedFolder(path);
-            ReloadAndRefreshUI();
+            // Deferred: the reload destroys this button and unhooks the
+            // handlers this lambda is running inside, and the flyout is
+            // anchored to it. The owner window lives on this same taskbar UI
+            // thread, so the post lands right after the flyout unwinds.
+            if (!g_menuOwnerWnd ||
+                !PostMessageW(g_menuOwnerWnd, WM_APP_RELOAD_UI, 0, 0)) {
+                Wh_Log(L"Unpin: no menu owner window to defer the reload to; "
+                       L"reloading inline");
+                ReloadAndRefreshUI();
+            }
         });
 
         MenuFlyoutItem manage;
@@ -7318,24 +7777,45 @@ std::wstring EscapeMenuLabel(const std::wstring& s) {
     return out;
 }
 
-bool IsShellViewWindow(HWND hwnd) {
+// The shell view that owns `hwnd`, or null if there is not one — which is also
+// what says "this is an Explorer or Desktop context menu, not some other
+// TrackPopupMenuEx caller in the process".
+HWND FindShellViewWindow(HWND hwnd) {
     for (HWND h = hwnd; h; h = GetParent(h)) {
         WCHAR cls[64]{};
         GetClassNameW(h, cls, ARRAYSIZE(cls));
         if (wcscmp(cls, L"SHELLDLL_DefView") == 0) {
-            return true;
+            return h;
         }
     }
-    return false;
+    return nullptr;
 }
 
-// Path of the single selected item in the shell view owning `hwnd`, or empty
-// (no selection, multi-selection, or not a real shell view).
-std::wstring GetSelectedPath(HWND hwnd) {
+// CWM_GETISHELLBROWSER. Undocumented, and WM_USER-relative, so it means
+// something entirely different to every window class that does not implement
+// it — which is why it is only ever sent to the classes known to answer it,
+// rather than up an arbitrary parent chain that ends at Progman or WorkerW.
+constexpr UINT CWM_GETISHELLBROWSER = WM_USER + 7;
+
+bool AnswersGetIShellBrowser(HWND hwnd) {
+    WCHAR cls[64]{};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    return wcscmp(cls, L"SHELLDLL_DefView") == 0 ||
+           wcscmp(cls, L"ShellTabWindowClass") == 0 ||
+           wcscmp(cls, L"CabinetWClass") == 0;
+}
+
+// Path of the single selected item in the shell view `defView`, or empty (no
+// selection, multi-selection, or no browser). The returned IShellBrowser is
+// not reference-counted by the message, so it is not released here.
+std::wstring GetSelectedPath(HWND defView) {
     std::wstring result;
-    IShellBrowser* browser = (IShellBrowser*)SendMessageW(hwnd, WM_USER + 7, 0, 0);
-    for (HWND h = hwnd; !browser && h; h = GetParent(h)) {
-        browser = (IShellBrowser*)SendMessageW(h, WM_USER + 7, 0, 0);
+    IShellBrowser* browser = nullptr;
+    for (HWND h = defView; !browser && h; h = GetParent(h)) {
+        if (AnswersGetIShellBrowser(h)) {
+            browser = (IShellBrowser*)SendMessageW(h, CWM_GETISHELLBROWSER, 0,
+                                                   0);
+        }
     }
     if (!browser) {
         return result;
@@ -7419,6 +7899,11 @@ std::wstring CreateShortcutIn(const std::wstring& target,
     return SUCCEEDED(hr) ? lnkPath : L"";
 }
 
+// Theme for the menu popups created while the CBT hook below is installed.
+// A WH_CBT hook procedure has to be a plain function pointer, so the value it
+// needs is parked here instead of captured.
+std::atomic<bool> g_menuDark{true};
+
 decltype(&TrackPopupMenuEx) TrackPopupMenuEx_orig;
 
 BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
@@ -7427,7 +7912,8 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
                                  int y,
                                  HWND hwnd,
                                  LPTPMPARAMS params) {
-    if (!IsShellViewWindow(hwnd)) {
+    HWND defView = g_settings.explorerMenu ? FindShellViewWindow(hwnd) : nullptr;
+    if (!defView) {
         return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
     }
 
@@ -7440,7 +7926,7 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
         }
     } com;
 
-    std::wstring path = GetSelectedPath(hwnd);
+    std::wstring path = GetSelectedPath(defView);
     DWORD attrs =
         path.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(path.c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES) {
@@ -7516,10 +8002,17 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
 
     // Submenus we inject (MF_POPUP with our own CreatePopupMenu() handles)
     // aren't part of explorer's IContextMenu tree, so explorer's own
-    // dark-mode/rounded-corner treatment for nested popups skips them —
-    // they render with the classic light-mode square border. Each nested
-    // popup spawns a new "#32768" window while TrackPopupMenuEx_orig pumps
-    // its own message loop below, so a scoped CBT hook catches all of them.
+    // dark-mode/rounded-corner treatment for nested popups skips them — they
+    // render with the classic light-mode square border. Each nested popup
+    // spawns a new "#32768" window while TrackPopupMenuEx_orig pumps its own
+    // message loop below, so a scoped CBT hook catches all of them.
+    //
+    // The hook is thread-wide for the duration of that call, so it also sees
+    // Explorer's own submenus (Open with, Send to, New) — forcing dark on
+    // those would darken them on a light theme. Resolved once here rather than
+    // inside the hook, which cannot capture and should not be doing WinRT work
+    // while a menu is coming up.
+    g_menuDark = IsDarkTheme();
     HHOOK cbtHook = SetWindowsHookExW(
         WH_CBT,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
@@ -7528,7 +8021,7 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
                 CBT_CREATEWNDW* cbt = (CBT_CREATEWNDW*)lParam;
                 LPCWSTR cls = cbt->lpcs->lpszClass;
                 if (IS_INTRESOURCE(cls) && LOWORD((ULONG_PTR)cls) == 32768) {
-                    BOOL dark = TRUE;
+                    BOOL dark = g_menuDark.load() ? TRUE : FALSE;
                     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
                                           &dark, sizeof(dark));
                     int corner = DWMWCP_ROUND;
@@ -7612,9 +8105,18 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!Wh_SetFunctionHook((void*)TrackPopupMenuEx,
-                            (void*)AddToTaskbar::TrackPopupMenuExHook,
-                            (void**)&AddToTaskbar::TrackPopupMenuEx_orig)) {
+    // Only when the Explorer integration is on: with it off, every context
+    // menu in the process stays entirely untouched by this mod, so nothing in
+    // the menu path can affect Explorer at all. Windhawk has no way to remove
+    // a function hook without reloading, so turning the setting back on takes
+    // effect on the next load — which is what its description says.
+    if (!g_settings.explorerMenu) {
+        Wh_Log(L"Explorer right-click integration is off; not hooking "
+               L"TrackPopupMenuEx");
+    } else if (!Wh_SetFunctionHook(
+                   (void*)TrackPopupMenuEx,
+                   (void*)AddToTaskbar::TrackPopupMenuExHook,
+                   (void**)&AddToTaskbar::TrackPopupMenuEx_orig)) {
         // Non-fatal: the rest of the mod works without the right-click
         // integration.
         Wh_Log(L"Failed to hook TrackPopupMenuEx; Explorer right-click "
@@ -7660,15 +8162,26 @@ void ReloadAndRefreshUI() {
 
     // Scan thread restarts lazily on the next RequestScan.
     StartRetryThread();
+
+    // Every store change routes through here — the Explorer pin, the taskbar
+    // unpin, a settings reload — so this is where an open manager window finds
+    // out its list is stale. Without it the window keeps showing (and
+    // committing against) rows that no longer match the store.
+    //
+    // Skipped when the manager thread is the caller: it refreshes its own list
+    // synchronously right after this returns, and a queued WM_APP would land
+    // afterwards and clear the selection it had just restored.
+    if (HWND manager = FolderManager::g_wnd.load()) {
+        if (GetWindowThreadProcessId(manager, nullptr) !=
+            GetCurrentThreadId()) {
+            PostMessageW(manager, WM_APP, 0, 0);
+        }
+    }
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     ReloadAndRefreshUI();
-    if (HWND manager = FolderManager::g_wnd.load()) {
-        // Mirror the new list if the manager happens to be open.
-        PostMessageW(manager, WM_APP, 0, 0);
-    }
 
     // "Open the folder manager" acts as a button: it fires when switched on,
     // and switching it off again is a no-op. Windhawk's settings schema has no
