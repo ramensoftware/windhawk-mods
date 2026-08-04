@@ -1,8 +1,9 @@
 // ==WindhawkMod==
-// @id              auto-hide-taskbar-desktop-only
-// @name            Hide Taskbar on Desktop Only
-// @version         1.0
+// @id              Autohide-taskbar-on-desktop
+// @name            Autohide-taskbar-on-desktop
+// @version         1.0.0
 // @author          qwertyuiop00-art
+// @github          https://github.com/qwertyuiop00-art
 // @description     Hides taskbar on desktop, shows when an app is active.
 // @architecture    x86-64
 // @include         explorer.exe
@@ -46,3 +47,15 @@ void Wh_ModUninit() {
     if (g_hook) UnhookWinEvent(g_hook);
     SetTaskbarAutoHide(false); // Restore default
 }
+
+// ==WindhawkModReadme==
+/*
+# Hide Taskbar on Desktop Only
+
+This mod automatically hides the Windows taskbar when you are viewing the desktop and restores it when applications are active/focused.
+
+## Features
+- Keeps desktop clean by auto-hiding taskbar.
+- Restores taskbar instantly when switching to open applications.
+*/
+// ==/WindhawkModReadme==
