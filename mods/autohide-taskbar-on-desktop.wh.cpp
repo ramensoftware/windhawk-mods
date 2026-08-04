@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              auto-hide-taskbar-desktop-only
-// @name            auto-hide-taskbar-desktop-only
+// @id              autohide-taskbar-desktop-only
+// @name            autohide-taskbar-desktop-only
 // @version         1.0.0
 // @author          qwertyuiop00-art
 // @github          https://github.com/qwertyuiop00-art
