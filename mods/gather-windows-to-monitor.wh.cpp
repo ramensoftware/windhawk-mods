@@ -15,7 +15,7 @@
 
 Global hotkeys gather visible application windows to a selected monitor work area.
 
-`Ctrl+Alt+Shift+W` moves only the foreground window to the primary monitor.
+By default, `Ctrl+Alt+Shift+W` moves only the foreground window to the primary monitor.
 
 Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 `Ctrl+Win+M`, `F9`, or `None`.
@@ -23,6 +23,11 @@ Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
 tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
 and untitled windows.
+
+The foreground-window action ignores the fullscreen, owned-window, and untitled-window
+filters. Windows already on the target monitor are left unchanged. Gather actions
+restore maximized windows before moving them and leave them restored for arranging;
+the foreground-window action re-maximizes them on the target monitor.
 
 Enable debug logging to see per-window skip reasons in the Windhawk log.
 
