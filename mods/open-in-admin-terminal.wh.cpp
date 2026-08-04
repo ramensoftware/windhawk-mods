@@ -901,7 +901,13 @@ static bool IsScriptHostChoice(const std::wstring& choice) {
 static LaunchSpec BuildScriptLaunchSpec(const Settings& s,
                                         const std::wstring& scriptPath) {
     LaunchSpec interpreter = BuildScriptInterpreterSpec(s, scriptPath);
-    if (!IsScriptHostChoice(s.terminalEffectiveChoice)) {
+    PCWSTR ext = PathFindExtensionW(scriptPath.c_str());
+    bool usesCmdWrapper = _wcsicmp(ext, L".bat") == 0 ||
+                          _wcsicmp(ext, L".cmd") == 0 ||
+                          (s.keepOpenAfterScript &&
+                           (_wcsicmp(ext, L".vbs") == 0 ||
+                            _wcsicmp(ext, L".js") == 0));
+    if (!IsScriptHostChoice(s.terminalEffectiveChoice) || usesCmdWrapper) {
         return interpreter;
     }
 
@@ -1235,18 +1241,39 @@ static bool IsKeyboardContextMenuPoint(const POINT& invocationPoint) {
     return invocationPoint.x == -1 && invocationPoint.y == -1;
 }
 
-static bool IsNavigationPaneContextWindow(const POINT& invocationPoint) {
-    if (IsKeyboardContextMenuPoint(invocationPoint)) {
-        HWND focusedWindow = GetFocus();
-        return focusedWindow && IsNavigationPaneWindow(focusedWindow);
+static bool ShouldUseFocusedNavigationPaneFallback(
+    bool invocationPointIsNavigationPane,
+    bool focusedWindowIsNavigationPane,
+    bool ownerIsShellView) {
+    return !invocationPointIsNavigationPane && focusedWindowIsNavigationPane &&
+           !ownerIsShellView;
+}
+
+static bool IsNavigationPaneContextWindow(HWND hwnd,
+                                          const POINT& invocationPoint,
+                                          bool& useSelectionFallback) {
+    useSelectionFallback = false;
+    bool invocationPointIsNavigationPane = false;
+    if (!IsKeyboardContextMenuPoint(invocationPoint)) {
+        HWND invocationWindow = WindowFromPoint(invocationPoint);
+        invocationPointIsNavigationPane =
+            invocationWindow && IsNavigationPaneWindow(invocationWindow);
+        if (invocationPointIsNavigationPane) {
+            return true;
+        }
     }
 
-    HWND invocationWindow = WindowFromPoint(invocationPoint);
-    return invocationWindow && IsNavigationPaneWindow(invocationWindow);
+    HWND focusedWindow = GetFocus();
+    useSelectionFallback = ShouldUseFocusedNavigationPaneFallback(
+        invocationPointIsNavigationPane,
+        focusedWindow && IsNavigationPaneWindow(focusedWindow),
+        IsShellViewWindow(hwnd));
+    return useSelectionFallback;
 }
 
 static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
                                             const POINT& invocationPoint,
+                                            bool useSelectionFallback,
                                             MenuTarget& targetOut) {
     targetOut = {};
 
@@ -1295,7 +1322,7 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
             }
         }
 
-        if (!ok && IsKeyboardContextMenuPoint(invocationPoint)) {
+        if (!ok && useSelectionFallback) {
             IShellItemArray* selectedItems = nullptr;
             if (SUCCEEDED(navigationPane->GetSelectedItems(&selectedItems)) &&
                 selectedItems) {
@@ -1331,12 +1358,15 @@ static bool ResolveMenuTarget(HWND hwnd,
                               MenuTarget& targetOut) {
     targetOut = {};
 
-    bool isNavigationPane = IsNavigationPaneContextWindow(invocationPoint);
+    bool useNavigationPaneSelectionFallback = false;
+    bool isNavigationPane = IsNavigationPaneContextWindow(
+        hwnd, invocationPoint, useNavigationPaneSelectionFallback);
     if (isNavigationPane) {
         if (!settings.showOnNavigationPane) {
             return false;
         }
-        return ResolveNavigationPaneMenuTarget(hwnd, invocationPoint, targetOut);
+        return ResolveNavigationPaneMenuTarget(
+            hwnd, invocationPoint, useNavigationPaneSelectionFallback, targetOut);
     }
 
     if (!IsShellViewWindow(hwnd)) {
