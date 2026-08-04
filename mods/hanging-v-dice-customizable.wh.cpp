@@ -1,20 +1,26 @@
 // ==WindhawkMod==
-// @id           hanging-v-dice-customizable
-// @name         Customizable Dual Hanging Dice
-// @description  Hanging dice with physical reactions to window animations and auto-hide in fullscreen mode.
-// @version      1.1
-// @author       Jaali
-// @github       https://github.com/alivca
-// @include      explorer.exe
+// @id            hanging-v-dice-customizable
+// @name          Customizable Dual Hanging Dice
+// @description   Hanging dice with physical reactions to window animations and auto-hide in fullscreen mode.
+// @version       1.2
+// @author        Jaali
+// @github        https://github.com/alivca
+// @include       explorer.exe
 // @compilerOptions -lgdi32 -lgdiplus -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
+## Customizable Dual Hanging Dice
+
 Add interactive hanging dice to your desktop with dynamic physics. They swing and react in real-time when you move, minimize, maximize, or restore windows, and automatically hide during fullscreen games or apps to stay out of your way.
 
-![Preview](https://raw.githubusercontent.com/alivca/hanging-v-dice-customizable/main/cubic.gif)
+![Preview](https://raw.githubusercontent.com/alivca/hanging-v-dice-customizable/07f396c74f569269c4ee1804f5c3963dd13d6d5d/mods/cubic.gif)
 
+## ⚠️ Game Compatibility Note:
+The dice overlay renders via Windows DWM. In some games (especially those running on DirectX 12 in Exclusive Fullscreen mode), the game screen may cover the overlay.
+
+Fix: Change the game's display settings to Borderless Windowed (or Windowed Fullscreen).
 */
 // ==/WindhawkModReadme==
 
@@ -440,7 +446,7 @@ void DrawScene(Graphics& gr) {
         case 5:
             gr.FillEllipse(&dotB, -rDot, -rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
-            gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
+            gr.FillEllipse(&dotB, offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
@@ -511,6 +517,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     switch (msg) {
+    case WM_MOUSEACTIVATE:
+        return MA_NOACTIVATE;
+
     case WM_TIMER:
         if (PhysicsStep()) {
             RedrawOverlay(hWnd);
@@ -618,7 +627,7 @@ DWORD WINAPI StartThread(LPVOID) {
     }
 
     g_hWnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         L"DiceCustomizableOverlay", L"Dice",
         WS_POPUP,
         10, 10, g_winW, g_winH,
@@ -634,7 +643,8 @@ DWORD WINAPI StartThread(LPVOID) {
 
     LoadSettingsInternal();
     ApplySettingsInternal();
-    ShowWindow(g_hWnd, SW_SHOW);
+  
+    ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
     SetTimer(g_hWnd, 1, 16, NULL);
 
     g_hEventHookMin = SetWinEventHook(
