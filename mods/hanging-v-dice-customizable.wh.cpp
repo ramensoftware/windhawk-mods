@@ -518,6 +518,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     switch (msg) {
     case WM_MOUSEACTIVATE:
+
         return MA_NOACTIVATE;
 
     case WM_TIMER:
@@ -626,6 +627,7 @@ DWORD WINAPI StartThread(LPVOID) {
         return 0;
     }
 
+
     g_hWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         L"DiceCustomizableOverlay", L"Dice",
@@ -643,7 +645,7 @@ DWORD WINAPI StartThread(LPVOID) {
 
     LoadSettingsInternal();
     ApplySettingsInternal();
-  
+
     ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
     SetTimer(g_hWnd, 1, 16, NULL);
 
