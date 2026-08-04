@@ -136,9 +136,6 @@ source of truth, edits apply instantly, and nothing ever asks for elevation.
 The trade-off is that it needs its own window instead of riding along on the
 settings page Windhawk already draws — hence **Taskbar Folders**.
 
-Folders you had configured on the settings page before this change are imported
-into it automatically the first time this version runs; nothing is lost.
-
 ## How it is positioned
 
 The Windows 11 taskbar app strip is a WinUI `ItemsRepeater` that refuses to lay out
@@ -209,9 +206,8 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
     to pin a folder straight to the taskbar, or to move, copy or make a
     shortcut into a folder that already has a button. Turn this off to keep
     the mod entirely on the taskbar side — with it off, Explorer's own context
-    menus are left completely alone. Switching it back on takes effect after
-    the mod is reloaded (toggle the mod off and on, or restart Explorer),
-    because the menu hook is only installed at startup.
+    menus are left completely alone. Changing this setting reloads the mod,
+    because the menu hook can only be installed or removed at startup.
 
 - position: beforeApps
   $name: 1. Behavior ▸ Position
@@ -500,6 +496,11 @@ std::mutex g_foldersMutex;
 
 std::atomic<bool> g_unloading{false};
 
+// Value of the explorerMenu setting this load was built around: the
+// TrackPopupMenuEx hook is installed (or not) once, in Wh_ModInit.
+// Wh_ModSettingsChanged compares against it to know when a reload is needed.
+bool g_explorerMenuHooked = false;
+
 ////////////////////////////////////////////////////////////////////////////////
 // Small helpers
 
@@ -511,6 +512,44 @@ HINSTANCE GetCurrentModuleHandle() {
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       (LPCWSTR)&GetCurrentModuleHandle, &hInst);
     return hInst;
+}
+
+// Registers one of the mod's window classes against the current DLL.
+//
+// Recompiling the mod unloads this DLL and loads a new copy, but a window
+// class registered by the old one survives in the process with its
+// lpfnWndProc still pointing at the freed image. Reusing it — which is what
+// treating ERROR_CLASS_ALREADY_EXISTS as success amounts to — hands
+// CreateWindowEx a dangling procedure and takes Explorer down with the first
+// message. So a stale registration is torn down and replaced rather than
+// adopted. Wh_ModUninit unregisters the classes for the same reason; this is
+// the belt to that pair of braces, since an Explorer crash (or any unclean
+// unload) skips the tidy path.
+bool RegisterModClass(const WNDCLASSEXW& wc) {
+    if (RegisterClassExW(&wc)) {
+        return true;
+    }
+    if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"RegisterClassExW('%s') failed (error %u)", wc.lpszClassName,
+               GetLastError());
+        return false;
+    }
+
+    // Left behind by an earlier load of this mod. Unregistering fails while
+    // any window of the class still exists, and there should be none.
+    if (!UnregisterClassW(wc.lpszClassName, wc.hInstance)) {
+        Wh_Log(L"stale class '%s' could not be unregistered (error %u)",
+               wc.lpszClassName, GetLastError());
+        return false;
+    }
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"re-registering '%s' failed (error %u)", wc.lpszClassName,
+               GetLastError());
+        return false;
+    }
+    Wh_Log(L"replaced a stale '%s' class from a previous load",
+           wc.lpszClassName);
+    return true;
 }
 
 std::wstring ResolveFolderPath(const std::wstring& raw);
@@ -783,83 +822,6 @@ int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
         }
     }
     return -1;
-}
-
-// One-time import of the two pre-manager lists: folders configured in the
-// Windhawk settings UI, and folders pinned into the old `pinned[]` storage.
-// Settings rows the user had "unpinned" (the old hidden[] list) come across as
-// drafts rather than vanishing.
-void MigrateLegacy() {
-    // Held across the whole read-modify-write, like every other store mutation.
-    std::lock_guard<std::recursive_mutex> lock(g_mutex);
-    if (Wh_GetIntValue(L"storeVersion", 0) >= 2) {
-        return;
-    }
-
-    std::vector<std::wstring> hidden;
-    int hiddenCount = Wh_GetIntValue(L"hiddenCount", 0);
-    for (int i = 0; i < hiddenCount; i++) {
-        std::wstring path = GetString(L"hidden[%d].path", i);
-        if (!path.empty()) {
-            hidden.push_back(path);
-        }
-    }
-
-    std::vector<Entry> entries = Read();
-
-    for (int i = 0; i < 64; i++) {
-        auto rawPath =
-            WindhawkUtils::StringSetting::make(L"folders[%d].path", i);
-        std::wstring path = Trim(std::wstring(rawPath.get()));
-        if (path.empty()) {
-            continue;
-        }
-        auto rawName =
-            WindhawkUtils::StringSetting::make(L"folders[%d].name", i);
-        auto rawIcon =
-            WindhawkUtils::StringSetting::make(L"folders[%d].icon", i);
-
-        Entry entry;
-        entry.path = ExpandEnv(path);
-        entry.name = Trim(std::wstring(rawName.get()));
-        entry.icon = Trim(std::wstring(rawIcon.get()));
-        entry.fileId = GetDirFileId(entry.path);
-        entry.pinned = true;
-        for (const auto& h : hidden) {
-            if (_wcsicmp(h.c_str(), entry.path.c_str()) == 0) {
-                entry.pinned = false;  // Was unpinned before; keep as a draft.
-                break;
-            }
-        }
-        if (IndexOfPath(entries, entry.path) < 0) {
-            entries.push_back(std::move(entry));
-        }
-    }
-
-    int pinnedCount = Wh_GetIntValue(L"pinnedCount", 0);
-    for (int i = 0; i < pinnedCount; i++) {
-        Entry entry;
-        entry.path = GetString(L"pinned[%d].path", i);
-        if (entry.path.empty()) {
-            continue;
-        }
-        entry.name = GetString(L"pinned[%d].name", i);
-        entry.icon = GetString(L"pinned[%d].icon", i);
-        std::wstring id = GetString(L"pinned[%d].id", i);
-        entry.fileId = id.empty() ? GetDirFileId(entry.path)
-                                  : wcstoull(id.c_str(), nullptr, 16);
-        entry.pinned = true;
-        if (IndexOfPath(entries, entry.path) < 0) {
-            entries.push_back(std::move(entry));
-        }
-    }
-
-    Write(entries);
-    Wh_SetIntValue(L"storeVersion", 2);
-    Wh_Log(L"Migrated %zu folder(s) into the manager store", entries.size());
-
-    // The legacy keys are left in place on purpose: downgrading to an older
-    // build of the mod should still find its folders.
 }
 
 }  // namespace FolderStore
@@ -4238,10 +4200,12 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
 }
 
 bool EnsurePopupClasses() {
-    enum class ClassState { Untried, Ok, Failed };
-    static ClassState classState = ClassState::Untried;
-    if (classState != ClassState::Untried) {
-        return classState == ClassState::Ok;
+    // Only success is cached. A failure is not latched: it can come from a
+    // class a previous load left registered behind windows that outlived it,
+    // and latching would disable every hover grid for the rest of the session.
+    static bool registered = false;
+    if (registered) {
+        return true;
     }
 
     HINSTANCE instance = GetCurrentModuleHandle();
@@ -4251,29 +4215,19 @@ bool EnsurePopupClasses() {
     popupClass.hInstance = instance;
     popupClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
     popupClass.lpszClassName = kPopupClassName;
-    ATOM popupAtom = RegisterClassExW(&popupClass);
 
     WNDCLASSEXW ownerClass{};
     ownerClass.cbSize = sizeof(ownerClass);
     ownerClass.lpfnWndProc = MenuOwnerWndProc;
     ownerClass.hInstance = instance;
     ownerClass.lpszClassName = kMenuOwnerClassName;
-    ATOM ownerAtom = RegisterClassExW(&ownerClass);
 
-    if (!popupAtom || !ownerAtom) {
-        Wh_Log(L"RegisterClassExW failed (error %u); hover grids disabled",
-               GetLastError());
-        if (popupAtom) {
-            UnregisterClassW(kPopupClassName, instance);
-        }
-        if (ownerAtom) {
-            UnregisterClassW(kMenuOwnerClassName, instance);
-        }
-        classState = ClassState::Failed;
+    if (!RegisterModClass(popupClass) || !RegisterModClass(ownerClass)) {
+        Wh_Log(L"hover grid classes unavailable; hover grids disabled");
         return false;
     }
 
-    classState = ClassState::Ok;
+    registered = true;
     return true;
 }
 
@@ -5580,50 +5534,16 @@ std::vector<FolderStore::Entry> g_rows;
 std::vector<HICON> g_rowIcons;
 
 // Registers one of the manager's window classes against the current DLL.
-//
-// Recompiling the mod unloads this DLL and loads a new copy, but a window
-// class registered by the old one survives in the process with its
-// lpfnWndProc still pointing at the freed image. Reusing it — which is what
-// treating ERROR_CLASS_ALREADY_EXISTS as success amounts to — hands
-// CreateWindowEx a dangling procedure and takes Explorer down with the first
-// message. So a stale registration is torn down and replaced rather than
-// adopted. Wh_ModUninit unregisters both classes for the same reason; this is
-// the belt to that pair of braces, since an Explorer crash (or any unclean
-// unload) skips the tidy path.
+// RegisterModClass handles a stale registration left by a previous load.
 bool EnsureClass(PCWSTR name, WNDPROC proc) {
-    HINSTANCE instance = GetCurrentModuleHandle();
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = proc;
-    wc.hInstance = instance;
+    wc.hInstance = GetCurrentModuleHandle();
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     wc.lpszClassName = name;
-
-    if (RegisterClassExW(&wc)) {
-        return true;
-    }
-    if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        Wh_Log(L"Manager: RegisterClassExW('%s') failed (error %u)", name,
-               GetLastError());
-        return false;
-    }
-
-    // Left behind by an earlier load of this mod. Unregistering fails while
-    // any window of the class still exists, and there should be none.
-    if (!UnregisterClassW(name, instance)) {
-        Wh_Log(L"Manager: stale class '%s' could not be unregistered "
-               L"(error %u)",
-               name, GetLastError());
-        return false;
-    }
-    if (!RegisterClassExW(&wc)) {
-        Wh_Log(L"Manager: re-registering '%s' failed (error %u)", name,
-               GetLastError());
-        return false;
-    }
-    Wh_Log(L"Manager: replaced a stale '%s' class from a previous load", name);
-    return true;
+    return RegisterModClass(wc);
 }
 
 // Top-left corner that centres a width x height window on the monitor
@@ -8167,9 +8087,6 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    // Brings folders across from the two pre-manager lists (the old Settings
-    // array and the old pinned[] storage) the first time this build runs.
-    FolderStore::MigrateLegacy();
     LoadSettings();
     ResetFolderData();
 
@@ -8191,8 +8108,13 @@ BOOL Wh_ModInit() {
     // Only when the Explorer integration is on: with it off, every context
     // menu in the process stays entirely untouched by this mod, so nothing in
     // the menu path can affect Explorer at all. Windhawk has no way to remove
-    // a function hook without reloading, so turning the setting back on takes
-    // effect on the next load — which is what its description says.
+    // a function hook without reloading, so Wh_ModSettingsChanged asks for a
+    // reload when the setting stops matching what was installed here.
+    //
+    // Tracks the setting as of this load, not whether the hook took: a failed
+    // hook would not be fixed by reloading, and asking for one on every save
+    // would just churn.
+    g_explorerMenuHooked = g_settings.explorerMenu;
     if (!g_settings.explorerMenu) {
         Wh_Log(L"Explorer right-click integration is off; not hooking "
                L"TrackPopupMenuEx");
@@ -8263,19 +8185,31 @@ void ReloadAndRefreshUI() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"SettingsChanged");
-    RequestReloadUI();
+
+    // The TrackPopupMenuEx hook can only be installed or removed at load time,
+    // so toggling the Explorer integration asks Windhawk for a reload instead
+    // of leaving the new value to take effect at some unrelated later point.
+    // The UI is rebuilt by the reload, so RequestReloadUI would be redundant.
+    bool reload = (Wh_GetIntSetting(L"explorerMenu") != 0) != g_explorerMenuHooked;
+    if (reload) {
+        *bReload = TRUE;
+    } else {
+        RequestReloadUI();
+    }
 
     // "Open the folder manager" acts as a button: it fires when switched on,
     // and switching it off again is a no-op. Windhawk's settings schema has no
     // button widget, and a mod cannot clear the flag itself, so the previous
-    // value is tracked here to catch the off -> on edge only.
+    // value is tracked here to catch the off -> on edge only. Tracked even on
+    // the reload path, so the edge is not replayed after the reload.
     int manage = Wh_GetIntSetting(L"manageFolders");
-    if (manage && !Wh_GetIntValue(L"manageFoldersPrev", 0)) {
+    if (manage && !Wh_GetIntValue(L"manageFoldersPrev", 0) && !reload) {
         FolderManager::Open();
     }
     Wh_SetIntValue(L"manageFoldersPrev", manage);
+    return TRUE;
 }
 
 void Wh_ModUninit() {
