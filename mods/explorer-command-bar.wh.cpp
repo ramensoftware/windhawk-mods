@@ -530,12 +530,11 @@ a new tab or navigating to another folder makes them appear.
   - buttonLabel: Context menu
     $name: Item label
     $description: The label and tooltip of the context menu item.
-  - buttonIcon: ""
+  - buttonIcon: E8FD
     $name: Item icon glyph or icon path
     $description: >-
-      Leave empty for the three dots glyph. Alternatively, enter a Segoe
-      Fluent Icons hex code point or an .exe, .dll or .ico path with an
-      optional icon index.
+      A Segoe Fluent Icons hex code point, or an .exe, .dll or .ico path with
+      an optional icon index. Leave empty for the default glyph.
   $name: Context menu item
   $description: >-
     Add a configurable item which expands the real File Explorer shell context
@@ -764,16 +763,24 @@ struct TrackedRevoker {
 
 thread_local std::vector<TrackedRevoker> g_revokers;
 
+constexpr size_t kRevokersPruneMin = 64;
+thread_local size_t g_revokersPruneAt = kRevokersPruneMin;
+
 template <typename T, typename Revoker>
 void TrackRevoker(T const& source, Revoker&& revoker) {
     // Entries whose element is gone can go: XAML released their delegates
-    // together with the element itself.
-    for (auto it = g_revokers.begin(); it != g_revokers.end();) {
-        if (!it->source.get()) {
-            it = g_revokers.erase(it);
-        } else {
-            ++it;
-        }
+    // together with the element itself. Only when the vector has grown past
+    // the threshold, though - resolving every weak_ref is a COM call each, and
+    // populating a menu with many items would otherwise be quadratic in them.
+    if (g_revokers.size() >= g_revokersPruneAt) {
+        std::erase_if(g_revokers,
+                      [](TrackedRevoker const& tracked) {
+                          return !tracked.source.get();
+                      });
+
+        // Prune again once the survivors have doubled, so the work stays
+        // proportional to what's actually being added.
+        g_revokersPruneAt = std::max(kRevokersPruneMin, g_revokers.size() * 2);
     }
 
     // The revoker types differ per event, so they're type-erased behind the
@@ -789,6 +796,7 @@ void TrackRevoker(T const& source, Revoker&& revoker) {
 void RevokeHandlersForCurrentThread() {
     std::vector<TrackedRevoker> taken;
     taken.swap(g_revokers);
+    g_revokersPruneAt = kRevokersPruneMin;
 
     for (auto const& tracked : taken) {
         try {
@@ -1143,7 +1151,20 @@ constexpr UINT kContextMenuLastCmdId = 0x7FFF;
 thread_local IContextMenu2* g_trackedContextMenu2;
 thread_local IContextMenu3* g_trackedContextMenu3;
 thread_local bool g_contextMenuIsOpen;
+
+// How many threads are anywhere inside ShowShellContextMenu. Not just the modal
+// loop: GetShellContextMenu walks the shell windows and QueryContextMenu loads
+// and runs every registered shell extension, which is the part that can take a
+// long time, and all of it runs this DLL's code. Wh_ModUninit waits for this to
+// drop to zero before it lets the module be unmapped.
 std::atomic<int> g_openContextMenuCount;
+
+struct OpenContextMenuScope {
+    OpenContextMenuScope() { g_openContextMenuCount++; }
+    ~OpenContextMenuScope() { g_openContextMenuCount--; }
+    OpenContextMenuScope(const OpenContextMenuScope&) = delete;
+    OpenContextMenuScope& operator=(const OpenContextMenuScope&) = delete;
+};
 
 LRESULT CALLBACK ContextMenuOwnerWndProc(HWND hWnd,
                                          UINT uMsg,
@@ -1185,6 +1206,17 @@ std::wstring ContextMenuOwnerClassName() {
     return std::wstring(L"WindhawkContextMenuOwner_") + WH_MOD_ID;
 }
 
+// This mod's DLL HINSTANCE. GetModuleHandle(nullptr) would return explorer.exe,
+// which is wrong for RegisterClass/CreateWindowEx/UnregisterClass: the class
+// belongs to the module its window procedure lives in.
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE hInst = nullptr;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)&GetCurrentModuleHandle, &hInst);
+    return hInst;
+}
+
 std::atomic<bool> g_contextMenuOwnerClassRegistered;
 std::mutex g_contextMenuOwnersMutex;
 std::unordered_map<DWORD, HWND> g_contextMenuOwners;
@@ -1199,25 +1231,33 @@ bool IsContextMenuOwnerWindow(DWORD threadId, HWND hWnd) {
            _wcsicmp(className, ContextMenuOwnerClassName().c_str()) == 0;
 }
 
-bool EnsureContextMenuOwnerClass() {
-    if (g_contextMenuOwnerClassRegistered) {
-        return true;
-    }
-
+// Registered once, from Wh_ModInit, so that the Explorer UI threads which reach
+// EnsureContextMenuOwnerWindow never race over the registration - and so
+// ERROR_CLASS_ALREADY_EXISTS can be treated as the hard failure it is. For a
+// freshly loaded instance, that error means a previous load left the class
+// behind, and its lpfnWndProc still points at the previous, now unmapped image:
+// a window created on it would dispatch WM_INITMENUPOPUP into freed memory.
+// Doing without the shell context menu item until Explorer restarts is the
+// lesser evil.
+void RegisterContextMenuOwnerClass() {
     std::wstring className = ContextMenuOwnerClassName();
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = ContextMenuOwnerWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = GetCurrentModuleHandle();
     wc.lpszClassName = className.c_str();
-    if (!RegisterClassExW(&wc) &&
-        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        Wh_Log(L"RegisterClassEx failed: %u", GetLastError());
-        return false;
+    if (!RegisterClassExW(&wc)) {
+        DWORD error = GetLastError();
+        Wh_Log(L"RegisterClassEx failed: %u%s", error,
+               error == ERROR_CLASS_ALREADY_EXISTS
+                   ? L" - a previous load of the mod left the class behind, "
+                     L"the shell context menu item will be unavailable until "
+                     L"Explorer is restarted"
+                   : L"");
+        return;
     }
 
     g_contextMenuOwnerClassRegistered = true;
-    return true;
 }
 
 HWND EnsureContextMenuOwnerWindow() {
@@ -1234,13 +1274,13 @@ HWND EnsureContextMenuOwnerWindow() {
         }
     }
 
-    if (!EnsureContextMenuOwnerClass()) {
+    if (!g_contextMenuOwnerClassRegistered) {
         return nullptr;
     }
 
     HWND hWnd = CreateWindowExW(0, ContextMenuOwnerClassName().c_str(), nullptr,
                                 0, 0, 0, 0, 0, nullptr, nullptr,
-                                GetModuleHandleW(nullptr), nullptr);
+                                GetCurrentModuleHandle(), nullptr);
     if (!hWnd) {
         Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
         return nullptr;
@@ -1251,21 +1291,30 @@ HWND EnsureContextMenuOwnerWindow() {
     return hWnd;
 }
 
+// Waits until no thread is inside ShowShellContextMenu anymore. There's no
+// timeout on purpose: giving up would mean unmapping the DLL out from under a
+// thread which is still running its code, and the wait can't deadlock, since
+// those threads never send anything to the thread running Wh_ModUninit.
+// WM_CANCELMODE is re-posted on every iteration because a single post can land
+// before the target thread has entered its modal loop, which would drop it.
 void DismissOpenContextMenus() {
-    if (g_openContextMenuCount == 0) {
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-        for (auto const& [threadId, hWnd] : g_contextMenuOwners) {
-            if (IsContextMenuOwnerWindow(threadId, hWnd)) {
-                PostMessageW(hWnd, WM_CANCELMODE, 0, 0);
+    for (int i = 0; g_openContextMenuCount > 0; i++) {
+        {
+            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+            for (auto const& [threadId, hWnd] : g_contextMenuOwners) {
+                if (IsContextMenuOwnerWindow(threadId, hWnd)) {
+                    PostMessageW(hWnd, WM_CANCELMODE, 0, 0);
+                }
             }
         }
-    }
 
-    for (int i = 0; i < 200 && g_openContextMenuCount > 0; i++) {
+        // Once a second, so that an unload which is stuck here - a shell
+        // extension taking its time in QueryContextMenu, say - is diagnosable.
+        if (i > 0 && i % 100 == 0) {
+            Wh_Log(L"Still waiting for %d shell context menu(s)",
+                   g_openContextMenuCount.load());
+        }
+
         Sleep(10);
     }
 }
@@ -1320,6 +1369,11 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
         return;
     }
 
+    // Held for the whole call, not just the modal loop: everything below runs
+    // this DLL's code, including the shell extensions QueryContextMenu brings
+    // in, and Wh_ModUninit has to wait for all of it.
+    OpenContextMenuScope openScope;
+
     bool useNilesoftShell;
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
@@ -1370,18 +1424,26 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
         return;
     }
 
+    // Building the menu can take a while, so check again before showing it -
+    // an unload which started in the meantime is waiting for this call.
+    if (g_unloading) {
+        DestroyMenu(hMenu);
+        if (hrInit == S_OK) {
+            CoUninitialize();
+        }
+        return;
+    }
+
     auto contextMenu2 = contextMenu.try_as<IContextMenu2>();
     auto contextMenu3 = contextMenu.try_as<IContextMenu3>();
     g_trackedContextMenu2 = contextMenu2.get();
     g_trackedContextMenu3 = contextMenu3.get();
     g_contextMenuIsOpen = true;
-    g_openContextMenuCount++;
 
     UINT cmdId = (UINT)TrackPopupMenuEx(
         hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN,
         point.x, point.y, hOwnerWnd, nullptr);
 
-    g_openContextMenuCount--;
     g_contextMenuIsOpen = false;
     g_trackedContextMenu2 = nullptr;
     g_trackedContextMenu3 = nullptr;
@@ -1621,7 +1683,16 @@ HWND GetExplorerWindowForElement(mux::FrameworkElement const& element) {
     }
 
     if (!hWnd) {
-        hWnd = GetForegroundWindow();
+        // Last resort, and the only candidate which isn't ours by
+        // construction: the foreground window can belong to another process,
+        // and callers post messages into what they get back from here.
+        HWND hForegroundWnd = GetForegroundWindow();
+        DWORD processId = 0;
+        if (hForegroundWnd &&
+            GetWindowThreadProcessId(hForegroundWnd, &processId) &&
+            processId == GetCurrentProcessId()) {
+            hWnd = hForegroundWnd;
+        }
     }
 
     if (hWnd) {
@@ -3749,7 +3820,7 @@ muxc::AppBarButton CreateContextMenuButton(bool openOnHover,
                              ? muxc::CommandBarLabelPosition::Default
                              : muxc::CommandBarLabelPosition::Collapsed);
     button.Icon(CreateIconElement(settings.buttonIcon, std::wstring(),
-                                  L"\uE712"));
+                                  L"\uE8FD"));
 
     if (!settings.showLabel && !settings.buttonLabel.empty()) {
         muxc::ToolTipService::SetToolTip(
@@ -4964,6 +5035,10 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
+    // Last, so that no failure path above can leave the class registered:
+    // Wh_ModUninit, which unregisters it, isn't called when Wh_ModInit fails.
+    RegisterContextMenuOwnerClass();
+
     return TRUE;
 }
 
@@ -5014,30 +5089,69 @@ void Wh_ModUninit() {
         g_iconCache.clear();
     }
 
+    // Any owner window the loop above didn't get to - its Explorer window may
+    // already be gone, or RunFromWindowThread may have failed - has to be
+    // destroyed from its own thread, so ask that thread through the owner
+    // window itself. Leaving one behind would keep the class registered with a
+    // window procedure which is about to be unmapped.
     {
-        std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
-        for (auto it = g_contextMenuOwners.begin();
-             it != g_contextMenuOwners.end();) {
-            if (!IsContextMenuOwnerWindow(it->first, it->second)) {
-                it = g_contextMenuOwners.erase(it);
-            } else {
-                ++it;
-            }
+        std::vector<std::pair<DWORD, HWND>> leftovers;
+        {
+            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+            leftovers.assign(g_contextMenuOwners.begin(),
+                             g_contextMenuOwners.end());
         }
 
-        if (g_contextMenuOwners.empty() &&
-            g_contextMenuOwnerClassRegistered) {
-            UnregisterClassW(ContextMenuOwnerClassName().c_str(),
-                             GetModuleHandleW(nullptr));
-            g_contextMenuOwnerClassRegistered = false;
-        } else if (!g_contextMenuOwners.empty()) {
-            Wh_Log(L"%zu context menu owner windows left behind",
-                   g_contextMenuOwners.size());
+        for (auto const& [threadId, hWnd] : leftovers) {
+            if (!IsContextMenuOwnerWindow(threadId, hWnd)) {
+                std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+                g_contextMenuOwners.erase(threadId);
+                continue;
+            }
+
+            Wh_Log(L"Destroying leftover context menu owner window of thread %u",
+                   threadId);
+            if (!RunFromWindowThread(
+                    hWnd,
+                    [](PVOID) { DestroyContextMenuOwnerWindowForCurrentThread(); },
+                    nullptr)) {
+                Wh_Log(L"Couldn't reach thread %u", threadId);
+            }
         }
     }
 
+    // Unconditionally: a class left registered outlives this image, and the
+    // next load of the mod would find a stale window procedure behind it. If
+    // some window still survived above, this fails - the next load detects that
+    // as ERROR_CLASS_ALREADY_EXISTS and disables the context menu item rather
+    // than crashing on it.
+    if (g_contextMenuOwnerClassRegistered) {
+        if (!UnregisterClassW(ContextMenuOwnerClassName().c_str(),
+                              GetCurrentModuleHandle())) {
+            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+            Wh_Log(L"UnregisterClass failed: %u, %zu owner window(s) left "
+                   L"behind",
+                   GetLastError(), g_contextMenuOwners.size());
+        }
+
+        g_contextMenuOwnerClassRegistered = false;
+    }
+
     // Last, since the launch threads run our code: the DLL can't be unmapped
-    // while one of them is still working.
+    // while one of them is still working. The wait has no timeout, and a
+    // launch thread can be inside a synchronous ShellExecuteExW - an elevation
+    // consent prompt, which SEE_MASK_FLAG_NO_UI doesn't suppress, blocks it
+    // until the user answers. Logged so that a stalled unload is diagnosable.
+    {
+        std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
+        if (!g_launchThreads.empty()) {
+            Wh_Log(L"Waiting for %zu launch thread(s) - a command still being "
+                   L"launched, such as one showing an elevation prompt, holds "
+                   L"this up until it's done",
+                   g_launchThreads.size());
+        }
+    }
+
     WaitForLaunchThreads();
 }
 
