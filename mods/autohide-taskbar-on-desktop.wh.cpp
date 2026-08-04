@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              autohide-taskbar-on-desktop-only
-// @name            autohide-taskbar-on-desktop-only
+// @id              autohide-taskbar-on-desktop
+// @name            autohide-taskbar-on-desktop
 // @version         1.0.0
 // @author          qwertyuiop00-art
 // @github          https://github.com/qwertyuiop00-art
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Autohide Taskbar on Desktop Only
+# Autohide Taskbar on Desktop 
 
 Automatically hides the taskbar when switching to the desktop, and restores it when any application is active/focused.
 */
