@@ -2,7 +2,7 @@
 // @id           hanging-v-dice-customizable
 // @name         Customizable Dual Hanging Dice
 // @description  Hanging dice with physical reactions to window animations and auto-hide in fullscreen mode.
-// @version      1.0
+// @version      1.1
 // @author       Jaali
 // @github       https://github.com/alivca
 // @include      explorer.exe
@@ -13,7 +13,7 @@
 /*
 Add interactive hanging dice to your desktop with dynamic physics. They swing and react in real-time when you move, minimize, maximize, or restore windows, and automatically hide during fullscreen games or apps to stay out of your way.
 
-![Preview](https://raw.githubusercontent.com/alivca/windhawk-mods/9f44d9cdda2cef3d7d5240971d32606518fa17c2/cubic.gif)
+![Preview](https://raw.githubusercontent.com/alivca/hanging-v-dice-customizable/main/cubic.gif)
 
 */
 // ==/WindhawkModReadme==
@@ -52,28 +52,23 @@ Add interactive hanging dice to your desktop with dynamic physics. They swing an
 */
 // ==/WindhawkModSettings==
 
-#ifndef WINVER
-#define WINVER 0x0A00
-#endif
-
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-
 #include <windows.h>
 #include <gdiplus.h>
 #include <math.h>
 #include <string>
 #include <stdlib.h>
 #include <time.h>
+#include <atomic>
+#include <numbers>
+
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 #ifndef WINEVENT_OUTOFPROCESS
-#define WINEVENT_OUTOFPROCESS 0x0000
+#define WINEVENT_OUTOFPROCESS 0x0003
 #endif
 
 using namespace Gdiplus;
-
-#define PI 3.14159265358979323846f
 
 struct Settings {
     std::wstring position = L"center";
@@ -96,21 +91,26 @@ struct Dice {
     bool isDragged;
     int dots;
     POINT dragStartPt;
+    float dragOffsetX;
+    float dragOffsetY;
 };
 
 PointF g_anchor(175.0f, 0.0f);
-Dice g_d1 = { 130.0f, 110.0f, 0.0f, 0.0f, 40.0f, 110.0f, false, 5, {0, 0} };
-Dice g_d2 = { 220.0f, 110.0f, 0.0f, 0.0f, 40.0f, 110.0f, false, 3, {0, 0} };
+Dice g_d1 = { 130.0f, 110.0f, 0.0f, 0.0f, 40.0f, 110.0f, false, 5, {0, 0}, 0.0f, 0.0f };
+Dice g_d2 = { 220.0f, 110.0f, 0.0f, 0.0f, 40.0f, 110.0f, false, 3, {0, 0}, 0.0f, 0.0f };
 
 HWND g_hWnd = NULL;
 HANDLE g_hThread = NULL;
 HWINEVENTHOOK g_hEventHookMin = NULL;
 HWINEVENTHOOK g_hEventHookUnmin = NULL;
 HWINEVENTHOOK g_hEventHookMax = NULL;
-HWINEVENTHOOK g_hEventHookPos = NULL;
-bool g_running = false;
+HWINEVENTHOOK g_hEventHookFg = NULL;
+std::atomic<bool> g_running{ false };
 ULONG_PTR g_gdiToken = 0;
 bool g_isHiddenByFullscreen = false;
+UINT g_wmReloadSettings = 0;
+
+void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 
 int ClampDiceValue(int val) {
     if (val < 1) return 1;
@@ -135,11 +135,14 @@ bool IsWindowFullscreen(HWND hwnd) {
 }
 
 void CheckFullscreenState() {
-    if (!g_settings.hideOnFullscreen || !g_hWnd) {
+    if (!g_hWnd) return;
+
+    if (!g_settings.hideOnFullscreen) {
         if (g_isHiddenByFullscreen) {
             ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
             SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             g_isHiddenByFullscreen = false;
+            SetTimer(g_hWnd, 1, 16, NULL);
         }
         return;
     }
@@ -148,17 +151,50 @@ void CheckFullscreenState() {
     if (hForeground && hForeground != g_hWnd) {
         bool fs = IsWindowFullscreen(hForeground);
         if (fs && !g_isHiddenByFullscreen) {
+            KillTimer(g_hWnd, 1);
             ShowWindow(g_hWnd, SW_HIDE);
             g_isHiddenByFullscreen = true;
         } else if (!fs && g_isHiddenByFullscreen) {
             ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
             SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             g_isHiddenByFullscreen = false;
+            SetTimer(g_hWnd, 1, 16, NULL);
         }
     }
 }
 
-void ApplySettings() {
+void UpdateForegroundHookState() {
+    if (g_settings.hideOnFullscreen) {
+        if (!g_hEventHookFg) {
+            g_hEventHookFg = SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
+            );
+        }
+    } else {
+        if (g_hEventHookFg) {
+            UnhookWinEvent(g_hEventHookFg);
+            g_hEventHookFg = NULL;
+        }
+    }
+}
+
+void LoadSettingsInternal() {
+    WindhawkUtils::StringSetting pos = WindhawkUtils::StringSetting::make(L"position");
+    if (pos.get()) g_settings.position = pos.get();
+
+    g_settings.diceSize = Wh_GetIntSetting(L"diceSize");
+
+    WindhawkUtils::StringSetting style = WindhawkUtils::StringSetting::make(L"diceStyle");
+    if (style.get()) g_settings.diceStyle = style.get();
+
+    g_settings.randomOnClick = Wh_GetIntSetting(L"randomOnClick") != 0;
+    g_settings.leftDiceValue = Wh_GetIntSetting(L"leftDiceValue");
+    g_settings.rightDiceValue = Wh_GetIntSetting(L"rightDiceValue");
+    g_settings.hideOnFullscreen = Wh_GetIntSetting(L"hideOnFullscreen") != 0;
+}
+
+void ApplySettingsInternal() {
     float size = (float)g_settings.diceSize;
     if (size < 20.0f) size = 20.0f;
     if (size > 120.0f) size = 120.0f;
@@ -200,6 +236,7 @@ void ApplySettings() {
         }
 
         SetWindowPos(g_hWnd, HWND_TOPMOST, posX, 10, g_winW, g_winH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        UpdateForegroundHookState();
         CheckFullscreenState();
     }
 }
@@ -256,15 +293,18 @@ void ConstrainToBounds(Dice& d) {
 }
 
 void UpdateDicePhysics(Dice& d) {
-    POINT pt;
-    GetCursorPos(&pt);
-    if (g_hWnd) ScreenToClient(g_hWnd, &pt);
-
     if (d.isDragged) {
-        d.vx = ((float)pt.x - d.x) * 0.35f;
-        d.vy = ((float)pt.y - d.y) * 0.35f;
-        d.x = (float)pt.x;
-        d.y = (float)pt.y;
+        POINT pt;
+        GetCursorPos(&pt);
+        if (g_hWnd) ScreenToClient(g_hWnd, &pt);
+
+        float targetX = (float)pt.x - d.dragOffsetX;
+        float targetY = (float)pt.y - d.dragOffsetY;
+
+        d.vx = (targetX - d.x) * 0.35f;
+        d.vy = (targetY - d.y) * 0.35f;
+        d.x = targetX;
+        d.y = targetY;
     } else {
         d.vy += 0.45f;
         d.x += d.vx;
@@ -328,18 +368,26 @@ void ResolveCollision(Dice& d1, Dice& d2) {
     }
 }
 
-void PhysicsStep() {
+bool PhysicsStep() {
+    float prev1X = g_d1.x, prev1Y = g_d1.y;
+    float prev2X = g_d2.x, prev2Y = g_d2.y;
+
     UpdateDicePhysics(g_d1);
     UpdateDicePhysics(g_d2);
     ResolveCollision(g_d1, g_d2);
+
+    bool moved1 = (fabsf(g_d1.vx) > 0.01f || fabsf(g_d1.vy) > 0.01f || fabsf(g_d1.x - prev1X) > 0.01f || fabsf(g_d1.y - prev1Y) > 0.01f);
+    bool moved2 = (fabsf(g_d2.vx) > 0.01f || fabsf(g_d2.vy) > 0.01f || fabsf(g_d2.x - prev2X) > 0.01f || fabsf(g_d2.y - prev2Y) > 0.01f);
+
+    return moved1 || moved2 || g_d1.isDragged || g_d2.isDragged;
 }
 
 void DrawScene(Graphics& gr) {
     gr.SetSmoothingMode(SmoothingModeAntiAlias);
     gr.Clear(Color(0, 0, 0, 0));
 
-    Color stringColor(200, 220, 220, 220);
-    if (g_settings.diceStyle == L"neon") stringColor = Color(220, 0, 255, 200);
+    Color stringColor(255, 220, 220, 220);
+    if (g_settings.diceStyle == L"neon") stringColor = Color(255, 0, 255, 200);
 
     Pen stringPen(stringColor, 2.0f);
     gr.DrawLine(&stringPen, g_anchor.X, g_anchor.Y, g_d1.x, g_d1.y);
@@ -348,7 +396,7 @@ void DrawScene(Graphics& gr) {
     auto DrawCube = [&](const Dice& d, Color bg, Color stroke, Color dotColor) {
         GraphicsState st = gr.Save();
         
-        float angle = atan2f(d.x - g_anchor.X, d.y - g_anchor.Y) * (180.0f / PI);
+        float angle = atan2f(d.x - g_anchor.X, d.y - g_anchor.Y) * (180.0f / (float)std::numbers::pi);
         
         gr.TranslateTransform(d.x, d.y);
         gr.RotateTransform(-angle);
@@ -392,7 +440,7 @@ void DrawScene(Graphics& gr) {
         case 5:
             gr.FillEllipse(&dotB, -rDot, -rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
-            gr.FillEllipse(&dotB, offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
+            gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
@@ -411,14 +459,14 @@ void DrawScene(Graphics& gr) {
     };
 
     if (g_settings.diceStyle == L"neon") {
-        DrawCube(g_d1, Color(220, 10, 200, 230), Color(255, 0, 255, 255), Color(255, 255, 255, 255));
-        DrawCube(g_d2, Color(220, 230, 20, 120), Color(255, 255, 50, 180), Color(255, 255, 255, 255));
+        DrawCube(g_d1, Color(255, 10, 200, 230), Color(255, 0, 255, 255), Color(255, 255, 255, 255));
+        DrawCube(g_d2, Color(255, 230, 20, 120), Color(255, 255, 50, 180), Color(255, 255, 255, 255));
     } else if (g_settings.diceStyle == L"mono") {
-        DrawCube(g_d1, Color(240, 240, 240, 240), Color(255, 50, 50, 50), Color(255, 20, 20, 20));
-        DrawCube(g_d2, Color(240, 45, 45, 45), Color(255, 200, 200, 200), Color(255, 240, 240, 240));
+        DrawCube(g_d1, Color(255, 240, 240, 240), Color(255, 50, 50, 50), Color(255, 20, 20, 20));
+        DrawCube(g_d2, Color(255, 45, 45, 45), Color(255, 200, 200, 200), Color(255, 240, 240, 240));
     } else {
-        DrawCube(g_d1, Color(230, 210, 40, 40), Color(255, 30, 30, 30), Color(255, 255, 255, 255));
-        DrawCube(g_d2, Color(230, 30, 30, 30), Color(255, 100, 100, 100), Color(255, 255, 255, 255));
+        DrawCube(g_d1, Color(255, 210, 40, 40), Color(255, 30, 30, 30), Color(255, 255, 255, 255));
+        DrawCube(g_d2, Color(255, 30, 30, 30), Color(255, 100, 100, 100), Color(255, 255, 255, 255));
     }
 }
 
@@ -427,23 +475,27 @@ void RedrawOverlay(HWND hWnd) {
 
     HDC hdcScr = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScr);
-    HBITMAP hBmp = CreateCompatibleBitmap(hdcScr, g_winW, g_winH);
+
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = g_winW;
+    bi.bmiHeader.biHeight = -g_winH;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcMem, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
 
     Graphics gr(hdcMem);
     DrawScene(gr);
 
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-    POINT ptDst = { 0, 0 };
-    RECT rc;
-    GetWindowRect(hWnd, &rc);
-    ptDst.x = rc.left;
-    ptDst.y = rc.top;
-
     SIZE szDst = { g_winW, g_winH };
     POINT ptSrc = { 0, 0 };
 
-    UpdateLayeredWindow(hWnd, hdcScr, &ptDst, &szDst, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
+    UpdateLayeredWindow(hWnd, hdcScr, NULL, &szDst, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
 
     SelectObject(hdcMem, hOld);
     DeleteObject(hBmp);
@@ -452,10 +504,17 @@ void RedrawOverlay(HWND hWnd) {
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == g_wmReloadSettings) {
+        LoadSettingsInternal();
+        ApplySettingsInternal();
+        return 0;
+    }
+
     switch (msg) {
     case WM_TIMER:
-        PhysicsStep();
-        RedrawOverlay(hWnd);
+        if (PhysicsStep()) {
+            RedrawOverlay(hWnd);
+        }
         break;
 
     case WM_LBUTTONDOWN: {
@@ -463,17 +522,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int my = (short)HIWORD(lParam);
 
         float dist2 = sqrtf((mx - g_d2.x)*(mx - g_d2.x) + (my - g_d2.y)*(my - g_d2.y));
-        if (dist2 < g_d2.size) {
+        if (dist2 < g_d2.size * 0.5f) {
             g_d2.isDragged = true;
             g_d2.dragStartPt = { mx, my };
+            g_d2.dragOffsetX = mx - g_d2.x;
+            g_d2.dragOffsetY = my - g_d2.y;
             SetCapture(hWnd);
             return 0;
         }
 
         float dist1 = sqrtf((mx - g_d1.x)*(mx - g_d1.x) + (my - g_d1.y)*(my - g_d1.y));
-        if (dist1 < g_d1.size) {
+        if (dist1 < g_d1.size * 0.5f) {
             g_d1.isDragged = true;
             g_d1.dragStartPt = { mx, my };
+            g_d1.dragOffsetX = mx - g_d1.x;
+            g_d1.dragOffsetY = my - g_d1.y;
             SetCapture(hWnd);
             return 0;
         }
@@ -491,6 +554,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_d1.dots = (rand() % 6) + 1;
             }
             g_d1.isDragged = false;
+            ReleaseCapture();
         }
 
         if (g_d2.isDragged) {
@@ -500,11 +564,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_d2.dots = (rand() % 6) + 1;
             }
             g_d2.isDragged = false;
+            ReleaseCapture();
         }
-
-        ReleaseCapture();
         break;
     }
+
+    case WM_CAPTURECHANGED:
+        g_d1.isDragged = false;
+        g_d2.isDragged = false;
+        break;
 
     case WM_NCHITTEST: {
         POINT pt = { (short)LOWORD(lParam), (short)HIWORD(lParam) };
@@ -513,7 +581,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         float dist1 = sqrtf((pt.x - g_d1.x)*(pt.x - g_d1.x) + (pt.y - g_d1.y)*(pt.y - g_d1.y));
         float dist2 = sqrtf((pt.x - g_d2.x)*(pt.x - g_d2.x) + (pt.y - g_d2.y)*(pt.y - g_d2.y));
 
-        if (dist1 < g_d1.size || dist2 < g_d2.size) {
+        if (dist1 < g_d1.size * 0.5f || dist2 < g_d2.size * 0.5f) {
             return HTCLIENT;
         }
         return HTTRANSPARENT;
@@ -530,13 +598,24 @@ DWORD WINAPI StartThread(LPVOID) {
     srand((unsigned int)time(NULL));
 
     GdiplusStartupInput input;
-    GdiplusStartup(&g_gdiToken, &input, NULL);
+    if (GdiplusStartup(&g_gdiToken, &input, NULL) != Ok) {
+        Wh_Log(L"GdiplusStartup failed");
+        return 0;
+    }
+
+    g_wmReloadSettings = RegisterWindowMessage(L"DiceCustomizableReloadSettings");
 
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = WndProc;
     wc.hInstance = GetModuleHandle(NULL);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.lpszClassName = L"DiceCustomizableOverlay";
-    RegisterClass(&wc);
+
+    if (!RegisterClass(&wc)) {
+        Wh_Log(L"RegisterClass failed");
+        GdiplusShutdown(g_gdiToken);
+        return 0;
+    }
 
     g_hWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
@@ -546,80 +625,61 @@ DWORD WINAPI StartThread(LPVOID) {
         NULL, NULL, GetModuleHandle(NULL), NULL
     );
 
-    if (g_hWnd) {
-        ApplySettings();
-        SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        ShowWindow(g_hWnd, SW_SHOW);
-        SetTimer(g_hWnd, 1, 16, NULL);
-
-        g_hEventHookMin = SetWinEventHook(
-            EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZESTART,
-            NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-        );
-
-        g_hEventHookUnmin = SetWinEventHook(
-            EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND,
-            NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-        );
-
-        g_hEventHookMax = SetWinEventHook(
-            EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND,
-            NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-        );
-
-        g_hEventHookPos = SetWinEventHook(
-            EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-            NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-        );
-
-        MSG msg;
-        while (g_running && GetMessage(&msg, NULL, 0, 0)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-
-        if (g_hEventHookMin) UnhookWinEvent(g_hEventHookMin);
-        if (g_hEventHookUnmin) UnhookWinEvent(g_hEventHookUnmin);
-        if (g_hEventHookMax) UnhookWinEvent(g_hEventHookMax);
-        if (g_hEventHookPos) UnhookWinEvent(g_hEventHookPos);
-
-        KillTimer(g_hWnd, 1);
-        DestroyWindow(g_hWnd);
+    if (!g_hWnd) {
+        Wh_Log(L"CreateWindowEx failed");
+        UnregisterClass(L"DiceCustomizableOverlay", GetModuleHandle(NULL));
+        GdiplusShutdown(g_gdiToken);
+        return 0;
     }
+
+    LoadSettingsInternal();
+    ApplySettingsInternal();
+    ShowWindow(g_hWnd, SW_SHOW);
+    SetTimer(g_hWnd, 1, 16, NULL);
+
+    g_hEventHookMin = SetWinEventHook(
+        EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZESTART,
+        NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
+    );
+
+    g_hEventHookUnmin = SetWinEventHook(
+        EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND,
+        NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
+    );
+
+    g_hEventHookMax = SetWinEventHook(
+        EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND,
+        NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
+    );
+
+    UpdateForegroundHookState();
+
+    MSG msg;
+    while (g_running && GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_hEventHookMin) UnhookWinEvent(g_hEventHookMin);
+    if (g_hEventHookUnmin) UnhookWinEvent(g_hEventHookUnmin);
+    if (g_hEventHookMax) UnhookWinEvent(g_hEventHookMax);
+    if (g_hEventHookFg) UnhookWinEvent(g_hEventHookFg);
+
+    KillTimer(g_hWnd, 1);
+    DestroyWindow(g_hWnd);
 
     GdiplusShutdown(g_gdiToken);
     UnregisterClass(L"DiceCustomizableOverlay", GetModuleHandle(NULL));
     return 0;
 }
 
-void LoadSettings() {
-    PCWSTR pos = Wh_GetStringSetting(L"position");
-    if (pos) {
-        g_settings.position = pos;
-        Wh_FreeStringSetting(pos);
-    }
-
-    g_settings.diceSize = Wh_GetIntSetting(L"diceSize");
-
-    PCWSTR style = Wh_GetStringSetting(L"diceStyle");
-    if (style) {
-        g_settings.diceStyle = style;
-        Wh_FreeStringSetting(style);
-    }
-
-    g_settings.randomOnClick = Wh_GetIntSetting(L"randomOnClick") != 0;
-    g_settings.leftDiceValue = Wh_GetIntSetting(L"leftDiceValue");
-    g_settings.rightDiceValue = Wh_GetIntSetting(L"rightDiceValue");
-    g_settings.hideOnFullscreen = Wh_GetIntSetting(L"hideOnFullscreen") != 0;
-}
-
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    ApplySettings();
+    if (g_hWnd && g_wmReloadSettings) {
+        PostMessage(g_hWnd, g_wmReloadSettings, 0, 0);
+    }
 }
 
 BOOL Wh_ModInit() {
-    LoadSettings();
     g_running = true;
     g_hThread = CreateThread(NULL, 0, StartThread, NULL, 0, NULL);
     return TRUE;
@@ -631,7 +691,8 @@ void Wh_ModUninit() {
         PostMessage(g_hWnd, WM_CLOSE, 0, 0);
     }
     if (g_hThread) {
-        WaitForSingleObject(g_hThread, 1000);
+        WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
+        g_hThread = NULL;
     }
 }
