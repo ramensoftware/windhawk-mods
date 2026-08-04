@@ -54,11 +54,18 @@ Windows 11 only.
 - Or, in this mod's settings, switch on **Open the folder manager** and save.
 
 The quickest way to add one in the first place is straight from Explorer:
-right click any folder in Explorer or on the Desktop and pick
+right click any folder in Explorer or on the Desktop, pick **Show more
+options** (or press Shift+F10 to go straight there), and choose
 **Taskbar Folders -> Pin**. It becomes a button immediately, taking its name
 and its custom icon (Properties > Customize > Change Icon) from the folder
 itself. That same menu appears on files and shortcuts too — use it to move,
 copy, or make a shortcut into a folder that already has a button.
+
+The entry is on the classic context menu, the one behind **Show more
+options**, and not on the short Windows 11 menu that opens first — that one is
+XAML and takes no menu items from a mod like this. If you would rather it were
+one click away, a mod such as **explorer-context-menu-classic** makes the
+classic menu the default one.
 
 If you would rather the mod stayed entirely on the taskbar side, turn off
 **Explorer right-click menu** in the settings; with it off, Explorer and Desktop
@@ -196,9 +203,11 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 - explorerMenu: true
   $name: 1. Behavior ▸ Explorer right-click menu
   $description: >-
-    Adds a "Taskbar Folders" submenu to Explorer and Desktop context menus, for
-    pinning a folder straight to the taskbar and for moving, copying or making
-    a shortcut into a folder that already has a button. Turn this off to keep
+    Adds a "Taskbar Folders" submenu to the classic Explorer and Desktop
+    context menus — the ones behind "Show more options" / Shift+F10, not the
+    short Windows 11 menu, which is XAML and takes no items from a mod. Use it
+    to pin a folder straight to the taskbar, or to move, copy or make a
+    shortcut into a folder that already has a button. Turn this off to keep
     the mod entirely on the taskbar side — with it off, Explorer's own context
     menus are left completely alone. Switching it back on takes effect after
     the mod is reloaded (toggle the mod off and on, or restart Explorer),
@@ -572,6 +581,13 @@ uint64_t GetDirFileId(const std::wstring& path) {
     return (static_cast<uint64_t>(info.nFileIndexHigh) << 32) | info.nFileIndexLow;
 }
 
+bool DirectoryExists(const std::wstring& path) {
+    DWORD attrs = path.empty() ? INVALID_FILE_ATTRIBUTES
+                               : GetFileAttributesW(path.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES &&
+           (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
 // A renamed folder keeps the same parent, so if oldPath no longer resolves,
 // scan its parent for a subfolder whose file id still matches. Returns the
 // new full path, or empty if no match.
@@ -871,7 +887,16 @@ bool BuildFolderEntry(FolderStore::Entry* stored, FolderEntry* out) {
 
         // Folder missing under its stored path: it may have been renamed in
         // place. Find it by file id under the same parent and follow it.
-        if (out->resolveFailed && stored->fileId != 0) {
+        //
+        // The trigger is the folder not being on disk, not ResolveFolderPath
+        // failing — for a filesystem path that only strips trailing slashes,
+        // so it never fails. Remote paths are left alone: a stat on an offline
+        // share blocks for the SMB timeout, and this runs on Explorer's main
+        // thread during Wh_ModInit. A miss changes nothing (no rename found,
+        // or a drive that is merely unplugged keeps its path and starts
+        // working again when it comes back).
+        if (!out->resolveFailed && !out->likelyRemote && stored->fileId != 0 &&
+            !DirectoryExists(out->resolvedPath)) {
             std::wstring renamed =
                 FindRenamedSibling(out->path, stored->fileId);
             if (!renamed.empty()) {
@@ -941,24 +966,33 @@ void LoadFolders(std::vector<FolderEntry>* out) {
            out->size(), storedCount);
 }
 
-// True if `path` already has a stored entry — pinned or draft. Used to hide
-// the "Pin to Taskbar" menu item and to reject duplicates, so that a folder
-// kept as a draft cannot be pinned a second time as a separate copy.
-bool IsAlreadyTaskbarFolder(const std::wstring& path) {
+// True if `path` already has a button on the taskbar. Used to hide the "Pin to
+// Taskbar" menu item — a draft deliberately does not count, so a folder that
+// was unpinned can be pinned again from Explorer.
+bool IsPinnedTaskbarFolder(const std::wstring& path) {
     auto stored = FolderStore::Read();
-    return FolderStore::IndexOfPath(stored, path) >= 0;
+    int index = FolderStore::IndexOfPath(stored, path);
+    return index >= 0 && stored[index].pinned;
 }
 
 // Adds a folder as a new taskbar button, persisted in the mod's own storage.
 // Caller must refresh (LoadSettings + UI teardown/rebuild) for it to appear.
-// No-op (returns false) if the folder already has an entry, draft included.
+// An existing draft is re-pinned in place, keeping its name and icon, rather
+// than becoming a second entry for the same folder. No-op (returns false) only
+// if the folder is already pinned.
 bool AddPinnedFolder(const std::wstring& path, const std::wstring& name) {
     // Held across read-modify-write: the manager thread and the taskbar UI
     // thread mutate the same store.
     std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
     auto stored = FolderStore::Read();
-    if (FolderStore::IndexOfPath(stored, path) >= 0) {
-        return false;
+    if (int index = FolderStore::IndexOfPath(stored, path); index >= 0) {
+        if (stored[index].pinned) {
+            return false;
+        }
+        stored[index].pinned = true;
+        FolderStore::Write(stored);
+        Wh_Log(L"Re-pinned the draft entry for '%s'", path.c_str());
+        return true;
     }
     FolderStore::Entry entry;
     entry.path = path;
@@ -2951,7 +2985,10 @@ struct PopupLevel {
     bool baseDirty = true;
 };
 
-HWND g_menuOwnerWnd = nullptr;
+// Created on the taskbar UI thread, read from the Windhawk engine thread, an
+// Explorer browser thread and the folder manager thread when they ask for a
+// reload — see RequestReloadUI.
+std::atomic<HWND> g_menuOwnerWnd{nullptr};
 HWND g_taskbarWnd = nullptr;
 
 // Windows are created lazily, one per depth, and reused across cascades.
@@ -3002,6 +3039,31 @@ constexpr UINT WM_APP_INVOKE_SHELL_VERB = WM_APP + 41;
 // down the very button the flyout is anchored to and unhooks the handlers it
 // is running inside, so it must not run inline from there.
 constexpr UINT WM_APP_RELOAD_UI = WM_APP + 42;
+
+// The only way anything should ask for a reload.
+//
+// Four threads want one — the Windhawk engine on a settings change, the
+// taskbar UI thread on unpin, an Explorer browser thread on a right-click
+// pin, the manager thread on any edit — and ReloadAndRefreshUI is not safe to
+// run concurrently or inline on most of them: it joins the scan and retry
+// workers (so a slow shell icon handler would freeze the Explorer window the
+// user just right-clicked in) and it rebuilds g_settings, which two threads
+// doing it at once is a data race on the string members.
+//
+// Posting to the one window owned by the taskbar UI thread serializes every
+// request through that thread's message loop for free. A mutex could not:
+// ReloadAndRefreshUI SendMessages to the taskbar thread, so if that thread
+// were the one blocked in lock(), it would never dispatch the send and both
+// threads would hang.
+void RequestReloadUI() {
+    HWND owner = g_menuOwnerWnd.load();
+    if (!owner || !PostMessageW(owner, WM_APP_RELOAD_UI, 0, 0)) {
+        // Before the taskbar UI is up (a settings change during init) there is
+        // no message loop to defer to, and no other thread to race with.
+        Wh_Log(L"RequestReloadUI: no owner window; reloading inline");
+        ReloadAndRefreshUI();
+    }
+}
 
 // Both take their arguments by value: reopening a level destroys the PopupLevel
 // the caller may have read them from.
@@ -5700,13 +5762,14 @@ int SelectedIndex(HWND hWnd) {
 
 // Refreshes the taskbar and this window after the store was changed.
 //
-// Must be called with FolderStore::g_mutex released: ReloadAndRefreshUI reaches
-// LoadFolders, which takes g_foldersMutex and then the store lock, so holding
-// the store lock across this would invert the order. Every caller therefore
-// scopes its read-modify-write to a block and calls this after it.
+// The taskbar half is deferred to the taskbar UI thread (see RequestReloadUI),
+// so this returns without blocking the manager thread on two worker joins. The
+// window's own list is repopulated here and now, from the store this thread
+// just wrote; the reload posts a WM_APP back afterwards, which repopulates
+// again from the same store and keeps the selected index either way.
 void RefreshAfterStoreChange(HWND hWnd) {
     if (!g_unloading) {
-        ReloadAndRefreshUI();
+        RequestReloadUI();
     }
     PopulateList(hWnd);
 }
@@ -6950,12 +7013,7 @@ void OnButtonRightClicked(int folderIndex, Button const& button) {
             // handlers this lambda is running inside, and the flyout is
             // anchored to it. The owner window lives on this same taskbar UI
             // thread, so the post lands right after the flyout unwinds.
-            if (!g_menuOwnerWnd ||
-                !PostMessageW(g_menuOwnerWnd, WM_APP_RELOAD_UI, 0, 0)) {
-                Wh_Log(L"Unpin: no menu owner window to defer the reload to; "
-                       L"reloading inline");
-                ReloadAndRefreshUI();
-            }
+            RequestReloadUI();
         });
 
         MenuFlyoutItem manage;
@@ -7848,7 +7906,15 @@ std::wstring GetSelectedPath(HWND defView) {
     return result;
 }
 
-bool MoveOrCopy(const std::wstring& src, const std::wstring& destDir, bool move) {
+// `owner` is the Explorer window the menu came from: it owns the shell's
+// progress and error dialogs, so they cannot end up behind it or ownerless.
+// ponytail: SHFileOperation, not IFileOperation — the flags below cover undo
+// and error reporting; move to IFileOperation if this ever needs per-item
+// results or an elevation prompt.
+bool MoveOrCopy(HWND owner,
+                const std::wstring& src,
+                const std::wstring& destDir,
+                bool move) {
     if (destDir.empty()) {
         return false;
     }
@@ -7856,11 +7922,18 @@ bool MoveOrCopy(const std::wstring& src, const std::wstring& destDir, bool move)
     std::wstring from = src + L'\0';
     std::wstring to = destDir + L'\0';
     SHFILEOPSTRUCTW op{};
+    op.hwnd = owner;
     op.wFunc = move ? FO_MOVE : FO_COPY;
     op.pFrom = from.c_str();
     op.pTo = to.c_str();
-    op.fFlags = FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_RENAMEONCOLLISION;
-    return SHFileOperationW(&op) == 0;
+    // FOF_ALLOWUNDO: a mis-click on a menu that sits right next to Explorer's
+    // own commands has to be undoable with Ctrl+Z, and a move without it is
+    // permanent. No FOF_NOERRORUI either — access denied or a file in use is
+    // the shell's error to report, and swallowing it looks like nothing
+    // happened.
+    op.fFlags =
+        FOF_NOCONFIRMMKDIR | FOF_ALLOWUNDO | FOF_RENAMEONCOLLISION;
+    return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
 }
 
 // Creates a .lnk to `target` inside `destDir`. Returns the new .lnk path, or
@@ -7896,7 +7969,14 @@ std::wstring CreateShortcutIn(const std::wstring& target,
     HRESULT hr = persist->Save(lnkPath.c_str(), TRUE);
     persist->Release();
     link->Release();
-    return SUCCEEDED(hr) ? lnkPath : L"";
+    if (FAILED(hr)) {
+        return L"";
+    }
+    // Writing the file is not enough: a window already showing destDir only
+    // learns about the new shortcut from a change notification.
+    SHChangeNotify(SHCNE_CREATE, SHCNF_PATH | SHCNF_FLUSH, lnkPath.c_str(),
+                   nullptr);
+    return lnkPath;
 }
 
 // Theme for the menu popups created while the CBT hook below is installed.
@@ -7951,7 +8031,7 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     UINT copyBase = moveBase + (UINT)n;
     UINT shortcutBase = copyBase + (UINT)n;
 
-    bool canPin = isDir && !IsAlreadyTaskbarFolder(path);
+    bool canPin = isDir && !IsPinnedTaskbarFolder(path);
     bool showMoveCopy = !isDir && n > 0;
     bool showShortcut = !isLnk && n > 0;
 
@@ -8045,7 +8125,10 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
 
     if (canPin && result == kMinId) {
         AddPinnedFolder(path, LeafName(path));
-        ReloadAndRefreshUI();
+        // Deferred: this is the UI thread of the Explorer window the user just
+        // right-clicked in, and a reload joins the scan worker, which can sit
+        // in a slow shell icon handler for a while.
+        RequestReloadUI();
         return 0;
     }
 
@@ -8072,7 +8155,7 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
         CreateShortcutIn(path, destDir);
         return 0;
     }
-    MoveOrCopy(path, destDir, move);
+    MoveOrCopy(hwnd, path, destDir, move);
     return 0;
 }
 
@@ -8168,9 +8251,10 @@ void ReloadAndRefreshUI() {
     // out its list is stale. Without it the window keeps showing (and
     // committing against) rows that no longer match the store.
     //
-    // Skipped when the manager thread is the caller: it refreshes its own list
-    // synchronously right after this returns, and a queued WM_APP would land
-    // afterwards and clear the selection it had just restored.
+    // Since reloads run on the taskbar UI thread, this always posts when the
+    // manager is open — including for the manager's own edits, which already
+    // repopulated synchronously. The extra pass is a no-op beyond a redraw:
+    // PopulateList reads the same store and keeps the selected index.
     if (HWND manager = FolderManager::g_wnd.load()) {
         if (GetWindowThreadProcessId(manager, nullptr) !=
             GetCurrentThreadId()) {
@@ -8181,7 +8265,7 @@ void ReloadAndRefreshUI() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
-    ReloadAndRefreshUI();
+    RequestReloadUI();
 
     // "Open the folder manager" acts as a button: it fires when switched on,
     // and switching it off again is a no-op. Windhawk's settings schema has no
