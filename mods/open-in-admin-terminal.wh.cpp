@@ -49,7 +49,7 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
 - The entry is injected only while Explorer's classic menu is open; disabling the mod leaves no registry cleanup behind.
 - The mod intentionally targets filesystem folders and drive roots only, including optional navigation pane and Quick access support.
 - Auto chooses Windows Terminal, PowerShell 7, Windows PowerShell, then Command Prompt. If another built-in preset is unavailable, the mod falls back to Auto instead of hiding the entry.
-- Script actions use the selected terminal when it can host the required Windows interpreter. WSL, Git Bash, and custom commands fall back to PowerShell, Command Prompt, or Windows Script Host and use that actual program name in the menu.
+- Script actions use the selected terminal only when it can safely host the required interpreter. Batch scripts and keep-open Windows Script Host scripts launch through Command Prompt; menu labels show Command Prompt or Windows Script Host. WSL, Git Bash, and custom commands fall back to a compatible Windows interpreter.
 - Diagnostics use Windhawk's built-in logging controls.
 
 ## Version log
@@ -898,16 +898,24 @@ static bool IsScriptHostChoice(const std::wstring& choice) {
            choice == L"alacritty" || choice == L"conemu";
 }
 
+static bool UsesCmdWrapper(const Settings& s, PCWSTR extension) {
+    return _wcsicmp(extension, L".bat") == 0 ||
+           _wcsicmp(extension, L".cmd") == 0 ||
+           (s.keepOpenAfterScript &&
+            (_wcsicmp(extension, L".vbs") == 0 ||
+             _wcsicmp(extension, L".js") == 0));
+}
+
+static bool UsesSelectedTerminalHost(const Settings& s,
+                                     const std::wstring& scriptPath) {
+    return IsScriptHostChoice(s.terminalEffectiveChoice) &&
+           !UsesCmdWrapper(s, PathFindExtensionW(scriptPath.c_str()));
+}
+
 static LaunchSpec BuildScriptLaunchSpec(const Settings& s,
                                         const std::wstring& scriptPath) {
     LaunchSpec interpreter = BuildScriptInterpreterSpec(s, scriptPath);
-    PCWSTR ext = PathFindExtensionW(scriptPath.c_str());
-    bool usesCmdWrapper = _wcsicmp(ext, L".bat") == 0 ||
-                          _wcsicmp(ext, L".cmd") == 0 ||
-                          (s.keepOpenAfterScript &&
-                           (_wcsicmp(ext, L".vbs") == 0 ||
-                            _wcsicmp(ext, L".js") == 0));
-    if (!IsScriptHostChoice(s.terminalEffectiveChoice) || usesCmdWrapper) {
+    if (!UsesSelectedTerminalHost(s, scriptPath)) {
         return interpreter;
     }
 
@@ -1776,7 +1784,7 @@ static bool ShouldClearMenuStateAfterTracking(UINT flags, BOOL result) {
 
 static std::wstring GetScriptTerminalDisplayName(const Settings& settings,
                                                  const std::wstring& scriptPath) {
-    if (IsScriptHostChoice(settings.terminalEffectiveChoice)) {
+    if (UsesSelectedTerminalHost(settings, scriptPath)) {
         return GetTerminalDisplayName(settings);
     }
 
@@ -1798,7 +1806,7 @@ static std::wstring GetScriptTerminalDisplayName(const Settings& settings,
 
 static Settings GetScriptIconSettings(const Settings& settings,
                                       const std::wstring& scriptPath) {
-    if (IsScriptHostChoice(settings.terminalEffectiveChoice)) {
+    if (UsesSelectedTerminalHost(settings, scriptPath)) {
         return settings;
     }
 
