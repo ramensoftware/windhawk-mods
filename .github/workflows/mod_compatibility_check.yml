@@ -20,14 +20,14 @@ jobs:
       fail-fast: false
       matrix:
         version: [
-          '1.5.1',
+          # '1.5.1',
           '1.6.1',
           '1.7.3',
-          '2.0.0-alpha.1',
+          '2.0.0-alpha.2',
         ]
-        exclude:
-          # Exclude 1.5.1, which is quite old, for everyone but m417z.
-          - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.5.1' }}
+        # exclude:
+        #   # Exclude 1.5.1, which is quite old, for everyone but m417z.
+        #   - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.5.1' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -89,16 +89,29 @@ jobs:
                 -oarm64 "${{ runner.temp }}\mod_arm64.dll"
             else
               # Compile via the CLI (--disabled builds the mod without activating
-              # it). WINDHAWK_LOG_COMPILER_WARNINGS=1 surfaces clang warnings,
-              # which the CLI hides on a successful compile by default. Two passes:
-              # with WINDHAWK_ARM64_ENABLED=1 the CLI drops the x86-64 build for a
-              # mod whose targets are all common system processes, so the first
-              # pass (arm64 off) covers x86/x86-64 and the second (arm64 on) covers
-              # arm64.
+              # it). --arch all builds the union of every machine scenario:
+              # x86/x86-64 plus arm64, without the x86-64 build being skipped for a
+              # mod whose targets are all common system processes.
               cli="$windhawk_path\windhawk-cli.exe"
-              MSYS_NO_PATHCONV=1 WINDHAWK_LOG_COMPILER_WARNINGS=1 "$cli" --app-root "$windhawk_path" \
-                mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
-              MSYS_NO_PATHCONV=1 WINDHAWK_ARM64_ENABLED=1 WINDHAWK_LOG_COMPILER_WARNINGS=1 "$cli" --app-root "$windhawk_path" \
-                mod install --disabled --file "$ALL_CHANGED_AND_MODIFIED_FILES"
+              result="${{ runner.temp }}/compile_result.json"
+              if ! MSYS_NO_PATHCONV=1 "$cli" --json \
+                mod install --disabled --arch all --file "$ALL_CHANGED_AND_MODIFIED_FILES" \
+                > "$result"; then
+                # Compiler diagnostics are streamed to stderr, but the failure
+                # summary goes to stdout in JSON mode, and a failure that produced
+                # no diagnostics (bad metadata, for example) has no stderr output
+                # at all.
+                jq -r '"::error::\(.error.code): \(.error.message)"' "$result" \
+                  || cat "$result"
+                exit 1
+              fi
+
+              # The CLI exits with 0 for a compile that only produced warnings, and
+              # omits the "warnings" key when there were none. The warning text
+              # itself is printed to stderr above.
+              if jq -e '.data.warnings' "$result" > /dev/null; then
+                echo "::error::The mod compiled with warnings"
+                exit 1
+              fi
             fi
           fi
