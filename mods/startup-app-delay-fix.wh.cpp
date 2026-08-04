@@ -14,14 +14,14 @@ Windows intentionally delays startup applications after sign-in to reduce
 system load, which can cause apps to open minutes after startup.
 
 This mod makes Explorer see `WaitforIdleState` as zero when it reads the
-startup-item serialization settings. It doesn't create or modify registry
-values, so disabling the mod restores Windows' normal behavior immediately.
+startup-item serialization settings. It leaves no persistent registry changes
+behind.
 
 Only `WaitforIdleState` is overridden. The related `StartupDelayInMSec` value
 is left unchanged.
 
-The setting is read when Explorer starts. Enabling or disabling the mod during
-a session takes effect after the next sign-in or Explorer restart.
+The setting is read when Explorer starts, so enabling or disabling the mod
+takes effect after the next sign-in or Explorer restart.
 */
 // ==/WindhawkModReadme==
 
@@ -53,6 +53,20 @@ typedef struct _KEY_NAME_INFORMATION {
     ULONG NameLength;
     WCHAR Name[1];
 } KEY_NAME_INFORMATION, *PKEY_NAME_INFORMATION;
+
+struct KEY_FULL_INFORMATION_LOCAL {
+    LARGE_INTEGER LastWriteTime;
+    ULONG TitleIndex;
+    ULONG ClassOffset;
+    ULONG ClassLength;
+    ULONG SubKeys;
+    ULONG MaxNameLen;
+    ULONG MaxClassLen;
+    ULONG Values;
+    ULONG MaxValueNameLen;
+    ULONG MaxValueDataLen;
+    WCHAR Class[1];
+};
 
 typedef enum _KEY_VALUE_INFORMATION_CLASS {
     KeyValueBasicInformation,
@@ -154,25 +168,30 @@ bool IsTargetValueName(const UNICODE_STRING* valueName) {
            _wcsnicmp(valueName->Buffer, kValueName, valueNameLength) == 0;
 }
 
-bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
-    if (!IsTargetValueName(valueName)) {
-        return false;
-    }
+bool IsSerializePath(std::wstring_view path) {
+    constexpr size_t userHivePrefixLength = ARRAYSIZE(kUserHivePrefix) - 1;
+    constexpr size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
+    return path.length() >= userHivePrefixLength + suffixLength &&
+           _wcsnicmp(path.data(), kUserHivePrefix, userHivePrefixLength) == 0 &&
+           _wcsnicmp(path.data() + path.length() - suffixLength,
+                      kKeyPathSuffix, suffixLength) == 0;
+}
 
+bool IsSerializeKey(HANDLE key) {
     if (IsVirtualKey(key)) {
         return true;
     }
 
     std::wstring path;
-    if (!GetKeyPath(key, &path)) {
+    return GetKeyPath(key, &path) && IsSerializePath(path);
+}
+
+bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
+    if (!IsTargetValueName(valueName)) {
         return false;
     }
-    size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
-    constexpr size_t userHivePrefixLength = ARRAYSIZE(kUserHivePrefix) - 1;
-    return path.length() >= userHivePrefixLength + suffixLength &&
-           _wcsnicmp(path.c_str(), kUserHivePrefix, userHivePrefixLength) == 0 &&
-           _wcsnicmp(path.c_str() + path.length() - suffixLength,
-                      kKeyPathSuffix, suffixLength) == 0;
+
+    return IsSerializeKey(key);
 }
 
 bool IsTargetOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
@@ -206,12 +225,7 @@ bool IsTargetOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
         path = rootPath;
     }
 
-    constexpr size_t userHivePrefixLength = ARRAYSIZE(kUserHivePrefix) - 1;
-    constexpr size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
-    return path.length() >= userHivePrefixLength + suffixLength &&
-           _wcsnicmp(path.c_str(), kUserHivePrefix, userHivePrefixLength) == 0 &&
-           _wcsnicmp(path.c_str() + path.length() - suffixLength,
-                      kKeyPathSuffix, suffixLength) == 0;
+    return IsSerializePath(path);
 }
 
 void RememberVirtualKey(HANDLE key) {
@@ -263,6 +277,7 @@ NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle,
         .Buffer = parentName.data(),
     };
     OBJECT_ATTRIBUTES parentAttributes = *objectAttributes;
+    parentAttributes.Length = sizeof(parentAttributes);
     parentAttributes.ObjectName = &parentObjectName;
 
     NTSTATUS status = useNtOpenKeyEx
@@ -296,8 +311,13 @@ NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
         NtOpenKey_orig(keyHandle, desiredAccess, objectAttributes);
     if (IsMissingStatus(status) && !(desiredAccess & kNonReadAccess) &&
         IsTargetOpen(objectAttributes)) {
-        return OpenParentAsVirtualKey(keyHandle, objectAttributes, 0, false,
-                                      status);
+        NTSTATUS virtualStatus = OpenParentAsVirtualKey(
+            keyHandle, objectAttributes, 0, false, status);
+        if (virtualStatus == STATUS_SUCCESS) {
+            Wh_Log(L"Substituting missing Serialize key (access=0x%08X)",
+                   desiredAccess);
+        }
+        return virtualStatus;
     }
     return status;
 }
@@ -314,14 +334,20 @@ NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                                        objectAttributes, openOptions);
     if (IsMissingStatus(status) && !(desiredAccess & kNonReadAccess) &&
         IsTargetOpen(objectAttributes)) {
-        return OpenParentAsVirtualKey(keyHandle, objectAttributes, openOptions,
-                                      true, status);
+        NTSTATUS virtualStatus = OpenParentAsVirtualKey(
+            keyHandle, objectAttributes, openOptions, true, status);
+        if (virtualStatus == STATUS_SUCCESS) {
+            Wh_Log(L"Substituting missing Serialize key (access=0x%08X)",
+                   desiredAccess);
+        }
+        return virtualStatus;
     }
     return status;
 }
 
 NTSTATUS NTAPI NtClose_hook(HANDLE handle) {
-    if (g_virtualKeyHandleCount.load(std::memory_order_relaxed) != 0) {
+    if (g_virtualKeyHandleCount.load(std::memory_order_relaxed) != 0 &&
+        IsVirtualKey(handle)) {
         AcquireSRWLockExclusive(&g_virtualKeyHandlesLock);
         if (g_virtualKeyHandles.erase(handle)) {
             g_virtualKeyHandleCount.fetch_sub(1, std::memory_order_relaxed);
@@ -425,6 +451,69 @@ NTSTATUS FillValueInformation(const UNICODE_STRING* valueName,
     return STATUS_INVALID_INFO_CLASS;
 }
 
+bool IsSupportedValueInformationClass(
+    KEY_VALUE_INFORMATION_CLASS informationClass) {
+    switch (informationClass) {
+        case KeyValueBasicInformation:
+        case KeyValueFullInformation:
+        case KeyValuePartialInformation:
+        case KeyValueFullInformationAlign64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+UNICODE_STRING GetTargetValueName() {
+    return {
+        .Length = static_cast<USHORT>((ARRAYSIZE(kValueName) - 1) *
+                                      sizeof(wchar_t)),
+        .MaximumLength = static_cast<USHORT>(sizeof(kValueName)),
+        .Buffer = const_cast<PWSTR>(kValueName),
+    };
+}
+
+bool IsTargetValueAtIndex(HANDLE keyHandle, ULONG index) {
+    alignas(KEY_VALUE_BASIC_INFORMATION_LOCAL) BYTE buffer[128];
+    ULONG resultLength = 0;
+    NTSTATUS status = NtEnumerateValueKey_orig(
+        keyHandle, index, KeyValueBasicInformation, buffer, sizeof(buffer),
+        &resultLength);
+    if (status != STATUS_SUCCESS && status != STATUS_BUFFER_OVERFLOW) {
+        return false;
+    }
+
+    auto info = reinterpret_cast<KEY_VALUE_BASIC_INFORMATION_LOCAL*>(buffer);
+    constexpr ULONG targetNameLength =
+        (ARRAYSIZE(kValueName) - 1) * sizeof(wchar_t);
+    constexpr ULONG nameOffset =
+        FIELD_OFFSET(KEY_VALUE_BASIC_INFORMATION_LOCAL, Name);
+    return info->NameLength == targetNameLength &&
+           resultLength >= nameOffset + targetNameLength &&
+           _wcsnicmp(info->Name, kValueName, ARRAYSIZE(kValueName) - 1) == 0;
+}
+
+bool GetValueCount(HANDLE keyHandle, ULONG* valueCount) {
+    KEY_FULL_INFORMATION_LOCAL info{};
+    ULONG resultLength = 0;
+    NTSTATUS status = NtQueryKey(keyHandle, KeyFullInformation, &info,
+                                 sizeof(info), &resultLength);
+    if (status != STATUS_SUCCESS && status != STATUS_BUFFER_OVERFLOW) {
+        return false;
+    }
+    *valueCount = info.Values;
+    return true;
+}
+
+bool ContainsTargetValue(HANDLE keyHandle, ULONG valueCount) {
+    for (ULONG index = 0; index < valueCount; index++) {
+        if (IsTargetValueAtIndex(keyHandle, index)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 NTSTATUS NTAPI NtQueryValueKey_hook(
     HANDLE keyHandle, PUNICODE_STRING valueName,
     KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
@@ -452,14 +541,8 @@ NTSTATUS NTAPI NtQueryValueKey_hook(
         return status;
     }
 
-    switch (keyValueInformationClass) {
-        case KeyValueBasicInformation:
-        case KeyValueFullInformation:
-        case KeyValuePartialInformation:
-        case KeyValueFullInformationAlign64:
-            break;
-        default:
-            return status;
+    if (!IsSupportedValueInformationClass(keyValueInformationClass)) {
+        return status;
     }
 
     status = FillValueInformation(valueName, keyValueInformationClass,
@@ -474,12 +557,43 @@ NTSTATUS NTAPI NtEnumerateValueKey_hook(
     HANDLE keyHandle, ULONG index,
     KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
     PVOID keyValueInformation, ULONG length, PULONG resultLength) {
-    if (IsVirtualKey(keyHandle)) {
-        return STATUS_NO_MORE_ENTRIES;
-    }
-    return NtEnumerateValueKey_orig(keyHandle, index,
-                                    keyValueInformationClass,
+    bool virtualKey = IsVirtualKey(keyHandle);
+    if (virtualKey) {
+        if (index != 0) {
+            return STATUS_NO_MORE_ENTRIES;
+        }
+        if (!IsSupportedValueInformationClass(keyValueInformationClass)) {
+            return STATUS_INVALID_INFO_CLASS;
+        }
+        UNICODE_STRING valueName = GetTargetValueName();
+        return FillValueInformation(&valueName, keyValueInformationClass,
                                     keyValueInformation, length, resultLength);
+    }
+
+    NTSTATUS status = NtEnumerateValueKey_orig(
+        keyHandle, index, keyValueInformationClass, keyValueInformation, length,
+        resultLength);
+    if (!IsSerializeKey(keyHandle) ||
+        !IsSupportedValueInformationClass(keyValueInformationClass)) {
+        return status;
+    }
+
+    bool targetAtIndex = IsTargetValueAtIndex(keyHandle, index);
+    if (!targetAtIndex && status != STATUS_NO_MORE_ENTRIES) {
+        return status;
+    }
+
+    if (!targetAtIndex) {
+        ULONG valueCount;
+        if (!GetValueCount(keyHandle, &valueCount) || index != valueCount ||
+            ContainsTargetValue(keyHandle, valueCount)) {
+            return status;
+        }
+    }
+
+    UNICODE_STRING valueName = GetTargetValueName();
+    return FillValueInformation(&valueName, keyValueInformationClass,
+                                keyValueInformation, length, resultLength);
 }
 
 BOOL Wh_ModInit() {
