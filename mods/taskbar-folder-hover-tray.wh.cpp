@@ -2,12 +2,12 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.25
+// @version         1.26
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -lcomctl32 -ldwmapi -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -6022,7 +6022,6 @@ void OpenSelected(HWND hWnd) {
 // the parent so the mouse capture and the hit testing share one coordinate
 // space.
 
-WNDPROC g_listOriginalProc = nullptr;
 int g_dragFrom = -1;      // Row being dragged, -1 when not dragging.
 int g_dragTo = -1;        // Insertion point currently drawn.
 bool g_dragArmed = false; // Button down, but not yet past the drag threshold.
@@ -6099,8 +6098,11 @@ void EndDrag(HWND list, bool commit) {
     }
 }
 
-LRESULT CALLBACK ListSubclassProc(HWND list, UINT msg, WPARAM wParam,
-                                  LPARAM lParam) {
+LRESULT CALLBACK ListSubclassProc(HWND list,
+                                  UINT msg,
+                                  WPARAM wParam,
+                                  LPARAM lParam,
+                                  DWORD_PTR /*dwRefData*/) {
     switch (msg) {
         // Handled here in full, never forwarded. A stock listbox runs its own
         // nested modal loop from WM_LBUTTONDOWN to track drag-selection, and
@@ -6211,7 +6213,7 @@ LRESULT CALLBACK ListSubclassProc(HWND list, UINT msg, WPARAM wParam,
             g_dragArmed = false;
             break;
     }
-    return CallWindowProcW(g_listOriginalProc, list, msg, wParam, lParam);
+    return DefSubclassProc(list, msg, wParam, lParam);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -6224,8 +6226,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     LBS_OWNERDRAWFIXED,
                 12, 12, 452, 300, hWnd, (HMENU)(INT_PTR)kIdList, instance,
                 nullptr);
-            g_listOriginalProc = (WNDPROC)SetWindowLongPtrW(
-                list, GWLP_WNDPROC, (LONG_PTR)ListSubclassProc);
+            WindhawkUtils::SetWindowSubclassFromAnyThread(list,
+                                                          ListSubclassProc, 0);
 
             struct ButtonSpec {
                 int id;
@@ -6303,11 +6305,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_DESTROY:
             // Unsubclass before the listbox goes away, so a reopened window
-            // does not chain its proc onto a stale one.
-            if (g_listOriginalProc) {
-                SetWindowLongPtrW(GetDlgItem(hWnd, kIdList), GWLP_WNDPROC,
-                                  (LONG_PTR)g_listOriginalProc);
-                g_listOriginalProc = nullptr;
+            // does not chain onto a stale subclass entry.
+            if (HWND list = GetDlgItem(hWnd, kIdList)) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                    list, ListSubclassProc);
             }
             FreeRowIcons();
             g_wnd = nullptr;
