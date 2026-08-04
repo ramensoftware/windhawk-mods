@@ -1,13 +1,12 @@
 // ==WindhawkMod==
 // @id              autohide-taskbar-on-desktop
 // @name            autohide-taskbar-on-desktop
-// @version         1.0.0
+// @version         1.0.1
 // @author          qwertyuiop00-art
 // @github          https://github.com/qwertyuiop00-art
 // @description     Hides taskbar on desktop, shows when an app is active.
 // @architecture    x86-64
-// @include         explorer.exe
-// @compilerOptions -lshell32 -luser32
+// @include         windhawk.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,17 +18,26 @@ Automatically hides the taskbar when switching to the desktop, and restores it w
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <shellapi.h>
+#include <windhawk_api.h>
 
 static HANDLE g_thread = NULL;
 static DWORD g_threadId = 0;
 static HANDLE g_readyEvent = NULL;
-static UINT g_originalState = 0;
+static int g_lastApplied = -1;
 
 void SetTaskbarAutoHide(bool enable) {
     APPBARDATA abd = { sizeof(APPBARDATA) };
-    abd.hWnd = FindWindow(L"Shell_TrayWnd", NULL);
-    abd.lParam = enable ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
-    SHAppBarMessage(ABM_SETSTATE, &abd);
+    UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+    
+    // Only flip the ABS_AUTOHIDE bit, leave others like ABS_ALWAYSONTOP alone
+    UINT newState = enable ? (state | ABS_AUTOHIDE) : (state & ~ABS_AUTOHIDE);
+    
+    if (state != newState) {
+        abd.lParam = newState;
+        SHAppBarMessage(ABM_SETSTATE, &abd);
+        Wh_Log(L"> Taskbar state changed to: %d", enable);
+    }
 }
 
 void UpdateStateForWindow(HWND hwnd) {
@@ -37,28 +45,43 @@ void UpdateStateForWindow(HWND hwnd) {
     if (!hwnd) return;
 
     WCHAR className[256] = {0};
-    GetClassNameW(hwnd, className, 256);
+    GetClassNameW(hwnd, className, ARRAYSIZE(className));
+
+    // Ignore shell flyouts and start menu to prevent visual flickering
+    if (wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+        wcscmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+        wcscmp(className, L"Shell_TrayWnd") == 0) {
+        return;
+    }
 
     bool isDesktop = (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0);
-    SetTaskbarAutoHide(isDesktop);
+    
+    // Only apply if the state has actually changed
+    if (g_lastApplied != (int)isDesktop) {
+        g_lastApplied = isDesktop;
+        SetTaskbarAutoHide(isDesktop);
+        Wh_Log(L"> Window switched. isDesktop=%d, class=%s", isDesktop, className);
+    }
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
                             LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
-    if (event == EVENT_SYSTEM_FOREGROUND) {
-        UpdateStateForWindow(hwnd);
+    // Filter to the specific window object as recommended
+    if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW ||
+        idChild != CHILDID_SELF || !hwnd) {
+        return;
     }
+    UpdateStateForWindow(hwnd);
 }
 
 DWORD WINAPI WinEventHookThread(LPVOID) {
-    // Force message queue creation to avoid PostThreadMessage race condition
     MSG msg;
+    // Force message queue creation
     PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
     
     HWINEVENTHOOK hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, 
                                          NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
 
-    // Signal readiness
     if (g_readyEvent) {
         SetEvent(g_readyEvent);
     }
@@ -74,10 +97,16 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    // Save user's original taskbar auto-hide setting
-    APPBARDATA abd = { sizeof(APPBARDATA) };
-    g_originalState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+BOOL WhTool_ModInit() {
+    Wh_Log(L"> WhTool_ModInit started");
+
+    // Lazily capture original state only once and persist it so it survives restarts
+    if (Wh_GetIntValue(L"OriginalStateSaved") != 1) {
+        APPBARDATA abd = { sizeof(APPBARDATA) };
+        UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+        Wh_SetIntValue(L"OriginalState", state);
+        Wh_SetIntValue(L"OriginalStateSaved", 1);
+    }
 
     g_readyEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!g_readyEvent) return FALSE;
@@ -88,7 +117,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Wait safely for thread message queue to initialize
     WaitForSingleObject(g_readyEvent, 3000);
     CloseHandle(g_readyEvent);
     g_readyEvent = NULL;
@@ -96,17 +124,26 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
+    Wh_Log(L"> WhTool_ModUninit started");
+    
     if (g_thread) {
-        PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 2000);
+        // Safely close thread handling race conditions
+        while (!PostThreadMessage(g_threadId, WM_QUIT, 0, 0)) {
+            Sleep(10);
+        }
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = NULL;
     }
 
-    // Restore original state
-    APPBARDATA abd = { sizeof(APPBARDATA) };
-    abd.hWnd = FindWindow(L"Shell_TrayWnd", NULL);
-    abd.lParam = g_originalState;
-    SHAppBarMessage(ABM_SETSTATE, &abd);
+    // Restore user's original taskbar state cleanly
+    if (Wh_GetIntValue(L"OriginalStateSaved") == 1) {
+        UINT originalState = (UINT)Wh_GetIntValue(L"OriginalState");
+        APPBARDATA abd = { sizeof(APPBARDATA) };
+        abd.lParam = originalState;
+        SHAppBarMessage(ABM_SETSTATE, &abd);
+        // Clear saved state so next time we capture a fresh one
+        Wh_SetIntValue(L"OriginalStateSaved", 0);
+    }
 }
