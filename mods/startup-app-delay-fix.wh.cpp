@@ -222,6 +222,9 @@ void RememberVirtualKey(HANDLE key) {
     ReleaseSRWLockExclusive(&g_virtualKeyHandlesLock);
 }
 
+// A tracked handle is only a read-only backing handle for value queries. It
+// must never be used as a real registry key for child opens or other namespace
+// operations, because it actually refers to the parent Explorer key.
 NTSTATUS OpenParentAsVirtualKey(PHANDLE keyHandle,
                                 POBJECT_ATTRIBUTES objectAttributes,
                                 ULONG openOptions, bool useNtOpenKeyEx,
@@ -284,6 +287,11 @@ constexpr ACCESS_MASK kNonReadAccess =
 
 NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                               POBJECT_ATTRIBUTES objectAttributes) {
+    if (objectAttributes && objectAttributes->RootDirectory &&
+        IsVirtualKey(objectAttributes->RootDirectory)) {
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
     NTSTATUS status =
         NtOpenKey_orig(keyHandle, desiredAccess, objectAttributes);
     if (IsMissingStatus(status) && !(desiredAccess & kNonReadAccess) &&
@@ -297,6 +305,11 @@ NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
 NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                                 POBJECT_ATTRIBUTES objectAttributes,
                                 ULONG openOptions) {
+    if (objectAttributes && objectAttributes->RootDirectory &&
+        IsVirtualKey(objectAttributes->RootDirectory)) {
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
     NTSTATUS status = NtOpenKeyEx_orig(keyHandle, desiredAccess,
                                        objectAttributes, openOptions);
     if (IsMissingStatus(status) && !(desiredAccess & kNonReadAccess) &&
