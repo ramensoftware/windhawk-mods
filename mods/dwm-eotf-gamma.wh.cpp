@@ -7,7 +7,7 @@
 // @github          https://github.com/millerpb
 // @license         GPL-3.0-or-later
 // @include         dwm.exe
-// @architecture    amd64
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
