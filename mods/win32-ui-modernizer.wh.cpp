@@ -6,12 +6,13 @@
 // @description     Modernizes legacy Win32 UI elements
 // @description:pt  Moderniza elementos antigos da interface Win32
 // @description:es  Moderniza elementos heredados de la interfaz Win32
-// @version         1.0.1
+// @version         1.0.2
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         *
 // @exclude         dwm.exe
 // @exclude         mmc.exe
+// @exclude         msiexec.exe
 // @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lgdiplus
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -31,9 +32,9 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 |:---:|:---:|
 | Control Panel | Registry Editor |
 
-| ![Navigation pane pill](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif) | ![Tab pill animation](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill%20das%20Abas.gif) | ![About Windows](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif) |
+| ![Navigation pane pill](https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif) | ![Property sheet tabs](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Abas.jpg) | ![About Windows](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif) |
 |:---:|:---:|:---:|
-| Navigation pane pill | Tab pill animation | About Windows |
+| Navigation pane pill | Property sheet tabs | About Windows |
 
 ### Features
 
@@ -47,13 +48,13 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 - **Edit focus accent line**: WinUI 3 style accent-colored line at the bottom of focused Edit controls
 - **Modern group box**: Replaces the 3D GroupBox border with a subtle rounded card background (WinUI SettingsCard style)
 - **Modern separators**: Replaces 3D embossed separators with a clean 1px semi-transparent line
-- **Rounded tab content pane**: Rounds the corners of the tab page content area with a subtle border
 - **Modern light scrollbars**: Optional modern scrollbar renderer in light mode with a white track background
 - **Drag-drop normalizer**: Replace the drag overlay with a clean anti-aliased rounded rectangle
 
 **Explorer**
-- **Rounded selection**: Rounded item backgrounds in Explorer nav pane and content area
+- **Rounded selection**: Rounded item backgrounds in Explorer nav pane and content area, with a smooth fade-in on selection
 - **Neutral selection color**: Optional neutral gray instead of accent color for TreeView/ListView/Header selection backgrounds
+- **Navigation pane item hover fade**: Smoothly fades and scales in item hover backgrounds in Explorer and file picker navigation panes
 - **Nav pane pill (DComp)**: WinUI-style animated pill indicator on the navigation pane
 - **File list pill indicator**: Pill on selected items in file lists (details/list view)
 - **Animated glyph arrows**: Smooth rotation animation for expand/collapse arrows
@@ -78,7 +79,7 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 - **ComboBox DWM**: Rounded corners and optional backdrop on dropdown lists
 
 **Property windows**
-- **Property window tab pill**: Animated DComp pill on selected tabs
+- **WinUI-style tabs**: Tab content pane reaches the dialog's real edges in an elevated color, with rounded corners and the selected tab merging seamlessly into it
 - **Dark mode**: Immersive dark title bars on property dialogs
 - **DirectUI dark mode**: Dark backgrounds for "Previous Versions" and similar DirectUI pages
 
@@ -105,6 +106,7 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 - **Dark menu bar**: UAH dark menu painting with NC bottom line fix
 - **Modern search bar**: Pill-shaped search with focus accent line
 - **Dark ListView / Header / StatusBar / Toolbar**
+- **Glyph icons in the tree view**: Replaces the This Computer and folder/key icons with Fluent-style glyphs, accent-colored when selected
 
 - Automatic light/dark mode detection
 
@@ -388,9 +390,9 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
     $name: Modern group box
     $name:pt: Caixa de grupo moderna
     $name:es: Cuadro de grupo moderno
-    $description: Replace the 3D GroupBox border with a subtle rounded card background (WinUI SettingsCard style). Also applies to boxy Static controls with a WS_EX_STATICEDGE/WS_EX_CLIENTEDGE sunken border.
-    $description:pt: Substitui a borda 3D do GroupBox por um fundo arredondado sutil (estilo SettingsCard do WinUI). Tambem se aplica a controles Static em formato de caixa com borda afundada WS_EX_STATICEDGE/WS_EX_CLIENTEDGE.
-    $description:es: Reemplaza el borde 3D del GroupBox por un fondo redondeado sutil (estilo SettingsCard de WinUI). Tambien se aplica a controles Static en forma de caja con borde hundido WS_EX_STATICEDGE/WS_EX_CLIENTEDGE.
+    $description: Replace the 3D GroupBox border with a subtle rounded card background (WinUI SettingsCard style). Also applies to boxy Static controls with a WS_EX_STATICEDGE/WS_EX_CLIENTEDGE sunken border, and to DirectUI folder-view borders inside tabbed property-sheet pages.
+    $description:pt: Substitui a borda 3D do GroupBox por um fundo arredondado sutil (estilo SettingsCard do WinUI). Tambem se aplica a controles Static em formato de caixa com borda afundada WS_EX_STATICEDGE/WS_EX_CLIENTEDGE, e as bordas de visualizacao de pastas DirectUI dentro de paginas de propriedades com abas.
+    $description:es: Reemplaza el borde 3D del GroupBox por un fondo redondeado sutil (estilo SettingsCard de WinUI). Tambien se aplica a controles Static en forma de caja con borde hundido WS_EX_STATICEDGE/WS_EX_CLIENTEDGE, y a los bordes de vista de carpetas DirectUI dentro de paginas de propiedades con pestanas.
   - ModernSeparators: TRUE
     $name: Modern separators
     $name:pt: Separadores modernos
@@ -415,20 +417,13 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
     $description: Replaces system progress bars with WinUI 3 style (rounded, solid accent fill, no gradient).
     $description:pt: Substitui as barras de progresso do sistema por estilo WinUI 3 (arredondado, preenchimento solido, sem degrad).
     $description:es: Reemplaza las barras de progreso del sistema con estilo WinUI 3 (redondeado, relleno solido, sin degradado).
-  - TabPill: FALSE
-    $name: Property window tab pill
-    $name:pt: Pill de abas em janelas de propriedades
-    $name:es: Pill de pestanas en ventanas de propiedades
-    $description: Draw an animated DComp pill indicator on the selected tab in property windows and dialogs.
-    $description:pt: Desenha uma pill DComp animada na aba selecionada de janelas de propriedades e dialogos.
-    $description:es: Dibuja una pill DComp animada en la pestana seleccionada de ventanas de propiedades y dialogos.
   - RoundedTabPane: TRUE
-    $name: Rounded tab content pane
-    $name:pt: Painel de conteudo de aba arredondado
-    $name:es: Panel de contenido de pestana redondeado
-    $description: Round the corners of the tab page content area with a subtle border.
-    $description:pt: Arredonda os cantos da area de conteudo das abas com uma borda sutil.
-    $description:es: Redondea las esquinas del area de contenido de las pestanas con un borde sutil.
+    $name: WinUI-style property window tabs
+    $name:pt: Abas em estilo WinUI em janelas de propriedades
+    $name:es: Pestanas estilo WinUI en ventanas de propiedades
+    $description: Restyle property window tabs to match WinUI, with the content pane reaching the dialog's real edges in an elevated color and the selected tab merging into it via a flat background.
+    $description:pt: Reestiliza as abas de janelas de propriedades para o padrao WinUI, com o painel de conteudo alcancando as bordas reais do dialogo em uma cor elevada e a aba selecionada se fundindo a ele com um fundo plano.
+    $description:es: Reestiliza las pestanas de ventanas de propiedades al estilo WinUI, con el panel de contenido alcanzando los bordes reales del dialogo en un color elevado y la pestana seleccionada fusionandose con el mediante un fondo plano.
   - NormalizeDragDrop: FALSE
     $name: Normalize drag-drop overlay
     $name:pt: Normalizar overlay de arrastar e soltar
@@ -466,6 +461,13 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
     $description: Rounds the selection/hover background in the Explorer navigation pane and content area (TreeView, ListView).
     $description:pt: Arredonda o fundo de selecao/hover no painel de navegacao e na area de conteudo do Explorer (TreeView, ListView).
     $description:es: Redondea el fondo de seleccion/hover en el panel de navegacion y el area de contenido del Explorador (TreeView, ListView).
+  - NavPaneHoverFade: FALSE
+    $name: Navigation pane item hover fade
+    $name:pt: Fade no hover dos itens do painel de navegacao
+    $name:es: Desvanecimiento del hover en el panel de navegacion
+    $description: Smoothly fades and scales in item hover backgrounds in Explorer and file picker navigation panes. Requires rounded selection backgrounds.
+    $description:pt: Suaviza o surgimento do fundo de hover com fade e escala nos paineis de navegacao do Explorer e das janelas seletoras. Requer fundos de selecao arredondados.
+    $description:es: Suaviza la aparicion del fondo de hover con desvanecimiento y escala en los paneles de navegacion del Explorador y de los selectores de archivos. Requiere fondos de seleccion redondeados.
   - NeutralSelection: FALSE
     $name: Neutral selection color
     $name:pt: Cor de selecao neutra
@@ -673,6 +675,13 @@ Esto es esperado — este mod usa SetSysColors para cambiar los colores del sist
     $description: Paint backgrounds black for DWM transparency. Use with Translucent Windows or similar mods.
     $description:pt: Pinta fundos de preto para transparencia DWM. Use com Translucent Windows ou mods semelhantes.
     $description:es: Pinta fondos de negro para transparencia DWM. Use con Translucent Windows o mods similares.
+  - GlyphIcons: FALSE
+    $name: Glyph icons in the tree view
+    $name:pt: Icones de glyph no tree view
+    $name:es: Iconos de glyph en el tree view
+    $description: Replace the This Computer and folder/key icons (imageres.dll 109/3/4) with Fluent-style glyphs. The selected-state icon uses the accent color, same as the Explorer navigation pane.
+    $description:pt: Substitui os icones de Este Computador e pasta/chave (imageres.dll 109/3/4) por glyphs estilo Fluent. O icone do item selecionado usa a cor de destaque, igual ao painel de navegacao do Explorador.
+    $description:es: Reemplaza los iconos de Este Equipo y carpeta/clave (imageres.dll 109/3/4) por glyphs estilo Fluent. El icono del elemento seleccionado usa el color de acento, igual que el panel de navegacion del Explorador.
   $name: -- Registry Editor --
   $name:pt: -- Editor de Registro --
   $name:es: -- Editor del Registro --
@@ -837,6 +846,16 @@ struct FPUGuard {
     (DWORD)SendMessage((hwnd), TVM_SETEXTENDEDSTYLE, (WPARAM)(mask), (LPARAM)(dw))
 #endif
 
+#ifndef TBSTYLE_EX_DOUBLEBUFFER
+#define TBSTYLE_EX_DOUBLEBUFFER 0x00000080
+#endif
+#ifndef TB_SETEXTENDEDSTYLE
+#define TB_SETEXTENDEDSTYLE (WM_USER + 84)
+#endif
+#ifndef TB_GETEXTENDEDSTYLE
+#define TB_GETEXTENDEDSTYLE (WM_USER + 85)
+#endif
+
 #ifndef CCS_NODIVIDER
 #define CCS_NODIVIDER 0x0040
 #endif
@@ -860,11 +879,11 @@ struct Settings {
     BOOL     CheckBoxAnim       = TRUE;
     BOOL     AccentRadioButtons = TRUE;
     BOOL     ProgressBars       = FALSE;
-    BOOL     TabPill            = FALSE;
     BOOL     AccentMarquee      = FALSE;
     BOOL     AccentColorize     = FALSE;
     BOOL     ExplorerSection    = TRUE;
     BOOL     RoundedSelection   = FALSE;
+    BOOL     NavPaneHoverFade   = FALSE;
     BOOL     NeutralSelection   = FALSE;
     BOOL     RemoveNavDivider   = FALSE;
     BOOL     RemoveNavDividerTW = FALSE;
@@ -913,6 +932,7 @@ struct Settings {
     // RegeditSection -- disabled by default, regedit.exe only
     BOOL     RegeditSection = FALSE;
     BOOL     RgTransparentBg = FALSE;
+    BOOL     RgGlyphIcons = FALSE;
     // WinverSection -- disabled by default, winver.exe only
     BOOL     WinverSection = FALSE;
     INT      WinverBackground = 0; // 0=solid, 1=mica, 2=micaAlt, 3=acrylic, 4=black
@@ -1056,14 +1076,16 @@ static ID2D1Factory1* g_d2dFactory = nullptr;
 // which is what most D2D paint call sites should actually use).
 static UINT g_Dpi = USER_DEFAULT_SCREEN_DPI;
 
-// Per-paint DPI resolution: prefer the real target window's own DPI (correct
-// on mixed-DPI multi-monitor setups and after a runtime DPI change), falling
-// back to the primary-monitor snapshot only when hwnd can't be resolved.
-// Mirrors the existing "hwnd ? GetDpiForWindow(hwnd) : g_Dpi" idiom already
-// used at several call sites in this file.
+// Resolve per-paint DPI from the target window; invalid or stale HWNDs fall
+// back to the initialized process DPI so geometry never collapses to zero.
 static UINT DpiForPaint(HWND hwnd)
 {
-    return hwnd ? GetDpiForWindow(hwnd) : g_Dpi;
+    if (hwnd) {
+        const UINT dpi = GetDpiForWindow(hwnd);
+        if (dpi)
+            return dpi;
+    }
+    return g_Dpi ? g_Dpi : USER_DEFAULT_SCREEN_DPI;
 }
 
 // Stroke style for checkbox checkmark animation (round caps, solid)
@@ -1350,13 +1372,27 @@ static COLORREF GetSystemAccentColor()
     return GetAccentFromPalette(dark ? 8 : 12);
 }
 
+// Native Explorer/shell dark background for an excluded process's file
+// picker -- measured (#383838), NOT the mod's own kPropDkBg shade below.
+// Hardcoded rather than sampled for the same reason kPropDkBg itself is
+// hardcoded (see its own comment a few lines down): GetPixel/SampleBackground
+// can catch a transient white frame during repaint, leaving a white fringe
+// around rounded corners until the next redraw fixes it.
+static constexpr COLORREF kNativeExcludedPickerDarkBg = RGB(0x38, 0x38, 0x38);
+
 // ── Property Window Dark Mode constants (used in DrawThemeBackground_hook) ──
 static constexpr COLORREF kPropDkBg     = RGB(0x19, 0x19, 0x19); // universal dark bg
 static HBRUSH g_propDkBgBrush = nullptr; // forward decl (defined in regedit section)
 static void SetPropertyDialogClassBrush(bool dark, HWND sample = nullptr);
+static void SetFontViewClassBrush(bool dark, HWND sample = nullptr);
 static constexpr COLORREF kPropDkScroll = RGB(0x19, 0x19, 0x19); // scrollbar track dark bg
-static constexpr COLORREF kPropDkPane   = RGB(0x19, 0x19, 0x19); // same as bg — rounded border provides separation
+static constexpr COLORREF kPropDkPane   = RGB(0x24, 0x24, 0x24); // experiment: lighter than bg for real elevation contrast (was 0x19 == bg)
 static constexpr COLORREF kPropDkText   = RGB(0xFF, 0xFF, 0xFF);
+// Light mode's counterpart to kPropDkPane -- the WinUI tab pane/edge-extension
+// fill there (TabBgCacheEnsureWinUI, TabPaneCornerColor, HandleThemeDraw's
+// TABP_PANE branch, PropLightPaneSubclassProc). Not pure white -- confirmed
+// live, real WinUI content-pane surfaces use this shade instead.
+static constexpr COLORREF kPropLightPane = RGB(0xF9, 0xF9, 0xF9);
 // One-shot marker: caption/backdrop already applied to this AeroWizard
 // window's non-client area (see HandleThemeDraw).
 static constexpr LPCWSTR kPropAeroWizardCaption = L"Win32UIModernizer.AeroWizardCaption";
@@ -1378,22 +1414,125 @@ static bool IsAeroWizardRawWindow(HWND hwnd)
     return root && GetPropW(root, kPropAeroWizardCaption);
 }
 
-// One-shot marker: a modern Explorer-style file-picker #32770 dialog hosted
-// in a dark-mode-excluded process, opted back into our real dark palette
-// despite the process-wide exclusion (see TryForceDarkExcludedFilePicker).
-static constexpr LPCWSTR kPropForceDarkFilePicker = L"Win32UIModernizer.ForceDarkFilePicker";
+// Defined later in the file (NavDivider section) -- reused as-is here rather
+// than duplicating an EnumChildWindows walk. Resolves hwnd's own root and
+// checks whether it IS or CONTAINS a NamespaceTreeControl, caching a
+// positive answer as a prop on the root window (no separate map/eviction
+// needed: the prop dies with the window, so a reused HWND value can't read
+// a stale hit). cacheNegative=false here: see this call site's own use
+// below for why a miss must NOT be cached permanently for a paint-hot-path
+// caller like this one.
+static bool NavDividerRootContainsNamespaceTree(HWND hwnd, bool cacheNegative = true);
 
-// True if hwnd's top-level ancestor is a tracked force-dark file picker.
-// Consulted by GetSysColor_hook/GetSysColorBrush_hook -- those APIs take no
-// HWND/HDC at all, so callers pass g_tlsPaintHwnd (last-BeginPaint-wins
-// thread-local; can go stale if another window on this thread paints
-// in between -- an accepted, pre-existing tradeoff already used the same
-// way elsewhere in this file, e.g. IsWindowDarkMode's fallback chain).
-static bool IsInsideForceDarkFilePicker(HWND hwnd)
+// True if hwnd's top-level ancestor is a #32770 common-dialog window that
+// hosts a NamespaceTreeControl nav pane (e.g. a modern Explorer-style file
+// picker's Open/Save dialog), in a process on the dark-mode exclusion list.
+// The NamespaceTreeControl requirement -- the same ancestry signal
+// GlyphIsNavPaneTreeView/the old TryForceDarkExcludedFilePicker both used --
+// is deliberate: without it, this would match ANY #32770 dialog in an
+// excluded process (a plain MessageBox, a Find/Replace dialog, a
+// Preferences screen), which is a much bigger surface than "the file
+// picker" and was never the intent. Used to keep such dialogs fully native
+// -- colors, glyph icons, shell-icon replacement, Explorer-family control
+// styling -- so an excluded process's file picker behaves exactly like the
+// rest of that process already does under the exclusion, with no partial
+// theming.
+static bool IsInsideExcludedFilePicker(HWND hwnd)
 {
-    if (!hwnd) return false;
+    if (!g_darkModeExcluded || !hwnd) return false;
     HWND root = GetAncestor(hwnd, GA_ROOT);
-    return root && GetPropW(root, kPropForceDarkFilePicker);
+    if (!root) return false;
+    wchar_t rootCls[64] = {};
+    if (!GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) ||
+        _wcsicmp(rootCls, L"#32770") != 0)
+        return false;
+    // cacheNegative=false: this runs from paint hot paths and can fire
+    // before the picker's NamespaceTreeControl nav pane finishes
+    // constructing -- an uncached miss just re-walks (cheaply, since few
+    // children exist yet) until the tree actually appears, instead of
+    // permanently deciding "not a file picker" from a too-early first paint.
+    return NavDividerRootContainsNamespaceTree(root, /*cacheNegative=*/false);
+}
+
+static bool IsHwndDarkMode(HWND hwnd); // defined later in the file
+
+// A child control's own dark-mode signal (props, DWM attribute walk) can be
+// wrong inside an excluded process's file picker: the picker's native frame
+// follows the real system dark-mode setting directly (Explorer/shell themes
+// it, independent of the excluded host's own dark-mode awareness), but a
+// plain child control never got its own per-control opt-in the way our
+// PropApplyDarkMode normally provides. Trust the system state directly for
+// these instead of the per-window heuristic.
+static bool IsDarkForExcludedAwarePaint(HWND hwnd)
+{
+    if (IsInsideExcludedFilePicker(hwnd))
+        return IsSystemDarkMode();
+    return IsHwndDarkMode(hwnd);
+}
+
+static bool IsWindowDarkMode(HDC hdc); // defined later in the file
+static bool IsDarkForExcludedAwarePaintHdc(HDC hdc); // defined after g_tlsPaintHwnd, later in the file
+
+// Same as g_darkModeActive, except inside an excluded process's file picker.
+// CheckDarkModeExclusion() force-sets g_darkModeActive to FALSE for the
+// whole excluded process (that's the switch that turns off our normal dark
+// styling everywhere else in it) -- but the picker's own native frame still
+// follows the real system dark setting directly, so that forced-false
+// answer is specifically wrong for elements (rebar, push-button fill/text)
+// that read g_darkModeActive straight instead of going through
+// IsCustomDarkModeAllowed(). Use this wherever such a direct read needs to
+// match the genuinely-dark native frame instead.
+static bool DarkModeActiveForPaint(HWND hwnd)
+{
+    if (IsInsideExcludedFilePicker(hwnd))
+        return IsSystemDarkMode();
+    return g_darkModeActive.load(std::memory_order_acquire);
+}
+
+// A genuine property-sheet page is a sibling of its tab control; standalone
+// WS_CHILD dialogs such as AeroWizard page hosts have no such relationship.
+static bool HasTabControlSibling(HWND hwnd)
+{
+    HWND parent = hwnd ? GetParent(hwnd) : nullptr;
+    return parent && FindWindowExW(parent, nullptr, L"SysTabControl32", nullptr) != nullptr;
+}
+
+// Nested #32770 content inherits the pane shade from the nearest ancestor
+// that is a direct sibling of the property sheet's tab control.
+static bool IsInTabbedPropertyPane(HWND hwnd)
+{
+    for (HWND current = hwnd; current; current = GetParent(current)) {
+        if (!(GetWindowLongPtrW(current, GWL_STYLE) & WS_CHILD))
+            break;
+        if (HasTabControlSibling(current))
+            return true;
+    }
+    return false;
+}
+
+static bool IsInsidePropSheetPage(HWND hwnd)
+{
+    HWND parent = hwnd ? GetParent(hwnd) : nullptr;
+    if (!parent) return false;
+    return GetPropW(parent, L"_PropDkApplied") &&
+           IsInTabbedPropertyPane(parent);
+}
+
+// Opaque dark-mode background fill color for corner/erase fills, aware of
+// whether hwnd is inside an excluded process's file picker (native shade,
+// kNativeExcludedPickerDarkBg), a property-sheet page (kPropDkPane -- the
+// same lighter elevated shade the page's own WM_CTLCOLORBTN/WM_ERASEBKGND
+// background uses, so a button's corner cutout matches what's actually
+// behind it there instead of the darker base shade), or the mod's own
+// actively-styled dark window generally (kPropDkBg). Callers still gate
+// this behind their own dark-mode check (DarkModeActiveForPaint/
+// IsDarkForExcludedAwarePaint) -- this only picks which dark shade to use,
+// not whether dark applies at all.
+static COLORREF DarkBgForPaint(HWND hwnd)
+{
+    if (IsInsideExcludedFilePicker(hwnd)) return kNativeExcludedPickerDarkBg;
+    if (IsInsidePropSheetPage(hwnd)) return kPropDkPane;
+    return kPropDkBg;
 }
 
 static std::mutex g_staticBrushCacheMutex;
@@ -1531,7 +1670,7 @@ static HWINEVENTHOOK g_cleanmgrEventHook = nullptr;
 static void CALLBACK CleanmgrWinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd,
     LONG idObject, LONG idChild, DWORD, DWORD)
 {
-    if (!g_settings.WinverSection)
+    if (!IsCustomDarkModeAllowed())
         return;
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF)
         return;
@@ -1680,6 +1819,14 @@ struct D2DThreadCache
     ID2D1GradientStopCollection* buttonBorderStops = nullptr;
     ID2D1LinearGradientBrush* buttonBorderBrush = nullptr;
     bool buttonBorderDark = false;
+    // Indeterminate-progress-bar edge mask (PaintIndeterminateProgressBar).
+    // Tied to renderTarget's identity the same way brush/brushTarget above
+    // are -- an ID2D1Layer isn't valid across a render target it wasn't
+    // created from, and this cache is per-thread, so two threads painting
+    // marquee progress bars at once never share the same layer or fight
+    // over Reset()/Attach() the way a single process-global ComPtr would.
+    ID2D1Layer* progressMarqueeMaskLayer = nullptr;
+    ID2D1RenderTarget* progressMarqueeMaskLayerRT = nullptr; // identity check only
 
     void Reset()
     {
@@ -1695,6 +1842,8 @@ struct D2DThreadCache
         if (buttonBorderBrush)  { buttonBorderBrush->Release();  buttonBorderBrush = nullptr; }
         if (buttonBorderStops)  { buttonBorderStops->Release();  buttonBorderStops = nullptr; }
         buttonBorderDark = false;
+        if (progressMarqueeMaskLayer) { progressMarqueeMaskLayer->Release(); progressMarqueeMaskLayer = nullptr; }
+        progressMarqueeMaskLayerRT = nullptr;
     }
 
     ~D2DThreadCache() { Reset(); }
@@ -1998,15 +2147,13 @@ static std::atomic<bool> g_pillDCValid{false};
 static std::atomic<bool> g_pillDCContentAttached{false};
 static std::atomic<bool> g_pillDCClearRequested{false};
 
-// PROTOTYPE: a second DComp visual, child of g_pillDC.pVisual, for icon-pop
-// content (currently wired up for GLYPH_PHONE only, to test the approach).
-// A window can only have ONE DirectComposition target -- CreateTargetForHwnd
-// on an hwnd that already has one fails with
-// DCOMPOSITION_ERROR_WINDOW_ALREADY_COMPOSED (confirmed via a standalone
-// spike), so this reuses g_pillDC's existing device/target instead of owning
-// its own; CreateVisual/CreateSurface are per-device, not per-hwnd, so a
-// second independent visual+surface from the same device is fine. Access
-// serialized by g_pillDCMutex, same as g_pillDC itself.
+// A second DComp visual, child of g_pillDC.pVisual, for icon-pop content
+// (currently wired up for GLYPH_PHONE only). A window can only have ONE
+// DirectComposition target -- CreateTargetForHwnd on an hwnd that already
+// has one fails with DCOMPOSITION_ERROR_WINDOW_ALREADY_COMPOSED, so this
+// reuses g_pillDC's existing device/target; CreateVisual/CreateSurface are
+// per-device, not per-hwnd, so a second visual+surface is fine. Serialized
+// by g_pillDCMutex.
 struct IconPopDComp {
     IDCompositionVisual2* pVisual = nullptr;
     IDCompositionSurface* pSurf   = nullptr;
@@ -2082,9 +2229,6 @@ static COLORREF                     s_pillSliceGradIndClr  = 0;
 
 // Cached DC render target for glyph rotation (glyph redrawn per-frame)
 static ID2D1DCRenderTarget* g_glyphCachedRT = nullptr;
-
-// Cached DC render target for tab pill GDI fallback
-static ID2D1DCRenderTarget* g_tabCachedRT = nullptr;
 
 // ============================================================================
 // Gradient brush helper for pill gradient fill
@@ -2684,11 +2828,9 @@ static bool IconPopDCompInit_Locked() {
     if (FAILED(hr) || !pV2) return false;
 
     // 256x256, not 64x64: DComp atlases small surfaces into a shared texture,
-    // and each BeginDraw can land in a different tile (confirmed live -- the
-    // update offset cycled 1/67/133/199, a clean 66px stride, and the
-    // composited content went blank whenever it didn't land in the tile
-    // actually being shown). A surface this size is large enough to get its
-    // own dedicated texture instead, at a trivial 256KB cost.
+    // and each BeginDraw can land in a different tile -- composited content
+    // goes blank when it doesn't land in the tile being shown. This size
+    // gets its own dedicated texture instead, at a trivial 256KB cost.
     const int w = 256, h = 256;
     IDCompositionSurface* pSurf = nullptr;
     hr = g_pillDC.pDComp->CreateSurface((UINT)w, (UINT)h,
@@ -2710,9 +2852,7 @@ static bool IconPopDCompInit_Locked() {
 
     // Prime the whole surface before any partial-rect BeginDraw is ever
     // requested on it -- mirrors PillDCompInit_Locked's own init-clear.
-    // Skipping this (the surface's very first BeginDraw was already a
-    // partial {0,0,64,64} sub-rect of the 256x256 surface) made every
-    // subsequent BeginDraw fail with E_INVALIDARG, confirmed live.
+    // Skipping this makes every subsequent BeginDraw fail with E_INVALIDARG.
     {
         RECT fullRect = {0, 0, w, h};
         IDXGISurface* pDXGISurf = nullptr; POINT off = {};
@@ -2838,7 +2978,7 @@ static bool PillDCompStartExpand_Locked(float itemCenterY, float durSec)
     }
     float scale  = (float)DpiForPaint(g_pillDC.hwnd) / USER_DEFAULT_SCREEN_DPI;
     float pillW  = 3.2f * scale;  // logical, matches PillDCompDrawFrame
-    float pillX  = 4.0f;           // logical
+    float pillX  = 0.64f * scale; // logical, matches the real pill origin (PillDCompDrawFrame_Locked)
     HRESULT hr = g_pillDC.pScale->SetCenterX(pillX + pillW / 2.0f);
     if (SUCCEEDED(hr)) hr = g_pillDC.pScale->SetCenterY(itemCenterY);
     if (SUCCEEDED(hr)) hr = g_pillDC.pScale->SetScaleX(1.0f);
@@ -2960,7 +3100,7 @@ static bool PillDCompDrawFrame_Locked(float vTop, float vBottom,
 
     bool frameDrewPill = clearing;
     if (!clearing){
-        float pillW=3.2f*scale, pillX=0.8f + (float)nestIndentPx;
+        float pillW=3.2f*scale, pillX=0.64f*scale + (float)nestIndentPx;
         if (snapStyle != 3 && snapStyle != 2)
         {
             float leadRatio = (float)(PILL_DUR / PILL_DUR_TOTAL);
@@ -3093,423 +3233,10 @@ static bool PillDCompDrawFrame_Locked(float vTop, float vBottom,
     return true;
 }
 
-// ============================================================================
-// TabDComp: DirectComposition overlay for property window tab pills
-// ============================================================================
-
-static const FLOAT TAB_PILL_FRAC = 0.40f;
-
-// Duration of the tab pill's slide transition (TabDCompStartSlide), kept
-// separate from PILL_DUR_TOTAL so tuning it doesn't affect the nav-pane pill.
-static const FLOAT TAB_PILL_SLIDE_DUR = 0.40f;
-// Fraction of TAB_PILL_SLIDE_DUR spent in the hesitant tail before catch-up
-// (0.09s at the current duration).
-static const DOUBLE TAB_PILL_SLIDE_TAIL_RATIO = 0.225;
-// Re-materialization "pop" duration used when the pill's position hasn't
-// changed but its DComp target was invalidated (e.g. accent color rebake --
-// see UpdateThemeColors). Short enough to read as instant.
-static const FLOAT TAB_PILL_REBAKE_DUR = 0.05f;
-
-struct TabDComp {
-    ID3D11Device*                pD3D    = nullptr;
-    IDXGIDevice*                 pDXGI   = nullptr;
-    IDCompositionDesktopDevice*  pDComp  = nullptr;
-    IDCompositionTarget*         pTarget = nullptr;
-    IDCompositionVisual3*        pVisual = nullptr;
-    IDCompositionScaleTransform* pScale  = nullptr;
-    IDCompositionSurface*        pSurf   = nullptr;
-    int   surfW = 0, surfH = 0;
-    HWND  hwnd  = nullptr;
-    bool  valid = false;
-};
-static TabDComp g_tabDC;
-// Protects g_tabDC: PaintTab (UI thread) and Wh_ModUninit's cleanup aren't
-// guaranteed to run on the same thread. Same pattern as g_pillDCMutex.
-static std::mutex g_tabDCMutex;
-
-static HWND  g_tabCurHWND   = nullptr;
-static FLOAT g_tabLastPillX = -1.f;
-static FLOAT g_tabLastPillY = -1.f; // tracks Y to detect row changes
-static FLOAT g_tabPrevPillX = -1.f;
-
-// Tracks the most recently committed TabDCompStartSlide so a new animation
-// that interrupts it can start from where the pill visually is right now
-// instead of snapping to the old target -- DComp doesn't expose the live
-// value of an in-flight IDCompositionAnimation. Only slides animate OffsetX
-// itself (expand/collapse set a constant offset and only animate ScaleX), so
-// this is irrelevant -- and left false -- for those.
-static DOUBLE g_tabSlideStartTime = 0.0;
-static FLOAT  g_tabSlideFromX     = 0.f;
-static FLOAT  g_tabSlideToX       = 0.f;
-static FLOAT  g_tabSlideDur       = 0.f;
-static bool   g_tabSlideInFlight  = false;
-
-// Tears down only the per-HWND target/visual/surface -- keeps the device
-// (pD3D/pDXGI/pDComp) alive so switching the owning HWND (see ownsSharedState
-// in PaintTab) doesn't pay a full D3D11CreateDevice + adapter enumeration.
-static void TabDCompReleaseTarget()
-{
-    if (g_tabDC.pTarget)
-    {
-        g_tabDC.pTarget->SetRoot(nullptr);
-        if (g_tabDC.pDComp) g_tabDC.pDComp->Commit();
-        g_tabDC.pTarget->Release(); g_tabDC.pTarget = nullptr;
-    }
-    if (g_tabDC.pVisual) { g_tabDC.pVisual->Release(); g_tabDC.pVisual = nullptr; }
-    if (g_tabDC.pScale)  { g_tabDC.pScale->Release();  g_tabDC.pScale  = nullptr; }
-    if (g_tabDC.pSurf)   { g_tabDC.pSurf->Release();   g_tabDC.pSurf   = nullptr; }
-    g_tabDC.surfW = g_tabDC.surfH = 0;
-    g_tabDC.hwnd  = nullptr;
-    g_tabDC.valid = false;
-    g_tabSlideInFlight = false; // visual is gone, nothing left to interpolate
-}
-
-// Full teardown including the device -- only for real shutdown or a
-// device-level failure (see TabDCompInit). Ownership-switch/rebake paths
-// use TabDCompReleaseTarget instead.
-static void TabDCompRelease()
-{
-    TabDCompReleaseTarget();
-    if (g_tabDC.pDComp)  { g_tabDC.pDComp->Release();  g_tabDC.pDComp  = nullptr; }
-    if (g_tabDC.pDXGI)   { g_tabDC.pDXGI->Release();   g_tabDC.pDXGI   = nullptr; }
-    if (g_tabDC.pD3D)    { g_tabDC.pD3D->Release();    g_tabDC.pD3D    = nullptr; }
-}
-
-static bool TabDCompIsDeviceLoss(HRESULT hr)
-{
-    return hr == D2DERR_RECREATE_TARGET ||
-           hr == DXGI_ERROR_DEVICE_REMOVED ||
-           hr == DXGI_ERROR_DEVICE_RESET ||
-           hr == DXGI_ERROR_DEVICE_HUNG;
-}
-
-static void TabDCompReleaseAfterFailure(HRESULT hr)
-{
-    if (TabDCompIsDeviceLoss(hr))
-        TabDCompRelease();
-    else
-        TabDCompReleaseTarget();
-}
-
-// Device-level init: D3D11 device -> DXGI device -> DComp desktop device.
-// Created once and kept alive across HWND switches -- see TabDCompReleaseTarget.
-static bool TabDCompEnsureDevice()
-{
-    if (g_tabDC.pDComp) return true;
-
-    // D3D11: reuse loaded DXGI adapter, WARP fallback
-    IDXGIAdapter* pAdapter = nullptr;
-    {
-        IDXGIFactory1* pFactory = nullptr;
-        if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1),(void**)&pFactory))) {
-            pFactory->EnumAdapters(0,&pAdapter);
-            pFactory->Release();
-        }
-    }
-    D3D_FEATURE_LEVEL fl = D3D_FEATURE_LEVEL_11_0;
-    HRESULT hr = E_FAIL;
-    if (pAdapter) {
-        hr = D3D11CreateDevice(pAdapter, D3D_DRIVER_TYPE_UNKNOWN, nullptr,
-            D3D11_CREATE_DEVICE_BGRA_SUPPORT, &fl, 1, D3D11_SDK_VERSION,
-            &g_tabDC.pD3D, nullptr, nullptr);
-        pAdapter->Release();
-    }
-    if (FAILED(hr))
-        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-            D3D11_CREATE_DEVICE_BGRA_SUPPORT, &fl, 1, D3D11_SDK_VERSION,
-            &g_tabDC.pD3D, nullptr, nullptr);
-    if (FAILED(hr)) return false;
-    hr = g_tabDC.pD3D->QueryInterface(__uuidof(IDXGIDevice), (void**)&g_tabDC.pDXGI);
-    if (FAILED(hr)) { TabDCompRelease(); return false; }
-    using DCompCreate2_t = HRESULT(WINAPI*)(IUnknown*,REFIID,void**);
-    HMODULE hDComp = GetModuleHandleW(L"dcomp.dll");
-    if (!hDComp) hDComp = LoadLibraryExW(L"dcomp.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);
-    auto pfnDComp = hDComp?(DCompCreate2_t)GetProcAddress(hDComp,"DCompositionCreateDevice2"):nullptr;
-    if (!pfnDComp){TabDCompRelease();return false;}
-    hr = pfnDComp(g_tabDC.pDXGI, __uuidof(IDCompositionDesktopDevice), (void**)&g_tabDC.pDComp);
-    if (FAILED(hr)) { TabDCompRelease(); return false; }
-    return true;
-}
-
-// Returns true on success. Reinitializes the per-HWND target if HWND or pill
-// size changed -- the device (see TabDCompEnsureDevice) is created once and
-// reused across HWND switches (sibling property sheets taking turns owning
-// the pill don't each pay a full D3D11CreateDevice + adapter enumeration).
-// +2px on both dimensions for D2D antialiasing room at all four edges.
-static bool TabDCompInit(HWND hwnd, float pillW, float pillH,
-                         float accentR, float accentG, float accentB)
-{
-    int iW = (int)ceilf(pillW) + 2, iH = (int)ceilf(pillH) + 2;
-    if (g_tabDC.valid && g_tabDC.hwnd == hwnd &&
-        iW == g_tabDC.surfW && iH == g_tabDC.surfH)
-        return true;
-
-    if (!TabDCompEnsureDevice()) return false;
-    TabDCompReleaseTarget();
-
-    HRESULT hr = g_tabDC.pDComp->CreateTargetForHwnd(hwnd, TRUE, &g_tabDC.pTarget);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    {
-        IDCompositionVisual2* pV2 = nullptr;
-        hr = g_tabDC.pDComp->CreateVisual(&pV2);
-        if (FAILED(hr) || !pV2) { TabDCompReleaseAfterFailure(hr); return false; }
-        hr = pV2->QueryInterface(
-            __uuidof(IDCompositionVisual3), (void**)&g_tabDC.pVisual);
-        pV2->Release();
-        if (FAILED(hr) || !g_tabDC.pVisual) {
-            TabDCompReleaseAfterFailure(hr);
-            return false;
-        }
-    }
-    hr = g_tabDC.pDComp->CreateScaleTransform(&g_tabDC.pScale);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    // CenterX/Y include +1px margin so scaling is centered on the actual pill
-    hr = g_tabDC.pScale->SetScaleX(0.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleY(1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetCenterX(1.0f + pillW / 2.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetCenterY(1.0f + pillH / 2.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pVisual->SetTransform(g_tabDC.pScale);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-
-    hr = g_tabDC.pDComp->CreateSurface((UINT)iW, (UINT)iH,
-        DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_ALPHA_MODE_PREMULTIPLIED, &g_tabDC.pSurf);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    g_tabDC.surfW = iW; g_tabDC.surfH = iH;
-
-    // Draw pill 1px inset from surface edges
-    if (!g_d2dFactory) { TabDCompReleaseTarget(); return false; }
-    bool drawOK = false;
-    HRESULT drawHr = E_FAIL;
-    {
-        RECT fullRect = {0, 0, iW, iH};
-        IDXGISurface* pDXGI2 = nullptr; POINT off = {};
-        HRESULT beginHr = g_tabDC.pSurf->BeginDraw(
-            &fullRect, __uuidof(IDXGISurface), (void**)&pDXGI2, &off);
-        if (SUCCEEDED(beginHr))
-        {
-            if (pDXGI2)
-            {
-                D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
-                    D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                    D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
-                ID2D1RenderTarget* pRT = nullptr;
-                drawHr = g_d2dFactory->CreateDxgiSurfaceRenderTarget(pDXGI2, &rtp, &pRT);
-                if (SUCCEEDED(drawHr) && pRT)
-                {
-                    pRT->SetTransform(D2D1::Matrix3x2F::Translation((float)off.x, (float)off.y));
-                    pRT->BeginDraw();
-                    pRT->Clear(D2D1::ColorF(0,0,0,0));
-                    float r = (float)(iH - 2) / 2.0f;
-                    D2D1_ROUNDED_RECT tabRR = D2D1::RoundedRect(
-                        D2D1::RectF(1.f, 1.f, (float)iW - 1.f, (float)iH - 1.f), r, r);
-                    if (g_settings.NavPillGradient)
-                    {
-                        COLORREF baseC = GetAccentFromPalette(12);
-                        COLORREF indC  = GetAccentIndicator();
-                        D2D1_GRADIENT_STOP stops[2] = {
-                            { 0.0f, D2D1::ColorF(GetRValue(baseC)/255.f, GetGValue(baseC)/255.f, GetBValue(baseC)/255.f) },
-                            { 1.0f, D2D1::ColorF(GetRValue(indC)/255.f, GetGValue(indC)/255.f, GetBValue(indC)/255.f) }
-                        };
-                        ID2D1GradientStopCollection* pStops = nullptr;
-                        drawHr = pRT->CreateGradientStopCollection(stops, 2, &pStops);
-                        if (SUCCEEDED(drawHr) && pStops) {
-                            ID2D1LinearGradientBrush* pGr = nullptr;
-                            drawHr = pRT->CreateLinearGradientBrush(
-                                D2D1::LinearGradientBrushProperties(
-                                    D2D1::Point2F(1.f, 0.f), D2D1::Point2F((float)iW - 1.f, 0.f)),
-                                pStops, &pGr);
-                            if (SUCCEEDED(drawHr) && pGr) {
-                                pRT->FillRoundedRectangle(tabRR, pGr);
-                                drawOK = true;
-                            }
-                            if (pGr) pGr->Release();
-                            pStops->Release();
-                        }
-                    }
-                    else
-                    {
-                        D2D1_COLOR_F ac = D2D1::ColorF(accentR, accentG, accentB, 1.0f);
-                        ID2D1SolidColorBrush* pBr = nullptr;
-                        drawHr = pRT->CreateSolidColorBrush(ac, &pBr);
-                        if (SUCCEEDED(drawHr) && pBr) {
-                            pRT->FillRoundedRectangle(tabRR, pBr);
-                            drawOK = true;
-                        }
-                        if (pBr) pBr->Release();
-                    }
-                    HRESULT endHr = pRT->EndDraw();
-                    if (FAILED(endHr)) {
-                        drawHr = endHr;
-                        drawOK = false;
-                    }
-                    pRT->Release();
-                }
-                pDXGI2->Release();
-            }
-            HRESULT surfaceEndHr = g_tabDC.pSurf->EndDraw();
-            if (FAILED(surfaceEndHr)) {
-                drawHr = surfaceEndHr;
-                drawOK = false;
-            }
-        }
-        else
-            drawHr = beginHr;
-    }
-    if (!drawOK) { TabDCompReleaseAfterFailure(drawHr); return false; }
-
-    hr = g_tabDC.pVisual->SetContent(g_tabDC.pSurf);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pTarget->SetRoot(g_tabDC.pVisual);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pDComp->Commit();
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    g_tabDC.hwnd  = hwnd;
-    g_tabDC.valid = true;
-    return true;
-}
-
-// Expand pill at (pillX, pillY) via GPU-native IDCompositionAnimation (ScaleX 0->1).
-// EaseOutBackGentle: f(tau) = 4.2*tau - 5.4*tau^2 + 2.2*tau^3, ~5% overshoot
-static bool TabDCompStartExpand(float pillX, float pillY, float, float,
-                                float durSec)
-{
-    if (!g_tabDC.valid || !g_tabDC.pScale || !g_tabDC.pDComp) return false;
-    HRESULT hr = g_tabDC.pVisual->SetOffsetX(pillX - 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pVisual->SetOffsetY(pillY - 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleY(1.0f);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    g_tabSlideInFlight = false; // offsetX is a constant here, not animated
-
-    Microsoft::WRL::ComPtr<IDCompositionAnimation> anim;
-    hr = g_tabDC.pDComp->CreateAnimation(&anim);
-    double D = (double)durSec;
-    if (SUCCEEDED(hr)) hr = anim->AddCubic(
-        0.0, 0.0, (float)(4.2/D), (float)(-5.4/(D*D)),
-        (float)(2.2/(D*D*D)));
-    if (SUCCEEDED(hr)) hr = anim->End(D, 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleX(anim.Get());
-    if (SUCCEEDED(hr)) hr = g_tabDC.pDComp->Commit();
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    return true;
-}
-
-// Hides the pill instantly (ScaleX snaps to 0), waits tWait, then expands at
-// the new position with EaseOutBackGentle. Used for adjacent/aligned tabs
-// (close horizontal distance) -- this deliberately pops out/in rather than
-// sliding from the old position; TabDCompStartSlide handles the slide case.
-static bool TabDCompCollapseExpand(float pillX, float pillY, float pillW,
-                                    float tWait, float tExpand)
-{
-    if (!g_tabDC.valid || !g_tabDC.pScale || !g_tabDC.pDComp) return false;
-
-    // Position at destination immediately (invisible while ScaleX=0)
-    HRESULT hr = g_tabDC.pVisual->SetOffsetX(pillX - 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pVisual->SetOffsetY(pillY - 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleY(1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetCenterX(1.0f + pillW / 2.0f);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    g_tabSlideInFlight = false; // offsetX is a constant here, not animated
-
-    double T1 = (double)tWait;
-    double T2 = (double)tExpand;
-
-    // ScaleX: 0 immediately, wait T1, then expand with EaseOutBackGentle
-    Microsoft::WRL::ComPtr<IDCompositionAnimation> anim;
-    hr = g_tabDC.pDComp->CreateAnimation(&anim);
-    if (SUCCEEDED(hr))
-        hr = anim->AddCubic(0.0, 0.0f, 0, 0, 0); // constant 0 during T1
-    if (SUCCEEDED(hr))
-        hr = anim->AddCubic((float)T1, 0.0f,
-            (float)(4.2  / T2),
-            (float)(-5.4 / (T2*T2)),
-            (float)(2.2  / (T2*T2*T2)));
-    if (SUCCEEDED(hr)) hr = anim->End(T1+T2, 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleX(anim.Get());
-    if (SUCCEEDED(hr)) hr = g_tabDC.pDComp->Commit();
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-    return true;
-}
-
-// Evaluates the same two-phase cubic TabDCompStartSlide below builds, at
-// elapsed time t (seconds) since that slide was committed. DComp doesn't
-// expose the live value of an in-flight IDCompositionAnimation, so a caller
-// that needs to interrupt an ongoing slide (see g_tabSlideInFlight and its
-// use in PaintTab) recomputes it here from the same closed-form coefficients
-// instead of snapping to prevX or pillX.
-static float TabDCompEvalSlideX(float prevX, float pillX, float durSec, float t)
-{
-    double delta = (double)(pillX - prevX);
-    double T     = (double)durSec;
-    double inset = -1.0;
-    double f1    = 0.25;
-    double t1    = T * TAB_PILL_SLIDE_TAIL_RATIO;
-    double t2    = T - t1;
-
-    double kc = delta * f1 / (t1*t1*t1);
-    double B  = delta * 3.0 * f1 / t1;
-    double R  = (delta*(1.0-f1) - B*t2) / (t2*t2);
-    double S  = -B / t2;
-    double d  = (S - 2.0*R) / t2;
-    double c  = R - d*t2;
-
-    double tt = (double)t;
-    if (tt <= 0.0) return (float)((double)prevX + inset);
-    if (tt >= T)   return (float)((double)pillX + inset);
-    if (tt < t1)
-        return (float)((double)prevX + inset + kc*tt*tt*tt);
-    double u = tt - t1;
-    return (float)((double)prevX + inset + delta*f1 + B*u + c*u*u + d*u*u*u);
-}
-
-// Smooth slide with elastic tail: phase 1 (TAB_PILL_SLIDE_TAIL_RATIO of time)
-// covers 25% of distance with pure cubic (hesitation). Phase 2 (the rest)
-// catches up with smooth Hermite cubic.
-static bool TabDCompStartSlide(float prevX, float pillX, float pillY,
-                                float pillW, float /*pillH*/, float durSec)
-{
-    if (!g_tabDC.valid || !g_tabDC.pScale || !g_tabDC.pDComp) return false;
-
-    HRESULT hr = g_tabDC.pVisual->SetOffsetY(pillY - 1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleX(1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetScaleY(1.0f);
-    if (SUCCEEDED(hr)) hr = g_tabDC.pScale->SetCenterX(1.0f + pillW / 2.0f);
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-
-    double delta = (double)(pillX - prevX);
-    double T     = (double)durSec;
-    double inset = -1.0;
-    double f1    = 0.25;       // 25% of distance in phase 1
-    double t1    = T * TAB_PILL_SLIDE_TAIL_RATIO; // visible slow tail at start
-    double t2    = T - t1;
-
-    // Phase 1: pure cubic -- slope=0 at t=0, accelerates within phase
-    double kc = delta * f1 / (t1*t1*t1);
-    // Phase 2: Hermite cubic -- very high velocity at start, smooth at end
-    double B = delta * 3.0 * f1 / t1;
-    double R = (delta*(1.0-f1) - B*t2) / (t2*t2);
-    double S = -B / t2;
-    double d = (S - 2.0*R) / t2;
-    double c = R - d*t2;
-
-    Microsoft::WRL::ComPtr<IDCompositionAnimation> anim;
-    hr = g_tabDC.pDComp->CreateAnimation(&anim);
-    if (SUCCEEDED(hr))
-        hr = anim->AddCubic(0.0,
-            (float)((double)prevX + inset), 0.0f, 0.0f, (float)kc);
-    if (SUCCEEDED(hr))
-        hr = anim->AddCubic((float)t1,
-            (float)((double)prevX + inset + delta*f1),
-            (float)B, (float)c, (float)d);
-    if (SUCCEEDED(hr)) hr = anim->End(T, (float)((double)pillX + inset));
-    if (SUCCEEDED(hr)) hr = g_tabDC.pVisual->SetOffsetX(anim.Get());
-    if (SUCCEEDED(hr)) hr = g_tabDC.pDComp->Commit();
-    if (FAILED(hr)) { TabDCompReleaseAfterFailure(hr); return false; }
-
-    g_tabSlideStartTime = TimerGetSeconds();
-    g_tabSlideFromX     = prevX;
-    g_tabSlideToX       = pillX;
-    g_tabSlideDur       = durSec;
-    g_tabSlideInFlight  = true;
-    return true;
-}
+// Serializes g_tabBgCacheWinUI (see TabBgCacheEnsureWinUI/TabBgCacheClearWinUI)
+// between PaintTab (UI thread) and Wh_ModUninit's cleanup path, which aren't
+// guaranteed to run on the same thread.
+static std::mutex g_tabBgMutex;
 
 // ============================================================================
 // CheckBox animation
@@ -3660,14 +3387,11 @@ static void CheckAnims_Cleanup()
 {
     // RemoveWindowSubclassFromAnyThread is a synchronous cross-thread
     // SendMessage, and CheckBoxSubclassProc takes g_checkAnimsMutex at the
-    // top of every message it handles. Holding the lock across that call (as
-    // this used to) deadlocks whenever the checkbox lives on a different
-    // thread than Wh_ModUninit: this thread blocks in SendMessage waiting
-    // for the owning thread to pump it, while that thread blocks inside
-    // CheckBoxSubclassProc waiting for the mutex this thread still holds.
-    // Copy the HWNDs out and release the lock first -- same pattern as
-    // ButtonPopCleanup/BreadcrumbChevronCleanup/PlacesBarCleanup/
-    // TabPillRemoveAll/AuxiliarySubclassCleanup.
+    // top of every message it handles. Holding the lock across that call
+    // deadlocks whenever the checkbox lives on a different thread than
+    // Wh_ModUninit. Copy the HWNDs out and release the lock first -- same
+    // pattern as ButtonPopCleanup/BreadcrumbChevronCleanup/PlacesBarCleanup/
+    // TabFlickerFixRemoveAll/AuxiliarySubclassCleanup.
     std::vector<HWND> owners;
     {
         std::lock_guard<std::recursive_mutex> lk(g_checkAnimsMutex);
@@ -3880,14 +3604,10 @@ static bool PinDrawGlyph(HDC hdc, const RECT& rc, COLORREF cr, bool filled)
     constexpr wchar_t kPinGlyph = L'\uE718';
     const int fontSize = ((rc.bottom - rc.top) * 7) / 10;
     if (filled) {
-        // Filled body first, then the outline glyph drawn unconditionally
-        // below on top of it, in the same color/DC (DrawGlyphDW doesn't
-        // clear its target, so this composes like the two sequential
-        // DrawTextW calls the pre-DirectWrite GDI code used here) -- the
-        // outline's stroke sits right at the silhouette's edge, giving the
-        // filled shape a crisper boundary than its own antialiased edge
-        // alone. Lost when this function was rewritten for DirectWrite;
-        // restored here.
+        // Filled body first, then the outline glyph drawn unconditionally on
+        // top, in the same color/DC (DrawGlyphDW doesn't clear its target) --
+        // the outline's stroke sits at the silhouette's edge, giving the
+        // filled shape a crisper boundary than its own antialiased edge alone.
         wchar_t buf2[2] = { L'\uE841', 0 };
         if (!DrawGlyphDW(hdc, rc, cr, buf2, fontSize, 1.0f))
             return false;
@@ -4336,17 +4056,18 @@ static HIMAGELIST NavMetricsBuildNormalList(HIMAGELIST src, bool useWinUIMetrics
             }
         }
 
-        HBITMAP hMask = transparentIcons
-            ? CreateAlphaZeroMaskBitmap(cellW, cellH, bits)
-            : nullptr;
         SelectObject(hDC, hPrev);
         // A black chroma key is unreliable when comctl32 converts a 32-bit
-        // list under DPI virtualization: some hosts preserve RGB but lose
-        // alpha, exposing the empty cell as a black rectangle. Pair zero
-        // alpha with an explicit 1-bit mask, as the pin image list does.
-        int added = transparentIcons
-            ? (hMask ? ImageList_Add(dst, hBmp, hMask) : -1)
-            : ImageList_Add(dst, hBmp, nullptr);
+        // list under DPI virtualization -- some hosts preserve RGB but lose
+        // alpha, exposing the empty cell as a black rectangle (this is what
+        // caused black squares behind normal icons with WinUI nav-pane
+        // metrics and glyphs off). Pair zero alpha with an explicit 1-bit
+        // mask, as the pin image list does. Needed regardless of
+        // transparentIcons -- a real drawn icon's own masked-out background
+        // pixels are zero-alpha too (from the ZeroMemory before DrawIconEx),
+        // so it hits the same failure mode if added with hbmMask=NULL.
+        HBITMAP hMask = CreateAlphaZeroMaskBitmap(cellW, cellH, bits);
+        int added = hMask ? ImageList_Add(dst, hBmp, hMask) : -1;
         if (hMask)
             DeleteObject(hMask);
         if (added == -1)
@@ -4611,14 +4332,19 @@ static int NavMetricsGetIconDrawLeft(HWND tv, int cellLeft, int artW, int cellAr
 static bool GlyphIsNavPaneTreeView(HWND hwnd);
 static bool GlyphIsTracked(HWND hwnd);
 static void TreeCursorTrySubclass(HWND hwnd);
+static void NavHoverFadeInvalidateItem(HWND hwnd, HTREEITEM deletedItem);
+static void ListSelectFadeInvalidateItem(HWND hwndFrom, ULONG_PTR itemId, bool isTreeView);
+static void ListSelectFadeResyncWindow(HWND hwndFrom);
+static void ListSelectFadeStartItem(HWND hwndFrom, ULONG_PTR itemId, bool isTreeView);
+static void ListSelectFadeInvalidateWindowItems(HWND hwndFrom);
 static void PropApplyDarkMode(HWND hwnd);
-static void TryForceDarkExcludedFilePicker(HWND navPaneTreeHwnd);
 static bool IsClassicPlacesBarToolbar(HWND hwndFrom);
 static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd);
 static void GlyphEnsureMap();
 static const wchar_t* GlyphResolveItem(int imageIndex, const wchar_t* text, bool selected);
 static const wchar_t* GlyphGetForItem(HWND tv, HTREEITEM hItem, bool selected = false);
 static bool DrawSvgGlyph(HDC hdc, const RECT& rc, COLORREF cr, wchar_t ch, bool filled, bool inCabinetWClass = true, float extraScale = 1.0f, float popAnimT = -1.0f);
+static COLORREF GlyphSampleEraseColor(HDC hdc, const RECT& rc, bool dark);
 static bool SvgGlyphGeometryAvailable(wchar_t ch, bool filled);
 static void DrawSvgGlyphCore(ID2D1RenderTarget* rt, const RECT& rc, COLORREF cr,
                              wchar_t ch, bool filled, bool inCabinetWClass,
@@ -4959,9 +4685,9 @@ static bool IsTravelBandToolbarCustomDraw(HWND notifyTarget, const NMHDR* nm)
            _wcsicmp(rootCls, L"NativeHWNDHost") == 0;
 }
 
-static COLORREF TravelBandEraseColor()
+static COLORREF TravelBandEraseColor(HWND hwndCtx)
 {
-    const bool dark = g_darkModeActive;
+    const bool dark = DarkModeActiveForPaint(hwndCtx);
     if (g_settings.RebarMicaTint && IsSystemTransparencyEnabled()) {
         auto blend = [](COLORREF base, COLORREF overlay, float alpha) -> COLORREF {
             alpha = std::clamp(alpha, 0.f, 1.f);
@@ -4984,6 +4710,9 @@ static COLORREF TravelBandEraseColor()
     }
 
     // No mica tint: fixed colors instead of a queried/sampled background.
+    // Unlike the button corner fills (PaintPushButton, command-link), this
+    // area's native dark shade coincides with kPropDkBg even inside an
+    // excluded process's file picker, so no DarkBgForPaint split is needed.
     return dark ? kPropDkBg
                 : RGB(0xFF, 0xFF, 0xFF);
 }
@@ -5007,12 +4736,51 @@ static const wchar_t GLYPH_DLG_VIEW[]      = L"\uE8A9";
 // there), so this BeginPaint-hook-set fallback is required, not optional.
 static thread_local HWND g_tlsPaintHwnd = nullptr; // BeginPaint hook sets this
 
-// DpiForPaint (see its own declaration near g_Dpi) for call sites that only
-// have an HDC -- same g_tlsPaintHwnd-first, WindowFromDC(hdc)-fallback idiom
-// used by IsDarkForExcludedAwarePaintHdc and throughout this file.
+// Same idea as IsDarkForExcludedAwarePaint, for call sites that only have an
+// HDC and originally called IsWindowDarkMode(hdc) directly (no pre-existing
+// hwnd variable). IsWindowDarkMode's own hwnd resolution is WindowFromDC(hdc)
+// first, then t_currentCheckHWND, then g_tlsPaintHwnd last -- a DIFFERENT
+// order than the g_tlsPaintHwnd-first idiom used elsewhere in this file, so
+// approximating it by hand here risked a behavior change for every process,
+// not just excluded ones, if WindowFromDC(hdc) and g_tlsPaintHwnd ever
+// disagree. Calling IsWindowDarkMode(hdc) itself in the non-excluded branch
+// keeps that path byte-for-byte identical to before; only the
+// IsInsideExcludedFilePicker check uses an approximate hwnd, which is safe
+// because it evaluates false regardless of exact hwnd precision for any
+// non-excluded process, light mode, or real Explorer window.
+static bool IsDarkForExcludedAwarePaintHdc(HDC hdc)
+{
+    HWND approxHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
+    if (IsInsideExcludedFilePicker(approxHwnd))
+        return IsSystemDarkMode();
+    return IsWindowDarkMode(hdc);
+}
+
+// Prefer the DC window; validate the tracked HWND because popup recreation can
+// leave it stale, and a zero DPI would collapse scaled geometry.
 static UINT DpiForPaintHdc(HDC hdc)
 {
-    return DpiForPaint(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc));
+    if (hdc) {
+        if (HWND hwnd = WindowFromDC(hdc)) {
+            const UINT dpi = GetDpiForWindow(hwnd);
+            if (dpi)
+                return dpi;
+        }
+    }
+
+    if (g_tlsPaintHwnd) {
+        const UINT dpi = GetDpiForWindow(g_tlsPaintHwnd);
+        if (dpi)
+            return dpi;
+    }
+
+    if (hdc) {
+        const int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+        if (dpi > 0)
+            return static_cast<UINT>(dpi);
+    }
+
+    return DpiForPaint(nullptr);
 }
 
 // Edit-class-only, promptly-cleared counterpart to g_tlsPaintHwnd. Set by
@@ -5466,13 +5234,15 @@ static void PaintTravelBandToolbarItem(const NMCUSTOMDRAW* cd)
     if (rc.right <= rc.left || rc.bottom <= rc.top)
         return;
 
-    HBRUSH bgBrush = CreateSolidBrush(TravelBandEraseColor());
+    HBRUSH bgBrush = CreateSolidBrush(TravelBandEraseColor(
+        g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc)));
     if (bgBrush) {
         FillRect(cd->hdc, &rc, bgBrush);
         DeleteObject(bgBrush);
     }
 
-    const bool dark = g_darkModeActive;
+    const bool dark = DarkModeActiveForPaint(
+        g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc));
     const float scale = (float)DpiForPaintHdc(cd->hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     const float alpha = pressed ? (dark ? 0.050f : 0.040f)
                                 : (dark ? 0.085f : 0.060f);
@@ -5568,7 +5338,8 @@ static void PaintTravelBandToolbarItem(const NMCUSTOMDRAW* cd)
             // convention) -- the hover/press highlight fill drawn behind the
             // glyph already carries that state feedback.
             COLORREF textClr = disabled
-                ? TravelBandBlendOverErase(glyph, TravelBandEraseColor())
+                ? TravelBandBlendOverErase(glyph, TravelBandEraseColor(
+                      g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc)))
                 : (dark ? RGB(255, 255, 255) : RGB(25, 26, 26));
             HGDIOBJ oldFont = SelectObject(cd->hdc, iconFont);
             int oldBkMode = SetBkMode(cd->hdc, TRANSPARENT);
@@ -5708,13 +5479,15 @@ static void PaintUpBandToolbarItem(const NMCUSTOMDRAW* cd)
     if (rc.right <= rc.left || rc.bottom <= rc.top)
         return;
 
-    HBRUSH bgBrush = CreateSolidBrush(TravelBandEraseColor());
+    HBRUSH bgBrush = CreateSolidBrush(TravelBandEraseColor(
+        g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc)));
     if (bgBrush) {
         FillRect(cd->hdc, &rc, bgBrush);
         DeleteObject(bgBrush);
     }
 
-    const bool dark = g_darkModeActive;
+    const bool dark = DarkModeActiveForPaint(
+        g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc));
     const float scale = (float)DpiForPaintHdc(cd->hdc) / (float)USER_DEFAULT_SCREEN_DPI;
     const float alpha = pressed ? (dark ? 0.050f : 0.040f)
                                 : (dark ? 0.085f : 0.060f);
@@ -5782,7 +5555,8 @@ static void PaintUpBandToolbarItem(const NMCUSTOMDRAW* cd)
     if (TravelBandUseIconFont(fontSize, [&](HFONT iconFont) {
         pRT->EndDraw();
         COLORREF textClr = disabled
-            ? TravelBandBlendOverErase(glyph, TravelBandEraseColor())
+            ? TravelBandBlendOverErase(glyph, TravelBandEraseColor(
+                  g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc)))
             : (dark ? RGB(255, 255, 255) : RGB(25, 26, 26));
         HGDIOBJ oldFont = SelectObject(cd->hdc, iconFont);
         int oldBkMode = SetBkMode(cd->hdc, TRANSPARENT);
@@ -5942,7 +5716,8 @@ static void PaintRefreshGlyphOverlay(const NMCUSTOMDRAW* cd)
         animElapsed = ButtonPopTrigger(toolbarHwnd, kRefreshCommand, pressed, kRefreshSpinDur, &glyphRc);
     }
 
-    const bool dark = g_darkModeActive;
+    const bool dark = DarkModeActiveForPaint(
+        g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc));
     D2D1_COLOR_F glyph = disabled
         ? (dark ? D2D1::ColorF(1.f, 1.f, 1.f, 0.24f)
                 : D2D1::ColorF(0.f, 0.f, 0.f, 0.24f))
@@ -6065,35 +5840,16 @@ static bool HandleRefreshToolbarCustomDraw(HWND notifyTarget, NMHDR* nm, LRESULT
 static bool IsWindowDarkMode(HDC hdc);
 
 // ── Breadcrumb root/overflow chevron ────────────────────────────────────
-// The breadcrumb's leftmost item (icon + implicit dropdown chevron, same
-// idCommand whether it's showing the actual root or has become the "more
-// locations" overflow indicator) draws itself in two NM_CUSTOMDRAW passes:
-// a full-item stage for the icon (already dark-mode correct, since it goes
-// through the toolbar's own default AllowDarkModeForWindow-aware path),
-// then a narrow CDDS_SUBITEM pass for just the chevron. That second pass
-// answers CDRF_DODEFAULT while the address bar has room -- comctl32's own
-// default draw handles it, correctly dark. Once the bar can't fit every
-// segment, the same pass answers CDRF_SKIPDEFAULT instead: the breadcrumb
-// draws the chevron itself, through a path that ignores dark mode entirely.
-// Confirmed live (both states logged): identical rect/geometry, only the
-// return value and resulting color differ. Native is always called first
-// and its result is always forwarded unchanged -- only the pixels are
-// patched, and CDRF_SKIPDEFAULT is what marks the one state where a patch
-// is needed at all. The patch itself now runs in both themes (see below):
-// it replaces the native glyph with a deliberate ellipsis restyle, not
-// just a dark-mode color correction anymore.
-// Replaces the glyph outright with a plain "more" ellipsis instead of
-// reproducing the per-segment chevron's rotating dropdown-arrow look --
-// clearer for an overflow indicator, and side-steps needing to track the
-// flyout's open/closed state at all (TB_GETSTATE's TBSTATE_PRESSED does not
-// reliably reflect it for this control, confirmed live). A static glyph
-// needs no such signal, so there's no rotation/expanded state here. Press
-// feedback is still given, just from a different, more direct source: the
-// physical mouse-button state via GetKeyState, not comctl32's own per-button
-// bookkeeping -- reliable for "is the button down right now", which is all
-// a non-animated glyph needs. Runs in both themes, not just dark -- the
-// ellipsis is a deliberate style choice here, not a dark-mode-only patch
-// like the erase/redraw itself started as.
+// Draws in two NM_CUSTOMDRAW passes: a full-item stage for the icon, then a
+// narrow CDDS_SUBITEM pass for the chevron. That pass answers CDRF_DODEFAULT
+// (native, correctly dark) while there's room, or CDRF_SKIPDEFAULT (ignores
+// dark mode) once crowded -- only the latter case gets patched here, and
+// native is still called first with its result forwarded unchanged. The
+// patch replaces the chevron with a static "more" ellipsis in both themes
+// (not just dark), since that reads clearer for an overflow indicator and
+// avoids tracking the flyout's open/closed state. Press feedback comes from
+// GetKeyState against a live hit-test rather than TBSTATE_PRESSED, which
+// doesn't reliably reflect this control's state.
 static void PaintBreadcrumbRootChevronOverlay(const NMCUSTOMDRAW* cd, HWND toolbar)
 {
     if (!cd || !cd->hdc || !g_d2dFactory || !toolbar)
@@ -6106,10 +5862,9 @@ static void PaintBreadcrumbRootChevronOverlay(const NMCUSTOMDRAW* cd, HWND toolb
         return;
 
     // cd->uItemState's bits are the breadcrumb's own private encoding for
-    // the CDDS_SUBITEM stage (confirmed by probing live: values seen there
-    // don't line up with standard CDIS_HOT meaning) -- hot is resolved
+    // the CDDS_SUBITEM stage, not standard CDIS_HOT -- hot is resolved
     // independently instead, via a live hit-test against the button's own
-    // rect, the same technique the diagnostic probe used to find this bug.
+    // rect.
     RECT buttonRc = {};
     SendMessageW_orig(toolbar, TB_GETITEMRECT, 0,
         reinterpret_cast<LPARAM>(&buttonRc));
@@ -6141,7 +5896,8 @@ static void PaintBreadcrumbRootChevronOverlay(const NMCUSTOMDRAW* cd, HWND toolb
     // nothing here is a fixed-width stroke.
     const float fw = (float)w0, fh = (float)h0;
     const float cx = fw / 2.f, cy = fh / 2.f;
-    const float cr = 5.f;
+    const float scale = (float)DpiForPaintHdc(cd->hdc) / 96.f;
+    const float cr = 4.f * scale;
 
     // Created before BeginDraw so a failure here just returns -- no
     // BeginDraw/EndDraw pairing to worry about, and no risk of swallowing a
@@ -6181,7 +5937,6 @@ static void PaintBreadcrumbRootChevronOverlay(const NMCUSTOMDRAW* cd, HWND toolb
     // Three dots, not a rotating arrow -- a static "more" ellipsis needs no
     // open/closed state at all.
     pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    const float scale = (float)DpiForPaintHdc(cd->hdc) / 96.f;
     const float dotR = 1.0f * scale;
     const float spacing = dotR * 3.f;
     for (int i = -1; i <= 1; ++i) {
@@ -6348,25 +6103,18 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     if (msg == TVM_SETIMAGELIST && wp == TVSIL_NORMAL) {
         if (GlyphIsNavPaneTreeView(hwnd)) {
             TreeCursorTrySubclass(hwnd);
-            // GlyphIsNavPaneTreeView matches any SysTreeView32 under a
-            // NamespaceTreeControl ancestor -- that's also the nav pane of a
-            // modern file-picker dialog hosted in another process, not just
-            // Explorer's own. Regedit's Import/Export/Load Hive picker hits
-            // this: per-item glyph detection (GlyphGetForItem) resolves each
-            // visible item's shell identity, which internally triggers a
-            // security-zone + cloud-sync-status check per item -- fine for a
-            // few dozen nav items, but confirmed (via CoCreateInstance
-            // logging) to add up to a multi-second stall when the picker's
-            // nav tree ends up showing hundreds of items. Skip tracking
-            // entirely in regedit.exe so it falls back to default icons
-            // there instead of freezing; Explorer and every other host are
-            // unaffected.
+            // GlyphIsNavPaneTreeView also matches a modern file-picker's nav
+            // pane hosted in another process, e.g. regedit's Import/Export/
+            // Load Hive picker. Per-item glyph detection there resolves each
+            // item's shell identity, triggering a security-zone + cloud-sync
+            // check per item -- a multi-second stall when the tree shows
+            // hundreds of items. Skip tracking entirely in regedit.exe so it
+            // falls back to default icons instead of freezing.
             if (g_settings.GlyphIcons && !IsCurrentProcessRegedit()) {
                 std::lock_guard<std::mutex> lk(g_glyphTreeMutex);
                 g_glyphTrackedTrees.insert(hwnd);
                 GlyphEnsureMap();
             }
-            TryForceDarkExcludedFilePicker(hwnd);
             if (NavMetricsNeedsCustomNormalList(hwnd)) {
                 HIMAGELIST srcList = reinterpret_cast<HIMAGELIST>(lp);
                 if (NavMetricsInstallNormalList(hwnd, srcList,
@@ -6375,6 +6123,110 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         GlyphIsTracked(hwnd)))
                     return 0;
             }
+        }
+    }
+
+    // TVN_DELETEITEM is sent to the tree's parent, not the tree itself, so
+    // this global SendMessageW interception -- not TreeCursorSubclassProc --
+    // is the only place that sees it. Invalidates any nav-pane hover-fade
+    // state still pointing at the item comctl32 is about to free, closing a
+    // dangling-HTREEITEM window that would otherwise last until the next
+    // mouse move/button event.
+    if (msg == WM_NOTIFY && g_settings.RoundedSelection) {
+        NMHDR* pnmDel = reinterpret_cast<NMHDR*>(lp);
+        if (pnmDel && pnmDel->code == TVN_DELETEITEM &&
+            GlyphIsNavPaneTreeView(pnmDel->hwndFrom)) {
+            NMTREEVIEWW* nmtv = reinterpret_cast<NMTREEVIEWW*>(lp);
+            NavHoverFadeInvalidateItem(pnmDel->hwndFrom, nmtv->itemOld.hItem);
+        }
+    }
+
+    // TVN_SELCHANGEDW/A: TreeView's equivalent of LVN_ITEMCHANGED below, but
+    // simpler -- comctl32 always reports both the outgoing and incoming item
+    // in one notification (no ListView-style bulk/iItem==-1 case), and
+    // HTREEITEM is a stable identity, so a real selection change is always
+    // exactly one invalidate + one start. NMTREEVIEWW and NMTREEVIEWA share
+    // the same layout for the fields read here (hItem), so one cast covers
+    // both notification codes. isTreeView=true routes through
+    // ShouldDrawSelectionBorder's nav-pane exclusion (GlyphIsNavPaneTreeView),
+    // same as the drawing side.
+    if (msg == WM_NOTIFY && g_settings.RoundedSelection) {
+        NMHDR* pnmTv = reinterpret_cast<NMHDR*>(lp);
+        if (pnmTv && (pnmTv->code == TVN_SELCHANGEDW || pnmTv->code == TVN_SELCHANGEDA)) {
+            NMTREEVIEWW* nmtv = reinterpret_cast<NMTREEVIEWW*>(lp);
+            if (nmtv->itemOld.hItem)
+                ListSelectFadeInvalidateItem(
+                    pnmTv->hwndFrom, (ULONG_PTR)nmtv->itemOld.hItem, true);
+            if (nmtv->itemNew.hItem)
+                ListSelectFadeStartItem(
+                    pnmTv->hwndFrom, (ULONG_PTR)nmtv->itemNew.hItem, true);
+        }
+    }
+
+    // LVN_ITEMCHANGED, like TVN_DELETEITEM above, is sent to the ListView's
+    // parent, so this global interception is the only reliable place to see
+    // a real deselection -- DrawRoundedItemBg's border path only ever gets
+    // called with an already-selected state, so it never observes the
+    // moment an item goes back to Normal. Without this, reselecting the same
+    // item would find its ListSelectFade entry still parked at progress 1
+    // and skip the fade-in entirely.
+    if (msg == WM_NOTIFY && g_settings.RoundedSelection) {
+        NMHDR* pnmLv = reinterpret_cast<NMHDR*>(lp);
+        if (pnmLv && pnmLv->code == LVN_ITEMCHANGED) {
+            NMLISTVIEW* pnmv = reinterpret_cast<NMLISTVIEW*>(lp);
+            if (pnmv->uChanged & LVIF_STATE) {
+                if (pnmv->iItem < 0) {
+                    // Bulk notification (comctl32 coalesces "deselect
+                    // everything" and "deselect old + select new" into this
+                    // form) -- old/newState aren't meaningful per item here,
+                    // so re-derive the real selection set instead of trying
+                    // to read a transition out of these fields.
+                    ListSelectFadeResyncWindow(pnmLv->hwndFrom);
+                } else {
+                    const bool wasSelected = (pnmv->uOldState & LVIS_SELECTED) != 0;
+                    const bool isSelected = (pnmv->uNewState & LVIS_SELECTED) != 0;
+                    if (wasSelected && !isSelected) {
+                        ListSelectFadeInvalidateItem(
+                            pnmLv->hwndFrom, (ULONG_PTR)(UINT)pnmv->iItem, false);
+                    } else if (!wasSelected && isSelected) {
+                        // The only place a fade entry is created -- see
+                        // ListSelectFadeStartItem for why paint doesn't.
+                        ListSelectFadeStartItem(
+                            pnmLv->hwndFrom, (ULONG_PTR)(UINT)pnmv->iItem, false);
+                    }
+                }
+            }
+        }
+    }
+
+    // LVN_DELETEITEM: see ListSelectFadeInvalidateWindowItems for why this
+    // wipes the whole window's tracked set rather than just the deleted
+    // index (deletion shifts every later item down by one).
+    if (msg == WM_NOTIFY && g_settings.RoundedSelection) {
+        NMHDR* pnmLvDel = reinterpret_cast<NMHDR*>(lp);
+        if (pnmLvDel && pnmLvDel->code == LVN_DELETEITEM) {
+            ListSelectFadeInvalidateWindowItems(pnmLvDel->hwndFrom);
+        }
+    }
+
+    // TVN_DELETEITEM (select-fade): unlike ListView, HTREEITEM is a stable
+    // identity, so a targeted erase of just the deleted item's own entry is
+    // enough -- no index-shift concern, no need to wipe the whole window.
+    // Defends against comctl32 ever recycling a freed HTREEITEM value for a
+    // new item that gets selected before this fires: without this, a stale
+    // parked (progress=1) entry under the reused key would make that new
+    // selection silently skip its fade-in. Checks both notification codes
+    // like the TVN_SELCHANGEDW/A block above -- the plain TVN_DELETEITEM
+    // macro resolves to only the W variant under this project's UNICODE
+    // build, but a real ANSI-window TreeView in some other process still
+    // sends the A code regardless of how we were compiled.
+    if (msg == WM_NOTIFY && g_settings.RoundedSelection) {
+        NMHDR* pnmTvDel = reinterpret_cast<NMHDR*>(lp);
+        if (pnmTvDel && (pnmTvDel->code == TVN_DELETEITEMW || pnmTvDel->code == TVN_DELETEITEMA)) {
+            NMTREEVIEWW* nmtvDel = reinterpret_cast<NMTREEVIEWW*>(lp);
+            if (nmtvDel->itemOld.hItem)
+                ListSelectFadeInvalidateItem(
+                    pnmTvDel->hwndFrom, (ULONG_PTR)nmtvDel->itemOld.hItem, true);
         }
     }
 
@@ -6533,6 +6385,28 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     int iconY = iconRect.top + (iconRect.bottom - iconRect.top - artH) / 2;
 
                     RECT glyphRect = { drawX, iconY, drawX + artW, iconY + artH };
+
+                    // In WinUI-metrics mode the registered image-list cell (iconW)
+                    // is wider than the drawn art (artW), reserving a text-gap
+                    // strip that CDDS_ITEMPREPAINT excluded from native drawing.
+                    // Nothing else paints it -- left unfilled it shows a black
+                    // square beside the glyph. Erase the full union with the
+                    // same live-sampled color the icon uses, so the strip and
+                    // the icon match with no visible seam.
+                    if (metricsList) {
+                        int cellY = iconRect.top +
+                            (iconRect.bottom - iconRect.top - iconH) / 2;
+                        RECT eraseRect = {
+                            (std::min)(iconX, drawX), (std::min)(cellY, iconY),
+                            (std::max)(iconX + iconW, drawX + artW) + 1,
+                            (std::max)(cellY + iconH, iconY + artH)
+                        };
+                        COLORREF eraseClr = GlyphSampleEraseColor(
+                            hdc, glyphRect, IsSystemDarkMode());
+                        if (HBRUSH eraseBr = GetCachedSolidBrush(eraseClr))
+                            FillRect_orig(hdc, &eraseRect, eraseBr);
+                    }
+
                     COLORREF bgColor = IsSystemDarkMode() ? RGB(0x19, 0x19, 0x19) : GetSysColor(COLOR_WINDOW);
                     COLORREF neutralColor = g_settings.GlyphColor != CLR_INVALID
                         ? g_settings.GlyphColor
@@ -6597,25 +6471,17 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     bool dcompFinalCountdown = false;
                     float wipeElapsedSec = 0.0f;
                     // Gallery/Videos/Phone already play a full custom intro of their
-                    // own (assemble/build/vibrate); the shared spring bounce that
-                    // follows read as lost/unnoticeable on top of that much motion,
-                    // so they hand off straight to the settled Filled render instead.
-                    // Home already has its own shrink/dip/grow-back motion, so
-                    // the generic bounce right after would just be a redundant
-                    // second pop. Documents and Network carry their
-                    // own settle-pulse motion (pulseScale / settle pulse) for the
-                    // same reason; ThisPC's CRT-on now pulses in sync with its
-                    // own bloom overshoot instead. Desktop's bloom-rise already
-                    // has enough motion of its own (rise + fade) that the
-                    // generic bounce afterward reads as tacked-on. OneDrive's
-                    // converge-wipe deliberately settles flat with no pop at
-                    // all -- the generic bounce (and an earlier bespoke
-                    // grow-overshoot) clipped outside Explorer, where this
-                    // icon renders unscaled with no scale-up headroom. CD's
-                    // sweep-reveal already ends exactly at the settled
-                    // Filled render (the wedge boundary IS the outline-to-
-                    // filled transition), so a generic bounce afterward
-                    // would be a redundant second pop, same as Drive/Documents.
+                    // own (assemble/build/vibrate); a generic bounce afterward would
+                    // be lost or redundant on top of that motion, so they hand off
+                    // straight to the settled Filled render. Home, Documents,
+                    // Network, and ThisPC each carry their own settle motion for the
+                    // same reason. Desktop's bloom-rise already has enough motion
+                    // (rise + fade) that a bounce reads as tacked-on. OneDrive's
+                    // converge-wipe deliberately settles flat -- a bounce clips
+                    // outside Explorer, where this icon renders unscaled with no
+                    // scale-up headroom. CD's sweep-reveal already ends exactly at
+                    // the settled Filled render, so a bounce would be redundant,
+                    // same as Drive/Documents.
                     bool skipGenericPop = glyph[0] == GLYPH_GALLERY[0]   ||
                                           glyph[0] == GLYPH_VIDEOS[0]    ||
                                           glyph[0] == GLYPH_PHONE[0]     ||
@@ -7030,7 +6896,8 @@ static LRESULT CALLBACK PillTreeSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPA
     const bool dcompRelevantMessage =
         msg == WM_PAINT || msg == WM_VSCROLL || msg == WM_HSCROLL ||
         msg == WM_MOUSEWHEEL || msg == WM_KEYDOWN;
-    bool isDComp = dcompRelevantMessage && PillDCompAllowedForTree(hwnd) &&
+    bool isDComp = dcompRelevantMessage && g_settings.NavPanePill &&
+        PillDCompAllowedForTree(hwnd) &&
         (g_settings.NavPillStyle == 4 || g_settings.NavPillStyle == 3 ||
          g_settings.NavPillStyle == 2 || g_settings.NavPillStyle == 1);
 
@@ -7087,23 +6954,12 @@ static LRESULT CALLBACK PillTreeSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPA
                 PillWakeThread();
             }
 
-            // Deliberately NOT touching g_pillCurTop/g_pillCurLeft/
-            // g_pillCurItem here (previously this force-reset them to
-            // "first ever" sentinels on every scroll). g_pillCurItem must
-            // stay accurate so the trigger site's isSameItem check still
-            // works right after a scroll -- if the same item is still
-            // selected, that path already reposition it silently with no
-            // animation, exactly as before this whole blind-pop-in feature
-            // existed. Resetting it unconditionally made isSameItem
-            // impossible to compute (forced through isFirstEver instead),
-            // so a one-line scroll nudge with the same item on screen
-            // replayed the blind pop-in every time. The other failure mode
-            // this must still avoid -- a scroll immediately followed by a
-            // REAL selection change, with no intermediate repaint to correct
-            // g_pillCurTop first -- is instead handled at the trigger site
-            // via justScrolled combined with isSameItem (see below): the
-            // stale pre-scroll top is never trusted as an elastic "from"
-            // position in that case.
+            // Deliberately not reset on scroll: g_pillCurItem must stay
+            // accurate for the trigger site's isSameItem check, or a
+            // same-item scroll replays the blind pop-in every time. A second
+            // case -- scroll immediately followed by a real selection change
+            // with no intermediate repaint -- is handled separately via
+            // justScrolled+isSameItem (see below).
             g_pillJustScrolled   = true;
             g_pillJustScrolledUp = scrolledUp;
         }
@@ -7666,7 +7522,7 @@ static bool PillGdiFadeCacheEnsureLocked(HDC hdc, float scale, int itemH,
     const COLORREF baseColor = gradient ? GetCachedAccentBase() : CLR_INVALID;
     const float pillW = 3.2f * scale;
     const float pillH = (float)itemH * PILL_H_FRAC;
-    const float fracX = 0.8f;
+    const float fracX = 0.64f * scale;
     const float halfPad = (float)itemH * (1.0f - PILL_H_FRAC) / 2.0f;
     const float fracY = halfPad - floorf(halfPad);
     constexpr float bitmapPad = 1.0f;
@@ -7811,7 +7667,7 @@ static bool PillDrawGdiFade(HDC hdc, float itemTop, float scale, int itemH,
     if (!PillGdiFadeCacheEnsureLocked(hdc, scale, itemH, gradient))
         return false;
 
-    const float pillX = 0.8f + (float)indentPx;
+    const float pillX = 0.64f * scale + (float)indentPx;
     const float halfPad = (float)itemH * (1.0f - PILL_H_FRAC) / 2.0f;
     const int dstX = (int)floorf(pillX) - 1;
     const int dstY = (int)floorf(itemTop + halfPad) - 1;
@@ -8045,31 +7901,83 @@ static void DrawNineGridStretch(HDC hdc, HDC srcDC, LPCRECT dstRect,
 }
 
 // ============================================================================
-// Tab background bitmap cache (DrawNineGridStretch eliminates hover flicker)
+// WinUI-style tab background (DrawNineGridStretch eliminates flicker)
 // ============================================================================
 
-// 0=normal(transparent), 1=selected, 2=disabled, 3=hot
-static HDC g_tabBgCache[4] = {};
-
-static void TabBgCacheClear()
+// Fills `rect` with `color`, rounding only the top-left/top-right corners
+// (radius `r`) and leaving the bottom square -- same manual-path technique
+// as FillScrollbarHoverCap, since D2D's FillRoundedRectangle can't round a
+// subset of corners. Used for the WinUI-style property-tab background so a
+// selected tab's fill stays flush/square where it meets the pane below.
+static bool FillTopRoundedRect(ID2D1Factory1* factory, ID2D1DCRenderTarget* pRT,
+    D2D1_RECT_F rect, FLOAT r, D2D1_COLOR_F color)
 {
+    if (!factory || !pRT) return false;
+    Microsoft::WRL::ComPtr<ID2D1PathGeometry> geo;
+    if (FAILED(factory->CreatePathGeometry(&geo)) || !geo) return false;
+    Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(geo->Open(&sink)) || !sink) return false;
+
+    D2D1_SIZE_F sz = D2D1::SizeF(r, r);
+    auto arcTo = [&](D2D1_POINT_2F pt) {
+        sink->AddArc(D2D1::ArcSegment(pt, sz, 0.f,
+            D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    };
+
+    sink->BeginFigure({rect.left + r, rect.top}, D2D1_FIGURE_BEGIN_FILLED);
+    sink->AddLine({rect.right - r, rect.top});
+    arcTo({rect.right, rect.top + r});
+    sink->AddLine({rect.right, rect.bottom});
+    sink->AddLine({rect.left, rect.bottom});
+    sink->AddLine({rect.left, rect.top + r});
+    arcTo({rect.left + r, rect.top});
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    if (FAILED(sink->Close())) return false;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    if (FAILED(pRT->CreateSolidColorBrush(color, &brush)) || !brush)
+        return false;
+    pRT->FillGeometry(geo.Get(), brush.Get());
+    return true;
+}
+
+// 0=normal(transparent) 1=selected(rounded pane) 2=disabled 3=hot(all-corners).
+// Outer index is light[0]/dark[1]; colors are fixed (not accent-derived), so
+// this never needs invalidation on a theme change -- a window's own per-paint
+// dark flag just picks which already-baked set to draw.
+static HDC g_tabBgCacheWinUI[2][4] = {};
+
+static void TabBgCacheClearWinUI()
+{
+    for (int m = 0; m < 2; m++)
     for (int i = 0; i < 4; i++) {
-        if (g_tabBgCache[i]) {
-            HBITMAP hBmp = (HBITMAP)GetCurrentObject(g_tabBgCache[i], OBJ_BITMAP);
-            DeleteDC(g_tabBgCache[i]);
+        if (g_tabBgCacheWinUI[m][i]) {
+            HBITMAP hBmp = (HBITMAP)GetCurrentObject(g_tabBgCacheWinUI[m][i], OBJ_BITMAP);
+            DeleteDC(g_tabBgCacheWinUI[m][i]);
             if (hBmp) DeleteObject(hBmp);
-            g_tabBgCache[i] = nullptr;
+            g_tabBgCacheWinUI[m][i] = nullptr;
         }
     }
 }
 
-static bool TabBgCacheEnsure(HDC hdc, int index)
+static FLOAT TabWinUiCornerRadius(HDC hdc)
 {
-    if (g_tabBgCache[index]) return true;
+    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
+    return 4.f * scale; // same radius for selected/disabled and hover -- tuned live
+}
+
+// WinUI-style property-tab background. The selected tab fills solid with
+// the pane color so it reads as an elevated surface against the darker/
+// dimmer strip around it; unselected (index 0) stays transparent. `dark`
+// picks which of the two baked sets (light: white pane, dark: kPropDkPane)
+// this call fills/reuses.
+static bool TabBgCacheEnsureWinUI(HDC hdc, int index, bool dark)
+{
+    HDC& slot = g_tabBgCacheWinUI[dark ? 1 : 0][index];
+    if (slot) return true;
     if (!g_d2dFactory) return false;
 
-    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
-    FLOAT cr = 6.f * scale;
+    FLOAT cr = TabWinUiCornerRadius(hdc);
     const INT W = 18, H = 18;
 
     HDC memDC = CreateCompatibleDC(hdc);
@@ -8110,7 +8018,11 @@ static bool TabBgCacheEnsure(HDC hdc, int index)
         return discard();
     }
 
-    FLOAT inset = 3.0f, hotInset = 3.8f;
+    D2D1_RECT_F full = D2D1::RectF(0, 0, (FLOAT)W, (FLOAT)H);
+    COLORREF pane = dark ? kPropDkPane : kPropLightPane;
+    D2D1_COLOR_F paneColor = D2D1::ColorF(
+        GetRValue(pane) / 255.f, GetGValue(pane) / 255.f, GetBValue(pane) / 255.f);
+
     pRT->BeginDraw();
     bool contentOK = true;
 
@@ -8118,31 +8030,25 @@ static bool TabBgCacheEnsure(HDC hdc, int index)
         pRT->Clear(D2D1::ColorF(0, 0, 0, 0));
     } else if (index == 1) {
         pRT->Clear(D2D1::ColorF(0, 0, 0, 0));
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> br;
-        if (FAILED(pRT->CreateSolidColorBrush(
-                D2D1::ColorF(0.565f, 0.565f, 0.565f, 0.188f), &br)) || !br)
+        if (!FillTopRoundedRect(g_d2dFactory, pRT.Get(), full, cr, paneColor))
             contentOK = false;
-        else
-            pRT->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(hotInset, inset, (FLOAT)W-hotInset, (FLOAT)H-inset), cr, cr), br.Get());
     } else if (index == 2) {
         pRT->Clear(D2D1::ColorF(0, 0, 0, 0));
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> br;
-        if (FAILED(pRT->CreateSolidColorBrush(
-                D2D1::ColorF(0.376f, 0.376f, 0.376f, 0.376f), &br)) || !br)
+        D2D1_COLOR_F disabledColor = paneColor;
+        disabledColor.a = 0.6f;
+        if (!FillTopRoundedRect(g_d2dFactory, pRT.Get(), full, cr, disabledColor))
             contentOK = false;
-        else
-            pRT->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(0, 0, (FLOAT)W, (FLOAT)H), cr, cr), br.Get());
     } else if (index == 3) {
+        // Hover uses all-corners rounding, unlike the semi-rounded
+        // selected/disabled shape above -- WinUI reserves the merged
+        // silhouette for the actual selected tab.
         pRT->Clear(D2D1::ColorF(0, 0, 0, 0));
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> br;
         if (FAILED(pRT->CreateSolidColorBrush(
                 D2D1::ColorF(0.376f, 0.376f, 0.376f, 0.502f), &br)) || !br)
             contentOK = false;
         else
-            pRT->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(hotInset, inset, (FLOAT)W-hotInset, (FLOAT)H-inset), cr, cr), br.Get());
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(full, cr, cr), br.Get());
     }
 
     HRESULT endHr = pRT->EndDraw();
@@ -8150,12 +8056,12 @@ static bool TabBgCacheEnsure(HDC hdc, int index)
     if (!contentOK || FAILED(endHr)) {
         return discard();
     }
-    g_tabBgCache[index] = memDC;
+    slot = memDC;
     return true;
 }
 
 // ============================================================================
-// PaintTab: tab background (cached bitmap) + DComp pill for property windows
+// PaintTab: WinUI-style tab background for property windows
 // Returns true if handled.
 // ============================================================================
 
@@ -8169,95 +8075,35 @@ static thread_local unsigned g_duiPaintElementCode = 0;
 
 static bool IsPropertyDirectUIScope(HWND hwnd);
 
-// Draws a static (non-animated) accent pill via the shared GDI-fallback D2D
-// DC render target. Used when DComp is unavailable/disabled (forceGDI or
-// system animations off), for sub-dialogs, and for property sheets that
-// don't currently own the shared DComp pill state (see ownsSharedState in
-// PaintTab) -- all three cases must render *something* without touching
-// g_tabDC. Must be called with g_tabDCMutex already held.
-static void DrawStaticTabPill(HDC hdc, LPCRECT pRect, FLOAT pillLeft, FLOAT pillTop,
-                               FLOAT pillBottom, FLOAT pillW, FLOAT pillHeight,
-                               D2D1_COLOR_F accentColor)
+// True whenever this mod's WinUI tab styling should be active -- the single
+// gate PaintTab and HandleThemeDraw's TABP_PANE fill share. Deliberately
+// unconditional on dark mode -- both callers resolve their own per-window
+// dark flag now.
+static bool IsWinUiTabStyleActive()
 {
-    auto drawGdiFallback = [&]() {
-        HBRUSH brush = CreateSolidBrush(RGB(
-            (BYTE)std::clamp(accentColor.r * 255.f, 0.f, 255.f),
-            (BYTE)std::clamp(accentColor.g * 255.f, 0.f, 255.f),
-            (BYTE)std::clamp(accentColor.b * 255.f, 0.f, 255.f)));
-        if (!brush) return;
-        HGDIOBJ oldBrush = SelectObject(hdc, brush);
-        if (!oldBrush || oldBrush == HGDI_ERROR) {
-            DeleteObject(brush);
-            return;
-        }
-        HGDIOBJ oldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
-        if (!oldPen || oldPen == HGDI_ERROR) {
-            SelectObject(hdc, oldBrush);
-            DeleteObject(brush);
-            return;
-        }
-        const int radius = std::max(1, (int)std::ceil(pillHeight));
-        RoundRect(hdc,
-            pRect->left + (int)std::floor(pillLeft),
-            pRect->top + (int)std::floor(pillTop),
-            pRect->left + (int)std::ceil(pillLeft + pillW),
-            pRect->top + (int)std::ceil(pillBottom),
-            radius, radius);
-        SelectObject(hdc, oldPen);
-        SelectObject(hdc, oldBrush);
-        DeleteObject(brush);
-    };
-
-    if (!g_tabCachedRT && g_d2dFactory) {
-        D2D1_RENDER_TARGET_PROPERTIES rtP = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-            0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT);
-        if (FAILED(g_d2dFactory->CreateDCRenderTarget(&rtP, &g_tabCachedRT)))
-            g_tabCachedRT = nullptr;
-    }
-    if (!g_tabCachedRT) {
-        drawGdiFallback();
-        return;
-    }
-
-    if (FAILED(g_tabCachedRT->BindDC(hdc, pRect))) {
-        // Most likely a stale RT after a device-loss event -- drop it so the
-        // next call recreates from scratch instead of staying broken forever
-        // (previously only the EndDraw failure below was handled this way).
-        CachedRTRecreate(g_tabCachedRT);
-        drawGdiFallback();
-        return;
-    }
-
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> br;
-    if (FAILED(g_tabCachedRT->CreateSolidColorBrush(accentColor, &br)) || !br) {
-        drawGdiFallback();
-        return;
-    }
-    float pr = pillHeight / 2.f;
-    g_tabCachedRT->BeginDraw();
-    g_tabCachedRT->FillRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(pillLeft, pillTop, pillLeft + pillW, pillBottom), pr, pr), br.Get());
-    HRESULT hr = g_tabCachedRT->EndDraw();
-    if (FAILED(hr)) {
-        if (hr == (HRESULT)D2DERR_RECREATE_TARGET)
-            CachedRTRecreate(g_tabCachedRT);
-        drawGdiFallback();
-    }
+    return g_settings.RoundedTabPane;
 }
 
-static bool PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, bool forceGDI = false)
-{
-    if (iPartId == TABP_PANE || !g_d2dFactory) return false;
+// Forward declaration -- defined in the PaintCheckBox section below. PaintTab
+// now needs its own per-window dark/light answer (see IsWinUiTabStyleActive's
+// comment), earlier than the file's other forward declaration of this same
+// function further down.
+static bool IsWindowDarkMode(HDC hdc);
 
-    // Held for the whole function -- serializes every g_tabDC touch below
-    // against the Wh_ModUninit cleanup path (see g_tabDCMutex).
-    std::lock_guard<std::mutex> tabDCLock(g_tabDCMutex);
+static bool PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId == TABP_PANE || !g_d2dFactory || !IsWinUiTabStyleActive())
+        return false;
+
+    // Serializes every g_tabBgCacheWinUI touch below against the
+    // Wh_ModUninit cleanup path (see g_tabBgMutex).
+    std::lock_guard<std::mutex> tabBgLock(g_tabBgMutex);
 
     int w = pRect->right - pRect->left;
     int h = pRect->bottom - pRect->top;
     if (w <= 0 || h <= 0) return false;
+
+    bool dark = IsWindowDarkMode(hdc);
 
     BOOL isSelected = (iStateId == TIS_SELECTED || iStateId == TIS_FOCUSED);
     BOOL isHot      = (iStateId == TIS_HOT);
@@ -8269,170 +8115,11 @@ static bool PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, bool for
     else if (iStateId == TIS_DISABLED) bgIndex = 2;
     else                               bgIndex = 0;
 
-    if (TabBgCacheEnsure(hdc, bgIndex))
+    if (TabBgCacheEnsureWinUI(hdc, bgIndex, dark))
     {
-        RECT brc = {pRect->left - 1, pRect->top, pRect->right + 1, pRect->bottom};
-        DrawNineGridStretch(hdc, g_tabBgCache[bgIndex], &brc, 9, 9, 8, 8);
+        RECT brc = {pRect->left, pRect->top, pRect->right, pRect->bottom};
+        DrawNineGridStretch(hdc, g_tabBgCacheWinUI[dark ? 1 : 0][bgIndex], &brc, 9, 9, 8, 8);
     }
-
-    // Non-selected tabs: background only, no pill
-    if (!isSelected) return true;
-
-    // -- Tab pill (DComp slide animation) --
-    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / USER_DEFAULT_SCREEN_DPI;
-    FLOAT fw = (FLOAT)w, fh = (FLOAT)h;
-    FLOAT inset  = 3.0f;
-
-    FLOAT pillHeight = 2.8f * scale;
-    FLOAT pillBottom = fh - inset - 0.5f;
-    FLOAT pillTop    = pillBottom - pillHeight;
-    FLOAT bgW   = fw - inset * 2.0f;
-    FLOAT pillW = bgW * TAB_PILL_FRAC;
-    if (pillW < 14.0f * scale) pillW = 14.0f * scale;
-    if (pillW > bgW - 2.0f)   pillW = bgW - 2.0f;
-    FLOAT marginOffset = 2.0f * scale;
-    FLOAT pillLeft = inset + (bgW - pillW) / 2.0f - marginOffset;
-
-    COLORREF ac = GetAccentIndicator();
-    float accentR = GetRValue(ac)/255.f, accentG = GetGValue(ac)/255.f, accentB = GetBValue(ac)/255.f;
-    D2D1_COLOR_F accentColor = D2D1::ColorF(accentR, accentG, accentB);
-
-    HWND tabHWND = WindowFromDC(hdc);
-    if (!tabHWND) tabHWND = g_tlsPaintHwnd; // fallback for DrawThemeBackgroundEx memory DCs
-    const bool sysAnim = SysAnimationsEnabled();
-
-    // Same modern focus outline as Edit/ComboBox/TreeView -- TIS_FOCUSED
-    // already carries the keyboard-focus signal (mirrors TIS_SELECTED vs
-    // TIS_FOCUSED, the same pattern ETS_SELECTED/ETS_FOCUSED uses
-    // elsewhere), so no new NM_CUSTOMDRAW plumbing is needed. Drawn last at
-    // each exit point (after the pill) so it isn't covered by the static
-    // fallback fill; the DComp-animated pill composites on its own layer
-    // regardless of draw order here.
-    const bool focused = (iStateId == TIS_FOCUSED) &&
-        g_settings.ModernFocusRect == 0 && tabHWND && NavFocusCuesVisible(tabHWND);
-
-    if (forceGDI || !sysAnim)
-    {
-        if (tabHWND && tabHWND == g_tabCurHWND) {
-            TabDCompReleaseTarget();
-            g_tabCurHWND = nullptr;
-            g_tabLastPillX = g_tabLastPillY = g_tabPrevPillX = -1.f;
-        }
-        DrawStaticTabPill(hdc, pRect, pillLeft, pillTop, pillBottom, pillW, pillHeight, accentColor);
-        if (focused) DrawModernFocusRect(hdc, pRect);
-        return true;
-    }
-
-    // -- Sub-dialog check --
-    // DComp only for first-level owned windows (e.g. property sheets from Explorer).
-    // Windows opened by owned windows (sub-dialogs) use a static GDI pill and
-    // never become the DComp owner -- prevents g_tabCurHWND thrash when a
-    // sub-dialog opens/closes over a property sheet.
-    bool isSubDialog = false;
-    if (tabHWND) {
-        HWND root  = GetAncestor(tabHWND, GA_ROOT);
-        HWND owner = root ? GetWindow(root, GW_OWNER) : nullptr;
-        isSubDialog = (owner && GetWindow(owner, GW_OWNER));
-    }
-
-    // -- Multi-window ownership --
-    // g_tabDC/g_tabCurHWND/g_tabLastPillX/Y are single globals shared by
-    // every SysTabControl32 in the process -- not keyed per HWND. Two
-    // sibling property sheets (e.g. Properties opened on two different
-    // files, neither owning the other -- the isSubDialog check above only
-    // catches a dialog owned by a dialog) would otherwise fight over this
-    // state on every unrelated repaint of the non-focused one, tearing down
-    // and reiniting the DComp target and popping its pill back in every time
-    // focus returns. Only the foreground property sheet (or whichever
-    // already owns the state, or if nothing does yet) gets the animated
-    // pill; everyone else -- including sub-dialogs -- gets the static draw
-    // and never touches g_tabDC.
-    HWND ownerTop         = tabHWND ? GetAncestor(tabHWND, GA_ROOT) : nullptr;
-    bool tabIsForeground  = (ownerTop && ownerTop == GetForegroundWindow());
-    bool noHwndTrackedYet = (!g_tabCurHWND || !IsWindow(g_tabCurHWND));
-    bool ownsSharedState  = tabHWND && !isSubDialog &&
-        (tabHWND == g_tabCurHWND || tabIsForeground || noHwndTrackedYet);
-
-    if (!ownsSharedState) {
-        DrawStaticTabPill(hdc, pRect, pillLeft, pillTop, pillBottom, pillW, pillHeight, accentColor);
-        if (focused) DrawModernFocusRect(hdc, pRect);
-        return true;
-    }
-
-    // -- DComp permanent pill --
-    FLOAT pillXi = floorf((FLOAT)pRect->left + pillLeft + 0.5f);
-    FLOAT pillYi = floorf((FLOAT)pRect->top  + pillTop  + 0.5f);
-
-    if (tabHWND != g_tabCurHWND) {
-        // The DComp overlay is a compositor-level layer, independent of the
-        // old owner's own WM_PAINT cycle -- tearing it down here removes its
-        // pill from the screen immediately, even if that window doesn't
-        // repaint again for a while (e.g. it just lost foreground and
-        // nothing else invalidates it). Nudge it to repaint so it falls back
-        // to the static pill (see ownsSharedState/DrawStaticTabPill above)
-        // instead of showing no pill at all until its next unrelated repaint.
-        HWND prevOwner = g_tabCurHWND;
-        TabDCompReleaseTarget(); // keep the device; only the per-HWND target is stale
-        g_tabCurHWND   = tabHWND;
-        g_tabLastPillX = -1.f;
-        g_tabLastPillY = -1.f;
-        g_tabPrevPillX = -1.f;
-        if (prevOwner && IsWindow(prevOwner))
-            InvalidateRect(prevOwner, nullptr, FALSE);
-    }
-
-    if (pillXi != g_tabLastPillX || pillYi != g_tabLastPillY) {
-        // If a slide is still mid-flight, redirect from where the pill
-        // visually is right now rather than the target it was heading to --
-        // otherwise fast tab-switching snaps to the old target first (see
-        // g_tabSlideInFlight / TabDCompEvalSlideX).
-        FLOAT effectivePrevX = g_tabLastPillX;
-        if (g_tabSlideInFlight) {
-            float elapsed = (float)(TimerGetSeconds() - g_tabSlideStartTime);
-            effectivePrevX = TabDCompEvalSlideX(g_tabSlideFromX, g_tabSlideToX, g_tabSlideDur, elapsed);
-        }
-
-        float absDX     = fabsf(pillXi - effectivePrevX);
-        bool closeAlign = (absDX < pillW * 1.5f);
-        bool hasHistory = (g_tabLastPillX >= 0.f);
-
-        bool dcompReady = TabDCompInit(
-            tabHWND, pillW, pillHeight, accentR, accentG, accentB);
-        if (dcompReady) {
-            if (hasHistory && !closeAlign)
-                dcompReady = TabDCompStartSlide(
-                    effectivePrevX, pillXi, pillYi, pillW, pillHeight,
-                    TAB_PILL_SLIDE_DUR);
-            else if (hasHistory && closeAlign)
-                dcompReady = TabDCompCollapseExpand(
-                    pillXi, pillYi, pillW, 0.08f, 0.20f);
-            else
-                dcompReady = TabDCompStartExpand(
-                    pillXi, pillYi, pillW, pillHeight, 0.20f);
-        }
-
-        g_tabPrevPillX = g_tabLastPillX;
-        g_tabLastPillX = pillXi;
-        g_tabLastPillY = pillYi;
-        if (!dcompReady)
-            DrawStaticTabPill(hdc, pRect, pillLeft, pillTop, pillBottom,
-                              pillW, pillHeight, accentColor);
-    } else if (!g_tabDC.valid) {
-        // Position unchanged but the DComp target isn't there -- e.g. an
-        // accent-color change invalidated it via TabDCompReleaseTarget (see
-        // UpdateThemeColors). Re-materialize at the current position with
-        // the fresh color; nothing moved, so no slide/collapse, just a quick pop.
-        bool dcompReady = TabDCompInit(
-            tabHWND, pillW, pillHeight, accentR, accentG, accentB);
-        if (dcompReady)
-            dcompReady = TabDCompStartExpand(
-                pillXi, pillYi, pillW, pillHeight, TAB_PILL_REBAKE_DUR);
-        if (!dcompReady)
-            DrawStaticTabPill(hdc, pRect, pillLeft, pillTop, pillBottom,
-                              pillW, pillHeight, accentColor);
-    }
-
-    if (focused) DrawModernFocusRect(hdc, pRect);
     return true;
 }
 
@@ -8887,7 +8574,6 @@ static bool PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 // ============================================================================
 
 // ── ListViewPill dimensions (NAV pill dims are in part3 via PillGetCachedRT) ─
-static const FLOAT LV_PILL_W = 3.6f;
 static const FLOAT LV_PILL_X = 0.0f;
 
 // ── ComboBox DWM — globals, helpers, subclasses ────────────────────────────────
@@ -9143,7 +8829,7 @@ static HRESULT WINAPI DwmSetWindowAttribute_hook(
         pvAttribute && cbAttribute >= sizeof(BOOL) &&
         *reinterpret_cast<const BOOL*>(pvAttribute) == FALSE &&
         GetPropW(hWnd, L"_PropDkApplied") && IsSystemDarkMode() &&
-        (IsCustomDarkModeAllowed() || GetPropW(hWnd, kPropForceDarkFilePicker)) &&
+        IsCustomDarkModeAllowed() &&
         !GetPropW(hWnd, L"_PropDkCounterApplied"))
     {
         SetPropW(hWnd, L"_PropDkCounterApplied", (HANDLE)1);
@@ -9346,7 +9032,10 @@ static void TooltipApplyAcrylicEffects(HWND hwnd, HWND owner)
             &smallRound, sizeof(smallRound));
     }
 
-    const bool ownerDark = owner ? IsHwndDarkMode(owner) : IsSystemDarkMode();
+    // No owner yet (comctl32 often creates tooltips before binding one) --
+    // fall back to our own gated state instead of the raw OS setting, so an
+    // excluded process's tooltip doesn't go dark on its own.
+    const bool ownerDark = owner ? IsHwndDarkMode(owner) : IsCustomDarkModeAllowed();
     if (!ownerDark)
         return;
 
@@ -9786,7 +9475,8 @@ static LRESULT CALLBACK CbdComboLBoxSubclass(
 
 static void CbdInstallWindow(HWND hwnd)
 {
-    if (!hwnd || !IsWindow(hwnd) || !g_settings.ComboBoxDWM)
+    if (!hwnd || !IsWindow(hwnd) || !g_settings.ComboBoxDWM ||
+        IsInsideExcludedFilePicker(hwnd))
         return;
 
     const CbdTargetClass target = CbdGetTargetClass(hwnd);
@@ -9878,6 +9568,13 @@ static const wchar_t* PROP_TV_INSERT_ITEM = L"WH_MW_TV_INSERT_ITEM";
 static const wchar_t* PROP_TV_INSERT_AFTER = L"WH_MW_TV_INSERT_AFTER";
 static const wchar_t* PROP_TV_HASLINES_ORIG = L"WH_MW_TV_HASLINES";
 static const wchar_t* PROP_TV_NOTOOLTIPS_ORIG = L"WH_MW_TV_NOTOOLTIPS";
+static const wchar_t* PROP_TV_TRACKSELECT_ORIG = L"WH_MW_TV_TRACKSELECT";
+static const wchar_t* PROP_TV_TRACKSELECT_CURSOR_SUB = L"WH_MW_TV_TRACKSELECT_CUR";
+// Regedit's own tree, kept separate from the two constants above (which
+// track Explorer-context trees) even though the per-HWND-scoped property
+// storage would never actually collide between the two windows.
+static const wchar_t* PROP_RG_TV_HASLINES_ORIG = L"WH_MW_RGTV_HASLINES";
+static const wchar_t* PROP_RG_TV_FULLROWSELECT_ORIG = L"WH_MW_RGTV_FULLROWSELECT";
 // NOTE: checkbox anim subclass tracked via g_checkAnims map (no window prop)
 
 static COLORREF g_origHotlight  = 0;
@@ -10013,13 +9710,10 @@ static void ExcludedBrushCacheClear() {
 
 static DWORD WINAPI GetSysColor_hook(int nIndex)
 {
-    // Excluded processes: return light defaults to undo SetSysColors --
-    // unless the current paint is inside a window we've explicitly opted
-    // back into real dark mode despite the exclusion (see
-    // TryForceDarkExcludedFilePicker / kPropForceDarkFilePicker).
+    // Excluded processes: return light defaults to undo SetSysColors, with
+    // no exception -- an excluded process's file pickers stay fully native
+    // too (see IsInsideExcludedFilePicker).
     if (g_darkModeExcluded) {
-        if (g_tlsPaintHwnd && IsInsideForceDarkFilePicker(g_tlsPaintHwnd))
-            return GetDarkSysColor(nIndex);
         return GetDefaultLightSysColor(nIndex);
     }
     if (g_darkModeActive) {
@@ -10049,17 +9743,10 @@ HBRUSH WINAPI GetSysColorBrush_hook(int nIndex)
 {
     if (nIndex < 0 || nIndex >= 31)
         return GetSysColorBrush_orig(nIndex);
-    // Excluded processes: return cached light brushes -- same force-dark
-    // window exception as GetSysColor_hook above (reuses g_darkBrushCache,
-    // the same cache the normal non-excluded dark path already fills with
-    // identical GetDarkSysColor values).
+    // Excluded processes: return cached light brushes, with no exception --
+    // an excluded process's file pickers stay fully native too (see
+    // IsInsideExcludedFilePicker).
     if (g_darkModeExcluded) {
-        if (g_tlsPaintHwnd && IsInsideForceDarkFilePicker(g_tlsPaintHwnd)) {
-            if (HBRUSH br = BrushCacheGetOrCreate(g_darkBrushCache, nIndex,
-                    GetDarkSysColor(nIndex)))
-                return br;
-            return GetSysColorBrush_orig(nIndex);
-        }
         if (nIndex >= 0 && nIndex < 31) {
             if (HBRUSH br = BrushCacheGetOrCreate(g_excludedBrushCache, nIndex,
                     GetDefaultLightSysColor(nIndex)))
@@ -10171,6 +9858,22 @@ static bool IsInsideExplorer(HWND hFrom)
             _wcsicmp(cls, L"ExploreWClass") == 0);
 }
 
+// IsInsideExplorer only covers CabinetWClass/ExploreWClass -- common Open/Save
+// file-picker dialogs (root class #32770) have their own NamespaceTreeControl
+// nav pane and need the same protection. cacheNegative=false: this can run
+// before the picker's nav pane finishes constructing, same reasoning as
+// IsInsideExcludedFilePicker.
+static bool IsInsidePickerNamespaceTree(HWND hwnd)
+{
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    if (!root) return false;
+    wchar_t rootCls[64] = {};
+    if (!GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) ||
+        _wcsicmp(rootCls, L"#32770") != 0)
+        return false;
+    return NavDividerRootContainsNamespaceTree(hwnd, /*cacheNegative=*/false);
+}
+
 // True if hwnd sits inside a real shell folder view (SHELLDLL_DefView) hosted
 // either by Explorer itself or by a common Open/Save file picker running in
 // some other process (root class "#32770") -- the two contexts that share the
@@ -10211,6 +9914,23 @@ static HANDLE         g_msgWndReadyEvent = nullptr;
 static std::atomic<DWORD> g_msgWndThreadId{0};
 static std::atomic<bool> g_msgWndUnloading{false};
 static const wchar_t* MSG_WND_CLS = L"W32MThemeMsgWnd";
+
+// Set first thing in Wh_ModUninit (see there), well before the
+// NavDividerClearAll() teardown sweep -- NOT the same as g_darkModeUnloading
+// (hover-reveal isn't dark-mode-specific) and never reset back to false
+// (this DLL instance is done either way). Declared way up here, far from its
+// own NavDivider* neighbors further down, because ThemeMsgWndProc below is
+// now also a consumer (see kNavDividerApplyHooksMessage) and it would
+// otherwise be used before its declaration -- same reason
+// NavDividerFadeTimerProc already needed it hoisted once before.
+static std::atomic<bool> g_navDividerUnloading{false};
+
+// Posted to g_msgWnd by NavDividerTrackAndGetHwnd, which runs inside a live
+// DrawThemeBackground(Ex) hook callback -- Wh_ApplyHookOperations can't run
+// from there directly. g_msgWnd's own thread is already running (started in
+// Wh_ModAfterInit for theme-broadcast reception), so posting here reaches a
+// safe call stack without spinning up a dedicated thread just for this.
+static constexpr UINT kNavDividerApplyHooksMessage = WM_APP + 0x5A4;
 static bool           g_lastSeenSystemDark = false;
 static bool           g_lastSeenSystemDarkValid = false;
 
@@ -10221,6 +9941,7 @@ static void ShellIconClearCache();
 static void ShellIconReleaseSvgResources();
 static void ShellIconClearModuleCaches();
 static void PinContentIconClearCache();
+static void RgGlyphIconClearCache();
 static BOOL CALLBACK PinSettingsEnumProc(HWND hwnd, LPARAM);
 static HRESULT SetExplorerFamilyTheme(HWND hwnd, LPCWSTR pszSubIdList = nullptr);
 static HRESULT SetDarkExplorerOrDefaultTheme(HWND hwnd);
@@ -10241,16 +9962,6 @@ static void UpdateThemeColors()
     { std::lock_guard<std::mutex> lk(g_pillDCMutex);
       g_pillDC.brushDirty = true; }
 
-    // Invalidate the tab pill's DComp target -- its surface has the accent
-    // color baked in (see TabDCompInit) and TabDCompInit only re-bakes on an
-    // HWND/size change, not a color-only change. Releasing just the target
-    // (device stays alive) makes PaintTab re-bake on its next paint; note
-    // g_tabBgCache is NOT invalidated here -- its 4 cached bitmaps use fixed
-    // grays independent of accent/dark-light (see TabBgCacheEnsure), so
-    // clearing it on every accent change was pure waste, not a fix.
-    { std::lock_guard<std::mutex> lk(g_tabDCMutex);
-      TabDCompReleaseTarget(); }
-
     // Invalidate ListView item cache (accent/dark may have changed)
     LvCacheInvalidate();
 
@@ -10263,6 +9974,9 @@ static void UpdateThemeColors()
 
     // Same reasoning -- the content-area pin icons are keyed by dark/accent too.
     PinContentIconClearCache();
+
+    // Regedit's TreeView glyph icons are keyed by dark/accent as well.
+    RgGlyphIconClearCache();
 
     // Module-identity caches (keyed by raw HMODULE base address) can't
     // detect a module unloading and a different one loading at the same
@@ -10420,8 +10134,8 @@ static LRESULT CALLBACK ThemeMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_flushMenuThemes) g_flushMenuThemes();
             if (g_refreshColorPolicy) g_refreshColorPolicy();
             LvCacheInvalidate();
-            // g_tabBgCache is theme-independent (see UpdateThemeColors above)
-            // -- nothing to invalidate here.
+            // g_tabBgCacheWinUI is theme-independent (see UpdateThemeColors
+            // above) -- nothing to invalidate here.
 
             if (nowDark && !g_propDkBgBrush)
                 g_propDkBgBrush = CreateSolidBrush(kPropDkBg);
@@ -10452,6 +10166,19 @@ static LRESULT CALLBACK ThemeMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             std::memory_order_acquire);
         PostQuitMessage(0);
     }
+
+    // Posted by NavDividerTrackAndGetHwnd -- see kNavDividerApplyHooksMessage.
+    // Re-checked here (not just relying on the g_msgWndUnloading guard at the
+    // top of this function) because g_navDividerUnloading is set well before
+    // DestroyMsgWindow gets around to setting g_msgWndUnloading, so a message
+    // posted just before Wh_ModUninit began could otherwise still be
+    // dispatched during that window.
+    if (uMsg == kNavDividerApplyHooksMessage) {
+        if (!g_navDividerUnloading.load(std::memory_order_acquire))
+            Wh_ApplyHookOperations();
+        return 0;
+    }
+
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
@@ -10681,6 +10408,271 @@ static void DrawModernInsertMarkGdi(HWND tv, HDC hdc,
 // Wh_ModUninit's RemoveSubclassesFromWindow sweep knows to remove it
 // without unconditionally messaging every enumerated window.
 static constexpr LPCWSTR kTreeCursorSubclassProp = L"WH_MW_TREE_CURSOR_SUB";
+static constexpr LPCWSTR kPropNavHoverFadeState =
+    L"Win32UIModernizer.NavHoverFadeState";
+// Registered at runtime via RegisterWindowMessageW in Wh_ModInit, not a
+// fixed WM_APP+N value -- this is SendMessageW'd to Explorer's/a file
+// picker's own SysTreeView32 (a window this mod doesn't own), and WM_APP+N
+// is the range reserved for the *application*, so a hardcoded offset here
+// could collide with Explorer's or another mod's own private message on
+// that window. Same treatment as Win32UIModernizer.DefViewBorderPaint.
+static std::atomic<UINT> g_navHoverFadeResetMessage{0};
+static constexpr UINT kNavHoverFadeTimerIntervalMs = 16;
+static constexpr DOUBLE kNavHoverFadeDurationSeconds = 0.14;
+static constexpr float kNavHoverFadeInitialScale = 0.97f;
+static int g_navHoverFadeTimerTag;
+
+struct NavHoverFadeState {
+    HTREEITEM hotItem = nullptr;
+    RECT rect = {};
+    DOUBLE startTime = 0.0;
+    bool trackingLeave = false;
+    bool timerActive = false;
+};
+
+static UINT_PTR NavHoverFadeTimerId()
+{
+    return reinterpret_cast<UINT_PTR>(&g_navHoverFadeTimerTag);
+}
+
+static bool NavHoverFadeSettingsEnabled()
+{
+    return !g_msgWndUnloading.load(std::memory_order_acquire) &&
+        g_settings.ExplorerSection &&
+        g_settings.RoundedSelection &&
+        g_settings.NavPaneHoverFade &&
+        SysAnimationsEnabled();
+}
+
+static NavHoverFadeState* NavHoverFadeGetState(HWND hwnd)
+{
+    return reinterpret_cast<NavHoverFadeState*>(
+        GetPropW(hwnd, kPropNavHoverFadeState));
+}
+
+static bool NavHoverFadeGetItemRect(
+    HWND hwnd, HTREEITEM item, RECT* rect)
+{
+    if (!hwnd || !item || !rect ||
+        !TreeView_GetItemRect(hwnd, item, rect, FALSE)) {
+        return false;
+    }
+
+    RECT client = {};
+    if (GetClientRect(hwnd, &client)) {
+        rect->left = client.left;
+        rect->right = client.right;
+    }
+    return rect->bottom > rect->top;
+}
+
+static float NavHoverFadeProgress(
+    const NavHoverFadeState& state, DOUBLE now)
+{
+    if (!state.hotItem || state.startTime <= 0.0)
+        return 1.f;
+
+    const DOUBLE elapsed = now - state.startTime;
+    if (elapsed <= 0.0)
+        return 0.f;
+    if (elapsed >= kNavHoverFadeDurationSeconds)
+        return 1.f;
+
+    float t = static_cast<float>(
+        elapsed / kNavHoverFadeDurationSeconds);
+    t = t * t * (3.f - 2.f * t);
+    return t;
+}
+
+static void NavHoverFadeStopTimer(
+    HWND hwnd, NavHoverFadeState* state)
+{
+    if (!state || !state->timerActive)
+        return;
+
+    (void)KillTimer(hwnd, NavHoverFadeTimerId());
+    state->timerActive = false;
+}
+
+static void NavHoverFadeDestroyState(HWND hwnd, bool invalidate)
+{
+    auto* state = reinterpret_cast<NavHoverFadeState*>(
+        RemovePropW(hwnd, kPropNavHoverFadeState));
+    if (!state)
+        return;
+
+    NavHoverFadeStopTimer(hwnd, state);
+    if (invalidate && state->hotItem)
+        InvalidateRect(hwnd, &state->rect, FALSE);
+    delete state;
+}
+
+// Called from TVN_DELETEITEM so a deleted item's HTREEITEM can never be
+// dereferenced again by the timer tick -- comctl32 frees the item's backing
+// storage on delete, so holding onto a stale handle across the fade's
+// ~140ms window is a real dangling-pointer hazard, not just a stale rect.
+static void NavHoverFadeInvalidateItem(HWND hwnd, HTREEITEM deletedItem)
+{
+    NavHoverFadeState* state = NavHoverFadeGetState(hwnd);
+    if (state && state->hotItem == deletedItem)
+        NavHoverFadeDestroyState(hwnd, false);
+}
+
+static NavHoverFadeState* NavHoverFadeEnsureState(HWND hwnd)
+{
+    if (auto* state = NavHoverFadeGetState(hwnd))
+        return state;
+
+    auto* state = new (std::nothrow) NavHoverFadeState{};
+    if (!state)
+        return nullptr;
+    if (!SetPropW(hwnd, kPropNavHoverFadeState, state)) {
+        delete state;
+        return nullptr;
+    }
+    return state;
+}
+
+static bool NavHoverFadeStartTimer(
+    HWND hwnd, NavHoverFadeState* state)
+{
+    if (!state || state->timerActive)
+        return state != nullptr;
+    if (!SetTimer(
+            hwnd, NavHoverFadeTimerId(),
+            kNavHoverFadeTimerIntervalMs, nullptr)) {
+        return false;
+    }
+
+    state->timerActive = true;
+    return true;
+}
+
+static bool IsTreeItemPressed(HWND hwnd, LPCRECT itemRect);
+
+static void NavHoverFadeRetarget(HWND hwnd, HTREEITEM hotItem)
+{
+    NavHoverFadeState* state = NavHoverFadeGetState(hwnd);
+    if (!state && !hotItem)
+        return;
+    if (!state) {
+        state = NavHoverFadeEnsureState(hwnd);
+        if (!state)
+            return;
+    }
+    if (state->hotItem == hotItem)
+        return;
+
+    const bool selected = hotItem &&
+        (TreeView_GetItemState(
+            hwnd, hotItem, TVIS_SELECTED) & TVIS_SELECTED);
+
+    if (state->hotItem)
+        InvalidateRect(hwnd, &state->rect, FALSE);
+    NavHoverFadeStopTimer(hwnd, state);
+
+    if (!hotItem) {
+        NavHoverFadeDestroyState(hwnd, false);
+        return;
+    }
+
+    state->hotItem = hotItem;
+    state->startTime = 0.0;
+    if (!NavHoverFadeGetItemRect(
+            hwnd, hotItem, &state->rect)) {
+        NavHoverFadeDestroyState(hwnd, false);
+        return;
+    }
+
+    const bool animate =
+        !selected && !IsTreeItemPressed(hwnd, &state->rect);
+    if (animate)
+        state->startTime = TimerGetSeconds();
+
+    InvalidateRect(hwnd, &state->rect, FALSE);
+    if (animate && !NavHoverFadeStartTimer(hwnd, state))
+        state->startTime = 0.0;
+}
+
+static void NavHoverFadeHandleMouseMove(HWND hwnd, LPARAM lParam)
+{
+    if (!NavHoverFadeSettingsEnabled()) {
+        NavHoverFadeDestroyState(hwnd, true);
+        return;
+    }
+
+    TVHITTESTINFO hit = {};
+    hit.pt.x = static_cast<SHORT>(LOWORD(lParam));
+    hit.pt.y = static_cast<SHORT>(HIWORD(lParam));
+    HTREEITEM item = TreeView_HitTest(hwnd, &hit);
+    NavHoverFadeState* state = NavHoverFadeGetState(hwnd);
+    if (state && state->hotItem == item) {
+        if (!state->trackingLeave) {
+            TRACKMOUSEEVENT tme = {
+                sizeof(tme), TME_LEAVE, hwnd, 0
+            };
+            state->trackingLeave =
+                TrackMouseEvent(&tme) != FALSE;
+        }
+        return;
+    }
+    NavHoverFadeRetarget(hwnd, item);
+    state = NavHoverFadeGetState(hwnd);
+    if (state && !state->trackingLeave) {
+        TRACKMOUSEEVENT tme = {
+            sizeof(tme), TME_LEAVE, hwnd, 0
+        };
+        state->trackingLeave = TrackMouseEvent(&tme) != FALSE;
+    }
+}
+
+static void NavHoverFadeTimerTick(HWND hwnd)
+{
+    NavHoverFadeState* state = NavHoverFadeGetState(hwnd);
+    if (!state || !state->timerActive)
+        return;
+    if (!NavHoverFadeSettingsEnabled()) {
+        NavHoverFadeDestroyState(
+            hwnd,
+            !g_msgWndUnloading.load(std::memory_order_acquire));
+        return;
+    }
+
+    const DOUBLE now = TimerGetSeconds();
+    RECT previousRect = state->rect;
+    if (!NavHoverFadeGetItemRect(
+            hwnd, state->hotItem, &state->rect)) {
+        NavHoverFadeDestroyState(hwnd, true);
+        return;
+    }
+    if (!EqualRect(&previousRect, &state->rect))
+        InvalidateRect(hwnd, &previousRect, FALSE);
+    InvalidateRect(hwnd, &state->rect, FALSE);
+
+    if (now - state->startTime >=
+        kNavHoverFadeDurationSeconds) {
+        state->startTime = 0.0;
+        NavHoverFadeStopTimer(hwnd, state);
+    }
+}
+
+static float NavHoverFadeProgressForWindow(HWND hwnd)
+{
+    NavHoverFadeState* state = NavHoverFadeGetState(hwnd);
+    if (!state)
+        return 1.f;
+    return NavHoverFadeProgress(
+        *state, TimerGetSeconds());
+}
+
+// Set by GlyphSampleEraseColor (near DrawSvgGeom, much later in this file)
+// on whichever window it last painted a glyph background for. Defined here,
+// next to kTreeCursorSubclassProp, so the two subclasses that actually see
+// every window a glyph background gets painted on -- nav-pane TreeViews via
+// TreeCursorSubclassProc below, and the classic Places Bar toolbar via
+// PlacesBarAnimSubclassProc -- can remove it in their own WM_NCDESTROY
+// without needing a forward declaration.
+static constexpr LPCWSTR kPropGlyphEraseWarm = L"Win32UIModernizer.GlyphEraseWarm";
 
 static HCURSOR TreeArrowCursor()
 {
@@ -10691,8 +10683,43 @@ static HCURSOR TreeArrowCursor()
 static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
     WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
-    UNREFERENCED_PARAMETER(wParam);
     UNREFERENCED_PARAMETER(dwRefData);
+
+    if (const UINT resetMsg = g_navHoverFadeResetMessage.load(std::memory_order_acquire);
+        resetMsg && uMsg == resetMsg) {
+        NavHoverFadeDestroyState(
+            hWnd,
+            !g_msgWndUnloading.load(std::memory_order_acquire));
+        return 0;
+    }
+
+    if (uMsg == WM_MOUSEMOVE &&
+        NavHoverFadeSettingsEnabled()) {
+        NavHoverFadeHandleMouseMove(hWnd, lParam);
+    }
+
+    if (uMsg == WM_MOUSELEAVE) {
+        if (auto* state = NavHoverFadeGetState(hWnd)) {
+            state->trackingLeave = false;
+            if (NavHoverFadeSettingsEnabled()) {
+                NavHoverFadeRetarget(hWnd, nullptr);
+            } else {
+                NavHoverFadeDestroyState(
+                    hWnd,
+                    !g_msgWndUnloading.load(
+                        std::memory_order_acquire));
+            }
+        }
+    }
+
+    if (uMsg == WM_TIMER &&
+        wParam == NavHoverFadeTimerId()) {
+        NavHoverFadeTimerTick(hWnd);
+        return 0;
+    }
+
+    if (uMsg == WM_SETTINGCHANGE || uMsg == WM_THEMECHANGED)
+        NavHoverFadeDestroyState(hWnd, true);
 
     if (uMsg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT
         && GlyphIsNavPaneTreeView(hWnd)) {
@@ -10701,8 +10728,10 @@ static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
     }
 
     if (uMsg == WM_NCDESTROY) {
+        NavHoverFadeDestroyState(hWnd, false);
         GlyphTreeOwnerCleanup(hWnd);
         RemovePropW(hWnd, kTreeCursorSubclassProp);
+        RemovePropW(hWnd, kPropGlyphEraseWarm);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TreeCursorSubclassProc);
     }
 
@@ -10711,12 +10740,79 @@ static LRESULT CALLBACK TreeCursorSubclassProc(HWND hWnd, UINT uMsg,
 
 static void TreeCursorTrySubclass(HWND hwnd)
 {
-    if (!g_settings.ExplorerSection || !GlyphIsNavPaneTreeView(hwnd))
+    if (g_msgWndUnloading.load(std::memory_order_acquire) ||
+        !g_settings.ExplorerSection ||
+        !GlyphIsNavPaneTreeView(hwnd)) {
         return;
+    }
 
     if (!GetPropW(hwnd, kTreeCursorSubclassProp) &&
         WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc, 0))
         SetPropW(hwnd, kTreeCursorSubclassProp, (HANDLE)1);
+}
+
+// Lightweight WM_SETCURSOR-only counterpart for third-party trees where
+// ApplyTreeRuntimeSettings forced TVS_TRACKSELECT: comctl32's own
+// TREEVIEW_SetCursor (confirmed via Wine/ReactOS) sets a hand cursor over any
+// hit item once that style is set and returns without reaching
+// DefWindowProc, so nothing short of intercepting WM_SETCURSOR ourselves can
+// restore the arrow. Reuses the same cached TreeArrowCursor() as
+// TreeCursorSubclassProc, but skips all of its nav-pane hover-fade/glyph
+// machinery -- this population is never the nav pane (see IsInsideExplorer/
+// IsInsidePickerNamespaceTree in the caller).
+static LRESULT CALLBACK TvTrackSelectCursorSubclassProc(HWND hWnd, UINT uMsg,
+    WPARAM wParam, LPARAM lParam, DWORD_PTR)
+{
+    if (uMsg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT) {
+        SetCursor(TreeArrowCursor());
+        return TRUE;
+    }
+    if (uMsg == WM_NCDESTROY) {
+        RemovePropW(hWnd, PROP_TV_TRACKSELECT_CURSOR_SUB);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TvTrackSelectCursorSubclassProc);
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+static void TreeCursorRemoveFromWindow(HWND hwnd)
+{
+    if (GetPropW(hwnd, kTreeCursorSubclassProp)) {
+        if (GetPropW(hwnd, kPropNavHoverFadeState)) {
+            // If registration failed, resetMsg is 0 -- sending WM_NULL
+            // wouldn't reach TreeCursorSubclassProc's (correctly) guarded
+            // handler at all, leaking the hover-fade state and its SetTimer.
+            // Do the work directly instead of relying on the message.
+            if (const UINT resetMsg =
+                    g_navHoverFadeResetMessage.load(std::memory_order_acquire))
+                (void)SendMessageW(hwnd, resetMsg, 0, 0);
+            else
+                NavHoverFadeDestroyState(
+                    hwnd, !g_msgWndUnloading.load(std::memory_order_acquire));
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc);
+        RemovePropW(hwnd, kTreeCursorSubclassProp);
+    }
+}
+
+static BOOL CALLBACK TreeCursorRemoveChildEnum(HWND hwnd, LPARAM)
+{
+    TreeCursorRemoveFromWindow(hwnd);
+    return TRUE;
+}
+
+// Sweeps every top-level window of this process when ExplorerSection is
+// toggled off live -- nav-pane TreeViews are essentially always alive for
+// the life of Explorer, so without this the subclass would otherwise
+// outlive the setting until the window itself is destroyed.
+static BOOL CALLBACK TreeCursorRemoveEnum(HWND hwnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+    TreeCursorRemoveFromWindow(hwnd);
+    EnumChildWindows(hwnd, TreeCursorRemoveChildEnum, 0);
+    return TRUE;
 }
 
 static LRESULT CALLBACK TreeViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
@@ -10751,7 +10847,7 @@ static LRESULT CALLBACK TreeViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         const BOOL after = GetPropW(hWnd, PROP_TV_INSERT_AFTER) != nullptr;
 
-        // Double-buffer with regular memory DC (anti-flicker, same as TabSubclassProc)
+        // Double-buffer with regular memory DC (anti-flicker, same as TabFlickerFixSubclassProc)
         PAINTSTRUCT ps{};
         HDC hdc = BeginPaint(hWnd, &ps);
         if (!hdc)
@@ -11081,6 +11177,23 @@ static bool DiskPieIsFreeSliceColor(COLORREF c)
     return DiskPieColorCloseTo(c, kDiskPieFreeColorLight, 6);
 }
 
+// The donut's center hole isn't drawn with a color this mod picks -- it's
+// native shell32/wpdshext code reading GetSysColor(COLOR_BTNFACE), which
+// ApplyDarkSysColors has remapped process-wide to kPropDkBg (needed for the
+// countless other unrelated consumers of that system color). That's the
+// right shade for most contexts, but wrong specifically when the chart sits
+// on a property-sheet page: those pages paint their own actual background
+// as the lighter kPropDkPane (see IsInsidePropSheetPage/DarkBgForPaint), so
+// a hole filled with the darker global BTNFACE shade reads as a mismatched
+// dark circle instead of blending in. Can't fix this by changing what
+// COLOR_BTNFACE maps to (that would wrongly recolor everything else that
+// reads it) -- has to be caught and swapped here, the same way the slice
+// colors already are, scoped to just this one draw call.
+static bool DiskPieIsHoleColor(COLORREF c)
+{
+    return DiskPieColorCloseTo(c, kPropDkBg, 4);
+}
+
 static UINT32 DiskPieColorRefToOpaqueArgb(COLORREF color)
 {
     return 0xFF000000 |
@@ -11106,6 +11219,12 @@ static COLORREF DiskPieResolveColor(COLORREF color)
     if (DiskPieIsFreeSliceColor(color) && IsWindowDarkMode(g_diskPieState.hdc))
     {
         return kDiskPieFreeColorDark; // Light mode keeps the original as-is.
+    }
+    if (DiskPieIsHoleColor(color) && IsWindowDarkMode(g_diskPieState.hdc))
+    {
+        HWND pieHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(g_diskPieState.hdc);
+        if (IsInsidePropSheetPage(pieHwnd))
+            return kPropDkPane;
     }
     return color;
 }
@@ -11884,7 +12003,7 @@ static bool PaintExplorerNavigationButton(HDC hdc, INT iPartId, INT iStateId, LP
     if (w <= 0 || h <= 0)
         return false;
 
-    const bool dark = IsWindowDarkMode(hdc);
+    const bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
     const bool hot = (iStateId == NAV_BB_HOT);
     const bool pressed = (iStateId == NAV_BB_PRESSED);
     const bool disabled = (iStateId == NAV_BB_DISABLED);
@@ -12094,7 +12213,8 @@ static bool SuppressTravelBandRecentMenuHover(HDC hdc, INT iPartId, INT iStateId
         tb.idCommand != 258)
         return false;
 
-    HBRUSH br = CreateSolidBrush(TravelBandEraseColor());
+    HBRUSH br = CreateSolidBrush(TravelBandEraseColor(
+        g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)));
     if (br) {
         FillRect(hdc, pRect, br);
         DeleteObject(br);
@@ -12218,8 +12338,8 @@ static bool PaintExplorerRebarMicaTintRect(HDC hdc, LPCRECT pRect)
     if (w <= 0 || h <= 0)
         return false;
 
-    const bool dark = IsWindowDarkMode(hdc);
-    
+    const bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
+
     const COLORREF micaBase = dark ? RGB(0x16, 0x16, 0x16)
                                    : RGB(0xFF, 0xFF, 0xFF);
                                    
@@ -12339,11 +12459,12 @@ static bool PaintLegacyShellDropdownToolbar(HDC hdc, INT iPartId, INT iStateId, 
     if (!brush)
         return true;
 
+    const float scale = (float)DpiForPaintHdc(hdc) / 96.f;
     pRT->BeginDraw();
     pRT->FillRoundedRectangle(
         D2D1::RoundedRect(
             D2D1::RectF(0.f, 0.f, (float)w, (float)h),
-            kRoundedSelectionCornerRadius, kRoundedSelectionCornerRadius),
+            kRoundedSelectionCornerRadius * scale, kRoundedSelectionCornerRadius * scale),
         brush.Get());
     HRESULT hr = pRT->EndDraw();
     if (hr == (HRESULT)D2DERR_RECREATE_TARGET) {
@@ -12468,7 +12589,7 @@ static BOOL DrawModernFocusRect(HDC hdc, const RECT* rect)
     return graphics.DrawPath(&pen, &path) == Gdiplus::Ok;
 }
 
-static bool ShouldDrawSelectionBorder(HDC hdc, bool isTreeView); // defined later in the file
+static bool ShouldDrawSelectionBorder(HWND hwnd, bool isTreeView); // defined later in the file
 
 BOOL WINAPI DrawFocusRect_hook(HDC hdc, CONST RECT* lprc)
 {
@@ -12485,20 +12606,19 @@ BOOL WINAPI DrawFocusRect_hook(HDC hdc, CONST RECT* lprc)
         if (g_settings.RoundedSelection && _wcsicmp(cls, L"SysTreeView32") == 0)
             return TRUE; // handled independently via NM_CUSTOMDRAW/CDIS_FOCUS
 
-        // Items with an existing accent ring (outside the shell's own file
-        // list) get that ring recolored to white/black on focus instead
-        // (DrawRoundedItemBg/DrawFocusRect_hook never fires for the ring
-        // draw itself). Items with no ring -- the pill, inside the shell's
-        // own list -- get no separate indicator: Explorer's own file list
-        // never calls this API for its custom-rendered items, so a
-        // fallthrough here is unreachable for them, and drawing the outline
-        // from elsewhere in the paint pipeline didn't work either (tried via
-        // HandlePostDraw; reverted). Suppress unconditionally either way,
-        // same as the TreeView branch above.
+        // Items with an existing accent ring get it recolored white/black on
+        // focus instead. Items with no ring (Explorer's own pill) get none --
+        // Explorer's file list never calls this API for its custom items, so
+        // a fallthrough here is unreachable for them. Suppress unconditionally
+        // either way, same as the TreeView branch above.
         if (g_settings.RoundedSelection && _wcsicmp(cls, L"SysListView32") == 0)
             return TRUE;
 
-        if (g_settings.TabPill && _wcsicmp(cls, L"SysTabControl32") == 0)
+        // The WinUI background already conveys selection on its own -- but
+        // only when PaintTab is actually going to draw it (IsWinUiTabStyleActive);
+        // otherwise this tab is falling through to fully native rendering,
+        // and native rendering needs its own native focus rect.
+        if (_wcsicmp(cls, L"SysTabControl32") == 0 && IsWinUiTabStyleActive())
             return TRUE;
 
         // Pushbuttons show focus via their own border color (PaintPushButton)
@@ -12651,6 +12771,8 @@ static constexpr float LV_RING_CORNER_RADIUS = 8.f;
 static constexpr int LV_CACHE_MARGIN = 8; // 9-grid margin (>= largest corner radius at 100%)
 static constexpr float LV_SHADOW_BAND_H = 2.f; // selected-item bottom shadow height (must be <= LV_CACHE_MARGIN)
 static constexpr int LV_CACHE_BLOCK = 12; // slots needed for one fill-only 9-grid variant (5 states x 2 controls, some spare)
+static constexpr int LV_TREE_PRESSED_CACHE_INDEX = LV_CACHE_BLOCK - 1;
+static constexpr float LV_TREE_PRESSED_ALPHA_MULTIPLIER = 0.70f;
 static constexpr int LV_BORDER_CACHE_BASE = LV_CACHE_BLOCK; // outside-context bordered-pill variant starts here
 static constexpr int LV_FOCUS_BORDER_CACHE_BASE = LV_CACHE_BLOCK * 2; // same, ring recolored white/black on keyboard focus
 static constexpr int LV_CACHE_SLOTS = LV_CACHE_BLOCK * 3;
@@ -12822,11 +12944,14 @@ static bool LvBorderCacheEnsure(HDC hdc, int idx, D2D1_COLOR_F fill, D2D1_COLOR_
 }
 
 // 9-grid stretch with alpha — corners preserved, middle stretched
-static void LvCacheDraw(HDC hdc, LPCRECT dst, int idx) {
+static void LvCacheDraw(HDC hdc, LPCRECT dst, int idx, BYTE opacity = 255) {
+    if (!opacity)
+        return;
+
     int dw = dst->right - dst->left, dh = dst->bottom - dst->top;
     int m = LV_CACHE_MARGIN;
     int S = LV_CACHE_SZ;
-    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, opacity, AC_SRC_ALPHA};
     AlphaBlend(hdc, dst->left, dst->top, m, m, g_lvCacheDC[idx], 0, 0, m, m, bf);
     AlphaBlend(hdc, dst->right - m, dst->top, m, m, g_lvCacheDC[idx], S - m, 0, m, m, bf);
     AlphaBlend(hdc, dst->left, dst->bottom - m, m, m, g_lvCacheDC[idx], 0, S - m, m, m, bf);
@@ -12852,9 +12977,8 @@ static HWND GetPaintHwndFromDC(HDC hdc)
 // own namespace tree, or a ListView not hosted in a real shell folder view
 // (Explorer or a common file picker). Third-party apps get the accent
 // border instead of Explorer's plain filled selection.
-static bool ShouldDrawSelectionBorder(HDC hdc, bool isTreeView)
+static bool ShouldDrawSelectionBorder(HWND hwnd, bool isTreeView)
 {
-    HWND hwnd = GetPaintHwndFromDC(hdc);
     if (!hwnd) return false;
     return isTreeView ? !GlyphIsNavPaneTreeView(hwnd) : !IsInsideShellFolderView(hwnd);
 }
@@ -12870,7 +12994,7 @@ static bool IsKeyboardFocusedItemRect(HWND hwnd, LPCRECT pRect, bool isTreeView)
 
 static int GetSelectionBorderOuterPaddingX(HWND hwnd)
 {
-    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    const UINT dpi = DpiForPaint(hwnd);
     const int padding = MulDiv(2, dpi, 96);
     return padding > 1 ? padding : 1;
 }
@@ -12882,14 +13006,14 @@ static int GetSelectionBorderOuterPaddingX(HWND hwnd)
 // itself, cutting it off on the sides.
 static int GetListSelectionBorderOuterPaddingX(HWND hwnd)
 {
-    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    const UINT dpi = DpiForPaint(hwnd);
     const int padding = MulDiv(1, dpi, 96);
     return padding > 1 ? padding : 1;
 }
 
 static int GetSelectionBorderOuterPaddingY(HWND hwnd)
 {
-    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    const UINT dpi = DpiForPaint(hwnd);
     const int padding = MulDiv(1, dpi, 96);
     return padding > 1 ? padding : 1;
 }
@@ -12899,7 +13023,7 @@ static int GetSelectionBorderOuterPaddingY(HWND hwnd)
 // real at 100% DPI instead of rounding straight back up to the same value.
 static int GetListSelectionBorderOuterPaddingY(HWND hwnd)
 {
-    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    const UINT dpi = DpiForPaint(hwnd);
     return (int)(dpi / 192);
 }
 
@@ -12916,7 +13040,7 @@ static void DrawSelectionBorder(ID2D1RenderTarget* pRT, FLOAT w, FLOAT h, FLOAT 
     if (!pRT || w <= 0.f || h <= 0.f)
         return;
 
-    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    const UINT dpi = DpiForPaint(hwnd);
     const FLOAT scale = (FLOAT)dpi / 96.f;
     const FLOAT stroke = 1.5f * scale;
     const FLOAT inset = stroke * 0.5f;
@@ -12934,26 +13058,503 @@ static void DrawSelectionBorder(ID2D1RenderTarget* pRT, FLOAT w, FLOAT h, FLOAT 
         borderBr.Get(), stroke);
 }
 
+// GetCursorPos/ScreenToClient cached per (hwnd, tick) -- this is called once
+// per visible row via DrawRoundedItemBg, so a ~30-item nav pane repainting
+// while the left button is held (drag, press-and-hold) would otherwise redo
+// the same cursor query ~30 times per frame. GetTickCount()'s ~10-16ms
+// resolution means every item painted within one repaint sees the same tick
+// and reuses a single cached query; a tick advancing or a different
+// window's items starting to paint invalidates it.
+//
+// GetKeyState(VK_LBUTTON) below is deliberately NOT part of this cache and
+// always read fresh, unlike the position: it's effectively free (no real
+// syscall, just a read of the thread's already-attached input state), and
+// caching it caused a real regression -- an unrelated repaint (e.g. a hover
+// fade tick) landing in the same ~15ms tick window as the actual
+// WM_LBUTTONDOWN-triggered repaint could populate the cache with a stale
+// "not pressed" reading moments before the press, which then got reused for
+// the real press's own paint instead of re-checking the button, making the
+// pressed state silently fail to activate.
+struct TreeItemPressedCache {
+    DWORD tick = 0;
+    HWND hwnd = nullptr;
+    POINT clientPt = {};
+    bool havePt = false;
+};
+static thread_local TreeItemPressedCache s_treeItemPressedCache;
+
+static bool IsTreeItemPressed(HWND hwnd, LPCRECT itemRect)
+{
+    if (!hwnd || !itemRect || !(GetKeyState(VK_LBUTTON) & 0x8000))
+        return false;
+
+    const DWORD now = GetTickCount();
+    TreeItemPressedCache& c = s_treeItemPressedCache;
+    if (c.tick != now || c.hwnd != hwnd) {
+        c.tick = now;
+        c.hwnd = hwnd;
+        POINT cursor = {};
+        c.havePt = GetCursorPos(&cursor) && ScreenToClient(hwnd, &cursor);
+        c.clientPt = cursor;
+    }
+    return c.havePt && PtInRect(itemRect, c.clientPt);
+}
+
+static void ScaleRectAroundCenter(RECT* rect, float scale)
+{
+    if (!rect || scale >= 1.f)
+        return;
+
+    const int width = rect->right - rect->left;
+    const int height = rect->bottom - rect->top;
+    const int insetX = std::max(
+        0, static_cast<int>(std::lround(width * (1.f - scale) * 0.5f)));
+    const int insetY = std::max(
+        0, static_cast<int>(std::lround(height * (1.f - scale) * 0.5f)));
+    if (width > insetX * 2) {
+        rect->left += insetX;
+        rect->right -= insetX;
+    }
+    if (height > insetY * 2) {
+        rect->top += insetY;
+        rect->bottom -= insetY;
+    }
+}
+
+// Alpha-fade-in for the outside-context bordered-pill selection style (see
+// ShouldDrawSelectionBorder) -- same smoothstep-progress/16ms-timer strategy
+// as NavHoverFadeState, but single-shot (0->1 only, no reverse). Shared
+// between ListView (keyed by the item's real LVM_HITTEST index -- a rect key
+// breaks on scroll, since the same item gets a new key at its shifted
+// position and wrongly restarts) and TreeView (keyed by the stable HTREEITEM
+// directly, no hit-test involved -- see the TreeView branch in
+// DrawRoundedItemBg's reader block). A finished entry is left parked at
+// progress 1 (same as the chevron animation map) instead of erased, since the
+// item stays selected across many repaints -- erasing on completion would
+// make the very next repaint see no entry and restart the fade from 0,
+// blinking forever. Real deselection is only ever observed via
+// LVN_ITEMCHANGED (ListView) or TVN_SELCHANGEDW/A and TVN_DELETEITEM
+// (TreeView) -- see ListSelectFadeInvalidateItem/ListSelectFadeResyncWindow
+// -- never through the paint path itself.
+struct ListSelectFadeState {
+    DOUBLE startTime = 0.0;
+    HWND paintHwnd = nullptr;
+    RECT rect = {};
+    // Whether this entry is still counted in g_lvSelectFadeActiveCount --
+    // cleared exactly once, the first time the timer tick observes its
+    // progress reach 1, so the counter never double-decrements.
+    bool activeCounted = false;
+};
+
+static constexpr UINT kListSelectFadeTimerId = 0x5E1EC7;
+static constexpr UINT kListSelectFadeTimerIntervalMs = 16;
+static constexpr DOUBLE kListSelectFadeDurationSeconds = 0.14;
+static constexpr UINT kListSelectFadeHitTestMsg = 0x1000 + 18; // LVM_HITTEST
+// Explorer runs one UI thread per browser window (and dialogs commonly get
+// their own thread too), so although each *window's* own messages are always
+// serialized on its own thread, these containers are process-global -- two
+// list/tree views on different threads can still insert into/rehash the same
+// unordered_map concurrently. g_lvSelectFadeMutex guards every access to the
+// globals below. Never hold it across a cross-thread
+// SetWindowSubclassFromAnyThread/RemoveWindowSubclassFromAnyThread call --
+// same deadlock shape documented on g_checkAnimsMutex/CheckAnims_Cleanup.
+static std::recursive_mutex g_lvSelectFadeMutex;
+static std::unordered_map<ULONG_PTR, ListSelectFadeState> g_lvSelectFadeAnims;
+// Reverse index (which keys belong to which window) so a per-window
+// operation -- LVN_DELETEITEM's wipe, ResyncWindow's prune -- doesn't have
+// to scan every entry in the process, just this window's own.
+static std::unordered_map<HWND, std::unordered_set<ULONG_PTR>> g_lvSelectFadeKeysByWindow;
+// One independent timer/subclass host per root window that has ever needed
+// one -- NOT a single global slot retargeted between windows. Retargeting
+// meant releasing the *previous* host's subclass from whichever thread was
+// installing the new one: a blocking cross-thread
+// RemoveWindowSubclassFromAnyThread call made synchronously from inside
+// SendMessageW_hook's LVN_ITEMCHANGED handling, which could freeze window
+// B's click on window A's thread for as long as A's thread was busy. Each
+// host now manages its own timer independently and self-removes on its own
+// WM_NCDESTROY; only Wh_ModUninit tears every host down explicitly, with
+// the copy-then-release shape used elsewhere in the file.
+static std::unordered_set<HWND> g_lvSelectFadeTimerHosts;
+// Count of entries still actively fading (progress < 1). DrawRoundedItemBg
+// gates its whole per-paint lookup behind this being nonzero -- the ListView
+// LVM_HITTEST call and the TreeView map lookup alike -- once every fade has
+// settled it's back to 0, so a selected item just sitting there (the common
+// case, including a first/last item during an unrelated later scroll) costs
+// zero SendMessage calls per paint, not one per repaint forever.
+static int g_lvSelectFadeActiveCount = 0;
+
+// Callers below already hold g_lvSelectFadeMutex.
+static void ListSelectFadeMarkComplete(ListSelectFadeState& state)
+{
+    if (!state.activeCounted)
+        return;
+    state.activeCounted = false;
+    if (g_lvSelectFadeActiveCount > 0)
+        --g_lvSelectFadeActiveCount;
+}
+
+// Callers below already hold g_lvSelectFadeMutex.
+static void ListSelectFadeTrackKey(HWND hwnd, ULONG_PTR key)
+{
+    g_lvSelectFadeKeysByWindow[hwnd].insert(key);
+}
+
+static void ListSelectFadeUntrackKey(HWND hwnd, ULONG_PTR key)
+{
+    auto it = g_lvSelectFadeKeysByWindow.find(hwnd);
+    if (it == g_lvSelectFadeKeysByWindow.end())
+        return;
+    it->second.erase(key);
+    if (it->second.empty())
+        g_lvSelectFadeKeysByWindow.erase(it);
+}
+
+// itemId is a ListView index (cast through (UINT) at the call site) or a
+// TreeView HTREEITEM's raw pointer value -- either way just opaque bits to
+// hash, disambiguated by hwnd since the two controls never share a map entry.
+static ULONG_PTR ListSelectFadeKey(HWND hwnd, ULONG_PTR itemId)
+{
+    return ((ULONG_PTR)hwnd) ^ ((itemId + 1) * 2654435761ull);
+}
+
+// Resolves the real item index under pRect's center the same way the OS
+// itself would hit-test it -- pRect is already the exact bounding rect
+// DrawThemeBackground handed us for this item, so its center reliably lands
+// inside that item's own cell regardless of view mode (report/list/icon).
+static int ListSelectFadeHitTestItem(HWND hwnd, LPCRECT pRect)
+{
+    if (!hwnd || !pRect)
+        return -1;
+
+    LVHITTESTINFO ht = {};
+    ht.pt.x = (pRect->left + pRect->right) / 2;
+    ht.pt.y = (pRect->top + pRect->bottom) / 2;
+    return (int)SendMessageW(hwnd, kListSelectFadeHitTestMsg, 0, (LPARAM)&ht);
+}
+
+static float ListSelectFadeProgress(const ListSelectFadeState& state, DOUBLE now)
+{
+    if (state.startTime <= 0.0)
+        return 1.f;
+
+    const DOUBLE elapsed = now - state.startTime;
+    if (elapsed <= 0.0)
+        return 0.f;
+    if (elapsed >= kListSelectFadeDurationSeconds)
+        return 1.f;
+
+    float t = static_cast<float>(elapsed / kListSelectFadeDurationSeconds);
+    return t * t * (3.f - 2.f * t);
+}
+
+static LRESULT CALLBACK ListSelectFadeSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
+{
+    if (msg == WM_TIMER && wp == kListSelectFadeTimerId) {
+        DOUBLE now = TimerGetSeconds();
+
+        // Rects to invalidate are collected under the lock and fired off
+        // after releasing it -- InvalidateRect itself doesn't need the
+        // lock, and keeping the critical section short matters here since
+        // this runs on every timer tick while any selection is fading.
+        struct PendingInvalidate { HWND hwnd; RECT rect; };
+        std::vector<PendingInvalidate> pending;
+        bool anyFading = false;
+        {
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            for (auto it = g_lvSelectFadeAnims.begin(); it != g_lvSelectFadeAnims.end(); ) {
+                auto& state = it->second;
+                if (!state.paintHwnd || !IsWindow(state.paintHwnd)) {
+                    ListSelectFadeMarkComplete(state);
+                    g_lvSelectFadeKeysByWindow.erase(state.paintHwnd);
+                    it = g_lvSelectFadeAnims.erase(it);
+                    continue;
+                }
+
+                const float progress = ListSelectFadeProgress(state, now);
+                if (progress >= 1.f) {
+                    ListSelectFadeMarkComplete(state);
+                } else {
+                    anyFading = true;
+                    // state.rect is kept fresh by DrawRoundedItemBg on every
+                    // real paint during this active window (the InvalidateRect
+                    // below is what drives those paints), so it doesn't need a
+                    // live re-fetch here. It IS inflated by a safety margin
+                    // before invalidating, though: the border draw expands its
+                    // destination rect outward past pRect for the cross-axis
+                    // bleed effect (extraX for TreeView, extraY for ListView),
+                    // but InvalidateRect also sets the clip region for the next
+                    // paint -- invalidating the raw, un-inflated rect would
+                    // permanently clip that bleed off every repaint this timer
+                    // drives, cutting the border's edges. GetSelectionBorderOuterPaddingX
+                    // is the larger of the two axis paddings, so using it on all
+                    // four sides is a safe, generous margin regardless of which
+                    // control type/axis actually needs it.
+                    if (state.rect.right > state.rect.left) {
+                        RECT inv = state.rect;
+                        const int margin = GetSelectionBorderOuterPaddingX(state.paintHwnd);
+                        InflateRect(&inv, margin, margin);
+                        pending.push_back({state.paintHwnd, inv});
+                    }
+                }
+                ++it;
+            }
+        }
+
+        for (const auto& p : pending)
+            InvalidateRect(p.hwnd, &p.rect, FALSE);
+
+        if (!anyFading)
+            KillTimer(hwnd, kListSelectFadeTimerId);
+        return 0;
+    }
+
+    if (msg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            // A destroyed root's descendant controls are already destroyed
+            // by this point (Windows tears down children before their
+            // parent's own WM_NCDESTROY completes), so a generic
+            // now-dead-paintHwnd sweep -- the same one the timer tick above
+            // already does -- removes exactly the entries that belonged to
+            // this window's hierarchy, without touching entries for other,
+            // still-alive windows that happen to share this process-global
+            // map. (Previously this unconditionally cleared every entry
+            // process-wide, cancelling in-flight fades in unrelated windows
+            // just because this window happened to be destroyed.)
+            for (auto it = g_lvSelectFadeAnims.begin(); it != g_lvSelectFadeAnims.end(); ) {
+                if (!it->second.paintHwnd || !IsWindow(it->second.paintHwnd)) {
+                    ListSelectFadeMarkComplete(it->second);
+                    g_lvSelectFadeKeysByWindow.erase(it->second.paintHwnd);
+                    it = g_lvSelectFadeAnims.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            g_lvSelectFadeTimerHosts.erase(hwnd);
+        }
+        KillTimer(hwnd, kListSelectFadeTimerId);
+        // No manual RemoveWindowSubclass here: this proc is installed via
+        // WindhawkUtils::SetWindowSubclassFromAnyThread, whose
+        // SubclassProcWrapper already removes itself on WM_NCDESTROY before
+        // forwarding the message to us.
+    }
+
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static HWND ListSelectFadeTimerHwnd(HWND paintHwnd)
+{
+    if (!paintHwnd || !IsWindow(paintHwnd))
+        return nullptr;
+
+    HWND root = GetAncestor(paintHwnd, GA_ROOT);
+    return (root && IsWindow(root)) ? root : paintHwnd;
+}
+
+static bool ListSelectFadeEnsureTimer(HWND timerHwnd)
+{
+    if (!timerHwnd || !IsWindow(timerHwnd))
+        return false;
+
+    // timerHwnd is GetAncestor(hwndFrom, GA_ROOT), always on hwndFrom's own
+    // thread, so the subclass install below always takes
+    // SetWindowSubclassFromAnyThread's same-thread fast path -- no blocking
+    // cross-thread SendMessage. Each host is independent (see
+    // g_lvSelectFadeTimerHosts): there's no *other* window's subclass to
+    // release here, unlike the old single-global-slot design.
+    bool needSubclass;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        needSubclass = !g_lvSelectFadeTimerHosts.count(timerHwnd);
+    }
+
+    if (needSubclass) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                timerHwnd, ListSelectFadeSubclassProc, 0))
+            return false;
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        g_lvSelectFadeTimerHosts.insert(timerHwnd);
+    }
+
+    // SetTimer on an already-running timer with the same ID just re-arms
+    // it -- harmless, and this is only reached once per new fade (a real
+    // selection change), not once per paint, so the redundant call some of
+    // the time isn't worth tracking a separate "is armed" flag for.
+    SetTimer(timerHwnd, kListSelectFadeTimerId, kListSelectFadeTimerIntervalMs, nullptr);
+    return true;
+}
+
+// Called from SendMessageW_hook's LVN_ITEMCHANGED interception for a clean
+// per-item selection (iItem >= 0, LVIS_SELECTED actually gained) -- the sole
+// place a ListSelectFade entry is created. Paint (DrawRoundedItemBg) only
+// ever reads an existing entry's progress; it never creates one, since that
+// would mean an LVM_HITTEST lookup on every single paint of a selected item
+// (not just while it's actively fading) -- see g_lvSelectFadeActiveCount.
+// Inserts the fade entry and arms the timer for an item the caller has
+// already confirmed eligible (SysAnimationsEnabled + ShouldDrawSelectionBorder).
+// Used directly by ListSelectFadeResyncWindow, which validates both once for
+// the whole batch instead of paying ShouldDrawSelectionBorder's ancestor walk
+// again per selected item.
+static void ListSelectFadeStartItemUnchecked(HWND hwndFrom, ULONG_PTR itemId)
+{
+    const ULONG_PTR key = ListSelectFadeKey(hwndFrom, itemId);
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        if (g_lvSelectFadeAnims.find(key) != g_lvSelectFadeAnims.end())
+            return;
+
+        ListSelectFadeState st;
+        st.startTime = TimerGetSeconds();
+        st.paintHwnd = hwndFrom;
+        st.activeCounted = true;
+        g_lvSelectFadeAnims.emplace(key, st);
+        ListSelectFadeTrackKey(hwndFrom, key);
+        ++g_lvSelectFadeActiveCount;
+    }
+    if (!ListSelectFadeEnsureTimer(ListSelectFadeTimerHwnd(hwndFrom))) {
+        // Timer failed to install (e.g. SetWindowSubclass exhausted) --
+        // nothing will ever advance or complete this entry, so undo the
+        // insert instead of leaking an active-but-frozen fade forever.
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        ListSelectFadeUntrackKey(hwndFrom, key);
+        g_lvSelectFadeAnims.erase(key);
+        --g_lvSelectFadeActiveCount;
+    }
+}
+
+static void ListSelectFadeStartItem(HWND hwndFrom, ULONG_PTR itemId, bool isTreeView)
+{
+    if (!hwndFrom || !SysAnimationsEnabled() ||
+        !ShouldDrawSelectionBorder(hwndFrom, isTreeView))
+        return;
+    ListSelectFadeStartItemUnchecked(hwndFrom, itemId);
+}
+
+static void ListSelectFadeCleanup()
+{
+    std::vector<HWND> hosts;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        g_lvSelectFadeActiveCount = 0;
+        hosts.assign(g_lvSelectFadeTimerHosts.begin(), g_lvSelectFadeTimerHosts.end());
+        g_lvSelectFadeTimerHosts.clear();
+        g_lvSelectFadeAnims.clear();
+        g_lvSelectFadeKeysByWindow.clear();
+    }
+    for (HWND h : hosts) {
+        if (IsWindow(h)) {
+            KillTimer(h, kListSelectFadeTimerId);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                h, ListSelectFadeSubclassProc);
+        }
+    }
+}
+
 static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeView)
 {
-    EnsureD2DFactory();
-    if (!g_d2dFactory || !pRect) return false;
+    if (!pRect)
+        return false;
+
     int itemW = pRect->right - pRect->left, itemH = pRect->bottom - pRect->top;
-    if (itemW <= 0 || itemH <= 0) return false;
+    if (itemW <= 0 || itemH <= 0)
+        return false;
+
+    HWND itemHwnd = GetPaintHwndFromDC(hdc);
+    NavHoverFadeState* hoverFadeState =
+        isTreeView && itemHwnd
+            ? NavHoverFadeGetState(itemHwnd)
+            : nullptr;
+    const bool isNavPaneTree = isTreeView && itemHwnd &&
+        (hoverFadeState || GlyphIsNavPaneTreeView(itemHwnd));
+    const bool hoverFade = hoverFadeState != nullptr;
+    const bool pressed = isNavPaneTree &&
+        IsTreeItemPressed(itemHwnd, pRect);
+    if (pressed && hoverFadeState) {
+        hoverFadeState->startTime = 0.0;
+        NavHoverFadeStopTimer(itemHwnd, hoverFadeState);
+    }
+    float hoverProgress = 1.f;
+    if (iStateId == 2 && hoverFade) {
+        hoverProgress = NavHoverFadeProgressForWindow(itemHwnd);
+        if (hoverProgress <= 0.001f)
+            return true;
+    }
+    const float hoverScale =
+        kNavHoverFadeInitialScale +
+        (1.f - kNavHoverFadeInitialScale) * hoverProgress;
+
+    EnsureD2DFactory();
+    if (!g_d2dFactory)
+        return false;
 
     bool dark = IsWindowDarkMode(hdc);
-    if (iStateId == 1) return true;
-    // Hot (hover-only, not selected) never gets the outside-context border on
-    // ListView -- only genuine selection states (3/5/6) do. TreeView keeps
-    // its existing, already-tuned behavior for every state.
-    bool drawBorder = ShouldDrawSelectionBorder(hdc, isTreeView) &&
-                       !(!isTreeView && iStateId == 2);
+    // Hot (hover-only, not selected) never gets the outside-context border --
+    // only genuine selection states (3/5/6) do. Applies to both ListView and
+    // TreeView; the nav pane's own hover (isNavPaneTree) is unaffected, since
+    // its drawBorder was already false regardless of iStateId.
+    const bool drawBorder =
+        (isTreeView
+            ? itemHwnd && !isNavPaneTree
+            : ShouldDrawSelectionBorder(itemHwnd, false)) &&
+        !(iStateId == 2);
     // Keyboard-focused item (Tab/arrow nav, not mouse click) gets its ring
     // recolored white/black instead of a second overlapping indicator -- see
     // IsKeyboardFocusedItemRect and DrawFocusRect_hook's ListView branch.
     bool focusedRing = drawBorder && g_settings.ModernFocusRect == 0 &&
-        IsKeyboardFocusedItemRect(GetPaintHwndFromDC(hdc), pRect, isTreeView);
+        IsKeyboardFocusedItemRect(itemHwnd, pRect, isTreeView);
     D2D1_COLOR_F ringColor = GetSelectionRingColor(dark, focusedRing);
+
+    // Fade the bordered-pill in on selection (see ListSelectFade* above) --
+    // the hover state is already excluded from drawBorder, so this only ever
+    // triggers on a genuine selection transition. Entries are created only by
+    // LVN_ITEMCHANGED/TVN_SELCHANGEDW/A (ListSelectFadeStartItem), never here:
+    // this block is purely a reader, gated behind g_lvSelectFadeActiveCount so
+    // a settled selection costs nothing extra per repaint.
+    float selectFadeProgress = 1.f;
+    if (drawBorder && itemHwnd && SysAnimationsEnabled()) {
+        if (isTreeView) {
+            // TreeView is single-select and keyed by the stable HTREEITEM
+            // rather than a hit-testable index (TVM_HITTEST proved
+            // unreliable here in an earlier attempt -- see the blinking bug
+            // it caused). Any Selected-family iStateId paint for this window
+            // during an active fade can only be for the one selected item,
+            // so the sole tracked entry (if any) is read directly, no
+            // hit-test needed.
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            if (g_lvSelectFadeActiveCount > 0) {
+                auto winIt = g_lvSelectFadeKeysByWindow.find(itemHwnd);
+                if (winIt != g_lvSelectFadeKeysByWindow.end() && !winIt->second.empty()) {
+                    auto fadeIt = g_lvSelectFadeAnims.find(*winIt->second.begin());
+                    if (fadeIt != g_lvSelectFadeAnims.end()) {
+                        fadeIt->second.rect = *pRect;
+                        selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+                    }
+                }
+            }
+        } else {
+            // Only worth an LVM_HITTEST round-trip while some window has an
+            // active fade -- check the (lock-protected) counter first, same
+            // early-exit this block always relied on.
+            bool anyActive;
+            {
+                std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+                anyActive = g_lvSelectFadeActiveCount > 0;
+            }
+            if (anyActive) {
+                const int fadeItem = ListSelectFadeHitTestItem(itemHwnd, pRect);
+                if (fadeItem >= 0) {
+                    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+                    auto fadeIt = g_lvSelectFadeAnims.find(
+                        ListSelectFadeKey(itemHwnd, (ULONG_PTR)(UINT)fadeItem));
+                    if (fadeIt != g_lvSelectFadeAnims.end()) {
+                        fadeIt->second.rect = *pRect;
+                        selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+                    }
+                }
+            }
+        }
+    }
 
     float aR, aG, aB;
     if (g_settings.NeutralSelection) {
@@ -12968,7 +13569,7 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
     D2D1_COLOR_F fill;
     switch (iStateId) {
     case 2:
-        if (isTreeView || drawBorder) {
+        if (drawBorder || isNavPaneTree) {
             float a = GetBorderedSelectionFillAlpha(dark, g_settings.NeutralSelection, drawBorder);
             fill = D2D1::ColorF(aR, aG, aB, a);
         } else fill = D2D1::ColorF(aR, aG, aB, dark ? 0.08f : 0.06f);
@@ -12987,18 +13588,20 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
         break;
     default: return false;
     }
+    if (pressed)
+        fill.a *= LV_TREE_PRESSED_ALPHA_MULTIPLIER;
 
-    // Selected-item drop shadow: plain (non-bordered) ListView selection only
-    // -- nav-pane TreeView and any bordered-pill selection (TreeView/ListView
-    // outside their native shell context) use the accent border treatment
-    // instead. Baked into the cached tile itself -- see LvCacheEnsure's
-    // shadowAlpha param. Dark mode needs noticeably more alpha since it's
-    // composited over the window's real dark background (~#191919), not
-    // black -- the same 0.12 used in light mode barely reads there.
+    // Drop shadow: plain (non-bordered) ListView selection only -- bordered-
+    // pill and TreeView selection use the accent border instead. Alpha
+    // values follow LvCacheEnsure's shadowAlpha rationale (dark mode
+    // composites over ~#191919, not black).
     bool  wantsShadow  = !isTreeView && !drawBorder && (iStateId == 3 || iStateId == 6);
     float shadowAlpha  = wantsShadow ? (dark ? 0.38f : 0.12f) : 0.f;
 
-    int cacheIdx = (iStateId >= 2 && iStateId <= 6 ? iStateId - 2 : 0) + (isTreeView ? 6 : 0);
+    int cacheIdx = pressed
+        ? LV_TREE_PRESSED_CACHE_INDEX
+        : (iStateId >= 2 && iStateId <= 6 ? iStateId - 2 : 0) +
+            (isTreeView ? 6 : 0);
     if (cacheIdx >= LV_CACHE_BLOCK) cacheIdx = 0;
     FLOAT padX = isTreeView ? 1.f : 0.f;
     int px = (int)padX;
@@ -13015,7 +13618,7 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
         // clipped and bled visibly past the item's own edges. Reproduce just
         // that net-visible bleed directly in the destination rect.
         int borderIdx = (focusedRing ? LV_FOCUS_BORDER_CACHE_BASE : LV_BORDER_CACHE_BASE) + cacheIdx;
-        HWND borderHwnd = GetPaintHwndFromDC(hdc);
+        HWND borderHwnd = itemHwnd;
         UINT borderDpi = borderHwnd ? GetDpiForWindow(borderHwnd) : (UINT)g_Dpi;
         if (LvBorderCacheEnsure(hdc, borderIdx, fill, ringColor, isTreeView, borderDpi)) {
             RECT dst = *pRect;
@@ -13028,17 +13631,23 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
                 dst.top -= extraY;
                 dst.bottom += extraY;
             }
-            LvCacheDraw(hdc, &dst, borderIdx);
+            const BYTE borderOpacity = static_cast<BYTE>(
+                std::lround(std::clamp(selectFadeProgress, 0.f, 1.f) * 255.f));
+            LvCacheDraw(hdc, &dst, borderIdx, borderOpacity);
             return true;
         }
     } else if (LvCacheEnsure(hdc, cacheIdx, fill, shadowAlpha)) {
         RECT dst = {pRect->left + px, pRect->top, pRect->right - px, pRect->bottom};
-        LvCacheDraw(hdc, &dst, cacheIdx);
+        if (iStateId == 2 && hoverFade)
+            ScaleRectAroundCenter(&dst, hoverScale);
+        const BYTE opacity = static_cast<BYTE>(
+            std::lround(std::clamp(hoverProgress, 0.f, 1.f) * 255.f));
+        LvCacheDraw(hdc, &dst, cacheIdx, opacity);
         return true;
     }
 
     // Fallback: direct D2D (cache alloc failure, e.g. GDI object exhaustion)
-    HWND paintHwnd = drawBorder ? GetPaintHwndFromDC(hdc) : nullptr;
+    HWND paintHwnd = drawBorder ? itemHwnd : nullptr;
     RECT paintRect = *pRect;
     int extraX = 0;
     int extraY = 0;
@@ -13052,13 +13661,20 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
         paintRect.top -= extraY;
         paintRect.bottom += extraY;
     }
+    if (iStateId == 2 && hoverFade)
+        ScaleRectAroundCenter(&paintRect, hoverScale);
     int w = paintRect.right - paintRect.left, h = paintRect.bottom - paintRect.top;
     if (w <= 0 || h <= 0) return false;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
     if (FAILED(CreateBoundD2DRenderTarget(hdc, &paintRect, g_d2dFactory, &pRT))) return false;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> br;
-    pRT->CreateSolidColorBrush(fill, &br);
+    D2D1_COLOR_F fallbackFill = fill;
+    fallbackFill.a *= hoverProgress * selectFadeProgress;
+    if (FAILED(pRT->CreateSolidColorBrush(fallbackFill, &br)))
+        return false;
+    D2D1_COLOR_F fallbackRingColor = ringColor;
+    fallbackRingColor.a *= selectFadeProgress;
     const FLOAT fillOffsetX = drawBorder ? (FLOAT)extraX + padX : padX;
     const FLOAT fillOffsetY = drawBorder ? (FLOAT)extraY : 0.f;
     const FLOAT fillRadius = drawBorder ? LV_RING_CORNER_RADIUS : LV_CORNER_RADIUS;
@@ -13106,7 +13722,7 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
         }
     }
     if (drawBorder)
-        DrawSelectionBorder(pRT.Get(), (FLOAT)w, (FLOAT)h, padX, paintHwnd, ringColor);
+        DrawSelectionBorder(pRT.Get(), (FLOAT)w, (FLOAT)h, padX, paintHwnd, fallbackRingColor);
     if (drawBorder)
         pRT->PopAxisAlignedClip();
     if (pRT->EndDraw() == (HRESULT)D2DERR_RECREATE_TARGET) {
@@ -13130,7 +13746,8 @@ static void DrawListViewPill(HDC hdc, LPCRECT pRect)
     float pad = h * (1.0f - PILL_H_FRAC) / 2.0f;
     if (h - 2.0f * pad < 1.0f) return;
 
-    float pillW = LV_PILL_W;
+    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
+    float pillW = 2.88f * scale;
     float cr    = pillW / 2.0f;
     D2D1_RECT_F pillRect = D2D1::RectF(LV_PILL_X, pad, LV_PILL_X + pillW, h - pad);
 
@@ -13194,12 +13811,12 @@ static bool PaintListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCREC
 
     const bool dark = IsWindowDarkMode(hdc);
     if (!g_d2dFactory)
-        return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
+        return false;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
     FPUGuard fpu;
     if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
-        return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
+        return false;
 
     const float fw = (float)w;
     const float fh = (float)h;
@@ -13214,7 +13831,7 @@ static bool PaintListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCREC
              : D2D1::ColorF(0.f, 0.f, 0.f, hoverAlpha),
         &brush);
     if (!brush)
-        return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
+        return false;
 
     pRT->BeginDraw();
     if (hoverAlpha > 0.f) {
@@ -13257,229 +13874,15 @@ static bool PaintListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCREC
     return true;
 }
 
-struct ListViewGroupChevronAnim {
-    float current = 0.f;
-    float startAngle = 0.f;
-    float target = 0.f;
-    DWORD startTick = 0;
-    int lastState = -1;
-    RECT rect = {};
-    HWND paintHwnd = nullptr;
-};
+// The group-header expand/collapse chevron used to have its own
+// timer-driven rotation animation (ListViewGroupChevronAnim et al.,
+// mirroring the nav-pane TreeView glyph's), but comctl32 almost never
+// actually painted an intermediate state for this control long enough
+// for it to be seen -- removed rather than kept around (and made to
+// fight the same cross-thread/unbounded-growth bugs the nav-pane
+// version had) for a transition nobody was really watching.
+// PaintListViewGroupChevron below renders the resting state directly.
 
-static constexpr UINT kListViewGroupChevronTimerId = 0x517C0B;
-static constexpr UINT_PTR kListViewGroupChevronSubId = 0x517C0A;
-static std::unordered_map<ULONG_PTR, ListViewGroupChevronAnim> g_lvGroupChevronAnims;
-static DOUBLE g_lvGroupChevronLastTime = 0.0;
-static HWND g_lvGroupChevronTimerHwnd = nullptr;
-
-static LRESULT CALLBACK ListViewGroupChevronSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR id, DWORD_PTR)
-{
-    if (msg == WM_TIMER && wp == kListViewGroupChevronTimerId) {
-        DWORD now = GetTickCount();
-
-        bool anyMoving = false;
-        for (auto it = g_lvGroupChevronAnims.begin(); it != g_lvGroupChevronAnims.end(); ) {
-            auto& anim = it->second;
-            if (!anim.paintHwnd || !IsWindow(anim.paintHwnd)) {
-                it = g_lvGroupChevronAnims.erase(it);
-                continue;
-            }
-
-            const float before = anim.current;
-            if (anim.current != anim.target) {
-                anim.current = GlyphChevronAngleAt(
-                    anim.startAngle, anim.target, anim.startTick, now);
-                if (anim.current == anim.target)
-                    anim.startTick = 0;
-            }
-
-            if (before != anim.current && anim.rect.right > anim.rect.left)
-                InvalidateRect(anim.paintHwnd, &anim.rect, FALSE);
-            if (anim.current != anim.target)
-                anyMoving = true;
-            ++it;
-        }
-
-        if (!anyMoving) {
-            KillTimer(hwnd, kListViewGroupChevronTimerId);
-            g_lvGroupChevronLastTime = 0.0;
-        }
-        return 0;
-    }
-
-    if (msg == WM_NCDESTROY) {
-        KillTimer(hwnd, kListViewGroupChevronTimerId);
-        g_lvGroupChevronAnims.clear();
-        g_lvGroupChevronLastTime = 0.0;
-        if (g_lvGroupChevronTimerHwnd == hwnd)
-            g_lvGroupChevronTimerHwnd = nullptr;
-        RemoveWindowSubclass(hwnd, ListViewGroupChevronSubclassProc, id);
-    }
-
-    return DefSubclassProc(hwnd, msg, wp, lp);
-}
-
-static HWND ListViewGroupChevronPaintHwnd(HDC hdc)
-{
-    HWND hwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
-    return (hwnd && IsWindow(hwnd)) ? hwnd : nullptr;
-}
-
-static HWND ListViewGroupChevronTimerHwnd(HWND paintHwnd)
-{
-    if (!paintHwnd || !IsWindow(paintHwnd))
-        return nullptr;
-
-    HWND root = GetAncestor(paintHwnd, GA_ROOT);
-    return (root && IsWindow(root)) ? root : paintHwnd;
-}
-
-static bool ListViewGroupChevronEnsureTimer(HWND timerHwnd)
-{
-    if (!timerHwnd || !IsWindow(timerHwnd))
-        return false;
-
-    if (g_lvGroupChevronTimerHwnd != timerHwnd) {
-        if (g_lvGroupChevronTimerHwnd && IsWindow(g_lvGroupChevronTimerHwnd)) {
-            KillTimer(g_lvGroupChevronTimerHwnd, kListViewGroupChevronTimerId);
-            RemoveWindowSubclass(g_lvGroupChevronTimerHwnd,
-                ListViewGroupChevronSubclassProc, kListViewGroupChevronSubId);
-        }
-        g_lvGroupChevronLastTime = 0.0;
-        g_lvGroupChevronTimerHwnd = nullptr;
-
-        if (!SetWindowSubclass(timerHwnd, ListViewGroupChevronSubclassProc,
-                kListViewGroupChevronSubId, 0))
-            return false;
-        g_lvGroupChevronTimerHwnd = timerHwnd;
-    }
-
-    if (g_lvGroupChevronLastTime == 0.0) {
-        g_lvGroupChevronLastTime = TimerGetSeconds();
-        SetTimer(timerHwnd, kListViewGroupChevronTimerId, 16, nullptr);
-    }
-    return true;
-}
-
-static void ListViewGroupChevronCleanup()
-{
-    if (g_lvGroupChevronTimerHwnd && IsWindow(g_lvGroupChevronTimerHwnd)) {
-        KillTimer(g_lvGroupChevronTimerHwnd, kListViewGroupChevronTimerId);
-        RemoveWindowSubclass(g_lvGroupChevronTimerHwnd,
-            ListViewGroupChevronSubclassProc, kListViewGroupChevronSubId);
-    }
-    g_lvGroupChevronAnims.clear();
-    g_lvGroupChevronLastTime = 0.0;
-    g_lvGroupChevronTimerHwnd = nullptr;
-}
-
-static ULONG_PTR ListViewGroupChevronKey(HWND hwnd, LPCRECT rc)
-{
-    int x = rc ? rc->left : 0;
-    int y = rc ? rc->top : 0;
-    ULONG_PTR h = (ULONG_PTR)hwnd;
-    return h ^ (((ULONG_PTR)(UINT)(x & 0xFFFF)) << 16) ^
-           (ULONG_PTR)(UINT)(y & 0xFFFF);
-}
-
-static bool PaintAnimatedListViewGroupChevron(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
-{
-    if (!pRect || (iPartId != LVP_EXPANDBUTTON && iPartId != LVP_COLLAPSEBUTTON))
-        return false;
-    if (!g_settings.AnimatedArrows || !SysAnimationsEnabled())
-        return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
-
-    const int w = pRect->right - pRect->left;
-    const int h = pRect->bottom - pRect->top;
-    if (w <= 0 || h <= 0)
-        return true;
-
-    HWND paintHwnd = ListViewGroupChevronPaintHwnd(hdc);
-    const float target = (iPartId == LVP_COLLAPSEBUTTON) ? 90.f : 0.f;
-    const ULONG_PTR key = ListViewGroupChevronKey(paintHwnd, pRect);
-    auto& anim = g_lvGroupChevronAnims[key];
-    anim.rect = *pRect;
-    anim.paintHwnd = paintHwnd;
-    if (anim.lastState == -1) {
-        anim.current = target;
-        anim.startAngle = target;
-        anim.target = target;
-        anim.startTick = 0;
-        anim.lastState = iPartId;
-    } else if (anim.lastState != iPartId) {
-        DWORD now = GetTickCount();
-        anim.current = GlyphChevronAngleAt(
-            anim.startAngle, anim.target, anim.startTick, now);
-        anim.startAngle = anim.current;
-        anim.target = target;
-        anim.startTick = now;
-        anim.lastState = iPartId;
-        HWND timerHwnd = ListViewGroupChevronTimerHwnd(paintHwnd);
-        if (!ListViewGroupChevronEnsureTimer(timerHwnd) && paintHwnd != timerHwnd)
-            ListViewGroupChevronEnsureTimer(paintHwnd);
-    }
-
-    if (!g_d2dFactory)
-        return true;
-
-    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
-    FPUGuard fpu;
-    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
-        return true;
-
-    const float fw = (float)w;
-    const float fh = (float)h;
-    const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
-    const bool dark = IsWindowDarkMode(hdc);
-    const bool hot = (iStateId == 2 || iStateId == 3);
-    const bool pressed = (iStateId == 3);
-    const float hoverAlpha = pressed ? 0.10f : hot ? 0.075f : 0.f;
-
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    pRT->CreateSolidColorBrush(
-        dark ? D2D1::ColorF(1.f, 1.f, 1.f, hoverAlpha)
-             : D2D1::ColorF(0.f, 0.f, 0.f, hoverAlpha),
-        &brush);
-    if (!brush)
-        return true;
-
-    pRT->BeginDraw();
-    if (hoverAlpha > 0.f) {
-        pRT->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(0.f, 0.f, fw, fh), 4.f * scale, 4.f * scale),
-            brush.Get());
-    }
-
-    brush->SetColor(dark
-        ? D2D1::ColorF(1.f, 1.f, 1.f, hot ? 0.90f : 0.68f)
-        : D2D1::ColorF(0.f, 0.f, 0.f, hot ? 0.78f : 0.58f));
-    const float cx = fw * 0.50f;
-    const float cy = fh * 0.52f;
-    const float len = std::min(fw, fh) * 0.205f;
-    const float stroke = std::max(1.f, 1.45f * scale);
-
-    pRT->PushAxisAlignedClip(D2D1::RectF(0.f, 0.f, fw, fh),
-        D2D1_ANTIALIAS_MODE_ALIASED);
-    pRT->SetTransform(D2D1::Matrix3x2F::Rotation(
-        anim.current, D2D1::Point2F(cx, cy)));
-    pRT->DrawLine(D2D1::Point2F(cx - len * 0.35f, cy - len),
-                  D2D1::Point2F(cx + len * 0.45f, cy),
-                  brush.Get(), stroke);
-    pRT->DrawLine(D2D1::Point2F(cx - len * 0.35f, cy + len),
-                  D2D1::Point2F(cx + len * 0.45f, cy),
-                  brush.Get(), stroke);
-    pRT->SetTransform(D2D1::Matrix3x2F::Identity());
-    pRT->PopAxisAlignedClip();
-
-    HRESULT hr = pRT->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
-        pRT.Reset();
-        CachedTlsRTRecreate();
-    }
-    return hr != D2DERR_RECREATE_TARGET;
-}
 
 static bool PaintGroupHeaderOverlayPill(HDC hdc, INT iStateId, LPCRECT pRect)
 {
@@ -13728,7 +14131,7 @@ static INT GetSplitButtonPaintState(HWND hwnd)
 
 static COLORREF GetSplitButtonTextColor(HWND hwnd, HDC hdc, INT state)
 {
-    bool dark = IsWindowDarkMode(hdc);
+    bool dark = IsDarkForExcludedAwarePaint(hwnd);
     bool disabled = (state == PBS_DISABLED);
     bool isAccent = false;
     if (hwnd) {
@@ -13993,22 +14396,76 @@ static void TryInstallSplitButtonChevronSubclass(HWND hwnd)
     }
 
 }
+
+static void SplitButtonChevronRemoveFromWindow(HWND hwnd)
+{
+    if (GetPropW(hwnd, kSplitButtonChevronSubclassProp)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SplitButtonChevronSubclassProc);
+        RemovePropW(hwnd, kSplitButtonChevronSubclassProp);
+    }
+}
+
+static BOOL CALLBACK SplitButtonChevronRemoveChildEnum(HWND hwnd, LPARAM)
+{
+    SplitButtonChevronRemoveFromWindow(hwnd);
+    return TRUE;
+}
+
+// Sweeps every top-level window of this process when RoundedButtons is
+// toggled off live, so the subclass doesn't outlive the setting.
+static BOOL CALLBACK SplitButtonChevronRemoveEnum(HWND hwnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+    SplitButtonChevronRemoveFromWindow(hwnd);
+    EnumChildWindows(hwnd, SplitButtonChevronRemoveChildEnum, 0);
+    return TRUE;
+}
 // ============================================================================
 // PaintIndeterminateProgressBar — solid accent pill instead of the system's
 // gradient. Only renders PP_MOVEOVERLAY (the moving pill); suppresses all
 // other parts.
 // ============================================================================
 
+// ID2D1DCRenderTarget doesn't implement ID2D1DeviceContext, so PushLayer's
+// layer parameter can't be nullptr here (that's only valid on a real
+// device context) -- needs an explicit ID2D1Layer. Cached per-thread in
+// D2DThreadCache (progressMarqueeMaskLayer/RT fields) rather than as a
+// process-global: two threads painting marquee progress bars at once (two
+// Explorer copy dialogs, each on its own thread) each get their own cache
+// via FLS, so there's no shared ComPtr for them to race on. Keyed against
+// the render target's own identity since a layer isn't valid across a
+// render target it wasn't created from -- same pattern as brush/brushTarget
+// above.
 static bool PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory) return false;
     // Suppress track, pulse overlay etc. — only render the moving pill
     if (iPartId != PP_MOVEOVERLAY && iPartId != PP_MOVEOVERLAYVERT) {
-        // Fill bg for track parts (prevents black corners)
-        COLORREF bgClr = SampleBackground(hdc, pRect->left, pRect->top, COLOR_WINDOW);
-        HBRUSH bgBr = CreateSolidBrush(bgClr);
-        FillRect(hdc, pRect, bgBr);
-        DeleteObject(bgBr);
+        // Fill bg for track parts (prevents black corners). Same flat,
+        // deterministic fill + list-ancestor transparency check as
+        // PaintProgressBar's own track handling below -- GetPixel-based
+        // sampling here could read stale leftover content from a previous
+        // frame on comctl32's reused buffered-paint surface, producing a
+        // background color that didn't match the determinate bar's.
+        bool isTransparentTrack = (iPartId == PP_TRANSPARENTBAR || iPartId == PP_TRANSPARENTBARVERT);
+        bool transparent = false;
+        if (isTransparentTrack) {
+            HWND hw = g_tlsPaintHwnd;
+            if (!hw) hw = WindowFromDC(hdc);
+            if (hw) {
+                wchar_t pc[64] = {};
+                GetClassNameW(hw, pc, ARRAYSIZE(pc));
+                if (_wcsicmp(pc, L"SysListView32") == 0 ||
+                    wcsstr(pc, L"ListView") != nullptr ||
+                    _wcsicmp(pc, L"DirectUIHWND") == 0)
+                    transparent = true;
+            }
+        }
+        if (!transparent)
+            FillRect(hdc, pRect, GetSysColorBrush(COLOR_WINDOW));
         return true;
     }
 
@@ -14031,13 +14488,58 @@ static bool PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LP
                       (FLOAT)w, ((FLOAT)h + pillH) * 0.5f);
     FLOAT cr = pillH * 0.5f;
 
+    // pRect keeps a constant size as the pill slides past the control's
+    // edges -- comctl32 never clips it, so the square cutoff we'd otherwise
+    // see is just the render target extending past the real DC surface.
+    // pRect's own offset tells us the control's true edges, so we clip to a
+    // rounded-rect mask there instead (same radius/band as pillRect) so the
+    // pill stays rounded as it exits/enters instead of cutting off flat.
+    HWND paintHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
+    RECT clientRc = {};
+    if (paintHwnd) GetClientRect(paintHwnd, &clientRc);
+    D2D1_RECT_F maskRect = pillRect;
+    bool haveMask = false;
+    if (isVert) {
+        maskRect.top    = (FLOAT)(clientRc.top    - pRect->top);
+        maskRect.bottom = (FLOAT)(clientRc.bottom  - pRect->top);
+        haveMask = paintHwnd && maskRect.bottom > maskRect.top;
+    } else {
+        maskRect.left  = (FLOAT)(clientRc.left  - pRect->left);
+        maskRect.right = (FLOAT)(clientRc.right - pRect->left);
+        haveMask = paintHwnd && maskRect.right > maskRect.left;
+    }
+    Microsoft::WRL::ComPtr<ID2D1RoundedRectangleGeometry> maskGeom;
+    if (haveMask)
+        g_d2dFactory->CreateRoundedRectangleGeometry(
+            D2D1::RoundedRect(maskRect, cr, cr), &maskGeom);
+    D2DThreadCache* cache = D2DGetThreadCache();
+    if (maskGeom && cache &&
+        (!cache->progressMarqueeMaskLayer || cache->progressMarqueeMaskLayerRT != pRT.Get())) {
+        if (cache->progressMarqueeMaskLayer) {
+            cache->progressMarqueeMaskLayer->Release();
+            cache->progressMarqueeMaskLayer = nullptr;
+        }
+        ID2D1Layer* rawLayer = nullptr;
+        pRT->CreateLayer(nullptr, &rawLayer);
+        if (rawLayer) {
+            cache->progressMarqueeMaskLayer = rawLayer;
+            cache->progressMarqueeMaskLayerRT = pRT.Get();
+        }
+    }
+    const bool pushedLayer = maskGeom && cache && cache->progressMarqueeMaskLayer;
+
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     pRT->CreateSolidColorBrush(GetAccentIndicatorD2D(), &brush);
     pRT->BeginDraw();
+    if (pushedLayer)
+        pRT->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), maskGeom.Get()),
+            cache->progressMarqueeMaskLayer);
     pRT->FillRoundedRectangle(D2D1::RoundedRect(pillRect, cr, cr), brush.Get());
+    if (pushedLayer)
+        pRT->PopLayer();
     if (pRT->EndDraw() == (HRESULT)D2DERR_RECREATE_TARGET) {
         pRT.Reset();
-        CachedTlsRTRecreate();
+        CachedTlsRTRecreate(); // also releases progressMarqueeMaskLayer via cache->Reset()
     }
     return true;
 }
@@ -14100,15 +14602,24 @@ static bool PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
     if (!isTrack && !isFill) return false;
 
-    FLOAT barThickness = isTrack ? 1.f : 5.f;
+    const bool dark = IsWindowDarkMode(hdc);
+    FLOAT scale = (FLOAT)DpiForPaintHdc(hdc) / (FLOAT)USER_DEFAULT_SCREEN_DPI;
+    // Track is a true 1-device-pixel hairline at any DPI, not a scaled
+    // logical pixel -- scaling it (e.g. 1.25px at 125%) would straddle two
+    // pixel rows/columns even with aliased rendering below, since only an
+    // exact 1px rect pixel-snapped to the grid rasterizes as a single
+    // crisp line.
+    FLOAT barThickness = isTrack ? 1.f : 4.f * scale;
     FLOAT cornerRadius = barThickness / 2.f;
 
     D2D1_RECT_F barRect;
     if (isVertical) {
         FLOAT pad = (w - barThickness) / 2.f;
+        if (isTrack) pad = floorf(pad + 0.5f); // pixel-snap the 1px hairline
         barRect = D2D1::RectF(pad, 0.f, pad + barThickness, h);
     } else {
         FLOAT pad = (h - barThickness) / 2.f;
+        if (isTrack) pad = floorf(pad + 0.5f); // pixel-snap the 1px hairline
         barRect = D2D1::RectF(0.f, pad, w, pad + barThickness);
     }
     D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(barRect, cornerRadius, cornerRadius);
@@ -14119,9 +14630,15 @@ static bool PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
     if (isTrack)
     {
-        // Semi-transparent gray track (alpha=180, rgb=128)
-        pRT->CreateSolidColorBrush(
-            D2D1::ColorF(0.502f, 0.502f, 0.502f, 180.f / 255.f), &brush);
+        // Black/white at 50% alpha depending on theme, matching the
+        // fill's own theme-aware treatment. Render target's default
+        // per-primitive antialiasing -- the rect is already pixel-snapped
+        // to an exact 1px-tall/wide boundary above, so there's no partial
+        // pixel coverage to smooth either way.
+        D2D1_COLOR_F trackColor = dark
+            ? D2D1::ColorF(1.f, 1.f, 1.f, 0.5f)
+            : D2D1::ColorF(0.f, 0.f, 0.f, 0.5f);
+        pRT->CreateSolidColorBrush(trackColor, &brush);
         pRT->FillRoundedRectangle(rounded, brush.Get());
     }
     else // fill
@@ -14164,26 +14681,27 @@ constexpr UINT   TVM_GETNEXTITEM_  = 0x110A;
 constexpr WPARAM TVGN_PARENT_      = 0x0003;
 constexpr WPARAM TVGN_DROPHILITE_  = 0x0008;
 constexpr WPARAM TVGN_CARET_       = 0x0009;
-constexpr UINT   LVM_GETNEXTITEM_  = 0x1000 + 12;
-constexpr UINT   LVM_GETITEMRECT_  = 0x1000 + 14;
-constexpr WPARAM LVNI_FOCUSED_     = 0x0001;
-constexpr INT    LVIR_BOUNDS_      = 0;
+constexpr UINT   LVM_GETNEXTITEM_       = 0x1000 + 12;
+constexpr UINT   LVM_GETITEMRECT_       = 0x1000 + 14;
+constexpr UINT   LVM_GETSELECTEDCOUNT_  = 0x1000 + 50;
+constexpr WPARAM LVNI_FOCUSED_          = 0x0001;
+constexpr WPARAM LVNI_SELECTED_         = 0x0002;
+constexpr INT    LVIR_BOUNDS_           = 0;
+// A bulk selection (Ctrl+A and the like) has no meaningful per-item fade to
+// show, so ListSelectFadeResyncWindow skips starting fades entirely above
+// this count instead of paying one ancestor-walk-gated map insert per row.
+constexpr int    kListSelectFadeMaxBulkSelection = 32;
 
-// True when *pRect exactly matches the control's own keyboard-focused item
-// (TVGN_CARET / LVNI_FOCUSED) and focus indicators are currently visible
-// (NavFocusCuesVisible) -- i.e. reached via Tab/arrow-key navigation, not a
-// mouse click. Used to recolor an already-drawn accent ring on focus instead
-// of layering a second outline on top of it (see DrawFocusRect_hook and
+// True when *pRect matches the keyboard-focused item (Tab/arrow-key nav, not
+// a mouse click) and focus cues are visible. Used to recolor an already-drawn
+// accent ring instead of layering a second outline (DrawFocusRect_hook,
 // DrawRoundedItemBg).
 static bool IsKeyboardFocusedItemRect(HWND hwnd, LPCRECT pRect, bool isTreeView)
 {
-    // GetFocus() is a cheap thread-local read (no IPC) -- check it first to
-    // skip the two SendMessage round-trips below for every ring item repainted
-    // in a control that doesn't even have keyboard focus right now (the
-    // common case). Also strictly more correct than NavFocusCuesVisible
-    // alone: that reflects the window's last WM_CHANGEUISTATE toggle, which
-    // can still read "show focus cues" after a mouse click moved focus
-    // elsewhere entirely.
+    // GetFocus() is cheap (no IPC) -- check first to skip the SendMessage
+    // round-trips below for the common case. Also more correct than
+    // NavFocusCuesVisible alone, which can still read "show focus cues"
+    // after a mouse click moved focus elsewhere.
     if (!hwnd || !pRect || GetFocus() != hwnd || !NavFocusCuesVisible(hwnd))
         return false;
 
@@ -14203,22 +14721,140 @@ static bool IsKeyboardFocusedItemRect(HWND hwnd, LPCRECT pRect, bool isTreeView)
     return EqualRect(&fr, pRect) != FALSE;
 }
 
+// Called from SendMessageW_hook's LVN_ITEMCHANGED (ListView, iItem >= 0) and
+// TVN_SELCHANGEDW/A / TVN_DELETEITEM (TreeView, HTREEITEM) interceptions for
+// a clean deselection or a deleted item. Erases the matching ListSelectFade
+// entry so a later reselection of the same item starts fresh instead of
+// reusing the finished progress=1 state from before.
+static void ListSelectFadeInvalidateItem(HWND hwndFrom, ULONG_PTR itemId, bool isTreeView)
+{
+    if (!hwndFrom || !ShouldDrawSelectionBorder(hwndFrom, isTreeView))
+        return;
+
+    const ULONG_PTR key = ListSelectFadeKey(hwndFrom, itemId);
+    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+    auto it = g_lvSelectFadeAnims.find(key);
+    if (it == g_lvSelectFadeAnims.end())
+        return;
+    ListSelectFadeMarkComplete(it->second);
+    g_lvSelectFadeAnims.erase(it);
+    ListSelectFadeUntrackKey(hwndFrom, key);
+}
+
+// Called from SendMessageW_hook's LVN_ITEMCHANGED interception for a bulk
+// state change (iItem == -1) -- comctl32 reports both "deselect everything"
+// (e.g. clicking empty space) and "deselect the old item while selecting a
+// new one" this way, so uOldState/uNewState aren't meaningful per item here.
+// Re-derives the real selection set directly (SendMessageW_orig -- this runs
+// inside the SendMessageW hook, so a plain SendMessageW would re-enter it):
+// starts a fresh fade for any currently-selected item that has no entry yet
+// (a real new selection can arrive this way too, not just deselection), and
+// prunes any tracked entry that fell out of the selection, leaving entries
+// for items that stayed selected untouched.
+static void ListSelectFadeResyncWindow(HWND hwndFrom)
+{
+    if (!hwndFrom || !SysAnimationsEnabled() || !ShouldDrawSelectionBorder(hwndFrom, false))
+        return;
+
+    // A bulk selection (Ctrl+A and the like) also arrives as iItem==-1, and
+    // has no meaningful per-item fade to show -- counting first avoids
+    // thousands of LVM_GETNEXTITEM round-trips and map inserts for a
+    // selection this large. Any previously tracked entries for this window
+    // are dropped outright rather than left parked in g_lvSelectFadeAnims
+    // until the next selection change.
+    const int selCount = (int)SendMessageW_orig(hwndFrom, LVM_GETSELECTEDCOUNT_, 0, 0);
+    if (selCount > kListSelectFadeMaxBulkSelection) {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        auto winIt = g_lvSelectFadeKeysByWindow.find(hwndFrom);
+        if (winIt == g_lvSelectFadeKeysByWindow.end())
+            return;
+        for (ULONG_PTR key : winIt->second) {
+            auto animIt = g_lvSelectFadeAnims.find(key);
+            if (animIt != g_lvSelectFadeAnims.end()) {
+                ListSelectFadeMarkComplete(animIt->second);
+                g_lvSelectFadeAnims.erase(animIt);
+            }
+        }
+        g_lvSelectFadeKeysByWindow.erase(winIt);
+        return;
+    }
+
+    std::unordered_set<ULONG_PTR> stillSelected;
+    int idx = -1;
+    for (;;) {
+        idx = (int)SendMessageW_orig(hwndFrom, LVM_GETNEXTITEM_,
+            (WPARAM)idx, MAKELPARAM(LVNI_SELECTED_, 0));
+        if (idx < 0)
+            break;
+        const ULONG_PTR key = ListSelectFadeKey(hwndFrom, (ULONG_PTR)(UINT)idx);
+        stillSelected.insert(key);
+        bool alreadyTracked;
+        {
+            std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+            alreadyTracked = g_lvSelectFadeAnims.find(key) != g_lvSelectFadeAnims.end();
+        }
+        // Unchecked: ShouldDrawSelectionBorder was already validated once
+        // above for the whole batch, so a per-item ancestor walk here would
+        // just repeat the same answer at the cost of one extra call per row.
+        if (!alreadyTracked)
+            ListSelectFadeStartItemUnchecked(hwndFrom, (ULONG_PTR)(UINT)idx);
+    }
+
+    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+    auto winIt = g_lvSelectFadeKeysByWindow.find(hwndFrom);
+    if (winIt == g_lvSelectFadeKeysByWindow.end())
+        return;
+
+    // Copy first: erasing from winIt->second (via ListSelectFadeUntrackKey)
+    // while iterating it directly would invalidate the iterator.
+    std::vector<ULONG_PTR> trackedKeys(winIt->second.begin(), winIt->second.end());
+    for (ULONG_PTR key : trackedKeys) {
+        if (stillSelected.count(key))
+            continue;
+        auto animIt = g_lvSelectFadeAnims.find(key);
+        if (animIt != g_lvSelectFadeAnims.end()) {
+            ListSelectFadeMarkComplete(animIt->second);
+            g_lvSelectFadeAnims.erase(animIt);
+        }
+        ListSelectFadeUntrackKey(hwndFrom, key);
+    }
+}
+
+// Called from SendMessageW_hook's LVN_DELETEITEM interception. Deleting an
+// item shifts every later index down by one, so any ListSelectFade entry
+// tracked for this window could now be keyed at the wrong (shifted) item --
+// there's no cheap per-item fix-up without a stable non-index item identity
+// (unlike TreeView's HTREEITEM), so this drops the window's entire tracked
+// set instead of trying to reindex individual keys. Harmless for an item
+// that stays selected across the delete: it just reads as untracked (full
+// opacity, matching its already-finished fade) on its next repaint instead
+// of finding a parked entry -- same visual result, one extra hit-test.
+static void ListSelectFadeInvalidateWindowItems(HWND hwndFrom)
+{
+    std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+    auto winIt = g_lvSelectFadeKeysByWindow.find(hwndFrom);
+    if (winIt == g_lvSelectFadeKeysByWindow.end())
+        return;
+
+    for (ULONG_PTR key : winIt->second) {
+        auto animIt = g_lvSelectFadeAnims.find(key);
+        if (animIt != g_lvSelectFadeAnims.end()) {
+            ListSelectFadeMarkComplete(animIt->second);
+            g_lvSelectFadeAnims.erase(animIt);
+        }
+    }
+    g_lvSelectFadeKeysByWindow.erase(winIt);
+}
+
 // Visual tree nesting depth of 'item' (0 = top-level row) and its real
-// horizontal indent in device pixels relative to its own top-level ancestor.
-// The indent is measured via TVM_GETITEMRECT rather than assumed, since the
-// tree's actual per-level pixel step depends on whether items show an
-// expand chevron or just an icon.
-//
-// A plain "has a parent" check is not enough to find the top-level ancestor:
-// Explorer's nav pane has a hidden root (Desktop) above every visually
-// top-level item, so TVGN_PARENT_ on those still returns a non-null handle --
-// climbing stops one level early (at the item whose parent has no parent).
-// Last successfully measured indent per (tree, item) -- TVM_GETITEMRECT
-// fails for an item that's scrolled out of view (e.g. the item a blind
-// transition is collapsing away from), which would otherwise report 0
-// (no inset) for that one transition's collapse phase even though the
-// item genuinely is nested. Falling back to the last known-good value is
-// more often correct than a hard 0.
+// horizontal indent, measured via TVM_GETITEMRECT rather than assumed --
+// the per-level pixel step depends on whether items show a chevron or just
+// an icon. Explorer's nav pane has a hidden root (Desktop) above every
+// visually top-level item, so a plain "has a parent" check climbs one level
+// too far; a null grandparent is the real stop condition. Cached per (tree,
+// item): TVM_GETITEMRECT fails for an item scrolled out of view, which would
+// otherwise wrongly report 0 inset during that transition instead of falling
+// back to the last known-good value.
 static HWND      s_pillNestLastHwnd     = nullptr;
 static HTREEITEM s_pillNestLastItem     = nullptr;
 static int       s_pillNestLastIndentPx = 0;
@@ -14316,7 +14952,7 @@ static void TrackShellDuiListItemForCheckbox(
     if (w <= 0 || h <= 0)
         return;
 
-    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    const UINT dpi = DpiForPaint(hwnd);
     const float ratio = (float)w / (float)h;
     const int logicalHeight = MulDiv(h, 96, dpi);
     const int logicalExtent = MulDiv((w > h) ? w : h, 96, dpi);
@@ -15429,16 +16065,12 @@ static bool PaintDragDropTextBg(HDC hdc, LPCRECT pRect)
         g_dragDropBadgeCache.hdc, 0, 0, side, side, bf);
 }
 
-// Themed push buttons normally cross-fade between states via uxtheme's own
-// buffered-transition system: it captures DrawThemeBackground twice (once
-// per endpoint state) into off-screen buffers and blends between them. That
-// blend never reliably reached the screen for our custom-drawn buttons,
-// leaving the pre-transition state visible (e.g. a disabled "Apply" button
-// not visually updating to enabled) until an unrelated repaint (hover)
-// bypassed the transition system entirely. Forcing transition duration to
-// 0 for push buttons makes uxtheme skip the capture/blend mechanism and
-// just call DrawThemeBackground once per actual state change, painting
-// immediately.
+// Themed push buttons normally cross-fade between states via uxtheme's
+// buffered-transition system (captures DrawThemeBackground per endpoint
+// state, blends between them off-screen). That blend never reliably reached
+// the screen for our custom-drawn buttons, leaving the pre-transition state
+// visible until an unrelated repaint bypassed it. Forcing duration to 0 for
+// push buttons skips the capture/blend and paints each state change directly.
 static decltype(&GetThemeTransitionDuration) GetThemeTransitionDuration_orig = nullptr;
 HRESULT WINAPI GetThemeTransitionDuration_hook(HTHEME hTheme, int iPartId,
     int iStateIdFrom, int iStateIdTo, int iPropId, DWORD* pdwDuration)
@@ -15506,6 +16138,14 @@ HRESULT WINAPI GetThemeTransitionDuration_hook(HTHEME hTheme, int iPartId,
 // jump between buttons as focus moves (unlike BS_DEFPUSHBUTTON style).
 // Uses GetAccentIndicator() for accent color consistency with the rest of the mod.
 static thread_local bool g_tlsIsAccentButton = false;
+
+// PaintPushButton's own `dark` (DarkModeActiveForPaint, resolved via a
+// robust hwnd fallback) mirrored here for GetThemeColor_hook's text-color
+// query -- GetThemeColor takes no HDC/HWND at all, and can fire for this
+// same button's TMT_TEXTCOLOR property with only g_tlsPaintHwnd (no
+// WindowFromDC fallback possible) to go on, which is less reliable than
+// what PaintPushButton already resolved moments earlier for the same paint.
+static thread_local bool g_tlsButtonDark = false;
 
 // Marked by PaintPushButton (Winver backdrop-hole context only) so the GDI
 // text hooks below can skip a button's follow-up DrawText call for a
@@ -15810,7 +16450,10 @@ static bool PaintPushButton(HDC hdc, INT iStateId, LPCRECT pRect)
     const int h = pRect->bottom - pRect->top;
     if (w <= 0 || h <= 0) return false;
 
-    // Detect accent button by control ID (stable, not focus-dependent)
+    // Reads the control ID (stable across hot/pressed/disabled) instead of
+    // iStateId's PBS_DEFAULTED, which Windows stops reporting the instant
+    // the button goes hot/pressed -- checking that would flicker the accent
+    // off on hover.
     HWND hBtn = g_tlsPaintHwnd;
     if (!hBtn) hBtn = WindowFromDC(hdc);
     bool isAccent = false;
@@ -15831,7 +16474,8 @@ static bool PaintPushButton(HDC hdc, INT iStateId, LPCRECT pRect)
     const bool winverBlackVisual =
         IsCurrentProcessWinver() && WinverUsesBlackBackground();
     const bool dark = winverBlackVisual ? WinverIsDarkVisualMode()
-                                        : g_darkModeActive.load(std::memory_order_acquire);
+                                        : DarkModeActiveForPaint(hBtn);
+    g_tlsButtonDark = dark;
     const float scale = (float)DpiForPaint(hBtn) / (float)USER_DEFAULT_SCREEN_DPI;
     const float cr = 4.f * scale;
 
@@ -15858,17 +16502,15 @@ static bool PaintPushButton(HDC hdc, INT iStateId, LPCRECT pRect)
         GetNeutralPushButtonColors(dark, iStateId, &fill, &border);
     }
 
-    // GDI opaque fill first — prevents DWM alpha transparency artifacts.
-    // Uses the same hardcoded `dark` flag as the fill color above: a fixed
-    // color instead of GetPixel/SampleBackground for the dark case, since
+    // GDI opaque fill first, preventing DWM alpha transparency artifacts. A
+    // fixed color for the dark case instead of GetPixel/SampleBackground --
     // GetPixel can capture transient white during repaints, leaving white
-    // artifacts around rounded borders until the next redraw.
-    // Winver backdrop/black modes paint the dialog gaps black; pure black
-    // here lets rounded button corners blend into that same background. Gated
-    // on IsCurrentProcessWinver() so other apps keep their normal corner fill.
+    // artifacts around rounded borders. Winver backdrop/black modes paint
+    // the dialog gaps black, so pure black here blends the corners into that
+    // background; gated on IsCurrentProcessWinver() for other apps.
     const bool winverBlackCorner = winverBlackVisual;
     COLORREF cornerClr = winverBlackCorner ? RGB(0, 0, 0)
-                        : dark ? kPropDkBg
+                        : dark ? DarkBgForPaint(hBtn)
                               : SampleBackground(hdc, pRect->left, pRect->top, COLOR_BTNFACE);
     HBRUSH hBgBr = CreateSolidBrush(cornerClr);
     if (hBgBr) { FillRect(hdc, pRect, hBgBr); DeleteObject(hBgBr); }
@@ -15982,13 +16624,10 @@ static bool PaintPushButton(HDC hdc, INT iStateId, LPCRECT pRect)
         }
     }
 
-    // Force text color on the DC — the button control calls DrawText after
-    // DrawThemeBackground (a no-op above when this HWND was just marked).
-    // Runs unconditionally as a fallback for every other app's buttons and
-    // in case the D2D draw above failed. DWM's colorkey (WinverBackdropSetup's
-    // extended frame, backdrop modes only) treats any exact RGB(0,0,0) pixel
-    // as a hole into the backdrop; one unit off pure black is visually
-    // identical but no longer a match.
+    // Fallback for every other app's buttons and in case the D2D draw above
+    // failed. DWM's colorkey (WinverBackdropSetup's extended frame, backdrop
+    // modes only) treats exact RGB(0,0,0) as a hole into the backdrop, so
+    // nudge pure black by one unit to avoid matching it unintentionally.
     if (textClr == RGB(0, 0, 0) && WinverUsesBackdropHole() && IsCurrentProcessWinver())
         textClr = RGB(1, 1, 1);
     SetTextColor(hdc, textClr);
@@ -16022,20 +16661,16 @@ static bool PaintControlBorder(HDC hdc, INT iPartId, INT iStateId,
     const float cr = 4.f * scale;
 
     // EP_EDITBORDER_NOSCROLL/HSCROLL/VSCROLL/HVSCROLL (6-9): the accent line
-    // is the text field's own primary "this is where typing goes" cue, not
-    // a supplementary keyboard-navigation ring -- unlike ListBox/ListView
-    // below, it isn't gated behind NavFocusCuesVisible. Confirmed live:
-    // uxtheme reports state 3 (EBNS_FOCUSED) the whole time an edit has
-    // real input focus, mouse-clicked or Tab'd into alike; NavFocusCuesVisible
-    // is a global, UISF_HIDEFOCUS-driven flag unrelated to whether THIS
-    // control specifically has focus, so edits skip it entirely.
+    // is the text field's primary focus cue, not a supplementary keyboard-
+    // navigation ring, so unlike ListBox/ListView below it isn't gated
+    // behind NavFocusCuesVisible -- uxtheme reports state 3 (EBNS_FOCUSED)
+    // for any real input focus, mouse or Tab alike.
     //
-    // The bypass only covers state 3, not the whole cluster below: Edit's
-    // own state enum (EDITBORDER_NOSCROLLSTATES) doesn't overlap with
-    // ListBox's -- state 2 there is EBNS_HOT (mere hover, no focus at all),
-    // a different meaning from the ListBox cluster's LBPSH_FOCUSED(2) it
-    // coincides with only numerically. Bypassing the whole cluster would
-    // make hovering an unfocused edit show the line too.
+    // The bypass only covers state 3, not the whole cluster: Edit's state
+    // enum doesn't overlap with ListBox's -- state 2 there is EBNS_HOT (mere
+    // hover), unlike the ListBox cluster's LBPSH_FOCUSED(2) it coincides
+    // with only numerically. Bypassing the whole cluster would make hovering
+    // an unfocused edit show the line too.
     const bool isEditBorder = (iPartId >= 6 && iPartId <= 9);
 
     // Focused = ETS_SELECTED(3) / ETS_FOCUSED(5) / LBPSH_FOCUSED(2)
@@ -16326,6 +16961,658 @@ static LRESULT CALLBACK ModernBorderSubclassProc(
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
+// ── DirectUI folder-view border in property dialogs ─────────────────────────
+// SHELLDLL_DefView adds WS_BORDER after creation. Keep its layout border, clip
+// the content, suppress the square NC paint, and draw the replacement outside.
+static constexpr LPCWSTR kPropDefViewBorderSubclass =
+    L"Win32UIModernizer.DefViewBorderSubclass";
+static constexpr LPCWSTR kPropDefViewBorderRegionInstalled =
+    L"Win32UIModernizer.DefViewBorderRegionInstalled";
+static constexpr LPCWSTR kPropDefViewBorderOriginalRegion =
+    L"Win32UIModernizer.DefViewBorderOriginalRegion";
+static constexpr LPCWSTR kPropDefViewBorderApplyingRegion =
+    L"Win32UIModernizer.DefViewBorderApplyingRegion";
+static constexpr LPCWSTR kPropDefViewBorderParentSubclass =
+    L"Win32UIModernizer.DefViewBorderParentSubclass";
+static constexpr LPCWSTR kPropDefViewBorderParentChild =
+    L"Win32UIModernizer.DefViewBorderParentChild";
+static constexpr LPCWSTR kPropDefViewBorderParentPaintPending =
+    L"Win32UIModernizer.DefViewBorderParentPaintPending";
+
+static std::atomic<bool> g_defViewBorderUnloading{false};
+static std::atomic<UINT> g_defViewBorderPaintMessage{0};
+
+static LRESULT CALLBACK DefViewBorderSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR);
+static LRESULT CALLBACK DefViewBorderParentSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR);
+
+static HWND DefViewBorderFindDirectUiChild(HWND hwnd)
+{
+    return FindWindowExW(hwnd, nullptr, L"DirectUIHWND", nullptr);
+}
+
+static bool DefViewBorderIsPropertyScope(HWND hwnd)
+{
+    if (!IsClassName(hwnd, L"SHELLDLL_DefView"))
+        return false;
+
+    HWND page = GetParent(hwnd);
+    if (!IsClassName(page, L"#32770") ||
+        !IsInTabbedPropertyPane(page)) {
+        return false;
+    }
+
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    return IsClassName(root, L"#32770");
+}
+
+static bool DefViewBorderIsEligible(HWND hwnd)
+{
+    return g_settings.ModernGroupBox &&
+        !SysHighContrastEnabled() &&
+        DefViewBorderIsPropertyScope(hwnd) &&
+        (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_BORDER) &&
+        DefViewBorderFindDirectUiChild(hwnd);
+}
+
+static UINT DefViewBorderDpi(HWND hwnd)
+{
+    UINT dpi = GetDpiForWindow(hwnd);
+    return dpi ? dpi : USER_DEFAULT_SCREEN_DPI;
+}
+
+static int DefViewBorderCornerDiameter(HWND hwnd)
+{
+    return (std::max)(
+        1, MulDiv(8, DefViewBorderDpi(hwnd), USER_DEFAULT_SCREEN_DPI));
+}
+
+static int DefViewBorderOutsideInset(HWND hwnd)
+{
+    return (std::max)(
+        1, MulDiv(1, DefViewBorderDpi(hwnd), USER_DEFAULT_SCREEN_DPI));
+}
+
+static void DefViewBorderDiscardSavedRegion(HWND hwnd)
+{
+    HRGN original = reinterpret_cast<HRGN>(
+        RemovePropW(hwnd, kPropDefViewBorderOriginalRegion));
+    if (original)
+        DeleteObject(original);
+    RemovePropW(hwnd, kPropDefViewBorderRegionInstalled);
+    RemovePropW(hwnd, kPropDefViewBorderApplyingRegion);
+}
+
+static void DefViewBorderRestoreRegion(HWND hwnd)
+{
+    if (!RemovePropW(hwnd, kPropDefViewBorderRegionInstalled))
+        return;
+
+    HRGN original = reinterpret_cast<HRGN>(
+        RemovePropW(hwnd, kPropDefViewBorderOriginalRegion));
+    RemovePropW(hwnd, kPropDefViewBorderApplyingRegion);
+    if (!SetWindowRgn(hwnd, original, TRUE) && original)
+        DeleteObject(original);
+}
+
+static bool DefViewBorderApplyRegion(HWND hwnd)
+{
+    if (GetPropW(hwnd, kPropDefViewBorderApplyingRegion))
+        return true;
+
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect))
+        return false;
+    const int width = rect.right - rect.left;
+    const int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0)
+        return false;
+
+    const bool firstInstall =
+        !GetPropW(hwnd, kPropDefViewBorderRegionInstalled);
+    if (firstInstall) {
+        HRGN original = CreateRectRgn(0, 0, 0, 0);
+        if (!original)
+            return false;
+        if (GetWindowRgn(hwnd, original) == ERROR) {
+            DeleteObject(original);
+            original = nullptr;
+        } else if (!SetPropW(
+                       hwnd, kPropDefViewBorderOriginalRegion, original)) {
+            DeleteObject(original);
+            return false;
+        }
+
+        if (!SetPropW(
+                hwnd, kPropDefViewBorderRegionInstalled,
+                reinterpret_cast<HANDLE>(1))) {
+            if (original) {
+                RemovePropW(hwnd, kPropDefViewBorderOriginalRegion);
+                DeleteObject(original);
+            }
+            return false;
+        }
+    }
+
+    const int diameter = DefViewBorderCornerDiameter(hwnd);
+    HRGN rounded = CreateRoundRectRgn(
+        0, 0, width + 1, height + 1, diameter, diameter);
+    if (!rounded) {
+        if (firstInstall)
+            DefViewBorderDiscardSavedRegion(hwnd);
+        return false;
+    }
+
+    if (!SetPropW(
+            hwnd, kPropDefViewBorderApplyingRegion,
+            reinterpret_cast<HANDLE>(1))) {
+        DeleteObject(rounded);
+        if (firstInstall)
+            DefViewBorderDiscardSavedRegion(hwnd);
+        return false;
+    }
+
+    const bool applied = SetWindowRgn(hwnd, rounded, TRUE) != FALSE;
+    RemovePropW(hwnd, kPropDefViewBorderApplyingRegion);
+    if (!applied) {
+        DeleteObject(rounded);
+        if (firstInstall)
+            DefViewBorderDiscardSavedRegion(hwnd);
+    }
+    return applied;
+}
+
+static bool DefViewBorderEraseNative(HWND hwnd, bool dark)
+{
+    HDC hdc = GetWindowDC(hwnd);
+    if (!hdc)
+        return false;
+
+    RECT windowRect = {};
+    RECT clientRect = {};
+    if (!GetWindowRect(hwnd, &windowRect) ||
+        !GetClientRect(hwnd, &clientRect)) {
+        ReleaseDC(hwnd, hdc);
+        return false;
+    }
+    MapWindowPoints(
+        hwnd, nullptr, reinterpret_cast<POINT*>(&clientRect), 2);
+    OffsetRect(
+        &clientRect, -windowRect.left, -windowRect.top);
+
+    const int width = windowRect.right - windowRect.left;
+    const int height = windowRect.bottom - windowRect.top;
+    const int ncLeft = clientRect.left;
+    const int ncTop = clientRect.top;
+    const int ncRight = width - clientRect.right;
+    const int ncBottom = height - clientRect.bottom;
+    if (width <= 0 || height <= 0 ||
+        (ncLeft <= 0 && ncTop <= 0 && ncRight <= 0 && ncBottom <= 0)) {
+        ReleaseDC(hwnd, hdc);
+        return false;
+    }
+
+    HBRUSH brush = CreateSolidBrush(
+        dark ? kPropDkBg : GetSysColor(COLOR_WINDOW));
+    if (!brush) {
+        ReleaseDC(hwnd, hdc);
+        return false;
+    }
+
+    bool erased = true;
+    if (ncTop > 0) {
+        RECT rect = {0, 0, width, ncTop};
+        erased = FillRect_orig(hdc, &rect, brush) != FALSE && erased;
+    }
+    if (ncBottom > 0) {
+        RECT rect = {0, height - ncBottom, width, height};
+        erased = FillRect_orig(hdc, &rect, brush) != FALSE && erased;
+    }
+    if (ncLeft > 0) {
+        RECT rect = {0, ncTop, ncLeft, height - ncBottom};
+        erased = FillRect_orig(hdc, &rect, brush) != FALSE && erased;
+    }
+    if (ncRight > 0) {
+        RECT rect = {
+            width - ncRight, ncTop, width, height - ncBottom};
+        erased = FillRect_orig(hdc, &rect, brush) != FALSE && erased;
+    }
+
+    DeleteObject(brush);
+    ReleaseDC(hwnd, hdc);
+    return erased;
+}
+
+static bool DefViewBorderGetOuterRect(
+    HWND hwnd, HWND* parentOut, RECT* borderRectOut)
+{
+    HWND parent = GetParent(hwnd);
+    if (!parent || !borderRectOut || !IsClassName(parent, L"#32770"))
+        return false;
+
+    RECT windowRect = {};
+    if (!GetWindowRect(hwnd, &windowRect))
+        return false;
+    POINT points[2] = {
+        {windowRect.left, windowRect.top},
+        {windowRect.right, windowRect.bottom},
+    };
+    MapWindowPoints(nullptr, parent, points, ARRAYSIZE(points));
+
+    const int outsideInset = DefViewBorderOutsideInset(hwnd);
+    *borderRectOut = {
+        points[0].x - outsideInset,
+        points[0].y - outsideInset,
+        points[1].x + outsideInset,
+        points[1].y + outsideInset,
+    };
+    if (parentOut)
+        *parentOut = parent;
+    return true;
+}
+
+static void DefViewBorderInvalidateOuter(HWND hwnd)
+{
+    HWND parent = nullptr;
+    RECT borderRect = {};
+    if (DefViewBorderGetOuterRect(hwnd, &parent, &borderRect)) {
+        RedrawWindow(
+            parent, &borderRect, nullptr,
+            RDW_INVALIDATE | RDW_ERASE);
+    }
+}
+
+static bool DefViewBorderPaintOuter(HWND hwnd, bool dark)
+{
+    HWND parent = nullptr;
+    RECT borderRect = {};
+    if (!IsWindowVisible(hwnd) ||
+        !DefViewBorderGetOuterRect(hwnd, &parent, &borderRect) ||
+        !IsWindowVisible(parent)) {
+        return false;
+    }
+
+    RECT parentClient = {};
+    if (!GetClientRect(parent, &parentClient) ||
+        borderRect.left < parentClient.left ||
+        borderRect.top < parentClient.top ||
+        borderRect.right > parentClient.right ||
+        borderRect.bottom > parentClient.bottom) {
+        return false;
+    }
+
+    HDC parentDc = GetDC(parent);
+    if (!parentDc)
+        return false;
+
+    BP_PAINTPARAMS params = {};
+    params.cbSize = sizeof(params);
+    HDC bufferDc = nullptr;
+    HPAINTBUFFER buffer = BeginBufferedPaint(
+        parentDc, &borderRect, BPBF_COMPATIBLEBITMAP, &params, &bufferDc);
+    if (!buffer || !bufferDc) {
+        ReleaseDC(parent, parentDc);
+        return false;
+    }
+
+    const int width = borderRect.right - borderRect.left;
+    const int height = borderRect.bottom - borderRect.top;
+    bool painted = BitBlt(
+        bufferDc, borderRect.left, borderRect.top, width, height,
+        parentDc, borderRect.left, borderRect.top, SRCCOPY) != FALSE;
+
+    const COLORREF line =
+        dark ? RGB(0x30, 0x30, 0x30) : RGB(0xE0, 0xE0, 0xE0);
+    const int penWidth = DefViewBorderOutsideInset(hwnd);
+    HPEN pen = painted ? CreatePen(PS_SOLID, penWidth, line) : nullptr;
+    HBRUSH nullBrush =
+        static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
+    if (!pen || !nullBrush) {
+        painted = false;
+    } else {
+        HPEN oldPen =
+            static_cast<HPEN>(SelectObject(bufferDc, pen));
+        HBRUSH oldBrush =
+            static_cast<HBRUSH>(SelectObject(bufferDc, nullBrush));
+        const int penInset = penWidth / 2;
+        const int outsideInset = DefViewBorderOutsideInset(hwnd);
+        const int diameter =
+            DefViewBorderCornerDiameter(hwnd) + 2 * outsideInset;
+        painted = RoundRect(
+            bufferDc,
+            borderRect.left + penInset, borderRect.top + penInset,
+            borderRect.right - penInset, borderRect.bottom - penInset,
+            diameter, diameter) != FALSE;
+        SelectObject(bufferDc, oldBrush);
+        SelectObject(bufferDc, oldPen);
+    }
+
+    if (pen)
+        DeleteObject(pen);
+    const HRESULT endHr = EndBufferedPaint(buffer, painted);
+    ReleaseDC(parent, parentDc);
+    return painted && SUCCEEDED(endHr);
+}
+
+static void DefViewBorderScheduleParentPaint(HWND parent)
+{
+    if (!parent ||
+        GetPropW(parent, kPropDefViewBorderParentPaintPending)) {
+        return;
+    }
+
+    const UINT paintMessage =
+        g_defViewBorderPaintMessage.load(std::memory_order_acquire);
+    if (!paintMessage) {
+        HWND child = reinterpret_cast<HWND>(
+            GetPropW(parent, kPropDefViewBorderParentChild));
+        if (DefViewBorderIsEligible(child))
+            DefViewBorderPaintOuter(child, IsHwndDarkMode(child));
+        return;
+    }
+
+    if (!SetPropW(
+            parent, kPropDefViewBorderParentPaintPending,
+            reinterpret_cast<HANDLE>(1))) {
+        return;
+    }
+    if (!PostMessageW(parent, paintMessage, 0, 0)) {
+        RemovePropW(parent, kPropDefViewBorderParentPaintPending);
+    }
+}
+
+static bool DefViewBorderAttachParent(HWND hwnd)
+{
+    HWND parent = GetParent(hwnd);
+    if (!parent || !IsClassName(parent, L"#32770"))
+        return false;
+
+    HWND previous = reinterpret_cast<HWND>(
+        GetPropW(parent, kPropDefViewBorderParentChild));
+    if (previous && previous != hwnd && IsWindow(previous))
+        return false;
+
+    if (!SetPropW(parent, kPropDefViewBorderParentChild, hwnd))
+        return false;
+
+    if (GetPropW(parent, kPropDefViewBorderParentSubclass))
+        return true;
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            parent, DefViewBorderParentSubclassProc, 0)) {
+        RemovePropW(parent, kPropDefViewBorderParentChild);
+        return false;
+    }
+    if (!SetPropW(
+            parent, kPropDefViewBorderParentSubclass,
+            reinterpret_cast<HANDLE>(1))) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            parent, DefViewBorderParentSubclassProc);
+        RemovePropW(parent, kPropDefViewBorderParentChild);
+        return false;
+    }
+    return true;
+}
+
+static void DefViewBorderDetachParent(HWND hwnd)
+{
+    HWND parent = GetParent(hwnd);
+    if (!parent ||
+        reinterpret_cast<HWND>(
+            GetPropW(parent, kPropDefViewBorderParentChild)) != hwnd) {
+        return;
+    }
+
+    RemovePropW(parent, kPropDefViewBorderParentPaintPending);
+    RemovePropW(parent, kPropDefViewBorderParentChild);
+    if (RemovePropW(parent, kPropDefViewBorderParentSubclass)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            parent, DefViewBorderParentSubclassProc);
+    }
+}
+
+static void DefViewBorderDeactivate(HWND hwnd)
+{
+    HWND parent = nullptr;
+    RECT borderRect = {};
+    const bool hadOuterRect =
+        DefViewBorderGetOuterRect(hwnd, &parent, &borderRect);
+    DefViewBorderDetachParent(hwnd);
+    DefViewBorderRestoreRegion(hwnd);
+    if (hadOuterRect && parent) {
+        RedrawWindow(
+            parent, &borderRect, nullptr,
+            RDW_INVALIDATE | RDW_ERASE);
+    }
+}
+
+static bool DefViewBorderActivate(HWND hwnd)
+{
+    if (!DefViewBorderIsEligible(hwnd))
+        return false;
+
+    ModernBorderUninstall(hwnd);
+    if (!DefViewBorderApplyRegion(hwnd) ||
+        !DefViewBorderAttachParent(hwnd)) {
+        DefViewBorderDeactivate(hwnd);
+        return false;
+    }
+
+    RedrawWindow(
+        hwnd, nullptr, nullptr,
+        RDW_INVALIDATE | RDW_FRAME | RDW_NOERASE);
+    return true;
+}
+
+static void DefViewBorderUpdate(HWND hwnd)
+{
+    if (DefViewBorderIsEligible(hwnd))
+        DefViewBorderActivate(hwnd);
+    else
+        DefViewBorderDeactivate(hwnd);
+}
+
+static LRESULT CALLBACK DefViewBorderParentSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
+{
+    if (msg == WM_NCDESTROY) {
+        RemovePropW(hwnd, kPropDefViewBorderParentPaintPending);
+        RemovePropW(hwnd, kPropDefViewBorderParentChild);
+        RemovePropW(hwnd, kPropDefViewBorderParentSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, DefViewBorderParentSubclassProc);
+        return DefSubclassProc(hwnd, msg, wp, lp);
+    }
+
+    if (g_defViewBorderUnloading.load(std::memory_order_acquire))
+        return DefSubclassProc(hwnd, msg, wp, lp);
+
+    if (const UINT paintMessage =
+            g_defViewBorderPaintMessage.load(std::memory_order_acquire);
+        paintMessage && msg == paintMessage) {
+        RemovePropW(hwnd, kPropDefViewBorderParentPaintPending);
+        HWND child = reinterpret_cast<HWND>(
+            GetPropW(hwnd, kPropDefViewBorderParentChild));
+        if (DefViewBorderIsEligible(child))
+            DefViewBorderPaintOuter(child, IsHwndDarkMode(child));
+        return 0;
+    }
+
+    if (msg == WM_PAINT || msg == WM_WINDOWPOSCHANGED) {
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        DefViewBorderScheduleParentPaint(hwnd);
+        return result;
+    }
+
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static LRESULT CALLBACK DefViewBorderSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
+{
+    if (msg == WM_NCDESTROY) {
+        HWND parent = nullptr;
+        RECT borderRect = {};
+        const bool hadOuterRect =
+            DefViewBorderGetOuterRect(hwnd, &parent, &borderRect);
+        DefViewBorderDetachParent(hwnd);
+        DefViewBorderDiscardSavedRegion(hwnd);
+        RemovePropW(hwnd, kPropDefViewBorderSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, DefViewBorderSubclassProc);
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        if (hadOuterRect && IsWindow(parent)) {
+            RedrawWindow(
+                parent, &borderRect, nullptr,
+                RDW_INVALIDATE | RDW_ERASE);
+        }
+        return result;
+    }
+
+    if (g_defViewBorderUnloading.load(std::memory_order_acquire) ||
+        !g_settings.ModernGroupBox) {
+        return DefSubclassProc(hwnd, msg, wp, lp);
+    }
+
+    if (msg == WM_STYLECHANGED &&
+        static_cast<int>(wp) == GWL_STYLE) {
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        DefViewBorderUpdate(hwnd);
+        return result;
+    }
+
+    if (msg == WM_SIZE || msg == WM_DPICHANGED) {
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        DefViewBorderUpdate(hwnd);
+        return result;
+    }
+
+    if (msg == WM_WINDOWPOSCHANGED) {
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        if (DefViewBorderIsEligible(hwnd))
+            DefViewBorderScheduleParentPaint(GetParent(hwnd));
+        return result;
+    }
+
+    if (msg == WM_SHOWWINDOW) {
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        if (wp && DefViewBorderIsEligible(hwnd))
+            DefViewBorderScheduleParentPaint(GetParent(hwnd));
+        else
+            DefViewBorderInvalidateOuter(hwnd);
+        return result;
+    }
+
+    if (msg == WM_THEMECHANGED || msg == WM_SETTINGCHANGE) {
+        LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
+        DefViewBorderUpdate(hwnd);
+        if (DefViewBorderIsEligible(hwnd)) {
+            DefViewBorderScheduleParentPaint(GetParent(hwnd));
+        }
+        return result;
+    }
+
+    if (msg == WM_NCPAINT && DefViewBorderIsEligible(hwnd)) {
+        const bool dark = IsHwndDarkMode(hwnd);
+        const bool erased = DefViewBorderEraseNative(hwnd, dark);
+        const bool outerPainted =
+            erased && DefViewBorderPaintOuter(hwnd, dark);
+        if (erased && outerPainted)
+            return 0;
+    }
+
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static void DefViewBorderTryInstall(HWND hwnd)
+{
+    if (g_defViewBorderUnloading.load(std::memory_order_acquire) ||
+        !g_settings.ModernGroupBox ||
+        !DefViewBorderIsPropertyScope(hwnd) ||
+        !DefViewBorderFindDirectUiChild(hwnd)) {
+        return;
+    }
+
+    if (!GetPropW(hwnd, kPropDefViewBorderSubclass)) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, DefViewBorderSubclassProc, 0)) {
+            return;
+        }
+        if (!SetPropW(
+                hwnd, kPropDefViewBorderSubclass,
+                reinterpret_cast<HANDLE>(1))) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, DefViewBorderSubclassProc);
+            return;
+        }
+    }
+
+    DefViewBorderUpdate(hwnd);
+}
+
+static void DefViewBorderConsiderWindow(HWND hwnd)
+{
+    if (!IsClassName(hwnd, L"DirectUIHWND"))
+        return;
+
+    HWND defView = GetParent(hwnd);
+    if (DefViewBorderIsPropertyScope(defView))
+        DefViewBorderTryInstall(defView);
+}
+
+static void DefViewBorderUninstall(HWND hwnd)
+{
+    if (GetPropW(hwnd, kPropDefViewBorderSubclass)) {
+        DefViewBorderDeactivate(hwnd);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, DefViewBorderSubclassProc);
+        RemovePropW(hwnd, kPropDefViewBorderSubclass);
+    }
+
+    if (GetPropW(hwnd, kPropDefViewBorderParentSubclass)) {
+        RemovePropW(hwnd, kPropDefViewBorderParentPaintPending);
+        RemovePropW(hwnd, kPropDefViewBorderParentChild);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, DefViewBorderParentSubclassProc);
+        RemovePropW(hwnd, kPropDefViewBorderParentSubclass);
+    }
+}
+
+static BOOL CALLBACK DefViewBorderApplyChildEnum(HWND hwnd, LPARAM)
+{
+    DefViewBorderConsiderWindow(hwnd);
+    return TRUE;
+}
+
+static BOOL CALLBACK DefViewBorderApplyEnum(HWND hwnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+    DefViewBorderConsiderWindow(hwnd);
+    EnumChildWindows(hwnd, DefViewBorderApplyChildEnum, 0);
+    return TRUE;
+}
+
+static BOOL CALLBACK DefViewBorderRemoveChildEnum(HWND hwnd, LPARAM)
+{
+    DefViewBorderUninstall(hwnd);
+    return TRUE;
+}
+
+static BOOL CALLBACK DefViewBorderRemoveEnum(HWND hwnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+    DefViewBorderUninstall(hwnd);
+    EnumChildWindows(hwnd, DefViewBorderRemoveChildEnum, 0);
+    return TRUE;
+}
+
 // WinUI-style scrollbar hover background: one continuous pill running the
 // length of the whole bar, built from three independently-painted theme
 // parts (top/left arrow, track + thumb body, bottom/right arrow). Each part
@@ -16337,27 +17624,15 @@ static LRESULT CALLBACK ModernBorderSubclassProc(
 // the arrow parts that cap each end of the bar.
 static D2D1_RECT_F ScrollbarHoverStripRect(bool isVert, FLOAT fw, FLOAT fh, FLOAT scale)
 {
-    // Near side (away from the thumb — left for vertical, top for
-    // horizontal) trims the empty margin without shrinking to the thumb's
-    // own width. Far side (right/bottom, where the thumb is anchored) gets
-    // a smaller trim too — flush-to-the-edge looked wrong since the thumb
-    // itself never reaches the true edge either.
-    //
-    // Insets are a fraction of the control's own measured cross-width/height
-    // (fw for vertical, fh for horizontal), not a fixed scale-derived pixel
-    // count. `scale` comes from g_Dpi, a single global DPI snapshot — it can
-    // mismatch the actual physical size of this specific scrollbar when the
-    // owning window isn't on the DPI g_Dpi was captured for, or isn't fully
-    // per-monitor-v2 aware (some native file-picker dialogs, e.g. the ones
-    // Chromium browsers open, fall in this bucket and render the scrollbar
-    // control narrower than the ~17px*scale standard this was tuned
-    // against). A fixed pixel inset then undershoots there, leaving a
-    // sliver of background sticking out past the visible bar on the near
-    // side. Deriving the inset from the control's own rect instead makes it
-    // self-consistent regardless of what scale actually applies.
-    // Ratios are the original 4px/1px tuning expressed as a fraction of the
-    // ~17px*scale standard width they were tuned against; `scale` now only
-    // sets the floor so a degenerate near-zero rect can't collapse the inset.
+    // Near side (away from the thumb) trims the empty margin without
+    // shrinking to the thumb's own width; far side gets a smaller trim too,
+    // since the thumb itself never reaches the true edge. Insets are a
+    // fraction of the control's own measured cross-width/height, not a fixed
+    // scale-derived pixel count -- some windows (certain native file-picker
+    // dialogs) aren't fully per-monitor-v2 aware and render the scrollbar
+    // narrower than the DPI standard this was tuned against, and a fixed
+    // pixel inset would undershoot there. `scale` only sets the floor so a
+    // near-zero rect can't collapse the inset.
     FLOAT crossDim  = isVert ? fw : fh;
     FLOAT nearInset = std::max(crossDim * (4.f / 17.f), 1.f * scale);
     FLOAT farInset  = std::max(crossDim * (1.f / 17.f), 0.5f * scale);
@@ -16529,20 +17804,10 @@ static constexpr UINT     kNavDividerWatchTimerMs = 80;
 
 static std::atomic<HWND> g_navDividerHotHwnd{nullptr};
 
-// Set first thing in Wh_ModUninit (see there), well before the
-// NavDividerClearAll() teardown sweep -- NOT the same as g_darkModeUnloading
-// (hover-reveal isn't dark-mode-specific) and never reset back to false
-// (this DLL instance is done either way). Declared here (rather than next to
-// its other consumer, NavDividerInstallSetCursorHookThread, further down)
-// because NavDividerFadeTimerProc below also needs it: closes a narrow race
-// where NavDividerClearAll's KillTimer reliably removes the timer even
-// cross-thread, but if a WM_TIMER for it was already dequeued on the divider
-// window's own thread microseconds earlier, DispatchMessage still invokes
-// NavDividerFadeTimerProc once more -- and its normal body re-arms itself
-// via SetTimer, which would leave a fresh timer pointing at this TIMERPROC
-// with nothing left to kill it before the DLL unloads. The guard in
-// NavDividerFadeTimerProc makes that stray call a no-op instead.
-static std::atomic<bool> g_navDividerUnloading{false};
+// g_navDividerUnloading (needed by NavDividerFadeTimerProc below, and now
+// also by ThemeMsgWndProc's kNavDividerApplyHooksMessage handler, declared
+// far earlier in the file) is declared up near g_msgWndUnloading instead of
+// here -- see its own comment there for why.
 
 static void NavDividerInvalidateStrip(HWND hWnd, int centerX, int marginMul)
 {
@@ -16553,16 +17818,13 @@ static void NavDividerInvalidateStrip(HWND hWnd, int centerX, int marginMul)
     InvalidateRect(hWnd, &inval, FALSE);
 }
 
-// TIMERPROC -- the OS calls this directly (no message, no subclass needed).
-// DestroyWindow automatically kills any timer still pending on a window, so
-// there's nothing to explicitly clean up if hwnd goes away mid-fade.
-//
-// Moving from the divider into DirectUI's own content pane doesn't always
-// produce a fresh SetCursor() call (same HWND, as far as WindowFromPoint is
-// concerned), so NavDividerSetCursor_hook's leave-detection can miss it.
-// This timer compensates by re-checking the real cursor position against
-// the last-known divider X on every tick and clearing hot itself if the
-// mouse drifted away, instead of stopping once fully faded in.
+// TIMERPROC -- the OS calls this directly (no message, no subclass needed),
+// and DestroyWindow auto-kills any pending timer, so nothing to clean up if
+// hwnd goes away mid-fade. Moving from the divider into DirectUI's own
+// content pane doesn't always produce a fresh SetCursor() call, so
+// NavDividerSetCursor_hook's leave-detection can miss it -- this timer
+// compensates by re-checking the real cursor position each tick and
+// clearing hot itself if the mouse drifted away.
 static void CALLBACK NavDividerFadeTimerProc(HWND hwnd, UINT, UINT_PTR idEvent, DWORD)
 {
     if (g_navDividerUnloading.load(std::memory_order_acquire)) {
@@ -16691,14 +17953,19 @@ static BOOL CALLBACK NavDividerFindNamespaceTreeChild(HWND hwnd, LPARAM lParam)
 }
 
 // Never a real HWND -- marks "checked, no namespace tree under this root"
-// so a root without one (essentially every non-Explorer top-level window)
-// doesn't pay a fresh EnumChildWindows walk on every single call. This runs
-// from a global SetCursor hook, so an uncached negative here means every
-// WM_SETCURSOR in every process with an IDC_SIZEWE-style splitter re-walks
-// its whole child tree.
+// so a root without one doesn't pay a fresh EnumChildWindows walk on every
+// call. This runs from a global SetCursor hook, so an uncached negative
+// means every WM_SETCURSOR with an IDC_SIZEWE-style splitter re-walks its
+// whole child tree.
 static HWND kNavDividerNoTreeSentinel = reinterpret_cast<HWND>(static_cast<INT_PTR>(-1));
 
-static bool NavDividerRootContainsNamespaceTree(HWND hwnd)
+// cacheNegative=true is only safe once the caller's trigger can't fire
+// before the dialog finishes building its children -- true for WM_SETCURSOR,
+// but not for a paint-hot-path caller like IsInsideExcludedFilePicker, which
+// can run while the NamespaceTreeControl nav pane is still under
+// construction. Such a caller must pass cacheNegative=false, or a too-early
+// miss gets baked in permanently since nothing else invalidates it.
+static bool NavDividerRootContainsNamespaceTree(HWND hwnd, bool cacheNegative)
 {
     HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
     if (!root)
@@ -16720,7 +17987,8 @@ static bool NavDividerRootContainsNamespaceTree(HWND hwnd)
             reinterpret_cast<LPARAM>(&namespaceTree));
 
     if (!namespaceTree) {
-        SetPropW(root, kPropNavDividerNamespaceTree, kNavDividerNoTreeSentinel);
+        if (cacheNegative)
+            SetPropW(root, kPropNavDividerNamespaceTree, kNavDividerNoTreeSentinel);
         return false;
     }
 
@@ -16766,54 +18034,51 @@ HCURSOR WINAPI NavDividerSetCursor_hook(HCURSOR hCursor)
     return NavDividerSetCursor_orig(hCursor);
 }
 
-// Guards the one-shot installer thread below: ensures CreateThread fires
-// exactly once even if multiple UI threads hit NavDividerTrackAndGetHwnd
-// concurrently right as the first divider(s) appear. (g_navDividerUnloading,
-// used right below too, is declared earlier in the file -- see its own
-// comment there for why.)
+// Guards SetFunctionHook below: ensures it's queued exactly once even if
+// multiple UI threads hit NavDividerTrackAndGetHwnd concurrently right as
+// the first divider(s) appear. (g_navDividerUnloading, used right below
+// too, is declared earlier in the file -- see its own comment there for
+// why.)
 static std::atomic<bool> g_navDividerHookInstallTriggered{false};
-
-// Wh_SetFunctionHook + Wh_ApplyHookOperations must never run from inside a
-// hook callback (or Wh_ModInit) -- only from a deferred handler -- per the
-// Windhawk modding skill. NavDividerTrackAndGetHwnd runs inside the
-// DrawThemeBackground(Ex) hook callback, so it can't call them directly.
-// Spawning a one-shot thread here defers the actual call to a separate
-// call stack, satisfying that rule while still installing the SetCursor
-// hook lazily -- only in processes that actually show a real nav-pane
-// divider, instead of unconditionally in Wh_ModInit for every process
-// under this mod's @include *.
-static DWORD WINAPI NavDividerInstallSetCursorHookThread(LPVOID)
-{
-    if (g_navDividerUnloading.load(std::memory_order_acquire)) return 0;
-    WindhawkUtils::SetFunctionHook(SetCursor, NavDividerSetCursor_hook, &NavDividerSetCursor_orig);
-    if (!g_navDividerUnloading.load(std::memory_order_acquire))
-        Wh_ApplyHookOperations();
-    return 0;
-}
+// Separate from the flag above: g_msgWnd is only created in Wh_ModAfterInit,
+// so a divider paint in the gap between hooks going live and that window
+// existing (or any CreateMsgWindow failure) would otherwise queue the hook
+// and never actually apply it -- Wh_ApplyHookOperations can't run from this
+// paint callback, only from ThemeMsgWndProc once the post lands. Tracked
+// independently so a later divider paint keeps retrying the post (cheap:
+// one atomic load) until it succeeds once, instead of giving up forever.
+static std::atomic<bool> g_navDividerApplyPosted{false};
 
 // Resolves the HWND owning this divider paint and refreshes kPropNavDividerX
 // -- keeps the position accurate during an active drag, when the OS may
 // suppress redundant SetCursor calls while the mouse is captured. Hover
-// detection itself is entirely handled by the global NavDividerSetCursor_hook,
-// lazily installed (see above) the first time this function runs.
+// detection is handled by the global NavDividerSetCursor_hook, lazily
+// installed the first time this function runs.
 //
-// WindowFromDC(hdc) is tried FIRST, not g_tlsPaintHwnd -- g_tlsPaintHwnd is a
-// single thread-local last-set by whichever BeginPaint happened most
-// recently on this UI thread, and Explorer paints many different elements
-// in succession on that same thread, so it can be stale for this specific
-// call. WindowFromDC has no such staleness risk: it only succeeds for a
-// real window-associated DC, giving an authoritative match with zero
-// ambiguity. It only fails for memory/double-buffered DCs (the file-picker
-// case), where g_tlsPaintHwnd is kept as the fallback.
+// WindowFromDC(hdc) is tried first, not g_tlsPaintHwnd, since the latter is
+// last-set by whichever BeginPaint ran most recently on this UI thread and
+// can be stale by the time this call happens. WindowFromDC only succeeds
+// for a real window-associated DC, so it's authoritative when it works;
+// g_tlsPaintHwnd is kept as the fallback for memory/double-buffered DCs.
 static HWND NavDividerTrackAndGetHwnd(HDC hdc, LPCRECT pRect)
 {
     HWND hDiv = WindowFromDC(hdc);
     if (!hDiv) hDiv = g_tlsPaintHwnd;
     if (!hDiv) return nullptr;
 
-    if (!g_navDividerHookInstallTriggered.exchange(true, std::memory_order_acq_rel)) {
-        HANDLE hThread = CreateThread(nullptr, 0, NavDividerInstallSetCursorHookThread, nullptr, 0, nullptr);
-        if (hThread) CloseHandle(hThread); // fire-and-forget; doesn't stop the thread
+    // SetFunctionHook only queues the hook, so it's safe to call directly
+    // from this callback. Only Wh_ApplyHookOperations (which actually
+    // patches the target) can't run from here -- deferred to ThemeMsgWndProc
+    // via a posted message, reusing the thread g_msgWnd already runs on.
+    // Installing lazily (not in Wh_ModInit) keeps SetCursor unhooked in the
+    // many processes that never show a real nav-pane divider.
+    if (!g_navDividerHookInstallTriggered.exchange(true, std::memory_order_acq_rel))
+        WindhawkUtils::SetFunctionHook(SetCursor, NavDividerSetCursor_hook, &NavDividerSetCursor_orig);
+
+    if (!g_navDividerApplyPosted.load(std::memory_order_acquire)) {
+        HWND msgWnd = g_msgWnd.load(std::memory_order_acquire);
+        if (msgWnd && PostMessageW(msgWnd, kNavDividerApplyHooksMessage, 0, 0))
+            g_navDividerApplyPosted.store(true, std::memory_order_release);
     }
 
     int centerX = (pRect->left + pRect->right) / 2;
@@ -16837,23 +18102,15 @@ static COLORREF NavDividerBackgroundColor(bool dark)
 }
 
 // Paints the WinUI-style hover indicator on top of the already-erased
-// background, scaled by fadeFrac (0..1) for the fade-in/out animation:
-//   - A thin rounded line spanning 90% of the divider's height, white-with-
-//     opacity in dark mode / black-with-opacity in light mode (same values
-//     already used for the scrollbar thumb's hot state, for consistency).
-//   - A wider pill-shaped bulge centered vertically, accent-colored fill
-//     (same Light2-dark/Dark1-light offsets as every other accent pill in
-//     this file) with a 2px dark/light outline so it stays legible
-//     regardless of what's directly behind it.
-// Brushes live in the shared per-thread D2DThreadCache (see its definition)
-// instead of their own thread_local statics, so Wh_ModUninit's
-// D2DThreadCachesClear() proactively releases them for every thread that
-// ever painted here -- not just whichever thread happens to run
-// Wh_ModUninit -- rather than waiting on each thread's own (possibly much
-// later, possibly after this module has already unloaded) exit. Tied to the
-// same cache entry as `renderTarget`, so CreateBoundD2DRenderTarget already
-// keeps them correctly invalidated together whenever it recreates a stale
-// RT; no separate staleness check is needed here.
+// background, scaled by fadeFrac (0..1): a thin rounded line spanning 90%
+// of the divider's height (same white/black-with-opacity values as the
+// scrollbar thumb's hot state), plus a wider accent-filled pill bulge with
+// a 2px outline so it stays legible against whatever's behind it.
+//
+// Brushes live in the shared per-thread D2DThreadCache instead of their own
+// thread_local statics, so Wh_ModUninit's D2DThreadCachesClear() proactively
+// releases them for every thread that painted here, rather than waiting on
+// each thread's own (possibly much later) exit.
 static void PaintNavDividerHoverPill(HDC hdc, LPCRECT pRect, float fadeFrac, bool dark)
 {
     if (!g_d2dFactory || fadeFrac <= 0.f) return;
@@ -16957,7 +18214,7 @@ static bool PaintLegacyShellDropdownHover(HDC hdc, LPCRECT pRect, HWND hwnd, boo
     if (w <= 0 || h <= 0)
         return true;
 
-    UINT dpi = hwnd ? GetDpiForWindow(hwnd) : (UINT)g_Dpi;
+    UINT dpi = DpiForPaint(hwnd);
     float scale = (float)dpi / (float)USER_DEFAULT_SCREEN_DPI;
     float cr = g_settings.MenuHoverRadius * scale;
     float inset = 1.f * scale;
@@ -16987,6 +18244,44 @@ static bool PaintLegacyShellDropdownHover(HDC hdc, LPCRECT pRect, HWND hwnd, boo
 
 static const wchar_t kSearchIconGlyph[] = L"\uE721"; // Segoe Fluent/MDL2 "Search"
 
+// Same prop this file uses elsewhere (PropLightPaneSubclassProc's own
+// declaration, defined much later) to mark a root dialog as carrying the
+// light-mode edge extension -- redeclared here since TabPaneCornerColor
+// needs it earlier in the file than that section.
+static constexpr LPCWSTR kPropLightPaneSubclassProp = L"WH_PROP_LIGHTPANE_SUB";
+
+// True when the color that should show through the TABP_PANE rounded-corner
+// cutouts is actually known -- the root is a real property-sheet dialog that
+// our own edge-extension subclass (PropDlgSubclassProc/
+// PropLightPaneSubclassProc) has already painted with kPropDkPane/
+// kPropLightPane. Without that confirmation there's no way to know what
+// really surrounds the pane (a plain #32770, an AeroWizard page, a custom-
+// colored dialog), so callers should skip the rounded-corner treatment
+// entirely rather than clearing the cutouts to a guessed color.
+static bool TabPaneCornerColorConfirmed(HWND tabHwnd, bool dark)
+{
+    if (!tabHwnd || !g_settings.RoundedTabPane)
+        return false;
+    HWND root = GetAncestor(tabHwnd, GA_ROOT);
+    const wchar_t* extensionMarker = dark ? L"_PropDkApplied" : kPropLightPaneSubclassProp;
+    wchar_t rootCls[32] = {};
+    return root && GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) &&
+        _wcsicmp(rootCls, L"#32770") == 0 && GetPropW(root, extensionMarker);
+}
+
+// The color that should show through the TABP_PANE rounded-corner cutouts,
+// once TabPaneCornerColorConfirmed() has already established it's known. A
+// DC render target bound via BindDC discards alpha on its final blit, so
+// Clear()-ing to transparent just blits the Clear color's own RGB, not the
+// real destination pixels -- and GetPixel is unsafe too, since the strip
+// above the pane may not be repainted yet at this point. Same as
+// SampleBackground's own dark-mode branch, the fix is a fixed color by
+// context instead of sampling.
+static COLORREF TabPaneCornerColor(bool dark)
+{
+    return dark ? kPropDkPane : kPropLightPane;
+}
+
 static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     W32M_PROF(PROF_HandleThemeDraw);
@@ -16994,6 +18289,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
     // Reset accent button flag — prevents leak from a previous PaintPushButton
     // call affecting unrelated controls (tabs, lists) on the same thread.
     g_tlsIsAccentButton = false;
+    g_tlsButtonDark = false;
     EnsureD2DFactory();
 
     std::wstring cls = GetCachedThemeClass(hTheme);
@@ -17006,23 +18302,19 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
     }
 
     // The legacy rebar search box's magnifying-glass icon is theme class
-    // "SearchBox" part 3 (confirmed via GetThemePartSize: a fixed 22x22
-    // icon-sized part within the search box's part-1 background). Native
-    // dark mode gives it a wrong/inconsistent color, which is what first
-    // motivated this -- but the icon swap itself is a cosmetic
-    // modernization, same as the travel-band buttons, not a dark-mode-only
-    // bugfix, so it now runs whenever legacy rebar controls are being
-    // modernized, in both themes (color picked per-window below rather than
-    // hardcoded white, since light mode needs a dark glyph instead). Falls
-    // back to the native draw (by not returning true here) if no icon font
-    // is installed at all.
+    // "SearchBox" part 3, a fixed 22x22 icon-sized part within the search
+    // box's part-1 background. This is a cosmetic modernization (like the
+    // travel-band buttons), not a dark-mode-only fix, so it runs in both
+    // themes whenever legacy rebar controls are modernized -- color picked
+    // per-window rather than hardcoded white, since light mode needs a dark
+    // glyph. Falls back to the native draw if no icon font is installed.
     if (g_settings.LegacyRebarControls && cls == L"SearchBox" && iPartId == 3) {
         int w = pRect->right - pRect->left, h = pRect->bottom - pRect->top;
         if (w > 0 && h > 0) {
             int fontSize = std::max(8, (int)(std::min(w, h) * 0.82f + 0.5f));
             if (TravelBandUseIconFont(fontSize, [&](HFONT iconFont) {
                 HWND searchCtxHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
-                COLORREF glyphClr = IsHwndDarkMode(searchCtxHwnd) ? RGB(255, 255, 255) : RGB(25, 26, 26);
+                COLORREF glyphClr = IsDarkForExcludedAwarePaint(searchCtxHwnd) ? RGB(255, 255, 255) : RGB(25, 26, 26);
                 HGDIOBJ oldFont = SelectObject(hdc, iconFont);
                 int oldBkMode = SetBkMode(hdc, TRANSPARENT);
                 COLORREF oldTextClr = SetTextColor(hdc, glyphClr);
@@ -17065,17 +18357,17 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         }
     }
 
-    // AeroWizard title bar (zip-extraction wizard, among others): the top
-    // <44px strip is DWM's own non-client caption, never drawn via uxtheme
-    // (DrawThemeBackground(Ex) never fires with iPartId == AW_TITLEBAR).
-    // Give it a Mica backdrop, applied once per window. AllowDarkModeForWindow
-    // stays off for this window (it changes uxtheme's internal GetThemeColor/
-    // DrawThemeXxx rendering branch and broke this legacy control's own text
-    // rendering); DWMWA_USE_IMMERSIVE_DARK_MODE is unrelated to that and only
-    // controls Mica's dark/light tint. No SetWindowPos/SWP_FRAMECHANGED here
-    // -- it forces WM_NCCALCSIZE, which conflicts with this control's own
-    // custom NC hit-testing/layout.
-    if (cls == L"AeroWizard") {
+    // AeroWizard title bar: the top <44px strip is DWM's own non-client
+    // caption, never drawn via uxtheme, so give it a Mica backdrop applied
+    // once per window. AllowDarkModeForWindow stays off here -- it changes
+    // uxtheme's internal rendering branch and broke this legacy control's
+    // own text rendering; DWMWA_USE_IMMERSIVE_DARK_MODE is unrelated and
+    // only controls Mica's tint. No SWP_FRAMECHANGED -- it forces
+    // WM_NCCALCSIZE, which conflicts with this control's own NC layout.
+    // Always applied in dark mode (a light caption on a dark wizard body
+    // looks broken); in light mode it's purely cosmetic, so it rides on
+    // RoundedButtons instead of getting its own dedicated setting.
+    if (cls == L"AeroWizard" && (g_darkModeActive || g_settings.RoundedButtons)) {
         HWND root = GetAncestor(WindowFromDC(hdc), GA_ROOT);
         if (root && !GetPropW(root, kPropAeroWizardCaption)) {
             if (g_darkModeActive) {
@@ -17332,15 +18624,18 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         if (iPartId == 7) return true; // suppress glyph (system draws arrow separately)
         int w = pRect->right - pRect->left, h = pRect->bottom - pRect->top;
         if (w > 0 && h > 0 && g_d2dFactory) {
-            bool dark = IsWindowDarkMode(hdc);
-            COLORREF bgClr = SampleBackground(hdc, pRect->left, pRect->top, COLOR_BTNFACE);
+            HWND cmdLinkHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
+            bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
+            COLORREF bgClr = dark ? DarkBgForPaint(cmdLinkHwnd)
+                : SampleBackground(hdc, pRect->left, pRect->top, COLOR_BTNFACE);
             HBRUSH bgBr = CreateSolidBrush(bgClr);
             FillRect(hdc, pRect, bgBr);
             DeleteObject(bgBr);
             Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
             if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
             {
-                float fw = (float)w, fh = (float)h, cr = 5.f;
+                float scale = (float)DpiForPaintHdc(hdc) / 96.f;
+                float fw = (float)w, fh = (float)h, cr = 4.f * scale;
                 D2D1_COLOR_F fill;
                 bool isHot = (iStateId == 2 /*HOT*/);
                 bool isPressed = (iStateId == 3 /*PRESSED*/);
@@ -17386,11 +18681,12 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         if (iPartId == 1 /*LBCP_BORDER_NOSCROLL or similar*/) {
             int w = pRect->right - pRect->left, h = pRect->bottom - pRect->top;
             if (w > 0 && h > 0 && g_d2dFactory) {
-                bool dark = IsWindowDarkMode(hdc);
+                bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
                 Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
                 if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
                 {
-                    float fw = (float)w, fh = (float)h, cr = 5.f;
+                    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
+                    float fw = (float)w, fh = (float)h, cr = 4.f * scale;
                     // Fill bg
                     D2D1_COLOR_F bgFill = dark
                         ? D2D1::ColorF(0.18f, 0.18f, 0.18f)
@@ -17442,11 +18738,12 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
             if (iStateId == 1 || iStateId == 6) return true;
             int w = pRect->right - pRect->left, h = pRect->bottom - pRect->top;
             if (w > 0 && h > 0 && g_d2dFactory) {
-                bool dark = IsWindowDarkMode(hdc);
+                bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
                 Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
                 if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
                 {
-                    float fw = (float)w, fh = (float)h, cr = 5.f;
+                    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
+                    float fw = (float)w, fh = (float)h, cr = 4.f * scale;
                     bool isPressed = (iStateId == 3 /*PRESSED*/);
                     float alpha = isPressed ? (dark ? 0.04f : 0.03f) : (dark ? 0.08f : 0.06f);
                     D2D1_COLOR_F fill = dark
@@ -17470,89 +18767,75 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
     // TABP_PANE (9) / TABP_BODY (10) — tab content area background
     if (cls == L"Tab" && (iPartId == 9 || iPartId == 10)) {
         const bool dark = IsWindowDarkMode(hdc);
-        if (dark && g_darkModeActive) {
-            // Expand 2px up to cover the 1px border artifact between strip and pane
+
+        // Not widened here: this hdc belongs to the tab control itself, and
+        // a child window's DC is clipped to its own bounds regardless of
+        // what rect we hand FillRect. Reaching the real dialog edges needs
+        // an unclipped DC, so that's drawn separately from the root
+        // dialog's own WM_ERASEBKGND (PropDlgSubclassProc/
+        // PropLightPaneSubclassProc), which only happens in a real
+        // property-sheet root dialog -- elsewhere there's no matching
+        // root-level fill to blend into, so the rounded shape just reads as
+        // a plain panel there.
+        //
+        // All 4 corners rounded, no border. The corner cutouts are cleared
+        // to TabPaneCornerColor(...) -- see that function's own comment for
+        // why it needs a context-picked fixed color. Runs in both themes
+        // (gated on IsWinUiTabStyleActive, same as PaintTab).
+        if (IsWinUiTabStyleActive()) {
             RECT rcExp = *pRect;
-            rcExp.top -= 2;
-            if (!(g_settings.RoundedTabPane && iPartId == 9)) {
-                if (HBRUSH hBr = GetCachedSolidBrush(kPropDkPane))
-                    FillRect(hdc, &rcExp, hBr);
-                return true;
+            // Scaled the same way as the root dialog's own matching nudge
+            // (PropDlgSubclassProc's WM_ERASEBKGND, rcContent.top) -- see
+            // that site's comment for why a fixed pixel count is wrong once
+            // DPI varies.
+            const float paneScale = DpiForPaintHdc(hdc) / 96.f;
+            rcExp.top -= (LONG)lroundf(1.f * paneScale);
+
+            COLORREF pane = dark ? kPropDkPane : kPropLightPane;
+            HWND tabHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
+            bool drewRounded = false;
+            // Rounding requires clearing the corner cutouts to whatever
+            // color actually surrounds the pane -- only attempt it once
+            // that's confirmed (a real property-sheet root wrapping this
+            // pane with its own edge extension). Otherwise fall straight
+            // through to the flat, un-rounded fill below instead of
+            // guessing COLOR_BTNFACE and painting four grey notches on a
+            // dialog with an unrelated background (custom-colored dialog,
+            // AeroWizard page, etc.).
+            if (g_d2dFactory && TabPaneCornerColorConfirmed(tabHwnd, dark)) {
+                COLORREF corner = TabPaneCornerColor(dark);
+                ID2D1DCRenderTarget* rawRT = nullptr;
+                if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, &rcExp, g_d2dFactory, &rawRT)) && rawRT) {
+                    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
+                    pRT.Attach(rawRT);
+                    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> br;
+                    D2D1_COLOR_F paneColor = D2D1::ColorF(
+                        GetRValue(pane) / 255.f, GetGValue(pane) / 255.f, GetBValue(pane) / 255.f);
+                    if (SUCCEEDED(pRT->CreateSolidColorBrush(paneColor, &br)) && br) {
+                        FLOAT w = (FLOAT)(rcExp.right - rcExp.left);
+                        FLOAT h = (FLOAT)(rcExp.bottom - rcExp.top);
+                        FLOAT cr = TabWinUiCornerRadius(hdc);
+                        pRT->BeginDraw();
+                        pRT->Clear(D2D1::ColorF(
+                            GetRValue(corner) / 255.f, GetGValue(corner) / 255.f, GetBValue(corner) / 255.f));
+                        pRT->FillRoundedRectangle(
+                            D2D1::RoundedRect(D2D1::RectF(0.f, 0.f, w, h), cr, cr), br.Get());
+                        HRESULT endHr = pRT->EndDraw();
+                        drewRounded = SUCCEEDED(endHr);
+                        if (endHr == (HRESULT)D2DERR_RECREATE_TARGET) {
+                            pRT.Reset();
+                            CachedTlsRTRecreate();
+                        }
+                    }
+                }
             }
-            // For RoundedTabPane: fill the expanded area with outer bg color
-            // so the rounded corners sit on the correct background
-            if (HBRUSH hBgBr = GetCachedSolidBrush(kPropDkBg))
-                FillRect(hdc, &rcExp, hBgBr);
-        }
-        if (g_settings.RoundedTabPane && iPartId == 9) {
-        if (!g_d2dFactory) return false;
-        const int w = pRect->right - pRect->left;
-        const int h = pRect->bottom - pRect->top;
-        if (w <= 0 || h <= 0) return false;
-
-        const float scale = (float)DpiForPaintHdc(hdc) / (float)USER_DEFAULT_SCREEN_DPI;
-        const float cr = 6.f * scale;
-
-        // Pane fill and border — transparency-aware
-        D2D1_COLOR_F paneBorder;
-        const bool transparentMode = g_settings.TransparencyCompat;
-
-        if (transparentMode) {
-            // D2D alpha transparency: Clear(0,0,0,0) = fully transparent for DWM.
-            // Only draw the rounded border — Mica/Acrylic shows through the fill.
-            paneBorder = dark
-                ? D2D1::ColorF(1.f, 1.f, 1.f, 0.06f)
-                : D2D1::ColorF(1.f, 1.f, 1.f, 0.05f);
-        } else {
-            paneBorder = dark
-                ? D2D1::ColorF(1.f, 1.f, 1.f, 0.08f)
-                : D2D1::ColorF(0.f, 0.f, 0.f, 0.08f);
-        }
-
-        // Opaque mode: GDI pre-fill prevents DWM alpha artifacts on corners.
-        // Transparent mode: skip GDI (would write opaque pixels over transparency).
-        if (!transparentMode) {
-            COLORREF preFill = (dark && g_darkModeActive)
-                ? kPropDkBg
-                : SampleBackground(hdc, pRect->left, pRect->top, COLOR_BTNFACE);
-            HBRUSH hBgBr = CreateSolidBrush(preFill);
-            if (hBgBr) { FillRect(hdc, pRect, hBgBr); DeleteObject(hBgBr); }
-        }
-
-        Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
-        if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
-            return false;
-
-        const float fW = (float)w, fH = (float)h;
-        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(
-            D2D1::RectF(0.5f, 0.5f, fW - 0.5f, fH - 0.5f), cr, cr);
-
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-        if (FAILED(pRT->CreateSolidColorBrush(paneBorder, &brush))) return false;
-
-        pRT->BeginDraw();
-        if (transparentMode) {
-            // Clear to fully transparent — DWM shows Mica/Acrylic through
-            pRT->Clear(D2D1::ColorF(0, 0, 0, 0));
-        } else {
-            // Opaque fill — use elevated pane color for property windows
-            D2D1_COLOR_F paneFill = dark
-                ? D2D1::ColorF(GetRValue(kPropDkPane)/255.f,
-                                GetGValue(kPropDkPane)/255.f,
-                                GetBValue(kPropDkPane)/255.f)
-                : D2D1::ColorF(0.976f, 0.976f, 0.976f); // #F9F9F9
-            brush->SetColor(paneFill);
-            pRT->FillRoundedRectangle(&rr, brush.Get());
-        }
-        brush->SetColor(paneBorder);
-        pRT->DrawRoundedRectangle(&rr, brush.Get(), scale);
-        HRESULT hr = pRT->EndDraw();
-        if (hr == (HRESULT)D2DERR_RECREATE_TARGET) {
-            pRT.Reset();
-            CachedTlsRTRecreate();
-            return false;
-        }
-        return SUCCEEDED(hr);
+            if (!drewRounded) {
+                // No confirmed corner color, or D2D unavailable/failed --
+                // flat fill, no rounding.
+                if (HBRUSH hBr = GetCachedSolidBrush(pane))
+                    FillRect(hdc, &rcExp, hBr);
+            }
+            return true;
         }
     }
 
@@ -17605,7 +18888,8 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
     // Edit: EP_EDITBORDER_NOSCROLL=6..9; ListBox: LBCP_BORDER_*=1..4
     if (g_settings.EditFocusLine) {
         if ((cls == L"Edit" || cls.find(L"Edit") != std::wstring::npos)
-            && iPartId >= 6 && iPartId <= 9)
+            && iPartId >= 6 && iPartId <= 9 &&
+            !IsInsideExcludedFilePicker(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)))
             return PaintControlBorder(hdc, iPartId, iStateId, pRect);
 
         if (cls == L"ListBox" && iPartId >= 1 && iPartId <= 4)
@@ -17629,12 +18913,15 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         PaintExplorerAddressDropDownArrow(hdc, iPartId, iStateId, pRect, false))
         return true;
 
-    // ComboBox — always active (not gated by EditFocusLine).
-    // WinUI 3 style: dark bg fill, rounded border, Fluent chevron.
-    // Was previously inside EditFocusLine causing the ComboBox dropdown button
-    // to lose dark mode and client-edge rounding to disappear when
-    // EditFocusLine was toggled off.
-    if (cls == L"Combobox") {
+    // ComboBox — not gated by EditFocusLine (gating it there made the
+    // dropdown button lose dark mode and client-edge rounding whenever
+    // EditFocusLine was toggled off). WinUI 3 style: dark bg fill, rounded
+    // border, Fluent chevron. Always active in dark mode for the same
+    // reason (native chrome has no dark colors of its own); in light mode
+    // it's purely cosmetic, so it respects RoundedButtons.
+    if (cls == L"Combobox" &&
+        (IsWindowDarkMode(hdc) || g_settings.RoundedButtons) &&
+        !IsInsideExcludedFilePicker(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc))) {
             bool dark = IsWindowDarkMode(hdc);
             int w = pRect->right - pRect->left;
             int h = pRect->bottom - pRect->top;
@@ -17661,7 +18948,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                     dark, buttonState, &fill, &border);
 
                 const COLORREF cornerClr = dark
-                    ? kPropDkBg
+                    ? DarkBgForPaint(ResolveComboBoxAnimationHwnd(hdc))
                     : SampleBackground(
                         hdc, pRect->left, pRect->top, COLOR_BTNFACE);
                 if (HBRUSH hBr = CreateSolidBrush(cornerClr)) {
@@ -17735,7 +19022,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 GetNeutralPushButtonColors(
                     dark, buttonState, &fill, &unusedBorder);
                 const COLORREF base = dark
-                    ? kPropDkBg
+                    ? DarkBgForPaint(ResolveComboBoxAnimationHwnd(hdc))
                     : SampleBackground(
                         hdc, pRect->left, pRect->top, COLOR_BTNFACE);
                 const float invAlpha = 1.f - fill.a;
@@ -17878,9 +19165,10 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
 
                 FLOAT fw = (FLOAT)w, fh = (FLOAT)h;
                 FLOAT pad = 2.f * scale;
+                FLOAT edgeGap = 4.f * scale;
                 D2D1_RECT_F thumbRect = isVert
-                    ? D2D1::RectF(fw - thumbW - 5.f, pad, fw - 5.f, fh - pad)
-                    : D2D1::RectF(pad, fh - thumbW - 5.f, fw - pad, fh - 5.f);
+                    ? D2D1::RectF(fw - thumbW - edgeGap, pad, fw - edgeGap, fh - pad)
+                    : D2D1::RectF(pad, fh - thumbW - edgeGap, fw - pad, fh - edgeGap);
                 FLOAT cr = thumbW * 0.5f;
 
                 pRT->BeginDraw();
@@ -17947,16 +19235,28 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 FLOAT fw = (FLOAT)w, fh = (FLOAT)h;
                 FLOAT triBase = 6.0f * scale, triH = 3.75f * scale;
                 FLOAT hotThumbW = 6.f * scale;
+                FLOAT edgeGap = 4.f * scale;
                 bool isVertDir = (iStateId >= ABS_UPNORMAL && iStateId <= ABS_DOWNDISABLED)
                               || iStateId == 17 || iStateId == 18;
-                FLOAT cx = isVertDir ? (fw - hotThumbW / 2.f - 5.f) : (fw / 2.f);
-                FLOAT cy = isVertDir ? (fh / 2.f) : (fh - hotThumbW / 2.f - 5.f);
+                // +0.5px at the 125% DPI baseline (0.4px logical), scaled by
+                // DPI -- measured in Photoshop against the thumb's actual
+                // position; without this the chevron sits slightly left of
+                // where it should be.
+                FLOAT cx = isVertDir ? (fw - hotThumbW / 2.f - edgeGap + 0.4f * scale) : (fw / 2.f);
+                FLOAT cy = isVertDir ? (fh / 2.f) : (fh - hotThumbW / 2.f - edgeGap);
 
                 D2D1_COLOR_F arrowClr = darkScrollbar
                     ? D2D1::ColorF(1.f, 1.f, 1.f, 90.f / 255.f)
                     : D2D1::ColorF(0.f, 0.f, 0.f, 115.f / 255.f);
+                const bool isPressed = (iStateId == ABS_UPPRESSED || iStateId == ABS_DOWNPRESSED ||
+                                         iStateId == ABS_LEFTPRESSED || iStateId == ABS_RIGHTPRESSED);
                 if (isHot) {
                     triBase = 6.5f * scale; triH = 4.f * scale;
+                } else if (isPressed) {
+                    // Shrink below the base size (mirrors the hot growth
+                    // delta in the other direction) so the press feedback
+                    // reads as a deliberate squeeze, not just "not hot".
+                    triBase = 5.5f * scale; triH = 3.5f * scale;
                 }
 
                 D2D1_POINT_2F pts[6] = {};
@@ -18298,14 +19598,12 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         }
     }
 
-    // Tab class -- property window tab pills
-    if (g_settings.TabPill && cls == L"Tab")
+    // Tab class -- WinUI-style tab backgrounds. PaintTab itself checks
+    // IsWinUiTabStyleActive and no-ops when it isn't, so no setting gate is
+    // needed here.
+    if (cls == L"Tab")
     {
-        // DComp only in Explorer — other processes get GDI pill (no animation).
-        // Same guard as nav pane pill: DComp init outside Explorer causes
-        // rendering errors in file pickers and other shell dialogs.
-        bool forceGDI = !IsCurrentProcessExplorer();
-        if (PaintTab(hdc, iPartId, iStateId, pRect, forceGDI))
+        if (PaintTab(hdc, iPartId, iStateId, pRect))
             return true;
     }
 
@@ -18399,8 +19697,10 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
 
     // Legacy shell dropdowns sometimes paint hot rows as ListView items
     // instead of Menu popup items in light mode. Catch that path too so the
-    // native blue square hover doesn't leak through.
-    if (cls == L"ListView" && iPartId == LVP_LISTITEM_ && iStateId == 2) {
+    // native blue square hover doesn't leak through. Gated the same as its
+    // Menu-class sibling above.
+    if (g_settings.ModernContextMenus && cls == L"ListView" &&
+        iPartId == LVP_LISTITEM_ && iStateId == 2) {
         HWND hwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
         if (IsLegacyShellDropdownRoot(hwnd))
             return PaintLegacyShellDropdownHover(hdc, pRect, hwnd);
@@ -18412,7 +19712,8 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         if (iPartId == TVP_TREEITEM_ &&
             (cls == L"TreeView" || cls == L"Explorer::TreeView"))
         {
-            if (iStateId == 1) return true; // suppress TREIS_NORMAL focus border
+            if (iStateId == 1)
+                return true;
             if (iStateId >= 2 && iStateId <= 6)
                 return DrawRoundedItemBg(hdc, pRect, iStateId, true);
         }
@@ -18421,10 +19722,13 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
             return true;
 
         bool isLV = IsListViewThemeClass(cls);
-        if (isLV && iPartId == LVP_LISTITEM_)
-            if (iStateId >= 1 && iStateId <= 6) {
+        if (isLV && iPartId == LVP_LISTITEM_) {
+            if (iStateId == 1)
+                return true; // suppress native focus border, same as the TreeView/ItemsView call sites
+            if (iStateId >= 2 && iStateId <= 6) {
                 return DrawRoundedItemBg(hdc, pRect, iStateId, false);
             }
+        }
 
         // iPartId == 3 in ItemsView = overlay drawn on top of the item background.
         // State 1 = focus border (suppress). Other states = hover/selection overlays
@@ -18460,9 +19764,10 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                 Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
                 if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
                 {
-                    bool dark = IsWindowDarkMode(hdc);
+                    bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
+                    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
                     float fw = (float)w, fh = (float)h;
-                    float cr = 5.f;
+                    float cr = 4.f * scale;
                     float alpha;
                     switch (iStateId) {
                     case TS_HOT: case TS_OTHERSIDEHOT:
@@ -18495,11 +19800,12 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
             if (iStateId == TS_DISABLED) return true;
             int w = pRect->right - pRect->left, h = pRect->bottom - pRect->top;
             if (w > 0 && h > 0 && g_d2dFactory) {
-                bool dark = IsWindowDarkMode(hdc);
+                bool dark = IsDarkForExcludedAwarePaintHdc(hdc);
                 Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRT;
                 if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRT)))
                 {
-                    float fw = (float)w, fh = (float)h, cr = 5.f;
+                    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
+                    float fw = (float)w, fh = (float)h, cr = 4.f * scale;
                     float bgAlpha = 0.f;
                     bool isPressed = (iStateId == TS_PRESSED);
                     if (iStateId == TS_HOT || iStateId == TS_OTHERSIDEHOT || iStateId == TS_HOTCHECKED)
@@ -18520,7 +19826,6 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
                     }
                     // Chevron: rotate the existing > into V with the same
                     // 160 ms EaseOutCubic transition used by TreeView.
-                    float scale = (float)DpiForPaintHdc(hdc) / 96.f;
                     float cx = fw / 2.f, cy = fh / 2.f;
                     float al = std::min(fw, fh) * 0.2f;
                     D2D1_COLOR_F ac = dark ? D2D1::ColorF(0.85f, 0.85f, 0.85f)
@@ -18582,7 +19887,7 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         bool isLV = IsListViewThemeClass(cls);
         if (isLV && (iPartId == LVP_EXPANDBUTTON || iPartId == LVP_COLLAPSEBUTTON))
         {
-            return PaintAnimatedListViewGroupChevron(hdc, iPartId, iStateId, pRect);
+            return PaintListViewGroupChevron(hdc, iPartId, iStateId, pRect);
         }
         if (isLV && iPartId == 6 && g_d2dFactory)
         {
@@ -18704,16 +20009,12 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                 PillDCompAllowedForTree(currentTree);
 
             // A second Explorer/picker window's tree can repaint its own
-            // selected row (hover, an unrelated redraw, a blinking caret --
-            // none of them a real selection change) while a DIFFERENT tree
-            // still owns the single shared g_pillTreeHWND/g_pillDC/g_pillTimer
-            // state. Switching that shared state over -- or even just hiding
-            // the owner's DComp visual -- on every such repaint tore down the
-            // owner's animation and re-subclassed trees constantly just from
-            // moving the mouse between two windows. Only let a tree touch the
-            // shared state if it's the one actually being interacted with
-            // (its top-level window is foreground), if it already owns the
-            // state, or if nothing owns it yet.
+            // selected row (hover, an unrelated redraw, a blinking caret) while
+            // a different tree still owns the single shared g_pillTreeHWND/
+            // g_pillDC/g_pillTimer state -- switching that state on every such
+            // repaint tore down the owner's animation just from moving the
+            // mouse between windows. Only let a tree touch the shared state
+            // if it's foreground, already owns it, or nothing owns it yet.
             HWND ownerTop = GetAncestor(currentTree, GA_ROOT);
             bool currentIsForeground = (ownerTop && ownerTop == GetForegroundWindow());
             bool noTreeTrackedYet = (!g_pillTreeHWND || !IsWindow(g_pillTreeHWND));
@@ -18879,26 +20180,19 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                                 HTREEITEM newItem = (HTREEITEM)curItem;
                                 if (isFirstEver || justScrolled)
                                 {
-                                    // isFirstEver: a true first-ever paint or a
-                                    // tree/window change -- no "from" item exists
-                                    // at all (prevItemForBoundary is 0). justScrolled
-                                    // (guaranteed style==4 by the outer gate): a
-                                    // scroll happened, so prevItemForBoundary's
-                                    // remembered top predates it and can't be
-                                    // trusted as a real "from" coordinate even
-                                    // though the item handle itself is still valid
-                                    // -- entering/exiting/same-depth would all
-                                    // show a stale sliver at the pre-scroll
-                                    // position if reasoned about normally, so
-                                    // this skips straight to an open-only pop-in
-                                    // in both cases, ignoring depth entirely.
-                                    // Anchor follows scroll direction (confirmed
-                                    // by testing): scrolled up -> bottom-anchored
-                                    // (blindKind 3, same as "arriving after a
-                                    // collapse"); scrolled down -> the inverse,
-                                    // top-anchored (blindKind 4); with no scroll
-                                    // at all (genuine first paint) it defaults to
-                                    // blindKind 3 via g_pillJustScrolledUp's default.
+                                    // isFirstEver: no "from" item exists at all.
+                                    // justScrolled: prevItemForBoundary's
+                                    // remembered top predates the scroll and
+                                    // can't be trusted as a real "from"
+                                    // coordinate, even though the item handle is
+                                    // still valid -- both cases skip straight to
+                                    // an open-only pop-in, ignoring depth.
+                                    // Anchor follows scroll direction: scrolled
+                                    // up -> bottom-anchored (blindKind 3, same as
+                                    // "arriving after a collapse"); scrolled down
+                                    // -> top-anchored (blindKind 4); no scroll
+                                    // (genuine first paint) defaults to blindKind
+                                    // 3 via g_pillJustScrolledUp's default.
                                     int newDepth = 0, newIndentPx = 0;
                                     PillItemNestInfo(g_pillTreeHWND, newItem, &newDepth, &newIndentPx);
                                     snap.curIndentPx = newIndentPx;
@@ -18913,28 +20207,20 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                                     PillItemNestInfo(g_pillTreeHWND, newItem, &newDepth, &newIndentPx);
                                     snap.prevIndentPx = oldIndentPx;
                                     snap.curIndentPx = newIndentPx;
-                                    // Purely depth-based: fires on any depth
-                                    // increase/decrease regardless of branch
-                                    // relationship (e.g. a drive nested under
-                                    // "This PC" is not literally an ancestor of
-                                    // another drive's children, but it's still a
-                                    // sibling section as far as the tree's visual
-                                    // structure goes -- requiring an exact
-                                    // ancestor relationship here rejected that
-                                    // common case).
+                                    // Purely depth-based, not ancestor-based --
+                                    // a drive under "This PC" isn't literally an
+                                    // ancestor of another drive's children, but
+                                    // is still a sibling section visually.
                                     if (newDepth > oldDepth)
                                         snap.blindKind = 1; // entering a section
                                     else if (newDepth < oldDepth)
                                     {
                                         // If oldItem is no longer visible, this exit
-                                        // was triggered by collapsing its section
-                                        // (not a plain navigation to a shallower
-                                        // item that's still shown) -- its old row
-                                        // now shows different/no content after the
-                                        // collapse shifted everything up, so
-                                        // animating a close phase there would look
-                                        // wrong. blindKind 3 skips straight to a
-                                        // single expand-only phase at the parent.
+                                        // was a section collapse, not a plain
+                                        // navigation -- its old row now shows
+                                        // different content, so animating a close
+                                        // phase there would look wrong. blindKind 3
+                                        // skips to a single expand-only phase.
                                         snap.blindKind =
                                             PillItemIsVisible(g_pillTreeHWND, oldItem) ? 2 : 3;
                                     }
@@ -19027,17 +20313,14 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                                 }
                                 // The tree's current WM_PAINT removes the old
                                 // static GDI pill when it returns. For a held
-                                // transition, wait until the committed
-                                // DComp copy of that pill has reached DWM first,
-                                // making the GDI-to-overlay handoff atomic.
-                                // DwmFlush can block for an unbounded time
-                                // (GPU/DWM stall); it must run after the
-                                // unlock below so it never blocks the
-                                // animation thread's try_lock on this same
-                                // mutex. The commit it waits for already
-                                // happened above, under the lock, so moving
-                                // the flush after unlock doesn't change what
-                                // it waits for -- only who it can block.
+                                // transition, wait until the committed DComp
+                                // copy reaches DWM first, making the handoff
+                                // atomic. DwmFlush can block unboundedly, so it
+                                // must run after the unlock below so it can't
+                                // block the animation thread's try_lock on this
+                                // same mutex -- the commit it waits for already
+                                // happened under the lock, so this only changes
+                                // who it can block, not what it waits for.
                                 bool needDwmFlush = preRendered && snap.holdDuration > 0.0;
                                 g_pillDCMutex.unlock();
                                 if (needDwmFlush)
@@ -19063,15 +20346,12 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
             }
 
             // ── Draw static GDI pill slice ────────────────────────────────
-            // For DComp styles during active animation (g_pillTimer > 0):
-            // DComp overlay renders the pill — skip GDI slice.
-            // For all other states (static, non-DComp, isSameItem etc.):
-            // GDI slice is the permanent renderer.
-            // Both gated on ownsSharedState too: g_pillTimer/g_pillDC* belong
-            // to whichever tree currently owns the shared state, so a
-            // different, non-owning tree must never read them as if they
-            // described its own animation -- it always takes the plain
-            // resting path below instead.
+            // Skip the GDI slice only while a DComp overlay is actively
+            // rendering the pill (g_pillTimer > 0); GDI is the permanent
+            // renderer otherwise. Both gated on ownsSharedState: g_pillTimer/
+            // g_pillDC* belong to whichever tree currently owns the shared
+            // state, so a non-owning tree always takes the plain resting
+            // path instead of reading them as its own animation.
             bool dcompAnimating = ownsSharedState && isDCompStyle && g_pillTimer &&
                                     g_pillDCValid.load(std::memory_order_acquire) &&
                                     g_pillDCContentAttached.load(std::memory_order_acquire);
@@ -19153,19 +20433,13 @@ static void HandlePostDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LP
                         float pillW = 3.2f * scale;
                         // Horizontal inset for nested items (winui_top style
                         // only): gdiIndentPx while the GDI fallback is actively
-                        // animating (already phase-aware, computed above), or a
-                        // fresh measurement of the resting item otherwise.
-                        // Resting lookup cached by (tree, item, scale, item
-                        // count): this runs on every idle repaint of the
-                        // selected row (hover elsewhere, focus, caret blink,
-                        // etc. all repaint without the selection changing), so
-                        // skip re-walking the tree and re-querying rects when
-                        // nothing relevant changed. Item count is included
-                        // because comctl32 can reuse an HTREEITEM's pointer
-                        // value for a different item after a tree rebuild
-                        // (e.g. F5) -- without some signal that changes across
-                        // a rebuild, a same-looking key would keep returning a
-                        // stale indent indefinitely instead of just one frame.
+                        // animating, or a fresh measurement otherwise. Resting
+                        // lookup cached by (tree, item, scale, item count) since
+                        // this runs on every idle repaint of the selected row.
+                        // Item count is included because comctl32 can reuse an
+                        // HTREEITEM's pointer value after a tree rebuild (e.g.
+                        // F5) -- without it, a same-looking key would keep
+                        // returning a stale indent indefinitely.
                         static HWND      s_pillNestCacheHwnd     = nullptr;
                         static HTREEITEM s_pillNestCacheItem     = nullptr;
                         static float     s_pillNestCacheScale    = 0.0f;
@@ -19730,17 +21004,10 @@ static int WINAPI GlowDrawTextCallback(HDC hdc, LPWSTR pszText, int cchText,
 }
 
 // ── File operation (copy/move/delete) progress dialog accent colors ──────
-// The progress dialog (top-level window class "OperationStatusWindow") has
-// hardcoded-blue elements that don't follow the system accent color:
-// - the source/destination folder name link text (e.g. "Windows",
-//   "Downloads"), drawn via plain DrawTextW with SetTextColor;
-// - the expanded "more details" speed chart's area fill, drawn via GDI+
-//   GdipFillPolygon[I] with a solid #60CDFF brush, plus a fading overlay
-//   drawn via GdipFillRectangleI with a 2-stop LinearGradientBrush
-//   (#2660CDFF -> #0060CDFF, same RGB at different alpha).
-// Gated by AccentColorize, mirroring the existing DragDrop text accent
-// override below (same setting, same kind of incidental-UI recolor, not a
-// structural dark-mode change).
+// The progress dialog (OperationStatusWindow) hardcodes blue in its link
+// text and speed-chart fill (GDI+ Gdip* calls, #60CDFF). Recolor to accent
+// when AccentColorize is on, matching the DragDrop text accent override
+// below.
 static bool IsFileOpProgressWindow(HWND hwnd)
 {
     if (!hwnd) return false;
@@ -20062,21 +21329,12 @@ static void FileOpAccentGdipInit()
 // ============================================================================
 // AutoPlay flyout replacement (ExplorerSection.AutoPlayReplacement)
 // ============================================================================
-// Replaces the Windows 11 AutoPlay flyout (Shell_Flyout window, shown when a
-// removable drive/disc arrives) with a Direct2D popup: dark/light acrylic,
-// real shell icons, entrance animation, accent-colored hover pill, correct
-// handler invocation. Ported from the standalone "AutoPlay Replacement" mod;
-// reuses this file's own infrastructure instead of duplicating it:
-//   - GetAccentFromPalette()+ColorFAlpha() instead of its own palette reader
-//   - IsSystemDarkMode() instead of its own registry read
-//   - g_d2dFactory (already created for all processes) instead of its own D2D factory
-//   - g_pSWCA/ACCENT_POLICY/WCA_ACCENT_POLICY (already loaded by CbdLoadAPIs)
-//     instead of its own SetWindowCompositionAttribute plumbing
-//   - IsCurrentProcessExplorer() to scope hook installation to Explorer only
-//     (the flyout never appears anywhere else, and ShowWindow/SetWindowPos/
-//     DestroyWindow are too hot-path to hook in every process under @include *)
-// All symbols are Ap-prefixed: plain names like WndProc/ApplyAcrylic/g_pSWCA
-// already exist in this file for unrelated features.
+// Replaces the Win11 AutoPlay flyout (Shell_Flyout) with a D2D popup, reusing
+// this file's existing accent/dark-mode/D2D/SWCA infra instead of duplicating
+// it (ported from the standalone AutoPlay Replacement mod). Hooks are scoped
+// to Explorer via IsCurrentProcessExplorer since ShowWindow/SetWindowPos/
+// DestroyWindow are hot-path. Symbols are Ap-prefixed to avoid clashing with
+// this file's other WndProc/ApplyAcrylic-named features.
 
 struct ApItem {
     std::wstring id;
@@ -22127,6 +23385,21 @@ static bool IsInsideAclUiDarkDialog(HWND hwnd)
     return false;
 }
 
+// The ReBar's search box (Windows 11 "SearchEditBoxWrapperClass") already
+// renders dark mode correctly on its own; our general text-color remap
+// conflicts with its near-transparent placeholder text. Direct parent
+// only, not a full walk -- called on nearly every text draw in the
+// process, and the placeholder's DirectUIHWND is always an immediate child.
+static bool IsInsideSearchEditBoxWrapper(HWND hwnd)
+{
+    if (!hwnd) return false;
+    HWND parent = GetParent(hwnd);
+    if (!parent) return false;
+    wchar_t cls[64] = {};
+    return GetClassNameW(parent, cls, ARRAYSIZE(cls)) &&
+           _wcsicmp(cls, L"SearchEditBoxWrapperClass") == 0;
+}
+
 int WINAPI FillRect_hook(HDC hdc, const RECT* lprc, HBRUSH hbr)
 {
     if (hbr && IsModernLightEditDc(hdc)) {
@@ -22299,23 +23572,29 @@ HRESULT WINAPI DrawThemeText_hook(HTHEME hTheme, HDC hdc, int iPartId,
 
     // Accent button text: force color in BOTH dark and light modes.
     // Must be before g_darkModeActive check because light mode needs it too.
-    if (!IsTextPipelineDisabled() && g_settings.RoundedButtons && pRect) {
+    //
+    // IsTextPipelineDisabled() is too broad a veto here on its own: it's
+    // also true for any window of an excluded process, but this specific
+    // override is color-only (no glow/decorative rendering) and needs to
+    // keep running inside an excluded process's file picker, whose native
+    // frame is genuinely dark regardless of the host's own exclusion (see
+    // IsInsideExcludedFilePicker). The user's own DisableTextPipeline
+    // setting still vetoes unconditionally.
+    const bool accentTextAllowed = !GetSettings()->DisableTextPipeline &&
+        (!g_darkModeExcluded ||
+         IsInsideExcludedFilePicker(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)));
+    if (accentTextAllowed && g_settings.RoundedButtons && pRect) {
         std::wstring c = GetCachedThemeClass(hTheme);
         if (c == L"Button" && iPartId == BP_PUSHBUTTON && iStateId != PBS_DISABLED) {
-            HWND hBtn = g_tlsPaintHwnd;
-            bool isAccent = false;
-            if (hBtn) {
-                INT ctrlId = GetDlgCtrlID(hBtn);
-                isAccent = (ctrlId == IDOK || ctrlId == IDYES);
-            }
-            if (isAccent || g_darkModeActive) {
+            const bool isAccent = g_tlsIsAccentButton;
+            const bool dark = g_tlsButtonDark;
+            if (isAccent || dark) {
                 DTTOPTS opts = { sizeof(DTTOPTS) };
                 opts.dwFlags = DTT_TEXTCOLOR;
                 if (isAccent) {
-                    bool dark = g_darkModeActive.load(std::memory_order_acquire);
                     opts.crText = dark ? RGB(0, 0, 0) : RGB(255, 255, 255);
                     // Composited DCs need DTT_COMPOSITED for correct alpha
-                    if (!g_darkModeActive)
+                    if (!dark)
                         opts.dwFlags |= DTT_COMPOSITED;
                 } else {
                     GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &opts.crText);
@@ -22379,18 +23658,11 @@ HRESULT WINAPI DrawThemeTextEx_hook(HTHEME hTheme, HDC hdc, int iPartId,
 {
     W32M_PROF(PROF_DrawThemeTextEx);
 
-    // Classic places bar: comctl32's own toolbar item-text paint builds its
-    // DTTOPTS.crText internally (confirmed via probe logging: it arrives
-    // here already black, e.g. from GetSysColor(COLOR_BTNTEXT) or similar)
-    // instead of reading GetTextColor(hdc) like SysHeader32 does -- so
-    // neither a WM_NOTIFY-stage SetTextColor nor the general GetThemeColor-
-    // based fixup below (which the probe confirmed never even gets reached
-    // for this control, for reasons not fully root-caused) can reach it.
-    // Override unconditionally, ahead of every other bail/branch, so it
-    // doesn't matter which one was swallowing this specific call -- this is
-    // a contrast fix for comctl32's own internal black text color on this
-    // control, not part of the mod's general custom text pipeline, so it
-    // must still apply even when DisableTextPipeline is on.
+    // Classic places bar: comctl32 builds this control's DTTOPTS.crText
+    // internally as black, bypassing both the WM_NOTIFY-stage SetTextColor
+    // and the GetThemeColor fixup below. Override unconditionally, even when
+    // DisableTextPipeline is on -- this is a contrast fix for comctl32's own
+    // color, not part of the mod's general text pipeline.
     if (IsClassicPlacesBarToolbar(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc))) {
         DTTOPTS fixedOpts = pOptions ? *pOptions : DTTOPTS{ sizeof(DTTOPTS) };
         fixedOpts.dwFlags |= DTT_TEXTCOLOR;
@@ -22572,9 +23844,12 @@ INT WINAPI DrawTextW_hook(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, U
         return std::max(1L, lprc->bottom - lprc->top);
     }
 
+    // ReBar search box placeholder text: see the matching gate in
+    // ExtTextOutW_hook for why this can't be remapped to a dark-mode color.
     if ((format & DT_CALCRECT) || g_glowEntry || IsTextPipelineDisabled() ||
         !g_darkModeActive || !lprc ||
-        IsAeroWizardRawWindow(splitChevronHwnd))
+        IsAeroWizardRawWindow(splitChevronHwnd) ||
+        IsInsideSearchEditBoxWrapper(splitChevronHwnd))
         [[clang::musttail]] return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
 
     // Win11 context menus draw their chevron/check/radio glyphs as a single
@@ -22744,9 +24019,11 @@ BOOL WINAPI ExtTextOutW_hook(HDC hdc, int x, int y, UINT options,
         return ret;
     }
 
+    // ReBar search box: see IsInsideSearchEditBoxWrapper's own comment.
     if (IsTextPipelineDisabled() || !g_darkModeActive || !hdc ||
         g_tlsIsAccentButton || g_glowEntry ||
-        IsAeroWizardRawWindow(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)))
+        IsAeroWizardRawWindow(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)) ||
+        IsInsideSearchEditBoxWrapper(g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)))
         [[clang::musttail]] return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     if (!lpString && !(options & ETO_GLYPH_INDEX))
@@ -23208,15 +24485,11 @@ HRESULT WINAPI GetThemeColor_hook(HTHEME hTheme, int iPartId, int iStateId,
     if (g_settings.RoundedButtons && cls == L"Button"
         && iPartId == BP_PUSHBUTTON && iPropId == TMT_TEXTCOLOR
         && iStateId != PBS_DISABLED) {
-        HWND hBtn = g_tlsPaintHwnd;
-        bool isAccent = false;
-        if (hBtn) {
-            INT ctrlId = GetDlgCtrlID(hBtn);
-            isAccent = (ctrlId == IDOK || ctrlId == IDYES);
-        }
+        const bool isAccent = g_tlsIsAccentButton;
+        const bool dark = g_tlsButtonDark;
         if (isAccent)
-            *pColor = g_darkModeActive ? RGB(0, 0, 0) : RGB(255, 255, 255);
-        else if (g_darkModeActive)
+            *pColor = dark ? RGB(0, 0, 0) : RGB(255, 255, 255);
+        else if (dark)
             *pColor = RGB(255, 255, 255);
     }
     return hr;
@@ -23239,14 +24512,11 @@ HRESULT WINAPI GetThemeMargins_hook(HTHEME hTheme, HDC hdc, int iPartId,
 // ============================================================================
 // Registry Editor modernization (RegeditSection)
 // ============================================================================
-// Architecture: TryApplyToWindow_Regedit() called from NtUserCreateWindowEx_hook
-// for every window created in regedit.exe. Each control (TV, LV, Header, Search)
-// detected by class name and styled individually with dedicated subclasses.
-//
-// TreeView rendering: D2D via BindDC for anti-aliased rounded rects, pill, and
-// geometric chevron (same DrawLine technique as Explorer's DrawChevronGlyph).
-// Horizontal scroll artifacts prevented by WM_HSCROLL in RgTVSubclassProc
-// forcing a full RedrawWindow after every ScrollWindowEx BitBlt.
+// TryApplyToWindow_Regedit() styles each control (TV/LV/Header/Search) via a
+// dedicated subclass, installed on window creation. TreeView rendering uses
+// D2D via BindDC; horizontal scroll artifacts are prevented by WM_HSCROLL in
+// RgTVSubclassProc forcing a full RedrawWindow after every ScrollWindowEx
+// BitBlt.
 // ============================================================================
 
 static bool IsCurrentProcessRegedit()
@@ -23289,7 +24559,7 @@ static constexpr float    kRgLtMicaBase   = 243.0f / 255.0f;
 // Layout constants (logical px at 96 DPI)
 // ---------------------------------------------------------------------------
 static constexpr int   kRgPanelRadius      = 5;
-static constexpr int   kRgSearchCornerPx   = 7;
+static constexpr int   kRgSearchCornerPx   = 4;
 static constexpr int   kRgSearchHeightBase = 23;
 static constexpr int   kRgSearchWidthPct   = 65;
 static constexpr int   kRgSearchBarGap     = 6;
@@ -23325,6 +24595,10 @@ static constexpr UINT  kRgTVAnimTimerId = 0xCC6410;
 static constexpr UINT   kRgPillAnimTimerId = 0xCC6411;
 static constexpr DOUBLE kRgPillExpandDur   = 0.20;
 static constexpr UINT   kRgFlushMenuTimerId = 0xCC6412;  // 200ms expand with overshoot
+// Hosted on rg_hwndTV itself (mouse messages arrive there directly), unlike
+// the three timers above which live on rg_hwndMain (NM_CUSTOMDRAW/
+// TVN_DELETEITEM are sent to the tree's parent).
+static constexpr UINT   kRgHoverFadeTimerId = 0xCC6413;
 
 // ---------------------------------------------------------------------------
 // Regedit pill expand animation state (UI-thread only)
@@ -23345,6 +24619,139 @@ struct RgTVItemAnim {
 };
 static std::unordered_map<HTREEITEM, RgTVItemAnim> rg_tvAnims;
 static DWORD rg_tvLastTick = 0;
+
+// Declared here (ahead of its "real" neighbors further down, alongside
+// rg_hwndMain/rg_hwndTV) because RgHoverFadeEnabled below needs it and this
+// file has no header -- declaration order is compile order.
+static std::atomic<bool> rg_unloading{ false };
+
+// ---------------------------------------------------------------------------
+// Regedit tree hover fade (UI-thread only, no lock)
+// ---------------------------------------------------------------------------
+// Mirrors NavHoverFadeState's design exactly -- same struct type and fade
+// curve/constants (kNavHoverFadeDurationSeconds, kNavHoverFadeTimerIntervalMs,
+// NavHoverFadeProgress/NavHoverFadeGetItemRect, all pure functions with no
+// hidden state) -- but stored as a plain global instead of a window prop.
+// NavHoverFadeGetState's GetPropW-based lookup elsewhere (DrawRoundedItemBg's
+// isNavPaneTree) treats that prop's mere presence on a window as "this is
+// the nav pane", so this must never touch that storage. A plain global is
+// also simpler here: regedit has exactly one tree (rg_hwndTV), unlike
+// Explorer's multiple nav panes across windows.
+static NavHoverFadeState rg_hoverFade;
+
+static void RgHoverFadeStopTimer(HWND hwnd)
+{
+    if (!rg_hoverFade.timerActive)
+        return;
+    KillTimer(hwnd, kRgHoverFadeTimerId);
+    rg_hoverFade.timerActive = false;
+}
+
+static void RgHoverFadeClear(HWND hwnd, bool invalidate)
+{
+    RgHoverFadeStopTimer(hwnd);
+    if (invalidate && rg_hoverFade.hotItem)
+        InvalidateRect(hwnd, &rg_hoverFade.rect, FALSE);
+    rg_hoverFade = NavHoverFadeState{};
+}
+
+static bool RgHoverFadeEnabled()
+{
+    return !rg_unloading.load(std::memory_order_acquire) &&
+        g_settings.RegeditSection && SysAnimationsEnabled();
+}
+
+// Single-shot fade-in only (0->1), same as NavHoverFadeRetarget -- leaving an
+// item shows its highlight disappear instantly, no fade-out.
+static void RgHoverFadeRetarget(HWND hwnd, HTREEITEM hotItem)
+{
+    if (rg_hoverFade.hotItem == hotItem)
+        return;
+
+    const bool selected = hotItem &&
+        (TreeView_GetItemState(hwnd, hotItem, TVIS_SELECTED) & TVIS_SELECTED);
+
+    if (rg_hoverFade.hotItem)
+        InvalidateRect(hwnd, &rg_hoverFade.rect, FALSE);
+    RgHoverFadeStopTimer(hwnd);
+
+    if (!hotItem) {
+        rg_hoverFade = NavHoverFadeState{};
+        return;
+    }
+
+    rg_hoverFade.hotItem = hotItem;
+    rg_hoverFade.startTime = 0.0;
+    if (!NavHoverFadeGetItemRect(hwnd, hotItem, &rg_hoverFade.rect)) {
+        rg_hoverFade = NavHoverFadeState{};
+        return;
+    }
+
+    // Selected or physically pressed: show the highlight immediately, same
+    // as NavHoverFadeRetarget -- no fade racing a click or a state the
+    // background tint already renders at full strength.
+    const bool animate = !selected && !IsTreeItemPressed(hwnd, &rg_hoverFade.rect);
+    if (animate)
+        rg_hoverFade.startTime = TimerGetSeconds();
+
+    InvalidateRect(hwnd, &rg_hoverFade.rect, FALSE);
+    if (animate) {
+        if (SetTimer(hwnd, kRgHoverFadeTimerId, kNavHoverFadeTimerIntervalMs, nullptr))
+            rg_hoverFade.timerActive = true;
+        else
+            rg_hoverFade.startTime = 0.0;
+    }
+}
+
+static void RgHoverFadeHandleMouseMove(HWND hwnd, LPARAM lParam)
+{
+    if (!RgHoverFadeEnabled()) {
+        RgHoverFadeClear(hwnd, true);
+        return;
+    }
+
+    TVHITTESTINFO hit = {};
+    hit.pt.x = static_cast<SHORT>(LOWORD(lParam));
+    hit.pt.y = static_cast<SHORT>(HIWORD(lParam));
+    HTREEITEM item = TreeView_HitTest(hwnd, &hit);
+    if (rg_hoverFade.hotItem == item) {
+        if (!rg_hoverFade.trackingLeave) {
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
+            rg_hoverFade.trackingLeave = TrackMouseEvent(&tme) != FALSE;
+        }
+        return;
+    }
+    RgHoverFadeRetarget(hwnd, item);
+    if (!rg_hoverFade.trackingLeave) {
+        TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
+        rg_hoverFade.trackingLeave = TrackMouseEvent(&tme) != FALSE;
+    }
+}
+
+static void RgHoverFadeTimerTick(HWND hwnd)
+{
+    if (!rg_hoverFade.timerActive)
+        return;
+    if (!RgHoverFadeEnabled()) {
+        RgHoverFadeClear(hwnd, !rg_unloading.load(std::memory_order_acquire));
+        return;
+    }
+
+    const DOUBLE now = TimerGetSeconds();
+    RECT previousRect = rg_hoverFade.rect;
+    if (!NavHoverFadeGetItemRect(hwnd, rg_hoverFade.hotItem, &rg_hoverFade.rect)) {
+        RgHoverFadeClear(hwnd, true);
+        return;
+    }
+    if (!EqualRect(&previousRect, &rg_hoverFade.rect))
+        InvalidateRect(hwnd, &previousRect, FALSE);
+    InvalidateRect(hwnd, &rg_hoverFade.rect, FALSE);
+
+    if (now - rg_hoverFade.startTime >= kNavHoverFadeDurationSeconds) {
+        rg_hoverFade.startTime = 0.0;
+        RgHoverFadeStopTimer(hwnd);
+    }
+}
 
 static bool RgUnionTreeItemRect(HWND tv, HTREEITEM item, RECT* inOut, bool* hasRect)
 {
@@ -23409,7 +24816,6 @@ static std::atomic<int>  rg_searchBarBottom{ 0 };
 // padding below it) -- RgUpdateSearchRegion/RgDrawSearchOverlay read this
 // instead of the window's own (now taller) client rect.
 static std::atomic<int>  rg_searchVisibleH{ 0 };
-static std::atomic<bool> rg_unloading{ false };
 
 // GDI resources
 static HBRUSH rg_lvBkBrush      = nullptr;
@@ -23433,8 +24839,12 @@ static std::mutex rg_gdipMutex;
 static HBRUSH rg_menuBkBrush   = nullptr;
 static HMODULE rg_hUxtheme     = nullptr;
 
-static constexpr UINT kRgRefreshColorsMessage = WM_APP + 0x5A2;
-static constexpr UINT kRgResetDividerMessage = WM_APP + 0x5A3;
+// Registered at runtime via RegisterWindowMessageW in Wh_ModInit, not fixed
+// WM_APP+N values -- both are sent to regedit's own main window (a window
+// this mod doesn't own), same collision reasoning as
+// Win32UIModernizer.NavHoverFadeReset.
+static std::atomic<UINT> g_rgRefreshColorsMessage{0};
+static std::atomic<UINT> g_rgResetDividerMessage{0};
 
 using RgSetPreferredAppMode_T  = int(WINAPI*)(int);
 using RgFlushMenuThemes_T      = void(WINAPI*)();
@@ -23443,6 +24853,22 @@ static RgFlushMenuThemes_T     rg_FlushMenuThemes     = nullptr;
 
 // SetMenuInfo hook
 static decltype(&SetMenuInfo) rg_SetMenuInfo_orig = nullptr;
+
+// SHDefExtractIconW hook -- GlyphIcons setting. regedit's root ("This
+// Computer") and folder/key TreeView icons come from imageres.dll via
+// SHDefExtractIconW(-109/-3/-4, ...), not from regedit.exe's own resources.
+// Not declared in any standard header (shell32 export, resolved via
+// GetProcAddress like rg_SetPreferredAppMode above), so the pointer type is
+// spelled out here rather than using decltype like the other Rg*_orig hooks.
+// RgGlyphIconShouldReplace/RgGlyphIconGetForLoad are defined later in the
+// file, next to the glyph-rendering helpers they call.
+using RgSHDefExtractIconW_t =
+    HRESULT(WINAPI*)(PCWSTR, int, UINT, HICON*, HICON*, UINT);
+static RgSHDefExtractIconW_t rg_SHDefExtractIconW_orig = nullptr;
+static bool RgGlyphIconShouldReplace(PCWSTR pszIconFile, int iIndex, UINT* outId);
+static HICON RgGlyphIconGetForLoad(UINT id, int size, bool dark, COLORREF accent, bool useAccent);
+static bool RgThisPcAccentIconDraw(HDC hdc, int x, int y, int cx, int cy,
+    bool dark, COLORREF accent);
 
 // PatBlt/ReleaseCapture hooks -- prototype WinUI-style divider drag visual.
 // regedit's own OnLButtonDown draws its ghost-line via PatBlt(..., PATINVERT)
@@ -23761,30 +25187,18 @@ static void RgDividerFreeBackup()
     RgDividerResetTracking();
 }
 
-// WinUI-style divider accent (same look as PaintNavDividerHoverPill, this
-// mod's Explorer nav-divider hover reveal): a thin line spanning most of the
-// divider's height plus a wider accent-colored pill with a contrast outline,
-// both centered on the divider. Drawn unconditionally for the whole drag --
-// unlike the nav divider there's no separate hover/idle state to track here,
-// the drag itself is already the trigger -- so fadeFrac is fixed at 1 and
-// centerX is passed in explicitly instead of derived from the paint rect's
-// own midpoint (this rect is a per-call compose buffer, not a fixed strip).
+// WinUI-style divider accent, same look as PaintNavDividerHoverPill: a thin
+// line plus a wider accent-colored pill with a contrast outline, centered on
+// the divider. Drawn unconditionally for the whole drag -- the drag itself
+// is the trigger, so fadeFrac is fixed at 1 and centerX is passed in
+// explicitly (this rect is a per-call compose buffer, not a fixed strip).
 //
-// Unlike PaintNavDividerHoverPill, the thin line is NOT a low-alpha D2D fill
-// here -- it's drawn separately, via plain GDI InvertRect, before this
-// function runs (see RgPatBlt_Hook). A flat translucent tint reads fine over
-// the nav pane's single stable background, but this divider sweeps across
-// TreeView/ListView content of unknown, changing color (selected rows,
-// alternating backgrounds, etc.), where a fixed low-alpha line can wash out
-// to invisible. Inverting is background-color-agnostic by construction --
-// the same trick regedit's own native XOR line already relied on -- so it
-// stays visible no matter what it's dragged over, in either color mode.
-//
-// The pill/outline brushes live in the shared per-thread D2DThreadCache (see
-// its definition) instead of their own thread_local statics, so
-// Wh_ModUninit's D2DThreadCachesClear() proactively releases them for every
-// thread that ever painted here, not just whichever thread happens to run
-// Wh_ModUninit -- same reasoning as PaintNavDividerHoverPill above.
+// The thin line is drawn via plain GDI InvertRect (not a D2D low-alpha fill,
+// unlike PaintNavDividerHoverPill) because it sweeps over TreeView/ListView
+// content of unknown, changing color -- inverting stays visible regardless
+// of what's underneath. Pill/outline brushes live in the shared per-thread
+// D2DThreadCache so Wh_ModUninit's D2DThreadCachesClear() releases them for
+// every thread that painted here.
 
 // Half-width of the accent's widest element (the pill + its outline stroke),
 // with a small AA-safety margin. Used to size the backup/erase rect instead
@@ -24169,6 +25583,9 @@ static void RgDrawSearchOverlay(HWND hwnd)
     if (w <= 0 || h <= 0) return;
     const bool dark = IsSystemDarkMode();
     const bool focused = rg_searchFocused.load(std::memory_order_relaxed);
+    const UINT dpi = GetDpiForWindow(hwnd);
+    const float cornerPx = (float)MulDiv(kRgSearchCornerPx, (int)dpi, 96);
+    const float accentLineH = (float)MulDiv(kRgAccentLineH, (int)dpi, 96);
 
     HDC hdc = GetDC(hwnd);
     if (!hdc) return;
@@ -24213,21 +25630,21 @@ static void RgDrawSearchOverlay(HWND hwnd)
             RgAddRoundedRect(borderPath,
                 Gdiplus::RectF(0.5f, 0.5f, (Gdiplus::REAL)w - 1.0f,
                     (Gdiplus::REAL)h - 1.0f),
-                (float)kRgSearchCornerPx);
+                cornerPx);
             Gdiplus::Pen borderPen(RgGdipColor(borderClr), 1.0f);
             graphics.DrawPath(&borderPen, &borderPath);
 
             if (focused) {
                 const COLORREF ac = GetAccentIndicator();
-                const float insetX = kRgSearchCornerPx * 0.8f;
+                const float insetX = cornerPx * 0.8f;
                 const Gdiplus::RectF lineRect(
                     insetX,
-                    (Gdiplus::REAL)(h - kRgAccentLineH),
+                    (Gdiplus::REAL)h - accentLineH,
                     (Gdiplus::REAL)w - insetX * 2.0f,
-                    (Gdiplus::REAL)kRgAccentLineH);
+                    (Gdiplus::REAL)accentLineH);
                 Gdiplus::GraphicsPath linePath;
                 RgAddRoundedRect(linePath, lineRect,
-                    (float)kRgAccentLineH * 0.5f);
+                    accentLineH * 0.5f);
                 Gdiplus::SolidBrush lineBrush(RgGdipColor(ac));
                 graphics.FillPath(&lineBrush, &linePath);
             }
@@ -24243,7 +25660,8 @@ static void RgDrawSearchOverlay(HWND hwnd)
         if (hPen && hNull) {
             const HPEN   hOldPen   = static_cast<HPEN>(SelectObject(paintHdc, hPen));
             const HBRUSH hOldBrush = static_cast<HBRUSH>(SelectObject(paintHdc, hNull));
-            RoundRect(paintHdc, 0, 0, w, h, kRgSearchCornerPx * 2, kRgSearchCornerPx * 2);
+            const int cornerPxInt = (int)lroundf(cornerPx);
+            RoundRect(paintHdc, 0, 0, w, h, cornerPxInt * 2, cornerPxInt * 2);
             SelectObject(paintHdc, hOldPen);
             SelectObject(paintHdc, hOldBrush);
         }
@@ -24254,7 +25672,6 @@ static void RgDrawSearchOverlay(HWND hwnd)
     // SearchBox (kSearchIconGlyph), left-aligned inside the margin reserved
     // by RgApplySearchStyle's EM_SETMARGINS.
     {
-        const UINT dpi = GetDpiForWindow(hwnd);
         const int  iconSize = MulDiv(kRgSearchIconSize, (int)dpi, 96);
         const int  iconX    = MulDiv(kRgSearchIconLeftPad, (int)dpi, 96);
         TravelBandUseIconFont(iconSize, [&](HFONT iconFont) {
@@ -24275,9 +25692,9 @@ static void RgDrawSearchOverlay(HWND hwnd)
         const COLORREF ac = GetAccentIndicator();
         HBRUSH hBrush = CreateSolidBrush(ac);
         if (hBrush) {
-            const float insetX = kRgSearchCornerPx * 0.8f;
+            const float insetX = cornerPx * 0.8f;
             const RECT rcLine = {
-                (int)insetX, h - kRgAccentLineH,
+                (int)insetX, h - (int)lroundf(accentLineH),
                 w - (int)insetX, h
             };
             FillRect(paintHdc, &rcLine, hBrush);
@@ -24318,7 +25735,8 @@ static void RgUpdateSearchRegion(HWND hwnd)
     static int s_lastW = -1, s_lastH = -1;
     if (hwnd == s_lastHwnd && w == s_lastW && h == s_lastH) return;
 
-    const int dia = kRgSearchCornerPx * 2;
+    const UINT dpi = GetDpiForWindow(hwnd);
+    const int dia = MulDiv(kRgSearchCornerPx, (int)dpi, 96) * 2;
     HRGN hRgn = CreateRoundRectRgn(0, 0, w, h, dia, dia);
     if (hRgn) {
         SetWindowRgn(hwnd, hRgn, TRUE);
@@ -24337,7 +25755,8 @@ static void RgUpdateListViewRegion(HWND hwnd)
     const int h = rcWin.bottom - rcWin.top  + 1;
     if (w <= 1 || h <= 1) return;
 
-    const int r = kRgPanelRadius, d = r * 2;
+    const UINT dpi = GetDpiForWindow(hwnd);
+    const int r = MulDiv(kRgPanelRadius, (int)dpi, 96), d = r * 2;
     HRGN hBase = CreateRoundRectRgn(0, 0, w, h, d, d);
     if (!hBase) return;
 
@@ -24418,13 +25837,15 @@ static LRESULT CALLBACK RgSearchSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_P
 static LRESULT CALLBACK RgMainSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR /*dwRefData*/)
 {
-    if (msg == kRgRefreshColorsMessage) {
+    if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire);
+        refreshMsg && msg == refreshMsg) {
         RgRefreshColorResources();
         RedrawWindow(hwnd, nullptr, nullptr,
             RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
         return 0;
     }
-    if (msg == kRgResetDividerMessage) {
+    if (const UINT resetDividerMsg = g_rgResetDividerMessage.load(std::memory_order_acquire);
+        resetDividerMsg && msg == resetDividerMsg) {
         RgDividerResetOnMainThread(hwnd);
         return 0;
     }
@@ -24569,7 +25990,13 @@ static LRESULT CALLBACK RgMainSubclassProc(
     case WM_SETTINGCHANGE:
         g_accentCacheDirty.store(true, std::memory_order_release);
         if (g_uahMenuBarTheme) { CloseThemeData(g_uahMenuBarTheme); g_uahMenuBarTheme = nullptr; }
-        PostMessageW(hwnd, kRgRefreshColorsMessage, 0, 0);
+        if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire))
+            PostMessageW(hwnd, refreshMsg, 0, 0);
+        else {
+            RgRefreshColorResources();
+            RedrawWindow(hwnd, nullptr, nullptr,
+                RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
         // Regedit has no dedicated broadcast-listener window like Explorer's
         // ThemeMsgWndProc, so re-check the animations-enabled setting here.
         if (msg == WM_SETTINGCHANGE) g_animEnabled = -1;
@@ -24685,6 +26112,13 @@ static LRESULT CALLBACK RgMainSubclassProc(
         if (nm->code == TVN_DELETEITEM) {
             const NMTREEVIEW* nmt = reinterpret_cast<const NMTREEVIEW*>(lp);
             rg_tvAnims.erase(nmt->itemOld.hItem);
+            // Same dangling-HTREEITEM hazard NavHoverFadeInvalidateItem
+            // guards against for the nav pane: comctl32 frees the item's
+            // backing storage on delete, so rg_hoverFade must drop it
+            // immediately rather than holding it across the fade's ~140ms
+            // window (or the next timer tick's TreeView_GetItemRect call).
+            if (rg_hoverFade.hotItem == nmt->itemOld.hItem)
+                RgHoverFadeClear(tv, false);
             break;
         }
 
@@ -24708,7 +26142,15 @@ static LRESULT CALLBACK RgMainSubclassProc(
             const bool dark = s_rgTvPaintDark;
 
             const bool selected = (cd->uItemState & CDIS_SELECTED) != 0;
-            const bool hot      = (cd->uItemState & CDIS_HOT)      != 0;
+            // Native CDIS_HOT never arrives here -- comctl32 only computes a
+            // hotItem with TVS_TRACKSELECT set, which regedit's tree
+            // deliberately never gets (see ApplyTreeRuntimeSettings's
+            // IsCurrentProcessRegedit exclusion). Hover is tracked
+            // independently instead -- see RgHoverFade* above -- with its
+            // own fade-in, same curve as NavHoverFadeState.
+            const bool hot = !selected && rg_hoverFade.hotItem == hItem;
+            const float hoverProgress = hot
+                ? NavHoverFadeProgress(rg_hoverFade, TimerGetSeconds()) : 1.f;
 
             // Single TVM_GETITEM for everything this item's paint needs
             // (children/expanded/selected state, icon indices, text) --
@@ -24737,6 +26179,11 @@ static LRESULT CALLBACK RgMainSubclassProc(
             if (!SendMessage(tv, TVM_GETITEMRECT, FALSE, reinterpret_cast<LPARAM>(&rcFullBuf)))
                 rcFullBuf = cd->rc; // fallback
             const RECT& rcFull = rcFullBuf;
+
+            // Same reduced-opacity treatment as the nav pane's own pressed
+            // feedback (LV_TREE_PRESSED_ALPHA_MULTIPLIER) -- physically
+            // holding the mouse down over the selected or hovering item.
+            const bool pressed = (selected || hot) && IsTreeItemPressed(tv, &rcFull);
 
             // Shared geometry
             const float hMf  = (float)MulDiv(kRgTVHMargin, (int)dpi, 96);
@@ -24794,7 +26241,11 @@ static LRESULT CALLBACK RgMainSubclassProc(
                             ? 1.f                       // root near edge: clamp to 1px
                             : bgLeftRaw;                // far off: scroll naturally
 
-                    // Background tint (selected or hot)
+                    // Background tint (selected or hot). hot's opacity is
+                    // scaled by hoverProgress (0->1 over kNavHoverFadeDurationSeconds,
+                    // same curve as the nav pane) instead of applied at full
+                    // strength immediately. pressed dims whichever of the two
+                    // is showing, same as the nav pane's own pressed feedback.
                     if (selected || hot) {
                         const COLORREF ac = g_settings.NeutralSelection
                             ? (dark ? RGB(255, 255, 255) : RGB(0, 0, 0))
@@ -24805,9 +26256,12 @@ static LRESULT CALLBACK RgMainSubclassProc(
                         const float hotOp = g_settings.NeutralSelection
                             ? (dark ? 0.05f : 0.035f)
                             : (dark ? 0.06f : 0.09f);
+                        float opacity = selected ? selOp : (hotOp * hoverProgress);
+                        if (pressed)
+                            opacity *= LV_TREE_PRESSED_ALPHA_MULTIPLIER;
                         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
                         if (SUCCEEDED(rg_tvCachedRT->CreateSolidColorBrush(
-                                RgBlendAccent(ac, selected ? selOp : hotOp), &brush))) {
+                                RgBlendAccent(ac, opacity), &brush))) {
                             rg_tvCachedRT->FillRoundedRectangle(
                                 D2D1::RoundedRect(D2D1::RectF(bgLeft, 0.f, wF-hMf, hF), rBg, rBg),
                                 brush.Get());
@@ -24924,7 +26378,25 @@ static LRESULT CALLBACK RgMainSubclassProc(
 
                 const bool sel = (tvi.state & TVIS_SELECTED) != 0;
                 int idx = (sel && tvi.iSelectedImage >= 0) ? tvi.iSelectedImage : tvi.iImage;
-                if (idx >= 0)
+
+                // This Computer has no separate iSelectedImage slot (regedit
+                // only ever requests imageres.dll index 109 once), so draw
+                // our own accent-colored bake directly for this one root
+                // row instead. GetRoot alone identifies it -- it's the only
+                // item at this indentation level. No DestroyIcon: the
+                // handle is owned by RgThisPcAccentIconGet's own cache, and
+                // RgThisPcAccentIconDraw holds that cache's mutex across the
+                // draw so RgThisPcAccentIconClear (message-window thread)
+                // can't destroy it out from under this DrawIconEx call.
+                bool drewAccentRoot = false;
+                if (sel && g_settings.RegeditSection && g_settings.RgGlyphIcons &&
+                    hItem == TreeView_GetRoot(tv)) {
+                    int glyphCx = iconW, glyphCy = iconH;
+                    ImageList_GetIconSize(himl, &glyphCx, &glyphCy);
+                    drewAccentRoot = RgThisPcAccentIconDraw(hdc, iconX, iconY,
+                        glyphCx, glyphCy, dark, GetAccentIndicator());
+                }
+                if (!drewAccentRoot && idx >= 0)
                     ImageList_Draw(himl, idx, hdc, iconX, iconY, ILD_TRANSPARENT);
             }
 
@@ -25120,7 +26592,27 @@ static LRESULT CALLBACK RgTVSubclassProc(
         break;
     }
 
+    // Hover fade: see RgHoverFade* above. Falls through to DefSubclassProc
+    // in every case below (never consumed) so the tree's own mouse handling
+    // (drag, tooltips) is unaffected.
+    case WM_MOUSEMOVE:
+        RgHoverFadeHandleMouseMove(hwnd, lp);
+        break;
+
+    case WM_MOUSELEAVE:
+        rg_hoverFade.trackingLeave = false;
+        RgHoverFadeRetarget(hwnd, nullptr);
+        break;
+
+    case WM_TIMER:
+        if (wp == kRgHoverFadeTimerId) {
+            RgHoverFadeTimerTick(hwnd);
+            return 0;
+        }
+        break;
+
     case WM_NCDESTROY:
+        RgHoverFadeClear(hwnd, false);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, RgTVSubclassProc);
         rg_hwndTV.store(nullptr, std::memory_order_release);
         break;
@@ -25196,6 +26688,15 @@ static LRESULT CALLBACK RgHdrSubclassProc(
         SetTextColor(hdc, dark ? kRgDkHdrText : kRgLtHdrText);
         SetBkMode(hdc, TRANSPARENT);
 
+        const UINT dpi = GetDpiForWindow(hwnd);
+        const int leftMargin  = MulDiv(8, (int)dpi, 96);
+        const int rightMargin = MulDiv(4, (int)dpi, 96);
+
+        // Native Header_Paint draws a 1px divider per item; skipping
+        // WM_PAINT entirely drops it, so redraw it ourselves.
+        HPEN hPen = CreatePen(PS_SOLID, 1, RGB(70, 70, 70));
+        HPEN hOldPen = hPen ? static_cast<HPEN>(SelectObject(hdc, hPen)) : nullptr;
+
         for (int i = 0; i < n; i++) {
             RECT rcItem;
             if (!Header_GetItemRect(hwnd, i, &rcItem)) continue;
@@ -25205,14 +26706,20 @@ static LRESULT CALLBACK RgHdrSubclassProc(
             hdi.pszText    = buf;
             hdi.cchTextMax = 256;
             Header_GetItem(hwnd, i, &hdi);
-            RECT rcText = { rcItem.left + 8, rcItem.top,
-                            rcItem.right - 4, rcItem.bottom };
+            RECT rcText = { rcItem.left + leftMargin, rcItem.top,
+                            rcItem.right - rightMargin, rcItem.bottom };
             g_glowEntry = true;
             DrawTextW(hdc, buf, -1, &rcText,
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             g_glowEntry = false;
+            if (hPen) {
+                MoveToEx(hdc, rcItem.right - 2, rcClient.top, nullptr);
+                LineTo(hdc, rcItem.right - 2, rcClient.bottom);
+            }
         }
 
+        if (hOldPen) SelectObject(hdc, hOldPen);
+        if (hPen) DeleteObject(hPen);
         if (hOld) SelectObject(hdc, hOld);
         EndPaint(hwnd, &ps);
         return 0;
@@ -25381,6 +26888,11 @@ static void RgApplyMainStyle(HWND hwnd)
     WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, RgMainSubclassProc, 0);
 }
 
+// Defined later in the file, alongside their Explorer-context call sites.
+static void TreeRuntimeSaveAndSetStyleBit(
+    HWND hwnd, const wchar_t* prop, LONG bit, bool enabled);
+static void TreeRuntimeRestoreStyleBit(HWND hwnd, const wchar_t* prop, LONG bit);
+
 static void RgApplyTreeViewStyle(HWND hwnd)
 {
     RgRemoveBorderStyles(hwnd);
@@ -25409,6 +26921,25 @@ static void RgApplyTreeViewStyle(HWND hwnd)
 
     // Double-buffer eliminates horizontal scroll artifacts
     TreeView_SetExtendedStyle(hwnd, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+
+    // TVS_FULLROWSELECT (matching the ListView's LVS_EX_FULLROWSELECT above)
+    // has no effect at all while TVS_HASLINES is set -- comctl32's own
+    // TREEVIEW_IsFullRowSelect requires both -- so without clearing it here
+    // our background tint paints the full row (see RgMainSubclassProc's
+    // NM_CUSTOMDRAW) but only the icon/label was actually clickable/
+    // selectable. Clearing TVS_HASLINES draws no native connector lines here
+    // regardless, since CDRF_SKIPDEFAULT already makes TREEVIEW_DrawItem
+    // return before it would ever call TREEVIEW_DrawItemLines. Unlike the
+    // other one-way TVS_EX_DOUBLEBUFFER-style paint tweaks in this file,
+    // this one DOES change visible native behavior once our own subclass
+    // (which is what actually overrides the rendering) is gone -- native
+    // full-row-select highlighting and missing connector lines would show
+    // up if RegeditSection is toggled off live without restarting
+    // regedit.exe -- so it's saved/restored the same way Explorer-context
+    // trees already do via TreeRuntimeSaveAndSetStyleBit, restored in
+    // RgUninit alongside this function's other TreeView_Set* reversals.
+    TreeRuntimeSaveAndSetStyleBit(hwnd, PROP_RG_TV_HASLINES_ORIG, TVS_HASLINES, false);
+    TreeRuntimeSaveAndSetStyleBit(hwnd, PROP_RG_TV_FULLROWSELECT_ORIG, TVS_FULLROWSELECT, true);
 
     const UINT dpi   = GetDpiForWindow(hwnd);
     const int  itemH = MulDiv(kRgTVItemHeightBase, (int)dpi, 96);
@@ -25615,6 +27146,43 @@ static bool TryApplyToWindow_Regedit(HWND hwnd)
     return false;
 }
 
+static HRESULT WINAPI RgSHDefExtractIconW_Hook(PCWSTR pszIconFile, int iIndex,
+                                               UINT uFlags, HICON* phiconLarge,
+                                               HICON* phiconSmall,
+                                               UINT nIconSize)
+{
+    UINT id = 0;
+    if (RgGlyphIconShouldReplace(pszIconFile, iIndex, &id)) {
+        // nIconSize packs the large-icon size in the low word, small-icon
+        // size in the high word -- each output is baked at its own
+        // requested size, not a single shared one.
+        const int cx = LOWORD(nIconSize);
+        const int cy = HIWORD(nIconSize);
+        const int largeSize = std::clamp(cx > 0 ? cx : 16, 8, 256);
+        const int smallSize = std::clamp(cy > 0 ? cy : (cx > 0 ? cx : 16), 8, 256);
+        const bool dark = IsSystemDarkMode();
+        const COLORREF accent = GetAccentIndicator();
+
+        // Only build the outputs the caller actually asked for. If either
+        // requested output fails to build, fall through to the real API for
+        // both rather than handing back a half-substituted pair. Index 4 is
+        // the folder/key iSelectedImage slot -- accent-colored, matching the
+        // nav pane's own selected-item convention (see RgGlyphIconGetForLoad).
+        const bool useAccent = (id == 4);
+        HICON large = phiconLarge ? RgGlyphIconGetForLoad(id, largeSize, dark, accent, useAccent) : nullptr;
+        HICON small = phiconSmall ? RgGlyphIconGetForLoad(id, smallSize, dark, accent, useAccent) : nullptr;
+        if (!(phiconLarge && !large) && !(phiconSmall && !small)) {
+            if (phiconLarge) *phiconLarge = large;
+            if (phiconSmall) *phiconSmall = small;
+            return S_OK;
+        }
+        if (large) DestroyIcon(large);
+        if (small) DestroyIcon(small);
+    }
+    return rg_SHDefExtractIconW_orig(pszIconFile, iIndex, uFlags, phiconLarge,
+                                     phiconSmall, nIconSize);
+}
+
 // ---------------------------------------------------------------------------
 // Regedit: init GDI + uxtheme resources
 // ---------------------------------------------------------------------------
@@ -25668,6 +27236,26 @@ static bool RgQueueRequiredHooks(bool* anyQueued = nullptr)
             success = false;
         }
     }
+    if (!rg_SHDefExtractIconW_orig) {
+        // Not a static import -- shell32.dll's export table is resolved by
+        // hand, same as rg_SetPreferredAppMode above. regedit.exe uses other
+        // shell32 APIs (common file-picker dialogs) well before it builds its
+        // TreeView icons, so shell32.dll is already loaded by this point.
+        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+        RgSHDefExtractIconW_t shDefExtractIconW = shell32
+            ? reinterpret_cast<RgSHDefExtractIconW_t>(
+                  GetProcAddress(shell32, "SHDefExtractIconW"))
+            : nullptr;
+        if (shDefExtractIconW &&
+            WindhawkUtils::SetFunctionHook(shDefExtractIconW,
+                                           RgSHDefExtractIconW_Hook,
+                                           &rg_SHDefExtractIconW_orig)) {
+            queued = true;
+        } else {
+            Wh_Log(L"Failed to hook SHDefExtractIconW for RegeditSection");
+            success = false;
+        }
+    }
 
     if (anyQueued)
         *anyQueued = queued;
@@ -25703,8 +27291,11 @@ static void RgUninit(bool fullUnload)
     const HWND search = rg_hwndSearch.load(std::memory_order_acquire);
 
     if (main && IsWindow(main)) {
+        const UINT resetDividerMsg =
+            g_rgResetDividerMessage.load(std::memory_order_acquire);
         DWORD_PTR resetIgnored = 0;
-        if (!SendMessageTimeoutW(main, kRgResetDividerMessage, 0, 0,
+        if (!resetDividerMsg ||
+            !SendMessageTimeoutW(main, resetDividerMsg, 0, 0,
                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &resetIgnored)) {
             RgDividerResetTrackingThreadSafe();
         }
@@ -25734,17 +27325,25 @@ static void RgUninit(bool fullUnload)
         }
     }
     if (tv) {
+        // kRgHoverFadeTimerId lives on tv itself (WM_MOUSEMOVE-driven), unlike
+        // the three timers below which live on main.
+        KillTimer(tv, kRgHoverFadeTimerId);
+        rg_hoverFade = NavHoverFadeState{};
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(tv, RgTVSubclassProc);
         if (IsWindow(tv)) {
             TreeView_SetItemHeight(tv, -1);
             TreeView_SetBkColor(tv, (COLORREF)-1);    // CLR_DEFAULT
             TreeView_SetTextColor(tv, (COLORREF)-1);
             TreeView_SetExtendedStyle(tv, TVS_EX_DOUBLEBUFFER, 0);
+            TreeRuntimeRestoreStyleBit(tv, PROP_RG_TV_HASLINES_ORIG, TVS_HASLINES);
+            TreeRuntimeRestoreStyleBit(tv, PROP_RG_TV_FULLROWSELECT_ORIG, TVS_FULLROWSELECT);
             SetWindowTheme(tv, nullptr, nullptr);
         }
     }
     if (main) {
         KillTimer(main, kRgTVAnimTimerId);
+        KillTimer(main, kRgPillAnimTimerId);
+        KillTimer(main, kRgFlushMenuTimerId);
         rg_tvLastTick = 0;
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(main, RgMainSubclassProc);
         if (IsWindow(main)) {
@@ -25816,15 +27415,12 @@ static void RgUninit(bool fullUnload)
 // ============================================================================
 
 // ── Dark Mode — SetSysColors approach ────────────────────────────────────────
-// Full 30-element system color palette covering every control that reads
-// GetSysColor(). Win32 controls read GetSysColor() and paint dark
-// automatically. XAML/DirectUI controls ignore system colors.
-//
-// COLOR_HIGHLIGHT / MENUHILIGHT / HOTLIGHT are included in SetSysColors with
-// the accent color. Without them, the kernel holds the light-mode default
-// which the dark ListBox theme renders as white hover. Our GetSysColor hook
-// returns accent for in-process callers, but the ComboLBox popup draws via
-// the kernel-level color table directly.
+// Full 30-element system color palette; Win32 controls read GetSysColor()
+// and paint dark automatically (XAML/DirectUI ignores it). COLOR_HIGHLIGHT/
+// MENUHILIGHT/HOTLIGHT must be included: without them the kernel keeps the
+// light-mode default, which ComboLBox's popup renders as a white hover since
+// it reads the kernel-level color table directly instead of going through
+// our GetSysColor hook.
 static constexpr int kDarkSysColorCount = 30;
 static const INT kDarkSysColorElems[kDarkSysColorCount] = {
     COLOR_SCROLLBAR,               // 0
@@ -25945,11 +27541,15 @@ static void RestoreDarkSysColors()
 
 static constexpr UINT_PTR kPropDlgSubId  = 0xDE02;
 static constexpr UINT_PTR kPropPageSubId = 0xDE03;
+static constexpr UINT_PTR kPropLightPaneSubId = 0xDE04;
 // Marks a window as currently carrying ClassicDlgToolbarSubclassProc, so
 // Wh_ModUninit's RemoveSubclassesFromWindow sweep knows to remove it
 // without unconditionally messaging every enumerated window.
 static constexpr LPCWSTR kClassicDlgToolbarSubclassProp =
     L"WH_MW_CLASSIC_DLG_TOOLBAR_SUB";
+// kPropLightPaneSubclassProp (same purpose, for PropLightPaneSubclassProc
+// below) is defined earlier in the file now -- TabPaneCornerColor needs it
+// too, well above this point.
 static constexpr wchar_t kPropDarkWindowApplied[] = L"_W32M_DarkWindowApplied";
 static HBRUSH g_propDkPaneBrush = nullptr;   // inner pane / controls
 static HBRUSH g_propDlgOriginalClassBrush = nullptr; // borrowed class brush
@@ -25958,6 +27558,8 @@ static std::atomic<bool> g_darkModeUnloading{ false };
 
 // Forward declarations
 static LRESULT CALLBACK PropDlgSubclassProc(
+    HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
+static LRESULT CALLBACK PropLightPaneSubclassProc(
     HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 
 // Classic Open/Save places bar: a transparent/customer-erase toolbar whose
@@ -26030,16 +27632,24 @@ static LRESULT CALLBACK PropDlgSubclassProc(
         return (LRESULT)g_propDkPaneBrush;
     }
 
-    // DrawThemeParentBackground sends WM_PRINTCLIENT to the parent.
-    // The tab control uses this to get the strip background. Filling dark
-    // here makes the strip behind tab buttons dark — no WM_PAINT needed.
+    // DrawThemeParentBackground sends WM_PRINTCLIENT to the parent. The tab
+    // control (parent == root dialog) uses this to get the strip
+    // background; a themed child control -- a checkbox's box glyph, a
+    // static label with a transparent theme part, etc. (parent == the page
+    // dialog) -- uses the exact same message to get ITS backdrop. Same
+    // isPage split as the WM_CTLCOLORSTATIC/BTN case above: without it,
+    // every one of those child-control backdrops came out kPropDkBg (the
+    // darker strip shade) even on a page, showing as a mismatched rectangle
+    // against the lighter kPropDkPane page background around it.
     case WM_PRINTCLIENT: {
+        bool isPage = (dwRefData == kPropPageSubId);
         HDC hdc = (HDC)wp;
         RECT rc;
         GetClientRect(hwnd, &rc);
-        if (!g_propDkBgBrush)
-            g_propDkBgBrush = CreateSolidBrush(kPropDkBg);
-        FillRect(hdc, &rc, g_propDkBgBrush);
+        HBRUSH br = isPage
+            ? (g_propDkPaneBrush ? g_propDkPaneBrush : (g_propDkPaneBrush = CreateSolidBrush(kPropDkPane)))
+            : (g_propDkBgBrush   ? g_propDkBgBrush   : (g_propDkBgBrush   = CreateSolidBrush(kPropDkBg)));
+        FillRect(hdc, &rc, br);
         return 0;
     }
 
@@ -26069,27 +27679,20 @@ static LRESULT CALLBACK PropDlgSubclassProc(
                 if (ncd->dwDrawStage == CDDS_PREPAINT)
                     return CDRF_NOTIFYITEMDRAW;
                 if (ncd->dwDrawStage == CDDS_ITEMPREPAINT) {
-                    if (PaintClassicPlacesBarItem(nm->hwndFrom, ncd))
+                    // Icon/pill modernization rides on LegacyRebarControls,
+                    // same as its light-mode counterpart in
+                    // ClassicDlgToolbarSubclassProc. The PREERASE dark fill
+                    // above stays unconditional either way -- without it the
+                    // strip would show as a light hole in a dark dialog.
+                    if (g_settings.LegacyRebarControls &&
+                        PaintClassicPlacesBarItem(nm->hwndFrom, ncd))
                         return CDRF_SKIPDEFAULT;
-                    // Unrecognized command (shouldn't happen -- only 5 known
-                    // shortcuts) -- preserve the original dark-mode text
-                    // legibility fix as a fallback instead of drawing nothing.
+                    // Unrecognized command, or LegacyRebarControls off --
+                    // preserve the original dark-mode text legibility fix as
+                    // a fallback instead of drawing nothing.
                     SetTextColor(ncd->hdc, kPropDkText);
                     SetBkMode(ncd->hdc, TRANSPARENT);
                     return CDRF_DODEFAULT;
-                }
-            }
-
-            // Header custom draw — force white text
-            wchar_t childCls[32] = {};
-            GetClassNameW(nm->hwndFrom, childCls, ARRAYSIZE(childCls));
-            if (_wcsicmp(childCls, L"SysHeader32") == 0) {
-                if (ncd->dwDrawStage == CDDS_PREPAINT)
-                    return CDRF_NOTIFYITEMDRAW;
-                if (ncd->dwDrawStage == CDDS_ITEMPREPAINT) {
-                    SetTextColor(ncd->hdc, kPropDkText);
-                    SetBkMode(ncd->hdc, TRANSPARENT);
-                    return CDRF_NEWFONT;
                 }
             }
         }
@@ -26104,87 +27707,114 @@ static LRESULT CALLBACK PropDlgSubclassProc(
         GetClientRect(hwnd, &rc);
         HBRUSH hBr = CreateSolidBrush(bg);
         if (hBr) { FillRect_orig(hdc, &rc, hBr); DeleteObject(hBr); }
-        return 1;
-    }
 
-    // Force-dark excluded file pickers only: GetSysColor/GetSysColorBrush
-    // take no HWND, so they infer context from g_tlsPaintHwnd (last
-    // BeginPaint on this thread) -- it can stay stuck on this dialog after
-    // its last paint until something else on this thread calls BeginPaint.
-    // Closing this dialog hands control straight back to the excluded
-    // host app's own untouched UI; if it queries a system color before its
-    // own next BeginPaint (e.g. a WM_CTLCOLOR* handler with no paint of its
-    // own), it could transiently see our dark answers. Force a synchronous
-    // repaint of the owner now so BeginPaint_hook refreshes g_tlsPaintHwnd
-    // before control returns, closing the highest-risk window (right at
-    // modal-dialog handoff) without touching the general dark-mode path.
-    case WM_DESTROY: {
-        if (GetPropW(hwnd, kPropForceDarkFilePicker)) {
-            HWND owner = GetWindow(hwnd, GW_OWNER);
-            if (owner && IsWindow(owner)) {
-                RedrawWindow(owner, nullptr, nullptr,
-                    RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        // Experiment: extend the flat content-pane fill out to the real
+        // window edges. HandleThemeDraw's own TABP_PANE paint can't do this
+        // itself -- its hdc belongs to the tab control, whose DC is clipped
+        // to its own bounds no matter what rect we hand FillRect. This hdc
+        // is the root dialog's own, unclipped, so the side margins can
+        // actually be reached from here, drawn underneath where the tab
+        // control then paints its own (correctly clipped) matching fill on
+        // top. No rounding/border -- two independently-drawn shapes never
+        // lined up pixel-perfectly, so just the plain color, which needs no
+        // alignment at all.
+        if (!isPage && g_settings.RoundedTabPane) {
+            HWND hwndTab = FindWindowExW(hwnd, nullptr, L"SysTabControl32", nullptr);
+            RECT rcContent;
+            if (hwndTab && GetClientRect(hwndTab, &rcContent)) {
+                // TCM_ADJUSTRECT shrinks a tab-control-relative rect down to
+                // the content-only area, excluding the tab strip -- same
+                // coordinate space GetClientRect just gave us.
+                TabCtrl_AdjustRect(hwndTab, FALSE, &rcContent);
+                MapWindowPoints(hwndTab, hwnd,
+                    reinterpret_cast<POINT*>(&rcContent), 2);
+                // Widen left/right to the root's own full client width. Nudge
+                // top/bottom out a few px -- TabCtrl_AdjustRect's rect is a
+                // touch tighter than where the tab control's own fill
+                // actually reaches (see HandleThemeDraw's own rcExp.top -= 1
+                // on its own copy of this rect), so without this, a thin
+                // sliver of the outer bg peeks through above/below.
+                // Empirically tuned live against a real screenshot at 96 DPI;
+                // scaled here so a dialog on a different-DPI monitor (or one
+                // dragged there, or restyled after a runtime DPI change)
+                // nudges by the same physical distance instead of a fixed
+                // pixel count that's too small/large once the surrounding
+                // control geometry itself is DPI-scaled. Same offsets as
+                // PropLightPaneSubclassProc's own extension -- kept in sync
+                // deliberately now, not just each independently tuned to
+                // look right.
+                const float scale = DpiForPaint(hwnd) / 96.f;
+                rcContent.left = rc.left;
+                rcContent.right = rc.right;
+                rcContent.top -= (LONG)lroundf(3.f * scale);
+                rcContent.bottom += (LONG)lroundf(5.f * scale);
+
+                if (HBRUSH hPaneBr = CreateSolidBrush(kPropDkPane)) {
+                    FillRect_orig(hdc, &rcContent, hPaneBr);
+                    DeleteObject(hPaneBr);
+                }
             }
         }
-        break;
+        return 1;
     }
     }
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
-// Lets a modern Explorer-style Open/Save file picker's own dialog frame go
-// dark even when the HOST PROCESS is on the dark-mode exclusion list --
-// called from the same NamespaceTreeControl-ancestry check
-// GlyphIsNavPaneTreeView already uses to find nav-pane TreeViews (that
-// control only ever appears in real Explorer's own nav pane or a modern
-// picker's nav pane, so there's no meaningful false-positive risk here).
-//
-// Root class must be exactly #32770 -- real Explorer's own nav pane is
-// rooted in CabinetWClass/ExploreWClass, never #32770, so this can't ever
-// fire for Explorer's own window; no separate exclusion check needed.
-//
-// Marks the window (kPropForceDarkFilePicker) BEFORE calling
-// PropApplyDarkMode, so GetSysColor_hook/GetSysColorBrush_hook already see
-// it as opted back into the real dark palette by the time
-// PropApplyDarkMode's own AllowDarkModeForWindow call (left fully enabled
-// here, unlike an earlier attempt) can trigger native control repaints
-// that read those colors -- keeping the native dark-theme-variant controls
-// (buttons, toolbar) and our own GetSysColor answers in agreement instead
-// of fighting each other.
-static void TryForceDarkExcludedFilePicker(HWND navPaneTreeHwnd)
+// Light mode's counterpart to PropDlgSubclassProc's WM_ERASEBKGND pane
+// extension -- installed independently of the whole dark-mode subclass/
+// color-override system (PropApplyDarkMode et al.), since none of that is
+// needed here: native light-theme colors are already correct everywhere
+// else in the dialog. The one gap is the margin between the tab control's
+// own edges and the real dialog edges, which natively erases to the
+// dialog's own COLOR_BTNFACE-ish class brush -- this fills just that
+// margin white afterward, so it reads as the same elevated white surface
+// HandleThemeDraw's TABP_PANE paints inside the tab control itself, instead
+// of a mismatched gray band around it.
+static LRESULT CALLBACK PropLightPaneSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
-    if (!g_darkModeExcluded || !ShouldCustomDarkModeBeActive())
-        return;
-
-    HWND root = GetAncestor(navPaneTreeHwnd, GA_ROOT);
-    if (!root) return;
-
-    wchar_t rootCls[64] = {};
-    if (!GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) ||
-        _wcsicmp(rootCls, L"#32770") != 0)
-        return;
-
-    const bool firstApply = !GetPropW(root, L"_PropDkApplied");
-    SetPropW(root, kPropForceDarkFilePicker, (HANDLE)1);
-    PropApplyDarkMode(root);
-
-    if (firstApply) {
-        // This fires when the nav pane TreeView sets its image list, well
-        // after the dialog's own WM_INITDIALOG/first paint already ran
-        // with light colors (unlike the normal, non-excluded #32770 path,
-        // caught at the dialog's own creation before it has painted even
-        // once). Force an immediate full repaint under the new dark
-        // answers so the already-drawn light content doesn't linger as a
-        // visible artifact.
-        RedrawWindow(root, nullptr, nullptr,
-            RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    if (msg == WM_NCDESTROY) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, PropLightPaneSubclassProc);
+        RemovePropW(hwnd, kPropLightPaneSubclassProp);
+        return DefSubclassProc(hwnd, msg, wp, lp);
     }
+
+    if (msg == WM_ERASEBKGND) {
+        // Let native erase happen first (fills the dialog's real class
+        // brush) -- this only adds a patch on top, it never replaces the
+        // dialog's own background the way the dark version's handler does.
+        LRESULT res = DefSubclassProc(hwnd, msg, wp, lp);
+        if (!g_settings.RoundedTabPane)
+            return res;
+
+        HWND hwndTab = FindWindowExW(hwnd, nullptr, L"SysTabControl32", nullptr);
+        RECT rc;
+        RECT rcContent;
+        if (hwndTab && GetClientRect(hwnd, &rc) && GetClientRect(hwndTab, &rcContent)) {
+            // Same geometry as PropDlgSubclassProc's own extension -- see
+            // its comment for why each offset is what it is.
+            TabCtrl_AdjustRect(hwndTab, FALSE, &rcContent);
+            MapWindowPoints(hwndTab, hwnd, reinterpret_cast<POINT*>(&rcContent), 2);
+            const float scale = DpiForPaint(hwnd) / 96.f;
+            rcContent.left = rc.left;
+            rcContent.right = rc.right;
+            rcContent.top -= (LONG)lroundf(3.f * scale);
+            rcContent.bottom += (LONG)lroundf(5.f * scale);
+
+            if (HBRUSH hPaneBr = GetCachedSolidBrush(kPropLightPane))
+                FillRect_orig((HDC)wp, &rcContent, hPaneBr);
+        }
+        return res;
+    }
+
+    return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
 static void PropApplyDarkMode(HWND hwnd)
 {
     if (g_darkModeUnloading.load(std::memory_order_acquire) || !IsSystemDarkMode()) return;
-    if (!IsCustomDarkModeAllowed() && !GetPropW(hwnd, kPropForceDarkFilePicker)) return;
+    if (!IsCustomDarkModeAllowed()) return;
     if (GetPropW(hwnd, L"_PropDkApplied")) return;
     if (IsAeroWizardRawWindow(hwnd)) return;
     SetPropW(hwnd, L"_PropDkApplied", (HANDLE)1);
@@ -26202,9 +27832,10 @@ static void PropApplyDarkMode(HWND hwnd)
     if (IsCurrentProcessExplorer())
         SetWindowTheme(hwnd, L"DarkMode_Explorer", nullptr);
 
-    // Subclass for WM_CTLCOLOR (backup) + WM_ERASEBKGND
+    // Nested child dialogs inherit the elevated pane shade; unrelated WS_CHILD
+    // dialogs remain on the base background.
     const DWORD_PTR subclassKind =
-        (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD)
+        IsInTabbedPropertyPane(hwnd)
             ? kPropPageSubId
             : kPropDlgSubId;
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -26218,12 +27849,34 @@ static void PropApplyDarkMode(HWND hwnd)
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
+// FindWindowExW(nullptr, ...) enumerates every top-level window on the
+// desktop across ALL processes -- filter by PID before using a match, same
+// as MenuDetectPopupFromUAH's #32768 lookup above. Without this, a
+// class-brush helper called with no sample (from Wh_ModUninit/
+// Wh_ModSettingsChanged, where there genuinely is none) can grab a foreign
+// process's window of the same class, cache ITS class brush as "the
+// original to restore later", write this mod's own brush handle into a
+// class it doesn't own, and force a RedrawWindow on an unrelated app --
+// while never actually themeing anything in this process.
+static HWND FindWindowInCurrentProcess(LPCWSTR className)
+{
+    const DWORD myPid = GetCurrentProcessId();
+    HWND hwnd = nullptr;
+    while ((hwnd = FindWindowExW(nullptr, hwnd, className, nullptr)) != nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == myPid)
+            return hwnd;
+    }
+    return nullptr;
+}
+
 static void SetPropertyDialogClassBrush(bool dark, HWND sample)
 {
     HWND hwnd = sample;
     bool destroySample = false;
     if (!hwnd || !IsWindow(hwnd)) {
-        hwnd = FindWindowExW(nullptr, nullptr, L"#32770", nullptr);
+        hwnd = FindWindowInCurrentProcess(L"#32770");
         if (!hwnd) {
             hwnd = CreateWindowExW(0, L"#32770", nullptr, WS_POPUP,
                 0, 0, 0, 0, nullptr, nullptr, nullptr, nullptr);
@@ -26247,6 +27900,39 @@ static void SetPropertyDialogClassBrush(bool dark, HWND sample)
 
     if (destroySample)
         DestroyWindow(hwnd);
+}
+
+static HBRUSH g_fontViewOriginalClassBrush = nullptr;
+static bool g_fontViewOriginalClassBrushSaved = false;
+
+// Same save-once/restore pattern as SetPropertyDialogClassBrush, but never
+// spins up a throwaway FontViewWClass window -- unlike #32770 it's a
+// specialized host, not a generic dialog class safe to instantiate blindly.
+// If no live instance exists, this is a no-op: the next window of this
+// class is created via NtUserCreateWindowEx_hook, which always re-applies
+// the brush for the current mode, so there's nothing stale left dangling.
+static void SetFontViewClassBrush(bool dark, HWND sample)
+{
+    HWND hwnd = (sample && IsWindow(sample))
+        ? sample
+        : FindWindowInCurrentProcess(L"FontViewWClass");
+    if (!hwnd)
+        return;
+
+    if (!g_fontViewOriginalClassBrushSaved) {
+        g_fontViewOriginalClassBrush = reinterpret_cast<HBRUSH>(
+            GetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND));
+        g_fontViewOriginalClassBrushSaved = true;
+    }
+
+    HBRUSH brush = dark ? g_propDkBgBrush : g_fontViewOriginalClassBrush;
+    if (!brush && !dark)
+        brush = GetSysColorBrush(COLOR_3DFACE);
+    if (brush)
+        SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, reinterpret_cast<LONG_PTR>(brush));
+
+    RedrawWindow(hwnd, nullptr, nullptr,
+        RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
 }
 
 static void ApplyCustomDarkModeToExistingWindow(HWND hwnd)
@@ -26298,7 +27984,6 @@ static void RemoveCustomDarkModeFromWindow(HWND hwnd)
     RemovePropW(hwnd, L"_PropDkApplied");
     RemovePropW(hwnd, L"_PropDkCounterApplied");
     RemovePropW(hwnd, L"UseImmersiveDarkModeColors");
-    RemovePropW(hwnd, kPropForceDarkFilePicker);
     RemovePropW(hwnd, kPropDarkWindowApplied);
 
     const BOOL dark = FALSE;
@@ -26317,13 +28002,9 @@ static void RemoveCustomDarkModeFromWindow(HWND hwnd)
 }
 
 // ── Classic dialog top toolbar: Fluent glyph icons ──────────────────────────
-// Replaces the XP/Vista-era bitmap icons on the classic Open/Save dialog's
-// top command toolbar (Back/Up one level/New folder/View, next to the
-// "Look in:"/"File name:" combo) with Segoe Fluent Icons glyphs, matching
-// GLYPH_NAV_BACK/GLYPH_NAV_UP already used for Explorer's own TravelBand.
-// Cosmetic only, not tied to dark mode -- must render correctly in light
-// mode too, so (unlike IsClassicPlacesBarToolbar) this does NOT require
-// _PropDkApplied, and its subclass is installed unconditionally.
+// Cosmetic-only glyph swap on the classic Open/Save dialog toolbar. Must
+// render correctly in light mode too, so (unlike the places bar) this needs
+// no _PropDkApplied gate and installs unconditionally.
 
 // Distinguished from the places bar by NOT having TBSTYLE_CUSTOMERASE/
 // TBSTYLE_WRAPABLE -- full style word confirmed via WinSpy on the real
@@ -26451,21 +28132,19 @@ static void PaintClassicDlgToolbarItem(const NMCUSTOMDRAW* cd, const wchar_t* gl
     const bool disabled = (cd->uItemState & CDIS_DISABLED) != 0;
 
     HWND ctxHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc);
-    const bool dark = IsHwndDarkMode(ctxHwnd);
+    const bool dark = IsDarkForExcludedAwarePaint(ctxHwnd);
     COLORREF textClr = disabled
         ? (dark ? RGB(120, 120, 120) : RGB(160, 160, 160))
         : (dark ? RGB(255, 255, 255) : RGB(25, 26, 26));
 
     const float w = (float)(rc.right - rc.left);
     const float h = (float)(rc.bottom - rc.top);
-    // Lighter than the first pass (was 1.16/0.86) -- less travel reads as
-    // snappier even though this is an immediate state switch, not a timed
-    // animation.
+    const float dpiScale = (float)DpiForPaintHdc(cd->hdc) / 96.f;
+    // Less travel reads as snappier for an immediate state switch (not a
+    // timed animation).
     const float scale = disabled ? 1.0f : pressed ? 0.93f : hot ? 1.08f : 1.0f;
-    // Smaller than the first pass (was 0.68) -- at 0.68 the glyph's own
-    // bounding box touched the rounded fill's edges with almost no
-    // breathing room. Leaves clear space between icon and fill on all
-    // sides now.
+    // Font sized so the glyph's bounding box stays clear of the rounded
+    // fill's edges.
     const int fontSize = std::max(9, (int)(std::min(w, h) * 0.56f + 0.5f));
     const bool showFill = !disabled && (hot || pressed);
     // Exibir is BTNS_WHOLEDROPDOWN -- comctl32 would normally draw its own
@@ -26548,7 +28227,7 @@ static void PaintClassicDlgToolbarItem(const NMCUSTOMDRAW* cd, const wchar_t* gl
         const float alpha = dark ? (pressed ? 0.14f : 0.20f) : (pressed ? 0.06f : 0.09f);
         brush->SetColor(dark ? D2D1::ColorF(1.f, 1.f, 1.f, alpha)
                              : D2D1::ColorF(0.f, 0.f, 0.f, alpha));
-        const float inset = 1.5f;
+        const float inset = 1.2f * dpiScale;
         const float radius = std::min(w, h) * 0.16f; // less rounded than the first pass (was 0.30)
         pRT->FillRoundedRectangle(
             D2D1::RoundedRect(D2D1::RectF(inset, inset, w - inset, h - inset), radius, radius),
@@ -26681,6 +28360,7 @@ static LRESULT CALLBACK PlacesBarAnimSubclassProc(HWND hwnd, UINT msg, WPARAM wp
         }
         if (empty)
             PlacesBarDWriteCacheClear();
+        RemovePropW(hwnd, kPropGlyphEraseWarm);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, PlacesBarAnimSubclassProc);
     }
@@ -26855,6 +28535,7 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
         return false;
     const float w = (float)(rc.right - rc.left);
     const float h = (float)(rc.bottom - rc.top);
+    const float scale = (float)DpiForPaintHdc(cd->hdc) / 96.f;
 
     const bool hot       = (cd->uItemState & CDIS_HOT) != 0;
     const bool pressed   = (cd->uItemState & CDIS_SELECTED) != 0;
@@ -26881,7 +28562,7 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
     }
 
     HWND ctxHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(cd->hdc);
-    const bool dark = IsHwndDarkMode(ctxHwnd);
+    const bool dark = IsDarkForExcludedAwarePaint(ctxHwnd);
     COLORREF neutralClr = disabled
         ? (dark ? RGB(120, 120, 120) : RGB(160, 160, 160))
         : (dark ? RGB(255, 255, 255) : RGB(25, 26, 26));
@@ -26890,9 +28571,8 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
     // shape change -- applies to both icon and label.
     COLORREF itemClr = (filled && !disabled) ? GetAccentIndicator() : neutralClr;
 
-    // Faster than the first pass (was 0.22/EaseOutCubic) -- EaseInOutCubic's
-    // gentle start avoids the instant-max-velocity snap EaseOutCubic has
-    // right at t=0, reading as smoother despite the shorter duration.
+    // EaseInOutCubic's gentle start avoids the instant-max-velocity snap
+    // EaseOutCubic has at t=0, reading as smoother despite the short duration.
     static constexpr float kSettleDur = 0.15f; // fast layout snap, independent of the slower SVG wipe below
     float settleT = filled ? 1.0f : 0.0f;
     if (wiping)
@@ -26903,8 +28583,8 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
 
     wchar_t label[128] = {};
     SendMessageW(toolbarHwnd, TB_GETBUTTONTEXTW, cd->dwItemSpec, (LPARAM)label);
-    // Bigger than the first pass (was h*0.115) -- read as too small next to
-    // a ~43px icon.
+    // Label size kept proportional to the icon so it doesn't read as too
+    // small next to it.
     int labelSize = std::max(9, (int)(h * 0.16f));
     auto fmt = label[0] ? PlacesBarEnsureLabelFormat(labelSize) :
                           Microsoft::WRL::ComPtr<IDWriteTextFormat>{};
@@ -26970,7 +28650,7 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
                                                   GetBValue(ac) / 255.f, a);
                     }
                     brush->SetColor(fillColor);
-                    const float inset = 1.5f;
+                    const float inset = 1.2f * scale;
                     const float radius = std::min(w, h) * 0.10f;
                     pRT->FillRoundedRectangle(
                         D2D1::RoundedRect(D2D1::RectF(inset, inset, w - inset, h - inset), radius, radius),
@@ -26982,7 +28662,7 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
                                                   GetGValue(itemClr) / 255.f,
                                                   GetBValue(itemClr) / 255.f, textAlpha));
                     pRT->DrawTextW(label, (UINT32)wcslen(label), fmt.Get(),
-                        D2D1::RectF(2.f, textTop, w - 2.f, h - 2.f), brush.Get());
+                        D2D1::RectF(1.6f * scale, textTop, w - 1.6f * scale, h - 1.6f * scale), brush.Get());
                     attemptedLabel = true;
                 }
                 // Accent pill at the left edge -- ported from the regedit
@@ -27004,7 +28684,7 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
                         const float pTop = cy - pillHalf;
                         const float pBot = cy + pillHalf;
                         if (pBot > pTop + 0.5f) {
-                            const float pillLeft = 1.5f; // same inset as the rounded bg fill
+                            const float pillLeft = 1.2f * scale; // same inset as the rounded bg fill
                             const D2D1_RECT_F pillRect = D2D1::RectF(pillLeft, pTop, pillLeft + pillW, pBot);
                             const COLORREF ac = GetAccentIndicator();
                             if (g_settings.NavPillGradient) {
@@ -27038,9 +28718,10 @@ static bool PaintClassicPlacesBarItem(HWND toolbarHwnd, const NMCUSTOMDRAW* cd)
     }
 
     if (label[0] && textAlpha > 0.01f && !labelDrawn) {
+        const LONG textMargin = (LONG)lroundf(1.6f * scale);
         RECT labelRc = {
-            rc.left + 2, rc.top + (LONG)textTop,
-            rc.right - 2, rc.bottom - 2
+            rc.left + textMargin, rc.top + (LONG)textTop,
+            rc.right - textMargin, rc.bottom - textMargin
         };
         int oldBkMode = SetBkMode(cd->hdc, TRANSPARENT);
         COLORREF oldTextColor = SetTextColor(cd->hdc, itemClr);
@@ -27117,7 +28798,7 @@ static LRESULT CALLBACK ClassicDlgToolbarSubclassProc(HWND hwnd, UINT msg, WPARA
 static std::mutex g_tabSubclassOwnersMutex;
 static std::unordered_set<HWND> g_tabSubclassOwners;
 
-static LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp,
+static LRESULT CALLBACK TabFlickerFixSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp,
     DWORD_PTR)
 {
     if (msg == WM_ERASEBKGND)
@@ -27157,42 +28838,38 @@ static LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM l
         return 0;
     }
     if (msg == WM_NCDESTROY) {
-        std::lock_guard<std::mutex> lock(g_tabDCMutex);
-        if (hWnd == g_tabCurHWND) {
-            TabDCompReleaseTarget();
-            g_tabCurHWND = nullptr;
-            g_tabLastPillX = g_tabLastPillY = g_tabPrevPillX = -1.f;
-        }
         {
             std::lock_guard<std::mutex> ownersLock(g_tabSubclassOwnersMutex);
             g_tabSubclassOwners.erase(hWnd);
         }
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            hWnd, TabSubclassProc);
+            hWnd, TabFlickerFixSubclassProc);
     }
     return DefSubclassProc(hWnd, msg, wp, lp);
 }
 
-static void TabPillInstallWindow(HWND hwnd)
+// Gated by RoundedTabPane at both call sites (creation-time and the
+// settings-changed sweep below) -- applies to every SysTabControl32 when
+// on, regardless of whether IsWinUiTabStyleActive ends up drawing anything
+// special on top of it.
+static void TabFlickerFixInstallWindow(HWND hwnd)
 {
-    if (!hwnd || !IsWindow(hwnd) || !g_settings.TabPill)
+    if (!hwnd || !IsWindow(hwnd))
         return;
     {
         std::lock_guard<std::mutex> lock(g_tabSubclassOwnersMutex);
         g_tabSubclassOwners.insert(hwnd);
     }
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-            hwnd, TabSubclassProc, 0)) {
+            hwnd, TabFlickerFixSubclassProc, 0)) {
         std::lock_guard<std::mutex> lock(g_tabSubclassOwnersMutex);
         g_tabSubclassOwners.erase(hwnd);
     }
 }
 
-// Turning TabPill off at runtime (Wh_ModSettingsChanged) must undo what the
-// creation-time hook did -- otherwise already-subclassed SysTabControl32s
-// keep suppressing WM_ERASEBKGND/double-buffering their own paint forever,
-// and g_tabDC/caches stay allocated for a feature that's now disabled.
-static void TabPillRemoveAll()
+// Full-unload teardown -- removes every subclass this feature ever
+// installed, tracked via g_tabSubclassOwners since install/WM_NCDESTROY.
+static void TabFlickerFixRemoveAll()
 {
     std::vector<HWND> owners;
     {
@@ -27203,26 +28880,26 @@ static void TabPillRemoveAll()
     for (HWND hwnd : owners) {
         if (IsWindow(hwnd))
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                hwnd, TabSubclassProc);
+                hwnd, TabFlickerFixSubclassProc);
     }
 }
 
-static BOOL CALLBACK TabPillApplyChild(HWND hwnd, LPARAM)
+static BOOL CALLBACK TabFlickerFixApplyChild(HWND hwnd, LPARAM)
 {
     wchar_t cls[32] = {};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
     if (_wcsicmp(cls, L"SysTabControl32") == 0)
-        TabPillInstallWindow(hwnd);
+        TabFlickerFixInstallWindow(hwnd);
     return TRUE;
 }
 
-static BOOL CALLBACK TabPillApplyEnum(HWND hwnd, LPARAM)
+static BOOL CALLBACK TabFlickerFixApplyEnum(HWND hwnd, LPARAM)
 {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid != GetCurrentProcessId()) return TRUE;
-    TabPillApplyChild(hwnd, 0);
-    EnumChildWindows(hwnd, TabPillApplyChild, 0);
+    TabFlickerFixApplyChild(hwnd, 0);
+    EnumChildWindows(hwnd, TabFlickerFixApplyChild, 0);
     return TRUE;
 }
 
@@ -27252,6 +28929,38 @@ static void TreeRuntimeSaveAndSetStyleBit(
         SetWindowLongW(hwnd, GWL_STYLE, next);
 }
 
+// Tracks every non-regedit TreeView we've set TVS_EX_DOUBLEBUFFER on --
+// across all three call sites that do so (this function, plus the two
+// creation-time ones in NtUserCreateWindowEx_hook) -- so the bit can be
+// fully cleared on mod unload. A passive style bit leaves no code/pointer
+// behind, but nothing the mod changed should still be active once it's
+// gone. Not tied to a live RoundedSelection toggle-off: the dark-mode
+// creation-time call site isn't gated by that setting at all (applies
+// unconditionally under IsCustomDarkModeAllowed), so a setting-scoped
+// sweep wouldn't correctly cover it anyway -- full unload only.
+static std::mutex g_treeDoubleBufferMutex;
+static std::unordered_set<HWND> g_treeDoubleBufferOwners;
+
+static void TreeDoubleBufferTrack(HWND hwnd)
+{
+    std::lock_guard<std::mutex> lock(g_treeDoubleBufferMutex);
+    g_treeDoubleBufferOwners.insert(hwnd);
+}
+
+static void TreeDoubleBufferRemoveAll()
+{
+    std::vector<HWND> trees;
+    {
+        std::lock_guard<std::mutex> lock(g_treeDoubleBufferMutex);
+        trees.assign(g_treeDoubleBufferOwners.begin(), g_treeDoubleBufferOwners.end());
+        g_treeDoubleBufferOwners.clear();
+    }
+    for (HWND hwnd : trees) {
+        if (IsWindow(hwnd))
+            TreeView_SetExtendedStyle(hwnd, TVS_EX_DOUBLEBUFFER, 0);
+    }
+}
+
 static void ApplyTreeRuntimeSettings(HWND hwnd)
 {
     if (!hwnd || !IsWindow(hwnd))
@@ -27268,6 +28977,77 @@ static void ApplyTreeRuntimeSettings(HWND hwnd)
         TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_HASLINES_ORIG, TVS_HASLINES);
     }
 
+    // TVS_EX_DOUBLEBUFFER reduces flicker from RoundedSelection's own D2D
+    // paint (border fade, hover fade) on this tree. Unlike TVS_TRACKSELECT
+    // below, this is a TVM_SETEXTENDEDSTYLE flag, not a GWL_STYLE bit -- pure
+    // paint composition, no input/selection semantics to worry about, so it
+    // doesn't need the narrower TVS_TRACKSELECT gate (tvExplorerThemed,
+    // IsInsidePickerNamespaceTree): the same outside-Explorer scope
+    // RemoveTreeLines already uses above is enough. Regedit excluded since
+    // RgApplyTreeViewStyle already manages this for its own tree. Not
+    // reversed on toggle-off, matching every other TVS_EX_DOUBLEBUFFER call
+    // site in this file (e.g. NtUserCreateWindowEx_hook) -- a one-way,
+    // harmless paint enhancement, not a behavior change to undo. This also
+    // covers a gap those creation-time call sites have: a tree that already
+    // existed before RoundedSelection was toggled on live never retroactively
+    // got it there.
+    //
+    // Checked before setting -- this function re-runs on every settings-
+    // changed sweep (any setting, not just this one), so an unconditional
+    // TVM_SETEXTENDEDSTYLE would resend the message to every qualifying tree
+    // each time. Same guard the pre-existing LVS_EX_DOUBLEBUFFER call site
+    // already uses for ListView (LVM_GETEXTENDEDLISTVIEWSTYLE check first).
+    if (g_settings.RoundedSelection && !IsInsideExplorer(hwnd) &&
+        !IsCurrentProcessRegedit() &&
+        !(TreeView_GetExtendedStyle(hwnd) & TVS_EX_DOUBLEBUFFER)) {
+        TreeView_SetExtendedStyle(hwnd, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+        TreeDoubleBufferTrack(hwnd);
+    }
+
+    // TVS_TRACKSELECT lets DrawRoundedItemBg's Hot(2) branch actually fire on
+    // third-party trees -- without it comctl32 never requests that state at
+    // all (confirmed via Wine/ReactOS TREEVIEW_MouseMove). Requires this
+    // exact hwnd to already be tracked as Explorer/DarkMode_Explorer themed
+    // (not just the ExplorerSection+RoundedSelection settings pair) before
+    // touching the style bit -- sequencing it strictly after the theme has
+    // actually landed avoids the SetWindowTheme/WM_THEMECHANGED reentrancy
+    // class of bug already seen elsewhere in this file. Combined with
+    // IsInsideExplorer/IsInsidePickerNamespaceTree, this keeps real Explorer
+    // windows AND common Open/Save file-picker nav panes out (the latter
+    // root at #32770, not CabinetWClass/ExploreWClass, so IsInsideExplorer
+    // alone would miss them) even if the theme check ever misses an edge case.
+    // IsCurrentProcessRegedit is a separate, required exclusion: regedit's
+    // own RgApplyTreeViewStyle also calls plain SetWindowTheme(DarkMode_Explorer)
+    // through this same hook purely for scrollbar/NC cosmetics (its own
+    // NM_CUSTOMDRAW returns CDRF_SKIPDEFAULT, fully owning item painting), so
+    // tvExplorerThemed alone would go true there too -- forcing native hot-
+    // tracking onto RgTVSubclassProc's own pill/chevron system, which has
+    // never been exercised against comctl32's hotItem/CDIS_HOT and has its
+    // own history of subtle timing bugs.
+    const bool tvExplorerThemed =
+        IsKnownWindowThemeApplied(hwnd, L"Explorer", nullptr) ||
+        IsKnownWindowThemeApplied(hwnd, L"DarkMode_Explorer", nullptr);
+    if (g_settings.ExplorerSection && g_settings.RoundedSelection &&
+        !IsInsideExplorer(hwnd) && !IsInsidePickerNamespaceTree(hwnd) &&
+        !IsCurrentProcessRegedit() && tvExplorerThemed) {
+        TreeRuntimeSaveAndSetStyleBit(
+            hwnd, PROP_TV_TRACKSELECT_ORIG, TVS_TRACKSELECT, true);
+        // comctl32 shows a hand cursor over any hit item once TVS_TRACKSELECT
+        // is set -- restore the arrow via the lightweight subclass above.
+        if (!GetPropW(hwnd, PROP_TV_TRACKSELECT_CURSOR_SUB) &&
+            WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, TvTrackSelectCursorSubclassProc, 0)) {
+            SetPropW(hwnd, PROP_TV_TRACKSELECT_CURSOR_SUB, (HANDLE)1);
+        }
+    } else {
+        TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_TRACKSELECT_ORIG, TVS_TRACKSELECT);
+        if (GetPropW(hwnd, PROP_TV_TRACKSELECT_CURSOR_SUB)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, TvTrackSelectCursorSubclassProc);
+            RemovePropW(hwnd, PROP_TV_TRACKSELECT_CURSOR_SUB);
+        }
+    }
+
     if (g_settings.ModernInsert) {
         if (!GetPropW(hwnd, PROP_TV_SUB) &&
             WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -27281,6 +29061,27 @@ static void ApplyTreeRuntimeSettings(HWND hwnd)
     }
 
     const bool navTree = GlyphIsNavPaneTreeView(hwnd);
+    const bool needsTreeCursorSubclass =
+        g_settings.GlyphIcons ||
+        (g_settings.RoundedSelection &&
+         g_settings.NavPaneHoverFade);
+    if (navTree && g_settings.ExplorerSection &&
+        needsTreeCursorSubclass) {
+        TreeCursorTrySubclass(hwnd);
+    }
+    if (navTree &&
+        (!g_settings.RoundedSelection ||
+         !g_settings.NavPaneHoverFade) &&
+        GetPropW(hwnd, kPropNavHoverFadeState)) {
+        // See TreeCursorRemoveFromWindow for why a 0 message needs a direct
+        // call instead of SendMessageW(WM_NULL).
+        if (const UINT resetMsg =
+                g_navHoverFadeResetMessage.load(std::memory_order_acquire))
+            (void)SendMessageW(hwnd, resetMsg, 0, 0);
+        else
+            NavHoverFadeDestroyState(
+                hwnd, !g_msgWndUnloading.load(std::memory_order_acquire));
+    }
     if (navTree && g_settings.GlyphIcons) {
         TreeRuntimeSaveAndSetStyleBit(
             hwnd, PROP_TV_NOTOOLTIPS_ORIG, TVS_NOTOOLTIPS, true);
@@ -27328,6 +29129,12 @@ static BOOL CALLBACK TreeRuntimeApplyEnum(HWND hwnd, LPARAM)
 static std::mutex g_auxSubclassOwnersMutex;
 static std::unordered_set<HWND> g_statusBarSubclassOwners;
 static std::unordered_set<HWND> g_fontViewSubclassOwners;
+static std::unordered_set<HWND> g_trackbarSubclassOwners;
+static std::unordered_set<HWND> g_hdrDarkSubclassOwners;
+// Same pattern as g_navDividerUnloading/g_menuAcrylicUnloading/etc -- blocks
+// installs during the teardown window after HdrDarkPaintRemoveAll's
+// one-shot sweep has run, which would otherwise leave a dangling subclass.
+static std::atomic<bool> g_hdrDarkUnloading{ false };
 
 static void PaintStatusBarSeparators(HWND hwnd, HDC hdc)
 {
@@ -27421,11 +29228,19 @@ static LRESULT CALLBACK StatusBarSubclassProc(HWND hwnd, UINT msg, WPARAM wp,
                 SelectObject(memDC, oldBmp);
                 DeleteObject(bmp);
             } else {
-                LRESULT res = DefSubclassProc(hwnd, msg, wp, lp);
+                // memDC/bmp allocation failed (GDI exhaustion) -- draw
+                // unbuffered straight onto the hdc BeginPaint already
+                // opened, via WM_PRINTCLIENT, instead of calling
+                // DefSubclassProc(WM_PAINT) here: wp/lp for a real WM_PAINT
+                // are 0/0, and the status bar's native handler takes that to
+                // mean "call BeginPaint yourself" (same nested-BeginPaint
+                // hazard fixed in the sibling TrackbarSubclassProc).
+                if (memDC) DeleteDC(memDC);
+                SendMessageW(hwnd, WM_PRINTCLIENT, (WPARAM)hdc,
+                    PRF_CLIENT | PRF_ERASEBKGND);
                 PaintStatusBarSeparators(hwnd, hdc);
                 EndPaint(hwnd, &ps);
-                if (memDC) DeleteDC(memDC);
-                return res;
+                return 0;
             }
             if (memDC)
                 DeleteDC(memDC);
@@ -27454,6 +29269,265 @@ static LRESULT CALLBACK StatusBarSubclassProc(HWND hwnd, UINT msg, WPARAM wp,
     }
 
     return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+// Trackbar has no TBS_EX_DOUBLEBUFFER-equivalent extended style (unlike
+// ListView/TreeView/Toolbar) and is well documented as one of the worst
+// native flicker offenders in Win32 -- comctl32 erases and redraws the
+// rail/thumb in separate steps on every WM_HSCROLL/WM_VSCROLL tick. We
+// already paint a custom WinUI accent rail/thumb on top of it (RoundedButtons,
+// "Trackbar" DrawThemeBackground branch), so wrap WM_PAINT the same way as
+// StatusBarSubclassProc. Confirmed via Wine's trackbar.c that WM_PRINTCLIENT
+// is handled identically to WM_PAINT (TRACKBAR_Paint takes the HDC straight
+// from wParam, no BeginPaint), so the same memory-DC technique applies.
+static LRESULT CALLBACK TrackbarSubclassProc(HWND hwnd, UINT msg, WPARAM wp,
+    LPARAM lp, DWORD_PTR)
+{
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        if (!hdc)
+            return 0;
+
+        RECT rc = {};
+        GetClientRect(hwnd, &rc);
+        const int w = rc.right - rc.left;
+        const int h = rc.bottom - rc.top;
+        if (w > 0 && h > 0) {
+            HDC memDC = CreateCompatibleDC(hdc);
+            HBITMAP bmp = memDC ? CreateCompatibleBitmap(hdc, w, h) : nullptr;
+            if (memDC && bmp) {
+                HGDIOBJ oldBmp = SelectObject(memDC, bmp);
+                FillRect_orig(memDC, &rc, GetSysColorBrush(COLOR_BTNFACE));
+                SendMessageW(hwnd, WM_PRINTCLIENT, (WPARAM)memDC,
+                    PRF_CLIENT | PRF_ERASEBKGND);
+                BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
+                SelectObject(memDC, oldBmp);
+                DeleteObject(bmp);
+            } else {
+                // memDC/bmp allocation failed (GDI exhaustion) -- draw
+                // unbuffered straight onto the hdc BeginPaint already
+                // opened, via the same WM_PRINTCLIENT path, instead of
+                // calling DefSubclassProc(WM_PAINT) here: wp/lp for a real
+                // WM_PAINT are 0/0, and the trackbar's native handler takes
+                // that to mean "call BeginPaint yourself" (confirmed in
+                // Wine's TRACKBAR_Paint) -- a second BeginPaint/EndPaint
+                // pair nested inside the one already open above.
+                if (memDC) DeleteDC(memDC);
+                SendMessageW(hwnd, WM_PRINTCLIENT, (WPARAM)hdc,
+                    PRF_CLIENT | PRF_ERASEBKGND);
+                EndPaint(hwnd, &ps);
+                return 0;
+            }
+            if (memDC)
+                DeleteDC(memDC);
+        }
+
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+
+    if (msg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+            g_trackbarSubclassOwners.erase(hwnd);
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, TrackbarSubclassProc);
+    }
+
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+// Shared by WM_PAINT (hdc from BeginPaint) and WM_PRINTCLIENT (hdc from
+// wParam) in HdrDarkPaintSubclassProc below -- g_propDkBgBrush is guaranteed
+// non-null by both callers before this runs.
+static void HdrDarkPaintDraw(HWND hwnd, HDC hdc)
+{
+    RECT rcClient;
+    GetClientRect(hwnd, &rcClient);
+    FillRect(hdc, &rcClient, g_propDkBgBrush);
+
+    const int   n     = Header_GetItemCount(hwnd);
+    const HFONT hFont = reinterpret_cast<HFONT>(
+                            SendMessage(hwnd, WM_GETFONT, 0, 0));
+    const HFONT hOld  = hFont
+        ? static_cast<HFONT>(SelectObject(hdc, hFont)) : nullptr;
+    SetTextColor(hdc, kPropDkText);
+    SetBkMode(hdc, TRANSPARENT);
+
+    const UINT dpi = GetDpiForWindow(hwnd);
+    const int leftMargin  = MulDiv(8, (int)dpi, 96);
+    const int rightMargin = MulDiv(4, (int)dpi, 96);
+
+    // A bit darker than regedit's RGB(70,70,70): kPropDkBg (25,25,25) is
+    // darker than regedit's kRgDkLVBk (40,40,40), so the same value here
+    // would read brighter/more prominent than the tuned regedit look.
+    HPEN hPen = CreatePen(PS_SOLID, 1, RGB(55, 55, 55));
+    HPEN hOldPen = hPen ? static_cast<HPEN>(SelectObject(hdc, hPen)) : nullptr;
+
+    for (int i = 0; i < n; i++) {
+        RECT rcItem;
+        if (!Header_GetItemRect(hwnd, i, &rcItem)) continue;
+        wchar_t buf[256] = {};
+        HDITEMW hdi = {};
+        hdi.mask       = HDI_TEXT | HDI_FORMAT;
+        hdi.pszText    = buf;
+        hdi.cchTextMax = 256;
+        Header_GetItem(hwnd, i, &hdi);
+        RECT rcText = { rcItem.left + leftMargin, rcItem.top,
+                        rcItem.right - rightMargin, rcItem.bottom };
+
+        // Real Explorer headers do use HDF_RIGHT/HDF_CENTER and sort arrows
+        // (e.g. the "Previous Versions" list) -- match native placement:
+        // the arrow always sits at the column's own right edge, and text
+        // yields that space regardless of its own alignment.
+        const bool sortUp   = (hdi.fmt & HDF_SORTUP)   != 0;
+        const bool sortDown = (hdi.fmt & HDF_SORTDOWN) != 0;
+        if (sortUp || sortDown) {
+            const int arrowW = MulDiv(8, (int)dpi, 96);
+            const int arrowH = MulDiv(4, (int)dpi, 96);
+            const int arrowGap = MulDiv(4, (int)dpi, 96);
+            rcText.right -= (arrowW + arrowGap);
+            const int cx = rcItem.right - rightMargin - arrowW / 2;
+            const int cy = (rcItem.top + rcItem.bottom) / 2;
+            const POINT tri[3] = {
+                sortUp ? POINT{cx - arrowW / 2, cy + arrowH / 2}
+                       : POINT{cx - arrowW / 2, cy - arrowH / 2},
+                sortUp ? POINT{cx + arrowW / 2, cy + arrowH / 2}
+                       : POINT{cx + arrowW / 2, cy - arrowH / 2},
+                sortUp ? POINT{cx, cy - arrowH / 2}
+                       : POINT{cx, cy + arrowH / 2},
+            };
+            if (HBRUSH arrowBrush = CreateSolidBrush(kPropDkText)) {
+                HGDIOBJ oldArrowBrush = SelectObject(hdc, arrowBrush);
+                HGDIOBJ oldArrowPen = SelectObject(hdc, GetStockObject(NULL_PEN));
+                Polygon(hdc, tri, 3);
+                SelectObject(hdc, oldArrowPen);
+                SelectObject(hdc, oldArrowBrush);
+                DeleteObject(arrowBrush);
+            }
+        }
+
+        UINT dtAlign = DT_LEFT;
+        switch (hdi.fmt & HDF_JUSTIFYMASK) {
+        case HDF_RIGHT:  dtAlign = DT_RIGHT;  break;
+        case HDF_CENTER: dtAlign = DT_CENTER; break;
+        }
+
+        // Guard re-entry into DrawTextW_hook's glow/dark-mode pipeline --
+        // this text is already themed above, same guard RgHdrSubclassProc
+        // uses for its own header text.
+        g_glowEntry = true;
+        DrawTextW(hdc, buf, -1, &rcText,
+            dtAlign | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        g_glowEntry = false;
+        if (hPen) {
+            MoveToEx(hdc, rcItem.right - 2, rcClient.top, nullptr);
+            LineTo(hdc, rcItem.right - 2, rcClient.bottom);
+        }
+    }
+
+    if (hOldPen) SelectObject(hdc, hOldPen);
+    if (hPen) DeleteObject(hPen);
+    if (hOld) SelectObject(hdc, hOld);
+}
+
+// Generic dark-mode SysHeader32 full-paint fix, same technique as regedit's
+// own RgHdrSubclassProc: AllowDarkModeForWindow's internal dark renderer
+// doesn't draw column divider lines, and NM_CUSTOMDRAW is unreliable for
+// this control, so WM_PAINT is fully replaced instead. Installed on
+// Explorer-family, non-cabinet-rooted headers once dark mode is active
+// (property dialogs, Folder Options, etc. -- the same DarkMode_ItemsView
+// scope SetItemsViewOrDefaultTheme always used); regedit keeps its own
+// dedicated subclass to avoid stacking two full-paint owners on the same
+// header. Deliberately NOT installed in third-party processes: HdrDarkPaintDraw
+// only draws HDI_TEXT left-aligned and would silently discard alignment,
+// sort arrows, images/owner-draw and the host's own NM_CUSTOMDRAW that
+// uxtheme's native dark renderer already handles correctly there.
+static LRESULT CALLBACK HdrDarkPaintSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR /*dwRefData*/)
+{
+    switch (msg) {
+    case WM_PAINT: {
+        if (!IsSystemDarkMode())
+            break;  // light mode: default paint
+
+        if (!g_propDkBgBrush)
+            g_propDkBgBrush = CreateSolidBrush(kPropDkBg);
+        if (!g_propDkBgBrush)
+            break;
+
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        if (!hdc)
+            return 0;
+        HdrDarkPaintDraw(hwnd, hdc);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    // Some hosts repaint via WM_PRINTCLIENT instead of WM_PAINT (see
+    // StatusBarSubclassProc/TrackbarSubclassProc).
+    case WM_PRINTCLIENT: {
+        if (!IsSystemDarkMode())
+            break;
+
+        if (!g_propDkBgBrush)
+            g_propDkBgBrush = CreateSolidBrush(kPropDkBg);
+        if (!g_propDkBgBrush)
+            break;
+
+        HDC hdc = (HDC)wp;
+        if (hdc)
+            HdrDarkPaintDraw(hwnd, hdc);
+        return 0;
+    }
+    case WM_NCDESTROY:
+        {
+            std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+            g_hdrDarkSubclassOwners.erase(hwnd);
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, HdrDarkPaintSubclassProc);
+        break;
+    }
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static void HdrDarkPaintInstall(HWND hwnd)
+{
+    // Blocks new installs once teardown starts -- see g_hdrDarkUnloading.
+    if (g_hdrDarkUnloading.load(std::memory_order_acquire))
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        g_hdrDarkSubclassOwners.insert(hwnd);
+    }
+    bool ok = WindhawkUtils::SetWindowSubclassFromAnyThread(
+        hwnd, HdrDarkPaintSubclassProc, 0);
+    if (!ok) {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        g_hdrDarkSubclassOwners.erase(hwnd);
+    }
+}
+
+// Split out from AuxiliarySubclassCleanup so it can also run standalone if
+// ever needed live -- mirrors StatusBarRemoveAllSubclasses/
+// TrackbarRemoveAllSubclasses.
+static void HdrDarkPaintRemoveAll()
+{
+    std::vector<HWND> headers;
+    {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        headers.assign(
+            g_hdrDarkSubclassOwners.begin(), g_hdrDarkSubclassOwners.end());
+        g_hdrDarkSubclassOwners.clear();
+    }
+    for (HWND hwnd : headers) {
+        if (IsWindow(hwnd))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, HdrDarkPaintSubclassProc);
+    }
 }
 
 static void PaintFontViewBackground(HWND hwnd, HDC hdc)
@@ -27555,23 +29629,156 @@ static LRESULT CALLBACK FontViewSubclassProc(HWND hwnd, UINT msg, WPARAM wp,
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
-static void AuxiliarySubclassCleanup()
+// Split out from AuxiliarySubclassCleanup so it can also run on a live
+// ModernSeparators toggle-off, not just full mod unload -- otherwise an
+// already-subclassed status bar keeps double-buffering every WM_PAINT
+// indefinitely even with the setting off.
+static void StatusBarRemoveAllSubclasses()
 {
     std::vector<HWND> statusBars;
-    std::vector<HWND> fontViews;
     {
         std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
         statusBars.assign(
             g_statusBarSubclassOwners.begin(), g_statusBarSubclassOwners.end());
-        fontViews.assign(
-            g_fontViewSubclassOwners.begin(), g_fontViewSubclassOwners.end());
         g_statusBarSubclassOwners.clear();
-        g_fontViewSubclassOwners.clear();
     }
     for (HWND hwnd : statusBars) {
         if (IsWindow(hwnd))
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hwnd, StatusBarSubclassProc);
+    }
+}
+
+// Same split-out rationale as StatusBarRemoveAllSubclasses -- runs on a live
+// RoundedButtons toggle-off too, not just full mod unload.
+static void TrackbarRemoveAllSubclasses()
+{
+    std::vector<HWND> trackbars;
+    {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        trackbars.assign(
+            g_trackbarSubclassOwners.begin(), g_trackbarSubclassOwners.end());
+        g_trackbarSubclassOwners.clear();
+    }
+    for (HWND hwnd : trackbars) {
+        if (IsWindow(hwnd))
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, TrackbarSubclassProc);
+    }
+}
+
+// SetWindowSubclass is idempotent for an (proc, id) pair already installed
+// (MSDN: updates the ref-data instead of stacking a second entry), so this
+// is safe to call again on an already-subclassed trackbar -- lets the
+// RoundedButtons live-toggle-on sweep below share this with the creation-
+// time call site instead of duplicating the insert/subclass/rollback dance.
+static void ApplyTrackbarDoubleBuffer(HWND hwnd)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        g_trackbarSubclassOwners.insert(hwnd);
+    }
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, TrackbarSubclassProc, 0)) {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        g_trackbarSubclassOwners.erase(hwnd);
+    }
+}
+
+static BOOL CALLBACK TrackbarDoubleBufferApplyChild(HWND hwnd, LPARAM)
+{
+    wchar_t cls[32] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (_wcsicmp(cls, L"msctls_trackbar32") == 0)
+        ApplyTrackbarDoubleBuffer(hwnd);
+    return TRUE;
+}
+
+// Covers trackbars created before RoundedButtons was toggled on live --
+// without this, an already-open dialog's trackbar would start getting the
+// WinUI accent rail/thumb paint immediately (that hook is a live per-paint
+// check) but never the double-buffer fix, reintroducing the exact flicker
+// this feature exists to remove until the dialog is recreated. Same
+// "current process only" filter as TabFlickerFixApplyEnum.
+static BOOL CALLBACK TrackbarDoubleBufferApplyEnum(HWND hwnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    TrackbarDoubleBufferApplyChild(hwnd, 0);
+    EnumChildWindows(hwnd, TrackbarDoubleBufferApplyChild, 0);
+    return TRUE;
+}
+
+// Same "nothing the mod changed should still be active once it's gone"
+// rationale as g_treeDoubleBufferOwners -- tracks every toolbar we've set
+// TBSTYLE_EX_DOUBLEBUFFER on so it can be cleared on full mod unload.
+static std::mutex g_toolbarDoubleBufferMutex;
+static std::unordered_set<HWND> g_toolbarDoubleBufferOwners;
+
+// Same idempotency rationale as ApplyTrackbarDoubleBuffer -- TB_GETEXTENDEDSTYLE
+// is checked before setting, so a redundant call on an already-buffered
+// toolbar is a cheap no-op.
+static void ApplyToolbarDoubleBuffer(HWND hwnd)
+{
+    DWORD tbExSt = (DWORD)SendMessageW(hwnd, TB_GETEXTENDEDSTYLE, 0, 0);
+    if (!(tbExSt & TBSTYLE_EX_DOUBLEBUFFER)) {
+        SendMessageW(hwnd, TB_SETEXTENDEDSTYLE, 0, tbExSt | TBSTYLE_EX_DOUBLEBUFFER);
+        std::lock_guard<std::mutex> lock(g_toolbarDoubleBufferMutex);
+        g_toolbarDoubleBufferOwners.insert(hwnd);
+    }
+}
+
+static void ToolbarDoubleBufferRemoveAll()
+{
+    std::vector<HWND> toolbars;
+    {
+        std::lock_guard<std::mutex> lock(g_toolbarDoubleBufferMutex);
+        toolbars.assign(
+            g_toolbarDoubleBufferOwners.begin(), g_toolbarDoubleBufferOwners.end());
+        g_toolbarDoubleBufferOwners.clear();
+    }
+    for (HWND hwnd : toolbars) {
+        if (!IsWindow(hwnd))
+            continue;
+        DWORD tbExSt = (DWORD)SendMessageW(hwnd, TB_GETEXTENDEDSTYLE, 0, 0);
+        if (tbExSt & TBSTYLE_EX_DOUBLEBUFFER)
+            SendMessageW(hwnd, TB_SETEXTENDEDSTYLE, 0, tbExSt & ~TBSTYLE_EX_DOUBLEBUFFER);
+    }
+}
+
+static BOOL CALLBACK ToolbarDoubleBufferApplyChild(HWND hwnd, LPARAM)
+{
+    wchar_t cls[32] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (_wcsicmp(cls, L"ToolbarWindow32") == 0)
+        ApplyToolbarDoubleBuffer(hwnd);
+    return TRUE;
+}
+
+// Same live-toggle-on gap as TrackbarDoubleBufferApplyEnum, for toolbars
+// existing before LegacyRebarControls was turned on.
+static BOOL CALLBACK ToolbarDoubleBufferApplyEnum(HWND hwnd, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    ToolbarDoubleBufferApplyChild(hwnd, 0);
+    EnumChildWindows(hwnd, ToolbarDoubleBufferApplyChild, 0);
+    return TRUE;
+}
+
+static void AuxiliarySubclassCleanup()
+{
+    StatusBarRemoveAllSubclasses();
+    TrackbarRemoveAllSubclasses();
+    HdrDarkPaintRemoveAll();
+    std::vector<HWND> fontViews;
+    {
+        std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+        fontViews.assign(
+            g_fontViewSubclassOwners.begin(), g_fontViewSubclassOwners.end());
+        g_fontViewSubclassOwners.clear();
     }
     for (HWND hwnd : fontViews) {
         if (IsWindow(hwnd))
@@ -27608,6 +29815,14 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
     wchar_t cls[32] = {};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
 
+    // The DefView itself exists before its DirectUI child and may gain
+    // WS_BORDER later. Only the child-creation event has enough context to
+    // distinguish a tabbed property page from Explorer's ordinary DefView.
+    if (g_settings.ModernGroupBox &&
+        _wcsicmp(cls, L"DirectUIHWND") == 0) {
+        DefViewBorderConsiderWindow(hwnd);
+    }
+
     // Classic Open/Save dialog top toolbar icon swap: cosmetic, works in
     // light mode too, so installed unconditionally here rather than inside
     // the IsCustomDarkModeAllowed() block below (which PropApplyDarkMode
@@ -27618,22 +29833,24 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
             hwnd, ClassicDlgToolbarSubclassProc, 0))
         SetPropW(hwnd, kClassicDlgToolbarSubclassProp, (HANDLE)1);
 
-    if (IsCustomDarkModeAllowed() && _wcsicmp(cls, L"FontViewWClass") == 0) {
+    if (_wcsicmp(cls, L"FontViewWClass") == 0) {
         if (!g_propDkBgBrush)
             g_propDkBgBrush = CreateSolidBrush(kPropDkBg);
-        if (g_propDkBgBrush)
-            SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)g_propDkBgBrush);
-        {
-            std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
-            g_fontViewSubclassOwners.insert(hwnd);
+        // Always re-applied against the current mode (not just when dark),
+        // so a class-wide dark brush left over from a since-toggled-off
+        // dark mode never leaks into a freshly created light-mode window.
+        SetFontViewClassBrush(IsCustomDarkModeAllowed(), hwnd);
+        if (IsCustomDarkModeAllowed()) {
+            {
+                std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+                g_fontViewSubclassOwners.insert(hwnd);
+            }
+            if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                    hwnd, FontViewSubclassProc, 0)) {
+                std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
+                g_fontViewSubclassOwners.erase(hwnd);
+            }
         }
-        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-                hwnd, FontViewSubclassProc, 0)) {
-            std::lock_guard<std::mutex> lock(g_auxSubclassOwnersMutex);
-            g_fontViewSubclassOwners.erase(hwnd);
-        }
-        RedrawWindow(hwnd, nullptr, nullptr,
-            RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
     }
 
     if (g_settings.ModernSeparators &&
@@ -27650,19 +29867,33 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
         }
     }
 
+    // Rides on RoundedButtons -- the setting that makes us paint the WinUI
+    // accent rail/thumb on this control in the first place (see the
+    // "Trackbar" DrawThemeBackground branch). No point double-buffering a
+    // trackbar we never touch.
+    if (g_settings.RoundedButtons && _wcsicmp(cls, L"msctls_trackbar32") == 0)
+        ApplyTrackbarDoubleBuffer(hwnd);
+
     if (_wcsicmp(cls, L"Button") == 0)
         TryInstallSplitButtonChevronSubclass(hwnd);
 
     const bool isTreeView = (_wcsicmp(cls, L"SysTreeView32") == 0);
     const bool isListView = (_wcsicmp(cls, L"SysListView32") == 0);
+    const bool isToolbar = (_wcsicmp(cls, L"ToolbarWindow32") == 0);
 
     // The Explorer theme itself is a modern visual style, not a dark-mode
     // color override. Apply it in light mode too, but leave dark colors and
-    // AllowDarkModeForWindow inside the dark-mode block below.
-    if ((isTreeView || isListView) && (!g_darkModeActive || g_darkModeExcluded)) {
+    // AllowDarkModeForWindow inside the dark-mode block below (that path
+    // stays unconditional -- DarkMode_Explorer is load-bearing there for
+    // the dark colors to actually render, not just cosmetic).
+    if ((isTreeView || isListView) && (!g_darkModeActive || g_darkModeExcluded) &&
+        g_settings.ExplorerSection && g_settings.RoundedSelection &&
+        !IsInsideExcludedFilePicker(hwnd)) {
         SetExplorerFamilyTheme(hwnd);
-        if (isTreeView)
+        if (isTreeView) {
             TreeView_SetExtendedStyle(hwnd, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+            TreeDoubleBufferTrack(hwnd);
+        }
     }
 
     // ── Per-thread WH_CALLWNDPROC hook for context menus ─────────────────
@@ -27691,25 +29922,12 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
     }
 
     // ── DropDown/ViewControlClass children: SysListView32 dark mode ──────
-    // The SysListView32 child of legacy dropdowns does NOT inherit dark
-    // mode from its parent's DWMWA_USE_IMMERSIVE_DARK_MODE attribute.
-    // Without AllowDarkModeForWindow + SetWindowTheme applied to the
-    // ListView itself, the system uses the LIGHT variant of theme parts
-    // (Menu background, ListView items) — dropdown content appears light
-    // even when our dark mode is active.
-    //
-    // This mirrors how Explorer themes its own file-list ListViews. Unlike
-    // ComboLBox (ListBox-based — had a hardcoded FFFFFF highlight bug with
-    // AllowDarkModeForWindow), SysListView32 honors GetSysColor hooks
-    // correctly. Confirmed safe by Explorer's own dark mode implementation.
-    //
-    // GetAncestor(GA_ROOT) is used (not just hWndParent) for robustness
-    // against potential intermediate container windows.
-    //
-    // This handles pill / text / item rendering. The DropDown's window-level
-    // background (theme Menu parts 9/13) is handled by the acrylic pipeline
-    // applied to the DropDown itself via MenuTryInstallAcrylic — the blur
-    // composes black pixels as transparent, achieving the dark visual.
+    // SysListView32 children of legacy dropdowns don't inherit dark mode from
+    // the parent's DWMWA_USE_IMMERSIVE_DARK_MODE attribute -- need explicit
+    // AllowDarkModeForWindow + SetWindowTheme or they render with light theme
+    // parts. GetAncestor(GA_ROOT) guards against intermediate containers.
+    // This only covers pill/text/item rendering; the DropDown's own
+    // background is handled separately via MenuTryInstallAcrylic.
     if (IsCustomDarkModeAllowed()
         && _wcsicmp(cls, L"SysListView32") == 0) {
         HWND root = GetAncestor(hwnd, GA_ROOT);
@@ -27728,6 +29946,23 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
             }
         }
+    }
+
+    // Light mode's white tab-pane edge fill -- RoundedTabPane's counterpart
+    // to the dark pane extension below. Root dialogs only, same as
+    // PropDlgSubclassProc's own extension. Gated on RoundedTabPane at
+    // install time (not inside the subclass's WM_ERASEBKGND) since this
+    // subclass has no other job, unlike PropDlgSubclassProc.
+    //
+    // Gated on !IsSystemDarkMode(), not !IsCustomDarkModeAllowed(): the
+    // latter is also false for a dark-mode-excluded process on an otherwise-
+    // dark system, which would wrongly get this white fill.
+    if (g_settings.RoundedTabPane && !IsSystemDarkMode() &&
+        wcscmp(cls, L"#32770") == 0 &&
+        !(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD)) {
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, PropLightPaneSubclassProc, kPropLightPaneSubId))
+            SetPropW(hwnd, kPropLightPaneSubclassProp, (HANDLE)1);
     }
 
     // Dark mode: DWM dark title bar for ALL top-level windows.
@@ -27833,6 +30068,7 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
             TreeView_SetBkColor(hwnd, kPropDkBg);
             TreeView_SetTextColor(hwnd, kPropDkText);
             TreeView_SetExtendedStyle(hwnd, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+            TreeDoubleBufferTrack(hwnd);
         }
         else if (isListView) {
             if (!cabinetRooted) {
@@ -27872,8 +30108,20 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
         }
         else if (_wcsicmp(cls, L"SysHeader32") == 0) {
             if (g_cbdAllowDark) g_cbdAllowDark(hwnd, true);
-            if (IsCurrentProcessExplorer() && !cabinetRooted)
-                SetItemsViewOrDefaultTheme(hwnd);
+            // Replaces SetItemsViewOrDefaultTheme outright -- full WM_PAINT
+            // ownership makes whatever theme is set moot. Scoped the same way
+            // SetItemsViewOrDefaultTheme itself always was (Explorer-family,
+            // non-cabinet -- property dialogs, Folder Options, etc.): the
+            // divider-line bug this fixes only exists in the DarkMode_ItemsView
+            // renderer that theme applies, which SetItemsViewOrDefaultTheme
+            // only ever requested inside Explorer. Dropping that check here
+            // would take over WM_PAINT for every third-party app's own
+            // SysHeader32 too, discarding alignment, sort arrows, images,
+            // owner-draw and NM_CUSTOMDRAW that HdrDarkPaintDraw doesn't
+            // know how to reproduce -- uxtheme's own dark header renderer
+            // already handles all of that correctly outside Explorer.
+            if (IsCurrentProcessExplorer() && !cabinetRooted && !IsCurrentProcessRegedit())
+                HdrDarkPaintInstall(hwnd);
         }
         else if (_wcsicmp(cls, L"msctls_trackbar32") == 0 ||
                  _wcsicmp(cls, L"msctls_statusbar32") == 0 ||
@@ -27916,9 +30164,11 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
         }
     }
 
-    // Tab flicker fix: subclass in BOTH dark and light modes
-    if (g_settings.TabPill && _wcsicmp(cls, L"SysTabControl32") == 0) {
-        TabPillInstallWindow(hwnd);
+    // Tab flicker fix: subclass in BOTH dark and light modes, rides on
+    // RoundedTabPane (the closest existing setting, even though the fix
+    // itself applies to every tab control, not just property-sheet ones).
+    if (g_settings.RoundedTabPane && _wcsicmp(cls, L"SysTabControl32") == 0) {
+        TabFlickerFixInstallWindow(hwnd);
     }
 
     // Retroactive pin swap — covers TVM_SETIMAGELIST sent during creation
@@ -27948,16 +30198,10 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
     // hWndParent is the tooltip's owner (the control that created it).
 
     // ── Modern border subclass for WS_EX_CLIENTEDGE / WS_STATICEDGE / WS_BORDER controls ──
-    // Paints over the 3D NC border with a subtle rounded line (like GroupBox).
-    // Outer gate widened to either toggle: plain "Static" controls with a
-    // sunken edge are sometimes thin decorative separator lines, sometimes
-    // boxed panels grouping other controls, so either feature toggle needs
-    // to reach this code — the branch below tells them apart by shape and
-    // routes each to its own setting. Non-Static classes below are always
-    // box-shaped and stay strictly gated to ModernGroupBox, unchanged.
-    // Previously gated by EditFocusLine — untangled because EditFocusLine should
-    // only control the accent focus line at the bottom of controls, not the
-    // NC border rounding which is a separate visual concern.
+    // Paints a rounded line over the 3D NC border (like GroupBox). A sunken-
+    // edge Static can be a thin separator or a boxed panel, so the branch
+    // below tells them apart by shape and routes to ModernSeparators/
+    // ModernGroupBox/EditFocusLine respectively.
     if ((g_settings.ModernGroupBox || g_settings.ModernSeparators ||
          g_settings.EditFocusLine) &&
         (GetWindowLongW(hwnd, GWL_STYLE) & WS_CHILD)) {
@@ -28019,9 +30263,6 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
     if (isTreeView)
         ApplyTreeRuntimeSettings(hwnd);
 
-    if (isTreeView)
-        TreeCursorTrySubclass(hwnd);
-
     // ListView — enable double-buffer (modern marquee selection)
     if (isListView) {
         DWORD exSt = (DWORD)SendMessageW(hwnd, LVM_GETEXTENDEDLISTVIEWSTYLE, 0, 0);
@@ -28029,6 +30270,15 @@ HWND WINAPI NtUserCreateWindowEx_hook(DWORD dwExStyle, VOID* pClassName, LPCWSTR
             SendMessageW(hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, LVS_EX_DOUBLEBUFFER, LVS_EX_DOUBLEBUFFER);
         ApplyDiskCleanupCheckboxListViewDark(hwnd);
     }
+
+    // Toolbar — enable double-buffer, rides on the ReBar modernization
+    // toggle (same control family). Unlike TVM/LVM's mask+value
+    // SETEXTENDEDSTYLE, TB_SETEXTENDEDSTYLE replaces the WHOLE value
+    // (wParam unused) -- OR with the existing style instead of just
+    // setting our bit, or this would wipe out MIXEDBUTTONS/DRAWDDARROWS/
+    // etc. that the toolbar may already have.
+    if (isToolbar && g_settings.ExplorerSection && g_settings.LegacyRebarControls)
+        ApplyToolbarDoubleBuffer(hwnd);
 
     return hwnd;
 }
@@ -28052,6 +30302,7 @@ static void CleanupResources()
 static BOOL CALLBACK RemoveSubclassesFromWindow(HWND hwnd, LPARAM)
 {
     RemoveCustomDarkModeFromWindow(hwnd);
+    DefViewBorderUninstall(hwnd);
     ModernBorderUninstall(hwnd);
     if (GetPropW(hwnd, PROP_TV_SUB)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeViewSubclass);
@@ -28060,24 +30311,34 @@ static BOOL CALLBACK RemoveSubclassesFromWindow(HWND hwnd, LPARAM)
     }
     TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_HASLINES_ORIG, TVS_HASLINES);
     TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_NOTOOLTIPS_ORIG, TVS_NOTOOLTIPS);
+    TreeRuntimeRestoreStyleBit(hwnd, PROP_TV_TRACKSELECT_ORIG, TVS_TRACKSELECT);
+    if (GetPropW(hwnd, PROP_TV_TRACKSELECT_CURSOR_SUB)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, TvTrackSelectCursorSubclassProc);
+        RemovePropW(hwnd, PROP_TV_TRACKSELECT_CURSOR_SUB);
+    }
     // These three are installed with raw SetWindowSubclass and previously
     // only removed themselves in their own WM_NCDESTROY -- if the mod is
     // disabled while such a window is still alive (e.g. Explorer's nav pane
     // is long-lived, so TreeCursorSubclassProc is essentially always
     // installed), the subclass proc stayed in comctl32's chain after the
     // DLL unloaded, and the next message dispatched into freed memory.
-    if (GetPropW(hwnd, kTreeCursorSubclassProp)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TreeCursorSubclassProc);
-        RemovePropW(hwnd, kTreeCursorSubclassProp);
-    }
-    if (GetPropW(hwnd, kSplitButtonChevronSubclassProp)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SplitButtonChevronSubclassProc);
-        RemovePropW(hwnd, kSplitButtonChevronSubclassProp);
-    }
+    TreeCursorRemoveFromWindow(hwnd);
+    SplitButtonChevronRemoveFromWindow(hwnd);
     if (GetPropW(hwnd, kClassicDlgToolbarSubclassProp)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClassicDlgToolbarSubclassProc);
         RemovePropW(hwnd, kClassicDlgToolbarSubclassProp);
     }
+    if (GetPropW(hwnd, kPropLightPaneSubclassProp)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, PropLightPaneSubclassProc);
+        RemovePropW(hwnd, kPropLightPaneSubclassProp);
+    }
+    // GlyphSampleEraseColor sets this on whatever g_tlsPaintHwnd/WindowFromDC
+    // resolves to at erase time, which is broader than the two subclasses
+    // (TreeCursorSubclassProc, PlacesBarAnimSubclassProc) that remove it on
+    // their own teardown -- sweep it here too so it can't outlive the mod on
+    // some other window.
+    RemovePropW(hwnd, kPropGlyphEraseWarm);
     return TRUE;
 }
 
@@ -28173,7 +30434,6 @@ static Settings LoadSettings()
     }
     next.CheckBoxAnim     = Wh_GetIntSetting(L"GeneralSection.CheckBoxAnim");
     next.AccentRadioButtons= Wh_GetIntSetting(L"GeneralSection.AccentRadioButtons");
-    next.TabPill          = Wh_GetIntSetting(L"GeneralSection.TabPill");
     next.ProgressBars     = Wh_GetIntSetting(L"GeneralSection.ProgressBars");
     next.NormalizeDragDrop = Wh_GetIntSetting(L"GeneralSection.NormalizeDragDrop");
     next.ModernTooltips    = Wh_GetIntSetting(L"GeneralSection.ModernTooltips");
@@ -28197,16 +30457,16 @@ static Settings LoadSettings()
     next.EnableDarkMode      = Wh_GetIntSetting(L"GeneralSection.EnableDarkMode");
     // DarkMode is automatic (follows system)
     {
-        LPCWSTR hex = Wh_GetStringSetting(L"GeneralSection.CustomAccentColor");
+        auto hex = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"GeneralSection.CustomAccentColor"));
         next.CustomAccentColor = 0;
         if (hex[0] == L'#' && wcslen(hex) == 7) {
             unsigned r = 0, g = 0, b = 0;
             if (swscanf(hex + 1, L"%02x%02x%02x", &r, &g, &b) == 3)
                 next.CustomAccentColor = RGB(r, g, b);
         }
-        Wh_FreeStringSetting(hex);
     }
     next.RoundedSelection = Wh_GetIntSetting(L"ExplorerSection.RoundedSelection");
+    next.NavPaneHoverFade = Wh_GetIntSetting(L"ExplorerSection.NavPaneHoverFade");
     next.NeutralSelection = Wh_GetIntSetting(L"ExplorerSection.NeutralSelection");
     next.RoundedGroupHeaders = Wh_GetIntSetting(L"ExplorerSection.RoundedGroupHeaders");
 
@@ -28237,14 +30497,12 @@ static Settings LoadSettings()
     next.ListViewPill         = Wh_GetIntSetting(L"ExplorerSection.ListViewPill");
     next.FluentPinIcon        = Wh_GetIntSetting(L"ExplorerSection.FluentPinIcon");
     {
-        LPCWSTR pinSty = Wh_GetStringSetting(L"ExplorerSection.PinIconStyle");
+        auto pinSty = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.PinIconStyle"));
         next.PinIconStyle = (wcscmp(pinSty, L"filled") == 0) ? 1 : 0;
-        Wh_FreeStringSetting(pinSty);
     }
     {
-        LPCWSTR pinClr = Wh_GetStringSetting(L"ExplorerSection.PinIconColor");
+        auto pinClr = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.PinIconColor"));
         next.PinIconColor = (wcscmp(pinClr, L"accent") == 0) ? 1 : 0;
-        Wh_FreeStringSetting(pinClr);
     }
     next.PinMarginRight = std::clamp(Wh_GetIntSetting(L"ExplorerSection.PinMarginRight"), 0, 32);
     {
@@ -28264,14 +30522,13 @@ static Settings LoadSettings()
     }
     next.ModernizeShellIcons = Wh_GetIntSetting(L"ExplorerSection.ModernizeShellIcons");
     {
-        const wchar_t* s = Wh_GetStringSetting(L"ExplorerSection.GlyphColor");
+        auto s = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"ExplorerSection.GlyphColor"));
         next.GlyphColor = CLR_INVALID;
         if (s[0] == L'#' && wcslen(s) == 7) {
             unsigned r, g, b;
             if (swscanf_s(s + 1, L"%02x%02x%02x", &r, &g, &b) == 3)
                 next.GlyphColor = RGB(r, g, b);
         }
-        Wh_FreeStringSetting(s);
     }
     next.DiskChartAccentColor = Wh_GetIntSetting(L"ExplorerSection.DiskChartAccentColor");
     next.AutoPlayReplacement = Wh_GetIntSetting(L"ExplorerSection.AutoPlayReplacement");
@@ -28289,6 +30546,7 @@ static Settings LoadSettings()
     // Invalidate animation-enabled cache after reload
     next.RegeditSection = Wh_GetIntSetting(L"RegeditSection.Enabled");
     next.RgTransparentBg = Wh_GetIntSetting(L"RegeditSection.TransparentBg");
+    next.RgGlyphIcons = Wh_GetIntSetting(L"RegeditSection.GlyphIcons");
     next.WinverSection = Wh_GetIntSetting(L"WinverSection.Enabled");
     {
         auto bg = WindhawkUtils::StringSetting(
@@ -28311,7 +30569,6 @@ static Settings LoadSettings()
         next.ModernFocusRect = -1; // native passthrough, not "hidden"
         next.CheckBoxAnim = FALSE;
         next.AccentRadioButtons = FALSE;
-        next.TabPill = FALSE;
         next.ProgressBars = FALSE;
         next.NormalizeDragDrop = FALSE;
         next.ModernTooltips = FALSE;
@@ -28329,6 +30586,7 @@ static Settings LoadSettings()
     }
     if (!next.ExplorerSection) {
         next.RoundedSelection = FALSE;
+        next.NavPaneHoverFade = FALSE;
         next.NeutralSelection = FALSE;
         next.RoundedGroupHeaders = FALSE;
         next.AccentColorize = FALSE;
@@ -28356,6 +30614,7 @@ static Settings LoadSettings()
     }
     if (!next.RegeditSection) {
         next.RgTransparentBg = FALSE;
+        next.RgGlyphIcons = FALSE;
     }
 
     Settings previous = *GetSettings();
@@ -28459,17 +30718,10 @@ static void DuiApplyDarkToChildIfRelevant(HWND hwnd)
         _wcsicmp(cls, L"SysListView32") == 0 ||
         _wcsicmp(cls, L"SysTreeView32") == 0 ||
         _wcsicmp(cls, L"SysHeader32") == 0) {
-        // DuiApplyDarkForPaintWindow calls this on EVERY DirectUI element
-        // background paint (unlike the EnumThreadWindows cascade below it,
-        // which is already throttled via appliedRoots), so without a guard
-        // this re-issued SetWindowTheme on the same hwnd hundreds of times a
-        // second during scroll/redraw. Each successful SetWindowTheme fires
-        // WM_THEMECHANGED, which invalidates DirectUI's own font-metric/
-        // layout cache -- this was the actual cause of the modern grouped
-        // ListView's group-header font-height flicker (confirmed: disabling
-        // custom dark mode, which no-ops this whole function, made the bug
-        // disappear; disabling only the text-drawing pipeline did not).
-        // Only theme a window that isn't already themed.
+        // Guards against re-issuing SetWindowTheme on the same hwnd every
+        // paint -- each call fires WM_THEMECHANGED, which invalidates
+        // DirectUI's font-metric cache and was the cause of the grouped
+        // ListView's group-header flicker.
         if (IsKnownWindowThemeApplied(hwnd, L"DarkMode_Explorer", nullptr))
             return;
         if (g_cbdAllowDark) g_cbdAllowDark(hwnd, true);
@@ -30299,18 +32551,11 @@ static constexpr char kSvgZipFilled[] =
     "M557.8840669642,110c-4.3525982204,0-7.8810762415,3.5284780211-7.8810762415,7.8810762415v38.8258329382h-.0029907227v85.4120145788c0,4.3525982204,3.5284780211,7.8810762415,7.8810762415,7.8810762415h34.237847517c4.3525982204,0,7.8810762415-3.5284780211,7.8810762415-7.8810762415v-87.8975492468h-.0029907227v-36.3402982702c0-4.3525982204-3.5284780211-7.8810762415-7.8810762415-7.8810762415h-34.2318660717Z"
     "M791.4583129883,174.7916870117c-5.694152832-12.6391601562-13.3333129883-23.75-22.9166259766-33.3333740234-9.5833740234-9.5833129883-20.6942138672-17.2224731445-33.3333740234-22.9166259766s-25.9024658203-8.5416870117-39.7916259766-8.5416870117h-37.5356107702c-4.3525982204,0-7.8810762415,3.5284780211-7.8810762415,7.8810762415v132.1189237585c0,7.03125-1.3023071289,13.5413818359-3.90625,19.53125-2.6038818359,5.9898071289-6.1851196289,11.2632446289-10.7421875,15.8203125-4.5570068359,4.5570068359-9.8304443359,8.1382446289-15.8203125,10.7421875-5.9898071289,2.6038818359-12.5,3.90625-19.53125,3.90625v150h13.28125c4.4273681641,0,8.7890625.2601318359,13.0859375.78125,4.296875.5210571289,8.203125,1.6273193359,11.71875,3.3203125,3.515625,1.6929321289,6.3804931641,4.1663818359,8.59375,7.421875,2.2133178711,3.2554321289,3.3203125,7.7476196289,3.3203125,13.4765625,0,5.7288818359-1.1069946289,10.2866821289-3.3203125,13.671875-2.2132568359,3.3851318359-5.078125,5.9241943359-8.59375,7.6171875-3.515625,1.6929321289-7.421875,2.7991943359-11.71875,3.3203125-4.296875.5210571289-8.6585693359.78125-13.0859375.78125-2.34375,0-4.6226196289-.0648803711-6.8359375-.1953125-2.2132568359-.1304931641-4.3616943359-.1953125-6.4453125-.1953125v150h.0014648438v38.7856107702c0,4.3525982204,3.5284780211,7.8810762415,7.8810762415,7.8810762415h87.5341459265c13.8891601562,0,27.1524658203-2.8475341797,39.7916259766-8.5416870117s23.75-13.3333129883,33.3333740234-22.9166870117c9.5833129883-9.5833129883,17.2224731445-20.694152832,22.9166259766-33.3333129883,5.6942138672-12.6391601562,8.5416870117-25.9025268555,8.5416870117-39.7916870117V214.5833129883c0-13.8891601562-2.8474731445-27.1524658203-8.5416870117-39.7916259766Z";
 
-// winver "About Windows" banner replacement -- see WinverDrawBanner. The
-// flag+wordmark lockup ("Logo": flag squares + "Windows 11" text as vector
-// letterforms) is authored with clean <path> elements throughout -- an
-// earlier <polygon>-based version of some letters introduced small
-// rendering artifacts. Fit using the SOURCE SVG's own full-canvas viewBox
-// (1282.4272460938 x 204.4983520508, see kWinverViewBoxW/H in
-// WinverDrawBanner) so the logo lands at its authored position/size without
-// parsing a separate background geometry -- WinverPaintNow's own GDI
-// FillRect (banner-only mode) or the whole-dialog backdrop fill (WinverBackdropSetup,
-// opt-in) already cover the background pixels.
-// Original source colors (#a0a0a0 bg / #212121 logo) are discarded;
-// re-rendered with BTNFACE / the live accent color at draw time instead.
+// Winver banner replacement (see WinverDrawBanner). Authored with <path>
+// elements only -- an earlier <polygon>-based version caused artifacts. Fit
+// against the source SVG's own viewBox so the logo lands at its authored
+// position; original colors are discarded and re-rendered with BTNFACE/
+// accent at draw time.
 static constexpr char kSvgWinverBannerLogo[] =
     // "W"
     "M556.3152858488,135.7807370495h-13.900409037l-13.554031484-51.5930405303-13.7033151322,51.5930405303h-14.2075088422l-18.6363745982-67.0607868396h12.6078044492l13.4391951963,53.3422313066,14.6719311883-53.3422313066h12.7346638177l13.7908967529,53.6587979658,12.7637871747-53.6587979658h12.1738452756l-18.180484761,67.0607868396Z "
@@ -30347,10 +32592,64 @@ static constexpr char kSvgWinverBannerLogo[] =
 // plus g_glyphProgFilesNames/g_glyphPhoneNames below, all written by that
 // background thread and read from the UI thread during per-item paint.
 static std::mutex g_glyphMapMutex;
-// Number of in-flight glyph background threads (build + drive-arrival
-// refresh) -- Wh_ModUninit waits (bounded) for this to reach 0 before the
-// DLL unloads out from under a still-running thread.
-static std::atomic<int> g_glyphBgThreadCount{0};
+// Background shell-query workers are retained by HANDLE until they signal.
+// A counter alone is insufficient because it can reach zero just before the
+// thread executes its final return epilogue inside this DLL.
+static std::atomic<uint64_t> g_glyphBgGeneration{1};
+static std::atomic<bool> g_glyphBgUnloading{false};
+static std::mutex g_glyphBgThreadsMutex;
+static std::vector<HANDLE> g_glyphBgThreads;
+
+static void GlyphBgBeginUnload()
+{
+    std::lock_guard<std::mutex> lock(g_glyphBgThreadsMutex);
+    if (!g_glyphBgUnloading.exchange(true, std::memory_order_acq_rel))
+        g_glyphBgGeneration.fetch_add(1, std::memory_order_acq_rel);
+}
+
+static bool GlyphBgStartWorker(
+    LPTHREAD_START_ROUTINE startRoutine, void* parameter)
+{
+    std::lock_guard<std::mutex> lock(g_glyphBgThreadsMutex);
+    if (g_glyphBgUnloading.load(std::memory_order_acquire))
+        return false;
+
+    for (auto it = g_glyphBgThreads.begin();
+         it != g_glyphBgThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_glyphBgThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    HANDLE thread = CreateThread(
+        nullptr, 0, startRoutine, parameter, 0, nullptr);
+    if (!thread)
+        return false;
+    g_glyphBgThreads.push_back(thread);
+    return true;
+}
+
+static void GlyphBgWaitForWorkers()
+{
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_glyphBgThreadsMutex);
+        threads.swap(g_glyphBgThreads);
+    }
+    for (HANDLE thread : threads) {
+        DWORD result = WaitForSingleObject(thread, 2000);
+        if (result == WAIT_TIMEOUT) {
+            Wh_Log(L"Waiting for a glyph shell-query worker to finish");
+            result = WaitForSingleObject(thread, INFINITE);
+        }
+        if (result != WAIT_OBJECT_0)
+            Wh_Log(L"Failed to join a glyph shell-query worker");
+        CloseHandle(thread);
+    }
+}
 static std::unordered_map<int, const wchar_t*> g_glyphIndexMap;
 static std::unordered_map<int, const wchar_t*> g_glyphFilledMap;
 static std::unordered_map<std::wstring, const wchar_t*> g_glyphKnownFolderNames;
@@ -30426,7 +32725,9 @@ static bool SvgParsePathToGeometry(const char* d, ID2D1PathGeometry** ppOut) {
         }
         case 'C': case 'c': {
             float x1, y1, x2, y2, x, y;
+            bool any = false;
             while (readF(x1) && readF(y1) && readF(x2) && readF(y2) && readF(x) && readF(y)) {
+                any = true;
                 float ax1 = x1, ay1 = y1, ax2 = x2, ay2 = y2, ax = x, ay = y;
                 if (rel) { ax1 += cx; ay1 += cy; ax2 += cx; ay2 += cy; ax += cx; ay += cy; }
                 sink->AddBezier(D2D1::BezierSegment(
@@ -30434,7 +32735,13 @@ static bool SvgParsePathToGeometry(const char* d, ID2D1PathGeometry** ppOut) {
                 lastCtrlX = ax2; lastCtrlY = ay2; cx = ax; cy = ay;
                 if (!isNum()) break;
             }
-            lastCmd = cmd; break;
+            // Only keep lastCmd when a coordinate group actually advanced p
+            // (matches every other case) -- otherwise a failed first read
+            // leaves lastCmd == cmd with p unmoved, and the implicit-repeat
+            // branch above re-enters this same case at the same position
+            // forever.
+            lastCmd = any ? cmd : 0;
+            break;
         }
         case 'S': case 's': {
             float x2, y2, x, y;
@@ -30502,18 +32809,69 @@ static bool SvgParsePathToGeometry(const char* d, ID2D1PathGeometry** ppOut) {
     return true;
 }
 
+// The color DrawSvgGeom should Clear() its render target to before drawing
+// the glyph -- the shared/cached D2D render target (CreateBoundD2DRenderTarget/
+// D2DGetThreadCache) is reused across unrelated draw sites, so without this
+// the glyph's own sliver of `rc` can read as a stray leftover fill from an
+// earlier button/checkbox/tab paint on the same thread, causing intermittent
+// black squares.
+//
+// GetPixel is the only way to see a live hover/selection tint, so it's used
+// to sample -- but distrusted for pure black specifically: a DPI-unaware
+// window's top-level buffer is virtualized by the OS, and its first-ever
+// paint can genuinely read back RGB(0,0,0) for a cell that hasn't had real
+// content composited into it yet (not a torn/partial value, a valid-looking
+// but stale sample). Rejecting black outright would also swallow real dark
+// selection tints, so instead a per-window "warm" flag (kPropGlyphEraseWarm)
+// tracks the first trustworthy non-black sample; every call before that
+// falls back to a fixed color, every call after trusts GetPixel normally.
+//
+// TransparencyCompat skips the sample entirely, same as SampleBackground's
+// own handling -- with an external DWM transparency mod compositing the
+// client area, GetPixel would just read a live blur snapshot, not a stable
+// color to erase back to.
+
+static bool IsWindowDpiUnaware(HWND hwnd)
+{
+    if (!hwnd) return false;
+    DPI_AWARENESS_CONTEXT ctx = GetWindowDpiAwarenessContext(hwnd);
+    return ctx && GetAwarenessFromDpiAwarenessContext(ctx) == DPI_AWARENESS_UNAWARE;
+}
+
+// Live-samples the real pixel already at rc's midpoint instead of assuming a
+// flat system color. Used both by DrawSvgGeom's own erase step and by the
+// icon-text-gap erase-rect fill in SendMessageW_hook's CDDS_ITEMPOSTPAINT
+// handler. Sampling unconditionally (rather than special-casing
+// TransparencyCompat to a flat GetSysColor(COLOR_WINDOW) fill, as an earlier
+// version of this code did) is what lets both call sites correctly pick up
+// whatever's really underneath -- including a hover/selection highlight
+// already painted there -- instead of flattening it to plain background.
+static COLORREF GlyphSampleEraseColor(HDC hdc, const RECT& rc, bool dark)
+{
+    HWND paintHwnd = g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc);
+    COLORREF sampled = GetPixel(hdc, rc.left, (rc.top + rc.bottom) / 2);
+    // Only pure black in dark mode needs the extra check -- pure black in
+    // light mode is already rejected below regardless of DPI awareness,
+    // and a cold DPI-unaware buffer reads as black, never as white, so
+    // the existing white-while-dark rejection needs no equivalent guard.
+    bool suspectCold = dark && sampled == RGB(0, 0, 0) &&
+        IsWindowDpiUnaware(paintHwnd) &&
+        !GetPropW(paintHwnd, kPropGlyphEraseWarm);
+    if (sampled != CLR_INVALID && !suspectCold &&
+        !(dark && sampled == RGB(0xFF, 0xFF, 0xFF)) &&
+        !(!dark && sampled == RGB(0, 0, 0))) {
+        if (paintHwnd)
+            SetPropW(paintHwnd, kPropGlyphEraseWarm, (HANDLE)1);
+        return sampled;
+    }
+    return dark ? kPropDkBg : GetSysColor(COLOR_WINDOW);
+}
+
 // Renders one SVG geometry into `rc` using uniform scale + center fit.
 // Bounds are computed from the geometry itself via GetBounds — no hardcoded BB needed.
 static void DrawSvgGeom(HDC hdc, const RECT& rc, COLORREF cr,
                         ID2D1PathGeometry* geom, float extraScale = 1.0f,
                         float rotationDeg = 0.0f) {
-    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> rt;
-    {
-        ID2D1DCRenderTarget* raw = nullptr;
-        RECT rcCopy = rc;
-        if (FAILED(CreateBoundD2DRenderTarget(hdc, &rcCopy, g_d2dFactory, &raw)) || !raw) return;
-        rt.Attach(raw);
-    }
     D2D1_RECT_F bb;
     if (FAILED(geom->GetBounds(nullptr, &bb))) return;
     const float contentW = bb.right  - bb.left;
@@ -30526,16 +32884,95 @@ static void DrawSvgGeom(HDC hdc, const RECT& rc, COLORREF cr,
     const float offY  = (targetH - contentH * scale) / 2.0f - bb.top  * scale;
     const D2D1_COLOR_F clr = {
         GetRValue(cr) / 255.f, GetGValue(cr) / 255.f, GetBValue(cr) / 255.f, 1.0f };
-    rt->BeginDraw();
-    D2D1::Matrix3x2F transform = D2D1::Matrix3x2F(scale, 0, 0, scale, offX, offY);
-    if (rotationDeg != 0.0f) {
-        transform = transform * D2D1::Matrix3x2F::Rotation(rotationDeg,
-            D2D1::Point2F(targetW / 2.0f, targetH / 2.0f));
+
+    // Sets the transform and fills `geom` at the scale/offset already
+    // computed above. Deliberately doesn't own BeginDraw/EndDraw -- each
+    // branch below needs exactly one Begin/End cycle each (with its own,
+    // different erase step in between, or none), not this fill wrapped in
+    // a second cycle of its own.
+    auto fillGeometry = [&](ID2D1DCRenderTarget* rtRaw) {
+        D2D1::Matrix3x2F transform = D2D1::Matrix3x2F(scale, 0, 0, scale, offX, offY);
+        if (rotationDeg != 0.0f) {
+            transform = transform * D2D1::Matrix3x2F::Rotation(rotationDeg,
+                D2D1::Point2F(targetW / 2.0f, targetH / 2.0f));
+        }
+        rtRaw->SetTransform(transform);
+        if (ID2D1SolidColorBrush* brush = GetCachedSolidBrush(rtRaw, clr))
+            rtRaw->FillGeometry(geom, brush);
+        rtRaw->SetTransform(D2D1::Matrix3x2F::Identity());
+    };
+
+    // TransparencyCompat means a real DWM-transparency mod (Translucent
+    // Windows or similar) is compositing this client area. Clear()ing to any
+    // solid color (sampled or not) would replace the real blur/translucency
+    // with an opaque patch, and skipping the erase entirely would just leave
+    // whatever this thread's shared, uncleared D2D render target has cached
+    // from an unrelated earlier draw -- neither path ever actually looks at
+    // what's really on screen right now (hover highlight included).
+    //
+    // So actually read it: BitBlt the real current pixels (hover tint,
+    // DWM blur, anything) into a small memory DC first -- a genuine GDI
+    // pixel copy, not the D2D render target's own isolated buffer -- draw
+    // the glyph on top of that real copy, then BitBlt the composed result
+    // back. This is more expensive than the plain paths (one extra
+    // CreateCompatibleBitmap + two BitBlts per glyph), but TransparencyCompat
+    // is an opt-in setting for a narrow audience already running a DWM
+    // transparency mod, not the common case.
+    if (g_settings.TransparencyCompat) {
+        const int w = rc.right - rc.left;
+        const int h = rc.bottom - rc.top;
+        if (w <= 0 || h <= 0) return;
+        HDC memDC = CreateCompatibleDC(hdc);
+        if (!memDC) return;
+        HBITMAP bmp = CreateCompatibleBitmap(hdc, w, h);
+        if (!bmp) { DeleteDC(memDC); return; }
+        HBITMAP oldBmp = static_cast<HBITMAP>(SelectObject(memDC, bmp));
+        BitBlt(memDC, 0, 0, w, h, hdc, rc.left, rc.top, SRCCOPY);
+
+        RECT localRc = {0, 0, w, h};
+        ID2D1DCRenderTarget* raw = nullptr;
+        if (SUCCEEDED(CreateBoundD2DRenderTarget(memDC, &localRc, g_d2dFactory, &raw)) && raw) {
+            Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> rtMem;
+            rtMem.Attach(raw);
+            // No Clear() -- memDC was just seeded with the real destination
+            // pixels via the BitBlt above, so this fills straight on top of
+            // them, unlike the plain path below which erases first.
+            rtMem->BeginDraw();
+            fillGeometry(rtMem.Get());
+            if (rtMem->EndDraw() == D2DERR_RECREATE_TARGET)
+                CachedTlsRTRecreate();
+        }
+
+        BitBlt(hdc, rc.left, rc.top, w, h, memDC, 0, 0, SRCCOPY);
+        SelectObject(memDC, oldBmp);
+        DeleteObject(bmp);
+        DeleteDC(memDC);
+
+        // The shared per-thread render target above is still bound to the
+        // memDC just destroyed. Rebind it onto the real, still-live hdc
+        // before returning so it's never left pointing at a freed handle --
+        // no drawing happens here, just BindDC, so this has no visible
+        // effect of its own.
+        ID2D1DCRenderTarget* rebind = nullptr;
+        RECT rcCopy = rc;
+        if (SUCCEEDED(CreateBoundD2DRenderTarget(hdc, &rcCopy, g_d2dFactory, &rebind)) && rebind)
+            rebind->Release();
+        return;
     }
-    rt->SetTransform(transform);
-    if (ID2D1SolidColorBrush* brush = GetCachedSolidBrush(rt.Get(), clr))
-        rt->FillGeometry(geom, brush);
-    rt->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> rt;
+    {
+        ID2D1DCRenderTarget* raw = nullptr;
+        RECT rcCopy = rc;
+        if (FAILED(CreateBoundD2DRenderTarget(hdc, &rcCopy, g_d2dFactory, &raw)) || !raw) return;
+        rt.Attach(raw);
+    }
+    rt->BeginDraw();
+    const COLORREF eraseClr = GlyphSampleEraseColor(hdc, rc, IsSystemDarkMode());
+    const D2D1_COLOR_F eraseD2D = {
+        GetRValue(eraseClr) / 255.f, GetGValue(eraseClr) / 255.f, GetBValue(eraseClr) / 255.f, 1.0f };
+    rt->Clear(eraseD2D);
+    fillGeometry(rt.Get());
     if (rt->EndDraw() == D2DERR_RECREATE_TARGET) {
         rt.Reset();
         CachedTlsRTRecreate();
@@ -31598,26 +34035,13 @@ static void PinContentIconClearCache()
 
 static bool PinContentIconIsImageresModuleUncached(HMODULE module)
 {
-    // imageres.dll is a pure-resource DLL, and Windows commonly loads those
-    // via LOAD_LIBRARY_AS_DATAFILE/LOAD_LIBRARY_AS_IMAGE_RESOURCE, which map
-    // the file as a section rather than registering it as a real loaded
-    // module -- confirmed live (three failed attempts before this one):
-    //   1. Handle equality against GetModuleHandleW's return: fails, because
-    //      GetModuleHandleW doesn't find/return these tagged loads at all
-    //      (it returned NULL for imageres.dll even though shell32.dll
-    //      plainly had a live handle to it).
-    //   2. GetModuleFileNameW-based path comparison (same helper
-    //      ShellIconIsShell32Module uses): fails with ERROR_MOD_NOT_FOUND on
-    //      a tagged handle, masked or not -- these mappings are never added
-    //      to the PEB's loaded-module list GetModuleFileNameW walks.
-    //   3. Masking the tag bits first: doesn't help, same failure -- the
-    //      handle was never a real LDR_DATA_TABLE_ENTRY to begin with.
-    // K32GetMappedFileNameW (kernel32.dll export, Windows 7+; no extra
-    // @compilerOptions entry needed) resolves the file behind *any* mapped
-    // address the same way VirtualQuery does, independent of how it got
-    // mapped -- verified working against a live LOAD_LIBRARY_AS_IMAGE_RESOURCE
-    // handle. Returns an NT device path (\Device\HarddiskVolumeN\...), not a
-    // drive letter, but the substring check below doesn't care about the
+    // imageres.dll is a pure-resource DLL, loaded via
+    // LOAD_LIBRARY_AS_DATAFILE/LOAD_LIBRARY_AS_IMAGE_RESOURCE, which maps it
+    // as a section rather than a real loaded module -- GetModuleHandleW and
+    // GetModuleFileNameW-based lookups both fail to find it.
+    // K32GetMappedFileNameW resolves the file behind any mapped address
+    // regardless of how it was mapped, returning an NT device path (not a
+    // drive letter), but the substring check below doesn't care about the
     // prefix.
     wchar_t path[MAX_PATH] = {};
     DWORD len = K32GetMappedFileNameW(GetCurrentProcess(), module, path, ARRAYSIZE(path));
@@ -31921,7 +34345,10 @@ static COLORREF WinverBgColor(bool dark)
 // or the whole-dialog backdrop hole (opt-in, see WinverBackdropSetup).
 static constexpr float kWinverViewBoxW = 1282.4272460938f;
 static constexpr float kWinverViewBoxH = 204.4983520508f;
-static constexpr UINT kWinverStartLogoAnimMsg = WM_APP + 0x5A1;
+// Registered at runtime in Wh_ModInit (RegisterWindowMessageW) rather than a
+// fixed WM_APP+N value, to avoid colliding with another injected mod/app
+// using the same offset in this process -- see g_rgRefreshColorsMessage.
+static std::atomic<UINT> g_winverStartLogoAnimMsg{0};
 static constexpr UINT_PTR kWinverLogoAnimTimerId = 0x5A2;
 static constexpr DWORD kWinverLogoAnimDurationMs = 520;
 static constexpr float kWinverLogoAnimMinScale = 0.94f;
@@ -32005,8 +34432,7 @@ static void WinverDrawBanner(HDC hdc, const RECT& rc, float animT = 1.0f,
     // viewBox height rather than a flat pixel count, so it stays consistent
     // across DPI/dialog sizes instead of needing its own separate scaling.
     const float yNudge = kWinverViewBoxH * scale * 0.12f;
-    // Fixed device-pixel nudge; reads consistently regardless of dialog size.
-    constexpr float kExtraDownPx = 2.0f;
+    const float kExtraDownPx = 2.0f * scale;
     rt->SetTransform(D2D1::Matrix3x2F(scale, 0, 0, scale, offX, offY + yNudge + kExtraDownPx));
 
     D2D1_RECT_F logoBB{};
@@ -32682,12 +35108,9 @@ static void WinverRemoveTextSubclasses(HWND hDlg)
         EnumChildWindows(hDlg, WinverRemoveTextSubclassEnum, 0);
 }
 
-// The Separator control's own resource-template width/position left it
-// visibly off-center in the dialog (more empty space on one side than the
-// other, pre-existing in the original template, not something this mod
-// introduced) -- hiding it and drawing a full-width line ourselves (see
-// g_winverSeparatorY / WinverDrawSeparatorLine above WinverPaintNow) fixes
-// both the off-center width and the >1px thickness in one move.
+// Hides the resource-template Separator (off-center, >1px thick) and draws
+// a full-width 1px line ourselves instead (see g_winverSeparatorY /
+// WinverDrawSeparatorLine above WinverPaintNow).
 static void WinverFixSeparator(HWND hDlg)
 {
     HWND hSep = GetDlgItem(hDlg, kWinverSeparatorCtrlId);
@@ -32751,29 +35174,35 @@ static void WinverEnsureSettingsButton(HWND hDlg)
         SendMessageW(g_winverSettingsBtn, WM_SETFONT, (WPARAM)hFont, TRUE);
 }
 
+static LRESULT WinverStartLogoAnimNow(HWND hWnd)
+{
+    if (!SysAnimationsEnabled()) {
+        g_winverLogoAnimPending.store(false, std::memory_order_release);
+        g_winverLogoAnimating.store(false, std::memory_order_release);
+        KillTimer(hWnd, kWinverLogoAnimTimerId);
+        WinverPaintBannerAnimFrame(hWnd);
+        return 0;
+    }
+
+    const bool wasAnimating =
+        g_winverLogoAnimating.load(std::memory_order_acquire);
+    if (!wasAnimating) {
+        g_winverLogoAnimPending.store(false, std::memory_order_release);
+        g_winverLogoAnimStart.store(GetTickCount(), std::memory_order_release);
+        g_winverLogoAnimating.store(true, std::memory_order_release);
+    }
+    SetTimer(hWnd, kWinverLogoAnimTimerId, 16, nullptr);
+    if (!wasAnimating)
+        WinverPaintBannerAnimFrame(hWnd);
+    return 0;
+}
+
 static LRESULT CALLBACK WinverDialogSubclassProc(HWND hWnd, UINT uMsg,
     WPARAM wParam, LPARAM lParam, DWORD_PTR /*ref*/)
 {
-    if (uMsg == kWinverStartLogoAnimMsg) {
-        if (!SysAnimationsEnabled()) {
-            g_winverLogoAnimPending.store(false, std::memory_order_release);
-            g_winverLogoAnimating.store(false, std::memory_order_release);
-            KillTimer(hWnd, kWinverLogoAnimTimerId);
-            WinverPaintBannerAnimFrame(hWnd);
-            return 0;
-        }
-
-        const bool wasAnimating =
-            g_winverLogoAnimating.load(std::memory_order_acquire);
-        if (!wasAnimating) {
-            g_winverLogoAnimPending.store(false, std::memory_order_release);
-            g_winverLogoAnimStart.store(GetTickCount(), std::memory_order_release);
-            g_winverLogoAnimating.store(true, std::memory_order_release);
-        }
-        SetTimer(hWnd, kWinverLogoAnimTimerId, 16, nullptr);
-        if (!wasAnimating)
-            WinverPaintBannerAnimFrame(hWnd);
-        return 0;
+    if (const UINT startMsg = g_winverStartLogoAnimMsg.load(std::memory_order_acquire);
+        startMsg && uMsg == startMsg) {
+        return WinverStartLogoAnimNow(hWnd);
     }
 
     if (uMsg == WM_TIMER && wParam == kWinverLogoAnimTimerId) {
@@ -32821,12 +35250,9 @@ static LRESULT CALLBACK WinverDialogSubclassProc(HWND hWnd, UINT uMsg,
                LOWORD(wParam) == kWinverSettingsBtnId && HIWORD(wParam) == BN_CLICKED) {
         ShellExecuteW(hWnd, L"open", L"ms-settings:about", nullptr, nullptr, SW_SHOWNORMAL);
     } else if (WinverUsesBlackBackground() && uMsg == WM_CTLCOLORSTATIC) {
-        // Backdrop/black modes only: each static text control paints its OWN
-        // background rect by asking its parent for a brush here;
-        // WinverPaintNow's whole-client black fill only covers the gaps
-        // AROUND child controls (GetDC respects WS_CLIPCHILDREN), so
-        // without this override every label would still show up as a normal
-        // opaque rectangle punched out of the material/black background.
+        // Backdrop/black modes: each static paints its own bg here because
+        // the whole-client black fill only covers gaps around children
+        // (WS_CLIPCHILDREN).
         HDC hdcStatic = reinterpret_cast<HDC>(wParam);
         SetBkMode(hdcStatic, TRANSPARENT);
         SetTextColor(hdcStatic,
@@ -32905,7 +35331,10 @@ static void CALLBACK WinverWinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd,
         g_winverLogoAnimStart.store(GetTickCount(), std::memory_order_release);
         g_winverLogoAnimating.store(true, std::memory_order_release);
         RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
-        PostMessageW(hWnd, kWinverStartLogoAnimMsg, 0, 0);
+        if (const UINT startMsg = g_winverStartLogoAnimMsg.load(std::memory_order_acquire))
+            PostMessageW(hWnd, startMsg, 0, 0);
+        else
+            WinverStartLogoAnimNow(hWnd);
     }
 }
 
@@ -32977,12 +35406,11 @@ static void WinverDisableRuntime()
 }
 
 // ── General SVG icon registry ────────────────────────────────────────────
-// `scale` shrinks an icon relative to its own uniform-fit size (1.0 = fills
-// the target rect as tightly as the SVG's own bounds allow). Use it for
-// icons that read visually larger than their neighbors at the same size.
-// `scaleOnlyInCabinet`: when true, `scale` only applies inside Explorer's
-// main CabinetWClass window (other hosts render at 1.0); when false (the
-// default), `scale` applies in every host.
+// `scale`: shrinks an icon relative to its own uniform-fit size (1.0 = fills
+// the target rect as tightly as the SVG's bounds allow); use for icons that
+// read visually larger than their neighbors. `scaleOnlyInCabinet`: when
+// true, restricts `scale` to Explorer's main CabinetWClass window (other
+// hosts render at 1.0); false (default) applies it everywhere.
 struct SvgIconPaths {
     const char* normal;
     const char* filled;
@@ -33070,14 +35498,9 @@ static float MusicShimmyAngle(float animT) {
     return MUSIC_SHIMMY_AMPLITUDE_DEG * sinf(animT * MUSIC_SHIMMY_CYCLES * kTwoPi) * envelope;
 }
 
-// Shared scale-suppression rule: NavPaneWinUIMetrics off forces these 5
-// icons back to unscaled (1.0x) in their settled DrawSvgGlyph render. Every
-// intro animation for these icons must apply the exact same rule, or the
-// intro plays at the configured scale and then jumps to 1.0x the instant it
-// hands off to the settled render -- used by DrawSvgGlyph below and by each
-// icon's own intro function (DrawOneDriveWipeIn, DrawDesktopBloomRise,
-// DrawDriveSwirlOn, DrawVideosBuildIn, and DrawCrossfadeSingle for Desktop's
-// phase 1) so intro and settle always agree.
+// NavPaneWinUIMetrics off forces these 5 icons to 1.0x scale; every intro
+// function for them must apply the same rule via IconIntroApplyConfigScale
+// or intro/settle will visibly jump.
 static bool IconIntroApplyConfigScale(wchar_t ch, bool scaleOnlyInCabinet, bool inCabinetWClass)
 {
     bool applyConfigScale = scaleOnlyInCabinet ? inCabinetWClass : true;
@@ -33107,6 +35530,235 @@ static bool DrawSvgGlyph(HDC hdc, const RECT& rc, COLORREF cr, wchar_t ch, bool 
 
 static bool SvgGlyphGeometryAvailable(wchar_t ch, bool filled) {
     return SvgGeomEnsure(ch, filled) != nullptr;
+}
+
+// ── Regedit TreeView icon replacement (RegeditSection.GlyphIcons) ────────
+// Bakes the This Computer / Folder glyphs into standalone HICONs for
+// RgSHDefExtractIconW_Hook. No filled-glyph swap: every entry shares the
+// same Normal glyph shape and differs only by fill color (accent on the
+// selected-item variant, matching the nav pane's own convention).
+struct RgGlyphIconCacheEntry {
+    UINT id;      // 109 (This Computer), or 3/4 (folder/key, imageres.dll index)
+    int size;
+    bool dark;
+    COLORREF accent;
+    bool useAccent;
+    HICON icon;
+};
+static SRWLOCK g_rgGlyphIconCacheLock = SRWLOCK_INIT;
+static constexpr size_t kRgGlyphIconCacheMaxEntries = 32;
+static std::vector<RgGlyphIconCacheEntry> g_rgGlyphIconCache;
+
+// Caller holds g_rgGlyphIconCacheLock exclusively.
+static void RgGlyphIconClearCacheLocked()
+{
+    for (RgGlyphIconCacheEntry& cached : g_rgGlyphIconCache)
+        if (cached.icon)
+            DestroyIcon(cached.icon);
+    g_rgGlyphIconCache.clear();
+}
+
+static void RgThisPcAccentIconClear(); // defined below, alongside its cache
+
+static void RgGlyphIconClearCache()
+{
+    AcquireSRWLockExclusive(&g_rgGlyphIconCacheLock);
+    RgGlyphIconClearCacheLocked();
+    ReleaseSRWLockExclusive(&g_rgGlyphIconCacheLock);
+    RgThisPcAccentIconClear();
+}
+
+// Bakes one standalone HICON via DrawGlyphDW (DirectWrite text render of a
+// Segoe Fluent Icons codepoint) rather than SvgGeomEnsure/FillGeometry --
+// lighter than the D2D geometry-fill pipeline and reuses the exact call
+// every nav-pane icon's font fallback already goes through.
+static HICON RgGlyphIconCreate(int size, wchar_t glyphCh, COLORREF color)
+{
+    if (size <= 0)
+        return nullptr;
+
+    HDC hScreen = GetDC(nullptr);
+    if (!hScreen) return nullptr;
+    HDC hDC = CreateCompatibleDC(hScreen);
+    if (!hDC) { ReleaseDC(nullptr, hScreen); return nullptr; }
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = size;
+    bmi.bmiHeader.biHeight = -size;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!hBmp) {
+        DeleteDC(hDC);
+        ReleaseDC(nullptr, hScreen);
+        return nullptr;
+    }
+    HBITMAP hPrev = static_cast<HBITMAP>(SelectObject(hDC, hBmp));
+    ZeroMemory(bits, static_cast<SIZE_T>(size) * size * 4);
+
+    // fontSize at 80% of the canvas -- bigger than PinContentIcon's 70%
+    // (tuned for a small secondary badge, not a primary tree glyph) but
+    // short of the nav pane's full-canvas convention, which needed no
+    // margin because NavMetricsGetIconArtSize already centers the art
+    // inside a separately-computed text gap. Here the icon and text share
+    // a single fixed-size TreeView image-list cell with no such margin
+    // logic, so a small reserved edge keeps the glyph from visually
+    // crowding into the text/selection padding.
+    RECT rc = { 0, 0, size, size };
+    const int fontSize = (size * 8) / 10;
+    wchar_t buf[2] = { glyphCh, 0 };
+    if (!DrawGlyphDW(hDC, rc, color, buf, fontSize)) {
+        SelectObject(hDC, hPrev);
+        DeleteObject(hBmp);
+        DeleteDC(hDC);
+        ReleaseDC(nullptr, hScreen);
+        return nullptr;
+    }
+
+    ConvertPremultipliedDibToStraightAlpha(bits, size, size);
+    HBITMAP hMask = CreateAlphaZeroMaskBitmap(size, size, bits);
+    SelectObject(hDC, hPrev);
+
+    HICON icon = nullptr;
+    if (hMask) {
+        ICONINFO ii = {};
+        ii.fIcon = TRUE;
+        ii.hbmColor = hBmp;
+        ii.hbmMask = hMask;
+        icon = CreateIconIndirect(&ii);
+        DeleteObject(hMask);
+    }
+    DeleteObject(hBmp);
+    DeleteDC(hDC);
+    ReleaseDC(nullptr, hScreen);
+    return icon;
+}
+
+// `useAccent` is explicit rather than inferred from `id`: index 4 (folder/
+// key's iSelectedImage slot) always passes true from
+// RgSHDefExtractIconW_Hook; index 109 (This Computer) has no such slot, so
+// RgMainSubclassProc's paint code calls this directly with useAccent=true
+// for the selected root row instead.
+static HICON RgGlyphIconGetForLoad(UINT id, int size, bool dark, COLORREF accent, bool useAccent)
+{
+    AcquireSRWLockExclusive(&g_rgGlyphIconCacheLock);
+    for (RgGlyphIconCacheEntry& cached : g_rgGlyphIconCache) {
+        if (cached.id == id && cached.size == size && cached.dark == dark &&
+            cached.accent == accent && cached.useAccent == useAccent) {
+            HICON result = CopyIcon(cached.icon);
+            ReleaseSRWLockExclusive(&g_rgGlyphIconCacheLock);
+            return result;
+        }
+    }
+    if (g_rgGlyphIconCache.size() >= kRgGlyphIconCacheMaxEntries)
+        RgGlyphIconClearCacheLocked();
+    ReleaseSRWLockExclusive(&g_rgGlyphIconCacheLock);
+
+    const wchar_t glyphCh = (id == 109) ? GLYPH_THISPC[0] : GLYPH_FOLDER[0];
+    const COLORREF neutralColor = dark ? RGB(255, 255, 255) : RGB(25, 26, 26);
+    const COLORREF color = useAccent ? accent : neutralColor;
+
+    HICON icon = RgGlyphIconCreate(size, glyphCh, color);
+    if (!icon)
+        return nullptr;
+
+    AcquireSRWLockExclusive(&g_rgGlyphIconCacheLock);
+    for (RgGlyphIconCacheEntry& cached : g_rgGlyphIconCache) {
+        if (cached.id == id && cached.size == size && cached.dark == dark &&
+            cached.accent == accent && cached.useAccent == useAccent) {
+            HICON result = CopyIcon(cached.icon);
+            ReleaseSRWLockExclusive(&g_rgGlyphIconCacheLock);
+            DestroyIcon(icon);
+            return result;
+        }
+    }
+    if (g_rgGlyphIconCache.size() >= kRgGlyphIconCacheMaxEntries)
+        RgGlyphIconClearCacheLocked();
+    g_rgGlyphIconCache.push_back({ id, size, dark, accent, useAccent, icon });
+    HICON result = CopyIcon(icon);
+    ReleaseSRWLockExclusive(&g_rgGlyphIconCacheLock);
+    return result;
+}
+
+// Dedicated single-slot cache for the This Computer root-row accent icon,
+// repainted on every redraw of that row (unlike every other glyph icon,
+// baked once into the native image list at startup). Holds one real,
+// uncopied HICON reused across paints instead of the general cache's
+// lock+scan+CopyIcon+DestroyIcon cycle. Invalidated by RgGlyphIconClearCache
+// so it shares that function's existing call sites.
+static HICON g_rgThisPcAccentIcon = nullptr;
+static int g_rgThisPcAccentSize = 0;
+static bool g_rgThisPcAccentDark = false;
+static COLORREF g_rgThisPcAccentColor = 0;
+static std::mutex g_rgThisPcAccentMutex;
+
+// Caller must hold g_rgThisPcAccentMutex -- see RgThisPcAccentIconDraw below.
+static HICON RgThisPcAccentIconGet_Locked(int size, bool dark, COLORREF accent)
+{
+    if (g_rgThisPcAccentIcon && g_rgThisPcAccentSize == size &&
+        g_rgThisPcAccentDark == dark && g_rgThisPcAccentColor == accent) {
+        return g_rgThisPcAccentIcon;
+    }
+    HICON icon = RgGlyphIconCreate(size, GLYPH_THISPC[0], accent);
+    if (!icon)
+        return g_rgThisPcAccentIcon; // keep showing the stale icon over nothing
+    if (g_rgThisPcAccentIcon)
+        DestroyIcon(g_rgThisPcAccentIcon);
+    g_rgThisPcAccentIcon = icon;
+    g_rgThisPcAccentSize = size;
+    g_rgThisPcAccentDark = dark;
+    g_rgThisPcAccentColor = accent;
+    return icon;
+}
+
+// Holds g_rgThisPcAccentMutex across the whole get-then-draw sequence, not
+// just the cache lookup: RgThisPcAccentIconClear runs from
+// RgGlyphIconClearCache/UpdateThemeColors on the message-window thread, and
+// without this the handle it hands back could be DestroyIcon'd on that
+// thread in the gap between returning here and the regedit UI thread's own
+// DrawIconEx call below.
+static bool RgThisPcAccentIconDraw(HDC hdc, int x, int y, int cx, int cy,
+    bool dark, COLORREF accent)
+{
+    std::lock_guard<std::mutex> lock(g_rgThisPcAccentMutex);
+    HICON icon = RgThisPcAccentIconGet_Locked(cx, dark, accent);
+    if (!icon)
+        return false;
+    DrawIconEx(hdc, x, y, icon, cx, cy, 0, nullptr, DI_NORMAL);
+    return true;
+}
+
+static void RgThisPcAccentIconClear()
+{
+    std::lock_guard<std::mutex> lock(g_rgThisPcAccentMutex);
+    if (g_rgThisPcAccentIcon) {
+        DestroyIcon(g_rgThisPcAccentIcon);
+        g_rgThisPcAccentIcon = nullptr;
+    }
+    g_rgThisPcAccentSize = 0;
+}
+
+static bool RgGlyphIconShouldReplace(PCWSTR pszIconFile, int iIndex, UINT* outId)
+{
+    if (!g_settings.RegeditSection || !g_settings.RgGlyphIcons ||
+        !IsCurrentProcessRegedit())
+        return false;
+    if (!pszIconFile || iIndex >= 0)
+        return false;
+
+    const int absIdx = -iIndex;
+    if (absIdx != 109 && absIdx != 3 && absIdx != 4)
+        return false;
+
+    if (!ShellIconContainsI(pszIconFile, L"\\imageres.dll"))
+        return false;
+
+    *outId = static_cast<UINT>(absIdx);
+    return true;
 }
 
 // DComp counterpart of DrawSvgGeom for a settled SVG frame. Keeping the same
@@ -33215,9 +35867,9 @@ static void DrawOneDriveWipeInCore(ID2D1RenderTarget* rt, const RECT& rc, COLORR
     const float contentH = fullBounds.bottom - fullBounds.top;
     if (contentW <= 0 || contentH <= 0) return;
     // Normal has its own bounds, distinct from Filled's -- DrawSvgGeom fits
-    // each render independently to its own geometry's bounding box, so the
-    // ghost needs its own fit transform too, or it lands at a different
-    // position than the Normal render actually on screen a moment ago.
+    // each render independently to its own bounding box, so the ghost below
+    // needs its own fit transform (normalScale/normalOffX/Y) or it lands at
+    // a different position than the Normal render on screen a moment ago.
     D2D1_RECT_F normalBounds;
     if (FAILED(normalGeom->GetBounds(nullptr, &normalBounds))) return;
     const float normalContentW = normalBounds.right - normalBounds.left;
@@ -33254,11 +35906,8 @@ static void DrawOneDriveWipeInCore(ID2D1RenderTarget* rt, const RECT& rc, COLORR
     const float startGhostP = 1.0f - EaseOutCubic(std::min(1.0f, elapsedSec / oneDriveGhostFadeDur));
 
     if (startGhostP > 0.001f) {
-        // Normal has its own bounds (see above), so it needs its own fit
-        // transform -- reusing the blobs' Filled-fitted transform here was
-        // the bug: the ghost landed at a different vertical position than
-        // the Normal render actually on screen a moment ago, reading as a
-        // jump instead of a continuation.
+        // Uses the Normal-fitted transform above, not Filled's -- reusing
+        // Filled's made the ghost jump to a different vertical position.
         rt->SetTransform(D2D1::Matrix3x2F(normalScale, 0, 0, normalScale, normalOffX, normalOffY));
         if (ID2D1SolidColorBrush* brush = GetCachedSolidBrush(rt, D2D1::ColorF(clr.r, clr.g, clr.b, startGhostP)))
             rt->FillGeometry(normalGeom, brush);
@@ -33824,20 +36473,14 @@ static void DrawDriveSwirlOn(HDC hdc, const RECT& rc, COLORREF cr, float t, bool
 }
 
 // ── CD/DVD facet-spin intro ───────────────────────────────────────────────
-// Phase 1: crossfade Normal (two thin outline rings) -> Intermediate (solid
-// disc+hub like Filled, plus two capsule-shaped holes near the outer edge,
-// like a disc's shine marks). Phase 2: spins Intermediate a full turn in
-// place at constant angular velocity (easing a full 360 makes the holes
-// race through the middle of the turn and crawl at the ends, reading as
-// uneven rather than smooth). Phase 3: patches the holes back in -- draws
-// Intermediate at full alpha, then fades the holes-only geometry in on top,
-// ending pixel-identical to Filled. Deliberately not a crossfade to Filled:
-// the two shapes differ only inside the tiny holes, so blending two
-// near-identical solid discs double-exposes the shared body and flashes
-// toward the background color mid-fade. Single color throughout (cr).
-//
-// The holes are baked into the static path (opposite winding vs. the disc),
-// not runtime masks/boolean combines, which caused contour artifacts.
+// Phase 1: crossfade Normal (outline rings) -> Intermediate (solid disc+hub
+// with two capsule holes near the edge). Phase 2: spins Intermediate a full
+// turn at constant angular velocity (easing made the holes race/crawl
+// unevenly). Phase 3: patches the holes back in, ending pixel-identical to
+// Filled -- not a crossfade to Filled, since the two near-identical solid
+// discs would double-expose and flash toward the background color mid-fade.
+// Holes are baked into the static path (opposite winding), not runtime
+// masks/boolean combines, which caused contour artifacts.
 static const float CDROM_FADE1_FRAC = 0.30f; // fraction of the total duration spent crossfading to Intermediate
 static const float CDROM_SPIN_FRAC  = 0.38f; // fraction spent spinning Intermediate (remainder patches the holes back in)
 static const float CDROM_SPIN_DEG   = 360.0f; // one full turn -- ends at the same orientation it started
@@ -34460,12 +37103,10 @@ static void DrawDocumentsFoldIn(HDC hdc, const RECT& rc, COLORREF cr, float t, b
 }
 
 // ── Videos fill-wipe + wedge undraw intro ─────────────────────────────────
-// The body's Filled color grows in from the right (horizontal scale/reveal
-// anchored at the boundary next to the wedge, over the Normal base), while
-// the hollow wedge simultaneously erases itself via a dashed border trace
-// shrinking from full length to 0 -- the reverse of Drive's trace-in. Once
-// erased, the wedge springs back in solid (Filled style, no hollow-vs-solid
-// ambiguity there), then everything crossfades into the real Filled render.
+// The body's Filled color grows in from the right over the Normal base,
+// while the hollow wedge erases via a dashed border trace shrinking to 0
+// (reverse of Drive's trace-in), springs back in solid, then everything
+// crossfades into the real Filled render.
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_videosTriangleGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_videosBodyOuterGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_videosBodyInnerGeom;
@@ -34485,14 +37126,9 @@ static const DOUBLE VIDEOS_UNDRAW_END = 0.45;      // body fill-reveal + wedge u
 static const DOUBLE VIDEOS_TRI_POP_START = 0.45;
 static const DOUBLE VIDEOS_TRI_POP_END   = 0.75;
 // Filled and Normal are separately authored assets with slightly different
-// contours (not just a recolor of the same path), so a short tail-only
-// crossfade left a visible seam where the clipped Filled body met Normal.
-// Starting the crossfade as soon as the undraw is half done (t where
-// undrawP == 0.5, i.e. EaseOutCubic^-1(0.5) * VIDEOS_UNDRAW_END) and
-// stretching it across nearly the whole rest of the animation blends the
-// contour mismatch in gradually instead of revealing it all at once, and
-// still fully completes with margin before the wipe hands off to the
-// regular pop system (at t=1.0).
+// contours, so a short tail-only crossfade left a visible seam. Starting it
+// at the undraw's halfway point and stretching it across most of the
+// remaining animation blends the mismatch in gradually instead.
 static const DOUBLE VIDEOS_HANDOFF_START = 0.093;
 static const DOUBLE VIDEOS_HANDOFF_END   = 0.90;
 
@@ -34629,20 +37265,13 @@ static void DrawVideosBuildIn(HDC hdc, const RECT& rc, COLORREF cr, float t, boo
 }
 
 // ── Gallery shrink+separate+reassemble intro ─────────────────────────────
-// Front (frame+landscape+sun) and shadow (the second offset frame behind)
-// shrink and pull apart, then snap back together with a spring overshoot as
-// they grow back to full size (already accent-colored throughout, like every
-// other intro here -- `cr` is already the accent color by the time this
-// plays, since it only triggers on selection). Style crossfades from Normal
-// to Filled split parts early (see GALLERY_STYLE_FILL_START/_END) and then
-// STAYS on the split-filled parts through to t=1.0 -- deliberately never
-// crossfades into the combined kSvgGalleryFilled render here, since that
-// shape was traced independently in Illustrator and doesn't line up
-// pixel-for-pixel with the split parts recombined; alpha-blending between
-// two nearly-but-not-quite-identical solid shapes read as a flicker right at
-// the handoff. Letting the wipe animation end (wiping -> false) and falling
-// through to the normal DrawSvgGlyph/kSvgGalleryFilled render is a hard cut
-// instead, which hides the same tiny shape mismatch far better.
+// Front (frame+landscape+sun) and shadow shrink and pull apart, then snap
+// back with a spring overshoot. Crossfades from Normal to Filled split parts
+// early, then stays on them through t=1.0 -- deliberately never crossfades
+// into the combined kSvgGalleryFilled render, since that shape was traced
+// independently and doesn't line up pixel-for-pixel with the split parts
+// recombined; blending two near-identical shapes flickered at the handoff.
+// A hard cut when the wipe ends hides the mismatch far better.
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_galleryFrontGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_galleryShadowGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_galleryFrontFilledGeom;
@@ -34885,14 +37514,12 @@ static void DrawProgFilesHopIn(HDC hdc, const RECT& rc, COLORREF cr, float t, bo
 }
 
 // ── Google Drive facet-hop intro ──────────────────────────────────────────
-// Each of the mark's three facets (top, right, left) hard-swaps from its
-// hollow Normal outline to its solid Filled shape at the peak of a small
-// scale pop, one at a time -- opacity-crossfading hollow-to-solid instead
-// reads as the shape gaining "weight" rather than a clean materialize,
-// since the two don't share edges. Once the last facet has swapped, the
-// three solid Filled facets already reproduce kSvgGoogleDriveFilled
-// exactly, so no separate crossfade to the combined Filled render is
-// needed -- the animation just holds at that state until the pop.
+// Each of the mark's three facets hard-swaps from hollow Normal to solid
+// Filled at the peak of a small scale pop, one at a time -- opacity-
+// crossfading instead reads as the shape gaining "weight" since the two
+// don't share edges. The swapped facets already reproduce
+// kSvgGoogleDriveFilled exactly, so no crossfade to the combined render is
+// needed; the animation just holds until the pop.
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_gdriveTopNormalGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_gdriveRightNormalGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_gdriveLeftNormalGeom;
@@ -35179,14 +37806,10 @@ static void DrawNetworkScanIn(HDC hdc, const RECT& rc, COLORREF cr, float t, boo
 }
 
 // ── Zip Archive unzip+close intro ─────────────────────────────────────────
-// The folder's left/right halves slide apart horizontally and the zipper
-// pull tab rises, revealing an "unzipped" state, then everything slides back
-// together with a spring overshoot as the zipper closes. Style crossfades
-// from Normal to the Filled split parts early (like Gallery) and then STAYS
-// on the split-filled parts through to t=1.0 -- same reasoning as Gallery's
-// flicker fix: never crossfade back into a separately-authored combined
-// asset, since even a tiny pixel mismatch between independently traced
-// shapes reads as a flicker once both are semi-transparent and overlapping.
+// The folder's left/right halves slide apart and the zipper pull tab rises,
+// then everything slides back together with a spring overshoot as it
+// closes. Crossfades from Normal to Filled split parts early and stays on
+// them through t=1.0, same flicker-avoidance reasoning as Gallery.
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_zipLeftFilledGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_zipPullFilledGeom;
 static Microsoft::WRL::ComPtr<ID2D1PathGeometry> g_zipRightFilledGeom;
@@ -35422,16 +38045,13 @@ static void DrawPicturesSunOrbit(HDC hdc, const RECT& rc, COLORREF cr, float t, 
 
 // ── Recycle Bin arrows-reveal intro ───────────────────────────────────────
 // Each arrow is masked by a growing pie wedge (pivot = the 3 arrows'
-// shared center) sweeping from its own measured start angle to its own
-// end angle, so it appears to trace itself in along the direction it was
-// actually drawn -- not rotate in from elsewhere. Angles were measured by
-// densely sampling each arrow's path in a browser mockup (SVG
-// getPointAtLength) and tracking the running min/max angle around the
-// pivot; baked here since D2D has no equivalent path-sampling API.
-// Shared by both the empty and full bin (their arrow coordinates match to
-// the 3rd decimal), each with its own body geometry passed in by the caller.
-// Each arrow gets its own non-overlapping slice of [0, 0.6] -- fully
-// sequential (draws one at a time), not staggered-but-concurrent.
+// shared center) sweeping from its own measured start angle to its own end
+// angle, so it appears to trace itself in along the direction it was
+// actually drawn, not rotate in from elsewhere -- baked here since D2D has
+// no path-sampling API. Shared by both the empty and full bin (their arrow
+// coordinates match to the 3rd decimal), each with its own body geometry
+// passed in by the caller. Each arrow gets its own non-overlapping slice of
+// [0, 0.6], fully sequential.
 struct RecycleArrowAngle { float startDeg; float sweepDeg; float segStart; float segEnd; };
 static const RecycleArrowAngle kRecycleArrowAngles[3] = {
     { -28.4f,  -123.4f, 0.00f, 0.20f }, // red
@@ -35617,12 +38237,10 @@ static ID2D1PathGeometry* PhoneZigGeomEnsure(Microsoft::WRL::ComPtr<ID2D1PathGeo
     return cache.Get();
 }
 
-// Geometry/fill only -- caller owns BeginDraw/EndDraw (and, if it shares the
-// render target with other content, must reset the transform to Identity
-// afterward; this function already does that itself before returning).
-// baseOffX/baseOffY are added into the fit transform's translation, for a
-// caller whose render target's (0,0) isn't rc's top-left -- e.g. the DComp
-// path below, where BeginDraw's own update offset must be honored.
+// Geometry/fill only -- caller owns BeginDraw/EndDraw and must reset the
+// transform to Identity afterward if sharing the RT. baseOffX/baseOffY are
+// added into the fit transform's translation for a caller whose RT origin
+// isn't rc's top-left (e.g. the DComp path's BeginDraw update offset).
 static void DrawPhoneVibrateCore(ID2D1RenderTarget* rt, const RECT& rc, COLORREF cr,
                                   float t, bool inCabinetWClass,
                                   float baseOffX, float baseOffY) {
@@ -35712,13 +38330,10 @@ static void DrawPhoneVibrate(HDC hdc, const RECT& rc, COLORREF cr, float t, bool
 }
 
 // Draws into the shared DComp surface instead of the NM_CUSTOMDRAW hdc, to
-// decouple icon-pop presentation from Explorer's own WM_PAINT (see
-// g_iconPopDC above). Must be called with g_pillDCMutex held. screenX/screenY
-// are client-relative (glyphRect's own origin) -- g_pillDC.pVisual, the
-// parent, carries no offset of its own, so a child visual's offset is
-// already client-absolute. drawCore does the actual glyph-specific drawing;
-// everything else here (surface priming, re-attach, commit) is shared by
-// every glyph.
+// decouple icon-pop presentation from Explorer's own WM_PAINT. Must be
+// called with g_pillDCMutex held. screenX/screenY are client-relative --
+// g_pillDC.pVisual carries no offset of its own, so a child visual's offset
+// is already client-absolute. drawCore does the glyph-specific drawing.
 static bool IconPopDCompDrawFrame_Locked(int screenX, int screenY, int iconW, int iconH,
                                           const IconPopDrawCoreFn& drawCore)
 {
@@ -35734,14 +38349,10 @@ static bool IconPopDCompDrawFrame_Locked(int screenX, int screenY, int iconW, in
     g_iconPopDC.pVisual->SetOffsetY((float)screenY);
 
     // nullptr, not a sub-rect: the surface is atlased into a shared texture
-    // even at 256x256 (confirmed live -- the update offset cycled through a
-    // stride roughly the surface size itself, so a bigger surface didn't
-    // opt out of atlasing, it just changed the tile pitch). A fixed partial
-    // rect meant a frame could land in a different physical tile while
-    // assuming the *previous* frame's tile still held valid content
-    // underneath it -- a stale-tile mismatch. Updating the whole surface
-    // every frame removes that assumption entirely: wherever the tile is
-    // this frame, the full redraw makes it self-consistent, matching the
+    // even at 256x256, so a fixed partial rect could land in a different
+    // physical tile than the previous frame assumed -- a stale-tile
+    // mismatch. Updating the whole surface every frame makes each redraw
+    // self-consistent regardless of which tile it lands in, matching the
     // one-time init-clear's own full-surface BeginDraw.
     IDXGISurface* pDXGI = nullptr; POINT off = {};
     HRESULT hr = g_iconPopDC.pSurf->BeginDraw(nullptr, __uuidof(IDXGISurface), (void**)&pDXGI, &off);
@@ -35788,11 +38399,7 @@ static bool IconPopDCompDrawFrame_Locked(int screenX, int screenY, int iconW, in
     // HideIfShown detaches content (SetContent(nullptr)) at the end of every
     // wipe without destroying pVisual/pSurf -- IconPopDCompInit_Locked's
     // early return (already created, skip straight to true) means creation
-    // only calls SetContent once, ever, so a later wipe must re-attach
-    // itself here. Missing this was the actual "empty square after the
-    // first animation" bug: every draw kept succeeding (fresh content in
-    // the surface every frame), but the visual was never told to show it
-    // again after the first hide.
+    // only calls SetContent once, ever, so a later wipe must re-attach here.
     if (!g_iconPopDC.contentAttached) {
         HRESULT attachHr = g_iconPopDC.pVisual->SetContent(g_iconPopDC.pSurf);
         if (FAILED(attachHr)) {
@@ -35830,18 +38437,11 @@ static void IconPopDCompHideIfShown_Locked(HTREEITEM hItem)
     g_iconPopDCShownFor.store(0, std::memory_order_release);
 }
 
-// A blocking lock (not try_lock) is deliberate here, not an oversight: this
-// runs on the UI thread during paint, and PillAnimThread's own critical
-// section under this same mutex is always short and purely local -- no
-// cross-thread waits inside it (DwmFlush was moved out from under this
-// exact mutex for that reason; see the DwmFlush fix history). Using
-// try_lock instead flipped a single wipe between the DComp and hdc paths
-// frame-to-frame under contention (every nav-pane click also starts a real
-// pill transition, which drives PillAnimThread's try_lock at up to ~144fps)
-// -- each path drawing a different frame of the *same* animation showed as
-// a flash, then settled on whichever path drew last. The two paths must
-// stay mutually exclusive for a given wipe, decided once and honored for
-// its whole duration, not re-decided every frame.
+// A blocking lock (not try_lock) is deliberate: this mutex's critical
+// sections are always short and purely local (DwmFlush was moved out from
+// under it for that reason), and try_lock instead flipped a single wipe
+// between the DComp and hdc paths frame-to-frame under contention, each
+// drawing a different frame of the same animation and reading as a flash.
 static bool IconPopTryDrawDComp(HWND tv, HTREEITEM hItem, const RECT& glyphRect,
                                  const IconPopDrawCoreFn& drawCore)
 {
@@ -35908,10 +38508,8 @@ static void IconPopAdvanceFinalHandoff(HTREEITEM hItem)
         return;
 
     // ICON_POP_DCOMP_FADE_FRAMES == ICON_POP_DCOMP_HANDOFF_FRAMES, so the
-    // countdown IS the fade -- opacity starts ramping down on this very
-    // first call rather than holding at full opacity for some initial
-    // stretch of frames. Decoupling the two constants would reintroduce a
-    // hold phase (remaining >= ICON_POP_DCOMP_FADE_FRAMES skipping the
+    // countdown IS the fade. Decoupling the two constants would reintroduce
+    // a hold phase (remaining >= ICON_POP_DCOMP_FADE_FRAMES skipping the
     // opacity update below) if that's ever wanted again.
     int remaining = pending - 1;
     if (remaining > 0) {
@@ -36012,9 +38610,10 @@ static bool DrawGlyphDW(HDC hdc, const RECT& rc, COLORREF cr, const wchar_t* gly
         if (glyph[0] == GLYPH_DOWNLOADS[0]) {
             // Downloads: squash only the Y axis, anchored at the bottom --
             // width stays put, so it reads as the arrow landing/compressing
-            // against the tray instead of shrinking proportionally. The
-            // Keep the landing emphasis without making this icon's compression
-            // substantially heavier than the shared spring animation.
+            // against the tray instead of shrinking proportionally.
+            // DOWNLOADS_SQUASH_AMPLIFY keeps that landing emphasis without
+            // making the compression substantially heavier than the shared
+            // spring animation.
             static const FLOAT DOWNLOADS_SQUASH_AMPLIFY = 1.4f;
             FLOAT downloadsScale = 1.0f + (extraScale - 1.0f) * DOWNLOADS_SQUASH_AMPLIFY;
             rt->SetTransform(D2D1::Matrix3x2F::Scale(
@@ -36043,28 +38642,13 @@ static bool DrawGlyphDW(HDC hdc, const RECT& rc, COLORREF cr, const wchar_t* gly
 
 // Background thread driving the icon scale-pop: periodically invalidates
 // just the animating item's icon rect so CDDS_ITEMPOSTPAINT re-fires with
-// an updated elapsed time. Lazily started on first real trigger.
-//
-// Unlike PillAnimThread, this one blocks on g_iconPopWakeEvent while idle
-// instead of polling with Sleep() -- the thread costs ~0 CPU between pops.
-// The 200ms wait timeout is just a periodic check for g_iconPopThreadStop
-// during shutdown, not a poll interval; SetEvent() at the trigger site
-// wakes it immediately for a new pop. timeBeginPeriod(1) (needed for the
-// ~100fps redraw cadence to land on schedule) is raised only while a pop
-// is actually in flight and dropped the moment it goes idle again, instead
-// of being held for the thread's entire lifetime.
-//
-// g_iconPopTimer is a 3-state flag: 0 idle, 1 pending, 2 active. During the
-// initial hold the first frame stays visible without repeated invalidation;
-// the same pending state then covers ICON_POP_DELAY before the shared pop.
-//
-// Invalidation is fire-and-forget (plain InvalidateRect, not RedrawWindow
-// with RDW_UPDATENOW): the latter forces WM_PAINT to be dispatched before
-// returning, which cross-thread means blocking until the owning thread's
-// message loop actually pumps it -- so if that thread stalls, this thread
-// stalls with it. Letting the paint land whenever the queue next goes idle
-// keeps this thread free-running instead of coupled to the host's
-// responsiveness.
+// an updated elapsed time. Lazily started on first real trigger. Blocks on
+// g_iconPopWakeEvent while idle (~0 CPU); the 200ms wait is just a periodic
+// g_iconPopThreadStop check, not a poll interval. timeBeginPeriod(1) is held
+// only while a pop is in flight. g_iconPopTimer is a 3-state flag (0 idle, 1
+// pending, 2 active); pending covers the initial hold + ICON_POP_DELAY.
+// Invalidation is fire-and-forget (plain InvalidateRect, not RDW_UPDATENOW)
+// so a stalled owning thread can't block this one.
 static DWORD WINAPI IconPopAnimThread(LPVOID)
 {
     bool highResActive = false;
@@ -36141,9 +38725,13 @@ static DWORD WINAPI IconPopAnimThread(LPVOID)
             HIMAGELIST himl = TreeView_GetImageList(tv, TVSIL_NORMAL);
             int iconW = 16, iconH = 16;
             if (himl) ImageList_GetIconSize(himl, &iconW, &iconH);
-            int iconX = itemRect.left - iconW - 4;
+            int iconX = itemRect.left - iconW - NavMetricsScale(tv, kNavMetricsIconOffset);
             int iconY = itemRect.top + (itemRect.bottom - itemRect.top - iconH) / 2;
-            int pad = 6; // covers the overshoot bulge
+            // NavMetricsScale takes its value already expressed at the
+            // 125%-DPI reference NavMetricsScaleForDpi calibrates against
+            // (kNavMetricsReferenceDpi), so 6 here reproduces the original
+            // physical-pixel margin exactly and scales correctly elsewhere.
+            int pad = NavMetricsScale(tv, 6); // covers the overshoot bulge
             RECT dirty = { iconX - pad, iconY - pad, iconX + iconW + pad, iconY + iconH + pad };
             InvalidateRect(tv, &dirty, FALSE);
         } else if (wantsDCompHandoff && handoffEnd <= 0.0) {
@@ -36189,21 +38777,13 @@ static int GlyphGetIconIndexByPIDL(PIDLIST_ABSOLUTE pidl) {
 // ── Lazy init ────────────────────────────────────────────────────────────
 static std::atomic<bool> g_glyphMapBuilt{false};
 
-// Inserts idx -> glyph, but if idx is already mapped to a DIFFERENT glyph,
-// the index is ambiguous on this system -- Windows' shared system icon
-// cache (SHGFI_SYSICONINDEX/SHGSI_SYSICONINDEX) hands out the SAME index to
-// any two shell items that happen to render the identical icon resource,
-// regardless of what those items actually are. Erase it instead of
-// guessing which candidate is "right", so neither item shows a confidently
-// wrong glyph -- both fall through to the text-based matching in
-// GlyphResolveItem instead (worst case: the plain folder icon). Mapping the
-// same glyph twice (e.g. two different library CLSIDs that both mean
-// "Documents") is harmless and left alone. Order-independent by
-// construction: whichever of two colliding writes happens first, the
-// second one poisons the slot either way. Returns true if the map was
-// actually changed (inserted or erased), so callers that only care about
-// real changes (e.g. deciding whether a repaint is worth triggering) don't
-// need to duplicate this logic.
+// Inserts idx -> glyph, but if idx is already mapped to a DIFFERENT glyph
+// (Windows' shared system icon cache can hand out the same index to two
+// unrelated shell items), erases it instead of guessing which is "right" --
+// both fall through to text-based matching in GlyphResolveItem instead.
+// Mapping the same glyph twice is harmless and left alone. Returns true if
+// the map actually changed, so callers can tell whether a repaint is worth
+// triggering.
 static bool GlyphMapInsertOrPoison(std::unordered_map<int, const wchar_t*>& map,
                                     int idx, const wchar_t* glyph) {
     if (idx < 0 || !glyph) return false;
@@ -36220,12 +38800,9 @@ static bool GlyphMapInsertOrPoison(std::unordered_map<int, const wchar_t*>& map,
 }
 
 // Builds into caller-owned local maps rather than the shared globals
-// directly -- this runs entirely off the UI thread (see
-// GlyphBuildMapThreadProc), so nothing here may touch g_glyphIndexMap/
-// g_glyphFilledMap without the mutex. Building locally and handing the
-// finished maps to the caller in one shot means the mutex is only ever
-// held for a fast move-assign, never across any of the slow shell calls
-// below -- exactly what makes this safe to background in the first place.
+// directly -- this runs entirely off the UI thread, so the mutex is only
+// ever held for a fast move-assign in the caller, never across any of the
+// slow shell calls below.
 static void GlyphBuildMap(std::unordered_map<int, const wchar_t*>& outIndexMap,
                            std::unordered_map<int, const wchar_t*>& outFilledMap,
                            BYTE (&outDriveTypeByLetter)[26]) {
@@ -36246,7 +38823,12 @@ static void GlyphBuildMap(std::unordered_map<int, const wchar_t*>& outIndexMap,
         // Core virtual folders
         { L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}", GLYPH_THISPC    }, // This PC
         { L"::{5b934b42-522b-4c34-bbfe-37a3ef7b9c90}", GLYPH_THISPC    }, // This Device
-        { L"::{645FF040-5081-101B-9F08-00AA002F954E}", GLYPH_RECYCLE   }, // Recycle Bin
+        // Recycle Bin is deliberately NOT here: its icon index depends on
+        // whether the bin is currently empty or full, so a live index
+        // lookup here would tag whichever state happens to be active at
+        // map-build-time as GLYPH_RECYCLE, poisoning the correct
+        // empty/full split that GlyphCacheStockIcons() sets up below via
+        // the dedicated SIID_RECYCLER/SIID_RECYCLERFULL stock icon IDs.
         { L"::{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}", GLYPH_NETWORK   }, // Network
         { L"::{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}", GLYPH_DESKTOP   }, // Desktop
         { L"::{018D5C66-4533-4307-9B53-224DE2ED1FE6}", GLYPH_ONEDRIVE  }, // OneDrive Personal
@@ -36291,7 +38873,8 @@ static void GlyphBuildMap(std::unordered_map<int, const wchar_t*>& outIndexMap,
         { &FOLDERID_Music,           GLYPH_MUSIC,     L"FOLDERID_Music" },
         { &FOLDERID_Videos,          GLYPH_VIDEOS,    L"FOLDERID_Videos" },
         { &FOLDERID_ComputerFolder,  GLYPH_THISPC,    L"FOLDERID_ComputerFolder" },
-        { &FOLDERID_RecycleBinFolder,GLYPH_RECYCLE,   L"FOLDERID_RecycleBinFolder" },
+        // FOLDERID_RecycleBinFolder deliberately omitted -- same live-index
+        // vs. empty/full split conflict as the CLSID table above.
         { &FOLDERID_NetworkFolder,   GLYPH_NETWORK,   L"FOLDERID_NetworkFolder" },
         { &FOLDERID_SavedGames,      GLYPH_GAME,      L"FOLDERID_SavedGames" },
         { &FOLDERID_CameraRoll,      GLYPH_CAMERA,    L"FOLDERID_CameraRoll" },
@@ -36341,11 +38924,9 @@ static void GlyphBuildMap(std::unordered_map<int, const wchar_t*>& outIndexMap,
 
     // Zip/archive files browsable as virtual folders in the nav pane. .zip
     // gets this natively (zipfldr.dll); .rar/.tar only if a compatible
-    // archiver with shell namespace integration (WinRAR, 7-Zip, ...) is
-    // installed -- otherwise SHGetFileInfoW just returns whatever generic
-    // "unknown file type" icon Explorer uses, which is a harmless no-op
-    // entry here since an unregistered extension never appears as a nav-pane
-    // tree item in the first place (nothing would ever look that index up).
+    // archiver with shell namespace integration is installed -- otherwise
+    // this is a harmless no-op entry, since an unregistered extension never
+    // appears as a nav-pane tree item to look the index up.
     {
         struct { const wchar_t* dummyName; const wchar_t* glyph; } archiveExts[] = {
             { L"x.zip", GLYPH_ZIPARCHIVE },
@@ -36396,15 +38977,23 @@ static void GlyphBuildMap(std::unordered_map<int, const wchar_t*>& outIndexMap,
 }
 
 // Background half of GlyphRefreshDriveArrival: probes each newly-arrived
-// drive letter (GlyphGetIconIndexByCLSID -- SHParseDisplayName +
-// SHGetFileInfoW) off the UI thread, since that probe is exactly the kind
-// of call that can stall for seconds on an optical drive, a disconnected
-// network drive, or a card reader/phone. 'bits' is a plain DWORD copy of
-// DEV_BROADCAST_VOLUME::dbcv_unitmask taken synchronously by the caller --
-// the broadcast structure itself is only valid for the duration of the
-// WM_DEVICECHANGE call, so nothing from it may be touched here.
+// drive letter off the UI thread, since that probe can stall for seconds
+// on an optical drive, disconnected network drive, or card reader/phone.
+// 'bits' is a plain DWORD copy of DEV_BROADCAST_VOLUME::dbcv_unitmask taken
+// synchronously by the caller, since the broadcast structure itself is only
+// valid for the duration of the WM_DEVICECHANGE call.
+struct GlyphDriveRefreshWork {
+    DWORD bits;
+    uint64_t generation;
+};
+
 static DWORD WINAPI GlyphRefreshDriveArrivalThreadProc(LPVOID param) {
-    DWORD bits = (DWORD)(uintptr_t)param;
+    std::unique_ptr<GlyphDriveRefreshWork> work(
+        static_cast<GlyphDriveRefreshWork*>(param));
+    const HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool coInitialized = SUCCEEDED(coHr);
+    const DWORD bits = work->bits;
+    const uint64_t generation = work->generation;
     std::unordered_map<int, const wchar_t*> newEntries;
     BYTE newDriveTypes[26] = {};
     bool anyDriveTypeFound = false;
@@ -36425,18 +39014,31 @@ static DWORD WINAPI GlyphRefreshDriveArrivalThreadProc(LPVOID param) {
     // newEntries can be empty while a drive type was still found (icon-index
     // lookup failing independently of GetDriveTypeW succeeding), so gate on
     // both rather than just newEntries.empty() like before.
-    if (!newEntries.empty() || anyDriveTypeFound) {
+    const bool currentGeneration =
+        !g_glyphBgUnloading.load(std::memory_order_acquire) &&
+        g_glyphBgGeneration.load(std::memory_order_acquire) == generation &&
+        g_settings.GlyphIcons;
+    if (currentGeneration &&
+        (!newEntries.empty() || anyDriveTypeFound)) {
         std::lock_guard<std::mutex> lk(g_glyphMapMutex);
-        for (auto& kv : newEntries) {
-            if (GlyphMapInsertOrPoison(g_glyphIndexMap, kv.first, kv.second))
-                anyChanged = true;
-        }
-        // Text-fallback array (see g_glyphDriveTypeByLetter) -- keep it in
-        // sync too, same reasoning as the icon-index map above.
-        for (int i = 0; i < 26; i++) {
-            if (newDriveTypes[i] && g_glyphDriveTypeByLetter[i] != newDriveTypes[i]) {
-                g_glyphDriveTypeByLetter[i] = newDriveTypes[i];
-                anyChanged = true;
+        if (!g_glyphBgUnloading.load(std::memory_order_acquire) &&
+            g_glyphBgGeneration.load(std::memory_order_acquire) ==
+                generation &&
+            g_settings.GlyphIcons) {
+            for (auto& kv : newEntries) {
+                if (GlyphMapInsertOrPoison(
+                        g_glyphIndexMap, kv.first, kv.second)) {
+                    anyChanged = true;
+                }
+            }
+            // Text-fallback array (see g_glyphDriveTypeByLetter) -- keep it
+            // in sync with the icon-index map.
+            for (int i = 0; i < 26; i++) {
+                if (newDriveTypes[i] &&
+                    g_glyphDriveTypeByLetter[i] != newDriveTypes[i]) {
+                    g_glyphDriveTypeByLetter[i] = newDriveTypes[i];
+                    anyChanged = true;
+                }
             }
         }
     }
@@ -36447,34 +39049,35 @@ static DWORD WINAPI GlyphRefreshDriveArrivalThreadProc(LPVOID param) {
             if (IsWindow(tv)) InvalidateRect(tv, nullptr, TRUE);
     }
 
-    g_glyphBgThreadCount.fetch_sub(1, std::memory_order_acq_rel);
+    if (coInitialized)
+        CoUninitialize();
     return 0;
 }
 
 // Refreshes just the newly-arrived drive's icon-index -> glyph mapping,
-// called from WM_DEVICECHANGE/DBT_DEVICEARRIVAL (see ApRecordDeviceArrival,
-// same event, reused here rather than installing a separate hook). Without
-// this, a drive plugged in after GlyphBuildMap() already ran keeps showing
-// the generic folder glyph until Explorer restarts -- GlyphGetIconIndexByCLSID
-// returns a system image-list slot assigned fresh per session, so the map
-// built at startup never saw the new drive's index.
+// called from WM_DEVICECHANGE/DBT_DEVICEARRIVAL. Without this, a drive
+// plugged in after GlyphBuildMap() already ran keeps showing the generic
+// folder glyph until Explorer restarts -- the system image-list slot is
+// assigned fresh per session, so the startup map never saw its index.
 static void GlyphRefreshDriveArrival(LPARAM lParam) {
-    if (!g_glyphMapBuilt.load(std::memory_order_acquire) || !lParam) return;
+    if (g_glyphBgUnloading.load(std::memory_order_acquire) ||
+        !g_glyphMapBuilt.load(std::memory_order_acquire) || !lParam) {
+        return;
+    }
     auto* hdr = reinterpret_cast<DEV_BROADCAST_HDR*>(lParam);
     if (hdr->dbch_devicetype != DBT_DEVTYP_VOLUME) return;
     auto* vol = reinterpret_cast<DEV_BROADCAST_VOLUME*>(lParam);
     DWORD bits = vol->dbcv_unitmask; // copy out now -- vol is only valid for
                                        // the duration of this call
     if (!bits) return;
-    g_glyphBgThreadCount.fetch_add(1, std::memory_order_acq_rel);
-    HANDLE h = CreateThread(nullptr, 0, GlyphRefreshDriveArrivalThreadProc,
-                             (LPVOID)(uintptr_t)bits, 0, nullptr);
-    if (h) {
-        CloseHandle(h); // fire-and-forget: g_glyphBgThreadCount (not this
-                        // handle) is what Wh_ModUninit waits on
-    } else {
-        g_glyphBgThreadCount.fetch_sub(1, std::memory_order_acq_rel);
-    }
+    auto work = std::make_unique<GlyphDriveRefreshWork>();
+    work->bits = bits;
+    work->generation =
+        g_glyphBgGeneration.load(std::memory_order_acquire);
+    auto* workerParameter = work.release();
+    if (!GlyphBgStartWorker(
+            GlyphRefreshDriveArrivalThreadProc, workerParameter))
+        delete workerParameter;
 }
 
 // ── Stock icon cache (Recycle Bin empty/full) ────────────────────────────
@@ -36586,19 +39189,12 @@ static void GlyphCacheKnownFolderNames(std::unordered_map<std::wstring, const wc
         CoTaskMemFree(pidl);
     }
 
-    // OneDrive's sync root has no KNOWNFOLDERID of its own and isn't a
-    // shell-namespace CLSID -- it's just a regular filesystem folder at a
-    // predictable path. Resolving %USERPROFILE%\OneDrive's OWN current
-    // display name (rather than hardcoding substring matches like
-    // "OneDrive"/"OneDrive - ") means this still matches even if OneDrive
-    // is showing a fully custom/localized/company-branded label that
-    // doesn't contain the literal text "OneDrive" at all -- the same
-    // reasoning as the KNOWNFOLDERID table above, just for a folder that
-    // only has a path, not a folder ID. The nav-pane TreeView item itself
-    // exposes no reliable PIDL/path (NamespaceTreeControl's TVITEM.lParam
-    // isn't a raw PIDL the way a classic tree view's would be), so this
-    // resolve-by-known-path approach is used instead of reading the path
-    // back off the tree item.
+    // OneDrive's sync root has no KNOWNFOLDERID/CLSID of its own, just a
+    // regular filesystem folder at a predictable path. Resolves
+    // %USERPROFILE%\OneDrive's own current display name instead of
+    // hardcoding "OneDrive" substring matches, since it can be
+    // localized/rebranded. The nav-pane TreeView item exposes no reliable
+    // PIDL/path to read this back off of otherwise.
     {
         wchar_t oneDrivePath[MAX_PATH] = {};
         if (ExpandEnvironmentStringsW(L"%USERPROFILE%\\OneDrive", oneDrivePath,
@@ -36675,7 +39271,16 @@ static void GlyphDetectFont() {
 // only takes g_glyphMapMutex for the fast final handoff, then invalidates
 // any nav-pane trees already on screen so rows that painted with a generic
 // icon while this was running pick up their real glyph promptly.
-static DWORD WINAPI GlyphBuildMapThreadProc(LPVOID) {
+struct GlyphBuildMapWork {
+    uint64_t generation;
+};
+
+static DWORD WINAPI GlyphBuildMapThreadProc(LPVOID param) {
+    std::unique_ptr<GlyphBuildMapWork> work(
+        static_cast<GlyphBuildMapWork*>(param));
+    const HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool coInitialized = SUCCEEDED(coHr);
+    const uint64_t generation = work->generation;
     std::unordered_map<int, const wchar_t*> indexMap, filledMap;
     BYTE driveTypeByLetter[26] = {};
     GlyphBuildMap(indexMap, filledMap, driveTypeByLetter);
@@ -36686,36 +39291,51 @@ static DWORD WINAPI GlyphBuildMapThreadProc(LPVOID) {
     GlyphCacheProgFilesNames(progFilesNames);
     GlyphCacheKnownFolderNames(knownFolderNames);
 
-    {
+    bool committed = false;
+    if (!g_glyphBgUnloading.load(std::memory_order_acquire) &&
+        g_glyphBgGeneration.load(std::memory_order_acquire) == generation &&
+        g_settings.GlyphIcons) {
         std::lock_guard<std::mutex> lk(g_glyphMapMutex);
-        g_glyphIndexMap        = std::move(indexMap);
-        g_glyphFilledMap       = std::move(filledMap);
-        g_glyphPhoneNames      = std::move(phoneNames);
-        g_glyphProgFilesNames  = std::move(progFilesNames);
-        g_glyphKnownFolderNames = std::move(knownFolderNames);
-        memcpy(g_glyphDriveTypeByLetter, driveTypeByLetter, sizeof(driveTypeByLetter));
+        if (!g_glyphBgUnloading.load(std::memory_order_acquire) &&
+            g_glyphBgGeneration.load(std::memory_order_acquire) ==
+                generation &&
+            g_settings.GlyphIcons) {
+            g_glyphIndexMap = std::move(indexMap);
+            g_glyphFilledMap = std::move(filledMap);
+            g_glyphPhoneNames = std::move(phoneNames);
+            g_glyphProgFilesNames = std::move(progFilesNames);
+            g_glyphKnownFolderNames = std::move(knownFolderNames);
+            memcpy(g_glyphDriveTypeByLetter, driveTypeByLetter,
+                sizeof(driveTypeByLetter));
+            committed = true;
+        }
     }
-    {
+    if (committed) {
         std::lock_guard<std::mutex> lk(g_glyphTreeMutex);
         for (HWND tv : g_glyphTrackedTrees)
             if (IsWindow(tv)) InvalidateRect(tv, nullptr, TRUE);
     }
 
-    g_glyphBgThreadCount.fetch_sub(1, std::memory_order_acq_rel);
+    if (coInitialized)
+        CoUninitialize();
     return 0;
 }
 
 static void GlyphEnsureMap() {
+    if (g_glyphBgUnloading.load(std::memory_order_acquire) ||
+        !g_settings.GlyphIcons) {
+        return;
+    }
     bool expected = false;
     if (!g_glyphMapBuilt.compare_exchange_strong(
             expected, true, std::memory_order_acq_rel))
         return;
-    g_glyphBgThreadCount.fetch_add(1, std::memory_order_acq_rel);
-    HANDLE h = CreateThread(nullptr, 0, GlyphBuildMapThreadProc, nullptr, 0, nullptr);
-    if (h) {
-        CloseHandle(h); // fire-and-forget, same as GlyphRefreshDriveArrival's thread
-    } else {
-        g_glyphBgThreadCount.fetch_sub(1, std::memory_order_acq_rel);
+    auto work = std::make_unique<GlyphBuildMapWork>();
+    work->generation =
+        g_glyphBgGeneration.load(std::memory_order_acquire);
+    auto* workerParameter = work.release();
+    if (!GlyphBgStartWorker(GlyphBuildMapThreadProc, workerParameter)) {
+        delete workerParameter;
         g_glyphMapBuilt.store(false, std::memory_order_release);
     }
 }
@@ -36804,19 +39424,13 @@ static const wchar_t* GlyphResolveItem(int imageIndex, const wchar_t* text, bool
             return GLYPH_PHONE;
         if (g_glyphProgFilesNames.count(text))
             return GLYPH_PROGFILES;
-        // Some window frames (e.g. the classic ribbon Explorer reached by
-        // navigating Control Panel/Windows Tools' address bar to a real
-        // path) hand their nav-pane tree items a different iImage than the
-        // one GlyphBuildMap probed for that same drive, so the index lookup
-        // above misses even though the drive is real -- fall back to the
-        // drive-letter text pattern. GetLogicalDrives() is a cheap, instant
-        // bitmask read (no per-drive I/O, unlike GetDriveTypeW) -- cross-
-        // checking it live closes two gaps at once: it stops trusting a
-        // cached entry for a drive that was unplugged since the map was
-        // built/refreshed, and it narrows the (already tiny) chance some
-        // unrelated item's text happens to end in the same "(X:)" pattern,
-        // since that letter now also has to be a real, currently-mounted
-        // drive, not just one that once was.
+        // Some window frames hand their nav-pane tree items a different
+        // iImage than the one GlyphBuildMap probed for that drive, so the
+        // index lookup above misses -- fall back to the drive-letter text
+        // pattern. Cross-checking GetLogicalDrives() live (cheap bitmask
+        // read, no per-drive I/O) stops trusting a cached entry for a drive
+        // that's since been unplugged, and narrows the chance some
+        // unrelated text happens to end in the same "(X:)" pattern.
         wchar_t driveLetter;
         if (GlyphExtractDriveLetter(text, &driveLetter)) {
             int bit = driveLetter - L'A';
@@ -36883,14 +39497,12 @@ BOOL Wh_ModInit()
 
     g_lastSeenSystemDark = IsSystemDarkMode();
     g_lastSeenSystemDarkValid = true;
-    // CreateMsgWindow() is deliberately NOT called here. It now spawns a real
-    // background thread (see MsgWindowThreadProc), and dozens of load-bearing
-    // SetFunctionHook calls below can still fail and return FALSE -- when
-    // Wh_ModInit returns FALSE, Windhawk never calls Wh_ModUninit, so
-    // DestroyMsgWindow() (its only caller) would never run and that thread
-    // would be orphaned for the life of the host process. It's created in
-    // Wh_ModAfterInit instead, which only runs once Wh_ModInit has already
-    // succeeded.
+    // CreateMsgWindow() is deliberately NOT called here: it spawns a real
+    // background thread, and dozens of load-bearing SetFunctionHook calls
+    // below can still fail and return FALSE -- since Wh_ModInit returning
+    // FALSE means Windhawk never calls Wh_ModUninit (so DestroyMsgWindow
+    // would never run), that thread would be orphaned. Created in
+    // Wh_ModAfterInit instead, once Wh_ModInit has already succeeded.
 
     // GetThemeClass (uxtheme ordinal 74) -- for theme class name cache
     {
@@ -36973,6 +39585,17 @@ BOOL Wh_ModInit()
             DrawThemeTextEx_hook, &DrawThemeTextEx_orig);
         WindhawkUtils::SetFunctionHook(ExtTextOutW,
             ExtTextOutW_hook, &ExtTextOutW_orig);
+        // Load-bearing here too: several of this path's own hooks (ExtTextOutW's
+        // opaque-bg fill, DefWindowProcW/A's UAH menu paint, DrawThemeBackground(Ex)'s
+        // scrollbar handling, TrackPopupMenu(Ex)'s acrylic subclass) route their own
+        // drawing through FillRect_orig instead of raw FillRect, specifically so
+        // FillRect_hook's combo-edit-restyle logic can't reinterpret a mod-authored
+        // fill -- which requires the hook to actually be installed.
+        if (!WindhawkUtils::SetFunctionHook(FillRect,
+                FillRect_hook, &FillRect_orig)) {
+            Wh_Log(L"Failed to hook FillRect");
+            return FALSE;
+        }
         // System color hooks — COLOR_MENUTEXT must return white in dark mode
         if (!WindhawkUtils::SetFunctionHook(GetSysColor,
                 GetSysColor_hook, &GetSysColor_orig)) {
@@ -37014,6 +39637,40 @@ BOOL Wh_ModInit()
             EnumWindows(MenuInitEnumProc, 0);
         return TRUE;
     }
+
+    g_defViewBorderPaintMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.DefViewBorderPaint"),
+        std::memory_order_release);
+    if (!g_defViewBorderPaintMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register DefView border paint message");
+
+    g_navHoverFadeResetMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.NavHoverFadeReset"),
+        std::memory_order_release);
+    if (!g_navHoverFadeResetMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register nav hover fade reset message");
+
+    // Same treatment as the two above: these are SendMessage/PostMessage'd
+    // to windows this mod doesn't own (regedit's own main window, winver's
+    // own dialog), so a hardcoded WM_APP+N could collide with the host's or
+    // another mod's own private message on that window.
+    g_rgRefreshColorsMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.RgRefreshColors"),
+        std::memory_order_release);
+    if (!g_rgRefreshColorsMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register regedit refresh-colors message");
+
+    g_rgResetDividerMessage.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.RgResetDivider"),
+        std::memory_order_release);
+    if (!g_rgResetDividerMessage.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register regedit reset-divider message");
+
+    g_winverStartLogoAnimMsg.store(
+        RegisterWindowMessageW(L"Win32UIModernizer.WinverStartLogoAnim"),
+        std::memory_order_release);
+    if (!g_winverStartLogoAnimMsg.load(std::memory_order_relaxed))
+        Wh_Log(L"Failed to register winver logo-animation-start message");
 
     // Function hooks
     // These are load-bearing: every hook callback unconditionally calls
@@ -37148,20 +39805,17 @@ BOOL Wh_ModInit()
     }
 
     // Nav divider hover reveal's SetCursor hook is intentionally NOT
-    // installed here. It's triggered lazily, the first time this process
+    // installed here -- it's triggered lazily, the first time this process
     // shows a real nav-pane divider (see NavDividerTrackAndGetHwnd), so
     // processes that never display one never pay even the cheapest
-    // per-call check. The actual Wh_SetFunctionHook + Wh_ApplyHookOperations
-    // calls run on a dedicated one-shot thread spawned from there, NOT
-    // inside that hook callback -- see NavDividerInstallSetCursorHookThread.
+    // per-call check. Only the actual Wh_ApplyHookOperations is deferred,
+    // via a message posted to g_msgWnd.
 
-    // RegeditSection: queue its required hooks and initialize resources
-    // (regedit.exe only). Deliberately BEFORE the NtUserCreateWindowEx_hook
-    // install just below --
-    // that hook's regedit branch reads rg_lvBkBrush/rg_tvBkBrush/etc. via
-    // RgApply*Style, so a late-injection scenario (mod attaching to an
-    // already-running regedit.exe) must not have the hook live before these
-    // resources exist.
+    // RegeditSection: queue its required hooks and init resources
+    // (regedit.exe only) BEFORE the NtUserCreateWindowEx_hook install below
+    // -- that hook's regedit branch reads rg_lvBkBrush/rg_tvBkBrush/etc. via
+    // RgApply*Style, so a late-injection scenario must not have the hook
+    // live before these resources exist.
     if (g_settings.RegeditSection && IsCurrentProcessRegedit())
     {
         if (!RgQueueRequiredHooks())
@@ -37206,8 +39860,12 @@ BOOL Wh_ModInit()
     {
         ApplyAccentColorize();
         ApplyAccentMarquee();
-        // Start pill animation thread (runs until g_pillThreadStop = true)
-        PillEnsureThreadStarted();
+        // Pill animation thread is started lazily on first real animation
+        // (see the PillEnsureThreadStarted() call site near the pill
+        // transition setup) -- that already covers every process with a
+        // nav pane, so no eager start is needed here, and starting it
+        // unconditionally would spin up an idle thread even with
+        // NavPanePill off.
 
         // AutoPlay flyout replacement: Explorer-only (the flyout never
         // appears anywhere else) and opt-in, since it replaces a stock
@@ -37257,7 +39915,12 @@ static BOOL CALLBACK NavMetricsRestoreEnumProc(HWND hwnd, LPARAM);
 
 void Wh_ModBeforeUninit()
 {
+    g_defViewBorderUnloading.store(true, std::memory_order_release);
     g_apUnloading.store(true, std::memory_order_release);
+    // Hooks are still installed during this callback -- block a new glyph
+    // background worker from starting before Windhawk finishes detaching
+    // them.
+    GlyphBgBeginUnload();
     if (IsCurrentProcessExplorer() &&
         !ApDismissReplacement(true, true)) {
         Wh_Log(L"[AutoPlay] Replacement could not be fully dismissed before unload");
@@ -37266,9 +39929,9 @@ void Wh_ModBeforeUninit()
 
 void Wh_ModUninit()
 {
-    // Set first: lets NavDividerInstallSetCursorHookThread bail out if it's
-    // still in flight (spawned a moment ago from NavDividerTrackAndGetHwnd)
-    // when the mod is unloaded.
+    // Set first: lets ThemeMsgWndProc's kNavDividerApplyHooksMessage handler
+    // skip Wh_ApplyHookOperations if a divider paint posted it moments ago
+    // (see NavDividerTrackAndGetHwnd) right as the mod is being unloaded.
     g_navDividerUnloading.store(true, std::memory_order_release);
     // Same reasoning: the WH_CALLWNDPROC/TrackPopupMenu(Ex)/NtUserCreateWindowEx
     // hooks that can install MenuAcrylicSubclassProc on a new popup are still
@@ -37283,6 +39946,9 @@ void Wh_ModUninit()
     rg_unloading.store(true, std::memory_order_release);
     // Block lazy pill worker creation before stopping the existing worker.
     g_pillUnloading.store(true, std::memory_order_release);
+    // Block HdrDarkPaintInstall before AuxiliarySubclassCleanup's one-shot sweep.
+    g_hdrDarkUnloading.store(true, std::memory_order_release);
+    GlyphBgBeginUnload();
     g_darkModeUnloading.store(true, std::memory_order_release);
 
     // This thread executes mod code and must be fully joined before unload;
@@ -37305,6 +39971,7 @@ void Wh_ModUninit()
     ShellIconClearCache();
     ShellIconClearModuleCaches();
     PinContentIconClearCache();
+    RgGlyphIconClearCache();
     // Stop pill animation thread first (must happen before DComp release).
     HANDLE pillThread = nullptr;
     {
@@ -37365,22 +40032,17 @@ void Wh_ModUninit()
         g_iconPopWakeEvent = nullptr;
     }
 
-    // Wait (bounded) for any in-flight glyph background build/drive-arrival
-    // threads (GlyphBuildMapThreadProc, GlyphRefreshDriveArrivalThreadProc)
-    // to finish before the DLL unloads out from under them -- same reasoning
-    // as the pill thread join above, but these are fire-and-forget threads
-    // (no single HANDLE to wait on), so poll the shared counter instead.
-    {
-        DWORD waited = 0;
-        while (g_glyphBgThreadCount.load(std::memory_order_relaxed) > 0 && waited < 2000) {
-            Sleep(50);
-            waited += 50;
-        }
-    }
+    // Wait for any in-flight glyph background build/drive-arrival threads
+    // (GlyphBuildMapThreadProc, GlyphRefreshDriveArrivalThreadProc) to finish
+    // before the DLL unloads out from under them. Handles are retained until
+    // each thread signals, so this waits on the real thread exit instead of
+    // polling a counter that can reach zero just before the thread's return
+    // epilogue actually runs inside this DLL.
+    GlyphBgWaitForWorkers();
 
     // Remove nav-pane pill subclass (restores original WndProc + kills glyph timer)
     PillTreeSubclassRemove();
-    ListViewGroupChevronCleanup();
+    ListSelectFadeCleanup();
 
     // Restore system colors
     RestoreDarkSysColors();
@@ -37436,12 +40098,15 @@ void Wh_ModUninit()
 
     // Remove only subclasses that were actually installed. Their owner sets
     // are maintained at install/WM_NCDESTROY time.
-    TabPillRemoveAll();
+    TabFlickerFixRemoveAll();
     AuxiliarySubclassCleanup();
+    TreeDoubleBufferRemoveAll();
+    ToolbarDoubleBufferRemoveAll();
 
     // Remove all treeview insertion-mark subclasses
     EnumWindows(EnumWindowsRemoveSubclasses, 0);
     SetPropertyDialogClassBrush(false);
+    SetFontViewClassBrush(false);
     // g_navDividerUnloading was already set at the very top of this function.
     NavDividerClearAll();
 
@@ -37474,33 +40139,24 @@ void Wh_ModUninit()
             Wh_Log(L"[AutoPlay] Resources retained for quarantined replacement");
     }
 
-    // Only safe to take g_pillDCMutex unconditionally if the pill thread
-    // actually joined above: it holds this mutex for the whole duration of
-    // its GPU draw/commit (see PillDCompDrawFrame_Locked's callers), so in
-    // exactly the stuck-driver/TDR scenario the bounded 500ms join was
-    // written for, the thread is wedged WHILE HOLDING it -- an unconditional
-    // lock_guard here would then block Wh_ModUninit forever, defeating the
-    // whole point of that bound. If pillThreadJoined is true, the thread has
-    // fully returned (all its local lock_guards already destructed), so the
-    // mutex is provably uncontended and this acquire is instant. If false,
-    // skip and leak the DComp device -- consistent with leaking the thread
-    // handle itself a few lines above for the same reason.
+    // Only lock g_pillDCMutex unconditionally if the pill thread's bounded
+    // join succeeded -- in the stuck-driver/TDR scenario that bound exists
+    // for, the thread is wedged while still holding this mutex (it holds it
+    // for its whole GPU draw/commit), and an unconditional lock_guard here
+    // would then block Wh_ModUninit forever. If the join failed, skip and
+    // leak the DComp device instead, same as the thread handle above.
     if (pillThreadJoined) {
         std::lock_guard<std::mutex> lk(g_pillDCMutex);
         PillDCompRelease_Locked();
     }
 
-    // Release DComp tab overlay + related tab-pill state (must hold the
-    // mutex for all of it -- PaintTab treats g_tabCurHWND/g_tabLastPillX/Y/
-    // g_tabPrevPillX/g_tabBgCache/g_tabCachedRT as g_tabDCMutex-protected for
-    // its entire body, so resetting them unlocked here could race a PaintTab
-    // call still in flight on another thread).
+    // Release the WinUI tab background cache (must hold the mutex -- PaintTab
+    // treats g_tabBgCacheWinUI as g_tabBgMutex-protected for its entire
+    // body, so clearing it unlocked here could race a PaintTab call still
+    // in flight on another thread).
     {
-        std::lock_guard<std::mutex> lk(g_tabDCMutex);
-        TabDCompRelease();
-        g_tabCurHWND = nullptr; g_tabLastPillX = -1.f; g_tabLastPillY = -1.f; g_tabPrevPillX = -1.f;
-        TabBgCacheClear();
-        if (g_tabCachedRT) { g_tabCachedRT->Release(); g_tabCachedRT = nullptr; }
+        std::lock_guard<std::mutex> lk(g_tabBgMutex);
+        TabBgCacheClearWinUI();
     }
 
     // Release cached D2D render targets
@@ -37618,11 +40274,28 @@ void Wh_ModSettingsChanged()
         BreadcrumbChevronCleanup();
         PlacesBarCleanup();
     }
+    if (oldSettings.RoundedButtons && !g_settings.RoundedButtons) {
+        EnumWindows(SplitButtonChevronRemoveEnum, 0);
+        TrackbarRemoveAllSubclasses();
+    }
+    if (oldSettings.ModernSeparators && !g_settings.ModernSeparators) {
+        StatusBarRemoveAllSubclasses();
+    }
+    if (oldSettings.ExplorerSection && !g_settings.ExplorerSection) {
+        EnumWindows(TreeCursorRemoveEnum, 0);
+    }
+    // Same singleton-timer teardown for the ListView selection-border fade --
+    // RoundedSelection going off makes DrawRoundedItemBg's border path (the
+    // only caller of ListSelectFade*) unreachable.
+    if (oldSettings.RoundedSelection && !g_settings.RoundedSelection) {
+        ListSelectFadeCleanup();
+    }
     if (!g_settings.GlyphIcons) {
         GlyphDWriteCacheClear();
     }
     ShellIconClearCache();
     PinContentIconClearCache();
+    RgGlyphIconClearCache();
     if (!g_settings.ModernizeShellIcons) {
         ShellIconReleaseSvgResources();
     }
@@ -37640,6 +40313,13 @@ void Wh_ModSettingsChanged()
         return;
     }
 
+    if (oldSettings.ModernGroupBox != g_settings.ModernGroupBox) {
+        if (g_settings.ModernGroupBox)
+            EnumWindows(DefViewBorderApplyEnum, 0);
+        else
+            EnumWindows(DefViewBorderRemoveEnum, 0);
+    }
+
     // Dark system colors: setting is opt-in, system dark mode is the gate.
     if (nowDarkModeActive) {
         ApplyDarkSysColors();
@@ -37655,6 +40335,7 @@ void Wh_ModSettingsChanged()
             if (g_flushMenuThemes) g_flushMenuThemes();
         }
         SetPropertyDialogClassBrush(nowDarkModeActive);
+        SetFontViewClassBrush(nowDarkModeActive);
         EnumWindows(ModeSwitchEnumProc, 0);
     }
 
@@ -37672,11 +40353,10 @@ void Wh_ModSettingsChanged()
 
     // RegeditSection turned on/off while regedit.exe is already running --
     // without this, enabling it never styles the already-open window until
-    // regedit is restarted, and disabling it leaves every subclass/timer
-    // running until the process closes. RgInitResources()/the required hook
-    // installs are idempotent (skip if already done), and
-    // TryApplyToWindow_Regedit's compare_exchange_strong claims make
-    // re-scanning an already-styled window safe to repeat.
+    // restart, and disabling it leaves subclasses/timers running until the
+    // process closes. RgInitResources()/the hook installs are idempotent,
+    // and TryApplyToWindow_Regedit's compare_exchange_strong claims make
+    // re-scanning an already-styled window safe.
     if (g_settings.RegeditSection && IsCurrentProcessRegedit()) {
         RgInitResources();
         bool hooksQueued = false;
@@ -37687,23 +40367,32 @@ void Wh_ModSettingsChanged()
             Wh_Log(L"RegeditSection enabled with one or more hooks unavailable");
         EnumWindows(RgEnumWindowsAfterInitProc, 0);
         const HWND rgMain = rg_hwndMain.load(std::memory_order_acquire);
-        if (rgMain)
-            PostMessageW(rgMain, kRgRefreshColorsMessage, 0, 0);
+        if (rgMain) {
+            // Color resources are swapped in-place with no locking, so a refresh
+            // must happen on rgMain's own UI thread (see RgInitResources) --
+            // post, never call RgRefreshColorResources() directly from here.
+            if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire))
+                PostMessageW(rgMain, refreshMsg, 0, 0);
+            else
+                Wh_Log(L"Skipping regedit color refresh: refresh-colors message not registered");
+        }
     } else if (IsCurrentProcessRegedit()) {
         RgUninit(/*fullUnload=*/false);
     }
 
-    // Apply/remove tab subclasses symmetrically for already-open dialogs.
-    if (g_settings.TabPill) {
-        EnumWindows(TabPillApplyEnum, 0);
-    } else {
-        TabPillRemoveAll();
-        std::lock_guard<std::mutex> lk(g_tabDCMutex);
-        TabDCompRelease();
-        g_tabCurHWND = nullptr; g_tabLastPillX = -1.f; g_tabLastPillY = -1.f; g_tabPrevPillX = -1.f;
-        TabBgCacheClear();
-        if (g_tabCachedRT) { g_tabCachedRT->Release(); g_tabCachedRT = nullptr; }
-    }
+    // Flicker-fix subclass, gated by RoundedTabPane -- covers already-open
+    // dialogs whose tab controls existed before this settings-changed pass.
+    if (g_settings.RoundedTabPane)
+        EnumWindows(TabFlickerFixApplyEnum, 0);
+    else if (oldSettings.RoundedTabPane)
+        TabFlickerFixRemoveAll();
+
+    // Same "cover already-open windows" rationale as the tab flicker fix
+    // above, for the two other creation-time-only double-buffer fixes.
+    if (g_settings.RoundedButtons)
+        EnumWindows(TrackbarDoubleBufferApplyEnum, 0);
+    if (g_settings.ExplorerSection && g_settings.LegacyRebarControls)
+        EnumWindows(ToolbarDoubleBufferApplyEnum, 0);
 
     // Stop an in-flight transition before changing any pill resource or
     // visual policy. The worker validates this generation at every handoff.
@@ -37802,6 +40491,7 @@ void Wh_ModSettingsChanged()
     const bool glyphReplacementChanged =
         oldSettings.GlyphIcons != g_settings.GlyphIcons;
     if (glyphReplacementChanged) {
+        g_glyphBgGeneration.fetch_add(1, std::memory_order_acq_rel);
         g_glyphMapBuilt.store(false, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lk(g_glyphMapMutex);
@@ -37836,13 +40526,25 @@ void Wh_ModAfterInit()
     // All included processes need to follow live app-theme changes, not only
     // explorer.exe. A dedicated thread owns its hidden receiver and message
     // loop. Started here (not Wh_ModInit) so it's only ever created once
-    // Wh_ModInit has already succeeded -- see the comment at its old call
-    // site for why creating it earlier, ahead of still-fallible hook
-    // registration, risked orphaning the thread.
+    // Wh_ModInit has already succeeded -- creating it earlier, ahead of
+    // still-fallible hook registration, risked orphaning the thread.
+    //
+    // Deliberately unconditional, not gated behind any single setting:
+    // ThemeMsgWndProc's WM_SETTINGCHANGE/WM_THEMECHANGED handling resets
+    // g_animEnabled (read by SysAnimationsEnabled(), which gates most of
+    // this mod's animated features) and invalidates the shared theme-color
+    // caches that nearly every paint path reads -- gating window creation
+    // behind a narrower OR (e.g. just EnableDarkMode/FluentPinIcon) would
+    // silently starve those unrelated features of live-update reactivity
+    // whenever that narrower condition happened to be false. The thread
+    // itself is a plain GetMessageW pump, parked in the kernel at ~zero
+    // cost while idle, so there's no real teardown benefit to chase here.
     CreateMsgWindow();
 
     if (!g_isXamlProcess)
         EnumWindows(TreeRuntimeApplyEnum, 0);
+    if (!g_isXamlProcess && g_settings.ModernGroupBox)
+        EnumWindows(DefViewBorderApplyEnum, 0);
     if (g_settings.EditFocusLine)
         EnumWindows(ModernBorderApplyHotkeyEnum, 0);
     if (g_settings.RegeditSection && IsCurrentProcessRegedit()) {

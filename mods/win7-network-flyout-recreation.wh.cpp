@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 along with some more configurable restorations
-// @version        3.4.0
+// @description    This mod recreates the Windows 7 network flyout for Windows 10 and 11 including the Network Sharing Center Control Panel page
+// @version        4.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -15,7 +15,7 @@
 /*
 # Windows 7 Network Flyout Recreation
 
-This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with a recreation of the familiar, lightweight alternative from Windows 7.
+This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, replacing the modern flyout with an accurate recreation of the familiar, lightweight alternative from Windows 7.
 
 Screenshot of the light theme:
 
@@ -25,9 +25,9 @@ Screenshot of the dark theme:
 
 ![Screenshot](https://raw.githubusercontent.com/babamohammed2022/gtasashtml/main/dark.png)
 
-Screenshot of the restored Control Panel links:
+Screenshot of the restored Control Panel Network Sharing Center:
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/immagine.webp)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/controlpanelpage.png)
 
 The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Windows 11 24H2 and Windows 11 25H2.
 
@@ -38,27 +38,30 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **Privacy mode**: Hide real network names (shows as Network 1, Network 2...)
 - **Classic tooltips**: Full network info on hover (SSID, signal, security type)
 - **Right-click context menu**: Quick access to network status and properties
+- **Native Network Menus**: “Status” opens the native Wi‑Fi connection status dialog, while “Properties” opens the native Wireless Network Properties dialog for saved Wi‑Fi profiles when available, with safe fallbacks for unsupported cases.
 - **Keyboard navigation**: Full Arrow keys, Enter, and Escape support
 - **Auto-refresh**: Periodically refreshes the network list at a configurable interval
-- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese or auto-detect
-- **DPI aware**: Scales correctly on high-DPI and mixed-DPI setups
+- **Language support**: English, Italian, Spanish, French, Russian, German, Portuguese, Polish, Dutch, Romanian or auto-detect
+- **DPI aware**: Opens at the correct DPI on high-DPI and mixed-DPI setups. If the flyout is moved to another monitor while it is open, close and reopen it to recalculate the DPI.
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
 - **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
 - **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
 - **Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
 - **Restored classic Home/Public/Work network location icons**: The location icon shown in the flyout now matches the type of network (Public, Home, Work) and can be configured in the mod's options. 
-
+- **Restored classic network map**: Restores the Windows 7-style visual map in the Network and Sharing Center, with PC/network/Internet icons, connection lines, and Home/Public/Work location icons.
 
 ## Requirements
 - **Windows 10** with the native taskbar
 - **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) or similar mods)
 - The network icon must be visible in the main system tray (overflow menu not supported)
 
-> **Note:** This mod is unlikely to work with some taskbar mods (e.g. Retrobar because they don't use the ToolbarWindow32) or heavily customized and unstable configurations.
+**Note:** This mod is unlikely to work with some taskbar mods (e.g. Retrobar because they don't use the ToolbarWindow32) or heavily customized and unstable configurations.
 
 ## Known limitations
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
 - **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
+- **"View full map"**: This link opens the Network shell folder, the same as on Windows 10/11 which is the most similar concept to the classic Windows 7 map.
+- **Control Panel custom page refresh**: On some Windows builds, the customized Network and Sharing Center page may not fully refresh its custom map/details while it is already open. This is a minor visual limitation; close and reopen the page to refresh the custom data.
 
 ## Hotkeys
 | Key | Action |
@@ -69,8 +72,9 @@ The mod has been tested on Windows 10 21H2, Windows 10 1809, Windows 11 23H2, Wi
 - **m417z** - Code review
 - **Anixx** - Testing on Windows 11 23H2 and providing feedback
 - **sebastian08dm08-cpu** - Testing on Windows 10 1809
+- **Kichura** - Visual analysis
 
-If you encounter issues, please report them on the author of the mod.
+If you encounter issues, please report them to the author of the mod.
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -87,6 +91,9 @@ If you encounter issues, please report them on the author of the mod.
     - ru: Русский
     - de: Deutsch
     - pt: Português
+    - pl: Polski
+    - nl: Nederlands
+    - ro: Română
 - interceptNativeFlyout: true
   $name: Intercept system network flyout
   $description: When you click the network icon in the tray, show this classic flyout instead of the Windows one. Requires the Windows 10 taskbar (native on Win10, or via ExplorerPatcher on Win11).
@@ -103,8 +110,8 @@ If you encounter issues, please report them on the author of the mod.
   $name: Rounded corners
   $description: Give the flyout window rounded corners, matching the look of the original Windows 7 flyout. Enabled by default since Windows 7 itself used rounded corners. Disable this for a more strictly classic/square theme look.
 - restoreClassicNetworkCenterLinks: true
-  $name: Restore classic Network Center links
-  $description: Add the Windows 7 “Connect to a network” and HomeGroup/sharing links to the ''Network and Sharing Center'' page in the Control Panel.
+  $name: Restore Windows 7 Network Center layout
+  $description: This setting replaces the layout of the current Network and Sharing Center page in the Control Panel with an accurate recreation of the Windows 7 one, featuring the classic links "Connect to a network" and "HomeGroup" along with the visual network map with PC, network, and Internet icons.
 - useNetworkLocationIcons: true
   $name: Network location icons (Home / Public / Work)
   $description: Show the classic Windows 7 network location icon in the flyout header based on the active network profile (house = Home, bench = Public, buildings = Work). Disable to restore the original generic network icon.
@@ -117,6 +124,12 @@ If you encounter issues, please report them on the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog
+// - 4.0.0: Enhanced the Network Sharing center Control Panel page
+// - 4.0.0: Native network context menu actions now open the native Wi-Fi status
+//   and saved-profile Wireless Network Properties dialogs when available, with
+//   safe fallbacks for unsupported cases.
+// - 4.0.0: Removed legacy EnumWindows-based refresh (INetworkListManagerEvents now drives live updates).
+// - 4.0.0: Control Panel Network Map layout refinements and privacy masking.
 // - 3.4.0: van.dll alignment: row height 30rp + 24rp name + padding
 //   rect(8rp,3rp,10rp,3rp), signal icon re-centered (matches the
 //   real Windows 7 van.dll UIFILE). Refresh button, footer link
@@ -182,7 +195,23 @@ If you encounter issues, please report them on the author of the mod.
 #include <windhawk_utils.h>
 #include <process.h>
 #include <string>
+#include <vector>
+#include <memory>
+#include <type_traits>
 #include <stdlib.h>
+#include <cwctype>
+
+// Use the mod's own module as the HINSTANCE for every RegisterClass /
+// UnregisterClass / CreateWindowEx call in this file, instead of the host
+// EXE's (GetModuleHandle(NULL)). A class is keyed by (name, hInstance) and
+// Windows does not remove the registration when the mod DLL is unmapped, so
+// registering against the EXE's long-lived hInstance leaves a registration
+// that survives across loads/unloads while its lpfnWndProc still points into
+// the (now unmapped or relocated) old mod image. Using the mod's own,
+// per-load HINSTANCE makes a leftover registration harmless, since the next
+// load gets a different hInstance and therefore a distinct class.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
 
 // =========================================================
 // Dark context menu support (right-click menu only)
@@ -207,7 +236,11 @@ static int  ROW_HEIGHT_EXPANDED = ROW_HEIGHT_EXPANDED_BASE;
 static inline int ScaleDpi(int valueAt96dpi) {
     return MulDiv(valueAt96dpi, (int)g_dpi, 96);
 }
-
+typedef struct {
+    WCHAR profileName[33];
+    GUID interfaceGuid;
+} WlanProfileDialogContext;
+static HANDLE g_hProfileDialogThread = NULL;
 // Shared by InitRefreshButtonRect (hit-testing) and the paint handler
 // (drawing), so the two can't drift apart the way two copies of this
 // expression could.
@@ -240,6 +273,9 @@ void LoadSettings() {
     else if (_wcsicmp(lang.get(), L"ru") == 0) raw_language = 5;
     else if (_wcsicmp(lang.get(), L"de") == 0) raw_language = 6;
     else if (_wcsicmp(lang.get(), L"pt") == 0) raw_language = 7;
+    else if (_wcsicmp(lang.get(), L"pl") == 0) raw_language = 8;
+    else if (_wcsicmp(lang.get(), L"nl") == 0) raw_language = 9;
+    else if (_wcsicmp(lang.get(), L"ro") == 0) raw_language = 10;
 
     int raw_enableHotkey = Wh_GetIntSetting(L"enableHotkey");
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
@@ -272,12 +308,13 @@ void ApplyNativeControlsTheme();
 
 void FreeSystemIcons();
 void LoadSystemIcons();
+static int GetNetworkCountSafe();
 
 void RecalcDpiMetrics(UINT dpi) {
     g_dpi = dpi ? dpi : 96;
     WINDOW_WIDTH        = ScaleDpi(WINDOW_WIDTH_BASE);
     
-    BOOL showWifiList = (g_NetworkCount > 0);
+    BOOL showWifiList = (GetNetworkCountSafe() > 0);
     int targetHeaderHeightBase = showWifiList ? HEADER_HEIGHT_BASE : 76;
     int targetWindowHeightBase = showWifiList ? WINDOW_HEIGHT_BASE : (targetHeaderHeightBase + FOOTER_HEIGHT_BASE);
     
@@ -312,10 +349,24 @@ void RecalcDpiMetrics(UINT dpi) {
 #define WM_ASYNC_CONNECT_COMPLETE (WM_USER + 105)
 #define WM_TOGGLE_FLYOUT_REQUEST (WM_USER + 111)
 #define WM_UPDATE_REFRESH_TIMER  (WM_USER + 112)
+#define WM_UPDATE_HOTKEY       (WM_USER + 113)
 
 static UINT g_uTaskbarCreated = 0;
 static DWORD g_dwFlyoutOwnerThreadId = 0;
 static HANDLE g_hConnectThread = NULL; 
+// Handle of the short-lived thread that waits for a superseded connect
+// thread to finish and closes its handle (see ReapConnectThreadHandleProc).
+// Tracked so SafeCleanup() can join it before Wh_ModUninit returns; both
+// this and the connect thread run code in the mod's own image, so leaving
+// either alive when Windhawk unloads the DLL crashes the process on return.
+static HANDLE g_hReapThread = NULL;
+
+// Track per-load class registrations so the first RegisterClassW of a load is
+// required to succeed (a leftover class from a previous load bails out of that
+// feature rather than creating windows on a stale class), while later calls
+// in the same load skip re-registering.
+static bool g_pwdClassRegistered = false;
+static bool g_flyoutClassRegistered = false;
 
 #define IDM_CONNECT         2001
 #define IDM_DISCONNECT      2002
@@ -725,6 +776,37 @@ static const WCHAR* NETLOC_PUBLIC_ICON_BASE64 =
     L"9br8aJxu8cBeMeOmT/5DIcqMxWGwLyYci/P8SwEo/p+uUCDa7ZgIr3HyMFhMaI38OlrshwnnEP8KAAD//5R9kyoAAAAGSURBVAMA/JzslxJ7OeIAAAAASUVO"
     L"RK5CYII=";
 
+static const WCHAR* NETLOC_PUBLIC_OFFLINE_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAHk0lEQVR4nM2XXWwU1xXH/+fcOzP75W79BUK2AjaFlMZRolKR"
+    L"hoq+ICSSxW2kttAIKS99qJAqpD5UVYTUl6bKSxrJD/2SKjWoUlFTWUICiqAlSRXioAKxAi3BGFgMbLENa7zLzs7X/eiDd9xl"
+    L"+WhfovRKR3dmZ+ac3/2fc8/M0tjYGD7LwZ9p9P8HAPmoC7t3714dBMGQUupyb28vdXV17Y/jOFetVo9WKpWfTkxMmE8VII7j"
+    L"7zabzdeJ6Mbc3Jxfr9c3AEC9Xl/b399/eufOnafefvvtuwDspwLAzGeMMeNa69UA1gdBACICM/f5vn8kiqLZUql0iYguM/NV"
+    L"AJcAXCeif2mtFw4fPuynvvbs2VNg5l1xHN+J4/j8/v37r/4vAH3MfAPAn13X/Rozf6/RaCBJkvdd172eJMmX4zh+zhjz9RYY"
+    L"iChm5lkimtmxY8cVIppKkuSTWq02UiwWXyMi22g0jgAY/a8AcRxvSpLkh8yMIAgSKSWICEKIUAhxSghxgpmV1jpnjFkBYMgY"
+    L"M5QkybC19vkoira07sf8/Dyq1SqEEKSU2jQ6OroPwAWt9eVHAlhrDwohbhJRXgixU2v9dOvStiiKthERiGiemcvMfIWIpoQQ"
+    L"pwDUrbUSQNEY84S1dtAYs80Y058kCYhohe/7rxERjDEnHwewRyn1HDN/4DhOnMlkUKvVLDP/MpPJTCdJMqK1XquUWgdgIxFJ"
+    L"ACCiJjPfIqIpZv5ECHFSSrmOiPqDILDGmLeklFWt9VeklP98JIBSalop9ay1dpfv+25LTjLGlJIk+RjARSHEJBHVhBCste4z"
+    L"xgxZa4eUUk9aa7cDeLEFBSEEaGkMMvM0ER0QQvydHtWKN27cyPl8vpDL5YZyudxbjUbjWd/3NYBZAH0AvJbzUAhRIaKLQogL"
+    L"AGaEEIvGGAugC8AzRPSKUipvjDHMzEQEpRQcx3n1oQps3bo1f+LEiSaARqlUuj44OJhpNpsol8uh4zi7giCIHMcZUUo9DWDE"
+    L"GLNea11KkqTUgtLMPNNKwXw2m00AoF6vzzPzz4QQvUT0lOM45+8D2L59+xpm/laj0Xhly5YtM8aYv2mtV9RqtfVRFAHA7YmJ"
+    L"ibP1el0D+BiAXbdundvf3//5XC73hLV2JEmSZ4hoRGu9XilV0lojCAIIIcDMvVrr7wA4J6V831p7msbGxvDSSy9tbDabe4Ig"
+    L"2BqG4RqlVHsxLufQdd2b1to3lFIXlFLTk5OTs63bDP7TEe2qVat47dq1g0KI1V1dXbuCIPh+HMew1sZCCLflVzPzV6lSqfxk"
+    L"cXFxn+/7rrUWqRljYO2ST6318jEACCEaQoh5IrokpZwkonNhGH5Sr9dnp6enay0YC8Du3bv3B41G403f91Gr1f6otf6FMeZ5"
+    L"Y0xfJpP5uVRKlR3H+X2xWBxRSm1USsk0aGpCiKVlGpNaQWtdIKLhKIq2tzrh7e7u7vLmzZsvKqXOKaXOW2tnms3mi67rIooi"
+    L"5PP5f4yPj58C8GEKSGNjYwIAj46Orl25cuWhe/fufWF2dhbWWjiOs6xAkiTLyrSrk56nx21t2RdCVKWUq3K5nMPMsNa+WqlU"
+    L"fjczM1P3fV+lABJL3wXi5Zdf3k5E35ybm/tGGIbdSZJASgnP8+B5nlVKkbUWSikopR6ASWumHTSFatXRgpTyhhDiTBiGP/7o"
+    L"o4/q6QcJAeADBw6889577+1bs2bN1eHhYTiOgzAMAynlb3p6epqu68JaGzLzn7LZ7MlCoXA7n8+rbDYLx3EghEirHVJKZDIZ"
+    L"ZLNZuK4LKSW01j1BEDzleV65UqkoAEK2gqfGGzZsWCmE6GdeYsvn86cnJiZ+WyqVuj3P26yU+uD48eNvArBDQ0MDfX19Q/l8"
+    L"/ovZbHYDEX1JKdXbvnprLZg5VWLOGPOjd99990irBviBRlQsFvuYuTt14DjOGd/340OHDr0xODi4slKp3E1VK5fLt8rl8i0A"
+    L"E57nyR07duzNZDI7fd/H4uIiPM8DACil4Ps+enp6Lhw7duwdLL2FDQBKU5BuGyOl9ESr7JkZcRxfBaCCIAinp6dvNpvNAIBO"
+    L"70/3fxRF6tq1a4fjOD6cz+eDtHgBwHVdFItFeJ73uWw267VqjlMA2+ZMO44DInLbAKoAog5LAMQAVMs0AHP27NmpycnJXwFY"
+    L"GBgYQKFQADMjn8+jUCjAGKPN0pZJY0J2AJC19jaAK0T0pOd5f52fnz8HIAQg0t3StgLRqp105oGBgX4pZTcRAQCEEH/RWl+U"
+    L"Um5KkuStKIqSNuWsbAsOADh48OD5F1544duZTGbDnTt3zk5NTd3tCMgPseXfe3t7VziOk027ZxiGh44ePXq8t7f319Vq9V5L"
+    L"rdRMWoTL+Ww2m2Z8fHwawOU0Tx1z5/F9ELlcriiEoFb+wyAILgOIqtVqmq6kPW2pAumwLecG929Pwv0gD4NiAOy6boaI0oa0"
+    L"sLCwcLWVwnTVy8E7AdLg6Tk9ZH4cFAMgKWU27YTMfKFSqSy0Vm3aA7cDtI+HqdEJ9DgYiqLoD57nMTMPA3jd9/0m7t+y7TMe"
+    L"+Un2mNGpTCdQ57X2hdkOe/T/gscM2zE/TqXOZx54/t9lcT9A127FpQAAAABJRU5ErkJggg==";
+
+
 // Classic Windows 7-style Work/domain network icon, downsampled to 64x64 for compact embedding.
 // PNG RGBA 64x64; SHA-256: aa799df96ae1d1e683945c367f3ba4b1c776f0c719af808b7b3e9dd47442c81a
 static const WCHAR* NETLOC_WORK_ICON_BASE64 =
@@ -753,6 +835,1067 @@ static const WCHAR* NETLOC_WORK_ICON_BASE64 =
     L"z+1l7Tt3Ft7bvbNt++aNz7369M+/+vbLzy5q2/DCnb2v/erJgXfX7jO62/XANSFFKnDLoS1u//P3t3Zmxx5yJWUt+k6eRM++cYyOls8ZvNiZ/afCiQMHRrZt"
     L"2biladUTD+5Yu3LJoVeevbn51z/4buuLj7XuX/+bVWOIPARd24WT3WdQGiyQvk1C9NB9FuNDAM63MTAwUG7e/peOv27e+Nv97266qXz6+I/Qvq0Vfe2j1EYG"
     L"7f1APml90eMjAXyEtf8p6vPtzhbABwrpfIMX+zxbABfs579t/CcAAAD//yOSCIUAAAAGSURBVAMAJ07tbrBZnd0AAAAASUVORK5CYII=";
+
+// Windows 7-style PC icon for Network Map, higher-quality artwork, 128x128.
+// PNG RGBA 128x128
+
+// Disconnected-network artwork used by the flyout header when no network is
+// connected. Source: NeTray-Aero (icon_disconnected.png), embedded as data so
+// the mod has no runtime file or network dependency. The source image is 48x48
+// and is decoded at the header's actual DPI-scaled draw size.
+
+// Available-networks artwork used when Wi-Fi networks are visible but none is
+// connected. Its white screenshot background was made transparent before an
+// alpha-preserving Lanczos resize to the 35px header size.
+static const WCHAR* AVAILABLE_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAACMAAAAjCAYAAAAe2bNZAAAGRklEQVR4nO2XXWwU1xXH/+fe+dgPs+tdbGyDXSjBAZHEqREt"
+    L"H6IRaQRqElX9kAY5CouUl6iqQKr61LfFUvuYqhUPlaU+VlTVCkEb+aGNW0uAFRrTSE3oWoqjyC7BxmBnP2bXO5/39GE/sB03"
+    L"bsDkiSNdzcy9M/f+5pzzP3cGeGJP7IltjtFXsUg2mxX5fH7VWvv37+d8Pk+5XE4B4K+C40vZ4/YMAeBMJnNQSmlEo1EEQQBN"
+    L"0+D7viIiUa1Wpy5evFgAQNrjJLEsS+RyuZCZr5mmGSkWiyAiMDM0TUM6nUa1Wv0BgD9ZliU2G4Ysy9JXXEvLskKl1Lzv+zuO"
+    L"HTvGQRCQaZqYnZ115+bmTMMwnObNmw3DuVzOW9s5NDQkdV03jh8/zq7rUnt7O8bGxnhmZsZoa2sTmwqTzWbF8PCwGhoaGojH"
+    L"4791HMdnZh2NnGHm7jAMUS6XyfM8EBGax5X20DBNuTYkqlmWFUop06ZpHg3DEFLK1r2O44CZIaVstbUgjwQzPDysVlx6AHD2"
+    L"7NlCoVAIBwcHvRMnThjFYpHi8TiPjIxI3/fXBXgkmGZIMpnM01LKDsMwGICUUirP8wbCMJREpAkhpJQSQogN53xomJmZGQOA"
+    L"o5T6TTKZ/O7S0lJrTEoJz/MAQGdmNNumwliWZaxYULcsSwkhCpVKxTtw4EAQjUY1IoJt2zQxMaGvCgcrCFLrTftwMGvk6gHA"
+    L"mTNnvDAMjcOHD4t0Oq1JKTE7O4vx8fEVucFgGUMtjECg+ugwlmUZhmGMA2i6XABQzPy053mwbVtqmgYpJZaXl1sgxAosothy"
+    L"9zJe7nwXf7v3PNQGEdsQJhaLCSHEUSJapYYwDNGQMDXlKoSAYoKCrFcYoaNt8R18qz2P60vP1R8kWW/rbIurYLLZrJifn5c9"
+    L"PT08Pz9PANDT06NNTU2Fvb29yGQyKJVKlEql+MqVK2JycpJWqoUZ2Jsu4tnYLfjOIIjikMKHGdHRpvtgaEgU30G7xwASXwzT"
+    L"qB1rs80/deqUBAAhRMsDK71EDRAG4+C2+zgeuYw7dzUIcwDRLSZC0Yne+QoS1Ul0zF0A4v0Q/sm6hwJ3NUyzdpw+fXqPaZqH"
+    L"lVKhEEICdfUUi8XGm68vVwYgKUAYhBib24vnnrqNwe05FAo3EN0Wh7a9Cydqs3hKvIXClhTu9f0UXLoLCQ/QEqth8vm8BsBj"
+    L"5leTyeSvFxYWwMwbVsyVFsokYFaxVNMxVdiDfb6BRLcN2R4AWg1791VgF5NYoO8g3HoElfCvsD0TWmxNmFKpFAOAaZr24uKi"
+    L"OzAw4O7cudN03boLR0dHzf8FwSAQAW33/4x996/i54c+wJ7dWyH0GihWAfwloLgM9kLotkKvmoB/6w28hCp69gKf1LYCACxr"
+    L"Tc4IIaTv+2ZfXx8GBwfNarUKZsbo6OgXeoUA6OUPkCpfRVeaQa4NTXkQngIcBkICeYyIWIJbKEDV8tilPKjUMyjUHnz+fE7a"
+    L"RIQgCOC6LjzPa+UHEaFZTzRNe/DFJgWE1LD89bP4SLyCy3/4HX54KIkX2v+DiMpDSgIcBfiMarUTC+0nQd/4Pq7+82NM3LgJ"
+    L"MxIHAORyn4dRROQ7jhPYti1qtVoLJgxDlEol2LYNIoLv+xBCoFKpAABpusmfObpY8DslgjnEEx+GpXu9FEVJ6LAxV+zkHV2L"
+    L"YZt/W7uDbhT9OVULDF8ovaWGVTCu68Y6Ojr0a9eu6devX2/1JxIJlMtljIyMPHCppqGrqwuXLl1qAXuej+cT095u/3188q+E"
+    L"8d7dOA71fYatpsTb/06og5WIlvb/7r37lx/hZvlgZNuO3VRcutfa9zQAKBQKqhGKW8vLy78HEDBzC9RxnFaomtbYndGozEIp"
+    L"Urt27dzx41effbHT+DZGxui9SiIReyF55Rm/Okt9R96Uf5z86O3s61/73hsv1mBMGh//48NPb8S2xG4D9f+oddLx4Y2Zo8x8"
+    L"ntn9BTN3MXOO3/8J33krXmPmn8XaEqiP83lm/ubaF1wVJsuyZHd3tzY9PY3+/v7/G2J6ehpAP4ioBuB8o5tsn0dkLXly+5HX"
+    L"EkT0KwCSiJrjOHfunHnhwgUPj+OPkpmJ+ZbBfFNnHtcAYPHqL/fz9MjRej8TMxuNc7nRfJsN96UW/C/r/vM0bglTFAAAAABJ"
+    L"RU5ErkJggg==";
+
+static const WCHAR* DISCONNECTED_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAX"
+
+    L"cJy6UTwAAAGbUExURQAAAObm5tnZ2dHR0c3NzbGxsampqbm5ucHBwZiYmLe3uJiYlpGRkb29vYeHiIyAgISFhXl5ecnJybq1"
+
+    L"tb1XV7QoKMlsbMG8vMqkpNhFRdk5Ob6Pj8Vra950dOCNjeFhYfOMjORaWrGEhHV1db5fX96BgeSKiuV6eq2oqNKoqPGJifJ9"
+
+    L"fdxSUptGRr8tLeF0dMVdXfFxcepgYMFWVt5hYeeHh5NoaPFpacZBQWk1NbtTU+pxce57e7CqqsidndtVVWRRUUlJSehpacla"
+
+    L"WvJubmVlZapBQfBlZWxSUmxmZupUVPBdXfBPT+9BQe45Oes4OGhPT71NTeNKSuhbW+xJSewzM+0eHukMDOoDA4GBgaKXl81Z"
+
+    L"WegKCnlZWcmRkeQmJuOlpeADA+IqKtFpaa9ubtoCAtMCAtoxMd+enuwVFcwCAsUCAtQ0NNdPT9E2Ns9sbIheXtgrK7oCAssv"
+
+    L"L4ZtbdhOTmxFRURERF9fX25ubtZiYtEtLbACAs1AQIpgYNdqaq0BAcc4OLZcXI96es04OOCQkLlpaYx2dgAAAKkyvtMAAAAB"
+
+    L"dFJOUwBA5thmAAAAAWJLR0QAiAUdSAAAAAd0SU1FB+oDFg4vASZcxSYAAAAldEVYdGRhdGU6Y3JlYXRlADIwMjYtMDMtMjJU"
+
+    L"MTQ6NDc6MDErMDA6MDAnY+fQAAAAJXRFWHRkYXRlOm1vZGlmeQAyMDI2LTAzLTIyVDE0OjQ3OjAxKzAwOjAwVj5fbAAAACh0"
+
+    L"RVh0ZGF0ZTp0aW1lc3RhbXAAMjAyNi0wMy0yMlQxNDo0NzowMSswMDowMAErfrMAAALXSURBVEjH7ZTpUxNBEMWHnZmdIcGw"
+
+    L"G0AQjSFGCAYkB0iQgEdQQTxQUE4VEK8YFQVPQEFE/bft7s0CBSQuX/zk26SSrXq/7p63XcvYf5VShcENzgX3DHBp4qU8Awb5"
+
+    L"TXnIDtI7YEiUaR6ig0N4CUdoKYod/g5wPCl8PXfgdFKzEjr4pFTeOsDlJ8AnVaW3s5p+xpXPp5T0CGAHRfKXSYdrtQ1UQYcj"
+
+    L"5QAB58N4CFAIUAetqkoB7lk52IAIAKDxKgnsnBUlqxknvwqUBaCwAyiLGZpU7QnQynYBqzSAo1swCQ6i8E9Qw6cUAIV9sqa2"
+
+    L"7mi9osI248GGY43H1R6gAsKnnRcwSM2J0MlQrYkEjMQbwk1NkVPRvWlSnH4E9OlQc3NLrLZVUYcz4XhbW7z97EHxmwEAtOpo"
+
+    L"DsViLYlkqxY6ysLxeFsqla47MH6LCaja2RVKxGLnkNDdaaifSmV6zu8DcIkJCMrerkQi29eXTfZfuFj0X7q8b4XwuVosiCH2"
+
+    L"90ZyuWy2LzcQAfeVDPjtq47RgAePrxyhXACl+68BkcukMimonhnsGbKlk5KBi4m7KSh0CDEoUOp653A6PZgbvHHz1u2Rnju2"
+
+    L"FHYRKK4ajq6DAGhORJTdHR27d398YnJyomNoSgpeBGiFzSoYXeDwCKAAmJ55MElqfDhlcm5sA7AxEL8zyW7g0eiEA8wmpwW8"
+
+    L"v4sAjY4dyEYAvd2jc65/fv7xQj033A5UGJaZAAMKK/Qb4snwtv/ps+dITDm7SSIAjRCFMlAvnPr50Vnwvyy8WtDFkaAqCABN"
+
+    L"PgAk/s459fOvu2dmwV8ovFnUDiDIp1yAO4Drb39rTw+8KxSWlpaWF987T1qZ/oBt4bb6A1bUrmQCftvz5P/w8dPnL9Urq+Bf"
+
+    L"W/uaZKWVG6f635y79VXwb5QF2Fge/N3u3cLy2sb3zR/lABYZ2fEDsbW1aZf1s5/hX7tvVwZ+s3+iP163dACZQBppAAAAAElF"
+
+    L"TkSuQmCC";
+
+
+
+static const WCHAR* PC_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAABD3ElEQVR42u29eYxc13kv+PvOOffW3"
+    L"iu72RJJbWZoWbRleYtly7YoJ3l5zvbgyVB5DoIAyYtjYDx5CRI7g5nJG4rzECTBw+SvwBjDE2T+eB"
+    L"nY4iR2kDheZEmUR/bIkWxLlriJNLdmN8kmu9m13brLOeebP+65t04Vi1qdie30AQpdXV1V3V3f9vt"
+    L"+33KBrbN1ts7W2TpbZ+tsna2zdbbO1tk6W2frbJ2ts3W2ztbZOltn62ydrbN1ts7W2TpbZ+tsna2z"
+    L"dbbO1tk6W2frbJ2ts3W2ztbZOlvnB3uYmZiZtj6Jf/5DP+yKcOjQIbGwsEBXrlzh/UeOMB56iAGAi"
+    L"HhLfD+G5+GHHw7/+q//evbTzzwTvKTmEoGZxcMPPywff/xx9fjjjytmlswsDhw4IJwH2fIiPyoe4P"
+    L"HHH1cPPPCAfuyxxz5Wq9X+s86yM2DeyLLsZNTvn0yS5FzU613URMtpmq5/7GMfy17J+x44cEDs27d"
+    L"PAMCVK1d4//79DIB9RfK/31KAf2EFePTRR/+3xYWF34+iCEEYIk0SpEkCbS2sMZaBthRi2RpziaRs"
+    L"G2M61Wr1GhFdEsznMmtXpJQrp06dWvuN3/iN+JWGGgDi8OHDtG/fvkJB+F+Dgqgflj/kypUr7IQxm"
+    L"yQJp1mWpVkm2TKnqSbLLIiEkFLMqiCYDRvB3UopkBCQRGAwdJYBacoA+rt37770jSefvMDAKhGdkc"
+    L"BpJeUFK8Sq1np1586dg6eeeip98MEHjcMT5iUURBw+fHjci+DHQUl+aDwAMxMR8SNf+crfzM7O/jd"
+    L"plploMJAnjn8PrWYV09Mt1OtNrlZrUCpkIRQzBABihoC1IGYWDBABEFJACQGlJAQRLDOyLAMzZ1LK"
+    L"TSFlB0BHCNEFcI2IzhLRGSI6Z629GIbheaXUxp49e5IfgBfhLQV4hR/iI1/5yhPTMzPvl4LM+eWL8"
+    L"j/8zuNQKsTcjMbCPGF+XmFxWwvb5lvYvtjCzHQVjTpQrylUKwEq1SpXwiqECJlJsmXB1gJsmCwgpZ"
+    L"SQSkIJ91VJSJl/ZWakaYosy5iIukS0CmCFiFaY+SyA7wO4JKXsWGs7zNxtt9ub9913X+/lhOx7EQD"
+    L"Yt28fHzp0CEeOHOGH/gUzG/phsv7HH3+8mSbJ8WartaNeCfg7z52m//B7VwGaH9qTNQAsIBmQBFVh"
+    L"NKoZmo0YrXqEhTmD7dsYSwsK2xdDLG6rYn62humpOprNBqq1OodBCKVCZpIAFDMLWBZsjCXLVhARC"
+    L"QKUUu4mIYSA1hppmsJay0SUEVHKzNeEEBcArAohzllrT0spl7XWq0EQnI/jePPNb35z+moA6759++"
+    L"B5kH9W5fihUIADBw6IgwcP2i984Qt3Ner171artXBmusZ/98Vv0x/9r32IxiwYBBIhAAFAgUmBEQK"
+    L"kAFsBIPOfWeThnDJApaiGMVqNGDNTMeZnGNtmBRbmKlhcCDE3w5ibMphqMqZbAaamamg2pxCGVZYy"
+    L"AEgxINky2FqGtSyYWQCAEAIkCFIIBEGuKFJKWGuRZRmyLLNE1AZwiYiWAVwAcJ6I1omorZTqAthg5"
+    L"gthGF6+6aab+q/kc9q7dy/t37+/kJ2f0fBrUZIfChC4d+9eAoAwDG+rVCohAZCC6OrVPmAUAAIzgW"
+    L"1hGBYgA5AGEQOKAZIgEoAIAFJg1MFUQWwriPsKV7qEk8sKsNapPgNSA8EAtbCP2VYHO7cn+Ilb1rF"
+    L"riWlxHpibFjQzJTHVDNFqhKjVq6hUAiilGGyRexCCtYaTxDhFsQSGIEFCCDGrpJxVKnhTEOQKYoyB"
+    L"MTneNMaAiAbGmLXV1dVlIUTpRcIwXCaiFSnlSqvVukZE+uDBg/blwgwR2R85BVhYWMhhtDF31KpVa"
+    L"G2NhZGrlwYAZnOBQ97gnwbgOB8G5U8lBqABQbmCSAIpAVAIkASEAlAFUwiGwAAhdBJCxIQZA1S1Qa"
+    L"+d4NTGALB9MMdQQiNUBrUK0Khm1KgO0KzGaFYytJpEM60K6vUKarUqVBBAqpABBhGzMRlnWcrMADM"
+    L"KmpukFKSUrEmlbg2D4NYwDBEEAay1SNMURmtDRJudTme10+lcVEq1AXSIaJOILhPROSJaMcasVKvV"
+    L"C0SkPc/wo6MADjUDQuwJKxUAGWdpgtVLiROWda6fX0XUIoCdblgBFsJ7OQ/DBBGE1KiGKZZmK3jbn"
+    L"QHe8hMS09N1GFNHks2jnwBRAvTj/HZ1AFzYNMiyFDqLQNyHQg81FaFZ6WCqnmKmYWimJdBqKJpqVt"
+    L"Goh6jXQgSBhJQCQiiQICZBIDCnaYY004U6E4iEFEJK0HwYhvNBELxFyuuNwOYeLXryySdfPHz48P+"
+    L"8b9++fyxC6o+KAlDhtgTwBgAIKxXqdjdx+QoAIXIrf2kY6X3ll/j5+LcEEMFagjECAKFRIyzOA0vb"
+    L"AEEMC8BYwDCgdX4/1YRUS8S6hjitYZDNI0qAQQoMEqAdM64mKUwvhjEJ2KaQMKioFDUVox520QwHq"
+    L"AcZzTYFppoBTTUqaDRqqNZqqIQVBJUKpBRMZKCzlI21zAwIIZjcP0BEIgxDYYypnz179p65ubnPnz"
+    L"59+gN33HHHtx5++GH54IMPmh8VIog//elPB0R0qzUWlUpA7XaE9WuUe/4Ryy1cfIEF5Mt4vEnK4V7"
+    L"rhRZjgDi1yDRDCkK1AgTKfdTsXpG7cFjOoYRhwFqGtvn3mQW0UxBtKkh0BWkGJBqI0/w2cLduZpD1"
+    L"E3C7D7IRFPqoyQiNoItG1aBRFWjWA5pqhJhqBtRqhKgEAkophLVpVKtVWGthreV+v49er5dVKpXw4"
+    L"sWLvwTgWw4o/vB7AGYGEWHXrl3biehWYy2kJFq70kGnp/J0j18qZ/GFSgUo8JTE/zFPyH/y5xlr0R"
+    L"8w2l1GnObhgwgQNPYWvirlUT7/3v2ZhYIwAxYMa4aPGc4VTVtCZiQyU0eq66WCpBpIUiBKGdcyjWw"
+    L"jg76cwugYVkfQaQLuH8e/+8A2vP3t70AcxyAi6na7MMaIJEn46tWrSwBQcAs/9Apw6NAhkQNic3ul"
+    L"VmswM4QEXVjpQscBqMo5uCvMkDAq5HHBXmfpPKoozEMpFq/jnF4YDICNNqMbAdoAQUErjukMkbtPY"
+    L"2CUxn3R0IOUfscpR6koYBjnQazNlcNYgrYBtAmQZnX0EuBaDzi3DkRoYtt8BGMM2MXGXq8Hay2EEL"
+    L"S5udn2M6sfmVoAES1UKxUCERMMrV6MAKNAsOAyDvAET8BDcxx5vHDv9nrbZQbIDs2WGAzGILFY32S"
+    L"0O0CSAZXQe0t6GSaFvC/ec8W4ApGnMIWSUP5nll7FCznGMFINbDYZQhB6iFGvVaC1gbUWzIxut1sq"
+    L"QxzHqwBw5MiRHw0FKFJARTQdhCGIBBurae0qA6yclY9bNHmCHLduHhP0BAxReg8eCR1pyrjWsdhoA"
+    L"4MYqFe9P1SM6gD5YYleqZJPVgzAy3L992XASIKUeXgIFWG6xqhUKtBal1xCkiQgIpllGQCc+5GsBm"
+    L"rm+SAIQCSs1plYu8Je6jcp+XdSYAuQGEsVPUGzJ+wR5cCIkjAstGG0O4z1TYt+JDDdBGTB3huXUhb"
+    L"Jw5jrpzEvwEO9KY8p9IWH71W8jnjMi7g7QgDCuoojA/XQQAjhyCQumEcWQlCWZQxgxXOBL3vEv3QN"
+    L"YGFhQTCzlES3BCrXR63ZZQCUC7i4+cpAPAEEelJhHkP7hbQKX2vzMOBR7tZadPuMq9cYnR6QubTP2"
+    L"CHytz6gK9z12M+N/zz3euZhnB/HAcWNbf6XGh9MFimoBeLEol6BYxRz91/UJ4QQYObIUc4/nCDQa9"
+    L"MSjrs2AFIA+OpXvnK7c43U6ydodw1q0yFIANGgeAM7TP2KOA6Zf1KiAIY0luqNp4nWA5SFQkj39ox"
+    L"oYLHRttjsSCQpEE7AAUTXx3/iCVhADJ0V55RD6TGKP5U8D+J7kcJbGKdEmQbS1KDWFE7ZDIDcE8Rx"
+    L"DCkliOhSEARrr0Ym4v8PobtePUlETESWiDQRGWZuMvPPJEnyF61W6wNRNIAKlLh6tY12J8Wtu6awa"
+    L"0cDUhBG2SC+Lo0bcfnj3mDk8TGMAGdmLiVNUotrbcZGhzGIAaM9K3UWfJ1HMEOyyH+O8R9n775x1m"
+    L"5HPYDxvAd73sOYnEtIM4taRYCZHQPISJIEURRxGIYgouWiC4qI/mUUwBf4gQMHhBO6cQKvpWn6/iQ"
+    L"ZfDSOo/89GQy+Z4z+ahgGH5dKTRlrEChJl9euIdWE7Ys13HH7FFpN6SmAHcsA7PWu/jpBW8/148aK"
+    L"AEamGe2uxcamRX/gwoDxhFG4eZPfrPHcuid0393bCY+bSYpih0rgK5Q2eVaijUG9FuYZgFPaJEmQZ"
+    L"ZlVSsFau1pUDV9pPUD9gNx6qUzOrRvv5y1AvzdJzC/E8eCniPCmSqUCQCDqdzHo9NHrRzqJYxkEIU"
+    L"kJrFzsgm2AVivAzUs1nNrWw+ZmdxTojWQAE/AAu+f6rCG80MFiGALc+zEYWlt0+xZXNy16kUCqCSQ"
+    L"8kCbyOtMI8KPhfzxieDwWLqxz+34I8EJI8VRLQyBpDJAZRpwQjNGoBHlqaI0FAmAwGCDLMtRqNQA4"
+    L"48nin68WULQ/eQIvwhaYuR7H8b3W2geI+I39Xu+dQaBur1QqGAwiRP0I3XbH5BwJCSmlSOJEsbXOb"
+    L"VmcX+5CyhDVCmFqKsTOmxs4e76PzIyzfJ5wSxxQ0MPWu7nPo1QKO5ohkIP4JMBs0B9IrG9atHuMNM"
+    L"vTMEHer/YFz6PIn2gMG0zgCMj73oH7/P2L3yGGkEfbvAYxyABhNRQZaJN7AGZGHMew1pIjhk7/s/Q"
+    L"DeOCNDh06NGLlBOAab85VE/VurfkX+/3uB6UQb6zX6rAmQ5RFaLd7AEMzsyBBJISQefqSgq1B1O/n"
+    L"VTkSyLIU51cihJVFhIFAoAhL22uYng5wdUOPWbwTKNs8Vyq9w1i9YIQexqgXKMFk/hxmQpJYXOs4W"
+    L"jgGgmCYt48LeIQZHOMFRlhEX8DwhO5bvXuOMMP/zpg8BMQpIJBCkMkzANfX0Ov1mJml1hpBEKw4Fv"
+    L"D1l4OZmQ4fPiz37dtXoPXyTS9fvtycmqrfazLzc0y417b5dqPsUr1WQ7/fR7fXQ6fd1gyQEJKISFi"
+    L"2yhgNnRqkaYo0zZBpDSKBXjQAEUFIgSgaYGU1Qb0eQrn+jdnZEDuW6ti41ob1FYDhhCdGLXqkLgDP"
+    L"5RfPJc/1O78MF5SFRJYZtDsWm22LKBao1WjIB3jCFzSBDKIJxA9NUAbP1Y/Ty9ZjC7XJSaAoAST6U"
+    L"ArQlsGc3/r9PoQQsNZylmUdxwK+dgXYv3+/PHToELsSrXbKECZJ9w6T4o2WzYeY8YDRvKdaqyFNUm"
+    L"gToxv1udftGgYLZggppcrZtdg1Wupc6Jkekl0kICSX2iylRHuzj/V1i+aMhJIEbSwqgcCOmxv4/rk"
+    L"+ej0DIgEmT8jk3HtJDI3TwNYLAT52sLnrL71ArijaAN2ewbWuQj+yaDUkwsAjbzwBTrJ63xvQBLaQ"
+    L"vNaGEQUYCxXMQOYUYBADM4GGEArWcJkJRFFUIH7t2sxeXwg4dOiQUUohy7JdAD6Qpsl9V6+sfUAK8"
+    L"RNBGIbVSgX9QYR+t4dOmw2DSEhJUiqybJXJNNIsQ5amiOMESZqBnWslAkgICCIQUfkPa60hhIBSAp"
+    L"fW2tjcZCwuEUgwjM4tdHGhivnZCnrdyBOqn1wXQiQv1mP4vPI1BrDCOQIzDCGFF2ALayR6g9wD9Po"
+    L"C6YyFEGIiDzAC+sT1TB5NwgP2BmHCp4kLBdBAkhEGscXOaQOlqrCxgRCELMtKDgBAIoRoFyTQwYMH"
+    L"X5sCfPjDH/7g3r17f+sv//L/+Le7du6afes9b8X27UvYuLqG9uY17illiEgAJCBIShLI0gTdeIAkT"
+    L"qC1QZJl0Dq3VCEob6CkPDclrwxc+Dl2rldJYGW1jTSRqFYAIoY2GoBArSqxtBBiZbUHbU3OkZIcTe"
+    L"18RWAHs0eAn/AsX3pE0KgXYEtIYsJm16DTl0hThpJ52fo6a/at3w6tfdwLMIbgbqRgJCaUErwQUHi"
+    L"ANNOYbhQMYv6/FCygUgrGmDYzb74aDsBXAAnAvOMd73jg4sWLX7t8+RK96yffjSe/8U370d/+bfuR"
+    L"j3xE/MEf/D7V6nXKMq20zpAmMeI4wSAeII5TZNoUVT0IIdyNiiHO8qtX/cu7cYwBWwsBghCMq+sZY"
+    L"PPmB7iGC2sNpJBYXAwx1QI2NmLX0mUAyptAcxRvR6sqTGNg0HmAQmolLqCiEQt5k6dAmgHtnkWnZx"
+    L"EnAoFiCJFLnEafXrJ+13kHeM/DMA30rZ/NqPsvhe+qganOG0iyNEO9wo5bYCgiDAYDaK05DEOy1i7"
+    L"/5m/+Zu+3fuu3Xn0IuP/+++mJJ55AmqZ3zczMUKvVTPfuvTtoTU0Jq7X4x3/8R0RRhP/0n/4I58+f"
+    L"Q6Y1jDHIsrwmXQicStdOI1buK8F4UcdonbNaRBAEXFnPi0BhKMD5PCCszbuCp6cq2L5Yx7XNNtgaZ"
+    L"20WIO2UQAGcuSqiyptAhXLSENczhONYwFKeTbCBzgi9vsBmx2CQCFSrAqJ4SRG+xuO67/bHXPzLAc"
+    L"JJ4NEwoE3eoEJIMN1U0Db/24kISZLAGGOllIKZV4mIixmL14QBiEgyMx85ckS+8U33kFQKcRzjIx/"
+    L"5VTz6tUdw5cpVbGx2cj6ktHIxIvCJlj7u9r2faWOKQgZAhI11DUgJpYRDwRaweUt4GAgsLdRw9nwX"
+    L"g2icD8gFl1u+AZABSPI2caEAq5y3CF3reOiyyEKqcqRXQBtGFAGdHhANGI0aoAJGEcSuy/fNGLdKY"
+    L"40jN7g/YhNjocNYQGdAnAASGWoVwBjr0tVy1K3AAOdd/JcFeH/VCiCEaBIJqlRCZkj0owTHjx/D3W"
+    L"+9B2GlgixLIUVuSZOs3FeC4r6vFOPKkKfrXGKDzBhcudKHDBSEBNha5GVv1+ELgdnZKmamQwyiwWj"
+    L"5l/n6li9GrgxFqzi5TmArASFzhbDSmW/gWsYDMAVgVoj6VbS7NfQjwnSTSqIKyJWeaQIHwBOES5NL"
+    L"vZM8he8JrCsCRQlQUxnqFYlU2/Lzdg0h5LqBTr4WUm/cA1SEK7xoCwziGJVKCKUC5/K1+8U8ogTj1"
+    L"j1JCXyr9wGgMQY2zxsRxwkuXu6hWp2BoJzyZGNcS3f+Oyuhwra5KtauxnmGUJoUeVScdMjeg+d+D0"
+    L"FZWdT540IMgSFnAEmwlUiiBN12il6viWQmhCABAoGJck8ghPMI5ELA0LzJ0wwiXyHouvRvUggoaeA"
+    L"EiHtAkzJIkWOA4vNzTSHCZVEXXi0JVCrA4uJiMX/WzP8WQppZZNrCaF24GCRJeh2ou5F1O60c8QK5"
+    L"VruUqmgEyTIYrREECp3NNq6uJ6hWAghBMNaWIL5oviQA2+araDUUNjez3Hr9pg8UDSIeT8s+8HP+e"
+    L"iQL8GoGjkW0YCQZo9uz6PU14lhCCZTZTJHPkeNzaQz+UxkDaAT0DrMAGi0lj6WQRTUwiwmDDrBt1k"
+    L"AqCWuHPIobYiWttdVar7xaEui6aqCUMsy1mZEx54wTGFIqZ/nmuhhf3B+P777lj3uB4ntmhjY5tx0"
+    L"EEmtXe2h3LKrVfMzLaAtjLHSW059aG2TaoFEPMDtTGfYA+CRPme/7DSBuEKRsLLFD5q/EDF5hyOb3"
+    L"tdbo9w16fUYcW6QZIzOMTOfpmTZ59TDL4B4b/Zk2eQjTJm9y0VlebNKay5spf47hfZPXADINpBkQp"
+    L"4xmIw93lm3pzfr9fmGcbaXUyqtpBBnxAHfddVfpAYgIwgh0ryTQsGC2ECKfgfM6TyYCukmu3n98HC"
+    L"9YlwUwA1IRVi92YWOFsCJcvxvDWnbjsQzr2BEpBeZnq1i52EeamiEZRF7DJ8TkRlAIVzjy6ghueih"
+    L"/zJQQ3BiBQWzQ6WkMkgC1qoW0BCKLAg6S8JkdGlp36QxM3uXiJf1UhiL3HjRsXCwdlZszSDMgjhnN"
+    L"uoK1iftMy15AVkoRM6+mabr+ajmA6zCAlCR0piFuVrhS/3/RPZmBdBUkACFy0DFpPGlS3C8E79+3r"
+    L"uJXfGVjYKwFgUBkcH65C7BCqMh5B+sUIK+3WnLCI6DZDNBqBFhPk7ESr/VqBHIsPJixBL1o9LNeWD"
+    L"AlNWKNQZzkXmAQGaQNAeWylTL2j6N6J0guUuJc092v5LHY79TIvZg8hFjUAZIE0JlFNdAwhl21MP8"
+    L"MkyThIAiQpunKK92ZNDEEHDx4kN3fWa9X6rDviemO/yHGz//VPLa9WyKLcitx3acv69b974vW5ete"
+    L"QwTj+ARQnvOfOdsBKIBS5GjQPB3T2oWBzORuNTNQijAzHboizZgr5+K+GQI+8hr4uEgZncWzF0Z4+"
+    L"H5sLJJEoz/Q6McGWZJPDunMIsusc/8WWeq+zyxSbZEZmz/HTRplGsgyQGcGWWahtUWWufCh3XuW99"
+    L"3PtUGaWcQpoDONQKblHAGAcpGFUgrMvAIADz/88MuNSb20B8jSjOYX5/Dv9/xnnPmHo4jmL2B2Z5R"
+    L"PyHjAzQdy4259HA8UFl/wBYVSSCGQZZnjFAhJmmJlJa+9CkkwlsvGSQaDHR5hsrA2Z6KnpkJUqxL9"
+    L"SA8RuLU5mT5eGYTxCkQODFp2tVca4efzfgINhkSWCfSjDP3IIEkNGAJUpMKO2is9uPAteujqycsMO"
+    L"J8YHnueGMkfiTgPAdoiTgjW9lELU1hbBVuGCATiOC7Gy0FEZ/0W+9dTDKoLKXHzjh1oVBpob7wJ9+"
+    L"ypQlQZySMpkiTB1NTUDVm+SQRQ8TNfCay1kMzQaZrHfykR9WNcWkuhwhoE5RmABTmjzBXAOkKdXfd"
+    L"OJZRo1gP0+5lz/TQ6B1Ak6pDDHoEiFBR8rhXDAnyhKDZXAmYDowWiyCAaGMRpwVjaYapX/q+ibPUp"
+    L"soT8i3C9L4Wgyfld9jgB49VJioHVHFzGCUPyALWqQc6222IABNZaBzloAwAOHz78mnkAdpok868CF"
+    L"9cvwFqDW3feg/Zm2/1jryzuT1IKXwmK58dpCoARBBIbGz1cvmIQVvLCkdHshZX8A2PLsC7Ns2xBJN"
+    L"FqBbi6QTA8Vg0kB/DKBNwDfCy8moDXylM0OhXKxALGWMSxQRRpJLFy3UFiLPdnEBkn7GG/V/7ZmOv"
+    L"TRvc3DXEDeZ8vO4BMyLK8S7kaJphq5r2AbkIYcZz3frrPd/O1cACTmECRz64TwiBEmmawxrr1JwEi"
+    L"15/tgzs/3x+3/PHswAeAlhlW63zNmyJ0exZxRJiaI0dyWBcCxjFFDqYKXqASStSqCr1+5uqo1gsFG"
+    L"K3a+I15RWFo2H3nzR0Oy7HGWsSJRjTQGCQGSgFSur4tznsaiv5uIi6VYChnAsOWXoJK9E8j/eA0Vg"
+    L"jIPQAjijW2NTQqIaEXDbuXB4MBhBDkwkAXr/GosUEWJaUqkT6RgFIBhEhBVDJPE3P+8RDwUiliQQB"
+    L"ZayFIQElCu8NAJpH/6hwDWGvLZl7rPEEeChjsPlghBBp1hX6UgUvCx15v2UUK6FcNuRC6HKaNpXIM"
+    L"OaQsCxDFBnFiUAkIUrnYTgJg41bTFG69yBKGNZLcG/jsaWHtwjOaAifkCmJMngJGkcH0QgYlFazV5"
+    L"QBLkiQshCCtNQNYd70ceL0egAvA55d1i1VqhZ74aH7cwl/OE/iMIDjvbg3DANfauXIpJcHIU5/C/T"
+    L"Oza7suvIBTAJc9VKsSQSCRJgaQXgNI0egxMrRRpIbGo4xpmA6OzXYxA2miEQ8MktggrQqocu6LIQp"
+    L"g5zAAOZA3GgZGsUDx+4jMqJJ4XKB1reBJrDE3w270nEcaQVwGMJBSLrsswL4uHoCIgnzCpCjt5qtM"
+    L"pAxAJBDHyQ2R/iRBj9PBfqgovlpmKCVx+UrkuAiUHAC72jfYWb31QoGbvwcEpCBUQkIOKawHAO2Q4"
+    L"GEawwMeMVR6AoyOnnFRkNGI4wyDuIJ6amCVb8ke+CuG+ZCTRWXpuMAVBBC75woPC0zgAYwB0hTQOs"
+    L"VMS8PYAJYtBESxGKJYOnVpx44dl19PCPAtVuQKIKmo60upIIQs/+FJ+f8klz9O+vj3QVQWgYCc2Vs"
+    L"5fxWA2+ppGJkbuGMXD4t0sCiG5GmhhSUCW4FKINAXxRIwz8JhXPXPjnkCDxSWSjAGCmHyCV2tESca"
+    L"g1gjiQW4wmVFsIzpQjgV4LIGQB5AJKIxKy9e69USvFTRGEacCFibYttskBe+eJiGMzMrpcgYs/zAA"
+    L"w+8qmmglwoBpfXmIYAghIJSYbkD76Vq+zdShnGcIAoMwPk6FmMsVi/28yYOANbNUhUhwHrZANuhEh"
+    L"ShwBJDKEAptyqY/fYbeMN5PKFK6CuBHvYFWJTgzmhCmhgkSYYkzcvHQ6ulsrGkTPtK4YuRYiVhrDi"
+    L"E8RLz8M81Jt83JClBq26QmVEXxcxWSikArBZd3K9rT6Axht73vvdRngUIEMl8NFkI5wWGIWASCLyR"
+    L"sG8EFrM0hTUGlTBENMhwfiUGwmbp/vNszlMCX+hwmICtU5C8VhEUClB2C5sh8i9YwvLzpmFmwJ6yl"
+    L"CEkxwtsLdgapGmGQWyQpBokFEQ51TkUIkG4ApUnWBKl1ZMYtgIL8j0BRsvrbvRsEAHVwKDVUq7lbv"
+    L"gc7aq0Qogzr6URZJIHICIKwrDiZQF5CJBSl9VAn/L1vcWNrP9GTKHOMhhjEAYK164NsL5hIANyPQL"
+    L"DFHA4Rl3Efve7rZ8ZaDAJCMEQZGGLeF8yfdKbDRxv1hNjncEYThkxHBeQ90IkiUaSKEgBxwaSV+Yl"
+    L"x/CJEuiVilH8vFQQMXT/KD5DO9IUYCwQxRZLcxaVIOcDio94MBiAmYtpoDOvZ7RvHAQ6ADgEgbmWu"
+    L"S2coJckgSZZ/6TyMZV1AIsgkDi30kPSY1SmyTVCsBf3c0u3zjiL+G8tD1lCY/NCEQhCWFhd0Lk05v"
+    L"L9OW0z2r5T9glyrjDWlKkd25yPz0OAgpKAED51m1PTuUOwZZ5PRS+iKMge66V/NNJlTCPpK8Ey0B8"
+    L"YNGqEMBDo9vJ6hcgpdAYgszyVXn6tJNAEBQCkVFAqKP9QISSCIEA+K5COLCcab/bwkf6NBE8OAKZZ"
+    L"TjJJBZxbbgMs8zZwzciUdfnuMAtg1yHMxgsLcN8DsKwdTz866zes9nnDoxbe/CDGPIGfHRT9d4DRB"
+    L"mmikcYagczX0aMkd5DXBRwYHPUMox6QaLhMgMbA37ASmIe4NLGoBNZ53qGDctvBYK3NiOg1NYLcAA"
+    L"TKYtGAs/g8/uc9AQJpmkJrUxJCBU/gnxLpTwCCpXvTGlrrHOyBce58H0C+9SJOdN5OLsh5AXYp/dA"
+    L"rlKkhPGIIeSgoBMJsHJqX3hIpvi7Gl6FB8Bgw5JI4yse+DdJUI0k1goAg5XDegFy/BNFwVI1G0rth"
+    L"898QG1DZTTQEgFQ6ImsLBcjc/8dlN3CapkWY3pRSrrzaYZCXKAbluaWUakTAfhGHXR+fn9YVPy+UZ"
+    L"1JnUOERpJTQWueNIBYw1mC5VABGHGcQAMJQeTiAh/He4wHgPV4oSz5mJkbXBRUbRWDGikXeZIZlr3"
+    L"nT8wSupmBMhjRTSFOFLCAYKRwbOIzf+cia4wBouAyFxLA8KDCuDE6JvBax/P8hpDpDvZaCrSzb2N1"
+    L"GEA7DkLIsO3/y5Mn2a00BRxTg0KFDBFBQrdZKDJBnABLGyGIA0a0mwcQwYFyL96Q5AeZy2x/SOIbO"
+    L"MpAQyDKLldW0TL+0BgapzqtuYliiLwRsPQKJ/cyg9AwY9gGIovBTNhZ64cBrvgM7JTFe46gYvpcQY"
+    L"EvIUo0kzRAGBKXkMPaXnUGitP4hMLRenj/aH+g4vzEquFgoQdBphlYtzTefu04gay201qyUgtb6st"
+    L"sJ/KoWRE9UgIWFBSISQqnAuRe6LgsoXHwhaB/k+UpQ8AU+nVxyCwCSNEWaZQjDANooXMv7QFyzA0F"
+    L"njJg0QiWd6xvjAtgjhNz9607xoNBeOVh4jaNjW0QLwDYCDvN4ztbmQtEGWWqQhTqvRkKUef+IJdMQ"
+    L"BxB5fH95X3it4cPYX3AFlhmZJrBNcPOigtYFk5p7T601VyoVMHMXAA4cOEBFU8/rzgKGOMBN7wpZ8"
+    L"gDsUrSCivTd/43oYV8his9aZxl0mqFWDRDHhEsXM8BUAStAwkJQjuw1cWkRQy6gMFw7WfD+byrWbg"
+    L"n/twuPETSeAjj0T8LDDLK0arYMrQ3STCNLhcdqClcUEkMGsIzrLkyUfYJ2pKu4aDEfTgeL0iklKRC"
+    L"oDLMzQV4ZhQVB5sshHMXuDYPitcT/CT2B+TLigvotrFdKhSAIyxBQeAGf7x8Hg5NGwYpuIKN1HgJI"
+    L"Ynqmhgf2dfH909dwaU0hjWowJoCBQCYCIJQQ0uaulK3bjZOPir3sYW/syxd2iQnYW9wnvJ+PNGi7u"
+    L"JyPqmepQRpqKOsEDJvPBxRpctETQHY0FBTFIp8mHukNoBH2cjAAGjWD2akqUp252hIVHEDx2W46BX"
+    L"jFK2FedjpYCFV2ARc8gJ8FFBY9zvEPswe6rh4wQhK5kSaSAv1ogMsXl/HJ//he9Po9dPsZ+lEVVzc"
+    L"Ix168jFOn1vH9Myk6GwrQdQBVIHAdPNJCCAsCO0aQnHeg0TEddrSaEMM9L2U4oNFwUHYNSa9R39HS"
+    L"JMBGQGuLNDP5cEwhZLbO2of9AQUHQL5XGFGGUU+AsUGSaMDYuWhRrTL6fS4oo6IPoADkK3id5zoFy"
+    L"LMA6dUCJISwXggwfi9aaf3+Y+NDoiN9AFojSRLIvJSJiyurWFlmhGGIWq2CbVMB3rCjhZ+5fy9ICv"
+    L"T6Cc6cXceRo1dx9EQfZ84BVzZq6HUkbOS57ZBAykKQBtiUJBKK7frW29BUeg85XPFNxvMExaSGHA6"
+    L"NWIY1BJNJ6EyUC/+GgrXDql/5uBilgstxMj//F2NeIP95PDCYnWaEAaFjbF5k5PxKIswssywDEZ1/"
+    L"PSTQRAwgpYCUQ7CSewQLIcivRI1Yt0/y+OBvyC4Ob8UkEJyHCIKgDA/9boQrnStIqhGqR6ZQDWtoT"
+    L"TUwPzuFX/jZN+AX/q11+/mriOMAZ85fw5FjV3DkSBenzlm0NwKYtOU++AwQGaCcpyADtia3ZGG9f9"
+    L"0jgApvwEWIKIpD+UYSa3MGM00JbGWO/P3+v1KQYpTxK7IRb0ZsqAB2JAPIOwcJSaJx86ICuOiqdn2"
+    L"S1haNINZa+7pIoBsogAKRLHkAKZF34YJGPIAv6MLF+2h/HAcUPEGWa/D1wJEYEgF682sI3ryJyrf3"
+    L"QkWEbqeNTruDRrOJIAihlESlmqBer+An3zaNB963BKkE1td7OHPmGr53bBNnzwKXrszh8obFxcs9m"
+    L"Hbm+H0AYc7HS6kBpPnlZCDBLIerCMl6tHGx1TG/4JPWBjLLrZGEzwZSOedVWDUVYVl4bt/HCfA9AA"
+    L"+LQyLvA1iYU7nQmSF4WK11JFC3Xq9feD0k0IgC7Nu3j//0T/9EF4zgMCPIFaD45eNpYIHwx8OA3wx"
+    L"SCDv/AHPr57HMIPeYFlPxNsjTMwhNDYYspJAOhzGUzGN4mqRIkhTr613XRaRQq1Vx01IVu3Zsz6/L"
+    L"E4QQooZ2J8P3z/Zw5FgXLxyNcfIsY+NaANNXbmVnCgT5xQFysGny4hIAJuWGRfIOYbaANRomy3GHK"
+    L"GsAYkgCuSEXfyqU/DYz8rqFyXuOBwqZCbAaN29XyLJiKXRJprGUkowxq7feeuvVHyQGYAAmyzInuA"
+    L"IUYmSfTwECx7mAcdp3vBmk9BhSYm5hIc9nsyxn83JyAybL0EhmwCuEDDpvrnCbmNI0RRiGudUxg4R"
+    L"AoERZUIkHEaI+w9hi6US+irBWq2D3rgbuedMsxH6Ja5sJzpxt49wKYaO7gGvXFE6di3DmbB9JWwOa"
+    L"gEABIQMiBlEKUXb2CljDMCYAWLrVbnbIIRR5/0gr2GieP+w9tK5bjUYmjAmANoSKspidImSZ9aaJC"
+    L"MYYdr0ZF975zndmr4cFvEEWIMaKQ0WLkkEYBmXMLxRhhOkbY/58DDBacSRIpSCDoFwYlZfic8Uyji"
+    L"pO4xiZ1vnjSYJ+bu0spLQqCEhJSeRrJxhSACKQYJs3lvb7A7TbfQwGA1hjUK1V0KgqvPPNCo2mxdT"
+    L"UDEjUsNlp4Pwq4+iLBkePZzh2VmBzcx42AUyaADYGggS2ypBKQ5DJgSGEa2RxYNTP+0FjQNEVjcYn"
+    L"ij1FIQLSBJiZJszPKSTpoHwPrTWyLONGo4E0TctpoFdycahXjAFG8l8U5Esu6CAISuGPY4BxBRhXj"
+    L"FfSNSTyDhSoMERYrWJ2fh7VajW/pm+SIB4MIKUkJaXs9/sYRFG+dUwIS0QspKTCh1pvRL0SCqigiW"
+    L"QwgLWMXj9Fp5vAXuyC+RKUFGg0q1iaqeON/6aJX/oZgY2NBFeuBoj1HDrJHE6fMXj+RIwLqzF6HZs"
+    L"vlFAEpWIoSiApgRTFzIJz4yRKMonKgVGaUCQb6jAJQpoxqrUAQhhYY8GuKusbHfLrGL+maaCXUgDK"
+    L"hTTsyDUGbiEE+flnKUjjrXjxBT0i1JcIEz5J5K54gWq1irm5OTSbTaRpim63iyhJeG5+Ht1u93x/M"
+    L"Hh2dm7uzSDaMYiiCpiFEAJpkiCKY1itGUSWRD7CYZkdAZf37EkiSEGgYDjoOhhk6PWu4dz5qxBECE"
+    L"OJRkVgduoy9jRruP9tLUg1hd6ghuW1Co68SDh+0uD7F1roRgpRV8P28wtNIkwRBgaBYhCnw+zD4Qm"
+    L"fKsbIUEhelEwzi0ooIUi7axLYcicQMwtXjT37WqeBbogBiCjTeljzz1m/4hKnKBXAB3s+kvfn/240"
+    L"Mj7+tfAoUkrMzc1hYWEB1WoVURRhZWUFWms0Gg3eNj9vqtWqeuqpp1b/+I//+H+am5u7+S1vecvs/"
+    L"OLi1N4779xxy65dd7eazT3bZ2Z2W2trWZrKJI6RJkkZRvL+Tk1SShIurx3+7TnoDUNVkoiDmBENNN"
+    L"bX22B7DVIC9UaIpZkGdt/fxIc/WIHhJkjOw4htOHoG+N7zMZ470sXZlQz9tnDrQFOAB4DoI5AJApm"
+    L"6hqWC0RT5yhoISEmwmUWzYiEFI2UqiTibW6JwOK0oA9vXmgGMKICUkj/0oZ+1WaZdA0JR+mVXASSv"
+    L"ImhHCj5+o8e45Y/3B/ihQWuNMAwxNzeHHTt2oNls4tq1a1heXka/38f09LSdnZ1FkiRidXVVvfjii"
+    L"+ePHj36jUajsX1jY0M+8cQTawBW/xb4HoAvAqh98IMfXLr33ntv37Nnzz0Q4g1QaqGq1IIKglalUp"
+    L"GDKEK73UaaW5MlIViI/EK/NLbqW7jWbaVU6bjTFLh4qQe6MkCoJGr1EPXGZcxMN/DTb5/Ghx+YheU"
+    L"ZXN1UeP54hhdOZDh1inG5fRPW2gprl/rINjcB2wNUBqoCSmhIO3BNqbm+1MJ8YipH/8NxMOdtY6XU"
+    L"hZFY/YMBgXkI0FqXCpAj9AzWmjIOjRNBk5i/SSmhn0UEQYBdu3bh5ptvRhiG2NjYwLPPPgulFJaWl"
+    L"rBr1y4MBgNx9OhRnDhx4uxzzz332a9//evfBBABqANgKWWjYC+VUhxFkXnsscfWHnvssWUAjwEIp+"
+    L"fnq3fu3t26++67b3nnO9959+zs7J0z8/NvAvM2o7VI0xTxYJArhcdRuIbL0XF4p8BBICHdpeUBhTh"
+    L"mXE4iXLocgWgVlTBAvRFi760h3v7GCoKwDhkwwso0Vi5vw7MvzuP552O8cCLCi2cJUVsgS3UONKkL"
+    L"xOu4eUfV7QRiCDHcClY0glhr1/ADOMqPwUJQmqYJtM54WPUbEj9uI+VI3C+s3c8IJmEB7fYB1ut1z"
+    L"M3N4aabbkIQBLh69So2NzcBALfccguazSbW1tZw5MgR++yzz3775MmTT373u999Ko7jawCqUsqWcV"
+    L"dMMsZwoVRpmjpdkE0pZVMphSRJTHt9XX9rfb39rW9965nPfOYz3wIQ3HPPPTP33nffzW9/29t+QhJ"
+    L"tj6No+/Tc3P1TrVbNWsuDfp+63S4Gg0GuyPnARL4hzd/q6Dp1hMj7A4rnMIBBbN0s5QAk2pBSIAwl"
+    L"Zqfr+Pl7W/iVfzON1DSwesng+CmLF88KrHdmsbG5G08/08ett1+GNdGI58yyjKWUZK3tLCwsJD9QB"
+    L"XCsFBujoXWaEx8l85e3aVWrldID+JnA+ESw7+aLUFGpVLBz504sLS2BmbG+vo5Lly6h2Wxi9+7dtl"
+    L"aridXVVXz1q181KysrIk1TG0XRRpqmL8Zx3HfCV8YYv/V5bMseyCkop2nKMj+qUqlQkiRVY8wAQPb"
+    L"ss8+uP/vss/03velNnfe85z173vCGN4SJ1ubC6ioWtm3D4uIilnbuhCBCGsdodzro93oY9Pv5HmSt"
+    L"IYWADQJUlSpbtchjP4UUIDWslxTA7/LVCMurm5BiBdVqiOmpKt5+Z4j73lZBtRohrPSR2imk8SwuX"
+    L"exAClUO0hQhs9frdQ4fPpy+Xg6gUAAuQI8QQmudIctSt6LVetQvIQjCYi79OisfT/sKwU9NTWF+fh"
+    L"7z8/MwxuD06dNI0xTNZhN79+61tVpNnD17Vhw7dgznz5+HUkoyM+bn59Uv//Iv/2yz2fzZU6dOfff"
+    L"hhx/+r4888sgLUsqKUwLrCV54xD4BKC6qbI0xSRRFSa1Wm9q/f/+9u3fvfmuj0dg+Ozt7x9TU1FIY"
+    L"hhBCoN/v49KlSzh69Ci9cOQIGvU6pqenMTM7i1q1inqziW2Li6jValBSIo5jFKmosRZw7lkqVXoKE"
+    L"n4DmGuYtRrbty+gXqths91BL7IYpBp8LQPy/g5UqxJSBjnxxDkbWii2UgpRFHUOHjxoC8/7g/QAJs"
+    L"syt4Ey36RlrYHWmZvjV+j3zXWrYMZn/ogI9Xod27dvx+zsLLTWWF5eRrvdxvz8PO/Zs4crlYpYXl4"
+    L"WTz/9NL/44otHjx49+tV+v9++9dZb33rnnXe+9+67717cuXOnDYIAMzMzb2s2m2/LsuwPDh8+/B3n"
+    L"CVIPAMnilm86A9I0bQOovuMd79j1cz/3cz99xx13vG9qampHGIbFdC0GgwH6/b516FrOz8+jXq9jZ"
+    L"WUFSZLg2rVruHr1avkhK6XQaDYxOzOD7du3Y9u2bdh1661uoaVGlmVIkiRf3+IaXwUAVgrSKYSxFp"
+    L"1Ox21IyZs7pQObBQWfT0brkc81juOCBmal1HoxzPNapoGuU4BirEjrdGCtQZom5RiytRb9fgfGaAd"
+    L"E9HUZgPG6VGZmZrBt2zbU63XEcYwTJ05ACIHFxUXccsstLISgY8eO0QsvvGCPHTv2/xw/fvwbq6ur"
+    L"JwEM7rrrrts/9KEPTb/1rW+tLS4ucq/XkxsbGzh16tTakSNHPn/mzJlVAIaIBgASbxJGAKhUq9Uwj"
+    L"uOrAMKPf/zjP/+Wt7zlF5vN5ptarVaYJAl6vR5ba21xBRT/0jfFwIUQAjfffDPW19f99uuSru6027"
+    L"hy+TKOHj0KBlCv1VCr1dBqtbCwsIClpSUsLCyg0WhAG4N4MEAURa6jWiMIAmRZhtWLFyGEwOzs7HB"
+    L"QttiiMmH8LgfmTG4e8JsA8LGPfUy5z+D1VQMfeuihInylucWnbEze5KB1ik5n0/0ROR7w3Y61FmEY"
+    L"otVqYXFxEfm1gQY4d+4ckiTB0tISLy0tcZZl4uTJk/T0008Pzp49e/TkyZOPLy8vPw9AvPGNb7ztw"
+    L"x/+8Pvuu+++fTt37pRZluHSpUt48cUXN48cOXL4H/7hHz5/5cqV4no4qda6ByBGvhDYViqVMEmSTh"
+    L"zH6a/92q994L777vvvlpaW3l9cUWNjY8M6JSdmluMjbb5H0zrvf5ybm0On0ykWMpeeLggCBEGxOTW"
+    L"3+Ha7jZWVFRw9ehRSSjQaDSwuLuK2227DTTfdhFarhZYYFtSKNe9u0ZPPobCr9tGEbio7NzdHWZa1"
+    L"v/zlL38RQPh3f/d3AYYXiDIYvZ7Oqw8BYRj0sywrPUAUdbG+fglJEuVz8q4jqLgppTA3N4f5+Xkop"
+    L"dDtdnH+/HmEYYgdO3ZgdnaWoyiiZ555hp5//vn41KlT3zx27NjXe73eRQDp3r177/yVX/mVn3nnO9"
+    L"/59ptuukmkaYozZ87gxIkT/WeeeeYLX/3qV7/a7XZXAHC1WpVxHHcA9N0tAZDecsst8vz581fuvPP"
+    L"O1ic/+ck/nZmZ+a0wDNHP22i4UqlQpZIvHhwfa/NZzeJ7f6vZ7OxsaflpmiKO4/Lm07JhGI4A4iRJ"
+    L"cObMGayurqLRaKBaraJWq5XecX5+HnNzc2g0GuWFH4tLwSdJUix/sEVerpSihYUFW6/X1WOPPfYXf"
+    L"/u3f3tuYWFh7vLly4mTofFu/tWyXpkCFJcaJ5KdIj4CQLe7iX6/A60zFEOjxVBiAe6EENjY2Bhxn/"
+    L"Pz81hbW8OpU6foueeeu3r27Nljy8vLT62trZ0BgLe97W13ffCDH7znAx/4wLt37txZLQR/9OjRjRd"
+    L"eeOGbX//617+0urp6wtHCmTGm7zKBGEDh/tOdO3fy+fPnO3/0R3/0E3ffffdfLi4uvr/b7VoA3Gq1"
+    L"ZEFt32hd/Xhhy/8+c7OLeREsRK1Ww9TUVJlyDgaD8hZFEXq93khbfKVSgRACYRiW6fPGxgauXbuG0"
+    L"6dPIwxD3HTTTVhcXESz2US1WkWapidnZma2hWE4q5SSWZZhc3MTRGRvuukm9dRTT73w53/+5/9XrV"
+    L"Zb7Ha7/gXrfOGbCY+9tAIUlxrPsqxjrUGWxe4DyUmgNE3KapS1Fo1GA7VaDRsbG9jc3MTU1BR27Ni"
+    L"BVquFtbU1fOlLX8K5c+fs6dOnnzx+/PgXXfNisGvXrtt+/dd//YF77733HbfddpuI4xjLy8t47rnn"
+    L"0u9+97tf+fKXv/w3cRxfAGCq1aqJ47gXx3HkCT1xbj+76667cPTo0fQTn/jEG9797nc/Vq1Wd25ub"
+    L"hqZ+8+JBacbdSqNV0GL0OZasEt3XXjAIAhQr9dLr5FlGfr9PjqdDjqdDqIoKmI22u02lpaWCrKq/E"
+    L"pE6HQ6BX/BrVaLLl68ePZTn/rUb3/0ox99y549e+5ZWFi4a25ubvfs7Oy2Z5999umPf/zjv72+vp4"
+    L"wczNN02zM+vUERdDe4/yyIUAp1bbWsNYZFSlgliVlFuCuUolut4s4jtFqtXDHHXfYSqVCq6ur9OST"
+    L"T9q1tTVSStGuXbto165de/bs2TNz5cqV9v33319517vetXf37t2Nfr+P48eP49lnn20///zzj3/rW"
+    L"9967PLly0ed4FNjTBTHcRHnk7x1B1nxD95///3Yt2+fve2222YajcZfV6vVnf1+X6ucmptYlRzvVv"
+    L"JrF5PK1vlqnLxvsXDVRYZU9DUW96WUqFQqmJ2dRZZliKII/X4fURRhc3MTm5ub2LZtGwAgCAKEYYg"
+    L"gCEq2UQhBcRzz7bff/jMf/ehH40984hP/o2Myg3e9613z73nPe277q7/6q2PdbjcOgqCV5cChmCbV"
+    L"wwbG66y/AImZ+wx5ogIUFaUgCNbSNKVut8NKSfT7OSeQJLlHKKjSarWKXbt2WSklra+vi+effx7Ly"
+    L"8uWmcX8/Dymp6c5DEOenp5e2rFjx9L09DTe9773QQiBM2fO4Omnn9bf+c53vvHEE0/81yiKTiK/4p"
+    L"XRWvuuvgB5eiy28eLiojh48KD9+7//+z9utVrv3tzc1FJKdSPBT7J4v4t5/Hl+eChCQ+HWi5J4o9E"
+    L"YSft8lD89PY2pqSlorbG0tFS48ZxDcNbvA8tCCTqdjt2zZ88vfuQjHzn8xS9+8UljTP3pp5/uPv30"
+    L"098CUFFKTWVZpvNaNPw1Z97408jNYPQSl+l1nrHciMOMn/7pn567+eabv7J9+/Z3NJtNPTU1o2655"
+    L"Vasr1/Fd7/7bUxPT0NKaarVqux2u1heXsbKysr3T58+/eVer7e5bdu2t05PT7+r2WxubzQaCIIACw"
+    L"sLeP/738/NZpO+8Y1vxM8999w/PvPMM1/tdDrHAaS1Wk0bY/ppmvY9iy+0thR6cStS1r//+7//CWP"
+    L"MEenGmIiIxsfRJln+6DWNxMQrn4wDxgIL+LORfqgoWDpfIcZfUzxWCL2wfv8rEdlWq0VXr1498nu/"
+    L"93v/fZZlAgAHQcBaa6PzOrAdi/W+u7djj/k/S10oNZNCAD/00EPi0UcfXf/Qhz70q1LKL3S7nTd1O"
+    L"h0IQTpJEnJoVURRJNfW1nDlypVja2trXzt16tRT7k1lu91+FsAXtm/ffufc3Ny7KpXKLUqpm5577j"
+    L"k8//zz//TUU099ttfrfQeADYLAZFnWHwwGkRP8iJv3BD9S8Tp8+LAEoI0xP1mtVoM0Ta2r5o0Ivlh"
+    L"y4QvW337muV9fAKM7DJzAxvmO8RSyeC+lFCqVyigh5NbhOS6/VIzidb7SKaVEFEU8Ozv75ve///1v"
+    L"fuSRR56TUtbiONYjE7yjQvQBjxk3bO/zUx5muB4DFEOGX/rSl1584xvf+O577733f9HafOLEieNKC"
+    L"EKz2US328ULL7zw9bW1tc+ePn36iPtjqlJK4XrVyBizcfny5WOXL1/+AoDquXPntsVxbAeDwUkAut"
+    L"FoUL/f72dZNvBB3ZjQ+UalziJcCSHe7T5sS26m6qXc/rjlF/MP/vfjIWC8yOU/7r9/lmUl0i94EaU"
+    L"UqtVqqQgFVhjHEgXD6PVQchiGtHfv3rseeeSR71UqlTCKIm+ubeIaGP/z8hckj1/TlF6uJ5APHDgg"
+    L"Dh482D1x4sQnf/EXf/ELMzMz/95aewcR9dbW1r781FNPfc0BjnoQBJRlmS1covtKQRAUWYW9du3aW"
+    L"QCmUqkoIkr7/f4kazcvJfTxsU+HV6bLwosnkJFB1DGv4At70v3x8u/47EOhJIUw86mpYZioVPL1Om"
+    L"6NK6SUqFarbrlGLvRitl9KWXoHv7paeBZHaQfMrDzDuJEwbyR0flVEkO8J9u/fLw4dOvQNAN/wB4c"
+    L"AzDabTer1er2CxRo/Ex7nJEn0BJTKr0Lw8DmLojvWd+/XTSJ7ilFYme/ux73ApC6nQpDjo/BSSoRh"
+    L"WD6v2+0iyzK0Wi1IKdHtdkcAZxEilFLlhTeklCWw9n4fGWOwurp6BUBojCkKdmZM2NYDeuPW73+md"
+    L"gwTvLQCFC88dOiQ3b9/v5ydnRUnTpzgWq0mX3jhBXHhwoVur9d7NWwj3+APfNW0pd8EGcfx8Varxe"
+    L"PgbzylG2/u8IU/7hnG+YPxrqZxb1IUlqSUxUUc0e12MT09jSAIcO3atetCR1F9LECj2/njKyqlaWp"
+    L"feOGFKwCqWuvxiyCPe8MbCXwcLOrx+P9SClAogfFSCTMBWLyW87qqV1euXGEAaLfbTy4uLtJ4/H+5"
+    L"FPCl5hcnMYXjPYz++yqlygJOvV5Ht9uFMQa9Xg/btm2DlLKsJvr9kUVNwVc8Fz5to9Gg5eXl088//"
+    L"/xFIUTVFhs5bmxM1vMQdgz5F2G24AGuUwDxKoTGYxrGr/H2us6DDz5omJk+//nPf2d1dfXZ7du3k7"
+    L"XWTEoBbxQaxrMCTKi+3YhJHKeW83F6genp6fL3xHGMq1evotlsYmlpqSSUJjXFBkFQ4oQgCLhSqdC"
+    L"jjz76dwD6LvRMsuhxyld7Avdv2mNQJ+4QlPjRPOIzn/lMeuutt55YXFz8b5eWllSv14Pr9h1JBScB"
+    L"Q/82aaZxUr3AL9kWp16vl+9R7D5KkgSuHQ3MjKmpqTIbcBO91/VTOGUwCwsL8ujRoyc//elP/58AS"
+    L"GvtC9endfVLCD29gSLgx0YBnnjiCX744Yfl7//+75/ZvXv35ZtvvvnD27dvp16vZwFQYZWT8vxJa2"
+    L"vGMcONhD9+v1AAP0Po9/vl+0VRBGNMqQQFL+DjAldV1UtLS+rIkSOn/+RP/uR3oijq5uMMnE4QpC/"
+    L"oZOxrOpZWa7zM9tAfVQ+AQ4cOwaWs39mxY0e32Wy+/7bbbgsB6DiOSQhBPvgbt/hJIeFG1cJxRShi"
+    L"drVaHckQCjBYdEQXpeHC1VcqlbK45BhC22w2baVSUceOHXvuc5/73O+cOHHitJRSGmMiT7i+ZaceY"
+    L"+rffOFbjxnEj6UCFJ6AmcVP/dRPfXPbtm3fiaJo35133jkzOztLaZqaLMuIiMhnBf37N6oTTLL28Y"
+    L"mogvDxuYDCG0RRNIIT+v1+mQa6djWuVCp2ZmZGRlEknnvuuc//4R/+4S9fuHBhuVarqTRNe06osac"
+    L"EyZjw47HH07G6ySvCWz/SCuB4C3744YflJz/5yZO1Wu1vNjc3gyRJ7tm5c2fgsgSTJAmstTTOA0xS"
+    L"hHEwOE79Fo8xc1nR88mgAgQWryuaTOI4Znepd1SrVTEYDMTp06eP/9M//dN//LM/+7ODAAYLCwtBu"
+    L"90eeJY+7t4nCT6bUPvnfzUK4MIBHzhwQHzqU5/afPTRR79UqVQeuXTp0h1RFO26/fbb1cLCAlWrVS"
+    L"ultOWOAjcrOIlDuI569JTA9wRFbd/fm+QsvFjmxFJKrtfrpl6vy0ajIdbX1+n48eNXjh8//l/+4i/"
+    L"+4mNf+9rXnj5w4ACeeOIJiqLId9/ZBKCXjuEB/VJ1k1dyCD9Gp2j2pHxoH7/6q796z+7du//d9u3b"
+    L"f/Wmm27as3fvXiwuLkIIgSiKbJqmNssyYa0trr5Fk1C/vxjD348QBAFqtVoh/HynBBHnfaesKpUKk"
+    L"iTB5cuXcebMGY6i6NG1tbW/PH/+/OOf/exnLwPAgQMH1MGDB/WN5hwm8PkvlVq/6jT7x0oBiuPAYQ"
+    L"mAfumXfqm1c+fOD83Ozj64ffv2u3bt2nXbHXfcUZubmxvv0rFEZLW7omnRAeXuj2zjLDyAlJKyLBN"
+    L"aayqenyQJLl26hAsXLlxeW1s7t7m5+Y1er/d/f+Yzn/lm8fr9+/fLQ4cOvVSsphs8xj9IYu3HUgF8"
+    L"Rdi7dy/5CxTuuuuu8L3vfe9trVbr3mq1el+tVrtbSrlnZmZmbnFxEfPz82i1WqhUKiXIKwBcUbzRW"
+    L"pd9gBsbG9jY2MD6+noWRdGFNE2PRlH0TLvd/sZTTz31nePHj28UQiIifO5zn5P79++3r7ef/wd1fq"
+    L"wVwA8Nhw4dEg8++OB1FsfM9Lu/+7uLjUZj99ra2k4At4dhOBcEQb1ardaEEGowGEillAiCILPW2qt"
+    L"XryZpmg4AdLXWq8aY5SRJzqysrJz99re/HY3//ocfflgeOXKEfa/0w3L+VSjA+P984MABAiCOHj1a"
+    L"1Dt+oMr20EMPyaNHj7J3GTf+of0wsHWImfHQQw/R3r176ciRI3T48GEsLi7yoUOHJgpu//79tH///"
+    L"rKb+ujRo3zXXXexW9jMWx/p1tk6W+dH4/x/I8GcLno3JhoAAAAASUVORK5CYII=";
+
+// Globe icon for Network Map (Internet), higher-quality artwork, 128x128.
+// PNG RGBA 128x128
+static const WCHAR* GLOBE_ICON_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAABhQ0lEQVR42u39d7jk2Vnfi35W+IUKO"
+    L"3bvzpNz1IxaEpIlPCOCkBDY+JqWjY99rw9+8Ak4XBs/xwb73JnBPrY5HIJNMjhgMGCswSQLBAJpZp"
+    L"RGqTXShB5Nns55xwq/sNZ67x/r96uqbnoGzWgUsKl+6qnaVbVrV9ebv+/3fZfia/QiIupLfQ+llLT"
+    L"vo5QS/vTyRy76v+f/3KwStfdFRM3e/x9dAdTXkpBmLfYr+iX8D+wdvqYU4LW83HsvCu6Fe+/llvvv"
+    L"V088saK4Oz635+m5+Df3AwfjYyeu3xIehEO3nJWbnzgg93Ev3Hdvoxh/Gj5ec6G/gqueuX3J63vfK"
+    L"+aBBx6wn/mMJA/IA1bkHq31a6ThIuquex6wBw681yCi4L+f0KG+Bq1evcRjcvFzP3fwoF7Kc3Xgll"
+    L"sCKK8V0prqO98pmbmKrtt9bgf5C5eleriSpXrednQ/TdJOqlWKEetdTV372jtfjgs3rCrZqKS3euJ"
+    L"scuT65c2jr9u2NL7vf3nD6OIPdODAew3A/e89EPgTHELUV1nYL/d52vsXCP7nDh7U+9nP/v33B6Pe"
+    L"4wNwD6Kf+n5WtpY+fdv8gr9+btndmWRb13e7smehm+/u5q7X6So6WUKeGTpJQmIMVhtyvQAilJWjr"
+    L"oStcotx4Rit9upPPuLWvE6OhyDPhBA+p7Q8PTe/+Ond+8en7rv11mrySe+5Rx84dIv6k6gMXysKoC"
+    L"6y9D+iDPc/8YReueWW8A1KOYC//33Se3b3x183v423dOfHd88tlLcuLYUrl7cnLM9b+hoSgUwU2ht"
+    L"00BKCiBItSoyIaHK1yKjosFkW9PJElSGgTK16GfrclvC7nwh4leHFIl6oiwJX1usSwheU4qOJTT6y"
+    L"8wr78R/9czeem1WGe7iX++5T4U8V4JW5+4tfpw4ePKiez3N14JZba6OR54LkP/prj7++kPV3p53hN"
+    L"67MmTuX9kk6v1CwoDSJVyTeBO10MEErQlClq5TzJYmyKjcLKAQlUcsy3efF4xUnVkcIirObJYfPGb"
+    L"L+El6MpHlGUFqCCxJQiASNsgoSCJp6VBDq+phCPWAS9b4bbtB/eN87b11t/Ja6515R992HfC0nkeq"
+    L"rIHz1x/39g6DPPPOMftd111eJ1vKPf9Rf+bx67J1VuXlgNF59667rskxJh739EZfduBYSjSyoRBmd"
+    L"KE1QKggKTagdShxdkxHo4JwCgcRkGJWgMCilUCh8EIpxyYnVwKeeN2yqOXrzHQbDGkSQKFMQkQCCU"
+    L"iG4YBSJMiZHyopyq35eqvT9YWvbL//W/7PzYcE1TkH016oiqK+w1auXcf0cPIg6Mx8Fnxorf/+Hh7"
+    L"cdW/jwX3U7njnQL+evOv65Heg6cNMtzi+bVPn0rLrzdQtqJdtDlngwIyq3ReWHGB3IWeC5Y/DC6Q5"
+    L"5t+TGPZrt+QJBND5EHEwEJASMjsqQJpqtUcXvfrbgxUGPufmcqobaeUQpCBBmglSQIFaZEPx5vevy"
+    L"sdp05xiP15zb3PeHxbFb/sM1C9e+78e+T42jJojmayw0qK+gu7+U9StADh48qM/Mz+t3Xfc5l9rv8"
+    L"n/3R0a3H1v40PcUy4//5dG2p7fvWSpZOXx7OPy5m2X+sjU9d8fvqTdzBfWp/aT9PWTdRU5vrLKtV7"
+    L"Ktb3no8Ij14Zglu52Tax1Ud45QrLFrviYhcOvewBXLc4SgJxWdQqFRBIEsjbcPPDbk8yc1em6esvC"
+    L"ICCEQb0UhQRAR0tQw3lpn561PhpvvWJXx+Lw5VzrOHdnJxnNXPzw6fsNPfe+bbvm1b/1WVcbQcI+6"
+    L"7777wv9oCqAudfvEE2hueYI7k9uqH/jxcO3T+R9+T7Xzse9Orj68fb14gY2N0t+6uENf99w71LG1H"
+    L"uGNfwjqGXSAO5f38/rFb2JjbRUGu0h7wgaP8eLzt+HH8zxbBE7SI81TBg4qpbGA2TzF9+wP7JubR4"
+    L"JCKSBEYDw6acEmFm2F935si6fWcrpzHcZjRxABEYKHECA07iBLEjbOrrJ02Wne8nW1SPp0GNdWD80"
+    L"29fyLm5w5tPfDyYmv/6Hf/L/2/W6QAAfea7j/QPhqhwX1FYz5CuDBBx9Ud999txw8eFDn+X51yy24"
+    L"3/oter917JG/urnv098nlz1xTd47T1GO/PqW0+JytTh/jrfLXRw+n/Fo933ctnAFN2+7jo7P8GHMx"
+    L"vBFXr/yDjbkMJ859SDb1PVcOb+Xa+beSDW8gRe3XmS9Fk6srvD5YcLAW75l5TjvvnaOcZVjUGhRiA"
+    L"S0VqAUQSl0Ejg/EN770QFD08MpjXNCaCy/VQLxAVGQp5bB2Zq8f5JvfPcGth6ysbkzbC2+wLo9oo8"
+    L"+sizDZ27/pbnzd//LX/4X+aG2auCr6A3MV1L4gLryxRd5YnilOdEd6rtet1KdWvjrb/mkf+inRrf8"
+    L"wd9Vez+7rGQtjIoRw3JdaztWS3M1S4ninD3Cmn2cReXZblLKasyoXqVy50h1lyW7wkZxnDWXcMwNO"
+    L"FWukiphobdJ2lnjxpV5bt51GYfPlZwLGqULNkrNVYsJqU7RSmG0QSuD0hqMIkstla548lTFyKeYLE"
+    L"EZSKwBDDZViKhYtypFWXl6CwnVqMuThwJ7rqlJus8qf36PCuPL/I6rV1XvqlOvOz1+4cC1d/zT6qk"
+    L"Hf/qR+97+dseB9xoO3S9/YhXgZVy/vjjuv7++0vyZG3HVNp8P07/298cLX/jX5f4P3D7QT4RqXMqw"
+    L"2NDDek15V9O1mm1ZigRBS2DJZBjxDPwAqzw9VZOJo/CKwp8HOty8sJ+VtE8/6bBaHqarHLndwbjuk"
+    L"rHC8QEc1QnHVlOkdLxhnyM3PZTWaK3Q2iBa0cs0RzaEn/zwkHPMYedypA7oSlONx6RsUBearJsQmr"
+    L"JSG01RBfKeJZR9zp5WXHnTKrvn1hlvdvXTn71ePffJvf6G28Jc55ZPvOsnfuX069/ydf/liUf/za0"
+    L"n4/ckCu77iiqA/jIK/48kfM88g/lzN+vyxx994bof+1er/2mw+/F/Uez/je3D8HwYjcZ6k3N6rIZU"
+    L"3mC0Zj5JSRX0U0U3NQzxlKRc3bucN/RvZ2/nGs5Jn8TsRcs1dM1OzozPU3hDbgyJ0RwZnWHkhV2dy"
+    L"1jJEjacoNKMq7Z5vvPOdTpWMMZgjcZoi9WGuSzF6oT3HRqx2Vmgs61HJZaifI6FlU9w2TWHuPKtH2"
+    L"DnzueoC4fJNMoolFYkqWZce9J5y3CY0i2v5i0738q1V55i960fZikJ5umP7pRt/X64+c8//O6tK3/"
+    L"y9//8P37+r9nExDLxHtF/ojzAvffee6nSTl3s/p8Bc9026vL1f/EdLzzqf/HM/CfeunHt/SHrjhmU"
+    L"W7pSmyz3LYmFfqpZ6Wb0E00n1RijWVZLXGa3s+h3cfz063j65O3odJ5tWZ9idAcPn7iRsetSBc18v"
+    L"slG+Tw77DxJsshaCNzYvZEHjwsf34JkrkvutnjdjpwlM4/VFqUMShmsMXxh1fPvPrvJ4doyt9RlWN"
+    L"bkViEhY30L+p1z7O4nnFvNGZe70YlGaJJJVCwsDBhJOPRUxbky8Ka9VzG/NGT+xmeoN+bUp993g7r"
+    L"uxtTvuPMP5kb+8F+4/Lof2vHj//bffvCXv1M5EA33fUVCgvoyeIBZ4XPwIDrfj7oF1Pf916e+e/OM"
+    L"/Msz/U/Mn93zi34uNyb0KkZs0jOGHI2rPD2bMp9maITlJOfabB/F+nY+/8IVnBtchd1+G2me4MvzW"
+    L"OtwIYfubmopcNWAGzqHeedln6NvO+zJ3srR0SZ/cGyeQ+USncUOKk3ZOr3JW7ef49v3wZLajRfBKs"
+    L"1mFfiRT61zXOcszucUhYfg0UFI0RivGK8O0DJEkZH1Org6EILgAwQXS0UfhNRotNOcPLHOrTcMWe7"
+    L"nfO7Yc9zyxnVOHLyc557u8bYDh4PseB+rx3bowx+6+7evWP7Ov/dv/rZ6Xrxo+PJjBubLIPxZYEfn"
+    L"+RPqlh079P/2y5//P8fr9l+cVB/Pz13z875rxdQM8MmI+W7GXNYhNwm9LMEAqTH0leWmZC/nT1zHh"
+    L"59/Jyz/WXr7riBftNAxZMvLZNkiuTvB9d3HuTadx+Z9jmz12dMdo2Qnv3J4Bx/dWuJMtkx/pU9pNA"
+    L"4hzVJGW2OuXvQsmhyjc4yGtbHns+uBut+l8oJWoDQNWhhAe7J+iun0MJnFeyGomYRHxZZklmrcuKY"
+    L"sPcsrfc6eT3jhmEYPrubYU33mdg1ZO7KdzRNLavmqoNT8Qb9y1Ymbnn987VtuuPznP/L0I91TvPe9"
+    L"hvu/vMmh+XILn1tW0u//Dy/8kGb+H6yPn+PMtf9GOl1ntHHUbky/l7K9N4d4oZcYOipDi5CZwPXpV"
+    L"Zw9dT2fOv5NLF5xA3YRKiU4rRFtyBLBF5rL849zw/Jv8saFgjd2Uz496HFMX8nj4xXqhSXS7Yvo3F"
+    L"AGQSsFCvLUsD7WVHXJVUsl89aijKOqNZ887xgkGVqpaTzTxJ9FIYEGBGr/0wrR8bWiFGjwtWL30lm"
+    L"u2l1w9lhBSHt08hSHI/EOZdYZHU8IW56l/Z+jlrHO8sotXP/0jrPHz35DePxnfn/tF77+3IED7zWH"
+    L"vowVgnkNEz8108TR+/fv4dFB0v2Z+4/9WJ7N/68bayfCiWv/vSq7L+rl7hxO17hQ0e0lZGmO844kW"
+    L"EDoJBrlAzYYilPvYmP5NvpLmi0P1hq00SSZISs83fKz7Ok/wLJxrIazrOgVTlV7GczPs2wCytegFC"
+    L"6xMctvkrWgoNtJObsReHGr4rPnCjbrDQbVmMdWM0IvQ1SDEEaZThVCqXh/cpUm9kcMQWmF0ZZivMr"
+    L"Nd5zn1quEFz/vGZwekzmHjCs2ngfqESvf8UH0zs+DV1R1R8+n+Mv2H1sZd09/mz70Ix/4yKe++cyX"
+    L"UwnMa5D4XZzwqZN79qjPc77zn37phR/v9Ba/e+PcSX94z0+breXPqoV8nizTbNUbZInFucCwKnFlo"
+    L"KoB76AS8Alni/NcmWX4ravZSnvMz6U4pTFNtp0WFW/ufZ7t3UP0zBxzyTy5WaQTtjMuHuHrF5/ijU"
+    L"mPx4Y5yVwPB2itUboRnAR0knNeL3A69HjyrOXRDQv9HjqziHCBF9CA1ip2FBtFiPejV1FaRZSw8Ji"
+    L"yJGxmPPKgZ2SH3PS2VZIycOIZQakEHbpc8eazFG/5LfzAYY3HGI+Vrs515nfsP7a8bs59O4/95O99"
+    L"/OA3nP1yKYF5jTN/Dh48qPM9e7J//SNP/Eg2N/83yvUN/2Tnp8z6yqcwwbAw38GbCqvBojFYfAXVK"
+    L"FCPPFUl+FrwNfR0D8mOcGfuGQwuZ6hz+nMpOlF0jUXGimvMY2zvb7KUbWc5X0GsMJCn2dt7ipXccd"
+    L"XcTk5sdTiX9jGJARWFqJVGKUUwYBJNZiHPEtI8RxKD1xoFmGjUqCbLVwqUNJauQCsdO4UuwKhGNgt"
+    L"ko6BaL9EBUqNY6ASerLfo7tLs3VVjwpgTzwW27VV0rj6CCetsy1I6JqVrUjos6i65W77z2NKWnH33"
+    L"+CM//N8+/eQ7Vu+55x790EMPyVdNAUREvYTwAdTPHUTv378n+cc/9PB9ttf9W2os4UX/2/rUrt9RW"
+    L"it6nYSsqyA45tIOC3kfowEcdakpBxmJVczlmp6xzGUJXdNhU7/A7fkJQn05G8kSPS/owRpL5uNctn"
+    L"iI5WSZRM8hqs+J0YCtcIqd+TYStcx8skhZLfOFKmVhPsehmjwgeoGphDXBapzR0AgfVJPYNRre0FU"
+    L"atDiiP7VHBhVslMigREp/QbvQVRVvffcqe7IOBz+T8YZvO4V53W+TDpY58vQSu15/BNRZemaOFENH"
+    L"WwIVZwunO6T+ijevLg/U2turh3/2v/7Og985gns0r6ESvFagg/q5nzuo/+Z+5Pt++GN/iyT9e2ok4"
+    L"bnB+9ULO35BmbxCdE3WMYgT0ixje7aDbWaBTmKxoimrKISFnmEhy1jIEzpG0SWho/vM90uu7Z1FRh"
+    L"X76k9wY+dneMviR9hl58n1MqlagJAzbzVX5nuZ05exkKzgVMrtS+vc6DcZrw6Zt6CtxhqFNWCNRhu"
+    L"NsvGqzRTU0UaB0TEDnDymQauI/2+VhLUxslWB97FaaF6nlEJpIbEZD/7uIktLDntS8bnf2EOvvoOV"
+    L"Nx1Gq5qO6tNNNTUVozDEhYpKFZik4PSoMLpW/vXf89Tt2//ar/wCSriH+3gtSanmS3T9jeUfNN/7F"
+    L"99UP+bf9h5H8iMGnT5f/aZ6Yee/V0m/QFtNp5ezkKbYoOimltRCZjQuODZGBUWl6HcV2zsJc0nGnM"
+    L"2YNxmZMuzL59nOfj4yvh3pLvO67OPsSk6wkO6ko/chpKBS+sk8XbNA124j0V0MOVoL3pznzl6HzUH"
+    L"CybxLnhoEiV6gtfDGzbet4dnnNKDbZ11ABlW0+sKBlymPLcROIrFhiHcBm1pcITz5mEP5RdaPdTh/"
+    L"POXwwW3UJ+bZ/ZazuPx5MqVRWoCUbrJIqg2kgWFhtU/XXbXv/A1644Xtv/5zH/ydu+4Se/jwa+MFv"
+    L"lQPoO6990H9vW9+U/2X/tkHvn5QuB9LVa93tPyIHNn3n1S6zaHThKyTMdfJ8AheAsOtivWNDU6un2"
+    L"Vja4h2mn6u6GWxGSNobBOj53RCbgJVPUet97Ddn2RerbPSvZptnX3kWUIn6dNPFklMl04yRzedI7U"
+    L"5Whm8F8a1xrPBHUuKpdGYPHgSq0mMwhqF0QqtNdo0VYJRk4pB64jxgxAKh9+KglcSrT16BiZVATMJ"
+    L"oTIa5zxK56h6J9pa8gXN8Ohu1Npelm4pUP0X6IimRFEhGAt93cGKpT59PbnfxxX2enPjzWN3zTec/"
+    L"d4bb/tP3/PQQ/e5Awfe+5p4b/ul/PL996PuvffucO6y39vz1Ge3fmR++65d5zeeDsevvV+nOx1JyO"
+    L"j0cxb6OcoDRcBYjVEKRKO9xJoaQGtya+jkhlR7yiDsThfYrXM2whiTPcG35stU5gTb85xOugdNjkb"
+    L"QRmGVxiqL0Z1II5YxooUqVAQviPbc3DnDufE2PiI5uYZSGvjWRUsXFD5ogg6IEQQd6WCFJ4xqpGjo"
+    L"YUahRCA0rkOr2NbX0f1LiD83BCJqJwgBV3i8UygjiHWkSxvsy66n1oH14iQbCGMpcKEk6RR0Nnp8/"
+    L"NcXeeM7K3Xj/kVddTv+cG/zR1/3rT/56fvvf8/nImT8paGF+otN/i5l/SsrDypjdfjcB479n1ln7o"
+    L"2bmyf9c5f9ey2XH6WT5XSXEpYXc1KrCRIoXYmXmlQrUiNoqym9wmtNLzP0OxqjhUWzlxvTu7iKt7M"
+    L"Q/jJ9dTMhOc987zNc0ff00r0oyXBotOqjpUPlx0QHmpKEhI7qkilDAuR6jrVxzvOnPBsV5FqTasg0"
+    L"WKVIjGpywdbqNUrrSB4tHL6oES9NXG+tXDENGkyyRKWkEb6gJkzCGBZibhBDQ9ZJOf+53fzGv7iW0"
+    L"Ym7WepcyQ6dx+rIZOhTd2Avd9z1V4Z84g80n/vUNl13OipNdV9G1c9fe+2/yuDeLzkf0K+kArgwH3"
+    L"hQf+M3vt29/l0/+ZeSvPs3wrgKR5d/XZdXPM783AKJgV6WgoVet0PeydBWxV57iMzcjbKkCB6lLX1"
+    L"rqesOx9cSdLGP488vs3nyek5tLpAUr2dXfiu5XUGrJVzQCBZBUUqNSIpVHerQ4QujOQ5uLfLZ4XYe"
+    L"G6zw7GAHHytv5IPja9hkO+eTDt1Ek2lFoiAxNCGgSeBUyxASQlkT6tAggS3QI81X3nA8VTO40DwmF"
+    L"ylEJJfE14gCdHzFaFhjOxY7WuLDP9+nHN6BU/N0Q8bCUsoHfzHnN/5hn6q3yp99p2bt2ZylWzK970"
+    L"7n6kLfEXpb/xzuCwcOvEd/2ZPAi5O/99x/v/6p7313+G+fWbpcmeyX+vNL21aXPinnrvt9nS9qsi5"
+    L"00gTTNeRpRt+kGBF8GbCi6BpNqYRxEIy2aKPx2jCocpSxzCW7uHVuL7oSbN4j1z06XEM3NxirQSms"
+    L"7hIo0NQonWCUYRSWOCs7GGRL1P0lNtU851hgfnEBJY47++dRusPG2GNEkNTgp3lbIyUIdSCUjuBCd"
+    L"PMi4APKCxJihich+ncJAr7J+gIQIleQBioWicmhSGQRycxrqtLT6WtGZzVnHktYesOQXXOBpz+ywi"
+    L"d+a4muW+Cx3zboyzZ5y9cv8IEfGlM7VDmow3gw/Lqdl3/Lhz7yhz9xGO7R8OqSwi8pBxgPwj9d2jV"
+    L"/lbMbfuPajxq9rSLJLDZN6PeXWMy6aHH4ssboQLdjsd4zUjWlh26akimDTRRZYpnrexCPlSGuPIOr"
+    L"d5CnLxDcPsT3UdJBKY3GIJRoUVidoTFUBLYlQq5GPCGWzFh6PYvqWYa157IwIreKNyTn2L0l/OF4N"
+    L"7aXYb0QGkvwgHeCq0PjxhWiBGniueip928nBNUFOGjj+tvXeom5QvN8612EgDaKTtdQDQPzOxSDwj"
+    L"OoCozW9IfXYrSK3jMs8Oi/VRRnz0NI2TquFSYobY0pRoOf3L//Z9908OAJz4VDNV8+Bbj77gfNQw+"
+    L"9x91294++O83S/ylNdBhzRo97p+nOpyRWkRiLEsE0H8eJI9VCr6cZu5rxyDGXZGzLDHmiqQARj4hj"
+    L"dZCwK7cYFuhl28nzVbJK2LFjHaNyYI5aj3Hi0dqhVA4qwfnz1DqnYpnMGnKgRPBApsClXT5Z9cjcG"
+    L"quSkeQZLghGgW54mSEAImjVsH51I9SmydNi/SIKRWhifBMCZOJAZryJanKAwKQ2bO4rrTBe2P3tz7"
+    L"N46+e5Ps/oG0Fcxq63nOWh31/hxFNCkJJ+p8sz9wvpvCeEkmCUNrnyvjZ3nCuOfS/80x+HAwbu91+"
+    L"WHKCdn7/33nvV3Xc/GL75r/5iz9fuB+eWF4xzI05e/n7F4gCrwaBQBuow5uzoLBvVkBBqlAp4PLWu"
+    L"0VbTSyxz1rCQmKaFKhROE3zOfKdg+/bA+uJjbJqKhQXHqEwZFwuEchEJnloGeAqU0njGeLUBKmVnq"
+    L"jBlTVUHEhdIgcRofH8O1+9xvrOLen6ZpJehAdvYjfjGYpEJ8N8OjbTp3GwcDEAgeg9ai59RiYkiKI"
+    L"kDxU15CGrSTHIhsG1XydzCJh1TMC8d+mnGxpZhawOS1OJrxcZ6QSAwXq9wY4d4Ie3kSiVB6mr8j69"
+    L"44/+9C+4PMRS8xgowu1HjwQfR9913Xzj83PG/3lmYf71GhbWVz+rh3i+QaAMS8EnMjAtXM0aoqhII"
+    L"lHVN5UrEK1TQOAK1CKPgGddglGFr3GMl12TZWY7KI4yzz7F7fiuG4GIeaytCskEtG8AqWmkSnZKQY"
+    L"biRM24XR+se16fCNW4TM9hEnGCUYAgYBUluUakhxCIP8ULwTbbeuurZudQZ1nZQrWCbZK9N7pBmLL"
+    L"m1ci5QhPa9RKKHUcR8QNmEJ375WtTW1Rxz6xQEilBgupB2NTZJ0MaQdxLm5npkSZ80y+J3rZXO+3l"
+    L"Iss52VWz8g/gnD6nXXAGm1o968MF7/Rv/2k9sU8L3ZZ1MarPB+pUfwywFRHt8Hcg7FrGKEsEESAUS"
+    L"0SAeheBqwXnHhnes18JGpdgoYavI8MGyvSfMm4Segqtzi6tHrJmzFPkTjDmJMy9S6cNolZKZnZRhO"
+    L"2vhegb2OkYyx5Ip6dqCIjhKDKkGJYKWeKskZvhaaFg8M2FTaCyeiE9I67CbPv+sD5jKuhkZmzWaGb"
+    L"0RpirTZIVCLAVFKepRypknd7GqKp4tj3JkdI7Ldwz55m+0FLWjN5+Rp31GZpO7/8lxVvYp6mhTzG2"
+    L"f10tXJpJk5m/e9JafvOLVeIEv+sUP8qBWSsnGU4P/d9afuyoxRgZzz+nCnseKQAgorbFK4XzAorAN"
+    L"QibBE0KgcNHaK9EUdez6rhaBcuSpfc0ViwVXdSwj1+HZUcZq1eFYNQJ1CJscQZmzeNlCZESieoz8l"
+    L"RxnJ5udRaq0izGaIy7lYNXnpF6gM9+fCCR++Y0FSszKHRCa2ly1Ap+x4CivmAgSQsziZ6y6tX6kSQ"
+    L"r/CMlOJiWGaqpomWw6UDjn8UFTn1wmy3ucG61R1wVPDZ5mz+0l/WWL1RkhG/IN/+gx7vqWp7jrz2p"
+    L"8ZUgSCF6rxVtKv/31g7nRxtnvBYQDr8wL6C+2DPzwD36D++bv+8WeBP+/Zt0ER8lgx5OId9RbHjd2"
+    L"MQRUHl85cAE/rvDiKZTHIVQi1AScj+52GGrWC4cYw/Zeyg3dDvOqw87UcNVizbb+JrvzEbnRQEViO"
+    L"vTV1fTUHQS5ghf9HMMsZ1MpKsBnKbrbY6mX0+vYWQOcCDQIeIQSiXRuiYMeQSJaJ0gz7TEj6NB4gn"
+    L"YsbCL4C12/MFW0iUNo4RORmcAS73kHed/w9Cczqs/dyVV7riQxHaQjrJ0qqUYaVwp3fc8L3P2WLep"
+    L"TXcwbHmFpW8AP51EhZ/z8Hr39O45Id/+zf73PZ1f4tfv9KwGH7BeTA9x994Na5L5w5GNH/3zS7V1v"
+    L"jQlFdloPsyOIUgTfuHYnlFUgyxOqoqJWwhjBuZo0aLaKQF0bTIgMXF8lWG1Ic0PXwNBXbGpLX0oCn"
+    L"k1JWA6KkkDXbCdxu/j0aDdlNh9ZvElOAlgR6kab49xe/MLDJFmbXh1QCDgPPoQo3NAkc42GhNZa29"
+    L"q9UZSY7Suk+T19oZdHZJohyEwVMPEaF5YIgFC5Gl0sc+QzY0bjEWbhPOdPKD79Wx43SNh2zSo3ve0"
+    L"Y3dESq5QcNkfY/901q0cTiq0lzhzdpaus8Lve6lYGD7//OwfP8jMcuF9zP/41UQCltNxzz/8vPPjg"
+    L"Pfr6r5PvzjupBIck+zbYubKLk2oNlceOqUcQcVSlp/QFIdW4WpMqw3AIo0FC3rMoayi8wzlPL03pm"
+    L"pyx92wGGNcVW6VjPs25IktZVj06SpPIFTywtZdz3V0sdixKQa6i8JSCukmyTXNtPa0HQjP06SSWhn"
+    L"WI2I1vn2/yAReIzF6RBtuJCaJMwkib98dKIRB7AjKzSkpkNgGcUYZGoSboUJNvlGNP3vGceWqOFx6"
+    L"+HZ2UDDccstVjadHxlgNHWO4IaZnTNY5b82U2bjnPrptXkarH2c156iRhcMsmp247/t08Kz/Hr6kv"
+    L"uhz8IpDAe/RDD90XfuOBd97hRf+ztJOZpOuUO6dUcmQngz1fIPTHZN0EkyqM1TjnIA/YYMl8QhDF5"
+    L"nmFcgaPUBU11EKiDJ08I00MtRbGOnDae7TO2J112G13Yetr6MkeHh7dxMnOXpa7hq0Zi2qqr4nAI3"
+    L"AXxRQrO6FGUYowFBiLUErsvFUBnI+3dUPlFhcILhBCIPgQrd0L4iPiJ2F6f4IMekG16F9g4iFCCM3"
+    L"zUcHi74IEFaNMiFlmXQd8lcSYXHXo7Rhy83e9yJ0HHueNt62yLewiKEdRFIzqMRuFRxVJzLOMwrtM"
+    L"09uQ8cjsqR4dfWgw/s3D8F4DfzyF7I/NAQ4cuEUBjEf+PWneTyC4OoyVDBN02Y9ZdEObibVt1HgTD"
+    L"GEsjLZqVs+XlMP4xfphIFUpvSTHWkPlHIPgKBBGQWNMxmKacM6POVkXHN24hveu38qZdA/djuZsO5"
+    L"UrEeSpiMlkKVCKUAZhDIwExgIFMBJhIDAKQinEXCSAawTvpMkBnOBDmHgBCTIRVJsgRgHG+2ESImR"
+    L"q+Q3cO4GAm9dO3T8T/9SGhuDB1dFzKhsYnc1ILnuBsPdJ0noJrTR1FShcRVAeqwNiBScVwZWgA8Hl"
+    L"fvmOdTV/+5G/iAD3PCGvRQhQ99//Hv/mv/cjnXMfHf0FlQiu9LqqClKTUfohqlsjzZy9DgqpPUoLv"
+    L"hCcAzeCEDRGafAKrQWrApWvIBj6XYW1URA2aDKBtXrMWBxzyRrz3XnK7HryTs26FxIFNQodYmOlxe"
+    L"NCg/o14N0kH3BATVSGkvh3yhAVIAo/Wr7zsSSMhuzxvlWAFsMP0cobYesmoWzdvg6t8Nv4zwXVQpj"
+    L"1/vJHYUMJgrUagqK3c4SeO8eSX8Qbz2Y9YFyNUFhSk5EaT92EFmUqjHJo6evlPedZvv3Md/Ah+QF+"
+    L"UA2/GHj45T1AQzpY+9jgzcaY67X24iunFQFXBLqXjUiSgN8weOepy5q6dNQ+UFaBqvIQFKkkGDTOO"
+    L"1BCCIGqCqAgTQwKRRCFCzWD8YizowGLao4r0stZHdcEHOue6LIlkkqiFUeLL4JQhijkEVCIMBJhBA"
+    L"yBQYCxF0o/FX4ZYiLovMSmjwso37j7IAQfJhYeJm6cmcqhaepMsv5pA2iaQDJRhtnkcJJUhqZX0JS"
+    L"XqKhI133XF+juOoryFic1RT3AB4NWndjw1hatBK0MxoC1FblOdS+zsnTTxuV7r//lP4vAF0Ma+aJ6"
+    L"Ac6rd+TdngoE50pnk65HRkLJmGrkUJlGdRS+ipM03guuAlVrqKEqA9b4iLAqRVlKbL0GhXeC1xEpL"
+    L"H1BJ8nYv3wdO+RyDh6/glW1jYWepxRB2Sa901OAxhC9gG86rZqI79NYXS1ROXyTBNZNBeCEGK6aTp"
+    L"6aSndSDbQoYQigJOIAuo3dLZoXmAI8jTK0Ll/aEDATRqSpK9sqIUiY/tlaYeZLuleeYcl3WErnWas"
+    L"2UMU4JowCzitU8JhQ47QieFChQhuFcx2/eNOGXbzm1Dcff5r3f+kh4P73+LvuecAee99D36ytIC6o"
+    L"UDmccxinKcKIgKDSpuwSkLEibAmlglwSfBHwzmF7KSKB0bgmSQ2psYgOOHEMSyjGJXv7K9wxfyXj8"
+    L"1fx0c0/Qzp/I4vLOYPaIV6BF4LRhIbK5ZXCKvBNFaBVUwE0ZuhbN9/cdxIzfdfW/j62eY1v3XtM/r"
+    L"yXSQUQrT80ChGfUxOIMDSK0SiBn3H/IUw8gWpApFiLNoow0y5u8wqjYDSqCS9exZ47MgbFBsV4nQX"
+    L"JqBlQ1J6qLqncgMoXmDTHeaFGSHONUgumt/0snatPvQMkuf/XVP3HhQH9ctk/wOnfffhqtLoVEwi1"
+    L"1945klQwGJyum764IhSRZDnc9AyOOxZdnyuybVzV38lSv0/taoxYdi8sY1VM/lQM1AzqipV8gSvVV"
+    L"Tz55I08ceZddJZvI5tPWHeBsRNcCFQuUDlPUXuKKjCuPeM6MKwDIxdvh04Yehh4GHhh6IXCC2MvFB"
+    L"7KEHBOcC6gnMc4j/UBKwEbhMQHdBC0jxl8m8T5RmHanv70uQtHxWQmCWyrgQmqOPEIMsUNWmVpcg/"
+    L"tOnzyZ67k7KZiXJ7GFA6jLCJCVW9SuiHrxQbDUIAKeKup66igqe6RdaBz+fkb9i5+6OYo9nvUq/UA"
+    L"GgiuLr7e9nqZiARf11pEKIeeTALKtloeCDYCQfWm58rlXey0K6x+eg+jUzvZ803HSXduQJEwPNbh2"
+    L"ss9Z83zDH2FVppdvXn2bl3HI0+8lbndd7G8s8sIhys01iqStj1joi57DUEHvAbXkDENU0qWajAYaQ"
+    L"CeIGpa2zcWrRqhaYlXFQQJHh9Ah6mFEwKhBQzabu7k+YYMwrS2lzBLAGkIJmFGKbhI+L7xIEHw3oM"
+    L"37HzjkLXkRRbPV8xnO/FogneE4BElBBsribKumcu7iA8Y7RCt1ajUPr98YBdvevqtxx/m83fdhX7o"
+    L"IcKrUIBbBMAjr0uSBERCqL0OXlCYSfnjfWTNGIFq7Flaydh1+jaO3f91dJb3sdhd4vwDQzp7D5N1D"
+    L"aPzN1OvF2y/5sNcd/mTPFc/wy69g3PP/Rk6S2+jty1ltaoRo0lT8EGjnEeJjm7ZKExQiFGEoAgalG"
+    L"o28qlI324dXmi8n5+Be0MTt63ErSOxtg+Tmpy25g9CcBGuFe8RH/FgJYIO8Xd0uxokEENU+z4SJij"
+    L"TRNCT0MBMfiATfMD7QJoaVGHo33IMv3WSjGW0UozrgqIuqJzHZoa5ZI7hcANRgdQatNTUrkTZCpGO"
+    L"ZHs30DtW3xD5G4SHHnrlHkDBe/xdd91jj2yEN2odEO+1dwElEhM/F9C1RSsNRiNVjJ+dNMG9eDnL+"
+    L"TUMpGRQbtFdnEcGr2dUCp2VDibZzuqLf5Hh6vPsvvoTWFapwjWk8wmrA4dONRahrgWREIczxCOi0U"
+    L"FoloBOuHyTSZ8WaW9IuhP5NJbXbvVSbcIWBOV9kwTGcjCCNwHvw+R+8DItAfyUOIKPTSQdZiBAmXY"
+    L"SJyFBZAYPaGllzesiCSrS0sWgdp5izzUHsUNNZSoG5QZBNMNixHA8oGd6ZHmGT7KmpR5wxlEUA2wy"
+    L"R6o7Optbx247/yaQ5L4fVHXDXZJXoACR/nDabl9Q+swNaCFUQXnnEeWRrQQSRUqOVhonEXD1UmM29"
+    L"sL6XpwaMB4IpqPZ2hhi5zzaZJTrBbrn6S91QL+Rs4d3sP2GX0NTM67AWY/xCqUCWsBLQ8EWPdnipT"
+    L"RYLXjdTO5eNKU7e/ESCRlhRuhTtxwfMyKIVzGhchETiOVhpIgFF0OGCgqa3ECFaYcpSJNETsKDTMN"
+    L"AuBAYmjSeJCpbaJQOAas0N/6lp5nXJyl8xjh4MgVpagjDimFRobMOeTchSXJUqHGhJu1ahsOa4CpQ"
+    L"uer0hO6+zSsv48jKUTgB975kIvgSChB/oVw/d41SzCsleOejKxSJEywqfkHBC1IHRDzduZy+n6Pct"
+    L"IhEDCCWV+DLgBiPMhqphc2tiv58SZIGttwmJgXnAl4EpQJOdCwdReOapYwhTAc2ROumFm4VYNK8iE"
+    L"QNmSFkNGBPG2uZIHkBHwRNtGYXBFd7yqa55V2g9XoSANcCQgHl43voxhOIZ4Y0OlsaTnOH0HwXbWk"
+    L"YGqQxeKGTJlRmizB/mJ5fYaXTZeRGkZOIJ+iaLMvQKqX2Hm1txC20YIwGU1PVY3TWU7VT4uYGvfSK"
+    L"h27nMCc4cEhx/yupAu56MD5eV7cZmxlEgnivYsIStVcbzbDawNU1wQeS1HBLto8zv7WNemRBHPgI/"
+    L"+J9U4eFSYxVPqBqgbqgZoBIjbim9KoDvvZ4J9Q+4OpAXQVcFe+7KlBXnrr21E6onaeum+y+fW0dqO"
+    L"vm5zrg65j51y7gXKCoA+NJ9QBDJ7GqcEJZB2on+AgTEnz874SZvkDcD9j0Di5ADSO0K2HaNwi+7SX"
+    L"PJInN+0jTzKrGQv/OF+h0zzNHn3FVU4cadGBcD8FCJ7PUZUFVF1hjcUEIKhDwBHGMizEeRQhpsNsL"
+    L"zO61GwHuOnOzeoU5wN3AQ0jw+3RiESR453RowBAlGpsoBsmQypXoYOj2cjqfeh354dvoXp2zuVlgb"
+    L"Ba/NOdR3hN8QNcBkgBeU4+FbfMbbE97PLM2JnTB176h22sgYCQW+GIaMmbrBXQ75g1ay4RrN13Xry"
+    L"5o015Yok2TuLrN9n2D/vlYzYQGGQyiGsuOU786NODPrHB9NGnVVhlhiiO0Ap8NOUGi1QffKgJ470l"
+    L"I6ZkFnIxwoQJJ0CpON+VJyrguKKsaGaaIFoqyQgM+NTjlqKoxiXOgcsl2DMgWix2vDgh66FCsAJRs"
+    L"p+2utZ0xEbQxYBwu2UIlGqymLB3lYBtzc/Osr26isCjdZM9eEO+jy3KRXx9cwOaOc2dXyOb6DIc1S"
+    L"WNFoWXOBo0YhbZgQ4P4aEVoZ/eUQukQk0DdVACTZkugrQcF+SN1OiHgGnBG2kqgEaZ3YRrLXZz9V0"
+    L"FQTiaJW2wi+AbOjTqkWrgxCME17x3iBlKZEfbE0zXuPyDoYKlLj7EDEqWx3lKWQlmPSUwK2lOlNTp"
+    L"xIAmj2lMrhw46YhEq4H2Fq2ucgpJNgiquBHjobgIPvSIPcL+P/Hd1GUqQICoiW2GSzPikQO8aEcYK"
+    L"09Fop6hlk6IoqW1NlhhMkIZ0EZovJypEqANoTekquskyLz77HvLlJUJVxWxdxcTPB0GHiPvWRmNMs"
+    L"+PHx508vpnFa3MB1y5yaJNeNZ3YDTQZNzJNzvwMOudjcBbHhAwotTTzi9EbxDIxgjsxrDET0hrhtx"
+    L"WDZyL0GBKaFrEQ281tKPEhdlINpEvn2JZ7rEvRNmB9gg8BlTiCBGyW0el3qQrwOGye46ipncOLx2s"
+    L"YFQXjeqTK8QiXDq4GUfygCi+FCOqX2vWz/3t+NhG4TPCE4KMCtDWtClCkJKf2oZUmnFd0vGU+dNBW"
+    L"Mz/fIUk1OE/wMT5JiO1W5QMGsKS40lAqg8p3MZKU8cghLsb/UIdpLlAGQuXxVcDVnuAiAdVXHld56"
+    L"spTlZ66jM+72lHXnqrJE6oq4CqPqz3exfzAV6HZRBLwdSC4uJkkeAh1zENwDVDjZBqzHTHpbev4li"
+    L"fgZuhlMzlAaJRr0mrwrfCJIadZF61NTbZ9E8ok7q02ijLUhJCgyQg+waoenXwOH0w84kYaZnVVUFY"
+    L"F2gS8Lxlt1Xpz6MCOV94J6cv1A18SCKpf2EwRWUaBNAoQmiaIrz0SHPbQNSwtn2Q1fZb1QUHR3aQc"
+    L"DHHG0+8tkVvI0x5BunGVaq6olaKna0JyhDzvUg0WUd0Mck9VKTQ6QqNGN1O00/gfXKwAggGl/XSuv"
+    L"x3UjB3n2ZHNCfIWb+JeoGiGasrQaUo1FRQhBJSbWjuhvd9UAa55bMbi26S2JYdEhWmAoDBTCrpG4V"
+    L"wEfsKEYKJRK5vsun5AGGvqbsKgHlEHoWPm4vIJVBNOFGIs43FNCJ6iLhmNxtQVkCRgC3wVSQbBFv0"
+    L"TUcblK1aAgXgL0oshIEQYEkFJ3JdXlAXZ5hJzn3kbyTsKjq8dobztceY+0efc6SXmlxZIpcta/1HK"
+    L"K59mZ34Z42fejMmXqKs1yvwx0nyL+cuGnDt8J6n7s9hFYVh5tNeERJAQgR9tVGTvmoi7K6fRppm2p"
+    L"Rm3JoYBJnx9NcO/Y7LSbdKGRV2AC9AseWz7/uKniZ5uEULXPieT1nFUjKa8nLCGovCnbr4JBS4QHB"
+    L"Nv2FYBRsNoLXDm8UX27QdVDdmsRiR0AB09lIoLteoQiW61VIzXq7hgy4eISBuPcjXGGwxCndZJ2aZ"
+    L"G8goVwNdjJUESNQFTmgIWhcJQjCq0NuTndtA5eR3dK87w1MZpbr51g8W1yzDjRYbqLKduei87b9/A"
+    L"feY7CWWHkFSoepHu8N1sbozZPP8IV7zpD1l7IqNefRsLS56Rd9SlQtsAVkVF0Gq6nEn7OGCi2x5BM"
+    L"3PXQIDtno92kY9qARulolVOYMIo6ElLN3iUn2byDaGwcf+hoYG1FUOM+6otbSceg0mSOaGTBcH7WF"
+    L"a2ISA05BMJQi01SVjgmd++guUbz7KkzxN0wNrAuF7D6JxSHKNySCAw8FsUowIfPGiF94pKAqr2GBt"
+    L"wtY1KrqtXzweQ1VIJXl3Q6GgQwnZQqihKrE1JnrqGlasPs1qc5ql9DzP3+vOc2+xR7nyBMHeWhdNv"
+    L"ZPOzr6OzTbE5dGivUbJFf7mPKu/ihY8usu+m5xhsHWXr5NfTW9qNSWqKWkULtBJ7pU0JiFLR1Tdlo"
+    L"Pjpzr4WC0Jd+FkjaTPMEDMnY3oNPBzQDXdPtUjfpDcQ3btu8gHlZWrxTZxXbgoITbmDM16gjpWB90"
+    L"0SGNpwIlS1R+caKXPGm136yxm5yXEyoizHoEYMqyHDcYFOFCNfUReOWim8lpjjiJ/8/+oiwuhBOWX"
+    L"+mHXAL6kAanksnFVKQpjOw8t06k3pmME6X6NPzNN5ZD833P0i54dnOHbFRzELirCm2N7pIM9fTaq3"
+    L"UxRjVEhiXV0rNtdKuotC176BU49fwdXf+B/YefWzjJ/7Ns6Mbwbtm08YvYCv41InDJNlDdLM8MnM9"
+    L"G1obpU01s6F3HzxMy5xAuPGXb9TDvmU+Kma8fDoBWIu0CpJcBEXaCuKtqSkSfBEmrV3TebvG+EHP1"
+    L"WYIBFpDeMe585asiWPcTVbozWkrPF1YFzXOBdJjgPxVAFQHi+B2jnKWjBWUFYoy0AZBBs0cP7VE0I"
+    L"kiEhoZuja0WaZYcMoRTEqSZIU//nLWH18F8mcY89dH+WMeQadK3osUR3ejtKBYhCXIrSuVHkYbzjC"
+    L"/Igs7/HsR+5mbt/T6HoT8YGOFaRIcQokETodGoQuNHsCYBL4Wwi4WcwQt3c3XkDCdOSLSXcoPjIha"
+    L"TTNHaEp+RoBNSBR+7OakENkyvp1XNBJlIlwo+V711QZLkxCAM3vhxn+gBJNPQyMqi1MNWRYV5FQU3"
+    L"qCxKGVygklTS4gnjoJFC4wqsE4SDRULiDagEvETA9TfWUKYAa5VDJ2wQuqSbgmB+u0AHejEIOtEUm"
+    L"akqYZ2i+Rf/ItzL3jJHqvZ+7R65Cj19Lfm1BboXIBZZoM2gS0MUgRUD1Frt/A6PCfQWUlaRdks2Jl"
+    L"z8fYky9Tj7fz9LlFkoWcQR0tpl3mpFS7mKmtCJoBTBU9VksQnc7/TZk5LV6vZhA+Gqy/9Q4qTIXa4"
+    L"v2qxQPClGMgM61kCXH+LzQlZpgAQLMwcJNINvPl4oV67BkWI1RRMxahriKUbUSovTRNt0BRebwDnw"
+    L"llHbkO3sX/XISIgdLOTK68QgUY1tud5ehIJGzT7S78SYNl2nqNniJQlzWuDugFTXpuN/NfeCPnug9"
+    L"QbBswuvGDjNevYZ47KHqaURGbGW1/QFtFXZxG9DyV7pHUmlCcxcsYs3CCzq0f4K7sTWx/4jIeeuw6"
+    L"Ov05ygpsDnXl4/en22VNrQeYLnIOTHGhNhRM9jY0PX5mu3ltadj09ZWLYUC1WEbw09JQmlju2yqgq"
+    L"fnriFuEFvVzfsb1N95jUp4KwXuyrsFsqymrIdpZzlaueY/4/jbEKWcnnmEZqBs6WNXMMOqgCEojBE"
+    L"ItSJl4w+lX5wFu/AtvKJ/+1cNrInIZWotSDddGLhyZbifi28MSxqMKO9/BfOFmFvYc5dnlz8BbA5n"
+    L"vYz/5N8jOv41eXxgVAWUAHRCnCbINrI7vZwXPHMoucPrRt7F54koedl2s1iTGwGiLnb11BuPtBJPh"
+    L"gp/s8JHJWtc41KlaZZWZ4c2LkkAkWrai5e9d1NZ1YYIfqFmih5+SSnENONSUexFUaoUf8C6Wmbg4d"
+    L"zChhiFN8mbQaUAWTmECrFeOjcrhJIaMLIAVME0FUTthGAJFQ8ULOtDDQNAE6wg1hLGtLdteMS1cAD"
+    L"5839udeHW02YDQ9F1lChWqWe8S8W5U/A+X5Rg7XqL32bdzU7Kf3eMrKIqSzbf/V/T8Y+gykBgNdcy"
+    L"q68JTV4Z6rAilpyoco1FCVaR4trN+8k7C+q2MVm+idinV5irrw0coh+tRIHWI0yHttRak9kglkahS"
+    L"B6QdBCjb18aflfNQNywP1/QqmteqOpZWk05mHUNXWxZK2x9xYYLs+Ub4bSs5VM1tkzuEZnIocgDCl"
+    L"CKkBFdozLM3cS4knKpqXGoImYnTTRrGIVA4qDyUKhJvY48qsGPHAtZakkSBrsWQkIR8w7GrfhVzAQ"
+    L"dMNIJwWHxUAG2b07TavdAX65XSNMs3KQtP7Sr0+jaKX34Xyw//BexaQtnbQF/xeaq1MZomk26+9FC"
+    L"5OFTiJH75laMeV4y2KmpXMi4G1OWIelxh0x3Um+9E2yWkLKEOhNojziN1fB+pG+J/7ZmOAfko8HYO"
+    L"oBFq+zelalvUvlGOmM0rF2KjwdNUArFnIL5RNtd0EuswTfom95u2cpiyjCcUtDYGaAjiCKXFv3Aty"
+    L"/M7KYJnVDmUApMqxiFEQiueQgXGDbHEh8BKtpfk0/vZoW5kl7maeVmWJEnB2acOoauZofQvMgTcdb"
+    L"PiIZAQzsb9eCLGGhQ6MoImLv/CFsJke5qCYlzhQ0aeLuHOJ/TLvaSra8iJm1nsd1kdV6DTqFRtSAn"
+    L"NOhUd18xE4Kdh4zRL+31wDLVC25pqpKdr3XR0/xoF2jfrXdqVLKGJ92oSAtTszgBkMvWDEAkfs+TP"
+    L"pmUsLQTckkDaDL6N8a3br5vs/4KKoMEEgp+4/ra8VsTeg+p5Vg9rkv/8Fi77Js0LxZOMRrYhtAQSB"
+    L"T4F5+L/xfmaleUF0k/eSf3I6yjOnKes5ule0wlb/cq4LR4Fgf3/i+Ug9SsuA63NTnjnIBgTlylHK2"
+    L"AmwVIXKYO0Y9oBqsKh9YjeaJ7lx7+N/uUfR87txPka4wLB+pi9iyE2+Jsv2ygIOuIAplm3aSL5UzW"
+    L"JntQKTDOjrTQqaslkQ+cUFFIT/VLTgDWZHWhPCiUwVYIwwwBuuAOTnGDCDI6gS2i4A6HpAfhmuFQm"
+    L"mIBcMGgaWtKoml0iKSgNtavIh0v4J5fYDJ7LvqXk2PAwro74hRNBi8LVQlHVdPuGxaO3MnjyGnq7H"
+    L"TLcTsfMMxg/hy+6mHq+ANgPHHxlfIAY+Q3qc94VPvjMGGPEGK2k2ZJ1cTIwqxDSrmPRiqoK9LxB6o"
+    L"yTp8+zjzjoaAnoECir5rswgrI64g00DZem9av0zK2WBuVtH2PyGJPVbU2l0u55p/UmM3s92snihja"
+    L"gQrs+5sLSsOXs01QB7cKIKbbfYAJOCLWf4v4NqkhLLm2GTqZ7h2auzVIqXweGbkR/McE/fTvjrTm2"
+    L"v+P3ebF6kkxn0eP4mixVXDnfoyMrbL3/JtK0w+bGgHQxJzddys5Jo7csnO8fATh4cLe8wiogHlmm8"
+    L"+wZNx5uBS+LSWpi6ab8JJ1WFzeRZ/bmyYx11bWH+U3scs3YnqantzMoC6w4rFHUPq6NFR9RPjEKm+"
+    L"h4iicK1xAvhOkq93aPH7oJD0o1A2Kq8RYz0p0Awo2QJ4oqk1JwMsUjM9M7E6G3JE8mtXuow3R0rFG"
+    L"AlvAxafj41vKbCSM1u2AoNGj1dMJU6YizDjZKevMWdfpq8rWr2L7vRTbOlQTnWJnvss/sY/3JHawe"
+    L"XSKttlH5Ii7Ytgkktbjupq6/sDzunrr8Q408/atCAo889tzm7ut2fyF43ozSYhKrlHFN5jptuChRF"
+    L"2oB07Vo4oEkkB29AftoCXtPEp64iX6/i4ih6zNcVjEOEU7LTIb4BEQTeqfR2qLdIt4rTBbwPgIgSq"
+    L"tJfwA9PcJFVIyPanZdK2HymaR1/6ImIYHJ9o9ZIqdMDHVS8oUZq2/5AFVoBkUh+LgtBTell0/QQqb"
+    L"s0Mnf1TOPNQsk24JrPKzo9oW1T1zB4v43sXzFUcbhLPOHb+DFj9yOHuwm14LXY6rKkfaT5sgaR2oy"
+    L"1OryYC//r3PPvuoFEQfeazh0n59betMtJsnfYjvGI2hf1s1ctI7sHKMbV6ubY1gMSjXLlnX8ua6Ev"
+    L"JfBySswixuM1FHYXKRITrCx60N0pUtSL2G0YWQfpdr9Ycyup+jNDZHVKxCzTmf5OAwTOkkPRfPFNj"
+    L"N9uuXaN268RfWmtxc/1qJ9bdI3rfvFM2UBN0zgSZyvm3Zu2/Ovp7z+4MPM7ZQMcgEtmOkC6ckce7s"
+    L"xSIXJVFP7OqWFTr3C+Km9lCcWsONFNj/6BjpqD0EPGY0HVGXcu5jklizPEVX6euGsLp/c9nuPHn/n"
+    L"f+YeNC8zGfLSHuDME/FzafP54GrEWW0Si7EGqcP0UAWZcf16Zm3HzHpUgI3VgoUli3v2Gqpbf4+1a"
+    L"3+bfrqIXRqz/gXYPbqW0dDTv+okm7e8n6LukH3275BUfUYrH2LlHR8gOXEHz//+N9FLt9HVGeQBCS"
+    L"puzcqF2jtcCarZ7z89yUhdMO8wxYOaL/wiuFwahC/41o1Pt3lMRsX9lOgRLoJ2I72sQRJbYc6MgE+"
+    L"TDdrFAtPP29DiIVCMHZUpyLsp+vz1VKcup9exDIabVEUVTzSzcSuLTg1KFHXYkuJEHz1e/Cwo2f++"
+    L"v2kPQv3KFaBJBBMtD9VVOfYu66SdVEyaKl+GCani4tWK6IuBImlO3VAMByXzC33CE99Ies0Kdm0vb"
+    L"msR9XUPcPb5Z5Deaczuj/Ls5zfozgnZqIatM4TlwxzcfIqd/YKVb1tDj1cYPnsF4bm3QGeL7Tc+z+"
+    L"DoXqzaR2lHuMpPIeF2JkapCaGFSVv7omWOE3ZQuwlEplhNuJDdE4JMPYFMm0NxOdU02ZvkEJNFoWF"
+    L"mj6j80aQwurCG4BLfezgYoU38eXNzjASPNnFQRqFQicZYi4hDVR0rz6x4VVcfaxJA/yp3BMXt0xvn"
+    L"37k5t1R9m0mzfTa3AUH7qj0YSUFz6nasxzWxgFcopuFAt4+LwnshNwvoM5djqxUylhhtFKiv+106r"
+    L"3+Uw+XzSFDoBHbcdoSF2z/D6rZnGZ6t2TpbMio3OZc+zrYbj2OTIfb6z3PVOz5Blgw5/GiXfrJAmi"
+    L"rKwk9x/skYGBMBI7O8/Yb318b3BrYVp6a9fTfl+7UlX2hnBdosXyIq1zJnZ2N9hKWbJdTt481ZD6o"
+    L"NBar5ndkSUTX5QRBC8DNr6Zt8wUDSzUg7Ca4oxRWipORUWtp/cPbsQx4e+lKWRB0w8NNhfttbLtcm"
+    L"vctkOmhjdKjd5AAFTTxESSndCD3mAzH+N0qBjs8rjQRFVXt8UFRloNNNYZSzcdnHOO2OwDaNVAa37"
+    L"vE7txhk65x6bgspAibRhMoy2Cw5V2yRXnkUN/ciz589i922zjVfd5L1w4bxsd3Mzxvq0hHqKXcvwr"
+    L"F+arlt5j4j+MnjLWTrI4ljQvCYyfZF2vKuEfxMnJ96xHbbeJix9DA5eawVMu1rdDvf2Ah/ogjT21k"
+    L"PoRND2s8wRlMNKz8eOz0eDn/1ucf++W82Zw2GL3lDiM3M+31V/ECorEm6KSa1hLIBNfSMv9ct8jbd"
+    L"3DU5N2GS7DSDm96D0lTDwGD+MdbGR1FJTUoeeXLzimHqWDtfosYGOk0nTTWJXqU5sbVFnkO/k3K0P"
+    L"EfVKbn6PRUnP3qC8w9/HfO9HQyGBd5J452Y8gCaLpxq9/mJuoAtFGa6hoQLF0Yxuxyq5RJIa+FNa7"
+    L"ddH4+fgE5MLPpClx/pbKHps87kBXJRqJjZU6oVoDUmS0gz05BNao14bJJ9AOBMk8d9CVvCovZc+Rd"
+    L"7n0Z4wldxAsHmKToxDUfgouPCG9BFy8WTOvGL143L080adYWmUscQu0aiwW9WSFJgd9RoAraZEPZV"
+    L"zLDxoDKF6ivSBUtVG4rCYURxdnXAp44dor7zg+x59++xcf4MvbSDUWrSJwi1w5UOV3mkltg1m5A2/"
+    L"IS7Fzt47ZhaQx33fkKQDd43B0qEhnAyTTBbi9f46fbxyDSJtb6a8Qo6NJbecltmwKK48yaympr30M"
+    L"zgH0aT5gkmsQQXQghoVxSnBoPV3wN46KH7/JeoAAgcMA/dd58zWv26OAi1F5Mk6NRGNz/jAFRz1Cq"
+    L"2BlVP2g86rmrkgr1ZDdtYKYEiRTmN6IA4hyo9uhbqwxXVqRhuqARfxjannbOo3OBGQqBmtClsjEuC"
+    L"Cbi85rHTp1nd+3lWvvUPOL92FJxHOTAuJSUlNQnWMKFoOx+FH1zsIkZcv5lFcI3AQ5gCO00/QLelm"
+    L"yYOzJomLjfxf7oZLsT4rttaP6B1QExoUEyZOWuorapaSHv6/ko3MLmKB07Y1JB00rjHqaoCWLTWv3"
+    L"H20E8POPBe88UcIPFFhICbBSDJeG9ZjX/Alyo1aSJJnqrQDHA0HfhpT0D0pL5VIrQorLRWgCUEweY"
+    L"aayweh0ocXjT1pkVbRbFRI6OGDCouuujgIK/RwVCPXDzLr2+QXHBBUVaBTl+xa2fKs+dOcdkVn2Hn"
+    L"d21hNy4DrylHivroZRRnF7DlCjoPDNYdxqoG25ru+xGm62EnC6bbxc9qllo0ZZZM4jnTtfAzaFJTE"
+    L"ckU/Wtt5wJMQCYjbcyScGcasLpZlJXkKWmW4IoKX3vj60pqJ//5NT4x5L4A9+hnHrnvyStv+kd/EJ"
+    L"z+VvEh2CwxrqybFRozZ+YhKLGgDDLB7S8sdUQ8SWqZ6/dY23iW8vZHUL04kh1ckwSV0nw6gzgdk7K"
+    L"62R8w0HjtUV2FlLG0cwVsbQl+CJ1M0CPNc2fO0svXyLYdxOYWaseem3eyN5/nuV9+G/rkG+nPCVvr"
+    L"FVqrGP4vOPpjZgfsrLDa8nHSzQtcyL2K7ls1Q4MyoVTIbKBouJbTw6faY+rVrPIx3S6uVEPI0RqTG"
+    L"tJ+HreOF86D1aEafuroZ9OPxSla5V8jBQCI20KNtT8XavduXymV9DJslhKqtkU6y7sKTSmoLvxiJM"
+    L"QmjVb053PWNo9x6tafQF33NM5nuCpOEstQgzfoTnvwXoM5WKiKElsqwrzHlRrlQBLfIHgwbA70FAR"
+    L"jEsa+YrRZIedjp/B08jTX7Fjitu8OHPzZmuzcG+n0DMNBFb/gME0U1eyBwe2wSVvTq7g3QM0mfc1S"
+    L"mhbbl9myTzVonzDNi9o29UWglZoJBVER1MQrxY0skPZSsizBV466drGVkCQ/A/cG3nNLewTSa7ErG"
+    L"Jqds2r39r/1QhVO/Dll7C5jtWhrlW9iZ4sMTs/TU5M+sWrMRqkIH/T6GX7sOXPzvydc+yiuSiOPfd"
+    L"3CWDVn7BnENSdwaSDV6I5Cco/xKX49zvvpfkOJquOwppZAUIK3caGS8gopDTrX6A5Yn7K+WTNKxlz"
+    L"xllXOP7FAMt5BCPFsQGYS1QnLuHXRKjTTyNMYPRvDdRvLmT43OWhah+Y1Tb6gYvxXuiWzNr+vGzBN"
+    L"gzHqgiabahpfNk3oLXQxVlMNq1DVQftyfHj1XPjbo7MPVRy6/7U/MAIO6EOH3lMlifpXoUb5ukZbR"
+    L"ZqnEZUys8fiXFiyyGQZThxr0sGwNfcZuONJ6tJGClVpCANBSkEKQWyI+wd9swrWeUKpCIUjiCddsO"
+    L"gFTxBPqBx4jVKCrzVeAWLwY3DjQIgz2UgRj65TTnH8XMET64eZ/4ZH8DKafG6lBTEB0e0pYXENpVI"
+    L"B3SZiOkzj+ATWDZPsHiWInvSZLxD0BBeYdDFbBZj+rDUY2xxiaRqehI5nLmqjybo5aZoQXKAua0GM"
+    L"kqB+5Oyh+wYcOPBFJX+vQgHuD4BauMz+F/HjL/hSqVD5YDKDzuwM23ZSRE9w9vYgBomTEwQ8OE3nz"
+    L"E50YgkmQKlQXkfOXS3IAPyGJxQBGQkyFsI4EMbgVYXpRqAprCrChkLGgTAU/FCQUiGlRWobF0o5jx"
+    L"vXuKHHFRU1FdrD+bMbbG6M6KRZpKqrdh18AOXRyqN1iBn4rLCbDpNqr2Y2U7/wimHyfGvZWk+Frlv"
+    L"hm3g1VmNTg7EGbTTWGhJrmt1ImqST0pnLIv279CGgta+LZzX1fwQU99//io6SfUWnh3PggDn5mz9d"
+    L"3XDTtw4F/R3aILaTKK11BHYCk/m92ZOzRNoTuWN2m3SEnruKelDQu+MUIpZs3KdrOhgszvmYW9SNG"
+    L"25OGIntTkVQNarIkE2FK2uUU0gJUjUxs4qeQ9UxEpo50Bh81dC60QQR8rLH0sMH8OM5TKpIUxPLO9"
+    L"MsyJuk/DNo3MQdz5ZtjcAnZZtMjhRuhT7JKQwTDoPSF7p3Y2JjZ3IEfbMBzdjGUxhDd6FDlqeE2lM"
+    L"MC/FeaV/V33/ogX/yMAcOGA4d+jIqwKFDgKhf+o/uCw9+9Oi3pklnT9a1odPLVJZYssSSZ4Y8t2RZ"
+    L"QidPyPJ428kt3W5Cr2tJE8PiXBe9/0n8npOYeg7rEgwJViyaeOZAdKe66Tsw6TG0UGgiHYLyiLmA7"
+    L"BP3xoa4WYRcMLoxP6PRSTyhvCoq9slVdNIe9Rs+TLcrhHMLJB2F9ik2TdFKYa2gTeO2TbMW3LQ9fJ"
+    L"mST/TMMfQTK58eJDlpk7TH1Lbja1qhtKCtmbr9ZuxNNzxIrRXaGrJeRqeXIUA5KoNzSpeDrUcOPTP"
+    L"6O2zcHTj006/44EjDK74cMr/wC/9HfdPrvuPwaFj8Fa2VJHmibWKxRpEaTZZa8sySZwl5npB34s9p"
+    L"akhs3C/U6WR4F9hceqoBVgxSCSoojLKYxOAl7hWaxRmVjnzBQIXWFqsTXKjjCeBGx2KkYfBGIp1Ch"
+    L"nriRbQxaAzaGTaLddbmHufc8DD14jHSGw5jb32C+R0jdJVgF0pMYknI0NqS6ARr4jXJIxFFpJmcak"
+    L"8N1VMPoWaUgtaq1ayiRCHbRJMk0eVr3R5fr5tdSNEjZHlGb6GDNoa6rGRcVBJ80JXnb5z7zPd/gQM"
+    L"79Cu1/lerAAL36Bef+YfPXn71N90QJHmd0uJ1arXQ9MJdmJ6ohVxwxFpEABUmUXTrnYSBpdh+FN2N"
+    L"litVU5+mCYm2zfycn4YQHXGhOOFdY20OTuKodHMMvLIKcc0BAQ6UbY56dwYqhRu5eNR8klCNBfGWY"
+    L"T1irTrJujuNXH6S+RtOM7zsc9TLJ+hefYJk32nsvmOku4+RLYyRoouhh00MaWawmcJ7PxF63FqtJl"
+    L"Y/9QrNwZEatAGTaEximoRPTYZedaswBmxq6c3npFmCBGE8KoP31pSD4a898f6/98/hHs2hn35Vx8i"
+    L"/6rODQ0BddeX2H3j6uTPfpExnRdsQjDXa22YnkISmwWIm3a242D3WueW4xMwJyxu34o6vsXXV57Fd"
+    L"BVu+6b0HMptiOoZxOWLsCjxNXqBBKg3WUcqATM1FyBaPVrqpOoBURa5h3WwA0QFlFToxkWdYxdeTg"
+    L"kETShBjOH/ScSo8hbUGz2GyxJDOG0wn9vfnbI9tV9/G+NHbGOgz6KJLv7wJ5zXehwl+MEtLuwAyp3"
+    L"XrGtPi+mrmCOKZI+iM0XR7sd2LCK52QdDa1ePzkmf/kD9m/PvL4AFarsAB89gj/3Ltxlveda4ow3d"
+    L"oJJjUKGWUagkSU9i0Qb4mXcLoCn0IJKnFVl2qzjl8OoyhoGHUtC4yMSlGm6aWaEbKmnxAdA1GkZDH"
+    L"o1wlNJzA6D5pdv7oNBInGhS1Of+3GR8zceYBDUk3jdVFIfGEEx+Pb61qKEpHcIphXXKeI9S7n2Gw4"
+    L"0nSuXXy07cSMLFNa/RFlt+6dWJmn2iS1EwSvon1t0uvjEYbhTGaTi+n083AKLwLMh6XImK0K+v/43"
+    L"P/9X/7APfco3novvAVVgCAQ8ABc/i5f/XIvsvvvllIb1P4oLNEo1TTJg2TOnNyDq+0m2ub3RNKkas"
+    L"5pDaMdx5BpaDKmYSuYf9aZUmSFGUUoam5W8ApqBKMIbUdgneTuQBpJnOVitamMjUZbQeFsgaVaoyx"
+    L"MWQ0hXGcTWkXYjdCSTQmU9jEYMSAN1Te41NH163QO3tnXDunZOrqG8G3U8wmMSSJwTbxXjV1vjKRK"
+    L"zG53yh+K3xlYg4zGhYhkJhyOPjdd/3nv/n3H7oPxUP3Ctz3qqWovwTvIXCzhCDqbftv+NuuHD5bV8"
+    L"GEygWdGFQT10RN++e+IVAQorsWAq6s8RUsrF9H9/w+VMdjOhZtTbwaE78UE08l76Y95rJ5cpvFU0l"
+    L"FQ7A4RjhdkKU5WgwheLAamyXoLE7Jh8rHpo9V6FSjsihtH3xcNGH0lCSWBXTXYLoGk1m0Nlhlscag"
+    L"rInJYZJiU0Va7ECRgo5dOtUK0kbFs4khyyxZbrG5QacGnZgY+xMdQ0HzmLYGk2jyXodOL0Mnscwoq"
+    L"zoEZU3tymP9XTv/1n2q7Top+SqEgNlQcI9++OH/fXDTre96bDxyfwWUNkahE6PajZztoMhsB22mp0"
+    L"KQQJpkmOEcVf8crjuISZ9M4c92958iWmGaZPGYeqWa9WtCoIg4edLBJjYqgRFUFoWOVqg0KiaNN5r"
+    L"ulohKlvYyVKIR14SQhtWjCBgdERslBl8rvA309ApLh96JoocL7gKrt4khyWx096mJXsjoJrNvLF6b"
+    L"Zv9xm/Ur8m5Gp5dikljflmUtZeWpSxdMov8/H/xXBz75pbr+10gBpvnAC8/8+AtXXfcN65WTd4v4k"
+    L"KZWmcSoMLM6lZk1LsxsGIh4v5CrBcw4p1o5hXQcKqhJ9q8a1o5u8HGNwmhDYmN/32iLSgxelQTtME"
+    L"mKkSSikKqJw825htQ6Cr+FXqVxxQ38G7tu0S1jIyxrGkpbXPKs0SajOzfP8lPfRL51DU5XhCCYxGB"
+    L"STZpaksxgjY6s3cYzRI/Wxvzp423szzspeTdrCDeaqvIUtQuiElOX5T976Gf/p5/lwAHDT/+08Bpc"
+    L"DK/JJeYDx174iU/uu+rubUj6ZiF4m1ptEjM5em16aq7iwmOY46EMRkOqOrjOBm7hfBSAiZwA5RpEU"
+    L"cvUO6hoSTY1JFkavYLOQDxelZAqbJJjQhL/pmo3gcZcQBuNDlEQKm2OfmmoOVprdKIw1kyILmI0Js"
+    L"lI8z5zS/PMPfcmOsdeh84Dde1JcxsF37h304YB01q8mlp++3OL8VtN3snIGrevlMZ5T1HWXunM+Lr"
+    L"8lf/9J/7y//f+ex803NKDQ4fkS60AXkMFAHgCQP/YD930hx//5JnXIclNorzTidU2tdP9+M3hORe2"
+    L"isNkXi+1KcEZwtwW9AtUX1AdopCk7as3oImxDdk0WpVRkWCSJB3SJMMm8Rw2kxqsjh5BBRMxASRWB"
+    L"T4moqE9ti3XsQnVEFyNVihvMElGnvfpdBbomUW6T99J/9iddOYSvAvR1Sdt3jIVfJvDzApd2+ZnG8"
+    L"EBm2o6nYysk6Js/Ls+BMZl7UVnpi5GHx32X/zuH3v7W0uuwPLxj/+Rza6v9qJ4TS8xUP/dv/vzix9"
+    L"75Pj7bN59q+0ol3ZSqxRUoxrXTBbpmS2f0rCHlVJ0eik204zzM4wve4pi9zFcZzXu9x9pwgBkoJu6"
+    L"Xjczgy1BQxDrY3Op2WkUnIsrUxJQzqKcRSSylknAlTVBCWKasrNr4iKr2mJUirWaJE1JOhkqMVhnW"
+    L"Xrkm8hHV6O7jrKomQD/qtlZ1KyracfV2vu0i7bU9OtPrCbLLNboZs+hwtWO0bjyQawZb2w+NRg+9Z"
+    L"5P/sw/fpaFhZSNjZqZBTUXXcNXWQEgnjZ2X/jLf/nHdz5zbOt3km5vf5Irl3QSq7WmLirqoo6btlE"
+    L"NEbJxkw1onuWWtJPgsyHjhROMr3mCcukYPgSCM7CRIiMbR8ibTpo4wUsdY74OiPVIEhoEUCGmnWXQ"
+    L"KGmydGNjnpGZSD1zCp0aTDdBeY22doLWKRXzhk6xg6XH3gU6pyqr6JmMbhZYNo0c1TAg2qFVNcPoU"
+    L"ROCD0liyVM7URghrssfFlH4xcbGkY2zB//nT/27/+vRTmc5G49XK6a7SSdnX1+47OaCA0u/kiHgws"
+    L"rg8ce/f/Dm/d/+31Y3hneB2Yd4p63RNrUYq6dHpTRdMpnw5og783zAkpHVi6hRBz1fo3olWmmSrEu"
+    L"a9dCqg1IJuh1CET3TXxdU2lihaLS2mCxBZSY+b0GaU7iwcR+hSkClCpsokiwCNVpplLYoScEkdAZ7"
+    L"6axfhxePKNU0cZqQ1Lr/SRmomzCg46GXJjakbGLpdFLyThKxiGb7inOBUVUHbGbKwdbR84cf/Duf+"
+    L"Y8//GSazs2X5Ua7ekFddHspYvYXbdxfBg9woSf49m//8Z3Hzm/8WtLtvc3m4rIstSaLuwLLssQV7b"
+    L"BpzOyVbieMYiKW9xNMqnHJFuHyI9Q3vogYhQk9giiqrZrxsIrC9DUiJY4SLy527nwDDSviefPtQgl"
+    L"0tH6rMZ2oHMbYSMAI7XcbyzSlLFoStIWFI3fSO3M7hZQRTGoSxpawocy029Pi+m21oVAkiSFNbcP2"
+    L"UZOJtLJ2FJXzSqdmtH7++eOfe98/euzXfu7JpNvN6tGonLH6urnvZrzB7M9yUXj4SnuACz3B009//"
+    L"+DPveu7fv3o8bUbRfTNiPdKiVKJUUmaRIhX2k3ksx+58QZ15Bwm9FDrS+ilCjvnsapD0u2RdTKSJM"
+    L"HmHdIkxejYSdSZRktcKq2NwRqLTiw2syTdlKybkfYy0l5KmufYxEZBikFhUMpgtEUbi5EUrQ1pvUD"
+    L"/yB0YneHFN+Vd3G6iJslf09ixpsEDYt2fpJa8m5BnSczym9JPUJTOSelFlM7MaOPs55974Of/yZPv"
+    L"++UXrc17rhzPWv5UMy8Ywb3AA8jXiAe40BM88MAD9u/8ww/+aJLnfzvvJphMhzRLtU4M+EBd1FRlP"
+    L"TlAwdA2SeL/OckNnfmE+uoXCdcdjUfIJTk6s0jpCME0R8DXBClxakwto0hUqZv1EEagE61eWROHK4"
+    L"OKZxJOxttsc9VoZVEmwUiKsZbsyduZG1yLUxXeE1230ZNWb/QETWenecyYBhNoWD2i1WQw1QWhqGp"
+    L"xAVCJ2jj54gOP/uq/+NHTT3x2FZOl+LKeifUXX9uD0etL3PeXSBK/0h7gQk/wC7/wP8vZ4x/+3Z27"
+    L"3rxWlP7tSpsE8R7Q2kZ83BgTdxCHtqnDZAcwAsYmSKfCLZyhqseEomr2+kQShZcIDSvfNnr8dD+gF"
+    L"kgUKomuNx4BP51b1MZgVIK2FqMt1mYkJic1HZKkQ/L0TfTXr4E0HjihE9MoUqzhlW4svnkswr/R4p"
+    L"PURkVpvYRWVEEovA+iU+1qL+vHD/3Kwz/5d35q/cXnx43w/YyRysxsu3oJy+cSCeBXMwRcOGsOBzQ"
+    L"Ms1PH3/expeXrPuN98iZIVqTdrKCVirh5grUGrSJEHAHESMK0xqJTT7V8nKoexMOolIqrUdBxe5aO"
+    L"LtkojbHxVC2VBOiAzhshSVMJNDHeaBuTxNSgpUNSL5CGeRI3j60WMC9eSff8legOVJWPQjbTJRhMh"
+    L"G+wqSXNLJ08JUmTJkFUKGvBxAmCwnmpRMB2dDUanDv16B/+2Ed++O/9ej0aG2OMEl/PrrMOLyNMdY"
+    L"lS8OKS8GUBo6+QAqDgkIINDQtz508/fKRriw96Wdwhwd4sqHhUhyilmszapgabJDEpI45UaaVRec1"
+    L"4+UXqetSMH2iMSeIJWybBWIu1tsHVA2Jd9ARK0FlbiqnIDEoNJkkwNsHqnGRtF73nb6R36jrytT3Y"
+    L"s7tJTu4mG29Hp7EdPAvgtCWgTqKbz3NLnqcxyZvxDjRMpSoECh9C0ImGRG2dfvETj9//Yz/8+P3/7"
+    L"lFjTEe0DuL9RTN0Fwjy4jJPLlKUcImy8GvBA8wmMKWGztzGxmF//vSnPtbJF047l98gkszH0awIyE"
+    L"5g3sREzoA1pEmCdAoGnaepqwJpjngBiRm8TrBJSpLEmG21IpgqYgCEyaljysZ6P7r7hMTmpKcup/f"
+    L"UbeTFTqhTwjgDlwAGryLUGxs9UfDGGmwahzPzPCHLEmxqJxg/jeBRilqg8CHUgtJZV5XDwdqJzz3w"
+    L"ix/9l9/zH88/+/S6SdOOd85N8PJLx255CVc/a/GXun7NKEDbfrbgNGQdUP311SdfqIZHP6v1XO59c"
+    L"hVYI+IlDsVI9AgNVp5lHXS/YJy8QCjj0KgPdXMAg585IzDu30V5RNUEXCwzm4RPG0tqUzKb00m6pM"
+    L"U20uevJCmWqKqKyjlC8883Zw2ZJNb7bRmXdxLSNCVt1uYo03iFpnUtSuFk6u512tN1Ucj64S985NH"
+    L"/8v/81OO/+rOf8k5SY1LtXeUuYfWXEvJLuXp3idIwfC16gPYaGRUEA7ZXVRtu/fxjj3q39YwK2ZL3"
+    L"2S7QSuJ0U2jzwCgExcgcIVQVRgwGjRIVj7UNHl+XhKrAVxVVNaIqC+q6Rqq43UM5jZGE1ObkeoGs2"
+    L"IY+tguzth1XgvcBo2NSaJOELLMkDcE1yxKSJqnTdspTaE6xjNC0igsdo8ULKu2q4FGbJ1889NwHfu"
+    L"nfPfyvf+C/bRx5fqCTJJcQgsgfcflcwtXPuvVZ63YXVQWzt+GLqQIUX7mLnnoAUqAD9IE5MIvAAvh"
+    L"Mw9zyjjfeObd86zd05nfe1JmbI801SWpD3rOq08/U6c5DjPxhtLKRlp3oCeVLmZgTKBtLMdFxyDQ2"
+    L"ZyKRI81zOnqFdH0vdrCELnqEcUpd+RmWjpk2cxqkrkX4aBs8OiZ+ouNAuCeIU0qC0tqkHVxdMzxz/"
+    L"Jnjn/mDP/j8r/7EZwiM0TrV4EII9UVCvJRgwwzuf6ky0M2UgNVMKXixF/iaUYDW6yRA3lx7M4qwAD"
+    L"IHIdWaueXlO27pL9/6Z/L5XTd1+ks2m1MsLvdkkB6W1fxDSjmtjMljCWZ1s37+IhAmMZGFkyUkaUa"
+    L"a9uiwQrZ2OelgOwSDb04LF6SZy9ITAdO+90QBzMTqRam4BlgpCVopTKq0zRhvrIfh2WNPnnzkgY98"
+    L"4Xd+/rHgwggwOklCqOtZwcmMwPwlhB0uYeGXEr6bUYCLhR++ykDQJcOAabxA2ihBd0YR5kHPQegCG"
+    L"dCbW7jiyvltr7uz09t3y9LOXUv5Yp9zyceo02dQ1gWVKJWojtI2iTW9jjsGJBFsljOfXE2HHVjdxe"
+    L"oOie9jXA9fK2rnI8+gqc/RzeaTBsOflHgqgjiiVVwnqLWI0RqToHSKdxXjtdX1zWNPPXH8Mx/4zJF"
+    L"Pf/AFYAxYba0E51rrDDMCu9jC65exdn9RnL8YBHIX/Y58MZXAV1IBLg4FpgkHSSPoTqMIM8qg5+Jt"
+    L"SIA8SZLti0u3X7e486YbdLLrGtORHgtDQu8MPjsP2ZYo40SnWnWynXT1HtVVe+jr3aS6eRuJ7N9As"
+    L"8277dI1eD6z+L0xBIKIUmCMiFJKtFEqTYGEuhhRbm4Mh2cPP3f+2c8/dezg7z813ji/Bni01lpr1w"
+    L"j+UhZcXcLK65cRtrtISWY9wMWC/6LLwK+GAlzsCexMXtDmBhcpg+6B6UOdN6/pZUlnuT9/81Wduau"
+    L"u6PR27jX93rakr610C5LlQNfsoG9WsEmCMh7vg0jQEVea9Oz1hQKPG8ujkHWs3bEWnTS7C3xFXYxd"
+    L"sbm6Olo7emT9hUNHzz3zyRdGm+fXGkEoba0QqENwF7tkfwmBuRmvUF8im68vsvZwife8uCXsX6J0/"
+    L"JpRgItzAv0SitDmCBcqhNZdAl0IrTLkxrCUJMvzc/PX703z3Tv7i9vnu/PbV7w2PZ2nxmaZNiZFaR"
+    L"vje0vYMHpC/5LJsGacEg7ifD2qgq/G43p87sx4c3VjvHrs7ObJx46NVs9uefFbjRCU1taj8SGEmhC"
+    L"qGSFeqn9fvYRCuJdQAPcSHiS8TPdPXok1fjUv6qIuV6sIsznCbMKYzShFF607YLqEOm2eS5przygz"
+    L"h07zNO13Ov0dC0m2PK9Np4O2CUbrdtm0Vrpd/CFI8OKKsixWN4ut42tVOSx8VdTeVwOgmLEur23qC"
+    L"KEOBE8I5UUCvVTr9uLH6pdI6i4OAeES5d3FJSGvRvhfCwrARY0NfZEyzOYJs94hm1GGLD5mcrTkGp"
+    L"OF4BMI6czvmZmrvqi9+nL1d7PVUXutbSA0p/+GMCvoMGPp/mUE+VKhIFxCGcIl3PvFgr/4c6pXKvy"
+    L"vFQV4OcBIX0IZzIxgkxkvMesxkuljJkFLojGzv98ogFwKCGsXvvrIFA3yEvF21kLdJR7zl8jM3UWJ"
+    L"n7vo/cJFrv1SdC95GWiYP+kKcCmvMJswqosAJT0j1FYhzEU5hb3otXoGAb2YWvVSWHu4RMy9VPI1K"
+    L"9xwCTAnvIRVhz9G4PJaCfxPigJc6vNd3Au/mBmjL3Lx5qLXzFj+RJkuvsrLhAW5RIkVXub2YmH6l3"
+    L"iPl+v4verY/t+LAnBRbFN/jJe4OHy8HIFSX0Lw6iU8AS/jgi+OyeGLaOWGL4LAIV9pC/uTdFEvQXS"
+    L"4FFNGXaL05CWeV5fOCV7yvvpjhPfFCPhVJ3B/evnTy59e/vTyp5c/vXwJl/8/YzklMybh7aEAAAAA"
+    L"SUVORK5CYII=";
+
+// Disabled/offline variant of the globe. Generated from the same embedded
+// globe artwork with luminance conversion, keeping alpha intact, so the no-
+// Internet state matches the gray Windows 7 visual rather than hiding it.
+static const WCHAR* GLOBE_ICON_OFFLINE_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAA2SklEQVR4nO19eZAdx3nfr7tn5s07dhcLYIFdAGtSokBQNCmR"
+    L"okgx0cFURNtJUUmUOD6UxCnbKUWhJavKZVfssuM45VTicjmOD9mibDmSpZQsS3Zs0hZ12CorOmylBN4gKYCgAAJLYrHA3vv2"
+    L"HTPT3fnjzTf7vd6e997iIn18VVNv3kzPTE9/99E94oMf/CBeiXD//feLy73HAw88YOk+DzzwgL38Xv3NA/lyd+BqAici2r//"
+    L"/vsF33+5+vZKAfFySwCOBM6x1xL+NkuH4OXuAIcrifxjx46JbreLG2+8EYuLi2JtbU3s2rULAJCmqQCARqOBZrOJt7/97QjD"
+    L"0K6uriIMQ2uttQsLC5ifn7cA0Gw2/8YSyMtCADtEtABg899SmJubE0EQiDiORRzH9rWvfa35nd/5HXP06NHL6isA3HfffeKl"
+    L"l15SnU7H3nDDDebLX/7y3xiieEVJgBx8iJbwEMG5c+dkGIZiamrK7NmzR3/sYx8rkHLkyJHK6173uloYhvsAzAohppRS40qp"
+    L"hpSyKoSIhBCBMQbGmNRa29Vab2qt1wAsdzqds3Ecz9Xr9fbDDz/cApABwPHjxwEAN910kwKAG264wTz88MN/bYnhqtsAl8Dt"
+    L"7n4f4s+dOyer1SomJibMb/3Wb2kAOHTokJyZmZkCcGsYhjdGUXS7lPLGIAgOBEEwo5SqB0EApVSxCSEghICUPTvYGAOtNbTW"
+    L"yLIMaZqmS0tLKwBeAnDSWvsEgOeiKDq6a9eu8w899FBCfTp8+LBUSom/jsTwSpEAgv26AygAiIsXL8qJiQnz0EMPpQDwpje9"
+    L"qX7XXXe9PoqivxeG4T8Iw/CWKIqur1QqiKIIUkoI0Ud71lpr8/tbABBCIMsyZFkGpZSw1kIpJaIokkmShLn02Afgdmvt92qt"
+    L"0e12V8+fP3/87rvv/pqU8qu1Wu2vvvjFLy4CPelw+PBhuX//fnzta18zV2+4rhy83BLAx/HF/6WlJWGMEfV6Pf3Yxz5m3/Oe"
+    L"98QnT558gzHmPinl26Mour1arUaE8ByMtdYAENZaYYwR1loIIQRrAwCQUmJzcxOdTgcA0O120el0EAQBAFilFABYYwwRpeT9"
+    L"1FrDGPMigC9JKT8zPj7+xS984QvLAHDPPfcIrbV44okn7CvZXriqBFCC/EFIBwBkWSbX19dlHMfJxz/+cfu2t73t+iRJ/pHW"
+    L"+nuyLHtzo9GoCCEQhiHGxsaMEMJKKYWUUqCHeAghYEyPCQnx1lpYa/ukA/1aa6G1RqfTwerqKgAgDEOkaep2jySIMcYo0QMY"
+    L"Y5Bl2SljzOeMMZ947LHHvk4XvOUtb5GvVEK4KgQwgOu3cTn/XVlZEdbaAvFvfetbb9Va/xul1PcIIV61trYGay127dqllVIC"
+    L"gNi9e7fgEiA36gr93mw20W63oZRCvV5HFEXoaYIecKIAesSSZRkuXLiAbreLMAxhrS2Iia5hYIUQxhgja7WayFVKprX+YpIk"
+    L"H6nVap/56le/2gaAW265RT799NOvKNVwRQlgBIPP5X4BwC4tLUkhhNy1a1f24Q9/WL/lLW95ndb63UKI75dS7q1UKtBam/X1"
+    L"dRvHsazX6yKOY2RZhjAMEQQBut0ugiBAFEVYXV1FmqbFcaUUtNaIoghCCDQaDVSrVReREEL0EcPi4iKazSaCIIDWGsAW8vmv"
+    L"lBJpmqLRaJjJyUmbpqnKsgztdhvtdvvrSZL85uzs7B8++OCD3XvuuUe0Wi1x9OjRVwQhXEsCEL7f9fV1Wa1W8ZGPfCS55557"
+    L"XpMkybullD8cx/HeJEmQpqmu1WrSWiu63S5qtVrBjWNjYxgbG0O320VuwCHLMrRaLRhj0O12YYwpCIAgyzLMzMwgjuNtREBA"
+    L"auLcuXPodDoIwxBZlnkJgNp3Oh3EcYypqSlrrTXGGAlAbGxsYHNz8yta61985JFHPgsAs7OzamVlxbzcauFa5AIE3+bn5wUA"
+    L"LC0tifX1dTk+Pp5duHChcvfdd9+fZdnnK5XKf4zjeK/ugZVSqizLRBzHqFQqaLVaUEphfHy8EPGbm5sIggDGGKyvr0MIgXq9"
+    L"jkOHDmF2dhaTk5OYnJxErVaDlBJBEKDT6RTuoJSyQDjtAz2JsG/fPiilYIzpa+faEMYYxHGMJEkwPz8vVA+EtdaMjY2Zqamp"
+    L"t1Wr1c/ceeedH7/zzjtvnpub081m0x4+fPhlzcdcsYcPMfiK3ziOsb6+roQQ8pOf/GRy7NixuxcXF/8giqIPRlF0AwCTJIlN"
+    L"kkQJIQQX8VprstDR6XTQ6XSQJElh8KVpCqUUkiTBxsYGWq0WrLWIogi7du3C9PQ0KpUKhBBIkgSrq6vbkM/jA1JKKKWKZ/Jj"
+    L"REjUXghRqBlrLc6ePUtEI7XW0lqrd+/ejampqR8IguBLd9xxx/vvv//+6OTJk2Z2dlZdKTzsFK4IAQwx+vrOCSHU+Ph4Nj4+"
+    L"Ht51110/ZYx5KI7j7zLGmCRJTLfblWmaChLZSqnCUAvDsNC3JI7Jem+327DWYmJiAuPj46jVauh2uwWBpGla3CMIArTbbWxu"
+    L"blKfCuRyJHe7XZw5c6awJ4CeyKdn5/GDPgNSa130c3FxEUopVKtVCCHU8vKyWFhY0GNjY/t27979a9/4xjf+6K677nr93Nyc"
+    L"BiAajcY1T4RdNgGMaPELAKLZbKpPfepT3fn5+cPPPPPM/5ZS/kIu7k2WZcQphRVPg07RO9L9cRyj0WigUqkUOl4IUXA/XS+E"
+    L"KOyAKIoKY05KiWq1in379m0T63QfIQQWFxchhEClUoG1tiCEWq2GiYmJ4vmu5CBJlWUZhBCYmJhAvV5Ho9GAUkotLS3ZKIrM"
+    L"vn377hNCfOGOO+74ASmlbTab9pZbbrmmKuFqPIzrfPoPrbVqNBrpvffe+10XL178E2vtO6WUBoDVWksABXdGUYQ4jvvCtkEQ"
+    L"oFqtIo5jdLvdwtInkUsin3N8EAQIggBJkkBKibW1tUJN+EQ+/bZaLZw9exZJkiD3QAqRTwQlpSwMwEH3evHFF3Hu3DnEcYxd"
+    L"u3bh4MGDaDQa4uzZs1IIoaempvZXq9WP33bbbb/5rne9q/L000+bRqNxzYjgaj2o4P6VlRWhtZZKKTz33HPvabVan7bW3ghA"
+    L"A5BaawH0kE8GFRerQghUq1VIKbGxsYG1tTUA6BPjFL0jD6DVaqFWqyGOY0xMTCCOY5w/fx55urfwCprNJihoBGyJ8IsXLyLL"
+    L"soLDyT0MgqAw9FZWVgpxT/3kG7UPwxALCwuYm5vD8vIyzp8/j3q9jomJCbz00kvKGGMmJibM5OTkj5w4ceLT99xzz6s3Nzev"
+    L"GRFc1kM84r/v/8rKihRCCKWUfPbZZ3+22+3+Rpqm49ZaLaVUFLQJw7CP+4mDlFKoVCrodDpYW1tDpVLBxMQEqtUqwjAskKyU"
+    L"QhiGqFarqFarhY2gtcb58+exvLwMY0xBSNba4r6kzwlxpFJIsnCOJo6vVCqoVCpFkMhFPvWdEkz1eh3tdhvLy8vQWmNhYaGw"
+    L"bS5cuCCttTIMQ713795/urGx8fAtt9zyumazad7whjdcdePwkglgAPIpqieFEKLRaERPP/30LwH4mSzLhBDCKKUUD7oQF7mZ"
+    L"OkJSq9VCo9FAFEUA0Cd6OafV63Xs2rULSil0Oh1sbGwUXMsRSggi1UFcDmyFjen+fHNDylx6+CRApVLB+Pg40jSFEKIIRJEh"
+    L"S7GKPKeglFLZ1NTUTVLKT+/du/fwY489pintfLXgkghgWMRvaWlJTk5OAkD1m9/85q8qpd7X7XZNPljSl44Fer40IRToBWzI"
+    L"vyY/n0sHMhjpGCV1KpVKIU0A9HEy9/MrlQq63S4WFxexsLCAtbU1tNvtbYYdsB3Brt7nbegZSZKgXq/j4MGD0Fqj1WoVKee1"
+    L"tTUYY5CPE71vIKXUhw4dOnLw4MEvTE1Nvfb48eNXlQiuRDp4m7U/MTGBTqdTfeGFF34liqIfarfb2hijiNtJ1FLcnVw+1yKn"
+    L"yFqapoW+5XF+rTW5WH2IrVaraLVaqNfrCIKgUB/0HOJQcgtJFbXb7d6gBAGklIXXwdsTsgeB1rpwT7/1rW9hcnIS09PTWF1d"
+    L"xfLyciHpxsfHUa1WkWUZVzMKgD506NCrjDGf11p/1/Hjx4/fdNNN6vjx43row3cIV8LQoFBmEeETQlSeffbZ/xEEwQ91u13d"
+    L"6XQKfU86mAw9lklDkiSF705ZuCzLUK1WizZU2MGNROJ2CvJYa1GtVgvxT0jmkocTDakQijbye7suYplEAHqIp76Tt0DPXltb"
+    L"QxzH2LdvH6rVahG+puvJBsrfTSmlstnZ2W87cODAZ8fGxl59/Phxfeedd15xw3BHEmBYendhYUHu27cvfOyxx/5LEATvzrLM"
+    L"dDodCWwlTWif+/a5DiwQTIEYQjS5YzzTx6UGIRYAkiSB1hqVSqXoYKVSQbvdLmwN6oMvD8C5ndqVcT0PRJEkc+9rrcXevXuR"
+    L"ZRkWFhYwOzuLRqMBIQQ2NjaKkDY9mxgkTdNAKaWvv/76Vxlj/nhubu7eWq22ePjwYXny5Mkrlki6UhQlnnvuObl//377+OOP"
+    L"v08I8WPGGLO5uSm01kUhBo+pR1HUx8la6z5OIELgXBpFUR/iyRvg91FKFTYDIbxWqxVBItf+cP13wM/d7nGKBPKopO86KSXO"
+    L"nTuHKIooTwApJcbHx4vzZM8QI9DxJEmUtVbPzs6+bmpq6mOPPvooarUarmTE8IqUhJ07d05+6UtfSldXV79fCPGfpZQiN3gE"
+    L"t/D5AHORTFzNa/ZoYAAUUTxKBFEMnt/T9wxgi0snJyexvr5eSB8yOAm4XTJIMpCk4tzOn+Xej2IOL7zwQhHLIBVB4Wlqz4mG"
+    L"9rMsUwCy6enpf5xl2QeefPLJ983OzgbNZlNje/ncjuFyCUA8/vjj8hvf+Eb6xje+8a3dbvdXKpVKvdPpGGutJLeH/HR6WXKB"
+    L"uLglxBc3ZkEhTiTEqSRBqK3LwdxVo2trtVpf/J/uS0CGH13PuZ8jnxuHPD7A9+m/e78wDAvXr9Fo9BmbpCYprU25hjAMlZQy"
+    L"63Q6702S5Mm5ubkPXymj8LIIYG5uTtx+++0mDMMDy8vLvxzH8TRHPoAiyAOg4DACd7B4ho3798RttVqtOO5yvyt6eVkYD+DQ"
+    L"wNLAcwTQfQgRdB2vGKY2/Bn8fdz/9EsExFUFqTXKZFIbkhzGGMzPz2N6elpMTEzIOI61lPJ/XnfddUePHz/+RKPRkM1m87Ls"
+    L"gZFsgDLjLwgC8aEPfcjMz8//bBAEdyZJoo0xkvQyWeY0mIRIHiunweeinaJ6ZMETp0spCx/f5TzOldSWS4Ysy7C5uVkkaLjE"
+    L"8BESsFUn6CKuDIa5iHSeELyxsYHnnnsOWZYVEo33N45jzM7OUjRTSimFUqphjPno3r17K0mSXLY9MLIR6BLB448/Lh966KHs"
+    L"uuuu+z6l1L+jjF4YhkU4lxDFjTpgizNInPLATqfTgbUWrVarcAkJ8TRArpVNyLHWotvtot1uF/UC3W63OEbt3RQu4Df8uPQY"
+    L"xf93wXcN0+3FO585c6aPwKIowpkzZ/D0009DCIEDBw5gc3MTY2NjcmJiItNa3yal/O9Jkpjp6enLMuQv6eKnn35a3n777fq6"
+    L"6677NiHELyilQmMMgiAQPHvn5tddI9CNwRN3WmtRr9eLtrTRPbiRxAeW7smJD0ARt6cYPnG1a0NwzneNRJ9hOMo5H9CzKG2c"
+    L"JAlOnTpVFK9cvHixSHo99dRTWFtbw/T0NJ5//nmkaaqklNoY8/7p6ek3P//88zqKoksmgsuyAbIs+6/VavVVAHQQBIojnSx3"
+    L"AIV4DoKgzzhzS7K4EUi6ENjus/tcM24bkNQgO4TSuVJKxHEMIXp1ApyQuL521QmXMO5x+l9mCJYBEbTWGlTgShlI/l5SyiI1"
+    L"DQCdTkcIIYTslcr9xoEDB+5aXFzU8E+qGQo7JoDPf/7z6vTp09np06fvU0r9ayml0VpLMva4biWgASTDhsQfEQwfMMrjc9Uh"
+    L"hCiifHQ/Vyf7CIsjRUpZRN+01n3ExvtJ7S+V43cqDaamplCv1/tspT179mB+fh4bGxsFYc/PzxcM1MO/1MaY29I0fW+SJL8a"
+    L"BIHKsmzHXsFIooPmzz/yyCNi79695siRI3VjzM9HUaRyHS5ccWqMKaJy7qBwn5+LamobBEHBCW683rWoqQ3tU9KIn+eRRSIs"
+    L"3l8CXz/LYBRED2pDREZBKyJSpRTSNC2kmLW24H7KieRELoQQVmv9M9PT09NZlplLUQVDJQA3/s6fPy/n5uaymZmZH6xUKm8Q"
+    L"QhgAkiORG1Ck58jad0Os3O0hy5fulSRJgXxqx+vySAJwCUKDQ6lfXv1DwLOIrps4qvi+EkD9P3fuHK6//nqkadqXJ+FzEUhS"
+    L"8qQRABmGoQawV2v9EwB+Ii9D3xEMvYC4/9ixY+Id73iHPnz48B4AP66UsryzNHg+S51eGNiyrMmvduPoPERMPjK/hiOPF4xy"
+    L"q54Gkh/39cW1Lcr6fCWBPxtAUZlkjCm8lmq1ipmZmaKWkd7zxhtvRK1WKwijUqnIWq1mlVL//sCBA9ddihQYuXGz2ZQPPPCA"
+    L"3djY+LdhGL5KSmkBSPeFePTLZ1kTMumXxBrl/QnpFC2jqCEfQI5Y91lZlvUVgg4DnxHog1H0/ijXcklJ70I5CipobbVamJiY"
+    L"KApIhBB4zWteg/3792P//v3cKBWNRkOPj4+PJUnyXgB2z549O/JXRyKARx55RDzxxBPZrbfeWgfwH4gieYCHqJKLejc7xg01"
+    L"aptlGQAU6VgKG5Nu5PED0pGkCqjShrt/dL2rLlxk8L7shPPL2o7qMrrXBkGA5eXlouqJJFi73S4Y47rrrsPU1FRRYEKZUQDo"
+    L"dDpy7969ttFo/GC9Xp+an5/XOwkODSWA+++/XywuLkoAWFxc/GdKqRtJ93NE8o2O0eCSiKdfnv7l/j0/x90xzuWdTgdpmhb1"
+    L"Aj5x7kNsGeJdBLrXlLXxEQ4H3znfNfSuVCzSbrexsbGBF198saiF2L17d9E+TVMcOnQI+/fvx8TEBJRSUghhdu/ePRXH8b8E"
+    L"gMnJyZEl+1Aj8IEHHrB33nmnuffee+Wf/umf/nAQBNZaa6MoKqZPu/40xc7JzyVjkLt4PARMRiLFxPlETx78abVahRXPvY2y"
+    L"DJ6LCNeD8BmkLqKGifeyZw1rx20ApRSazSZWVlYghCjUYqVSwYEDB/rc62q1iiiKUK/XCxVKY1Kv13+42+3+dj7RZCQYSgBR"
+    L"FMmjR4+a+fn524UQbwMgpJSSwq3krpFbRQPphn3JleFuIbfQeUKEL+cC9PQlhXJ5WRgPApVZ8ByBPtfRJymGcb57f19bt30Z"
+    L"IRFz8MRUHMfYu3cvGo1GUTDC+05jyGIrSillJyYm7lhfX38zgK/Ecaw6nc5QQhgqKl796lcLAMiy7HuDIAgBZLa38kbxQq5h"
+    L"Q0Biv9vtFkUTJBFczueEw9OhaZqi2WwCQFH774LPuHRtjUFtyjYfwgbZDm4bd78MuM1ELjBJWP6OPBvJjcj8HnpsbEzU6/Xv"
+    L"BoDZ2dmRxNEwAhDHjx/XN998cxXAP89FriQfneLp/AX5IHO97wuXUozAfRmqrSO/l+ba8Tn6ZWKbjtHGXccy5PN+u0gZhHAf"
+    L"kkdRRe796T/PXbjVUjSGpAq4BMw3GccxxsbG3tloNOp52dhQY3AgAczOzkoAWF5evlsIcWMeeZLUKQpfkgijX75PL8b1PiGC"
+    L"h41pMCgKRpNCSC1wj8LdhnG2KwHctj4iKuPiYSJ/GNJ9/zljAMD09HQRzOLv7rrWdE0+jlIpZev1+rdVq9W3AcBNN900VMKP"
+    L"ZC1aa79T9ea6a0IcdY5EMg++uIPOq2gA9CGTB3kodEyGTrPZLCKCnKDKkOg+15UC/HwZIn1SwN13kVjG3b7zg+5DEpUSVmRk"
+    L"k/rkXhbgjVzqfPWT7xgFr8AQApibm9O33XZbAOA7KPDg6lKgv6CCEM47TeILwDZqpmPkITQaDWRZho2NDQAoKoI4Ml1XsUwC"
+    L"+M6VSQkXGYMkge+6snu59x20T4EsPimVS0DuRnN1SIQjhFB5Mc13NhqNMC8ZG6gGSgmAQornz59/tRDiFtL/1vaHV6nzRAxp"
+    L"mqLdbkMIUczypegegCKrx8UuLawQRRE2NjaKCSEUD/dxNycE/p+ro0GE4rqCg5A2imooa+9rN0ydnDlzpphfQBIX2LIFeHSU"
+    L"S2Oqg6hUKkeCILg5x+OlEQCdM8a8VUpZsdYaa63gYp/7/oRUCl5UKhU0m00sLy/Tcm6o1WpFqROfWEm1A2tra1BKFbV/pDrK"
+    L"EOgjBuIU95x73TCRPgqifdf47uX77/slZhgfHy/67kuAEdB5ZhQKrbWO4zio1+tvBoD9+/cPlPKlJ/NYPwC8Pud4w406HxUb"
+    L"YwoOX1hYKAzF9fV1bGxsFKXQtD5PvV4vxFe73S5m5rhl166uL+Nk1wMp+z9IrLsIHOYy+hA+jGB815ALLESvepkCPIRorjq5"
+    L"e8hzIvm9bF4B9UYAmJ6eHlg0WhYIEp1OR8/OzgbdbvfOHOFF6JeXbgH9YogWUSArlgoeaZ88B4oNxHFc3IMv5sBLtPk+9yh4"
+    L"EKiv8yXZyFG5eBiRlJ3zPW9UgqN3oGnv9H4kbcmuoiJZngnlOJFSyjyHclej0QiPHj2aNhoNUbYamVcCNBoN2p0QQhzJO14E"
+    L"f3yGHBdhdJ5EMS8MIf+eon3dbrd47iBOd4/7tkESY5CXMOgerroYtj+I0MrEPmekmZmZgoC5kc3Hk5iCGIOH140xInehr5dS"
+    L"TgFAkiSldoCXAOiCJEluADDuIsdFGP1S9o6MFFc98PZk3VIcgb2AFxFlxqBrC5QZiaNurvHI35mOcSQOIgoX3HOu+KfxoNpF"
+    L"t2yNh9vdYBD1TwghrLVWSlmPouh1ADAoRVwmAUjp3yqEUOgtwCxckcUHSuWrYV24cKHPwi/jFvp1B9VHML4AU5kt4BLQICng"
+    L"C2ANkjyDVEIZUZRJEH6cxjJfRKovuAZszZukcjceWeXPZCunmbw8/yYACIKglAC8NgCjvENkAFpmAxAF5kRSuB+Uw65Wq8Vi"
+    L"TfSyvn1y/+havnKnq/vpWa7n4UbFfFDGrXRPfvxyxH4ZYZT1yd3onbn4J+Kg/AjPB7ihdEakNh/XfaUdyMFLACsrKzbv5F7f"
+    L"S/MsHnWAKJbmvg17WbL+iVD4un9EVK7hxxFeFhYdNODub9m+jyjKrtnJ5koW3h9gi8ApIUbqiM+kcgNq7vVO368HgDiOSz0B"
+    L"LwFQebEQYpbG1uUioDdrlxI21AGiUHfyxiAiaLfbfcEidzBc7sj7to0YRuG4sv984OiX92cUIhlGIGVjQf3nFVDcLqB3o8QY"
+    L"jTH3BOj+OSOJ3Ct4daPRECwxtG2AfAQgANgjR46Ey8vLs3mHhW/AyPWg6hxCujshhK7jIpyMPlIfpBJ4gghA3zGeEeP3HSYF"
+    L"XMIo42gXOb42g5Bc9ryytiQJuAvI38klQC5tSS0A2JZxTdNU5nGEqWq1GjWbzS5KoLQgpNVqRdba3fnDBX8x6lin00G9Xi/C"
+    L"k9xvdRdu4IRBx2iiCPftfaKfP9OnCviglUkBH4LKju2EMHztBqkQrgYISHVSYIyInZBO78aBXEIe+eQV0Tk0tNYBgJ0TgLU2"
+    L"AFAnxLiDRb58u90ulmzftWsXoigqAkGcsuk4z+tTASeVgFHs36f3uZj3/eecNAiGSQMfQvl5t+0o0mLYJqUsCl92795dIJWA"
+    L"iMW1HSi+womJ91kIEVprB4aCSwnAGCMAFDFHd+DcDB9VsjYajb7YO9WvUak2IYuCQGmaYnx8HO12G2ma9s0CIiTzmgGf+Hc9"
+    L"g0FQhmDaL9PV7jXD1IFvc91TVzVeuHAB9Xq9z8CmseX2FY9V8L7y8c3vPTTdX0oAaZoKV/S7QJ3rdDoYHx8vOkiTHfkkkWaz"
+    L"WcT5SUxR3f7a2hoajUaRSeSrfbmI5kgeFAoug0ESoOx31P1BROFDPj9HPj6Fe92Se5IKJJF5bSW3JchGyM8JDEkHlxJAEAQ2"
+    L"SRLhDpg7eMb0Qr2dTgcTExNFGpPWvyMRz/UadZrXvm1uboI+7cpDx2WEwPd5HwepBR/X83NlUsE97/MOBhHOsIASvyclygD0"
+    L"RVQ5x7sqmUtMAH1tB+EPGFIVbImMSixrHqTY3NwsvtxRr9f71gTY3NwsDERyXeieVAiilMLq6mrfbB7OBUL0TwXzSQPer2HI"
+    L"9v3fqTQY5digCKWvj5zjXVHvShICHh10+mHhcf04DLIBLICM62IfWLs1tYmCF+12G/V6vVjlkyQCHxyOSO4Okoqge1GhiDG9"
+    L"lTz5pEm3MMVnH7gE4fbd998d4Hw8+tqVqQMXWWVRxTJpQ6Ke2rgEQO3puDvxlruPrnHog0EEkAFoAdgzinVNHaLgEEX4yNLn"
+    L"M3XdAk9gK53pDjJNhqjX61hbW8PKykqhL+m5wHbVwAe3DPk+SVEm/nmfBh3jhDBI7/s2Git6J14Q4yMU/gy3z/m5oUvJlRLA"
+    L"wYMHu2fPnl0BMAvAinxUXb3qAuX/6Zt7VBRCASNrbcHFXC/yexJlCyGwubmJJElw8eLFvoAQlwQ+5LnBIVcqUPsyKeC7rw8R"
+    L"rqjn+/z9XPHtuxf58TSOXBK4ffQhn5fo521SIcRAAvC5CRYAnnjiicxaO5ffcLAl4XSOkNvpdFCtVotEBn21i17WFXNuWRfp"
+    L"NZo1SxxB08fIVy4bXBcBvnYckYOQ5hpvZYZd2XWDJA2wldwhA5hUIQ/s+NQKneOLZqPHsBBCrAkhtn36dBgBIAgClT/wDBHA"
+    L"IDvABY7IxcVFdDqdAplhGBbTxPjg+xDICyB55IvPTi5DPA3UTs4P41QfIYxCNL77uMin9t1ut5j9y8Pgvr7SvaIoKtZCziOw"
+    L"NiecE8vLy0k+W9jLxF4VMDk5KS5evAgAF4kAykKSZUDii5Y8IXVA3/nxJY3o5XxhXgLu8rh2g2sDuED3du9J5wbtD1IHPmQP"
+    L"0/8uUCyg1WohTVPs2rWrmAnNn8v7b0xvHiF9JofGPI5jY4xRWZY9BQBRFAUAvJJgoBsopTyXP0z5fO5h4CQoiihh2YC6iHOP"
+    L"0f8yX9+HYPd/Wf8vhQDod5CKGQX5vN/W9lTnyspKQQSc26md1rpgKgqekVRkoeQOgIELZXgJYG1tjfyHJ4wx2lqrpJSFIcih"
+    L"jOtcEQ0ArVYLQL97wg0+d9D5S3PEc24YRjTDwCUaF0G+42WIvRTk03vQWJAn1e12sby8jPHxcXQ6nb42Usoi1kLfJqSgWi6p"
+    L"lbUWWZadBYDl5eVSrvUSQJIkPbZX6mSWZRvW2l28CHGQFPBxLL0UfX+XDB4++ZHH/DnC+YC753wqw4VRJNaoSOf7O3XxBnG+"
+    L"C0mSFGNljCk+bWOtLRa9pK+lAdsypVYIIbvdbjvLsr/I71c6TXxgsmBlZWVdCHGc2wGDuMsXk6eXJMudct68vJkvA+Ou6sUJ"
+    L"g0KkrgvkcuCl+OBlCHOPDZpxdKmc7ztOjLK+vg6tNWq1WvHllIWFBWxsbBRekDGmb9xyNdCsVCqLg/ALlBOAnZ2dVVmWaWvt"
+    L"1/MXMJz7holZfp5WEeH6rOxDC7wAkoiFCIZelFcgjer+jbKV3Y+Ou9XCZR6Ez03bCbjEt7q6ipWVFbTbbayurhbIpvUT+Pjl"
+    L"KhvGmK90Op3usI9TlxqBnU5H5Ih8Mn8h6UqAUXQttSH3hmoFiPvDMCx0HAWNaOYLuYtCiCLbuLS01PfBCBp0d/2/y4Ey7neP"
+    L"+dq453YCrlFLUoAin5RroSVk6BouJa21NlcXjzWbTbuxsVHqAQADCIAMQSHEl40xbWNMNQgCK6UUw+yAspcjF5CIgbKItVqt"
+    L"WP+HkkKUEqUAEr385OQkrLXFmnpkEBER8dKxfECK5w8DF6m+Y8P+u+88yjiVMRX3oOg4TZd3o5sslhAkSaKttX8JAMvLywOX"
+    L"iSklgCRJDABsbGycbTQaT1lr3wTAKKUUUR/v6KgDTNk/vlgzfeq1UqkUn4UBgHq9XkQRO51OkQwipJP9sHv3bjSbTVy4cKH4"
+    L"ngAfNHr2KP3j7UYlCN817vhciiqga/nzfMTC5hJY3fsU74KU8uvAlkFfBoP1QxConBD+LOd6y+PV1Imdul0kwghJZFwRl/M1"
+    L"grIsQ7PZ7PMe6FOypAqWlpYghMChQ4cghChKzLhO5rrZPebqd981g2wFjiAXuIfiIm+nY+fzdjg+jDE6H9eHL1y4kOQfnLx0"
+    L"AmAP+Zwxpvj4o2up+zo46DywNWB8/iDX31RA6gZC+PVUUiaEKOYc7t+/v6hR9HkNvFytbCszJssMvJ1w904N6GHHCB95/3pB"
+    L"AKX+DAA2NzeHUtdAAsiyzADAzMzMUQDPGGOEtdYQ1V2usUUvwf1YCn263wnmA08vzcuogB6xrK6uolqtYs+ePUV1DdOPBREM"
+    L"it650sLXhvp2qaJ9EJCoH0QsdI69n7HWSq31+SRJPg/0VngZ9qxhEsAGQaCOHTuWCSH+KH9hO4gAdirWgO3VrrSRoedyL6kJ"
+    L"njfn7tDGxgaklNi9e3chQbjBRH2/FDeS95G/M/8dBXwILkO6z/3m3J+PIbnpf7y8vNycnZ0dKv6BEVQALRQhpfy0MSbRWish"
+    L"hCXKu9ToW37PbYNHsQGKE/gGCdgqnaL7EIFQAQkZk1NTU5icnMTk5CTGxsYKyULcM0gllCG+DCH060MqhzIEjwqc+5n4V8YY"
+    L"a4z55Mg3wggEkCSJiaJIXrhw4ZsA/tz2YJsacN0ufsz7YCmLr2lSVJAPOl+Gho659QJ0jP7Tt4cphby+vo52u923ktn4+Hgx"
+    L"B9+YrW/7lln0/NhOEHWpRt8oYp+4n+wknXOCMeYbq6urf3nfffeJUZeLHdUIpKDQbxtjRE/aCO9XNwa9IB9cCgDReoD5CxTI"
+    L"J87kpU/5y/Z9Y88lCiot5yXUSZKg1Wqh3W5jfX0dnU4HBw8eLM67c+xcpF8LGEQwPonhcH9+WDyQJIl56qmnRl4seqSG+Zqz"
+    L"Qin1eWvtk9wYdBcxICgzkEiH08wiXvzAy6CA/nWFeZUxgILb3ee59gQRD/deNjc30Ww2ceDAgdKpVxyuJBG4iB2EeHcRCH6c"
+    L"FpDWWhsA0hjzQpIk/wcA5ubmRv6Y5OjLigeBPH/+fCKl/LVcCmAn3oDrMllri7VwXF+cZwe5F0DnAPR9E8BFOgG191n3nU4H"
+    L"m5ubmJiY2EaoO/HRRxHXoxp3rh3hO0ain1UJWfQmf/zy0tJSc2ZmZiTjj2BkAshdQlGtVj9lrT2eE4HhXAmUR9N8+3weoKuH"
+    L"eV2gL1hD3EzGIpciHNFkQ/A6e3pGu93u+6K4r58+GIawURA9qA1nLL7vcr/pyX5pjHkewO8CEPPz8zv6lOxOvi9jZ2Zm5Jkz"
+    L"Z1pxHP8i2QVEkb7gUJnbRAikPABxM4VxgX4r3yfWkyQpgj8usbgratIAcklAhNButws7gH/3sAx2yvHDdLtLSL6aCE4M7rQx"
+    L"25u+90svvfRSc2ZmRmIH3A/s8LuB8/PzptFoiDvuuOP3H3300R+VUr5BKWWCIJC81Ns3OO5L0Zc8KZhDL0TgK4nmHM2jhtwD"
+    L"4dLERaa77gD/xC2VVlF/6D6ccPj7+IxEOu4jkkGEM+iXgNdO5P03AKTW+vG1tbWPR1Ekd8r9wM4/HGk7nY568MEHOzfccMNP"
+    L"J0nyWSGE5V+04FE93y8NEGX66DhdyzmAG4SEdD5T2OVsXmpObUgKcHFK96eEFKWoG41GQQC82oZ7IQQ+wuDvydu4x932rhTw"
+    L"AaXOASDLMpvrfgghfmZ9fb0zMzOjrgUBIMsyHUWRPHXq1BdmZ2d/31r7r7TWWinVVzhaxjFAf0CF4gC8+EOIrW8Pl301jDiU"
+    L"u3Ak7omY+DeJAPTZENSOpBZNaqWlaicmJgq3kksproJ4X+j+LgxTJy7yfRKEi/6cGI0QQmmt//Ds2bOfy7l/x18NBS7j28HW"
+    L"WjE2NvbT6+vr9wohpqSURkopfVzheyluANJMH/6NIWDrxbk9wLnbHTgAfWKbSwg6zomUCItLFbILWq1Wn64lY5err1artc3Y"
+    L"HKQC3WM+zvchn3/p1FpLon9JSvmTwPCPQgyCS/rqdJIkJggC+cwzz5wJguAntdZCa22R1w26XgH/5cCRSghyvQoaAF43yAeO"
+    L"xwno/yBvw+0Xvx83wpiRtS3KSJ+kJ8nFw8vu/dyN4hGcoFx/n8aQv3tOYNYYY0UPfu706dOnDh8+LKh241Lgkj87nmWZCYJA"
+    L"vfDCC78L4NPGGKW1Ni5l02C6wMUpiXMu6tyaAzKA+GdqCYiT3aAUlxx0H1cvcylB9+LSxW3LvR13cotrsftcuLKNn+eGMn/f"
+    L"3BVXWuvP3n333Q/kov+y0pGXTADocbu11op9+/b9qNb6+TwhYXzBIe7j82NuIQYfZB9nECHwNC/dC+hfTpVLFB4l9HE7sN2A"
+    L"czm1jEtddeTeh3O9ez+fFPBJvZy5lDHmxTiO3/eJT3zCAEDZItCjwuUQACWKxKOPPnohiqJ3a62THKHbVAFQXm9PnETEwAfK"
+    L"l3Ti0sCX7+fuEoBtnOVyN92XjM+y8Da/htsPXMX4RL1P5A+SDlQRTeeNMTYfJy2lfO+xY8dOHz58WF6O6C/G5nJvkNsD6tSp"
+    L"U/9XSvnjWmuZ+6jW1eeAnwh4iJdPIi3jPsBPCJyjufXP7QTuKroEQH1xj3MCJJeQ+siN1kGI9yHdJ/Y555NqzK1+CeC/Pfvs"
+    L"s38yMzOjTp48eUUqUS6bAIAte+DMmTO/AeADuT2gge0TPQB/QSVxP53nIthHCMUL5BxDM4/4l8zpHpzjuUvp2gPUhv77pBg9"
+    L"L47jvlU6SPKUcXyZDVAm9plU01JKZa39vbvvvvvnlVLcc7vsLNUVIQAANo5jE0WRvPnmm3/CWvsnxphAa50B6NNlrvjnvzwF"
+    L"DGwFP2hBaZ8Y9eltss7puYQQn+h3CZEjpW+gmGimKe40QdNa2yexfH0cZAySJONin5Avev7+1wD82Ec/+lEZRVEwPz8vc9wJ"
+    L"9ntJID74wQ9e6rXbgL5Mcfvtt++6ePHiZ5RSb1ZKZUS13OBzB5j+E6L5oHKr27XsAX8RCke2z6qnNm7kkufZCWEuAdGEFdL/"
+    L"7nPdPrjvysH1LKhP+XrNKkmSE0mSfO+JEyeeD8MwSntFkwYALf/Ct6sfCRwEzWbTRlEkH3/88dUjR458d7PZfBjAHQAypVRA"
+    L"MXeeM3AHh1fvUGaPOINzmOve+XQ6P87VAj/PpQoFj4gAXLXDiUIIsS2+4FNR/B19UsVVkbk9pIUQKk3Ts51O50dOnjx5LgiC"
+    L"yTRNE/Q4Pst/NXpIJ8TzZNBINsKVUgEFUAnZiRMnFmq12j/JsuwRrXWQZVnGLXRXJXBR7H53kCqF+XQySiTx2kQf5/GNu5Cu"
+    L"bgf6xb/zNa7iPBEGDyePYuC5KoBUCT+eqz8jpVRa67lms/n+kydPfksptSfLshBABUDEfiP0mDgAoNCvDkZSC1dUAhAQEZw8"
+    L"eXL+Na95zTtardYfBkHwFuSSgF6aqwQA2ziB4vAAiiXlacEpGjB3MSUuCdz9MgJxjUwOZaJ9lH3fr892ofc1xmillEqS5NTy"
+    L"8vJPnTlz5ltBEOzNsqyLHkI1evP8MvQQrvPfLN/A2o0kAa4KAQBbRPD8888v3Hrrre9YWlr6XWvtO621WiklpZSC1/W7opqA"
+    L"rxtIM34o9Eoc7X4nENiy+Pm9XOMM2C62fWqE9oGtXMMoUocDF/f8XM711lprpZSq2+0+OT8///Pz8/NnpJTjWZal6HE6F/0K"
+    L"W4gXzkZtyCa4/JlBlwpEBMeOHVu76667vifLsg9kWaby3IEhMcqNPZdriUAos8erf7gBRsRA7iB5D+RB0DPcuMEg98+11Pnn"
+    L"8lwi8HkmrlfikzSU1pVSyk6n86VTp079p/n5+fNCiDHTW7CbkB2gt3h3iC3xH7ItYG0Jr0QUpXDVJAABEcGDDz5oALz/wIED"
+    L"zydJ8otBEMTWWi2lVORi8dy7zz/nXM7DyINEN9/3IZy3KTPohBDFCh1SbtUtDJICrv53+8QDPNZa02w2f+/48eMf73a7iRCi"
+    L"aq1N0UMe1fiZfN9FKv/PDUCLnioYCFedAIDeDNUgCKQxJj537tyvT01NnTDG/HoYhjdKKY1SSvTKCYSXEMg14kTAAzp8IqiL"
+    L"EAotjyLm3Ugi7dO8RUJ+GcG50sNHHHk/bU5MMk3TxeXl5Q+dOHHiLwCEQojAWsv1OX3uhRt3pAaALeIgAjHY8hBEfp5+t8E1"
+    L"IQCgcO+sEGLXxYsX/2p8fPz7KpXKz4Zh+C/yQTFSSsldPY5wVwJwRNC+z7gCypM9LnJctcKvJdfT5WjXkCyTDKTaWFgX7Xb7"
+    L"/509e/Z/LSwsnBFC1AGkdos6CWnuf9qnjYhBY8sLoOMDkQ9cQwIgsNZqAGPr6+vrAH5ucnLyyTAM3xOG4YGck43sQTGwbmCG"
+    L"Ly1D40UhYI4g15YgLvZxJ1/fmK7hbXw+P7cPfDaBw/XGWiuVUjJJkpWVlZVPnzhx4nNa60RKWTfG0OqZhEBCmkS/FOBcPWgD"
+    L"hhiAwLUlAE7NKYAagHhlZeXPoig61Wg03hWG4XeGYRgopaxSygohJNejNNg8b8ClAw/9ciS4Ip1LCxLrfCYRlxicqHwifpAt"
+    L"kN+rMPLSNLWbm5tfnZub+4MLFy68AKAihBCmtzA34Nfvo4Bh20jWP8G1lgBkmGgACXoLGU4mSbK4vLz84VqtdjSO43dGUfT6"
+    L"MAxFzvlGSildzuYForxejyKIvkAPsN0ft9YWU824KzpIp5epGoK8PwaAkPmSOpubm88uLCw8eObMmSfRq6VoGGNckU+/7s3d"
+    L"cC9tGfqjgRz5rkHohWtFAFwXUce7ANrYcl8qrVbr2VarNVer1W6P4/gfRlH02jAMyS4woicSik/YcZ3Mua7MoieioF8+x5Da"
+    L"cFXiXucaf66YtzkAkEopmSP+5OLi4p+fPn36kfx9YyFEZoxxF27yIck9xomAkJ85m5sjGAjXWgJQEiNDTw20sWW4GAATAIJW"
+    L"q/VIu90+Ua1Wvz2O478fRdFrgyAIckRZa63NfWTBRbwvSEN2hItMN/0MoBTRZUAWPXrGbQFpmppms/nNpaWlr7744ovHrLUt"
+    L"AEpKWTXGZB6uB/qR6+N4zTaO8NT5zxNFwBAiuNY2ACE6Q08F8HOcOMastWi1Wo+3Wq3nKpXK9dVq9fYwDL/dGDMZhqGgWIAQ"
+    L"opAMZcgvHuJEB7k76UO6+59dR0iXhHStNZIkWd3c3HxmaWnpkcXFxdPIJZzI/XrDfdf+JA6BLtlcbqeQMCE/ZcdJJbziJAB1"
+    L"iKzaFNsRn6KnGloAGgDGAOhut/vNbrd7Wkr5lTiOD9dqtSNKqRuklPUgCCRxv+wtZmEpzCylFFx3c2TziCP3JorObhmOliRP"
+    L"r2mP2ACIfN7AZqfT+db6+vqJpaWlE0mSrOTvI4UQFWttmns+xJVch2v4uduHbL7Pz6fO9W6KeCBcczcQ5WKODMMuesZhG8Am"
+    L"gHq+NYwx3VardbHVaj2plNpdqVReFUXRdWEYHlRK7QmCIJBSCpfr8zUF+gbEZ7Xnv0Iw1ifJorUW+b2yNE2Xu93u2WazObe2"
+    L"tnY6TdMV9BAhhBBh/twkj+a5SOUIo//EEK4uT9HP7Qb9BMA5nsZ0RxNEXi4CIEnAdRZ/UU4ATQBV9NxG2ja11uutVutcq9V6"
+    L"VAgxqZQar1QqB4Mg2B9F0XgURVMA6r3YUi/5hNxmcI1DlxCAXrxCa22MMe0syy4kSbKWJMnFVqv1Yrfb3bDWbuT9FyQdcm5P"
+    L"sIXEBNuRlcBPED5jLnXacsLhup5zPjAC5xO8HARAQMEN7r7wQSI3cRNAnG+V/JcIoiqEqFlrV7Msq2RZ9i30EiN1IcSYECKW"
+    L"UlajKJpQSo0LIapCiFDkkbgc+cWgWWu1tbabZdl6mqYrWuuO1jq11jbzvhB3aSllRuLdWttFP0JdBPqQ6koCt51r1JW5fGRH"
+    L"7Bj5wMtLAMB2X5WoWWJLEgTo2QQBtrJglXyLrbVUHBGj52JVrLWhtTay1obGmCDLMsqSUaaMh0x9/eD7Bj2EG2ttlsfpyY0j"
+    L"BBGnu8h0dbmP87lYd7mbI7ws0EP9HBjyLYOXmwAA/4vQABAhJNhKiSpspT8pNVqkSK21PEVapEyFEPx6IgDfBACLXBqwPmWm"
+    L"9wk2jhDOoZnnmCu2XS7myDbOvmsw+gw7X4xgx/BKIAAOnAiALTVBFTBUEyfR6zv98nw5z58Xm+19RZuuIcTzylq3H7w/LmLK"
+    L"jC+OXOO08R3zcbYP4a5Ff0nI9sErjQAIfC/rpkUl+sU5IVZ69vl/4nxfAoUTn089uR6MK5JdRPK2uuQe9N99lvv+VwzpHF6p"
+    L"BEDAdRtHDrA1aGXZMLdu3q2S4XaART9x8efzfZ8IdnWycY77ri0z3K4Klw+CVzoBAP5B4YUS/LwvocKRKkvauseGPZ/2+fMH"
+    L"ce2wNpdkwF0J+OtAAD64oobQKwBetn5f1aLQv4NXPvwdAfwth/8PjolSBNd+nFYAAAAASUVORK5CYII=";
+
+// Red no-Internet marker for the middle of the Network -> Internet line.
+// Generated for this mod and trimmed to a transparent 32x32 icon canvas.
+static const WCHAR* NETWORK_NO_INTERNET_X_BASE64 =
+    L"iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAJBElEQVR4nK2We3BV1RXGv/04557c3JubXEKEJOSSm4RHeErk"
+    L"lZjEUFHRCFINtVVsrU5t6zi1ttpOZ5yYcZx2xqIdmTq12mItWpRaayMJJGiCEESQVyAkBEEIKZCEJPf9Onuf3T/IZVJsCI5d"
+    L"f+05Z531/db6ztn7AABeATQAeI3zx+onTzr/B2ApALQAHF8zkjVeA6qacrL7/gJ8f7Tm5cVLwEN771olz73ycqRh7pyedcCi"
+    L"rwuRfPYloLxh/rx/X9jwp8in1bdHfg/cn9QmALAeeLi0+o5Xs29eZsX6+gjPylIdb/y1/8jBwyufBPa1ALwKEF9VvAoQLwIV"
+    L"0xcs2Dznwe+5Er09ekpODult3IZ9jVvXPgpsJH+2Gz+fUV7xvKeywgr39hIiJGEphtJzcuIdmzYNHTxwaPUvgb1fBSKZ+zxQ"
+    L"UXz9/LfmPrA2K37qJLdicaIYUylTctHbssPq3rnrcapzfnfujGlI+HxSRaKEADADARI/dco2a02Ne9bs4k0vAGVVgLgWO5Li"
+    L"vwYqiksWbJ777XuzYsc6mAyGCCGAioSJ8PlF9rRpTNPYaro7EFq+642N21kwqPE0hxDhEIhSMINBEu06rs+7556cghnTN/wW"
+    L"KB0PIin+HFA+b+EN7829+5uZ0aNHmQxHKKBgBoPQ0zNMGghobX97a8s/Q5FqAgDVgP07GRlbSu9ZfZMkRMSHhjjjGpQQoJpm"
+    L"6R5P7PD79f2dnZ3fGsuOUeJlCxcvqp+54lZHuLOTQ0gCTYNMxGFkTTSJKbVP3v3H1ud8/lXHgASpBWgdYJUA9ifcGfWlq6qX"
+    L"mZYlEoPDnOkcyhTQdB08zxM6+uFH4c/aj1TXAZ+Nhkiua4HSssUL62cuq3JEurp0KQSIxiETJmyZmYIRwtvee79xrc9/F4BE"
+    L"LUAJAIyG+GlGRv2N1SuWxRNxkRj2c8Y5IEwwzmEvLEJHW9vF1v0Hb/sNsL92xI46QDwFLFm+aFHj7MrydN/RdqUkCNEYhGnC"
+    L"cLtNZrNpu96vb3jA51+tlDKfIYTUARZJjjAJsQRI+XF6+pbK25ZXxaIRkfD5OeccSphglErHtOmsfc++wT2HD99SBxwAgKeB"
+    L"pRU3lDTOWrLIFejokEopBs5hJkwYE9xCS7Hz1oat2x70+VYmO68DLAAgo31M3rgfSL3F7W4sL19anojFRMIf4ExjgClBCGRa"
+    L"YSE7crB9cO/RjnIDsF0/d3Zr8YLrXf7u4xYACsYghYDhzjSZ3dB2ftTS9Oygb+UJpRLJzpOa/wUwGqIScDzidm9ZXDK/woxG"
+    L"hBmOcsYoYFkgSlkuTx79rKNzgBDCSubMcvtOfWGBEApNg1QKmq4Lpuu87eDh5g3DvpU7gNjozscEuBLi4QzXlrLimZcg4nHO"
+    L"KAWxLIAQZZs0iUABsQvnFSgl4BxmPAHE4oLpOt/be7b59VB0TPExAUZD1ACOO53OD8oKp1aKeFwIU3BGCWApEEoUAChFiJQm"
+    L"4v4gVDgibO50fiAQano6GFp15iriVwUYDbEcSH0wzbltUe7kMjMas2ApSglgmQIyHoeMRJGIxgClrJTJWfRQNNb6qi+w4mqd"
+    L"X3PUAlQpkBpAfzPVvrd7ZpE6kp4mD2maaidEHQTUfkDtJ5BHsrPU62mONgBMAbQWoOPVHzcBACUEqggonjAlJ0sKoWL+AFGm"
+    L"CQUFQggIIbAAokBU5sSJk34BFBPAmjXOhMcFqAV4HSB+BcxfXFTQXMSoJ/j5aUUUIYoQSAVYSo3Ml5DouT7lFaZ3sSev+Slg"
+    L"5hpA1o5zgF3tJeR1gHgMKF5WmN8yQ9eyho51SwYwRgmUpaBzJi2ACCEpCIEEIJWSzvw81qXU+U9Pn73pBaD7HYCtAeQ1AyQf"
+    L"eAQo+kb+1I+mG1rucOcJSQlhGgGUpWDousU9ORQAzDO9VixhUtBLU5FKSVdRPjuekD0tZ3qW/RE4ORbElyxIJj4OeCs9edu9"
+    L"hpbb33lCWgBTBEhYCpphE/aifLrX52884At9mFrkpZpNF6Z1yQ4FwgY//0J6DT3vxrzcpp8BnjWAfAdgVwVIiv8ImLIgN6ep"
+    L"IDUlr6/rhBQEzKIEpqXADZswirx8V//F7Q8PDN1ZOzBQ/cnA0M6Ugqmc2zQhlIKkgFBggydOygJHqnd2bnbzk0D2GkDWXAFB"
+    L"rxR/FMhekpPd5HU5C853dUtLgSlCkLAUuGGI1CIv333uQvOzA4N3KijrDBB7vn/g9j19Fz92FBRwMjIJRQmEpdjA8ROiMD2t"
+    L"aMbkSU0/BLI2XwFBAaBmRPx+IKska+K2PId9xoWubmFZ6nLnzLAJu9fDPznf17JhcHjVGSD2DAipBegxILRxcOiOT/sGdjq9"
+    L"+Zwm7aAElrR4X2e38KQ5ZpVcl9m0Fpiw+dLXQQGA1ABsMyAfAtyL3enNU9NdC3w9vUIJyTmjgLSgGzaRkZfL2y8OtTYMDd/x"
+    L"ARAZvcONPjvuzcjYMntCRsXw2bPCjJt8ZBKgnIm03BzeEwjs2zHku/lNIHD5h+Q+IK3M6djudTkXBi70C0tIziiBZSnoNl04"
+    L"syfxbn+gdfeQr3ojEP5f22vyWing/K7b1VjoTCsbPndeSFNwMlKLalw4sjL56WBo9+5A6JaNQJj8ALDPSUlpKHCmVoaGhoUS"
+    L"koMCygKYpgnndRP5yUCw9ZVAsLp9DPErIWoAV5UrrbEgNWWpv39QKCEu1yScCYc7nZ8KRT484kpfSX5nGIfyHSnz4r6AtIRk"
+    L"ZCSRciZSJ7j5F+Fw69ZQ5EtjHyuSOY8BaTMdqY15hl4aHvYLSOsyBOVM2DJc/HQwso+CISoVQChVAAAFEEZFijOVnwqGduwJ"
+    L"RaqvVRwA6gCrFqDrgUBbKLyiJxLbbdgNDkoE1MibzxgsBShCIgQAf9GwvePV+ep4JCqUtGAYNn4WtG1PNHrrWJ6PF6PtqNC1"
+    L"hikEpbGEKRln0O12djKW2PREPH4fFEBqamrYOl1/622Nqb8zotbreuuT06c7k4W+ivCVEABwn9udtl5jH79LiXpbY2od5xuA"
+    L"S8O+dN6PnAkvatq/XuL88P9DPBnJTecnHk/6yzbt2Aua9m6ydi1A/wMm/WMxG2Z0fQAAAABJRU5ErkJggg==";
+
+
 
 // Network location category values (from netlistmgr.h enum NLM_NETWORK_CATEGORY).
 // NLM_NETWORK_CATEGORY_PUBLIC       = 0  -> Public Network  (bench icon, ID_1)
@@ -847,14 +1990,39 @@ enum class AppMode {
 
 using FlushMenuThemes_T     = void(WINAPI*)();
 using SetPreferredAppMode_T = AppMode(WINAPI*)(AppMode);
+using AllowDarkModeForWindow_T = bool(WINAPI*)(HWND, bool);
 static HMODULE g_hUxtheme = NULL;
 static FlushMenuThemes_T     pFlushMenuThemes    = nullptr;
 static SetPreferredAppMode_T pSetPreferredAppMode = nullptr;
+static AllowDarkModeForWindow_T pAllowDarkModeForWindow = nullptr;
+
+// Opts a specific control (e.g. a tooltip) into dark rendering. Unlike
+// SetWindowTheme(hwnd, L"DarkMode_Explorer", ...) alone, which several common
+// controls (tooltips included) silently ignore, this - followed by
+// WM_THEMECHANGED - is what actually makes such controls pick up the dark
+// variant. Safe to call even if the private API wasn't resolved.
+void AllowDarkModeForWindow(HWND hwnd, bool allow) {
+    if (pAllowDarkModeForWindow)
+        pAllowDarkModeForWindow(hwnd, allow);
+}
+
+static AppMode g_initialAppMode = AppMode::Default;
 
 void Apply(BOOL dark) {
     if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
-    pFlushMenuThemes();
     pSetPreferredAppMode(dark ? AppMode::ForceDark : AppMode::Default);
+    pFlushMenuThemes();
+}
+
+// Puts the process-wide preferred app mode back to whatever it was before
+// this mod touched it (g_initialAppMode), instead of Apply(FALSE)'s hardcoded
+// Default - which would stomp AllowDark/ForceDark set by other mods for the
+// rest of explorer.exe. Use this (not Apply()) anywhere the menu is only
+// being reverted to its pre-mod state, e.g. after a context menu closes.
+void Restore() {
+    if (!g_hUxtheme || !pSetPreferredAppMode || !pFlushMenuThemes) return;
+    pSetPreferredAppMode(g_initialAppMode);
+    pFlushMenuThemes();
 }
 
 void Init() {
@@ -862,19 +2030,34 @@ void Init() {
     if (g_hUxtheme) {
         pSetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
         pFlushMenuThemes     = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
+        pAllowDarkModeForWindow = (AllowDarkModeForWindow_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(133));
+        // Save the current app mode so Uninit can restore it instead of
+        // blindly resetting to Default (which would overwrite other mods'
+        // dark-mode settings like AllowDark/ForceDark).
+        if (pSetPreferredAppMode) {
+            // Call with Default to get the previous mode returned, then restore it
+            g_initialAppMode = pSetPreferredAppMode(AppMode::Default);
+            pSetPreferredAppMode(g_initialAppMode);
+        }
     }
-}
-
-void OnSettingsChanged() {
-    return;
 }
 
 void Uninit() {
-    Apply(FALSE);
+    // Restore the original app mode instead of forcing Default.
+    // Use pSetPreferredAppMode directly (not Apply()) so we restore
+    // the exact mode that was active before the mod loaded, rather
+    // than the mod's light-theme default.
+    if (pSetPreferredAppMode) {
+        pSetPreferredAppMode(g_initialAppMode);
+        if (pFlushMenuThemes) pFlushMenuThemes();
+    }
     if (g_hUxtheme) {
         FreeLibrary(g_hUxtheme);
-        g_hUxtheme = NULL;
+        g_hUxtheme = nullptr;
     }
+    pSetPreferredAppMode = nullptr;
+    pFlushMenuThemes = nullptr;
+    pAllowDarkModeForWindow = nullptr;
 }
 } // namespace DarkContextMenu
 
@@ -1003,10 +2186,10 @@ static void DetectWindowsVersion() {
         } else {
             Wh_Log(L"Win11: Shell_TrayWnd not found - taskbar not ready yet");
         }
-        WCHAR epPniduiPath[MAX_PATH];
-        StringCchPrintfW(epPniduiPath, ARRAYSIZE(epPniduiPath),
-                         L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-        if (GetFileAttributesW(epPniduiPath) != INVALID_FILE_ATTRIBUTES) {
+        // Plain literal is enough here; this is purely an informational log
+        // line, not a path used to load anything.
+        static const WCHAR* kEpPniduiPath = L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll";
+        if (GetFileAttributesW(kEpPniduiPath) != INVALID_FILE_ATTRIBUTES) {
             Wh_Log(L"ExplorerPatcher detected: pnidui.dll found");
         } else {
             Wh_Log(L"ExplorerPatcher not detected");
@@ -1069,6 +2252,7 @@ HFONT g_hFontUnderline = NULL;
 HFONT g_hFontCheckbox  = NULL;
 HFONT g_hFontArrow     = NULL;
 WifiNetworkItem g_NetworkList[50];
+
 BOOL g_IsHoveringLink         = FALSE;
 BOOL g_IsHoveringRefresh      = FALSE;
 BOOL g_IsHoveringArrow        = FALSE;
@@ -1082,12 +2266,45 @@ RECT g_rcArrowButton   = { 0 };
 RECT g_rcCheckboxLabel = { 0 };
 BOOL g_bShowCheckboxLabel = FALSE;
 HICON g_hIconNetworkMap  = NULL;
+HICON g_hIconDisconnected = NULL;
+HICON g_hIconAvailable = NULL;
+// Separate cache for the DirectUI Network Map visual: LoadImageW_Hook is asked
+// for these icons at whatever size DirectUI's icon() markup requests (e.g.
+// 36rp, which varies with DPI), which does NOT match the fixed 48x48
+// g_hIconNetworkMap is used by the tray flyout header icon.
+// Returning a CopyIcon() of the fixed 48x48 bitmap forced DirectUI to stretch
+// it to 36x36 (or upscale it at >100% DPI), blurring otherwise sharp artwork.
+// These are re-decoded from the same Base64 PNGs whenever the requested size
+// changes, so the DUI visual always gets a native-resolution bicubic render.
+static HICON g_hIconNetworkMapDUI = NULL;
+static int   g_iconNetworkMapDUIW = 0, g_iconNetworkMapDUIH = 0;
+static HICON g_hIconGlobeDUI = NULL;
+static int   g_iconGlobeDUIW = 0, g_iconGlobeDUIH = 0;
+static BOOL  g_iconGlobeDUIOnline = TRUE;
+// Separate high-quality DirectUI cache for the active-network profile icon.
+// Never return the flyout's fixed 35rp icon to DirectUI: it would upscale it.
+static HICON g_hIconNetLocDUI = NULL;
+static int   g_iconNetLocDUIW = 0, g_iconNetLocDUIH = 0;
+static HICON g_hIconNoInternetXDUI = NULL;
+static int   g_iconNoInternetXDUIW = 0, g_iconNoInternetXDUIH = 0;
+// Size-keyed cache for the offline gray network icon, matching the pattern
+// used by every other LoadImageW_Hook branch instead of re-decoding
+// NETLOC_PUBLIC_OFFLINE_ICON_BASE64 on every DirectUI request.
+static HICON g_hIconOfflineNetworkDUI = NULL;
+static int   g_iconOfflineNetworkDUIW = 0, g_iconOfflineNetworkDUIH = 0;
+static int   g_iconNetLocDUICategory = -1;
 HICON g_hIconSignalBars[6] = { NULL };
-HICON g_hIconRefreshWin7 = NULL;
 int   g_PendingConnectIndex = -1;
 HWND  g_hTooltip = NULL;
 UINT_PTR g_RefreshTimer = 0;
 UINT_PTR g_TimeoutTimer = 0;
+// Persistent off-screen buffer for WM_PAINT, recreated only when the size
+// changes (normally never, since the flyout has a fixed WINDOW_WIDTH/HEIGHT).
+// Avoids a CreateCompatibleDC/CreateCompatibleBitmap pair on every repaint.
+static HDC     g_hdcMemPaint = NULL;
+static HBITMAP g_hbmMemPaint = NULL;
+static int     g_memPaintWidth  = 0;
+static int     g_memPaintHeight = 0;
 HWND G_hSubclassedToolbar = nullptr;
 static BYTE* g_pniduiBase = NULL;
 static BYTE* g_pniduiEnd  = NULL;
@@ -1098,6 +2315,41 @@ struct HandleDeleter {
     }
 };
 using WinHandle = std::unique_ptr<std::remove_pointer<HANDLE>::type, HandleDeleter>;
+
+// Small COM smart pointer for API out-parameters.  Keep ownership explicit for
+// globals that deliberately outlive a scope; local COM interfaces should use
+// this type so every early return and failed intermediate call releases them.
+template <typename T>
+class ComPtr {
+public:
+    ComPtr() noexcept = default;
+    explicit ComPtr(T* value) noexcept : value_(value) {}
+    ~ComPtr() { reset(); }
+    ComPtr(const ComPtr&) = delete;
+    ComPtr& operator=(const ComPtr&) = delete;
+    ComPtr(ComPtr&& other) noexcept : value_(other.detach()) {}
+    ComPtr& operator=(ComPtr&& other) noexcept {
+        if (this != &other) reset(other.detach());
+        return *this;
+    }
+    T* get() const noexcept { return value_; }
+    T** put() noexcept { reset(); return &value_; }
+    T* detach() noexcept { T* value = value_; value_ = nullptr; return value; }
+    void reset(T* value = nullptr) noexcept {
+        if (value_) value_->Release();
+        value_ = value;
+    }
+    T* operator->() const noexcept { return value_; }
+    explicit operator bool() const noexcept { return value_ != nullptr; }
+private:
+    T* value_ = nullptr;
+};
+
+struct WlanMemoryDeleter {
+    void operator()(void* value) const noexcept { if (value) WlanFreeMemory(value); }
+};
+template <typename T>
+using WlanMemoryPtr = std::unique_ptr<T, WlanMemoryDeleter>;
 
 static WinHandle g_hConnectMutex;
 static HMODULE g_hGdiPlus = NULL;
@@ -1115,6 +2367,72 @@ static BOOL  g_EthernetHasInternet = FALSE;
 static GUID  g_EthernetAdapterGuid = {0};
 static BOOL  g_HasEthernetAdapterGuid = FALSE;
 
+struct NetworkStateSnapshot {
+    int networkCount;
+    WifiNetworkItem networks[50];
+    BOOL ethernetConnected;
+    WCHAR ethernetNetworkName[64];
+    BOOL ethernetHasInternet;
+    GUID ethernetAdapterGuid;
+    BOOL hasEthernetAdapterGuid;
+    int currentNetworkCategory;
+    int lastReliableNetworkCategory;
+    DWORD lastReliableNetworkCategoryTick;
+};
+
+static void CaptureNetworkState(NetworkStateSnapshot* snapshot) {
+    if (!snapshot)
+        return;
+
+    ZeroMemory(snapshot, sizeof(*snapshot));
+    snapshot->currentNetworkCategory = -1;
+    snapshot->lastReliableNetworkCategory = -1;
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    int count = g_NetworkCount;
+    if (count < 0)
+        count = 0;
+    if (count > (int)ARRAYSIZE(snapshot->networks))
+        count = (int)ARRAYSIZE(snapshot->networks);
+
+    snapshot->networkCount = count;
+    if (count > 0)
+        CopyMemory(snapshot->networks, g_NetworkList,
+                   sizeof(WifiNetworkItem) * count);
+    snapshot->ethernetConnected = g_EthernetConnected;
+    StringCchCopyW(snapshot->ethernetNetworkName,
+                   ARRAYSIZE(snapshot->ethernetNetworkName),
+                   g_EthernetNetworkName);
+    snapshot->ethernetHasInternet = g_EthernetHasInternet;
+    snapshot->ethernetAdapterGuid = g_EthernetAdapterGuid;
+    snapshot->hasEthernetAdapterGuid = g_HasEthernetAdapterGuid;
+    snapshot->currentNetworkCategory = g_CurrentNetworkCategory;
+    snapshot->lastReliableNetworkCategory = g_LastReliableNetworkCategory;
+    snapshot->lastReliableNetworkCategoryTick = g_LastReliableNetworkCategoryTick;
+    LeaveCriticalSection(&g_Ctx.csLock);
+}
+
+static int GetNetworkCountSafe() {
+    int count = 0;
+    EnterCriticalSection(&g_Ctx.csLock);
+    count = g_NetworkCount;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return count;
+}
+
+static BOOL GetSelectedRowConnState(ConnectionState* outState) {
+    BOOL valid = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
+        if (outState)
+            *outState = g_NetworkList[g_SelectedRowIndex].connState;
+        valid = TRUE;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return valid;
+}
+
+
 typedef int (WINAPI *GdipCreateBitmapFromHICONFunc)(HICON, void**);
 typedef int (WINAPI *GdipSetInterpolationModeFunc)(void*, int);
 typedef int (WINAPI *GdipDrawImageRectIFunc)(void*, void*, int, int, int, int);
@@ -1125,6 +2443,11 @@ typedef int (WINAPI *GdipSetPixelOffsetModeFunc)(void*, int);
 typedef int (WINAPI *GdipGraphicsClearFunc)(void*, unsigned int);
 typedef int (WINAPI *GdipCreateHBITMAPFromBitmapFunc)(void*, HBITMAP*, unsigned int);
 typedef int (WINAPI *GdipDisposeImageFunc)(void*);
+// Used by CreateIconFromBase64PNG, which reuses the process-wide GDI+
+// instance/token from InitGdiPlusRendering() instead of loading gdiplus.dll
+// and starting/stopping its own GDI+ session on every call.
+typedef int (WINAPI *GdipCreateBitmapFromStreamFunc)(IStream*, void**);
+typedef int (WINAPI *GdipCreateHICONFromBitmapFunc)(void*, HICON*);
 
 static GdipCreateBitmapFromHICONFunc pGdipCreateBitmapFromHICON = NULL;
 static GdipSetInterpolationModeFunc pGdipSetInterpolationMode = NULL;
@@ -1136,11 +2459,12 @@ static GdipSetPixelOffsetModeFunc pGdipSetPixelOffsetMode = NULL;
 static GdipGraphicsClearFunc pGdipGraphicsClear = NULL;
 static GdipCreateHBITMAPFromBitmapFunc pGdipCreateHBITMAPFromBitmap = NULL;
 static GdipDisposeImageFunc pGdipDisposeImage = NULL;
+static GdipCreateBitmapFromStreamFunc pGdipCreateBitmapFromStream = NULL;
+static GdipCreateHICONFromBitmapFunc pGdipCreateHICONFromBitmap = NULL;
 
 static BOOL g_inPasswordPrompt = FALSE;
 LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 static WCHAR g_TooltipBuffer[1024] = {0};
-
 // -------------------------------------------------------
 // Localization
 // -------------------------------------------------------
@@ -1190,6 +2514,9 @@ typedef enum {
     STR_PWD_EMPTY,
     STR_TRAY_TROUBLESHOOT,
     STR_TRAY_NETWORK_SETTINGS,
+    // New strings for HomeGroup fallback
+    STR_ADVANCED_SHARING_TITLE,
+    STR_ADVANCED_SHARING_DESC,
     STR_COUNT
 } LocaleStringId;
 
@@ -1211,7 +2538,7 @@ static const LocalePack g_Locales[] = {
         L"Disconnect",
         L"Status",
         L"Properties",
-        L"No connections available",
+        L"Not connected",
         L"Connections are available",
         L"Connect automatically",
         L"Connect to a Network",
@@ -1258,7 +2585,7 @@ static const LocalePack g_Locales[] = {
         L"Disconnetti",
         L"Stato",
         L"Propriet\u00E0",
-        L"Nessuna connessione disponibile",
+        L"Non connesso",
         L"Connessioni disponibili",
         L"Connetti automaticamente",
         L"Connetti a una rete",
@@ -1305,7 +2632,7 @@ static const LocalePack g_Locales[] = {
         L"Desconectar",
         L"Estado",
         L"Propiedades",
-        L"No hay conexiones disponibles",
+        L"No conectado",
         L"Hay conexiones disponibles",
         L"Conectar autom\u00E1ticamente",
         L"Conectarse a una red",
@@ -1352,7 +2679,7 @@ static const LocalePack g_Locales[] = {
         L"D\u00E9connecter",
         L"\u00C9tat",
         L"Propri\u00E9t\u00E9s",
-        L"Aucune connexion disponible",
+        L"Non connect\u00E9",
         L"Des connexions sont disponibles",
         L"Connexion automatique",
         L"Se connecter \u00E0 un r\u00E9seau",
@@ -1399,7 +2726,7 @@ static const LocalePack g_Locales[] = {
         L"\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C",
         L"\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435",
         L"\u0421\u0432\u043E\u0439\u0441\u0442\u0432\u0430",
-        L"\u041D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0445 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0439",
+        L"\u041D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E",
         L"\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
         L"\u0410\u0432\u0442\u043E\u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
         L"\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u0442\u044C\u0441\u044F \u043A \u0441\u0435\u0442\u0438",
@@ -1446,7 +2773,7 @@ static const LocalePack g_Locales[] = {
         L"Trennen",
         L"Status",
         L"Eigenschaften",
-        L"Keine Verbindungen",
+        L"Nicht verbunden",
         L"Verbindungen verf\u00FCgbar",
         L"Automatisch verbinden",
         L"Netzwerk verbinden",
@@ -1493,7 +2820,7 @@ static const LocalePack g_Locales[] = {
         L"Desligar",
         L"Estado",
         L"Propriedades",
-        L"Sem liga\u00E7\u00F5es",
+        L"N\u00E3o ligado",
         L"Liga\u00E7\u00F5es dispon\u00EDveis",
         L"Ligar automaticamente",
         L"Ligar \u00E0 Rede",
@@ -1528,6 +2855,147 @@ static const LocalePack g_Locales[] = {
         L"Resolver problemas",
         L"Abrir Centro de Rede",
     }},
+    { 0x0415, {
+        L"Obecnie połączono z:",
+        L"Dostęp do Internetu",
+        L"Sieć bezprzewodowa",
+        L"Połączono",
+        L"Otwórz Centrum sieci i udostępniania",
+        L"Połącz",
+        L"Rozłącz",
+        L"Połącz",
+        L"Rozłącz",
+        L"Stan",
+        L"Właściwości",
+        L"Brak połączenia",
+        L"Dostępne połączenia",
+        L"Połącz automatycznie",
+        L"Połącz z siecią",
+        L"Wprowadź klucz zabezpieczeń sieci",
+        L"Klucz zabezpieczeń:",
+        L"Ukryj znaki",
+        L"OK",
+        L"Anuluj",
+        L"Błąd połączenia",
+        L"Klucz zabezpieczeń jest nieprawidłowy. Spróbuj ponownie.",
+        L"Nie udało się połączyć z %s",
+        L"Sieć %d",
+        L"Typ zabezpieczeń:",
+        L"Siła sygnału:",
+        L"Typ radia:",
+        L"Doskonały",
+        L"Dobry",
+        L"Przeciętny",
+        L"Słaby",
+        L"Brak sygnału",
+        L"Łączenie...",
+        L"Rozłączanie...",
+        L"Stan: Połączono",
+        L"Stan: Łączenie...",
+        L"Stan: Brak połączenia",
+        L"Błąd",
+        L"Błąd zapisu profilu sieci (kod: %lu)",
+        L"Błąd połączenia (kod: %lu)",
+        L"Przekroczono limit czasu",
+        L"Próba połączenia wygasła. Sieć może być poza zasięgiem.",
+        L"Wprowadź klucz zabezpieczeń sieci.",
+        L"Rozwiązywanie problemów",
+        L"Otwórz Centrum sieci i udostępniania",
+    }},
+    { 0x0413, {
+        L"Momenteel verbonden met:",
+        L"Internettoegang",
+        L"Draadloze netwerkverbinding",
+        L"Verbonden",
+        L"Netwerkcentrum openen",
+        L"Verbinden",
+        L"Verbreken",
+        L"Verbinden",
+        L"Verbreken",
+        L"Status",
+        L"Eigenschappen",
+        L"Niet verbonden",
+        L"Verbindingen beschikbaar",
+        L"Automatisch verbinden",
+        L"Verbinding maken met een netwerk",
+        L"Voer de netwerkbeveiligingssleutel in",
+        L"Beveiligingssleutel:",
+        L"Tekens verbergen",
+        L"OK",
+        L"Annuleren",
+        L"Verbindingsfout",
+        L"De beveiligingssleutel is onjuist. Probeer opnieuw.",
+        L"Verbinding met %s mislukt",
+        L"Netwerk %d",
+        L"Beveiligingstype:",
+        L"Signaalsterkte:",
+        L"Radiotype:",
+        L"Uitstekend",
+        L"Goed",
+        L"Redelijk",
+        L"Zwak",
+        L"Geen signaal",
+        L"Verbinden...",
+        L"Verbreken...",
+        L"Status: Verbonden",
+        L"Status: Verbinden...",
+        L"Status: Niet verbonden",
+        L"Fout",
+        L"Netwerkprofiel opslaan mislukt (code: %lu)",
+        L"Verbindingsfout (code: %lu)",
+        L"Time-out",
+        L"Verbindingspoging verlopen. Netwerk mogelijk buiten bereik.",
+        L"Voer een netwerkbeveiligingssleutel in.",
+        L"Problemen oplossen",
+        L"Netwerkcentrum openen",
+    }},
+    { 0x0418, {
+        L"Conectat în prezent la:",
+        L"Acces la Internet",
+        L"Conexiune rețea fără fir",
+        L"Conectat",
+        L"Deschide Centrul de rețea și partajare",
+        L"Conectare",
+        L"Deconectare",
+        L"Conectare",
+        L"Deconectare",
+        L"Stare",
+        L"Proprietăți",
+        L"Neconectat",
+        L"Conexiuni disponibile",
+        L"Conectare automată",
+        L"Conectare la o rețea",
+        L"Introduceți cheia de securitate a rețelei",
+        L"Cheie de securitate:",
+        L"Ascundere caractere",
+        L"OK",
+        L"Anulare",
+        L"Eroare de conectare",
+        L"Cheia de securitate este incorectă. Reîncercați.",
+        L"Conectare la %s eșuată",
+        L"Rețea %d",
+        L"Tip securitate:",
+        L"Putere semnal:",
+        L"Tip radio:",
+        L"Excelent",
+        L"Bun",
+        L"Mediu",
+        L"Slab",
+        L"Fără semnal",
+        L"Conectare...",
+        L"Deconectare...",
+        L"Stare: Conectat",
+        L"Stare: Conectare...",
+        L"Stare: Neconectat",
+        L"Eroare",
+        L"Salvare profil rețea eșuată (cod: %lu)",
+        L"Eroare de conectare (cod: %lu)",
+        L"Depășire timp",
+        L"Încercarea de conectare a expirat. Rețeaua poate fi în afara razei.",
+        L"Introduceți o cheie de securitate a rețelei.",
+        L"Remediere probleme",
+        L"Deschide Centrul de rețea și partajare",
+    }},
 };
 
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
@@ -1554,6 +3022,9 @@ void DetermineLocale() {
         case 5: g_CurrentLocalePack = FindLocalePack(0x0419); break;
         case 6: g_CurrentLocalePack = FindLocalePack(0x0407); break;
         case 7: g_CurrentLocalePack = FindLocalePack(0x0816); break;
+        case 8: g_CurrentLocalePack = FindLocalePack(0x0415); break;
+        case 9: g_CurrentLocalePack = FindLocalePack(0x0413); break;
+        case 10: g_CurrentLocalePack = FindLocalePack(0x0418); break;
         default: {
             LANGID userLangId = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(userLangId);
@@ -1675,8 +3146,20 @@ static BYTE* DecodeBase64W(const WCHAR* base64Str, DWORD* outLen) {
     return data;
 }
 
+static BOOL InitGdiPlusRendering();
+
 static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0,
                                       int targetHeight = 0) {
+    // Reuse the process-wide GDI+ instance/token and the function pointers
+    // already resolved by InitGdiPlusRendering(), instead of doing a fresh
+    // LoadLibraryExW(gdiplus.dll) + GdiplusStartup + ... + GdiplusShutdown +
+    // FreeLibrary on every single icon decode. InitGdiPlusRendering() is
+    // idempotent and returns immediately if already initialized, so calling
+    // it here also makes this function safe to use before the mod's own
+    // one-time init call happens to run.
+    if (!InitGdiPlusRendering() || !pGdipCreateBitmapFromStream || !pGdipCreateHICONFromBitmap)
+        return NULL;
+
     DWORD outLen = 0;
     BYTE* data = DecodeBase64W(base64Str, &outLen);
     if (!data || outLen == 0) return NULL;
@@ -1693,69 +3176,36 @@ static HICON CreateIconFromBase64PNG(const WCHAR* base64Str, int targetWidth = 0
     if (!stream) { GlobalFree(hMem); return NULL; }
 
     HICON hIcon = NULL;
-    HMODULE hGdi = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hGdi) {
-        typedef int (WINAPI *GdiplusStartupFunc)(ULONG_PTR*, const void*, void*);
-        typedef int (WINAPI *GdipCreateBitmapFromStreamFunc)(IStream*, void**);
-        typedef int (WINAPI *GdipCreateHICONFromBitmapFunc)(void*, HICON*);
-        typedef int (WINAPI *GdipDisposeImageFunc)(void*);
-        typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
-        GdiplusStartupFunc pStartup = (GdiplusStartupFunc)GetProcAddress(hGdi, "GdiplusStartup");
-        GdipCreateBitmapFromStreamFunc pFromStream = (GdipCreateBitmapFromStreamFunc)GetProcAddress(hGdi, "GdipCreateBitmapFromStream");
-        GdipCreateHICONFromBitmapFunc pToHICON = (GdipCreateHICONFromBitmapFunc)GetProcAddress(hGdi, "GdipCreateHICONFromBitmap");
-        GdipDisposeImageFunc pDispose = (GdipDisposeImageFunc)GetProcAddress(hGdi, "GdipDisposeImage");
-        GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(hGdi, "GdiplusShutdown");
-        GdipCreateBitmapFromScan0Func pCreateBitmap =
-            (GdipCreateBitmapFromScan0Func)GetProcAddress(hGdi, "GdipCreateBitmapFromScan0");
-        GdipGetImageGraphicsContextFunc pGetGraphics =
-            (GdipGetImageGraphicsContextFunc)GetProcAddress(hGdi, "GdipGetImageGraphicsContext");
-        GdipSetInterpolationModeFunc pSetInterpolation =
-            (GdipSetInterpolationModeFunc)GetProcAddress(hGdi, "GdipSetInterpolationMode");
-        GdipSetPixelOffsetModeFunc pSetPixelOffset =
-            (GdipSetPixelOffsetModeFunc)GetProcAddress(hGdi, "GdipSetPixelOffsetMode");
-        GdipGraphicsClearFunc pClear =
-            (GdipGraphicsClearFunc)GetProcAddress(hGdi, "GdipGraphicsClear");
-        GdipDrawImageRectIFunc pDraw =
-            (GdipDrawImageRectIFunc)GetProcAddress(hGdi, "GdipDrawImageRectI");
-        GdipDeleteGraphicsFunc pDeleteGraphics =
-            (GdipDeleteGraphicsFunc)GetProcAddress(hGdi, "GdipDeleteGraphics");
-
-        if (pStartup && pFromStream && pToHICON && pDispose && pShutdown) {
-            ULONG_PTR token = 0;
-            struct { DWORD Version; void* Callback; BOOL Suppress; } input = {1, NULL, FALSE};
-            if (pStartup(&token, &input, NULL) == 0) {
-                void* srcBitmap = NULL;
-                if (pFromStream(stream, &srcBitmap) == 0 && srcBitmap) {
-                    bool scaled = false;
-                    if (targetWidth > 0 && targetHeight > 0 && pCreateBitmap && pGetGraphics &&
-                        pSetInterpolation && pSetPixelOffset && pClear && pDraw && pDeleteGraphics) {
-                        void* dstBitmap = NULL;
-                        if (pCreateBitmap(targetWidth, targetHeight, 0, 0x00E200B, NULL, &dstBitmap) == 0 &&
-                            dstBitmap) {
-                            void* graphics = NULL;
-                            if (pGetGraphics(dstBitmap, &graphics) == 0 && graphics) {
-                                // 7 is GDI+'s HighQualityBicubic mode; 3 matches the
-                                // pixel-offset mode used by DrawIconBicubic below.
-                                pSetInterpolation(graphics, 7);
-                                pSetPixelOffset(graphics, 3);
-                                pClear(graphics, 0);
-                                scaled = pDraw(graphics, srcBitmap, 0, 0,
-                                               targetWidth, targetHeight) == 0;
-                                pDeleteGraphics(graphics);
-                            }
-                            if (scaled)
-                                pToHICON(dstBitmap, &hIcon);
-                            pDispose(dstBitmap);
-                        }
-                    }
-                    if (!scaled)
-                        pToHICON(srcBitmap, &hIcon);
-                    pDispose(srcBitmap);
+    void* srcBitmap = NULL;
+    if (pGdipCreateBitmapFromStream(stream, &srcBitmap) == 0 && srcBitmap) {
+        bool scaled = false;
+        if (targetWidth > 0 && targetHeight > 0 && pGdipCreateBitmapFromScan0 &&
+            pGdipGetImageGraphicsContext && pGdipSetInterpolationMode &&
+            pGdipSetPixelOffsetMode && pGdipGraphicsClear && pGdipDrawImageRectI &&
+            pGdipDeleteGraphics) {
+            void* dstBitmap = NULL;
+            if (pGdipCreateBitmapFromScan0(targetWidth, targetHeight, 0, 0x00E200B, NULL,
+                                            &dstBitmap) == 0 &&
+                dstBitmap) {
+                void* graphics = NULL;
+                if (pGdipGetImageGraphicsContext(dstBitmap, &graphics) == 0 && graphics) {
+                    // 7 is GDI+'s HighQualityBicubic mode; 3 matches the
+                    // pixel-offset mode used by DrawIconBicubic below.
+                    pGdipSetInterpolationMode(graphics, 7);
+                    pGdipSetPixelOffsetMode(graphics, 3);
+                    pGdipGraphicsClear(graphics, 0);
+                    scaled = pGdipDrawImageRectI(graphics, srcBitmap, 0, 0,
+                                                  targetWidth, targetHeight) == 0;
+                    pGdipDeleteGraphics(graphics);
                 }
-                pShutdown(token);
+                if (scaled)
+                    pGdipCreateHICONFromBitmap(dstBitmap, &hIcon);
+                pGdipDisposeImage(dstBitmap);
             }
         }
-        FreeLibrary(hGdi);
+        if (!scaled)
+            pGdipCreateHICONFromBitmap(srcBitmap, &hIcon);
+        pGdipDisposeImage(srcBitmap);
     }
     stream->Release();
     return hIcon;
@@ -1782,11 +3232,11 @@ static HICON CopyNetworkCenterIcon(int resourceId, int targetWidth, int targetHe
         return NULL;
     }
 
-    // DirectUI requests the icon at a DPI-relative size (e.g. 24rp); fall back
-    // to the classic 24x24 base size if the caller didn't specify one.
     int wantWidth  = (targetWidth  > 0) ? targetWidth  : 24;
     int wantHeight = (targetHeight > 0) ? targetHeight : 24;
 
+    HICON copy = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
     if (!*source || *cachedWidth != wantWidth || *cachedHeight != wantHeight) {
         if (*source) {
             DestroyIcon(*source);
@@ -1796,7 +3246,33 @@ static HICON CopyNetworkCenterIcon(int resourceId, int targetWidth, int targetHe
         *cachedWidth = wantWidth;
         *cachedHeight = wantHeight;
     }
-    return *source ? CopyIcon(*source) : NULL;
+    if (*source)
+        copy = CopyIcon(*source);
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return copy;
+}
+
+static HICON CopyCachedBase64Icon(HICON* cache, int* cachedWidth,
+                                  int* cachedHeight, const WCHAR* base64,
+                                  int wantWidth, int wantHeight) {
+    if (!cache || !cachedWidth || !cachedHeight || !base64)
+        return NULL;
+
+    HICON copy = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (!*cache || *cachedWidth != wantWidth || *cachedHeight != wantHeight) {
+        if (*cache) {
+            DestroyIcon(*cache);
+            *cache = NULL;
+        }
+        *cache = CreateIconFromBase64PNG(base64, wantWidth, wantHeight);
+        *cachedWidth = wantWidth;
+        *cachedHeight = wantHeight;
+    }
+    if (*cache)
+        copy = CopyIcon(*cache);
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return copy;
 }
 
 static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, int lineHeight) {
@@ -1810,6 +3286,10 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
         return;
     }
     WCHAR buffer[256];
+
+    // Guard against buffer overflow
+    if (totalLen > 255) totalLen = 255;
+
     int lineStart = 0;
     int currentY = y;
     while (lineStart < totalLen) {
@@ -1846,13 +3326,18 @@ static void DrawTextWithWrap(HDC hdc, LPCWSTR text, int x, int y, int maxWidth, 
 // Internet check
 // -------------------------------------------------------
 BOOL IsInternetConnected() {
-    if (!g_pNLM) {
-        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                         IID_INetworkListManager, (void**)&g_pNLM);
-    }
-    if (!g_pNLM) return FALSE;
+    // Create a local NLM instance instead of sharing g_pNLM, so that
+    // callers from the Control Panel's DUI thread (NetworkMapVisual,
+    // LoadImageW_Hook) don't cross apartments with the hotkey thread's
+    // g_pNLM or race with its Release in HotkeyThreadProc exit.
+    INetworkListManager* pNLM = NULL;
+    if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                IID_INetworkListManager, (void**)&pNLM)) || !pNLM)
+        return FALSE;
     NLM_CONNECTIVITY connectivity;
-    if (FAILED(g_pNLM->GetConnectivity(&connectivity))) return FALSE;
+    HRESULT hr = pNLM->GetConnectivity(&connectivity);
+    pNLM->Release();
+    if (FAILED(hr)) return FALSE;
     return (connectivity & NLM_CONNECTIVITY_IPV4_INTERNET) ||
            (connectivity & NLM_CONNECTIVITY_IPV6_INTERNET);
 }
@@ -1869,7 +3354,7 @@ BOOL IsInternetConnected() {
 //  3) Fall back to the NetworkList registry profile name, then to a safe
 //     public-first scan of connected NLM networks.
 // -------------------------------------------------------
-static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name);
+static BOOL IsVirtualOrNonEthernetAdapter(const IP_ADAPTER_ADDRESSES* adapter);
 static void SafeSysFreeString(BSTR bstr);
 static BOOL IsZeroGuidValue(const GUID* guid);
 
@@ -1923,7 +3408,7 @@ static BOOL AdapterIgnoreTable_IsIgnored(const AdapterIgnoreTable* table, const 
             }
         }
         if (haveParsedGuid && IsEqualGUID(parsedAdapterGuid, *adapterGuid)) {
-            return IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName);
+            return IsVirtualOrNonEthernetAdapter(pCurr);
         }
     }
     return FALSE;
@@ -1946,19 +3431,21 @@ static BOOL ConnectivityIsActive(NLM_CONNECTIVITY connectivity) {
 
 static int StabilizeNetworkCategoryResult(int detectedCategory) {
     DWORD now = GetTickCount();
+    int result = -1;
+
+    EnterCriticalSection(&g_Ctx.csLock);
     if (IsValidNetworkCategoryValue(detectedCategory)) {
         g_LastReliableNetworkCategory = detectedCategory;
         g_LastReliableNetworkCategoryTick = now;
-        return detectedCategory;
+        result = detectedCategory;
+    } else if (IsValidNetworkCategoryValue(g_LastReliableNetworkCategory) &&
+               now - g_LastReliableNetworkCategoryTick < 30000) {
+        // Avoid a one-refresh flicker to the generic icon if NLM/registry is
+        // temporarily unavailable while the network stack is settling.
+        result = g_LastReliableNetworkCategory;
     }
-
-    // Avoid a one-refresh flicker to the generic icon if NLM/registry is
-    // temporarily unavailable while the network stack is settling.
-    if (IsValidNetworkCategoryValue(g_LastReliableNetworkCategory) &&
-        now - g_LastReliableNetworkCategoryTick < 30000) {
-        return g_LastReliableNetworkCategory;
-    }
-    return -1;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return result;
 }
 
 static BOOL TryGetCategoryForAdapter(INetworkListManager* pNLM,
@@ -1967,27 +3454,27 @@ static BOOL TryGetCategoryForAdapter(INetworkListManager* pNLM,
                                      LPCWSTR reason) {
     if (!pNLM || IsZeroGuidValue(adapterGuid) || !outCategory) return FALSE;
 
-    IEnumNetworks* pEnum = NULL;
-    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) || !pEnum)
+    ComPtr<IEnumNetworks> networks;
+    if (FAILED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, networks.put())) || !networks)
         return FALSE;
 
     BOOL found = FALSE;
-    INetwork* pNet = NULL;
     ULONG fetched = 0;
-    while (!found && pEnum->Next(1, &pNet, &fetched) == S_OK && pNet) {
+    ComPtr<INetwork> network;
+    while (!found && networks->Next(1, network.put(), &fetched) == S_OK && network) {
         NLM_NETWORK_CATEGORY category;
-        if (SUCCEEDED(pNet->GetCategory(&category)) &&
+        if (SUCCEEDED(network->GetCategory(&category)) &&
             IsValidNetworkCategoryValue((int)category)) {
-            IEnumNetworkConnections* pEnumConn = NULL;
-            if (SUCCEEDED(pNet->GetNetworkConnections(&pEnumConn)) && pEnumConn) {
-                INetworkConnection* pConn = NULL;
+            ComPtr<IEnumNetworkConnections> connections;
+            if (SUCCEEDED(network->GetNetworkConnections(connections.put())) && connections) {
                 ULONG fetchedConn = 0;
-                while (!found && pEnumConn->Next(1, &pConn, &fetchedConn) == S_OK && pConn) {
+                ComPtr<INetworkConnection> connection;
+                while (!found && connections->Next(1, connection.put(), &fetchedConn) == S_OK && connection) {
                     GUID connAdapterId = {0};
-                    if (SUCCEEDED(pConn->GetAdapterId(&connAdapterId)) &&
+                    if (SUCCEEDED(connection->GetAdapterId(&connAdapterId)) &&
                         IsEqualGUID(connAdapterId, *adapterGuid)) {
                         NLM_CONNECTIVITY connConnectivity = NLM_CONNECTIVITY_DISCONNECTED;
-                        HRESULT hrConn = pConn->GetConnectivity(&connConnectivity);
+                        HRESULT hrConn = connection->GetConnectivity(&connConnectivity);
                         if (FAILED(hrConn) || ConnectivityIsActive(connConnectivity)) {
                             *outCategory = (int)category;
                             found = TRUE;
@@ -1995,14 +3482,10 @@ static BOOL TryGetCategoryForAdapter(INetworkListManager* pNLM,
                                    reason ? reason : L"unknown", *outCategory);
                         }
                     }
-                    pConn->Release();
                 }
-                pEnumConn->Release();
             }
         }
-        pNet->Release();
     }
-    pEnum->Release();
     return found;
 }
 
@@ -2091,6 +3574,22 @@ static BOOL TryGetCategoryByAdapterProfileGuid(INetworkListManager* pNLM,
                 found = TRUE;
                 Wh_Log(L"Network category exact GUID join (%s): %d",
                        reason ? reason : L"unknown", *outCategory);
+            } else {
+                // Keep the lookup exact even if the registry profile key is not
+                // readable or has not been created yet. Falling through to the
+                // profile-name registry scan here can pick a stale same-named
+                // Public profile (common names such as "Network"/"Network 2"),
+                // which is what made Home/Private and Domain/Work networks keep
+                // the Public bench icon. The INetwork object is already matched
+                // to the active adapter, so its category is the safer fallback.
+                NLM_NETWORK_CATEGORY category;
+                if (SUCCEEDED(pNet->GetCategory(&category)) &&
+                    IsValidNetworkCategoryValue((int)category)) {
+                    *outCategory = (int)category;
+                    found = TRUE;
+                    Wh_Log(L"Network category exact adapter NLM fallback (%s): %d",
+                           reason ? reason : L"unknown", *outCategory);
+                }
             }
         }
         pNet->Release();
@@ -2270,73 +3769,87 @@ static BOOL TryGetCategoryBySafeFallbackScan(INetworkListManager* pNLM, int* out
     return TRUE;
 }
 
-static int DetectNetworkLocationCategory() {
-    INetworkListManager* pNLM = g_pNLM;
-    if (!pNLM) {
+// pNLMOverride: same convention as UpdateEthernetStatus() above - null (the
+// default) preserves the original g_pNLM-sharing behavior for the flyout/
+// hotkey thread; a caller-supplied instance is used exclusively instead,
+// without ever reading, creating, or publishing g_pNLM, so the DirectUI/
+// Control-Panel thread never touches the hotkey thread's NLM instance.
+//
+// useOnlyOverride: distinguishes "no override was requested" (false, the
+// legacy g_pNLM-sharing path) from "an isolated instance was requested but
+// the caller's CoCreateInstance failed, so pNLMOverride is null" (true). A
+// null pNLMOverride alone can't carry that distinction - falling back to
+// g_pNLM in the failure case is exactly the cross-apartment use / use-after-
+// free the override exists to prevent (g_pNLM can be Release()d by
+// HotkeyThreadProc concurrently). When useOnlyOverride is true and
+// pNLMOverride is null, skip detection entirely rather than silently
+// reaching for g_pNLM.
+static int DetectNetworkLocationCategory(INetworkListManager* pNLMOverride = nullptr,
+                                          bool useOnlyOverride = false) {
+    if (useOnlyOverride && !pNLMOverride) {
+        Wh_Log(L"DetectNetworkLocationCategory: isolated NLM instance unavailable, skipping");
+        return -1;
+    }
+    INetworkListManager* pNLM = pNLMOverride ? pNLMOverride : g_pNLM;
+    if (!pNLM && !pNLMOverride && !useOnlyOverride) {
         CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
                          IID_INetworkListManager, (void**)&pNLM);
         if (pNLM && !g_pNLM) g_pNLM = pNLM;
     }
 
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+
     int detected = -1;
 
-    // Exact GUID join first: no name-matching ambiguity, and Ethernet is
-    // checked before Wi-Fi to match the header's display priority (fixes the
-    // case where a missed Ethernet registry lookup let a Wi-Fi lookup run
-    // first and show the wrong network's icon).
-    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
-        TryGetCategoryByAdapterProfileGuid(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+    if (pNLM && state.ethernetConnected && state.hasEthernetAdapterGuid &&
+        TryGetCategoryByAdapterProfileGuid(pNLM, &state.ethernetAdapterGuid, &detected, L"Ethernet")) {
         return StabilizeNetworkCategoryResult(detected);
     }
-    if (pNLM && !g_EthernetConnected) {
-        for (int i = 0; i < g_NetworkCount; i++) {
-            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-                TryGetCategoryByAdapterProfileGuid(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+    if (pNLM && !state.ethernetConnected) {
+        for (int i = 0; i < state.networkCount; i++) {
+            if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByAdapterProfileGuid(pNLM, &state.networks[i].interfaceGuid, &detected, L"Wi-Fi")) {
                 return StabilizeNetworkCategoryResult(detected);
             }
         }
     }
 
-    // The registry profile is the most stable source for the icon Windows shows
-    // in Network and Sharing Center. Prefer it before NLM exact-adapter data so
-    // a Public profile cannot be overridden by a separate domain/VPN network.
-    if (g_EthernetConnected &&
-        TryGetCategoryFromRegistryProfileName(g_EthernetNetworkName, &detected)) {
+    if (state.ethernetConnected &&
+        TryGetCategoryFromRegistryProfileName(state.ethernetNetworkName, &detected)) {
         return StabilizeNetworkCategoryResult(detected);
     }
 
-    for (int i = 0; i < g_NetworkCount; i++) {
-        if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-            TryGetCategoryFromRegistryProfileName(g_NetworkList[i].ssid, &detected)) {
+    for (int i = 0; i < state.networkCount; i++) {
+        if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+            TryGetCategoryFromRegistryProfileName(state.networks[i].ssid, &detected)) {
             return StabilizeNetworkCategoryResult(detected);
         }
     }
 
-    // The header shows Ethernet before Wi-Fi when both are present, so use the
-    // same priority for the exact-adapter NLM fallback.
-    if (pNLM && g_EthernetConnected && g_HasEthernetAdapterGuid &&
-        TryGetCategoryForAdapter(pNLM, &g_EthernetAdapterGuid, &detected, L"Ethernet")) {
+    if (pNLM && state.ethernetConnected && state.hasEthernetAdapterGuid &&
+        TryGetCategoryForAdapter(pNLM, &state.ethernetAdapterGuid, &detected, L"Ethernet")) {
         return StabilizeNetworkCategoryResult(detected);
     }
 
-    if (pNLM && !g_EthernetConnected) {
-        for (int i = 0; i < g_NetworkCount; i++) {
-            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-                TryGetCategoryForAdapter(pNLM, &g_NetworkList[i].interfaceGuid, &detected, L"Wi-Fi")) {
+    if (pNLM && !state.ethernetConnected) {
+        for (int i = 0; i < state.networkCount; i++) {
+            if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryForAdapter(pNLM, &state.networks[i].interfaceGuid, &detected, L"Wi-Fi")) {
                 return StabilizeNetworkCategoryResult(detected);
             }
         }
     }
 
-    if (pNLM && g_EthernetConnected &&
-        TryGetCategoryByNlmName(pNLM, g_EthernetNetworkName, &detected)) {
+    if (pNLM && state.ethernetConnected &&
+        TryGetCategoryByNlmName(pNLM, state.ethernetNetworkName, &detected)) {
         return StabilizeNetworkCategoryResult(detected);
     }
 
     if (pNLM) {
-        for (int i = 0; i < g_NetworkCount; i++) {
-            if (g_NetworkList[i].connState == CONN_STATE_CONNECTED &&
-                TryGetCategoryByNlmName(pNLM, g_NetworkList[i].ssid, &detected)) {
+        for (int i = 0; i < state.networkCount; i++) {
+            if (state.networks[i].connState == CONN_STATE_CONNECTED &&
+                TryGetCategoryByNlmName(pNLM, state.networks[i].ssid, &detected)) {
                 return StabilizeNetworkCategoryResult(detected);
             }
         }
@@ -2370,12 +3883,19 @@ static HICON GetNetworkLocationIcon(void*** pppOutCache) {
     // Use the stable reliable category when the current one is momentarily
     // unknown (e.g. during a reconnect).  This keeps the correct Home/Public/Work
     // icon on screen instead of briefly flashing the generic PC icon.
-    int effectiveCategory = g_CurrentNetworkCategory;
+    int effectiveCategory = -1;
+    int lastReliableCategory = -1;
+    DWORD lastReliableCategoryTick = 0;
+    EnterCriticalSection(&g_Ctx.csLock);
+    effectiveCategory = g_CurrentNetworkCategory;
+    lastReliableCategory = g_LastReliableNetworkCategory;
+    lastReliableCategoryTick = g_LastReliableNetworkCategoryTick;
+    LeaveCriticalSection(&g_Ctx.csLock);
     if (!IsValidNetworkCategoryValue(effectiveCategory) &&
-        IsValidNetworkCategoryValue(g_LastReliableNetworkCategory)) {
+        IsValidNetworkCategoryValue(lastReliableCategory)) {
         DWORD now = GetTickCount();
-        if (now - g_LastReliableNetworkCategoryTick < 30000)
-            effectiveCategory = g_LastReliableNetworkCategory;
+        if (now - lastReliableCategoryTick < 30000)
+            effectiveCategory = lastReliableCategory;
     }
     
     switch (effectiveCategory) {
@@ -2395,8 +3915,15 @@ static HICON GetNetworkLocationIcon(void*** pppOutCache) {
             break;
     }
     
-    // Last resort: if even the reliable fallback failed and we have the
-    // generic PC icon loaded, use that so the flyout never shows a blank area.
+    // During the short interval after a new connection is reported but before
+    // NLM/the registry expose its category, never flash the generic PC icon.
+    // Public is Windows' safe default profile and provides a location icon
+    // until the authoritative Home/Public/Work category replaces it.
+    if (!hIcon && g_hIconNetLocPublic) {
+        hIcon   = g_hIconNetLocPublic;
+        ppCache = &g_pBitmapNetLocPublic;
+    }
+    // Defensive last resort only if decoding the location artwork itself failed.
     if (!hIcon && g_hIconNetworkMap) {
         hIcon   = g_hIconNetworkMap;
         ppCache = &g_pBitmapNetworkMap;
@@ -2406,8 +3933,93 @@ static HICON GetNetworkLocationIcon(void*** pppOutCache) {
     return hIcon;
 }
 
+// DirectUI draws the active-network icon itself. Decode the PNG at the exact
+// size it requests, using CreateIconFromBase64PNG's HighQualityBicubic (mode
+// 7) path, instead of passing it the 35rp flyout icon and letting it upscale.
+static void PublishNetworkLocationCategory(int category, BOOL allowClear) {
+    if (!IsValidNetworkCategoryValue(category) && !allowClear)
+        return;
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    int oldCategory = g_CurrentNetworkCategory;
+    g_CurrentNetworkCategory = IsValidNetworkCategoryValue(category) ? category : -1;
+
+    // DirectUI keeps asking LoadImageW for the active-network icon after our
+    // message-only refresh. If the first render used the Public fallback while
+    // the background category probe was still running, drop the size/category
+    // cache when the authoritative Home/Public/Work category changes so the
+    // next LoadImageW call cannot reuse the stale bench icon.
+    if (oldCategory != g_CurrentNetworkCategory && g_hIconNetLocDUI) {
+        DestroyIcon(g_hIconNetLocDUI);
+        g_hIconNetLocDUI = NULL;
+        g_iconNetLocDUIW = 0;
+        g_iconNetLocDUIH = 0;
+        g_iconNetLocDUICategory = -1;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+}
+
+static HICON CopyNetworkLocationIconForDUI(int targetWidth, int targetHeight) {
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+
+    bool hasConnectedNetwork = state.ethernetConnected != FALSE;
+    for (int i = 0; !hasConnectedNetwork && i < state.networkCount; ++i) {
+        if (state.networks[i].connState == CONN_STATE_CONNECTED)
+            hasConnectedNetwork = true;
+    }
+    if (!hasConnectedNetwork) {
+        if (!IsInternetConnected()) {
+            int wantW = targetWidth > 0 ? targetWidth : ScaleDpi(36);
+            int wantH = targetHeight > 0 ? targetHeight : ScaleDpi(36);
+            return CreateIconFromBase64PNG(NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+        }
+        hasConnectedNetwork = true;
+    }
+
+    int category = state.currentNetworkCategory;
+    if (!IsValidNetworkCategoryValue(category) &&
+        IsValidNetworkCategoryValue(state.lastReliableNetworkCategory)) {
+        DWORD now = GetTickCount();
+        if (now - state.lastReliableNetworkCategoryTick < 30000)
+            category = state.lastReliableNetworkCategory;
+    }
+
+    const WCHAR* png = NULL;
+    switch (category) {
+        case (int)NLM_NETWORK_CATEGORY_PRIVATE:              png = NETLOC_HOME_ICON_BASE64;   break;
+        case (int)NLM_NETWORK_CATEGORY_PUBLIC:               png = NETLOC_PUBLIC_ICON_BASE64; break;
+        case (int)NLM_NETWORK_CATEGORY_DOMAIN_AUTHENTICATED: png = NETLOC_WORK_ICON_BASE64;   break;
+        default:
+            png = NETLOC_PUBLIC_ICON_BASE64;
+            break;
+    }
+
+    int wantW = targetWidth  > 0 ? targetWidth  : ScaleDpi(48);
+    int wantH = targetHeight > 0 ? targetHeight : ScaleDpi(48);
+    HICON copy = NULL;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (!g_hIconNetLocDUI || g_iconNetLocDUIW != wantW ||
+        g_iconNetLocDUIH != wantH || g_iconNetLocDUICategory != category) {
+        if (g_hIconNetLocDUI) {
+            DestroyIcon(g_hIconNetLocDUI);
+            g_hIconNetLocDUI = NULL;
+        }
+        g_hIconNetLocDUI = CreateIconFromBase64PNG(png, wantW, wantH);
+        g_iconNetLocDUIW = wantW;
+        g_iconNetLocDUIH = wantH;
+        g_iconNetLocDUICategory = category;
+    }
+    if (g_hIconNetLocDUI)
+        copy = CopyIcon(g_hIconNetLocDUI);
+    LeaveCriticalSection(&g_Ctx.csLock);
+    return copy;
+}
+
 void SetKeyboardFocus(int index) {
-    if (index < -1 || index >= g_NetworkCount) return;
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    if (index < -1 || index >= state.networkCount) return;
     ClearKeyboardFocus();
     g_KeyboardSelectedIndex = index;
     if (index >= 0 && g_bListExpanded) {
@@ -2438,55 +4050,82 @@ void DrawFocusRectangle(HDC hdc, const RECT* rcRow) {
 }
 
 void InitRefreshButtonRect(void) {
-    const int buttonSize = ScaleDpi(16);
-    const int margin = ScaleDpi(8);
-    int totalListHeight = GetTotalListHeight();
-    int availableHeight = LIST_Y_END - LIST_Y_START;
-    BOOL hasScrollbar = (totalListHeight > availableHeight);
-    int refreshLeftOffset = GetRefreshButtonLeftOffset();
-    int baseX = WINDOW_WIDTH - margin - buttonSize - refreshLeftOffset;
-    if (!hasScrollbar) {
-        baseX += (WINDOW_WIDTH * 4) / 100;     
-        baseX -= (WINDOW_WIDTH * 13) / 1000;   
-    }
-    if (baseX + buttonSize > WINDOW_WIDTH) {
-        baseX = WINDOW_WIDTH - buttonSize;
-    }
-    g_rcRefreshButton.left   = baseX;
+    // Keep hit-testing in lockstep with the paint-path geometry below.
+    const int buttonWidth = ScaleDpi(21);
+    const int totalListHeight = GetTotalListHeight();
+    const int availableHeight = LIST_Y_END - LIST_Y_START;
+    const BOOL hasScrollbar = (totalListHeight > availableHeight);
+    const int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
+    const int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
+    // With a scrollbar, apply the requested compensation, 1% left of the prior 4% position.
+    const int scrollbarShift = hasScrollbar ? ((WINDOW_WIDTH * 3) / 100)
+                                             : (((WINDOW_WIDTH * 4) / 100) - ((WINDOW_WIDTH * 13) / 1000));
+    const int refreshLeftOffset = GetRefreshButtonLeftOffset();
+    int right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset +
+                scrollbarShift - refreshLeftOffset;
+    if (right > WINDOW_WIDTH)
+        right = WINDOW_WIDTH;
+
+    g_rcRefreshButton.left   = right - buttonWidth;
     g_rcRefreshButton.top    = ScaleDpi(2);
-    g_rcRefreshButton.right  = baseX + buttonSize;
+    g_rcRefreshButton.right  = right;
     g_rcRefreshButton.bottom = ScaleDpi(24);
 }
 
 // -------------------------------------------------------
 // SSID display helper
 // -------------------------------------------------------
-static void GetDisplaySSID(int index, WCHAR* buf, int bufLen) {
+static void FormatDisplaySSID(const WifiNetworkItem& item, int displayIndex,
+                              WCHAR* buf, int bufLen) {
+    if (!buf || bufLen <= 0)
+        return;
     if (g_Settings.privacyMode) {
-        StringCchPrintfW(buf, bufLen, LOC(STR_NETWORK_PRIVACY_FMT), index + 1);
+        StringCchPrintfW(buf, bufLen, LOC(STR_NETWORK_PRIVACY_FMT), displayIndex + 1);
         return;
     }
-    int suffix = g_NetworkList[index].displaySuffix;
+    int suffix = item.displaySuffix;
     if (suffix >= 2) {
-        StringCchPrintfW(buf, bufLen, L"%s %d", g_NetworkList[index].ssid, suffix);
+        StringCchPrintfW(buf, bufLen, L"%s %d", item.ssid, suffix);
     } else {
-        StringCchCopyW(buf, bufLen, g_NetworkList[index].ssid);
+        StringCchCopyW(buf, bufLen, item.ssid);
     }
 }
+
 
 // -------------------------------------------------------
 // Icons and resources
 // -------------------------------------------------------
 void LoadSystemIcons() {
+    EnterCriticalSection(&g_Ctx.csLock);
     if (!g_hIconNetworkMap)
-        ExtractIconExW(L"netshell.dll", 120, &g_hIconNetworkMap, NULL, 1);
+        g_hIconNetworkMap = CreateIconFromBase64PNG(PC_ICON_BASE64, ScaleDpi(48), ScaleDpi(48));
+
+    // Build an absolute System32 path instead of relying on the default
+    // DLL search order for bare file names. The mod only ever injects into
+    // explorer.exe/control.exe (both launched from protected system
+    // directories), so this was already low-risk, but an absolute path is
+    // tidier and removes any doubt.
+    WCHAR sysDir[MAX_PATH];
+    UINT sysDirLen = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+    WCHAR netshellPath[MAX_PATH] = {0};
+    if (sysDirLen > 0 && sysDirLen < ARRAYSIZE(sysDir)) {
+        StringCchCopyW(netshellPath, ARRAYSIZE(netshellPath), sysDir);
+        StringCchCatW(netshellPath, ARRAYSIZE(netshellPath), L"\\netshell.dll");
+    }
     for (int i = 0; i < 6; i++)
         if (!g_hIconSignalBars[i])
-            ExtractIconExW(L"netshell.dll", 152 + i, &g_hIconSignalBars[i], NULL, 1);
-    if (!g_hIconRefreshWin7)
-        ExtractIconExW(L"shell32.dll", 238, &g_hIconRefreshWin7, NULL, 1);
+            ExtractIconExW(netshellPath[0] ? netshellPath : L"netshell.dll",
+                           152 + i, &g_hIconSignalBars[i], NULL, 1);
+    // Keep this cache at the exact header render size. Unlike the 48px map
+    // artwork it is never resampled by DrawIconEx at normal DPI.
+    if (!g_hIconDisconnected)
+        g_hIconDisconnected = CreateIconFromBase64PNG(DISCONNECTED_ICON_BASE64,
+                                                       ScaleDpi(35), ScaleDpi(35));
+    if (!g_hIconAvailable)
+        g_hIconAvailable = CreateIconFromBase64PNG(AVAILABLE_ICON_BASE64,
+                                                    ScaleDpi(36), ScaleDpi(36));
+    LeaveCriticalSection(&g_Ctx.csLock);
 }
-
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
     g_hGdiPlus = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2504,10 +4143,12 @@ static BOOL InitGdiPlusRendering() {
     pGdipGraphicsClear = (GdipGraphicsClearFunc)GetProcAddress(g_hGdiPlus, "GdipGraphicsClear");
     pGdipCreateHBITMAPFromBitmap = (GdipCreateHBITMAPFromBitmapFunc)GetProcAddress(g_hGdiPlus, "GdipCreateHBITMAPFromBitmap");
     pGdipDisposeImage = (GdipDisposeImageFunc)GetProcAddress(g_hGdiPlus, "GdipDisposeImage");
+    pGdipCreateBitmapFromStream = (GdipCreateBitmapFromStreamFunc)GetProcAddress(g_hGdiPlus, "GdipCreateBitmapFromStream");
+    pGdipCreateHICONFromBitmap = (GdipCreateHICONFromBitmapFunc)GetProcAddress(g_hGdiPlus, "GdipCreateHICONFromBitmap");
     if (!pGdipCreateBitmapFromHICON || !pGdipSetInterpolationMode || !pGdipDrawImageRectI ||
         !pGdipDeleteGraphics || !pGdipCreateBitmapFromScan0 || !pGdipGetImageGraphicsContext ||
         !pGdipSetPixelOffsetMode || !pGdipGraphicsClear || !pGdipCreateHBITMAPFromBitmap ||
-        !pGdipDisposeImage) {
+        !pGdipDisposeImage || !pGdipCreateBitmapFromStream || !pGdipCreateHICONFromBitmap) {
         Wh_Log(L"GDI+: missing function pointers");
         FreeLibrary(g_hGdiPlus);
         g_hGdiPlus = NULL;
@@ -2531,7 +4172,11 @@ static BOOL InitGdiPlusRendering() {
     return TRUE;
 }
 
-static void ShutdownGdiPlusRendering() {
+// Shared by ShutdownGdiPlusRendering() and FreeSystemIcons(), which
+// previously duplicated this exact sequence and could drift out of sync.
+static void DisposeGdiPlusBitmapCaches() {
+    if (!g_hGdiPlus || !pGdipDisposeImage)
+        return;
     for (int i = 0; i < 6; i++) {
         if (g_pBitmapSignalBars[i]) {
             pGdipDisposeImage(g_pBitmapSignalBars[i]);
@@ -2543,6 +4188,10 @@ static void ShutdownGdiPlusRendering() {
     if (g_pBitmapNetLocPublic) { pGdipDisposeImage(g_pBitmapNetLocPublic); g_pBitmapNetLocPublic = NULL; }
     if (g_pBitmapNetLocWork)   { pGdipDisposeImage(g_pBitmapNetLocWork);   g_pBitmapNetLocWork = NULL; }
     if (g_pBitmapNetworkMap)   { pGdipDisposeImage(g_pBitmapNetworkMap);   g_pBitmapNetworkMap = NULL; }
+}
+
+static void ShutdownGdiPlusRendering() {
+    DisposeGdiPlusBitmapCaches();
     if (g_hGdiPlus) {
         typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
         GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(g_hGdiPlus, "GdiplusShutdown");
@@ -2554,6 +4203,7 @@ static void ShutdownGdiPlusRendering() {
 }
 
 void FreeSystemIcons() {
+    EnterCriticalSection(&g_Ctx.csLock);
     // Free network location icons
     if (g_hIconNetLocHome)   { DestroyIcon(g_hIconNetLocHome);   g_hIconNetLocHome = NULL; }
     if (g_hIconNetLocPublic) { DestroyIcon(g_hIconNetLocPublic); g_hIconNetLocPublic = NULL; }
@@ -2564,27 +4214,29 @@ void FreeSystemIcons() {
     if (g_hIconChevronDown)   { DestroyIcon(g_hIconChevronDown);   g_hIconChevronDown = NULL; }
     if (g_hIconChevronDownHL) { DestroyIcon(g_hIconChevronDownHL); g_hIconChevronDownHL = NULL; }
     g_chevronsLoaded = FALSE;
-    if (g_hGdiPlus && pGdipDisposeImage) {
-        for (int i = 0; i < 6; i++) {
-            if (g_pBitmapSignalBars[i]) {
-                pGdipDisposeImage(g_pBitmapSignalBars[i]);
-                g_pBitmapSignalBars[i] = NULL;
-            }
-        }
-        // Free network location icon bitmap caches
-        if (g_pBitmapNetLocHome)   { pGdipDisposeImage(g_pBitmapNetLocHome);   g_pBitmapNetLocHome = NULL; }
-        if (g_pBitmapNetLocPublic) { pGdipDisposeImage(g_pBitmapNetLocPublic); g_pBitmapNetLocPublic = NULL; }
-        if (g_pBitmapNetLocWork)   { pGdipDisposeImage(g_pBitmapNetLocWork);   g_pBitmapNetLocWork = NULL; }
-        if (g_pBitmapNetworkMap)   { pGdipDisposeImage(g_pBitmapNetworkMap);   g_pBitmapNetworkMap = NULL; }
-    }
+    DisposeGdiPlusBitmapCaches();
     if (g_hIconRefreshNormal) { DestroyIcon(g_hIconRefreshNormal); g_hIconRefreshNormal = NULL; }
     if (g_hIconRefreshHover)  { DestroyIcon(g_hIconRefreshHover);  g_hIconRefreshHover = NULL; }
     if (g_hIconNetworkCenterConnect) { DestroyIcon(g_hIconNetworkCenterConnect); g_hIconNetworkCenterConnect = NULL; }
     if (g_hIconNetworkCenterHomegroup) { DestroyIcon(g_hIconNetworkCenterHomegroup); g_hIconNetworkCenterHomegroup = NULL; }
     if (g_hIconNetworkMap) { DestroyIcon(g_hIconNetworkMap); g_hIconNetworkMap = NULL; }
+    if (g_hIconDisconnected) { DestroyIcon(g_hIconDisconnected); g_hIconDisconnected = NULL; }
+    if (g_hIconAvailable) { DestroyIcon(g_hIconAvailable); g_hIconAvailable = NULL; }
+    if (g_hIconNetworkMapDUI) { DestroyIcon(g_hIconNetworkMapDUI); g_hIconNetworkMapDUI = NULL; }
+    g_iconNetworkMapDUIW = g_iconNetworkMapDUIH = 0;
+    if (g_hIconGlobeDUI) { DestroyIcon(g_hIconGlobeDUI); g_hIconGlobeDUI = NULL; }
+    g_iconGlobeDUIW = g_iconGlobeDUIH = 0;
+    g_iconGlobeDUIOnline = TRUE;
+    if (g_hIconNetLocDUI) { DestroyIcon(g_hIconNetLocDUI); g_hIconNetLocDUI = NULL; }
+    g_iconNetLocDUIW = g_iconNetLocDUIH = 0;
+    if (g_hIconNoInternetXDUI) { DestroyIcon(g_hIconNoInternetXDUI); g_hIconNoInternetXDUI = NULL; }
+    g_iconNoInternetXDUIW = g_iconNoInternetXDUIH = 0;
+    if (g_hIconOfflineNetworkDUI) { DestroyIcon(g_hIconOfflineNetworkDUI); g_hIconOfflineNetworkDUI = NULL; }
+    g_iconOfflineNetworkDUIW = g_iconOfflineNetworkDUIH = 0;
+    g_iconNetLocDUICategory = -1;
     for (int i = 0; i < 6; i++)
         if (g_hIconSignalBars[i]) { DestroyIcon(g_hIconSignalBars[i]); g_hIconSignalBars[i] = NULL; }
-    if (g_hIconRefreshWin7) { DestroyIcon(g_hIconRefreshWin7); g_hIconRefreshWin7 = NULL; }
+    LeaveCriticalSection(&g_Ctx.csLock);
 }
 
 void InitGlobalFonts() {
@@ -2616,7 +4268,13 @@ void PositionWindowNearTray(HWND hwnd) {
     APPBARDATA abd = { sizeof(APPBARDATA) };
     SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
     RECT rcWork;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    // Use the monitor where the taskbar is located for multi-monitor setups
+    HMONITOR hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (hMon && GetMonitorInfoW(hMon, &mi))
+        rcWork = mi.rcWork;
+    else
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
     int x = rcWork.right - WINDOW_WIDTH - 8;
     int y = rcWork.bottom - WINDOW_HEIGHT - 8;
     if (abd.uEdge == ABE_TOP)   y = abd.rc.bottom + 8;
@@ -2643,6 +4301,12 @@ void PositionWindowNearTray(HWND hwnd) {
 #ifndef IF_TYPE_ETHERNET_CSMACD
 #define IF_TYPE_ETHERNET_CSMACD 6
 #endif
+#ifndef IF_TYPE_FASTETHER
+#define IF_TYPE_FASTETHER 62
+#endif
+#ifndef IF_TYPE_GIGABITETHERNET
+#define IF_TYPE_GIGABITETHERNET 117
+#endif
 #ifndef NLM_ENUM_NETWORK_CONNECTED
 #define NLM_ENUM_NETWORK_CONNECTED ((NLM_ENUM_NETWORK)1)
 #endif
@@ -2660,12 +4324,18 @@ void RefreshWifiData(HANDLE hClient) {
     PWLAN_INTERFACE_INFO_LIST pIfList = NULL;
     if (WlanEnumInterfaces(hClient, NULL, &pIfList) != ERROR_SUCCESS) return;
     
-    g_WlanInterfaceCount = 0;
+    int localWlanIfCount = 0;
+    GUID localWlanIfGuids[16];
     if (pIfList) {
-        for (DWORD i = 0; i < pIfList->dwNumberOfItems && g_WlanInterfaceCount < 16; i++) {
-            g_WlanInterfaceGuids[g_WlanInterfaceCount++] = pIfList->InterfaceInfo[i].InterfaceGuid;
+        for (DWORD i = 0; i < pIfList->dwNumberOfItems && localWlanIfCount < 16; i++) {
+            localWlanIfGuids[localWlanIfCount++] = pIfList->InterfaceInfo[i].InterfaceGuid;
         }
     }
+    EnterCriticalSection(&g_Ctx.csLock);
+    g_WlanInterfaceCount = localWlanIfCount;
+    for (int i = 0; i < localWlanIfCount; i++)
+        g_WlanInterfaceGuids[i] = localWlanIfGuids[i];
+    LeaveCriticalSection(&g_Ctx.csLock);
     WifiNetworkItem tempList[50];
     int tempCount = 0;
     ZeroMemory(tempList, sizeof(tempList));
@@ -2809,6 +4479,11 @@ void RefreshWifiData(HANDLE hClient) {
             }
         }
     }
+    BOOL hasInternet = FALSE;
+    if (tempCount > 0 && tempList[0].connState == CONN_STATE_CONNECTED) {
+        hasInternet = IsInternetConnected();
+    }
+
     EnterCriticalSection(&g_Ctx.csLock);
     if (tempCount > 0 && tempCount <= 50) {
         WCHAR pendingSsid[33] = {0};
@@ -2864,15 +4539,19 @@ void RefreshWifiData(HANDLE hClient) {
     if (tempCount > 0) {
         lastValidRefresh = now;
     }
-    LeaveCriticalSection(&g_Ctx.csLock);
+    // This write belongs inside the lock, like the rest of the list update
+    // above: g_NetworkList is shared with the flyout thread, and writing to
+    // it after LeaveCriticalSection raced with any concurrent reader.
     if (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) {
-        g_NetworkList[0].hasInternetAccess = IsInternetConnected();
+        g_NetworkList[0].hasInternetAccess = hasInternet;
     }
+    int loggedNetworkCount = g_NetworkCount;
+    BOOL loggedConnected = loggedNetworkCount > 0 &&
+                           g_NetworkList[0].connState == CONN_STATE_CONNECTED;
+    int loggedPendingIndex = g_PendingConnectIndex;
+    LeaveCriticalSection(&g_Ctx.csLock);
     Wh_Log(L"Refresh complete: %d network(s) found, connected: %s, g_PendingConnectIndex=%d",
-           g_NetworkCount,
-           (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED) 
-               ? L"yes" : L"no",
-           g_PendingConnectIndex);
+           loggedNetworkCount, loggedConnected ? L"yes" : L"no", loggedPendingIndex);
 }
 
 // -------------------------------------------------------
@@ -2913,27 +4592,105 @@ static BOOL ContainsKeywordCI(LPCWSTR str, LPCWSTR keyword) {
     return FALSE;
 }
 
-static BOOL IsVirtualOrNonEthernetAdapter(LPCWSTR desc, LPCWSTR name) {
-    if (!desc && !name) return FALSE;
+static BOOL IsEthernetIfType(ULONG ifType) {
+    return ifType == IF_TYPE_ETHERNET_CSMACD ||
+           ifType == IF_TYPE_FASTETHER ||
+           ifType == IF_TYPE_GIGABITETHERNET;
+}
+
+static BOOL IsVirtualOrNonEthernetAdapter(const IP_ADAPTER_ADDRESSES* adapter) {
+    if (!adapter) return FALSE;
+
+    if (!IsEthernetIfType(adapter->IfType))
+        return TRUE;
+
+    // Prefer language-independent interface metadata. Adapter descriptions and
+    // friendly names can come from localized driver INFs, so generic English
+    // words such as "virtual", "wireless" or "miniport" are not reliable as
+    // the primary classifier. GetIfEntry2 exposes the NDIS media/access type
+    // and whether Windows considers the interface a filter rather than the
+    // underlying network adapter.
+    MIB_IF_ROW2 row = {};
+    row.InterfaceLuid = adapter->Luid;
+    DWORD rowResult = GetIfEntry2(&row);
+    if (rowResult != NO_ERROR && adapter->IfIndex) {
+        ZeroMemory(&row, sizeof(row));
+        row.InterfaceIndex = adapter->IfIndex;
+        rowResult = GetIfEntry2(&row);
+    }
+
+    if (rowResult == NO_ERROR) {
+        if (!IsEthernetIfType(row.Type))
+            return TRUE;
+
+        // NET_IF_ACCESS_BROADCAST == 2. Ethernet is a broadcast medium;
+        // loopback, point-to-point and tunnel-style interfaces are not.
+        if ((int)row.AccessType != 2)
+            return TRUE;
+
+        // NdisMedium802_3 == 0. Anything else is not classic Ethernet.
+        if ((int)row.MediaType != 0)
+            return TRUE;
+
+        // Exclude clearly wireless physical media using stable NDIS enum
+        // values: WirelessLan=1, WirelessWan=8, Native802_11=9, Bluetooth=10.
+        int physicalMedium = (int)row.PhysicalMediumType;
+        if (physicalMedium == 1 || physicalMedium == 8 ||
+            physicalMedium == 9 || physicalMedium == 10)
+            return TRUE;
+
+        // Do not require HardwareInterface here. Some real adapters/drivers do
+        // not report it consistently, and rejecting them makes Ethernet appear
+        // disconnected, which in turn leaves the location icon on the Public
+        // fallback. Filter interfaces, however, are not the underlying network
+        // adapter and should not drive the Ethernet state.
+        if (row.InterfaceAndOperStatusFlags.FilterInterface)
+            return TRUE;
+    }
+
+    // Last-resort fallback for well-known invariant driver/protocol names.
+    // Avoid localized generic English words here; the GetIfEntry2 checks above
+    // are the primary language-independent filter.
+    const WCHAR* desc = adapter->Description;
+    const WCHAR* name = adapter->FriendlyName;
     const WCHAR* ignoreKeywords[] = {
-        L"vmware", L"virtualbox", L"virtual", L"hyper-v", L"vethernet",
-        L"loopback", L"npcap", L"tap-", L"wsl", L"bluetooth", L"wireguard",
-        L"tailscale", L"openvpn", L"warp", L"pseudo", L"miniport", L"wi-fi direct",
-        L"wireless", L"wlan", L"wi-fi", L"802.11"
+        L"vmware", L"virtualbox", L"hyper-v", L"vethernet",
+        L"loopback", L"npcap", L"tap-", L"wsl", L"bluetooth",
+        L"wireguard", L"tailscale", L"openvpn", L"warp",
+        L"wi-fi direct", L"802.11"
     };
     for (size_t i = 0; i < ARRAYSIZE(ignoreKeywords); i++) {
-        if (desc && ContainsKeywordCI(desc, ignoreKeywords[i])) return TRUE;
-        if (name && ContainsKeywordCI(name, ignoreKeywords[i])) return TRUE;
+        if (ContainsKeywordCI(desc, ignoreKeywords[i]) ||
+            ContainsKeywordCI(name, ignoreKeywords[i]))
+            return TRUE;
     }
     return FALSE;
 }
 
-void UpdateEthernetStatus() {
-    g_EthernetConnected = FALSE;
-    g_EthernetNetworkName[0] = L'\0';
-    g_EthernetHasInternet = FALSE;
-    ZeroMemory(&g_EthernetAdapterGuid, sizeof(g_EthernetAdapterGuid));
-    g_HasEthernetAdapterGuid = FALSE;
+// pNLMOverride: optional INetworkListManager instance owned and released by
+// the caller. When null (the default, used by the flyout/hotkey thread which
+// already legitimately owns g_pNLM), behavior is unchanged from before -
+// g_pNLM is created/reused/shared as before. When non-null (used by
+// EnsureNetCenterNetworkDataFresh() on the DirectUI/Control-Panel thread),
+// that instance is used exclusively and g_pNLM is never read, created, or
+// published from this call, avoiding the cross-apartment sharing / use-after-
+// free race with HotkeyThreadProc's exit-time Release() of g_pNLM.
+void UpdateEthernetStatus(INetworkListManager* pNLMOverride = nullptr,
+                           bool useOnlyOverride = false) {
+    // Staged locally and published to the g_Ethernet* globals in a single
+    // locked block at the end of this function. Previously these globals
+    // were written directly, with no lock at all, while
+    // GetConnectedNetworkName()/MaskConnectedNetworkText() read them under
+    // g_Ctx.csLock - so the lock protected nothing, and a torn/garbled name
+    // was reachable if this function ran concurrently with itself (e.g. once
+    // on the flyout thread, once on the NetCenter DirectUI thread). The
+    // blocking WLAN/adapter/COM work itself is unchanged and still runs
+    // without holding the lock, so this doesn't add any new stall.
+    BOOL  localConnected = FALSE;
+    WCHAR localNetworkName[64] = L"";
+    BOOL  localHasInternet = FALSE;
+    GUID  localAdapterGuid = {0};
+    BOOL  localHasAdapterGuid = FALSE;
 
     // 1. Find physical operational Ethernet adapter GUID via GetAdaptersAddresses
     BOOL foundPhysicalEthernet = FALSE;
@@ -2954,40 +4711,34 @@ void UpdateEthernetStatus() {
         }
         if (res == NO_ERROR && pAddresses) {
             for (PIP_ADAPTER_ADDRESSES pCurr = pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
-                if ((pCurr->IfType == IF_TYPE_ETHERNET_CSMACD || pCurr->IfType == 117 || pCurr->IfType == 62) &&
+                if (IsEthernetIfType(pCurr->IfType) &&
                     pCurr->OperStatus == IfOperStatusUp &&
                     pCurr->FirstUnicastAddress != NULL) {
                     
-                    // Check if this adapter GUID belongs to a Wi-Fi card
-                    BOOL isWifiGuid = FALSE;
-                    for (int w = 0; w < g_WlanInterfaceCount; w++) {
-                        if (IsEqualGUID(pCurr->NetworkGuid, g_WlanInterfaceGuids[w])) {
-                            isWifiGuid = TRUE;
-                            break;
-                        }
-                    }
-                    if (isWifiGuid) continue;
-                    
-                    // Check if description or friendly name indicates a virtual/Bluetooth/wireless adapter
-                    if (IsVirtualOrNonEthernetAdapter(pCurr->Description, pCurr->FriendlyName)) {
-                        continue;
-                    }
-                    
-                    // NOTE: pCurr->NetworkGuid is an NLM-internal network identifier and is
-                    // NOT the same GUID as INetworkConnection::GetAdapterId(). The adapter's
-                    // real device GUID is embedded (as a string, e.g. "{4D36E972-...}") in
-                    // pCurr->AdapterName. Parse that instead, or the COM name lookup below
-                    // will never match and we'll silently keep the generic fallback name.
+                    // AdapterName contains the interface/device GUID; NetworkGuid
+                    // is an unrelated NLM network identifier and cannot be compared
+                    // to WLAN_INTERFACE_INFO::InterfaceGuid.
                     GUID parsedAdapterGuid = {0};
                     BOOL haveParsedGuid = FALSE;
                     if (pCurr->AdapterName && pCurr->AdapterName[0] != '\0') {
                         WCHAR wAdapterName[128];
                         int convRes = MultiByteToWideChar(CP_ACP, 0, pCurr->AdapterName, -1,
                                                            wAdapterName, ARRAYSIZE(wAdapterName));
-                        if (convRes > 0 && SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid))) {
-                            haveParsedGuid = TRUE;
+                        haveParsedGuid = convRes > 0 &&
+                            SUCCEEDED(IIDFromString(wAdapterName, &parsedAdapterGuid));
+                    }
+                    BOOL isWifiGuid = FALSE;
+                    EnterCriticalSection(&g_Ctx.csLock);
+                    for (int w = 0; haveParsedGuid && w < g_WlanInterfaceCount; w++) {
+                        if (IsEqualGUID(parsedAdapterGuid, g_WlanInterfaceGuids[w])) {
+                            isWifiGuid = TRUE;
+                            break;
                         }
                     }
+                    LeaveCriticalSection(&g_Ctx.csLock);
+                    if (isWifiGuid) continue;
+                    if (IsVirtualOrNonEthernetAdapter(pCurr))
+                        continue;
 
                     foundPhysicalEthernet = TRUE;
                     physicalEthernetGuid = haveParsedGuid ? parsedAdapterGuid : pCurr->NetworkGuid;
@@ -3003,27 +4754,44 @@ void UpdateEthernetStatus() {
     }
 
     if (!foundPhysicalEthernet) {
-        // No real physical Ethernet cable connected!
+        // No real physical Ethernet cable connected! Publish the
+        // "disconnected" reset under the lock too, so a reader never
+        // observes a half-reset state.
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_EthernetConnected = FALSE;
+        g_EthernetNetworkName[0] = L'\0';
+        g_EthernetHasInternet = FALSE;
+        ZeroMemory(&g_EthernetAdapterGuid, sizeof(g_EthernetAdapterGuid));
+        g_HasEthernetAdapterGuid = FALSE;
+        LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
 
-    g_EthernetConnected = TRUE;
-    g_EthernetHasInternet = IsInternetConnected();
+    localConnected = TRUE;
+    localHasInternet = IsInternetConnected();
     if (physicalEthernetGuidReliable && !IsZeroGuidValue(&physicalEthernetGuid)) {
-        g_EthernetAdapterGuid = physicalEthernetGuid;
-        g_HasEthernetAdapterGuid = TRUE;
+        localAdapterGuid = physicalEthernetGuid;
+        localHasAdapterGuid = TRUE;
     }
-    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), fallbackName);
+    StringCchCopyW(localNetworkName, ARRAYSIZE(localNetworkName), fallbackName);
 
     // 2. Query COM INetworkListManager to get the exact friendly network name (e.g. "Rete 2")
-    if (!g_pNLM) {
-        CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
-                         IID_INetworkListManager, (void**)&g_pNLM);
+    INetworkListManager* pNLM = pNLMOverride;
+    if (!pNLM && !useOnlyOverride) {
+        if (!g_pNLM) {
+            CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                             IID_INetworkListManager, (void**)&g_pNLM);
+        }
+        pNLM = g_pNLM;
     }
-    
-    if (g_pNLM) {
+    // else: caller asked for an isolated instance and CoCreateInstance
+    // failed on their side - pNLM stays null and we skip the NLM-backed
+    // name lookup below instead of silently falling back to the shared
+    // g_pNLM (which another thread can Release() concurrently).
+
+    if (pNLM) {
         IEnumNetworks* pEnum = NULL;
-        if (SUCCEEDED(g_pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) && pEnum) {
+        if (SUCCEEDED(pNLM->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, &pEnum)) && pEnum) {
             INetwork* pNet = NULL;
             ULONG fetched = 0;
             BOOL matchedNlm = FALSE;
@@ -3038,13 +4806,13 @@ void UpdateEthernetStatus() {
                             if (IsEqualGUID(connAdapterId, physicalEthernetGuid)) {
                                 BSTR bstrName = NULL;
                                 if (SUCCEEDED(pNet->GetName(&bstrName)) && bstrName) {
-                                    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), bstrName);
+                                    StringCchCopyW(localNetworkName, ARRAYSIZE(localNetworkName), bstrName);
                                     SafeSysFreeString(bstrName);
                                     matchedNlm = TRUE;
                                 }
                                 NLM_CONNECTIVITY conn = NLM_CONNECTIVITY_DISCONNECTED;
                                 pNet->GetConnectivity(&conn);
-                                g_EthernetHasInternet = (conn & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
+                                localHasInternet = (conn & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) != 0;
                             }
                         }
                         pConn->Release();
@@ -3058,12 +4826,20 @@ void UpdateEthernetStatus() {
             pEnum->Release();
         }
     }
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    g_EthernetConnected = localConnected;
+    StringCchCopyW(g_EthernetNetworkName, ARRAYSIZE(g_EthernetNetworkName), localNetworkName);
+    g_EthernetHasInternet = localHasInternet;
+    g_EthernetAdapterGuid = localAdapterGuid;
+    g_HasEthernetAdapterGuid = localHasAdapterGuid;
+    LeaveCriticalSection(&g_Ctx.csLock);
 }
 
 void UpdateFlyoutWindowSize(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     
-    BOOL showWifiList = (g_NetworkCount > 0);
+    BOOL showWifiList = (GetNetworkCountSafe() > 0);
     int targetHeaderHeightBase = showWifiList ? HEADER_HEIGHT_BASE : 76;
     int targetWindowHeightBase = showWifiList ? WINDOW_HEIGHT_BASE : (targetHeaderHeightBase + FOOTER_HEIGHT_BASE);
     
@@ -3081,7 +4857,13 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
         RecalcArrowRect();
         
         RECT rcWork;
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+        // Use the near monitor instead of primary for multi-monitor setups
+        HMONITOR hMon = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(mi) };
+        if (hMon && GetMonitorInfoW(hMon, &mi))
+            rcWork = mi.rcWork;
+        else
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
         APPBARDATA abd = { sizeof(APPBARDATA) };
         SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
         
@@ -3102,7 +4884,8 @@ void UpdateFlyoutWindowSize(HWND hwnd) {
     }
 }
 
-void RefreshNetworkData(BOOL forceDetection = FALSE) {
+void RefreshNetworkData(BOOL forceDetection = FALSE, INetworkListManager* pNLMOverride = nullptr,
+                         bool useOnlyOverride = false) {
     if (g_Ctx.hWlanClient) {
         RefreshWifiData(g_Ctx.hWlanClient);
     } else {
@@ -3110,31 +4893,35 @@ void RefreshNetworkData(BOOL forceDetection = FALSE) {
         g_NetworkCount = 0;
         LeaveCriticalSection(&g_Ctx.csLock);
     }
-    UpdateEthernetStatus();
+    UpdateEthernetStatus(pNLMOverride, useOnlyOverride);
     
     // Detect network location category (Home / Public / Work).
     // Skip the COM query entirely when the feature is disabled, and also
     // while the flyout isn't visible: the result is only consumed at paint
     // time, so running the registry enumeration (and, on a name-match miss,
     // up to four NLM/COM calls plus a GetAdaptersAddresses pass) on every
-    // auto-refresh tick while hidden would be wasted work. WM_SHOW_FLYOUT
+    // auto-refresh tick while hidden would be wasted work. ToggleFlyoutWindow()
     // already calls RefreshNetworkData() when the flyout opens, so gating on
     // visibility here is safe. forceDetection bypasses this gate for the
     // one-off priming calls at mod startup and after a settings change, so
     // the category is already known (instead of falling back to the generic
     // PC icon) the first time the flyout is actually shown.
-    BOOL isAnyConnected = (g_EthernetConnected || 
-                           (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED));
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    BOOL isAnyConnected = (state.ethernetConnected ||
+                           (state.networkCount > 0 &&
+                            state.networks[0].connState == CONN_STATE_CONNECTED));
     BOOL flyoutVisible = forceDetection ||
                          (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout));
     if (isAnyConnected && g_Settings.useNetworkLocationIcons && flyoutVisible) {
-        g_CurrentNetworkCategory = DetectNetworkLocationCategory();
+        int category = DetectNetworkLocationCategory(pNLMOverride, useOnlyOverride);
+        PublishNetworkLocationCategory(category, TRUE);
     } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
         // Don't wipe the reliable fallback just because the connection is
         // momentarily settling (e.g. during a reconnect). While the flyout is
         // merely hidden, g_CurrentNetworkCategory is left untouched below so
         // the first paint after reopening doesn't flash the generic icon.
-        g_CurrentNetworkCategory = -1;
+        PublishNetworkLocationCategory(-1, TRUE);
     }
     
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
@@ -3237,6 +5024,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             if (hIconBig) {
                 SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
             }
+            // LR_SHARED icons remain valid after releasing the module.
+            FreeLibrary(hVanDll);
         }
         HDC hdc = GetDC(hwnd);
         int ptPx = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
@@ -3372,9 +5161,9 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 return (INT_PTR)hBrushHideLight;
             }
         }
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndCtrl == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
@@ -3416,9 +5205,9 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     }
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam; HWND hwndBtn = (HWND)lParam;
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndBtn == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
@@ -3496,19 +5285,35 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
 BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize) {
     if (!SafeToAccessUI()) return FALSE;
     g_inPasswordPrompt = TRUE;
-    HINSTANCE hInst = GetModuleHandle(NULL);
+    HINSTANCE hInst = HINST_THISCOMPONENT;
     WNDCLASSW wc = {0};
     wc.lpfnWndProc   = Win7PasswordWndProc;
     wc.hInstance     = hInst;
     wc.lpszClassName = L"Win7NetPwdClass";
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
-    UnregisterClassW(wc.lpszClassName, hInst);
-    RegisterClassW(&wc);
+    // First RegisterClassW of a load is required to succeed (a leftover class
+    // from a previous load bails out rather than creating a window on a stale
+    // class with a dangling WndProc), while later calls in the same load can
+    // skip re-registering.
+    if (!g_pwdClassRegistered) {
+        if (RegisterClassW(&wc)) {
+            g_pwdClassRegistered = true;
+        } else {
+            Wh_Log(L"PromptNetworkPassword: RegisterClassW failed (%lu)", GetLastError());
+            g_inPasswordPrompt = FALSE;
+            return FALSE;
+        }
+    }
     
     PasswordDlgData data = { passwordBuffer, bufferSize, FALSE };
     RECT rcWork;
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    HMONITOR hMon = MonitorFromWindow(hParent ? hParent : FindWindowW(L"Shell_TrayWnd", NULL), MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (hMon && GetMonitorInfoW(hMon, &mi))
+        rcWork = mi.rcWork;
+    else
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
     int dlgW=ScaleDpi(420), dlgH=ScaleDpi(180);
     
     HWND hDlg = CreateWindowExW(
@@ -3531,10 +5336,20 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
     ShowWindow(hDlg, SW_SHOW);
     EnableWindow(hParent, FALSE);
     
-    MSG msg;
-    while (IsWindow(hDlg) && GetMessageW(&msg, NULL, 0, 0)) {
+    MSG msg = {};
+    BOOL quitting = FALSE;
+    while (IsWindow(hDlg)) {
+        BOOL got = GetMessageW(&msg, NULL, 0, 0);
+        if (got == 0) { quitting = TRUE; break; }
+        if (got == -1) break;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
+    }
+    if (quitting) {
+        if (IsWindow(hDlg)) DestroyWindow(hDlg);
+        // Preserve WM_QUIT for HotkeyThreadProc; otherwise it would remain
+        // blocked in GetMessage after this nested modal loop returns.
+        PostQuitMessage((int)msg.wParam);
     }
     
     EnableWindow(hParent, TRUE);
@@ -3771,44 +5586,55 @@ static unsigned int __stdcall AsyncConnectThreadProc(void* pParam) {
 // off the flyout's UI thread. See the call site in AskForPasswordAndConnect.
 static unsigned __stdcall ReapConnectThreadHandleProc(void* p) {
     HANDLE h = (HANDLE)p;
-    WaitForSingleObject(h, 5000);
+    WaitForSingleObject(h, INFINITE);
     CloseHandle(h);
     return 0;
 }
 
 static BOOL AskForPasswordAndConnect(int index) {
-    if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return FALSE;
-    if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount && g_PendingConnectIndex != index) {
-        g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_IDLE;
-        g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
-        Wh_Log(L"Previous pending connection %d reset", g_PendingConnectIndex);
+    if (!g_Ctx.hWlanClient) return FALSE;
+
+    WifiNetworkItem item = {};
+    BOOL haveItem = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        item = g_NetworkList[index];
+        haveItem = TRUE;
+        if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount &&
+            g_PendingConnectIndex != index) {
+            g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_IDLE;
+            g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
+            Wh_Log(L"Previous pending connection %d reset", g_PendingConnectIndex);
+        }
     }
-    
-    WifiNetworkItem* item = &g_NetworkList[index];
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!haveItem) return FALSE;
     
     AsyncConnectContext* ctx = (AsyncConnectContext*)calloc(1, sizeof(AsyncConnectContext));
     if (!ctx) {
+        EnterCriticalSection(&g_Ctx.csLock);
         g_PendingConnectIndex = -1;
+        LeaveCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
     ZeroMemory(ctx, sizeof(AsyncConnectContext));
     ctx->hWndNotify = g_hWndFlyout;
-    ctx->interfaceGuid = item->interfaceGuid;
-    ctx->dot11BssType = item->dot11BssType;
-    ctx->hasProfile = item->hasProfile;
-    ctx->isSecured = item->isSecured;
-    ctx->authAlgorithm = item->authAlgorithm;
-    ctx->cipherAlgorithm = item->cipherAlgorithm;
-    StringCchCopyW(ctx->ssid, ARRAYSIZE(ctx->ssid), item->ssid);
-    ctx->hasBssid = item->hasBssid;
-    if (item->hasBssid) {
-        CopyMemory(ctx->bssid, item->bssid, sizeof(DOT11_MAC_ADDRESS));
+    ctx->interfaceGuid = item.interfaceGuid;
+    ctx->dot11BssType = item.dot11BssType;
+    ctx->hasProfile = item.hasProfile;
+    ctx->isSecured = item.isSecured;
+    ctx->authAlgorithm = item.authAlgorithm;
+    ctx->cipherAlgorithm = item.cipherAlgorithm;
+    StringCchCopyW(ctx->ssid, ARRAYSIZE(ctx->ssid), item.ssid);
+    ctx->hasBssid = item.hasBssid;
+    if (item.hasBssid) {
+        CopyMemory(ctx->bssid, item.bssid, sizeof(DOT11_MAC_ADDRESS));
     }
-    BOOL needsPassword = (item->isSecured && !item->hasProfile);
+    BOOL needsPassword = (item.isSecured && !item.hasProfile);
     if (needsPassword) {
         WCHAR password[65] = {0};
         if (!PromptNetworkPassword(g_hWndFlyout, password, ARRAYSIZE(password) - 1)) {
-            LogSsidSafe(L"User cancelled password for", item->ssid);
+            LogSsidSafe(L"User cancelled password for", ctx->ssid);
             g_PendingConnectIndex = -1;
             SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
@@ -3823,9 +5649,10 @@ static BOOL AskForPasswordAndConnect(int index) {
             }
         }
         if (isEmpty) {
-            LogSsidSafe(L"Empty password provided for", item->ssid);
+            LogSsidSafe(L"Empty password provided for", ctx->ssid);
             MessageBoxW(g_hWndFlyout, LOC(STR_PWD_EMPTY), LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
             g_PendingConnectIndex = -1;
+            SecureZeroMemory(ctx->password, sizeof(ctx->password));
             free(ctx);
             return FALSE;
         }
@@ -3833,12 +5660,31 @@ static BOOL AskForPasswordAndConnect(int index) {
         ctx->password[0] = L'\0';
     }
     
-    item->connState = CONN_STATE_CONNECTING;
-    item->operationStartTime = GetTickCount();
-    g_PendingConnectIndex = index;
+    // The password dialog is modal; refresh may have rebuilt the list while
+    // it was open. Re-resolve the original row before publishing state.
+    EnterCriticalSection(&g_Ctx.csLock);
+    int resolvedIndex = -1;
+    for (int i = 0; i < g_NetworkCount; ++i) {
+        if (IsEqualGUID(g_NetworkList[i].interfaceGuid, ctx->interfaceGuid) &&
+            wcscmp(g_NetworkList[i].ssid, ctx->ssid) == 0) {
+            resolvedIndex = i;
+            break;
+        }
+    }
+    if (resolvedIndex >= 0) {
+        g_NetworkList[resolvedIndex].connState = CONN_STATE_CONNECTING;
+        g_NetworkList[resolvedIndex].operationStartTime = GetTickCount();
+        g_PendingConnectIndex = resolvedIndex;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (resolvedIndex < 0) {
+        SecureZeroMemory(ctx->password, sizeof(ctx->password));
+        free(ctx);
+        return FALSE;
+    }
     
     Wh_Log(L"AskForPasswordAndConnect: set g_PendingConnectIndex=%d, SSID=%s, hasProfile=%d", 
-           index, item->ssid, item->hasProfile);
+           resolvedIndex, ctx->ssid, ctx->hasProfile);
     
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 5000, NULL);
@@ -3852,8 +5698,15 @@ static BOOL AskForPasswordAndConnect(int index) {
     HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, AsyncConnectThreadProc, ctx, 0, NULL);
     if (!hThread) {
         Wh_Log(L"Failed to create async connect thread");
-        item->connState = CONN_STATE_IDLE;
-        g_PendingConnectIndex = -1;
+        EnterCriticalSection(&g_Ctx.csLock);
+        if (resolvedIndex >= 0 && resolvedIndex < g_NetworkCount) {
+            g_NetworkList[resolvedIndex].connState = CONN_STATE_IDLE;
+            g_NetworkList[resolvedIndex].operationStartTime = 0;
+        }
+        if (g_PendingConnectIndex == resolvedIndex)
+            g_PendingConnectIndex = -1;
+        LeaveCriticalSection(&g_Ctx.csLock);
+        SecureZeroMemory(ctx->password, sizeof(ctx->password));
         free(ctx);
         return FALSE;
     }
@@ -3866,7 +5719,13 @@ static BOOL AskForPasswordAndConnect(int index) {
         HANDLE hReaper = (HANDLE)_beginthreadex(NULL, 0,
             ReapConnectThreadHandleProc, hOldThread, 0, NULL);
         if (hReaper) {
-            CloseHandle(hReaper);
+            // Drop our reference to any previous reaper's handle (it has
+            // long since finished by the time a new connect is started) and
+            // track this one instead, so SafeCleanup() can join it at
+            // unload rather than leaving it untracked and potentially still
+            // running mod code when the DLL is unmapped.
+            if (g_hReapThread) CloseHandle(g_hReapThread);
+            g_hReapThread = hReaper;
         } else {
             // Couldn't spin up a reaper thread; fall back to closing the
             // handle immediately. This does not terminate the still-running
@@ -3879,68 +5738,125 @@ static BOOL AskForPasswordAndConnect(int index) {
 }
 
 void ConnectToNetwork(int index) {
-    if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return;
-    WifiNetworkItem* item = &g_NetworkList[index];
-    if (item->connState == CONN_STATE_CONNECTED) {
+    if (!g_Ctx.hWlanClient) return;
+
+    WifiNetworkItem item = {};
+    BOOL haveItem = FALSE;
+    BOOL shouldDisconnect = FALSE;
+    BOOL alreadyConnecting = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        haveItem = TRUE;
+        item = g_NetworkList[index];
+        if (item.connState == CONN_STATE_CONNECTED) {
+            shouldDisconnect = TRUE;
+        } else if (item.connState == CONN_STATE_CONNECTING) {
+            alreadyConnecting = TRUE;
+        } else {
+            for (int i = 0; i < g_NetworkCount; i++) {
+                if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
+                                   g_NetworkList[i].connState == CONN_STATE_ERROR)) {
+                    g_NetworkList[i].connState = CONN_STATE_IDLE;
+                    g_NetworkList[i].operationStartTime = 0;
+                }
+            }
+        }
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    if (!haveItem)
+        return;
+    if (shouldDisconnect) {
         DisconnectFromNetwork(index);
         return;
     }
-    if (item->connState == CONN_STATE_CONNECTING) {
-        LogSsidSafe(L"Already connecting to, ignoring", item->ssid);
+    if (alreadyConnecting) {
+        LogSsidSafe(L"Already connecting to, ignoring", item.ssid);
         return;
-    }
-    for (int i = 0; i < g_NetworkCount; i++) {
-        if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
-                           g_NetworkList[i].connState == CONN_STATE_ERROR)) {
-            g_NetworkList[i].connState = CONN_STATE_IDLE;
-            g_NetworkList[i].operationStartTime = 0;
-        }
     }
     AskForPasswordAndConnect(index);
 }
 
 void DisconnectFromNetwork(int index) {
-    if (index < 0 || index >= g_NetworkCount || !g_Ctx.hWlanClient) return;
-    WifiNetworkItem* item = &g_NetworkList[index];
-    if (item->connState != CONN_STATE_CONNECTED && item->connState != CONN_STATE_CONNECTING) return;
-    for (int i = 0; i < g_NetworkCount; i++) {
-        if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
-                           g_NetworkList[i].connState == CONN_STATE_ERROR)) {
-            g_NetworkList[i].connState = CONN_STATE_IDLE;
-            g_NetworkList[i].operationStartTime = 0;
+    if (!g_Ctx.hWlanClient) return;
+
+    WifiNetworkItem item = {};
+    BOOL canDisconnect = FALSE;
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (index >= 0 && index < g_NetworkCount) {
+        item = g_NetworkList[index];
+        canDisconnect = (item.connState == CONN_STATE_CONNECTED ||
+                         item.connState == CONN_STATE_CONNECTING);
+        if (canDisconnect) {
+            for (int i = 0; i < g_NetworkCount; i++) {
+                if (i != index && (g_NetworkList[i].connState == CONN_STATE_CONNECTING ||
+                                   g_NetworkList[i].connState == CONN_STATE_ERROR)) {
+                    g_NetworkList[i].connState = CONN_STATE_IDLE;
+                    g_NetworkList[i].operationStartTime = 0;
+                }
+            }
+            g_NetworkList[index].connState = CONN_STATE_DISCONNECTING;
+            g_NetworkList[index].operationStartTime = GetTickCount();
+            g_PendingConnectIndex = index;
         }
     }
-    item->connState = CONN_STATE_DISCONNECTING;
-    item->operationStartTime = GetTickCount();
-    g_PendingConnectIndex = index;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!canDisconnect)
+        return;
+
     if (!g_TimeoutTimer && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         g_TimeoutTimer = SetTimer(g_hWndFlyout, 1002, 1000, NULL);
     }
     UpdateLayoutGeometry();
     if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
-    DWORD res = WlanDisconnect(g_Ctx.hWlanClient, &item->interfaceGuid, NULL);
+
+    DWORD res = WlanDisconnect(g_Ctx.hWlanClient, &item.interfaceGuid, NULL);
     if (res != ERROR_SUCCESS) {
         Wh_Log(L"WlanDisconnect failed: %lu", res);
-        item->connState = CONN_STATE_ERROR;
-        if (g_PendingConnectIndex == index) g_PendingConnectIndex = -1;
+        EnterCriticalSection(&g_Ctx.csLock);
+        int resolvedIndex = -1;
+        for (int i = 0; i < g_NetworkCount; ++i) {
+            if (IsEqualGUID(g_NetworkList[i].interfaceGuid, item.interfaceGuid) &&
+                wcscmp(g_NetworkList[i].ssid, item.ssid) == 0) {
+                resolvedIndex = i;
+                break;
+            }
+        }
+        if (resolvedIndex >= 0) {
+            g_NetworkList[resolvedIndex].connState = CONN_STATE_ERROR;
+            g_NetworkList[resolvedIndex].operationStartTime = 0;
+            if (g_PendingConnectIndex == index)
+                g_PendingConnectIndex = -1;
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
         UpdateLayoutGeometry();
         if (g_hWndFlyout) InvalidateRect(g_hWndFlyout, NULL, TRUE);
     } else {
-        LogSsidSafe(L"WlanDisconnect request successful for", item->ssid);
+        LogSsidSafe(L"WlanDisconnect request successful for", item.ssid);
     }
 }
 
 void CheckConnectionTimeouts() {
     if (!g_Ctx.hWlanClient) return;
+
+    BOOL doRefresh = FALSE;
+    BOOL doTimeoutMsg = FALSE;
+    BOOL doInvalidate = FALSE;
+
+    EnterCriticalSection(&g_Ctx.csLock);
     if (g_PendingConnectIndex < 0 || g_PendingConnectIndex >= g_NetworkCount) {
         if (g_TimeoutTimer && g_hWndFlyout) {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
+        LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
     WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-    if (item->operationStartTime == 0) return;
+    if (item->operationStartTime == 0) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        return;
+    }
     if (item->connState == CONN_STATE_CONNECTED) {
         LogSsidSafe(L"Timeout check: already connected, clearing pending", item->ssid);
         item->operationStartTime = 0;
@@ -3949,6 +5865,7 @@ void CheckConnectionTimeouts() {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
+        LeaveCriticalSection(&g_Ctx.csLock);
         return;
     }
     if (item->connState == CONN_STATE_ERROR) {
@@ -3959,7 +5876,9 @@ void CheckConnectionTimeouts() {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
-        if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+        doInvalidate = TRUE;
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (doInvalidate && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
             InvalidateRect(g_hWndFlyout, NULL, TRUE);
             UpdateLayoutGeometry();
         }
@@ -3976,11 +5895,13 @@ void CheckConnectionTimeouts() {
                 KillTimer(g_hWndFlyout, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
             }
-            if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-                RefreshNetworkData();
-                InvalidateRect(g_hWndFlyout, NULL, TRUE);
-                UpdateLayoutGeometry();
-            }
+            doRefresh = TRUE;
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (doRefresh && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+            RefreshNetworkData();
+            InvalidateRect(g_hWndFlyout, NULL, TRUE);
+            UpdateLayoutGeometry();
         }
         return;
     }
@@ -3994,37 +5915,46 @@ void CheckConnectionTimeouts() {
             KillTimer(g_hWndFlyout, g_TimeoutTimer);
             g_TimeoutTimer = 0;
         }
-        if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
-            MessageBoxW(g_hWndFlyout, LOC(STR_CONNECTION_TIMEOUT_MSG), 
-                       LOC(STR_TIMEOUT_ERROR), MB_OK | MB_ICONWARNING);
-            InvalidateRect(g_hWndFlyout, NULL, TRUE);
-            UpdateLayoutGeometry();
-        }
+        doTimeoutMsg = TRUE;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (doTimeoutMsg && g_hWndFlyout && IsWindow(g_hWndFlyout)) {
+        MessageBoxW(g_hWndFlyout, LOC(STR_CONNECTION_TIMEOUT_MSG), 
+                   LOC(STR_TIMEOUT_ERROR), MB_OK | MB_ICONWARNING);
+        InvalidateRect(g_hWndFlyout, NULL, TRUE);
+        UpdateLayoutGeometry();
     }
 }
+
+// Enum-based live refresh removed. Using INetworkListManagerEvents instead.
 
 void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context) {
     ModContext* ctx = (ModContext*)context;
     if (!ctx || ctx->isUninitializing || !data) return;
     if (data->NotificationSource != WLAN_NOTIFICATION_SOURCE_ACM) return;
     HWND hFlyout = g_hWndFlyout;
-    if (!hFlyout || !IsWindow(hFlyout)) return;
+    // refreshNetworkCenter removed — using INetworkListManagerEvents instead
     EnterCriticalSection(&ctx->csLock);
     switch (data->NotificationCode) {
         case wlan_notification_acm_connection_start:
             Wh_Log(L"WLAN: Connection Start");
             break;
         case wlan_notification_acm_connection_complete: {
+            if (!data->pData || data->dwDataSize < sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                break;
             PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Connection Complete - Profile: %s, ReasonCode: %lu (0x%08X)", 
                    connData->strProfileName, connData->wlanReasonCode, connData->wlanReasonCode);
-            PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 
+            if (hFlyout && IsWindow(hFlyout)) PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE,
                          (connData->wlanReasonCode == ERROR_SUCCESS) ? 1 : 0,
                          (LPARAM)connData->wlanReasonCode);
+            // refresh now handled by INetworkListManagerEvents
             break;
         }
         case wlan_notification_acm_connection_attempt_fail: {
+            if (!data->pData || data->dwDataSize < sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                break;
             PWLAN_CONNECTION_NOTIFICATION_DATA connData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Connection Attempt Failed (intermediate), Reason: %lu", 
@@ -4032,11 +5962,14 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
             break;
         }
         case wlan_notification_acm_disconnected: {
+            if (!data->pData || data->dwDataSize < sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                break;
             PWLAN_CONNECTION_NOTIFICATION_DATA discData = 
                 (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
             Wh_Log(L"WLAN: Disconnected (reason: %lu), g_PendingConnectIndex=%d", 
                    discData->wlanReasonCode, g_PendingConnectIndex);
-            PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_SUCCESS);
+            if (hFlyout && IsWindow(hFlyout)) PostMessageW(hFlyout, WM_ASYNC_CONNECT_COMPLETE, 0, (LPARAM)ERROR_SUCCESS);
+            // refresh now handled by INetworkListManagerEvents
             if (g_TimeoutTimer && hFlyout) {
                 PostMessageW(hFlyout, WM_TIMER, 1002, 0);
             }
@@ -4053,7 +5986,8 @@ void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data, PVOID context
         }
     }
     LeaveCriticalSection(&ctx->csLock);
-    PostMessageW(hFlyout, WM_REFRESH_DATA, 0, 0);
+    // Live refresh now handled by INetworkListManagerEvents connectivity callback
+    if (hFlyout && IsWindow(hFlyout)) PostMessageW(hFlyout, WM_REFRESH_DATA, 0, 0);
 }
 
 static void DrawIconBicubic(HDC hdc, int x, int y, int w, int h, HICON hIcon, void** ppCached) {
@@ -4170,35 +6104,48 @@ void InitTooltip(HWND hwnd) {
     if (g_Settings.theme == 1) {
         SendMessage(g_hTooltip, TTM_SETTIPBKCOLOR,   (WPARAM)RGB(30, 30, 30),   0);
         SendMessage(g_hTooltip, TTM_SETTIPTEXTCOLOR, (WPARAM)RGB(100, 200, 255), 0);
+        DarkContextMenu::AllowDarkModeForWindow(g_hTooltip, true);
         SetWindowTheme(g_hTooltip, L"DarkMode_Explorer", NULL);
+        SendMessageW(g_hTooltip, WM_THEMECHANGED, 0, 0);
     }
 }
 
+// Track the last tooltip uId so we can delete just that one instead of all 50
+static UINT_PTR g_lastTooltipId = 0;
+
 void UpdateTooltipForRow(HWND hwnd, int index) {
     if (!g_hTooltip) InitTooltip(hwnd);
-    for (int i = 0; i < 50; i++) {
+    // Delete only the previously registered tool instead of all 50
+    if (g_lastTooltipId) {
         TOOLINFOW ti = {0};
         ti.cbSize = sizeof(TOOLINFOW);
         ti.hwnd   = hwnd;
-        ti.uId    = (UINT_PTR)(i + 1);
+        ti.uId    = g_lastTooltipId;
         SendMessage(g_hTooltip, TTM_DELTOOL, 0, (LPARAM)&ti);
+        g_lastTooltipId = 0;
     }
-    if (index < 0 || index >= g_NetworkCount) return;
-    WifiNetworkItem* item = &g_NetworkList[index];
+    WifiNetworkItem item = {};
+    EnterCriticalSection(&g_Ctx.csLock);
+    BOOL haveItem = (index >= 0 && index < g_NetworkCount);
+    if (haveItem)
+        item = g_NetworkList[index];
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!haveItem) return;
+
     WCHAR ssidBuf[33];
-    GetDisplaySSID(index, ssidBuf, 33);
+    FormatDisplaySSID(item, index, ssidBuf, ARRAYSIZE(ssidBuf));
     const WCHAR* statusText;
-    switch (item->connState) {
-        case CONN_STATE_CONNECTED:    statusText = LOC(STR_STATUS_CONNECTED); break;
-        case CONN_STATE_CONNECTING:   statusText = LOC(STR_STATUS_CONNECTING); break;
+    switch (item.connState) {
+        case CONN_STATE_CONNECTED:     statusText = LOC(STR_STATUS_CONNECTED); break;
+        case CONN_STATE_CONNECTING:    statusText = LOC(STR_STATUS_CONNECTING); break;
         case CONN_STATE_DISCONNECTING: statusText = LOC(STR_DISCONNECTING); break;
-        default:                      statusText = LOC(STR_STATUS_NOT_CONNECTED); break;
+        default:                       statusText = LOC(STR_STATUS_NOT_CONNECTED); break;
     }
     StringCchPrintfW(g_TooltipBuffer, 1024,
         L"SSID: %s\n%s %s\n%s %s\n%s",
         ssidBuf,
-        LOC(STR_SIGNAL_STRENGTH), SignalQualityToString(item->signalQuality),
-        LOC(STR_SECURITY_TYPE), item->isSecured ? L"WPA2-PSK" : L"Open",
+        LOC(STR_SIGNAL_STRENGTH), SignalQualityToString(item.signalQuality),
+        LOC(STR_SECURITY_TYPE), item.isSecured ? L"WPA2-PSK" : L"Open",
         statusText);
     RECT rcRow;
     if (!GetRowRect(index, &rcRow)) return;
@@ -4210,13 +6157,20 @@ void UpdateTooltipForRow(HWND hwnd, int index) {
     ti.lpszText = g_TooltipBuffer;
     ti.rect     = rcRow;
     SendMessage(g_hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
+    g_lastTooltipId = (UINT_PTR)(index + 1);
+}
+
+static int GetTotalListHeightForCount(int networkCount) {
+    int h = 0;
+    for (int i = 0; i < networkCount; i++)
+        h += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    return h;
 }
 
 static int GetTotalListHeight() {
-    int h = 0;
-    for (int i = 0; i < g_NetworkCount; i++)
-        h += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
-    return h;
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    return GetTotalListHeightForCount(state.networkCount);
 }
 
 static void ClampScrollPos() {
@@ -4227,9 +6181,9 @@ static void ClampScrollPos() {
     if (g_ScrollPos < 0) g_ScrollPos = 0;
 }
 
-BOOL GetRowRect(int index, RECT* rcRow) {
-    BOOL showWifiList = (g_NetworkCount > 0);
-    if (!showWifiList || index < 0 || index >= g_NetworkCount || !g_bListExpanded) return FALSE;
+static BOOL GetRowRectForCount(int index, int networkCount, RECT* rcRow) {
+    BOOL showWifiList = (networkCount > 0);
+    if (!showWifiList || index < 0 || index >= networkCount || !g_bListExpanded) return FALSE;
     int y = LIST_Y_START;
     for (int i = 0; i < index; i++)
         y += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
@@ -4237,21 +6191,29 @@ BOOL GetRowRect(int index, RECT* rcRow) {
     int rowHeight = (index == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     if (y + rowHeight <= LIST_Y_START) return FALSE;
     if (y >= LIST_Y_END) return FALSE;
-    rcRow->left   = 10;
+    rcRow->left   = ScaleDpi(10);
     rcRow->top    = y;
-    rcRow->right  = WINDOW_WIDTH - 10;
+    rcRow->right  = WINDOW_WIDTH - ScaleDpi(10);
     int bottom = y + rowHeight;
     if (bottom > LIST_Y_END) bottom = LIST_Y_END;
     rcRow->bottom = bottom;
     return TRUE;
 }
 
+BOOL GetRowRect(int index, RECT* rcRow) {
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    return GetRowRectForCount(index, state.networkCount, rcRow);
+}
+
 int HitTestRows(int x, int y) {
-    BOOL showWifiList = (g_NetworkCount > 0);
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    BOOL showWifiList = (state.networkCount > 0);
     if (!showWifiList) return -1;
-    for (int i = 0; i < g_NetworkCount; i++) {
+    for (int i = 0; i < state.networkCount; i++) {
         RECT rc;
-        if (GetRowRect(i, &rc) && x>=rc.left && x<=rc.right && y>=rc.top && y<=rc.bottom) return i;
+        if (GetRowRectForCount(i, state.networkCount, &rc) && x>=rc.left && x<=rc.right && y>=rc.top && y<=rc.bottom) return i;
     }
     return -1;
 }
@@ -4267,29 +6229,57 @@ static void InvalidateToolbarCache() {
     g_ToolbarCache.valid = FALSE;
 }
 
+// Cache netcenter.dll base+size for caller-module range checking (DrawTextW_Hook)
+static BYTE* g_netcenterBase = NULL;
+static BYTE* g_netcenterEnd  = NULL;
+
+// netcenter.dll is loaded on demand. Cache its range only when
+// SetXMLFromResource_Hook receives the known netcenter HMODULE, never from the
+// DrawTextW hook itself.
+
+static bool IsInNetCenter(void* ra) {
+    // DrawTextW is a very hot shell path. The hook is installed only after
+    // SetXMLFromResource_Hook has observed netcenter.dll and cached this range,
+    // so never probe the loader/module list from here on the miss path.
+    if (!ra || !(g_netcenterBase && g_netcenterEnd))
+        return false;
+    BYTE* address = static_cast<BYTE*>(ra);
+    return address >= g_netcenterBase && address < g_netcenterEnd;
+}
+
+// Resolves and caches netcenter.dll's base+size from a known-good HMODULE.
+// Call this from SetXMLFromResource_Hook (which always runs before the page
+// draws any text and already has the netcenter HMODULE in hand) instead of
+// letting every DrawTextW call in the process hit GetModuleHandleW's loader
+// lock + module-list walk.
+static void CacheNetCenterRange(HMODULE h) {
+    if (g_netcenterBase && g_netcenterEnd)
+        return;
+    if (!h)
+        return;
+
+    MODULEINFO mi{};
+    if (!GetModuleInformation(GetCurrentProcess(), h, &mi, sizeof(mi)))
+        return;
+
+    g_netcenterBase = (BYTE*)mi.lpBaseOfDll;
+    g_netcenterEnd  = g_netcenterBase + mi.SizeOfImage;
+}
+
 static bool InitPniduiInfo() {
     if (g_pniduiBase) return true;
-    
-    HMODULE hPnidui = NULL;
-    
-    // Try standard ExplorerPatcher installation path (64-bit) first: this is
-    // mainly informational logging, since GetModuleHandleW with a bare name
-    // below already matches a loaded module by base name regardless of the
-    // directory it was actually loaded from.
-    hPnidui = GetModuleHandleW(L"C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-    if (hPnidui) {
-        Wh_Log(L"pnidui.dll found at: C:\\Program Files\\ExplorerPatcher\\pnidui.dll");
-        goto found;
-    }
-    
+
     // Bare-name lookup: matches pnidui.dll regardless of where it was loaded
-    // from (AppData, ProgramData, mod folder, System32, or native on Win10).
-    hPnidui = GetModuleHandleW(L"pnidui.dll");
+    // from (AppData, ProgramData, mod folder, System32, or native on Win10),
+    // so there's no need to also probe the ExplorerPatcher install path
+    // first - GetModuleHandleW matches by base name, not by the directory
+    // the module actually loaded from.
+    HMODULE hPnidui = GetModuleHandleW(L"pnidui.dll");
     if (hPnidui) {
         Wh_Log(L"pnidui.dll found via simple name lookup");
         goto found;
     }
-    
+
     // Not found in any location - log gracefully and continue without icon detection
     Wh_Log(L"pnidui.dll not found in any known location");
     Wh_Log(L"Network icon detection will be unavailable");
@@ -4353,8 +6343,11 @@ void RecalcArrowRect() {
 
 void UpdateLayoutGeometry(int scrollbarOffset) {
     if (!SafeToAccessUI()) return;
-    BOOL showWifiList = (g_NetworkCount > 0);
-    if (!showWifiList || g_SelectedRowIndex < 0 || g_SelectedRowIndex >= g_NetworkCount) {
+    NetworkStateSnapshot layoutState;
+    CaptureNetworkState(&layoutState);
+    BOOL showWifiList = (layoutState.networkCount > 0);
+    int selectedRowIndex = g_SelectedRowIndex;
+    if (!showWifiList || selectedRowIndex < 0 || selectedRowIndex >= layoutState.networkCount) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
         if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) 
@@ -4363,15 +6356,15 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         return;
     }
     int rowY = LIST_Y_START;
-    for (int i = 0; i < g_SelectedRowIndex; i++) {
-        rowY += (i == g_SelectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
+    for (int i = 0; i < selectedRowIndex; i++) {
+        rowY += (i == selectedRowIndex) ? ROW_HEIGHT_EXPANDED : ROW_HEIGHT_NORMAL;
     }
     int rowYRelative = rowY - g_ScrollPos;
     int rowHeight = ROW_HEIGHT_EXPANDED;
-    WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-    BOOL isConnected = (item->connState == CONN_STATE_CONNECTED);
-    BOOL isConnecting = (item->connState == CONN_STATE_CONNECTING || 
-                         item->connState == CONN_STATE_DISCONNECTING);
+    const WifiNetworkItem& item = layoutState.networks[selectedRowIndex];
+    BOOL isConnected = (item.connState == CONN_STATE_CONNECTED);
+    BOOL isConnecting = (item.connState == CONN_STATE_CONNECTING ||
+                         item.connState == CONN_STATE_DISCONNECTING);
     if (rowYRelative + rowHeight <= LIST_Y_START || rowYRelative >= LIST_Y_END) {
         if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect))   
             ShowWindow(g_hWndButtonConnect, SW_HIDE);
@@ -4380,30 +6373,30 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         g_bShowCheckboxLabel = FALSE;
         return;
     }
-    int btnX = WINDOW_WIDTH - 114 - scrollbarOffset;  
-    int chkX = 18;
+    int btnX = WINDOW_WIDTH - ScaleDpi(114) - scrollbarOffset;
+    int chkX = ScaleDpi(18);
     int chkYOffset = 0;
     if (scrollbarOffset > 0) {
         chkX -= (WINDOW_WIDTH * 19) / 1000;   
         chkX -= (WINDOW_WIDTH * 5) / 1000;    
         chkYOffset -= (WINDOW_HEIGHT * 13) / 1000;  
     }
-    int btnY = rowYRelative + 35;  
-    int chkY = rowYRelative + 36 + chkYOffset;
-    if (btnY < LIST_Y_START) btnY = LIST_Y_START + 2;
-    if (btnY > LIST_Y_END - 24) btnY = LIST_Y_END - 24;
-    if (chkY < LIST_Y_START) chkY = LIST_Y_START + 2;
-    if (chkY > LIST_Y_END - 22) chkY = LIST_Y_END - 22;
+    int btnY = rowYRelative + ScaleDpi(35);
+    int chkY = rowYRelative + ScaleDpi(36) + chkYOffset;
+    if (btnY < LIST_Y_START) btnY = LIST_Y_START + ScaleDpi(2);
+    if (btnY > LIST_Y_END - ScaleDpi(24)) btnY = LIST_Y_END - ScaleDpi(24);
+    if (chkY < LIST_Y_START) chkY = LIST_Y_START + ScaleDpi(2);
+    if (chkY > LIST_Y_END - ScaleDpi(22)) chkY = LIST_Y_END - ScaleDpi(22);
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect)) {
         if (!isConnected && !isConnecting) {
             int boxSize = ScaleDpi(13);
             int chkNativeW = boxSize + ScaleDpi(4);
-            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, chkNativeW, 20, TRUE);
+            MoveWindow(g_hWndCheckboxConnect, chkX, chkY, chkNativeW, ScaleDpi(20), TRUE);
             ShowWindow(g_hWndCheckboxConnect, SW_SHOW);
             g_rcCheckboxLabel.left   = chkX + boxSize + ScaleDpi(5);
             g_rcCheckboxLabel.top    = chkY;
-            g_rcCheckboxLabel.right  = chkX + 160;
-            g_rcCheckboxLabel.bottom = chkY + 20;
+            g_rcCheckboxLabel.right  = chkX + ScaleDpi(160);
+            g_rcCheckboxLabel.bottom = chkY + ScaleDpi(20);
             g_bShowCheckboxLabel = TRUE;
         } else {
             ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
@@ -4418,7 +6411,7 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
         // between them briefly exposed the parent's background (white)
         // before the button repainted, since MoveWindow uncovers the old
         // area for one frame. A fixed rect means there's nothing to expose.
-        MoveWindow(g_hWndButtonConnect, btnX, btnY, 92, 22, TRUE);
+        MoveWindow(g_hWndButtonConnect, btnX, btnY, ScaleDpi(92), ScaleDpi(22), TRUE);
         if (isConnecting) {
             SetWindowTextW(g_hWndButtonConnect, L"...");
             ShowWindow(g_hWndButtonConnect, SW_SHOW);
@@ -4435,40 +6428,316 @@ void UpdateLayoutGeometry(int scrollbarOffset) {
     }
 }
 
+static BOOL BringProfileDialogToForeground() {
+    if (!g_hProfileDialogThread)
+        return FALSE;
+
+    DWORD tid = GetThreadId(g_hProfileDialogThread);
+    if (!tid)
+        return FALSE;
+
+    struct EnumData {
+        HWND hwnd;
+    } data = {};
+
+    EnumThreadWindows(tid, [](HWND h, LPARAM lp) -> BOOL {
+        EnumData* data = reinterpret_cast<EnumData*>(lp);
+        if (!IsWindowVisible(h))
+            return TRUE;
+
+        data->hwnd = h;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&data));
+
+    if (!data.hwnd)
+        return FALSE;
+
+    if (IsIconic(data.hwnd))
+        ShowWindow(data.hwnd, SW_RESTORE);
+    else
+        ShowWindow(data.hwnd, SW_SHOWNORMAL);
+
+    BringWindowToTop(data.hwnd);
+    SetForegroundWindow(data.hwnd);
+
+    FLASHWINFO flashInfo = { sizeof(flashInfo) };
+    flashInfo.hwnd = data.hwnd;
+    flashInfo.dwFlags = FLASHW_CAPTION | FLASHW_TRAY;
+    flashInfo.uCount = 3;
+    FlashWindowEx(&flashInfo);
+
+    return TRUE;
+}
+
+static DWORD WINAPI WlanProfileDialogThreadProc(LPVOID lpParam) {
+    std::unique_ptr<WlanProfileDialogContext> context(
+        static_cast<WlanProfileDialogContext*>(lpParam));
+
+    if (!context)
+        return ERROR_INVALID_PARAMETER;
+
+    typedef DWORD (WINAPI *WlanUIEditProfile_t)(
+        DWORD dwClientVersion,
+        LPCWSTR wstrProfileName,
+        GUID* pInterfaceGuid,
+        HWND hWnd,
+        DWORD wlStartPage,
+        PVOID pReserved,
+        DWORD* pdwReasonCode);
+
+    HMODULE hWlanUi = LoadLibraryExW(
+        L"wlanui.dll",
+        nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    if (!hWlanUi)
+        return GetLastError();
+
+    WlanUIEditProfile_t editProfile =
+        reinterpret_cast<WlanUIEditProfile_t>(
+            GetProcAddress(hWlanUi, "WlanUIEditProfile"));
+
+    DWORD result = ERROR_PROC_NOT_FOUND;
+
+    if (editProfile) {
+        DWORD reasonCode = 0;
+
+        // This opens the native Wireless Network Properties dialog for the
+        // saved Wi-Fi profile itself. Do not replace this with the Network
+        // Connections shell "properties" verb: that opens the adapter/connection
+        // properties on many systems, which is a fidelity regression from the
+        // intended Windows 7 behavior and from the documented Native Network
+        // Menus feature.
+        result = editProfile(
+            1,
+            context->profileName,
+            &context->interfaceGuid,
+            nullptr,
+            0,
+            nullptr,
+            &reasonCode);
+    }
+
+    FreeLibrary(hWlanUi);
+    return result;
+}
+// Keep WlanUIEditProfile as the primary implementation for the
+// "Properties" command on saved Wi-Fi profiles.
+//
+// This is intentional. There are two different native Windows dialogs that
+// are easy to confuse:
+//
+// 1. The Network Connections shell "properties" verb, invoked through
+//    shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\::{adapter-guid}
+//    with lpVerb = "properties". On many systems this opens the adapter or
+//    connection properties page. That is useful as a fallback, but it is not
+//    the same UI that Windows 7 showed for a saved Wi-Fi network profile.
+//
+// 2. WlanUIEditProfile from wlanui.dll. This opens the native Wireless
+//    Network Properties dialog for the saved Wi-Fi profile itself, including
+//    the profile-specific wireless/security settings. This is the dialog the
+//    Windows 7-style flyout is expected to open when the user right-clicks a
+//    saved Wi-Fi network and chooses "Properties".
+//
+// Replacing WlanUIEditProfile with the shell "properties" verb makes the code
+// simpler from a teardown/threading point of view, but it changes the visible
+// behavior: "Properties" starts opening the network adapter properties instead
+// of the saved wireless profile properties. That is a fidelity regression from
+// the intended Windows 7 behavior and from the documented "Native Network
+// Menus" feature in this mod's README.
+//
+// Therefore the order here is deliberate:
+// - First try WlanUIEditProfile for saved Wi-Fi profiles.
+// - Only if that path is unavailable or cannot be started, fall back to the
+//   Network Connections shell verb.
+// - If even that fails, fall back to opening the Network Connections folder.
+//
+// The WlanUIEditProfile dialog is still native Windows UI. The mod does not
+// implement or fake the property sheet; it only asks wlanui.dll to show the
+// same profile editor that Windows provides. The worker thread is used only so
+// the flyout's UI thread is not blocked by a modal native dialog. Cleanup code
+// must account for that thread, but removing this path entirely would trade a
+// lifecycle concern for a user-visible behavior regression.
 void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
-    if (itemIndex < 0 || itemIndex >= g_NetworkCount) return;
-    g_ContextMenuTargetIndex = itemIndex;
-    WifiNetworkItem* item = &g_NetworkList[itemIndex];
+    WifiNetworkItem menuItem = {};
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (itemIndex < 0 || itemIndex >= g_NetworkCount) {
+        LeaveCriticalSection(&g_Ctx.csLock);
+        return;
+    }
+    menuItem = g_NetworkList[itemIndex];
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    GUID targetGuid = menuItem.interfaceGuid;
+    WCHAR targetSsid[33] = {0};
+    StringCchCopyW(targetSsid, ARRAYSIZE(targetSsid), menuItem.ssid);
+
     HMENU hMenu = CreatePopupMenu();
-    if (item->connState == CONN_STATE_CONNECTED) {
+    if (!hMenu) return;
+    if (menuItem.connState == CONN_STATE_CONNECTED) {
         AppendMenuW(hMenu, MF_STRING, IDM_DISCONNECT, LOC(STR_CTX_DISCONNECT));
         AppendMenuW(hMenu, MF_STRING, IDM_STATUS,     LOC(STR_CTX_STATUS));
-    } else if (item->connState == CONN_STATE_CONNECTING) {
+    } else if (menuItem.connState == CONN_STATE_CONNECTING) {
         AppendMenuW(hMenu, MF_STRING | MF_GRAYED, IDM_CONNECT, LOC(STR_CONNECTING));
     } else {
         AppendMenuW(hMenu, MF_STRING, IDM_CONNECT, LOC(STR_CTX_CONNECT));
     }
-    AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
+    if (menuItem.hasProfile) {
+        AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
+    }
     if (g_Settings.theme == 1) {
         DarkContextMenu::Apply(TRUE);
     }
     int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN|TPM_RIGHTBUTTON|TPM_RETURNCMD, pt.x, pt.y, 0, hwnd, NULL);
     if (g_Settings.theme == 1) {
-        DarkContextMenu::Apply(FALSE);
+        DarkContextMenu::Restore();
     }
     if (cmd > 0) {
+        WifiNetworkItem targetItem = {};
+        int targetIndex = -1;
+        EnterCriticalSection(&g_Ctx.csLock);
+        g_ContextMenuTargetIndex = -1;
+        for (int i = 0; i < g_NetworkCount; ++i) {
+            if (IsEqualGUID(g_NetworkList[i].interfaceGuid, targetGuid) &&
+                wcscmp(g_NetworkList[i].ssid, targetSsid) == 0) {
+                targetIndex = i;
+                targetItem = g_NetworkList[i];
+                g_ContextMenuTargetIndex = i;
+                break;
+            }
+        }
+        LeaveCriticalSection(&g_Ctx.csLock);
+        if (targetIndex < 0) {
+            DestroyMenu(hMenu);
+            return;
+        }
+
         switch (cmd) {
         case IDM_CONNECT:
-            ConnectToNetwork(g_ContextMenuTargetIndex);
+            ConnectToNetwork(targetIndex);
             break;
         case IDM_DISCONNECT:
-            DisconnectFromNetwork(g_ContextMenuTargetIndex);
+            DisconnectFromNetwork(targetIndex);
             break;
         case IDM_STATUS:
-        case IDM_PROPERTIES:
-            ShellExecuteW(NULL, L"open", L"explorer.exe", L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", NULL, SW_SHOWNORMAL);
-            ShowWindow(hwnd, SW_HIDE);
-            break;
+case IDM_PROPERTIES:
+{
+    BOOL launched = FALSE;
+
+    // For saved Wi-Fi profiles, "Properties" should open the native
+    // Wireless Network Properties dialog for the profile itself, not the
+    // adapter properties page. Routing IDM_PROPERTIES directly through the
+    // Network Connections shell PIDL opens the adapter/connection properties
+    // on many systems, which is a fidelity regression from the intended
+    // Windows 7-style behavior and from the documented "Native Network Menus"
+    // feature. Keep WlanUIEditProfile as the first choice, and use the shell
+    // verb path only as a safe fallback for unsupported cases.
+    if (cmd == IDM_PROPERTIES && targetItem.hasProfile &&
+        !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
+        if (g_hProfileDialogThread &&
+            WaitForSingleObject(g_hProfileDialogThread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_hProfileDialogThread);
+            g_hProfileDialogThread = NULL;
+        }
+
+        if (!g_hProfileDialogThread) {
+            std::unique_ptr<WlanProfileDialogContext> context(
+                new WlanProfileDialogContext{});
+
+            StringCchCopyW(
+                context->profileName,
+                ARRAYSIZE(context->profileName),
+                targetItem.ssid);
+
+            context->interfaceGuid = targetItem.interfaceGuid;
+
+            WlanProfileDialogContext* rawContext = context.release();
+
+            HANDLE thread = CreateThread(
+                NULL,
+                0,
+                WlanProfileDialogThreadProc,
+                rawContext,
+                0,
+                NULL);
+
+            if (thread) {
+                g_hProfileDialogThread = thread;
+                launched = TRUE;
+            } else {
+                delete rawContext;
+            }
+        } else {
+            // A profile-properties dialog is already open. Do not fall through
+            // to adapter properties, because that would show a different UI for
+            // the same "Properties" command. Bring/flash the existing dialog so
+            // the command gives visible feedback instead of appearing to do
+            // nothing.
+            if (!BringProfileDialogToForeground()) {
+                Wh_Log(L"Properties dialog already open, but no visible dialog window was found");
+            }
+            launched = TRUE;
+        }
+    }
+
+    if (!launched && !IsEqualGUID(targetItem.interfaceGuid, GUID_NULL)) {
+        WCHAR szGuid[64] = {0};
+
+        if (StringFromGUID2(
+                targetItem.interfaceGuid,
+                szGuid,
+                ARRAYSIZE(szGuid)) > 0) {
+            std::wstring path =
+                L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}\\::" +
+                std::wstring(szGuid);
+
+            LPITEMIDLIST pidl = nullptr;
+
+            if (SUCCEEDED(SHParseDisplayName(
+                    path.c_str(),
+                    nullptr,
+                    &pidl,
+                    0,
+                    nullptr)) && pidl) {
+                SHELLEXECUTEINFOW sei = { sizeof(sei) };
+
+                sei.fMask =
+                    SEE_MASK_INVOKEIDLIST |
+                    SEE_MASK_IDLIST |
+                    SEE_MASK_FLAG_NO_UI;
+
+                sei.hwnd = hwnd;
+                sei.lpIDList = pidl;
+                sei.nShow = SW_SHOWNORMAL;
+
+                sei.lpVerb =
+                    (cmd == IDM_STATUS) ? L"status" : L"properties";
+
+                launched = ShellExecuteExW(&sei);
+
+                if (!launched) {
+                    sei.lpVerb = L"properties";
+                    launched = ShellExecuteExW(&sei);
+                }
+
+                CoTaskMemFree(pidl);
+            }
+        }
+    }
+
+    if (!launched) {
+        ShellExecuteW(
+            hwnd,
+            L"open",
+            L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}",
+            NULL,
+            NULL,
+            SW_SHOWNORMAL);
+    }
+
+    ShowWindow(hwnd, SW_HIDE);
+}
+break;
         }
     }
     DestroyMenu(hMenu);
@@ -4480,8 +6749,9 @@ static RECT GetFooterRect() {
 }
 
 void EnsureRowVisible(int index) {
-    BOOL showWifiList = (g_NetworkCount > 0);
-    if (!showWifiList || index < 0 || index >= g_NetworkCount) return;
+    int networkCount = GetNetworkCountSafe();
+    BOOL showWifiList = (networkCount > 0);
+    if (!showWifiList || index < 0 || index >= networkCount) return;
     int visibleHeight = LIST_Y_END - LIST_Y_START;
     int totalHeight = GetTotalListHeight();
     int maxScroll = (totalHeight > visibleHeight) ? (totalHeight - visibleHeight) : 0;
@@ -4583,6 +6853,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_SHOW_FLYOUT:
         ShowWindow(hwnd, SW_SHOW);
         SetForegroundWindow(hwnd);
+        if (!g_RefreshTimer && g_Settings.refreshInterval > 0) {
+            g_RefreshTimer = SetTimer(hwnd, 1000, g_Settings.refreshInterval, NULL);
+        }
         RefreshNetworkData();
         UpdateLayoutGeometry();
         InvalidateRect(hwnd, NULL, TRUE);
@@ -4597,26 +6870,34 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_ASYNC_CONNECT_COMPLETE: {
         BOOL opSuccess = (BOOL)wParam;
         DWORD errorCode = (DWORD)lParam;
-        Wh_Log(L"Async connect/disconnect complete: success=%d, error=%lu (0x%08X)", 
+        Wh_Log(L"Async connect/disconnect complete: success=%d, error=%lu (0x%08X)",
                opSuccess, errorCode, errorCode);
         if (!opSuccess && errorCode == ERROR_SUCCESS) {
+            WCHAR disconnectedSsid[33] = {0};
+            BOOL loggedDisconnect = FALSE;
+            EnterCriticalSection(&g_Ctx.csLock);
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
                 if (item->connState == CONN_STATE_DISCONNECTING) {
-                    LogSsidSafe(L"Disconnection confirmed by notification for", item->ssid);
+                    StringCchCopyW(disconnectedSsid, ARRAYSIZE(disconnectedSsid), item->ssid);
                     item->connState = CONN_STATE_IDLE;
                     item->operationStartTime = 0;
                     g_PendingConnectIndex = -1;
+                    loggedDisconnect = TRUE;
                 }
             }
+            int pendingIndex = g_PendingConnectIndex;
             for (int i = 0; i < g_NetworkCount; i++) {
-                if (i == g_PendingConnectIndex) continue;
+                if (i == pendingIndex) continue;
                 if (g_NetworkList[i].connState == CONN_STATE_DISCONNECTING ||
                     g_NetworkList[i].connState == CONN_STATE_CONNECTED) {
                     g_NetworkList[i].connState = CONN_STATE_IDLE;
                     g_NetworkList[i].operationStartTime = 0;
                 }
             }
+            LeaveCriticalSection(&g_Ctx.csLock);
+            if (loggedDisconnect)
+                LogSsidSafe(L"Disconnection confirmed by notification for", disconnectedSsid);
             if (g_TimeoutTimer) { KillTimer(hwnd, g_TimeoutTimer); g_TimeoutTimer = 0; }
             RefreshNetworkData();
             UpdateLayoutGeometry();
@@ -4624,11 +6905,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             break;
         }
         if (opSuccess) {
+            EnterCriticalSection(&g_Ctx.csLock);
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 g_NetworkList[g_PendingConnectIndex].connState = CONN_STATE_CONNECTED;
                 g_NetworkList[g_PendingConnectIndex].operationStartTime = 0;
                 g_PendingConnectIndex = -1;
             }
+            LeaveCriticalSection(&g_Ctx.csLock);
             if (g_TimeoutTimer) {
                 KillTimer(hwnd, g_TimeoutTimer);
                 g_TimeoutTimer = 0;
@@ -4637,48 +6920,57 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             // new networks and writes the category to the registry.  We just
             // re-detect on the next refresh and show the correct icon.
         } else {
+            static const DWORD authFailureCodes[] = {
+                0x00038001,
+                0x00038002,
+                0x00028001,
+                0x00028002,
+                0x00030001,
+            };
+            BOOL isAuthFailure = FALSE;
+            for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
+                if (errorCode == authFailureCodes[i]) {
+                    isAuthFailure = TRUE;
+                    break;
+                }
+            }
+
+            WCHAR failedSsid[33] = {0};
+            BOOL havePendingItem = FALSE;
+            BOOL hadProfile = FALSE;
+            EnterCriticalSection(&g_Ctx.csLock);
             if (g_PendingConnectIndex >= 0 && g_PendingConnectIndex < g_NetworkCount) {
                 WifiNetworkItem* item = &g_NetworkList[g_PendingConnectIndex];
-                static const DWORD authFailureCodes[] = {
-                    0x00038001,  
-                    0x00038002,  
-                    0x00028001,  
-                    0x00028002,  
-                    0x00030001,  
-                };
-                BOOL isAuthFailure = FALSE;
-                for (size_t i = 0; i < ARRAYSIZE(authFailureCodes); i++) {
-                    if (errorCode == authFailureCodes[i]) {
-                        isAuthFailure = TRUE;
-                        break;
-                    }
-                }
-                if (isAuthFailure && item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - saved password likely wrong, resetting profile", 
-                           item->ssid, errorCode);
+                StringCchCopyW(failedSsid, ARRAYSIZE(failedSsid), item->ssid);
+                hadProfile = item->hasProfile;
+                if (isAuthFailure && item->hasProfile)
                     item->hasProfile = FALSE;
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
-                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                item->connState = CONN_STATE_ERROR;
+                item->operationStartTime = 0;
+                g_PendingConnectIndex = -1;
+                havePendingItem = TRUE;
+            }
+            LeaveCriticalSection(&g_Ctx.csLock);
+
+            if (havePendingItem) {
+                if (isAuthFailure && hadProfile) {
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - saved password likely wrong, resetting profile",
+                           failedSsid, errorCode);
+                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE),
                                MB_OK | MB_ICONERROR);
-                } else if (isAuthFailure && !item->hasProfile) {
-                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - user-entered password was wrong", 
-                           item->ssid, errorCode);
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
-                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE), 
+                } else if (isAuthFailure && !hadProfile) {
+                    Wh_Log(L"Auth failure for '%s' (code 0x%08X) - user-entered password was wrong",
+                           failedSsid, errorCode);
+                    MessageBoxW(hwnd, LOC(STR_PWD_FAILED_WRONG), LOC(STR_PWD_FAILED_TITLE),
                                MB_OK | MB_ICONERROR);
                 } else {
-                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) - keeping profile intact", 
-                           item->ssid, errorCode);
-                    item->connState = CONN_STATE_ERROR;
-                    item->operationStartTime = 0;
+                    Wh_Log(L"Non-auth failure for '%s' (code 0x%08X) - keeping profile intact",
+                           failedSsid, errorCode);
                     WCHAR errMsg[256];
-                    StringCchPrintfW(errMsg, ARRAYSIZE(errMsg), 
+                    StringCchPrintfW(errMsg, ARRAYSIZE(errMsg),
                                    LOC(STR_CONNECTION_ERROR), errorCode);
                     MessageBoxW(hwnd, errMsg, LOC(STR_ERROR_TITLE), MB_OK | MB_ICONWARNING);
                 }
-                g_PendingConnectIndex = -1;
             }
             if (g_TimeoutTimer) {
                 KillTimer(hwnd, g_TimeoutTimer);
@@ -4693,31 +6985,34 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     case WM_GETDLGCODE:
         return DLGC_WANTARROWS | DLGC_WANTCHARS;
     case WM_KEYDOWN: {
-        BOOL showWifiList = (g_NetworkCount > 0);
+        NetworkStateSnapshot keyState;
+        CaptureNetworkState(&keyState);
+        int keyNetworkCount = keyState.networkCount;
+        BOOL showWifiList = (keyNetworkCount > 0);
         switch (wParam) {
             case VK_UP:
-                if (showWifiList && g_bListExpanded && g_NetworkCount > 0) {
-                    int newIndex = (g_KeyboardSelectedIndex > 0) ? g_KeyboardSelectedIndex - 1 : g_NetworkCount - 1;
+                if (showWifiList && g_bListExpanded && keyNetworkCount > 0) {
+                    int newIndex = (g_KeyboardSelectedIndex > 0) ? g_KeyboardSelectedIndex - 1 : keyNetworkCount - 1;
                     SetKeyboardFocus(newIndex);
                     InvalidateRect(hwnd, NULL, TRUE);
                 }
                 return 0;
             case VK_DOWN:
-                if (showWifiList && g_bListExpanded && g_NetworkCount > 0) {
-                    int newIndex = (g_KeyboardSelectedIndex < g_NetworkCount - 1) ? g_KeyboardSelectedIndex + 1 : 0;
+                if (showWifiList && g_bListExpanded && keyNetworkCount > 0) {
+                    int newIndex = (g_KeyboardSelectedIndex < keyNetworkCount - 1) ? g_KeyboardSelectedIndex + 1 : 0;
                     SetKeyboardFocus(newIndex);
                     InvalidateRect(hwnd, NULL, TRUE);
                 }
                 return 0;
             case VK_RETURN:
-                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount)
+                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < keyNetworkCount)
                     ConnectToNetwork(g_KeyboardSelectedIndex);
                 return 0;
             case VK_LEFT:
                 ShowWindow(hwnd, SW_HIDE);
                 return 0;
             case VK_RIGHT:
-                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < g_NetworkCount) {
+                if (showWifiList && g_KeyboardSelectedIndex >= 0 && g_KeyboardSelectedIndex < keyNetworkCount) {
                     RECT rcRow;
                     if (GetRowRect(g_KeyboardSelectedIndex, &rcRow)) {
                         POINT pt = {rcRow.left + 20, rcRow.top + 13};
@@ -4733,7 +7028,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
     case WM_VSCROLL: {
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         if (!showWifiList) break;
         int totalHeight = GetTotalListHeight();
         int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -4756,7 +7051,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         break;
     }
     case WM_MOUSEWHEEL: {
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         if (!showWifiList) break;
         int totalHeight = GetTotalListHeight();
         int visibleHeight = LIST_Y_END - LIST_Y_START;
@@ -4784,9 +7079,17 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         if (!SafeToAccessUI()) break;
         PAINTSTRUCT ps;
         HDC hdcReal = BeginPaint(hwnd, &ps);
-        HDC     hdc     = CreateCompatibleDC(hdcReal);
-        HBITMAP hBmp    = CreateCompatibleBitmap(hdcReal, WINDOW_WIDTH, WINDOW_HEIGHT);
-        HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
+
+        if (!g_hdcMemPaint || g_memPaintWidth != WINDOW_WIDTH || g_memPaintHeight != WINDOW_HEIGHT) {
+            if (g_hdcMemPaint) { DeleteDC(g_hdcMemPaint); g_hdcMemPaint = NULL; }
+            if (g_hbmMemPaint) { DeleteObject(g_hbmMemPaint); g_hbmMemPaint = NULL; }
+            g_hdcMemPaint = CreateCompatibleDC(hdcReal);
+            g_hbmMemPaint = CreateCompatibleBitmap(hdcReal, WINDOW_WIDTH, WINDOW_HEIGHT);
+            g_memPaintWidth  = WINDOW_WIDTH;
+            g_memPaintHeight = WINDOW_HEIGHT;
+        }
+        HDC     hdc     = g_hdcMemPaint;
+        HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, g_hbmMemPaint);
         
         RECT rcHeader  = {0, 0, WINDOW_WIDTH, HEADER_HEIGHT};
         HBRUSH hBrH = CreateSolidBrush(GetHeaderBgColor()); FillRect(hdc, &rcHeader, hBrH); DeleteObject(hBrH);
@@ -4796,10 +7099,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         HBRUSH hBrF = CreateSolidBrush(GetFooterBgColor());
         FillRect(hdc, &rcFooter, hBrF); DeleteObject(hBrF);
 
-        BOOL showWifiList = (g_NetworkCount > 0);
+        NetworkStateSnapshot paintState;
+        CaptureNetworkState(&paintState);
+        const int paintNetworkCount = paintState.networkCount;
+        BOOL showWifiList = (paintNetworkCount > 0);
         
         if (showWifiList) {
-            int totalHeight = GetTotalListHeight();
+            int totalHeight = GetTotalListHeightForCount(paintNetworkCount);
             int visibleHeight = LIST_Y_END - LIST_Y_START;
             SCROLLINFO si = { sizeof(SCROLLINFO), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight, (UINT)visibleHeight, g_ScrollPos };
             SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
@@ -4823,8 +7129,9 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         DeleteObject(hPenBevelDark);
         DeleteObject(hPenBevelLight);
 
-        BOOL isWifiConnected = (g_NetworkCount > 0 && g_NetworkList[0].connState == CONN_STATE_CONNECTED);
-        BOOL isAnyConnected = (g_EthernetConnected || isWifiConnected);
+        BOOL isWifiConnected = (paintNetworkCount > 0 &&
+                                paintState.networks[0].connState == CONN_STATE_CONNECTED);
+        BOOL isAnyConnected = (paintState.ethernetConnected || isWifiConnected);
         SetBkMode(hdc, TRANSPARENT);
         
         if (isAnyConnected) {
@@ -4834,18 +7141,18 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             SetTextColor(hdc, GetTextColor());
             
             WCHAR displayName[64] = {0};
-            BOOL showEthernetInHeader = g_EthernetConnected;
+            BOOL showEthernetInHeader = paintState.ethernetConnected;
             if (showEthernetInHeader) {
                 if (g_Settings.privacyMode) {
                     StringCchPrintfW(displayName, ARRAYSIZE(displayName), LOC(STR_NETWORK_PRIVACY_FMT), 1);
                 } else {
-                    StringCchCopyW(displayName, ARRAYSIZE(displayName), g_EthernetNetworkName);
+                    StringCchCopyW(displayName, ARRAYSIZE(displayName), paintState.ethernetNetworkName);
                     if (displayName[0] == L'\0') {
                         StringCchPrintfW(displayName, ARRAYSIZE(displayName), LOC(STR_NETWORK_PRIVACY_FMT), 2);
                     }
                 }
             } else {
-                GetDisplaySSID(0, displayName, 33);
+                FormatDisplaySSID(paintState.networks[0], 0, displayName, ARRAYSIZE(displayName));
             }
             
             DrawTextWithWrap(hdc, displayName, ScaleDpi(56), ScaleDpi(36), WINDOW_WIDTH - ScaleDpi(70), ScaleDpi(18));
@@ -4855,12 +7162,19 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         } else {
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
             TextOutW(hdc, ScaleDpi(10), ScaleDpi(10), LOC(STR_NO_CONNECTIONS), lstrlenW(LOC(STR_NO_CONNECTIONS)));
-            SelectObject(hdc, g_hFontBold);
+            // This is a status line, not a selected network name: keep it
+            // normal weight. 46rp includes the prior adjustments plus a further
+            // ~7% downward adjustment in the disconnected header.
+            SelectObject(hdc, g_hFontNormal);
             SetTextColor(hdc, GetTextColor());
-            TextOutW(hdc, ScaleDpi(56), ScaleDpi(36), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
+            TextOutW(hdc, ScaleDpi(55), ScaleDpi(46), LOC(STR_CONNECTIONS_AVAILABLE), lstrlenW(LOC(STR_CONNECTIONS_AVAILABLE)));
         }
         
-        int iconSize = ScaleDpi(35); 
+        int iconSize = ScaleDpi(35);
+        // 36rp is the nearest whole-pixel equivalent to a 2.5% increase over
+        // the normal 35rp header artwork at the baseline DPI.
+        int availableIconSize = ScaleDpi(36);
+        BOOL drawAvailableIcon = FALSE;
         HICON hLargeIcon = NULL;
         if (isAnyConnected) {
             if (g_Settings.useNetworkLocationIcons) {
@@ -4873,8 +7187,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                 // User prefers the original generic PC/network icon
                 hLargeIcon = g_hIconNetworkMap;
             }
+        } else if (paintNetworkCount > 0) {
+            // Networks are available but none is connected.
+            hLargeIcon = g_hIconAvailable ? g_hIconAvailable : g_hIconSignalBars[0];
+            drawAvailableIcon = (g_hIconAvailable != NULL);
         } else {
-            hLargeIcon = g_hIconSignalBars[0];  // No connection - show empty signal bars
+            // No Wi-Fi networks are available and no Ethernet connection is active.
+            hLargeIcon = g_hIconDisconnected ? g_hIconDisconnected : g_hIconSignalBars[0];
         }
         // ICON_HEADER_Y_OFFSET is the -3 fine-tune used since the original
         // layout; kept as a named constant rather than a bare magic number so
@@ -4883,16 +7202,23 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         // (bench) icon artwork, so this reverts to the original draw path.
         const int ICON_HEADER_Y_OFFSET = -3;
         if (hLargeIcon) {
-            DrawIconEx(hdc, ScaleDpi(12), ScaleDpi(37) + ICON_HEADER_Y_OFFSET,
-                       hLargeIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+            int drawSize = drawAvailableIcon ? availableIconSize : iconSize;
+            // Keep the slightly larger available-networks artwork visually centered.
+            int centeringOffset = (drawSize - iconSize) / 2;
+            DrawIconEx(hdc, ScaleDpi(12) - centeringOffset,
+                       ScaleDpi(37) + ICON_HEADER_Y_OFFSET - centeringOffset,
+                       hLargeIcon, drawSize, drawSize, 0, NULL, DI_NORMAL);
         }
         if (showWifiList) {
-            int totalHeight = GetTotalListHeight();
+            int totalHeight = GetTotalListHeightForCount(paintNetworkCount);
             int visibleHeight = LIST_Y_END - LIST_Y_START;
             BOOL hasScrollbar = (totalHeight > visibleHeight);
             int scrollbarOffset = hasScrollbar ? ScaleDpi(13) : 0;
             int roundedCornersOffset = g_Settings.useRoundedCorners ? (WINDOW_WIDTH * 2) / 100 : 0;
-            int scrollbarShift = hasScrollbar ? 0 : (((WINDOW_WIDTH  *4) / 100) - ((WINDOW_WIDTH*  13) / 1000));
+            // A visible scrollbar would otherwise move the control left by
+            // its reserved width. Compensate with a DPI-independent 3% shift (1% left of the prior position).
+            int scrollbarShift = hasScrollbar ? ((WINDOW_WIDTH * 3) / 100)
+                                             : (((WINDOW_WIDTH * 4) / 100) - ((WINDOW_WIDTH * 13) / 1000));
             int refreshLeftOffset = GetRefreshButtonLeftOffset();
             g_rcRefreshButton.right = WINDOW_WIDTH - ScaleDpi(19) - scrollbarOffset - roundedCornersOffset + scrollbarShift - refreshLeftOffset;
             g_rcRefreshButton.left  = g_rcRefreshButton.right - ScaleDpi(21);
@@ -5044,9 +7370,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 int scrollbarOffset = (totalHeight > visibleHeight) ? ScaleDpi(16) : 0;
                 UpdateLayoutGeometry(scrollbarOffset);  
                 
-                for (int i = 0; i < g_NetworkCount; i++) {
+                for (int i = 0; i < paintNetworkCount; i++) {
                     RECT rcRow;
-                    if (!GetRowRect(i, &rcRow)) continue;
+                    if (!GetRowRectForCount(i, paintNetworkCount, &rcRow)) continue;
                     BOOL isSelected = (i == g_SelectedRowIndex);
                     BOOL isHovered  = (i == g_HoveredRowIndex);
                     BOOL hasKeyboardFocus = (i == g_KeyboardSelectedIndex);
@@ -5066,8 +7392,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     if (hasKeyboardFocus && !isSelected)
                         DrawFocusRectangle(hdc, &rcRow);
                     
-                    WCHAR ssidBuf[33]; GetDisplaySSID(i, ssidBuf, 33);
-                    BOOL isConnected = (g_NetworkList[i].connState == CONN_STATE_CONNECTED);
+                    WCHAR ssidBuf[33];
+                    FormatDisplaySSID(paintState.networks[i], i, ssidBuf, ARRAYSIZE(ssidBuf));
+                    BOOL isConnected = (paintState.networks[i].connState == CONN_STATE_CONNECTED);
                     SelectObject(hdc, isConnected ? g_hFontBold : g_hFontNormal);
                     SetTextColor(hdc, GetNetworkNameColor());
                     // ROW_TEXT_Y_OFFSET is the ~1% row-text nudge (was
@@ -5077,7 +7404,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     const int ROW_TEXT_Y_OFFSET = ScaleDpi(4);
                     DrawTextWithWrap(hdc, ssidBuf, rcRow.left - ScaleDpi(2), rcRow.top + ScaleDpi(3) + ROW_TEXT_Y_OFFSET,
                                      rcRow.right - rcRow.left - 10, ScaleDpi(24));
-                    WifiNetworkItem* item = &g_NetworkList[i];
+                    const WifiNetworkItem* item = &paintState.networks[i];
                     BOOL isTransitioning = (item->connState == CONN_STATE_CONNECTING ||
                                             item->connState == CONN_STATE_DISCONNECTING);
                     if (item->connState == CONN_STATE_CONNECTED) {
@@ -5139,7 +7466,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             SelectObject(hdc, hOldFontChk);
         }
         BitBlt(hdcReal, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, hdc, 0, 0, SRCCOPY);
-        SelectObject(hdc, hOldBmp); DeleteObject(hBmp); DeleteDC(hdc);
+        SelectObject(hdc, hOldBmp);
         EndPaint(hwnd, &ps);
         break;
     }
@@ -5225,9 +7552,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
         HWND hwndCtrl = (HWND)lParam;
-        if (hwndCtrl == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndCtrl == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg);
@@ -5282,9 +7609,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
         HWND hwndBtn = (HWND)lParam;
-        if (hwndBtn == g_hWndCheckboxConnect && g_SelectedRowIndex >= 0 && g_SelectedRowIndex < g_NetworkCount) {
-            WifiNetworkItem* item = &g_NetworkList[g_SelectedRowIndex];
-            if (item->connState == CONN_STATE_IDLE || item->connState == CONN_STATE_ERROR) {
+        ConnectionState connState = CONN_STATE_IDLE;
+        if (hwndBtn == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
+            if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
                 COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
                 COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg);
@@ -5329,7 +7656,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         int  wasHov     = g_HoveredRowIndex;
         BOOL wasConnectHover = g_IsHoveringConnectButton;
         
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         
         g_IsHoveringLink    = PtInRect(&rcF, pt) != 0;
         g_IsHoveringRefresh = showWifiList && PtInRect(&g_rcRefreshButton, pt) != 0;
@@ -5373,7 +7700,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         int lx = LOWORD(lParam), ly = HIWORD(lParam);
         POINT pt = {lx,ly};
         RECT rcF = GetFooterRect();
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         
         if (showWifiList && PtInRect(&g_rcRefreshButton,pt)) {
             Wh_Log(L"Manual refresh requested");
@@ -5444,7 +7771,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     }
     case WM_RBUTTONDOWN: {
         int rx = LOWORD(lParam), ry = HIWORD(lParam);
-        BOOL showWifiList = (g_NetworkCount > 0);
+        BOOL showWifiList = (GetNetworkCountSafe() > 0);
         if (showWifiList && g_bListExpanded && ry >= LIST_Y_START && ry < LIST_Y_END) {
             int ci = HitTestRows(rx,ry);
             if (ci != -1) {
@@ -5467,6 +7794,12 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             if (!g_inPasswordPrompt) {
                 ClearKeyboardFocus();
                 ShowWindow(hwnd, SW_HIDE);
+                // The flyout is only hidden here, not destroyed, so without
+                // this the timer would otherwise keep running a full
+                // RefreshWifiData()/UpdateEthernetStatus() every tick with
+                // nothing on screen to consume it until explorer restarts.
+                // Re-armed by ToggleFlyoutWindow() when the flyout is shown.
+                if (g_RefreshTimer) { KillTimer(hwnd, g_RefreshTimer); g_RefreshTimer = 0; }
             }
         }
         break;
@@ -5479,6 +7812,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     case WM_DESTROY:
         if (g_RefreshTimer) { KillTimer(hwnd, g_RefreshTimer); g_RefreshTimer = 0; }
         if (g_TimeoutTimer) { KillTimer(hwnd, g_TimeoutTimer); g_TimeoutTimer = 0; }
+        if (g_hdcMemPaint) { DeleteDC(g_hdcMemPaint); g_hdcMemPaint = NULL; }
+        if (g_hbmMemPaint) { DeleteObject(g_hbmMemPaint); g_hbmMemPaint = NULL; }
+        g_memPaintWidth = g_memPaintHeight = 0;
         InterlockedDecrement(&g_Ctx.refCount);
         if (g_hTooltip) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTooltip, TooltipSubclassProc);
@@ -5495,6 +7831,8 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
 // Network icon detection via pnidui.dll & toolbar subclassing
 // =====================================================================
 static void DetectNetworkButtonId(HWND hToolbar, int* outButtonId) {
+    // pnidui.dll can arrive after Explorer's toolbar; retry until cached.
+    InitPniduiInfo();
     *outButtonId = -1;
     int count = (int)SendMessageW(hToolbar, TB_BUTTONCOUNT, 0, 0);
     Wh_Log(L"[Discovery] Toolbar has %d buttons", count);
@@ -5540,7 +7878,7 @@ LRESULT CALLBACK ToolbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         DetectNetworkButtonId(hWnd, &detectedId);
                         g_ToolbarCache.networkId = detectedId;
                         g_ToolbarCache.buttonCount = currentCount;
-                        g_ToolbarCache.valid = TRUE;
+                        g_ToolbarCache.valid = (detectedId != -1);
                     }
                     if (g_ToolbarCache.networkId != -1 && tb.idCommand == g_ToolbarCache.networkId) {
                         // Record flyout visibility at button-DOWN time, before
@@ -5646,15 +7984,26 @@ void ToggleFlyoutWindow() {
             UINT dpi = hScreenDC ? (UINT)GetDeviceCaps(hScreenDC, LOGPIXELSX) : 96;
             if (hScreenDC) ReleaseDC(NULL, hScreenDC);
             RecalcDpiMetrics(dpi);
-            HINSTANCE hInst = GetModuleHandle(NULL);
+            HINSTANCE hInst = HINST_THISCOMPONENT;
             WNDCLASSW wc = {0};
             wc.lpfnWndProc   = FlyoutWndProc;
             wc.hInstance     = hInst;
             wc.lpszClassName = L"Win7NetworkFlyoutSafe";
             wc.hCursor       = LoadCursor(NULL,IDC_ARROW);
             wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
-            UnregisterClassW(wc.lpszClassName,hInst);
-            RegisterClassW(&wc);
+            // First RegisterClassW of a load is required to succeed (a leftover
+            // class from a previous load bails out rather than creating a window
+            // on a stale class with a dangling WndProc), while later calls in
+            // the same load can skip re-registering.
+            if (!g_flyoutClassRegistered) {
+                if (RegisterClassW(&wc)) {
+                    g_flyoutClassRegistered = true;
+                } else {
+                    Wh_Log(L"ToggleFlyoutWindow: RegisterClassW failed (%lu)", GetLastError());
+                    LeaveCriticalSection(&g_Ctx.csLock);
+                    return;
+                }
+            }
             RECT rcClient = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
             DWORD dwExStyle = WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LEFT;
             DWORD dwStyle = WS_POPUP | WS_CLIPCHILDREN | WS_BORDER; 
@@ -5663,12 +8012,18 @@ void ToggleFlyoutWindow() {
             g_hWndFlyout = CreateWindowExW(dwExStyle, wc.lpszClassName, L"", dwStyle,
                 0, 0, rcClient.right-rcClient.left, rcClient.bottom-rcClient.top,
                 NULL, NULL, hInst, NULL);
-            if (g_hWndFlyout) {
-                g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
+            if (!g_hWndFlyout) {
+                Wh_Log(L"ToggleFlyoutWindow: CreateWindowExW failed (%lu)", GetLastError());
+                LeaveCriticalSection(&g_Ctx.csLock);
+                return;
             }
+            g_dwFlyoutOwnerThreadId = GetCurrentThreadId();
         }
         if (IsWindowVisible(g_hWndFlyout)) {
             ClearKeyboardFocus();
+            // Hiding can synchronously transfer activation. Do not let the
+            // recipient of that activation block behind csLock.
+            LeaveCriticalSection(&g_Ctx.csLock);
             ShowWindow(g_hWndFlyout, SW_HIDE);
         } else {
             if (!g_Ctx.hWlanClient) {
@@ -5696,6 +8051,8 @@ void ToggleFlyoutWindow() {
             if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
                 ShowWindow(g_hWndCheckboxConnect, SW_HIDE);
             
+            LeaveCriticalSection(&g_Ctx.csLock);
+            
             // This runs before ShowWindow below, so the window isn't
             // IsWindowVisible() yet - force detection here instead of
             // relying on the visibility gate, which would otherwise skip it
@@ -5706,25 +8063,22 @@ void ToggleFlyoutWindow() {
             UpdateLayoutGeometry();
             PositionWindowNearTray(g_hWndFlyout);
             ShowWindow(g_hWndFlyout, SW_SHOW);
+            // ToggleFlyoutWindow is the normal show path. Restore the timer
+            // stopped on deactivation.
+            if (!g_RefreshTimer && g_Settings.refreshInterval > 0)
+                g_RefreshTimer = SetTimer(g_hWndFlyout, 1000, g_Settings.refreshInterval, NULL);
             SetForegroundWindow(g_hWndFlyout);
             InvalidateRect(g_hWndFlyout,NULL,TRUE);
         }
+    } else {
+        LeaveCriticalSection(&g_Ctx.csLock);
     }
-    LeaveCriticalSection(&g_Ctx.csLock);
 }
 
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
     ModContext* ctx = (ModContext*)lpParam;
     if (!ctx) return 1;
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    // Prime Ethernet/registry state and the Home/Public/Work category once at
-    // startup (bypassing the visibility gate) so the very first time the
-    // flyout is shown it already has fresh data instead of momentarily
-    // falling back to the generic PC icon while everything is uninitialized.
-    // This must happen here (COM-initialized, STA hotkey thread) rather than
-    // in Wh_ModInit: NLM requires COM, and g_pNLM must be created on the same
-    // apartment that later uses it.
-    RefreshNetworkData(/*forceDetection=*/TRUE);
     {
         DWORD dwMaxClient = 2, dwCurVer = 0;
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -5742,6 +8096,20 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             Wh_Log(L"WLAN service unavailable - will retry lazily on first flyout open");
         }
     }
+    // Prime Wi-Fi/Ethernet state and the Home/Public/Work category once at
+    // startup (bypassing the visibility gate) so the very first time the
+    // flyout is shown it already has fresh data instead of momentarily
+    // falling back to the generic PC icon while everything is uninitialized.
+    // This must happen here (COM-initialized, STA hotkey thread) rather than
+    // in Wh_ModInit: NLM requires COM, and g_pNLM must be created on the same
+    // apartment that later uses it.
+    // NOTE: keep this AFTER the WlanOpenHandle block above. Running it
+    // before the handle existed made RefreshNetworkData() take the
+    // "no WLAN handle" path, leaving g_NetworkList empty on Wi-Fi machines
+    // until the first flyout open - the root cause of the gray Network
+    // Center icon when the page was opened via Win+R / the native context
+    // menu without the flyout.
+    RefreshNetworkData(/*forceDetection=*/TRUE);
     auto UpdateHotkeyRegistration = [](BOOL shouldRegister) {
         UnregisterHotKey(NULL, HOTKEY_ID);
         if (shouldRegister) RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, 'H');
@@ -5763,6 +8131,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             ToggleFlyoutWindow();
         if (msg.message == WM_TOGGLE_FLYOUT_REQUEST && !ctx->isUninitializing)
             ToggleFlyoutWindow();
+        if (msg.message == WM_UPDATE_HOTKEY && !ctx->isUninitializing)
+            UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == WM_UPDATE_REFRESH_TIMER && !ctx->isUninitializing) {
             if (SafeToAccessUI() && g_hWndFlyout) {
                 if (g_RefreshTimer) {
@@ -5779,7 +8149,18 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
             g_pniduiBase = NULL;
             g_pniduiEnd  = NULL;
             if (G_hSubclassedToolbar) RemoveTrayInterception();
-            Sleep(1000);
+            // Use a one-shot timer instead of Sleep(1000) to keep the
+            // message loop responsive to WM_QUIT during this wait
+            // (important for the 3s SafeCleanup timeout).
+            HANDLE timerEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+            if (timerEvent) {
+                // Use MsgWaitForMultipleObjects with a 1-second timeout
+                // instead of Sleep, so WM_QUIT is still processed.
+                MsgWaitForMultipleObjects(1, &timerEvent, FALSE, 1000, QS_ALLINPUT);
+                CloseHandle(timerEvent);
+            } else {
+                Sleep(1000);
+            }
             if (!InstallTrayInterceptionInternal() && !trayRetryTimer) {
                 trayRetryTimer = SetTimer(NULL, 0, 1500, NULL);
             }
@@ -5802,7 +8183,13 @@ void SafeCleanup() {
     RemoveTrayInterception();
     if (g_Ctx.dwHotkeyThreadId) PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_QUIT, 0, 0);
     if (g_Ctx.hHotkeyThread) {
-        WaitForSingleObject(g_Ctx.hHotkeyThread, 3000);
+        // Bounded waits here are unsafe: if the thread is still running
+        // inside the mod image when Wh_ModUninit returns, Windhawk unmaps
+        // the DLL out from under it and it executes unmapped code. Nothing
+        // in HotkeyThreadProc can block forever (PromptNetworkPassword
+        // re-posts WM_QUIT, and the WLAN/NLM calls are bounded), so wait
+        // for real completion instead of falling through on a timeout.
+        WaitForSingleObject(g_Ctx.hHotkeyThread, INFINITE);
         CloseHandle(g_Ctx.hHotkeyThread);
         g_Ctx.hHotkeyThread = NULL; g_Ctx.dwHotkeyThreadId = 0;
     }
@@ -5811,17 +8198,50 @@ void SafeCleanup() {
         for (int i = 0; i < 50 && IsWindow(g_hWndFlyout); i++) {
             MSG msg;
             while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+            // Wait briefly instead of a tight spin; still wakes immediately
+            // on any new message so WM_SAFE_CLOSE's DestroyWindow is
+            // processed as soon as it's posted.
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
         }
         if (IsWindow(g_hWndFlyout)) DestroyWindow(g_hWndFlyout);
     }
-        if (g_hConnectThread) {
+    if (g_hConnectThread) {
+        // AsyncConnectThreadProc can wait up to 10s on g_hConnectMutex before
+        // doing anything, so any join timeout shorter than that (previously
+        // 5s) is a guaranteed fall-through, not a rare race. Wait for real
+        // completion instead: the thread is bounded, just not by 5s.
         Wh_Log(L"SafeCleanup: Waiting for connect thread to finish...");
-        DWORD waitResult = WaitForSingleObject(g_hConnectThread, 5000);
+        DWORD waitResult = WaitForSingleObject(g_hConnectThread, INFINITE);
         Wh_Log(L"SafeCleanup: Connect thread finished (result=%lu)", waitResult);
         CloseHandle(g_hConnectThread);
         g_hConnectThread = NULL;
     } else {
         Wh_Log(L"SafeCleanup: No pending connect thread");
+    }
+    if (g_hReapThread) {
+        // Same reasoning as the connect thread above: this also runs code
+        // in the mod's image, so it must finish before Wh_ModUninit returns.
+        WaitForSingleObject(g_hReapThread, INFINITE);
+        CloseHandle(g_hReapThread);
+        g_hReapThread = NULL;
+    }
+    if (g_hProfileDialogThread) {
+        DWORD tid = GetThreadId(g_hProfileDialogThread);
+        // WlanUIEditProfile can spend time loading before it creates the
+        // property-sheet windows, or it can have a nested modal open when the
+        // first close arrives. Keep asking the thread's windows to close while
+        // still preserving the important invariant: never return from uninit
+        // while the thread can still be executing code in this mod image.
+        while (WaitForSingleObject(g_hProfileDialogThread, 250) == WAIT_TIMEOUT) {
+            if (tid) {
+                EnumThreadWindows(tid, [](HWND h, LPARAM) -> BOOL {
+                    PostMessageW(h, WM_CLOSE, 0, 0);
+                    return TRUE;
+                }, 0);
+            }
+        }
+        CloseHandle(g_hProfileDialogThread);
+        g_hProfileDialogThread = NULL;
     }
     if (g_Ctx.hWlanClient) { WlanCloseHandle(g_Ctx.hWlanClient, NULL); g_Ctx.hWlanClient = NULL; }
     ShutdownGdiPlusRendering();
@@ -5844,51 +8264,138 @@ namespace Win7NetworkCenterLinks {
 // from a user-writable directory.
 static constexpr int kConnectCustomIconId = 0x7FF1;
 static constexpr int kHomegroupCustomIconId = 0x7FF2;
+// Network-map row (This computer / network category / Internet). Reuses
+// icons already loaded elsewhere in the mod rather than new embedded assets:
+// kComputerIconId serves g_hIconNetworkMap (generic PC icon, netshell.dll
+// #120) for BOTH the computer and Internet nodes as a neutral placeholder -
+// there is no verified globe/Internet icon asset in this mod yet. Swap the
+// Internet node to a real globe icon once one is sourced and confirmed.
+// kNetMapCategoryIconId serves GetNetworkLocationIcon() (Home/Public/Work,
+// already used by the flyout header).
+static constexpr int kComputerIconId = 0x7FF3;
+static constexpr int kNetMapCategoryIconId = 0x7FF4;
+static constexpr int kGlobeIconId = 0x7FF5;
+static constexpr int kNoInternetXIconId = 0x7FF6;
+static constexpr int kOfflineNetworkIconId = 0x7FF8;
 static bool g_addConnect = true;
 static bool g_addHomegroup = true;
+static bool g_addNetworkMap = true;  // Visual Network Map rectangle (now functional)
 static bool g_hookInstalled = false;
 static bool g_iconHookInstalled = false;
 
 using LoadImageW_t = decltype(&LoadImageW);
 static LoadImageW_t LoadImageW_Orig = nullptr;
 
+// NetCenter renders its native active-network label with DrawTextW after the
+// XML has been parsed. Hook that final draw to apply the existing privacy mode
+// there too, without changing the actual Windows network profile name.
+using DrawTextW_t = decltype(&DrawTextW);
+static DrawTextW_t DrawTextW_Orig = nullptr;
+static bool g_textHookInstalled = false;
+
 // ---------------------------------------------------------------------------
 // Strings / XML
 // ---------------------------------------------------------------------------
 struct LangPack {
     WORD lang;
-    const wchar_t *cTitle, *cDesc, *hTitle, *hDesc;
+    const wchar_t *cTitle, *cDesc;      // Connect to a Network
+    const wchar_t *hTitle, *hDesc;      // HomeGroup (original)
+    const wchar_t *hFallbackTitle, *hFallbackDesc; // Advanced Sharing (fallback)
+    const wchar_t *mTitle, *mDesc;      // View Network Map
+    const wchar_t *fullMap;             // View full map
+    const wchar_t *networkFallback, *internetLabel;
 };
-
 static const LangPack kLang[] = {
     {0x09, L"Connect to a Network",
      L"Connect to an available wireless, VPN, or dial-up network.",
      L"Choose Homegroup and Sharing Options",
-     L"View or change your homegroup settings and network sharing preferences."},
+     L"View or change your homegroup settings and network sharing preferences.",
+     L"Advanced Sharing Settings",
+     L"Configure advanced network sharing settings.",
+     L"View Network Map",
+     L"See a map of your network and connected devices.",
+     L"View full map", L"Network", L"Internet"},
     {0x10, L"Connessione a una rete",
      L"Connettere o riconnettere una rete wireless, VPN o di accesso remoto disponibile.",
      L"Selezione delle opzioni del gruppo home e della condivisione",
-     L"Accedere alle impostazioni del gruppo home e configurare le opzioni di condivisione della rete."},
+     L"Accedere alle impostazioni del gruppo home e configurare le opzioni di condivisione della rete.",
+     L"Impostazioni di condivisione avanzate",
+     L"Configura le impostazioni avanzate di condivisione della rete.",
+     L"Visualizza mappa di rete",
+     L"Visualizza una mappa della rete e dei dispositivi connessi.",
+     L"Visualizza mappa completa", L"Rete", L"Internet"},
     {0x0c, L"Se connecter \u00e0 un r\u00e9seau",
      L"Connectez-vous aux r\u00e9seaux sans fil, VPN ou distants disponibles.",
      L"Choisir les options de groupe r\u00e9sidentiel et de partage",
-     L"Affichez ou modifiez les param\u00e8tres de groupe r\u00e9sidentiel et de partage."},
+     L"Affichez ou modifiez les param\u00e8tres de groupe r\u00e9sidentiel et de partage.",
+     L"Param\u00e8tres de partage avanc\u00e9s",
+     L"Configurez les param\u00e8tres de partage avanc\u00e9s du r\u00e9seau.",
+     L"Afficher la carte du r\u00e9seau",
+     L"Voir une carte de votre r\u00e9seau et des appareils connect\u00e9s.",
+     L"Afficher la carte compl\u00e8te", L"R\u00e9seau", L"Internet"},
     {0x0a, L"Conectar a una red",
      L"Con\u00e9ctese a redes inal\u00e1mbricas, VPN o de acceso telef\u00f3nico disponibles.",
      L"Elegir opciones de grupo en el hogar y uso compartido",
-     L"Vea o cambie la configuraci\u00f3n del grupo en el hogar y uso compartido de red."},
+     L"Vea o cambie la configuraci\u00f3n del grupo en el hogar y uso compartido de red.",
+     L"Configuraci\u00f3n avanzada de uso compartido",
+     L"Configura las opciones avanzadas de uso compartido de red.",
+     L"Ver mapa de red",
+     L"Vea un mapa de su red y los dispositivos conectados.",
+     L"Ver mapa completo", L"Red", L"Internet"},
     {0x19, L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0441\u0435\u0442\u0438",
      L"\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u043c \u0431\u0435\u0441\u043f\u0440\u043e\u0432\u043e\u0434\u043d\u044b\u043c \u0441\u0435\u0442\u044f\u043c, VPN \u0438\u043b\u0438 \u0441\u0435\u0442\u044f\u043c \u0443\u0434\u0430\u043b\u0451\u043d\u043d\u043e\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430.",
      L"\u0412\u044b\u0431\u043e\u0440 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430",
-     L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0441\u0435\u0442\u0438."},
+     L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u0434\u043e\u043c\u0430\u0448\u043d\u0435\u0439 \u0433\u0440\u0443\u043f\u043f\u044b \u0438 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0441\u0435\u0442\u0438.",
+     L"\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430",
+     L"\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u044b\u0445 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043e\u0431\u0449\u0435\u0433\u043e \u0434\u043e\u0441\u0442\u0443\u043f\u0430.",
+     L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u044b \u0441\u0435\u0442\u0438",
+     L"\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043a\u0430\u0440\u0442\u044b \u0441\u0435\u0442\u0438 \u0438 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d\u043d\u044b\u0445 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432.",
+     L"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u043e\u043b\u043d\u0443\u044e \u043a\u0430\u0440\u0442\u0443", L"\u0421\u0435\u0442\u044c", L"\u0418\u043d\u0442\u0435\u0440\u043d\u0435\u0442"},
     {0x07, L"Mit einem Netzwerk verbinden",
      L"Verbindung mit verf\u00fcgbaren Drahtlos-, VPN- oder DF\u00dc-Netzwerken herstellen.",
      L"Heimnetzgruppen- und Freigabeoptionen ausw\u00e4hlen",
-     L"Einstellungen f\u00fcr Heimnetzgruppen und Netzwerkfreigaben anzeigen oder \u00e4ndern."},
+     L"Einstellungen f\u00fcr Heimnetzgruppen und Netzwerkfreigaben anzeigen oder \u00e4ndern.",
+     L"Erweiterte Freigabeeinstellungen",
+     L"Konfiguriere erweiterte Netzwerkfreigabeeinstellungen.",
+     L"Netzwerkkarte anzeigen",
+     L"Zeigen Sie eine Karte Ihres Netzwerks und der verbundenen Ger\u00e4te an.",
+     L"Vollst\u00e4ndige Karte anzeigen", L"Netzwerk", L"Internet"},
     {0x16, L"Ligar a uma rede",
      L"Ligue-se a redes sem fios, VPN ou de acesso telef\u00f3nico dispon\u00edveis.",
      L"Escolher op\u00e7\u00f5es de Grupo Dom\u00e9stico e partilha",
-     L"Veja ou altere as defini\u00e7\u00f5es do Grupo Dom\u00e9stico e da partilha de rede."},
+     L"Veja ou altere as defini\u00e7\u00f5es do Grupo Dom\u00e9stico e da partilha de rede.",
+     L"Defini\u00e7\u00f5es avan\u00e7adas de partilha",
+     L"Configure defini\u00e7\u00f5es avan\u00e7adas de partilha de rede.",
+     L"Ver mapa de rede",
+     L"Veja um mapa da sua rede e dispositivos ligados.",
+     L"Ver mapa completo", L"Rede", L"Internet"},
+    {0x15, L"Połącz z siecią",
+     L"Połącz z dostępną siecią bezprzewodową, VPN lub modemową.",
+     L"Wybierz opcje grupy domowej i udostępniania",
+     L"Wyświetl lub zmień ustawienia grupy domowej i udostępniania sieci.",
+     L"Zaawansowane ustawienia udost\u0119pniania",
+     L"Skonfiguruj zaawansowane ustawienia udost\u0119pniania sieci.",
+     L"Wy\u015bwietl map\u0119 sieci",
+     L"Wy\u015bwietl map\u0119 sieci i pod\u0142\u0105czonych urz\u0105dze\u0144.",
+     L"Wy\u015bwietl pe\u0142n\u0105 map\u0119", L"Sie\u0107", L"Internet"},
+    {0x13, L"Verbinding maken met een netwerk",
+     L"Verbinding maken met een beschikbare draadloos-, VPN- of inbelnetwerk.",
+     L"Thuisgroep- en delingsopties kiezen",
+     L"Bekijk of wijzig uw thuisgroep- en netwerkinstellingen.",
+     L"Geavanceerde deelinstellingen",
+     L"Configureer geavanceerde netwerkdeelinstellingen.",
+     L"Netwerkkaart weergeven",
+     L"Bekijk een kaart van uw netwerk en verbonden apparaten.",
+     L"Volledige kaart weergeven", L"Netwerk", L"Internet"},
+    {0x18, L"Conectare la o rețea",
+     L"Conectați-vă la o rețea fără fir, VPN sau dial-up disponibilă.",
+     L"Alegeți opțiunile de grup de domiciliu și partajare",
+     L"Vizualizați sau modificați setările grupului de domiciliu și partajarea în rețea.",
+     L"Set\u0103ri avansate de partajare",
+     L"Configura\u021Bi set\u0103rile avansate de partajare \u00een re\u021Bea.",
+     L"Vizualizare hart\u0103 re\u021Bea",
+     L"Vizualiza\u021Bi o hart\u0103 a re\u021Belei \u0219i dispozitivelor conectate.",
+     L"Vizualizare hart\u0103 complet\u0103", L"Re\u021Bea", L"Internet"},
 };
 
 static const LangPack* GetLang() {
@@ -5901,6 +8408,9 @@ static const LangPack* GetLang() {
         case 5: ui = 0x19; break;  // Russian
         case 6: ui = 0x07; break;  // German
         case 7: ui = 0x16; break;  // Portuguese
+        case 8: ui = 0x15; break;  // Polish
+        case 9: ui = 0x13; break;  // Dutch
+        case 10: ui = 0x18; break; // Romanian
         default: ui = PRIMARYLANGID(GetUserDefaultUILanguage()); break;
     }
     for (const auto& p : kLang)
@@ -5959,6 +8469,8 @@ static std::wstring IconAttr(int fallbackIconId) {
             iconId = kConnectCustomIconId;
         else if (fallbackIconId == 27)
             iconId = kHomegroupCustomIconId;
+        else if (fallbackIconId == 30)
+            iconId = kComputerIconId;  // Network Map -> PC icon
     }
     wchar_t b[96];
     swprintf_s(b, L" content=\"icon(%d,24rp,24rp)\"", iconId);
@@ -6028,23 +8540,362 @@ static bool FindOuterElement(const std::wstring& xml, size_t markerPos, size_t& 
     return false;
 }
 
-static std::wstring Patch(const std::wstring& in) {
-    if (!g_addConnect && !g_addHomegroup)
+static std::wstring GetComputerNameStr() {
+    WCHAR computerName[MAX_COMPUTERNAME_LENGTH + 1] = {0};
+    DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
+    if (GetComputerNameW(computerName, &size)) {
+        return std::wstring(computerName);
+    }
+    return L"PC";
+}
+
+static BOOL TryGetConnectedNlmNetworkInfo(std::wstring* outName, int* outCategory) {
+    if (outName) outName->clear();
+    if (outCategory) *outCategory = -1;
+
+    ComPtr<INetworkListManager> nlm;
+    if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                IID_INetworkListManager, (void**)nlm.put())) || !nlm)
+        return FALSE;
+
+    ComPtr<IEnumNetworks> networks;
+    if (FAILED(nlm->GetNetworks(NLM_ENUM_NETWORK_CONNECTED, networks.put())) || !networks)
+        return FALSE;
+
+    BOOL foundActive = FALSE;
+    std::wstring activeName;
+    int activeCategory = -1;
+    std::wstring internetName;
+    int internetCategory = -1;
+
+    ULONG fetched = 0;
+    ComPtr<INetwork> network;
+    while (networks->Next(1, network.put(), &fetched) == S_OK && network) {
+        NLM_CONNECTIVITY connectivity = NLM_CONNECTIVITY_DISCONNECTED;
+        if (FAILED(network->GetConnectivity(&connectivity)) || !ConnectivityIsActive(connectivity)) {
+            network.reset();
+            continue;
+        }
+
+        int category = -1;
+        NLM_NETWORK_CATEGORY nlmCategory;
+        if (SUCCEEDED(network->GetCategory(&nlmCategory)) &&
+            IsValidNetworkCategoryValue((int)nlmCategory)) {
+            category = (int)nlmCategory;
+        }
+
+        std::wstring name;
+        BSTR bstrName = NULL;
+        if (SUCCEEDED(network->GetName(&bstrName)) && bstrName) {
+            name.assign(bstrName);
+            SafeSysFreeString(bstrName);
+        }
+
+        if (!foundActive) {
+            foundActive = TRUE;
+            activeName = name;
+            activeCategory = category;
+        }
+
+        if (connectivity & (NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET)) {
+            internetName = name;
+            internetCategory = category;
+            break;
+        }
+
+        network.reset();
+    }
+
+    if (!internetName.empty() || IsValidNetworkCategoryValue(internetCategory)) {
+        if (outName) *outName = internetName;
+        if (outCategory) *outCategory = internetCategory;
+        return TRUE;
+    }
+    if (foundActive) {
+        if (outName) *outName = activeName;
+        if (outCategory) *outCategory = activeCategory;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static void RefreshNetCenterCategoryFromNlmQuick() {
+    int category = -1;
+    if (TryGetConnectedNlmNetworkInfo(nullptr, &category) &&
+        IsValidNetworkCategoryValue(category)) {
+        PublishNetworkLocationCategory(category, FALSE);
+    }
+}
+
+static std::wstring GetConnectedNetworkName() {
+    if (g_Settings.privacyMode) {
+        WCHAR privateName[64] = {0};
+        StringCchPrintfW(privateName, ARRAYSIZE(privateName),
+                         LOC(STR_NETWORK_PRIVACY_FMT), 1);
+        return std::wstring(privateName);
+    }
+
+    // The custom Network Map lives in Control Panel and should mirror the
+    // native "View active networks" section. Prefer NLM's current connected
+    // network name over the shared WLAN scan cache, which can lag behind a
+    // Control Panel live refresh and leave the custom map showing the previous
+    // SSID while the native section below has already updated.
+    std::wstring nlmName;
+    if (TryGetConnectedNlmNetworkInfo(&nlmName, nullptr) && !nlmName.empty())
+        return nlmName;
+    
+    // Copy shared data under the critical section so reads are safe
+    // against RefreshWifiData() on the flyout thread.
+    EnterCriticalSection(&g_Ctx.csLock);
+    std::wstring wifiName;
+    for (int i = 0; i < g_NetworkCount; i++) {
+        if (g_NetworkList[i].connState == 2) { // Connected
+            wifiName = std::wstring(g_NetworkList[i].ssid);
+            break;
+        }
+    }
+    WCHAR ethernetName[64] = {0};
+    StringCchCopyW(ethernetName, ARRAYSIZE(ethernetName), g_EthernetNetworkName);
+    BOOL ethernetConnected = g_EthernetConnected;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    
+    // Check WiFi first (already copied out)
+    if (!wifiName.empty())
+        return wifiName;
+    
+    // Check Ethernet
+    if (ethernetConnected && ethernetName[0] != L'\0')
+        return std::wstring(ethernetName);
+
+    return GetLang()->networkFallback;
+}
+
+// Defined further down alongside the rest of the NetCenter live-refresh
+// state; forward-declared here since NetworkMapVisual() (used well before
+// that point in the file) needs to check it.
+extern thread_local bool g_ncForceFreshConnectivity;
+
+static std::wstring NetworkMapVisual() {
+    // DirectUI's valid endellipsis layout is left-aligned. In privacy mode,
+    // two leading spaces visually center the short "PC" label beneath its icon
+    // without using the unsupported contentalign="center" token.
+    std::wstring pcName = g_Settings.privacyMode ? L"    PC" : GetComputerNameStr();
+    std::wstring networkName = GetConnectedNetworkName();
+    std::wstring internetName = GetLang()->internetLabel;
+    
+    // Cache connectivity once for this entire NetworkMapVisual() build,
+    // used by both the route-line rendering and the globe-icon inline check.
+    // Saves two COM round-trips per XML generation.
+    static BOOL s_cachedConnected = FALSE;
+    static DWORD s_cacheTick = 0;
+    DWORD now = GetTickCount();
+    BOOL isOnline;
+    // g_ncForceFreshConnectivity is set by RefreshNetworkCenterXml() right
+    // after a ConnectivityChanged notification, so a live-refresh push always
+    // re-queries NLM instead of reusing a value that may predate the change
+    // by up to 500ms (see g_ncForceFreshConnectivity's declaration for why).
+    if (g_ncForceFreshConnectivity || now - s_cacheTick > 500) {
+        s_cachedConnected = IsInternetConnected();
+        s_cacheTick = now;
+    }
+    isOnline = s_cachedConnected;
+
+    // Windows 7's "View full map" link. The original Network Map feature
+    // was removed from modern Windows, therefore open the useful native
+    // Network shell folder (CLSID 208D2C60-3AEA-1069-A2D7-08002B30309D).
+    const wchar_t* fullMapText = GetLang()->fullMap;
+    std::wstring xml;
+
+    // Put the link in its own, full-width top row. This lets it stay at the
+    // upper right without reserving horizontal space in the PC->Network->
+    // Internet flow layout (which must remain on one line).
+    xml += L"<element layoutpos=\"top\" layout=\"borderlayout()\" ";
+    xml += L"padding=\"rect(0rp,0rp,10rp,0rp)\">";
+    xml += L"<NavigateButton layoutpos=\"right\" layout=\"flowlayout()\" ";
+    xml += L"shellexecute=\"%SystemRoot%\\explorer.exe\" ";
+    xml += L"shellexecuteparams=\"shell:::{208D2C60-3AEA-1069-A2D7-08002B30309D}\">";
+    xml += L"<button sheet=\"cp_style\" class=\"cp_content_link\" cursor=\"hand\" ";
+    xml += L"active=\"mouse\" content=\"" + Esc(fullMapText) + L"\"/>";
+    xml += L"</NavigateButton>";
+    xml += L"</element>";
+
+    // Move the complete network-map group 10% to the left.
+    // 96rp - 10% = 86.4rp; use 86rp so it remains DPI-scalable.
+    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
+    xml += L"padding=\"rect(86rp,15rp,10rp,15rp)\" ";
+    xml += L">";
+
+    // PC section: 15% (about 14rp) farther right within the map.
+    // Horizontally scaled to 86% (the customized map is 14% narrower).
+    // The negative right side keeps the connector anchored on its right end.
+    xml += L"<element layoutpos=\"left\" layout=\"borderlayout()\" ";
+    // PC artwork: 1rp left; 15 + (-21) keeps the horizontal total unchanged.
+    xml += L"padding=\"rect(15rp,3rp,-21rp,5rp)\">";
+    xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
+    xml += L" content=\"icon(32755,36rp,36rp)\"/>";
+    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
+    xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
+    xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
+    // Keep DirectUI's known-valid endellipsis token. Centering is handled by
+    // the icon/container geometry; this avoids an unsupported XML value.
+    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
+    xml += L"content=\"" + Esc(pcName.c_str()) + L"\"/>";
+    xml += L"</element>";
+    xml += L"</element>";
+
+    // Horizontally scaled to 86%: 125rp -> 108rp.
+    // Its extension remains anchored to the left, not the right.
+    xml += L"<element layoutpos=\"left\" width=\"108rp\" height=\"2rp\" ";
+    xml += L"background=\"argb(255,135,195,235)\"/>";
+
+    // Network section, horizontally scaled to 86% like the PC section.
+    xml += L"<element layoutpos=\"left\" layout=\"borderlayout()\" ";
+    xml += L"padding=\"rect(4rp,3rp,-22rp,5rp)\">";
+    xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
+    // Use a distinct hardcoded DirectUI resource while offline: DirectUI caches
+    // resource 32756, so reusing it kept the colored bench after disconnect.
+    xml += isOnline ? L" content=\"icon(32756,36rp,36rp)\"/>"
+                                : L" content=\"icon(32760,36rp,36rp)\"/>";
+    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
+    xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
+    xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
+    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
+    xml += L"content=\"" + Esc(networkName.c_str()) + L"\"/>";
+    xml += L"</element>";
+    xml += L"</element>";
+
+    // If this connection has no Internet access, split the 108rp connector
+    // around a 16rp red X at its exact midpoint. Otherwise retain one
+    // uninterrupted line. NetworkMapVisual is rebuilt by DirectUI when the
+    // native Network Center refreshes after a connectivity transition.
+    if (!isOnline) {
+        xml += L"<element layoutpos=\"left\" width=\"46rp\" height=\"2rp\" ";
+        xml += L"background=\"argb(255,135,195,235)\"/>";
+        xml += L"<button layoutpos=\"left\" accessible=\"true\" accrole=\"graphic\" ";
+        xml += L"content=\"icon(32758,16rp,16rp)\"/>";
+        xml += L"<element layoutpos=\"left\" width=\"46rp\" height=\"2rp\" ";
+        xml += L"background=\"argb(255,135,195,235)\"/>";
+    } else {
+        xml += L"<element layoutpos=\"left\" width=\"108rp\" height=\"2rp\" ";
+        xml += L"background=\"argb(255,135,195,235)\"/>";
+    }
+
+    // Internet section
+    xml += L"<element layoutpos=\"left\" layout=\"borderlayout()\" ";
+    // Internet artwork: one further rp right; 6 + 2 preserves the 8rp
+    // container width, so its connector and label do not move.
+    xml += L"padding=\"rect(6rp,5rp,2rp,5rp)\">";
+    xml += L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" ";
+    xml += L" content=\"icon(32757,36rp,36rp)\"/>";
+    xml += L"<element layoutpos=\"top\" layout=\"flowlayout()\" ";
+    xml += L"padding=\"rect(0rp,2rp,0rp,0rp)\">";
+    xml += L"<element sheet=\"cp_style\" class=\"cp_content_text\" ";
+    xml += L"width=\"69rp\" contentalign=\"endellipsis\" ";
+    xml += L"content=\"" + Esc(internetName.c_str()) + L"\"/>";
+    xml += L"</element>";
+    xml += L"</element>";
+
+    xml += L"</element>";  // flow-layout map
+
+    return xml;
+}
+
+
+
+// Add the Windows 7-style Home/Public/Work icon to the left of the active
+// connection's name. 32756 is handled by LoadImageW_Hook and is resolved at
+// runtime to the current network-category icon, so it also follows changes
+// between Public, Private/Home and Domain/Work profiles.
+static std::wstring AddActiveNetworkLocationIcon(const std::wstring& in) {
+    static const wchar_t kMarker[] = L"<element id=\"atom(ActiveNetworksSection)\"";
+    size_t section = in.find(kMarker);
+    if (section == std::wstring::npos)
         return in;
+
+    size_t tagEnd = in.find(L'>', section);
+    if (tagEnd == std::wstring::npos)
+        return in;
+
+    // Patch() runs once per DirectUI document, but retain this guard in case a
+    // future NetCenter resource reuses the same section markup more than once.
+    if (in.find(L"icon(32756,36rp,36rp)", section) != std::wstring::npos)
+        return in;
+
+    // Direct child of ActiveNetworksSection. The source PNG contains
+    // Move the artwork 2% of its 36rp size left (0.72rp, rounded to 1rp)
+    // and a little lower. 23 + (-13) remains 10rp, so the native text stays
+    // fixed while only the icon's visual position changes.
+    const std::wstring iconXml =
+        L"<element layoutpos=\"left\" layout=\"borderlayout()\" "
+        L"padding=\"rect(23rp,33rp,-13rp,0rp)\">"
+        L"<button layoutpos=\"top\" accessible=\"true\" accrole=\"graphic\" "
+        L"content=\"icon(32756,36rp,36rp)\"/>"
+        L"</element>";
+
+    std::wstring out = in;
+    out.insert(tagEnd + 1, iconXml);
+    return out;
+}
+
+// Defined below, next to PrimeNetworkCategoryForNetCenterHost().
+static void EnsureNetCenterNetworkDataFresh();
+
+static std::wstring Patch(const std::wstring& in) {
+    if (!g_addConnect && !g_addHomegroup && !g_addNetworkMap)
+        return in;
+
+    // The Network Map and the active-network icon render from the mod's
+    // SHARED network state (g_NetworkList / g_EthernetConnected /
+    // g_CurrentNetworkCategory). In explorer.exe that state is refreshed
+    // ONLY by the flyout side (flyout show / flyout timer / WLAN
+    // notifications to the flyout window), and the hotkey-thread startup
+    // prime even ran before the WLAN handle existed - so on Wi-Fi it stayed
+    // empty until the flyout was opened once. This page is also hosted in an
+    // explorer.exe frame when opened via Win+R or the native tray context
+    // menu (control.exe just delegates to the shell), so those entry points
+    // rendered from the empty state: gray offline bench + generic "Network"
+    // label, while IsInternetConnected() (its own local NLM query) still
+    // colored the globe. PrimeNetworkCategoryForNetCenterHost() deliberately
+    // skips explorer hosts, so it never covered this case - this refresh is
+    // the host-agnostic equivalent, safe on the Control Panel's DirectUI
+    // thread.
+    EnsureNetCenterNetworkDataFresh();
+
     std::wstring xml = in;
+
+    // Add the profile-specific icon before the active connection name, matching
+    // the Windows 7 Network and Sharing Center layout.
+    if (g_addNetworkMap)
+        xml = AddActiveNetworkLocationIcon(xml);
+
+    // STEP 1: Insert Network Map visual rectangle (BEFORE modifying create/diagnose blocks)
+    if (g_addNetworkMap) {
+        size_t anchor = xml.find(L"<element id=\"atom(ActiveNetworksSection)\"");
+        if (anchor != std::wstring::npos) {
+            Wh_Log(L"[NetMap] Found anchor at pos=%zu, inserting Network Map", anchor);
+            std::wstring mapXml = NetworkMapVisual();
+            xml.insert(anchor, mapXml);
+            Wh_Log(L"[NetMap] Network Map inserted (%zu chars)", mapXml.length());
+        } else {
+            Wh_Log(L"[NetMap] Anchor not found, skipping Network Map");
+        }
+    }
+
+    // STEP 2: Manipulate create/diagnose blocks for Connect and Homegroup links
     size_t createMark = xml.find(L"atom(createnewbtn)");
     size_t diagMark = xml.find(L"atom(diagnosebtn)");
     if (createMark == std::wstring::npos || diagMark == std::wstring::npos)
-        return in;
+        return xml;
 
     size_t c0 = 0, c1 = 0, d0 = 0, d1 = 0;
-    if (!FindOuterElement(xml, createMark, c0, c1) || !FindOuterElement(xml, diagMark, d0, d1))
-        return in;
+    if (!FindOuterElement(xml, createMark, c0, c1) ||
+        !FindOuterElement(xml, diagMark, d0, d1))
+        return xml;
     if (c1 <= c0 || d1 <= d0 || !(c1 <= d0 || d1 <= c0))
-        return in;
+        return xml;
 
     std::wstring createBlock = xml.substr(c0, c1 - c0);
-    std::wstring diagBlock = xml.substr(d0, d1 - d0);
+    std::wstring diagBlock   = xml.substr(d0, d1 - d0);
 
     if (d0 > c0) {
         xml.erase(d0, d1 - d0);
@@ -6060,10 +8911,28 @@ static std::wstring Patch(const std::wstring& in) {
     if (g_addConnect)
         mid += Link(L->cTitle, L->cDesc, L"%SystemRoot%\\explorer.exe",
                     L"shell:::{7007ACC7-3202-11D1-AAD2-00805FC1270E}", 22);
-    if (g_addHomegroup)
+if (g_addHomegroup) {
+    // Check if HomeGroup exists on the system (removed in Windows 10 1803+)
+    HKEY hKey;
+    bool homeGroupExists = (RegOpenKeyExW(
+        HKEY_CLASSES_ROOT,
+        L"CLSID\\{67CA7650-96E6-4FDD-BB43-A8E774F73A57}",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS);
+    if (homeGroupExists) {
+        RegCloseKey(hKey);
+        // Windows 7 / Windows 10 pre-1803: use HomeGroup
         mid += Link(L->hTitle, L->hDesc, L"%SystemRoot%\\explorer.exe",
                     L"shell:::{67CA7650-96E6-4FDD-BB43-A8E774F73A57}", 27);
-
+    } else {
+        // Windows 10 1803+ / Windows 11: fallback to Advanced Sharing Settings
+        // Use the already-populated LangPack fallback strings. This doesn't change the
+        // fallback behavior; it only prevents the Advanced Sharing row from rendering
+        // blank when HomeGroup is unavailable.
+            mid += Link(L->hFallbackTitle, L->hFallbackDesc,
+            L"%SystemRoot%\\system32\\control.exe",
+            L"/name Microsoft.NetworkAndSharingCenter /page Advanced", 27);
+    }
+}
     xml.insert(insertAt, createBlock + mid + diagBlock);
     return xml;
 }
@@ -6085,18 +8954,693 @@ static SetXML_t SetXML = nullptr;
 static SetXMLFromResource_t SetXMLFromResource_Orig = nullptr;
 static thread_local int g_inHook = 0;
 
+// ---------------------------------------------------------------------------
+// Live refresh of the Network and Sharing Center page.
+//
+// SetXMLFromResource_Hook only fires once, when DirectUI first loads the
+// UIFILE resource for the page (i.e. when the Control Panel window is
+// opened). Nothing was previously re-invoking SetXML() after that point, so
+// disconnecting/reconnecting Wi-Fi never updated the already-open page - it
+// only showed the fresh state the next time the page was reopened.
+//
+// Fix: remember the DUI target/module/instance from the last successful
+// SetXML() call and subscribe to INetworkListManager connectivity events.
+//
+// IConnectionPoint::Advise on an in-process sink does NOT marshal - netprofm
+// invokes ConnectivityChanged on its own notification/RPC thread, not on
+// whatever thread happened to call Advise. DirectUI has hard thread
+// affinity, so calling SetXML() directly from that handler could corrupt or
+// crash the page's actual UI thread. All refresh work is therefore
+// marshaled through a message-only window that the mod creates itself, on
+// the page's own thread, instead of ever touching g_ncTarget from the NLM
+// callback thread.
+//
+// That message-only window also replaces the previous approach of finding
+// and subclassing some existing DirectUIHWND: every ordinary Explorer folder
+// window has the exact same child chain (CabinetWClass -> ShellTabWindowClass
+// -> DUIViewWndClassName -> DirectUIHWND), and Explorer windows normally
+// share one thread, so a thread-wide EnumThreadWindows search would usually
+// land on an unrelated folder window - subclassing/timering a window that
+// has nothing to do with Network Center, and tearing down on that window's
+// WM_NCDESTROY instead of the page's, leaving g_ncTarget dangling into freed
+// memory. Owning a private window sidesteps that: it is created on the exact
+// thread that owns the page, so there is nothing to search for and nothing
+// foreign to subclass.
+struct NcThreadContext {
+    DWORD threadId;
+    HWND msgWindow;
+    HWND hostWindow;
+};
+static std::vector<NcThreadContext> g_ncRegistry;
+
+static thread_local void* g_ncTarget = nullptr;
+static thread_local HMODULE g_ncModule = nullptr;
+static thread_local HINSTANCE g_ncP4 = nullptr;
+static thread_local IConnectionPoint* g_ncCP = nullptr;
+static thread_local DWORD g_ncCookie = 0;
+static thread_local bool g_ncEventsAdvised = false;
+// Whether the current page instance is displaying XML that this mod patched.
+// Needed so runtime settings changes and teardown can push the original XML
+// back when Patch() becomes a no-op (e.g. the feature is turned off).
+static thread_local bool g_ncPagePatched = false;
+
+// The mod's own message-only window, created on the page's STA thread the
+// first time that thread parses the NetCenter UIFILE. Everything that needs
+// to run on the page's thread (the marshaled refresh, the delayed-refresh
+// timer, and teardown) is routed through it instead of through a foreign
+// DirectUIHWND.
+static thread_local HWND g_ncMsgWindow = nullptr;
+static bool g_ncMsgClassRegistered = false;
+static const PCWSTR kNcMsgClassName = L"Win7NetFlyout_NcMsgWnd";
+
+// Tracks whether PrimeNetworkCategoryForNetCenterHost() personally called
+// CoInitializeEx on this thread (S_OK or S_FALSE), as opposed to it already
+// having an apartment (RPC_E_CHANGED_MODE) or the prime never having run.
+// Only ever call CoUninitialize() when this is true, and only once, from the
+// same thread - paired in the message-only window's teardown branch
+// (NcMsgWndProc), which runs on this same STA thread whether the page is
+// closed normally or the mod is being unloaded.
+static thread_local bool g_ncComInitializedByUs = false;
+static thread_local HWND g_ncHostWindow = nullptr;
+static thread_local bool g_ncSkipRefreshOnThisPass = false;
+
+static void SyncNcRegistry() {
+    DWORD tid = GetCurrentThreadId();
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (!g_ncMsgWindow && !g_ncHostWindow) {
+        for (auto it = g_ncRegistry.begin(); it != g_ncRegistry.end(); ++it) {
+            if (it->threadId == tid) {
+                g_ncRegistry.erase(it);
+                break;
+            }
+        }
+    } else {
+        bool found = false;
+        for (auto& item : g_ncRegistry) {
+            if (item.threadId == tid) {
+                item.msgWindow = g_ncMsgWindow;
+                item.hostWindow = g_ncHostWindow;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            NcThreadContext item = { tid, g_ncMsgWindow, g_ncHostWindow };
+            g_ncRegistry.push_back(item);
+        }
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+}
+
+// Private message posted from ConnectivityChanged (which may run on an
+// arbitrary NLM thread) to ask the message-only window - which lives on the
+// correct DirectUI thread - to perform the actual refresh.
+static UINT g_ncRefreshMsg = 0;
+// Private message used to ask the message-only window to tear itself down
+// from Wh_ModUninit, which can run on an arbitrary Windhawk thread.
+static UINT g_ncTeardownMsg = 0;
+
+// NLM sometimes fires ConnectivityChanged a moment before its own internal
+// connectivity property has actually settled, so a query made right inside
+// the event handler can still observe the pre-change state. Set for the
+// duration of a forced refresh so NetworkMapVisual()'s 500ms connectivity
+// cache is bypassed instead of possibly reusing a stale cached value.
+thread_local bool g_ncForceFreshConnectivity = false;
+
+// Timer id used to schedule a short-delay second refresh after
+// ConnectivityChanged, to catch the rare case where NLM's internal state was
+// still stale during the immediate refresh. Installed on g_ncMsgWindow.
+static const UINT_PTR kNcDelayedRefreshTimerId = 0x4E430001; // 'NC' + 0001
+static const UINT kNcDelayedRefreshDelayMs = 350;
+
+static void RefreshNetworkCenterXml(bool forceOriginal = false, bool pushUnchangedOriginal = false) {
+    if (!g_ncTarget || !g_ncModule || !SetXML || g_inHook)
+        return;
+
+    std::wstring xml = LoadUifile(g_ncModule, (PCWSTR)MAKEINTRESOURCE(110), L"UIFILE");
+    if (xml.empty())
+        return;
+
+    if (!forceOriginal && g_addNetworkMap)
+        RefreshNetCenterCategoryFromNlmQuick();
+
+    std::wstring nextXml = forceOriginal ? xml : Patch(xml);
+    bool nextIsPatched = !forceOriginal && nextXml != xml;
+
+    // If the page is already showing original XML and Patch() currently has
+    // nothing to add, there is normally nothing to push. Settings refreshes can
+    // still ask for an unchanged original push to force a redraw for features
+    // implemented outside Patch(), e.g. privacy-mode DrawText masking.
+    // If it *was* patched before, still call SetXML with the original XML to
+    // revert runtime settings and mod teardown in-place instead of requiring
+    // the page to be reopened.
+    if (!nextIsPatched && !g_ncPagePatched && !pushUnchangedOriginal)
+        return;
+
+    g_inHook++;
+    HRESULT hr = S_OK;
+    if (nextIsPatched && g_ncPagePatched) {
+        // DirectUI sometimes updates only parts of the already patched tree;
+        // the native section refreshes, but our injected Network Map can keep
+        // stale text/icons. Rebuild conservatively by first restoring the
+        // original UIFILE for this page instance, then applying the freshly
+        // generated patched XML.
+        hr = SetXML(g_ncTarget, xml.c_str(), g_ncModule, g_ncP4);
+    }
+    if (SUCCEEDED(hr))
+        hr = SetXML(g_ncTarget, nextXml.c_str(), g_ncModule, g_ncP4);
+    g_inHook--;
+    if (SUCCEEDED(hr)) {
+        g_ncPagePatched = nextIsPatched;
+        if (nextIsPatched)
+            Wh_Log(L"[NetMap] Live refresh pushed patched XML");
+        else
+            Wh_Log(L"[NetMap] Live refresh reverted to original XML");
+    } else {
+        Wh_Log(L"[NetMap] Live refresh SetXML failed (hr=0x%08X)", hr);
+    }
+}
+
+// Forces IsInternetConnected() to be re-queried (rather than served from
+// NetworkMapVisual()'s 500ms cache) for the duration of one refresh push.
+static void RefreshNetworkCenterXmlForced(bool forceOriginal = false, bool pushUnchangedOriginal = false) {
+    g_ncForceFreshConnectivity = true;
+    RefreshNetworkCenterXml(forceOriginal, pushUnchangedOriginal);
+    g_ncForceFreshConnectivity = false;
+}
+
+static void UnadviseConnectivityEvents() {
+    if (g_ncCP) {
+        if (g_ncEventsAdvised)
+            g_ncCP->Unadvise(g_ncCookie);
+        g_ncCP->Release();
+        g_ncCP = nullptr;
+    }
+    g_ncEventsAdvised = false;
+    g_ncCookie = 0;
+    g_ncTarget = nullptr;
+    g_ncModule = nullptr;
+    g_ncP4 = nullptr;
+    g_ncPagePatched = false;
+}
+
+// The real window that hosts the NetCenter page on this thread (DirectUIHWND).
+// Subclassed purely to learn when the page goes away (WM_NCDESTROY) - unlike
+// the previous approach this mod's comments warn against, it is never used
+// to marshal SetXML() calls (that's still g_ncMsgWindow's job) and is looked
+// up fresh each time a page is parsed.
+
+static LRESULT CALLBACK NcHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                            UINT_PTR uIdSubclass) {
+    if (uMsg == WM_NCDESTROY) {
+        // The subclass wrapper removes itself before dispatching WM_NCDESTROY.
+        if (g_ncHostWindow == hWnd) {
+            g_ncHostWindow = nullptr;
+            SyncNcRegistry();
+        }
+        // The page (and its DUIXmlParser) is going away right now, so drop
+        // the tracked instance before it can be freed out from under a
+        // later ConnectivityChanged-triggered refresh.
+        UnadviseConnectivityEvents();
+        // The message-only window is per page thread; retaining it after its
+        // page died leaves an unnecessary registry entry until mod unload.
+        if (g_ncMsgWindow && IsWindow(g_ncMsgWindow))
+            DestroyWindow(g_ncMsgWindow);
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+struct FindChildClassData {
+    PCWSTR pszClassName;
+    HWND hWndFound;
+};
+
+static BOOL CALLBACK FindChildClassEnumProc(HWND hWnd, LPARAM lParam) {
+    FindChildClassData* pData = reinterpret_cast<FindChildClassData*>(lParam);
+    wchar_t szClass[256];
+    if (GetClassNameW(hWnd, szClass, 256) && wcscmp(szClass, pData->pszClassName) == 0) {
+        pData->hWndFound = hWnd;
+        return FALSE; // stop enumeration
+    }
+    return TRUE; // keep enumerating
+}
+
+struct FindNcHostData {
+    HWND hFrame;
+    HWND hDirectUI;
+};
+
+static BOOL CALLBACK FindNcHostEnumProc(HWND hWnd, LPARAM lParam) {
+    FindNcHostData* pData = reinterpret_cast<FindNcHostData*>(lParam);
+    if (!GetWindow(hWnd, GW_OWNER)) {
+        wchar_t szClass[256];
+        if (GetClassNameW(hWnd, szClass, 256)) {
+            if (wcscmp(szClass, L"CabinetWClass") == 0 ||
+                wcscmp(szClass, L"RegParent") == 0 ||
+                wcscmp(szClass, L"ExplorerFrame") == 0) {
+                
+                FindChildClassData childData = { L"DirectUIHWND", nullptr };
+                EnumChildWindows(hWnd, FindChildClassEnumProc, reinterpret_cast<LPARAM>(&childData));
+                if (childData.hWndFound) {
+                    pData->hFrame = hWnd;
+                    pData->hDirectUI = childData.hWndFound;
+                    return FALSE; // found, stop enumeration
+                }
+            }
+        }
+    }
+    return TRUE;
+}
+
+// Subclasses the current thread's active page window (DirectUIHWND) so its
+// destruction can be observed. Must be called on the STA thread that owns
+// the NetCenter page, right after a successful SetXML().
+static void EnsureNcHostSubclassed() {
+    FindNcHostData data = { nullptr, nullptr };
+    EnumThreadWindows(GetCurrentThreadId(), FindNcHostEnumProc,
+                       reinterpret_cast<LPARAM>(&data));
+    
+    HWND targetWnd = data.hDirectUI;
+    if (!targetWnd || targetWnd == g_ncHostWindow)
+        return;
+        
+    if (g_ncHostWindow) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_ncHostWindow, NcHostSubclassProc);
+        g_ncHostWindow = nullptr;
+        SyncNcRegistry();
+    }
+    
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(targetWnd, NcHostSubclassProc, 0)) {
+        g_ncHostWindow = targetWnd;
+        SyncNcRegistry();
+    }
+}
+
+static UINT GetNcRefreshMessage() {
+    if (!g_ncRefreshMsg)
+        g_ncRefreshMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcRefresh");
+    return g_ncRefreshMsg;
+}
+
+static UINT GetNcTeardownMessage() {
+    if (!g_ncTeardownMsg)
+        g_ncTeardownMsg = RegisterWindowMessageW(L"Win7NetFlyout_NcTeardown");
+    return g_ncTeardownMsg;
+}
+
+static void RequestNetCenterRefreshFromSettings() {
+    std::vector<NcThreadContext> registryCopy;
+    EnterCriticalSection(&g_Ctx.csLock);
+    registryCopy = g_ncRegistry;
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    UINT refreshMsg = GetNcRefreshMessage();
+    for (const auto& item : registryCopy) {
+        if (item.msgWindow && IsWindow(item.msgWindow) && refreshMsg) {
+            // wParam=1 marks a settings-driven refresh. Unlike an NLM event or
+            // worker completion, this should be allowed to kick the async data
+            // refresh path from Patch() if the Network Map was just enabled.
+            PostMessageW(item.msgWindow, refreshMsg, 1, 0);
+        }
+    }
+}
+
+// WndProc for the mod's own message-only window. Runs entirely on the STA
+// thread that owns the NetCenter page, so it is always safe to touch
+// g_ncTarget / g_ncCP here.
+static LRESULT CALLBACK NcMsgWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == g_ncRefreshMsg && g_ncRefreshMsg) {
+        // Posted from ConnectivityChanged/refresh workers or from runtime
+        // settings changes. We're on the right thread now, so it's safe to
+        // touch the DUI parser. Settings refreshes use wParam=1 and are
+        // allowed to let Patch() kick a fresh async data pass if needed;
+        // worker/event refreshes suppress that to avoid refresh loops.
+        if (g_ncTarget) {
+            bool settingsRefresh = (wParam == 1);
+            g_ncSkipRefreshOnThisPass = !settingsRefresh;
+            RefreshNetworkCenterXmlForced(/*forceOriginal=*/false,
+                                          /*pushUnchangedOriginal=*/settingsRefresh);
+            g_ncSkipRefreshOnThisPass = false;
+            if (!settingsRefresh) {
+                // NLM occasionally reports the change before its own
+                // connectivity state has fully settled, which the immediate
+                // refresh above can miss. Schedule one more forced refresh
+                // shortly after to catch that case.
+                SetTimer(hWnd, kNcDelayedRefreshTimerId, kNcDelayedRefreshDelayMs, nullptr);
+            }
+        }
+        return 0;
+    }
+    if (uMsg == WM_TIMER && wParam == kNcDelayedRefreshTimerId) {
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        if (g_ncTarget) {
+            g_ncSkipRefreshOnThisPass = true;
+            RefreshNetworkCenterXmlForced();
+            g_ncSkipRefreshOnThisPass = false;
+        }
+        return 0;
+    }
+    if (uMsg == g_ncTeardownMsg && g_ncTeardownMsg) {
+        Wh_Log(L"[NetMap] NetCenter live-refresh window tearing down");
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        // Revert the already-open page to the original Network Center XML
+        // before the WndProc goes away. This keeps disabling/updating the mod
+        // reversible without requiring the user to reopen Control Panel.
+        RefreshNetworkCenterXmlForced(/*forceOriginal=*/true);
+        UnadviseConnectivityEvents();
+        if (g_ncHostWindow && IsWindow(g_ncHostWindow)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_ncHostWindow, NcHostSubclassProc);
+        }
+        g_ncHostWindow = nullptr;
+        if (g_ncMsgWindow == hWnd)
+            g_ncMsgWindow = nullptr;
+        SyncNcRegistry();
+        // Balances the CoInitializeEx() in PrimeNetworkCategoryForNetCenterHost():
+        // this message window always lives on the same STA thread that call
+        // ran on, so this is the one place that can safely pair it.
+        if (g_ncComInitializedByUs) {
+            CoUninitialize();
+            g_ncComInitializedByUs = false;
+        }
+        DestroyWindow(hWnd);
+        return 0;
+    }
+    if (uMsg == WM_NCDESTROY) {
+        // Reached if the window is destroyed some other way than the
+        // teardown message above (shouldn't normally happen, since only
+        // this code ever destroys it, but keep state consistent either way).
+        KillTimer(hWnd, kNcDelayedRefreshTimerId);
+        if (g_ncMsgWindow == hWnd)
+            g_ncMsgWindow = nullptr;
+        UnadviseConnectivityEvents();
+        if (g_ncHostWindow && IsWindow(g_ncHostWindow)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_ncHostWindow, NcHostSubclassProc);
+        }
+        g_ncHostWindow = nullptr;
+        SyncNcRegistry();
+        if (g_ncComInitializedByUs) {
+            CoUninitialize();
+            g_ncComInitializedByUs = false;
+        }
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+// Creates (if needed) the mod's message-only window on the current thread.
+// Must be called from SetXMLFromResource_Hook, i.e. on the STA thread that
+// owns the NetCenter page - never from the NLM callback thread.
+static HWND EnsureNcMsgWindow() {
+    if (g_ncMsgWindow && IsWindow(g_ncMsgWindow))
+        return g_ncMsgWindow;
+    g_ncMsgWindow = nullptr; // stale handle from a destroyed window, if any
+    SyncNcRegistry();
+
+    // Own HINSTANCE (see HINST_THISCOMPONENT), so a leftover registration
+    // from a previous load/unload can never collide with this one.
+    HINSTANCE hInst = HINST_THISCOMPONENT;
+    // Each Explorer browser window (and each control.exe instance) runs the
+    // Network Center page on its own thread, so two pages can both reach
+    // here concurrently and race on g_ncMsgClassRegistered. Serialize under
+    // the same lock SyncNcRegistry() above already takes, so only one
+    // thread ever calls RegisterClassW and every other racing thread sees
+    // the flag already set instead of also seeing "not registered" and
+    // failing its own RegisterClassW call (which used to leave that page
+    // with no message window and therefore no live refresh).
+    EnterCriticalSection(&g_Ctx.csLock);
+    if (!g_ncMsgClassRegistered) {
+        WNDCLASSW wc = {0};
+        wc.lpfnWndProc   = NcMsgWndProc;
+        wc.hInstance     = hInst;
+        wc.lpszClassName = kNcMsgClassName;
+        if (RegisterClassW(&wc))
+            g_ncMsgClassRegistered = true;
+    }
+    bool classReady = g_ncMsgClassRegistered;
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (!classReady)
+        return nullptr;
+
+    GetNcRefreshMessage();
+    GetNcTeardownMessage();
+    g_ncMsgWindow = CreateWindowExW(0, kNcMsgClassName, L"", 0, 0, 0, 0, 0,
+                                     HWND_MESSAGE, NULL, hInst, NULL);
+    SyncNcRegistry();
+    return g_ncMsgWindow;
+}
+
+class NetworkEventsSink : public INetworkListManagerEvents {
+   public:
+    explicit NetworkEventsSink(HWND msgWindow) : m_refCount(1), m_msgWindow(msgWindow) {}
+    virtual ~NetworkEventsSink() {}
+
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        if (riid == IID_IUnknown || riid == IID_IDispatch ||
+            riid == IID_INetworkListManagerEvents) {
+            *ppv = static_cast<INetworkListManagerEvents*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_refCount); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG r = InterlockedDecrement(&m_refCount);
+        if (r == 0) delete this;
+        return r;
+    }
+
+    // These four come from IDispatch. Left without 'override' since this
+    // toolchain's netlistmgr/oaidl headers don't always expose them with a
+    // signature clang recognizes as virtual on this interface; they're still
+    // correctly dispatched through the vtable at runtime.
+    STDMETHODIMP GetTypeInfoCount(UINT* pctinfo) { *pctinfo = 0; return S_OK; }
+    STDMETHODIMP GetTypeInfo(UINT, LCID, ITypeInfo**) { return E_NOTIMPL; }
+    STDMETHODIMP GetIDsOfNames(REFIID, LPOLESTR*, UINT, LCID, DISPID*) { return E_NOTIMPL; }
+    STDMETHODIMP Invoke(DISPID, REFIID, LCID, WORD, DISPPARAMS*, VARIANT*, EXCEPINFO*, UINT*) {
+        return E_NOTIMPL;
+    }
+
+    // Runs on NLM's own notification/RPC thread, not on the DirectUI page's
+    // thread - IConnectionPoint::Advise on an in-process sink does not
+    // marshal. Never touch g_ncTarget/SetXML from here: just hand off to the
+    // message-only window that lives on the correct thread.
+    STDMETHODIMP ConnectivityChanged(NLM_CONNECTIVITY) override {
+        // This sink is advised by its owning page thread. Refresh only that
+        // thread's message window; broadcasting makes N pages refresh N² times.
+        if (m_msgWindow && IsWindow(m_msgWindow) && g_ncRefreshMsg)
+            PostMessageW(m_msgWindow, g_ncRefreshMsg, 0, 0);
+        return S_OK;
+    }
+
+   private:
+    LONG m_refCount;
+    HWND m_msgWindow;
+};
+
+static void EnsureConnectivityEventsAdvised() {
+    if (g_ncEventsAdvised)
+        return;
+
+    ComPtr<INetworkListManager> nlm;
+    if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                 IID_INetworkListManager, (void**)nlm.put())) || !nlm)
+        return;
+
+    ComPtr<IConnectionPointContainer> container;
+    if (FAILED(nlm->QueryInterface(IID_IConnectionPointContainer, (void**)container.put())) || !container)
+        return;
+
+    ComPtr<IConnectionPoint> connectionPoint;
+    if (FAILED(container->FindConnectionPoint(IID_INetworkListManagerEvents,
+                                               connectionPoint.put())) || !connectionPoint)
+        return;
+
+    // Advise retains the sink on success. The local reference is released on
+    // every path, including an Advise failure.
+    ComPtr<NetworkEventsSink> sink(new NetworkEventsSink(g_ncMsgWindow));
+    DWORD cookie = 0;
+    if (SUCCEEDED(connectionPoint->Advise(
+            static_cast<IUnknown*>(static_cast<INetworkListManagerEvents*>(sink.get())),
+            &cookie))) {
+        g_ncCP = connectionPoint.detach(); // ownership moves to UnadviseConnectivityEvents.
+        g_ncCookie = cookie;
+        g_ncEventsAdvised = true;
+        Wh_Log(L"[NetMap] Subscribed to live connectivity change events");
+    }
+}
+
+// Called from Wh_ModUninit. Marshals the subclass/timer cleanup and the COM
+// Unadvise/Release to the STA thread that owns g_ncCP and g_ncMsgWindow,
+// instead of touching that raw, unmarshalled pointer from whatever thread
+// Windhawk calls Wh_ModUninit on.
+static void TeardownNetCenterHost() {
+    std::vector<NcThreadContext> registryCopy;
+    EnterCriticalSection(&g_Ctx.csLock);
+    registryCopy = g_ncRegistry;
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    for (const auto& item : registryCopy) {
+        if (item.msgWindow && IsWindow(item.msgWindow)) {
+            // Do not fall through while a live message-only window still has a
+            // WndProc in this mod image. If the UI thread is merely busy it will
+            // eventually process the teardown; returning early would let
+            // Windhawk unmap the DLL and leave the next message/timer to jump
+            // into unmapped code.
+            DWORD_PTR dwResult = 0;
+            int attempt = 0;
+            while (IsWindow(item.msgWindow)) {
+                LRESULT sent = SendMessageTimeoutW(item.msgWindow, GetNcTeardownMessage(), 0, 0,
+                                                    SMTO_ABORTIFHUNG, 5000, &dwResult);
+                if (sent != 0 || !IsWindow(item.msgWindow))
+                    break;
+                attempt++;
+                Wh_Log(L"[NetMap] NC teardown message timed out (attempt %d); waiting", attempt);
+            }
+        } else {
+            if (item.hostWindow && IsWindow(item.hostWindow)) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(item.hostWindow, NcHostSubclassProc);
+            }
+        }
+    }
+
+    EnterCriticalSection(&g_Ctx.csLock);
+    g_ncRegistry.clear();
+    LeaveCriticalSection(&g_Ctx.csLock);
+}
+
+
 static bool IsNetCenter(HMODULE h) {
     if (!h)
         return false;
+    // Fast path: compare directly against the cached module handle instead
+    // of touching the filesystem on every matching LoadImageW call. Only
+    // falls back to path parsing if the cache misses (e.g. netcenter.dll
+    // reloaded at a different base, or not yet resolved).
+    HMODULE hNetCenter = GetModuleHandleW(L"netcenter.dll");
+    if (hNetCenter && hNetCenter == h)
+        return true;
     wchar_t path[MAX_PATH];
     if (!GetModuleFileNameW(h, path, MAX_PATH))
         return false;
     return _wcsicmp(PathFindFileNameW(path), L"netcenter.dll") == 0;
 }
 
+// Replace every occurrence of the connected SSID/profile name, including
+// compound native labels such as "Wi-Fi (PosteMobile-12673059)". This is
+// deliberately a substring replacement: the Control Panel connection link
+// includes the name in parentheses, whereas the active-network heading draws
+// it as a standalone string.
+static bool MaskConnectedNetworkText(LPCWSTR text, int textLength,
+                                     std::wstring& masked) {
+    if (!g_Settings.privacyMode || !text)
+        return false;
+    int len = (textLength >= 0) ? textLength : lstrlenW(text);
+    if (len <= 0)
+        return false;
+
+    WCHAR privateName[64] = {0};
+    StringCchPrintfW(privateName, ARRAYSIZE(privateName),
+                     LOC(STR_NETWORK_PRIVACY_FMT), 1);
+    masked.assign(text, len);
+    bool changed = false;
+
+    auto ReplaceName = [&](const WCHAR* realName) {
+        if (!realName || !realName[0]) return;
+        const std::wstring needle(realName);
+        size_t pos = 0;
+        while ((pos = masked.find(needle, pos)) != std::wstring::npos) {
+            // Require a non-alphanumeric boundary (or start/end of string) on
+            // both sides, so a short/generic name like "Net" or "Home" only
+            // matches as a whole label/word - e.g. inside "Wi-Fi (MyNetwork)"
+            // or standing alone - rather than also rewriting an unrelated
+            // NetCenter string that merely contains it as a substring.
+            bool leftOk = (pos == 0) || !iswalnum(masked[pos - 1]);
+            size_t endPos = pos + needle.length();
+            bool rightOk = (endPos >= masked.size()) || !iswalnum(masked[endPos]);
+            if (!leftOk || !rightOk) {
+                pos += 1;
+                continue;
+            }
+            masked.replace(pos, needle.length(), privateName);
+            pos += lstrlenW(privateName);
+            changed = true;
+        }
+    };
+
+    // Copy connected network names under the critical section
+    EnterCriticalSection(&g_Ctx.csLock);
+    std::vector<std::wstring> connectedNames;
+    for (int i = 0; i < g_NetworkCount; ++i) {
+        if (g_NetworkList[i].connState == CONN_STATE_CONNECTED)
+            connectedNames.push_back(std::wstring(g_NetworkList[i].ssid));
+    }
+    BOOL ethernetConnected = g_EthernetConnected;
+    WCHAR ethernetName[64] = {0};
+    StringCchCopyW(ethernetName, ARRAYSIZE(ethernetName), g_EthernetNetworkName);
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    for (const auto& name : connectedNames)
+        ReplaceName(name.c_str());
+    if (ethernetConnected)
+        ReplaceName(ethernetName);
+    return changed;
+}
+
+static int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR text, int textLength,
+                                 LPRECT rect, UINT format) {
+    // Only mask text when called from netcenter.dll to avoid mangling
+    // unrelated strings process-wide (e.g. filenames containing the SSID).
+    void* ra = __builtin_return_address(0);
+    if (ra && !IsInNetCenter(ra))
+        return DrawTextW_Orig ? DrawTextW_Orig(hdc, text, textLength, rect, format) : 0;
+
+    std::wstring masked;
+    if (DrawTextW_Orig && MaskConnectedNetworkText(text, textLength, masked))
+        return DrawTextW_Orig(hdc, masked.c_str(), (int)masked.length(), rect, format);
+    return DrawTextW_Orig ? DrawTextW_Orig(hdc, text, textLength, rect, format) : 0;
+}
+
+// Installs the hook if it isn't already installed. Callable from either the
+// NetCenter page's UI thread (via SetXMLFromResource_Hook, the first time
+// netcenter.dll is actually observed) or the Windhawk settings-callback
+// thread (via SettingsChanged(), when privacy mode is toggled on at
+// runtime) - so the check-and-set on g_textHookInstalled is serialized under
+// g_Ctx.csLock. Without that, both callers could see it as false at the same
+// time and both call SetFunctionHook on DrawTextW, registering the hook
+// twice. applyNow lets the Wh_ModInit-time caller (HookAll(), below) skip
+// the explicit Wh_ApplyHookOperations() call, since Windhawk already applies
+// all hooks registered during Wh_ModInit on its own right after it returns;
+// calling it again there would just be redundant work on that path.
+static void EnsurePrivacyTextHookInstalled(bool applyNow = true) {
+    if (!g_Settings.privacyMode)
+        return;
+    EnterCriticalSection(&g_Ctx.csLock);
+    bool alreadyInstalled = g_textHookInstalled;
+    bool justInstalled = false;
+    if (!alreadyInstalled) {
+        justInstalled = WindhawkUtils::SetFunctionHook(
+            DrawTextW, DrawTextW_Hook, &DrawTextW_Orig);
+        if (justInstalled)
+            g_textHookInstalled = true;
+    }
+    LeaveCriticalSection(&g_Ctx.csLock);
+    if (alreadyInstalled || !justInstalled)
+        return;
+    if (applyNow)
+        Wh_ApplyHookOperations();
+}
+
 // DirectUI loads icon() graphics through LoadImageW. Only the two private
 // IDs emitted by IconAttr are replaced, leaving Configure a Network and
 // Troubleshoot (and every other stock page icon) untouched.
+// Forward-declared here; defined further down alongside the rest of the
+// non-explorer-host NetCenter state. Called both here and in
+// SetXMLFromResource_Hook since the category icon can in principle be
+// requested by DirectUI (e.g. on a DPI change) without a fresh SetXML pass.
+static void PrimeNetworkCategoryForNetCenterHost();
+
 static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
                                      int width, int height, UINT flags) {
     if (type == IMAGE_ICON && hInst && name) {
@@ -6109,6 +9653,16 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
             resourceId = kConnectCustomIconId;
         else if (wcscmp(name, L"32754") == 0)
             resourceId = kHomegroupCustomIconId;
+        else if (wcscmp(name, L"32755") == 0)
+            resourceId = kComputerIconId;
+        else if (wcscmp(name, L"32756") == 0)
+            resourceId = kNetMapCategoryIconId;
+        else if (wcscmp(name, L"32757") == 0)
+            resourceId = kGlobeIconId;
+        else if (wcscmp(name, L"32758") == 0)
+            resourceId = kNoInternetXIconId;
+        else if (wcscmp(name, L"32760") == 0)
+            resourceId = kOfflineNetworkIconId;
 
         int sourceIconId = 0;
         if (resourceId == kConnectCustomIconId)
@@ -6123,8 +9677,281 @@ static HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst, LPCWSTR name, UINT type,
             return LoadImageW_Orig ? LoadImageW_Orig(hInst,
                 MAKEINTRESOURCEW(sourceIconId), type, width, height, flags) : NULL;
         }
+
+        if (resourceId == kComputerIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+            int wantW = (width  > 0) ? width  : ScaleDpi(48);
+            int wantH = (height > 0) ? height : ScaleDpi(48);
+            HICON copy = CopyCachedBase64Icon(&g_hIconNetworkMapDUI,
+                &g_iconNetworkMapDUIW, &g_iconNetworkMapDUIH,
+                PC_ICON_BASE64, wantW, wantH);
+            Wh_Log(L"[NetMap-Icon] kComputerIconId requested at %dx%d, copy=%p", wantW, wantH, copy);
+            return copy;
+        }
+        if (resourceId == kGlobeIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+            int wantW = (width  > 0) ? width  : ScaleDpi(48);
+            int wantH = (height > 0) ? height : ScaleDpi(48);
+            // The same connectivity test used by the flyout selects a gray
+            // globe whenever this connection has no Internet access.
+            BOOL online = IsInternetConnected();
+            HICON copy = NULL;
+            EnterCriticalSection(&g_Ctx.csLock);
+            if (!g_hIconGlobeDUI || g_iconGlobeDUIW != wantW ||
+                g_iconGlobeDUIH != wantH || g_iconGlobeDUIOnline != online) {
+                if (g_hIconGlobeDUI) { DestroyIcon(g_hIconGlobeDUI); g_hIconGlobeDUI = NULL; }
+                g_hIconGlobeDUI = CreateIconFromBase64PNG(
+                    online ? GLOBE_ICON_BASE64 : GLOBE_ICON_OFFLINE_BASE64,
+                    wantW, wantH);
+                g_iconGlobeDUIW = wantW;
+                g_iconGlobeDUIH = wantH;
+                g_iconGlobeDUIOnline = online;
+            }
+            if (g_hIconGlobeDUI)
+                copy = CopyIcon(g_hIconGlobeDUI);
+            LeaveCriticalSection(&g_Ctx.csLock);
+            Wh_Log(L"[NetMap-Icon] Globe requested at %dx%d (online=%d), copy=%p",
+                   wantW, wantH, online, copy);
+            return copy;
+        }
+
+        if (resourceId == kNoInternetXIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+            int wantW = (width > 0) ? width : ScaleDpi(16);
+            int wantH = (height > 0) ? height : ScaleDpi(16);
+            return CopyCachedBase64Icon(&g_hIconNoInternetXDUI,
+                &g_iconNoInternetXDUIW, &g_iconNoInternetXDUIH,
+                NETWORK_NO_INTERNET_X_BASE64, wantW, wantH);
+        }
+
+        if (resourceId == kOfflineNetworkIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+            int wantW = width > 0 ? width : ScaleDpi(36);
+            int wantH = height > 0 ? height : ScaleDpi(36);
+            HICON copy = CopyCachedBase64Icon(&g_hIconOfflineNetworkDUI,
+                &g_iconOfflineNetworkDUIW, &g_iconOfflineNetworkDUIH,
+                NETLOC_PUBLIC_OFFLINE_ICON_BASE64, wantW, wantH);
+            Wh_Log(L"[NetMap-Icon] Offline gray network icon requested at %dx%d, copy=%p", wantW, wantH, copy);
+            return copy;
+        }
+
+        if (resourceId == kNetMapCategoryIconId) {
+            if (!IsNetCenter(hInst))
+                return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+            PrimeNetworkCategoryForNetCenterHost();
+            // Decode at DirectUI's requested 36rp active-network size. This
+            // uses the same bicubic scaling path as the PC/globe DUI caches.
+            return CopyNetworkLocationIconForDUI(width, height);
+        }
     }
     return LoadImageW_Orig ? LoadImageW_Orig(hInst, name, type, width, height, flags) : NULL;
+}
+
+// Tracks whether we've attempted the one-time priming below, and whether we
+// were the ones who opened g_Ctx.hWlanClient (so Wh_ModUninit's
+// non-explorer-host branch knows it's safe/necessary to close it).
+static bool g_ncCategoryPrimeAttempted = false;
+static bool g_ncOwnsWlanHandleInNonExplorerHost = false;
+// Wh_ModInit() deliberately skips all WLAN/NLM priming when the mod is
+// injected into a non-explorer host (see the g_IsExplorerHost branch there):
+// that infrastructure was designed to run only inside explorer.exe's own
+// tray flyout + hotkey thread. But Network and Sharing Center can also be
+// opened directly as a standalone control.exe process (e.g. via the tray
+// icon's right-click context menu), which never touches that code path at
+// all. Without this, g_CurrentNetworkCategory stays "unknown" for that
+// process's whole lifetime, and CopyNetworkLocationIconForDUI always falls
+// back to the generic Public icon instead of the real Home/Public/Work one.
+// Confirmed by testing: without a real COM apartment on this thread,
+// IsInternetConnected() (used both for the network-map's online/offline icon
+// and inside category detection's NLM path) fails silently and always
+// reports offline, which is why the map row was still always showing the
+// gray offline icon even after WLAN/category priming was added.
+//
+// This is a best-effort, one-shot, defensive addition: it runs at most once
+// per process, and any failure anywhere in it (COM unavailable, WLAN service
+// unavailable, etc.) just leaves the existing Public/offline fallback in
+// place rather than risking the host process. Everything here is wrapped in
+// try/catch per request, even though the Win32/COM calls involved report
+// failure via return codes rather than exceptions - this is extra insurance
+// against an unexpected std::bad_alloc or similar from the helper functions
+// it calls into (LoadUifile, RefreshWifiData, etc.), not a substitute for
+// checking those return codes, which are still checked individually below.
+static LONG volatile g_ncRefreshInFlight = 0;
+static HANDLE g_ncRefreshThread = NULL;   // joined in Wh_ModUninit
+static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID);
+
+static void PrimeNetworkCategoryForNetCenterHost() {
+    if (g_ncCategoryPrimeAttempted || g_IsExplorerHost)
+        return;
+    g_ncCategoryPrimeAttempted = true;
+
+    if (InterlockedCompareExchange(&g_ncRefreshInFlight, 1, 0) != 0)
+        return;
+
+    if (g_ncRefreshThread) {
+        CloseHandle(g_ncRefreshThread);
+        g_ncRefreshThread = NULL;
+    }
+    g_ncRefreshThread = CreateThread(NULL, 0, NcNetworkDataRefreshWorker, NULL, 0, NULL);
+    if (!g_ncRefreshThread) {
+        InterlockedExchange(&g_ncRefreshInFlight, 0);
+        Wh_Log(L"[NetMap] CreateThread failed for initial priming pass");
+    } else {
+        Wh_Log(L"[NetMap] Kicked off background network data priming thread in non-explorer host");
+    }
+}
+
+// Refreshes the shared Wi-Fi/Ethernet/category state from whichever process
+// and thread is rendering the Network Center page. Throttled to once every
+// 2 seconds because Patch() can run several times per page load (initial
+// parse, DirectUI re-layouts, live-refresh pushes). Host-agnostic
+// counterpart of PrimeNetworkCategoryForNetCenterHost(): it also runs in
+// explorer.exe, where the priming helper returns early by design and where
+// the flyout-side machinery is otherwise the only thing keeping
+// g_NetworkList / g_EthernetConnected up to date.
+// Guards against overlapping worker runs (Patch() can trigger a refresh
+// request again - immediate + the 350 ms delayed pass - before a previous
+// one finishes).
+static DWORD WINAPI NcNetworkDataRefreshWorker(PVOID /*unused*/) {
+    // Thread pool threads have no COM apartment by default, but the
+    // CoCreateInstance() below needs one. Balance whatever we do here at
+    // the end of this same function.
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    bool comInitializedHere = (hrCo == S_OK || hrCo == S_FALSE);
+
+    // Reuse the process-wide WLAN handle if the flyout/hotkey side (or
+    // the non-explorer priming) already opened it. wlanapi handles are
+    // RPC-based and usable from any thread in the process. A handle
+    // opened HERE is ours to close at uninit only in non-explorer hosts;
+    // in explorer the hotkey/flyout path owns the lifecycle (it also
+    // registers notifications on the handle it opens itself).
+    if (!g_Ctx.hWlanClient) {
+        DWORD dwCurVer = 0;
+        HANDLE hClient = NULL;
+        DWORD wlanResult = WlanOpenHandle(2, NULL, &dwCurVer, &hClient);
+        if (wlanResult == ERROR_SUCCESS && hClient) {
+            EnterCriticalSection(&g_Ctx.csLock);
+            if (!g_Ctx.hWlanClient) {
+                g_Ctx.hWlanClient = hClient;
+                if (!g_IsExplorerHost)
+                    g_ncOwnsWlanHandleInNonExplorerHost = true;
+            } else {
+                WlanCloseHandle(hClient, NULL);
+                hClient = nullptr;
+            }
+            LeaveCriticalSection(&g_Ctx.csLock);
+            if (hClient) {
+                Wh_Log(L"[NetMap] WLAN handle opened for NetCenter data refresh");
+            }
+        } else {
+            Wh_Log(L"[NetMap] WlanOpenHandle failed during NetCenter data "
+                   L"refresh (error=%lu)", wlanResult);
+        }
+    }
+
+    if (g_Ctx.hWlanClient)
+        RefreshWifiData(g_Ctx.hWlanClient);  // serializes the g_NetworkList swap internally
+
+    // This runs on a background thread, a different COM apartment from the 
+    // flyout/hotkey thread that owns g_pNLM. Create and use a local instance 
+    // instead of sharing g_pNLM: the hotkey thread releases g_pNLM 
+    // unconditionally on exit, so touching it from here was reachable as a 
+    // use-after-free during unload, on top of using/publishing an interface 
+    // pointer created in the wrong apartment.
+    ComPtr<INetworkListManager> localNlm;
+    HRESULT hrNlm = CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_INPROC_SERVER,
+                                      IID_INetworkListManager, (void**)localNlm.put());
+    if (FAILED(hrNlm)) {
+        // A null localNlm must NOT be treated as "no override requested" by
+        // the callees below - that would silently fall back to the shared
+        // g_pNLM, which is exactly the cross-apartment use / use-after-free
+        // this local instance exists to avoid (HotkeyThreadProc releases
+        // g_pNLM unconditionally on exit and this worker can be mid-call on
+        // it). useOnlyOverride=true below makes the callees skip NLM-backed
+        // work entirely instead of guessing.
+        Wh_Log(L"[NetMap] CoCreateInstance(NetworkListManager) failed (hr=0x%08X) "
+               L"on refresh worker thread; NLM-backed detection skipped this pass", hrNlm);
+    }
+
+    // lock-free COM/WLAN work, locked publish of g_Ethernet*
+    UpdateEthernetStatus(localNlm.get(), /*useOnlyOverride=*/true);
+
+    // Re-evaluate the category on every worker pass, not only while it is
+    // unknown. The first DirectUI render can legitimately use the Public bench
+    // fallback before this background worker completes; if that Public value is
+    // treated as final, Home/Private and Domain/Work profiles never get a
+    // chance to replace it with the house/buildings icon.
+    NetworkStateSnapshot state;
+    CaptureNetworkState(&state);
+    BOOL isAnyConnected = state.ethernetConnected ||
+        (state.networkCount > 0 && state.networks[0].connState == CONN_STATE_CONNECTED);
+    if (isAnyConnected && g_Settings.useNetworkLocationIcons) {
+        int category = DetectNetworkLocationCategory(localNlm.get(), /*useOnlyOverride=*/true);
+        PublishNetworkLocationCategory(category, FALSE);
+    } else if (!isAnyConnected || !g_Settings.useNetworkLocationIcons) {
+        PublishNetworkLocationCategory(-1, TRUE);
+    }
+
+    if (comInitializedHere)
+        CoUninitialize();
+
+    // Keep the in-flight guard until notification posting is complete.
+
+    // Nudge a re-render now that fresher data is available. Same
+    // immediate-plus-later-catch-up shape as the connectivity-event path.
+    EnterCriticalSection(&g_Ctx.csLock);
+    std::vector<NcThreadContext> registryCopy = g_ncRegistry;
+    LeaveCriticalSection(&g_Ctx.csLock);
+
+    for (const auto& item : registryCopy) {
+        if (item.msgWindow && IsWindow(item.msgWindow) && g_ncRefreshMsg) {
+            PostMessageW(item.msgWindow, g_ncRefreshMsg, 0, 0);
+        }
+    }
+    InterlockedExchange(&g_ncRefreshInFlight, 0);
+
+    return 0;
+}
+
+// Kicks off a background refresh of WLAN/adapter/NLM data for the NetCenter
+// page, throttled to once every 2 seconds (Patch() can run several times
+// per page load) and skipped entirely when nothing is around to show the
+// result. The actual WLAN/COM work runs on a worker thread - see
+// NcNetworkDataRefreshWorker() - instead of blocking whatever Explorer UI
+// thread happens to be rendering the page or handling a connectivity event.
+
+static void EnsureNetCenterNetworkDataFresh() {
+    if (g_ncSkipRefreshOnThisPass)
+        return;
+
+    // Nothing live to show a fresher result to (no open NetCenter page, no
+    // flyout) - don't pay the WLAN/NLM cost at all.
+    if (!g_ncTarget && !g_hWndFlyout)
+        return;
+
+    static DWORD s_lastRefreshTick = 0;
+    DWORD now = GetTickCount();
+    if (now - s_lastRefreshTick < 2000)
+        return;
+
+    if (InterlockedCompareExchange(&g_ncRefreshInFlight, 1, 0) != 0)
+        return; // a refresh is already running
+
+    s_lastRefreshTick = now;
+
+    if (g_ncRefreshThread) {
+        CloseHandle(g_ncRefreshThread);
+        g_ncRefreshThread = NULL;
+    }
+    g_ncRefreshThread = CreateThread(NULL, 0, NcNetworkDataRefreshWorker, NULL, 0, NULL);
+    if (!g_ncRefreshThread) {
+        InterlockedExchange(&g_ncRefreshInFlight, 0);
+        Wh_Log(L"[NetMap] CreateThread failed, skipping this refresh");
+    }
 }
 
 static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp, HMODULE m,
@@ -6134,23 +9961,94 @@ static HRESULT NCL_THISCALL SetXMLFromResource_Hook(void* t, PCWSTR n, PCWSTR tp
     if (!SetXML || g_inHook)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
 
-    if (!IsNetCenter(m) || !tp || _wcsicmp(tp, L"UIFILE") || !IS_INTRESOURCE(n) ||
-        (UINT)(UINT_PTR)n != 110)
+    // Parser addresses can be immediately reused during in-place navigation,
+    // so pointer identity alone cannot identify the live NetCenter page. Any
+    // non-NetCenter parse on this page thread retires the tracked target.
+    bool isNetCenterPage = IsNetCenter(m) && tp && !_wcsicmp(tp, L"UIFILE") &&
+                           IS_INTRESOURCE(n) && (UINT)(UINT_PTR)n == 110;
+    if (g_ncTarget && (g_ncTarget != t || !isNetCenterPage))
+        UnadviseConnectivityEvents();
+
+    if (!isNetCenterPage)
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+
+    // Resolve and cache netcenter.dll's address range here, on the one path
+    // guaranteed to run before the page draws any text, instead of paying a
+    // GetModuleHandleW lookup on every DrawTextW call via IsInNetCenter().
+    CacheNetCenterRange(m);
+    EnsurePrivacyTextHookInstalled();
+
+    // One-shot, best-effort: only does anything the first time, and only in
+    // a non-explorer host (see PrimeNetworkCategoryForNetCenterHost's
+    // comment). Must run before Patch() below so the freshly-detected
+    // category is what the network map icon logic actually sees.
+    PrimeNetworkCategoryForNetCenterHost();
 
     std::wstring xml = LoadUifile(m, n, tp);
     if (xml.empty() || xml.find(L"atom(NetworkCenter)") == std::wstring::npos ||
-        xml.find(L"atom(diagnosebtn)") == std::wstring::npos)
+        xml.find(L"atom(diagnosebtn)") == std::wstring::npos) {
+        if (g_ncComInitializedByUs) {
+            CoUninitialize();
+            g_ncComInitializedByUs = false;
+        }
         return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+    }
 
     std::wstring patched = Patch(xml);
-    if (patched == xml)
-        return SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+    bool pageWasPatched = (patched != xml);
 
-    g_inHook++;
-    HRESULT hr = SetXML(t, patched.c_str(), m, p4);
-    g_inHook--;
-    return FAILED(hr) ? SetXMLFromResource_Orig(t, n, tp, m, p4, p5) : hr;
+    HRESULT hr = S_OK;
+    if (pageWasPatched) {
+        g_inHook++;
+        hr = SetXML(t, patched.c_str(), m, p4);
+        g_inHook--;
+    } else {
+        // No current layout change (for example the feature is disabled), but
+        // still let the native loader initialize the page and then remember the
+        // parser/message window. That makes runtime enabling/language/privacy
+        // changes visible without requiring the user to close and reopen the
+        // Network and Sharing Center page.
+        hr = SetXMLFromResource_Orig(t, n, tp, m, p4, p5);
+    }
+
+    if (SUCCEEDED(hr)) {
+        // Remember this page instance so connectivity/settings-change
+        // notifications can re-push freshly patched or original XML later.
+        g_ncTarget = t;
+        g_ncModule = m;
+        g_ncP4 = p4;
+        g_ncPagePatched = pageWasPatched;
+        EnsureNcHostSubclassed();
+
+        // Create (once per thread) the mod's own message-only window here,
+        // i.e. on the exact STA thread that owns this page - no searching
+        // for or subclassing of some other, possibly unrelated, Explorer
+        // window is needed. ConnectivityChanged (which can fire on an
+        // arbitrary NLM thread) posts to this window, and the actual
+        // SetXML() refresh always then runs on the right thread.
+        if (!EnsureNcMsgWindow()) {
+            Wh_Log(L"[NetMap] Could not create NetCenter live-refresh window");
+            if (g_ncComInitializedByUs) {
+                CoUninitialize();
+                g_ncComInitializedByUs = false;
+            }
+        } else {
+            EnsureConnectivityEventsAdvised();
+            // Kick the refresh once so that we render the correct and fresh data
+            // the very first time the page is opened (per Issue 6). Skip it
+            // when Patch() was a no-op; settings-refresh can start it later if
+            // the Network Map is enabled at runtime.
+            if (pageWasPatched)
+                EnsureNetCenterNetworkDataFresh();
+        }
+    } else {
+        if (g_ncComInitializedByUs) {
+            CoUninitialize();
+            g_ncComInitializedByUs = false;
+        }
+    }
+
+    return hr;
 }
 
 static bool HookAll() {
@@ -6158,8 +10056,11 @@ static bool HookAll() {
         return true;
 
     HMODULE dui = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!dui)
+    if (!dui) {
+        Wh_Log(L"Network Center links: dui70.dll could not be loaded - "
+               L"DirectUI may have been removed/relocated by this Windows build");
         return false;
+    }
 
     // SetXML is public; resolving it directly avoids a no-op hook on a hot
     // DirectUI path merely to obtain a trampoline.
@@ -6170,8 +10071,11 @@ static bool HookAll() {
             break;
         }
     }
-    if (!SetXML)
+    if (!SetXML) {
+        Wh_Log(L"Network Center links: DUIXmlParser::SetXML symbol not found in "
+               L"dui70.dll - mangled signature likely changed in this Windows build");
         return false;
+    }
 
     for (auto n : {
 #ifdef _WIN64
@@ -6186,6 +10090,10 @@ static bool HookAll() {
             }
         }
     }
+    if (!SetXMLFromResource_Orig) {
+        Wh_Log(L"Network Center links: DUIXmlParser::_SetXMLFromResource symbol "
+               L"not found or hook failed - mangled signature likely changed");
+    }
     g_hookInstalled = SetXMLFromResource_Orig != nullptr;
     if (g_hookInstalled && !g_iconHookInstalled) {
         g_iconHookInstalled = WindhawkUtils::SetFunctionHook(
@@ -6193,6 +10101,18 @@ static bool HookAll() {
         if (!g_iconHookInstalled)
             Wh_Log(L"Network Center links: custom icon hook unavailable; using Windows icons");
     }
+    // DrawTextW_Hook's fast path (a null check plus two pointer compares
+    // against g_netcenterBase/g_netcenterEnd) costs essentially nothing, so
+    // when privacy mode is already on at load time there's no reason to
+    // defer installing it until SetXMLFromResource_Hook first observes
+    // netcenter.dll - just install it here, in Wh_ModInit, like every other
+    // hook in this mod. This call is Wh_ModInit-time (via Init() below), so
+    // Wh_ApplyHookOperations() - which Windhawk calls automatically right
+    // after Wh_ModInit returns - will pick it up; applyNow=false skips the
+    // redundant explicit call. If privacy mode gets turned on later at
+    // runtime, EnsurePrivacyTextHookInstalled() is still called from
+    // SettingsChanged()/SetXMLFromResource_Hook and applies the hook itself.
+    EnsurePrivacyTextHookInstalled(/*applyNow=*/false);
     return g_hookInstalled;
 }
 
@@ -6200,16 +10120,22 @@ static bool Init() {
     bool enabled = Wh_GetIntSetting(L"restoreClassicNetworkCenterLinks") != 0;
     g_addConnect = enabled;
     g_addHomegroup = enabled;
+    g_addNetworkMap = enabled;  // Visual Network Map rectangle
 
     // Always install the DirectUI + LoadImageW hooks here, unconditionally,
     // regardless of whether the feature is currently enabled. Per the
     // Windhawk API, all hooks should be set in Wh_ModInit, since
     // Wh_ApplyHookOperations() is called automatically right after it;
     // hooks registered later (e.g. from Wh_ModSettingsChanged) stay pending
-    // and never actually activate. g_addConnect/g_addHomegroup already make
-    // Patch() a no-op when the feature is off, so installing the hooks
-    // unconditionally has no behavioral effect while it's disabled, and lets
-    // it turn on and off correctly at runtime without a mod reload.
+    // until the mod explicitly calls Wh_ApplyHookOperations() itself, which
+    // SettingsChanged() below does when privacy mode is turned on at
+    // runtime. g_addConnect/g_addHomegroup already make Patch() a no-op
+    // when the feature is off, so installing the hooks unconditionally has
+    // no behavioral effect while it's disabled, and lets it turn on and off
+    // correctly at runtime without a mod reload. The DrawTextW hook is the
+    // one exception: unlike the others, it sits on a very hot user32 path, so
+    // it is deferred until SetXMLFromResource_Hook observes netcenter.dll.
+    // That way, an unused privacy feature never hooks DrawTextW.
     if (!HookAll()) {
         Wh_Log(L"Network Center links: DirectUI hook was not installed");
         return false;
@@ -6221,8 +10147,32 @@ static void SettingsChanged() {
     bool enabled = Wh_GetIntSetting(L"restoreClassicNetworkCenterLinks") != 0;
     g_addConnect = enabled;
     g_addHomegroup = enabled;
-    // The hooks were already installed unconditionally in Init(); toggling
-    // the setting only needs to flip these flags, which Patch() checks.
+    g_addNetworkMap = enabled;  // Visual Network Map rectangle
+
+    // Privacy mode may have just been turned on at runtime: install the
+    // DrawTextW hook now (it was skipped in HookAll() while privacy mode
+    // was off) and explicitly apply it, since hooks registered outside
+    // Wh_ModInit stay pending until Wh_ApplyHookOperations() is called.
+    // Note: turning privacy mode back off deliberately does NOT remove the
+    // hook again - MaskConnectedNetworkText() already no-ops when
+    // g_Settings.privacyMode is false, and unhooking/rehooking DrawTextW on
+    // every toggle isn't worth the added complexity for a hot user32 entry
+    // point that's already cheap to no-op through.
+    // If the page is already loaded, apply the runtime setting now. Otherwise
+    // SetXMLFromResource_Hook installs it when netcenter.dll is first used.
+    // Install the hook from the settings path when privacy mode is enabled. The hook
+    // still no-ops until netcenter.dll is observed and its range is cached, so this
+    // doesn't change privacy behavior; it only avoids applying hook operations from
+    // inside the DirectUI SetXML hook.
+    if (g_Settings.privacyMode && g_hookInstalled)
+        EnsurePrivacyTextHookInstalled();
+
+    // Push runtime settings to already-open Network and Sharing Center pages.
+    // This covers toggling the restored layout, privacy mode, network-location
+    // icons and language. RefreshNetworkCenterXml() also reverts to the stock
+    // XML if Patch() is now a no-op, so turning the feature off is visible
+    // immediately instead of only after reopening the page.
+    RequestNetCenterRefreshFromSettings();
 }
 
 #undef NCL_THISCALL
@@ -6231,10 +10181,21 @@ static void SettingsChanged() {
 
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"=== Wh_ModInit v3.4.0 ===");
+    Wh_Log(L"=== Wh_ModInit ===");
     DetectWindowsVersion();
     LoadSettings();
     DetermineLocale();
+
+    // g_Ctx.csLock must be ready before Win7NetworkCenterLinks::Init() below
+    // installs its DirectUI/DrawTextW hooks: those hooks run in control.exe
+    // too (via SetXMLFromResource_Hook / DrawTextW_Hook -> 
+    // GetConnectedNetworkName() / MaskConnectedNetworkText(), both of which
+    // take this lock), and control.exe never reaches the g_IsExplorerHost
+    // branch that used to initialize this critical section. Entering an
+    // uninitialized CRITICAL_SECTION there was undefined behavior that, in
+    // practice, deadlocked the Control Panel page.
+    ZeroMemory(&g_Ctx, sizeof(g_Ctx));
+    InitializeCriticalSection(&g_Ctx.csLock);
 
     if (!Win7NetworkCenterLinks::Init()) {
         // The flyout does not depend on this optional Control Panel feature.
@@ -6248,8 +10209,6 @@ BOOL Wh_ModInit() {
     }
 
     DarkContextMenu::Init();
-    ZeroMemory(&g_Ctx, sizeof(g_Ctx));
-    InitializeCriticalSection(&g_Ctx.csLock);
     g_hConnectMutex.reset(CreateMutexW(NULL, FALSE, L"Local\\Win7NetFlyout_ConnectMutex"));
     g_uTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSystemIcons();
@@ -6267,6 +10226,18 @@ BOOL Wh_ModInit() {
     // startup, and risks creating g_pNLM in the wrong apartment.
     g_Ctx.hHotkeyThread = CreateThread(NULL, 0, HotkeyThreadProc, &g_Ctx, 0, &g_Ctx.dwHotkeyThreadId);
     if (!g_Ctx.hHotkeyThread) {
+        // Per the Windhawk mod lifetime contract, returning FALSE here means
+        // Wh_ModUninit is never called - so everything installed above
+        // (tray subclass, GDI+, icons, fonts, DarkContextMenu) must be
+        // undone right here, or it stays live in explorer.exe pointing into
+        // a mod image that's about to be unmapped. The tray interception
+        // and Network Center page don't actually depend on the hotkey
+        // thread, so this path should be rare, but must still be safe.
+        RemoveTrayInterception();
+        ShutdownGdiPlusRendering();
+        FreeSystemIcons();
+        FreeGlobalFonts();
+        DarkContextMenu::Uninit();
         DeleteCriticalSection(&g_Ctx.csLock);
         return FALSE;
     }
@@ -6285,8 +10256,6 @@ void Wh_ModSettingsChanged() {
     if (!g_IsExplorerHost)
         return;
 
-    DarkContextMenu::OnSettingsChanged();
-
     BOOL needRecreate = (oldRoundedCorners != g_Settings.useRoundedCorners)
                      || (oldTheme          != g_Settings.theme);
 
@@ -6298,6 +10267,15 @@ void Wh_ModSettingsChanged() {
         }
         return;
     }
+    // Update hotkey registration when the setting changes. This must not
+    // depend on the flyout window existing: refCount (and therefore
+    // SafeToAccessUI()) is only incremented in the flyout's WM_CREATE, so on
+    // a fresh session - where the user is enabling the hotkey specifically
+    // in order to open the flyout for the first time - the guard below would
+    // never be true and the hotkey would silently stay unregistered.
+    if (g_Ctx.dwHotkeyThreadId)
+        PostThreadMessageW(g_Ctx.dwHotkeyThreadId, WM_UPDATE_HOTKEY, 0, 0);
+
     if (SafeToAccessUI() && g_hWndFlyout) {
         if (g_dwFlyoutOwnerThreadId) {
             PostThreadMessageW(g_dwFlyoutOwnerThreadId, WM_UPDATE_REFRESH_TIMER, 0, 0);
@@ -6313,15 +10291,75 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (Win7NetworkCenterLinks::g_ncRefreshThread) {
+        // Was bounded to 5s; NcNetworkDataRefreshWorker's worst case
+        // (WlanEnumInterfaces + WlanGetNetworkBssList per network +
+        // GetAdaptersAddresses + 2x CoCreateInstance) can exceed that on a
+        // laptop with many visible SSIDs. A timed-out fall-through here
+        // means Windhawk unmaps the DLL while this thread is still running
+        // inside it, so wait for real completion instead.
+        WaitForSingleObject(Win7NetworkCenterLinks::g_ncRefreshThread, INFINITE);
+        CloseHandle(Win7NetworkCenterLinks::g_ncRefreshThread);
+        Win7NetworkCenterLinks::g_ncRefreshThread = NULL;
+    }
+
     if (!g_IsExplorerHost) {
         // control.exe can create only the in-memory Network Center icons.
+        // Marshal the subclass removal + COM Unadvise/Release to the STA
+        // thread that owns them (this callback can run on an arbitrary
+        // Windhawk thread), instead of touching the raw, unmarshalled
+        // IConnectionPoint pointer from here directly.
+        Win7NetworkCenterLinks::TeardownNetCenterHost();
+        // Only closes a handle PrimeNetworkCategoryForNetCenterHost() opened
+        // itself in this same (non-explorer-host) process; SafeCleanup()
+        // below (explorer-host branch) already owns the equivalent handle
+        // for the normal flyout case. Best-effort: WlanCloseHandle failing
+        // here just leaks the handle for this short-lived process's
+        // remaining lifetime, which the OS reclaims on exit regardless.
+        if (Win7NetworkCenterLinks::g_ncOwnsWlanHandleInNonExplorerHost && g_Ctx.hWlanClient) {
+            WlanCloseHandle(g_Ctx.hWlanClient, NULL);
+            g_Ctx.hWlanClient = NULL;
+        }
+        if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
+            // UnregisterClass fails while any window of the class still
+            // exists. TeardownNetCenterHost now waits for message-only windows
+            // to be destroyed before returning, but keep the flag truthful if
+            // an unexpected window is still alive.
+            if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
+                Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+            } else {
+                Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
+            }
+        }
+        ShutdownGdiPlusRendering();
         FreeSystemIcons();
+        DeleteCriticalSection(&g_Ctx.csLock);
         return;
     }
 
+    Win7NetworkCenterLinks::TeardownNetCenterHost();
     SafeCleanup();
     DeleteCriticalSection(&g_Ctx.csLock);
     DarkContextMenu::Uninit();
-    UnregisterClassW(L"Win7NetworkFlyoutSafe", GetModuleHandle(NULL));
-    UnregisterClassW(L"Win7NetPwdClass", GetModuleHandle(NULL));
+    if (Win7NetworkCenterLinks::g_ncMsgClassRegistered) {
+        if (UnregisterClassW(Win7NetworkCenterLinks::kNcMsgClassName, HINST_THISCOMPONENT)) {
+            Win7NetworkCenterLinks::g_ncMsgClassRegistered = false;
+        } else {
+            Wh_Log(L"[NetMap] UnregisterClass failed (window still alive?)");
+        }
+    }
+    if (g_flyoutClassRegistered) {
+        if (UnregisterClassW(L"Win7NetworkFlyoutSafe", HINST_THISCOMPONENT)) {
+            g_flyoutClassRegistered = false;
+        } else {
+            Wh_Log(L"UnregisterClassW(Win7NetworkFlyoutSafe) failed (%lu)", GetLastError());
+        }
+    }
+    if (g_pwdClassRegistered) {
+        if (UnregisterClassW(L"Win7NetPwdClass", HINST_THISCOMPONENT)) {
+            g_pwdClassRegistered = false;
+        } else {
+            Wh_Log(L"UnregisterClassW(Win7NetPwdClass) failed (%lu)", GetLastError());
+        }
+    }
 }
