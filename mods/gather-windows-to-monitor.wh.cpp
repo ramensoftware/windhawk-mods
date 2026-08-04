@@ -470,8 +470,11 @@ void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
     Wh_Log(L"Skip hwnd=%p class=%s title=%s reason=%s", hwnd, className, title, SkipReasonText(reason));
 }
 
-bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
+bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
+                         bool bulk) {
     if (!IsWindow(hwnd)) return false;
+    if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) == target.handle) return false;
+    const RECT& workArea = target.work;
     bool wasMaximized = IsZoomed(hwnd);
     bool wasMinimized = IsIconic(hwnd);
 
@@ -485,7 +488,7 @@ bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
     }
 
     if (wasMaximized) {
-        ShowWindowAsync(hwnd, SW_RESTORE);
+        ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
     } else if (wasMinimized && g_settings.restoreMinimized) {
         ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
     }
@@ -532,14 +535,14 @@ bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
         flags |= SWP_NOSIZE;
     }
     bool moved = SetWindowPos(hwnd, nullptr, x, y, width, height, flags) != FALSE;
-    if (moved && wasMaximized) {
+    if (wasMaximized && (!moved || !bulk)) {
         ShowWindowAsync(hwnd, SW_MAXIMIZE);
     }
     return moved;
 }
 
 struct GatherState {
-    const RECT* workArea;
+    const MonitorInfo* target;
     bool bulk;
     int found;
     int moved;
@@ -556,7 +559,7 @@ BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
     }
 
     state->found++;
-    if (MoveWindowToMonitor(hwnd, *state->workArea, state->moved)) {
+    if (MoveWindowToMonitor(hwnd, *state->target, state->moved, state->bulk)) {
         state->moved++;
     } else {
         state->skipped++;
@@ -576,7 +579,7 @@ void GatherWindows(TargetMode mode) {
 
     Wh_Log(L"Target work area: (%ld,%ld,%ld,%ld)", target->work.left, target->work.top,
            target->work.right, target->work.bottom);
-    GatherState state{ &target->work,
+    GatherState state{ target,
                        mode != TargetMode::ForegroundPrimary,
                        0,
                        0,
