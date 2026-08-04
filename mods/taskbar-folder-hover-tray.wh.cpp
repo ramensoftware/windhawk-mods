@@ -7755,6 +7755,34 @@ std::wstring EscapeMenuLabel(const std::wstring& s) {
     return out;
 }
 
+// Position (by-position index) of the top-level item whose visible text
+// matches `label`, ignoring '&' mnemonics and any trailing "\taccelerator".
+// Returns -1 if not found.
+int FindMenuItemPositionByLabel(HMENU menu, PCWSTR label) {
+    int count = GetMenuItemCount(menu);
+    for (int i = 0; i < count; i++) {
+        WCHAR buf[256];
+        int len = GetMenuStringW(menu, i, buf, ARRAYSIZE(buf), MF_BYPOSITION);
+        if (len <= 0) {
+            continue;
+        }
+        std::wstring text(buf, len);
+        if (PCWSTR tab = wcschr(text.c_str(), L'\t')) {
+            text.resize(tab - text.c_str());
+        }
+        std::wstring stripped;
+        for (wchar_t c : text) {
+            if (c != L'&') {
+                stripped += c;
+            }
+        }
+        if (_wcsicmp(stripped.c_str(), label) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 // The shell view that owns `hwnd`, or null if there is not one — which is also
 // what says "this is an Explorer or Desktop context menu, not some other
 // TrackPopupMenuEx caller in the process".
@@ -7994,10 +8022,37 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     if (!anyItem) {
         DestroyMenu(foldersMenu);
     } else {
-        if (GetMenuItemCount(hMenu) > 0) {
-            AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+        // Sit right under "Pin to taskbar" so it reads as a related action,
+        // falling back to right under "Give access to" when Explorer didn't
+        // offer a pin item (e.g. the item is already pinned).
+        int afterPos = FindMenuItemPositionByLabel(hMenu, L"Pin to taskbar");
+        if (afterPos < 0) {
+            afterPos = FindMenuItemPositionByLabel(hMenu, L"Give access to");
         }
-        AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)foldersMenu, L"Taskbar Folders");
+        if (afterPos >= 0) {
+            InsertMenuW(hMenu, afterPos + 1, MF_BYPOSITION | MF_POPUP,
+                        (UINT_PTR)foldersMenu, L"Taskbar Folders");
+        } else {
+            if (GetMenuItemCount(hMenu) > 0) {
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+            }
+            AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)foldersMenu,
+                        L"Taskbar Folders");
+        }
+
+        // Explorer applies dark-mode/background MENUINFO across the whole
+        // menu tree it builds via SetMenuInfo(..., MIM_APPLYTOSUBMENUS)
+        // before handing off to TrackPopupMenuEx. Our submenu is created
+        // afterward, inside this hook, so it never inherits that pass —
+        // copying the parent's MENUINFO onto it (with MIM_APPLYTOSUBMENUS so
+        // it cascades down to Move/Copy/Copy as shortcut too) is what fixes
+        // the classic light-mode square border that otherwise shows up only
+        // on menus this mod injects.
+        MENUINFO parentInfo{sizeof(parentInfo)};
+        parentInfo.fMask = MIM_STYLE | MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+        if (GetMenuInfo(hMenu, &parentInfo)) {
+            SetMenuInfo(foldersMenu, &parentInfo);
+        }
     }
 
     // Submenus we inject (MF_POPUP with our own CreatePopupMenu() handles)
