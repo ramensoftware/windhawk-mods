@@ -2,7 +2,7 @@
 // @id            hanging-v-dice-customizable
 // @name          Customizable Dual Hanging Dice
 // @description   Hanging dice with physical reactions to window animations and auto-hide in fullscreen mode.
-// @version       1.2
+// @version       1.2.1
 // @author        Jaali
 // @github        https://github.com/alivca
 // @include       explorer.exe
@@ -125,7 +125,15 @@ int ClampDiceValue(int val) {
 }
 
 bool IsWindowFullscreen(HWND hwnd) {
-    if (!hwnd || hwnd == GetDesktopWindow() || hwnd == GetShellWindow()) return false;
+    if (!hwnd || hwnd == GetDesktopWindow() || hwnd == GetShellWindow()) 
+        return false;
+
+    wchar_t className[256];
+    if (GetClassNameW(hwnd, className, 256)) {
+        if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
+            return false;
+        }
+    }
 
     RECT appBounds;
     if (!GetWindowRect(hwnd, &appBounds)) return false;
@@ -134,10 +142,16 @@ bool IsWindowFullscreen(HWND hwnd) {
     MONITORINFO mi = { sizeof(MONITORINFO) };
     if (!GetMonitorInfo(hMon, &mi)) return false;
 
-    return (appBounds.left <= mi.rcMonitor.left &&
-            appBounds.top <= mi.rcMonitor.top &&
-            appBounds.right >= mi.rcMonitor.right &&
-            appBounds.bottom >= mi.rcMonitor.bottom);
+    int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+    int monHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+    int appWidth = appBounds.right - appBounds.left;
+    int appHeight = appBounds.bottom - appBounds.top;
+
+    bool isSizeMatching = (abs(appWidth - monWidth) <= 4) && (abs(appHeight - monHeight) <= 4);
+    bool isPositionMatching = (abs(appBounds.left - mi.rcMonitor.left) <= 4) && (abs(appBounds.top - mi.rcMonitor.top) <= 4);
+
+    return (isSizeMatching && isPositionMatching);
 }
 
 void CheckFullscreenState() {
@@ -148,7 +162,7 @@ void CheckFullscreenState() {
             ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
             SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             g_isHiddenByFullscreen = false;
-            SetTimer(g_hWnd, 1, 16, NULL);
+
         }
         return;
     }
@@ -157,14 +171,14 @@ void CheckFullscreenState() {
     if (hForeground && hForeground != g_hWnd) {
         bool fs = IsWindowFullscreen(hForeground);
         if (fs && !g_isHiddenByFullscreen) {
-            KillTimer(g_hWnd, 1);
+
             ShowWindow(g_hWnd, SW_HIDE);
             g_isHiddenByFullscreen = true;
         } else if (!fs && g_isHiddenByFullscreen) {
             ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
             SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             g_isHiddenByFullscreen = false;
-            SetTimer(g_hWnd, 1, 16, NULL);
+            
         }
     }
 }
@@ -522,6 +536,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return MA_NOACTIVATE;
 
     case WM_TIMER:
+        CheckFullscreenState();
         if (PhysicsStep()) {
             RedrawOverlay(hWnd);
         }
