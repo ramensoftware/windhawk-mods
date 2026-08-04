@@ -119,10 +119,13 @@ NtCreateKey_t NtCreateKey_orig;
 using NtClose_t = NTSTATUS(NTAPI*)(HANDLE handle);
 NtClose_t NtClose_orig;
 
-std::atomic<HANDLE> g_virtualKeyHandles[8]{};
+constexpr size_t kVirtualKeyCapacity = 16;
+std::atomic<HANDLE> g_virtualKeyHandles[kVirtualKeyCapacity]{};
+std::atomic<size_t> g_virtualKeyHandleCount{0};
 
 bool IsVirtualKey(HANDLE key) {
-    if (!key) {
+    if (!key ||
+        g_virtualKeyHandleCount.load(std::memory_order_relaxed) == 0) {
         return false;
     }
     for (auto& slot : g_virtualKeyHandles) {
@@ -232,6 +235,7 @@ bool RememberVirtualKey(HANDLE key) {
         HANDLE expected = nullptr;
         if (slot.compare_exchange_strong(expected, key,
                                          std::memory_order_relaxed)) {
+            g_virtualKeyHandleCount.fetch_add(1, std::memory_order_relaxed);
             return true;
         }
     }
@@ -243,6 +247,7 @@ void ForgetVirtualKey(HANDLE key) {
         HANDLE expected = key;
         if (slot.compare_exchange_strong(expected, nullptr,
                                          std::memory_order_relaxed)) {
+            g_virtualKeyHandleCount.fetch_sub(1, std::memory_order_relaxed);
             return;
         }
     }
@@ -379,7 +384,9 @@ NTSTATUS NTAPI NtCreateKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
 }
 
 NTSTATUS NTAPI NtClose_hook(HANDLE handle) {
-    ForgetVirtualKey(handle);
+    if (g_virtualKeyHandleCount.load(std::memory_order_relaxed) != 0) {
+        ForgetVirtualKey(handle);
+    }
     return NtClose_orig(handle);
 }
 
