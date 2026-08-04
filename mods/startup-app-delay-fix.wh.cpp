@@ -10,6 +10,8 @@
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
+![Key](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png)
+
 Windows intentionally delays startup applications after sign-in to reduce
 system load, which can cause apps to open minutes after startup.
 
