@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              autohide-taskbar-on-desktop
-// @name            Hide Taskbar on Desktop Only
+// @name            autohide-taskbar-on-desktop
 // @version         1.0.0
 // @author          qwertyuiop00-art
 // @github          https://github.com/qwertyuiop00-art
