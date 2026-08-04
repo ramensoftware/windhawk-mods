@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.1
+// @version         3.1.3
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -13,8 +13,6 @@
 // ==WindhawkModReadme==
 /*
 # MacOS Minimize Animation
-
-![Demo](https://raw.githubusercontent.com/Potassiumuncher/MacOS-Animation-for-windows/99a9a78e9a06c49b282cc8e337854840a9f7fa73/Desktop2026.07.02-19.32.49.05-ezgif.com-video-to-gif-converter.gif)
 
 Brings the classic macOS **genie** effect to Windows. When you minimize a window
 it warps and flows down into the taskbar; when you restore it, it flows back out.
@@ -32,10 +30,14 @@ Definitely not inspired from MacOS.
 There are two genie styles, selectable in the settings (**Animation style**):
 
 - **Modern** (default) - the Direct2D genie engine contributed by **Potassiumuncher**:
-  a smooth mesh warp that necks the window down into the taskbar. The demo GIF above
-  shows it.
+  a smooth mesh warp that necks the window down into the taskbar:
+
+![Modern genie demo](https://raw.githubusercontent.com/Potassiumuncher/MacOS-Animation-for-windows/99a9a78e9a06c49b282cc8e337854840a9f7fa73/Desktop2026.07.02-19.32.49.05-ezgif.com-video-to-gif-converter.gif)
+
 - **Classic** - this mod's original strip-based genie: lighter, with a slightly
-  different look. Kept because some people preferred it.
+  different look. Kept because some people preferred it:
+
+![Classic genie demo](https://raw.githubusercontent.com/Abdullah-Masood-05/my-windhawk-mods-media/main/macos-minimize-animation.gif)
 
 ## Credits
 The **Modern** genie style - the Direct2D genie rendering engine (a configurable
@@ -47,7 +49,8 @@ capture, flash-free cloak restore, safe unload, first-frame sync). The fixes in
 v3.1.1 are his as well (from v1.5 of his engine): the translucent-window capture
 fix that stops acrylic / Mica windows going grey, the window-only capture that
 keeps the taskbar out of the animation, the smoother mask / mesh rendering, the
-frame pacer, and the tile-count setting. The demo GIF above is also his, from his
+frame pacing (since reshaped into a high-resolution 2x-refresh timer in v3.1.2),
+and the tile-count setting. The modern-genie demo GIF above is also his, from his
 own [MacOS-Animation-for-windows](https://github.com/Potassiumuncher/MacOS-Animation-for-windows)
 repo. Huge thanks for building this, sharing the recording, and generously handing
 it all over - this mod wouldn't look nearly this good without him. The **Classic**
@@ -92,9 +95,15 @@ style is the mod's original renderer.
 - **Real genie warp.** The window is rendered as a Direct2D mesh whose vertices
   follow the macOS lamp curve, so the whole frame necks down and funnels into the
   taskbar icon instead of just shrinking.
-- **Actually smooth.** Progress is driven by real elapsed time and every rendered
-  frame is gated on the DWM compose cycle (`DwmFlush`), so each frame you render is
-  exactly one frame you see - perfectly aligned with vsync at any duration you set.
+- **Actually smooth.** Progress is driven by real elapsed time, and frames are
+  paced at twice the display's refresh rate (via a high-resolution timer), so the
+  compositor always has a fresh frame ready at each vsync. No system animation
+  competes with it, so it stays smooth at any duration you set. In v3.1.3 the
+  modern genie's render canvas shrank from the full virtual desktop to a tight
+  bounding box around the window and dock target, which removed a large per-frame
+  `UpdateLayeredWindow` cost that made the modern style stutter on AMD GPUs
+  (reported on a 6900 XT and a Vega 8 iGPU; the classic style was already using
+  the tight canvas).
 - **Smoothstep easing** instead of a linear ramp, so it eases in and out.
 - **Accurate targeting.** The mod locates the app's actual taskbar button via UI
   Automation and aims the genie at it (with a per-process fallback cache), instead
@@ -238,6 +247,14 @@ Check out the documentation
 #define PW_RENDERFULLCONTENT 2
 #endif
 
+// High-resolution waitable timer flag (Win10 1803+). The kernel rejects the
+// flag on 1709 and earlier (and Win7/8.1), so CreateWaitableTimerExW is retried
+// without it; the pacer then just ticks coarser. A plain Sleep(1) floor keeps
+// the loop from ever degrading to a busy spin.
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+
 // Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
 #define PI 3.14159265f
 // Mesh tile-count bounds for the modern engine (Potassiumuncher's v1.5 update:
@@ -361,7 +378,9 @@ void MacGenieLoadSettings() {
     g_unhideEnabled.store(Wh_GetIntSetting(L"unhide_taskbar") != 0, std::memory_order_relaxed);
 
     PCWSTR engine = Wh_GetStringSetting(L"engine");
-    g_classicEngine.store(engine && wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
+    // Wh_GetStringSetting never returns NULL (it returns L"" on error / unset),
+    // so only the string comparison matters.
+    g_classicEngine.store(wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
     Wh_FreeStringSetting(engine);
 
     int tiles = Wh_GetIntSetting(L"tile_count");
@@ -374,7 +393,7 @@ void MacGenieLoadSettings() {
     std::vector<std::wstring> excluded;
     for (int i = 0;; i++) {
         PCWSTR prog = Wh_GetStringSetting(L"excluded_programs[%d]", i);
-        bool has = prog && *prog;
+        bool has = *prog;   // L"" on unset, so *prog alone signals presence
         if (has) {
             std::wstring s = prog;
             std::transform(s.begin(), s.end(), s.begin(), ::towlower);
@@ -733,28 +752,163 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
     *outY = w.y + y + offsetY;
 }
 
+// Shared by both engines: union of the monitors involved (the window's own
+// monitor and the monitor the genie funnels to). With Multi-monitor support off
+// (the default) data->hMon is the primary monitor, so a window sitting on a
+// secondary display still needs its own monitor in the union or the canvas would
+// collapse onto the primary and clip the first half of the animation.
+static RECT GetGenieMonitorUnion(const RECT& winRect, HMONITOR hDockMon) {
+    RECT winMon;
+    HMONITOR hWinMon = MonitorFromRect(&winRect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO wmi = {0};
+    wmi.cbSize = sizeof(wmi);
+    if (hWinMon && GetMonitorInfoW(hWinMon, &wmi)) {
+        winMon = wmi.rcMonitor;
+    } else {
+        winMon = winRect;
+    }
+
+    RECT dockMon;
+    MONITORINFO dmi = {0};
+    dmi.cbSize = sizeof(dmi);
+    if (hDockMon && GetMonitorInfoW(hDockMon, &dmi)) {
+        dockMon = dmi.rcMonitor;
+    } else {
+        dockMon = winMon;
+    }
+
+    RECT u;
+    u.left   = (winMon.left   < dockMon.left)   ? winMon.left   : dockMon.left;
+    u.top    = (winMon.top    < dockMon.top)    ? winMon.top    : dockMon.top;
+    u.right  = (winMon.right  > dockMon.right)  ? winMon.right  : dockMon.right;
+    u.bottom = (winMon.bottom > dockMon.bottom) ? winMon.bottom : dockMon.bottom;
+    return u;
+}
+
+// Shared by both engines: clamp a proposed canvas rect to the union of the
+// monitors involved, then re-expand it so it can never clip the window rect or
+// the dock target column away. The monitor clamp only trims the box to the
+// screens actually used; it must never cut geometry the animation draws.
+static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
+                             const RECT& winRect, int dockX, const RECT& monUnion) {
+    if (left   < monUnion.left)   left   = monUnion.left;
+    if (right  > monUnion.right)  right  = monUnion.right;
+    if (top    < monUnion.top)    top    = monUnion.top;
+    if (bottom > monUnion.bottom) bottom = monUnion.bottom;
+
+    if (left  > winRect.left)  left  = winRect.left;
+    if (right < winRect.right) right = winRect.right;
+    if (top   > winRect.top)   top   = winRect.top;
+    if (bottom < winRect.bottom) bottom = winRect.bottom;
+    if (left  > dockX - 16)    left  = dockX - 16;   // iGeom is dockX ± 11
+    if (right < dockX + 16)    right = dockX + 16;
+}
+
 // -------------------------------------------------------------------------
 // Genie Animation Thread
 //
-// MINE's loop and lifecycle - g_workerCount, g_unloading early-out, DwmFlush
-// pacing, the first-frame sync event, g_AnimActive teardown - with HIS's Direct2D
-// mesh renderer as the per-frame draw call. HIS's original busy for(;;) with no
-// compose gating is dropped in favor of MINE's DwmFlush vsync pace-gate.
+// MINE's loop and lifecycle - g_workerCount, g_unloading early-out, the
+// first-frame sync event, g_AnimActive teardown - with HIS's Direct2D mesh
+// renderer as the per-frame draw call. Frames are paced by a high-resolution
+// waitable timer at 2x the display's refresh rate (never a busy loop), so DWM
+// always has a fresh frame to composite at each vsync.
 // -------------------------------------------------------------------------
 DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     MacGenieAnimData* data = (MacGenieAnimData*)lpParam;
 
+    // Matches the in-repo standalone genie mod (genie-minimize-animation.wh.cpp):
+    // HIGHEST, not TIME_CRITICAL. A TIME_CRITICAL thread that never yields would
+    // preempt the host app's UI thread for the whole animation on slow or 2-core
+    // machines; the pacer below keeps the frame rate up without that.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
-    // Full virtual-screen canvas: HIS's genie mesh is written in screen-space
-    // coordinates (it can spill outside the window rect), so the ghost and its
-    // render surface span every monitor. This is the one place we adopt HIS's
-    // full-screen ghost over MINE's tight bounding box, because the mesh geometry
-    // structurally requires a screen-space canvas.
-    int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+    // --- Target geometry (Potassiumuncher's engine), using the monitor picked by
+    // the multi-monitor setting (data->hMon), so "off" keeps the primary-monitor
+    // behavior and "on" targets the window's monitor taskbar edge. ---
+    Geometry wGeom = { (float)data->targetRect.left, (float)data->targetRect.top, (float)data->width, (float)data->height };
+
+    MONITORINFO mi = {0};
+    mi.cbSize = sizeof(MONITORINFO);
+    HMONITOR hMon = data->hMon;
+    GetMonitorInfoW(hMon, &mi);
+
+    UINT dpiX = 96, dpiY = 96;
+    // System32-only search: Shcore.dll is not a KnownDLL, and under @include *
+    // this code runs inside every process - a bare-name LoadLibrary would search
+    // the host .exe's own directory first, letting a planted Shcore.dll next to
+    // any portable app execute in that process (windhawk-mods #2063 pattern).
+    HMODULE hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hShcore) {
+        typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+        auto pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
+        if (pGetDpiForMonitor) pGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
+        FreeLibrary(hShcore);
+    }
+    float dpiScale = dpiY / 96.0f;
+    float scaledTaskbarHeight = COMPAT_TASKBAR_HEIGHT * dpiScale;
+    float scaledIconSize = COMPAT_ICON_SIZE * dpiScale;
+
+    float iGeomTaskbarTop = (float)mi.rcMonitor.bottom - scaledTaskbarHeight;
+
+    HWND hTrayGeom = FindTaskbarForMonitor(hMon);
+    if (hTrayGeom) {
+        RECT tr;
+        if (GetWindowRect(hTrayGeom, &tr)) {
+            int th = tr.bottom - tr.top;
+            if (th > 0) iGeomTaskbarTop = (float)tr.top;
+        }
+    }
+
+    Geometry iGeom = {
+        (float)data->targetDockX - 11.0f,
+        iGeomTaskbarTop,
+        22.0f,
+        scaledIconSize
+    };
+
+    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
+    int xTiles = g_tileCount.load(std::memory_order_relaxed);
+    int yTiles = xTiles;
+
+    // Tight bounding-box canvas: the genie mesh is written in screen-space
+    // coordinates and only ever occupies the region between the window rect and
+    // the dock target. Rendering over the full virtual desktop wasted CPU on
+    // every frame - UpdateLayeredWindow of a whole-screen layered window is slow,
+    // most visibly on AMD drivers. A ~W/2 pad alone can't bound the mesh's sway
+    // term in CalculateLampVertexMacOS (its amplitude scales with the
+    // window-to-dock distance, not the window width), so the horizontal pad is
+    // the exact sway bound: max(|w.x-i.x|, |w.right-i.right|)/7.
+    const int origLeftB = data->targetRect.left;
+    const int origTopB  = data->targetRect.top;
+    const int wB = data->width;
+    const int dockXB = data->targetDockX;
+
+    const float iLeftF = iGeom.x;
+    const float iWidthF = iGeom.width;
+    const float sway = fmaxf(fabsf((float)origLeftB - iLeftF),
+                             fabsf((float)origLeftB + wB - iLeftF - iWidthF)) / 7.0f;
+    int padX = (int)((wB / 2 > sway ? wB / 2 : sway) + 1);
+
+    // iGeom is known here, so a top/side taskbar (iGeom.y above/beside the
+    // window) is covered: the box spans min..max of the window and the icon rect,
+    // with no band below the taskbar top ever wasted.
+    int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - padX;
+    int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + padX;
+    int boundTop    = (int)fminf(wGeom.y, iGeom.y);
+    int boundBottom = (int)fmaxf(wGeom.y + wGeom.height, iGeom.y + iGeom.height);
+
+    // Trim the box to the union of the monitors actually involved, but never
+    // clip the window rect or the dock target column away.
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockXB, monUnion);
+
+    int vLeft = boundLeft;
+    int vTop = boundTop;
+    int vWidth = boundRight - boundLeft;
+    int vHeight = (boundBottom - boundTop) - 1;
+    if (vWidth < 1) vWidth = 1;
+    if (vHeight < 1) vHeight = 1;
 
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
@@ -811,58 +965,11 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     }
     bool d2dOk = (rt && bmpBrush);
 
-    // --- Target geometry (Potassiumuncher's engine), using the monitor picked by
-    // the multi-monitor setting (data->hMon), so "off" keeps the primary-monitor
-    // behavior and "on" targets the window's monitor taskbar edge. ---
-    Geometry wGeom = { (float)data->targetRect.left, (float)data->targetRect.top, (float)data->width, (float)data->height };
-
-    MONITORINFO mi = {0};
-    mi.cbSize = sizeof(MONITORINFO);
-    HMONITOR hMon = data->hMon;
-    GetMonitorInfoW(hMon, &mi);
-
-    UINT dpiX = 96, dpiY = 96;
-    // System32-only search: Shcore.dll is not a KnownDLL, and under @include *
-    // this code runs inside every process - a bare-name LoadLibrary would search
-    // the host .exe's own directory first, letting a planted Shcore.dll next to
-    // any portable app execute in that process (windhawk-mods #2063 pattern).
-    HMODULE hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hShcore) {
-        typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
-        auto pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
-        if (pGetDpiForMonitor) pGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
-        FreeLibrary(hShcore);
-    }
-    float dpiScale = dpiY / 96.0f;
-    float scaledTaskbarHeight = COMPAT_TASKBAR_HEIGHT * dpiScale;
-    float scaledIconSize = COMPAT_ICON_SIZE * dpiScale;
-
-    float iGeomTaskbarTop = (float)mi.rcMonitor.bottom - scaledTaskbarHeight;
-
-    HWND hTrayGeom = FindTaskbarForMonitor(hMon);
-    if (hTrayGeom) {
-        RECT tr;
-        if (GetWindowRect(hTrayGeom, &tr)) {
-            int th = tr.bottom - tr.top;
-            if (th > 0) iGeomTaskbarTop = (float)tr.top;
-        }
-    }
-
-    Geometry iGeom = {
-        (float)data->targetDockX - 11.0f,
-        iGeomTaskbarTop,
-        22.0f,
-        scaledIconSize
-    };
-
     const double animDur = (double)data->durationMs;
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
 
-    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
-    int xTiles = g_tileCount.load(std::memory_order_relaxed);
-    int yTiles = xTiles;
     std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
 
     ID2D1PathGeometry* cachedOutlineGeo = nullptr;
@@ -870,29 +977,31 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     BOOL firstFrame = TRUE;
 
-    // Potassiumuncher's v1.5 frame pacer: cap delivery at ~120fps so frames land
-    // at even intervals when per-frame cost varies (it does not change the
-    // animation's duration). On <=120Hz displays MINE's DwmFlush below already
-    // paces slower than this, so the pacer is a no-op there; on faster displays
-    // it keeps the mesh render cost bounded.
-    const double kTargetFrameMs = 1000.0 / 120.0;
-    LARGE_INTEGER qpcLastFrame = qpcStart;
+    // Frame pacing, 2x the display's refresh rate (or 240 fps if we can't read
+    // it): the pacer is a rate LIMITER, not a vsync gate. Dropping the old
+    // per-frame DwmFlush removed the render_time + vsync serialization that cut
+    // delivered frames in half on fast displays; this timer caps the loop below
+    // a busy spin while still handing DWM a fresh frame at every compose tick.
+    double frameIntervalMs = 1000.0 / 240.0;   // fallback
+    DWM_TIMING_INFO ti = { sizeof(ti) };
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator) {
+        double hz = (double)ti.rateRefresh.uiNumerator / ti.rateRefresh.uiDenominator;
+        frameIntervalMs = 1000.0 / (hz * 2.0);
+    }
+    HANDLE hFrameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hFrameTimer) {
+        // Pre-1803: the high-resolution flag isn't recognized. A plain waitable
+        // timer paces coarser, but it still isn't a spin.
+        hFrameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0,
+                                             TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
 
     if (d2dOk) {
         for (;;) {
-            for (;;) {
-                QueryPerformanceCounter(&qpcNow);
-                double sinceLastMs = (qpcNow.QuadPart - qpcLastFrame.QuadPart) * 1000.0 / qpcFreq.QuadPart;
-                if (sinceLastMs >= kTargetFrameMs) break;
-                double remainingMs = kTargetFrameMs - sinceLastMs;
-                if (remainingMs > 2.0) {
-                    Sleep((DWORD)(remainingMs - 1.0));
-                } else {
-                    YieldProcessor();
-                }
-            }
-            qpcLastFrame = qpcNow;
-
+            QueryPerformanceCounter(&qpcNow);
+            const LARGE_INTEGER qpcFrameStart = qpcNow;
             double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
             BOOL lastFrame = (elapsedMs >= animDur);
 
@@ -915,7 +1024,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     // (virtual-desktop) coordinates - wGeom / iGeom are both
                     // screen-space (targetRect, targetDockX, taskbar-top Y are all
                     // virtual-screen). The ONLY conversion to the ghost's
-                    // full-virtual-screen canvas is the (px - vLeft, py - vTop)
+                    // bounding-box canvas is the (px - vLeft, py - vTop)
                     // subtraction below - vLeft/vTop are negative on monitors left of
                     // / above the primary. Every mesh coordinate passes through here
                     // exactly once; nothing downstream re-offsets.
@@ -1000,14 +1109,14 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             }
 
             if (outlineGeo) {
-                ID2D1Layer* layer = nullptr;
-                rt->CreateLayer(&layer);
                 D2D1_LAYER_PARAMETERS layerParams = D2D1::LayerParameters();
                 layerParams.geometricMask = outlineGeo;
                 // Per-primitive AA on the outline mask (Potassiumuncher's v1.5):
                 // smooth silhouette edges without per-tile seam artifacts.
                 layerParams.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
-                rt->PushLayer(&layerParams, layer);
+                // nullptr layer: D2D manages its own layer pool, avoiding a fresh
+                // ID2D1Layer create/release on every frame.
+                rt->PushLayer(&layerParams, nullptr);
 
                 for (int y = 0; y < yTiles; y++) {
                     for (int x = 0; x < xTiles; x++) {
@@ -1049,7 +1158,6 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     }
                 }
                 rt->PopLayer();
-                if (layer) layer->Release();
             }
             rt->EndDraw();
 
@@ -1076,20 +1184,44 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             // transitions.
             if (g_unloading.load(std::memory_order_relaxed)) break;
 
-            // Block until the next DWM compose cycle - the vsync sync point (MINE).
-            DwmFlush();
-
+            // The first real frame has been presented on the ghost. For a
+            // minimize the hook is holding the REAL minimize (or, on the
+            // auto-hide path, the cloak-hide) back until this moment - otherwise
+            // the window would vanish a few frames before the genie appears.
+            // One DwmFlush here guarantees it is composed on screen before the
+            // handoff; every subsequent frame is capped only by the pacer below.
             if (firstFrame && !degenerate) {
+                DwmFlush();
                 firstFrame = FALSE;
-                // The first real frame has now been composed on screen. For a
-                // minimize the hook is holding the REAL minimize (or, on the
-                // auto-hide path, the cloak-hide) back until this moment - otherwise
-                // the window would vanish a few frames before the genie appears.
                 if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
+            }
+
+            // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+            // measured from the START of the frame, so the period is
+            // max(render, interval), not render + interval (a render faster than
+            // the interval just sleeps the difference; a slower one runs as-is).
+            // Capped wait keeps the g_unloading check responsive. When a frame
+            // overruns its budget, SwitchToThread still yields the quantum.
+            if (hFrameTimer) {
+                LARGE_INTEGER qpcAfter;
+                QueryPerformanceCounter(&qpcAfter);
+                double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+                double waitMs = frameIntervalMs - spentMs;
+                if (waitMs > 0.1) {
+                    LARGE_INTEGER due;
+                    due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                    SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                    WaitForSingleObject(hFrameTimer, 100);
+                } else {
+                    SwitchToThread();   // overran the budget - yield the quantum anyway
+                }
+            } else {
+                Sleep(1);   // last resort: never spin
             }
         }
     }
 
+    if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
     if (cachedOutlineGeo) { cachedOutlineGeo->Release(); cachedOutlineGeo = nullptr; }
 
     // -------------------- COMMON TEARDOWN --------------------
@@ -1137,9 +1269,16 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     if (data->deferredMinimize) {
         int unhideMs = data->unhideDurationMs;
         int animMs = data->durationMs;
-        if (data->requestedUnhide && unhideMs > animMs &&
-            !g_unloading.load(std::memory_order_relaxed)) {
-            Sleep(unhideMs - animMs);
+        if (data->requestedUnhide && unhideMs > animMs) {
+            // Chunked sleep so the unload drain (which waits ~3 s for workers to
+            // see g_unloading) never times out on the up-to-~5 s unhide wait and
+            // leaves this thread in unmapped code.
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
         }
 
         // Perform the delayed minimize with transitions still disabled (instant, no
@@ -1219,14 +1358,18 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
 
-    // Bounding box the funnel can occupy.
+    // Bounding box the funnel can occupy. Both the window's own monitor and the
+    // monitor it funnels to are unioned; the box is trimmed to them but never
+    // allowed to clip the window rect or the dock column away (shared helper -
+    // the same clipping bug the modern engine had, when multi-monitor support is
+    // off and the window sits on a secondary display).
     int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
     int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
     int boundTop    = origTop;
     int boundBottom = mon.bottom;
-    if (boundLeft < mon.left) boundLeft = mon.left;
-    if (boundRight > mon.right) boundRight = mon.right;
-    if (boundTop < mon.top) boundTop = mon.top;
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockX, monUnion);
     int boundW = boundRight - boundLeft;
     int boundH = boundBottom - boundTop;
     if (boundW < 1) boundW = 1;
@@ -1291,14 +1434,34 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
     float* yb = new float[H + 1];
 
-    // Time-based progress synced to the DWM compose cycle via DwmFlush (vsync).
+    // Time-based progress; frames paced at 2x refresh below (no per-frame
+    // DwmFlush, same as the modern engine, so the classic warp hits the same
+    // half-rate cliff only if its per-frame work ever exceeds the interval).
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
 
+    // Frame pacing, 2x the display's refresh rate (fallback 240 fps).
+    double frameIntervalMs = 1000.0 / 240.0;
+    DWM_TIMING_INFO ti = { sizeof(ti) };
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator) {
+        double hz = (double)ti.rateRefresh.uiNumerator / ti.rateRefresh.uiDenominator;
+        frameIntervalMs = 1000.0 / (hz * 2.0);
+    }
+    HANDLE hFrameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hFrameTimer) {
+        // Pre-1803: the high-resolution flag isn't recognized. A plain waitable
+        // timer paces coarser, but it still isn't a spin.
+        hFrameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0,
+                                             TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
+
     BOOL firstFrame = TRUE;
     for (;;) {
         QueryPerformanceCounter(&qpcNow);
+        const LARGE_INTEGER qpcFrameStart = qpcNow;
         double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
         BOOL lastFrame = (elapsedMs >= totalMs);
         float progress = lastFrame ? 1.0f : (float)(elapsedMs / totalMs);
@@ -1385,14 +1548,40 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         if (lastFrame) break;
         if (g_unloading.load(std::memory_order_relaxed)) break;
 
-        DwmFlush();   // block until the next compose cycle (vsync sync point)
-
+        // First frame is on screen; release the minimize hook it was holding.
+        // One DwmFlush here matches the modern engine's handoff sync; subsequent
+        // frames are paced by the timer below instead of a per-frame DwmFlush.
         if (firstFrame) {
+            DwmFlush();
             firstFrame = FALSE;
-            // First frame is on screen; release the minimize hook it was holding.
             if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
         }
+
+        // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+        // measured from the START of the frame, so the period is
+        // max(render, interval), not render + interval (a render faster than
+        // the interval just sleeps the difference; a slower one runs as-is).
+        // Capped wait keeps the g_unloading check responsive. When a frame
+        // overruns its budget, SwitchToThread still yields the quantum.
+        if (hFrameTimer) {
+            LARGE_INTEGER qpcAfter;
+            QueryPerformanceCounter(&qpcAfter);
+            double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+            double waitMs = frameIntervalMs - spentMs;
+            if (waitMs > 0.1) {
+                LARGE_INTEGER due;
+                due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                WaitForSingleObject(hFrameTimer, 100);
+            } else {
+                SwitchToThread();   // overran the budget - yield the quantum anyway
+            }
+        } else {
+            Sleep(1);   // last resort: never spin
+        }
     }
+
+    if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
 
     // -------------------- COMMON TEARDOWN (identical to the modern engine) -----
     if (data->isRising) {
@@ -1436,9 +1625,16 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     if (data->deferredMinimize) {
         int unhideMs = data->unhideDurationMs;
         int animMs = data->durationMs;
-        if (data->requestedUnhide && unhideMs > animMs &&
-            !g_unloading.load(std::memory_order_relaxed)) {
-            Sleep(unhideMs - animMs);
+        if (data->requestedUnhide && unhideMs > animMs) {
+            // Chunked sleep so the unload drain (which waits ~3 s for workers to
+            // see g_unloading) never times out on the up-to-~5 s unhide wait and
+            // leaves this thread in unmapped code.
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
         }
         if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
             SetPropW(data->hRealWnd, L"GenieBypass", (HANDLE)1);
@@ -1480,6 +1676,22 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
                        BOOL cloakHidden = FALSE, BOOL deferredMinimize = FALSE,
                        BOOL requestedUnhide = FALSE, HWND hNextApp = NULL) {
+    // Bound the snapshot cache: windows closed while minimized (the common
+    // WM_DESTROY + PostQuitMessage path never reaches DefWindowProcW, where the
+    // usual cleanup lives) would otherwise leave their full DIB behind until
+    // unload. Cheap sweep at the single animation entry point.
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        for (auto it = g_SnapshotCache.begin(); it != g_SnapshotCache.end();) {
+            if (!IsWindow(it->first)) {
+                DeleteObject(it->second.hBmp);
+                it = g_SnapshotCache.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     // "Excluded programs" gate - single choke point for every animation path
     // (all six minimize/restore hooks AND the launch thread funnel through here).
     // Bail exactly like the other early-outs so hook-side state is restored: a
