@@ -2,7 +2,7 @@
 // @id              startup-app-delay-fix
 // @name            Startup App Delay Fix
 // @description     Removes the delay Windows applies to startup applications after sign-in
-// @version         1.1
+// @version         1.2
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -13,12 +13,9 @@
 Windows intentionally delays startup applications after sign-in to reduce
 system load, which can cause apps to open minutes after startup.
 
-This mod makes Explorer see `WaitforIdleState` as zero when it reads the
-startup-item serialization settings. It leaves no persistent registry changes
-behind.
-
-Only `WaitforIdleState` is overridden. The related `StartupDelayInMSec` value
-is left unchanged.
+This mod makes Explorer see both `WaitforIdleState` and `StartupDelayInMSec` as
+zero when it reads the startup-item serialization settings. It leaves no
+persistent registry changes behind.
 
 The setting is read when Explorer starts, so enabling or disabling the mod
 takes effect after the next sign-in or Explorer restart.
@@ -40,7 +37,10 @@ takes effect after the next sign-in or Explorer restart.
 constexpr wchar_t kKeyPathSuffix[] =
     L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
 constexpr wchar_t kUserHivePrefix[] = L"\\REGISTRY\\USER\\";
-constexpr wchar_t kValueName[] = L"WaitforIdleState";
+constexpr const wchar_t* kValueNames[] = {
+    L"WaitforIdleState",
+    L"StartupDelayInMSec",
+};
 
 typedef enum _KEY_INFORMATION_CLASS {
     KeyBasicInformation,
@@ -162,10 +162,18 @@ bool GetKeyPath(HANDLE key, std::wstring* path) {
 }
 
 bool IsTargetValueName(const UNICODE_STRING* valueName) {
-    constexpr size_t valueNameLength = ARRAYSIZE(kValueName) - 1;
-    return valueName && valueName->Buffer &&
-           valueName->Length == valueNameLength * sizeof(wchar_t) &&
-           _wcsnicmp(valueName->Buffer, kValueName, valueNameLength) == 0;
+    if (!valueName || !valueName->Buffer) {
+        return false;
+    }
+
+    for (const wchar_t* targetName : kValueNames) {
+        size_t targetLength = wcslen(targetName);
+        if (valueName->Length == targetLength * sizeof(wchar_t) &&
+            _wcsnicmp(valueName->Buffer, targetName, targetLength) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool IsSerializePath(std::wstring_view path) {
@@ -464,33 +472,43 @@ bool IsSupportedValueInformationClass(
     }
 }
 
-UNICODE_STRING GetTargetValueName() {
+UNICODE_STRING GetTargetValueName(size_t targetIndex) {
+    const wchar_t* targetName = kValueNames[targetIndex];
+    size_t targetLength = wcslen(targetName);
     return {
-        .Length = static_cast<USHORT>((ARRAYSIZE(kValueName) - 1) *
-                                      sizeof(wchar_t)),
-        .MaximumLength = static_cast<USHORT>(sizeof(kValueName)),
-        .Buffer = const_cast<PWSTR>(kValueName),
+        .Length = static_cast<USHORT>(targetLength * sizeof(wchar_t)),
+        .MaximumLength =
+            static_cast<USHORT>((targetLength + 1) * sizeof(wchar_t)),
+        .Buffer = const_cast<PWSTR>(targetName),
     };
 }
 
-bool IsTargetValueAtIndex(HANDLE keyHandle, ULONG index) {
+int GetTargetValueAtIndex(HANDLE keyHandle, ULONG index) {
     alignas(KEY_VALUE_BASIC_INFORMATION_LOCAL) BYTE buffer[128];
     ULONG resultLength = 0;
     NTSTATUS status = NtEnumerateValueKey_orig(
         keyHandle, index, KeyValueBasicInformation, buffer, sizeof(buffer),
         &resultLength);
     if (status != STATUS_SUCCESS && status != STATUS_BUFFER_OVERFLOW) {
-        return false;
+        return -1;
     }
 
     auto info = reinterpret_cast<KEY_VALUE_BASIC_INFORMATION_LOCAL*>(buffer);
-    constexpr ULONG targetNameLength =
-        (ARRAYSIZE(kValueName) - 1) * sizeof(wchar_t);
     constexpr ULONG nameOffset =
         FIELD_OFFSET(KEY_VALUE_BASIC_INFORMATION_LOCAL, Name);
-    return info->NameLength == targetNameLength &&
-           resultLength >= nameOffset + targetNameLength &&
-           _wcsnicmp(info->Name, kValueName, ARRAYSIZE(kValueName) - 1) == 0;
+    for (size_t targetIndex = 0; targetIndex < ARRAYSIZE(kValueNames);
+         targetIndex++) {
+        const wchar_t* targetName = kValueNames[targetIndex];
+        ULONG targetNameLength =
+            static_cast<ULONG>(wcslen(targetName) * sizeof(wchar_t));
+        if (info->NameLength == targetNameLength &&
+            resultLength >= nameOffset + targetNameLength &&
+            _wcsnicmp(info->Name, targetName,
+                       targetNameLength / sizeof(wchar_t)) == 0) {
+            return static_cast<int>(targetIndex);
+        }
+    }
+    return -1;
 }
 
 bool GetValueCount(HANDLE keyHandle, ULONG* valueCount) {
@@ -505,13 +523,14 @@ bool GetValueCount(HANDLE keyHandle, ULONG* valueCount) {
     return true;
 }
 
-bool ContainsTargetValue(HANDLE keyHandle, ULONG valueCount) {
+void FindPresentTargetValues(HANDLE keyHandle, ULONG valueCount,
+                             bool* present) {
     for (ULONG index = 0; index < valueCount; index++) {
-        if (IsTargetValueAtIndex(keyHandle, index)) {
-            return true;
+        int targetIndex = GetTargetValueAtIndex(keyHandle, index);
+        if (targetIndex >= 0) {
+            present[targetIndex] = true;
         }
     }
-    return false;
 }
 
 NTSTATUS NTAPI NtQueryValueKey_hook(
@@ -548,7 +567,9 @@ NTSTATUS NTAPI NtQueryValueKey_hook(
     status = FillValueInformation(valueName, keyValueInformationClass,
                                   keyValueInformation, length, resultLength);
     if (status == STATUS_SUCCESS) {
-        Wh_Log(L"Reporting WaitforIdleState=0");
+        Wh_Log(L"Reporting %.*s=0",
+               static_cast<int>(valueName->Length / sizeof(wchar_t)),
+               valueName->Buffer);
     }
     return status;
 }
@@ -559,13 +580,13 @@ NTSTATUS NTAPI NtEnumerateValueKey_hook(
     PVOID keyValueInformation, ULONG length, PULONG resultLength) {
     bool virtualKey = IsVirtualKey(keyHandle);
     if (virtualKey) {
-        if (index != 0) {
+        if (index >= ARRAYSIZE(kValueNames)) {
             return STATUS_NO_MORE_ENTRIES;
         }
         if (!IsSupportedValueInformationClass(keyValueInformationClass)) {
             return STATUS_INVALID_INFO_CLASS;
         }
-        UNICODE_STRING valueName = GetTargetValueName();
+        UNICODE_STRING valueName = GetTargetValueName(index);
         return FillValueInformation(&valueName, keyValueInformationClass,
                                     keyValueInformation, length, resultLength);
     }
@@ -578,20 +599,36 @@ NTSTATUS NTAPI NtEnumerateValueKey_hook(
         return status;
     }
 
-    bool targetAtIndex = IsTargetValueAtIndex(keyHandle, index);
-    if (!targetAtIndex && status != STATUS_NO_MORE_ENTRIES) {
+    int targetAtIndex = GetTargetValueAtIndex(keyHandle, index);
+    if (targetAtIndex < 0 && status != STATUS_NO_MORE_ENTRIES) {
         return status;
     }
 
-    if (!targetAtIndex) {
+    size_t targetIndex;
+    if (targetAtIndex >= 0) {
+        targetIndex = targetAtIndex;
+    } else {
         ULONG valueCount;
-        if (!GetValueCount(keyHandle, &valueCount) || index != valueCount ||
-            ContainsTargetValue(keyHandle, valueCount)) {
+        if (!GetValueCount(keyHandle, &valueCount) || index < valueCount) {
+            return status;
+        }
+
+        bool present[ARRAYSIZE(kValueNames)]{};
+        FindPresentTargetValues(keyHandle, valueCount, present);
+        ULONG missingIndex = index - valueCount;
+        targetIndex = ARRAYSIZE(kValueNames);
+        for (size_t i = 0; i < ARRAYSIZE(kValueNames); i++) {
+            if (!present[i] && missingIndex-- == 0) {
+                targetIndex = i;
+                break;
+            }
+        }
+        if (targetIndex == ARRAYSIZE(kValueNames)) {
             return status;
         }
     }
 
-    UNICODE_STRING valueName = GetTargetValueName();
+    UNICODE_STRING valueName = GetTargetValueName(targetIndex);
     return FillValueInformation(&valueName, keyValueInformationClass,
                                 keyValueInformation, length, resultLength);
 }
