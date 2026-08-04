@@ -689,6 +689,13 @@ static std::wstring QuoteCmdPath(const std::wstring& path) {
     return L'"' + path + L'"';
 }
 
+static std::wstring BuildCmdCommandLine(bool keepOpen,
+                                        const std::wstring& command) {
+    // /s makes cmd strip the outer pair, preserving quotes inside the command.
+    return std::wstring(keepOpen ? L"/s /k \"" : L"/s /c \"") + command +
+           L'"';
+}
+
 static std::wstring JoinCommandLineArguments(
     const std::vector<std::wstring>& args) {
     std::wstring result;
@@ -804,7 +811,8 @@ static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target)
         return spec;
     }
     if (choice == L"cmd") {
-        spec.parameters = L"/k cd /d " + QuoteCmdPath(target);
+        spec.parameters =
+            BuildCmdCommandLine(true, L"cd /d " + QuoteCmdPath(target));
         return spec;
     }
     if (choice == L"wsl") {
@@ -862,9 +870,8 @@ static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
     } else if (_wcsicmp(ext, L".bat") == 0 ||
                _wcsicmp(ext, L".cmd") == 0) {
         ResolveSystemExecutablePath(L"cmd.exe", spec.executable);
-        spec.parameters =
-            std::wstring(s.keepOpenAfterScript ? L"/k " : L"/c ") +
-            QuoteCmdPath(scriptPath);
+        spec.parameters = BuildCmdCommandLine(s.keepOpenAfterScript,
+                                              QuoteCmdPath(scriptPath));
     } else if (_wcsicmp(ext, L".vbs") == 0 ||
                _wcsicmp(ext, L".js") == 0) {
         std::wstring cscriptPath;
@@ -875,8 +882,9 @@ static LaunchSpec BuildScriptInterpreterSpec(const Settings& s,
             if (!ResolveSystemExecutablePath(L"cmd.exe", spec.executable)) {
                 return {};
             }
-            spec.parameters = L"/k " + QuoteCmdPath(cscriptPath) +
-                              L" //nologo " + QuoteCmdPath(scriptPath);
+            spec.parameters = BuildCmdCommandLine(
+                true, QuoteCmdPath(cscriptPath) + L" //nologo " +
+                          QuoteCmdPath(scriptPath));
         } else {
             spec.executable = std::move(cscriptPath);
             spec.parameters = L"//nologo " + QuoteCommandLineArgument(scriptPath);
