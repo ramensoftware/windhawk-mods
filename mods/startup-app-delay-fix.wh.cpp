@@ -23,6 +23,9 @@ discarded when the user registry hive unloads at sign-out or shutdown.
 
 The settings are read when Explorer starts, so enabling or disabling the mod
 takes effect after the next sign-in or Explorer restart.
+
+This only affects the delay Explorer applies to startup-item processing. It
+doesn't change delays configured by other systems, such as Task Scheduler.
 */
 // ==/WindhawkModReadme==
 
@@ -32,6 +35,7 @@ takes effect after the next sign-in or Explorer restart.
 
 #include <algorithm>
 #include <cstring>
+#include <cwchar>
 #include <string>
 #include <string_view>
 #include <vector>
