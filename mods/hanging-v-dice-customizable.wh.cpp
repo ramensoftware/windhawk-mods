@@ -15,7 +15,7 @@
 
 Add interactive hanging dice to your desktop with dynamic physics. They swing and react in real-time when you move, minimize, maximize, or restore windows, and automatically hide during fullscreen games or apps to stay out of your way.
 
-![Preview](https://raw.githubusercontent.com/alivca/hanging-v-dice-customizable/07f396c74f569269c4ee1804f5c3963dd13d6d5d/mods/cubic.gif)
+![Preview](https://raw.githubusercontent.com/alivca/gifs/main/cubic.gif)
 
 ## ⚠️ Game Compatibility Note:
 The dice overlay renders via Windows DWM. In some games (especially those running on DirectX 12 in Exclusive Fullscreen mode), the game screen may cover the overlay.
