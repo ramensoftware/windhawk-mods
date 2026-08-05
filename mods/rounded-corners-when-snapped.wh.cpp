@@ -54,6 +54,13 @@ addresses once and caches them as RVAs for it.
 * Windows 11, x64.
 * No other DWM corner patcher running (ExplorerPatcher, StartAllBack,
   Win11DisableRoundedCorners).
+
+## Mod authorship
+
+This mod was created by:
+
+- [x] The submitter, with AI assistance
+- [x] Claude
 */
 // ==/WindhawkModReadme==
 
