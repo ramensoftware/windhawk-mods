@@ -920,6 +920,31 @@ double PrimaryCenter(winrt::Windows::Foundation::Rect const& bounds,
            PrimarySize(bounds, orientation) / 2.0;
 }
 
+double CrossCenter(winrt::Windows::Foundation::Rect const& bounds,
+                   TaskbarOrientation orientation) {
+    return orientation == TaskbarOrientation::horizontal
+               ? bounds.Y + bounds.Height / 2.0
+               : bounds.X + bounds.Width / 2.0;
+}
+
+bool TryCalculateDividerPosition(double primaryCenter,
+                                 double crossOrigin,
+                                 TaskbarOrientation orientation,
+                                 double rectangleWidth,
+                                 double rectangleHeight,
+                                 double* left,
+                                 double* top) {
+    if (orientation == TaskbarOrientation::horizontal) {
+        *left = primaryCenter - rectangleWidth / 2.0;
+        *top = crossOrigin;
+    } else {
+        *left = crossOrigin;
+        *top = primaryCenter - rectangleHeight / 2.0;
+    }
+    return std::isfinite(primaryCenter) && std::isfinite(*left) &&
+           std::isfinite(*top);
+}
+
 bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
                            FrameworkElement const& previousIcon,
                            FrameworkElement const& targetIcon,
@@ -954,14 +979,8 @@ bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
         double previousCenter = PrimaryCenter(previousBounds, orientation);
         double targetCenter = PrimaryCenter(targetBounds, orientation);
         double spacing = targetCenter - previousCenter;
-        double previousCrossCenter =
-            orientation == TaskbarOrientation::horizontal
-                ? previousBounds.Y + previousBounds.Height / 2.0
-                : previousBounds.X + previousBounds.Width / 2.0;
-        double targetCrossCenter =
-            orientation == TaskbarOrientation::horizontal
-                ? targetBounds.Y + targetBounds.Height / 2.0
-                : targetBounds.X + targetBounds.Width / 2.0;
+        double previousCrossCenter = CrossCenter(previousBounds, orientation);
+        double targetCrossCenter = CrossCenter(targetBounds, orientation);
         double crossSpacing = targetCrossCenter - previousCrossCenter;
         if (!std::isfinite(spacing) || !std::isfinite(crossSpacing) ||
             std::fabs(spacing) <= 0.1 ||
@@ -1001,16 +1020,14 @@ bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
         return false;
     }
 
+    double crossOrigin = orientation == TaskbarOrientation::horizontal
+                             ? (overlayHeight - rectangleHeight) / 2.0
+                             : (overlayWidth - rectangleWidth) / 2.0;
     double left;
     double top;
-    if (orientation == TaskbarOrientation::horizontal) {
-        left = center - rectangleWidth / 2.0;
-        top = (overlayHeight - rectangleHeight) / 2.0;
-    } else {
-        left = (overlayWidth - rectangleWidth) / 2.0;
-        top = center - rectangleHeight / 2.0;
-    }
-    if (!std::isfinite(center) || !std::isfinite(left) || !std::isfinite(top)) {
+    if (!TryCalculateDividerPosition(center, crossOrigin, orientation,
+                                     rectangleWidth, rectangleHeight, &left,
+                                     &top)) {
         return false;
     }
 
@@ -1042,9 +1059,7 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
     }
 
     double firstCenter = PrimaryCenter(firstBounds, orientation);
-    double firstCrossCenter = orientation == TaskbarOrientation::horizontal
-                                  ? firstBounds.Y + firstBounds.Height / 2.0
-                                  : firstBounds.X + firstBounds.Width / 2.0;
+    double firstCrossCenter = CrossCenter(firstBounds, orientation);
     double pitch = PrimarySize(firstBounds, orientation);
     double crossPitch = 0;
     if (secondIcon) {
@@ -1054,10 +1069,7 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
 
         double secondCenter = PrimaryCenter(secondBounds, orientation);
         pitch = secondCenter - firstCenter;
-        double secondCrossCenter =
-            orientation == TaskbarOrientation::horizontal
-                ? secondBounds.Y + secondBounds.Height / 2.0
-                : secondBounds.X + secondBounds.Width / 2.0;
+        double secondCrossCenter = CrossCenter(secondBounds, orientation);
         crossPitch = secondCrossCenter - firstCrossCenter;
         if (!std::isfinite(pitch) || !std::isfinite(crossPitch) ||
             std::fabs(pitch) <= 0.1 ||
@@ -1070,16 +1082,14 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
     double center = (virtualPreviousCenter + firstCenter) / 2.0;
     double virtualPreviousCrossCenter = firstCrossCenter - crossPitch;
     double crossCenter = (virtualPreviousCrossCenter + firstCrossCenter) / 2.0;
+    double crossOrigin = orientation == TaskbarOrientation::horizontal
+                             ? crossCenter - rectangleHeight / 2.0
+                             : crossCenter - rectangleWidth / 2.0;
     double left;
     double top;
-    if (orientation == TaskbarOrientation::horizontal) {
-        left = center - rectangleWidth / 2.0;
-        top = crossCenter - rectangleHeight / 2.0;
-    } else {
-        left = crossCenter - rectangleWidth / 2.0;
-        top = center - rectangleHeight / 2.0;
-    }
-    if (!std::isfinite(center) || !std::isfinite(left) || !std::isfinite(top)) {
+    if (!TryCalculateDividerPosition(center, crossOrigin, orientation,
+                                     rectangleWidth, rectangleHeight, &left,
+                                     &top)) {
         return false;
     }
 
@@ -1105,24 +1115,23 @@ bool TryGetAnimatedDividerGeometry(Controls::Canvas const& overlayCanvas,
         return false;
     }
 
-    double targetCenterX =
-        geometry->targetBounds.X + geometry->targetBounds.Width / 2.0;
-    double targetCenterY =
-        geometry->targetBounds.Y + geometry->targetBounds.Height / 2.0;
-    double nextCenterX =
-        geometry->nextBounds.X + geometry->nextBounds.Width / 2.0;
-    double nextCenterY =
-        geometry->nextBounds.Y + geometry->nextBounds.Height / 2.0;
-
+    double targetCrossCenter = CrossCenter(geometry->targetBounds, orientation);
+    double nextCrossCenter = CrossCenter(geometry->nextBounds, orientation);
+    double crossCenter = (targetCrossCenter + nextCrossCenter) / 2.0;
+    double crossOrigin = orientation == TaskbarOrientation::horizontal
+                             ? crossCenter - rectangleHeight / 2.0
+                             : crossCenter - rectangleWidth / 2.0;
+    double left;
+    double top;
+    bool positionValid = TryCalculateDividerPosition(
+        geometry->center, crossOrigin, orientation, rectangleWidth,
+        rectangleHeight, &left, &top);
     if (orientation == TaskbarOrientation::horizontal) {
-        double separatorCenterY = (targetCenterY + nextCenterY) / 2.0;
-        geometry->top = separatorCenterY - rectangleHeight / 2.0;
+        geometry->top = top;
     } else {
-        double separatorCenterX = (targetCenterX + nextCenterX) / 2.0;
-        geometry->left = separatorCenterX - rectangleWidth / 2.0;
+        geometry->left = left;
     }
-
-    return std::isfinite(geometry->left) && std::isfinite(geometry->top);
+    return positionValid;
 }
 
 TrackedTaskbarState* FindTrackedTaskbarById(size_t taskbarId) {
