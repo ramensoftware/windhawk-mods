@@ -4940,7 +4940,10 @@ static LRESULT CALLBACK DashWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             InvalidateRect(hWnd, nullptr, TRUE);
             return 0;
         }
-        if (id >= IDC_ZONE_ACTION && id < IDC_ZONE_ACTION + ZONE_COUNT)
+        // (int) because IDC_ZONE_ACTION is a DashId and ZONE_COUNT is a Zone:
+        // C++20 deprecates arithmetic between two different enumeration types,
+        // and the mod repository's CI fails the build on any warning.
+        if (id >= IDC_ZONE_ACTION && id < IDC_ZONE_ACTION + (int)ZONE_COUNT)
         {
             if (HIWORD(wParam) == CBN_SELCHANGE ||
                 HIWORD(wParam) == CBN_SETFOCUS)
