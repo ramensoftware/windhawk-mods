@@ -32,7 +32,7 @@ continuous polling, minimizing background activity while the pointer is idle.
 
 ## Features
 
-- Configurable activation-band height
+- Configurable activation-band height and hover delay
 - Per-monitor DPI scaling
 - Multi-monitor support
 - Adjustable release delay and activation cooldown
@@ -53,9 +53,11 @@ The mod does not modify:
 - Transparency
 - Windows' auto-hide setting
 
-When revealing the taskbar, the mod also restores its native topmost Z-order
-without activating it. This prevents normal application windows from covering
-the revealed taskbar while preserving focus in the current application.
+When revealing the taskbar, the mod brings it to the front of its existing
+Z-order band without activating it or changing whether Explorer currently
+treats it as topmost. This prevents ordinary windows in the same band from
+covering the taskbar while preserving fullscreen and third-party Z-order
+policies.
 
 The mod is designed to coexist with taskbar styling, sizing, transparency,
 animation, clock, label, and icon mods that retain the standard bottom-positioned
@@ -87,13 +89,15 @@ Windows 11 taskbar.
 ## Suggested settings
 
 - Activation threshold: `24`
+- Hover delay: `75`
 - Release delay: `120`
 - Activation cooldown: `200`
 
 These defaults provide a noticeably larger activation area while retaining
-responsive reveal and hide behavior. Increase the activation threshold for
-easier access, or reduce it to more closely match the standard Windows edge
-trigger.
+responsive reveal and hide behavior. The short hover delay prevents accidental
+reveals while crossing the bottom edge of an upper monitor in a vertically
+stacked layout. Increase the activation threshold for easier access, or reduce
+it to more closely match the standard Windows edge trigger.
 
 ## Attribution and license
 
@@ -112,11 +116,17 @@ This mod is distributed under the GNU General Public License v3.0.
   $description: >-
     Height of the activation band in logical pixels at 96 DPI. The value is
     scaled independently for each monitor. Recommended range: 12 to 48.
+- activationDelayMs: 75
+  $name: Hover delay
+  $description: >-
+    Time in milliseconds that the pointer must remain in the activation band
+    before the taskbar is revealed. A short delay prevents accidental reveals
+    while moving between vertically stacked monitors.
 - releaseDelayMs: 120
   $name: Release delay
   $description: >-
-    Delay before releasing the synthetic pointer-over state after the pointer
-    leaves both the activation band and the visible taskbar.
+    Delay before the taskbar is allowed to hide again after the pointer leaves
+    both the activation band and the visible taskbar.
 - activationCooldownMs: 200
   $name: Activation cooldown
   $description: >-
@@ -163,6 +173,7 @@ This mod is distributed under the GNU General Public License v3.0.
 
 struct Settings {
     std::atomic<int> activationThresholdPx{24};
+    std::atomic<int> activationDelayMs{75};
     std::atomic<int> releaseDelayMs{120};
     std::atomic<int> activationCooldownMs{200};
     std::atomic<bool> requireWindowsAutoHide{true};
@@ -175,7 +186,7 @@ struct Settings {
 Settings g_settings;
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
-std::atomic<bool> g_settingsChanged{false};
+std::atomic<unsigned> g_settingsGeneration{0};
 std::atomic<DWORD> g_workerThreadId{0};
 std::atomic<bool> g_cursorUpdatePosted{false};
 std::atomic<HWND> g_mainTaskbarWindow{nullptr};
@@ -189,24 +200,34 @@ UINT g_uiThreadMessage = 0;
 UINT g_captureTaskbarObjectMessage = 0;
 UINT g_queryTaskbarRectMessage = 0;
 
+// The taskbar-rectangle query can outlive SendMessageTimeoutW. Keeping all
+// request and result storage at file scope avoids passing a pointer to a worker
+// stack frame into Explorer's UI thread. Only the activation worker initiates
+// these queries, and a timed-out request remains pending until the UI thread
+// eventually consumes it.
+struct StuckRectQueryState {
+    std::atomic<bool> pending{false};
+    std::atomic<bool> succeeded{false};
+    HMONITOR monitor = nullptr;
+    RECT rect{};
+};
+
+StuckRectQueryState g_stuckRectQuery;
+
 enum UiOperation : WPARAM {
     kUiRevealTaskbar = 1,
     kUiClearSyntheticPointerOver = 2,
     kUiClearAllSyntheticPointerOver = 3,
     kUiTriggerNativeUnhideTimer = 4,
     kUiCancelNativeUnhideTimer = 5,
-    kUiRaiseTaskbarAboveWindows = 6,
+    kUiBringTaskbarToFront = 6,
 };
 
 constexpr UINT kWorkerCursorChangedMessage = WM_APP + 1;
 constexpr UINT kWorkerSettingsChangedMessage = WM_APP + 2;
-constexpr UINT_PTR kWorkerReleaseTimer = 1;
-constexpr UINT_PTR kWorkerRetryTimer = 2;
-constexpr UINT_PTR kWorkerFallbackPollTimer = 3;
-constexpr UINT_PTR kWorkerNativeTimerCleanupTimer = 4;
-
 constexpr UINT kReleaseRetryMs = 250;
 constexpr UINT kFallbackStatusPollMs = 250;
+constexpr UINT kFallbackRearmBaseMs = 1000;
 constexpr UINT kNativeTimerCleanupMs = 250;
 constexpr UINT kSuppressionBackoffMaxMs = 5000;
 
@@ -232,6 +253,10 @@ void ForgetTaskbarState(HWND taskbarWindow) {
 void LoadSettings() {
     g_settings.activationThresholdPx.store(
         std::clamp(Wh_GetIntSetting(L"activationThresholdPx"), 1, 500),
+        std::memory_order_relaxed);
+
+    g_settings.activationDelayMs.store(
+        std::clamp(Wh_GetIntSetting(L"activationDelayMs"), 0, 1000),
         std::memory_order_relaxed);
 
     g_settings.releaseDelayMs.store(
@@ -323,7 +348,8 @@ HWND FindMainTaskbarWindow() {
 }
 
 bool GetTaskbarStuckRectForMonitor(HMONITOR monitor, RECT* rect) {
-    if (!monitor || !rect || !g_queryTaskbarRectMessage) {
+    if (!monitor || !rect || !g_queryTaskbarRectMessage ||
+        g_stuckRectQuery.pending.load(std::memory_order_acquire)) {
         return false;
     }
 
@@ -332,17 +358,41 @@ bool GetTaskbarStuckRectForMonitor(HMONITOR monitor, RECT* rect) {
         return false;
     }
 
-    SetRectEmpty(rect);
+    g_stuckRectQuery.monitor = monitor;
+    SetRectEmpty(&g_stuckRectQuery.rect);
+    g_stuckRectQuery.succeeded.store(false, std::memory_order_relaxed);
+    g_stuckRectQuery.pending.store(true, std::memory_order_release);
+
     DWORD_PTR result = 0;
-    return SendMessageTimeoutW(
-               taskbarWindow,
-               g_queryTaskbarRectMessage,
-               reinterpret_cast<WPARAM>(monitor),
-               reinterpret_cast<LPARAM>(rect),
-               SMTO_ABORTIFHUNG | SMTO_BLOCK,
-               250,
-               &result) &&
-           result != 0 && !IsRectEmpty(rect);
+    SetLastError(ERROR_SUCCESS);
+    if (!SendMessageTimeoutW(
+            taskbarWindow,
+            g_queryTaskbarRectMessage,
+            0,
+            0,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK,
+            250,
+            &result)) {
+        const DWORD error = GetLastError();
+        if (error != ERROR_TIMEOUT && error != ERROR_SUCCESS) {
+            // The message wasn't left pending, so allow another query.
+            g_stuckRectQuery.pending.store(false,
+                                           std::memory_order_release);
+        }
+        return false;
+    }
+
+    // If the hook wasn't reached, don't leave the query permanently pending.
+    g_stuckRectQuery.pending.store(false, std::memory_order_release);
+
+    if (!result ||
+        !g_stuckRectQuery.succeeded.load(std::memory_order_acquire) ||
+        IsRectEmpty(&g_stuckRectQuery.rect)) {
+        return false;
+    }
+
+    *rect = g_stuckRectQuery.rect;
+    return true;
 }
 
 HWND GetTaskBandWindow() {
@@ -495,7 +545,7 @@ bool IsAnyMouseButtonDown() {
     return false;
 }
 
-bool IsDesktopWindow(HWND window) {
+bool HasDesktopWindowClass(HWND window) {
     if (!window) {
         return false;
     }
@@ -509,6 +559,10 @@ bool IsDesktopWindow(HWND window) {
            _wcsicmp(className, L"WorkerW") == 0;
 }
 
+bool IsShellDesktopWindow(HWND window) {
+    return HasDesktopWindowClass(window) && IsCurrentProcessWindow(window);
+}
+
 bool IsWindowCloaked(HWND window) {
     BOOL cloaked = FALSE;
     return SUCCEEDED(DwmGetWindowAttribute(
@@ -518,8 +572,7 @@ bool IsWindowCloaked(HWND window) {
 
 bool IsFullscreenCandidateOnMonitor(HWND window, HMONITOR monitor) {
     if (!window || !IsWindowVisible(window) || IsIconic(window) ||
-        IsDesktopWindow(window) || IsTaskbarClass(window) ||
-        IsWindowCloaked(window)) {
+        HasDesktopWindowClass(window) || IsTaskbarClass(window)) {
         return false;
     }
 
@@ -534,7 +587,8 @@ bool IsFullscreenCandidateOnMonitor(HWND window, HMONITOR monitor) {
         return false;
     }
 
-    if (MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) != monitor) {
+    if (MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) != monitor ||
+        IsWindowCloaked(window)) {
         return false;
     }
 
@@ -572,7 +626,37 @@ void LogFullscreenCandidate(HWND window) {
            title);
 }
 
+bool IsFullscreenOrPresentationNotificationState(HMONITOR monitor) {
+    QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
+    if (FAILED(SHQueryUserNotificationState(&state))) {
+        return false;
+    }
+
+    if (state == QUNS_PRESENTATION_MODE) {
+        return true;
+    }
+
+    if (state != QUNS_BUSY &&
+        state != QUNS_RUNNING_D3D_FULL_SCREEN) {
+        return false;
+    }
+
+    // The notification state is system-wide. Associate fullscreen/busy states
+    // with the foreground monitor to avoid suppressing unrelated taskbars.
+    HWND foregroundWindow = GetForegroundWindow();
+    return foregroundWindow &&
+           MonitorFromWindow(foregroundWindow,
+                             MONITOR_DEFAULTTONEAREST) == monitor;
+}
+
 bool IsFullscreenWindowOnMonitor(HMONITOR monitor) {
+    // This complements the per-monitor window walk. It catches exclusive D3D,
+    // fullscreen Store/UWP apps, and presentation mode, which don't always
+    // expose a borderless top-level window that can be recognized reliably.
+    if (IsFullscreenOrPresentationNotificationState(monitor)) {
+        return true;
+    }
+
     struct Context {
         HMONITOR monitor;
         bool found;
@@ -585,7 +669,7 @@ bool IsFullscreenWindowOnMonitor(HMONITOR monitor) {
         [](HWND window, LPARAM parameter) -> BOOL {
             auto* context = reinterpret_cast<Context*>(parameter);
 
-            if (IsDesktopWindow(window)) {
+            if (IsShellDesktopWindow(window)) {
                 return FALSE;
             }
 
@@ -649,7 +733,6 @@ bool IsTaskbarVisiblyRevealed(HWND taskbarWindow, HMONITOR monitor) {
     return intersection.bottom - intersection.top > 2;
 }
 
-
 void* QueryViaVtable(void* object, void* targetVtable) {
     if (!object || !targetVtable) {
         return nullptr;
@@ -706,16 +789,24 @@ LRESULT WINAPI TrayUI_WndProc_Hook(
     LPARAM lParam,
     bool* handled) {
     if (message == g_queryTaskbarRectMessage) {
-        RECT* rect = reinterpret_cast<RECT*>(lParam);
-        const HMONITOR monitor = reinterpret_cast<HMONITOR>(wParam);
         bool succeeded = false;
-        if (rect && monitor && TrayUI_GetStuckRectForMonitor_Original) {
+        if (g_stuckRectQuery.pending.load(std::memory_order_acquire) &&
+            g_stuckRectQuery.monitor &&
+            TrayUI_GetStuckRectForMonitor_Original) {
+            RECT rect{};
             succeeded = TrayUI_GetStuckRectForMonitor_Original(
-                trayUi, monitor, rect);
+                trayUi, g_stuckRectQuery.monitor, &rect);
+            if (succeeded) {
+                g_stuckRectQuery.rect = rect;
+            } else {
+                SetRectEmpty(&g_stuckRectQuery.rect);
+            }
         }
-        if (!succeeded && rect) {
-            SetRectEmpty(rect);
-        }
+
+        g_stuckRectQuery.succeeded.store(succeeded,
+                                         std::memory_order_release);
+        g_stuckRectQuery.pending.store(false, std::memory_order_release);
+
         if (handled) {
             *handled = true;
         }
@@ -723,6 +814,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(
     }
 
     if (message == WM_NCCREATE) {
+        g_stuckRectQuery.pending.store(false, std::memory_order_release);
         g_trayUiWndProcObjects[window] = trayUi;
         g_mainTaskbarWindow.store(window, std::memory_order_relaxed);
         Wh_Log(L"Captured TrayUI object for taskbar %p", window);
@@ -739,6 +831,8 @@ LRESULT WINAPI TrayUI_WndProc_Hook(
         ForgetTaskbarState(window);
         if (g_mainTaskbarWindow.load(std::memory_order_relaxed) == window) {
             g_mainTaskbarWindow.store(nullptr, std::memory_order_relaxed);
+            g_stuckRectQuery.pending.store(false,
+                                           std::memory_order_release);
         }
     }
 
@@ -967,6 +1061,11 @@ void WINAPI ViewCoordinator_UpdateIsExpanded_Hook(
 
 bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
                                        bool isPointerOver) {
+    if (!isPointerOver && taskbarWindow &&
+        !g_syntheticPointerOverTaskbars.contains(taskbarWindow)) {
+        return true;
+    }
+
     if (!taskbarWindow || !IsWindow(taskbarWindow) ||
         !ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original ||
         !ViewCoordinator_UpdateIsExpanded_Original) {
@@ -1063,60 +1162,64 @@ bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
     return true;
 }
 
-bool RaiseTaskbarAboveWindowsOnUiThread(HWND taskbarWindow) {
+bool BringTaskbarToFrontWithinCurrentBandOnUiThread(
+    HWND taskbarWindow) {
     if (!taskbarWindow || !IsWindow(taskbarWindow)) {
         return false;
     }
 
-    // A taskbar revealed without a real edge-hover can retain an old Z-order
-    // position and end up underneath an ordinary or topmost application
-    // window. Reinsert it at the top of the topmost band without activating,
-    // moving, resizing, or showing it. This matches the user-visible behavior
-    // of the native auto-hide reveal while leaving Explorer in control of the
-    // taskbar's geometry and animation.
+    // Reorder only within Explorer's current Z-order band. This brings the
+    // taskbar above ordinary windows when appropriate without forcing or
+    // clearing WS_EX_TOPMOST, preserving fullscreen behavior and compatibility
+    // with mods that intentionally manage the taskbar's Z-order policy.
+    const bool isTopmost =
+        (GetWindowLongPtrW(taskbarWindow, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
     if (!SetWindowPos(taskbarWindow,
-                      HWND_TOPMOST,
+                      isTopmost ? HWND_TOPMOST : HWND_TOP,
                       0,
                       0,
                       0,
                       0,
                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                           SWP_NOOWNERZORDER)) {
-        Wh_Log(L"Couldn't raise taskbar %p above application windows: %u",
+        Wh_Log(L"Couldn't bring taskbar %p to the front of its Z-order "
+               L"band: %u",
                taskbarWindow,
                GetLastError());
         return false;
     }
 
-    Wh_Log(L"Raised taskbar %p to the topmost Z-order band", taskbarWindow);
+    Wh_Log(L"Brought taskbar %p to the front of its %s Z-order band",
+           taskbarWindow,
+           isTopmost ? L"topmost" : L"normal");
     return true;
 }
 
 bool RevealTaskbarOnUiThread(HWND taskbarWindow) {
-    // The maintained Windhawk taskbar implementation invokes both paths:
-    // TrayUI::Unhide physically slides Shell_TrayWnd onscreen, while the
-    // Windows 11 ViewCoordinator establishes the logical expanded state.
-    const bool shellWindowRevealed =
-        InvokeNativeShellUnhideOnUiThread(taskbarWindow);
-
+    // Establish coordinator ownership first. If this fails, leave the legacy
+    // path untouched and let the caller use Explorer's native timer fallback,
+    // avoiding two independent reveal mechanisms for the same attempt.
     const bool coordinatorExpanded =
         SetSyntheticPointerOverOnUiThread(taskbarWindow, true);
 
-    // Reassert the native overlay Z-order after both reveal paths have run.
-    // SetWindowPos uses SWP_NOACTIVATE, so the foreground application keeps
-    // keyboard focus.
-    const bool raisedAboveWindows =
-        RaiseTaskbarAboveWindowsOnUiThread(taskbarWindow);
+    bool shellWindowRevealed = false;
+    bool broughtToFront = false;
+    if (coordinatorExpanded) {
+        // TrayUI::Unhide physically slides Shell_TrayWnd onscreen after the
+        // coordinator has established the matching logical expanded state.
+        shellWindowRevealed =
+            InvokeNativeShellUnhideOnUiThread(taskbarWindow);
+        broughtToFront =
+            BringTaskbarToFrontWithinCurrentBandOnUiThread(taskbarWindow);
+    }
 
     Wh_Log(L"Reveal result for taskbar %p: shell=%d coordinator=%d "
            L"zorder=%d",
            taskbarWindow,
            shellWindowRevealed,
            coordinatorExpanded,
-           raisedAboveWindows);
+           broughtToFront);
 
-    // The legacy Unhide path alone has no matching hide trigger on Windows 11,
-    // so only the coordinator path counts as a reveal owned by this mod.
     return coordinatorExpanded;
 }
 
@@ -1171,7 +1274,7 @@ bool TriggerNativeUnhideTimerOnUiThread(HWND taskbarWindow) {
     // Put the hidden taskbar in the correct Z-order before Explorer processes
     // the asynchronous timer. A second reinforcement is sent by the worker
     // after the timer has had time to reveal the window.
-    RaiseTaskbarAboveWindowsOnUiThread(taskbarWindow);
+    BringTaskbarToFrontWithinCurrentBandOnUiThread(taskbarWindow);
 
     Wh_Log(L"Requested native unhide timer for taskbar %p",
            taskbarWindow);
@@ -1215,8 +1318,9 @@ LRESULT WINAPI CTaskBand_v_WndProc_Hook(
                            ? 1
                            : 0;
 
-            case kUiRaiseTaskbarAboveWindows:
-                return RaiseTaskbarAboveWindowsOnUiThread(targetTaskbar)
+            case kUiBringTaskbarToFront:
+                return BringTaskbarToFrontWithinCurrentBandOnUiThread(
+                           targetTaskbar)
                            ? 1
                            : 0;
         }
@@ -1232,16 +1336,32 @@ LRESULT WINAPI CTaskBand_v_WndProc_Hook(
         lParam);
 }
 
-bool SendUiOperation(UiOperation operation,
-                     HWND taskbarWindow,
-                     DWORD timeoutMs = 250) {
+enum class UiOperationResult {
+    kNotSent,
+    kCompletedFailure,
+    kCompletedSuccess,
+    kIndeterminate,
+};
+
+bool UiOperationSucceeded(UiOperationResult result) {
+    return result == UiOperationResult::kCompletedSuccess;
+}
+
+bool UiOperationMayHaveRun(UiOperationResult result) {
+    return result == UiOperationResult::kCompletedSuccess ||
+           result == UiOperationResult::kIndeterminate;
+}
+
+UiOperationResult SendUiOperation(UiOperation operation,
+                                  HWND taskbarWindow,
+                                  DWORD timeoutMs = 250) {
     HWND taskBandWindow = GetTaskBandWindow();
     if (!taskBandWindow) {
-        return false;
+        return UiOperationResult::kNotSent;
     }
 
     DWORD_PTR result = 0;
-
+    SetLastError(ERROR_SUCCESS);
     if (!SendMessageTimeoutW(
             taskBandWindow,
             g_uiThreadMessage,
@@ -1250,12 +1370,25 @@ bool SendUiOperation(UiOperation operation,
             SMTO_ABORTIFHUNG | SMTO_BLOCK,
             timeoutMs,
             &result)) {
-        Wh_Log(L"UI-thread operation timed out or failed: %u",
-               GetLastError());
-        return false;
+        const DWORD error = GetLastError();
+        Wh_Log(L"UI-thread operation timed out or failed: operation=%u "
+               L"error=%u",
+               static_cast<unsigned>(operation),
+               error);
+
+        // Once SendMessageTimeoutW has begun a cross-thread send, a timeout or
+        // an unspecified failure doesn't prove that the target WndProc won't
+        // process the message later. Only a vanished target window is treated
+        // as definitely not sent; all other failures are conservatively
+        // considered indeterminate.
+        if (error == ERROR_INVALID_WINDOW_HANDLE) {
+            return UiOperationResult::kNotSent;
+        }
+        return UiOperationResult::kIndeterminate;
     }
 
-    return result != 0;
+    return result != 0 ? UiOperationResult::kCompletedSuccess
+                       : UiOperationResult::kCompletedFailure;
 }
 
 struct ActivationWorkerState {
@@ -1263,13 +1396,18 @@ struct ActivationWorkerState {
     HMONITOR activeTaskbarMonitor = nullptr;
     HWND fallbackTaskbar = nullptr;
     HMONITOR fallbackTaskbarMonitor = nullptr;
+    HMONITOR activationCandidateMonitor = nullptr;
     bool armed = true;
     UINT_PTR releaseTimerId = 0;
     UINT_PTR retryTimerId = 0;
     UINT_PTR nativeTimerCleanupTimerId = 0;
     bool releaseRetryPending = false;
+    ULONGLONG activationCandidateSince = 0;
     ULONGLONG lastActivationCheck = 0;
+    ULONGLONG fallbackRearmNotBefore = 0;
     unsigned suppressionFailures = 0;
+    unsigned fallbackHideCount = 0;
+    unsigned appliedSettingsGeneration = 0;
 };
 
 void CancelWorkerTimer(UINT_PTR& timerId) {
@@ -1281,21 +1419,16 @@ void CancelWorkerTimer(UINT_PTR& timerId) {
     timerId = 0;
 }
 
-void ScheduleWorkerTimer(UINT_PTR requestedTimerId,
-                         UINT delayMs,
-                         UINT_PTR& timerId) {
+void ScheduleWorkerTimer(UINT delayMs, UINT_PTR& timerId) {
     if (timerId) {
         return;
     }
 
-    timerId = SetTimer(nullptr,
-                       requestedTimerId,
-                       std::max(delayMs, 1U),
-                       nullptr);
+    // With hWnd == nullptr, Windows allocates and returns the timer ID. The
+    // caller stores that returned value and compares WM_TIMER against it.
+    timerId = SetTimer(nullptr, 0, std::max(delayMs, 1U), nullptr);
     if (!timerId) {
-        Wh_Log(L"Failed to create worker timer %llu: %u",
-               static_cast<unsigned long long>(requestedTimerId),
-               GetLastError());
+        Wh_Log(L"Failed to create worker timer: %u", GetLastError());
     }
 }
 
@@ -1304,19 +1437,23 @@ bool ClearActiveTaskbar(ActivationWorkerState& state,
                         bool scheduleRetry = true) {
     CancelWorkerTimer(state.releaseTimerId);
 
-    if (state.activeTaskbar && IsWindow(state.activeTaskbar) &&
-        !SendUiOperation(kUiClearSyntheticPointerOver,
-                         state.activeTaskbar,
-                         timeoutMs)) {
-        // Keep ownership and retry instead of forgetting synthetic state that
-        // may still force Explorer's coordinator to remain expanded.
-        if (scheduleRetry) {
-            state.releaseRetryPending = true;
-            ScheduleWorkerTimer(kWorkerReleaseTimer,
-                                kReleaseRetryMs,
-                                state.releaseTimerId);
+    if (state.activeTaskbar && IsWindow(state.activeTaskbar)) {
+        const UiOperationResult clearResult =
+            SendUiOperation(kUiClearSyntheticPointerOver,
+                            state.activeTaskbar,
+                            timeoutMs);
+        if (!UiOperationSucceeded(clearResult)) {
+            // Keep ownership and retry instead of forgetting synthetic state
+            // that may still force Explorer's coordinator to remain expanded.
+            // An indeterminate result is especially important: the clear may
+            // still be waiting in the taskbar UI thread's sent-message queue.
+            if (scheduleRetry) {
+                state.releaseRetryPending = true;
+                ScheduleWorkerTimer(kReleaseRetryMs,
+                                    state.releaseTimerId);
+            }
+            return false;
         }
-        return false;
     }
 
     state.releaseRetryPending = false;
@@ -1329,9 +1466,9 @@ bool ClearActiveTaskbar(ActivationWorkerState& state,
 void CancelFallbackNativeTimer(ActivationWorkerState& state) {
     CancelWorkerTimer(state.nativeTimerCleanupTimerId);
     if (state.fallbackTaskbar && IsWindow(state.fallbackTaskbar)) {
-        SendUiOperation(kUiCancelNativeUnhideTimer,
-                        state.fallbackTaskbar,
-                        500);
+        (void)SendUiOperation(kUiCancelNativeUnhideTimer,
+                              state.fallbackTaskbar,
+                              500);
     }
 }
 
@@ -1343,9 +1480,7 @@ void ClearFallbackTaskbar(ActivationWorkerState& state) {
 }
 
 void ScheduleRetry(ActivationWorkerState& state, UINT delayMs) {
-    ScheduleWorkerTimer(kWorkerRetryTimer,
-                        delayMs,
-                        state.retryTimerId);
+    ScheduleWorkerTimer(delayMs, state.retryTimerId);
 }
 
 UINT GetSuppressionRetryDelay(ActivationWorkerState& state,
@@ -1362,15 +1497,40 @@ void ScheduleSuppressedRetry(ActivationWorkerState& state,
     ScheduleRetry(state, GetSuppressionRetryDelay(state, cooldownMs));
 }
 
+void ResetActivationCandidate(ActivationWorkerState& state) {
+    state.activationCandidateMonitor = nullptr;
+    state.activationCandidateSince = 0;
+}
+
+void ResetFallbackBackoff(ActivationWorkerState& state) {
+    state.fallbackHideCount = 0;
+    state.fallbackRearmNotBefore = 0;
+}
+
+UINT GetFallbackRearmDelay(ActivationWorkerState& state) {
+    state.fallbackHideCount = std::min(state.fallbackHideCount + 1, 4U);
+    const unsigned shift = state.fallbackHideCount - 1;
+    return std::min(kFallbackRearmBaseMs << shift,
+                    kSuppressionBackoffMaxMs);
+}
+
 void ProcessPointerState(ActivationWorkerState& state) {
-    if (g_settingsChanged.exchange(false, std::memory_order_relaxed)) {
+    const unsigned settingsGeneration =
+        g_settingsGeneration.load(std::memory_order_acquire);
+    if (state.appliedSettingsGeneration != settingsGeneration) {
         CancelWorkerTimer(state.retryTimerId);
         if (!ClearActiveTaskbar(state)) {
+            // Keep the old generation pending. Once the release retry succeeds,
+            // the complete settings reset will run instead of being forgotten.
             return;
         }
+
         ClearFallbackTaskbar(state);
+        ResetActivationCandidate(state);
+        ResetFallbackBackoff(state);
         state.lastActivationCheck = 0;
         state.suppressionFailures = 0;
+        state.appliedSettingsGeneration = settingsGeneration;
     }
 
     POINT pointer{};
@@ -1386,6 +1546,8 @@ void ProcessPointerState(ActivationWorkerState& state) {
         }
         ClearFallbackTaskbar(state);
         CancelWorkerTimer(state.retryTimerId);
+        ResetActivationCandidate(state);
+        ResetFallbackBackoff(state);
         state.suppressionFailures = 0;
         return;
     }
@@ -1396,6 +1558,7 @@ void ProcessPointerState(ActivationWorkerState& state) {
         return;
     }
 
+    const ULONGLONG now = GetTickCount64();
     const bool insideActivationBand =
         IsPointInsideActivationBand(pointer, pointerMonitor, monitorInfo);
 
@@ -1406,16 +1569,22 @@ void ProcessPointerState(ActivationWorkerState& state) {
             !sameMonitor) {
             ClearFallbackTaskbar(state);
             CancelWorkerTimer(state.retryTimerId);
+            ResetFallbackBackoff(state);
         } else if (IsTaskbarVisiblyRevealed(state.fallbackTaskbar,
                                             state.fallbackTaskbarMonitor)) {
             // Explorer owns the fallback reveal and its matching hide. Poll at
-            // a low rate only while the pointer remains in the activation band;
-            // once Explorer hides it again, rearm without requiring a leave.
+            // a low rate only while this exceptional path remains active.
             ScheduleRetry(state, kFallbackStatusPollMs);
             return;
         } else {
+            // Avoid a rapid hide/reveal oscillation if Explorer's timer path
+            // hides again before a ViewCoordinator becomes available.
             ClearFallbackTaskbar(state);
             CancelWorkerTimer(state.retryTimerId);
+            const UINT rearmDelay = GetFallbackRearmDelay(state);
+            state.fallbackRearmNotBefore = now + rearmDelay;
+            ScheduleRetry(state, rearmDelay);
+            return;
         }
     }
 
@@ -1442,18 +1611,15 @@ void ProcessPointerState(ActivationWorkerState& state) {
             }
 
             const int releaseDelay =
-                g_settings.releaseDelayMs.load(
-                    std::memory_order_relaxed);
+                g_settings.releaseDelayMs.load(std::memory_order_relaxed);
             if (releaseDelay == 0) {
                 if (!ClearActiveTaskbar(state)) {
                     return;
                 }
             } else {
                 state.releaseRetryPending = false;
-                ScheduleWorkerTimer(
-                    kWorkerReleaseTimer,
-                    static_cast<UINT>(releaseDelay),
-                    state.releaseTimerId);
+                ScheduleWorkerTimer(static_cast<UINT>(releaseDelay),
+                                    state.releaseTimerId);
                 return;
             }
         }
@@ -1463,6 +1629,8 @@ void ProcessPointerState(ActivationWorkerState& state) {
         state.armed = true;
         state.suppressionFailures = 0;
         CancelWorkerTimer(state.retryTimerId);
+        ResetActivationCandidate(state);
+        ResetFallbackBackoff(state);
         return;
     }
 
@@ -1471,10 +1639,37 @@ void ProcessPointerState(ActivationWorkerState& state) {
         return;
     }
 
-    const ULONGLONG now = GetTickCount64();
+    if (now < state.fallbackRearmNotBefore) {
+        ScheduleRetry(
+            state,
+            static_cast<UINT>(state.fallbackRearmNotBefore - now));
+        return;
+    }
+
+    const int activationDelay =
+        g_settings.activationDelayMs.load(std::memory_order_relaxed);
+    if (state.activationCandidateMonitor != pointerMonitor) {
+        state.activationCandidateMonitor = pointerMonitor;
+        state.activationCandidateSince = now;
+        if (activationDelay > 0) {
+            ScheduleRetry(state, static_cast<UINT>(activationDelay));
+            return;
+        }
+    } else {
+        const ULONGLONG candidateElapsed =
+            now - state.activationCandidateSince;
+        if (candidateElapsed < static_cast<ULONGLONG>(activationDelay)) {
+            ScheduleRetry(
+                state,
+                static_cast<UINT>(
+                    static_cast<ULONGLONG>(activationDelay) -
+                    candidateElapsed));
+            return;
+        }
+    }
+
     const int cooldown =
-        g_settings.activationCooldownMs.load(
-            std::memory_order_relaxed);
+        g_settings.activationCooldownMs.load(std::memory_order_relaxed);
     const ULONGLONG elapsed = now - state.lastActivationCheck;
     if (elapsed < static_cast<ULONGLONG>(cooldown)) {
         ScheduleRetry(
@@ -1487,13 +1682,12 @@ void ProcessPointerState(ActivationWorkerState& state) {
     state.lastActivationCheck = now;
     CancelWorkerTimer(state.retryTimerId);
 
-    Wh_Log(L"Pointer entered activation band: x=%d y=%d bottom=%d",
+    Wh_Log(L"Pointer remained in activation band: x=%d y=%d bottom=%d",
            pointer.x,
            pointer.y,
            monitorInfo.rcMonitor.bottom);
 
-    if (g_settings.primaryMonitorOnly.load(
-            std::memory_order_relaxed) &&
+    if (g_settings.primaryMonitorOnly.load(std::memory_order_relaxed) &&
         (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) == 0) {
         ScheduleSuppressedRetry(state, cooldown);
         return;
@@ -1513,8 +1707,7 @@ void ProcessPointerState(ActivationWorkerState& state) {
         return;
     }
 
-    if (g_settings.ignoreFullscreenApps.load(
-            std::memory_order_relaxed) &&
+    if (g_settings.ignoreFullscreenApps.load(std::memory_order_relaxed) &&
         IsFullscreenWindowOnMonitor(pointerMonitor)) {
         Wh_Log(L"Activation suppressed: fullscreen app detected");
         ScheduleSuppressedRetry(state, cooldown);
@@ -1530,30 +1723,47 @@ void ProcessPointerState(ActivationWorkerState& state) {
 
     state.suppressionFailures = 0;
 
-    if (SendUiOperation(kUiRevealTaskbar, taskbarWindow)) {
-        Wh_Log(L"Activated taskbar %p through native shell/coordinator path",
-               taskbarWindow);
+    const UiOperationResult revealResult =
+        SendUiOperation(kUiRevealTaskbar, taskbarWindow);
+    if (UiOperationMayHaveRun(revealResult)) {
+        if (revealResult == UiOperationResult::kIndeterminate) {
+            Wh_Log(L"Taskbar reveal timed out; assuming coordinator ownership "
+                   L"until the matching release succeeds: %p",
+                   taskbarWindow);
+        } else {
+            Wh_Log(L"Activated taskbar %p through native "
+                   L"shell/coordinator path",
+                   taskbarWindow);
+        }
+
         ClearFallbackTaskbar(state);
+        ResetFallbackBackoff(state);
+        ResetActivationCandidate(state);
         state.activeTaskbar = taskbarWindow;
         state.activeTaskbarMonitor = pointerMonitor;
         state.armed = false;
         return;
     }
 
-    if (g_settings.nativeTimerFallback.load(
-            std::memory_order_relaxed) &&
-        SendUiOperation(kUiTriggerNativeUnhideTimer, taskbarWindow)) {
-        Wh_Log(L"Activated taskbar %p through native timer fallback",
-               taskbarWindow);
+    if (g_settings.nativeTimerFallback.load(std::memory_order_relaxed)) {
+        const UiOperationResult fallbackResult =
+            SendUiOperation(kUiTriggerNativeUnhideTimer, taskbarWindow);
+        if (UiOperationMayHaveRun(fallbackResult)) {
+            Wh_Log(L"Activated taskbar %p through native timer fallback%s",
+                   taskbarWindow,
+                   fallbackResult == UiOperationResult::kIndeterminate
+                       ? L" (delivery indeterminate)"
+                       : L"");
 
-        state.fallbackTaskbar = taskbarWindow;
-        state.fallbackTaskbarMonitor = pointerMonitor;
-        state.armed = false;
-        ScheduleWorkerTimer(kWorkerNativeTimerCleanupTimer,
-                            kNativeTimerCleanupMs,
-                            state.nativeTimerCleanupTimerId);
-        ScheduleRetry(state, kFallbackStatusPollMs);
-        return;
+            ResetActivationCandidate(state);
+            state.fallbackTaskbar = taskbarWindow;
+            state.fallbackTaskbarMonitor = pointerMonitor;
+            state.armed = false;
+            ScheduleWorkerTimer(kNativeTimerCleanupMs,
+                                state.nativeTimerCleanupTimerId);
+            ScheduleRetry(state, kFallbackStatusPollMs);
+            return;
+        }
     }
 
     Wh_Log(L"Threshold entered, but no reveal backend succeeded");
@@ -1643,6 +1853,9 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_workerThreadId.store(GetCurrentThreadId(), std::memory_order_relaxed);
 
+    // The hook is system-wide because WinEvent can't filter by object ID at
+    // registration time. CursorWinEventProc immediately discards every event
+    // except OBJID_CURSOR, avoiding permanent polling while the mouse is idle.
     HWINEVENTHOOK cursorHook = SetWinEventHook(
         EVENT_OBJECT_LOCATIONCHANGE,
         EVENT_OBJECT_LOCATIONCHANGE,
@@ -1658,7 +1871,7 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
                L"using a 50 ms fallback timer",
                GetLastError());
         fallbackPollTimerId =
-            SetTimer(nullptr, kWorkerFallbackPollTimer, 50, nullptr);
+            SetTimer(nullptr, 0, 50, nullptr);
     }
 
     ActivationWorkerState state;
@@ -1714,20 +1927,20 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
                             state.nativeTimerCleanupTimerId);
                         if (state.fallbackTaskbar &&
                             IsWindow(state.fallbackTaskbar)) {
-                            SendUiOperation(kUiCancelNativeUnhideTimer,
-                                            state.fallbackTaskbar,
-                                            500);
+                            (void)SendUiOperation(
+                                kUiCancelNativeUnhideTimer,
+                                state.fallbackTaskbar,
+                                500);
 
-                            // The timer reveal is asynchronous. Reinforce the
-                            // taskbar's overlay Z-order after Explorer has had
-                            // time to move it onscreen, preventing a normal or
-                            // always-on-top app from covering part of it.
+                            // The timer reveal is asynchronous. Bring the
+                            // taskbar forward within its existing Z-order band
+                            // after Explorer has moved it onscreen.
                             if (state.fallbackTaskbarMonitor &&
                                 IsTaskbarVisiblyRevealed(
                                     state.fallbackTaskbar,
                                     state.fallbackTaskbarMonitor)) {
-                                SendUiOperation(
-                                    kUiRaiseTaskbarAboveWindows,
+                                (void)SendUiOperation(
+                                    kUiBringTaskbarToFront,
                                     state.fallbackTaskbar,
                                     500);
                             }
@@ -1897,7 +2110,6 @@ bool HookTaskbarUiThreadSymbol() {
     return true;
 }
 
-
 void CaptureExistingTaskbarObjects() {
     EnumWindows(
         [](HWND window, LPARAM) -> BOOL {
@@ -1909,10 +2121,21 @@ void CaptureExistingTaskbarObjects() {
             GetWindowThreadProcessId(window, &processId);
 
             if (processId == GetCurrentProcessId()) {
-                SendMessageW(window,
-                             g_captureTaskbarObjectMessage,
-                             0,
-                             0);
+                DWORD_PTR result = 0;
+                SetLastError(ERROR_SUCCESS);
+                if (!SendMessageTimeoutW(
+                        window,
+                        g_captureTaskbarObjectMessage,
+                        0,
+                        0,
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                        500,
+                        &result)) {
+                    Wh_Log(L"Taskbar object capture timed out or failed for "
+                           L"%p: %u",
+                           window,
+                           GetLastError());
+                }
             }
 
             return TRUE;
@@ -2070,7 +2293,6 @@ void Wh_ModAfterInit() {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
         return;
     }
-
 }
 
 void Wh_ModBeforeUninit() {
@@ -2084,13 +2306,15 @@ void Wh_ModBeforeUninit() {
         WaitForSingleObject(g_workerThread, INFINITE);
     }
 
-    if (!SendUiOperation(kUiClearAllSyntheticPointerOver,
-                         nullptr,
-                         1000)) {
+    UiOperationResult clearResult =
+        SendUiOperation(kUiClearAllSyntheticPointerOver, nullptr, 1000);
+    if (!UiOperationSucceeded(clearResult)) {
         Sleep(50);
-        SendUiOperation(kUiClearAllSyntheticPointerOver,
-                        nullptr,
-                        2000);
+        clearResult =
+            SendUiOperation(kUiClearAllSyntheticPointerOver, nullptr, 2000);
+        if (!UiOperationSucceeded(clearResult)) {
+            Wh_Log(L"Final synthetic pointer-over cleanup wasn't confirmed");
+        }
     }
 }
 
@@ -2107,7 +2331,7 @@ void Wh_ModUninit() {
         g_stopEvent = nullptr;
     }
 
-
+    g_stuckRectQuery.pending.store(false, std::memory_order_relaxed);
     g_viewCoordinators.clear();
     g_trayUiWndProcObjects.clear();
     g_secondaryTrayObjects.clear();
@@ -2118,7 +2342,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
 
     LoadSettings();
-    g_settingsChanged.store(true, std::memory_order_relaxed);
+    g_settingsGeneration.fetch_add(1, std::memory_order_release);
 
     DWORD workerThreadId =
         g_workerThreadId.load(std::memory_order_relaxed);
