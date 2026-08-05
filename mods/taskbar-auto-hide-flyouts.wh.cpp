@@ -4,7 +4,7 @@
 // @description     Prevents the auto-hiding taskbar from disappearing while the Quick Settings, Notification Center, or calendar flyouts are open.
 // @version         1.0.0
 // @author          Zicronium
-// @github          https://github.com
+// @github          https://github.com/Prashant-modder
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -ldwmapi
@@ -29,28 +29,26 @@ It handles mouse actions as well as Win+A / Win+N hotkeys gracefully by monitori
 #define TIMER_POLL_INTERVAL 250
 #define kTrayUITimerHide 2
 
-// ---------------------------------------------------------------------------
-// Advanced Flyout State Analysis (DWMWA_CLOAKED verification)
-// ---------------------------------------------------------------------------
 static bool IsTargetWindowActive(HWND hWnd) {
     if (!hWnd || !IsWindowVisible(hWnd)) return false;
     
     BOOL cloaked = FALSE;
-    HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    if (SUCCEEDED(hr) && cloaked) {
-        return false; // Window is rendered but hidden/cloaked by the OS shell
+    HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &cloaked, sizeof(cloaked));
+    if (FAILED(hr)) {
+        DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    }
+    if (cloaked) {
+        return false; 
     }
     return true; 
 }
 
 static bool AreShellFlyoutsOpen() {
-    // Check 24H2+ architecture (ShellHost modern panels)
     HWND hFlyout = nullptr;
     while ((hFlyout = FindWindowExW(nullptr, hFlyout, L"ControlCenterWindow", nullptr)) != nullptr) {
         if (IsTargetWindowActive(hFlyout)) return true;
     }
     
-    // Check 21H2-23H2 legacy architecture (ShellExperienceHost generic UWP panels)
     HWND hUwpWindow = nullptr;
     while ((hUwpWindow = FindWindowExW(nullptr, hUwpWindow, L"Windows.UI.Core.CoreWindow", nullptr)) != nullptr) {
         DWORD pid = 0;
@@ -73,16 +71,12 @@ static bool AreShellFlyoutsOpen() {
     return false;
 }
 
-// ---------------------------------------------------------------------------
-// Legcy Hook Layer: TrayUI Hiding Controls
-// ---------------------------------------------------------------------------
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 
 static VOID CALLBACK RearmTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     if (!AreShellFlyoutsOpen()) {
         KillTimer(hWnd, TIMER_REARM_ID);
-        // Safely trigger standard system taskbar hide sequence dispatch
         SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
     }
 }
@@ -91,25 +85,19 @@ void WINAPI TrayUI__Hide_Hook(void* pThis) {
     if (AreShellFlyoutsOpen()) {
         HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
         if (hTaskbar) {
-            // Set a low-overhead tracking loop to re-arm hiding once panels close safely
             SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, RearmTimerProc);
         }
-        return; // Suppress legacy hide invocation frame
+        return; 
     }
     TrayUI__Hide_Original(pThis);
 }
 
-// ---------------------------------------------------------------------------
-// Modern Win11 Hook Layer: ViewCoordinator Layout Suppression
-// ---------------------------------------------------------------------------
 using UpdateIsExpanded_t = void(__cdecl*)(void* pThis, bool isExpanded);
 UpdateIsExpanded_t UpdateIsExpanded_Original;
 
 void __cdecl UpdateIsExpanded_Hook(void* pThis, bool isExpanded) {
     if (!isExpanded && AreShellFlyoutsOpen()) {
-        // Force layout engine to retain active/expanded visibility state parameters
         UpdateIsExpanded_Original(pThis, true);
-        
         HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
         if (hTaskbar) {
             SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, RearmTimerProc);
@@ -119,33 +107,29 @@ void __cdecl UpdateIsExpanded_Hook(void* pThis, bool isExpanded) {
     UpdateIsExpanded_Original(pThis, isExpanded);
 }
 
-// Runtime loader hook to safely trap dynamic runtime module streaming parameters
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE hMod = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (hMod && lpLibFileName && (wcsstr(lpLibFileName, L"Taskbar.View.dll") || wcsstr(lpLibFileName, L"ExplorerExtensions.dll"))) {
-        WindhawkUtils::SYMBOL_HOOK viewHooks[] = {
+        WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
             {
                 { LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(bool))" },
                 &UpdateIsExpanded_Original,
                 UpdateIsExpanded_Hook,
-                true // True because dynamic targets might contain varying decoration signatures across updates
+                true 
             }
         };
-        WindhawkUtils::HookSymbols(hMod, viewHooks, ARRAYSIZE(viewHooks));
+        WindhawkUtils::HookSymbols(hMod, taskbar_view_dll_hooks, ARRAYSIZE(taskbar_view_dll_hooks));
     }
     return hMod;
 }
 
-// ---------------------------------------------------------------------------
-// Mod Framework Initializer Context
-// ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     HMODULE hTaskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hTaskbarDll) {
-        WindhawkUtils::SYMBOL_HOOK legacyHooks[] = {
+        WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
             {
                 {
                     LR"(public: virtual void __cdecl TrayUI::_Hide(void))",
@@ -153,16 +137,15 @@ BOOL Wh_ModInit() {
                 },
                 &TrayUI__Hide_Original,
                 TrayUI__Hide_Hook,
-                false // Required asset tracking anchor
+                false 
             }
         };
-        WindhawkUtils::HookSymbols(hTaskbarDll, legacyHooks, ARRAYSIZE(legacyHooks));
+        WindhawkUtils::HookSymbols(hTaskbarDll, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks));
     }
 
-    // Attach dynamic module loader hooks to securely track late-loaded modern layout dependencies
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
-        WindhawkUtils::SYMBOL_HOOK loaderHooks[] = {
+        WindhawkUtils::SYMBOL_HOOK kernelbase_dll_hooks[] = {
             {
                 { LR"(lSystem.LoadLibraryExW)" },
                 &LoadLibraryExW_Original,
@@ -170,7 +153,7 @@ BOOL Wh_ModInit() {
                 true
             }
         };
-        WindhawkUtils::HookSymbols(hKernelBase, loaderHooks, ARRAYSIZE(loaderHooks));
+        WindhawkUtils::HookSymbols(hKernelBase, kernelbase_dll_hooks, ARRAYSIZE(kernelbase_dll_hooks));
     }
 
     return TRUE;
