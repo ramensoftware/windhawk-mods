@@ -6,6 +6,7 @@
 // @author         allelimo
 // @github         https://github.com/allelimo
 // @include        windhawk.exe
+// @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,13 +31,17 @@ All credits goes to James Lin and Husam Abdulraheem.
 // ==WindhawkModSettings==
 /*
 - app_path: borderline.exe
-  $name: Full path to borderline.exe
-- app_options: no options
+  $name: Borderline.exe path
+  $description: Full path to the executable to launch - Borderline.exe
+- app_options: ""
   $name: Command line options
+  $description: Optional arguments passed to the application. Leave empty for none.
 - icon_file: C:\Windows\System32\shell32.dll
   $name: Icon File (DLL or EXE)
+  $description: Full path to Icon resource (DLL or EXE)
 - icon_index: 132
   $name: Icon Index
+  $description: Icon Index refers to the icon resource index within the DLL/EXE.
 - tooltip_text: Recover all the lost windows
   $name: Tooltip Text
 */
@@ -49,6 +54,11 @@ All credits goes to James Lin and Husam Abdulraheem.
 #define WM_USER_TRAYICON (WM_USER + 1)
 #define WM_USER_UPDATESETTINGS (WM_USER + 2)
 
+#define MENU_OPEN_WINDHAWK   9000
+#define MENU_TITLE_WINDHAWK  9100
+#define MENU_CLOSE_TRAYBORDERLINE 9200
+
+
 // --- Global Variables ---
 
 HWND g_hWnd = NULL;
@@ -58,6 +68,10 @@ UINT g_uMsgTaskbarCreated = 0;
 // allelimo
 PCWSTR g_appPath;
 PCWSTR g_appOptions;
+
+static HINSTANCE           g_hInstance    = nullptr;
+static WCHAR               g_windhawkPath[MAX_PATH] = {};
+
 
 // --- Functional Logic ---
 
@@ -91,8 +105,7 @@ void ApplySettingsToTray() {
     if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
     Wh_FreeStringSetting(iconFile);
     Wh_FreeStringSetting(tooltipText);
-    Wh_FreeStringSetting(g_appPath);
-    Wh_FreeStringSetting(g_appOptions);
+    
 }
 
 // allelimo
@@ -112,6 +125,39 @@ void OpenApp() {
     
 }
 
+// ─── System Theme + Context Menu ─────────────────────────────────────────────
+
+static bool IsSystemDarkMode() {
+    DWORD value = 1, size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return value == 0;
+}
+
+static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
+    HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+    if (!ux) return;
+    using Fn135 = int(WINAPI*)(int);
+    using Fn133 = bool(WINAPI*)(HWND, bool);
+    using Fn136 = void(WINAPI*)();
+    if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
+    if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
+    if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
+}
+
+// --- WhTool Callbacks ---
+
+void WhTool_ModUninit() {
+    //if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
+    if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, 2000);
+        CloseHandle(g_hThread);
+    }
+}
+
+// main
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_uMsgTaskbarCreated != 0 && uMsg == g_uMsgTaskbarCreated) {
         ApplySettingsToTray();
@@ -120,7 +166,54 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
         case WM_USER_TRAYICON:
             if (LOWORD(lParam) == WM_LBUTTONUP) OpenApp();  // allelimo
+            //allelimo
+            else if(LOWORD(lParam) == WM_RBUTTONUP)
+                {
+
+                HMENU hMenu = CreatePopupMenu();
+
+                    AppendMenuW(hMenu, MF_STRING, MENU_TITLE_WINDHAWK, L"Tray Borderline");
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                    AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
+                    AppendMenuW(hMenu, MF_STRING, MENU_CLOSE_TRAYBORDERLINE, L"Close Tray Borderline");
+
+
+                    POINT pt;
+                    GetCursorPos(&pt);
+                    bool dark = IsSystemDarkMode();
+                    ApplyContextMenuTheme(hwnd, dark);
+                    SetForegroundWindow(hwnd);
+                    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON |
+                        TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
+                        pt.x, pt.y, 0, hwnd, nullptr);
+                    PostMessageW(hwnd, WM_NULL, 0, 0);
+                    DestroyMenu(hMenu);
+
+
+                    if (cmd == MENU_OPEN_WINDHAWK) {
+                        SHELLEXECUTEINFOW sei = {sizeof(sei)};
+                        sei.lpFile = g_windhawkPath;
+                        sei.nShow  = SW_SHOWNORMAL;
+                        ShellExecuteExW(&sei);
+                    }
+                    else if (cmd == MENU_CLOSE_TRAYBORDERLINE){
+                        WhTool_ModUninit();
+                    }
+
+
+            };
             return 0;
+ 
+                    //allelimo 
+                    //WCHAR statusText[128];
+                    //int freedisk = g_freeSpace;
+                    //int totaldisk = g_totalSpace;
+                               
+                   
+
+
+
+//alellimo
         case WM_USER_UPDATESETTINGS:
             ApplySettingsToTray();
             return 0;
@@ -134,6 +227,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 DWORD WINAPI TrayThread(LPVOID lpParam) {
+
+    // initialize COM before calling ShellExecuteW
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (FAILED(hrCo) && hrCo != RPC_E_CHANGED_MODE) {
+            Wh_Log(L"CoInitializeEx failed (0x%08X)", hrCo);
+        return 1;
+    }
+
     g_uMsgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = WindowProc;
@@ -163,21 +264,35 @@ DWORD WINAPI TrayThread(LPVOID lpParam) {
 // --- WhTool Callbacks ---
 
 BOOL WhTool_ModInit() {
+
+    g_hInstance = GetModuleHandleW(nullptr);
+    switch (GetModuleFileNameW(g_hInstance, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
+        case 0:
+        case ARRAYSIZE(g_windhawkPath):
+            Wh_Log(L"GetModuleFileNameW failed");
+            break;
+    }
+
+
     g_hThread = CreateThread(NULL, 0, TrayThread, NULL, 0, NULL);
     return (g_hThread != NULL);
+
+
+
 }
 
 void WhTool_ModSettingsChanged() {
     if (g_hWnd) PostMessage(g_hWnd, WM_USER_UPDATESETTINGS, 0, 0);
 }
 
-void WhTool_ModUninit() {
-    if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
-    if (g_hThread) {
-        WaitForSingleObject(g_hThread, 2000);
-        CloseHandle(g_hThread);
-    }
-}
+// void WhTool_ModUninit() {
+//     //if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
+//     if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
+//     if (g_hThread) {
+//         WaitForSingleObject(g_hThread, 2000);
+//         CloseHandle(g_hThread);
+//     }
+// }
 
 // --- Windhawk Tool Mod Boilerplate (Do not modify) ---
 
