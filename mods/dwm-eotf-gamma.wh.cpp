@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              dwm-eotf-gamma
-// @name            DWM EOTF Gamma Curve
+// @name            Windows SDR to HDR Tonemapping Fix
 // @description     Replaces DWM's sRGB EOTF with a pure power-law gamma for SDR-to-HDR tone mapping
 // @version         1.0
 // @author          millerpb
@@ -12,10 +12,14 @@
 
 // ==WindhawkModReadme==
 /*
-# DWM EOTF Gamma Curve
+# Windows SDR to HDR Tonemapping Fix
+
+Correct Windows' SDR-to-HDR tonemapping. No more washed out midtones or crushed shadows — just a simple power-law gamma curve that you can control.
+
+## DWM EOTF Gamma Curve
 
 When Windows HDR is enabled, DWM converts SDR content to HDR scRGB using the
-sRGB EOTF — an ~2.2 power curve with a linear toe segment near black. This mod
+sRGB EOTF (a ~2.2 power curve with a linear toe segment near black). This mod
 patches the DXBC shader bytecode embedded in `dwmcore.dll` at DWM startup,
 replacing the sRGB curve with a simple power-law gamma. This gives you direct
 control over the SDR-to-HDR tone mapping without permanently modifying any files
@@ -25,7 +29,7 @@ Based on [dwm_eotf](https://github.com/ledoge/dwm_eotf) by ledoge (GPL-3.0).
 
 ## How it works
 
-When DWM starts, Windhawk injects this mod early — ideally before Direct3D
+When DWM starts, Windhawk injects this mod early, ideally before Direct3D
 initializes, so the patched bytecode is what D3D compiles from. The mod walks
 `dwmcore.dll`'s read-only PE sections looking for DXBC shader blobs that contain
 all four sRGB EOTF float constants. When found, those constants are replaced with
@@ -34,7 +38,7 @@ D3D accepts the modified bytecode.
 
 When the mod is unloaded while DWM is running (e.g. Windhawk disabled or settings
 changed), all patched bytes are restored in memory. Note that the unload callback
-does not run at process exit, so no restore occurs at Windows shutdown — this is
+does not run at process exit, so no restore occurs at Windows shutdown; this is
 harmless since the process is terminating anyway.
 
 ## Important: enable injection into dwm.exe
@@ -111,6 +115,7 @@ Without this step the mod will be silently ignored.
 #include <cwchar>
 #include <cstdint>
 #include <vector>
+#include <windhawk_utils.h>
 
 // =============================================================================
 // DXBC Checksum — AMD DXBCChecksum (modified MD5 used by Microsoft for DXBC)
@@ -270,7 +275,7 @@ static void DX_MD5Update(MD5_CTX_DX *ctx, const unsigned char *data, unsigned in
 // Computes the DXBC-variant MD5 checksum for a shader blob.
 // pData must point to the start of the DXBC header; dwSize is the full shader size.
 // The checksum is written into dwHash[4].
-static void CalcDXBCChecksum(BYTE *pData, DWORD dwSize, DWORD dwHash[4])
+static void CalcDXBCChecksum(const BYTE *pData, DWORD dwSize, DWORD dwHash[4])
 {
     static const DWORD kHashOffset = 0x14; // skip magic(4) + checksum(16) = 20 bytes
     MD5_CTX_DX ctx;
@@ -391,9 +396,12 @@ static const float kPatchConsts[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 // Index 0 (the exponent) is replaced with the user-chosen gamma, not kPatchConsts[0].
 
 // Searches 'buf' (a copy of a shader blob) for the sRGB vec3-splat patterns and
-// patches them in-place. Returns the number of the four constants found (0–4).
-// Callers must require == 4 to ensure all-or-nothing patching.
-static int PatchShaderBuf(BYTE *buf, DWORD size, float gamma)
+// patches them in-place. Fills counts[4] with the number of replacements made for
+// each constant. Returns the number of constants that had at least one match (0–4).
+// Callers must require == 4 to ensure all-or-nothing patching, and should log the
+// individual counts: some constants (e.g. 0.055) appear in both decode and encode
+// paths, so a count > 1 indicates unexpected overlap that would corrupt unintended code.
+static int PatchShaderBuf(BYTE *buf, DWORD size, float gamma, int counts[4])
 {
     int found = 0;
     for (int ci = 0; ci < 4; ci++)
@@ -401,17 +409,18 @@ static int PatchShaderBuf(BYTE *buf, DWORD size, float gamma)
         float src = kSrgbConsts[ci];
         float dst = (ci == 0) ? gamma : kPatchConsts[ci];
         float pat[3] = {src, src, src};
-        bool foundThis = false;
+        counts[ci] = 0;
         // Search from after the header; stop where a full 12-byte match would overflow.
-        for (size_t j = kDXBCHeaderSize; j + sizeof(float) * 3 <= size; j++)
+        // DXBC constants are DWORD-aligned, so step by 4 for correctness and speed.
+        for (size_t j = kDXBCHeaderSize; j + sizeof(float) * 3 <= size; j += 4)
         {
             if (memcmp(pat, buf + j, sizeof(pat)) != 0)
                 continue;
             float rep[3] = {dst, dst, dst};
             memcpy(buf + j, rep, sizeof(rep));
-            foundThis = true;
+            counts[ci]++;
         }
-        if (foundThis)
+        if (counts[ci] > 0)
             found++;
     }
     return found;
@@ -438,6 +447,16 @@ static bool HasDXBCSubBlob(const DXBCHeader *hdr)
     return false;
 }
 
+// Returns true if CalcDXBCChecksum reproduces the blob's own embedded checksum.
+// Used as a pre-flight check before writing a new checksum into a container blob
+// that is not on the known-checksum allowlist.
+static bool ChecksumRoundTrips(const DXBCHeader *hdr)
+{
+    DWORD verify[4];
+    CalcDXBCChecksum((const BYTE *)hdr, hdr->size, verify);
+    return memcmp(verify, hdr->checksum, 16) == 0;
+}
+
 // =============================================================================
 // Region scanner
 // =============================================================================
@@ -455,28 +474,47 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
 
     DXBCHeader *bigShader = nullptr; // enclosing container blob, if any
     bool bigPatched = false;         // did we patch any sub-shader inside it?
+    size_t containerPatchBase = 0;   // g_patches index when the current container was accepted
+
+    // Finalizes a container whose inner shaders have been patched: saves its
+    // original checksum, recomputes it, and writes it back. If the write fails,
+    // rolls back all leaf patches belonging to this container.
+    auto FinalizeContainer = [&](DXBCHeader *container) -> bool
+    {
+        PatchRecord bigRec;
+        bigRec.addr = (BYTE *)container + 4;
+        bigRec.original.assign(bigRec.addr, bigRec.addr + 16);
+        g_patches.push_back(std::move(bigRec));
+
+        DWORD newCk[4];
+        CalcDXBCChecksum((const BYTE *)container, container->size, newCk);
+        if (!WriteMemorySafe((BYTE *)container + 4, newCk, 16))
+        {
+            g_patches.pop_back(); // remove the checksum record we just pushed
+            size_t toRollBack = g_patches.size() - containerPatchBase;
+            Wh_Log(L"  VirtualProtect failed for container at %p — rolling back %zu leaf patch(es)",
+                   (void *)container, toRollBack);
+            while (g_patches.size() > containerPatchBase)
+            {
+                auto &rec = g_patches.back();
+                WriteMemorySafe(rec.addr, rec.original.data(), rec.original.size());
+                g_patches.pop_back();
+                numPatched--;
+            }
+            return false;
+        }
+        Wh_Log(L"  Fixed container checksum at %p", (void *)container);
+        return true;
+    };
 
     for (size_t i = 0; i + kDXBCHeaderSize <= regionSize; i++)
     {
         // If we have advanced past the end of the current container blob,
-        // finalize it: save its original checksum and write the new one.
+        // finalize it if we patched any inner shaders.
         if (bigShader && region + i >= (BYTE *)bigShader + bigShader->size)
         {
             if (bigPatched)
-            {
-                // Save the original checksum of the big shader (bytes 4–19).
-                PatchRecord bigRec;
-                bigRec.addr = (BYTE *)bigShader + 4;
-                bigRec.original.assign(bigRec.addr, bigRec.addr + 16);
-                g_patches.push_back(std::move(bigRec));
-
-                // Recompute and write back the container checksum.
-                DWORD newCk[4];
-                CalcDXBCChecksum((BYTE *)bigShader, bigShader->size, newCk);
-                WriteMemorySafe((BYTE *)bigShader + 4, newCk, 16);
-
-                Wh_Log(L"  Fixed container checksum at %p", (void *)bigShader);
-            }
+                FinalizeContainer(bigShader);
             bigShader = nullptr;
             bigPatched = false;
         }
@@ -499,7 +537,27 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
         if (HasDXBCSubBlob(hdr))
         {
             if (!bigShader)
+            {
+                // Pre-flight: verify our checksum routine reproduces this blob's own
+                // hash before we commit to overwriting it. An unlisted container whose
+                // hash doesn't round-trip is skipped to avoid silent corruption.
+                if (!ChecksumRoundTrips(hdr))
+                {
+                    Wh_Log(L"  Container at %p: checksum did not round-trip, skipping", (void *)hdr);
+                    continue;
+                }
                 bigShader = hdr;
+                containerPatchBase = g_patches.size();
+            }
+            else
+            {
+                // A nested container inside the current one: multi-level nesting is
+                // not supported. Skip past the inner blob so its leaves are not
+                // patched without a proper container fixup.
+                Wh_Log(L"  Nested container at %p inside %p — skipping unsupported nesting depth",
+                       (void *)hdr, (void *)bigShader);
+                i += hdr->size - 1; // loop will add 1 more, landing just after the blob
+            }
             continue;
         }
 
@@ -519,18 +577,29 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
         if (matchIdx < 0)
             continue;
 
+        // Verify the leaf actually lies within the tracked container's bounds
+        // before attributing the patch to that container. A positional false-positive
+        // (a blob that looked like a container but preceded the real one) would
+        // otherwise get its checksum overwritten for leaves it doesn't contain.
+        bool insideContainer = bigShader &&
+                               (BYTE *)hdr >= (BYTE *)bigShader &&
+                               (BYTE *)hdr + hdr->size <= (BYTE *)bigShader + bigShader->size;
+
         // Checksum matched — copy the blob, patch the sRGB constants, verify
         // all four were found, then recompute the DXBC checksum.
         std::vector<BYTE> patched(hdr->size);
         memcpy(patched.data(), hdr, hdr->size);
 
-        int constsFound = PatchShaderBuf(patched.data(), hdr->size, gamma);
+        int counts[4] = {};
+        int constsFound = PatchShaderBuf(patched.data(), hdr->size, gamma, counts);
         if (constsFound < 4)
         {
             Wh_Log(L"  Shader #%d: checksum matched but only %d/4 sRGB constants found",
                    matchIdx, constsFound);
             continue;
         }
+        for (int ci = 0; ci < 4; ci++)
+            Wh_Log(L"  Shader #%d: constant %d replaced %d time(s)", matchIdx, ci, counts[ci]);
 
         DWORD newCk[4];
         CalcDXBCChecksum(patched.data(), hdr->size, newCk);
@@ -550,7 +619,7 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
 
         g_patches.push_back(std::move(rec));
         numPatched++;
-        if (bigShader)
+        if (insideContainer)
             bigPatched = true;
 
         Wh_Log(L"  Patched shader #%d at %p (size %lu)", matchIdx, (void *)hdr, hdr->size);
@@ -558,18 +627,7 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
 
     // Handle a container blob that reaches the very end of the region.
     if (bigShader && bigPatched)
-    {
-        PatchRecord bigRec;
-        bigRec.addr = (BYTE *)bigShader + 4;
-        bigRec.original.assign(bigRec.addr, bigRec.addr + 16);
-        g_patches.push_back(std::move(bigRec));
-
-        DWORD newCk[4];
-        CalcDXBCChecksum((BYTE *)bigShader, bigShader->size, newCk);
-        WriteMemorySafe((BYTE *)bigShader + 4, newCk, 16);
-
-        Wh_Log(L"  Fixed trailing container checksum at %p", (void *)bigShader);
-    }
+        FinalizeContainer(bigShader);
 
     return numPatched;
 }
@@ -591,9 +649,7 @@ static void RestoreAllPatches()
 BOOL Wh_ModInit()
 {
     // Read the user's gamma setting.
-    PCWSTR gammaStr = Wh_GetStringSetting(L"GammaCurve");
-    float gamma = wcstof(gammaStr, nullptr);
-    Wh_FreeStringSetting(gammaStr);
+    float gamma = wcstof(WindhawkUtils::StringSetting::make(L"GammaCurve"), nullptr);
     if (gamma < 1.0f || gamma > 10.0f)
     {
         Wh_Log(L"Invalid gamma value, falling back to 2.2");
@@ -652,7 +708,7 @@ BOOL Wh_ModInit()
 
 void Wh_ModBeforeUninit()
 {
-    Wh_Log(L"DWM EOTF: restoring original shader bytes");
+    Wh_Log(L"Restoring original shader bytes");
     RestoreAllPatches();
 }
 
