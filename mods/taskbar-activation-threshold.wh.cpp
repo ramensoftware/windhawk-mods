@@ -15,17 +15,36 @@
 /*
 # Taskbar Activation Threshold
 
-Reveals an auto-hidden Windows 11 taskbar when the pointer enters a
-configurable activation band above the bottom edge of the monitor. The pointer
-is never moved or injected; the mod invokes the taskbar's native reveal paths
-on Explorer's taskbar UI thread.
+Reveal the auto-hidden Windows 11 taskbar from a configurable activation band
+above the bottom edge of the screen.
 
-The activation band is scaled for each monitor's DPI, and cursor movement is
-observed through Windows accessibility events instead of continuous polling.
+Unlike approaches that move or inject the pointer, this mod keeps the cursor
+stationary and invokes Explorer's native taskbar reveal logic on the taskbar UI
+thread.
 
-## Compatibility approach
+The activation threshold is scaled independently for each monitor's DPI.
+Cursor movement is detected through Windows accessibility events rather than
+continuous polling, minimizing background activity while the pointer is idle.
 
-The mod doesn't modify:
+## Demonstration
+
+![Taskbar Activation Threshold demonstration](https://raw.githubusercontent.com/themagnificentoofman/taskbar-activation-threshold-assets/main/taskbar-activation-threshold-demo.gif)
+
+## Features
+
+- Configurable activation-band height
+- Per-monitor DPI scaling
+- Multi-monitor support
+- Adjustable release delay and activation cooldown
+- Optional suppression over fullscreen applications
+- Optional suppression while a mouse button is held
+- Optional restriction to the primary monitor
+- Native timer fallback while the Windows 11 taskbar coordinator is unavailable
+- No cursor movement, pointer injection, or taskbar layout modification
+
+## Compatibility
+
+The mod does not modify:
 
 - Taskbar position or geometry
 - XAML layout or styles
@@ -34,44 +53,55 @@ The mod doesn't modify:
 - Transparency
 - Windows' auto-hide setting
 
-It is therefore designed to coexist with styling, sizing, transparency,
-animation-speed, clock, label, and icon mods which leave the taskbar at the
-bottom of the screen.
+When revealing the taskbar, the mod also restores its native topmost Z-order
+without activating it. This prevents normal application windows from covering
+the revealed taskbar while preserving focus in the current application.
+
+The mod is designed to coexist with taskbar styling, sizing, transparency,
+animation, clock, label, and icon mods that retain the standard bottom-positioned
+Windows 11 taskbar.
 
 ## Requirements
 
 - Windows 11
 - The standard Windows 11 taskbar
+- A bottom-positioned taskbar
 - **Automatically hide the taskbar** enabled in Windows, unless
   `requireWindowsAutoHide` is disabled
-- Bottom-positioned taskbars
 
-## Known incompatibilities and limitations
+## Known limitations
 
-- Taskbars moved to the top, left, right, or an arbitrary floating location
-  aren't supported.
-- ExplorerPatcher's legacy Windows 10 taskbar isn't supported.
-- Mods which block or replace the taskbar's native expansion logic can
-  conflict. In particular, keyboard-only or never-show auto-hide modes are
+- Top-, left-, right-, detached-, and arbitrarily positioned taskbars are not
+  supported.
+- ExplorerPatcher's legacy Windows 10 taskbar is not supported.
+- Mods that disable, replace, or override the taskbar's native expansion logic
+  may conflict with this mod. Keyboard-only and never-show auto-hide modes are
   intentionally incompatible with mouse activation.
-- Microsoft can rename undocumented taskbar symbols in a Windows update. If
-  that happens, one or more reveal paths may stop working until the symbols are
-  updated.
-- Until the taskbar's internal coordinator is captured, the optional native
-  timer fallback is used. Coordinator-owned reveals are used as soon as the
-  coordinator becomes available.
+- Windows updates can rename undocumented taskbar symbols. If this occurs, one
+  or more reveal paths may require a symbol update.
+- Shortly after Explorer starts, the internal Windows 11 taskbar coordinator
+  may not yet have been captured. During this period, the optional native timer
+  fallback is used. Coordinator-controlled activation begins automatically once
+  the coordinator becomes available.
 
-## Suggested starting values
+## Suggested settings
 
 - Activation threshold: `24`
 - Release delay: `120`
 - Activation cooldown: `200`
 
+These defaults provide a noticeably larger activation area while retaining
+responsive reveal and hide behavior. Increase the activation threshold for
+easier access, or reduce it to more closely match the standard Windows edge
+trigger.
+
 ## Attribution and license
 
 The Windows 11 `ViewCoordinator` symbol names and UI-thread invocation
 technique were informed by the GPL-3.0-licensed **Taskbar auto-hide fine
-tuning** Windhawk mod by m417z. This mod is distributed under GPL-3.0.
+tuning** Windhawk mod by m417z.
+
+This mod is distributed under the GNU General Public License v3.0.
 */
 // ==/WindhawkModReadme==
 
@@ -165,6 +195,7 @@ enum UiOperation : WPARAM {
     kUiClearAllSyntheticPointerOver = 3,
     kUiTriggerNativeUnhideTimer = 4,
     kUiCancelNativeUnhideTimer = 5,
+    kUiRaiseTaskbarAboveWindows = 6,
 };
 
 constexpr UINT kWorkerCursorChangedMessage = WM_APP + 1;
@@ -493,8 +524,13 @@ bool IsFullscreenCandidateOnMonitor(HWND window, HMONITOR monitor) {
     }
 
     const LONG_PTR style = GetWindowLongPtrW(window, GWL_STYLE);
+    const LONG_PTR exStyle = GetWindowLongPtrW(window, GWL_EXSTYLE);
+
+    // Tool, click-through, wallpaper, and other non-activating surfaces can be
+    // full-monitor windows without representing a fullscreen application.
     if ((style & WS_CHILD) != 0 ||
-        (style & (WS_CAPTION | WS_THICKFRAME)) != 0) {
+        (style & (WS_CAPTION | WS_THICKFRAME)) != 0 ||
+        (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) != 0) {
         return false;
     }
 
@@ -520,19 +556,45 @@ bool IsFullscreenCandidateOnMonitor(HWND window, HMONITOR monitor) {
            windowRect.bottom >= monitorInfo.rcMonitor.bottom - tolerance;
 }
 
+void LogFullscreenCandidate(HWND window) {
+    wchar_t className[128] = L"";
+    wchar_t title[256] = L"";
+    GetClassNameW(window, className, ARRAYSIZE(className));
+    GetWindowTextW(window, title, ARRAYSIZE(title));
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+
+    Wh_Log(L"Fullscreen candidate: hwnd=%p pid=%u class=\"%s\" title=\"%s\"",
+           window,
+           processId,
+           className,
+           title);
+}
+
 bool IsFullscreenWindowOnMonitor(HMONITOR monitor) {
     struct Context {
         HMONITOR monitor;
         bool found;
     } context{monitor, false};
 
+    // EnumWindows walks top-level windows from top to bottom in Z order. Once
+    // the desktop host is reached, all remaining windows are background or
+    // wallpaper surfaces and must not suppress taskbar activation.
     EnumWindows(
         [](HWND window, LPARAM parameter) -> BOOL {
             auto* context = reinterpret_cast<Context*>(parameter);
+
+            if (IsDesktopWindow(window)) {
+                return FALSE;
+            }
+
             if (IsFullscreenCandidateOnMonitor(window, context->monitor)) {
+                LogFullscreenCandidate(window);
                 context->found = true;
                 return FALSE;
             }
+
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&context));
@@ -1001,6 +1063,35 @@ bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
     return true;
 }
 
+bool RaiseTaskbarAboveWindowsOnUiThread(HWND taskbarWindow) {
+    if (!taskbarWindow || !IsWindow(taskbarWindow)) {
+        return false;
+    }
+
+    // A taskbar revealed without a real edge-hover can retain an old Z-order
+    // position and end up underneath an ordinary or topmost application
+    // window. Reinsert it at the top of the topmost band without activating,
+    // moving, resizing, or showing it. This matches the user-visible behavior
+    // of the native auto-hide reveal while leaving Explorer in control of the
+    // taskbar's geometry and animation.
+    if (!SetWindowPos(taskbarWindow,
+                      HWND_TOPMOST,
+                      0,
+                      0,
+                      0,
+                      0,
+                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                          SWP_NOOWNERZORDER)) {
+        Wh_Log(L"Couldn't raise taskbar %p above application windows: %u",
+               taskbarWindow,
+               GetLastError());
+        return false;
+    }
+
+    Wh_Log(L"Raised taskbar %p to the topmost Z-order band", taskbarWindow);
+    return true;
+}
+
 bool RevealTaskbarOnUiThread(HWND taskbarWindow) {
     // The maintained Windhawk taskbar implementation invokes both paths:
     // TrayUI::Unhide physically slides Shell_TrayWnd onscreen, while the
@@ -1011,10 +1102,18 @@ bool RevealTaskbarOnUiThread(HWND taskbarWindow) {
     const bool coordinatorExpanded =
         SetSyntheticPointerOverOnUiThread(taskbarWindow, true);
 
-    Wh_Log(L"Reveal result for taskbar %p: shell=%d coordinator=%d",
+    // Reassert the native overlay Z-order after both reveal paths have run.
+    // SetWindowPos uses SWP_NOACTIVATE, so the foreground application keeps
+    // keyboard focus.
+    const bool raisedAboveWindows =
+        RaiseTaskbarAboveWindowsOnUiThread(taskbarWindow);
+
+    Wh_Log(L"Reveal result for taskbar %p: shell=%d coordinator=%d "
+           L"zorder=%d",
            taskbarWindow,
            shellWindowRevealed,
-           coordinatorExpanded);
+           coordinatorExpanded,
+           raisedAboveWindows);
 
     // The legacy Unhide path alone has no matching hide trigger on Windows 11,
     // so only the coordinator path counts as a reveal owned by this mod.
@@ -1069,6 +1168,11 @@ bool TriggerNativeUnhideTimerOnUiThread(HWND taskbarWindow) {
         return false;
     }
 
+    // Put the hidden taskbar in the correct Z-order before Explorer processes
+    // the asynchronous timer. A second reinforcement is sent by the worker
+    // after the timer has had time to reveal the window.
+    RaiseTaskbarAboveWindowsOnUiThread(taskbarWindow);
+
     Wh_Log(L"Requested native unhide timer for taskbar %p",
            taskbarWindow);
     return true;
@@ -1108,6 +1212,11 @@ LRESULT WINAPI CTaskBand_v_WndProc_Hook(
 
             case kUiCancelNativeUnhideTimer:
                 return CancelNativeUnhideTimerOnUiThread(targetTaskbar)
+                           ? 1
+                           : 0;
+
+            case kUiRaiseTaskbarAboveWindows:
+                return RaiseTaskbarAboveWindowsOnUiThread(targetTaskbar)
                            ? 1
                            : 0;
         }
@@ -1608,6 +1717,20 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
                             SendUiOperation(kUiCancelNativeUnhideTimer,
                                             state.fallbackTaskbar,
                                             500);
+
+                            // The timer reveal is asynchronous. Reinforce the
+                            // taskbar's overlay Z-order after Explorer has had
+                            // time to move it onscreen, preventing a normal or
+                            // always-on-top app from covering part of it.
+                            if (state.fallbackTaskbarMonitor &&
+                                IsTaskbarVisiblyRevealed(
+                                    state.fallbackTaskbar,
+                                    state.fallbackTaskbarMonitor)) {
+                                SendUiOperation(
+                                    kUiRaiseTaskbarAboveWindows,
+                                    state.fallbackTaskbar,
+                                    500);
+                            }
                         }
                     } else if (fallbackPollTimerId &&
                                message.wParam == fallbackPollTimerId) {
