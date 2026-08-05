@@ -29,7 +29,6 @@ It handles mouse actions as well as Win+A / Win+N hotkeys gracefully by monitori
 #define TIMER_POLL_INTERVAL 250
 #define kTrayUITimerHide 2
 
-// Helper function to find the primary taskbar owned safely by the current process context
 static HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (hTaskbar) {
@@ -49,7 +48,6 @@ static bool IsTargetWindowActive(HWND hWnd) {
     if (!hWnd || !IsWindowVisible(hWnd)) return false;
     
     BOOL cloaked = FALSE;
-    // FIX: Cleared structural bounds passing array bug to request cloaking state directly
     if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
         cloaked = FALSE;
     }
@@ -90,12 +88,11 @@ static bool AreShellFlyoutsOpen() {
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 
-// Using window message routines inside a subclass to bypass the thread affinity timer crash risk
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (uMsg == WM_TIMER && wParam == TIMER_REARM_ID) {
         if (!AreShellFlyoutsOpen()) {
             KillTimer(hWnd, TIMER_REARM_ID);
-            SetTimer(hWnd, kTrayUITimerHide, 0, nullptr); // Re-trigger the taskbar's original hide routine
+            SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
         }
         return 0;
     }
@@ -106,21 +103,21 @@ void WINAPI TrayUI__Hide_Hook(void* pThis) {
     if (AreShellFlyoutsOpen()) {
         HWND hTaskbar = FindCurrentProcessTaskbarWnd();
         if (hTaskbar) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hTaskbar, TaskbarSubclassProc, TIMER_REARM_ID, 0);
-            SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, nullptr); // Null pointer tells system to send simple WM_TIMER messages
+            // FIX: Removed 4th argument to match the 3-parameter definition in windhawk_utils.h
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hTaskbar, TaskbarSubclassProc, TIMER_REARM_ID);
+            SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, nullptr);
         }
         return; 
     }
     TrayUI__Hide_Original(pThis);
 }
 
-// Secondary taskbar handling hook interface mapping context
 using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool hide);
 CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
 
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool hide) {
     if (hide && AreShellFlyoutsOpen()) {
-        return; // Suppress secondary screen collapses safely
+        return;
     }
     CSecondaryTray__AutoHide_Original(pThis, hide);
 }
@@ -128,7 +125,16 @@ void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool hide) {
 // ---------------------------------------------------------------------------
 // Modern Win11 Hook Layer: ViewCoordinator Layout Suppression
 // ---------------------------------------------------------------------------
-// FIX: Converted the proxy setup into a standard runtime GetProcAddress lookup to avoid downloading large PDB metadata
+using ShouldTaskbarBeExpanded_t = bool(__cdecl*)(void* pThis);
+ShouldTaskbarBeExpanded_t ShouldTaskbarBeExpanded_Original;
+
+bool __cdecl ShouldTaskbarBeExpanded_Hook(void* pThis) {
+    if (AreShellFlyoutsOpen()) {
+        return true; // Keep taskbar expanded while flyouts are up
+    }
+    return ShouldTaskbarBeExpanded_Original(pThis);
+}
+
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
@@ -136,15 +142,16 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     HMODULE hMod = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (hMod && lpLibFileName && (wcsstr(lpLibFileName, L"Taskbar.View.dll") || wcsstr(lpLibFileName, L"ExplorerExtensions.dll"))) {
         // Taskbar.View.dll
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        // FIX: Provided valid hook function and original pointer variables to satisfy constructor templates
+        WindhawkUtils::SYMBOL_HOOK view_coordinator_hooks[] = {
             {
-                { LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(void))" }, // Extracted the correct hook signature suggested by the repository
-                nullptr, // Dynamic hook location targeted via standard runtime override bindings
-                nullptr,
+                { LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(void))" },
+                &ShouldTaskbarBeExpanded_Original,
+                ShouldTaskbarBeExpanded_Hook,
                 true 
             }
         };
-        WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks));
+        WindhawkUtils::HookSymbols(hMod, view_coordinator_hooks, ARRAYSIZE(view_coordinator_hooks));
     }
     return hMod;
 }
@@ -156,7 +163,7 @@ BOOL Wh_ModInit() {
     HMODULE hTaskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hTaskbarDll) {
         // taskbar.dll
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
             {
                 { LR"(public: virtual void __cdecl TrayUI::_Hide(void))" },
                 &TrayUI__Hide_Original,
@@ -164,16 +171,15 @@ BOOL Wh_ModInit() {
                 false 
             },
             {
-                { LR"(public: void __cdecl CSecondaryTray::_AutoHide(bool))" }, // Added explicit multi-monitor support rules
+                { LR"(public: void __cdecl CSecondaryTray::_AutoHide(bool))" },
                 &CSecondaryTray__AutoHide_Original,
                 CSecondaryTray__AutoHide_Hook,
                 true
             }
         };
-        WindhawkUtils::HookSymbols(hTaskbarDll, hooks, ARRAYSIZE(hooks));
+        WindhawkUtils::HookSymbols(hTaskbarDll, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks));
     }
 
-    // Direct GetProcAddress lookup to hook load functions without triggering large kernelbase.pdb cloud network loads
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
@@ -190,6 +196,6 @@ void Wh_ModUninit() {
     if (hTaskbar) {
         KillTimer(hTaskbar, TIMER_REARM_ID);
         RemoveWindowSubclass(hTaskbar, TaskbarSubclassProc, TIMER_REARM_ID);
-        SetTimer(hTaskbar, kTrayUITimerHide, 0, nullptr); // FIX: Instantly forces the taskbar to auto-hide when the mod is disabled
+        SetTimer(hTaskbar, kTrayUITimerHide, 0, nullptr);
     }
 }
