@@ -14,7 +14,12 @@
 /*
 # Windows SDR to HDR Tonemapping Fix
 
-Correct Windows' SDR-to-HDR tonemapping. No more washed out midtones or crushed shadows — just a simple power-law gamma curve that you can control.
+Viewing SDR content while using HDR in Windows causes washed out darker tones like shadows. This corrects
+it so that Windows uses a standard gamma curve. It should not affect native HDR content like games and movies.
+
+Simple, accurate sRGB with a simple power-law gamma curve that you can control.
+
+See examples and read more on [GitHub](https://github.com/dylanraga/win11hdr-srgb-to-gamma2.2-icm) by dylanraga
 
 ## DWM EOTF Gamma Curve
 
