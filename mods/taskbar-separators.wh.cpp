@@ -116,6 +116,7 @@ mods by Michael Maltsev (m417z).
 */
 // ==/WindhawkModReadme==
 
+// clang-format off
 // ==WindhawkModSettings==
 /*
 - width: 2
@@ -133,8 +134,9 @@ mods by Michael Maltsev (m417z).
 - style: fade
   $name: Style
   $description: "Solid: Plain crisp separator line. Fade: Soft layered separator
-with faded ends. Double: Two parallel separator lines. Rounded: Separator with
-rounded ends. Glow: Separator with a soft surrounding glow." $options:
+    with faded ends. Double: Two parallel separator lines. Rounded: Separator with
+    rounded ends. Glow: Separator with a soft surrounding glow."
+  $options:
   - solid: Solid
   - fade: Fade
   - double: Double
@@ -165,7 +167,8 @@ rounded ends. Glow: Separator with a soft surrounding glow." $options:
 - animationCompatibility: "off"
   $name: Animation compatibility
   $description: Track animated taskbar icons. Turn off for static separators
-with no animation-tracking overhead. $options:
+    with no animation-tracking overhead.
+  $options:
   - "on": On
   - "off": Off
 - separatorBeforeFirstApp: false
@@ -177,6 +180,7 @@ with no animation-tracking overhead. $options:
   $description: Application button positions after which to place dividers.
 */
 // ==/WindhawkModSettings==
+// clang-format on
 
 #include <windhawk_utils.h>
 
