@@ -1,3 +1,10 @@
+## 1.4 ([Aug 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/da5a7e59605f811c25d98fb3e8c399b34906272f/mods/explorer-force-details-columns.wh.cpp))
+
+- Fixed normal folders sometimes being treated as virtual folders and left unchanged, which also affected their subfolders.
+- Added a note about a known issue of Windows 11 using an unreasonable minimum column width when a non-custom scaling is set for the display instead of a custom scaling.
+- Columns without "Force Width" now keep their current width instead of being reset when the set of columns changes.
+- Forced widths are now also applied as the column's default and ideal width, so auto-sizing doesn't override them.
+
 ## 1.3 ([Jul 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/615068c3c4bf5f22dbd5f0ddd3af971c4ab9fac7/mods/explorer-force-details-columns.wh.cpp))
 
 - Virtual folders with their own specialized columns (Recycle Bin, This PC, search results, etc.) are no longer affected by default; controlled by "Exclude virtual folders".

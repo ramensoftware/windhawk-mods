@@ -4883,7 +4883,7 @@
           4
         ],
         "ratingUsers": 7,
-        "updated": 1784579811000,
+        "updated": 1785948930000,
         "users": 164
       },
       "metadata": {
@@ -4896,7 +4896,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Details View Columns",
-        "version": "1.3"
+        "version": "1.4"
       }
     },
     "explorer-frame-classic": {

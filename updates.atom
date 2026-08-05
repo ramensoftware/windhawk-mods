@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-05T16:52:26.000Z</updated>
+    <updated>2026-08-05T16:55:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Details View Columns 1.4]]></title>
+        <id>https://windhawk.net/mods/explorer-force-details-columns#da5a7e59605f811c25d98fb3e8c399b34906272f</id>
+        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
+        <updated>2026-08-05T16:55:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed normal folders sometimes being treated as virtual folders and left unchanged, which also affected their subfolders.</li>
+<li>Added a note about a known issue of Windows 11 using an unreasonable minimum column width when a non-custom scaling is set for the display instead of a custom scaling.</li>
+<li>Columns without "Force Width" now keep their current width instead of being reset when the set of columns changes.</li>
+<li>Forced widths are now also applied as the column's default and ideal width, so auto-sizing doesn't override them.</li>
+</ul>]]></content>
+        <author>
+            <name>ernisn</name>
+            <uri>https://github.com/ernisn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Animations 1.1.5]]></title>
         <id>https://windhawk.net/mods/windows-animations#fcf4752975ee79f29179fa66057e216ba4f52ff5</id>
@@ -618,59 +634,6 @@ timedate.cpl).</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aero Flip 3D Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/aero-flip3d-recreation#82101c2b63b3998596dd42430bafc1c99e32752a</id>
-        <link href="https://windhawk.net/mods/aero-flip3d-recreation"/>
-        <updated>2026-07-31T10:16:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="aeroflip3drecreation">Aero Flip 3D Recreation</h1>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/aeroflip3d.png" alt="Screenshot" /></p>
-<h2 id="aboutthemod">About the mod</h2>
-<p>This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern Windows versions.</p>
-<p>It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.</p>
-<p>This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.</p>
-<p>The mod has been tested on Windows 10 1809.</p>
-<h2 id="keyboardshortcuts">Keyboard shortcuts</h2>
-<p>| Shortcut | Action |
-| --- | --- |
-| <code>Win+Tab</code> | Opens Aero Flip 3D |
-| <code>Ctrl+Alt+F12</code> | Opens or closes Aero Flip 3D manually. Use this as a fallback. |</p>
-<h3 id="whileaeroflip3disopen">While Aero Flip 3D is open</h3>
-<ul>
-<li>Navigate: <code>Tab</code> / <code>Shift+Tab</code>, arrow keys, or mouse wheel</li>
-<li>Select: <code>Enter</code> or <code>Space</code></li>
-<li>Close: <code>Esc</code></li>
-<li>Emergency exit: <code>Ctrl+Shift+Esc</code> opens Task Manager</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li>Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.</li>
-<li>Auto-cycle while Win is held: automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default.</li>
-<li>Number of visible windows: how many cards are shown in the deck at once. Defaults to auto-detecting a value from your PC's RAM/CPU, but can be overridden.</li>
-</ul>
-<p>By default, the mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.</p>
-<h2 id="performance">Performance</h2>
-<p>Live DWM thumbnails are used only during animations.</p>
-<p>More thumbnail strips are used to make the edges smoother while keeping the original pseudo-3D window shape.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 version 1809 or later (64-bit)</li>
-<li>DWM enabled (default on Windows)</li>
-<li>2 GB RAM or more (2-4 GB machines get a reduced-effects mode automatically)</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Aero Flip 3D appears on the main monitor, where all available windows are displayed in the 3D switcher interface.</li>
-<li>The native Alt+Tab window switcher is not modified and continues to work normally.</li>
-<li>While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.</li>
-<li>To restore the original Windows Task View behavior, simply disable or uninstall the mod.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
