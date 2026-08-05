@@ -2,7 +2,7 @@
 // @id              notifications-settings-page-speedup
 // @name            Faster Notifications Settings Page
 // @description     Stops Settings from re-scanning every notification app on each visit, so revisits load in seconds instead of minutes
-// @version         1.1
+// @version         1.2
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         SystemSettings.exe
@@ -90,6 +90,7 @@ static std::atomic<HANDLE> g_uiThreadHandle{nullptr};
 // that OwnerAlive/AddEntry read, so the handle is always published before the id
 // and only one thread can claim or take over ownership at a time.
 static std::atomic<DWORD> g_ownerClaim{0};
+static bool IsOwner();  // Defined with the ownership helpers below; used by the hooks.
 
 // ---------------------------------------------------------------------------
 // Run a callback on the thread that owns a given window. Used at unload to
@@ -231,7 +232,7 @@ HRESULT STDMETHODCALLTYPE GetSettings_Hook(void* self, PCWSTR aumid, void** out)
     // Only use the cache on the thread that created the proxies; a proxy handed to
     // another apartment would fail its reads with RPC_E_WRONG_THREAD.
     if (g_cacheSettings.load() && aumid && out && !g_ownerGone.load() &&
-        GetCurrentThreadId() == g_uiThreadId.load()) {
+        IsOwner()) {
         {
             std::shared_lock lk(g_cacheMutex);
             auto it = g_cache.find(aumid);
@@ -370,6 +371,12 @@ static bool OwnerAlive() {
     return h && WaitForSingleObject(h, 0) == WAIT_TIMEOUT;
 }
 
+// Set only on the owning thread itself, in TakeOwnership. A bare id can't identify
+// the owner, because ids are recycled: a dead owner's id can be handed to an
+// unrelated live thread that would then match on `id == owner` and be treated as
+// the owner. A new thread always starts with this false, whatever id it inherits.
+static thread_local bool g_isOwnerThread = false;
+
 // Latch this thread as the owner. Only ever called on the thread itself, and only
 // by the thread that won g_ownerClaim. The handle is published before the id so a
 // reader can never see an owner id whose liveness handle isn't in place yet, which
@@ -378,55 +385,60 @@ static void TakeOwnership(DWORD self) {
     HANDLE h = OpenThread(SYNCHRONIZE, FALSE, self);
     HANDLE old = g_uiThreadHandle.exchange(h);  // Handle visible before the id.
     g_uiThreadId.store(self);
+    g_isOwnerThread = true;
     if (old) {
         CloseHandle(old);
     }
 }
 
+// True only on the thread that actually latched ownership, and only while it still
+// holds the published id, so a stolen ownership (another thread took over after
+// OpenThread failed on this one) also resolves correctly.
+static bool IsOwner() {
+    return g_isOwnerThread && g_uiThreadId.load() == GetCurrentThreadId();
+}
+
 HRESULT __cdecl AddEntry_Hook(void* helper, PCWSTR aumid, unsigned long long opt) {
     DWORD self = GetCurrentThreadId();
-    DWORD owner = g_uiThreadId.load();
 
-    // The owner is latched by the first enumeration and then left alone. Storing it
-    // on every call made the apartment check meaningless, because a second thread
-    // would overwrite it and then match itself, which is the wrong-apartment case
-    // the check exists for.
-    if (owner == 0) {
-        // Win the claim first, then publish handle-before-id in TakeOwnership. The
-        // claim, not the id, is what serializes the winner, so the id is never made
-        // visible ahead of its handle.
-        DWORD expected = 0;
-        if (g_ownerClaim.compare_exchange_strong(expected, self)) {
-            TakeOwnership(self);
-        }
-        owner = g_uiThreadId.load();
-    } else if (owner != self && !OwnerAlive()) {
-        // The apartment that made all of this has exited, so nothing can legally
-        // be called through any of it, Release included. One thread wins the
-        // takeover via the claim; the rest fall through to the slow path. Guarding
-        // it this way stops two threads both taking over and stealing ownership
-        // from each other mid-enumeration.
-        DWORD expected = owner;
-        if (g_ownerClaim.compare_exchange_strong(expected, self)) {
-            // The slot is restored first, while the controller reference we still
-            // hold keeps its vtable page mapped. Dropping the reference first would
-            // leave RestoreVtableSlot writing into memory that may already be gone.
-            RestoreVtableSlot();
-            g_vtblHooked   = false;
-            g_vtblSlot     = nullptr;
-            g_controller   = nullptr;  // Abandoned, not released.
-            g_hookAttempts = 0;
-            g_ownerGone    = true;
-            TakeOwnership(self);
-            owner = self;
-        } else {
-            owner = g_uiThreadId.load();  // Someone else took over.
+    // Ownership is identified by the thread_local latch, not the bare id. Only a
+    // thread that isn't already the owner tries to claim or take over.
+    if (!IsOwner()) {
+        DWORD owner = g_uiThreadId.load();
+        if (owner == 0) {
+            // Win the claim first, then publish handle-before-id in TakeOwnership.
+            // The claim, not the id, serializes the winner, so the id is never made
+            // visible ahead of its handle.
+            DWORD expected = 0;
+            if (g_ownerClaim.compare_exchange_strong(expected, self)) {
+                TakeOwnership(self);
+            }
+        } else if (!OwnerAlive()) {
+            // The owning apartment has exited (this also covers a recycled id that
+            // matches g_uiThreadId but never latched: its liveness handle belongs to
+            // the dead thread, so OwnerAlive is false). Nothing here can be called,
+            // so one thread wins the takeover via the claim and the rest fall through
+            // to the slow path, instead of two threads stealing it from each other.
+            DWORD expected = owner;
+            if (g_ownerClaim.compare_exchange_strong(expected, self)) {
+                // The slot is restored first, while the controller reference we
+                // still hold keeps its vtable page mapped. Dropping the reference
+                // first would leave RestoreVtableSlot writing into memory that may
+                // already be gone.
+                RestoreVtableSlot();
+                g_vtblHooked   = false;
+                g_vtblSlot     = nullptr;
+                g_controller   = nullptr;  // Abandoned, not released.
+                g_hookAttempts = 0;
+                g_ownerGone    = true;
+                TakeOwnership(self);
+            }
         }
     }
 
-    // Anything that isn't the owning apartment falls through to the original path:
-    // slower, but correct, instead of being handed a proxy it can't call.
-    if (owner == self) {
+    // Only the owning apartment gets the cache path; anything else falls through to
+    // the original, slower but correct instead of touching a proxy it can't call.
+    if (IsOwner()) {
         if (g_ownerGone.exchange(false)) {
             AbandonCache();
         }
