@@ -193,8 +193,8 @@ void Wh_ModUninit() {
     HWND hTaskbar = FindCurrentProcessTaskbarWnd();
     if (hTaskbar) {
         KillTimer(hTaskbar, TIMER_REARM_ID);
-        // FIX: Swapped to Windhawk's matching subclass uninstaller helper function
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTaskbar, TIMER_REARM_ID);
+        // FIX: Provided TaskbarSubclassProc to cleanly match the utility signature
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTaskbar, TaskbarSubclassProc);
         SetTimer(hTaskbar, kTrayUITimerHide, 0, nullptr);
     }
 }
