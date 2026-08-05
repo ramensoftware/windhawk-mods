@@ -1,4 +1,3 @@
-// clang-format off
 // ==WindhawkMod==
 // @id              dwm-eotf-gamma
 // @name            Windows SDR to HDR Tonemapping Fix
@@ -122,7 +121,6 @@ effect.
     - "2.6": "2.6 (dark / high contrast)"
 */
 // ==/WindhawkModSettings==
-// clang-format on
 
 #include <windhawk_utils.h>
 #include <windows.h>
