@@ -39,7 +39,7 @@ Custom colours are only applied when the corresponding "Use Custom Colours" togg
 
 ## Notes
 - UWP/WinUI windows (`ApplicationFrameWindow`, WinUI 3, XAML islands) are automatically detected and skipped to avoid conflicts
-- Windows whose caption colour is set by the application itself are left untouched
+- Windows whose caption colour is set by the application itself have that colour left untouched; only the dark/light mode is kept in sync
 - Visual attributes apply seamlessly on window activation and theme changes
 */
 // ==/WindhawkModReadme==
@@ -231,7 +231,11 @@ static BOOL IsWindowEligible(HWND hWnd, BOOL allowCacheUpdate = TRUE)
 
     WCHAR className[256];
     if (GetClassNameW(hWnd, className, 256)) {
-        if (wcscmp(className, L"ApplicationFrameWindow") == 0) {
+        if (wcscmp(className, L"ApplicationFrameWindow") == 0 ||
+            wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
+            wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
+            wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0 ||
+            wcscmp(className, L"WinUIDesktopWin32WindowClass") == 0) {
             return FALSE;
         }
         if (g_settings.excludeMozilla && wcsncmp(className, L"Mozilla", 7) == 0) {
@@ -350,7 +354,7 @@ static void LoadSettings()
 using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
 static DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
 
-HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
+static HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
     HRESULT hr = DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
     if (!g_inMod && SUCCEEDED(hr)) {
@@ -542,7 +546,7 @@ static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
 using DefWindowProcW_t = decltype(&DefWindowProcW);
 static DefWindowProcW_t DefWindowProcW_orig;
 
-LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+static LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefWindowProcW_orig(hWnd, Msg, wParam, lParam);
     HandleWindowMessage(hWnd, Msg, wParam, lParam, FALSE);
@@ -552,7 +556,7 @@ LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 using DefWindowProcA_t = decltype(&DefWindowProcA);
 static DefWindowProcA_t DefWindowProcA_orig;
 
-LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+static LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefWindowProcA_orig(hWnd, Msg, wParam, lParam);
     HandleWindowMessage(hWnd, Msg, wParam, lParam, TRUE);
@@ -566,7 +570,7 @@ LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 using DefDlgProcW_t = decltype(&DefDlgProcW);
 static DefDlgProcW_t DefDlgProcW_orig;
 
-LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+static LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcW_orig(hWnd, Msg, wParam, lParam);
     HandleWindowMessage(hWnd, Msg, wParam, lParam, FALSE);
@@ -576,7 +580,7 @@ LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
 using DefDlgProcA_t = decltype(&DefDlgProcA);
 static DefDlgProcA_t DefDlgProcA_orig;
 
-LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+static LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = DefDlgProcA_orig(hWnd, Msg, wParam, lParam);
     HandleWindowMessage(hWnd, Msg, wParam, lParam, TRUE);
@@ -590,6 +594,25 @@ LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
 static void HandleCreatedWindow(HWND hWnd)
 {
     if (!hWnd) return;
+
+    // Clear any stale entries for this HWND in case it was recycled and
+    // WM_NCDESTROY did not chain through DefWindowProc.
+    {
+        std::lock_guard<std::mutex> lock(g_eligibilityMutex);
+        g_eligibilityCache.erase(hWnd);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_appControlledMutex);
+        g_appControlledWindows.erase(hWnd);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
+        g_appDarkModeWindows.erase(hWnd);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_appliedMutex);
+        g_appliedWindows.erase(hWnd);
+    }
 
     WCHAR className[256];
     if (GetClassNameW(hWnd, className, 256) &&
@@ -614,7 +637,7 @@ static void HandleCreatedWindow(HWND hWnd)
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 static CreateWindowExW_t CreateWindowExW_orig;
 
-HWND WINAPI CreateWindowExW_hook(
+static HWND WINAPI CreateWindowExW_hook(
     DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
     DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
     HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
@@ -630,7 +653,7 @@ HWND WINAPI CreateWindowExW_hook(
 using CreateWindowExA_t = decltype(&CreateWindowExA);
 static CreateWindowExA_t CreateWindowExA_orig;
 
-HWND WINAPI CreateWindowExA_hook(
+static HWND WINAPI CreateWindowExA_hook(
     DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
     DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
     HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
