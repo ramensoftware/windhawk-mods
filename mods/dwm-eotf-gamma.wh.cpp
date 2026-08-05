@@ -25,14 +25,30 @@ Based on [dwm_eotf](https://github.com/ledoge/dwm_eotf) by ledoge (GPL-3.0).
 
 ## How it works
 
-On DWM startup, Windhawk injects this mod before Direct3D is initialized. The
-mod locates the known DXBC shader blobs in `dwmcore.dll`'s read-only memory
-sections and patches four floating-point constants that define the sRGB transfer
-function, replacing them with the equivalent pure power-law constants. The shader
-checksums are recalculated so D3D accepts the patched bytecode.
+When DWM starts, Windhawk injects this mod early — ideally before Direct3D
+initializes, so the patched bytecode is what D3D compiles from. The mod walks
+`dwmcore.dll`'s read-only PE sections looking for DXBC shader blobs that contain
+all four sRGB EOTF float constants. When found, those constants are replaced with
+the equivalent pure power-law values and the shader checksum is recalculated so
+D3D accepts the modified bytecode.
 
-When the mod is unloaded (Windhawk disabled, settings changed, or Windows
-shutdown), all patched bytes are restored to their original values.
+When the mod is unloaded while DWM is running (e.g. Windhawk disabled or settings
+changed), all patched bytes are restored in memory. Note that the unload callback
+does not run at process exit, so no restore occurs at Windows shutdown — this is
+harmless since the process is terminating anyway.
+
+## Important: enable injection into dwm.exe
+
+`dwm.exe` is a critical system process. Windhawk does not inject into it by
+default — you must explicitly allow it in **Windhawk's advanced settings**:
+
+1. Open Windhawk → **Advanced settings**
+2. In the **Process inclusion list**, add `dwm.exe`
+3. Click **Save**
+
+Without this step the mod will be silently ignored.
+
+![Windhawk advanced settings](https://i.imgur.com/LRhREtJ.png)
 
 ## Usage
 
@@ -69,9 +85,8 @@ shutdown), all patched bytes are restored to their original values.
   patching or unpatching at runtime has no effect on shaders that are already
   compiled. The flicker is driven by Chrome's own mode-switching and cannot be
   suppressed from the DWM side.
-- The shader checksums in `dwmcore.dll` may change with Windows Updates. If the
-  mod reports patching 0 shaders after an update, the known-checksum list may
-  need updating.
+- If the mod logs "No matching shaders found" after a Windows Update, the shader
+  structure in `dwmcore.dll` has changed. Please file an issue.
 */
 // ==/WindhawkModReadme==
 
@@ -93,7 +108,8 @@ shutdown), all patched bytes are restored to their original values.
 
 #include <windows.h>
 #include <cstring>
-#include <cstdlib>
+#include <cwchar>
+#include <cstdint>
 #include <vector>
 
 // =============================================================================
@@ -103,7 +119,7 @@ shutdown), all patched bytes are restored to their original values.
 // Free for all — MD5 algorithm derived from RSA Data Security, Inc. (1990).
 // =============================================================================
 
-typedef unsigned long DX_UINT4;
+typedef uint32_t DX_UINT4;
 
 struct MD5_CTX_DX
 {
@@ -327,10 +343,11 @@ struct PatchRecord
 };
 
 static std::vector<PatchRecord> g_patches;
-static float g_gamma = 2.2f;
 
-// Known DXBC checksums for the sRGB-EOTF shaders in dwmcore.dll.
-// These are the unmodified ("vanilla") checksums for the target shader blobs.
+// Known DXBC checksums for the four sRGB-EOTF target shaders in dwmcore.dll.
+// Used as the primary selector: dwmcore.dll contains dozens of other shaders
+// that also contain sRGB constants, so constant-only detection over-patches.
+// If these change after a Windows Update, please file an issue.
 static const BYTE kKnownChecksums[4][16] = {
     {0x96, 0xe6, 0xd1, 0x58, 0x92, 0x55, 0xec, 0xcd, 0x1d, 0xd7, 0xd4, 0xdb, 0xec, 0x54, 0xd2, 0x85},
     {0x21, 0x26, 0xb0, 0x37, 0xc1, 0xa2, 0xfb, 0xdd, 0xe3, 0x55, 0xb6, 0xe6, 0xdd, 0x9c, 0xaf, 0x3c},
@@ -373,16 +390,18 @@ static const float kSrgbConsts[4] = {2.4f, 0.04045f, 0.055000f, 0.94786733f};
 static const float kPatchConsts[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 // Index 0 (the exponent) is replaced with the user-chosen gamma, not kPatchConsts[0].
 
-// Searches 'buf' (a copy of a shader blob) for the sRGB splat patterns and
-// patches them in-place. Returns true if at least one substitution was made.
-static bool PatchShaderBuf(BYTE *buf, DWORD size, float gamma)
+// Searches 'buf' (a copy of a shader blob) for the sRGB vec3-splat patterns and
+// patches them in-place. Returns the number of the four constants found (0–4).
+// Callers must require == 4 to ensure all-or-nothing patching.
+static int PatchShaderBuf(BYTE *buf, DWORD size, float gamma)
 {
-    bool changed = false;
+    int found = 0;
     for (int ci = 0; ci < 4; ci++)
     {
         float src = kSrgbConsts[ci];
         float dst = (ci == 0) ? gamma : kPatchConsts[ci];
         float pat[3] = {src, src, src};
+        bool foundThis = false;
         // Search from after the header; stop where a full 12-byte match would overflow.
         for (size_t j = kDXBCHeaderSize; j + sizeof(float) * 3 <= size; j++)
         {
@@ -390,10 +409,33 @@ static bool PatchShaderBuf(BYTE *buf, DWORD size, float gamma)
                 continue;
             float rep[3] = {dst, dst, dst};
             memcpy(buf + j, rep, sizeof(rep));
-            changed = true;
+            foundThis = true;
         }
+        if (foundThis)
+            found++;
     }
-    return changed;
+    return found;
+}
+
+// Returns true if the blob contains at least one valid nested DXBC blob.
+// dwmcore.dll embeds the target leaf shaders inside larger container blobs.
+// Container blobs have sub-blobs; leaf shaders do not. Distinguishing them
+// prevents patching a container as a leaf, which would leave internal
+// sub-blob checksums stale.
+static bool HasDXBCSubBlob(const DXBCHeader *hdr)
+{
+    const BYTE *base = (const BYTE *)hdr;
+    for (size_t k = kDXBCHeaderSize; k + kDXBCHeaderSize <= hdr->size; k++)
+    {
+        const auto *inner = (const DXBCHeader *)(base + k);
+        if (inner->magic[0] == 'D' && inner->magic[1] == 'X' &&
+            inner->magic[2] == 'B' && inner->magic[3] == 'C' &&
+            inner->reserved == 1 &&
+            inner->size >= (DWORD)kDXBCHeaderSize &&
+            k + inner->size <= hdr->size)
+            return true;
+    }
+    return false;
 }
 
 // =============================================================================
@@ -452,7 +494,19 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
         if (hdr->size < (DWORD)kDXBCHeaderSize || i + hdr->size > regionSize)
             continue;
 
-        // Check if this blob's checksum matches one of our targets.
+        // Container blobs embed sub-shaders as nested DXBC blobs; leaf shaders do not.
+        // Track containers so we can fix their checksum after inner shaders are patched.
+        if (HasDXBCSubBlob(hdr))
+        {
+            if (!bigShader)
+                bigShader = hdr;
+            continue;
+        }
+
+        // Leaf blob — match against the known-checksum allowlist.
+        // Many other DWM shaders also contain sRGB constants, so constant-only
+        // detection would over-patch unrelated shaders; checksums select the
+        // correct four. The constant search below acts as a sanity check.
         int matchIdx = -1;
         for (int k = 0; k < 4; k++)
         {
@@ -462,26 +516,22 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
                 break;
             }
         }
-
         if (matchIdx < 0)
-        {
-            // Unknown blob — track as a potential container for inner sub-shaders.
-            if (!bigShader || region + i >= (BYTE *)bigShader + bigShader->size)
-                bigShader = hdr;
             continue;
-        }
 
-        // Found a target shader. Make a working copy, patch it, validate, write back.
+        // Checksum matched — copy the blob, patch the sRGB constants, verify
+        // all four were found, then recompute the DXBC checksum.
         std::vector<BYTE> patched(hdr->size);
         memcpy(patched.data(), hdr, hdr->size);
 
-        if (!PatchShaderBuf(patched.data(), hdr->size, gamma))
+        int constsFound = PatchShaderBuf(patched.data(), hdr->size, gamma);
+        if (constsFound < 4)
         {
-            Wh_Log(L"  Shader #%d matched checksum but no constants found to patch", matchIdx);
+            Wh_Log(L"  Shader #%d: checksum matched but only %d/4 sRGB constants found",
+                   matchIdx, constsFound);
             continue;
         }
 
-        // Recalculate DXBC checksum for the patched copy.
         DWORD newCk[4];
         CalcDXBCChecksum(patched.data(), hdr->size, newCk);
         memcpy(patched.data() + 4, newCk, 16);
@@ -549,9 +599,8 @@ BOOL Wh_ModInit()
         Wh_Log(L"Invalid gamma value, falling back to 2.2");
         gamma = 2.2f;
     }
-    g_gamma = gamma;
 
-    Wh_Log(L"DWM EOTF: target gamma = %.1f", (double)gamma);
+    Wh_Log(L"Target gamma = %.1f", (double)gamma);
 
     // Locate dwmcore.dll (always loaded as a static import of dwm.exe).
     HMODULE hDwmcore = GetModuleHandleW(L"dwmcore.dll");
@@ -567,43 +616,37 @@ BOOL Wh_ModInit()
     BYTE *modBase = (BYTE *)hDwmcore;
     size_t modSize = nt->OptionalHeader.SizeOfImage;
 
-    Wh_Log(L"dwmcore.dll at %p, image size %zu", (void *)modBase, modSize);
+    Wh_Log(L"dwmcore.dll base %p, image size %zu", (void *)modBase, modSize);
 
-    // Walk the virtual memory regions within dwmcore.dll's image range.
-    // The DXBC shader blobs live in PAGE_READONLY sections (typically .rdata).
+    // Walk PE sections instead of VirtualQuery: deterministic regardless of
+    // page-protection fragmentation from other mods or the loader.
     int totalPatched = 0;
-    BYTE *addr = modBase;
-    while (addr < modBase + modSize)
+    auto *sec = IMAGE_FIRST_SECTION(nt);
+    for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++)
     {
-        MEMORY_BASIC_INFORMATION mbi{};
-        if (!VirtualQuery(addr, &mbi, sizeof(mbi)))
-            break;
+        // Scan readable, non-writable, non-executable sections only (e.g. .rdata).
+        if (!(sec->Characteristics & IMAGE_SCN_MEM_READ))
+            continue;
+        if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+            continue;
+        if (sec->Characteristics & IMAGE_SCN_MEM_WRITE)
+            continue;
+        if (sec->Misc.VirtualSize == 0)
+            continue;
 
-        size_t regionSize = mbi.RegionSize;
-        // Clamp to the module boundary.
-        if ((BYTE *)mbi.BaseAddress + regionSize > modBase + modSize)
-            regionSize = (modBase + modSize) - (BYTE *)mbi.BaseAddress;
-
-        if (mbi.State == MEM_COMMIT &&
-            mbi.Protect == PAGE_READONLY &&
-            regionSize > 4096)
-        {
-            Wh_Log(L"Scanning region at %p, size %zu", mbi.BaseAddress, regionSize);
-            totalPatched += ScanRegionForShaders((BYTE *)mbi.BaseAddress, regionSize, gamma);
-        }
-
-        addr = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+        Wh_Log(L"Scanning section at %p, size %lu",
+               (void *)(modBase + sec->VirtualAddress), sec->Misc.VirtualSize);
+        totalPatched += ScanRegionForShaders(modBase + sec->VirtualAddress,
+                                             sec->Misc.VirtualSize, gamma);
     }
 
     if (totalPatched == 0)
     {
-        Wh_Log(L"No shaders patched. HDR may be off, or dwmcore.dll was updated (checksums changed).");
-    }
-    else
-    {
-        Wh_Log(L"Successfully patched %d shader(s) with gamma %.1f", totalPatched, (double)gamma);
+        Wh_Log(L"No matching shaders found — dwmcore.dll may have been updated.");
+        return FALSE;
     }
 
+    Wh_Log(L"Successfully patched %d shader(s) with gamma %.1f", totalPatched, (double)gamma);
     return TRUE;
 }
 
