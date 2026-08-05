@@ -8,7 +8,7 @@
 // @homepage        https://dan13.me/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi
+// @compilerOptions -ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -694,6 +694,7 @@ struct {
 #undef GetCurrentTime
 
 #include <winrt/base.h>
+#include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
@@ -709,6 +710,7 @@ struct {
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
 
+namespace wdj = winrt::Windows::Data::Json;
 namespace wf = winrt::Windows::Foundation;
 namespace wfc = winrt::Windows::Foundation::Collections;
 namespace mux = winrt::Microsoft::UI::Xaml;
@@ -969,6 +971,32 @@ std::wstring ResolveCommandPath(std::wstring const& command) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Getting the current folder path and launching commands.
+
+// Initializes the calling thread's apartment for as long as the scope lives.
+//
+// The pairing is what matters here: every CoInitializeEx which succeeded has to
+// be undone by a CoUninitialize, and that includes S_FALSE - the apartment was
+// already initialized, and the call still took a reference on it. Only
+// RPC_E_CHANGED_MODE leaves nothing to undo, since it means the apartment
+// wasn't entered at all. COM objects created inside the scope have to be
+// released before it ends, which declaring them after it takes care of.
+class ComApartmentScope {
+   public:
+    explicit ComApartmentScope(DWORD coInit)
+        : m_hr(CoInitializeEx(nullptr, coInit)) {}
+
+    ~ComApartmentScope() {
+        if (SUCCEEDED(m_hr)) {
+            CoUninitialize();
+        }
+    }
+
+    ComApartmentScope(const ComApartmentScope&) = delete;
+    ComApartmentScope& operator=(const ComApartmentScope&) = delete;
+
+   private:
+    HRESULT m_hr;
+};
 
 // What the active tab of a File Explorer window is showing. The shell view is
 // only used by the New+ button, to select and rename the item it creates.
@@ -1389,22 +1417,17 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
         return;
     }
 
-    HRESULT hrInit =
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    ComApartmentScope comScope(COINIT_APARTMENTTHREADED |
+                               COINIT_DISABLE_OLE1DDE);
+
     bool isItemMenu = false;
     auto contextMenu = GetShellContextMenu(hExplorerWnd, &isItemMenu);
     if (!contextMenu) {
-        if (hrInit == S_OK) {
-            CoUninitialize();
-        }
         return;
     }
 
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) {
-        if (hrInit == S_OK) {
-            CoUninitialize();
-        }
         return;
     }
 
@@ -1418,9 +1441,6 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
     if (FAILED(hr)) {
         Wh_Log(L"QueryContextMenu failed: %08X", hr);
         DestroyMenu(hMenu);
-        if (hrInit == S_OK) {
-            CoUninitialize();
-        }
         return;
     }
 
@@ -1428,9 +1448,6 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
     // an unload which started in the meantime is waiting for this call.
     if (g_unloading) {
         DestroyMenu(hMenu);
-        if (hrInit == S_OK) {
-            CoUninitialize();
-        }
         return;
     }
 
@@ -1454,9 +1471,6 @@ void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
     }
 
     DestroyMenu(hMenu);
-    if (hrInit == S_OK) {
-        CoUninitialize();
-    }
 }
 
 // The folder and the selection of the given window's active tab. Always used
@@ -1599,15 +1613,12 @@ void RunShellWorkOnWorkerThread(std::function<void()> work) {
             std::unique_ptr<std::function<void()>> work(
                 reinterpret_cast<std::function<void()>*>(lpParam));
 
-            HRESULT hrInit = CoInitializeEx(
-                nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            ComApartmentScope comScope(COINIT_APARTMENTTHREADED |
+                                       COINIT_DISABLE_OLE1DDE);
             try {
                 (*work)();
             } catch (...) {
                 Wh_Log(L"Error %08X", winrt::to_hresult().value);
-            }
-            if (SUCCEEDED(hrInit)) {
-                CoUninitialize();
             }
 
             return 0;
@@ -1718,10 +1729,6 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
 
 ////////////////////////////////////////////////////////////////////////////////
 // PowerToys' New+ configuration, for the New+ button.
-//
-// The settings file is small and its shape is stable, so instead of pulling in a
-// JSON parser, the values are picked out of it directly: find the property name,
-// then the "value" which follows it.
 
 std::wstring GetPowerToysNewPlusFolder() {
     return ExpandEnvVars(L"%LOCALAPPDATA%\\Microsoft\\PowerToys\\NewPlus");
@@ -1775,88 +1782,26 @@ std::wstring ReadFileAsWideString(std::wstring const& path) {
     return result;
 }
 
-// The raw text of the value which follows the given property name, e.g.
-// `"C:\\Templates"` or `true`. Empty if the property isn't there.
-std::wstring FindJsonValueText(std::wstring const& json, PCWSTR propertyName) {
-    std::wstring needle = L"\"";
-    needle += propertyName;
-    needle += L"\"";
-
-    size_t pos = json.find(needle);
-    if (pos == std::wstring::npos) {
-        return std::wstring();
+// The value of a named setting. PowerToys keeps the settings under a
+// "properties" member and wraps each one in an object with a single "value":
+//
+//   { "properties": { "TemplateLocation": { "value": "C:\\Templates" } } }
+//
+// Both levels are optional here, so a setting written as a plain member is read
+// just as well. Returns a null value if the setting isn't in the file.
+wdj::IJsonValue FindNewPlusSetting(wdj::JsonObject const& root, PCWSTR name) {
+    wdj::JsonObject properties = root;
+    if (auto nested = root.TryLookup(L"properties");
+        nested && nested.ValueType() == wdj::JsonValueType::Object) {
+        properties = nested.GetObject();
     }
 
-    // The properties are wrapped in an object with a single "value" member:
-    // "TemplateLocation": { "value": "..." }. A property whose value is a plain
-    // literal is supported as well.
-    size_t colon = json.find(L':', pos + needle.size());
-    if (colon == std::wstring::npos) {
-        return std::wstring();
+    auto value = properties.TryLookup(name);
+    if (value && value.ValueType() == wdj::JsonValueType::Object) {
+        return value.GetObject().TryLookup(L"value");
     }
 
-    size_t valuePos = json.find(L"\"value\"", pos + needle.size());
-    size_t nextProperty = json.find(L'}', colon);
-    if (valuePos != std::wstring::npos &&
-        (nextProperty == std::wstring::npos || valuePos < nextProperty)) {
-        colon = json.find(L':', valuePos);
-        if (colon == std::wstring::npos) {
-            return std::wstring();
-        }
-    }
-
-    size_t start = json.find_first_not_of(L" \t\r\n", colon + 1);
-    if (start == std::wstring::npos) {
-        return std::wstring();
-    }
-
-    if (json[start] == L'"') {
-        // Copy the string, unescaping as we go.
-        std::wstring result;
-        for (size_t i = start + 1; i < json.size(); i++) {
-            WCHAR c = json[i];
-            if (c == L'"') {
-                break;
-            }
-
-            if (c == L'\\' && i + 1 < json.size()) {
-                WCHAR escaped = json[++i];
-                switch (escaped) {
-                    case L'n':
-                        result += L'\n';
-                        break;
-                    case L'r':
-                        result += L'\r';
-                        break;
-                    case L't':
-                        result += L'\t';
-                        break;
-                    default:
-                        result += escaped;  // Covers \\ and \".
-                        break;
-                }
-
-                continue;
-            }
-
-            result += c;
-        }
-
-        return result;
-    }
-
-    size_t end = json.find_first_of(L",}\r\n", start);
-    if (end == std::wstring::npos) {
-        end = json.size();
-    }
-
-    std::wstring result = json.substr(start, end - start);
-    while (!result.empty() &&
-           (result.back() == L' ' || result.back() == L'\t')) {
-        result.pop_back();
-    }
-
-    return result;
+    return value;
 }
 
 struct PowerToysConfig {
@@ -1877,21 +1822,50 @@ PowerToysConfig ReadPowerToysConfig() {
         return config;
     }
 
-    auto readBool = [&json](PCWSTR name, bool fallback) {
-        std::wstring text = ToLower(FindJsonValueText(json, name));
-        if (text == L"true" || text == L"1") {
-            return true;
+    wdj::JsonObject root{nullptr};
+    if (!wdj::JsonObject::TryParse(json, root)) {
+        Wh_Log(L"Couldn't parse the New+ settings file");
+        return config;
+    }
+
+    // PowerToys writes these as JSON booleans, but older builds wrote them as
+    // strings, so both are accepted.
+    auto readBool = [&root](PCWSTR name, bool fallback) {
+        auto value = FindNewPlusSetting(root, name);
+        if (!value) {
+            return fallback;
         }
 
-        if (text == L"false" || text == L"0") {
-            return false;
-        }
+        switch (value.ValueType()) {
+            case wdj::JsonValueType::Boolean:
+                return value.GetBoolean();
 
-        return fallback;
+            case wdj::JsonValueType::Number:
+                return value.GetNumber() != 0;
+
+            case wdj::JsonValueType::String: {
+                std::wstring text = ToLower(std::wstring(value.GetString()));
+                if (text == L"true" || text == L"1") {
+                    return true;
+                }
+                if (text == L"false" || text == L"0") {
+                    return false;
+                }
+                return fallback;
+            }
+
+            default:
+                return fallback;
+        }
     };
 
-    config.templateFolder =
-        TrimQuotesAndSpaces(FindJsonValueText(json, L"TemplateLocation"));
+    if (auto templateLocation = FindNewPlusSetting(root, L"TemplateLocation");
+        templateLocation &&
+        templateLocation.ValueType() == wdj::JsonValueType::String) {
+        config.templateFolder =
+            TrimQuotesAndSpaces(std::wstring(templateLocation.GetString()));
+    }
+
     config.hideFileExtension =
         readBool(L"HideFileExtension", config.hideFileExtension);
     config.hideStartingDigits =
@@ -2150,48 +2124,77 @@ std::wstring MakeUniquePath(std::wstring const& targetFolder,
     return std::wstring();
 }
 
-bool CopyDirectoryRecursively(std::wstring const& source,
-                              std::wstring const& target) {
-    if (!CreateDirectoryW(target.c_str(), nullptr) &&
-        GetLastError() != ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"CreateDirectory(%s) failed: %u", target.c_str(),
-               GetLastError());
+// Copies a template - a file or a whole folder - into the target folder under
+// the given name.
+//
+// IFileOperation rather than CopyFile and a hand-rolled directory walk: it's
+// what Explorer itself copies with, so long paths, reparse points, alternate
+// streams, elevation and the copy hooks other software installs all behave the
+// way they do for a normal copy, the operation is undoable with Ctrl+Z, and the
+// shell is notified about the new item without a separate SHChangeNotify.
+//
+// FOF_NO_UI, so that nothing can put up a dialog: this runs on a worker thread
+// which Wh_ModUninit waits for, and a modal prompt would stall an unload for as
+// long as it's up. That also answers any collision prompt with "yes", but the
+// caller picked a name which didn't exist a moment earlier, so there's nothing
+// to collide with.
+bool CopyTemplateItem(std::wstring const& source,
+                      std::wstring const& targetFolder,
+                      std::wstring const& targetName) {
+    winrt::com_ptr<IFileOperation> operation;
+    HRESULT hr = CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(operation.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"CoCreateInstance(FileOperation) failed: %08X", hr);
         return false;
     }
 
-    std::wstring pattern = JoinPath(source, L"*");
-
-    WIN32_FIND_DATAW findData{};
-    HANDLE hFind =
-        FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &findData,
-                         FindExSearchNameMatch, nullptr,
-                         FIND_FIRST_EX_LARGE_FETCH);
-    if (hFind == INVALID_HANDLE_VALUE) {
-        return true;  // An empty (or unreadable) template folder.
+    hr = operation->SetOperationFlags(FOF_NO_UI);
+    if (FAILED(hr)) {
+        Wh_Log(L"SetOperationFlags failed: %08X", hr);
+        return false;
     }
 
-    bool succeeded = true;
-    do {
-        std::wstring fileName = findData.cFileName;
-        if (fileName == L"." || fileName == L"..") {
-            continue;
-        }
+    winrt::com_ptr<IShellItem> sourceItem;
+    hr = SHCreateItemFromParsingName(source.c_str(), nullptr,
+                                     IID_PPV_ARGS(sourceItem.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"SHCreateItemFromParsingName(%s) failed: %08X", source.c_str(),
+               hr);
+        return false;
+    }
 
-        std::wstring sourceChild = JoinPath(source, fileName);
-        std::wstring targetChild = JoinPath(target, fileName);
+    winrt::com_ptr<IShellItem> targetFolderItem;
+    hr = SHCreateItemFromParsingName(targetFolder.c_str(), nullptr,
+                                     IID_PPV_ARGS(targetFolderItem.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"SHCreateItemFromParsingName(%s) failed: %08X",
+               targetFolder.c_str(), hr);
+        return false;
+    }
 
-        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            succeeded &= CopyDirectoryRecursively(sourceChild, targetChild);
-        } else if (!CopyFileW(sourceChild.c_str(), targetChild.c_str(),
-                              /*bFailIfExists=*/TRUE)) {
-            Wh_Log(L"CopyFile(%s) failed: %u", targetChild.c_str(),
-                   GetLastError());
-            succeeded = false;
-        }
-    } while (FindNextFileW(hFind, &findData));
+    hr = operation->CopyItem(sourceItem.get(), targetFolderItem.get(),
+                             targetName.c_str(), nullptr);
+    if (FAILED(hr)) {
+        Wh_Log(L"CopyItem failed: %08X", hr);
+        return false;
+    }
 
-    FindClose(hFind);
-    return succeeded;
+    hr = operation->PerformOperations();
+    if (FAILED(hr)) {
+        Wh_Log(L"PerformOperations failed: %08X", hr);
+        return false;
+    }
+
+    // PerformOperations succeeds even when the individual copy didn't go
+    // through - a denied elevation, say - so ask separately.
+    BOOL aborted = FALSE;
+    if (SUCCEEDED(operation->GetAnyOperationsAborted(&aborted)) && aborted) {
+        Wh_Log(L"The copy of %s was aborted", source.c_str());
+        return false;
+    }
+
+    return true;
 }
 
 // Selects the created item and starts editing its name, the way Explorer's own
@@ -2265,16 +2268,8 @@ void CreateFromTemplateForWindow(HWND hExplorerWnd,
 
     Wh_Log(L"Creating %s from %s", targetPath.c_str(), entry.path.c_str());
 
-    bool succeeded;
-    if (entry.isDirectory) {
-        succeeded = CopyDirectoryRecursively(entry.path, targetPath);
-    } else {
-        succeeded = CopyFileW(entry.path.c_str(), targetPath.c_str(),
-                              /*bFailIfExists=*/TRUE) != FALSE;
-        if (!succeeded) {
-            Wh_Log(L"CopyFile failed: %u", GetLastError());
-        }
-    }
+    bool succeeded = CopyTemplateItem(
+        entry.path, context.folderPath, PathFindFileNameW(targetPath.c_str()));
 
     // A folder template can be copied only partially, in which case the folder
     // itself is there and worth selecting.
@@ -2283,9 +2278,8 @@ void CreateFromTemplateForWindow(HWND hExplorerWnd,
         return;
     }
 
-    SHChangeNotify(entry.isDirectory ? SHCNE_MKDIR : SHCNE_CREATE, SHCNF_PATHW,
-                   targetPath.c_str(), nullptr);
-
+    // No SHChangeNotify: IFileOperation notifies the shell about what it
+    // created itself.
     SelectAndRename(context.shellView, targetPath);
 }
 
