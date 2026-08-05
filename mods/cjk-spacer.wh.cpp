@@ -2,7 +2,7 @@
 // @id              cjk-spacer
 // @name            CJK Spacer
 // @description     Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and best-effort because it may conflict with other XAML Diagnostics mods
-// @version         0.1.26
+// @version         0.1.27
 // @author          aenerv7
 // @github          https://github.com/aenerv7
 // @license         GPL-3.0
@@ -97,10 +97,13 @@ hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing. Connection attempts are scheduled outside the Windows loader
-  path; a single-flight worker retains requests that arrive while it is running,
+  path; one managed worker retains requests that arrive while it is running,
   tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
-  and retries only the connection that was lost. The worker pins the mod image
-  until `FreeLibraryAndExitThread`, so it cannot execute unloaded mod code.
+  and retries only the connection that was lost. It doesn't add a module
+  reference: the worker is signaled to stop and joined before Windhawk removes
+  hooks. Asynchronous visual-tree watcher setup threads are tracked by handle
+  and joined at the same point, so the engine's single module reference remains
+  sufficient.
   `Wh_ModAfterInit` covers XAML modules that are already loaded, while the
   `LoadLibraryExW` hook covers modules loaded later, including the
   `CoreMessagingXP.dll` static-import path used by
@@ -176,6 +179,7 @@ also need compatible DC targets to keep sizing consistent; disable
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <windows.h>
@@ -1859,7 +1863,6 @@ void CleanupModernTextStatesForCurrentThread() {
     }
 }
 
-HMODULE AcquireCurrentModuleReference();
 enum class XamlDiagnosticsFlavor {
     None,
     Windows,
@@ -1875,6 +1878,66 @@ extern std::atomic_bool g_windowsUiXamlDiagnosticsAttempted;
 extern std::atomic_bool g_microsoftUiXamlDiagnosticsAttempted;
 extern thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics;
 
+struct XamlWatcherThreadNode {
+    HANDLE thread;
+    XamlWatcherThreadNode* next;
+};
+
+std::mutex g_xamlWatcherThreadsMutex;
+XamlWatcherThreadNode* g_xamlWatcherThreads;
+
+HANDLE CreateTrackedXamlWatcherThread(LPTHREAD_START_ROUTINE startRoutine,
+                                      void* parameter) {
+    auto* node = static_cast<XamlWatcherThreadNode*>(
+        HeapAlloc(GetProcessHeap(), 0, sizeof(XamlWatcherThreadNode)));
+    if (!node) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> guard(g_xamlWatcherThreadsMutex);
+    if (g_stoppingModernUi.load(std::memory_order_acquire)) {
+        HeapFree(GetProcessHeap(), 0, node);
+        SetLastError(ERROR_OPERATION_ABORTED);
+        return nullptr;
+    }
+
+    node->thread =
+        CreateThread(nullptr, 0, startRoutine, parameter, 0, nullptr);
+    if (!node->thread) {
+        const DWORD error = GetLastError();
+        HeapFree(GetProcessHeap(), 0, node);
+        SetLastError(error);
+        return nullptr;
+    }
+
+    node->next = g_xamlWatcherThreads;
+    g_xamlWatcherThreads = node;
+    return node->thread;
+}
+
+void WaitForXamlWatcherThreads() {
+    XamlWatcherThreadNode* threads;
+    {
+        std::lock_guard<std::mutex> guard(g_xamlWatcherThreadsMutex);
+        threads = std::exchange(g_xamlWatcherThreads, nullptr);
+    }
+
+    while (threads) {
+        XamlWatcherThreadNode* next = threads->next;
+        const DWORD waitResult =
+            WaitForSingleObject(threads->thread, INFINITE);
+        if (waitResult != WAIT_OBJECT_0) {
+            Wh_Log(L"Couldn't wait for a XAML watcher thread: %u",
+                   waitResult == WAIT_FAILED ? GetLastError()
+                                             : ERROR_GEN_FAILURE);
+        }
+        CloseHandle(threads->thread);
+        HeapFree(GetProcessHeap(), 0, threads);
+        threads = next;
+    }
+}
+
 class VisualTreeWatcher
     : public winrt::implements<VisualTreeWatcher,
                                IVisualTreeServiceCallback2,
@@ -1882,14 +1945,8 @@ class VisualTreeWatcher
 public:
     explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
         : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
-        m_moduleReference = AcquireCurrentModuleReference();
-        if (!m_moduleReference) {
-            winrt::throw_hresult(HRESULT_FROM_WIN32(GetLastError()));
-        }
-
         AddRef();
-        HANDLE thread = CreateThread(
-            nullptr, 0,
+        HANDLE thread = CreateTrackedXamlWatcherThread(
             [](LPVOID parameter) -> DWORD {
                 auto* watcher =
                     static_cast<VisualTreeWatcher*>(parameter);
@@ -1915,19 +1972,16 @@ public:
                         watcher->UnadviseVisualTreeChange();
                     }
                 }
-                HMODULE module = watcher->m_moduleReference;
                 watcher->Release();
-                FreeLibraryAndExitThread(module, 0);
+                return 0;
             },
-            this, 0, nullptr);
-        if (thread) {
-            CloseHandle(thread);
-        } else {
+            this);
+        if (!thread) {
             const DWORD error = GetLastError();
             Release();
-            FreeLibrary(m_moduleReference);
-            m_moduleReference = nullptr;
-            Wh_Log(L"Couldn't create XAML watcher thread");
+            if (error != ERROR_OPERATION_ABORTED) {
+                Wh_Log(L"Couldn't create XAML watcher thread: %u", error);
+            }
             winrt::throw_hresult(HRESULT_FROM_WIN32(error));
         }
     }
@@ -2083,7 +2137,6 @@ private:
     }
 
     winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
-    HMODULE m_moduleReference = nullptr;
     std::atomic_bool m_advised{false};
     std::atomic_bool m_unadviseRequested{false};
 };
@@ -2115,19 +2168,6 @@ HMODULE GetCurrentModuleHandle() {
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
             reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle),
-            &module)) {
-        return nullptr;
-    }
-
-    return module;
-}
-
-HMODULE AcquireCurrentModuleReference() {
-    HMODULE module;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            reinterpret_cast<LPCWSTR>(
-                &AcquireCurrentModuleReference),
             &module)) {
         return nullptr;
     }
@@ -2283,8 +2323,10 @@ std::atomic_bool g_windowsUiXamlDiagnosticsConnected{false};
 std::atomic_bool g_microsoftUiXamlDiagnosticsConnected{false};
 std::atomic_bool g_windowsUiXamlDiagnosticsAttempted{false};
 std::atomic_bool g_microsoftUiXamlDiagnosticsAttempted{false};
-std::atomic_bool g_xamlDiagnosticsWorkerRunning{false};
 std::atomic_bool g_xamlDiagnosticsRequestPending{false};
+std::mutex g_xamlDiagnosticsWorkerMutex;
+HANDLE g_xamlDiagnosticsWorkerThread;
+HANDLE g_xamlDiagnosticsWorkerWakeEvent;
 thread_local bool g_loadingXamlDiagnostics;
 thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics =
     XamlDiagnosticsFlavor::None;
@@ -2437,6 +2479,30 @@ bool NeedsXamlDiagnosticsConnection() {
             GetModuleHandleW(L"Microsoft.Internal.FrameworkUdk.dll"));
 }
 
+DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
+    const HANDLE wakeEvent = static_cast<HANDLE>(parameter);
+    const HRESULT initializeResult =
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    for (;;) {
+        const DWORD waitResult = WaitForSingleObject(wakeEvent, INFINITE);
+        if (waitResult != WAIT_OBJECT_0 ||
+            g_stoppingModernUi.load(std::memory_order_acquire)) {
+            break;
+        }
+
+        while (!g_stoppingModernUi.load(std::memory_order_acquire) &&
+               g_xamlDiagnosticsRequestPending.exchange(
+                   false, std::memory_order_acq_rel)) {
+            EnsureModernXamlDiagnostics();
+        }
+    }
+
+    if (SUCCEEDED(initializeResult)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
 void RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor retryFlavor) {
     if (g_stoppingModernUi.load(std::memory_order_acquire)) {
@@ -2463,65 +2529,44 @@ void RequestModernXamlDiagnosticsInitialization(
     g_xamlDiagnosticsRequestPending.store(
         true, std::memory_order_release);
 
-    bool expected = false;
-    if (!g_xamlDiagnosticsWorkerRunning.compare_exchange_strong(
-            expected, true, std::memory_order_acq_rel)) {
+    std::lock_guard<std::mutex> guard(
+        g_xamlDiagnosticsWorkerMutex);
+    if (g_stoppingModernUi.load(std::memory_order_acquire) ||
+        !g_xamlDiagnosticsWorkerWakeEvent) {
         return;
     }
 
-    // Do not hold a mutex across these calls. The request can originate from
-    // LoadLibraryExW, whose caller may still own the Windows loader lock.
-    // The worker isn't joined during unload, so keep the mod image loaded
-    // until the worker exits through FreeLibraryAndExitThread.
-    HMODULE module = AcquireCurrentModuleReference();
-    if (!module) {
-        if (!g_stoppingModernUi.load(std::memory_order_acquire)) {
-            g_xamlDiagnosticsWorkerRunning.store(
-                false, std::memory_order_release);
-            Wh_Log(L"Couldn't retain the mod for XAML diagnostics");
+    SetEvent(g_xamlDiagnosticsWorkerWakeEvent);
+}
+
+void StopModernXamlDiagnosticsWorker() {
+    HANDLE thread;
+    HANDLE wakeEvent;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_xamlDiagnosticsWorkerMutex);
+        thread = std::exchange(g_xamlDiagnosticsWorkerThread, nullptr);
+        wakeEvent = std::exchange(
+            g_xamlDiagnosticsWorkerWakeEvent, nullptr);
+        if (wakeEvent) {
+            SetEvent(wakeEvent);
         }
-        return;
     }
 
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID parameter) -> DWORD {
-            const HMODULE module = static_cast<HMODULE>(parameter);
-            const HRESULT initializeResult =
-                CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            while (!g_stoppingModernUi.load(std::memory_order_acquire) &&
-                   g_xamlDiagnosticsRequestPending.exchange(
-                       false, std::memory_order_acq_rel)) {
-                EnsureModernXamlDiagnostics();
-            }
-            if (SUCCEEDED(initializeResult)) {
-                CoUninitialize();
-            }
-
-            if (!g_stoppingModernUi.load(std::memory_order_acquire)) {
-                g_xamlDiagnosticsWorkerRunning.store(
-                    false, std::memory_order_release);
-                if (g_xamlDiagnosticsRequestPending.load(
-                        std::memory_order_acquire)) {
-                    RequestModernXamlDiagnosticsInitialization();
-                }
-            }
-            FreeLibraryAndExitThread(module, 0);
-        },
-        module, 0, nullptr);
-    if (!thread) {
-        const DWORD error = GetLastError();
-        if (!g_stoppingModernUi.load(std::memory_order_acquire)) {
-            g_xamlDiagnosticsWorkerRunning.store(
-                false, std::memory_order_release);
-            Wh_Log(L"Couldn't create the XAML diagnostics thread: %u",
-                   error);
+    if (thread) {
+        const DWORD waitResult = WaitForSingleObject(thread, INFINITE);
+        if (waitResult != WAIT_OBJECT_0) {
+            Wh_Log(L"Couldn't wait for the XAML diagnostics thread: %u",
+                   waitResult == WAIT_FAILED ? GetLastError()
+                                             : ERROR_GEN_FAILURE);
         }
-        FreeLibrary(module);
-        return;
+        CloseHandle(thread);
     }
-
-    CloseHandle(thread);
+    if (wakeEvent) {
+        CloseHandle(wakeEvent);
+    }
+    g_xamlDiagnosticsRequestPending.store(
+        false, std::memory_order_release);
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -2681,7 +2726,7 @@ HWND FindWindowForThread(DWORD threadId) {
     return parameter.xamlHost ? parameter.xamlHost : parameter.first;
 }
 
-void InitializeModernUi() {
+bool InitializeModernUi() {
     g_stoppingModernUi.store(true, std::memory_order_release);
     g_windowsUiXamlDiagnosticsConnected.store(
         false, std::memory_order_release);
@@ -2691,12 +2736,33 @@ void InitializeModernUi() {
         false, std::memory_order_release);
     g_microsoftUiXamlDiagnosticsAttempted.store(
         false, std::memory_order_release);
-    g_xamlDiagnosticsWorkerRunning.store(
-        false, std::memory_order_release);
     g_xamlDiagnosticsRequestPending.store(
         false, std::memory_order_release);
     g_visualTreeWatcherGeneration.store(
         0, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> guard(
+            g_xamlDiagnosticsWorkerMutex);
+        g_xamlDiagnosticsWorkerThread = nullptr;
+        g_xamlDiagnosticsWorkerWakeEvent =
+            CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!g_xamlDiagnosticsWorkerWakeEvent) {
+            Wh_Log(L"Couldn't create the XAML diagnostics worker event: %u",
+                   GetLastError());
+            return false;
+        }
+        g_xamlDiagnosticsWorkerThread = CreateThread(
+            nullptr, 0, XamlDiagnosticsWorkerProc,
+            g_xamlDiagnosticsWorkerWakeEvent, 0, nullptr);
+        if (!g_xamlDiagnosticsWorkerThread) {
+            const DWORD error = GetLastError();
+            CloseHandle(g_xamlDiagnosticsWorkerWakeEvent);
+            g_xamlDiagnosticsWorkerWakeEvent = nullptr;
+            Wh_Log(L"Couldn't create the XAML diagnostics thread: %u",
+                   error);
+            return false;
+        }
+    }
     {
         std::lock_guard<std::mutex> guard(
             g_visualTreeWatchersMutex);
@@ -2710,10 +2776,13 @@ void InitializeModernUi() {
         g_modernTextStateThreads.clear();
     }
     g_stoppingModernUi.store(false, std::memory_order_release);
+    return true;
 }
 
 void UninitializeModernUi() {
     g_stoppingModernUi.store(true, std::memory_order_release);
+    StopModernXamlDiagnosticsWorker();
+    WaitForXamlWatcherThreads();
 
     std::vector<winrt::com_ptr<VisualTreeWatcher>> watchers;
     {
@@ -2943,7 +3012,9 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Couldn't find kernelbase!LoadLibraryExW");
             return FALSE;
         }
-        InitializeModernUi();
+        if (!InitializeModernUi()) {
+            return FALSE;
+        }
     }
 
     Wh_Log(L"Initialized (classicMenus=%d, "
@@ -2966,9 +3037,12 @@ void Wh_ModAfterInit() {
 
 void Wh_ModBeforeUninit() {
     if (g_modernUiText.load(std::memory_order_relaxed)) {
-        // Stop new COM callbacks before Windhawk begins removing function
-        // hooks. UninitializeModernUi performs the owning-thread restoration.
+        // Stop new COM callbacks and wait for the diagnostics worker before
+        // Windhawk begins removing hooks. UninitializeModernUi performs the
+        // owning-thread restoration after hook removal.
         g_stoppingModernUi.store(true, std::memory_order_release);
+        StopModernXamlDiagnosticsWorker();
+        WaitForXamlWatcherThreads();
     }
 }
 
