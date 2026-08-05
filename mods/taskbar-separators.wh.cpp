@@ -447,7 +447,7 @@ void LoadSettings() {
 
     PCWSTR colorText = Wh_GetStringSetting(L"color");
     if (!ParseColor(colorText, &settings.color)) {
-        Wh_Log(L"SETTINGS: invalid color; using #FFFF00");
+        Wh_Log(L"Invalid color; using #FFFF00");
         settings.color = winrt::Windows::UI::Color{255, 255, 255, 0};
     }
     Wh_FreeStringSetting(colorText);
@@ -1306,7 +1306,7 @@ void OnAnimationRendering(size_t taskbarId,
     try {
         bool allStable = false;
         if (!RefreshCachedDividerGeometry(taskbar, true, &allStable)) {
-            Wh_Log(L"GEOMETRY TRACKING: cache invalid");
+            Wh_Log(L"Divider geometry cache is invalid");
             ClearAnimationElementCache(taskbar);
             StopAllGeometryTracking(taskbar);
             return;
@@ -1334,7 +1334,7 @@ void OnAnimationRendering(size_t taskbarId,
             }
         }
     } catch (...) {
-        Wh_Log(L"GEOMETRY TRACKING: cache invalid");
+        Wh_Log(L"Divider geometry cache is invalid");
         ClearAnimationElementCache(taskbar);
         StopAllGeometryTracking(taskbar);
     }
@@ -2844,7 +2844,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
             if (settingsChanged ||
                 taskbar.lastActiveDividerCount != activeDividerCount) {
                 if (result == ReconcileResult::temporarilyNotReady) {
-                    Wh_Log(L"RECONCILE: failed: active %zu of %zu dividers",
+                    Wh_Log(L"Failed to reconcile dividers: active %zu of %zu",
                            activeDividerCount, activeSeparators.size());
                 }
                 taskbar.lastActiveDividerCount = activeDividerCount;
@@ -2869,11 +2869,11 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
         }
     } catch (winrt::hresult_error const& e) {
         InvalidateReconciliationSignature(taskbar);
-        Wh_Log(L"RECONCILE: failed: 0x%08X %s",
+        Wh_Log(L"Failed to reconcile dividers: 0x%08X %s",
                static_cast<unsigned int>(e.code().value), e.message().c_str());
     } catch (...) {
         InvalidateReconciliationSignature(taskbar);
-        Wh_Log(L"RECONCILE: failed with an unknown exception");
+        Wh_Log(L"Failed to reconcile dividers with an unknown exception");
     }
 
     return result;
@@ -3059,10 +3059,10 @@ ReconcileResult ReconcileTaskbarRepeater(FrameworkElement const& repeater,
         return ReconcileTrackedTaskbar(*taskbar, repeater,
                                        forceStructuralReconcile);
     } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"RECONCILE: failed: 0x%08X %s",
+        Wh_Log(L"Failed to reconcile dividers: 0x%08X %s",
                static_cast<unsigned int>(e.code().value), e.message().c_str());
     } catch (...) {
-        Wh_Log(L"RECONCILE: failed with an unknown exception");
+        Wh_Log(L"Failed to reconcile dividers with an unknown exception");
     }
 
     return ReconcileResult::temporarilyNotReady;
@@ -3102,10 +3102,10 @@ void ReconcileDividers(bool forceStructuralReconcile) {
             }
         }
     } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"RECONCILE: failed: 0x%08X %s",
+        Wh_Log(L"Failed to reconcile dividers: 0x%08X %s",
                static_cast<unsigned int>(e.code().value), e.message().c_str());
     } catch (...) {
-        Wh_Log(L"RECONCILE: failed with an unknown exception");
+        Wh_Log(L"Failed to reconcile dividers with an unknown exception");
     }
 }
 
@@ -3165,7 +3165,7 @@ bool RunReconcileOnTaskbarThread(bool enabled) {
 
     if (taskbarUiWindows.empty()) {
         if (enabled) {
-            Wh_Log(L"RECONCILE: taskbar UI window not found");
+            Wh_Log(L"Taskbar UI window not found for reconciliation");
         }
         return false;
     }
@@ -3199,7 +3199,7 @@ bool RunReconcileOnTaskbarThread(bool enabled) {
 
     if (enabled) {
         Wh_Log(
-            L"RECONCILE: failed to run synchronously on the taskbar UI "
+            L"Failed to run reconciliation synchronously on the taskbar UI "
             L"thread");
     }
     return false;
@@ -3360,7 +3360,7 @@ void Wh_ModBeforeUninit() {
         // taskbars have been cleaned on the taskbar UI thread.
         if (!RunReconcileOnTaskbarThread(false)) {
             Wh_Log(
-                L"RECONCILE: unload cleanup did not reach the taskbar UI "
+                L"Unload cleanup did not reach the taskbar UI "
                 L"thread");
         }
     }
