@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.8.0
+// @version         0.9.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -48,11 +48,13 @@ standard dialog instead.
 
 ## Privacy
 
-SnapSentry only handles image files that are created in the watched folder while
-it is running, and only within a few seconds of being created, so an old picture
-copied in or synced from another device is left alone. By default a deleted
-screenshot goes to the Recycle Bin so it can be restored; if you turn that off,
-deletion is permanent. Deleting a screenshot does not remove copies already
+SnapSentry treats any supported image written into the watched folder within the
+last few seconds as a new screenshot. Files that were already there, and copies of
+older images dragged in or synced from another device, are left alone. A brand new
+file saved or downloaded straight into the folder cannot be told apart from a
+capture, so avoid pointing the folder at a place where downloads land. By default a
+deleted screenshot goes to the Recycle Bin so it can be restored; if you turn that
+off, deletion is permanent. Deleting a screenshot does not remove copies already
 stored in clipboard history, cloud sync, backups, or other programs.
 */
 // ==/WindhawkModReadme==
@@ -223,6 +225,10 @@ static int g_toastAction = ACTION_AUTO;
 // later dismissal must not overwrite it with Keep.
 static bool g_toastAnswered = false;
 static ULONGLONG g_activeToastId;
+// The toast currently being waited on. A Dismissed event for an earlier toast can
+// be pumped after we've moved on to the next one, so the handler matches on this
+// pointer before treating a dismissal as the current toast's answer.
+static std::atomic<void*> g_activeToast{nullptr};
 static HANDLE g_toastActionEvent;      // Auto-reset: a toast was activated or dismissed.
 static std::atomic<bool> g_toastRegistered{false};  // AUMID+CLSID registration ok.
 
@@ -897,6 +903,22 @@ static void RemoveClsidRegistration() {
     }
 }
 
+// Windows creates a per-AUMID key the first time a toast is delivered, which is
+// what keeps "SnapSentry" listed under Settings > System > Notifications. It is
+// our own AUMID, so remove it too, otherwise the entry outlives the mod. A
+// missing key is not an error.
+static void RemoveNotificationSettings() {
+    HKEY parent = nullptr;
+    LSTATUS status = RegOpenKeyExW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings", 0,
+        DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE, &parent);
+    if (status == ERROR_SUCCESS) {
+        RegDeleteTreeW(parent, kAppUserModelId);
+        RegCloseKey(parent);
+    }
+}
+
 // ============================================================================
 // COM activator: invoked when a toast button is clicked (routed via the CLSID
 // registered above). Parses which button and hands the result to whichever
@@ -1002,8 +1024,13 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE
-    Invoke(ABI::Windows::UI::Notifications::IToastNotification*,
+    Invoke(ABI::Windows::UI::Notifications::IToastNotification* sender,
            ABI::Windows::UI::Notifications::IToastDismissedEventArgs*) override {
+        // A dismissal raised for an earlier toast can be dispatched by a later
+        // toast's message pump; ignore anything that isn't the one we're waiting on.
+        if (sender != g_activeToast.load()) {
+            return S_OK;
+        }
         EnterCriticalSection(&g_toastLock);
         // Only the toast currently being waited on, and only if a button click
         // hasn't already answered it (clicking one also dismisses the toast).
@@ -1128,12 +1155,14 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     g_toastAction = ACTION_AUTO;
     g_toastAnswered = false;
     LeaveCriticalSection(&g_toastLock);
+    g_activeToast.store(toast.Get());
 
     EventRegistrationToken dismissToken{};
     bool dismissHooked =
         SUCCEEDED(toast->add_Dismissed(&g_toastDismissListener, &dismissToken));
 
     if (FAILED(notifier->Show(toast.Get()))) {
+        g_activeToast.store(nullptr);
         EnterCriticalSection(&g_toastLock);
         g_activeToastId = 0;  // Don't accept a late Activate for a toast that never showed.
         LeaveCriticalSection(&g_toastLock);
@@ -1200,6 +1229,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         break;
     }
 
+    g_activeToast.store(nullptr);
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = 0;
     LeaveCriticalSection(&g_toastLock);
@@ -1329,7 +1359,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     c.pszContent = initialText.c_str();
     c.cButtons = ARRAYSIZE(buttons);
     c.pButtons = buttons;
-    c.nDefaultButton = ACTION_COPY_DELETE;
+    c.nDefaultButton = ACTION_KEEP;  // Enter should never be the destructive choice.
     c.pfCallback = DialogCallback;
     c.lpCallbackData = (LONG_PTR)&state;
 
@@ -1637,6 +1667,7 @@ static void SyncToastRegistration(bool wantPopup) {
     }
     RemoveAumidRegistration();
     RemoveClsidRegistration();
+    RemoveNotificationSettings();
     g_toastRegApplied = false;
 }
 
@@ -1688,29 +1719,39 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 // A file turning up in the folder is not the same thing as a screenshot being
 // taken. A sync client delivering a capture from another device, an image dragged
 // in, a download saved there, all of them look identical to a new capture, and
-// with deletion on they would be recycled a few seconds later. A file that was
-// just created is the closest signal available: a same-volume move and the sync
-// clients both keep the original creation time, so anything older than this
-// window was not captured just now. Checked on the watch thread, at the moment
-// the event arrives, rather than at processing time, since the worker can be busy
-// with an earlier screenshot's countdown for much longer than the window.
+// with deletion on they would be recycled a few seconds later. Two timestamps
+// together are the closest signal available: a real capture has both its creation
+// time and its last-write time within the last few seconds. A same-volume move
+// keeps the original creation time so it is caught there; a copy (drag in, save
+// as, a sync client that rewrites the file) gets a fresh creation time but keeps
+// the old content's last-write time, so it is caught by the write-time check. A
+// brand new download can't be told apart by timestamps at all. Checked on the
+// watch thread, at the moment the event arrives, rather than at processing time,
+// since the worker can be busy with an earlier screenshot's countdown for much
+// longer than the window.
 static constexpr ULONGLONG kFreshCaptureWindowMs = 30000;
 
 static bool JustCreated(const std::wstring& path) {
     WIN32_FILE_ATTRIBUTE_DATA info;
     if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &info)) {
-        return true;  // Can't tell, so leave it to the normal handling.
+        return false;  // Can't tell: like every other unknown, don't act on it.
     }
-    ULONGLONG created = ((ULONGLONG)info.ftCreationTime.dwHighDateTime << 32) |
-                        info.ftCreationTime.dwLowDateTime;
     FILETIME nowFt;
     GetSystemTimeAsFileTime(&nowFt);
     ULONGLONG now =
         ((ULONGLONG)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
-    if (now <= created) {
-        return true;  // Created in the future: clock skew, treat it as new.
+    const ULONGLONG window = kFreshCaptureWindowMs * 10000ull;  // 100ns units.
+    ULONGLONG created = ((ULONGLONG)info.ftCreationTime.dwHighDateTime << 32) |
+                        info.ftCreationTime.dwLowDateTime;
+    if (now > created && (now - created) > window) {
+        return false;  // Not created just now: an older file that appeared here.
     }
-    return (now - created) <= kFreshCaptureWindowMs * 10000ull;  // 100ns units.
+    ULONGLONG written = ((ULONGLONG)info.ftLastWriteTime.dwHighDateTime << 32) |
+                        info.ftLastWriteTime.dwLowDateTime;
+    if (now > written && (now - written) > window) {
+        return false;  // Content predates this creation: a copy of an older image.
+    }
+    return true;
 }
 
 static void Enqueue(const std::wstring& folder, const std::wstring& name) {
