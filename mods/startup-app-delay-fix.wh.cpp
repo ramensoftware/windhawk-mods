@@ -2,7 +2,7 @@
 // @id              startup-app-delay-fix
 // @name            Startup App Delay Fix
 // @description     Removes the delay Windows applies to startup applications after sign-in
-// @version         1.3
+// @version         1.4
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -10,18 +10,16 @@
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-![Key](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png)
-
 Windows intentionally delays startup applications after sign-in to reduce
 system load, which can cause apps to open minutes after startup.
 
-This mod makes Explorer see both `WaitforIdleState` and `StartupDelayInMSec` as
-zero when it reads the startup-item serialization settings. It leaves no
-persistent registry changes behind.
+This mod redirects Explorer's startup-serialization key to a dedicated,
+volatile key where both `WaitforIdleState` and `StartupDelayInMSec` are zero.
+It never creates, modifies, or deletes the user's real `Serialize` key.
 
-If the `Serialize` key is missing, the mod creates it as a volatile, in-memory
-key. The creating instance deletes it on a normal disable; otherwise it is
-discarded when the user registry hive unloads at sign-out or shutdown.
+The redirect key is in-memory only. The mod deletes it on a normal disable,
+and Windows discards it when the user registry hive unloads at sign-out or
+shutdown if Explorer exits unexpectedly.
 
 The settings are read when Explorer starts, so enabling or disabling the mod
 takes effect after the next sign-in or Explorer restart.
@@ -35,19 +33,19 @@ doesn't change delays configured by other systems, such as Task Scheduler.
 #include <ntstatus.h>
 #include <windhawk_utils.h>
 
-#include <algorithm>
-#include <cstring>
 #include <cwchar>
 #include <string>
 #include <string_view>
 #include <vector>
 
-constexpr wchar_t kRegistryPath[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
-constexpr wchar_t kKeyPathSuffix[] =
+constexpr wchar_t kRedirectRegistryPath[] =
+    L"Software\\Windhawk_" WH_MOD_ID L"_Redirect";
+constexpr wchar_t kOwnerValueName[] = L"Owner";
+constexpr wchar_t kOwnerValue[] = WH_MOD_ID;
+constexpr wchar_t kSerializePathSuffix[] =
     L"\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize";
 constexpr wchar_t kUserHivePrefix[] = L"\\REGISTRY\\USER\\";
-constexpr const wchar_t* kValueNames[] = {
+constexpr const wchar_t* kDelayValueNames[] = {
     L"WaitforIdleState",
     L"StartupDelayInMSec",
 };
@@ -64,47 +62,31 @@ typedef struct _KEY_NAME_INFORMATION {
     WCHAR Name[1];
 } KEY_NAME_INFORMATION, *PKEY_NAME_INFORMATION;
 
-typedef enum _KEY_VALUE_INFORMATION_CLASS {
-    KeyValueBasicInformation,
-    KeyValueFullInformation,
-    KeyValuePartialInformation,
-    KeyValueFullInformationAlign64,
-} KEY_VALUE_INFORMATION_CLASS;
-
-struct KEY_VALUE_BASIC_INFORMATION_LOCAL {
-    ULONG TitleIndex;
-    ULONG Type;
-    ULONG NameLength;
-    WCHAR Name[1];
-};
-
-struct KEY_VALUE_FULL_INFORMATION_LOCAL {
-    ULONG TitleIndex;
-    ULONG Type;
-    ULONG DataOffset;
-    ULONG DataLength;
-    ULONG NameLength;
-    WCHAR Name[1];
-};
-
-struct KEY_VALUE_PARTIAL_INFORMATION_LOCAL {
-    ULONG TitleIndex;
-    ULONG Type;
-    ULONG DataLength;
-    UCHAR Data[1];
-};
-
 EXTERN_C NTSYSAPI NTSTATUS NTAPI NtQueryKey(
     HANDLE keyHandle, KEY_INFORMATION_CLASS keyInformationClass,
     PVOID keyInformation, ULONG length, PULONG resultLength);
 
-using NtQueryValueKey_t = NTSTATUS(NTAPI*)(
-    HANDLE keyHandle, PUNICODE_STRING valueName,
-    KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
-    PVOID keyValueInformation, ULONG length, PULONG resultLength);
-NtQueryValueKey_t NtQueryValueKey_orig;
+EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlNtStatusFromDosError(ULONG dosError);
 
-HKEY g_createdSerializeKey;
+using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
+                                     ACCESS_MASK desiredAccess,
+                                     POBJECT_ATTRIBUTES objectAttributes);
+NtOpenKey_t NtOpenKey_orig;
+
+using NtOpenKeyEx_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
+                                       ACCESS_MASK desiredAccess,
+                                       POBJECT_ATTRIBUTES objectAttributes,
+                                       ULONG openOptions);
+NtOpenKeyEx_t NtOpenKeyEx_orig;
+
+using NtCreateKey_t = NTSTATUS(NTAPI*)(
+    PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+    POBJECT_ATTRIBUTES objectAttributes, ULONG titleIndex,
+    PUNICODE_STRING klass, ULONG createOptions, PULONG disposition);
+NtCreateKey_t NtCreateKey_orig;
+
+HKEY g_redirectKey;
+bool g_ownsRedirectKey;
 
 bool GetKeyPath(HANDLE key, std::wstring* path) {
     ULONG size = 0;
@@ -125,207 +107,201 @@ bool GetKeyPath(HANDLE key, std::wstring* path) {
     return true;
 }
 
-bool IsTargetValueName(const UNICODE_STRING* valueName) {
-    if (!valueName || !valueName->Buffer) {
-        return false;
-    }
-
-    for (const wchar_t* targetName : kValueNames) {
-        size_t targetLength = wcslen(targetName);
-        if (valueName->Length == targetLength * sizeof(wchar_t) &&
-            _wcsnicmp(valueName->Buffer, targetName, targetLength) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool IsSerializePath(std::wstring_view path) {
     constexpr size_t userHivePrefixLength = ARRAYSIZE(kUserHivePrefix) - 1;
-    constexpr size_t suffixLength = ARRAYSIZE(kKeyPathSuffix) - 1;
+    constexpr size_t suffixLength = ARRAYSIZE(kSerializePathSuffix) - 1;
     return path.length() >= userHivePrefixLength + suffixLength &&
            _wcsnicmp(path.data(), kUserHivePrefix, userHivePrefixLength) == 0 &&
            _wcsnicmp(path.data() + path.length() - suffixLength,
-                      kKeyPathSuffix, suffixLength) == 0;
+                      kSerializePathSuffix, suffixLength) == 0;
 }
 
-bool IsTargetQuery(HANDLE key, const UNICODE_STRING* valueName) {
-    if (!IsTargetValueName(valueName)) {
+bool IsSerializeOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
+    if (!objectAttributes || !objectAttributes->ObjectName ||
+        !objectAttributes->ObjectName->Buffer) {
         return false;
     }
 
-    std::wstring path;
-    return GetKeyPath(key, &path) && IsSerializePath(path);
-}
-
-ULONG AlignUp(ULONG value, ULONG alignment) {
-    return (value + alignment - 1) & ~(alignment - 1);
-}
-
-NTSTATUS FillValueInformation(const UNICODE_STRING* valueName,
-                              KEY_VALUE_INFORMATION_CLASS informationClass,
-                              void* buffer, ULONG bufferLength,
-                              ULONG* resultLength,
-                              NTSTATUS unsupportedStatus) {
-    ULONG dataOffset;
-    ULONG requiredLength;
-
-    switch (informationClass) {
-        case KeyValueBasicInformation: {
-            ULONG nameOffset = FIELD_OFFSET(KEY_VALUE_BASIC_INFORMATION_LOCAL,
-                                            Name);
-            requiredLength = nameOffset + valueName->Length;
-            if (resultLength) {
-                *resultLength = requiredLength;
-            }
-            if (!buffer || bufferLength < nameOffset) {
-                return STATUS_BUFFER_TOO_SMALL;
-            }
-            auto info = static_cast<KEY_VALUE_BASIC_INFORMATION_LOCAL*>(buffer);
-            info->TitleIndex = 0;
-            info->Type = REG_DWORD;
-            info->NameLength = valueName->Length;
-            ULONG copiedNameLength =
-                std::min<ULONG>(valueName->Length, bufferLength - nameOffset);
-            std::memcpy(info->Name, valueName->Buffer, copiedNameLength);
-            return bufferLength < requiredLength ? STATUS_BUFFER_OVERFLOW
-                                                 : STATUS_SUCCESS;
-        }
-
-        case KeyValueFullInformation:
-        case KeyValueFullInformationAlign64: {
-            ULONG nameOffset = FIELD_OFFSET(KEY_VALUE_FULL_INFORMATION_LOCAL,
-                                            Name);
-            ULONG alignment = informationClass == KeyValueFullInformationAlign64
-                                  ? 8
-                                  : 4;
-            dataOffset = AlignUp(nameOffset + valueName->Length, alignment);
-            requiredLength = dataOffset + sizeof(DWORD);
-            if (resultLength) {
-                *resultLength = requiredLength;
-            }
-            if (!buffer || bufferLength < nameOffset) {
-                return STATUS_BUFFER_TOO_SMALL;
-            }
-            auto info = static_cast<KEY_VALUE_FULL_INFORMATION_LOCAL*>(buffer);
-            info->TitleIndex = 0;
-            info->Type = REG_DWORD;
-            info->DataOffset = dataOffset;
-            info->DataLength = sizeof(DWORD);
-            info->NameLength = valueName->Length;
-            ULONG copiedNameLength =
-                std::min<ULONG>(valueName->Length, bufferLength - nameOffset);
-            std::memcpy(info->Name, valueName->Buffer, copiedNameLength);
-            if (bufferLength < requiredLength) {
-                return STATUS_BUFFER_OVERFLOW;
-            }
-            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(buffer) + dataOffset) =
-                0;
-            return STATUS_SUCCESS;
-        }
-
-        case KeyValuePartialInformation: {
-            dataOffset = FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION_LOCAL,
-                                      Data);
-            requiredLength = dataOffset + sizeof(DWORD);
-            if (resultLength) {
-                *resultLength = requiredLength;
-            }
-            constexpr ULONG headerLength =
-                FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION_LOCAL, Data);
-            if (!buffer || bufferLength < headerLength) {
-                return STATUS_BUFFER_TOO_SMALL;
-            }
-            auto info =
-                static_cast<KEY_VALUE_PARTIAL_INFORMATION_LOCAL*>(buffer);
-            info->TitleIndex = 0;
-            info->Type = REG_DWORD;
-            info->DataLength = sizeof(DWORD);
-            if (bufferLength < requiredLength) {
-                return STATUS_BUFFER_OVERFLOW;
-            }
-            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(buffer) + dataOffset) =
-                0;
-            return STATUS_SUCCESS;
-        }
+    const UNICODE_STRING* objectName = objectAttributes->ObjectName;
+    std::wstring_view name(objectName->Buffer,
+                           objectName->Length / sizeof(wchar_t));
+    constexpr std::wstring_view serializeName = L"Serialize";
+    if (name.length() < serializeName.length() ||
+        _wcsnicmp(name.data() + name.length() - serializeName.length(),
+                   serializeName.data(), serializeName.length()) != 0) {
+        return false;
     }
 
-    return unsupportedStatus;
+    std::wstring path(name);
+    if (objectAttributes->RootDirectory &&
+        (path.empty() || path.front() != L'\\')) {
+        std::wstring rootPath;
+        if (!GetKeyPath(objectAttributes->RootDirectory, &rootPath)) {
+            return false;
+        }
+        if (!path.empty()) {
+            rootPath += L'\\';
+            rootPath += path;
+        }
+        path = rootPath;
+    }
+
+    return IsSerializePath(path);
 }
 
-NTSTATUS NTAPI NtQueryValueKey_hook(
-    HANDLE keyHandle, PUNICODE_STRING valueName,
-    KEY_VALUE_INFORMATION_CLASS keyValueInformationClass,
-    PVOID keyValueInformation, ULONG length, PULONG resultLength) {
-    NTSTATUS status = NtQueryValueKey_orig(
-        keyHandle, valueName, keyValueInformationClass, keyValueInformation,
-        length, resultLength);
-    if (!IsTargetQuery(keyHandle, valueName)) {
+NTSTATUS DuplicateRedirectKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess) {
+    HANDLE duplicate = nullptr;
+    DWORD options = desiredAccess & MAXIMUM_ALLOWED ? DUPLICATE_SAME_ACCESS : 0;
+    if (!DuplicateHandle(GetCurrentProcess(), g_redirectKey,
+                         GetCurrentProcess(), &duplicate, desiredAccess, FALSE,
+                         options)) {
+        return RtlNtStatusFromDosError(GetLastError());
+    }
+
+    *keyHandle = duplicate;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+                              POBJECT_ATTRIBUTES objectAttributes) {
+    if (IsSerializeOpen(objectAttributes)) {
+        return DuplicateRedirectKey(keyHandle, desiredAccess);
+    }
+    return NtOpenKey_orig(keyHandle, desiredAccess, objectAttributes);
+}
+
+NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+                                POBJECT_ATTRIBUTES objectAttributes,
+                                ULONG openOptions) {
+    if (IsSerializeOpen(objectAttributes)) {
+        return DuplicateRedirectKey(keyHandle, desiredAccess);
+    }
+    return NtOpenKeyEx_orig(keyHandle, desiredAccess, objectAttributes,
+                            openOptions);
+}
+
+NTSTATUS NTAPI NtCreateKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
+                                POBJECT_ATTRIBUTES objectAttributes,
+                                ULONG titleIndex, PUNICODE_STRING klass,
+                                ULONG createOptions, PULONG disposition) {
+    if (IsSerializeOpen(objectAttributes)) {
+        NTSTATUS status = DuplicateRedirectKey(keyHandle, desiredAccess);
+        if (status == STATUS_SUCCESS && disposition) {
+            *disposition = REG_OPENED_EXISTING_KEY;
+        }
         return status;
     }
+    return NtCreateKey_orig(keyHandle, desiredAccess, objectAttributes,
+                            titleIndex, klass, createOptions, disposition);
+}
 
-    if (status != STATUS_SUCCESS && status != STATUS_OBJECT_NAME_NOT_FOUND &&
-        status != STATUS_OBJECT_PATH_NOT_FOUND &&
-        status != STATUS_BUFFER_TOO_SMALL &&
-        status != STATUS_BUFFER_OVERFLOW) {
-        return status;
+bool VerifyOwner(HKEY key) {
+    wchar_t owner[ARRAYSIZE(kOwnerValue)];
+    DWORD type;
+    DWORD size = sizeof(owner);
+    LSTATUS status = RegQueryValueExW(
+        key, kOwnerValueName, nullptr, &type, reinterpret_cast<BYTE*>(owner),
+        &size);
+    return status == ERROR_SUCCESS && type == REG_SZ &&
+           size == sizeof(kOwnerValue) &&
+           wcscmp(owner, kOwnerValue) == 0;
+}
+
+bool InitializeRedirectKey() {
+    DWORD disposition;
+    LSTATUS status = RegCreateKeyExW(
+        HKEY_CURRENT_USER, kRedirectRegistryPath, 0, nullptr,
+        REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr, &g_redirectKey,
+        &disposition);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Failed to create redirect key: %ld", status);
+        return false;
     }
 
-    status = FillValueInformation(valueName, keyValueInformationClass,
-                                  keyValueInformation, length, resultLength,
-                                  status);
-    if (status == STATUS_SUCCESS) {
-        Wh_Log(L"Reporting %.*s=0",
-               static_cast<int>(valueName->Length / sizeof(wchar_t)),
-               valueName->Buffer);
+    bool created = disposition == REG_CREATED_NEW_KEY;
+    if (!created && !VerifyOwner(g_redirectKey)) {
+        Wh_Log(L"Existing redirect key isn't owned by this mod");
+        RegCloseKey(g_redirectKey);
+        g_redirectKey = nullptr;
+        return false;
     }
-    return status;
+
+    if (created) {
+        status = RegSetValueExW(
+            g_redirectKey, kOwnerValueName, 0, REG_SZ,
+            reinterpret_cast<const BYTE*>(kOwnerValue), sizeof(kOwnerValue));
+        if (status != ERROR_SUCCESS) {
+            Wh_Log(L"Failed to mark redirect-key ownership: %ld", status);
+            RegCloseKey(g_redirectKey);
+            g_redirectKey = nullptr;
+            RegDeleteKeyW(HKEY_CURRENT_USER, kRedirectRegistryPath);
+            return false;
+        }
+    }
+
+    DWORD zero = 0;
+    for (const wchar_t* valueName : kDelayValueNames) {
+        status = RegSetValueExW(
+            g_redirectKey, valueName, 0, REG_DWORD,
+            reinterpret_cast<const BYTE*>(&zero), sizeof(zero));
+        if (status != ERROR_SUCCESS) {
+            Wh_Log(L"Failed to initialize %s: %ld", valueName, status);
+            RegCloseKey(g_redirectKey);
+            g_redirectKey = nullptr;
+            if (created) {
+                RegDeleteKeyW(HKEY_CURRENT_USER, kRedirectRegistryPath);
+            }
+            return false;
+        }
+    }
+
+    g_ownsRedirectKey = true;
+    Wh_Log(L"Initialized volatile Serialize redirect key");
+    return true;
+}
+
+void DeleteRedirectKey() {
+    if (g_redirectKey) {
+        RegCloseKey(g_redirectKey);
+        g_redirectKey = nullptr;
+    }
+    if (!g_ownsRedirectKey) {
+        return;
+    }
+
+    g_ownsRedirectKey = false;
+    LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, kRedirectRegistryPath);
+    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"Failed to delete volatile redirect key: %ld", status);
+    }
 }
 
 BOOL Wh_ModInit() {
-    DWORD disposition;
-    HKEY serializeKey;
-    LSTATUS createStatus = RegCreateKeyExW(
-        HKEY_CURRENT_USER, kRegistryPath, 0, nullptr, REG_OPTION_VOLATILE,
-        KEY_READ, nullptr, &serializeKey, &disposition);
-    if (createStatus != ERROR_SUCCESS) {
-        Wh_Log(L"Failed to open or create volatile Serialize key: %ld",
-               createStatus);
+    if (!InitializeRedirectKey()) {
         return FALSE;
-    } else if (disposition == REG_CREATED_NEW_KEY) {
-        g_createdSerializeKey = serializeKey;
-        Wh_Log(L"Created volatile Serialize key");
-    } else {
-        RegCloseKey(serializeKey);
     }
 
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    auto ntQueryValueKey = reinterpret_cast<NtQueryValueKey_t>(
-        GetProcAddress(ntdll, "NtQueryValueKey"));
-    if (!ntQueryValueKey) {
-        Wh_Log(L"Failed to find NtQueryValueKey");
-        if (g_createdSerializeKey) {
-            RegCloseKey(g_createdSerializeKey);
-            g_createdSerializeKey = nullptr;
-            RegDeleteKeyW(HKEY_CURRENT_USER, kRegistryPath);
-        }
+    auto ntOpenKey = reinterpret_cast<NtOpenKey_t>(
+        GetProcAddress(ntdll, "NtOpenKey"));
+    auto ntOpenKeyEx = reinterpret_cast<NtOpenKeyEx_t>(
+        GetProcAddress(ntdll, "NtOpenKeyEx"));
+    auto ntCreateKey = reinterpret_cast<NtCreateKey_t>(
+        GetProcAddress(ntdll, "NtCreateKey"));
+    if (!ntOpenKey || !ntOpenKeyEx || !ntCreateKey) {
+        Wh_Log(L"Failed to find required ntdll registry functions");
+        DeleteRedirectKey();
         return FALSE;
     }
 
-    WindhawkUtils::SetFunctionHook(ntQueryValueKey, NtQueryValueKey_hook,
-                                   &NtQueryValueKey_orig);
+    WindhawkUtils::SetFunctionHook(ntOpenKey, NtOpenKey_hook, &NtOpenKey_orig);
+    WindhawkUtils::SetFunctionHook(ntOpenKeyEx, NtOpenKeyEx_hook,
+                                   &NtOpenKeyEx_orig);
+    WindhawkUtils::SetFunctionHook(ntCreateKey, NtCreateKey_hook,
+                                   &NtCreateKey_orig);
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (!g_createdSerializeKey) {
-        return;
-    }
-
-    RegCloseKey(g_createdSerializeKey);
-    g_createdSerializeKey = nullptr;
-    LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, kRegistryPath);
-    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
-        Wh_Log(L"Failed to delete volatile Serialize key: %ld", status);
-    }
+    DeleteRedirectKey();
 }
