@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              rounded-corners-when-snapped
-// @name            Rounded corners when snapped or maximized
-// @description     Keeps window corners rounded when a window is snapped or maximized, without changing the window state
+// @name            Rounded corners for snapped windows
+// @description     Keeps window corners rounded when a window is snapped, without changing the window state
 // @version         1.0.0
 // @author          Alexey Lavrinenko
-// @github          https://github.com/leshaalexey
+// @github          https://github.com/YOUR-GITHUB-USERNAME
 // @license         GPL-3.0
 // @include         dwm.exe
 // @architecture    x86-64
@@ -17,15 +17,14 @@
 
 // ==WindhawkModReadme==
 /*
-# Rounded corners when snapped or maximized
+# Rounded corners for snapped windows
 
-Windows 11 squares off a window's corners as soon as it is maximized or
-snapped. This mod keeps them rounded, the way macOS does.
+Windows 11 squares off a window's corners as soon as it is snapped. This mod
+keeps them rounded.
 
-The window state is untouched: it is really snapped, really maximized, and
-Snap Layouts, Snap Assist, Win+Arrow and the maximize button all behave exactly
-as before. Only the compositor's drawing changes, and disabling the mod
-restores the default look immediately.
+The window state is untouched: it is really snapped, and Snap Layouts, Snap
+Assist and Win+Arrow behave exactly as before. Only the compositor's drawing
+changes, and disabling the mod restores the default look immediately.
 
 ## ⚠ Important usage note ⚠
 
@@ -33,22 +32,31 @@ This mod needs to hook into `dwm.exe` to work. Please navigate to Windhawk's
 Settings > Advanced settings > More advanced settings > Process inclusion list,
 and make sure that `dwm.exe` is in the list.
 
+## Why maximized windows are left alone
+
+A window maximized over the whole screen is presented through *direct flip*:
+its buffer goes to the display without DWM composing the frame, which is also
+why Windows doesn't round it in the first place. Rounded corners drawn for such
+a window only show up while something forces composition — the Start menu, a
+notification, Alt+Tab — and disappear again the moment the overlay goes away.
+In apps that draw their own frame (browsers, Electron apps) that reads as
+corners flickering between round and square.
+
+Snapped windows are composed normally, so their corners stay rounded at all
+times. Maximized windows are therefore skipped by default. The behaviour can be
+turned on with the *Also round maximized windows* option, with the caveat
+above — it looks fine in apps with a standard window frame.
+
 ## How it works
 
-Windows are squared off in one of two ways, depending on the build: either the
-corner style comes out as `DWMWCP_DONOTROUND`, or the style stays rounded and
-the corner radius is zeroed further down the pipeline. The mod covers both, by
-hooking `CTopLevelWindow::GetEffectiveCornerStyle` and the corner radius
-getters of the same class.
-
-Every replacement is gated on `CTopLevelWindow::IsMaximizedOrSnapped` — DWM's
-own answer about the very surface being composed. The Start menu backdrop, the
-virtual-desktop switch animation, drag previews and fullscreen windows answer
-`false` and are left exactly as DWM wanted them, so no stray outlines appear.
-
-A forced radius is scaled through `CWindowData::ScaleForDpi`, the same way DWM
-scales its own, so it comes out the right size on every monitor of a mixed-DPI
-setup.
+Two `CTopLevelWindow` methods of `uDWM.dll` are involved:
+`GetEffectiveCornerStyle`, which decides the corner style of a composed
+surface, and `IsMaximizedOrSnapped`, which is DWM's own answer about that very
+surface. Depending on the build, a snapped window is squared off either through
+the style or by zeroing the corner radius, so the radius getters of the same
+class are hooked as well. Every replacement is gated on `IsMaximizedOrSnapped`,
+so the Start menu backdrop, the virtual-desktop switch animation, drag previews
+and fullscreen windows are left exactly as DWM wanted them.
 
 ## Compatibility
 
@@ -56,29 +64,20 @@ Other mods and tools that patch DWM corners hook the same functions and will
 fight with this one. Don't run it together with **Custom Window Corner
 Radius**, **Disable rounded corners in Windows 11**, ExplorerPatcher's rounded
 corner option, StartAllBack or Win11DisableRoundedCorners.
-
-## Mod authorship
- 
-If this pull request introduces a new mod, please complete the section below.
- 
-This mod was created by:
- 
-- - [ ] The submitter, without AI assistance
-- - [x] The submitter, with AI assistance
-- - [x] Claude
-- - [ ] ChatGPT
-- - [ ] Gemini
-- - [ ] Another AI (please specify): 
-- - [ ] Other (please specify): 
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- roundMaximized: false
+  $name: Also round maximized windows
+  $description: >-
+    Maximized windows are presented without DWM composing them, so their
+    rounded corners only appear while the Start menu, a notification or Alt+Tab
+    is on screen. Fine with a standard window frame, flickers in apps that draw
+    their own.
 - roundStyle: round
   $name: Corner style
-  $description: >-
-    Which rounding to apply. "Normal" matches an ordinary unsnapped window.
   $options:
   - round: Normal
   - small: Small, like a menu
@@ -97,6 +96,7 @@ This mod was created by:
 #include <winevt.h>
 
 struct {
+    bool roundMaximized;
     int roundStyle;
     float radius;
 } g_settings;
@@ -105,27 +105,24 @@ struct {
 using IsMaximizedOrSnapped_t = bool(WINAPI*)(void* pThis);
 IsMaximizedOrSnapped_t IsMaximizedOrSnapped;
 
-// Captured, not hooked: DWM's own per-window DPI scaling, so a forced radius
-// comes out the right size on every monitor.
-using GetWindowData_t = void*(WINAPI*)(void* pThis);
-GetWindowData_t GetWindowData_Original;
-
-using ScaleForDpi_t = unsigned int(WINAPI*)(void* pThis, unsigned int value);
-ScaleForDpi_t ScaleForDpi_Original;
-
-float ScaledRadius(void* pThis) {
-    if (GetWindowData_Original && ScaleForDpi_Original) {
-        if (void* data = GetWindowData_Original(pThis)) {
-            return static_cast<float>(ScaleForDpi_Original(
-                data, static_cast<unsigned int>(g_settings.radius)));
-        }
+// True for a window filling its monitor's work area, as opposed to one snapped
+// to part of it.
+bool CoversWorkArea(const RECT& rect) {
+    MONITORINFO mi{sizeof(MONITORINFO)};
+    if (!GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST),
+                         &mi)) {
+        return false;
     }
-    // Fall back to the system DPI, which is only wrong on mixed-DPI setups.
-    UINT dpi = GetDpiForSystem();
-    return g_settings.radius * (dpi ? dpi / 96.0f : 1.0f);
+
+    LONG width = rect.right - rect.left;
+    LONG height = rect.bottom - rect.top;
+    LONG workWidth = mi.rcWork.right - mi.rcWork.left;
+    LONG workHeight = mi.rcWork.bottom - mi.rcWork.top;
+
+    return width * 100 >= workWidth * 95 && height * 100 >= workHeight * 95;
 }
 
-// Builds that square a maximized window by reporting a "don't round" style.
+// Builds that square a snapped window by reporting a "don't round" style.
 using GetEffectiveCornerStyle_t = int(WINAPI*)(void* pThis);
 GetEffectiveCornerStyle_t GetEffectiveCornerStyle_Original;
 int WINAPI GetEffectiveCornerStyle_Hook(void* pThis) {
@@ -163,16 +160,47 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* pThis) {
     return orig;
 }
 
-// Returns an already DPI-scaled value, so the replacement has to be scaled too.
+// Already DPI-scaled, hence the separate hook. The unscaled getter above feeds
+// it on current builds, so it only fires where that isn't the case.
 RadiusGetter_t GetDpiAdjustedFloatCornerRadius_Original;
 float WINAPI GetDpiAdjustedFloatCornerRadius_Hook(void* pThis) {
     float orig = GetDpiAdjustedFloatCornerRadius_Original(pThis);
-    if (orig <= 0.0f && IsMaximizedOrSnapped(pThis)) {
-        float scaled = ScaledRadius(pThis);
-        Wh_Log(L"> dpi adjusted radius 0 -> %f", scaled);
-        return scaled;
+    if (orig > 0.0f || !IsMaximizedOrSnapped(pThis)) {
+        return orig;
     }
-    return orig;
+
+    UINT dpi = GetDpiForSystem();
+    float value = g_settings.radius * (dpi ? dpi / 96.0f : 1.0f);
+    Wh_Log(L"> dpi adjusted radius 0 -> %f", value);
+    return value;
+}
+
+// The window border is where the rounding actually becomes visible, and the
+// only place with a rectangle to tell a snapped window from a maximized one.
+using SetBorderParameters_t = long(WINAPI*)(void* pThis,
+                                            const RECT& borderRect,
+                                            float cornerRadius,
+                                            int dpi,
+                                            const void* color,
+                                            int borderStyle,
+                                            int shadowStyle);
+SetBorderParameters_t SetBorderParameters_Original;
+long WINAPI SetBorderParameters_Hook(void* pThis,
+                                     const RECT& borderRect,
+                                     float cornerRadius,
+                                     int dpi,
+                                     const void* color,
+                                     int borderStyle,
+                                     int shadowStyle) {
+    if (cornerRadius > 0.0f && !g_settings.roundMaximized &&
+        CoversWorkArea(borderRect)) {
+        // Maximized: DWM presents it without composing, so a rounded border
+        // would only show while something else is drawn on top.
+        Wh_Log(L"> maximized, leaving the border square");
+        cornerRadius = 0.0f;
+    }
+    return SetBorderParameters_Original(pThis, borderRect, cornerRadius, dpi,
+                                        color, borderStyle, shadowStyle);
 }
 
 void LoadSettings() {
@@ -180,6 +208,8 @@ void LoadSettings() {
         WindhawkUtils::StringSetting::make(L"roundStyle");
     g_settings.roundStyle =
         wcscmp(style.get(), L"small") == 0 ? DWMWCP_ROUNDSMALL : DWMWCP_ROUND;
+
+    g_settings.roundMaximized = Wh_GetIntSetting(L"roundMaximized") != 0;
 
     int radius = Wh_GetIntSetting(L"radius");
     if (radius < 1) {
@@ -286,18 +316,12 @@ BOOL Wh_ModInit() {
             GetDpiAdjustedFloatCornerRadius_Hook,
             true,  // Optional.
         },
-        // Used only to scale a forced radius the way DWM would.
+        // Keeps maximized windows square unless the user asks otherwise.
         {
-            {LR"(public: class CWindowData * __cdecl CTopLevelWindow::GetWindowData(void)const )"},
-            &GetWindowData_Original,
-            nullptr,  // Capture only.
-            true,     // Optional - falls back to the system DPI.
-        },
-        {
-            {LR"(public: unsigned int __cdecl CWindowData::ScaleForDpi(unsigned int)const )"},
-            &ScaleForDpi_Original,
-            nullptr,  // Capture only.
-            true,     // Optional - falls back to the system DPI.
+            {LR"(public: long __cdecl CWindowBorder::SetBorderParameters(struct tagRECT const &,float,int,struct _D3DCOLORVALUE const &,enum CWindowBorder::BorderStyle,enum CWindowBorder::ShadowStyle))"},
+            &SetBorderParameters_Original,
+            SetBorderParameters_Hook,
+            true,  // Optional.
         },
     };
 
