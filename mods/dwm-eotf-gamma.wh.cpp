@@ -1,8 +1,8 @@
+// clang-format off
 // ==WindhawkMod==
 // @id              dwm-eotf-gamma
 // @name            Windows SDR to HDR Tonemapping Fix
-// @description     Replaces DWM's sRGB EOTF with a pure power-law gamma for
-// SDR-to-HDR tone mapping
+// @description     Replaces DWM's sRGB EOTF with a pure power-law gamma for SDR-to-HDR tone mapping
 // @version         1.0
 // @author          millerpb
 // @github          https://github.com/millerpb
@@ -122,6 +122,7 @@ effect.
     - "2.6": "2.6 (dark / high contrast)"
 */
 // ==/WindhawkModSettings==
+// clang-format on
 
 #include <windhawk_utils.h>
 #include <windows.h>
