@@ -139,25 +139,22 @@ static void FreeBackdropCache() {
     g_backdropCache = {};
 }
 
-static void InvalidateBackdropCache() {
-    std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
-    g_backdropCache.valid = false;
-}
-
 
 static void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     constexpr int kDefaultDesaturationPercent = 65;
-    const int oldDesaturationPercent = g_settings.desaturationPercent.load();
+    
     int desaturationPercent = Wh_GetIntSetting(L"desaturationPercent");
     g_settings.desaturationPercent.store(
         desaturationPercent >= 0 && desaturationPercent <= 100
             ? desaturationPercent
             : kDefaultDesaturationPercent
     );
-    // If desaturation changes, the backdrop cache needs rebuilding.
-    if (g_settings.desaturationPercent.load() != oldDesaturationPercent)
-        InvalidateBackdropCache();
+    
+    // REMOVED: InvalidateBackdropCache() call - it caused a lock-order inversion
+    // with g_cacheMutex and isn't needed because desaturationPercent doesn't
+    // affect the cache contents (desaturation is applied per-frame via AlphaBlend).
+    
     g_settings.desaturationRampMs.store(std::clamp(Wh_GetIntSetting(L"desaturationRampMs"), 0, 10000));
     g_settings.boxSizePercent.store(std::clamp(Wh_GetIntSetting(L"boxSizePercent"), 50, 200));
     g_settings.fontSizePercent.store(std::clamp(Wh_GetIntSetting(L"fontSizePercent"), 50, 200));
@@ -190,19 +187,29 @@ static const LocalizedText kPleaseWaitTexts[] = {
     { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_HONGKONG), L"\u8acb\u7a0d\u5019" },
 };
 
-static const wchar_t* GetPleaseWaitText() {
+static void GetPleaseWaitText(wchar_t (&out)[ARRAYSIZE(Settings::customText)]) {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    if (g_settings.customTextValid.load() && g_settings.customText[0])
-        return g_settings.customText;
+    
+    if (g_settings.customText[0]) {
+        lstrcpynW(out, g_settings.customText, ARRAYSIZE(out));
+        return;
+    }
     
     const LANGID uiLanguage = GetUserDefaultUILanguage();
-    for (const auto& entry : kPleaseWaitTexts)
-        if (entry.language == uiLanguage) return entry.text;
-    for (const auto& entry : kPleaseWaitTexts)
-        if (PRIMARYLANGID(entry.language) == PRIMARYLANGID(uiLanguage)) return entry.text;
-    return L"Please wait";
+    for (const auto& entry : kPleaseWaitTexts) {
+        if (entry.language == uiLanguage) {
+            lstrcpynW(out, entry.text, ARRAYSIZE(out));
+            return;
+        }
+    }
+    for (const auto& entry : kPleaseWaitTexts) {
+        if (PRIMARYLANGID(entry.language) == PRIMARYLANGID(uiLanguage)) {
+            lstrcpynW(out, entry.text, ARRAYSIZE(out));
+            return;
+        }
+    }
+    lstrcpynW(out, L"Please wait", ARRAYSIZE(out));
 }
-
 class ScopedGdiObject {
 public:
     explicit ScopedGdiObject(HGDIOBJ object = nullptr) : object_(object) {}
@@ -384,6 +391,10 @@ static bool BuildBackdropCache(HWND hwnd, const RECT& clientRect, UINT dpi) {
 
     // Copy raw to gray and fully desaturate it once.
     BitBlt(grayDc, 0, 0, width, height, rawDc, 0, 0, SRCCOPY);
+    
+    // FIX: Force GDI batch flush before reading pixel data
+    GdiFlush();
+    
     if (grayPixels) {
         auto* pixel = static_cast<BYTE*>(grayPixels);
         const size_t count = (size_t)width * (size_t)height;
@@ -502,7 +513,11 @@ static bool DrawClassicPleaseWaitBox(HWND hwnd, HDC hdc) {
 
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(0, 0, 0));
-    DrawTextW(hdc, GetPleaseWaitText(), -1, &content,
+    
+    // FIX: Use local buffer instead of returning a pointer to shared data
+    wchar_t textBuffer[ARRAYSIZE(Settings::customText)];
+    GetPleaseWaitText(textBuffer);
+    DrawTextW(hdc, textBuffer, -1, &content,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 
     RestoreDC(hdc, savedDc);
