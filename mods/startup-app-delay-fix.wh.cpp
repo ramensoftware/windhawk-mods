@@ -13,6 +13,8 @@
 Windows intentionally delays startup applications after sign-in to reduce
 system load, which can cause apps to open minutes after startup.
 
+![Key](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png)
+
 This mod redirects Explorer's startup-serialization key to a dedicated,
 volatile key where both `WaitforIdleState` and `StartupDelayInMSec` are zero.
 It never creates, modifies, or deletes the user's real `Serialize` key.
