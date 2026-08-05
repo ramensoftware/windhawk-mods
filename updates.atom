@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-05T12:58:14.000Z</updated>
+    <updated>2026-08-05T16:37:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Command Bar 1.1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-command-bar#81a25073317418e4daedb4eba756326a9587dffc</id>
+        <link href="https://windhawk.net/mods/explorer-command-bar"/>
+        <updated>2026-08-05T16:37:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add the New+ feature from PowerToys to Explorer Command Bar, with possibility to replace the default explorer's New.</li>
+<li>Add an optional command bar button for the selected item’s or current folder’s shell context menu, including shell extensions, nested menus, extended verbs, and Nilesoft Shell support.</li>
+<li>Add nested custom menus, improved icon handling, configurable button spacing, and more reliable command bar refreshes.</li>
+<li>Prevent crashes when unloading the mod by revoking XAML event handlers and safely cleaning up menus, timers, hooks, and other per-thread resources.</li>
+<li>Add Windhawk 2.0 settings compatibility for toolbar items without subitems.</li>
+<li>Bug fixes.</li>
+</ul>]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CJK Spacer 0.1.27]]></title>
         <id>https://windhawk.net/mods/cjk-spacer#d021d038b75876dc7345cfe32cd13b079be697a7</id>
@@ -670,28 +688,6 @@ useful if the <em>Switch the communications device too</em> option is turned off
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Corner Click Fix 2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#846fb5c2697073198ff251c14fd373f94f16f977</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-corner-fix"/>
-        <updated>2026-07-30T21:54:46.000Z</updated>
-        <content type="html"><![CDATA[<p>Reworked corner-click handling to hook the taskbar’s invisible InputSite window procedure and intercept its <code>WM_POINTER</code> messages directly. Existing InputSite windows are found through taskbar scans, while <code>CreateWindowInBand</code> covers future taskbar recreation. Runtime hook operations are applied only when necessary, with retry and unload protection.</p>
-<p>Improved corner detection by validating the taskbar bounds, monitor ownership, adjacent-monitor geometry, DPI-scaled L-shaped region, pointer lifecycle, and left-aligned taskbar setting. The registry check now runs only after the cheaper geometry checks pass.</p>
-<p>UI Automation is now limited to Start-button activation on a dedicated worker thread:</p>
-<ul>
-<li>Uses <code>CUIAutomation8</code>, COM RAII, provider timeouts, and per-taskbar element caching.</li>
-<li>Coalesces clicks received during UIA lag to avoid repeatedly toggling Start open and closed.</li>
-<li>Adds the <code>openStartWhenButtonUnavailable</code> setting, enabled by default. When UIA successfully searches the taskbar but finds no Start button, the mod falls back to pressing the Windows key.</li>
-<li>Does not trigger the fallback for COM errors, UIA provider failures, activation failures, stale taskbars, or worker-queue failures.</li>
-</ul>
-<p>The fallback applies to both primary and secondary taskbars. Since Windows normally opens a keyboard-triggered Start menu on the primary monitor, the documentation recommends the <a href="https://windhawk.net/mods/start-menu-open-location">Start menu open location</a> mod for cursor-monitor placement.</p>
-<p>The UIA bounding rectangle is not queried before interception because that would require provider calls on the taskbar input thread or depend on potentially stale cached geometry.</p>
-<p>Also updated the Windhawk requirement and settings descriptions, and removed redundant linker options.</p>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>

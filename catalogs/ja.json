@@ -4581,7 +4581,7 @@
           16
         ],
         "ratingUsers": 16,
-        "updated": 1785493651000,
+        "updated": 1785947860000,
         "users": 200
       },
       "metadata": {
@@ -4589,8 +4589,8 @@
           "x86-64"
         ],
         "author": "DanRotaru",
-        "compilerOptions": "-ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32",
-        "description": "Add your own buttons and dropdown menus to the Windows 11 File Explorer command bar, and hide the built-in ones",
+        "compilerOptions": "-ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid",
+        "description": "Customize the Windows 11 File Explorer command bar with commands, menus, New+, and a shell context-menu button",
         "github": "https://github.com/DanRotaru",
         "homepage": "https://dan13.me/",
         "include": [
@@ -4598,7 +4598,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Command Bar",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "explorer-context-menu-classic": {
