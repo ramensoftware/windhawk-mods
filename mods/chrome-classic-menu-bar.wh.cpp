@@ -21,10 +21,25 @@ Included:
   - Native Chromium frame integration adapted from
     Titlebar For Everyone by Ingan121.
   - Reliable new-tab navigation for chrome:// pages.
-  - Automatic startup attachment using a dedicated browser-window watcher.
-  - Periodic recovery if Chrome replaces or recreates its main window.
+  - Automatic startup attachment through the Chrome window-creation hook.
+  - Windhawk settings for dark menus and native-frame ownership.
+
+Compatibility:
+  - If Titlebar For Everyone is enabled for Chrome, disable
+    "Manage Chrome native frame" in this mod so only one mod owns the frame.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- darkMenu: true
+  $name: Dark menu mode
+  $description: Use a dark theme for the menu bar and pop-up menus
+- manageNativeFrame: true
+  $name: Manage Chrome native frame
+  $description: Disable this if another mod, such as Titlebar For Everyone, already manages Chrome's native frame
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <algorithm>
@@ -112,32 +127,11 @@ struct BuiltMenu {
     std::vector<MenuItemData*> itemData;
 };
 
-struct ChromePageRequest {
-    HWND hwnd = nullptr;
-    std::wstring url;
-};
 
 SRWLOCK g_stateLock = SRWLOCK_INIT;
 std::unordered_map<HWND, WindowState> g_windows;
-std::atomic<bool> g_stopWorker{false};
 std::atomic<bool> g_darkMode{true};
-HANDLE g_workerThread = nullptr;
-std::atomic<bool> g_workerStarted{false};
-HWND g_hotkeyWindow = nullptr;
-
-HANDLE g_attachWatcherThread = nullptr;
-std::atomic<bool> g_attachWatcherStarted{false};
-std::atomic<bool> g_stopAttachWatcher{false};
-
-constexpr int HOTKEY_EXTENSIONS = 20001;
-constexpr int HOTKEY_SETTINGS = 20002;
-constexpr int HOTKEY_ABOUT = 20003;
-constexpr UINT_PTR ATTACH_TIMER_ID = 1;
-constexpr UINT ATTACH_RETRY_MS = 500;
-constexpr UINT ATTACH_WATCHER_MS = 250;
-constexpr UINT WM_OPEN_CHROME_PAGE = WM_APP + 100;
-constexpr wchar_t kHotkeyWindowClass[] =
-    L"ChromeClassicMenuBarHotkeyWindow";
+std::atomic<bool> g_manageNativeFrame{true};
 
 HBRUSH g_darkBackgroundBrush = nullptr;
 HBRUSH g_darkHighlightBrush = nullptr;
@@ -153,23 +147,20 @@ constexpr COLORREF kDarkSeparator = RGB(95, 99, 104);
 bool IsChromeBrowserFrame(HWND hwnd);
 
 void EnableNativeChromeFrame(HWND hwnd) {
-    if (!IsChromeBrowserFrame(hwnd)) {
+    if (!g_manageNativeFrame.load() || !IsChromeBrowserFrame(hwnd)) {
         return;
     }
 
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    style |= WS_CAPTION | WS_SYSMENU;
-    SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+    LONG_PTR requiredStyle = WS_CAPTION | WS_SYSMENU;
+    if ((style & requiredStyle) == requiredStyle) {
+        return;
+    }
 
-    SetWindowPos(
-        hwnd,
-        nullptr,
-        0,
-        0,
-        0,
-        0,
-        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
-            SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    SetWindowLongPtrW(hwnd, GWL_STYLE, style | requiredStyle);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
 }
 
 bool IsChromeBrowserFrame(HWND hwnd) {
@@ -398,77 +389,42 @@ void SendKey(WORD vk, bool ctrl = false, bool shift = false, bool alt = false) {
     SendInput(static_cast<UINT>(input.size()), input.data(), sizeof(INPUT));
 }
 
-void TypeUnicode(const wchar_t* text) {
-    std::vector<INPUT> input;
-    for (const wchar_t* p = text; *p; ++p) {
-        INPUT down{};
-        down.type = INPUT_KEYBOARD;
-        down.ki.wScan = *p;
-        down.ki.dwFlags = KEYEVENTF_UNICODE;
-        input.push_back(down);
-
-        INPUT up = down;
-        up.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-        input.push_back(up);
-    }
-
-    if (!input.empty()) {
-        SendInput(static_cast<UINT>(input.size()), input.data(), sizeof(INPUT));
-    }
-}
-
-DWORD WINAPI OpenChromePageWorker(LPVOID parameter) {
-    auto* request = static_cast<ChromePageRequest*>(parameter);
-    if (!request) {
-        return 0;
-    }
-
-    HWND hwnd = request->hwnd;
-    std::wstring url = std::move(request->url);
-    delete request;
-
-    if (!IsWindow(hwnd)) {
-        return 0;
-    }
-
-    Sleep(150);
-
-    SetForegroundWindow(hwnd);
-    Sleep(100);
-
-    // Open a fresh tab first.
-    SendKey(L'T', true);
-    Sleep(300);
-
-    SendKey(L'A', true);
-    Sleep(100);
-
-    // Type the URL.
-    TypeUnicode(url.c_str());
-    Sleep(150);
-
-    // Navigate.
-    SendKey(VK_RETURN);
-
-    return 0;
-}
-
 void OpenChromeUrl(HWND hwnd, const wchar_t* url) {
     if (!IsWindow(hwnd) || !url) {
         return;
     }
 
-    auto* request = new ChromePageRequest{hwnd, url};
-
-    if (!PostMessageW(
-            hwnd,
-            WM_OPEN_CHROME_PAGE,
-            0,
-            reinterpret_cast<LPARAM>(request))) {
-        Wh_Log(L"OpenChromeUrl: PostMessage failed, error=%lu",
+    wchar_t exePath[MAX_PATH]{};
+    if (!GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
+        Wh_Log(L"OpenChromeUrl: GetModuleFileNameW failed, error=%lu",
                GetLastError());
-        delete request;
+        return;
     }
+
+    std::wstring commandLine = L"\"";
+    commandLine += exePath;
+    commandLine += L"\" \"";
+    commandLine += url;
+    commandLine += L"\"";
+
+    std::vector<wchar_t> writableCommandLine(commandLine.begin(),
+                                              commandLine.end());
+    writableCommandLine.push_back(L'\0');
+
+    STARTUPINFOW startupInfo{};
+    startupInfo.cb = sizeof(startupInfo);
+    PROCESS_INFORMATION processInfo{};
+
+    if (!CreateProcessW(nullptr, writableCommandLine.data(), nullptr, nullptr,
+                        FALSE, 0, nullptr, nullptr, &startupInfo,
+                        &processInfo)) {
+        Wh_Log(L"OpenChromeUrl: CreateProcessW failed, error=%lu",
+               GetLastError());
+        return;
+    }
+
+    CloseHandle(processInfo.hThread);
+    CloseHandle(processInfo.hProcess);
 }
 
 void PaintMenuBarBottomLine(HWND hwnd) {
@@ -501,24 +457,37 @@ void PaintMenuBarBottomLine(HWND hwnd) {
 }
 
 void RedrawAllMenus() {
+    struct RedrawTarget {
+        HWND hwnd;
+        std::vector<HMENU> menus;
+    };
+
+    std::vector<RedrawTarget> targets;
     AcquireSRWLockShared(&g_stateLock);
+    targets.reserve(g_windows.size());
+    for (const auto& [hwnd, state] : g_windows) {
+        if (state.menu) {
+            targets.push_back({hwnd, state.allMenus});
+        }
+    }
+    ReleaseSRWLockShared(&g_stateLock);
+
     HBRUSH background = g_darkMode.load()
         ? g_darkBackgroundBrush
         : GetSysColorBrush(COLOR_MENU);
 
-    for (auto& [hwnd, state] : g_windows) {
-        for (HMENU menu : state.allMenus) {
+    for (const auto& target : targets) {
+        for (HMENU menu : target.menus) {
             SetMenuBackground(menu, background);
         }
 
-        if (IsWindow(hwnd)) {
-            DrawMenuBar(hwnd);
-            RedrawWindow(hwnd, nullptr, nullptr,
+        if (IsWindow(target.hwnd)) {
+            DrawMenuBar(target.hwnd);
+            RedrawWindow(target.hwnd, nullptr, nullptr,
                          RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW);
-            PaintMenuBarBottomLine(hwnd);
+            PaintMenuBarBottomLine(target.hwnd);
         }
     }
-    ReleaseSRWLockShared(&g_stateLock);
 }
 
 void RunCommand(HWND hwnd, UINT id) {
@@ -757,29 +726,6 @@ void MeasureOwnerItem(HWND hwnd, MEASUREITEMSTRUCT* mis) {
 LRESULT CALLBACK ChromeSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
                                     LPARAM lParam, DWORD_PTR) {
     switch (msg) {
-        case WM_OPEN_CHROME_PAGE: {
-            auto* request =
-                reinterpret_cast<ChromePageRequest*>(lParam);
-
-            HANDLE thread = CreateThread(
-                nullptr,
-                0,
-                OpenChromePageWorker,
-                request,
-                0,
-                nullptr);
-
-            if (thread) {
-                CloseHandle(thread);
-            } else {
-                Wh_Log(L"OpenChromePageWorker: CreateThread failed, error=%lu",
-                       GetLastError());
-                delete request;
-            }
-
-            return 0;
-        }
-
         case WM_COMMAND:
             if (HIWORD(wParam) == 0) {
                 UINT id = LOWORD(wParam);
@@ -814,15 +760,26 @@ LRESULT CALLBACK ChromeSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
         }
 
         case WM_NCDESTROY: {
+            WindowState state;
+            bool found = false;
+
             AcquireSRWLockExclusive(&g_stateLock);
             auto it = g_windows.find(hwnd);
             if (it != g_windows.end()) {
-                for (MenuItemData* data : it->second.itemData) {
-                    delete data;
-                }
+                state = std::move(it->second);
                 g_windows.erase(it);
+                found = true;
             }
             ReleaseSRWLockExclusive(&g_stateLock);
+
+            if (found) {
+                if (state.menu) {
+                    DestroyMenu(state.menu);
+                }
+                for (MenuItemData* data : state.itemData) {
+                    delete data;
+                }
+            }
             break;
         }
     }
@@ -830,79 +787,34 @@ LRESULT CALLBACK ChromeSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-DWORD WINAPI MenuWorkerThread(LPVOID);
-DWORD WINAPI AttachWatcherThread(LPVOID);
-
-void StartWorkerIfNeeded() {
-    bool expected = false;
-    if (!g_workerStarted.compare_exchange_strong(expected, true)) {
-        return;
-    }
-
-    g_stopWorker.store(false);
-    g_workerThread =
-        CreateThread(nullptr, 0, MenuWorkerThread, nullptr, 0, nullptr);
-
-    if (!g_workerThread) {
-        Wh_Log(L"Failed to create menu worker thread, error=%lu",
-               GetLastError());
-        g_workerStarted.store(false);
-    } else {
-        Wh_Log(L"Hotkey worker started in Chrome browser process %lu",
-               GetCurrentProcessId());
-    }
-}
-
-void StartAttachWatcherIfNeeded() {
-    bool expected = false;
-    if (!g_attachWatcherStarted.compare_exchange_strong(expected, true)) {
-        return;
-    }
-
-    g_stopAttachWatcher.store(false);
-    g_attachWatcherThread = CreateThread(
-        nullptr, 0, AttachWatcherThread, nullptr, 0, nullptr);
-
-    if (!g_attachWatcherThread) {
-        Wh_Log(L"Failed to create attach watcher, error=%lu", GetLastError());
-        g_attachWatcherStarted.store(false);
-    }
-}
-
 void AttachMenu(HWND hwnd) {
     if (!IsMainChromeWindow(hwnd)) {
         return;
     }
 
-    EnableNativeChromeFrame(hwnd);
+    AcquireSRWLockExclusive(&g_stateLock);
+    auto [it, inserted] = g_windows.emplace(hwnd, WindowState{});
+    if (!inserted) {
+        HMENU existingMenu = it->second.menu;
+        ReleaseSRWLockExclusive(&g_stateLock);
 
-    // Hotkeys start only after a real browser frame is found.
-    StartWorkerIfNeeded();
-
-    AcquireSRWLockShared(&g_stateLock);
-    auto existingIt = g_windows.find(hwnd);
-    bool alreadyAttached = existingIt != g_windows.end();
-    HMENU existingMenu =
-        alreadyAttached ? existingIt->second.menu : nullptr;
-    ReleaseSRWLockShared(&g_stateLock);
-
-    if (alreadyAttached) {
-        if (GetMenu(hwnd) != existingMenu) {
+        if (existingMenu && GetMenu(hwnd) != existingMenu) {
             SetMenu(hwnd, existingMenu);
             DrawMenuBar(hwnd);
-            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                         SWP_NOOWNERZORDER | SWP_NOACTIVATE |
-                         SWP_FRAMECHANGED);
             PaintMenuBarBottomLine(hwnd);
         }
         return;
     }
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    EnableNativeChromeFrame(hwnd);
 
     BuiltMenu built = BuildMenuBar();
     if (!built.bar) {
-        Wh_Log(L"BuildMenuBar failed for %p, error=%lu",
-               hwnd, GetLastError());
+        Wh_Log(L"BuildMenuBar failed for %p, error=%lu", hwnd, GetLastError());
+        AcquireSRWLockExclusive(&g_stateLock);
+        g_windows.erase(hwnd);
+        ReleaseSRWLockExclusive(&g_stateLock);
         return;
     }
 
@@ -914,12 +826,41 @@ void AttachMenu(HWND hwnd) {
         for (MenuItemData* data : built.itemData) {
             delete data;
         }
+        AcquireSRWLockExclusive(&g_stateLock);
+        g_windows.erase(hwnd);
+        ReleaseSRWLockExclusive(&g_stateLock);
         return;
     }
 
     if (!SetMenu(hwnd, built.bar)) {
-        Wh_Log(L"SetMenu failed for %p, error=%lu",
-               hwnd, GetLastError());
+        Wh_Log(L"SetMenu failed for %p, error=%lu", hwnd, GetLastError());
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ChromeSubclassProc);
+        DestroyMenu(built.bar);
+        for (MenuItemData* data : built.itemData) {
+            delete data;
+        }
+        AcquireSRWLockExclusive(&g_stateLock);
+        g_windows.erase(hwnd);
+        ReleaseSRWLockExclusive(&g_stateLock);
+        return;
+    }
+
+    DrawMenuBar(hwnd);
+    PaintMenuBarBottomLine(hwnd);
+
+    bool stored = false;
+    AcquireSRWLockExclusive(&g_stateLock);
+    auto stateIt = g_windows.find(hwnd);
+    if (stateIt != g_windows.end()) {
+        stateIt->second = WindowState{built.bar, std::move(built.allMenus),
+                                      std::move(built.itemData)};
+        stored = true;
+    }
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    if (!stored) {
+        SetMenu(hwnd, nullptr);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, ChromeSubclassProc);
         DestroyMenu(built.bar);
@@ -929,74 +870,12 @@ void AttachMenu(HWND hwnd) {
         return;
     }
 
-    DrawMenuBar(hwnd);
-    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                 SWP_NOOWNERZORDER | SWP_NOACTIVATE |
-                 SWP_FRAMECHANGED);
-    PaintMenuBarBottomLine(hwnd);
-
-    AcquireSRWLockExclusive(&g_stateLock);
-    g_windows.emplace(
-        hwnd,
-        WindowState{built.bar, std::move(built.allMenus),
-                    std::move(built.itemData)});
-    ReleaseSRWLockExclusive(&g_stateLock);
-
-    Wh_Log(L"Dark-capable classic menu attached to %p", hwnd);
+    Wh_Log(L"Classic menu attached to %p", hwnd);
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM) {
     AttachMenu(hwnd);
     return TRUE;
-}
-
-HWND GetForegroundMainChromeWindow() {
-    HWND foreground = GetForegroundWindow();
-    if (!foreground) {
-        return nullptr;
-    }
-
-    HWND root = GetAncestor(foreground, GA_ROOT);
-    return IsMainChromeWindow(root) ? root : nullptr;
-}
-
-LRESULT CALLBACK HotkeyWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
-                                  LPARAM lParam) {
-    switch (msg) {
-        case WM_HOTKEY: {
-            HWND chrome = GetForegroundMainChromeWindow();
-            if (!chrome) {
-                return 0;
-            }
-
-            switch (static_cast<int>(wParam)) {
-                case HOTKEY_EXTENSIONS:
-                    RunCommand(chrome, CMD_TOOLS_EXTENSIONS);
-                    break;
-                case HOTKEY_SETTINGS:
-                    RunCommand(chrome, CMD_TOOLS_SETTINGS);
-                    break;
-                case HOTKEY_ABOUT:
-                    RunCommand(chrome, CMD_HELP_ABOUT);
-                    break;
-            }
-            return 0;
-        }
-
-        case WM_TIMER:
-            if (wParam == ATTACH_TIMER_ID) {
-                EnumWindows(EnumWindowsProc, 0);
-                return 0;
-            }
-            break;
-
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
-    }
-
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -1006,9 +885,10 @@ HWND WINAPI CreateWindowExW_Hook(
     DWORD exStyle, LPCWSTR className, LPCWSTR windowName,
     DWORD style, int x, int y, int width, int height,
     HWND parent, HMENU menu, HINSTANCE instance, LPVOID param) {
-    // Titlebar For Everyone removes this at creation time because it makes
-    // the GDI/native non-client surface invisible and can't be changed later.
-    exStyle &= ~WS_EX_NOREDIRECTIONBITMAP;
+    if (g_manageNativeFrame.load()) {
+        // Required for the native non-client/menu surface to remain visible.
+        exStyle &= ~WS_EX_NOREDIRECTIONBITMAP;
+    }
 
     bool chromeBrowserFrame =
         className &&
@@ -1021,93 +901,11 @@ HWND WINAPI CreateWindowExW_Hook(
         height, parent, menu, instance, param);
 
     if (hwnd && chromeBrowserFrame) {
-        // Fast path. The dedicated watcher retries after Chrome finishes
-        // initializing if this immediate attachment is too early.
+        // New browser windows are attached as soon as Chrome creates them.
         AttachMenu(hwnd);
     }
 
     return hwnd;
-}
-
-DWORD WINAPI AttachWatcherThread(LPVOID) {
-    while (!g_stopAttachWatcher.load()) {
-        EnumWindows(EnumWindowsProc, 0);
-        Sleep(ATTACH_WATCHER_MS);
-    }
-
-    return 0;
-}
-
-DWORD WINAPI MenuWorkerThread(LPVOID) {
-    WNDCLASSEXW wc{};
-    wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = HotkeyWindowProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = kHotkeyWindowClass;
-
-    RegisterClassExW(&wc);
-
-    g_hotkeyWindow = CreateWindowExW(
-        0,
-        kHotkeyWindowClass,
-        L"Chrome Classic Menu Bar Hotkeys",
-        0,
-        0, 0, 0, 0,
-        HWND_MESSAGE,
-        nullptr,
-        wc.hInstance,
-        nullptr);
-
-    if (!g_hotkeyWindow) {
-        Wh_Log(L"Failed to create hotkey window, error=%lu",
-               GetLastError());
-        return 0;
-    }
-
-    if (!RegisterHotKey(
-            g_hotkeyWindow,
-            HOTKEY_EXTENSIONS,
-            MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
-            L'E')) {
-        Wh_Log(L"Failed to register Ctrl+Shift+E, error=%lu",
-               GetLastError());
-    }
-
-    if (!RegisterHotKey(
-            g_hotkeyWindow,
-            HOTKEY_SETTINGS,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
-            L'S')) {
-        Wh_Log(L"Failed to register Ctrl+Alt+S, error=%lu",
-               GetLastError());
-    }
-
-    if (!RegisterHotKey(
-            g_hotkeyWindow,
-            HOTKEY_ABOUT,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
-            L'A')) {
-        Wh_Log(L"Failed to register Ctrl+Alt+A, error=%lu",
-               GetLastError());
-    }
-
-    SetTimer(g_hotkeyWindow, ATTACH_TIMER_ID, ATTACH_RETRY_MS, nullptr);
-
-    MSG msg{};
-    while (!g_stopWorker.load() && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-
-    KillTimer(g_hotkeyWindow, ATTACH_TIMER_ID);
-    UnregisterHotKey(g_hotkeyWindow, HOTKEY_EXTENSIONS);
-    UnregisterHotKey(g_hotkeyWindow, HOTKEY_SETTINGS);
-    UnregisterHotKey(g_hotkeyWindow, HOTKEY_ABOUT);
-
-    DestroyWindow(g_hotkeyWindow);
-    g_hotkeyWindow = nullptr;
-    UnregisterClassW(kHotkeyWindowClass, wc.hInstance);
-    return 0;
 }
 
 using SetWindowThemeAttribute_t = decltype(&SetWindowThemeAttribute);
@@ -1118,7 +916,7 @@ HRESULT WINAPI SetWindowThemeAttribute_Hook(
     enum WINDOWTHEMEATTRIBUTETYPE attribute,
     PVOID value,
     DWORD valueSize) {
-    if (attribute == WTA_NONCLIENT) {
+    if (g_manageNativeFrame.load() && attribute == WTA_NONCLIENT) {
         // Match Titlebar For Everyone: keep native/DWM non-client controls
         // enabled by ignoring Chromium's attempt to disable them.
         return S_OK;
@@ -1132,16 +930,15 @@ HRESULT WINAPI SetWindowThemeAttribute_Hook(
 }
 
 void DetachAllMenus() {
+    std::unordered_map<HWND, WindowState> windows;
     AcquireSRWLockExclusive(&g_stateLock);
+    windows.swap(g_windows);
+    ReleaseSRWLockExclusive(&g_stateLock);
 
-    for (auto& [hwnd, state] : g_windows) {
+    for (auto& [hwnd, state] : windows) {
         if (IsWindow(hwnd)) {
             SetMenu(hwnd, nullptr);
             DrawMenuBar(hwnd);
-            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                         SWP_NOOWNERZORDER | SWP_NOACTIVATE |
-                         SWP_FRAMECHANGED);
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hwnd, ChromeSubclassProc);
         }
@@ -1149,20 +946,28 @@ void DetachAllMenus() {
         if (state.menu) {
             DestroyMenu(state.menu);
         }
-
         for (MenuItemData* data : state.itemData) {
             delete data;
         }
     }
+}
 
-    g_windows.clear();
-    ReleaseSRWLockExclusive(&g_stateLock);
+void LoadSettings() {
+    g_darkMode.store(Wh_GetIntSetting(L"darkMenu") != 0);
+    g_manageNativeFrame.store(
+        Wh_GetIntSetting(L"manageNativeFrame") != 0);
 }
 
 }  // namespace
 
 BOOL Wh_ModInit() {
+    if (wcsstr(GetCommandLineW(), L"--type=") != nullptr) {
+        Wh_Log(L"Auxiliary Chrome process detected, skipping");
+        return FALSE;
+    }
+
     Wh_Log(L"Initializing Chrome Classic Menu Bar v1.0.0");
+    LoadSettings();
 
     g_darkBackgroundBrush = CreateSolidBrush(kDarkBackground);
     g_darkHighlightBrush = CreateSolidBrush(kDarkHighlight);
@@ -1190,7 +995,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    StartAttachWatcherIfNeeded();
     EnumWindows(EnumWindowsProc, 0);
     return TRUE;
 }
@@ -1200,28 +1004,16 @@ void Wh_ModAfterInit() {
     EnumWindows(EnumWindowsProc, 0);
 }
 
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+    EnumWindows(EnumWindowsProc, 0);
+    RedrawAllMenus();
+}
+
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Chrome Classic Menu Bar v1.0.0");
 
-    g_stopWorker.store(true);
-    if (g_hotkeyWindow) {
-        PostMessageW(g_hotkeyWindow, WM_CLOSE, 0, 0);
-    }
-    if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 3000);
-        CloseHandle(g_workerThread);
-        g_workerThread = nullptr;
-    }
-    g_workerStarted.store(false);
-
-    g_stopAttachWatcher.store(true);
-    if (g_attachWatcherThread) {
-        WaitForSingleObject(g_attachWatcherThread, 3000);
-        CloseHandle(g_attachWatcherThread);
-        g_attachWatcherThread = nullptr;
-    }
-    g_attachWatcherStarted.store(false);
-
+    /* no worker threads: all callbacks are owned by Chrome window threads */
     DetachAllMenus();
 
     if (g_menuFont &&
