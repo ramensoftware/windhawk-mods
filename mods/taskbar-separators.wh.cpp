@@ -954,6 +954,8 @@ bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
                            FrameworkElement const& targetIcon,
                            FrameworkElement const& nextIcon,
                            TaskbarOrientation orientation,
+                           double taskbarWidth,
+                           double taskbarHeight,
                            double rectangleWidth,
                            double rectangleHeight,
                            DividerGeometry* geometry) {
@@ -1017,16 +1019,14 @@ bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
                                         : (targetCenter + nextCenter) / 2.0;
     }
 
-    double overlayWidth = overlayCanvas.ActualWidth();
-    double overlayHeight = overlayCanvas.ActualHeight();
-    if (!std::isfinite(overlayWidth) || overlayWidth <= 0 ||
-        !std::isfinite(overlayHeight) || overlayHeight <= 0) {
+    if (!std::isfinite(taskbarWidth) || taskbarWidth <= 0 ||
+        !std::isfinite(taskbarHeight) || taskbarHeight <= 0) {
         return false;
     }
 
     double crossOrigin = orientation == TaskbarOrientation::horizontal
-                             ? (overlayHeight - rectangleHeight) / 2.0
-                             : (overlayWidth - rectangleWidth) / 2.0;
+                             ? (taskbarHeight - rectangleHeight) / 2.0
+                             : (taskbarWidth - rectangleWidth) / 2.0;
     double left;
     double top;
     if (!TryCalculateDividerPosition(center, crossOrigin, orientation,
@@ -1110,12 +1110,15 @@ bool TryGetAnimatedDividerGeometry(Controls::Canvas const& overlayCanvas,
                                    FrameworkElement const& targetIcon,
                                    FrameworkElement const& nextIcon,
                                    TaskbarOrientation orientation,
+                                   double taskbarWidth,
+                                   double taskbarHeight,
                                    double rectangleWidth,
                                    double rectangleHeight,
                                    DividerGeometry* geometry) {
     if (!TryGetDividerGeometry(overlayCanvas, previousIcon, targetIcon,
-                               nextIcon, orientation, rectangleWidth,
-                               rectangleHeight, geometry)) {
+                               nextIcon, orientation, taskbarWidth,
+                               taskbarHeight, rectangleWidth, rectangleHeight,
+                               geometry)) {
         return false;
     }
 
@@ -1243,9 +1246,13 @@ bool RefreshCachedDividerGeometry(TrackedTaskbarState& taskbar,
             : animatedCrossAxis
                 ? TryGetAnimatedDividerGeometry(
                       overlayCanvas, previousIcon, targetIcon, nextIcon,
-                      cache.orientation, host.Width(), host.Height(), &geometry)
+                      cache.orientation, taskbar.reconciledRootWidth,
+                      taskbar.reconciledRootHeight, host.Width(), host.Height(),
+                      &geometry)
                 : TryGetDividerGeometry(overlayCanvas, previousIcon, targetIcon,
                                         nextIcon, cache.orientation,
+                                        taskbar.reconciledRootWidth,
+                                        taskbar.reconciledRootHeight,
                                         host.Width(), host.Height(), &geometry);
         if (!geometryValid) {
             return false;
@@ -2070,6 +2077,8 @@ void ConfigureStyleHost(Controls::Canvas const& host,
 
 bool TryGetTaskbarOrientation(OrientationSetting orientationSetting,
                               Controls::Canvas const& overlayCanvas,
+                              double taskbarWidth,
+                              double taskbarHeight,
                               std::vector<FrameworkElement> const& icons,
                               TaskbarOrientation* orientation) {
     if (!orientation) {
@@ -2108,15 +2117,14 @@ bool TryGetTaskbarOrientation(OrientationSetting orientationSetting,
     }
 
     if (!foundPair) {
-        double width = overlayCanvas.ActualWidth();
-        double height = overlayCanvas.ActualHeight();
-        if (!std::isfinite(width) || !std::isfinite(height) || width < 0 ||
-            height < 0) {
+        if (!std::isfinite(taskbarWidth) || !std::isfinite(taskbarHeight) ||
+            taskbarWidth < 0 || taskbarHeight < 0) {
             return false;
         }
 
-        *orientation = width >= height ? TaskbarOrientation::horizontal
-                                       : TaskbarOrientation::vertical;
+        *orientation = taskbarWidth >= taskbarHeight
+                           ? TaskbarOrientation::horizontal
+                           : TaskbarOrientation::vertical;
         return true;
     }
 
@@ -2677,8 +2685,9 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 TaskbarOrientation::horizontal;
             bool orientationValid =
                 overlayCanvas &&
-                TryGetTaskbarOrientation(settings.orientation, overlayCanvas,
-                                         appIcons, &taskbarOrientation);
+                TryGetTaskbarOrientation(
+                    settings.orientation, overlayCanvas, snapshot.rootWidth,
+                    snapshot.rootHeight, appIcons, &taskbarOrientation);
 
             std::vector<AnimationDividerCache> animationDividers;
             std::vector<ReconciledSeparatorVisual> reconciledSeparators;
@@ -2734,8 +2743,9 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                             : (nextIcon || previousIcon) &&
                                   TryGetDividerGeometry(
                                       overlayCanvas, previousIcon, targetIcon,
-                                      nextIcon, taskbarOrientation, hostWidth,
-                                      hostHeight, &geometry);
+                                      nextIcon, taskbarOrientation,
+                                      snapshot.rootWidth, snapshot.rootHeight,
+                                      hostWidth, hostHeight, &geometry);
                 }
                 if (!geometryValid) {
                     if (geometryExpectedFromCurrentButtons) {
