@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-05T16:44:55.000Z</updated>
+    <updated>2026-08-05T16:52:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Animations 1.1.5]]></title>
+        <id>https://windhawk.net/mods/windows-animations#fcf4752975ee79f29179fa66057e216ba4f52ff5</id>
+        <link href="https://windhawk.net/mods/windows-animations"/>
+        <updated>2026-08-05T16:52:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsanimations">Windows Animations</h1>
+<p>Welcome to <strong>Windows Animations</strong>, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. </p>
+<p>By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and seamless execution.</p>
+<h2 id="keyfeatures">✨ Key Features</h2>
+<ul>
+<li><p><strong>🚀 Smart Hybrid Engine:</strong> Intelligently seamlessly switches between lightning-fast GDI (for pixel-perfect destruction physics) and the native DWM Thumbnail API (to perfectly preserve Windows 11 rounded corners and drop shadows).</p></li>
+<li><p><strong>🎬 Cinematic Close Effects:</strong> Transform how you close applications with four physics-based animations:</p></li>
+<li><p><strong>Square Shatter:</strong> The window violently explodes outward into digital blocks before drifting into the void.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/shatter_close.gif" alt="Square Shatter Preview" /></p></li>
+<li><p><strong>Thanos Snap:</strong> A disintegration wave sweeps across the window, turning it into thousands of tiny dust particles that curve away into the wind.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/0e0508083d6c3108b2b3da8c5f0140f01cd21e37/close_preview.gif" alt="Thanos Snap Preview" /></p></li>
+<li><p><strong>Perlin Dissolve:</strong> The window organically melts and dissolves into thin air using a smooth Perlin noise map.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/perlin_close.gif" alt="Perlin Dissolve Preview" /></p></li>
+<li><p><strong>Cyber Glitch:</strong> The window fractures into irregular horizontal data strips that shudder, then tear left and right like a corrupted hologram.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/glitchy_close.gif" alt="Cyber Glitch Preview" /></p></li>
+<li><p><strong>🧞 Fluid Minimize & Restore:</strong> Choose between the classic Genie "suck into the taskbar" effect (derived from macos-minimize-animation by Abdullah Masood under MIT license) and <strong>Ink Splash</strong> — an organic blot reveal/retract.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif" alt="Genie Minimize Preview" /></p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif" alt="Ink Splash Preview" /></p></li>
+<li><p><strong>🔄 Soft Switch Animation:</strong> A pristine scale and fade-in animation triggered <em>exclusively</em> when actively switching windows via the Alt+Tab menu.</p></li>
+<li><p><strong>Before:</strong></p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_before.gif" alt="Alt Tab Switch Before" /></p></li>
+<li><p><strong>After:</strong></p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif" alt="Alt Tab Switch After" /></p></li>
+<li><p><strong>🛡️ Rock-Solid Stability:</strong> Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency. Tray apps only <em>hide</em> their window instead of closing it, so animating them is opt-in via the <strong>Treat hiding a window as closing it</strong> setting.</p></li>
+</ul>
+<h2 id="customizationsettings">⚙️ Customization &amp; Settings</h2>
+<p>You can deeply customize the feel and pacing of every animation via the Windhawk Settings tab:</p>
+<ul>
+<li><strong>Minimize/Restore Animation Style:</strong> Choose between Genie (taskbar suck) and Ink Splash (organic blot reveal/retract).</li>
+<li><strong>Close Animation Effect:</strong> Dropdown menu to switch between 'Square Shatter', 'Thanos Snap', 'Perlin Dissolve', and 'Cyber Glitch'.</li>
+<li><strong>Minimize/Restore duration (ms):</strong> Controls Genie speed directly; Ink Splash is paced slower from the same value. (Default: 360ms, clamp 200–1400)</li>
+<li><strong>Close animation duration (ms):</strong> Controls how long the dramatic close animation lasts. (Default: 900ms)</li>
+<li><strong>Switch animation duration (ms):</strong> Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)</li>
+<li><strong>Shatter block size (px):</strong> Determines the size of the dust/shatter particles. </li>
+<li><em>Performance Tip:</em> Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).</li>
+<li><strong>Treat hiding a window as closing it:</strong> Off by default. Enable it to get close animations for system tray apps that hide their window instead of closing it—at the cost of also animating splash screens and other windows an app hides on its own.</li>
+<li><strong>Toggles:</strong> Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.</li>
+</ul>]]></content>
+        <author>
+            <name>ReDrag</name>
+            <uri>https://github.com/redrag2105</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Gather Windows To Monitor 0.1.1]]></title>
         <id>https://windhawk.net/mods/gather-windows-to-monitor#b9bf0180c5febca2c52e1674c12adc914e424b96</id>
@@ -623,70 +671,6 @@ timedate.cpl).</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar audio device switcher 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-device-switcher#ca9e7ad4464eaf177d708b5646e0a22b264c879b</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-device-switcher"/>
-        <updated>2026-07-30T22:29:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaraudiodeviceswitcher">Taskbar audio device switcher</h1>
-<p>Adds one tray (notification area) icon per connected audio device. The icon of
-the device that is currently the default one is drawn normally, all the other
-ones are dimmed and grayed out. <strong>Left click</strong> on an icon makes that device the
-default playback/recording device, <strong>right click</strong> opens a menu with additional
-options.</p>
-<p>Each device uses its own icon, the one Windows shows in the sound settings, so
-headphones, speakers, HDMI output and a microphone are easy to tell apart.</p>
-<p><img src="https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/tray-icons.png" alt="Tray icons" /><br />
-<em>Two playback devices: the default one is drawn normally, the other one dimmed</em></p>
-<p><img src="https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/context-menu.png" alt="Right click menu" /><br />
-<em>The right click menu of a device</em></p>
-<h2 id="howthisdiffersfromtheotheraudioswitchingmods">How this differs from the other audio switching mods</h2>
-<p>The catalog already has several mods for switching audio devices, but the
-interaction model here is different: instead of one icon that you click through
-or scroll on, every device gets its own icon, with its own graphic, and you
-click the device you want directly. Nothing is cycled, and no list of devices
-has to be configured in advance.</p>
-<ul>
-<li><strong>Audioswap</strong> / <strong>Microswap</strong> — a single tray icon which cycles through a
-preconfigured list of up to 6 devices.</li>
-<li><strong>Mic Tray Control</strong> — one microphone icon, focused on mute and volume.</li>
-<li><strong>Audio scroll switcher</strong> — switches devices by scrolling over the taskbar,
-without adding any icon.</li>
-</ul>
-<h2 id="choosingwhichdevicesareshown">Choosing which devices are shown</h2>
-<p>The right click menu has a <strong>Shown devices</strong> submenu which lists every device,
-including the ones which are currently hidden, with a check mark next to the
-ones that have an icon. Clicking an entry shows or hides that device, and the
-choice is remembered across restarts. There is also <strong>Hide this icon</strong> for the
-device that was clicked, and <strong>Show all devices</strong> to undo everything.</p>
-<p>The icon of the last remaining device can't be hidden, otherwise there would be
-no menu left to bring the other ones back. For the same reason, if every device
-that is currently connected happens to be hidden — say the only visible one was
-unplugged — the hidden ones are shown anyway until that changes.</p>
-<h2 id="windows11note">Windows 11 note</h2>
-<p>New tray icons are hidden inside the overflow ("^") flyout by default. To make
-the audio device icons always visible, either drag them out of the flyout onto
-the taskbar, or go to
-<em>Settings → Personalization → Taskbar → Other system tray icons</em> and turn the
-<code>windhawk.exe</code> entries on.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod runs in a dedicated <code>windhawk.exe</code> process and doesn't hook anything,
-see <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Mods as
-tools</a>.</li>
-<li>Devices are refreshed automatically when a device is plugged in/out, enabled,
-disabled, or when the default device changes from somewhere else.</li>
-<li>Switching the default device uses the undocumented <code>IPolicyConfig</code> interface,
-the same one used by nircmd, SoundSwitch and similar tools.</li>
-<li>Middle click sets the device as the communications device only. With the
-default settings a left click already does that too, so middle click is only
-useful if the <em>Switch the communications device too</em> option is turned off.</li>
-</ul>]]></content>
-        <author>
-            <name>Maksim Chingin</name>
-            <uri>https://github.com/umnik1</uri>
         </author>
     </entry>
 </feed>

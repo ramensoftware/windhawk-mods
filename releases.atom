@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-05T12:58:14.000Z</updated>
+    <updated>2026-08-05T16:52:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Animations 1.1.5]]></title>
+        <id>https://windhawk.net/mods/windows-animations#fcf4752975ee79f29179fa66057e216ba4f52ff5</id>
+        <link href="https://windhawk.net/mods/windows-animations"/>
+        <updated>2026-08-05T16:52:26.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsanimations">Windows Animations</h1>
+<p>Welcome to <strong>Windows Animations</strong>, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. </p>
+<p>By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between stunning visual aesthetics and seamless execution.</p>
+<h2 id="keyfeatures">✨ Key Features</h2>
+<ul>
+<li><p><strong>🚀 Smart Hybrid Engine:</strong> Intelligently seamlessly switches between lightning-fast GDI (for pixel-perfect destruction physics) and the native DWM Thumbnail API (to perfectly preserve Windows 11 rounded corners and drop shadows).</p></li>
+<li><p><strong>🎬 Cinematic Close Effects:</strong> Transform how you close applications with four physics-based animations:</p></li>
+<li><p><strong>Square Shatter:</strong> The window violently explodes outward into digital blocks before drifting into the void.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/shatter_close.gif" alt="Square Shatter Preview" /></p></li>
+<li><p><strong>Thanos Snap:</strong> A disintegration wave sweeps across the window, turning it into thousands of tiny dust particles that curve away into the wind.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/0e0508083d6c3108b2b3da8c5f0140f01cd21e37/close_preview.gif" alt="Thanos Snap Preview" /></p></li>
+<li><p><strong>Perlin Dissolve:</strong> The window organically melts and dissolves into thin air using a smooth Perlin noise map.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/perlin_close.gif" alt="Perlin Dissolve Preview" /></p></li>
+<li><p><strong>Cyber Glitch:</strong> The window fractures into irregular horizontal data strips that shudder, then tear left and right like a corrupted hologram.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/glitchy_close.gif" alt="Cyber Glitch Preview" /></p></li>
+<li><p><strong>🧞 Fluid Minimize & Restore:</strong> Choose between the classic Genie "suck into the taskbar" effect (derived from macos-minimize-animation by Abdullah Masood under MIT license) and <strong>Ink Splash</strong> — an organic blot reveal/retract.</p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif" alt="Genie Minimize Preview" /></p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif" alt="Ink Splash Preview" /></p></li>
+<li><p><strong>🔄 Soft Switch Animation:</strong> A pristine scale and fade-in animation triggered <em>exclusively</em> when actively switching windows via the Alt+Tab menu.</p></li>
+<li><p><strong>Before:</strong></p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_before.gif" alt="Alt Tab Switch Before" /></p></li>
+<li><p><strong>After:</strong></p>
+<p><img src="https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif" alt="Alt Tab Switch After" /></p></li>
+<li><p><strong>🛡️ Rock-Solid Stability:</strong> Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency. Tray apps only <em>hide</em> their window instead of closing it, so animating them is opt-in via the <strong>Treat hiding a window as closing it</strong> setting.</p></li>
+</ul>
+<h2 id="customizationsettings">⚙️ Customization &amp; Settings</h2>
+<p>You can deeply customize the feel and pacing of every animation via the Windhawk Settings tab:</p>
+<ul>
+<li><strong>Minimize/Restore Animation Style:</strong> Choose between Genie (taskbar suck) and Ink Splash (organic blot reveal/retract).</li>
+<li><strong>Close Animation Effect:</strong> Dropdown menu to switch between 'Square Shatter', 'Thanos Snap', 'Perlin Dissolve', and 'Cyber Glitch'.</li>
+<li><strong>Minimize/Restore duration (ms):</strong> Controls Genie speed directly; Ink Splash is paced slower from the same value. (Default: 360ms, clamp 200–1400)</li>
+<li><strong>Close animation duration (ms):</strong> Controls how long the dramatic close animation lasts. (Default: 900ms)</li>
+<li><strong>Switch animation duration (ms):</strong> Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)</li>
+<li><strong>Shatter block size (px):</strong> Determines the size of the dust/shatter particles. </li>
+<li><em>Performance Tip:</em> Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).</li>
+<li><strong>Treat hiding a window as closing it:</strong> Off by default. Enable it to get close animations for system tray apps that hide their window instead of closing it—at the cost of also animating splash screens and other windows an app hides on its own.</li>
+<li><strong>Toggles:</strong> Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.</li>
+</ul>]]></content>
+        <author>
+            <name>ReDrag</name>
+            <uri>https://github.com/redrag2105</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CJK Spacer 0.1.27]]></title>
         <id>https://windhawk.net/mods/cjk-spacer#d021d038b75876dc7345cfe32cd13b079be697a7</id>
@@ -910,20 +958,6 @@ selection colors are never touched.</li>
         <author>
             <name>angel_lov</name>
             <uri>https://github.com/Twilight0Sparkle</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Copy Queue 1.0]]></title>
-        <id>https://windhawk.net/mods/copy-queue#889a5cd1a64c886634dd4db19e86334a59d7173a</id>
-        <link href="https://windhawk.net/mods/copy-queue"/>
-        <updated>2026-07-18T13:29:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="sequentialexplorercopyqueue">Sequential Explorer Copy Queue</h1>
-<p>Copy queues Windows Explorer copy operations and runs them one after another instead of in parallel. The next copy operation starts automatically when the previous one has finished.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://i.imgur.com/7Jmifwt.png" alt="Copy dialog" /></p>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
         </author>
     </entry>
 </feed>
