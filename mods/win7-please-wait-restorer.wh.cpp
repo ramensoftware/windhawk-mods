@@ -8,7 +8,7 @@
 // @include      rundll32.exe
 // @include      explorer.exe
 // @include      SystemSettings.exe
-// @compilerOptions -lgdi32 -lshcore
+// @compilerOptions -lgdi32 -lshcore -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -73,6 +73,7 @@ the DPI.
 #include <windhawk_utils.h>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <mutex>
 
 #ifdef _WIN64
@@ -102,35 +103,45 @@ struct Settings {
 static Settings g_settings = { 65, 500, 105, 115, L"", false };
 
 // ---------------------------------------------------------------------------
-// Sfondo in cache: catturato e desaturato UNA sola volta, con la STESSA
-// semantica di coordinate dell'originale (origine = ClientToScreen(0,0),
-// dimensione = client). Il paint usa sempre questa cache e non ricattura mai
-// lo schermo (che conterrebbe il box del frame precedente -> scie a cascata).
-// Nessuna conversione e nessun ridimensionamento: nessuno zoom a nessun DPI.
+// Cached backdrop: captured ONCE with the SAME coordinate semantics as the
+// original (origin = ClientToScreen(0,0), size = client). Paint always uses
+// this cache and never recaptures the screen (which would contain the previous
+// frame's box -> cascading trails). No coordinate space conversion and no
+// resizing: rendering is identical at every DPI with no zoom artifacts.
 //
-// Il percorso in cache e' usato a OGNI DPI, compreso il 100%: la resa a 100%
-// e' identica a quella verificata a 125%. La desaturazione e' progressiva,
-// come in Windows 7: parte dalla cattura vergine e aumenta nel tempo fino al
-// valore scelto (desaturationRampMs ne regola la durata). La cache registra
-// il DPI (e la finestra) con cui e' stata costruita: se il DPI cambia durante
-// l'esecuzione viene ricostruita subito, senza ambiguita'.
+// Desaturation is progressive, like in Windows 7: starts from the pristine
+// capture and increases over time to the chosen value (desaturationRampMs
+// controls the duration). The cache records the DPI and window it was built
+// for: if DPI changes during execution it is rebuilt immediately without
+// ambiguity.
 // ---------------------------------------------------------------------------
 struct BackdropCache {
-    HBITMAP    rawBitmap  = nullptr;   // cattura vergine, mai desaturata
-    HDC        rawDc      = nullptr;   // memory DC con rawBitmap selezionata
-    HBITMAP    workBitmap = nullptr;   // copia di lavoro per la desaturazione per-frame
-    HDC        workDc     = nullptr;   // memory DC con workBitmap selezionata
-    void*      workPixels = nullptr;   // pixel di workBitmap (DIB section 32 bpp)
-    RECT       size       = { 0, 0, 0, 0 };  // dimensione catturata (= client)
-    POINT      origin     = { 0, 0 };  // origine di cattura (ClientToScreen di 0,0)
-    UINT       dpi        = 0;         // DPI effettivo del monitor al momento della cattura
-    HWND       hwnd       = nullptr;   // finestra a cui appartiene la cattura
-    ULONGLONG  startTime  = 0;         // inizio della rampa di desaturazione
-    float      lastAmount = -1.0f;     // ultima desaturazione applicata a workBitmap
-    bool       valid      = false;
+    HBITMAP    rawBitmap   = nullptr;  // raw capture, never desaturated
+    HDC        rawDc       = nullptr;  // memory DC with rawBitmap selected
+    HBITMAP    grayBitmap  = nullptr;  // fully desaturated copy, built once at capture time
+    HDC        grayDc      = nullptr;  // memory DC with grayBitmap selected
+    HBITMAP    compBitmap  = nullptr;  // offscreen compositing buffer (backdrop + box)
+    HDC        compDc      = nullptr;  // memory DC with compBitmap selected
+    RECT       size        = { 0, 0, 0, 0 };  // captured size (= client)
+    POINT      origin      = { 0, 0 };  // capture origin (ClientToScreen of 0,0)
+    UINT       dpi         = 0;         // effective monitor DPI at capture time
+    HWND       hwnd        = nullptr;   // window the capture belongs to
+    ULONGLONG  startTime   = 0;         // start of the desaturation ramp
+    bool       valid       = false;
 };
 static BackdropCache g_backdropCache;
 static std::recursive_mutex g_cacheMutex;
+
+static void FreeBackdropCache() {
+    std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
+    if (g_backdropCache.rawDc) DeleteDC(g_backdropCache.rawDc);
+    if (g_backdropCache.rawBitmap) DeleteObject(g_backdropCache.rawBitmap);
+    if (g_backdropCache.grayDc) DeleteDC(g_backdropCache.grayDc);
+    if (g_backdropCache.grayBitmap) DeleteObject(g_backdropCache.grayBitmap);
+    if (g_backdropCache.compDc) DeleteDC(g_backdropCache.compDc);
+    if (g_backdropCache.compBitmap) DeleteObject(g_backdropCache.compBitmap);
+    g_backdropCache = {};
+}
 
 static void InvalidateBackdropCache() {
     std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
@@ -148,7 +159,7 @@ static void LoadSettings() {
             ? desaturationPercent
             : kDefaultDesaturationPercent
     );
-    // Se cambia la desaturazione, la cache dello sfondo va ricostruita.
+    // If desaturation changes, the backdrop cache needs rebuilding.
     if (g_settings.desaturationPercent.load() != oldDesaturationPercent)
         InvalidateBackdropCache();
     g_settings.desaturationRampMs.store(std::clamp(Wh_GetIntSetting(L"desaturationRampMs"), 0, 10000));
@@ -233,10 +244,10 @@ static UINT GetPrimaryMonitorDpi() {
     return dpiX;
 }
 
-// Origine della regione di schermo da catturare: ClientToScreen dell'angolo
-// client, esattamente come nel codice originale del mod. NESSUNA conversione
-// di spazio di coordinate e NESSUN ridimensionamento: la resa resta identica
-// all'originale a ogni DPI (nessuno zoom); la cache elimina le scie.
+// Origin of the screen region to capture: ClientToScreen of the client corner,
+// exactly as in the original mod code. No coordinate space conversion and no
+// resizing: rendering stays identical to the original at every DPI with no
+// zoom; the cache eliminates trails entirely.
 static bool GetBackdropOrigin(HWND hwnd, POINT* originOut) {
     POINT origin = { 0, 0 };
     if (!ClientToScreen(hwnd, &origin))
@@ -246,9 +257,9 @@ static bool GetBackdropOrigin(HWND hwnd, POINT* originOut) {
     return true;
 }
 
-// DPI effettivo del monitor su cui sta la finestra (96 = scala 100%).
-// Indipendente dal livello di DPI-awareness del processo: e' la vera
-// impostazione di scala dell'utente, usato per convalidare la cache.
+// Effective DPI of the monitor containing the window (96 = 100% scale).
+// Independent of the process DPI-awareness level: this is the user's true
+// scale setting, used to validate the cache.
 static UINT GetMonitorDpiForWindow(HWND hwnd) {
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     UINT dpiX = 96, dpiY = 96;
@@ -256,10 +267,10 @@ static UINT GetMonitorDpiForWindow(HWND hwnd) {
     return dpiX;
 }
 
-// DPI da usare per DISEGNARE nella finestra, coerente con il livello di
-// DPI-awareness del processo: per processi DPI-unaware restituisce 96 (le
-// unita' del DC sono logiche e il sistema scala il risultato), per processi
-// aware il DPI reale del monitor su cui sta la finestra.
+// DPI to use for DRAWING in the window, consistent with the process
+// DPI-awareness level: for DPI-unaware processes returns 96 (DC units are
+// logical and the system scales the result), for aware processes the real
+// DPI of the monitor containing the window.
 static UINT GetWindowDpi(HWND hwnd) {
     typedef UINT(WINAPI* GetDpiForWindow_t)(HWND);
     static const GetDpiForWindow_t getDpiForWindow =
@@ -274,17 +285,18 @@ static UINT GetWindowDpi(HWND hwnd) {
 
 
 
-// Cattura lo schermo nell'area client UNA volta sola, con la STESSA semantica
-// dell'originale (origine = ClientToScreen(0,0), dimensione = client): resa
-// identica all'originale a ogni DPI, senza zoom. La cattura resta VERGINE:
-// la desaturazione progressiva viene applicata per-frame sulla copia di
-// lavoro, partendo sempre da questa base pulita (niente scie a cascata).
+// Captures the screen in the client area ONCE, with the SAME semantics as the
+// original (origin = ClientToScreen(0,0), size = client): rendering identical
+// to the original at every DPI, without zoom. The capture stays PRISTINE:
+// progressive desaturation is applied per-frame via AlphaBlend between the raw
+// capture and the fully desaturated copy, always starting from this clean base
+// (no cascading trails).
 static bool BuildBackdropCache(HWND hwnd, const RECT& clientRect, UINT dpi) {
     POINT origin = {};
     if (!GetBackdropOrigin(hwnd, &origin))
         return false;
-    // Dimensione della cattura = dimensione del client DC, come nell'originale:
-    // il blit finale e' sempre 1:1 (nessuno zoom).
+    // Capture size = client DC size, as in the original: the final blit is
+    // always 1:1 (no zoom).
     const int width = clientRect.right - clientRect.left;
     const int height = clientRect.bottom - clientRect.top;
     if (width <= 0 || height <= 0)
@@ -292,15 +304,13 @@ static bool BuildBackdropCache(HWND hwnd, const RECT& clientRect, UINT dpi) {
 
     std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
 
-    // Libera la vecchia cache.
-    if (g_backdropCache.rawDc)
-        DeleteDC(g_backdropCache.rawDc);
-    if (g_backdropCache.rawBitmap)
-        DeleteObject(g_backdropCache.rawBitmap);
-    if (g_backdropCache.workDc)
-        DeleteDC(g_backdropCache.workDc);
-    if (g_backdropCache.workBitmap)
-        DeleteObject(g_backdropCache.workBitmap);
+    // Free the old cache.
+    if (g_backdropCache.rawDc) DeleteDC(g_backdropCache.rawDc);
+    if (g_backdropCache.rawBitmap) DeleteObject(g_backdropCache.rawBitmap);
+    if (g_backdropCache.grayDc) DeleteDC(g_backdropCache.grayDc);
+    if (g_backdropCache.grayBitmap) DeleteObject(g_backdropCache.grayBitmap);
+    if (g_backdropCache.compDc) DeleteDC(g_backdropCache.compDc);
+    if (g_backdropCache.compBitmap) DeleteObject(g_backdropCache.compBitmap);
     g_backdropCache = {};
 
     HDC screenDC = GetDC(nullptr);
@@ -317,35 +327,45 @@ static bool BuildBackdropCache(HWND hwnd, const RECT& clientRect, UINT dpi) {
 
     void* rawPixels = nullptr;
     HBITMAP rawDib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &rawPixels, nullptr, 0);
-    void* workPixels = nullptr;
-    HBITMAP workDib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &workPixels, nullptr, 0);
-    if (!rawDib || !rawPixels || !workDib || !workPixels) {
+    void* grayPixels = nullptr;
+    HBITMAP grayDib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &grayPixels, nullptr, 0);
+    void* compPixels = nullptr;
+    HBITMAP compDib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &compPixels, nullptr, 0);
+    if (!rawDib || !rawPixels || !grayDib || !grayPixels || !compDib || !compPixels) {
         if (rawDib) DeleteObject(rawDib);
-        if (workDib) DeleteObject(workDib);
+        if (grayDib) DeleteObject(grayDib);
+        if (compDib) DeleteObject(compDib);
         ReleaseDC(nullptr, screenDC);
         return false;
     }
 
     HDC rawDc = CreateCompatibleDC(screenDC);
-    HDC workDc = CreateCompatibleDC(screenDC);
-    if (!rawDc || !workDc) {
+    HDC grayDc = CreateCompatibleDC(screenDC);
+    HDC compDc = CreateCompatibleDC(screenDC);
+    if (!rawDc || !grayDc || !compDc) {
         if (rawDc) DeleteDC(rawDc);
-        if (workDc) DeleteDC(workDc);
+        if (grayDc) DeleteDC(grayDc);
+        if (compDc) DeleteDC(compDc);
         DeleteObject(rawDib);
-        DeleteObject(workDib);
+        DeleteObject(grayDib);
+        DeleteObject(compDib);
         ReleaseDC(nullptr, screenDC);
         return false;
     }
 
     HGDIOBJ oldRaw = SelectObject(rawDc, rawDib);
-    HGDIOBJ oldWork = SelectObject(workDc, workDib);
-    if (!oldRaw || oldRaw == HGDI_ERROR || !oldWork || oldWork == HGDI_ERROR) {
+    HGDIOBJ oldGray = SelectObject(grayDc, grayDib);
+    HGDIOBJ oldComp = SelectObject(compDc, compDib);
+    if (!oldRaw || oldRaw == HGDI_ERROR || !oldGray || oldGray == HGDI_ERROR || !oldComp || oldComp == HGDI_ERROR) {
         if (oldRaw && oldRaw != HGDI_ERROR) SelectObject(rawDc, oldRaw);
-        if (oldWork && oldWork != HGDI_ERROR) SelectObject(workDc, oldWork);
+        if (oldGray && oldGray != HGDI_ERROR) SelectObject(grayDc, oldGray);
+        if (oldComp && oldComp != HGDI_ERROR) SelectObject(compDc, oldComp);
         DeleteDC(rawDc);
-        DeleteDC(workDc);
+        DeleteDC(grayDc);
+        DeleteDC(compDc);
         DeleteObject(rawDib);
-        DeleteObject(workDib);
+        DeleteObject(grayDib);
+        DeleteObject(compDib);
         ReleaseDC(nullptr, screenDC);
         return false;
     }
@@ -355,94 +375,44 @@ static bool BuildBackdropCache(HWND hwnd, const RECT& clientRect, UINT dpi) {
     ReleaseDC(nullptr, screenDC);
     if (!captured) {
         SelectObject(rawDc, oldRaw);
-        SelectObject(workDc, oldWork);
+        SelectObject(grayDc, oldGray);
+        SelectObject(compDc, oldComp);
         DeleteDC(rawDc);
-        DeleteDC(workDc);
+        DeleteDC(grayDc);
+        DeleteDC(compDc);
         DeleteObject(rawDib);
-        DeleteObject(workDib);
+        DeleteObject(grayDib);
+        DeleteObject(compDib);
         return false;
     }
 
-    // Copia iniziale: la copia di lavoro parte dalla cattura vergine.
-    BitBlt(workDc, 0, 0, width, height, rawDc, 0, 0, SRCCOPY);
+    // Copy raw to gray and fully desaturate it once.
+    BitBlt(grayDc, 0, 0, width, height, rawDc, 0, 0, SRCCOPY);
+    if (grayPixels) {
+        auto* pixel = static_cast<BYTE*>(grayPixels);
+        const size_t count = (size_t)width * (size_t)height;
+        for (size_t i = 0; i < count; ++i) {
+            BYTE* color = pixel + i * 4;
+            const float luminance = color[2] * 0.299f + color[1] * 0.587f + color[0] * 0.114f;
+            color[0] = color[1] = color[2] = static_cast<BYTE>(luminance);
+        }
+    }
 
     g_backdropCache.rawBitmap = rawDib;
     g_backdropCache.rawDc = rawDc;
-    g_backdropCache.workBitmap = workDib;
-    g_backdropCache.workDc = workDc;
-    g_backdropCache.workPixels = workPixels;
+    g_backdropCache.grayBitmap = grayDib;
+    g_backdropCache.grayDc = grayDc;
+    g_backdropCache.compBitmap = compDib;
+    g_backdropCache.compDc = compDc;
     g_backdropCache.size = { 0, 0, width, height };
     g_backdropCache.origin = origin;
     g_backdropCache.dpi = dpi;
     g_backdropCache.hwnd = hwnd;
     g_backdropCache.startTime = GetTickCount64();
-    g_backdropCache.lastAmount = -1.0f;
     g_backdropCache.valid = true;
     return true;
 }
 
-// Disegna lo sfondo sull'HDC partendo SEMPRE dalla cattura vergine, con
-// desaturazione progressiva come in Windows 7: all'inizio il colore e'
-// pieno, poi sfuma verso il valore scelto nell'arco di desaturationRampMs
-// millisecondi (0 = applicazione istantanea). La cache ha le stesse
-// dimensioni del client DC, quindi il blit e' SEMPRE 1:1: niente
-// StretchBlt, niente zoom.
-static bool PaintCachedBackdrop(HDC hdc, const RECT& clientRect) {
-    std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
-    if (!g_backdropCache.valid || !g_backdropCache.rawDc || !g_backdropCache.workDc)
-        return false;
-
-    const int width = clientRect.right - clientRect.left;
-    const int height = clientRect.bottom - clientRect.top;
-    if (width <= 0 || height <= 0)
-        return false;
-
-    // Quanto desaturare in QUESTO frame, in base al tempo trascorso.
-    const float target = g_settings.desaturationPercent.load() / 100.0f;
-    float amount = 0.0f;
-    if (target > 0.0f) {
-        const int rampMs = g_settings.desaturationRampMs.load();
-        const ULONGLONG elapsed = GetTickCount64() - g_backdropCache.startTime;
-        if (rampMs <= 0 || elapsed >= (ULONGLONG)rampMs) {
-            amount = target;  // rampa completata (o disabilitata): valore finale
-        } else {
-            double t = (double)elapsed / (double)rampMs;
-            t = t * t * (3.0 - 2.0 * t);  // smoothstep, come la transizione di Win7
-            amount = target * (float)t;
-        }
-    }
-
-    // Riallaccia l'animazione: finche' la rampa non e' completa, forza un
-    // nuovo paint (senza, con pochi paint la progressivita' si perderebbe).
-    if (amount < target && g_backdropCache.hwnd)
-        InvalidateRect(g_backdropCache.hwnd, nullptr, FALSE);
-
-    // Se la desaturazione non e' cambiata, la copia di lavoro e' gia' pronta:
-    // si evita la copia e il passaggio per-pixel inutili.
-    if (amount != g_backdropCache.lastAmount) {
-        // Riparte SEMPRE dalla cattura vergine: mai dallo schermo (che
-        // conterrebbe il box del frame precedente -> scie a cascata).
-        BitBlt(g_backdropCache.workDc, 0, 0, width, height,
-               g_backdropCache.rawDc, 0, 0, SRCCOPY);
-
-        // Desaturazione in place (BI_RGB 32-bit: byte B, G, R, riservato).
-        if (amount > 0.0f && g_backdropCache.workPixels) {
-            auto* pixel = static_cast<BYTE*>(g_backdropCache.workPixels);
-            const size_t count = (size_t)width * (size_t)height;
-            for (size_t i = 0; i < count; ++i) {
-                BYTE* color = pixel + i * 4;
-                const float luminance = color[2] * 0.299f + color[1] * 0.587f + color[0] * 0.114f;
-                color[0] = static_cast<BYTE>(color[0] + (luminance - color[0]) * amount);
-                color[1] = static_cast<BYTE>(color[1] + (luminance - color[1]) * amount);
-                color[2] = static_cast<BYTE>(color[2] + (luminance - color[2]) * amount);
-            }
-        }
-        g_backdropCache.lastAmount = amount;
-    }
-
-    return BitBlt(hdc, clientRect.left, clientRect.top, width, height,
-                  g_backdropCache.workDc, 0, 0, SRCCOPY);
-}
 
 static RECT GetBoxSurfaceArea(const RECT& clientArea) {
     const int width = clientArea.right - clientArea.left;
@@ -469,8 +439,8 @@ static bool DrawClassicPleaseWaitBox(HWND hwnd, HDC hdc) {
     if (!hwnd || !GetClientRect(hwnd, &clientArea)) return false;
     if (clientArea.right <= clientArea.left || clientArea.bottom <= clientArea.top) return false;
 
-    // Lo sfondo in cache e' gia' stato disegnato dal hook a OGNI DPI: niente
-    // ricattura qui (includerebbe il box del frame precedente -> scie).
+    // The cached backdrop is already drawn by the hook at EVERY DPI: no
+    // recapture here (which would include the previous frame's box -> trails).
     const RECT boxArea = GetBoxSurfaceArea(clientArea);
     const UINT dpi = GetWindowDpi(hwnd);
     const int boxWidth = ScaleBoxForDpi(210, dpi);
@@ -559,20 +529,30 @@ static void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
         return;
     }
 
-    // DPI effettivo del monitor (96 = scala 100%, 120 = 125%, ...). A OGNI
-    // DPI si usa lo stesso percorso: sfondo in cache con cattura unica per
-    // evitare le scie. Il comportamento a 100% e' identico a quello a 125%.
     const UINT monitorDpi = GetMonitorDpiForWindow(hwnd);
     POINT origin = {};
     const bool haveOrigin = GetBackdropOrigin(hwnd, &origin);
     const int clientWidth = clientRect.right - clientRect.left;
     const int clientHeight = clientRect.bottom - clientRect.top;
 
+    // Calculate desaturation amount once, before the lock
+    const float target = g_settings.desaturationPercent.load() / 100.0f;
+    float amount = 0.0f;
+    if (target > 0.0f) {
+        const int rampMs = g_settings.desaturationRampMs.load();
+        const ULONGLONG elapsed = GetTickCount64() - g_backdropCache.startTime;
+        if (rampMs <= 0 || elapsed >= (ULONGLONG)rampMs) {
+            amount = target;
+        } else {
+            double t = (double)elapsed / (double)rampMs;
+            t = t * t * (3.0 - 2.0 * t);
+            amount = target * (float)t;
+        }
+    }
+
     {
         std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
 
-        // Ricrea la cache se non esiste o se cambia finestra, DPI, dimensione
-        // o posizione: un cambio DPI a runtime invalida subito la cache.
         if (!g_backdropCache.valid ||
             !haveOrigin ||
             g_backdropCache.hwnd != hwnd ||
@@ -585,16 +565,36 @@ static void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
                 BuildBackdropCache(hwnd, clientRect, monitorDpi);
         }
 
-        // Sfondo: SEMPRE dalla cache, mai dallo schermo (che conterrebbe il
-        // box del frame precedente -> scie a cascata).
-        if (!g_backdropCache.valid || !PaintCachedBackdrop(hdc, clientRect)) {
+        if (!g_backdropCache.valid) {
             if (g_originalOnPaint) g_originalOnPaint(window, hdc);
             return;
         }
-    }
 
-    // Box sopra lo sfondo, senza ricattura.
-    DrawClassicPleaseWaitBox(hwnd, hdc);
+        // Compose everything into the offscreen buffer first
+        if (g_backdropCache.compDc) {
+            // Draw backdrop into compDc
+            BitBlt(g_backdropCache.compDc, 0, 0, clientWidth, clientHeight,
+                   g_backdropCache.rawDc, 0, 0, SRCCOPY);
+            
+            // Apply desaturation
+            if (amount > 0.0f) {
+                BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)lround(amount * 255.0f), 0 };
+                AlphaBlend(g_backdropCache.compDc, 0, 0, clientWidth, clientHeight,
+                           g_backdropCache.grayDc, 0, 0, clientWidth, clientHeight, bf);
+            }
+            
+            // Draw the box on top in the composition buffer
+            DrawClassicPleaseWaitBox(hwnd, g_backdropCache.compDc);
+            
+            // Single blit to screen - no flash
+            BitBlt(hdc, clientRect.left, clientRect.top, clientWidth, clientHeight,
+                   g_backdropCache.compDc, 0, 0, SRCCOPY);
+        }
+        
+        // Keep animation alive
+        if (amount < target && g_backdropCache.hwnd)
+            InvalidateRect(g_backdropCache.hwnd, nullptr, FALSE);
+    }
 }
 
 static bool HookThemeUiSymbols(HMODULE themeUi) {
@@ -667,4 +667,5 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+    FreeBackdropCache();
 }
