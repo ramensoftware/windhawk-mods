@@ -113,6 +113,7 @@ LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE hMod = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (hMod && lpLibFileName && (wcsstr(lpLibFileName, L"Taskbar.View.dll") || wcsstr(lpLibFileName, L"ExplorerExtensions.dll"))) {
+        // Taskbar.View.dll
         WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
             {
                 { LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(bool))" },
@@ -121,15 +122,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
                 true 
             }
         };
-// Taskbar.View.dll
-        WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
-            {
-                { LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(bool))" },
-                &UpdateIsExpanded_Original,
-                UpdateIsExpanded_Hook,
-                true 
-            }
-        };
+        WindhawkUtils::HookSymbols(hMod, taskbar_view_dll_hooks, ARRAYSIZE(taskbar_view_dll_hooks));
     }
     return hMod;
 }
