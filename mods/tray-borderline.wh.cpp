@@ -30,16 +30,16 @@ All credits goes to James Lin and Husam Abdulraheem.
 
 // ==WindhawkModSettings==
 /*
-- app_path: borderline.exe
+- app_path: ""
   $name: Borderline.exe path
   $description: Full path to the executable to launch - Borderline.exe
 - app_options: ""
   $name: Command line options
   $description: Optional arguments passed to the application. Leave empty for none.
-- icon_file: C:\Windows\System32\shell32.dll
+- icon_file: shell32.dll
   $name: Icon File (DLL or EXE)
   $description: Full path to Icon resource (DLL or EXE)
-- icon_index: 132
+- icon_index: 77
   $name: Icon Index
   $description: Icon Index refers to the icon resource index within the DLL/EXE.
 - tooltip_text: Recover all the lost windows
