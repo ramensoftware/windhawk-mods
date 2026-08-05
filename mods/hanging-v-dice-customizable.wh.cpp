@@ -2,15 +2,17 @@
 // @id            hanging-v-dice-customizable
 // @name          Customizable Dual Hanging Dice
 // @description   Hanging dice with physical reactions to window animations and auto-hide in fullscreen mode.
-// @version       1.2.1
+// @version       1.3.0
 // @author        Jaali
 // @github        https://github.com/alivca
-// @include       explorer.exe
+// @include       windhawk.exe
 // @compilerOptions -lgdi32 -lgdiplus -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
+
 /*
+
 ## Customizable Dual Hanging Dice
 
 Add interactive hanging dice to your desktop with dynamic physics. They swing and react in real-time when you move, minimize, maximize, or restore windows, and automatically hide during fullscreen games or apps to stay out of your way.
@@ -18,43 +20,39 @@ Add interactive hanging dice to your desktop with dynamic physics. They swing an
 ![Preview](https://raw.githubusercontent.com/alivca/gifs/main/cubic.gif)
 
 ## ⚠️ Game Compatibility Note:
+
 The dice overlay renders via Windows DWM. In some games (especially those running on DirectX 12 in Exclusive Fullscreen mode), the game screen may cover the overlay.
 
 Fix: Change the game's display settings to Borderless Windowed (or Windowed Fullscreen).
+
 */
+
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - position: center
   $name: Position on Screen
-  $description: "Choose where on the screen the hanging dice should be displayed."
   $options:
     - left: Left
     - center: Center
     - right: Right
 - diceSize: 50
   $name: Dice Size (Pixels)
-  $description: "Sets the base size of the dice in pixels (range: 20 to 120)."
 - diceStyle: classic
   $name: Visual Style
-  $description: "Color scheme and visual appearance of the dice and strings."
   $options:
     - classic: Classic (Red + Black)
     - neon: Neon (Cyan + Pink)
     - mono: Monochrome (White + Gray)
 - randomOnClick: false
   $name: Random Value on Click
-  $description: "If enabled, clicking a die changes its face to a random number from 1 to 6."
 - leftDiceValue: 5
   $name: Left Die Fixed Value
-  $description: "Fixed dot value (1 to 6) used when random on click is disabled."
 - rightDiceValue: 3
   $name: Right Die Fixed Value
-  $description: "Fixed dot value (1 to 6) used when random on click is disabled."
 - hideOnFullscreen: false
-  $name: Hide in Fullscreen Mode (F11 / Fullscreen)
-  $description: "Automatically hides the overlay when the active application enters fullscreen mode."
+  $name: Hide in Fullscreen Mode
 */
 // ==/WindhawkModSettings==
 
@@ -64,26 +62,21 @@ Fix: Change the game's display settings to Borderless Windowed (or Windowed Full
 #include <string>
 #include <stdlib.h>
 #include <time.h>
-#include <atomic>
 #include <numbers>
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-#ifndef WINEVENT_OUTOFPROCESS
-#define WINEVENT_OUTOFPROCESS 0x0003
-#endif
-
 using namespace Gdiplus;
 
 struct Settings {
     std::wstring position = L"center";
-    int diceSize = 40;
+    int diceSize = 50;
     std::wstring diceStyle = L"classic";
-    bool randomOnClick = true;
+    bool randomOnClick = false;
     int leftDiceValue = 5;
     int rightDiceValue = 3;
-    bool hideOnFullscreen = true;
+    bool hideOnFullscreen = false;
 } g_settings;
 
 int g_winW = 350;
@@ -102,19 +95,25 @@ struct Dice {
 };
 
 PointF g_anchor(175.0f, 0.0f);
-Dice g_d1 = { 130.0f, 110.0f, 0.0f, 0.0f, 40.0f, 110.0f, false, 5, {0, 0}, 0.0f, 0.0f };
-Dice g_d2 = { 220.0f, 110.0f, 0.0f, 0.0f, 40.0f, 110.0f, false, 3, {0, 0}, 0.0f, 0.0f };
+Dice g_d1 = { 130.0f, 110.0f, 0.0f, 0.0f, 50.0f, 140.0f, false, 5, {0, 0}, 0.0f, 0.0f };
+Dice g_d2 = { 220.0f, 110.0f, 0.0f, 0.0f, 50.0f, 140.0f, false, 3, {0, 0}, 0.0f, 0.0f };
 
 HWND g_hWnd = NULL;
-HANDLE g_hThread = NULL;
+HANDLE g_hUIThread = NULL;
+DWORD g_uiThreadId = 0;
+HANDLE g_hSingleInstanceMutex = NULL;
+
 HWINEVENTHOOK g_hEventHookMin = NULL;
 HWINEVENTHOOK g_hEventHookUnmin = NULL;
 HWINEVENTHOOK g_hEventHookMax = NULL;
 HWINEVENTHOOK g_hEventHookFg = NULL;
-std::atomic<bool> g_running{ false };
+
 ULONG_PTR g_gdiToken = 0;
 bool g_isHiddenByFullscreen = false;
 UINT g_wmReloadSettings = 0;
+bool g_timerActive = false;
+int g_idleFrames = 0;
+DWORD g_lastFullscreenCheck = 0;
 
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 
@@ -135,8 +134,15 @@ bool IsWindowFullscreen(HWND hwnd) {
         }
     }
 
-    RECT appBounds;
-    if (!GetWindowRect(hwnd, &appBounds)) return false;
+    RECT clientRect;
+    if (!GetClientRect(hwnd, &clientRect)) return false;
+
+    POINT ptTopLeft = { clientRect.left, clientRect.top };
+    POINT ptBottomRight = { clientRect.right, clientRect.bottom };
+    ClientToScreen(hwnd, &ptTopLeft);
+    ClientToScreen(hwnd, &ptBottomRight);
+
+    RECT appBounds = { ptTopLeft.x, ptTopLeft.y, ptBottomRight.x, ptBottomRight.y };
 
     HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(MONITORINFO) };
@@ -148,37 +154,41 @@ bool IsWindowFullscreen(HWND hwnd) {
     int appWidth = appBounds.right - appBounds.left;
     int appHeight = appBounds.bottom - appBounds.top;
 
-    bool isSizeMatching = (abs(appWidth - monWidth) <= 4) && (abs(appHeight - monHeight) <= 4);
-    bool isPositionMatching = (abs(appBounds.left - mi.rcMonitor.left) <= 4) && (abs(appBounds.top - mi.rcMonitor.top) <= 4);
+    bool isSizeMatch = (abs(appWidth - monWidth) <= 8) && (abs(appHeight - monHeight) <= 8) &&
+                       (abs(appBounds.left - mi.rcMonitor.left) <= 8) && (abs(appBounds.top - mi.rcMonitor.top) <= 8);
 
-    return (isSizeMatching && isPositionMatching);
+    if (!isSizeMatch) return false;
+
+    LONG style = GetWindowLong(hwnd, GWL_STYLE);
+    if ((style & WS_CAPTION) == WS_CAPTION && !(style & WS_POPUP)) {
+        return false;
+    }
+
+    return true;
 }
 
 void CheckFullscreenState() {
-    if (!g_hWnd) return;
+    if (!g_hWnd || !g_settings.hideOnFullscreen) return;
 
-    if (!g_settings.hideOnFullscreen) {
-        if (g_isHiddenByFullscreen) {
-            ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
-            SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            g_isHiddenByFullscreen = false;
-
-        }
-        return;
-    }
+    DWORD now = GetTickCount();
+    if (now - g_lastFullscreenCheck < 150) return;
+    g_lastFullscreenCheck = now;
 
     HWND hForeground = GetForegroundWindow();
-    if (hForeground && hForeground != g_hWnd) {
-        bool fs = IsWindowFullscreen(hForeground);
-        if (fs && !g_isHiddenByFullscreen) {
+    bool shouldHide = hForeground && hForeground != g_hWnd && IsWindowFullscreen(hForeground);
 
+    if (shouldHide != g_isHiddenByFullscreen) {
+        g_isHiddenByFullscreen = shouldHide;
+        if (shouldHide) {
             ShowWindow(g_hWnd, SW_HIDE);
-            g_isHiddenByFullscreen = true;
-        } else if (!fs && g_isHiddenByFullscreen) {
+        } else {
             ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
             SetWindowPos(g_hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            g_isHiddenByFullscreen = false;
-            
+            if (!g_timerActive) {
+                SetTimer(g_hWnd, 1, 16, NULL);
+                g_timerActive = true;
+                g_idleFrames = 0;
+            }
         }
     }
 }
@@ -188,7 +198,7 @@ void UpdateForegroundHookState() {
         if (!g_hEventHookFg) {
             g_hEventHookFg = SetWinEventHook(
                 EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
-                NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
+                NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT
             );
         }
     } else {
@@ -255,7 +265,7 @@ void ApplySettingsInternal() {
             posX = screenW - g_winW - 10;
         }
 
-        SetWindowPos(g_hWnd, HWND_TOPMOST, posX, 10, g_winW, g_winH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetWindowPos(g_hWnd, HWND_TOPMOST, posX, 10, g_winW, g_winH, SWP_NOACTIVATE);
         UpdateForegroundHookState();
         CheckFullscreenState();
     }
@@ -264,52 +274,30 @@ void ApplySettingsInternal() {
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
     if (!hwnd || hwnd == g_hWnd || idObject != OBJID_WINDOW) return;
 
-    if (event == EVENT_SYSTEM_MINIMIZESTART) {
-        g_d1.vy += 7.5f;
+    if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND || event == EVENT_SYSTEM_MOVESIZEEND) {
+        g_d1.vy += (event == EVENT_SYSTEM_MINIMIZESTART) ? 7.5f : -8.0f;
         g_d1.vx += (rand() % 2 == 0 ? 3.5f : -3.5f);
 
-        g_d2.vy += 9.0f;
+        g_d2.vy += (event == EVENT_SYSTEM_MINIMIZESTART) ? 9.0f : -9.5f;
         g_d2.vx += (rand() % 2 == 0 ? 4.5f : -4.5f);
-    }
-    else if (event == EVENT_SYSTEM_MINIMIZEEND) {
-        g_d1.vy -= 8.0f;
-        g_d1.vx += (rand() % 2 == 0 ? 4.0f : -4.0f);
 
-        g_d2.vy -= 9.5f;
-        g_d2.vx += (rand() % 2 == 0 ? 5.0f : -5.0f);
-    }
-    else if (event == EVENT_SYSTEM_MOVESIZEEND) {
-        if (IsZoomed(hwnd)) {
-            g_d1.vy -= 6.0f;
-            g_d1.vx += (rand() % 2 == 0 ? 3.0f : -3.0f);
-
-            g_d2.vy -= 7.0f;
-            g_d2.vx += (rand() % 2 == 0 ? 3.5f : -3.5f);
+        if (!g_timerActive && g_hWnd) {
+            SetTimer(g_hWnd, 1, 16, NULL);
+            g_timerActive = true;
+            g_idleFrames = 0;
         }
     }
-
-    CheckFullscreenState();
+    else if (event == EVENT_SYSTEM_FOREGROUND) {
+        CheckFullscreenState();
+    }
 }
 
 void ConstrainToBounds(Dice& d) {
     float half = d.size / 2.0f;
-
-    if (d.x - half < 0.0f) {
-        d.x = half;
-        if (d.vx < 0) d.vx *= -0.3f;
-    }
-    if (d.x + half > (float)g_winW) {
-        d.x = (float)g_winW - half;
-        if (d.vx > 0) d.vx *= -0.3f;
-    }
-    if (d.y - half < 0.0f) {
-        d.y = half;
-        if (d.vy < 0) d.vy *= -0.3f;
-    }
-    if (d.y + half > (float)g_winH) {
-        d.y = (float)g_winH - half;
-        if (d.vy > 0) d.vy *= -0.3f;
-    }
+    if (d.x - half < 0.0f) { d.x = half; if (d.vx < 0) d.vx *= -0.3f; }
+    if (d.x + half > (float)g_winW) { d.x = (float)g_winW - half; if (d.vx > 0) d.vx *= -0.3f; }
+    if (d.y - half < 0.0f) { d.y = half; if (d.vy < 0) d.vy *= -0.3f; }
+    if (d.y + half > (float)g_winH) { d.y = (float)g_winH - half; if (d.vy > 0) d.vy *= -0.3f; }
 }
 
 void UpdateDicePhysics(Dice& d) {
@@ -340,17 +328,13 @@ void UpdateDicePhysics(Dice& d) {
 
             if (currentDist > d.stringLen) {
                 float stretch = currentDist - d.stringLen;
-                float springK = 0.18f;
-
-                d.vx -= nx * stretch * springK;
-                d.vy -= ny * stretch * springK;
+                d.vx -= nx * stretch * 0.18f;
+                d.vy -= ny * stretch * 0.18f;
             }
         }
-
         d.vx *= 0.982f;
         d.vy *= 0.982f;
     }
-
     ConstrainToBounds(d);
 }
 
@@ -365,19 +349,10 @@ void ResolveCollision(Dice& d1, Dice& d2) {
         float ny = dy / dist;
         float overlap = minDist - dist;
 
-        if (!d1.isDragged) {
-            d1.x -= nx * overlap * 0.5f;
-            d1.y -= ny * overlap * 0.5f;
-        }
-        if (!d2.isDragged) {
-            d2.x += nx * overlap * 0.5f;
-            d2.y += ny * overlap * 0.5f;
-        }
+        if (!d1.isDragged) { d1.x -= nx * overlap * 0.5f; d1.y -= ny * overlap * 0.5f; }
+        if (!d2.isDragged) { d2.x += nx * overlap * 0.5f; d2.y += ny * overlap * 0.5f; }
 
-        float kx = d1.vx - d2.vx;
-        float ky = d1.vy - d2.vy;
-        float p = (nx * kx + ny * ky);
-
+        float p = (nx * (d1.vx - d2.vx) + ny * (d1.vy - d2.vy));
         if (p > 0) {
             float restitution = 0.75f;
             d1.vx -= p * nx * restitution;
@@ -396,8 +371,8 @@ bool PhysicsStep() {
     UpdateDicePhysics(g_d2);
     ResolveCollision(g_d1, g_d2);
 
-    bool moved1 = (fabsf(g_d1.vx) > 0.01f || fabsf(g_d1.vy) > 0.01f || fabsf(g_d1.x - prev1X) > 0.01f || fabsf(g_d1.y - prev1Y) > 0.01f);
-    bool moved2 = (fabsf(g_d2.vx) > 0.01f || fabsf(g_d2.vy) > 0.01f || fabsf(g_d2.x - prev2X) > 0.01f || fabsf(g_d2.y - prev2Y) > 0.01f);
+    bool moved1 = (fabsf(g_d1.x - prev1X) > 0.01f || fabsf(g_d1.y - prev1Y) > 0.01f);
+    bool moved2 = (fabsf(g_d2.x - prev2X) > 0.01f || fabsf(g_d2.y - prev2Y) > 0.01f);
 
     return moved1 || moved2 || g_d1.isDragged || g_d2.isDragged;
 }
@@ -406,18 +381,14 @@ void DrawScene(Graphics& gr) {
     gr.SetSmoothingMode(SmoothingModeAntiAlias);
     gr.Clear(Color(0, 0, 0, 0));
 
-    Color stringColor(255, 220, 220, 220);
-    if (g_settings.diceStyle == L"neon") stringColor = Color(255, 0, 255, 200);
-
+    Color stringColor = (g_settings.diceStyle == L"neon") ? Color(255, 0, 255, 200) : Color(255, 220, 220, 220);
     Pen stringPen(stringColor, 2.0f);
     gr.DrawLine(&stringPen, g_anchor.X, g_anchor.Y, g_d1.x, g_d1.y);
     gr.DrawLine(&stringPen, g_anchor.X, g_anchor.Y, g_d2.x, g_d2.y);
 
     auto DrawCube = [&](const Dice& d, Color bg, Color stroke, Color dotColor) {
         GraphicsState st = gr.Save();
-        
         float angle = atan2f(d.x - g_anchor.X, d.y - g_anchor.Y) * (180.0f / (float)std::numbers::pi);
-        
         gr.TranslateTransform(d.x, d.y);
         gr.RotateTransform(-angle);
 
@@ -435,28 +406,22 @@ void DrawScene(Graphics& gr) {
         float offset = half * 0.5f;
 
         switch (d.dots) {
-        case 1:
-            gr.FillEllipse(&dotB, -rDot, -rDot, rDot * 2, rDot * 2);
-            break;
-
+        case 1: gr.FillEllipse(&dotB, -rDot, -rDot, rDot * 2, rDot * 2); break;
         case 2:
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
-
         case 3:
             gr.FillEllipse(&dotB, -rDot, -rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
-
         case 4:
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
-
         case 5:
             gr.FillEllipse(&dotB, -rDot, -rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
@@ -464,7 +429,6 @@ void DrawScene(Graphics& gr) {
             gr.FillEllipse(&dotB, -offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
-
         case 6:
             gr.FillEllipse(&dotB, -offset - rDot, -offset - rDot, rDot * 2, rDot * 2);
             gr.FillEllipse(&dotB, -offset - rDot, -rDot, rDot * 2, rDot * 2);
@@ -474,7 +438,6 @@ void DrawScene(Graphics& gr) {
             gr.FillEllipse(&dotB, offset - rDot, offset - rDot, rDot * 2, rDot * 2);
             break;
         }
-
         gr.Restore(st);
     };
 
@@ -494,7 +457,10 @@ void RedrawOverlay(HWND hWnd) {
     if (g_isHiddenByFullscreen) return;
 
     HDC hdcScr = GetDC(NULL);
+    if (!hdcScr) return;
+
     HDC hdcMem = CreateCompatibleDC(hdcScr);
+    if (!hdcMem) { ReleaseDC(NULL, hdcScr); return; }
 
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -506,6 +472,8 @@ void RedrawOverlay(HWND hWnd) {
 
     void* bits = nullptr;
     HBITMAP hBmp = CreateDIBSection(hdcMem, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!hBmp) { DeleteDC(hdcMem); ReleaseDC(NULL, hdcScr); return; }
+
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
 
     Graphics gr(hdcMem);
@@ -531,14 +499,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     switch (msg) {
-    case WM_MOUSEACTIVATE:
-
-        return MA_NOACTIVATE;
+    case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
 
     case WM_TIMER:
         CheckFullscreenState();
         if (PhysicsStep()) {
+            g_idleFrames = 0;
             RedrawOverlay(hWnd);
+        } else if (++g_idleFrames > 30) {
+            KillTimer(hWnd, 1);
+            g_timerActive = false;
         }
         break;
 
@@ -546,25 +516,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int mx = (short)LOWORD(lParam);
         int my = (short)HIWORD(lParam);
 
-        float dist2 = sqrtf((mx - g_d2.x)*(mx - g_d2.x) + (my - g_d2.y)*(my - g_d2.y));
-        if (dist2 < g_d2.size * 0.5f) {
-            g_d2.isDragged = true;
-            g_d2.dragStartPt = { mx, my };
-            g_d2.dragOffsetX = mx - g_d2.x;
-            g_d2.dragOffsetY = my - g_d2.y;
-            SetCapture(hWnd);
-            return 0;
-        }
+        auto TryStartDrag = [&](Dice& d) {
+            float dist = sqrtf((mx - d.x)*(mx - d.x) + (my - d.y)*(my - d.y));
+            if (dist < d.size * 0.5f) {
+                d.isDragged = true;
+                d.dragStartPt = { mx, my };
+                d.dragOffsetX = mx - d.x;
+                d.dragOffsetY = my - d.y;
+                SetCapture(hWnd);
+                if (!g_timerActive) {
+                    SetTimer(hWnd, 1, 16, NULL);
+                    g_timerActive = true;
+                    g_idleFrames = 0;
+                }
+                return true;
+            }
+            return false;
+        };
 
-        float dist1 = sqrtf((mx - g_d1.x)*(mx - g_d1.x) + (my - g_d1.y)*(my - g_d1.y));
-        if (dist1 < g_d1.size * 0.5f) {
-            g_d1.isDragged = true;
-            g_d1.dragStartPt = { mx, my };
-            g_d1.dragOffsetX = mx - g_d1.x;
-            g_d1.dragOffsetY = my - g_d1.y;
-            SetCapture(hWnd);
-            return 0;
-        }
+        if (!TryStartDrag(g_d2)) TryStartDrag(g_d1);
         break;
     }
 
@@ -572,25 +542,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int mx = (short)LOWORD(lParam);
         int my = (short)HIWORD(lParam);
 
-        if (g_d1.isDragged) {
-            int dx = abs(mx - g_d1.dragStartPt.x);
-            int dy = abs(my - g_d1.dragStartPt.y);
-            if (dx < 5 && dy < 5 && g_settings.randomOnClick) {
-                g_d1.dots = (rand() % 6) + 1;
+        auto CheckRelease = [&](Dice& d) {
+            if (d.isDragged) {
+                int dx = abs(mx - d.dragStartPt.x);
+                int dy = abs(my - d.dragStartPt.y);
+                if (dx < 5 && dy < 5 && g_settings.randomOnClick) {
+                    d.dots = (rand() % 6) + 1;
+                }
+                d.isDragged = false;
+                ReleaseCapture();
             }
-            g_d1.isDragged = false;
-            ReleaseCapture();
-        }
+        };
 
-        if (g_d2.isDragged) {
-            int dx = abs(mx - g_d2.dragStartPt.x);
-            int dy = abs(my - g_d2.dragStartPt.y);
-            if (dx < 5 && dy < 5 && g_settings.randomOnClick) {
-                g_d2.dots = (rand() % 6) + 1;
-            }
-            g_d2.isDragged = false;
-            ReleaseCapture();
-        }
+        CheckRelease(g_d1);
+        CheckRelease(g_d2);
         break;
     }
 
@@ -619,12 +584,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
-DWORD WINAPI StartThread(LPVOID) {
+DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
+    g_hSingleInstanceMutex = CreateMutex(NULL, TRUE, L"Global\\WindhawkHangingDiceSingleInstanceMutex");
+    if (GetLastError() == ERROR_ALREADY_EXISTS || g_hSingleInstanceMutex == NULL) {
+        if (g_hSingleInstanceMutex) {
+            CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = NULL;
+        }
+        return 0;
+    }
+
     srand((unsigned int)time(NULL));
 
     GdiplusStartupInput input;
     if (GdiplusStartup(&g_gdiToken, &input, NULL) != Ok) {
-        Wh_Log(L"GdiplusStartup failed");
+        if (g_hSingleInstanceMutex) {
+            ReleaseMutex(g_hSingleInstanceMutex);
+            CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = NULL;
+        }
         return 0;
     }
 
@@ -637,11 +615,14 @@ DWORD WINAPI StartThread(LPVOID) {
     wc.lpszClassName = L"DiceCustomizableOverlay";
 
     if (!RegisterClass(&wc)) {
-        Wh_Log(L"RegisterClass failed");
         GdiplusShutdown(g_gdiToken);
+        if (g_hSingleInstanceMutex) {
+            ReleaseMutex(g_hSingleInstanceMutex);
+            CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = NULL;
+        }
         return 0;
     }
-
 
     g_hWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -652,9 +633,13 @@ DWORD WINAPI StartThread(LPVOID) {
     );
 
     if (!g_hWnd) {
-        Wh_Log(L"CreateWindowEx failed");
         UnregisterClass(L"DiceCustomizableOverlay", GetModuleHandle(NULL));
         GdiplusShutdown(g_gdiToken);
+        if (g_hSingleInstanceMutex) {
+            ReleaseMutex(g_hSingleInstanceMutex);
+            CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = NULL;
+        }
         return 0;
     }
 
@@ -662,27 +647,18 @@ DWORD WINAPI StartThread(LPVOID) {
     ApplySettingsInternal();
 
     ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
-    SetTimer(g_hWnd, 1, 16, NULL);
 
-    g_hEventHookMin = SetWinEventHook(
-        EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZESTART,
-        NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-    );
-
-    g_hEventHookUnmin = SetWinEventHook(
-        EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND,
-        NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-    );
-
-    g_hEventHookMax = SetWinEventHook(
-        EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND,
-        NULL, WinEventProc, 0, 0, WINEVENT_OUTOFPROCESS
-    );
+    g_hEventHookMin = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZESTART, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    g_hEventHookUnmin = SetWinEventHook(EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    g_hEventHookMax = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
 
     UpdateForegroundHookState();
 
+    SetTimer(g_hWnd, 1, 16, NULL);
+    g_timerActive = true;
+
     MSG msg;
-    while (g_running && GetMessage(&msg, NULL, 0, 0)) {
+    while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -692,34 +668,40 @@ DWORD WINAPI StartThread(LPVOID) {
     if (g_hEventHookMax) UnhookWinEvent(g_hEventHookMax);
     if (g_hEventHookFg) UnhookWinEvent(g_hEventHookFg);
 
-    KillTimer(g_hWnd, 1);
-    DestroyWindow(g_hWnd);
-
-    GdiplusShutdown(g_gdiToken);
     UnregisterClass(L"DiceCustomizableOverlay", GetModuleHandle(NULL));
+    GdiplusShutdown(g_gdiToken);
+
+    if (g_hSingleInstanceMutex) {
+        ReleaseMutex(g_hSingleInstanceMutex);
+        CloseHandle(g_hSingleInstanceMutex);
+        g_hSingleInstanceMutex = NULL;
+    }
+
     return 0;
 }
 
-void Wh_ModSettingsChanged() {
+BOOL WhTool_ModInit() {
+    g_hUIThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &g_uiThreadId);
+    return g_hUIThread != NULL;
+}
+
+void WhTool_ModUninit() {
+    if (g_hWnd) {
+        PostMessage(g_hWnd, WM_CLOSE, 0, 0);
+    }
+    if (g_hUIThread) {
+        WaitForSingleObject(g_hUIThread, 2000);
+        CloseHandle(g_hUIThread);
+        g_hUIThread = NULL;
+    }
+}
+
+void WhTool_ModSettingsChanged() {
     if (g_hWnd && g_wmReloadSettings) {
         PostMessage(g_hWnd, g_wmReloadSettings, 0, 0);
     }
 }
 
-BOOL Wh_ModInit() {
-    g_running = true;
-    g_hThread = CreateThread(NULL, 0, StartThread, NULL, 0, NULL);
-    return TRUE;
-}
-
-void Wh_ModUninit() {
-    g_running = false;
-    if (g_hWnd) {
-        PostMessage(g_hWnd, WM_CLOSE, 0, 0);
-    }
-    if (g_hThread) {
-        WaitForSingleObject(g_hThread, INFINITE);
-        CloseHandle(g_hThread);
-        g_hThread = NULL;
-    }
-}
+BOOL Wh_ModInit() { return WhTool_ModInit(); }
+void Wh_ModUninit() { WhTool_ModUninit(); }
+void Wh_ModSettingsChanged() { WhTool_ModSettingsChanged(); }
