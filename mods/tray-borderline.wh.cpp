@@ -13,6 +13,8 @@
 /*
 # Tray Borderline
 
+![Screenshot](https://i.imgur.com/YSu5aBK.jpeg)
+
 Click the tray icon to instantly recover all the "lost" windows.
 
 This is a simple way to use the app "Borderline" by James Lin from the tray.
@@ -50,6 +52,7 @@ All credits goes to James Lin and Husam Abdulraheem.
 #include <windows.h>
 #include <shellapi.h>
 #include <stdio.h>
+#include <windhawk_utils.h>  //ai strings leaked
 
 #define WM_USER_TRAYICON (WM_USER + 1)
 #define WM_USER_UPDATESETTINGS (WM_USER + 2)
@@ -64,19 +67,35 @@ NOTIFYICONDATAW g_nid = {0};
 HANDLE g_hThread = NULL;
 UINT g_uMsgTaskbarCreated = 0;
 // allelimo
-PCWSTR g_appPath;
-PCWSTR g_appOptions;
+//PCWSTR g_appPath;
+//PCWSTR g_appOptions;
+
+WindhawkUtils::StringSetting g_appPath;
+WindhawkUtils::StringSetting g_appOptions;
+
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
 
 // --- Functional Logic ---
 void ApplySettingsToTray() {
-    PCWSTR iconFile = Wh_GetStringSetting(L"icon_file");
+    // PCWSTR iconFile = Wh_GetStringSetting(L"icon_file");
+    // int iconIndex = Wh_GetIntSetting(L"icon_index");
+    // PCWSTR tooltipText = Wh_GetStringSetting(L"tooltip_text");
+    // // allelimo
+    // g_appPath = Wh_GetStringSetting(L"app_path");
+    // g_appOptions = Wh_GetStringSetting(L"app_options");
+
+    WindhawkUtils::StringSetting iconFile =
+        WindhawkUtils::StringSetting::make(L"icon_file");
     int iconIndex = Wh_GetIntSetting(L"icon_index");
-    PCWSTR tooltipText = Wh_GetStringSetting(L"tooltip_text");
-    // allelimo
-    g_appPath = Wh_GetStringSetting(L"app_path");
-    g_appOptions = Wh_GetStringSetting(L"app_options");
+    WindhawkUtils::StringSetting tooltipText =
+        WindhawkUtils::StringSetting::make(L"tooltip_text");
+
+    g_appPath = WindhawkUtils::StringSetting::make(L"app_path");
+    g_appOptions = WindhawkUtils::StringSetting::make(L"app_options");
+
+
+
     if (!*g_appOptions) {
         g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
     }
@@ -89,9 +108,9 @@ void ApplySettingsToTray() {
     lstrcpynW(g_nid.szTip, tooltipText, ARRAYSIZE(g_nid.szTip));
     if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) Shell_NotifyIconW(NIM_ADD, &g_nid);
 
-    if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
-    Wh_FreeStringSetting(iconFile);
-    Wh_FreeStringSetting(tooltipText);
+    // if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
+    // Wh_FreeStringSetting(iconFile);
+    // Wh_FreeStringSetting(tooltipText);
     
 }
 
