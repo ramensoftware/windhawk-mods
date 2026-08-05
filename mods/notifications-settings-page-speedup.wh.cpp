@@ -2,7 +2,7 @@
 // @id              notifications-settings-page-speedup
 // @name            Faster Notifications Settings Page
 // @description     Stops Settings from re-scanning every notification app on each visit, so revisits load in seconds instead of minutes
-// @version         1.0
+// @version         1.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         SystemSettings.exe
@@ -85,7 +85,11 @@ static std::atomic<bool> g_uninitializing{false};
 // The id is what Wh_ModUninit needs to find a window on that thread; the handle is
 // what liveness is checked against, since ids get recycled and handles don't.
 static std::atomic<DWORD> g_uiThreadId{0};
-static HANDLE g_uiThreadHandle = nullptr;
+static std::atomic<HANDLE> g_uiThreadHandle{nullptr};
+// Winner-selection token for ownership transitions. Held separately from the id
+// that OwnerAlive/AddEntry read, so the handle is always published before the id
+// and only one thread can claim or take over ownership at a time.
+static std::atomic<DWORD> g_ownerClaim{0};
 
 // ---------------------------------------------------------------------------
 // Run a callback on the thread that owns a given window. Used at unload to
@@ -362,18 +366,21 @@ static AddEntry_t AddEntry_Orig = nullptr;
 // unrelated new thread, and that thread would then pass as the owner and be handed
 // proxies it can't legally call.
 static bool OwnerAlive() {
-    return g_uiThreadHandle &&
-           WaitForSingleObject(g_uiThreadHandle, 0) == WAIT_TIMEOUT;
+    HANDLE h = g_uiThreadHandle.load();
+    return h && WaitForSingleObject(h, 0) == WAIT_TIMEOUT;
 }
 
-// Latch this thread as the owner. Only ever called on the thread itself, so the
-// id is unambiguous and the handle refers to the right thread.
+// Latch this thread as the owner. Only ever called on the thread itself, and only
+// by the thread that won g_ownerClaim. The handle is published before the id so a
+// reader can never see an owner id whose liveness handle isn't in place yet, which
+// would make OwnerAlive wrongly report a live owner as dead.
 static void TakeOwnership(DWORD self) {
-    if (g_uiThreadHandle) {
-        CloseHandle(g_uiThreadHandle);
-    }
-    g_uiThreadHandle = OpenThread(SYNCHRONIZE, FALSE, self);
+    HANDLE h = OpenThread(SYNCHRONIZE, FALSE, self);
+    HANDLE old = g_uiThreadHandle.exchange(h);  // Handle visible before the id.
     g_uiThreadId.store(self);
+    if (old) {
+        CloseHandle(old);
+    }
 }
 
 HRESULT __cdecl AddEntry_Hook(void* helper, PCWSTR aumid, unsigned long long opt) {
@@ -385,28 +392,36 @@ HRESULT __cdecl AddEntry_Hook(void* helper, PCWSTR aumid, unsigned long long opt
     // would overwrite it and then match itself, which is the wrong-apartment case
     // the check exists for.
     if (owner == 0) {
+        // Win the claim first, then publish handle-before-id in TakeOwnership. The
+        // claim, not the id, is what serializes the winner, so the id is never made
+        // visible ahead of its handle.
         DWORD expected = 0;
-        if (g_uiThreadId.compare_exchange_strong(expected, self)) {
+        if (g_ownerClaim.compare_exchange_strong(expected, self)) {
             TakeOwnership(self);
         }
         owner = g_uiThreadId.load();
     } else if (owner != self && !OwnerAlive()) {
         // The apartment that made all of this has exited, so nothing can legally
-        // be called through any of it, Release included. Give up the controller on
-        // the same terms as the cache and let this thread rediscover its own,
-        // otherwise the cache is bypassed for the rest of the session.
-        //
-        // The slot is restored first, while the controller reference we still hold
-        // keeps its vtable page mapped. Dropping the reference first would leave
-        // RestoreVtableSlot writing into memory that may already be gone.
-        RestoreVtableSlot();
-        g_vtblHooked   = false;
-        g_vtblSlot     = nullptr;
-        g_controller   = nullptr;  // Abandoned, not released.
-        g_hookAttempts = 0;
-        g_ownerGone    = true;
-        TakeOwnership(self);
-        owner = self;
+        // be called through any of it, Release included. One thread wins the
+        // takeover via the claim; the rest fall through to the slow path. Guarding
+        // it this way stops two threads both taking over and stealing ownership
+        // from each other mid-enumeration.
+        DWORD expected = owner;
+        if (g_ownerClaim.compare_exchange_strong(expected, self)) {
+            // The slot is restored first, while the controller reference we still
+            // hold keeps its vtable page mapped. Dropping the reference first would
+            // leave RestoreVtableSlot writing into memory that may already be gone.
+            RestoreVtableSlot();
+            g_vtblHooked   = false;
+            g_vtblSlot     = nullptr;
+            g_controller   = nullptr;  // Abandoned, not released.
+            g_hookAttempts = 0;
+            g_ownerGone    = true;
+            TakeOwnership(self);
+            owner = self;
+        } else {
+            owner = g_uiThreadId.load();  // Someone else took over.
+        }
     }
 
     // Anything that isn't the owning apartment falls through to the original path:
@@ -434,8 +449,20 @@ static HMODULE g_handlerDllRef = nullptr;  // Reference dropped in Wh_ModUninit.
 
 static void HookHandlerDll(bool applyNow) {
     if (g_symHooked.exchange(true)) return;
-    HMODULE h = GetModuleHandleW(L"SettingsHandlers_Notifications.dll");
-    if (!h) { g_symHooked = false; return; }
+
+    // Take the reference before hooking, and hook through that same handle.
+    // HookSymbols can sit for seconds to minutes on the first symbol download, and
+    // the page can be opened and closed inside that window. GetModuleHandleW takes
+    // no reference, so between it and hooking the DLL could unload and leave hooks
+    // pointing into an unmapped image with nothing holding it. Holding the reference
+    // first closes that window and guarantees the module we hook is the one we keep
+    // mapped. Dropped in Wh_ModUninit after Windhawk has removed the hooks.
+    if (!g_handlerDllRef &&
+        !GetModuleHandleExW(0, L"SettingsHandlers_Notifications.dll",
+                            &g_handlerDllRef)) {
+        g_symHooked = false;  // DLL not loaded yet; the worker retries on reload.
+        return;
+    }
 
     // SettingsHandlers_Notifications.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
@@ -453,20 +480,10 @@ static void HookHandlerDll(bool applyNow) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(g_handlerDllRef, hooks, ARRAYSIZE(hooks))) {
         g_symHooked = false;  // symbols not ready yet; the worker retries on reload
         Wh_Log(L"HookSymbols failed (symbols not ready?)");
         return;
-    }
-
-    // Hold a reference for as long as the hooks are installed. HookSymbols only
-    // hands back trampolines, so there is no way to unregister the hooks if the DLL
-    // goes away, and a reload would register a second pair on top of the first
-    // while Windhawk still holds the originals, pointing at an unmapped image.
-    // Keeping the module loaded makes that whole cycle unreachable. The reference
-    // is dropped in Wh_ModUninit, after Windhawk has removed the hooks.
-    if (!g_handlerDllRef) {
-        GetModuleHandleExW(0, L"SettingsHandlers_Notifications.dll", &g_handlerDllRef);
     }
 
     if (applyNow) Wh_ApplyHookOperations();
@@ -640,9 +657,15 @@ void Wh_ModUninit() {
     // Release could still be in there when the 5 s expires and write its result
     // into a stack frame that no longer exists.
     static RELEASE_PARAM param;
-    if (DWORD tid = g_uiThreadId.load()) {
-        if (HWND hWnd = GetWindowOnThread(tid))
-            RunFromWindowThread(hWnd, ReleaseComStateOnUiThread, &param);
+    // Only hop to the owning thread if it's still alive. The id alone isn't enough:
+    // ids are recycled, so a dead owner's id can belong to an unrelated live thread,
+    // and releasing the proxies there is the cross-apartment release this whole
+    // design exists to avoid. A dead owner falls through to the local restore below.
+    if (OwnerAlive()) {
+        if (DWORD tid = g_uiThreadId.load()) {
+            if (HWND hWnd = GetWindowOnThread(tid))
+                RunFromWindowThread(hWnd, ReleaseComStateOnUiThread, &param);
+        }
     }
     if (!param.ran) {
         // The callback never got to run: no window, the window died while we were
@@ -653,7 +676,7 @@ void Wh_ModUninit() {
         RestoreVtableSlot();
     }
 
-    if (g_uiThreadHandle) { CloseHandle(g_uiThreadHandle); g_uiThreadHandle = nullptr; }
+    if (HANDLE h = g_uiThreadHandle.exchange(nullptr)) { CloseHandle(h); }
     if (g_dllLoadedEvent) { CloseHandle(g_dllLoadedEvent); g_dllLoadedEvent = nullptr; }
     if (g_stopEvent)      { CloseHandle(g_stopEvent);      g_stopEvent = nullptr; }
 
