@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.9.0
+// @version         0.10.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -1114,11 +1114,30 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     }
 
     // Show() reports success even when notifications are switched off for us, and
-    // then nothing is ever delivered and no answer can arrive. Ask first and use
-    // the dialog on the machines where the toast would go nowhere.
+    // then nothing is ever delivered and no answer can arrive. Ask first, but treat
+    // the reasons differently: "toasts don't work here" wants the dialog, while
+    // "the user turned notifications off" does not, since a modal dialog on every
+    // screenshot is more intrusive than the toast they just silenced.
     NotificationSetting setting = NotificationSetting_Enabled;
-    if (FAILED(notifier->get_Setting(&setting)) ||
-        setting != NotificationSetting_Enabled) {
+    if (FAILED(notifier->get_Setting(&setting))) {
+        return false;  // Can't tell: fall back to the dialog.
+    }
+    if (setting == NotificationSetting_DisabledForUser ||
+        setting == NotificationSetting_DisabledByGroupPolicy) {
+        // Off for the whole account or by policy: don't substitute a dialog, just
+        // let the countdown run into the configured automatic action.
+        Wh_Log(L"Notifications off system-wide (setting=%d); using the automatic "
+               L"action",
+               (int)setting);
+        action = ACTION_AUTO;
+        if (s.delaySeconds > 0 && WaitStop((DWORD)s.delaySeconds * 1000)) {
+            action = ACTION_KEEP;  // Stop requested during the wait: never delete.
+        }
+        return true;
+    }
+    if (setting != NotificationSetting_Enabled) {
+        // DisabledForApplication and the like are ambiguous, and also seen briefly
+        // before the Start Menu shortcut is indexed, so fall back to the dialog.
         Wh_Log(L"Notifications unavailable (setting=%d); using the dialog instead",
                (int)setting);
         return false;
@@ -1631,7 +1650,7 @@ static bool g_toastRegSynced = false;
 // unconditionally at startup. With processing or the popup off there is no
 // notification, and a SnapSentry entry sitting in Start and in Search would be
 // there for nothing.
-static void SyncToastRegistration(bool wantPopup) {
+static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
     if (g_toastRegSynced && wantPopup == g_toastRegApplied) {
         return;
     }
@@ -1667,7 +1686,13 @@ static void SyncToastRegistration(bool wantPopup) {
     }
     RemoveAumidRegistration();
     RemoveClsidRegistration();
-    RemoveNotificationSettings();
+    // The per-AUMID Notifications\Settings key also holds the user's own per-app
+    // choices (enabled, banner, sound), so only reclaim it when the mod is actually
+    // going away. Clearing it on an ordinary popup-off toggle would silently reset
+    // a preference the user set in Windows Settings.
+    if (unloading) {
+        RemoveNotificationSettings();
+    }
     g_toastRegApplied = false;
 }
 
@@ -1709,7 +1734,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     // Leave nothing behind. Done here, while this thread's COM apartment is still
     // live, because removing the shortcut has to read its properties through COM;
     // the uninit thread has no apartment. Everything is recreated on the next load.
-    SyncToastRegistration(false);
+    SyncToastRegistration(false, /*unloading=*/true);
 
     RoUninitialize();
     CoUninitialize();
@@ -1897,6 +1922,15 @@ static DWORD WINAPI WatchThread(LPVOID) {
             ParseNotifications(s.folder, buffer);
         }
         CloseHandle(dir);
+        if (!reopen) {
+            // The inner loop ended on an error, not a reload: the handle opened but
+            // change notifications don't work on this path (some network redirectors
+            // and virtual/sync filesystems return ERROR_INVALID_FUNCTION), or the
+            // volume went away. Back off like the open-failure path so a persistently
+            // failing watch can't peg a core re-opening and re-enumerating in a spin.
+            HANDLE idle[] = {g_stopEvent, g_reloadEvent};
+            WaitForMultipleObjects(2, idle, FALSE, 2000);
+        }
     }
 
     CloseHandle(ov.hEvent);
