@@ -4,6 +4,7 @@
 // @description     Adds a native File/Edit/View/History/Bookmarks/Tools/Help menu bar to Google Chrome, with switchable dark mode
 // @version         0.6.0
 // @author          Gokhan
+// @github          https://github.com/GokhanGerkz
 // @include         chrome.exe
 // @compilerOptions -lcomctl32 -luser32 -lgdi32 -luxtheme
 // ==/WindhawkMod==
