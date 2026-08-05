@@ -54,8 +54,9 @@ All credits goes to James Lin and Husam Abdulraheem.
 #define WM_USER_TRAYICON (WM_USER + 1)
 #define WM_USER_UPDATESETTINGS (WM_USER + 2)
 
-#define MENU_OPEN_WINDHAWK   9000
-#define MENU_TITLE_WINDHAWK  9100
+#define MENU_TITLE_BORDERLINE       9000
+#define MENU_EXECUTE_BORDERLINE     9100
+#define MENU_OPEN_WINDHAWK          9200
 
 // --- Global Variables ---
 HWND g_hWnd = NULL;
@@ -142,8 +143,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 {
                     HMENU hMenu = CreatePopupMenu();
 
-                    AppendMenuW(hMenu, MF_STRING, MENU_TITLE_WINDHAWK, L"Tray Borderline");
+                    AppendMenuW(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, MENU_TITLE_BORDERLINE, L"Tray Borderline");
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                    AppendMenuW(hMenu, MF_STRING, MENU_EXECUTE_BORDERLINE, L"Execute Tray Borderline");
                     AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
 
                     POINT pt;
@@ -155,7 +157,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     PostMessageW(hwnd, WM_NULL, 0, 0);
                     DestroyMenu(hMenu);
 
-                    if (cmd == MENU_OPEN_WINDHAWK) {
+                    if (cmd == MENU_EXECUTE_BORDERLINE){
+                        OpenApp();
+                    }
+                    else if (cmd == MENU_OPEN_WINDHAWK) {
                         SHELLEXECUTEINFOW sei = {sizeof(sei)};
                         sei.lpFile = g_windhawkPath;
                         sei.nShow  = SW_SHOWNORMAL;
