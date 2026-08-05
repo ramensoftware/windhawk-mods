@@ -323,7 +323,7 @@ struct TrackedTaskbarState {
 
     std::vector<AnimationDividerCache> animationDividers;
     winrt::weak_ref<Controls::Canvas> animationOverlayCanvas;
-    winrt::weak_ref<FrameworkElement> animationPointerSource;
+    winrt::weak_ref<Controls::Grid> animationPointerSource;
     winrt::Windows::Foundation::IInspectable animationPointerMovedHandler{
         nullptr};
     winrt::event_token animationPointerExitedToken{};
@@ -1468,7 +1468,7 @@ void DetachAnimationPointerHandlers(TrackedTaskbarState& taskbar) {
 }
 
 void AttachAnimationPointerHandlers(TrackedTaskbarState& taskbar,
-                                    FrameworkElement const& source) {
+                                    Controls::Grid const& source) {
     if (!source || g_unloading) {
         return;
     }
