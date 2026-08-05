@@ -67,6 +67,8 @@ EXTERN_C NTSYSAPI NTSTATUS NTAPI NtQueryKey(
     HANDLE keyHandle, KEY_INFORMATION_CLASS keyInformationClass,
     PVOID keyInformation, ULONG length, PULONG resultLength);
 
+EXTERN_C NTSYSAPI NTSTATUS NTAPI NtDeleteKey(HANDLE keyHandle);
+
 using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
                                      ACCESS_MASK desiredAccess,
                                      POBJECT_ATTRIBUTES objectAttributes);
@@ -221,9 +223,9 @@ bool InitializeRedirectKey() {
             reinterpret_cast<const BYTE*>(kOwnerValue), sizeof(kOwnerValue));
         if (status != ERROR_SUCCESS) {
             Wh_Log(L"Failed to mark redirect-key ownership: %ld", status);
+            NtDeleteKey(g_redirectKey);
             RegCloseKey(g_redirectKey);
             g_redirectKey = nullptr;
-            RegDeleteKeyW(HKEY_CURRENT_USER, kRedirectRegistryPath);
             return false;
         }
     }
@@ -235,11 +237,11 @@ bool InitializeRedirectKey() {
             reinterpret_cast<const BYTE*>(&zero), sizeof(zero));
         if (status != ERROR_SUCCESS) {
             Wh_Log(L"Failed to initialize %s: %ld", valueName, status);
+            if (created) {
+                NtDeleteKey(g_redirectKey);
+            }
             RegCloseKey(g_redirectKey);
             g_redirectKey = nullptr;
-            if (created) {
-                RegDeleteKeyW(HKEY_CURRENT_USER, kRedirectRegistryPath);
-            }
             return false;
         }
     }
@@ -250,19 +252,22 @@ bool InitializeRedirectKey() {
 }
 
 void DeleteRedirectKey() {
-    if (g_redirectKey) {
-        RegCloseKey(g_redirectKey);
-        g_redirectKey = nullptr;
-    }
-    if (!g_ownsRedirectKey) {
+    if (!g_redirectKey) {
+        g_ownsRedirectKey = false;
         return;
     }
 
-    g_ownsRedirectKey = false;
-    LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, kRedirectRegistryPath);
-    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
-        Wh_Log(L"Failed to delete volatile redirect key: %ld", status);
+    if (g_ownsRedirectKey) {
+        NTSTATUS status = NtDeleteKey(g_redirectKey);
+        if (status != STATUS_SUCCESS &&
+            status != STATUS_OBJECT_NAME_NOT_FOUND) {
+            Wh_Log(L"Failed to delete volatile redirect key: 0x%08X", status);
+        }
     }
+
+    RegCloseKey(g_redirectKey);
+    g_redirectKey = nullptr;
+    g_ownsRedirectKey = false;
 }
 
 BOOL Wh_ModInit() {
