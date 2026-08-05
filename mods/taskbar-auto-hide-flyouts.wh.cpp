@@ -121,7 +121,15 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
                 true 
             }
         };
-        WindhawkUtils::HookSymbols(hMod, taskbar_view_dll_hooks, ARRAYSIZE(taskbar_view_dll_hooks));
+// Taskbar.View.dll
+        WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
+            {
+                { LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(bool))" },
+                &UpdateIsExpanded_Original,
+                UpdateIsExpanded_Hook,
+                true 
+            }
+        };
     }
     return hMod;
 }
