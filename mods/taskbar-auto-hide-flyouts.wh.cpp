@@ -103,7 +103,6 @@ void WINAPI TrayUI__Hide_Hook(void* pThis) {
     if (AreShellFlyoutsOpen()) {
         HWND hTaskbar = FindCurrentProcessTaskbarWnd();
         if (hTaskbar) {
-            // FIX: Removed 4th argument to match the 3-parameter definition in windhawk_utils.h
             WindhawkUtils::SetWindowSubclassFromAnyThread(hTaskbar, TaskbarSubclassProc, TIMER_REARM_ID);
             SetTimer(hTaskbar, TIMER_REARM_ID, TIMER_POLL_INTERVAL, nullptr);
         }
@@ -130,7 +129,7 @@ ShouldTaskbarBeExpanded_t ShouldTaskbarBeExpanded_Original;
 
 bool __cdecl ShouldTaskbarBeExpanded_Hook(void* pThis) {
     if (AreShellFlyoutsOpen()) {
-        return true; // Keep taskbar expanded while flyouts are up
+        return true; 
     }
     return ShouldTaskbarBeExpanded_Original(pThis);
 }
@@ -142,8 +141,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     HMODULE hMod = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (hMod && lpLibFileName && (wcsstr(lpLibFileName, L"Taskbar.View.dll") || wcsstr(lpLibFileName, L"ExplorerExtensions.dll"))) {
         // Taskbar.View.dll
-        // FIX: Provided valid hook function and original pointer variables to satisfy constructor templates
-        WindhawkUtils::SYMBOL_HOOK view_coordinator_hooks[] = {
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {
                 { LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(void))" },
                 &ShouldTaskbarBeExpanded_Original,
@@ -151,7 +149,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
                 true 
             }
         };
-        WindhawkUtils::HookSymbols(hMod, view_coordinator_hooks, ARRAYSIZE(view_coordinator_hooks));
+        WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks));
     }
     return hMod;
 }
@@ -163,7 +161,7 @@ BOOL Wh_ModInit() {
     HMODULE hTaskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hTaskbarDll) {
         // taskbar.dll
-        WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {
                 { LR"(public: virtual void __cdecl TrayUI::_Hide(void))" },
                 &TrayUI__Hide_Original,
@@ -177,7 +175,7 @@ BOOL Wh_ModInit() {
                 true
             }
         };
-        WindhawkUtils::HookSymbols(hTaskbarDll, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks));
+        WindhawkUtils::HookSymbols(hTaskbarDll, hooks, ARRAYSIZE(hooks));
     }
 
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
