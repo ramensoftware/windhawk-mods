@@ -88,7 +88,8 @@ static bool AreShellFlyoutsOpen() {
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 
-LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+// FIX: Changed to Windhawk's required 5-parameter signature (removed uIdSubclass)
+LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == WM_TIMER && wParam == TIMER_REARM_ID) {
         if (!AreShellFlyoutsOpen()) {
             KillTimer(hWnd, TIMER_REARM_ID);
