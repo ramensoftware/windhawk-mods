@@ -109,26 +109,6 @@ void OpenApp() {
     }
 }
 
-// // ─── System Theme + Context Menu ─────────────────────────────────────────────
-// static bool IsSystemDarkMode() {
-//     DWORD value = 1, size = sizeof(value);
-//     RegGetValueW(HKEY_CURRENT_USER,
-//         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-//         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
-//     return value == 0;
-// }
-
-// static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
-//     HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
-//     if (!ux) return;
-//     using Fn135 = int(WINAPI*)(int);
-//     using Fn133 = bool(WINAPI*)(HWND, bool);
-//     using Fn136 = void(WINAPI*)();
-//     if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
-//     if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
-//     if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
-// }
-
 // main
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_uMsgTaskbarCreated != 0 && uMsg == g_uMsgTaskbarCreated) {
@@ -137,37 +117,38 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     switch (uMsg) {
         case WM_USER_TRAYICON:
-            if (LOWORD(lParam) == WM_LBUTTONUP) OpenApp();  // allelimo
-            //allelimo
-            else if(LOWORD(lParam) == WM_RBUTTONUP)
-                {
-                    HMENU hMenu = CreatePopupMenu();
+            if (LOWORD(lParam) == WM_LBUTTONUP) {
+                
+                OpenApp();  // allelimo
+            } 
+            else if(LOWORD(lParam) == WM_RBUTTONUP) {
+                
+                HMENU hMenu = CreatePopupMenu();
+                AppendMenuW(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, MENU_TITLE_BORDERLINE, L"Tray Borderline");
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(hMenu, MF_STRING, MENU_EXECUTE_BORDERLINE, L"Execute Tray Borderline");
+                AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
 
-                    AppendMenuW(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, MENU_TITLE_BORDERLINE, L"Tray Borderline");
-                    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-                    AppendMenuW(hMenu, MF_STRING, MENU_EXECUTE_BORDERLINE, L"Execute Tray Borderline");
-                    AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
+                POINT pt;
+                GetCursorPos(&pt);
+                SetForegroundWindow(hwnd);
+                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON |
+                    TPM_BOTTOMALIGN /*| TPM_RIGHTALIGN*/,
+                    pt.x, pt.y, 0, hwnd, nullptr);
+                PostMessageW(hwnd, WM_NULL, 0, 0);
+                DestroyMenu(hMenu);
 
-                    POINT pt;
-                    GetCursorPos(&pt);
-                    SetForegroundWindow(hwnd);
-                    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON |
-                        TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
-                        pt.x, pt.y, 0, hwnd, nullptr);
-                    PostMessageW(hwnd, WM_NULL, 0, 0);
-                    DestroyMenu(hMenu);
-
-                    if (cmd == MENU_EXECUTE_BORDERLINE){
-                        OpenApp();
-                    }
-                    else if (cmd == MENU_OPEN_WINDHAWK) {
-                        SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                        sei.lpFile = g_windhawkPath;
-                        sei.nShow  = SW_SHOWNORMAL;
-                        ShellExecuteExW(&sei);
-                    }
-            };
-            //return 0;
+                if (cmd == MENU_EXECUTE_BORDERLINE){
+                    OpenApp();
+                }
+                else if (cmd == MENU_OPEN_WINDHAWK) {
+                    SHELLEXECUTEINFOW sei = {sizeof(sei)};
+                    sei.lpFile = g_windhawkPath;
+                    sei.nShow  = SW_SHOWNORMAL;
+                    ShellExecuteExW(&sei);
+                }
+            }
+            return 0;
  
         case WM_USER_UPDATESETTINGS:
             ApplySettingsToTray();
