@@ -29,7 +29,7 @@ filters. Windows already on the target monitor are left unchanged. Gather action
 restore maximized windows before moving them and leave them restored for arranging;
 the foreground-window action re-maximizes them on the target monitor.
 
-Enable debug logging to see per-window skip reasons in the Windhawk log.
+Enable logging in Windhawk to see per-window skip reasons.
 
 Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
 the Windows Settings display number. Moving minimized windows without restoring is
@@ -39,8 +39,6 @@ not attempted because it is not reliable for all apps.
 
 // ==WindhawkModSettings==
 /*
-- Enabled: true
-  $name: Enable mod
 - HotkeyPrimary: "Ctrl+Alt+Shift+P"
   $name: Gather to primary monitor
 - HotkeyForegroundPrimary: "Ctrl+Alt+Shift+W"
@@ -78,8 +76,6 @@ not attempted because it is not reliable for all apps.
   - mouse: Mouse cursor
 - IncludeOwnedWindows: false
   $name: Include owned windows/popups
-- DebugLogging: false
-  $name: Debug logging
 */
 // ==/WindhawkModSettings==
 
@@ -125,7 +121,6 @@ enum class AnchorMode {
 };
 
 struct Settings {
-    bool enabled;
     bool skipMinimized;
     bool restoreMinimized;
     bool skipFullscreen;
@@ -135,7 +130,6 @@ struct Settings {
     int cascadeOffset;
     AnchorMode anchor;
     bool includeOwnedWindows;
-    bool debugLogging;
     std::wstring hotkeys[7];
 };
 
@@ -175,7 +169,6 @@ std::wstring GetStringSetting(const wchar_t* name) {
 AnchorMode ParseAnchorMode(const std::wstring& text);
 
 void LoadSettings() {
-    g_settings.enabled = Wh_GetIntSetting(L"Enabled") != 0;
     g_settings.hotkeys[(int)TargetMode::Primary] = GetStringSetting(L"HotkeyPrimary");
     g_settings.hotkeys[(int)TargetMode::ForegroundPrimary] =
         GetStringSetting(L"HotkeyForegroundPrimary");
@@ -193,7 +186,6 @@ void LoadSettings() {
     g_settings.cascadeOffset = std::max(0, Wh_GetIntSetting(L"CascadeOffset"));
     g_settings.anchor = ParseAnchorMode(GetStringSetting(L"Anchor"));
     g_settings.includeOwnedWindows = Wh_GetIntSetting(L"IncludeOwnedWindows") != 0;
-    g_settings.debugLogging = Wh_GetIntSetting(L"DebugLogging") != 0;
 }
 
 std::wstring TrimUpper(std::wstring s) {
@@ -271,10 +263,6 @@ void UnregisterConfiguredHotkeys() {
 
 void RegisterConfiguredHotkeys() {
     UnregisterConfiguredHotkeys();
-    if (!g_settings.enabled) {
-        Wh_Log(L"Disabled");
-        return;
-    }
 
     const TargetMode modes[] = {
         TargetMode::Primary, TargetMode::ForegroundPrimary, TargetMode::Monitor1,
@@ -467,7 +455,6 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
 }
 
 void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
-    if (!g_settings.debugLogging) return;
     wchar_t title[128]{};
     wchar_t className[128]{};
     GetWindowText(hwnd, title, ARRAYSIZE(title));
@@ -574,7 +561,6 @@ BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
 }
 
 void GatherWindows(TargetMode mode) {
-    if (!g_settings.enabled) return;
     auto monitors = GetMonitors();
     const MonitorInfo* target = ResolveTargetMonitor(mode, monitors);
     if (!target) {
