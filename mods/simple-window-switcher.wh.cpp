@@ -717,6 +717,7 @@ static HANDLE g_explorerIpcThread = NULL;
 static DWORD g_explorerIpcThreadId = 0;
 static bool g_isPendingShow = false;
 static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
+static bool g_isWin11OrGreater = false;
 
 // Forward declarations
 static void LoadSettings();
@@ -1399,7 +1400,6 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 if (hWinIcon) {
                     Wh_Log(L"Explorer IPC: Returning WM_GETICON/GetClassLongPtr icon %p as Win10 fallback", hWinIcon);
-                    g_uwpIconCache[L"wm_icon_" + std::to_wstring((uintptr_t)hWinIcon) + L"_" + std::to_wstring(desiredSizePx)] = hWinIcon;
                     return (LRESULT)hWinIcon;
                 }
 
@@ -1489,19 +1489,7 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
         if (res) {
             // On Windows 11 explorer returns usable icon handles via IPC in our environment.
             // Avoid attempting local AUMID->icon resolution on Win11 to preserve that behavior.
-            auto IsWindows11OrGreater = []() -> bool {
-                DWORD build = 0; DWORD sz = sizeof(build);
-                if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, NULL, &sz) == ERROR_SUCCESS) {
-                    // Read as string
-                    std::wstring buf; buf.resize(sz/2);
-                    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, &buf[0], &sz) == ERROR_SUCCESS) {
-                        int buildNum = _wtoi(buf.c_str());
-                        return buildNum >= 22000;
-                    }
-                }
-                return false;
-            };
-            if (IsWindows11OrGreater()) {
+            if (g_isWin11OrGreater) {
                 return (HICON)res;
             }
             // We got an icon handle from Explorer, but HICON handles are process-local —
@@ -3556,8 +3544,8 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
 
             if (action > 0) {
                 PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)dir, (LPARAM)action);
+                return 1;
             }
-            return 1;
         }
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
@@ -4910,13 +4898,8 @@ static void LoadSettings() {
     v = Wh_GetStringSetting(L"Accessibility.backwardShortcut");
     if (v && *v) {
         wcsncpy_s(g_settings.backwardShortcut, v, _TRUNCATE);
-        Wh_FreeStringSetting(v);
-    } else {
-        Wh_FreeStringSetting(v);
-        // Backward compatibility with previous boolean setting.
-        wcsncpy_s(g_settings.backwardShortcut,
-                  Wh_GetIntSetting(L"enableAltShiftForBackward") ? L"altShift" : L"altShiftTab", _TRUNCATE);
     }
+    Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.backwardShortcut, L"altShiftTab") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altShift") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altBacktick") != 0) {
@@ -5327,6 +5310,20 @@ BOOL Wh_ModInit() {
     WCHAR* exeName = wcsrchr(exePath, L'\\');
     exeName = exeName ? exeName + 1 : exePath;
     Wh_Log(L"SWS: Wh_ModInit in process: %s", exeName);
+
+    // Cache Windows version once so callers don't need to read the registry repeatedly.
+    {
+        DWORD sz = 0;
+        RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                     L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, NULL, &sz);
+        if (sz > 0) {
+            std::wstring buf(sz / sizeof(WCHAR), L'\0');
+            if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                             L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, &buf[0], &sz) == ERROR_SUCCESS) {
+                g_isWin11OrGreater = (_wtoi(buf.c_str()) >= 22000);
+            }
+        }
+    }
 
     // --- explorer.exe path: hook RegisterHotKey only ---
     if (_wcsicmp(exeName, L"explorer.exe") == 0) {
