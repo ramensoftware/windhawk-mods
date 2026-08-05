@@ -88,7 +88,6 @@ static bool AreShellFlyoutsOpen() {
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 
-// FIX: Changed to Windhawk's required 5-parameter signature (removed uIdSubclass)
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == WM_TIMER && wParam == TIMER_REARM_ID) {
         if (!AreShellFlyoutsOpen()) {
@@ -194,7 +193,8 @@ void Wh_ModUninit() {
     HWND hTaskbar = FindCurrentProcessTaskbarWnd();
     if (hTaskbar) {
         KillTimer(hTaskbar, TIMER_REARM_ID);
-        RemoveWindowSubclass(hTaskbar, TaskbarSubclassProc, TIMER_REARM_ID);
+        // FIX: Swapped to Windhawk's matching subclass uninstaller helper function
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTaskbar, TIMER_REARM_ID);
         SetTimer(hTaskbar, kTrayUITimerHide, 0, nullptr);
     }
 }
