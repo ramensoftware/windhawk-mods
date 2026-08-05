@@ -66,11 +66,11 @@ Radius**, **Disable rounded corners in Windows 11**, ExplorerPatcher's rounded
 corner option, StartAllBack or Win11DisableRoundedCorners.
 
 ## Mod authorship
- 
+
 If this pull request introduces a new mod, please complete the section below.
- 
+
 This mod was created by:
- 
+
 - - [ ] The submitter, without AI assistance
 - - [x] The submitter, with AI assistance
 - - [x] Claude
