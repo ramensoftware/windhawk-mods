@@ -103,19 +103,9 @@ static void LoadSettings() {
     g_settings.fontSizePercent.store(std::clamp(Wh_GetIntSetting(L"fontSizePercent"), 50, 200));
 
     PCWSTR customText = Wh_GetStringSetting(L"customText");
-    size_t customTextLength = 0;
-    if (customText) {
-        while (customTextLength < 100 && customText[customTextLength])
-            ++customTextLength;
-    }
-    if (customText && customTextLength < 100) {
-        lstrcpynW(g_settings.customText, customText, ARRAYSIZE(g_settings.customText));
-        g_settings.customTextValid.store(true);
-    } else {
-        g_settings.customText[0] = L'\0';
-        g_settings.customTextValid.store(false);
-    }
-    if (customText) Wh_FreeStringSetting(customText);
+    lstrcpynW(g_settings.customText, customText, ARRAYSIZE(g_settings.customText));
+    g_settings.customTextValid.store(g_settings.customText[0] != L'\0');
+    Wh_FreeStringSetting(customText);
 }
 
 struct LocalizedText {
@@ -130,9 +120,9 @@ static const LocalizedText kPleaseWaitTexts[] = {
     { MAKELANGID(LANG_FRENCH, SUBLANG_DEFAULT), L"Veuillez patienter" },
     { MAKELANGID(LANG_SPANISH, SUBLANG_DEFAULT), L"Espere" },
     { MAKELANGID(LANG_PORTUGUESE, SUBLANG_DEFAULT), L"Aguarde" },
-    { MAKELANGID(LANG_DUTCH, SUBLANG_DEFAULT), L"Even ogenblik geduld" },
+    { MAKELANGID(LANG_DUTCH, SUBLANG_DEFAULT), L"Een ogenblik geduld" },
     { MAKELANGID(LANG_POLISH, SUBLANG_DEFAULT), L"Prosz\u0119 czeka\u0107" },
-    { MAKELANGID(LANG_RUSSIAN, SUBLANG_DEFAULT), L"\u041f\u043e\u0434\u043e\u0436\u0434\u0430\u043d\u0438\u0442\u0435" },
+    { MAKELANGID(LANG_RUSSIAN, SUBLANG_DEFAULT), L"\u041f\u043e\u0434\u043e\u0436\u0434\u0438\u0442\u0435" },
     { MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT), L"\u3057\u3070\u3089\u304a\u5f85\u3061\u304f\u3060\u3055\u3044" },
     { MAKELANGID(LANG_KOREAN, SUBLANG_DEFAULT), L"\uc7a0\uc2dc \uae30\ub2e4\ub824 \uc8fc\uc2ed\uc2dc\uc624" },
     { MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED), L"\u8bf7\u7a0d\u5019" },
@@ -203,7 +193,7 @@ static UINT GetPrimaryMonitorDpi() {
 
 // Uses only documented GDI APIs. A 32-bit DIB section gives direct access to
 // the captured pixels, so the desaturation is not dependent on GDI+ behavior.
-static bool PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
+static bool PaintSnapshotWithGentleDesaturation(HWND hwnd, HDC hdc, const RECT& area) {
     if (!hdc) return false;
     const int width = area.right - area.left;
     const int height = area.bottom - area.top;
@@ -228,9 +218,12 @@ static bool PaintSnapshotWithGentleDesaturation(HDC hdc, const RECT& area) {
     {
         ScopedSelection selection(memoryDc.get(), bitmap.get());
         if (!selection.selected()) { ReleaseDC(nullptr, screen); return false; }
-        const int screenX = GetSystemMetrics(SM_XVIRTUALSCREEN) + area.left;
-        const int screenY = GetSystemMetrics(SM_YVIRTUALSCREEN) + area.top;
-        if (!BitBlt(memoryDc.get(), 0, 0, width, height, screen, screenX, screenY,
+        POINT topLeft = { area.left, area.top };
+        if (!ClientToScreen(hwnd, &topLeft)) {
+            ReleaseDC(nullptr, screen);
+            return false;
+        }
+        if (!BitBlt(memoryDc.get(), 0, 0, width, height, screen, topLeft.x, topLeft.y,
                     SRCCOPY | CAPTUREBLT)) {
             ReleaseDC(nullptr, screen);
             return false;
@@ -278,7 +271,7 @@ static bool DrawClassicPleaseWaitBox(HWND hwnd, HDC hdc) {
     if (!hwnd || !GetClientRect(hwnd, &clientArea)) return false;
     if (clientArea.right <= clientArea.left || clientArea.bottom <= clientArea.top) return false;
 
-    if (!PaintSnapshotWithGentleDesaturation(hdc, clientArea)) return false;
+    if (!PaintSnapshotWithGentleDesaturation(hwnd, hdc, clientArea)) return false;
 
     const RECT boxArea = GetBoxSurfaceArea(clientArea);
     const UINT dpi = GetPrimaryMonitorDpi();
@@ -324,14 +317,12 @@ static bool DrawClassicPleaseWaitBox(HWND hwnd, HDC hdc) {
 
     NONCLIENTMETRICSW metrics = { sizeof(metrics) };
     LOGFONTW fontDescription = {};
-    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0)) {
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0, dpi)) {
         fontDescription = metrics.lfMessageFont;
     } else {
-        fontDescription.lfHeight = -12;
+        fontDescription.lfHeight = -ScaleForDpi(12, dpi);
     }
 
-    int baseHeight = fontDescription.lfHeight;
-    fontDescription.lfHeight = -ScaleForDpi(baseHeight < 0 ? -baseHeight : 12, dpi);
     fontDescription.lfHeight = MulDiv(fontDescription.lfHeight, g_settings.fontSizePercent.load(), 100);
     fontDescription.lfWeight = FW_BOLD;
 
@@ -380,11 +371,13 @@ static bool HookThemeUiSymbols(HMODULE themeUi) {
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
-static void HandleLoadedModule(HMODULE module) {
-    if (GetModuleHandleW(L"themeui.dll") != module ||
-        g_themeUiHandled.exchange(true))
+static void HandleLoadedModule(HMODULE /*module*/) {
+    if (g_themeUiHandled.load())
         return;
-    if (HookThemeUiSymbols(module))
+    HMODULE themeUi = GetModuleHandleW(L"themeui.dll");
+    if (!themeUi || g_themeUiHandled.exchange(true))
+        return;
+    if (HookThemeUiSymbols(themeUi))
         Wh_ApplyHookOperations();
 }
 
