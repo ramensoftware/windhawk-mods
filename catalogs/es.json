@@ -1457,6 +1457,38 @@
         "version": "0.2"
       }
     },
+    "cjk-spacer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785934694000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785934694000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "aenerv7",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luxtheme",
+        "description": "Add spaces between CJK characters and letters or digits in Explorer context menus and tooltips; modern XAML UI is opt-in and best-effort because it may conflict with other XAML Diagnostics mods",
+        "github": "https://github.com/aenerv7",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "CJK Spacer",
+        "version": "0.1.27"
+      }
+    },
     "classic-browser-fix": {
       "details": {
         "defaultSorting": 1930,

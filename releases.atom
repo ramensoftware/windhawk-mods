@@ -2,12 +2,131 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-03T22:11:59.000Z</updated>
+    <updated>2026-08-05T12:58:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CJK Spacer 0.1.27]]></title>
+        <id>https://windhawk.net/mods/cjk-spacer#d021d038b75876dc7345cfe32cd13b079be697a7</id>
+        <link href="https://windhawk.net/mods/cjk-spacer"/>
+        <updated>2026-08-05T12:58:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cjkspacer">CJK Spacer</h1>
+<p>Adds a normal ASCII space at a direct boundary between a CJK character and a
+letter or digit in UI text hosted by <code>explorer.exe</code>.</p>
+<p>On Windows 11, the primary Explorer and desktop context menus are modern XAML
+menus. The <code>modernUiText</code> setting is disabled by default because each named
+XAML Diagnostics connection permits only one consumer, and tools such as
+Taskbar Styler or File Explorer Styler may already use or block those
+connections. Enable it explicitly if you want those menus and pointer
+tooltips processed. <code>classicMenus</code> still covers the Win32 menu opened through
+"Show more options". The modern path is intentionally retained as an opt-in,
+best-effort implementation because it covers the primary Windows 11 menu; the
+connection conflict is left visible to the user rather than silently dropping
+that coverage.</p>
+<p>Examples:</p>
+<ul>
+<li><code>使用VS Code打开</code> becomes <code>使用 VS Code 打开</code></li>
+<li><code>压缩为ZIP文件</code> becomes <code>压缩为 ZIP 文件</code></li>
+<li><code>使用 VS Code 打开</code> is unchanged</li>
+<li><code>打开(&amp;O)</code> is unchanged</li>
+</ul>
+<h2 id="screenshot">Screenshot</h2>
+<p>Before:</p>
+<p><img src="https://raw.githubusercontent.com/aenerv7/Dox/main/Windhawk/CJKSpacer/Before.png" alt="Before enabling CJK Spacer" /></p>
+<p>After:</p>
+<p><img src="https://raw.githubusercontent.com/aenerv7/Dox/main/Windhawk/CJKSpacer/After.png" alt="After enabling CJK Spacer" /></p>
+<p>The transformation is idempotent. Punctuation and existing whitespace break a
+boundary and are preserved. Win32 <code>&amp;</code> mnemonic markers and tab-separated
+keyboard shortcut text are also preserved.
+Hiragana, fullwidth Katakana, and halfwidth Katakana letters are all
+classified as CJK characters for boundary detection; kana punctuation remains
+excluded.</p>
+<h2 id="supportedui">Supported UI</h2>
+<ul>
+<li>Classic Win32 popup menus are rewritten through public <code>HMENU</code> APIs. Menus
+created through <code>CreatePopupMenu</code> are handled while they are constructed,
+then associated with their <code>TrackPopupMenu</code> call and restored when the popup
+closes. Existing popup handles are also scanned immediately before display.
+It covers File Explorer, desktop, taskbar, and jump-list context menus that
+Explorer itself hosts.
+Context menus shown by third-party notification-area icon processes are
+outside the injected <code>explorer.exe</code> process and aren't covered.
+Construction-time hooks also see menu-bar dropdowns created with
+<code>CreatePopupMenu</code>, even when user32 displays them without <code>TrackPopupMenu*</code>.
+Such pending changes are restored when the menu is destroyed, the mod
+unloads, or the record expires during later popup activity. Window system
+menus that aren't built through the hooked popup APIs remain outside scope.</li>
+<li>Classic Win32 tooltips, including legacy notification-area icon tooltips, are
+rewritten only through theme handles opened for the <code>TOOLTIP</code> class, covering
+both text measurement and drawing without touching unrelated GDI text.
+Shared theme handles retain a reference for every Tooltip window that opened
+them. A DC mapped to another window is rejected, while buffered DCs that do
+not map to a window are accepted.
+Existing tooltip controls are discovered when the mod is enabled in a
+running Explorer. Basic or classic-theme tooltips drawn directly with
+<code>DrawTextW</code> aren't covered.</li>
+<li>Windows 11 XAML context menus and pointer tooltips are handled at the XAML
+source-element level. Only plain local string values in the <code>Text</code> source of
+XAML menu items and <code>ToolTip.Content</code> are changed; bindings, styles,
+presenter <code>TextBlock</code> values and ordinary XAML text are untouched. Taskbar
+thumbnail preview content is normally not a plain local string and therefore
+is not changed. A source is changed when XAML Diagnostics reports
+that it was added and restored when it is removed or the mod unloads. This
+path is disabled by default; enable <code>modernUiText</code> to opt in.</li>
+</ul>
+<p>The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
+hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
+so another diagnostics-based customization tool, including Windows 11 Taskbar
+Styler or Windows 11 File Explorer Styler, can prevent this path from
+initializing. Connection attempts are scheduled outside the Windows loader
+  path; one managed worker retains requests that arrive while it is running,
+  tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
+  and retries only the connection that was lost. It doesn't add a module
+  reference: the worker is signaled to stop and joined before Windhawk removes
+  hooks. Asynchronous visual-tree watcher setup threads are tracked by handle
+  and joined at the same point, so the engine's single module reference remains
+  sufficient.
+  <code>Wh_ModAfterInit</code> covers XAML modules that are already loaded, while the
+  <code>LoadLibraryExW</code> hook covers modules loaded later, including the
+  <code>CoreMessagingXP.dll</code> static-import path used by
+  <code>Microsoft.Internal.FrameworkUdk.dll</code>.
+  If a connection attempt is denied or otherwise fails, a newly loaded XAML
+  module or an established connection being disconnected provides the next
+  retry opportunity.
+When Taskbar Styler is configured to alert on competing XAML Diagnostics
+consumers, enabling this path can show its confirmation dialog.
+The mod is injected only into <code>explorer.exe</code>. Start, Search, and some shell
+flyouts hosted by <code>StartMenuExperienceHost.exe</code>, <code>SearchHost.exe</code>, or
+<code>ShellExperienceHost.exe</code> are outside its scope.</p>
+<p>The mod doesn't edit system files, registry values, or file names. A file name
+shown in a classic menu can nevertheless be displayed with inserted spaces.
+The modern path temporarily changes target source values on their XAML UI
+threads and restores them when the source leaves the visual tree or the mod
+unloads. The classic path updates
+strings stored in active <code>HMENU</code> objects, so menu text read through
+accessibility APIs also contains the inserted spaces until the corresponding
+record is restored.
+Other menu-cleanup mods that match items by their displayed text, such as
+Remove Context Menu Items, may therefore need rules that account for the
+temporary spaces while the popup is open.
+Text Replace targets the same classic menu APIs but performs literal
+substitutions, so it cannot express this CJK/non-CJK boundary rule; when both
+mods are enabled, their hook order can affect which temporary text each sees.
+Rewritten strings are recorded and restored when the popup closes. If multiple
+items have identical rewritten text, text-based fallback restoration can select
+the first match; the idempotent transformation does not compound spaces.
+If a displayed popup item is changed dynamically, Windows may not remeasure it;
+the added spaces can clip on uncommon paths. Tooltip measurement and drawing
+also need compatible DC targets to keep sizing consistent; disable
+<code>classicTooltips</code> if a specific control clips after spacing.</p>]]></content>
+        <author>
+            <name>aenerv7</name>
+            <uri>https://github.com/aenerv7</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Legacy Applet Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-legacy-applet-restorer#d2e3a41d70427e4dca9113bfde4492008442a2ba</id>
@@ -805,224 +924,6 @@ selection colors are never touched.</li>
         <author>
             <name>Nerdworld</name>
             <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win32-ui-modernizer#d9bb22b73df373844b864a87299693353035e34e</id>
-        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
-        <updated>2026-07-17T00:07:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="win32uimodernizer">Win32 UI Modernizer</h1>
-<p>Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / Fluent Design aesthetics.</p>
-<p>| <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Explorer.png" alt="File Explorer" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Janela%20Seletora.png" alt="File picker dialog" /> |
-|:---:|:---:|
-| File Explorer | File picker dialog |</p>
-<p>| <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Painel%20de%20Controle.png" alt="Control Panel" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Regedit.png" alt="Registry Editor" /> |
-|:---:|:---:|
-| Control Panel | Registry Editor |</p>
-<p>| <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill.gif" alt="Navigation pane pill" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Modernizer/Pill%20das%20Abas.gif" alt="Tab pill animation" /> | <img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Modernizer/Winver.gif" alt="About Windows" /> |
-|:---:|:---:|:---:|
-| Navigation pane pill | Tab pill animation | About Windows |</p>
-<h3 id="features">Features</h3>
-<p><strong>General</strong></p>
-<ul>
-<li><strong>Modern tooltips</strong>: WinUI 3 style tooltips with rounded corners, dark mode support, and modern solid colors</li>
-<li><strong>Focus rectangle</strong>: Suppress the dotted focus rectangle for modern look</li>
-<li><strong>CheckBox reveal animation</strong>: Checkmark draws progressively when checked (WinUI-style)</li>
-<li><strong>Accent radio buttons</strong>: System accent color on radio button indicators</li>
-<li><strong>Modern progress bars</strong>: WinUI 3 style progress bars (rounded, solid accent, no gradient)</li>
-<li><strong>Rounded buttons</strong>: WinUI 3 style rounded push buttons; OK and Yes buttons use accent color fill</li>
-<li><strong>Edit focus accent line</strong>: WinUI 3 style accent-colored line at the bottom of focused Edit controls</li>
-<li><strong>Modern group box</strong>: Replaces the 3D GroupBox border with a subtle rounded card background (WinUI SettingsCard style)</li>
-<li><strong>Modern separators</strong>: Replaces 3D embossed separators with a clean 1px semi-transparent line</li>
-<li><strong>Rounded tab content pane</strong>: Rounds the corners of the tab page content area with a subtle border</li>
-<li><strong>Modern light scrollbars</strong>: Optional modern scrollbar renderer in light mode with a white track background</li>
-<li><strong>Drag-drop normalizer</strong>: Replace the drag overlay with a clean anti-aliased rounded rectangle</li>
-</ul>
-<p><strong>Explorer</strong></p>
-<ul>
-<li><strong>Rounded selection</strong>: Rounded item backgrounds in Explorer nav pane and content area</li>
-<li><strong>Neutral selection color</strong>: Optional neutral gray instead of accent color for TreeView/ListView/Header selection backgrounds</li>
-<li><strong>Nav pane pill (DComp)</strong>: WinUI-style animated pill indicator on the navigation pane</li>
-<li><strong>File list pill indicator</strong>: Pill on selected items in file lists (details/list view)</li>
-<li><strong>Animated glyph arrows</strong>: Smooth rotation animation for expand/collapse arrows</li>
-<li><strong>Explorer nav divider</strong>: Remove the vertical separator line, or reveal a thin accent-colored handle on hover only (WinUI pane splitter style)</li>
-<li><strong>WinUI nav pane metrics</strong>: WinUI-like item height and margins in the navigation pane</li>
-<li><strong>Modern legacy ReBar controls</strong>: Modernizes the legacy Explorer/Control Panel address bar, search box, toolbar buttons and related dropdowns, with an optional Mica-like tint</li>
-<li><strong>Fluent pin icon</strong>: Replaces the Quick Access pin icon (navigation pane and content area) with a Segoe Fluent Icons glyph — outline or filled, normal or accent color</li>
-<li><strong>Nav pane glyph icons</strong>: Replaces nav pane folder icons with monochrome Segoe Fluent Icons glyphs, in Explorer and file picker dialogs</li>
-<li><strong>Modernize shell icons</strong>: Replaces selected legacy shell icons in classic file picker controls with modern adaptive SVG-style icons</li>
-<li><strong>Accent colorize</strong>: Shift system colors and theme bitmaps to accent color</li>
-<li><strong>Accent marquee</strong>: Use Windows accent color for drag-selection rectangles</li>
-<li><strong>Rounded drive bars</strong>: Accent-colored rounded drive usage bars</li>
-<li><strong>Rounded group headers</strong>: Fully rounded group header backgrounds</li>
-<li><strong>Disk chart accent color</strong>: Recolors the disk usage chart and legend swatches in drive Properties dialogs to the system accent color, with rounded swatch corners</li>
-<li><strong>AutoPlay replacement</strong>: Replaces the AutoPlay flyout (shown when inserting removable drives or discs) with a Direct2D popup using dark/light acrylic, real shell icons, and the system accent color</li>
-</ul>
-<p><strong>TreeView (all apps)</strong></p>
-<ul>
-<li><strong>TreeView insertion mark</strong>: Clean opaque line instead of legacy zigzag</li>
-<li><strong>TreeView dotted lines</strong>: Remove legacy dotted connecting lines</li>
-</ul>
-<p><strong>ComboBox (all apps)</strong></p>
-<ul>
-<li><strong>ComboBox DWM</strong>: Rounded corners and optional backdrop on dropdown lists</li>
-</ul>
-<p><strong>Property windows</strong></p>
-<ul>
-<li><strong>Property window tab pill</strong>: Animated DComp pill on selected tabs</li>
-<li><strong>Dark mode</strong>: Immersive dark title bars on property dialogs</li>
-<li><strong>DirectUI dark mode</strong>: Dark backgrounds for "Previous Versions" and similar DirectUI pages</li>
-</ul>
-<p><strong>Context menus</strong></p>
-<ul>
-<li><strong>Acrylic backdrop</strong>: Semi-transparent blur behind context menus (dark system mode)</li>
-<li><strong>Dark mode</strong>: Full dark context menus with correct alpha text rendering (DrawTextWithGlow)</li>
-<li><strong>Accent header hover</strong>: Semi-transparent accent overlay on column headers</li>
-</ul>
-<p><strong>Dark mode (manual toggle, off by default)</strong></p>
-<ul>
-<li>Off by default so Explorer/dialogs don't unexpectedly switch when Windows dark mode is on — enable via "Enable custom dark mode". Visual enhancements below (accent buttons, rounded controls, context menu acrylic) work independently and don't require it</li>
-<li><strong>Full Win32 dark mode</strong>: Dark backgrounds, menus, title bar, and controls for all Win32 dialogs</li>
-<li><strong>Text pipeline</strong>: DrawTextWithGlow for correct alpha on composited DCs</li>
-<li><strong>DirectUI</strong>: Dark Control Panel, Windows Tools, and property dialog backgrounds</li>
-<li><strong>Acrylic context menus</strong>: Semi-transparent blur behind context menus</li>
-<li>Uses SetSysColors (changes global system colors, may affect other applications)</li>
-</ul>
-<p><strong>About Windows dialog (winver.exe)</strong></p>
-<ul>
-<li><strong>Modernize Winver</strong>: Replaces the banner logo with an accent-colored version and adds a "Device Info" button next to OK</li>
-<li><strong>Background material</strong>: Solid, Mica, Mica Alt, or Acrylic background (backdrop materials require Windows 11)</li>
-</ul>
-<p><strong>Registry Editor</strong></p>
-<ul>
-<li><p><strong>Full dark mode</strong>: Dark backgrounds, menus, title bar, and controls</p></li>
-<li><p><strong>D2D TreeView</strong>: Anti-aliased rounded selection, animated accent pill, geometric chevron with rotation</p></li>
-<li><p><strong>Dark menu bar</strong>: UAH dark menu painting with NC bottom line fix</p></li>
-<li><p><strong>Modern search bar</strong>: Pill-shaped search with focus accent line</p></li>
-<li><p><strong>Dark ListView / Header / StatusBar / Toolbar</strong></p></li>
-<li><p>Automatic light/dark mode detection</p></li>
-</ul>
-<p><strong>Compatibility (Translucent Windows / other dark mode mods)</strong></p>
-<ul>
-<li>Dark mode is off by default (see above), so it doesn't conflict with other dark mode mods unless you explicitly enable it. If you do want it on but need specific processes handled by an external mod instead, list them in the dark mode process exclusion list.</li>
-<li><strong>Disable text rendering pipeline</strong>: Disables DrawThemeTextEx/DrawTextW compositing, letting external mods handle text alpha. Enable when using Translucent Windows to avoid transparent text.</li>
-</ul>
-<h3 id="requirements">Requirements</h3>
-<ul>
-<li>Windows 11 version 22000 (21H2) or later</li>
-</ul>
-<h3 id="knownlimitations">Known limitations</h3>
-<ul>
-<li>Some Win32 controls may retain stale colors after switching between light and dark mode multiple times. This is a Windows limitation (uxtheme/comctl32 internal caching). Restarting Explorer resolves it.</li>
-</ul>
-<h3 id="acknowledgments">Acknowledgments</h3>
-<ul>
-<li><strong>aubymori</strong> — "Disk Pie Chart" mod, which taught how to find and hook the drive Properties disk chart routines.</li>
-<li><strong>Undisputed00x</strong> — "Translucent Windows", whose source was a big help in understanding how to style Win32, including the per-process dark mode exclusion list technique used here.</li>
-<li><strong>krlvm</strong> — part of the logic behind the "Accent colorize system colors" option.</li>
-</ul>
-<h3 id="faq">F.A.Q</h3>
-<p><strong>Is this mod heavy?</strong>
-It shouldn't be noticeable in everyday use. The hooks used (themes, colors, text) are lightweight and cached to avoid repeated, expensive shell/COM calls, and most features only run extra code when the element actually needs to be modernized. Since the mod injects into every process, there's always a small amount of interception overhead, but animations (pill, icons, chevrons) run on their own threads that sit idle (no CPU use) when nothing is happening on screen. More elaborate features (custom glyph icons, animated pill, AutoPlay) only cost anything once you specifically enable those options.</p>
-<p><strong>Is this mod compatible with other mods? E.g. Translucent Windows:</strong>
-Partially. This mod has a transparency-mod compatibility toggle, but since it injects into every process just like mods such as Translucent Windows, some incompatibilities will show up. Don't enable this mod's dark mode alongside Translucent Windows, and also disable the text rendering pipeline. For both mods to work together, this mod needs to be enabled last.</p>
-<p><strong>A specific program has wrong colors in dark mode:</strong>
-Use the dark mode exclusion list, adding the program's executable.</p>
-<p><strong>Can I combine all the settings I want?</strong>
-Yes, this mod does almost nothing with everything disabled, and you can mix almost all of them. There's no automatic warning for conflicting combinations — some options already describe their own priority in their description text (e.g. the WinUI-style navigation divider takes priority over the two divider-removal options when enabled), so it's worth reading each setting's description before turning several on at once.</p>
-<p><strong>Found a bug? A program isn't working right? Something froze?</strong>
-Please open a GitHub issue. Show your settings and mention which program froze.</p>
-<p><strong>Some colors didn't change when switching from dark mode back to light mode:</strong>
-This is a limitation of Windows' own legacy programs (uxtheme/comctl32 internal caching). Restarting Explorer fixes it.</p>
-<p><strong>I noticed dark mode changes colors in non-native programs:</strong>
-That's expected — this mod uses SetSysColors to change system colors, which can't easily be excluded per-app, so any program that asks Windows for system colors will get the dark ones. For better exclusion, use the dark mode exclusion list in the settings.</p>
-<h3 id="recommendedmodstomodernizethesystem">Recommended mods to modernize the system</h3>
-<ul>
-<li><strong>WinUI Context Menu Animation</strong> by crazyboyybs</li>
-<li><strong>File Explorer WinUI-Like Content Animation</strong> by crazyboyybs</li>
-<li><strong>Smooth Scroll for Win32</strong> by crazyboyybs</li>
-<li><strong>Custom Menu Height</strong> by Kitsune</li>
-<li><strong>Translucent Windows</strong> by Undisputed00x</li>
-<li><strong>Window Border Customizer</strong> by Lockframe</li>
-</ul>
-<hr />
-<h1 id="modernizadordeinterfacewin32portugues">Modernizador de Interface Win32 (Portugues)</h1>
-<p>Moderniza elementos antigos da interface Win32 em todos os aplicativos para corresponder a estetica do WinUI 3 / Fluent Design.</p>
-<h3 id="requisitos">Requisitos</h3>
-<ul>
-<li>Windows 11 versao 22000 (21H2) ou posterior</li>
-</ul>
-<h3 id="agradecimentos">Agradecimentos</h3>
-<ul>
-<li><strong>aubymori</strong> — mod "Disk Pie Chart", que ensinou como encontrar e interceptar as rotinas do grafico de disco nas propriedades de unidade.</li>
-<li><strong>Undisputed00x</strong> — "Translucent Windows", cujo codigo ajudou bastante a entender como estilizar o Win32, incluindo a tecnica da lista de exclusao por processo no modo escuro usada aqui.</li>
-<li><strong>krlvm</strong> — parte da logica usada na opcao "Colorir cores do sistema com a cor de destaque".</li>
-</ul>
-<h3 id="faq-1">F.A.Q</h3>
-<p><strong>Esse mod e pesado?</strong>
-Nao deve ser perceptivel no uso do dia a dia. Os hooks usados (temas, cores, texto) sao leves e otimizados com cache para evitar chamadas repetidas e caras ao shell/COM, e a maioria dos recursos so executa codigo extra quando o elemento realmente precisa ser modernizado. Como o mod se injeta em todos os processos, sempre existe uma sobrecarga minima de interceptacao, mas as animacoes (pill, icones, chevrons) rodam em threads proprias que ficam paradas (sem consumir CPU) quando nao ha nada acontecendo na tela. Recursos mais elaborados (icones de glifo customizados, pill animada, AutoPlay) so custam algo quando voce ativa essas opcoes especificamente.</p>
-<p><strong>Esse mod e compativel com outros mods? Ex: Translucent Windows:</strong>
-Parcialmente. Esse mod possui um toggle de compatibilidade com mods de transparencia, mas como ele injeta em todos os processos assim como mods como o Translucent Windows, algumas incompatibilidades vao aparecer. Nao ative o modo escuro desse mod junto com o Translucent Windows, e tambem desative o pipeline de renderizacao de texto. Para ambos os mods funcionarem juntos e necessario que esse mod seja ativado por ultimo.</p>
-<p><strong>Certo programa tem cores erradas no modo escuro:</strong>
-Utilize a lista de exclusao de modo escuro, adicionando o executavel do programa.</p>
-<p><strong>Posso combinar todas as configuracoes que eu quiser?</strong>
-Sim, esse mod nao faz quase nada com todas desativadas, e voce pode misturar quase todas. Nao existe um aviso automatico para combinacoes conflitantes — algumas opcoes ja descrevem sua propria prioridade no texto (ex: o divisor de navegacao estilo WinUI tem prioridade sobre as duas opcoes de remocao de divisor quando ativado), entao vale ler a descricao de cada configuracao antes de ativar varias ao mesmo tempo.</p>
-<p><strong>Notou um bug? Um programa nao funciona direito? Algo travou?</strong>
-Por favor, crie um issue no GitHub. Mostre suas configuracoes e cite qual programa travou.</p>
-<p><strong>Ao sair do modo escuro para o modo claro algumas cores nao mudaram:</strong>
-Isso e uma limitacao dos proprios programas antigos do Windows (cache interno do uxtheme/comctl32). Reiniciar o Explorer resolve.</p>
-<p><strong>Notei que o modo escuro altera cores em programas que nao sao nativos:</strong>
-Isso e esperado — esse mod usa o SetSysColors para trocar as cores do sistema, algo que nao pode ser excluido facilmente, entao qualquer programa que peca ao Windows as cores do sistema recebera as cores escuras. Para melhor exclusao, use a lista de exclusao de modo escuro nas configuracoes.</p>
-<h3 id="modsrecomendadosparamodernizarosistema">Mods recomendados para modernizar o sistema</h3>
-<ul>
-<li><strong>WinUI Context Menu Animation</strong> por crazyboyybs</li>
-<li><strong>File Explorer WinUI-Like Content Animation</strong> por crazyboyybs</li>
-<li><strong>Smooth Scroll for Win32</strong> por crazyboyybs</li>
-<li><strong>Custom Menu Height</strong> por Kitsune</li>
-<li><strong>Translucent Windows</strong> por Undisputed00x</li>
-<li><strong>Window Border Customizer</strong> por Lockframe</li>
-</ul>
-<hr />
-<h1 id="modernizadordeinterfazwin32espanol">Modernizador de Interfaz Win32 (Espanol)</h1>
-<p>Moderniza elementos heredados de la interfaz Win32 en todas las aplicaciones para coincidir con la estetica de WinUI 3 / Fluent Design.</p>
-<h3 id="requisitos-1">Requisitos</h3>
-<ul>
-<li>Windows 11 version 22000 (21H2) o posterior</li>
-</ul>
-<h3 id="agradecimientos">Agradecimientos</h3>
-<ul>
-<li><strong>aubymori</strong> — mod "Disk Pie Chart", que enseno como encontrar e interceptar las rutinas del grafico de disco en las propiedades de unidad.</li>
-<li><strong>Undisputed00x</strong> — "Translucent Windows", cuyo codigo ayudo mucho a entender como estilizar Win32, incluyendo la tecnica de la lista de exclusion por proceso en modo oscuro usada aqui.</li>
-<li><strong>krlvm</strong> — parte de la logica usada en la opcion "Colorear colores del sistema con el color de acento".</li>
-</ul>
-<h3 id="faq-2">F.A.Q</h3>
-<p><strong>¿Este mod es pesado?</strong>
-No deberia notarse en el uso diario. Los hooks utilizados (temas, colores, texto) son livianos y usan cache para evitar llamadas repetidas y costosas al shell/COM, y la mayoria de las funciones solo ejecutan codigo extra cuando el elemento realmente necesita modernizarse. Como el mod se inyecta en todos los procesos, siempre existe una sobrecarga minima de interceptacion, pero las animaciones (pill, iconos, chevrones) se ejecutan en sus propios hilos que quedan inactivos (sin consumir CPU) cuando no pasa nada en pantalla. Las funciones mas elaboradas (iconos de glifo personalizados, pill animada, AutoPlay) solo tienen costo cuando activas esas opciones especificamente.</p>
-<p><strong>¿Este mod es compatible con otros mods? Ej: Translucent Windows:</strong>
-Parcialmente. Este mod tiene un interruptor de compatibilidad con mods de transparencia, pero como se inyecta en todos los procesos igual que mods como Translucent Windows, apareceran algunas incompatibilidades. No actives el modo oscuro de este mod junto con Translucent Windows, y desactiva tambien el pipeline de renderizado de texto. Para que ambos mods funcionen juntos, este mod debe activarse al final.</p>
-<p><strong>Cierto programa tiene colores incorrectos en modo oscuro:</strong>
-Usa la lista de exclusion de modo oscuro, agregando el ejecutable del programa.</p>
-<p><strong>¿Puedo combinar todas las configuraciones que quiera?</strong>
-Si, este mod casi no hace nada con todo desactivado, y puedes combinar casi todas. No existe un aviso automatico para combinaciones en conflicto — algunas opciones ya describen su propia prioridad en el texto (ej: el divisor de navegacion estilo WinUI tiene prioridad sobre las dos opciones de eliminacion de divisor cuando esta activado), asi que vale la pena leer la descripcion de cada configuracion antes de activar varias a la vez.</p>
-<p><strong>¿Notaste un error? ¿Un programa no funciona bien? ¿Algo se congelo?</strong>
-Por favor, crea un issue en GitHub. Muestra tu configuracion y menciona que programa se congelo.</p>
-<p><strong>Al pasar del modo oscuro al modo claro, algunos colores no cambiaron:</strong>
-Esto es una limitacion de los propios programas antiguos de Windows (cache interno de uxtheme/comctl32). Reiniciar el Explorador lo soluciona.</p>
-<p><strong>Note que el modo oscuro cambia colores en programas que no son nativos:</strong>
-Esto es esperado — este mod usa SetSysColors para cambiar los colores del sistema, algo que no se puede excluir facilmente por aplicacion, asi que cualquier programa que le pida a Windows los colores del sistema recibira los colores oscuros. Para una mejor exclusion, usa la lista de exclusion de modo oscuro en la configuracion.</p>
-<h3 id="modsrecomendadosparamodernizarelsistema">Mods recomendados para modernizar el sistema</h3>
-<ul>
-<li><strong>WinUI Context Menu Animation</strong> por crazyboyybs</li>
-<li><strong>File Explorer WinUI-Like Content Animation</strong> por crazyboyybs</li>
-<li><strong>Smooth Scroll for Win32</strong> por crazyboyybs</li>
-<li><strong>Custom Menu Height</strong> por Kitsune</li>
-<li><strong>Translucent Windows</strong> por Undisputed00x</li>
-<li><strong>Window Border Customizer</strong> por Lockframe</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>
