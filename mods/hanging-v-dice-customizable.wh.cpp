@@ -2,7 +2,7 @@
 // @id            hanging-v-dice-customizable
 // @name          Customizable Dual Hanging Dice
 // @description   Hanging dice with physical reactions to window animations and auto-hide in fullscreen mode.
-// @version       1.3.0
+// @version       1.3.1
 // @author        Jaali
 // @github        https://github.com/alivca
 // @include       windhawk.exe
@@ -680,12 +680,16 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     return 0;
 }
 
-BOOL WhTool_ModInit() {
+// Инициализация мода — запускаем UI-поток
+BOOL Wh_ModInit()
+{
     g_hUIThread = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, &g_uiThreadId);
     return g_hUIThread != NULL;
 }
 
-void WhTool_ModUninit() {
+// Выключение мода — закрываем окно и ждём потока
+void Wh_ModUninit()
+{
     if (g_hWnd) {
         PostMessage(g_hWnd, WM_CLOSE, 0, 0);
     }
@@ -696,12 +700,11 @@ void WhTool_ModUninit() {
     }
 }
 
-void WhTool_ModSettingsChanged() {
+// Настройки изменились — посылаем сообщение перезагрузки настроек в окно оверлея
+void Wh_ModSettingsChanged()
+{
     if (g_hWnd && g_wmReloadSettings) {
         PostMessage(g_hWnd, g_wmReloadSettings, 0, 0);
     }
 }
 
-BOOL Wh_ModInit() { return WhTool_ModInit(); }
-void Wh_ModUninit() { WhTool_ModUninit(); }
-void Wh_ModSettingsChanged() { WhTool_ModSettingsChanged(); }
