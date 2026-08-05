@@ -198,6 +198,31 @@ bool VerifyOwner(HKEY key) {
            wcscmp(owner, kOwnerValue) == 0;
 }
 
+bool IsVolatileKey(HKEY key) {
+    wchar_t probeName[96];
+    swprintf_s(probeName, ARRAYSIZE(probeName),
+               L"WhVolatileProbe_%lu_%llX", GetCurrentProcessId(),
+               static_cast<unsigned long long>(GetTickCount64()));
+
+    HKEY probeKey;
+    DWORD disposition;
+    LSTATUS status = RegCreateKeyExW(
+        key, probeName, 0, nullptr, REG_OPTION_NON_VOLATILE,
+        KEY_READ | DELETE, nullptr, &probeKey, &disposition);
+    if (status == ERROR_CHILD_MUST_BE_VOLATILE) {
+        return true;
+    }
+    if (status != ERROR_SUCCESS) {
+        return false;
+    }
+
+    if (disposition == REG_CREATED_NEW_KEY) {
+        NtDeleteKey(probeKey);
+    }
+    RegCloseKey(probeKey);
+    return false;
+}
+
 bool InitializeRedirectKey() {
     DWORD disposition;
     LSTATUS status = RegCreateKeyExW(
@@ -210,8 +235,9 @@ bool InitializeRedirectKey() {
     }
 
     bool created = disposition == REG_CREATED_NEW_KEY;
-    if (!created && !VerifyOwner(g_redirectKey)) {
-        Wh_Log(L"Existing redirect key isn't owned by this mod");
+    if (!created &&
+        (!VerifyOwner(g_redirectKey) || !IsVolatileKey(g_redirectKey))) {
+        Wh_Log(L"Existing redirect key isn't an owned volatile key");
         RegCloseKey(g_redirectKey);
         g_redirectKey = nullptr;
         return false;
