@@ -36,11 +36,7 @@ For specific setups (such as unsupported language), it is recommended to apply t
 
 ## Known Limitations
 
-When the display scaling (DPI) is changed while the mod is active, the mod may
-behave slightly differently (e.g. the captured backdrop or the classic box may
-look off until the next theme switch). To ensure everything is back to normal,
-it is recommended to restart Explorer or log out and log back in after changing
-the DPI.
+On legacy Windows 10 builds (particularly version 1809 and prior), altering the display DPI scaling while the mod is running can result in slight rendering anomalies. For instance, the captured backdrop or classic box may appear misaligned until a subsequent theme change occurs. To ensure full restoration of proper rendering, it is advisable to restart explorer.exe or perform a user logoff/logon cycle following any DPI modification.
 ## Credits
 
 - Nex — Testing on Windows 10 21H2 and providing feedback
