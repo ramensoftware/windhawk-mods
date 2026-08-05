@@ -34,6 +34,7 @@ doesn't change delays configured by other systems, such as Task Scheduler.
 #include <ntdef.h>
 #include <ntstatus.h>
 
+#include <atomic>
 #include <cwchar>
 #include <string>
 #include <string_view>
@@ -82,6 +83,7 @@ NtOpenKeyEx_t NtOpenKeyEx_orig;
 
 HKEY g_redirectKey;
 bool g_ownsRedirectKey;
+std::atomic<bool> g_loggedSuccessfulRedirect{false};
 
 bool GetKeyPath(HANDLE key, std::wstring* path) {
     ULONG size = 0;
@@ -165,6 +167,13 @@ NTSTATUS DuplicateRedirectKeyHandle(PHANDLE keyHandle,
     }
 
     *keyHandle = duplicate;
+    bool expected = false;
+    if (g_loggedSuccessfulRedirect.compare_exchange_strong(
+            expected, true, std::memory_order_relaxed)) {
+        Wh_Log(L"Redirected Explorer Serialize open to volatile key "
+               L"(access=0x%08X)",
+               desiredAccess);
+    }
     return STATUS_SUCCESS;
 }
 
