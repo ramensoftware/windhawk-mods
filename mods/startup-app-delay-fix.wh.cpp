@@ -67,8 +67,6 @@ EXTERN_C NTSYSAPI NTSTATUS NTAPI NtQueryKey(
     HANDLE keyHandle, KEY_INFORMATION_CLASS keyInformationClass,
     PVOID keyInformation, ULONG length, PULONG resultLength);
 
-EXTERN_C NTSYSAPI NTSTATUS NTAPI RtlNtStatusFromDosError(ULONG dosError);
-
 using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
                                      ACCESS_MASK desiredAccess,
                                      POBJECT_ATTRIBUTES objectAttributes);
@@ -144,13 +142,24 @@ bool IsSerializeOpen(const OBJECT_ATTRIBUTES* objectAttributes) {
     return IsSerializePath(path);
 }
 
-NTSTATUS DuplicateRedirectKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess) {
+NTSTATUS DuplicateRedirectKeyHandle(PHANDLE keyHandle,
+                                    ACCESS_MASK desiredAccess) {
     HANDLE duplicate = nullptr;
     DWORD options = desiredAccess & MAXIMUM_ALLOWED ? DUPLICATE_SAME_ACCESS : 0;
     if (!DuplicateHandle(GetCurrentProcess(), g_redirectKey,
                          GetCurrentProcess(), &duplicate, desiredAccess, FALSE,
                          options)) {
-        return RtlNtStatusFromDosError(GetLastError());
+        switch (GetLastError()) {
+            case ERROR_ACCESS_DENIED:
+                return STATUS_ACCESS_DENIED;
+            case ERROR_INVALID_HANDLE:
+                return STATUS_INVALID_HANDLE;
+            case ERROR_NOT_ENOUGH_MEMORY:
+            case ERROR_OUTOFMEMORY:
+                return STATUS_NO_MEMORY;
+            default:
+                return STATUS_UNSUCCESSFUL;
+        }
     }
 
     *keyHandle = duplicate;
@@ -160,7 +169,7 @@ NTSTATUS DuplicateRedirectKey(PHANDLE keyHandle, ACCESS_MASK desiredAccess) {
 NTSTATUS NTAPI NtOpenKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                               POBJECT_ATTRIBUTES objectAttributes) {
     if (IsSerializeOpen(objectAttributes)) {
-        return DuplicateRedirectKey(keyHandle, desiredAccess);
+        return DuplicateRedirectKeyHandle(keyHandle, desiredAccess);
     }
     return NtOpenKey_orig(keyHandle, desiredAccess, objectAttributes);
 }
@@ -169,7 +178,7 @@ NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                                 POBJECT_ATTRIBUTES objectAttributes,
                                 ULONG openOptions) {
     if (IsSerializeOpen(objectAttributes)) {
-        return DuplicateRedirectKey(keyHandle, desiredAccess);
+        return DuplicateRedirectKeyHandle(keyHandle, desiredAccess);
     }
     return NtOpenKeyEx_orig(keyHandle, desiredAccess, objectAttributes,
                             openOptions);
