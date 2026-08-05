@@ -114,7 +114,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     HMODULE hMod = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (hMod && lpLibFileName && (wcsstr(lpLibFileName, L"Taskbar.View.dll") || wcsstr(lpLibFileName, L"ExplorerExtensions.dll"))) {
         // Taskbar.View.dll
-        WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {
                 { LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(bool))" },
                 &UpdateIsExpanded_Original,
@@ -122,7 +122,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
                 true 
             }
         };
-        WindhawkUtils::HookSymbols(hMod, taskbar_view_dll_hooks, ARRAYSIZE(taskbar_view_dll_hooks));
+        WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks));
     }
     return hMod;
 }
@@ -130,7 +130,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 BOOL Wh_ModInit() {
     HMODULE hTaskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (hTaskbarDll) {
-        WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
+        // taskbar.dll
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {
                 {
                     LR"(public: virtual void __cdecl TrayUI::_Hide(void))",
@@ -141,12 +142,13 @@ BOOL Wh_ModInit() {
                 false 
             }
         };
-        WindhawkUtils::HookSymbols(hTaskbarDll, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks));
+        WindhawkUtils::HookSymbols(hTaskbarDll, hooks, ARRAYSIZE(hooks));
     }
 
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
-        WindhawkUtils::SYMBOL_HOOK kernelbase_dll_hooks[] = {
+        // kernelbase.dll
+        WindhawkUtils::SYMBOL_HOOK hooks[] = {
             {
                 { LR"(lSystem.LoadLibraryExW)" },
                 &LoadLibraryExW_Original,
@@ -154,7 +156,7 @@ BOOL Wh_ModInit() {
                 true
             }
         };
-        WindhawkUtils::HookSymbols(hKernelBase, kernelbase_dll_hooks, ARRAYSIZE(kernelbase_dll_hooks));
+        WindhawkUtils::HookSymbols(hKernelBase, hooks, ARRAYSIZE(hooks));
     }
 
     return TRUE;
