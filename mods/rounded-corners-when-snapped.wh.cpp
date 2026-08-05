@@ -1,66 +1,61 @@
 // ==WindhawkMod==
 // @id              rounded-corners-when-snapped
 // @name            Rounded corners when snapped or maximized
-// @description     Makes DWM draw rounded corners for snapped and maximized windows (macOS-like), without changing the window state
-// @version         2.1.0
-// @author          Alexey
+// @description     Keeps window corners rounded when a window is snapped or maximized, without changing the window state
+// @version         1.0.0
+// @author          Alexey Lavrinenko
 // @github          https://github.com/leshaalexey
+// @license         GPL-3.0
 // @include         dwm.exe
-// @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lwevtapi
 // ==/WindhawkMod==
+
+// HasMultipleDwminitWarningsInLastMinute() is taken from the Custom Window
+// Corner Radius mod by m417z, which is published under the GNU General Public
+// License v3.0, so this mod carries the same license.
 
 // ==WindhawkModReadme==
 /*
 # Rounded corners when snapped or maximized
 
-Windows stays in charge of the window: it is really snapped / really maximized
-(Snap Layouts, Snap Assist, Win+Arrow, the maximize button — all untouched).
-Only the *drawing* changes, inside the compositor.
+Windows 11 squares off a window's corners as soon as it is maximized or
+snapped. This mod keeps them rounded, the way macOS does.
 
-Two functions of `uDWM.dll` are involved, both members of `CTopLevelWindow`:
+The window state is untouched: it is really snapped, really maximized, and
+Snap Layouts, Snap Assist, Win+Arrow and the maximize button all behave exactly
+as before. Only the compositor's drawing changes, and disabling the mod
+restores the default look immediately.
 
-* `GetEffectiveCornerStyle` decides the corner style of a composed surface and
-  returns `1` (square) for maximized and snapped windows.
-* `IsMaximizedOrSnapped` is DWM's own answer for the very same surface.
+## ⚠ Important usage note ⚠
 
-The hook combines them: when the style came out square *and* DWM says this
-surface is a maximized or snapped window, it returns `2` (round) instead.
+This mod needs to hook into `dwm.exe` to work. Please navigate to Windhawk's
+Settings > Advanced settings > More advanced settings > Process inclusion list,
+and make sure that `dwm.exe` is in the list.
 
-Some builds don't change the style at all — they keep the rounded style and
-zero the *radius* instead. So the three radius getters of `CTopLevelWindow`
-(`GetRadiusFromCornerStyle`, `GetFloatCornerRadiusForCurrentStyle`,
-`GetDpiAdjustedFloatCornerRadius`) are hooked as well, and a radius of zero is
-replaced — but only for surfaces `IsMaximizedOrSnapped` vouches for.
+## How it works
 
-Everything else — the Start menu backdrop, the virtual-desktop switch
-animation, drag previews, fullscreen windows — is left exactly as DWM wanted
-it, so there are no stray outlines.
+Windows are squared off in one of two ways, depending on the build: either the
+corner style comes out as `DWMWCP_DONOTROUND`, or the style stays rounded and
+the corner radius is zeroed further down the pipeline. The mod covers both, by
+hooking `CTopLevelWindow::GetEffectiveCornerStyle` and the corner radius
+getters of the same class.
 
-## Setup
+Every replacement is gated on `CTopLevelWindow::IsMaximizedOrSnapped` — DWM's
+own answer about the very surface being composed. The Start menu backdrop, the
+virtual-desktop switch animation, drag previews and fullscreen windows answer
+`false` and are left exactly as DWM wanted them, so no stray outlines appear.
 
-**1. Let Windhawk into `dwm.exe`** — it is on the built-in list of critical
-system processes and mods targeting it fail silently:
+A forced radius is scaled through `CWindowData::ScaleForDpi`, the same way DWM
+scales its own, so it comes out the right size on every monitor of a mixed-DPI
+setup.
 
-* Windhawk → **Settings** → **Advanced settings** → **More advanced settings**
-* **Process inclusion list** → add `%systemroot%\system32\dwm.exe`
+## Compatibility
 
-**2. Keep `explorer.exe` targeted (default)** — `dwm.exe` runs under a
-restricted account and usually cannot download PDBs, so explorer resolves the
-addresses once and caches them as RVAs for it.
-
-## Requirements
-
-* Windows 11, x64.
-* No other DWM corner patcher running (ExplorerPatcher, StartAllBack,
-  Win11DisableRoundedCorners).
-
-## Mod authorship
-
-This mod was created by:
-
-- [x] The submitter, with AI assistance
-- [x] Claude
+Other mods and tools that patch DWM corners hook the same functions and will
+fight with this one. Don't run it together with **Custom Window Corner
+Radius**, **Disable rounded corners in Windows 11**, ExplorerPatcher's rounded
+corner option, StartAllBack or Win11DisableRoundedCorners.
 */
 // ==/WindhawkModReadme==
 
@@ -68,414 +63,244 @@ This mod was created by:
 /*
 - roundStyle: round
   $name: Corner style
+  $description: >-
+    Which rounding to apply. "Normal" matches an ordinary unsnapped window.
   $options:
-  - round: Normal rounding (like an unsnapped window)
-  - small: Small rounding (like a menu)
-- noFilter: false
-  $name: Round everything DWM wanted square
-  $description: >-
-    Ignores IsMaximizedOrSnapped. Rounds internal surfaces too, which causes
-    outlines around the Start menu and desktop switching. For testing only.
-- forceRadius: true
-  $name: Force a non-zero radius
-  $description: >-
-    Needed on builds where DWM zeroes the corner radius for maximized windows
-    instead of changing the corner style. Filtered by IsMaximizedOrSnapped just
-    like the style, so it no longer touches other surfaces.
+  - round: Normal
+  - small: Small, like a menu
 - radius: 8
-  $name: Radius in pixels
-  $description: Only used when the option above is on. Windows 11 default is 8.
-- dumpSymbols: ""
-  $name: Dump symbols containing
+  $name: Fallback radius
   $description: >-
-    Diagnostics. A comma-separated list of substrings, for example
-    "Hwnd, Maximiz, CornerStyle" - explorer.exe then lists every matching
-    uDWM.dll symbol in the log. Leave empty normally.
-- debugLog: false
-  $name: Diagnostic logging
+    Only used on builds where DWM zeroes the corner radius instead of changing
+    the corner style. Windows 11 uses 8 pixels for normal rounding and 4 for
+    small rounding.
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
-#include <windows.h>
+#include <windhawk_utils.h>
 
-// ---------------------------------------------------------------- constants
+#include <dwmapi.h>
+#include <winevt.h>
 
-// uDWM CORNER_STYLE
-constexpr int kCornerSquare = 1;
-constexpr int kCornerRound = 2;
-constexpr int kCornerRoundSmall = 3;
-
-constexpr int kCacheVersion = 4;
-
-constexpr PCWSTR kKeyCacheVer = L"cacheVersion";
-constexpr PCWSTR kKeyStamp = L"uDwmTimeDateStamp";
-constexpr PCWSTR kKeySize = L"uDwmSizeOfImage";
-constexpr PCWSTR kKeyRvaCornerStyle = L"rvaGetEffectiveCornerStyle";
-constexpr PCWSTR kKeyRvaMaximized = L"rvaIsMaximizedOrSnapped";
-constexpr PCWSTR kKeyRvaRadiusStyle = L"rvaGetRadiusFromCornerStyle";
-constexpr PCWSTR kKeyRvaRadiusCurrent = L"rvaGetFloatCornerRadiusForCurrentStyle";
-constexpr PCWSTR kKeyRvaRadiusDpi = L"rvaGetDpiAdjustedFloatCornerRadius";
-
-// ----------------------------------------------------------------- settings
-
-struct Settings {
+struct {
     int roundStyle;
-    bool noFilter;
-    bool forceRadius;
     float radius;
-    bool debugLog;
 } g_settings;
 
-// -------------------------------------------------------------------- hooks
-
-using GetEffectiveCornerStyle_t = int(__fastcall*)(void* pThis);
-using IsMaximizedOrSnapped_t = bool(__fastcall*)(void* pThis);
-using FloatGetter_t = float(__fastcall*)(void* pThis);
-
-GetEffectiveCornerStyle_t GetEffectiveCornerStyle_orig;
+// Captured, not hooked: DWM's own verdict about the surface being composed.
+using IsMaximizedOrSnapped_t = bool(WINAPI*)(void* pThis);
 IsMaximizedOrSnapped_t IsMaximizedOrSnapped;
-FloatGetter_t GetRadiusFromCornerStyle_orig;
-FloatGetter_t GetFloatCornerRadiusForCurrentStyle_orig;
-FloatGetter_t GetDpiAdjustedFloatCornerRadius_orig;
 
-static void LogThrottled(PCWSTR message) {
-    static ULONGLONG lastTick;
+// Captured, not hooked: DWM's own per-window DPI scaling, so a forced radius
+// comes out the right size on every monitor.
+using GetWindowData_t = void*(WINAPI*)(void* pThis);
+GetWindowData_t GetWindowData_Original;
 
-    if (!g_settings.debugLog) {
-        return;
-    }
-    ULONGLONG now = GetTickCount64();
-    if (now - lastTick < 1000) {
-        return;
-    }
-    lastTick = now;
-    Wh_Log(L"%s", message);
-}
+using ScaleForDpi_t = unsigned int(WINAPI*)(void* pThis, unsigned int value);
+ScaleForDpi_t ScaleForDpi_Original;
 
-int __fastcall GetEffectiveCornerStyle_hook(void* pThis) {
-    int style = GetEffectiveCornerStyle_orig(pThis);
-
-    if (style != kCornerSquare) {
-        return style;
-    }
-
-    if (!g_settings.noFilter) {
-        if (!IsMaximizedOrSnapped || !IsMaximizedOrSnapped(pThis)) {
-            return style;
+float ScaledRadius(void* pThis) {
+    if (GetWindowData_Original && ScaleForDpi_Original) {
+        if (void* data = GetWindowData_Original(pThis)) {
+            return static_cast<float>(ScaleForDpi_Original(
+                data, static_cast<unsigned int>(g_settings.radius)));
         }
     }
-
-    LogThrottled(L"rounding a maximized/snapped window");
-    return g_settings.roundStyle;
-}
-
-// All three radius getters are CTopLevelWindow methods, so the very same
-// `this` can be asked whether this surface is a maximized/snapped window.
-static bool SurfaceWantsRounding(void* pThis) {
-    if (!g_settings.forceRadius) {
-        return false;
-    }
-    if (g_settings.noFilter) {
-        return true;
-    }
-    return IsMaximizedOrSnapped && IsMaximizedOrSnapped(pThis);
-}
-
-static float FixRadius(void* pThis, float value) {
-    if (value > 0.01f || !SurfaceWantsRounding(pThis)) {
-        return value;
-    }
-    LogThrottled(L"forcing radius on a maximized/snapped window");
-    return g_settings.radius;
-}
-
-float __fastcall GetRadiusFromCornerStyle_hook(void* pThis) {
-    return FixRadius(pThis, GetRadiusFromCornerStyle_orig(pThis));
-}
-
-float __fastcall GetFloatCornerRadiusForCurrentStyle_hook(void* pThis) {
-    return FixRadius(pThis, GetFloatCornerRadiusForCurrentStyle_orig(pThis));
-}
-
-float __fastcall GetDpiAdjustedFloatCornerRadius_hook(void* pThis) {
-    float value = GetDpiAdjustedFloatCornerRadius_orig(pThis);
-    if (value > 0.01f || !SurfaceWantsRounding(pThis)) {
-        return value;
-    }
+    // Fall back to the system DPI, which is only wrong on mixed-DPI setups.
     UINT dpi = GetDpiForSystem();
-    if (!dpi) dpi = 96;
-    return g_settings.radius * (dpi / 96.0f);
+    return g_settings.radius * (dpi ? dpi / 96.0f : 1.0f);
 }
 
-// ------------------------------------------------------- symbols and cache
-
-struct ResolvedRvas {
-    int cornerStyle;
-    int isMaximized;
-    int radiusStyle;
-    int radiusCurrent;
-    int radiusDpi;
-};
-
-static bool GetModuleIdentity(HMODULE module, int* stamp, int* size) {
-    auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(module);
-    if (!dos || dos->e_magic != IMAGE_DOS_SIGNATURE) {
-        return false;
+// Builds that square a maximized window by reporting a "don't round" style.
+using GetEffectiveCornerStyle_t = int(WINAPI*)(void* pThis);
+GetEffectiveCornerStyle_t GetEffectiveCornerStyle_Original;
+int WINAPI GetEffectiveCornerStyle_Hook(void* pThis) {
+    int orig = GetEffectiveCornerStyle_Original(pThis);
+    if (orig == DWMWCP_DONOTROUND && IsMaximizedOrSnapped(pThis)) {
+        Wh_Log(L"> DONOTROUND -> %d", g_settings.roundStyle);
+        return g_settings.roundStyle;
     }
-    auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-        reinterpret_cast<BYTE*>(module) + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) {
-        return false;
-    }
-    *stamp = static_cast<int>(nt->FileHeader.TimeDateStamp);
-    *size = static_cast<int>(nt->OptionalHeader.SizeOfImage);
-    return true;
+    return orig;
 }
 
-// filter is a comma-separated list of substrings; empty means "no match".
-static bool MatchesFilterList(PCWSTR text, PCWSTR filter) {
-    if (!text || !filter || !*filter) {
-        return false;
-    }
+// Builds that keep the rounded style and zero the radius instead. Which getter
+// does the zeroing differs between builds, and a downstream getter may already
+// see a value replaced upstream, so every replacement is guarded by "the radius
+// is still zero".
+using RadiusGetter_t = float(WINAPI*)(void* pThis);
 
-    while (*filter) {
-        while (*filter == L' ' || *filter == L',') {
-            filter++;
-        }
-        WCHAR token[64];
-        int n = 0;
-        while (*filter && *filter != L',' && n < ARRAYSIZE(token) - 1) {
-            token[n++] = *filter++;
-        }
-        while (n > 0 && token[n - 1] == L' ') {
-            n--;
-        }
-        token[n] = L'\0';
-        if (n && wcsstr(text, token)) {
-            return true;
-        }
-        while (*filter && *filter != L',') {
-            filter++;
-        }
+RadiusGetter_t GetRadiusFromCornerStyle_Original;
+float WINAPI GetRadiusFromCornerStyle_Hook(void* pThis) {
+    float orig = GetRadiusFromCornerStyle_Original(pThis);
+    if (orig <= 0.0f && IsMaximizedOrSnapped(pThis)) {
+        Wh_Log(L"> radius 0 -> %f", g_settings.radius);
+        return g_settings.radius;
     }
-    return false;
+    return orig;
 }
 
-static bool ResolveBySymbols(HMODULE module, ResolvedRvas* out,
-                             PCWSTR dumpFilter) {
-    WH_FIND_SYMBOL_OPTIONS options = {sizeof(options)};
-    WH_FIND_SYMBOL symbol = {};
-
-    HANDLE find = Wh_FindFirstSymbol(module, &options, &symbol);
-    if (!find) {
-        return false;
+RadiusGetter_t GetFloatCornerRadiusForCurrentStyle_Original;
+float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* pThis) {
+    float orig = GetFloatCornerRadiusForCurrentStyle_Original(pThis);
+    if (orig <= 0.0f && IsMaximizedOrSnapped(pThis)) {
+        Wh_Log(L"> current style radius 0 -> %f", g_settings.radius);
+        return g_settings.radius;
     }
-
-    auto base = reinterpret_cast<BYTE*>(module);
-    *out = {};
-
-    do {
-        if (!symbol.symbol || !symbol.address) {
-            continue;
-        }
-        int rva = static_cast<int>(reinterpret_cast<BYTE*>(symbol.address) - base);
-
-        if (MatchesFilterList(symbol.symbol, dumpFilter)) {
-            Wh_Log(L"[%08X] %s", rva, symbol.symbol);
-        }
-
-        if (wcsstr(symbol.symbol, L"CTopLevelWindow::GetEffectiveCornerStyle")) {
-            out->cornerStyle = rva;
-        } else if (wcsstr(symbol.symbol, L"CTopLevelWindow::IsMaximizedOrSnapped")) {
-            out->isMaximized = rva;
-        } else if (wcsstr(symbol.symbol, L"CTopLevelWindow::GetRadiusFromCornerStyle")) {
-            out->radiusStyle = rva;
-        } else if (wcsstr(symbol.symbol,
-                          L"CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle")) {
-            out->radiusCurrent = rva;
-        } else if (wcsstr(symbol.symbol,
-                          L"CTopLevelWindow::GetDpiAdjustedFloatCornerRadius")) {
-            out->radiusDpi = rva;
-        }
-    } while (Wh_FindNextSymbol(find, &symbol));
-
-    Wh_FindCloseSymbol(find);
-    return out->cornerStyle != 0;
+    return orig;
 }
 
-static void StoreRvas(int stamp, int size, const ResolvedRvas& rvas) {
-    Wh_SetIntValue(kKeyRvaCornerStyle, rvas.cornerStyle);
-    Wh_SetIntValue(kKeyRvaMaximized, rvas.isMaximized);
-    Wh_SetIntValue(kKeyRvaRadiusStyle, rvas.radiusStyle);
-    Wh_SetIntValue(kKeyRvaRadiusCurrent, rvas.radiusCurrent);
-    Wh_SetIntValue(kKeyRvaRadiusDpi, rvas.radiusDpi);
-    // Identity last: it validates everything above.
-    Wh_SetIntValue(kKeyStamp, stamp);
-    Wh_SetIntValue(kKeySize, size);
-    Wh_SetIntValue(kKeyCacheVer, kCacheVersion);
-}
-
-static bool LoadRvas(int stamp, int size, ResolvedRvas* out) {
-    if (Wh_GetIntValue(kKeyCacheVer, 0) != kCacheVersion ||
-        Wh_GetIntValue(kKeyStamp, 0) != stamp ||
-        Wh_GetIntValue(kKeySize, 0) != size) {
-        return false;
+// Returns an already DPI-scaled value, so the replacement has to be scaled too.
+RadiusGetter_t GetDpiAdjustedFloatCornerRadius_Original;
+float WINAPI GetDpiAdjustedFloatCornerRadius_Hook(void* pThis) {
+    float orig = GetDpiAdjustedFloatCornerRadius_Original(pThis);
+    if (orig <= 0.0f && IsMaximizedOrSnapped(pThis)) {
+        float scaled = ScaledRadius(pThis);
+        Wh_Log(L"> dpi adjusted radius 0 -> %f", scaled);
+        return scaled;
     }
-    out->cornerStyle = Wh_GetIntValue(kKeyRvaCornerStyle, 0);
-    out->isMaximized = Wh_GetIntValue(kKeyRvaMaximized, 0);
-    out->radiusStyle = Wh_GetIntValue(kKeyRvaRadiusStyle, 0);
-    out->radiusCurrent = Wh_GetIntValue(kKeyRvaRadiusCurrent, 0);
-    out->radiusDpi = Wh_GetIntValue(kKeyRvaRadiusDpi, 0);
-    return out->cornerStyle != 0;
+    return orig;
 }
 
-// ---------------------------------------------------------------- settings
-
-static void LoadSettings() {
-    PCWSTR style = Wh_GetStringSetting(L"roundStyle");
+void LoadSettings() {
+    WindhawkUtils::StringSetting style =
+        WindhawkUtils::StringSetting::make(L"roundStyle");
     g_settings.roundStyle =
-        (style && wcscmp(style, L"small") == 0) ? kCornerRoundSmall : kCornerRound;
-    Wh_FreeStringSetting(style);
-
-    g_settings.noFilter = Wh_GetIntSetting(L"noFilter") != 0;
-    g_settings.forceRadius = Wh_GetIntSetting(L"forceRadius") != 0;
-    g_settings.debugLog = Wh_GetIntSetting(L"debugLog") != 0;
+        wcscmp(style.get(), L"small") == 0 ? DWMWCP_ROUNDSMALL : DWMWCP_ROUND;
 
     int radius = Wh_GetIntSetting(L"radius");
-    if (radius < 1) radius = 8;
-    if (radius > 60) radius = 60;
+    if (radius < 1) {
+        radius = 1;
+    } else if (radius > 40) {
+        radius = 40;
+    }
     g_settings.radius = static_cast<float>(radius);
 }
 
-// -------------------------------------------------------------- entrypoints
+// Returns true if at least two Dwminit warnings (Level=3) were logged in the
+// Application event log within the last 60 seconds. DWM logs warnings here when
+// it crashes and is restarted by the session manager, so repeated warnings are
+// a strong signal that something in the desktop pipeline is unstable, and a mod
+// hooking the compositor should stay out of the way.
+bool HasMultipleDwminitWarningsInLastMinute() {
+    const WCHAR* queryPath = L"Application";
+    const WCHAR* query =
+        L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
+        L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
 
-static bool RunningInDwm() {
-    WCHAR path[MAX_PATH]{};
-    if (!GetModuleFileNameW(nullptr, path, ARRAYSIZE(path))) {
+    EVT_HANDLE queryHandle =
+        EvtQuery(nullptr, queryPath, query, EvtQueryChannelPath);
+    if (!queryHandle) {
+        Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
         return false;
     }
-    PCWSTR name = wcsrchr(path, L'\\');
-    name = name ? name + 1 : path;
-    return _wcsicmp(name, L"dwm.exe") == 0;
+
+    EVT_HANDLE events[2] = {};
+    DWORD returned = 0;
+    constexpr DWORD kTimeout = 1000;
+    BOOL ok =
+        EvtNext(queryHandle, ARRAYSIZE(events), events, kTimeout, 0, &returned);
+    if (!ok && GetLastError() != ERROR_NO_MORE_ITEMS) {
+        Wh_Log(L"EvtNext failed with error: %u", GetLastError());
+    }
+    for (DWORD i = 0; i < returned; i++) {
+        EvtClose(events[i]);
+    }
+
+    EvtClose(queryHandle);
+    return ok && returned >= ARRAYSIZE(events);
 }
 
 BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    if (HasMultipleDwminitWarningsInLastMinute()) {
+        Wh_Log(L"Refusing to load: multiple recent Dwminit warnings");
+        return FALSE;
+    }
+
     LoadSettings();
 
-    HMODULE hUDWM = GetModuleHandleW(L"uDWM.dll");
-    if (!hUDWM) {
-        hUDWM = LoadLibraryW(L"uDWM.dll");
-    }
-    if (!hUDWM) {
-        Wh_Log(L"uDWM.dll not available");
+    HMODULE udwm = GetModuleHandle(L"udwm.dll");
+    if (!udwm) {
+        Wh_Log(L"udwm.dll isn't loaded");
         return FALSE;
     }
 
-    int stamp = 0, size = 0;
-    if (!GetModuleIdentity(hUDWM, &stamp, &size)) {
-        Wh_Log(L"Bad uDWM.dll headers");
+    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
+        // The filter. Without it there's no way to tell app windows from
+        // internal DWM surfaces, and rounding those leaves visible outlines, so
+        // this one is mandatory.
+        {
+            {LR"(public: bool __cdecl CTopLevelWindow::IsMaximizedOrSnapped(void)const )"},
+            &IsMaximizedOrSnapped,
+            nullptr,  // Capture only.
+        },
+        {
+            {LR"(private: enum CORNER_STYLE __cdecl CTopLevelWindow::GetEffectiveCornerStyle(void))"},
+            &GetEffectiveCornerStyle_Original,
+            GetEffectiveCornerStyle_Hook,
+        },
+        {
+            {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))"},
+            &GetRadiusFromCornerStyle_Original,
+            GetRadiusFromCornerStyle_Hook,
+        },
+        // The next two come in const and non-const, private and public flavors
+        // depending on the build, and are missing entirely in older ones. Only
+        // CTopLevelWindow overloads are listed on purpose: the hooks pass
+        // `this` to IsMaximizedOrSnapped, so a same-named method on another
+        // class must not match.
+        {
+            {
+                LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))",
+                LR"(private: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void)const )",
+                LR"(public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void))",
+                LR"(public: float __cdecl CTopLevelWindow::GetFloatCornerRadiusForCurrentStyle(void)const )",
+            },
+            &GetFloatCornerRadiusForCurrentStyle_Original,
+            GetFloatCornerRadiusForCurrentStyle_Hook,
+            true,  // Optional.
+        },
+        {
+            {
+                LR"(private: float __cdecl CTopLevelWindow::GetDpiAdjustedFloatCornerRadius(void))",
+                LR"(private: float __cdecl CTopLevelWindow::GetDpiAdjustedFloatCornerRadius(void)const )",
+                LR"(public: float __cdecl CTopLevelWindow::GetDpiAdjustedFloatCornerRadius(void))",
+                LR"(public: float __cdecl CTopLevelWindow::GetDpiAdjustedFloatCornerRadius(void)const )",
+            },
+            &GetDpiAdjustedFloatCornerRadius_Original,
+            GetDpiAdjustedFloatCornerRadius_Hook,
+            true,  // Optional.
+        },
+        // Used only to scale a forced radius the way DWM would.
+        {
+            {LR"(public: class CWindowData * __cdecl CTopLevelWindow::GetWindowData(void)const )"},
+            &GetWindowData_Original,
+            nullptr,  // Capture only.
+            true,     // Optional - falls back to the system DPI.
+        },
+        {
+            {LR"(public: unsigned int __cdecl CWindowData::ScaleForDpi(unsigned int)const )"},
+            &ScaleForDpi_Original,
+            nullptr,  // Capture only.
+            true,     // Optional - falls back to the system DPI.
+        },
+    };
+
+    if (!HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return FALSE;
     }
 
-    // --- Warmer mode: resolve and cache the addresses for dwm.exe.
-    if (!RunningInDwm()) {
-        PCWSTR dump = Wh_GetStringSetting(L"dumpSymbols");
-        bool wantDump = dump && *dump;
-
-        ResolvedRvas cached{};
-        if (!wantDump && LoadRvas(stamp, size, &cached)) {
-            Wh_Log(L"warmer: RVAs already cached for this uDWM build");
-            Wh_FreeStringSetting(dump);
-            return TRUE;
-        }
-
-        ResolvedRvas rvas{};
-        bool ok = ResolveBySymbols(hUDWM, &rvas, dump);
-        Wh_FreeStringSetting(dump);
-
-        if (!ok) {
-            Wh_Log(L"warmer: failed to enumerate uDWM.dll symbols here too");
-            return TRUE;
-        }
-
-        StoreRvas(stamp, size, rvas);
-        Wh_Log(L"warmer: stored RVAs style=%08X maximized=%08X", rvas.cornerStyle,
-               rvas.isMaximized);
-        return TRUE;
-    }
-
-    // --- dwm.exe: cache first, own enumeration as a fallback.
-    ResolvedRvas rvas{};
-    if (LoadRvas(stamp, size, &rvas)) {
-        Wh_Log(L"dwm: using cached RVAs");
-    } else if (ResolveBySymbols(hUDWM, &rvas, nullptr)) {
-        Wh_Log(L"dwm: resolved symbols locally");
-        StoreRvas(stamp, size, rvas);
-    } else {
-        Wh_Log(L"dwm: no cached RVAs and no symbols - let explorer.exe warm "
-               L"the cache, then re-enable the mod");
-        return FALSE;
-    }
-
-    auto base = reinterpret_cast<BYTE*>(hUDWM);
-
-    if (rvas.isMaximized) {
-        IsMaximizedOrSnapped =
-            reinterpret_cast<IsMaximizedOrSnapped_t>(base + rvas.isMaximized);
-    } else if (!g_settings.noFilter) {
-        Wh_Log(L"dwm: CTopLevelWindow::IsMaximizedOrSnapped not found - "
-               L"staying passive to avoid rounding internal surfaces");
-    }
-
-    Wh_Log(L"dwm: RVAs style=%08X maximized=%08X radius=%08X/%08X/%08X",
-           rvas.cornerStyle, rvas.isMaximized, rvas.radiusStyle,
-           rvas.radiusCurrent, rvas.radiusDpi);
-
-    int hooked = 0;
-
-    if (rvas.cornerStyle &&
-        Wh_SetFunctionHook(base + rvas.cornerStyle,
-                           (void*)GetEffectiveCornerStyle_hook,
-                           (void**)&GetEffectiveCornerStyle_orig)) {
-        hooked++;
-    }
-    // Always hooked; whether they change anything is decided per call, so the
-    // radius setting can be toggled without recompiling.
-    if (rvas.radiusStyle &&
-        Wh_SetFunctionHook(base + rvas.radiusStyle,
-                           (void*)GetRadiusFromCornerStyle_hook,
-                           (void**)&GetRadiusFromCornerStyle_orig)) {
-        hooked++;
-    }
-    if (rvas.radiusCurrent &&
-        Wh_SetFunctionHook(base + rvas.radiusCurrent,
-                           (void*)GetFloatCornerRadiusForCurrentStyle_hook,
-                           (void**)&GetFloatCornerRadiusForCurrentStyle_orig)) {
-        hooked++;
-    }
-    if (rvas.radiusDpi &&
-        Wh_SetFunctionHook(base + rvas.radiusDpi,
-                           (void*)GetDpiAdjustedFloatCornerRadius_hook,
-                           (void**)&GetDpiAdjustedFloatCornerRadius_orig)) {
-        hooked++;
-    }
-
-    if (!hooked) {
-        Wh_Log(L"dwm: nothing hooked");
-        return FALSE;
-    }
-
-    Wh_Log(L"dwm: hooked %d function(s), filter=%s", hooked,
-           IsMaximizedOrSnapped ? L"IsMaximizedOrSnapped" : L"none");
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
     LoadSettings();
-    SystemParametersInfoW(SPI_SETDRAGFULLWINDOWS, TRUE, nullptr, SPIF_SENDCHANGE);
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Unloaded");
+    Wh_Log(L">");
 }
