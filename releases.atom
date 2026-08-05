@@ -2,12 +2,92 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-05T16:52:26.000Z</updated>
+    <updated>2026-08-05T18:23:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Separators 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-separators#8a97b5eccb4fbe75e04fdfb62be173b619bcd528</id>
+        <link href="https://windhawk.net/mods/taskbar-separators"/>
+        <updated>2026-08-05T18:23:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarseparators">Taskbar Separators</h1>
+<p>Add clean, customizable visual separators between application buttons on the
+Windows 11 taskbar.</p>
+<p>Unlike placeholder applications or pinned shortcuts, these separators are
+visual, non-clickable elements. They do not launch programs or occupy normal
+application slots.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-preview.jpg" alt="Taskbar Separators
+preview" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Add multiple separators at configurable taskbar positions</li>
+<li>Optional separator before the first application button</li>
+<li>Live position and appearance updates</li>
+<li>Five configurable visual styles:</li>
+<li>Fade</li>
+<li>Solid</li>
+<li>Double</li>
+<li>Rounded</li>
+<li>Glow</li>
+<li>Adjustable thickness, length, opacity, color, and effect settings</li>
+<li>Automatic horizontal and vertical taskbar orientation</li>
+<li>Optional animation compatibility mode</li>
+<li>Clean removal when the mod is disabled</li>
+<li>No changes to taskbar button margins, padding, or application behavior</li>
+</ul>
+<h2 id="gettingstarted">Getting started</h2>
+<ol>
+<li>Open the mod's <strong>Settings</strong> tab.</li>
+<li>Add separator positions to the <strong>Separators</strong> list.</li>
+<li>A position of <code>3</code> places a separator after the third application button.</li>
+<li>Select a style and adjust its appearance.</li>
+</ol>
+<h2 id="positionbehavior">Position behavior</h2>
+<p>Numbered positions place separators after application buttons:</p>
+<ul>
+<li>Position <code>1</code> places a separator after the first application button</li>
+<li>Position <code>2</code> places a separator after the second application button</li>
+<li>Position <code>3</code> places a separator after the third application button</li>
+</ul>
+<p>Enable <strong>Separator before first app</strong> to place a separator before the first
+application button.</p>
+<p>Start, Search, Widgets, Task View, and other system buttons are not counted as
+application buttons.</p>
+<p>Positions follow the current visual order of taskbar application buttons.
+Opening, closing, pinning, unpinning, or rearranging applications can change
+which icons appear beside a configured separator.</p>
+<h2 id="settings">Settings</h2>
+<p><img src="https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-settings.jpg" alt="Taskbar Separators
+settings" /></p>
+<h2 id="alternatesetups">Alternate setups</h2>
+<p><img src="https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-alt.jpg" alt="Taskbar Separators alternate
+setups" /></p>
+<h2 id="animationcompatibility">Animation compatibility</h2>
+<p>Static taskbars are fully supported.</p>
+<p>The mod can follow icons animated by other taskbar mods, but very fast animation
+may not remain perfectly synchronized because both mods update their visual
+elements independently.</p>
+<p>This affects animation appearance only and does not affect normal static
+separator positioning.</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 horizontal taskbars</li>
+<li>Vertical taskbars via Vertical Taskbar for Windows 11</li>
+<li>Compatible with Windows 11 Taskbar Styler in normal configurations</li>
+</ul>
+<h2 id="licenseandattribution">License and attribution</h2>
+<p>Licensed under the GNU General Public License v3.0.</p>
+<p>Taskbar hook and UI-thread infrastructure includes code adapted from Windhawk
+mods by Michael Maltsev (m417z).</p>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Animations 1.1.5]]></title>
         <id>https://windhawk.net/mods/windows-animations#fcf4752975ee79f29179fa66057e216ba4f52ff5</id>
@@ -908,56 +988,6 @@ this is safe to do for as many or as few programs as you'd like.</p>]]></content
         <author>
             <name>Didi</name>
             <uri>https://github.com/diegoalejo15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Marquee Fade 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-marquee-fade#9844dd6581b5594ed8a8a601388d96d6e293f23f</id>
-        <link href="https://windhawk.net/mods/desktop-marquee-fade"/>
-        <updated>2026-07-18T16:49:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopmarqueefade">Desktop Marquee Fade</h1>
-<p>Adds a smooth fade animation to the desktop selection rectangle.
-Instead of vanishing instantly when you release the mouse button, the
-selection area dissolves gracefully — making the Windows desktop feel
-more polished and modern.</p>
-<p><img src="https://i.imgur.com/oH4fh6O.gif" alt="preview" /></p>
-<hr />
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li><strong>Smooth Fade Effect</strong> — The selection rectangle fades out instead of
-disappearing instantly.</li>
-<li><strong>Highly Customizable</strong> — Adjust animation speed and duration via mod
-settings.</li>
-<li><strong>Smart Auto-Opacity</strong> — Automatically calculates the starting opacity to
-match your speed and duration so the animation always looks natural.</li>
-<li><strong>Smart Interrupt</strong> — If another window comes to the foreground while the
-animation is playing, the mod speeds it up 4x to stay out of your way.</li>
-<li><strong>Single Instance Mode</strong> — Prevents overlapping animations; only one
-selection rectangle fades at a time.</li>
-<li><strong>Custom Fade Colors</strong> — Override the fill and border colors used by the
-fade overlay. Only the fade overlay is affected — your system-wide
-selection colors are never touched.</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Click and drag on the desktop to draw a selection rectangle.</li>
-<li>Release the mouse button — the rectangle fades out smoothly.</li>
-</ol>
-<h2 id="configuration">Configuration</h2>
-<p>| Setting | Default | Description |
-|---|---|---|
-| Animation Speed (%) | 100 | Multiplier for how fast the animation runs (50–500). |
-| Animation Duration (ms) | 300 | Total time the fade lasts (100–2000 ms). |
-| Auto-calculate Opacity | Off | Scales starting opacity automatically to match speed/duration. |
-| Manual Initial Opacity | 90 | Starting alpha (1–255) when auto-calculate is off. |
-| Accelerate if Covered | On | Speeds up the fade 4× whenever another window is in the foreground. |
-| Single Instance Only | Off | Destroys any previous fade when a new drag starts. |
-| Use Custom Colors | Off | Overrides the fade overlay's fill and border colors with your custom hex values. The live drag rectangle is <strong>not</strong> affected. |
-| Custom Fill Color | 8C8C8C | Hex color for the overlay fill. |
-| Custom Border Color | B4B4B4 | Hex color for the overlay border. |</p>]]></content>
-        <author>
-            <name>angel_lov</name>
-            <uri>https://github.com/Twilight0Sparkle</uri>
         </author>
     </entry>
 </feed>

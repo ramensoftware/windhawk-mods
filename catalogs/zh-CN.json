@@ -12867,6 +12867,38 @@
         "version": "1.2"
       }
     },
+    "taskbar-separators": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1785954199000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1785954199000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "digART",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Add customizable visual separators between Windows 11 taskbar application buttons.",
+        "github": "https://github.com/digart11",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Separators",
+        "version": "1.0.0"
+      }
+    },
     "taskbar-shadow-border": {
       "details": {
         "defaultSorting": 3720,
