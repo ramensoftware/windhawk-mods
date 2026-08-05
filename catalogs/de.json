@@ -6448,7 +6448,7 @@
           0
         ],
         "ratingUsers": 2,
-        "updated": 1783006070000,
+        "updated": 1785948295000,
         "users": 21
       },
       "metadata": {
@@ -6460,7 +6460,7 @@
           "windhawk.exe"
         ],
         "name": "Gather Windows To Monitor",
-        "version": "0.1.0"
+        "version": "0.1.1"
       }
     },
     "genie-minimize-animation": {
