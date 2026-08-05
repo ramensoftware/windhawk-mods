@@ -6,7 +6,7 @@
 // @author         allelimo
 // @github         https://github.com/allelimo
 // @include        windhawk.exe
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -56,11 +56,8 @@ All credits goes to James Lin and Husam Abdulraheem.
 
 #define MENU_OPEN_WINDHAWK   9000
 #define MENU_TITLE_WINDHAWK  9100
-#define MENU_CLOSE_TRAYBORDERLINE 9200
-
 
 // --- Global Variables ---
-
 HWND g_hWnd = NULL;
 NOTIFYICONDATAW g_nid = {0};
 HANDLE g_hThread = NULL;
@@ -68,13 +65,10 @@ UINT g_uMsgTaskbarCreated = 0;
 // allelimo
 PCWSTR g_appPath;
 PCWSTR g_appOptions;
-
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
 
-
 // --- Functional Logic ---
-
 void ApplySettingsToTray() {
     PCWSTR iconFile = Wh_GetStringSetting(L"icon_file");
     int iconIndex = Wh_GetIntSetting(L"icon_index");
@@ -86,19 +80,11 @@ void ApplySettingsToTray() {
         g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
     }
 
-    // int IsOptionsNull = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE, appOptions, -1, L"no options", -1) ;
-    // int IsOptionsNull2 = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE, appOptions, -1, L"", -1) ;
-
-    // if (IsOptionsNull2 == CSTR_EQUAL || IsOptionsNull == CSTR_EQUAL) {
-    //     appOptions = NULL;
-    // }
-
     HICON hOldIcon = g_nid.hIcon;
     ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
     if (!g_nid.hIcon) g_nid.hIcon = (HICON)LoadImageW(NULL, iconFile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
     if (!g_nid.hIcon) g_nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
 
-    // wcscpy_s(g_nid.szTip, tooltipText);
     lstrcpynW(g_nid.szTip, tooltipText, ARRAYSIZE(g_nid.szTip));
     if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) Shell_NotifyIconW(NIM_ADD, &g_nid);
 
@@ -110,8 +96,6 @@ void ApplySettingsToTray() {
 
 // allelimo
 void OpenApp() {
-
-   // ShellExecuteW(NULL, L"open", appPath, appOptions, NULL, 1);
     if (!g_appPath || !*g_appPath) {
         Wh_Log(L"No app path configured");
         return;
@@ -122,40 +106,27 @@ void OpenApp() {
     if ((INT_PTR)result <= 32) {
         Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)result);
     }
-    
 }
 
-// ─── System Theme + Context Menu ─────────────────────────────────────────────
+// // ─── System Theme + Context Menu ─────────────────────────────────────────────
+// static bool IsSystemDarkMode() {
+//     DWORD value = 1, size = sizeof(value);
+//     RegGetValueW(HKEY_CURRENT_USER,
+//         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+//         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+//     return value == 0;
+// }
 
-static bool IsSystemDarkMode() {
-    DWORD value = 1, size = sizeof(value);
-    RegGetValueW(HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
-    return value == 0;
-}
-
-static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
-    HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
-    if (!ux) return;
-    using Fn135 = int(WINAPI*)(int);
-    using Fn133 = bool(WINAPI*)(HWND, bool);
-    using Fn136 = void(WINAPI*)();
-    if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
-    if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
-    if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
-}
-
-// --- WhTool Callbacks ---
-
-void WhTool_ModUninit() {
-    //if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
-    if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
-    if (g_hThread) {
-        WaitForSingleObject(g_hThread, 2000);
-        CloseHandle(g_hThread);
-    }
-}
+// static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
+//     HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+//     if (!ux) return;
+//     using Fn135 = int(WINAPI*)(int);
+//     using Fn133 = bool(WINAPI*)(HWND, bool);
+//     using Fn136 = void(WINAPI*)();
+//     if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
+//     if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
+//     if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
+// }
 
 // main
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -169,19 +140,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             //allelimo
             else if(LOWORD(lParam) == WM_RBUTTONUP)
                 {
-
-                HMENU hMenu = CreatePopupMenu();
+                    HMENU hMenu = CreatePopupMenu();
 
                     AppendMenuW(hMenu, MF_STRING, MENU_TITLE_WINDHAWK, L"Tray Borderline");
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
-                    AppendMenuW(hMenu, MF_STRING, MENU_CLOSE_TRAYBORDERLINE, L"Close Tray Borderline");
-
 
                     POINT pt;
                     GetCursorPos(&pt);
-                    bool dark = IsSystemDarkMode();
-                    ApplyContextMenuTheme(hwnd, dark);
                     SetForegroundWindow(hwnd);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON |
                         TPM_BOTTOMALIGN | TPM_RIGHTALIGN,
@@ -189,31 +155,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     PostMessageW(hwnd, WM_NULL, 0, 0);
                     DestroyMenu(hMenu);
 
-
                     if (cmd == MENU_OPEN_WINDHAWK) {
                         SHELLEXECUTEINFOW sei = {sizeof(sei)};
                         sei.lpFile = g_windhawkPath;
                         sei.nShow  = SW_SHOWNORMAL;
                         ShellExecuteExW(&sei);
                     }
-                    else if (cmd == MENU_CLOSE_TRAYBORDERLINE){
-                        WhTool_ModUninit();
-                    }
-
-
             };
-            return 0;
+            //return 0;
  
-                    //allelimo 
-                    //WCHAR statusText[128];
-                    //int freedisk = g_freeSpace;
-                    //int totaldisk = g_totalSpace;
-                               
-                   
-
-
-
-//alellimo
         case WM_USER_UPDATESETTINGS:
             ApplySettingsToTray();
             return 0;
@@ -262,7 +212,6 @@ DWORD WINAPI TrayThread(LPVOID lpParam) {
 }
 
 // --- WhTool Callbacks ---
-
 BOOL WhTool_ModInit() {
 
     g_hInstance = GetModuleHandleW(nullptr);
@@ -273,26 +222,22 @@ BOOL WhTool_ModInit() {
             break;
     }
 
-
     g_hThread = CreateThread(NULL, 0, TrayThread, NULL, 0, NULL);
     return (g_hThread != NULL);
-
-
-
 }
 
 void WhTool_ModSettingsChanged() {
     if (g_hWnd) PostMessage(g_hWnd, WM_USER_UPDATESETTINGS, 0, 0);
 }
 
-// void WhTool_ModUninit() {
-//     //if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
-//     if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
-//     if (g_hThread) {
-//         WaitForSingleObject(g_hThread, 2000);
-//         CloseHandle(g_hThread);
-//     }
-// }
+void WhTool_ModUninit() {
+    //if (g_hWnd) SendMessageW(g_hWnd, WM_CLOSE, 0, 0);
+    if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, 2000);
+        CloseHandle(g_hThread);
+    }
+}
 
 // --- Windhawk Tool Mod Boilerplate (Do not modify) ---
 
