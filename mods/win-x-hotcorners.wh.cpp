@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         4.0.2
+// @version         4.0.3
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @license         MIT
@@ -187,6 +187,14 @@ Hot corners are disabled when any excluded process is the foreground window.
 **Example:** `photoshop.exe;premiere.exe;blender.exe`
 
 # Changelog
+
+## What's New in v4.0.3
+
+- **Fixed: the mod would not load at all.** "Require a modifier key" offered a
+  dropdown whose values were numbers, and Windhawk only accepts text values for
+  a dropdown — it refused to parse the settings before any of the mod ran. The
+  choices are now stored by name (`none`, `ctrl`, `alt`, `shift`, `win`); a
+  configuration saved by an earlier version keeps working.
 
 ## What's New in v4.0.2
 
@@ -437,18 +445,18 @@ twice a second, leaving the tick to one cursor read plus a few comparisons.
     This is the strongest protection against accidental triggers. 0 turns it
     off; 400 is a comfortable starting point. The two entries must be within
     this many milliseconds of each other.
-- RequireModifier: 0
+- RequireModifier: none
   $name: Require a modifier key
   $description: >-
     Only fire while this key is held down. Makes hot corners completely inert
     the rest of the time, which suits people who work near the screen edges.
     Combines with everything else - the zone still has to be entered normally.
   $options:
-  - 0: None - zones always active
-  - 1: Ctrl
-  - 2: Alt
-  - 3: Shift
-  - 4: Win
+  - none: None - zones always active
+  - ctrl: Ctrl
+  - alt: Alt
+  - shift: Shift
+  - win: Win
 - CooldownMs: 300
   $name: Cooldown between triggers (ms)
   $description: >-
@@ -3127,6 +3135,26 @@ done:
 // Settings
 // =====================================================================
 
+// Windhawk rejects a settings block where a value with $options is not a
+// string, so this one setting is stored by name. Everything downstream — the
+// zones, the value store, the dashboard combo — keeps the 0-4 encoding, so the
+// mapping lives here and nowhere else.
+static int ParseModifierName(const wchar_t *s)
+{
+    static const wchar_t *kNames[] = {L"none", L"ctrl", L"alt", L"shift",
+                                      L"win"};
+    for (int i = 0; i < (int)ARRAYSIZE(kNames); i++)
+        if (_wcsicmp(s, kNames[i]) == 0)
+            return i;
+
+    // Versions up to 4.0.2 stored a number here. Keep those configurations
+    // working instead of silently resetting them to "none".
+    if (s[0] >= L'0' && s[0] <= L'4' && s[1] == L'\0')
+        return s[0] - L'0';
+
+    return 0;
+}
+
 static void LoadSettings()
 {
     using WindhawkUtils::StringSetting;
@@ -3153,9 +3181,8 @@ static void LoadSettings()
     if (g_settings.knockWindowMs < 0)
         g_settings.knockWindowMs = 0;
 
-    g_settings.requireModifier = Wh_GetIntSetting(L"RequireModifier");
-    if (g_settings.requireModifier < 0 || g_settings.requireModifier > 4)
-        g_settings.requireModifier = 0;
+    g_settings.requireModifier =
+        ParseModifierName(StringSetting::make(L"RequireModifier").get());
 
     g_settings.avoidTaskbar = Wh_GetIntSetting(L"AvoidTaskbar") != 0;
 
