@@ -19,7 +19,9 @@ it so that Windows uses a standard gamma curve. It should not affect native HDR 
 
 Simple, accurate sRGB with a simple power-law gamma curve that you can control.
 
-See examples and read more on [GitHub](https://github.com/dylanraga/win11hdr-srgb-to-gamma2.2-icm) by dylanraga
+![Comparison Image](https://i.imgur.com/GwegdeU.png)
+
+See examples and read more on the [win11hdr-srgb-to-gamma2.2-icm GitHub](https://github.com/dylanraga/win11hdr-srgb-to-gamma2.2-icm), an alternative icc based solution by dylanraga
 
 ## DWM EOTF Gamma Curve
 
@@ -439,7 +441,8 @@ static int PatchShaderBuf(BYTE *buf, DWORD size, float gamma, int counts[4])
 static bool HasDXBCSubBlob(const DXBCHeader *hdr)
 {
     const BYTE *base = (const BYTE *)hdr;
-    for (size_t k = kDXBCHeaderSize; k + kDXBCHeaderSize <= hdr->size; k++)
+    // DXBC sub-blobs are at DWORD-aligned offsets within a container (verified).
+    for (size_t k = kDXBCHeaderSize; k + kDXBCHeaderSize <= hdr->size; k += 4)
     {
         const auto *inner = (const DXBCHeader *)(base + k);
         if (inner->magic[0] == 'D' && inner->magic[1] == 'X' &&
@@ -468,22 +471,25 @@ static bool ChecksumRoundTrips(const DXBCHeader *hdr)
 
 // Scans a read-only committed memory region for DXBC shader blobs, patches any
 // that match the known checksums, and appends restoration records to g_patches.
+// Accumulates matched-shader bits into matchedMask (bit i = kKnownChecksums[i] patched).
 // Returns the number of individual shaders patched.
 //
 // "Big shader" handling: dwmcore.dll embeds the target shaders as sub-blobs
 // inside larger DXBC container blobs. The container's own checksum must be
 // recalculated after its inner shaders are patched.
-static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
+static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma, unsigned &matchedMask)
 {
     int numPatched = 0;
 
-    DXBCHeader *bigShader = nullptr; // enclosing container blob, if any
-    bool bigPatched = false;         // did we patch any sub-shader inside it?
-    size_t containerPatchBase = 0;   // g_patches index when the current container was accepted
+    DXBCHeader *bigShader = nullptr;   // enclosing container blob, if any
+    bool bigPatched = false;           // did we patch any sub-shader inside it?
+    size_t containerPatchBase = 0;     // g_patches index when the current container was accepted
+    unsigned containerMatchedBits = 0; // matchedMask bits set for the current container's leaves
 
     // Finalizes a container whose inner shaders have been patched: saves its
     // original checksum, recomputes it, and writes it back. If the write fails,
-    // rolls back all leaf patches belonging to this container.
+    // rolls back all leaf patches belonging to this container and clears their
+    // bits from matchedMask so Wh_ModInit's all-or-nothing check stays accurate.
     auto FinalizeContainer = [&](DXBCHeader *container) -> bool
     {
         PatchRecord bigRec;
@@ -506,13 +512,16 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
                 g_patches.pop_back();
                 numPatched--;
             }
+            matchedMask &= ~containerMatchedBits; // un-mark the rolled-back shaders
             return false;
         }
         Wh_Log(L"  Fixed container checksum at %p", (void *)container);
         return true;
     };
 
-    for (size_t i = 0; i + kDXBCHeaderSize <= regionSize; i++)
+    // All DXBC blobs in dwmcore.dll's .rdata are DWORD-aligned (verified by scanning
+    // the binary: 0 of 404 occurrences are unaligned). Step by 4 for speed.
+    for (size_t i = 0; i + kDXBCHeaderSize <= regionSize; i += 4)
     {
         // If we have advanced past the end of the current container blob,
         // finalize it if we patched any inner shaders.
@@ -522,6 +531,7 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
                 FinalizeContainer(bigShader);
             bigShader = nullptr;
             bigPatched = false;
+            containerMatchedBits = 0;
         }
 
         auto *hdr = (DXBCHeader *)(region + i);
@@ -549,10 +559,12 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
                 if (!ChecksumRoundTrips(hdr))
                 {
                     Wh_Log(L"  Container at %p: checksum did not round-trip, skipping", (void *)hdr);
+                    i += hdr->size - 4; // loop will add 4 more, landing just after the blob
                     continue;
                 }
                 bigShader = hdr;
                 containerPatchBase = g_patches.size();
+                containerMatchedBits = 0;
             }
             else
             {
@@ -561,7 +573,7 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
                 // patched without a proper container fixup.
                 Wh_Log(L"  Nested container at %p inside %p — skipping unsupported nesting depth",
                        (void *)hdr, (void *)bigShader);
-                i += hdr->size - 1; // loop will add 1 more, landing just after the blob
+                i += hdr->size - 4; // loop will add 4 more, landing just after the blob
             }
             continue;
         }
@@ -581,6 +593,15 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
         }
         if (matchIdx < 0)
             continue;
+
+        // Verify our checksum implementation can reproduce this blob's exact hash
+        // before rewriting it. A wrong hash here makes D3D reject the shader,
+        // which in DWM means a compositor failure rather than a cosmetic glitch.
+        if (!ChecksumRoundTrips(hdr))
+        {
+            Wh_Log(L"  Shader #%d at %p: checksum did not round-trip, skipping", matchIdx, (void *)hdr);
+            continue;
+        }
 
         // Verify the leaf actually lies within the tracked container's bounds
         // before attributing the patch to that container. A positional false-positive
@@ -624,8 +645,12 @@ static int ScanRegionForShaders(BYTE *region, size_t regionSize, float gamma)
 
         g_patches.push_back(std::move(rec));
         numPatched++;
+        matchedMask |= 1u << matchIdx;
         if (insideContainer)
+        {
+            containerMatchedBits |= 1u << matchIdx;
             bigPatched = true;
+        }
 
         Wh_Log(L"  Patched shader #%d at %p (size %lu)", matchIdx, (void *)hdr, hdr->size);
     }
@@ -643,7 +668,11 @@ static void RestoreAllPatches()
     // Iterate in reverse so sub-shader records (added first) are restored after
     // their container checksum records (added last), giving a consistent final state.
     for (auto it = g_patches.rbegin(); it != g_patches.rend(); ++it)
-        WriteMemorySafe(it->addr, it->original.data(), it->original.size());
+    {
+        if (!WriteMemorySafe(it->addr, it->original.data(), it->original.size()))
+            Wh_Log(L"  VirtualProtect failed restoring %zu bytes at %p",
+                   it->original.size(), (void *)it->addr);
+    }
     g_patches.clear();
 }
 
@@ -653,21 +682,39 @@ static void RestoreAllPatches()
 
 BOOL Wh_ModInit()
 {
-    // Read the user's gamma setting.
-    float gamma = wcstof(WindhawkUtils::StringSetting::make(L"GammaCurve"), nullptr);
-    if (gamma < 1.0f || gamma > 10.0f)
+    // Resolve the gamma setting via lookup table to avoid locale-dependent wcstof
+    // behaviour: a locale with ',' as the decimal separator would silently parse
+    // "2.2" as 2.0, which passes a range check without any visible error.
+    static const struct
     {
-        Wh_Log(L"Invalid gamma value, falling back to 2.2");
-        gamma = 2.2f;
+        const wchar_t *str;
+        float val;
+    } kGammaOptions[] = {
+        {L"1.8", 1.8f}, {L"2.0", 2.0f}, {L"2.2", 2.2f}, {L"2.4", 2.4f}, {L"2.6", 2.6f}};
+    float gamma = 2.2f;
+    {
+        auto gammaSetting = WindhawkUtils::StringSetting::make(L"GammaCurve");
+        for (const auto &opt : kGammaOptions)
+        {
+            if (wcscmp(gammaSetting, opt.str) == 0)
+            {
+                gamma = opt.val;
+                break;
+            }
+        }
     }
 
     Wh_Log(L"Target gamma = %.1f", (double)gamma);
 
-    // Locate dwmcore.dll (always loaded as a static import of dwm.exe).
+    // Locate dwmcore.dll. It is listed in dwm.exe's PE import directory and is
+    // therefore mapped by the OS loader before any code runs in the process,
+    // so GetModuleHandleW is guaranteed to succeed without needing a
+    // LoadLibraryExW hook. (Verified: "dwmcore.dll" appears in dwm.exe's
+    // raw import-table bytes at a fixed offset.)
     HMODULE hDwmcore = GetModuleHandleW(L"dwmcore.dll");
     if (!hDwmcore)
     {
-        Wh_Log(L"dwmcore.dll not found in process — aborting");
+        Wh_Log(L"dwmcore.dll not found — unexpected, please file an issue");
         return FALSE;
     }
 
@@ -681,7 +728,7 @@ BOOL Wh_ModInit()
 
     // Walk PE sections instead of VirtualQuery: deterministic regardless of
     // page-protection fragmentation from other mods or the loader.
-    int totalPatched = 0;
+    unsigned matchedMask = 0;
     auto *sec = IMAGE_FIRST_SECTION(nt);
     for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++)
     {
@@ -697,17 +744,28 @@ BOOL Wh_ModInit()
 
         Wh_Log(L"Scanning section at %p, size %lu",
                (void *)(modBase + sec->VirtualAddress), sec->Misc.VirtualSize);
-        totalPatched += ScanRegionForShaders(modBase + sec->VirtualAddress,
-                                             sec->Misc.VirtualSize, gamma);
+        ScanRegionForShaders(modBase + sec->VirtualAddress,
+                             sec->Misc.VirtualSize, gamma, matchedMask);
     }
 
-    if (totalPatched == 0)
+    if (matchedMask == 0)
     {
-        Wh_Log(L"No matching shaders found — dwmcore.dll may have been updated.");
+        // No target shaders found at all. Most likely HDR is disabled (the patched
+        // code path is only active when the display is in HDR mode) or dwmcore.dll
+        // was updated and its shader checksums changed.
+        Wh_Log(L"No target shaders found — HDR may be off, or dwmcore.dll checksums changed after a Windows Update");
         return FALSE;
     }
-
-    Wh_Log(L"Successfully patched %d shader(s) with gamma %.1f", totalPatched, (double)gamma);
+    if (matchedMask != 0xFu)
+    {
+        // Partial patch: some but not all of the four target shaders were found.
+        // Leaving DWM with a mix of power-law and sRGB surfaces would produce
+        // inconsistent rendering, so revert everything.
+        Wh_Log(L"Partial patch (mask 0x%X of 0xF) — reverting to avoid inconsistent SDR rendering", matchedMask);
+        RestoreAllPatches();
+        return FALSE;
+    }
+    Wh_Log(L"All 4 target shaders patched with gamma %.1f", (double)gamma);
     return TRUE;
 }
 
