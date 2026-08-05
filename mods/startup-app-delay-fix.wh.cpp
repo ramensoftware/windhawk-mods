@@ -31,7 +31,6 @@ doesn't change delays configured by other systems, such as Task Scheduler.
 
 #include <ntdef.h>
 #include <ntstatus.h>
-#include <windhawk_utils.h>
 
 #include <cwchar>
 #include <string>
@@ -78,12 +77,6 @@ using NtOpenKeyEx_t = NTSTATUS(NTAPI*)(PHANDLE keyHandle,
                                        POBJECT_ATTRIBUTES objectAttributes,
                                        ULONG openOptions);
 NtOpenKeyEx_t NtOpenKeyEx_orig;
-
-using NtCreateKey_t = NTSTATUS(NTAPI*)(
-    PHANDLE keyHandle, ACCESS_MASK desiredAccess,
-    POBJECT_ATTRIBUTES objectAttributes, ULONG titleIndex,
-    PUNICODE_STRING klass, ULONG createOptions, PULONG disposition);
-NtCreateKey_t NtCreateKey_orig;
 
 HKEY g_redirectKey;
 bool g_ownsRedirectKey;
@@ -180,21 +173,6 @@ NTSTATUS NTAPI NtOpenKeyEx_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
                             openOptions);
 }
 
-NTSTATUS NTAPI NtCreateKey_hook(PHANDLE keyHandle, ACCESS_MASK desiredAccess,
-                                POBJECT_ATTRIBUTES objectAttributes,
-                                ULONG titleIndex, PUNICODE_STRING klass,
-                                ULONG createOptions, PULONG disposition) {
-    if (IsSerializeOpen(objectAttributes)) {
-        NTSTATUS status = DuplicateRedirectKey(keyHandle, desiredAccess);
-        if (status == STATUS_SUCCESS && disposition) {
-            *disposition = REG_OPENED_EXISTING_KEY;
-        }
-        return status;
-    }
-    return NtCreateKey_orig(keyHandle, desiredAccess, objectAttributes,
-                            titleIndex, klass, createOptions, disposition);
-}
-
 bool VerifyOwner(HKEY key) {
     wchar_t owner[ARRAYSIZE(kOwnerValue)];
     DWORD type;
@@ -286,19 +264,22 @@ BOOL Wh_ModInit() {
         GetProcAddress(ntdll, "NtOpenKey"));
     auto ntOpenKeyEx = reinterpret_cast<NtOpenKeyEx_t>(
         GetProcAddress(ntdll, "NtOpenKeyEx"));
-    auto ntCreateKey = reinterpret_cast<NtCreateKey_t>(
-        GetProcAddress(ntdll, "NtCreateKey"));
-    if (!ntOpenKey || !ntOpenKeyEx || !ntCreateKey) {
+    if (!ntOpenKey || !ntOpenKeyEx) {
         Wh_Log(L"Failed to find required ntdll registry functions");
         DeleteRedirectKey();
         return FALSE;
     }
 
-    WindhawkUtils::SetFunctionHook(ntOpenKey, NtOpenKey_hook, &NtOpenKey_orig);
-    WindhawkUtils::SetFunctionHook(ntOpenKeyEx, NtOpenKeyEx_hook,
-                                   &NtOpenKeyEx_orig);
-    WindhawkUtils::SetFunctionHook(ntCreateKey, NtCreateKey_hook,
-                                   &NtCreateKey_orig);
+    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(ntOpenKey),
+                            reinterpret_cast<void*>(NtOpenKey_hook),
+                            reinterpret_cast<void**>(&NtOpenKey_orig)) ||
+        !Wh_SetFunctionHook(reinterpret_cast<void*>(ntOpenKeyEx),
+                            reinterpret_cast<void*>(NtOpenKeyEx_hook),
+                            reinterpret_cast<void**>(&NtOpenKeyEx_orig))) {
+        Wh_Log(L"Failed to register registry-open hooks");
+        DeleteRedirectKey();
+        return FALSE;
+    }
     return TRUE;
 }
 
