@@ -65,6 +65,14 @@ fight with this one. Don't run it together with **Custom Window Corner
 Radius**, **Disable rounded corners in Windows 11**, ExplorerPatcher's rounded
 corner option, StartAllBack or Win11DisableRoundedCorners.
 
+## Changelog
+
+If this pull request updates an existing mod, describe the changes below:
+
+* Changelog item 1...
+* Changelog item 2...
+
+
 ## Mod authorship
 
 If this pull request introduces a new mod, please complete the section below.
