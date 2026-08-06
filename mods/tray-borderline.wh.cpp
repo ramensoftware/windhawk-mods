@@ -146,7 +146,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 AppendMenuW(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, MENU_TITLE_BORDERLINE, L"Tray Borderline");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, MF_STRING, MENU_EXECUTE_BORDERLINE, L"Execute Tray Borderline");
-                AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
+                //AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
 
                 POINT pt;
                 GetCursorPos(&pt);
@@ -160,12 +160,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 if (cmd == MENU_EXECUTE_BORDERLINE){
                     OpenApp();
                 }
-                else if (cmd == MENU_OPEN_WINDHAWK) {
-                    SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                    sei.lpFile = g_windhawkPath;
-                    sei.nShow  = SW_SHOWNORMAL;
-                    ShellExecuteExW(&sei);
-                }
+                // else if (cmd == MENU_OPEN_WINDHAWK) {
+                //     SHELLEXECUTEINFOW sei = {sizeof(sei)};
+                //     sei.lpFile = g_windhawkPath;
+                //     sei.nShow  = SW_SHOWNORMAL;
+                //     ShellExecuteExW(&sei);
+                // }
             }
             return 0;
  
