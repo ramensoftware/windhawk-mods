@@ -36,7 +36,7 @@ continuous polling, minimizing background activity while the pointer is idle.
 - Per-monitor DPI scaling
 - Multi-monitor support
 - Adjustable release delay and activation cooldown
-- Optional suppression over fullscreen applications
+- Optional suppression over fullscreen applications and presentation mode
 - Optional suppression while a mouse button is held
 - Optional restriction to the primary monitor
 - Best-effort native timer fallback while the taskbar coordinator is unavailable
@@ -55,12 +55,13 @@ The mod does not modify:
 
 When needed, the mod can bring a normal-band taskbar in front of an ordinary
 normal-band window without activating it. It never promotes the taskbar into
-the topmost band or reorders it above an always-on-top window, preserving
-fullscreen, accessibility-overlay, and third-party Z-order policies.
+the topmost band or reorders it above an always-on-top window. Mods that
+intentionally keep the taskbar behind other normal windows can conflict with
+this narrowly scoped Z-order correction.
 
 The mod is designed to coexist with taskbar styling, sizing, transparency,
-animation, clock, label, and icon mods that retain the standard bottom-positioned
-Windows 11 taskbar.
+animation, clock, label, and icon mods that retain the standard
+bottom-positioned Windows 11 taskbar and don't replace its reveal logic.
 
 ## Requirements
 
@@ -78,12 +79,27 @@ Windows 11 taskbar.
 - Mods that disable, replace, or override the taskbar's native expansion logic
   may conflict with this mod. Keyboard-only and never-show auto-hide modes are
   intentionally incompatible with mouse activation.
-- Windows updates can rename undocumented taskbar symbols. If this occurs, one
-  or more reveal paths may require a symbol update.
+- The primary reveal path depends on undocumented Windows 11 taskbar symbols.
+  If a Windows update renames either required coordinator method, the mod logs
+  that the reveal path is unavailable and needs a symbol update.
 - Shortly after Explorer starts, the internal Windows 11 taskbar coordinator
   may not yet have been captured. The optional native timer fallback is tried
   once per activation-band entry, while coordinator activation continues to
   retry with backoff until the coordinator becomes available.
+- The native timer fallback uses Explorer's internal taskbar-unhide timer. A
+  mod that intercepts or replaces that timer can block the fallback, and
+  arming it can reset an already pending native unhide timer. This affects only
+  the brief pre-coordinator fallback path; normal coordinator activation is
+  independent of the timer.
+- Mods that deliberately control the taskbar's normal-window Z-order can
+  conflict with the correction used when an ordinary window covers a revealed
+  taskbar. The correction never crosses into the topmost window band. Stock
+  topmost taskbars bypass the coverage scan and aren't reordered.
+- Fullscreen suppression ignores click-through, tool, non-activating, cloaked,
+  desktop, and taskbar windows. It is intentionally conservative otherwise: a
+  qualifying fullscreen window anywhere above the desktop on the target monitor
+  can suppress activation even when another app has focus. A borderless custom-
+  chrome app that covers the monitor can therefore be treated as fullscreen.
 
 ## Suggested settings
 
@@ -139,7 +155,10 @@ This mod is distributed under the GNU General Public License v3.0.
 - ignoreFullscreenApps: true
   $name: Ignore fullscreen apps
   $description: >-
-    Don't reveal the taskbar over borderless or exclusive-fullscreen apps.
+    Don't reveal the taskbar when a fullscreen app or presentation state is
+    detected on the target monitor. Click-through, tool, non-activating,
+    cloaked, desktop, and taskbar windows are ignored. A qualifying background
+    fullscreen window on that monitor can still suppress activation.
 - ignoreWhileMouseButtonDown: true
   $name: Ignore while dragging
   $description: >-
@@ -152,8 +171,9 @@ This mod is distributed under the GNU General Public License v3.0.
   $name: Native timer fallback
   $description: >-
     If the Windows 11 taskbar coordinator isn't available yet, make one
-    best-effort request to Explorer's native reveal timer for each entry into
-    the activation band. The mod never cancels Explorer's timer.
+    best-effort request through Explorer's native unhide timer for each entry
+    into the activation band. Mods that intercept Explorer's taskbar timers can
+    block this temporary fallback. The pointer is never moved or injected.
 */
 // ==/WindhawkModSettings==
 
@@ -247,6 +267,26 @@ std::unordered_set<HWND> g_syntheticPointerOverTaskbars;
 // Set only while this mod is applying its reason-7 synthetic enter update on
 // the taskbar UI thread. This keeps ShouldTaskbarBeExpanded narrowly scoped.
 bool g_syntheticExpansionUpdateInProgress = false;
+
+class ScopedSyntheticExpansionUpdate {
+public:
+    ScopedSyntheticExpansionUpdate()
+        : previous_(g_syntheticExpansionUpdateInProgress) {
+        g_syntheticExpansionUpdateInProgress = true;
+    }
+
+    ~ScopedSyntheticExpansionUpdate() {
+        g_syntheticExpansionUpdateInProgress = previous_;
+    }
+
+    ScopedSyntheticExpansionUpdate(const ScopedSyntheticExpansionUpdate&) =
+        delete;
+    ScopedSyntheticExpansionUpdate& operator=(
+        const ScopedSyntheticExpansionUpdate&) = delete;
+
+private:
+    bool previous_;
+};
 
 void* g_trayUiVtableITrayComponentHost = nullptr;
 
@@ -662,7 +702,8 @@ bool IsFullscreenCandidateOnMonitor(HWND window, HMONITOR monitor) {
     // Tool, click-through, wallpaper, and other non-activating surfaces can be
     // full-monitor windows without representing a fullscreen application.
     if ((style & WS_CHILD) != 0 ||
-        (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) != 0) {
+        (exStyle & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+                    WS_EX_NOACTIVATE)) != 0) {
         return false;
     }
 
@@ -1089,13 +1130,6 @@ void* GetViewCoordinator(HWND taskbarWindow) {
 // IsPointerOverTaskbarFrameChanged update reason.
 constexpr int kReasonIsPointerOverTaskbarFrameChanged = 7;
 
-using ViewCoordinator_IsExpanded_t =
-    bool(WINAPI*)(void* viewCoordinator,
-                  HWND taskbarWindow);
-
-ViewCoordinator_IsExpanded_t
-    ViewCoordinator_IsExpanded_Original;
-
 using ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_t =
     void(WINAPI*)(void* viewCoordinator,
                   HWND taskbarWindow,
@@ -1129,13 +1163,17 @@ ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook(
                taskbarWindow);
 
         const DWORD workerThreadId =
-            g_workerThreadId.load(std::memory_order_relaxed);
-        if (workerThreadId) {
-            PostThreadMessageW(
+            g_workerThreadId.load(std::memory_order_acquire);
+        if (workerThreadId &&
+            !PostThreadMessageW(
                 workerThreadId,
                 kWorkerNativePointerLeaveMessage,
                 reinterpret_cast<WPARAM>(taskbarWindow),
-                0);
+                0)) {
+            Wh_Log(L"Couldn't notify activation worker about Explorer's "
+                   L"pointer leave for taskbar %p: %u",
+                   taskbarWindow,
+                   GetLastError());
         }
     }
 }
@@ -1189,23 +1227,6 @@ using ViewCoordinator_UpdateIsExpanded_t =
 ViewCoordinator_UpdateIsExpanded_t
     ViewCoordinator_UpdateIsExpanded_Original;
 
-void WINAPI ViewCoordinator_UpdateIsExpanded_Hook(
-    void* viewCoordinator,
-    HWND taskbarWindow,
-    int reason) {
-    RememberViewCoordinator(taskbarWindow, viewCoordinator);
-
-    Wh_Log(L"UpdateIsExpanded: taskbar=%p reason=%d synthetic=%d",
-           taskbarWindow,
-           reason,
-           g_syntheticPointerOverTaskbars.contains(taskbarWindow));
-
-    ViewCoordinator_UpdateIsExpanded_Original(
-        viewCoordinator,
-        taskbarWindow,
-        reason);
-}
-
 bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
                                        bool isPointerOver) {
     if (!isPointerOver && taskbarWindow &&
@@ -1240,7 +1261,7 @@ bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
         Wh_Log(L"Setting synthetic pointer-over for taskbar %p",
                taskbarWindow);
 
-        g_syntheticExpansionUpdateInProgress = true;
+        ScopedSyntheticExpansionUpdate expansionUpdate;
         ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original(
             viewCoordinator,
             taskbarWindow,
@@ -1251,19 +1272,6 @@ bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
             viewCoordinator,
             taskbarWindow,
             kReasonIsPointerOverTaskbarFrameChanged);
-        g_syntheticExpansionUpdateInProgress = false;
-
-        // IsExpanded can lag behind the logical pointer-over update while the
-        // taskbar animation/XAML state catches up. Treat it as diagnostics only;
-        // undoing the synthetic enter here would turn every asynchronous build
-        // into a permanent fallback path.
-        if (ViewCoordinator_IsExpanded_Original) {
-            const bool expanded = ViewCoordinator_IsExpanded_Original(
-                viewCoordinator,
-                taskbarWindow);
-            Wh_Log(L"Coordinator expansion snapshot after synthetic enter: %d",
-                   expanded);
-        }
     } else {
         if (g_syntheticPointerOverTaskbars.erase(taskbarWindow) == 0) {
             return true;
@@ -1283,13 +1291,6 @@ bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
             taskbarWindow,
             kReasonIsPointerOverTaskbarFrameChanged);
 
-        if (ViewCoordinator_IsExpanded_Original) {
-            bool expanded = ViewCoordinator_IsExpanded_Original(
-                viewCoordinator,
-                taskbarWindow);
-            Wh_Log(L"Coordinator expansion result after synthetic leave: %d",
-                   expanded);
-        }
     }
 
     return true;
@@ -1460,6 +1461,9 @@ bool TriggerNativeUnhideTimerOnUiThread(HWND taskbarWindow) {
 
     // Explorer owns timer ID 3. Never kill or clean it up here: doing so can
     // cancel a genuine native edge-hover reveal that Explorer armed itself.
+    // SetTimer resets an existing timer with the same HWND and ID, so this
+    // compatibility fallback is deliberately limited to one attempt per band
+    // entry and is disclosed in the README.
     const UINT_PTR timerResult =
         SetTimer(taskbarWindow, kTrayUITimerUnhide, 1, nullptr);
     if (!timerResult) {
@@ -1618,14 +1622,23 @@ bool ClearActiveTaskbar(ActivationWorkerState& state,
                         bool scheduleRetry = true) {
     CancelWorkerTimer(state.releaseTimerId);
 
-    if (state.activeTaskbar && IsWindow(state.activeTaskbar)) {
+    if (state.activeTaskbar) {
         const UiOperationResult clearResult =
             SendUiOperation(kUiClearSyntheticPointerOver,
                             state.activeTaskbar,
                             timeoutMs);
-        if (!UiOperationSucceeded(clearResult)) {
-            // Keep ownership and retry instead of forgetting synthetic state
-            // that may still force Explorer's coordinator to remain expanded.
+
+        if (clearResult == UiOperationResult::kNotSent) {
+            // The HWND is no longer a taskbar in this Explorer process. Its
+            // coordinator and synthetic state were already discarded by the
+            // taskbar WM_NCDESTROY hook, so retrying could loop forever if the
+            // numeric handle was recycled for another window.
+            Wh_Log(L"Release target is no longer a taskbar: %p",
+                   state.activeTaskbar);
+        } else if (!UiOperationSucceeded(clearResult)) {
+            // Completed failure or timeout means the taskbar might still own
+            // synthetic state. Keep worker ownership and retry rather than
+            // allowing Explorer's coordinator to remain forced open.
             if (scheduleRetry) {
                 state.releaseRetryPending = true;
                 ScheduleWorkerTimer(kReleaseRetryMs,
@@ -1943,7 +1956,6 @@ void HandleNativePointerLeave(ActivationWorkerState& state,
     state.activeTaskbar = nullptr;
     state.activeTaskbarMonitor = nullptr;
     state.armed = true;
-    state.lastActivationCheck = 0;
     state.suppressionFailures = 0;
     ResetActivationCandidate(state);
 
@@ -2147,14 +2159,6 @@ bool HookTaskbarViewSymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {
-                LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::IsExpanded(unsigned __int64))",
-            },
-            &ViewCoordinator_IsExpanded_Original,
-            nullptr,
-            true,
-        },
-        {
-            {
                 LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::HandleIsPointerOverTaskbarFrameChanged(unsigned __int64,bool,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))",
             },
             &ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original,
@@ -2174,7 +2178,7 @@ bool HookTaskbarViewSymbols(HMODULE module) {
                 LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(unsigned __int64,enum TaskbarTipTest::TaskbarExpandCollapseReason))",
             },
             &ViewCoordinator_UpdateIsExpanded_Original,
-            ViewCoordinator_UpdateIsExpanded_Hook,
+            nullptr,
             true,
         },
     };
@@ -2184,6 +2188,13 @@ bool HookTaskbarViewSymbols(HMODULE module) {
             symbolHooks,
             ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"Failed to hook Windows 11 ViewCoordinator symbols");
+        return false;
+    }
+
+    if (!ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original ||
+        !ViewCoordinator_UpdateIsExpanded_Original) {
+        Wh_Log(L"Taskbar reveal path unavailable: required ViewCoordinator "
+               L"symbols need updating");
         return false;
     }
 
@@ -2385,23 +2396,23 @@ BOOL Wh_ModInit() {
             std::memory_order_relaxed);
     } else {
         Wh_Log(L"Taskbar.View.dll/ExplorerExtensions.dll isn't loaded yet");
+
+        HMODULE kernelBaseModule =
+            GetModuleHandleW(L"kernelbase.dll");
+
+        auto loadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
+            GetProcAddress(kernelBaseModule, "LoadLibraryExW"));
+
+        if (!loadLibraryExW) {
+            Wh_Log(L"Couldn't find KernelBase!LoadLibraryExW");
+            return FALSE;
+        }
+
+        WindhawkUtils::SetFunctionHook(
+            loadLibraryExW,
+            LoadLibraryExW_Hook,
+            &LoadLibraryExW_Original);
     }
-
-    HMODULE kernelBaseModule =
-        GetModuleHandleW(L"kernelbase.dll");
-
-    auto loadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
-        GetProcAddress(kernelBaseModule, "LoadLibraryExW"));
-
-    if (!loadLibraryExW) {
-        Wh_Log(L"Couldn't find KernelBase!LoadLibraryExW");
-        return FALSE;
-    }
-
-    WindhawkUtils::SetFunctionHook(
-        loadLibraryExW,
-        LoadLibraryExW_Hook,
-        &LoadLibraryExW_Original);
 
     g_stopEvent =
         CreateEventW(nullptr, TRUE, FALSE, nullptr);
