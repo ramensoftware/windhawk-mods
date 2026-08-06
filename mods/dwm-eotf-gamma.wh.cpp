@@ -56,7 +56,7 @@ shutdown; this is harmless since the process is terminating anyway.
 `dwm.exe` is a critical system process. Windhawk does not inject into it by
 default — you must explicitly allow it in **Windhawk's advanced settings**:
 
-1. Open Windhawk → **Advanced settings**
+1. Open Windhawk → **Advanced settings** → **More advanced settings**
 2. In the **Process inclusion list**, add `dwm.exe`
 3. Click **Save**
 
@@ -103,6 +103,9 @@ effect.
 - If the mod logs "No target shaders found" after a Windows Update, the shader
   structure in `dwmcore.dll` has changed (verified against 10.0.26100.8521).
   Please file an issue.
+- If the desktop stops rendering correctly after enabling this mod, boot into
+  Safe Mode (Windhawk does not inject there) or start Windhawk with
+  `windhawk.exe -safe-mode`, then disable or uninstall the mod.
 */
 // ==/WindhawkModReadme==
 
@@ -410,9 +413,9 @@ static bool WriteMemorySafe(void* dst, const void* src, size_t size) {
 // the simple power-law: out = in ^ gamma.
 
 static const float kSrgbConsts[4] = {2.4f, 0.04045f, 0.055000f, 0.94786733f};
-static const float kPatchConsts[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-// Index 0 (the exponent) is replaced with the user-chosen gamma, not
-// kPatchConsts[0].
+// Replacement values for sRGB constants 1–3; constant 0 (the exponent) is
+// replaced with the user-chosen gamma instead and has no slot here.
+static const float kPatchConsts[3] = {0.0f, 0.0f, 1.0f};
 
 // Searches 'buf' (a copy of a shader blob) for the sRGB vec3-splat patterns and
 // patches them in-place. Fills counts[4] with the number of replacements made
@@ -425,7 +428,7 @@ static int PatchShaderBuf(BYTE* buf, DWORD size, float gamma, int counts[4]) {
     int found = 0;
     for (int ci = 0; ci < 4; ci++) {
         float src = kSrgbConsts[ci];
-        float dst = (ci == 0) ? gamma : kPatchConsts[ci];
+        float dst = (ci == 0) ? gamma : kPatchConsts[ci - 1];
         float pat[3] = {src, src, src};
         counts[ci] = 0;
         // Search from after the header; stop where a full 12-byte match would
@@ -472,6 +475,42 @@ static bool ChecksumRoundTrips(const DXBCHeader* hdr) {
     DWORD verify[4];
     CalcDXBCChecksum((const BYTE*)hdr, hdr->size, verify);
     return memcmp(verify, hdr->checksum, 16) == 0;
+}
+
+// =============================================================================
+// Diagnostic pass
+// =============================================================================
+
+// Read-only scan: logs the DXBC checksum of every leaf blob in 'region' that
+// carries all four sRGB vec3-splat constants exactly once. Called when the
+// allowlist doesn't yield a full match so that a reporter on an updated build
+// can paste the output into an issue instead of extracting blobs by hand.
+// Over-matching here is harmless — nothing is written.
+static void LogSrgbCandidates(const BYTE* region, size_t regionSize) {
+    for (size_t i = 0; i + kDXBCHeaderSize <= regionSize; i += 4) {
+        const auto* hdr = (const DXBCHeader*)(region + i);
+        if (hdr->magic[0] != 'D' || hdr->magic[1] != 'X' ||
+            hdr->magic[2] != 'B' || hdr->magic[3] != 'C' ||
+            hdr->reserved != 1 || hdr->size < (DWORD)kDXBCHeaderSize ||
+            i + hdr->size > regionSize || HasDXBCSubBlob(hdr))
+            continue;
+
+        std::vector<BYTE> tmp(hdr->size);
+        memcpy(tmp.data(), hdr, hdr->size);
+        int counts[4] = {};
+        if (PatchShaderBuf(tmp.data(), hdr->size, 2.2f, counts) != 4 ||
+            counts[0] != 1 || counts[1] != 1 || counts[2] != 1 ||
+            counts[3] != 1)
+            continue;
+
+        const auto* ck = (const BYTE*)hdr->checksum;
+        Wh_Log(
+            L"  sRGB candidate at +0x%zx size %lu checksum "
+            L"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+            i, hdr->size, ck[0], ck[1], ck[2], ck[3], ck[4], ck[5], ck[6],
+            ck[7], ck[8], ck[9], ck[10], ck[11], ck[12], ck[13], ck[14],
+            ck[15]);
+    }
 }
 
 // =============================================================================
@@ -669,7 +708,12 @@ static int ScanRegionForShaders(BYTE* region,
         rec.addr = (BYTE*)hdr;
         rec.original.assign(rec.addr, rec.addr + hdr->size);
 
-        // Write the patched shader back into the (read-only) memory region.
+        // Writing the whole blob rather than only the changed bytes: patched
+        // differs from the original solely in the ~48 bytes of splat constants
+        // and the 16-byte checksum, so memcpy replays every other byte at its
+        // current value. A concurrent reader can only observe changes to those
+        // same bytes — the same window as delta writes. Delta writes would
+        // reduce COW pages and PatchRecord size but not improve correctness.
         if (!WriteMemorySafe((BYTE*)hdr, patched.data(), hdr->size)) {
             Wh_Log(L"  VirtualProtect failed for shader #%d at %p", matchIdx,
                    (void*)hdr);
@@ -686,6 +730,7 @@ static int ScanRegionForShaders(BYTE* region,
 
         Wh_Log(L"  Patched shader #%d at %p (size %lu)", matchIdx, (void*)hdr,
                hdr->size);
+        i += hdr->size - 4;  // skip the blob body; loop adds 4
     }
 
     // Handle a container blob that reaches the very end of the region.
@@ -780,6 +825,24 @@ BOOL Wh_ModInit() {
         totalPatched +=
             ScanRegionForShaders(modBase + sec->VirtualAddress,
                                  sec->Misc.VirtualSize, gamma, matchedMask);
+    }
+
+    // If the allowlist didn't match all four shaders, run a read-only candidate
+    // scan to log checksums of sRGB-matching blobs in this build. This gives
+    // reporters something to paste into an issue without manual extraction.
+    if (matchedMask != 0xFu) {
+        Wh_Log(L"Scanning for sRGB candidates (matchedMask=0x%X)...",
+               matchedMask);
+        auto* dSec = IMAGE_FIRST_SECTION(nt);
+        for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, dSec++) {
+            if (!(dSec->Characteristics & IMAGE_SCN_MEM_READ) ||
+                (dSec->Characteristics & IMAGE_SCN_MEM_EXECUTE) ||
+                (dSec->Characteristics & IMAGE_SCN_MEM_WRITE) ||
+                dSec->Misc.VirtualSize == 0)
+                continue;
+            LogSrgbCandidates(modBase + dSec->VirtualAddress,
+                              dSec->Misc.VirtualSize);
+        }
     }
 
     if (matchedMask == 0) {
