@@ -47,27 +47,31 @@ and presses your toggle shortcut.
 
 ## Requirements
 
-The In-Game Overlay must be enabled, and you need a "Toggle Instant Replay" keyboard shortcut
-configured - that shortcut is how this mod switches Instant Replay.
+The In-Game Overlay must be enabled, and you must have a "Toggle Instant Replay" keyboard
+shortcut configured - that shortcut is how this mod switches Instant Replay, and the mod does
+nothing at all if one isn't set.
 
-**Change that shortcut away from the Alt+Shift+F10 default.** Alt+Shift is also the Windows
-shortcut for cycling the keyboard layout, so leaving it at the default means every automatic
-re-enable may also change your input language. Ctrl+Shift+F10 works well. The new shortcut is
-picked up automatically, no restart needed.
+**Set that shortcut to something without Alt+Shift in it.** Alt+Shift is also the Windows
+shortcut for cycling the keyboard layout, so a shortcut containing it means every automatic
+re-enable may also change your input language. Ctrl+Shift+F10 works well. The shortcut is
+re-read every time, so changing it takes effect immediately.
 
-Because the shortcut is replayed as real keystrokes, whatever window has focus also receives
-the combination. That is inherent to this approach - the Nvidia App no longer ships the local
-server that GeForce Experience used to expose, so the shortcut is the only way left to switch
-Instant Replay from outside.
+Because the shortcut is replayed as real keystrokes, two things follow. Whatever window has
+focus also receives the combination. And the key-ups the mod sends will release those keys
+even if you happen to be physically holding one at that moment - so a shortcut built from keys
+you hold during normal use (Shift, Ctrl) is a poor choice. This is inherent to the approach:
+the Nvidia App no longer ships the local server GeForce Experience used to expose, so the
+shortcut is the only way left to switch Instant Replay from outside.
 
 ## Notes
 
 Works with the Nvidia App and with the old GeForce Experience.
 
-If you use **Only keep it on while these programs run** and then disable the mod at a moment
-when none of those programs are running, Instant Replay is left off - the mod turned it off on
-purpose and isn't around any more to turn it back on. That's the one case where switching the
-mod off doesn't restore what you had before.
+Instant Replay is a persistent Nvidia setting, so whatever state the mod leaves it in stays
+that way after the mod is disabled. In particular, if you use **Only keep it on while these
+programs run** and then disable the mod at a moment when none of those programs are running,
+Instant Replay is left off - the mod turned it off on purpose and isn't around any more to
+turn it back on.
 */
 // ==/WindhawkModReadme==
 
@@ -84,14 +88,16 @@ mod off doesn't restore what you had before.
     If Instant Replay keeps turning itself back off, something is fighting us. After 2
     attempts in a row that don't stick, wait before trying again instead of flip-flopping -
     30 seconds at first, doubling each round up to this limit, and reset as soon as Instant
-    Replay is in the state it should be. Set to 0 to keep retrying and never back off.
+    Replay is in the state it should be. Once the wait has sat at this limit for a few rounds
+    the mod stops trying until the state changes, rather than pressing the shortcut forever.
 - pauseWhileRunning: [""]
   $name: Pause while these programs run
   $description: >-
     While any of these is running, Instant Replay is left alone. An entry without a backslash
     matches a process by exact file name, e.g. netflix.exe. An entry containing a backslash is
     matched as a substring of the full image path, e.g. \Netflix\ - useful for covering a whole
-    install folder. Matching ignores case either way.
+    install folder, but it can only match processes this mod is allowed to open, so prefer the
+    file name form unless you need the path. Matching ignores case either way.
     Leave the single empty entry to disable this.
 - onlyWhileRunning: [""]
   $name: Only keep it on while these programs run
@@ -122,8 +128,8 @@ mod off doesn't restore what you had before.
 //   - The "Toggle Instant Replay" shortcut, as IRToggleHKeyCount plus one IRToggleHKey<n>
 //     per key. Pressing it is how the state gets changed.
 //
-// Everything in the key is stored as 4 byte REG_BINARY rather than REG_DWORD, which is why
-// the reads below accept both.
+// Everything in the key is stored as 4 byte REG_BINARY rather than REG_DWORD, which RRF_RT_DWORD
+// accepts alongside REG_DWORD, so all the reads below use it.
 
 static PCWSTR kShadowPlayRegKey = L"SOFTWARE\\NVIDIA Corporation\\Global\\ShadowPlay\\NVSPCAPS";
 static PCWSTR kInstantReplayRegValue = L"{1B1D3DAA-601D-49E5-8508-81736CA28C6D}";
@@ -138,6 +144,18 @@ static const int kStreakAfterBackoff = kMaxTogglesBeforeBackoff - 1;
 // Where the backoff starts before doubling towards the configured limit. Short enough that a
 // one-off failure costs almost nothing, and it only grows if the fight is real.
 static const int kInitialBackoffSec = 30;
+
+// Once the backoff has sat at its maximum for this many rounds, stop pressing the shortcut
+// until something changes. A toggle that has failed this persistently - the overlay is off,
+// or UIPI is silently dropping the input - is not going to start working on the next attempt,
+// and continuing would inject keystrokes into the user's session forever.
+static const int kMaxRoundsAtMaxBackoff = 3;
+
+// How long to let Nvidia catch up after pressing the shortcut. Starting the Instant Replay
+// ring buffer isn't instant, and the state value can still read stale for a moment after a
+// notification fires for one of the other values in the key.
+static const DWORD kToggleConfirmTimeoutMs = 8000;
+static const DWORD kToggleConfirmPollMs = 500;
 
 // Don't press the shortcut faster than this, no matter how many notifications arrive.
 static const DWORD kMinToggleIntervalMs = 3000;
@@ -186,8 +204,16 @@ static void LoadStringListSetting(PCWSTR nameFormat, std::vector<std::wstring>* 
 
 static void LoadSettings() {
     ModSettings settings;
-    settings.pollIntervalSec = std::clamp(Wh_GetIntSetting(L"pollIntervalSec"), 1, 3600);
-    settings.conflictBackoffSec = std::clamp(Wh_GetIntSetting(L"conflictBackoffSec"), 0, 86400);
+
+    // A one second poll would mean a full process enumeration every second once either list is
+    // configured, which isn't worth it when registry notifications already carry the real work.
+    settings.pollIntervalSec = std::clamp(Wh_GetIntSetting(L"pollIntervalSec"), 5, 3600);
+
+    // No "never back off" option: the shortcut can fail in ways the mod cannot detect, and an
+    // unbounded retry would inject keystrokes into the user's session indefinitely.
+    settings.conflictBackoffSec =
+        std::clamp(Wh_GetIntSetting(L"conflictBackoffSec"), kInitialBackoffSec, 86400);
+
     LoadStringListSetting(L"pauseWhileRunning[%d]", &settings.pauseWhileRunning);
     LoadStringListSetting(L"onlyWhileRunning[%d]", &settings.onlyWhileRunning);
 
@@ -208,17 +234,12 @@ static ModSettings GetSettings() {
 // installed or has never been configured. Treating that as Unknown rather than as "off" keeps
 // the mod from pressing the shortcut on a machine that has nothing to toggle.
 static InstantReplayState GetInstantReplayState() {
-    DWORD type = 0;
     DWORD isActive = 0;
     DWORD size = sizeof(isActive);
     LSTATUS ret = RegGetValueW(HKEY_CURRENT_USER, kShadowPlayRegKey, kInstantReplayRegValue,
-                               RRF_RT_ANY, &type, &isActive, &size);
+                               RRF_RT_DWORD, nullptr, &isActive, &size);
 
     if (ret != ERROR_SUCCESS) {
-        return InstantReplayState::Unknown;
-    }
-
-    if ((type != REG_DWORD && type != REG_BINARY) || size != sizeof(DWORD)) {
         return InstantReplayState::Unknown;
     }
 
@@ -239,33 +260,45 @@ static void AddKeyInput(std::vector<INPUT>* inputs, WORD vkey, bool isDown) {
 
 // Note this *toggles*, it doesn't set a state, so only call it when the current state is known.
 // The shortcut is read fresh every time, so changing it in the Nvidia App takes effect at once.
+//
+// If no shortcut is configured the mod presses nothing. Guessing at Nvidia's Alt+Shift+F10
+// default would mean that the one case where there's no evidence a shortcut exists is also the
+// case where the mod repeatedly injects the combination that cycles the keyboard layout.
 static bool ToggleInstantReplayWithHotkey() {
-    std::vector<WORD> keys;
-
     DWORD keyCount = 0;
     DWORD size = sizeof(keyCount);
     LSTATUS ret = RegGetValueW(HKEY_CURRENT_USER, kShadowPlayRegKey, L"IRToggleHKeyCount",
                                RRF_RT_DWORD, nullptr, &keyCount, &size);
 
-    if (ret == ERROR_SUCCESS && keyCount > 0 && keyCount <= 8) {
-        // Each key of the shortcut is stored in its own value: IRToggleHKey0, IRToggleHKey1, ...
-        for (DWORD i = 0; i < keyCount; i++) {
-            std::wstring valueName = L"IRToggleHKey" + std::to_wstring(i);
+    if (ret != ERROR_SUCCESS || keyCount == 0 || keyCount > 8) {
+        Wh_Log(L"No usable Toggle Instant Replay shortcut is configured (IRToggleHKeyCount), "
+               L"so there's nothing to press. Set one in the Nvidia App.");
+        return false;
+    }
 
-            DWORD vkey = 0;
-            size = sizeof(vkey);
-            if (RegGetValueW(HKEY_CURRENT_USER, kShadowPlayRegKey, valueName.c_str(),
-                             RRF_RT_DWORD, nullptr, &vkey, &size) != ERROR_SUCCESS) {
-                Wh_Log(L"Couldn't read %s, can't press the toggle shortcut", valueName.c_str());
-                return false;
-            }
+    std::vector<WORD> keys;
+    keys.reserve(keyCount);
 
-            keys.push_back((WORD)vkey);
+    // Each key of the shortcut is stored in its own value: IRToggleHKey0, IRToggleHKey1, ...
+    for (DWORD i = 0; i < keyCount; i++) {
+        std::wstring valueName = L"IRToggleHKey" + std::to_wstring(i);
+
+        DWORD vkey = 0;
+        size = sizeof(vkey);
+        if (RegGetValueW(HKEY_CURRENT_USER, kShadowPlayRegKey, valueName.c_str(), RRF_RT_DWORD,
+                         nullptr, &vkey, &size) != ERROR_SUCCESS) {
+            Wh_Log(L"Couldn't read %s, can't press the toggle shortcut", valueName.c_str());
+            return false;
         }
-    } else {
-        // Nvidia's default shortcut.
-        Wh_Log(L"No toggle shortcut configured, assuming the default Alt+Shift+F10");
-        keys = {VK_MENU, VK_SHIFT, VK_F10};
+
+        // Don't feed anything that isn't a plain virtual-key code to SendInput.
+        if (vkey == 0 || vkey > 0xFE) {
+            Wh_Log(L"%s is %u, which isn't a virtual-key code, can't press the toggle shortcut",
+                   valueName.c_str(), vkey);
+            return false;
+        }
+
+        keys.push_back((WORD)vkey);
     }
 
     std::vector<INPUT> inputs;
@@ -321,13 +354,17 @@ static bool ContainsNoCase(std::wstring_view haystack, std::wstring_view needle)
     return false;
 }
 
+static bool PatternNeedsPath(const std::wstring& pattern) {
+    return pattern.find(L'\\') != std::wstring::npos;
+}
+
 // A pattern without a backslash is matched against the process file name exactly, so
 // "notepad" doesn't quietly match ...\notepad++\notepad++.exe. A pattern with a backslash is
 // matched as a substring of the full image path, which covers "everything in this folder".
 static bool MatchesProcess(std::wstring_view imagePath,
                            std::wstring_view fileName,
                            const std::wstring& pattern) {
-    if (pattern.find(L'\\') != std::wstring::npos) {
+    if (PatternNeedsPath(pattern)) {
         return ContainsNoCase(imagePath, pattern);
     }
 
@@ -343,6 +380,11 @@ static std::optional<bool> IsAnyProcessRunning(const std::vector<std::wstring>& 
     if (patterns.empty()) {
         return false;
     }
+
+    // Resolving full paths costs an OpenProcess for every process on the system. Only pay it
+    // when a pattern actually asks for a path - entry.szExeFile is already the file name that
+    // the exact-match form compares against.
+    const bool needsPath = std::any_of(patterns.begin(), patterns.end(), PatternNeedsPath);
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
@@ -364,15 +406,17 @@ static std::optional<bool> IsAnyProcessRunning(const std::vector<std::wstring>& 
     do {
         std::wstring imagePath = entry.szExeFile;
 
-        HANDLE process =
-            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
-        if (process) {
-            WCHAR path[MAX_PATH];
-            DWORD pathLen = ARRAYSIZE(path);
-            if (QueryFullProcessImageNameW(process, 0, path, &pathLen)) {
-                imagePath.assign(path, pathLen);
+        if (needsPath) {
+            HANDLE process =
+                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
+            if (process) {
+                WCHAR path[MAX_PATH];
+                DWORD pathLen = ARRAYSIZE(path);
+                if (QueryFullProcessImageNameW(process, 0, path, &pathLen)) {
+                    imagePath.assign(path, pathLen);
+                }
+                CloseHandle(process);
             }
-            CloseHandle(process);
         }
 
         std::wstring_view fileName = imagePath;
@@ -402,22 +446,52 @@ static bool StopRequested(DWORD waitMs) {
     return WaitForSingleObject(g_stopEvent, waitMs) == WAIT_OBJECT_0;
 }
 
+// Returns true if the state reached `expected` before the timeout. `*stop` is set when the mod
+// is shutting down, in which case the caller must break out of its loop.
+//
+// Without this the mod would go straight back to waiting after pressing the shortcut, read a
+// state value that hasn't caught up yet, and press again - undoing its own toggle and then
+// counting the result as a conflict.
+static bool WaitForState(InstantReplayState expected, DWORD timeoutMs, bool* stop) {
+    ULONGLONG deadline = GetTickCount64() + timeoutMs;
+
+    for (;;) {
+        if (GetInstantReplayState() == expected) {
+            return true;
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) {
+            return false;
+        }
+
+        if (StopRequested((DWORD)std::min<ULONGLONG>(kToggleConfirmPollMs, deadline - now))) {
+            *stop = true;
+            return false;
+        }
+    }
+}
+
 static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
     Wh_Log(L"Instant Replay watchdog started");
 
     // Waiting on a registry notification means we react the moment something turns Instant
     // Replay off, instead of up to a whole poll interval later.
     HKEY notifyKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kShadowPlayRegKey, 0, KEY_NOTIFY, &notifyKey) !=
-        ERROR_SUCCESS) {
-        notifyKey = nullptr;
-    }
-
     HANDLE notifyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     bool notifyArmed = false;
+    bool loggedNotifyUnavailable = false;
+
+    if (!notifyEvent) {
+        Wh_Log(L"CreateEvent for the registry notification failed, error %u. Falling back to "
+               L"polling only.",
+               GetLastError());
+    }
 
     int toggleStreak = 0;
     int currentBackoffSec = 0;
+    int roundsAtMaxBackoff = 0;
+    bool gaveUp = false;
     ULONGLONG conflictUntil = 0;
     ULONGLONG nextToggleAllowed = 0;
     bool loggedUnreadableState = false;
@@ -426,10 +500,34 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
     for (;;) {
         ModSettings settings = GetSettings();
 
+        // Opened here rather than once before the loop so that configuring ShadowPlay after the
+        // mod is already running still gets the immediate-reaction behaviour, instead of
+        // silently degrading to polling for the rest of the session.
+        if (notifyEvent && !notifyKey) {
+            LSTATUS openRet =
+                RegOpenKeyExW(HKEY_CURRENT_USER, kShadowPlayRegKey, 0, KEY_NOTIFY, &notifyKey);
+            if (openRet != ERROR_SUCCESS) {
+                notifyKey = nullptr;
+                if (!loggedNotifyUnavailable) {
+                    loggedNotifyUnavailable = true;
+                    Wh_Log(L"Can't open the ShadowPlay key to watch it (error %d), polling "
+                           L"every %d seconds until it appears",
+                           openRet, settings.pollIntervalSec);
+                }
+            } else {
+                loggedNotifyUnavailable = false;
+            }
+        }
+
         if (notifyKey && notifyEvent && !notifyArmed) {
             ResetEvent(notifyEvent);
             notifyArmed = RegNotifyChangeKeyValue(notifyKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET,
                                                   notifyEvent, TRUE) == ERROR_SUCCESS;
+            if (!notifyArmed) {
+                // The key may have been deleted from under us; reopen it next time round.
+                RegCloseKey(notifyKey);
+                notifyKey = nullptr;
+            }
         }
 
         HANDLE waitHandles[3];
@@ -457,10 +555,13 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         }
 
         if (waited == WAIT_OBJECT_0 + 1) {
-            // Settings changed. Give the new configuration a clean slate.
+            // Settings changed. Give the new configuration an immediate retry, but keep the
+            // backoff ladder where it was so repeated tweaking during a real conflict doesn't
+            // restart it from the bottom every time.
             toggleStreak = 0;
-            currentBackoffSec = 0;
             conflictUntil = 0;
+            roundsAtMaxBackoff = 0;
+            gaveUp = false;
         } else if (waited == WAIT_OBJECT_0 + 2) {
             notifyArmed = false;
             if (StopRequested(kRegistryNotifyDebounceMs)) {
@@ -502,7 +603,9 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         if (isOn == shouldBeOn) {
             toggleStreak = 0;
             currentBackoffSec = 0;
+            roundsAtMaxBackoff = 0;
             conflictUntil = 0;
+            gaveUp = false;
             continue;
         }
 
@@ -523,6 +626,12 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
             }
         }
 
+        // Pressing the shortcut has failed often enough that it clearly isn't going to work.
+        // Stay quiet until the state changes on its own or the settings do.
+        if (gaveUp) {
+            continue;
+        }
+
         ULONGLONG now = GetTickCount64();
         if (now < conflictUntil) {
             continue;
@@ -530,14 +639,24 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
 
         // If our toggles keep failing to stick, something is undoing them. Yield for a while
         // rather than flip-flopping forever, growing the wait only as the fight continues.
-        if (settings.conflictBackoffSec > 0 && toggleStreak >= kMaxTogglesBeforeBackoff) {
+        if (toggleStreak >= kMaxTogglesBeforeBackoff) {
+            bool wasAtMax = currentBackoffSec >= settings.conflictBackoffSec;
             currentBackoffSec = currentBackoffSec == 0
                                     ? std::min(kInitialBackoffSec, settings.conflictBackoffSec)
                                     : std::min(currentBackoffSec * 2, settings.conflictBackoffSec);
             conflictUntil = now + (ULONGLONG)currentBackoffSec * 1000;
             toggleStreak = kStreakAfterBackoff;
-            Wh_Log(L"Something keeps changing Instant Replay back. Backing off for %d seconds.",
-                   currentBackoffSec);
+
+            if (wasAtMax && ++roundsAtMaxBackoff >= kMaxRoundsAtMaxBackoff) {
+                gaveUp = true;
+                Wh_Log(L"Pressing the toggle shortcut hasn't worked after repeated attempts at "
+                       L"the maximum backoff. Giving up until the Instant Replay state changes "
+                       L"or the settings do. Check that the In-Game Overlay is on and that a "
+                       L"Toggle Instant Replay shortcut is set.");
+            } else {
+                Wh_Log(L"Instant Replay keeps changing back. Backing off for %d seconds.",
+                       currentBackoffSec);
+            }
             continue;
         }
 
@@ -549,15 +668,31 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
             now = GetTickCount64();
         }
 
-        toggleStreak++;
         nextToggleAllowed = now + kMinToggleIntervalMs;
         Wh_Log(L"Instant Replay is %s but should be %s, pressing the toggle shortcut",
                isOn ? L"on" : L"off", shouldBeOn ? L"on" : L"off");
 
-        // Success here only means the input was injected - if Nvidia ignores it the state won't
-        // change, the next cycles will notice, and the backoff above stops us hammering it.
         if (!ToggleInstantReplayWithHotkey()) {
-            Wh_Log(L"Failed to send the Instant Replay toggle shortcut");
+            toggleStreak++;
+            continue;
+        }
+
+        // Wait for the press to actually take effect before deciding whether it worked. A slow
+        // but successful toggle then costs nothing, and toggleStreak counts real failures only.
+        bool stop = false;
+        InstantReplayState expected =
+            shouldBeOn ? InstantReplayState::On : InstantReplayState::Off;
+        if (WaitForState(expected, kToggleConfirmTimeoutMs, &stop)) {
+            toggleStreak = 0;
+            currentBackoffSec = 0;
+            roundsAtMaxBackoff = 0;
+        } else {
+            if (stop) {
+                break;
+            }
+            Wh_Log(L"Instant Replay didn't change within %u ms of the toggle shortcut",
+                   kToggleConfirmTimeoutMs);
+            toggleStreak++;
         }
     }
 
@@ -664,7 +799,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -697,7 +832,7 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -738,8 +873,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -752,9 +887,9 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -777,8 +912,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
