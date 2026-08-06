@@ -57,11 +57,12 @@ re-enable may also change your input language. Ctrl+Shift+F10 works well. The sh
 re-read every time, so changing it takes effect immediately.
 
 Because the shortcut is replayed as real keystrokes, two things follow. Whatever window has
-focus also receives the combination. And the key-ups the mod sends will release those keys
-even if you happen to be physically holding one at that moment - so a shortcut built from keys
-you hold during normal use (Shift, Ctrl) is a poor choice. This is inherent to the approach:
-the Nvidia App no longer ships the local server GeForce Experience used to expose, so the
-shortcut is the only way left to switch Instant Replay from outside.
+focus also receives the combination. And the key-ups the mod sends would release those keys if
+you were physically holding one - so the mod waits for a cycle when none of the shortcut's keys
+and no modifier is held down, and a shortcut built from keys you hold during normal use is
+still a poor choice. This is inherent to the approach: the Nvidia App no longer ships the local
+server GeForce Experience used to expose, so the shortcut is the only way left to switch
+Instant Replay from outside.
 
 ## Notes
 
@@ -80,16 +81,18 @@ turn it back on.
 - pollIntervalSec: 10
   $name: Check interval (seconds)
   $description: >-
-    How often to re-check the Instant Replay state. The state is also re-checked immediately
-    whenever Nvidia writes to the ShadowPlay registry key, so this is mostly a safety net.
+    How often to re-check the Instant Replay state, from 5 to 3600. The state is also
+    re-checked immediately whenever Nvidia writes to the ShadowPlay registry key, so this is
+    mostly a safety net.
 - conflictBackoffSec: 900
   $name: Maximum conflict backoff (seconds)
   $description: >-
     If Instant Replay keeps turning itself back off, something is fighting us. After 2
     attempts in a row that don't stick, wait before trying again instead of flip-flopping -
-    30 seconds at first, doubling each round up to this limit, and reset as soon as Instant
-    Replay is in the state it should be. Once the wait has sat at this limit for a few rounds
-    the mod stops trying until the state changes, rather than pressing the shortcut forever.
+    30 seconds at first, doubling each round up to this limit (from 30 to 86400), and reset as
+    soon as Instant Replay is in the state it should be. Once the wait has sat at this limit
+    for a few rounds the mod stops trying, and starts again when the toggle shortcut changes,
+    when the state changes, or after a few hours.
 - pauseWhileRunning: [""]
   $name: Pause while these programs run
   $description: >-
@@ -145,11 +148,15 @@ static const int kStreakAfterBackoff = kMaxTogglesBeforeBackoff - 1;
 // one-off failure costs almost nothing, and it only grows if the fight is real.
 static const int kInitialBackoffSec = 30;
 
-// Once the backoff has sat at its maximum for this many rounds, stop pressing the shortcut
-// until something changes. A toggle that has failed this persistently - the overlay is off,
-// or UIPI is silently dropping the input - is not going to start working on the next attempt,
-// and continuing would inject keystrokes into the user's session forever.
+// Once the backoff has sat at its maximum for this many rounds, stop pressing the shortcut.
+// A toggle that has failed this persistently isn't going to start working on the next attempt,
+// and continuing would inject keystrokes into the user's session indefinitely.
 static const int kMaxRoundsAtMaxBackoff = 3;
+
+// Having given up, try again this long afterwards. The user may have fixed the cause in a way
+// the mod cannot observe - switching the In-Game Overlay back on doesn't touch the registry
+// key, so it produces no notification to wake us.
+static const ULONGLONG kGiveUpRetryMs = 6ULL * 60 * 60 * 1000;
 
 // How long to let Nvidia catch up after pressing the shortcut. Starting the Instant Replay
 // ring buffer isn't instant, and the state value can still read stale for a moment after a
@@ -250,30 +257,19 @@ static InstantReplayState GetInstantReplayState() {
 
 #pragma region Changing the state
 
-static void AddKeyInput(std::vector<INPUT>* inputs, WORD vkey, bool isDown) {
-    INPUT input = {};
-    input.type = INPUT_KEYBOARD;
-    input.ki.wVk = vkey;
-    input.ki.dwFlags = isDown ? 0 : KEYEVENTF_KEYUP;
-    inputs->push_back(input);
-}
-
-// Note this *toggles*, it doesn't set a state, so only call it when the current state is known.
-// The shortcut is read fresh every time, so changing it in the Nvidia App takes effect at once.
+// Reads IRToggleHKeyCount + IRToggleHKey<n>. Empty when no usable shortcut is configured.
 //
-// If no shortcut is configured the mod presses nothing. Guessing at Nvidia's Alt+Shift+F10
-// default would mean that the one case where there's no evidence a shortcut exists is also the
-// case where the mod repeatedly injects the combination that cycles the keyboard layout.
-static bool ToggleInstantReplayWithHotkey() {
+// Nvidia's Alt+Shift+F10 default is deliberately not assumed here: the case where these values
+// are missing is the case with no evidence a shortcut exists at all, and guessing would mean
+// repeatedly injecting the combination that cycles the keyboard layout.
+static std::vector<WORD> ReadToggleHotkey() {
     DWORD keyCount = 0;
     DWORD size = sizeof(keyCount);
     LSTATUS ret = RegGetValueW(HKEY_CURRENT_USER, kShadowPlayRegKey, L"IRToggleHKeyCount",
                                RRF_RT_DWORD, nullptr, &keyCount, &size);
 
     if (ret != ERROR_SUCCESS || keyCount == 0 || keyCount > 8) {
-        Wh_Log(L"No usable Toggle Instant Replay shortcut is configured (IRToggleHKeyCount), "
-               L"so there's nothing to press. Set one in the Nvidia App.");
-        return false;
+        return {};
     }
 
     std::vector<WORD> keys;
@@ -287,20 +283,60 @@ static bool ToggleInstantReplayWithHotkey() {
         size = sizeof(vkey);
         if (RegGetValueW(HKEY_CURRENT_USER, kShadowPlayRegKey, valueName.c_str(), RRF_RT_DWORD,
                          nullptr, &vkey, &size) != ERROR_SUCCESS) {
-            Wh_Log(L"Couldn't read %s, can't press the toggle shortcut", valueName.c_str());
-            return false;
+            return {};
         }
 
         // Don't feed anything that isn't a plain virtual-key code to SendInput.
         if (vkey == 0 || vkey > 0xFE) {
-            Wh_Log(L"%s is %u, which isn't a virtual-key code, can't press the toggle shortcut",
-                   valueName.c_str(), vkey);
-            return false;
+            return {};
         }
 
         keys.push_back((WORD)vkey);
     }
 
+    return keys;
+}
+
+// The keys that live on the extended part of the keyboard need KEYEVENTF_EXTENDEDKEY, or the
+// injected event describes the wrong physical key.
+static bool IsExtendedKey(WORD vkey) {
+    switch (vkey) {
+        case VK_RCONTROL:
+        case VK_RMENU:
+        case VK_INSERT:
+        case VK_DELETE:
+        case VK_HOME:
+        case VK_END:
+        case VK_PRIOR:
+        case VK_NEXT:
+        case VK_LEFT:
+        case VK_UP:
+        case VK_RIGHT:
+        case VK_DOWN:
+        case VK_NUMLOCK:
+        case VK_DIVIDE:
+        case VK_SNAPSHOT:
+        case VK_LWIN:
+        case VK_RWIN:
+        case VK_APPS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void AddKeyInput(std::vector<INPUT>* inputs, WORD vkey, bool isDown) {
+    INPUT input = {};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = vkey;
+    input.ki.wScan = (WORD)MapVirtualKeyW(vkey, MAPVK_VK_TO_VSC);
+    input.ki.dwFlags = (isDown ? 0 : KEYEVENTF_KEYUP) |
+                       (IsExtendedKey(vkey) ? KEYEVENTF_EXTENDEDKEY : 0);
+    inputs->push_back(input);
+}
+
+// Note this *toggles*, it doesn't set a state, so only call it when the current state is known.
+static bool PressToggleHotkey(const std::vector<WORD>& keys) {
     std::vector<INPUT> inputs;
     inputs.reserve(keys.size() * 2);
 
@@ -321,12 +357,45 @@ static bool ToggleInstantReplayWithHotkey() {
     return true;
 }
 
+// If the user is physically holding any of these, the combination Nvidia sees isn't the one
+// that's configured, so the toggle would fail and be counted as a conflict - and the key-ups
+// we send would steal the keys out from under them.
+static bool IsAnyRelevantKeyHeld(const std::vector<WORD>& keys) {
+    static const WORD kModifiers[] = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
+
+    for (WORD vkey : keys) {
+        if (GetAsyncKeyState(vkey) & 0x8000) {
+            return true;
+        }
+    }
+
+    for (WORD vkey : kModifiers) {
+        if (GetAsyncKeyState(vkey) & 0x8000) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// A locked session or a secure desktop (UAC) means injected input can't reach anything. That's
+// not the mod losing a fight, so it mustn't be allowed to drive the backoff.
+static bool IsInputDesktopReachable() {
+    HDESK inputDesktop = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (!inputDesktop) {
+        return false;
+    }
+
+    CloseDesktop(inputDesktop);
+    return true;
+}
+
 #pragma endregion  // Changing the state
 
 #pragma region Process matching
 
-// CompareStringOrdinal rather than towlower, which only folds ASCII under the default locale
-// and would quietly fail to match paths containing non-ASCII characters.
+// CompareStringOrdinal / FindNLSStringEx rather than towlower, which only folds ASCII under the
+// default locale and would quietly fail to match paths containing non-ASCII characters.
 static bool EqualsNoCase(std::wstring_view a, std::wstring_view b) {
     if (a.size() != b.size()) {
         return false;
@@ -345,13 +414,9 @@ static bool ContainsNoCase(std::wstring_view haystack, std::wstring_view needle)
         return false;
     }
 
-    for (size_t i = 0; i + needle.size() <= haystack.size(); i++) {
-        if (EqualsNoCase(haystack.substr(i, needle.size()), needle)) {
-            return true;
-        }
-    }
-
-    return false;
+    return FindNLSStringEx(LOCALE_NAME_INVARIANT, FIND_FROMSTART | NORM_IGNORECASE,
+                           haystack.data(), (int)haystack.size(), needle.data(),
+                           (int)needle.size(), nullptr, nullptr, nullptr, 0) >= 0;
 }
 
 static bool PatternNeedsPath(const std::wstring& pattern) {
@@ -410,7 +475,9 @@ static std::optional<bool> IsAnyProcessRunning(const std::vector<std::wstring>& 
             HANDLE process =
                 OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
             if (process) {
-                WCHAR path[MAX_PATH];
+                // Generous enough that a long path doesn't silently fall back to the bare file
+                // name, which a \folder\ pattern then couldn't match.
+                WCHAR path[1024];
                 DWORD pathLen = ARRAYSIZE(path);
                 if (QueryFullProcessImageNameW(process, 0, path, &pathLen)) {
                     imagePath.assign(path, pathLen);
@@ -492,10 +559,13 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
     int currentBackoffSec = 0;
     int roundsAtMaxBackoff = 0;
     bool gaveUp = false;
+    std::vector<WORD> hotkeyAtGiveUp;
+    ULONGLONG giveUpRetryAt = 0;
     ULONGLONG conflictUntil = 0;
     ULONGLONG nextToggleAllowed = 0;
     bool loggedUnreadableState = false;
     bool loggedEnumerationFailure = false;
+    bool loggedMissingHotkey = false;
 
     for (;;) {
         ModSettings settings = GetSettings();
@@ -598,8 +668,8 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         bool isOn = state == InstantReplayState::On;
 
         // Whatever we were fighting with has stopped, or never existed. Note this is reached
-        // even while backing off: a backoff only holds off the toggle, it never stops the mod
-        // noticing that the situation has resolved.
+        // even while backing off or after giving up: neither state stops the mod noticing that
+        // the situation has resolved.
         if (isOn == shouldBeOn) {
             toggleStreak = 0;
             currentBackoffSec = 0;
@@ -626,13 +696,45 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
             }
         }
 
-        // Pressing the shortcut has failed often enough that it clearly isn't going to work.
-        // Stay quiet until the state changes on its own or the settings do.
-        if (gaveUp) {
+        // Nothing we send can land right now, and that isn't a failure on our part.
+        if (!IsInputDesktopReachable()) {
             continue;
         }
 
+        std::vector<WORD> hotkey = ReadToggleHotkey();
+        if (hotkey.empty()) {
+            // Not a failed attempt - there was nothing to attempt - so this doesn't count
+            // towards the backoff.
+            if (!loggedMissingHotkey) {
+                loggedMissingHotkey = true;
+                Wh_Log(L"No usable Toggle Instant Replay shortcut is configured "
+                       L"(IRToggleHKeyCount), so there's nothing to press. Set one in the "
+                       L"Nvidia App.");
+            }
+            continue;
+        }
+        loggedMissingHotkey = false;
+
         ULONGLONG now = GetTickCount64();
+
+        // Pressing the shortcut failed persistently enough that we stopped. Re-arm when the
+        // user acts on what the log asked for - the shortcut changing is observable, and a
+        // periodic retry covers the causes that aren't, like the overlay being switched on.
+        if (gaveUp) {
+            bool hotkeyChanged = hotkey != hotkeyAtGiveUp;
+            if (!hotkeyChanged && now < giveUpRetryAt) {
+                continue;
+            }
+
+            Wh_Log(L"Trying again after giving up (%s)",
+                   hotkeyChanged ? L"the toggle shortcut changed" : L"periodic retry");
+            gaveUp = false;
+            toggleStreak = 0;
+            currentBackoffSec = 0;
+            roundsAtMaxBackoff = 0;
+            conflictUntil = 0;
+        }
+
         if (now < conflictUntil) {
             continue;
         }
@@ -649,14 +751,22 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
 
             if (wasAtMax && ++roundsAtMaxBackoff >= kMaxRoundsAtMaxBackoff) {
                 gaveUp = true;
+                hotkeyAtGiveUp = hotkey;
+                giveUpRetryAt = now + kGiveUpRetryMs;
                 Wh_Log(L"Pressing the toggle shortcut hasn't worked after repeated attempts at "
-                       L"the maximum backoff. Giving up until the Instant Replay state changes "
-                       L"or the settings do. Check that the In-Game Overlay is on and that a "
-                       L"Toggle Instant Replay shortcut is set.");
+                       L"the maximum backoff. Pausing until the Instant Replay state changes, "
+                       L"the toggle shortcut changes, or a few hours pass. Check that the "
+                       L"In-Game Overlay is on and that a Toggle Instant Replay shortcut is "
+                       L"set.");
             } else {
                 Wh_Log(L"Instant Replay keeps changing back. Backing off for %d seconds.",
                        currentBackoffSec);
             }
+            continue;
+        }
+
+        // Pressing now would send the wrong combination and steal the keys being held.
+        if (IsAnyRelevantKeyHeld(hotkey)) {
             continue;
         }
 
@@ -672,7 +782,7 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         Wh_Log(L"Instant Replay is %s but should be %s, pressing the toggle shortcut",
                isOn ? L"on" : L"off", shouldBeOn ? L"on" : L"off");
 
-        if (!ToggleInstantReplayWithHotkey()) {
+        if (!PressToggleHotkey(hotkey)) {
             toggleStreak++;
             continue;
         }
