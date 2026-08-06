@@ -4,7 +4,7 @@
 // @description     Prevents the auto-hiding taskbar from disappearing while the Quick Settings, Notification Center, or calendar flyouts are open.
 // @version         1.0.0
 // @author          Zicronium
-// @github          https://github.com/Prashant-modder
+// @github          https://github.com/Prashant-modder/
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -ldwmapi -lcomctl32
