@@ -151,8 +151,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 POINT pt;
                 GetCursorPos(&pt);
                 SetForegroundWindow(hwnd);
-                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON |
-                    TPM_BOTTOMALIGN /*| TPM_RIGHTALIGN*/,
+                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON /*|
+                    TPM_BOTTOMALIGN | TPM_RIGHTALIGN*/,
                     pt.x, pt.y, 0, hwnd, nullptr);
                 PostMessageW(hwnd, WM_NULL, 0, 0);
                 DestroyMenu(hMenu);
