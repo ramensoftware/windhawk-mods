@@ -1,0 +1,455 @@
+// @github xandri19wang
+// ==WindhawkMod==
+// @id           explorer-soft-dedup-per-folder
+// @name         Explorer Soft Dedup per Folder (Windows 11/10)
+// @description  Natural dedup: when a new Explorer window opens to a folder already open, just focus the existing one. No closes by default.
+// @version      1.5.0
+// @author       XandriW
+// @include      C:\Windows\explorer.exe
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+Soft Dedup (natural behavior)
+- If a new File Explorer window navigates to a folder that's already open elsewhere,
+  simply bring the existing window to front. Do NOT close any window (no flicker, no accidental kills).
+- Hold a configurable modifier key (Shift by default) to bypass dedup and allow another window.
+
+Extras
+- Grace delay so the new window can finish navigation (/select,filename etc.) before we decide.
+- Special handling for the Downloads known folder (shell:Downloads and its GUID).
+- If you ever want closing behavior, switch DuplicateAction in settings.
+
+Notes
+- Dedup is window-level. Tabs inside the same Explorer window are not merged (Windows API doesn't expose tab list here).
+- Virtual / non-file-system locations are ignored, except Downloads which is resolved to its physical path.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- CheckIntervalMs: 250
+  $name: Polling interval (ms)
+
+- NewWindowGraceMs: 500
+  $name: Grace time for new windows (ms)
+
+- BypassModifier: Shift
+  $name: Bypass modifier key
+  $options:
+  - None: Never bypass (always dedupe)
+  - Shift: Hold Shift to bypass
+  - Ctrl: Hold Ctrl to bypass
+  - Alt: Hold Alt to bypass
+
+- DuplicateAction: FocusExisting
+  $name: What to do on duplicate path
+  $options:
+  - FocusExisting: Soft dedup (default). Keep both windows, just focus the existing one.
+  - KeepNewCloseOld: Close the old window, keep the new one (preserves fresh selection).
+  - KeepOldCloseNew: Close the new window, keep the old one.
+
+- ActivateKeptWindow: true
+  $name: Bring the kept/focused window to front
+*/
+// ==/WindhawkModSettings==
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define _WIN32_WINNT 0x0A00
+
+#include <windows.h>
+#include <exdisp.h>     // IShellWindows, IWebBrowser2
+#include <shlwapi.h>
+#include <shlobj.h>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <cwctype>
+
+// ---------------- Settings ----------------
+static int  gIntervalMs           = 250;
+static int  gNewWindowGraceMs     = 500;
+static int  gBypassModifier       = 1;   // 0=None, 1=Shift, 2=Ctrl, 3=Alt
+static int  gDuplicateAction      = 0;   // 0=FocusExisting, 1=KeepNewCloseOld, 2=KeepOldCloseNew
+static bool gActivateKeptWindow   = true;
+
+// ---------------- State ----------------
+static HANDLE gTimerQueue = nullptr;
+static HANDLE gTimer      = nullptr;
+static LONG   gScanRunning = 0;
+static CRITICAL_SECTION gLock;
+
+static std::unordered_map<HWND, std::wstring> gKnown;       // hwnd -> path
+static std::unordered_map<std::wstring, HWND> gPathIndex;   // path -> hwnd
+static std::unordered_map<HWND, DWORD>        gFirstSeen;   // hwnd -> tick
+
+// ---------------- Dynamic COM / OleAut / Shell32 ----------------
+static HMODULE gOle32    = nullptr;
+static HMODULE gOleAut32 = nullptr;
+static HMODULE gShell32  = nullptr;
+
+typedef HRESULT (WINAPI *PFN_CoInitializeEx)(LPVOID, DWORD);
+typedef void    (WINAPI *PFN_CoUninitialize)(void);
+typedef HRESULT (WINAPI *PFN_CoCreateInstance)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
+typedef UINT    (WINAPI *PFN_SysStringLen)(BSTR);
+typedef void    (WINAPI *PFN_SysFreeString)(BSTR);
+typedef HRESULT (WINAPI *PFN_SHGetKnownFolderPath)(REFKNOWNFOLDERID, DWORD, HANDLE, PWSTR*);
+typedef void    (WINAPI *PFN_CoTaskMemFree)(LPVOID);
+
+static PFN_CoInitializeEx     pCoInitializeEx     = nullptr;
+static PFN_CoUninitialize     pCoUninitialize     = nullptr;
+static PFN_CoCreateInstance   pCoCreateInstance   = nullptr;
+static PFN_SysStringLen       pSysStringLen       = nullptr;
+static PFN_SysFreeString      pSysFreeString      = nullptr;
+static PFN_SHGetKnownFolderPath pSHGetKnownFolderPath = nullptr;
+static PFN_CoTaskMemFree      pCoTaskMemFree      = nullptr;
+
+static void LoadComProcs() {
+    if (!gOle32)    gOle32    = LoadLibraryW(L"ole32.dll");
+    if (!gOleAut32) gOleAut32 = LoadLibraryW(L"oleaut32.dll");
+    if (!gShell32)  gShell32  = LoadLibraryW(L"shell32.dll");
+
+    if (gOle32) {
+        pCoInitializeEx     = (PFN_CoInitializeEx)    GetProcAddress(gOle32,   "CoInitializeEx");
+        pCoUninitialize     = (PFN_CoUninitialize)    GetProcAddress(gOle32,   "CoUninitialize");
+        pCoCreateInstance   = (PFN_CoCreateInstance)  GetProcAddress(gOle32,   "CoCreateInstance");
+        pCoTaskMemFree      = (PFN_CoTaskMemFree)     GetProcAddress(gOle32,   "CoTaskMemFree");
+    }
+    if (gOleAut32) {
+        pSysStringLen       = (PFN_SysStringLen)      GetProcAddress(gOleAut32,"SysStringLen");
+        pSysFreeString      = (PFN_SysFreeString)     GetProcAddress(gOleAut32,"SysFreeString");
+    }
+    if (gShell32) {
+        pSHGetKnownFolderPath = (PFN_SHGetKnownFolderPath)GetProcAddress(gShell32,"SHGetKnownFolderPath");
+    }
+}
+
+// ---------------- GUIDs (inline, no uuid.lib needed) ----------------
+// CLSID_ShellWindows: 9BA05972-F6A8-11CF-A442-00A0C90A8F39
+static const GUID MY_CLSID_ShellWindows =
+{ 0x9ba05972, 0xf6a8, 0x11cf, {0xa4, 0x42, 0x00, 0xa0, 0xc9, 0x0a, 0x8f, 0x39} };
+// IID_IShellWindows: 85CB6900-4D95-11CF-960C-0080C7F4EE85
+static const GUID MY_IID_IShellWindows =
+{ 0x85cb6900, 0x4d95, 0x11cf, {0x96, 0x0c, 0x00, 0x80, 0xc7, 0xf4, 0xee, 0x85} };
+// IID_IWebBrowser2: D30C1661-CDAF-11d0-8A3E-00C04FC9E26E
+static const GUID MY_IID_IWebBrowser2 =
+{ 0xd30c1661, 0xcdaf, 0x11d0, {0x8a, 0x3e, 0x00, 0xc0, 0x4f, 0xc9, 0xe2, 0x6e} };
+// FOLDERID_Downloads: 374DE290-123F-4565-9164-39C4925E467B
+static const GUID MY_FOLDERID_Downloads =
+{ 0x374de290, 0x123f, 0x4565, {0x91, 0x64, 0x39, 0xc4, 0x92, 0x5e, 0x46, 0x7b} };
+
+// ---------------- Helpers ----------------
+static void LoadSettings() {
+    gIntervalMs = Wh_GetIntSetting(L"CheckIntervalMs");
+    if (gIntervalMs < 50)   gIntervalMs = 50;
+    if (gIntervalMs > 5000) gIntervalMs = 5000;
+
+    gNewWindowGraceMs = Wh_GetIntSetting(L"NewWindowGraceMs");
+    if (gNewWindowGraceMs < 0) gNewWindowGraceMs = 0;
+    if (gNewWindowGraceMs > 3000) gNewWindowGraceMs = 3000;
+
+    if (PCWSTR s = Wh_GetStringSetting(L"BypassModifier")) {
+        if (_wcsicmp(s, L"None")  == 0) gBypassModifier = 0;
+        else if (_wcsicmp(s, L"Shift") == 0) gBypassModifier = 1;
+        else if (_wcsicmp(s, L"Ctrl")  == 0) gBypassModifier = 2;
+        else if (_wcsicmp(s, L"Alt")   == 0) gBypassModifier = 3;
+        Wh_FreeStringSetting(const_cast<PWSTR>(s));
+    }
+
+    if (PCWSTR p = Wh_GetStringSetting(L"DuplicateAction")) {
+        if (_wcsicmp(p, L"KeepNewCloseOld") == 0) gDuplicateAction = 1;
+        else if (_wcsicmp(p, L"KeepOldCloseNew") == 0) gDuplicateAction = 2;
+        else gDuplicateAction = 0; // FocusExisting default
+        Wh_FreeStringSetting(const_cast<PWSTR>(p));
+    } else {
+        gDuplicateAction = 0; // default
+    }
+
+    gActivateKeptWindow = Wh_GetIntSetting(L"ActivateKeptWindow") != 0;
+}
+
+static bool IsBypassHeld() {
+    int vk = 0;
+    switch (gBypassModifier) {
+        case 1: vk = VK_SHIFT;   break;
+        case 2: vk = VK_CONTROL; break;
+        case 3: vk = VK_MENU;    break;
+        default: return false;
+    }
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+static bool IsDriveRoot(const std::wstring& p) {
+    return p.size() == 3 && p[1] == L':' && (p[2] == L'\\' || p[2] == L'/');
+}
+
+static std::wstring GetDownloadsPhysicalPath() {
+    if (!pSHGetKnownFolderPath || !pCoTaskMemFree) return L"";
+    PWSTR w = nullptr;
+    if (SUCCEEDED(pSHGetKnownFolderPath(MY_FOLDERID_Downloads, 0, nullptr, &w)) && w) {
+        std::wstring out(w);
+        pCoTaskMemFree(w);
+        std::transform(out.begin(), out.end(), out.begin(), [](wchar_t c){ return (wchar_t)towlower(c); });
+        if (!out.empty() && !IsDriveRoot(out)) {
+            while (!out.empty() && (out.back() == L'\\' || out.back() == L'/')) out.pop_back();
+        }
+        return out;
+    }
+    return L"";
+}
+
+// Minimal URL %XX decoder
+static std::wstring UrlPercentDecode(const std::wstring& s) {
+    std::wstring out; out.reserve(s.size());
+    auto hex = [](wchar_t c)->int {
+        if (c >= L'0' && c <= L'9') return c - L'0';
+        if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+        if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+        return -1;
+    };
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == L'%' && i + 2 < s.size()) {
+            int h1 = hex(s[i+1]), h2 = hex(s[i+2]);
+            if (h1 >= 0 && h2 >= 0) {
+                out.push_back(static_cast<wchar_t>((h1 << 4) | h2));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(s[i]);
+    }
+    return out;
+}
+
+static std::wstring WStrFromBSTR(BSTR b) {
+    if (!b) return L"";
+    return std::wstring(b); // okay as fallback
+}
+
+// Normalize IWebBrowser2::LocationURL to a local file-system path
+// - file:///C:/... -> normalized path
+// - shell:downloads or Downloads' GUID -> resolved to physical path
+static std::wstring NormalizeFromLocationUrl(BSTR burl) {
+    std::wstring u = WStrFromBSTR(burl);
+    if (u.empty()) return L"";
+
+    std::wstring low = u;
+    std::transform(low.begin(), low.end(), low.begin(), [](wchar_t c){ return (wchar_t)towlower(c); });
+
+    const std::wstring prefixFile = L"file:///";
+    if (low.rfind(prefixFile, 0) == 0) {
+        std::wstring path = UrlPercentDecode(u.substr(prefixFile.size()));
+        std::replace(path.begin(), path.end(), L'/', L'\\');
+        std::transform(path.begin(), path.end(), path.begin(), [](wchar_t c){ return (wchar_t)towlower(c); });
+        if (!path.empty() && !IsDriveRoot(path)) {
+            while (!path.empty() && (path.back() == L'\\' || path.back() == L'/')) path.pop_back();
+        }
+        return path;
+    }
+
+    // Treat Downloads specially
+    if (low.rfind(L"shell:downloads", 0) == 0 ||
+        low.find(L"374de290-123f-4565-9164-39c4925e467b") != std::wstring::npos) {
+        return GetDownloadsPhysicalPath();
+    }
+
+    // Unknown/virtual -> ignore
+    return L"";
+}
+
+static void ActivateFront(HWND hwnd) {
+    if (!gActivateKeptWindow) return;
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    SetForegroundWindow(hwnd);
+}
+
+static void HandleDuplicate(HWND hwndNew, const std::wstring& path) {
+    auto it = gPathIndex.find(path);
+    if (it == gPathIndex.end()) {
+        gPathIndex[path] = hwndNew; // first owner
+        return;
+    }
+
+    HWND hwndOld = it->second;
+    if (hwndOld == hwndNew) return;
+
+    switch (gDuplicateAction) {
+        case 1: // KeepNewCloseOld
+            ActivateFront(hwndNew);
+            // No close in Soft mode by default, but allow if user switches to this action:
+            PostMessageW(hwndOld, WM_CLOSE, 0, 0);
+            gPathIndex[path] = hwndNew;
+            break;
+        case 2: // KeepOldCloseNew
+            ActivateFront(hwndOld);
+            PostMessageW(hwndNew, WM_CLOSE, 0, 0);
+            break;
+        case 0: // FocusExisting (Soft Dedup, default)
+        default:
+            ActivateFront(hwndOld); // just focus old, keep both windows
+            // Keep index pointing to the old window
+            break;
+    }
+}
+
+static void ScanNow() {
+    // Dynamic COM availability check
+    static const GUID CLSID_ShellWindows = { 0x9ba05972,0xf6a8,0x11cf,{0xa4,0x42,0x00,0xa0,0xc9,0x0a,0x8f,0x39} };
+    static const GUID IID_IShellWindows = { 0x85cb6900,0x4d95,0x11cf,{0x96,0x0c,0x00,0x80,0xc7,0xf4,0xee,0x85} };
+    static const GUID IID_IWebBrowser2  = { 0xd30c1661,0xcdaf,0x11d0,{0x8a,0x3e,0x00,0xc0,0x4f,0xc9,0xe2,0x6e} };
+
+    if (!pCoInitializeEx || !pCoCreateInstance || !pCoUninitialize)
+        return;
+
+    if (FAILED(pCoInitializeEx(nullptr, COINIT_MULTITHREADED)))
+        return;
+
+    IShellWindows* psw = nullptr;
+    if (SUCCEEDED(pCoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                    IID_IShellWindows, (void**)&psw))) {
+        VARIANT vIdx; ZeroMemory(&vIdx, sizeof(vIdx)); vIdx.vt = VT_I4;
+        long count = 0;
+        if (SUCCEEDED(psw->get_Count(&count))) {
+            std::unordered_map<HWND, std::wstring> current;
+
+            for (long i = 0; i < count; ++i) {
+                vIdx.lVal = i;
+                IDispatch* pDisp = nullptr;
+                if (S_OK != psw->Item(vIdx, &pDisp) || !pDisp) continue;
+
+                IWebBrowser2* pWB = nullptr;
+                if (SUCCEEDED(pDisp->QueryInterface(IID_IWebBrowser2, (void**)&pWB)) && pWB) {
+                    LONG_PTR rawHwnd = 0;
+                    if (SUCCEEDED(pWB->get_HWND(&rawHwnd))) {
+                        HWND hwnd = (HWND)rawHwnd;
+                        BSTR burl = nullptr;
+                        if (SUCCEEDED(pWB->get_LocationURL(&burl))) {
+                            std::wstring norm = NormalizeFromLocationUrl(burl);
+                            current[hwnd] = norm;
+                            if (pSysFreeString) pSysFreeString(burl);
+                        }
+                    }
+                    pWB->Release();
+                }
+                pDisp->Release();
+            }
+
+            DWORD now = GetTickCount();
+
+            EnterCriticalSection(&gLock);
+
+            // Track / update / dedup (with grace)
+            for (auto& kv : current) {
+                HWND hwnd = kv.first;
+                const std::wstring& path = kv.second;
+
+                if (IsBypassHeld()) {
+                    // If bypass held, just index and skip dedup
+                    gKnown[hwnd] = path;
+                    if (!path.empty()) gPathIndex[path] = hwnd;
+                    gFirstSeen[hwnd] = now;
+                    continue;
+                }
+
+                auto itKnown = gKnown.find(hwnd);
+                if (itKnown == gKnown.end()) {
+                    // New HWND seen: record, wait grace before acting
+                    gKnown[hwnd] = path;
+                    gFirstSeen[hwnd] = now;
+                    continue;
+                }
+
+                // Path changed (window navigated): update and restart grace
+                if (itKnown->second != path) {
+                    auto itIdx = gPathIndex.find(itKnown->second);
+                    if (itIdx != gPathIndex.end() && itIdx->second == hwnd) {
+                        gPathIndex.erase(itIdx);
+                    }
+                    gKnown[hwnd] = path;
+                    gFirstSeen[hwnd] = now; // restart grace for this new path
+                }
+
+                // If grace elapsed and we have a real path, handle dedup
+                auto itFirst = gFirstSeen.find(hwnd);
+                if (itFirst != gFirstSeen.end()) {
+                    if ((int)(now - itFirst->second) >= gNewWindowGraceMs && !path.empty()) {
+                        HandleDuplicate(hwnd, path);
+                        // Ensure index exists
+                        if (!gPathIndex.count(path)) gPathIndex[path] = hwnd;
+                    }
+                }
+            }
+
+            // Cleanup closed windows
+            std::vector<HWND> toErase;
+            for (auto& kv : gKnown) {
+                if (!current.count(kv.first)) {
+                    auto itIdx = gPathIndex.find(kv.second);
+                    if (itIdx != gPathIndex.end() && itIdx->second == kv.first) {
+                        gPathIndex.erase(itIdx);
+                    }
+                    toErase.push_back(kv.first);
+                }
+            }
+            for (HWND h : toErase) {
+                gKnown.erase(h);
+                gFirstSeen.erase(h);
+            }
+
+            LeaveCriticalSection(&gLock);
+        }
+        psw->Release();
+    }
+
+    pCoUninitialize();
+}
+
+static VOID CALLBACK TimerCb(PVOID, BOOLEAN) {
+    if (InterlockedExchange(&gScanRunning, 1)) return;
+    ScanNow();
+    InterlockedExchange(&gScanRunning, 0);
+}
+
+// ---------------- Windhawk entry points ----------------
+BOOL Wh_ModInit() {
+    InitializeCriticalSection(&gLock);
+    LoadSettings();
+    LoadComProcs();
+
+    gTimerQueue = CreateTimerQueue();
+    if (!gTimerQueue) return TRUE;
+
+    // Start after 500 ms, then poll by interval
+    if (!CreateTimerQueueTimer(&gTimer, gTimerQueue, TimerCb, nullptr, 500, gIntervalMs, WT_EXECUTEDEFAULT)) {
+        DeleteTimerQueueEx(gTimerQueue, nullptr);
+        gTimerQueue = nullptr;
+    }
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (gTimer) {
+        DeleteTimerQueueTimer(gTimerQueue, gTimer, nullptr);
+        gTimer = nullptr;
+    }
+    if (gTimerQueue) {
+        DeleteTimerQueueEx(gTimerQueue, nullptr);
+        gTimerQueue = nullptr;
+    }
+    DeleteCriticalSection(&gLock);
+
+    if (gOle32)    { FreeLibrary(gOle32);    gOle32 = nullptr; }
+    if (gOleAut32) { FreeLibrary(gOleAut32); gOleAut32 = nullptr; }
+    if (gShell32)  { FreeLibrary(gShell32);  gShell32 = nullptr; }
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+    if (gTimer && gTimerQueue) {
+        DeleteTimerQueueTimer(gTimerQueue, gTimer, nullptr);
+        gTimer = nullptr;
+        CreateTimerQueueTimer(&gTimer, gTimerQueue, TimerCb, nullptr, gIntervalMs, gIntervalMs, WT_EXECUTEDEFAULT);
+    }
+}
