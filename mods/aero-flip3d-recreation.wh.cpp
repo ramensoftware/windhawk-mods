@@ -29,7 +29,7 @@ The mod has been tested on Windows 10 1809, Windows 11 23H2 and Windows 11 24H2.
 
 | Shortcut | Action |
 | --- | --- |
-| `Win+Tab` | Opens Aero Flip 3D; it auto-advances while held when Auto-cycle is enabled |
+| `Win+Tab` | Opens Aero Flip 3D |
 | `Ctrl+Alt+F12` | Opens or closes Aero Flip 3D manually. Use this as a fallback. |
 
 ### While Aero Flip 3D is open
@@ -3637,7 +3637,8 @@ BOOL Wh_ModInit() {
 
     g_isExplorerProcess = true;
     Wh_Log(L"Initializing in the real explorer.exe shell process");
-    return WhTool_ModInit();
+    bool returnValue=WhTool_ModInit(); // This variable is used for the ModInit
+    return returnValue;
 }
 
 void Wh_ModSettingsChanged() {
