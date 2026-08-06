@@ -5,7 +5,6 @@
 // @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
-// @include         windhawk.exe
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm -lmsimg32
@@ -23,14 +22,14 @@ This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern
 
 It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.
 
-This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
+This mod is actively maintained, and some details may still be improved. To help the author improve it, feel free to send suggestions.
 
 The mod has been tested on Windows 10 1809, Windows 11 23H2 and Windows 11 24H2.
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
-| `Win+Tab` | Opens Aero Flip 3D and auto-advances the selection while held |
+| `Win+Tab` | Opens Aero Flip 3D; it auto-advances while held when Auto-cycle is enabled |
 | `Ctrl+Alt+F12` | Opens or closes Aero Flip 3D manually. Use this as a fallback. |
 
 ### While Aero Flip 3D is open
@@ -44,7 +43,7 @@ The mod has been tested on Windows 10 1809, Windows 11 23H2 and Windows 11 24H2.
 ## Settings
 
 - Simulated 3D cards: This setting uses the classic DWM thumbnail-strip 3D effect.
-- Auto-cycle while Win is held: automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default.
+- Auto-cycle while Win is held: automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. On by default.
 - Number of visible windows: how many cards are shown in the deck at once. Defaults to auto-detecting a value from your PC's RAM/CPU, but can be overridden.
 
 By default, the mod automatically detects your PC's hardware (RAM and CPU cores) and adjusts animation speed and the number of visible windows accordingly.
@@ -77,9 +76,9 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 - usePerspective: true
   $name: Simulated 3D cards
   $description: Tilt the cards in 3D instead of showing them flat.
-- autoCycle: false
-  $name: (Legacy, unused) Auto-cycle while Win is held
-  $description: Superseded — Win+Tab now always auto-advances the selection while held. Kept only for settings-file compatibility; has no effect.
+- autoCycle: true
+  $name: Auto-cycle while Win is held
+  $description: Automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab.
 - visibleWindowCount: 0
   $name: Number of visible windows
   $description: How many cards are shown in the deck at once. 0 = auto-detect based on your PC's RAM/CPU (the default).
@@ -89,8 +88,8 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 // -----------------------------------------------------------------------------
 // Defensive rewrite (hardened build)
 //
-// This mod runs in Windhawk's dedicated tool process. The code follows a
-// conventional RAII and explicit-error-checking strategy:
+// This mod runs in the real primary Explorer shell process. The code follows
+// a conventional RAII and explicit-error-checking strategy:
 //
 //  1. RAII everywhere: HDC, HBITMAP, HBRUSH, HHOOK, HANDLE, HTHUMBNAIL and
 //     BeginPaint/EndPaint are owned by small move-only wrapper classes, so
@@ -117,7 +116,15 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 // The implementation uses only public DWM thumbnail APIs, gated to Windows 10
 // version 1809 and later.
 // -----------------------------------------------------------------------------
-
+// explorer.exe is intentionally the target for this mod. It was retained after
+// user testing showed that Win+Tab failed to activate on a number of affected
+// Windows 11 23H2/24H2 installations when the same input code was hosted by a
+// dedicated windhawk.exe tool process. Running in the real shell means that
+// the low-level input hook and the shell's Task View/Win+Tab registration are
+// initialized in the same shell lifetime and startup order. This is therefore
+// a compatibility fix, not an attempt to use a hollow explorer.exe as a tool
+// host: Wh_ModInit below accepts only the primary taskbar-owning Explorer and
+// initializes the implementation directly in that real shell process.
 // -----------------------------------------------------------------------------
 // How the REAL Flip 3D worked, and this public-API implementation
 //
@@ -664,7 +671,7 @@ static int g_moduleAddressAnchor = 0;
 
 struct Flip3DSettings {
     bool perspective = true;
-    bool autoCycle = false;  // Off by default: Tab/Shift+Tab is the primary navigation.
+    bool autoCycle = true;  // Enabled by default; Tab/Shift+Tab remain available for exact navigation.
 };
 
 static Flip3DSettings g_settings;
@@ -767,16 +774,11 @@ static constexpr UINT_PTR kFailsafeTimerId = 2;
 static constexpr UINT_PTR kAutoCycleTimerId = 3;
 static constexpr UINT kAutoCycleIntervalMs = 250;  // Vista/7 Win-held cycle cadence.
 
-// Continuous advance while Tab itself is held down (independent of the
-// Win-held autoCycle setting above): pressing and holding Tab repeatedly
-// steps the selection forward without needing to release/press again.
-static constexpr UINT_PTR kTabHoldCycleTimerId = 5;  // NOTE: 4 is kWinTabClaimTimerId — must not collide.
-static constexpr UINT kTabHoldCycleIntervalMs = 350;  // Slightly slower than autoCycle so the two don't fight if both are active.
 // Controller-window timer: a bounded startup claim for Win+Tab. It retries
-// exactly 20 times, never as a permanent reclaim/polling loop.
+// at most 50 times, never as a permanent reclaim/polling loop.
 static constexpr UINT_PTR kWinTabClaimTimerId = 4;
 static constexpr UINT kWinTabClaimIntervalMs = 100;
-static constexpr int kWinTabClaimAttempts = 50;  // ~5s window: was 20/2s, bumped since explorer/Task View sometimes wins the race past 2s.
+static constexpr int kWinTabClaimAttempts = 50;  // ~5 s startup claim window.
 // Baseline animation period (~60 fps). The value actually used is
 // g_perf.frameIntervalMs, which drops to 20 ms (50 fps) or 25 ms (40 fps) on
 // low-end machines. This limits DWM strip updates during animations.
@@ -2650,7 +2652,6 @@ static void CleanupFlipResourcesOnOverlayThread() {
     if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
         KillTimer(g_hOverlayWnd, kFailsafeTimerId);
         KillTimer(g_hOverlayWnd, kAutoCycleTimerId);
-        KillTimer(g_hOverlayWnd, kTabHoldCycleTimerId);
     }
     g_animationInProgress = false;
     g_animationKind = FlipAnimationKind::None;
@@ -2902,9 +2903,8 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
         !SetTimer(g_hOverlayWnd, kFailsafeTimerId, kFailsafeAutoCloseMs, nullptr)) {
         Wh_Log(L"SetTimer(failsafe) failed (code %u)", static_cast<unsigned>(GetLastError()));
     }
-    // Win+Tab now always auto-advances the selection while held (this
-    // replaces the old opt-in autoCycle setting).
-    const bool wantsAutoCycle = triggerModifier == TriggerModifier::Win;
+    const bool wantsAutoCycle =
+        g_settings.autoCycle && triggerModifier == TriggerModifier::Win;
     if (wantsAutoCycle && !g_persistentMode.load(std::memory_order_acquire) &&
         !SetTimer(g_hOverlayWnd, kAutoCycleTimerId, kAutoCycleIntervalMs, nullptr)) {
         Wh_Log(L"SetTimer(auto-cycle) failed (code %u)", static_cast<unsigned>(GetLastError()));
@@ -3015,23 +3015,10 @@ try {
                         return 0;
 
                     case VK_TAB:
+                        // The LL hook normally consumes Tab and handles its
+                        // hardware repeat. This is only the no-hook fallback.
                         NavigateSelection(1);
-                        // Start (or keep alive) the hold-to-advance timer so
-                        // that simply keeping Tab pressed continues to step
-                        // through the deck without repeated key presses.
-                        if (!(lParam & 0x40000000)) {  // ignore key-repeat re-arm, only arm on the initial press
-                            SetTimer(hwnd, kTabHoldCycleTimerId, kTabHoldCycleIntervalMs, nullptr);
-                        }
                         return 0;
-                }
-                break;
-            }
-
-            case WM_KEYUP:
-            case WM_SYSKEYUP: {
-                if (wParam == VK_TAB) {
-                    KillTimer(hwnd, kTabHoldCycleTimerId);
-                    return 0;
                 }
                 break;
             }
@@ -3078,17 +3065,6 @@ try {
                         NavigateSelection(1);
                     } else {
                         KillTimer(hwnd, kAutoCycleTimerId);
-                    }
-                    return 0;
-                }
-                if (wParam == kTabHoldCycleTimerId) {
-                    // GetAsyncKeyState reflects physical key state directly,
-                    // independent of whether WM_KEYUP was delivered to this
-                    // window, so it is the reliable way to detect release.
-                    if (g_isActive && (GetAsyncKeyState(VK_TAB) & 0x8000) != 0) {
-                        NavigateSelection(1);
-                    } else {
-                        KillTimer(hwnd, kTabHoldCycleTimerId);
                     }
                     return 0;
                 }
@@ -3450,7 +3426,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
         Wh_Log(L"HookThread: controller window created, hwnd=%p", g_hControllerWnd);
         TryRegisterHotkey(kStickyHotkeyId, MOD_CONTROL | MOD_ALT, VK_F12,
                           L"RegisterHotKey(Ctrl+Alt+F12)");
-        // Claim modern Win+Tab at startup with a bounded 20-attempt sequence.
+        // Claim modern Win+Tab at startup with a bounded 50-attempt sequence.
         // When Windows keeps the combo reserved, the dedicated LL hook remains
         // the fallback and blocks Task View without any permanent polling.
         BeginWinTabClaim();
@@ -3564,9 +3540,9 @@ static bool WhTool_ModInitImpl() {
 static void WhTool_ModUninitImpl() {
     DisableHighResAnimationTimer();
 
-    // A tool process may wait indefinitely: unlike explorer.exe this cannot
-    // stall the shell. Do not unload code while a callback can still reference
-    // it, and unhook unconditionally as a final defensive action.
+    // This code now runs in the real shell process. Do not unload it while a
+    // callback can still reference it: join the worker threads and unhook as
+    // a final defensive action.
     // g_hookThreadId is captured from CreateThread so it is always
     // valid once the thread is created.
     // Post WM_QUIT with retry: PostThreadMessageW fails until the target
@@ -3619,171 +3595,60 @@ void WhTool_ModSettingsChanged() {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+// Explorer lifecycle
+//
+// This mod needs to run in the real shell process to reliably intercept
+// Win+Tab. Do not use the tool-mod launcher boilerplate here: launching a copy
+// of explorer.exe would create a shell-less Explorer process and would not run
+// this code in the actual shell.
 
-bool g_isToolModProcessLauncher;
-HANDLE g_toolModProcessMutex;
-
-void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
-    ExitThread(0);
+static bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH] = {};
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (length == 0 || length >= ARRAYSIZE(path)) {
+        return false;
+    }
+    const WCHAR* name = wcsrchr(path, L'\\');
+    return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
 }
+
+static bool IsMainExplorerProcess() {
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar) {
+        // The initial shell can be injected before it creates the taskbar.
+        return true;
+    }
+
+    DWORD taskbarProcessId = 0;
+    GetWindowThreadProcessId(taskbar, &taskbarProcessId);
+    return taskbarProcessId == GetCurrentProcessId();
+}
+
+static bool g_isExplorerProcess = false;
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
+    // @include limits normal loading to Explorer. Keep this check as a guard
+    // against an accidental/manual load into another process. Only the shell
+    // Explorer owns the global hooks; folder-window Explorer processes must
+    // not create competing controller and input threads.
+    if (!IsExplorerProcess() || !IsMainExplorerProcess()) {
         return FALSE;
     }
 
-    bool isExcluded = false;
-    bool isToolModProcess = false;
-    bool isCurrentToolModProcess = false;
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
-            break;
-        }
-    }
-
-    LocalFree(argv);
-
-    if (isExcluded) {
-        return FALSE;
-    }
-
-    if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
-        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
-        return TRUE;
-    }
-
-    if (isToolModProcess) {
-        return FALSE;
-    }
-
-    g_isToolModProcessLauncher = true;
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
-
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
-        }
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+    g_isExplorerProcess = true;
+    Wh_Log(L"Initializing in the real explorer.exe shell process");
+    return WhTool_ModInit();
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
+    if (g_isExplorerProcess) {
+        WhTool_ModSettingsChanged();
     }
-
-    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
+    if (g_isExplorerProcess) {
+        WhTool_ModUninit();
+        g_isExplorerProcess = false;
     }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
 }
