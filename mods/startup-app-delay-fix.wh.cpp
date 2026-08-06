@@ -33,6 +33,7 @@ doesn't change delays configured by other systems, such as Task Scheduler.
 
 #include <ntdef.h>
 #include <ntstatus.h>
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <cwchar>
@@ -317,12 +318,10 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(ntOpenKey),
-                            reinterpret_cast<void*>(NtOpenKey_hook),
-                            reinterpret_cast<void**>(&NtOpenKey_orig)) ||
-        !Wh_SetFunctionHook(reinterpret_cast<void*>(ntOpenKeyEx),
-                            reinterpret_cast<void*>(NtOpenKeyEx_hook),
-                            reinterpret_cast<void**>(&NtOpenKeyEx_orig))) {
+    if (!WindhawkUtils::SetFunctionHook(ntOpenKey, NtOpenKey_hook,
+                                        &NtOpenKey_orig) ||
+        !WindhawkUtils::SetFunctionHook(ntOpenKeyEx, NtOpenKeyEx_hook,
+                                        &NtOpenKeyEx_orig)) {
         Wh_Log(L"Failed to register registry-open hooks");
         DeleteRedirectKey();
         return FALSE;
