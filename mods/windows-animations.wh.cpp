@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.1.5
+// @version         1.1.7
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @include         *
@@ -12,7 +12,7 @@
 // @exclude         SearchHost.exe
 // @exclude         dwm.exe
 // @license         MIT
-// @compilerOptions -ladvapi32 -ldwmapi -lgdi32 -lole32 -loleaut32 -luuid -luser32
+// @compilerOptions -ladvapi32 -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -luuid -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,7 +27,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
 
 * **🚀 Smart Hybrid Engine:** Intelligently seamlessly switches between lightning-fast GDI (for pixel-perfect destruction physics) and the native DWM Thumbnail API (to perfectly preserve Windows 11 rounded corners and drop shadows).
 
-* **🎬 Cinematic Close Effects:** Transform how you close applications with four physics-based animations:
+* **🎬 Cinematic Close Effects:** Transform how you close applications with six physics-based animations:
   * **Square Shatter:** The window violently explodes outward into digital blocks before drifting into the void.
     
     ![Square Shatter Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/shatter_close.gif)
@@ -40,15 +40,47 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
     
     ![Perlin Dissolve Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/perlin_close.gif)
 
-  * **Cyber Glitch:** The window fractures into irregular horizontal data strips that shudder, then tear left and right like a corrupted hologram.
+  * **Cyber Glitch:** Signal-snow close — horizontal band tears and a fine noise dissolve that eats the window away.
 
-    ![Cyber Glitch Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/glitchy_close.gif)
+    ![Cyber Glitch Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/cyber_glitch.gif)
 
-* **🧞 Fluid Minimize & Restore:** Choose between the classic Genie "suck into the taskbar" effect (derived from macos-minimize-animation by Abdullah Masood under MIT license) and **Ink Splash** — an organic blot reveal/retract.
-  
-  ![Genie Minimize Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif)
-  
-  ![Ink Splash Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif)
+  * **Retro TV Off:** Classic CRT power-down — the window squashes into a bright horizontal beam, zips to a glowing center dot, then phosphor-fades to black.
+
+    ![Retro TV Off Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/tv_retro.gif)
+
+  * **Pixel Melt:** The window melts downward like hot wax — staggered pixel columns drip at different speeds into jagged streaks.
+
+    ![Pixel Melt Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/pixel_melt.gif)
+
+* **🧞 Fluid Minimize & Restore:** Transform how windows minimize and restore with seven fluid, physics-inspired animations:
+
+  * **Genie:** The window is pulled toward the taskbar like a classic macOS Genie effect, bending and compressing smoothly into its destination.
+
+    ![Genie Minimize Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif)
+
+  * **Ink Splash:** The window collapses into a fluid splash of ink, spreading and deforming organically before fading away.
+
+    ![Ink Splash Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ff3a17e818f2d08e43ee4f79059b4ccb3c663cb0/ink_splash.gif)
+
+  * **Mirage:** The window ripples and distorts like a heat haze, gradually dissolving into a soft, shimmering mirage.
+
+    ![Mirage Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/mirage.gif)
+
+  * **Scorch:** The window breaks into vertical stripes that smoothly slide upwards or shrink until they completely disappear.
+
+    ![Scorch Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/scorch.gif)
+
+  * **Splinter:** The window transitions through a grid of overlapping horizontal and vertical stripes that piece the window together or tear it apart.
+
+    ![Splinter Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/splinter.gif)
+
+  * **Stipple:** The window breaks down into a dense field of tiny dots, gradually dispersing until the entire surface disappears.
+
+    ![Stipple Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/stipple.gif)
+
+  * **Swell:** The window expands and bulges outward with a soft, elastic distortion before smoothly fading away.
+
+    ![Swell Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/swell.gif)
 
 * **🔄 Soft Switch Animation:** A pristine scale and fade-in animation triggered *exclusively* when actively switching windows via the Alt+Tab menu.
   * **Before:**
@@ -63,81 +95,94 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
 
 You can deeply customize the feel and pacing of every animation via the Windhawk Settings tab:
 
-* **Minimize/Restore Animation Style:** Choose between Genie (taskbar suck) and Ink Splash (organic blot reveal/retract).
-* **Close Animation Effect:** Dropdown menu to switch between 'Square Shatter', 'Thanos Snap', 'Perlin Dissolve', and 'Cyber Glitch'.
-* **Minimize/Restore duration (ms):** Controls Genie speed directly; Ink Splash is paced slower from the same value. (Default: 360ms, clamp 200–1400)
+* **Minimize/Restore Animation Style:** Choose between Genie, Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
+* **Close Animation Effect:** Dropdown menu to switch between 'Square Shatter', 'Thanos Snap', 'Perlin Dissolve', 'Cyber Glitch', 'Retro TV Off', and 'Pixel Melt'.
+* **Minimize/Restore duration (ms):** Controls Genie speed directly; each style applies a small pace tweak. (Default: 360ms, clamp 200–1400)
 * **Close animation duration (ms):** Controls how long the dramatic close animation lasts. (Default: 900ms)
 * **Switch animation duration (ms):** Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)
 * **Shatter block size (px):** Determines the size of the dust/shatter particles. 
   * *Performance Tip:* Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).
 * **Treat hiding a window as closing it:** Off by default. Enable it to get close animations for system tray apps that hide their window instead of closing it—at the cost of also animating splash screens and other windows an app hides on its own.
 * **Toggles:** Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
+* **Unhide taskbar (auto-hide):** Genie only. Ignored for Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- minimize_animation: true
-  $name: Animate window minimize
-  $description: Play the minimize animation when a window is minimized to the taskbar.
-- restore_animation: true
-  $name: Animate window restore
-  $description: Play the restore animation when a window is restored from the taskbar.
-- min_restore_effect_style: genie
-  $name: Minimize/Restore Animation Style
-  $description: Choose how windows minimize and restore.
-  $options:
-  - genie: Genie (Taskbar Suck)
-  - ink_splash: Ink Splash (Organic Blot)
-- duration_ms: 360
-  $name: Minimize/Restore duration (ms)
-  $description: Controls the speed of Genie (as-is) and Ink Splash (internally paced slower). Clamped between 200 and 1400.
-- close_animation: true
-  $name: Animate window close
-  $description: Play the shatter/disintegration animation when closing an application.
-- close_effect_style: thanos
-  $name: Close Animation Style
-  $description: Choose the cinematic effect used when closing a window.
-  $options:
-  - shatter: Square Shatter (Explosion)
-  - thanos: Thanos Snap (Disintegration Wave)
-  - perlin: Perlin Dissolve (Acid Burn)
-  - glitch: Cyber Glitch (Digital Teleport)
-- close_duration_ms: 900
-  $name: Close animation duration (ms)
-  $description: How long the shatter/disintegration close animation lasts. Clamped to 50-5000.
-- hide_as_close: false
-  $name: Treat hiding a window as closing it
-  $description: >-
-    Plays the close animation when an app hides its window instead of really destroying it.
-
-    Many apps that live in the system tray - Discord, Steam and Telegram, for example - do not
-    actually close when you press the X. They only hide the window and keep running in the
-    background, so by default those apps disappear with no animation at all. Turn this on to
-    animate them too.
-
-    The catch is that Windows gives no way to tell "the user closed this window" apart from
-    "the app hid this window for its own reasons", so enabling this also animates things you
-    did not close: splash screens that vanish once an app has finished loading, windows an app
-    hides while rearranging its own UI, and explicit "minimise to tray" commands. If you start
-    seeing the shatter or disintegration effect at moments when you did not close anything,
-    turn this back off.
-
-    Windows that are genuinely closed and destroyed are animated either way - this setting only
-    affects the hide-based cases. It has no effect unless "Animate window close" is also on.
-- shatter_block_size: 12
-  $name: Dust/Shatter block size (px)
-  $description: >- 
-    Base size of the disintegrated dust. 1 = true pixel dust (Heavy CPU). Clamped to 1-100. WARNING: Setting this to 1-4 on a 4K display may allocate a significant amount of RAM per close animation.
-- switch_animation: true
-  $name: Animate window switch (Alt+Tab strictly)
-  $description: Play a scale and fade-in animation ONLY when switching to a window via Alt+Tab.
-- switch_duration_ms: 200
-  $name: Switch animation duration (ms)
-  $description: How long the switching animation lasts. Clamped to 50-1000.
-- launch_animation: false
-  $name: Animate app launch
-  $description: Play the restore animation when an application window first opens.
+- minimize_restore:
+  - minimize_animation: true
+    $name: Animate minimizing
+    $description: Animate windows as they minimize to the taskbar.
+  - restore_animation: true
+    $name: Animate restoring
+    $description: Animate windows as they return from the taskbar.
+  - launch_animation: true
+    $name: Animate app launches
+    $description: Use the restore animation when an application window first opens.
+  - effect_style: genie
+    $name: Animation style
+    $description: Choose the effect used for minimizing and restoring windows.
+    $options:
+    - genie: Genie — Taskbar suck
+    - ink_splash: Ink Splash — Organic blot
+    - scorch: Scorch — Corner burn
+    - splinter: Splinter — Center crack
+    - mirage: Mirage — Wavy shimmer
+    - stipple: Stipple — Dotted bloom
+    - swell: Swell — Expand and fade
+  - duration_ms: 360
+    $name: Duration (ms)
+    $description: Base animation duration, from 200 to 1400 ms. Non-Genie effects apply a small pacing adjustment.
+  - unhide_taskbar: false
+    $name: Reveal the taskbar during Genie
+    $description: >-
+      When taskbar auto-hide is enabled, briefly reveal the taskbar so the Genie effect has a
+      visible destination. This option has no effect on other animation styles.
+  - unhide_duration_ms: 450
+    $name: Taskbar reveal duration (ms)
+    $description: Delay the Genie minimize while the taskbar is visible, from 0 to 5000 ms.
+  $name: Minimize and restore
+  $description: Configure animations for minimizing, restoring, and opening windows.
+- close:
+  - close_animation: true
+    $name: Animate closing
+    $description: Play a cinematic effect when an application window closes.
+  - effect_style: thanos
+    $name: Animation style
+    $description: Choose the effect used when closing a window.
+    $options:
+    - shatter: Square Shatter — Explosion
+    - thanos: Thanos Snap — Disintegration wave
+    - perlin: Perlin Dissolve — Acid burn
+    - glitch: Cyber Glitch — Digital teleport
+    - tv_off: Retro TV Off — CRT power-down
+    - pixel_melt: Pixel Melt — Dripping paint
+  - duration_ms: 630
+    $name: Duration (ms)
+    $description: Close animation duration, from 50 to 5000 ms.
+  - hide_as_close: true
+    $name: Animate windows hidden to the tray
+    $description: >-
+      Also animate apps such as Discord, Steam, and Telegram when they hide their window instead
+      of closing it. This can also animate splash screens (Discord update splash screen) or windows hidden automatically by an
+      app (Google Chrome Profile Picker). Disable this option if close effects appear unexpectedly for some apps.
+  - shatter_block_size: 5
+    $name: Dust and shatter block size (px)
+    $description: >-
+      Particle size, from 1 to 100 px. Smaller particles look finer but use more CPU and memory;
+      values from 1 to 4 can be especially demanding on 4K displays.
+  $name: Close
+  $description: Configure the effects played when windows close or hide (system tray app).
+- window_switch:
+  - switch_animation: true
+    $name: Animate Alt+Tab switching
+    $description: Play a scale-and-fade animation when switching windows with Alt+Tab.
+  - duration_ms: 200
+    $name: Duration (ms)
+    $description: Window-switch animation duration, from 50 to 1000 ms.
+  $name: Window switch
+  $description: Configure the animation used when selecting a window through Alt+Tab.
 */
 // ==/WindhawkModSettings==
 
@@ -146,6 +191,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 #endif
 #include <windows.h>
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <math.h>
 #include <cstdint>
 #include <cstring>
@@ -200,6 +246,10 @@ struct WindowAnimData {
     BOOL isClosing{};
     UINT closeMsg{};
     HANDLE hWaitFinish{};
+    BOOL requestedUnhide{};
+    HWND hNextApp{};
+    int unhideDurationMs{};
+    BOOL deferredMinimize{};
 };
 struct LaunchAnimData { HWND hWnd; LONG_PTR originalExStyle; };
 struct SwitchAnimData { HWND hWnd; int durationMs; };
@@ -215,20 +265,16 @@ namespace AnimConstants {
     constexpr float ThanosLifeSpan = 0.4f;
     constexpr float ShatterTravelBase = 200.0f;
     constexpr float ShatterTravelMult = 1000.0f;
-    constexpr float GlitchJitterEnd = 0.12f;
-    constexpr float GlitchBlendLen = 0.08f;
-    constexpr float GlitchEjectEnd = 0.56f;
-    constexpr float GlitchJitterAmp = 14.0f;
-    constexpr float GlitchShrinkStart = 0.58f;
-    constexpr float GlitchTravelFracMin = 0.40f;
-    constexpr float GlitchTravelFracMax = 0.65f;
-    constexpr float GlitchFadeStart = 0.52f;
-    constexpr float GlitchFadeDoneAt = 0.96f;
+    constexpr float CrtSquashEnd = 0.42f;
+    constexpr float CrtZipEnd = 0.78f;
     constexpr int WaitTimeoutMs = 2500;
     constexpr int WaitSlackMs = 500;
     constexpr int AltTabPollMs = 16;
     constexpr int AltTabSessionMs = 500;
-    constexpr int UiaLookupWaitMs = 120;
+    constexpr int UiaLookupWaitMs = 400;
+    constexpr int UiaLookupWaitCachedMs = 0;
+    constexpr int UiaMinAcceptScore = 400;
+    constexpr int TaskbarExpandWaitMs = 250;
 }
 static constexpr std::wstring_view kGdiExcludedClasses[] = {
     L"CoreWindow",
@@ -250,6 +296,7 @@ static constexpr std::wstring_view kSafeCloseClasses[] = {
 };
 static constexpr PCWSTR kPropCloseBypass = L"windows-animations.CloseBypass";
 static constexpr PCWSTR kPropClosed = L"windows-animations.Closed";
+static constexpr PCWSTR kPropMinBypass = L"windows-animations.MinBypass";
 std::unordered_map<HWND, SnapCache> g_WndSnapshots;
 std::unordered_map<HWND, int> g_TaskbarDockXs;
 std::unordered_map<std::wstring, int> g_ProcessDockXs;
@@ -257,35 +304,42 @@ std::unordered_map<HWND, std::wstring> g_ProcessNameCache;
 std::unordered_set<HWND> g_LaunchSeen;
 std::unordered_set<HWND> g_AnimActive;
 std::mutex g_StateMutex;
-
 std::atomic<HWINEVENTHOOK> g_hForegroundHook{NULL};
 HANDLE g_hAltTabThread = NULL;
 HANDLE g_hWinEventThread = NULL;
 std::atomic<bool> g_winEventThreadStarted{false};
 DWORD WINAPI WinEventHookThread(LPVOID lpParam);
 struct alignas(8) SharedAnimState {
+    volatile LONG magic;
+    volatile LONG sessionEpoch;
+    volatile LONG heartbeatTick;
     volatile LONG lastAltTabTick;
     volatile LONG altTabSourceWindow;
     volatile LONG altTabStartTick;
     volatile LONG altTabGeneration;
 };
-static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_V5";
+static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_V7";
+static constexpr LONG kSharedStateMagic = 0x57415337;
+static constexpr LONG kSharedHeartbeatStaleMs = 2500;
 HANDLE g_hMapFile = NULL;
 SharedAnimState* g_pSharedState = nullptr;
 bool g_sharedStateWritable = false;
 std::atomic<LONG> g_consumedGeneration{0};
+std::atomic<LONG> g_seenSessionEpoch{0};
 std::atomic<int> g_durationMs{360};
 std::atomic<int> g_closeDurationMs{900};
 std::atomic<int> g_closeEffectStyle{1};
 std::atomic<int> g_minRestoreEffectStyle{0};
-std::atomic<int> g_shatterBlockSize{12};
+std::atomic<int> g_shatterBlockSize{5};
 std::atomic<bool> g_minimizeAnimation{true};
 std::atomic<bool> g_restoreAnimation{true};
 std::atomic<bool> g_closeAnimation{true};
-std::atomic<bool> g_hideAsClose{false};
+std::atomic<bool> g_hideAsClose{true};
 std::atomic<bool> g_launchAnimation{false};
 std::atomic<bool> g_switchAnimation{true};
 std::atomic<int> g_switchDurationMs{200};
+std::atomic<bool> g_unhideEnabled{true};
+std::atomic<int> g_unhideDurationMs{450};
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_altTabThreadRunning{false};
 std::mutex g_WorkerThreadsMutex;
@@ -331,33 +385,53 @@ static LONG NonZeroTick() {
     const LONG tick = (LONG)GetTickCount();
     return tick ? tick : 1;
 }
+static void PulseSharedHeartbeat() {
+    if (!g_pSharedState || !g_sharedStateWritable) return;
+    InterlockedExchange(&g_pSharedState->heartbeatTick, NonZeroTick());
+}
 static void ResetAltTabState() {
     if (!g_pSharedState || !g_sharedStateWritable) return;
+    InterlockedExchange(&g_pSharedState->magic, kSharedStateMagic);
+    InterlockedIncrement(&g_pSharedState->sessionEpoch);
+    if (g_pSharedState->sessionEpoch == 0) InterlockedIncrement(&g_pSharedState->sessionEpoch);
     InterlockedExchange(&g_pSharedState->lastAltTabTick, 0);
     InterlockedExchange(&g_pSharedState->altTabSourceWindow, 0);
     InterlockedExchange(&g_pSharedState->altTabStartTick, 0);
     InterlockedExchange(&g_pSharedState->altTabGeneration, 0);
+    PulseSharedHeartbeat();
 }
 static void BeginAltTabSession(HWND source) {
     if (!g_pSharedState || !g_sharedStateWritable) return;
-    InterlockedExchange(&g_pSharedState->lastAltTabTick, 0);
     InterlockedExchange(&g_pSharedState->altTabSourceWindow, HwndToShared(source));
     InterlockedExchange(&g_pSharedState->altTabStartTick, (LONG)GetTickCount());
     LONG generation = InterlockedIncrement(&g_pSharedState->altTabGeneration);
     if (generation == 0) InterlockedIncrement(&g_pSharedState->altTabGeneration);
     InterlockedExchange(&g_pSharedState->lastAltTabTick, NonZeroTick());
+    PulseSharedHeartbeat();
 }
 static void TouchAltTabSession() {
     if (g_pSharedState && g_sharedStateWritable) {
         InterlockedExchange(&g_pSharedState->lastAltTabTick, NonZeroTick());
+        PulseSharedHeartbeat();
     }
 }
+static bool EnsureSharedStateMapped();
 static bool ConsumeAltTabIntent(HWND target, DWORD eventTime) {
-    if (!g_pSharedState) return false;
-
+    if (!EnsureSharedStateMapped() || !g_pSharedState) return false;
+    if (g_pSharedState->magic != kSharedStateMagic) return false;
+    const LONG epoch = g_pSharedState->sessionEpoch;
+    LONG seen = g_seenSessionEpoch.load(std::memory_order_relaxed);
+    if (epoch != seen) {
+        g_seenSessionEpoch.store(epoch, std::memory_order_relaxed);
+        g_consumedGeneration.store(0, std::memory_order_relaxed);
+    }
+    const LONG heartbeat = g_pSharedState->heartbeatTick;
+    if (!heartbeat ||
+        (LONG)(GetTickCount() - (DWORD)heartbeat) > kSharedHeartbeatStaleMs) {
+        return false;
+    }
     const LONG stamp = g_pSharedState->lastAltTabTick;
     if (!stamp || (LONG)(GetTickCount() - (DWORD)stamp) > AnimConstants::AltTabSessionMs) return false;
-
     const LONG generation = g_pSharedState->altTabGeneration;
     if (!generation) return false;
     const DWORD startTick = (DWORD)g_pSharedState->altTabStartTick;
@@ -365,7 +439,6 @@ static bool ConsumeAltTabIntent(HWND target, DWORD eventTime) {
         (LONG)(eventTime - startTick) < -(40 + AnimConstants::AltTabPollMs)) {
         return false;
     }
-
     const LONG source = g_pSharedState->altTabSourceWindow;
     if (generation != g_pSharedState->altTabGeneration) return false;
     LONG consumed = g_consumedGeneration.load(std::memory_order_relaxed);
@@ -373,7 +446,6 @@ static bool ConsumeAltTabIntent(HWND target, DWORD eventTime) {
         !g_consumedGeneration.compare_exchange_strong(consumed, generation, std::memory_order_relaxed)) {
         return false;
     }
-
     return !source || source != HwndToShared(target);
 }
 static bool IsExplorerProcess() {
@@ -408,12 +480,10 @@ static void CleanupWindowData(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_StateMutex);
     auto it = g_WndSnapshots.find(hWnd);
     if (it != g_WndSnapshots.end()) { DeleteObject(it->second.hBmp); g_WndSnapshots.erase(it); }
-    g_TaskbarDockXs.clear();
-    g_ProcessDockXs.clear();
+    g_TaskbarDockXs.erase(hWnd);
     g_ProcessNameCache.erase(hWnd);
     g_LaunchSeen.erase(hWnd);
 }
-
 static void SweepStaleData() {
     std::lock_guard<std::mutex> lock(g_StateMutex);
     for (auto it = g_WndSnapshots.begin(); it != g_WndSnapshots.end();) {
@@ -437,7 +507,6 @@ static void SweepStaleData() {
         else ++it;
     }
 }
-
 static bool ShouldUseBitBlt(HWND hWnd, bool isClosing) {
     if (!isClosing) return false;
     if (GetForegroundWindow() == hWnd) return true;
@@ -456,63 +525,125 @@ static PSECURITY_DESCRIPTOR BuildSharedStateSd() {
         ConvertSidToStringSidW(((TOKEN_USER*)buffer.data())->User.Sid, &userSid) && userSid;
     CloseHandle(hToken);
     if (!haveSid) return nullptr;
-
     std::wstring sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;";
     sddl += userSid;
     sddl += L")(A;;GR;;;WD)(A;;GR;;;AC)S:(ML;;NW;;;LW)";
     LocalFree(userSid);
-
     PSECURITY_DESCRIPTOR pSd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &pSd, NULL)) {
         return nullptr;
     }
     return pSd;
 }
+static void CloseSharedState() {
+    if (g_pSharedState) {
+        UnmapViewOfFile(g_pSharedState);
+        g_pSharedState = nullptr;
+    }
+    if (g_hMapFile) {
+        CloseHandle(g_hMapFile);
+        g_hMapFile = NULL;
+    }
+    g_sharedStateWritable = false;
+}
 void InitSharedMemory() {
-    PSECURITY_DESCRIPTOR pSd = BuildSharedStateSd();
-    SECURITY_ATTRIBUTES sa{sizeof(sa), pSd, FALSE};
-    g_hMapFile = CreateFileMappingW(INVALID_HANDLE_VALUE, pSd ? &sa : NULL, PAGE_READWRITE, 0,
-                                    sizeof(SharedAnimState), kSharedStateName);
-    if (pSd) LocalFree(pSd);
-    if (!g_hMapFile) g_hMapFile = OpenFileMappingW(FILE_MAP_READ, FALSE, kSharedStateName);
-    if (!g_hMapFile) {
-        Wh_Log(L"Shared state mapping unavailable (Alt+Tab switch intent disabled in this process)");
+    CloseSharedState();
+    const bool explorer = IsExplorerProcess();
+    if (explorer) {
+        PSECURITY_DESCRIPTOR pSd = BuildSharedStateSd();
+        SECURITY_ATTRIBUTES sa{sizeof(sa), pSd, FALSE};
+        g_hMapFile = CreateFileMappingW(INVALID_HANDLE_VALUE, pSd ? &sa : NULL, PAGE_READWRITE, 0,
+                                        sizeof(SharedAnimState), kSharedStateName);
+        const DWORD createErr = GetLastError();
+        if (pSd) LocalFree(pSd);
+        if (!g_hMapFile) {
+            g_hMapFile = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE, kSharedStateName);
+        }
+        if (!g_hMapFile) {
+            Wh_Log(L"Explorer shared state unavailable err=%lu (switch intent writer offline)",
+                   createErr);
+            return;
+        }
+        g_pSharedState = (SharedAnimState*)MapViewOfFile(
+            g_hMapFile, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(SharedAnimState));
+        if (!g_pSharedState) {
+            Wh_Log(L"Explorer failed to map shared state for write err=%lu — switch anim disabled",
+                   GetLastError());
+            CloseSharedState();
+            return;
+        }
+        g_sharedStateWritable = true;
+        ResetAltTabState();
+        Wh_Log(L"Explorer claimed Alt+Tab shared state epoch=%ld existing=%d",
+               g_pSharedState->sessionEpoch, createErr == ERROR_ALREADY_EXISTS ? 1 : 0);
         return;
     }
-    g_sharedStateWritable = IsExplorerProcess();
-    g_pSharedState = (SharedAnimState*)MapViewOfFile(
-        g_hMapFile, g_sharedStateWritable ? (FILE_MAP_READ | FILE_MAP_WRITE) : FILE_MAP_READ, 0, 0,
-        sizeof(SharedAnimState));
-    if (!g_pSharedState && g_sharedStateWritable) {
-        g_sharedStateWritable = false;
-        g_pSharedState = (SharedAnimState*)MapViewOfFile(g_hMapFile, FILE_MAP_READ, 0, 0,
-                                                         sizeof(SharedAnimState));
+    g_hMapFile = OpenFileMappingW(FILE_MAP_READ, FALSE, kSharedStateName);
+    if (!g_hMapFile) {
+        Wh_Log(L"Shared state not open yet (will retry on Alt+Tab)");
+        return;
     }
-    if (!g_pSharedState) Wh_Log(L"Failed to map shared Alt+Tab state");
+    g_pSharedState = (SharedAnimState*)MapViewOfFile(g_hMapFile, FILE_MAP_READ, 0, 0,
+                                                     sizeof(SharedAnimState));
+    if (!g_pSharedState) {
+        Wh_Log(L"Failed to map shared Alt+Tab state err=%lu", GetLastError());
+        CloseSharedState();
+    }
+}
+static bool EnsureSharedStateMapped() {
+    if (g_pSharedState) {
+        if (g_pSharedState->magic == kSharedStateMagic) return true;
+        if (!g_sharedStateWritable) CloseSharedState();
+        else return false;
+    }
+    if (g_sharedStateWritable) return false;
+    if (IsExplorerProcess()) return false;
+    HANDLE h = OpenFileMappingW(FILE_MAP_READ, FALSE, kSharedStateName);
+    if (!h) return false;
+    auto* view = (SharedAnimState*)MapViewOfFile(h, FILE_MAP_READ, 0, 0, sizeof(SharedAnimState));
+    if (!view || view->magic != kSharedStateMagic) {
+        if (view) UnmapViewOfFile(view);
+        CloseHandle(h);
+        return false;
+    }
+    g_hMapFile = h;
+    g_pSharedState = view;
+    return true;
 }
 void LoadAnimSettings() {
-    g_durationMs.store(Clamp(Wh_GetIntSetting(L"duration_ms"), 200, 1400), std::memory_order_relaxed);
-    g_closeDurationMs.store(Clamp(Wh_GetIntSetting(L"close_duration_ms"), 50, 5000), std::memory_order_relaxed);
-    g_shatterBlockSize.store(Clamp(Wh_GetIntSetting(L"shatter_block_size"), 1, 100), std::memory_order_relaxed);
-    if (PCWSTR style = Wh_GetStringSetting(L"close_effect_style")) {
+    g_durationMs.store(Clamp(Wh_GetIntSetting(L"minimize_restore.duration_ms"), 200, 1400), std::memory_order_relaxed);
+    g_closeDurationMs.store(Clamp(Wh_GetIntSetting(L"close.duration_ms"), 50, 5000), std::memory_order_relaxed);
+    g_shatterBlockSize.store(Clamp(Wh_GetIntSetting(L"close.shatter_block_size"), 1, 100), std::memory_order_relaxed);
+    if (PCWSTR style = Wh_GetStringSetting(L"close.effect_style")) {
         const int value = wcscmp(style, L"shatter") == 0 ? 0
                           : wcscmp(style, L"perlin") == 0 ? 2
-                          : wcscmp(style, L"glitch") == 0 ? 3
+                          : (wcscmp(style, L"glitch") == 0 || wcscmp(style, L"static") == 0) ? 3
+                          : wcscmp(style, L"tv_off") == 0 ? 4
+                          : wcscmp(style, L"pixel_melt") == 0 ? 5
                                                          : 1;
         g_closeEffectStyle.store(value, std::memory_order_relaxed);
         Wh_FreeStringSetting(style);
     }
-    if (PCWSTR style = Wh_GetStringSetting(L"min_restore_effect_style")) {
-        g_minRestoreEffectStyle.store(wcscmp(style, L"ink_splash") == 0 ? 1 : 0, std::memory_order_relaxed);
+    if (PCWSTR style = Wh_GetStringSetting(L"minimize_restore.effect_style")) {
+        const int value = wcscmp(style, L"ink_splash") == 0 ? 1
+                          : wcscmp(style, L"scorch") == 0   ? 2
+                          : wcscmp(style, L"splinter") == 0 ? 3
+                          : wcscmp(style, L"mirage") == 0   ? 4
+                          : wcscmp(style, L"stipple") == 0  ? 5
+                          : wcscmp(style, L"swell") == 0    ? 6
+                                                           : 0;
+        g_minRestoreEffectStyle.store(value, std::memory_order_relaxed);
         Wh_FreeStringSetting(style);
     }
-    g_minimizeAnimation.store(Wh_GetIntSetting(L"minimize_animation") != 0, std::memory_order_relaxed);
-    g_restoreAnimation.store(Wh_GetIntSetting(L"restore_animation") != 0, std::memory_order_relaxed);
-    g_closeAnimation.store(Wh_GetIntSetting(L"close_animation") != 0, std::memory_order_relaxed);
-    g_hideAsClose.store(Wh_GetIntSetting(L"hide_as_close") != 0, std::memory_order_relaxed);
-    g_launchAnimation.store(Wh_GetIntSetting(L"launch_animation") != 0, std::memory_order_relaxed);
-    g_switchAnimation.store(Wh_GetIntSetting(L"switch_animation") != 0, std::memory_order_relaxed);
-    g_switchDurationMs.store(Clamp(Wh_GetIntSetting(L"switch_duration_ms"), 50, 1000), std::memory_order_relaxed);
+    g_minimizeAnimation.store(Wh_GetIntSetting(L"minimize_restore.minimize_animation") != 0, std::memory_order_relaxed);
+    g_restoreAnimation.store(Wh_GetIntSetting(L"minimize_restore.restore_animation") != 0, std::memory_order_relaxed);
+    g_closeAnimation.store(Wh_GetIntSetting(L"close.close_animation") != 0, std::memory_order_relaxed);
+    g_hideAsClose.store(Wh_GetIntSetting(L"close.hide_as_close") != 0, std::memory_order_relaxed);
+    g_launchAnimation.store(Wh_GetIntSetting(L"minimize_restore.launch_animation") != 0, std::memory_order_relaxed);
+    g_switchAnimation.store(Wh_GetIntSetting(L"window_switch.switch_animation") != 0, std::memory_order_relaxed);
+    g_switchDurationMs.store(Clamp(Wh_GetIntSetting(L"window_switch.duration_ms"), 50, 1000), std::memory_order_relaxed);
+    g_unhideEnabled.store(Wh_GetIntSetting(L"minimize_restore.unhide_taskbar") != 0, std::memory_order_relaxed);
+    g_unhideDurationMs.store(Clamp(Wh_GetIntSetting(L"minimize_restore.unhide_duration_ms"), 0, 5000), std::memory_order_relaxed);
 }
 static void UpdateDwmTransitions(HWND hWnd, BOOL enable) {
     BOOL disable = !enable;
@@ -521,16 +652,34 @@ static void UpdateDwmTransitions(HWND hWnd, BOOL enable) {
 static void SetWindowCloak(HWND hWnd, BOOL cloak) {
     DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
 }
+static void RestoreLayeredOpacity(HWND hWnd, LONG_PTR originalExStyle) {
+    SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+    if (!(originalExStyle & WS_EX_LAYERED)) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+    }
+}
 static void UndoRisingHide(HWND hWnd, LONG_PTR originalExStyle, BOOL cloakHidden) {
-    if (cloakHidden) {
-        SetWindowCloak(hWnd, FALSE);
-    } else {
-        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-        if (!(originalExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
-        }
+    if (cloakHidden) SetWindowCloak(hWnd, FALSE);
+    else RestoreLayeredOpacity(hWnd, originalExStyle);
+    UpdateDwmTransitions(hWnd, TRUE);
+}
+static void FailAnimationStart(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloakHidden,
+                               bool skipDwmIfOwned = false) {
+    if (rising) {
+        UndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        return;
+    }
+    if (skipDwmIfOwned) {
+        bool owned = false;
+        { std::lock_guard<std::mutex> lock(g_StateMutex); owned = g_AnimActive.count(hWnd) != 0; }
+        if (owned) return;
     }
     UpdateDwmTransitions(hWnd, TRUE);
+}
+static bool IsShowCmdForWinEvent(int cmd) {
+    return cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWMAXIMIZED || cmd == SW_RESTORE ||
+           cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMINIMIZED || cmd == SW_SHOWMINNOACTIVE ||
+           cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE;
 }
 std::wstring GetProcessNameCached(HWND hWnd) {
     {
@@ -621,7 +770,60 @@ HWND FindTaskbarForMonitor(HMONITOR hMon) {
     }
     return hMainTray;
 }
-
+static bool IsBottomTaskbarExpanded(HWND hTray, const MONITORINFO& mi) {
+    RECT tr{};
+    if (!hTray || !GetWindowRect(hTray, &tr)) return false;
+    const int th = tr.bottom - tr.top;
+    const int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    if (th < 24 || th >= monH / 2) return false;
+    if (tr.bottom < mi.rcMonitor.bottom - 2) return false;
+    return tr.top <= mi.rcMonitor.bottom - 24;
+}
+static void WaitForTaskbarExpanded(HWND hTray, HMONITOR hMon) {
+    if (!hTray) return;
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!hMon) hMon = MonitorFromWindow(hTray, MONITOR_DEFAULTTONEAREST);
+    if (!GetMonitorInfoW(hMon, &mi)) return;
+    const DWORD start = GetTickCount();
+    while ((int)(GetTickCount() - start) < AnimConstants::TaskbarExpandWaitMs) {
+        if (g_unloading.load(std::memory_order_relaxed)) return;
+        if (IsBottomTaskbarExpanded(hTray, mi)) return;
+        Sleep(10);
+    }
+}
+static float GetTaskbarDockY(HMONITOR hMon, const MONITORINFO& mi, bool aimAtExpandedTaskbar = false) {
+    float dockY = (float)mi.rcMonitor.bottom;
+    if (mi.rcWork.bottom > mi.rcMonitor.top && mi.rcWork.bottom < mi.rcMonitor.bottom) {
+        dockY = (float)mi.rcWork.bottom;
+    }
+    HWND hTray = FindTaskbarForMonitor(hMon);
+    if (!hTray) return dockY;
+    RECT tr{};
+    if (!GetWindowRect(hTray, &tr)) return dockY;
+    const int th = tr.bottom - tr.top;
+    const int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    if (th <= 0 || th >= monH / 2 || tr.bottom < mi.rcMonitor.bottom - 2) return dockY;
+    if (tr.top <= mi.rcMonitor.bottom - 24) {
+        return (float)tr.top;
+    }
+    if (aimAtExpandedTaskbar) return (float)(mi.rcMonitor.bottom - th);
+    return (float)mi.rcMonitor.bottom;
+}
+static HWND FindNextAppWindow(HWND hWnd, HWND hTray) {
+    HWND hwndIter = GetWindow(hWnd, GW_HWNDNEXT);
+    while (hwndIter) {
+        if (IsWindowVisible(hwndIter) && !IsIconic(hwndIter) &&
+            GetAncestor(hwndIter, GA_ROOT) == hwndIter &&
+            GetWindowTextLengthW(hwndIter) > 0 &&
+            hwndIter != hWnd && hwndIter != hTray) {
+            const LONG_PTR exStyle = GetWindowLongPtrW(hwndIter, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_TOOLWINDOW)) return hwndIter;
+        }
+        hwndIter = GetWindow(hwndIter, GW_HWNDNEXT);
+    }
+    return NULL;
+}
 struct UiaPending {
     volatile LONG refs = 2;
     HANDLE done = nullptr;
@@ -638,12 +840,36 @@ struct UiaTask {
     HWND hWndApp;
     std::wstring titleLower;
     std::wstring procNameLower;
+    std::wstring procHintLower;
     std::wstring processKey;
     HMONITOR hMon;
     int fallbackX;
     UiaPending* pending = nullptr;
 };
-
+static std::wstring MakeProcessDockKey(const std::wstring& procNameLower, HMONITOR hMon) {
+    if (procNameLower.empty()) return L"";
+    if (!hMon) return procNameLower;
+    return procNameLower + L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+}
+static std::wstring ProcHintForUia(const std::wstring& procNameLower) {
+    if (procNameLower == L"chrome") return L"google chrome";
+    if (procNameLower == L"msedge") return L"microsoft edge";
+    if (procNameLower == L"firefox") return L"firefox";
+    if (procNameLower == L"brave") return L"brave";
+    if (procNameLower == L"opera") return L"opera";
+    if (procNameLower == L"vivaldi") return L"vivaldi";
+    if (procNameLower == L"discord") return L"discord";
+    if (procNameLower == L"spotify") return L"spotify";
+    if (procNameLower == L"code") return L"visual studio code";
+    if (procNameLower == L"devenv") return L"visual studio";
+    return procNameLower;
+}
+static void RememberDockX(HWND hWndApp, HMONITOR hMon, int dockX) {
+    const std::wstring processKey = MakeProcessDockKey(GetProcessNameCached(hWndApp), hMon);
+    std::lock_guard<std::mutex> lock(g_StateMutex);
+    g_TaskbarDockXs[hWndApp] = dockX;
+    if (!processKey.empty()) g_ProcessDockXs[processKey] = dockX;
+}
 DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     UiaTask* t = (UiaTask*)lpParam;
     UiaPending* pending = t->pending;
@@ -652,7 +878,7 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         UiaPending* pending;
         ~UiaCleanupGuard() {
             if (pending) {
-                SetEvent(pending->done);
+                if (pending->done) SetEvent(pending->done);
                 pending->Release();
             }
             delete task;
@@ -661,7 +887,6 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     if (g_unloading.load(std::memory_order_relaxed)) {
         return 0;
     }
-
     int targetX = t->fallbackX;
     bool uiaFound = false;
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -712,12 +937,32 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
                                         int score = 0;
                                         if (t->titleLower == uiaNameLower) score += 1000;
                                         if (!t->titleLower.empty() && t->titleLower.find(uiaNameLower) != std::wstring::npos) score += 500;
-                                        if (!uiaNameLower.empty() && uiaNameLower.find(t->titleLower) != std::wstring::npos) score += 500;
+                                        if (!t->titleLower.empty() && uiaNameLower.find(t->titleLower) != std::wstring::npos) score += 500;
                                         if (!t->procNameLower.empty() && uiaNameLower.find(t->procNameLower) != std::wstring::npos) score += 400;
+                                        if (!t->procHintLower.empty() && t->procHintLower != t->procNameLower &&
+                                            uiaNameLower.find(t->procHintLower) != std::wstring::npos) {
+                                            score += 900;
+                                        }
+                                        std::wstring currentWord;
+                                        for (wchar_t c : t->titleLower) {
+                                            if (iswalnum(c)) currentWord += c;
+                                            else {
+                                                if (currentWord.length() >= 4 &&
+                                                    uiaNameLower.find(currentWord) != std::wstring::npos) {
+                                                    score += 50;
+                                                }
+                                                currentWord.clear();
+                                            }
+                                        }
+                                        if (currentWord.length() >= 4 &&
+                                            uiaNameLower.find(currentWord) != std::wstring::npos) {
+                                            score += 50;
+                                        }
                                         if (uiaNameLower.find(L"start") != std::wstring::npos) score -= 500;
                                         if (uiaNameLower.find(L"search") != std::wstring::npos) score -= 500;
                                         if (uiaNameLower.find(L"task view") != std::wstring::npos) score -= 500;
-                                        if (score > bestScore) {
+                                        if (uiaNameLower.find(L"widgets") != std::wstring::npos) score -= 500;
+                                        if (score >= AnimConstants::UiaMinAcceptScore && score > bestScore) {
                                             RECT bRect;
                                             if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect))) {
                                                 if (bRect.right > bRect.left && bRect.left < monRight - 50) {
@@ -759,63 +1004,68 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
     }
     return 0;
 }
-
 int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallbackX, HMONITOR hMon) {
     std::wstring procNameLower = GetProcessNameCached(hWndApp);
-    std::wstring processKey = procNameLower;
-    if (!processKey.empty() && hMon) {
-        processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
-    }
-    int cachedX = 0;
-    bool haveCache = false;
+    std::wstring processKey = MakeProcessDockKey(procNameLower, hMon);
+    int hwndCachedX = 0;
+    int processCachedX = 0;
+    bool haveHwndCache = false;
+    bool haveProcessCache = false;
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         auto it = g_TaskbarDockXs.find(hWndApp);
         if (it != g_TaskbarDockXs.end()) {
-            cachedX = it->second;
-            haveCache = true;
-        } else if (!processKey.empty()) {
+            hwndCachedX = it->second;
+            haveHwndCache = true;
+        }
+        if (!processKey.empty()) {
             auto pit = g_ProcessDockXs.find(processKey);
             if (pit != g_ProcessDockXs.end()) {
-                cachedX = pit->second;
-                haveCache = true;
+                processCachedX = pit->second;
+                haveProcessCache = true;
             }
         }
     }
     std::wstring titleLower = windowTitle ? windowTitle : L"";
     std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
-
+    const std::wstring procHintLower = ProcHintForUia(procNameLower);
     auto* pending = new UiaPending{};
     pending->done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    pending->targetX = haveCache ? cachedX : fallbackX;
+    const int softFallback = haveHwndCache ? hwndCachedX
+                           : haveProcessCache ? processCachedX
+                                              : fallbackX;
+    pending->targetX = softFallback;
     if (!pending->done) {
         pending->Release();
         pending->Release();
-        return haveCache ? cachedX : fallbackX;
+        return softFallback;
     }
-
-    auto* task = new UiaTask{hWndApp, titleLower, procNameLower, processKey, hMon, fallbackX, pending};
+    auto* task = new UiaTask{hWndApp, titleLower, procNameLower, procHintLower, processKey, hMon,
+                             softFallback, pending};
     if (!StartWorkerThread(UiaWorkerThread, task)) {
         delete task;
         pending->Release();
         pending->Release();
-        return haveCache ? cachedX : fallbackX;
+        return softFallback;
     }
-
-    const DWORD wait = WaitForSingleObject(pending->done, AnimConstants::UiaLookupWaitMs);
-    int result = haveCache ? cachedX : fallbackX;
-    if (wait == WAIT_OBJECT_0 && pending->found) result = pending->targetX;
+    const DWORD waitMs = haveHwndCache ? (DWORD)AnimConstants::UiaLookupWaitCachedMs
+                                       : (DWORD)AnimConstants::UiaLookupWaitMs;
+    int result = softFallback;
+    if (waitMs > 0) {
+        const DWORD wait = WaitForSingleObject(pending->done, waitMs);
+        if (wait == WAIT_OBJECT_0 && pending->found) result = pending->targetX;
+    }
     pending->Release();
     return result;
 }
 DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
     bool altTabSession = false;
     HWND stableForeground = GetForegroundWindow();
-
+    PulseSharedHeartbeat();
     while (g_altTabThreadRunning.load(std::memory_order_relaxed) && !g_unloading.load(std::memory_order_relaxed)) {
+        if (!altTabSession) PulseSharedHeartbeat();
         const bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
         const bool tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
-
         if (!altTabSession) {
             if (!altDown) {
                 if (HWND current = GetForegroundWindow()) stableForeground = current;
@@ -829,7 +1079,6 @@ DWORD WINAPI AltTabTrackerThread(LPVOID lpParam) {
             TouchAltTabSession();
             if (!altDown) altTabSession = false;
         }
-
         Sleep(AnimConstants::AltTabPollMs);
     }
     return 0;
@@ -838,9 +1087,7 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     SwitchAnimData* data = (SwitchAnimData*)lpParam;
     HWND hWnd = data->hWnd;
     int durationMs = data->durationMs;
-    
     delete data; 
-
     struct CleanupGuard {
         HWND h;
         bool uncloaked = false; 
@@ -852,13 +1099,11 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
             g_AnimActive.erase(h);
         }
     } guard{ hWnd };
-
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
     RECT winRect;
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || !IsAppMainWindow(hWnd, true) || !GetWindowRect(hWnd, &winRect)) {
         return 0; 
     }
-    
     RECT extRect = winRect;
     DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extRect, sizeof(extRect));
     int ghostX = winRect.left;
@@ -868,12 +1113,6 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     if (ghostW <= 0 || ghostH <= 0) {
         return 0; 
     }
-    
-    // Deliberately NOT WS_EX_TRANSPARENT, unlike the close/minimize ghost: that ghost floats
-    // over a live window, but this one covers a *cloaked* window, and a cloaked window is not
-    // hit-testable. Click-through here would skip the target and activate the window behind
-    // it, so the ghost absorbs clicks for the duration instead - the target stays focused at
-    // the cost of losing a click aimed at it, which is the better trade of the two.
     HWND hGhost = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
         L"STATIC", NULL, WS_POPUP,
@@ -896,7 +1135,6 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     int H = extRect.bottom - extRect.top;
     int offsetX = extRect.left - winRect.left;
     int offsetY = extRect.top - winRect.top;
-    
     for (;;) {
         MSG msg;
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -927,31 +1165,25 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
         if (lastFrame || g_unloading.load(std::memory_order_relaxed)) break;
         DwmFlush();
     }
-    
     if (IsWindow(hWnd)) {
         SetWindowCloak(hWnd, FALSE);
         guard.uncloaked = true;
     }
-    
     if (hThumb) DwmUnregisterThumbnail(hThumb);
     DestroyWindow(hGhost);
-    
     return 0; 
 }
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
     if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (!g_switchAnimation.load(std::memory_order_relaxed) || g_unloading.load(std::memory_order_relaxed)) return;
-
     DWORD windowPid = 0;
     GetWindowThreadProcessId(hWnd, &windowPid);
     if (windowPid != GetCurrentProcessId() || IsIconic(hWnd) || !IsAppMainWindow(hWnd, true)) return;
     if (!ConsumeAltTabIntent(hWnd, dwmsEventTime)) return;
-
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         if (!g_AnimActive.insert(hWnd).second) return;
     }
-
     Wh_Log(L"Switch animation start hwnd=%p", hWnd);
     SetWindowCloak(hWnd, TRUE);
     auto* data = new SwitchAnimData{hWnd, g_switchDurationMs.load(std::memory_order_relaxed)};
@@ -1006,6 +1238,12 @@ private:
     bool blocksInput = false;
     std::vector<ShatterBlock> shatterBlocks;
     std::vector<float> yb;
+    std::vector<float> meltLag;
+    std::vector<float> meltSpeed;
+    static constexpr int kMeltStripPx = 120;
+    static constexpr int kMeltSubStepPx = 6;
+    static constexpr float kMeltMaxLagStep = 0.08f;
+    static constexpr float kMeltMaxSpeedStep = 0.12f;
     bool firstFramePending = true;
     inline float MorphAt(float v, float tt) {
         float m = tt * (1.0f + AnimConstants::MinimizeSpread) - (1.0f - v) * AnimConstants::MinimizeSpread;
@@ -1065,6 +1303,117 @@ private:
             }
         }
     }
+    void BlitVerticalSquash(int dstBaseX, int dstBaseY, int dstH, float alpha, float bright) {
+        if (dstH < 1 || alpha <= 0.0f) return;
+        if (bright < 0.0f) bright = 0.0f;
+        if (bright > 1.5f) bright = 1.5f;
+        const float invH = 1.0f / (float)dstH;
+        for (int dy = 0; dy < dstH; ++dy) {
+            const int outY = dstBaseY + dy;
+            if (outY < 0 || outY >= boundH) continue;
+            const float srcYF = ((float)dy + 0.5f) * invH * (float)H - 0.5f;
+            int y0 = (int)floorf(srcYF);
+            float fy = srcYF - (float)y0;
+            int y1 = y0 + 1;
+            if (y0 < 0) { y0 = 0; fy = 0.0f; }
+            if (y1 >= H) y1 = H - 1;
+            if (y0 >= H) y0 = H - 1;
+            const BYTE* row0 = srcBits + (size_t)y0 * srcStride;
+            const BYTE* row1 = srcBits + (size_t)y1 * srcStride;
+            BYTE* dstRow = pBits + (size_t)outY * canvasStride;
+            const float w0 = 1.0f - fy;
+            const float w1 = fy;
+            for (int x = 0; x < W; ++x) {
+                const int outX = dstBaseX + x;
+                if (outX < 0 || outX >= boundW) continue;
+                const BYTE* s0 = row0 + (size_t)x * 4;
+                const BYTE* s1 = row1 + (size_t)x * 4;
+                BYTE* d = dstRow + (size_t)outX * 4;
+                float b = ((float)s0[0] * w0 + (float)s1[0] * w1) * bright;
+                float g = ((float)s0[1] * w0 + (float)s1[1] * w1) * bright;
+                float r = ((float)s0[2] * w0 + (float)s1[2] * w1) * bright;
+                float a = ((float)s0[3] * w0 + (float)s1[3] * w1) * alpha;
+                if (bright > 1.0f) {
+                    const float lift = (bright - 1.0f) * 0.65f;
+                    b += (255.0f - b) * lift;
+                    g += (255.0f - g) * lift;
+                    r += (220.0f - r) * lift;
+                }
+                d[0] = (BYTE)(b > 255.0f ? 255.0f : b);
+                d[1] = (BYTE)(g > 255.0f ? 255.0f : g);
+                d[2] = (BYTE)(r > 255.0f ? 255.0f : r);
+                d[3] = (BYTE)(a > 255.0f ? 255.0f : a);
+            }
+        }
+    }
+    void DrawSharpCrtBeam(float cx, float cy, float halfLen, float intensity) {
+        if (intensity <= 0.02f || halfLen < 0.25f) return;
+        if (intensity > 1.0f) intensity = 1.0f;
+        const float tip = 1.75f;
+        const int x0 = (int)floorf(cx - halfLen - tip);
+        const int x1 = (int)ceilf(cx + halfLen + tip);
+        const int y0 = (int)floorf(cy - 2.0f);
+        const int y1 = (int)ceilf(cy + 2.0f);
+        for (int y = y0; y <= y1; ++y) {
+            if (y < 0 || y >= boundH) continue;
+            const float ady = fabsf((float)y + 0.5f - cy);
+            float gy = 0.0f;
+            if (ady < 0.55f) gy = 1.0f;
+            else if (ady < 1.55f) gy = 1.0f - (ady - 0.55f);
+            if (gy <= 0.0f) continue;
+            BYTE* dstRow = pBits + (size_t)y * canvasStride;
+            for (int x = x0; x <= x1; ++x) {
+                if (x < 0 || x >= boundW) continue;
+                const float adx = fabsf((float)x + 0.5f - cx);
+                float gx = 1.0f;
+                if (adx > halfLen) {
+                    const float t = (adx - halfLen) / tip;
+                    if (t >= 1.0f) continue;
+                    gx = 1.0f - t;
+                }
+                const float a = gy * gx * intensity;
+                if (a < 0.02f) continue;
+                const float hot = gy;
+                const float b = (210.0f + 45.0f * hot) * a;
+                const float g = (235.0f + 20.0f * hot) * a;
+                const float r = (255.0f) * a;
+                const float aa = 255.0f * a;
+                BYTE* d = dstRow + (size_t)x * 4;
+                d[0] = (BYTE)(b > 255.0f ? 255.0f : b);
+                d[1] = (BYTE)(g > 255.0f ? 255.0f : g);
+                d[2] = (BYTE)(r > 255.0f ? 255.0f : r);
+                d[3] = (BYTE)(aa > 255.0f ? 255.0f : aa);
+            }
+        }
+    }
+    void DrawSharpCrtDot(float cx, float cy, float intensity) {
+        if (intensity <= 0.02f) return;
+        if (intensity > 1.0f) intensity = 1.0f;
+        const int x0 = (int)floorf(cx - 1.5f);
+        const int x1 = (int)ceilf(cx + 1.5f);
+        const int y0 = (int)floorf(cy - 1.5f);
+        const int y1 = (int)ceilf(cy + 1.5f);
+        for (int y = y0; y <= y1; ++y) {
+            if (y < 0 || y >= boundH) continue;
+            BYTE* dstRow = pBits + (size_t)y * canvasStride;
+            for (int x = x0; x <= x1; ++x) {
+                if (x < 0 || x >= boundW) continue;
+                const float dx = (float)x + 0.5f - cx;
+                const float dy = (float)y + 0.5f - cy;
+                const float d2 = dx * dx + dy * dy;
+                float w = 0.0f;
+                if (d2 <= 0.35f) w = 1.0f;
+                else if (d2 <= 1.6f) w = 1.0f - (d2 - 0.35f) / 1.25f;
+                if (w <= 0.0f) continue;
+                const float a = w * intensity;
+                BYTE* d = dstRow + (size_t)x * 4;
+                d[0] = (BYTE)(255.0f * a);
+                d[1] = (BYTE)(255.0f * a);
+                d[2] = (BYTE)(255.0f * a);
+                d[3] = (BYTE)(255.0f * a);
+            }
+        }
+    }
     void RenderPerlin(float progress, float& fade) {
         fade = 1.0f;
         for (const auto& b : shatterBlocks) {
@@ -1108,95 +1457,165 @@ private:
     }
     void RenderGlitch(float progress, float& fade) {
         fade = 1.0f;
-        const float jitterEnd = AnimConstants::GlitchJitterEnd;
-        const float blendLen = AnimConstants::GlitchBlendLen;
-        const float ejectEnd = AnimConstants::GlitchEjectEnd;
-        const float ejectSpan = 1.0f - jitterEnd;
-        const float ejectPortion = (ejectEnd - jitterEnd) / ejectSpan;
-        const float shrinkStart = AnimConstants::GlitchShrinkStart;
-        const float fadeStart = AnimConstants::GlitchFadeStart;
-        const float fadeDone = AnimConstants::GlitchFadeDoneAt;
-        static constexpr int kGlitchCuts[] = {0, -2, 3, -4, 2, -3, 4, -1, 5, -5, 1, -6};
-        const int cutCount = (int)(sizeof(kGlitchCuts) / sizeof(kGlitchCuts[0]));
-        for (const auto& b : shatterBlocks) {
-            const int bw = b.bw > 0 ? b.bw : blockSizeSetting;
-            const int bh = b.bh > 0 ? b.bh : blockSizeSetting;
-            const int baseX = (origLeft - boundLeft) + b.srcX;
-            const int baseY = (origTop - boundTop) + b.srcY;
-            float alpha = 1.0f;
-            float scale = 1.0f;
-            float jitterW = 0.0f;
-            int jitterX = 0, jitterY = 0;
-            if (progress < jitterEnd + blendLen) {
-                const float tJ = Clamp(progress / jitterEnd, 0.0f, 1.0f);
-                const float amp = AnimConstants::GlitchJitterAmp * (0.55f + 1.6f * tJ * tJ);
-                const int frame = (int)(progress * 90.0f);
-                const int slot = frame + (b.srcY * 3) + (b.srcX >> 3);
-                int cut = kGlitchCuts[slot % cutCount];
-                if (tJ > 0.55f) {
-                    const float bias = (tJ - 0.55f) / 0.45f;
-                    int directed = (b.dirX < 0.0f) ? -abs(cut) : abs(cut);
-                    if (directed == 0) directed = (b.dirX < 0.0f) ? -3 : 3;
-                    cut = (int)((float)cut * (1.0f - bias) + (float)directed * bias);
-                }
-                jitterX = (int)((float)cut * amp);
-                if ((slot % 3) == 0) {
-                    const int vCut = kGlitchCuts[(slot * 5 + 2) % cutCount];
-                    jitterY = (int)((float)vCut * amp * 0.35f);
-                }
-                if (progress < jitterEnd) {
-                    jitterW = 1.0f;
+        if (!srcBits || !pBits || W < 1 || H < 1) return;
+        auto ihash = [](int x, int y) -> float {
+            uint32_t h = (uint32_t)(x * 374761393) ^ (uint32_t)(y * 668265263);
+            h = (h ^ (h >> 13)) * 1274126177u;
+            return (h & 0xFFFFu) / 65535.0f;
+        };
+        auto smoothstep01 = [](float e0, float e1, float x) -> float {
+            float t = Clamp((x - e0) / std::max(1e-5f, e1 - e0), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        };
+        const float p = progress * progress * (3.0f - 2.0f * progress);
+        const int pBand = (int)floorf(p * 18.0f);
+        const int pTear = (int)floorf(p * 32.0f);
+        const int pMicro = (int)floorf(p * 64.0f);
+        const int pBreak = (int)floorf(p * 22.0f);
+        float alphaBase = 1.0f - smoothstep01(0.0f, 1.0f, p);
+        alphaBase *= 1.0f - smoothstep01(0.55f, 1.0f, p);
+        if (alphaBase <= 0.01f) return;
+        const float breakupCut = 1.0f - p * 0.92f;
+        const bool opaque = alphaBase >= 0.99f;
+        const int dstBaseX = origLeft - boundLeft;
+        const int dstBaseY = origTop - boundTop;
+        if (breakupCut >= 0.92f) {
+            for (int y = 0; y < H; ++y) {
+                const int lineId = (int)((float)y / (float)H * 70.0f);
+                const float bandMask = (ihash(lineId, pBand) >= 0.55f) ? 1.0f : 0.0f;
+                const float tear =
+                    (ihash((int)(lineId * 1.7f), pTear) - 0.5f) * 0.10f * bandMask;
+                const float micro =
+                    (ihash((int)((float)y / (float)H * 220.0f), pMicro) - 0.5f) * 0.025f;
+                const int sx = (int)((tear + micro) * (float)W);
+                DrawBlock(0, y, dstBaseX + sx, dstBaseY + y, alphaBase, W, 1);
+            }
+            return;
+        }
+        for (int y = 0; y < H; ++y) {
+            const int lineId = (int)((float)y / (float)H * 70.0f);
+            const float bandMask = (ihash(lineId, pBand) >= 0.55f) ? 1.0f : 0.0f;
+            const float tear =
+                (ihash((int)(lineId * 1.7f), pTear) - 0.5f) * 0.10f * bandMask;
+            const float micro =
+                (ihash((int)((float)y / (float)H * 220.0f), pMicro) - 0.5f) * 0.025f;
+            const int tearX = (int)((tear + micro) * (float)W);
+            const int dstY = dstBaseY + y;
+            if (dstY < 0 || dstY >= boundH) continue;
+            const BYTE* srcRow = srcBits + (size_t)y * srcStride;
+            BYTE* dstRow = pBits + (size_t)dstY * canvasStride;
+            for (int x = 0; x < W; ++x) {
+                if (ihash(x, y + pBreak * 17) > breakupCut) continue;
+                const int dstX = dstBaseX + x + tearX;
+                if (dstX < 0 || dstX >= boundW) continue;
+                const BYTE* src = srcRow + (size_t)x * 4;
+                BYTE* dst = dstRow + (size_t)dstX * 4;
+                if (opaque) {
+                    dst[0] = src[0];
+                    dst[1] = src[1];
+                    dst[2] = src[2];
+                    dst[3] = src[3];
                 } else {
-                    jitterW = 1.0f - (progress - jitterEnd) / blendLen;
-                    if (jitterW < 0.0f) jitterW = 0.0f;
+                    dst[0] = (BYTE)(src[0] * alphaBase);
+                    dst[1] = (BYTE)(src[1] * alphaBase);
+                    dst[2] = (BYTE)(src[2] * alphaBase);
+                    dst[3] = (BYTE)(src[3] * alphaBase);
                 }
             }
-            float ejectT = 0.0f;
-            int travelX = 0;
-            if (progress >= jitterEnd) {
-                float raw = (progress - jitterEnd) / ejectSpan;
-                const float lag = Clamp(b.noiseX, 0.0f, 0.08f);
-                float delayed = (raw - lag) / std::max(0.55f, 1.0f - lag * 0.5f);
-                if (delayed < 0.0f) delayed = 0.0f;
-                if (delayed > 1.0f) delayed = 1.0f;
-                if (delayed < ejectPortion) {
-                    float u = delayed / ejectPortion;
-                    ejectT = (u >= 1.0f) ? 1.0f : (1.0f - powf(2.0f, -7.0f * u));
-                } else {
-                    ejectT = 1.0f;
-                }
+        }
+    }
+    void RenderCrtOff(float progress, float& fade) {
+        fade = 1.0f;
+        const float squashEnd = AnimConstants::CrtSquashEnd;
+        const float zipEnd = AnimConstants::CrtZipEnd;
+        const float cx = (float)(origLeft - boundLeft) + (float)W * 0.5f;
+        const float cy = (float)(origTop - boundTop) + (float)H * 0.5f;
+        if (progress < squashEnd) {
+            const float u = progress / squashEnd;
+            const float punch = u * u * u;
+            const float minH = 2.0f;
+            const float dstHf = (float)H * (1.0f - punch) + minH * punch;
+            const int dstH = std::max(2, (int)(dstHf + 0.5f));
+            const int dstY = (int)(cy - (float)dstH * 0.5f);
+            const int dstX = origLeft - boundLeft;
+            const float bright = 1.0f + punch * 0.85f;
+            const float handoffStart = 10.0f;
+            float contentAlpha = 1.0f;
+            float beamAlpha = 0.0f;
+            if ((float)dstH < handoffStart) {
+                const float t = ((float)dstH - minH) / (handoffStart - minH);
+                contentAlpha = Clamp(t, 0.0f, 1.0f);
+                beamAlpha = 1.0f - contentAlpha;
+            }
+            if (contentAlpha > 0.02f) {
+                BlitVerticalSquash(dstX, dstY, dstH, contentAlpha, bright);
+            }
+            if (beamAlpha > 0.02f) {
+                DrawSharpCrtBeam(cx, cy, (float)W * 0.5f, beamAlpha);
+            }
+            return;
+        }
+        if (progress < zipEnd) {
+            const float u = (progress - squashEnd) / (zipEnd - squashEnd);
+            const float ease = u * u;
+            const float halfLen = (float)W * 0.5f * (1.0f - ease) + 1.0f * ease;
+            DrawSharpCrtBeam(cx, cy, halfLen, 1.0f);
+            return;
+        }
+        const float u = (progress - zipEnd) / std::max(0.01f, 1.0f - zipEnd);
+        const float decay = 1.0f - u;
+        if (decay > 0.02f) DrawSharpCrtDot(cx, cy, decay * decay);
+    }
+    void RenderPixelMelt(float progress, float& fade) {
+        fade = 1.0f;
+        const int stripCount = (int)meltLag.size();
+        if (!srcBits || !pBits || stripCount < 1 || W < 1 || H < 1) return;
+        const int baseX = origLeft - boundLeft;
+        const int baseY = origTop - boundTop;
+        const int maxH = std::max(1, boundH - 1);
+        auto sampleStrip = [&](float px, float& lag, float& spd) {
+            const float f = px / (float)kMeltStripPx - 0.5f;
+            int i0 = (int)floorf(f);
+            float u = f - (float)i0;
+            if (i0 < 0) {
+                i0 = 0;
+                u = 0.0f;
+            }
+            int i1 = i0 + 1;
+            if (i0 >= stripCount) i0 = stripCount - 1;
+            if (i1 >= stripCount) i1 = stripCount - 1;
+            u = u * u * (3.0f - 2.0f * u);
+            lag = meltLag[(size_t)i0] * (1.0f - u) + meltLag[(size_t)i1] * u;
+            spd = meltSpeed[(size_t)i0] * (1.0f - u) + meltSpeed[(size_t)i1] * u;
+        };
+        for (int x = 0; x < W; x += kMeltSubStepPx) {
+            const int bw = std::min(kMeltSubStepPx, W - x);
+            float lag = 0.0f, spd = 1.0f;
+            sampleStrip((float)x + 0.5f * (float)bw, lag, spd);
+            const int dstX = baseX + x;
+            if (dstX >= boundW || dstX + bw <= 0) continue;
 
-                if (ejectT <= fadeStart) {
-                    alpha = 1.0f;
-                } else if (ejectT >= fadeDone) {
-                    alpha = 0.0f;
-                } else {
-                    float fadeU = (ejectT - fadeStart) / (fadeDone - fadeStart);
-                    alpha = powf(1.0f - fadeU, 1.15f);
-                }
-                if (ejectT > shrinkStart) {
-                    float s = (ejectT - shrinkStart) / std::max(0.05f, fadeDone - shrinkStart);
-                    if (s < 0.0f) s = 0.0f;
-                    if (s > 1.0f) s = 1.0f;
-                    scale = 1.0f - (s * s * s);
-                }
-                const float travelFrac = AnimConstants::GlitchTravelFracMin +
-                    (AnimConstants::GlitchTravelFracMax - AnimConstants::GlitchTravelFracMin) * b.force;
-                const float maxTravel = (float)W * travelFrac * Clamp(b.noiseY, 0.75f, 1.15f);
-                travelX = (int)(b.dirX * maxTravel * ejectT);
+            if (progress <= lag) {
+                DrawBlock(x, 0, dstX, baseY, 1.0f, bw, H);
+                continue;
             }
-            const int dstX = baseX + (int)((float)jitterX * jitterW) + travelX;
-            const int dstY = baseY + (int)((float)jitterY * jitterW);
-            if (alpha <= 0.01f || scale <= 0.02f) continue;
-            if (scale >= 0.98f) {
-                DrawBlock(b.srcX, b.srcY, dstX, dstY, alpha, bw, bh);
-            } else {
-                const int dw = std::max(1, (int)((float)bw * scale + 0.5f));
-                const int dh = std::max(1, (int)((float)bh * scale + 0.5f));
-                const int sx = dstX + (bw - dw) / 2;
-                const int sy = dstY + (bh - dh) / 2;
-                DrawBlockScaled(b.srcX, b.srcY, bw, bh, sx, sy, dw, dh, alpha);
+            float t = (progress - lag) / std::max(0.2f, 1.0f - lag);
+            if (t > 1.0f) t = 1.0f;
+            t = t * t * t;
+            const float fall = t * (float)H * (0.75f + 0.95f * spd);
+            const float stretch = 1.0f + t * (0.3f + 0.7f * spd);
+            int dstH = std::max(1, (int)((float)H * stretch + 0.5f));
+            if (dstH > maxH) dstH = maxH;
+            float alpha = 1.0f;
+            if (t > 0.55f) {
+                const float u = (t - 0.55f) / 0.45f;
+                alpha = powf(1.0f - u, 1.2f);
             }
+            if (alpha <= 0.02f) continue;
+
+            const int dstY = baseY + (int)fall;
+            if (dstY >= boundH || dstY + dstH <= 0) continue;
+            DrawBlockScaled(x, 0, bw, H, dstX, dstY, bw, dstH, alpha);
         }
     }
     void RenderInkSplash(float progress, float& fade) {
@@ -1214,6 +1633,91 @@ private:
             if (reveal <= 0.01f) continue;
             DrawBlock(b.srcX, b.srcY, dstBaseX + b.srcX, dstBaseY + b.srcY, reveal, b.bw, b.bh);
         }
+    }
+    void RenderScorch(float progress, float& fade) {
+        fade = 1.0f;
+        float p = data->isRising ? progress : (1.0f - progress);
+        p = p * p * (3.0f - 2.0f * p);
+        const int dstBaseX = origLeft - boundLeft;
+        const int dstBaseY = origTop - boundTop;
+        for (const auto& b : shatterBlocks) {
+            const float dist = hypotf(1.0f - b.dirX, 1.0f - b.dirY) * 1.55f - p * b.force;
+            const float r = p - b.noiseX;
+            const float reveal = (dist <= r) ? 1.0f : (p * p * p * p);
+            if (reveal <= 0.01f) continue;
+            DrawBlock(b.srcX, b.srcY, dstBaseX + b.srcX, dstBaseY + b.srcY, reveal, b.bw, b.bh);
+        }
+    }
+    void RenderSplinter(float progress, float& fade) {
+        fade = 1.0f;
+        float p = data->isRising ? progress : (1.0f - progress);
+        p = p * p * (3.0f - 2.0f * p);
+        constexpr float fadeEdge = 0.08f;
+        auto smooth01 = [](float e0, float e1, float x) -> float {
+            float t = (x - e0) / (e1 - e0);
+            if (t < 0.0f) t = 0.0f;
+            if (t > 1.0f) t = 1.0f;
+            return t * t * (3.0f - 2.0f * t);
+        };
+        const float outer = smooth01(0.0f, fadeEdge, p);
+        const float endFill = smooth01(1.0f - fadeEdge, 1.0f, p);
+        const int dstBaseX = origLeft - boundLeft;
+        const int dstBaseY = origTop - boundTop;
+        for (const auto& b : shatterBlocks) {
+            const float r = p - b.noiseX;
+            const float hard = (b.noiseY <= r) ? 1.0f : 0.0f;
+            const float inner = hard + (1.0f - hard) * endFill;
+            const float reveal = outer * inner;
+            if (reveal <= 0.01f) continue;
+            DrawBlock(b.srcX, b.srcY, dstBaseX + b.srcX, dstBaseY + b.srcY, reveal, b.bw, b.bh);
+        }
+    }
+    void RenderMirage(float progress, float& fade) {
+        fade = 1.0f;
+        float p = data->isRising ? progress : (1.0f - progress);
+        p = p * p * (3.0f - 2.0f * p);
+        const float inv = 1.0f - p;
+        if (p <= 0.01f) return;
+        const int dstBaseX = origLeft - boundLeft;
+        const int dstBaseY = origTop - boundTop;
+        for (const auto& b : shatterBlocks) {
+            const float su = b.dirX + inv * b.force;
+            const float sv = b.dirY + inv * b.noiseX;
+            int sx = (int)(su * (float)W - 0.5f * (float)b.bw);
+            int sy = (int)(sv * (float)H - 0.5f * (float)b.bh);
+            if (sx < 0) sx = 0;
+            if (sy < 0) sy = 0;
+            if (sx > W - b.bw) sx = W - b.bw;
+            if (sy > H - b.bh) sy = H - b.bh;
+            DrawBlock(sx, sy, dstBaseX + b.srcX, dstBaseY + b.srcY, p, b.bw, b.bh);
+        }
+    }
+    void RenderStipple(float progress, float& fade) {
+        fade = 1.0f;
+        float p = data->isRising ? progress : (1.0f - progress);
+        p = p * p * (3.0f - 2.0f * p);
+        const int dstBaseX = origLeft - boundLeft;
+        const int dstBaseY = origTop - boundTop;
+        for (const auto& b : shatterBlocks) {
+            const float threshold = p / b.force;
+            if (b.noiseY > threshold) continue;
+            DrawBlock(b.srcX, b.srcY, dstBaseX + b.srcX, dstBaseY + b.srcY, 1.0f, b.bw, b.bh);
+        }
+    }
+    void RenderSwell(float progress, float& fade) {
+        const float t = data->isRising ? (1.0f - progress) : progress;
+        const float u = 1.0f - t;
+        const float eased = 1.0f - u * u * u;
+        const float scale = 1.0f + 0.18f * eased;
+        fade = data->isRising
+                   ? progress * progress * (3.0f - 2.0f * progress)
+                   : 1.0f - eased;
+        if (data->isRising && fade < 0.04f) fade = 0.04f;
+        const int dstW = std::max(1, (int)((float)W * scale + 0.5f));
+        const int dstH = std::max(1, (int)((float)H * scale + 0.5f));
+        const int dstX = (origLeft - boundLeft) + (W - dstW) / 2;
+        const int dstY = (origTop - boundTop) + (H - dstH) / 2;
+        DrawBlockScaled(0, 0, W, H, dstX, dstY, dstW, dstH, 1.0f);
     }
     void RenderMinimizeRestore(float progress, float& fade) {
         float tt = data->isRising ? (1.0f - progress) : progress;
@@ -1279,7 +1783,10 @@ public:
         const int monRight = (int)mmi.rcMonitor.right, monBottom = (int)mmi.rcMonitor.bottom;
         const int dockX = Clamp(data->targetDockX, monLeft, monRight);
         dockXf = (float)dockX;
-        dockY = (float)monBottom;
+        dockY = GetTaskbarDockY(hMon ? hMon : data->hMon, mmi,
+                                data->requestedUnhide || data->deferredMinimize);
+        if (dockY < (float)monTop + 1.0f) dockY = (float)monBottom;
+        if (dockY > (float)monBottom) dockY = (float)monBottom;
         neckW = Clamp(W * 0.03f, 12.0f, 60.0f);
         blockSizeSetting = std::max(1, g_shatterBlockSize.load(std::memory_order_relaxed));
         closeEffect = g_closeEffectStyle.load(std::memory_order_relaxed);
@@ -1295,8 +1802,14 @@ public:
                 padTop = H / 2;
                 padBottom = (int)(H * 1.5f);
             } else if (closeEffect == 3) {
-                padLeft = padRight = (int)(W * 0.7f) + 24;
-                padTop = padBottom = 8;
+                padLeft = padRight = (int)(W * 0.14f) + 8;
+                padTop = padBottom = 2;
+            } else if (closeEffect == 4) {
+                padLeft = padTop = padRight = padBottom = 4;
+            } else if (closeEffect == 5) {
+                padLeft = padRight = 4;
+                padTop = 2;
+                padBottom = (int)(H * 0.9f) + 16;
             } else {
                 padLeft = padTop = padRight = padBottom = 50;
             }
@@ -1306,17 +1819,27 @@ public:
             int boundBottom = std::min(monBottom, origTop + H + padBottom);
             boundW = boundRight - boundLeft;
             boundH = boundBottom - boundTop;
-        } else if (minRestoreEffect == 1) {
+        } else if (minRestoreEffect >= 1 && minRestoreEffect <= 5) {
             boundLeft = Clamp(origLeft, monLeft, monRight - 1);
             boundTop = Clamp(origTop, monTop, monBottom - 1);
             boundW = std::min(W, monRight - boundLeft);
             boundH = std::min(H, monBottom - boundTop);
+        } else if (minRestoreEffect == 6) {
+            const int padX = (int)ceilf((float)W * 0.10f) + 2;
+            const int padY = (int)ceilf((float)H * 0.10f) + 2;
+            boundLeft = std::max(monLeft, origLeft - padX);
+            boundTop = std::max(monTop, origTop - padY);
+            const int boundRight = std::min(monRight, origLeft + W + padX);
+            const int boundBottom = std::min(monBottom, origTop + H + padY);
+            boundW = boundRight - boundLeft;
+            boundH = boundBottom - boundTop;
         } else {
             boundLeft = std::max(monLeft, std::min(origLeft, dockX) - W / 2);
             const int boundRight = std::min(monRight, std::max(origLeft + W, dockX) + W / 2);
             boundTop = std::max(monTop, origTop);
+            const int boundBottom = std::min(monBottom, std::max(origTop + H, (int)dockY + 40));
             boundW = boundRight - boundLeft;
-            boundH = monBottom - boundTop;
+            boundH = boundBottom - boundTop;
         }
         if (boundW < 1) boundW = 1;
         if (boundH < 1) boundH = 1;
@@ -1379,6 +1902,15 @@ public:
             const int dstX = origLeft - boundLeft;
             const int dstY = origTop - boundTop;
             DrawBlock(0, 0, dstX, dstY, 1.0f, W, H);
+        } else if (minRestoreEffect == 6) {
+            const int dstW = std::max(1, (int)((float)W * 1.18f + 0.5f));
+            const int dstH = std::max(1, (int)((float)H * 1.18f + 0.5f));
+            const int dstX = (origLeft - boundLeft) + (W - dstW) / 2;
+            const int dstY = (origTop - boundTop) + (H - dstH) / 2;
+            DrawBlockScaled(0, 0, W, H, dstX, dstY, dstW, dstH, 1.0f);
+            PresentCanvas(0.04f);
+            DwmFlush();
+            return;
         }
         PresentCanvas(1.0f);
         DwmFlush();
@@ -1460,11 +1992,221 @@ public:
         }
         return true;
     }
+    bool PrecalcScorch() {
+        auto hm_rand = [](float x, float y) -> float {
+            const float n = sinf(x * 12.9898f + y * 78.233f) * 43758.5453f;
+            return n - floorf(n);
+        };
+        auto hm_snoise = [](float vx, float vy) -> float {
+            const float C0 = 0.211324865405187f;
+            const float C1 = 0.366025403784439f;
+            const float C2 = -0.577350269189626f;
+            const float C3 = 0.024390243902439f;
+            auto mod289v = [](float x) -> float { return x - floorf(x * (1.0f / 289.0f)) * 289.0f; };
+            auto perm = [&](float x) -> float { return mod289v(((x * 34.0f) + 1.0f) * x); };
+            float i_x = floorf(vx + (vx + vy) * C1);
+            float i_y = floorf(vy + (vx + vy) * C1);
+            float x0 = vx - i_x + (i_x + i_y) * C0;
+            float y0 = vy - i_y + (i_x + i_y) * C0;
+            const float i1x = (x0 > y0) ? 1.0f : 0.0f;
+            const float i1y = (x0 > y0) ? 0.0f : 1.0f;
+            float x1 = x0 + C0 - i1x;
+            float y1 = y0 + C0 - i1y;
+            float x2 = x0 + C2;
+            float y2 = y0 + C2;
+            i_x = mod289v(i_x);
+            i_y = mod289v(i_y);
+            const float q0 = perm(perm(i_y) + i_x);
+            const float q1 = perm(perm(i_y + i1y) + i_x + i1x);
+            const float q2 = perm(perm(i_y + 1.0f) + i_x + 1.0f);
+
+            auto bake = [&](float q, float px, float py) -> float {
+                float m = 0.5f - (px * px + py * py);
+                if (m < 0.0f) return 0.0f;
+                m *= m;
+                m *= m;
+                const float xf = 2.0f * (q * C3 - floorf(q * C3)) - 1.0f;
+                const float h = fabsf(xf) - 0.5f;
+                const float ox = floorf(xf + 0.5f);
+                const float a0 = xf - ox;
+                m *= 1.79284291400159f - 0.85373472095314f * (a0 * a0 + h * h);
+                return m * (a0 * px + h * py);
+            };
+            return 130.0f * (bake(q0, x0, y0) + bake(q1, x1, y1) + bake(q2, x2, y2));
+        };
+        const int step = Clamp(std::min(W, H) / 96, 2, 5);
+        try {
+            shatterBlocks.reserve(((W + step - 1) / step) * ((H + step - 1) / step));
+            for (int y = 0; y < H; y += step) {
+                const int bh = std::min(step, H - y);
+                for (int x = 0; x < W; x += step) {
+                    const int bw = std::min(step, W - x);
+                    const float uvx = ((float)x + 0.5f * (float)bw) / (float)W;
+                    const float uvy = ((float)y + 0.5f * (float)bh) / (float)H;
+                    const float n = hm_snoise(uvx * 2.8f, 0.0f);
+                    const float expN = 0.42f + 0.58f * expf(n * 0.55f);
+                    const float rnd = hm_rand(uvx * 2.8f, 0.1f) * 0.42f;
+                    shatterBlocks.push_back({x, y, uvx, uvy, expN, rnd, 0.0f, bw, bh});
+                }
+            }
+        } catch (const std::exception&) {
+            Wh_Log(L"Scorch precalc failed");
+            shatterBlocks.clear();
+            return false;
+        }
+        return true;
+    }
+    bool PrecalcSplinter() {
+        auto ch_rand = [](float x, float y) -> float {
+            const float n = sinf(x * 12.9898f + y * 78.233f) * 43758.5453f;
+            return n - floorf(n);
+        };
+        constexpr float threshold = 3.2f;
+        const int step = Clamp(std::min(W, H) / 96, 2, 5);
+        try {
+            shatterBlocks.reserve(((W + step - 1) / step) * ((H + step - 1) / step));
+            for (int y = 0; y < H; y += step) {
+                const int bh = std::min(step, H - y);
+                for (int x = 0; x < W; x += step) {
+                    const int bw = std::min(step, W - x);
+                    const float uvx = ((float)x + 0.5f * (float)bw) / (float)W;
+                    const float uvy = ((float)y + 0.5f * (float)bh) / (float)H;
+                    const float dist = hypotf(uvx - 0.5f, uvy - 0.5f) / threshold;
+                    const float ry = ch_rand(uvy * 2.6f, 0.0f);
+                    const float rx = ch_rand(0.0f, uvx * 2.6f);
+                    const float jitter = (std::min)(ry, rx) * 0.38f;
+                    shatterBlocks.push_back({x, y, uvx, uvy, 0.0f, jitter, dist, bw, bh});
+                }
+            }
+        } catch (const std::exception&) {
+            Wh_Log(L"Splinter precalc failed");
+            shatterBlocks.clear();
+            return false;
+        }
+        return true;
+    }
+    bool PrecalcMirage() {
+        constexpr float sz = 0.035f;
+        constexpr float zoom = 62.0f;
+        const int step = Clamp(std::min(W, H) / 96, 2, 4);
+        try {
+            shatterBlocks.reserve(((W + step - 1) / step) * ((H + step - 1) / step));
+            for (int y = 0; y < H; y += step) {
+                const int bh = std::min(step, H - y);
+                for (int x = 0; x < W; x += step) {
+                    const int bw = std::min(step, W - x);
+                    const float uvx = ((float)x + 0.5f * (float)bw) / (float)W;
+                    const float uvy = ((float)y + 0.5f * (float)bh) / (float)H;
+                    const float dx = sz * cosf(zoom * uvx);
+                    const float dy = sz * sinf(zoom * uvy);
+                    shatterBlocks.push_back({x, y, uvx, uvy, dx, dy, 0.0f, bw, bh});
+                }
+            }
+        } catch (const std::exception&) {
+            Wh_Log(L"Mirage precalc failed");
+            shatterBlocks.clear();
+            return false;
+        }
+        return true;
+    }
+    bool PrecalcStipple() {
+        constexpr float dots = 28.0f;
+        const int step = Clamp(std::min(W, H) / 110, 2, 4);
+        try {
+            shatterBlocks.reserve(((W + step - 1) / step) * ((H + step - 1) / step));
+            for (int y = 0; y < H; y += step) {
+                const int bh = std::min(step, H - y);
+                for (int x = 0; x < W; x += step) {
+                    const int bw = std::min(step, W - x);
+                    const float uvx = ((float)x + 0.5f * (float)bw) / (float)W;
+                    const float uvy = ((float)y + 0.5f * (float)bh) / (float)H;
+                    float fx = uvx * dots;
+                    float fy = uvy * dots;
+                    fx -= floorf(fx);
+                    fy -= floorf(fy);
+                    const float cellDist = hypotf(fx - 0.5f, fy - 0.5f);
+                    const float originDist = (std::max)(hypotf(uvx, uvy), 0.0001f);
+                    shatterBlocks.push_back({x, y, uvx, uvy, originDist, 0.0f, cellDist, bw, bh});
+                }
+            }
+        } catch (const std::exception&) {
+            Wh_Log(L"Stipple precalc failed");
+            shatterBlocks.clear();
+            return false;
+        }
+        return true;
+    }
+    bool PrecalcPixelMelt() {
+        auto hash01 = [](int ix) -> float {
+            uint32_t h = (uint32_t)ix * 747796405u + 2891336453u;
+            h = (h ^ (h >> 14)) * 277803737u;
+            h ^= h >> 13;
+            return (h & 0xFFFFFFu) / 16777215.0f;
+        };
+        auto valueNoise = [&](float x) -> float {
+            const int i = (int)floorf(x);
+            float f = x - (float)i;
+            f = f * f * (3.0f - 2.0f * f);
+            return hash01(i) * (1.0f - f) + hash01(i + 1) * f;
+        };
+        auto fbm = [&](float x) -> float {
+            float v = 0.0f, a = 0.5f, n = 0.0f;
+            for (int o = 0; o < 4; ++o) {
+                v += a * valueNoise(x);
+                n += a;
+                x = x * 2.03f + 17.0f;
+                a *= 0.5f;
+            }
+            return v / std::max(0.001f, n);
+        };
+        try {
+            const int stripCount = (W + kMeltStripPx - 1) / kMeltStripPx;
+            meltLag.resize((size_t)stripCount);
+            meltSpeed.resize((size_t)stripCount);
+            for (int si = 0; si < stripCount; ++si) {
+                const float a = fbm((float)si * 0.85f);
+                const float b = fbm((float)si * 1.7f + 9.1f);
+                float lagN = Clamp(0.6f * a + 0.4f * b, 0.0f, 1.0f);
+                lagN = lagN * lagN * (3.0f - 2.0f * lagN);
+                meltLag[(size_t)si] = 0.02f + lagN * 0.52f;
+                meltSpeed[(size_t)si] = 0.4f + (1.0f - lagN) * 0.85f;
+            }
+            auto limitSteps = [&](std::vector<float>& v, float maxStep) {
+                for (int pass = 0; pass < 3; ++pass) {
+                    for (int i = 1; i < stripCount; ++i) {
+                        const float d = v[(size_t)i] - v[(size_t)i - 1];
+                        if (d > maxStep) v[(size_t)i] = v[(size_t)i - 1] + maxStep;
+                        if (d < -maxStep) v[(size_t)i] = v[(size_t)i - 1] - maxStep;
+                    }
+                    for (int i = stripCount - 2; i >= 0; --i) {
+                        const float d = v[(size_t)i] - v[(size_t)i + 1];
+                        if (d > maxStep) v[(size_t)i] = v[(size_t)i + 1] + maxStep;
+                        if (d < -maxStep) v[(size_t)i] = v[(size_t)i + 1] - maxStep;
+                    }
+                }
+            };
+            limitSteps(meltLag, kMeltMaxLagStep);
+            limitSteps(meltSpeed, kMeltMaxSpeedStep);
+        } catch (const std::exception&) {
+            Wh_Log(L"Pixel melt precalc failed");
+            meltLag.clear();
+            meltSpeed.clear();
+            return false;
+        }
+        return true;
+    }
     bool PrecalcPhysics() {
         if (!data->isClosing) {
             if (minRestoreEffect == 1) return PrecalcInkSplash();
+            if (minRestoreEffect == 2) return PrecalcScorch();
+            if (minRestoreEffect == 3) return PrecalcSplinter();
+            if (minRestoreEffect == 4) return PrecalcMirage();
+            if (minRestoreEffect == 5) return PrecalcStipple();
+            if (minRestoreEffect == 6) return true;
             return true;
         }
+        if (closeEffect == 3 || closeEffect == 4) return true;
+        if (closeEffect == 5) return PrecalcPixelMelt();
         float cx = W / 2.0f;
         float cy = H / 2.0f;
         float maxDist = (float)(W + H);
@@ -1505,38 +2247,6 @@ public:
                         float startTime = v * 0.9f;
                         shatterBlocks.push_back({srcX, srcY, 0, 0, 0, 0, startTime});
                     }
-                }
-            } else if (closeEffect == 3) {
-                auto next = [](uint32_t& s) -> uint32_t {
-                    s ^= s << 13;
-                    s ^= s >> 17;
-                    s ^= s << 5;
-                    return s;
-                };
-                uint32_t seed = 0xC0FFEEu ^ (uint32_t)W ^ ((uint32_t)H << 16) ^
-                                ((uint32_t)blockSizeSetting * 2654435761u);
-                const int minStrip = 1;
-                const int maxStrip = std::max(minStrip, std::min(std::max(8, H / 6),
-                                                                std::max(4, blockSizeSetting * 3)));
-                const int minSeg = std::max(4, blockSizeSetting);
-                const int maxSeg = std::max(minSeg, std::min(std::max(24, W / 3),
-                                                             std::max(16, blockSizeSetting * 6)));
-                for (int y = 0; y < H;) {
-                    int stripH = minStrip + (int)(next(seed) % (uint32_t)(maxStrip - minStrip + 1));
-                    if (y + stripH > H) stripH = H - y;
-                    const float speed = 0.55f + 0.45f * (1.0f - (float)(stripH - minStrip) /
-                                                                  (float)std::max(1, maxStrip - minStrip));
-                    for (int x = 0; x < W;) {
-                        int segW = minSeg + (int)(next(seed) % (uint32_t)(maxSeg - minSeg + 1));
-                        if (x + segW > W) segW = W - x;
-                        const float dirX = (next(seed) & 1) ? -1.0f : 1.0f;
-                        const float startLag = (next(seed) % 1000) / 1000.0f * 0.28f;
-                        const float travelScale = 0.8f + (next(seed) % 1000) / 1000.0f * 0.55f;
-                        shatterBlocks.push_back(
-                            {x, y, dirX, 0.0f, speed, startLag, travelScale, segW, stripH});
-                        x += segW;
-                    }
-                    y += stripH;
                 }
             } else {
                 for (int srcY = 0; srcY < H; srcY += blockSizeSetting) {
@@ -1601,9 +2311,21 @@ public:
                 if (closeEffect == 2) RenderPerlin(progress, fade);
                 else if (closeEffect == 0) RenderShatter(progress, fade);
                 else if (closeEffect == 3) RenderGlitch(progress, fade);
+                else if (closeEffect == 4) RenderCrtOff(progress, fade);
+                else if (closeEffect == 5) RenderPixelMelt(progress, fade);
                 else RenderThanos(progress, fade);
             } else if (minRestoreEffect == 1) {
                 RenderInkSplash(progress, fade);
+            } else if (minRestoreEffect == 2) {
+                RenderScorch(progress, fade);
+            } else if (minRestoreEffect == 3) {
+                RenderSplinter(progress, fade);
+            } else if (minRestoreEffect == 4) {
+                RenderMirage(progress, fade);
+            } else if (minRestoreEffect == 5) {
+                RenderStipple(progress, fade);
+            } else if (minRestoreEffect == 6) {
+                RenderSwell(progress, fade);
             } else {
                 RenderMinimizeRestore(progress, fade);
             }
@@ -1612,50 +2334,70 @@ public:
             DwmFlush();
         }
     }
-    void Teardown() {
-        if (!data->isClosing && data->isRising) {
-            if (data->hiddenByCloak) SetWindowCloak(data->hRealWnd, FALSE);
-            else {
-                SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
-                if (!(data->originalExStyle & WS_EX_LAYERED)) {
-                    SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, GetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
-                }
-            }
-            UpdateDwmTransitions(data->hRealWnd, TRUE);
-            DwmFlush();
+    void FinishRising() {
+        if (data->isClosing || !data->isRising) return;
+        if (data->hiddenByCloak) SetWindowCloak(data->hRealWnd, FALSE);
+        else RestoreLayeredOpacity(data->hRealWnd, data->originalExStyle);
+        UpdateDwmTransitions(data->hRealWnd, TRUE);
+        DwmFlush();
+    }
+    void FinishClose() {
+        if (!data->isClosing) return;
+        if (data->hWaitFinish) {
+            SetEvent(data->hWaitFinish);
+            CloseHandle(data->hWaitFinish);
+            data->hWaitFinish = NULL;
         }
-        if (hScreenDC) ReleaseDC(NULL, hScreenDC);
-        if (hGhost) DestroyWindow(hGhost);
-        if (data->hFirstFrameShown) { SetEvent(data->hFirstFrameShown); CloseHandle(data->hFirstFrameShown); }
-        
-        if (data->isClosing) {
-            if (data->hWaitFinish) { SetEvent(data->hWaitFinish); CloseHandle(data->hWaitFinish); data->hWaitFinish = NULL; }
-
-            if (data->closeMsg != WM_DESTROY && IsWindow(data->hRealWnd)) {
-                SetPropW(data->hRealWnd, kPropCloseBypass, (HANDLE)1);
-                if (data->closeMsg == ANIM_DEFER_SW_HIDE) ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
-                else if (data->closeMsg == WM_CLOSE) PostMessageW(data->hRealWnd, WM_CLOSE, 0, 0);
-                else if (data->closeMsg == WM_SYSCOMMAND) PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-                else PostMessageW(data->hRealWnd, data->closeMsg, 0, 0);
+        if (data->closeMsg == WM_DESTROY || !IsWindow(data->hRealWnd)) return;
+        SetPropW(data->hRealWnd, kPropCloseBypass, (HANDLE)1);
+        if (data->closeMsg == ANIM_DEFER_SW_HIDE) ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
+        else if (data->closeMsg == WM_CLOSE) PostMessageW(data->hRealWnd, WM_CLOSE, 0, 0);
+        else if (data->closeMsg == WM_SYSCOMMAND) PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+        else PostMessageW(data->hRealWnd, data->closeMsg, 0, 0);
+        for (int i = 0; i < 50; ++i) {
+            if (!IsWindow(data->hRealWnd) || g_unloading.load(std::memory_order_relaxed) ||
+                !IsWindowVisible(data->hRealWnd)) {
+                break;
             }
-            
-            if (data->closeMsg != WM_DESTROY && IsWindow(data->hRealWnd)) {
-                for (int i = 0; i < 50; ++i) {
-                    if (!IsWindow(data->hRealWnd) || g_unloading.load(std::memory_order_relaxed) || !IsWindowVisible(data->hRealWnd)) break;
-                    Sleep(10);
-                }
-                if (IsWindow(data->hRealWnd)) {
-                    RemovePropW(data->hRealWnd, kPropCloseBypass);
-                    RemovePropW(data->hRealWnd, kPropClosed);
-                    
-                    SetWindowCloak(data->hRealWnd, FALSE);
-                    UpdateDwmTransitions(data->hRealWnd, TRUE);
-                }
-            }
-        } else if (!data->isClosing && !data->isRising) {
+            Sleep(10);
+        }
+        if (IsWindow(data->hRealWnd)) {
+            RemovePropW(data->hRealWnd, kPropCloseBypass);
+            RemovePropW(data->hRealWnd, kPropClosed);
+            SetWindowCloak(data->hRealWnd, FALSE);
             UpdateDwmTransitions(data->hRealWnd, TRUE);
         }
-        
+    }
+    void FinishDeferredMinimize() {
+        if (!data->deferredMinimize) return;
+        const int unhideMs = data->unhideDurationMs;
+        const int animMs = data->durationMs;
+        if (data->requestedUnhide && unhideMs > animMs) {
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                const int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
+        }
+        if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
+            SetPropW(data->hRealWnd, kPropMinBypass, (HANDLE)1);
+            SendMessageTimeoutW(data->hRealWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_NORMAL, 1000, NULL);
+        }
+        if (IsWindow(data->hRealWnd)) {
+            RemovePropW(data->hRealWnd, kPropMinBypass);
+            SetWindowCloak(data->hRealWnd, FALSE);
+            UpdateDwmTransitions(data->hRealWnd, TRUE);
+        }
+        if (data->requestedUnhide && !g_unloading.load(std::memory_order_relaxed)) {
+            if (data->hNextApp && IsWindow(data->hNextApp) && IsWindowVisible(data->hNextApp)) {
+                SetForegroundWindow(data->hNextApp);
+            } else {
+                SetForegroundWindow(FindWindowW(L"Progman", NULL));
+            }
+        }
+    }
+    void ReleaseGdiResources() {
         if (hCanvasDC && hOldCanvas && hOldCanvas != HGDI_ERROR) SelectObject(hCanvasDC, hOldCanvas);
         if (hSrcDibDC && hOldSrcDib && hOldSrcDib != HGDI_ERROR) SelectObject(hSrcDibDC, hOldSrcDib);
         if (hSrcDC && hOldSrc && hOldSrc != HGDI_ERROR) SelectObject(hSrcDC, hOldSrc);
@@ -1665,17 +2407,46 @@ public:
         if (hCanvasDC) DeleteDC(hCanvasDC);
         if (hSrcDibDC) DeleteDC(hSrcDibDC);
         if (hSrcDC) DeleteDC(hSrcDC);
-        
+        hCanvas = hSrcDib = data->hBitmap = nullptr;
+        hCanvasDC = hSrcDibDC = hSrcDC = nullptr;
+    }
+    void Teardown() {
+        FinishRising();
+        if (hScreenDC) {
+            ReleaseDC(NULL, hScreenDC);
+            hScreenDC = nullptr;
+        }
+        if (hGhost) {
+            DestroyWindow(hGhost);
+            hGhost = nullptr;
+        }
+        if (data->hFirstFrameShown) {
+            SetEvent(data->hFirstFrameShown);
+            CloseHandle(data->hFirstFrameShown);
+            data->hFirstFrameShown = nullptr;
+        }
+        FinishClose();
+        if (!data->isClosing && !data->isRising && !data->deferredMinimize) {
+            UpdateDwmTransitions(data->hRealWnd, TRUE);
+        }
+        ReleaseGdiResources();
+        FinishDeferredMinimize();
         { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(data->hRealWnd); }
         delete data;
+        data = nullptr;
     }
 };
 DWORD WINAPI MainAnimThread(LPVOID lpParam) {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-    AnimationEngine engine((WindowAnimData*)lpParam);
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+    auto* data = (WindowAnimData*)lpParam;
+    AnimationEngine engine(data);
     if (engine.Initialize()) {
-        if (!((WindowAnimData*)lpParam)->isClosing &&
-            g_minRestoreEffectStyle.load(std::memory_order_relaxed) == 1) {
+        const int minStyle = g_minRestoreEffectStyle.load(std::memory_order_relaxed);
+        const bool inplaceBootstrap =
+            !data->isClosing && (minStyle >= 1 && minStyle <= 6);
+        const bool meltBootstrap =
+            data->isClosing && g_closeEffectStyle.load(std::memory_order_relaxed) == 5;
+        if (inplaceBootstrap || meltBootstrap) {
             engine.ShowInkBootstrapFrame();
         }
         if (engine.PrecalcPhysics()) {
@@ -1685,17 +2456,17 @@ DWORD WINAPI MainAnimThread(LPVOID lpParam) {
     engine.Teardown();
     return 0;
 }
-bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloakHidden = FALSE, BOOL isClosing = FALSE, UINT closeMsg = 0, HANDLE hWaitFinish = NULL) {
+bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloakHidden = FALSE,
+                    BOOL isClosing = FALSE, UINT closeMsg = 0, HANDLE hWaitFinish = NULL,
+                    BOOL deferredMinimize = FALSE, BOOL requestedUnhide = FALSE, HWND hNextApp = NULL) {
     
     static std::atomic<int> s_animCount{0};
     if (s_animCount.fetch_add(1, std::memory_order_relaxed) % 10 == 0) {
         SweepStaleData();
     }
-
     RECT winRect;
     if (!GetWindowRect(hWnd, &winRect)) {
-        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
-        else UpdateDwmTransitions(hWnd, TRUE);
+        FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden);
         return false;
     }
     RECT rect = winRect, extRect;
@@ -1709,8 +2480,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     int rawW = winRect.right - winRect.left;
     int rawH = winRect.bottom - winRect.top;
     if (w <= 0 || h <= 0 || rawW <= 0 || rawH <= 0) {
-        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
-        else UpdateDwmTransitions(hWnd, TRUE);
+        FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden);
         return false;
     }
     bool blocked = g_unloading.load(std::memory_order_relaxed);
@@ -1722,22 +2492,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     if (blocked) {
         Wh_Log(L"Animation skipped (busy/unloading) hwnd=%p rising=%d closing=%d", hWnd, rising,
                isClosing);
-        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
-        else {
-            bool owned;
-            { std::lock_guard<std::mutex> lock(g_StateMutex); owned = g_AnimActive.count(hWnd) != 0; }
-            if (!owned) UpdateDwmTransitions(hWnd, TRUE);
-        }
-        return false;
-    }
-    
-    if (g_unloading.load(std::memory_order_relaxed)) {
-        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden);
-        else {
-            bool owned;
-            { std::lock_guard<std::mutex> lock(g_StateMutex); owned = g_AnimActive.count(hWnd) != 0; }
-            if (!owned) UpdateDwmTransitions(hWnd, TRUE);
-        }
+        FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden, /*skipDwmIfOwned=*/true);
         return false;
     }
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
@@ -1755,8 +2510,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     else SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
     if (!PtInRect(&workArea, pt)) {
         learnedTargetX = pt.x;
-        std::lock_guard<std::mutex> lock(g_StateMutex);
-        g_TaskbarDockXs[hWnd] = learnedTargetX;
+        RememberDockX(hWnd, hMon, learnedTargetX);
     } else if (!isClosing && g_minRestoreEffectStyle.load(std::memory_order_relaxed) == 0) {
         WCHAR windowTitle[256] = {0};
         GetWindowTextW(hWnd, windowTitle, 256);
@@ -1764,24 +2518,46 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     }
     int durationMs = isClosing ? g_closeDurationMs.load(std::memory_order_relaxed)
                                : g_durationMs.load(std::memory_order_relaxed);
-    if (!isClosing && g_minRestoreEffectStyle.load(std::memory_order_relaxed) == 1) {
-        durationMs = Clamp((durationMs * 6) / 5, 260, 1400);
+    {
+        const int minStyle = g_minRestoreEffectStyle.load(std::memory_order_relaxed);
+        if (!isClosing && minStyle == 1) {
+            durationMs = Clamp((durationMs * 6) / 5, 260, 1400); // Ink Splash
+        } else if (!isClosing && minStyle == 2) {
+            durationMs = Clamp((durationMs * 3) / 4, 200, 1100); // Scorch
+        } else if (!isClosing && minStyle == 3) {
+            durationMs = Clamp((durationMs * 7) / 6, 300, 1200); // Splinter
+        } else if (!isClosing && minStyle == 4) {
+            durationMs = Clamp((durationMs * 4) / 5, 220, 1100); // Mirage
+        } else if (!isClosing && minStyle == 5) {
+            durationMs = Clamp((durationMs * 4) / 5, 220, 1100); // Stipple
+        } else if (!isClosing && minStyle == 6) {
+            durationMs = Clamp((durationMs * 17) / 20, 200, 1200); // Swell
+        }
+    }
+    {
+        const int closeStyle = g_closeEffectStyle.load(std::memory_order_relaxed);
+        if (isClosing && closeStyle == 3) {
+            durationMs = Clamp((durationMs * 19) / 20, 320, 1300);
+        } else if (isClosing && closeStyle == 4) {
+            durationMs = Clamp((durationMs * 55) / 100, 280, 900);
+        }
     }
     auto* data = new WindowAnimData{
         hWnd, nullptr, nullptr, rect, hMon, w, h, learnedTargetX, rising, originalExStyle, cloakHidden, nullptr,
         durationMs,
-        isClosing, closeMsg, hWaitFinish
+        isClosing, closeMsg, hWaitFinish,
+        requestedUnhide, hNextApp,
+        g_unhideDurationMs.load(std::memory_order_relaxed),
+        deferredMinimize
     };
     HDC hScreenDC = GetDC(NULL);
-    BITMAPINFO bmi{};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-    bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-    data->hBitmap = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &data->pBits, nullptr, 0);
+    data->hBitmap = CreateDib32(hScreenDC, w, h, &data->pBits);
     if (!data->hBitmap || !data->pBits) {
         Wh_Log(L"Snapshot DIB alloc failed hwnd=%p %dx%d", hWnd, w, h);
         ReleaseDC(NULL, hScreenDC);
-        if (rising) UndoRisingHide(hWnd, originalExStyle, cloakHidden); else UpdateDwmTransitions(hWnd, TRUE);
-        if (data->hBitmap) DeleteObject(data->hBitmap); delete data;
+        FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden);
+        if (data->hBitmap) DeleteObject(data->hBitmap);
+        delete data;
         { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd); }
         return false;
     }
@@ -1879,11 +2655,9 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
                isClosing ? L"close" : (rising ? L"restore" : L"minimize"), learnedTargetX,
                data->durationMs);
         if (hFirstShown) {
+            const int minStyle = g_minRestoreEffectStyle.load(std::memory_order_relaxed);
             const DWORD firstFrameWaitMs =
-                (!rising && !isClosing &&
-                 g_minRestoreEffectStyle.load(std::memory_order_relaxed) == 1)
-                    ? 500
-                    : 200;
+                (!rising && !isClosing && minStyle >= 1 && minStyle <= 6) ? 500 : 200;
             if (waitForFirstFrame) WaitForSingleObject(hFirstShown, firstFrameWaitMs);
             CloseHandle(hFirstShown);
         }
@@ -1892,9 +2666,11 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     }
     Wh_Log(L"Animation worker failed hwnd=%p kind=%s", hWnd,
            isClosing ? L"close" : (rising ? L"restore" : L"minimize"));
-    if (rising) UndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak); else UpdateDwmTransitions(hWnd, TRUE);
-    if (hFirstShown) CloseHandle(hFirstShown); if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
-    DeleteObject(data->hBitmap); delete data;
+    FailAnimationStart(hWnd, rising, data->originalExStyle, data->hiddenByCloak);
+    if (hFirstShown) CloseHandle(hFirstShown);
+    if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
+    DeleteObject(data->hBitmap);
+    delete data;
     { std::lock_guard<std::mutex> lock(g_StateMutex); g_AnimActive.erase(hWnd); }
     return false;
 }
@@ -1942,12 +2718,57 @@ static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
     if (wait) CloseHandle(wait);
     return started;
 }
-static void TryMinimizeAnim(HWND hWnd) {
-    if (!g_minimizeAnimation.load(std::memory_order_relaxed)) return;
-    if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
-    if (!ShouldAnimateWindow(hWnd)) return;
+enum class MinimizeKick { None, Immediate, Deferred };
+static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide = false,
+                                          bool allowUnhide = true) {
+    if (!g_minimizeAnimation.load(std::memory_order_relaxed)) return MinimizeKick::None;
+    if (GetPropW(hWnd, kPropMinBypass)) return MinimizeKick::None;
+    if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return MinimizeKick::None;
+    if (!ShouldAnimateWindow(hWnd)) return MinimizeKick::None;
+    BOOL requestedUnhide = FALSE;
+    HWND hTray = NULL;
+    HWND hNext = NULL;
+    const bool genieStyle = g_minRestoreEffectStyle.load(std::memory_order_relaxed) == 0;
+    if (allowUnhide && genieStyle && g_unhideEnabled.load(std::memory_order_relaxed)) {
+        hTray = FindTaskbarForMonitor(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST));
+        if (hTray) {
+            APPBARDATA abd = { sizeof(APPBARDATA) };
+            abd.hWnd = hTray;
+            const UINT uState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+            if (uState & ABS_AUTOHIDE) {
+                requestedUnhide = TRUE;
+                if (!desktopFocusOnUnhide) hNext = FindNextAppWindow(hWnd, hTray);
+            }
+        }
+    }
     UpdateDwmTransitions(hWnd, FALSE);
+    if (requestedUnhide) {
+        SetPropW(hWnd, kPropMinBypass, (HANDLE)1);
+        if (hTray) {
+            SetForegroundWindow(hTray);
+            WaitForTaskbarExpanded(hTray, MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST));
+        }
+        if (StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, FALSE, 0, NULL,
+                           TRUE, TRUE, hNext)) {
+            SetWindowCloak(hWnd, TRUE);
+            return MinimizeKick::Deferred;
+        }
+        RemovePropW(hWnd, kPropMinBypass);
+    }
     StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
+    return MinimizeKick::Immediate;
+}
+static void TryMinimizeAnim(HWND hWnd) {
+    KickMinimizeAnimation(hWnd, /*desktopFocusOnUnhide=*/true, /*allowUnhide=*/false);
+}
+static bool PrepareRestoreAnimation(HWND hWnd) {
+    if (!g_restoreAnimation.load(std::memory_order_relaxed) || !ShouldAnimateWindow(hWnd)) return false;
+    UpdateDwmTransitions(hWnd, FALSE);
+    SetWindowCloak(hWnd, TRUE);
+    return true;
+}
+static void CommitRestoreAnimation(HWND hWnd) {
+    StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
 }
 static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
     if (g_unloading.load(std::memory_order_relaxed)) return false;
@@ -1968,10 +2789,7 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle) {
     auto* ld = new LaunchAnimData{hWnd, originalExStyle};
     if (!StartWorkerThread(LaunchAnimThread, ld)) {
         delete ld;
-        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-        if (!(originalExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
-        }
+        RestoreLayeredOpacity(hWnd, originalExStyle);
         UpdateDwmTransitions(hWnd, TRUE);
     }
 }
@@ -1981,35 +2799,29 @@ static bool IsOurWindow(HWND hWnd) {
     return pid == GetCurrentProcessId();
 }
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
-    if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
-    if (cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWMAXIMIZED || cmd == SW_RESTORE || 
-        cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMINIMIZED || cmd == SW_SHOWMINNOACTIVE || 
-        cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) {
-        EnsureWinEventThreadStarted();
+    if (IsMinimizeCommand(cmd)) {
+        const BOOL wasVisible = IsWindowVisible(hWnd);
+        if (KickMinimizeAnimation(hWnd, /*desktopFocusOnUnhide=*/true) == MinimizeKick::Deferred) {
+            return wasVisible;
+        }
+        return ShowWindow_Original(hWnd, cmd);
     }
+    if ((cmd == SW_RESTORE || cmd == SW_SHOWNORMAL) && IsIconic(hWnd)) {
+        if (PrepareRestoreAnimation(hWnd)) {
+            BOOL result = ShowWindow_Original(hWnd, cmd);
+            CommitRestoreAnimation(hWnd);
+            return result;
+        }
+        return ShowWindow_Original(hWnd, cmd);
+    }
+    if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
+    if (IsShowCmdForWinEvent(cmd)) EnsureWinEventThreadStarted();
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, kPropCloseBypass)) return ShowWindow_Original(hWnd, cmd);
         if (ShouldTreatHideAsClose(hWnd)) {
             BOOL wasVisible = IsWindowVisible(hWnd);
             if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return wasVisible;
         }
-    }
-    if (IsMinimizeCommand(cmd)) {
-        if (g_minimizeAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
-            UpdateDwmTransitions(hWnd, FALSE);
-            StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
-        }
-        return ShowWindow_Original(hWnd, cmd);
-    }
-    if ((cmd == SW_RESTORE || cmd == SW_SHOWNORMAL) && IsIconic(hWnd)) {
-        if (g_restoreAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
-            UpdateDwmTransitions(hWnd, FALSE);
-            SetWindowCloak(hWnd, TRUE);
-            BOOL result = ShowWindow_Original(hWnd, cmd);
-            StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
-            return result;
-        }
-        return ShowWindow_Original(hWnd, cmd);
     }
     LONG_PTR originalStyle;
     if (PrepareLaunchAnim(hWnd, cmd, &originalStyle)) {
@@ -2020,24 +2832,21 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     return ShowWindow_Original(hWnd, cmd);
 }
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
-    if (!IsOurWindow(hWnd)) return ShowWindowAsync_Original(hWnd, cmd);
-    if (cmd == SW_SHOW || cmd == SW_SHOWNORMAL || cmd == SW_SHOWMAXIMIZED || cmd == SW_RESTORE || 
-        cmd == SW_SHOWDEFAULT || cmd == SW_SHOWMINIMIZED || cmd == SW_SHOWMINNOACTIVE || 
-        cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE) {
-        EnsureWinEventThreadStarted();
+    if (IsMinimizeCommand(cmd)) {
+        TryMinimizeAnim(hWnd);
+        return ShowWindowAsync_Original(hWnd, cmd);
     }
+    if (!IsOurWindow(hWnd)) return ShowWindowAsync_Original(hWnd, cmd);
+    if (IsShowCmdForWinEvent(cmd)) EnsureWinEventThreadStarted();
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, kPropCloseBypass)) return ShowWindowAsync_Original(hWnd, cmd);
         if (ShouldTreatHideAsClose(hWnd) && RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
     }
-    if (IsMinimizeCommand(cmd)) TryMinimizeAnim(hWnd);
-    else {
-        LONG_PTR originalStyle;
-        if (PrepareLaunchAnim(hWnd, cmd, &originalStyle)) {
-            BOOL result = ShowWindowAsync_Original(hWnd, cmd);
-            CommitLaunchAnim(hWnd, originalStyle);
-            return result;
-        }
+    LONG_PTR originalStyle;
+    if (PrepareLaunchAnim(hWnd, cmd, &originalStyle)) {
+        BOOL result = ShowWindowAsync_Original(hWnd, cmd);
+        CommitLaunchAnim(hWnd, originalStyle);
+        return result;
     }
     return ShowWindowAsync_Original(hWnd, cmd);
 }
@@ -2070,7 +2879,6 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
 }
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     bool animated = false;
-
     if (GetWindowThreadProcessId(hWnd, NULL) == GetCurrentThreadId() &&
         g_closeAnimation.load(std::memory_order_relaxed) &&
         IsAppMainWindow(hWnd) &&
@@ -2081,16 +2889,13 @@ BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
         animated = RunCloseAnimation(hWnd, WM_DESTROY);
         if (!animated) RemovePropW(hWnd, kPropCloseBypass);
     }
-
     BOOL result = DestroyWindow_Original(hWnd);
-
     if (!result && animated && IsWindow(hWnd)) {
         RemovePropW(hWnd, kPropCloseBypass);
         RemovePropW(hWnd, kPropClosed);
         SetWindowCloak(hWnd, FALSE);
         UpdateDwmTransitions(hWnd, TRUE);
     }
-
     return result;
 }
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -2101,6 +2906,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     if (msg == WM_DESTROY) {
         RemovePropW(hWnd, kPropCloseBypass);
         RemovePropW(hWnd, kPropClosed);
+        RemovePropW(hWnd, kPropMinBypass);
         CleanupWindowData(hWnd);
     }
     const bool closeMessage = msg == WM_CLOSE || (msg == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_CLOSE);
@@ -2114,44 +2920,40 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     if (msg == WM_SYSCOMMAND) {
         const UINT cmd = wParam & 0xFFF0;
         if (cmd == SC_MINIMIZE) {
-            if (g_minimizeAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
-                UpdateDwmTransitions(hWnd, FALSE);
-                StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
+            if (GetPropW(hWnd, kPropMinBypass)) {
+                return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
+            }
+            if (KickMinimizeAnimation(hWnd, false) == MinimizeKick::Deferred) {
+                return 0;
             }
             return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
         }
-        if (cmd == SC_RESTORE && IsIconic(hWnd) && g_restoreAnimation.load(std::memory_order_relaxed) && ShouldAnimateWindow(hWnd)) {
-            UpdateDwmTransitions(hWnd, FALSE);
-            SetWindowCloak(hWnd, TRUE);
+        if (cmd == SC_RESTORE && IsIconic(hWnd) && PrepareRestoreAnimation(hWnd)) {
             LRESULT result = DefWindowProcW_Original(hWnd, msg, wParam, lParam);
-            StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
+            CommitRestoreAnimation(hWnd);
             return result;
         }
     }
     return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
 }
 BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement) {
+    if (placement && IsMinimizeCommand(placement->showCmd)) {
+        TryMinimizeAnim(hWnd);
+        return SetWindowPlacement_Original(hWnd, placement);
+    }
     if (!IsOurWindow(hWnd)) return SetWindowPlacement_Original(hWnd, placement);
-    if (placement) {
-        if (IsMinimizeCommand(placement->showCmd)) TryMinimizeAnim(hWnd);
-        else if (placement->showCmd == SW_HIDE && !GetPropW(hWnd, kPropCloseBypass) &&
-                 ShouldTreatHideAsClose(hWnd)) {
-            
-            WINDOWPLACEMENT modified = *placement;
-            modified.showCmd = SW_SHOWNA;
-            BOOL applied = SetWindowPlacement_Original(hWnd, &modified);
-            
-            if (!applied) return FALSE;
-            
-            if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
-            
-            return ShowWindow_Original(hWnd, SW_HIDE);
-        }
+    if (placement && placement->showCmd == SW_HIDE && !GetPropW(hWnd, kPropCloseBypass) &&
+        ShouldTreatHideAsClose(hWnd)) {
+        WINDOWPLACEMENT modified = *placement;
+        modified.showCmd = SW_SHOWNA;
+        BOOL applied = SetWindowPlacement_Original(hWnd, &modified);
+        if (!applied) return FALSE;
+        if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+        return ShowWindow_Original(hWnd, SW_HIDE);
     }
     return SetWindowPlacement_Original(hWnd, placement);
 }
 BOOL WINAPI CloseWindow_Hook(HWND hWnd) {
-    if (!IsOurWindow(hWnd)) return CloseWindow_Original(hWnd);
     TryMinimizeAnim(hWnd);
     return CloseWindow_Original(hWnd);
 }
@@ -2165,10 +2967,7 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
     }
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
         if (IsWindow(hWnd)) {
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            if (!(originalExStyle & WS_EX_LAYERED)) {
-                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
-            }
+            RestoreLayeredOpacity(hWnd, originalExStyle);
             UpdateDwmTransitions(hWnd, TRUE);
         }
         return 0;
@@ -2201,14 +3000,12 @@ void StopSwitchThreads() {
         CloseHandle(g_hAltTabThread);
         g_hAltTabThread = NULL;
     }
-    
     HANDLE hWinEvent = NULL;
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         hWinEvent = g_hWinEventThread;
         g_hWinEventThread = NULL;
     }
-    
     if (hWinEvent) {
         DWORD tid = GetThreadId(hWinEvent);
         while (tid && !PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
@@ -2231,7 +3028,6 @@ BOOL Wh_ModInit() {
     }
     InitSharedMemory();
     const bool explorerProcess = IsExplorerProcess();
-    if (explorerProcess) ResetAltTabState();
     Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
     Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     Wh_SetFunctionHook((void*)ShowWindowAsync, (void*)ShowWindowAsync_Hook, (void**)&ShowWindowAsync_Original);
@@ -2239,7 +3035,6 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)CloseWindow, (void*)CloseWindow_Hook, (void**)&CloseWindow_Original);
     Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Original);
     Wh_SetFunctionHook((void*)DestroyWindow, (void*)DestroyWindow_Hook, (void**)&DestroyWindow_Original);
-    
     if (g_switchAnimation.load(std::memory_order_relaxed)) {
         StartSwitchThreads();
     }
@@ -2286,13 +3081,8 @@ void Wh_ModUninit() {
         RemovePropW(hWnd, kPropCloseBypass);
         RemovePropW(hWnd, kPropClosed);
     }
-
     std::lock_guard<std::mutex> lock(g_StateMutex);
     for (auto& pair : g_WndSnapshots) DeleteObject(pair.second.hBmp);
     g_WndSnapshots.clear(); g_TaskbarDockXs.clear(); g_ProcessDockXs.clear(); g_ProcessNameCache.clear(); g_LaunchSeen.clear();
-    if (g_hMapFile) {
-        UnmapViewOfFile(g_pSharedState);
-        CloseHandle(g_hMapFile);
-        g_hMapFile = NULL;
-    }
+    CloseSharedState();
 }
