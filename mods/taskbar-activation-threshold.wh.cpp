@@ -53,15 +53,15 @@ The mod does not modify:
 - Transparency
 - Windows' auto-hide setting
 
-When needed, the mod can bring a normal-band taskbar in front of an ordinary
-normal-band window without activating it. It never promotes the taskbar into
-the topmost band or reorders it above an always-on-top window. Mods that
-intentionally keep the taskbar behind other normal windows can conflict with
-this narrowly scoped Z-order correction.
+When needed, the mod brings a covered taskbar to the front of its existing
+Z-order band without activating it or changing whether Explorer currently
+treats it as topmost. This prevents ordinary windows in the same band from
+covering the revealed taskbar while preserving fullscreen and third-party
+Z-order policies.
 
 The mod is designed to coexist with taskbar styling, sizing, transparency,
-animation, clock, label, and icon mods that retain the standard
-bottom-positioned Windows 11 taskbar and don't replace its reveal logic.
+animation, clock, label, and icon mods that retain the standard bottom-positioned
+Windows 11 taskbar.
 
 ## Requirements
 
@@ -85,14 +85,6 @@ bottom-positioned Windows 11 taskbar and don't replace its reveal logic.
   may not yet have been captured. The optional native timer fallback is tried
   once per activation-band entry, while coordinator activation continues to
   retry with backoff until the coordinator becomes available.
-- The native timer fallback uses Explorer's internal taskbar-unhide timer. A
-  mod that intercepts or replaces that timer can block the fallback, and
-  arming it can reset an already pending native unhide timer. This affects only
-  the brief pre-coordinator fallback path; normal coordinator activation is
-  independent of the timer.
-- Mods that deliberately control the taskbar's normal-window Z-order can
-  conflict with the correction used when an ordinary window covers a revealed
-  taskbar. The correction never crosses into the topmost window band.
 
 ## Suggested settings
 
@@ -161,9 +153,8 @@ This mod is distributed under the GNU General Public License v3.0.
   $name: Native timer fallback
   $description: >-
     If the Windows 11 taskbar coordinator isn't available yet, make one
-    best-effort request through Explorer's native unhide timer for each entry
-    into the activation band. Mods that intercept Explorer's taskbar timers can
-    block this temporary fallback. The pointer is never moved or injected.
+    best-effort request to Explorer's native reveal timer for each entry into
+    the activation band. The mod never cancels Explorer's timer.
 */
 // ==/WindhawkModSettings==
 
@@ -235,8 +226,6 @@ enum UiOperation : WPARAM {
 
 constexpr UINT kWorkerCursorChangedMessage = WM_APP + 1;
 constexpr UINT kWorkerSettingsChangedMessage = WM_APP + 2;
-constexpr UINT kWorkerNativePointerLeaveMessage = WM_APP + 3;
-constexpr LPARAM kRevealFlagBringNormalTaskbarForward = 1;
 constexpr UINT kReleaseRetryMs = 250;
 constexpr UINT kFallbackProbeMs = 300;
 constexpr UINT kSuppressionBackoffMaxMs = 5000;
@@ -269,7 +258,6 @@ DWORD WINAPI ActivationWorkerThread(LPVOID);
 void EnsureActivationWorker();
 bool HandleTaskbarUiOperation(HWND taskbarWindow,
                               WPARAM operationValue,
-                              LPARAM operationParameter,
                               LRESULT* result);
 
 void InvalidateAutoHideCache() {
@@ -471,9 +459,8 @@ HMONITOR GetTaskbarMonitor(HWND taskbarWindow) {
     return MonitorFromWindow(taskbarWindow, MONITOR_DEFAULTTONEAREST);
 }
 
-bool LooksLikeHorizontalTaskbarRect(
-    const RECT& taskbarRect,
-    const MONITORINFO& monitorInfo) {
+bool IsBottomDockedRect(const RECT& taskbarRect,
+                        const MONITORINFO& monitorInfo) {
     const int monitorWidth =
         monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
     const int monitorHeight =
@@ -481,13 +468,10 @@ bool LooksLikeHorizontalTaskbarRect(
     const int taskbarWidth = taskbarRect.right - taskbarRect.left;
     const int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
 
-    return taskbarWidth >= monitorWidth / 2 && taskbarHeight > 0 &&
-           taskbarHeight <= monitorHeight / 2;
-}
-
-bool IsBottomDockedRect(const RECT& taskbarRect,
-                        const MONITORINFO& monitorInfo) {
-    return LooksLikeHorizontalTaskbarRect(taskbarRect, monitorInfo) &&
+    const bool looksHorizontal =
+        taskbarWidth >= monitorWidth / 2 && taskbarHeight > 0 &&
+        taskbarHeight <= monitorHeight / 2;
+    return looksHorizontal &&
            std::abs(taskbarRect.bottom - monitorInfo.rcMonitor.bottom) <= 2;
 }
 
@@ -511,11 +495,19 @@ bool IsBottomPositionedTaskbar(HWND taskbarWindow, HMONITOR monitor) {
         return false;
     }
 
-    if (!LooksLikeHorizontalTaskbarRect(taskbarRect, monitorInfo)) {
+    const int monitorWidth =
+        monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+    const int monitorHeight =
+        monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+    const int taskbarWidth = taskbarRect.right - taskbarRect.left;
+    const int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
+    const bool looksHorizontal =
+        taskbarWidth >= monitorWidth / 2 && taskbarHeight > 0 &&
+        taskbarHeight <= monitorHeight / 2;
+    if (!looksHorizontal) {
         return false;
     }
 
-    const int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
     const int tolerance = std::max(16, taskbarHeight + 16);
     return std::abs(taskbarRect.bottom - monitorInfo.rcMonitor.bottom) <=
                tolerance ||
@@ -705,17 +697,10 @@ bool IsFullscreenCandidateOnMonitor(HWND window, HMONITOR monitor) {
 
     // Borderless windows are the common fullscreen case. Some Store/UWP apps
     // and browsers retain caption/frame style bits in fullscreen; for those,
-    // the client area must cover the monitor after excluding maximized windows.
+    // require the client area itself to cover the monitor. A regular maximized
+    // window keeps non-client chrome and therefore doesn't pass this test.
     if ((style & (WS_CAPTION | WS_THICKFRAME)) == 0) {
         return true;
-    }
-
-    // A maximized window fills the work area, which equals the monitor while
-    // auto-hide is enabled. Chromium, Electron, Terminal, File Explorer, and
-    // other custom-frame apps draw their title bar into the client area and
-    // would otherwise be indistinguishable from fullscreen here.
-    if (IsZoomed(window)) {
-        return false;
     }
 
     return DoesClientAreaCoverMonitor(window, monitorInfo);
@@ -747,14 +732,13 @@ bool IsFullscreenOrPresentationNotificationState(HMONITOR monitor) {
         return true;
     }
 
-    if (state != QUNS_RUNNING_D3D_FULL_SCREEN) {
+    if (state != QUNS_BUSY &&
+        state != QUNS_RUNNING_D3D_FULL_SCREEN) {
         return false;
     }
 
-    // The notification state is system-wide. Associate exclusive D3D
-    // fullscreen with the foreground monitor to avoid suppressing unrelated
-    // taskbars. QUNS_BUSY is deliberately not treated as fullscreen because it
-    // can mean that Presentation Settings are active without a fullscreen app.
+    // The notification state is system-wide. Associate fullscreen/busy states
+    // with the foreground monitor to avoid suppressing unrelated taskbars.
     HWND foregroundWindow = GetForegroundWindow();
     return foregroundWindow &&
            MonitorFromWindow(foregroundWindow,
@@ -902,7 +886,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(
     bool* handled) {
     if (message == g_uiThreadMessage) {
         LRESULT result = 0;
-        if (HandleTaskbarUiOperation(window, wParam, lParam, &result)) {
+        if (HandleTaskbarUiOperation(window, wParam, &result)) {
             if (handled) {
                 *handled = true;
             }
@@ -988,7 +972,7 @@ LRESULT WINAPI CSecondaryTray_WndProc_Hook(
     LPARAM lParam) {
     if (message == g_uiThreadMessage) {
         LRESULT result = 0;
-        if (HandleTaskbarUiOperation(window, wParam, lParam, &result)) {
+        if (HandleTaskbarUiOperation(window, wParam, &result)) {
             return result;
         }
     }
@@ -1128,30 +1112,6 @@ ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook(
         taskbarWindow,
         isPointerOver,
         inputDeviceKind);
-
-    // Calls made by this mod invoke the original function directly, so a false
-    // value reaching this hook is Explorer's own pointer-leave transition. If
-    // it superseded our synthetic enter, relinquish UI-thread ownership and
-    // tell the worker to re-arm rather than waiting for a redundant release.
-    if (!isPointerOver &&
-        g_syntheticPointerOverTaskbars.erase(taskbarWindow) != 0) {
-        Wh_Log(L"Explorer cleared synthetic pointer-over for taskbar %p",
-               taskbarWindow);
-
-        const DWORD workerThreadId =
-            g_workerThreadId.load(std::memory_order_acquire);
-        if (workerThreadId &&
-            !PostThreadMessageW(
-                workerThreadId,
-                kWorkerNativePointerLeaveMessage,
-                reinterpret_cast<WPARAM>(taskbarWindow),
-                0)) {
-            Wh_Log(L"Couldn't notify activation worker about Explorer's "
-                   L"pointer leave for taskbar %p: %u",
-                   taskbarWindow,
-                   GetLastError());
-        }
-    }
 }
 
 using ViewCoordinator_ShouldTaskbarBeExpanded_t =
@@ -1309,27 +1269,16 @@ bool SetSyntheticPointerOverOnUiThread(HWND taskbarWindow,
     return true;
 }
 
-bool ShouldBringNormalTaskbarForward(HWND taskbarWindow) {
-    if (!taskbarWindow || !IsWindow(taskbarWindow)) {
-        return false;
-    }
-
-    // Never reorder a topmost taskbar. Windows such as the on-screen keyboard,
-    // always-on-top players, and capture overlays can legitimately sit above
-    // it, and this mod must not override that policy.
-    const LONG_PTR taskbarExStyle =
-        GetWindowLongPtrW(taskbarWindow, GWL_EXSTYLE);
-    if ((taskbarExStyle & WS_EX_TOPMOST) != 0) {
-        return false;
-    }
-
+bool IsTaskbarCoveredByHigherWindow(HWND taskbarWindow) {
     RECT taskbarRect{};
     if (!GetWindowRect(taskbarWindow, &taskbarRect)) {
         return false;
     }
 
-    // While auto-hidden, project the live taskbar rectangle to its visible
-    // bottom-docked position before testing windows above it in Z order.
+    // While auto-hidden, the live taskbar rectangle can sit just outside the
+    // monitor and therefore not intersect the window that will cover it after
+    // the reveal animation. Project it to its visible bottom-docked position
+    // before checking higher Z-order windows.
     const HMONITOR monitor = GetTaskbarMonitor(taskbarWindow);
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
@@ -1348,12 +1297,11 @@ bool ShouldBringNormalTaskbarForward(HWND taskbarWindow) {
     struct Context {
         HWND taskbarWindow;
         RECT taskbarRect;
-        bool coveredByNormalWindow;
+        bool covered;
     } context{taskbarWindow, taskbarRect, false};
 
-    // This desktop-wide walk intentionally runs on the activation worker, not
-    // Explorer's taskbar UI thread. Only a normal-band window encountered above
-    // the normal-band taskbar is actionable; topmost windows are left alone.
+    // EnumWindows walks from top to bottom. Only windows encountered before the
+    // taskbar can cover it, so stop once the taskbar itself is reached.
     EnumWindows(
         [](HWND window, LPARAM parameter) -> BOOL {
             auto* context = reinterpret_cast<Context*>(parameter);
@@ -1368,11 +1316,8 @@ bool ShouldBringNormalTaskbarForward(HWND taskbarWindow) {
 
             const LONG_PTR exStyle = GetWindowLongPtrW(window, GWL_EXSTYLE);
             if ((exStyle & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
-                            WS_EX_NOACTIVATE | WS_EX_TOPMOST)) != 0) {
-                return TRUE;
-            }
-
-            if (IsWindowCloaked(window)) {
+                            WS_EX_NOACTIVATE)) != 0 ||
+                IsWindowCloaked(window)) {
                 return TRUE;
             }
 
@@ -1382,7 +1327,7 @@ bool ShouldBringNormalTaskbarForward(HWND taskbarWindow) {
                 IntersectRect(&intersection,
                               &windowRect,
                               &context->taskbarRect)) {
-                context->coveredByNormalWindow = true;
+                context->covered = true;
                 return FALSE;
             }
 
@@ -1390,40 +1335,47 @@ bool ShouldBringNormalTaskbarForward(HWND taskbarWindow) {
         },
         reinterpret_cast<LPARAM>(&context));
 
-    return context.coveredByNormalWindow;
+    return context.covered;
 }
 
-bool BringNormalTaskbarForwardOnUiThread(HWND taskbarWindow) {
+bool BringTaskbarToFrontWithinCurrentBandOnUiThread(
+    HWND taskbarWindow) {
     if (!taskbarWindow || !IsWindow(taskbarWindow)) {
         return false;
     }
 
-    // Recheck the band on the UI thread in case Explorer or another mod changed
-    // it after the worker's coverage snapshot. Never reorder a topmost taskbar.
-    if ((GetWindowLongPtrW(taskbarWindow, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0) {
+    // Explorer normally puts the revealed taskbar in front itself. Only nudge
+    // the Z-order when a higher window is actually intersecting it; this keeps
+    // the workaround for covered taskbars without reordering Explorer's window
+    // on every reveal.
+    if (!IsTaskbarCoveredByHigherWindow(taskbarWindow)) {
         return true;
     }
 
+    const bool isTopmost =
+        (GetWindowLongPtrW(taskbarWindow, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
     if (!SetWindowPos(taskbarWindow,
-                      HWND_TOP,
+                      isTopmost ? HWND_TOPMOST : HWND_TOP,
                       0,
                       0,
                       0,
                       0,
                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                           SWP_NOOWNERZORDER)) {
-        Wh_Log(L"Couldn't bring covered normal-band taskbar %p forward: %u",
+        Wh_Log(L"Couldn't bring covered taskbar %p to the front of its "
+               L"Z-order band: %u",
                taskbarWindow,
                GetLastError());
         return false;
     }
 
-    Wh_Log(L"Brought covered normal-band taskbar %p forward", taskbarWindow);
+    Wh_Log(L"Brought covered taskbar %p to the front of its %s Z-order band",
+           taskbarWindow,
+           isTopmost ? L"topmost" : L"normal");
     return true;
 }
 
-bool RevealTaskbarOnUiThread(HWND taskbarWindow,
-                             bool bringNormalTaskbarForward) {
+bool RevealTaskbarOnUiThread(HWND taskbarWindow) {
     // Establish coordinator ownership first. If no coordinator has been
     // captured yet, leave the legacy shell path untouched and let the worker
     // retry with backoff instead of starting competing reveal mechanisms.
@@ -1437,10 +1389,8 @@ bool RevealTaskbarOnUiThread(HWND taskbarWindow,
         // coordinator has established the matching logical expanded state.
         shellWindowRevealed =
             InvokeNativeShellUnhideOnUiThread(taskbarWindow);
-        if (bringNormalTaskbarForward) {
-            broughtToFront =
-                BringNormalTaskbarForwardOnUiThread(taskbarWindow);
-        }
+        broughtToFront =
+            BringTaskbarToFrontWithinCurrentBandOnUiThread(taskbarWindow);
     }
 
     Wh_Log(L"Reveal result for taskbar %p: shell=%d coordinator=%d "
@@ -1474,9 +1424,6 @@ bool TriggerNativeUnhideTimerOnUiThread(HWND taskbarWindow) {
 
     // Explorer owns timer ID 3. Never kill or clean it up here: doing so can
     // cancel a genuine native edge-hover reveal that Explorer armed itself.
-    // SetTimer resets an existing timer with the same HWND and ID, so this
-    // compatibility fallback is deliberately limited to one attempt per band
-    // entry and is disclosed in the README.
     const UINT_PTR timerResult =
         SetTimer(taskbarWindow, kTrayUITimerUnhide, 1, nullptr);
     if (!timerResult) {
@@ -1492,7 +1439,6 @@ bool TriggerNativeUnhideTimerOnUiThread(HWND taskbarWindow) {
 
 bool HandleTaskbarUiOperation(HWND taskbarWindow,
                               WPARAM operationValue,
-                              LPARAM operationParameter,
                               LRESULT* result) {
     if (!result) {
         return false;
@@ -1500,12 +1446,7 @@ bool HandleTaskbarUiOperation(HWND taskbarWindow,
 
     switch (static_cast<UiOperation>(operationValue)) {
         case kUiRevealTaskbar:
-            *result = RevealTaskbarOnUiThread(
-                          taskbarWindow,
-                          (operationParameter &
-                           kRevealFlagBringNormalTaskbarForward) != 0)
-                          ? 1
-                          : 0;
+            *result = RevealTaskbarOnUiThread(taskbarWindow) ? 1 : 0;
             return true;
 
         case kUiClearSyntheticPointerOver:
@@ -1548,8 +1489,7 @@ bool UiOperationMayHaveRun(UiOperationResult result) {
 
 UiOperationResult SendUiOperation(UiOperation operation,
                                   HWND taskbarWindow,
-                                  DWORD timeoutMs = 250,
-                                  LPARAM operationParameter = 0) {
+                                  DWORD timeoutMs = 250) {
     HWND destination = taskbarWindow;
     if (operation == kUiClearAllSyntheticPointerOver) {
         destination = FindAnyTaskbarWindow();
@@ -1566,7 +1506,7 @@ UiOperationResult SendUiOperation(UiOperation operation,
             destination,
             g_uiThreadMessage,
             operation,
-            operationParameter,
+            0,
             SMTO_ABORTIFHUNG | SMTO_BLOCK,
             timeoutMs,
             &result)) {
@@ -1635,23 +1575,14 @@ bool ClearActiveTaskbar(ActivationWorkerState& state,
                         bool scheduleRetry = true) {
     CancelWorkerTimer(state.releaseTimerId);
 
-    if (state.activeTaskbar) {
+    if (state.activeTaskbar && IsWindow(state.activeTaskbar)) {
         const UiOperationResult clearResult =
             SendUiOperation(kUiClearSyntheticPointerOver,
                             state.activeTaskbar,
                             timeoutMs);
-
-        if (clearResult == UiOperationResult::kNotSent) {
-            // The HWND is no longer a taskbar in this Explorer process. Its
-            // coordinator and synthetic state were already discarded by the
-            // taskbar WM_NCDESTROY hook, so retrying could loop forever if the
-            // numeric handle was recycled for another window.
-            Wh_Log(L"Release target is no longer a taskbar: %p",
-                   state.activeTaskbar);
-        } else if (!UiOperationSucceeded(clearResult)) {
-            // Completed failure or timeout means the taskbar might still own
-            // synthetic state. Keep worker ownership and retry rather than
-            // allowing Explorer's coordinator to remain forced open.
+        if (!UiOperationSucceeded(clearResult)) {
+            // Keep ownership and retry instead of forgetting synthetic state
+            // that may still force Explorer's coordinator to remain expanded.
             if (scheduleRetry) {
                 state.releaseRetryPending = true;
                 ScheduleWorkerTimer(kReleaseRetryMs,
@@ -1906,15 +1837,8 @@ void ProcessPointerState(ActivationWorkerState& state) {
         return;
     }
 
-    const bool bringNormalTaskbarForward =
-        ShouldBringNormalTaskbarForward(taskbarWindow);
-    const UiOperationResult revealResult = SendUiOperation(
-        kUiRevealTaskbar,
-        taskbarWindow,
-        250,
-        bringNormalTaskbarForward
-            ? kRevealFlagBringNormalTaskbarForward
-            : 0);
+    const UiOperationResult revealResult =
+        SendUiOperation(kUiRevealTaskbar, taskbarWindow);
     if (UiOperationMayHaveRun(revealResult)) {
         state.suppressionFailures = 0;
         if (revealResult == UiOperationResult::kIndeterminate) {
@@ -1955,27 +1879,6 @@ void ProcessPointerState(ActivationWorkerState& state) {
 
     Wh_Log(L"Threshold entered, but no reveal backend succeeded");
     ScheduleSuppressedRetry(state, cooldown);
-}
-
-void HandleNativePointerLeave(ActivationWorkerState& state,
-                              HWND taskbarWindow) {
-    if (!taskbarWindow || state.activeTaskbar != taskbarWindow) {
-        return;
-    }
-
-    CancelWorkerTimer(state.releaseTimerId);
-    CancelWorkerTimer(state.retryTimerId);
-    state.releaseRetryPending = false;
-    state.activeTaskbar = nullptr;
-    state.activeTaskbarMonitor = nullptr;
-    state.armed = true;
-    state.lastActivationCheck = 0;
-    state.suppressionFailures = 0;
-    ResetActivationCandidate(state);
-
-    Wh_Log(L"Re-arming after Explorer pointer leave for taskbar %p",
-           taskbarWindow);
-    ProcessPointerState(state);
 }
 
 void HandleReleaseTimer(ActivationWorkerState& state) {
@@ -2076,10 +1979,10 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
     UINT_PTR fallbackPollTimerId = 0;
     if (!cursorHook) {
         Wh_Log(L"SetWinEventHook for cursor movement failed: %u; "
-               L"using a 150 ms fallback timer",
+               L"using a 50 ms fallback timer",
                GetLastError());
         fallbackPollTimerId =
-            SetTimer(nullptr, 0, 150, nullptr);
+            SetTimer(nullptr, 0, 50, nullptr);
     }
 
     ActivationWorkerState state;
@@ -2118,12 +2021,6 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
 
                 case kWorkerSettingsChangedMessage:
                     ProcessPointerState(state);
-                    break;
-
-                case kWorkerNativePointerLeaveMessage:
-                    HandleNativePointerLeave(
-                        state,
-                        reinterpret_cast<HWND>(message.wParam));
                     break;
 
                 case WM_TIMER:
