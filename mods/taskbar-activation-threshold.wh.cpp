@@ -236,10 +236,8 @@ enum UiOperation : WPARAM {
 constexpr UINT kWorkerCursorChangedMessage = WM_APP + 1;
 constexpr UINT kWorkerSettingsChangedMessage = WM_APP + 2;
 constexpr UINT kWorkerNativePointerLeaveMessage = WM_APP + 3;
-constexpr UINT kWorkerTaskbarDestroyedMessage = WM_APP + 4;
 constexpr LPARAM kRevealFlagBringNormalTaskbarForward = 1;
 constexpr UINT kReleaseRetryMs = 250;
-constexpr UINT kTaskbarRebuildRetryMs = 100;
 constexpr UINT kFallbackProbeMs = 300;
 constexpr UINT kSuppressionBackoffMaxMs = 5000;
 constexpr ULONGLONG kAutoHideCacheDurationMs = 5000;
@@ -269,7 +267,6 @@ void ForgetTaskbarState(HWND taskbarWindow) {
 
 DWORD WINAPI ActivationWorkerThread(LPVOID);
 void EnsureActivationWorker();
-void NotifyActivationWorkerTaskbarDestroyed(HWND taskbarWindow);
 bool HandleTaskbarUiOperation(HWND taskbarWindow,
                               WPARAM operationValue,
                               LPARAM operationParameter,
@@ -338,25 +335,6 @@ void EnsureActivationWorker() {
 
     g_workerThread.store(workerThread, std::memory_order_release);
     Wh_Log(L"Started activation worker in the taskbar Explorer process");
-}
-
-void NotifyActivationWorkerTaskbarDestroyed(HWND taskbarWindow) {
-    const DWORD workerThreadId =
-        g_workerThreadId.load(std::memory_order_acquire);
-    if (!workerThreadId) {
-        return;
-    }
-
-    if (!PostThreadMessageW(
-            workerThreadId,
-            kWorkerTaskbarDestroyedMessage,
-            reinterpret_cast<WPARAM>(taskbarWindow),
-            0)) {
-        Wh_Log(L"Couldn't notify activation worker that taskbar %p was "
-               L"destroyed: %u",
-               taskbarWindow,
-               GetLastError());
-    }
 }
 
 bool IsTaskbarClass(HWND window) {
@@ -977,7 +955,6 @@ LRESULT WINAPI TrayUI_WndProc_Hook(
     } else if (message == WM_NCDESTROY) {
         g_trayUiWndProcObjects.erase(window);
         ForgetTaskbarState(window);
-        NotifyActivationWorkerTaskbarDestroyed(window);
         if (g_mainTaskbarWindow.load(std::memory_order_relaxed) == window) {
             g_mainTaskbarWindow.store(nullptr, std::memory_order_relaxed);
             g_stuckRectQuery.pending.store(false,
@@ -1030,7 +1007,6 @@ LRESULT WINAPI CSecondaryTray_WndProc_Hook(
     } else if (message == WM_NCDESTROY) {
         g_secondaryTrayObjects.erase(window);
         ForgetTaskbarState(window);
-        NotifyActivationWorkerTaskbarDestroyed(window);
     }
 
     return CSecondaryTray_WndProc_Original(
@@ -2002,46 +1978,6 @@ void HandleNativePointerLeave(ActivationWorkerState& state,
     ProcessPointerState(state);
 }
 
-void HandleTaskbarDestroyed(ActivationWorkerState& state,
-                            HWND taskbarWindow) {
-    if (!taskbarWindow) {
-        return;
-    }
-
-    bool stateChanged = false;
-
-    if (state.activeTaskbar == taskbarWindow) {
-        CancelWorkerTimer(state.releaseTimerId);
-        state.releaseRetryPending = false;
-        state.activeTaskbar = nullptr;
-        state.activeTaskbarMonitor = nullptr;
-        stateChanged = true;
-    }
-
-    if (state.fallbackProbeTaskbar == taskbarWindow) {
-        state.fallbackProbeTaskbar = nullptr;
-        state.fallbackProbeMonitor = nullptr;
-        stateChanged = true;
-    }
-
-    if (!stateChanged) {
-        return;
-    }
-
-    CancelWorkerTimer(state.retryTimerId);
-    state.armed = true;
-    state.lastActivationCheck = 0;
-    state.suppressionFailures = 0;
-    ResetBandEntry(state);
-
-    // WM_NCDESTROY is observed before Explorer's original WndProc returns. Give
-    // the shell a short interval to finish destruction or create a replacement
-    // before searching for a taskbar again; otherwise the worker could briefly
-    // rediscover the window that's still being torn down.
-    Wh_Log(L"Forgot worker state for destroyed taskbar %p", taskbarWindow);
-    ScheduleRetry(state, kTaskbarRebuildRetryMs);
-}
-
 void HandleReleaseTimer(ActivationWorkerState& state) {
     CancelWorkerTimer(state.releaseTimerId);
 
@@ -2186,12 +2122,6 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
 
                 case kWorkerNativePointerLeaveMessage:
                     HandleNativePointerLeave(
-                        state,
-                        reinterpret_cast<HWND>(message.wParam));
-                    break;
-
-                case kWorkerTaskbarDestroyedMessage:
-                    HandleTaskbarDestroyed(
                         state,
                         reinterpret_cast<HWND>(message.wParam));
                     break;
