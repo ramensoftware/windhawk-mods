@@ -38,6 +38,9 @@ All credits goes to James Lin and Husam Abdulraheem.
 - app_options: ""
   $name: Command line options
   $description: Optional arguments passed to the application. Leave empty for none.
+- app_folder: ""
+  $name: Borderline.exe folder
+  $description: Full path to the executable folder.
 - icon_file: shell32.dll
   $name: Icon File (DLL or EXE)
   $description: Full path to Icon resource (DLL or EXE)
@@ -52,7 +55,7 @@ All credits goes to James Lin and Husam Abdulraheem.
 #include <windows.h>
 #include <shellapi.h>
 #include <stdio.h>
-#include <windhawk_utils.h>  //ai strings leaked
+#include <windhawk_utils.h> 
 
 #define WM_USER_TRAYICON (WM_USER + 1)
 #define WM_USER_UPDATESETTINGS (WM_USER + 2)
@@ -72,6 +75,7 @@ UINT g_uMsgTaskbarCreated = 0;
 
 WindhawkUtils::StringSetting g_appPath;
 WindhawkUtils::StringSetting g_appOptions;
+WindhawkUtils::StringSetting g_appFolder;
 
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
@@ -93,8 +97,7 @@ void ApplySettingsToTray() {
 
     g_appPath = WindhawkUtils::StringSetting::make(L"app_path");
     g_appOptions = WindhawkUtils::StringSetting::make(L"app_options");
-
-
+    g_appFolder = WindhawkUtils::StringSetting::make(L"app_folder");
 
     // if (!*g_appOptions) {
     //     g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
@@ -122,7 +125,7 @@ void OpenApp() {
     }
 
     HINSTANCE result =
-        ShellExecuteW(nullptr, L"open", g_appPath, g_appOptions, nullptr, SW_SHOWNORMAL);
+        ShellExecuteW(nullptr, L"open", g_appPath, g_appOptions, g_appFolder, SW_SHOWNORMAL);
     if ((INT_PTR)result <= 32) {
         Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)result);
     }
