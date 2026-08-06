@@ -229,6 +229,9 @@ bool IsVolatileKey(HKEY key) {
     return false;
 }
 
+// A value-read hook isn't sufficient because Serialize commonly doesn't exist,
+// so Explorer's key open fails before it can query either value. Redirect the
+// observed NtOpenKey/NtOpenKeyEx paths to a real volatile key instead.
 bool InitializeRedirectKey() {
     DWORD disposition;
     LSTATUS status = RegCreateKeyExW(
