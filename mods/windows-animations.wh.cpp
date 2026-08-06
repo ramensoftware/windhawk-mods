@@ -18,6 +18,7 @@
 // ==WindhawkModReadme==
 /*
 # Windows Animations
+> ⚠️ **Update Note (v1.1.7):** The settings menu has been completely reorganized into nested groups (Minimize, Close, Switch) to make it easier to navigate. If your custom settings were reset to defaults after this update, please re-configure them. We apologize for the inconvenience!
 
 Welcome to **Windows Animations**, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. 
 
@@ -89,7 +90,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
   * **After:**
     
     ![Alt Tab Switch After](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/ba4e9efd647c954eb619ec2181d5435a80af7b15/switch_after.gif)
-* **🛡️ Rock-Solid Stability:** Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency. Tray apps only *hide* their window instead of closing it, so animating them is opt-in via the **Treat hiding a window as closing it** setting.
+* **🛡️ Rock-Solid Stability:** Features lifecycle management for System Tray apps (like Discord, Steam, etc.)—handling background apps gracefully to minimize ghosting or stuck transparency.
 
 ## ⚙️ Customization & Settings
 
@@ -98,12 +99,12 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Minimize/Restore Animation Style:** Choose between Genie, Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
 * **Close Animation Effect:** Dropdown menu to switch between 'Square Shatter', 'Thanos Snap', 'Perlin Dissolve', 'Cyber Glitch', 'Retro TV Off', and 'Pixel Melt'.
 * **Minimize/Restore duration (ms):** Controls Genie speed directly; each style applies a small pace tweak. (Default: 360ms, clamp 200–1400)
-* **Close animation duration (ms):** Controls how long the dramatic close animation lasts. (Default: 900ms)
+* **Close animation duration (ms):** Controls how long the dramatic close animation lasts. (Default: 630ms)
 * **Switch animation duration (ms):** Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)
 * **Shatter block size (px):** Determines the size of the dust/shatter particles. 
   * *Performance Tip:* Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).
-* **Treat hiding a window as closing it:** Off by default. Enable it to get close animations for system tray apps that hide their window instead of closing it—at the cost of also animating splash screens and other windows an app hides on its own.
-* **Toggles:** Individually turn on/off Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
+* **Animate windows hidden to the tray:** On by default. Also animate apps such as Discord, Steam, and Telegram when they hide their window instead of closing it. Disable this option if close effects appear unexpectedly for splash screens or hidden windows.
+* **Toggles:** Individually turn on/off Minimize, Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
 * **Unhide taskbar (auto-hide):** Genie only. Ignored for Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
 */
 // ==/WindhawkModReadme==
@@ -631,7 +632,7 @@ void LoadAnimSettings() {
                           : wcscmp(style, L"mirage") == 0   ? 4
                           : wcscmp(style, L"stipple") == 0  ? 5
                           : wcscmp(style, L"swell") == 0    ? 6
-                                                           : 0;
+                                                            : 0;
         g_minRestoreEffectStyle.store(value, std::memory_order_relaxed);
         Wh_FreeStringSetting(style);
     }
@@ -2722,6 +2723,7 @@ enum class MinimizeKick { None, Immediate, Deferred };
 static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide = false,
                                           bool allowUnhide = true) {
     if (!g_minimizeAnimation.load(std::memory_order_relaxed)) return MinimizeKick::None;
+    if (IsHungAppWindow(hWnd)) return MinimizeKick::None;
     if (GetPropW(hWnd, kPropMinBypass)) return MinimizeKick::None;
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return MinimizeKick::None;
     if (!ShouldAnimateWindow(hWnd)) return MinimizeKick::None;
