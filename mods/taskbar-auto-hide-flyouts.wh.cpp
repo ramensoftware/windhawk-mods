@@ -7,7 +7,7 @@
 // @github          https://github.com/Prashant-modder
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -ldwmapi
+// @compilerOptions -luser32 -ldwmapi -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
