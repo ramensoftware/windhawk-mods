@@ -16,6 +16,7 @@
 // @version           2.0.2
 // @author            incconutwo
 // @github            https://github.com/incconutwo
+// @twitter           https://x.com/tnemoroccan
 // @homepage          https://incconutwo.com
 // @include           explorer.exe
 // @architecture      x86-64
@@ -61,6 +62,7 @@ If you enjoy this mod and want to support its continued development:
 * **Personal Website & Projects:** [incconutwo.com](https://incconutwo.com)
 * **Support My Work:** [Ko-fi](https://ko-fi.com/incconutwo)
 * **GitHub Profile:** [github.com/incconutwo](https://github.com/incconutwo)
+* **X (Twitter):** [@tnemoroccan](https://x.com/tnemoroccan)
 
 ---
 
