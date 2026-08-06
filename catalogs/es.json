@@ -11271,6 +11271,34 @@
         "version": "1.0.0"
       }
     },
+    "startup-app-delay-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786003189000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786003189000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "meteoni",
+        "compilerOptions": "-ladvapi32 -lntdll",
+        "description": "Removes the delay Windows applies to startup applications after sign-in",
+        "github": "https://github.com/Meteony",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Startup App Delay Fix",
+        "version": "1.4"
+      }
+    },
     "suppress-run-box-error-message": {
       "details": {
         "defaultSorting": 325,

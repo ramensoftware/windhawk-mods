@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-05T18:23:19.000Z</updated>
+    <updated>2026-08-06T07:59:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Startup App Delay Fix 1.4]]></title>
+        <id>https://windhawk.net/mods/startup-app-delay-fix#bc4c75fe4152fde646d366530f5b560e2bbdabd2</id>
+        <link href="https://windhawk.net/mods/startup-app-delay-fix"/>
+        <updated>2026-08-06T07:59:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Windows intentionally delays startup applications after sign-in to reduce
+system load, which can cause apps to open minutes after startup.</p>
+<p>Common fix (which the mod intends to emulate): 
+<img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png" alt="Common Fix" /></p>
+<p>This mod redirects Explorer's startup-serialization key to a dedicated,
+volatile key where both <code>WaitforIdleState</code> and <code>StartupDelayInMSec</code> are zero.
+It never creates, modifies, or deletes the user's real <code>Serialize</code> key.</p>
+<p>The redirect key is in-memory only. The mod deletes it on a normal disable,
+and Windows discards it when the user registry hive unloads at sign-out or
+shutdown if Explorer exits unexpectedly.</p>
+<p>Windows reads the startup-delay values when Explorer starts, so enabling or
+disabling the mod takes effect after the next sign-in or Explorer restart.</p>
+<p>This only affects the delay Explorer applies to startup-item processing. It
+doesn't change delays configured by other systems, such as Task Scheduler.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Separators 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-separators#8a97b5eccb4fbe75e04fdfb62be173b619bcd528</id>
@@ -675,26 +699,6 @@ a new tab or navigating to another folder makes them appear.</p>]]></content>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Open Real File Location 1.0.0]]></title>
-        <id>https://windhawk.net/mods/start-menu-open-real-file-location#6394be02922caab897a87b5dee236bfca2a4947f</id>
-        <link href="https://windhawk.net/mods/start-menu-open-real-file-location"/>
-        <updated>2026-07-31T10:16:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startmenuopenrealfilelocation">Start Menu Open Real File Location</h1>
-<p>Changes <code>Open file location</code> for traditional desktop programs in the Start menu and Windows Search. Instead of opening the Start Menu Programs directory and selecting the program's <code>.lnk</code> file, Explorer opens the shortcut target's directory and selects the target.</p>
-<p>The mod reads only the target stored in the shortcut. It doesn't search for a moved target or display link-resolution dialogs.</p>
-<h2 id="currentlimitationsandtodos">Current Limitations and TODOs</h2>
-<ul>
-<li>Packaged Microsoft Store apps don't normally have a conventional shortcut target and are left unchanged for now.</li>
-<li>If the target can't be read, Windows retains its original behavior and opens the shortcut's location.</li>
-<li>The direct shortcut target is selected. For wrapper shortcuts, this can be a launcher, script host, or another intermediate executable.</li>
-<li>There is currently no program blacklist, so shortcuts that point to common wrappers or launchers will be resolved there.</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-05T18:23:19.000Z</updated>
+    <updated>2026-08-06T07:59:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Startup App Delay Fix 1.4]]></title>
+        <id>https://windhawk.net/mods/startup-app-delay-fix#bc4c75fe4152fde646d366530f5b560e2bbdabd2</id>
+        <link href="https://windhawk.net/mods/startup-app-delay-fix"/>
+        <updated>2026-08-06T07:59:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Windows intentionally delays startup applications after sign-in to reduce
+system load, which can cause apps to open minutes after startup.</p>
+<p>Common fix (which the mod intends to emulate): 
+<img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png" alt="Common Fix" /></p>
+<p>This mod redirects Explorer's startup-serialization key to a dedicated,
+volatile key where both <code>WaitforIdleState</code> and <code>StartupDelayInMSec</code> are zero.
+It never creates, modifies, or deletes the user's real <code>Serialize</code> key.</p>
+<p>The redirect key is in-memory only. The mod deletes it on a normal disable,
+and Windows discards it when the user registry hive unloads at sign-out or
+shutdown if Explorer exits unexpectedly.</p>
+<p>Windows reads the startup-delay values when Explorer starts, so enabling or
+disabling the mod takes effect after the next sign-in or Explorer restart.</p>
+<p>This only affects the delay Explorer applies to startup-item processing. It
+doesn't change delays configured by other systems, such as Task Scheduler.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Separators 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-separators#8a97b5eccb4fbe75e04fdfb62be173b619bcd528</id>
@@ -944,50 +968,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>Yusseter</name>
             <uri>https://github.com/Yusseter</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Expand folder on click (Explorer nav pane) 1.2]]></title>
-        <id>https://windhawk.net/mods/explorer-tree-click-expand#e4c7c01af169e0fcb3c0945ccd3290fed70f0582</id>
-        <link href="https://windhawk.net/mods/explorer-tree-click-expand"/>
-        <updated>2026-07-21T19:22:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="expandfolderonclick">Expand folder on click</h1>
-<p>By default, in File Explorer's navigation pane (tree view), left-clicking
-a folder only selects it; you have to click the small chevron/arrow to
-expand it.</p>
-<p><img src="https://i.imgur.com/9pmZye3.gif" alt="Demo" /></p>
-<p>This mod adds four click behaviors to the navigation pane tree:</p>
-<ul>
-<li><strong>Left click</strong> on a folder's icon or label: expands it one level (like
-pressing Numpad +). The native chevron behavior is untouched.</li>
-<li><strong>Ctrl + left click</strong> on any folder: collapses the entire tree back to
-its original state (all folders collapsed).</li>
-<li><strong>Alt + left click</strong> on a folder: expands it and all its subfolders
-recursively, down to the last level (like pressing the Numpad * key).</li>
-<li><strong>Shift + left click</strong> on a folder: fully collapses just that folder,
-resetting the expanded state of its subfolders so that when you expand
-it again, its children come back collapsed instead of showing
-everything you had open before.</li>
-</ul>
-<p>Ctrl+click, Alt+click, and Shift+click behaviors can each be individually
-enabled or disabled in the mod's settings. All are enabled by default.</p>
-<p>The mod works by subclassing the navigation pane's tree view control
-directly (it's identified by its parent being a <code>NamespaceTreeControl</code>,
-which is specific to Explorer's nav pane). Tree views shown inside other
-programs' Open/Save file dialogs (Cubase, Excel, etc.), or any other tree
-view elsewhere in Explorer, are never touched, since only the nav pane's
-own tree view control is ever subclassed.</p>
-<p>By default this mod only runs inside <code>explorer.exe</code>, so it only affects
-the navigation pane of File Explorer windows. Many other programs' Open/
-Save dialogs use the same navigation pane control, so if you'd like this
-mod's click behaviors to also work there, you can add those programs'
-executable names (e.g. <code>EXCEL.EXE</code>) to the mod's process inclusion list
-from the "Advanced" tab of this mod's settings in Windhawk - no code
-changes needed. The mod only ever touches the process it's running in, so
-this is safe to do for as many or as few programs as you'd like.</p>]]></content>
-        <author>
-            <name>Didi</name>
-            <uri>https://github.com/diegoalejo15</uri>
         </author>
     </entry>
 </feed>
