@@ -35,7 +35,7 @@ replacing the sRGB curve with a simple power-law gamma. This gives you direct
 control over the SDR-to-HDR tone mapping without permanently modifying any files
 on disk.
 
-Based on [dwm_eotf](https://github.com/ledoge/dwm_eotf) by ledoge (GPL-3.0).
+Originally based on [dwm_eotf](https://github.com/ledoge/dwm_eotf) by ledoge (GPL-3.0), but expanded
 
 ## How it works
 
@@ -100,9 +100,8 @@ effect.
   patching or unpatching at runtime has no effect on shaders that are already
   compiled. The flicker is driven by Chrome's own mode-switching and cannot be
   suppressed from the DWM side.
-- If the mod logs "No target shaders found" after a Windows Update, the shader
-  structure in `dwmcore.dll` has changed (verified against 10.0.26100.8521).
-  Please file an issue.
+- If the mod logs "No sRGB EOTF shaders found" after a Windows Update, the
+  constant encoding in `dwmcore.dll` has changed format. Please file an issue.
 - If the desktop stops rendering correctly after enabling this mod, boot into
   Safe Mode (Windhawk does not inject there) or start Windhawk with
   `windhawk.exe -safe-mode`, then disable or uninstall the mod.
@@ -357,30 +356,13 @@ struct PatchRecord {
 
 static std::vector<PatchRecord> g_patches;
 
-// Known DXBC checksums for the four sRGB-EOTF target shaders in dwmcore.dll.
-// Verified against dwmcore.dll 10.0.26100.8521 (Windows 11 24H2).
-//
-// Used as the primary selector: dwmcore.dll contains dozens of other shaders
-// that also contain sRGB constants, so constant-only detection alone
-// over-patches. A content-based fallback (accept leaf blobs containing all four
-// sRGB splats exactly once, require exactly four such blobs) was considered and
-// deferred: it would survive Windows Updates that recompile these shaders but
-// requires non-trivial cross-section state tracking. Left as a future
-// improvement.
-//
-// If these change after a Windows Update, please file an issue. The
-// per-constant replacement counts logged at INFO level help identify the new
-// shader blobs.
-static const BYTE kKnownChecksums[4][16] = {
-    {0x96, 0xe6, 0xd1, 0x58, 0x92, 0x55, 0xec, 0xcd, 0x1d, 0xd7, 0xd4, 0xdb,
-     0xec, 0x54, 0xd2, 0x85},
-    {0x21, 0x26, 0xb0, 0x37, 0xc1, 0xa2, 0xfb, 0xdd, 0xe3, 0x55, 0xb6, 0xe6,
-     0xdd, 0x9c, 0xaf, 0x3c},
-    {0x2c, 0x89, 0x26, 0xff, 0xe2, 0x29, 0xf0, 0x5d, 0x96, 0x7c, 0x72, 0x66,
-     0x8d, 0xc3, 0xad, 0xdb},
-    {0xf6, 0x93, 0xbf, 0xbb, 0xaf, 0x24, 0xb3, 0xd9, 0x36, 0x63, 0x54, 0xbe,
-     0x88, 0x98, 0xa7, 0xf5},
-};
+// The sRGB EOTF signature — all four vec3-splat constants present exactly once
+// in a leaf blob — is unique to the decode path and covers all ~37 shader
+// variants across DWM's compositing code paths. A checksum allowlist was used
+// previously (verified against dwmcore.dll 10.0.26100.8521) but only covered
+// four of the thirty-seven variants, causing the remaining unpatched shaders to
+// revert to sRGB EOTF during window focus and resize events. Content-based
+// detection is now the sole selector and requires no per-build maintenance.
 
 // =============================================================================
 // Memory helpers
@@ -517,32 +499,25 @@ static void LogSrgbCandidates(const BYTE* region, size_t regionSize) {
 // Region scanner
 // =============================================================================
 
-// Scans a read-only committed memory region for DXBC shader blobs, patches any
-// that match the known checksums, and appends restoration records to g_patches.
-// Accumulates matched-shader bits into matchedMask (bit i = kKnownChecksums[i]
-// patched). Returns the number of individual shaders patched.
+// Scans a read-only PE section for sRGB EOTF leaf DXBC blobs and patches them.
+// A leaf blob qualifies if it contains all four sRGB vec3-splat constants each
+// exactly once — a signature unique to the decode path. Returns the number of
+// blobs patched.
 //
-// "Big shader" handling: dwmcore.dll embeds the target shaders as sub-blobs
-// inside larger DXBC container blobs. The container's own checksum must be
-// recalculated after its inner shaders are patched.
-static int ScanRegionForShaders(BYTE* region,
-                                size_t regionSize,
-                                float gamma,
-                                unsigned& matchedMask) {
+// Container handling: dwmcore.dll embeds leaf shaders inside larger DXBC
+// container blobs. The container's checksum must be recalculated after any
+// inner leaf is patched.
+static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
     int numPatched = 0;
 
     DXBCHeader* bigShader = nullptr;  // enclosing container blob, if any
     bool bigPatched = false;          // did we patch any sub-shader inside it?
     size_t containerPatchBase =
         0;  // g_patches index when the current container was accepted
-    unsigned containerMatchedBits =
-        0;  // matchedMask bits set for the current container's leaves
 
     // Finalizes a container whose inner shaders have been patched: saves its
     // original checksum, recomputes it, and writes it back. If the write fails,
-    // rolls back all leaf patches belonging to this container and clears their
-    // bits from matchedMask so Wh_ModInit's all-or-nothing check stays
-    // accurate.
+    // rolls back all leaf patches belonging to this container.
     auto FinalizeContainer = [&](DXBCHeader* container) -> bool {
         PatchRecord bigRec;
         bigRec.addr = (BYTE*)container + 4;
@@ -565,8 +540,6 @@ static int ScanRegionForShaders(BYTE* region,
                 g_patches.pop_back();
                 numPatched--;
             }
-            matchedMask &=
-                ~containerMatchedBits;  // un-mark the rolled-back shaders
             return false;
         }
         Wh_Log(L"  Fixed container checksum at %p", (void*)container);
@@ -584,7 +557,6 @@ static int ScanRegionForShaders(BYTE* region,
                 FinalizeContainer(bigShader);
             bigShader = nullptr;
             bigPatched = false;
-            containerMatchedBits = 0;
         }
 
         auto* hdr = (DXBCHeader*)(region + i);
@@ -621,7 +593,6 @@ static int ScanRegionForShaders(BYTE* region,
                 }
                 bigShader = hdr;
                 containerPatchBase = g_patches.size();
-                containerMatchedBits = 0;
             } else {
                 // A nested container inside the current one: multi-level
                 // nesting is not supported. Skip past the inner blob so its
@@ -636,66 +607,42 @@ static int ScanRegionForShaders(BYTE* region,
             continue;
         }
 
-        // Leaf blob — match against the known-checksum allowlist.
-        // Many other DWM shaders also contain sRGB constants, so constant-only
-        // detection would over-patch unrelated shaders; checksums select the
-        // correct four. The constant search below acts as a sanity check.
-        int matchIdx = -1;
-        for (int k = 0; k < 4; k++) {
-            if (memcmp(kKnownChecksums[k], hdr->checksum, 16) == 0) {
-                matchIdx = k;
-                break;
-            }
-        }
-        if (matchIdx < 0)
-            continue;
-
-        // Verify our checksum implementation can reproduce this blob's exact
-        // hash before rewriting it. A wrong hash here makes D3D reject the
-        // shader, which in DWM means a compositor failure rather than a
-        // cosmetic glitch.
-        if (!ChecksumRoundTrips(hdr)) {
-            Wh_Log(L"  Shader #%d at %p: checksum did not round-trip, skipping",
-                   matchIdx, (void*)hdr);
-            continue;
-        }
-
-        // Verify the leaf actually lies within the tracked container's bounds
-        // before attributing the patch to that container. A positional
-        // false-positive (a blob that looked like a container but preceded the
-        // real one) would otherwise get its checksum overwritten for leaves it
-        // doesn't contain.
+        // Leaf blob: use content-based detection. The four sRGB EOTF vec3-splat
+        // constants together are unique to the decode path — any leaf
+        // containing all four (each exactly once) is an sRGB EOTF shader
+        // regardless of its compiled checksum. This covers all ~37 shader
+        // variants in DWM.
         bool insideContainer =
             bigShader && (BYTE*)hdr >= (BYTE*)bigShader &&
             (BYTE*)hdr + hdr->size <= (BYTE*)bigShader + bigShader->size;
 
-        // Checksum matched — copy the blob, patch the sRGB constants, verify
-        // all four were found, then recompute the DXBC checksum.
+        // Copy the blob and attempt to patch the sRGB constants.
         std::vector<BYTE> patched(hdr->size);
         memcpy(patched.data(), hdr, hdr->size);
 
         int counts[4] = {};
         int constsFound =
             PatchShaderBuf(patched.data(), hdr->size, gamma, counts);
-        if (constsFound < 4) {
-            Wh_Log(
-                L"  Shader #%d: checksum matched but only %d/4 sRGB constants "
-                L"found",
-                matchIdx, constsFound);
-            continue;
-        }
+        if (constsFound < 4)
+            continue;  // not an sRGB EOTF shader — discard the copy
+
         bool countsOk = true;
         for (int ci = 0; ci < 4; ci++) {
-            Wh_Log(L"  Shader #%d: constant %d replaced %d time(s)", matchIdx,
-                   ci, counts[ci]);
-            if (counts[ci] != 1)
+            if (counts[ci] != 1) {
+                Wh_Log(L"  Blob at %p: constant %d count %d != 1 — skipping",
+                       (void*)hdr, ci, counts[ci]);
                 countsOk = false;
+            }
         }
-        if (!countsOk) {
-            Wh_Log(
-                L"  Shader #%d: expected each constant exactly once — skipping "
-                L"to avoid corruption",
-                matchIdx);
+        if (!countsOk)
+            continue;
+
+        // Pre-flight: verify our checksum implementation reproduces this blob's
+        // own hash before writing a new one. A wrong hash makes D3D reject the
+        // shader, causing a compositor failure rather than a cosmetic glitch.
+        if (!ChecksumRoundTrips(hdr)) {
+            Wh_Log(L"  Blob at %p: checksum did not round-trip, skipping",
+                   (void*)hdr);
             continue;
         }
 
@@ -715,20 +662,16 @@ static int ScanRegionForShaders(BYTE* region,
         // same bytes — the same window as delta writes. Delta writes would
         // reduce COW pages and PatchRecord size but not improve correctness.
         if (!WriteMemorySafe((BYTE*)hdr, patched.data(), hdr->size)) {
-            Wh_Log(L"  VirtualProtect failed for shader #%d at %p", matchIdx,
-                   (void*)hdr);
+            Wh_Log(L"  VirtualProtect failed for blob at %p", (void*)hdr);
             continue;
         }
 
         g_patches.push_back(std::move(rec));
         numPatched++;
-        matchedMask |= 1u << matchIdx;
-        if (insideContainer) {
-            containerMatchedBits |= 1u << matchIdx;
+        if (insideContainer)
             bigPatched = true;
-        }
 
-        Wh_Log(L"  Patched shader #%d at %p (size %lu)", matchIdx, (void*)hdr,
+        Wh_Log(L"  Patched sRGB EOTF shader at %p (size %lu)", (void*)hdr,
                hdr->size);
         i += hdr->size - 4;  // skip the blob body; loop adds 4
     }
@@ -805,7 +748,6 @@ BOOL Wh_ModInit() {
 
     // Walk PE sections instead of VirtualQuery: deterministic regardless of
     // page-protection fragmentation from other mods or the loader.
-    unsigned matchedMask = 0;
     int totalPatched = 0;
     auto* sec = IMAGE_FIRST_SECTION(nt);
     for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
@@ -822,17 +764,17 @@ BOOL Wh_ModInit() {
 
         Wh_Log(L"Scanning section at %p, size %lu",
                (void*)(modBase + sec->VirtualAddress), sec->Misc.VirtualSize);
-        totalPatched +=
-            ScanRegionForShaders(modBase + sec->VirtualAddress,
-                                 sec->Misc.VirtualSize, gamma, matchedMask);
+        totalPatched += ScanRegionForShaders(modBase + sec->VirtualAddress,
+                                             sec->Misc.VirtualSize, gamma);
     }
 
-    // If the allowlist didn't match all four shaders, run a read-only candidate
-    // scan to log checksums of sRGB-matching blobs in this build. This gives
-    // reporters something to paste into an issue without manual extraction.
-    if (matchedMask != 0xFu) {
-        Wh_Log(L"Scanning for sRGB candidates (matchedMask=0x%X)...",
-               matchedMask);
+    if (totalPatched == 0) {
+        // No sRGB EOTF shaders found. The vec3-splat constant encoding may have
+        // changed in a Windows Update. Run LogSrgbCandidates to log any blobs
+        // that partially match, to help diagnose format changes.
+        Wh_Log(
+            L"No sRGB EOTF shaders found — dwmcore.dll format may have "
+            L"changed; scanning for partial matches...");
         auto* dSec = IMAGE_FIRST_SECTION(nt);
         for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, dSec++) {
             if (!(dSec->Characteristics & IMAGE_SCN_MEM_READ) ||
@@ -843,31 +785,10 @@ BOOL Wh_ModInit() {
             LogSrgbCandidates(modBase + dSec->VirtualAddress,
                               dSec->Misc.VirtualSize);
         }
-    }
-
-    if (matchedMask == 0) {
-        // No target shaders found. The DXBC blobs live in dwmcore.dll's .rdata
-        // and are present regardless of HDR state, so matchedMask == 0 means
-        // the known checksums no longer match — dwmcore.dll was recompiled by a
-        // Windows Update.
-        Wh_Log(
-            L"No target shaders found — dwmcore.dll checksums changed after a "
-            L"Windows Update; please file an issue");
         return FALSE;
     }
-    if (matchedMask != 0xFu) {
-        // Partial patch: some but not all of the four target shaders were
-        // found. Leaving DWM with a mix of power-law and sRGB surfaces would
-        // produce inconsistent rendering, so revert everything.
-        Wh_Log(
-            L"Partial patch (mask 0x%X of 0xF) — reverting to avoid "
-            L"inconsistent SDR rendering",
-            matchedMask);
-        RestoreAllPatches();
-        return FALSE;
-    }
-    Wh_Log(L"All 4 target shaders patched (%d blob(s) written) with gamma %.1f",
-           totalPatched, (double)gamma);
+    Wh_Log(L"Patched %d sRGB EOTF shader(s) with gamma %.1f", totalPatched,
+           (double)gamma);
     return TRUE;
 }
 
