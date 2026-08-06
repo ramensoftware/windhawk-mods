@@ -363,6 +363,16 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 
 - gapAfter: 0
   $name: 3. Appearance ▸ Padding after buttons (px)
+
+- debugAnimLog: false
+  $name: 9. Debug ▸ Position trace logging
+  $description: Traces folder-button positioning to the Windhawk debug
+    console, one [ANIM] line per event - WINDOW (a window opened or closed),
+    ANCHOR (the anchored app icon was swapped), MARGIN (the reserved gap was
+    rewritten), SLIDE (the buttons were retargeted), RECYCLED/EXCEPTION - plus
+    GAP or OVERLAP when the settled distance between the folder buttons and
+    the app strip is not the configured padding, with every app icon's
+    position at that moment.
 */
 // ==/WindhawkModSettings==
 
@@ -487,9 +497,22 @@ struct Settings {
     // Read from an Explorer window thread inside the TrackPopupMenuEx hook
     // while LoadSettings may be writing it on another.
     std::atomic<bool> explorerMenu{true};
+    bool debugAnimLog = false;
 };
 
 Settings g_settings;
+
+// One-line-per-event trace, all under the same [ANIM] prefix so the whole
+// sequence (window opened, anchor swapped, margin rewritten, slide retargeted,
+// gap went bad) reads in order in the Windhawk log and filters with one grep.
+// Every call is off unless the debug setting is on.
+#define ANIM_TRACE(fmt, ...)                       \
+    do {                                           \
+        if (g_settings.debugAnimLog) {             \
+            Wh_Log(L"[ANIM] " fmt, ##__VA_ARGS__); \
+        }                                          \
+    } while (0)
+
 // Guards FolderEntry::resolvedPath / likelyRemote fills from STA resolve helpers
 // while UI and the scan worker may read them.
 std::mutex g_foldersMutex;
@@ -1059,6 +1082,7 @@ void LoadSettings() {
         std::clamp<int>(Wh_GetIntSetting(L"buttonIconSize"), 0, 128);
     g_settings.openFolderOnClick = Wh_GetIntSetting(L"openFolderOnClick");
     g_settings.explorerMenu = Wh_GetIntSetting(L"explorerMenu") != 0;
+    g_settings.debugAnimLog = Wh_GetIntSetting(L"debugAnimLog") != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4533,6 +4557,7 @@ struct TaskbarHost {
     double buttonWidth = kFallbackButtonSize;
     double buttonHeight = kFallbackButtonSize;
     ULONGLONG lastAnchorResolveTick = 0;
+    int lastRepeaterChildCount = -1;
     ULONGLONG lastButtonSizeTick = 0;
     // hostGrid is positioned by this RenderTransform rather than by Margin.
     // Margin would feed rootGrid's column-0 measure, so every reposition
@@ -4556,6 +4581,45 @@ struct TaskbarHost {
     ULONGLONG slideEndTick = 0;
     ULONGLONG slideCauseTick = 0;
     bool slideCauseIsClose = false;
+    // When the target last moved, used to tell a settled open/close (which has
+    // a real icon animation to sync with) from churn (which does not).
+    ULONGLONG lastRetargetTick = 0;
+    // Set when ResolveAnchor just swapped to a different button (the old
+    // anchor closed) rather than the usual smooth shrink/slide. Consumed by
+    // AnimateHostGridLeftTo to skip the open/close sync delay for that one
+    // retarget — see the anchor-changed comment in OnRootGridLayoutUpdated.
+    bool anchorSwapped = false;
+    // First tick the settled gap looked wrong (0 = it looks fine), and whether
+    // that stretch has already been logged, so one bad stretch produces one
+    // error line plus one recovery line instead of one per layout pass. See
+    // CheckHostGridHealth.
+    ULONGLONG dbgBadSince = 0;
+    bool dbgBadLogged = false;
+    // Placed/visible app buttons last pass and when that count last moved -
+    // the only reliable "a window opened/closed" signal available (see
+    // CensusAppStrip). A retarget bigger than a button with no recent change
+    // here has no legitimate cause and gets flagged.
+    int dbgVisibleButtons = -1;
+    ULONGLONG dbgLastWindowTick = 0;
+    // Where the anchor was sitting when it was adopted one full reserve-width
+    // clear of the rest of the strip, i.e. parked on the far side of our own
+    // gap. -1 when the anchor was adopted normally. Positioning is held until
+    // the button has actually moved off this spot - see OnRootGridLayoutUpdated.
+    double parkedAnchorX = -1.0;
+    // Consecutive passes held back by the above, capped so a parked anchor
+    // that never moves cannot wedge the overlay.
+    int reserveHolds = 0;
+    // Anchor X as of the previous layout pass, and the tick it last differed
+    // from the pass before that. Windows moves its own icons over ~250ms, and
+    // layout reports the anchor part-way through that move, so a reading that
+    // differs from last pass is a frame of an animation in flight rather than
+    // a resting place. Positioning waits for two passes to agree - see the
+    // settle hold in OnRootGridLayoutUpdated.
+    double lastAnchorX = -1.0;
+    ULONGLONG anchorMovingSince = 0;
+    // Whether positioning is currently frozen for a mouse drag; only used to
+    // log the transitions rather than every pass.
+    bool dragFrozen = false;
 };
 
 [[clang::no_destroy]] std::optional<std::vector<std::unique_ptr<TaskbarHost>>>
@@ -5084,6 +5148,52 @@ FrameworkElement ResolveAnchor(FrameworkElement const& repeater,
     return nullptr;
 }
 
+// Debug-only census of the app strip. The repeater's realized-child count is
+// not a usable open/close signal: ItemsRepeater recycles containers, so a
+// window opening or closing leaves the count unchanged - a full trace of
+// spammed open/close produced zero count changes while the strip visibly grew
+// and shrank. What does move is the number of *placed, visible*
+// TaskListButtons, so that stands in for "a window opened/closed" here, with
+// the strip's own left/right extent alongside it so the re-centre that follows
+// is visible on the same line.
+int CensusAppStrip(FrameworkElement const& repeater, Grid const& rootGrid,
+                   double* stripLeft, double* stripRight,
+                   FrameworkElement const& exclude = nullptr) {
+    std::vector<FrameworkElement> children;
+    EnumRepeaterChildren(repeater, &children);
+    int count = 0;
+    double left = 0.0;
+    double right = 0.0;
+    for (const auto& child : children) {
+        try {
+            if (exclude && child == exclude) {
+                continue;
+            }
+            if (winrt::get_class_name(child) != L"Taskbar.TaskListButton" ||
+                child.Visibility() != Visibility::Visible ||
+                child.ActualWidth() <= 1.0) {
+                continue;
+            }
+            double x =
+                child.TransformToVisual(rootGrid).TransformPoint({0, 0}).X;
+            if (x <= 0.5) {
+                continue;
+            }
+            if (!count || x < left) {
+                left = x;
+            }
+            if (!count || x + child.ActualWidth() > right) {
+                right = x + child.ActualWidth();
+            }
+            count++;
+        } catch (...) {
+        }
+    }
+    *stripLeft = left;
+    *stripRight = right;
+    return count;
+}
+
 double DesiredHostWidth(TaskbarHost* host) {
     if (!host || host->buttonStates.empty()) {
         return 0.0;
@@ -5109,6 +5219,19 @@ constexpr float kSlideEaseCp2Y = 1.0f;
 // are tuned by eye against the real icons, so they are just knobs.
 constexpr int kSlideDelayOpenMs = 50;
 constexpr int kSlideDelayCloseMs = 350;
+
+// A retarget arriving within this long of the previous one means the strip is
+// churning rather than settling - windows opening and closing faster than the
+// slide itself. Comfortably longer than one slide, so a single open or close
+// still gets its full sync delay.
+constexpr ULONGLONG kChurnWindowMs = 400;
+
+// Smallest target change worth a slide. Anything under this is a sample of the
+// anchor taken part-way through Windows' own re-centre rather than a new
+// resting place, and re-aiming at it just restarts the storyboard. Well under
+// the half-button (~22px) that a real open or close moves the anchor by, so no
+// genuine move is swallowed.
+constexpr double kSlideNoiseFloor = 4.0;
 
 // Slides hostGrid to newLeft by animating its RenderTransform.
 //
@@ -5138,12 +5261,18 @@ constexpr int kSlideDelayCloseMs = 350;
 // XAML hands transform animations to the compositor, so they run off the UI
 // thread at the monitor's refresh tick and don't stutter when the taskbar
 // thread is busy.
-void AnimateHostGridLeftTo(TaskbarHost* host, double newLeft) {
+void AnimateHostGridLeftTo(TaskbarHost* host, double newLeft,
+                           double anchorX = -1.0) {
     if (!host || !host->hostGrid || !host->hostTranslate) {
         return;
     }
     double previousLeft = host->currentLeft;
-    if (std::abs(previousLeft - newLeft) < 1.0) {
+    // Noise floor, not a 1px epsilon. LayoutUpdated fires on every pass of
+    // Windows' own ~250ms re-centre, and the anchor is read mid-flight on each
+    // one, so consecutive targets land a few px apart with nothing having
+    // actually happened. At 1px each of those noise reads cleared the guard and
+    // restarted a full 250ms storyboard, which is most of what churn is.
+    if (std::abs(previousLeft - newLeft) < kSlideNoiseFloor) {
         return;
     }
 
@@ -5174,8 +5303,25 @@ void AnimateHostGridLeftTo(TaskbarHost* host, double newLeft) {
         return;
     }
 
+    // Windows only animates its icons for a settled open or close. Spamming
+    // produces a fresh layout every 100-200ms, so there is no icon slide left
+    // to fall in step with - and waiting out the close delay parks the folder
+    // block on top of icons that have already moved for the whole 350ms. If
+    // the last retarget was recent enough that we are still inside that
+    // window, chase immediately instead.
+    bool churning = host->lastRetargetTick &&
+                    now - host->lastRetargetTick < kChurnWindowMs;
+    // Only an actual retarget counts as churn. Stamping every call armed the
+    // window off a lone settled open too, and since kChurnWindowMs is longer
+    // than kSlideDelayCloseMs, the close that followed it always lost its whole
+    // sync delay - it chased early, landed on icons that hadn't moved yet, and
+    // retargeted again.
+    if (pending || animating) {
+        host->lastRetargetTick = now;
+    }
+
     int delayMs = 0;
-    if (!animating) {
+    if (!animating && !churning) {
         if (!pending) {
             host->slideCauseTick = now;
             host->slideCauseIsClose = isCloseMove;
@@ -5185,6 +5331,15 @@ void AnimateHostGridLeftTo(TaskbarHost* host, double newLeft) {
         long long remain =
             (long long)host->slideCauseTick + causeDelay - (long long)now;
         delayMs = remain > 0 ? (int)remain : 0;
+    }
+
+    bool wasAnchorSwap = host->anchorSwapped;
+    if (host->anchorSwapped) {
+        // The anchor teleported to a new button instead of sliding — chase
+        // it now instead of waiting out a sync delay for motion that isn't
+        // happening.
+        host->anchorSwapped = false;
+        delayMs = 0;
     }
 
     try {
@@ -5233,12 +5388,58 @@ void AnimateHostGridLeftTo(TaskbarHost* host, double newLeft) {
 
         host->slideStartTick = now + delayMs;
         host->slideEndTick = now + delayMs + kHostGridSlideMs;
+
+        // retarget=1 means this replaced a slide that was already moving or
+        // still waiting - a burst of those between two WINDOW lines is the
+        // signature of the target thrashing rather than settling.
+        double delta = newLeft - previousLeft;
+        ANIM_TRACE(L"SLIDE t=%llu host=%p %.2f->%.2f (%+.2f) anchorX=%.2f "
+                   L"delay=%d close=%d retarget=%d swapped=%d churn=%d",
+                   now, host->hwnd, previousLeft, newLeft, delta, anchorX,
+                   delayMs, (int)isCloseMove, (int)(pending || animating),
+                   (int)wasAnchorSwap, (int)churning);
+
+        // The reserve is a Margin on the anchor button, so in the repeater's
+        // horizontal layout the anchor occupies its own width *plus* the
+        // reserve - and any button inserted to its outer side is laid out on
+        // the far side of our gap, at anchorX + anchorWidth + reserve. That
+        // button is visible and placed, so ResolveAnchor adopts it, the
+        // reserve moves onto it, and the whole thing walks another reserve
+        // further out. A retarget of exactly one reserve width is that loop,
+        // and it is the visible large gap. Distinct from the ordinary
+        // half-a-button re-centre a real open/close produces.
+        double reserve =
+            DesiredHostWidth(host) + g_settings.gapBefore + g_settings.gapAfter;
+        if (reserve > 1.0 && std::abs(std::abs(delta) - reserve) < 4.0) {
+            ANIM_TRACE(L"RESERVE-JUMP t=%llu host=%p retarget %+.2f == the "
+                       L"reserved width (%.2f) — a new app button was laid "
+                       L"out past our own reserve and adopted as the anchor; "
+                       L"self-inflicted, anchorX=%.2f swapped=%d",
+                       now, host->hwnd, delta, reserve, anchorX,
+                       (int)wasAnchorSwap);
+        } else if (std::abs(delta) > host->buttonWidth &&
+                   now - host->dbgLastWindowTick > 500) {
+            // Bigger than one button, no window change behind it: the target
+            // is wrong for some other reason (anchor measured mid-recycle).
+            ANIM_TRACE(L"SUSPECT t=%llu host=%p retarget %+.2f (>1 button) "
+                       L"with no window change for %llums — anchorX=%.2f "
+                       L"anchorSwapped=%d",
+                       now, host->hwnd, delta, now - host->dbgLastWindowTick,
+                       anchorX, (int)wasAnchorSwap);
+        }
     } catch (...) {
         // Animation unavailable for whatever reason — still get the element
-        // to the right place, just without the slide.
+        // to the right place, just without the slide. This is exactly the
+        // kind of thing that produces a one-frame jump/overlap, so it's
+        // worth an error even though the element ends up in the right spot.
         try {
             host->slideStoryboard = nullptr;
             host->hostTranslate.X(newLeft);
+            ANIM_TRACE(L"SNAP t=%llu host=%p %.2f->%.2f close=%d delay=%d — "
+                       L"storyboard threw, snapped instead (reads as a "
+                       L"stutter)",
+                       now, host->hwnd, previousLeft, newLeft,
+                       (int)isCloseMove, delayMs);
         } catch (...) {
         }
     }
@@ -5250,6 +5451,14 @@ void RestoreAnchorMargin(TaskbarHost* host) {
     }
     if (host->anchor && host->hasAnchorOriginalMargin) {
         try {
+            // Paired with the MARGIN write on the incoming anchor. The two
+            // land in the same layout pass, so seeing only one of them in the
+            // log means the strip spent a pass either double-reserved or
+            // un-reserved - a full 264px of width appearing or vanishing.
+            ANIM_TRACE(L"RESTORE t=%llu host=%p anchor=%p margin -> %.2f/%.2f",
+                       GetTickCount64(), host->hwnd, winrt::get_abi(host->anchor),
+                       host->anchorOriginalMargin.Left,
+                       host->anchorOriginalMargin.Right);
             host->anchor.Margin(host->anchorOriginalMargin);
         } catch (...) {
         }
@@ -6980,6 +7189,14 @@ Grid BuildHostGrid(TaskbarHost* host) {
     host->hasPlaced = false;
     host->slideCauseTick = 0;
     host->slideCauseIsClose = false;
+    host->lastRetargetTick = 0;
+    host->dbgBadSince = 0;
+    host->dbgBadLogged = false;
+    host->parkedAnchorX = -1.0;
+    host->reserveHolds = 0;
+    host->lastAnchorX = -1.0;
+    host->anchorMovingSince = 0;
+    host->dragFrozen = false;
 
     host->buttonStates.clear();
 
@@ -7184,13 +7401,22 @@ void RemoveHostGrid(TaskbarHost* host) {
     RestoreAnchorMargin(host);
     ClearButtonState(host);
 
-    if (host->trackedRootGrid) {
+    // Detach hostGrid from wherever it's actually parented right now, not
+    // from host->trackedRootGrid's children. If FindTaskbarRootGrid ever
+    // resolves a different (but still live) RootGrid object on a later pass
+    // than the one hostGrid was originally appended under, searching that
+    // mismatched trackedRootGrid finds nothing to remove and leaves the old
+    // hostGrid orphaned but still attached and rendering - a second, stuck
+    // copy of the folder buttons that nothing else catches, since it isn't
+    // moving or overlapping its own (correct) anchor.
+    if (host->hostGrid) {
         try {
-            auto children = host->trackedRootGrid.Children();
-            for (int i = (int)children.Size() - 1; i >= 0; i--) {
-                auto child = children.GetAt(i).try_as<FrameworkElement>();
-                if (child && child.Name() == kHostGridName) {
-                    children.RemoveAt(i);
+            if (auto panel =
+                    VisualTreeHelper::GetParent(host->hostGrid).try_as<Panel>()) {
+                auto children = panel.Children();
+                uint32_t index;
+                if (children.IndexOf(host->hostGrid, index)) {
+                    children.RemoveAt(index);
                 }
             }
         } catch (...) {
@@ -7214,8 +7440,179 @@ void RemoveAllHostGrids() {
     g_injectionLive = false;
 }
 
-// Runs on every layout pass, so every branch is guarded by a tolerance check to
-// avoid feeding layout back into itself.
+// Only called once a health check below has already decided something is
+// wrong. Dumps every realized child of the app-icon repeater - taskbar
+// buttons, the widgets/task-view/start toggles, everything - with its class,
+// X position (relative to rootGrid, same space AnchorX/hostGrid use), width,
+// and visibility, so the error line above it is followed by the full picture
+// of where every icon actually was that frame. Apps move between the start
+// button, task view, the widgets button, and either side of the app strip
+// depending on pin state and window count, so this is unfiltered: every
+// child, no assumptions about which slot anything is in.
+void LogRepeaterPositions(TaskbarHost* host, FrameworkElement const& repeater,
+                           PCWSTR tag) {
+    if (!repeater || !host || !host->trackedRootGrid) {
+        return;
+    }
+    std::vector<FrameworkElement> children;
+    EnumRepeaterChildren(repeater, &children);
+    ANIM_TRACE(L"%s   repeater children=%zu (host=%p)", tag, children.size(),
+               host->hwnd);
+    for (size_t i = 0; i < children.size(); i++) {
+        auto const& child = children[i];
+        try {
+            auto className = winrt::get_class_name(child);
+            double x = -99999.0;
+            try {
+                auto point = child.TransformToVisual(host->trackedRootGrid)
+                                 .TransformPoint({0, 0});
+                x = point.X;
+            } catch (...) {
+            }
+            ANIM_TRACE(L"%s     [%zu] class=%s x=%.2f w=%.2f h=%.2f vis=%d "
+                       L"opacity=%.2f",
+                       tag, i, className.c_str(), x, child.ActualWidth(),
+                       child.ActualHeight(), (int)child.Visibility(),
+                       child.Opacity());
+        } catch (...) {
+            ANIM_TRACE(L"%s     [%zu] <threw reading child>", tag, i);
+        }
+    }
+}
+
+// How far the settled gap may differ from the configured padding before it
+// counts as wrong, and how long it has to stay wrong before it's logged. The
+// second number matters: a single layout pass routinely lands in the window
+// between the anchor moving and our retarget being handed to the compositor,
+// and that transient is normal. A gap that's still wrong a few hundred ms
+// after the last slide finished is the actual bug being hunted.
+// Layout passes during an icon slide come every ~15ms, so this covers the
+// taskbar's own 250ms slide with room to spare while still guaranteeing the
+// overlay gives in and moves if a reserve-sized target is genuinely correct.
+constexpr int kMaxReserveHolds = 24;
+
+// How far the anchor has to move between two layout passes to count as still
+// in flight. Below this it is measurement jitter on a button that has stopped.
+constexpr double kAnchorSettleEpsilon = 0.5;
+// Ceiling on how long positioning will wait for the anchor to stop moving.
+// Comfortably past Windows' own ~250ms icon slide, so a real settle always
+// wins the race; it exists only so an anchor that somehow never stops (a
+// perpetual animation, a stuck arrange) cannot wedge the overlay in place.
+constexpr ULONGLONG kMaxAnchorSettleMs = 600;
+
+constexpr double kGapTolerancePx = 2.0;
+constexpr ULONGLONG kBadGapSettleMs = 400;
+
+// Checked once per layout pass against the anchor position just measured by
+// OnRootGridLayoutUpdated, using hostGrid's live RenderTransform X (where it
+// visibly is right now, not the animation's target). One failure mode: the
+// space between the folder block and the app strip is not the configured
+// padding once everything has stopped moving — negative means they overlap,
+// too large means a leftover gap.
+// Silent while a slide is pending or running (the gap is supposed to be wrong
+// then), and silent until a wrong gap has persisted past kBadGapSettleMs. One
+// bad stretch logs exactly one error line (plus the full repeater dump) and
+// one recovery line carrying how long it lasted.
+void CheckHostGridHealth(TaskbarHost* host, FrameworkElement const& repeater,
+                          bool before, double anchorX, double anchorWidth) {
+    if (!g_settings.debugAnimLog || !host || !host->hostGrid ||
+        !host->trackedRootGrid || !host->hasPlaced) {
+        return;
+    }
+
+    double hostWidth = DesiredHostWidth(host);
+    if (hostWidth <= 1.0) {
+        return;
+    }
+
+    ULONGLONG now = GetTickCount64();
+    double liveLeft = host->hostTranslate ? host->hostTranslate.X() : host->currentLeft;
+    double rootWidth = 0.0;
+    try {
+        rootWidth = host->trackedRootGrid.ActualWidth();
+    } catch (...) {
+    }
+
+    double gap;
+    double expectedGap;
+    if (before) {
+        // hostGrid sits left of the anchor: gap is the space between its
+        // right edge and the anchor's left edge.
+        gap = anchorX - (liveLeft + hostWidth);
+        expectedGap = g_settings.gapAfter;
+    } else {
+        // hostGrid sits right of the anchor: gap is the space between the
+        // anchor's right edge and hostGrid's left edge.
+        gap = liveLeft - (anchorX + anchorWidth);
+        expectedGap = g_settings.gapBefore;
+    }
+
+    // Mid-slide, or still waiting on the slide's start delay: hostGrid is on
+    // its way somewhere, so its distance from the anchor means nothing yet.
+    if (host->slideStoryboard && now < host->slideEndTick) {
+        host->dbgBadSince = 0;
+        host->dbgBadLogged = false;
+        return;
+    }
+
+    if (std::abs(gap - expectedGap) <= kGapTolerancePx) {
+        if (host->dbgBadLogged) {
+            ANIM_TRACE(L"GAP-OK t=%llu host=%p gap=%.2f liveLeft=%.2f "
+                       L"(was wrong for %llums)",
+                       now, host->hwnd, gap, liveLeft,
+                       now - host->dbgBadSince);
+        }
+        host->dbgBadSince = 0;
+        host->dbgBadLogged = false;
+        return;
+    }
+
+    if (!host->dbgBadSince) {
+        host->dbgBadSince = now;
+        return;
+    }
+    if (host->dbgBadLogged || now - host->dbgBadSince < kBadGapSettleMs) {
+        return;
+    }
+    host->dbgBadLogged = true;
+
+    bool visible = true;
+    double opacity = 1.0;
+    try {
+        visible = host->hostGrid.Visibility() == Visibility::Visible;
+        opacity = host->hostGrid.Opacity();
+    } catch (...) {
+    }
+
+    PCWSTR kind = gap < 0 ? L"OVERLAP" : L"GAP";
+    ANIM_TRACE(L"%s t=%llu host=%p before=%d gap=%.2f expected=%.2f "
+               L"off-by=%.2f stuck=%llums",
+               kind, now, host->hwnd, (int)before, gap, expectedGap,
+               gap - expectedGap, now - host->dbgBadSince);
+    ANIM_TRACE(L"%s   hostGrid: liveLeft=%.2f target=%.2f width=%.2f "
+               L"rightEdge=%.2f visible=%d opacity=%.2f rootWidth=%.2f",
+               kind, liveLeft, host->currentLeft, hostWidth,
+               liveLeft + hostWidth, (int)visible, opacity, rootWidth);
+    double marginSide = -1.0;
+    try {
+        auto margin = host->anchor.Margin();
+        marginSide = before ? margin.Left : margin.Right;
+    } catch (...) {
+    }
+    double originalSide = before ? host->anchorOriginalMargin.Left
+                                 : host->anchorOriginalMargin.Right;
+    ANIM_TRACE(L"%s   anchor: x=%.2f width=%.2f margin=%.2f original=%.2f "
+               L"reserved=%.2f children=%d",
+               kind, anchorX, anchorWidth, marginSide, originalSide,
+               marginSide - originalSide, host->lastRepeaterChildCount);
+    ANIM_TRACE(L"%s   slide: lastEnd=%lld ms ago storyboard=%d close=%d "
+               L"anchorSwapped=%d",
+               kind, (long long)now - (long long)host->slideEndTick,
+               (int)(bool)host->slideStoryboard, (int)host->slideCauseIsClose,
+               (int)host->anchorSwapped);
+    LogRepeaterPositions(host, repeater, kind);
+}
+
 void OnRootGridLayoutUpdated(TaskbarHost* host) {
     if (g_unloading || !host || !host->hostGrid || !host->trackedRootGrid) {
         return;
@@ -7273,11 +7670,131 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
         // from the tree instead so a closing-but-still-present button
         // doesn't trigger a needless re-resolve (and the churn/flicker
         // that comes with it) on every window close.
+        // A new app button lands and settles at its final position within a
+        // tick or two — well inside the 250ms re-resolve throttle below.
+        // Left on the throttle alone, a newly-opened window can render past
+        // our still-stale reserved gap for up to 250ms, appearing to the
+        // right of hostGrid before the next re-resolve catches it and pulls
+        // hostGrid past it. React the moment the child count itself moves
+        // instead of waiting out the throttle.
+        int childCount = VisualTreeHelper::GetChildrenCount(repeater);
+        bool childCountChanged = childCount != host->lastRepeaterChildCount;
+        host->lastRepeaterChildCount = childCount;
+
+        // Every WINDOW line is one window opening or closing. Counted from the
+        // placed/visible buttons rather than childCountChanged above, which
+        // never moves at all (recycling) - see CensusAppStrip. Head of the
+        // causal chain for everything logged below.
+        if (g_settings.debugAnimLog) {
+            double stripLeft = 0.0;
+            double stripRight = 0.0;
+            int visible = CensusAppStrip(repeater, host->trackedRootGrid,
+                                         &stripLeft, &stripRight);
+            if (visible != host->dbgVisibleButtons) {
+                ANIM_TRACE(L"WINDOW t=%llu host=%p buttons %d->%d (%+d) "
+                           L"strip=[%.2f..%.2f] w=%.2f realized=%d",
+                           now, host->hwnd, host->dbgVisibleButtons, visible,
+                           visible - host->dbgVisibleButtons, stripLeft,
+                           stripRight, stripRight - stripLeft, childCount);
+                host->dbgVisibleButtons = visible;
+                host->dbgLastWindowTick = now;
+            }
+        }
+
         bool anchorLooksDead = !host->anchor || !host->anchor.Parent();
-        if (anchorLooksDead || now - host->lastAnchorResolveTick > 250) {
+        if (anchorLooksDead || childCountChanged ||
+            now - host->lastAnchorResolveTick > 250) {
             host->lastAnchorResolveTick = now;
             if (auto resolved =
                     ResolveAnchor(repeater, host->trackedRootGrid)) {
+                if (resolved != host->anchor) {
+                    // The anchor itself just closed and a different button
+                    // was promoted in its place — a discontinuous swap, not
+                    // a smooth shrink/slide. There's no icon animation left
+                    // to stay in sync with, so the open/close delay in
+                    // AnimateHostGridLeftTo (there to match Windows' own
+                    // icon-slide timing) would just leave hostGrid parked
+                    // over the new anchor's slot for a few hundred ms.
+                    host->anchorSwapped = true;
+                    // The margin the new anchor is adopted with is snapshotted
+                    // as its "original", so it is worth seeing: if it were
+                    // already carrying a reserved gap from a previous
+                    // adoption, that gap would be baked in and doubled.
+                    double m = -1.0;
+                    double rx = -1.0;
+                    double rw = -1.0;
+                    winrt::hstring cls;
+                    try {
+                        auto margin = resolved.Margin();
+                        m = (g_settings.position != L"afterApps")
+                                ? margin.Left
+                                : margin.Right;
+                        cls = winrt::get_class_name(resolved);
+                        rw = resolved.ActualWidth();
+                        rx = resolved.TransformToVisual(host->trackedRootGrid)
+                                 .TransformPoint({0, 0})
+                                 .X;
+                    } catch (...) {
+                    }
+                    double oldX = -1.0;
+                    try {
+                        if (host->anchor) {
+                            oldX = host->anchor
+                                       .TransformToVisual(host->trackedRootGrid)
+                                       .TransformPoint({0, 0})
+                                       .X;
+                        }
+                    } catch (...) {
+                    }
+
+                    // Our reserve is a Margin on the outgoing anchor, so a
+                    // button realized on its outer side is laid out exactly
+                    // one reserve-width clear of it - parked on the far side
+                    // of our own gap - and only closes up once the reserve has
+                    // migrated across and the taskbar has slid it home. That
+                    // separation is the reliable signal, measured directly
+                    // here. (Watching the retarget distance instead cannot
+                    // work: the target is anchorX + buttonWidth, so the move
+                    // is reserve + a button on the way out and reserve + the
+                    // re-centre on the way back - never the reserve itself.)
+                    // Clearance is measured against the rest of the strip, not
+                    // against the outgoing anchor: that anchor is frequently
+                    // still sliding home from the previous cycle, so the
+                    // distance to it reads anything (127 in one trace where
+                    // the real clearance was a full reserve). Everything
+                    // except the incoming button is settled, so its outer edge
+                    // is a stable reference. Tolerance stays a whole button -
+                    // the two cases are far apart anyway (a parked button sits
+                    // a reserve out, a normal adoption lands touching).
+                    double reserve = DesiredHostWidth(host) +
+                                     g_settings.gapBefore + g_settings.gapAfter;
+                    double slack = host->buttonWidth > 1.0 ? host->buttonWidth
+                                                           : kFallbackButtonSize;
+                    double stripLeft = 0.0;
+                    double stripRight = 0.0;
+                    int others = CensusAppStrip(repeater, host->trackedRootGrid,
+                                                &stripLeft, &stripRight,
+                                                resolved);
+                    host->parkedAnchorX = -1.0;
+                    double clearance = 0.0;
+                    if (others > 0 && rx > 0.5 && reserve > slack) {
+                        clearance = (g_settings.position != L"afterApps")
+                                        ? stripLeft - (rx + rw)
+                                        : rx - stripRight;
+                        if (std::abs(clearance - reserve) <= slack) {
+                            host->parkedAnchorX = rx;
+                        }
+                    }
+
+                    ANIM_TRACE(L"ANCHOR t=%llu host=%p swap %p(x=%.2f)->%p "
+                               L"class=%s x=%.2f w=%.2f margin=%.2f "
+                               L"(adopted as original) oldDead=%d "
+                               L"clearance=%.2f/%.2f parked=%d",
+                               now, host->hwnd, winrt::get_abi(host->anchor),
+                               oldX, winrt::get_abi(resolved), cls.c_str(), rx,
+                               rw, m, (int)anchorLooksDead, clearance, reserve,
+                               (int)(host->parkedAnchorX >= 0.0));
+                }
                 AdoptAnchor(host, resolved);
             }
         }
@@ -7314,11 +7831,88 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
         // queues another LayoutUpdated; let that pass place hostGrid once
         // the anchor has actually moved.
         if (marginChanged) {
+            ANIM_TRACE(L"MARGIN t=%llu host=%p %s %.2f->%.2f (original=%.2f "
+                       L"reserve=%.2f)",
+                       now, host->hwnd, before ? L"left" : L"right",
+                       before ? currentMargin.Left : currentMargin.Right,
+                       before ? target.Left : target.Right,
+                       before ? host->anchorOriginalMargin.Left
+                              : host->anchorOriginalMargin.Right,
+                       desiredGap);
+            return;
+        }
+
+        // Dragging a taskbar button moves that button under the cursor - the
+        // element itself, no swap, no window opening or closing - so it can
+        // wander to the outer end of the strip and drag the folder block along
+        // with it (anchorX walking 1098 -> 1291 -> 1334 in a trace, with the
+        // block chasing). Rearranging apps should not move the overlay at all,
+        // so freeze positioning while the primary button is held and settle
+        // once on release. The margin above is still maintained, so the
+        // reserved gap does not collapse mid-drag.
+        bool dragging = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        if (dragging != host->dragFrozen) {
+            host->dragFrozen = dragging;
+            ANIM_TRACE(L"DRAG t=%llu host=%p primary button %s — positioning %s",
+                       now, host->hwnd, dragging ? L"down" : L"up",
+                       dragging ? L"frozen" : L"resumed");
+        }
+        if (dragging) {
             return;
         }
 
         auto point = host->anchor.TransformToVisual(host->trackedRootGrid)
                          .TransformPoint({0, 0});
+
+        // ItemsRepeater can recycle the container backing our anchor to
+        // represent a different, off-screen item (e.g. the closing-window
+        // placeholder parked at a large negative X) while it's still
+        // attached to the tree, so Parent() alone doesn't catch it. Same
+        // sentinel check ResolveAnchor uses when picking an anchor: bail
+        // and force an immediate re-resolve instead of animating to the
+        // bogus coordinate.
+        if (point.X <= 0.5) {
+            // Anchor container got recycled to an off-screen item. hostGrid
+            // stays wherever it was while this repeats, so a run of these
+            // lines explains a gap that just sits there.
+            ANIM_TRACE(L"RECYCLED t=%llu host=%p anchor=%p x=%.2f — forcing "
+                       L"re-resolve (this container was adopted %llums ago)",
+                       now, host->hwnd, winrt::get_abi(host->anchor), point.X,
+                       now - host->lastAnchorResolveTick);
+            host->lastAnchorResolveTick = 0;
+            return;
+        }
+
+        // Windows slides its own icons over ~250ms and layout reports the
+        // anchor part-way through that slide, so a reading that differs from
+        // the previous pass is a frame of a move in flight, not a resting
+        // place. Committing to one parks the folder block at a coordinate the
+        // taskbar was only passing through - and if no further layout pass
+        // happens to land after the icons settle, it stays parked there for as
+        // long as it takes something else to disturb the tree (a full second
+        // in the traces, ending in a visible pop). Waiting for two consecutive
+        // passes to agree costs one pass (~15ms) on a genuine open or close and
+        // makes every intermediate frame a no-op, so the block simply stays put
+        // through the taskbar's animation and moves once, to the right place.
+        bool anchorSettled =
+            host->lastAnchorX >= 0.0 &&
+            std::abs(point.X - host->lastAnchorX) <= kAnchorSettleEpsilon;
+        if (!anchorSettled && host->anchorMovingSince == 0) {
+            host->anchorMovingSince = now;
+        }
+        bool settleTimedOut =
+            host->anchorMovingSince &&
+            now - host->anchorMovingSince > kMaxAnchorSettleMs;
+        host->lastAnchorX = point.X;
+        if (host->hasPlaced && !anchorSettled && !settleTimedOut) {
+            return;
+        }
+        if (settleTimedOut && !anchorSettled) {
+            ANIM_TRACE(L"SETTLE t=%llu host=%p anchor still moving after %llums "
+                       L"(x=%.2f) — giving in and positioning off it anyway",
+                       now, host->hwnd, now - host->anchorMovingSince, point.X);
+        }
+        host->anchorMovingSince = 0;
 
         double left;
         if (before) {
@@ -7327,7 +7921,31 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
             left = point.X + host->anchor.ActualWidth() + g_settings.gapBefore;
         }
 
-        AnimateHostGridLeftTo(host, left);
+        // Adopting a button parked past our own reserve is correct - it really
+        // is the new outermost one - but positioning off it while it is still
+        // out there throws the folder block a reserve-width sideways and back.
+        // Hold until the taskbar has started sliding it home, then track it
+        // in normally. Capped so a button that never moves cannot wedge us.
+        if (host->hasPlaced && host->parkedAnchorX >= 0.0 &&
+            host->reserveHolds < kMaxReserveHolds &&
+            std::abs(point.X - host->parkedAnchorX) < 4.0) {
+            host->reserveHolds++;
+            ANIM_TRACE(L"HOLD t=%llu host=%p anchor still parked at %.2f, one "
+                       L"reserve (%.2f) clear of the strip — holding (%d/%d)",
+                       now, host->hwnd, point.X, desiredGap,
+                       host->reserveHolds, kMaxReserveHolds);
+            return;
+        }
+        host->parkedAnchorX = -1.0;
+        host->reserveHolds = 0;
+
+        // Checked against the anchor position just measured above, before
+        // handing the new target to the animation - this is what's actually
+        // on screen right now, this frame.
+        CheckHostGridHealth(host, repeater, before, point.X,
+                             host->anchor.ActualWidth());
+
+        AnimateHostGridLeftTo(host, left, point.X);
     } catch (...) {
         // A XAML call threw, most likely the anchor was recycled out from
         // under us mid-access. cachedRepeater is the only thing actually
@@ -7338,6 +7956,14 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
         // alive, and if that restore itself no-ops or throws, the next
         // AdoptAnchor snapshots the still-widened margin as "original",
         // doubling the gap permanently.
+        ANIM_TRACE(L"EXCEPTION host=%p; a XAML call threw while "
+                   L"reading/positioning the anchor or hostGrid (anchor "
+                   L"likely recycled mid-access) — dropping cachedRepeater "
+                   L"and re-resolving next tick. currentLeft(target)=%.2f "
+                   L"liveX=%.2f anchorPresent=%d",
+                   host->hwnd, host->currentLeft,
+                   host->hostTranslate ? host->hostTranslate.X() : -1.0,
+                   (int)(bool)host->anchor);
         host->cachedRepeater = nullptr;
     }
 }
