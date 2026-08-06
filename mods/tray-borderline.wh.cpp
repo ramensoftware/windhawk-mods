@@ -6,7 +6,7 @@
 // @author         allelimo
 // @github         https://github.com/allelimo
 // @include        windhawk.exe
-// @compilerOptions -lole32
+// @compilerOptions -lole32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -38,9 +38,6 @@ All credits goes to James Lin and Husam Abdulraheem.
 - app_options: ""
   $name: Command line options
   $description: Optional arguments passed to the application. Leave empty for none.
-- app_folder: ""
-  $name: Borderline.exe folder
-  $description: Full path to the executable folder.
 - icon_file: shell32.dll
   $name: Icon File (DLL or EXE)
   $description: Full path to Icon resource (DLL or EXE)
@@ -56,6 +53,7 @@ All credits goes to James Lin and Husam Abdulraheem.
 #include <shellapi.h>
 #include <stdio.h>
 #include <windhawk_utils.h> 
+#include <shlwapi.h>
 
 #define WM_USER_TRAYICON (WM_USER + 1)
 #define WM_USER_UPDATESETTINGS (WM_USER + 2)
@@ -69,25 +67,15 @@ HWND g_hWnd = NULL;
 NOTIFYICONDATAW g_nid = {0};
 HANDLE g_hThread = NULL;
 UINT g_uMsgTaskbarCreated = 0;
-// allelimo
-//PCWSTR g_appPath;
-//PCWSTR g_appOptions;
 
 WindhawkUtils::StringSetting g_appPath;
 WindhawkUtils::StringSetting g_appOptions;
-WindhawkUtils::StringSetting g_appFolder;
 
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
 
 // --- Functional Logic ---
 void ApplySettingsToTray() {
-    // PCWSTR iconFile = Wh_GetStringSetting(L"icon_file");
-    // int iconIndex = Wh_GetIntSetting(L"icon_index");
-    // PCWSTR tooltipText = Wh_GetStringSetting(L"tooltip_text");
-    // // allelimo
-    // g_appPath = Wh_GetStringSetting(L"app_path");
-    // g_appOptions = Wh_GetStringSetting(L"app_options");
 
     WindhawkUtils::StringSetting iconFile =
         WindhawkUtils::StringSetting::make(L"icon_file");
@@ -99,10 +87,6 @@ void ApplySettingsToTray() {
     g_appOptions = WindhawkUtils::StringSetting::make(L"app_options");
     g_appFolder = WindhawkUtils::StringSetting::make(L"app_folder");
 
-    // if (!*g_appOptions) {
-    //     g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
-    // }
-
     HICON hOldIcon = g_nid.hIcon;
     ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
     if (!g_nid.hIcon) g_nid.hIcon = (HICON)LoadImageW(NULL, iconFile, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
@@ -112,12 +96,8 @@ void ApplySettingsToTray() {
     if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) Shell_NotifyIconW(NIM_ADD, &g_nid);
 
     if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
-    // Wh_FreeStringSetting(iconFile);
-    // Wh_FreeStringSetting(tooltipText);
-    
 }
 
-// allelimo
 void OpenApp() {
     if (!g_appPath || !*g_appPath) {
         Wh_Log(L"No app path configured");
@@ -131,7 +111,6 @@ void OpenApp() {
     }
 }
 
-// main
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_uMsgTaskbarCreated != 0 && uMsg == g_uMsgTaskbarCreated) {
         ApplySettingsToTray();
@@ -141,7 +120,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_USER_TRAYICON:
             if (LOWORD(lParam) == WM_LBUTTONUP) {
                 
-                OpenApp();  // allelimo
+                OpenApp();  
             } 
             else if(LOWORD(lParam) == WM_RBUTTONUP) {
                 
@@ -149,26 +128,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 AppendMenuW(hMenu, MF_STRING | MF_DISABLED | MF_GRAYED, MENU_TITLE_BORDERLINE, L"Tray Borderline");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, MF_STRING, MENU_EXECUTE_BORDERLINE, L"Execute Tray Borderline");
-                //AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
-
+                
                 POINT pt;
                 GetCursorPos(&pt);
                 SetForegroundWindow(hwnd);
-                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON /*|
-                    TPM_BOTTOMALIGN | TPM_RIGHTALIGN*/,
-                    pt.x, pt.y, 0, hwnd, nullptr);
+                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
                 PostMessageW(hwnd, WM_NULL, 0, 0);
                 DestroyMenu(hMenu);
 
                 if (cmd == MENU_EXECUTE_BORDERLINE){
                     OpenApp();
                 }
-                // else if (cmd == MENU_OPEN_WINDHAWK) {
-                //     SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                //     sei.lpFile = g_windhawkPath;
-                //     sei.nShow  = SW_SHOWNORMAL;
-                //     ShellExecuteExW(&sei);
-                // }
             }
             return 0;
  
