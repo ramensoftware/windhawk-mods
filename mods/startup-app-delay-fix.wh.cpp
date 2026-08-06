@@ -278,7 +278,7 @@ bool InitializeRedirectKey() {
         }
     }
 
-    g_ownsRedirectKey = true;
+    g_ownsRedirectKey = created;
     Wh_Log(L"Initialized volatile Serialize redirect key");
     return true;
 }
