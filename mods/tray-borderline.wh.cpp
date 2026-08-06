@@ -85,7 +85,6 @@ void ApplySettingsToTray() {
 
     g_appPath = WindhawkUtils::StringSetting::make(L"app_path");
     g_appOptions = WindhawkUtils::StringSetting::make(L"app_options");
-    g_appFolder = WindhawkUtils::StringSetting::make(L"app_folder");
 
     HICON hOldIcon = g_nid.hIcon;
     ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
@@ -104,8 +103,12 @@ void OpenApp() {
         return;
     }
 
+    WCHAR dir[MAX_PATH];
+    lstrcpynW(dir, g_appPath, ARRAYSIZE(dir));
+    PathRemoveFileSpecW(dir);  // <shlwapi.h>, -lshlwapi
+    
     HINSTANCE result =
-        ShellExecuteW(nullptr, L"open", g_appPath, g_appOptions, g_appFolder, SW_SHOWNORMAL);
+        ShellExecuteW(nullptr, L"open", g_appPath, *g_appOptions ? g_appOptions.get() : nullptr, *dir ? dir : nullptr, SW_SHOWNORMAL);
     if ((INT_PTR)result <= 32) {
         Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)result);
     }
