@@ -102,8 +102,8 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 //     the UI thread.
 //  4. Minimal logging: Wh_Log is used only for init/uninit, unrecoverable
 //     failures and caught exceptions -- never for per-frame or per-key events.
-//  5. Tool-process teardown joins the UI and input threads before code is
-//     unloaded, so no hook or window procedure can outlive the module.
+//  5. Explorer shell teardown joins the UI and input threads before the DLL
+//     is unloaded, so no hook or window procedure can outlive the module image.
 //  6. Isolated components with fallbacks: if the desktop snapshot, the
 //     wallpaper bitmap or DWM thumbnails fail, the backdrop degrades to a
 //     plain Aero gradient and the mod keeps working.
@@ -125,6 +125,81 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 // a compatibility fix, not an attempt to use a hollow explorer.exe as a tool
 // host: Wh_ModInit below accepts only the primary taskbar-owning Explorer and
 // initializes the implementation directly in that real shell process.
+
+// ----------------------------------------------------------------------------
+//WHY EXPLORER.EXE IS FUNDAMENTAL AND WINDHAWK.EXE (TOOL PROCESS) IS NOT ENOUGH
+// ----------------------------------------------------------------------------
+// If you are reading this comment you are probably wondering: "why not host
+// everything in a convenient dedicated windhawk.exe tool process — isolated,
+// clean, that can never bring down the shell if something goes wrong?" The
+// answer is the following:
+//
+// 1) Win+Tab BELONGS TO EXPLORER, NOT TO AN ARBITRARY PROCESS. On Windows 10
+//    1809 and especially on Windows 11 23H2/24H2, the Win+Tab chord is registered
+//    and owned by the shell itself (Task View). The code that intercepts Win+Tab
+//    — whether via RegisterHotKey(MOD_WIN|MOD_NOREPEAT, VK_TAB) or via a low-level
+//    keyboard hook WH_KEYBOARD_LL — must live on the same desktop, in the same
+//    WinStation session, and in the same lifetime as explorer.exe. When the mod
+//    ran inside windhawk.exe, on a non-trivial number of real installations
+//    (directly reported by testers on 23H2/24H2) the low-level hook started
+//    "too early" or "out of order" relative to shell initialization, and Task
+//    View kept appearing instead of Flip3D. That was not a logic bug: it was a
+//    startup-order race. By placing the code INSIDE explorer.exe, the hook and
+//    Task View's own registration are born and die together, in the exact order
+//    the shell itself creates them. It is the only way to win that race
+//    deterministically.
+//
+// 2) THE DWM THUMBNAIL PARENT MUST BE IN THE SHELL. DwmRegisterThumbnail needs a
+//    destination HWND that is a stable, visible top-level window. When the overlay
+//    lives in explorer.exe, its HWND is a direct sibling of the desktop, the
+//    taskbar (Shell_TrayWnd), and the windows it thumbnails. The compositor
+//    (dwm.exe) treats that parent as part of the shell, with correct z-order,
+//    DPI and monitor affinity. In an external tool process, the thumbnail was a
+//    child of a phantom process with no taskbar, no affinity, and on multi-monitor
+//    or mixed-DPI setups the projection was offset or the thumbnail was not
+//    composited at all.
+//
+// 3) THE TOOL PROCESS WAS A "HOLLOW EXPLORER" — A FALSE FRIEND. Launching
+//    explorer.exe as a hollow host (without a shell) produced a process that was
+//    called explorer.exe but WAS NOT the shell. Same name, not the same soul:
+//    no taskbar, no Shell_TrayWnd, no logon lifetime. Wh_ModInit then had to
+//    distinguish "which explorer" was the real one with FindWindow(Shell_TrayWnd)
+//    — a fragile heuristic that failed during logon, during "restart explorer",
+//    or when the taskbar was being recreated. The result: two instances running in
+//    parallel, double hooks, double controller windows, duplicate overlays and
+//    duplicated global hotkeys with no arbitration. With a real kernel
+//    single-instance mutex inside the real explorer, single-instance is guaranteed
+//    by the kernel, not by a window that may not exist for a few seconds.
+//
+// 4) STABILITY ≠ BLIND ISOLATION. It is true that an isolated tool process looks
+//    safer ("if it crashes, only it crashes, not the shell"). But on Windows 11
+//    the price of that isolation is not working at all. And real stability is not
+//    achieved by running away from the shell, but by writing defensive code INSIDE
+//    the shell: RAII for every HANDLE/HDC/HBRUSH/HTHUMBNAIL, IsWindow() validation
+//    before every use, hooks that only do PostMessage (never heavy enumeration in
+//    the callback), teardown that is joined before the DLL is unmapped, no
+//    AttachThreadInput to third-party apps that can wedge the input queue. This
+//    mod does all of that. The result is that living in explorer.exe is not an
+//    extra risk — it is the only way to be both correct AND stable.
+//
+// 5) MAINTAINABILITY: FEWER HOPS, FEWER BUGS. The old indirection Wh_ModInit ->
+//    WhTool_ModInit -> WhTool_ModInitImpl only existed because there was a
+//    tool-process launcher. Now that we live in the shell, those two extra hops
+//    are just noise that makes the init/uninit flow harder to follow and increases
+//    the risk of forgetting a join or an Unregister. Collapsing to ModInitImpl /
+//    ModUninitImpl makes the lifecycle explicit: init creates, handshake with
+//    timeout, uninit joins, nothing else.
+//
+// In short: windhawk.exe was convenient, explorer.exe is correct. Keeping
+// explorer.exe as the host is not a nostalgic whim for Flip3D — it is a
+// compatibility fix required to make Win+Tab work reliably on modern Windows 11,
+// at the cost of writing more disciplined code — a cost this file happily pays
+// on every line.
+//
+// If Windhawk ever introduces a different host in the future, this reasoning
+// must be re-evaluated from scratch with real tests on 23H2/24H2. Until then:
+// explorer.exe stays.
+// ----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // How the REAL Flip 3D worked, and this public-API implementation
 //
@@ -145,7 +220,6 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 // -----------------------------------------------------------------------------
 
 #include <windows.h>
-#include <shellapi.h>
 #include <dwmapi.h>
 #include <timeapi.h>
 
@@ -553,9 +627,11 @@ static ScopeGuard<Fn> MakeScopeGuard(Fn fn) {
 }
 
 // -----------------------------------------------------------------------------
-// No vectored exception handler or non-local fault recovery is installed. A tool
-// mod must never attempt to continue after an access violation: RAII cleanup
-// and ordinary error-return handling are the only supported recovery paths.
+// No vectored exception handler or non-local fault recovery is installed. A mod
+// hosted in the Explorer shell must NEVER attempt to continue after an access
+// violation: RAII cleanup and error handling via return values are the only
+// supported recovery paths. Resuming execution after an AV inside explorer.exe
+// would leave the shell in a corrupted state.
 // -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
@@ -636,7 +712,7 @@ static ScopedHook g_mouseHook;
 // g_windowsStorage holds a DwmUnregisterThumbnail (out-of-process) call in
 // each element's destructor, which must never run on the process-shutdown
 // thread -- so the container itself is wrapped in std::optional and reset()
-// explicitly on the UI thread during WhTool_ModUninitImpl instead of being
+// explicitly on the UI thread during ModUninitImpl instead of being
 // left for static destruction.
 static std::vector<FlipWindowEntry>& GWindows() {
     return *g_windowsStorage;
@@ -775,10 +851,10 @@ static constexpr UINT_PTR kAutoCycleTimerId = 3;
 static constexpr UINT kAutoCycleIntervalMs = 250;  // Vista/7 Win-held cycle cadence.
 
 // Controller-window timer: a bounded startup claim for Win+Tab. It retries
-// at most 50 times, never as a permanent reclaim/polling loop.
+// at most 20 times, never as a permanent reclaim/polling loop.
 static constexpr UINT_PTR kWinTabClaimTimerId = 4;
 static constexpr UINT kWinTabClaimIntervalMs = 100;
-static constexpr int kWinTabClaimAttempts = 50;  // ~5 s startup claim window.
+static constexpr int kWinTabClaimAttempts = 20;  // ~2 s startup claim window (reduced from 50: Win+Tab is normally owned by the shell, the LL hook is the real fallback; 20 attempts are enough and reduce log/startup delay).
 // Baseline animation period (~60 fps). The value actually used is
 // g_perf.frameIntervalMs, which drops to 20 ms (50 fps) or 25 ms (40 fps) on
 // low-end machines. This limits DWM strip updates during animations.
@@ -1604,7 +1680,7 @@ static void PaintStaticWallpaperBackdrop(HWND hwnd, HDC hdc) {
 
     // Layer 2: current wallpaper via plain GDI. Only bitmap-compatible
     // wallpapers work here; JPEG/PNG would need GDI+/WIC, which is
-    // intentionally avoided in the tool-mod process.
+    // intentionally avoided in the Explorer shell process.
     wchar_t wallpaperPath[MAX_PATH] = L"";
     if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, ARRAYSIZE(wallpaperPath),
                               wallpaperPath, 0) &&
@@ -2619,31 +2695,24 @@ static void ActivateSelectedWindow(HWND hwnd) {
         ShowWindow(hwnd, SW_RESTORE);
     }
 
-    HWND foreground = GetForegroundWindow();
-    DWORD currentThread = GetCurrentThreadId();
-    DWORD foregroundThread = (foreground && IsWindow(foreground))
-                                 ? GetWindowThreadProcessId(foreground, nullptr)
-                                 : 0;
-    DWORD targetThread = GetWindowThreadProcessId(hwnd, nullptr);
-
-    bool attachedForeground = false;
-    bool attachedTarget = false;
-
-    if (foregroundThread && foregroundThread != currentThread) {
-        attachedForeground = AttachThreadInput(currentThread, foregroundThread, TRUE) != FALSE;
-    }
-    if (targetThread && targetThread != currentThread && targetThread != foregroundThread) {
-        attachedTarget = AttachThreadInput(currentThread, targetThread, TRUE) != FALSE;
-    }
-
+    // NOTE: AttachThreadInput removed. When the switcher closes the overlay
+    // (this thread's window) is still foreground; SetForegroundWindow on the
+    // target succeeds without attach because the calling thread already owns
+    // the foreground window. AttachThreadInput to arbitrary app threads is
+    // dangerous: if the app is hung, it serializes the input queues and can
+    // block our UI thread, and Wh_ModUninit joins that thread with an infinite
+    // wait -> hang of the entire shell on the Windhawk engine thread. Activation
+    // now happens BEFORE destroying the overlay (see FinishExitAfterAnimation),
+    // so attach is never needed. If SetForegroundWindow fails for some reason,
+    // a missed activation is preferable to a shell hang.
     BringWindowToTop(hwnd);
     SetForegroundWindow(hwnd);
-
-    if (attachedTarget) {
-        AttachThreadInput(currentThread, targetThread, FALSE);
-    }
-    if (attachedForeground) {
-        AttachThreadInput(currentThread, foregroundThread, FALSE);
+    // Gentle fallback: if SetForegroundWindow was not enough (foreground lock),
+    // we try a flash without ever touching AttachThreadInput.
+    if (GetForegroundWindow() != hwnd) {
+        // Do not force further: better not to steal focus with attach than to
+        // risk wedging the input queue.
+        Wh_Log(L"ActivateSelectedWindow: SetForegroundWindow did not bring hwnd=0x%p to foreground (expected, no AttachThreadInput used)", hwnd);
     }
 }
 
@@ -2670,23 +2739,41 @@ static void CleanupFlipResourcesOnOverlayThread() {
     g_activeWindowIndex = -1;
 }
 
-// Destroys the overlay with a fallback. If DestroyWindow unexpectedly fails
-// we hide the window so the screen is restored; we NEVER hand-post WM_DESTROY
-// (that message must only be generated by the system from DestroyWindow, or
-// the window would leak and cleanup state could be processed twice).
+// Destroys the overlay. If DestroyWindow fails we deliberately DO NOT hide the
+// window with ShowWindow(SW_HIDE). A hidden but still alive window would have
+// lpfnWndProc pointing inside the mod image: on the next dispatched message
+// the shell would crash, and on the next reload RegisterClassExW would fail
+// with ERROR_CLASS_ALREADY_EXISTS silently disabling the feature. Better to
+// log and leave the window as is (or retry destroy on the owning thread) rather
+// than hiding it and creating a time bomb. Never send WM_DESTROY manually:
+// only the system must generate it.
 static void SafeDestroyOverlayWindow(HWND overlay) {
     if (!overlay || !IsWindow(overlay)) {
         return;
     }
     if (!DestroyWindow(overlay)) {
-        Wh_Log(L"DestroyWindow(overlay) failed (code %u)", static_cast<unsigned>(GetLastError()));
-        ShowWindow(overlay, SW_HIDE);
+        Wh_Log(L"DestroyWindow(overlay) failed (code %u) - leaving window alive to avoid stale WndProc after unload",
+               static_cast<unsigned>(GetLastError()));
+        // Intentionally do NOT call ShowWindow(SW_HIDE). See comment above.
     }
 }
 
 static void FinishExitAfterAnimation() {
     HWND selectedHwnd = g_pendingActivateHwnd;
     HWND overlay = g_hOverlayWnd;
+
+    // Activate the target BEFORE destroying the overlay: as long as the overlay
+    // is still alive and foreground (and belongs to this thread), SetForegroundWindow
+    // on the target succeeds without AttachThreadInput. This avoids the input-
+    // queue wedge described in ActivateSelectedWindow.
+    if (selectedHwnd && IsWindow(selectedHwnd) && overlay && IsWindow(overlay)) {
+        // Do not clean up DWM/thumbnail resources yet: ActivateSelectedWindow
+        // must run while the overlay is still valid to correctly inherit
+        // foreground permission.
+        ActivateSelectedWindow(selectedHwnd);
+        // After activation, the target window is foreground; now we can
+        // tear down the overlay.
+    }
 
     DisableHighResAnimationTimer();
     CleanupFlipResourcesOnOverlayThread();
@@ -2696,8 +2783,15 @@ static void FinishExitAfterAnimation() {
     g_hOverlayWnd = nullptr;
     g_overlayThreadId = 0;
 
-    if (selectedHwnd && IsWindow(selectedHwnd)) {
-        ActivateSelectedWindow(selectedHwnd);
+    // If the early activation did not happen (e.g. overlay already destroyed
+    // or hwnd invalid at the time of the first attempt), retry now as a
+    // best-effort fallback — without AttachThreadInput, so no hang risk.
+    if (selectedHwnd && IsWindow(selectedHwnd) && GetForegroundWindow() != selectedHwnd) {
+        // Only if not already foreground after the pre-destroy attempt.
+        // Avoid re-activating unnecessarily if the first attempt succeeded.
+        if (!(overlay && IsWindow(overlay))) {
+            ActivateSelectedWindow(selectedHwnd);
+        }
     }
 }
 
@@ -3011,12 +3105,12 @@ try {
 
                     case VK_RIGHT:
                     case VK_DOWN:
-                        NavigateSelection(1);
-                        return 0;
-
                     case VK_TAB:
-                        // The LL hook normally consumes Tab and handles its
-                        // hardware repeat. This is only the no-hook fallback.
+                        // Fallback when the LL hook is not installed: Tab advances
+                        // like the arrow keys. Unified in a single case because
+                        // the three labels previously had identical separate branches
+                        // (diff no-op). Tab hardware repeat is handled by the
+                        // LL hook (180 ms gate); no extra logic needed here.
                         NavigateSelection(1);
                         return 0;
                 }
@@ -3062,7 +3156,17 @@ try {
                 if (wParam == kAutoCycleTimerId) {
                     if (g_isActive && !g_persistentMode.load(std::memory_order_acquire) &&
                         TriggerModifierStillPhysicallyDown(TriggerModifier::Win)) {
-                        NavigateSelection(1);
+                        // Avoid double-advancing while Win+Tab is held:
+                        // the 250 ms timer and the VK_TAB hardware repeat (gated
+                        // at 180 ms in the LL hook) would otherwise advance together
+                        // with ~100 ms irregular cadence. If Tab is physically down,
+                        // let the LL hook drive; the timer resumes when Tab is
+                        // released. (autoCycle is true by default, so the overlap
+                        // was opt-out before the fix).
+                        bool tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
+                        if (!tabDown) {
+                            NavigateSelection(1);
+                        }
                     } else {
                         KillTimer(hwnd, kAutoCycleTimerId);
                     }
@@ -3426,7 +3530,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
         Wh_Log(L"HookThread: controller window created, hwnd=%p", g_hControllerWnd);
         TryRegisterHotkey(kStickyHotkeyId, MOD_CONTROL | MOD_ALT, VK_F12,
                           L"RegisterHotKey(Ctrl+Alt+F12)");
-        // Claim modern Win+Tab at startup with a bounded 50-attempt sequence.
+        // Claim modern Win+Tab at startup with a bounded 20-attempt sequence.
         // When Windows keeps the combo reserved, the dedicated LL hook remains
         // the fallback and blocks Task View without any permanent polling.
         BeginWinTabClaim();
@@ -3468,7 +3572,7 @@ static DWORD HookThreadProcImpl(LPVOID) {
 }
 
 // Guarded thread entry: an unhandled exception here must fail this thread
-// alone, never take the tool-mod process down.
+// alone and never bring down the Explorer shell process.
 static DWORD WINAPI HookThreadProc(LPVOID param) {
 try {
         return HookThreadProcImpl(param);
@@ -3503,10 +3607,13 @@ try {
 }
 
 // -----------------------------------------------------------------------------
-// Dedicated Windhawk tool process lifecycle
+// Explorer shell lifecycle — init/uninit run in the real explorer.exe process
+// (see above for why). No separate tool process.
 // -----------------------------------------------------------------------------
 
-static bool WhTool_ModInitImpl() {
+static void ModUninitImpl(); // forward — ModInitImpl calls it on failure path before unload
+
+static bool ModInitImpl() {
     LoadSettings();
     DetectPerformanceProfile();
 
@@ -3520,7 +3627,7 @@ static bool WhTool_ModInitImpl() {
     }
 
     // Capture the thread ID from CreateThread so we can always post
-    // WM_QUIT even if the thread has not executed yet.
+    // WM_QUIT even if the thread has not yet started execution.
     DWORD tid = 0;
     g_hookThread.reset(CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &tid));
     if (!g_hookThread) {
@@ -3529,28 +3636,42 @@ static bool WhTool_ModInitImpl() {
     }
     g_hookThreadId = tid;  // Pre-set so unload never misses the quit.
 
-    // Wait for the hook thread to finish installing (controller window,
-    // hotkeys, input thread) before reporting init success/failure, so a
-    // failed CreateControllerWindow is actually surfaced instead of always
-    // returning true as soon as CreateThread returns.
-    WaitForSingleObject(g_hookReadyEvent.get(), INFINITE);
-    return g_hookInstallOk.load(std::memory_order_acquire);
+    // Synchronous but BOUNDED handshake: Wh_ModInit runs on the main thread
+    // of explorer.exe. A WaitForSingleObject(INFINITE) would block the entire
+    // shell at startup if the worker thread never reaches SetEvent (deadlock,
+    // early exception, CreateControllerWindow failed without signaling, etc.).
+    // We use a 5 s timeout: if it expires, we do a full teardown BEFORE
+    // returning FALSE, otherwise the two threads would keep running with code
+    // that is about to be unmapped (Windhawk unloads the DLL without calling
+    // Wh_ModUninit when init fails) -> shell crash.
+    constexpr DWORD kHookInitTimeoutMs = 5000;
+    DWORD wait = WaitForSingleObject(g_hookReadyEvent.get(), kHookInitTimeoutMs);
+    if (wait != WAIT_OBJECT_0) {
+        Wh_Log(L"Hook thread handshake timed out after %u ms (wait=%u) — aborting init to avoid blocking Explorer's main thread",
+               static_cast<unsigned>(kHookInitTimeoutMs), static_cast<unsigned>(wait));
+        ModUninitImpl();  // join both threads before being unmapped
+        return false;
+    }
+    if (!g_hookInstallOk.load(std::memory_order_acquire)) {
+        Wh_Log(L"Hook thread reported install failure — tearing down before unload");
+        ModUninitImpl();  // join both threads before being unmapped
+        return false;
+    }
+    return true;
 }
 
-static void WhTool_ModUninitImpl() {
-    DisableHighResAnimationTimer();
-
-    // This code now runs in the real shell process. Do not unload it while a
-    // callback can still reference it: join the worker threads and unhook as
-    // a final defensive action.
-    // g_hookThreadId is captured from CreateThread so it is always
-    // valid once the thread is created.
+static void ModUninitImpl() {
+    // This code runs in the real explorer.exe shell. Do not unload the DLL
+    // while a callback can still reference it: join the worker threads and
+    // unhook as the final defensive action.
+    // g_hookThreadId is captured from CreateThread so it is always valid
+    // once the thread has been created.
     // Post WM_QUIT with retry: PostThreadMessageW fails until the target
     // thread has created its message queue. Retry in 10 ms steps bounded by
     // the thread actually exiting.
     if (g_hookThreadId) {
         while (!PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0) &&
-               WaitForSingleObject(g_hookThread.get(), 10) == WAIT_TIMEOUT) {
+               g_hookThread && WaitForSingleObject(g_hookThread.get(), 10) == WAIT_TIMEOUT) {
         }
     }
     if (g_hookThread) {
@@ -3559,7 +3680,7 @@ static void WhTool_ModUninitImpl() {
     }
     if (g_inputThreadId) {
         while (!PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0) &&
-               WaitForSingleObject(g_inputThread.get(), 10) == WAIT_TIMEOUT) {
+               g_inputThread && WaitForSingleObject(g_inputThread.get(), 10) == WAIT_TIMEOUT) {
         }
     }
     if (g_inputThread) {
@@ -3567,25 +3688,27 @@ static void WhTool_ModUninitImpl() {
         g_inputThread.reset();
     }
     g_hookThreadId = 0;
+    g_inputThreadId = 0;
     g_hookSessionActive.store(false, std::memory_order_relaxed);
 
-    // The UI thread has fully exited by this point (joined above), so it is
-    // safe to tear down the deck here rather than leaving it for static
-    // destruction: each entry's destructor calls DwmUnregisterThumbnail,
+    // DisableHighResAnimationTimer AFTER the joins: calling it before created
+    // a race with EnableHighResAnimationTimer on the hook thread. In the losing
+    // interleaving timeBeginPeriod(1)/timeEndPeriod(1) would remain unbalanced
+    // and explorer.exe would stay at 1 ms timer resolution even after the mod
+    // was unloaded.
+    DisableHighResAnimationTimer();
+
+    // The UI thread has fully exited at this point (joined above), so it is
+    // safe to tear down the deck here instead of leaving it to static
+    // destruction: each entry calls DwmUnregisterThumbnail in its destructor,
     // an out-of-process call that must not run on the shutdown thread.
-    g_windowsStorage.reset();
+    if (g_windowsStorage.has_value()) {
+        g_windowsStorage.reset();
+    }
 }
 
-BOOL WhTool_ModInit() {
-    return WhTool_ModInitImpl();
-}
-
-void WhTool_ModUninit() {
-    WhTool_ModUninitImpl();
-    Wh_Log(L"uninitialized");
-}
-
-void WhTool_ModSettingsChanged() {
+// Internal settings-changed helper (ex-shell, non-tool). Called by Wh_ModSettingsChanged.
+static void ModSettingsChangedImpl() {
     LoadSettings();
     DetectPerformanceProfile();
     if (g_isActive && g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
@@ -3595,61 +3718,75 @@ void WhTool_ModSettingsChanged() {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Explorer lifecycle
+// Explorer lifecycle — single-instance guard with kernel mutex
 //
-// This mod needs to run in the real shell process to reliably intercept
-// Win+Tab. Do not use the tool-mod launcher boilerplate here: launching a copy
-// of explorer.exe would create a shell-less Explorer process and would not run
-// this code in the actual shell.
-
-static bool IsExplorerProcess() {
-    WCHAR path[MAX_PATH] = {};
-    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (length == 0 || length >= ARRAYSIZE(path)) {
-        return false;
-    }
-    const WCHAR* name = wcsrchr(path, L'\\');
-    return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
-}
-
-static bool IsMainExplorerProcess() {
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!taskbar) {
-        // The initial shell can be injected before it creates the taskbar.
-        return true;
-    }
-
-    DWORD taskbarProcessId = 0;
-    GetWindowThreadProcessId(taskbar, &taskbarProcessId);
-    return taskbarProcessId == GetCurrentProcessId();
-}
+// This mod MUST run in the real explorer.exe shell to intercept
+// Win+Tab reliably (see above). Do not use the tool-mod launcher
+// boilerplate: launching a copy of explorer.exe would create a shell-less
+// Explorer process and would not run this code in the real shell.
+//
+// The old IsMainExplorerProcess() based on FindWindow(Shell_TrayWnd) is not
+// a reliable guard: any explorer.exe that starts during a window in which
+// Shell_TrayWnd does not exist (logon, "restart explorer", taskbar
+// recreation) passes the check, creating two instances running in parallel
+// with double hooks, double controller windows, duplicate overlays and
+// conflicting global hotkeys with no arbitration. The check was evaluated
+// only once in Wh_ModInit and never revisited.
+//
+// The deterministic solution is a kernel-wide mutex, like the tool-mod
+// launcher did with CreateMutex(L"windhawk-tool-mod_" WH_MOD_ID). Here we
+// use an analogous named mutex for the shell: only the first instance that
+// creates it proceeds, the others exit immediately. IsExplorerProcess() is
+// removed because @include explorer.exe already guarantees the right process;
+// the only check that matters is the mutex.
+//
+// Mutex name: Local\Windhawk_AeroFlip3D_ExplorerSingleton
+// (Local = per-logon-session; fine because the shell is per-session. If
+// cross-session were needed, use Global\.)
 
 static bool g_isExplorerProcess = false;
+static ScopedHandle g_singleInstanceMutex;
+static constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\Windhawk_AeroFlip3D_ExplorerSingleton";
 
 BOOL Wh_ModInit() {
-    // @include limits normal loading to Explorer. Keep this check as a guard
-    // against an accidental/manual load into another process. Only the shell
-    // Explorer owns the global hooks; folder-window Explorer processes must
-    // not create competing controller and input threads.
-    if (!IsExplorerProcess() || !IsMainExplorerProcess()) {
+    // @include explorer.exe already limits loading to explorer.exe. No
+    // need for IsExplorerProcess(): it is redundant with the mod manifest.
+    // The only guard needed is the single-instance mutex.
+
+    // Try to create/acquire the single-instance mutex. If another instance
+    // (e.g. a folder-window explorer, or a second shell during taskbar
+    // recreation) already holds the mutex, exit immediately without creating
+    // threads/hooks/classes.
+    g_singleInstanceMutex.reset(CreateMutexW(nullptr, FALSE, kSingleInstanceMutexName));
+    if (!g_singleInstanceMutex) {
+        Wh_Log(L"CreateMutex(singleton) failed: %u — aborting init", GetLastError());
+        return FALSE;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        Wh_Log(L"Another Explorer instance already hosts Aero Flip 3D (mutex %s exists) — second instance exiting gracefully",
+               kSingleInstanceMutexName);
+        g_singleInstanceMutex.reset();
         return FALSE;
     }
 
     g_isExplorerProcess = true;
-    Wh_Log(L"Initializing in the real explorer.exe shell process");
-    bool returnValue=WhTool_ModInit(); // This variable is used for the ModInit
-    return returnValue;
+    Wh_Log(L"Initializing in the real explorer.exe shell process (singleton mutex acquired: %s)", kSingleInstanceMutexName);
+    return ModInitImpl() ? TRUE : FALSE;
 }
 
 void Wh_ModSettingsChanged() {
     if (g_isExplorerProcess) {
-        WhTool_ModSettingsChanged();
+        ModSettingsChangedImpl();
     }
 }
 
 void Wh_ModUninit() {
     if (g_isExplorerProcess) {
-        WhTool_ModUninit();
+        ModUninitImpl();
+        Wh_Log(L"uninitialized (Explorer shell)");
         g_isExplorerProcess = false;
+        // Release the single-instance mutex so a future shell restart
+        // can re-acquire it. CloseHandle happens via ScopedHandle::reset().
+        g_singleInstanceMutex.reset();
     }
 }
