@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id                
+// @id                taskbar-dock-animation-plus
 // @name              Taskbar Dock Animation Plus
 // @name:zh-CN        任务栏 Dock 动画增强版
 // @name:ja-JP        タスクバー Dock アニメーション Plus
