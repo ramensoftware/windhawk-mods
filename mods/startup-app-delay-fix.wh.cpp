@@ -199,10 +199,9 @@ bool VerifyOwner(HKEY key) {
     LSTATUS status = RegQueryValueExW(
         key, kOwnerValueName, nullptr, &type, reinterpret_cast<BYTE*>(owner),
         &size);
-    return status == ERROR_SUCCESS && type == REG_SZ &&
-           size == sizeof(kOwnerValue) &&
-           wcscmp(owner, kOwnerValue) == 0;
-}
+return status == ERROR_SUCCESS && type == REG_SZ &&
+       size == sizeof(kOwnerValue) &&
+       memcmp(owner, kOwnerValue, sizeof(kOwnerValue)) == 0;}
 
 bool IsVolatileKey(HKEY key) {
     wchar_t probeName[96];
