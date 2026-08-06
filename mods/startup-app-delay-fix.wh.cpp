@@ -292,7 +292,8 @@ void DeleteRedirectKey() {
     if (g_ownsRedirectKey) {
         NTSTATUS status = NtDeleteKey(g_redirectKey);
         if (status != STATUS_SUCCESS &&
-            status != STATUS_OBJECT_NAME_NOT_FOUND) {
+            status != STATUS_OBJECT_NAME_NOT_FOUND &&
+            status != STATUS_KEY_DELETED) {
             Wh_Log(L"Failed to delete volatile redirect key: 0x%08X", status);
         }
     }
