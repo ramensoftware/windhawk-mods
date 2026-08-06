@@ -96,9 +96,9 @@ void ApplySettingsToTray() {
 
 
 
-    if (!*g_appOptions) {
-        g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
-    }
+    // if (!*g_appOptions) {
+    //     g_appOptions = nullptr;  // Wh_GetStringSetting returns L"" when unset, never NULL
+    // }
 
     HICON hOldIcon = g_nid.hIcon;
     ExtractIconExW(iconFile, iconIndex, NULL, &g_nid.hIcon, 1);
@@ -108,7 +108,7 @@ void ApplySettingsToTray() {
     lstrcpynW(g_nid.szTip, tooltipText, ARRAYSIZE(g_nid.szTip));
     if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) Shell_NotifyIconW(NIM_ADD, &g_nid);
 
-    // if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
+    if (hOldIcon && hOldIcon != g_nid.hIcon) DestroyIcon(hOldIcon);
     // Wh_FreeStringSetting(iconFile);
     // Wh_FreeStringSetting(tooltipText);
     
