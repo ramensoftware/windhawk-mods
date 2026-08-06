@@ -55,12 +55,13 @@ The mod does not modify:
 
 When needed, the mod can bring a normal-band taskbar in front of an ordinary
 normal-band window without activating it. It never promotes the taskbar into
-the topmost band or reorders it above an always-on-top window, preserving
-fullscreen, accessibility-overlay, and third-party Z-order policies.
+the topmost band or reorders it above an always-on-top window. Mods that
+intentionally keep the taskbar behind other normal windows can conflict with
+this narrowly scoped Z-order correction.
 
 The mod is designed to coexist with taskbar styling, sizing, transparency,
-animation, clock, label, and icon mods that retain the standard bottom-positioned
-Windows 11 taskbar.
+animation, clock, label, and icon mods that retain the standard
+bottom-positioned Windows 11 taskbar and don't replace its reveal logic.
 
 ## Requirements
 
@@ -84,6 +85,14 @@ Windows 11 taskbar.
   may not yet have been captured. The optional native timer fallback is tried
   once per activation-band entry, while coordinator activation continues to
   retry with backoff until the coordinator becomes available.
+- The native timer fallback uses Explorer's internal taskbar-unhide timer. A
+  mod that intercepts or replaces that timer can block the fallback, and
+  arming it can reset an already pending native unhide timer. This affects only
+  the brief pre-coordinator fallback path; normal coordinator activation is
+  independent of the timer.
+- Mods that deliberately control the taskbar's normal-window Z-order can
+  conflict with the correction used when an ordinary window covers a revealed
+  taskbar. The correction never crosses into the topmost window band.
 
 ## Suggested settings
 
@@ -152,8 +161,9 @@ This mod is distributed under the GNU General Public License v3.0.
   $name: Native timer fallback
   $description: >-
     If the Windows 11 taskbar coordinator isn't available yet, make one
-    best-effort request to Explorer's native reveal timer for each entry into
-    the activation band. The mod never cancels Explorer's timer.
+    best-effort request through Explorer's native unhide timer for each entry
+    into the activation band. Mods that intercept Explorer's taskbar timers can
+    block this temporary fallback. The pointer is never moved or injected.
 */
 // ==/WindhawkModSettings==
 
@@ -226,8 +236,10 @@ enum UiOperation : WPARAM {
 constexpr UINT kWorkerCursorChangedMessage = WM_APP + 1;
 constexpr UINT kWorkerSettingsChangedMessage = WM_APP + 2;
 constexpr UINT kWorkerNativePointerLeaveMessage = WM_APP + 3;
+constexpr UINT kWorkerTaskbarDestroyedMessage = WM_APP + 4;
 constexpr LPARAM kRevealFlagBringNormalTaskbarForward = 1;
 constexpr UINT kReleaseRetryMs = 250;
+constexpr UINT kTaskbarRebuildRetryMs = 100;
 constexpr UINT kFallbackProbeMs = 300;
 constexpr UINT kSuppressionBackoffMaxMs = 5000;
 constexpr ULONGLONG kAutoHideCacheDurationMs = 5000;
@@ -257,6 +269,7 @@ void ForgetTaskbarState(HWND taskbarWindow) {
 
 DWORD WINAPI ActivationWorkerThread(LPVOID);
 void EnsureActivationWorker();
+void NotifyActivationWorkerTaskbarDestroyed(HWND taskbarWindow);
 bool HandleTaskbarUiOperation(HWND taskbarWindow,
                               WPARAM operationValue,
                               LPARAM operationParameter,
@@ -325,6 +338,25 @@ void EnsureActivationWorker() {
 
     g_workerThread.store(workerThread, std::memory_order_release);
     Wh_Log(L"Started activation worker in the taskbar Explorer process");
+}
+
+void NotifyActivationWorkerTaskbarDestroyed(HWND taskbarWindow) {
+    const DWORD workerThreadId =
+        g_workerThreadId.load(std::memory_order_acquire);
+    if (!workerThreadId) {
+        return;
+    }
+
+    if (!PostThreadMessageW(
+            workerThreadId,
+            kWorkerTaskbarDestroyedMessage,
+            reinterpret_cast<WPARAM>(taskbarWindow),
+            0)) {
+        Wh_Log(L"Couldn't notify activation worker that taskbar %p was "
+               L"destroyed: %u",
+               taskbarWindow,
+               GetLastError());
+    }
 }
 
 bool IsTaskbarClass(HWND window) {
@@ -945,6 +977,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(
     } else if (message == WM_NCDESTROY) {
         g_trayUiWndProcObjects.erase(window);
         ForgetTaskbarState(window);
+        NotifyActivationWorkerTaskbarDestroyed(window);
         if (g_mainTaskbarWindow.load(std::memory_order_relaxed) == window) {
             g_mainTaskbarWindow.store(nullptr, std::memory_order_relaxed);
             g_stuckRectQuery.pending.store(false,
@@ -997,6 +1030,7 @@ LRESULT WINAPI CSecondaryTray_WndProc_Hook(
     } else if (message == WM_NCDESTROY) {
         g_secondaryTrayObjects.erase(window);
         ForgetTaskbarState(window);
+        NotifyActivationWorkerTaskbarDestroyed(window);
     }
 
     return CSecondaryTray_WndProc_Original(
@@ -1129,13 +1163,17 @@ ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook(
                taskbarWindow);
 
         const DWORD workerThreadId =
-            g_workerThreadId.load(std::memory_order_relaxed);
-        if (workerThreadId) {
-            PostThreadMessageW(
+            g_workerThreadId.load(std::memory_order_acquire);
+        if (workerThreadId &&
+            !PostThreadMessageW(
                 workerThreadId,
                 kWorkerNativePointerLeaveMessage,
                 reinterpret_cast<WPARAM>(taskbarWindow),
-                0);
+                0)) {
+            Wh_Log(L"Couldn't notify activation worker about Explorer's "
+                   L"pointer leave for taskbar %p: %u",
+                   taskbarWindow,
+                   GetLastError());
         }
     }
 }
@@ -1460,6 +1498,9 @@ bool TriggerNativeUnhideTimerOnUiThread(HWND taskbarWindow) {
 
     // Explorer owns timer ID 3. Never kill or clean it up here: doing so can
     // cancel a genuine native edge-hover reveal that Explorer armed itself.
+    // SetTimer resets an existing timer with the same HWND and ID, so this
+    // compatibility fallback is deliberately limited to one attempt per band
+    // entry and is disclosed in the README.
     const UINT_PTR timerResult =
         SetTimer(taskbarWindow, kTrayUITimerUnhide, 1, nullptr);
     if (!timerResult) {
@@ -1618,14 +1659,23 @@ bool ClearActiveTaskbar(ActivationWorkerState& state,
                         bool scheduleRetry = true) {
     CancelWorkerTimer(state.releaseTimerId);
 
-    if (state.activeTaskbar && IsWindow(state.activeTaskbar)) {
+    if (state.activeTaskbar) {
         const UiOperationResult clearResult =
             SendUiOperation(kUiClearSyntheticPointerOver,
                             state.activeTaskbar,
                             timeoutMs);
-        if (!UiOperationSucceeded(clearResult)) {
-            // Keep ownership and retry instead of forgetting synthetic state
-            // that may still force Explorer's coordinator to remain expanded.
+
+        if (clearResult == UiOperationResult::kNotSent) {
+            // The HWND is no longer a taskbar in this Explorer process. Its
+            // coordinator and synthetic state were already discarded by the
+            // taskbar WM_NCDESTROY hook, so retrying could loop forever if the
+            // numeric handle was recycled for another window.
+            Wh_Log(L"Release target is no longer a taskbar: %p",
+                   state.activeTaskbar);
+        } else if (!UiOperationSucceeded(clearResult)) {
+            // Completed failure or timeout means the taskbar might still own
+            // synthetic state. Keep worker ownership and retry rather than
+            // allowing Explorer's coordinator to remain forced open.
             if (scheduleRetry) {
                 state.releaseRetryPending = true;
                 ScheduleWorkerTimer(kReleaseRetryMs,
@@ -1952,6 +2002,46 @@ void HandleNativePointerLeave(ActivationWorkerState& state,
     ProcessPointerState(state);
 }
 
+void HandleTaskbarDestroyed(ActivationWorkerState& state,
+                            HWND taskbarWindow) {
+    if (!taskbarWindow) {
+        return;
+    }
+
+    bool stateChanged = false;
+
+    if (state.activeTaskbar == taskbarWindow) {
+        CancelWorkerTimer(state.releaseTimerId);
+        state.releaseRetryPending = false;
+        state.activeTaskbar = nullptr;
+        state.activeTaskbarMonitor = nullptr;
+        stateChanged = true;
+    }
+
+    if (state.fallbackProbeTaskbar == taskbarWindow) {
+        state.fallbackProbeTaskbar = nullptr;
+        state.fallbackProbeMonitor = nullptr;
+        stateChanged = true;
+    }
+
+    if (!stateChanged) {
+        return;
+    }
+
+    CancelWorkerTimer(state.retryTimerId);
+    state.armed = true;
+    state.lastActivationCheck = 0;
+    state.suppressionFailures = 0;
+    ResetBandEntry(state);
+
+    // WM_NCDESTROY is observed before Explorer's original WndProc returns. Give
+    // the shell a short interval to finish destruction or create a replacement
+    // before searching for a taskbar again; otherwise the worker could briefly
+    // rediscover the window that's still being torn down.
+    Wh_Log(L"Forgot worker state for destroyed taskbar %p", taskbarWindow);
+    ScheduleRetry(state, kTaskbarRebuildRetryMs);
+}
+
 void HandleReleaseTimer(ActivationWorkerState& state) {
     CancelWorkerTimer(state.releaseTimerId);
 
@@ -2096,6 +2186,12 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
 
                 case kWorkerNativePointerLeaveMessage:
                     HandleNativePointerLeave(
+                        state,
+                        reinterpret_cast<HWND>(message.wParam));
+                    break;
+
+                case kWorkerTaskbarDestroyedMessage:
+                    HandleTaskbarDestroyed(
                         state,
                         reinterpret_cast<HWND>(message.wParam));
                     break;
