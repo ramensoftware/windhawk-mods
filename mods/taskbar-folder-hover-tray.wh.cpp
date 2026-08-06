@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.28
+// @version         1.29
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -6947,6 +6947,18 @@ void Open() {
     }
     try {
         std::lock_guard<std::mutex> lock(g_threadMutex);
+        // Re-checked under the lock, the same way StartScanThread and
+        // StartRetryThread do it: CloseAndWait takes this mutex after
+        // g_unloading is set, so either it sees this thread and joins it, or
+        // this sees the flag and never starts one. The check above the lock is
+        // only a fast path — on its own it loses the race where CloseAndWait
+        // swaps out an empty slot between that check and the emplace below,
+        // leaving a fresh message loop running in an image about to be
+        // unmapped.
+        if (g_unloading) {
+            g_active = false;
+            return;
+        }
         // Reap the previous run before reusing the slot: assigning over a
         // joinable std::thread calls std::terminate.
         if (g_thread) {
@@ -8602,11 +8614,22 @@ std::atomic<bool> g_menuDark{true};
 //
 // Every path through the hook is counted, including the ones that pass straight
 // to the original — those block in the modal loop just the same, with the return
-// address still inside this DLL. The owner is the hwnd handed to
-// TrackPopupMenuEx, which belongs to the thread running the menu; EndMenu only
-// cancels the calling thread's menu, so uninit has to drive it from there.
-std::atomic<int> g_explorerMenuActive{0};
-std::atomic<HWND> g_explorerMenuOwner{nullptr};
+// address still inside this DLL. Note the frame outlives the menu: a chosen
+// Move/Copy runs SHFileOperationW after TrackPopupMenuEx_orig has returned, so
+// an entry can stay live for as long as that operation takes.
+//
+// One entry per live call rather than a count and a single owner: the owner is
+// the hwnd handed to TrackPopupMenuEx, which belongs to the thread running that
+// menu, and EndMenu only cancels the calling thread's menu — so uninit needs
+// every owner, not whichever one entered last.
+[[clang::no_destroy]] std::mutex g_explorerMenuMutex;
+[[clang::no_destroy]] std::vector<HWND> g_explorerMenuOwners;
+
+bool ExplorerMenuOwnersSnapshot(std::vector<HWND>* out) {
+    std::lock_guard<std::mutex> lock(g_explorerMenuMutex);
+    *out = g_explorerMenuOwners;
+    return !out->empty();
+}
 
 decltype(&TrackPopupMenuEx) TrackPopupMenuEx_orig;
 
@@ -8617,13 +8640,17 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
                                  HWND hwnd,
                                  LPTPMPARAMS params) {
     struct MenuActiveGuard {
-        explicit MenuActiveGuard(HWND owner) {
-            g_explorerMenuOwner = owner;
-            g_explorerMenuActive.fetch_add(1);
+        HWND owner;
+        explicit MenuActiveGuard(HWND ownerWnd) : owner(ownerWnd) {
+            std::lock_guard<std::mutex> lock(g_explorerMenuMutex);
+            g_explorerMenuOwners.push_back(owner);
         }
         ~MenuActiveGuard() {
-            if (g_explorerMenuActive.fetch_sub(1) == 1) {
-                g_explorerMenuOwner = nullptr;
+            std::lock_guard<std::mutex> lock(g_explorerMenuMutex);
+            auto it = std::find(g_explorerMenuOwners.begin(),
+                                g_explorerMenuOwners.end(), owner);
+            if (it != g_explorerMenuOwners.end()) {
+                g_explorerMenuOwners.erase(it);
             }
         }
     } menuActive(hwnd);
@@ -9006,37 +9033,66 @@ void Wh_ModUninit() {
         threadWnd = FindCurrentProcessTaskbarWnd();
     }
 
+    // Every one of these waits is unbounded on purpose, for the reason
+    // FolderManager::CloseAndWait spells out: Wh_ModUninit runs on a Windhawk
+    // engine thread, not on any Explorer UI thread, so blocking here does not
+    // freeze the shell — while falling through early is exactly what unmaps the
+    // image with one of these frames still executing inside it. Cancellation is
+    // attempted for the first couple of seconds only; past that, whatever is
+    // still live is work that has to finish on its own (a folder copy can run
+    // for minutes) and re-asking every 20ms is pointless.
+    constexpr int kUninitWaitPollMs = 50;
+    constexpr int kUninitCancelForMs = 2000;
+    constexpr int kUninitLogEveryMs = 5000;
+    auto waitOut = [](PCWSTR what, auto stillLive, auto attemptCancel) {
+        for (int elapsedMs = 0; stillLive(); elapsedMs += kUninitWaitPollMs) {
+            if (elapsedMs < kUninitCancelForMs) {
+                attemptCancel();
+            } else if (elapsedMs % kUninitLogEveryMs == 0) {
+                Wh_Log(L"Uninit: still waiting on %s (%d s)", what,
+                       elapsedMs / 1000);
+            }
+            Sleep(kUninitWaitPollMs);
+        }
+    };
+
     // ShowItemContextMenu runs a modal TrackPopupMenuEx loop on the UI thread.
     // Teardown via RunFromWindowThread would destroy windows and let Windhawk
-    // unload the DLL while that frame is still live — EndMenu/CANCELMODE first
-    // and wait for g_menuActive to clear (same pattern as taskbar-folder-menus).
-    if (threadWnd && g_menuActive) {
-        for (int i = 0; g_menuActive && i < 100; i++) {
-            RunFromWindowThread(
-                threadWnd,
-                [](void*) {
-                    if (g_menuActive && !EndMenu() && g_menuOwnerWnd) {
-                        SendMessageW(g_menuOwnerWnd, WM_CANCELMODE, 0, 0);
-                    }
-                },
-                nullptr);
-            Sleep(20);
-        }
-        if (g_menuActive) {
-            Wh_Log(L"Uninit: shell context menu still active after wait");
-        }
+    // unload the DLL while that frame is still live — EndMenu/CANCELMODE first,
+    // then wait for g_menuActive to clear (same pattern as taskbar-folder-menus).
+    if (threadWnd) {
+        waitOut(
+            L"a shell context menu", [] { return g_menuActive.load(); },
+            [threadWnd] {
+                RunFromWindowThread(
+                    threadWnd,
+                    [](void*) {
+                        if (g_menuActive && !EndMenu() && g_menuOwnerWnd) {
+                            SendMessageW(g_menuOwnerWnd, WM_CANCELMODE, 0, 0);
+                        }
+                    },
+                    nullptr);
+            });
     }
 
     // Same problem, other menu: a classic Explorer/Desktop context menu opened
     // through TrackPopupMenuExHook is pumping its modal loop inside a frame of
     // this DLL, with no mod-owned window involved. EndMenu only cancels the
-    // calling thread's menu, so it has to be driven onto the owner window's
-    // thread — that is the Explorer window the user right-clicked in, not the
-    // taskbar.
-    if (AddToTaskbar::g_explorerMenuActive) {
-        for (int i = 0; AddToTaskbar::g_explorerMenuActive && i < 100; i++) {
-            HWND owner = AddToTaskbar::g_explorerMenuOwner.load();
-            if (owner && IsWindow(owner)) {
+    // calling thread's menu, so it has to be driven onto each owner window's
+    // thread — those are Explorer windows the user right-clicked in, not the
+    // taskbar. A live entry can also be post-menu work (SHFileOperationW for a
+    // Move/Copy), which no amount of EndMenu will cut short.
+    std::vector<HWND> menuOwners;
+    waitOut(
+        L"an Explorer context menu",
+        [&menuOwners] {
+            return AddToTaskbar::ExplorerMenuOwnersSnapshot(&menuOwners);
+        },
+        [&menuOwners] {
+            for (HWND owner : menuOwners) {
+                if (!IsWindow(owner)) {
+                    continue;
+                }
                 RunFromWindowThread(
                     owner,
                     [](void* param) {
@@ -9046,24 +9102,12 @@ void Wh_ModUninit() {
                     },
                     owner);
             }
-            Sleep(20);
-        }
-        if (AddToTaskbar::g_explorerMenuActive) {
-            Wh_Log(L"Uninit: Explorer context menu still active after wait");
-        }
-    }
+        });
 
     // Also wait out a deferred/synchronous shell verb. ASYNCOK usually makes
-    // this short; verbs that ignore it and show modal UI can still outlive
-    // this wait — see CMIC_MASK_ASYNCOK on the invoke path.
-    if (g_invokeActive) {
-        for (int i = 0; g_invokeActive && i < 100; i++) {
-            Sleep(20);
-        }
-        if (g_invokeActive) {
-            Wh_Log(L"Uninit: shell verb still active after wait");
-        }
-    }
+    // this short; verbs that ignore it and show modal UI take as long as the
+    // user does — see CMIC_MASK_ASYNCOK on the invoke path. Nothing to cancel.
+    waitOut(L"a shell verb", [] { return g_invokeActive.load(); }, [] {});
 
     if (threadWnd) {
         if (!RunFromWindowThread(threadWnd, teardownOnUiThread, nullptr)) {
