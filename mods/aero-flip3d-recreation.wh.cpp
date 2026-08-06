@@ -2,10 +2,11 @@
 // @id              aero-flip3d-recreation
 // @name            Aero Flip 3D Recreation
 // @description     This mod recreates the classic Windows Vista/7 Flip 3D effect in modern Windows versions
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
+// @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm -lmsimg32
 // ==/WindhawkMod==
@@ -24,17 +25,18 @@ It keeps window previews live and displays them in a 3D-style cascade similar to
 
 This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
 
-The mod has been tested on Windows 10 1809.
+The mod has been tested on Windows 10 1809, Windows 11 23H2 and Windows 11 24H2.
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
-| `Win+Tab` | Opens Aero Flip 3D |
+| `Win+Tab` | Opens Aero Flip 3D and auto-advances the selection while held |
 | `Ctrl+Alt+F12` | Opens or closes Aero Flip 3D manually. Use this as a fallback. |
 
 ### While Aero Flip 3D is open
 
 - Navigate: `Tab` / `Shift+Tab`, arrow keys, or mouse wheel
+- Hold `Tab` down to keep advancing automatically without repeated presses
 - Select: `Enter` or `Space`
 - Close: `Esc`
 - Emergency exit: `Ctrl+Shift+Esc` opens Task Manager
@@ -65,6 +67,8 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 - The native Alt+Tab window switcher is not modified and continues to work normally.
 - While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.
 - To restore the original Windows Task View behavior, simply disable or uninstall the mod.
+## Credits 
+- Tails - Testing the mod on Windows 11 23H2 and proposing the fix that made it work there (it has since been verified on Windows 11 24H2 as well)
 */
 // ==/WindhawkModReadme==
 
@@ -74,8 +78,8 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
   $name: Simulated 3D cards
   $description: Tilt the cards in 3D instead of showing them flat.
 - autoCycle: false
-  $name: Auto-cycle while Win is held
-  $description: Automatically advance the selection every 250 ms while Win is held, in addition to Tab/Shift+Tab. Off by default so Tab lets you step to an exact window.
+  $name: (Legacy, unused) Auto-cycle while Win is held
+  $description: Superseded — Win+Tab now always auto-advances the selection while held. Kept only for settings-file compatibility; has no effect.
 - visibleWindowCount: 0
   $name: Number of visible windows
   $description: How many cards are shown in the deck at once. 0 = auto-detect based on your PC's RAM/CPU (the default).
@@ -762,11 +766,17 @@ static constexpr UINT_PTR kAnimationTimerId = 1;
 static constexpr UINT_PTR kFailsafeTimerId = 2;
 static constexpr UINT_PTR kAutoCycleTimerId = 3;
 static constexpr UINT kAutoCycleIntervalMs = 250;  // Vista/7 Win-held cycle cadence.
+
+// Continuous advance while Tab itself is held down (independent of the
+// Win-held autoCycle setting above): pressing and holding Tab repeatedly
+// steps the selection forward without needing to release/press again.
+static constexpr UINT_PTR kTabHoldCycleTimerId = 5;  // NOTE: 4 is kWinTabClaimTimerId — must not collide.
+static constexpr UINT kTabHoldCycleIntervalMs = 350;  // Slightly slower than autoCycle so the two don't fight if both are active.
 // Controller-window timer: a bounded startup claim for Win+Tab. It retries
 // exactly 20 times, never as a permanent reclaim/polling loop.
 static constexpr UINT_PTR kWinTabClaimTimerId = 4;
 static constexpr UINT kWinTabClaimIntervalMs = 100;
-static constexpr int kWinTabClaimAttempts = 20;
+static constexpr int kWinTabClaimAttempts = 50;  // ~5s window: was 20/2s, bumped since explorer/Task View sometimes wins the race past 2s.
 // Baseline animation period (~60 fps). The value actually used is
 // g_perf.frameIntervalMs, which drops to 20 ms (50 fps) or 25 ms (40 fps) on
 // low-end machines. This limits DWM strip updates during animations.
@@ -2640,6 +2650,7 @@ static void CleanupFlipResourcesOnOverlayThread() {
     if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
         KillTimer(g_hOverlayWnd, kFailsafeTimerId);
         KillTimer(g_hOverlayWnd, kAutoCycleTimerId);
+        KillTimer(g_hOverlayWnd, kTabHoldCycleTimerId);
     }
     g_animationInProgress = false;
     g_animationKind = FlipAnimationKind::None;
@@ -2891,7 +2902,10 @@ static bool ActivateFlip3DImpl(TriggerModifier triggerModifier, int initialDelta
         !SetTimer(g_hOverlayWnd, kFailsafeTimerId, kFailsafeAutoCloseMs, nullptr)) {
         Wh_Log(L"SetTimer(failsafe) failed (code %u)", static_cast<unsigned>(GetLastError()));
     }
-    if (g_settings.autoCycle && !g_persistentMode.load(std::memory_order_acquire) &&
+    // Win+Tab now always auto-advances the selection while held (this
+    // replaces the old opt-in autoCycle setting).
+    const bool wantsAutoCycle = triggerModifier == TriggerModifier::Win;
+    if (wantsAutoCycle && !g_persistentMode.load(std::memory_order_acquire) &&
         !SetTimer(g_hOverlayWnd, kAutoCycleTimerId, kAutoCycleIntervalMs, nullptr)) {
         Wh_Log(L"SetTimer(auto-cycle) failed (code %u)", static_cast<unsigned>(GetLastError()));
     }
@@ -2997,9 +3011,27 @@ try {
 
                     case VK_RIGHT:
                     case VK_DOWN:
-                    case VK_TAB:
                         NavigateSelection(1);
                         return 0;
+
+                    case VK_TAB:
+                        NavigateSelection(1);
+                        // Start (or keep alive) the hold-to-advance timer so
+                        // that simply keeping Tab pressed continues to step
+                        // through the deck without repeated key presses.
+                        if (!(lParam & 0x40000000)) {  // ignore key-repeat re-arm, only arm on the initial press
+                            SetTimer(hwnd, kTabHoldCycleTimerId, kTabHoldCycleIntervalMs, nullptr);
+                        }
+                        return 0;
+                }
+                break;
+            }
+
+            case WM_KEYUP:
+            case WM_SYSKEYUP: {
+                if (wParam == VK_TAB) {
+                    KillTimer(hwnd, kTabHoldCycleTimerId);
+                    return 0;
                 }
                 break;
             }
@@ -3046,6 +3078,17 @@ try {
                         NavigateSelection(1);
                     } else {
                         KillTimer(hwnd, kAutoCycleTimerId);
+                    }
+                    return 0;
+                }
+                if (wParam == kTabHoldCycleTimerId) {
+                    // GetAsyncKeyState reflects physical key state directly,
+                    // independent of whether WM_KEYUP was delivered to this
+                    // window, so it is the reliable way to detect release.
+                    if (g_isActive && (GetAsyncKeyState(VK_TAB) & 0x8000) != 0) {
+                        NavigateSelection(1);
+                    } else {
+                        KillTimer(hwnd, kTabHoldCycleTimerId);
                     }
                     return 0;
                 }
@@ -3107,7 +3150,7 @@ try {
             case WM_HOTKEY:
                 switch (static_cast<int>(wParam)) {
                     case kHotkeyWinTab:
-                        // Win+Tab: transient mode. Release Win = confirm.
+                        // Win+Tab: transient mode, auto-advance while held.
                         if (g_isActive) {
                             NavigateSelection(1);
                         } else {
