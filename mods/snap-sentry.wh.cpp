@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.10.0
+// @version         0.11.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -66,9 +66,9 @@ stored in clipboard history, cloud sync, backups, or other programs.
 - delaySeconds: 5
   $name: Seconds before deletion
   $description: With the popup on, this is the countdown before the automatic action, and 0 waits for you to choose, keeping the file if the popup is never answered. With the popup off, 0 deletes as soon as clipboard copying finishes.
-- deleteFile: true
+- deleteFile: false
   $name: Delete the saved screenshot
-  $description: Only applies to Image and None clipboard modes. File and Path modes reference the file, so deletion is always suppressed for them.
+  $description: Off by default, since deletion is the irreversible part; turn it on to opt in. Only applies to Image and None clipboard modes. File and Path modes reference the file, so deletion is always suppressed for them.
 - recycle: true
   $name: Send deletions to the Recycle Bin
   $description: Deleted screenshots go to the Recycle Bin so they can be restored. Turn off to delete permanently.
@@ -133,6 +133,8 @@ INotificationActivationCallback : public IUnknown {
 DEFINE_GUID(IID_INotificationActivationCallback,
             0x53e31837, 0x6600, 0x4a81, 0x93, 0x95, 0x75, 0xcf, 0xfe, 0x74,
             0x6f, 0x94);
+
+#include <windhawk_utils.h>  // WindhawkUtils::StringSetting (RAII settings strings)
 
 #include <wrl/client.h>
 #include <wrl/wrappers/corewrappers.h>
@@ -275,19 +277,13 @@ static void LoadSettings() {
     s.popup = Wh_GetIntSetting(L"showActionPopup") != 0;
     s.recycle = Wh_GetIntSetting(L"recycle") != 0;
     s.renameFromWindow = Wh_GetIntSetting(L"renameFromWindow") != 0;
+    // Kept as its own toggle so file paths can be withheld from a log the user
+    // might share; Windhawk's own logging switch is all-or-nothing.
     s.logDetails = Wh_GetIntSetting(L"logDetails") != 0;
 
-    PCWSTR mode = Wh_GetStringSetting(L"clipboardMode");
-    s.mode = mode;
-    Wh_FreeStringSetting(mode);
-
-    PCWSTR pathFormat = Wh_GetStringSetting(L"pathFormat");
-    s.pathFormat = pathFormat;
-    Wh_FreeStringSetting(pathFormat);
-
-    PCWSTR folder = Wh_GetStringSetting(L"folder");
-    s.folder = folder;
-    Wh_FreeStringSetting(folder);
+    s.mode = WindhawkUtils::StringSetting::make(L"clipboardMode").get();
+    s.pathFormat = WindhawkUtils::StringSetting::make(L"pathFormat").get();
+    s.folder = WindhawkUtils::StringSetting::make(L"folder").get();
     if (s.folder.empty()) {
         s.folder = DefaultScreenshotsFolder();
     }
@@ -522,8 +518,10 @@ static void WriteBottomUp(BYTE* dest, const BYTE* topDown, UINT width,
     }
 }
 
-// Decodes any WIC-supported image into self-contained CF_DIBV5 + CF_DIB payloads.
-// This is what makes the copied image survive deletion of the source file.
+// Decodes any WIC-supported image into a self-contained CF_DIBV5 payload, which is
+// what makes the copied image survive deletion of the source file. Windows
+// synthesizes CF_DIB and CF_BITMAP from CF_DIBV5 on demand, so publishing those too
+// would just be another full-size copy of the bitmap (it runs in a 32-bit process).
 static bool ClipboardImage(const std::wstring& path) {
     IWICImagingFactory* factory = nullptr;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
@@ -536,7 +534,6 @@ static bool ClipboardImage(const std::wstring& path) {
     IWICFormatConverter* converter = nullptr;
     BYTE* topDown = nullptr;
     HGLOBAL hV5 = nullptr;
-    HGLOBAL hDib = nullptr;
     bool ok = false;
 
     do {
@@ -569,8 +566,7 @@ static bool ClipboardImage(const std::wstring& path) {
         }
 
         hV5 = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPV5HEADER) + pixels);
-        hDib = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPINFOHEADER) + pixels);
-        if (!hV5 || !hDib) {
+        if (!hV5) {
             break;
         }
 
@@ -595,22 +591,6 @@ static bool ClipboardImage(const std::wstring& path) {
         WriteBottomUp(v5 + sizeof(BITMAPV5HEADER), topDown, width, height);
         GlobalUnlock(hV5);
 
-        BYTE* dib = (BYTE*)GlobalLock(hDib);
-        if (!dib) {
-            break;
-        }
-        auto* bih = (BITMAPINFOHEADER*)dib;
-        ZeroMemory(bih, sizeof(*bih));
-        bih->biSize = sizeof(BITMAPINFOHEADER);
-        bih->biWidth = (LONG)width;
-        bih->biHeight = (LONG)height;
-        bih->biPlanes = 1;
-        bih->biBitCount = 32;
-        bih->biCompression = BI_RGB;
-        bih->biSizeImage = (DWORD)pixels;
-        WriteBottomUp(dib + sizeof(BITMAPINFOHEADER), topDown, width, height);
-        GlobalUnlock(hDib);
-
         if (!OpenClipboard(nullptr)) {
             break;
         }
@@ -619,19 +599,12 @@ static bool ClipboardImage(const std::wstring& path) {
         if (setV5) {
             hV5 = nullptr;  // Clipboard owns it now.
         }
-        bool setDib = SetClipboardData(CF_DIB, hDib) != nullptr;
-        if (setDib) {
-            hDib = nullptr;
-        }
         CloseClipboard();
-        ok = setV5 || setDib;
+        ok = setV5;
     } while (false);
 
     if (hV5) {
         GlobalFree(hV5);
-    }
-    if (hDib) {
-        GlobalFree(hDib);
     }
     free(topDown);
     if (converter) {
@@ -1124,15 +1097,13 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     }
     if (setting == NotificationSetting_DisabledForUser ||
         setting == NotificationSetting_DisabledByGroupPolicy) {
-        // Off for the whole account or by policy: don't substitute a dialog, just
-        // let the countdown run into the configured automatic action.
-        Wh_Log(L"Notifications off system-wide (setting=%d); using the automatic "
-               L"action",
+        // Off for the whole account or by policy: there is no way to ask, and a
+        // dialog on every screenshot would be worse than the toast they silenced.
+        // Since the user was never actually prompted, keep the file rather than run
+        // the destructive automatic action.
+        Wh_Log(L"Notifications off system-wide (setting=%d); keeping the file",
                (int)setting);
-        action = ACTION_AUTO;
-        if (s.delaySeconds > 0 && WaitStop((DWORD)s.delaySeconds * 1000)) {
-            action = ACTION_KEEP;  // Stop requested during the wait: never delete.
-        }
+        action = ACTION_KEEP;
         return true;
     }
     if (setting != NotificationSetting_Enabled) {
@@ -1651,6 +1622,12 @@ static bool g_toastRegSynced = false;
 // notification, and a SnapSentry entry sitting in Start and in Search would be
 // there for nothing.
 static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
+    // Reclaim the per-AUMID notification key on unload before the early return
+    // below: with the popup already off at unload the requested state matches and
+    // we would otherwise return without ever clearing it, stranding the key.
+    if (unloading) {
+        RemoveNotificationSettings();
+    }
     if (g_toastRegSynced && wantPopup == g_toastRegApplied) {
         return;
     }
@@ -1687,12 +1664,9 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
     RemoveAumidRegistration();
     RemoveClsidRegistration();
     // The per-AUMID Notifications\Settings key also holds the user's own per-app
-    // choices (enabled, banner, sound), so only reclaim it when the mod is actually
-    // going away. Clearing it on an ordinary popup-off toggle would silently reset
-    // a preference the user set in Windows Settings.
-    if (unloading) {
-        RemoveNotificationSettings();
-    }
+    // choices (enabled, banner, sound), so it is reclaimed only on unload (handled
+    // at the top of this function), never on an ordinary popup-off toggle, which
+    // would silently reset a preference the user set in Windows Settings.
     g_toastRegApplied = false;
 }
 
@@ -1860,8 +1834,10 @@ static DWORD WINAPI WatchThread(LPVOID) {
     while (!WaitStop(0)) {
         Settings s = SnapshotSettings();
         if (!s.enabled || s.folder.empty()) {
+            // Wait indefinitely: a settings change signals g_reloadEvent, so there
+            // is nothing to poll for here.
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
-            WaitForMultipleObjects(2, idle, FALSE, 500);
+            WaitForMultipleObjects(2, idle, FALSE, INFINITE);
             continue;
         }
 
