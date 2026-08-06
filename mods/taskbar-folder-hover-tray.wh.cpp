@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.27
+// @version         1.28
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -51,7 +51,8 @@ Windows 11 only.
 
 - Right click any folder button already on the taskbar and choose
   **Manage folders...**
-- Or, in this mod's settings, switch on **Open the folder manager** and save.
+- Or, with nothing pinned yet, click the **➕** button the mod puts on the
+  taskbar — it is there only until the first folder is pinned.
 
 The quickest way to add one in the first place is straight from Explorer:
 right click any folder in Explorer or on the Desktop, pick **Show more
@@ -182,17 +183,6 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 
 // ==WindhawkModSettings==
 /*
-- manageFolders: false
-  $name: 1. Behavior ▸ Open the folder manager
-  $description: >-
-    Which folders appear on your taskbar is NOT set here — it is set in the
-    Taskbar Folders window. Switch this on and save to open it, then add, edit,
-    reorder, pin, unpin and remove folders there, each with its own name and
-    icon. This is a button rather than a preference: switching it off again
-    does nothing, so just leave it wherever it lands. You can also open the
-    same window at any time by right clicking a folder button on the taskbar.
-    Why it works this way is explained under Details.
-
 - openFolderOnClick: true
   $name: 1. Behavior ▸ Click opens the folder
   $description: Left clicking a taskbar button opens the folder in File Explorer.
@@ -4940,8 +4930,17 @@ UIElement MakeButtonContent(const FolderEntry& entry,
                 try {
                     WCHAR url[2048];
                     DWORD urlLen = ARRAYSIZE(url);
-                    if (SUCCEEDED(UrlCreateFromPathW(icon.c_str(), url, &urlLen,
-                                                     0))) {
+                    // S_OK only: a real local path was converted to a file://
+                    // URL. UrlCreateFromPathW returns S_FALSE and copies the
+                    // input through unchanged when it is already a URL, so
+                    // SUCCEEDED() here would let an http(s) icon value reach
+                    // BitmapImage.UriSource and have XAML fetch it from a
+                    // remote server inside explorer.exe. The value is not
+                    // always the user's own either — ReadFolderCustomIcon
+                    // takes IconResource straight out of a folder's
+                    // desktop.ini when it is pinned from Explorer.
+                    if (UrlCreateFromPathW(icon.c_str(), url, &urlLen, 0) ==
+                        S_OK) {
                         Image image;
                         image.Width(iconExtent);
                         image.Height(iconExtent);
@@ -7208,6 +7207,21 @@ Grid BuildHostGrid(TaskbarHost* host) {
         folders = g_settings.folders;
     }
 
+    // No buttons at all — a fresh install, or every folder unpinned — means
+    // nothing on the taskbar to right-click, and the Taskbar Folders window is
+    // only reachable from a button. Stand in a single "add a folder" button so
+    // there is always a way in. It is not in the store and has no entry of its
+    // own: an emoji icon and an empty path, which every index-taking path
+    // (hover, click, right-click) already treats as "nothing to open", since
+    // FolderPathForButton returns empty for it.
+    const bool placeholder = folders.empty();
+    if (placeholder) {
+        FolderEntry add;
+        add.name = L"Add a folder";
+        add.icon = L"➕";
+        folders.push_back(std::move(add));
+    }
+
     for (size_t i = 0; i < folders.size(); i++) {
         const auto& entry = folders[i];
 
@@ -7264,8 +7278,15 @@ Grid BuildHostGrid(TaskbarHost* host) {
         state.contentGrid = content;
 
         // No taskbar-button tooltip; the folder name is shown in the hover
-        // grid.
-        ToolTipService::SetToolTip(button, nullptr);
+        // grid. The placeholder has no grid to show it in, so it says what it
+        // is on hover instead.
+        if (placeholder) {
+            ToolTipService::SetToolTip(
+                button, winrt::box_value(winrt::hstring(
+                            L"Add a folder to the taskbar")));
+        } else {
+            ToolTipService::SetToolTip(button, nullptr);
+        }
 
         Grid::SetColumn(button, (int)i);
         hostGrid.Children().Append(button);
@@ -7273,8 +7294,15 @@ Grid BuildHostGrid(TaskbarHost* host) {
         int folderIndex = (int)i;
         HWND taskbarWnd = host->hwnd;
         state.clickToken = button.Click(
-            [folderIndex](winrt::Windows::Foundation::IInspectable const&,
-                          RoutedEventArgs const&) {
+            [folderIndex, placeholder](
+                winrt::Windows::Foundation::IInspectable const&,
+                RoutedEventArgs const&) {
+                if (placeholder) {
+                    if (!g_unloading) {
+                        FolderManager::Open();
+                    }
+                    return;
+                }
                 OnButtonClicked(folderIndex);
             });
         Border highlightRef = highlight;
@@ -7324,13 +7352,21 @@ Grid BuildHostGrid(TaskbarHost* host) {
                 }
             });
         state.rightTapToken = button.RightTapped(
-            [folderIndex](
+            [folderIndex, placeholder](
                 winrt::Windows::Foundation::IInspectable const& sender,
                 winrt::Windows::UI::Xaml::Input::RightTappedRoutedEventArgs const&
                     args) {
                 // Unpin/hide is offered for every folder button now, regardless
                 // of whether it came from Settings or the Explorer pin action.
                 args.Handled(true);
+                // Nothing to unpin on the placeholder — either button opens the
+                // manager, which is the only thing it is there for.
+                if (placeholder) {
+                    if (!g_unloading) {
+                        FolderManager::Open();
+                    }
+                    return;
+                }
                 OnButtonRightClicked(folderIndex, sender.try_as<Button>());
             });
 
@@ -7969,7 +8005,7 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
 }
 
 bool InjectHostGridForTaskbar(HWND taskbarWnd) {
-    if (!taskbarWnd || g_settings.folders.empty()) {
+    if (!taskbarWnd) {
         return false;
     }
 
@@ -8067,12 +8103,10 @@ bool InjectHostGridsOnTaskbarThread() {
         // hover/open and RequestScan see filesystem paths (no CoInitializeEx).
         ResolvePendingFolderEntries();
 
-        if (g_settings.folders.empty()) {
-            Wh_Log(L"No folders configured, nothing to inject");
-            RemoveAllHostGrids();
-            return true;
-        }
-
+        // An empty folder list is not an early-out: BuildHostGrid stands in the
+        // "add a folder" placeholder button, the only route to the manager when
+        // there is no real button to right-click.
+        //
         // Drop hosts for taskbar HWNDs that no longer exist (unplugged monitors)
         // without tearing down every seated host on each retry.
         if (g_taskbarHosts) {
@@ -8558,6 +8592,22 @@ std::wstring CreateShortcutIn(const std::wstring& target,
 // needs is parked here instead of captured.
 std::atomic<bool> g_menuDark{true};
 
+// An Explorer/Desktop context menu opened through this hook keeps a frame of
+// this DLL live for as long as the menu is up (TrackPopupMenuEx_orig runs the
+// menu's modal loop), and for part of that time a WH_CBT hook whose proc is also
+// in this DLL is installed. Wh_ModUninit has to wait that out — or Windhawk
+// FreeLibrary's the image and dismissing the menu returns into unmapped memory.
+// Not hypothetical: Wh_ModSettingsChanged asks for a reload whenever
+// explorerMenu changes.
+//
+// Every path through the hook is counted, including the ones that pass straight
+// to the original — those block in the modal loop just the same, with the return
+// address still inside this DLL. The owner is the hwnd handed to
+// TrackPopupMenuEx, which belongs to the thread running the menu; EndMenu only
+// cancels the calling thread's menu, so uninit has to drive it from there.
+std::atomic<int> g_explorerMenuActive{0};
+std::atomic<HWND> g_explorerMenuOwner{nullptr};
+
 decltype(&TrackPopupMenuEx) TrackPopupMenuEx_orig;
 
 BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
@@ -8566,6 +8616,18 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
                                  int y,
                                  HWND hwnd,
                                  LPTPMPARAMS params) {
+    struct MenuActiveGuard {
+        explicit MenuActiveGuard(HWND owner) {
+            g_explorerMenuOwner = owner;
+            g_explorerMenuActive.fetch_add(1);
+        }
+        ~MenuActiveGuard() {
+            if (g_explorerMenuActive.fetch_sub(1) == 1) {
+                g_explorerMenuOwner = nullptr;
+            }
+        }
+    } menuActive(hwnd);
+
     HWND defView = g_settings.explorerMenu ? FindShellViewWindow(hwnd) : nullptr;
     if (!defView) {
         return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
@@ -8693,31 +8755,45 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     // those would darken them on a light theme. Resolved once here rather than
     // inside the hook, which cannot capture and should not be doing WinRT work
     // while a menu is coming up.
+    //
+    // Scoped so the hook comes out even if TrackPopupMenuEx_orig unwinds
+    // unexpectedly — its proc lives in this DLL and must not stay registered
+    // once the menu is done with.
     g_menuDark = IsDarkTheme();
-    HHOOK cbtHook = SetWindowsHookExW(
-        WH_CBT,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HCBT_CREATEWND) {
-                HWND hWnd = (HWND)wParam;
-                CBT_CREATEWNDW* cbt = (CBT_CREATEWNDW*)lParam;
-                LPCWSTR cls = cbt->lpcs->lpszClass;
-                if (IS_INTRESOURCE(cls) && LOWORD((ULONG_PTR)cls) == 32768) {
-                    BOOL dark = g_menuDark.load() ? TRUE : FALSE;
-                    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                                          &dark, sizeof(dark));
-                    int corner = DWMWCP_ROUND;
-                    DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                                          &corner, sizeof(corner));
+    UINT result;
+    {
+        struct CbtHookGuard {
+            HHOOK hook = nullptr;
+            ~CbtHookGuard() {
+                if (hook) {
+                    UnhookWindowsHookEx(hook);
                 }
             }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, GetCurrentThreadId());
+        } cbtGuard;
+        cbtGuard.hook = SetWindowsHookExW(
+            WH_CBT,
+            [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+                if (nCode == HCBT_CREATEWND) {
+                    HWND hWnd = (HWND)wParam;
+                    CBT_CREATEWNDW* cbt = (CBT_CREATEWNDW*)lParam;
+                    LPCWSTR cls = cbt->lpcs->lpszClass;
+                    if (IS_INTRESOURCE(cls) &&
+                        LOWORD((ULONG_PTR)cls) == 32768) {
+                        BOOL dark = g_menuDark.load() ? TRUE : FALSE;
+                        DwmSetWindowAttribute(hWnd,
+                                              DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                              &dark, sizeof(dark));
+                        int corner = DWMWCP_ROUND;
+                        DwmSetWindowAttribute(hWnd,
+                                              DWMWA_WINDOW_CORNER_PREFERENCE,
+                                              &corner, sizeof(corner));
+                    }
+                }
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            },
+            nullptr, GetCurrentThreadId());
 
-    UINT result = TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
-
-    if (cbtHook) {
-        UnhookWindowsHookEx(cbtHook);
+        result = TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
     }
 
     if (!(flags & TPM_RETURNCMD) || result < kMinId) {
@@ -8880,16 +8956,6 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
         RequestReloadUI();
     }
 
-    // "Open the folder manager" acts as a button: it fires when switched on,
-    // and switching it off again is a no-op. Windhawk's settings schema has no
-    // button widget, and a mod cannot clear the flag itself, so the previous
-    // value is tracked here to catch the off -> on edge only. Tracked even on
-    // the reload path, so the edge is not replayed after the reload.
-    int manage = Wh_GetIntSetting(L"manageFolders");
-    if (manage && !Wh_GetIntValue(L"manageFoldersPrev", 0) && !reload) {
-        FolderManager::Open();
-    }
-    Wh_SetIntValue(L"manageFoldersPrev", manage);
     return TRUE;
 }
 
@@ -8958,6 +9024,32 @@ void Wh_ModUninit() {
         }
         if (g_menuActive) {
             Wh_Log(L"Uninit: shell context menu still active after wait");
+        }
+    }
+
+    // Same problem, other menu: a classic Explorer/Desktop context menu opened
+    // through TrackPopupMenuExHook is pumping its modal loop inside a frame of
+    // this DLL, with no mod-owned window involved. EndMenu only cancels the
+    // calling thread's menu, so it has to be driven onto the owner window's
+    // thread — that is the Explorer window the user right-clicked in, not the
+    // taskbar.
+    if (AddToTaskbar::g_explorerMenuActive) {
+        for (int i = 0; AddToTaskbar::g_explorerMenuActive && i < 100; i++) {
+            HWND owner = AddToTaskbar::g_explorerMenuOwner.load();
+            if (owner && IsWindow(owner)) {
+                RunFromWindowThread(
+                    owner,
+                    [](void* param) {
+                        if (!EndMenu()) {
+                            SendMessageW((HWND)param, WM_CANCELMODE, 0, 0);
+                        }
+                    },
+                    owner);
+            }
+            Sleep(20);
+        }
+        if (AddToTaskbar::g_explorerMenuActive) {
+            Wh_Log(L"Uninit: Explorer context menu still active after wait");
         }
     }
 
