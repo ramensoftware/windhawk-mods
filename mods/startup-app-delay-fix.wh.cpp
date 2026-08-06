@@ -23,8 +23,8 @@ The redirect key is in-memory only. The mod deletes it on a normal disable,
 and Windows discards it when the user registry hive unloads at sign-out or
 shutdown if Explorer exits unexpectedly.
 
-The settings are read when Explorer starts, so enabling or disabling the mod
-takes effect after the next sign-in or Explorer restart.
+Windows reads the startup-delay values when Explorer starts, so enabling or
+disabling the mod takes effect after the next sign-in or Explorer restart.
 
 This only affects the delay Explorer applies to startup-item processing. It
 doesn't change delays configured by other systems, such as Task Scheduler.
