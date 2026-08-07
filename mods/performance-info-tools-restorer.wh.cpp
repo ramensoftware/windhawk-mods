@@ -7,17 +7,20 @@
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        control.exe
-// @architecture   x86-64
-// @compilerOptions -lurlmon -lcomctl32 -ladvapi32 -lole32 -luuid -luser32 -lpsapi
+// @architecture   amd64
+// @compilerOptions -lwininet -ladvapi32 -lole32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Performance Information and Tools Restorer
-
+## About
 This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.
 
 The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
+## Screenshot
+
+![performance](https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/performance.png)
 
 ## Features
 
@@ -25,13 +28,21 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 - **Automatic setup**: The required PerfCenterCPL.dll is downloaded and verified automatically, nothing to install manually
 - **Right DLL for the system**: Uses the Windows 8 DLL on Windows 8.1/10/11
 - **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. Normal API strings are intercepted through `LoadStringW`/`LoadStringA`; DirectUI `resstr(...)` values use a private, real PE resource module
-- **Conservative resource handling**: The mod implements a conservative approach to be more stable.
-- **100% reversible**: Disabling the mod removes everything it created (registry entries, downloaded files, loaded DLL)
+- **Conservative resource handling**: The mod implements a conservative approach to be more stable
+- **100% reversible**: Disabling the mod removes everything it created (downloaded files, private resource module, loaded DLL). No registry keys are ever written
 
 ## Requirements
 
 - **Windows 10 or Windows 11** (64-bit) with the native Control Panel
 - An internet connection the first time the mod runs (to download the DLL)
+
+## Design and safety notes
+
+- The setup step (download + verification) runs on a background thread so it never blocks Explorer startup, and it is serialized across processes with a named mutex so two Explorer/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place.
+- The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang Explorer or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
+- If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart Explorer to retry).
+- The mod only stores files inside its own folder, `%ProgramData%\Windhawk\Engine\ModsWritable\performance-info-tools-restorer`, and never touches files it did not create.
+- All registry values are provided through an in-memory virtualization layer; nothing is persisted to the registry, so uninstalling the mod leaves no traces.
 
 ## Known limitations
 
@@ -43,7 +54,7 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 
 - **Cips** — Testing the mod on Windows 11 25H2
 
-If any issues are encountered, please report them on the author of the mod.
+If any issues are encountered, please report them to the mod's author.
 */
 // ==/WindhawkModReadme==
 
@@ -69,37 +80,35 @@ If any issues are encountered, please report them on the author of the mod.
   $description: ON = use the embedded translations in the language selected above, including DirectUI page text. OFF = use the DLL's own resources.
 - keepFilesOnDisable: false
   $name: Keep downloaded files when the mod is disabled
-  $description: OFF (default) = when the mod is disabled/uninstalled, PerfCenterCPL.dll, the variant marker and any legacy MUI copies are removed from the LegacyStore folder and the DLL is unloaded from memory. ON = keep the files for a faster re-enable.
+  $description: OFF (default) = when the mod is disabled/uninstalled, the downloaded DLL, the variant marker and any stale copies are removed from the mod's own folder and the DLL is unloaded from memory. ON = keep the files for a faster re-enable.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <urlmon.h>
-#include <shellapi.h>
-#include <psapi.h>
+#include <wininet.h>
+#include <wincrypt.h>
 #include <combaseapi.h>
 #include <string>
 #include <unordered_map>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <utility>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <windhawk_utils.h>
 
-// Shared file-system helpers.
+// =============================================================================
+// Constants - the mod keeps all of its files in its own folder and never
+// shares (or deletes) files created by other mods.
+// =============================================================================
 static const wchar_t* kDllRelativeName = L"PerfCenterCPL.dll";
-
-void EnsureDirectoryExists(const std::wstring& directory) {
-    DWORD attributes = GetFileAttributesW(directory.c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES ||
-        !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
-        CreateDirectoryW(directory.c_str(), nullptr);
-    }
-}
+static const wchar_t* kStoreFolderName = L"performance-info-tools-restorer";
 
 // =============================================================================
 // EMBEDDED STRING CATALOG - No MUI file is generated or required
 // =============================================================================
-
 enum class MuiLanguage {
     EN_US, IT_IT, ES_ES, FR_FR, TR_TR, RU_RU, ZH_CN, DE_DE, PT_BR, PL_PL
 };
@@ -315,15 +324,13 @@ static MuiLanguage DetectMuiLanguage(const wchar_t* locale) {
 }
 
 // END OF EMBEDDED STRING CATALOG
-// =============================================================================
 
 static const wchar_t* kAppletClsidEnglish = L"{78f3955e-3b90-4184-bd14-5397c15f1efc}";
 static const wchar_t* kAppletDisplayNameEN = L"Performance Information and Tools";
 static const wchar_t* kLayoutFolderClsid = L"{328B0346-7EAF-4BBE-A479-7CB88A095F5B}";
 static const wchar_t* kProviderClsid = L"{9cb535dd-4354-42a1-8281-bbb58defa741}";
-static const DWORD kShellFolderAttributes = 0xa80001a0; // + SFGAO_BROWSABLE (0x08000000): richiesto perché il Pannello di controllo navighi l'item in-place al doppio click
+static const DWORD kShellFolderAttributes = 0xa80001a0; // + SFGAO_BROWSABLE (0x08000000): required for the Control Panel to navigate the item in-place on double click
 static const DWORD kInitResourceId = 100;
-static const wchar_t* kDirPath = L"%ProgramData%\\Windhawk\\Engine\\ModsWritable\\LegacyStore";
 // Windows 8 SP-less RTM x64 (6.2.9200.16384, win8_rtm.120725-1247). Verified URL.
 static const wchar_t* kDownloadUrlWin8 = L"https://msdl.microsoft.com/download/symbols/PerfCenterCPL.dll/501093259D000/PerfCenterCPL.dll";
 // Windows 7 SP1 x64, 6.1.7601.23403 (win7sp1_ldr.160325-0600).
@@ -334,127 +341,524 @@ static const wchar_t* kDownloadUrlWin8 = L"https://msdl.microsoft.com/download/s
 static const wchar_t* kDownloadUrlWin7 = L"https://msdl.microsoft.com/download/symbols/PerfCenterCPL.dll/56F58B33A5000/PerfCenterCPL.dll";
 static const wchar_t* kVariantMarkerName = L"PerfCenterCPL.dll.variant";
 static const wchar_t* kLocalizedResourcePrefix = L"PerfCenterCPL.resources-";
-static const DWORD kMinPlausibleDllSize = 4096;
-enum class DllVariant { Win8, Win7 };
-static GUID kProviderGuid = {0x9CB535DD,0x4354,0x42A1,{0x82,0x81,0xBB,0xB5,0x8D,0xEF,0xA7,0x41}};
-static const IID IID_IClassFactory_GUID = {0x00000001,0x0000,0x0000,{0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
-std::wstring g_expandedDllPath; bool g_setupDone=false; bool g_dllVerifiedOk=false; HMODULE g_hPerfCenter=nullptr; bool g_forceTranslations=true; DllVariant g_activeVariant=DllVariant::Win8;
-std::wstring g_localizedResourcePath;
-HMODULE g_hLocalizedResources=nullptr;
-static std::mutex g_localizedResourceMutex;
-static bool g_languageAutomatic=true;
-static MuiLanguage g_forcedLanguage=MuiLanguage::EN_US;
-std::wstring g_clsidLower,g_clsidSuffix,g_defaultIconSuffix,g_inprocSuffix,g_shellFolderSuffix,g_instanceSuffix,g_initPropBagSuffix,g_namespaceSuffix;
-std::wstring g_providerClsidLower,g_providerSuffix,g_providerInprocSuffix; std::wstring g_namespaceHkcuPath;
+// The real files are ~610-660 KB; a 64 KB floor still catches a truncated download
+// cheaply while tolerating any legitimate build. (The SHA-256 check below is the
+// authoritative integrity test.)
+static const DWORD kMinPlausibleDllSize = 65536;
 
-std::wstring ToLower(const std::wstring& s){ std::wstring r=s; for(auto&c:r) c=towlower(c); return r; }
-bool EndsWith(const std::wstring& s,const std::wstring& suf){ if(s.size()<suf.size()) return false; return s.compare(s.size()-suf.size(),suf.size(),suf)==0; }
-bool ContainsRelevantKeyword(const std::wstring& s){ std::wstring l=ToLower(s); return l.find(L"clsid")!=std::wstring::npos || l.find(L"controlpanel")!=std::wstring::npos || l.find(L"shell extensions")!=std::wstring::npos; }
-std::wstring ExpandEnv(const wchar_t* p){ wchar_t b[MAX_PATH]{}; ExpandEnvironmentStringsW(p,b,MAX_PATH); return std::wstring(b); }
-bool VerifyDownloadedDllLooksValid(const std::wstring& p){ HANDLE h=CreateFileW(p.c_str(),GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL); if(h==INVALID_HANDLE_VALUE) return false; LARGE_INTEGER sz{}; GetFileSizeEx(h,&sz); if(sz.QuadPart<kMinPlausibleDllSize){CloseHandle(h);return false;} IMAGE_DOS_HEADER dos{}; DWORD br=0; ReadFile(h,&dos,sizeof(dos),&br,NULL); if(br!=sizeof(dos)||dos.e_magic!=IMAGE_DOS_SIGNATURE){CloseHandle(h);return false;} LARGE_INTEGER off{}; off.QuadPart=dos.e_lfanew; SetFilePointerEx(h,off,NULL,FILE_BEGIN); DWORD sig=0; ReadFile(h,&sig,sizeof(sig),&br,NULL); CloseHandle(h); return br==sizeof(sig)&&sig==IMAGE_NT_SIGNATURE; }
-// --- Compatibility helpers (v1.3) ---
-bool GetRealOsVersion(DWORD& major,DWORD& minor,DWORD& build){ struct OsVersionInfoW{ DWORD size,major,minor,build,platform; WCHAR csd[128]; }; typedef LONG(WINAPI*RtlGetVersionT)(OsVersionInfoW*); major=6; minor=2; build=9200; HMODULE ntdll=GetModuleHandleW(L"ntdll.dll"); if(!ntdll) return false; RtlGetVersionT p=(RtlGetVersionT)(void*)GetProcAddress(ntdll,"RtlGetVersion"); if(!p) return false; OsVersionInfoW ovi{}; ovi.size=sizeof(ovi); if(p(&ovi)!=0) return false; major=ovi.major; minor=ovi.minor; build=ovi.build; return true; }
-bool IsOsWindows8OrNewer(){ DWORD M,m,b; GetRealOsVersion(M,m,b); return (M>6)||(M==6&&m>=2); }
-bool GetPeMachineType(const std::wstring& p,WORD& machine){ HANDLE h=CreateFileW(p.c_str(),GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL); if(h==INVALID_HANDLE_VALUE) return false; IMAGE_DOS_HEADER dos{}; DWORD br=0; bool ok=ReadFile(h,&dos,sizeof(dos),&br,NULL)&&br==sizeof(dos)&&dos.e_magic==IMAGE_DOS_SIGNATURE; if(ok){ LARGE_INTEGER off{}; off.QuadPart=dos.e_lfanew; ok=SetFilePointerEx(h,off,NULL,FILE_BEGIN)!=FALSE; DWORD sig=0; ok=ok&&ReadFile(h,&sig,sizeof(sig),&br,NULL)&&br==sizeof(sig)&&sig==IMAGE_NT_SIGNATURE; ok=ok&&ReadFile(h,&machine,sizeof(machine),&br,NULL)&&br==sizeof(machine); } CloseHandle(h); return ok; }
-std::wstring VariantMarkerName(DllVariant v){ return v==DllVariant::Win7?L"win7":L"win8"; }
-bool ReadVariantMarker(const std::wstring& dir,std::wstring& out){ std::wstring mp=dir+L"\\"+kVariantMarkerName; HANDLE h=CreateFileW(mp.c_str(),GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL); if(h==INVALID_HANDLE_VALUE) return false; char buf[16]{}; DWORD br=0; ReadFile(h,buf,sizeof(buf)-1,&br,NULL); CloseHandle(h); if(br==0) return false; out.clear(); for(DWORD i=0;i<br;i++) out.push_back((wchar_t)(unsigned char)buf[i]); while(!out.empty()&&(out.back()==L'\r'||out.back()==L'\n'||out.back()==L' ')) out.pop_back(); return !out.empty(); }
-void WriteVariantMarker(const std::wstring& dir,DllVariant v){ std::wstring mp=dir+L"\\"+kVariantMarkerName; std::wstring name=VariantMarkerName(v); std::string narrow(name.begin(),name.end()); HANDLE h=CreateFileW(mp.c_str(),GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL); if(h==INVALID_HANDLE_VALUE) return; DWORD bw=0; WriteFile(h,narrow.c_str(),(DWORD)narrow.size(),&bw,NULL); CloseHandle(h); }
-DllVariant ResolveSelectedVariant(){ bool win8OrNewer=IsOsWindows8OrNewer(); if(win8OrNewer) return DllVariant::Win8; Wh_Log(L"Windows 7 detected: the Windows 8 DLL requires NT 6.2+, using the Windows 7 DLL as fallback"); return DllVariant::Win7; }
-std::wstring GetVariantUrl(DllVariant v){ return v==DllVariant::Win7?kDownloadUrlWin7:kDownloadUrlWin8; }
-bool VerifyDllIsCompatible(const std::wstring& p){ if(!VerifyDownloadedDllLooksValid(p)) return false; WORD machine=0; if(!GetPeMachineType(p,machine)||machine!=IMAGE_FILE_MACHINE_AMD64){ Wh_Log(L"DLL at %s is not x64 (machine=%04X) - incompatible with this x86-64 mod",p.c_str(),machine); return false; } return true; }
-void CleanupOldDlls(const std::wstring& dir){ WIN32_FIND_DATAW fd{}; std::wstring pattern=dir+L"\\"+kDllRelativeName+L".old*"; HANDLE h=FindFirstFileW(pattern.c_str(),&fd); if(h==INVALID_HANDLE_VALUE) return; do{ if(!(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)){ std::wstring p=dir+L"\\"+fd.cFileName; DeleteFileW(p.c_str()); } }while(FindNextFileW(h,&fd)); FindClose(h); }
-void ReleaseAllPerfCenterModules(){
-    if(g_hPerfCenter){ FreeLibrary(g_hPerfCenter); g_hPerfCenter=nullptr; }
-    const size_t kNameLen=wcslen(kDllRelativeName);
-    for(int pass=0;pass<4;pass++){
-        HMODULE mods[1024]; DWORD needed=0;
-        if(!EnumProcessModules(GetCurrentProcess(),mods,sizeof(mods),&needed)) break;
-        bool found=false; int freed=0;
-        DWORD count=needed/sizeof(HMODULE);
-        for(DWORD i=0;i<count&&freed<16;i++){
-            wchar_t name[MAX_PATH]{};
-            if(GetModuleBaseNameW(GetCurrentProcess(),mods[i],name,MAX_PATH) && _wcsnicmp(name,kDllRelativeName,kNameLen)==0){ found=true; FreeLibrary(mods[i]); freed++; }
-        }
-        if(!found) break;
-    }
+enum class DllVariant { Win8, Win7 };
+
+// Pinned SHA-256 digests of the exact files served from msdl.microsoft.com at
+// the URLs above (computed from the symbol-server payloads). A downloaded
+// binary is only ever accepted when its SHA-256 matches the digest for the
+// requested variant.
+static const wchar_t* kExpectedSha256[2] = {
+    L"425820ABCA72EFF806C9F41809A619C97ACB642B06B988001EA50090D07D1B98", // DllVariant::Win8
+    L"CE15883E0B681DB4CF00FE08A021777568213D6254615E3693DF3C28EB44C4D1", // DllVariant::Win7
+};
+
+static const GUID kAppletFolderGuid = {0x78f3955e, 0x3b90, 0x4184,
+                                       {0xBD, 0x14, 0x53, 0x97, 0xC1, 0x5F, 0x1E, 0xFC}};
+static GUID kProviderGuid = {0x9CB535DD, 0x4354, 0x42A1,
+                             {0x82, 0x81, 0xBB, 0xB5, 0x8D, 0xEF, 0xA7, 0x41}};
+static const IID IID_IClassFactory_GUID = {0x00000001, 0x0000, 0x0000,
+                                           {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+
+// -----------------------------------------------------------------------------
+// Shared state. Most of this is read on hot paths by hooks, so it is published
+// atomically. The setup thread populates it in one direction; hooks only read.
+// -----------------------------------------------------------------------------
+std::atomic<HMODULE> g_hPerfCenter{nullptr};
+// The DLL path is written exactly once by the setup thread and never mutated
+// afterwards, so an atomic raw pointer to a heap-allocated string is sufficient
+// (std::atomic<shared_ptr> is not available on the Windhawk compiler).
+std::atomic<const std::wstring*> g_dllPath{nullptr};
+std::atomic<bool> g_dllVerifiedOk{false};
+std::atomic<int> g_activeVariant{static_cast<int>(DllVariant::Win8)};
+std::atomic<bool> g_forceTranslations{true};
+std::atomic<bool> g_languageAutomatic{true};
+std::atomic<int> g_forcedLanguage{static_cast<int>(MuiLanguage::EN_US)};
+
+// Set by Wh_ModUninit so the background setup (and any in-flight download) can
+// abort promptly instead of blocking shutdown.
+std::atomic<bool> g_shuttingDown{false};
+static const DWORD kDownloadTimeoutMs = 20000;
+static const int kMaxDownloadAttempts = 3;
+static const DWORD kRetryDelayMs = 3000;
+
+// The private DirectUI resource module is built once and loaded lazily; it is
+// guarded by a mutex because both the setup thread and settings changes can
+// (re)build it.
+static std::mutex g_localizedResourceMutex;
+static std::wstring g_localizedResourcePath;
+// Read lock-free on the hot path, written under g_localizedResourceMutex.
+static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
+
+// Setup is performed on a background worker thread that is joined on unload.
+static std::thread g_setupThread;
+
+const std::wstring* CurrentDllPath() {
+    return g_dllPath.load(std::memory_order_acquire);
 }
-void RemoveLegacyStoreFiles(const std::wstring& dir){
-    WIN32_FIND_DATAW fd{}; std::wstring pattern=dir+L"\\*";
-    HANDLE h=FindFirstFileW(pattern.c_str(),&fd);
-    if(h!=INVALID_HANDLE_VALUE){
-        do{
-            std::wstring name=fd.cFileName;
-            if(name==L"."||name==L"..") continue;
-            std::wstring p=dir+L"\\"+name;
-            if(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY){
-                DeleteFileW((p+L"\\"+kDllRelativeName+L".mui").c_str());
-                if(!RemoveDirectoryW(p.c_str())) Wh_Log(L"Could not remove folder %s",p.c_str());
-            } else if(!DeleteFileW(p.c_str())){
-                // File is still in use (e.g. other explorer.exe instances still
-                // have the DLL loaded). Schedule deletion at next reboot so the
-                // user doesn't end up with stale files on every mod re-enable.
-                DWORD err = GetLastError();
-                Wh_Log(L"[RemoveLegacyStoreFiles] Could not delete %s (err=%u, still in use) — scheduling for reboot delete", p.c_str(), err);
-                if (MoveFileExW(p.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT)){
-                    Wh_Log(L"[RemoveLegacyStoreFiles] Scheduled reboot delete for: %s", p.c_str());
-                } else {
-                    Wh_Log(L"[RemoveLegacyStoreFiles] MoveFileEx also failed (err=%u)", GetLastError());
+
+std::wstring ToLower(const std::wstring& s) {
+    std::wstring r = s;
+    for (auto& c : r) c = towlower(c);
+    return r;
+}
+bool EndsWith(const std::wstring& s, const std::wstring& suf) {
+    if (s.size() < suf.size()) return false;
+    return s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
+}
+std::wstring ExpandEnv(const wchar_t* p) {
+    wchar_t b[MAX_PATH]{};
+    ExpandEnvironmentStringsW(p, b, MAX_PATH);
+    return std::wstring(b);
+}
+
+// Cheap, non-allocating ASCII case-insensitive substring test. Used to gate the
+// expensive registry hooks so they do no allocation for the vast majority of
+// registry accesses that are irrelevant to this mod.
+static bool AsciiCaseInsensitiveContains(const wchar_t* s, const char* needle) {
+    if (!s || !*s || !needle) return false;
+    wchar_t needleW[32] = {};
+    size_t nlen = 0;
+    for (; needle[nlen] && nlen < 31; ++nlen) {
+        char c = needle[nlen];
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        needleW[nlen] = static_cast<wchar_t>(c);
+    }
+    needleW[nlen] = 0;
+    if (!nlen) return false;
+    for (const wchar_t* p = s; *p; ++p) {
+        const wchar_t* a = p;
+        const wchar_t* b = needleW;
+        while (*b) {
+            wchar_t ca = *a;
+            if (ca >= L'a' && ca <= L'z') ca = static_cast<wchar_t>(ca - L'a' + L'A');
+            if (ca != *b) break;
+            ++a;
+            ++b;
+        }
+        if (!*b) return true;
+    }
+    return false;
+}
+
+static bool ContainsRelevantKeywordCheap(const wchar_t* s) {
+    return s && (AsciiCaseInsensitiveContains(s, "clsid") ||
+                 AsciiCaseInsensitiveContains(s, "controlpanel") ||
+                 AsciiCaseInsensitiveContains(s, "shell extensions"));
+}
+
+// -----------------------------------------------------------------------------
+// File integrity - SHA-256 via CryptoAPI (advapi32, already linked).
+// -----------------------------------------------------------------------------
+static wchar_t HexUpper(BYTE nibble) {
+    return nibble < 10 ? static_cast<wchar_t>(L'0' + nibble)
+                       : static_cast<wchar_t>(L'A' + nibble - 10);
+}
+
+static bool ComputeFileSha256(const std::wstring& path, BYTE digest[32]) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+
+    HCRYPTPROV prov = 0;
+    HCRYPTHASH hash = 0;
+    bool ok = false;
+    if (CryptAcquireContextW(&prov, nullptr, nullptr, PROV_RSA_AES,
+                             CRYPT_VERIFYCONTEXT)) {
+        if (CryptCreateHash(prov, CALG_SHA_256, 0, 0, &hash)) {
+            BYTE buf[65536];
+            DWORD rd = 0;
+            bool readOk = true;
+            while (ReadFile(h, buf, sizeof(buf), &rd, nullptr) && rd > 0) {
+                if (!CryptHashData(hash, buf, rd, 0)) {
+                    readOk = false;
+                    break;
                 }
             }
-        }while(FindNextFileW(h,&fd));
-        FindClose(h);
+            if (readOk) {
+                DWORD cb = 32;
+                ok = CryptGetHashParam(hash, HP_HASHVAL, digest, &cb, 0) != FALSE &&
+                     cb == 32;
+            }
+            CryptDestroyHash(hash);
+        }
+        CryptReleaseContext(prov, 0);
     }
+    CloseHandle(h);
+    return ok;
+}
+
+static bool FileSha256Matches(const std::wstring& path, const wchar_t* expectedHex) {
+    BYTE digest[32];
+    if (!ComputeFileSha256(path, digest)) return false;
+    for (int i = 0; i < 32; ++i) {
+        if (expectedHex[i * 2] != HexUpper(digest[i] >> 4) ||
+            expectedHex[i * 2 + 1] != HexUpper(digest[i] & 0xF)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// PE validation helpers
+// -----------------------------------------------------------------------------
+bool VerifyDownloadedDllLooksValid(const std::wstring& p) {
+    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER sz{};
+    GetFileSizeEx(h, &sz);
+    if (sz.QuadPart < kMinPlausibleDllSize) {
+        CloseHandle(h);
+        return false;
+    }
+    IMAGE_DOS_HEADER dos{};
+    DWORD br = 0;
+    ReadFile(h, &dos, sizeof(dos), &br, nullptr);
+    if (br != sizeof(dos) || dos.e_magic != IMAGE_DOS_SIGNATURE) {
+        CloseHandle(h);
+        return false;
+    }
+    LARGE_INTEGER off{};
+    off.QuadPart = dos.e_lfanew;
+    SetFilePointerEx(h, off, nullptr, FILE_BEGIN);
+    DWORD sig = 0;
+    ReadFile(h, &sig, sizeof(sig), &br, nullptr);
+    CloseHandle(h);
+    return br == sizeof(sig) && sig == IMAGE_NT_SIGNATURE;
+}
+
+bool GetRealOsVersion(DWORD& major, DWORD& minor, DWORD& build) {
+    struct OsVersionInfoW {
+        DWORD size, major, minor, build, platform;
+        WCHAR csd[128];
+    };
+    typedef LONG(WINAPI* RtlGetVersionT)(OsVersionInfoW*);
+    major = 6;
+    minor = 2;
+    build = 9200;
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return false;
+    RtlGetVersionT p = reinterpret_cast<RtlGetVersionT>(
+        reinterpret_cast<void*>(GetProcAddress(ntdll, "RtlGetVersion")));
+    if (!p) return false;
+    OsVersionInfoW ovi{};
+    ovi.size = sizeof(ovi);
+    if (p(&ovi) != 0) return false;
+    major = ovi.major;
+    minor = ovi.minor;
+    build = ovi.build;
+    return true;
+}
+
+bool IsOsWindows8OrNewer() {
+    DWORD M, m, b;
+    GetRealOsVersion(M, m, b);
+    return (M > 6) || (M == 6 && m >= 2);
+}
+
+bool GetPeMachineType(const std::wstring& p, WORD& machine) {
+    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    IMAGE_DOS_HEADER dos{};
+    DWORD br = 0;
+    bool ok = ReadFile(h, &dos, sizeof(dos), &br, nullptr) && br == sizeof(dos) &&
+              dos.e_magic == IMAGE_DOS_SIGNATURE;
+    if (ok) {
+        LARGE_INTEGER off{};
+        off.QuadPart = dos.e_lfanew;
+        ok = SetFilePointerEx(h, off, nullptr, FILE_BEGIN) != FALSE;
+        DWORD sig = 0;
+        ok = ok && ReadFile(h, &sig, sizeof(sig), &br, nullptr) &&
+             br == sizeof(sig) && sig == IMAGE_NT_SIGNATURE;
+        ok = ok && ReadFile(h, &machine, sizeof(machine), &br, nullptr) &&
+             br == sizeof(machine);
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+std::wstring VariantMarkerName(DllVariant v) {
+    return v == DllVariant::Win7 ? L"win7" : L"win8";
+}
+
+bool ReadVariantMarker(const std::wstring& dir, std::wstring& out) {
+    std::wstring mp = dir + L"\\" + kVariantMarkerName;
+    HANDLE h = CreateFileW(mp.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    char buf[16] = {};
+    DWORD br = 0;
+    ReadFile(h, buf, sizeof(buf) - 1, &br, nullptr);
+    CloseHandle(h);
+    if (br == 0) return false;
+    out.clear();
+    for (DWORD i = 0; i < br; i++) out.push_back(static_cast<wchar_t>(
+                                                     static_cast<unsigned char>(buf[i])));
+    while (!out.empty() && (out.back() == L'\r' || out.back() == L'\n' ||
+                            out.back() == L' '))
+        out.pop_back();
+    return !out.empty();
+}
+
+void WriteVariantMarker(const std::wstring& dir, DllVariant v) {
+    std::wstring mp = dir + L"\\" + kVariantMarkerName;
+    std::wstring name = VariantMarkerName(v);
+    std::string narrow(name.begin(), name.end());
+    HANDLE h = CreateFileW(mp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    DWORD bw = 0;
+    WriteFile(h, narrow.c_str(), static_cast<DWORD>(narrow.size()), &bw, nullptr);
+    CloseHandle(h);
+}
+
+DllVariant ResolveSelectedVariant() {
+    if (IsOsWindows8OrNewer()) return DllVariant::Win8;
+    Wh_Log(L"Windows 7 detected: the Windows 8 DLL requires NT 6.2+, using the "
+           L"Windows 7 DLL as fallback");
+    return DllVariant::Win7;
+}
+
+std::wstring GetVariantUrl(DllVariant v) {
+    return v == DllVariant::Win7 ? kDownloadUrlWin7 : kDownloadUrlWin8;
+}
+
+// Structural + SHA-256 verification. Anything that is not the exact expected
+// binary is rejected and never loaded.
+bool VerifyDllIsCompatible(const std::wstring& p, DllVariant variant) {
+    if (!VerifyDownloadedDllLooksValid(p)) return false;
+    WORD machine = 0;
+    if (!GetPeMachineType(p, machine) || machine != IMAGE_FILE_MACHINE_AMD64) {
+        Wh_Log(L"DLL at %s is not x64 (machine=%04X) - incompatible with this "
+               L"amd64 mod",
+               p.c_str(), machine);
+        return false;
+    }
+    if (!FileSha256Matches(p, kExpectedSha256[static_cast<int>(variant)])) {
+        Wh_Log(L"DLL at %s failed SHA-256 verification; refusing to use it",
+               p.c_str());
+        return false;
+    }
+    return true;
+}
+
+// Delete the mod's own stale "*.old-*" files (renamed-out previous variants).
+void CleanupOldDlls(const std::wstring& dir) {
+    WIN32_FIND_DATAW fd{};
+    std::wstring pattern = dir + L"\\" + kDllRelativeName + L".old*";
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            DeleteFileW((dir + L"\\" + fd.cFileName).c_str());
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+// Download a file to `dest` using WinInet. Unlike URLDownloadToFileW this gives
+// us real control over timeouts and lets us abort on shutdown. connect/send/
+// receive are each bounded to kDownloadTimeoutMs at the WinInet level, and we
+// additionally enforce an overall deadline so a stuck/captive-portal connection
+// can never block for minutes. Returns true only when the full file was written.
+static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& dest) {
+    HINTERNET hNet = InternetOpenW(L"Windhawk Performance Info Tools",
+                                   INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr,
+                                   0);
+    if (!hNet) return false;
+
+    DWORD timeoutMs = kDownloadTimeoutMs;
+    InternetSetOptionW(hNet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs,
+                       sizeof(timeoutMs));
+    InternetSetOptionW(hNet, INTERNET_OPTION_SEND_TIMEOUT, &timeoutMs,
+                       sizeof(timeoutMs));
+    InternetSetOptionW(hNet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs,
+                       sizeof(timeoutMs));
+
+    HINTERNET hUrl = InternetOpenUrlW(
+        hNet, url.c_str(), nullptr, 0,
+        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_UI,
+        0);
+    if (!hUrl) {
+        InternetCloseHandle(hNet);
+        return false;
+    }
+
+    bool ok = false;
+    do {
+        // Redirects are followed automatically (INTERNET_FLAG_NO_AUTO_REDIRECT
+        // is not set). Confirm we actually got a 200 OK response.
+        DWORD status = 0;
+        DWORD statusLen = sizeof(status);
+        DWORD headerIndex = 0;
+        if (!HttpQueryInfoW(hUrl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                            &status, &statusLen, &headerIndex) ||
+            status != HTTP_STATUS_OK) {
+            break;
+        }
+
+        HANDLE hFile = CreateFileW(dest.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                                   nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                   nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) break;
+
+        const ULONGLONG start = GetTickCount64();
+        BYTE buf[65536];
+        bool readOk = true;
+        DWORD rd = 0;
+        for (;;) {
+            if (g_shuttingDown.load(std::memory_order_relaxed)) {
+                readOk = false;
+                break;
+            }
+            DWORD avail = 0;
+            if (!InternetQueryDataAvailable(hUrl, &avail, 0, 0)) {
+                readOk = false;
+                break;
+            }
+            if (avail == 0) break;  // normal EOF
+            if (avail > sizeof(buf)) avail = static_cast<DWORD>(sizeof(buf));
+            if (!InternetReadFile(hUrl, buf, avail, &rd) || rd == 0) {
+                readOk = false;
+                break;
+            }
+            DWORD wr = 0;
+            if (!WriteFile(hFile, buf, rd, &wr, nullptr) || wr != rd) {
+                readOk = false;
+                break;
+            }
+            if (GetTickCount64() - start > kDownloadTimeoutMs) {
+                readOk = false;  // overall deadline exceeded
+                break;
+            }
+        }
+        CloseHandle(hFile);
+        ok = readOk;
+    } while (false);
+
+    InternetCloseHandle(hUrl);
+    InternetCloseHandle(hNet);
+    return ok;
+}
+
+// Download the required DLL (if needed), verify it, and make it visible only
+// once valid. Returns true and sets outPath when a valid DLL is available.
+// The cross-process serialization is done by the caller (the setup thread).
+bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
+                       std::wstring& outPath) {
+    const std::wstring wanted = VariantMarkerName(variant);
+    const std::wstring out = dir + L"\\" + kDllRelativeName;
+    CleanupOldDlls(dir);
+
+    // Reuse an existing, valid DLL of the requested variant.
+    if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        std::wstring marker;
+        bool markerOk = ReadVariantMarker(dir, marker);
+        if (markerOk && marker == wanted && VerifyDllIsCompatible(out, variant)) {
+            outPath = out;
+            return true;
+        }
+        // Marker mismatch or corrupt file: replace it.
+        DeleteFileW(out.c_str());
+        // If the file is locked (still loaded), renaming a loaded module is
+        // allowed, so move it out of the way to free the name immediately.
+        FILETIME ft{};
+        SYSTEMTIME st{};
+        GetSystemTime(&st);
+        SystemTimeToFileTime(&st, &ft);
+        wchar_t suffix[48];
+        swprintf_s(suffix, 48, L".old-%08X%08X", (unsigned)ft.dwHighDateTime,
+                   (unsigned)ft.dwLowDateTime);
+        std::wstring oldPath = out + suffix;
+        MoveFileW(out.c_str(), oldPath.c_str());
+        if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Could not remove or rename the old file. Keep it only if it is
+            // actually a valid DLL of the requested variant.
+            if (VerifyDllIsCompatible(out, variant)) {
+                outPath = out;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    // Download to a temp file first, verify, then atomically move it into
+    // place so a partial file is never visible under the final name.
+    const std::wstring url = GetVariantUrl(variant);
+    const std::wstring tmp = out + L".tmp";
+    DeleteFileW(tmp.c_str());
+    Wh_Log(L"Downloading %s variant from %s", wanted.c_str(), url.c_str());
+    const bool downloaded = DownloadWithTimeout(url, tmp);
+    bool ok = downloaded && VerifyDllIsCompatible(tmp, variant);
+    if (ok) {
+        if (MoveFileExW(tmp.c_str(), out.c_str(),
+                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            WriteVariantMarker(dir, variant);
+            outPath = out;
+            return true;
+        }
+        ok = false;
+    }
+    if (!ok) {
+        Wh_Log(L"Download/verification failed; the DLL was not installed");
+        DeleteFileW(tmp.c_str());
+    }
+    return false;
+}
+
+// Remove only files this mod created. keepBase=true leaves the base DLL and the
+// variant marker behind (used when the "keep files" setting is ON), but still
+// removes per-process resource modules and stale copies. If a file is still in
+// use it is left alone and retried on the next unload.
+void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
+    WIN32_FIND_DATAW fd{};
+    std::wstring pattern = dir + L"\\*";
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    std::vector<std::wstring> folders;
+    do {
+        std::wstring name = fd.cFileName;
+        if (name == L"." || name == L"..") continue;
+        const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        const std::wstring p = dir + L"\\" + name;
+        if (isDir) {
+            folders.push_back(p);
+            continue;
+        }
+        const bool ownFile =
+            name == kDllRelativeName || name == kVariantMarkerName ||
+            name.rfind(kLocalizedResourcePrefix, 0) == 0 ||
+            (name.rfind(kDllRelativeName, 0) == 0 &&
+             name.find(L".old") != std::wstring::npos) ||
+            (name.size() >= 4 &&
+             name.compare(name.size() - 4, 4, L".tmp") == 0);
+        if (!ownFile) continue;
+        if (keepBase && (name == kDllRelativeName || name == kVariantMarkerName))
+            continue;
+        if (!DeleteFileW(p.c_str())) {
+            // No MOVEFILE_DELAY_UNTIL_REBOOT here: a machine-wide persistent
+            // operation is not appropriate. Just leave the file; it will be
+            // retried on a later unload.
+            Wh_Log(L"Could not delete %s (err=%u, in use); will retry on next "
+                   L"unload",
+                   p.c_str(), GetLastError());
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    for (const auto& f : folders) RemoveDirectoryW(f.c_str());
     RemoveDirectoryW(dir.c_str());
 }
-void DownloadDllIfMissing(const std::wstring& dir,DllVariant variant,std::wstring& out){
-    out=dir+L"\\"+kDllRelativeName; std::wstring wanted=VariantMarkerName(variant);
-    CleanupOldDlls(dir);
-    DWORD a=GetFileAttributesW(out.c_str());
-    if(a!=INVALID_FILE_ATTRIBUTES){
-        std::wstring marker;
-        if(ReadVariantMarker(dir,marker)){
-            if(marker!=wanted){
-                Wh_Log(L"DLL variant changed (%s -> %s), switching at runtime",marker.c_str(),wanted.c_str());
-                ReleaseAllPerfCenterModules();
-                if(DeleteFileW(out.c_str())){
-                    a=INVALID_FILE_ATTRIBUTES;
-                } else {
-                    // File locked (module still loaded): renaming a loaded DLL is allowed - move it
-                    // out of the way so the new variant can take its place immediately.
-                    FILETIME ft{}; SYSTEMTIME st{}; GetSystemTime(&st); SystemTimeToFileTime(&st,&ft);
-                    wchar_t suffix[40]; swprintf_s(suffix,40,L".old-%08X%08X",(unsigned)ft.dwHighDateTime,(unsigned)ft.dwLowDateTime);
-                    std::wstring oldPath=out+suffix;
-                    if(MoveFileW(out.c_str(),oldPath.c_str())){ Wh_Log(L"Old DLL renamed out of the way: %s",oldPath.c_str()); a=INVALID_FILE_ATTRIBUTES; }
-                    else Wh_Log(L"Cannot replace the DLL (delete and rename failed); keeping the current one");
-                }
-            }
-        } else { Wh_Log(L"Adopting existing DLL without variant marker as %s",wanted.c_str()); WriteVariantMarker(dir,variant); }
-    }
-    if(a!=INVALID_FILE_ATTRIBUTES){
-        g_dllVerifiedOk=VerifyDllIsCompatible(out);
-        // Don't call LoadLibrary here. Wh_ModInit is still registering hooks,
-        // and PerfCenter can cache resource strings while it is being loaded.
-        if(g_dllVerifiedOk) g_hPerfCenter=GetModuleHandleW(out.c_str());
-        return;
-    }
-    std::wstring url=GetVariantUrl(variant);
-    if(url.empty()){ Wh_Log(L"No download URL available for the %s variant",wanted.c_str()); g_dllVerifiedOk=false; return; }
-    Wh_Log(L"Downloading %s variant from %s",wanted.c_str(),url.c_str());
-    HRESULT hr=URLDownloadToFileW(NULL,url.c_str(),out.c_str(),0,NULL);
-    if(SUCCEEDED(hr)) g_dllVerifiedOk=VerifyDllIsCompatible(out);
-    else Wh_Log(L"Download failed (HRESULT %08X)",(DWORD)hr);
-    if(!g_dllVerifiedOk){ DeleteFileW(out.c_str()); g_hPerfCenter=nullptr; return; }
-    WriteVariantMarker(dir,variant);
-    // Loading is deferred until first use, after all hooks are active.
-    g_hPerfCenter=GetModuleHandleW(out.c_str());
-}
+
 // -----------------------------------------------------------------------------
 // Conservative DirectUI resource module
 // -----------------------------------------------------------------------------
-// PerfCenter's DirectUI XML uses resstr(ID), which bypasses LoadStringW. Build
-// a private, real PE resource module from a copy of PerfCenterCPL.dll, add the
-// translated RT_STRING tables with UpdateResource, and give that module only
-// to DirectUI::XResourceProvider. The executable DLL itself is never modified.
 class UniqueWinHandle {
 public:
     UniqueWinHandle() = default;
@@ -471,9 +875,7 @@ public:
         return *this;
     }
 
-    bool IsValid() const {
-        return handle_ && handle_ != INVALID_HANDLE_VALUE;
-    }
+    bool IsValid() const { return handle_ && handle_ != INVALID_HANDLE_VALUE; }
     HANDLE Get() const { return handle_; }
     HANDLE Release() {
         HANDLE result = handle_;
@@ -527,7 +929,7 @@ private:
     HANDLE update_ = nullptr;
 };
 
-template<typename T>
+template <typename T>
 static bool ReadPeValue(const std::vector<BYTE>& file, size_t offset, T& value) {
     if (offset > file.size() || file.size() - offset < sizeof(T)) return false;
     memcpy(&value, file.data() + offset, sizeof(T));
@@ -536,11 +938,14 @@ static bool ReadPeValue(const std::vector<BYTE>& file, size_t offset, T& value) 
 
 // UpdateResource intentionally restricts LN/MUI binaries. Rename the private
 // copy's named "MUI" RC-config resource to the unused name "CUI" first. This
-// changes only the copy and makes it a normal resource PE.
+// changes only the copy and makes it a normal resource PE. Note: this depends on
+// undocumented layout details of the specific Microsoft binary at the symbol
+// server URL; it may need updating if that binary ever changes. It is confined
+// to a private copy, so the blast radius is small.
 static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
     UniqueWinHandle file(CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
-                                    FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr));
+                                     FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                     FILE_ATTRIBUTE_NORMAL, nullptr));
     if (!file.IsValid()) return false;
 
     LARGE_INTEGER size = {};
@@ -552,7 +957,8 @@ static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
     std::vector<BYTE> bytes(static_cast<size_t>(size.QuadPart));
     DWORD bytesRead = 0;
     if (!ReadFile(file.Get(), bytes.data(), static_cast<DWORD>(bytes.size()),
-                  &bytesRead, nullptr) || bytesRead != bytes.size()) {
+                  &bytesRead, nullptr) ||
+        bytesRead != bytes.size()) {
         return false;
     }
 
@@ -571,8 +977,7 @@ static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
         return false;
     }
 
-    const size_t optionalOffset =
-        ntOffset + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
+    const size_t optionalOffset = ntOffset + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
     WORD optionalMagic = 0;
     if (!ReadPeValue(bytes, optionalOffset, optionalMagic)) return false;
 
@@ -602,15 +1007,13 @@ static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
     DWORD resourceRaw = 0;
     for (WORD i = 0; i < fileHeader.NumberOfSections; ++i) {
         IMAGE_SECTION_HEADER section = {};
-        if (!ReadPeValue(bytes,
-                         sectionOffset + i * sizeof(IMAGE_SECTION_HEADER),
+        if (!ReadPeValue(bytes, sectionOffset + i * sizeof(IMAGE_SECTION_HEADER),
                          section)) {
             return false;
         }
         const DWORD virtualSize = section.Misc.VirtualSize;
-        const DWORD span = virtualSize > section.SizeOfRawData
-                               ? virtualSize
-                               : section.SizeOfRawData;
+        const DWORD span = virtualSize > section.SizeOfRawData ? virtualSize
+                                                               : section.SizeOfRawData;
         if (resourceRva >= section.VirtualAddress &&
             resourceRva - section.VirtualAddress < span) {
             resourceRaw = section.PointerToRawData +
@@ -629,19 +1032,15 @@ static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
     size_t muiFirstCharacterOffset = 0;
     for (DWORD i = 0; i < entryCount; ++i) {
         IMAGE_RESOURCE_DIRECTORY_ENTRY entry = {};
-        if (!ReadPeValue(bytes,
-                         entriesOffset + i * sizeof(entry), entry)) {
+        if (!ReadPeValue(bytes, entriesOffset + i * sizeof(entry), entry)) {
             return false;
         }
-
         DWORD nameField = 0;
         memcpy(&nameField, &entry, sizeof(nameField));
         if (!(nameField & 0x80000000u)) continue;
-        const size_t stringOffset =
-            resourceRaw + (nameField & 0x7FFFFFFFu);
+        const size_t stringOffset = resourceRaw + (nameField & 0x7FFFFFFFu);
         WORD length = 0;
         if (!ReadPeValue(bytes, stringOffset, length) || length != 3) continue;
-
         WCHAR name[3] = {};
         if (stringOffset + sizeof(WORD) > bytes.size() ||
             bytes.size() - (stringOffset + sizeof(WORD)) < sizeof(name)) {
@@ -660,8 +1059,9 @@ static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
     if (!SetFilePointerEx(file.Get(), position, nullptr, FILE_BEGIN)) return false;
     const WCHAR replacement = L'C';
     DWORD written = 0;
-    return WriteFile(file.Get(), &replacement, sizeof(replacement),
-                     &written, nullptr) && written == sizeof(replacement);
+    return WriteFile(file.Get(), &replacement, sizeof(replacement), &written,
+                     nullptr) &&
+           written == sizeof(replacement);
 }
 
 static WORD GetEmbeddedLanguageId(MuiLanguage language) {
@@ -692,8 +1092,7 @@ static bool BuildEmbeddedStringBlock(UINT blockId, MuiLanguage language,
 
         const WORD wordLength = static_cast<WORD>(length);
         const BYTE* lengthBytes = reinterpret_cast<const BYTE*>(&wordLength);
-        output.insert(output.end(), lengthBytes,
-                      lengthBytes + sizeof(wordLength));
+        output.insert(output.end(), lengthBytes, lengthBytes + sizeof(wordLength));
         if (length) {
             const BYTE* textBytes = reinterpret_cast<const BYTE*>(text);
             output.insert(output.end(), textBytes,
@@ -703,36 +1102,38 @@ static bool BuildEmbeddedStringBlock(UINT blockId, MuiLanguage language,
     return hasString;
 }
 
+// Reads the translation settings at call time, so both the setup thread and a
+// settings change can rebuild the module with the current values.
 static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
                                          const std::wstring& directory) {
     g_localizedResourcePath.clear();
-    if (!g_forceTranslations || g_activeVariant != DllVariant::Win8 ||
+    if (!g_forceTranslations.load() ||
+        static_cast<DllVariant>(g_activeVariant.load()) != DllVariant::Win8 ||
         sourceDll.empty()) {
         return false;
     }
 
     wchar_t fileName[96] = {};
-    swprintf_s(fileName, ARRAYSIZE(fileName), L"%s%u.dll",
-               kLocalizedResourcePrefix, GetCurrentProcessId());
+    swprintf_s(fileName, ARRAYSIZE(fileName), L"%s%u.dll", kLocalizedResourcePrefix,
+               GetCurrentProcessId());
     const std::wstring destination = directory + L"\\" + fileName;
     const std::wstring temporary = destination + L".tmp";
     ScopedTemporaryFile temporaryGuard(temporary);
 
     DeleteFileW(temporary.c_str());
     if (!CopyFileW(sourceDll.c_str(), temporary.c_str(), FALSE)) {
-        Wh_Log(L"[STR] Copying private resource module failed: %u",
-               GetLastError());
+        Wh_Log(L"Copying private resource module failed: %u", GetLastError());
         return false;
     }
 
     if (!DisableMuiConfigInPrivateCopy(temporary)) {
-        Wh_Log(L"[STR] Could not neutralize RC Config in private copy");
+        Wh_Log(L"Could not neutralize RC Config in private copy");
         return false;
     }
 
     ResourceUpdateTransaction update(temporary);
     if (!update.IsValid()) {
-        Wh_Log(L"[STR] BeginUpdateResource failed: %u", GetLastError());
+        Wh_Log(L"BeginUpdateResource failed: %u", GetLastError());
         return false;
     }
 
@@ -752,15 +1153,14 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     std::vector<BYTE> block;
     for (MuiLanguage resourceLanguage : languages) {
         const MuiLanguage textLanguage =
-            g_languageAutomatic ? resourceLanguage : g_forcedLanguage;
+            g_languageAutomatic.load() ? resourceLanguage
+                                       : static_cast<MuiLanguage>(g_forcedLanguage.load());
         for (UINT blockId = 1; blockId <= maxBlockId; ++blockId) {
             if (!BuildEmbeddedStringBlock(blockId, textLanguage, block)) continue;
-            if (!UpdateResourceW(update.Get(), RT_STRING,
-                                 MAKEINTRESOURCEW(blockId),
+            if (!UpdateResourceW(update.Get(), RT_STRING, MAKEINTRESOURCEW(blockId),
                                  GetEmbeddedLanguageId(resourceLanguage),
-                                 block.data(),
-                                 static_cast<DWORD>(block.size()))) {
-                Wh_Log(L"[STR] UpdateResource failed: lang=%04X block=%u err=%u",
+                                 block.data(), static_cast<DWORD>(block.size()))) {
+                Wh_Log(L"UpdateResource failed: lang=%04X block=%u err=%u",
                        GetEmbeddedLanguageId(resourceLanguage), blockId,
                        GetLastError());
                 return false;
@@ -769,73 +1169,151 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     }
 
     if (!update.Commit()) {
-        Wh_Log(L"[STR] EndUpdateResource failed: %u", GetLastError());
+        Wh_Log(L"EndUpdateResource failed: %u", GetLastError());
         return false;
     }
 
     DeleteFileW(destination.c_str());
     if (!MoveFileExW(temporary.c_str(), destination.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        Wh_Log(L"[STR] Activating private resource module failed: %u",
-               GetLastError());
+        Wh_Log(L"Activating private resource module failed: %u", GetLastError());
         return false;
     }
     temporaryGuard.Commit();
 
     if (!VerifyDownloadedDllLooksValid(destination)) {
         DeleteFileW(destination.c_str());
-        Wh_Log(L"[STR] Private resource module failed PE validation");
+        Wh_Log(L"Private resource module failed PE validation");
         return false;
     }
 
     g_localizedResourcePath = destination;
-    Wh_Log(L"[STR] Private resource module ready with 147 strings in 10 languages: %s",
+    Wh_Log(L"Private resource module ready with 147 strings in 10 languages: %s",
            destination.c_str());
     return true;
 }
 
 static HMODULE EnsureLocalizedResourceModuleLoaded() {
     std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
-    if (g_hLocalizedResources) return g_hLocalizedResources;
+    if (HMODULE h = g_hLocalizedResources.load()) return h;
     if (g_localizedResourcePath.empty()) return nullptr;
 
-    g_hLocalizedResources = LoadLibraryExW(
-        g_localizedResourcePath.c_str(), nullptr,
-        LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-    if (!g_hLocalizedResources) {
-        Wh_Log(L"[STR] Loading private resource module failed: %u",
-               GetLastError());
+    HMODULE h = LoadLibraryExW(g_localizedResourcePath.c_str(), nullptr,
+                               LOAD_LIBRARY_AS_DATAFILE |
+                                   LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    g_hLocalizedResources.store(h);
+    if (!h) {
+        Wh_Log(L"Loading private resource module failed: %u", GetLastError());
     }
-    return g_hLocalizedResources;
+    return h;
+}
+
+// Assumes g_localizedResourceMutex is already held.
+static void ReleaseLocalizedResourceModuleLocked() {
+    if (HMODULE h = g_hLocalizedResources.exchange(nullptr)) {
+        FreeLibrary(h);
+    }
+    if (!g_localizedResourcePath.empty()) {
+        DeleteFileW(g_localizedResourcePath.c_str());
+        g_localizedResourcePath.clear();
+    }
 }
 
 static void ReleaseLocalizedResourceModule() {
     std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
-    if (g_hLocalizedResources) {
-        FreeLibrary(g_hLocalizedResources);
-        g_hLocalizedResources = nullptr;
+    ReleaseLocalizedResourceModuleLocked();
+}
+
+// The storage directory is scoped to this mod only.
+static std::wstring StoreDir() {
+    wchar_t base[MAX_PATH]{};
+    ExpandEnvironmentStringsW(L"%ProgramData%\\Windhawk\\Engine\\ModsWritable", base,
+                              MAX_PATH);
+    std::wstring root(base);
+    std::wstring dir = root + L"\\" + kStoreFolderName;
+    DWORD a = GetFileAttributesW(dir.c_str());
+    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+        CreateDirectoryW(root.c_str(), nullptr);
+        CreateDirectoryW(dir.c_str(), nullptr);
+    }
+    return dir;
+}
+
+// -----------------------------------------------------------------------------
+// Async setup - runs on a worker thread so Explorer startup is never blocked.
+// -----------------------------------------------------------------------------
+static void RunSetup() {
+    // Serialize with other processes (other Explorer instances, control.exe)
+    // that may be performing the same setup at the same time.
+    HANDLE setupMutex =
+        CreateMutexW(nullptr, FALSE, L"Windhawk.PerformanceInfoToolsRestorer.Setup");
+    if (setupMutex) {
+        DWORD wait = WaitForSingleObject(setupMutex, 60000);
+        if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED) {
+            // Could not get the lock in time. Proceed anyway; the
+            // temp-file + atomic-move pattern keeps a partial file invisible.
+        }
+    }
+
+    DllVariant variant = ResolveSelectedVariant();
+    std::wstring dir = StoreDir();
+    std::wstring outPath;
+    bool ok = false;
+
+    // A few bounded retries with backoff cover transient network failures.
+    // Each attempt is individually time-limited and aborts on shutdown, so this
+    // thread never blocks indefinitely. A persisted valid file is reused without
+    // any network access (see DownloadDllToPath), so an offline restart with an
+    // existing copy still works.
+    for (int attempt = 1; attempt <= kMaxDownloadAttempts; ++attempt) {
+        if (g_shuttingDown.load(std::memory_order_relaxed)) break;
+        if (DownloadDllToPath(dir, variant, outPath)) {
+            ok = true;
+            break;
+        }
+        if (g_shuttingDown.load(std::memory_order_relaxed)) break;
+        if (attempt < kMaxDownloadAttempts) {
+            Wh_Log(L"Download attempt %d/%d failed; retrying in a few seconds",
+                   attempt, kMaxDownloadAttempts);
+            Sleep(kRetryDelayMs);
+        }
+    }
+
+    if (setupMutex) {
+        ReleaseMutex(setupMutex);
+        CloseHandle(setupMutex);
+    }
+
+    if (ok && !outPath.empty()) {
+        auto* pathPtr = new std::wstring(outPath);
+        g_dllPath.store(pathPtr, std::memory_order_release);
+        g_activeVariant.store(static_cast<int>(variant), std::memory_order_release);
+        // Take exactly one reference on the DLL; it is released in Wh_ModUninit.
+        HMODULE h = LoadLibraryExW(outPath.c_str(), nullptr, 0);
+        g_hPerfCenter.store(h, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+            BuildLocalizedResourceModule(outPath, dir);
+        }
+        g_dllVerifiedOk.store(true, std::memory_order_release);
+        Wh_Log(L"PerfCenterCPL setup complete (variant %s)",
+               VariantMarkerName(variant).c_str());
+    } else {
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        Wh_Log(L"Performance Information and Tools is unavailable: the required "
+               L"PerfCenterCPL.dll could not be downloaded or verified. Check "
+               L"your internet connection and restart Explorer to retry.");
     }
 }
 
-void SetupLegacyStore(){ std::wstring dir=ExpandEnv(kDirPath); EnsureDirectoryExists(dir); g_activeVariant=ResolveSelectedVariant(); DownloadDllIfMissing(dir,g_activeVariant,g_expandedDllPath); if(!g_hPerfCenter && !g_expandedDllPath.empty()) g_hPerfCenter=GetModuleHandleW(g_expandedDllPath.c_str()); if(g_dllVerifiedOk) BuildLocalizedResourceModule(g_expandedDllPath,dir); g_setupDone=true; DWORD osM,osm,osb; GetRealOsVersion(osM,osm,osb); Wh_Log(L"Setup done: OS %u.%u build %u, variant %s, dllOk=%d, resourceModule=%d; DLL load deferred until first use after hooks are active",osM,osm,osb,VariantMarkerName(g_activeVariant).c_str(),g_dllVerifiedOk?1:0,g_localizedResourcePath.empty()?0:1); }
-void InitClsidStrings(){ g_clsidLower=kAppletClsidEnglish; g_clsidSuffix=L"clsid\\"+g_clsidLower; g_defaultIconSuffix=g_clsidSuffix+L"\\defaulticon"; g_inprocSuffix=g_clsidSuffix+L"\\inprocserver32"; g_shellFolderSuffix=g_clsidSuffix+L"\\shellfolder"; g_instanceSuffix=g_clsidSuffix+L"\\instance"; g_initPropBagSuffix=g_instanceSuffix+L"\\initpropertybag"; g_namespaceSuffix=L"controlpanel\\namespace\\"+g_clsidLower; g_providerClsidLower=kProviderClsid; g_providerSuffix=L"clsid\\"+g_providerClsidLower; g_providerInprocSuffix=g_providerSuffix+L"\\inprocserver32"; g_namespaceHkcuPath=L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\"+g_clsidLower; }
-
-static MuiLanguage GetCurrentEmbeddedLanguage();
-
-// Control Panel entry name uses the same selected language as the page.
-std::wstring GetLocalizedDisplayName(){
-    const wchar_t* text=GetMuiString(1,GetCurrentEmbeddedLanguage());
-    return text?std::wstring(text):std::wstring(kAppletDisplayNameEN);
-}
-
-// Complete in-memory translation lookup. The table above uses the exact
-// resource IDs extracted from the Windows 8 PerfCenterCPL.dll.
+// -----------------------------------------------------------------------------
+// Language selection
+// -----------------------------------------------------------------------------
 static MuiLanguage GetCurrentEmbeddedLanguage() {
-    if(!g_languageAutomatic) return g_forcedLanguage;
+    if (!g_languageAutomatic.load())
+        return static_cast<MuiLanguage>(g_forcedLanguage.load());
     LANGID languageId = GetThreadUILanguage();
-    if (!languageId) {
-        languageId = GetUserDefaultUILanguage();
-    }
+    if (!languageId) languageId = GetUserDefaultUILanguage();
 
     switch (PRIMARYLANGID(languageId)) {
         case LANG_ITALIAN: return MuiLanguage::IT_IT;
@@ -843,10 +1321,22 @@ static MuiLanguage GetCurrentEmbeddedLanguage() {
         case LANG_FRENCH: return MuiLanguage::FR_FR;
         case LANG_TURKISH: return MuiLanguage::TR_TR;
         case LANG_RUSSIAN: return MuiLanguage::RU_RU;
-        case LANG_CHINESE: return MuiLanguage::ZH_CN;
         case LANG_GERMAN: return MuiLanguage::DE_DE;
-        case LANG_PORTUGUESE: return MuiLanguage::PT_BR;
         case LANG_POLISH: return MuiLanguage::PL_PL;
+        // Only Simplified Chinese (zh-CN) is embedded. Traditional Chinese
+        // (zh-TW/zh-HK/zh-MO) falls back to English rather than showing the
+        // wrong (Simplified) variant.
+        case LANG_CHINESE:
+            return (SUBLANGID(languageId) == SUBLANG_CHINESE_SIMPLIFIED ||
+                    SUBLANGID(languageId) == SUBLANG_CHINESE_SINGAPORE)
+                       ? MuiLanguage::ZH_CN
+                       : MuiLanguage::EN_US;
+        // Only Brazilian Portuguese is embedded; European Portuguese falls back
+        // to English rather than showing the wrong variant.
+        case LANG_PORTUGUESE:
+            return SUBLANGID(languageId) == SUBLANG_PORTUGUESE_BRAZILIAN
+                       ? MuiLanguage::PT_BR
+                       : MuiLanguage::EN_US;
         default: break;
     }
 
@@ -858,45 +1348,42 @@ static MuiLanguage GetCurrentEmbeddedLanguage() {
     return MuiLanguage::EN_US;
 }
 
-static const wchar_t* GetEmbeddedLanguageTag(MuiLanguage language) {
-    switch(language) {
-        case MuiLanguage::IT_IT: return L"it-IT";
-        case MuiLanguage::ES_ES: return L"es-ES";
-        case MuiLanguage::FR_FR: return L"fr-FR";
-        case MuiLanguage::TR_TR: return L"tr-TR";
-        case MuiLanguage::RU_RU: return L"ru-RU";
-        case MuiLanguage::ZH_CN: return L"zh-CN";
-        case MuiLanguage::DE_DE: return L"de-DE";
-        case MuiLanguage::PT_BR: return L"pt-BR";
-        case MuiLanguage::PL_PL: return L"pl-PL";
-        default: return L"en-US";
-    }
-}
 
 static void LoadLanguageSetting() {
-    g_languageAutomatic=true;
-    g_forcedLanguage=MuiLanguage::EN_US;
+    g_languageAutomatic.store(true);
+    g_forcedLanguage.store(static_cast<int>(MuiLanguage::EN_US));
 
-    PCWSTR raw=Wh_GetStringSetting(L"language");
-    std::wstring value=raw?raw:L"auto";
-    Wh_FreeStringSetting(raw);
-    for(auto& character:value) character=towlower(character);
+    // WindhawkUtils::StringSetting frees the underlying pointer automatically.
+    auto raw = WindhawkUtils::StringSetting::make(L"language");
+    PCWSTR r = raw.get();
+    std::wstring value = (r && *r) ? r : L"auto";
+    for (auto& character : value) character = towlower(character);
 
-    if(value.empty()||value==L"auto"||value==L"system") return;
-    g_languageAutomatic=false;
-    if(value==L"it"||value==L"it-it") g_forcedLanguage=MuiLanguage::IT_IT;
-    else if(value==L"es"||value==L"es-es") g_forcedLanguage=MuiLanguage::ES_ES;
-    else if(value==L"fr"||value==L"fr-fr") g_forcedLanguage=MuiLanguage::FR_FR;
-    else if(value==L"tr"||value==L"tr-tr") g_forcedLanguage=MuiLanguage::TR_TR;
-    else if(value==L"ru"||value==L"ru-ru") g_forcedLanguage=MuiLanguage::RU_RU;
-    else if(value==L"zh"||value==L"zh-cn") g_forcedLanguage=MuiLanguage::ZH_CN;
-    else if(value==L"de"||value==L"de-de") g_forcedLanguage=MuiLanguage::DE_DE;
-    else if(value==L"pt"||value==L"pt-br") g_forcedLanguage=MuiLanguage::PT_BR;
-    else if(value==L"pl"||value==L"pl-pl") g_forcedLanguage=MuiLanguage::PL_PL;
-    else if(value==L"en"||value==L"en-us") g_forcedLanguage=MuiLanguage::EN_US;
+    if (value.empty() || value == L"auto" || value == L"system") return;
+    g_languageAutomatic.store(false);
+    if (value == L"it" || value == L"it-it")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::IT_IT));
+    else if (value == L"es" || value == L"es-es")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::ES_ES));
+    else if (value == L"fr" || value == L"fr-fr")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::FR_FR));
+    else if (value == L"tr" || value == L"tr-tr")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::TR_TR));
+    else if (value == L"ru" || value == L"ru-ru")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::RU_RU));
+    else if (value == L"zh" || value == L"zh-cn")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::ZH_CN));
+    else if (value == L"de" || value == L"de-de")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::DE_DE));
+    else if (value == L"pt" || value == L"pt-br")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::PT_BR));
+    else if (value == L"pl" || value == L"pl-pl")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::PL_PL));
+    else if (value == L"en" || value == L"en-us")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::EN_US));
     else {
-        g_languageAutomatic=true;
-        Wh_Log(L"Unknown language setting '%s'; using Automatic",value.c_str());
+        g_languageAutomatic.store(true);
+        Wh_Log(L"Unknown language setting '%s'; using Automatic", value.c_str());
     }
 }
 
@@ -904,287 +1391,1791 @@ static const wchar_t* GetEmbeddedTranslation(UINT id) {
     return GetMuiString(id, GetCurrentEmbeddedLanguage());
 }
 
-static std::wstring GetLocalizedInfoTip() {
-    const wchar_t* text = GetEmbeddedTranslation(2);
-    return text ? std::wstring(text)
-                : std::wstring(L"Get information about your computer's speed and performance. If solutions to performance problems are available, Windows lets you know.");
+std::wstring GetLocalizedDisplayName() {
+    const wchar_t* text = GetMuiString(1, GetCurrentEmbeddedLanguage());
+    return text ? std::wstring(text) : std::wstring(kAppletDisplayNameEN);
 }
 
-// KeyTracker + registry hooks (same as 1.0)
-class KeyTracker{public: std::wstring GetPath(HKEY k) const { if(std::wstring s=SpecialRootPath(k);!s.empty()) return s; std::lock_guard<std::mutex> l(mutex_); auto it=paths_.find(k); return it!=paths_.end()?it->second:L""; } bool IsFakeAndGetPath(HKEY k,std::wstring& o) const { if(std::wstring s=SpecialRootPath(k);!s.empty()){o=s;return false;} std::lock_guard<std::mutex> l(mutex_); bool f=fakeOwners_.count(k)!=0; auto it=paths_.find(k); o=it!=paths_.end()?it->second:L""; return f; } bool IsFake(HKEY k) const { std::lock_guard<std::mutex> l(mutex_); return fakeOwners_.count(k)!=0; } void Track(HKEY k,const std::wstring& p){ if(!k||IsSpecialRoot(k)) return; if(!ContainsRelevantKeyword(p)) return; std::lock_guard<std::mutex> l(mutex_); paths_[k]=p; } void Untrack(HKEY k){ if(!k||IsSpecialRoot(k)) return; std::lock_guard<std::mutex> l(mutex_); paths_.erase(k); } HKEY CreateFake(const std::wstring& p){ std::unique_ptr<int> o(new(std::nothrow) int(1)); if(!o) return nullptr; HKEY f=reinterpret_cast<HKEY>(o.get()); std::lock_guard<std::mutex> l(mutex_); paths_[f]=p; fakeOwners_[f]=std::move(o); return f; } void FreeFake(HKEY k){ std::lock_guard<std::mutex> l(mutex_); paths_.erase(k); fakeOwners_.erase(k); } void ClearWithoutFreeing(){ std::lock_guard<std::mutex> l(mutex_); paths_.clear(); for(auto&kv:fakeOwners_){ [[maybe_unused]] int* abandoned=kv.second.release(); } fakeOwners_.clear(); } private: static bool IsSpecialRoot(HKEY k){ auto v=(uintptr_t)k; return v>=0x80000000 && v<=0x80000004; } static std::wstring SpecialRootPath(HKEY k){ switch((uintptr_t)k){case 0x80000000:return L"HKEY_CLASSES_ROOT";case 0x80000001:return L"HKEY_CURRENT_USER";case 0x80000002:return L"HKEY_LOCAL_MACHINE";case 0x80000003:return L"HKEY_USERS";case 0x80000004:return L"HKEY_CURRENT_CONFIG";default:return L"";} } mutable std::mutex mutex_; std::unordered_map<HKEY,std::wstring> paths_; std::unordered_map<HKEY,std::unique_ptr<int>> fakeOwners_; };
-static KeyTracker g_keyTracker; static std::mutex g_injectedMutex; static std::unordered_map<HKEY,bool> g_injectedForHandle;
-bool ShouldInjectNow(HKEY k){ std::lock_guard<std::mutex> l(g_injectedMutex); bool&a=g_injectedForHandle[k]; if(a) return false; a=true; return true; }
-void ClearInjectedState(HKEY k){ std::lock_guard<std::mutex> l(g_injectedMutex); g_injectedForHandle.erase(k); }
-enum class VNode{ None,ClsidRoot,DefaultIcon,InProcServer32,ShellFolder,Instance,InitPropertyBag,NamespaceEntry,ProviderRoot,ProviderInProc };
-VNode ClassifyPath(const std::wstring& p){ if(!ContainsRelevantKeyword(p)) return VNode::None; std::wstring l=ToLower(p); if(EndsWith(l,g_namespaceSuffix)) return VNode::NamespaceEntry; if(EndsWith(l,g_initPropBagSuffix)) return VNode::InitPropertyBag; if(EndsWith(l,g_instanceSuffix)) return VNode::Instance; if(EndsWith(l,g_shellFolderSuffix)) return VNode::ShellFolder; if(EndsWith(l,g_inprocSuffix)) return VNode::InProcServer32; if(EndsWith(l,g_defaultIconSuffix)) return VNode::DefaultIcon; if(EndsWith(l,g_clsidSuffix)) return VNode::ClsidRoot; if(EndsWith(l,g_providerInprocSuffix)) return VNode::ProviderInProc; if(EndsWith(l,g_providerSuffix)) return VNode::ProviderRoot; return VNode::None; }
-bool IsApprovedKey(const std::wstring& p){ return EndsWith(ToLower(p),L"shell extensions\\approved"); }
-bool IsTargetKey(const std::wstring& p){ return ClassifyPath(p)!=VNode::None; }
-bool IsNamespaceParentKey(const std::wstring& p){ return EndsWith(ToLower(p),L"controlpanel\\namespace"); }
-LSTATUS ProvideStringValue(LPBYTE d,LPDWORD cb,const std::wstring& s){ if(!cb) return ERROR_INVALID_PARAMETER; DWORD need=(DWORD)((s.length()+1)*sizeof(wchar_t)); if(!d){*cb=need;return ERROR_SUCCESS;} if(*cb<need){*cb=need;return ERROR_MORE_DATA;} *cb=need; memcpy(d,s.c_str(),need); return ERROR_SUCCESS; }
-LSTATUS ProvideDwordValue(LPBYTE d,LPDWORD cb,DWORD v){ if(!cb) return ERROR_INVALID_PARAMETER; if(!d){*cb=sizeof(DWORD);return ERROR_SUCCESS;} if(*cb<sizeof(DWORD)){*cb=sizeof(DWORD);return ERROR_MORE_DATA;} *cb=sizeof(DWORD); *(DWORD*)d=v; return ERROR_SUCCESS; }
-std::wstring GetShdocvwPath(){ wchar_t b[MAX_PATH]{}; GetSystemDirectoryW(b,MAX_PATH); return std::wstring(b)+L"\\shdocvw.dll"; }
-bool TryProvideValue(const std::wstring& path,const std::wstring& vn,LPDWORD tp,LPBYTE d,LPDWORD cb,LSTATUS& out){
-    if(!g_dllVerifiedOk||g_expandedDllPath.empty()) return false;
-    if(IsApprovedKey(path)){ std::wstring low=ToLower(vn); if(low==g_clsidLower||low==g_providerClsidLower){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,L""); return true; } return false; }
-    VNode node=ClassifyPath(path); if(node==VNode::None) return false;
-    switch(node){
-        case VNode::NamespaceEntry: if(vn.empty()){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,GetLocalizedDisplayName()); return true; } break;
-        case VNode::ClsidRoot: if(vn.empty()){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,GetLocalizedDisplayName()); return true; } else if(vn==L"LocalizedString"){ if(tp) *tp=REG_EXPAND_SZ; out=ProvideStringValue(d,cb,L"@"+g_expandedDllPath+L",-1"); return true; } else if(vn==L"InfoTip"){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,GetLocalizedInfoTip()); return true; } else if(vn==L"{305CA226-D286-468e-B848-2B2E8E697B74} 2"){ if(tp) *tp=REG_EXPAND_SZ; out=ProvideStringValue(d,cb,L"5"); return true; } break;
-        case VNode::InProcServer32: if(vn.empty()){ if(tp) *tp=REG_EXPAND_SZ; out=ProvideStringValue(d,cb,GetShdocvwPath()); return true; } else if(vn==L"ThreadingModel"){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,L"Apartment"); return true; } break;
-        case VNode::ShellFolder: if(vn==L"Attributes"){ if(tp) *tp=REG_DWORD; out=ProvideDwordValue(d,cb,kShellFolderAttributes); return true; } else if(vn==L"WantsParseDisplayName"){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,L""); return true; } break;
-        case VNode::Instance: if(vn==L"CLSID"){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,kLayoutFolderClsid); return true; } break;
-        case VNode::InitPropertyBag: if(vn==L"ResourceDLL"){ if(tp) *tp=REG_EXPAND_SZ; out=ProvideStringValue(d,cb,g_expandedDllPath); return true; } else if(vn==L"ResourceID"){ if(tp) *tp=REG_DWORD; out=ProvideDwordValue(d,cb,kInitResourceId); return true; } break;
-        case VNode::DefaultIcon: if(vn.empty()){ if(tp) *tp=REG_EXPAND_SZ; out=ProvideStringValue(d,cb,g_expandedDllPath+L",-1"); return true; } break;
-        case VNode::ProviderRoot: if(vn.empty()){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,L""); return true; } break;
-        case VNode::ProviderInProc: if(vn.empty()){ if(tp) *tp=REG_EXPAND_SZ; out=ProvideStringValue(d,cb,g_expandedDllPath); return true; } else if(vn==L"ThreadingModel"){ if(tp) *tp=REG_SZ; out=ProvideStringValue(d,cb,L"Apartment"); return true; } break;
-        default: break;
-    } return false;
+static std::wstring GetLocalizedInfoTip() {
+    const wchar_t* text = GetEmbeddedTranslation(2);
+    return text
+               ? std::wstring(text)
+               : std::wstring(
+                     L"Get information about your computer's speed and performance. "
+                     L"If solutions to performance problems are available, Windows "
+                     L"lets you know.");
 }
-bool GetVirtualSubKeyName(VNode n,DWORD idx,std::wstring& o){ switch(n){case VNode::ClsidRoot:if(idx==0){o=L"DefaultIcon";return true;}if(idx==1){o=L"InProcServer32";return true;}if(idx==2){o=L"ShellFolder";return true;}if(idx==3){o=L"Instance";return true;}return false;case VNode::Instance:if(idx==0){o=L"InitPropertyBag";return true;}return false;case VNode::ProviderRoot:if(idx==0){o=L"InProcServer32";return true;}return false;default:return false;} }
-DWORD GetVirtualSubKeyCount(VNode n){ switch(n){case VNode::ClsidRoot:return 4;case VNode::Instance:return 1;case VNode::ProviderRoot:return 1;default:return 0;} }
-DWORD GetVirtualValueCount(VNode n){ switch(n){case VNode::ClsidRoot:return 4;case VNode::InProcServer32:return 2;case VNode::ShellFolder:return 2;case VNode::Instance:return 1;case VNode::InitPropertyBag:return 2;case VNode::DefaultIcon:return 1;case VNode::ProviderRoot:return 1;case VNode::ProviderInProc:return 2;case VNode::NamespaceEntry:return 1;default:return 0;} }
-using RegOpenKeyExW_t=decltype(&RegOpenKeyExW); RegOpenKeyExW_t RegOpenKeyExWOriginal;
-LSTATUS WINAPI RegOpenKeyExWHook(HKEY hk,LPCWSTR sub,DWORD opt,REGSAM sam,PHKEY out){ std::wstring full; if(g_keyTracker.IsFakeAndGetPath(hk,full)){ if(sub&&*sub){ if(!full.empty()) full+=L"\\"; full+=sub; } if(IsTargetKey(full)){ Wh_Log(L"[CPL-DBG] OpenKey(fake-parent) HIT -> %s",full.c_str()); HKEY f=g_keyTracker.CreateFake(full); if(!f) return ERROR_OUTOFMEMORY; if(out) *out=f; return ERROR_SUCCESS; } Wh_Log(L"[CPL-DBG] OpenKey(fake-parent) MISS -> %s",full.c_str()); return ERROR_FILE_NOT_FOUND; } LSTATUS st=RegOpenKeyExWOriginal(hk,sub,opt,sam,out); if(st==ERROR_SUCCESS&&out&&*out){ try{ std::wstring base=g_keyTracker.GetPath(hk); std::wstring fp=base; if(sub&&*sub){ if(!fp.empty()) fp+=L"\\"; fp+=sub; } g_keyTracker.Track(*out,fp); }catch(...){} } else if(st==ERROR_FILE_NOT_FOUND&&out){ std::wstring base=g_keyTracker.GetPath(hk); std::wstring fp=base; if(sub&&*sub){ if(!fp.empty()) fp+=L"\\"; fp+=sub; } if(IsTargetKey(fp)){ Wh_Log(L"[CPL-DBG] OpenKey(real-miss->fake) HIT -> %s",fp.c_str()); HKEY f=g_keyTracker.CreateFake(fp); if(!f) return ERROR_OUTOFMEMORY; if(out) *out=f; return ERROR_SUCCESS; } } return st; }
-using RegCloseKey_t=decltype(&RegCloseKey); RegCloseKey_t RegCloseKeyOriginal;
-LSTATUS WINAPI RegCloseKeyHook(HKEY k){ if(g_keyTracker.IsFake(k)){ g_keyTracker.FreeFake(k); return ERROR_SUCCESS; } LSTATUS s=RegCloseKeyOriginal(k); g_keyTracker.Untrack(k); ClearInjectedState(k); return s; }
-using RegQueryValueExW_t=decltype(&RegQueryValueExW); RegQueryValueExW_t RegQueryValueExWOriginal;
-LSTATUS WINAPI RegQueryValueExWHook(HKEY k,LPCWSTR vn,LPDWORD r,LPDWORD t,LPBYTE d,LPDWORD cb){ try{ std::wstring p=g_keyTracker.GetPath(k); if(!p.empty()){ std::wstring v=vn?vn:L""; LSTATUS o; if(TryProvideValue(p,v,t,d,cb,o)) return o; if(g_keyTracker.IsFake(k)) Wh_Log(L"[CPL-DBG] QueryValue MISS on fake key %s value='%s'",p.c_str(),v.c_str()); } if(g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND; return RegQueryValueExWOriginal(k,vn,r,t,d,cb);}catch(...){return RegQueryValueExWOriginal(k,vn,r,t,d,cb);} }
-using RegGetValueW_t=decltype(&RegGetValueW); RegGetValueW_t RegGetValueWOriginal;
-LSTATUS WINAPI RegGetValueWHook(HKEY hk,LPCWSTR sub,LPCWSTR val,DWORD fl,LPDWORD tp,PVOID d,LPDWORD cb){ try{ std::wstring p=g_keyTracker.GetPath(hk); if(sub&&*sub){ if(!p.empty()) p+=L"\\"; p+=sub; } if(!p.empty()){ std::wstring v=val?val:L""; LSTATUS o; if(TryProvideValue(p,v,tp,(LPBYTE)d,cb,o)) return o; } if(g_keyTracker.IsFake(hk)) return ERROR_FILE_NOT_FOUND; return RegGetValueWOriginal(hk,sub,val,fl,tp,d,cb);}catch(...){return RegGetValueWOriginal(hk,sub,val,fl,tp,d,cb);} }
-using RegEnumKeyExW_t=decltype(&RegEnumKeyExW); RegEnumKeyExW_t RegEnumKeyExWOriginal;
-LSTATUS WINAPI RegEnumKeyExWHook(HKEY k,DWORD idx,LPWSTR name,LPDWORD lpcch,LPDWORD r,LPWSTR cls,LPDWORD lpcCls,PFILETIME ft){ try{ if(g_keyTracker.IsFake(k)){ std::wstring p=g_keyTracker.GetPath(k); VNode n=ClassifyPath(p); std::wstring s; if(!GetVirtualSubKeyName(n,idx,s)) return ERROR_NO_MORE_ITEMS; if(!lpcch||!name) return ERROR_INVALID_PARAMETER; if(*lpcch < s.size()+1){*lpcch=(DWORD)(s.size()+1);return ERROR_MORE_DATA;} wcscpy_s(name,*lpcch,s.c_str()); *lpcch=(DWORD)s.size(); if(ft) GetSystemTimeAsFileTime(ft); return ERROR_SUCCESS; } const std::wstring path=g_keyTracker.GetPath(k); if(!IsNamespaceParentKey(path)) return RegEnumKeyExWOriginal(k,idx,name,lpcch,r,cls,lpcCls,ft); if(!g_dllVerifiedOk) return RegEnumKeyExWOriginal(k,idx,name,lpcch,r,cls,lpcCls,ft); const LSTATUS st=RegEnumKeyExWOriginal(k,idx,name,lpcch,r,cls,lpcCls,ft); if(st!=ERROR_NO_MORE_ITEMS) return st; { HKEY hTest=nullptr; if(RegOpenKeyExWOriginal(k,g_clsidLower.c_str(),0,KEY_READ,&hTest)==ERROR_SUCCESS){ RegCloseKeyOriginal(hTest); return ERROR_NO_MORE_ITEMS; } } if(!ShouldInjectNow(k)) { Wh_Log(L"[CPL-DBG] EnumKeyEx: injection skipped (already done for this handle) on %s",path.c_str()); return ERROR_NO_MORE_ITEMS; } Wh_Log(L"[CPL-DBG] EnumKeyEx: INJECTING %s into %s",g_clsidLower.c_str(),path.c_str()); if(!lpcch||!name) return ERROR_INVALID_PARAMETER; if(*lpcch < g_clsidLower.size()+1){*lpcch=(DWORD)(g_clsidLower.size()+1);return ERROR_MORE_DATA;} wcscpy_s(name,*lpcch,g_clsidLower.c_str()); *lpcch=(DWORD)g_clsidLower.size(); if(ft) GetSystemTimeAsFileTime(ft); return ERROR_SUCCESS; }catch(...){return RegEnumKeyExWOriginal(k,idx,name,lpcch,r,cls,lpcCls,ft);} }
-using RegEnumKeyW_t=decltype(&RegEnumKeyW); RegEnumKeyW_t RegEnumKeyWOriginal;
-LSTATUS WINAPI RegEnumKeyWHook(HKEY k,DWORD idx,LPWSTR name,DWORD cch){ try{ if(g_keyTracker.IsFake(k)){ std::wstring p=g_keyTracker.GetPath(k); VNode n=ClassifyPath(p); std::wstring s; if(!GetVirtualSubKeyName(n,idx,s)) return ERROR_NO_MORE_ITEMS; if(!name) return ERROR_INVALID_PARAMETER; if(cch<=s.size()) return ERROR_MORE_DATA; wcscpy_s(name,cch,s.c_str()); return ERROR_SUCCESS; } const std::wstring path=g_keyTracker.GetPath(k); if(!IsNamespaceParentKey(path)) return RegEnumKeyWOriginal(k,idx,name,cch); if(!g_dllVerifiedOk) return RegEnumKeyWOriginal(k,idx,name,cch); const LSTATUS st=RegEnumKeyWOriginal(k,idx,name,cch); if(st!=ERROR_NO_MORE_ITEMS) return st; { HKEY hTest=nullptr; if(RegOpenKeyExWOriginal(k,g_clsidLower.c_str(),0,KEY_READ,&hTest)==ERROR_SUCCESS){ RegCloseKeyOriginal(hTest); return ERROR_NO_MORE_ITEMS; } } if(!ShouldInjectNow(k)) return ERROR_NO_MORE_ITEMS; if(!name) return ERROR_INVALID_PARAMETER; if(cch<=g_clsidLower.size()) return ERROR_MORE_DATA; wcscpy_s(name,cch,g_clsidLower.c_str()); return ERROR_SUCCESS; }catch(...){return RegEnumKeyWOriginal(k,idx,name,cch);} }
-using RegQueryInfoKeyW_t=decltype(&RegQueryInfoKeyW); RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal;
-LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k,LPWSTR cls,LPDWORD lpcCls,LPDWORD r,LPDWORD cSubKeys,LPDWORD lpcMaxSub,LPDWORD lpcMaxCls,LPDWORD cValues,LPDWORD lpcMaxValName,LPDWORD lpcMaxValData,LPDWORD sec,PFILETIME ft){ if(g_keyTracker.IsFake(k)){ std::wstring p=g_keyTracker.GetPath(k); VNode n=ClassifyPath(p); if(cSubKeys) *cSubKeys=GetVirtualSubKeyCount(n); if(cValues) *cValues=GetVirtualValueCount(n); if(lpcMaxSub) *lpcMaxSub=32; if(lpcMaxCls) *lpcMaxCls=0; if(lpcMaxValName) *lpcMaxValName=64; if(lpcMaxValData) *lpcMaxValData=512; if(cls&&lpcCls){ if(*lpcCls>0) cls[0]=0; *lpcCls=0; } if(ft) GetSystemTimeAsFileTime(ft); return ERROR_SUCCESS; } std::wstring path=g_keyTracker.GetPath(k); if(IsNamespaceParentKey(path)&&g_dllVerifiedOk){ LSTATUS st=RegQueryInfoKeyWOriginal(k,cls,lpcCls,r,cSubKeys,lpcMaxSub,lpcMaxCls,cValues,lpcMaxValName,lpcMaxValData,sec,ft); if(st==ERROR_SUCCESS&&cSubKeys){ HKEY hTest=nullptr; if(RegOpenKeyExWOriginal(k,g_clsidLower.c_str(),0,KEY_READ,&hTest)!=ERROR_SUCCESS) (*cSubKeys)++; else RegCloseKeyOriginal(hTest); } return st; } return RegQueryInfoKeyWOriginal(k,cls,lpcCls,r,cSubKeys,lpcMaxSub,lpcMaxCls,cValues,lpcMaxValName,lpcMaxValData,sec,ft); }
-using RegEnumValueW_t=decltype(&RegEnumValueW); RegEnumValueW_t RegEnumValueWOriginal;
-LSTATUS WINAPI RegEnumValueWHook(HKEY k,DWORD idx,LPWSTR valName,LPDWORD lpcchValName,LPDWORD r,LPDWORD tp,LPBYTE data,LPDWORD cbData){ if(g_keyTracker.IsFake(k)){ std::wstring p=g_keyTracker.GetPath(k); VNode n=ClassifyPath(p); std::wstring vname; DWORD vtype=0; std::wstring vstr; DWORD vdword=0; bool isStr=true; switch(n){case VNode::ClsidRoot:if(idx==0){vname=L"";vstr=GetLocalizedDisplayName();vtype=REG_SZ;}else if(idx==1){vname=L"LocalizedString";vstr=L"@"+g_expandedDllPath+L",-1";vtype=REG_EXPAND_SZ;}else if(idx==2){vname=L"InfoTip";vstr=GetLocalizedInfoTip();vtype=REG_SZ;}else if(idx==3){vname=L"{305CA226-D286-468e-B848-2B2E8E697B74} 2";vstr=L"5";vtype=REG_EXPAND_SZ;}else return ERROR_NO_MORE_ITEMS;break; case VNode::InProcServer32:if(idx==0){vname=L"";vstr=GetShdocvwPath();vtype=REG_EXPAND_SZ;}else if(idx==1){vname=L"ThreadingModel";vstr=L"Apartment";vtype=REG_SZ;}else return ERROR_NO_MORE_ITEMS;break; case VNode::ShellFolder:if(idx==0){vname=L"Attributes";vdword=kShellFolderAttributes;vtype=REG_DWORD;isStr=false;}else if(idx==1){vname=L"WantsParseDisplayName";vstr=L"";vtype=REG_SZ;}else return ERROR_NO_MORE_ITEMS;break; case VNode::Instance:if(idx==0){vname=L"CLSID";vstr=kLayoutFolderClsid;vtype=REG_SZ;}else return ERROR_NO_MORE_ITEMS;break; case VNode::InitPropertyBag:if(idx==0){vname=L"ResourceDLL";vstr=g_expandedDllPath;vtype=REG_EXPAND_SZ;}else if(idx==1){vname=L"ResourceID";vdword=kInitResourceId;vtype=REG_DWORD;isStr=false;}else return ERROR_NO_MORE_ITEMS;break; case VNode::DefaultIcon:if(idx==0){vname=L"";vstr=g_expandedDllPath+L",-1";vtype=REG_EXPAND_SZ;}else return ERROR_NO_MORE_ITEMS;break; case VNode::NamespaceEntry:if(idx==0){vname=L"";vstr=GetLocalizedDisplayName();vtype=REG_SZ;}else return ERROR_NO_MORE_ITEMS;break; default:return ERROR_NO_MORE_ITEMS;} if(!lpcchValName) return ERROR_INVALID_PARAMETER; DWORD needName=(DWORD)(vname.size()+1); if(!valName){*lpcchValName=needName;return ERROR_SUCCESS;} if(*lpcchValName<needName){*lpcchValName=needName;return ERROR_MORE_DATA;} wcscpy_s(valName,*lpcchValName,vname.c_str()); *lpcchValName=(DWORD)vname.size(); if(r) *r=0; if(tp) *tp=vtype; if(isStr){ DWORD need=(DWORD)((vstr.size()+1)*sizeof(wchar_t)); if(!cbData) return ERROR_SUCCESS; if(!data){*cbData=need;return ERROR_SUCCESS;} if(*cbData<need){*cbData=need;return ERROR_MORE_DATA;} *cbData=need; memcpy(data,vstr.c_str(),need); } else { if(!cbData) return ERROR_SUCCESS; if(!data){*cbData=sizeof(DWORD);return ERROR_SUCCESS;} if(*cbData<sizeof(DWORD)){*cbData=sizeof(DWORD);return ERROR_MORE_DATA;} *cbData=sizeof(DWORD); *(DWORD*)data=vdword; } return ERROR_SUCCESS; } return RegEnumValueWOriginal(k,idx,valName,lpcchValName,r,tp,data,cbData); }
-void* GetRegFunc(const char* n){ HMODULE h=GetModuleHandleW(L"kernelbase.dll"); if(h){ void*p=(void*)GetProcAddress(h,n); if(p) return p; } HMODULE a=GetModuleHandleW(L"advapi32.dll"); if(!a) a=LoadLibraryW(L"advapi32.dll"); if(a){ void*p=(void*)GetProcAddress(a,n); if(p) return p; } return nullptr; }
-void RemoveClsidFromHkcu(); void DeleteClassesTree(const std::wstring& s); bool g_hkcuWritten=false;
-LSTATUS SetRegString(HKEY k,const wchar_t* n,const std::wstring& d,DWORD t=REG_SZ){ return RegSetValueExW(k,n,0,t,(const BYTE*)d.c_str(),(DWORD)((d.size()+1)*sizeof(wchar_t))); }
-LSTATUS SetRegDword(HKEY k,const wchar_t* n,DWORD d){ return RegSetValueExW(k,n,0,REG_DWORD,(const BYTE*)&d,sizeof(d)); }
-HKEY CreateClassesKey(const std::wstring& sub){ HKEY h=nullptr; std::wstring f=L"Software\\Classes\\"+sub; if(RegCreateKeyExW(HKEY_CURRENT_USER,f.c_str(),0,nullptr,REG_OPTION_NON_VOLATILE,KEY_WRITE,nullptr,&h,nullptr)!=ERROR_SUCCESS) return nullptr; return h; }
-HKEY CreateHkcuKey(const std::wstring& full){ HKEY h=nullptr; if(RegCreateKeyExW(HKEY_CURRENT_USER,full.c_str(),0,nullptr,REG_OPTION_NON_VOLATILE,KEY_WRITE,nullptr,&h,nullptr)!=ERROR_SUCCESS) return nullptr; return h; }
-void DeleteClassesTree(const std::wstring& sub){ std::wstring f=L"Software\\Classes\\"+sub; LSTATUS st=RegDeleteTreeW(HKEY_CURRENT_USER,f.c_str()); if(st!=0&&st!=ERROR_FILE_NOT_FOUND) Wh_Log(L"HKCU delete fail %s",f.c_str()); }
-void DeleteHkcuTree(const std::wstring& full){ LSTATUS st=RegDeleteTreeW(HKEY_CURRENT_USER,full.c_str()); if(st!=0&&st!=ERROR_FILE_NOT_FOUND) Wh_Log(L"HKCU delete fail %s",full.c_str()); }
-bool WriteClsidToHkcu(){ RemoveClsidFromHkcu(); if(!g_dllVerifiedOk||g_expandedDllPath.empty()) return false; std::wstring displayName=GetLocalizedDisplayName(); const std::wstring clsidKey=L"CLSID\\"+g_clsidLower; const std::wstring shdocvw=GetShdocvwPath(); HKEY h=CreateClassesKey(clsidKey); if(!h) return false; SetRegString(h,nullptr,displayName); SetRegString(h,L"LocalizedString",L"@"+g_expandedDllPath+L",-1",REG_EXPAND_SZ); SetRegString(h,L"InfoTip",GetLocalizedInfoTip(),REG_SZ); SetRegString(h,L"{305CA226-D286-468e-B848-2B2E8E697B74} 2",L"5",REG_EXPAND_SZ); RegCloseKey(h); h=CreateClassesKey(clsidKey+L"\\DefaultIcon"); if(h){ SetRegString(h,nullptr,g_expandedDllPath+L",-1",REG_EXPAND_SZ); RegCloseKey(h); } h=CreateClassesKey(clsidKey+L"\\InProcServer32"); if(h){ SetRegString(h,nullptr,shdocvw,REG_EXPAND_SZ); SetRegString(h,L"ThreadingModel",L"Apartment"); RegCloseKey(h); } h=CreateClassesKey(clsidKey+L"\\ShellFolder"); if(h){ SetRegDword(h,L"Attributes",kShellFolderAttributes); SetRegString(h,L"WantsParseDisplayName",L""); RegCloseKey(h); } h=CreateClassesKey(clsidKey+L"\\Instance"); if(h){ SetRegString(h,L"CLSID",kLayoutFolderClsid); RegCloseKey(h); } h=CreateClassesKey(clsidKey+L"\\Instance\\InitPropertyBag"); if(h){ SetRegString(h,L"ResourceDLL",g_expandedDllPath,REG_EXPAND_SZ); SetRegDword(h,L"ResourceID",kInitResourceId); RegCloseKey(h); } const std::wstring prov=L"CLSID\\"+g_providerClsidLower; h=CreateClassesKey(prov); if(h){ SetRegString(h,nullptr,L""); RegCloseKey(h); } h=CreateClassesKey(prov+L"\\InProcServer32"); if(h){ SetRegString(h,nullptr,g_expandedDllPath,REG_EXPAND_SZ); SetRegString(h,L"ThreadingModel",L"Apartment"); RegCloseKey(h); } h=CreateHkcuKey(L"Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved"); if(h){ SetRegString(h,g_clsidLower.c_str(),L""); SetRegString(h,g_providerClsidLower.c_str(),L""); RegCloseKey(h); } h=CreateHkcuKey(g_namespaceHkcuPath); if(h){ SetRegString(h,nullptr,displayName); RegCloseKey(h); } g_hkcuWritten=true; return true; }
-void RemoveClsidFromHkcu(){ DeleteClassesTree(L"CLSID\\"+g_clsidLower); DeleteClassesTree(L"CLSID\\"+g_providerClsidLower); HKEY h=nullptr; if(RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",0,KEY_SET_VALUE,&h)==ERROR_SUCCESS){ RegDeleteValueW(h,g_clsidLower.c_str()); RegDeleteValueW(h,g_providerClsidLower.c_str()); RegCloseKey(h); } DeleteHkcuTree(g_namespaceHkcuPath); g_hkcuWritten=false; }
-using LoadLibraryExW_t=HMODULE(WINAPI*)(LPCWSTR,HANDLE,DWORD); using LoadLibraryW_t=HMODULE(WINAPI*)(LPCWSTR); using LoadLibraryExA_t=HMODULE(WINAPI*)(LPCSTR,HANDLE,DWORD); using LoadLibraryA_t=HMODULE(WINAPI*)(LPCSTR); using GetModuleHandleW_t=HMODULE(WINAPI*)(LPCWSTR); using GetModuleHandleA_t=HMODULE(WINAPI*)(LPCSTR); using GetModuleHandleExW_t=BOOL(WINAPI*)(DWORD,LPCWSTR,HMODULE*); LoadLibraryExW_t LoadLibraryExWOriginal; LoadLibraryW_t LoadLibraryWOriginal; LoadLibraryExA_t LoadLibraryExAOriginal; LoadLibraryA_t LoadLibraryAOriginal; GetModuleHandleW_t GetModuleHandleWOriginal; GetModuleHandleA_t GetModuleHandleAOriginal; GetModuleHandleExW_t GetModuleHandleExWOriginal;
-bool IsPerfCenterModuleNameW(LPCWSTR n){ if(!n) return false; std::wstring s(n); if(s.empty()||s.size()>MAX_PATH*2) return false; size_t p=s.find_last_of(L"\\/"); std::wstring leaf=p==std::wstring::npos?s:s.substr(p+1); if(leaf.size()!=17) return false; return _wcsicmp(leaf.c_str(),L"PerfCenterCPL.dll")==0; }
-bool IsPerfCenterModuleNameA(LPCSTR n){ if(!n) return false; std::string s(n); if(s.empty()||s.size()>MAX_PATH*2) return false; size_t p=s.find_last_of("\\/"); std::string leaf=p==std::string::npos?s:s.substr(p+1); if(leaf.size()!=17) return false; return _stricmp(leaf.c_str(),"PerfCenterCPL.dll")==0; }
-bool ShouldRedirectModuleW(LPCWSTR n,std::wstring& o){ if(g_expandedDllPath.empty()) return false; if(!IsPerfCenterModuleNameW(n)) return false; if(_wcsicmp(n,g_expandedDllPath.c_str())==0) return false; o=g_expandedDllPath; return true; }
-HMODULE WINAPI LoadLibraryExWHook(LPCWSTR f,HANDLE hf,DWORD fl){ std::wstring r; if(ShouldRedirectModuleW(f,r)) return LoadLibraryExWOriginal(r.c_str(),hf,fl); return LoadLibraryExWOriginal(f,hf,fl); }
-HMODULE WINAPI LoadLibraryWHook(LPCWSTR f){ std::wstring r; if(ShouldRedirectModuleW(f,r)) return LoadLibraryWOriginal(r.c_str()); return LoadLibraryWOriginal(f); }
-HMODULE WINAPI LoadLibraryExAHook(LPCSTR f,HANDLE hf,DWORD fl){ if(IsPerfCenterModuleNameA(f)&&!g_expandedDllPath.empty()) return LoadLibraryExWOriginal(g_expandedDllPath.c_str(),hf,fl); return LoadLibraryExAOriginal(f,hf,fl); }
-HMODULE WINAPI LoadLibraryAHook(LPCSTR f){ if(IsPerfCenterModuleNameA(f)&&!g_expandedDllPath.empty()) return LoadLibraryWOriginal(g_expandedDllPath.c_str()); return LoadLibraryAOriginal(f); }
-HMODULE WINAPI GetModuleHandleWHook(LPCWSTR n){ if(IsPerfCenterModuleNameW(n)&&!g_expandedDllPath.empty()){ HMODULE h=GetModuleHandleWOriginal(g_expandedDllPath.c_str()); if(h) return h; HMODULE h2=LoadLibraryWOriginal(g_expandedDllPath.c_str()); if(h2) return h2; } return GetModuleHandleWOriginal(n); }
-HMODULE WINAPI GetModuleHandleAHook(LPCSTR n){ if(IsPerfCenterModuleNameA(n)&&!g_expandedDllPath.empty()){ HMODULE h=GetModuleHandleWOriginal(g_expandedDllPath.c_str()); if(h) return h; HMODULE h2=LoadLibraryWOriginal(g_expandedDllPath.c_str()); if(h2) return h2; } return GetModuleHandleAOriginal(n); }
-BOOL WINAPI GetModuleHandleExWHook(DWORD f,LPCWSTR n,HMODULE* o){ if(n&&IsPerfCenterModuleNameW(n)&&!g_expandedDllPath.empty()) return GetModuleHandleExWOriginal(f,g_expandedDllPath.c_str(),o); return GetModuleHandleExWOriginal(f,n,o); }
-void InstallModuleRedirectHooks(){ HMODULE k32=GetModuleHandleW(L"kernel32.dll"); if(!k32) return; void *pExW=(void*)GetProcAddress(k32,"LoadLibraryExW"),*pW=(void*)GetProcAddress(k32,"LoadLibraryW"),*pExA=(void*)GetProcAddress(k32,"LoadLibraryExA"),*pA=(void*)GetProcAddress(k32,"LoadLibraryA"),*pGMW=(void*)GetProcAddress(k32,"GetModuleHandleW"),*pGMA=(void*)GetProcAddress(k32,"GetModuleHandleA"),*pGMExW=(void*)GetProcAddress(k32,"GetModuleHandleExW"); if(pExW) Wh_SetFunctionHook(pExW,(void*)LoadLibraryExWHook,(void**)&LoadLibraryExWOriginal); if(pW) Wh_SetFunctionHook(pW,(void*)LoadLibraryWHook,(void**)&LoadLibraryWOriginal); if(pExA) Wh_SetFunctionHook(pExA,(void*)LoadLibraryExAHook,(void**)&LoadLibraryExAOriginal); if(pA) Wh_SetFunctionHook(pA,(void*)LoadLibraryAHook,(void**)&LoadLibraryAOriginal); if(pGMW) Wh_SetFunctionHook(pGMW,(void*)GetModuleHandleWHook,(void**)&GetModuleHandleWOriginal); if(pGMA) Wh_SetFunctionHook(pGMA,(void*)GetModuleHandleAHook,(void**)&GetModuleHandleAOriginal); if(pGMExW) Wh_SetFunctionHook(pGMExW,(void*)GetModuleHandleExWHook,(void**)&GetModuleHandleExWOriginal); }
+
+// -----------------------------------------------------------------------------
+// Registry virtualization
+// -----------------------------------------------------------------------------
+std::wstring g_clsidLower, g_clsidSuffix, g_defaultIconSuffix, g_inprocSuffix,
+    g_shellFolderSuffix, g_instanceSuffix, g_initPropBagSuffix, g_namespaceSuffix;
+std::wstring g_providerClsidLower, g_providerSuffix, g_providerInprocSuffix,
+    g_namespaceHkcuPath;
+
+void InitClsidStrings() {
+    g_clsidLower = kAppletClsidEnglish;
+    g_clsidSuffix = L"clsid\\" + g_clsidLower;
+    g_defaultIconSuffix = g_clsidSuffix + L"\\defaulticon";
+    g_inprocSuffix = g_clsidSuffix + L"\\inprocserver32";
+    g_shellFolderSuffix = g_clsidSuffix + L"\\shellfolder";
+    g_instanceSuffix = g_clsidSuffix + L"\\instance";
+    g_initPropBagSuffix = g_instanceSuffix + L"\\initpropertybag";
+    g_namespaceSuffix = L"controlpanel\\namespace\\" + g_clsidLower;
+    g_providerClsidLower = kProviderClsid;
+    g_providerSuffix = L"clsid\\" + g_providerClsidLower;
+    g_providerInprocSuffix = g_providerSuffix + L"\\inprocserver32";
+    g_namespaceHkcuPath =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\" +
+        g_clsidLower;
+}
+
+// KeyTracker maps HKEY handles to registry paths and tracks the fake handles the
+// virtualization layer hands out. Reads use a shared lock (so concurrent
+// registry reads are not serialized against each other), writes use an
+// exclusive lock.
+class KeyTracker {
+public:
+    std::wstring GetPath(HKEY k) const {
+        if (std::wstring s = SpecialRootPath(k); !s.empty()) return s;
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        auto it = paths_.find(k);
+        return it != paths_.end() ? it->second : std::wstring();
+    }
+    bool IsFakeAndGetPath(HKEY k, std::wstring& o) const {
+        if (std::wstring s = SpecialRootPath(k); !s.empty()) {
+            o = s;
+            return false;
+        }
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        bool f = fakeOwners_.count(k) != 0;
+        auto it = paths_.find(k);
+        o = it != paths_.end() ? it->second : std::wstring();
+        return f;
+    }
+    bool IsFake(HKEY k) const {
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        return fakeOwners_.count(k) != 0;
+    }
+    void Track(HKEY k, const std::wstring& p) {
+        if (!k || IsSpecialRoot(k)) return;
+        if (!ContainsRelevantKeywordCheap(p.c_str())) return;
+        std::unique_lock<std::shared_mutex> l(mutex_);
+        paths_[k] = p;
+    }
+    void Untrack(HKEY k) {
+        if (!k || IsSpecialRoot(k)) return;
+        std::unique_lock<std::shared_mutex> l(mutex_);
+        paths_.erase(k);
+    }
+    HKEY CreateFake(const std::wstring& p) {
+        std::unique_ptr<int> o(new (std::nothrow) int(1));
+        if (!o) return nullptr;
+        HKEY f = reinterpret_cast<HKEY>(o.get());
+        std::unique_lock<std::shared_mutex> l(mutex_);
+        paths_[f] = p;
+        fakeOwners_[f] = std::move(o);
+        return f;
+    }
+    void FreeFake(HKEY k) {
+        std::unique_lock<std::shared_mutex> l(mutex_);
+        paths_.erase(k);
+        fakeOwners_.erase(k);
+    }
+    // On unload we deliberately abandon (leak) the backing int of each
+    // outstanding fake key. This keeps the addresses reserved so they can never
+    // be handed back by a subsequent allocation and mistaken for a valid OS
+    // handle. This is intentional, not a leak bug.
+    void ClearWithoutFreeing() {
+        std::unique_lock<std::shared_mutex> l(mutex_);
+        paths_.clear();
+        for (auto& kv : fakeOwners_) {
+            [[maybe_unused]] int* abandoned = kv.second.release();
+        }
+        fakeOwners_.clear();
+    }
+
+private:
+    static bool IsSpecialRoot(HKEY k) {
+        auto v = reinterpret_cast<uintptr_t>(k);
+        return v >= 0x80000000 && v <= 0x80000004;
+    }
+    static std::wstring SpecialRootPath(HKEY k) {
+        switch (reinterpret_cast<uintptr_t>(k)) {
+            case 0x80000000: return L"HKEY_CLASSES_ROOT";
+            case 0x80000001: return L"HKEY_CURRENT_USER";
+            case 0x80000002: return L"HKEY_LOCAL_MACHINE";
+            case 0x80000003: return L"HKEY_USERS";
+            case 0x80000004: return L"HKEY_CURRENT_CONFIG";
+            default: return std::wstring();
+        }
+    }
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<HKEY, std::wstring> paths_;
+    std::unordered_map<HKEY, std::unique_ptr<int>> fakeOwners_;
+};
+
+static KeyTracker g_keyTracker;
+static std::mutex g_injectedMutex;
+static std::unordered_map<HKEY, bool> g_injectedForHandle;
+
+// Inject the namespace entry once per enumeration pass. Resetting when a new
+// pass starts (idx==0) means a caller that enumerates twice on the same handle
+// (e.g. once to size buffers) still sees the entry on each pass.
+static bool ShouldInjectNow(HKEY k, DWORD idx) {
+    std::lock_guard<std::mutex> l(g_injectedMutex);
+    if (idx == 0) g_injectedForHandle[k] = false;
+    bool& a = g_injectedForHandle[k];
+    if (a) return false;
+    a = true;
+    return true;
+}
+void ClearInjectedState(HKEY k) {
+    std::lock_guard<std::mutex> l(g_injectedMutex);
+    g_injectedForHandle.erase(k);
+}
+
+enum class VNode {
+    None, ClsidRoot, DefaultIcon, InProcServer32, ShellFolder, Instance,
+    InitPropertyBag, NamespaceEntry, ProviderRoot, ProviderInProc
+};
+
+VNode ClassifyPath(const std::wstring& p) {
+    if (!ContainsRelevantKeywordCheap(p.c_str())) return VNode::None;
+    std::wstring l = ToLower(p);
+    if (EndsWith(l, g_namespaceSuffix)) return VNode::NamespaceEntry;
+    if (EndsWith(l, g_initPropBagSuffix)) return VNode::InitPropertyBag;
+    if (EndsWith(l, g_instanceSuffix)) return VNode::Instance;
+    if (EndsWith(l, g_shellFolderSuffix)) return VNode::ShellFolder;
+    if (EndsWith(l, g_inprocSuffix)) return VNode::InProcServer32;
+    if (EndsWith(l, g_defaultIconSuffix)) return VNode::DefaultIcon;
+    if (EndsWith(l, g_clsidSuffix)) return VNode::ClsidRoot;
+    if (EndsWith(l, g_providerInprocSuffix)) return VNode::ProviderInProc;
+    if (EndsWith(l, g_providerSuffix)) return VNode::ProviderRoot;
+    return VNode::None;
+}
+
+bool IsApprovedKey(const std::wstring& p) {
+    return EndsWith(ToLower(p), L"shell extensions\\approved");
+}
+bool IsTargetKey(const std::wstring& p) { return ClassifyPath(p) != VNode::None; }
+bool IsNamespaceParentKey(const std::wstring& p) {
+    return EndsWith(ToLower(p), L"controlpanel\\namespace");
+}
+
+LSTATUS ProvideStringValue(LPBYTE d, LPDWORD cb, const std::wstring& s) {
+    if (!cb) return ERROR_INVALID_PARAMETER;
+    DWORD need = static_cast<DWORD>((s.length() + 1) * sizeof(wchar_t));
+    if (!d) {
+        *cb = need;
+        return ERROR_SUCCESS;
+    }
+    if (*cb < need) {
+        *cb = need;
+        return ERROR_MORE_DATA;
+    }
+    *cb = need;
+    memcpy(d, s.c_str(), need);
+    return ERROR_SUCCESS;
+}
+
+LSTATUS ProvideDwordValue(LPBYTE d, LPDWORD cb, DWORD v) {
+    if (!cb) return ERROR_INVALID_PARAMETER;
+    if (!d) {
+        *cb = sizeof(DWORD);
+        return ERROR_SUCCESS;
+    }
+    if (*cb < sizeof(DWORD)) {
+        *cb = sizeof(DWORD);
+        return ERROR_MORE_DATA;
+    }
+    *cb = sizeof(DWORD);
+    *reinterpret_cast<DWORD*>(d) = v;
+    return ERROR_SUCCESS;
+}
+
+std::wstring GetShdocvwPath() {
+    wchar_t b[MAX_PATH]{};
+    GetSystemDirectoryW(b, MAX_PATH);
+    return std::wstring(b) + L"\\shdocvw.dll";
+}
+
+// Compute the virtual value for (path, valueName). Shared by the W and A value
+// query hooks and the value enumerators so they always agree.
+static bool TryProvideValueData(const std::wstring& path, const std::wstring& vn,
+                                DWORD* type, std::wstring& strOut,
+                                DWORD& dwordOut, bool& isStr, LSTATUS& status) {
+    const std::wstring* dllPath = CurrentDllPath();
+    if (!g_dllVerifiedOk.load() || !dllPath || dllPath->empty()) return false;
+
+    if (IsApprovedKey(path)) {
+        std::wstring low = ToLower(vn);
+        if (low == g_clsidLower || low == g_providerClsidLower) {
+            if (type) *type = REG_SZ;
+            strOut.clear();
+            isStr = true;
+            status = ERROR_SUCCESS;
+            return true;
+        }
+        return false;
+    }
+
+    VNode node = ClassifyPath(path);
+    if (node == VNode::None) return false;
+    switch (node) {
+        case VNode::NamespaceEntry:
+            if (vn.empty()) {
+                if (type) *type = REG_SZ;
+                strOut = GetLocalizedDisplayName();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ClsidRoot:
+            if (vn.empty()) {
+                if (type) *type = REG_SZ;
+                strOut = GetLocalizedDisplayName();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"LocalizedString") {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = L"@" + *dllPath + L",-1";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"InfoTip") {
+                if (type) *type = REG_SZ;
+                strOut = GetLocalizedInfoTip();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"{305CA226-D286-468e-B848-2B2E8E697B74} 2") {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = L"5";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::InProcServer32:
+            if (vn.empty()) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = GetShdocvwPath();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"ThreadingModel") {
+                if (type) *type = REG_SZ;
+                strOut = L"Apartment";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ShellFolder:
+            if (vn == L"Attributes") {
+                if (type) *type = REG_DWORD;
+                dwordOut = kShellFolderAttributes;
+                isStr = false;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"WantsParseDisplayName") {
+                if (type) *type = REG_SZ;
+                strOut.clear();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::Instance:
+            if (vn == L"CLSID") {
+                if (type) *type = REG_SZ;
+                strOut = kLayoutFolderClsid;
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::InitPropertyBag:
+            if (vn == L"ResourceDLL") {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = *dllPath;
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"ResourceID") {
+                if (type) *type = REG_DWORD;
+                dwordOut = kInitResourceId;
+                isStr = false;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::DefaultIcon:
+            if (vn.empty()) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = *dllPath + L",-1";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ProviderRoot:
+            if (vn.empty()) {
+                if (type) *type = REG_SZ;
+                strOut.clear();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ProviderInProc:
+            if (vn.empty()) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = *dllPath;
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (vn == L"ThreadingModel") {
+                if (type) *type = REG_SZ;
+                strOut = L"Apartment";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+static bool TryProvideValue(const std::wstring& path, const std::wstring& vn,
+                            LPDWORD tp, LPBYTE d, LPDWORD cb, LSTATUS& out) {
+    DWORD vtype = 0;
+    std::wstring strOut;
+    DWORD dwOut = 0;
+    bool isStr = true;
+    if (!TryProvideValueData(path, vn, &vtype, strOut, dwOut, isStr, out))
+        return false;
+    if (tp) *tp = vtype;
+    if (isStr) {
+        out = ProvideStringValue(d, cb, strOut);
+        return true;
+    }
+    out = ProvideDwordValue(d, cb, dwOut);
+    return true;
+}
+
+bool GetVirtualSubKeyName(VNode n, DWORD idx, std::wstring& o) {
+    switch (n) {
+        case VNode::ClsidRoot:
+            if (idx == 0) { o = L"DefaultIcon"; return true; }
+            if (idx == 1) { o = L"InProcServer32"; return true; }
+            if (idx == 2) { o = L"ShellFolder"; return true; }
+            if (idx == 3) { o = L"Instance"; return true; }
+            return false;
+        case VNode::Instance:
+            if (idx == 0) { o = L"InitPropertyBag"; return true; }
+            return false;
+        case VNode::ProviderRoot:
+            if (idx == 0) { o = L"InProcServer32"; return true; }
+            return false;
+        default: return false;
+    }
+}
+
+DWORD GetVirtualSubKeyCount(VNode n) {
+    switch (n) {
+        case VNode::ClsidRoot: return 4;
+        case VNode::Instance: return 1;
+        case VNode::ProviderRoot: return 1;
+        default: return 0;
+    }
+}
+
+DWORD GetVirtualValueCount(VNode n) {
+    switch (n) {
+        case VNode::ClsidRoot: return 4;
+        case VNode::InProcServer32: return 2;
+        case VNode::ShellFolder: return 2;
+        case VNode::Instance: return 1;
+        case VNode::InitPropertyBag: return 2;
+        case VNode::DefaultIcon: return 1;
+        case VNode::ProviderRoot: return 1;
+        case VNode::ProviderInProc: return 2;
+        case VNode::NamespaceEntry: return 1;
+        default: return 0;
+    }
+}
+
+// The value enumerated at (node, index). Kept in sync with GetVirtualValueCount
+// and TryProvideValueData so enumeration and query agree.
+static bool GetVirtualValueAt(VNode n, DWORD idx, std::wstring& vname,
+                              std::wstring& vstr, DWORD& vdword, DWORD& vtype,
+                              bool& isStr) {
+    const std::wstring* dllPath = CurrentDllPath();
+    const std::wstring emptyPath;
+    const std::wstring& dp = dllPath ? *dllPath : emptyPath;
+    switch (n) {
+        case VNode::ClsidRoot:
+            if (idx == 0) { vname = L""; vstr = GetLocalizedDisplayName(); vtype = REG_SZ; }
+            else if (idx == 1) { vname = L"LocalizedString"; vstr = L"@" + dp + L",-1"; vtype = REG_EXPAND_SZ; }
+            else if (idx == 2) { vname = L"InfoTip"; vstr = GetLocalizedInfoTip(); vtype = REG_SZ; }
+            else if (idx == 3) { vname = L"{305CA226-D286-468e-B848-2B2E8E697B74} 2"; vstr = L"5"; vtype = REG_EXPAND_SZ; }
+            else return false;
+            break;
+        case VNode::InProcServer32:
+            if (idx == 0) { vname = L""; vstr = GetShdocvwPath(); vtype = REG_EXPAND_SZ; }
+            else if (idx == 1) { vname = L"ThreadingModel"; vstr = L"Apartment"; vtype = REG_SZ; }
+            else return false;
+            break;
+        case VNode::ShellFolder:
+            if (idx == 0) { vname = L"Attributes"; vdword = kShellFolderAttributes; vtype = REG_DWORD; isStr = false; }
+            else if (idx == 1) { vname = L"WantsParseDisplayName"; vstr = L""; vtype = REG_SZ; }
+            else return false;
+            break;
+        case VNode::Instance:
+            if (idx == 0) { vname = L"CLSID"; vstr = kLayoutFolderClsid; vtype = REG_SZ; }
+            else return false;
+            break;
+        case VNode::InitPropertyBag:
+            if (idx == 0) { vname = L"ResourceDLL"; vstr = dp; vtype = REG_EXPAND_SZ; }
+            else if (idx == 1) { vname = L"ResourceID"; vdword = kInitResourceId; vtype = REG_DWORD; isStr = false; }
+            else return false;
+            break;
+        case VNode::DefaultIcon:
+            if (idx == 0) { vname = L""; vstr = dp + L",-1"; vtype = REG_EXPAND_SZ; }
+            else return false;
+            break;
+        case VNode::NamespaceEntry:
+            if (idx == 0) { vname = L""; vstr = GetLocalizedDisplayName(); vtype = REG_SZ; }
+            else return false;
+            break;
+        case VNode::ProviderRoot:
+            if (idx == 0) { vname = L""; vstr = L""; vtype = REG_SZ; }
+            else return false;
+            break;
+        case VNode::ProviderInProc:
+            if (idx == 0) { vname = L""; vstr = dp; vtype = REG_EXPAND_SZ; }
+            else if (idx == 1) { vname = L"ThreadingModel"; vstr = L"Apartment"; vtype = REG_SZ; }
+            else return false;
+            break;
+        default: return false;
+    }
+    return true;
+}
+
+static std::wstring AnsiToWide(LPCSTR s) {
+    if (!s) return std::wstring();
+    int n = MultiByteToWideChar(CP_ACP, 0, s, -1, nullptr, 0);
+    if (n <= 0) return std::wstring();
+    std::wstring w(static_cast<size_t>(n - 1), 0);
+    MultiByteToWideChar(CP_ACP, 0, s, -1, &w[0], n);
+    return w;
+}
+
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegOpenKeyExA_t = decltype(&RegOpenKeyExA);
+using RegOpenKeyW_t = decltype(&RegOpenKeyW);
+using RegOpenKeyA_t = decltype(&RegOpenKeyA);
+using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
+using RegCreateKeyExA_t = decltype(&RegCreateKeyExA);
+using RegCloseKey_t = decltype(&RegCloseKey);
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RegQueryValueExA_t = decltype(&RegQueryValueExA);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegGetValueA_t = decltype(&RegGetValueA);
+using RegQueryValueW_t = decltype(&RegQueryValueW);
+using RegQueryValueA_t = decltype(&RegQueryValueA);
+using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+using RegEnumKeyExA_t = decltype(&RegEnumKeyExA);
+using RegEnumKeyW_t = decltype(&RegEnumKeyW);
+using RegEnumKeyA_t = decltype(&RegEnumKeyA);
+using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
+using RegQueryInfoKeyA_t = decltype(&RegQueryInfoKeyA);
+using RegEnumValueW_t = decltype(&RegEnumValueW);
+using RegEnumValueA_t = decltype(&RegEnumValueA);
+
+RegOpenKeyExW_t RegOpenKeyExWOriginal = nullptr;
+RegOpenKeyExA_t RegOpenKeyExAOriginal = nullptr;
+RegOpenKeyW_t RegOpenKeyWOriginal = nullptr;
+RegOpenKeyA_t RegOpenKeyAOriginal = nullptr;
+RegCreateKeyExW_t RegCreateKeyExWOriginal = nullptr;
+RegCreateKeyExA_t RegCreateKeyExAOriginal = nullptr;
+RegCloseKey_t RegCloseKeyOriginal = nullptr;
+RegQueryValueExW_t RegQueryValueExWOriginal = nullptr;
+RegQueryValueExA_t RegQueryValueExAOriginal = nullptr;
+RegGetValueW_t RegGetValueWOriginal = nullptr;
+RegGetValueA_t RegGetValueAOriginal = nullptr;
+RegQueryValueW_t RegQueryValueWOriginal = nullptr;
+RegQueryValueA_t RegQueryValueAOriginal = nullptr;
+RegEnumKeyExW_t RegEnumKeyExWOriginal = nullptr;
+RegEnumKeyExA_t RegEnumKeyExAOriginal = nullptr;
+RegEnumKeyW_t RegEnumKeyWOriginal = nullptr;
+RegEnumKeyA_t RegEnumKeyAOriginal = nullptr;
+RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal = nullptr;
+RegQueryInfoKeyA_t RegQueryInfoKeyAOriginal = nullptr;
+RegEnumValueW_t RegEnumValueWOriginal = nullptr;
+RegEnumValueA_t RegEnumValueAOriginal = nullptr;
+
+static bool IsWriteAccess(REGSAM sam) {
+    return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
+}
+
+// Shared "open" logic used by the W and A open hooks (and the create hooks, to
+// refuse persisting writes to the virtualized tree). Never returns a fake
+// handle to a caller that asked for write/create access, which keeps synthetic
+// handles out of write paths.
+static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
+                                 REGSAM sam, PHKEY out) {
+    std::wstring full;
+    const bool fakeParent = g_keyTracker.IsFakeAndGetPath(hk, full);
+    if (fakeParent) {
+        if (hasSub) {
+            if (!full.empty()) full += L"\\";
+            full += sub;
+        }
+        if (IsTargetKey(full)) {
+            if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
+            HKEY f = g_keyTracker.CreateFake(full);
+            if (!f) return ERROR_OUTOFMEMORY;
+            if (out) *out = f;
+            return ERROR_SUCCESS;
+        }
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    LSTATUS st = RegOpenKeyExWOriginal(hk, hasSub ? sub.c_str() : nullptr, 0, sam, out);
+    if (st == ERROR_SUCCESS && out && *out) {
+        std::wstring fp = full;
+        if (hasSub) {
+            if (!fp.empty()) fp += L"\\";
+            fp += sub;
+        }
+        g_keyTracker.Track(*out, fp);
+    } else if (st == ERROR_FILE_NOT_FOUND && out) {
+        std::wstring fp = full;
+        if (hasSub) {
+            if (!fp.empty()) fp += L"\\";
+            fp += sub;
+        }
+        if (IsTargetKey(fp)) {
+            if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
+            HKEY f = g_keyTracker.CreateFake(fp);
+            if (!f) return ERROR_OUTOFMEMORY;
+            if (out) *out = f;
+            return ERROR_SUCCESS;
+        }
+    }
+    return st;
+}
+
+LSTATUS WINAPI RegOpenKeyExWHook(HKEY hk, LPCWSTR sub, DWORD opt, REGSAM sam,
+                                 PHKEY out) {
+    std::wstring s = sub ? sub : L"";
+    return RegOpenKeyVirtual(hk, s, sub && *sub, sam, out);
+}
+
+LSTATUS WINAPI RegOpenKeyExAHook(HKEY hk, LPCSTR sub, DWORD opt, REGSAM sam,
+                                 PHKEY out) {
+    std::wstring s = sub ? AnsiToWide(sub) : std::wstring();
+    return RegOpenKeyVirtual(hk, s, sub && *sub, sam, out);
+}
+
+LSTATUS WINAPI RegOpenKeyWHook(HKEY hk, LPCWSTR sub, PHKEY out) {
+    std::wstring s = sub ? sub : L"";
+    return RegOpenKeyVirtual(hk, s, sub && *sub, KEY_READ, out);
+}
+
+LSTATUS WINAPI RegOpenKeyAHook(HKEY hk, LPCSTR sub, PHKEY out) {
+    std::wstring s = sub ? AnsiToWide(sub) : std::wstring();
+    return RegOpenKeyVirtual(hk, s, sub && *sub, KEY_READ, out);
+}
+
+// RegCreateKeyEx: creating/opening the virtualized tree for write would persist
+// to the real registry, which the mod must never do. Refuse writes there.
+template <typename CreateFn>
+static LSTATUS CreateKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
+                                REGSAM sam, PHKEY out, LPDWORD disposition,
+                                CreateFn original) {
+    std::wstring full;
+    const bool fakeParent = g_keyTracker.IsFakeAndGetPath(hk, full);
+    if (fakeParent) {
+        if (hasSub) {
+            if (!full.empty()) full += L"\\";
+            full += sub;
+        }
+        if (IsTargetKey(full)) {
+            if (out) *out = nullptr;
+            return ERROR_ACCESS_DENIED;
+        }
+        return ERROR_FILE_NOT_FOUND;
+    }
+    if (hasSub) {
+        if (!full.empty()) full += L"\\";
+        full += sub;
+    }
+    if (IsTargetKey(full)) {
+        if (out) *out = nullptr;
+        return ERROR_ACCESS_DENIED;
+    }
+    return original();
+}
+
+LSTATUS WINAPI RegCreateKeyExWHook(HKEY hk, LPCWSTR sub, DWORD reserved,
+                                   LPWSTR cls, DWORD opt, REGSAM sam,
+                                   LPSECURITY_ATTRIBUTES sa, PHKEY out,
+                                   LPDWORD disposition) {
+    std::wstring s = sub ? sub : L"";
+    return CreateKeyVirtual(
+        hk, s, sub && *sub, sam, out, disposition,
+        [&]() {
+            return RegCreateKeyExWOriginal(hk, sub, reserved, cls, opt, sam, sa,
+                                           out, disposition);
+        });
+}
+
+LSTATUS WINAPI RegCreateKeyExAHook(HKEY hk, LPCSTR sub, DWORD reserved, LPSTR cls,
+                                   DWORD opt, REGSAM sam,
+                                   LPSECURITY_ATTRIBUTES sa, PHKEY out,
+                                   LPDWORD disposition) {
+    std::wstring s = sub ? AnsiToWide(sub) : std::wstring();
+    return CreateKeyVirtual(
+        hk, s, sub && *sub, sam, out, disposition,
+        [&]() {
+            return RegCreateKeyExAOriginal(hk, sub, reserved, cls, opt, sam, sa,
+                                           out, disposition);
+        });
+}
+
+LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
+    if (g_keyTracker.IsFake(k)) {
+        g_keyTracker.FreeFake(k);
+        return ERROR_SUCCESS;
+    }
+    LSTATUS s = RegCloseKeyOriginal(k);
+    g_keyTracker.Untrack(k);
+    ClearInjectedState(k);
+    return s;
+}
+
+LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
+                                    LPBYTE d, LPDWORD cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(k);
+        if (!p.empty()) {
+            std::wstring v = vn ? vn : L"";
+            LSTATUS o;
+            if (TryProvideValue(p, v, t, d, cb, o)) return o;
+        }
+        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
+        return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
+    } catch (...) {
+        return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
+    }
+}
+
+// Fill the caller's ANSI buffer from a wide virtual value.
+static LSTATUS ProvideAnsiFromData(LPCSTR vn, LPBYTE data, LPDWORD cb,
+                                   DWORD vtype, const std::wstring& strOut,
+                                   DWORD dwOut, bool isStr) {
+    if (isStr) {
+        const int len =
+            WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
+                                static_cast<int>(strOut.size()), nullptr, 0,
+                                nullptr, nullptr);
+        const DWORD need = static_cast<DWORD>(len + 1);
+        if (!cb) return ERROR_SUCCESS;
+        if (!data) {
+            *cb = need;
+            return ERROR_SUCCESS;
+        }
+        if (*cb < need) {
+            *cb = need;
+            return ERROR_MORE_DATA;
+        }
+        if (len > 0)
+            WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
+                                static_cast<int>(strOut.size()),
+                                reinterpret_cast<LPSTR>(data), len, nullptr,
+                                nullptr);
+        data[len] = 0;
+        *cb = need;
+    } else {
+        const DWORD need = sizeof(DWORD);
+        if (!cb) return ERROR_SUCCESS;
+        if (!data) {
+            *cb = need;
+            return ERROR_SUCCESS;
+        }
+        if (*cb < need) {
+            *cb = need;
+            return ERROR_MORE_DATA;
+        }
+        *reinterpret_cast<DWORD*>(data) = dwOut;
+        *cb = need;
+    }
+    return ERROR_SUCCESS;
+}
+
+LSTATUS WINAPI RegQueryValueExAHook(HKEY k, LPCSTR vn, LPDWORD r, LPDWORD t,
+                                    LPBYTE data, LPDWORD cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(k);
+        if (!p.empty()) {
+            std::wstring v = vn ? AnsiToWide(vn) : std::wstring();
+            DWORD vtype = 0;
+            std::wstring strOut;
+            DWORD dwOut = 0;
+            bool isStr = true;
+            LSTATUS o;
+            if (TryProvideValueData(p, v, &vtype, strOut, dwOut, isStr, o)) {
+                if (o != ERROR_SUCCESS) return o;
+                if (t) *t = vtype;
+                if (r) *r = 0;
+                return ProvideAnsiFromData(vn, data, cb, vtype, strOut, dwOut, isStr);
+            }
+        }
+        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
+        return RegQueryValueExAOriginal(k, vn, r, t, data, cb);
+    } catch (...) {
+        return RegQueryValueExAOriginal(k, vn, r, t, data, cb);
+    }
+}
+
+LSTATUS WINAPI RegGetValueWHook(HKEY hk, LPCWSTR sub, LPCWSTR val, DWORD fl,
+                                LPDWORD tp, PVOID d, LPDWORD cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(hk);
+        if (sub && *sub) {
+            if (!p.empty()) p += L"\\";
+            p += sub;
+        }
+        if (!p.empty()) {
+            std::wstring v = val ? val : L"";
+            LSTATUS o;
+            if (TryProvideValue(p, v, tp, static_cast<LPBYTE>(d), cb, o)) return o;
+        }
+        if (g_keyTracker.IsFake(hk)) return ERROR_FILE_NOT_FOUND;
+        return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
+    } catch (...) {
+        return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
+    }
+}
+
+LSTATUS WINAPI RegGetValueAHook(HKEY hk, LPCSTR sub, LPCSTR val, DWORD fl,
+                                LPDWORD tp, PVOID d, LPDWORD cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(hk);
+        std::wstring subW = sub ? AnsiToWide(sub) : std::wstring();
+        if (sub && *sub) {
+            if (!p.empty()) p += L"\\";
+            p += subW;
+        }
+        if (!p.empty()) {
+            std::wstring v = val ? AnsiToWide(val) : std::wstring();
+            DWORD vtype = 0;
+            std::wstring strOut;
+            DWORD dwOut = 0;
+            bool isStr = true;
+            LSTATUS o;
+            if (TryProvideValueData(p, v, &vtype, strOut, dwOut, isStr, o)) {
+                if (o != ERROR_SUCCESS) return o;
+                if (tp) *tp = vtype;
+                return ProvideAnsiFromData(val, static_cast<LPBYTE>(d), cb, vtype,
+                                           strOut, dwOut, isStr);
+            }
+        }
+        if (g_keyTracker.IsFake(hk)) return ERROR_FILE_NOT_FOUND;
+        return RegGetValueAOriginal(hk, sub, val, fl, tp, d, cb);
+    } catch (...) {
+        return RegGetValueAOriginal(hk, sub, val, fl, tp, d, cb);
+    }
+}
+
+LSTATUS WINAPI RegQueryValueWHook(HKEY k, LPCWSTR sub, LPWSTR val, PLONG cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(k);
+        if (sub && *sub) {
+            if (!p.empty()) p += L"\\";
+            p += sub;
+        }
+        if (!p.empty()) {
+            LSTATUS o;
+            DWORD vtype = 0;
+            std::wstring strOut;
+            DWORD dwOut = 0;
+            bool isStr = true;
+            if (TryProvideValueData(p, std::wstring(), &vtype, strOut, dwOut, isStr,
+                                    o)) {
+                if (o != ERROR_SUCCESS) return o;
+                if (!cb) return ERROR_SUCCESS;
+                const DWORD need = static_cast<DWORD>((strOut.size() + 1) * sizeof(wchar_t));
+                if (!val) {
+                    *cb = static_cast<LONG>(need);
+                    return ERROR_SUCCESS;
+                }
+                if (static_cast<DWORD>(*cb) < need) {
+                    *cb = static_cast<LONG>(need);
+                    return ERROR_MORE_DATA;
+                }
+                wcscpy_s(val, static_cast<size_t>(*cb), strOut.c_str());
+                *cb = static_cast<LONG>(strOut.size() * sizeof(wchar_t));
+                return ERROR_SUCCESS;
+            }
+        }
+        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
+        return RegQueryValueWOriginal(k, sub, val, cb);
+    } catch (...) {
+        return RegQueryValueWOriginal(k, sub, val, cb);
+    }
+}
+
+LSTATUS WINAPI RegQueryValueAHook(HKEY k, LPCSTR sub, LPSTR val, PLONG cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(k);
+        std::wstring subW = sub ? AnsiToWide(sub) : std::wstring();
+        if (sub && *sub) {
+            if (!p.empty()) p += L"\\";
+            p += subW;
+        }
+        if (!p.empty()) {
+            LSTATUS o;
+            DWORD vtype = 0;
+            std::wstring strOut;
+            DWORD dwOut = 0;
+            bool isStr = true;
+            if (TryProvideValueData(p, std::wstring(), &vtype, strOut, dwOut, isStr,
+                                    o)) {
+                if (o != ERROR_SUCCESS) return o;
+                if (!cb) return ERROR_SUCCESS;
+                const int len = WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
+                                                    static_cast<int>(strOut.size()),
+                                                    nullptr, 0, nullptr, nullptr);
+                const DWORD need = static_cast<DWORD>(len + 1);
+                if (!val) {
+                    *cb = static_cast<LONG>(need);
+                    return ERROR_SUCCESS;
+                }
+                if (static_cast<DWORD>(*cb) < need) {
+                    *cb = static_cast<LONG>(need);
+                    return ERROR_MORE_DATA;
+                }
+                if (len > 0)
+                    WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
+                                        static_cast<int>(strOut.size()), val, len,
+                                        nullptr, nullptr);
+                val[len] = 0;
+                *cb = static_cast<LONG>(need);
+                return ERROR_SUCCESS;
+            }
+        }
+        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
+        return RegQueryValueAOriginal(k, sub, val, cb);
+    } catch (...) {
+        return RegQueryValueAOriginal(k, sub, val, cb);
+    }
+}
+
+LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
+                                 LPDWORD r, LPWSTR cls, LPDWORD lpcCls,
+                                 PFILETIME ft) {
+    try {
+        if (g_keyTracker.IsFake(k)) {
+            std::wstring p = g_keyTracker.GetPath(k);
+            VNode n = ClassifyPath(p);
+            std::wstring s;
+            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
+            if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
+            if (*lpcch < s.size() + 1) {
+                *lpcch = static_cast<DWORD>(s.size() + 1);
+                return ERROR_MORE_DATA;
+            }
+            wcscpy_s(name, *lpcch, s.c_str());
+            *lpcch = static_cast<DWORD>(s.size());
+            if (ft) GetSystemTimeAsFileTime(ft);
+            return ERROR_SUCCESS;
+        }
+        const std::wstring path = g_keyTracker.GetPath(k);
+        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+            return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+        const LSTATUS st = RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+        if (st != ERROR_NO_MORE_ITEMS) return st;
+        {
+            HKEY hTest = nullptr;
+            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) ==
+                ERROR_SUCCESS) {
+                RegCloseKeyOriginal(hTest);
+                return ERROR_NO_MORE_ITEMS;
+            }
+        }
+        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
+        if (*lpcch < g_clsidLower.size() + 1) {
+            *lpcch = static_cast<DWORD>(g_clsidLower.size() + 1);
+            return ERROR_MORE_DATA;
+        }
+        wcscpy_s(name, *lpcch, g_clsidLower.c_str());
+        *lpcch = static_cast<DWORD>(g_clsidLower.size());
+        if (ft) GetSystemTimeAsFileTime(ft);
+        return ERROR_SUCCESS;
+    } catch (...) {
+        return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+    }
+}
+
+LSTATUS WINAPI RegEnumKeyExAHook(HKEY k, DWORD idx, LPSTR name, LPDWORD lpcch,
+                                 LPDWORD r, LPSTR cls, LPDWORD lpcCls,
+                                 PFILETIME ft) {
+    try {
+        if (g_keyTracker.IsFake(k)) {
+            std::wstring p = g_keyTracker.GetPath(k);
+            VNode n = ClassifyPath(p);
+            std::wstring s;
+            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
+            if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
+            const int len = WideCharToMultiByte(CP_ACP, 0, s.c_str(),
+                                                static_cast<int>(s.size()), nullptr, 0,
+                                                nullptr, nullptr);
+            const DWORD need = static_cast<DWORD>(len + 1);
+            if (*lpcch < need) {
+                *lpcch = need;
+                return ERROR_MORE_DATA;
+            }
+            if (len > 0)
+                WideCharToMultiByte(CP_ACP, 0, s.c_str(),
+                                    static_cast<int>(s.size()), name, len, nullptr,
+                                    nullptr);
+            name[len] = 0;
+            *lpcch = static_cast<DWORD>(s.size());
+            if (ft) GetSystemTimeAsFileTime(ft);
+            return ERROR_SUCCESS;
+        }
+        return RegEnumKeyExAOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+    } catch (...) {
+        return RegEnumKeyExAOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+    }
+}
+
+LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
+    try {
+        if (g_keyTracker.IsFake(k)) {
+            std::wstring p = g_keyTracker.GetPath(k);
+            VNode n = ClassifyPath(p);
+            std::wstring s;
+            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
+            if (!name) return ERROR_INVALID_PARAMETER;
+            if (cch <= s.size()) return ERROR_MORE_DATA;
+            wcscpy_s(name, cch, s.c_str());
+            return ERROR_SUCCESS;
+        }
+        const std::wstring path = g_keyTracker.GetPath(k);
+        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+            return RegEnumKeyWOriginal(k, idx, name, cch);
+        const LSTATUS st = RegEnumKeyWOriginal(k, idx, name, cch);
+        if (st != ERROR_NO_MORE_ITEMS) return st;
+        {
+            HKEY hTest = nullptr;
+            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) ==
+                ERROR_SUCCESS) {
+                RegCloseKeyOriginal(hTest);
+                return ERROR_NO_MORE_ITEMS;
+            }
+        }
+        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        if (!name) return ERROR_INVALID_PARAMETER;
+        if (cch <= g_clsidLower.size()) return ERROR_MORE_DATA;
+        wcscpy_s(name, cch, g_clsidLower.c_str());
+        return ERROR_SUCCESS;
+    } catch (...) {
+        return RegEnumKeyWOriginal(k, idx, name, cch);
+    }
+}
+
+LSTATUS WINAPI RegEnumKeyAHook(HKEY k, DWORD idx, LPSTR name, DWORD cch) {
+    try {
+        if (g_keyTracker.IsFake(k)) {
+            std::wstring p = g_keyTracker.GetPath(k);
+            VNode n = ClassifyPath(p);
+            std::wstring s;
+            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
+            if (!name) return ERROR_INVALID_PARAMETER;
+            const int len = WideCharToMultiByte(CP_ACP, 0, s.c_str(),
+                                                static_cast<int>(s.size()), nullptr, 0,
+                                                nullptr, nullptr);
+            const DWORD need = static_cast<DWORD>(len + 1);
+            if (cch <= need) return ERROR_MORE_DATA;
+            if (len > 0)
+                WideCharToMultiByte(CP_ACP, 0, s.c_str(),
+                                    static_cast<int>(s.size()), name, len, nullptr,
+                                    nullptr);
+            name[len] = 0;
+            return ERROR_SUCCESS;
+        }
+        return RegEnumKeyAOriginal(k, idx, name, cch);
+    } catch (...) {
+        return RegEnumKeyAOriginal(k, idx, name, cch);
+    }
+}
+
+LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD r,
+                                    LPDWORD cSubKeys, LPDWORD lpcMaxSub,
+                                    LPDWORD lpcMaxCls, LPDWORD cValues,
+                                    LPDWORD lpcMaxValName, LPDWORD lpcMaxValData,
+                                    LPDWORD sec, PFILETIME ft) {
+    if (g_keyTracker.IsFake(k)) {
+        std::wstring p = g_keyTracker.GetPath(k);
+        VNode n = ClassifyPath(p);
+        if (cSubKeys) *cSubKeys = GetVirtualSubKeyCount(n);
+        if (cValues) *cValues = GetVirtualValueCount(n);
+        if (lpcMaxSub) *lpcMaxSub = 32;
+        if (lpcMaxCls) *lpcMaxCls = 0;
+        if (lpcMaxValName) *lpcMaxValName = 64;
+        if (lpcMaxValData) *lpcMaxValData = 512;
+        if (cls && lpcCls) {
+            if (*lpcCls > 0) cls[0] = 0;
+            *lpcCls = 0;
+        }
+        if (ft) GetSystemTimeAsFileTime(ft);
+        return ERROR_SUCCESS;
+    }
+    std::wstring path = g_keyTracker.GetPath(k);
+    if (IsNamespaceParentKey(path) && g_dllVerifiedOk.load()) {
+        LSTATUS st =
+            RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
+                                     lpcMaxCls, cValues, lpcMaxValName, lpcMaxValData,
+                                     sec, ft);
+        if (st == ERROR_SUCCESS && cSubKeys) {
+            HKEY hTest = nullptr;
+            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) !=
+                ERROR_SUCCESS) {
+                (*cSubKeys)++;
+                // Also bump the max subkey-name length (all subkeys here are
+                // 38-char CLSIDs, but state the assumption explicitly).
+                if (lpcMaxSub) {
+                    DWORD need = static_cast<DWORD>(g_clsidLower.size() + 1);
+                    if (*lpcMaxSub < need) *lpcMaxSub = need;
+                }
+            } else {
+                RegCloseKeyOriginal(hTest);
+            }
+        }
+        return st;
+    }
+    return RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub, lpcMaxCls,
+                                    cValues, lpcMaxValName, lpcMaxValData, sec, ft);
+}
+
+LSTATUS WINAPI RegQueryInfoKeyAHook(HKEY k, LPSTR cls, LPDWORD lpcCls, LPDWORD r,
+                                    LPDWORD cSubKeys, LPDWORD lpcMaxSub,
+                                    LPDWORD lpcMaxCls, LPDWORD cValues,
+                                    LPDWORD lpcMaxValName, LPDWORD lpcMaxValData,
+                                    LPDWORD sec, PFILETIME ft) {
+    if (g_keyTracker.IsFake(k)) {
+        std::wstring p = g_keyTracker.GetPath(k);
+        VNode n = ClassifyPath(p);
+        if (cSubKeys) *cSubKeys = GetVirtualSubKeyCount(n);
+        if (cValues) *cValues = GetVirtualValueCount(n);
+        if (lpcMaxSub) *lpcMaxSub = 32;
+        if (lpcMaxCls) *lpcMaxCls = 0;
+        if (lpcMaxValName) *lpcMaxValName = 64;
+        if (lpcMaxValData) *lpcMaxValData = 512;
+        if (cls && lpcCls) {
+            if (*lpcCls > 0) cls[0] = 0;
+            *lpcCls = 0;
+        }
+        if (ft) GetSystemTimeAsFileTime(ft);
+        return ERROR_SUCCESS;
+    }
+    return RegQueryInfoKeyAOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub, lpcMaxCls,
+                                    cValues, lpcMaxValName, lpcMaxValData, sec, ft);
+}
+
+LSTATUS WINAPI RegEnumValueWHook(HKEY k, DWORD idx, LPWSTR valName,
+                                 LPDWORD lpcchValName, LPDWORD r, LPDWORD tp,
+                                 LPBYTE data, LPDWORD cbData) {
+    if (g_keyTracker.IsFake(k)) {
+        std::wstring p = g_keyTracker.GetPath(k);
+        VNode n = ClassifyPath(p);
+        std::wstring vname, vstr;
+        DWORD vdword = 0, vtype = 0;
+        bool isStr = true;
+        if (!GetVirtualValueAt(n, idx, vname, vstr, vdword, vtype, isStr))
+            return ERROR_NO_MORE_ITEMS;
+        if (!lpcchValName) return ERROR_INVALID_PARAMETER;
+        DWORD needName = static_cast<DWORD>(vname.size() + 1);
+        if (!valName) {
+            *lpcchValName = needName;
+            return ERROR_SUCCESS;
+        }
+        if (*lpcchValName < needName) {
+            *lpcchValName = needName;
+            return ERROR_MORE_DATA;
+        }
+        wcscpy_s(valName, *lpcchValName, vname.c_str());
+        *lpcchValName = static_cast<DWORD>(vname.size());
+        if (r) *r = 0;
+        if (tp) *tp = vtype;
+        if (isStr) {
+            DWORD need = static_cast<DWORD>((vstr.size() + 1) * sizeof(wchar_t));
+            if (!cbData) return ERROR_SUCCESS;
+            if (!data) {
+                *cbData = need;
+                return ERROR_SUCCESS;
+            }
+            if (*cbData < need) {
+                *cbData = need;
+                return ERROR_MORE_DATA;
+            }
+            *cbData = need;
+            memcpy(data, vstr.c_str(), need);
+        } else {
+            if (!cbData) return ERROR_SUCCESS;
+            if (!data) {
+                *cbData = sizeof(DWORD);
+                return ERROR_SUCCESS;
+            }
+            if (*cbData < sizeof(DWORD)) {
+                *cbData = sizeof(DWORD);
+                return ERROR_MORE_DATA;
+            }
+            *cbData = sizeof(DWORD);
+            *reinterpret_cast<DWORD*>(data) = vdword;
+        }
+        return ERROR_SUCCESS;
+    }
+    return RegEnumValueWOriginal(k, idx, valName, lpcchValName, r, tp, data, cbData);
+}
+
+LSTATUS WINAPI RegEnumValueAHook(HKEY k, DWORD idx, LPSTR valName,
+                                 LPDWORD lpcchValName, LPDWORD r, LPDWORD tp,
+                                 LPBYTE data, LPDWORD cbData) {
+    if (g_keyTracker.IsFake(k)) {
+        std::wstring p = g_keyTracker.GetPath(k);
+        VNode n = ClassifyPath(p);
+        std::wstring vname, vstr;
+        DWORD vdword = 0, vtype = 0;
+        bool isStr = true;
+        if (!GetVirtualValueAt(n, idx, vname, vstr, vdword, vtype, isStr))
+            return ERROR_NO_MORE_ITEMS;
+        if (!lpcchValName) return ERROR_INVALID_PARAMETER;
+        const int nameLen = WideCharToMultiByte(CP_ACP, 0, vname.c_str(),
+                                                static_cast<int>(vname.size()),
+                                                nullptr, 0, nullptr, nullptr);
+        const DWORD needName = static_cast<DWORD>(nameLen + 1);
+        if (!valName) {
+            *lpcchValName = needName;
+            return ERROR_SUCCESS;
+        }
+        if (*lpcchValName < needName) {
+            *lpcchValName = needName;
+            return ERROR_MORE_DATA;
+        }
+        if (nameLen > 0)
+            WideCharToMultiByte(CP_ACP, 0, vname.c_str(),
+                                static_cast<int>(vname.size()), valName, nameLen,
+                                nullptr, nullptr);
+        valName[nameLen] = 0;
+        *lpcchValName = static_cast<DWORD>(vname.size());
+        if (r) *r = 0;
+        if (tp) *tp = vtype;
+        if (isStr) {
+            const int len = WideCharToMultiByte(CP_ACP, 0, vstr.c_str(),
+                                                static_cast<int>(vstr.size()),
+                                                nullptr, 0, nullptr, nullptr);
+            const DWORD need = static_cast<DWORD>(len + 1);
+            if (!cbData) return ERROR_SUCCESS;
+            if (!data) {
+                *cbData = need;
+                return ERROR_SUCCESS;
+            }
+            if (*cbData < need) {
+                *cbData = need;
+                return ERROR_MORE_DATA;
+            }
+            if (len > 0)
+                WideCharToMultiByte(CP_ACP, 0, vstr.c_str(),
+                                    static_cast<int>(vstr.size()),
+                                    reinterpret_cast<LPSTR>(data), len, nullptr,
+                                    nullptr);
+            data[len] = 0;
+            *cbData = need;
+        } else {
+            if (!cbData) return ERROR_SUCCESS;
+            if (!data) {
+                *cbData = sizeof(DWORD);
+                return ERROR_SUCCESS;
+            }
+            if (*cbData < sizeof(DWORD)) {
+                *cbData = sizeof(DWORD);
+                return ERROR_MORE_DATA;
+            }
+            *cbData = sizeof(DWORD);
+            *reinterpret_cast<DWORD*>(data) = vdword;
+        }
+        return ERROR_SUCCESS;
+    }
+    return RegEnumValueAOriginal(k, idx, valName, lpcchValName, r, tp, data, cbData);
+}
+
+void* GetRegFunc(const char* n) {
+    HMODULE h = GetModuleHandleW(L"kernelbase.dll");
+    if (h) {
+        void* p = reinterpret_cast<void*>(GetProcAddress(h, n));
+        if (p) return p;
+    }
+    HMODULE a = GetModuleHandleW(L"advapi32.dll");
+    if (!a) a = LoadLibraryW(L"advapi32.dll");
+    if (a) {
+        void* p = reinterpret_cast<void*>(GetProcAddress(a, n));
+        if (p) return p;
+    }
+    return nullptr;
+}
+
+// -----------------------------------------------------------------------------
+// Module redirection hooks (LoadLibrary / GetModuleHandle)
+// -----------------------------------------------------------------------------
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+using LoadLibraryW_t = HMODULE(WINAPI*)(LPCWSTR);
+using LoadLibraryExA_t = HMODULE(WINAPI*)(LPCSTR, HANDLE, DWORD);
+using LoadLibraryA_t = HMODULE(WINAPI*)(LPCSTR);
+using GetModuleHandleW_t = HMODULE(WINAPI*)(LPCWSTR);
+using GetModuleHandleA_t = HMODULE(WINAPI*)(LPCSTR);
+using GetModuleHandleExW_t = BOOL(WINAPI*)(DWORD, LPCWSTR, HMODULE*);
+LoadLibraryExW_t LoadLibraryExWOriginal = nullptr;
+LoadLibraryW_t LoadLibraryWOriginal = nullptr;
+LoadLibraryExA_t LoadLibraryExAOriginal = nullptr;
+LoadLibraryA_t LoadLibraryAOriginal = nullptr;
+GetModuleHandleW_t GetModuleHandleWOriginal = nullptr;
+GetModuleHandleA_t GetModuleHandleAOriginal = nullptr;
+GetModuleHandleExW_t GetModuleHandleExWOriginal = nullptr;
+
+// Leaf-name comparison performed in place, without allocation.
+static bool IsPerfCenterModuleNameW(LPCWSTR n) {
+    if (!n) return false;
+    const wchar_t* leaf = n;
+    for (const wchar_t* p = n; *p; ++p) {
+        if (*p == L'\\' || *p == L'/') leaf = p + 1;
+    }
+    static const wchar_t kName[] = L"PerfCenterCPL.dll";
+    for (int i = 0; i < 17; ++i) {
+        wchar_t a = leaf[i];
+        if (!a) return false;
+        if (a >= L'A' && a <= L'Z') a = static_cast<wchar_t>(a - L'A' + L'a');
+        wchar_t b = kName[i];
+        if (b >= L'A' && b <= L'Z') b = static_cast<wchar_t>(b - L'A' + L'a');
+        if (a != b) return false;
+    }
+    return leaf[17] == 0;
+}
+
+static bool IsPerfCenterModuleNameA(LPCSTR n) {
+    if (!n) return false;
+    const char* leaf = n;
+    for (const char* p = n; *p; ++p) {
+        if (*p == '\\' || *p == '/') leaf = p + 1;
+    }
+    static const char kName[] = "PerfCenterCPL.dll";
+    for (int i = 0; i < 17; ++i) {
+        char a = leaf[i];
+        if (!a) return false;
+        if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+        char b = kName[i];
+        if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+        if (a != b) return false;
+    }
+    return leaf[17] == 0;
+}
+
+bool ShouldRedirectModuleW(LPCWSTR n, std::wstring& o) {
+    const std::wstring* p = CurrentDllPath();
+    if (!p || p->empty()) return false;
+    if (!IsPerfCenterModuleNameW(n)) return false;
+    if (_wcsicmp(n, p->c_str()) == 0) return false;
+    o = *p;
+    return true;
+}
+
+HMODULE WINAPI LoadLibraryExWHook(LPCWSTR f, HANDLE hf, DWORD fl) {
+    std::wstring r;
+    if (ShouldRedirectModuleW(f, r)) return LoadLibraryExWOriginal(r.c_str(), hf, fl);
+    return LoadLibraryExWOriginal(f, hf, fl);
+}
+HMODULE WINAPI LoadLibraryWHook(LPCWSTR f) {
+    std::wstring r;
+    if (ShouldRedirectModuleW(f, r)) return LoadLibraryWOriginal(r.c_str());
+    return LoadLibraryWOriginal(f);
+}
+HMODULE WINAPI LoadLibraryExAHook(LPCSTR f, HANDLE hf, DWORD fl) {
+    if (IsPerfCenterModuleNameA(f)) {
+        const std::wstring* p = CurrentDllPath();
+        if (p && !p->empty()) return LoadLibraryExWOriginal(p->c_str(), hf, fl);
+    }
+    return LoadLibraryExAOriginal(f, hf, fl);
+}
+HMODULE WINAPI LoadLibraryAHook(LPCSTR f) {
+    if (IsPerfCenterModuleNameA(f)) {
+        const std::wstring* p = CurrentDllPath();
+        if (p && !p->empty()) return LoadLibraryWOriginal(p->c_str());
+    }
+    return LoadLibraryAOriginal(f);
+}
+
+// GetModuleHandle* must never load the module (callers do not own the returned
+// handle, so they never free it, and loading under the loader lock could
+// deadlock). They only report whether it is already mapped.
+HMODULE WINAPI GetModuleHandleWHook(LPCWSTR n) {
+    const std::wstring* p = CurrentDllPath();
+    if (p && !p->empty() && IsPerfCenterModuleNameW(n)) {
+        HMODULE h = GetModuleHandleWOriginal(p->c_str());
+        if (h) return h;
+    }
+    return GetModuleHandleWOriginal(n);
+}
+HMODULE WINAPI GetModuleHandleAHook(LPCSTR n) {
+    const std::wstring* p = CurrentDllPath();
+    if (p && !p->empty() && IsPerfCenterModuleNameA(n)) {
+        HMODULE h = GetModuleHandleWOriginal(p->c_str());
+        if (h) return h;
+    }
+    return GetModuleHandleAOriginal(n);
+}
+
+BOOL WINAPI GetModuleHandleExWHook(DWORD f, LPCWSTR n, HMODULE* o) {
+    // With GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, n is an address inside a
+    // module, not a string, so it must never be treated as a name.
+    if (!(f & GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS)) {
+        const std::wstring* p = CurrentDllPath();
+        if (p && !p->empty() && n && IsPerfCenterModuleNameW(n)) {
+            return GetModuleHandleExWOriginal(f, p->c_str(), o);
+        }
+    }
+    return GetModuleHandleExWOriginal(f, n, o);
+}
+
+static void* GetProcAddrFromDll(HMODULE kb, HMODULE k32, const char* n) {
+    void* p = kb ? reinterpret_cast<void*>(GetProcAddress(kb, n)) : nullptr;
+    if (!p && k32) p = reinterpret_cast<void*>(GetProcAddress(k32, n));
+    return p;
+}
+
+void InstallModuleRedirectHooks() {
+    HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+    // Resolve from kernelbase first: the real implementations live there and
+    // internal callers go straight to them, bypassing the kernel32 forwarder.
+    void* p = GetProcAddrFromDll(kb, k32, "LoadLibraryExW");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryExW_t>(p),
+                                       LoadLibraryExWHook, &LoadLibraryExWOriginal);
+    p = GetProcAddrFromDll(kb, k32, "LoadLibraryW");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryW_t>(p),
+                                       LoadLibraryWHook, &LoadLibraryWOriginal);
+    p = GetProcAddrFromDll(kb, k32, "LoadLibraryExA");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryExA_t>(p),
+                                       LoadLibraryExAHook, &LoadLibraryExAOriginal);
+    p = GetProcAddrFromDll(kb, k32, "LoadLibraryA");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryA_t>(p),
+                                       LoadLibraryAHook, &LoadLibraryAOriginal);
+    p = GetProcAddrFromDll(kb, k32, "GetModuleHandleW");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<GetModuleHandleW_t>(p),
+                                       GetModuleHandleWHook, &GetModuleHandleWOriginal);
+    p = GetProcAddrFromDll(kb, k32, "GetModuleHandleA");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<GetModuleHandleA_t>(p),
+                                       GetModuleHandleAHook, &GetModuleHandleAOriginal);
+    p = GetProcAddrFromDll(kb, k32, "GetModuleHandleExW");
+    if (p)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<GetModuleHandleExW_t>(p),
+                                       GetModuleHandleExWHook,
+                                       &GetModuleHandleExWOriginal);
+}
+
+// -----------------------------------------------------------------------------
+// Translation hooks (LoadStringW/A + DirectUI XResourceProvider)
+// -----------------------------------------------------------------------------
 using LoadStringW_t = int(WINAPI*)(HINSTANCE, UINT, LPWSTR, int);
 using LoadStringA_t = int(WINAPI*)(HINSTANCE, UINT, LPSTR, int);
 LoadStringW_t LoadStringWOriginal = nullptr;
 LoadStringA_t LoadStringAOriginal = nullptr;
 
+// The PerfCenter module handle is resolved once and we compare pointers only,
+// which avoids a per-call GetModuleFileNameW on the hot path.
 static bool IsPerfCenterResourceModule(HINSTANCE instance) {
-    if (!instance) {
-        return false;
-    }
-
-    // LOAD_LIBRARY_AS_DATAFILE handles can use their low bits as flags.
+    if (!instance) return false;
     const ULONG_PTR raw = reinterpret_cast<ULONG_PTR>(instance);
     HMODULE module = reinterpret_cast<HMODULE>(raw & ~static_cast<ULONG_PTR>(3));
-    if (g_hPerfCenter && module == g_hPerfCenter) {
-        return true;
-    }
-
-    wchar_t path[32768] = {};
-    DWORD length = GetModuleFileNameW(module, path, ARRAYSIZE(path));
-    if (!length) {
-        length = GetMappedFileNameW(GetCurrentProcess(), module,
-                                    path, ARRAYSIZE(path));
-    }
-    if (!length || length >= ARRAYSIZE(path)) {
-        return false;
-    }
-
-    const wchar_t* leaf = path;
-    for (const wchar_t* p = path; *p; ++p) {
-        if (*p == L'\\' || *p == L'/') {
-            leaf = p + 1;
-        }
-    }
-
-    return _wcsicmp(leaf, L"PerfCenterCPL.dll") == 0 ||
-           _wcsicmp(leaf, L"PerfCenterCPL.dll.mui") == 0;
+    HMODULE h = g_hPerfCenter.load();
+    if (h && module == h) return true;
+    HMODULE lr = g_hLocalizedResources.load();
+    if (lr && module == lr) return true;
+    return false;
 }
 
-// Translation is deliberately limited to LoadStringW/LoadStringA.
-// Returning synthetic HRSRC/HGLOBAL handles is unsafe because some Windows
-// components bypass KernelBase and call the native resource loader directly.
-
-static int CopyEmbeddedStringW(const wchar_t* text, LPWSTR buffer,
-                               int bufferChars) {
-    if (!text) {
-        return 0;
-    }
-
+static int CopyEmbeddedStringW(const wchar_t* text, LPWSTR buffer, int bufferChars) {
+    if (!text) return 0;
     const int length = static_cast<int>(wcslen(text));
-
-    // This is the documented LoadStringW zero-buffer mode: lpBuffer is really
-    // a pointer to LPCWSTR and receives a read-only pointer. The embedded
-    // string literals have static lifetime, so no temporary allocation is used.
     if (bufferChars == 0) {
-        if (!buffer) {
-            return 0;
-        }
+        if (!buffer) return 0;
         *reinterpret_cast<LPCWSTR*>(buffer) = text;
         return length;
     }
-
-    if (!buffer || bufferChars < 1) {
-        return 0;
-    }
-
+    if (!buffer || bufferChars < 1) return 0;
     const int copied = length < bufferChars - 1 ? length : bufferChars - 1;
-    if (copied > 0) {
+    if (copied > 0)
         memcpy(buffer, text, static_cast<size_t>(copied) * sizeof(wchar_t));
-    }
     buffer[copied] = L'\0';
     return copied;
 }
 
 int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
                            int bufferChars) {
-    if (g_forceTranslations && g_activeVariant == DllVariant::Win8 &&
+    if (g_forceTranslations.load() &&
+        static_cast<DllVariant>(g_activeVariant.load()) == DllVariant::Win8 &&
         IsPerfCenterResourceModule(instance)) {
         if (const wchar_t* text = GetEmbeddedTranslation(id)) {
-            static volatile LONG loggedIds[1224] = {};
-            if (id < ARRAYSIZE(loggedIds) &&
-                InterlockedCompareExchange(&loggedIds[id], 1, 0) == 0) {
-                Wh_Log(L"[STR] LoadStringW override id=%u", id);
-            }
             return CopyEmbeddedStringW(text, buffer, bufferChars);
         }
     }
-
     return LoadStringWOriginal(instance, id, buffer, bufferChars);
 }
 
 int WINAPI LoadStringAHook(HINSTANCE instance, UINT id, LPSTR buffer,
                            int bufferChars) {
-    if (g_forceTranslations && g_activeVariant == DllVariant::Win8 &&
+    if (g_forceTranslations.load() &&
+        static_cast<DllVariant>(g_activeVariant.load()) == DllVariant::Win8 &&
         IsPerfCenterResourceModule(instance)) {
         if (const wchar_t* text = GetEmbeddedTranslation(id)) {
-            if (!buffer || bufferChars < 1) {
-                return 0;
-            }
-
+            if (!buffer || bufferChars < 1) return 0;
             const int wideLength = static_cast<int>(wcslen(text));
-            int byteLength = WideCharToMultiByte(
-                CP_ACP, 0, text, wideLength, nullptr, 0, nullptr, nullptr);
-            if (byteLength < 0) {
-                return 0;
-            }
-
+            // Note: converting to CP_ACP is lossy for non-ANSI characters on a
+            // mismatched codepage; unavoidable for the A variant.
+            int byteLength = WideCharToMultiByte(CP_ACP, 0, text, wideLength,
+                                                 nullptr, 0, nullptr, nullptr);
+            if (byteLength <= 0) return 0;
             std::string converted(static_cast<size_t>(byteLength), '\0');
-            if (byteLength > 0) {
-                WideCharToMultiByte(CP_ACP, 0, text, wideLength,
-                                    &converted[0], byteLength,
-                                    nullptr, nullptr);
-            }
-
+            if (byteLength > 0)
+                WideCharToMultiByte(CP_ACP, 0, text, wideLength, &converted[0],
+                                    byteLength, nullptr, nullptr);
             const int copied =
                 byteLength < bufferChars - 1 ? byteLength : bufferChars - 1;
-            if (copied > 0) {
+            if (copied > 0)
                 memcpy(buffer, converted.data(), static_cast<size_t>(copied));
-            }
             buffer[copied] = '\0';
             return copied;
         }
     }
-
     return LoadStringAOriginal(instance, id, buffer, bufferChars);
 }
 
-using XResourceProviderCreate_t = HRESULT(*)(
-    HINSTANCE, LPCWSTR, LPCWSTR, LPCWSTR, void**);
+using XResourceProviderCreate_t = HRESULT(*)(HINSTANCE, LPCWSTR, LPCWSTR, LPCWSTR,
+                                             void**);
 static XResourceProviderCreate_t XResourceProviderCreateOriginal = nullptr;
 
-HRESULT XResourceProviderCreateHook(HINSTANCE instance,
-                                    LPCWSTR resourceName,
-                                    LPCWSTR resourceType,
-                                    LPCWSTR stylesheetName,
+HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceName,
+                                    LPCWSTR resourceType, LPCWSTR stylesheetName,
                                     void** provider) {
     HINSTANCE resourceInstance = instance;
-    if (g_forceTranslations && g_activeVariant == DllVariant::Win8 &&
+    if (g_forceTranslations.load() &&
+        static_cast<DllVariant>(g_activeVariant.load()) == DllVariant::Win8 &&
         IsPerfCenterResourceModule(instance)) {
         if (HMODULE localized = EnsureLocalizedResourceModuleLoaded()) {
             resourceInstance = reinterpret_cast<HINSTANCE>(localized);
-            static volatile LONG logged = 0;
-            if (InterlockedCompareExchange(&logged, 1, 0) == 0) {
-                Wh_Log(L"[STR] DirectUI XResourceProvider redirected to private resource module");
-            }
         }
     }
-
-    return XResourceProviderCreateOriginal(
-        resourceInstance, resourceName, resourceType, stylesheetName, provider);
+    return XResourceProviderCreateOriginal(resourceInstance, resourceName,
+                                           resourceType, stylesheetName, provider);
 }
 
 void InstallTranslationHook() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        user32 = LoadLibraryW(L"user32.dll");
-    }
-
+    if (!user32)
+        user32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     void* loadStringW =
-        user32 ? reinterpret_cast<void*>(GetProcAddress(user32, "LoadStringW"))
-               : nullptr;
+        user32 ? reinterpret_cast<void*>(GetProcAddress(user32, "LoadStringW")) : nullptr;
     void* loadStringA =
-        user32 ? reinterpret_cast<void*>(GetProcAddress(user32, "LoadStringA"))
-               : nullptr;
+        user32 ? reinterpret_cast<void*>(GetProcAddress(user32, "LoadStringA")) : nullptr;
+    if (loadStringW)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadStringW_t>(loadStringW),
+                                       LoadStringWHook, &LoadStringWOriginal);
+    if (loadStringA)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadStringA_t>(loadStringA),
+                                       LoadStringAHook, &LoadStringAOriginal);
 
-    if (loadStringW) {
-        Wh_SetFunctionHook(loadStringW, reinterpret_cast<void*>(LoadStringWHook),
-                           reinterpret_cast<void**>(&LoadStringWOriginal));
-    }
-    if (loadStringA) {
-        Wh_SetFunctionHook(loadStringA, reinterpret_cast<void*>(LoadStringAHook),
-                           reinterpret_cast<void**>(&LoadStringAOriginal));
-    }
-
+    // dui70.dll is not a KnownDLL, so restrict the search to System32.
     HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
-    if (!dui70) dui70 = LoadLibraryW(L"dui70.dll");
-    void* xResourceProviderCreate = dui70 ? reinterpret_cast<void*>(
-        GetProcAddress(dui70,
-            "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))
-        : nullptr;
-    if (xResourceProviderCreate) {
-        Wh_SetFunctionHook(
-            xResourceProviderCreate,
-            reinterpret_cast<void*>(XResourceProviderCreateHook),
-            reinterpret_cast<void**>(&XResourceProviderCreateOriginal));
+    if (!dui70)
+        dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* xResourceProviderCreate =
+        dui70 ? reinterpret_cast<void*>(
+                    GetProcAddress(
+                        dui70,
+                        "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))
+              : nullptr;
+    if (xResourceProviderCreate)
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<XResourceProviderCreate_t>(xResourceProviderCreate),
+            XResourceProviderCreateHook, &XResourceProviderCreateOriginal);
+}
+
+// -----------------------------------------------------------------------------
+// COM hooks
+// -----------------------------------------------------------------------------
+using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID,
+                                            LPVOID*);
+CoCreateInstance_t CoCreateInstanceOriginalCombase = nullptr;
+CoCreateInstance_t CoCreateInstanceOriginalOle32 = nullptr;
+
+static HRESULT HandleCoCreateInstance(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                      DWORD dwClsCtx, REFIID riid, LPVOID* ppv,
+                                      CoCreateInstance_t original) {
+    if (ppv) *ppv = nullptr;
+    const bool isProvider = IsEqualGUID(rclsid, kProviderGuid);
+    const bool isFolder = IsEqualGUID(rclsid, kAppletFolderGuid);
+    if (isProvider || isFolder) {
+        if (!g_dllVerifiedOk.load()) return REGDB_E_CLASSNOTREG;
+        HMODULE h = nullptr;
+        if (isProvider) {
+            // Reuse the reference the setup thread took; do not add another one.
+            h = g_hPerfCenter.load();
+        } else {
+            // The applet's shell folder comes from shdocvw.dll. Resolve it
+            // without creating new references when it is already mapped.
+            h = GetModuleHandleW(L"shdocvw.dll");
+            if (!h)
+                h = LoadLibraryExW(L"shdocvw.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
+        if (!h) return REGDB_E_CLASSNOTREG;
+        auto pDllGetClassObject = reinterpret_cast<HRESULT(WINAPI*)(REFCLSID, REFIID,
+                                                                   LPVOID*)>(
+            GetProcAddress(h, "DllGetClassObject"));
+        if (!pDllGetClassObject) return REGDB_E_CLASSNOTREG;
+        IClassFactory* cf = nullptr;
+        HRESULT hr = pDllGetClassObject(rclsid, IID_IClassFactory_GUID,
+                                        reinterpret_cast<LPVOID*>(&cf));
+        if (FAILED(hr)) return hr;
+        hr = cf->CreateInstance(pUnkOuter, riid, ppv);
+        cf->Release();
+        return hr;
     }
-
-    Wh_Log(L"Conservative string hooks requested: enabled=%d, LoadStringW=%d, LoadStringA=%d, DirectUI=%d, resourceModule=%d, embedded strings=147, language=%u",
-           g_forceTranslations ? 1 : 0,
-           loadStringW ? 1 : 0,
-           loadStringA ? 1 : 0,
-           xResourceProviderCreate ? 1 : 0,
-           g_localizedResourcePath.empty() ? 0 : 1,
-           static_cast<UINT>(GetCurrentEmbeddedLanguage()));
-    Wh_Log(L"Translation language: mode=%s, language=%s",
-           g_languageAutomatic?L"automatic":L"forced",
-           GetEmbeddedLanguageTag(GetCurrentEmbeddedLanguage()));
+    return original(rclsid, pUnkOuter, dwClsCtx, riid, ppv);
 }
 
-using CoCreateInstance_t=HRESULT(WINAPI*)(REFCLSID,LPUNKNOWN,DWORD,REFIID,LPVOID*); CoCreateInstance_t CoCreateInstanceOriginal=nullptr;
-HRESULT WINAPI CoCreateInstanceHook(REFCLSID rclsid,LPUNKNOWN pUnkOuter,DWORD dwClsCtx,REFIID riid,LPVOID* ppv){ if(ppv) *ppv=nullptr; { OLECHAR* s=nullptr; if(SUCCEEDED(StringFromCLSID(rclsid,&s))){ std::wstring cs=s; CoTaskMemFree(s); std::wstring csl=ToLower(cs); if(csl==L"{"+g_clsidLower+L"}") Wh_Log(L"[CPL-DBG] CoCreateInstance on FOLDER clsid requested"); } } if(IsEqualGUID(rclsid,kProviderGuid)){ Wh_Log(L"[CPL-DBG] CoCreateInstance provider requested (dllOk=%d path=%s)",g_dllVerifiedOk?1:0,g_expandedDllPath.c_str()); if(g_expandedDllPath.empty()||!g_dllVerifiedOk) return REGDB_E_CLASSNOTREG; HMODULE h=GetModuleHandleW(g_expandedDllPath.c_str()); if(!h) h=LoadLibraryW(g_expandedDllPath.c_str()); if(!h) return REGDB_E_CLASSNOTREG; auto pDllGetClassObject=(HRESULT(WINAPI*)(REFCLSID,REFIID,LPVOID*))GetProcAddress(h,"DllGetClassObject"); if(!pDllGetClassObject) return REGDB_E_CLASSNOTREG; IClassFactory* cf=nullptr; HRESULT hr=pDllGetClassObject(rclsid,IID_IClassFactory_GUID,(LPVOID*)&cf); if(FAILED(hr)) return hr; hr=cf->CreateInstance(pUnkOuter,riid,ppv); cf->Release(); return hr; } return CoCreateInstanceOriginal(rclsid,pUnkOuter,dwClsCtx,riid,ppv); }
-void InstallComHook(){ HMODULE ole32=GetModuleHandleW(L"ole32.dll"); if(!ole32) ole32=LoadLibraryW(L"ole32.dll"); HMODULE combase=GetModuleHandleW(L"combase.dll"); if(!combase) combase=LoadLibraryW(L"combase.dll"); void* p1=ole32?(void*)GetProcAddress(ole32,"CoCreateInstance"):nullptr; void* p2=combase?(void*)GetProcAddress(combase,"CoCreateInstance"):nullptr; if(p1) Wh_SetFunctionHook(p1,(void*)CoCreateInstanceHook,(void**)&CoCreateInstanceOriginal); if(p2&&p2!=p1) Wh_SetFunctionHook(p2,(void*)CoCreateInstanceHook,(void**)&CoCreateInstanceOriginal); }
-BOOL Wh_ModInit(void){ try{ InitClsidStrings(); g_forceTranslations=Wh_GetIntSetting(L"forceTranslations")!=0; LoadLanguageSetting(); SetupLegacyStore(); WriteClsidToHkcu(); void* pOpen=GetRegFunc("RegOpenKeyExW"),*pClose=GetRegFunc("RegCloseKey"),*pQV=GetRegFunc("RegQueryValueExW"),*pGV=GetRegFunc("RegGetValueW"),*pEnumEx=GetRegFunc("RegEnumKeyExW"),*pEnum=GetRegFunc("RegEnumKeyW"),*pQInfo=GetRegFunc("RegQueryInfoKeyW"),*pEnumVal=GetRegFunc("RegEnumValueW"); if(!pOpen||!pClose||!pQV||!pGV||!pEnumEx||!pEnum||!pQInfo||!pEnumVal) return FALSE; Wh_SetFunctionHook(pOpen,(void*)RegOpenKeyExWHook,(void**)&RegOpenKeyExWOriginal); Wh_SetFunctionHook(pClose,(void*)RegCloseKeyHook,(void**)&RegCloseKeyOriginal); Wh_SetFunctionHook(pQV,(void*)RegQueryValueExWHook,(void**)&RegQueryValueExWOriginal); Wh_SetFunctionHook(pGV,(void*)RegGetValueWHook,(void**)&RegGetValueWOriginal); Wh_SetFunctionHook(pEnumEx,(void*)RegEnumKeyExWHook,(void**)&RegEnumKeyExWOriginal); Wh_SetFunctionHook(pEnum,(void*)RegEnumKeyWHook,(void**)&RegEnumKeyWOriginal); Wh_SetFunctionHook(pQInfo,(void*)RegQueryInfoKeyWHook,(void**)&RegQueryInfoKeyWOriginal); Wh_SetFunctionHook(pEnumVal,(void*)RegEnumValueWHook,(void**)&RegEnumValueWOriginal); InstallModuleRedirectHooks(); InstallComHook(); InstallTranslationHook(); return TRUE; }catch(...){return FALSE;} }
-void Wh_ModAfterInit(void){
-    Wh_Log(L"Conservative string hooks are active; PerfCenter DLL will load on demand");
+HRESULT WINAPI CoCreateInstanceHookCombase(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                           DWORD dwClsCtx, REFIID riid, LPVOID* ppv) {
+    return HandleCoCreateInstance(rclsid, pUnkOuter, dwClsCtx, riid, ppv,
+                                  CoCreateInstanceOriginalCombase);
 }
-BOOL Wh_ModSettingsChanged(BOOL* reload){ if(reload) *reload=TRUE; return TRUE; }
-void Wh_ModUninit(void){ try{ RemoveClsidFromHkcu(); ReleaseLocalizedResourceModule(); ReleaseAllPerfCenterModules(); if(!g_localizedResourcePath.empty()) DeleteFileW(g_localizedResourcePath.c_str()); if(Wh_GetIntSetting(L"keepFilesOnDisable")==0){ std::wstring dir=ExpandEnv(kDirPath); RemoveLegacyStoreFiles(dir); Wh_Log(L"Mod disabled: DLL unloaded and LegacyStore files removed"); } else { Wh_Log(L"Mod disabled: base files kept; private resource module removed"); } g_keyTracker.ClearWithoutFreeing(); }catch(...){} }
+
+HRESULT WINAPI CoCreateInstanceHookOle32(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                         DWORD dwClsCtx, REFIID riid, LPVOID* ppv) {
+    return HandleCoCreateInstance(rclsid, pUnkOuter, dwClsCtx, riid, ppv,
+                                  CoCreateInstanceOriginalOle32);
+}
+
+void InstallComHook() {
+    HMODULE combase = GetModuleHandleW(L"combase.dll");
+    if (!combase)
+        combase = LoadLibraryExW(L"combase.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
+    if (!ole32)
+        ole32 = LoadLibraryExW(L"ole32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* pCombase =
+        combase ? reinterpret_cast<void*>(GetProcAddress(combase, "CoCreateInstance"))
+                : nullptr;
+    void* pOle32 =
+        ole32 ? reinterpret_cast<void*>(GetProcAddress(ole32, "CoCreateInstance"))
+              : nullptr;
+    // Hook the real implementation (combase). Each target gets its own hook
+    // function and its own original pointer so calls never cross between them.
+    if (pCombase) {
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<CoCreateInstance_t>(pCombase),
+                                       CoCreateInstanceHookCombase,
+                                       &CoCreateInstanceOriginalCombase);
+    }
+    if (pOle32 && pOle32 != pCombase) {
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<CoCreateInstance_t>(pOle32),
+                                       CoCreateInstanceHookOle32,
+                                       &CoCreateInstanceOriginalOle32);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Windhawk entry points
+// -----------------------------------------------------------------------------
+BOOL Wh_ModInit(void) {
+    try {
+        InitClsidStrings();
+        g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
+        LoadLanguageSetting();
+
+        // --- Install hooks (fast; no network/file I/O on this path) ---
+        void* pOpen = GetRegFunc("RegOpenKeyExW");
+        void* pOpenA = GetRegFunc("RegOpenKeyExA");
+        void* pOpenOldW = GetRegFunc("RegOpenKeyW");
+        void* pOpenOldA = GetRegFunc("RegOpenKeyA");
+        void* pCreateW = GetRegFunc("RegCreateKeyExW");
+        void* pCreateA = GetRegFunc("RegCreateKeyExA");
+        void* pClose = GetRegFunc("RegCloseKey");
+        void* pQV = GetRegFunc("RegQueryValueExW");
+        void* pQVA = GetRegFunc("RegQueryValueExA");
+        void* pGV = GetRegFunc("RegGetValueW");
+        void* pGVA = GetRegFunc("RegGetValueA");
+        void* pQValueW = GetRegFunc("RegQueryValueW");
+        void* pQValueA = GetRegFunc("RegQueryValueA");
+        void* pEnumEx = GetRegFunc("RegEnumKeyExW");
+        void* pEnumExA = GetRegFunc("RegEnumKeyExA");
+        void* pEnum = GetRegFunc("RegEnumKeyW");
+        void* pEnumA = GetRegFunc("RegEnumKeyA");
+        void* pQInfo = GetRegFunc("RegQueryInfoKeyW");
+        void* pQInfoA = GetRegFunc("RegQueryInfoKeyA");
+        void* pEnumVal = GetRegFunc("RegEnumValueW");
+        void* pEnumValA = GetRegFunc("RegEnumValueA");
+
+        if (!pOpen || !pOpenA || !pClose || !pQV || !pGV || !pEnumEx || !pEnum ||
+            !pQInfo || !pEnumVal) {
+            return FALSE;
+        }
+
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyExW_t>(pOpen),
+                                       RegOpenKeyExWHook, &RegOpenKeyExWOriginal);
+        if (pOpenA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyExA_t>(pOpenA),
+                                           RegOpenKeyExAHook, &RegOpenKeyExAOriginal);
+        if (pOpenOldW)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyW_t>(pOpenOldW),
+                                           RegOpenKeyWHook, &RegOpenKeyWOriginal);
+        if (pOpenOldA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyA_t>(pOpenOldA),
+                                           RegOpenKeyAHook, &RegOpenKeyAOriginal);
+        if (pCreateW)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCreateKeyExW_t>(pCreateW),
+                                           RegCreateKeyExWHook,
+                                           &RegCreateKeyExWOriginal);
+        if (pCreateA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCreateKeyExA_t>(pCreateA),
+                                           RegCreateKeyExAHook,
+                                           &RegCreateKeyExAOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCloseKey_t>(pClose),
+                                       RegCloseKeyHook, &RegCloseKeyOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueExW_t>(pQV),
+                                       RegQueryValueExWHook, &RegQueryValueExWOriginal);
+        if (pQVA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueExA_t>(pQVA),
+                                           RegQueryValueExAHook,
+                                           &RegQueryValueExAOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegGetValueW_t>(pGV),
+                                       RegGetValueWHook, &RegGetValueWOriginal);
+        if (pGVA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegGetValueA_t>(pGVA),
+                                           RegGetValueAHook, &RegGetValueAOriginal);
+        if (pQValueW)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueW_t>(pQValueW),
+                                           RegQueryValueWHook, &RegQueryValueWOriginal);
+        if (pQValueA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueA_t>(pQValueA),
+                                           RegQueryValueAHook, &RegQueryValueAOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyExW_t>(pEnumEx),
+                                       RegEnumKeyExWHook, &RegEnumKeyExWOriginal);
+        if (pEnumExA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyExA_t>(pEnumExA),
+                                           RegEnumKeyExAHook, &RegEnumKeyExAOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyW_t>(pEnum),
+                                       RegEnumKeyWHook, &RegEnumKeyWOriginal);
+        if (pEnumA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyA_t>(pEnumA),
+                                           RegEnumKeyAHook, &RegEnumKeyAOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryInfoKeyW_t>(pQInfo),
+                                       RegQueryInfoKeyWHook, &RegQueryInfoKeyWOriginal);
+        if (pQInfoA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryInfoKeyA_t>(pQInfoA),
+                                           RegQueryInfoKeyAHook, &RegQueryInfoKeyAOriginal);
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumValueW_t>(pEnumVal),
+                                       RegEnumValueWHook, &RegEnumValueWOriginal);
+        if (pEnumValA)
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumValueA_t>(pEnumValA),
+                                           RegEnumValueAHook, &RegEnumValueAOriginal);
+
+        InstallModuleRedirectHooks();
+        InstallComHook();
+        InstallTranslationHook();
+
+        // --- Start async setup on a worker thread (never blocks startup) ---
+        try {
+            g_setupThread = std::thread(RunSetup);
+        } catch (...) {
+            // Thread creation failed; the mod just runs without the DLL.
+        }
+        return TRUE;
+    } catch (...) {
+        return FALSE;
+    }
+}
+
+void Wh_ModAfterInit(void) {
+    Wh_Log(L"Conservative string hooks are active; PerfCenter DLL loads in the "
+           L"background");
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    try {
+        g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
+        LoadLanguageSetting();
+        // Rebuild the localized resource module in place. This never
+        // re-downloads the DLL and never forces a full mod reload.
+        std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+        ReleaseLocalizedResourceModuleLocked();
+        const std::wstring* dllPath = CurrentDllPath();
+        if (dllPath && !dllPath->empty()) {
+            BuildLocalizedResourceModule(*dllPath, StoreDir());
+        }
+        if (reload) *reload = FALSE;
+        return TRUE;
+    } catch (...) {
+        if (reload) *reload = FALSE;
+        return TRUE;
+    }
+}
+
+void Wh_ModUninit(void) {
+    try {
+        // Ask the background setup (and any in-flight download) to stop, then
+        // wait for it to finish before tearing anything down. The download loop
+        // checks this flag and the WinInet timeouts bound each blocking read, so
+        // the join returns promptly instead of hanging on a stuck connection.
+        g_shuttingDown.store(true, std::memory_order_release);
+        if (g_setupThread.joinable()) g_setupThread.join();
+        g_shuttingDown.store(false, std::memory_order_release);
+
+        // Release our own references only. COM owns any in-proc server it
+        // created; we never force-unload modules we did not reference.
+        ReleaseLocalizedResourceModule();
+        if (HMODULE h = g_hPerfCenter.exchange(nullptr)) {
+            FreeLibrary(h);
+        }
+        g_dllVerifiedOk.store(false);
+        const std::wstring* path = g_dllPath.exchange(nullptr);
+        delete path;
+
+        if (Wh_GetIntSetting(L"keepFilesOnDisable") == 0) {
+            std::wstring dir = StoreDir();
+            RemoveOwnFiles(dir, false);
+            Wh_Log(L"Mod disabled: DLL unloaded and mod-owned files removed");
+        } else {
+            std::wstring dir = StoreDir();
+            RemoveOwnFiles(dir, true);
+            Wh_Log(L"Mod disabled: base files kept; private resource module removed");
+        }
+        g_keyTracker.ClearWithoutFreeing();
+    } catch (...) {
+    }
+}
