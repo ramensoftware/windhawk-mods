@@ -155,7 +155,7 @@ static thread_local IPropertyStore* g_controlPanelPropertyStore;
 static std::atomic<bool> g_explorerFrameInitializationStarted;
 static std::atomic<bool> g_propertyStoreMismatchLogged;
 static std::atomic<bool> g_unloading;
-static WindowPropertyStore_SetValue_t g_hookedSetValue;
+static std::atomic<WindowPropertyStore_SetValue_t> g_hookedSetValue;
 
 static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
     return IsEqualPropertyKey(key, PKEY_AppUserModel_RelaunchCommand) ||
@@ -167,12 +167,8 @@ static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
 }
 
 static bool __cdecl UseSeparateProcess_Hook(IShellItem* item) {
-    if (!item) {
-        return UseSeparateProcess_Original(item);
-    }
-
     const bool useSeparateProcess = UseSeparateProcess_Original(item);
-    if (!useSeparateProcess) {
+    if (!useSeparateProcess || !item || !IsControlPanel_Original) {
         return useSeparateProcess;
     }
 
@@ -183,16 +179,19 @@ static void __cdecl CopyPropertyFromItemToPropStore_Hook(
     const PROPERTYKEY& key,
     IShellItem2* item,
     IPropertyStore* propertyStore) {
-    const bool isControlPanel = item && IsControlPanel_Original(item);
+    const bool isControlPanel =
+        item && IsControlPanel_Original && IsControlPanel_Original(item);
 
     // The direct AppUserModel.ID write follows these copies synchronously on
     // the same thread and uses the same IPropertyStore interface pointer. This
     // raw pointer is only a comparison token and is replaced by the next copy.
     g_controlPanelPropertyStore = isControlPanel ? propertyStore : nullptr;
 
-    if (isControlPanel && propertyStore && g_hookedSetValue &&
+    const WindowPropertyStore_SetValue_t hookedSetValue =
+        g_hookedSetValue.load(std::memory_order_relaxed);
+    if (isControlPanel && propertyStore && hookedSetValue &&
         (*reinterpret_cast<void***>(propertyStore))[6] !=
-            reinterpret_cast<void*>(g_hookedSetValue) &&
+            reinterpret_cast<void*>(hookedSetValue) &&
         !g_propertyStoreMismatchLogged.exchange(true,
                                                 std::memory_order_relaxed)) {
         Wh_Log(L"Window property store uses a different SetValue "
@@ -222,6 +221,7 @@ static HRESULT STDMETHODCALLTYPE WindowPropertyStore_SetValue_Hook(
                                  TRUE) == CSTR_EQUAL) {
             // Omitting the value makes the window inherit Explorer's taskbar
             // identity; a later read-back is intentionally empty.
+            Wh_Log(L"Suppressed Control Panel AppUserModel.ID");
             return S_OK;
         }
 
@@ -279,7 +279,7 @@ static bool HookWindowPropertyStoreSetValue() {
         setValue, WindowPropertyStore_SetValue_Hook,
         &WindowPropertyStore_SetValue_Original);
     if (hookInstalled) {
-        g_hookedSetValue = setValue;
+        g_hookedSetValue.store(setValue, std::memory_order_relaxed);
     }
 
     return hookInstalled;
@@ -358,26 +358,28 @@ static bool IsExplorerFrameModuleName(LPCWSTR fileName) {
                CSTR_EQUAL;
 }
 
-static void InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule,
-                                                  bool applyHooks) {
+static bool InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule,
+                                                   bool applyHooks) {
     if (g_unloading.load(std::memory_order_acquire)) {
-        return;
+        return false;
     }
 
     if (g_explorerFrameInitializationStarted.exchange(
             true, std::memory_order_acq_rel)) {
-        return;
+        return false;
     }
 
     PinExplorerFrameModule(explorerFrameModule);
     if (!InitializeExplorerFrameHooks(explorerFrameModule)) {
         Wh_Log(L"Failed to install ExplorerFrame.dll hooks after late load");
-        return;
+        return false;
     }
 
     if (applyHooks) {
         Wh_ApplyHookOperations();
     }
+
+    return true;
 }
 
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
@@ -436,17 +438,24 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
+    bool anyHooksRegistered = false;
+
     if (HMODULE explorerFrameModule =
             GetModuleHandleW(L"ExplorerFrame.dll")) {
-        InitializeExplorerFrameHooksAfterLoad(explorerFrameModule, false);
+        anyHooksRegistered =
+            InitializeExplorerFrameHooksAfterLoad(explorerFrameModule, false);
     }
 
-    if (!HookWindowPropertyStoreSetValue()) {
+    if (HookWindowPropertyStoreSetValue()) {
+        anyHooksRegistered = true;
+    } else {
         Wh_Log(L"Failed to hook IPropertyStore::SetValue; Control Panel "
                L"windows will keep their own taskbar identity");
     }
 
-    Wh_ApplyHookOperations();
+    if (anyHooksRegistered) {
+        Wh_ApplyHookOperations();
+    }
 }
 
 void Wh_ModBeforeUninit() {
