@@ -78,11 +78,12 @@ effect.
 
 | Value | Description |
 |-------|-------------|
-| 1.8   | Raised midtones and shadows; old Apple/Mac standard |
-| 2.0   | Moderately bright midpoint |
-| 2.2   | Closest to the perceptual average of sRGB |
-| 2.4   | sRGB peak exponent |
-| 2.6   | Darker midtones, punchier contrast |
+| 1.8   | Bright and low contrast, legacy Mac standard |
+| 2.0   | Compromise between 1.8 and 2.2 |
+| 2.2   | Standard PC/monitor target, sRGB average and Display P3 |
+| 2.3   | Compromise between 2.2 and 2.4 |
+| 2.4   | Broadcast and HDTV, Rec. 709 / BT.1886 |
+| 2.6   | Dark and high contrast, Digital cinema projection, DCI-P3 |
 
 ## Known limitations
 
@@ -91,6 +92,9 @@ effect.
 - **Gamma changes require a DWM restart.** D3D compiles the shader bytecode once
   at startup. Patching the bytecode after that has no effect until DWM restarts
   (log off and back on).
+- **Disabling the mod also requires a DWM restart.** After unloading, shaders
+  already compiled from the patched bytecode retain the power-law curve while
+  newly compiled ones revert, leaving a mixed state until DWM restarts.
 - **Chromium-based browsers and Electron apps** (Chrome, Edge, VS Code, Discord,
   etc.) switch between DWM's SDR compositing path and a direct scRGB path
   depending on tab/window content. Each
@@ -117,11 +121,12 @@ effect.
     Power-law gamma exponent used for SDR-to-HDR EOTF conversion.
     Log off and back in after changing for the new value to take effect.
   $options:
-    - "1.8": "1.8 (bright, old Mac standard)"
+    - "1.8": "1.8 (Bright and low contrast, legacy Mac standard)"
     - "2.0": "2.0"
-    - "2.2": "2.2 (sRGB average)"
-    - "2.4": "2.4 (sRGB peak)"
-    - "2.6": "2.6 (dark / high contrast)"
+    - "2.2": "2.2 (Standard PC/monitor target, sRGB average and Display P3)"
+    - "2.3": "2.3"
+    - "2.4": "2.4 (Broadcast and HDTV, Rec. 709 / BT.1886)"
+    - "2.6": "2.6 (Dark and high contrast, Digital cinema projection, DCI-P3)"
 */
 // ==/WindhawkModSettings==
 
@@ -357,13 +362,8 @@ struct PatchRecord {
 
 static std::vector<PatchRecord> g_patches;
 
-// The sRGB EOTF signature — all four vec3-splat constants present exactly once
-// in a leaf blob — is unique to the decode path and covers all ~37 shader
-// variants across DWM's compositing code paths. A checksum allowlist was used
-// previously (verified against dwmcore.dll 10.0.26100.8521) but only covered
-// four of the thirty-seven variants, causing the remaining unpatched shaders to
-// revert to sRGB EOTF during window focus and resize events. Content-based
-// detection is now the sole selector and requires no per-build maintenance.
+// All four sRGB EOTF vec3-splat constants together uniquely identify the decode
+// path across all ~37 shader variants in DWM's compositing pipeline.
 
 // =============================================================================
 // Memory helpers
@@ -400,35 +400,47 @@ static const float kSrgbConsts[4] = {2.4f, 0.04045f, 0.055000f, 0.94786733f};
 // replaced with the user-chosen gamma instead and has no slot here.
 static const float kPatchConsts[3] = {0.0f, 0.0f, 1.0f};
 
-// Searches 'buf' (a copy of a shader blob) for the sRGB vec3-splat patterns and
-// patches them in-place. Fills counts[4] with the number of replacements made
-// for each constant. Returns the number of constants that had at least one
-// match (0–4). Callers must require == 4 to ensure all-or-nothing patching, and
-// should log the individual counts: some constants (e.g. 0.055) appear in both
-// decode and encode paths, so a count > 1 indicates unexpected overlap that
-// would corrupt unintended code.
-static int PatchShaderBuf(BYTE* buf, DWORD size, float gamma, int counts[4]) {
+// Scans a DXBC blob for the four sRGB EOTF vec3-splat constants. Read-only;
+// fills counts[4] with occurrences of each and returns the number of constants
+// with at least one match. Used to pre-screen blobs before allocating a copy
+// and to count qualifying leaves inside skipped containers.
+static int ScanSrgbSplats(const BYTE* blob, DWORD size, int counts[4]) {
+    for (int ci = 0; ci < 4; ci++)
+        counts[ci] = 0;
     int found = 0;
+    for (size_t j = kDXBCHeaderSize; j + sizeof(float) * 3 <= size; j += 4) {
+        const BYTE* p = blob + j;
+        for (int ci = 0; ci < 4; ci++) {
+            float pat[3] = {kSrgbConsts[ci], kSrgbConsts[ci], kSrgbConsts[ci]};
+            if (memcmp(p, pat, sizeof(pat)) == 0)
+                counts[ci]++;
+        }
+    }
+    for (int ci = 0; ci < 4; ci++)
+        if (counts[ci] > 0)
+            found++;
+    return found;
+}
+
+// Patches 'buf' (a copy of a shader blob) in-place by replacing the four sRGB
+// EOTF vec3-splat constants with their power-law equivalents. Callers must
+// pre-screen with ScanSrgbSplats to confirm all four constants are present
+// exactly once before calling.
+static void PatchShaderBuf(BYTE* buf, DWORD size, float gamma) {
     for (int ci = 0; ci < 4; ci++) {
         float src = kSrgbConsts[ci];
         float dst = (ci == 0) ? gamma : kPatchConsts[ci - 1];
         float pat[3] = {src, src, src};
-        counts[ci] = 0;
-        // Search from after the header; stop where a full 12-byte match would
-        // overflow. DXBC constants are DWORD-aligned, so step by 4 for
-        // correctness and speed.
+        // DXBC constants are DWORD-aligned, so step by 4 for correctness and
+        // speed.
         for (size_t j = kDXBCHeaderSize; j + sizeof(float) * 3 <= size;
              j += 4) {
             if (memcmp(pat, buf + j, sizeof(pat)) != 0)
                 continue;
             float rep[3] = {dst, dst, dst};
             memcpy(buf + j, rep, sizeof(rep));
-            counts[ci]++;
         }
-        if (counts[ci] > 0)
-            found++;
     }
-    return found;
 }
 
 // Returns true if the blob contains at least one valid nested DXBC blob.
@@ -452,12 +464,33 @@ static bool HasDXBCSubBlob(const DXBCHeader* hdr) {
 }
 
 // Returns true if CalcDXBCChecksum reproduces the blob's own embedded checksum.
-// Used as a pre-flight check before writing a new checksum into a container
-// blob that is not on the known-checksum allowlist.
+// Used as a pre-flight check before writing a new checksum.
 static bool ChecksumRoundTrips(const DXBCHeader* hdr) {
     DWORD verify[4];
     CalcDXBCChecksum((const BYTE*)hdr, hdr->size, verify);
     return memcmp(verify, hdr->checksum, 16) == 0;
+}
+
+// Counts leaf DXBC blobs in [region, region+regionSize) that qualify as sRGB
+// EOTF shaders (all four constants present exactly once). Read-only — used to
+// account for blobs inside skipped containers so the all-or-nothing check stays
+// accurate.
+static int CountEotfLeaves(const BYTE* region, size_t regionSize) {
+    int count = 0;
+    for (size_t k = 0; k + kDXBCHeaderSize <= regionSize; k += 4) {
+        const auto* hdr = (const DXBCHeader*)(region + k);
+        if (hdr->magic[0] != 'D' || hdr->magic[1] != 'X' ||
+            hdr->magic[2] != 'B' || hdr->magic[3] != 'C' ||
+            hdr->reserved != 1 || hdr->size < (DWORD)kDXBCHeaderSize ||
+            k + hdr->size > regionSize || HasDXBCSubBlob(hdr))
+            continue;
+        int counts[4];
+        if (ScanSrgbSplats((const BYTE*)hdr, hdr->size, counts) == 4 &&
+            counts[0] == 1 && counts[1] == 1 && counts[2] == 1 &&
+            counts[3] == 1)
+            count++;
+    }
+    return count;
 }
 
 // =============================================================================
@@ -604,10 +637,12 @@ static int ScanRegionForShaders(BYTE* region,
                 // inner leaves the container body changes and round-trip always
                 // fails.
                 if (!ChecksumRoundTrips(hdr)) {
+                    int missed = CountEotfLeaves((const BYTE*)hdr, hdr->size);
                     Wh_Log(
                         L"  Container at %p: checksum did not round-trip, "
-                        L"skipping",
-                        (void*)hdr);
+                        L"skipping (%d EOTF leaf(s) uncounted)",
+                        (void*)hdr, missed);
+                    skippedCount += missed;
                     i +=
                         hdr->size -
                         4;  // loop will add 4 more, landing just after the blob
@@ -616,48 +651,45 @@ static int ScanRegionForShaders(BYTE* region,
                 bigShader = hdr;
                 containerPatchBase = g_patches.size();
             } else {
-                // A nested container inside the current one: multi-level
-                // nesting is not supported. Skip past the inner blob so its
-                // leaves are not patched without a proper container fixup.
+                // A nested container inside the current one: count its EOTF
+                // leaves as skipped before jumping past so the all-or-nothing
+                // check stays accurate.
+                int missed = CountEotfLeaves((const BYTE*)hdr, hdr->size);
                 Wh_Log(
                     L"  Nested container at %p inside %p — skipping "
-                    L"unsupported nesting depth",
-                    (void*)hdr, (void*)bigShader);
+                    L"unsupported nesting depth (%d EOTF leaf(s) uncounted)",
+                    (void*)hdr, (void*)bigShader, missed);
+                skippedCount += missed;
                 i += hdr->size -
                      4;  // loop will add 4 more, landing just after the blob
             }
             continue;
         }
 
-        // Leaf blob: use content-based detection. The four sRGB EOTF vec3-splat
-        // constants together are unique to the decode path — any leaf
-        // containing all four (each exactly once) is an sRGB EOTF shader
-        // regardless of its compiled checksum. This covers all ~37 shader
-        // variants in DWM.
+        // Leaf blob: detect by content — all four sRGB EOTF vec3-splat
+        // constants present exactly once. Pre-screen in-place to avoid
+        // allocation for the ~360 non-EOTF leaves in .rdata.
         bool insideContainer =
             bigShader && (BYTE*)hdr >= (BYTE*)bigShader &&
             (BYTE*)hdr + hdr->size <= (BYTE*)bigShader + bigShader->size;
 
-        // Copy the blob and attempt to patch the sRGB constants.
-        std::vector<BYTE> patched(hdr->size);
-        memcpy(patched.data(), hdr, hdr->size);
-
-        int counts[4] = {};
-        int constsFound =
-            PatchShaderBuf(patched.data(), hdr->size, gamma, counts);
-        if (constsFound < 4)
-            continue;  // not an sRGB EOTF shader — discard the copy
+        int preCounts[4];
+        if (ScanSrgbSplats((const BYTE*)hdr, hdr->size, preCounts) < 4)
+            continue;  // not all four EOTF constants present
 
         bool countsOk = true;
         for (int ci = 0; ci < 4; ci++) {
-            if (counts[ci] != 1) {
+            if (preCounts[ci] != 1) {
                 Wh_Log(L"  Blob at %p: constant %d count %d != 1 — skipping",
-                       (void*)hdr, ci, counts[ci]);
+                       (void*)hdr, ci, preCounts[ci]);
                 countsOk = false;
+                break;
             }
         }
-        if (!countsOk)
+        if (!countsOk) {
+            skippedCount++;
             continue;
+        }
 
         // Pre-flight: verify our checksum implementation reproduces this blob's
         // own hash before writing a new one. A wrong hash makes D3D reject the
@@ -669,6 +701,11 @@ static int ScanRegionForShaders(BYTE* region,
             continue;
         }
 
+        // EOTF leaf confirmed; allocate copy and apply patches.
+        std::vector<BYTE> patched(hdr->size);
+        memcpy(patched.data(), hdr, hdr->size);
+        PatchShaderBuf(patched.data(), hdr->size, gamma);
+
         DWORD newCk[4];
         CalcDXBCChecksum(patched.data(), hdr->size, newCk);
         memcpy(patched.data() + 4, newCk, 16);
@@ -678,12 +715,9 @@ static int ScanRegionForShaders(BYTE* region,
         rec.addr = (BYTE*)hdr;
         rec.original.assign(rec.addr, rec.addr + hdr->size);
 
-        // Writing the whole blob rather than only the changed bytes: patched
-        // differs from the original solely in the ~48 bytes of splat constants
-        // and the 16-byte checksum, so memcpy replays every other byte at its
-        // current value. A concurrent reader can only observe changes to those
-        // same bytes — the same window as delta writes. Delta writes would
-        // reduce COW pages and PatchRecord size but not improve correctness.
+        // Whole-blob write: patched differs from original only in the splat
+        // constants and checksum; unchanged bytes are replayed at their
+        // existing values — same observable window as delta writes.
         if (!WriteMemorySafe((BYTE*)hdr, patched.data(), hdr->size)) {
             Wh_Log(L"  VirtualProtect failed for blob at %p", (void*)hdr);
             skippedCount++;
@@ -726,6 +760,10 @@ static void RestoreAllPatches() {
 // =============================================================================
 
 BOOL Wh_ModInit() {
+    // Defensive reset: Wh_ModBeforeUninit should always clear g_patches before
+    // a reload, but clear it here in case of an abnormal lifecycle.
+    g_patches.clear();
+
     // Resolve the gamma setting via lookup table to avoid locale-dependent
     // wcstof behaviour: a locale with ',' as the decimal separator would
     // silently parse "2.2" as 2.0, which passes a range check without any
@@ -733,11 +771,8 @@ BOOL Wh_ModInit() {
     static const struct {
         const wchar_t* str;
         float val;
-    } kGammaOptions[] = {{L"1.8", 1.8f},
-                         {L"2.0", 2.0f},
-                         {L"2.2", 2.2f},
-                         {L"2.4", 2.4f},
-                         {L"2.6", 2.6f}};
+    } kGammaOptions[] = {{L"1.8", 1.8f}, {L"2.0", 2.0f}, {L"2.2", 2.2f},
+                         {L"2.3", 2.3f}, {L"2.4", 2.4f}, {L"2.6", 2.6f}};
     float gamma = 2.2f;
     {
         auto gammaSetting = WindhawkUtils::StringSetting::make(L"GammaCurve");
@@ -764,7 +799,15 @@ BOOL Wh_ModInit() {
 
     // Determine the module's address range from its PE header.
     auto* dos = (IMAGE_DOS_HEADER*)hDwmcore;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        Wh_Log(L"dwmcore.dll: invalid DOS header");
+        return FALSE;
+    }
     auto* nt = (IMAGE_NT_HEADERS*)((BYTE*)hDwmcore + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        Wh_Log(L"dwmcore.dll: invalid NT header");
+        return FALSE;
+    }
     BYTE* modBase = (BYTE*)hDwmcore;
     size_t modSize = nt->OptionalHeader.SizeOfImage;
 
