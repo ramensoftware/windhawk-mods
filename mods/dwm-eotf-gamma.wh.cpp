@@ -80,7 +80,7 @@ effect.
 |-------|-------------|
 | 1.8   | Bright and low contrast, legacy Mac standard |
 | 2.0   | Compromise between 1.8 and 2.2 |
-| 2.2   | Standard PC/monitor target, sRGB average and Display P3 |
+| 2.2   | **Default** - Standard PC/monitor target, sRGB average and Display P3 |
 | 2.3   | Compromise between 2.2 and 2.4 |
 | 2.4   | Broadcast and HDTV, Rec. 709 / BT.1886 |
 | 2.6   | Dark and high contrast, Digital cinema projection, DCI-P3 |
@@ -123,7 +123,7 @@ effect.
   $options:
     - "1.8": "1.8 (Bright and low contrast, legacy Mac standard)"
     - "2.0": "2.0"
-    - "2.2": "2.2 (Standard PC/monitor target, sRGB average and Display P3)"
+    - "2.2": "2.2 (**Default** - Standard PC/monitor target, sRGB average and Display P3)"
     - "2.3": "2.3"
     - "2.4": "2.4 (Broadcast and HDTV, Rec. 709 / BT.1886)"
     - "2.6": "2.6 (Dark and high contrast, Digital cinema projection, DCI-P3)"
