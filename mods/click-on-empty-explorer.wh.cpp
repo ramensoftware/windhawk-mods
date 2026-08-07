@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              click-on-empty-explorer
 // @name            Click on Empty Explorer
-// @description     Configure double click, middle click and double middle click actions on empty space in File Explorer
-// @version         2.3.0
+// @description     Configure double/triple click, middle click, double middle click, and modifier+click actions on empty space in File Explorer. Supports 17 actions including navigation, tabs, custom hotkeys, and invoking any right-click context menu entry.
+// @version         2.7.0
 // @author          LiHua81
 // @github          https://github.com/LiHua81
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -loleaut32 -lole32
+// @compilerOptions -lcomctl32 -loleaut32 -lole32 -lshlwapi
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -22,8 +22,9 @@
 /*
 # Click on Empty Explorer
 
-Configure what happens when you double click, middle click, or double middle click on
-empty space in File Explorer. Supports 12 different actions.
+Configure what happens when you double click, triple click, middle click, double middle click,
+or modifier+click (Ctrl/Alt/Shift+Click) on empty space in File Explorer. Supports 16 different
+actions.
 
 ## How it works
 
@@ -31,6 +32,14 @@ This mod intercepts mouse clicks on the blank area of File Explorer's file list 
 no file or folder is located) and performs the action you've configured.
 
 - **Double left click** — Windows natively detects double clicks. No delay at all.
+- **Triple left click** — When triple-click is configured, double-click actions are
+  delayed by ~500ms (the system double-click time). If a third click arrives in that
+  window, the double-click is cancelled and only the triple-click action fires. If no
+  third click arrives, the double-click action fires when the timer expires.
+  When triple-click is not configured, double-click fires instantly as before.
+- **Modifier + Click** — Hold Ctrl, Alt, or Shift while left-clicking empty space to
+  trigger a separate action (e.g. Ctrl+Click = Go Up, Alt+Click = Refresh). Each
+  modifier has its own independent action setting.
 - **Middle click** — If only a single-click action is set (double middle click is
   disabled), the action fires instantly with no delay, just like left click.
 - **Double middle click** — Windows does not natively support double middle click, so
@@ -56,6 +65,9 @@ no file or folder is located) and performs the action you've configured.
 - **Custom Hotkey** — Send a custom key combination, configured per trigger (see below)
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
+- **Open in VS Code** — Invoke "Open with Code" from the context menu; uses browser-based menu (works in virtual folders)
+- **Open in Terminal** — Invoke "Open in Terminal" from the context menu
+- **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for Cursor, Git Bash, PowerShell, or any program that registered an entry.
 - **None** — Do nothing
 
 ## Custom Hotkey
@@ -69,7 +81,46 @@ When you choose "Custom Hotkey" for a trigger, a text field appears where you de
 
 **Examples:** `Ctrl+V`, `Ctrl+Shift+N`, `Win+E`, `Alt+F4`, `Ctrl+Shift+Esc`, `F5`, `Win+Shift+S`
 
-Each trigger (double click, middle click, double middle click) has its own independent custom hotkey field.
+Each trigger has its own independent custom hotkey field.
+
+## Context Menu Match
+
+When you choose **Open Context Menu Item** for a trigger, this text field tells the mod which
+right-click background menu entry to invoke. The mod opens the folder's actual right-click
+context menu programmatically and clicks the first entry that matches your input.
+
+### Matching Rules
+
+Matching is **case-insensitive** and ignores **spaces** and `&` accelerator markers:
+
+| Menu item text              | Verb              | You can type any of                      |
+|-----------------------------|-------------------|------------------------------------------|
+| `Open Git Ba&sh here`       | `git_shell`       | `gitbash`, `git`, `bash`, `shell`        |
+| `Open with Code`            | `{1C6DF0C0...}`   | `code`, `openwithcode`                   |
+| `Open in Terminal`          | `{9F156763...}`   | `terminal`, `openinterminal`             |
+| `&ExtractAllFiles`          | `ExtractAllFiles` | `extractall`, `extract`                  |
+| `Properties`                | `properties`      | `prop`, `properties`                     |
+| `New` → `Folder`            | `NewFolder`       | `newfolder`, `folder`                    |
+
+### How to Find the Right Text
+
+If your match text doesn't work, check the debug log (enable in Windhawk editor) —
+the mod will dump ALL available menu items with their normalized text:
+
+```
+No match for 'Git Bash' — dumping all context menu items:
+CMENU[Open Git Ba&sh here] wID=92 verb=[git_shell]  → match: "opengitbashhere" or "git_shell"
+```
+
+The `→ match:` part shows the normalized form of each entry's text and verb.
+**Type any part of either normalized string** to match that entry. For example,
+`"gitbash"`, `"git"`, `"bash"`, `"shell"`, or `"git_shell"` would all match this entry.
+
+### Tips
+
+- **Any program** — any program that registered a right-click entry on the folder background works, regardless of install path
+- **Multiple matches** — if more than one entry matches, the first one in menu order is used
+- **Non-English menus** — type any substring from the display text in your system language (e.g., Japanese, Chinese, Korean all work)
 
 ## Windows version support
 
@@ -82,7 +133,7 @@ require Windows 11 for tabbed Explorer support.
 /*
 - doubleClickAction: goUp
   $name: Double Click Action
-  $description: What to do when double left clicking empty space. No delay (native Windows support).
+  $description: What to do when double left clicking empty space. Instant when triple-click is disabled. When triple-click is enabled, delayed ~500ms and overridden if a third click arrives.
   $options:
     - goUp: Go Up
     - goBack: Go Back
@@ -97,7 +148,43 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
     - none: None
+- doubleClickCustomHotkey: ""
+  $name: Double Click Custom Hotkey
+  $description: "Format: modifier keys + main key. Modifiers: Ctrl, Shift, Alt, Win (can combine multiple, e.g. Ctrl+Shift+N, Win+Shift+S). Main key: letter, F1-F24, Tab, Enter, Escape, arrows, Backspace, Delete, Home, End, PageUp, PageDown, Insert"
+- doubleClickContextMenuMatch: ""
+  $name: Double Click Context Menu Match
+  $description: "When Double Click Action is 'Open Context Menu Item', use this match text instead of the global 'Context Menu Match'. Leave empty to use the global setting."
+- tripleClickAction: none
+  $name: Triple Click Action
+  $description: What to do when triple left clicking empty space. When enabled, double-click is delayed ~500ms; if a third click arrives, only the triple-click action fires (double-click is cancelled).
+  $options:
+    - goUp: Go Up
+    - goBack: Go Back
+    - goForward: Go Forward
+    - refresh: Refresh
+    - newTab: New Tab (Win11)
+    - duplicateTab: Duplicate Tab (Win11)
+    - closeTab: Close Tab (Win11)
+    - newFolder: New Folder
+    - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
+    - goToDesktop: Go to Desktop
+    - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
+    - none: None
+- tripleClickCustomHotkey: ""
+  $name: Triple Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+W, Win+D, Ctrl+Shift+Esc"
+- tripleClickContextMenuMatch: ""
+  $name: Triple Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - middleClickAction: none
   $name: Middle Click Action
   $description: What to do when single middle clicking empty space. If only single click is set, fires instantly. If both single and double are set, single is delayed ~500ms to detect double clicks.
@@ -115,7 +202,16 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
     - none: None
+- middleClickCustomHotkey: ""
+  $name: Middle Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+V, Ctrl+T, Win+D, Ctrl+Shift+Esc"
+- middleClickContextMenuMatch: ""
+  $name: Middle Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
 - doubleMiddleClickAction: none
   $name: Double Middle Click Action
   $description: What to do when double middle clicking empty space. Two middle clicks within ~500ms count as a double click. If only double is set, single middle clicks are ignored.
@@ -133,16 +229,100 @@ require Windows 11 for tabbed Explorer support.
     - customHotkey: Custom Hotkey
     - goToDesktop: Go to Desktop
     - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
     - none: None
-- doubleClickCustomHotkey: ""
-  $name: Double Click Custom Hotkey
-  $description: "Format: modifier keys + main key. Modifiers: Ctrl, Shift, Alt, Win (can combine multiple, e.g. Ctrl+Shift+N, Win+Shift+S). Main key: letter, F1-F24, Tab, Enter, Escape, arrows, Backspace, Delete, Home, End, PageUp, PageDown, Insert"
-- middleClickCustomHotkey: ""
-  $name: Middle Click Custom Hotkey
-  $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+V, Ctrl+T, Win+D, Ctrl+Shift+Esc"
 - doubleMiddleClickCustomHotkey: ""
   $name: Double Middle Click Custom Hotkey
   $description: "Same format as Double Click Custom Hotkey. Supports multiple modifiers. Ex: Ctrl+W, Alt+Tab, Win+E, Alt+Shift+F4"
+- doubleMiddleClickContextMenuMatch: ""
+  $name: Double Middle Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
+- ctrlClickAction: none
+  $name: Ctrl+Click Action
+  $description: What to do when Ctrl+left clicking empty space. Hold Ctrl and single-click on empty area.
+  $options:
+    - goUp: Go Up
+    - goBack: Go Back
+    - goForward: Go Forward
+    - refresh: Refresh
+    - newTab: New Tab (Win11)
+    - duplicateTab: Duplicate Tab (Win11)
+    - closeTab: Close Tab (Win11)
+    - newFolder: New Folder
+    - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
+    - goToDesktop: Go to Desktop
+    - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
+    - none: None
+- ctrlClickCustomHotkey: ""
+  $name: Ctrl+Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Ex: Ctrl+N, Ctrl+Shift+E"
+- ctrlClickContextMenuMatch: ""
+  $name: Ctrl+Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
+- altClickAction: none
+  $name: Alt+Click Action
+  $description: What to do when Alt+left clicking empty space. Hold Alt and single-click on empty area.
+  $options:
+    - goUp: Go Up
+    - goBack: Go Back
+    - goForward: Go Forward
+    - refresh: Refresh
+    - newTab: New Tab (Win11)
+    - duplicateTab: Duplicate Tab (Win11)
+    - closeTab: Close Tab (Win11)
+    - newFolder: New Folder
+    - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
+    - goToDesktop: Go to Desktop
+    - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
+    - none: None
+- altClickCustomHotkey: ""
+  $name: Alt+Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Ex: Alt+F4, Alt+Tab"
+- altClickContextMenuMatch: ""
+  $name: Alt+Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
+- shiftClickAction: none
+  $name: Shift+Click Action
+  $description: What to do when Shift+left clicking empty space. Hold Shift and single-click on empty area.
+  $options:
+    - goUp: Go Up
+    - goBack: Go Back
+    - goForward: Go Forward
+    - refresh: Refresh
+    - newTab: New Tab (Win11)
+    - duplicateTab: Duplicate Tab (Win11)
+    - closeTab: Close Tab (Win11)
+    - newFolder: New Folder
+    - copyPath: Copy Path
+    - paste: Paste
+    - customHotkey: Custom Hotkey
+    - goToDesktop: Go to Desktop
+    - goToHome: Go to Home
+    - openInVSCode: Open in VS Code
+    - openInTerminal: Open in Terminal
+    - openWithContextMenu: Open Context Menu Item
+    - none: None
+- shiftClickCustomHotkey: ""
+  $name: Shift+Click Custom Hotkey
+  $description: "Same format as Double Click Custom Hotkey. Ex: Shift+F10, Ctrl+Shift+N"
+- shiftClickContextMenuMatch: ""
+  $name: Shift+Click Context Menu Match
+  $description: "Match text override for 'Open Context Menu Item' on this trigger. Leave empty to use global setting."
+- contextMenuMatch: ""
+  $name: Context Menu Match
+  $description: "Used by the 'Open Context Menu Item' action. Text to match (case-insensitive substring) against the folder background right-click menu entries' display text or verb. Ex: VS Code, Terminal, Git Bash, PowerShell, Cursor. Any program that registered an 'Open in ...' entry works regardless of install path."
 */
 // ==/WindhawkModSettings==
 
@@ -155,11 +335,13 @@ require Windows 11 for tabbed Explorer support.
 #include <shobjidl.h>
 
 #include <commctrl.h>
+#include <shlwapi.h>
 #include <UIAutomationClient.h>
 #include <UIAutomationCore.h>
 #include <comutil.h>
 #include <winrt/base.h>
 
+#include <algorithm>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -192,45 +374,104 @@ public:
 
 static std::mutex g_settingsMutex;
 static StringSetting g_doubleClickAction;
+static StringSetting g_tripleClickAction;
 static StringSetting g_middleClickAction;
 static StringSetting g_doubleMiddleClickAction;
+static StringSetting g_ctrlClickAction;
+static StringSetting g_altClickAction;
+static StringSetting g_shiftClickAction;
 static StringSetting g_doubleClickCustomCombo;
+static StringSetting g_tripleClickCustomCombo;
 static StringSetting g_middleClickCustomCombo;
 static StringSetting g_doubleMiddleClickCustomCombo;
+static StringSetting g_ctrlClickCustomCombo;
+static StringSetting g_altClickCustomCombo;
+static StringSetting g_shiftClickCustomCombo;
+static StringSetting g_doubleClickCtxMatch;
+static StringSetting g_tripleClickCtxMatch;
+static StringSetting g_middleClickCtxMatch;
+static StringSetting g_doubleMiddleClickCtxMatch;
+static StringSetting g_ctrlClickCtxMatch;
+static StringSetting g_altClickCtxMatch;
+static StringSetting g_shiftClickCtxMatch;
+static StringSetting g_contextMenuMatch;
 
 static void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_doubleClickAction.Load(L"doubleClickAction");
+    g_tripleClickAction.Load(L"tripleClickAction");
     g_middleClickAction.Load(L"middleClickAction");
     g_doubleMiddleClickAction.Load(L"doubleMiddleClickAction");
+    g_ctrlClickAction.Load(L"ctrlClickAction");
+    g_altClickAction.Load(L"altClickAction");
+    g_shiftClickAction.Load(L"shiftClickAction");
     g_doubleClickCustomCombo.Load(L"doubleClickCustomHotkey");
+    g_tripleClickCustomCombo.Load(L"tripleClickCustomHotkey");
     g_middleClickCustomCombo.Load(L"middleClickCustomHotkey");
     g_doubleMiddleClickCustomCombo.Load(L"doubleMiddleClickCustomHotkey");
+    g_ctrlClickCustomCombo.Load(L"ctrlClickCustomHotkey");
+    g_altClickCustomCombo.Load(L"altClickCustomHotkey");
+    g_shiftClickCustomCombo.Load(L"shiftClickCustomHotkey");
+    g_doubleClickCtxMatch.Load(L"doubleClickContextMenuMatch");
+    g_tripleClickCtxMatch.Load(L"tripleClickContextMenuMatch");
+    g_middleClickCtxMatch.Load(L"middleClickContextMenuMatch");
+    g_doubleMiddleClickCtxMatch.Load(L"doubleMiddleClickContextMenuMatch");
+    g_ctrlClickCtxMatch.Load(L"ctrlClickContextMenuMatch");
+    g_altClickCtxMatch.Load(L"altClickContextMenuMatch");
+    g_shiftClickCtxMatch.Load(L"shiftClickContextMenuMatch");
+    g_contextMenuMatch.Load(L"contextMenuMatch");
 }
 
 // Read settings under lock, deep-copy strings so they outlive the lock
 struct SettingsSnapshot {
     std::wstring doubleClick;
+    std::wstring tripleClick;
     std::wstring middleClick;
     std::wstring doubleMiddleClick;
+    std::wstring ctrlClick;
+    std::wstring altClick;
+    std::wstring shiftClick;
     std::wstring doubleClickCombo;
+    std::wstring tripleClickCombo;
     std::wstring middleClickCombo;
     std::wstring doubleMiddleClickCombo;
+    std::wstring ctrlClickCombo;
+    std::wstring altClickCombo;
+    std::wstring shiftClickCombo;
 };
 
 static SettingsSnapshot CopySettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return {
         g_doubleClickAction.Get() ? g_doubleClickAction.Get() : L"",
+        g_tripleClickAction.Get() ? g_tripleClickAction.Get() : L"",
         g_middleClickAction.Get() ? g_middleClickAction.Get() : L"",
         g_doubleMiddleClickAction.Get() ? g_doubleMiddleClickAction.Get() : L"",
+        g_ctrlClickAction.Get() ? g_ctrlClickAction.Get() : L"",
+        g_altClickAction.Get() ? g_altClickAction.Get() : L"",
+        g_shiftClickAction.Get() ? g_shiftClickAction.Get() : L"",
         g_doubleClickCustomCombo.Get() ? g_doubleClickCustomCombo.Get() : L"",
+        g_tripleClickCustomCombo.Get() ? g_tripleClickCustomCombo.Get() : L"",
         g_middleClickCustomCombo.Get() ? g_middleClickCustomCombo.Get() : L"",
-        g_doubleMiddleClickCustomCombo.Get() ? g_doubleMiddleClickCustomCombo.Get() : L""
+        g_doubleMiddleClickCustomCombo.Get() ? g_doubleMiddleClickCustomCombo.Get() : L"",
+        g_ctrlClickCustomCombo.Get() ? g_ctrlClickCustomCombo.Get() : L"",
+        g_altClickCustomCombo.Get() ? g_altClickCustomCombo.Get() : L"",
+        g_shiftClickCustomCombo.Get() ? g_shiftClickCustomCombo.Get() : L""
     };
 }
 
 static void SendParsedHotkey(const std::wstring& combo);
+
+// Bridge: per-trigger contextMenuMatch (defined below near other thread_locals)
+extern thread_local std::wstring g_pendingCtxMenuMatch;
+
+// Helper: set per-trigger contextMenuMatch before dispatching "openWithContextMenu".
+// Falls back to global setting if per-trigger is empty.
+static void SetCtxMenuMatch(PCWSTR action, StringSetting& perTriggerMatch) {
+    if (action && wcscmp(action, L"openWithContextMenu") == 0) {
+        g_pendingCtxMenuMatch = perTriggerMatch.Get() ? perTriggerMatch.Get() : L"";
+    }
+}
 
 // Helper: execute custom hotkey if the selected action is "customHotkey"
 static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
@@ -242,27 +483,27 @@ static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
 // ---- Helper: Send key combination ----
 
 static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
-    INPUT inputs[6] = {};
-    int count = 0;
-    auto Press = [&](WORD vk) {
-        inputs[count].type = INPUT_KEYBOARD;
-        inputs[count].ki.wVk = vk;
-        count++;
+    // Release held modifiers before injecting, restore after — all in one
+    // atomic SendInput batch so nothing can interleave. Side-specific VKs
+    // handle Left/Right variants (VK_CONTROL only reports combined state).
+    static constexpr WORD kSideMods[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU,
+                                         VK_RMENU, VK_LSHIFT, VK_RSHIFT};
+    std::vector<INPUT> in;
+    auto Key = [&](WORD vk, DWORD flags) {
+        in.push_back(INPUT{INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = flags}}});
     };
-    auto Release = [&](WORD vk) {
-        inputs[count].type = INPUT_KEYBOARD;
-        inputs[count].ki.wVk = vk;
-        inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
-        count++;
-    };
-    Press(vk1);
-    Press(vk2);
-    if (vk3) Press(vk3);
-    Release(vk2);
-    if (vk3) Release(vk3);
-    Release(vk1);
-    SendInput(count / 2, inputs, sizeof(INPUT));
-    SendInput(count / 2, inputs + count / 2, sizeof(INPUT));
+
+    std::vector<WORD> held;
+    for (WORD vk : kSideMods)
+        if (GetKeyState(vk) & 0x8000) held.push_back(vk);
+
+    for (WORD vk : held) Key(vk, KEYEVENTF_KEYUP);
+    Key(vk1, 0); Key(vk2, 0); if (vk3) Key(vk3, 0);
+    if (vk3) Key(vk3, KEYEVENTF_KEYUP);
+    Key(vk2, KEYEVENTF_KEYUP); Key(vk1, KEYEVENTF_KEYUP);
+    for (WORD vk : held) Key(vk, 0);
+
+    SendInput((UINT)in.size(), in.data(), sizeof(INPUT));
 }
 
 // ---- Custom hotkey parsing ----
@@ -339,7 +580,6 @@ static void SendParsedHotkey(const std::wstring& combo) {
         inputs[count].ki.wVk = keys[i];
         count++;
     }
-    SendInput(count, inputs, sizeof(INPUT));
     // Release in reverse
     for (int i = (int)keys.size() - 1; i >= 0; i--) {
         inputs[count].type = INPUT_KEYBOARD;
@@ -347,27 +587,282 @@ static void SendParsedHotkey(const std::wstring& combo) {
         inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
         count++;
     }
-    SendInput((int)keys.size(), inputs + (int)keys.size(), sizeof(INPUT));
+    SendInput(count, inputs, sizeof(INPUT));  // single atomic call
+}
+
+// ---- Invoke a folder background context menu entry (borrow the right-click menu) ----
+// Reuses exactly what Explorer shows when you right-click empty space in a folder, so any
+// program that registered an "Open in ..." (or similar) verb works without hard-coded paths.
+// matchText is matched (case-insensitive, space-insensitive) against both the menu display
+// text and the underlying verb (e.g. "VS Code" matches verb "VSCode" or text "Open with Code").
+//
+// SAFETY NOTE: Called from Explorer UI thread subclass proc — COM must already be initialized
+// (Explorer does that internally). All PIDL/interface clean-up is manual and exception-safe
+// (no C++ exceptions; early-return via if-guards). No window subclassing is used: cascading
+// submenus are populated by calling IContextMenu2::HandleMenuMsg(WM_INITMENUPOPUP, ...) directly.
+
+// Normalize: lowercase + drop whitespace + drop & accelerator markers.
+// "Open Git Ba&sh here" → "opengitbashhere", so user typing "gitbash" matches.
+// "通过 Code 打开" → "通过code打开", so user typing "code" or "通过code" matches.
+static std::wstring NormalizeForMatch(PCWSTR s) {
+    std::wstring out;
+    if (!s) return out;
+    out.reserve(wcslen(s) + 1);
+    for (const wchar_t* p = s; *p; ++p) {
+        if (iswspace((wint_t)*p) || *p == L'&') continue;
+        out.push_back((wchar_t)towlower((wint_t)*p));
+    }
+    return out;
+}
+
+// Case-insensitive substring test after normalization.
+// This lets "VS Code" match the verb "VSCode" and "Open with Code" match "Code", etc.
+static bool StrContainsNorm(PCWSTR haystack, PCWSTR needle) {
+    if (!haystack || !needle || !*needle) return false;
+    std::wstring h = NormalizeForMatch(haystack);
+    std::wstring n = NormalizeForMatch(needle);
+    return StrStrIW(h.c_str(), n.c_str()) != NULL;
+}
+
+// Recursively walk the (possibly nested) context menu, invoking the first item whose
+// display text or verb contains matchText. Returns true and invokes on success.
+static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* pcm2,
+                                 HWND hwnd, PCWSTR matchText, int idCmdFirst) {
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_SUBMENU;
+        if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
+
+        // Cascading submenu — check before wID guards, since submenu items
+        // carry an HMENU as wID (not a valid command ID in the context-menu range).
+        if (mii.hSubMenu != NULL) {
+            if (pcm2)
+                pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)mii.hSubMenu, MAKELPARAM(i, 0));
+            if (EnumContextMenuMatch(mii.hSubMenu, pcm, pcm2, hwnd, matchText, idCmdFirst))
+                return true;
+            continue;
+        }
+
+        // Leaf item: skip separators and items outside the context-menu command range.
+        if (mii.wID == 0) continue;                                     // separator
+        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;  // outside range
+
+        // Read verb + display text.
+        UINT offset = mii.wID - idCmdFirst;
+
+        CHAR verbA[MAX_PATH] = {};
+        pcm->GetCommandString(offset, GCS_VERBA, NULL, verbA, MAX_PATH);
+        wchar_t verb[MAX_PATH] = {};
+        if (verbA[0])
+            MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, MAX_PATH);
+
+        wchar_t text[MAX_PATH] = {};
+        MENUITEMINFOW miiT = { sizeof(miiT) };
+        miiT.fMask = MIIM_STRING;
+        miiT.dwTypeData = text;
+        miiT.cch = MAX_PATH;
+        GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
+
+        if (StrContainsNorm(text, matchText) || StrContainsNorm(verb, matchText)) {
+            CMINVOKECOMMANDINFO ci = { sizeof(ci) };
+            ci.hwnd = hwnd;
+            ci.lpVerb = MAKEINTRESOURCEA(offset);
+            ci.nShow = SW_SHOWNORMAL;
+            if (SUCCEEDED(pcm->InvokeCommand(&ci)))
+                return true;
+        }
+    }
+    return false;
+}
+
+// Diagnostic: recursively dump all context-menu leaf items.
+// Called when a match fails, so the user can see what verbs/text are available
+// and adjust the "Context Menu Match" setting accordingly.
+static void DumpContextMenuRecursive(HMENU hMenu, IContextMenu* pcm, IContextMenu2* pcm2,
+                                     int idCmdFirst, int depth) {
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_SUBMENU;
+        if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
+
+        wchar_t indent[64] = {};
+        for (int d = 0; d < depth && d < 31; d++) indent[d] = L' ';
+        indent[depth < 31 ? depth : 31] = 0;
+
+        // Cascading submenu — check before wID guards.
+        if (mii.hSubMenu != NULL) {
+            wchar_t stext[MAX_PATH] = {};
+            MENUITEMINFOW miiT = { sizeof(miiT) };
+            miiT.fMask = MIIM_STRING;
+            miiT.dwTypeData = stext;
+            miiT.cch = MAX_PATH;
+            GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
+            Wh_Log(L"CMENU%s[%s] (submenu) wID=%u", indent,
+                   stext[0] ? stext : L"(no text)", mii.wID);
+            if (pcm2)
+                pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)mii.hSubMenu, MAKELPARAM(i, 0));
+            DumpContextMenuRecursive(mii.hSubMenu, pcm, pcm2, idCmdFirst, depth + 2);
+            continue;
+        }
+
+        // Leaf item: skip separators and items outside the context-menu command range.
+        if (mii.wID == 0) continue;
+        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
+
+        UINT offset = mii.wID - idCmdFirst;
+        CHAR verbA[MAX_PATH] = {};
+        pcm->GetCommandString(offset, GCS_VERBA, NULL, verbA, MAX_PATH);
+        wchar_t verb[MAX_PATH] = {};
+        if (verbA[0])
+            MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, MAX_PATH);
+        wchar_t text[MAX_PATH] = {};
+        MENUITEMINFOW miiT = { sizeof(miiT) };
+        miiT.fMask = MIIM_STRING;
+        miiT.dwTypeData = text;
+        miiT.cch = MAX_PATH;
+        GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
+
+        // Show normalized text so user knows exactly what substring to type
+        std::wstring normText = NormalizeForMatch(text);
+        std::wstring normVerb = NormalizeForMatch(verb);
+        Wh_Log(L"CMENU%s[%s] wID=%u offset=%u verb=[%s]  → match: \"%s\" or \"%s\"", indent,
+               text[0] ? text : L"(no text)", mii.wID, offset,
+               verb[0] ? verb : L"(none)",
+               normText.c_str(), normVerb[0] ? normVerb.c_str() : L"<no verb>");
+    }
+}
+
+// Get the background context menu directly from the shell view.
+// Works for virtual folders (This PC, Libraries, Recycle Bin, search results)
+// where SHGetPathFromIDListW returns FALSE.
+static bool InvokeFolderContextMenuFromBrowser(IShellBrowser* browser, HWND hwnd, PCWSTR matchText) {
+    if (!browser || !matchText || !matchText[0]) return false;
+
+    IShellView* psv = nullptr;
+    if (FAILED(browser->QueryActiveShellView(&psv)) || !psv) return false;
+
+    IContextMenu* pcm = nullptr;
+    HRESULT hr = psv->GetItemObject(SVGIO_BACKGROUND, IID_IContextMenu, (void**)&pcm);
+    psv->Release();
+    if (FAILED(hr) || !pcm) return false;
+
+    IContextMenu2* pcm2 = nullptr;
+    pcm->QueryInterface(IID_IContextMenu2, (void**)&pcm2);
+
+    bool found = false;
+    HMENU hMenu = CreatePopupMenu();
+    if (hMenu && SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
+        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1);
+        if (!found) {
+            Wh_Log(L"No match for '%s' — dumping all context menu items:", matchText);
+            DumpContextMenuRecursive(hMenu, pcm, pcm2, 1, 0);
+        }
+    }
+    if (hMenu) DestroyMenu(hMenu);
+    if (pcm2) pcm2->Release();
+    pcm->Release();
+    return found;
+}
+
+// Legacy path-based fallback — only used by brand-specific actions (OpenInVSCode etc.)
+// which are kept for backward compatibility. The browser-based version above is preferred.
+static bool InvokeFolderContextMenuVerb(PCWSTR folderPath, HWND hwnd, PCWSTR matchText) {
+    if (!folderPath || !folderPath[0] || !matchText || !matchText[0]) return false;
+
+    // SHParseDisplayName returns an absolute PIDL (relative to Desktop root).
+    // We bind it directly on the desktop IShellFolder — no PIDL splitting needed.
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHParseDisplayName(folderPath, NULL, &pidl, 0, NULL)) || !pidl)
+        return false;
+
+    IShellFolder* psfDesktop = nullptr;
+    if (FAILED(SHGetDesktopFolder(&psfDesktop))) {
+        CoTaskMemFree(pidl);
+        return false;
+    }
+
+    IShellFolder* psfFolder = nullptr;
+    HRESULT hr = psfDesktop->BindToObject(pidl, NULL, IID_IShellFolder, (void**)&psfFolder);
+    psfDesktop->Release();
+    CoTaskMemFree(pidl);
+    if (FAILED(hr) || !psfFolder) return false;
+
+    // Background context menu for THIS folder (right-click empty space).
+    IContextMenu* pcm = nullptr;
+    hr = psfFolder->CreateViewObject(hwnd, IID_IContextMenu, (void**)&pcm);
+    psfFolder->Release();
+    if (FAILED(hr) || !pcm) return false;
+
+    // IContextMenu2 is needed to populate cascading submenus (WM_INITMENUPOPUP).
+    // QueryInterface for IContextMenu2 also succeeds when only IContextMenu3 exists.
+    IContextMenu2* pcm2 = nullptr;
+    pcm->QueryInterface(IID_IContextMenu2, (void**)&pcm2);
+
+    bool found = false;
+    HMENU hMenu = CreatePopupMenu();
+    if (hMenu && SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
+        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1);
+        if (!found) {
+            Wh_Log(L"No match for '%s' — dumping all context menu items:", matchText);
+            DumpContextMenuRecursive(hMenu, pcm, pcm2, 1, 0);
+        }
+    }
+    if (hMenu) DestroyMenu(hMenu);
+    if (pcm2) pcm2->Release();
+    pcm->Release();
+    return found;
 }
 
 // ---- Duplicate Tab infrastructure ----
 
-static wchar_t g_pendingNavPath[MAX_PATH] = {};
-static winrt::com_ptr<IShellBrowser> g_pendingNavBrowser;
-static HWND g_pendingNavHwnd = NULL;
+static thread_local wchar_t g_pendingNavPath[MAX_PATH] = {};
+static thread_local winrt::com_ptr<IShellBrowser> g_pendingNavBrowser;
+static thread_local HWND g_pendingNavHwnd = NULL;
 
 static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
+static VOID CALLBACK DblClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
 // ---- Middle-click double-click detection (timer-based) ----
 // Single-click fires immediately if only single is configured.
 // If both single and double are configured, single is delayed by
 // GetDoubleClickTime() (~500ms) to detect double clicks.
 
-static HWND g_midClickPendingHwnd = NULL;
-static UINT_PTR g_midClickTimerId = 0;
+static thread_local HWND g_midClickPendingHwnd = NULL;
+static thread_local UINT_PTR g_midClickTimerId = 0;
+
+// Pending double-click timer — used when triple-click is configured.
+// When triple-click is enabled, double-click is delayed by GetDoubleClickTime()
+// so a third click can arrive and override it with the triple-click action.
+static thread_local HWND g_pendingDblClickHwnd = NULL;
+static thread_local UINT_PTR g_pendingDblClickTimerId = 0;
+static thread_local std::wstring g_pendingDblClickAction;
+static thread_local std::wstring g_pendingDblClickCombo;
+
+// Bridge: per-trigger contextMenuMatch set by subclass proc before PostDoAction,
+// consumed by OpenWithContextMenu. Cleared after use.
+thread_local std::wstring g_pendingCtxMenuMatch;
+
+// Private message: dequeues action dispatch from mouse handlers to avoid
+// blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
+// wParam = (WPARAM)strdup(actionString), lParam = (LPARAM)hWnd
+static UINT g_msgDoAction = 0;
 
 static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action);
+
+// Post an action to be handled asynchronously — avoids synchronously activating
+// context-menu handlers inside the mouse-down handler.
+static void PostDoAction(HWND hWnd, PCWSTR action) {
+    if (!g_msgDoAction || !action || !*action) return;
+    size_t len = wcslen(action) + 1;
+    wchar_t* s = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, len * sizeof(wchar_t));
+    if (!s) return;
+    wcscpy_s(s, len, action);
+    if (!PostMessage(hWnd, g_msgDoAction, (WPARAM)s, (LPARAM)hWnd))
+        HeapFree(GetProcessHeap(), 0, s);
+}
 
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     KillTimer(hwnd, idEvent);
@@ -388,6 +883,31 @@ static void CancelPendingMidClick() {
     }
     g_midClickTimerId = 0;
     g_midClickPendingHwnd = NULL;
+}
+
+static VOID CALLBACK DblClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    KillTimer(hwnd, idEvent);
+    CHECK_INIT_OR_RETURN_VOID();
+    g_pendingDblClickTimerId = 0;
+    if (g_pendingDblClickHwnd && IsWindow(g_pendingDblClickHwnd)) {
+        if (!g_pendingDblClickAction.empty()) {
+            if (!TryCustomHotkey(g_pendingDblClickAction.c_str(), g_pendingDblClickCombo))
+                FindShellTabAndDoAction(g_pendingDblClickHwnd, g_pendingDblClickAction.c_str());
+        }
+    }
+    g_pendingDblClickHwnd = NULL;
+    g_pendingDblClickAction.clear();
+    g_pendingDblClickCombo.clear();
+}
+
+static void CancelPendingDblClick() {
+    if (g_pendingDblClickTimerId && g_pendingDblClickHwnd && IsWindow(g_pendingDblClickHwnd)) {
+        KillTimer(g_pendingDblClickHwnd, g_pendingDblClickTimerId);
+    }
+    g_pendingDblClickTimerId = 0;
+    g_pendingDblClickHwnd = NULL;
+    g_pendingDblClickAction.clear();
+    g_pendingDblClickCombo.clear();
 }
 
 // ---- ExplorerWrapper ----
@@ -423,11 +943,12 @@ class ExplorerWrapper {
 
 public:
     HWND hShellTab = NULL;
-    HWND hListView = NULL;
+    HWND m_timerHwnd = NULL;  // subclassed HWND for timer messages
 
-    ExplorerWrapper(HWND hWnd, IShellBrowser* hShellBrowser) {
-        hShellTab = hWnd;
+    ExplorerWrapper(HWND shellTab, IShellBrowser* hShellBrowser, HWND timerHwnd = NULL) {
+        hShellTab = shellTab;
         hBrowser.copy_from(hShellBrowser);
+        m_timerHwnd = timerHwnd;
     }
 
     // Return a ref-counted copy of the browser for thread-safe access
@@ -487,10 +1008,9 @@ public:
         wcsncpy(g_pendingNavPath, path, MAX_PATH - 1);
         g_pendingNavPath[MAX_PATH - 1] = L'\0';
         g_pendingNavBrowser = nullptr;
-        g_pendingNavHwnd = hShellTab;
+        g_pendingNavHwnd = m_timerHwnd;
         SendKeyCombo(VK_CONTROL, 'T');
-        if (IsWindow(hShellTab))
-            SetTimer(hShellTab, 0x4D43, 500, NavigateNewTabProc);
+        SetTimer(m_timerHwnd, 0x4D43, 500, nullptr);
     }
 
     void CloseTab() {
@@ -527,6 +1047,37 @@ public:
         }
     }
 
+    // ---- External program launchers (via browser — works for virtual folders too) ----
+
+    void OpenInVSCode() {
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, L"Code"))
+            Wh_Log(L"OpenInVSCode: no matching context menu entry found");
+    }
+
+    void OpenInTerminal() {
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, L"Terminal"))
+            Wh_Log(L"OpenInTerminal: no matching context menu entry found");
+    }
+
+    void OpenWithContextMenu() {
+        // Prefer per-trigger match (set by subclass proc before dispatching),
+        // fall back to global Context Menu Match setting.
+        std::wstring match = std::move(g_pendingCtxMenuMatch);
+        g_pendingCtxMenuMatch.clear();
+        if (match.empty()) {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            PCWSTR s = g_contextMenuMatch.Get();
+            if (s) match = s;
+        }
+        if (match.empty()) {
+            Wh_Log(L"OpenWithContextMenu: no match text configured (Context Menu Match setting)");
+            return;
+        }
+        // Use browser directly — works for virtual folders too (This PC, Libraries, etc.)
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, match.c_str()))
+            Wh_Log(L"OpenWithContextMenu: no context menu entry matching '%s'", match.c_str());
+    }
+
     // ---- Dispatch ----
 
     void DoAction(PCWSTR action) {
@@ -544,14 +1095,20 @@ public:
         else if (wcscmp(action, L"newFolder") == 0)   NewFolder();
         else if (wcscmp(action, L"copyPath") == 0)    CopyPath();
         else if (wcscmp(action, L"paste") == 0)       Paste();
+        else if (wcscmp(action, L"openInVSCode") == 0)  OpenInVSCode();
+        else if (wcscmp(action, L"openInTerminal") == 0) OpenInTerminal();
+        else if (wcscmp(action, L"openWithContextMenu") == 0) OpenWithContextMenu();
         // "none" or unknown — do nothing
     }
 };
 
 // ---- Globals ----
 
-std::vector<ExplorerWrapper> g_Wrappers;
-static std::mutex g_wrappersMutex;
+// Track subclassed windows so Wh_ModUninit can remove subclasses
+// for windows created both during and after init.
+struct SubclassEntry { HWND hWnd; bool isListView; };
+static std::vector<SubclassEntry> g_subclassed;
+static std::mutex g_subclassMutex;
 
 // Lazily initialized on first use (Explorer UI thread has COM already).
 // Intentionally leaked (raw pointer) to avoid Release() during DLL_PROCESS_DETACH.
@@ -568,8 +1125,8 @@ static IUIAutomation* GetUIAutomation() {
 // ---- NavigateNewTabProc (timer callback for duplicate tab) ----
 
 static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    CHECK_INIT_OR_RETURN_VOID();
     KillTimer(hwnd, 0x4D43);
+    CHECK_INIT_OR_RETURN_VOID();
 
     if (!g_pendingNavPath[0] || !g_pendingNavBrowser) {
         g_pendingNavPath[0] = L'\0';
@@ -592,34 +1149,33 @@ static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, 
 // ---- Helper: find ExplorerWrapper by shellTab HWND and run action ----
 
 static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action) {
-    if (!hWnd || !IsWindow(hWnd) || !action) return false;
+    if (!hWnd || !IsWindow(hWnd) || !action) {
+        Wh_Log(L"FindShellTabAndDoAction: invalid args hWnd=%p action=%s", hWnd, action ? action : L"null");
+        return false;
+    }
     int limit = 16;
     HWND parent = GetParent(hWnd);
     while (parent && limit-- > 0) {
         wchar_t className[256];
         if (!GetClassName(parent, className, 256)) break;
         if (wcscmp(className, L"ShellTabWindowClass") == 0) {
-            // Copy the browser under lock, then act outside the lock
-            winrt::com_ptr<IShellBrowser> browser;
             HWND shellTab = parent;
-            {
-                std::lock_guard<std::mutex> lock(g_wrappersMutex);
-                for (ExplorerWrapper& w : g_Wrappers) {
-                    if (w.hShellTab == shellTab) {
-                        browser = w.GetBrowser();
-                        break;
-                    }
-                }
-            }
+            // Query the browser on-demand instead of caching in g_Wrappers
+            // (WM_USER+7 returns a borrowed pointer, so copy_from to AddRef)
+            winrt::com_ptr<IShellBrowser> browser;
+            browser.copy_from(reinterpret_cast<IShellBrowser*>(
+                (void*)SendMessage(shellTab, WM_USER + 7, 0, 0)));
             if (browser) {
-                ExplorerWrapper tmp(shellTab, browser.get());
+                ExplorerWrapper tmp(shellTab, browser.get(), hWnd);
                 tmp.DoAction(action);
                 return true;
             }
+            Wh_Log(L"FindShellTabAndDoAction: no browser for shellTab=%p, action=%s", shellTab, action);
             break;
         }
         parent = GetParent(parent);
     }
+    Wh_Log(L"FindShellTabAndDoAction: ShellTabWindowClass not found from hWnd=%p, action=%s", hWnd, action);
     return false;
 }
 
@@ -629,10 +1185,47 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
                                       DWORD_PTR dwRefData) {
     CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
 
+    // Remove from subclass tracking on destroy (even during teardown)
+    if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lk(g_subclassMutex);
+        std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Deferred action dispatch (posted from mouse handlers to avoid blocking)
+    if (g_msgDoAction && uMsg == g_msgDoAction) {
+        PCWSTR action = (PCWSTR)wParam;
+        HWND target = (HWND)lParam;
+        if (action && *action && target)
+            FindShellTabAndDoAction(target, action);
+        HeapFree(GetProcessHeap(), 0, (void*)wParam);
+        return 0;
+    }
+
+    // WM_TIMER: handles deferred middle-click, double-click, and duplicate-tab timers.
+    // Uses nullptr callback (TIMERPROC lives in mod image, unsafe across unload).
+    if (uMsg == WM_TIMER) {
+        switch (wParam) {
+        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);  // let Explorer handle its own timers
+    }
+
+    // Fast path: skip settings copy for messages we don't handle
+    if (uMsg != WM_LBUTTONDOWN && uMsg != WM_LBUTTONDBLCLK && uMsg != WM_MBUTTONDOWN)
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
     SettingsSnapshot s = CopySettings();
 
-    if (uMsg == WM_LBUTTONDBLCLK) {
-        if (wcscmp(s.doubleClick.c_str(), L"none") == 0)
+    if (uMsg == WM_LBUTTONDOWN) {
+        bool ctrlOn   = (wcscmp(s.ctrlClick.c_str(), L"none") != 0);
+        bool altOn    = (wcscmp(s.altClick.c_str(), L"none") != 0);
+        bool shiftOn  = (wcscmp(s.shiftClick.c_str(), L"none") != 0);
+        bool tripleOn = (wcscmp(s.tripleClick.c_str(), L"none") != 0);
+
+        if (!ctrlOn && !altOn && !shiftOn && !tripleOn)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         POINT mousePos;
@@ -641,9 +1234,68 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         LVHITTESTINFO ht = {};
         ht.flags = LVHT_NOWHERE;
         ht.pt = mousePos;
-        if (ListView_SubItemHitTest(hWnd, &ht) == -1) {
+        if (ListView_SubItemHitTest(hWnd, &ht) != -1)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam); // clicked on an item
+
+        // Triple-click override: a pending double-click exists on this HWND;
+        // cancel the double-click and fire triple-click instead.
+        if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
+            CancelPendingDblClick();
+            if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
+            SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
+                SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
+                PostDoAction(hWnd, s.tripleClick.c_str());
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
+
+        // Modifier+click checks
+        bool ctrlDown  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool altDown   = (GetKeyState(VK_MENU) & 0x8000) != 0;
+        bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+
+        if (ctrlOn && ctrlDown) {
+            if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
+                SetCtxMenuMatch(s.ctrlClick.c_str(), g_ctrlClickCtxMatch);
+                PostDoAction(hWnd, s.ctrlClick.c_str());
+        } else if (altOn && altDown) {
+            if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
+                SetCtxMenuMatch(s.altClick.c_str(), g_altClickCtxMatch);
+                PostDoAction(hWnd, s.altClick.c_str());
+        } else if (shiftOn && shiftDown) {
+            if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
+                SetCtxMenuMatch(s.shiftClick.c_str(), g_shiftClickCtxMatch);
+                PostDoAction(hWnd, s.shiftClick.c_str());
+        }
+
+    } else if (uMsg == WM_LBUTTONDBLCLK) {
+        bool dblOn    = (wcscmp(s.doubleClick.c_str(), L"none") != 0);
+        bool tripleOn = (wcscmp(s.tripleClick.c_str(), L"none") != 0);
+        if (!dblOn && !tripleOn)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+        POINT mousePos;
+        GetCursorPos(&mousePos);
+        ScreenToClient(hWnd, &mousePos);
+        LVHITTESTINFO ht = {};
+        ht.flags = LVHT_NOWHERE;
+        ht.pt = mousePos;
+        if (ListView_SubItemHitTest(hWnd, &ht) != -1)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam); // clicked on an item
+
+        if (tripleOn) {
+            // Delay double-click to wait for possible third click that overrides it.
+            // Store empty action when dbl=none — DblClickTimerProc already guards on .empty().
+            CancelPendingDblClick();
+            g_pendingDblClickHwnd = hWnd;
+            g_pendingDblClickAction = dblOn ? s.doubleClick : L"";
+            g_pendingDblClickCombo = s.doubleClickCombo;
+            g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
+                GetDoubleClickTime(), nullptr);
+        } else {
+            // Instant double-click (no triple-click configured)
             if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
+                SetCtxMenuMatch(s.doubleClick.c_str(), g_doubleClickCtxMatch);
+                PostDoAction(hWnd, s.doubleClick.c_str());
         }
 
     } else if (uMsg == WM_MBUTTONDOWN) {
@@ -663,7 +1315,8 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (singleOn && !doubleOn) {
             if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
+                SetCtxMenuMatch(s.middleClick.c_str(), g_middleClickCtxMatch);
+                PostDoAction(hWnd, s.middleClick.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -672,12 +1325,13 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (isDouble) {
             CancelPendingMidClick();
             if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
-                FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
+                SetCtxMenuMatch(s.doubleMiddleClick.c_str(), g_doubleMiddleClickCtxMatch);
+                PostDoAction(hWnd, s.doubleMiddleClick.c_str());
         } else {
             CancelPendingMidClick();
             g_midClickPendingHwnd = hWnd;
             g_midClickTimerId = SetTimer(hWnd, 0x4D44,
-                GetDoubleClickTime(), MidClickTimerProc);
+                GetDoubleClickTime(), nullptr);
         }
     }
 
@@ -688,18 +1342,49 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
 struct ClickHelper {
     DWORD time = 0;
-    wchar_t className[256];
+    std::wstring className;
     HWND hWnd = NULL;
 };
 
-static ClickHelper g_currentClick;
-static ClickHelper g_lastClick;
+static thread_local ClickHelper g_currentClick;
+static thread_local ClickHelper g_lastClick;
 
 LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                               DWORD_PTR dwRefData) {
     CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
 
+    // Remove from subclass tracking on destroy (even during teardown)
+    if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lk(g_subclassMutex);
+        std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Deferred action dispatch (posted from mouse handlers to avoid blocking)
+    if (g_msgDoAction && uMsg == g_msgDoAction) {
+        PCWSTR action = (PCWSTR)wParam;
+        HWND target = (HWND)lParam;
+        if (action && *action && target)
+            FindShellTabAndDoAction(target, action);
+        HeapFree(GetProcessHeap(), 0, (void*)wParam);
+        return 0;
+    }
+
+    // WM_TIMER: handles deferred middle-click, double-click, and duplicate-tab timers.
+    if (uMsg == WM_TIMER) {
+        switch (wParam) {
+        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        }
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);  // let Explorer handle its own timers
+    }
+
     if (uMsg != WM_PARENTNOTIFY)
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+    // Fast path: only handle mouse button events
+    if (wParam != WM_LBUTTONDOWN && wParam != WM_MBUTTONDOWN)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
     auto pUIA = GetUIAutomation();
@@ -726,21 +1411,24 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
                     if (singleOn && !doubleOn) {
                         if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                            FindShellTabAndDoAction(hWnd, s.middleClick.c_str());
+                            SetCtxMenuMatch(s.middleClick.c_str(), g_middleClickCtxMatch);
+                            PostDoAction(hWnd, s.middleClick.c_str());
                         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
 
                     bool isDouble = (g_midClickTimerId != 0 && g_midClickPendingHwnd == hWnd);
 
                     if (isDouble) {
-                        CancelPendingMidClick();
-                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
-                            FindShellTabAndDoAction(hWnd, s.doubleMiddleClick.c_str());
+                            CancelPendingMidClick();
+                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo)) {
+                            SetCtxMenuMatch(s.doubleMiddleClick.c_str(), g_doubleMiddleClickCtxMatch);
+                            PostDoAction(hWnd, s.doubleMiddleClick.c_str());
+                        }
                     } else {
                         CancelPendingMidClick();
                         g_midClickPendingHwnd = hWnd;
                         g_midClickTimerId = SetTimer(hWnd, 0x4D44,
-                            GetDoubleClickTime(), MidClickTimerProc);
+                            GetDoubleClickTime(), nullptr);
                     }
                 }
             }
@@ -748,47 +1436,97 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    // Left click — track for double-click detection
+    // Left click — double-click, triple-click, and modifier+click detection
     if (wParam == WM_LBUTTONDOWN) {
-        if (wcscmp(s.doubleClick.c_str(), L"none") == 0)
-            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        bool dblOn    = (wcscmp(s.doubleClick.c_str(), L"none") != 0);
+        bool tripleOn = (wcscmp(s.tripleClick.c_str(), L"none") != 0);
+        bool ctrlOn   = (wcscmp(s.ctrlClick.c_str(), L"none") != 0);
+        bool altOn    = (wcscmp(s.altClick.c_str(), L"none") != 0);
+        bool shiftOn  = (wcscmp(s.shiftClick.c_str(), L"none") != 0);
 
-        DWORD now = GetTickCount();
-        g_currentClick.time = now;
-        g_currentClick.hWnd = hWnd;
+        if (!dblOn && !tripleOn && !ctrlOn && !altOn && !shiftOn)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         POINT mousePos;
         GetCursorPos(&mousePos);
         winrt::com_ptr<IUIAutomationElement> pElement = NULL;
-        if (SUCCEEDED(pUIA->ElementFromPoint(mousePos, pElement.put())) && pElement) {
-            bstr_ptr clsName;
-            if (SUCCEEDED(pElement->get_CurrentClassName(clsName.GetAddress()))) {
-                wchar_t* cn = clsName.GetBSTR();
-                if (!cn || (wcscmp(cn, L"UIGroupItem") != 0 && wcscmp(cn, L"UIItemsView") != 0)) {
-                    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-                }
-                wcsncpy(g_currentClick.className, cn, 255);
-                g_currentClick.className[255] = L'\0';
+        if (FAILED(pUIA->ElementFromPoint(mousePos, pElement.put())) || !pElement)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-                DWORD delta = g_currentClick.time - g_lastClick.time;
-                if (g_currentClick.hWnd == g_lastClick.hWnd &&
-                    ((wcscmp(cn, L"UIGroupItem") == 0 &&
-                      wcscmp(g_lastClick.className, L"UIGroupItem") == 0) ||
-                     (wcscmp(cn, L"UIItemsView") == 0 &&
-                      wcscmp(g_lastClick.className, L"UIItemsView") == 0)) &&
-                    delta <= GetDoubleClickTime()) {
-                    if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                        FindShellTabAndDoAction(hWnd, s.doubleClick.c_str());
-                    g_lastClick.time = 0;  // prevent triple-click from double-firing
-                } else {
-                    g_lastClick.time = now;
-                }
+        bstr_ptr clsName;
+        if (FAILED(pElement->get_CurrentClassName(clsName.GetAddress())))
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-                g_lastClick.hWnd = hWnd;
-                wcsncpy(g_lastClick.className, cn, 255);
-                g_lastClick.className[255] = L'\0';
-            }
+        wchar_t* cn = clsName.GetBSTR();
+        if (!cn || (wcscmp(cn, L"UIGroupItem") != 0 && wcscmp(cn, L"UIItemsView") != 0))
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam); // clicked on an item
+
+        // ========== On empty space ==========
+
+        // 1. Triple-click override: a pending double-click exists on this HWND;
+        //    cancel the double-click and fire triple-click instead.
+        if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
+            CancelPendingDblClick();
+            if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
+            SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
+                SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
+                PostDoAction(hWnd, s.tripleClick.c_str());
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
+
+        // 2. Double-click detection
+        DWORD now = GetTickCount();
+        g_currentClick.time = now;
+        g_currentClick.hWnd = hWnd;
+        g_currentClick.className = cn;
+
+        DWORD delta = now - g_lastClick.time;
+        if (g_currentClick.hWnd == g_lastClick.hWnd &&
+            ((wcscmp(cn, L"UIGroupItem") == 0 &&
+              g_lastClick.className == L"UIGroupItem") ||
+             (wcscmp(cn, L"UIItemsView") == 0 &&
+              g_lastClick.className == L"UIItemsView")) &&
+            delta <= (DWORD)GetDoubleClickTime()) {
+            // This is a double-click
+            if (tripleOn) {
+                // Delay to wait for possible third click.
+                // Store empty action when dbl=none (DblClickTimerProc guards on .empty()).
+                CancelPendingDblClick();
+                g_pendingDblClickHwnd = hWnd;
+                g_pendingDblClickAction = dblOn ? s.doubleClick : L"";
+                g_pendingDblClickCombo = s.doubleClickCombo;
+                g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
+                    GetDoubleClickTime(), nullptr);
+            } else if (dblOn) {
+                // Instant double-click (no triple-click configured)
+                if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
+                    SetCtxMenuMatch(s.doubleClick.c_str(), g_doubleClickCtxMatch);
+                PostDoAction(hWnd, s.doubleClick.c_str());
+            }
+            g_lastClick.time = 0;   // prevent next click from being another double-click
+        } else {
+            // Single click — check modifier+click combos
+            bool ctrlDown  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool altDown   = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+
+            if (ctrlOn && ctrlDown) {
+                if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
+                    PostDoAction(hWnd, s.ctrlClick.c_str());
+            } else if (altOn && altDown) {
+                if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
+                    PostDoAction(hWnd, s.altClick.c_str());
+            } else if (shiftOn && shiftDown) {
+                if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
+                    SetCtxMenuMatch(s.shiftClick.c_str(), g_shiftClickCtxMatch);
+                    PostDoAction(hWnd, s.shiftClick.c_str());
+            }
+
+            g_lastClick.time = now;
+        }
+
+        g_lastClick.hWnd = hWnd;
+        g_lastClick.className = cn;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -828,16 +1566,15 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
 
     if (wcscmp(className, L"SysListView32") == 0) {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SysListViewSubclass, 0);
-        { std::lock_guard<std::mutex> lk(g_wrappersMutex);
-          for (auto& w : g_Wrappers)
-            if (w.hShellTab == shellTab) { w.hListView = hWnd; break; }
+        { std::lock_guard<std::mutex> lk(g_subclassMutex);
+          g_subclassed.push_back({ hWnd, true });
         }
     } else {
-        if (IsWindow(defView))
+        if (IsWindow(defView)) {
             WindhawkUtils::SetWindowSubclassFromAnyThread(defView, DUISubclass, 0);
-        { std::lock_guard<std::mutex> lk(g_wrappersMutex);
-          for (auto& w : g_Wrappers)
-            if (w.hShellTab == shellTab) { w.hListView = defView; break; }
+            { std::lock_guard<std::mutex> lk(g_subclassMutex);
+              g_subclassed.push_back({ defView, false });
+            }
         }
     }
     return hWnd;
@@ -857,10 +1594,6 @@ HRESULT __cdecl FileCabinet_CreateViewWindow2Hook(
 
     HWND shellTab = GetParent(*hWnd);
     if (shellTab && IsWindow(shellTab)) {
-        {
-            std::lock_guard<std::mutex> lock(g_wrappersMutex);
-            g_Wrappers.push_back(ExplorerWrapper(shellTab, pBrowser));
-        }
         if (g_pendingNavPath[0] && !g_pendingNavBrowser) {
             g_pendingNavBrowser.copy_from(pBrowser);
         }
@@ -877,32 +1610,22 @@ BOOL CALLBACK InitEnumChildWindowsProc(HWND hWnd, LPARAM lParam) {
         wchar_t className[256];
         GetClassName(hWnd, className, 256);
         if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
-            HWND shellTab = (HWND)lParam;
-            auto browser = winrt::com_ptr<IShellBrowser>{
-                reinterpret_cast<IShellBrowser*>((void*)SendMessage(shellTab, WM_USER + 7, 0, 0)),
-                winrt::take_ownership_from_abi
-            };
-            if (browser != NULL) {
-                ExplorerWrapper wrapper(shellTab, browser.get());
-                HWND lv = FindWindowEx(hWnd, NULL, L"SysListView32", NULL);
-                HWND dui = FindWindowEx(hWnd, NULL, L"DirectUIHWND", NULL);
-                if (lv) {
-                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(lv, SysListViewSubclass, 0)) {
-                        Wh_Log(L"SysListView32 Subclassed %p", lv);
-                        wrapper.hListView = lv;
-                    }
-                } else if (dui) {
-                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DUISubclass, 0)) {
-                        Wh_Log(L"DirectUIHWND Subclassed %p", hWnd);
-                        wrapper.hListView = hWnd;
-                    }
+            HWND lv = FindWindowEx(hWnd, NULL, L"SysListView32", NULL);
+            HWND dui = FindWindowEx(hWnd, NULL, L"DirectUIHWND", NULL);
+            if (lv) {
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(lv, SysListViewSubclass, 0)) {
+                    Wh_Log(L"SysListView32 Subclassed %p", lv);
+                    std::lock_guard<std::mutex> slk(g_subclassMutex);
+                    g_subclassed.push_back({ lv, true });
                 }
-                if (wrapper.hListView) {
-                    std::lock_guard<std::mutex> lk(g_wrappersMutex);
-                    g_Wrappers.push_back(wrapper);
-                } else Wh_Log(L"Failed to setup wrapper for %p", shellTab);
-                return FALSE;
+            } else if (dui) {
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DUISubclass, 0)) {
+                    Wh_Log(L"DirectUIHWND Subclassed %p", hWnd);
+                    std::lock_guard<std::mutex> slk(g_subclassMutex);
+                    g_subclassed.push_back({ hWnd, false });
+                }
             }
+            return FALSE;
         }
     }
     return TRUE;
@@ -915,9 +1638,11 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         wchar_t className[256];
         GetClassName(hWnd, className, 256);
         if (wcscmp(className, L"CabinetWClass") == 0) {
-            HWND shellTab = FindWindowEx(hWnd, NULL, L"ShellTabWindowClass", NULL);
-            if (shellTab != NULL)
+            for (HWND shellTab = FindWindowEx(hWnd, NULL, L"ShellTabWindowClass", NULL);
+                 shellTab;
+                 shellTab = FindWindowEx(hWnd, shellTab, L"ShellTabWindowClass", NULL)) {
                 EnumChildWindows(shellTab, InitEnumChildWindowsProc, (LPARAM)shellTab);
+            }
         }
     }
     return TRUE;
@@ -928,6 +1653,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Click on Empty Explorer Init");
 
+    g_msgDoAction = RegisterWindowMessage(L"ClickOnEmptyExplorer_DoAction");
     LoadSettings();
 
     HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -967,33 +1693,25 @@ void Wh_ModUninit() {
     // Block subclass callbacks and hook code before cleanup
     InterlockedExchange(&g_initialized, 0);
 
-    CancelPendingMidClick();
-
-    if (g_pendingNavHwnd && IsWindow(g_pendingNavHwnd)) {
-        KillTimer(g_pendingNavHwnd, 0x4D43);
-    }
     g_pendingNavHwnd = NULL;
     g_pendingNavBrowser = nullptr;
     g_pendingNavPath[0] = L'\0';
 
-    // Collect HWNDs under lock, then remove subclasses outside the lock
-    // (RemoveWindowSubclassFromAnyThread does SendMessage which can deadlock
-    //  if the target thread is waiting on g_wrappersMutex)
-    struct SubclassInfo { HWND hWnd; bool isListView; };
-    std::vector<SubclassInfo> toRemove;
+    // Collect subclassed HWNDs under lock, kill timers + remove subclasses
+    // outside the lock. Timers use nullptr callback now (WM_TIMER handled in
+    // subclass proc), so KillTimer here is clean — no mod-image callback fire.
+    std::vector<SubclassEntry> toRemove;
     {
-        std::lock_guard<std::mutex> lk(g_wrappersMutex);
-        for (ExplorerWrapper& wrapper : g_Wrappers) {
-            HWND hWnd = wrapper.hListView;
-            if (hWnd && IsWindow(hWnd)) {
-                wchar_t className[256];
-                if (GetClassName(hWnd, className, 256))
-                    toRemove.push_back({ hWnd, wcscmp(className, L"SysListView32") == 0 });
-            }
-        }
-        g_Wrappers.clear();
+        std::lock_guard<std::mutex> lk(g_subclassMutex);
+        std::swap(toRemove, g_subclassed);
     }
-    for (auto& info : toRemove)
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            info.hWnd, info.isListView ? SysListViewSubclass : DUISubclass);
+    for (auto& e : toRemove) {
+        if (e.hWnd && IsWindow(e.hWnd)) {
+            KillTimer(e.hWnd, 0x4D43);
+            KillTimer(e.hWnd, 0x4D44);
+            KillTimer(e.hWnd, 0x4D45);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                e.hWnd, e.isListView ? SysListViewSubclass : DUISubclass);
+        }
+    }
 }
