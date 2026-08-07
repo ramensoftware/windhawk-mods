@@ -7,7 +7,7 @@
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        control.exe
-// @architecture   amd64
+// @architecture   x86-64
 // @compilerOptions -lwininet -ladvapi32 -lole32 -luser32
 // ==/WindhawkMod==
 
@@ -27,7 +27,7 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 - **Classic WEI page**: Restores "Performance Information and Tools" in Control Panel (Large/Small icons view)
 - **Automatic setup**: The required PerfCenterCPL.dll is downloaded and verified automatically, nothing to install manually
 - **Right DLL for the system**: Uses the Windows 8 DLL on Windows 8.1/10/11
-- **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. Normal API strings are intercepted through `LoadStringW`/`LoadStringA`; DirectUI `resstr(...)` values use a private, real PE resource module
+- **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. 
 - **Conservative resource handling**: The mod implements a conservative approach to be more stable
 - **100% reversible**: Disabling the mod removes everything it created (downloaded files, private resource module, loaded DLL). No registry keys are ever written
 
@@ -626,6 +626,28 @@ DllVariant ResolveSelectedVariant() {
     return DllVariant::Win7;
 }
 
+// The mod and the downloaded PerfCenterCPL.dll are x64 only. With
+// `@architecture x86-64`, on an ARM64 device Windhawk may still inject the mod
+// into a native ARM64 explorer.exe (it is a predefined shell process), where an
+// x64 DLL cannot load. Guard against that case so the mod cleanly does nothing
+// instead of failing setup.
+static bool IsRunningAsAmd64() {
+    // IsWow64Process2 reports the machine of the current process (even for
+    // 64-bit processes) and the native machine of the system.
+    typedef BOOL(WINAPI* IsWow64Process2T)(HANDLE, USHORT*, USHORT*);
+    USHORT processMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+    USHORT nativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+    if (!k32) return false;
+    auto pIsWow64Process2 = reinterpret_cast<IsWow64Process2T>(
+        reinterpret_cast<void*>(GetProcAddress(k32, "IsWow64Process2")));
+    if (!pIsWow64Process2 ||
+        !pIsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine)) {
+        return false;
+    }
+    return processMachine == IMAGE_FILE_MACHINE_AMD64;
+}
+
 std::wstring GetVariantUrl(DllVariant v) {
     return v == DllVariant::Win7 ? kDownloadUrlWin7 : kDownloadUrlWin8;
 }
@@ -637,7 +659,7 @@ bool VerifyDllIsCompatible(const std::wstring& p, DllVariant variant) {
     WORD machine = 0;
     if (!GetPeMachineType(p, machine) || machine != IMAGE_FILE_MACHINE_AMD64) {
         Wh_Log(L"DLL at %s is not x64 (machine=%04X) - incompatible with this "
-               L"amd64 mod",
+               L"x64 mod",
                p.c_str(), machine);
         return false;
     }
@@ -1243,6 +1265,13 @@ static std::wstring StoreDir() {
 // Async setup - runs on a worker thread so Explorer startup is never blocked.
 // -----------------------------------------------------------------------------
 static void RunSetup() {
+    // x64 only: bail out cleanly if we ended up in a non-AMD64 process (see
+    // IsRunningAsAmd64). This avoids any download/load attempt on ARM64.
+    if (!IsRunningAsAmd64()) {
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        return;
+    }
+
     // Serialize with other processes (other Explorer instances, control.exe)
     // that may be performing the same setup at the same time.
     HANDLE setupMutex =
