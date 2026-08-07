@@ -48,6 +48,10 @@ customizations.
   continue to follow that setting.
 * Pinning a Control Panel window pins File Explorer because the window shares
   File Explorer's taskbar identity.
+* Control Panel launched via Run (`Win+R` → `control`) or `control.exe`
+  directly is also covered — the mod hooks `control.exe` too, since it goes
+  through the same host-selection functions before launching its own
+  Explorer window.
 
 ---
 
@@ -81,6 +85,10 @@ do Explorador legado.
   As pastas comuns continuam seguindo essa configuração.
 * Fixar uma janela do Painel de Controle fixa o Explorador de Arquivos, pois a
   janela compartilha a identidade do Explorador na barra de tarefas.
+* O Painel de Controle aberto pelo Executar (`Win+R` → `control`) ou
+  diretamente pelo `control.exe` também é coberto — o mod também intercepta
+  o `control.exe`, pois ele passa pelas mesmas funções de seleção de host
+  antes de abrir sua própria janela do Explorer.
 
 ---
 
@@ -115,6 +123,10 @@ personalizaciones heredadas de Explorer.
   proceso independiente. Las carpetas normales siguen respetando esa opción.
 * Anclar una ventana del Panel de control ancla el Explorador de archivos porque
   la ventana comparte su identidad en la barra de tareas.
+* El Panel de control abierto mediante Ejecutar (`Win+R` → `control`) o
+  directamente con `control.exe` también está cubierto — el mod también
+  engancha `control.exe`, ya que pasa por las mismas funciones de selección
+  de host antes de abrir su propia ventana de Explorer.
 */
 // ==/WindhawkModReadme==
 
@@ -154,8 +166,11 @@ static LoadLibraryExW_t LoadLibraryExW_Original;
 static thread_local IPropertyStore* g_controlPanelPropertyStore;
 static std::atomic<bool> g_explorerFrameInitializationStarted;
 static std::atomic<bool> g_setValueHookInstalled;
+static std::atomic<WindowPropertyStore_SetValue_t> g_hookedSetValue;
+static std::atomic<bool> g_propertyStoreMismatchLogged;
 static std::atomic<bool> g_unloading;
 static HMODULE g_explorerFrameRef;
+static HMODULE g_setValueModuleRef;
 
 static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
     return IsEqualPropertyKey(key, PKEY_AppUserModel_RelaunchCommand) ||
@@ -164,15 +179,6 @@ static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
                key, PKEY_AppUserModel_RelaunchDisplayNameResource) ||
            IsEqualPropertyKey(key, PKEY_AppUserModel_PreventPinning) ||
            IsEqualPropertyKey(key, PKEY_AppUserModel_ID);
-}
-
-// Formats a GUID for logging without pulling in StringFromGUID2 (which
-// would reintroduce the ole32 dependency this file no longer needs).
-static void LogGuid(PCWSTR prefix, const GUID& guid) {
-    Wh_Log(L"%s {%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}", prefix,
-           guid.Data1, guid.Data2, guid.Data3, guid.Data4[0], guid.Data4[1],
-           guid.Data4[2], guid.Data4[3], guid.Data4[4], guid.Data4[5],
-           guid.Data4[6], guid.Data4[7]);
 }
 
 static bool __cdecl UseSeparateProcess_Hook(IShellItem* item) {
@@ -200,9 +206,6 @@ static GUID* __cdecl GetHostFromTarget_Hook(void* explorerLauncher,
                                             GUID* clsid,
                                             LPCITEMIDLIST pidl) {
     GUID* result = GetHostFromTarget_Original(explorerLauncher, clsid, pidl);
-    if (!result) {
-        return result;
-    }
 
     Microsoft::WRL::ComPtr<IShellItem> item;
     if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) ||
@@ -210,13 +213,17 @@ static GUID* __cdecl GetHostFromTarget_Hook(void* explorerLauncher,
         return result;
     }
 
-    // Lets a bug report confirm from the log alone which host CLSID was
-    // seen, on whichever process/launch path reaches this hook.
-    LogGuid(L"GetHostFromTarget: Control Panel item, host CLSID", *result);
-
+    // Diagnostic only, no override: UseSeparateProcess_Hook already steers
+    // Control Panel away from CLSID_ControlPanelProcessExplorerHost before
+    // this runs (this function's own host choice depends on it - confirmed
+    // it returns CLSID_DesktopExplorerHost once UseSeparateProcess is
+    // hooked), so no override has ever been observed as necessary here. Logs
+    // in case some untested launch path (jump list, pinned shortcut,
+    // right-click Open) ever disagrees.
     if (IsEqualGUID(*result, CLSID_ControlPanelProcessExplorerHost)) {
-        Wh_Log(L"Overriding Control Panel host CLSID from GetHostFromTarget");
-        *result = GUID_NULL;
+        Wh_Log(L"GetHostFromTarget returned the legacy Control Panel host "
+               L"CLSID even though UseSeparateProcess should have prevented "
+               L"it");
     }
 
     return result;
@@ -253,6 +260,17 @@ static HRESULT STDMETHODCALLTYPE WindowPropertyStore_SetValue_Hook(
     return WindowPropertyStore_SetValue_Original(propertyStore, key, value);
 }
 
+static void RefSetValueModule(WindowPropertyStore_SetValue_t setValue) {
+    // Keeps whatever module implements IPropertyStore::SetValue mapped for
+    // as long as the hook is installed, symmetric with RefExplorerFrameModule
+    // below - matters more in a short-lived host like control.exe.
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<LPCWSTR>(setValue),
+                            &g_setValueModuleRef)) {
+        Wh_Log(L"Failed to reference the IPropertyStore::SetValue module");
+    }
+}
+
 static void __cdecl CopyPropertyFromItemToPropStore_Hook(
     const PROPERTYKEY& key,
     IShellItem2* item,
@@ -265,6 +283,7 @@ static void __cdecl CopyPropertyFromItemToPropStore_Hook(
     g_controlPanelPropertyStore = isControlPanel ? propertyStore : nullptr;
 
     if (isControlPanel && propertyStore &&
+        !g_unloading.load(std::memory_order_acquire) &&
         !g_setValueHookInstalled.exchange(true, std::memory_order_acq_rel)) {
         // IPropertyStore::SetValue is slot 6 after IUnknown and the read
         // methods. This is the real window property store Explorer is about
@@ -272,13 +291,36 @@ static void __cdecl CopyPropertyFromItemToPropStore_Hook(
         // for this process - no separate probe is needed.
         auto setValue = reinterpret_cast<WindowPropertyStore_SetValue_t>(
             (*reinterpret_cast<void***>(propertyStore))[6]);
-        if (WindhawkUtils::SetFunctionHook(
+        if (!WindhawkUtils::SetFunctionHook(
                 setValue, WindowPropertyStore_SetValue_Hook,
                 &WindowPropertyStore_SetValue_Original)) {
-            Wh_ApplyHookOperations();
-        } else {
             Wh_Log(L"Failed to hook IPropertyStore::SetValue; Control Panel "
                    L"windows will keep their own taskbar identity");
+        } else if (!Wh_ApplyHookOperations()) {
+            Wh_Log(L"Failed to apply the IPropertyStore::SetValue hook; "
+                   L"Control Panel windows will keep their own taskbar "
+                   L"identity");
+        } else {
+            g_hookedSetValue.store(setValue, std::memory_order_relaxed);
+            RefSetValueModule(setValue);
+        }
+    }
+
+    if (isControlPanel && propertyStore) {
+        // Detects a different SetValue implementation on a later Control
+        // Panel window (e.g. wrapped by a shell extension) - a silent no-op
+        // on the call that just installed the hook above, since it compares
+        // the same store's slot against the value it was just read from.
+        const WindowPropertyStore_SetValue_t hookedSetValue =
+            g_hookedSetValue.load(std::memory_order_relaxed);
+        if (hookedSetValue &&
+            (*reinterpret_cast<void***>(propertyStore))[6] !=
+                reinterpret_cast<void*>(hookedSetValue) &&
+            !g_propertyStoreMismatchLogged.exchange(
+                true, std::memory_order_relaxed)) {
+            Wh_Log(L"Window property store uses a different SetValue "
+                   L"implementation; the Control Panel taskbar identity "
+                   L"won't be suppressed");
         }
     }
 
@@ -342,9 +384,8 @@ static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
     }
 
     if (!GetHostFromTarget_Original) {
-        Wh_Log(L"CExplorerLauncher::GetHostFromTarget not found; Control "
-               L"Panel launched outside an existing window may use the "
-               L"legacy host");
+        Wh_Log(L"CExplorerLauncher::GetHostFromTarget not found; losing "
+               L"only the legacy-host diagnostic, not functionality");
     }
 
     return true;
@@ -367,6 +408,13 @@ static void ReleaseExplorerFrameRef() {
     }
 }
 
+static void ReleaseSetValueModuleRef() {
+    if (g_setValueModuleRef) {
+        FreeLibrary(g_setValueModuleRef);
+        g_setValueModuleRef = nullptr;
+    }
+}
+
 static bool InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule,
                                                    bool applyHooks) {
     if (g_unloading.load(std::memory_order_acquire)) {
@@ -384,8 +432,8 @@ static bool InitializeExplorerFrameHooksAfterLoad(HMODULE explorerFrameModule,
         return false;
     }
 
-    if (applyHooks) {
-        Wh_ApplyHookOperations();
+    if (applyHooks && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"Failed to apply ExplorerFrame.dll hooks");
     }
 
     return true;
@@ -464,4 +512,5 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
     ReleaseExplorerFrameRef();
+    ReleaseSetValueModuleRef();
 }
