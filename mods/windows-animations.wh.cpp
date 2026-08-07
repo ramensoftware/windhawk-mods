@@ -103,7 +103,8 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Switch animation duration (ms):** Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)
 * **Shatter block size (px):** Determines the size of the dust/shatter particles. 
   * *Performance Tip:* Smaller values (e.g., 1, 2) create hyper-realistic pixel dust but require more CPU power. Larger values (24, 32) yield a stylish retro pixelated shatter and perform effortlessly on any hardware. (Clamped strictly to 1-100).
-* **Animate windows hidden to the tray:** On by default. Also animate apps such as Discord, Steam, and Telegram when they hide their window instead of closing it. Disable this option if close effects appear unexpectedly for splash screens or hidden windows.
+* **Animate app launches:** Off by default. Enable it to use the restore effect when an application window first opens.
+* **Animate windows hidden to the tray:** Off by default. Enable it to animate apps such as Discord, Steam, and Telegram when they hide their window instead of closing it. This can also animate splash screens or windows hidden automatically by an app.
 * **Toggles:** Individually turn on/off Minimize, Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
 * **Unhide taskbar (auto-hide):** Genie only. Ignored for Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
 */
@@ -118,9 +119,9 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
   - restore_animation: true
     $name: Animate restoring
     $description: Animate windows as they return from the taskbar.
-  - launch_animation: true
+  - launch_animation: false
     $name: Animate app launches
-    $description: Use the restore animation when an application window first opens.
+    $description: Disabled by default. Enable to use the restore animation when an application window first opens.
   - effect_style: genie
     $name: Animation style
     $description: Choose the effect used for minimizing and restoring windows.
@@ -162,12 +163,13 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
   - duration_ms: 630
     $name: Duration (ms)
     $description: Close animation duration, from 50 to 5000 ms.
-  - hide_as_close: true
+  - hide_as_close: false
     $name: Animate windows hidden to the tray
     $description: >-
-      Also animate apps such as Discord, Steam, and Telegram when they hide their window instead
-      of closing it. This can also animate splash screens (Discord update splash screen) or windows hidden automatically by an
-      app (Google Chrome Profile Picker). Disable this option if close effects appear unexpectedly for some apps.
+      Disabled by default. Enable to animate apps such as Discord, Steam, and Telegram when they
+      hide their window instead of closing it. This can also animate splash screens, such as the
+      Discord updater, or windows hidden automatically by an app, such as the Google Chrome
+      profile picker. Disable this option if close effects appear unexpectedly.
   - shatter_block_size: 5
     $name: Dust and shatter block size (px)
     $description: >-
@@ -251,6 +253,7 @@ struct WindowAnimData {
     HWND hNextApp{};
     int unhideDurationMs{};
     BOOL deferredMinimize{};
+    int deferredShowCmd{};
 };
 struct LaunchAnimData { HWND hWnd; LONG_PTR originalExStyle; };
 struct SwitchAnimData { HWND hWnd; int durationMs; };
@@ -991,7 +994,10 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         }
         if (coInit) CoUninitialize();
     }
-    if (uiaFound && !g_unloading.load(std::memory_order_relaxed)) {
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        return 0;
+    }
+    if (uiaFound) {
         if (pending) {
             pending->targetX = targetX;
             pending->found = true;
@@ -1001,7 +1007,11 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
         Wh_Log(L"UIA dock match hwnd=%p x=%d", t->hWndApp, targetX);
     } else {
-        Wh_Log(L"UIA dock miss hwnd=%p fallback=%d", t->hWndApp, t->fallbackX);
+        {
+            std::lock_guard<std::mutex> lock(g_StateMutex);
+            g_TaskbarDockXs[t->hWndApp] = t->fallbackX;
+        }
+        Wh_Log(L"UIA dock miss hwnd=%p fallback=%d (cached)", t->hWndApp, t->fallbackX);
     }
     return 0;
 }
@@ -1054,7 +1064,14 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     int result = softFallback;
     if (waitMs > 0) {
         const DWORD wait = WaitForSingleObject(pending->done, waitMs);
-        if (wait == WAIT_OBJECT_0 && pending->found) result = pending->targetX;
+        if (wait == WAIT_OBJECT_0 && pending->found) {
+            result = pending->targetX;
+        } else {
+            std::lock_guard<std::mutex> lock(g_StateMutex);
+            if (g_TaskbarDockXs.find(hWndApp) == g_TaskbarDockXs.end()) {
+                g_TaskbarDockXs[hWndApp] = softFallback;
+            }
+        }
     }
     pending->Release();
     return result;
@@ -2383,7 +2400,13 @@ public:
         }
         if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
             SetPropW(data->hRealWnd, kPropMinBypass, (HANDLE)1);
-            SendMessageTimeoutW(data->hRealWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_NORMAL, 1000, NULL);
+            if (data->deferredShowCmd == SW_SHOWMINNOACTIVE ||
+                data->deferredShowCmd == SW_SHOWMINIMIZED ||
+                data->deferredShowCmd == SW_MINIMIZE) {
+                ShowWindow_Original(data->hRealWnd, data->deferredShowCmd);
+            } else {
+                SendMessageTimeoutW(data->hRealWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_NORMAL, 1000, NULL);
+            }
         }
         if (IsWindow(data->hRealWnd)) {
             RemovePropW(data->hRealWnd, kPropMinBypass);
@@ -2459,7 +2482,8 @@ DWORD WINAPI MainAnimThread(LPVOID lpParam) {
 }
 bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloakHidden = FALSE,
                     BOOL isClosing = FALSE, UINT closeMsg = 0, HANDLE hWaitFinish = NULL,
-                    BOOL deferredMinimize = FALSE, BOOL requestedUnhide = FALSE, HWND hNextApp = NULL) {
+                    BOOL deferredMinimize = FALSE, BOOL requestedUnhide = FALSE, HWND hNextApp = NULL,
+                    int deferredShowCmd = 0) {
     
     static std::atomic<int> s_animCount{0};
     if (s_animCount.fetch_add(1, std::memory_order_relaxed) % 10 == 0) {
@@ -2549,7 +2573,8 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         isClosing, closeMsg, hWaitFinish,
         requestedUnhide, hNextApp,
         g_unhideDurationMs.load(std::memory_order_relaxed),
-        deferredMinimize
+        deferredMinimize,
+        deferredShowCmd
     };
     HDC hScreenDC = GetDC(NULL);
     data->hBitmap = CreateDib32(hScreenDC, w, h, &data->pBits);
@@ -2634,12 +2659,14 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
             std::lock_guard<std::mutex> lock(g_StateMutex);
             auto it = g_WndSnapshots.find(hWnd);
             if (it != g_WndSnapshots.end()) { DeleteObject(it->second.hBmp); g_WndSnapshots.erase(it); }
-            void* pCacheBits = nullptr;
-            HBITMAP hCacheBmp = CreateDib32(hScreenDC, w, h, &pCacheBits);
-            if (hCacheBmp && pCacheBits) {
-                memcpy(pCacheBits, data->pBits, (size_t)w * h * 4);
-                g_WndSnapshots[hWnd] = { hCacheBmp, pCacheBits, w, h };
-            } else if (hCacheBmp) DeleteObject(hCacheBmp);
+            if (g_restoreAnimation.load(std::memory_order_relaxed)) {
+                void* pCacheBits = nullptr;
+                HBITMAP hCacheBmp = CreateDib32(hScreenDC, w, h, &pCacheBits);
+                if (hCacheBmp && pCacheBits) {
+                    memcpy(pCacheBits, data->pBits, (size_t)w * h * 4);
+                    g_WndSnapshots[hWnd] = { hCacheBmp, pCacheBits, w, h };
+                } else if (hCacheBmp) DeleteObject(hCacheBmp);
+            }
         }
     }
     ReleaseDC(NULL, hScreenDC);
@@ -2721,7 +2748,7 @@ static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
 }
 enum class MinimizeKick { None, Immediate, Deferred };
 static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide = false,
-                                          bool allowUnhide = true) {
+                                          bool allowUnhide = true, int showCmd = 0) {
     if (!g_minimizeAnimation.load(std::memory_order_relaxed)) return MinimizeKick::None;
     if (IsHungAppWindow(hWnd)) return MinimizeKick::None;
     if (GetPropW(hWnd, kPropMinBypass)) return MinimizeKick::None;
@@ -2751,7 +2778,7 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
             WaitForTaskbarExpanded(hTray, MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST));
         }
         if (StartAnimation(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, FALSE, 0, NULL,
-                           TRUE, TRUE, hNext)) {
+                           TRUE, TRUE, hNext, showCmd)) {
             SetWindowCloak(hWnd, TRUE);
             return MinimizeKick::Deferred;
         }
@@ -2803,7 +2830,8 @@ static bool IsOurWindow(HWND hWnd) {
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     if (IsMinimizeCommand(cmd)) {
         const BOOL wasVisible = IsWindowVisible(hWnd);
-        if (KickMinimizeAnimation(hWnd, /*desktopFocusOnUnhide=*/true) == MinimizeKick::Deferred) {
+        if (KickMinimizeAnimation(hWnd, /*desktopFocusOnUnhide=*/true, /*allowUnhide=*/true, cmd) ==
+            MinimizeKick::Deferred) {
             return wasVisible;
         }
         return ShowWindow_Original(hWnd, cmd);
