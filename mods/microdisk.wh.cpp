@@ -104,52 +104,8 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 
 // Stable GUID that gives our tray icon a process-independent identity.
 static const GUID MICRODISK_TRAY_GUID =
-    //{0xFA6DAD73, 0xD350, 0x4BA8, {0x97, 0x3F, 0x5F, 0xA6, 0x0B, 0x15, 0x7B, 0x18}};
     {0x2C4E8A1B, 0x7D3F, 0x4A6E, {0x8B, 0x9C, 0x1D, 0x2E, 0x3F, 0x4A, 0x5B, 0x6C}}; //allelimo
     
-// typedef LONG NTSTATUS;
-
-// #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
-// #define SystemProcessInformation 5
-
-// typedef struct {
-//     ULONG NextEntryOffset;
-//     ULONG NumberOfThreads;
-//     LARGE_INTEGER WorkingSetPrivateSize;
-//     ULONG HardFaultCount;
-//     ULONG NumberOfThreadsHighWatermark;
-//     LARGE_INTEGER CycleTime;
-//     LARGE_INTEGER CreateTime;
-//     LARGE_INTEGER UserTime;
-//     LARGE_INTEGER KernelTime;
-//     UNICODE_STRING ImageName;
-//     LONG BasePriority;
-//     HANDLE UniqueProcessId;
-//     HANDLE InheritedFromUniqueProcessId;
-//     ULONG HandleCount;
-//     ULONG SessionId;
-//     ULONG_PTR Reserved1;
-//     SIZE_T PeakVirtualSize;
-//     SIZE_T VirtualSize;
-//     ULONG PageFaultCount;
-//     SIZE_T PeakWorkingSetSize;
-//     SIZE_T WorkingSetSize;
-//     SIZE_T QuotaPeakPagedPoolUsage;
-//     SIZE_T QuotaPagedPoolUsage;
-//     SIZE_T QuotaPeakNonPagedPoolUsage;
-//     SIZE_T QuotaNonPagedPoolUsage;
-//     SIZE_T PagefileUsage;
-//     SIZE_T PeakPagefileUsage;
-//     SIZE_T PrivatePageCount;
-//     LARGE_INTEGER ReadOperationCount;
-//     LARGE_INTEGER WriteOperationCount;
-//     LARGE_INTEGER OtherOperationCount;
-//     LARGE_INTEGER ReadTransferCount;
-//     LARGE_INTEGER WriteTransferCount;
-//     LARGE_INTEGER OtherTransferCount;
-// } MY_SYSTEM_PROCESS_INFO;
-
-//typedef NTSTATUS (WINAPI *NtQuerySystemInformation_t)(ULONG, PVOID, ULONG, PULONG);
 
 // ─── Globals ──────────────────────────────────────────────────────────────────
 
@@ -164,12 +120,6 @@ static WCHAR               g_ddoresDllPath[MAX_PATH] = {};
 static DWORD               g_updateMs     = 1000;
 static int                 g_dpi          = 96;   // popup DPI, refreshed per show
 static ULONGLONG           g_totalPhys    = 0;    // total physical RAM, bytes
-
-// Cached stats (updated on timer, read on popup paint)
-//static int                 g_totalCpu     = -1;
-//static int                 g_topCpuPct    = 0;
-//static WCHAR               g_topCpuName[64] = {};
-// allelimo: forse si può usare on paint come valore precedente
 
 static HICON               g_iconEnabled  = nullptr;
 static HFONT               g_hPopupFont   = nullptr;
@@ -197,7 +147,6 @@ static void EnsureFont() {
         DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     g_fontDpi = g_dpi;
 }
-
 
 // allelimo
 struct {
@@ -228,146 +177,18 @@ void GetDiskInfo() {
 // ─── Data Refresh ─────────────────────────────────────────────────────────────
 
 static void RefreshData() {
-    // int newTotalCpu = -1, newTopCpuPct = 0;
-    // WCHAR newTopCpuName[64] = {};
-    // int newTotalGpu = -1, newTopGpuPct = 0;
-    // WCHAR newTopGpuName[64] = {};
-    // int newTotalRam = -1, newTopRamPct = 0;
-    // WCHAR newTopRamName[64] = {};
-
-    // // Total RAM load is cheap and needs no prior sample — read it every tick.
-    // MEMORYSTATUSEX mem = {sizeof(mem)};
-    // if (GlobalMemoryStatusEx(&mem)) newTotalRam = (int)mem.dwMemoryLoad;
-
-    // // Collect CPU
-    // FILETIME nowIdle, nowKernel, nowUser;
-    // GetSystemTimes(&nowIdle, &nowKernel, &nowUser);
-
-    // ULARGE_INTEGER ui, uk, uu, pi, pk, pu;
-    // ui.LowPart = nowIdle.dwLowDateTime;     ui.HighPart = nowIdle.dwHighDateTime;
-    // uk.LowPart = nowKernel.dwLowDateTime;   uk.HighPart = nowKernel.dwHighDateTime;
-    // uu.LowPart = nowUser.dwLowDateTime;     uu.HighPart = nowUser.dwHighDateTime;
-    // pi.LowPart = g_prevIdle.dwLowDateTime;  pi.HighPart = g_prevIdle.dwHighDateTime;
-    // pk.LowPart = g_prevKernel.dwLowDateTime; pk.HighPart = g_prevKernel.dwHighDateTime;
-    // pu.LowPart = g_prevUser.dwLowDateTime;  pu.HighPart = g_prevUser.dwHighDateTime;
-
-    // double totalDelta = (double)(uk.QuadPart - pk.QuadPart) + (double)(uu.QuadPart - pu.QuadPart);
-    // double idleDelta = (double)(ui.QuadPart - pi.QuadPart);
-
-    // if (g_hasPrevSample && totalDelta > 0) {
-    //     newTotalCpu = (int)(100.0 - 100.0 * idleDelta / totalDelta + 0.5);
-
-    //     MY_SYSTEM_PROCESS_INFO* buf = nullptr;
-    //     if (CollectProcessInfo(&buf) && buf) {
-    //         MY_SYSTEM_PROCESS_INFO* p = buf;
-    //         LONGLONG bestTime = 0;
-    //         WCHAR bestCpuName[64] = {};
-    //         ULONGLONG bestWs = 0;
-    //         WCHAR bestRamName[64] = {};
-    //         int count = 0;
-
-    //         while (true) {
-    //             LONGLONG curTime = p->KernelTime.QuadPart + p->UserTime.QuadPart;
-
-    //             LONGLONG prevTime = 0;
-    //             BOOL foundInPrev = FALSE;
-    //             for (int i = 0; i < g_prevProcCount; i++) {
-    //                 if (g_prevProcs[i].pid == (DWORD)(ULONG_PTR)p->UniqueProcessId) {
-    //                     prevTime = g_prevProcs[i].time;
-    //                     foundInPrev = TRUE;
-    //                     break;
-    //                 }
-    //             }
-    //             // Only count delta for processes seen last tick; new/overflow processes
-    //             // would otherwise show their entire boot-time CPU as a single-tick spike.
-    //             LONGLONG delta = foundInPrev ? (curTime - prevTime) : 0;
-    //             if (delta > bestTime && p->ImageName.Buffer) {
-    //                 bestTime = delta;
-    //                 wcsncpy_s(bestCpuName, p->ImageName.Buffer,
-    //                     MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-    //                 bestCpuName[63] = L'\0';
-    //             }
-
-    //             // Top RAM consumer by working set (absolute — no prior sample needed).
-    //             if (p->ImageName.Buffer && (ULONGLONG)p->WorkingSetSize > bestWs) {
-    //                 bestWs = (ULONGLONG)p->WorkingSetSize;
-    //                 wcsncpy_s(bestRamName, p->ImageName.Buffer,
-    //                     MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-    //                 bestRamName[63] = L'\0';
-    //             }
-
-    //             if (count < MAX_PROCESSES) {
-    //                 g_curProcs[count].pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
-    //                 g_curProcs[count].time = curTime;
-    //                 if (p->ImageName.Buffer) {
-    //                     wcsncpy_s(g_curProcs[count].name, p->ImageName.Buffer,
-    //                         MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-    //                     g_curProcs[count].name[63] = L'\0';
-    //                 } else {
-    //                     g_curProcs[count].name[0] = L'\0';
-    //                 }
-    //                 count++;
-    //             }
-
-    //             if (p->NextEntryOffset == 0) break;
-    //             p = (MY_SYSTEM_PROCESS_INFO*)((BYTE*)p + p->NextEntryOffset);
-    //         }
-    //         memcpy(g_prevProcs, g_curProcs, count * sizeof(g_prevProcs[0]));
-    //         g_prevProcCount = count;
-
-    //         if (bestTime > 0) {
-    //             double pct = 100.0 * (double)bestTime / totalDelta;
-    //             if (pct >= 0.5) {
-    //                 newTopCpuPct = (int)(pct + 0.5);
-    //                 wcscpy_s(newTopCpuName, bestCpuName);
-    //             }
-    //         }
-
-    //         if (bestWs > 0 && g_totalPhys > 0) {
-    //             int pct = (int)((bestWs * 100ULL) / g_totalPhys);
-    //             newTopRamPct = pct < 1 ? 1 : pct;  // the top consumer is always shown
-    //             wcscpy_s(newTopRamName, bestRamName);
-    //         }
-
-    //         free(buf);
-    //     }
-    // }
-
-    // g_prevIdle = nowIdle; g_prevKernel = nowKernel; g_prevUser = nowUser;
-    // g_hasPrevSample = TRUE;
-
-    // CollectGpuStats(&newTotalGpu, &newTopGpuPct, newTopGpuName, 64);
-
-    // // g_totalCpu = newTotalCpu;
-    // g_topCpuPct = newTopCpuPct;
-    // wcscpy_s(g_topCpuName, newTopCpuName);
-    // g_totalGpu = newTotalGpu;
-    // g_topGpuPct = newTopGpuPct;
-    // wcscpy_s(g_topGpuName, newTopGpuName);
-    // g_totalRam = newTotalRam;
-    // g_topRamPct = newTopRamPct;
-    // wcscpy_s(g_topRamName, newTopRamName);
-
-    // if (g_popupHwnd && IsWindowVisible(g_popupHwnd)) {
-    //     InvalidateRect(g_popupHwnd, nullptr, TRUE);
-    // }
-
+   
     //allelimo
     GetDiskInfo();
 
     // Live summary tooltip — refresh only when the displayed numbers change.
     if (g_trayHwnd) {
-        WCHAR /*cpuS[8], gpuS[8], ramS[8],*/ gbS[8], totS[8], tip[128];
-        // if (newTotalCpu < 0) wcscpy_s(cpuS, L"--"); else swprintf_s(cpuS, L"%d%%", newTotalCpu);
-        // if (newTotalGpu < 0) wcscpy_s(gpuS, L"--"); else swprintf_s(gpuS, L"%d%%", newTotalGpu);
-        // if (newTotalRam < 0) wcscpy_s(ramS, L"--"); else swprintf_s(ramS, L"%d%%", newTotalRam);
+        WCHAR gbS[8], totS[8], tip[128];
+
         swprintf_s(gbS, L"%d Gb", g_freeSpace);
-        //swprintf_s(tip, L"FREE %s", gbS);
         swprintf_s(totS, L"%d Gb", g_totalSpace);
-        //swprintf_s(tip, L"TOTAL %s", totS);
-
+        
         swprintf_s(tip, L"Free: %s   Total: %s", gbS, totS);
-
 
         if (wcscmp(tip, g_lastTip) != 0) {
             wcscpy_s(g_lastTip, tip);
@@ -402,38 +223,15 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             // Snapshot stats under the lock, then paint without holding it.
             int totals[POPUP_ROWS], topPcts[POPUP_ROWS];
             WCHAR topNames[POPUP_ROWS][64];
-            //totals[0] = g_totalCpu; topPcts[0] = g_topCpuPct; wcscpy_s(topNames[0], g_topCpuName);
-            //totals[1] = g_totalGpu; topPcts[1] = g_topGpuPct; wcscpy_s(topNames[1], g_topGpuName);
-            //totals[2] = g_totalRam; topPcts[2] = g_topRamPct; wcscpy_s(topNames[2], g_topRamName);
+
             // allelimo
-            totals[0] = g_freeSpace; topPcts[0] = 0; //wcscpy_s(topNames[0], g_topRamName);
-            totals[1] = g_totalSpace; topPcts[1] = 0; //wcscpy_s(topNames[1], g_topRamName);
+            totals[0] = g_freeSpace; topPcts[0] = 0; 
+            totals[1] = g_totalSpace; topPcts[1] = 0; 
 
             static const PCWSTR kLabels[POPUP_ROWS]    = { L"Free", L"Total" };
             PCWSTR kEmptyText[POPUP_ROWS] = { g_settings.diskLetter, g_settings.diskLetter };
             COLORREF kTotalColors[POPUP_ROWS] = { RGB(128, 255, 128), RGB(0, 200, 255) };
-            
-            // wchar_t mybuffer[16];
-            // g_ratio = g_totalSpace - g_freeSpace;
-            // swprintf_s(mybuffer, L"%d .. Gb");
-
-            // MessageBox(hWnd, mybuffer, L"uella", 1);
-            
-            // // allelimo: if minor of 10% free, color in red
-            //  if (g_ratio > 0.1) {
-
-            //     //MessageBox(hWnd, m_rapporto, L"uella", 1);
-              //    kTotalColors[0] = RGB(128, 255, 128);
-                //  kTotalColors[1] = RGB(0, 200, 255);
-                  //}
-              //else {
-                 //MessageBox(hWnd, L"no", L"uella", 1);
-                //  kTotalColors[0] =  RGB(255, 128, 128);
-                  //kTotalColors[1] =  RGB(0, 200, 255);                
-              //}
         
- 
-
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
 
@@ -699,8 +497,7 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                     bool dark = IsSystemDarkMode();
                     ApplyContextMenuTheme(hWnd, dark);
                     SetForegroundWindow(hWnd);
-                    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON /*|
-                        TPM_BOTTOMALIGN | TPM_RIGHTALIGN */,
+                    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON,  // allelimo
                         pt.x, pt.y, 0, hWnd, nullptr);
                     PostMessageW(hWnd, WM_NULL, 0, 0);
                     DestroyMenu(hMenu);
@@ -898,7 +695,6 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    // Refresh rate is managed via the right-click menu; nothing to read here.
     // allelimo
     LoadSettings();
 }
