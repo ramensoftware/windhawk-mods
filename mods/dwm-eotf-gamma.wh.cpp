@@ -18,7 +18,7 @@ Viewing SDR content while using HDR in Windows causes washed out darker tones
 like shadows. This corrects it so that Windows uses a standard gamma curve. It
 should not affect native HDR content like games and movies.
 
-Simple, accurate sRGB with a simple power-law gamma curve that you can control.
+A simple, accurate fix for washed-out SDR shadows in Windows HDR mode.
 
 ![Comparison Image](https://i.imgur.com/GwegdeU.png)
 
@@ -77,7 +77,7 @@ effect.
 
 | Value | Description |
 |-------|-------------|
-| 1.8   | Brighter highlights; old Apple/Mac standard |
+| 1.8   | Raised midtones and shadows; old Apple/Mac standard |
 | 2.0   | Moderately bright midpoint |
 | 2.2   | Closest to the perceptual average of sRGB |
 | 2.4   | sRGB peak exponent |
@@ -89,7 +89,9 @@ effect.
   this code path.
 - **Gamma changes require a DWM restart.** D3D compiles the shader bytecode once
   at startup. Patching the bytecode after that has no effect until DWM recreates
-  its device (which happens on log off/on, or on display reconfiguration).
+  its device (which happens on log off/on, display reconfiguration, or toggling
+  Windows HDR off and back on — the last option is the lightest-weight way to
+  apply a new gamma value without a full log-off).
 - **Chromium-based browsers and Electron apps** (Chrome, Edge, VS Code, Discord,
   etc.) switch between DWM's SDR compositing path and a direct scRGB path
   depending on tab/window content. Each
@@ -463,12 +465,14 @@ static bool ChecksumRoundTrips(const DXBCHeader* hdr) {
 // Diagnostic pass
 // =============================================================================
 
-// Read-only scan: logs the DXBC checksum of every leaf blob in 'region' that
-// carries all four sRGB vec3-splat constants exactly once. Called when the
-// allowlist doesn't yield a full match so that a reporter on an updated build
-// can paste the output into an issue instead of extracting blobs by hand.
-// Over-matching here is harmless — nothing is written.
-static void LogSrgbCandidates(const BYTE* region, size_t regionSize) {
+// Logs every leaf DXBC blob in 'region' that contains any of the four sRGB
+// EOTF constants as raw DWORD values (not necessarily as vec3 splats). Called
+// when content-based detection finds nothing, to help diagnose whether the
+// constant encoding changed. The per-constant counts are informative:
+//   3 = vec3 splat (normal encoding)
+//   4 = splat + Level9 def (also normal)
+//   1 = single scalar occurrence (changed encoding?)
+static void LogSrgbNearMisses(const BYTE* region, size_t regionSize) {
     for (size_t i = 0; i + kDXBCHeaderSize <= regionSize; i += 4) {
         const auto* hdr = (const DXBCHeader*)(region + i);
         if (hdr->magic[0] != 'D' || hdr->magic[1] != 'X' ||
@@ -477,21 +481,30 @@ static void LogSrgbCandidates(const BYTE* region, size_t regionSize) {
             i + hdr->size > regionSize || HasDXBCSubBlob(hdr))
             continue;
 
-        std::vector<BYTE> tmp(hdr->size);
-        memcpy(tmp.data(), hdr, hdr->size);
         int counts[4] = {};
-        if (PatchShaderBuf(tmp.data(), hdr->size, 2.2f, counts) != 4 ||
-            counts[0] != 1 || counts[1] != 1 || counts[2] != 1 ||
-            counts[3] != 1)
+        for (size_t j = kDXBCHeaderSize; j + sizeof(float) <= hdr->size;
+             j += 4) {
+            const BYTE* p = (const BYTE*)hdr + j;
+            for (int ci = 0; ci < 4; ci++) {
+                if (memcmp(p, &kSrgbConsts[ci], sizeof(float)) == 0)
+                    counts[ci]++;
+            }
+        }
+
+        int present = 0;
+        for (int ci = 0; ci < 4; ci++) {
+            if (counts[ci] > 0)
+                present++;
+        }
+        if (present == 0)
             continue;
 
         const auto* ck = (const BYTE*)hdr->checksum;
         Wh_Log(
-            L"  sRGB candidate at +0x%zx size %lu checksum "
-            L"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-            i, hdr->size, ck[0], ck[1], ck[2], ck[3], ck[4], ck[5], ck[6],
-            ck[7], ck[8], ck[9], ck[10], ck[11], ck[12], ck[13], ck[14],
-            ck[15]);
+            L"  Near-miss at +0x%zx size %lu: c24=%d c04=%d c05=%d c95=%d "
+            L"ck=%02x%02x%02x%02x...",
+            i, hdr->size, counts[0], counts[1], counts[2], counts[3],
+            ck[0], ck[1], ck[2], ck[3]);
     }
 }
 
@@ -501,13 +514,16 @@ static void LogSrgbCandidates(const BYTE* region, size_t regionSize) {
 
 // Scans a read-only PE section for sRGB EOTF leaf DXBC blobs and patches them.
 // A leaf blob qualifies if it contains all four sRGB vec3-splat constants each
-// exactly once — a signature unique to the decode path. Returns the number of
-// blobs patched.
+// exactly once — a signature unique to the decode path.
+// Returns the number of blobs successfully patched. Increments skippedCount for
+// each blob that qualified but could not be written (VirtualProtect failure or
+// container checksum failure), enabling the caller to enforce all-or-nothing.
 //
 // Container handling: dwmcore.dll embeds leaf shaders inside larger DXBC
 // container blobs. The container's checksum must be recalculated after any
 // inner leaf is patched.
-static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
+static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma,
+                                int& skippedCount) {
     int numPatched = 0;
 
     DXBCHeader* bigShader = nullptr;  // enclosing container blob, if any
@@ -515,10 +531,30 @@ static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
     size_t containerPatchBase =
         0;  // g_patches index when the current container was accepted
 
-    // Finalizes a container whose inner shaders have been patched: saves its
-    // original checksum, recomputes it, and writes it back. If the write fails,
-    // rolls back all leaf patches belonging to this container.
+    // Finalizes a container whose inner shaders have been patched. Runs
+    // ChecksumRoundTrips here (deferred from container acceptance) so the MD5
+    // cost is only paid when qualifying leaves were actually found inside.
+    // Recomputes the container checksum and writes it back. On any failure,
+    // rolls back all inner leaf patches and increments skippedCount.
     auto FinalizeContainer = [&](DXBCHeader* container) -> bool {
+        // Deferred round-trip check: verify before writing.
+        if (!ChecksumRoundTrips(container)) {
+            size_t toRollBack = g_patches.size() - containerPatchBase;
+            Wh_Log(
+                L"  Container at %p: checksum did not round-trip — rolling "
+                L"back %zu leaf patch(es)",
+                (void*)container, toRollBack);
+            while (g_patches.size() > containerPatchBase) {
+                auto& rec = g_patches.back();
+                WriteMemorySafe(rec.addr, rec.original.data(),
+                                rec.original.size());
+                g_patches.pop_back();
+                numPatched--;
+            }
+            skippedCount += (int)toRollBack;
+            return false;
+        }
+
         PatchRecord bigRec;
         bigRec.addr = (BYTE*)container + 4;
         bigRec.original.assign(bigRec.addr, bigRec.addr + 16);
@@ -540,6 +576,7 @@ static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
                 g_patches.pop_back();
                 numPatched--;
             }
+            skippedCount += (int)toRollBack;
             return false;
         }
         Wh_Log(L"  Fixed container checksum at %p", (void*)container);
@@ -577,20 +614,9 @@ static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
         // shaders are patched.
         if (HasDXBCSubBlob(hdr)) {
             if (!bigShader) {
-                // Pre-flight: verify our checksum routine reproduces this
-                // blob's own hash before we commit to overwriting it. An
-                // unlisted container whose hash doesn't round-trip is skipped
-                // to avoid silent corruption.
-                if (!ChecksumRoundTrips(hdr)) {
-                    Wh_Log(
-                        L"  Container at %p: checksum did not round-trip, "
-                        L"skipping",
-                        (void*)hdr);
-                    i +=
-                        hdr->size -
-                        4;  // loop will add 4 more, landing just after the blob
-                    continue;
-                }
+                // Accept the container; the ChecksumRoundTrips verification is
+                // deferred to FinalizeContainer so the MD5 is only computed
+                // when qualifying leaves are actually found inside.
                 bigShader = hdr;
                 containerPatchBase = g_patches.size();
             } else {
@@ -643,6 +669,7 @@ static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
         if (!ChecksumRoundTrips(hdr)) {
             Wh_Log(L"  Blob at %p: checksum did not round-trip, skipping",
                    (void*)hdr);
+            skippedCount++;
             continue;
         }
 
@@ -663,6 +690,7 @@ static int ScanRegionForShaders(BYTE* region, size_t regionSize, float gamma) {
         // reduce COW pages and PatchRecord size but not improve correctness.
         if (!WriteMemorySafe((BYTE*)hdr, patched.data(), hdr->size)) {
             Wh_Log(L"  VirtualProtect failed for blob at %p", (void*)hdr);
+            skippedCount++;
             continue;
         }
 
@@ -749,6 +777,7 @@ BOOL Wh_ModInit() {
     // Walk PE sections instead of VirtualQuery: deterministic regardless of
     // page-protection fragmentation from other mods or the loader.
     int totalPatched = 0;
+    int totalSkipped = 0;
     auto* sec = IMAGE_FIRST_SECTION(nt);
     for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
         // Scan readable, non-writable, non-executable sections only (e.g.
@@ -765,16 +794,27 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Scanning section at %p, size %lu",
                (void*)(modBase + sec->VirtualAddress), sec->Misc.VirtualSize);
         totalPatched += ScanRegionForShaders(modBase + sec->VirtualAddress,
-                                             sec->Misc.VirtualSize, gamma);
+                                             sec->Misc.VirtualSize, gamma,
+                                             totalSkipped);
     }
 
+    if (totalSkipped > 0) {
+        // At least one qualified blob was not successfully patched. DWM would
+        // have a mix of patched and unpatched EOTF shaders, reproducing the
+        // intermittent sRGB reversion. Revert everything for a consistent state.
+        Wh_Log(
+            L"Partial patch (%d written, %d skipped) — reverting to avoid "
+            L"inconsistent SDR rendering",
+            totalPatched, totalSkipped);
+        RestoreAllPatches();
+        return FALSE;
+    }
     if (totalPatched == 0) {
-        // No sRGB EOTF shaders found. The vec3-splat constant encoding may have
-        // changed in a Windows Update. Run LogSrgbCandidates to log any blobs
-        // that partially match, to help diagnose format changes.
+        // No sRGB EOTF shaders found. The constant encoding may have changed.
+        // Run the near-miss scan to log any blobs with partial matches.
         Wh_Log(
             L"No sRGB EOTF shaders found — dwmcore.dll format may have "
-            L"changed; scanning for partial matches...");
+            L"changed; scanning for near-matches...");
         auto* dSec = IMAGE_FIRST_SECTION(nt);
         for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, dSec++) {
             if (!(dSec->Characteristics & IMAGE_SCN_MEM_READ) ||
@@ -782,7 +822,7 @@ BOOL Wh_ModInit() {
                 (dSec->Characteristics & IMAGE_SCN_MEM_WRITE) ||
                 dSec->Misc.VirtualSize == 0)
                 continue;
-            LogSrgbCandidates(modBase + dSec->VirtualAddress,
+            LogSrgbNearMisses(modBase + dSec->VirtualAddress,
                               dSec->Misc.VirtualSize);
         }
         return FALSE;
