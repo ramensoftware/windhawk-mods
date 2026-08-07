@@ -2,7 +2,7 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         2.0
+// @version         2.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
@@ -14,7 +14,7 @@
 /*
 # Simple Window Switcher
 A lightweight Alt+Tab replacement for Windows, ported from the [Simple Window Switcher](https://github.com/valinet/sws) project.
-Additional improvements made by [Asteski](https://github.com/Asteski).
+Additional improvements made by [Asteski](https://github.com/Asteski) and [bropines](https://github.com/bropines).
 
 ## Features
 - Grid layout with live DWM thumbnail previews
@@ -22,11 +22,16 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 - Center align task list content and titles (horizontal and vertical options)
 - Keyboard navigation (Tab/Shift+Tab/Shift/Backtick, Arrow keys, Enter, Esc)
 - Mouse click to select, scroll wheel to cycle from anywhere
-- Virtual Desktop Support (Show windows across multiple virtual desktops)
+- Scroll wheel page navigation (hold a secondary modifier to switch pages instead of individual windows)
+- Virtual Desktop Support (defaults to showing windows from all virtual desktops — change under Accessibility → Virtual Desktop Behavior)
 - Group windows by application (macOS Cmd+Tab style, one entry per app)
 - Drill into an app's windows with a Ctrl tap to pick a specific window (Esc backs out)
 - Win+Alt+Tab override to display windows from all monitors when using Per-Monitor mode
 - Alt+Ctrl+Tab sticky mode
+- Alt+` shortcut to cycle backwards or filter to windows of the same active application
+- Keyboard shortcut to close the selected window (Q, Ctrl+W, or Del)
+- Directional overflow chevrons (▲/▼/◀/▶) at the edges when windows extend off-screen
+- Show/hide close button toggle under Appearance → Thumbnails
 - Theme support (None/Backdrop Acrylic) with fully customizable background opacity
 - Works with elevated/admin applications
 - Dark/light mode auto-detection
@@ -65,7 +70,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Style
       $description: Visual theme style for the switcher background.
       $options:
-      - none: None (Transparent)
+      - none: None (Solid/Transparent)
       - backdrop: Acrylic (Windows 10+)
       - mica: Mica Blur (Windows 11 only)
     - colorScheme: system
@@ -266,6 +271,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
         - showThumbnails: true
           $name: Show Thumbnails
           $description: Show DWM live thumbnail previews of windows.
+        - showCloseButton: true
+          $name: Show Close Button
+          $description: Show the 'X' button on hover to close windows.
         - showHoverBorder: true
           $name: Show Hover Border
           $description: Show a colored border around the thumbnail when hovered.
@@ -381,6 +389,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
           $name: Apply to Group Indicator
           $description: Use these custom font settings for the grouped window count indicator badge.
       $name: Font
+    - showOverflowIndicator: true
+      $name: Show Overflow Indicator
+      $description: Show chevron indicators at the edges when there are more windows off-screen.
   $name: Appearance
 - Dimensions:
     - rowHeight: 230
@@ -432,11 +443,30 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $name: Show Delay (ms)
       $description: Delay in milliseconds before showing the switcher (0 = instant).
     - scrollWheelBehavior: never
-      $name: Scroll Wheel to Change Selection
+      $name: Scroll Wheel Activation
+      $description: When the scroll wheel should be active.
       $options:
       - never: Never
       - always: Always
       - stickyOnly: Only in sticky mode
+    - scrollWheelAction: selection
+      $name: Scroll Wheel Action
+      $options:
+      - selection: Change Selection
+      - page: Scroll Pages
+    - scrollSecondaryAction: page
+      $name: Secondary Scroll Wheel Action (With Modifier)
+      $options:
+      - none: None
+      - selection: Change Selection
+      - page: Scroll Pages
+    - scrollSecondaryModifier: shift
+      $name: Secondary Scroll Wheel Modifier Key
+      $options:
+      - none: None
+      - shift: Shift
+      - ctrl: Ctrl
+      - alt: Alt
     - reverseScrollDirection: false
       $name: Reverse Scroll Direction
     - backwardShortcut: altShiftTab
@@ -446,6 +476,13 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - altShiftTab: Alt+Shift+Tab (default)
       - altShift: Alt+Shift
       - altBacktick: Alt+Backtick
+    - altBacktickBehavior: backward
+      $name: Alt+Backtick Behavior
+      $description: Action to perform when pressing Alt+` (Backtick).
+      $options:
+      - none: Disabled / Do Nothing
+      - backward: Cycle Backward
+      - sameApp: Cycle Between Windows of Current Application
     - switcherDisplayBehavior: cursorMonitor
       $name: Switcher Display Behavior
       $options:
@@ -454,7 +491,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       - cursorMonitor: Monitor Based on Cursor Location
     - perMonitorWindows: false
       $name: Display Windows Only from the Monitor Containing the Cursor
-    - virtualDesktopBehavior: currentOnly
+    - virtualDesktopBehavior: allDesktops
       $name: Virtual Desktop Behavior
       $description: Choose which virtual desktops to show windows from.
       $options:
@@ -463,6 +500,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
     - hideMinimizedWindows: false
       $name: Hide Minimized Windows
       $description: Hide minimized windows from the switcher. When "Group Windows by Application" is enabled, an application is only hidden if all of its windows are minimized.
+    - sortMinimizedWindowsToEnd: true
+      $name: Sort Minimized Windows to the End
+      $description: Sort minimized windows after all active windows. Disable this to keep minimized windows in their Z-order.
   $name: Accessibility
 - ExcludedWindows:
     - excludeByTitle: ""
@@ -482,7 +522,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
       $description: "Full path to an icon source (.ico, .exe or .dll); the first icon in the file is used. Leave empty to keep the default icon. Example: C:\\Icons\\myapp.ico"
     - appName: ""
       $name: Application Name
-      $description: "Custom name to display for matching tasks, replacing the detected application name. Leave empty to keep the default. Shown in the 'App name' and 'App name + Window title' title modes."
+      $description: "Custom name to display for matching tasks, replacing the detected application name. Leave empty to keep the default. Shown in the 'App name' and 'App name + Window title' title modes (requires 'Group Windows by Application' to be enabled)."
   $name: Custom Header
   $description: Assign a custom icon and/or application name to tasks based on their executable name. The first matching rule wins.
 
@@ -548,6 +588,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski).
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
+#define WM_SWS_SETTINGS_CHANGED (WM_APP + 2)
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -567,7 +608,7 @@ struct WindowEntry {
     int drawnIconSz;           // Size of the drawn icon
 };
 struct Settings {
-    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
+    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR scrollWheelAction[32]; WCHAR scrollSecondaryAction[32]; WCHAR scrollSecondaryModifier[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR altBacktickBehavior[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
     WCHAR virtualDesktopBehavior[32];
     // Global theme settings (apply to both light and dark)
     WCHAR highlightStyle[32]; int opacity;
@@ -590,6 +631,8 @@ struct Settings {
     int rowWidth;
     bool stretchThumbnailsToTaskWidth;
     bool showThumbnails;
+    bool showCloseButton;
+    bool showOverflowIndicator;
     bool showTitle;
     bool showIcon;
     int maxWidthPercent;
@@ -601,6 +644,7 @@ struct Settings {
     WCHAR showTitles[32];
     bool restoreAllWindows;
     bool hideMinimizedWindows;
+    bool sortMinimizedWindowsToEnd;
     int customCornerRadius;
     WCHAR switcherPosition[32];
     int switcherPositionMargin;
@@ -631,6 +675,8 @@ static bool g_showAllMonitors = false;
 static HHOOK g_hMouseHook = NULL;
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
+static bool g_isPaginatedView = false;
+static bool g_isDryRunLayout = false;
 static HWND g_hoverWnd = NULL;
 static int g_layoutStartIndex = 0; // EP-style: first window index visible in the layout
 // App drill-in: when grouping by application, Ctrl drills into the selected app's
@@ -652,6 +698,7 @@ static int g_autoFitScalePct = 100;
 static int g_winW = 0, g_winH = 0;
 static int g_activePadDivider = 0;
 static bool g_hotkeysRegistered = false;
+static bool g_isAltBacktickSameApp = false;
 static HMONITOR g_hCurrentMonitor = NULL;
 static Settings g_settings;
 static HANDLE g_hSwitcherThread = NULL;
@@ -667,8 +714,16 @@ static SetWindowCompositionAttribute_t g_SetWindowCompositionAttribute = nullptr
 static ULONG_PTR g_gdiplusToken = 0;
 static bool g_isCloseHovered = false;
 static HANDLE g_explorerIpcThread = NULL;
+static DWORD g_explorerIpcThreadId = 0;
 static bool g_isPendingShow = false;
 static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
+static bool g_isWin11OrGreater = false;
+
+// Forward declarations
+static void LoadSettings();
+static void SWS_RegisterHotkeys();
+static void SWS_UnregisterHotkeys();
+static void ApplySwitcherRegion();
 
 // Helpers
 
@@ -975,11 +1030,14 @@ static bool ShouldListInAltTab(HWND hwnd) {
     // WS_EX_NOACTIVATE excludes unless WS_EX_APPWINDOW is also set
     if ((ex & WS_EX_NOACTIVATE) && !(ex & WS_EX_APPWINDOW)) return false;
 
-    // Owner chain: if window has a visible, enabled owner, exclude it
-    // unless WS_EX_APPWINDOW forces inclusion
+    // Prefer the owner over the child popup/dialog, but only if the owner is actually listable —
+    // otherwise both windows disappear from the switcher.
     HWND own = GetWindow(hwnd, GW_OWNER);
-    bool ownVis = IsWindow(own) && IsWindowEnabled(own) && IsReallyVisible(own);
-    if (ownVis && !(ex & WS_EX_APPWINDOW)) return false;
+    if (!(ex & WS_EX_APPWINDOW) && IsWindow(own) && IsReallyVisible(own) &&
+        !(GetWindowLongPtrW(own, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) &&
+        !IsOwnerToolWindow(own)) {
+        return false;
+    }
 
     // Check if an ancestor in the owner chain is a tool window
     if (IsOwnerToolWindow(hwnd)) return false;
@@ -1148,8 +1206,8 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
     }
     WindowEntry e = {};
     e.hWnd = hWnd;
-    InternalGetWindowText(hWnd, e.title, 256);
-    if (!e.title[0]) GetWindowTextW(hWnd, e.title, 256);
+    GetWindowTextW(hWnd, e.title, 256);
+    if (!e.title[0]) InternalGetWindowText(hWnd, e.title, 256);
     
     bool excluded = false;
     for (const auto& pat : g_excludeTitlePatterns) {
@@ -1328,10 +1386,13 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (aumid.empty() && pid) {
                 // First try window/class icons via WM_GETICON / GetClassLongPtr — sometimes available on Win10
                 HICON hWinIcon = NULL;
-                HICON hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_BIG, 0);
-                if (!hTmp) hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_SMALL, 0);
-                if (!hTmp) hTmp = (HICON)SendMessageW(hCore, WM_GETICON, ICON_SMALL2, 0);
-                if (hTmp) hWinIcon = hTmp;
+                DWORD_PTR iconRes = 0;
+                if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
+                    hWinIcon = (HICON)iconRes;
+                if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
+                    hWinIcon = (HICON)iconRes;
+                if (!hWinIcon && SendMessageTimeoutW(hCore, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &iconRes) && iconRes)
+                    hWinIcon = (HICON)iconRes;
                 if (!hWinIcon) {
                     HICON hClassIcon = (HICON)GetClassLongPtrW(hCore, GCLP_HICON);
                     if (!hClassIcon) hClassIcon = (HICON)GetClassLongPtrW(hCore, GCLP_HICONSM);
@@ -1339,7 +1400,6 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 if (hWinIcon) {
                     Wh_Log(L"Explorer IPC: Returning WM_GETICON/GetClassLongPtr icon %p as Win10 fallback", hWinIcon);
-                    g_uwpIconCache[L"wm_icon_" + std::to_wstring((uintptr_t)hWinIcon) + L"_" + std::to_wstring(desiredSizePx)] = hWinIcon;
                     return (LRESULT)hWinIcon;
                 }
 
@@ -1401,7 +1461,7 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
     wc.lpszClassName = L"WindhawkSWS_IpcWindow";
     RegisterClassW(&wc);
     
-    CreateWindowExW(0, L"WindhawkSWS_IpcWindow", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
+    HWND hIpcWnd = CreateWindowExW(0, L"WindhawkSWS_IpcWindow", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
     
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {
@@ -1409,6 +1469,9 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
         DispatchMessageW(&msg);
     }
     
+    if (hIpcWnd) DestroyWindow(hIpcWnd);
+    UnregisterClassW(L"WindhawkSWS_IpcWindow", wc.hInstance);
+
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }
@@ -1426,19 +1489,7 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
         if (res) {
             // On Windows 11 explorer returns usable icon handles via IPC in our environment.
             // Avoid attempting local AUMID->icon resolution on Win11 to preserve that behavior.
-            auto IsWindows11OrGreater = []() -> bool {
-                DWORD build = 0; DWORD sz = sizeof(build);
-                if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, NULL, &sz) == ERROR_SUCCESS) {
-                    // Read as string
-                    std::wstring buf; buf.resize(sz/2);
-                    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, &buf[0], &sz) == ERROR_SUCCESS) {
-                        int buildNum = _wtoi(buf.c_str());
-                        return buildNum >= 22000;
-                    }
-                }
-                return false;
-            };
-            if (IsWindows11OrGreater()) {
+            if (g_isWin11OrGreater) {
                 return (HICON)res;
             }
             // We got an icon handle from Explorer, but HICON handles are process-local —
@@ -1457,8 +1508,12 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
                 ps->Release();
             }
             if (!aumidLocal.empty()) {
+                std::wstring cacheKey = aumidLocal + L"_" + std::to_wstring(desiredSizePx);
+                auto it = g_uwpIconCache.find(cacheKey);
+                if (it != g_uwpIconCache.end()) return it->second;
                 HICON hLocal = ResolveIconFromAumid(aumidLocal.c_str(), desiredSizePx);
                 if (hLocal) {
+                    g_uwpIconCache[cacheKey] = hLocal;
                     Wh_Log(L"TryGetUwpIconFromExplorer: Resolved local icon %p from AUMID", hLocal);
                     return hLocal;
                 }
@@ -1614,9 +1669,11 @@ static void BuildWindowList() {
                 return IsIconic(w.hWnd) != FALSE;  // hide if minimized
             }), g_windows.end());
     }
-    std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
-        return IsIconic(a.hWnd) < IsIconic(b.hWnd);
-    });
+    if (g_settings.sortMinimizedWindowsToEnd) {
+        std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
+            return IsIconic(a.hWnd) < IsIconic(b.hWnd);
+        });
+    }
 }
 
 // Layout + Thumbnails
@@ -1887,10 +1944,17 @@ static void ComputeLayout(HMONITOR hMon) {
             g_windows[ji].rcCell = {0, 0, 0, 0};
             g_windows[ji].rcThumbActual = {0, 0, 0, 0};
             g_windows[ji].rcThumbSlot = {0, 0, 0, 0};
-            for (const auto& kv : g_windows[ji].hThumbs) {
-                if (kv.second) DwmUnregisterThumbnail(kv.second);
+            // During dry-run layout passes (e.g. CyclePage page-map discovery),
+            // we do NOT destroy DWM thumbnail handles. Doing so on every scroll
+            // event triggers rapid DwmUnregister/Register cycles that cause
+            // visible flicker in the DWM compositor. The caller is responsible
+            // for proper cleanup when g_isDryRunLayout is false.
+            if (!g_isDryRunLayout) {
+                for (const auto& kv : g_windows[ji].hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+                g_windows[ji].hThumbs.clear();
             }
-            g_windows[ji].hThumbs.clear();
         }
         placedCount = startIdx;
     };
@@ -1902,16 +1966,21 @@ static void ComputeLayout(HMONITOR hMon) {
             int i = (g_layoutStartIndex + idx) % n;
             auto& w = g_windows[i];
 
-            if (g_layoutStartIndex > 0 && idx > 0 && i < g_layoutStartIndex
-                && ((g_layoutStartIndex + idx - 1) % n) >= g_layoutStartIndex
-                && curX > initialLeft + masterPad) {
-                if (curX - initialLeft > maxRowW) maxRowW = curX - initialLeft;
-                curX = initialLeft + masterPad;
-                if (curY + 2 * bottomInc - initialTop > maxH - masterPad) {
+            if (g_layoutStartIndex > 0 && idx > 0 && i < g_layoutStartIndex) {
+                if (g_isPaginatedView) {
                     truncateRemaining(idx);
                     break;
                 }
-                curY = curY + bottomInc;
+                if (((g_layoutStartIndex + idx - 1) % n) >= g_layoutStartIndex
+                    && curX > initialLeft + masterPad) {
+                    if (curX - initialLeft > maxRowW) maxRowW = curX - initialLeft;
+                    curX = initialLeft + masterPad;
+                    if (curY + 2 * bottomInc - initialTop > maxH - masterPad) {
+                        truncateRemaining(idx);
+                        break;
+                    }
+                    curY = curY + bottomInc;
+                }
             }
 
             int width = 0;
@@ -2075,15 +2144,20 @@ static void ComputeLayout(HMONITOR hMon) {
             int i = (g_layoutStartIndex + idx) % n;
             auto& w = g_windows[i];
 
-            if (g_layoutStartIndex > 0 && idx > 0 && i < g_layoutStartIndex
-                && ((g_layoutStartIndex + idx - 1) % n) >= g_layoutStartIndex
-                && curY > initialTop + masterPad) {
-                curY = initialTop + masterPad;
-                curX = curX + curColMaxW + rightInc;
-                curColMaxW = 0;
-                if (curX + rightInc - initialLeft > maxW - masterPad) {
+            if (g_layoutStartIndex > 0 && idx > 0 && i < g_layoutStartIndex) {
+                if (g_isPaginatedView) {
                     truncateRemaining(idx);
                     break;
+                }
+                if (((g_layoutStartIndex + idx - 1) % n) >= g_layoutStartIndex
+                    && curY > initialTop + masterPad) {
+                    curY = initialTop + masterPad;
+                    curX = curX + curColMaxW + rightInc;
+                    curColMaxW = 0;
+                    if (curX + rightInc - initialLeft > maxW - masterPad) {
+                        truncateRemaining(idx);
+                        break;
+                    }
                 }
             }
 
@@ -2736,6 +2810,8 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius) {
     }
 }
 
+static bool IsWindowTruncated(int idx);
+
 // Shared drawing routine for both layered and buffered paint paths
 static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
@@ -2828,7 +2904,7 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
         // In vertical mode, never reserve space - close button overlays without displacement.
         int btnReserve = 0;
         bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
-        if (!HeaderIsVertical()) {
+        if (g_settings.showCloseButton && !HeaderIsVertical()) {
             if (!isIconOnly && !(g_settings.showThumbnails && ThumbnailIsSide())) {
                 btnReserve = ((g_settings.centerTaskContent) || (i == g_hoverIndex && g_hoverWnd == hWnd))
                          ? closeBtnReserve
@@ -2926,13 +3002,67 @@ static void DrawSwitcherContent(HDC hdc, bool fillBg, HWND hWnd) {
             }
         }
     }
+    
+    // Draw overflow indicator if any windows are truncated
+    if (g_settings.showOverflowIndicator && g_windows.size() > 0) {
+        int n = (int)g_windows.size();
+        int visibleCount = 0;
+        for (int i = 0; i < n; i++) {
+            if (IsWindowTruncated((g_layoutStartIndex + i) % n)) break;
+            visibleCount++;
+        }
+        
+        bool anyTruncated = visibleCount < n;
+        bool hasPrev = anyTruncated && (g_layoutStartIndex > 0);
+        bool hasNext = anyTruncated && ((g_layoutStartIndex + visibleCount) < n);
+        
+        if (hasPrev || hasNext) {
+            bool verticalLayout = LayoutIsVertical();
+            int masterPadX = DpiScale(SWS_MASTER_PADDING, g_dpiX);
+            int masterPadY = DpiScale(SWS_MASTER_PADDING, g_dpiY);
+            
+            auto DrawChevronText = [&](LPCWSTR text, RECT& rc, UINT flags) {
+                if (g_hTheme) {
+                    DTTOPTS opts = { sizeof(DTTOPTS) };
+                    opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
+                    opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+                    DrawThemeTextEx(g_hTheme, hdc, 0, 0, text, -1, flags | DT_NOCLIP, &rc, &opts);
+                } else {
+                    SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
+                    DrawTextW(hdc, text, -1, &rc, flags | DT_NOCLIP);
+                }
+            };
+            
+            if (hasPrev) {
+                RECT rcPrev = rcClient;
+                LPCWSTR textPrev = verticalLayout ? L"\x25C0" /* Left */ : L"\x25B2" /* Up */;
+                if (verticalLayout) {
+                    rcPrev.right = rcPrev.left + masterPadX;
+                    DrawChevronText(textPrev, rcPrev, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+                } else {
+                    rcPrev.bottom = rcPrev.top + masterPadY;
+                    DrawChevronText(textPrev, rcPrev, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+                }
+            }
+            if (hasNext) {
+                RECT rcNext = rcClient;
+                LPCWSTR textNext = verticalLayout ? L"\x25B6" /* Right */ : L"\x25BC" /* Down */;
+                if (verticalLayout) {
+                    rcNext.left = rcNext.right - masterPadX;
+                    DrawChevronText(textNext, rcNext, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+                } else {
+                    rcNext.top = rcNext.bottom - masterPadY;
+                    DrawChevronText(textNext, rcNext, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+                }
+            }
+        }
+    }
+    
     SelectObject(hdc, hOldFont);
 }
 
 
 // Rendering
-
-static bool IsWindowTruncated(int idx);
 
 static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_windows.empty()) return;
@@ -3068,7 +3198,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         }
 
         // Close button (positioned at top-right of the cell, in title area)
-        if (i == g_hoverIndex && g_hoverWnd == hWnd) {
+        if (g_settings.showCloseButton && i == g_hoverIndex && g_hoverWnd == hWnd) {
             int btnSz = DpiScale(24, g_dpiX);
             int bx, by;
             if (rowTitleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide()) || BadgeLayoutActive()) {
@@ -3317,6 +3447,22 @@ static void PaintSwitcher() {
         void* bits = NULL;
         HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
         HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+        INT cp = GetCornerPref();
+        int radius = 0;
+        if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+            radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+        } else if (cp == 2) {
+            radius = MulDiv(8, g_dpiX, 96);
+        } else if (cp == 3) {
+            radius = MulDiv(4, g_dpiX, 96);
+        }
+        if (radius > 0) {
+            HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+            SelectClipRgn(hdcMem, hClip);
+            DeleteObject(hClip);
+        }
+
         DrawSwitcherContent(hdcMem, true, g_hSwitcher);
         POINT ptSrc = {0,0}; SIZE sz = {w, h};
         BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -3333,12 +3479,14 @@ static void PaintSwitcher() {
         ReleaseDC(g_hSwitcher, hdcScreen);
         PaintSwitcherOverlay();
     } else {
-        // Acrylic: trigger WM_PAINT via InvalidateRect
-        InvalidateRect(g_hSwitcher, NULL, TRUE);
+        // Acrylic: trigger WM_PAINT via InvalidateRect.
+        // Use FALSE for the erase parameter: TRUE would send WM_ERASEBKGND which
+        // blanks the window before WM_PAINT fires, producing a visible flicker gap.
+        InvalidateRect(g_hSwitcher, NULL, FALSE);
         UpdateWindow(g_hSwitcher);
         for (HWND hMirror : g_hMirrorSwitchers) {
             if (IsWindow(hMirror)) {
-                InvalidateRect(hMirror, NULL, TRUE);
+                InvalidateRect(hMirror, NULL, FALSE);
                 UpdateWindow(hMirror);
             }
         }
@@ -3349,13 +3497,11 @@ static void PaintSwitcher() {
 // Switcher Show / Hide / Switch
 
 static void GetOffscreenDelayPosition(int* x, int* y) {
-    // Put the 1x1 window just outside the virtual screen bounds.
-    // This avoids alpha/layered hacks while keeping the window shown/foreground.
-    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-
-    *x = vx - 2;
-    *y = vy - 2;
+    // Position the 1x1 window safely off every monitor by going 2px past
+    // the virtual screen boundary — arrangement-agnostic and guaranteed
+    // to be off-screen even with multiple 4K displays left/above primary.
+    *x = GetSystemMetrics(SM_XVIRTUALSCREEN) - 2;
+    *y = GetSystemMetrics(SM_YVIRTUALSCREEN) - 2;
 }
 
 static void CancelPendingShow() {
@@ -3384,11 +3530,22 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
         if (ok) {
             int dir = (short)HIWORD(pMouseStruct->mouseData) > 0 ? -1 : 1;
             if (g_settings.reverseScrollDirection) dir = -dir;
-            // Defer the heavy CycleLinear work to the wndproc; low-level hook
-            // callbacks run synchronously on the raw-input path and must stay
-            // trivial or Windows will silently drop the hook.
-            PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)dir, 0);
-            return 1;
+            
+            bool modActive = false;
+            if (wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0) modActive = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            else if (wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0) modActive = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            else if (wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0) modActive = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+            const WCHAR* actionStr = modActive ? g_settings.scrollSecondaryAction : g_settings.scrollWheelAction;
+            
+            int action = 0; // 0 = none, 1 = selection, 2 = page
+            if (wcscmp(actionStr, L"selection") == 0) action = 1;
+            else if (wcscmp(actionStr, L"page") == 0) action = 2;
+
+            if (action > 0) {
+                PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)dir, (LPARAM)action);
+                return 1;
+            }
         }
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
@@ -3413,6 +3570,7 @@ static void RevealPendingSwitcher() {
     int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+    ApplySwitcherRegion();
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
@@ -3503,7 +3661,46 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
     return TRUE;
 }
 
+static void DestroyMirrorSwitchers() {
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindow(hMirror)) DestroyWindow(hMirror);
+    }
+    g_hMirrorSwitchers.clear();
+}
+
+
+static void ApplySwitcherRegion() {
+    if (!g_hSwitcher) return;
+    static bool s_hasCustomRgn = false;
+    static int s_lastW = 0, s_lastH = 0, s_lastRadius = -1;
+
+    INT cp = GetCornerPref();
+    bool isCustom = (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0);
+
+    if (isCustom) {
+        int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
+        if (!s_hasCustomRgn || s_lastW != g_winW || s_lastH != g_winH || s_lastRadius != radius) {
+            HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
+            SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
+            s_hasCustomRgn = true;
+            s_lastW = g_winW;
+            s_lastH = g_winH;
+            s_lastRadius = radius;
+        }
+    } else {
+        if (s_hasCustomRgn) {
+            SetWindowRgn(g_hSwitcher, NULL, TRUE);
+            s_hasCustomRgn = false;
+            s_lastW = 0;
+            s_lastH = 0;
+            s_lastRadius = -1;
+        }
+    }
+}
+
 static void ShowSwitcher(bool sticky) {
+    DestroyMirrorSwitchers();
+
     POINT pt; GetCursorPos(&pt);
     HMONITOR hMon = (wcscmp(g_settings.switcherDisplayBehavior, L"primaryOnly") == 0) ?
                     MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY) :
@@ -3511,6 +3708,22 @@ static void ShowSwitcher(bool sticky) {
 
     g_hCurrentMonitor = hMon;
     UnregisterThumbnails(); BuildWindowList();
+    
+    if (g_isAltBacktickSameApp) {
+        WCHAR activeKey[MAX_PATH] = {0};
+        GetWindowGroupKey(GetForegroundWindow(), activeKey, ARRAYSIZE(activeKey));
+        if (activeKey[0]) {
+            g_windows.erase(std::remove_if(g_windows.begin(), g_windows.end(),
+                [&](const WindowEntry& e) {
+                    WCHAR key[MAX_PATH] = {0};
+                    GetWindowGroupKey(e.hWnd, key, ARRAYSIZE(key));
+                    return wcscmp(key, activeKey) != 0;
+                }),
+                g_windows.end());
+        }
+        g_isAltBacktickSameApp = false;
+    }
+
     if (g_windows.empty()) return;
 
     g_isDarkMode = ShouldUseDarkMode(); g_isSticky = sticky;
@@ -3537,18 +3750,7 @@ static void ShowSwitcher(bool sticky) {
     GetSwitcherPosition(mi.rcWork, &cx, &cy);
 
     ApplyThemeToWindow(g_hSwitcher);
-
-    INT cp = GetCornerPref();
-    if (cp == 1 && wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        int radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-        HRGN hRgn1 = CreateRoundRectRgn(0, 0, g_winW + 1, g_winH + 1, radius * 2, radius * 2);
-        SetWindowRgn(g_hSwitcher, hRgn1, TRUE);
-        // NOTE: Do NOT call SetWindowRgn on g_hCloseBtnWnd — it is a layered
-        // window using UpdateLayeredWindow, which ignores SetWindowRgn.
-        // Instead, the overlay DC is clipped in PaintSwitcherOverlay.
-    } else {
-        SetWindowRgn(g_hSwitcher, NULL, TRUE);
-    }
+    ApplySwitcherRegion();
 
     g_pendingSwitcherRect = {
         cx,
@@ -3601,10 +3803,7 @@ static void HideSwitcher() {
     CancelPendingShow();
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
 
-    for (HWND hMirror : g_hMirrorSwitchers) {
-        if (IsWindow(hMirror)) DestroyWindow(hMirror);
-    }
-    g_hMirrorSwitchers.clear();
+    DestroyMirrorSwitchers();
 
     UnregisterThumbnails();
     if (g_hSwitcher) {
@@ -3624,6 +3823,7 @@ static void HideSwitcher() {
     g_drilledIn = false;
     g_savedAppList.clear();
     g_consumeEscUp = false;
+    g_isPaginatedView = false;
 }
 
 static void SwitchToSelected() {
@@ -3633,16 +3833,20 @@ static void SwitchToSelected() {
     if (g_settings.showApplications && g_settings.restoreAllWindows) {
         groupWindows = g_windows[g_selectedIndex].groupWindows;
     }
-    HideSwitcher();
+    
+    // Restore sibling windows without stealing activation focus from target
     for (HWND hw : groupWindows) {
-        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_RESTORE);
+        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_SHOWNOACTIVATE);
     }
+    
     if (IsWindow(hT)) {
         HWND hP = GetLastActivePopup(hT);
         HWND hF = IsWindowVisible(hP) ? hP : hT;
         if (IsIconic(hF)) ShowWindow(hF, SW_RESTORE);
-        SwitchToThisWindow(hF, TRUE);
+        if (!SetForegroundWindow(hF)) SwitchToThisWindow(hF, TRUE);
     }
+    
+    HideSwitcher();
 }
 
 // Helper: check if a window is truncated (not placed in current layout)
@@ -3657,6 +3861,7 @@ static void RecomputeAndReposition() {
     UnregisterThumbnails();
     RegisterThumbnailsEarly();
     HMONITOR hMon = MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+    g_hCurrentMonitor = hMon;
     ComputeLayout(hMon);
     MONITORINFO mi = { sizeof(mi) };
     GetMonitorInfoW(hMon, &mi);
@@ -3678,10 +3883,31 @@ static void RecomputeAndReposition() {
         return;
     }
 
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    // Only call SetWindowPos when the size or position has actually changed.
+    // An unconditional SetWindowPos sends WM_SIZE which triggers a WM_PAINT
+    // before our own rendering pass completes, causing a momentary flicker.
+    RECT curWndRect = {};
+    GetWindowRect(g_hSwitcher, &curWndRect);
+    bool posChanged = (curWndRect.left != cx || curWndRect.top != cy
+                       || (curWndRect.right - curWndRect.left) != g_winW
+                       || (curWndRect.bottom - curWndRect.top) != g_winH);
+    if (posChanged) {
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    } else {
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH,
+                     SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE | SWP_NOREDRAW);
+    }
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (!IsWindow(hMirror)) continue;
+        MONITORINFO mInfo = { sizeof(mInfo) };
+        GetMonitorInfoW(MonitorFromWindow(hMirror, MONITOR_DEFAULTTONEAREST), &mInfo);
+        int mx, my; GetSwitcherPosition(mInfo.rcWork, &mx, &my);
+        SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
+    }
     if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     }
+    ApplySwitcherRegion();
     RegisterThumbnails();
 }
 
@@ -3703,8 +3929,8 @@ static void EnterAppGroup() {
         if (!IsWindow(hw)) continue;
         WindowEntry e = {};
         e.hWnd = hw;
-        InternalGetWindowText(hw, e.title, 256);
-        if (!e.title[0]) GetWindowTextW(hw, e.title, 256);
+        GetWindowTextW(hw, e.title, 256);
+        if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
         e.hIcon = LoadWindowIcon(hw);
         g_windows.push_back(std::move(e));
     }
@@ -3749,6 +3975,7 @@ static void ToggleAppDrill() {
 // Linear navigation: Tab, Shift+Tab, Left, Right, Hotkeys, Scroll
 static void CycleLinear(int delta) {
     if (g_windows.empty()) return;
+    g_isPaginatedView = false;
     int n = (int)g_windows.size();
     g_selectedIndex = ((g_selectedIndex + delta) % n + n) % n;
 
@@ -3782,6 +4009,167 @@ static void CycleLinear(int delta) {
             RecomputeAndReposition();
         }
     }
+
+    PaintSwitcher();
+}
+
+static void CyclePage(int dir) {
+    if (g_windows.empty()) return;
+    int n = (int)g_windows.size();
+
+    // ── Step 1: Build a stable page map via a dry-run layout from index 0 ────
+    //
+    // We temporarily set g_layoutStartIndex = 0 and g_isPaginatedView = false
+    // so ComputeLayout places ALL windows with no wrapping suppression.
+    // We then read the resulting rcCell coordinates to find where rows/columns
+    // are, and record the window index at which each new "page" starts.
+    //
+    // This is the only reliable approach because ComputeLayout's row/column
+    // break conditions depend on many DPI-scaled constants that would be
+    // error-prone to replicate here.
+
+    HMONITOR hMon = g_hCurrentMonitor
+                    ? g_hCurrentMonitor
+                    : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+
+    // Save current start index — the dry-run will overwrite g_layoutStartIndex.
+    // Also save g_winW/g_winH: the dry-run ComputeLayout calls will overwrite them
+    // with intermediate values, which would cause WM_PAINT to draw with wrong dims.
+    int savedStart = g_layoutStartIndex;
+    int savedWinW  = g_winW;
+    int savedWinH  = g_winH;
+
+    // Dry-run: full layout pass from index 0, with wrapping allowed
+    g_isDryRunLayout   = true;
+    g_layoutStartIndex = 0;
+    g_isPaginatedView  = false;
+    ComputeLayout(hMon);  // populates rcCell for all windows
+
+    // ── Step 2: Walk rcCell coords to identify page boundaries ───────────────
+    //
+    // In horizontal mode each page is a group of rows (by rcCell.top).
+    // In vertical   mode each page is a group of columns (by rcCell.left).
+    //
+    // A page boundary occurs at the first row/column whose windows were
+    // TRUNCATED by ComputeLayout (rcCell all-zeros), because that is
+    // exactly where the layout engine ran out of screen space.
+    //
+    // pageStarts[p] = the window index (in layout order, which equals the
+    // absolute window index when g_layoutStartIndex == 0) at which page p
+    // starts.
+
+    std::vector<int> pageStarts;
+    pageStarts.push_back(0);
+
+    bool vertical = LayoutIsVertical();
+    int  prevLine = -1;   // previous row-top (horiz) or col-left (vert)
+
+    for (int idx = 0; idx < n; idx++) {
+        auto& w = g_windows[idx];  // g_layoutStartIndex==0, so idx == window index
+
+        // Truncated window signals the end of what fits on the current page
+        if (w.rcCell.left == 0 && w.rcCell.right  == 0 &&
+            w.rcCell.top  == 0 && w.rcCell.bottom == 0) {
+            // Start a new page here
+            pageStarts.push_back(idx);
+            prevLine = -1;  // reset for the next page's dry-run (see below)
+            break;          // only one overflow region possible per layout pass
+        }
+
+        int lineCoord = vertical ? w.rcCell.left : w.rcCell.top;
+        if (lineCoord != prevLine) {
+            prevLine = lineCoord;
+        }
+    }
+
+    // If more than one page exists, we need to recursively find further page
+    // boundaries by repeating the dry-run from each new page start.
+    // We loop until no more pages are detected.
+    while (true) {
+        int lastPageStart = pageStarts.back();
+        if (lastPageStart >= n) break;
+
+        // Dry-run from the last page start
+        g_layoutStartIndex = lastPageStart;
+        g_isPaginatedView  = true;   // prevent wrapping past end
+        ComputeLayout(hMon);
+
+        bool foundTruncation = false;
+        prevLine = -1;
+        for (int idx = 0; idx < n; idx++) {
+            int wi = (lastPageStart + idx) % n;
+            // Stop if we've wrapped past the array in paginated mode
+            if (idx > 0 && wi < lastPageStart) break;
+
+            auto& w = g_windows[wi];
+            if (w.rcCell.left == 0 && w.rcCell.right  == 0 &&
+                w.rcCell.top  == 0 && w.rcCell.bottom == 0) {
+                // This window starts the next page
+                int nextStart = wi;
+                if (nextStart <= lastPageStart) break;  // sanity: no progress
+                pageStarts.push_back(nextStart);
+                foundTruncation = true;
+                break;
+            }
+        }
+        if (!foundTruncation) break;  // all remaining windows fit — done
+    }
+
+    g_isDryRunLayout = false;
+
+    // ── Step 3: Determine which page we're currently on ──────────────────────
+    int currentPage = 0;
+    for (int p = (int)pageStarts.size() - 1; p >= 0; p--) {
+        if (savedStart >= pageStarts[p]) {
+            currentPage = p;
+            break;
+        }
+    }
+
+    // ── Step 4: Navigate to next or previous page ────────────────────────────
+    int numPages   = (int)pageStarts.size();
+    int targetPage = currentPage;
+
+    if (dir > 0) {
+        // Scroll forward: go to next page, clamp at last
+        if (currentPage + 1 < numPages)
+            targetPage = currentPage + 1;
+    } else {
+        // Scroll backward: go to previous page, clamp at first
+        if (currentPage - 1 >= 0)
+            targetPage = currentPage - 1;
+    }
+
+    // ── Boundary guard: if already on the first/last page, restore state and
+    // exit immediately. Since g_isDryRunLayout prevented any thumbnails from
+    // being destroyed during the dry runs, no DWM cleanup or reflow is needed.
+    if (targetPage == currentPage) {
+        g_layoutStartIndex = savedStart;
+        g_winW             = savedWinW;
+        g_winH             = savedWinH;
+        g_isPaginatedView  = true;
+
+        // Restore the g_windows memory geometry (rcCell, rcThumbActual) to the
+        // current page. The dry-runs overwrote it with the last page's layout.
+        // We set g_isDryRunLayout = true so truncateRemaining doesn't touch DWM handles.
+        g_isDryRunLayout = true;
+        ComputeLayout(hMon);
+        g_isDryRunLayout = false;
+
+        return;  // nothing changed — no reflow, no repaint, no flicker
+    }
+
+    // ── Step 5: Apply the new page and do the real reflow ────────────────────
+    // Restore g_winW/g_winH so the window doesn't resize to a dry-run value
+    // before RecomputeAndReposition sets the correct final dimensions.
+    g_winW = savedWinW;
+    g_winH = savedWinH;
+    g_layoutStartIndex = pageStarts[targetPage];
+    g_isPaginatedView  = true;
+    RecomputeAndReposition();  // single real reflow — no flicker, no loops
+
+    // ── Step 6: Place selection on the first visible window of the new page ──
+    g_selectedIndex = g_layoutStartIndex % n;
 
     PaintSwitcher();
 }
@@ -3946,8 +4334,8 @@ static int HitTestThumb(int x, int y) {
 static void SWS_RegisterHotkeys();
 
 static void UpdateEntryForWindow(WindowEntry& e) {
-    InternalGetWindowText(e.hWnd, e.title, 256);
-    if (!e.title[0]) GetWindowTextW(e.hWnd, e.title, 256);
+    GetWindowTextW(e.hWnd, e.title, 256);
+    if (!e.title[0]) InternalGetWindowText(e.hWnd, e.title, 256);
     e.hIcon = LoadWindowIcon(e.hWnd);
 
     if (g_settings.showApplications && wcscmp(g_settings.showTitles, L"windowTitle") != 0) {
@@ -3973,9 +4361,9 @@ static void UpdateEntryForWindow(WindowEntry& e) {
     }
 }
 
-// Close the window for the entry at idx (graceful WM_CLOSE, same as the close
+// Close the window for the entry at idx (posts SC_CLOSE, same as the close
 // button), remove it from the list and relayout. Shared by the close button,
-// middle-click and the Q key.
+// middle-click, Q, Ctrl+W and Del.
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
     
@@ -3983,12 +4371,12 @@ static void CloseSwitcherEntry(int idx) {
     if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
         if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
             for (HWND hw : g_windows[idx].groupWindows) {
-                PostMessage(hw, WM_CLOSE, 0, 0);
+                PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
             }
         } else {
             // closeRecent (Default)
             HWND closedHwnd = g_windows[idx].hWnd;
-            PostMessage(closedHwnd, WM_CLOSE, 0, 0);
+            PostMessage(closedHwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
             
             auto& group = g_windows[idx].groupWindows;
             group.erase(std::remove(group.begin(), group.end(), closedHwnd), group.end());
@@ -4004,27 +4392,23 @@ static void CloseSwitcherEntry(int idx) {
             }
         }
     } else {
-        PostMessage(g_windows[idx].hWnd, WM_CLOSE, 0, 0);
+        PostMessage(g_windows[idx].hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
     }
 
     if (eraseEntry) {
+        for (const auto& kv : g_windows[idx].hThumbs) {
+            if (kv.second) DwmUnregisterThumbnail(kv.second);
+        }
+        g_windows[idx].hThumbs.clear();
+
         g_windows.erase(g_windows.begin() + idx);
     }
 
     if (g_windows.empty()) { HideSwitcher(); return; }
     if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
-    UnregisterThumbnails();
-    RegisterThumbnailsEarly();
-    ComputeLayout(g_hCurrentMonitor);
-    // Resize and re-center the window to match new layout
-    MONITORINFO rmi = { sizeof(rmi) }; GetMonitorInfoW(g_hCurrentMonitor, &rmi);
-    int cx, cy;
-    GetSwitcherPosition(rmi.rcWork, &cx, &cy);
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    if (g_hCloseBtnWnd) {
-        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    }
-    RegisterThumbnails();
+
+    RecomputeAndReposition();
+
     g_hoverIndex = -1;
     g_hoverWnd = NULL;
     g_isCloseHovered = false;
@@ -4072,6 +4456,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         int id = (int)wParam;
         bool isBackward = false;
         bool isCtrl = false;
+        bool isAltBacktickTrigger = false;
 
         switch (id) {
         case SWS_HOTKEY_ALTTAB:
@@ -4097,14 +4482,20 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             isCtrl = true;
             break;
         case SWS_HOTKEY_ALTBACKTICK:
-            if (!UseAltBacktickBackward()) return 0;
-            isBackward = true;
+            if (wcscmp(g_settings.altBacktickBehavior, L"sameApp") == 0) {
+                isAltBacktickTrigger = true;
+            } else if (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward()) {
+                isBackward = true;
+            } else {
+                return 0;
+            }
             break;
         default:
             return 0;
         }
 
         if (!g_isVisible && !g_isPendingShow) {
+            if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
             ShowSwitcher(isCtrl);
 
             if (isBackward && g_windows.size() > 1) {
@@ -4235,7 +4626,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if (wParam == VK_RETURN || wParam == VK_SPACE) { SwitchToSelected(); return 0; }
-            if (wParam == 'Q') {
+            bool isCtrlW = (wParam == 'W' && (GetKeyState(VK_CONTROL) & 0x8000) != 0);
+            if (wParam == 'Q' || wParam == VK_DELETE || isCtrlW) {
                 bool isRepeat = (lParam & 0x40000000) != 0;
                 if (!isRepeat) CloseSwitcherEntry(g_selectedIndex);
                 return 0;
@@ -4245,8 +4637,20 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     // (Removed duplicate combined case for WM_SYSKEYUP and WM_KEYUP)
     case WM_SWS_SCROLL:
         if (g_isVisible) {
-            CycleLinear((int)wParam);
+            int dir = (int)wParam;
+            int action = (int)lParam;
+            if (action == 1) { // selection
+                CycleLinear(dir);
+            } else if (action == 2) { // page
+                CyclePage(dir);
+            }
         }
+        return 0;
+    case WM_SWS_SETTINGS_CHANGED:
+        if (g_isVisible) HideSwitcher();
+        SWS_UnregisterHotkeys();
+        LoadSettings();
+        SWS_RegisterHotkeys();
         return 0;
     case WM_SETCURSOR:
         SetCursor(LoadCursor(NULL, IDC_ARROW));
@@ -4257,7 +4661,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (idx < 0) idx = HitTest(x, y);
         
         bool closeHovered = false;
-        if (idx >= 0) {
+        if (g_settings.showCloseButton && idx >= 0) {
             auto& e = g_windows[idx];
             int titleH = GetHeaderRowHeightPx();
             int btnSz = DpiScale(24, g_dpiX);
@@ -4378,11 +4782,12 @@ static HANDLE g_hHotkeyMutex = NULL;
 
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
+    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0) || BackwardShortcutIs(L"altBacktick");
     BOOL r1 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
     BOOL r2 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
     BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
     BOOL r4 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
-    BOOL r5 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
+    BOOL r5 = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3) : TRUE;
     BOOL r6 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN, VK_TAB);
     BOOL r7 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN, VK_TAB);
     if (r1 && r2 && r3 && r4 && r5 && r6 && r7) {
@@ -4397,7 +4802,7 @@ static void SWS_RegisterHotkeys() {
         if (r2) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
         if (r3) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
         if (r4) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-        if (r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        if (wantAltBacktick && r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
         if (r6) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
         if (r7) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
@@ -4426,14 +4831,18 @@ static void SWS_UnregisterHotkeys() {
 
 // Settings
 
+template <size_t N>
+static void LoadStringSetting(LPCWSTR settingName, WCHAR (&dest)[N], LPCWSTR defaultVal) {
+    LPCWSTR v = Wh_GetStringSetting(settingName);
+    wcsncpy_s(dest, (v && *v) ? v : defaultVal, _TRUNCATE);
+    Wh_FreeStringSetting(v);
+}
+
 static void LoadSettings() {
     LPCWSTR v;
-    v = Wh_GetStringSetting(L"Style.theme");
-    wcscpy_s(g_settings.theme, v ? v : L"none"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.colorScheme");
-    wcscpy_s(g_settings.colorScheme, v ? v : L"system"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Appearance.Corners.cornerPreference");
-    wcscpy_s(g_settings.cornerPreference, v ? v : L"round"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.theme", g_settings.theme, L"none");
+    LoadStringSetting(L"Style.colorScheme", g_settings.colorScheme, L"system");
+    LoadStringSetting(L"Appearance.Corners.cornerPreference", g_settings.cornerPreference, L"round");
     g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
     if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
@@ -4441,19 +4850,18 @@ static void LoadSettings() {
     g_settings.roundThumbnailCorners = Wh_GetIntSetting(L"Appearance.Corners.roundThumbnailCorners");
     g_settings.roundGroupIndicator = Wh_GetIntSetting(L"Appearance.Corners.roundGroupIndicator");
     g_settings.roundBadgeIconBackground = Wh_GetIntSetting(L"Appearance.Corners.roundBadgeIconBackground");
-    v = Wh_GetStringSetting(L"Accessibility.scrollWheelBehavior");
-    wcscpy_s(g_settings.scrollWheelBehavior, v ? v : L"never"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Appearance.Orientation.taskListOrientation");
-    wcscpy_s(g_settings.taskListOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Appearance.Orientation.headerContentOrientation");
-    wcscpy_s(g_settings.headerContentOrientation, v ? v : L"horizontal"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
+    LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
+    LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
+    LoadStringSetting(L"Accessibility.scrollSecondaryModifier", g_settings.scrollSecondaryModifier, L"shift");
+    LoadStringSetting(L"Appearance.Orientation.taskListOrientation", g_settings.taskListOrientation, L"horizontal");
+    LoadStringSetting(L"Appearance.Orientation.headerContentOrientation", g_settings.headerContentOrientation, L"horizontal");
     if (wcscmp(g_settings.headerContentOrientation, L"horizontal") != 0 &&
         wcscmp(g_settings.headerContentOrientation, L"vertical") != 0) {
-        wcscpy_s(g_settings.headerContentOrientation, L"horizontal");
+        wcsncpy_s(g_settings.headerContentOrientation, L"horizontal", _TRUNCATE);
     }
     
-    v = Wh_GetStringSetting(L"Appearance.Position.switcherPosition");
-    wcscpy_s(g_settings.switcherPosition, v ? v : L"center"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Position.switcherPosition", g_settings.switcherPosition, L"center");
     if (wcscmp(g_settings.switcherPosition, L"topLeft") != 0 &&
         wcscmp(g_settings.switcherPosition, L"topCenter") != 0 &&
         wcscmp(g_settings.switcherPosition, L"topRight") != 0 &&
@@ -4463,54 +4871,52 @@ static void LoadSettings() {
         wcscmp(g_settings.switcherPosition, L"bottomLeft") != 0 &&
         wcscmp(g_settings.switcherPosition, L"bottomCenter") != 0 &&
         wcscmp(g_settings.switcherPosition, L"bottomRight") != 0) {
-        wcscpy_s(g_settings.switcherPosition, L"center");
+        wcsncpy_s(g_settings.switcherPosition, L"center", _TRUNCATE);
     }
     g_settings.switcherPositionMargin = Wh_GetIntSetting(L"Appearance.Position.switcherPositionMargin");
     if (g_settings.switcherPositionMargin < 0) g_settings.switcherPositionMargin = 0;
-    v = Wh_GetStringSetting(L"Appearance.HeaderContent.iconSize");
-    wcscpy_s(g_settings.iconSize, v ? v : L"small"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.HeaderContent.iconSize", g_settings.iconSize, L"small");
     if (wcscmp(g_settings.iconSize, L"small") != 0 &&
         wcscmp(g_settings.iconSize, L"medium") != 0 &&
         wcscmp(g_settings.iconSize, L"large") != 0 &&
         wcscmp(g_settings.iconSize, L"xlarge") != 0) {
-        wcscpy_s(g_settings.iconSize, L"small");
+        wcsncpy_s(g_settings.iconSize, L"small", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailPosition");
-    wcscpy_s(g_settings.thumbnailPosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Thumbnails.thumbnailPosition", g_settings.thumbnailPosition, L"bottom");
     if (wcscmp(g_settings.thumbnailPosition, L"bottom") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"top") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"left") != 0 &&
         wcscmp(g_settings.thumbnailPosition, L"right") != 0) {
-        wcscpy_s(g_settings.thumbnailPosition, L"bottom");
+        wcsncpy_s(g_settings.thumbnailPosition, L"bottom", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Appearance.Thumbnails.thumbnailAlignment");
-    wcscpy_s(g_settings.thumbnailAlignment, v ? v : L"left"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Thumbnails.thumbnailAlignment", g_settings.thumbnailAlignment, L"left");
     if (wcscmp(g_settings.thumbnailAlignment, L"left") != 0 &&
         wcscmp(g_settings.thumbnailAlignment, L"centered") != 0 &&
         wcscmp(g_settings.thumbnailAlignment, L"right") != 0) {
-        wcscpy_s(g_settings.thumbnailAlignment, L"left");
+        wcsncpy_s(g_settings.thumbnailAlignment, L"left", _TRUNCATE);
     }
     v = Wh_GetStringSetting(L"Accessibility.backwardShortcut");
-    if (v) {
-        wcscpy_s(g_settings.backwardShortcut, v);
-        Wh_FreeStringSetting(v);
-    } else {
-        // Backward compatibility with previous boolean setting.
-        wcscpy_s(g_settings.backwardShortcut,
-                 Wh_GetIntSetting(L"enableAltShiftForBackward") ? L"altShift" : L"altShiftTab");
+    if (v && *v) {
+        wcsncpy_s(g_settings.backwardShortcut, v, _TRUNCATE);
     }
+    Wh_FreeStringSetting(v);
     if (wcscmp(g_settings.backwardShortcut, L"altShiftTab") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altShift") != 0 &&
         wcscmp(g_settings.backwardShortcut, L"altBacktick") != 0) {
-        wcscpy_s(g_settings.backwardShortcut, L"altShiftTab");
+        wcsncpy_s(g_settings.backwardShortcut, L"altShiftTab", _TRUNCATE);
+    }
+    
+    LoadStringSetting(L"Accessibility.altBacktickBehavior", g_settings.altBacktickBehavior, L"backward");
+    if (wcscmp(g_settings.altBacktickBehavior, L"none") != 0 &&
+        wcscmp(g_settings.altBacktickBehavior, L"backward") != 0 &&
+        wcscmp(g_settings.altBacktickBehavior, L"sameApp") != 0) {
+        wcsncpy_s(g_settings.altBacktickBehavior, L"backward", _TRUNCATE);
     }
 
-    v = Wh_GetStringSetting(L"Accessibility.virtualDesktopBehavior");
-    wcscpy_s(g_settings.virtualDesktopBehavior, v ? v : L"currentOnly");
-    Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.virtualDesktopBehavior", g_settings.virtualDesktopBehavior, L"allDesktops");
     if (wcscmp(g_settings.virtualDesktopBehavior, L"currentOnly") != 0 &&
         wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
-        wcscpy_s(g_settings.virtualDesktopBehavior, L"currentOnly");
+        wcsncpy_s(g_settings.virtualDesktopBehavior, L"allDesktops", _TRUNCATE);
     }
 
     g_settings.rowHeight = Wh_GetIntSetting(L"Dimensions.rowHeight");
@@ -4520,6 +4926,8 @@ static void LoadSettings() {
     g_settings.stretchThumbnailsToTaskWidth = Wh_GetIntSetting(L"Dimensions.stretchThumbnailsToTaskWidth");
     g_settings.autoFitTasks = Wh_GetIntSetting(L"Dimensions.autoFitTasks");
     g_settings.showThumbnails = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnails");
+    g_settings.showCloseButton = Wh_GetIntSetting(L"Appearance.Thumbnails.showCloseButton");
+    g_settings.showOverflowIndicator = Wh_GetIntSetting(L"Appearance.showOverflowIndicator");
     g_settings.showHoverBorder = Wh_GetIntSetting(L"Appearance.Thumbnails.showHoverBorder");
     g_settings.showThumbnailShadow = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnailShadow");
     g_settings.showTitle = Wh_GetIntSetting(L"Appearance.HeaderContent.showTitle");
@@ -4539,19 +4947,18 @@ static void LoadSettings() {
     g_settings.showApplications = Wh_GetIntSetting(L"Grouping.showApplications");
     g_settings.restoreAllWindows = Wh_GetIntSetting(L"Grouping.restoreAllWindows");
     g_settings.hideMinimizedWindows = Wh_GetIntSetting(L"Accessibility.hideMinimizedWindows");
-    v = Wh_GetStringSetting(L"Grouping.showTitles");
-    wcscpy_s(g_settings.showTitles, v ? v : L"windowTitle"); Wh_FreeStringSetting(v);
+    g_settings.sortMinimizedWindowsToEnd = Wh_GetIntSetting(L"Accessibility.sortMinimizedWindowsToEnd");
+    LoadStringSetting(L"Grouping.showTitles", g_settings.showTitles, L"windowTitle");
     if (wcscmp(g_settings.showTitles, L"windowTitle") != 0 &&
         wcscmp(g_settings.showTitles, L"appName") != 0 &&
         wcscmp(g_settings.showTitles, L"appNameWindowTitle") != 0) {
-        wcscpy_s(g_settings.showTitles, L"windowTitle");
+        wcsncpy_s(g_settings.showTitles, L"windowTitle", _TRUNCATE);
     }
     g_settings.centerTaskContent = Wh_GetIntSetting(L"Appearance.HeaderContent.centerTaskContent");
 
     // Badge layout settings
     g_settings.enableBadgeLayout = Wh_GetIntSetting(L"Appearance.BadgeLayout.enableBadgeLayout");
-    v = Wh_GetStringSetting(L"Appearance.BadgeLayout.badgeIconPosition");
-    wcscpy_s(g_settings.badgeIconPosition, v ? v : L"bottomCenter"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.BadgeLayout.badgeIconPosition", g_settings.badgeIconPosition, L"bottomCenter");
     if (wcscmp(g_settings.badgeIconPosition, L"topLeft") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"topCenter") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"topRight") != 0 &&
@@ -4561,13 +4968,12 @@ static void LoadSettings() {
         wcscmp(g_settings.badgeIconPosition, L"bottomLeft") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"bottomCenter") != 0 &&
         wcscmp(g_settings.badgeIconPosition, L"bottomRight") != 0) {
-        wcscpy_s(g_settings.badgeIconPosition, L"bottomCenter");
+        wcsncpy_s(g_settings.badgeIconPosition, L"bottomCenter", _TRUNCATE);
     }
-    v = Wh_GetStringSetting(L"Appearance.BadgeLayout.badgeTitlePosition");
-    wcscpy_s(g_settings.badgeTitlePosition, v ? v : L"bottom"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.BadgeLayout.badgeTitlePosition", g_settings.badgeTitlePosition, L"bottom");
     if (wcscmp(g_settings.badgeTitlePosition, L"top") != 0 &&
         wcscmp(g_settings.badgeTitlePosition, L"bottom") != 0) {
-        wcscpy_s(g_settings.badgeTitlePosition, L"bottom");
+        wcsncpy_s(g_settings.badgeTitlePosition, L"bottom", _TRUNCATE);
     }
     g_settings.showBadgeIconBackground = Wh_GetIntSetting(L"Appearance.BadgeLayout.showBadgeIconBackground");
     g_settings.showBadgeIconBackgroundShadow = Wh_GetIntSetting(L"Appearance.BadgeLayout.showBadgeIconBackgroundShadow");
@@ -4578,108 +4984,79 @@ static void LoadSettings() {
     // Grouped indicator
     g_settings.showGroupIndicator = Wh_GetIntSetting(L"Grouping.showGroupIndicator");
     g_settings.showGroupIndicatorShadow = Wh_GetIntSetting(L"Grouping.showGroupIndicatorShadow");
-    v = Wh_GetStringSetting(L"Grouping.groupCloseBehavior");
-    wcscpy_s(g_settings.groupCloseBehavior, v ? v : L"closeRecent"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Grouping.groupCloseBehavior", g_settings.groupCloseBehavior, L"closeRecent");
     if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") != 0 &&
         wcscmp(g_settings.groupCloseBehavior, L"closeRecent") != 0) {
-        wcscpy_s(g_settings.groupCloseBehavior, L"closeRecent");
+        wcsncpy_s(g_settings.groupCloseBehavior, L"closeRecent", _TRUNCATE);
     }
 
     // Global theme settings (apply to both light and dark)
-    v = Wh_GetStringSetting(L"Style.highlightStyle");
-    wcscpy_s(g_settings.highlightStyle, v ? v : L"border"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.highlightStyle", g_settings.highlightStyle, L"border");
     if (wcscmp(g_settings.highlightStyle, L"border") != 0 &&
         wcscmp(g_settings.highlightStyle, L"fillAndBorder") != 0 &&
         wcscmp(g_settings.highlightStyle, L"fillOnly") != 0) {
-        wcscpy_s(g_settings.highlightStyle, L"border");
+        wcsncpy_s(g_settings.highlightStyle, L"border", _TRUNCATE);
     }
     g_settings.opacity = Wh_GetIntSetting(L"Style.opacity");
     if (g_settings.opacity < 0) g_settings.opacity = 0;
     if (g_settings.opacity > 100) g_settings.opacity = 100;
 
     // Dark Mode color settings
-    v = Wh_GetStringSetting(L"Style.DarkMode.borderColorMode");
-    wcscpy_s(g_settings.borderColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.highlightFillColorMode");
-    wcscpy_s(g_settings.highlightFillColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.bgColorMode");
-    wcscpy_s(g_settings.bgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customBorderColor");
-    wcscpy_s(g_settings.customBorderColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customHighlightFillColor");
-    wcscpy_s(g_settings.customHighlightFillColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customBgColor");
-    wcscpy_s(g_settings.customBgColorDark, v ? v : L"#202020"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.borderColorMode", g_settings.borderColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.highlightFillColorMode", g_settings.highlightFillColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.bgColorMode", g_settings.bgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customBorderColor", g_settings.customBorderColorDark, L"#FFFFFF");
+    LoadStringSetting(L"Style.DarkMode.customHighlightFillColor", g_settings.customHighlightFillColorDark, L"#FFFFFF");
+    LoadStringSetting(L"Style.DarkMode.customBgColor", g_settings.customBgColorDark, L"#202020");
     
-    v = Wh_GetStringSetting(L"Style.DarkMode.iconBgColorMode");
-    wcscpy_s(g_settings.iconBgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customIconBgColor");
-    wcscpy_s(g_settings.customIconBgColorDark, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.iconBgColorMode", g_settings.iconBgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customIconBgColor", g_settings.customIconBgColorDark, L"#000000");
     g_settings.iconBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.iconBgOpacity");
     if (g_settings.iconBgOpacityDark < 0) g_settings.iconBgOpacityDark = 0;
     if (g_settings.iconBgOpacityDark > 100) g_settings.iconBgOpacityDark = 100;
 
-    v = Wh_GetStringSetting(L"Style.DarkMode.indicatorBgColorMode");
-    wcscpy_s(g_settings.indicatorBgColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customIndicatorBgColor");
-    wcscpy_s(g_settings.customIndicatorBgColorDark, v ? v : L"#333333"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.indicatorBgColorMode", g_settings.indicatorBgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customIndicatorBgColor", g_settings.customIndicatorBgColorDark, L"#333333");
     g_settings.indicatorBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityDark < 0) g_settings.indicatorBgOpacityDark = 0;
     if (g_settings.indicatorBgOpacityDark > 100) g_settings.indicatorBgOpacityDark = 100;
     
-    v = Wh_GetStringSetting(L"Style.DarkMode.indicatorTextColorMode");
-    wcscpy_s(g_settings.indicatorTextColorModeDark, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.DarkMode.customIndicatorTextColor");
-    wcscpy_s(g_settings.customIndicatorTextColorDark, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.DarkMode.indicatorTextColorMode", g_settings.indicatorTextColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customIndicatorTextColor", g_settings.customIndicatorTextColorDark, L"#FFFFFF");
 
     // Light Mode color settings
-    v = Wh_GetStringSetting(L"Style.LightMode.borderColorMode");
-    wcscpy_s(g_settings.borderColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.highlightFillColorMode");
-    wcscpy_s(g_settings.highlightFillColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.bgColorMode");
-    wcscpy_s(g_settings.bgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customBorderColor");
-    wcscpy_s(g_settings.customBorderColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customHighlightFillColor");
-    wcscpy_s(g_settings.customHighlightFillColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customBgColor");
-    wcscpy_s(g_settings.customBgColorLight, v ? v : L"#F3F3F3"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.borderColorMode", g_settings.borderColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.highlightFillColorMode", g_settings.highlightFillColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.bgColorMode", g_settings.bgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customBorderColor", g_settings.customBorderColorLight, L"#000000");
+    LoadStringSetting(L"Style.LightMode.customHighlightFillColor", g_settings.customHighlightFillColorLight, L"#000000");
+    LoadStringSetting(L"Style.LightMode.customBgColor", g_settings.customBgColorLight, L"#F3F3F3");
 
-    v = Wh_GetStringSetting(L"Style.LightMode.iconBgColorMode");
-    wcscpy_s(g_settings.iconBgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customIconBgColor");
-    wcscpy_s(g_settings.customIconBgColorLight, v ? v : L"#FFFFFF"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.iconBgColorMode", g_settings.iconBgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customIconBgColor", g_settings.customIconBgColorLight, L"#FFFFFF");
     g_settings.iconBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.iconBgOpacity");
     if (g_settings.iconBgOpacityLight < 0) g_settings.iconBgOpacityLight = 0;
     if (g_settings.iconBgOpacityLight > 100) g_settings.iconBgOpacityLight = 100;
 
-    v = Wh_GetStringSetting(L"Style.LightMode.indicatorBgColorMode");
-    wcscpy_s(g_settings.indicatorBgColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customIndicatorBgColor");
-    wcscpy_s(g_settings.customIndicatorBgColorLight, v ? v : L"#EAEAEA"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.indicatorBgColorMode", g_settings.indicatorBgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customIndicatorBgColor", g_settings.customIndicatorBgColorLight, L"#EAEAEA");
     g_settings.indicatorBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityLight < 0) g_settings.indicatorBgOpacityLight = 0;
     if (g_settings.indicatorBgOpacityLight > 100) g_settings.indicatorBgOpacityLight = 100;
     
-    v = Wh_GetStringSetting(L"Style.LightMode.indicatorTextColorMode");
-    wcscpy_s(g_settings.indicatorTextColorModeLight, v ? v : L"default"); Wh_FreeStringSetting(v);
-    v = Wh_GetStringSetting(L"Style.LightMode.customIndicatorTextColor");
-    wcscpy_s(g_settings.customIndicatorTextColorLight, v ? v : L"#000000"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Style.LightMode.indicatorTextColorMode", g_settings.indicatorTextColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customIndicatorTextColor", g_settings.customIndicatorTextColorLight, L"#000000");
 
-    v = Wh_GetStringSetting(L"Appearance.Font.fontFamily");
-    wcscpy_s(g_settings.fontFamily, v ? v : L"Segoe UI"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Font.fontFamily", g_settings.fontFamily, L"Segoe UI");
     
     g_settings.fontSize = Wh_GetIntSetting(L"Appearance.Font.fontSize");
     if (g_settings.fontSize <= 0) g_settings.fontSize = 9;
 
-    v = Wh_GetStringSetting(L"Appearance.Font.fontStyle");
-    wcscpy_s(g_settings.fontStyle, v ? v : L"regular"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Appearance.Font.fontStyle", g_settings.fontStyle, L"regular");
 
     g_settings.applyToGroupIndicator = Wh_GetIntSetting(L"Appearance.Font.applyToGroupIndicator");
 
-    v = Wh_GetStringSetting(L"Accessibility.switcherDisplayBehavior");
-    wcscpy_s(g_settings.switcherDisplayBehavior, v ? v : L"cursorMonitor"); Wh_FreeStringSetting(v);
+    LoadStringSetting(L"Accessibility.switcherDisplayBehavior", g_settings.switcherDisplayBehavior, L"cursorMonitor");
 
     // Exclusion patterns (newline-delimited text fields)
     g_excludeTitlePatterns.clear();
@@ -4808,7 +5185,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
     g_hSwitcher = CreateWindowExW(exStyle, SWS_CLASSNAME, L"",
-        dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
+        dwStyle, -9999, -9999, 1, 1, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
 
     g_hCloseBtnWnd = CreateWindowExW(
@@ -4861,7 +5238,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
 // Tool Mod callbacks
 
-bool WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
     g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
     return g_hSwitcherThread != NULL;
@@ -4877,15 +5254,24 @@ void WhTool_ModUninit() {
         g_hSwitcherThread = NULL;
         g_dwSwitcherThreadId = 0;
     }
+    for (auto& pair : g_uwpIconCache) {
+        if (pair.second) DestroyIcon(pair.second);
+    }
+    g_uwpIconCache.clear();
+    for (auto& pair : g_exeIconCache) {
+        if (pair.second) DestroyIcon(pair.second);
+    }
+    g_exeIconCache.clear();
+    for (auto& pair : g_customIconCache) {
+        if (pair.second) DestroyIcon(pair.second);
+    }
+    g_customIconCache.clear();
 }
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModSettingsChanged");
     if (g_hSwitcher) {
-        LoadSettings();
-        if (g_isVisible) {
-            ShowSwitcher(g_isSticky);
-        }
+        PostMessage(g_hSwitcher, WM_SWS_SETTINGS_CHANGED, 0, 0);
     }
 }
 
@@ -4925,6 +5311,20 @@ BOOL Wh_ModInit() {
     exeName = exeName ? exeName + 1 : exePath;
     Wh_Log(L"SWS: Wh_ModInit in process: %s", exeName);
 
+    // Cache Windows version once so callers don't need to read the registry repeatedly.
+    {
+        DWORD sz = 0;
+        RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                     L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, NULL, &sz);
+        if (sz > 0) {
+            std::wstring buf(sz / sizeof(WCHAR), L'\0');
+            if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                             L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, &buf[0], &sz) == ERROR_SUCCESS) {
+                g_isWin11OrGreater = (_wtoi(buf.c_str()) >= 22000);
+            }
+        }
+    }
+
     // --- explorer.exe path: hook RegisterHotKey only ---
     if (_wcsicmp(exeName, L"explorer.exe") == 0) {
         g_isExplorer = true;
@@ -4933,7 +5333,7 @@ BOOL Wh_ModInit() {
         if (!g_WM_SWS_GET_UWP_ICON) {
             g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
         }
-        g_explorerIpcThread = CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, NULL);
+        g_explorerIpcThread = CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, &g_explorerIpcThreadId);
 
         HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
         if (hUser32) {
@@ -5134,14 +5534,12 @@ void Wh_ModUninit() {
         HWND promptWnd = g_restartExplorerPromptWindow;
         if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
 
-        HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
-        if (hIpc) {
-            PostMessageW(hIpc, WM_QUIT, 0, 0);
-        }
+        if (g_explorerIpcThreadId) PostThreadMessage(g_explorerIpcThreadId, WM_QUIT, 0, 0);
         if (g_explorerIpcThread) {
-            WaitForSingleObject(g_explorerIpcThread, 5000);
+            WaitForSingleObject(g_explorerIpcThread, INFINITE);
             CloseHandle(g_explorerIpcThread);
             g_explorerIpcThread = NULL;
+            g_explorerIpcThreadId = 0;
         }
         for (auto& pair : g_uwpIconCache) {
             if (pair.second) DestroyIcon(pair.second);
@@ -5163,7 +5561,11 @@ void Wh_ModUninit() {
         }
 
         if (g_restartExplorerPromptThread) {
-            WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT) {
+                HWND wnd = g_restartExplorerPromptWindow;
+                if (wnd) PostMessage(wnd, WM_CLOSE, 0, 0);
+                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+            }
             CloseHandle(g_restartExplorerPromptThread);
             g_restartExplorerPromptThread = NULL;
         }
