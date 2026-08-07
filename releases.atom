@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-06T07:59:49.000Z</updated>
+    <updated>2026-08-07T15:30:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 "Please Wait" Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-please-wait-restorer#8f52521d39ea694fc4809a963808a6bfafcc2b5e</id>
+        <link href="https://windhawk.net/mods/win7-please-wait-restorer"/>
+        <updated>2026-08-07T15:30:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows781pleasewaitrestorer">Windows 7/8.1 "Please Wait" Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod shows the small classic "Please wait" box from Windows 7/8.1 while the
+system changes the theme, instead of the modern full-screen overlay. The
+built-in text is localized for several common display languages while unsupported
+languages use English.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/PleaseWait.PNG" alt="screenshot" /></p>
+<h2 id="notes">Notes</h2>
+<p>The mod has been tested on Windows 10 1809 and Windows 10 21H2.
+Additionally, the mod only attaches when <code>themeui.dll</code> is actually loaded by one of the
+included processes. If the private themeui symbol is unavailable on a Windows
+build, the mod remains inactive in that process.
+For specific setups (such as unsupported language), it is recommended to apply the required changes using the mod's settings.</p>
+<h2 id="knownlimitations">Known Limitations</h2>
+<p>On legacy Windows 10 builds (particularly version 1809 and prior), altering the display DPI scaling while the mod is running can result in slight rendering anomalies. For instance, the captured backdrop or classic box may appear misaligned until a subsequent theme change occurs. To ensure full restoration of proper rendering, it is advisable to restart explorer.exe or perform a user logoff/logon cycle following any DPI modification.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Nex — Testing on Windows 10 21H2 and providing feedback</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Startup App Delay Fix 1.4]]></title>
         <id>https://windhawk.net/mods/startup-app-delay-fix#bc4c75fe4152fde646d366530f5b560e2bbdabd2</id>
@@ -941,33 +971,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Energy Saver Power Plan Link 1.0.0]]></title>
-        <id>https://windhawk.net/mods/energy-saver-power-plan-link#18615a32f83d3bcde2a32bd7ef648021b8100cc5</id>
-        <link href="https://windhawk.net/mods/energy-saver-power-plan-link"/>
-        <updated>2026-07-22T09:34:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="energysaverpowerplanlink">Energy Saver Power Plan Link</h1>
-<p>When Windows Energy Saver is enabled:</p>
-<ul>
-<li>Saves the currently active power plan.</li>
-<li>Switches to the standard Power Saver plan.</li>
-</ul>
-<p>When Energy Saver is disabled:</p>
-<ul>
-<li>Restores the saved plan only if Power Saver is still active.</li>
-<li>If the user manually selected another plan, that selection is preserved.</li>
-</ul>
-<p>Disabling the mod also restores the previous plan when appropriate.</p>
-<blockquote>
-  <p>On some Modern Standby systems, the classic Power Saver plan might not be
-  available. In that case, Windows can't switch to that plan and the mod leaves
-  the current plan unchanged.</p>
-</blockquote>]]></content>
-        <author>
-            <name>Yusseter</name>
-            <uri>https://github.com/Yusseter</uri>
         </author>
     </entry>
 </feed>

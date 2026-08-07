@@ -15451,6 +15451,36 @@
         "version": "4.0.0"
       }
     },
+    "win7-please-wait-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786116651000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786116651000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "babamohammed",
+        "compilerOptions": "-lgdi32 -lshcore -lmsimg32",
+        "description": "This mod replaces the theme-switch overlay with the classic \"Please wait\" box from Windows 7/8.1.",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "rundll32.exe",
+          "explorer.exe",
+          "SystemSettings.exe"
+        ],
+        "name": "Windows 7/8.1 \"Please Wait\" Restorer",
+        "version": "1.0.0"
+      }
+    },
     "win7-style-uac-dim": {
       "details": {
         "defaultSorting": 24744,
