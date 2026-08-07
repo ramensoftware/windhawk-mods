@@ -84,6 +84,12 @@ class CDimmedWindow;
 using CDimmedWindow_OnPaint_t = void(THISCALL*)(CDimmedWindow*, HDC);
 static CDimmedWindow_OnPaint_t g_originalOnPaint = nullptr;
 
+// Original CDimmedWindow::WndProc (static window procedure of the dimmed
+// window). Hooked so the backdrop cache can be freed on WM_NCDESTROY; the
+// hook is installed/uninstalled together with the OnPaint hook, so no
+// subclass bookkeeping (and no cross-thread subclass removal) is needed.
+static WNDPROC g_originalWndProc = nullptr;
+
 static std::atomic<bool> g_themeUiHandled = false;
 static std::mutex g_settingsMutex;
 
@@ -546,39 +552,54 @@ static void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
     const int clientWidth = clientRect.right - clientRect.left;
     const int clientHeight = clientRect.bottom - clientRect.top;
 
-    // Calculate desaturation amount once, before the lock
-    const float target = g_settings.desaturationPercent.load() / 100.0f;
-    float amount = 0.0f;
-    if (target > 0.0f) {
-        const int rampMs = g_settings.desaturationRampMs.load();
-        const ULONGLONG elapsed = GetTickCount64() - g_backdropCache.startTime;
-        if (rampMs <= 0 || elapsed >= (ULONGLONG)rampMs) {
-            amount = target;
-        } else {
-            double t = (double)elapsed / (double)rampMs;
-            t = t * t * (3.0 - 2.0 * t);
-            amount = target * (float)t;
-        }
-    }
-
     {
         std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
 
-        if (!g_backdropCache.valid ||
-            !haveOrigin ||
-            g_backdropCache.hwnd != hwnd ||
-            g_backdropCache.dpi != monitorDpi ||
-            g_backdropCache.origin.x != origin.x ||
-            g_backdropCache.origin.y != origin.y ||
-            g_backdropCache.size.right != clientWidth ||
-            g_backdropCache.size.bottom != clientHeight) {
+        // Use the cache only if it was built for this window and still
+        // matches its current position/size/DPI.
+        const bool cacheMatches =
+            g_backdropCache.valid &&
+            g_backdropCache.hwnd == hwnd &&
+            g_backdropCache.dpi == monitorDpi &&
+            g_backdropCache.origin.x == origin.x &&
+            g_backdropCache.origin.y == origin.y &&
+            g_backdropCache.size.right == clientWidth &&
+            g_backdropCache.size.bottom == clientHeight;
+
+        if (!cacheMatches) {
             if (haveOrigin)
                 BuildBackdropCache(hwnd, clientRect, monitorDpi);
+            // If the origin could not be resolved or the capture failed,
+            // do not fall back to a capture that belongs to a different
+            // window: paint the original content instead.
+            if (!haveOrigin || !g_backdropCache.valid) {
+                if (g_originalOnPaint) g_originalOnPaint(window, hdc);
+                return;
+            }
         }
 
-        if (!g_backdropCache.valid) {
-            if (g_originalOnPaint) g_originalOnPaint(window, hdc);
-            return;
+        // The desaturation amount is computed here, after the cache has
+        // been built, so the ramp always starts from the fresh startTime
+        // that BuildBackdropCache just set. Computing it before the build
+        // meant the first frame saw startTime == 0 (or a stale value from
+        // a previous switch), so elapsed >= rampMs held and the frame
+        // snapped straight to the target desaturation - and because
+        // amount < target was then false, no further frame was scheduled
+        // and the ramp never played at all. Computing it under the lock
+        // also makes the ULONGLONG startTime read atomic (on x86 it was
+        // a potentially torn read).
+        const float target = g_settings.desaturationPercent.load() / 100.0f;
+        float amount = 0.0f;
+        if (target > 0.0f) {
+            const int rampMs = g_settings.desaturationRampMs.load();
+            const ULONGLONG elapsed = GetTickCount64() - g_backdropCache.startTime;
+            if (rampMs <= 0 || elapsed >= (ULONGLONG)rampMs) {
+                amount = target;
+            } else {
+                double t = (double)elapsed / (double)rampMs;
+                t = t * t * (3.0 - 2.0 * t);
+                amount = target * (float)t;
+            }
         }
 
         // Compose everything into the offscreen buffer first
@@ -608,13 +629,45 @@ static void THISCALL CDimmedWindow_OnPaintHook(CDimmedWindow* window, HDC hdc) {
     }
 }
 
+// The dimmed window is destroyed when the theme switch finishes. The cache
+// holds three full-screen 32-bpp DIB sections plus three memory DCs
+// (~25 MB at 1080p, ~100 MB at 4K, more on multi-monitor setups): keeping
+// it until the mod is unloaded would leave that memory resident in the
+// long-lived explorer.exe / SystemSettings.exe process after every switch.
+// Tying the cache lifetime to its window also means a later dimmed window
+// that happens to reuse the same HWND value can never be painted with the
+// previous switch's capture.
+static void FreeBackdropCacheIfForWindow(HWND hwnd) {
+    std::lock_guard<std::recursive_mutex> lock(g_cacheMutex);
+    if (g_backdropCache.hwnd == hwnd)
+        FreeBackdropCache();
+}
+
+static LRESULT CALLBACK CDimmedWindow_WndProcHook(HWND hWnd, UINT uMsg,
+                                                  WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_NCDESTROY)
+        FreeBackdropCacheIfForWindow(hWnd);
+    return g_originalWndProc(hWnd, uMsg, wParam, lParam);
+}
+
 static bool HookThemeUiSymbols(HMODULE themeUi) {
-    WindhawkUtils::SYMBOL_HOOK themeuiDllHook = {
-        { L"private: void " STHICALL L" CDimmedWindow::OnPaint(struct HDC__ *)" },
-        &g_originalOnPaint, CDimmedWindow_OnPaintHook, false
+    WindhawkUtils::SYMBOL_HOOK themeuiDllHooks[] = {
+        {
+            { L"private: void " STHICALL L" CDimmedWindow::OnPaint(struct HDC__ *)" },
+            &g_originalOnPaint, CDimmedWindow_OnPaintHook, false
+        },
+        {
+            {
+                // x64 and x86 undecorated names; the first one that matches
+                // the module's symbols is used.
+                L"private: static __int64 __cdecl CDimmedWindow::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
+                L"private: static long __stdcall CDimmedWindow::WndProc(struct HWND__ *,unsigned int,unsigned int,long)",
+            },
+            &g_originalWndProc, CDimmedWindow_WndProcHook, false
+        },
     };
-    if (!WindhawkUtils::HookSymbols(themeUi, &themeuiDllHook, 1)) {
-        Wh_Log(L"CDimmedWindow::OnPaint was not resolved");
+    if (!WindhawkUtils::HookSymbols(themeUi, themeuiDllHooks, ARRAYSIZE(themeuiDllHooks))) {
+        Wh_Log(L"CDimmedWindow symbols were not resolved");
         return false;
     }
     return true;
@@ -678,5 +731,8 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+    // Windhawk removes the WndProc/OnPaint hooks automatically on unload,
+    // so unlike the subclassing alternative there is no subclass to remove
+    // here (and therefore no cross-thread RemoveWindowSubclass SendMessage).
     FreeBackdropCache();
 }
