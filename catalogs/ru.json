@@ -15919,12 +15919,12 @@
           19
         ],
         "ratingUsers": 20,
-        "updated": 1785948746000,
+        "updated": 1786103620000,
         "users": 185
       },
       "metadata": {
         "author": "ReDrag",
-        "compilerOptions": "-ladvapi32 -ldwmapi -lgdi32 -lole32 -loleaut32 -luuid -luser32",
+        "compilerOptions": "-ladvapi32 -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -luuid -luser32",
         "description": "Smooth minimize, restore, close, switch animations for windows.",
         "exclude": [
           "TextInputHost.exe",
@@ -15939,7 +15939,7 @@
         ],
         "license": "MIT",
         "name": "Windows Animations",
-        "version": "1.1.5"
+        "version": "1.1.7"
       }
     },
     "winui-context-menu-animation": {
