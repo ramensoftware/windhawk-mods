@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              explorer-command-bar
 // @name            Explorer Command Bar
-// @description     Add your own buttons and dropdown menus to the Windows 11 File Explorer command bar, and hide the built-in ones
-// @version         1.0.0
+// @description     Customize the Windows 11 File Explorer command bar with commands, menus, New+, and a shell context-menu button
+// @version         1.1.0
 // @author          DanRotaru
 // @github          https://github.com/DanRotaru
 // @homepage        https://dan13.me/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32
+// @compilerOptions -ladvapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -20,7 +20,7 @@ Add your own buttons and dropdown menus to the **Windows 11 File Explorer
 command bar** (the toolbar with New / Sort / View), and hide the built-in
 buttons, separators and spacing you don't want.
 
-![Explorer Command Bar demo](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/main.gif)
+![Explorer Command Bar demo](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/explorer-command-bar/screenshots/main.gif)
 
 Designed for Windows 11 24H2 / 25H2 with the WinAppSDK (WinUI 3) File
 Explorer.
@@ -31,6 +31,9 @@ Explorer.
   command of your choice.
 - **Dropdown menus & submenus** - a button can open a menu, and menu entries
   can themselves be submenus (three levels deep).
+- **Shell context menu item** - optionally add an item which opens the real
+  context menu of the active selection or folder, including shell extensions
+  and optional Nilesoft Shell support.
 - **Path & selection placeholders** - `%path%` (active tab folder) and `%sel%`
   (selected file/folder) are substituted into the command parameters.
 - **Flexible icons** - a Segoe Fluent Icons glyph, an `.exe` / `.dll` / `.ico`
@@ -40,10 +43,14 @@ Explorer.
   Share, Delete, Sort, View, the group separators, the "See more" (…) overflow
   menu, the contextual commands (Set as background, Rotate left, Rotate right,
   Extract all) and the Details pane toggle.
+- **Replace New with New+** - turn Explorer's New button into a *New+* button
+  which lists the templates of the
+  [PowerToys **New+**](https://learn.microsoft.com/en-us/windows/powertoys/newplus)
+  utility, with your own label and icon.
 - **Custom item spacing** - set the exact spacing between the command bar
   buttons.
-- **Open menus on hover** - optionally open dropdowns on hover, with a
-  configurable delay.
+- **Open menus on hover** - optionally open dropdowns and the context menu on
+  hover, with a configurable delay.
 - **Rock solid** - buttons are re-applied automatically across tab switches,
   navigation, new tabs and new windows, and everything is cleanly restored when
   the mod is disabled.
@@ -52,11 +59,11 @@ Explorer.
 
 Hiding built‑in buttons and separators:
 
-![Hide buttons](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-buttons.gif)
+![Hide buttons](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/explorer-command-bar/screenshots/hide-buttons.gif)
 
 You may hide even all options, and use only your custom ones:
 
-![Hide All buttons](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/exporer-command-bar/screenshots/hide-all-buttons.jpg)
+![Hide All buttons](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/explorer-command-bar/screenshots/hide-all-buttons.jpg)
 
 ## Command parameters
 
@@ -87,6 +94,69 @@ The **Icon glyph or icon path** field accepts several forms:
   execution aliases such as `wt.exe` are resolved to their real target).
 * **Hide icon** - enable the toggle to show no icon at all.
 
+## Context menu item
+
+Enable **Add the context menu item** in the **Context menu item** settings
+group to append a button which expands File Explorer's real shell context menu.
+It shows the selected items' menu, or the current folder's background menu when
+nothing is selected. Shell extensions and nested entries such as *Open with*
+and *Send to* are supported, and Shift-click includes extended verbs.
+
+The **Let File Explorer show the menu** option is intended for Nilesoft Shell.
+Because Nilesoft replaces the menu from inside Explorer rather than exposing an
+`IContextMenu` handler, this option asks the active file list to display its own
+menu. In that mode Explorer chooses its position.
+
+## Replace New to New+
+
+The **Replace New to New+** group turns Explorer's own **New** button into a
+*New+* button: instead of Explorer's fixed list of file types, the dropdown
+lists the templates of the
+[PowerToys **New+**](https://learn.microsoft.com/en-us/windows/powertoys/newplus)
+utility, and clicking one creates a copy of it in the current folder, selected
+and ready to be renamed.
+
+PowerToys is **not** required: the mod copies the templates itself and never
+talks to the New+ shell extension. It only reads PowerToys' New+ settings file
+(if there is one) to find the templates folder and the *Hide file extension* /
+*Hide starting digits* / *Replace variables* options. Without PowerToys the New+
+defaults are used: templates are read from
+`%LOCALAPPDATA%\Microsoft\PowerToys\NewPlus\Templates`, extensions and starting
+digits are hidden, and variables are not replaced. Any folder can be used
+instead via the **Templates folder** setting.
+
+Every file and folder directly inside the templates folder becomes a menu entry
+(hidden and system files, and `desktop.ini`, are skipped). Folder templates are
+listed first, then files, in the order File Explorer itself would list them, and
+if the name is already taken ` (2)`, ` (3)`, … is appended. The menu is built
+when it's opened, so templates added or removed in the meantime show up without
+reloading anything.
+
+The button takes the place of Explorer's New button, which is collapsed (and can
+be kept visible). Its **label** and **icon** are configurable: with a label the
+familiar chevron (˅) is drawn after the text, and with an empty label - or with
+the label turned off - only the icon is shown, without a chevron. An empty icon
+setting reuses the icon of Explorer's own New button.
+
+### Filename variables
+
+When *Replace variables* is enabled in PowerToys, these are substituted in the
+name of the created copy:
+
+| Variable | Meaning |
+| --- | --- |
+| `$YYYY` | Year, four digits |
+| `$YY` | Year, two digits |
+| `$MM` | Month, two digits |
+| `$DD` | Day, two digits |
+| `$hh` | Hour, two digits (24h) |
+| `$mm` | Minute, two digits |
+| `$ss` | Second, two digits |
+| `$PARENT_FOLDER_NAME` | Name of the folder the item is created in |
+
+Unlike New+, variables are replaced in the file *name* only, never inside the
+file contents.
+
 ## Default configuration
 
 Out of the box the mod adds:
@@ -103,8 +173,8 @@ Out of the box the mod adds:
 
 Items whose command isn't installed simply do nothing when clicked (the failure
 is written to the mod log), so remove the ones you don't need and add your own.
-All of the built-in buttons stay visible by default. Everything is configurable
-in the mod settings.
+All of the built-in buttons stay visible by default, and the New+ button is
+turned off. Everything is configurable in the mod settings.
 
 ## How it works
 
@@ -115,6 +185,10 @@ buttons are then inserted and the visibility / spacing settings are applied. The
 mod also listens for the command bar being rebuilt so the buttons stay in place
 across navigation, new tabs and new windows, and it restores the original state
 of any element it touches when disabled.
+
+The active tab's folder and selection are resolved through `IShellWindows` /
+`IShellBrowser`, off the UI thread, so a slow or unresponsive shell can't block
+the command bar.
 
 Notably, the mod does **not** use XAML Diagnostics
 (`InitializeXamlDiagnosticsEx`), since only one XAML diagnostics consumer can be
@@ -248,6 +322,13 @@ a new tab or navigating to another folder makes them appear.
         - parameters: '"%path%"'
         - iconGlyph: ""
         - separatorAfter: false
+        - subItems:
+          - - name: ""
+            - command: ""
+            - parameters: ""
+            - iconGlyph: ""
+            - hideIcon: false
+            - separatorAfter: false
       - - type: button
         - name: Open Paint
         - command: mspaint.exe
@@ -373,10 +454,96 @@ a new tab or navigating to another folder makes them appear.
     separator of the contextual commands (Set as background, Rotate left,
     Rotate right, Extract all) is hidden along with them, once none of them is
     left to show.
+- newPlus:
+  - enabled: false
+    $name: Replace New with New+
+    $description: >-
+      Put a New+ button in the place of Explorer's New button. Its dropdown
+      lists the templates of the PowerToys New+ utility instead of Explorer's
+      fixed list of file types, and clicking one creates a copy of it in the
+      current folder. PowerToys isn't required - the mod copies the templates
+      itself and only reads PowerToys' New+ settings, if there are any.
+  - showLabel: true
+    $name: Show the button label
+    $description: >-
+      Show the label next to the icon, the way Explorer's own New button does,
+      with a chevron after the text. When disabled, only the icon is shown, no
+      chevron is drawn, and the label becomes the button's tooltip.
+  - buttonLabel: New
+    $name: Button label
+    $description: >-
+      The text of the button, also used as its tooltip when the label is
+      hidden. Leave empty for an icon-only button without a chevron.
+  - buttonIcon: ""
+    $name: Button icon glyph or icon path
+    $description: >-
+      Leave empty to reuse the icon of Explorer's own New button.
+      Alternatively, a hex code point of a Segoe Fluent Icons glyph, e.g. E710
+      (https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font),
+      or a path to an .exe, .dll or .ico file, optionally with an icon index,
+      e.g. C:\Windows\System32\shell32.dll,3.
+  - templateFolder: ""
+    $name: Templates folder
+    $description: >-
+      The folder to read the templates from. Leave empty to use the folder
+      configured in PowerToys, or the New+ default location
+      (%LOCALAPPDATA%\Microsoft\PowerToys\NewPlus\Templates) if PowerToys isn't
+      installed.
+  - showIcons: true
+    $name: Show template icons
+    $description: >-
+      Show the shell icon of each template in the menu. Disable it if opening
+      the menu feels slow with many templates.
+  - showTemplatesFolderItem: true
+    $name: Add an "Open templates folder" entry
+    $description: >-
+      Append an entry which opens the templates folder, creating it if it
+      doesn't exist yet.
+  - keepOriginalNewButton: false
+    $name: Keep Explorer's New button
+    $description: >-
+      Show the built-in New button next to the New+ button instead of hiding
+      it.
+  $name: Replace New to New+
+  $description: >-
+    Replace Explorer's New button with a New+ button which creates files and
+    folders from your own templates, the way the PowerToys New+ utility does.
+    The label and the icon of the button are up to you.
+- contextMenuItem:
+  - enabled: false
+    $name: Add the context menu item
+    $description: >-
+      Add another command bar item which opens the shell context menu of the
+      current selection or folder, like right-clicking in File Explorer.
+  - useNilesoftShell: false
+    $name: Let File Explorer show the menu (for Nilesoft Shell)
+    $description: >-
+      Ask the file list to show its own context menu instead of building the
+      classic shell menu. Enable this for Nilesoft Shell, which replaces the
+      menu from inside Explorer. The menu is positioned by Explorer and the
+      active selection or folder background automatically.
+  - showLabel: false
+    $name: Show the item label
+    $description: >-
+      Show the label next to the icon. When disabled, only the icon is shown
+      and the label becomes the tooltip.
+  - buttonLabel: Context menu
+    $name: Item label
+    $description: The label and tooltip of the context menu item.
+  - buttonIcon: E8FD
+    $name: Item icon glyph or icon path
+    $description: >-
+      A Segoe Fluent Icons hex code point, or an .exe, .dll or .ico path with
+      an optional icon index. Leave empty for the default glyph.
+  $name: Context menu item
+  $description: >-
+    Add a configurable item which expands the real File Explorer shell context
+    menu for the active tab.
 - openMenuOnHover: false
   $name: Open menus on hover
   $description: >-
     Open dropdown menus by hovering over the button instead of clicking it.
+    Applies to the New+ button as well.
 - menuHoverDelay: 400
   $name: Hover delay (milliseconds)
   $description: >-
@@ -402,16 +569,21 @@ a new tab or navigating to another folder makes them appear.
 #include <servprov.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 #include <shobjidl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 #include <cwctype>
+#include <functional>
 #include <memory>
+#include <type_traits>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -477,6 +649,26 @@ constexpr int kDeleteButtonIndex = 6;
 constexpr int kSortButtonIndex = 7;
 constexpr int kViewButtonIndex = 8;
 
+// The New+ button which takes the place of Explorer's New button.
+struct NewPlusSettings {
+    bool enabled = false;
+    bool showLabel = true;
+    std::wstring buttonLabel = L"New";
+    std::wstring buttonIcon;
+    std::wstring templateFolder;
+    bool showIcons = true;
+    bool showTemplatesFolderItem = true;
+    bool keepOriginalNewButton = false;
+};
+
+struct ContextMenuItemSettings {
+    bool enabled = false;
+    bool useNilesoftShell = false;
+    bool showLabel = false;
+    std::wstring buttonLabel = L"Context menu";
+    std::wstring buttonIcon;
+};
+
 struct {
     std::mutex mutex;
     bool openMenuOnHover = false;
@@ -487,6 +679,8 @@ struct {
     bool hideDetailsButton = false;
     int itemSpacing = -1;
     std::vector<ActionItem> items;
+    NewPlusSettings newPlus;
+    ContextMenuItemSettings contextMenuItem;
 } g_settings;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -500,6 +694,7 @@ struct {
 #undef GetCurrentTime
 
 #include <winrt/base.h>
+#include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
@@ -510,14 +705,17 @@ struct {
 #include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.Documents.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
 
+namespace wdj = winrt::Windows::Data::Json;
 namespace wf = winrt::Windows::Foundation;
 namespace wfc = winrt::Windows::Foundation::Collections;
 namespace mux = winrt::Microsoft::UI::Xaml;
 namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
+namespace muxd = winrt::Microsoft::UI::Xaml::Documents;
 namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 
 #pragma endregion  // winrt_hpp
@@ -525,7 +723,12 @@ namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
+// Our own elements are recognized by their name. The action buttons and their
+// separators share a prefix (the index of the item follows), the New+ button has
+// a name of its own.
 constexpr PCWSTR kButtonNamePrefix = L"WindhawkActionButton";
+constexpr PCWSTR kNewPlusButtonName = L"WindhawkNewPlusButton";
+constexpr PCWSTR kContextMenuButtonName = L"WindhawkContextMenuButton";
 
 // Everything below is per-UI-thread state, and every XAML object in it belongs
 // to the thread that created it: a weak reference to a live non-agile XAML
@@ -548,6 +751,63 @@ thread_local std::vector<CommandBarEntry> g_entries;
 // Set once a scan of this thread's XAML island found its command bars, so the
 // focus hook can skip the tree walk while they're still around.
 thread_local bool g_threadScanned;
+
+// Every event handler the mod registers on the elements it creates has to be
+// revoked before the mod is unloaded. The delegate object itself lives in this
+// DLL, so XAML releasing it afterwards - even without ever invoking it again -
+// would run code from an unmapped module. Handlers are registered with
+// winrt::auto_revoke and their revokers are kept here until the buttons are
+// taken down, or until the mod is disabled.
+struct TrackedRevoker {
+    winrt::weak_ref<wf::IInspectable> source;
+    std::function<void()> revoke;
+};
+
+thread_local std::vector<TrackedRevoker> g_revokers;
+
+constexpr size_t kRevokersPruneMin = 64;
+thread_local size_t g_revokersPruneAt = kRevokersPruneMin;
+
+template <typename T, typename Revoker>
+void TrackRevoker(T const& source, Revoker&& revoker) {
+    // Entries whose element is gone can go: XAML released their delegates
+    // together with the element itself. Only when the vector has grown past
+    // the threshold, though - resolving every weak_ref is a COM call each, and
+    // populating a menu with many items would otherwise be quadratic in them.
+    if (g_revokers.size() >= g_revokersPruneAt) {
+        std::erase_if(g_revokers,
+                      [](TrackedRevoker const& tracked) {
+                          return !tracked.source.get();
+                      });
+
+        // Prune again once the survivors have doubled, so the work stays
+        // proportional to what's actually being added.
+        g_revokersPruneAt = std::max(kRevokersPruneMin, g_revokers.size() * 2);
+    }
+
+    // The revoker types differ per event, so they're type-erased behind the
+    // std::function. Calling revoke() twice is harmless: the second call is a
+    // no-op, which is also what the revoker's own destructor does.
+    auto held =
+        std::make_shared<std::decay_t<Revoker>>(std::forward<Revoker>(revoker));
+
+    g_revokers.push_back({winrt::weak_ref<wf::IInspectable>{source},
+                          [held]() { held->revoke(); }});
+}
+
+void RevokeHandlersForCurrentThread() {
+    std::vector<TrackedRevoker> taken;
+    taken.swap(g_revokers);
+    g_revokersPruneAt = kRevokersPruneMin;
+
+    for (auto const& tracked : taken) {
+        try {
+            tracked.revoke();
+        } catch (...) {
+            Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        }
+    }
+}
 
 // The Explorer elements we touch, each with the original state captured the
 // first time we touched it, so it can be restored exactly instead of forcing a
@@ -613,7 +873,11 @@ ManagedElement& GetManagedElement(mux::UIElement const& element) {
 // its icon.
 
 std::wstring ExpandEnvVars(std::wstring const& str) {
-    WCHAR buffer[MAX_PATH];
+    if (str.empty()) {
+        return str;
+    }
+
+    WCHAR buffer[MAX_PATH * 2];
     DWORD length =
         ExpandEnvironmentStringsW(str.c_str(), buffer, ARRAYSIZE(buffer));
     if (length == 0 || length > ARRAYSIZE(buffer)) {
@@ -621,6 +885,45 @@ std::wstring ExpandEnvVars(std::wstring const& str) {
     }
 
     return buffer;
+}
+
+std::wstring ToLower(std::wstring str) {
+    for (auto& c : str) {
+        c = towlower(c);
+    }
+
+    return str;
+}
+
+std::wstring TrimQuotesAndSpaces(std::wstring str) {
+    size_t first = str.find_first_not_of(L" \t");
+    if (first == std::wstring::npos) {
+        return std::wstring();
+    }
+
+    size_t last = str.find_last_not_of(L" \t");
+    str = str.substr(first, last - first + 1);
+
+    if (str.size() >= 2 && str.front() == L'"' && str.back() == L'"') {
+        str = str.substr(1, str.size() - 2);
+    }
+
+    return str;
+}
+
+std::wstring JoinPath(std::wstring const& folder, std::wstring const& name) {
+    std::wstring result = folder;
+    if (!result.empty() && result.back() != L'\\' && result.back() != L'/') {
+        result += L'\\';
+    }
+
+    return result + name;
+}
+
+bool DirectoryExists(std::wstring const& path) {
+    DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY);
 }
 
 // Resolves a bare executable name to a full path the way ShellExecute does:
@@ -641,11 +944,7 @@ std::wstring ResolveCommandPath(std::wstring const& command) {
     std::wstring keyPath =
         L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" +
         expanded;
-    std::wstring lower = expanded;
-    for (auto& c : lower) {
-        c = towlower(c);
-    }
-    if (!lower.ends_with(L".exe")) {
+    if (!ToLower(expanded).ends_with(L".exe")) {
         keyPath += L".exe";
     }
 
@@ -673,20 +972,48 @@ std::wstring ResolveCommandPath(std::wstring const& command) {
 ////////////////////////////////////////////////////////////////////////////////
 // Getting the current folder path and launching commands.
 
+// Initializes the calling thread's apartment for as long as the scope lives.
+//
+// The pairing is what matters here: every CoInitializeEx which succeeded has to
+// be undone by a CoUninitialize, and that includes S_FALSE - the apartment was
+// already initialized, and the call still took a reference on it. Only
+// RPC_E_CHANGED_MODE leaves nothing to undo, since it means the apartment
+// wasn't entered at all. COM objects created inside the scope have to be
+// released before it ends, which declaring them after it takes care of.
+class ComApartmentScope {
+   public:
+    explicit ComApartmentScope(DWORD coInit)
+        : m_hr(CoInitializeEx(nullptr, coInit)) {}
+
+    ~ComApartmentScope() {
+        if (SUCCEEDED(m_hr)) {
+            CoUninitialize();
+        }
+    }
+
+    ComApartmentScope(const ComApartmentScope&) = delete;
+    ComApartmentScope& operator=(const ComApartmentScope&) = delete;
+
+   private:
+    HRESULT m_hr;
+};
+
+// What the active tab of a File Explorer window is showing. The shell view is
+// only used by the New+ button, to select and rename the item it creates.
 struct ExplorerContext {
     std::wstring folderPath;
     std::wstring selectedPath;
+    winrt::com_ptr<IShellView> shellView;
 };
 
-ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
-    ExplorerContext result;
-
+// The shell view of the given File Explorer window's active tab.
+winrt::com_ptr<IShellView> GetActiveShellView(HWND hExplorerWnd) {
     winrt::com_ptr<IShellWindows> shellWindows;
     HRESULT hr = CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                   IID_PPV_ARGS(shellWindows.put()));
     if (FAILED(hr) || !shellWindows) {
         Wh_Log(L"CoCreateInstance(ShellWindows) failed: %08X", hr);
-        return result;
+        return nullptr;
     }
 
     long count = 0;
@@ -699,7 +1026,7 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
                                      L"ShellTabWindowClass", nullptr)
                      : nullptr;
 
-    for (long i = 0; i < count && result.folderPath.empty(); i++) {
+    for (long i = 0; i < count; i++) {
         VARIANT index;
         VariantInit(&index);
         index.vt = VT_I4;
@@ -750,50 +1077,442 @@ ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
         }
 
         winrt::com_ptr<IShellView> shellView;
-        if (FAILED(shellBrowser->QueryActiveShellView(shellView.put())) ||
-            !shellView) {
-            continue;
+        if (SUCCEEDED(shellBrowser->QueryActiveShellView(shellView.put())) &&
+            shellView) {
+            return shellView;
         }
+    }
 
-        auto folderView = shellView.try_as<IFolderView>();
-        if (!folderView) {
-            continue;
+    return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The shell context menu item.
+
+bool ShellViewHasSelection(winrt::com_ptr<IShellView> const& shellView) {
+    auto folderView = shellView.try_as<IFolderView>();
+    if (!folderView) {
+        return false;
+    }
+
+    int count = 0;
+    return SUCCEEDED(folderView->ItemCount(SVGIO_SELECTION, &count)) &&
+           count > 0;
+}
+
+struct FindWindowByClassParam {
+    PCWSTR className;
+    HWND result;
+};
+
+HWND FindDescendantWindow(HWND hParentWnd, PCWSTR className) {
+    FindWindowByClassParam param{className, nullptr};
+    EnumChildWindows(
+        hParentWnd,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& param = *(FindWindowByClassParam*)lParam;
+            WCHAR buffer[64];
+            if (GetClassNameW(hWnd, buffer, ARRAYSIZE(buffer)) &&
+                _wcsicmp(buffer, param.className) == 0) {
+                param.result = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        (LPARAM)&param);
+    return param.result;
+}
+
+HWND FindShellViewWindow(HWND hExplorerWnd) {
+    HWND hTabWnd =
+        FindWindowExW(hExplorerWnd, nullptr, L"ShellTabWindowClass", nullptr);
+    if (hTabWnd) {
+        if (HWND hViewWnd = FindDescendantWindow(hTabWnd, L"SHELLDLL_DefView")) {
+            return hViewWnd;
         }
+    }
 
-        winrt::com_ptr<IPersistFolder2> persistFolder;
-        if (FAILED(folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) ||
-            !persistFolder) {
-            continue;
-        }
+    return FindDescendantWindow(hExplorerWnd, L"SHELLDLL_DefView");
+}
 
-        LPITEMIDLIST pidl = nullptr;
-        if (FAILED(persistFolder->GetCurFolder(&pidl)) || !pidl) {
-            continue;
-        }
+// Nilesoft Shell replaces the file list's context menu from inside Explorer,
+// so asking the view to show its own menu is the only way to invoke it.
+bool RequestShellViewContextMenu(HWND hExplorerWnd) {
+    HWND hViewWnd = FindShellViewWindow(hExplorerWnd);
+    if (!hViewWnd) {
+        Wh_Log(L"No shell view window for %08X", (DWORD)(ULONG_PTR)hExplorerWnd);
+        return false;
+    }
 
-        WCHAR path[MAX_PATH];
-        if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
-                                  GPFIDL_DEFAULT)) {
-            result.folderPath = path;
-        }
+    return PostMessageW(hViewWnd, WM_CONTEXTMENU, (WPARAM)hViewWnd,
+                        (LPARAM)-1) != FALSE;
+}
 
-        CoTaskMemFree(pidl);
+winrt::com_ptr<IContextMenu> GetShellContextMenu(
+    HWND hExplorerWnd,
+    bool* isItemMenu) {
+    *isItemMenu = false;
 
-        // The first selected file or folder, if any.
-        winrt::com_ptr<IShellItemArray> selection;
-        if (SUCCEEDED(shellView->GetItemObject(
-                SVGIO_SELECTION, IID_PPV_ARGS(selection.put()))) &&
-            selection) {
-            winrt::com_ptr<IShellItem> shellItem;
-            if (SUCCEEDED(selection->GetItemAt(0, shellItem.put())) &&
-                shellItem) {
-                PWSTR selectedPath = nullptr;
-                if (SUCCEEDED(shellItem->GetDisplayName(
-                        SIGDN_FILESYSPATH, &selectedPath)) &&
-                    selectedPath) {
-                    result.selectedPath = selectedPath;
-                    CoTaskMemFree(selectedPath);
+    auto shellView = GetActiveShellView(hExplorerWnd);
+    if (!shellView) {
+        Wh_Log(L"No shell view for window %08X", (DWORD)(ULONG_PTR)hExplorerWnd);
+        return nullptr;
+    }
+
+    *isItemMenu = ShellViewHasSelection(shellView);
+    UINT viewObject = *isItemMenu ? SVGIO_SELECTION : SVGIO_BACKGROUND;
+
+    winrt::com_ptr<IContextMenu> contextMenu;
+    HRESULT hr = shellView->GetItemObject(viewObject, __uuidof(IContextMenu),
+                                          contextMenu.put_void());
+    if (FAILED(hr) || !contextMenu) {
+        Wh_Log(L"GetItemObject(%u) failed: %08X", viewObject, hr);
+        return nullptr;
+    }
+
+    return contextMenu;
+}
+
+constexpr UINT kContextMenuFirstCmdId = 1;
+constexpr UINT kContextMenuLastCmdId = 0x7FFF;
+
+thread_local IContextMenu2* g_trackedContextMenu2;
+thread_local IContextMenu3* g_trackedContextMenu3;
+thread_local bool g_contextMenuIsOpen;
+
+// How many threads are anywhere inside ShowShellContextMenu. Not just the modal
+// loop: GetShellContextMenu walks the shell windows and QueryContextMenu loads
+// and runs every registered shell extension, which is the part that can take a
+// long time, and all of it runs this DLL's code. Wh_ModUninit waits for this to
+// drop to zero before it lets the module be unmapped.
+std::atomic<int> g_openContextMenuCount;
+
+struct OpenContextMenuScope {
+    OpenContextMenuScope() { g_openContextMenuCount++; }
+    ~OpenContextMenuScope() { g_openContextMenuCount--; }
+    OpenContextMenuScope(const OpenContextMenuScope&) = delete;
+    OpenContextMenuScope& operator=(const OpenContextMenuScope&) = delete;
+};
+
+LRESULT CALLBACK ContextMenuOwnerWndProc(HWND hWnd,
+                                         UINT uMsg,
+                                         WPARAM wParam,
+                                         LPARAM lParam) {
+    switch (uMsg) {
+        case WM_INITMENUPOPUP:
+        case WM_DRAWITEM:
+        case WM_MEASUREITEM:
+            if (g_trackedContextMenu3) {
+                LRESULT result = 0;
+                if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
+                        uMsg, wParam, lParam, &result))) {
+                    return result;
                 }
+            } else if (g_trackedContextMenu2 &&
+                       SUCCEEDED(g_trackedContextMenu2->HandleMenuMsg(
+                           uMsg, wParam, lParam))) {
+                return uMsg == WM_INITMENUPOPUP ? 0 : TRUE;
+            }
+            break;
+
+        case WM_MENUCHAR:
+            if (g_trackedContextMenu3) {
+                LRESULT result = 0;
+                if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
+                        uMsg, wParam, lParam, &result)) &&
+                    result) {
+                    return result;
+                }
+            }
+            break;
+    }
+
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+std::wstring ContextMenuOwnerClassName() {
+    return std::wstring(L"WindhawkContextMenuOwner_") + WH_MOD_ID;
+}
+
+// This mod's DLL HINSTANCE. GetModuleHandle(nullptr) would return explorer.exe,
+// which is wrong for RegisterClass/CreateWindowEx/UnregisterClass: the class
+// belongs to the module its window procedure lives in.
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE hInst = nullptr;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)&GetCurrentModuleHandle, &hInst);
+    return hInst;
+}
+
+std::atomic<bool> g_contextMenuOwnerClassRegistered;
+std::mutex g_contextMenuOwnersMutex;
+std::unordered_map<DWORD, HWND> g_contextMenuOwners;
+
+bool IsContextMenuOwnerWindow(DWORD threadId, HWND hWnd) {
+    if (!IsWindow(hWnd) || GetWindowThreadProcessId(hWnd, nullptr) != threadId) {
+        return false;
+    }
+
+    WCHAR className[128];
+    return GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+           _wcsicmp(className, ContextMenuOwnerClassName().c_str()) == 0;
+}
+
+// Registered once, from Wh_ModInit, so that the Explorer UI threads which reach
+// EnsureContextMenuOwnerWindow never race over the registration - and so
+// ERROR_CLASS_ALREADY_EXISTS can be treated as the hard failure it is. For a
+// freshly loaded instance, that error means a previous load left the class
+// behind, and its lpfnWndProc still points at the previous, now unmapped image:
+// a window created on it would dispatch WM_INITMENUPOPUP into freed memory.
+// Doing without the shell context menu item until Explorer restarts is the
+// lesser evil.
+void RegisterContextMenuOwnerClass() {
+    std::wstring className = ContextMenuOwnerClassName();
+    WNDCLASSEXW wc{};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = ContextMenuOwnerWndProc;
+    wc.hInstance = GetCurrentModuleHandle();
+    wc.lpszClassName = className.c_str();
+    if (!RegisterClassExW(&wc)) {
+        DWORD error = GetLastError();
+        Wh_Log(L"RegisterClassEx failed: %u%s", error,
+               error == ERROR_CLASS_ALREADY_EXISTS
+                   ? L" - a previous load of the mod left the class behind, "
+                     L"the shell context menu item will be unavailable until "
+                     L"Explorer is restarted"
+                   : L"");
+        return;
+    }
+
+    g_contextMenuOwnerClassRegistered = true;
+}
+
+HWND EnsureContextMenuOwnerWindow() {
+    DWORD threadId = GetCurrentThreadId();
+    {
+        std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+        auto it = g_contextMenuOwners.find(threadId);
+        if (it != g_contextMenuOwners.end() &&
+            IsContextMenuOwnerWindow(threadId, it->second)) {
+            return it->second;
+        }
+        if (it != g_contextMenuOwners.end()) {
+            g_contextMenuOwners.erase(it);
+        }
+    }
+
+    if (!g_contextMenuOwnerClassRegistered) {
+        return nullptr;
+    }
+
+    HWND hWnd = CreateWindowExW(0, ContextMenuOwnerClassName().c_str(), nullptr,
+                                0, 0, 0, 0, 0, nullptr, nullptr,
+                                GetCurrentModuleHandle(), nullptr);
+    if (!hWnd) {
+        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+    g_contextMenuOwners[threadId] = hWnd;
+    return hWnd;
+}
+
+// Waits until no thread is inside ShowShellContextMenu anymore. There's no
+// timeout on purpose: giving up would mean unmapping the DLL out from under a
+// thread which is still running its code, and the wait can't deadlock, since
+// those threads never send anything to the thread running Wh_ModUninit.
+// WM_CANCELMODE is re-posted on every iteration because a single post can land
+// before the target thread has entered its modal loop, which would drop it.
+void DismissOpenContextMenus() {
+    for (int i = 0; g_openContextMenuCount > 0; i++) {
+        {
+            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+            for (auto const& [threadId, hWnd] : g_contextMenuOwners) {
+                if (IsContextMenuOwnerWindow(threadId, hWnd)) {
+                    PostMessageW(hWnd, WM_CANCELMODE, 0, 0);
+                }
+            }
+        }
+
+        // Once a second, so that an unload which is stuck here - a shell
+        // extension taking its time in QueryContextMenu, say - is diagnosable.
+        if (i > 0 && i % 100 == 0) {
+            Wh_Log(L"Still waiting for %d shell context menu(s)",
+                   g_openContextMenuCount.load());
+        }
+
+        Sleep(10);
+    }
+}
+
+void DestroyContextMenuOwnerWindowForCurrentThread() {
+    if (g_contextMenuIsOpen) {
+        return;
+    }
+
+    HWND hWnd = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+        auto it = g_contextMenuOwners.find(GetCurrentThreadId());
+        if (it == g_contextMenuOwners.end()) {
+            return;
+        }
+        hWnd = it->second;
+        g_contextMenuOwners.erase(it);
+    }
+
+    DestroyWindow(hWnd);
+}
+
+void InvokeShellContextMenuCommand(
+    winrt::com_ptr<IContextMenu> const& contextMenu,
+    UINT cmdId,
+    HWND hExplorerWnd,
+    POINT point) {
+    CMINVOKECOMMANDINFOEX info{};
+    info.cbSize = sizeof(info);
+    info.fMask = CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE;
+    info.hwnd = hExplorerWnd;
+    info.lpVerb = (LPCSTR)(UINT_PTR)(cmdId - kContextMenuFirstCmdId);
+    info.lpVerbW = (LPCWSTR)(UINT_PTR)(cmdId - kContextMenuFirstCmdId);
+    info.nShow = SW_SHOWNORMAL;
+    info.ptInvoke = point;
+    if (GetKeyState(VK_CONTROL) & 0x8000) {
+        info.fMask |= CMIC_MASK_CONTROL_DOWN;
+    }
+    if (GetKeyState(VK_SHIFT) & 0x8000) {
+        info.fMask |= CMIC_MASK_SHIFT_DOWN;
+    }
+
+    HRESULT hr = contextMenu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
+    if (FAILED(hr)) {
+        Wh_Log(L"InvokeCommand failed: %08X", hr);
+    }
+}
+
+void ShowShellContextMenu(HWND hExplorerWnd, POINT point) {
+    if (g_contextMenuIsOpen || g_unloading) {
+        return;
+    }
+
+    // Held for the whole call, not just the modal loop: everything below runs
+    // this DLL's code, including the shell extensions QueryContextMenu brings
+    // in, and Wh_ModUninit has to wait for all of it.
+    OpenContextMenuScope openScope;
+
+    bool useNilesoftShell;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        useNilesoftShell = g_settings.contextMenuItem.useNilesoftShell;
+    }
+
+    if (useNilesoftShell && RequestShellViewContextMenu(hExplorerWnd)) {
+        return;
+    }
+
+    HWND hOwnerWnd = EnsureContextMenuOwnerWindow();
+    if (!hOwnerWnd) {
+        return;
+    }
+
+    ComApartmentScope comScope(COINIT_APARTMENTTHREADED |
+                               COINIT_DISABLE_OLE1DDE);
+
+    bool isItemMenu = false;
+    auto contextMenu = GetShellContextMenu(hExplorerWnd, &isItemMenu);
+    if (!contextMenu) {
+        return;
+    }
+
+    HMENU hMenu = CreatePopupMenu();
+    if (!hMenu) {
+        return;
+    }
+
+    UINT flags = isItemMenu ? CMF_CANRENAME : CMF_NORMAL;
+    if (GetKeyState(VK_SHIFT) & 0x8000) {
+        flags |= CMF_EXTENDEDVERBS;
+    }
+
+    HRESULT hr = contextMenu->QueryContextMenu(
+        hMenu, 0, kContextMenuFirstCmdId, kContextMenuLastCmdId, flags);
+    if (FAILED(hr)) {
+        Wh_Log(L"QueryContextMenu failed: %08X", hr);
+        DestroyMenu(hMenu);
+        return;
+    }
+
+    // Building the menu can take a while, so check again before showing it -
+    // an unload which started in the meantime is waiting for this call.
+    if (g_unloading) {
+        DestroyMenu(hMenu);
+        return;
+    }
+
+    auto contextMenu2 = contextMenu.try_as<IContextMenu2>();
+    auto contextMenu3 = contextMenu.try_as<IContextMenu3>();
+    g_trackedContextMenu2 = contextMenu2.get();
+    g_trackedContextMenu3 = contextMenu3.get();
+    g_contextMenuIsOpen = true;
+
+    UINT cmdId = (UINT)TrackPopupMenuEx(
+        hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN,
+        point.x, point.y, hOwnerWnd, nullptr);
+
+    g_contextMenuIsOpen = false;
+    g_trackedContextMenu2 = nullptr;
+    g_trackedContextMenu3 = nullptr;
+
+    if (cmdId >= kContextMenuFirstCmdId &&
+        cmdId <= kContextMenuLastCmdId && !g_unloading) {
+        InvokeShellContextMenuCommand(contextMenu, cmdId, hExplorerWnd, point);
+    }
+
+    DestroyMenu(hMenu);
+}
+
+// The folder and the selection of the given window's active tab. Always used
+// from a worker thread, so the shell calls it makes can take their time.
+ExplorerContext GetExplorerContext(HWND hExplorerWnd) {
+    ExplorerContext result;
+
+    result.shellView = GetActiveShellView(hExplorerWnd);
+    if (!result.shellView) {
+        return result;
+    }
+
+    if (auto folderView = result.shellView.try_as<IFolderView>()) {
+        winrt::com_ptr<IPersistFolder2> persistFolder;
+        LPITEMIDLIST pidl = nullptr;
+        if (SUCCEEDED(
+                folderView->GetFolder(IID_PPV_ARGS(persistFolder.put()))) &&
+            persistFolder &&
+            SUCCEEDED(persistFolder->GetCurFolder(&pidl)) && pidl) {
+            WCHAR path[MAX_PATH];
+            if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path),
+                                      GPFIDL_DEFAULT)) {
+                result.folderPath = path;
+            }
+
+            CoTaskMemFree(pidl);
+        }
+    }
+
+    // The first selected file or folder, if any.
+    winrt::com_ptr<IShellItemArray> selection;
+    if (SUCCEEDED(result.shellView->GetItemObject(
+            SVGIO_SELECTION, IID_PPV_ARGS(selection.put()))) &&
+        selection) {
+        winrt::com_ptr<IShellItem> shellItem;
+        if (SUCCEEDED(selection->GetItemAt(0, shellItem.put())) && shellItem) {
+            PWSTR selectedPath = nullptr;
+            if (SUCCEEDED(shellItem->GetDisplayName(SIGDN_FILESYSPATH,
+                                                    &selectedPath)) &&
+                selectedPath) {
+                result.selectedPath = selectedPath;
+                CoTaskMemFree(selectedPath);
             }
         }
     }
@@ -880,6 +1599,39 @@ void WaitForLaunchThreads() {
     }
 }
 
+// Runs shell work on a tracked worker thread with an apartment of its own. Used
+// for everything which must not happen on the Explorer UI thread: launching a
+// command, copying a template, opening a folder. Note that the shell objects
+// involved are owned by the Explorer UI thread, so the calls marshal back to it;
+// only the waiting happens elsewhere.
+void RunShellWorkOnWorkerThread(std::function<void()> work) {
+    auto params = std::make_unique<std::function<void()>>(std::move(work));
+
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParam) -> DWORD {
+            std::unique_ptr<std::function<void()>> work(
+                reinterpret_cast<std::function<void()>*>(lpParam));
+
+            ComApartmentScope comScope(COINIT_APARTMENTTHREADED |
+                                       COINIT_DISABLE_OLE1DDE);
+            try {
+                (*work)();
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult().value);
+            }
+
+            return 0;
+        },
+        params.get(), 0, nullptr);
+    if (thread) {
+        params.release();  // Owned by the thread now.
+        // The handle is closed once the thread finished, either here on a later
+        // call or in Wh_ModUninit, which waits for it.
+        TrackLaunchThread(thread);
+    }
+}
+
 void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
     ExplorerContext context = GetExplorerContext(hExplorerWnd);
     Wh_Log(L"Launching %s for window %08X, path: %s, selection: %s",
@@ -900,7 +1652,8 @@ void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
                item.command.c_str());
     }
 
-    SHELLEXECUTEINFOW execInfo = {sizeof(execInfo)};
+    SHELLEXECUTEINFOW execInfo{};
+    execInfo.cbSize = sizeof(execInfo);
     // No UI: a command which doesn't exist would otherwise put up a modal
     // error box on this thread, which the mod would then have to wait for
     // while unloading. The failure is logged below instead. NOASYNC because
@@ -919,16 +1672,14 @@ void LaunchItemForWindow(HWND hExplorerWnd, ActionItem const& item) {
     }
 }
 
-void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
-                     ActionItem const& item) {
-    if (item.command.empty() || g_unloading) {
-        return;
-    }
-
+// The File Explorer window an element of ours belongs to. Note that a menu
+// flyout lives in its own popup window, so the element to ask has to be the
+// anchor button, not the clicked menu item.
+HWND GetExplorerWindowForElement(mux::FrameworkElement const& element) {
     HWND hWnd = nullptr;
 
     try {
-        if (auto xamlRoot = elementForWindow.XamlRoot()) {
+        if (auto xamlRoot = element.XamlRoot()) {
             if (auto environment = xamlRoot.ContentIslandEnvironment()) {
                 hWnd = (HWND)(uintptr_t)environment.AppWindowId().Value;
             }
@@ -943,46 +1694,593 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
     }
 
     if (!hWnd) {
-        hWnd = GetForegroundWindow();
+        // Last resort, and the only candidate which isn't ours by
+        // construction: the foreground window can belong to another process,
+        // and callers post messages into what they get back from here.
+        HWND hForegroundWnd = GetForegroundWindow();
+        DWORD processId = 0;
+        if (hForegroundWnd &&
+            GetWindowThreadProcessId(hForegroundWnd, &processId) &&
+            processId == GetCurrentProcessId()) {
+            hWnd = hForegroundWnd;
+        }
     }
 
     if (hWnd) {
         hWnd = GetAncestor(hWnd, GA_ROOT);
     }
 
-    struct LaunchParams {
-        HWND hExplorerWnd;
-        ActionItem item;
+    return hWnd;
+}
+
+void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
+                     ActionItem const& item) {
+    if (item.command.empty() || g_unloading) {
+        return;
+    }
+
+    HWND hWnd = GetExplorerWindowForElement(elementForWindow);
+
+    // Off the UI thread, so a slow or unresponsive shell can't block the click
+    // handler.
+    RunShellWorkOnWorkerThread(
+        [hWnd, item]() { LaunchItemForWindow(hWnd, item); });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PowerToys' New+ configuration, for the New+ button.
+
+std::wstring GetPowerToysNewPlusFolder() {
+    return ExpandEnvVars(L"%LOCALAPPDATA%\\Microsoft\\PowerToys\\NewPlus");
+}
+
+std::wstring DefaultTemplatesFolder() {
+    return JoinPath(GetPowerToysNewPlusFolder(), L"Templates");
+}
+
+std::wstring ReadFileAsWideString(std::wstring const& path) {
+    HANDLE hFile =
+        CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return std::wstring();
+    }
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(hFile, &size) || size.QuadPart <= 0 ||
+        size.QuadPart > 1024 * 1024) {
+        CloseHandle(hFile);
+        return std::wstring();
+    }
+
+    std::string bytes((size_t)size.QuadPart, '\0');
+    DWORD bytesRead = 0;
+    BOOL succeeded = ReadFile(hFile, bytes.data(), (DWORD)bytes.size(),
+                              &bytesRead, nullptr);
+    CloseHandle(hFile);
+    if (!succeeded) {
+        return std::wstring();
+    }
+
+    bytes.resize(bytesRead);
+
+    // The settings file is UTF-8, with or without a BOM.
+    if (bytes.size() >= 3 && (unsigned char)bytes[0] == 0xEF &&
+        (unsigned char)bytes[1] == 0xBB && (unsigned char)bytes[2] == 0xBF) {
+        bytes.erase(0, 3);
+    }
+
+    int length = MultiByteToWideChar(CP_UTF8, 0, bytes.data(),
+                                     (int)bytes.size(), nullptr, 0);
+    if (length <= 0) {
+        return std::wstring();
+    }
+
+    std::wstring result((size_t)length, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(),
+                        result.data(), length);
+    return result;
+}
+
+// The value of a named setting. PowerToys keeps the settings under a
+// "properties" member and wraps each one in an object with a single "value":
+//
+//   { "properties": { "TemplateLocation": { "value": "C:\\Templates" } } }
+//
+// Both levels are optional here, so a setting written as a plain member is read
+// just as well. Returns a null value if the setting isn't in the file.
+wdj::IJsonValue FindNewPlusSetting(wdj::JsonObject const& root, PCWSTR name) {
+    wdj::JsonObject properties = root;
+    if (auto nested = root.TryLookup(L"properties");
+        nested && nested.ValueType() == wdj::JsonValueType::Object) {
+        properties = nested.GetObject();
+    }
+
+    auto value = properties.TryLookup(name);
+    if (value && value.ValueType() == wdj::JsonValueType::Object) {
+        return value.GetObject().TryLookup(L"value");
+    }
+
+    return value;
+}
+
+struct PowerToysConfig {
+    std::wstring templateFolder;
+    bool hideFileExtension = true;
+    bool hideStartingDigits = true;
+    bool replaceVariables = false;
+};
+
+// Read on demand rather than cached, so changing a PowerToys option takes effect
+// the next time the menu is opened.
+PowerToysConfig ReadPowerToysConfig() {
+    PowerToysConfig config;
+
+    std::wstring json = ReadFileAsWideString(
+        JoinPath(GetPowerToysNewPlusFolder(), L"settings.json"));
+    if (json.empty()) {
+        return config;
+    }
+
+    wdj::JsonObject root{nullptr};
+    if (!wdj::JsonObject::TryParse(json, root)) {
+        Wh_Log(L"Couldn't parse the New+ settings file");
+        return config;
+    }
+
+    // PowerToys writes these as JSON booleans, but older builds wrote them as
+    // strings, so both are accepted.
+    auto readBool = [&root](PCWSTR name, bool fallback) {
+        auto value = FindNewPlusSetting(root, name);
+        if (!value) {
+            return fallback;
+        }
+
+        switch (value.ValueType()) {
+            case wdj::JsonValueType::Boolean:
+                return value.GetBoolean();
+
+            case wdj::JsonValueType::Number:
+                return value.GetNumber() != 0;
+
+            case wdj::JsonValueType::String: {
+                std::wstring text = ToLower(std::wstring(value.GetString()));
+                if (text == L"true" || text == L"1") {
+                    return true;
+                }
+                if (text == L"false" || text == L"0") {
+                    return false;
+                }
+                return fallback;
+            }
+
+            default:
+                return fallback;
+        }
     };
 
-    auto launchParams = std::make_unique<LaunchParams>(hWnd, item);
-
-    // Do the shell COM work off the UI thread, so a slow or unresponsive
-    // shell can't block the click handler. Note that IShellBrowser and
-    // friends are owned by the Explorer UI thread, so the calls marshal back
-    // to it; only the waiting happens elsewhere.
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParam) -> DWORD {
-            std::unique_ptr<LaunchParams> launchParams(
-                reinterpret_cast<LaunchParams*>(lpParam));
-
-            HRESULT hrInit = CoInitializeEx(
-                nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-            LaunchItemForWindow(launchParams->hExplorerWnd,
-                                launchParams->item);
-            if (SUCCEEDED(hrInit)) {
-                CoUninitialize();
-            }
-            return 0;
-        },
-        launchParams.get(), 0, nullptr);
-    if (thread) {
-        launchParams.release();  // Owned by the thread now.
-        // The handle is closed once the thread finished, either here on a
-        // later launch or in Wh_ModUninit, which waits for it.
-        TrackLaunchThread(thread);
+    if (auto templateLocation = FindNewPlusSetting(root, L"TemplateLocation");
+        templateLocation &&
+        templateLocation.ValueType() == wdj::JsonValueType::String) {
+        config.templateFolder =
+            TrimQuotesAndSpaces(std::wstring(templateLocation.GetString()));
     }
+
+    config.hideFileExtension =
+        readBool(L"HideFileExtension", config.hideFileExtension);
+    config.hideStartingDigits =
+        readBool(L"HideStartingDigits", config.hideStartingDigits);
+    config.replaceVariables =
+        readBool(L"ReplaceVariables", config.replaceVariables);
+
+    return config;
+}
+
+// How the templates are presented: PowerToys' own New+ configuration, plus the
+// display options of the mod.
+struct EffectiveConfig {
+    std::wstring templateFolder;
+    bool hideFileExtension;
+    bool hideStartingDigits;
+    bool replaceVariables;
+    bool showIcons;
+    bool showTemplatesFolderItem;
+};
+
+EffectiveConfig GetEffectiveConfig() {
+    std::wstring templateFolderSetting;
+
+    EffectiveConfig config{};
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        templateFolderSetting = g_settings.newPlus.templateFolder;
+        config.showIcons = g_settings.newPlus.showIcons;
+        config.showTemplatesFolderItem =
+            g_settings.newPlus.showTemplatesFolderItem;
+    }
+
+    PowerToysConfig powerToys = ReadPowerToysConfig();
+
+    config.templateFolder = ExpandEnvVars(
+        !templateFolderSetting.empty()
+            ? templateFolderSetting
+            : (!powerToys.templateFolder.empty() ? powerToys.templateFolder
+                                                 : DefaultTemplatesFolder()));
+    config.hideFileExtension = powerToys.hideFileExtension;
+    config.hideStartingDigits = powerToys.hideStartingDigits;
+    config.replaceVariables = powerToys.replaceVariables;
+
+    return config;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The New+ templates.
+
+struct TemplateEntry {
+    std::wstring path;      // Full path of the template.
+    std::wstring fileName;  // Name of the template, as it is on disk.
+    std::wstring displayName;
+    bool isDirectory = false;
+};
+
+// Digits at the start of a template's name are only there to order the menu
+// entries; drop them along with the separator which follows.
+std::wstring StripStartingDigits(std::wstring const& name) {
+    size_t pos = 0;
+    while (pos < name.size() && iswdigit(name[pos])) {
+        pos++;
+    }
+
+    if (pos == 0) {
+        return name;
+    }
+
+    while (pos < name.size() && wcschr(L" .-_", name[pos])) {
+        pos++;
+    }
+
+    // Never end up with an empty label, e.g. for a template named "2024".
+    if (pos >= name.size()) {
+        return name;
+    }
+
+    return name.substr(pos);
+}
+
+std::wstring MakeDisplayName(std::wstring const& fileName,
+                             bool isDirectory,
+                             EffectiveConfig const& config) {
+    std::wstring name = fileName;
+
+    if (!isDirectory && config.hideFileExtension) {
+        size_t dot = name.find_last_of(L'.');
+        if (dot != std::wstring::npos && dot > 0) {
+            name.resize(dot);
+        }
+    }
+
+    if (config.hideStartingDigits) {
+        name = StripStartingDigits(name);
+    }
+
+    return name;
+}
+
+std::vector<TemplateEntry> EnumerateTemplates(EffectiveConfig const& config) {
+    std::vector<TemplateEntry> entries;
+
+    std::wstring pattern = JoinPath(config.templateFolder, L"*");
+
+    WIN32_FIND_DATAW findData{};
+    HANDLE hFind =
+        FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &findData,
+                         FindExSearchNameMatch, nullptr,
+                         FIND_FIRST_EX_LARGE_FETCH);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Couldn't enumerate %s: %u", config.templateFolder.c_str(),
+               GetLastError());
+        return entries;
+    }
+
+    do {
+        std::wstring fileName = findData.cFileName;
+        if (fileName == L"." || fileName == L".." ||
+            _wcsicmp(fileName.c_str(), L"desktop.ini") == 0) {
+            continue;
+        }
+
+        if (findData.dwFileAttributes &
+            (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) {
+            continue;
+        }
+
+        TemplateEntry entry;
+        entry.isDirectory =
+            (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        entry.fileName = fileName;
+        entry.path = JoinPath(config.templateFolder, fileName);
+        entry.displayName =
+            MakeDisplayName(fileName, entry.isDirectory, config);
+        entries.push_back(std::move(entry));
+    } while (FindNextFileW(hFind, &findData));
+
+    FindClose(hFind);
+
+    // Folder templates first, then files, each in the natural, case-insensitive
+    // order File Explorer itself would list them in - the order New+ uses.
+    std::sort(entries.begin(), entries.end(),
+              [](TemplateEntry const& a, TemplateEntry const& b) {
+                  if (a.isDirectory != b.isDirectory) {
+                      return a.isDirectory;
+                  }
+
+                  return StrCmpLogicalW(a.fileName.c_str(),
+                                        b.fileName.c_str()) < 0;
+              });
+
+    return entries;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Creating an item from a New+ template.
+
+std::wstring ReplaceAll(std::wstring str,
+                        std::wstring_view from,
+                        std::wstring const& to) {
+    if (from.empty()) {
+        return str;
+    }
+
+    size_t pos = str.find(from);
+    while (pos != std::wstring::npos) {
+        str.replace(pos, from.size(), to);
+        pos = str.find(from, pos + to.size());
+    }
+
+    return str;
+}
+
+std::wstring TwoDigits(int value) {
+    WCHAR buffer[8];
+    swprintf(buffer, ARRAYSIZE(buffer), L"%02d", value);
+    return buffer;
+}
+
+std::wstring ReplaceNameVariables(std::wstring const& fileName,
+                                  std::wstring const& targetFolder) {
+    SYSTEMTIME time{};
+    GetLocalTime(&time);
+
+    std::wstring parentFolderName;
+    {
+        std::wstring folder = targetFolder;
+        while (!folder.empty() &&
+               (folder.back() == L'\\' || folder.back() == L'/')) {
+            folder.pop_back();
+        }
+
+        size_t slash = folder.find_last_of(L"\\/");
+        parentFolderName =
+            slash == std::wstring::npos ? folder : folder.substr(slash + 1);
+    }
+
+    std::wstring result = fileName;
+    // Longest first, so $YYYY isn't eaten by $YY.
+    result = ReplaceAll(result, L"$PARENT_FOLDER_NAME", parentFolderName);
+    result = ReplaceAll(result, L"$YYYY", std::to_wstring(time.wYear));
+    result = ReplaceAll(result, L"$YY", TwoDigits(time.wYear % 100));
+    result = ReplaceAll(result, L"$MM", TwoDigits(time.wMonth));
+    result = ReplaceAll(result, L"$DD", TwoDigits(time.wDay));
+    result = ReplaceAll(result, L"$hh", TwoDigits(time.wHour));
+    result = ReplaceAll(result, L"$mm", TwoDigits(time.wMinute));
+    result = ReplaceAll(result, L"$ss", TwoDigits(time.wSecond));
+    return result;
+}
+
+// Splits a file name into its base name and extension (including the dot).
+void SplitFileName(std::wstring const& fileName,
+                   bool isDirectory,
+                   std::wstring* baseName,
+                   std::wstring* extension) {
+    size_t dot =
+        isDirectory ? std::wstring::npos : fileName.find_last_of(L'.');
+    if (dot == std::wstring::npos || dot == 0) {
+        *baseName = fileName;
+        extension->clear();
+        return;
+    }
+
+    *baseName = fileName.substr(0, dot);
+    *extension = fileName.substr(dot);
+}
+
+// A path in the target folder which isn't taken yet, in Explorer's style:
+// "Report.docx", "Report (2).docx", ...
+std::wstring MakeUniquePath(std::wstring const& targetFolder,
+                            std::wstring const& fileName,
+                            bool isDirectory) {
+    std::wstring path = JoinPath(targetFolder, fileName);
+    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return path;
+    }
+
+    std::wstring baseName;
+    std::wstring extension;
+    SplitFileName(fileName, isDirectory, &baseName, &extension);
+
+    for (int i = 2; i < 10000; i++) {
+        std::wstring candidate = baseName;
+        candidate += L" (";
+        candidate += std::to_wstring(i);
+        candidate += L")";
+        candidate += extension;
+
+        path = JoinPath(targetFolder, candidate);
+        if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            return path;
+        }
+    }
+
+    return std::wstring();
+}
+
+// Copies a template - a file or a whole folder - into the target folder under
+// the given name.
+//
+// IFileOperation rather than CopyFile and a hand-rolled directory walk: it's
+// what Explorer itself copies with, so long paths, reparse points, alternate
+// streams, elevation and the copy hooks other software installs all behave the
+// way they do for a normal copy, the operation is undoable with Ctrl+Z, and the
+// shell is notified about the new item without a separate SHChangeNotify.
+//
+// FOF_NO_UI, so that nothing can put up a dialog: this runs on a worker thread
+// which Wh_ModUninit waits for, and a modal prompt would stall an unload for as
+// long as it's up. That also answers any collision prompt with "yes", but the
+// caller picked a name which didn't exist a moment earlier, so there's nothing
+// to collide with.
+bool CopyTemplateItem(std::wstring const& source,
+                      std::wstring const& targetFolder,
+                      std::wstring const& targetName) {
+    winrt::com_ptr<IFileOperation> operation;
+    HRESULT hr = CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(operation.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"CoCreateInstance(FileOperation) failed: %08X", hr);
+        return false;
+    }
+
+    hr = operation->SetOperationFlags(FOF_NO_UI);
+    if (FAILED(hr)) {
+        Wh_Log(L"SetOperationFlags failed: %08X", hr);
+        return false;
+    }
+
+    winrt::com_ptr<IShellItem> sourceItem;
+    hr = SHCreateItemFromParsingName(source.c_str(), nullptr,
+                                     IID_PPV_ARGS(sourceItem.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"SHCreateItemFromParsingName(%s) failed: %08X", source.c_str(),
+               hr);
+        return false;
+    }
+
+    winrt::com_ptr<IShellItem> targetFolderItem;
+    hr = SHCreateItemFromParsingName(targetFolder.c_str(), nullptr,
+                                     IID_PPV_ARGS(targetFolderItem.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"SHCreateItemFromParsingName(%s) failed: %08X",
+               targetFolder.c_str(), hr);
+        return false;
+    }
+
+    hr = operation->CopyItem(sourceItem.get(), targetFolderItem.get(),
+                             targetName.c_str(), nullptr);
+    if (FAILED(hr)) {
+        Wh_Log(L"CopyItem failed: %08X", hr);
+        return false;
+    }
+
+    hr = operation->PerformOperations();
+    if (FAILED(hr)) {
+        Wh_Log(L"PerformOperations failed: %08X", hr);
+        return false;
+    }
+
+    // PerformOperations succeeds even when the individual copy didn't go
+    // through - a denied elevation, say - so ask separately.
+    BOOL aborted = FALSE;
+    if (SUCCEEDED(operation->GetAnyOperationsAborted(&aborted)) && aborted) {
+        Wh_Log(L"The copy of %s was aborted", source.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// Selects the created item and starts editing its name, the way Explorer's own
+// New command does. The view learns about the new item asynchronously, so give
+// it a few chances.
+void SelectAndRename(winrt::com_ptr<IShellView> const& shellView,
+                     std::wstring const& path) {
+    if (!shellView) {
+        return;
+    }
+
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) ||
+        !pidl) {
+        return;
+    }
+
+    PCUITEMID_CHILD child = ILFindLastID(pidl);
+
+    auto folderView = shellView.try_as<IFolderView>();
+
+    // The view learns about the new item from a change notification, so
+    // selecting it can come too early, in which case nothing happens (and
+    // nothing fails either). Retry until the item is actually selected.
+    for (int attempt = 0; attempt < 20 && !g_unloading; attempt++) {
+        Sleep(50);
+
+        HRESULT hr = shellView->SelectItem(
+            child, SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE |
+                       SVSI_FOCUSED | SVSI_EDIT);
+        if (FAILED(hr)) {
+            continue;
+        }
+
+        if (!folderView) {
+            break;
+        }
+
+        int selectedCount = 0;
+        if (SUCCEEDED(
+                folderView->ItemCount(SVGIO_SELECTION, &selectedCount)) &&
+            selectedCount > 0) {
+            break;
+        }
+    }
+
+    CoTaskMemFree(pidl);
+}
+
+void CreateFromTemplateForWindow(HWND hExplorerWnd,
+                                 TemplateEntry const& entry,
+                                 bool replaceVariables) {
+    ExplorerContext context = GetExplorerContext(hExplorerWnd);
+    if (context.folderPath.empty()) {
+        Wh_Log(L"No filesystem folder for window %08X",
+               (DWORD)(ULONG_PTR)hExplorerWnd);
+        return;
+    }
+
+    std::wstring fileName =
+        replaceVariables
+            ? ReplaceNameVariables(entry.fileName, context.folderPath)
+            : entry.fileName;
+
+    std::wstring targetPath =
+        MakeUniquePath(context.folderPath, fileName, entry.isDirectory);
+    if (targetPath.empty()) {
+        Wh_Log(L"Couldn't find a free name for %s", fileName.c_str());
+        return;
+    }
+
+    Wh_Log(L"Creating %s from %s", targetPath.c_str(), entry.path.c_str());
+
+    bool succeeded = CopyTemplateItem(
+        entry.path, context.folderPath, PathFindFileNameW(targetPath.c_str()));
+
+    // A folder template can be copied only partially, in which case the folder
+    // itself is there and worth selecting.
+    if (!succeeded &&
+        GetFileAttributesW(targetPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return;
+    }
+
+    // No SHChangeNotify: IFileOperation notifies the shell about what it
+    // created itself.
+    SelectAndRename(context.shellView, targetPath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1275,10 +2573,7 @@ bool LooksLikeIconPath(std::wstring const& iconSetting) {
         return true;
     }
 
-    std::wstring lower = iconSetting;
-    for (auto& c : lower) {
-        c = towlower(c);
-    }
+    std::wstring lower = ToLower(iconSetting);
 
     // Also allow a bare file name, possibly with an icon index.
     size_t comma = lower.rfind(L',');
@@ -1429,6 +2724,13 @@ std::shared_ptr<DecodedIcon> GetIcon(std::wstring const& iconSetting,
         .first->second;
 }
 
+muxc::IconElement CreateGlyphIcon(PCWSTR glyph) {
+    muxc::FontIcon fontIcon;
+    fontIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
+    fontIcon.Glyph(glyph);
+    return fontIcon;
+}
+
 // Returns nullptr if no icon could be resolved from the settings.
 muxc::IconElement TryCreateIconElement(std::wstring const& iconSetting,
                                        std::wstring const& command) {
@@ -1451,10 +2753,7 @@ muxc::IconElement TryCreateIconElement(std::wstring const& iconSetting,
         return nullptr;
     }
 
-    muxc::FontIcon fontIcon;
-    fontIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
-    fontIcon.Glyph(glyph.c_str());
-    return fontIcon;
+    return CreateGlyphIcon(glyph.c_str());
 }
 
 muxc::IconElement CreateIconElement(std::wstring const& iconSetting,
@@ -1464,10 +2763,7 @@ muxc::IconElement CreateIconElement(std::wstring const& iconSetting,
         return icon;
     }
 
-    muxc::FontIcon fontIcon;
-    fontIcon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
-    fontIcon.Glyph(defaultGlyph);
-    return fontIcon;
+    return CreateGlyphIcon(defaultGlyph);
 }
 
 // Icon for a command bar button, honoring the item's "Hide icon" option.
@@ -1481,19 +2777,64 @@ muxc::IconElement MakeCommandButtonIcon(ActionItem const& item) {
     return CreateIconElement(item.icon, item.command, L"");
 }
 
+// The icon of the New+ button: the icon of Explorer's own New button when the
+// setting is empty, so the command bar keeps its familiar look.
+muxc::IconElement MakeNewPlusButtonIcon(std::wstring const& iconSetting,
+                                        std::wstring const& originalIconUri) {
+    if (iconSetting.empty() && !originalIconUri.empty()) {
+        try {
+            muxm::Imaging::SvgImageSource svgSource(
+                wf::Uri(winrt::hstring{originalIconUri}));
+            muxc::ImageIcon imageIcon;
+            imageIcon.Source(svgSource);
+            return imageIcon;
+        } catch (...) {
+            Wh_Log(L"Error %08X", winrt::to_hresult().value);
+        }
+    }
+
+    // Add, the glyph of Explorer's New button.
+    return CreateIconElement(iconSetting, std::wstring(), L"");
+}
+
+// The shell icon of a file or folder, the same one File Explorer shows for it.
+// Used for the New+ template entries, and deliberately not cached: the menu is
+// rebuilt from the templates folder every time it's opened, so a template whose
+// icon changed shows the new one.
+muxm::ImageSource LoadShellItemIcon(std::wstring const& path) {
+    DecodedIcon decoded;
+    if (!DecodeShellPathIcon(path, &decoded)) {
+        return nullptr;
+    }
+
+    return CreateImageSource(decoded);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Managing the buttons in the command bar.
 
-bool IsOurElement(muxc::ICommandBarElement const& command) {
-    // Matches both our buttons and our separators.
+bool IsOurNewPlusButton(muxc::ICommandBarElement const& command) {
     auto element = command.try_as<mux::FrameworkElement>();
-    return element &&
-           std::wstring_view(element.Name()).starts_with(kButtonNamePrefix);
+    return element && element.Name() == kNewPlusButtonName;
 }
 
-bool HasOurButtons(muxc::CommandBar const& commandBar) {
+bool IsOurElement(muxc::ICommandBarElement const& command) {
+    // Matches our action buttons and their separators, plus the special items.
+    auto element = command.try_as<mux::FrameworkElement>();
+    if (!element) {
+        return false;
+    }
+
+    std::wstring_view name{element.Name()};
+    return name.starts_with(kButtonNamePrefix) || name == kNewPlusButtonName ||
+           name == kContextMenuButtonName;
+}
+
+// True if the command bar holds any of the elements the given predicate matches.
+bool HasElement(muxc::CommandBar const& commandBar,
+                bool (*predicate)(muxc::ICommandBarElement const&)) {
     for (auto const& command : commandBar.PrimaryCommands()) {
-        if (IsOurElement(command)) {
+        if (predicate(command)) {
             return true;
         }
     }
@@ -1543,12 +2884,8 @@ std::wstring GetButtonIconUri(muxc::AppBarButton const& button) try {
 
 // Returns an index into kDefaultButtons, or -1.
 int IdentifyDefaultButton(muxc::AppBarButton const& button) {
-    std::wstring uri = GetButtonIconUri(button);
+    std::wstring uri = ToLower(GetButtonIconUri(button));
     if (!uri.empty()) {
-        for (auto& c : uri) {
-            c = towlower(c);
-        }
-
         size_t slash = uri.find_last_of(L'/');
         std::wstring_view fileName =
             slash == std::wstring::npos
@@ -1610,6 +2947,12 @@ struct GroupMember {
 struct ManagedTarget {
     ManagedKind kind;
     int index = 0;
+    // The New button only: whether our New+ button is in this command bar right
+    // now. Explorer's New button is hidden for the New+ button's sake, so it
+    // must not be hidden when that button isn't actually there - otherwise a
+    // command bar which our button hasn't reached yet would end up with no New
+    // button at all.
+    bool newPlusPresent = false;
     // GroupSeparator only. Shared so the target stays cheap to copy into the
     // visibility watcher below.
     std::shared_ptr<std::vector<GroupMember>> group;
@@ -1667,6 +3010,14 @@ bool ShouldHide(ManagedTarget const& target) {
     std::lock_guard<std::mutex> lock(g_settings.mutex);
     switch (target.kind) {
         case ManagedKind::Button:
+            // The New+ button takes the place of Explorer's New button, so the
+            // latter is collapsed unless it's explicitly asked for.
+            if (target.index == kNewButtonIndex && target.newPlusPresent &&
+                g_settings.newPlus.enabled &&
+                !g_settings.newPlus.keepOriginalNewButton) {
+                return true;
+            }
+
             return g_settings.hideDefaultButtons[target.index];
         case ManagedKind::SeparatorAfter:
             return g_settings.hideSeparatorAfterButton[target.index];
@@ -1972,6 +3323,9 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
     struct Entry {
         muxc::ICommandBarElement command;
         bool isOurs = false;
+        // The New+ button sits among Explorer's own buttons rather than after
+        // them, so it doesn't mark the start of our own elements.
+        bool isNewPlus = false;
         bool isSeparator = false;
         bool isDetailsToggle = false;
         int defaultIndex = -1;  // Index into kDefaultButtons, or -1.
@@ -1984,6 +3338,7 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
         Entry entry;
         entry.command = commands.GetAt(i);
         entry.isOurs = IsOurElement(entry.command);
+        entry.isNewPlus = entry.isOurs && IsOurNewPlusButton(entry.command);
         entry.isSeparator =
             !entry.isOurs &&
             static_cast<bool>(entry.command.try_as<muxc::AppBarSeparator>());
@@ -2017,10 +3372,12 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
     // line the user sees "after View" is really the separator right before our
     // first custom button, so locate that one.
     uint32_t firstCustomIndex = count;
+    bool hasNewPlusButton = false;
     for (uint32_t i = 0; i < count; i++) {
-        if (entries[i].isOurs) {
+        if (entries[i].isNewPlus) {
+            hasNewPlusButton = true;
+        } else if (entries[i].isOurs && firstCustomIndex == count) {
             firstCustomIndex = i;
-            break;
         }
     }
 
@@ -2051,6 +3408,12 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
 
         for (uint32_t i = separatorIndex + 1; i < count; i++) {
             auto const& entry = entries[i];
+            if (entry.isNewPlus) {
+                // Neither a member of the group nor its end: it's one of ours,
+                // but it stands between Explorer's own buttons.
+                continue;
+            }
+
             if (entry.isSeparator || entry.isOurs) {
                 break;
             }
@@ -2098,9 +3461,9 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
                 // One of Explorer's contextual separators. Hidden only when
                 // everything it introduces is hidden, so we never reveal a
                 // separator Explorer keeps collapsed.
-                setVisibility(
-                    separator,
-                    {ManagedKind::GroupSeparator, -1, collectGroup(i)});
+                setVisibility(separator,
+                              {ManagedKind::GroupSeparator, -1,
+                               /*newPlusPresent=*/false, collectGroup(i)});
             }
 
             prevIndex = -1;
@@ -2116,7 +3479,8 @@ void ApplyDefaultButtonVisibility(muxc::CommandBar const& commandBar,
 
         if (entry.defaultIndex >= 0) {
             auto button = entry.command.as<muxc::AppBarButton>();
-            setVisibility(button, {ManagedKind::Button, entry.defaultIndex});
+            setVisibility(button, {ManagedKind::Button, entry.defaultIndex,
+                                   hasNewPlusButton});
             // Spacing is applied only to real buttons, never the zero-width
             // contextual commands (which would otherwise occupy space).
             ApplyItemSpacing(button, itemSpacing, forceShow);
@@ -2177,12 +3541,15 @@ muxc::AppBarButton CreateActionButton(ActionItem const& item, int index) {
     muxc::AppBarButton button =
         CreateBareButton(index, item.name, MakeCommandButtonIcon(item));
 
-    button.Click([item](wf::IInspectable const& sender,
-                        mux::RoutedEventArgs const&) {
-        if (auto element = sender.try_as<mux::FrameworkElement>()) {
-            OnActionInvoked(element, item);
-        }
-    });
+    TrackRevoker(button,
+                 button.Click(winrt::auto_revoke,
+                              [item](wf::IInspectable const& sender,
+                                     mux::RoutedEventArgs const&) {
+                                  if (auto element =
+                                          sender.try_as<mux::FrameworkElement>()) {
+                                      OnActionInvoked(element, item);
+                                  }
+                              }));
 
     return button;
 }
@@ -2216,12 +3583,14 @@ muxc::MenuFlyoutItemBase CreateMenuEntry(
         }
     }
 
-    menuItem.Click([item, weakButton](wf::IInspectable const&,
-                                      mux::RoutedEventArgs const&) {
-        if (auto button = weakButton.get()) {
-            OnActionInvoked(button, item);
-        }
-    });
+    TrackRevoker(menuItem,
+                 menuItem.Click(winrt::auto_revoke,
+                                [item, weakButton](wf::IInspectable const&,
+                                                   mux::RoutedEventArgs const&) {
+                                    if (auto button = weakButton.get()) {
+                                        OnActionInvoked(button, item);
+                                    }
+                                }));
 
     return menuItem;
 }
@@ -2238,37 +3607,116 @@ void AppendMenuEntries(std::vector<ActionItem> const& items,
     }
 }
 
-// The hover timers of our menu buttons. A started timer is rooted by the
-// dispatcher queue and its Tick handler lives in this DLL, so the timers have
-// to be stopped before the mod is unloaded.
-thread_local std::vector<winrt::weak_ref<mux::DispatcherTimer>> g_hoverTimers;
+// The hover timers of our menu buttons, with their Tick registration. A started
+// timer is rooted by the dispatcher queue, and its Tick handler lives in this
+// DLL, so a timer has to be stopped and its handler revoked before the mod is
+// unloaded. The timer is held strongly - unlike the elements, DispatcherTimer
+// isn't a DependencyObject, so it isn't necessarily weak-referenceable - and
+// released once the button it belongs to is gone.
+struct HoverTimerEntry {
+    winrt::weak_ref<muxc::AppBarButton> button;
+    mux::DispatcherTimer timer;
+    winrt::event_token tickToken;
+};
 
-void TrackHoverTimer(mux::DispatcherTimer const& timer) {
-    // Drop the timers which are gone with their button.
+thread_local std::vector<HoverTimerEntry> g_hoverTimers;
+
+void ReleaseHoverTimer(HoverTimerEntry const& entry) {
+    try {
+        entry.timer.Stop();
+        entry.timer.Tick(entry.tickToken);
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    }
+}
+
+void TrackHoverTimer(muxc::AppBarButton const& button,
+                     mux::DispatcherTimer const& timer,
+                     winrt::event_token tickToken) {
+    // Drop the timers whose button is gone.
     for (auto it = g_hoverTimers.begin(); it != g_hoverTimers.end();) {
-        if (!it->get()) {
+        if (!it->button.get()) {
+            ReleaseHoverTimer(*it);
             it = g_hoverTimers.erase(it);
         } else {
             ++it;
         }
     }
 
-    g_hoverTimers.push_back(winrt::make_weak(timer));
+    g_hoverTimers.push_back({winrt::make_weak(button), timer, tickToken});
 }
 
 void StopHoverTimersForCurrentThread() {
-    std::vector<winrt::weak_ref<mux::DispatcherTimer>> taken;
+    std::vector<HoverTimerEntry> taken;
     taken.swap(g_hoverTimers);
 
-    for (auto const& weakTimer : taken) {
-        if (auto timer = weakTimer.get()) {
-            try {
-                timer.Stop();
-            } catch (...) {
-                Wh_Log(L"Error %08X", winrt::to_hresult().value);
-            }
-        }
+    for (auto const& entry : taken) {
+        ReleaseHoverTimer(entry);
     }
+}
+
+// Makes hovering over the button do what clicking it does, after the configured
+// delay. Used by the buttons of ours which open a menu: the dropdowns and the
+// New+ button.
+void SetUpOpenOnHover(muxc::AppBarButton const& button,
+                      int hoverDelayMs,
+                      std::function<void()> const& open) {
+    if (hoverDelayMs <= 0) {
+        TrackRevoker(
+            button,
+            button.PointerEntered(
+                winrt::auto_revoke,
+                [open](wf::IInspectable const&,
+                       mux::Input::PointerRoutedEventArgs const&) { open(); }));
+        return;
+    }
+
+    mux::DispatcherTimer timer;
+    timer.Interval(std::chrono::milliseconds(hoverDelayMs));
+
+    // The handler gets the timer as its sender, so it doesn't have to capture
+    // it - which would be either a reference cycle or a weak reference on a type
+    // that isn't a DependencyObject.
+    auto tickToken =
+        timer.Tick([open](wf::IInspectable const& sender,
+                          wf::IInspectable const&) {
+            if (auto timer = sender.try_as<mux::DispatcherTimer>()) {
+                timer.Stop();
+            }
+            open();
+        });
+
+    TrackHoverTimer(button, timer, tickToken);
+
+    TrackRevoker(button,
+                 button.PointerEntered(
+                     winrt::auto_revoke,
+                     [timer](wf::IInspectable const&,
+                             mux::Input::PointerRoutedEventArgs const&) {
+                         timer.Stop();  // Restart the delay.
+                         timer.Start();
+                     }));
+
+    auto stopTimer = [timer](wf::IInspectable const&,
+                             mux::Input::PointerRoutedEventArgs const&) {
+        timer.Stop();
+    };
+    TrackRevoker(button, button.PointerExited(winrt::auto_revoke, stopTimer));
+    TrackRevoker(button, button.PointerCanceled(winrt::auto_revoke, stopTimer));
+}
+
+// Shows the button's own flyout, for the buttons which have one.
+std::function<void()> MakeShowFlyoutAction(muxc::AppBarButton const& button) {
+    return [weakButton = winrt::make_weak(button)]() {
+        auto button = weakButton.get();
+        if (!button || g_unloading) {
+            return;
+        }
+
+        if (auto flyout = button.Flyout(); flyout && !flyout.IsOpen()) {
+            flyout.ShowAt(button);
+        }
+    };
 }
 
 muxc::AppBarButton CreateMenuButton(ActionItem const& item,
@@ -2302,84 +3750,323 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
         }
     };
 
-    menu.Opening([ensureMenuEntries](wf::IInspectable const& sender,
-                                     wf::IInspectable const&) {
-        ensureMenuEntries(sender.try_as<muxc::MenuFlyout>());
-    });
+    TrackRevoker(menu,
+                 menu.Opening(winrt::auto_revoke,
+                              [ensureMenuEntries](
+                                  wf::IInspectable const& sender,
+                                  wf::IInspectable const&) {
+                                  ensureMenuEntries(
+                                      sender.try_as<muxc::MenuFlyout>());
+                              }));
 
     // Also while the pointer is on its way to the button, which is both a
     // little earlier than the click and a safety net for the case above.
-    button.PointerEntered(
-        [ensureMenuEntries, weakButton](
-            wf::IInspectable const&,
-            mux::Input::PointerRoutedEventArgs const&) {
-            if (auto button = weakButton.get()) {
-                ensureMenuEntries(button.Flyout().try_as<muxc::MenuFlyout>());
-            }
-        });
+    TrackRevoker(
+        button,
+        button.PointerEntered(
+            winrt::auto_revoke,
+            [ensureMenuEntries, weakButton](
+                wf::IInspectable const&,
+                mux::Input::PointerRoutedEventArgs const&) {
+                if (auto button = weakButton.get()) {
+                    ensureMenuEntries(
+                        button.Flyout().try_as<muxc::MenuFlyout>());
+                }
+            }));
 
     button.Flyout(menu);
 
     if (openOnHover) {
-        auto showMenu = [weakButton]() {
-            auto button = weakButton.get();
-            if (!button) {
-                return;
-            }
-
-            if (auto flyout = button.Flyout(); flyout && !flyout.IsOpen()) {
-                flyout.ShowAt(button);
-            }
-        };
-
-        if (hoverDelayMs <= 0) {
-            button.PointerEntered(
-                [showMenu](wf::IInspectable const&,
-                           mux::Input::PointerRoutedEventArgs const&) {
-                    showMenu();
-                });
-        } else {
-            mux::DispatcherTimer timer;
-            timer.Interval(std::chrono::milliseconds(hoverDelayMs));
-            TrackHoverTimer(timer);
-
-            // Capture the timer weakly in its own Tick handler to avoid a
-            // reference cycle.
-            timer.Tick([weakTimer = winrt::make_weak(timer), showMenu](
-                           wf::IInspectable const&,
-                           wf::IInspectable const&) {
-                if (auto timer = weakTimer.get()) {
-                    timer.Stop();
-                }
-                showMenu();
-            });
-
-            button.PointerEntered(
-                [timer](wf::IInspectable const&,
-                        mux::Input::PointerRoutedEventArgs const&) {
-                    timer.Stop();  // Restart the delay.
-                    timer.Start();
-                });
-
-            auto stopTimer =
-                [timer](wf::IInspectable const&,
-                        mux::Input::PointerRoutedEventArgs const&) {
-                    timer.Stop();
-                };
-            button.PointerExited(stopTimer);
-            button.PointerCanceled(stopTimer);
-        }
+        SetUpOpenOnHover(button, hoverDelayMs, MakeShowFlyoutAction(button));
     }
 
     return button;
 }
 
-void EnsureButtons(muxc::CommandBar const& commandBar) {
+void OpenContextMenuForElement(mux::FrameworkElement const& element) {
+    if (g_unloading || !element) {
+        return;
+    }
+
+    HWND hExplorerWnd = GetExplorerWindowForElement(element);
+    if (!hExplorerWnd) {
+        Wh_Log(L"No File Explorer window for the context menu item");
+        return;
+    }
+
+    POINT point{};
+    GetCursorPos(&point);
+    ShowShellContextMenu(hExplorerWnd, point);
+}
+
+muxc::AppBarButton CreateContextMenuButton(bool openOnHover,
+                                            int hoverDelayMs) {
+    ContextMenuItemSettings settings;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        settings = g_settings.contextMenuItem;
+    }
+
+    muxc::AppBarButton button;
+    button.Name(kContextMenuButtonName);
+    button.Label(settings.buttonLabel.c_str());
+    button.LabelPosition(settings.showLabel
+                             ? muxc::CommandBarLabelPosition::Default
+                             : muxc::CommandBarLabelPosition::Collapsed);
+    button.Icon(CreateIconElement(settings.buttonIcon, std::wstring(),
+                                  L"\uE8FD"));
+
+    if (!settings.showLabel && !settings.buttonLabel.empty()) {
+        muxc::ToolTipService::SetToolTip(
+            button, winrt::box_value(winrt::hstring{settings.buttonLabel}));
+    }
+
+    TrackRevoker(
+        button,
+        button.Click(
+            winrt::auto_revoke,
+            [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+                OpenContextMenuForElement(
+                    sender.try_as<mux::FrameworkElement>());
+            }));
+
+    if (openOnHover) {
+        auto open = [weakButton = winrt::make_weak(button)]() {
+            if (auto button = weakButton.get()) {
+                OpenContextMenuForElement(button);
+            }
+        };
+        SetUpOpenOnHover(button, hoverDelayMs, open);
+    }
+
+    return button;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The New+ button, which takes the place of Explorer's New button.
+
+// Rebuilds the flyout contents from the templates folder. Done every time the
+// menu opens, so newly added templates show up without reloading the mod.
+void PopulateNewPlusMenu(
+    muxc::MenuFlyout const& menu,
+    winrt::weak_ref<muxc::AppBarButton> const& weakButton) try {
+    auto items = menu.Items();
+    items.Clear();
+
+    EffectiveConfig config = GetEffectiveConfig();
+    std::vector<TemplateEntry> templates = EnumerateTemplates(config);
+
+    if (templates.empty()) {
+        muxc::MenuFlyoutItem placeholder;
+        placeholder.Text(DirectoryExists(config.templateFolder)
+                             ? L"No templates"
+                             : L"Templates folder not found");
+        placeholder.IsEnabled(false);
+        items.Append(placeholder);
+    }
+
+    bool replaceVariables = config.replaceVariables;
+
+    for (auto const& entry : templates) {
+        muxc::MenuFlyoutItem menuItem;
+        menuItem.Text(entry.displayName.c_str());
+
+        if (config.showIcons) {
+            if (auto source = LoadShellItemIcon(entry.path)) {
+                muxc::ImageIcon imageIcon;
+                imageIcon.Source(source);
+                menuItem.Icon(imageIcon);
+            }
+        }
+
+        // The item's tooltip shows the name as it is on disk, which the display
+        // name may hide parts of.
+        if (entry.displayName != entry.fileName) {
+            muxc::ToolTipService::SetToolTip(
+                menuItem, winrt::box_value(winrt::hstring{entry.fileName}));
+        }
+
+        TrackRevoker(
+            menuItem,
+            menuItem.Click(
+                winrt::auto_revoke,
+                [entry, replaceVariables, weakButton](
+                    wf::IInspectable const&, mux::RoutedEventArgs const&) {
+                    if (g_unloading) {
+                        return;
+                    }
+
+                    // The flyout lives in its own popup window, so the Explorer
+                    // window is resolved from the anchor button.
+                    auto button = weakButton.get();
+                    if (!button) {
+                        return;
+                    }
+
+                    HWND hWnd = GetExplorerWindowForElement(button);
+                    RunShellWorkOnWorkerThread(
+                        [hWnd, entry, replaceVariables]() {
+                            CreateFromTemplateForWindow(hWnd, entry,
+                                                        replaceVariables);
+                        });
+                }));
+
+        items.Append(menuItem);
+    }
+
+    if (config.showTemplatesFolderItem) {
+        if (!templates.empty()) {
+            items.Append(muxc::MenuFlyoutSeparator());
+        }
+
+        muxc::MenuFlyoutItem openFolderItem;
+        openFolderItem.Text(L"Open templates folder");
+        openFolderItem.Icon(CreateGlyphIcon(L""));  // OpenFolderHorizontal.
+
+        TrackRevoker(
+            openFolderItem,
+            openFolderItem.Click(
+                winrt::auto_revoke,
+                [folder = config.templateFolder](wf::IInspectable const&,
+                                                 mux::RoutedEventArgs const&) {
+                    if (g_unloading) {
+                        return;
+                    }
+
+                    RunShellWorkOnWorkerThread([folder]() {
+                        if (!DirectoryExists(folder)) {
+                            SHCreateDirectoryExW(nullptr, folder.c_str(),
+                                                 nullptr);
+                        }
+
+                        ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr,
+                                      nullptr, SW_SHOWNORMAL);
+                    });
+                }));
+
+        items.Append(openFolderItem);
+    }
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+}
+
+void AddNewPlusChevron(muxc::AppBarButton const& button) try {
+    auto label =
+        FindDescendantByName(button, L"TextLabel").try_as<muxc::TextBlock>();
+    if (!label) {
+        Wh_Log(L"The New+ label wasn't found");
+        return;
+    }
+
+    std::wstring currentText = label.Text().c_str();
+    if (!currentText.empty() && currentText.back() == L'\uE70D') {
+        return;
+    }
+
+    // Use a separate text run so the label keeps Explorer's normal typeface
+    // while the chevron is rendered as the Segoe Fluent Icons ChevronDown
+    // symbol, just like the built-in New button.
+    auto inlines = label.Inlines();
+    inlines.Clear();
+
+    muxd::Run text;
+    std::wstring labelText = button.Label().c_str();
+    labelText += L"  ";
+    text.Text(labelText);
+    inlines.Append(text);
+
+    muxd::Run chevron;
+    chevron.Text(L"\uE70D");
+    chevron.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
+    chevron.FontSize(8);
+    inlines.Append(chevron);
+} catch (...) {
+    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+}
+
+muxc::AppBarButton CreateNewPlusButton(std::wstring const& originalIconUri,
+                                       bool openOnHover,
+                                       int hoverDelayMs) {
+    NewPlusSettings settings;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        settings = g_settings.newPlus;
+    }
+
+    // Explorer's command-bar template doesn't add a flyout indicator to an
+    // AppBarButton automatically. Without a label, only the icon is shown and
+    // the text becomes the tooltip.
+    bool showLabel = settings.showLabel && !settings.buttonLabel.empty();
+
+    muxc::AppBarButton button;
+    button.Name(kNewPlusButtonName);
+    button.Label(settings.buttonLabel.c_str());
+    button.LabelPosition(showLabel
+                             ? muxc::CommandBarLabelPosition::Default
+                             : muxc::CommandBarLabelPosition::Collapsed);
+    button.Icon(
+        MakeNewPlusButtonIcon(settings.buttonIcon, originalIconUri));
+
+    if (showLabel) {
+        TrackRevoker(
+            button,
+            button.Loaded(
+                winrt::auto_revoke,
+                [](wf::IInspectable const& sender, mux::RoutedEventArgs const&) {
+                    if (auto button = sender.try_as<muxc::AppBarButton>()) {
+                        AddNewPlusChevron(button);
+                    }
+                }));
+    }
+
+    // With the label visible there's nothing a tooltip could add.
+    if (!showLabel && !settings.buttonLabel.empty()) {
+        muxc::ToolTipService::SetToolTip(
+            button, winrt::box_value(winrt::hstring{settings.buttonLabel}));
+    }
+
+    auto weakButton = winrt::make_weak(button);
+
+    muxc::MenuFlyout menu;
+    menu.Placement(
+        muxc::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+
+    TrackRevoker(menu,
+                 menu.Opening(winrt::auto_revoke,
+                              [weakButton](wf::IInspectable const& sender,
+                                           wf::IInspectable const&) {
+                                  if (g_unloading) {
+                                      return;
+                                  }
+
+                                  if (auto menu =
+                                          sender.try_as<muxc::MenuFlyout>()) {
+                                      PopulateNewPlusMenu(menu, weakButton);
+                                  }
+                              }));
+
+    button.Flyout(menu);
+
+    if (openOnHover) {
+        SetUpOpenOnHover(button, hoverDelayMs, MakeShowFlyoutAction(button));
+    }
+
+    return button;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Inserting our elements into the command bar.
+
+void EnsureActionButtons(muxc::CommandBar const& commandBar) {
     if (g_unloading) {
         return;
     }
 
-    if (HasOurButtons(commandBar)) {
+    if (HasElement(commandBar, [](muxc::ICommandBarElement const& command) {
+            auto element = command.try_as<mux::FrameworkElement>();
+            return element && std::wstring_view(element.Name())
+                                  .starts_with(kButtonNamePrefix);
+        })) {
         return;
     }
 
@@ -2420,15 +4107,98 @@ void EnsureButtons(muxc::CommandBar const& commandBar) {
     }
 }
 
+void EnsureContextMenuButton(muxc::CommandBar const& commandBar) {
+    bool enabled;
+    bool openMenuOnHover;
+    int menuHoverDelay;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        enabled = g_settings.contextMenuItem.enabled;
+        openMenuOnHover = g_settings.openMenuOnHover;
+        menuHoverDelay = g_settings.menuHoverDelay;
+    }
+
+    if (!enabled ||
+        HasElement(commandBar, [](muxc::ICommandBarElement const& command) {
+            auto element = command.try_as<mux::FrameworkElement>();
+            return element && element.Name() == kContextMenuButtonName;
+        })) {
+        return;
+    }
+
+    Wh_Log(L"Adding the context menu item");
+    commandBar.PrimaryCommands().Append(
+        CreateContextMenuButton(openMenuOnHover, menuHoverDelay));
+}
+
+// Puts the New+ button where Explorer's New button is. The latter is collapsed
+// by ApplyDefaultButtonVisibility, which asks ShouldHide - and that returns true
+// for the New button while the New+ button is enabled.
+void EnsureNewPlusButton(muxc::CommandBar const& commandBar) {
+    if (g_unloading) {
+        return;
+    }
+
+    bool openMenuOnHover;
+    int menuHoverDelay;
+    bool enabled;
+    {
+        std::lock_guard<std::mutex> lock(g_settings.mutex);
+        enabled = g_settings.newPlus.enabled;
+        openMenuOnHover = g_settings.openMenuOnHover;
+        menuHoverDelay = g_settings.menuHoverDelay;
+    }
+
+    if (!enabled || HasElement(commandBar, IsOurNewPlusButton)) {
+        return;
+    }
+
+    auto commands = commandBar.PrimaryCommands();
+    uint32_t count = commands.Size();
+
+    uint32_t newButtonIndex = count;
+    std::wstring originalIconUri;
+    for (uint32_t i = 0; i < count; i++) {
+        auto command = commands.GetAt(i);
+        if (IsOurElement(command)) {
+            continue;
+        }
+
+        if (auto button = command.try_as<muxc::AppBarButton>();
+            button && IdentifyDefaultButton(button) == kNewButtonIndex) {
+            newButtonIndex = i;
+            originalIconUri = GetButtonIconUri(button);
+            break;
+        }
+    }
+
+    if (newButtonIndex == count) {
+        // Explorer hasn't filled the command bar in yet, or this build has no
+        // New button at all. Appending would put our button somewhere it doesn't
+        // belong, and since it's only ever inserted once it would stay there, so
+        // leave it to the update which follows Explorer's own commands being
+        // added. Explorer's New button stays visible until ours is really there.
+        Wh_Log(L"The New button isn't in the command bar (yet)");
+        return;
+    }
+
+    Wh_Log(L"Adding the New+ button");
+    commands.InsertAt(
+        newButtonIndex,
+        CreateNewPlusButton(originalIconUri, openMenuOnHover, menuHoverDelay));
+}
+
 void UpdateCommandBar(muxc::CommandBar const& commandBar) {
     if (g_unloading) {
         return;
     }
 
-    // Custom buttons only go in the primary command bar; the secondary bar
-    // just holds the Details pane toggle.
+    // Our buttons only go in the primary command bar; the secondary bar just
+    // holds the Details pane toggle.
     if (commandBar.Name() == L"FileExplorerCommandBar") {
-        EnsureButtons(commandBar);
+        EnsureNewPlusButton(commandBar);
+        EnsureActionButtons(commandBar);
+        EnsureContextMenuButton(commandBar);
     }
 
     ApplyDefaultButtonVisibility(commandBar);
@@ -2437,9 +4207,24 @@ void UpdateCommandBar(muxc::CommandBar const& commandBar) {
 void RemoveOurButtons(muxc::CommandBar const& commandBar) {
     auto commands = commandBar.PrimaryCommands();
     for (uint32_t i = commands.Size(); i > 0; i--) {
-        if (IsOurElement(commands.GetAt(i - 1))) {
-            commands.RemoveAt(i - 1);
+        auto command = commands.GetAt(i - 1);
+        if (!IsOurElement(command)) {
+            continue;
         }
+
+        // An open menu flyout lives in a popup rooted by the XamlRoot, not by
+        // the button, so it would stay on screen after the button is gone.
+        if (auto button = command.try_as<muxc::AppBarButton>()) {
+            if (auto flyout = button.Flyout()) {
+                try {
+                    flyout.Hide();
+                } catch (...) {
+                    Wh_Log(L"Error %08X", winrt::to_hresult().value);
+                }
+            }
+        }
+
+        commands.RemoveAt(i - 1);
     }
 }
 
@@ -2495,9 +4280,12 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
 }
 
 void RemoveButtonsForCurrentThread() {
-    // Before restoring anything, so the watcher can't fight the restore.
+    // Before restoring anything, so the watcher can't fight the restore, and
+    // before the buttons go away, while the elements the handlers are
+    // registered on are still around.
     UnwatchVisibilityForCurrentThread();
     StopHoverTimersForCurrentThread();
+    RevokeHandlersForCurrentThread();
 
     std::vector<CommandBarEntry> taken;
     taken.swap(g_entries);
@@ -2525,12 +4313,14 @@ void RemoveButtonsForCurrentThread() {
     ForgetManagedElementsForCurrentThread();
     g_pendingUpdates.clear();
     g_threadScanned = false;
+    DestroyContextMenuOwnerWindowForCurrentThread();
 }
 
 void RefreshButtonsForCurrentThread() {
-    // The buttons are recreated below, so the hover timers of the old ones are
-    // stopped and forgotten first.
+    // The buttons are recreated below, so the hover timers and event handlers
+    // of the old ones are released first.
     StopHoverTimersForCurrentThread();
+    RevokeHandlersForCurrentThread();
 
     // A copy, since UpdateCommandBar below can add entries.
     std::vector<winrt::weak_ref<muxc::CommandBar>> commandBars;
@@ -3164,6 +4954,38 @@ void LoadSettings() {
     int itemSpacing = Wh_GetIntSetting(L"itemSpacing");
     g_settings.itemSpacing = itemSpacing < 0 ? -1 : itemSpacing;
 
+    g_settings.newPlus = NewPlusSettings{};
+    g_settings.newPlus.enabled = Wh_GetIntSetting(L"newPlus.enabled") != 0;
+    g_settings.newPlus.showLabel =
+        Wh_GetIntSetting(L"newPlus.showLabel") != 0;
+    g_settings.newPlus.buttonLabel =
+        WindhawkUtils::StringSetting::make(L"newPlus.buttonLabel").get();
+    g_settings.newPlus.buttonIcon =
+        WindhawkUtils::StringSetting::make(L"newPlus.buttonIcon").get();
+    g_settings.newPlus.templateFolder = TrimQuotesAndSpaces(
+        WindhawkUtils::StringSetting::make(L"newPlus.templateFolder").get());
+    g_settings.newPlus.showIcons =
+        Wh_GetIntSetting(L"newPlus.showIcons") != 0;
+    g_settings.newPlus.showTemplatesFolderItem =
+        Wh_GetIntSetting(L"newPlus.showTemplatesFolderItem") != 0;
+    g_settings.newPlus.keepOriginalNewButton =
+        Wh_GetIntSetting(L"newPlus.keepOriginalNewButton") != 0;
+
+    g_settings.contextMenuItem = ContextMenuItemSettings{};
+    g_settings.contextMenuItem.enabled =
+        Wh_GetIntSetting(L"contextMenuItem.enabled") != 0;
+
+    g_settings.contextMenuItem.useNilesoftShell =
+        Wh_GetIntSetting(L"contextMenuItem.useNilesoftShell") != 0;
+    g_settings.contextMenuItem.showLabel =
+        Wh_GetIntSetting(L"contextMenuItem.showLabel") != 0;
+    g_settings.contextMenuItem.buttonLabel =
+        WindhawkUtils::StringSetting::make(
+            L"contextMenuItem.buttonLabel").get();
+    g_settings.contextMenuItem.buttonIcon = TrimQuotesAndSpaces(
+        WindhawkUtils::StringSetting::make(
+            L"contextMenuItem.buttonIcon").get());
+
     g_settings.items.clear();
     for (int i = 0; i < 100; i++) {
         WCHAR prefix[64];
@@ -3207,6 +5029,10 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
+    // Last, so that no failure path above can leave the class registered:
+    // Wh_ModUninit, which unregisters it, isn't called when Wh_ModInit fails.
+    RegisterContextMenuOwnerClass();
+
     return TRUE;
 }
 
@@ -3237,6 +5063,8 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
+    DismissOpenContextMenus();
+
     for (HWND hWnd : GetFileExplorerWnds()) {
         Wh_Log(L"Removing buttons for window %08X", (DWORD)(ULONG_PTR)hWnd);
         if (!RunFromWindowThread(
@@ -3255,8 +5083,69 @@ void Wh_ModUninit() {
         g_iconCache.clear();
     }
 
+    // Any owner window the loop above didn't get to - its Explorer window may
+    // already be gone, or RunFromWindowThread may have failed - has to be
+    // destroyed from its own thread, so ask that thread through the owner
+    // window itself. Leaving one behind would keep the class registered with a
+    // window procedure which is about to be unmapped.
+    {
+        std::vector<std::pair<DWORD, HWND>> leftovers;
+        {
+            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+            leftovers.assign(g_contextMenuOwners.begin(),
+                             g_contextMenuOwners.end());
+        }
+
+        for (auto const& [threadId, hWnd] : leftovers) {
+            if (!IsContextMenuOwnerWindow(threadId, hWnd)) {
+                std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+                g_contextMenuOwners.erase(threadId);
+                continue;
+            }
+
+            Wh_Log(L"Destroying leftover context menu owner window of thread %u",
+                   threadId);
+            if (!RunFromWindowThread(
+                    hWnd,
+                    [](PVOID) { DestroyContextMenuOwnerWindowForCurrentThread(); },
+                    nullptr)) {
+                Wh_Log(L"Couldn't reach thread %u", threadId);
+            }
+        }
+    }
+
+    // Unconditionally: a class left registered outlives this image, and the
+    // next load of the mod would find a stale window procedure behind it. If
+    // some window still survived above, this fails - the next load detects that
+    // as ERROR_CLASS_ALREADY_EXISTS and disables the context menu item rather
+    // than crashing on it.
+    if (g_contextMenuOwnerClassRegistered) {
+        if (!UnregisterClassW(ContextMenuOwnerClassName().c_str(),
+                              GetCurrentModuleHandle())) {
+            std::lock_guard<std::mutex> lock(g_contextMenuOwnersMutex);
+            Wh_Log(L"UnregisterClass failed: %u, %zu owner window(s) left "
+                   L"behind",
+                   GetLastError(), g_contextMenuOwners.size());
+        }
+
+        g_contextMenuOwnerClassRegistered = false;
+    }
+
     // Last, since the launch threads run our code: the DLL can't be unmapped
-    // while one of them is still working.
+    // while one of them is still working. The wait has no timeout, and a
+    // launch thread can be inside a synchronous ShellExecuteExW - an elevation
+    // consent prompt, which SEE_MASK_FLAG_NO_UI doesn't suppress, blocks it
+    // until the user answers. Logged so that a stalled unload is diagnosable.
+    {
+        std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
+        if (!g_launchThreads.empty()) {
+            Wh_Log(L"Waiting for %zu launch thread(s) - a command still being "
+                   L"launched, such as one showing an elevation prompt, holds "
+                   L"this up until it's done",
+                   g_launchThreads.size());
+        }
+    }
+
     WaitForLaunchThreads();
 }
 
