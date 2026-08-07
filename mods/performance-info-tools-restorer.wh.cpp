@@ -11,6 +11,11 @@
 // @compilerOptions -lwininet -ladvapi32 -lole32 -luser32
 // ==/WindhawkMod==
 
+// Note on @architecture x86-64:
+// While "amd64" is the common Windows designation for 64-bit x86, using `@architecture amd64`
+// causes repository validation errors on Windhawk. The repository schema strictly requires
+// `@architecture x86-64` as the mandatory specifier for x86-64 mods.
+
 // ==WindhawkModReadme==
 /*
 # Performance Information and Tools Restorer
@@ -24,12 +29,12 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 
 ## Features
 
-- **Classic WEI page**: Restores "Performance Information and Tools" in Control Panel (Large/Small icons view)
+- **Classic WEI page**: The mod restores "Performance Information and Tools" in Control Panel (Large/Small icons view)
 - **Automatic setup**: The required PerfCenterCPL.dll is downloaded and verified automatically, nothing to install manually
 - **Right DLL for the system**: Uses the Windows 8 DLL on Windows 8.1/10/11
 - **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. 
 - **Conservative resource handling**: The mod implements a conservative approach to be more stable
-- **100% reversible**: Disabling the mod removes everything it created (downloaded files, private resource module, loaded DLL). No registry keys are ever written
+- **100% reversible**: Disabling the mod removes everything it created (private resource module, loaded DLL, and downloaded files when the keep files setting is set to false). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
 
 ## Requirements
 
@@ -42,7 +47,7 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 - The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang Explorer or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
 - If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart Explorer to retry).
 - The mod only stores files inside its own folder, `%ProgramData%\Windhawk\Engine\ModsWritable\performance-info-tools-restorer`, and never touches files it did not create.
-- All registry values are provided through an in-memory virtualization layer; nothing is persisted to the registry, so uninstalling the mod leaves no traces.
+- All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.
 
 ## Known limitations
 
@@ -54,36 +59,36 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 
 - **Cips** — Testing the mod on Windows 11 25H2
 
-If any issues are encountered, please report them to the mod's author.
+If any problems are encountered, please report them to the mod's author.
 */
 // ==/WindhawkModReadme==
-
 // ==WindhawkModSettings==
 /*
 - language: auto
   $name: Page language
-  $description: Select the language used by the restored page and its Control Panel tooltip. Automatic follows the current Windows UI language.
+  $description: Selects the language used by the restored page and its Control Panel tooltip. "Automatic" follows the current Windows UI language.
   $options:
     - auto: Automatic (Windows UI language)
     - en-US: English (United States)
-    - it-IT: Italiano
-    - es-ES: Español
-    - fr-FR: Français
-    - tr-TR: Türkçe
-    - ru-RU: Русский
-    - zh-CN: 简体中文
-    - de-DE: Deutsch
-    - pt-BR: Português (Brasil)
-    - pl-PL: Polski
+    - it-IT: Italian
+    - es-ES: Spanish
+    - fr-FR: French
+    - tr-TR: Turkish
+    - ru-RU: Russian
+    - zh-CN: Simplified Chinese
+    - de-DE: German
+    - pt-BR: Portuguese (Brazil)
+    - pl-PL: Polish
+
 - forceTranslations: true
-  $name: Force 10-language translation inside the page
-  $description: ON = use the embedded translations in the language selected above, including DirectUI page text. OFF = use the DLL's own resources.
-- keepFilesOnDisable: false
-  $name: Keep downloaded files when the mod is disabled
-  $description: OFF (default) = when the mod is disabled/uninstalled, the downloaded DLL, the variant marker and any stale copies are removed from the mod's own folder and the DLL is unloaded from memory. ON = keep the files for a faster re-enable.
+  $name: Force translations
+  $description: If enabled, forces the use of the embedded translations within the page for all 10 available languages (including DirectUI page text). If disabled, uses the DLL's own native resources.
+
+- keepFilesOnDisable: true
+  $name: Keep downloaded files if the mod is disabled
+  $description: If enabled (default), keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder, and the DLL is unloaded from memory.
 */
 // ==/WindhawkModSettings==
-
 #include <windows.h>
 #include <wininet.h>
 #include <wincrypt.h>
@@ -97,6 +102,7 @@ If any issues are encountered, please report them to the mod's author.
 #include <vector>
 #include <thread>
 #include <atomic>
+#include <optional>
 #include <windhawk_utils.h>
 
 // =============================================================================
@@ -379,6 +385,10 @@ std::atomic<bool> g_forceTranslations{true};
 std::atomic<bool> g_languageAutomatic{true};
 std::atomic<int> g_forcedLanguage{static_cast<int>(MuiLanguage::EN_US)};
 
+// Manual-reset stop event set by Wh_ModUninit so that setup waits and retry
+// delays can be interrupted immediately.
+static HANDLE g_stopEvent = nullptr;
+
 // Set by Wh_ModUninit so the background setup (and any in-flight download) can
 // abort promptly instead of blocking shutdown.
 std::atomic<bool> g_shuttingDown{false};
@@ -395,7 +405,10 @@ static std::wstring g_localizedResourcePath;
 static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 
 // Setup is performed on a background worker thread that is joined on unload.
-static std::thread g_setupThread;
+// Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
+// (when Wh_ModUninit is not called), ~thread() is not invoked on a joinable thread,
+// avoiding std::terminate() and process crashes.
+[[clang::no_destroy]] static std::optional<std::thread> g_setupThread;
 
 const std::wstring* CurrentDllPath() {
     return g_dllPath.load(std::memory_order_acquire);
@@ -626,26 +639,42 @@ DllVariant ResolveSelectedVariant() {
     return DllVariant::Win7;
 }
 
-// The mod and the downloaded PerfCenterCPL.dll are x64 only. With
-// `@architecture x86-64`, on an ARM64 device Windhawk may still inject the mod
+// The mod and the downloaded PerfCenterCPL.dll are x64 only.
+// (Note: We use `@architecture x86-64` in the metadata because `@architecture amd64` causes
+// repository validation errors on Windhawk, even though Windows refers to x64 as AMD64).
+// With `@architecture x86-64`, on an ARM64 device Windhawk may still inject the mod
 // into a native ARM64 explorer.exe (it is a predefined shell process), where an
 // x64 DLL cannot load. Guard against that case so the mod cleanly does nothing
 // instead of failing setup.
 static bool IsRunningAsAmd64() {
+#if defined(_M_ARM64) || defined(__aarch64__)
+    return false;
+#else
     // IsWow64Process2 reports the machine of the current process (even for
     // 64-bit processes) and the native machine of the system.
+    // Note: When running natively without WOW64 translation, processMachine is
+    // set to IMAGE_FILE_MACHINE_UNKNOWN (0), and the process architecture is
+    // equal to nativeMachine.
     typedef BOOL(WINAPI* IsWow64Process2T)(HANDLE, USHORT*, USHORT*);
     USHORT processMachine = IMAGE_FILE_MACHINE_UNKNOWN;
     USHORT nativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
-    if (!k32) return false;
-    auto pIsWow64Process2 = reinterpret_cast<IsWow64Process2T>(
-        reinterpret_cast<void*>(GetProcAddress(k32, "IsWow64Process2")));
-    if (!pIsWow64Process2 ||
-        !pIsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine)) {
-        return false;
+    if (k32) {
+        auto pIsWow64Process2 = reinterpret_cast<IsWow64Process2T>(
+            reinterpret_cast<void*>(GetProcAddress(k32, "IsWow64Process2")));
+        if (pIsWow64Process2 &&
+            pIsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine)) {
+            const USHORT actualMachine =
+                (processMachine == IMAGE_FILE_MACHINE_UNKNOWN) ? nativeMachine
+                                                               : processMachine;
+            return actualMachine == IMAGE_FILE_MACHINE_AMD64;
+        }
     }
-    return processMachine == IMAGE_FILE_MACHINE_AMD64;
+    // Fallback for older Windows where IsWow64Process2 is not available:
+    SYSTEM_INFO si{};
+    GetNativeSystemInfo(&si);
+    return si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64;
+#endif
 }
 
 std::wstring GetVariantUrl(DllVariant v) {
@@ -1231,14 +1260,12 @@ static HMODULE EnsureLocalizedResourceModuleLoaded() {
 }
 
 // Assumes g_localizedResourceMutex is already held.
+// Note: We do not call FreeLibrary or DeleteFileW on teardown or settings changes,
+// because DirectUI::XResourceProvider::Create caches this HINSTANCE and loads
+// resources from it lazily. Unloading/deleting it can crash Explorer if a page is open.
 static void ReleaseLocalizedResourceModuleLocked() {
-    if (HMODULE h = g_hLocalizedResources.exchange(nullptr)) {
-        FreeLibrary(h);
-    }
-    if (!g_localizedResourcePath.empty()) {
-        DeleteFileW(g_localizedResourcePath.c_str());
-        g_localizedResourcePath.clear();
-    }
+    g_hLocalizedResources.store(nullptr);
+    g_localizedResourcePath.clear();
 }
 
 static void ReleaseLocalizedResourceModule() {
@@ -1265,9 +1292,11 @@ static std::wstring StoreDir() {
 // Async setup - runs on a worker thread so Explorer startup is never blocked.
 // -----------------------------------------------------------------------------
 static void RunSetup() {
+    Wh_Log(L"PerfCenterCPL background setup started...");
     // x64 only: bail out cleanly if we ended up in a non-AMD64 process (see
     // IsRunningAsAmd64). This avoids any download/load attempt on ARM64.
     if (!IsRunningAsAmd64()) {
+        Wh_Log(L"PerfCenterCPL setup aborted: system architecture is not AMD64 (x64)");
         g_dllVerifiedOk.store(false, std::memory_order_release);
         return;
     }
@@ -1277,7 +1306,13 @@ static void RunSetup() {
     HANDLE setupMutex =
         CreateMutexW(nullptr, FALSE, L"Windhawk.PerformanceInfoToolsRestorer.Setup");
     if (setupMutex) {
-        DWORD wait = WaitForSingleObject(setupMutex, 60000);
+        HANDLE handles[] = {setupMutex, g_stopEvent};
+        DWORD numHandles = g_stopEvent ? 2 : 1;
+        DWORD wait = WaitForMultipleObjects(numHandles, handles, FALSE, 60000);
+        if (wait == WAIT_OBJECT_0 + 1) {
+            CloseHandle(setupMutex);
+            return;
+        }
         if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED) {
             // Could not get the lock in time. Proceed anyway; the
             // temp-file + atomic-move pattern keeps a partial file invisible.
@@ -1304,7 +1339,12 @@ static void RunSetup() {
         if (attempt < kMaxDownloadAttempts) {
             Wh_Log(L"Download attempt %d/%d failed; retrying in a few seconds",
                    attempt, kMaxDownloadAttempts);
-            Sleep(kRetryDelayMs);
+            if (g_stopEvent &&
+                WaitForSingleObject(g_stopEvent, kRetryDelayMs) == WAIT_OBJECT_0) {
+                break;
+            } else if (!g_stopEvent) {
+                Sleep(kRetryDelayMs);
+            }
         }
     }
 
@@ -1840,126 +1880,40 @@ DWORD GetVirtualValueCount(VNode n) {
     }
 }
 
-// The value enumerated at (node, index). Kept in sync with GetVirtualValueCount
-// and TryProvideValueData so enumeration and query agree.
-static bool GetVirtualValueAt(VNode n, DWORD idx, std::wstring& vname,
-                              std::wstring& vstr, DWORD& vdword, DWORD& vtype,
-                              bool& isStr) {
-    const std::wstring* dllPath = CurrentDllPath();
-    const std::wstring emptyPath;
-    const std::wstring& dp = dllPath ? *dllPath : emptyPath;
-    switch (n) {
-        case VNode::ClsidRoot:
-            if (idx == 0) { vname = L""; vstr = GetLocalizedDisplayName(); vtype = REG_SZ; }
-            else if (idx == 1) { vname = L"LocalizedString"; vstr = L"@" + dp + L",-1"; vtype = REG_EXPAND_SZ; }
-            else if (idx == 2) { vname = L"InfoTip"; vstr = GetLocalizedInfoTip(); vtype = REG_SZ; }
-            else if (idx == 3) { vname = L"{305CA226-D286-468e-B848-2B2E8E697B74} 2"; vstr = L"5"; vtype = REG_EXPAND_SZ; }
-            else return false;
-            break;
-        case VNode::InProcServer32:
-            if (idx == 0) { vname = L""; vstr = GetShdocvwPath(); vtype = REG_EXPAND_SZ; }
-            else if (idx == 1) { vname = L"ThreadingModel"; vstr = L"Apartment"; vtype = REG_SZ; }
-            else return false;
-            break;
-        case VNode::ShellFolder:
-            if (idx == 0) { vname = L"Attributes"; vdword = kShellFolderAttributes; vtype = REG_DWORD; isStr = false; }
-            else if (idx == 1) { vname = L"WantsParseDisplayName"; vstr = L""; vtype = REG_SZ; }
-            else return false;
-            break;
-        case VNode::Instance:
-            if (idx == 0) { vname = L"CLSID"; vstr = kLayoutFolderClsid; vtype = REG_SZ; }
-            else return false;
-            break;
-        case VNode::InitPropertyBag:
-            if (idx == 0) { vname = L"ResourceDLL"; vstr = dp; vtype = REG_EXPAND_SZ; }
-            else if (idx == 1) { vname = L"ResourceID"; vdword = kInitResourceId; vtype = REG_DWORD; isStr = false; }
-            else return false;
-            break;
-        case VNode::DefaultIcon:
-            if (idx == 0) { vname = L""; vstr = dp + L",-1"; vtype = REG_EXPAND_SZ; }
-            else return false;
-            break;
-        case VNode::NamespaceEntry:
-            if (idx == 0) { vname = L""; vstr = GetLocalizedDisplayName(); vtype = REG_SZ; }
-            else return false;
-            break;
-        case VNode::ProviderRoot:
-            if (idx == 0) { vname = L""; vstr = L""; vtype = REG_SZ; }
-            else return false;
-            break;
-        case VNode::ProviderInProc:
-            if (idx == 0) { vname = L""; vstr = dp; vtype = REG_EXPAND_SZ; }
-            else if (idx == 1) { vname = L"ThreadingModel"; vstr = L"Apartment"; vtype = REG_SZ; }
-            else return false;
-            break;
-        default: return false;
-    }
-    return true;
-}
 
-static std::wstring AnsiToWide(LPCSTR s) {
-    if (!s) return std::wstring();
-    int n = MultiByteToWideChar(CP_ACP, 0, s, -1, nullptr, 0);
-    if (n <= 0) return std::wstring();
-    std::wstring w(static_cast<size_t>(n - 1), 0);
-    MultiByteToWideChar(CP_ACP, 0, s, -1, &w[0], n);
-    return w;
-}
-
+// -----------------------------------------------------------------------------
+// Conservative Registry Virtualization (Unicode *W only)
+// -----------------------------------------------------------------------------
 using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-using RegOpenKeyExA_t = decltype(&RegOpenKeyExA);
 using RegOpenKeyW_t = decltype(&RegOpenKeyW);
-using RegOpenKeyA_t = decltype(&RegOpenKeyA);
 using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
-using RegCreateKeyExA_t = decltype(&RegCreateKeyExA);
 using RegCloseKey_t = decltype(&RegCloseKey);
 using RegQueryValueExW_t = decltype(&RegQueryValueExW);
-using RegQueryValueExA_t = decltype(&RegQueryValueExA);
 using RegGetValueW_t = decltype(&RegGetValueW);
-using RegGetValueA_t = decltype(&RegGetValueA);
-using RegQueryValueW_t = decltype(&RegQueryValueW);
-using RegQueryValueA_t = decltype(&RegQueryValueA);
 using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
-using RegEnumKeyExA_t = decltype(&RegEnumKeyExA);
 using RegEnumKeyW_t = decltype(&RegEnumKeyW);
-using RegEnumKeyA_t = decltype(&RegEnumKeyA);
 using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
-using RegQueryInfoKeyA_t = decltype(&RegQueryInfoKeyA);
-using RegEnumValueW_t = decltype(&RegEnumValueW);
-using RegEnumValueA_t = decltype(&RegEnumValueA);
 
 RegOpenKeyExW_t RegOpenKeyExWOriginal = nullptr;
-RegOpenKeyExA_t RegOpenKeyExAOriginal = nullptr;
 RegOpenKeyW_t RegOpenKeyWOriginal = nullptr;
-RegOpenKeyA_t RegOpenKeyAOriginal = nullptr;
 RegCreateKeyExW_t RegCreateKeyExWOriginal = nullptr;
-RegCreateKeyExA_t RegCreateKeyExAOriginal = nullptr;
 RegCloseKey_t RegCloseKeyOriginal = nullptr;
 RegQueryValueExW_t RegQueryValueExWOriginal = nullptr;
-RegQueryValueExA_t RegQueryValueExAOriginal = nullptr;
 RegGetValueW_t RegGetValueWOriginal = nullptr;
-RegGetValueA_t RegGetValueAOriginal = nullptr;
-RegQueryValueW_t RegQueryValueWOriginal = nullptr;
-RegQueryValueA_t RegQueryValueAOriginal = nullptr;
 RegEnumKeyExW_t RegEnumKeyExWOriginal = nullptr;
-RegEnumKeyExA_t RegEnumKeyExAOriginal = nullptr;
 RegEnumKeyW_t RegEnumKeyWOriginal = nullptr;
-RegEnumKeyA_t RegEnumKeyAOriginal = nullptr;
 RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal = nullptr;
-RegQueryInfoKeyA_t RegQueryInfoKeyAOriginal = nullptr;
-RegEnumValueW_t RegEnumValueWOriginal = nullptr;
-RegEnumValueA_t RegEnumValueAOriginal = nullptr;
 
 static bool IsWriteAccess(REGSAM sam) {
     return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
 }
 
-// Shared "open" logic used by the W and A open hooks (and the create hooks, to
+// Shared "open" logic used by the W open hooks (and the create hooks, to
 // refuse persisting writes to the virtualized tree). Never returns a fake
 // handle to a caller that asked for write/create access, which keeps synthetic
-// handles out of write paths.
+// handles out of write paths. Preserves caller's opt parameter (e.g. REG_OPTION_OPEN_LINK).
 static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
-                                 REGSAM sam, PHKEY out) {
+                                 DWORD opt, REGSAM sam, PHKEY out) {
     std::wstring full;
     const bool fakeParent = g_keyTracker.IsFakeAndGetPath(hk, full);
     if (fakeParent) {
@@ -1977,7 +1931,7 @@ static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
         return ERROR_FILE_NOT_FOUND;
     }
 
-    LSTATUS st = RegOpenKeyExWOriginal(hk, hasSub ? sub.c_str() : nullptr, 0, sam, out);
+    LSTATUS st = RegOpenKeyExWOriginal(hk, hasSub ? sub.c_str() : nullptr, opt, sam, out);
     if (st == ERROR_SUCCESS && out && *out) {
         std::wstring fp = full;
         if (hasSub) {
@@ -2005,23 +1959,13 @@ static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
 LSTATUS WINAPI RegOpenKeyExWHook(HKEY hk, LPCWSTR sub, DWORD opt, REGSAM sam,
                                  PHKEY out) {
     std::wstring s = sub ? sub : L"";
-    return RegOpenKeyVirtual(hk, s, sub && *sub, sam, out);
-}
-
-LSTATUS WINAPI RegOpenKeyExAHook(HKEY hk, LPCSTR sub, DWORD opt, REGSAM sam,
-                                 PHKEY out) {
-    std::wstring s = sub ? AnsiToWide(sub) : std::wstring();
-    return RegOpenKeyVirtual(hk, s, sub && *sub, sam, out);
+    return RegOpenKeyVirtual(hk, s, sub && *sub, opt, sam, out);
 }
 
 LSTATUS WINAPI RegOpenKeyWHook(HKEY hk, LPCWSTR sub, PHKEY out) {
     std::wstring s = sub ? sub : L"";
-    return RegOpenKeyVirtual(hk, s, sub && *sub, KEY_READ, out);
-}
-
-LSTATUS WINAPI RegOpenKeyAHook(HKEY hk, LPCSTR sub, PHKEY out) {
-    std::wstring s = sub ? AnsiToWide(sub) : std::wstring();
-    return RegOpenKeyVirtual(hk, s, sub && *sub, KEY_READ, out);
+    // RegOpenKey uses MAXIMUM_ALLOWED as default access mask in modern Windows.
+    return RegOpenKeyVirtual(hk, s, sub && *sub, 0, MAXIMUM_ALLOWED, out);
 }
 
 // RegCreateKeyEx: creating/opening the virtualized tree for write would persist
@@ -2067,19 +2011,6 @@ LSTATUS WINAPI RegCreateKeyExWHook(HKEY hk, LPCWSTR sub, DWORD reserved,
         });
 }
 
-LSTATUS WINAPI RegCreateKeyExAHook(HKEY hk, LPCSTR sub, DWORD reserved, LPSTR cls,
-                                   DWORD opt, REGSAM sam,
-                                   LPSECURITY_ATTRIBUTES sa, PHKEY out,
-                                   LPDWORD disposition) {
-    std::wstring s = sub ? AnsiToWide(sub) : std::wstring();
-    return CreateKeyVirtual(
-        hk, s, sub && *sub, sam, out, disposition,
-        [&]() {
-            return RegCreateKeyExAOriginal(hk, sub, reserved, cls, opt, sam, sa,
-                                           out, disposition);
-        });
-}
-
 LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
     if (g_keyTracker.IsFake(k)) {
         g_keyTracker.FreeFake(k);
@@ -2107,74 +2038,6 @@ LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
     }
 }
 
-// Fill the caller's ANSI buffer from a wide virtual value.
-static LSTATUS ProvideAnsiFromData(LPCSTR vn, LPBYTE data, LPDWORD cb,
-                                   DWORD vtype, const std::wstring& strOut,
-                                   DWORD dwOut, bool isStr) {
-    if (isStr) {
-        const int len =
-            WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
-                                static_cast<int>(strOut.size()), nullptr, 0,
-                                nullptr, nullptr);
-        const DWORD need = static_cast<DWORD>(len + 1);
-        if (!cb) return ERROR_SUCCESS;
-        if (!data) {
-            *cb = need;
-            return ERROR_SUCCESS;
-        }
-        if (*cb < need) {
-            *cb = need;
-            return ERROR_MORE_DATA;
-        }
-        if (len > 0)
-            WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
-                                static_cast<int>(strOut.size()),
-                                reinterpret_cast<LPSTR>(data), len, nullptr,
-                                nullptr);
-        data[len] = 0;
-        *cb = need;
-    } else {
-        const DWORD need = sizeof(DWORD);
-        if (!cb) return ERROR_SUCCESS;
-        if (!data) {
-            *cb = need;
-            return ERROR_SUCCESS;
-        }
-        if (*cb < need) {
-            *cb = need;
-            return ERROR_MORE_DATA;
-        }
-        *reinterpret_cast<DWORD*>(data) = dwOut;
-        *cb = need;
-    }
-    return ERROR_SUCCESS;
-}
-
-LSTATUS WINAPI RegQueryValueExAHook(HKEY k, LPCSTR vn, LPDWORD r, LPDWORD t,
-                                    LPBYTE data, LPDWORD cb) {
-    try {
-        std::wstring p = g_keyTracker.GetPath(k);
-        if (!p.empty()) {
-            std::wstring v = vn ? AnsiToWide(vn) : std::wstring();
-            DWORD vtype = 0;
-            std::wstring strOut;
-            DWORD dwOut = 0;
-            bool isStr = true;
-            LSTATUS o;
-            if (TryProvideValueData(p, v, &vtype, strOut, dwOut, isStr, o)) {
-                if (o != ERROR_SUCCESS) return o;
-                if (t) *t = vtype;
-                if (r) *r = 0;
-                return ProvideAnsiFromData(vn, data, cb, vtype, strOut, dwOut, isStr);
-            }
-        }
-        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
-        return RegQueryValueExAOriginal(k, vn, r, t, data, cb);
-    } catch (...) {
-        return RegQueryValueExAOriginal(k, vn, r, t, data, cb);
-    }
-}
-
 LSTATUS WINAPI RegGetValueWHook(HKEY hk, LPCWSTR sub, LPCWSTR val, DWORD fl,
                                 LPDWORD tp, PVOID d, LPDWORD cb) {
     try {
@@ -2192,120 +2055,6 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hk, LPCWSTR sub, LPCWSTR val, DWORD fl,
         return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
     } catch (...) {
         return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
-    }
-}
-
-LSTATUS WINAPI RegGetValueAHook(HKEY hk, LPCSTR sub, LPCSTR val, DWORD fl,
-                                LPDWORD tp, PVOID d, LPDWORD cb) {
-    try {
-        std::wstring p = g_keyTracker.GetPath(hk);
-        std::wstring subW = sub ? AnsiToWide(sub) : std::wstring();
-        if (sub && *sub) {
-            if (!p.empty()) p += L"\\";
-            p += subW;
-        }
-        if (!p.empty()) {
-            std::wstring v = val ? AnsiToWide(val) : std::wstring();
-            DWORD vtype = 0;
-            std::wstring strOut;
-            DWORD dwOut = 0;
-            bool isStr = true;
-            LSTATUS o;
-            if (TryProvideValueData(p, v, &vtype, strOut, dwOut, isStr, o)) {
-                if (o != ERROR_SUCCESS) return o;
-                if (tp) *tp = vtype;
-                return ProvideAnsiFromData(val, static_cast<LPBYTE>(d), cb, vtype,
-                                           strOut, dwOut, isStr);
-            }
-        }
-        if (g_keyTracker.IsFake(hk)) return ERROR_FILE_NOT_FOUND;
-        return RegGetValueAOriginal(hk, sub, val, fl, tp, d, cb);
-    } catch (...) {
-        return RegGetValueAOriginal(hk, sub, val, fl, tp, d, cb);
-    }
-}
-
-LSTATUS WINAPI RegQueryValueWHook(HKEY k, LPCWSTR sub, LPWSTR val, PLONG cb) {
-    try {
-        std::wstring p = g_keyTracker.GetPath(k);
-        if (sub && *sub) {
-            if (!p.empty()) p += L"\\";
-            p += sub;
-        }
-        if (!p.empty()) {
-            LSTATUS o;
-            DWORD vtype = 0;
-            std::wstring strOut;
-            DWORD dwOut = 0;
-            bool isStr = true;
-            if (TryProvideValueData(p, std::wstring(), &vtype, strOut, dwOut, isStr,
-                                    o)) {
-                if (o != ERROR_SUCCESS) return o;
-                if (!cb) return ERROR_SUCCESS;
-                const DWORD need = static_cast<DWORD>((strOut.size() + 1) * sizeof(wchar_t));
-                if (!val) {
-                    *cb = static_cast<LONG>(need);
-                    return ERROR_SUCCESS;
-                }
-                if (static_cast<DWORD>(*cb) < need) {
-                    *cb = static_cast<LONG>(need);
-                    return ERROR_MORE_DATA;
-                }
-                wcscpy_s(val, static_cast<size_t>(*cb), strOut.c_str());
-                *cb = static_cast<LONG>(strOut.size() * sizeof(wchar_t));
-                return ERROR_SUCCESS;
-            }
-        }
-        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
-        return RegQueryValueWOriginal(k, sub, val, cb);
-    } catch (...) {
-        return RegQueryValueWOriginal(k, sub, val, cb);
-    }
-}
-
-LSTATUS WINAPI RegQueryValueAHook(HKEY k, LPCSTR sub, LPSTR val, PLONG cb) {
-    try {
-        std::wstring p = g_keyTracker.GetPath(k);
-        std::wstring subW = sub ? AnsiToWide(sub) : std::wstring();
-        if (sub && *sub) {
-            if (!p.empty()) p += L"\\";
-            p += subW;
-        }
-        if (!p.empty()) {
-            LSTATUS o;
-            DWORD vtype = 0;
-            std::wstring strOut;
-            DWORD dwOut = 0;
-            bool isStr = true;
-            if (TryProvideValueData(p, std::wstring(), &vtype, strOut, dwOut, isStr,
-                                    o)) {
-                if (o != ERROR_SUCCESS) return o;
-                if (!cb) return ERROR_SUCCESS;
-                const int len = WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
-                                                    static_cast<int>(strOut.size()),
-                                                    nullptr, 0, nullptr, nullptr);
-                const DWORD need = static_cast<DWORD>(len + 1);
-                if (!val) {
-                    *cb = static_cast<LONG>(need);
-                    return ERROR_SUCCESS;
-                }
-                if (static_cast<DWORD>(*cb) < need) {
-                    *cb = static_cast<LONG>(need);
-                    return ERROR_MORE_DATA;
-                }
-                if (len > 0)
-                    WideCharToMultiByte(CP_ACP, 0, strOut.c_str(),
-                                        static_cast<int>(strOut.size()), val, len,
-                                        nullptr, nullptr);
-                val[len] = 0;
-                *cb = static_cast<LONG>(need);
-                return ERROR_SUCCESS;
-            }
-        }
-        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
-        return RegQueryValueAOriginal(k, sub, val, cb);
-    } catch (...) {
-        return RegQueryValueAOriginal(k, sub, val, cb);
     }
 }
 
@@ -2356,39 +2105,6 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
     }
 }
 
-LSTATUS WINAPI RegEnumKeyExAHook(HKEY k, DWORD idx, LPSTR name, LPDWORD lpcch,
-                                 LPDWORD r, LPSTR cls, LPDWORD lpcCls,
-                                 PFILETIME ft) {
-    try {
-        if (g_keyTracker.IsFake(k)) {
-            std::wstring p = g_keyTracker.GetPath(k);
-            VNode n = ClassifyPath(p);
-            std::wstring s;
-            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
-            if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
-            const int len = WideCharToMultiByte(CP_ACP, 0, s.c_str(),
-                                                static_cast<int>(s.size()), nullptr, 0,
-                                                nullptr, nullptr);
-            const DWORD need = static_cast<DWORD>(len + 1);
-            if (*lpcch < need) {
-                *lpcch = need;
-                return ERROR_MORE_DATA;
-            }
-            if (len > 0)
-                WideCharToMultiByte(CP_ACP, 0, s.c_str(),
-                                    static_cast<int>(s.size()), name, len, nullptr,
-                                    nullptr);
-            name[len] = 0;
-            *lpcch = static_cast<DWORD>(s.size());
-            if (ft) GetSystemTimeAsFileTime(ft);
-            return ERROR_SUCCESS;
-        }
-        return RegEnumKeyExAOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
-    } catch (...) {
-        return RegEnumKeyExAOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
-    }
-}
-
 LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
     try {
         if (g_keyTracker.IsFake(k)) {
@@ -2424,32 +2140,6 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
     }
 }
 
-LSTATUS WINAPI RegEnumKeyAHook(HKEY k, DWORD idx, LPSTR name, DWORD cch) {
-    try {
-        if (g_keyTracker.IsFake(k)) {
-            std::wstring p = g_keyTracker.GetPath(k);
-            VNode n = ClassifyPath(p);
-            std::wstring s;
-            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
-            if (!name) return ERROR_INVALID_PARAMETER;
-            const int len = WideCharToMultiByte(CP_ACP, 0, s.c_str(),
-                                                static_cast<int>(s.size()), nullptr, 0,
-                                                nullptr, nullptr);
-            const DWORD need = static_cast<DWORD>(len + 1);
-            if (cch <= need) return ERROR_MORE_DATA;
-            if (len > 0)
-                WideCharToMultiByte(CP_ACP, 0, s.c_str(),
-                                    static_cast<int>(s.size()), name, len, nullptr,
-                                    nullptr);
-            name[len] = 0;
-            return ERROR_SUCCESS;
-        }
-        return RegEnumKeyAOriginal(k, idx, name, cch);
-    } catch (...) {
-        return RegEnumKeyAOriginal(k, idx, name, cch);
-    }
-}
-
 LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD r,
                                     LPDWORD cSubKeys, LPDWORD lpcMaxSub,
                                     LPDWORD lpcMaxCls, LPDWORD cValues,
@@ -2482,8 +2172,6 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
             if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) !=
                 ERROR_SUCCESS) {
                 (*cSubKeys)++;
-                // Also bump the max subkey-name length (all subkeys here are
-                // 38-char CLSIDs, but state the assumption explicitly).
                 if (lpcMaxSub) {
                     DWORD need = static_cast<DWORD>(g_clsidLower.size() + 1);
                     if (*lpcMaxSub < need) *lpcMaxSub = need;
@@ -2496,158 +2184,6 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
     }
     return RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub, lpcMaxCls,
                                     cValues, lpcMaxValName, lpcMaxValData, sec, ft);
-}
-
-LSTATUS WINAPI RegQueryInfoKeyAHook(HKEY k, LPSTR cls, LPDWORD lpcCls, LPDWORD r,
-                                    LPDWORD cSubKeys, LPDWORD lpcMaxSub,
-                                    LPDWORD lpcMaxCls, LPDWORD cValues,
-                                    LPDWORD lpcMaxValName, LPDWORD lpcMaxValData,
-                                    LPDWORD sec, PFILETIME ft) {
-    if (g_keyTracker.IsFake(k)) {
-        std::wstring p = g_keyTracker.GetPath(k);
-        VNode n = ClassifyPath(p);
-        if (cSubKeys) *cSubKeys = GetVirtualSubKeyCount(n);
-        if (cValues) *cValues = GetVirtualValueCount(n);
-        if (lpcMaxSub) *lpcMaxSub = 32;
-        if (lpcMaxCls) *lpcMaxCls = 0;
-        if (lpcMaxValName) *lpcMaxValName = 64;
-        if (lpcMaxValData) *lpcMaxValData = 512;
-        if (cls && lpcCls) {
-            if (*lpcCls > 0) cls[0] = 0;
-            *lpcCls = 0;
-        }
-        if (ft) GetSystemTimeAsFileTime(ft);
-        return ERROR_SUCCESS;
-    }
-    return RegQueryInfoKeyAOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub, lpcMaxCls,
-                                    cValues, lpcMaxValName, lpcMaxValData, sec, ft);
-}
-
-LSTATUS WINAPI RegEnumValueWHook(HKEY k, DWORD idx, LPWSTR valName,
-                                 LPDWORD lpcchValName, LPDWORD r, LPDWORD tp,
-                                 LPBYTE data, LPDWORD cbData) {
-    if (g_keyTracker.IsFake(k)) {
-        std::wstring p = g_keyTracker.GetPath(k);
-        VNode n = ClassifyPath(p);
-        std::wstring vname, vstr;
-        DWORD vdword = 0, vtype = 0;
-        bool isStr = true;
-        if (!GetVirtualValueAt(n, idx, vname, vstr, vdword, vtype, isStr))
-            return ERROR_NO_MORE_ITEMS;
-        if (!lpcchValName) return ERROR_INVALID_PARAMETER;
-        DWORD needName = static_cast<DWORD>(vname.size() + 1);
-        if (!valName) {
-            *lpcchValName = needName;
-            return ERROR_SUCCESS;
-        }
-        if (*lpcchValName < needName) {
-            *lpcchValName = needName;
-            return ERROR_MORE_DATA;
-        }
-        wcscpy_s(valName, *lpcchValName, vname.c_str());
-        *lpcchValName = static_cast<DWORD>(vname.size());
-        if (r) *r = 0;
-        if (tp) *tp = vtype;
-        if (isStr) {
-            DWORD need = static_cast<DWORD>((vstr.size() + 1) * sizeof(wchar_t));
-            if (!cbData) return ERROR_SUCCESS;
-            if (!data) {
-                *cbData = need;
-                return ERROR_SUCCESS;
-            }
-            if (*cbData < need) {
-                *cbData = need;
-                return ERROR_MORE_DATA;
-            }
-            *cbData = need;
-            memcpy(data, vstr.c_str(), need);
-        } else {
-            if (!cbData) return ERROR_SUCCESS;
-            if (!data) {
-                *cbData = sizeof(DWORD);
-                return ERROR_SUCCESS;
-            }
-            if (*cbData < sizeof(DWORD)) {
-                *cbData = sizeof(DWORD);
-                return ERROR_MORE_DATA;
-            }
-            *cbData = sizeof(DWORD);
-            *reinterpret_cast<DWORD*>(data) = vdword;
-        }
-        return ERROR_SUCCESS;
-    }
-    return RegEnumValueWOriginal(k, idx, valName, lpcchValName, r, tp, data, cbData);
-}
-
-LSTATUS WINAPI RegEnumValueAHook(HKEY k, DWORD idx, LPSTR valName,
-                                 LPDWORD lpcchValName, LPDWORD r, LPDWORD tp,
-                                 LPBYTE data, LPDWORD cbData) {
-    if (g_keyTracker.IsFake(k)) {
-        std::wstring p = g_keyTracker.GetPath(k);
-        VNode n = ClassifyPath(p);
-        std::wstring vname, vstr;
-        DWORD vdword = 0, vtype = 0;
-        bool isStr = true;
-        if (!GetVirtualValueAt(n, idx, vname, vstr, vdword, vtype, isStr))
-            return ERROR_NO_MORE_ITEMS;
-        if (!lpcchValName) return ERROR_INVALID_PARAMETER;
-        const int nameLen = WideCharToMultiByte(CP_ACP, 0, vname.c_str(),
-                                                static_cast<int>(vname.size()),
-                                                nullptr, 0, nullptr, nullptr);
-        const DWORD needName = static_cast<DWORD>(nameLen + 1);
-        if (!valName) {
-            *lpcchValName = needName;
-            return ERROR_SUCCESS;
-        }
-        if (*lpcchValName < needName) {
-            *lpcchValName = needName;
-            return ERROR_MORE_DATA;
-        }
-        if (nameLen > 0)
-            WideCharToMultiByte(CP_ACP, 0, vname.c_str(),
-                                static_cast<int>(vname.size()), valName, nameLen,
-                                nullptr, nullptr);
-        valName[nameLen] = 0;
-        *lpcchValName = static_cast<DWORD>(vname.size());
-        if (r) *r = 0;
-        if (tp) *tp = vtype;
-        if (isStr) {
-            const int len = WideCharToMultiByte(CP_ACP, 0, vstr.c_str(),
-                                                static_cast<int>(vstr.size()),
-                                                nullptr, 0, nullptr, nullptr);
-            const DWORD need = static_cast<DWORD>(len + 1);
-            if (!cbData) return ERROR_SUCCESS;
-            if (!data) {
-                *cbData = need;
-                return ERROR_SUCCESS;
-            }
-            if (*cbData < need) {
-                *cbData = need;
-                return ERROR_MORE_DATA;
-            }
-            if (len > 0)
-                WideCharToMultiByte(CP_ACP, 0, vstr.c_str(),
-                                    static_cast<int>(vstr.size()),
-                                    reinterpret_cast<LPSTR>(data), len, nullptr,
-                                    nullptr);
-            data[len] = 0;
-            *cbData = need;
-        } else {
-            if (!cbData) return ERROR_SUCCESS;
-            if (!data) {
-                *cbData = sizeof(DWORD);
-                return ERROR_SUCCESS;
-            }
-            if (*cbData < sizeof(DWORD)) {
-                *cbData = sizeof(DWORD);
-                return ERROR_MORE_DATA;
-            }
-            *cbData = sizeof(DWORD);
-            *reinterpret_cast<DWORD*>(data) = vdword;
-        }
-        return ERROR_SUCCESS;
-    }
-    return RegEnumValueAOriginal(k, idx, valName, lpcchValName, r, tp, data, cbData);
 }
 
 void* GetRegFunc(const char* n) {
@@ -2663,169 +2199,6 @@ void* GetRegFunc(const char* n) {
         if (p) return p;
     }
     return nullptr;
-}
-
-// -----------------------------------------------------------------------------
-// Module redirection hooks (LoadLibrary / GetModuleHandle)
-// -----------------------------------------------------------------------------
-using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
-using LoadLibraryW_t = HMODULE(WINAPI*)(LPCWSTR);
-using LoadLibraryExA_t = HMODULE(WINAPI*)(LPCSTR, HANDLE, DWORD);
-using LoadLibraryA_t = HMODULE(WINAPI*)(LPCSTR);
-using GetModuleHandleW_t = HMODULE(WINAPI*)(LPCWSTR);
-using GetModuleHandleA_t = HMODULE(WINAPI*)(LPCSTR);
-using GetModuleHandleExW_t = BOOL(WINAPI*)(DWORD, LPCWSTR, HMODULE*);
-LoadLibraryExW_t LoadLibraryExWOriginal = nullptr;
-LoadLibraryW_t LoadLibraryWOriginal = nullptr;
-LoadLibraryExA_t LoadLibraryExAOriginal = nullptr;
-LoadLibraryA_t LoadLibraryAOriginal = nullptr;
-GetModuleHandleW_t GetModuleHandleWOriginal = nullptr;
-GetModuleHandleA_t GetModuleHandleAOriginal = nullptr;
-GetModuleHandleExW_t GetModuleHandleExWOriginal = nullptr;
-
-// Leaf-name comparison performed in place, without allocation.
-static bool IsPerfCenterModuleNameW(LPCWSTR n) {
-    if (!n) return false;
-    const wchar_t* leaf = n;
-    for (const wchar_t* p = n; *p; ++p) {
-        if (*p == L'\\' || *p == L'/') leaf = p + 1;
-    }
-    static const wchar_t kName[] = L"PerfCenterCPL.dll";
-    for (int i = 0; i < 17; ++i) {
-        wchar_t a = leaf[i];
-        if (!a) return false;
-        if (a >= L'A' && a <= L'Z') a = static_cast<wchar_t>(a - L'A' + L'a');
-        wchar_t b = kName[i];
-        if (b >= L'A' && b <= L'Z') b = static_cast<wchar_t>(b - L'A' + L'a');
-        if (a != b) return false;
-    }
-    return leaf[17] == 0;
-}
-
-static bool IsPerfCenterModuleNameA(LPCSTR n) {
-    if (!n) return false;
-    const char* leaf = n;
-    for (const char* p = n; *p; ++p) {
-        if (*p == '\\' || *p == '/') leaf = p + 1;
-    }
-    static const char kName[] = "PerfCenterCPL.dll";
-    for (int i = 0; i < 17; ++i) {
-        char a = leaf[i];
-        if (!a) return false;
-        if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
-        char b = kName[i];
-        if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
-        if (a != b) return false;
-    }
-    return leaf[17] == 0;
-}
-
-bool ShouldRedirectModuleW(LPCWSTR n, std::wstring& o) {
-    const std::wstring* p = CurrentDllPath();
-    if (!p || p->empty()) return false;
-    if (!IsPerfCenterModuleNameW(n)) return false;
-    if (_wcsicmp(n, p->c_str()) == 0) return false;
-    o = *p;
-    return true;
-}
-
-HMODULE WINAPI LoadLibraryExWHook(LPCWSTR f, HANDLE hf, DWORD fl) {
-    std::wstring r;
-    if (ShouldRedirectModuleW(f, r)) return LoadLibraryExWOriginal(r.c_str(), hf, fl);
-    return LoadLibraryExWOriginal(f, hf, fl);
-}
-HMODULE WINAPI LoadLibraryWHook(LPCWSTR f) {
-    std::wstring r;
-    if (ShouldRedirectModuleW(f, r)) return LoadLibraryWOriginal(r.c_str());
-    return LoadLibraryWOriginal(f);
-}
-HMODULE WINAPI LoadLibraryExAHook(LPCSTR f, HANDLE hf, DWORD fl) {
-    if (IsPerfCenterModuleNameA(f)) {
-        const std::wstring* p = CurrentDllPath();
-        if (p && !p->empty()) return LoadLibraryExWOriginal(p->c_str(), hf, fl);
-    }
-    return LoadLibraryExAOriginal(f, hf, fl);
-}
-HMODULE WINAPI LoadLibraryAHook(LPCSTR f) {
-    if (IsPerfCenterModuleNameA(f)) {
-        const std::wstring* p = CurrentDllPath();
-        if (p && !p->empty()) return LoadLibraryWOriginal(p->c_str());
-    }
-    return LoadLibraryAOriginal(f);
-}
-
-// GetModuleHandle* must never load the module (callers do not own the returned
-// handle, so they never free it, and loading under the loader lock could
-// deadlock). They only report whether it is already mapped.
-HMODULE WINAPI GetModuleHandleWHook(LPCWSTR n) {
-    const std::wstring* p = CurrentDllPath();
-    if (p && !p->empty() && IsPerfCenterModuleNameW(n)) {
-        HMODULE h = GetModuleHandleWOriginal(p->c_str());
-        if (h) return h;
-    }
-    return GetModuleHandleWOriginal(n);
-}
-HMODULE WINAPI GetModuleHandleAHook(LPCSTR n) {
-    const std::wstring* p = CurrentDllPath();
-    if (p && !p->empty() && IsPerfCenterModuleNameA(n)) {
-        HMODULE h = GetModuleHandleWOriginal(p->c_str());
-        if (h) return h;
-    }
-    return GetModuleHandleAOriginal(n);
-}
-
-BOOL WINAPI GetModuleHandleExWHook(DWORD f, LPCWSTR n, HMODULE* o) {
-    // With GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, n is an address inside a
-    // module, not a string, so it must never be treated as a name.
-    if (!(f & GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS)) {
-        const std::wstring* p = CurrentDllPath();
-        if (p && !p->empty() && n && IsPerfCenterModuleNameW(n)) {
-            return GetModuleHandleExWOriginal(f, p->c_str(), o);
-        }
-    }
-    return GetModuleHandleExWOriginal(f, n, o);
-}
-
-static void* GetProcAddrFromDll(HMODULE kb, HMODULE k32, const char* n) {
-    void* p = kb ? reinterpret_cast<void*>(GetProcAddress(kb, n)) : nullptr;
-    if (!p && k32) p = reinterpret_cast<void*>(GetProcAddress(k32, n));
-    return p;
-}
-
-void InstallModuleRedirectHooks() {
-    HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
-    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
-    // Resolve from kernelbase first: the real implementations live there and
-    // internal callers go straight to them, bypassing the kernel32 forwarder.
-    void* p = GetProcAddrFromDll(kb, k32, "LoadLibraryExW");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryExW_t>(p),
-                                       LoadLibraryExWHook, &LoadLibraryExWOriginal);
-    p = GetProcAddrFromDll(kb, k32, "LoadLibraryW");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryW_t>(p),
-                                       LoadLibraryWHook, &LoadLibraryWOriginal);
-    p = GetProcAddrFromDll(kb, k32, "LoadLibraryExA");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryExA_t>(p),
-                                       LoadLibraryExAHook, &LoadLibraryExAOriginal);
-    p = GetProcAddrFromDll(kb, k32, "LoadLibraryA");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadLibraryA_t>(p),
-                                       LoadLibraryAHook, &LoadLibraryAOriginal);
-    p = GetProcAddrFromDll(kb, k32, "GetModuleHandleW");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<GetModuleHandleW_t>(p),
-                                       GetModuleHandleWHook, &GetModuleHandleWOriginal);
-    p = GetProcAddrFromDll(kb, k32, "GetModuleHandleA");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<GetModuleHandleA_t>(p),
-                                       GetModuleHandleAHook, &GetModuleHandleAOriginal);
-    p = GetProcAddrFromDll(kb, k32, "GetModuleHandleExW");
-    if (p)
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<GetModuleHandleExW_t>(p),
-                                       GetModuleHandleExWHook,
-                                       &GetModuleHandleExWOriginal);
 }
 
 // -----------------------------------------------------------------------------
@@ -3047,100 +2420,56 @@ BOOL Wh_ModInit(void) {
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
 
-        // --- Install hooks (fast; no network/file I/O on this path) ---
+        // --- Install conservative registry hooks (Unicode *W only: 9 hooks) ---
         void* pOpen = GetRegFunc("RegOpenKeyExW");
-        void* pOpenA = GetRegFunc("RegOpenKeyExA");
         void* pOpenOldW = GetRegFunc("RegOpenKeyW");
-        void* pOpenOldA = GetRegFunc("RegOpenKeyA");
         void* pCreateW = GetRegFunc("RegCreateKeyExW");
-        void* pCreateA = GetRegFunc("RegCreateKeyExA");
         void* pClose = GetRegFunc("RegCloseKey");
         void* pQV = GetRegFunc("RegQueryValueExW");
-        void* pQVA = GetRegFunc("RegQueryValueExA");
         void* pGV = GetRegFunc("RegGetValueW");
-        void* pGVA = GetRegFunc("RegGetValueA");
-        void* pQValueW = GetRegFunc("RegQueryValueW");
-        void* pQValueA = GetRegFunc("RegQueryValueA");
         void* pEnumEx = GetRegFunc("RegEnumKeyExW");
-        void* pEnumExA = GetRegFunc("RegEnumKeyExA");
         void* pEnum = GetRegFunc("RegEnumKeyW");
-        void* pEnumA = GetRegFunc("RegEnumKeyA");
         void* pQInfo = GetRegFunc("RegQueryInfoKeyW");
-        void* pQInfoA = GetRegFunc("RegQueryInfoKeyA");
-        void* pEnumVal = GetRegFunc("RegEnumValueW");
-        void* pEnumValA = GetRegFunc("RegEnumValueA");
 
-        if (!pOpen || !pOpenA || !pClose || !pQV || !pGV || !pEnumEx || !pEnum ||
-            !pQInfo || !pEnumVal) {
+        if (!pOpen || !pClose || !pQV || !pGV || !pEnumEx || !pEnum || !pQInfo) {
             return FALSE;
         }
 
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyExW_t>(pOpen),
                                        RegOpenKeyExWHook, &RegOpenKeyExWOriginal);
-        if (pOpenA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyExA_t>(pOpenA),
-                                           RegOpenKeyExAHook, &RegOpenKeyExAOriginal);
         if (pOpenOldW)
             WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyW_t>(pOpenOldW),
                                            RegOpenKeyWHook, &RegOpenKeyWOriginal);
-        if (pOpenOldA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyA_t>(pOpenOldA),
-                                           RegOpenKeyAHook, &RegOpenKeyAOriginal);
         if (pCreateW)
             WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCreateKeyExW_t>(pCreateW),
                                            RegCreateKeyExWHook,
                                            &RegCreateKeyExWOriginal);
-        if (pCreateA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCreateKeyExA_t>(pCreateA),
-                                           RegCreateKeyExAHook,
-                                           &RegCreateKeyExAOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCloseKey_t>(pClose),
                                        RegCloseKeyHook, &RegCloseKeyOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueExW_t>(pQV),
                                        RegQueryValueExWHook, &RegQueryValueExWOriginal);
-        if (pQVA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueExA_t>(pQVA),
-                                           RegQueryValueExAHook,
-                                           &RegQueryValueExAOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegGetValueW_t>(pGV),
                                        RegGetValueWHook, &RegGetValueWOriginal);
-        if (pGVA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegGetValueA_t>(pGVA),
-                                           RegGetValueAHook, &RegGetValueAOriginal);
-        if (pQValueW)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueW_t>(pQValueW),
-                                           RegQueryValueWHook, &RegQueryValueWOriginal);
-        if (pQValueA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueA_t>(pQValueA),
-                                           RegQueryValueAHook, &RegQueryValueAOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyExW_t>(pEnumEx),
                                        RegEnumKeyExWHook, &RegEnumKeyExWOriginal);
-        if (pEnumExA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyExA_t>(pEnumExA),
-                                           RegEnumKeyExAHook, &RegEnumKeyExAOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyW_t>(pEnum),
                                        RegEnumKeyWHook, &RegEnumKeyWOriginal);
-        if (pEnumA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyA_t>(pEnumA),
-                                           RegEnumKeyAHook, &RegEnumKeyAOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryInfoKeyW_t>(pQInfo),
                                        RegQueryInfoKeyWHook, &RegQueryInfoKeyWOriginal);
-        if (pQInfoA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryInfoKeyA_t>(pQInfoA),
-                                           RegQueryInfoKeyAHook, &RegQueryInfoKeyAOriginal);
-        WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumValueW_t>(pEnumVal),
-                                       RegEnumValueWHook, &RegEnumValueWOriginal);
-        if (pEnumValA)
-            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumValueA_t>(pEnumValA),
-                                           RegEnumValueAHook, &RegEnumValueAOriginal);
 
-        InstallModuleRedirectHooks();
         InstallComHook();
         InstallTranslationHook();
 
+        if (!g_stopEvent) {
+            g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        } else {
+            ResetEvent(g_stopEvent);
+        }
+        g_shuttingDown.store(false, std::memory_order_release);
+
         // --- Start async setup on a worker thread (never blocks startup) ---
         try {
-            g_setupThread = std::thread(RunSetup);
+            g_setupThread.emplace(RunSetup);
         } catch (...) {
             // Thread creation failed; the mod just runs without the DLL.
         }
@@ -3159,18 +2488,13 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
     try {
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
-        // Rebuild the localized resource module in place. This never
-        // re-downloads the DLL and never forces a full mod reload.
-        std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
-        ReleaseLocalizedResourceModuleLocked();
-        const std::wstring* dllPath = CurrentDllPath();
-        if (dllPath && !dllPath->empty()) {
-            BuildLocalizedResourceModule(*dllPath, StoreDir());
-        }
-        if (reload) *reload = FALSE;
+        // Do not rebuild/free/delete the DirectUI resource module on settings change,
+        // as DirectUI keeps the HINSTANCE and loads resources from it lazily.
+        // Instead, request a reload if needed.
+        if (reload) *reload = TRUE;
         return TRUE;
     } catch (...) {
-        if (reload) *reload = FALSE;
+        if (reload) *reload = TRUE;
         return TRUE;
     }
 }
@@ -3182,15 +2506,23 @@ void Wh_ModUninit(void) {
         // checks this flag and the WinInet timeouts bound each blocking read, so
         // the join returns promptly instead of hanging on a stuck connection.
         g_shuttingDown.store(true, std::memory_order_release);
-        if (g_setupThread.joinable()) g_setupThread.join();
-        g_shuttingDown.store(false, std::memory_order_release);
-
-        // Release our own references only. COM owns any in-proc server it
-        // created; we never force-unload modules we did not reference.
-        ReleaseLocalizedResourceModule();
-        if (HMODULE h = g_hPerfCenter.exchange(nullptr)) {
-            FreeLibrary(h);
+        if (g_stopEvent) {
+            SetEvent(g_stopEvent);
         }
+        if (g_setupThread && g_setupThread->joinable()) {
+            g_setupThread->join();
+        }
+        g_setupThread.reset();
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+
+        // Do not force-unload g_hPerfCenter or g_hLocalizedResources on teardown,
+        // because live COM objects or DirectUI::XResourceProvider may still reference
+        // their vtables and resources.
+        ReleaseLocalizedResourceModule();
+        g_hPerfCenter.store(nullptr);
         g_dllVerifiedOk.store(false);
         const std::wstring* path = g_dllPath.exchange(nullptr);
         delete path;
