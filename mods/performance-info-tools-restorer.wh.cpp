@@ -22,7 +22,7 @@
 ## About
 This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.
 
-The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
+The mod has been tested on Windows 10 21H2, Windows 10 22H2 and Windows 11 25H2.
 ## Screenshot
 
 ![performance](https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/performance.png)
@@ -54,10 +54,13 @@ The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
 - **"(unrated)" scores**: If your PC has never been rated, plug in power and run `winsat formal` once as admin
 - **On battery**: The assessment is not applicable while running on battery
 - **Windows 7 page on modern systems**: The Windows 7 version of the page is not compatible with Windows 8.1/10/11 (It displays the "cannot load page" error), so the Windows 8 DLL is always used there
+- **Windows 7 skin score scale**: The optional Windows 7 skin is only a visual/layout recreation. The restored page still uses the Windows 8 scoring range, so ratings can go up to 9.9 rather than Windows 7's original 7.9 scale.
 
 ## Credits
 
 - **Cips** — Testing the mod on Windows 11 25H2
+- **susiked** — Testing the mod on Windows 10 22H2
+- **MzkO** - Testing the mod on Windows 10 22H2 and providing feedback
 
 If any problems are encountered, please report them to the mod's author.
 */
@@ -82,17 +85,26 @@ If any problems are encountered, please report them to the mod's author.
 
 - forceTranslations: true
   $name: Force translations
-  $description: If enabled, forces the use of the embedded translations within the page for all 10 available languages (including DirectUI page text). If disabled, uses the DLL's own native resources.
+  $description: If this setting is enabled, the mod forces the use of the embedded translations within the page for all 10 available languages (including DirectUI page text). If disabled, uses the DLL's own native resources.
+
+- pageSkin: win8
+  $name: Page skin
+  $description: This setting changes the page skin/layout. Choose Windows 8 (default), Windows 7, or Windows Vista. The skin is applied in memory only and does not write or modify DLL resources on disk.
+  $options:
+    - win8: Windows 8 layout (default)
+    - win7: Windows 7 layout (more complete)
+    - vista: Windows Vista (more compact)
 
 - keepFilesOnDisable: true
   $name: Keep downloaded files if the mod is disabled
-  $description: If enabled (default), keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder, and the DLL is unloaded from memory.
+  $description: If this setting is enabled (which it is by default), the mod keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder, and the DLL is unloaded from memory.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
 #include <wininet.h>
 #include <wincrypt.h>
 #include <combaseapi.h>
+#include <shellapi.h>
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -158,7 +170,7 @@ static const MuiStringTable kMuiStrings[] = {
     {49,   L"Your Windows Experience Index needs to be refreshed", L"L'indice prestazioni Windows deve essere aggiornato", L"El Índice de experiencia necesita actualizarse", L"L'indice de performance doit être actualisé", L"Windows Deneyim Dizini yenilenmeli", L"Индекс производительности нуждается в обновлении", L"需要刷新您的 Windows 体验指数", L"Der Windows-Leistungsindex muss aktualisiert werden", L"O Índice de Experiência precisa ser atualizado", L" Indeks wydajności wymaga odświeżenia"},
     {52,   L"New hardware detected",                    L"Nuovo hardware rilevato",                           L"Nuevo hardware detectado",                        L"Nouveau matériel détecté",                    L"Yeni donanım algılandı",                       L"Обнаружено новое оборудование",                 L"检测到新硬件",                                     L"Neue Hardware erkannt",                            L"Novo hardware detectado",                        L"Wykryto nowy sprzęt"},
     {53,   L"Refresh Now",                              L"Aggiorna ora",                                      L"Actualizar ahora",                                 L"Actualiser maintenant",                       L"Şimdi yenile",                                 L"Обновить сейчас",                                 L"立即刷新",                                         L"Jetzt aktualisieren",                             L"Atualizar agora",                                 L"Odśwież teraz"},
-    {54,   L"(unrated)",                               L"(non valutato)",                                   L"(sin evaluar)",                                    L"(non évalué)",                                 L"(derecelendirilmedi)",                         L"(не оценено)",                                    L"(未评分)",                                         L"(nicht bewertet)",                                 L"(não avaliado)",                                   L"(nie oceniono)"},
+    {54,   L"(unrated)",                               L"(senza classificazione)",                                   L"(sin evaluar)",                                    L"(non évalué)",                                 L"(derecelendirilmedi)",                         L"(не оценено)",                                    L"(未评分)",                                         L"(nicht bewertet)",                                 L"(não avaliado)",                                   L"(nie oceniono)"},
     {55,   L"Unable to show performance details",      L"Impossibile visualizzare i dettagli sulle prestazioni", L"No se pueden mostrar los detalles de rendimiento", L"Impossible d'afficher les détails de performance", L"Performans ayrıntıları gösterilemiyor", L"Не удается отобразить сведения о производительности", L"无法显示性能详细信息", L"Details zur Leistung können nicht angezeigt werden", L"Não é possível exibir detalhes de desempenho", L"Nie można wyświetlić szczegółów wydajności"},
     {56,   L"The Windows Experience Index is not applicable while on batteries.", L"L'indice prestazioni Windows non è applicabile durante l'uso della batteria.", L"El Índice de experiencia no es aplicable mientras está con batería.", L"L'indice de performance n'est pas applicable sur batterie.", L"Dizin pildeyken kullanılamaz.", L"Индекс недоступен от батареи.", L"使用电池时不可用。", L"Index bei Akkubetrieb nicht verfügbar.", L"Índice indisponível na bateria.", L"Indeks niedostępny na baterii."},
     {210,  L"An error prevented the solution from being displayed.", L"Un errore ha impedito la visualizzazione della soluzione.", L"Un error impidió que se mostrara la solución.", L"Une erreur a empêché l'affichage de la solution.", L"Bir hata, çözümün görüntülenmesini engelledi.", L"Ошибка не позволила отобразить решение.", L"错误导致无法显示解决方案。", L"Ein Fehler verhinderte die Anzeige der Lösung.", L"Um erro impediu a exibição da solução.", L"Błąd uniemożliwił wyświetlenie rozwiązania."},
@@ -235,10 +247,10 @@ static const MuiStringTable kMuiStrings[] = {
     {654,  L"Cannot read data from the registry",      L"Impossibile leggere i dati dal registro",          L"No se pueden leer los datos del registro",         L"Impossible de lire les données du registre",   L"Kayıt defterinden veri okunamıyor",               L"Не удается прочитать данные из реестра",          L"无法从注册表读取数据",                                   L"Daten können nicht aus der Registrierung gelesen werden", L"Não é possível ler dados do registro",              L"Nie można odczytać danych z rejestru"},
     {655,  L"Close",                                    L"Chiudi",                                            L"Cerrar",                                           L"Fermer",                                        L"Kapat",                                          L"Закрыть",                                         L"关闭",                                             L"Schließen",                                        L"Fechar",                                          L"Zamknij"},
     {710,  L"Standard VGA Graphics Adaptor",             L"Scheda grafica VGA standard",                       L"Adaptador de gráficos VGA estándar",                L"Adaptateur graphique VGA standard",            L"Standart VGA Grafik Bağdaştırıcısı",             L"Стандартный графический адаптер VGA",            L"标准 VGA 图形适配器",                                  L"Standard-VGA-Grafikadapter",                       L"Adaptador Gráfico VGA Padrão",                    L"Standardowy adapter graficzny VGA"},
-    {711,  L"Desktop graphics performance",             L"Prestazioni grafica desktop",                       L"Rendimiento de gráficos de escritorio",            L"Performances graphiques du Bureau",            L"Masaüstü grafik performansı",                   L"Производительность графики рабочего стола",      L"桌面图形性能",                                        L"Desktopgrafikleistung",                             L"Desempenho gráfico da área de trabalho",          L"Wydajność grafiki pulpitu"},
+    {711,  L"Desktop graphics performance",             L"Prestazioni desktop per Windows Aero",                       L"Rendimiento de gráficos de escritorio",            L"Performances graphiques du Bureau",            L"Masaüstü grafik performansı",                   L"Производительность графики рабочего стола",      L"桌面图形性能",                                        L"Desktopgrafikleistung",                             L"Desempenho gráfico da área de trabalho",          L"Wydajność grafiki pulpitu"},
     {1100, L"Modify the schedule used to automatically defragment your hard disk.", L"Modifica la pianificazione utilizzata per la deframmentazione automatica del disco rigido.", L"Modificar la programación usada para desfragmentar automáticamente el disco duro.", L"Modifier la planification utilisée pour défragmenter automatiquement votre disque dur.", L"Sabit diskinizi otomatik olarak birleştirmek için kullanılan zamanlamayı değiştirin.", L"Измените расписание, используемое для автоматической дефрагментации жесткого диска.", L"修改用于自动整理硬盘碎片的计划。", L"Ändern Sie den Zeitplan, der zur automatischen Defragmentierung Ihrer Festplatte verwendet wird.", L"Modificar o agendamento usado para desfragmentar automaticamente o disco rígido.", L"Modyfikuj harmonogram używany do automatycznego defragmentowania dysku twardego."},
     {1101, L"Component",                                L"Componente",                                        L"Componente",                                       L"Composant",                                     L"Bileşen",                                       L"Компонент",                                        L"组件",                                             L"Komponente",                                       L"Componente",                                      L"Składnik"},
-    {1102, L"What is rated",                           L"Cosa viene valutato",                               L"Qué se evalúa",                                    L"Élément évalué",                                L"Ne değerlendirilir",                              L"Что оценивается",                                  L"评估内容",                                           L"Was wird bewertet",                                 L"O que é avaliado",                                 L"Co jest oceniane"},
+    {1102, L"What is rated",                           L"Elementi classificati",                               L"Qué se evalúa",                                    L"Élément évalué",                                L"Ne değerlendirilir",                              L"Что оценивается",                                  L"评估内容",                                           L"Was wird bewertet",                                 L"O que é avaliado",                                 L"Co jest oceniane"},
     {1103, L"Subscore",                                 L"Sottopunteggio",                                    L"Subpuntuación",                                    L"Sous-score",                                    L"Alt puan",                                      L"Подоценка",                                       L"子分数",                                           L"Teilbewertung",                                    L"Subpontuação",                                     L"Podwynik"},
     {1104, L"Base score",                               L"Punteggio di base",                                 L"Puntuación base",                                  L"Score de base",                                 L"Temel puan",                                    L"Базовая оценка",                                   L"基本分数",                                          L"Basisbewertung",                                   L"Pontuação base",                                   L"Wynik podstawowy"},
     {1110, L"View advanced information about your computer's performance", L"Visualizza informazioni avanzate sulle prestazioni del computer", L"Ver información avanzada sobre el rendimiento de su equipo", L"Afficher des informations avancées sur les performances de votre ordinateur", L"Bilgisayarınızın performansı hakkında gelişmiş bilgileri görüntüle", L"Просмотр дополнительных сведений о производительности компьютера", L"查看有关计算机性能的高级信息", L"Erweiterte Informationen zur Leistung Ihres Computers anzeigen", L"Exibir informações avançadas sobre o desempenho do seu computador", L"Wyświetl zaawansowane informacje o wydajności komputera"},
@@ -248,7 +260,7 @@ static const MuiStringTable kMuiStrings[] = {
     {1116, L"View details about system health and performance.", L"Visualizza dettagli su stato e prestazioni del sistema.", L"Ver detalles sobre el estado y el rendimiento del sistema.", L"Voir les détails sur l'état et les performances du système.", L"Sistem durumu ve performansı hakkında ayrıntıları görüntüle.", L"Просмотр сведений о работоспособности и производительности системы.", L"查看系统运行状况和性能详细信息。", L"Details zum Systemzustand und zur Leistung anzeigen.", L"Exibir detalhes sobre a integridade e o desempenho do sistema.", L"Wyświetl szczegóły dotyczące kondycji i wydajności systemu."},
     {1117, L"Enter Your Title",                         L"Immetti il titolo",                                 L"Introduzca su título",                              L"Entrez votre titre",                            L"Başlığınızı girin",                               L"Введите название",                                  L"输入标题",                                           L"Titel eingeben",                                   L"Digite seu título",                                L"Wpisz tytuł"},
     {1118, L"Default solutions text",                   L"Testo predefinito delle soluzioni",                L"Texto de soluciones predeterminado",               L"Texte des solutions par défaut",               L"Varsayılan çözümler metni",                       L"Текст решений по умолчанию",                      L"默认解决方案文本",                                      L"Standardlösungs-text",                              L"Texto de soluções padrão",                         L"Domyślny tekst rozwiązań"},
-    {1119, L"The Windows Experience Index assesses key system components on a scale of 1.0 to 9.9.", L"L'Indice prestazioni Windows valuta i componenti principali del sistema su una scala da 1,0 a 9,9.", L"El Índice de experiencia de Windows evalúa los componentes principales del sistema en una escala de 1,0 a 9,9.", L"L'indice de performance Windows évalue les composants principaux du système sur une échelle de 1,0 à 9,9.", L"Windows Deneyim Dizini, temel sistem bileşenlerini 1,0 ile 9,9 arasında bir ölçekte değerlendirir.", L"Индекс производительности Windows оценивает основные компоненты системы по шкале от 1,0 до 9,9.", L"Windows 体验指数按 1.0 到 9.9 的等级评估关键系统组件。", L"Der Windows-Leistungsindex bewertet wichtige Systemkomponenten auf einer Skala von 1,0 bis 9,9.", L"O Índice de Experiência do Windows avalia os principais componentes do sistema em uma escala de 1,0 a 9,9.", L"Indeks wydajności systemu Windows ocenia główne składniki systemu w skali od 1,0 do 9,9."},
+    {1119, L"The Windows Experience Index assesses key system components on a scale of 1.0 to 9.9.", L"L'indice prestazioni Windows valuta i componenti chiave del sistema in base a una scala da 1,0 a 9,9.", L"El Índice de experiencia de Windows evalúa los componentes principales del sistema en una escala de 1,0 a 9,9.", L"L'indice de performance Windows évalue les composants principaux du système sur une échelle de 1,0 à 9,9.", L"Windows Deneyim Dizini, temel sistem bileşenlerini 1,0 ile 9,9 arasında bir ölçekte değerlendirir.", L"Индекс производительности Windows оценивает основные компоненты системы по шкале от 1,0 до 9,9.", L"Windows 体验指数按 1.0 到 9.9 的等级评估关键系统组件。", L"Der Windows-Leistungsindex bewertet wichtige Systemkomponenten auf einer Skala von 1,0 bis 9,9.", L"O Índice de Experiência do Windows avalia os principais componentes do sistema em uma escala de 1,0 a 9,9.", L"Indeks wydajności systemu Windows ocenia główne składniki systemu w skali od 1,0 do 9,9."},
     {1120, L"Your scores are current",                 L"I punteggi sono aggiornati",                       L"Las puntuaciones están actualizadas",            L"Vos scores sont à jour",                       L"Puanlarınız güncel",                              L"Ваши оценки актуальны",                           L"您的分数是当前的",                                      L"Ihre Bewertungen sind aktuell",                    L"Seus pontuações estão atualizadas",                L"Twoje wyniki są aktualne"},
     {1121, L"Clear all Windows Experience Index scores and re-rate the system", L"Cancella tutti i punteggi dell'Indice esperienza Windows e ricalcola il sistema", L"Borrar todas las puntuaciones del Índice de experiencia de Windows y recalificar el sistema", L"Effacer tous les scores de l'Índice de performance Windows et re-évaluer le système", L"Tüm Windows Deneyim Dizini puanlarını temizle ve sistemi yeniden değerlendir", L"Очистить все оценки индекса производительности Windows и переоценить систему", L"清除所有 Windows 体验指数分数并重新评估系统", L"Alle Windows-Leistungsindex-Bewertungen löschen und das System neu bewerten", L"Limpar todas as pontuações do Índice de Experiência do Windows e reavaliar o sistema", L"Wyczyść wszystkie wyniki indeksu wydajności systemu Windows i ponownie oceń system"},
     {1122, L"Force a complete re-run of all Windows Experience Index tests.", L"Forza una nuova esecuzione completa di tutti i test dell'Indice esperienza Windows.", L"Forzar una nueva ejecución completa de todas las pruebas del Índice de experiencia de Windows.", L"Forcer une nouvelle exécution complète de tous les tests de l'indice de performance Windows.", L"Tüm Windows Deneyim Dizini testlerinin tam yeniden çalıştırılmasını zorla", L"Принудительно выполнить полный повторный запуск всех тестов индекса производительности Windows.", L"强制重新运行所有 Windows 体验指数测试。", L"Ein vollständiges erneutes Ausführen aller Windows-Leistungsindex-Tests erzwingen.", L"Forçar uma nova execução completa de todos os testes do Índice de Experiência do Windows.", L"Wymuś pełne ponowne uruchomienie wszystkich testów indeksu wydajności systemu Windows."},
@@ -281,7 +293,7 @@ static const MuiStringTable kMuiStrings[] = {
     {1216, L"Disk data transfer rate",                  L"Velocità di trasferimento dati del disco",         L"Velocidad de transferencia del disco",            L"Taux de transfert du disque",                     L"Disk veri aktarım hızı",                           L"Скорость передачи данных диска",                   L"磁盘数据传输速率",                                      L"Datentransferrate des Datenträgers",                L"Taxa de transferência do disco",                    L"Szybkość transferu dysku"},
     {1218, L"Graphics:",                                L"Scheda video:",                                    L"Gráficos:",                                        L"Graphiques :",                                   L"Grafik:",                                        L"Графика:",                                          L"图形：",                                            L"Grafik:",                                          L"Elementos gráficos:",                              L"Grafika:"},
     {1221, L"Gaming graphics:",                        L"Grafica dei giochi:",                               L"Gráficos de juego:",                               L"Graphiques de jeu :",                            L"Oyun grafikleri:",                               L"Графика для игр:",                                  L"游戏图形：",                                          L"Gaminggrafik:",                                    L"Gráficos de jogos:",                               L"Grafika w grach:"},
-    {1222, L"3D business and gaming graphics performance", L"Prestazioni grafica 3D per giochi e business", L"Rendimiento gráfico 3D para juegos y negocios", L"Performances graphiques 3D jeux et pro", L"3B iş ve oyun grafik performansı", L"3D-графика для игр и бизнеса", L"3D 商业和游戏图形性能", L"3D-Grafikleistung für Spiele und Business", L"Desempenho gráfico 3D para jogos e negócios", L"Wydajność grafiki 3D w grach i biznesie"},
+    {1222, L"3D business and gaming graphics performance", L"Prestazioni grafica 3D per applicazioni business e giochi", L"Rendimiento gráfico 3D para juegos y negocios", L"Performances graphiques 3D jeux et pro", L"3B iş ve oyun grafik performansı", L"3D-графика для игр и бизнеса", L"3D 商业和游戏图形性能", L"3D-Grafikleistung für Spiele und Business", L"Desempenho gráfico 3D para jogos e negócios", L"Wydajność grafiki 3D w grach i biznesie"},
     {1223, L"Use these tools to get additional performance information", L"Usa questi strumenti per ottenere ulteriori informazioni sulle prestazioni", L"Use estas herramientas para obtener información adicional sobre el rendimiento", L"Utilisez ces outils pour obtenir des informations supplémentaires sur les performances", L"Ek performans bilgileri almak için bu araçları kullanın", L"Используйте эти средства для получения дополнительных сведений о производительности", L"使用这些工具获取额外的性能信息", L"Verwenden Sie diese Tools, um zusätzliche Leistungsinformationen zu erhalten", L"Use estas ferramentas para obter informações adicionais de desempenho", L"Użyj tych narzędzi, aby uzyskać dodatkowe informacje o wydajności"},
     // Terminator
     {0}
@@ -383,6 +395,14 @@ std::atomic<bool> g_dllVerifiedOk{false};
 std::atomic<int> g_activeVariant{static_cast<int>(DllVariant::Win8)};
 std::atomic<bool> g_forceTranslations{true};
 std::atomic<bool> g_languageAutomatic{true};
+std::atomic<bool> g_useWindows7Skin{false};
+std::atomic<bool> g_useWindowsVistaSkin{false};
+// Latches the startup/requested classic skin state. This intentionally protects
+// the very first DirectUI parse from a transient/default string-setting read
+// that can happen during the initial Windhawk enable path.
+std::atomic<bool> g_startupRequestedWindows7Skin{false};
+std::atomic<bool> g_startupRequestedWindowsVistaSkin{false};
+std::atomic<bool> g_perfCenterXmlPageSeen{false};
 std::atomic<int> g_forcedLanguage{static_cast<int>(MuiLanguage::EN_US)};
 
 // Manual-reset stop event set by Wh_ModUninit so that setup waits and retry
@@ -1456,6 +1476,114 @@ static void LoadLanguageSetting() {
     }
 }
 
+
+static std::wstring ReadPageSkinSettingValue() {
+    auto raw = WindhawkUtils::StringSetting::make(L"pageSkin");
+    PCWSTR r = raw.get();
+    std::wstring value = (r && *r) ? r : L"win8";
+    for (auto& character : value) character = towlower(character);
+    return value;
+}
+
+static bool ReadPageSkinVistaSetting() {
+    std::wstring value = ReadPageSkinSettingValue();
+    return value.find(L"vista") != std::wstring::npos ||
+           value.find(L"windows vista") != std::wstring::npos;
+}
+
+static bool ReadPageSkinSetting() {
+    std::wstring value = ReadPageSkinSettingValue();
+
+    // Be intentionally permissive. Windhawk normally stores the option id
+    // ("win7"/"win8"/"vista"), but during local testing/imports it can be useful
+    // to tolerate labels such as "Windows 7 classic links" too.
+    const bool mentionsVista = value.find(L"vista") != std::wstring::npos;
+    const bool mentions8 = value.find(L"8") != std::wstring::npos ||
+                           value.find(L"win8") != std::wstring::npos ||
+                           value.find(L"windows 8") != std::wstring::npos ||
+                           value.find(L"windows8") != std::wstring::npos;
+    const bool mentions7 = value.find(L"7") != std::wstring::npos ||
+                           value.find(L"win7") != std::wstring::npos ||
+                           value.find(L"windows 7") != std::wstring::npos ||
+                           value.find(L"windows7") != std::wstring::npos ||
+                           value.find(L"classic") != std::wstring::npos;
+    return mentions7 && !mentions8 && !mentionsVista;
+}
+
+static const wchar_t* CurrentPageSkinName() {
+    if (g_useWindowsVistaSkin.load()) return L"Windows Vista";
+    if (g_useWindows7Skin.load()) return L"Windows 7";
+    return L"Windows 8";
+}
+
+static void LoadPageSkinSetting() {
+    const bool useVista = ReadPageSkinVistaSetting();
+    const bool useWin7 = !useVista && ReadPageSkinSetting();
+    g_useWindowsVistaSkin.store(useVista);
+    g_useWindows7Skin.store(useWin7);
+    g_startupRequestedWindowsVistaSkin.store(useVista);
+    g_startupRequestedWindows7Skin.store(useWin7);
+    Wh_Log(L"Initial page skin setting: %s", CurrentPageSkinName());
+}
+
+static void ResolvePageSkinForFreshPage() {
+    const bool freshVista = ReadPageSkinVistaSetting();
+    const bool freshWin7 = ReadPageSkinSetting();
+    const bool useVista = freshVista || g_useWindowsVistaSkin.load() ||
+                          g_startupRequestedWindowsVistaSkin.load();
+    const bool useWin7 = !useVista &&
+                         (freshWin7 || g_useWindows7Skin.load() ||
+                          g_startupRequestedWindows7Skin.load());
+    g_useWindowsVistaSkin.store(useVista);
+    g_useWindows7Skin.store(useWin7);
+}
+
+
+static bool ContainsInsensitive(const std::wstring& text,
+                                const std::wstring& needle) {
+    if (needle.empty()) return true;
+    std::wstring a = text;
+    std::wstring b = needle;
+    for (auto& c : a) c = towlower(c);
+    for (auto& c : b) c = towlower(c);
+    return a.find(b) != std::wstring::npos;
+}
+
+static BOOL CALLBACK FindPerfCenterWindowProc(HWND hwnd, LPARAM lParam) {
+    if (!IsWindowVisible(hwnd)) return TRUE;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+
+    wchar_t title[256] = {};
+    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    if (!title[0]) return TRUE;
+
+    std::wstring windowTitle = title;
+    const bool isPerfCenterTitle =
+        ContainsInsensitive(windowTitle, L"Performance Information and Tools") ||
+        ContainsInsensitive(windowTitle, L"Informazioni e strumenti sulle prestazioni") ||
+        ContainsInsensitive(windowTitle, L"Información y herramientas de rendimiento") ||
+        ContainsInsensitive(windowTitle, L"Informations et outils de performance") ||
+        ContainsInsensitive(windowTitle, L"Leistungsinformationen") ||
+        ContainsInsensitive(windowTitle, L"Informações e Ferramentas de Desempenho") ||
+        ContainsInsensitive(windowTitle, L"Informacje i narzędzia dotyczące wydajności");
+
+    if (isPerfCenterTitle) {
+        *reinterpret_cast<bool*>(lParam) = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static bool IsPerfCenterControlPanelWindowOpen() {
+    bool found = false;
+    EnumWindows(FindPerfCenterWindowProc, reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
+
 static const wchar_t* GetEmbeddedTranslation(UINT id) {
     return GetMuiString(id, GetCurrentEmbeddedLanguage());
 }
@@ -2297,6 +2425,910 @@ HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceName,
                                            resourceType, stylesheetName, provider);
 }
 
+
+// -----------------------------------------------------------------------------
+// DirectUI XML patch - optional Windows 7 link layout, in memory only
+// -----------------------------------------------------------------------------
+#ifdef _WIN64
+#define PERF_DUI_THISCALL __cdecl
+#else
+#define PERF_DUI_THISCALL __thiscall
+#endif
+
+using DUISetXML_t = HRESULT(PERF_DUI_THISCALL*)(void*, const WCHAR*, HINSTANCE,
+                                                HINSTANCE);
+using DUISetXMLFromResource_t = HRESULT(PERF_DUI_THISCALL*)(
+    void*, PCWSTR, PCWSTR, HMODULE, HINSTANCE, HINSTANCE);
+
+static DUISetXML_t DUISetXML = nullptr;
+static DUISetXMLFromResource_t DUISetXMLFromResourceOriginal = nullptr;
+static thread_local int g_inPerfCenterXmlPatch = 0;
+
+
+static std::wstring LoadUifileXml(HMODULE module, PCWSTR resourceName,
+                                  PCWSTR resourceType) {
+    HRSRC resource = FindResourceW(module, resourceName, resourceType);
+    if (!resource) return {};
+
+    HGLOBAL loaded = LoadResource(module, resource);
+    if (!loaded) return {};
+
+    DWORD size = SizeofResource(module, resource);
+    const char* data = static_cast<const char*>(LockResource(loaded));
+    if (!data || !size) return {};
+
+    int wideLength = MultiByteToWideChar(CP_UTF8, 0, data, static_cast<int>(size),
+                                         nullptr, 0);
+    UINT codePage = CP_UTF8;
+    if (wideLength <= 0) {
+        wideLength = MultiByteToWideChar(CP_ACP, 0, data, static_cast<int>(size),
+                                         nullptr, 0);
+        codePage = CP_ACP;
+    }
+    if (wideLength <= 0) return {};
+
+    std::wstring xml(static_cast<size_t>(wideLength), L'\0');
+    MultiByteToWideChar(codePage, 0, data, static_cast<int>(size), &xml[0],
+                        wideLength);
+    while (!xml.empty() &&
+           (xml.back() == L'\0' || xml.back() == L'\r' || xml.back() == L'\n')) {
+        xml.pop_back();
+    }
+    return xml;
+}
+
+static bool FindOuterElement(const std::wstring& xml, size_t markerPos,
+                             size_t& outStart, size_t& outEnd) {
+    size_t start = xml.rfind(L"<element", markerPos);
+    if (start == std::wstring::npos) return false;
+
+    int depth = 0;
+    size_t i = start;
+    size_t steps = 0;
+    while (i < xml.size() && ++steps < 250000) {
+        if (xml.compare(i, 8, L"<element") == 0) {
+            size_t gt = xml.find(L'>', i);
+            if (gt == std::wstring::npos) return false;
+            if (gt > i && xml[gt - 1] == L'/') {
+                i = gt + 1;
+                continue;
+            }
+            ++depth;
+            i = gt + 1;
+            continue;
+        }
+        if (xml.compare(i, 10, L"</element>") == 0) {
+            --depth;
+            i += 10;
+            if (depth == 0) {
+                outStart = start;
+                outEnd = i;
+                return true;
+            }
+            continue;
+        }
+        ++i;
+    }
+    return false;
+}
+
+static std::wstring XmlAttrEscape(const wchar_t* text) {
+    std::wstring out;
+    if (!text) return out;
+    for (const wchar_t* p = text; *p; ++p) {
+        switch (*p) {
+            case L'&': out += L"&amp;"; break;
+            case L'\"': out += L"&quot;"; break;
+            case L'<': out += L"&lt;"; break;
+            case L'>': out += L"&gt;"; break;
+            default: out.push_back(*p); break;
+        }
+    }
+    return out;
+}
+
+static void ReplaceAll(std::wstring& text, const std::wstring& from,
+                       const std::wstring& to) {
+    if (from.empty()) return;
+    size_t pos = 0;
+    while ((pos = text.find(from, pos)) != std::wstring::npos) {
+        text.replace(pos, from.length(), to);
+        pos += to.length();
+    }
+}
+
+static const wchar_t* PerfTitleText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Classificare e migliorare le prestazioni del computer";
+        case MuiLanguage::ES_ES: return L"Califica y mejora el rendimiento del equipo";
+        case MuiLanguage::FR_FR: return L"Évaluer et améliorer les performances de l'ordinateur";
+        case MuiLanguage::TR_TR: return L"Bilgisayarınızın performansını derecelendirin ve geliştirin";
+        case MuiLanguage::RU_RU: return L"Оценить и повысить производительность компьютера";
+        case MuiLanguage::ZH_CN: return L"为计算机的性能评分并进行改进";
+        case MuiLanguage::DE_DE: return L"Bewerten und Verbessern der Computerleistung";
+        case MuiLanguage::PT_BR: return L"Classifique e melhore o desempenho do computador";
+        case MuiLanguage::PL_PL: return L"Oceń i popraw wydajność komputera";
+        default: return L"Rate and improve your computer's performance";
+    }
+}
+
+static const wchar_t* PerfDescriptionText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"L'indice prestazioni Windows valuta i componenti chiave del sistema in base a una scala da 1,0 a 9,9.";
+        case MuiLanguage::ES_ES: return L"El Índice de experiencia de Windows evalúa los componentes principales del sistema en una escala de 1,0 a 9,9.";
+        case MuiLanguage::FR_FR: return L"L'indice de performance Windows évalue les composants principaux du système sur une échelle de 1,0 à 9,9.";
+        case MuiLanguage::TR_TR: return L"Windows Deneyim Dizini, temel sistem bileşenlerini 1,0 ile 9,9 arasında bir ölçekte değerlendirir.";
+        case MuiLanguage::RU_RU: return L"Индекс производительности Windows оценивает основные компоненты системы по шкале от 1,0 до 9,9.";
+        case MuiLanguage::ZH_CN: return L"Windows 体验指数按 1.0 到 9.9 的等级评估关键系统组件。";
+        case MuiLanguage::DE_DE: return L"Der Windows-Leistungsindex bewertet wichtige Systemkomponenten auf einer Skala von 1,0 bis 9,9.";
+        case MuiLanguage::PT_BR: return L"O Índice de Experiência do Windows avalia os principais componentes do sistema em uma escala de 1,0 a 9,9.";
+        case MuiLanguage::PL_PL: return L"Indeks wydajności systemu Windows ocenia główne składniki systemu w skali od 1,0 do 9,9.";
+        default: return L"The Windows Experience Index assesses key system components on a scale of 1.0 to 9.9.";
+    }
+}
+
+static const wchar_t* RateThisComputerText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Classifica computer";
+        case MuiLanguage::ES_ES: return L"Evaluar este equipo";
+        case MuiLanguage::FR_FR: return L"Évaluer cet ordinateur";
+        case MuiLanguage::TR_TR: return L"Bu bilgisayarı derecelendir";
+        case MuiLanguage::RU_RU: return L"Оценить компьютер";
+        case MuiLanguage::ZH_CN: return L"评估此计算机";
+        case MuiLanguage::DE_DE: return L"Diesen Computer bewerten";
+        case MuiLanguage::PT_BR: return L"Avaliar este computador";
+        case MuiLanguage::PL_PL: return L"Oceń ten komputer";
+        default: return L"Rate this computer";
+    }
+}
+
+static const wchar_t* RerunAssessmentText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Esegui di nuovo la valutazione";
+        case MuiLanguage::ES_ES: return L"Repetir la evaluación";
+        case MuiLanguage::FR_FR: return L"Réexécuter l'évaluation";
+        case MuiLanguage::TR_TR: return L"Değerlendirmeyi yeniden çalıştır";
+        case MuiLanguage::RU_RU: return L"Повторить оценку";
+        case MuiLanguage::ZH_CN: return L"重新运行评估";
+        case MuiLanguage::DE_DE: return L"Bewertung wiederholen";
+        case MuiLanguage::PT_BR: return L"Repetir a avaliação";
+        case MuiLanguage::PL_PL: return L"Uruchom ponownie ocenę";
+        default: return L"Re-run the assessment";
+    }
+}
+
+static const wchar_t* Win7NumbersMeanText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Significato dei numeri visualizzati";
+        case MuiLanguage::ES_ES: return L"¿Qué significan estos números?";
+        case MuiLanguage::FR_FR: return L"Que signifient ces nombres ?";
+        case MuiLanguage::TR_TR: return L"Bu sayılar ne anlama geliyor?";
+        case MuiLanguage::RU_RU: return L"Что означают эти числа?";
+        case MuiLanguage::ZH_CN: return L"这些数字是什么意思？";
+        case MuiLanguage::DE_DE: return L"Was bedeuten diese Zahlen?";
+        case MuiLanguage::PT_BR: return L"O que significam estes números?";
+        case MuiLanguage::PL_PL: return L"Co oznaczają te liczby?";
+        default: return L"What do these numbers mean?";
+    }
+}
+
+static const wchar_t* Win7ImproveText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Suggerimenti per migliorare le prestazioni del computer.";
+        case MuiLanguage::ES_ES: return L"Sugerencias para mejorar el rendimiento del equipo.";
+        case MuiLanguage::FR_FR: return L"Conseils pour améliorer les performances de l'ordinateur.";
+        case MuiLanguage::TR_TR: return L"Bilgisayarınızın performansını artırmaya yönelik ipuçları.";
+        case MuiLanguage::RU_RU: return L"Советы по повышению производительности компьютера.";
+        case MuiLanguage::ZH_CN: return L"提高计算机性能的提示。";
+        case MuiLanguage::DE_DE: return L"Tipps zum Verbessern der Computerleistung.";
+        case MuiLanguage::PT_BR: return L"Dicas para melhorar o desempenho do computador.";
+        case MuiLanguage::PL_PL: return L"Wskazówki dotyczące poprawy wydajności komputera.";
+        default: return L"Tips for improving your computer's performance.";
+    }
+}
+
+static const wchar_t* Win7MicrosoftLinkText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Ulteriori informazioni su punteggi e software online";
+        case MuiLanguage::ES_ES: return L"Más información sobre puntuaciones y software en línea";
+        case MuiLanguage::FR_FR: return L"En savoir plus sur les scores et les logiciels en ligne";
+        case MuiLanguage::TR_TR: return L"Puanlar ve yazılımlar hakkında çevrimiçi daha fazla bilgi";
+        case MuiLanguage::RU_RU: return L"Дополнительные сведения об оценках и программном обеспечении в Интернете";
+        case MuiLanguage::ZH_CN: return L"联机了解有关分数和软件的详细信息";
+        case MuiLanguage::DE_DE: return L"Weitere Informationen zu Bewertungen und Software online";
+        case MuiLanguage::PT_BR: return L"Saiba mais online sobre pontuações e software";
+        case MuiLanguage::PL_PL: return L"Dowiedz się więcej online o wynikach i oprogramowaniu";
+        default: return L"Learn more about scores and software online";
+    }
+}
+
+static const wchar_t* Win7NumbersDialogText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT:
+            return L"L'Indice prestazioni Windows valuta i componenti principali del computer, come processore, memoria, grafica, grafica dei giochi e disco rigido primario. Il punteggio di base è determinato dal sottopunteggio più basso, perché quel componente rappresenta il principale collo di bottiglia delle prestazioni.";
+        case MuiLanguage::ES_ES:
+            return L"El Índice de experiencia de Windows evalúa los componentes principales del equipo, como el procesador, la memoria, los gráficos, los gráficos de juego y el disco duro principal. La puntuación base viene determinada por la subpuntuación más baja, porque ese componente es el principal cuello de botella del rendimiento.";
+        case MuiLanguage::FR_FR:
+            return L"L'indice de performance Windows évalue les principaux composants de l'ordinateur, comme le processeur, la mémoire, les graphiques, les graphiques de jeu et le disque dur principal. Le score de base est déterminé par le sous-score le plus bas, car ce composant représente le principal goulot d'étranglement des performances.";
+        case MuiLanguage::TR_TR:
+            return L"Windows Deneyim Dizini işlemci, bellek, grafikler, oyun grafikleri ve birincil sabit disk gibi bilgisayarın temel bileşenlerini değerlendirir. Temel puan en düşük alt puana göre belirlenir, çünkü bu bileşen performansın ana darboğazıdır.";
+        case MuiLanguage::RU_RU:
+            return L"Индекс производительности Windows оценивает основные компоненты компьютера, такие как процессор, память, графика, игровая графика и основной жесткий диск. Базовая оценка определяется наименьшей подоценкой, поскольку этот компонент является главным ограничением производительности.";
+        case MuiLanguage::ZH_CN:
+            return L"Windows 体验指数会评估计算机的关键组件，例如处理器、内存、图形、游戏图形和主硬盘。基本分数由最低的子分数决定，因为该组件是主要的性能瓶颈。";
+        case MuiLanguage::DE_DE:
+            return L"Der Windows-Leistungsindex bewertet wichtige Komponenten des Computers, z. B. Prozessor, Arbeitsspeicher, Grafik, Gaminggrafik und primäre Festplatte. Die Basisbewertung wird durch die niedrigste Teilbewertung bestimmt, da diese Komponente den wichtigsten Leistungsengpass darstellt.";
+        case MuiLanguage::PT_BR:
+            return L"O Índice de Experiência do Windows avalia os principais componentes do computador, como processador, memória, elementos gráficos, gráficos de jogos e disco rígido principal. A pontuação base é determinada pela menor subpontuação, pois esse componente é o principal gargalo de desempenho.";
+        case MuiLanguage::PL_PL:
+            return L"Indeks wydajności systemu Windows ocenia główne składniki komputera, takie jak procesor, pamięć, grafika, grafika w grach i podstawowy dysk twardy. Wynik podstawowy jest określany przez najniższy podwynik, ponieważ ten składnik stanowi główne wąskie gardło wydajności.";
+        default:
+            return L"The Windows Experience Index rates key components of your computer, such as the processor, memory, graphics, gaming graphics and primary hard disk. The base score is determined by the lowest subscore, because that component is the main performance bottleneck.";
+    }
+}
+
+static const wchar_t* Win7TipsDialogText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT:
+            return L"Per migliorare il punteggio, aggiorna i driver dei dispositivi, chiudi i programmi di avvio non necessari, usa un piano di alimentazione ad alte prestazioni, mantieni spazio libero sul disco ed esegui di nuovo la valutazione dopo modifiche hardware o driver.";
+        case MuiLanguage::ES_ES:
+            return L"Para mejorar la puntuación, actualiza los controladores de dispositivo, cierra programas de inicio innecesarios, usa un plan de energía de alto rendimiento, mantén suficiente espacio libre en disco y vuelve a ejecutar la evaluación después de cambios de hardware o controladores.";
+        case MuiLanguage::FR_FR:
+            return L"Pour améliorer le score, mettez à jour les pilotes de périphériques, fermez les programmes de démarrage inutiles, utilisez un mode de gestion de l'alimentation hautes performances, gardez suffisamment d'espace disque libre et relancez l'évaluation après des changements matériels ou de pilotes.";
+        case MuiLanguage::TR_TR:
+            return L"Puanınızı artırmak için aygıt sürücülerini güncelleyin, gereksiz başlangıç programlarını kapatın, yüksek performanslı bir güç planı kullanın, yeterli boş disk alanı bırakın ve donanım ya da sürücü değişikliklerinden sonra değerlendirmeyi yeniden çalıştırın.";
+        case MuiLanguage::RU_RU:
+            return L"Чтобы повысить оценку, обновите драйверы устройств, отключите ненужные программы автозагрузки, используйте план питания высокой производительности, оставляйте достаточно свободного места на диске и повторно запускайте оценку после изменений оборудования или драйверов.";
+        case MuiLanguage::ZH_CN:
+            return L"若要提高分数，请更新设备驱动程序，关闭不必要的启动程序，使用高性能电源计划，保留足够的可用磁盘空间，并在更改硬件或驱动程序后重新运行评估。";
+        case MuiLanguage::DE_DE:
+            return L"Um die Bewertung zu verbessern, aktualisieren Sie Gerätetreiber, schließen Sie unnötige Autostartprogramme, verwenden Sie einen Energiesparplan mit hoher Leistung, halten Sie genügend freien Speicherplatz bereit und führen Sie die Bewertung nach Hardware- oder Treiberänderungen erneut aus.";
+        case MuiLanguage::PT_BR:
+            return L"Para melhorar sua pontuação, atualize os drivers de dispositivo, feche programas de inicialização desnecessários, use um plano de energia de alto desempenho, mantenha espaço livre suficiente em disco e execute a avaliação novamente após alterações de hardware ou driver.";
+        case MuiLanguage::PL_PL:
+            return L"Aby poprawić wynik, zaktualizuj sterowniki urządzeń, zamknij niepotrzebne programy startowe, użyj planu zasilania o wysokiej wydajności, zachowaj wystarczającą ilość wolnego miejsca na dysku i ponownie uruchom ocenę po zmianach sprzętu lub sterowników.";
+        default:
+            return L"To improve your score, update device drivers, close unnecessary startup programs, use a high performance power plan, keep enough free disk space and re-run the assessment after hardware or driver changes.";
+    }
+}
+
+static const wchar_t* Win7ViewPrintText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Visualizza e stampa dettagli";
+        case MuiLanguage::ES_ES: return L"Ver e imprimir detalles";
+        case MuiLanguage::FR_FR: return L"Afficher et imprimer les détails";
+        case MuiLanguage::TR_TR: return L"Ayrıntıları görüntüle ve yazdır";
+        case MuiLanguage::RU_RU: return L"Просмотр и печать сведений";
+        case MuiLanguage::ZH_CN: return L"查看并打印详细信息";
+        case MuiLanguage::DE_DE: return L"Details anzeigen und drucken";
+        case MuiLanguage::PT_BR: return L"Exibir e imprimir detalhes";
+        case MuiLanguage::PL_PL: return L"Wyświetl i wydrukuj szczegóły";
+        default: return L"View and print details";
+    }
+}
+
+static const wchar_t* VistaNotSureText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Non sai da dove iniziare?";
+        default: return L"Not sure where to start?";
+    }
+}
+
+static const wchar_t* VistaImproveLinkText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Informazioni su come migliorare le prestazioni del computer.";
+        default: return L"Learn how you can improve your computer's performance.";
+    }
+}
+
+static const wchar_t* VistaLearnScoresText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Ulteriori informazioni sui punteggi online";
+        default: return L"Learn more about the scores online";
+    }
+}
+
+static const wchar_t* VistaSoftwareForScoreText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Visualizza software per il punteggio di base online";
+        default: return L"View software for my base score online";
+    }
+}
+
+static std::wstring Win7PerfLinksXml() {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+    std::wstring numbers = XmlAttrEscape(Win7NumbersMeanText(lang));
+    std::wstring improve = XmlAttrEscape(Win7ImproveText(lang));
+
+    std::wstring xml;
+    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_1)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
+    xml += LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers">)PC";
+    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_details_numbersmeanimg)" layoutpos="left" padding="rect(15rp, 0rp, 15rp, 0rp)" content="icon(99, 32rp, 32rp, library(imageres.dll))" accname="Question mark image"/>)PC";
+    xml += LR"PC(<element layout="filllayout()" layoutpos="top">)PC";
+    xml += LR"PC(<button class="cp_content_link" active="mouse|keyboard" layoutpos="left" content=")PC" + numbers + L"\"/>";
+    xml += LR"PC(</element></NavigateButton>)PC";
+    xml += LR"PC(</element>)PC";
+    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_2)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
+    xml += LR"PC(<NavigateButton id="atom(perfhub_page_description_container)" layout="borderlayout()" layoutpos="top" padding="rect(0rp, 0rp, 7rp, 0rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:tips">)PC";
+    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_details_improvesystemimg)" layoutpos="left" padding="rect(15rp, 0rp, 15rp, 0rp)" content="icon(99, 32rp, 32rp, library(imageres.dll))" accname="Question mark image"/>)PC";
+    xml += LR"PC(<button class="cp_content_link" active="mouse|keyboard" layoutpos="top" content=")PC" + improve + L"\"/>";
+    xml += LR"PC(</NavigateButton></element>)PC";
+    return xml;
+}
+
+static std::wstring Win7MicrosoftUpsellXml() {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+    std::wstring learnMore = XmlAttrEscape(Win7MicrosoftLinkText(lang));
+
+    std::wstring xml;
+    xml += LR"PC(<element id="atom(perfhub_upsell_mscontainer)" layoutpos="top" layout="borderlayout()" bordercolor="gtc(CONTROLPANELSTYLE,17,0,3821)" borderthickness="rect(1rp,1rp,1rp,1rp)" padding="rect(7rp,7rp,7rp,7rp)">)PC";
+    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_upsell_mslogo)" layoutpos="left" padding="rect(0rp, 0rp, 15rp, 0rp)" content="icon(271, 40rp, 40rp, library(shell32.dll))" accname="Microsoft upsell image"/>)PC";
+    xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore"><element layout="filllayout()" layoutpos="top">)PC";
+    xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" content=")PC" + learnMore + L"\"/>";
+    xml += LR"PC(</element></NavigateButton></element>)PC";
+    return xml;
+}
+
+static bool HasWinsatAssessmentData() {
+    wchar_t windowsDir[MAX_PATH] = {};
+    if (!GetWindowsDirectoryW(windowsDir, ARRAYSIZE(windowsDir))) return false;
+
+    std::wstring pattern = std::wstring(windowsDir) +
+        L"\\Performance\\WinSAT\\DataStore\\*Formal.Assessment*.xml";
+    WIN32_FIND_DATAW fd{};
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    FindClose(h);
+    return true;
+}
+
+static std::wstring VistaStartHelpXml() {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+    std::wstring prefix = XmlAttrEscape(VistaNotSureText(lang));
+    std::wstring link = XmlAttrEscape(VistaImproveLinkText(lang));
+
+    std::wstring xml;
+    xml += LR"PC(<element layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,0rp,0rp,0rp)">)PC";
+    xml += LR"PC(<button layoutpos="left" accessible="true" accrole="graphic" padding="rect(0rp,0rp,8rp,0rp)" content="icon(61001,16rp,16rp,library(shell32.dll))" accname="Help image"/>)PC";
+    xml += LR"PC(<element sheet="cp_style" class="cp_content_text" layoutpos="left" content=")PC" + prefix + L"\"/>";
+    xml += LR"PC(<element layoutpos="left" width="4rp"/>)PC";
+    xml += LR"PC(<NavigateButton layoutpos="left" layout="flowlayout()" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:tips">)PC";
+    xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" content=")PC" + link + L"\"/>";
+    xml += LR"PC(</NavigateButton></element>)PC";
+    return xml;
+}
+
+static std::wstring VistaPerfLinksXml() {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+    std::wstring numbers = XmlAttrEscape(Win7NumbersMeanText(lang));
+    std::wstring scores = XmlAttrEscape(VistaLearnScoresText(lang));
+    std::wstring viewPrint = XmlAttrEscape(Win7ViewPrintText(lang));
+    const bool rated = HasWinsatAssessmentData();
+
+    std::wstring xml;
+    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_1)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
+    if (rated) {
+        xml += LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:viewprint">)PC";
+        xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + viewPrint + L"\"/>";
+        xml += LR"PC(</NavigateButton>)PC";
+        xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers">)PC";
+        xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + numbers + L"\"/>";
+        xml += LR"PC(</NavigateButton>)PC";
+    } else {
+        xml += LR"PC(<element layout="filllayout()"/>)PC";
+        xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers">)PC";
+        xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + numbers + L"\"/>";
+        xml += LR"PC(</NavigateButton>)PC";
+    }
+    xml += LR"PC(</element>)PC";
+    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_2)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
+    xml += LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore">)PC";
+    xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + scores + L"\"/>";
+    xml += LR"PC(</NavigateButton>)PC";
+    xml += LR"PC(<element layout="filllayout()"/>)PC";
+    xml += LR"PC(</element>)PC";
+    return xml;
+}
+
+static std::wstring VistaSoftwareUpsellXml() {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+    std::wstring text = XmlAttrEscape(VistaSoftwareForScoreText(lang));
+
+    std::wstring xml;
+    xml += LR"PC(<element id="atom(perfhub_vista_software_container)" layoutpos="top" layout="borderlayout()" bordercolor="gtc(CONTROLPANELSTYLE,17,0,3821)" borderthickness="rect(1rp,1rp,1rp,1rp)" padding="rect(12rp,7rp,7rp,7rp)">)PC";
+    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" layoutpos="left" padding="rect(0rp,0rp,15rp,0rp)" content="icon(271,40rp,40rp,library(shell32.dll))" accname="Software image"/>)PC";
+    xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore"><button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" content=")PC" + text + L"\"/></NavigateButton>";
+    xml += LR"PC(</element>)PC";
+    return xml;
+}
+
+static std::wstring PatchPerfCenterVistaXml(std::wstring xml) {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+
+    std::wstring descriptionMarker = L"content=\"" + XmlAttrEscape(PerfDescriptionText(lang)) + L"\"";
+    size_t descriptionPos = xml.find(descriptionMarker);
+    if (descriptionPos != std::wstring::npos) {
+        size_t blockStart = 0;
+        size_t blockEnd = 0;
+
+        // The description line in the stock UIFILE is usually a self-closing
+        // <element .../>. FindOuterElement intentionally ignores self-closing
+        // elements, so handle that case here; otherwise the Vista "Not sure..."
+        // row won't be inserted.
+        size_t elementStart = xml.rfind(L"<element", descriptionPos);
+        size_t tagEnd = (elementStart != std::wstring::npos) ? xml.find(L'>', elementStart)
+                                                             : std::wstring::npos;
+        if (elementStart != std::wstring::npos && tagEnd != std::wstring::npos &&
+            tagEnd > elementStart && xml[tagEnd - 1] == L'/') {
+            blockStart = elementStart;
+            blockEnd = tagEnd + 1;
+            xml.replace(blockStart, blockEnd - blockStart, VistaStartHelpXml());
+        } else if (FindOuterElement(xml, descriptionPos, blockStart, blockEnd)) {
+            xml.replace(blockStart, blockEnd - blockStart, VistaStartHelpXml());
+        }
+    }
+
+    size_t linksMarker = xml.find(L"atom(perfhub_details_wincrslinks_1)");
+    if (linksMarker != std::wstring::npos) {
+        size_t blockStart = 0;
+        size_t blockEnd = 0;
+        if (FindOuterElement(xml, linksMarker, blockStart, blockEnd)) {
+            xml.replace(blockStart, blockEnd - blockStart, VistaPerfLinksXml());
+        }
+    }
+
+    if (xml.find(L"atom(perfhub_vista_software_container)") == std::wstring::npos) {
+        size_t upsellContainer =
+            xml.find(L"<element id=\"atom(perfhub_upsell_container)\"");
+        if (upsellContainer != std::wstring::npos) {
+            xml.insert(upsellContainer, VistaSoftwareUpsellXml());
+        }
+    }
+    return xml;
+}
+
+static void InlineResString(std::wstring& xml, UINT id, MuiLanguage lang) {
+    const wchar_t* text = GetMuiString(id, lang);
+    if (!text || !*text) return;
+
+    std::wstring from = L"content=\"resstr(" + std::to_wstring(id) + L")\"";
+    std::wstring to = L"content=\"" + XmlAttrEscape(text) + L"\"";
+    ReplaceAll(xml, from, to);
+}
+
+static std::wstring PatchPerfCenterCommonTextXml(const std::wstring& inputXml) {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+    std::wstring xml = inputXml;
+
+    // Inline the core table labels/descriptions before any skin-specific patch.
+    // When SetXML is used with an XML string, some DirectUI resstr(...) lookups
+    // can fail depending on the resource module/MUI state. These replacements
+    // keep the original layout while ensuring the visible component names don't
+    // disappear (Processor, Memory, Graphics, Gaming graphics, Primary hard disk,
+    // table headers, unrated text, etc.).
+    static const UINT idsToInline[] = {
+        54, 1101, 1102, 1103, 1104, 1111,
+        1185, 1186, 1188,
+        1200, 1209, 1210, 1212, 1213, 1215, 1216,
+        1218, 711, 1221, 1222,
+    };
+    for (UINT id : idsToInline) {
+        InlineResString(xml, id, lang);
+    }
+
+    // Defensive fallback for DirectUI text that can be blank when the page is
+    // parsed from the downloaded DLL without its original MUI companion. This
+    // doesn't change the embedded string catalog and preserves the layout.
+    ReplaceAll(xml, L"content=\"resstr(1182)\"",
+               L"content=\"" + XmlAttrEscape(PerfTitleText(lang)) + L"\"");
+    ReplaceAll(xml, L"content=\"resstr(1119)\"",
+               L"content=\"" + XmlAttrEscape(PerfDescriptionText(lang)) + L"\"");
+    ReplaceAll(xml, L"content=\"resstr(1186)\"",
+               L"content=\"" + XmlAttrEscape(RateThisComputerText(lang)) + L"\"");
+    ReplaceAll(xml, L"content=\"resstr(1188)\"",
+               L"content=\"" + XmlAttrEscape(RerunAssessmentText(lang)) + L"\"");
+
+    return xml;
+}
+
+static std::wstring PatchPerfCenterXml(const std::wstring& inputXml) {
+    if (inputXml.find(L"atom(perfcentertoplevel)") == std::wstring::npos) {
+        return inputXml;
+    }
+
+    std::wstring xml = PatchPerfCenterCommonTextXml(inputXml);
+
+    if (g_useWindowsVistaSkin.load()) {
+        return PatchPerfCenterVistaXml(xml);
+    }
+
+    if (!g_useWindows7Skin.load()) {
+        return xml;
+    }
+
+    // Minimal Windows 7 skin patch: only restore the Windows 7 link blocks.
+    // All other UIFILE content and all original string resources are left untouched.
+    // content and all original string resources are left untouched.
+    size_t linksMarker = xml.find(L"atom(perfhub_details_wincrslinks_1)");
+    if (linksMarker != std::wstring::npos) {
+        size_t blockStart = 0;
+        size_t blockEnd = 0;
+        if (FindOuterElement(xml, linksMarker, blockStart, blockEnd)) {
+            xml.replace(blockStart, blockEnd - blockStart, Win7PerfLinksXml());
+        }
+    }
+
+    if (xml.find(L"atom(perfhub_upsell_mscontainer)") == std::wstring::npos) {
+        size_t upsellContainer =
+            xml.find(L"<element id=\"atom(perfhub_upsell_container)\"");
+        if (upsellContainer != std::wstring::npos) {
+            xml.insert(upsellContainer, Win7MicrosoftUpsellXml());
+        } else {
+            size_t oemContainer =
+                xml.find(L"<element id=\"atom(perfhub_upsell_oem_container)\"");
+            if (oemContainer != std::wstring::npos) {
+                xml.insert(oemContainer, Win7MicrosoftUpsellXml());
+            }
+        }
+    }
+
+    return xml;
+}
+
+static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
+    void* parser, PCWSTR resourceName, PCWSTR resourceType, HMODULE resourceModule,
+    HINSTANCE hInstance1, HINSTANCE hInstance2) {
+    if (!DUISetXMLFromResourceOriginal) return E_FAIL;
+    if (!DUISetXML || g_inPerfCenterXmlPatch) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                             resourceModule, hInstance1,
+                                             hInstance2);
+    }
+
+    const bool isUifile101 =
+        resourceType && !IS_INTRESOURCE(resourceType) &&
+        !_wcsicmp(resourceType, L"UIFILE") && IS_INTRESOURCE(resourceName) &&
+        static_cast<UINT>(reinterpret_cast<UINT_PTR>(resourceName)) == 101;
+
+    if (!isUifile101) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                             resourceModule, hInstance1,
+                                             hInstance2);
+    }
+
+    // Do not depend on g_hPerfCenter/g_hLocalizedResources here. During the
+    // first enable/startup path the page can be parsed before those atomics are
+    // published by the background setup thread. Instead, read UIFILE 101 and
+    // verify the XML marker below. This keeps first-load skinning reliable while
+    // still avoiding unrelated UIFILE 101 resources.
+    std::wstring xml = LoadUifileXml(resourceModule, resourceName, resourceType);
+    if (xml.empty() || xml.find(L"atom(perfcentertoplevel)") == std::wstring::npos) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                             resourceModule, hInstance1,
+                                             hInstance2);
+    }
+
+    // Re-read the setting when a fresh page is being created. This makes a skin
+    // choice made while the page was open take effect after the user closes and
+    // opens the page again, without forcing a mod reload. It also makes startup
+    // robust if Windhawk exposes string settings slightly later than Wh_ModInit.
+    ResolvePageSkinForFreshPage();
+    Wh_Log(L"PerfCenter UIFILE 101 load: page skin is %s (fresh7=%d freshVista=%d latched7=%d latchedVista=%d)",
+           CurrentPageSkinName(),
+           ReadPageSkinSetting() ? 1 : 0,
+           ReadPageSkinVistaSetting() ? 1 : 0,
+           g_useWindows7Skin.load() ? 1 : 0,
+           g_useWindowsVistaSkin.load() ? 1 : 0);
+
+    g_perfCenterXmlPageSeen.store(true);
+
+    std::wstring patchedXml = PatchPerfCenterXml(xml);
+    if (patchedXml == xml) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                             resourceModule, hInstance1,
+                                             hInstance2);
+    }
+
+    Wh_Log(L"PerfCenter UIFILE 101 patched with Windows 7 link layout");
+    ++g_inPerfCenterXmlPatch;
+    HRESULT hr = DUISetXML(parser, patchedXml.c_str(),
+                           reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
+    --g_inPerfCenterXmlPatch;
+    return hr;
+}
+
+
+static const int kVistaLampIconId = 61001;
+static const char kVistaLampIconRtBase64[] = R"B64(KAAAABAAAAAgAAAAAQAgAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAACQgIEY5NTDN
+LykjwwYDA1AAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8BAAAAAE46OhqgmZDmzsO2/3pvYf8vKybw
+AAAAUAAAACYAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf39/AgAAAACQg3I8y7yt/sWzpv5xYFD+Qzsw8gAAADcAAAAh
+AAAAGQAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAH9/fwIAAAAAenpxNqutp/mos7D/gY+M/2BlYO1VRjgSAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAB/f/8CAAAAAHu90EKu6Pb9yvz//6Lt/f+U0+Ty3eXlHgAAAAH///8BAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAqv//AwAAAACK3u9ltfT//6zt//6L2/H/j8/h/arW5UUA//8Bf///AgAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAKqq/wMAAAAAltvupqT1//+K4vj8kNnt/ZLY7P+Ry9+QAAAAAFWqqgMAAAAAAAAAAAAAAAAAAAAAAAAAAP///wIAAAAA
+fMjeL6Di9POM5Pr+ht30/YLT6P2J0+f/ks/f5Wa7zB7///8BVaqqAwAAAAAAAAAAAAAAAAAAAAD///8BAAAAAJzY6q6t9f//
+juT8/Y/j+f+E2fD/fM7h/aPg8P+RzN6TAAAAAH9/fwIAAAAAAAAAAAAAAAB///8CAAAAAHvK3US16vn+tvD//rvw//+68f//
+nen8/4DV6/+U1uf+qtjm+HG90y8AAAAA////AQAAAAAAAAAAf///BAAAAACW3/Ga1P///973//za+P//zvT//8Pz//+T4vf/
+g9Dl/b/o9f+KzNuIAAAAAH+/vwQAAAAAAAAAAJnM/wUAAAAAouj4qOL///72/f/74Pn//8z0///L9v//o+n8/4DS5/y86fX+
+kc/dpQAAAACqqqoDAAAAAAAAAAC///8EAAAAAJfi9pnW///+9vz9/Oj7///O9P//xPT//5zn+/+G1Of8ruHw/4zM34gAAAAA
+f7+/BAAAAAAAAAAAf///AgAAAACH2fBEsPD9/937//7m+P/9xvT//8L0//+i4/X9idTm/43M3vh5wtguAAAAAH9//wIAAAAA
+AAAAAAAAAAD///8BAAAAAJLe9H+l8P3/sPL//6ft//+f6Pr/k9zw/37N4f17xNdtAAAAAP///wEAAAAAAAAAAAAAAAAAAAAA
+AP//Af///wEAAAAAg9XsY4Tc8daF2e/5ftHn+HvL4Mt3wNJRAAAAAH9//wIAAAABAAAAAAAAAAD+fwAA/D8AAPw/AAD8PwAA
+/D8AAPw/AAD4HwAA+B8AAPAPAADwDwAA4AcAAOAHAADgBwAA8A8AAPgfAAD8PwAA)B64";
+
+using LoadImageW_t = decltype(&LoadImageW);
+static LoadImageW_t LoadImageWOriginalForVistaLamp = nullptr;
+static HICON g_vistaLampIcon = nullptr;
+
+static int Base64Value(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static std::vector<BYTE> DecodeBase64(const char* input) {
+    std::vector<BYTE> output;
+    int val = 0;
+    int valb = -8;
+    for (const char* p = input; p && *p; ++p) {
+        if (*p == '=') break;
+        int decoded = Base64Value(*p);
+        if (decoded < 0) continue;
+        val = (val << 6) + decoded;
+        valb += 6;
+        if (valb >= 0) {
+            output.push_back(static_cast<BYTE>((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return output;
+}
+
+static HICON GetVistaLampIcon() {
+    if (g_vistaLampIcon) return g_vistaLampIcon;
+    std::vector<BYTE> iconData = DecodeBase64(kVistaLampIconRtBase64);
+    if (iconData.empty()) return nullptr;
+    g_vistaLampIcon = CreateIconFromResourceEx(iconData.data(),
+                                               static_cast<DWORD>(iconData.size()),
+                                               TRUE, 0x00030000, 16, 16,
+                                               LR_DEFAULTCOLOR);
+    return g_vistaLampIcon;
+}
+
+HANDLE WINAPI LoadImageWHookForVistaLamp(HINSTANCE instance, LPCWSTR name, UINT type,
+                                         int cx, int cy, UINT flags) {
+    if (type == IMAGE_ICON && IS_INTRESOURCE(name) &&
+        static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId) {
+        if (HICON icon = GetVistaLampIcon()) {
+            return CopyIcon(icon);
+        }
+    }
+    return LoadImageWOriginalForVistaLamp(instance, name, type, cx, cy, flags);
+}
+
+
+using LoadIconW_t = decltype(&LoadIconW);
+using ExtractIconExW_t = decltype(&ExtractIconExW);
+using PrivateExtractIconsW_t = UINT(WINAPI*)(LPCWSTR, int, int, int, HICON*, UINT*, UINT, UINT);
+using SHDefExtractIconW_t = HRESULT(WINAPI*)(LPCWSTR, int, UINT, HICON*, HICON*, UINT);
+static LoadIconW_t LoadIconWOriginalForVistaLamp = nullptr;
+static ExtractIconExW_t ExtractIconExWOriginalForVistaLamp = nullptr;
+static PrivateExtractIconsW_t PrivateExtractIconsWOriginalForVistaLamp = nullptr;
+static SHDefExtractIconW_t SHDefExtractIconWOriginalForVistaLamp = nullptr;
+
+static bool IsVistaLampIconRequest(LPCWSTR file, int index) {
+    if (index != kVistaLampIconId && index != -kVistaLampIconId) return false;
+    if (!file || !*file) return true;
+    std::wstring s = file;
+    for (auto& c : s) c = towlower(c);
+    return s.find(L"shell32.dll") != std::wstring::npos;
+}
+
+HICON WINAPI LoadIconWHookForVistaLamp(HINSTANCE instance, LPCWSTR name) {
+    if (IS_INTRESOURCE(name) &&
+        static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId) {
+        if (HICON icon = GetVistaLampIcon()) return CopyIcon(icon);
+    }
+    return LoadIconWOriginalForVistaLamp(instance, name);
+}
+
+UINT WINAPI ExtractIconExWHookForVistaLamp(LPCWSTR file, int iconIndex,
+                                           HICON* large, HICON* small,
+                                           UINT icons) {
+    if (IsVistaLampIconRequest(file, iconIndex) && icons > 0) {
+        HICON icon = GetVistaLampIcon();
+        if (!icon) return 0;
+        if (large) large[0] = CopyIcon(icon);
+        if (small) small[0] = CopyIcon(icon);
+        return 1;
+    }
+    return ExtractIconExWOriginalForVistaLamp(file, iconIndex, large, small, icons);
+}
+
+UINT WINAPI PrivateExtractIconsWHookForVistaLamp(LPCWSTR file, int iconIndex,
+                                                 int cx, int cy, HICON* icons,
+                                                 UINT* ids, UINT iconCount,
+                                                 UINT flags) {
+    if (IsVistaLampIconRequest(file, iconIndex) && iconCount > 0 && icons) {
+        HICON icon = GetVistaLampIcon();
+        if (!icon) return 0;
+        icons[0] = CopyIcon(icon);
+        if (ids) ids[0] = kVistaLampIconId;
+        return 1;
+    }
+    return PrivateExtractIconsWOriginalForVistaLamp(file, iconIndex, cx, cy, icons,
+                                                    ids, iconCount, flags);
+}
+
+HRESULT WINAPI SHDefExtractIconWHookForVistaLamp(LPCWSTR file, int iconIndex,
+                                                 UINT flags, HICON* large,
+                                                 HICON* small, UINT size) {
+    if (IsVistaLampIconRequest(file, iconIndex)) {
+        HICON icon = GetVistaLampIcon();
+        if (!icon) return E_FAIL;
+        if (large) *large = CopyIcon(icon);
+        if (small) *small = CopyIcon(icon);
+        return S_OK;
+    }
+    return SHDefExtractIconWOriginalForVistaLamp(file, iconIndex, flags, large, small, size);
+}
+
+using ShellExecuteW_t = decltype(&ShellExecuteW);
+using ShellExecuteExW_t = decltype(&ShellExecuteExW);
+static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
+static ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
+
+static bool IsPerfCenterAction(PCWSTR params, const wchar_t* action) {
+    if (!params || !action) return false;
+    std::wstring value = params;
+    for (auto& c : value) c = towlower(c);
+    std::wstring expected = L"perfcenter-restorer:";
+    expected += action;
+    for (auto& c : expected) c = towlower(c);
+    return value == expected;
+}
+
+static bool HandlePerfCenterAction(HWND hwnd, PCWSTR params) {
+    MuiLanguage lang = GetCurrentEmbeddedLanguage();
+
+    if (IsPerfCenterAction(params, L"numbers")) {
+        MessageBoxW(hwnd, Win7NumbersDialogText(lang), Win7NumbersMeanText(lang),
+                    MB_OK | MB_ICONINFORMATION);
+        return true;
+    }
+    if (IsPerfCenterAction(params, L"tips")) {
+        MessageBoxW(hwnd, Win7TipsDialogText(lang), Win7ImproveText(lang),
+                    MB_OK | MB_ICONINFORMATION);
+        return true;
+    }
+    if (IsPerfCenterAction(params, L"viewprint")) {
+        if (ShellExecuteWOriginal) {
+            ShellExecuteWOriginal(hwnd, L"open", L"msinfo32.exe", nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        return true;
+    }
+    if (IsPerfCenterAction(params, L"learnmore")) {
+        if (ShellExecuteWOriginal) {
+            ShellExecuteWOriginal(hwnd, L"open",
+                                  L"https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows",
+                                  nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        return true;
+    }
+    return false;
+}
+
+HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR file,
+                                   LPCWSTR parameters, LPCWSTR directory,
+                                   INT showCmd) {
+    if (HandlePerfCenterAction(hwnd, parameters)) {
+        return reinterpret_cast<HINSTANCE>(static_cast<INT_PTR>(33));
+    }
+    return ShellExecuteWOriginal(hwnd, operation, file, parameters, directory, showCmd);
+}
+
+BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* execInfo) {
+    if (execInfo && HandlePerfCenterAction(execInfo->hwnd, execInfo->lpParameters)) {
+        execInfo->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<INT_PTR>(33));
+        return TRUE;
+    }
+    return ShellExecuteExWOriginal(execInfo);
+}
+
+static void InstallPerfCenterActionHooks() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        user32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (user32) {
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(user32, "LoadImageW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadImageW_t>(p),
+                                           LoadImageWHookForVistaLamp,
+                                           &LoadImageWOriginalForVistaLamp);
+        }
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(user32, "LoadIconW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadIconW_t>(p),
+                                           LoadIconWHookForVistaLamp,
+                                           &LoadIconWOriginalForVistaLamp);
+        }
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(user32, "PrivateExtractIconsW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<PrivateExtractIconsW_t>(p),
+                                           PrivateExtractIconsWHookForVistaLamp,
+                                           &PrivateExtractIconsWOriginalForVistaLamp);
+        }
+    }
+
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32) {
+        shell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!shell32) return;
+    if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ExtractIconExW"))) {
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<ExtractIconExW_t>(p),
+                                       ExtractIconExWHookForVistaLamp,
+                                       &ExtractIconExWOriginalForVistaLamp);
+    }
+    if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "SHDefExtractIconW"))) {
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<SHDefExtractIconW_t>(p),
+                                       SHDefExtractIconWHookForVistaLamp,
+                                       &SHDefExtractIconWOriginalForVistaLamp);
+    }
+    if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteW"))) {
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteW_t>(p),
+                                       ShellExecuteWHook, &ShellExecuteWOriginal);
+    }
+    if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteExW"))) {
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteExW_t>(p),
+                                       ShellExecuteExWHook, &ShellExecuteExWOriginal);
+    }
+}
+
+static void InstallPerfCenterXmlPatchHook() {
+    HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
+    if (!dui70) {
+        dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!dui70) {
+        Wh_Log(L"PerfCenter XML patch: dui70.dll could not be loaded");
+        return;
+    }
+
+    for (const char* name : {
+#ifdef _WIN64
+             "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z",
+#endif
+             "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z"}) {
+        if (FARPROC proc = GetProcAddress(dui70, name)) {
+            DUISetXML = reinterpret_cast<DUISetXML_t>(proc);
+            break;
+        }
+    }
+    if (!DUISetXML) {
+        Wh_Log(L"PerfCenter XML patch: DirectUI::DUIXmlParser::SetXML not found");
+        return;
+    }
+
+    for (const char* name : {
+#ifdef _WIN64
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z",
+#endif
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z"}) {
+        if (FARPROC proc = GetProcAddress(dui70, name)) {
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<DUISetXMLFromResource_t>(proc),
+                DUISetXMLFromResourceHook, &DUISetXMLFromResourceOriginal);
+            break;
+        }
+    }
+
+    if (!DUISetXMLFromResourceOriginal) {
+        Wh_Log(L"PerfCenter XML patch: DirectUI::_SetXMLFromResource hook failed");
+    }
+}
+
 void InstallTranslationHook() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32)
@@ -2326,6 +3358,9 @@ void InstallTranslationHook() {
         WindhawkUtils::SetFunctionHook(
             reinterpret_cast<XResourceProviderCreate_t>(xResourceProviderCreate),
             XResourceProviderCreateHook, &XResourceProviderCreateOriginal);
+
+    InstallPerfCenterXmlPatchHook();
+    InstallPerfCenterActionHooks();
 }
 
 // -----------------------------------------------------------------------------
@@ -2419,6 +3454,11 @@ BOOL Wh_ModInit(void) {
         InitClsidStrings();
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
+        // Load the skin setting during startup before DirectUI hooks are installed,
+        // so pageSkin=win7 is active for the very first page load after enabling
+        // the mod. The XML hook also re-reads the setting when a fresh page is
+        // created, which covers settings changed while the page was open.
+        LoadPageSkinSetting();
 
         // --- Install conservative registry hooks (Unicode *W only: 9 hooks) ---
         void* pOpen = GetRegFunc("RegOpenKeyExW");
@@ -2481,16 +3521,43 @@ BOOL Wh_ModInit(void) {
 
 void Wh_ModAfterInit(void) {
     Wh_Log(L"Conservative string hooks are active; PerfCenter DLL loads in the "
-           L"background");
+           L"background; startup page skin: %s",
+           CurrentPageSkinName());
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
     try {
+        const bool oldWindows7Skin = g_useWindows7Skin.load();
+        const bool oldWindowsVistaSkin = g_useWindowsVistaSkin.load();
+        const bool requestedVistaSkin = ReadPageSkinVistaSetting();
+        const bool requestedWindows7Skin = !requestedVistaSkin && ReadPageSkinSetting();
+
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
-        // Do not rebuild/free/delete the DirectUI resource module on settings change,
-        // as DirectUI keeps the HINSTANCE and loads resources from it lazily.
-        // Instead, request a reload if needed.
+
+        if (oldWindows7Skin != requestedWindows7Skin ||
+            oldWindowsVistaSkin != requestedVistaSkin) {
+            // Defensive runtime behavior: changing the DirectUI XML while the
+            // Control Panel page is already open can leave a half-patched tree.
+            // Apply the skin switch immediately only when the page isn't open;
+            // otherwise keep the active skin until the user closes/reopens the page.
+            if (IsPerfCenterControlPanelWindowOpen()) {
+                Wh_Log(L"Page skin setting changed, but Performance Information "
+                       L"and Tools is open; close and reopen the page to apply it");
+                if (reload) *reload = FALSE;
+                return TRUE;
+            }
+
+            g_useWindowsVistaSkin.store(requestedVistaSkin);
+            g_useWindows7Skin.store(requestedWindows7Skin);
+            g_startupRequestedWindowsVistaSkin.store(requestedVistaSkin);
+            g_startupRequestedWindows7Skin.store(requestedWindows7Skin);
+            Wh_Log(L"Page skin changed at runtime to %s", CurrentPageSkinName());
+            if (reload) *reload = FALSE;
+            return TRUE;
+        }
+
+        // Non-skin settings keep the previous conservative behavior.
         if (reload) *reload = TRUE;
         return TRUE;
     } catch (...) {
@@ -2498,6 +3565,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         return TRUE;
     }
 }
+
 
 void Wh_ModUninit(void) {
     try {
