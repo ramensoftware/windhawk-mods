@@ -98,20 +98,54 @@ void ApplySettingsToTray() {
 }
 
 void OpenApp() {
-    if (!g_appPath || !*g_appPath) {
+    if (!*g_appPath) {
         Wh_Log(L"No app path configured");
         return;
     }
 
-    WCHAR dir[MAX_PATH];
-    lstrcpynW(dir, g_appPath, ARRAYSIZE(dir));
-    PathRemoveFileSpecW(dir);  // <shlwapi.h>, -lshlwapi
+    // WCHAR dir[MAX_PATH];
+    // lstrcpynW(dir, g_appPath, ARRAYSIZE(dir));
+    // PathRemoveFileSpecW(dir);  // <shlwapi.h>, -lshlwapi
     
-    HINSTANCE result =
-        ShellExecuteW(nullptr, L"open", g_appPath, *g_appOptions ? g_appOptions.get() : nullptr, *dir ? dir : nullptr, SW_SHOWNORMAL);
-    if ((INT_PTR)result <= 32) {
-        Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)result);
-    }
+    // HINSTANCE result =
+    //     ShellExecuteW(nullptr, L"open", g_appPath, *g_appOptions ? g_appOptions.get() : nullptr, *dir ? dir : nullptr, SW_SHOWNORMAL);
+    // if ((INT_PTR)result <= 32) {
+    //     Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)result);
+    // }
+
+
+    // Copy the settings out on the caller's thread, then launch off the
+    // message loop so ShellExecuteW can't stall it.
+    auto* params = new std::pair<std::wstring, std::wstring>(
+        g_appPath.get(), g_appOptions.get());
+
+    HANDLE hThread = CreateThread(
+        nullptr, 0,
+        [](LPVOID p) -> DWORD {
+            std::unique_ptr<std::pair<std::wstring, std::wstring>> args(
+                (std::pair<std::wstring, std::wstring>*)p);
+            CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+            WCHAR dir[MAX_PATH];
+            lstrcpynW(dir, args->first.c_str(), ARRAYSIZE(dir));
+            PathRemoveFileSpecW(dir);
+            HINSTANCE r = ShellExecuteW(
+                nullptr, L"open", args->first.c_str(),
+                args->second.empty() ? nullptr : args->second.c_str(),
+                *dir ? dir : nullptr, SW_SHOWNORMAL);
+            if ((INT_PTR)r <= 32) {
+                Wh_Log(L"ShellExecute failed: %d", (int)(INT_PTR)r);
+            }
+            CoUninitialize();
+            return 0;
+        },
+        params, 0, nullptr);
+    if (hThread) {
+        CloseHandle(hThread);
+    } else {
+        delete params;
+    }    
+
+
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
