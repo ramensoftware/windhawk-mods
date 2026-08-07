@@ -1,4 +1,3 @@
-
 // ==WindhawkMod==
 // @id              microdisk
 // @name            MicroDisk
@@ -73,14 +72,6 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 #include <fileapi.h>
 #include <iostream>
 
-// PDH constants that may not be defined in all SDK versions
-// #ifndef PDH_MORE_DATA
-// #define PDH_MORE_DATA ((PDH_STATUS)0x800007D2L)
-// #endif
-// #ifndef PDH_CSTATUS_VALID_DATA
-// #define PDH_CSTATUS_VALID_DATA ((LONG)0x00000000L)
-// #endif
-
 // DWM window corner preference (Windows 11). Declared here so the mod builds
 // against older SDK headers; the call silently no-ops on Windows 10.
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
@@ -105,13 +96,6 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 #define POPUP_HEIGHT        80   // allelimo 112 then 140  then 48 then 72
 #define POPUP_ROWS          2    // allelimo 3
 
-//#define MAX_PROCESSES       1024
-//#define PROCESS_BUF_SIZE    (512 * 1024)
-
-// Re-attempt GPU (PDH) initialization roughly every this many ticks if it fails,
-// instead of disabling GPU stats permanently for the session.
-//#define GPU_RETRY_TICKS     30
-
 #define MENU_OPEN_WINDHAWK   9000
 #define MENU_INTERVAL_300MS  9100
 #define MENU_INTERVAL_500MS  9101
@@ -123,20 +107,10 @@ static const GUID MICRODISK_TRAY_GUID =
     //{0xFA6DAD73, 0xD350, 0x4BA8, {0x97, 0x3F, 0x5F, 0xA6, 0x0B, 0x15, 0x7B, 0x18}};
     {0x2C4E8A1B, 0x7D3F, 0x4A6E, {0x8B, 0x9C, 0x1D, 0x2E, 0x3F, 0x4A, 0x5B, 0x6C}}; //allelimo
     
-// ─── NtQuerySystemInformation via dynamic load ────────────────────────────────
+// typedef LONG NTSTATUS;
 
-#ifndef UNICODE_STRING
-typedef struct _UNICODE_STRING {
-    USHORT Length;
-    USHORT MaximumLength;
-    PWSTR  Buffer;
-} UNICODE_STRING;
-#endif
-
-typedef LONG NTSTATUS;
-
-#define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
-#define SystemProcessInformation 5
+// #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
+// #define SystemProcessInformation 5
 
 // typedef struct {
 //     ULONG NextEntryOffset;
@@ -175,7 +149,7 @@ typedef LONG NTSTATUS;
 //     LARGE_INTEGER OtherTransferCount;
 // } MY_SYSTEM_PROCESS_INFO;
 
-typedef NTSTATUS (WINAPI *NtQuerySystemInformation_t)(ULONG, PVOID, ULONG, PULONG);
+//typedef NTSTATUS (WINAPI *NtQuerySystemInformation_t)(ULONG, PVOID, ULONG, PULONG);
 
 // ─── Globals ──────────────────────────────────────────────────────────────────
 
