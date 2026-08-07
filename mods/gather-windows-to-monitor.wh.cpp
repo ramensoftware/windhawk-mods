@@ -2,7 +2,7 @@
 // @id              gather-windows-to-monitor
 // @name            Gather Windows To Monitor
 // @description     Move eligible open windows to a chosen monitor with global hotkeys
-// @version         0.1.0
+// @version         0.1.1
 // @author          Fred
 // @github          https://github.com/fjdiazt
 // @include         windhawk.exe
@@ -15,6 +15,8 @@
 
 Global hotkeys gather visible application windows to a selected monitor work area.
 
+By default, `Ctrl+Alt+Shift+W` moves only the foreground window to the primary monitor.
+
 Configure hotkeys in Windhawk settings. Use strings such as `Ctrl+Alt+Shift+1`,
 `Ctrl+Win+M`, `F9`, or `None`.
 
@@ -22,7 +24,12 @@ Skipped by default: minimized windows, fullscreen windows/games, hidden windows,
 tool windows, owned popups, desktop/taskbar/shell UI, cloaked UWP/helper windows,
 and untitled windows.
 
-Enable debug logging to see per-window skip reasons in the Windhawk log.
+The foreground-window action ignores the fullscreen, owned-window, and untitled-window
+filters. Windows already on the target monitor are left unchanged. Gather actions
+restore maximized windows before moving them and leave them restored for arranging;
+the foreground-window action re-maximizes them on the target monitor.
+
+Enable logging in Windhawk to see per-window skip reasons.
 
 Known limitations: monitor number hotkeys use Win32 monitor enumeration order, not
 the Windows Settings display number. Moving minimized windows without restoring is
@@ -32,10 +39,10 @@ not attempted because it is not reliable for all apps.
 
 // ==WindhawkModSettings==
 /*
-- Enabled: true
-  $name: Enable mod
 - HotkeyPrimary: "Ctrl+Alt+Shift+P"
   $name: Gather to primary monitor
+- HotkeyForegroundPrimary: "Ctrl+Alt+Shift+W"
+  $name: Move foreground window to primary monitor
 - HotkeyMonitor1: "Ctrl+Alt+Shift+1"
   $name: Gather to monitor 1
 - HotkeyMonitor2: "Ctrl+Alt+Shift+2"
@@ -69,8 +76,6 @@ not attempted because it is not reliable for all apps.
   - mouse: Mouse cursor
 - IncludeOwnedWindows: false
   $name: Include owned windows/popups
-- DebugLogging: false
-  $name: Debug logging
 */
 // ==/WindhawkModSettings==
 
@@ -82,11 +87,11 @@ not attempted because it is not reliable for all apps.
 #include <atomic>
 #include <cwctype>
 #include <string>
-#include <thread>
 #include <vector>
 
 enum class TargetMode {
     Primary,
+    ForegroundPrimary,
     Monitor1,
     Monitor2,
     Monitor3,
@@ -116,7 +121,6 @@ enum class AnchorMode {
 };
 
 struct Settings {
-    bool enabled;
     bool skipMinimized;
     bool restoreMinimized;
     bool skipFullscreen;
@@ -126,8 +130,7 @@ struct Settings {
     int cascadeOffset;
     AnchorMode anchor;
     bool includeOwnedWindows;
-    bool debugLogging;
-    std::wstring hotkeys[6];
+    std::wstring hotkeys[7];
 };
 
 struct MonitorInfo {
@@ -150,7 +153,7 @@ constexpr UINT WM_APP_STOP = WM_APP + 2;
 
 Settings g_settings{};
 std::vector<Hotkey> g_hotkeys;
-std::thread g_worker;
+HANDLE g_worker;
 std::atomic<DWORD> g_workerThreadId{};
 HANDLE g_workerReady;
 
@@ -166,8 +169,9 @@ std::wstring GetStringSetting(const wchar_t* name) {
 AnchorMode ParseAnchorMode(const std::wstring& text);
 
 void LoadSettings() {
-    g_settings.enabled = Wh_GetIntSetting(L"Enabled") != 0;
     g_settings.hotkeys[(int)TargetMode::Primary] = GetStringSetting(L"HotkeyPrimary");
+    g_settings.hotkeys[(int)TargetMode::ForegroundPrimary] =
+        GetStringSetting(L"HotkeyForegroundPrimary");
     g_settings.hotkeys[(int)TargetMode::Monitor1] = GetStringSetting(L"HotkeyMonitor1");
     g_settings.hotkeys[(int)TargetMode::Monitor2] = GetStringSetting(L"HotkeyMonitor2");
     g_settings.hotkeys[(int)TargetMode::Monitor3] = GetStringSetting(L"HotkeyMonitor3");
@@ -182,7 +186,6 @@ void LoadSettings() {
     g_settings.cascadeOffset = std::max(0, Wh_GetIntSetting(L"CascadeOffset"));
     g_settings.anchor = ParseAnchorMode(GetStringSetting(L"Anchor"));
     g_settings.includeOwnedWindows = Wh_GetIntSetting(L"IncludeOwnedWindows") != 0;
-    g_settings.debugLogging = Wh_GetIntSetting(L"DebugLogging") != 0;
 }
 
 std::wstring TrimUpper(std::wstring s) {
@@ -260,17 +263,15 @@ void UnregisterConfiguredHotkeys() {
 
 void RegisterConfiguredHotkeys() {
     UnregisterConfiguredHotkeys();
-    if (!g_settings.enabled) {
-        Wh_Log(L"Disabled");
-        return;
-    }
 
     const TargetMode modes[] = {
-        TargetMode::Primary, TargetMode::Monitor1, TargetMode::Monitor2,
-        TargetMode::Monitor3, TargetMode::Mouse, TargetMode::Foreground,
+        TargetMode::Primary, TargetMode::ForegroundPrimary, TargetMode::Monitor1,
+        TargetMode::Monitor2, TargetMode::Monitor3, TargetMode::Mouse,
+        TargetMode::Foreground,
     };
     const wchar_t* names[] = {
-        L"primary", L"monitor 1", L"monitor 2", L"monitor 3", L"mouse", L"foreground",
+        L"primary", L"foreground to primary", L"monitor 1", L"monitor 2",
+        L"monitor 3", L"mouse", L"foreground",
     };
 
     for (size_t i = 0; i < ARRAYSIZE(modes); i++) {
@@ -334,7 +335,9 @@ const MonitorInfo* MonitorByHandle(const std::vector<MonitorInfo>& monitors, HMO
 
 const MonitorInfo* ResolveTargetMonitor(TargetMode mode, const std::vector<MonitorInfo>& monitors) {
     if (monitors.empty()) return nullptr;
-    if (mode == TargetMode::Primary) return PrimaryMonitor(monitors);
+    if (mode == TargetMode::Primary || mode == TargetMode::ForegroundPrimary) {
+        return PrimaryMonitor(monitors);
+    }
     if (mode == TargetMode::Monitor1 || mode == TargetMode::Monitor2 || mode == TargetMode::Monitor3) {
         size_t index = (size_t)mode - (size_t)TargetMode::Monitor1;
         if (index < monitors.size()) return &monitors[index];
@@ -410,7 +413,7 @@ const wchar_t* SkipReasonText(SkipReason reason) {
     }
 }
 
-bool IsEligibleWindow(HWND hwnd, SkipReason* reason) {
+bool IsEligibleWindow(HWND hwnd, SkipReason* reason, bool bulk) {
     *reason = SkipReason::None;
     if (!IsWindow(hwnd)) { *reason = SkipReason::Invalid; return false; }
     if (!IsWindowVisible(hwnd)) { *reason = SkipReason::Invisible; return false; }
@@ -422,14 +425,14 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason) {
         *reason = SkipReason::ToolWindow;
         return false;
     }
-    if (!g_settings.includeOwnedWindows && GetWindow(hwnd, GW_OWNER)) {
+    if (bulk && !g_settings.includeOwnedWindows && GetWindow(hwnd, GW_OWNER)) {
         *reason = SkipReason::OwnedWindow;
         return false;
     }
 
     wchar_t title[256]{};
     GetWindowText(hwnd, title, ARRAYSIZE(title));
-    if (title[0] == L'\0') {
+    if (bulk && title[0] == L'\0') {
         *reason = SkipReason::Untitled;
         return false;
     }
@@ -444,7 +447,7 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason) {
         *reason = SkipReason::BadRect;
         return false;
     }
-    if (g_settings.skipFullscreen && IsLikelyFullscreen(hwnd, rect)) {
+    if (bulk && g_settings.skipFullscreen && IsLikelyFullscreen(hwnd, rect)) {
         *reason = SkipReason::Fullscreen;
         return false;
     }
@@ -452,7 +455,6 @@ bool IsEligibleWindow(HWND hwnd, SkipReason* reason) {
 }
 
 void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
-    if (!g_settings.debugLogging) return;
     wchar_t title[128]{};
     wchar_t className[128]{};
     GetWindowText(hwnd, title, ARRAYSIZE(title));
@@ -460,14 +462,28 @@ void DebugLogSkipReason(HWND hwnd, SkipReason reason) {
     Wh_Log(L"Skip hwnd=%p class=%s title=%s reason=%s", hwnd, className, title, SkipReasonText(reason));
 }
 
-bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
+bool MoveWindowToMonitor(HWND hwnd, const MonitorInfo& target, int cascadeIndex,
+                         bool bulk) {
     if (!IsWindow(hwnd)) return false;
-    if (IsIconic(hwnd) && g_settings.restoreMinimized) {
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-    }
+    if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) == target.handle) return false;
+    const RECT& workArea = target.work;
+    bool wasMaximized = IsZoomed(hwnd);
+    bool wasMinimized = IsIconic(hwnd);
 
     RECT rect{};
-    if (!GetWindowRect(hwnd, &rect)) return false;
+    if (wasMaximized || wasMinimized) {
+        WINDOWPLACEMENT placement{ sizeof(placement) };
+        if (!GetWindowPlacement(hwnd, &placement)) return false;
+        rect = placement.rcNormalPosition;
+    } else if (!GetWindowRect(hwnd, &rect)) {
+        return false;
+    }
+
+    if (wasMaximized) {
+        ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
+    } else if (wasMinimized && g_settings.restoreMinimized) {
+        ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE);
+    }
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
     int workWidth = workArea.right - workArea.left;
@@ -505,15 +521,21 @@ bool MoveWindowToMonitor(HWND hwnd, const RECT& workArea, int cascadeIndex) {
     x = std::clamp(x, minX, maxX);
     y = std::clamp(y, minY, maxY);
 
-    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                 SWP_ASYNCWINDOWPOS;
     if (g_settings.preserveSize && !g_settings.shrinkOversized) {
         flags |= SWP_NOSIZE;
     }
-    return SetWindowPos(hwnd, nullptr, x, y, width, height, flags) != FALSE;
+    bool moved = SetWindowPos(hwnd, nullptr, x, y, width, height, flags) != FALSE;
+    if (wasMaximized && (!moved || !bulk)) {
+        ShowWindowAsync(hwnd, SW_MAXIMIZE);
+    }
+    return moved;
 }
 
 struct GatherState {
-    const RECT* workArea;
+    const MonitorInfo* target;
+    bool bulk;
     int found;
     int moved;
     int skipped;
@@ -522,14 +544,14 @@ struct GatherState {
 BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
     auto state = reinterpret_cast<GatherState*>(lParam);
     SkipReason reason;
-    if (!IsEligibleWindow(hwnd, &reason)) {
+    if (!IsEligibleWindow(hwnd, &reason, state->bulk)) {
         state->skipped++;
         DebugLogSkipReason(hwnd, reason);
         return TRUE;
     }
 
     state->found++;
-    if (MoveWindowToMonitor(hwnd, *state->workArea, state->moved)) {
+    if (MoveWindowToMonitor(hwnd, *state->target, state->moved, state->bulk)) {
         state->moved++;
     } else {
         state->skipped++;
@@ -539,7 +561,6 @@ BOOL CALLBACK GatherEnumProc(HWND hwnd, LPARAM lParam) {
 }
 
 void GatherWindows(TargetMode mode) {
-    if (!g_settings.enabled) return;
     auto monitors = GetMonitors();
     const MonitorInfo* target = ResolveTargetMonitor(mode, monitors);
     if (!target) {
@@ -549,12 +570,20 @@ void GatherWindows(TargetMode mode) {
 
     Wh_Log(L"Target work area: (%ld,%ld,%ld,%ld)", target->work.left, target->work.top,
            target->work.right, target->work.bottom);
-    GatherState state{ &target->work, 0, 0, 0 };
-    EnumWindows(GatherEnumProc, (LPARAM)&state);
+    GatherState state{ target,
+                       mode != TargetMode::ForegroundPrimary,
+                       0,
+                       0,
+                       0 };
+    if (mode == TargetMode::ForegroundPrimary) {
+        GatherEnumProc(GetForegroundWindow(), (LPARAM)&state);
+    } else {
+        EnumWindows(GatherEnumProc, (LPARAM)&state);
+    }
     Wh_Log(L"Gather done: found=%d moved=%d skipped=%d", state.found, state.moved, state.skipped);
 }
 
-void WorkerMain() {
+DWORD WINAPI WorkerMain(LPVOID) {
     g_workerThreadId = GetCurrentThreadId();
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -582,6 +611,7 @@ void WorkerMain() {
 
     UnregisterConfiguredHotkeys();
     g_workerThreadId = 0;
+    return 0;
 }
 
 BOOL WhTool_ModInit() {
@@ -590,7 +620,13 @@ BOOL WhTool_ModInit() {
         Wh_Log(L"CreateEvent failed: %u", GetLastError());
         return FALSE;
     }
-    g_worker = std::thread(WorkerMain);
+    g_worker = CreateThread(nullptr, 0, WorkerMain, nullptr, 0, nullptr);
+    if (!g_worker) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        CloseHandle(g_workerReady);
+        g_workerReady = nullptr;
+        return FALSE;
+    }
     WaitForSingleObject(g_workerReady, INFINITE);
     return TRUE;
 }
@@ -607,8 +643,10 @@ void WhTool_ModUninit() {
     if (threadId) {
         PostThreadMessage(threadId, WM_APP_STOP, 0, 0);
     }
-    if (g_worker.joinable()) {
-        g_worker.join();
+    if (g_worker) {
+        WaitForSingleObject(g_worker, 3000);
+        CloseHandle(g_worker);
+        g_worker = nullptr;
     }
     if (g_workerReady) {
         CloseHandle(g_workerReady);
