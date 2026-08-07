@@ -82,7 +82,7 @@ effect.
 | 2.0   | Compromise between 1.8 and 2.2 |
 | 2.2   | **Default** - Standard PC/monitor target, sRGB average and Display P3 |
 | 2.3   | Compromise between 2.2 and 2.4 |
-| 2.4   | Broadcast and HDTV, Rec. 709 / BT.1886 |
+| 2.4   | Broadcast and HDTV, Rec.709 / BT.1886 |
 | 2.6   | Dark and high contrast, Digital cinema projection, DCI-P3 |
 
 ## Known limitations
@@ -123,9 +123,9 @@ effect.
   $options:
     - "1.8": "1.8 (Bright and low contrast, legacy Mac standard)"
     - "2.0": "2.0"
-    - "2.2": "2.2 (**Default** - Standard PC/monitor target, sRGB average and Display P3)"
+    - "2.2": "2.2 (Default - Standard PC/monitor target, sRGB average and Display P3)"
     - "2.3": "2.3"
-    - "2.4": "2.4 (Broadcast and HDTV, Rec. 709 / BT.1886)"
+    - "2.4": "2.4 (Broadcast and HDTV, Rec.709 / BT.1886)"
     - "2.6": "2.6 (Dark and high contrast, Digital cinema projection, DCI-P3)"
 */
 // ==/WindhawkModSettings==
@@ -140,8 +140,28 @@ effect.
 // =============================================================================
 // DXBC Checksum — AMD DXBCChecksum (modified MD5 used by Microsoft for DXBC)
 // Source: https://github.com/GPUOpen-Archive/common-src-ShaderUtils
-// Copyright 2008-2016 Advanced Micro Devices, Inc. All rights reserved.
-// Free for all — MD5 algorithm derived from RSA Data Security, Inc. (1990).
+//
+// Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+//
+// MD5 algorithm derived from RSA Data Security, Inc. (1990).
 // =============================================================================
 
 typedef uint32_t DX_UINT4;
@@ -405,14 +425,17 @@ static const float kPatchConsts[3] = {0.0f, 0.0f, 1.0f};
 // with at least one match. Used to pre-screen blobs before allocating a copy
 // and to count qualifying leaves inside skipped containers.
 static int ScanSrgbSplats(const BYTE* blob, DWORD size, int counts[4]) {
-    for (int ci = 0; ci < 4; ci++)
+    // Precompute the four vec3-splat patterns once before scanning.
+    float pats[4][3];
+    for (int ci = 0; ci < 4; ci++) {
+        pats[ci][0] = pats[ci][1] = pats[ci][2] = kSrgbConsts[ci];
         counts[ci] = 0;
+    }
     int found = 0;
     for (size_t j = kDXBCHeaderSize; j + sizeof(float) * 3 <= size; j += 4) {
         const BYTE* p = blob + j;
         for (int ci = 0; ci < 4; ci++) {
-            float pat[3] = {kSrgbConsts[ci], kSrgbConsts[ci], kSrgbConsts[ci]};
-            if (memcmp(p, pat, sizeof(pat)) == 0)
+            if (memcmp(p, pats[ci], sizeof(float) * 3) == 0)
                 counts[ci]++;
         }
     }
