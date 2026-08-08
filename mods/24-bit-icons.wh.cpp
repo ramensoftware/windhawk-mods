@@ -153,6 +153,49 @@ HBITMAP __fastcall BitmapFromDIB_hook(
     return BitmapFromDIB_orig(cxNew, cyNew, bPlanesNew, bBitsPixelNew, LR_flags, cxOld, cyOld, lpBits, cbBits, lpbi, hpal);
 }
 
+#ifdef _WIN64
+HBITMAP (__fastcall *BitmapFromDIB_11_orig)(int, int, WORD, WORD, UINT, int, int, LPSTR, DWORD, LPBITMAPINFO, HPALETTE);
+HBITMAP __fastcall BitmapFromDIB_11_hook(
+    int          cxNew,
+    int          cyNew,
+    WORD         bPlanesNew,
+    WORD         bBitsPixelNew,
+    UINT         LR_flags,
+    int          cxOld,
+    int          cyOld,
+    LPSTR        lpBits,
+    DWORD        cbBits,
+    LPBITMAPINFO lpbi,
+    HPALETTE     hpal)
+#else
+HBITMAP (__fastcall *BitmapFromDIB_11_orig)(int, int, WORD, WORD, UINT, int, int, LPSTR, DWORD, LPBITMAPINFO, LPBITMAPINFO, HPALETTE);
+HBITMAP __fastcall BitmapFromDIB_11_hook(
+    int          cxNew,
+    int          cyNew,
+    WORD         bPlanesNew,
+    WORD         bBitsPixelNew,
+    UINT         LR_flags,
+    int          cxOld,
+    int          cyOld,
+    LPSTR        lpBits,
+    DWORD        cbBits,
+    LPBITMAPINFO lpbi,
+    LPBITMAPINFO unused,
+    HPALETTE     hpal)
+#endif
+{
+    if (g_fIcon && bBitsPixelNew == 32)
+    {
+        bBitsPixelNew = 24;
+        LR_flags &= ~(LR_CREATEREALDIB);
+    }
+#ifdef _WIN64
+    return BitmapFromDIB_11_orig(cxNew, cyNew, bPlanesNew, bBitsPixelNew, LR_flags, cxOld, cyOld, lpBits, cbBits, lpbi, hpal);
+#else
+    return BitmapFromDIB_11_orig(cxNew, cyNew, bPlanesNew, bBitsPixelNew, LR_flags, cxOld, cyOld, lpBits, cbBits, lpbi, unused, hpal);
+#endif
+}
+
 BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
@@ -176,16 +219,6 @@ BOOL Wh_ModInit()
         },
         {
             {
-                L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)",
-                // Extra parameter in Windows 11 32-bit is not used
-                L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct tagBITMAPINFO *,struct HPALETTE__ *)"
-            },
-            &BitmapFromDIB_orig,
-            BitmapFromDIB_hook,
-            false
-        },
-        {
-            {
                 L"struct HICON__ * " SSTDCALL " ConvertDIBIcon(struct tagBITMAPINFOHEADER *,unsigned long,struct HINSTANCE__ *,unsigned short const *,int,unsigned long,unsigned long,unsigned int)",
             },
             &ConvertDIBIcon_orig,
@@ -194,10 +227,42 @@ BOOL Wh_ModInit()
         }
     };
 
+    // user32.dll
+    const WindhawkUtils::SYMBOL_HOOK user32_10_DllHook
+    {
+        {
+            L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)"
+        },
+        &BitmapFromDIB_orig,
+        BitmapFromDIB_hook,
+        false
+    };
+
+    // user32.dll
+    const WindhawkUtils::SYMBOL_HOOK user32_11_DllHook
+    {
+        {
+            L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)",
+            L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct tagBITMAPINFO *,struct HPALETTE__ *)"
+        },
+        &BitmapFromDIB_11_orig,
+        BitmapFromDIB_11_hook,
+        false
+    };
+
     if (!WindhawkUtils::HookSymbols(hUser32, user32DllHooks, ARRAYSIZE(user32DllHooks)))
     {
         Wh_Log(L"Failed to hook user32.dll");
         return FALSE;
+    }
+
+    if (!WindhawkUtils::HookSymbols(hUser32, &user32_10_DllHook, 1))
+    {
+        if (!WindhawkUtils::HookSymbols(hUser32, &user32_11_DllHook, 1))
+        {
+            Wh_Log(L"Failed to hook function BitmapFromDIB");
+            return FALSE;
+        }
     }
 
     return TRUE;
