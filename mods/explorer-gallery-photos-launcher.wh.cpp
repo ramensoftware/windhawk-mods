@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              explorer-gallery-photos-launcher
-// @name            Gallery -> Photos App Launcher (ExplorerPatcher Win10 Fix)
-// @description     ExplorerPatcher Win10 UI fix: intercepts Gallery navigation in File Explorer and launches the Microsoft Photos app (ms-photos:) instead of the built-in Gallery view.
+// @name            Open Photos App instead of Gallery
+// @description     Intercepts Gallery navigation in File Explorer and launches the Microsoft Photos app (ms-photos:) instead.
 // @version         2.0
 // @author          Jäkubix
 // @github          https://github.com/jakubix30
@@ -12,26 +12,15 @@
 
 // ==WindhawkModReadme==
 /*
-# Gallery → Photos App Launcher (ExplorerPatcher Win10 Fix)
-
-**A fix for ExplorerPatcher users running the Windows 10 Ribbon/UI overlay.**
+# Open Photos App instead of Gallery
 
 Intercepts navigation to the "Gallery" folder in the Windows File Explorer navigation pane
 and launches the Microsoft Photos app (`ms-photos:`) instead of opening the built-in Gallery view.
 
-## Why is this needed?
-
-Standard TreeView hooking methods (`WM_LBUTTONDOWN`, `TVN_SELCHANGING`, `SetWindowSubclass`)
-do **not** work with ExplorerPatcher, because the Win10 UI overlay intercepts and handles
-all mouse/keyboard events before they reach the underlying `SysTreeView32` control.
-
-This mod bypasses the problem entirely by hooking `CShellBrowser::BrowseObject` in `explorerframe.dll`.
-This is the single chokepoint through which **all** Explorer navigation passes — regardless of which UI layer is active.
-
 ## Features
 
-- Works with **ExplorerPatcher** (Win10 overlay) and without it
-- Hooks at the COM/Symbol level — completely UI-independent
+- Works with **ExplorerPatcher** (Win10 Ribbon overlay fix) and standard Windows 11
+- Hooks at the COM/Symbol level (`CShellBrowser::BrowseObject`) — completely UI-independent
 - Configurable target CLSID and launch command
 */
 // ==/WindhawkModReadme==
@@ -60,11 +49,21 @@ struct {
     std::wstring targetCommand;
 } g_settings;
 
+static PIDLIST_ABSOLUTE g_targetPidl = nullptr;
+static bool g_hookAttempted = false;
+
 // ---- BrowseObject Original & Hook ----
 typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
                                                    PCUIDLIST_RELATIVE pidl,
                                                    UINT wFlags);
 static BrowseObject_t g_BrowseObject_Original = nullptr;
+
+static void FreeTargetPidl() {
+    if (g_targetPidl) {
+        CoTaskMemFree(g_targetPidl);
+        g_targetPidl = nullptr;
+    }
+}
 
 static void LoadSettings() {
     PCWSTR s = Wh_GetStringSetting(L"settings.targetClsid");
@@ -75,9 +74,14 @@ static void LoadSettings() {
     s = Wh_GetStringSetting(L"settings.targetCommand");
     g_settings.targetCommand = s && *s ? s : L"ms-photos:";
     Wh_FreeStringSetting(s);
+
+    // Re-parse target PIDL
+    FreeTargetPidl();
+    std::wstring parsingName = L"::" + g_settings.targetClsid;
+    SHParseDisplayName(parsingName.c_str(), nullptr, &g_targetPidl, 0, nullptr);
 }
 
-// Substring search (case-insensitive)
+// Substring search (case-insensitive) for module name check
 static bool contains_ci(const std::wstring &hay, const std::wstring &needle) {
     if (needle.empty())
         return false;
@@ -89,35 +93,6 @@ static bool contains_ci(const std::wstring &hay, const std::wstring &needle) {
     return h.find(n) != std::wstring::npos;
 }
 
-// Checks if the given PIDL matches our target CLSID
-static bool IsTargetPidl(PCUIDLIST_RELATIVE pidl) {
-    if (!pidl)
-        return false;
-
-    PWSTR pszName = nullptr;
-    HRESULT hr = SHGetNameFromIDList(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl),
-                                     SIGDN_DESKTOPABSOLUTEPARSING, &pszName);
-    if (SUCCEEDED(hr) && pszName) {
-        std::wstring name(pszName);
-        CoTaskMemFree(pszName);
-
-        Wh_Log(L"BrowseObject PIDL parsing name: %s", name.c_str());
-
-        // Remove braces for comparison
-        std::wstring clean;
-        for (wchar_t c : g_settings.targetClsid) {
-            if (c != L'{' && c != L'}')
-                clean += c;
-        }
-
-        if (contains_ci(name, clean)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 // Asynchronous launch parameters
 static WCHAR g_cmdToLaunch[MAX_PATH] = L"";
 static HANDLE g_launchEvent = NULL;
@@ -125,6 +100,8 @@ static HANDLE g_workerThread = NULL;
 static volatile bool g_stopWorker = false;
 
 static DWORD WINAPI LaunchWorkerProc(LPVOID) {
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     while (!g_stopWorker) {
         DWORD waitRes = WaitForSingleObject(g_launchEvent, 500);
         if (waitRes == WAIT_OBJECT_0) {
@@ -136,6 +113,10 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
                 ShellExecuteW(NULL, L"open", cmd, NULL, NULL, SW_SHOWNORMAL);
             }
         }
+    }
+
+    if (SUCCEEDED(hrCo)) {
+        CoUninitialize();
     }
     return 0;
 }
@@ -149,26 +130,30 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
         return g_BrowseObject_Original(pThis, pidl, wFlags);
     }
 
-    Wh_Log(L"BrowseObject called, wFlags=0x%X", wFlags);
+    if (g_targetPidl && pidl) {
+        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), g_targetPidl) ||
+            ILIsParent(g_targetPidl, reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), FALSE)) {
+            
+            Wh_Log(L"Intercepted Gallery navigation! Triggering async launch: %s",
+                   g_settings.targetCommand.c_str());
 
-    if (IsTargetPidl(pidl)) {
-        Wh_Log(L"Intercepted Gallery navigation! Triggering async launch: %s",
-               g_settings.targetCommand.c_str());
+            // Trigger async launch off the UI thread
+            wcsncpy_s(g_cmdToLaunch, g_settings.targetCommand.c_str(), _TRUNCATE);
+            SetEvent(g_launchEvent);
 
-        // Trigger async launch off the UI thread
-        wcsncpy_s(g_cmdToLaunch, g_settings.targetCommand.c_str(), _TRUNCATE);
-        SetEvent(g_launchEvent);
-
-        return S_OK; // Intercepted, block original navigation
+            return S_OK; // Intercepted, block original navigation
+        }
     }
 
     return g_BrowseObject_Original(pThis, pidl, wFlags);
 }
 
 // Hook explorerframe.dll symbols
-static void HookExplorerFrame(HMODULE hEF) {
-    if (!hEF || g_BrowseObject_Original != nullptr)
+static void HookExplorerFrame(HMODULE hEF, bool applyNow) {
+    if (!hEF || g_hookAttempted)
         return;
+
+    g_hookAttempted = true;
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
@@ -184,7 +169,12 @@ static void HookExplorerFrame(HMODULE hEF) {
 
     if (WindhawkUtils::HookSymbols(hEF, explorerframe_dll_hooks,
                                    ARRAYSIZE(explorerframe_dll_hooks))) {
-        Wh_Log(L"Successfully hooked BrowseObject in explorerframe.dll!");
+        Wh_Log(L"Successfully registered BrowseObject hooks");
+        if (applyNow) {
+            if (!Wh_ApplyHookOperations()) {
+                Wh_Log(L"Wh_ApplyHookOperations failed");
+            }
+        }
     }
 }
 
@@ -198,8 +188,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE hMod = g_LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (hMod && lpLibFileName) {
         if (contains_ci(lpLibFileName, L"explorerframe.dll")) {
-            Wh_Log(L"explorerframe.dll loaded dynamically, applying symbol hooks...");
-            HookExplorerFrame(hMod);
+            HookExplorerFrame(hMod, true);
         }
     }
     return hMod;
@@ -214,7 +203,7 @@ BOOL Wh_ModInit() {
     g_stopWorker = false;
     g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
 
-    // Hook LoadLibraryExW from kernelbase.dll to catch dynamic loading
+    // Hook LoadLibraryExW from kernelbase.dll
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
@@ -225,14 +214,10 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Check if explorerframe.dll is already loaded or force load it to hook immediately
+    // If explorerframe.dll is already loaded, hook it immediately (applyNow = false because Windhawk applies after Init)
     HMODULE hEF = GetModuleHandleW(L"explorerframe.dll");
-    if (!hEF) {
-        hEF = LoadLibraryW(L"explorerframe.dll");
-    }
-
     if (hEF) {
-        HookExplorerFrame(hEF);
+        HookExplorerFrame(hEF, false);
     }
 
     return TRUE;
@@ -252,6 +237,8 @@ void Wh_ModUninit() {
         CloseHandle(g_launchEvent);
         g_launchEvent = NULL;
     }
+
+    FreeTargetPidl();
 }
 
 void Wh_ModSettingsChanged() { LoadSettings(); }
