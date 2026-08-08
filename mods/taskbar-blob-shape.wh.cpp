@@ -45,6 +45,15 @@ outward with concave (outside) corner radii, ending in a flat top edge:
   (Width + 2*TopRadius) x (Height + TopRadius).
 - **Bottom corner radius**: the convex bottom corners of the blob shape.
 
+**Known behavior**: when the mod is enabled mid-session, blobs appear on the
+first taskbar activity (a hover or any window state change) rather than
+instantly; at logon or after an Explorer restart they apply immediately.
+Discovery is event-driven by design — the mod keeps no standing visual-tree
+watcher.
+
+This mod should not be enabled together with **Taskbar Elastic WinUI Pill**,
+since both replace the native active indicator.
+
 */
 // ==/WindhawkModReadme==
 
