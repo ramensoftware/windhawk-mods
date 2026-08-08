@@ -4,11 +4,11 @@
 // @description     Keeps window corners rounded when a window is snapped, without changing the window state
 // @version         1.0.0
 // @author          Alexey Lavrinenko
-// @github          https://github.com/leshaalexey
+// @github          https://github.com/YOUR-GITHUB-USERNAME
 // @license         GPL-3.0
 // @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -lwevtapi
+// @compilerOptions -lgdi32 -lwevtapi
 // ==/WindhawkMod==
 
 // HasMultipleDwminitWarningsInLastMinute() is taken from the Custom Window
@@ -64,25 +64,6 @@ Other mods and tools that patch DWM corners hook the same functions and will
 fight with this one. Don't run it together with **Custom Window Corner
 Radius**, **Disable rounded corners in Windows 11**, ExplorerPatcher's rounded
 corner option, StartAllBack or Win11DisableRoundedCorners.
-
-## Changelog
- 
-This pull request introduces a new mod.
- 
-## Mod authorship
- 
-If this pull request introduces a new mod, please complete the section below.
- 
-This mod was created by:
- 
-- - [ ] The submitter, without AI assistance
-- - [x] The submitter, with AI assistance
-- - [x] Claude
-- - [ ] ChatGPT
-- - [ ] Gemini
-- - [ ] Another AI (please specify): 
-- - [ ] Other (please specify): 
-Please select the options that best apply. Your selection does not affect the acceptance criteria, but it helps reviewers understand the context of the code and provide relevant feedback.
 */
 // ==/WindhawkModReadme==
 
@@ -91,10 +72,11 @@ Please select the options that best apply. Your selection does not affect the ac
 - roundMaximized: false
   $name: Also round maximized windows
   $description: >-
-    Maximized windows are presented without DWM composing them, so their
-    rounded corners only appear while the Start menu, a notification or Alt+Tab
-    is on screen. Fine with a standard window frame, flickers in apps that draw
-    their own.
+    A maximized window is normally presented without DWM composing it, which is
+    why Windows squares its corners. To round it, the mod gives the window a
+    rounded region, which brings it back into composition and clips the app's
+    own content. That costs one composition pass for that window - a little more
+    GPU work and battery use while a window is maximized.
 - roundStyle: round
   $name: Corner style
   $options:
@@ -220,6 +202,171 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
     }
     return SetBorderParameters_Original(pThis, borderRect, cornerRadius, dpi,
                                         color, borderStyle, shadowStyle);
+}
+
+// ---------------------------------------------------------------------------
+// Maximized windows: a window with a region is no longer a plain rectangle, so
+// it stops being a direct flip candidate and DWM composes it again - which is
+// what makes the rounding above visible. The region also clips the app's own
+// content, so apps that paint their own frame can't fill the corner.
+//
+// The cost is one composition pass for that window, which is exactly what
+// Windows avoids by squaring the corners, so this is opt-in.
+// ---------------------------------------------------------------------------
+
+HANDLE g_regionThread;
+DWORD g_regionThreadId;
+HWINEVENTHOOK g_locationHook;
+HWINEVENTHOOK g_stateHook;
+
+CRITICAL_SECTION g_regionCs;
+constexpr int kMaxTrackedWindows = 64;
+HWND g_regionedWindows[kMaxTrackedWindows];
+
+void RememberWindow(HWND hwnd) {
+    EnterCriticalSection(&g_regionCs);
+    int free = -1;
+    for (int i = 0; i < kMaxTrackedWindows; i++) {
+        if (g_regionedWindows[i] == hwnd) {
+            free = -1;
+            break;
+        }
+        if (!g_regionedWindows[i] && free < 0) {
+            free = i;
+        }
+    }
+    if (free >= 0) {
+        g_regionedWindows[free] = hwnd;
+    }
+    LeaveCriticalSection(&g_regionCs);
+}
+
+void ForgetWindow(HWND hwnd) {
+    EnterCriticalSection(&g_regionCs);
+    for (int i = 0; i < kMaxTrackedWindows; i++) {
+        if (g_regionedWindows[i] == hwnd) {
+            g_regionedWindows[i] = nullptr;
+        }
+    }
+    LeaveCriticalSection(&g_regionCs);
+}
+
+bool IsRoundableMaximizedWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || !IsZoomed(hwnd)) {
+        return false;
+    }
+
+    LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+    if ((style & WS_CHILD) || !(style & (WS_CAPTION | WS_THICKFRAME))) {
+        return false;
+    }
+    if (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
+        return false;
+    }
+
+    // Leave true fullscreen alone - games and video players.
+    RECT rect;
+    MONITORINFO mi{sizeof(MONITORINFO)};
+    if (GetWindowRect(hwnd, &rect) &&
+        GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                        &mi) &&
+        EqualRect(&rect, &mi.rcMonitor)) {
+        return false;
+    }
+    return true;
+}
+
+void UpdateWindowRegion(HWND hwnd) {
+    if (!g_settings.roundMaximized) {
+        return;
+    }
+
+    if (!IsRoundableMaximizedWindow(hwnd)) {
+        ForgetWindow(hwnd);
+        return;
+    }
+
+    RECT rect;
+    if (!GetWindowRect(hwnd, &rect)) {
+        return;
+    }
+
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (!dpi) {
+        dpi = 96;
+    }
+    int radius = static_cast<int>(g_settings.radius * dpi / 96.0f);
+
+    // The region is in window coordinates, and a maximized window overhangs the
+    // work area by its border width on every side.
+    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2,
+                                     radius * 2);
+    if (!region) {
+        return;
+    }
+
+    if (SetWindowRgn(hwnd, region, TRUE)) {
+        RememberWindow(hwnd);  // SetWindowRgn took ownership.
+    } else {
+        DeleteObject(region);
+    }
+}
+
+void CALLBACK WinEventProc(HWINEVENTHOOK,
+                           DWORD event,
+                           HWND hwnd,
+                           LONG idObject,
+                           LONG idChild,
+                           DWORD,
+                           DWORD) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
+        return;
+    }
+    if (event == EVENT_OBJECT_DESTROY) {
+        ForgetWindow(hwnd);
+        return;
+    }
+    UpdateWindowRegion(hwnd);
+}
+
+DWORD WINAPI RegionThreadProc(LPVOID) {
+    g_stateHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND,
+                                  EVENT_SYSTEM_MINIMIZEEND, nullptr,
+                                  WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    g_locationHook = SetWinEventHook(EVENT_OBJECT_DESTROY,
+                                     EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+                                     WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_stateHook) {
+        UnhookWinEvent(g_stateHook);
+    }
+    if (g_locationHook) {
+        UnhookWinEvent(g_locationHook);
+    }
+    return 0;
+}
+
+void ClearAllWindowRegions() {
+    EnterCriticalSection(&g_regionCs);
+    for (int i = 0; i < kMaxTrackedWindows; i++) {
+        if (g_regionedWindows[i] && IsWindow(g_regionedWindows[i])) {
+            SetWindowRgn(g_regionedWindows[i], nullptr, TRUE);
+        }
+        g_regionedWindows[i] = nullptr;
+    }
+    LeaveCriticalSection(&g_regionCs);
 }
 
 void LoadSettings() {
@@ -349,6 +496,13 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    InitializeCriticalSection(&g_regionCs);
+    g_regionThread =
+        CreateThread(nullptr, 0, RegionThreadProc, nullptr, 0, &g_regionThreadId);
+    if (!g_regionThread) {
+        Wh_Log(L"Failed to start the region thread");
+    }
+
     return TRUE;
 }
 
@@ -356,8 +510,22 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     LoadSettings();
+
+    if (!g_settings.roundMaximized) {
+        ClearAllWindowRegions();
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    if (g_regionThread) {
+        PostThreadMessage(g_regionThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_regionThread, 2000);
+        CloseHandle(g_regionThread);
+        g_regionThread = nullptr;
+    }
+
+    ClearAllWindowRegions();
+    DeleteCriticalSection(&g_regionCs);
 }
