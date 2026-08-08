@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.13.0
+// @version         0.14.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -944,6 +944,8 @@ public:
                 action = ACTION_COPY_DELETE;
             } else if (command == L"keep") {
                 action = ACTION_KEEP;
+            } else if (command == L"body") {
+                action = ACTION_COPY_ONLY;  // Toast clicked away, not answered.
             }
         }
         EnterCriticalSection(&g_toastLock);
@@ -1086,7 +1088,8 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     ULONGLONG toastId = GetTickCount64();
     std::wstring id = std::to_wstring(toastId);
     std::wstring xml =
-        L"<toast scenario=\"reminder\" duration=\"long\">"
+        L"<toast scenario=\"reminder\" duration=\"long\" "
+        L"activationType=\"background\" launch=\"body|" + id + L"\">"
         L"<visual><binding template=\"ToastGeneric\">"
         L"<text>Screenshot saved</text><text>" +
         XmlEscape(name) +
@@ -1391,7 +1394,11 @@ static int AskAction(const std::wstring& path, const Settings& s) {
         case ACTION_KEEP:
             return result;
         default:
-            return ACTION_KEEP;
+            // Esc / the X close the dialog with IDCANCEL. Teardown clicks the real
+            // Keep button, and entry re-checks the stop event, so a cancel here can
+            // only be a live user dismissing it: copy, never delete, matching the
+            // toast-swipe path.
+            return ACTION_COPY_ONLY;
     }
 }
 
