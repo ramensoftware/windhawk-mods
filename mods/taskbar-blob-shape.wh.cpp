@@ -82,16 +82,16 @@ since both replace the native active indicator.
     $description: Hex color code. Supports multi-color gradients (e.g. '#FF0000,#00FF00') and Light | Dark separation (e.g. '#FFFFFF|#09131E'). Both can be combined ('light1,light2|dark1,dark2'). Leave empty to use the system accent color.
   $name: Color Settings
 - SystemButtons:
-  - SystemButtonsBlob: true
+  - SystemButtonsBlob: false
     $name: Start, Search and Task view blob
     $description: Show the blob behind the Start, Search and Task view buttons while they are open. Search is supported in "Search icon only" mode.
-  - WidgetsBlob: true
+  - WidgetsBlob: false
     $name: Widgets button blob
     $description: Show the blob behind the Widgets button while the widgets board is open.
-  - DateTimeBlob: true
+  - DateTimeBlob: false
     $name: Date and time blob
     $description: Show the blob behind the date and time while the notification center is open.
-  - TrayButtonsBlob: true
+  - TrayButtonsBlob: false
     $name: System tray buttons blob
     $description: Show the blob behind the other system tray buttons (control center, language, overflow chevron) while their flyout is open.
   $name: Other Taskbar Buttons
@@ -117,6 +117,7 @@ since both replace the native active indicator.
 #include <string_view>
 #include <mutex>
 #include <vector>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <cmath>
@@ -134,10 +135,10 @@ struct Settings {
     double BgOpacityLight = 1.0;
     double BgOpacityDark = 1.0;
 
-    bool SystemButtonsBlob = true;
-    bool WidgetsBlob = true;
-    bool DateTimeBlob = true;
-    bool TrayButtonsBlob = true;
+    bool SystemButtonsBlob = false;
+    bool WidgetsBlob = false;
+    bool DateTimeBlob = false;
+    bool TrayButtonsBlob = false;
 
     std::vector<winrt::Windows::UI::Color> ParsedLightColor;
     std::vector<winrt::Windows::UI::Color> ParsedDarkColor;
@@ -207,6 +208,9 @@ struct BlobEntry {
     std::vector<winrt::Windows::UI::Color> lastColors;
 };
 std::mutex g_blobEntriesMutex;
+// Set under g_blobEntriesMutex by the uninit snapshot; checked under the
+// same lock wherever new work (entries, hosts, posts) could start.
+std::atomic<bool> g_unloading{false};
 // BlobEntry holds a DispatcherTimer — a thread-affine XAML object — so this
 // container must never reach the CRT's global destructors: Wh_ModUninit does
 // not run when explorer.exe itself terminates, and destroying the vector on
@@ -227,7 +231,41 @@ struct SweptHost {
 };
 std::vector<SweptHost> g_taskbarHosts;
 std::vector<SweptHost> g_trayHosts;
-std::atomic<bool> g_unloading{false};
+
+// Every RunAsync post whose lambda lives in this DLL — hook refreshes, the
+// settings-change re-sweep and per-entry refreshes, cross-thread orphan
+// cleanup — takes a ticket here under g_blobEntriesMutex, next to the same
+// g_unloading check the uninit snapshot uses, and releases it when the
+// lambda finishes. Wh_ModBeforeUninit waits for the count to drain, closing
+// the two windows the entry/host barrier cannot see: a post queued before
+// its entry exists, and a post that lands behind the barrier's own items.
+// The rule: nothing from the mod image may be running or scheduled once
+// Wh_ModUninit returns.
+std::atomic<int> g_pendingPosts{0};
+HANDLE g_postsDrained = nullptr; // manual-reset, created in Wh_ModInit
+
+bool PostToUiThread(winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
+                    std::function<void()> fn) {
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        if (g_unloading) return false; // no new posts after the uninit snapshot
+        g_pendingPosts.fetch_add(1);
+    }
+    auto release = []() {
+        if (g_pendingPosts.fetch_sub(1) == 1 && g_postsDrained) SetEvent(g_postsDrained);
+    };
+    try {
+        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+                            [fn = std::move(fn), release]() {
+                                try { fn(); } catch (...) {}
+                                release();
+                            });
+        return true;
+    } catch (...) {
+        release(); // a failed post must not leak a count
+        return false;
+    }
+}
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 
@@ -634,11 +672,11 @@ bool IsSystemButtonChecked(FrameworkElement const& btn) {
                 if (!st) continue;
                 auto stateName = st.Name();
                 std::wstring_view name{stateName};
-                // Exact Active* names rather than a prefix match: now that
-                // checked toggles fall through to this scan, a prefix would
-                // read any unrelated Active-something state on some future
+                // Checked* as a prefix (Checked/CheckedNormal/...) and the
+                // exact Active* names — not substring/prefix-anything: a
+                // loose match would read unrelated states on some future
                 // template as "open".
-                if (name.find(L"Checked") != std::wstring_view::npos ||
+                if (name.starts_with(L"Checked") ||
                     name == L"ActiveNormal" ||
                     name == L"ActivePointerOver" ||
                     name == L"ActivePressed") {
@@ -730,6 +768,10 @@ int8_t ClassifyButton(winrt::Windows::UI::Xaml::FrameworkElement const& button) 
     return BlobEntry::KindSystem;
 }
 
+bool IsTrayKind(int8_t kind) {
+    return kind == BlobEntry::KindDateTime || kind == BlobEntry::KindTray;
+}
+
 bool IsKindEnabled(int8_t kind, const Settings& localSettings) {
     switch (kind) {
         case BlobEntry::KindTask:     return true;
@@ -746,6 +788,11 @@ bool IsKindEnabled(int8_t kind, const Settings& localSettings) {
 // applies the blob. The recursive tree walk only runs when the cached
 // element has expired or been detached.
 void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const Settings& localSettings) {
+    // FindOrCreateEntry returns null for both "no entry" and "unloading";
+    // without this check the disabled-kind path below would classify, walk
+    // the tree and re-register hosts into vectors uninit just cleared.
+    if (g_unloading) return;
+
     auto entry = FindOrCreateEntry(button, false);
     if (!entry) {
         // No entry yet: classify first, and don't materialize one — with its
@@ -762,7 +809,7 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
             // island would not be in the host list at all. Terminates: the
             // re-entrant RefreshBlob for this button hits the
             // firstTime == false path in SweepExistingButtons.
-            if (kind != BlobEntry::KindDateTime && kind != BlobEntry::KindTray) {
+            if (!IsTrayKind(kind)) {
                 if (auto grid = GetHostRootGrid(button)) {
                     SweepExistingButtons(grid, localSettings);
                 }
@@ -1110,7 +1157,7 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
             } catch (...) {}
             RemoveFromParentPanel(blob);
         } else if (dispatcher) {
-            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [orphan, blob]() {
+            PostToUiThread(dispatcher, [orphan, blob]() {
                 if (g_unloading) return; // the uninit cleanup restores natives itself
                 if (orphan->restoreTimer) {
                     try { orphan->restoreTimer.Stop(); } catch (...) {}
@@ -1441,7 +1488,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             return;
         }
         entry->grid = winrt::make_weak(grid);
-        if (entry->kind != BlobEntry::KindDateTime && entry->kind != BlobEntry::KindTray) {
+        if (!IsTrayKind(entry->kind)) {
             // First contact with this taskbar: bring its pre-existing
             // buttons up. Tray grids are swept by SweepTray instead —
             // registering them here would add a taskbar-host SizeChanged
@@ -1464,8 +1511,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         blobShape.Margin(winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, -1000, -1000));
         blobShape.Opacity(0.0);
 
-        bool expectRepeater = entry->kind != BlobEntry::KindDateTime &&
-                              entry->kind != BlobEntry::KindTray;
+        bool expectRepeater = !IsTrayKind(entry->kind);
         if (!InsertBlobBelowRepeater(grid, blobShape, expectRepeater)) {
             setNativeHidden(false); // no blob will be shown; retried on the next event
             return;
@@ -1508,8 +1554,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         if (parentGrid != grid) {
             RemoveFromParentPanel(blobShape);
             entry->bound = false;
-            bool expectRepeater = entry->kind != BlobEntry::KindDateTime &&
-                                  entry->kind != BlobEntry::KindTray;
+            bool expectRepeater = !IsTrayKind(entry->kind);
             if (!InsertBlobBelowRepeater(grid, blobShape, expectRepeater)) {
                 setNativeHidden(false); // unparented renders nothing; retried on the next event
                 return;
@@ -1641,7 +1686,7 @@ void DispatchElementRefresh(winrt::Windows::UI::Xaml::FrameworkElement const& el
     if (!dispatcher) return;
     auto weakElem = winrt::make_weak(elem);
 
-    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakElem]() {
+    PostToUiThread(dispatcher, [weakElem]() {
         if (g_unloading) return;
         try {
             Settings localSettings;
@@ -1746,6 +1791,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Taskbar Blob Shape Mod");
+
+    g_postsDrained = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
 
     HMODULE m = GetTaskbarViewModuleHandle();
@@ -1789,14 +1836,19 @@ void Wh_ModBeforeUninit() {
         // timers must never survive to the CRT's global destructors.
         g_blobEntries.reset();
     }
-    if (localEntries.empty() && localHosts.empty()) return;
+
+    // From here no new refresh can be posted (PostToUiThread checks
+    // g_unloading under the same mutex the snapshot just held), so the
+    // pending-post count is monotonically non-increasing: reset the drain
+    // event now and wait for it at the end. No early return — even with no
+    // entries and no hosts, posted refreshes may still be in flight.
+    if (g_postsDrained) ResetEvent(g_postsDrained);
 
     // One barrier covers everything posted from here: entry cleanups AND the
     // host SizeChanged detaches. The count is fixed up front (entries +
     // hosts) and every non-posted path decrements, so the wait below can't
     // complete while any posted lambda — whose code lives in this DLL — is
-    // still queued. In particular, hosts with no entries no longer escape
-    // via an early return.
+    // still queued.
     std::shared_ptr<void> eventLifetime(CreateEvent(nullptr, TRUE, FALSE, nullptr), [](HANDLE h) { if(h) CloseHandle(h); });
     auto pending = std::make_shared<std::atomic<int>>((int)localEntries.size() + (int)localHosts.size());
 
@@ -1921,10 +1973,24 @@ void Wh_ModBeforeUninit() {
             Wh_Log(L"Timed out waiting for blob shape cleanup");
         }
     }
+
+    // Second barrier: refreshes posted from the hooks and settings paths.
+    // Their tickets were taken before g_unloading was set; wait for the
+    // in-flight ones to finish executing.
+    if (g_postsDrained && g_pendingPosts.load() > 0) {
+        if (WaitForSingleObject(g_postsDrained, 2000) == WAIT_TIMEOUT) {
+            Wh_Log(L"Timed out waiting for posted refreshes to drain");
+        }
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Blob Shape Mod");
+
+    if (g_postsDrained) {
+        CloseHandle(g_postsDrained);
+        g_postsDrained = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -1944,16 +2010,14 @@ void Wh_ModSettingsChanged() {
         auto dispatcher = g.Dispatcher();
         if (!dispatcher) continue;
         auto weakGrid = winrt::make_weak(g);
-        try {
-            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakGrid]() {
-                if (g_unloading) return;
-                auto grid = weakGrid.get();
-                if (!grid) return;
-                Settings localSettings;
-                { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
-                try { TaskbarSweepBody(grid, localSettings); } catch (...) {}
-            });
-        } catch (...) {}
+        PostToUiThread(dispatcher, [weakGrid]() {
+            if (g_unloading) return;
+            auto grid = weakGrid.get();
+            if (!grid) return;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try { TaskbarSweepBody(grid, localSettings); } catch (...) {}
+        });
     }
 
     std::vector<std::shared_ptr<BlobEntry>> localEntries;
@@ -1974,11 +2038,11 @@ void Wh_ModSettingsChanged() {
                                     : (btn ? btn.Dispatcher() : nullptr);
         if (!dispatcher) continue;
         std::weak_ptr<BlobEntry> weakEntry = entry;
-        // High, matching the hook and the uninit cleanup: CoreDispatcher is
-        // priority-ordered, so a Low item posted here could still be queued
-        // when the High-priority uninit barrier completes — and would then
-        // run in an unloaded DLL.
-        dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakEntry]() {
+        // Routed through PostToUiThread: the posted-refresh counter is what
+        // guarantees this can't run after unload — the FIFO/priority
+        // argument alone can't, since a post can land behind the uninit
+        // barrier's own items.
+        PostToUiThread(dispatcher, [weakEntry]() {
             if (g_unloading) return;
             auto e = weakEntry.lock();
             if (!e) return;
