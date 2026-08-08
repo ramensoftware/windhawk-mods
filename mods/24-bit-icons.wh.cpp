@@ -227,7 +227,7 @@ BOOL Wh_ModInit()
         }
     };
 
-    const WindhawkUtils::SYMBOL_HOOK user32_10_DllHook
+    const WindhawkUtils::SYMBOL_HOOK user32DllHook_10
     {
         {
             L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)"
@@ -237,7 +237,7 @@ BOOL Wh_ModInit()
         false
     };
 
-    const WindhawkUtils::SYMBOL_HOOK user32_11_DllHook
+    const WindhawkUtils::SYMBOL_HOOK user32DllHook_11
     {
         {
             L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)",
@@ -254,9 +254,9 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(hUser32, &user32_10_DllHook, 1))
+    if (!WindhawkUtils::HookSymbols(hUser32, &user32DllHook_10, 1))
     {
-        if (!WindhawkUtils::HookSymbols(hUser32, &user32_11_DllHook, 1))
+        if (!WindhawkUtils::HookSymbols(hUser32, &user32DllHook_11, 1))
         {
             Wh_Log(L"Failed to hook function BitmapFromDIB");
             return FALSE;
