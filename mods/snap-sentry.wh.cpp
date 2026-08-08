@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.12.0
+// @version         0.13.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -67,7 +67,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
   $name: Enable processing
 - delaySeconds: 5
   $name: Seconds before deletion
-  $description: With the popup on, this is the countdown before the automatic action, and 0 waits for you to choose, keeping the file if the popup is never answered. With the popup off, 0 deletes as soon as clipboard copying finishes.
+  $description: With the popup on, this is the countdown before the automatic action; 0 waits for you to choose, backstopped at 10 minutes so an unanswered popup can't hold things forever (and because processing is one at a time, a screenshot taken while a popup is open waits for it). With the popup off, 0 acts as soon as the clipboard copy finishes. Capped at 3600 seconds.
 - deleteFile: false
   $name: Delete the saved screenshot
   $description: Off by default, since deletion is the irreversible part; turn it on to opt in. Only applies to Image and None clipboard modes. File and Path modes reference the file, so deletion is always suppressed for them.
@@ -77,9 +77,9 @@ stored in clipboard history, cloud sync, backups, or other programs.
 - renameFromWindow: false
   $name: Rename new screenshots by active window
   $description: Renames each new screenshot using the title of the window that is in front, plus a timestamp, so files are easier to find later. The file stays in the same folder.
-- showActionPopup: true
+- showActionPopup: false
   $name: Show companion action popup
-  $description: A notification offering Delete now, Copy image and delete, or Keep (falls back to a dialog if notifications are unavailable). The configured automatic action runs when the countdown expires.
+  $description: Off by default. When on, shows a notification offering Delete now, Copy image and delete, or Keep (falls back to a dialog if notifications are unavailable), and registers a Start Menu shortcut and a COM entry so its buttons work (both removed when you turn this off or disable the mod). With it off, SnapSentry is a pure clipboard tool with no footprint outside its own settings.
 - clipboardMode: image
   $name: Clipboard content
   $options:
@@ -97,7 +97,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
   - markdown: Markdown image link
 - folder: ""
   $name: Folder override
-  $description: Leave empty to watch your Windows Screenshots folder, wherever it is located. Whatever you point this at is treated the same way, so with deletion on, new images saved there are deleted too.
+  $description: Leave empty to watch your Windows Screenshots folder, wherever it is located. Environment variables like %USERPROFILE% are expanded. Whatever you point this at is treated the same way, so with deletion on, new images saved there are deleted too.
 - logDetails: false
   $name: Verbose logging (may include file paths)
   $description: When off, log lines omit file paths. Turn on only while debugging.
@@ -289,6 +289,14 @@ static void LoadSettings() {
     s.folder = WindhawkUtils::StringSetting::make(L"folder").get();
     if (s.folder.empty()) {
         s.folder = DefaultScreenshotsFolder();
+    } else {
+        // Expand things like %USERPROFILE% so a pasted path with env vars resolves.
+        WCHAR expanded[MAX_PATH * 2];
+        DWORD n = ExpandEnvironmentStringsW(s.folder.c_str(), expanded,
+                                            ARRAYSIZE(expanded));
+        if (n > 0 && n <= ARRAYSIZE(expanded)) {
+            s.folder = expanded;
+        }
     }
 
     EnterCriticalSection(&g_lock);
@@ -732,8 +740,11 @@ static bool EnsureAumidRegistered() {
     }
 
     WCHAR exePath[MAX_PATH];
-    if (!GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
-        Wh_Log(L"AUMID: GetModuleFileName failed %lu", GetLastError());
+    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+    if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
+        // At the buffer size it truncates with no null guarantee, so reject it
+        // rather than write a shortcut that points somewhere wrong.
+        Wh_Log(L"AUMID: GetModuleFileName failed/truncated %lu", GetLastError());
         return false;
     }
 
@@ -810,8 +821,9 @@ static bool EnsureAumidRegistered() {
 // unload so nothing is left to launch once the mod is gone.
 static bool EnsureClsidRegistered() {
     WCHAR exePath[MAX_PATH];
-    if (!GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath))) {
-        return false;
+    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+    if (exeLen == 0 || exeLen >= ARRAYSIZE(exePath)) {
+        return false;  // Truncated path would register a wrong LocalServer32 command.
     }
     WCHAR command[MAX_PATH + 64];
     swprintf_s(command, L"\"%s\" -tool-mod \"%s\"", exePath, WH_MOD_ID);
@@ -1001,18 +1013,28 @@ public:
 
     HRESULT STDMETHODCALLTYPE
     Invoke(ABI::Windows::UI::Notifications::IToastNotification* sender,
-           ABI::Windows::UI::Notifications::IToastDismissedEventArgs*) override {
+           ABI::Windows::UI::Notifications::IToastDismissedEventArgs* args) override {
         // A dismissal raised for an earlier toast can be dispatched by a later
         // toast's message pump; ignore anything that isn't the one we're waiting on.
         if (sender != g_activeToast.load()) {
             return S_OK;
         }
+        // Only a user dismissal is an answer. TimedOut (the platform retired the
+        // toast despite scenario=reminder) and ApplicationHidden (our own Hide) are
+        // not, so leave the wait running for those rather than cutting it short.
+        ABI::Windows::UI::Notifications::ToastDismissalReason reason =
+            ABI::Windows::UI::Notifications::ToastDismissalReason_UserCanceled;
+        if (args && SUCCEEDED(args->get_Reason(&reason)) &&
+            reason != ABI::Windows::UI::Notifications::ToastDismissalReason_UserCanceled) {
+            return S_OK;
+        }
         EnterCriticalSection(&g_toastLock);
         // Only the toast currently being waited on, and only if a button click
         // hasn't already answered it (clicking one also dismisses the toast).
+        // Swiping it away means "off my screen", not "delete", so copy, don't delete.
         bool mine = g_activeToastId != 0 && !g_toastAnswered;
         if (mine) {
-            g_toastAction = ACTION_KEEP;
+            g_toastAction = ACTION_COPY_ONLY;
             g_toastAnswered = true;
         }
         LeaveCriticalSection(&g_toastLock);
@@ -1072,7 +1094,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         L"</binding></visual><actions>"
         L"<action content=\"Delete\" arguments=\"delete|" + id + L"\" activationType=\"background\"/>"
         L"<action content=\"Copy + delete\" arguments=\"copydelete|" + id + L"\" activationType=\"background\"/>"
-        L"<action content=\"Keep\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
+        L"<action content=\"Keep, don't copy\" arguments=\"keep|" + id + L"\" activationType=\"background\"/>"
         L"</actions></toast>";
 
     ComPtr<IToastNotificationManagerStatics> toastStatics;
@@ -1255,7 +1277,8 @@ struct DialogState {
     DWORD started;
     DWORD timeoutMs;
     bool showCountdown;   // False when there is no countdown, only the backstop.
-    int expiryAction;     // What running out of time means.
+    int expiryAction;     // What running out of time means (a real button id).
+    bool expired;         // Set when the backstop closed it, not the user.
     std::wstring baseText;
 };
 
@@ -1287,6 +1310,7 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             {
                 DWORD elapsed = GetTickCount() - state->started;
                 if (elapsed >= state->timeoutMs) {
+                    state->expired = true;  // Backstop, not a user choice.
                     SendMessageW(hwnd, TDM_CLICK_BUTTON, state->expiryAction, 0);
                 } else if (state->showCountdown) {
                     DWORD left = (state->timeoutMs - elapsed + 999) / 1000;
@@ -1314,6 +1338,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     state.timeoutMs =
         state.showCountdown ? (DWORD)s.delaySeconds * 1000 : kNoAnswerCapMs;
     state.expiryAction = state.showCountdown ? ACTION_AUTO : ACTION_KEEP;
+    state.expired = false;
     state.baseText = name + L"\n\nChoose an action, or wait for the configured "
                             L"automatic action.";
 
@@ -1328,7 +1353,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     TASKDIALOG_BUTTON buttons[] = {
         {ACTION_DELETE, L"Delete now"},
         {ACTION_COPY_DELETE, L"Copy image && delete"},
-        {ACTION_KEEP, L"Keep file"},
+        {ACTION_KEEP, L"Keep, don't copy"},
         {ACTION_AUTO, L"Use automatic action"},
     };
 
@@ -1352,6 +1377,12 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     // rather than a failure, so map anything that isn't one of our buttons to Keep.
     if (FAILED(TaskDialogIndirect(&c, &result, nullptr, nullptr))) {
         return ACTION_KEEP;
+    }
+    // The no-countdown backstop clicks Keep (a real button) on expiry; translate
+    // that to copy-only, since nobody actually answered. A real Keep click, or a
+    // countdown expiry (which uses ACTION_AUTO), is left as-is.
+    if (state.expired && !state.showCountdown) {
+        return ACTION_COPY_ONLY;
     }
     switch (result) {
         case ACTION_AUTO:
@@ -1623,16 +1654,23 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
     if (unloading) {
         RemoveNotificationSettings();
     }
-    if (g_toastRegSynced && wantPopup == g_toastRegApplied) {
+    // Skip only when nothing needs to change: the state matches and, when the popup
+    // is wanted, registration already fully succeeded. A prior attempt that only
+    // partially succeeded is retried on a later call rather than being stuck on the
+    // dialog fallback for the whole session.
+    if (g_toastRegSynced && wantPopup == g_toastRegApplied &&
+        (!wantPopup || g_toastRegistered.load())) {
         return;
     }
     g_toastRegSynced = true;
     if (wantPopup) {
-        g_toastRegApplied = true;  // Even on a partial failure, so teardown cleans up.
+        g_toastRegApplied = true;  // Track intent, so teardown always cleans up.
+        // Both helpers are idempotent, so retrying after a partial failure is safe.
         bool aumidOk = EnsureAumidRegistered();
         bool clsidOk = EnsureClsidRegistered();
-        HRESULT regHr = E_FAIL;
-        if (aumidOk && clsidOk) {
+        // Don't re-register the class object if a previous attempt already did.
+        HRESULT regHr = g_toastActivatorCookie ? S_OK : E_FAIL;
+        if (aumidOk && clsidOk && !g_toastActivatorCookie) {
             regHr = CoRegisterClassObject(
                 CLSID_SnapSentryToastActivator, &g_toastActivatorFactory,
                 CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE, &g_toastActivatorCookie);
@@ -1780,8 +1818,21 @@ static void Enqueue(const std::wstring& folder, const std::wstring& name) {
 // Watcher: overlapped ReadDirectoryChangesW with a clean stop/reload path
 // ============================================================================
 
-static void ParseNotifications(const std::wstring& folder, const BYTE* buffer) {
+static void ParseNotifications(const std::wstring& folder, const BYTE* buffer,
+                               DWORD bytes) {
+    const BYTE* endp = buffer + bytes;
     for (auto* info = (const FILE_NOTIFY_INFORMATION*)buffer;;) {
+        // Bound every field against the reported size, so a malformed record can't
+        // walk off the buffer.
+        const BYTE* rec = (const BYTE*)info;
+        if (rec + sizeof(FILE_NOTIFY_INFORMATION) > endp) {
+            break;
+        }
+        const BYTE* nameEnd =
+            (const BYTE*)(info->FileName) + info->FileNameLength;
+        if (nameEnd > endp) {
+            break;
+        }
         if (info->Action == FILE_ACTION_ADDED ||
             info->Action == FILE_ACTION_RENAMED_NEW_NAME) {
             std::wstring name(info->FileName,
@@ -1826,6 +1877,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
     }
     HANDLE readyWaits[] = {g_stopEvent, g_reloadEvent, ov.hEvent};
 
+    int openFailures = 0;
     while (!WaitStop(0)) {
         Settings s = SnapshotSettings();
         if (!s.enabled || s.folder.empty()) {
@@ -1842,10 +1894,18 @@ static DWORD WINAPI WatchThread(LPVOID) {
             OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
             nullptr);
         if (dir == INVALID_HANDLE_VALUE) {
+            // The folder may appear later (Pictures\Screenshots isn't created until
+            // the first Win+PrintScreen). Back off from 2s to 30s after a few tries
+            // so a Snipping-Tool-only machine isn't polled twice a second forever.
+            DWORD wait = openFailures < 5 ? 2000 : 30000;
+            if (openFailures < 1000000) {
+                openFailures++;
+            }
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
-            WaitForMultipleObjects(2, idle, FALSE, 2000);  // Folder may appear later.
+            WaitForMultipleObjects(2, idle, FALSE, wait);
             continue;
         }
+        openFailures = 0;
 
         // Snapshot existing names before arming notifications so downloads or
         // sync churn on pre-existing files never look like new screenshots.
@@ -1890,7 +1950,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
                 Wh_Log(L"Change buffer overflow; some screenshots may be skipped");
                 continue;
             }
-            ParseNotifications(s.folder, buffer);
+            ParseNotifications(s.folder, buffer, bytes);
         }
         CloseHandle(dir);
         if (!reopen) {
