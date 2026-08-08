@@ -1,7 +1,7 @@
 // ==WindhawkMod==
-// @id              widget-board-size-position-prototype
-// @name            Widget Board Size and Position - Prototype
-// @description     Resize and reposition the WinUI 3 Windows Widget Board.
+// @id              widget-board-size-position
+// @name            Widget Board Size and Position
+// @description     Set a custom size and position for the new Widget Board on Windows 11. 
 // @version         0.1
 // @author          meteoni
 // @include         WidgetBoard.exe
@@ -11,10 +11,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Widget Board Size and Position - Prototype
+# Widget Board Size and Position
 
-Native HWND-only prototype for the WinUI 3 Widget Board (`WidgetBoard.exe`).
-It targets the top-level `WindowsDashboard` window and doesn't modify XAML.
+Set a custom size and position for the new Widget Board on Windows 11. 
+
+Allow you to override the default position and dimension of the new WinUI3 Widget Board (`WidgetBoard.exe`).
 
 Width, height, and offsets are specified in DIPs (96-DPI logical pixels), so a
 700x600 setting becomes 1400x1200 native pixels on a 200% display.
@@ -38,10 +39,20 @@ they move right/down from center.
   $description: Height in DIPs. Set to 0 to preserve Windows' height.
 - horizontalAnchor: left
   $name: Horizontal anchor
-  $description: "system, left, center, or right"
+  $description: "Where Widget Board shows up horiztontally."
+  $options:
+    - system: Default
+    - left: Left
+    - center: Center
+    - right: Right
 - verticalAnchor: top
   $name: Vertical anchor
-  $description: "system, top, center, or bottom"
+  $description: "Where Widget Board shows up vertically."
+  $options:
+    - system: Default
+    - top: Top
+    - center: Center
+    - bottom: Bottom
 - offsetX: 0
   $name: Horizontal offset
   $description: Offset in DIPs. Positive values move inward from an edge.
@@ -87,7 +98,6 @@ Settings g_settings;
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_attaching{false};
 std::atomic<HWND> g_boardHwnd{nullptr};
-std::atomic<unsigned long long> g_showEventCount{0};
 
 HWINEVENTHOOK g_showHook = nullptr;
 
@@ -461,21 +471,6 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
                            LONG idChild,
                            DWORD,
                            DWORD) {
-    WCHAR className[128]{};
-    if (hwnd)
-        GetClassNameW(hwnd, className, ARRAYSIZE(className));
-
-    const unsigned long long eventNumber = ++g_showEventCount;
-    Wh_Log(L"EVENT_OBJECT_SHOW #%llu: hwnd=%p object=%ld child=%ld "
-           L"thread=%u topLevel=%d class=%s",
-           eventNumber,
-           hwnd,
-           idObject,
-           idChild,
-           GetCurrentThreadId(),
-           hwnd && GetAncestor(hwnd, GA_ROOT) == hwnd,
-           className[0] ? className : L"<none>");
-
     if (event != EVENT_OBJECT_SHOW || !hwnd ||
         idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
