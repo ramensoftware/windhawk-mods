@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.38
+// @version         1.39
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -678,14 +678,21 @@ int ParseFontWeight(const std::wstring& value, int fallback) {
     return fallback;
 }
 
-// An icon setting is a file reference if it looks like a path, otherwise it is
-// literal text to render (an emoji).
+std::wstring IconSpecFilePart(const std::wstring& spec);
+
+// An icon setting is a file reference if it looks like a path or an
+// "app.exe,<index>" resource spec, otherwise it is literal text to render (an
+// emoji).
 bool IconSettingIsFile(const std::wstring& icon) {
     if (icon.size() < 3) {
         return false;
     }
     if (icon.find(L'\\') != std::wstring::npos ||
         icon.find(L'/') != std::wstring::npos) {
+        return true;
+    }
+    // Bare "explorer.exe,0" — no directory, no drive letter.
+    if (IconSpecFilePart(icon) != icon) {
         return true;
     }
     return icon[1] == L':';
@@ -1535,23 +1542,15 @@ PCWSTR PopupFontName() {
                                               : L"Segoe UI";
 }
 
-// Grid text is Arial. FontFamily construction succeeds even for a missing
-// family but leaves the object in a state GDI+ renders as boxes, so an absent
-// Arial falls back to the system popup font.
-std::wstring PopupTextFontName() {
-    Gdiplus::FontFamily arial(L"Arial");
-    if (arial.GetLastStatus() == Gdiplus::Ok) {
-        return L"Arial";
-    }
-    return PopupFontName();
-}
-
 // Built from a LOGFONT rather than a FontFamily + FontStyle so lfWeight goes to
 // the GDI font mapper, which resolves it against the family's real members.
 // Falls back to the FontFamily path if the mapper gives us something GDI+
 // cannot use.
 std::unique_ptr<Gdiplus::Font> MakePopupFont(int sizePx, int weight) {
-    std::wstring name = PopupTextFontName();
+    // Segoe UI Variable Text matches the surrounding shell and carries the CJK
+    // /Thai/Devanagari/emoji coverage a grid of filenames needs; Arial would
+    // drop those to GDI+ per-glyph font linking.
+    std::wstring name = PopupFontName();
 
     LOGFONTW lf{};
     // Negative lfHeight is the em size in pixels, matching what UnitPixel meant
@@ -6277,10 +6276,10 @@ POINT CenterOnMonitor(POINT anchor, int width, int height) {
 // metrics sized for the *system* DPI, which is what made a scaled window show
 // an oversized font. Cached per DPI so moving between monitors does not leak
 // an HFONT per WM_DPICHANGED; the manager only ever sees a couple of values.
-//
-// no_destroy for the same reason as every other global here: the CRT teardown
-// at Explorer exit must not touch it.
-[[clang::no_destroy]] std::vector<std::pair<int, HFONT>> g_fontCache;
+// Freed in Wh_ModUninit — the vector's own destructor is a plain heap free, so
+// it needs no no_destroy, but the handles it holds would leak into Explorer
+// across every disable/enable cycle.
+std::vector<std::pair<int, HFONT>> g_fontCache;
 
 HFONT UiFont(int dpi) {
     for (const auto& cached : g_fontCache) {
@@ -9396,6 +9395,13 @@ void Wh_ModUninit() {
     UnregisterClassW(kMenuOwnerClassName, instance);
     UnregisterClassW(FolderManager::kClassName, instance);
     UnregisterClassW(FolderManager::kEditClassName, instance);
+
+    // The manager thread is joined by now, so nothing has these selected into a
+    // DC. DeleteObject is a no-op on the DEFAULT_GUI_FONT stock fallback.
+    for (auto& [dpi, font] : FolderManager::g_fontCache) {
+        DeleteObject(font);
+    }
+    FolderManager::g_fontCache.clear();
 
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
