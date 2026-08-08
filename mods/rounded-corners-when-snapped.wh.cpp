@@ -8,7 +8,7 @@
 // @license         GPL-3.0
 // @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lwevtapi
+// @compilerOptions -lwevtapi
 // ==/WindhawkMod==
 
 // HasMultipleDwminitWarningsInLastMinute() is taken from the Custom Window
@@ -32,20 +32,19 @@ This mod needs to hook into `dwm.exe` to work. Please navigate to Windhawk's
 Settings > Advanced settings > More advanced settings > Process inclusion list,
 and make sure that `dwm.exe` is in the list.
 
-## Why maximized windows are left alone
+## Maximized windows are deliberately left alone
 
-A window maximized over the whole screen is presented through *direct flip*:
-its buffer goes to the display without DWM composing the frame, which is also
-why Windows doesn't round it in the first place. Rounded corners drawn for such
-a window only show up while something forces composition — the Start menu, a
-notification, Alt+Tab — and disappear again the moment the overlay goes away.
-In apps that draw their own frame (browsers, Electron apps) that reads as
-corners flickering between round and square.
+A window maximized over the whole screen is handed straight to the display
+through direct flip: its buffer is scanned out without DWM composing a frame
+for it. Corners drawn for such a window are simply not shown, and they appear
+for as long as something forces composition — the Start menu, a notification,
+Alt+Tab — which reads as corners flickering.
 
-Snapped windows are composed normally, so their corners stay rounded at all
-times. Maximized windows are therefore skipped by default. The behaviour can be
-turned on with the *Also round maximized windows* option, with the caveat
-above — it looks fine in apps with a standard window frame.
+Getting them to stay would mean pulling the window back into composition for
+every frame, which costs exactly the GPU work Windows avoids here. That isn't a
+reasonable trade for two corners, so a maximized window keeps its square
+corners — border and geometry both, so nothing flickers when an overlay opens.
+Unsnap or restore it and the rounding is back.
 
 ## How it works
 
@@ -58,6 +57,11 @@ class are hooked as well. Every replacement is gated on `IsMaximizedOrSnapped`,
 so the Start menu backdrop, the virtual-desktop switch animation, drag previews
 and fullscreen windows are left exactly as DWM wanted them.
 
+`IsMaximizedOrSnapped` covers both states at once, so telling a snapped window
+from a maximized one needs a rectangle. The only place that has one is
+`CWindowBorder::SetBorderParameters`, so the verdict is recorded there and
+reused by the getters on the next update.
+
 ## Compatibility
 
 Other mods and tools that patch DWM corners hook the same functions and will
@@ -69,14 +73,6 @@ corner option, StartAllBack or Win11DisableRoundedCorners.
 
 // ==WindhawkModSettings==
 /*
-- roundMaximized: false
-  $name: Also round maximized windows
-  $description: >-
-    A maximized window is normally presented without DWM composing it, which is
-    why Windows squares its corners. To round it, the mod gives the window a
-    rounded region, which brings it back into composition and clips the app's
-    own content. That costs one composition pass for that window - a little more
-    GPU work and battery use while a window is maximized.
 - roundStyle: round
   $name: Corner style
   $options:
@@ -97,14 +93,83 @@ corner option, StartAllBack or Win11DisableRoundedCorners.
 #include <winevt.h>
 
 struct {
-    bool roundMaximized;
     int roundStyle;
     float radius;
 } g_settings;
 
-// Captured, not hooked: DWM's own verdict about the surface being composed.
+// Captured, not hooked: DWM's own verdict about the surface being composed. It
+// answers "maximized or snapped" as one, hence the bookkeeping below.
 using IsMaximizedOrSnapped_t = bool(WINAPI*)(void* pThis);
 IsMaximizedOrSnapped_t IsMaximizedOrSnapped;
+
+// ---------------------------------------------------------------------------
+// Telling a snapped window from a maximized one.
+//
+// None of the corner functions get a rectangle, and DWM's own predicate lumps
+// both states together. CWindowBorder::SetBorderParameters does get one, and it
+// runs right after the corner functions for the same window, so the verdict is
+// recorded there and read back on the next update of that window.
+// ---------------------------------------------------------------------------
+
+constexpr int kMaxTrackedWindows = 32;
+
+CRITICAL_SECTION g_stateCs;
+struct {
+    void* window;
+    bool maximized;
+} g_windowState[kMaxTrackedWindows];
+int g_windowStateNext;
+
+// The window whose visuals are currently being built on this thread.
+thread_local void* g_currentWindow;
+
+bool IsKnownMaximized(void* window) {
+    bool maximized = false;
+
+    EnterCriticalSection(&g_stateCs);
+    for (int i = 0; i < kMaxTrackedWindows; i++) {
+        if (g_windowState[i].window == window) {
+            maximized = g_windowState[i].maximized;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_stateCs);
+
+    return maximized;
+}
+
+// Drops a remembered verdict. Only touches windows that are already tracked, so
+// querying an unrelated surface doesn't evict a real entry.
+void ForgetWindowState(void* window) {
+    EnterCriticalSection(&g_stateCs);
+    for (int i = 0; i < kMaxTrackedWindows; i++) {
+        if (g_windowState[i].window == window) {
+            g_windowState[i].maximized = false;
+            break;
+        }
+    }
+    LeaveCriticalSection(&g_stateCs);
+}
+
+void RememberWindowState(void* window, bool maximized) {
+    EnterCriticalSection(&g_stateCs);
+
+    int slot = -1;
+    for (int i = 0; i < kMaxTrackedWindows; i++) {
+        if (g_windowState[i].window == window) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        slot = g_windowStateNext;
+        g_windowStateNext = (g_windowStateNext + 1) % kMaxTrackedWindows;
+        g_windowState[slot].window = window;
+    }
+    g_windowState[slot].maximized = maximized;
+
+    LeaveCriticalSection(&g_stateCs);
+}
 
 // True for a window filling its monitor's work area, as opposed to one snapped
 // to part of it.
@@ -123,12 +188,27 @@ bool CoversWorkArea(const RECT& rect) {
     return width * 100 >= workWidth * 95 && height * 100 >= workHeight * 95;
 }
 
+// True for a surface this mod should round: DWM considers it snapped or
+// maximized, and it isn't one of the maximized ones.
+bool ShouldRound(void* pThis) {
+    if (!IsMaximizedOrSnapped(pThis)) {
+        // Restored or never snapped - DWM rounds it on its own, and any earlier
+        // "maximized" verdict is stale now. Clearing it here is what keeps a
+        // window from staying square after it leaves the maximized state.
+        ForgetWindowState(pThis);
+        return false;
+    }
+    return !IsKnownMaximized(pThis);
+}
+
 // Builds that square a snapped window by reporting a "don't round" style.
 using GetEffectiveCornerStyle_t = int(WINAPI*)(void* pThis);
 GetEffectiveCornerStyle_t GetEffectiveCornerStyle_Original;
 int WINAPI GetEffectiveCornerStyle_Hook(void* pThis) {
     int orig = GetEffectiveCornerStyle_Original(pThis);
-    if (orig == DWMWCP_DONOTROUND && IsMaximizedOrSnapped(pThis)) {
+    g_currentWindow = pThis;
+
+    if (orig == DWMWCP_DONOTROUND && ShouldRound(pThis)) {
         Wh_Log(L"> DONOTROUND -> %d", g_settings.roundStyle);
         return g_settings.roundStyle;
     }
@@ -144,7 +224,9 @@ using RadiusGetter_t = float(WINAPI*)(void* pThis);
 RadiusGetter_t GetRadiusFromCornerStyle_Original;
 float WINAPI GetRadiusFromCornerStyle_Hook(void* pThis) {
     float orig = GetRadiusFromCornerStyle_Original(pThis);
-    if (orig <= 0.0f && IsMaximizedOrSnapped(pThis)) {
+    g_currentWindow = pThis;
+
+    if (orig <= 0.0f && ShouldRound(pThis)) {
         Wh_Log(L"> radius 0 -> %f", g_settings.radius);
         return g_settings.radius;
     }
@@ -154,7 +236,9 @@ float WINAPI GetRadiusFromCornerStyle_Hook(void* pThis) {
 RadiusGetter_t GetFloatCornerRadiusForCurrentStyle_Original;
 float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* pThis) {
     float orig = GetFloatCornerRadiusForCurrentStyle_Original(pThis);
-    if (orig <= 0.0f && IsMaximizedOrSnapped(pThis)) {
+    g_currentWindow = pThis;
+
+    if (orig <= 0.0f && ShouldRound(pThis)) {
         Wh_Log(L"> current style radius 0 -> %f", g_settings.radius);
         return g_settings.radius;
     }
@@ -166,7 +250,9 @@ float WINAPI GetFloatCornerRadiusForCurrentStyle_Hook(void* pThis) {
 RadiusGetter_t GetDpiAdjustedFloatCornerRadius_Original;
 float WINAPI GetDpiAdjustedFloatCornerRadius_Hook(void* pThis) {
     float orig = GetDpiAdjustedFloatCornerRadius_Original(pThis);
-    if (orig > 0.0f || !IsMaximizedOrSnapped(pThis)) {
+    g_currentWindow = pThis;
+
+    if (orig > 0.0f || !ShouldRound(pThis)) {
         return orig;
     }
 
@@ -176,8 +262,10 @@ float WINAPI GetDpiAdjustedFloatCornerRadius_Hook(void* pThis) {
     return value;
 }
 
-// The window border is where the rounding actually becomes visible, and the
-// only place with a rectangle to tell a snapped window from a maximized one.
+// The only function in the chain that knows the window's rectangle. It runs
+// right after the getters above for the same window, so this is where a
+// maximized window is recognised - and where a rounding that slipped through
+// before that was known is taken back.
 using SetBorderParameters_t = long(WINAPI*)(void* pThis,
                                             const RECT& borderRect,
                                             float cornerRadius,
@@ -193,180 +281,31 @@ long WINAPI SetBorderParameters_Hook(void* pThis,
                                      const void* color,
                                      int borderStyle,
                                      int shadowStyle) {
-    if (cornerRadius > 0.0f && !g_settings.roundMaximized &&
-        CoversWorkArea(borderRect)) {
-        // Maximized: DWM presents it without composing, so a rounded border
-        // would only show while something else is drawn on top.
+    // Consume the marker: a later border update may belong to another window,
+    // and attributing its rectangle to this one is how a window ends up with a
+    // verdict that isn't its own.
+    void* window = g_currentWindow;
+    g_currentWindow = nullptr;
+
+    // The rectangle alone isn't enough - during the restore animation a window
+    // briefly still covers the work area while DWM already considers it
+    // restored, and squaring it there is what left windows square afterwards.
+    bool maximized = window && CoversWorkArea(borderRect) &&
+                     IsMaximizedOrSnapped(window);
+
+    if (window) {
+        RememberWindowState(window, maximized);
+    }
+
+    if (maximized && cornerRadius > 0.0f) {
+        // Direct flip means a rounded border here would only be shown while
+        // something else is composed on top, i.e. it would flicker.
         Wh_Log(L"> maximized, leaving the border square");
         cornerRadius = 0.0f;
     }
+
     return SetBorderParameters_Original(pThis, borderRect, cornerRadius, dpi,
                                         color, borderStyle, shadowStyle);
-}
-
-// ---------------------------------------------------------------------------
-// Maximized windows: a window with a region is no longer a plain rectangle, so
-// it stops being a direct flip candidate and DWM composes it again - which is
-// what makes the rounding above visible. The region also clips the app's own
-// content, so apps that paint their own frame can't fill the corner.
-//
-// The cost is one composition pass for that window, which is exactly what
-// Windows avoids by squaring the corners, so this is opt-in.
-// ---------------------------------------------------------------------------
-
-HANDLE g_regionThread;
-DWORD g_regionThreadId;
-HWINEVENTHOOK g_locationHook;
-HWINEVENTHOOK g_stateHook;
-
-CRITICAL_SECTION g_regionCs;
-constexpr int kMaxTrackedWindows = 64;
-HWND g_regionedWindows[kMaxTrackedWindows];
-
-void RememberWindow(HWND hwnd) {
-    EnterCriticalSection(&g_regionCs);
-    int free = -1;
-    for (int i = 0; i < kMaxTrackedWindows; i++) {
-        if (g_regionedWindows[i] == hwnd) {
-            free = -1;
-            break;
-        }
-        if (!g_regionedWindows[i] && free < 0) {
-            free = i;
-        }
-    }
-    if (free >= 0) {
-        g_regionedWindows[free] = hwnd;
-    }
-    LeaveCriticalSection(&g_regionCs);
-}
-
-void ForgetWindow(HWND hwnd) {
-    EnterCriticalSection(&g_regionCs);
-    for (int i = 0; i < kMaxTrackedWindows; i++) {
-        if (g_regionedWindows[i] == hwnd) {
-            g_regionedWindows[i] = nullptr;
-        }
-    }
-    LeaveCriticalSection(&g_regionCs);
-}
-
-bool IsRoundableMaximizedWindow(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || !IsZoomed(hwnd)) {
-        return false;
-    }
-
-    LONG style = GetWindowLongW(hwnd, GWL_STYLE);
-    if ((style & WS_CHILD) || !(style & (WS_CAPTION | WS_THICKFRAME))) {
-        return false;
-    }
-    if (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
-        return false;
-    }
-
-    // Leave true fullscreen alone - games and video players.
-    RECT rect;
-    MONITORINFO mi{sizeof(MONITORINFO)};
-    if (GetWindowRect(hwnd, &rect) &&
-        GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
-                        &mi) &&
-        EqualRect(&rect, &mi.rcMonitor)) {
-        return false;
-    }
-    return true;
-}
-
-void UpdateWindowRegion(HWND hwnd) {
-    if (!g_settings.roundMaximized) {
-        return;
-    }
-
-    if (!IsRoundableMaximizedWindow(hwnd)) {
-        ForgetWindow(hwnd);
-        return;
-    }
-
-    RECT rect;
-    if (!GetWindowRect(hwnd, &rect)) {
-        return;
-    }
-
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-    if (width <= 0 || height <= 0) {
-        return;
-    }
-
-    UINT dpi = GetDpiForWindow(hwnd);
-    if (!dpi) {
-        dpi = 96;
-    }
-    int radius = static_cast<int>(g_settings.radius * dpi / 96.0f);
-
-    // The region is in window coordinates, and a maximized window overhangs the
-    // work area by its border width on every side.
-    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2,
-                                     radius * 2);
-    if (!region) {
-        return;
-    }
-
-    if (SetWindowRgn(hwnd, region, TRUE)) {
-        RememberWindow(hwnd);  // SetWindowRgn took ownership.
-    } else {
-        DeleteObject(region);
-    }
-}
-
-void CALLBACK WinEventProc(HWINEVENTHOOK,
-                           DWORD event,
-                           HWND hwnd,
-                           LONG idObject,
-                           LONG idChild,
-                           DWORD,
-                           DWORD) {
-    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
-        return;
-    }
-    if (event == EVENT_OBJECT_DESTROY) {
-        ForgetWindow(hwnd);
-        return;
-    }
-    UpdateWindowRegion(hwnd);
-}
-
-DWORD WINAPI RegionThreadProc(LPVOID) {
-    g_stateHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND,
-                                  EVENT_SYSTEM_MINIMIZEEND, nullptr,
-                                  WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    g_locationHook = SetWinEventHook(EVENT_OBJECT_DESTROY,
-                                     EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-                                     WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    if (g_stateHook) {
-        UnhookWinEvent(g_stateHook);
-    }
-    if (g_locationHook) {
-        UnhookWinEvent(g_locationHook);
-    }
-    return 0;
-}
-
-void ClearAllWindowRegions() {
-    EnterCriticalSection(&g_regionCs);
-    for (int i = 0; i < kMaxTrackedWindows; i++) {
-        if (g_regionedWindows[i] && IsWindow(g_regionedWindows[i])) {
-            SetWindowRgn(g_regionedWindows[i], nullptr, TRUE);
-        }
-        g_regionedWindows[i] = nullptr;
-    }
-    LeaveCriticalSection(&g_regionCs);
 }
 
 void LoadSettings() {
@@ -374,8 +313,6 @@ void LoadSettings() {
         WindhawkUtils::StringSetting::make(L"roundStyle");
     g_settings.roundStyle =
         wcscmp(style.get(), L"small") == 0 ? DWMWCP_ROUNDSMALL : DWMWCP_ROUND;
-
-    g_settings.roundMaximized = Wh_GetIntSetting(L"roundMaximized") != 0;
 
     int radius = Wh_GetIntSetting(L"radius");
     if (radius < 1) {
@@ -429,6 +366,7 @@ BOOL Wh_ModInit() {
     }
 
     LoadSettings();
+    InitializeCriticalSection(&g_stateCs);
 
     HMODULE udwm = GetModuleHandle(L"udwm.dll");
     if (!udwm) {
@@ -482,7 +420,7 @@ BOOL Wh_ModInit() {
             GetDpiAdjustedFloatCornerRadius_Hook,
             true,  // Optional.
         },
-        // Keeps maximized windows square unless the user asks otherwise.
+        // Recognises maximized windows and keeps their border square.
         {
             {LR"(public: long __cdecl CWindowBorder::SetBorderParameters(struct tagRECT const &,float,int,struct _D3DCOLORVALUE const &,enum CWindowBorder::BorderStyle,enum CWindowBorder::ShadowStyle))"},
             &SetBorderParameters_Original,
@@ -496,13 +434,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    InitializeCriticalSection(&g_regionCs);
-    g_regionThread =
-        CreateThread(nullptr, 0, RegionThreadProc, nullptr, 0, &g_regionThreadId);
-    if (!g_regionThread) {
-        Wh_Log(L"Failed to start the region thread");
-    }
-
     return TRUE;
 }
 
@@ -510,22 +441,10 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     LoadSettings();
-
-    if (!g_settings.roundMaximized) {
-        ClearAllWindowRegions();
-    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_regionThread) {
-        PostThreadMessage(g_regionThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_regionThread, 2000);
-        CloseHandle(g_regionThread);
-        g_regionThread = nullptr;
-    }
-
-    ClearAllWindowRegions();
-    DeleteCriticalSection(&g_regionCs);
+    DeleteCriticalSection(&g_stateCs);
 }
