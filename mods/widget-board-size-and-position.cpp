@@ -87,9 +87,9 @@ Settings g_settings;
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_attaching{false};
 std::atomic<HWND> g_boardHwnd{nullptr};
+std::atomic<unsigned long long> g_showEventCount{0};
 
-HANDLE g_timerQueue = nullptr;
-HANDLE g_scanTimer = nullptr;
+HWINEVENTHOOK g_showHook = nullptr;
 
 constexpr UINT_PTR kSubclassId = 1;
 constexpr wchar_t kBoardClass[] = L"WindowsDashboard";
@@ -418,6 +418,27 @@ void WINAPI DetachOnWindowThread(PVOID parameter) {
         RemoveWindowSubclass(hwnd, BoardSubclassProc, kSubclassId);
 }
 
+void AttachToBoardWindow(HWND hwnd) {
+    if (g_unloading || !IsBoardWindow(hwnd))
+        return;
+
+    HWND existing = g_boardHwnd.load();
+    if (existing == hwnd && IsWindow(existing))
+        return;
+
+    bool expected = false;
+    if (!g_attaching.compare_exchange_strong(expected, true))
+        return;
+
+    if (g_unloading || !IsBoardWindow(hwnd)) {
+        g_attaching = false;
+        return;
+    }
+
+    if (!RunFromWindowThread(hwnd, AttachOnWindowThread, hwnd))
+        g_attaching = false;
+}
+
 void ScanForBoardWindow() {
     if (g_unloading)
         return;
@@ -428,22 +449,39 @@ void ScanForBoardWindow() {
 
     g_boardHwnd = nullptr;
 
-    bool expected = false;
-    if (!g_attaching.compare_exchange_strong(expected, true))
-        return;
-
     HWND hwnd = FindBoardWindow();
-    if (!hwnd) {
-        g_attaching = false;
+    if (hwnd)
+        AttachToBoardWindow(hwnd);
+}
+
+void CALLBACK WinEventProc(HWINEVENTHOOK,
+                           DWORD event,
+                           HWND hwnd,
+                           LONG idObject,
+                           LONG idChild,
+                           DWORD,
+                           DWORD) {
+    WCHAR className[128]{};
+    if (hwnd)
+        GetClassNameW(hwnd, className, ARRAYSIZE(className));
+
+    const unsigned long long eventNumber = ++g_showEventCount;
+    Wh_Log(L"EVENT_OBJECT_SHOW #%llu: hwnd=%p object=%ld child=%ld "
+           L"thread=%u topLevel=%d class=%s",
+           eventNumber,
+           hwnd,
+           idObject,
+           idChild,
+           GetCurrentThreadId(),
+           hwnd && GetAncestor(hwnd, GA_ROOT) == hwnd,
+           className[0] ? className : L"<none>");
+
+    if (event != EVENT_OBJECT_SHOW || !hwnd ||
+        idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
 
-    if (!RunFromWindowThread(hwnd, AttachOnWindowThread, hwnd))
-        g_attaching = false;
-}
-
-VOID CALLBACK ScanTimerCallback(PVOID, BOOLEAN) {
-    ScanForBoardWindow();
+    AttachToBoardWindow(hwnd);
 }
 
 }  // namespace
@@ -456,22 +494,25 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
     LoadSettings();
 
-    g_timerQueue = CreateTimerQueue();
-    if (!g_timerQueue) {
-        Wh_Log(L"CreateTimerQueue failed, error=%u", GetLastError());
+    HMODULE modModule = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&WinEventProc),
+            &modModule)) {
+        Wh_Log(L"GetModuleHandleExW failed, error=%u", GetLastError());
         return FALSE;
     }
 
-    if (!CreateTimerQueueTimer(&g_scanTimer,
-                               g_timerQueue,
-                               ScanTimerCallback,
-                               nullptr,
-                               0,
-                               500,
-                               WT_EXECUTEDEFAULT)) {
-        Wh_Log(L"CreateTimerQueueTimer failed, error=%u", GetLastError());
-        DeleteTimerQueue(g_timerQueue);
-        g_timerQueue = nullptr;
+    g_showHook = SetWinEventHook(EVENT_OBJECT_SHOW,
+                                 EVENT_OBJECT_SHOW,
+                                 modModule,
+                                 WinEventProc,
+                                 GetCurrentProcessId(),
+                                 0,
+                                 WINEVENT_INCONTEXT);
+    if (!g_showHook) {
+        Wh_Log(L"SetWinEventHook failed, error=%u", GetLastError());
         return FALSE;
     }
 
@@ -487,14 +528,9 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L">");
     g_unloading = true;
 
-    if (g_scanTimer) {
-        DeleteTimerQueueTimer(g_timerQueue, g_scanTimer, INVALID_HANDLE_VALUE);
-        g_scanTimer = nullptr;
-    }
-
-    if (g_timerQueue) {
-        DeleteTimerQueueEx(g_timerQueue, INVALID_HANDLE_VALUE);
-        g_timerQueue = nullptr;
+    if (g_showHook) {
+        UnhookWinEvent(g_showHook);
+        g_showHook = nullptr;
     }
 
     HWND hwnd = g_boardHwnd.exchange(nullptr);
