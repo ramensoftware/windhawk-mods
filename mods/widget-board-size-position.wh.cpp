@@ -15,7 +15,7 @@
 
 Set a custom size and position for the new Widget Board on Windows 11. 
 
-Allow you to override the default position and dimension of the new WinUI3 Widget Board (`WidgetBoard.exe`).
+Allows you to override the default position and dimensions of the new WinUI 3 Widget Board (`WidgetBoard.exe`).
 
 Width, height, and offsets are specified in DIPs (96-DPI logical pixels), so a
 700x600 setting becomes 1400x1200 native pixels on a 200% display.
@@ -39,7 +39,7 @@ they move right/down from center.
   $description: Height in DIPs. Set to 0 to preserve Windows' height.
 - horizontalAnchor: left
   $name: Horizontal anchor
-  $description: "Where Widget Board shows up horiztontally."
+  $description: "Where Widget Board shows up horizontally."
   $options:
     - system: Default
     - left: Left
