@@ -2916,6 +2916,42 @@
         "version": "1.0.1"
       }
     },
+    "control-panel-in-modern-file-explorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786188401000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786188401000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "crazyboyybs",
+        "description": "Abre el Panel de control en el Explorador de archivos moderno de Windows 11 y lo agrupa con Explorer en la barra de tareas",
+        "github": "https://github.com/crazyboyybs",
+        "include": [
+          "explorer.exe",
+          "control.exe"
+        ],
+        "license": "MIT",
+        "name": "Panel de control en el Explorador moderno",
+        "version": "1.0"
+      },
+      "metadataEnglish": {
+        "description": "Opens Control Panel in the modern Windows 11 File Explorer and groups it with Explorer on the taskbar",
+        "name": "Control Panel in Modern File Explorer"
+      }
+    },
     "copy-queue": {
       "details": {
         "defaultSorting": 1980,

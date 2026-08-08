@@ -2,12 +2,120 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-07T15:30:51.000Z</updated>
+    <updated>2026-08-08T11:26:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Control Panel in Modern File Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/control-panel-in-modern-file-explorer#f619cf783ed8630d4973aaa7b10dd5ecf0bddf9f</id>
+        <link href="https://windhawk.net/mods/control-panel-in-modern-file-explorer"/>
+        <updated>2026-08-08T11:26:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="controlpanelinmodernfileexplorer">Control Panel in Modern File Explorer</h1>
+<p>Windows 11 normally routes the Control Panel namespace to a dedicated legacy
+Explorer window. This mod disables only that special host-selection rule, so
+Control Panel opens in the regular modern File Explorer.</p>
+<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Painel%20de%20Controle.jpg" alt="Control Panel in modern File Explorer" /></p>
+<p>The Control Panel contents remain unchanged, but they are hosted by the modern
+Explorer frame with its current address bar, command bar, and tab interface.
+Its window also keeps File Explorer's taskbar identity instead of appearing as
+a separately pinned application.</p>
+<p>The mod allows normal File Explorer behavior and compatible tab-management mods
+and programs to handle Control Panel like other File Explorer locations.
+Separate-process behavior for regular folders is not changed, and there
+are no settings or background tasks.</p>
+<p>Unlike <code>aerexplorer</code>, this mod changes host selection only for Control Panel
+items and also removes their separate taskbar identity. It doesn't modify the
+host selection of other File Explorer locations or include legacy Explorer
+customizations. <code>cpl-classic-view-lite</code> is complementary rather than
+overlapping — it changes how the Control Panel folder's contents are
+presented, not which frame hosts the window.</p>
+<h2 id="knownbehavior">Known behavior</h2>
+<ul>
+<li>Control Panel is intentionally kept in the modern File Explorer even when
+"Launch folder windows in a separate process" is enabled. Regular folders
+continue to follow that setting.</li>
+<li>Pinning a Control Panel window pins File Explorer because the window shares
+File Explorer's taskbar identity.</li>
+<li>Control Panel launched via Run (<code>Win+R</code> → <code>control</code>) or <code>control.exe</code>
+directly is also covered — the mod hooks <code>control.exe</code> too, since it goes
+through the same host-selection functions before launching its own
+Explorer window.</li>
+</ul>
+<hr />
+<h1 id="paineldecontrolenoexploradormoderno">Painel de Controle no Explorador moderno</h1>
+<p>Normalmente, o Windows 11 encaminha o namespace do Painel de Controle para uma
+janela legada dedicada do Explorer. Este mod desativa somente essa regra especial
+de seleção de host, fazendo o Painel de Controle abrir no Explorador de Arquivos
+moderno normal.</p>
+<p>O conteúdo do Painel de Controle não é alterado, mas passa a ser hospedado pelo
+frame moderno do Explorer, com a barra de endereços, a barra de comandos e a
+interface de abas atuais.
+A janela também mantém a identidade do Explorador de Arquivos na barra de
+tarefas, em vez de aparecer como um aplicativo fixado separado.</p>
+<p>O mod permite que o comportamento normal do Explorador de Arquivos e mods e
+programas compatíveis de gerenciamento de abas tratem o Painel de Controle como
+outras localizações do Explorador de Arquivos. O comportamento de processo separado
+das pastas comuns não é alterado, e não há configurações nem tarefas em segundo plano.</p>
+<p>Ao contrário do <code>aerexplorer</code>, este mod altera a seleção de host somente para
+itens do Painel de Controle e também remove sua identidade separada na barra de
+tarefas. Ele não altera o host de outras localizações nem inclui personalizações
+do Explorador legado. O <code>cpl-classic-view-lite</code> é complementar, não
+concorrente — ele muda como o conteúdo da pasta do Painel de Controle é
+apresentado, não qual frame hospeda a janela.</p>
+<h2 id="comportamentoconhecido">Comportamento conhecido</h2>
+<ul>
+<li>O Painel de Controle é mantido intencionalmente no Explorador moderno mesmo
+quando "Iniciar as janelas de pastas em um processo separado" está ativado.
+As pastas comuns continuam seguindo essa configuração.</li>
+<li>Fixar uma janela do Painel de Controle fixa o Explorador de Arquivos, pois a
+janela compartilha a identidade do Explorador na barra de tarefas.</li>
+<li>O Painel de Controle aberto pelo Executar (<code>Win+R</code> → <code>control</code>) ou
+diretamente pelo <code>control.exe</code> também é coberto — o mod também intercepta
+o <code>control.exe</code>, pois ele passa pelas mesmas funções de seleção de host
+antes de abrir sua própria janela do Explorer.</li>
+</ul>
+<hr />
+<h1 id="paneldecontrolenelexploradormoderno">Panel de control en el Explorador moderno</h1>
+<p>Windows 11 normalmente dirige el espacio de nombres del Panel de control a una
+ventana heredada dedicada de Explorer. Este mod desactiva solamente esa regla
+especial de selección de host, haciendo que el Panel de control se abra en el
+Explorador de archivos moderno normal.</p>
+<p>El contenido del Panel de control no cambia, pero pasa a estar alojado en el
+marco moderno de Explorer, con la barra de direcciones, la barra de comandos y
+la interfaz de pestañas actuales.
+La ventana también conserva la identidad del Explorador de archivos en la barra
+de tareas, en vez de aparecer como una aplicación anclada independiente.</p>
+<p>Este mod permite que el Explorador de archivos funcione con normalidad y que los
+mods y programas compatibles de gestión de pestañas traten el Panel de control como
+cualquier otra ubicación del Explorador de archivos. El comportamiento de los procesos
+independientes de las carpetas comunes no se ve alterado, y no hay configuraciones ni
+tareas en segundo plano.</p>
+<p>A diferencia de <code>aerexplorer</code>, este mod cambia la selección del host solamente
+para los elementos del Panel de control y también elimina su identidad separada
+en la barra de tareas. No cambia el host de otras ubicaciones ni incluye las
+personalizaciones heredadas de Explorer. <code>cpl-classic-view-lite</code> es
+complementario, no competidor — cambia cómo se presenta el contenido de la
+carpeta del Panel de control, no qué marco aloja la ventana.</p>
+<h2 id="comportamientoconocido">Comportamiento conocido</h2>
+<ul>
+<li>El Panel de control se mantiene intencionadamente en el Explorador moderno
+incluso cuando está activada la opción de iniciar ventanas de carpeta en un
+proceso independiente. Las carpetas normales siguen respetando esa opción.</li>
+<li>Anclar una ventana del Panel de control ancla el Explorador de archivos porque
+la ventana comparte su identidad en la barra de tareas.</li>
+<li>El Panel de control abierto mediante Ejecutar (<code>Win+R</code> → <code>control</code>) o
+directamente con <code>control.exe</code> también está cubierto — el mod también
+engancha <code>control.exe</code>, ya que pasa por las mismas funciones de selección
+de host antes de abrir su propia ventana de Explorer.</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 "Please Wait" Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-please-wait-restorer#8f52521d39ea694fc4809a963808a6bfafcc2b5e</id>
@@ -599,29 +707,6 @@ power) or unplug it. By default it plays the Windows Notify Messaging sound.</p>
         <author>
             <name>khonloi</name>
             <uri>https://github.com/khonloi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.2]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#4c2a9225de5b346b3565df37d526fafd608d9bb9</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-07-31T20:42:41.000Z</updated>
-        <content type="html"><![CDATA[<p>The modern genie's render loop paced every frame behind a ~120fps <code>Sleep()</code>-based timer AND a per-frame <code>DwmFlush()</code>. That makes each frame cost render time plus one vsync, so once the mesh draw takes longer than a single refresh interval the delivered frame rate drops to roughly half the monitor's. The animation then looks visibly choppier than the standalone custom-animations-genie mod this engine was ported from.</p>
-<p>v3.1.2 fixes the serialization without turning the loop into a busy spin:</p>
-<ul>
-<li>Dropped the per-frame <code>DwmFlush()</code>. A single flush stays on the first non-degenerate frame, so the minimize/restore handoff still waits for the ghost to be composed before the real window is released.</li>
-<li>Replaced the old <code>Sleep()</code> pacer with a high-resolution waitable timer (<code>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION</code>) pacing frames at 2x the display's refresh rate (derived from <code>DwmGetCompositionTimingInfo</code>, 240 fps fallback). It's a rate limiter, not a vsync gate, so it caps CPU cost without re-introducing the render+vsync serialization.</li>
-<li>Thread stays at <code>THREAD_PRIORITY_HIGHEST</code>, matching the in-repo genie-minimize-animation mod.</li>
-</ul>
-<p>Also in this version:</p>
-<ul>
-<li>The classic engine gets the same pacing (it still had a per-frame <code>DwmFlush()</code>), so both styles behave consistently.</li>
-<li>Unload safety: the auto-hide deferred-minimize sleep is now chunked (20 ms) and aborts on <code>g_unloading</code>, so <code>Wh_ModBeforeUninit</code>'s 3 s drain can't time out while a worker is in a single up-to-5 s <code>Sleep()</code>.</li>
-<li>Readme: the Animation style section shows a demo GIF for each engine (Modern and Classic), and the "Actually smooth" feature bullet no longer claims per-frame <code>DwmFlush()</code> gating.</li>
-</ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>

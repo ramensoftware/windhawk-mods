@@ -2,12 +2,120 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-07T15:30:51.000Z</updated>
+    <updated>2026-08-08T11:26:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Control Panel in Modern File Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/control-panel-in-modern-file-explorer#f619cf783ed8630d4973aaa7b10dd5ecf0bddf9f</id>
+        <link href="https://windhawk.net/mods/control-panel-in-modern-file-explorer"/>
+        <updated>2026-08-08T11:26:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="controlpanelinmodernfileexplorer">Control Panel in Modern File Explorer</h1>
+<p>Windows 11 normally routes the Control Panel namespace to a dedicated legacy
+Explorer window. This mod disables only that special host-selection rule, so
+Control Panel opens in the regular modern File Explorer.</p>
+<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Painel%20de%20Controle.jpg" alt="Control Panel in modern File Explorer" /></p>
+<p>The Control Panel contents remain unchanged, but they are hosted by the modern
+Explorer frame with its current address bar, command bar, and tab interface.
+Its window also keeps File Explorer's taskbar identity instead of appearing as
+a separately pinned application.</p>
+<p>The mod allows normal File Explorer behavior and compatible tab-management mods
+and programs to handle Control Panel like other File Explorer locations.
+Separate-process behavior for regular folders is not changed, and there
+are no settings or background tasks.</p>
+<p>Unlike <code>aerexplorer</code>, this mod changes host selection only for Control Panel
+items and also removes their separate taskbar identity. It doesn't modify the
+host selection of other File Explorer locations or include legacy Explorer
+customizations. <code>cpl-classic-view-lite</code> is complementary rather than
+overlapping — it changes how the Control Panel folder's contents are
+presented, not which frame hosts the window.</p>
+<h2 id="knownbehavior">Known behavior</h2>
+<ul>
+<li>Control Panel is intentionally kept in the modern File Explorer even when
+"Launch folder windows in a separate process" is enabled. Regular folders
+continue to follow that setting.</li>
+<li>Pinning a Control Panel window pins File Explorer because the window shares
+File Explorer's taskbar identity.</li>
+<li>Control Panel launched via Run (<code>Win+R</code> → <code>control</code>) or <code>control.exe</code>
+directly is also covered — the mod hooks <code>control.exe</code> too, since it goes
+through the same host-selection functions before launching its own
+Explorer window.</li>
+</ul>
+<hr />
+<h1 id="paineldecontrolenoexploradormoderno">Painel de Controle no Explorador moderno</h1>
+<p>Normalmente, o Windows 11 encaminha o namespace do Painel de Controle para uma
+janela legada dedicada do Explorer. Este mod desativa somente essa regra especial
+de seleção de host, fazendo o Painel de Controle abrir no Explorador de Arquivos
+moderno normal.</p>
+<p>O conteúdo do Painel de Controle não é alterado, mas passa a ser hospedado pelo
+frame moderno do Explorer, com a barra de endereços, a barra de comandos e a
+interface de abas atuais.
+A janela também mantém a identidade do Explorador de Arquivos na barra de
+tarefas, em vez de aparecer como um aplicativo fixado separado.</p>
+<p>O mod permite que o comportamento normal do Explorador de Arquivos e mods e
+programas compatíveis de gerenciamento de abas tratem o Painel de Controle como
+outras localizações do Explorador de Arquivos. O comportamento de processo separado
+das pastas comuns não é alterado, e não há configurações nem tarefas em segundo plano.</p>
+<p>Ao contrário do <code>aerexplorer</code>, este mod altera a seleção de host somente para
+itens do Painel de Controle e também remove sua identidade separada na barra de
+tarefas. Ele não altera o host de outras localizações nem inclui personalizações
+do Explorador legado. O <code>cpl-classic-view-lite</code> é complementar, não
+concorrente — ele muda como o conteúdo da pasta do Painel de Controle é
+apresentado, não qual frame hospeda a janela.</p>
+<h2 id="comportamentoconhecido">Comportamento conhecido</h2>
+<ul>
+<li>O Painel de Controle é mantido intencionalmente no Explorador moderno mesmo
+quando "Iniciar as janelas de pastas em um processo separado" está ativado.
+As pastas comuns continuam seguindo essa configuração.</li>
+<li>Fixar uma janela do Painel de Controle fixa o Explorador de Arquivos, pois a
+janela compartilha a identidade do Explorador na barra de tarefas.</li>
+<li>O Painel de Controle aberto pelo Executar (<code>Win+R</code> → <code>control</code>) ou
+diretamente pelo <code>control.exe</code> também é coberto — o mod também intercepta
+o <code>control.exe</code>, pois ele passa pelas mesmas funções de seleção de host
+antes de abrir sua própria janela do Explorer.</li>
+</ul>
+<hr />
+<h1 id="paneldecontrolenelexploradormoderno">Panel de control en el Explorador moderno</h1>
+<p>Windows 11 normalmente dirige el espacio de nombres del Panel de control a una
+ventana heredada dedicada de Explorer. Este mod desactiva solamente esa regla
+especial de selección de host, haciendo que el Panel de control se abra en el
+Explorador de archivos moderno normal.</p>
+<p>El contenido del Panel de control no cambia, pero pasa a estar alojado en el
+marco moderno de Explorer, con la barra de direcciones, la barra de comandos y
+la interfaz de pestañas actuales.
+La ventana también conserva la identidad del Explorador de archivos en la barra
+de tareas, en vez de aparecer como una aplicación anclada independiente.</p>
+<p>Este mod permite que el Explorador de archivos funcione con normalidad y que los
+mods y programas compatibles de gestión de pestañas traten el Panel de control como
+cualquier otra ubicación del Explorador de archivos. El comportamiento de los procesos
+independientes de las carpetas comunes no se ve alterado, y no hay configuraciones ni
+tareas en segundo plano.</p>
+<p>A diferencia de <code>aerexplorer</code>, este mod cambia la selección del host solamente
+para los elementos del Panel de control y también elimina su identidad separada
+en la barra de tareas. No cambia el host de otras ubicaciones ni incluye las
+personalizaciones heredadas de Explorer. <code>cpl-classic-view-lite</code> es
+complementario, no competidor — cambia cómo se presenta el contenido de la
+carpeta del Panel de control, no qué marco aloja la ventana.</p>
+<h2 id="comportamientoconocido">Comportamiento conocido</h2>
+<ul>
+<li>El Panel de control se mantiene intencionadamente en el Explorador moderno
+incluso cuando está activada la opción de iniciar ventanas de carpeta en un
+proceso independiente. Las carpetas normales siguen respetando esa opción.</li>
+<li>Anclar una ventana del Panel de control ancla el Explorador de archivos porque
+la ventana comparte su identidad en la barra de tareas.</li>
+<li>El Panel de control abierto mediante Ejecutar (<code>Win+R</code> → <code>control</code>) o
+directamente con <code>control.exe</code> también está cubierto — el mod también
+engancha <code>control.exe</code>, ya que pasa por las mismas funciones de selección
+de host antes de abrir su propia ventana de Explorer.</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 "Please Wait" Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-please-wait-restorer#8f52521d39ea694fc4809a963808a6bfafcc2b5e</id>
@@ -910,67 +1018,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>Amrsatrio</name>
             <uri>https://github.com/Amrsatrio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[BT Battery Monitor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/bt-battery-monitor#93e8be7ddb883a9fa154bf1d50a23dd6f9ecab59</id>
-        <link href="https://windhawk.net/mods/bt-battery-monitor"/>
-        <updated>2026-07-22T13:45:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="btbatterymonitor">BT Battery Monitor</h1>
-<p>See every connected Bluetooth device's battery level right in your system tray — no more digging into Bluetooth settings to find out which keyboard or mouse needs charging.</p>
-<blockquote>
-  <p>Works great alongside <strong><a href="https://windhawk.net/mods/audioswap">AudioSwap</a></strong> and <strong><a href="https://windhawk.net/mods/microswap">MicSwitch</a></strong> — companion mods that bring the same tray experience to audio output and microphone control.</p>
-</blockquote>
-<p><img src="https://i.imgur.com/QDHrOTO.png" alt="Controller connected" /></p>
-<p><img src="https://i.imgur.com/GWzrttu.png" alt="Right-click menu" /></p>
-<hr />
-<h2 id="howtouse">How to Use</h2>
-<ol>
-<li><strong>Open Settings</strong> — Right-click the tray icon and select <strong>Mod Settings</strong> to open the configuration dashboard.</li>
-<li><strong>Set Polling Interval</strong> — Choose how often to scan for battery updates (default: 10 seconds).</li>
-<li><strong>Set Warning Threshold</strong> — Pick the battery percentage that triggers the red/black flashing icon.</li>
-<li><strong>Choose Icons</strong> — Pick a preset icon per device type, or click <strong>Browse…</strong> to load a custom <code>.ico</code> file.</li>
-<li>Click <strong>Save and Apply</strong> — the tray icon updates immediately, no restart needed.</li>
-</ol>
-<h3 id="leftclicktorescan">Left-click to rescan</h3>
-<p>Left-click the tray icon to trigger an immediate Bluetooth rescan. Use it when you've just paired or disconnected a device and want the battery readout to refresh without waiting for the next polling interval.</p>
-<h3 id="rightclickdevicelist">Right-click device list</h3>
-<p>Right-click the tray icon to see every connected Bluetooth device with its battery percentage, rescan immediately, or open Bluetooth Settings.</p>
-<h3 id="lowbatterywarning">Low Battery Warning</h3>
-<p>When any connected device drops below the configured threshold (default 30%), the tray icon starts alternating between solid red and black every second. Hover over the icon to see which device is running low and exactly how much juice it has left.</p>
-<h3 id="deviceicons">Device Icons</h3>
-<p>The mod detects device types automatically and lets you pick a different icon for each:</p>
-<ul>
-<li><strong>Keyboard</strong>, <strong>Mouse</strong>, <strong>Headphones</strong>, <strong>Controller</strong> — each gets its own icon so you can tell them apart instantly.</li>
-<li><strong>Multiple Devices</strong> — shown when more than one device is connected.</li>
-<li><strong>No Connected Devices</strong> — a clear visual indicator that nothing's paired.</li>
-</ul>
-<h3 id="pollinginterval">Polling Interval</h3>
-<p>Pick how often the mod checks for updates, from <strong>every second</strong> to <strong>once an hour</strong> (default: 10 seconds). Quick polling keeps the battery readout fresh, while slower polling saves a tiny bit of CPU.</p>
-<hr />
-<h2 id="knownbugs">Known Bugs</h2>
-<ul>
-<li><strong>Bluetooth devices that don't report battery</strong>: Some older Bluetooth peripherals simply don't broadcast battery info — the mod can't show what the hardware doesn't tell it. Check your device specs to see if battery reporting is supported.</li>
-</ul>
-<hr />
-<h2 id="changelog">Changelog</h2>
-<h1 id="100">1.0.0</h1>
-<ul>
-<li><strong>New:</strong> Tray icon shows battery percentage for every connected Bluetooth device — keyboard, mouse, headphones, controller, you name it.</li>
-<li><strong>New:</strong> Left-click triggers an immediate Bluetooth rescan to refresh battery readouts.</li>
-<li><strong>New:</strong> Low battery warning — tray icon flashes red and black when any device drops below your threshold.</li>
-<li><strong>New:</strong> Custom Settings Dashboard — dark themed, DPI-aware, with per-device icon picker.</li>
-<li><strong>New:</strong> Configurable polling interval (1s–1h) and warning threshold (0–50%).</li>
-<li><strong>New:</strong> Automatic Bluetooth rescan on device arrival/removal — no manual refresh needed.</li>
-<li><strong>New:</strong> Right-click → Bluetooth Settings shortcut for quick pairing.</li>
-<li><strong>New:</strong> Choose preset icons from <code>ddores.dll</code> per device type or browse for custom <code>.ico</code> files.</li>
-<li><strong>New:</strong> Clean tray icon identity — independent from Windhawk, no taskbar grouping issues.</li>
-<li><strong>New:</strong> Safe tool mod — runs in a dedicated <code>windhawk.exe</code> child process, no Explorer injection needed.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
         </author>
     </entry>
 </feed>
