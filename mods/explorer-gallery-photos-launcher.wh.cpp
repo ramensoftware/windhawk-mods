@@ -4,6 +4,7 @@
 // @description     ExplorerPatcher Win10 UI fix: intercepts Gallery navigation in File Explorer and launches the Microsoft Photos app (ms-photos:) instead of the built-in Gallery view.
 // @version         2.0
 // @author          Jäkubix
+// @github          https://github.com/jakubix30
 // @include         %SystemRoot%\explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -luuid -lcomctl32 -lshlwapi
