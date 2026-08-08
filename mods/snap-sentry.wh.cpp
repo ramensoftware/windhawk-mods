@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.11.0
+// @version         0.12.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -43,8 +43,10 @@ what it shows instead of Screenshot (1). The file stays in the same folder.
 The popup is a real Windows notification, so it matches your light or dark theme.
 While the popup is turned on, SnapSentry registers itself with Windows so the
 notification buttons work, and turning the popup off or disabling the mod removes
-that registration again. If notifications are unavailable, SnapSentry shows a
-standard dialog instead.
+that registration again. If the notification can't be shown, SnapSentry falls back
+to a standard dialog. If you have turned its notifications off, it takes that as a
+cue to stay quiet: it still copies to the clipboard but shows no dialog and never
+auto deletes.
 
 ## Privacy
 
@@ -218,6 +220,7 @@ enum {
     ACTION_DELETE = 101,
     ACTION_COPY_DELETE = 102,
     ACTION_KEEP = 103,
+    ACTION_COPY_ONLY = 104,  // Couldn't ask the user: do the configured copy, never delete.
 };
 
 static CRITICAL_SECTION g_toastLock;   // Guards g_toastAction, g_toastAnswered, g_activeToastId.
@@ -1087,31 +1090,20 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     }
 
     // Show() reports success even when notifications are switched off for us, and
-    // then nothing is ever delivered and no answer can arrive. Ask first, but treat
-    // the reasons differently: "toasts don't work here" wants the dialog, while
-    // "the user turned notifications off" does not, since a modal dialog on every
-    // screenshot is more intrusive than the toast they just silenced.
+    // then nothing is ever delivered and no answer can arrive. Ask first. If we
+    // genuinely can't tell why, fall back to the dialog; but if notifications are
+    // switched off (system-wide, by policy, or for this app), the user has said
+    // "stop popping things up", so don't substitute a modal dialog on every
+    // screenshot. Do the configured clipboard copy and never delete, since the user
+    // was never actually prompted.
     NotificationSetting setting = NotificationSetting_Enabled;
     if (FAILED(notifier->get_Setting(&setting))) {
         return false;  // Can't tell: fall back to the dialog.
     }
-    if (setting == NotificationSetting_DisabledForUser ||
-        setting == NotificationSetting_DisabledByGroupPolicy) {
-        // Off for the whole account or by policy: there is no way to ask, and a
-        // dialog on every screenshot would be worse than the toast they silenced.
-        // Since the user was never actually prompted, keep the file rather than run
-        // the destructive automatic action.
-        Wh_Log(L"Notifications off system-wide (setting=%d); keeping the file",
-               (int)setting);
-        action = ACTION_KEEP;
-        return true;
-    }
     if (setting != NotificationSetting_Enabled) {
-        // DisabledForApplication and the like are ambiguous, and also seen briefly
-        // before the Start Menu shortcut is indexed, so fall back to the dialog.
-        Wh_Log(L"Notifications unavailable (setting=%d); using the dialog instead",
-               (int)setting);
-        return false;
+        Wh_Log(L"Notifications off (setting=%d); copy only, no dialog", (int)setting);
+        action = ACTION_COPY_ONLY;
+        return true;
     }
 
     ComPtr<IInspectable> docInspectable;
@@ -1187,9 +1179,10 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         }
         if (result == WAIT_TIMEOUT) {
             if (noCountdown) {
-                Wh_Log(L"No answer to the notification; keeping the file");
+                // Nobody saw the toast to answer it, so copy but never delete.
+                Wh_Log(L"No answer to the notification; copy only");
             }
-            action = noCountdown ? ACTION_KEEP : ACTION_AUTO;
+            action = noCountdown ? ACTION_COPY_ONLY : ACTION_AUTO;
             removeToast = true;
             break;
         }
@@ -1520,9 +1513,10 @@ static void ProcessOne(std::wstring path) {
         Wh_Log(L"popup returned %d in %lu ms", action, GetTickCount() - t1);
     }
     // Keep, or anything we don't recognize, leaves the file alone. "Unknown means
-    // delete" is the wrong way round for this mod.
+    // delete" is the wrong way round for this mod. ACTION_COPY_ONLY still runs the
+    // copy below (it just never deletes), so it passes through here.
     if (action != ACTION_AUTO && action != ACTION_DELETE &&
-        action != ACTION_COPY_DELETE) {
+        action != ACTION_COPY_DELETE && action != ACTION_COPY_ONLY) {
         return;
     }
     if (action == ACTION_DELETE) {
@@ -1555,7 +1549,8 @@ static void ProcessOne(std::wstring path) {
     // File and Path payloads reference the file, so deleting would break them.
     bool payloadReferencesFile =
         !forceImage && (s.mode == L"file" || s.mode == L"path");
-    bool wantsDelete = forceImage || (s.deleteFile && !payloadReferencesFile);
+    bool wantsDelete = action != ACTION_COPY_ONLY &&
+                       (forceImage || (s.deleteFile && !payloadReferencesFile));
     if (!wantsDelete) {
         return;
     }
