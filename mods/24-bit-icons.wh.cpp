@@ -6,7 +6,6 @@
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
-// @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -91,7 +90,6 @@ void InvalidateIconCache()
 {
     if (IsExplorerProcess() && FindCurrentProcessTaskbarWnd())
     {
-        Sleep(400);
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     }
 }
@@ -99,8 +97,12 @@ void InvalidateIconCache()
 UINT (__fastcall *GetBestImage_orig)(LPRESDIR, UINT, int, int, UINT, BOOL);
 UINT __fastcall GetBestImage_hook(LPRESDIR lprd, UINT uCount, int cxDesired, int cyDesired, UINT bppDesired, BOOL fIcon)
 {
-    if (lprd->Icon.ColorCount == 16)
-        bppDesired = 8;
+    if (fIcon)
+    {
+        if (lprd->Icon.ColorCount == 16)
+            // bppDesired equal to 8 will get the 24-bit icon
+            bppDesired = 8;
+    }
     return GetBestImage_orig(lprd, uCount, cxDesired, cyDesired, bppDesired, fIcon);
 }
 
@@ -151,18 +153,6 @@ HBITMAP __fastcall BitmapFromDIB_hook(
     return BitmapFromDIB_orig(cxNew, cyNew, bPlanesNew, bBitsPixelNew, LR_flags, cxOld, cyOld, lpBits, cbBits, lpbi, hpal);
 }
 
-using GetDeviceCaps_t = decltype(&GetDeviceCaps);
-GetDeviceCaps_t GetDeviceCaps_orig;
-int WINAPI GetDeviceCaps_hook(HDC hdc, int index)
- {
-    int result = GetDeviceCaps_orig(hdc, index);
-    if (index == BITSPIXEL) 
-    {
-        result = 24;
-    }
-    return result;
-}
-
 BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
@@ -178,7 +168,7 @@ BOOL Wh_ModInit()
     {
         {
             {
-                L"unsigned int " SSTDCALL " GetBestImage(struct tagRESDIR *,unsigned int,int,int,unsigned int,int)"
+                L"unsigned int " SSTDCALL " GetBestImage(struct tagRESDIR *,unsigned int,int,int,unsigned int,int)",
             },
             &GetBestImage_orig,
             GetBestImage_hook,
@@ -186,7 +176,9 @@ BOOL Wh_ModInit()
         },
         {
             {
-                L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)"
+                L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct HPALETTE__ *)",
+                // Extra parameter in Windows 11 32-bit is not used
+                L"struct HBITMAP__ * " SSTDCALL " BitmapFromDIB(int,int,unsigned short,unsigned short,unsigned int,int,int,char *,unsigned long,struct tagBITMAPINFO *,struct tagBITMAPINFO *,struct HPALETTE__ *)"
             },
             &BitmapFromDIB_orig,
             BitmapFromDIB_hook,
@@ -194,7 +186,7 @@ BOOL Wh_ModInit()
         },
         {
             {
-                L"struct HICON__ * " SSTDCALL " ConvertDIBIcon(struct tagBITMAPINFOHEADER *,unsigned long,struct HINSTANCE__ *,unsigned short const *,int,unsigned long,unsigned long,unsigned int)"
+                L"struct HICON__ * " SSTDCALL " ConvertDIBIcon(struct tagBITMAPINFOHEADER *,unsigned long,struct HINSTANCE__ *,unsigned short const *,int,unsigned long,unsigned long,unsigned int)",
             },
             &ConvertDIBIcon_orig,
             ConvertDIBIcon_hook,
@@ -208,12 +200,12 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)GetDeviceCaps, (void*)GetDeviceCaps_hook,
-                       (void**)&GetDeviceCaps_orig);
-
-    InvalidateIconCache();
-
     return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    InvalidateIconCache();
 }
 
 void Wh_ModUninit()
