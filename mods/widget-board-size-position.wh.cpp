@@ -4,9 +4,10 @@
 // @description     Set a custom size and position for the new Widget Board on Windows 11.
 // @version         0.1
 // @author          meteoni
+// @github          https://github.com/meteony
 // @include         WidgetBoard.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lcomctl32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -58,14 +59,15 @@ they move right/down from center.
     - bottom: Bottom
 - offsetX: 0
   $name: Horizontal offset
-  $description: Offset in DIPs. Positive values move inward from an edge.
+  $description: Offset in DIPs. Positive values move inward from an edge, or right from center.
 - offsetY: 0
   $name: Vertical offset
-  $description: Offset in DIPs. Positive values move inward from an edge.
+  $description: Offset in DIPs. Positive values move inward from an edge, or down from center.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellscalingapi.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
 
@@ -183,25 +185,30 @@ void ForEachTopLevelWindow(WindowCallback_t callback) {
 // Geometry
 // -----------------------------------------------------------------------------
 
-int DipToPx(HWND hwnd, int dip) {
-    UINT dpi = GetDpiForWindow(hwnd);
-    if (!dpi)
-        dpi = 96;
+UINT GetMonitorDpi(HMONITOR monitor) {
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
+        return 96;
+
+    return dpiX;
+}
+
+int DipToPx(int dip, UINT dpi) {
     return MulDiv(dip, static_cast<int>(dpi), 96);
 }
 
-HMONITOR GetRequestedMonitor(HWND hwnd, const WINDOWPOS* wp) {
-    if (wp && !(wp->flags & SWP_NOMOVE)) {
-        POINT pt{wp->x, wp->y};
-        return MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    }
-
-    return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-}
-
 void ForceGeometry(HWND hwnd, WINDOWPOS* wp) {
-    if (!wp || g_unloading)
+    if (!wp || g_unloading || (wp->flags & SWP_HIDEWINDOW))
         return;
+
+    // Don't turn a pure stacking-order notification into a resize/move. A
+    // show operation is deliberately excluded so initial geometry is enforced.
+    if ((wp->flags & (SWP_NOMOVE | SWP_NOSIZE)) ==
+            (SWP_NOMOVE | SWP_NOSIZE) &&
+        !(wp->flags & SWP_SHOWWINDOW)) {
+        return;
+    }
 
     RECT current{};
     if (!GetWindowRect(hwnd, &current))
@@ -226,17 +233,21 @@ void ForceGeometry(HWND hwnd, WINDOWPOS* wp) {
     int x = (wp->flags & SWP_NOMOVE) ? current.left : wp->x;
     int y = (wp->flags & SWP_NOMOVE) ? current.top : wp->y;
 
-    if (widthDip > 0)
-        width = DipToPx(hwnd, widthDip);
-    if (heightDip > 0)
-        height = DipToPx(hwnd, heightDip);
+    RECT requestedRect{x, y, x + width, y + height};
+    HMONITOR monitor =
+        MonitorFromRect(&requestedRect, MONITOR_DEFAULTTONEAREST);
+    const UINT monitorDpi = GetMonitorDpi(monitor);
 
-    HMONITOR monitor = GetRequestedMonitor(hwnd, wp);
+    if (widthDip > 0)
+        width = DipToPx(widthDip, monitorDpi);
+    if (heightDip > 0)
+        height = DipToPx(heightDip, monitorDpi);
+
     MONITORINFO mi{sizeof(mi)};
 
     if (GetMonitorInfo(monitor, &mi)) {
-        const int offsetX = DipToPx(hwnd, offsetXDip);
-        const int offsetY = DipToPx(hwnd, offsetYDip);
+        const int offsetX = DipToPx(offsetXDip, monitorDpi);
+        const int offsetY = DipToPx(offsetYDip, monitorDpi);
 
         switch (hAnchor) {
             case HAnchor::Left:
