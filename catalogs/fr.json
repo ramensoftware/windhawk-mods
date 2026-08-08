@@ -9885,6 +9885,39 @@
         "version": "2.2.0"
       }
     },
+    "quick-launch-media-panel": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786218799000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786218799000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Spartacus",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lgdiplus -lgdi32 -luser32 -lshell32 -lshlwapi -ldwmapi -lcomdlg32 -luuid",
+        "description": "Un panneau de bureau moderne avec raccourcis configurables, glisser-déposer et commandes multimédias Windows.",
+        "github": "https://github.com/spartaaacus",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Panneau de lancement rapide et multimédia",
+        "version": "2.1.4"
+      },
+      "metadataEnglish": {
+        "description": "A modern desktop panel with configurable app shortcuts, drag and drop, and Windows media controls.",
+        "name": "Quick Launch & Media Panel"
+      }
+    },
     "quicklaunch-3dbuttons": {
       "details": {
         "defaultSorting": 450,

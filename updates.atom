@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-08T13:02:54.000Z</updated>
+    <updated>2026-08-08T19:53:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Launch & Media Panel 2.1.4]]></title>
+        <id>https://windhawk.net/mods/quick-launch-media-panel#3ea0870af51aa79053f75123211aec980742ddff</id>
+        <link href="https://windhawk.net/mods/quick-launch-media-panel"/>
+        <updated>2026-08-08T19:53:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="quicklaunchmediapanel">Quick Launch &amp; Media Panel</h1>
+<p>A modern, native Windows panel placed at the top-center of the selected monitor.</p>
+<p><img src="https://i.imgur.com/rckHuTB.png" alt="Quick Launch & Media Panel" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>1 to 8 configurable application or game shortcuts.</li>
+<li>Drag an <code>.exe</code>, <code>.lnk</code>, document, folder, <code>.url</code>, or <code>.website</code> file onto a tile.</li>
+<li>Dropped shortcuts are saved for the current Windows user.</li>
+<li>Live title/artist and previous, play/pause, next controls through Windows Global System Media Transport Controls.</li>
+<li>Works with Spotify and with YouTube Music when the browser exposes a Windows media session.</li>
+<li>Runs in a dedicated Windhawk tool process instead of being injected into Explorer.</li>
+<li>Attaches to the Windows desktop and automatically recovers after Explorer restarts.</li>
+</ul>
+<h2 id="howitdiffersfromexistingmediamods">How it differs from existing media mods</h2>
+<p>Dynamic Island for Windows, Island Media Controls, Taskbar Fluent Media Player,
+and Taskbar Music Lounge focus on media presentation in an overlay or the
+taskbar. This mod is primarily a pageable desktop application launcher. Its
+compact media strip is part of the same stationary desktop dashboard, so users
+can launch their usual apps and resume or control music from one place without
+modifying the taskbar or displaying a persistent foreground overlay.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Left-click a populated tile to launch it.</li>
+<li>Drag a file or shortcut onto a tile to assign it.</li>
+<li>Right-click a populated tile to remove its saved assignment. On page 1, the corresponding Windhawk setting is used again.</li>
+<li>Drag any empty area of the panel to move it. Its position is remembered.</li>
+<li>Hold Ctrl and use the mouse wheel to resize the shortcut tiles.</li>
+<li>Right-click an empty area for resize and recenter commands.</li>
+<li>Right-click an empty area and choose the settings command to open Windhawk.</li>
+<li>Choose a built-in theme below the language setting, or use Custom for your own colors.</li>
+<li>Use multiple pages of shortcuts.</li>
+<li>Right-click a tile to edit its target, label, arguments, icon, color, and elevation mode.</li>
+<li>Drag one tile onto another to reorder them.</li>
+<li>Album art, timeline, volume control, and media-session selection are supported.</li>
+<li>Import or export the complete layout from the panel context menu.</li>
+<li>Change layout, colors, position, and default shortcuts in the mod settings.</li>
+</ul>
+<p>The panel doesn't authenticate with Spotify or YouTube. It controls the media session
+already published by the playing application to Windows.</p>]]></content>
+        <author>
+            <name>Spartacus</name>
+            <uri>https://github.com/spartaaacus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Widget Board Size and Position 0.1]]></title>
         <id>https://windhawk.net/mods/widget-board-size-position#3464f4b275a5b6b7c1f34c94244904f631142a0e</id>
@@ -685,36 +734,6 @@ extends upward and outward. Total size is
         <author>
             <name>Valer100</name>
             <uri>https://github.com/Valer100</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix 11's notifications crash in Win10 taskbar under Win11 24H2+ 0.1]]></title>
-        <id>https://windhawk.net/mods/fix-10-taskbar-notifications#9f24537d1b1c65b10f5588db63c0d264f3609bf3</id>
-        <link href="https://windhawk.net/mods/fix-10-taskbar-notifications"/>
-        <updated>2026-08-01T17:35:18.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod hooks the function responsible for crashing the Explorer shell provided by the Win10 taskbar mod at runtime.</p>
-<p>But it is not confirmed if notifications arrive to the Notification Center.
-Thus, all this mod does is let notifications render without crashing Win10 Explorer but not hand them over to it (probably for the best.)</p>
-<p><strong>!Important! You MUST install, follow the instructions and run at least 2 times the <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar mod.</a></strong>
-<strong>If you don't follow these instructions carefully, the mod will not apply correctly.</strong></p>
-<h1 id="technicaldetails">Technical details</h1>
-<p>When a notification is rendered, it invokes from explorer a method called </p>
-<pre><code class="cpp language-cpp">NotificationDataSink::NotificationsAdded(
-    NotificationDataSink *this,
-    int32_t _arg2,
-    struct NOC_REFINED_NOTIFICATION *const *iterator,
-    uint32_t length
-);
-</code></pre>
-<p>.</p>
-<p><strong>Given I haven't experienced any destabilization from explorer thus far, I claim that this has something to do with the Notification Center.</strong></p>
-<p>I won't go too deep into details of the function, but the crash is observed as a <code>NULL</code> pointer exception when it tries to access <code>*(iterator + 0x88)</code> for the first time, which is probably where the actual elements are.</p>
-<p>Normally, it would use that pointer to add 0x150 in a do-while loop until the notification thing elements are exhausted, but instead it's just <code>NULL</code>.
-I haven't given a look at the iterator memory to see if it's more than just the first element that's <code>NULL</code>, or more or all of them are such.</p>
-<p>There is no <code>NULL</code> check in that loop, so it is likely that the iterator was never supposed to have <code>NULL</code> elements in the first place.</p>]]></content>
-        <author>
-            <name>ilovethisgame</name>
-            <uri>https://github.com/bozohi</uri>
         </author>
     </entry>
 </feed>

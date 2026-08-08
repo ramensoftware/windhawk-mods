@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-08T13:02:54.000Z</updated>
+    <updated>2026-08-08T19:53:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Launch & Media Panel 2.1.4]]></title>
+        <id>https://windhawk.net/mods/quick-launch-media-panel#3ea0870af51aa79053f75123211aec980742ddff</id>
+        <link href="https://windhawk.net/mods/quick-launch-media-panel"/>
+        <updated>2026-08-08T19:53:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="quicklaunchmediapanel">Quick Launch &amp; Media Panel</h1>
+<p>A modern, native Windows panel placed at the top-center of the selected monitor.</p>
+<p><img src="https://i.imgur.com/rckHuTB.png" alt="Quick Launch & Media Panel" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>1 to 8 configurable application or game shortcuts.</li>
+<li>Drag an <code>.exe</code>, <code>.lnk</code>, document, folder, <code>.url</code>, or <code>.website</code> file onto a tile.</li>
+<li>Dropped shortcuts are saved for the current Windows user.</li>
+<li>Live title/artist and previous, play/pause, next controls through Windows Global System Media Transport Controls.</li>
+<li>Works with Spotify and with YouTube Music when the browser exposes a Windows media session.</li>
+<li>Runs in a dedicated Windhawk tool process instead of being injected into Explorer.</li>
+<li>Attaches to the Windows desktop and automatically recovers after Explorer restarts.</li>
+</ul>
+<h2 id="howitdiffersfromexistingmediamods">How it differs from existing media mods</h2>
+<p>Dynamic Island for Windows, Island Media Controls, Taskbar Fluent Media Player,
+and Taskbar Music Lounge focus on media presentation in an overlay or the
+taskbar. This mod is primarily a pageable desktop application launcher. Its
+compact media strip is part of the same stationary desktop dashboard, so users
+can launch their usual apps and resume or control music from one place without
+modifying the taskbar or displaying a persistent foreground overlay.</p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Left-click a populated tile to launch it.</li>
+<li>Drag a file or shortcut onto a tile to assign it.</li>
+<li>Right-click a populated tile to remove its saved assignment. On page 1, the corresponding Windhawk setting is used again.</li>
+<li>Drag any empty area of the panel to move it. Its position is remembered.</li>
+<li>Hold Ctrl and use the mouse wheel to resize the shortcut tiles.</li>
+<li>Right-click an empty area for resize and recenter commands.</li>
+<li>Right-click an empty area and choose the settings command to open Windhawk.</li>
+<li>Choose a built-in theme below the language setting, or use Custom for your own colors.</li>
+<li>Use multiple pages of shortcuts.</li>
+<li>Right-click a tile to edit its target, label, arguments, icon, color, and elevation mode.</li>
+<li>Drag one tile onto another to reorder them.</li>
+<li>Album art, timeline, volume control, and media-session selection are supported.</li>
+<li>Import or export the complete layout from the panel context menu.</li>
+<li>Change layout, colors, position, and default shortcuts in the mod settings.</li>
+</ul>
+<p>The panel doesn't authenticate with Spotify or YouTube. It controls the media session
+already published by the playing application to Windows.</p>]]></content>
+        <author>
+            <name>Spartacus</name>
+            <uri>https://github.com/spartaaacus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Widget Board Size and Position 0.1]]></title>
         <id>https://windhawk.net/mods/widget-board-size-position#3464f4b275a5b6b7c1f34c94244904f631142a0e</id>
@@ -930,99 +979,6 @@ tray positions if this bothers you.</li>
 an animation, and the group can briefly sit at a stale position until
 the taskbar's next layout pass settles it.</li>
 </ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Folder Menus 0.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-folder-menus#70800f8cdf50ac6f5a85ec0655f03db98eaa2bf5</id>
-        <link href="https://windhawk.net/mods/taskbar-folder-menus"/>
-        <updated>2026-07-23T19:27:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarfoldermenus">Taskbar Folder Menus</h1>
-<p>A Windows 11-only mod that adds compact taskbar buttons which open Shell targets
-as native popup menus, recreating the most useful part of the classic taskbar
-toolbar workflow. Windows 10 is not supported.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/desktop-controlpanel.png" alt="Two folder buttons in the system tray" />
-<em>A minimal two-button setup for Desktop and Control Panel.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/tooltip-shows-destination.png" alt="Folder button destination tooltip" />
-<em>Hovering a compact button shows its configured Shell target.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/c-github-desktop-controlpanel.png" alt="Four folder buttons on a standard taskbar" />
-<em>Drive, GitHub, Desktop, and Control Panel shortcuts arranged in a grid.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/c-github-desktop-controlpanel-v.png" alt="Four folder buttons on a taller taskbar" />
-<em>The same four shortcuts arranged vertically by the grid layout on a taller taskbar.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/controlpanel-menu-open.png" alt="Control Panel opened as a native Shell menu" />
-<em>The Control Panel namespace opens directly as a native Shell menu with full icons.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-folder-menus/assets/whole-drive-on-taskbar.png" alt="Whole drive opened from a taskbar folder button" />
-<em>A drive-root button opens the whole drive as a native cascading Shell menu.</em></p>
-<p>Click a small button to browse a folder, drive, Desktop, or Control Panel
-directly from the taskbar — no minimizing required. Subfolders expand on
-hover. Right-click any item for the full classic Windows Shell context menu.
-Every folder popup includes an "Open in Explorer" shortcut at the top,
-including the configured root folder.</p>
-<h2 id="examplefolderentries">Example folder entries</h2>
-<pre><code class="text language-text">Label: 🖥    Target: shell:Desktop
-Label: ⚙     Target: shell:ControlPanelFolder
-Label: 📥    Target: %USERPROFILE%\Downloads
-Label: C:    Target: C:  
-</code></pre>
-<p>Add one record per button in the Folders setting. Each record has a short button
-label and a target. Targets can be normal paths or Shell namespace roots like
-<code>shell:Desktop</code> and <code>shell:ControlPanelFolder</code>. Environment variables such as
-<code>%USERPROFILE%</code> are expanded automatically. The full label and target appear in
-the tooltip.</p>
-<p>Emoji labels are a natural fit for narrow buttons. Label ideas: 📁 folder,
-🖥 desktop, 💻 laptop, 🪟 windows, 📥 downloads, 🌐 network, 🗄 drive,
-📄 documents, 🔧 tools, ⚙ settings, ⭐ favorites.</p>
-<h2 id="reorderingfolderbuttons">Reordering folder buttons</h2>
-<p>For several existing records, open the mod's Settings page and switch to
-<strong>Textual mode</strong>, then move each complete <code>label</code> + <code>target</code> record as a block.
-The regular form currently provides add/remove controls but no direct
-drag-to-reorder control.</p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Default | Description |
-|---------|---------|-------------|
-| Position | Before notification icons | Where to inject the button group in the tray |
-| Folders | Desktop and Control Panel | Add/remove records in the form; reorder complete records in Textual mode |
-| Grid mode | Smart automatic | Smart automatic, single row/column, fixed rows/columns, or fixed grid |
-| Smart layout | Balanced | Balanced, pack vertical, or pack horizontal in smart mode |
-| Grid columns | 0 (auto) | Exact columns in fixed-column modes; maximum columns in smart mode (0 = automatic) |
-| Grid rows | 0 (auto) | Exact rows in fixed-row modes; maximum rows in smart mode (0 = tray height) |
-| Fill order | Row-first | Row-first or column-first |
-| Short row/column position | Last | Put an incomplete row or column first or last |
-| Short row/column alignment | Start | Align an incomplete final row or column |
-| Button width | 24 px | Width of each folder button |
-| Button height | 22 px | Height of each folder button |
-| Button spacing | 4 px | Gap between buttons |
-| Default button text | 📁 | Fallback icon for entries with long labels |
-| Text/icon size | 10 pt | Button label font size |
-| Text color | <em>(system)</em> | Button label color; empty keeps the system default |
-| Background color | <em>(system)</em> | Button background; empty keeps the system default |
-| Hover background color | <code>accent</code> | Hover background; empty keeps the native hover color |
-| Click background color | <em>(system)</em> | Pressed background; empty keeps the native pressed color |
-| Border color | <em>(system)</em> | Button border; empty keeps the system default |
-| Border thickness | -1 (system) | -1 = system default, 0 = no border |
-| Corner rounding | -1 (system) | -1 = system default, 0 = square |
-| Opacity | 100% | Button transparency |
-| Shine effect | Off | Gradient highlight; activates when a custom background color is set |
-| Group padding left | 0 px | Extra space to the left of the button group |
-| Group padding right | 0 px | Extra space to the right of the button group |
-| Group X offset | 0 px | Shift the entire group left or right |
-| Group Y offset | 0 px | Shift the entire group up or down |
-| Max menu items | 0 (unlimited) | Limit items shown per folder |
-| Subfolder depth | 0 (unlimited) | How many subfolder levels to include |
-| Show hidden/system items | Off | Include hidden and system Shell items |</p>
-<p>All color settings accept <code>#RRGGBB</code> or <code>#AARRGGBB</code> hex (the alpha byte is
-honored), the generics <code>accent</code>, <code>accentLight</code>, and <code>accentDark</code> for the
-Windows accent shades, or <code>transparent</code> for a fully transparent surface —
-nothing drawn, button still present and clickable, useful for borderless
-background-free buttons. Leaving a color empty keeps the system default for
-that state.</p>
-<h2 id="noteonshelldesktop">Note on shell:Desktop</h2>
-<p><code>shell:Desktop</code> shows the full Desktop Shell namespace — user shortcuts, public
-shortcuts, and virtual items like Recycle Bin — not just the physical Desktop
-folder. Duplicates from the user+public Desktop merge are suppressed automatically.</p>]]></content>
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
