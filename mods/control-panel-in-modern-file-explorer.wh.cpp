@@ -12,7 +12,6 @@
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lshell32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -39,7 +38,9 @@ are no settings or background tasks.
 Unlike `aerexplorer`, this mod changes host selection only for Control Panel
 items and also removes their separate taskbar identity. It doesn't modify the
 host selection of other File Explorer locations or include legacy Explorer
-customizations.
+customizations. `cpl-classic-view-lite` is complementary rather than
+overlapping — it changes how the Control Panel folder's contents are
+presented, not which frame hosts the window.
 
 ## Known behavior
 
@@ -76,7 +77,9 @@ das pastas comuns não é alterado, e não há configurações nem tarefas em se
 Ao contrário do `aerexplorer`, este mod altera a seleção de host somente para
 itens do Painel de Controle e também remove sua identidade separada na barra de
 tarefas. Ele não altera o host de outras localizações nem inclui personalizações
-do Explorador legado.
+do Explorador legado. O `cpl-classic-view-lite` é complementar, não
+concorrente — ele muda como o conteúdo da pasta do Painel de Controle é
+apresentado, não qual frame hospeda a janela.
 
 ## Comportamento conhecido
 
@@ -114,7 +117,9 @@ tareas en segundo plano.
 A diferencia de `aerexplorer`, este mod cambia la selección del host solamente
 para los elementos del Panel de control y también elimina su identidad separada
 en la barra de tareas. No cambia el host de otras ubicaciones ni incluye las
-personalizaciones heredadas de Explorer.
+personalizaciones heredadas de Explorer. `cpl-classic-view-lite` es
+complementario, no competidor — cambia cómo se presenta el contenido de la
+carpeta del Panel de control, no qué marco aloja la ventana.
 
 ## Comportamiento conocido
 
@@ -138,7 +143,6 @@ personalizaciones heredadas de Explorer.
 #include <propidl.h>
 #include <shobjidl.h>
 #include <windows.h>
-#include <wrl/client.h>
 
 #include <atomic>
 
@@ -169,8 +173,7 @@ static std::atomic<bool> g_setValueHookInstalled;
 static std::atomic<WindowPropertyStore_SetValue_t> g_hookedSetValue;
 static std::atomic<bool> g_propertyStoreMismatchLogged;
 static std::atomic<bool> g_unloading;
-static HMODULE g_explorerFrameRef;
-static HMODULE g_setValueModuleRef;
+static std::atomic<HMODULE> g_explorerFrameRef;
 
 static bool IsCopiedAppIdentityProperty(const PROPERTYKEY& key) {
     return IsEqualPropertyKey(key, PKEY_AppUserModel_RelaunchCommand) ||
@@ -190,43 +193,6 @@ static bool __cdecl UseSeparateProcess_Hook(IShellItem* item) {
     // IsControlPanel is a required symbol: this hook is only ever live once
     // InitializeExplorerFrameHooks fully resolved, so it's never null here.
     return !IsControlPanel_Original(item);
-}
-
-using GetHostFromTarget_t = GUID*(__cdecl*)(void* explorerLauncher,
-                                            GUID* clsid,
-                                            LPCITEMIDLIST pidl);
-static GetHostFromTarget_t GetHostFromTarget_Original;
-
-// The host CExplorerLauncher::GetHostFromTarget selects for items it wants
-// to launch in the separate legacy Control Panel host process.
-DEFINE_GUID(CLSID_ControlPanelProcessExplorerHost, 0x5BD95610, 0x9434,
-           0x43C2, 0x88, 0x6C, 0x57, 0x85, 0x2C, 0xC8, 0xA1, 0x20);
-
-static GUID* __cdecl GetHostFromTarget_Hook(void* explorerLauncher,
-                                            GUID* clsid,
-                                            LPCITEMIDLIST pidl) {
-    GUID* result = GetHostFromTarget_Original(explorerLauncher, clsid, pidl);
-
-    Microsoft::WRL::ComPtr<IShellItem> item;
-    if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) ||
-        !IsControlPanel_Original(item.Get())) {
-        return result;
-    }
-
-    // Diagnostic only, no override: UseSeparateProcess_Hook already steers
-    // Control Panel away from CLSID_ControlPanelProcessExplorerHost before
-    // this runs (this function's own host choice depends on it - confirmed
-    // it returns CLSID_DesktopExplorerHost once UseSeparateProcess is
-    // hooked), so no override has ever been observed as necessary here. Logs
-    // in case some untested launch path (jump list, pinned shortcut,
-    // right-click Open) ever disagrees.
-    if (IsEqualGUID(*result, CLSID_ControlPanelProcessExplorerHost)) {
-        Wh_Log(L"GetHostFromTarget returned the legacy Control Panel host "
-               L"CLSID even though UseSeparateProcess should have prevented "
-               L"it");
-    }
-
-    return result;
 }
 
 static HRESULT STDMETHODCALLTYPE WindowPropertyStore_SetValue_Hook(
@@ -260,17 +226,6 @@ static HRESULT STDMETHODCALLTYPE WindowPropertyStore_SetValue_Hook(
     return WindowPropertyStore_SetValue_Original(propertyStore, key, value);
 }
 
-static void RefSetValueModule(WindowPropertyStore_SetValue_t setValue) {
-    // Keeps whatever module implements IPropertyStore::SetValue mapped for
-    // as long as the hook is installed, symmetric with RefExplorerFrameModule
-    // below - matters more in a short-lived host like control.exe.
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(setValue),
-                            &g_setValueModuleRef)) {
-        Wh_Log(L"Failed to reference the IPropertyStore::SetValue module");
-    }
-}
-
 static void __cdecl CopyPropertyFromItemToPropStore_Hook(
     const PROPERTYKEY& key,
     IShellItem2* item,
@@ -302,7 +257,6 @@ static void __cdecl CopyPropertyFromItemToPropStore_Hook(
                    L"identity");
         } else {
             g_hookedSetValue.store(setValue, std::memory_order_relaxed);
-            RefSetValueModule(setValue);
         }
     }
 
@@ -359,14 +313,6 @@ static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
             CopyPropertyFromItemToPropStore_Hook,
             true,
         },
-        {
-            {
-                LR"(private: struct _GUID __cdecl CExplorerLauncher::GetHostFromTarget(struct _ITEMIDLIST_ABSOLUTE const *))",
-            },
-            &GetHostFromTarget_Original,
-            GetHostFromTarget_Hook,
-            true,
-        },
     };
 
     if (!WindhawkUtils::HookSymbols(explorerFrameModule,
@@ -376,16 +322,11 @@ static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
         return false;
     }
 
-    // Both are optional: losing either only narrows Control Panel's modern-
-    // frame coverage, it doesn't break the mod's main feature.
+    // Optional: losing it only narrows Control Panel's modern-frame
+    // coverage, it doesn't break the mod's main feature.
     if (!CopyPropertyFromItemToPropStore_Original) {
         Wh_Log(L"CopyPropertyFromItemToPropStore not found; Control Panel "
                L"windows will keep their own taskbar identity");
-    }
-
-    if (!GetHostFromTarget_Original) {
-        Wh_Log(L"CExplorerLauncher::GetHostFromTarget not found; losing "
-               L"only the legacy-host diagnostic, not functionality");
     }
 
     return true;
@@ -394,24 +335,20 @@ static bool InitializeExplorerFrameHooks(HMODULE explorerFrameModule) {
 static void RefExplorerFrameModule(HMODULE explorerFrameModule) {
     // An ordinary reference, not a pin: released in Wh_ModUninit, once hooks
     // are already removed and the module is safe to let go.
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(explorerFrameModule),
-                            &g_explorerFrameRef)) {
+    HMODULE ref = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           reinterpret_cast<LPCWSTR>(explorerFrameModule),
+                           &ref)) {
+        g_explorerFrameRef.store(ref, std::memory_order_relaxed);
+    } else {
         Wh_Log(L"Failed to reference ExplorerFrame.dll");
     }
 }
 
 static void ReleaseExplorerFrameRef() {
-    if (g_explorerFrameRef) {
-        FreeLibrary(g_explorerFrameRef);
-        g_explorerFrameRef = nullptr;
-    }
-}
-
-static void ReleaseSetValueModuleRef() {
-    if (g_setValueModuleRef) {
-        FreeLibrary(g_setValueModuleRef);
-        g_setValueModuleRef = nullptr;
+    HMODULE ref = g_explorerFrameRef.exchange(nullptr, std::memory_order_relaxed);
+    if (ref) {
+        FreeLibrary(ref);
     }
 }
 
@@ -512,5 +449,4 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
     ReleaseExplorerFrameRef();
-    ReleaseSetValueModuleRef();
 }
