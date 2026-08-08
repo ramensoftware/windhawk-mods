@@ -103,8 +103,8 @@ Settings g_settings;
 std::atomic<bool> g_unloading{false};
 
 HANDLE g_winEventThread = nullptr;
-DWORD g_winEventThreadId = 0;
 HANDLE g_winEventThreadReady = nullptr;
+HANDLE g_winEventThreadStop = nullptr;
 std::atomic<bool> g_winEventHookInstalled{false};
 
 constexpr wchar_t kBoardClass[] = L"WindowsDashboard";
@@ -185,11 +185,14 @@ void ForEachTopLevelWindow(WindowCallback_t callback) {
 // Geometry
 // -----------------------------------------------------------------------------
 
-UINT GetMonitorDpi(HMONITOR monitor) {
+UINT GetMonitorDpi(HWND hwnd, HMONITOR monitor) {
     UINT dpiX = 96;
     UINT dpiY = 96;
-    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
-        return 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+        dpiX = GetDpiForWindow(hwnd);
+        if (!dpiX)
+            dpiX = 96;
+    }
 
     return dpiX;
 }
@@ -236,7 +239,7 @@ void ForceGeometry(HWND hwnd, WINDOWPOS* wp) {
     RECT requestedRect{x, y, x + width, y + height};
     HMONITOR monitor =
         MonitorFromRect(&requestedRect, MONITOR_DEFAULTTONEAREST);
-    const UINT monitorDpi = GetMonitorDpi(monitor);
+    const UINT monitorDpi = GetMonitorDpi(hwnd, monitor);
 
     if (widthDip > 0)
         width = DipToPx(widthDip, monitorDpi);
@@ -385,10 +388,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
 }
 
 DWORD WINAPI WinEventThreadProc(LPVOID) {
-    g_winEventThreadId = GetCurrentThreadId();
-
     // Force creation of this thread's message queue before initialization is
-    // reported complete, so teardown can always use PostThreadMessage safely.
+    // reported complete and before the WinEvent hook begins delivering events.
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -408,15 +409,35 @@ DWORD WINAPI WinEventThreadProc(LPVOID) {
     }
 
     g_winEventHookInstalled = true;
-    ScanForBoardWindows();
     SetEvent(g_winEventThreadReady);
 
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (!msg.hwnd && msg.message == WM_APP)
+    bool stop = false;
+    while (!stop) {
+        DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            1,
+            &g_winEventThreadStop,
+            INFINITE,
+            QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
+
+        if (waitResult == WAIT_OBJECT_0)
             break;
 
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        if (waitResult != WAIT_OBJECT_0 + 1) {
+            Wh_Log(L"MsgWaitForMultipleObjectsEx failed, error=%u",
+                   GetLastError());
+            break;
+        }
+
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                stop = true;
+                break;
+            }
+
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
     }
 
     UnhookWinEvent(showHook);
@@ -431,10 +452,20 @@ bool StartWinEventThread() {
         return false;
     }
 
+    g_winEventThreadStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_winEventThreadStop) {
+        Wh_Log(L"CreateEventW failed, error=%u", GetLastError());
+        CloseHandle(g_winEventThreadReady);
+        g_winEventThreadReady = nullptr;
+        return false;
+    }
+
     g_winEventThread =
         CreateThread(nullptr, 0, WinEventThreadProc, nullptr, 0, nullptr);
     if (!g_winEventThread) {
         Wh_Log(L"CreateThread failed, error=%u", GetLastError());
+        CloseHandle(g_winEventThreadStop);
+        g_winEventThreadStop = nullptr;
         CloseHandle(g_winEventThreadReady);
         g_winEventThreadReady = nullptr;
         return false;
@@ -448,7 +479,8 @@ bool StartWinEventThread() {
         WaitForSingleObject(g_winEventThread, INFINITE);
         CloseHandle(g_winEventThread);
         g_winEventThread = nullptr;
-        g_winEventThreadId = 0;
+        CloseHandle(g_winEventThreadStop);
+        g_winEventThreadStop = nullptr;
         return false;
     }
 
@@ -459,13 +491,13 @@ void StopWinEventThread() {
     if (!g_winEventThread)
         return;
 
-    if (!PostThreadMessageW(g_winEventThreadId, WM_APP, 0, 0))
-        Wh_Log(L"PostThreadMessageW failed, error=%u", GetLastError());
-
+    SetEvent(g_winEventThreadStop);
     WaitForSingleObject(g_winEventThread, INFINITE);
     CloseHandle(g_winEventThread);
     g_winEventThread = nullptr;
-    g_winEventThreadId = 0;
+
+    CloseHandle(g_winEventThreadStop);
+    g_winEventThreadStop = nullptr;
 }
 
 void DetachFromAllBoardWindows() {
@@ -482,7 +514,11 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
     LoadSettings();
 
-    return StartWinEventThread();
+    if (!StartWinEventThread())
+        return FALSE;
+
+    ScanForBoardWindows();
+    return TRUE;
 }
 
 void Wh_ModBeforeUninit() {
