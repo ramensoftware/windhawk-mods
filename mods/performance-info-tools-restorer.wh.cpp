@@ -51,7 +51,7 @@ The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
 - **Right DLL for the system**: Uses the Windows 8 DLL on Windows 8.1/10/11
 - **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. 
 - **Conservative resource handling**: The mod implements a conservative approach to be more stable
-- **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped; because Explorer keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after Explorer restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
+- **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped; because explorer.exe keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after explorer.exe restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
 
 ## Requirements
 
@@ -60,9 +60,9 @@ The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
 
 ## Design and safety notes
 
-- The setup step (download + verification) runs on a background thread so it never blocks Explorer startup, and it is serialized across processes with a named mutex so two Explorer/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place.
-- The download is time-limited, retried a bounded number of times, and closes immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
-- If the DLL cannot be obtained, the mod fails gracefully and nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart Explorer to retry).
+- The setup step (download + verification) runs on a background thread so it never blocks explorer.exe startup, and it is serialized across processes with a named mutex so two explorer.exe/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place.
+- The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
+- If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart explorer.exe to retry).
 - The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through `Wh_GetModStoragePath`, so it also works with portable Windhawk installations.
 - All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.
 
@@ -114,7 +114,7 @@ If any problems are encountered, please report them to the mod's author.
 
 - keepFilesOnDisable: true
   $name: Keep downloaded files if the mod is disabled
-  $description: If this setting is enabled (which it is by default), the mod keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder on the next unload in which they are no longer mapped. The DLL stays loaded in memory until the process (Explorer) restarts, so files that are still in use at that moment are deleted on a later unload.
+  $description: If this setting is enabled (which it is by default), the mod keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder on the next unload in which they are no longer mapped. The DLL stays loaded in memory until the process (explorer.exe) restarts, so files that are still in use at that moment are deleted on a later unload.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -413,9 +413,11 @@ std::atomic<bool> g_forceTranslations{true};
 std::atomic<bool> g_languageAutomatic{true};
 std::atomic<bool> g_useWindows7Skin{false};
 std::atomic<bool> g_useWindowsVistaSkin{false};
-// Latches the startup/requested classic skin state. This intentionally protects
-// the very first DirectUI parse from a transient/default string-setting read
-// that can happen during the initial Windhawk enable path.
+// Kept only for the initial "Wh_ModInit -> LoadPageSkinSetting" log line.
+// These are no longer read by ResolvePageSkinForFreshPage: Wh_GetStringSetting
+// (via WindhawkUtils::StringSetting) already returns the configured value from
+// Wh_ModInit onwards, so there is no transient/default read to latch against,
+// and a single "which skin" value read on each fresh page is simpler and correct.
 std::atomic<bool> g_startupRequestedWindows7Skin{false};
 std::atomic<bool> g_startupRequestedWindowsVistaSkin{false};
 std::atomic<bool> g_perfCenterXmlPageSeen{false};
@@ -436,6 +438,15 @@ static const DWORD kRetryDelayMs = 3000;
 // guarded by a mutex because both the setup thread and settings changes can
 // (re)build it.
 static std::mutex g_localizedResourceMutex;
+// Cache of the (forceTranslations, languageAutomatic, forcedLanguage) tuple the
+// private resource module was last built with, guarded by g_localizedResourceMutex.
+// Wh_ModSettingsChanged used to rebuild unconditionally on every settings save,
+// which copies and patches a ~650 KB DLL and maps it as a new never-freed
+// section each time; skip the rebuild when none of the three inputs changed.
+static bool g_lastBuiltValid = false;
+static bool g_lastBuiltForceTranslations = false;
+static bool g_lastBuiltLanguageAutomatic = true;
+static int g_lastBuiltForcedLanguage = static_cast<int>(MuiLanguage::EN_US);
 static std::wstring g_localizedResourcePath;
 // Read lock-free on the hot path, written under g_localizedResourceMutex.
 static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
@@ -719,6 +730,32 @@ static bool IsRunningAsAmd64() {
 #endif
 }
 
+// Why this mod downloads PerfCenterCPL.dll instead of asking the user to
+// supply it:
+//
+// The original "Informazioni e strumenti prestazioni" applet was removed by
+// Microsoft starting with Windows 8.1, so no genuine copy of PerfCenterCPL.dll
+// ships with the versions of Windows this mod targets - there is no local file
+// to point the mod at. Asking users to hunt down and paste in a binary
+// themselves is fundamental to why this mod stays easy to use, but it is also
+// exactly the kind of step that quietly breaks a mod and gets blamed on the
+// author: users would inevitably supply files of mismatched bitness (x86
+// instead of x64), the wrong Windows release, a version already patched or
+// bundled with unrelated tools, or a corrupted/incomplete download - none of
+// which VerifyDllIsCompatible() can fully tell apart from "the mod itself
+// doesn't work". A wrong file silently produces broken/crashing behavior that
+// looks exactly like a bug in the mod, generates support requests and bad
+// reviews the author has no way to reproduce or diagnose, and defeats the
+// entire point of a one-click Windhawk mod.
+//
+// Downloading a specific, known-good build directly (see GetVariantUrl below)
+// keeps the whole install path deterministic: the same bytes, verified with
+// VerifyDllIsCompatible()/VerifyDownloadedDllLooksValid() before ever being
+// registered, on every machine. It never touches or replaces a system file
+// (see the registry-virtualization comments above), only a private,
+// mod-owned copy is created, so this is not different in kind from a mod that
+// draws its own resources - it just fetches them from the network instead of
+// embedding megabytes of data in the mod script.
 std::wstring GetVariantUrl(DllVariant v) {
     return v == DllVariant::Win7 ? kDownloadUrlWin7 : kDownloadUrlWin8;
 }
@@ -756,6 +793,29 @@ void CleanupOldDlls(const std::wstring& dir) {
     FindClose(h);
 }
 
+// Handles for the WinInet call currently in flight (if any), published under
+// g_downloadHandlesMutex so Wh_ModUninit can close them from the outside.
+// InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile each block for
+// up to kDownloadTimeoutMs and do not otherwise notice g_shuttingDown, so on a
+// captive-portal/dead network the only way to make them return immediately is
+// to close the handle out from under them - WinInet fails the blocked call
+// with ERROR_INTERNET_OPERATION_CANCELLED instead of waiting out the timeout.
+static std::mutex g_downloadHandlesMutex;
+static HINTERNET g_downloadHNet = nullptr;
+static HINTERNET g_downloadHUrl = nullptr;
+
+static void CancelInFlightDownload() {
+    std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+    if (g_downloadHUrl) {
+        InternetCloseHandle(g_downloadHUrl);
+        g_downloadHUrl = nullptr;
+    }
+    if (g_downloadHNet) {
+        InternetCloseHandle(g_downloadHNet);
+        g_downloadHNet = nullptr;
+    }
+}
+
 // Download a file to `dest` using WinInet. Unlike URLDownloadToFileW this gives
 // us real control over timeouts and lets us abort on shutdown. connect/send/
 // receive are each bounded to kDownloadTimeoutMs at the WinInet level, and we
@@ -766,6 +826,18 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
                                    INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr,
                                    0);
     if (!hNet) return false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+        g_downloadHNet = hNet;
+    }
+
+    // If shutdown was requested while we were setting hNet up, cancel right
+    // away instead of starting a request we'd only have to unwind.
+    if (g_shuttingDown.load(std::memory_order_relaxed)) {
+        CancelInFlightDownload();
+        return false;
+    }
 
     DWORD timeoutMs = kDownloadTimeoutMs;
     InternetSetOptionW(hNet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs,
@@ -780,8 +852,19 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
         INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_UI,
         0);
     if (!hUrl) {
-        InternetCloseHandle(hNet);
+        CancelInFlightDownload();
         return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+        // CancelInFlightDownload() may have already closed g_downloadHNet from
+        // under us (shutdown raced this open); if so, hUrl is bogus, back out.
+        if (!g_downloadHNet) {
+            InternetCloseHandle(hUrl);
+            return false;
+        }
+        g_downloadHUrl = hUrl;
     }
 
     bool ok = false;
@@ -836,8 +919,25 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
         ok = readOk;
     } while (false);
 
-    InternetCloseHandle(hUrl);
-    InternetCloseHandle(hNet);
+    // Normal completion path. Only close a handle here if a concurrent
+    // CancelInFlightDownload() hasn't already closed it out from under us
+    // (checked-and-cleared under the same lock, to avoid a double-close race
+    // with the shutdown path).
+    {
+        std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+        if (g_downloadHUrl == hUrl) {
+            g_downloadHUrl = nullptr;
+        } else {
+            hUrl = nullptr;  // already closed by CancelInFlightDownload
+        }
+        if (g_downloadHNet == hNet) {
+            g_downloadHNet = nullptr;
+        } else {
+            hNet = nullptr;  // already closed by CancelInFlightDownload
+        }
+    }
+    if (hUrl) InternetCloseHandle(hUrl);
+    if (hNet) InternetCloseHandle(hNet);
     return ok;
 }
 
@@ -1210,7 +1310,7 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     // Never reuse a destination name: a previous module of the same name may
     // still be mapped as a section in this process (DirectUI keeps the
     // HINSTANCE), which would make DeleteFileW/MoveFileExW fail with a sharing
-    // violation and silently break translations until Explorer restarts.
+    // violation and silently break translations until explorer.exe restarts.
     swprintf_s(fileName, ARRAYSIZE(fileName), L"%s%u-%u.dll",
                kLocalizedResourcePrefix, GetCurrentProcessId(),
                g_resourceModuleSeq.fetch_add(1));
@@ -1286,9 +1386,25 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     }
 
     g_localizedResourcePath = destination;
+    g_lastBuiltForceTranslations = g_forceTranslations.load();
+    g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
+    g_lastBuiltForcedLanguage = g_forcedLanguage.load();
+    g_lastBuiltValid = true;
     Wh_Log(L"Private resource module ready with 147 strings in 10 languages: %s",
            destination.c_str());
     return true;
+}
+
+// True when the cached build already matches the current translation inputs,
+// so callers can skip ReleaseLocalizedResourceModuleLocked()+BuildLocalizedResourceModule()
+// entirely. Assumes g_localizedResourceMutex is already held.
+static bool LocalizedResourceModuleUpToDateLocked() {
+    return g_lastBuiltValid &&
+           !g_localizedResourcePath.empty() &&
+           g_lastBuiltForceTranslations == g_forceTranslations.load() &&
+           g_lastBuiltLanguageAutomatic == g_languageAutomatic.load() &&
+           (g_lastBuiltLanguageAutomatic ||
+            g_lastBuiltForcedLanguage == g_forcedLanguage.load());
 }
 
 static HMODULE EnsureLocalizedResourceModuleLoaded() {
@@ -1310,7 +1426,7 @@ static HMODULE EnsureLocalizedResourceModuleLoaded() {
 // Note: We deliberately never call FreeLibrary or DeleteFileW here (nor on
 // teardown), because DirectUI::XResourceProvider::Create caches this HINSTANCE
 // and loads resources from it lazily. Unloading or deleting the file while a
-// page is open can crash Explorer. Dropping the handle and clearing the path
+// page is open can crash explorer.exe. Dropping the handle and clearing the path
 // only means the next page that opens will use a freshly built module; pages
 // already open keep using the old (still-mapped) module, and RemoveOwnFiles
 // cleans up whichever copies are no longer mapped on a later unload.
@@ -1338,7 +1454,7 @@ static std::wstring StoreDir() {
 }
 
 // -----------------------------------------------------------------------------
-// Async setup - runs on a worker thread so Explorer startup is never blocked.
+// Async setup - runs on a worker thread so explorer.exe startup is never blocked.
 // -----------------------------------------------------------------------------
 static void RunSetup() {
     Wh_Log(L"PerfCenterCPL background setup started...");
@@ -1350,7 +1466,7 @@ static void RunSetup() {
         return;
     }
 
-    // Serialize with other processes (other Explorer instances, control.exe)
+    // Serialize with other processes (other explorer.exe instances, control.exe)
     // that may be performing the same setup at the same time.
     HANDLE setupMutex =
         CreateMutexW(nullptr, FALSE, L"Windhawk.PerformanceInfoToolsRestorer.Setup");
@@ -1429,7 +1545,7 @@ static void RunSetup() {
         g_dllVerifiedOk.store(false, std::memory_order_release);
         Wh_Log(L"Performance Information and Tools is unavailable: the required "
                L"PerfCenterCPL.dll could not be downloaded or verified. Check "
-               L"your internet connection and restart Explorer to retry.");
+               L"your internet connection and restart explorer.exe to retry.");
     }
 }
 
@@ -1565,15 +1681,20 @@ static void LoadPageSkinSetting() {
 }
 
 static void ResolvePageSkinForFreshPage() {
-    const bool freshVista = ReadPageSkinVistaSetting();
-    const bool freshWin7 = ReadPageSkinSetting();
-    const bool useVista = freshVista || g_useWindowsVistaSkin.load() ||
-                          g_startupRequestedWindowsVistaSkin.load();
-    const bool useWin7 = !useVista &&
-                         (freshWin7 || g_useWindows7Skin.load() ||
-                          g_startupRequestedWindows7Skin.load());
+    // Read the setting and use it verbatim. Earlier versions OR'd the fresh
+    // read with latched g_useWindowsVistaSkin/g_startupRequestedWindowsVistaSkin
+    // globals, which meant a skin could only ever be turned on through this
+    // path, never off: Wh_ModSettingsChanged deliberately skips re-resolving
+    // while the page is open ("close and reopen to apply"), so switching e.g.
+    // Vista -> Windows 8 while the page is open, then closing and reopening
+    // it, left freshVista false but the latched flag still true, and the
+    // Vista skin stuck until the mod was reloaded. Wh_GetStringSetting (via
+    // WindhawkUtils::StringSetting) returns the configured value from
+    // Wh_ModInit onwards, so there is no "transient/default read on the very
+    // first parse" to guard against, and no latch is needed.
+    const bool useVista = ReadPageSkinVistaSetting();
     g_useWindowsVistaSkin.store(useVista);
-    g_useWindows7Skin.store(useWin7);
+    g_useWindows7Skin.store(!useVista && ReadPageSkinSetting());
 }
 
 
@@ -1599,14 +1720,20 @@ static BOOL CALLBACK FindPerfCenterWindowProc(HWND hwnd, LPARAM lParam) {
     if (!title[0]) return TRUE;
 
     std::wstring windowTitle = title;
-    const bool isPerfCenterTitle =
-        ContainsInsensitive(windowTitle, L"Performance Information and Tools") ||
-        ContainsInsensitive(windowTitle, L"Informazioni e strumenti sulle prestazioni") ||
-        ContainsInsensitive(windowTitle, L"Información y herramientas de rendimiento") ||
-        ContainsInsensitive(windowTitle, L"Informations et outils de performance") ||
-        ContainsInsensitive(windowTitle, L"Leistungsinformationen") ||
-        ContainsInsensitive(windowTitle, L"Informações e Ferramentas de Desempenho") ||
-        ContainsInsensitive(windowTitle, L"Informacje i narzędzia dotyczące wydajności");
+    // Compare against every language in the mod's own MUI catalog instead of a
+    // hand-maintained list of titles: the previous list only covered English,
+    // Italian, Spanish, French, German, Portuguese and Polish, so on Turkish,
+    // Russian or Simplified Chinese UI (missing from that list) this always
+    // returned false and Wh_ModSettingsChanged would swap the skin under an
+    // open page, which can leave a half-patched DirectUI tree.
+    bool isPerfCenterTitle = false;
+    for (int i = 0; i <= static_cast<int>(MuiLanguage::PL_PL); ++i) {
+        const wchar_t* candidate = GetMuiString(1, static_cast<MuiLanguage>(i));
+        if (candidate && ContainsInsensitive(windowTitle, candidate)) {
+            isPerfCenterTitle = true;
+            break;
+        }
+    }
 
     if (isPerfCenterTitle) {
         *reinterpret_cast<bool*>(lParam) = true;
@@ -1673,13 +1800,13 @@ void InitClsidStrings() {
 class KeyTracker {
 public:
     std::wstring GetPath(HKEY k) const {
-        if (std::wstring s = SpecialRootPath(k); !s.empty()) return s;
+        if (const wchar_t* s = SpecialRootPath(k)) return s;
         std::shared_lock<std::shared_mutex> l(mutex_);
         auto it = paths_.find(k);
         return it != paths_.end() ? it->second : std::wstring();
     }
     bool IsFakeAndGetPath(HKEY k, std::wstring& o) const {
-        if (std::wstring s = SpecialRootPath(k); !s.empty()) {
+        if (const wchar_t* s = SpecialRootPath(k)) {
             o = s;
             return false;
         }
@@ -1692,6 +1819,18 @@ public:
     bool IsFake(HKEY k) const {
         std::shared_lock<std::shared_mutex> l(mutex_);
         return fakeOwners_.count(k) != 0;
+    }
+    // True if hk is either a fake (virtualized) key, or a real key whose path
+    // is already tracked (i.e. its path contained one of our keywords) - the
+    // two cases where a subkey open could still land inside the virtualized
+    // tree even if the subkey name itself doesn't contain a keyword (e.g.
+    // opening "CLSID" is tracked because "clsid" matches; opening the GUID
+    // subkey underneath it doesn't repeat that keyword but still needs the
+    // combined-path check). No string copy - just a presence check.
+    bool IsTrackedOrFake(HKEY k) const {
+        if (SpecialRootPath(k)) return false;
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        return fakeOwners_.count(k) != 0 || paths_.count(k) != 0;
     }
     void Track(HKEY k, const std::wstring& p) {
         if (!k || IsSpecialRoot(k)) return;
@@ -1736,14 +1875,20 @@ private:
         auto v = reinterpret_cast<uintptr_t>(k);
         return v >= 0x80000000 && v <= 0x80000004;
     }
-    static std::wstring SpecialRootPath(HKEY k) {
+    // Returns an interned literal (no heap allocation) instead of a fresh
+    // std::wstring. Every registry hook in the process (RegOpenKeyExW,
+    // RegQueryValueExW, RegGetValueW, ...) calls this on every invocation via
+    // GetPath()/IsFakeAndGetPath(), and names like L"HKEY_LOCAL_MACHINE" are
+    // past the small-string-optimization limit, so returning by value used to
+    // cost a heap allocation on every single registry read/open in explorer.exe.
+    static const wchar_t* SpecialRootPath(HKEY k) {
         switch (reinterpret_cast<uintptr_t>(k)) {
             case 0x80000000: return L"HKEY_CLASSES_ROOT";
             case 0x80000001: return L"HKEY_CURRENT_USER";
             case 0x80000002: return L"HKEY_LOCAL_MACHINE";
             case 0x80000003: return L"HKEY_USERS";
             case 0x80000004: return L"HKEY_CURRENT_CONFIG";
-            default: return std::wstring();
+            default: return nullptr;
         }
     }
     mutable std::shared_mutex mutex_;
@@ -2106,15 +2251,32 @@ static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
     return st;
 }
 
+// Fast pre-check shared by both open hooks: these run on every RegOpenKeyExW/
+// RegOpenKeyW in the process, so avoid constructing/copying std::wstring at
+// all for the overwhelming majority of calls that can't possibly touch the
+// virtualized tree - i.e. hk isn't one of our fake keys and sub doesn't even
+// contain one of our cheap keywords. g_keyTracker.IsFake() is a shared-lock
+// map lookup with no allocation, matching what RegOpenKeyVirtual would have
+// concluded anyway.
+static bool MightNeedVirtualization(HKEY hk, LPCWSTR sub) {
+    return g_keyTracker.IsTrackedOrFake(hk) || ContainsRelevantKeywordCheap(sub);
+}
+
 LSTATUS WINAPI RegOpenKeyExWHook(HKEY hk, LPCWSTR sub, DWORD opt, REGSAM sam,
                                  PHKEY out) {
+    if (!MightNeedVirtualization(hk, sub)) {
+        return RegOpenKeyExWOriginal(hk, sub, opt, sam, out);
+    }
     std::wstring s = sub ? sub : L"";
     return RegOpenKeyVirtual(hk, s, sub && *sub, opt, sam, out);
 }
 
 LSTATUS WINAPI RegOpenKeyWHook(HKEY hk, LPCWSTR sub, PHKEY out) {
-    std::wstring s = sub ? sub : L"";
     // RegOpenKey uses MAXIMUM_ALLOWED as default access mask in modern Windows.
+    if (!MightNeedVirtualization(hk, sub)) {
+        return RegOpenKeyWOriginal(hk, sub, out);
+    }
+    std::wstring s = sub ? sub : L"";
     return RegOpenKeyVirtual(hk, s, sub && *sub, 0, MAXIMUM_ALLOWED, out);
 }
 
@@ -3001,11 +3163,25 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
                                              hInstance2);
     }
 
-    // Do not depend on g_hPerfCenter/g_hLocalizedResources here. During the
-    // first enable/startup path the page can be parsed before those atomics are
-    // published by the background setup thread. Instead, read UIFILE 101 and
-    // verify the XML marker below. This keeps first-load skinning reliable while
-    // still avoiding unrelated UIFILE 101 resources.
+    // Gate on g_dllVerifiedOk and the two resource modules we actually own.
+    // The page can't be parsed before setup has completed: the registry entry
+    // that lets the Control Panel offer "Performance Information and Tools" at
+    // all comes from TryProvideValueData(), which bails out (returns false,
+    // so nothing is exposed) unless g_dllVerifiedOk is set - so by the time any
+    // UIFILE 101 for this applet is loaded, g_dllVerifiedOk is true and
+    // g_hPerfCenter/g_hLocalizedResources have already been published. Without
+    // this check, every DirectUI UIFILE 101 in the process (a very common
+    // resource id across the shell's DUI modules) paid for a FindResource +
+    // LoadResource + full XML conversion + substring search on every page
+    // creation, just to find out it wasn't ours.
+    if (!g_dllVerifiedOk.load() ||
+        (resourceModule != g_hPerfCenter.load() &&
+         resourceModule != g_hLocalizedResources.load())) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                             resourceModule, hInstance1,
+                                             hInstance2);
+    }
+
     std::wstring xml = LoadUifileXml(resourceModule, resourceName, resourceType);
     if (xml.empty() || xml.find(L"atom(perfcentertoplevel)") == std::wstring::npos) {
         return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
@@ -3063,7 +3239,13 @@ AP//Af///wEAAAAAg9XsY4Tc8daF2e/5ftHn+HvL4Mt3wNJRAAAAAH9//wIAAAABAAAAAAAAAAD+fwAA
 
 using LoadImageW_t = decltype(&LoadImageW);
 static LoadImageW_t LoadImageWOriginalForVistaLamp = nullptr;
-static HICON g_vistaLampIcon = nullptr;
+// Reachable from any thread that hits any of the five icon hooks below, so
+// this must not be a plain HICON: two concurrent first-callers could each
+// create an icon and one would leak. std::atomic<HICON> with compare-exchange
+// makes creation race-safe, and DestroyIcon in Wh_ModUninit reclaims it - the
+// CopyIcon() results handed out to callers are independent handles, so
+// destroying this master copy on unload is safe.
+static std::atomic<HICON> g_vistaLampIcon{nullptr};
 
 static int Base64Value(char c) {
     if (c >= 'A' && c <= 'Z') return c - 'A';
@@ -3093,20 +3275,36 @@ static std::vector<BYTE> DecodeBase64(const char* input) {
 }
 
 static HICON GetVistaLampIcon() {
-    if (g_vistaLampIcon) return g_vistaLampIcon;
+    if (HICON existing = g_vistaLampIcon.load(std::memory_order_acquire)) {
+        return existing;
+    }
     std::vector<BYTE> iconData = DecodeBase64(kVistaLampIconRtBase64);
     if (iconData.empty()) return nullptr;
-    g_vistaLampIcon = CreateIconFromResourceEx(iconData.data(),
-                                               static_cast<DWORD>(iconData.size()),
-                                               TRUE, 0x00030000, 16, 16,
-                                               LR_DEFAULTCOLOR);
-    return g_vistaLampIcon;
+    HICON created = CreateIconFromResourceEx(iconData.data(),
+                                             static_cast<DWORD>(iconData.size()),
+                                             TRUE, 0x00030000, 16, 16,
+                                             LR_DEFAULTCOLOR);
+    if (!created) return nullptr;
+
+    HICON expected = nullptr;
+    if (!g_vistaLampIcon.compare_exchange_strong(expected, created,
+                                                 std::memory_order_acq_rel)) {
+        // Another thread won the race and published its icon first; drop ours.
+        DestroyIcon(created);
+        return expected;
+    }
+    return created;
 }
 
 HANDLE WINAPI LoadImageWHookForVistaLamp(HINSTANCE instance, LPCWSTR name, UINT type,
                                          int cx, int cy, UINT flags) {
-    if (type == IMAGE_ICON && IS_INTRESOURCE(name) &&
-        static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId) {
+    // Only intercept while the Vista skin is actually selected, and only for
+    // requests that actually name shell32.dll (icon 61001 there is the "rate
+    // this computer" lamp glyph we're overriding). Without both checks this
+    // hijacked resource id 61001 process-wide for any module/skin.
+    if (g_useWindowsVistaSkin.load() && type == IMAGE_ICON && IS_INTRESOURCE(name) &&
+        static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId &&
+        instance == GetModuleHandleW(L"shell32.dll")) {
         if (HICON icon = GetVistaLampIcon()) {
             return CopyIcon(icon);
         }
@@ -3125,16 +3323,22 @@ static PrivateExtractIconsW_t PrivateExtractIconsWOriginalForVistaLamp = nullptr
 static SHDefExtractIconW_t SHDefExtractIconWOriginalForVistaLamp = nullptr;
 
 static bool IsVistaLampIconRequest(LPCWSTR file, int index) {
+    if (!g_useWindowsVistaSkin.load()) return false;
     if (index != kVistaLampIconId && index != -kVistaLampIconId) return false;
-    if (!file || !*file) return true;
+    // Require the caller to actually name shell32.dll. Treating an empty/NULL
+    // file as a match let any module in the process asking for icon 61001 by
+    // ordinal (with no file specified) get the lamp bitmap instead of its own
+    // icon.
+    if (!file || !*file) return false;
     std::wstring s = file;
     for (auto& c : s) c = towlower(c);
     return s.find(L"shell32.dll") != std::wstring::npos;
 }
 
 HICON WINAPI LoadIconWHookForVistaLamp(HINSTANCE instance, LPCWSTR name) {
-    if (IS_INTRESOURCE(name) &&
-        static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId) {
+    if (g_useWindowsVistaSkin.load() && IS_INTRESOURCE(name) &&
+        static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId &&
+        instance == GetModuleHandleW(L"shell32.dll")) {
         if (HICON icon = GetVistaLampIcon()) return CopyIcon(icon);
     }
     return LoadIconWOriginalForVistaLamp(instance, name);
@@ -3243,6 +3447,13 @@ BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* execInfo) {
     return ShellExecuteExWOriginal(execInfo);
 }
 
+// Installs both the Vista-lamp icon hooks and the perf-center-action
+// ShellExecute hooks. The icon hooks stay installed process-wide even when
+// the Windows 8 (default) or Windows 7 skin is active, because the selected
+// skin can change at runtime via Wh_ModSettingsChanged; each hook checks
+// g_useWindowsVistaSkin (and, for icon 61001, that the caller actually named
+// shell32.dll) before doing anything, so with the default skin they fall
+// straight through to the original function.
 static void InstallPerfCenterActionHooks() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -3559,8 +3770,10 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         const std::wstring* dll = CurrentDllPath();
         if (dll && !dll->empty()) {
             std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
-            ReleaseLocalizedResourceModuleLocked();
-            BuildLocalizedResourceModule(*dll, StoreDir());
+            if (!LocalizedResourceModuleUpToDateLocked()) {
+                ReleaseLocalizedResourceModuleLocked();
+                BuildLocalizedResourceModule(*dll, StoreDir());
+            }
         }
 
         if (oldWindows7Skin != requestedWindows7Skin ||
@@ -3607,6 +3820,14 @@ void Wh_ModUninit(void) {
         if (g_stopEvent) {
             SetEvent(g_stopEvent);
         }
+        // InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile are not
+        // interruptible and only bound each individual call to
+        // kDownloadTimeoutMs (20s), across up to kMaxDownloadAttempts retries -
+        // g_shuttingDown is only checked between calls, so a stuck/captive-
+        // portal connection could otherwise stall this join for a long time.
+        // Closing the handles from here makes any currently-blocked WinInet
+        // call fail immediately instead of waiting out its timeout.
+        CancelInFlightDownload();
         if (g_setupThread && g_setupThread->joinable()) {
             g_setupThread->join();
         }
@@ -3614,6 +3835,14 @@ void Wh_ModUninit(void) {
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
+        }
+
+        // The master Vista-lamp icon is safe to destroy here even though
+        // CopyIcon() results already handed out to callers are independent
+        // handles unaffected by this. Without it, one HICON leaked in
+        // explorer.exe on every enable/disable cycle.
+        if (HICON lamp = g_vistaLampIcon.exchange(nullptr)) {
+            DestroyIcon(lamp);
         }
 
         // Do not force-unload g_hPerfCenter or g_hLocalizedResources on teardown,
