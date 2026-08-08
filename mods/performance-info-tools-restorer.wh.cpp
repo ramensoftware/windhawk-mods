@@ -450,11 +450,11 @@ static int g_lastBuiltForcedLanguage = static_cast<int>(MuiLanguage::EN_US);
 static std::wstring g_localizedResourcePath;
 // Read lock-free on the hot path, written under g_localizedResourceMutex.
 static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
-// Monotonic counter appended to the resource module file name. The file of an
-// already-built module stays mapped (DirectUI caches the HINSTANCE), so the
-// same destination name can never be overwritten or deleted while it is still
-// mapped as a section - a fresh name per build avoids the sharing violation.
-static std::atomic<unsigned> g_resourceModuleSeq{0};
+// Version tag embedded in the private resource module's file name. The module
+// content is fully determined by the translation inputs plus the mod's
+// embedded string catalog, so bumping this invalidates files built by older
+// versions of the mod whenever the catalog changes.
+static constexpr DWORD kLocalizedResourceFormatVersion = 1;
 
 // Setup is performed on a background worker thread that is joined on unload.
 // Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
@@ -793,6 +793,55 @@ void CleanupOldDlls(const std::wstring& dir) {
     FindClose(h);
 }
 
+// -----------------------------------------------------------------------------
+// Verified load of the downloaded DLL
+// -----------------------------------------------------------------------------
+class UniqueWinHandle {
+public:
+    UniqueWinHandle() = default;
+    explicit UniqueWinHandle(HANDLE handle) : handle_(handle) {}
+    ~UniqueWinHandle() { Reset(); }
+
+    UniqueWinHandle(const UniqueWinHandle&) = delete;
+    UniqueWinHandle& operator=(const UniqueWinHandle&) = delete;
+
+    UniqueWinHandle(UniqueWinHandle&& other) noexcept
+        : handle_(other.Release()) {}
+    UniqueWinHandle& operator=(UniqueWinHandle&& other) noexcept {
+        if (this != &other) Reset(other.Release());
+        return *this;
+    }
+
+    bool IsValid() const { return handle_ && handle_ != INVALID_HANDLE_VALUE; }
+    HANDLE Get() const { return handle_; }
+    HANDLE Release() {
+        HANDLE result = handle_;
+        handle_ = INVALID_HANDLE_VALUE;
+        return result;
+    }
+    void Reset(HANDLE handle = INVALID_HANDLE_VALUE) {
+        if (IsValid()) CloseHandle(handle_);
+        handle_ = handle;
+    }
+
+private:
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+};
+
+// Open the DLL denying write sharing for the whole verify -> load window.
+// FILE_SHARE_READ | FILE_SHARE_DELETE is required (not FILE_SHARE_READ only)
+// because the loader opens the file requesting delete sharing; with read-only
+// sharing LoadLibraryExW would fail with ERROR_SHARING_VIOLATION. What the pin
+// prevents is in-place modification: the bytes cannot be rewritten between
+// verification and load. The caller must keep the returned handle alive until
+// after LoadLibraryExW returns.
+static UniqueWinHandle PinDllForLoad(const std::wstring& path) {
+    return UniqueWinHandle(
+        CreateFileW(path.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL, nullptr));
+}
+
 // Handles for the WinInet call currently in flight (if any), published under
 // g_downloadHandlesMutex so Wh_ModUninit can close them from the outside.
 // InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile each block for
@@ -944,8 +993,14 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
 // Download the required DLL (if needed), verify it, and make it visible only
 // once valid. Returns true and sets outPath when a valid DLL is available.
 // The cross-process serialization is done by the caller (the setup thread).
+// Download the required DLL (if needed), verify it, and make it visible only
+// once valid. On success, `outPin` holds an open handle to the verified file
+// (opened denying write sharing) and `outPath` its path; the caller must keep
+// `outPin` alive until after LoadLibraryExW so the executed bytes are the
+// verified bytes. The cross-process serialization is done by the caller (the
+// setup thread).
 bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
-                       std::wstring& outPath) {
+                       std::wstring& outPath, UniqueWinHandle& outPin) {
     const std::wstring wanted = VariantMarkerName(variant);
     const std::wstring out = dir + L"\\" + kDllRelativeName;
     CleanupOldDlls(dir);
@@ -954,9 +1009,13 @@ bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
     if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
         std::wstring marker;
         bool markerOk = ReadVariantMarker(dir, marker);
-        if (markerOk && marker == wanted && VerifyDllIsCompatible(out, variant)) {
-            outPath = out;
-            return true;
+        if (markerOk && marker == wanted) {
+            UniqueWinHandle pin = PinDllForLoad(out);
+            if (pin.IsValid() && VerifyDllIsCompatible(out, variant)) {
+                outPath = out;
+                outPin = std::move(pin);
+                return true;
+            }
         }
         // Marker mismatch or corrupt file: replace it.
         DeleteFileW(out.c_str());
@@ -974,8 +1033,10 @@ bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
         if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
             // Could not remove or rename the old file. Keep it only if it is
             // actually a valid DLL of the requested variant.
-            if (VerifyDllIsCompatible(out, variant)) {
+            UniqueWinHandle pin = PinDllForLoad(out);
+            if (pin.IsValid() && VerifyDllIsCompatible(out, variant)) {
                 outPath = out;
+                outPin = std::move(pin);
                 return true;
             }
             return false;
@@ -989,12 +1050,21 @@ bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
     DeleteFileW(tmp.c_str());
     Wh_Log(L"Downloading %s variant from %s", wanted.c_str(), url.c_str());
     const bool downloaded = DownloadWithTimeout(url, tmp);
-    bool ok = downloaded && VerifyDllIsCompatible(tmp, variant);
+    bool ok = false;
+    UniqueWinHandle pin;
+    if (downloaded) {
+        pin = PinDllForLoad(tmp);
+        ok = pin.IsValid() && VerifyDllIsCompatible(tmp, variant);
+    }
     if (ok) {
+        // The pin handle stays open across the move: it was opened on the
+        // temp file's file object, which is the same object that now appears
+        // at `out`, so the verified bytes are the bytes the caller will load.
         if (MoveFileExW(tmp.c_str(), out.c_str(),
                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
             WriteVariantMarker(dir, variant);
             outPath = out;
+            outPin = std::move(pin);
             return true;
         }
         ok = false;
@@ -1052,38 +1122,6 @@ void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
 // -----------------------------------------------------------------------------
 // Conservative DirectUI resource module
 // -----------------------------------------------------------------------------
-class UniqueWinHandle {
-public:
-    UniqueWinHandle() = default;
-    explicit UniqueWinHandle(HANDLE handle) : handle_(handle) {}
-    ~UniqueWinHandle() { Reset(); }
-
-    UniqueWinHandle(const UniqueWinHandle&) = delete;
-    UniqueWinHandle& operator=(const UniqueWinHandle&) = delete;
-
-    UniqueWinHandle(UniqueWinHandle&& other) noexcept
-        : handle_(other.Release()) {}
-    UniqueWinHandle& operator=(UniqueWinHandle&& other) noexcept {
-        if (this != &other) Reset(other.Release());
-        return *this;
-    }
-
-    bool IsValid() const { return handle_ && handle_ != INVALID_HANDLE_VALUE; }
-    HANDLE Get() const { return handle_; }
-    HANDLE Release() {
-        HANDLE result = handle_;
-        handle_ = INVALID_HANDLE_VALUE;
-        return result;
-    }
-    void Reset(HANDLE handle = INVALID_HANDLE_VALUE) {
-        if (IsValid()) CloseHandle(handle_);
-        handle_ = handle;
-    }
-
-private:
-    HANDLE handle_ = INVALID_HANDLE_VALUE;
-};
-
 class ScopedTemporaryFile {
 public:
     explicit ScopedTemporaryFile(std::wstring path) : path_(std::move(path)) {}
@@ -1297,6 +1335,73 @@ static bool BuildEmbeddedStringBlock(UINT blockId, MuiLanguage language,
 
 // Reads the translation settings at call time, so both the setup thread and a
 // settings change can rebuild the module with the current values.
+// The private resource module's content is fully determined by the translation
+// inputs (forceTranslations / languageAutomatic / forcedLanguage) plus this
+// mod's embedded string catalog - not by the process or the current UI
+// language (the automatic build embeds all ten languages, and a forced build
+// embeds the forced language under every language ID). The file name is
+// therefore derived from those inputs (plus a format version), so a given
+// configuration maps to exactly one reusable file that is shared across
+// processes and explorer restarts, instead of accumulating a new ~650 KB file
+// per process load. Only the module for the configuration that is currently
+// in use is ever loaded, so this stays compatible with the conservative
+// never-unload approach (files still mapped are simply left alone).
+static std::wstring LocalizedResourceModuleFileName() {
+    const bool automatic = g_languageAutomatic.load();
+    const MuiLanguage forced = static_cast<MuiLanguage>(g_forcedLanguage.load());
+    wchar_t name[96] = {};
+    if (automatic) {
+        swprintf_s(name, ARRAYSIZE(name), L"%sv%lu-auto.dll",
+                   kLocalizedResourcePrefix, kLocalizedResourceFormatVersion);
+    } else {
+        const wchar_t* tag = L"en";
+        switch (forced) {
+            case MuiLanguage::IT_IT: tag = L"it"; break;
+            case MuiLanguage::ES_ES: tag = L"es"; break;
+            case MuiLanguage::FR_FR: tag = L"fr"; break;
+            case MuiLanguage::TR_TR: tag = L"tr"; break;
+            case MuiLanguage::RU_RU: tag = L"ru"; break;
+            case MuiLanguage::ZH_CN: tag = L"zh"; break;
+            case MuiLanguage::DE_DE: tag = L"de"; break;
+            case MuiLanguage::PT_BR: tag = L"pt"; break;
+            case MuiLanguage::PL_PL: tag = L"pl"; break;
+            default: tag = L"en"; break;
+        }
+        swprintf_s(name, ARRAYSIZE(name), L"%sv%lu-%s.dll",
+                   kLocalizedResourcePrefix, kLocalizedResourceFormatVersion,
+                   tag);
+    }
+    return name;
+}
+
+// Remove resource-module files that are no longer needed: anything that does
+// not match the current configuration's file name. This also cleans up the
+// legacy per-process "PerfCenterCPL.resources-<pid>-<seq>.dll" files created
+// by older versions of the mod. Files still mapped (by this process or
+// another one) fail to delete and are simply left for a later sweep/unload.
+// Intentionally called only at setup time (before this process has loaded any
+// resource module), never while modules may be referenced.
+static void SweepStaleResourceModules(const std::wstring& directory) {
+    if (directory.empty()) return;
+    const std::wstring currentName = LocalizedResourceModuleFileName();
+    WIN32_FIND_DATAW fd{};
+    const std::wstring pattern =
+        directory + L"\\" + kLocalizedResourcePrefix + L"*";
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const std::wstring name = fd.cFileName;
+        if (name == currentName) continue;
+        const std::wstring p = directory + L"\\" + name;
+        if (!DeleteFileW(p.c_str())) {
+            // Still mapped (this or another process) or transiently locked;
+            // retried on a later sweep/unload.
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
 static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
                                          const std::wstring& directory) {
     g_localizedResourcePath.clear();
@@ -1306,16 +1411,37 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
         return false;
     }
 
-    wchar_t fileName[96] = {};
-    // Never reuse a destination name: a previous module of the same name may
-    // still be mapped as a section in this process (DirectUI keeps the
-    // HINSTANCE), which would make DeleteFileW/MoveFileExW fail with a sharing
-    // violation and silently break translations until explorer.exe restarts.
-    swprintf_s(fileName, ARRAYSIZE(fileName), L"%s%u-%u.dll",
-               kLocalizedResourcePrefix, GetCurrentProcessId(),
-               g_resourceModuleSeq.fetch_add(1));
-    const std::wstring destination = directory + L"\\" + fileName;
-    const std::wstring temporary = destination + L".tmp";
+    const std::wstring destination =
+        directory + L"\\" + LocalizedResourceModuleFileName();
+
+    // Reuse an existing valid module for this exact configuration: the bytes
+    // are deterministic, so a file built earlier (by this process, a previous
+    // session, or control.exe) is byte-identical to a fresh build. Skipping
+    // the rebuild avoids the ~650 KB copy + PE patch + resource rewrite on
+    // every process load. If the file is valid it has not been modified in
+    // place (it was built by this mod from a pinned-verified source), so
+    // loading it is safe.
+    if (GetFileAttributesW(destination.c_str()) != INVALID_FILE_ATTRIBUTES &&
+        VerifyDownloadedDllLooksValid(destination)) {
+        g_localizedResourcePath = destination;
+        g_lastBuiltForceTranslations = g_forceTranslations.load();
+        g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
+        g_lastBuiltForcedLanguage = g_forcedLanguage.load();
+        g_lastBuiltValid = true;
+        Wh_Log(L"Reusing existing private resource module: %s",
+               destination.c_str());
+        return true;
+    }
+    // Invalid leftover from an interrupted build: remove it and rebuild.
+    DeleteFileW(destination.c_str());
+
+    // Unique per-process temp file: the destination name is now shared across
+    // processes, so a bare ".tmp" suffix would collide with a concurrent build
+    // in control.exe or another explorer.exe.
+    wchar_t tmpSuffix[32] = {};
+    swprintf_s(tmpSuffix, ARRAYSIZE(tmpSuffix), L".tmp-%lu",
+               GetCurrentProcessId());
+    const std::wstring temporary = destination + tmpSuffix;
     ScopedTemporaryFile temporaryGuard(temporary);
 
     DeleteFileW(temporary.c_str());
@@ -1374,6 +1500,20 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     DeleteFileW(destination.c_str());
     if (!MoveFileExW(temporary.c_str(), destination.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        // Another process may have just built (or mapped) the same
+        // deterministic file; if the destination is already valid, use it.
+        if (VerifyDownloadedDllLooksValid(destination)) {
+            temporaryGuard.Commit();
+            g_localizedResourcePath = destination;
+            g_lastBuiltForceTranslations = g_forceTranslations.load();
+            g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
+            g_lastBuiltForcedLanguage = g_forcedLanguage.load();
+            g_lastBuiltValid = true;
+            Wh_Log(L"Private resource module already present (built by another "
+                   L"process): %s",
+                   destination.c_str());
+            return true;
+        }
         Wh_Log(L"Activating private resource module failed: %u", GetLastError());
         return false;
     }
@@ -1495,7 +1635,17 @@ static void RunSetup() {
         }
         return;
     }
+
+    // Remove private resource modules left behind by other configurations,
+    // sessions or processes (and by older per-process naming). Runs only at
+    // startup, before this process has loaded any resource module, so nothing
+    // referenced by this process can be deleted. The current configuration's
+    // file - if any - is kept, and files still mapped elsewhere are skipped
+    // and retried on a later sweep/unload.
+    SweepStaleResourceModules(dir);
+
     std::wstring outPath;
+    UniqueWinHandle pinnedDll;
     bool ok = false;
 
     // A few bounded retries with backoff cover transient network failures.
@@ -1505,7 +1655,7 @@ static void RunSetup() {
     // existing copy still works.
     for (int attempt = 1; attempt <= kMaxDownloadAttempts; ++attempt) {
         if (g_shuttingDown.load(std::memory_order_relaxed)) break;
-        if (DownloadDllToPath(dir, variant, outPath)) {
+        if (DownloadDllToPath(dir, variant, outPath, pinnedDll)) {
             ok = true;
             break;
         }
@@ -1532,6 +1682,8 @@ static void RunSetup() {
         g_dllPath.store(pathPtr, std::memory_order_release);
         g_activeVariant.store(static_cast<int>(variant), std::memory_order_release);
         // Take exactly one reference on the DLL; it is released in Wh_ModUninit.
+        // `pinnedDll` is still held here (write sharing denied), so the bytes
+        // mapped as executable code are the bytes that passed verification.
         HMODULE h = LoadLibraryExW(outPath.c_str(), nullptr, 0);
         g_hPerfCenter.store(h, std::memory_order_release);
         {
@@ -2549,11 +2701,9 @@ static bool IsPerfCenterResourceModule(HINSTANCE instance) {
 static int CopyEmbeddedStringW(const wchar_t* text, LPWSTR buffer, int bufferChars) {
     if (!text) return 0;
     const int length = static_cast<int>(wcslen(text));
-    if (bufferChars == 0) {
-        if (!buffer) return 0;
-        *reinterpret_cast<LPCWSTR*>(buffer) = text;
-        return length;
-    }
+    // Note: the cchBufferMax == 0 (return-a-pointer) form of LoadStringW is
+    // deliberately not emulated here - see LoadStringWHook. Callers of this
+    // function always pass bufferChars > 0.
     if (!buffer || bufferChars < 1) return 0;
     const int copied = length < bufferChars - 1 ? length : bufferChars - 1;
     if (copied > 0)
@@ -2564,7 +2714,15 @@ static int CopyEmbeddedStringW(const wchar_t* text, LPWSTR buffer, int bufferCha
 
 int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
                            int bufferChars) {
-    if (g_forceTranslations.load() &&
+    // The cchBufferMax == 0 form of LoadStringW returns a pointer into the
+    // string's home resource module, which stays mapped for the module's
+    // lifetime. Our embedded strings live in the mod's own image, which is
+    // unmapped when the mod is disabled/unloaded - handing out a pointer to
+    // them would leave the caller (DirectUI's resstr resolution) with a
+    // dangling pointer. Fall through to the original for that form: the
+    // private resource module already has the translated strings baked in, so
+    // the pointer it returns is both correct and safe.
+    if (bufferChars != 0 && g_forceTranslations.load() &&
         static_cast<DllVariant>(g_activeVariant.load()) == DllVariant::Win8 &&
         IsPerfCenterResourceModule(instance)) {
         if (const wchar_t* text = GetEmbeddedTranslation(id)) {
@@ -2576,7 +2734,9 @@ int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
 
 int WINAPI LoadStringAHook(HINSTANCE instance, UINT id, LPSTR buffer,
                            int bufferChars) {
-    if (g_forceTranslations.load() &&
+    // bufferChars == 0 is also passed through to the original: the A variant
+    // must not fabricate results for the pointer-returning form either.
+    if (bufferChars > 0 && g_forceTranslations.load() &&
         static_cast<DllVariant>(g_activeVariant.load()) == DllVariant::Win8 &&
         IsPerfCenterResourceModule(instance)) {
         if (const wchar_t* text = GetEmbeddedTranslation(id)) {
