@@ -61,8 +61,8 @@ The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
 ## Design and safety notes
 
 - The setup step (download + verification) runs on a background thread so it never blocks Explorer startup, and it is serialized across processes with a named mutex so two Explorer/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place.
-- The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang Explorer or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
-- If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart Explorer to retry).
+- The download is time-limited, retried a bounded number of times, and closes immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
+- If the DLL cannot be obtained, the mod fails gracefully and nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart Explorer to retry).
 - The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through `Wh_GetModStoragePath`, so it also works with portable Windhawk installations.
 - All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.
 
