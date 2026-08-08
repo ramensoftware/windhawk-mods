@@ -1,13 +1,13 @@
 // ==WindhawkMod==
-// @id              explorer-gallery-photos-launcher
-// @name            Open Photos App instead of Gallery
-// @description     Intercepts Gallery navigation in File Explorer and launches the Microsoft Photos app (ms-photos:) instead.
-// @version         2.0
-// @author          Jäkubix
-// @github          https://github.com/jakubix30
-// @include         %SystemRoot%\explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -luuid -lcomctl32 -lshlwapi
+// @id                  explorer-gallery-photos-launcher
+// @name                Open Photos App instead of Gallery
+// @description         Intercepts Gallery navigation in File Explorer and launches the Microsoft Photos app (ms-photos:) instead.
+// @version             2.0
+// @author              Jäkubix
+// @github              https://github.com/jakubix30
+// @include             %SystemRoot%\explorer.exe
+// @architecture        x86-64
+// @compilerOptions     -lole32 -luuid -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -38,11 +38,11 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 // ==/WindhawkModSettings==
 
 #include <shlobj.h>
-#include <shlwapi.h>
 #include <shobjidl.h>
 #include <string>
 #include <windows.h>
 #include <windhawk_utils.h>
+#include <atomic>
 
 struct {
     std::wstring targetClsid;
@@ -50,7 +50,7 @@ struct {
 } g_settings;
 
 static PIDLIST_ABSOLUTE g_targetPidl = nullptr;
-static bool g_hookAttempted = false;
+static std::atomic<bool> g_explorerFrameHooked{false};
 
 // ---- BrowseObject Original & Hook ----
 typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
@@ -81,37 +81,44 @@ static void LoadSettings() {
     SHParseDisplayName(parsingName.c_str(), nullptr, &g_targetPidl, 0, nullptr);
 }
 
-// Substring search (case-insensitive) for module name check
-static bool contains_ci(const std::wstring &hay, const std::wstring &needle) {
-    if (needle.empty())
-        return false;
-    std::wstring h = hay, n = needle;
-    for (auto &c : h)
-        c = towlower(c);
-    for (auto &c : n)
-        c = towlower(c);
-    return h.find(n) != std::wstring::npos;
-}
-
 // Asynchronous launch parameters
 static WCHAR g_cmdToLaunch[MAX_PATH] = L"";
 static HANDLE g_launchEvent = NULL;
+static HANDLE g_stopEvent = NULL;
 static HANDLE g_workerThread = NULL;
-static volatile bool g_stopWorker = false;
 
 static DWORD WINAPI LaunchWorkerProc(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
-    while (!g_stopWorker) {
-        DWORD waitRes = WaitForSingleObject(g_launchEvent, 500);
-        if (waitRes == WAIT_OBJECT_0) {
+    HANDLE handles[] = {g_stopEvent, g_launchEvent};
+    for (;;) {
+        DWORD r = MsgWaitForMultipleObjectsEx(ARRAYSIZE(handles), handles, INFINITE,
+                                              QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (r == WAIT_OBJECT_0) {
+            break;  // stop requested
+        }
+        if (r == WAIT_OBJECT_0 + 1) {
             WCHAR cmd[MAX_PATH];
             cmd[0] = L'\0';
             wcsncpy_s(cmd, g_cmdToLaunch, _TRUNCATE);
             if (cmd[0] != L'\0') {
                 Wh_Log(L"Launching app asynchronously: %s", cmd);
-                ShellExecuteW(NULL, L"open", cmd, NULL, NULL, SW_SHOWNORMAL);
+                
+                SHELLEXECUTEINFOW sei = {sizeof(sei)};
+                sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
+                sei.lpVerb = L"open";
+                sei.lpFile = cmd;
+                sei.nShow = SW_SHOWNORMAL;
+                ShellExecuteExW(&sei);
             }
+        } else if (r == WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        } else {
+            break;  // WAIT_FAILED
         }
     }
 
@@ -150,10 +157,8 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
 
 // Hook explorerframe.dll symbols
 static void HookExplorerFrame(HMODULE hEF, bool applyNow) {
-    if (!hEF || g_hookAttempted)
+    if (!hEF || g_explorerFrameHooked.exchange(true))
         return;
-
-    g_hookAttempted = true;
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
@@ -186,10 +191,8 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                           HANDLE hFile,
                                           DWORD dwFlags) {
     HMODULE hMod = g_LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (hMod && lpLibFileName) {
-        if (contains_ci(lpLibFileName, L"explorerframe.dll")) {
-            HookExplorerFrame(hMod, true);
-        }
+    if (hMod && hMod == GetModuleHandleW(L"explorerframe.dll")) {
+        HookExplorerFrame(hMod, true);
     }
     return hMod;
 }
@@ -199,9 +202,19 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod v2.0");
 
     // Create background worker thread for asynchronous protocol launching
-    g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
-    g_stopWorker = false;
+    g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
+    g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
+    
+    if (!g_launchEvent || !g_stopEvent) {
+        Wh_Log(L"Failed to create thread synchronization events.");
+        return FALSE;
+    }
+
     g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
+    if (!g_workerThread) {
+        Wh_Log(L"Failed to create worker thread.");
+        return FALSE;
+    }
 
     // Hook LoadLibraryExW from kernelbase.dll
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
@@ -226,7 +239,10 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing mod");
 
-    g_stopWorker = true;
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+
     if (g_workerThread) {
         WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
@@ -236,6 +252,11 @@ void Wh_ModUninit() {
     if (g_launchEvent) {
         CloseHandle(g_launchEvent);
         g_launchEvent = NULL;
+    }
+    
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
     }
 
     FreeTargetPidl();
