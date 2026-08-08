@@ -5,8 +5,7 @@
 // @version         1.0.0
 // @author          aubymori
 // @github          https://github.com/aubymori
-// @include         explorer.exe
-// @include         notepad.exe
+// @include         *
 // @compilerOptions -lversion
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -16,6 +15,9 @@
 # Windows XP Sorted Columns
 In Windows XP, list views in the Details view could show the sorted column in
 a different color. This mod restores that behavior.
+
+***NOTE: In order for these changes to be seen in Explorer, you must be using the legacy
+   SysListView32. The default DirectUI ItemsView will not be affected.***
 
 **Before**:
 
