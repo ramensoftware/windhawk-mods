@@ -17,6 +17,9 @@ Set a custom size and position for the new Widget Board on Windows 11.
 
 Allows you to override the default position and dimensions of the new WinUI 3 Widget Board (`WidgetBoard.exe`).
 
+![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/widget-board-size-position/wboard-size.png)
+_Example for making the Widget Board smaller_
+
 Width, height, and offsets are specified in DIPs (96-DPI logical pixels), so a
 700x600 setting becomes 1400x1200 native pixels on a 200% display.
 
