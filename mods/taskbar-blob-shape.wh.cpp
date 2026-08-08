@@ -16,7 +16,7 @@
 
 Adds a blob shape behind active taskbar buttons.
 
-![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo.gif)
+![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo2.gif)
 
 Based on **Taskbar Elastic WinUI Pill** and the unreleased **Taskbar Elastic
 Border** by **Lockframe**.
@@ -594,19 +594,20 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
 }
 
 // A system button counts as active while its flyout/experience is open.
-// Start, Task view and Widgets are ToggleButtons (IsChecked); for anything
-// that isn't, fall back to scanning the template root's visual state groups
-// for an open-state name. Two families exist: the tray controls
-// (OmniButton, ChevronIconView) report Checked/CheckedNormal/..., while the
-// shell's own flyout signal for the Experience buttons is
-// ActiveNormal/ActivePointerOver/ActivePressed on CommonStates — accepting
-// both means a future build where IsChecked stops tracking the flyout
-// degrades to the state-name path instead of going silent.
+// Start, Task view and Widgets are ToggleButtons: IsChecked is the primary
+// read, and an unchecked (or no-longer-tracking) toggle FALLS THROUGH to
+// the state-name scan below, so a future build where IsChecked stops
+// tracking the flyout degrades to the scan instead of going silent. The
+// scan accepts both state families: the tray controls (OmniButton,
+// ChevronIconView) report Checked/CheckedNormal/..., while the shell's
+// flyout signal for the Experience buttons is the exact
+// ActiveNormal/ActivePointerOver/ActivePressed set on CommonStates.
 bool IsSystemButtonChecked(FrameworkElement const& btn) {
     try {
         if (auto toggle = btn.try_as<winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton>()) {
             auto checked = toggle.IsChecked();
-            return checked && checked.Value();
+            if (checked && checked.Value()) return true;
+            // fall through to the state-name scan
         }
     } catch (...) {}
     try {
@@ -619,10 +620,14 @@ bool IsSystemButtonChecked(FrameworkElement const& btn) {
                 if (!st) continue;
                 auto stateName = st.Name();
                 std::wstring_view name{stateName};
-                // ("Inactive*" can't false-positive: starts_with is
-                // case-sensitive on the capital A.)
+                // Exact Active* names rather than a prefix match: now that
+                // checked toggles fall through to this scan, a prefix would
+                // read any unrelated Active-something state on some future
+                // template as "open".
                 if (name.find(L"Checked") != std::wstring_view::npos ||
-                    name.starts_with(L"Active")) {
+                    name == L"ActiveNormal" ||
+                    name == L"ActivePointerOver" ||
+                    name == L"ActivePressed") {
                     return true;
                 }
             }
@@ -694,6 +699,8 @@ TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
 struct BlobEntry;
 std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool createIfMissing = true);
+Grid GetHostRootGrid(winrt::Windows::UI::Xaml::FrameworkElement const& button);
+void SweepExistingButtons(Grid const& grid, const Settings& localSettings);
 void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, std::shared_ptr<BlobEntry> const& entry, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings);
 
 int8_t ClassifyButton(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
@@ -732,12 +739,25 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
         // kind whose toggle is off. Toggle-on later re-sweeps the hosts
         // (Wh_ModSettingsChanged), which creates the entries then.
         int8_t kind = ClassifyButton(button);
-        if (!IsKindEnabled(kind, localSettings)) return;
+        if (!IsKindEnabled(kind, localSettings)) {
+            // Still register this element's island as a sweep host: on a
+            // taskbar whose ONLY discovery trigger is a system button (a
+            // secondary monitor with no task-button activity), returning
+            // bare would kill tray and date/time discovery there — and the
+            // settings-change re-sweep could never recover it, because the
+            // island would not be in the host list at all. Terminates: the
+            // re-entrant RefreshBlob for this button hits the
+            // firstTime == false path in SweepExistingButtons.
+            if (kind != BlobEntry::KindDateTime && kind != BlobEntry::KindTray) {
+                if (auto grid = GetHostRootGrid(button)) {
+                    SweepExistingButtons(grid, localSettings);
+                }
+            }
+            return;
+        }
         entry = FindOrCreateEntry(button);
         if (!entry) return; // unloading
         entry->kind = kind;
-    } else if (entry->kind == BlobEntry::KindUnknown) {
-        entry->kind = ClassifyButton(button);
     }
 
     auto iconPanel = entry->iconPanel.get();
@@ -976,6 +996,13 @@ void TrayRefreshAll(Grid const& trayGrid, const Settings& localSettings) {
 // as the ongoing discovery event — the tray resizes exactly when
 // notification-area icons appear or disappear.
 void SweepTray(Grid const& trayGrid, const Settings& localSettings) {
+    // With both tray kinds disabled there is nothing to materialize, and
+    // registering the host would keep the depth-12 collection walk running
+    // on every tray resize for nothing. Safe to skip entirely: toggling
+    // either kind back on re-sweeps the taskbar hosts
+    // (Wh_ModSettingsChanged), which comes back through here.
+    if (!localSettings.DateTimeBlob && !localSettings.TrayButtonsBlob) return;
+
     bool firstTime = true;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
@@ -1050,9 +1077,27 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
     for (auto& orphan : orphans) {
         auto blob = orphan->blobShape.get();
         auto dispatcher = blob ? blob.Dispatcher() : nullptr;
-        if (dispatcher) {
-            // Stop the timer on its own UI thread, then remove the blob.
+        if (dispatcher && dispatcher.HasThreadAccess()) {
+            // Already on the blob's UI thread (the normal case — this runs
+            // from RefreshBlob). Inline is not just cheaper, it's the only
+            // variant the unload barrier covers: orphans are erased from
+            // g_blobEntries before this point, so a POSTED lambda would be
+            // invisible to Wh_ModBeforeUninit's pending count and could run
+            // after the DLL is gone. Inline removal is safe here — nothing
+            // above this call is iterating grid.Children() (TaskbarSweepBody
+            // has broken out of its child loop; TrayRefreshAll iterates a
+            // pre-collected vector).
+            if (orphan->restoreTimer) {
+                try { orphan->restoreTimer.Stop(); } catch (...) {}
+                orphan->restoreTimer = nullptr;
+            }
+            try {
+                ElementCompositionPreview::GetElementVisual(blob).Properties().StopAnimation(L"Translation");
+            } catch (...) {}
+            RemoveFromParentPanel(blob);
+        } else if (dispatcher) {
             dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [orphan, blob]() {
+                if (g_unloading) return; // the uninit cleanup restores natives itself
                 if (orphan->restoreTimer) {
                     try { orphan->restoreTimer.Stop(); } catch (...) {}
                     orphan->restoreTimer = nullptr;
@@ -1335,9 +1380,20 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         };
         bool attached = false;
         if (auto toggle = button.try_as<winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton>()) {
-            entry->checkedToken = toggle.Checked([refresh](auto const&, auto const&) { refresh(); });
-            entry->uncheckedToken = toggle.Unchecked([refresh](auto const&, auto const&) { refresh(); });
-            attached = true;
+            try {
+                entry->checkedToken = toggle.Checked([refresh](auto const&, auto const&) { refresh(); });
+                entry->uncheckedToken = toggle.Unchecked([refresh](auto const&, auto const&) { refresh(); });
+                attached = true;
+            } catch (...) {
+                // Partial subscription (Unchecked threw after Checked took):
+                // revoke it, or the retry would overwrite checkedToken and
+                // leave the first subscription firing forever, unrevokable —
+                // including at unload.
+                if (entry->checkedToken) {
+                    try { toggle.Checked(entry->checkedToken); } catch (...) {}
+                    entry->checkedToken = {};
+                }
+            }
         } else {
             try {
                 auto root = VisualTreeHelper::GetChildrenCount(button) > 0
