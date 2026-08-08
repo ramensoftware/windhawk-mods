@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.40
+// @version         1.41
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -770,6 +770,13 @@ std::wstring FindRenamedSibling(const std::wstring& oldPath, uint64_t fileId) {
 // from its desktop.ini as the "path,index" spec the Icon setting already
 // accepts. Empty when the folder has no custom icon.
 std::wstring ReadFolderCustomIcon(const std::wstring& folderPath) {
+    // GetPrivateProfileStringW opens the file, so an offline share blocks for
+    // the network timeout — on the Explorer UI thread in the pin flow. An empty
+    // spec is a valid entry: MakeButtonContent falls back to the folder's own
+    // shell icon.
+    if (IsLikelyRemotePath(folderPath)) {
+        return L"";
+    }
     std::wstring iniPath = folderPath + L"\\desktop.ini";
     WCHAR buf[1024]{};
     if (GetPrivateProfileStringW(L".ShellClassInfo", L"IconResource", L"", buf,
@@ -8939,8 +8946,16 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     } com;
 
     std::wstring path = GetSelectedPath(defView);
-    DWORD attrs =
-        path.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(path.c_str());
+    // This runs on the Explorer browser thread with that window's context menu
+    // waiting on us to return, and Explorer's own QueryContextMenu work is
+    // already done — a GetFileAttributesW on an offline share would freeze the
+    // whole window for the network timeout purely to decide whether to add our
+    // item. Degrade to no submenu, same as everywhere else the mod meets a
+    // remote path.
+    if (path.empty() || IsLikelyRemotePath(path)) {
+        return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
+    }
+    DWORD attrs = GetFileAttributesW(path.c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES) {
         return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
     }
