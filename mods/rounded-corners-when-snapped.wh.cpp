@@ -4,7 +4,7 @@
 // @description     Keeps window corners rounded when a window is snapped, without changing the window state
 // @version         1.0.0
 // @author          Alexey Lavrinenko
-// @github          https://github.com/YOUR-GITHUB-USERNAME
+// @github          https://github.com/leshaalexey
 // @license         GPL-3.0
 // @include         dwm.exe
 // @architecture    x86-64
