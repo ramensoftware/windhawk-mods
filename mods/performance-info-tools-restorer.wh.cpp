@@ -23,9 +23,21 @@
 This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.
 
 The mod has been tested on Windows 10 21H2, Windows 10 22H2 and Windows 11 25H2.
-## Screenshot
+## Screenshots
 
-![performance](https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/performance.png)
+The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
+
+### Windows 7 skin
+
+![Windows 7 skin](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows7perf.png)
+
+### Windows 8 skin
+
+![Windows 8 skin](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows8perf.png)
+
+### Windows Vista skin
+
+![Windows Vista skin](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsvistaperf.png)
 
 ## Features
 
@@ -46,7 +58,7 @@ The mod has been tested on Windows 10 21H2, Windows 10 22H2 and Windows 11 25H2.
 - The setup step (download + verification) runs on a background thread so it never blocks Explorer startup, and it is serialized across processes with a named mutex so two Explorer/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place.
 - The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang Explorer or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
 - If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart Explorer to retry).
-- The mod only stores files inside its own folder, `%ProgramData%\Windhawk\Engine\ModsWritable\performance-info-tools-restorer`, and never touches files it did not create.
+- The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through `Wh_GetModStoragePath`, so it also works with portable Windhawk installations.
 - All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.
 
 ## Known limitations
@@ -59,8 +71,8 @@ The mod has been tested on Windows 10 21H2, Windows 10 22H2 and Windows 11 25H2.
 ## Credits
 
 - **Cips** — Testing the mod on Windows 11 25H2
-- **susiked** — Testing the mod on Windows 10 22H2
-- **MzkO** - Testing the mod on Windows 10 22H2 and providing feedback
+- **susiked** — Testing the mod on Windows 10 22H2 and providing the Windows 8 skin screenshot
+- **MzKo** — Testing the mod on Windows 10 22H2, providing feedback, and providing the Windows Vista skin screenshot
 
 If any problems are encountered, please report them to the mod's author.
 */
@@ -69,7 +81,7 @@ If any problems are encountered, please report them to the mod's author.
 /*
 - language: auto
   $name: Page language
-  $description: Selects the language used by the restored page and its Control Panel tooltip. "Automatic" follows the current Windows UI language.
+  $description: This setting is used to select the language used by the restored page and its Control Panel tooltip. "Automatic" follows the current Windows UI language.
   $options:
     - auto: Automatic (Windows UI language)
     - en-US: English (United States)
@@ -89,7 +101,7 @@ If any problems are encountered, please report them to the mod's author.
 
 - pageSkin: win8
   $name: Page skin
-  $description: This setting changes the page skin/layout. Choose Windows 8 (default), Windows 7, or Windows Vista. The skin is applied in memory only and does not write or modify DLL resources on disk.
+  $description: This setting is used to change the page skin/layout. Choose Windows 8 (default), Windows 7, or Windows Vista. The skin is applied in memory only and does not write or modify DLL resources on disk.
   $options:
     - win8: Windows 8 layout (default)
     - win7: Windows 7 layout (more complete)
@@ -122,7 +134,6 @@ If any problems are encountered, please report them to the mod's author.
 // shares (or deletes) files created by other mods.
 // =============================================================================
 static const wchar_t* kDllRelativeName = L"PerfCenterCPL.dll";
-static const wchar_t* kStoreFolderName = L"performance-info-tools-restorer";
 
 // =============================================================================
 // EMBEDDED STRING CATALOG - No MUI file is generated or required
@@ -1293,19 +1304,17 @@ static void ReleaseLocalizedResourceModule() {
     ReleaseLocalizedResourceModuleLocked();
 }
 
-// The storage directory is scoped to this mod only.
+// The storage directory is scoped to this mod only. Windhawk resolves it for
+// both installed and portable deployments, so do not construct a ProgramData path.
 static std::wstring StoreDir() {
-    wchar_t base[MAX_PATH]{};
-    ExpandEnvironmentStringsW(L"%ProgramData%\\Windhawk\\Engine\\ModsWritable", base,
-                              MAX_PATH);
-    std::wstring root(base);
-    std::wstring dir = root + L"\\" + kStoreFolderName;
-    DWORD a = GetFileAttributesW(dir.c_str());
-    if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY)) {
-        CreateDirectoryW(root.c_str(), nullptr);
-        CreateDirectoryW(dir.c_str(), nullptr);
+    // Windows extended-length paths may contain up to 32,767 characters.
+    wchar_t path[32768] = {};
+    const size_t pathLength = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+    if (pathLength == 0 || pathLength >= ARRAYSIZE(path)) {
+        Wh_Log(L"Could not retrieve the mod storage path");
+        return {};
     }
-    return dir;
+    return path;
 }
 
 // -----------------------------------------------------------------------------
@@ -1341,6 +1350,15 @@ static void RunSetup() {
 
     DllVariant variant = ResolveSelectedVariant();
     std::wstring dir = StoreDir();
+    if (dir.empty()) {
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        Wh_Log(L"Performance Information and Tools is unavailable: Windhawk did not provide a mod storage path");
+        if (setupMutex) {
+            ReleaseMutex(setupMutex);
+            CloseHandle(setupMutex);
+        }
+        return;
+    }
     std::wstring outPath;
     bool ok = false;
 
@@ -2737,35 +2755,16 @@ static const wchar_t* VistaSoftwareForScoreText(MuiLanguage lang) {
 
 static std::wstring Win7PerfLinksXml() {
     MuiLanguage lang = GetCurrentEmbeddedLanguage();
-    std::wstring numbers = XmlAttrEscape(Win7NumbersMeanText(lang));
-    std::wstring improve = XmlAttrEscape(Win7ImproveText(lang));
-
-    std::wstring xml;
-    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_1)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
-    xml += LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers">)PC";
-    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_details_numbersmeanimg)" layoutpos="left" padding="rect(15rp, 0rp, 15rp, 0rp)" content="icon(99, 32rp, 32rp, library(imageres.dll))" accname="Question mark image"/>)PC";
-    xml += LR"PC(<element layout="filllayout()" layoutpos="top">)PC";
-    xml += LR"PC(<button class="cp_content_link" active="mouse|keyboard" layoutpos="left" content=")PC" + numbers + L"\"/>";
-    xml += LR"PC(</element></NavigateButton>)PC";
-    xml += LR"PC(</element>)PC";
-    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_2)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
-    xml += LR"PC(<NavigateButton id="atom(perfhub_page_description_container)" layout="borderlayout()" layoutpos="top" padding="rect(0rp, 0rp, 7rp, 0rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:tips">)PC";
-    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_details_improvesystemimg)" layoutpos="left" padding="rect(15rp, 0rp, 15rp, 0rp)" content="icon(99, 32rp, 32rp, library(imageres.dll))" accname="Question mark image"/>)PC";
-    xml += LR"PC(<button class="cp_content_link" active="mouse|keyboard" layoutpos="top" content=")PC" + improve + L"\"/>";
-    xml += LR"PC(</NavigateButton></element>)PC";
+    std::wstring xml = LR"PC(<element id="atom(perfhub_details_wincrslinks_1)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)"><NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers"><element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_details_numbersmeanimg)" layoutpos="left" padding="rect(15rp, 0rp, 15rp, 0rp)" content="icon(99, 32rp, 32rp, library(imageres.dll))" accname="Question mark image"/><element layout="filllayout()" layoutpos="top"><button class="cp_content_link" active="mouse|keyboard" layoutpos="left" content="%NUMBERS%"/></element></NavigateButton></element><element id="atom(perfhub_details_wincrslinks_2)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)"><NavigateButton id="atom(perfhub_page_description_container)" layout="borderlayout()" layoutpos="top" padding="rect(0rp, 0rp, 7rp, 0rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:tips"><element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_details_improvesystemimg)" layoutpos="left" padding="rect(15rp, 0rp, 15rp, 0rp)" content="icon(99, 32rp, 32rp, library(imageres.dll))" accname="Question mark image"/><button class="cp_content_link" active="mouse|keyboard" layoutpos="top" content="%IMPROVE%"/></NavigateButton></element>)PC";
+    ReplaceAll(xml, L"%NUMBERS%", XmlAttrEscape(Win7NumbersMeanText(lang)));
+    ReplaceAll(xml, L"%IMPROVE%", XmlAttrEscape(Win7ImproveText(lang)));
     return xml;
 }
 
 static std::wstring Win7MicrosoftUpsellXml() {
     MuiLanguage lang = GetCurrentEmbeddedLanguage();
-    std::wstring learnMore = XmlAttrEscape(Win7MicrosoftLinkText(lang));
-
-    std::wstring xml;
-    xml += LR"PC(<element id="atom(perfhub_upsell_mscontainer)" layoutpos="top" layout="borderlayout()" bordercolor="gtc(CONTROLPANELSTYLE,17,0,3821)" borderthickness="rect(1rp,1rp,1rp,1rp)" padding="rect(7rp,7rp,7rp,7rp)">)PC";
-    xml += LR"PC(<element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_upsell_mslogo)" layoutpos="left" padding="rect(0rp, 0rp, 15rp, 0rp)" content="icon(271, 40rp, 40rp, library(shell32.dll))" accname="Microsoft upsell image"/>)PC";
-    xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore"><element layout="filllayout()" layoutpos="top">)PC";
-    xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" content=")PC" + learnMore + L"\"/>";
-    xml += LR"PC(</element></NavigateButton></element>)PC";
+    std::wstring xml = LR"PC(<element id="atom(perfhub_upsell_mscontainer)" layoutpos="top" layout="borderlayout()" bordercolor="gtc(CONTROLPANELSTYLE,17,0,3821)" borderthickness="rect(1rp,1rp,1rp,1rp)" padding="rect(7rp,7rp,7rp,7rp)"><element sheet="perfhub_style" class="perfhub_nav_img" id="atom(perfhub_upsell_mslogo)" layoutpos="left" padding="rect(0rp, 0rp, 15rp, 0rp)" content="icon(271, 40rp, 40rp, library(shell32.dll))" accname="Microsoft upsell image"/><NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore"><element layout="filllayout()" layoutpos="top"><button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" content="%LEARN_MORE%"/></element></NavigateButton></element>)PC";
+    ReplaceAll(xml, L"%LEARN_MORE%", XmlAttrEscape(Win7MicrosoftLinkText(lang)));
     return xml;
 }
 
@@ -2800,33 +2799,23 @@ static std::wstring VistaStartHelpXml() {
 
 static std::wstring VistaPerfLinksXml() {
     MuiLanguage lang = GetCurrentEmbeddedLanguage();
-    std::wstring numbers = XmlAttrEscape(Win7NumbersMeanText(lang));
-    std::wstring scores = XmlAttrEscape(VistaLearnScoresText(lang));
-    std::wstring viewPrint = XmlAttrEscape(Win7ViewPrintText(lang));
     const bool rated = HasWinsatAssessmentData();
 
-    std::wstring xml;
-    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_1)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
+    std::wstring xml = LR"PC(<element id="atom(perfhub_details_wincrslinks_1)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">%RATED_SECTION%</element><element id="atom(perfhub_details_wincrslinks_2)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)"><NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore"><button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content="%SCORES%"/></NavigateButton><element layout="filllayout()"/></element>)PC";
+
+    std::wstring ratedSection;
     if (rated) {
-        xml += LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:viewprint">)PC";
-        xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + viewPrint + L"\"/>";
-        xml += LR"PC(</NavigateButton>)PC";
-        xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers">)PC";
-        xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + numbers + L"\"/>";
-        xml += LR"PC(</NavigateButton>)PC";
+        ratedSection = LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:viewprint"><button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content="%VIEWPRINT%"/></NavigateButton><NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers"><button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content="%NUMBERS%"/></NavigateButton>)PC";
     } else {
-        xml += LR"PC(<element layout="filllayout()"/>)PC";
-        xml += LR"PC(<NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers">)PC";
-        xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + numbers + L"\"/>";
-        xml += LR"PC(</NavigateButton>)PC";
+        ratedSection = LR"PC(<element layout="filllayout()"/><NavigateButton layoutpos="client" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:numbers"><button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content="%NUMBERS%"/></NavigateButton>)PC";
     }
-    xml += LR"PC(</element>)PC";
-    xml += LR"PC(<element id="atom(perfhub_details_wincrslinks_2)" layoutpos="top" layout="tablelayout(0,0, 0,2,-50, 1,2,-50)">)PC";
-    xml += LR"PC(<NavigateButton layoutpos="top" layout="flowlayout(0,2,0,2)" padding="rect(0rp,7rp,0rp,7rp)" shellexecute="%SystemRoot%\explorer.exe" shellexecuteparams="perfcenter-restorer:learnmore">)PC";
-    xml += LR"PC(<button sheet="cp_style" class="cp_content_link" cursor="hand" active="mouse|keyboard" layoutpos="left" content=")PC" + scores + L"\"/>";
-    xml += LR"PC(</NavigateButton>)PC";
-    xml += LR"PC(<element layout="filllayout()"/>)PC";
-    xml += LR"PC(</element>)PC";
+    ReplaceAll(ratedSection, L"%NUMBERS%", XmlAttrEscape(Win7NumbersMeanText(lang)));
+    if (rated) {
+        ReplaceAll(ratedSection, L"%VIEWPRINT%", XmlAttrEscape(Win7ViewPrintText(lang)));
+    }
+
+    ReplaceAll(xml, L"%RATED_SECTION%", ratedSection);
+    ReplaceAll(xml, L"%SCORES%", XmlAttrEscape(VistaLearnScoresText(lang)));
     return xml;
 }
 
@@ -3597,11 +3586,11 @@ void Wh_ModUninit(void) {
 
         if (Wh_GetIntSetting(L"keepFilesOnDisable") == 0) {
             std::wstring dir = StoreDir();
-            RemoveOwnFiles(dir, false);
+            if (!dir.empty()) RemoveOwnFiles(dir, false);
             Wh_Log(L"Mod disabled: DLL unloaded and mod-owned files removed");
         } else {
             std::wstring dir = StoreDir();
-            RemoveOwnFiles(dir, true);
+            if (!dir.empty()) RemoveOwnFiles(dir, true);
             Wh_Log(L"Mod disabled: base files kept; private resource module removed");
         }
         g_keyTracker.ClearWithoutFreeing();
