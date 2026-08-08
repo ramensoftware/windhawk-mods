@@ -1,11 +1,13 @@
 // ==WindhawkMod==
 // @id              quick-launch-media-panel
 // @name            Quick Launch & Media Panel
-// @description     A modern top-center desktop panel with configurable app shortcuts, drag and drop, and Windows media controls.
-// @version         2.0.2
+// @name:fr-FR      Panneau de lancement rapide et multimédia
+// @description     A modern desktop panel with configurable app shortcuts, drag and drop, and Windows media controls.
+// @description:fr-FR Un panneau de bureau moderne avec raccourcis configurables, glisser-déposer et commandes multimédias Windows.
+// @version         2.1.0
 // @author          Spartacus
 // @github          https://github.com/spartaaacus
-// @include         explorer.exe
+// @include         windhawk.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lgdiplus -lgdi32 -luser32 -lshell32 -lshlwapi -ldwmapi -lcomdlg32 -luuid
 // @license         MIT
@@ -24,13 +26,14 @@ A modern, native Windows panel placed at the top-center of the selected monitor.
 - Dropped shortcuts are saved for the current Windows user.
 - Live title/artist and previous, play/pause, next controls through Windows Global System Media Transport Controls.
 - Works with Spotify and with YouTube Music when the browser exposes a Windows media session.
-- Is owned by the Windows desktop and locked to the bottom of the normal window stack.
+- Runs in a dedicated Windhawk tool process instead of being injected into Explorer.
+- Attaches to the Windows desktop and automatically recovers after Explorer restarts.
 
 ## Usage
 
 - Left-click a populated tile to launch it.
 - Drag a file or shortcut onto a tile to assign it.
-- Right-click a tile to clear its dropped assignment and return to the corresponding Windhawk setting.
+- Right-click a populated tile to remove its saved assignment. On page 1, the corresponding Windhawk setting is used again.
 - Drag any empty area of the panel to move it. Its position is remembered.
 - Hold Ctrl and use the mouse wheel to resize the shortcut tiles.
 - Right-click an empty area for resize and recenter commands.
@@ -50,102 +53,159 @@ already published by the playing application to Windows.
 
 // ==WindhawkModSettings==
 /*
-- language: fr
-  $name: Language / Langue
+- language: en-US
+  $name: Language
+  $name:fr-FR: Langue
   $description: Language used by the panel and its context menu.
+  $description:fr-FR: Langue utilisée par le panneau et son menu contextuel.
   $options:
-    - fr: Français
     - en-US: English (US)
+    - fr: French
+  $options:fr-FR:
+    - en-US: Anglais (US)
+    - fr: Français
 - theme: midnight
-  $name: Theme / Thème
+  $name: Theme
+  $name:fr-FR: Thème
   $description: Choose a color palette. Select Custom to use the background and accent colors below.
+  $description:fr-FR: Choisissez une palette. Sélectionnez Personnalisé pour utiliser les couleurs ci-dessous.
   $options:
-    - midnight: Midnight violet / Minuit violet
+    - midnight: Midnight violet
     - graphite: Graphite
-    - ocean: Ocean blue / Bleu océan
-    - emerald: Emerald / Émeraude
+    - ocean: Ocean blue
+    - emerald: Emerald
     - rose: Rose
-    - automatic: Automatic / Automatique
-    - custom: Custom / Personnalisé
+    - automatic: Automatic
+    - custom: Custom
+  $options:fr-FR:
+    - midnight: Violet minuit
+    - graphite: Graphite
+    - ocean: Bleu océan
+    - emerald: Émeraude
+    - rose: Rose
+    - automatic: Automatique
+    - custom: Personnalisé
 - pageCount: 3
-  $name: Number of pages / Nombre de pages
+  $name: Number of pages
+  $name:fr-FR: Nombre de pages
   $description: Between 1 and 5 shortcut pages.
+  $description:fr-FR: Entre 1 et 5 pages de raccourcis.
 - lockPosition: false
-  $name: Lock position / Verrouiller la position
+  $name: Lock position
+  $name:fr-FR: Verrouiller la position
 - tileShape: rounded
-  $name: Tile shape / Forme des cases
+  $name: Tile shape
+  $name:fr-FR: Forme des cases
   $options:
-    - rounded: Rounded / Arrondie
-    - circle: Circle / Cercle
-    - square: Square / Carrée
+    - rounded: Rounded
+    - circle: Circle
+    - square: Square
     - minimal: Minimal
+  $options:fr-FR:
+    - rounded: Arrondie
+    - circle: Cercle
+    - square: Carrée
+    - minimal: Minimale
 - animations: true
   $name: Animations
 - autoThemeSource: system
-  $name: Automatic theme source / Source du thème automatique
+  $name: Automatic theme source
+  $name:fr-FR: Source du thème automatique
   $options:
-    - system: Windows accent / Accent Windows
-    - wallpaper: Wallpaper / Fond d'écran
-    - media: Album artwork / Pochette
+    - system: Windows accent
+    - wallpaper: Wallpaper
+    - media: Album artwork
+  $options:fr-FR:
+    - system: Accent Windows
+    - wallpaper: Fond d'écran
+    - media: Pochette de l'album
 - shortcutCount: 4
   $name: Number of shortcuts
+  $name:fr-FR: Nombre de raccourcis
   $description: Number of visible shortcut tiles (1 to 8).
+  $description:fr-FR: Nombre de cases de raccourcis visibles (1 à 8).
 - columns: 4
   $name: Columns
+  $name:fr-FR: Colonnes
   $description: Number of tiles per row (1 to 8).
+  $description:fr-FR: Nombre de cases par ligne (1 à 8).
 - shortcut1: ""
   $name: Shortcut 1
+  $name:fr-FR: Raccourci 1
   $description: Full path, URL, or shell target. You can also drag a file onto the tile.
+  $description:fr-FR: Chemin complet, URL ou cible Shell. Vous pouvez aussi déposer un fichier sur la case.
 - shortcut2: ""
   $name: Shortcut 2
+  $name:fr-FR: Raccourci 2
 - shortcut3: ""
   $name: Shortcut 3
+  $name:fr-FR: Raccourci 3
 - shortcut4: ""
   $name: Shortcut 4
+  $name:fr-FR: Raccourci 4
 - shortcut5: ""
   $name: Shortcut 5
+  $name:fr-FR: Raccourci 5
 - shortcut6: ""
   $name: Shortcut 6
+  $name:fr-FR: Raccourci 6
 - shortcut7: ""
   $name: Shortcut 7
+  $name:fr-FR: Raccourci 7
 - shortcut8: ""
   $name: Shortcut 8
+  $name:fr-FR: Raccourci 8
 - tileSize: 64
   $name: Tile size
+  $name:fr-FR: Taille des cases
   $description: Tile size in logical pixels (40 to 112). Ctrl+mouse wheel also changes it directly.
+  $description:fr-FR: Taille en pixels logiques (40 à 112). Ctrl+molette la modifie directement.
 - gap: 12
   $name: Tile spacing
+  $name:fr-FR: Espacement des cases
   $description: Gap between tiles in logical pixels (6 to 24).
+  $description:fr-FR: Espacement en pixels logiques (6 à 24).
 - offsetY: 18
   $name: Vertical offset
+  $name:fr-FR: Décalage vertical
   $description: Distance from the top edge of the selected monitor.
+  $description:fr-FR: Distance depuis le bord supérieur de l'écran choisi.
 - monitor: primary
   $name: Monitor
+  $name:fr-FR: Écran
   $options:
     - primary: Primary monitor
     - cursor: Monitor containing the mouse pointer
+  $options:fr-FR:
+    - primary: Écran principal
+    - cursor: Écran contenant le pointeur
 - perMonitorLayouts: false
-  $name: Separate layout per monitor / Disposition distincte par écran
+  $name: Separate layout per monitor
+  $name:fr-FR: Disposition distincte par écran
   $description: Stores independent pages and shortcuts for each monitor.
+  $description:fr-FR: Enregistre des pages et raccourcis indépendants pour chaque écran.
 - showLabels: true
   $name: Show shortcut labels
+  $name:fr-FR: Afficher le nom des raccourcis
 - backgroundColor: "#151821"
   $name: Background color
+  $name:fr-FR: Couleur d'arrière-plan
 - accentColor: "#7C5CFC"
   $name: Accent color
+  $name:fr-FR: Couleur d'accentuation
 - opacity: 92
   $name: Panel opacity
+  $name:fr-FR: Opacité du panneau
   $description: From 45 to 100 percent.
+  $description:fr-FR: De 45 à 100 pour cent.
 - cornerRadius: 22
   $name: Corner radius
+  $name:fr-FR: Rayon des coins
 */
 // ==/WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#ifndef UNICODE
-#define UNICODE
-#endif
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
@@ -158,13 +218,12 @@ already published by the playing application to Windows.
 #include <endpointvolume.h>
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <climits>
 #include <cwctype>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 #include <winrt/base.h>
@@ -180,8 +239,12 @@ using PlaybackStatus = winrt::Windows::Media::Control::GlobalSystemMediaTranspor
 namespace {
 
 constexpr wchar_t kClassName[] = L"Windhawk.QuickLaunchMediaPanel";
+constexpr wchar_t kSinkClassName[] = L"Windhawk.QuickLaunchMediaPanel.Sink";
+constexpr wchar_t kPromptClassName[] = L"Windhawk.QuickLaunchMediaPanel.Prompt";
 constexpr UINT WM_APP_MEDIA = WM_APP + 40;
 constexpr UINT WM_APP_RELOAD = WM_APP + 41;
+constexpr UINT WM_APP_QUIT = WM_APP + 42;
+constexpr UINT_PTR kDesktopTimer = 1;
 constexpr int kMaxShortcuts = 8;
 constexpr int kMaxPages = 5;
 
@@ -191,7 +254,7 @@ enum class AutoThemeSource { System, Wallpaper, Media };
 struct Settings {
     int count = 4, columns = 4, tile = 64, gap = 12, offsetY = 18;
     int opacity = 92, radius = 22, pageCount = 3;
-    bool labels = true, cursorMonitor = false, french = true, perMonitorLayouts = false;
+    bool labels = true, cursorMonitor = false, french = false, perMonitorLayouts = false;
     bool lockPosition = false, animations = true;
     TileShape tileShape = TileShape::Rounded;
     AutoThemeSource autoThemeSource = AutoThemeSource::System;
@@ -204,13 +267,13 @@ struct Settings {
 struct MediaState {
     bool available = false, playing = false;
     std::wstring title, artist, sourceId;
-    int64_t positionTicks = 0, endTicks = 0;
+    int64_t startTicks = 0, positionTicks = 0, endTicks = 0;
     std::vector<uint8_t> artwork;
     std::vector<std::pair<std::wstring, std::wstring>> sessions;
 };
 
 struct ShortcutData {
-    std::wstring path, label, arguments, iconPath;
+    std::wstring path, label, arguments, iconPath, resolvedPath;
     COLORREF color = 0;
     bool customColor = false;
     bool runAsAdmin = false;
@@ -219,19 +282,29 @@ struct ShortcutData {
 Settings g_settings;
 MediaState g_media;
 std::mutex g_mediaMutex;
+std::mutex g_mediaActionMutex;
 std::array<std::wstring, kMaxShortcuts> g_paths;
 std::array<ShortcutData, kMaxShortcuts> g_shortcuts;
 std::array<HICON, kMaxShortcuts> g_icons{};
+std::array<std::unique_ptr<Bitmap>, kMaxShortcuts> g_iconBitmaps;
+std::array<HWND, kMaxShortcuts> g_runningWindows{};
+HINSTANCE g_hInst = nullptr;
 HWND g_hwnd = nullptr;
+HWND g_sinkWnd = nullptr;
+HWND g_modalDialog = nullptr;
 HWND g_desktopHost = nullptr;
 IDropTarget* g_dropTarget = nullptr;
 bool g_dropRegistered = false;
-HANDLE g_uiThread = nullptr, g_mediaThread = nullptr, g_stopEvent = nullptr;
-std::atomic<bool> g_running = false;
-std::atomic<int> g_asyncOperations = 0;
-struct AsyncOperationGuard { ~AsyncOperationGuard(){--g_asyncOperations;} };
+bool g_uiInitialized = false;
+HANDLE g_uiThread = nullptr;
+DWORD g_uiThreadId = 0;
+HANDLE g_readyEvent = nullptr;
+HANDLE g_mediaThread = nullptr;
+HANDLE g_stopEvent = nullptr;
+HANDLE g_mediaActionEvent = nullptr;
 ULONG_PTR g_gdiplusToken = 0;
 int g_width = 420, g_height = 210, g_hover = -1;
+UINT g_dpi = 96;
 bool g_dragging = false;
 POINT g_dragStart{};
 RECT g_dragWindowStart{};
@@ -239,15 +312,46 @@ int g_savedX = INT_MIN, g_savedY = INT_MIN;
 int g_currentPage = 0;
 std::wstring g_selectedMediaSession;
 std::wstring g_layoutMonitorSuffix = L"primary";
+std::wstring g_stateFile;
+std::wstring g_currentPageName;
 int g_pressedTile = -1;
 POINT g_tilePressPoint{};
 bool g_reordering = false;
 float g_pageAnimation = 1.0f;
+size_t g_lastArtworkHash = 0;
+COLORREF g_cachedArtworkAccent = RGB(124, 92, 252);
+
+HDC g_renderDc = nullptr;
+HBITMAP g_renderBitmap = nullptr;
+HBITMAP g_renderOldBitmap = nullptr;
+void* g_renderBits = nullptr;
+int g_renderWidth = 0;
+int g_renderHeight = 0;
+
+enum class MediaActionKind { Previous, Toggle, Next, Seek, Volume };
+struct MediaAction {
+    MediaActionKind kind;
+    double value = 0;
+};
+std::vector<MediaAction> g_mediaActions;
 
 void Render();
-HWND FindRunningWindow(const std::wstring& rawPath);
+void LoadAssignments();
+void PositionWindow();
+void LayoutMetrics();
+std::wstring ResolveExecutable(const std::wstring& path);
 
 int Clamp(int value, int lo, int hi) { return std::max(lo, std::min(hi, value)); }
+
+int Scale(int value) { return MulDiv(value, static_cast<int>(g_dpi), 96); }
+int PixelWidth() { return Scale(g_width); }
+int PixelHeight() { return Scale(g_height); }
+
+POINT ToLogicalPoint(POINT point) {
+    point.x = MulDiv(point.x, 96, static_cast<int>(g_dpi));
+    point.y = MulDiv(point.y, 96, static_cast<int>(g_dpi));
+    return point;
+}
 
 std::wstring GetStringSetting(const wchar_t* name) {
     PCWSTR value = Wh_GetStringSetting(name);
@@ -265,25 +369,20 @@ COLORREF ParseColor(std::wstring value, COLORREF fallback) {
     return RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
 }
 
-std::wstring StateFile() {
+bool InitializeStateFile() {
     wchar_t storage[MAX_PATH]{};
-    if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) > 0) {
-        CreateDirectoryW(storage, nullptr);
-        std::wstring official = std::wstring(storage) + L"\\layout.ini";
-        if (GetFileAttributesW(official.c_str()) == INVALID_FILE_ATTRIBUTES) {
-            wchar_t oldDir[MAX_PATH]{};
-            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, oldDir))) {
-                std::wstring oldFile = std::wstring(oldDir) + L"\\Windhawk\\quick-launch-media-panel.ini";
-                CopyFileW(oldFile.c_str(), official.c_str(), TRUE);
-            }
-        }
-        return official;
+    if (Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) <= 0) {
+        Wh_Log(L"Wh_GetModStoragePath failed");
+        g_stateFile.clear();
+        return false;
     }
-    wchar_t dir[MAX_PATH]{};
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, dir))) return L"";
-    std::wstring folder = std::wstring(dir) + L"\\Windhawk";
-    CreateDirectoryW(folder.c_str(), nullptr);
-    return folder + L"\\quick-launch-media-panel.ini";
+    CreateDirectoryW(storage, nullptr);
+    g_stateFile = std::wstring(storage) + L"\\layout.ini";
+    return true;
+}
+
+const std::wstring& StateFile() {
+    return g_stateFile;
 }
 
 void LoadSettings() {
@@ -340,13 +439,18 @@ void LoadSettings() {
 }
 
 void DestroyIcons() {
-    for (auto& icon : g_icons) { if (icon) DestroyIcon(icon); icon = nullptr; }
+    for (auto& bitmap : g_iconBitmaps) bitmap.reset();
+    for (auto& icon : g_icons) {
+        if (icon) DestroyIcon(icon);
+        icon = nullptr;
+    }
 }
 
-std::wstring ProfilePageSection() {
-    // Keep the previous default-profile section name to preserve existing pages.
-    std::wstring section=L"profile.default.page." + std::to_wstring(g_currentPage + 1);
-    if(g_settings.perMonitorLayouts)section+=L".monitor."+g_layoutMonitorSuffix;
+std::wstring PageSection() {
+    std::wstring section = L"page." + std::to_wstring(g_currentPage + 1);
+    if (g_settings.perMonitorLayouts) {
+        section += L".monitor." + g_layoutMonitorSuffix;
+    }
     return section;
 }
 
@@ -368,7 +472,7 @@ void WriteIniString(const std::wstring& section, const std::wstring& key,
 
 void SaveShortcut(int slot) {
     if (slot < 0 || slot >= kMaxShortcuts) return;
-    const std::wstring section = ProfilePageSection();
+    const std::wstring section = PageSection();
     const std::wstring n = std::to_wstring(slot + 1);
     const ShortcutData& s = g_shortcuts[slot];
     WriteIniString(section, L"path" + n, s.path);
@@ -377,20 +481,34 @@ void SaveShortcut(int slot) {
     WriteIniString(section, L"icon" + n, s.iconPath);
     WriteIniString(section, L"color" + n, s.customColor ? std::to_wstring(s.color) : L"");
     WriteIniString(section, L"admin" + n, s.runAsAdmin ? L"1" : L"0");
-    WriteIniString(section, L"configured" + n, L"1");
+}
+
+void ClearShortcutOverride(int slot) {
+    if (slot < 0 || slot >= kMaxShortcuts || StateFile().empty()) return;
+    const std::wstring section = PageSection();
+    const std::wstring n = std::to_wstring(slot + 1);
+    const wchar_t* prefixes[] = {L"path", L"label", L"arguments", L"icon",
+                                 L"color", L"admin"};
+    for (const wchar_t* prefix : prefixes) {
+        const std::wstring key = std::wstring(prefix) + n;
+        WritePrivateProfileStringW(section.c_str(), key.c_str(), nullptr,
+                                   StateFile().c_str());
+    }
 }
 
 void LoadAssignments() {
     DestroyIcons();
-    const std::wstring section = ProfilePageSection();
+    const std::wstring section = PageSection();
+    g_currentPageName = ReadIniString(section, L"name");
+    if (g_currentPageName.empty()) {
+        g_currentPageName = L"Page " + std::to_wstring(g_currentPage + 1);
+    }
     for (int i = 0; i < kMaxShortcuts; ++i) {
         const std::wstring n = std::to_wstring(i + 1);
         ShortcutData item;
         item.path = ReadIniString(section, L"path" + n);
-        // Migrate the v1 default-profile first page transparently.
-        bool explicitlyConfigured=ReadIniString(section,L"configured"+n)==L"1";
-        if (item.path.empty() && !explicitlyConfigured && g_currentPage == 0) {
-            item.path = ReadIniString(L"shortcuts", L"slot" + n, g_settings.defaults[i]);
+        if (item.path.empty() && g_currentPage == 0) {
+            item.path = g_settings.defaults[i];
         }
         item.label = ReadIniString(section, L"label" + n);
         item.arguments = ReadIniString(section, L"arguments" + n);
@@ -401,13 +519,19 @@ void LoadAssignments() {
             item.customColor = true;
         }
         item.runAsAdmin = ReadIniString(section, L"admin" + n) == L"1";
+        item.resolvedPath = ResolveExecutable(item.path);
         g_shortcuts[i] = std::move(item);
         g_paths[i] = g_shortcuts[i].path;
         std::wstring iconSource = g_shortcuts[i].iconPath.empty() ? g_paths[i] : g_shortcuts[i].iconPath;
         if (!iconSource.empty()) {
             SHFILEINFOW info{};
-            if (SHGetFileInfoW(iconSource.c_str(), 0, &info, sizeof(info), SHGFI_ICON | SHGFI_LARGEICON)) g_icons[i] = info.hIcon;
+            if (SHGetFileInfoW(iconSource.c_str(), 0, &info, sizeof(info),
+                               SHGFI_ICON | SHGFI_LARGEICON)) {
+                g_icons[i] = info.hIcon;
+                g_iconBitmaps[i] = std::make_unique<Bitmap>(g_icons[i]);
+            }
         }
+        g_runningWindows[i] = nullptr;
     }
 }
 
@@ -429,13 +553,37 @@ std::wstring MonitorStorageSuffix(HMONITOR monitor) {
     std::wstring key=mi.szDevice;for(wchar_t& c:key)if(!iswalnum(c))c=L'_';return key;
 }
 
+HMONITOR SelectedMonitor() {
+    if (g_settings.cursorMonitor) {
+        POINT cursor{};
+        GetCursorPos(&cursor);
+        return MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    }
+    POINT origin{};
+    return MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+}
+
+UINT DpiForMonitor(HMONITOR monitor) {
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    static HMODULE shcore = LoadLibraryW(L"shcore.dll");
+    static auto getDpiForMonitor = shcore ? reinterpret_cast<GetDpiForMonitor_t>(
+                                               GetProcAddress(shcore, "GetDpiForMonitor"))
+                                         : nullptr;
+    UINT x = 96;
+    UINT y = 96;
+    if (getDpiForMonitor &&
+        SUCCEEDED(getDpiForMonitor(monitor, 0, &x, &y))) {
+        return x;
+    }
+    return 96;
+}
+
 void LoadPersistentUiState() {
     const std::wstring ini = StateFile();
     if (ini.empty()) return;
     int tileOverride = GetPrivateProfileIntW(L"ui", L"tileSize", -1, ini.c_str());
     if (tileOverride >= 40 && tileOverride <= 112) g_settings.tile = tileOverride;
-    POINT cursor{};if(g_settings.cursorMonitor)GetCursorPos(&cursor);
-    HMONITOR monitor=MonitorFromPoint(cursor,g_settings.cursorMonitor?MONITOR_DEFAULTTONEAREST:MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR monitor = SelectedMonitor();
     std::wstring suffix=MonitorStorageSuffix(monitor);
     g_layoutMonitorSuffix=suffix;
     g_savedX = GetPrivateProfileIntW(L"ui", (L"windowX."+suffix).c_str(), GetPrivateProfileIntW(L"ui",L"windowX",INT_MIN,ini.c_str()), ini.c_str());
@@ -504,10 +652,10 @@ BOOL CALLBACK FindDesktopHostProc(HWND hwnd, LPARAM lParam) {
 
 HWND FindDesktopHost() {
     HWND progman = FindWindowW(L"Progman", nullptr);
-    if (progman) {
-        DWORD_PTR ignored = 0;
-        SendMessageTimeoutW(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, &ignored);
-    }
+    if (!progman) return nullptr;
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(progman, 0x052C, 0, 0,
+                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &ignored);
     HWND host = nullptr;
     EnumWindows(FindDesktopHostProc, reinterpret_cast<LPARAM>(&host));
     return host ? host : progman;
@@ -515,24 +663,9 @@ HWND FindDesktopHost() {
 
 void OpenWindhawk() {
     wchar_t path[MAX_PATH]{};
-    HKEY key = nullptr;
-    DWORD bytes = sizeof(path);
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Windhawk.exe",
-                      0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
-        RegQueryValueExW(key, nullptr, nullptr, nullptr,
-                         reinterpret_cast<BYTE*>(path), &bytes);
-        RegCloseKey(key);
-    }
-    if (!path[0]) {
-        wchar_t programFiles[MAX_PATH]{};
-        ExpandEnvironmentStringsW(L"%ProgramFiles%", programFiles, ARRAYSIZE(programFiles));
-        swprintf_s(path, L"%s\\Windhawk\\Windhawk.exe", programFiles);
-    }
-    if (GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
+    DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (length > 0 && length < ARRAYSIZE(path)) {
         ShellExecuteW(nullptr, L"open", path, nullptr, nullptr, SW_SHOWNORMAL);
-    } else {
-        ShellExecuteW(nullptr, L"open", L"windhawk.exe", nullptr, nullptr, SW_SHOWNORMAL);
     }
 }
 
@@ -592,9 +725,9 @@ public:
         FORMATETC format{CF_HDROP,nullptr,DVASPECT_CONTENT,-1,TYMED_HGLOBAL};STGMEDIUM medium{};
         if(!object||FAILED(object->GetData(&format,&medium))){if(effect)*effect=DROPEFFECT_NONE;return S_OK;}
         HDROP drop=static_cast<HDROP>(GlobalLock(medium.hGlobal));
-        POINT client{point.x,point.y};ScreenToClient(g_hwnd,&client);int tile=HitTile(client);
+        POINT client{point.x,point.y};ScreenToClient(g_hwnd,&client);client=ToLogicalPoint(client);int tile=HitTile(client);
         bool accepted=false;
-        if(drop&&tile>=0){wchar_t path[32768]{};if(DragQueryFileW(drop,0,path,ARRAYSIZE(path))){g_shortcuts[tile]=ShortcutData{};SaveDroppedPath(tile,path);LoadAssignments();Render();accepted=true;}}
+        if(drop&&tile>=0){std::vector<wchar_t> path(32768);if(DragQueryFileW(drop,0,path.data(),static_cast<UINT>(path.size()))){g_shortcuts[tile]=ShortcutData{};SaveDroppedPath(tile,path.data());LoadAssignments();Render();accepted=true;}}
         if(drop)GlobalUnlock(medium.hGlobal);ReleaseStgMedium(&medium);
         if(accepted)SelectEffect(effect);else if(effect)*effect=DROPEFFECT_NONE;return S_OK;
     }
@@ -610,9 +743,7 @@ RECT PreviousPageRect() { return {18, 12, 48, 34}; }
 RECT NextPageRect() { return {g_width - 48, 12, g_width - 18, 34}; }
 
 std::wstring CurrentPageName() {
-    std::wstring name = ReadIniString(ProfilePageSection(), L"name");
-    if (!name.empty()) return name;
-    return (g_settings.french ? L"Page " : L"Page ") + std::to_wstring(g_currentPage + 1);
+    return g_currentPageName;
 }
 
 void SwitchPage(int delta) {
@@ -627,23 +758,24 @@ void SwitchPage(int delta) {
 }
 
 void PositionWindow() {
-    POINT pt{};
-    if (g_settings.cursorMonitor) GetCursorPos(&pt);
-    HMONITOR monitor = g_settings.cursorMonitor ? MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY) : MonitorFromPoint({0,0}, MONITOR_DEFAULTTOPRIMARY);
+    if (!g_hwnd) return;
+    HMONITOR monitor = SelectedMonitor();
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(monitor, &mi);
-    int x = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - g_width) / 2;
-    int y = mi.rcWork.top + g_settings.offsetY;
+    const int width = PixelWidth();
+    const int height = PixelHeight();
+    int x = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - width) / 2;
+    int y = mi.rcWork.top + Scale(g_settings.offsetY);
     if (g_savedX != INT_MIN && g_savedY != INT_MIN) {
         x = g_savedX;
         y = g_savedY;
-        x = Clamp(x, mi.rcWork.left, std::max(mi.rcWork.left, mi.rcWork.right - g_width));
-        y = Clamp(y, mi.rcWork.top, std::max(mi.rcWork.top, mi.rcWork.bottom - g_height));
+        x = Clamp(x, mi.rcWork.left,
+                  std::max(mi.rcWork.left, mi.rcWork.right - width));
+        y = Clamp(y, mi.rcWork.top,
+                  std::max(mi.rcWork.top, mi.rcWork.bottom - height));
     }
-    // The panel is an owned top-level window. HWND_BOTTOM puts it at the lowest
-    // legal position, immediately above its desktop owner and below normal apps.
-    SetWindowPos(g_hwnd, HWND_BOTTOM, x, y, g_width, g_height,
+    SetWindowPos(g_hwnd, HWND_BOTTOM, x, y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER);
 }
 
@@ -715,22 +847,83 @@ void ApplyAutomaticTheme() {
     COLORREF accent=RGB(124,92,252);
     if(g_settings.autoThemeSource==AutoThemeSource::System){DWORD color=0;BOOL opaque=FALSE;if(SUCCEEDED(DwmGetColorizationColor(&color,&opaque)))accent=RGB((color>>16)&255,(color>>8)&255,color&255);}
     else if(g_settings.autoThemeSource==AutoThemeSource::Wallpaper){wchar_t path[MAX_PATH]{};if(SystemParametersInfoW(SPI_GETDESKWALLPAPER,ARRAYSIZE(path),path,0)&&path[0]){Bitmap wallpaper(path);accent=AverageBitmap(wallpaper,accent);}}
-    else {std::vector<uint8_t> art;{std::lock_guard lock(g_mediaMutex);art=g_media.artwork;}accent=AccentFromArtwork(art,accent);}
+    else {
+        std::vector<uint8_t> art;
+        {std::lock_guard lock(g_mediaMutex);art=g_media.artwork;}
+        size_t hash = 1469598103934665603ULL;
+        for (uint8_t byte : art) {
+            hash ^= byte;
+            hash *= 1099511628211ULL;
+        }
+        if (!art.empty() && hash != g_lastArtworkHash) {
+            g_cachedArtworkAccent = AccentFromArtwork(art, accent);
+            g_lastArtworkHash = hash;
+        }
+        accent = art.empty() ? accent : g_cachedArtworkAccent;
+    }
     g_settings.accent=accent;
     g_settings.background=RGB(10+GetRValue(accent)/10,12+GetGValue(accent)/10,15+GetBValue(accent)/10);
 }
 
+void DestroyRenderSurface() {
+    if (g_renderDc && g_renderOldBitmap) {
+        SelectObject(g_renderDc, g_renderOldBitmap);
+    }
+    if (g_renderBitmap) DeleteObject(g_renderBitmap);
+    if (g_renderDc) DeleteDC(g_renderDc);
+    g_renderDc = nullptr;
+    g_renderBitmap = nullptr;
+    g_renderOldBitmap = nullptr;
+    g_renderBits = nullptr;
+    g_renderWidth = 0;
+    g_renderHeight = 0;
+}
+
+bool EnsureRenderSurface(int width, int height) {
+    if (g_renderDc && g_renderWidth == width && g_renderHeight == height) {
+        return true;
+    }
+    DestroyRenderSurface();
+    HDC screen = GetDC(nullptr);
+    if (!screen) return false;
+    g_renderDc = CreateCompatibleDC(screen);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = width;
+    bi.bmiHeader.biHeight = -height;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    g_renderBitmap = CreateDIBSection(screen, &bi, DIB_RGB_COLORS,
+                                      &g_renderBits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!g_renderDc || !g_renderBitmap || !g_renderBits) {
+        DestroyRenderSurface();
+        return false;
+    }
+    g_renderOldBitmap =
+        static_cast<HBITMAP>(SelectObject(g_renderDc, g_renderBitmap));
+    g_renderWidth = width;
+    g_renderHeight = height;
+    return true;
+}
+
 void Render() {
     if (!g_hwnd) return;
-    HDC screen = GetDC(nullptr), memory = CreateCompatibleDC(screen);
-    BITMAPINFO bi{}; bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); bi.bmiHeader.biWidth = g_width; bi.bmiHeader.biHeight = -g_height;
-    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr; HBITMAP bitmap = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    HGDIOBJ old = SelectObject(memory, bitmap);
-    Graphics g(memory); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-    BYTE alpha = static_cast<BYTE>(255 * g_settings.opacity / 100);
+    const int pixelWidth = PixelWidth();
+    const int pixelHeight = PixelHeight();
+    if (!EnsureRenderSurface(pixelWidth, pixelHeight)) return;
+    memset(g_renderBits, 0, static_cast<size_t>(pixelWidth) * pixelHeight * 4);
+    Bitmap surface(pixelWidth, pixelHeight, pixelWidth * 4,
+                   PixelFormat32bppPARGB,
+                   static_cast<BYTE*>(g_renderBits));
+    Graphics g(&surface);
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+    const REAL scale = static_cast<REAL>(g_dpi) / 96.0f;
+    g.ScaleTransform(scale, scale);
     RoundRectFill(g, RectF(0, 0, (REAL)g_width, (REAL)g_height), (REAL)g_settings.radius,
-                  Color(alpha, GetRValue(g_settings.background), GetGValue(g_settings.background), GetBValue(g_settings.background)));
+                  Color(255, GetRValue(g_settings.background), GetGValue(g_settings.background), GetBValue(g_settings.background)));
     RoundRectStroke(g, RectF(0.7f, 0.7f, (REAL)g_width-1.4f, (REAL)g_height-1.4f),
                     (REAL)g_settings.radius-0.7f, Color(65,255,255,255), 1.2f);
     DrawCentered(g, L"\u2039", RectF(18,10,30,24), 20, Color(205,235,238,245));
@@ -749,14 +942,14 @@ void Render() {
             RoundRectStroke(g, RectF((REAL)rr.left+0.5f, (REAL)rr.top+0.5f, (REAL)g_settings.tile-1, (REAL)g_settings.tile-1), std::max(1.0f,radius-0.5f),
                             hover ? Color(170, GetRValue(tileAccent), GetGValue(tileAccent), GetBValue(tileAccent)) : Color(35,255,255,255), 1.0f);
         }
-        if (g_icons[i]) {
-            Bitmap icon(g_icons[i]); int iconSize = Clamp(g_settings.tile - 24, 28, 52);
+        if (g_iconBitmaps[i]) {
+            int iconSize = Clamp(g_settings.tile - 24, 28, 52);
             int x = rr.left + (g_settings.tile - iconSize) / 2, y = rr.top + (g_settings.tile - iconSize) / 2;
-            g.DrawImage(&icon, x, y, iconSize, iconSize);
+            g.DrawImage(g_iconBitmaps[i].get(), x, y, iconSize, iconSize);
         } else {
             DrawCentered(g, L"+", RectF((REAL)rr.left, (REAL)rr.top-2, (REAL)g_settings.tile, (REAL)g_settings.tile), 30, Color(190,255,255,255));
         }
-        if(!g_shortcuts[i].path.empty()&&FindRunningWindow(g_shortcuts[i].path))
+        if(!g_shortcuts[i].path.empty()&&g_runningWindows[i])
             RoundRectFill(g,RectF((REAL)rr.left+g_settings.tile/2.0f-9,(REAL)rr.bottom-5,18,3),1.5f,
                           Color(235,GetRValue(tileAccent),GetGValue(tileAccent),GetBValue(tileAccent)));
         if (g_settings.labels) DrawCentered(g, DisplayName(g_paths[i], i), RectF((REAL)rr.left-5, (REAL)rr.bottom+1, (REAL)g_settings.tile+10, 18), 11, Color(205,235,238,245));
@@ -785,24 +978,27 @@ void Render() {
     RoundRectFill(g, RectF((REAL)cx-16,(REAL)mt+12,40,40), 20, Color(220, GetRValue(g_settings.accent), GetGValue(g_settings.accent), GetBValue(g_settings.accent)));
     DrawCentered(g, media.playing ? L"||" : L">", RectF((REAL)cx-16,(REAL)mt+12,40,40), 14, Color(255,255,255,255), true);
     DrawCentered(g, L">|", RectF((REAL)cx+30,(REAL)mt+14,32,36), 13, Color(235,245,246,250));
-    float progress=media.endTicks>0?std::clamp(static_cast<float>(media.positionTicks)/media.endTicks,0.0f,1.0f):0.0f;
+    const int64_t durationTicks = media.endTicks - media.startTicks;
+    float progress=durationTicks>0?std::clamp(static_cast<float>(media.positionTicks-media.startTicks)/durationTicks,0.0f,1.0f):0.0f;
     RoundRectFill(g,RectF(32,(REAL)mt+64,(REAL)g_width-64,3),1.5f,Color(45,255,255,255));
     if(progress>0)RoundRectFill(g,RectF(32,(REAL)mt+64,((REAL)g_width-64)*progress,3),1.5f,
                                Color(220,GetRValue(g_settings.accent),GetGValue(g_settings.accent),GetBValue(g_settings.accent)));
     Font versionFont(&ff, 9, FontStyleRegular, UnitPixel);
     StringFormat versionFormat; versionFormat.SetAlignment(StringAlignmentFar); versionFormat.SetLineAlignment(StringAlignmentCenter);
     SolidBrush versionBrush(Color(210,255,255,255));
-    g.DrawString(L"v2.0.2", -1, &versionFont, RectF(0,(REAL)g_height-19,(REAL)g_width-12,14), &versionFormat, &versionBrush);
-    POINT src{0,0}; SIZE size{g_width,g_height};
-    BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
-    if (!UpdateLayeredWindow(g_hwnd,screen,nullptr,&size,memory,&src,0,&blend,ULW_ALPHA)) {
+    g.DrawString(L"v" WH_MOD_VERSION, -1, &versionFont, RectF(0,(REAL)g_height-19,(REAL)g_width-12,14), &versionFormat, &versionBrush);
+    HDC screen = GetDC(nullptr);
+    POINT src{0,0}; SIZE size{pixelWidth,pixelHeight};
+    const BYTE opacity = static_cast<BYTE>(255 * g_settings.opacity / 100);
+    BLENDFUNCTION blend{AC_SRC_OVER,0,opacity,AC_SRC_ALPHA};
+    if (!UpdateLayeredWindow(g_hwnd,screen,nullptr,&size,g_renderDc,&src,0,&blend,ULW_ALPHA)) {
         static bool logged = false;
         if (!logged) {
             Wh_Log(L"UpdateLayeredWindow failed, error=%u", GetLastError());
             logged = true;
         }
     }
-    SelectObject(memory,old); DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(nullptr,screen);
+    ReleaseDC(nullptr,screen);
 }
 
 struct PromptData {
@@ -827,7 +1023,7 @@ LRESULT CALLBACK PromptWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                         14, 36, 330, 25, hwnd, reinterpret_cast<HMENU>(100), nullptr, nullptr);
         CreateWindowExW(0, L"BUTTON", L"OK", WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_DEFPUSHBUTTON,
                         184, 73, 76, 26, hwnd, reinterpret_cast<HMENU>(IDOK), nullptr, nullptr);
-        CreateWindowExW(0, L"BUTTON", L"Cancel", WS_CHILD|WS_VISIBLE|WS_TABSTOP,
+        CreateWindowExW(0, L"BUTTON", g_settings.french ? L"Annuler" : L"Cancel", WS_CHILD|WS_VISIBLE|WS_TABSTOP,
                         268, 73, 76, 26, hwnd, reinterpret_cast<HMENU>(IDCANCEL), nullptr, nullptr);
         SendMessageW(data->edit, EM_SETSEL, 0, -1); SetFocus(data->edit); return 0;
     case WM_COMMAND:
@@ -845,38 +1041,38 @@ LRESULT CALLBACK PromptWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
 }
 
 bool PromptText(const std::wstring& title, const std::wstring& prompt, std::wstring& value) {
-    static bool registered = false;
-    if (!registered) {
-        WNDCLASSW wc{}; wc.lpfnWndProc = PromptWindowProc; wc.hInstance = GetModuleHandleW(nullptr);
-        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW); wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
-        wc.lpszClassName = L"Windhawk.QuickPanelPrompt";
-        registered = RegisterClassW(&wc) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
-    }
     PromptData data{title, prompt, value};
     RECT owner{}; GetWindowRect(g_hwnd, &owner);
     HWND dialog = CreateWindowExW(WS_EX_DLGMODALFRAME|WS_EX_TOPMOST,
-        L"Windhawk.QuickPanelPrompt", title.c_str(), WS_CAPTION|WS_SYSMENU|WS_POPUP,
+        kPromptClassName, title.c_str(), WS_CAPTION|WS_SYSMENU|WS_POPUP,
         owner.left + (owner.right-owner.left-370)/2, owner.top + 40, 370, 140,
-        g_hwnd, nullptr, GetModuleHandleW(nullptr), &data);
+        g_hwnd, nullptr, g_hInst, &data);
     if (!dialog) return false;
+    g_modalDialog = dialog;
     EnableWindow(g_hwnd, FALSE); ShowWindow(dialog, SW_SHOW); UpdateWindow(dialog);
     MSG msg{};
-    while (IsWindow(dialog) && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    while (IsWindow(dialog)) {
+        BOOL result = GetMessageW(&msg, nullptr, 0, 0);
+        if (result <= 0) {
+            if (result == 0) PostQuitMessage(static_cast<int>(msg.wParam));
+            break;
+        }
         if (!IsDialogMessageW(dialog, &msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
-    EnableWindow(g_hwnd, TRUE);
+    g_modalDialog = nullptr;
+    if (g_hwnd) EnableWindow(g_hwnd, TRUE);
     value = data.value;
     return data.accepted;
 }
 
 bool ChooseFile(std::wstring& path, const wchar_t* filter = L"All files\0*.*\0\0") {
-    wchar_t buffer[32768]{};
-    if (!path.empty()) wcsncpy_s(buffer, path.c_str(), _TRUNCATE);
+    std::vector<wchar_t> buffer(32768);
+    if (!path.empty()) wcsncpy_s(buffer.data(), buffer.size(), path.c_str(), _TRUNCATE);
     OPENFILENAMEW ofn{}; ofn.lStructSize=sizeof(ofn); ofn.hwndOwner=g_hwnd;
-    ofn.lpstrFile=buffer; ofn.nMaxFile=ARRAYSIZE(buffer); ofn.lpstrFilter=filter;
+    ofn.lpstrFile=buffer.data(); ofn.nMaxFile=static_cast<DWORD>(buffer.size()); ofn.lpstrFilter=filter;
     ofn.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_EXPLORER;
     if (!GetOpenFileNameW(&ofn)) return false;
-    path=buffer; return true;
+    path=buffer.data(); return true;
 }
 
 bool ChooseFolder(std::wstring& path) {
@@ -918,10 +1114,35 @@ BOOL CALLBACK FindRunningWindowProc(HWND hwnd, LPARAM lp) {
     CloseHandle(process); if(match){data->found=hwnd;return FALSE;} return TRUE;
 }
 
-HWND FindRunningWindow(const std::wstring& rawPath) {
-    std::wstring target=ResolveExecutable(rawPath); std::wstring name=PathFindFileNameW(target.c_str());
-    if(name.empty()||_wcsicmp(PathFindExtensionW(name.c_str()),L".exe")!=0) return nullptr;
-    FindWindowData data{name}; EnumWindows(FindRunningWindowProc,reinterpret_cast<LPARAM>(&data)); return data.found;
+BOOL CALLBACK RefreshRunningWindowsProc(HWND hwnd, LPARAM) {
+    if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER)) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return TRUE;
+    wchar_t processPath[32768]{};
+    DWORD chars = ARRAYSIZE(processPath);
+    bool queried = QueryFullProcessImageNameW(process, 0, processPath, &chars);
+    CloseHandle(process);
+    if (!queried) return TRUE;
+    for (int i = 0; i < g_settings.count; ++i) {
+        const std::wstring& target = g_shortcuts[i].resolvedPath;
+        if (target.empty() ||
+            _wcsicmp(PathFindExtensionW(target.c_str()), L".exe") != 0) {
+            continue;
+        }
+        if (_wcsicmp(processPath, target.c_str()) == 0 ||
+            _wcsicmp(PathFindFileNameW(processPath),
+                     PathFindFileNameW(target.c_str())) == 0) {
+            if (!g_runningWindows[i]) g_runningWindows[i] = hwnd;
+        }
+    }
+    return TRUE;
+}
+
+void RefreshRunningWindows() {
+    g_runningWindows.fill(nullptr);
+    EnumWindows(RefreshRunningWindowsProc, 0);
 }
 
 void ShowFolderContents(int slot, POINT screen) {
@@ -943,7 +1164,7 @@ void LaunchSlot(int slot) {
     if(slot<0||slot>=kMaxShortcuts||g_shortcuts[slot].path.empty()) return;
     DWORD attributes=GetFileAttributesW(g_shortcuts[slot].path.c_str());
     if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&FILE_ATTRIBUTE_DIRECTORY)){POINT p{};GetCursorPos(&p);ShowFolderContents(slot,p);return;}
-    if(HWND running=FindRunningWindow(g_shortcuts[slot].path)){
+    if(HWND running=g_runningWindows[slot]){
         if(IsIconic(running)) ShowWindow(running,SW_RESTORE); SetForegroundWindow(running); return;
     }
     ShellExecuteW(g_hwnd,g_shortcuts[slot].runAsAdmin?L"runas":L"open",g_shortcuts[slot].path.c_str(),
@@ -981,7 +1202,7 @@ void ShowTileContextMenu(int slot, POINT screen) {
     else if(cmd==16){g_shortcuts[slot].customColor=false;SaveShortcut(slot);Render();}
     else if(cmd==17){g_shortcuts[slot].runAsAdmin=!g_shortcuts[slot].runAsAdmin;SaveShortcut(slot);}
     else if(cmd==18){std::wstring args=L"/select,\""+g_shortcuts[slot].path+L"\"";ShellExecuteW(g_hwnd,L"open",L"explorer.exe",args.c_str(),nullptr,SW_SHOWNORMAL);}
-    else if(cmd==19){SaveDroppedPath(slot,L"");ReloadShortcutVisuals();}
+    else if(cmd==19){ClearShortcutOverride(slot);ReloadShortcutVisuals();}
 }
 
 void SwapShortcuts(int a,int b) {
@@ -990,55 +1211,41 @@ void SwapShortcuts(int a,int b) {
 }
 
 bool SelectBackupFile(bool save,std::wstring& path) {
-    wchar_t buffer[32768]{}; wcscpy_s(buffer,L"quick-launch-media-panel-backup.ini");
-    OPENFILENAMEW ofn{};ofn.lStructSize=sizeof(ofn);ofn.hwndOwner=g_hwnd;ofn.lpstrFile=buffer;ofn.nMaxFile=ARRAYSIZE(buffer);
+    std::vector<wchar_t> buffer(32768); wcscpy_s(buffer.data(),buffer.size(),L"quick-launch-media-panel-backup.ini");
+    OPENFILENAMEW ofn{};ofn.lStructSize=sizeof(ofn);ofn.hwndOwner=g_hwnd;ofn.lpstrFile=buffer.data();ofn.nMaxFile=static_cast<DWORD>(buffer.size());
     ofn.lpstrFilter=L"Panel backup (*.ini)\0*.ini\0All files\0*.*\0\0";ofn.lpstrDefExt=L"ini";
     ofn.Flags=OFN_EXPLORER|OFN_PATHMUSTEXIST|(save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);
-    bool ok=save?GetSaveFileNameW(&ofn)!=FALSE:GetOpenFileNameW(&ofn)!=FALSE;if(ok)path=buffer;return ok;
+    bool ok=save?GetSaveFileNameW(&ofn)!=FALSE:GetOpenFileNameW(&ofn)!=FALSE;if(ok)path=buffer.data();return ok;
 }
 
 void ExportLayout() {std::wstring path;if(SelectBackupFile(true,path))CopyFileW(StateFile().c_str(),path.c_str(),FALSE);}
 void ImportLayout() {std::wstring path;if(SelectBackupFile(false,path)&&CopyFileW(path.c_str(),StateFile().c_str(),FALSE)){LoadPersistentUiState();LoadAssignments();LayoutMetrics();PositionWindow();Render();}}
 
+void QueueMediaAction(MediaAction action) {
+    {
+        std::lock_guard lock(g_mediaActionMutex);
+        g_mediaActions.push_back(action);
+    }
+    if (g_mediaActionEvent) SetEvent(g_mediaActionEvent);
+}
+
 void MediaCommand(int command) {
-    ++g_asyncOperations;
-    std::thread([command] {
-        AsyncOperationGuard operationGuard;
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        try {
-            auto manager = MediaManager::RequestAsync().get();
-            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session{nullptr};
-            std::wstring requested;{std::lock_guard lock(g_mediaMutex);requested=g_selectedMediaSession;}
-            if(manager&&!requested.empty())for(auto const& candidate:manager.GetSessions())
-                if(candidate.SourceAppUserModelId().c_str()==requested){session=candidate;break;}
-            if(!session&&manager)session=manager.GetCurrentSession();
-            if (!session) return;
-            if (command == 0) session.TrySkipPreviousAsync().get();
-            else if (command == 1) session.TryTogglePlayPauseAsync().get();
-            else session.TrySkipNextAsync().get();
-        } catch (...) { Wh_Log(L"Media command failed"); }
-    }).detach();
+    MediaActionKind kind = MediaActionKind::Toggle;
+    if (command == 0) kind = MediaActionKind::Previous;
+    else if (command == 2) kind = MediaActionKind::Next;
+    QueueMediaAction({kind});
 }
 
 void MediaSeek(double fraction) {
-    fraction=std::clamp(fraction,0.0,1.0);
-    ++g_asyncOperations;
-    std::thread([fraction]{
-        AsyncOperationGuard operationGuard;
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        try{
-            auto manager=MediaManager::RequestAsync().get();
-            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session{nullptr};
-            std::wstring requested;{std::lock_guard lock(g_mediaMutex);requested=g_selectedMediaSession;}
-            if(manager&&!requested.empty())for(auto const& candidate:manager.GetSessions())
-                if(candidate.SourceAppUserModelId().c_str()==requested){session=candidate;break;}
-            if(!session&&manager)session=manager.GetCurrentSession();
-            if(session){auto timeline=session.GetTimelineProperties();session.TryChangePlaybackPositionAsync(static_cast<int64_t>(timeline.EndTime().count()*fraction)).get();}
-        }catch(...){}
-    }).detach();
+    QueueMediaAction({MediaActionKind::Seek,
+                      std::clamp(fraction, 0.0, 1.0)});
 }
 
 void ChangeMasterVolume(float delta) {
+    QueueMediaAction({MediaActionKind::Volume, delta});
+}
+
+void ApplyMasterVolume(float delta) {
     winrt::com_ptr<IMMDeviceEnumerator> enumerator;
     if(FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator),nullptr,CLSCTX_ALL,IID_PPV_ARGS(enumerator.put()))))return;
     winrt::com_ptr<IMMDevice> device;if(FAILED(enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,device.put())))return;
@@ -1057,7 +1264,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_NCHITTEST: return HTCLIENT;
     case WM_LBUTTONDOWN: {
-        POINT p{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        POINT p=ToLogicalPoint({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
         int mt = MediaTop(), cx = g_width - 102;
         int tile=HitTile(p);
         if(tile>=0){g_pressedTile=tile;g_tilePressPoint=p;g_reordering=false;SetCapture(hwnd);return 0;}
@@ -1074,7 +1281,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     case WM_MOUSEMOVE: {
         if(g_pressedTile>=0){
-            POINT p{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};
+            POINT p=ToLogicalPoint({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)});
             if(abs(p.x-g_tilePressPoint.x)>7||abs(p.y-g_tilePressPoint.y)>7)g_reordering=true;
             int hit=HitTile(p);if(hit!=g_hover){g_hover=hit;Render();}return 0;
         }
@@ -1083,28 +1290,30 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             GetCursorPos(&current);
             int x = g_dragWindowStart.left + current.x - g_dragStart.x;
             int y = g_dragWindowStart.top + current.y - g_dragStart.y;
-            RECT proposed{x, y, x + g_width, y + g_height};
+            const int width = PixelWidth();
+            const int height = PixelHeight();
+            RECT proposed{x, y, x + width, y + height};
             HMONITOR monitor = MonitorFromRect(&proposed, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{};
             mi.cbSize = sizeof(mi);
             if (GetMonitorInfoW(monitor, &mi)) {
                 x = Clamp(x, mi.rcWork.left,
-                          std::max(mi.rcWork.left, mi.rcWork.right - g_width));
+                          std::max(mi.rcWork.left, mi.rcWork.right - width));
                 y = Clamp(y, mi.rcWork.top,
-                          std::max(mi.rcWork.top, mi.rcWork.bottom - g_height));
+                          std::max(mi.rcWork.top, mi.rcWork.bottom - height));
             }
             SetWindowPos(hwnd, nullptr, x, y, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             return 0;
         }
-        POINT p{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}; int hit = HitTile(p);
+        POINT p=ToLogicalPoint({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}); int hit = HitTile(p);
         if (hit != g_hover) { g_hover = hit; Render(); }
         TRACKMOUSEEVENT t{sizeof(t),TME_LEAVE,hwnd,0}; TrackMouseEvent(&t); return 0;
     }
     case WM_MOUSELEAVE: g_hover = -1; Render(); return 0;
     case WM_LBUTTONUP: {
         if(g_pressedTile>=0){
-            int source=g_pressedTile;POINT p{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};int target=HitTile(p);
+            int source=g_pressedTile;POINT p=ToLogicalPoint({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)});int target=HitTile(p);
             g_pressedTile=-1;ReleaseCapture();
             if(g_reordering&&target>=0&&target!=source)SwapShortcuts(source,target);else if(!g_reordering)LaunchSlot(source);
             g_reordering=false;return 0;
@@ -1115,7 +1324,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SaveWindowPosition();
             return 0;
         }
-        POINT p{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}; int tile = HitTile(p);
+        POINT p=ToLogicalPoint({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}); int tile = HitTile(p);
         RECT prev=PreviousPageRect(),next=NextPageRect();
         if(PtInRect(&prev,p)){SwitchPage(-1);return 0;}if(PtInRect(&next,p)){SwitchPage(1);return 0;}
         if (tile >= 0) { LaunchSlot(tile); return 0; }
@@ -1129,8 +1338,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         } return 0;
     }
     case WM_RBUTTONUP: {
-        POINT p{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)}; int tile=HitTile(p);
-        POINT screen=p;ClientToScreen(hwnd,&screen);
+        POINT screen{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};ClientToScreen(hwnd,&screen);
+        POINT p=ToLogicalPoint({GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)}); int tile=HitTile(p);
         if(tile>=0){ShowTileContextMenu(tile,screen);return 0;}
         int mt=MediaTop();
         if(p.y>=mt&&p.y<=mt+76){
@@ -1159,7 +1368,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         else if (command == 3) { ClearSavedPosition(); PositionWindow(); Render(); }
         else if (command == 4) OpenWindhawk();
         else if(command==5){g_settings.lockPosition=!g_settings.lockPosition;SaveUiNumber(L"lockPosition",g_settings.lockPosition?1:0);}
-        else if(command==6){std::wstring name=CurrentPageName();if(PromptText(g_settings.french?L"Nom de la page":L"Page name",g_settings.french?L"Nom :":L"Name:",name)){WriteIniString(ProfilePageSection(),L"name",name);Render();}}
+        else if(command==6){std::wstring name=CurrentPageName();if(PromptText(g_settings.french?L"Nom de la page":L"Page name",g_settings.french?L"Nom :":L"Name:",name)){WriteIniString(PageSection(),L"name",name);g_currentPageName=name.empty()?L"Page "+std::to_wstring(g_currentPage+1):name;Render();}}
         else if(command==7)ExportLayout();else if(command==8)ImportLayout();
         return 0;
     }
@@ -1168,17 +1377,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ResizeTiles(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 4 : -4);
             return 0;
         }
-        {POINT screen{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};POINT client=screen;ScreenToClient(hwnd,&client);int mt=MediaTop();
+        {POINT screen{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};POINT client=screen;ScreenToClient(hwnd,&client);client=ToLogicalPoint(client);int mt=MediaTop();
         if(client.y>=mt&&client.y<=mt+76)ChangeMasterVolume(GET_WHEEL_DELTA_WPARAM(wParam)>0?0.05f:-0.05f);else SwitchPage(GET_WHEEL_DELTA_WPARAM(wParam)>0?-1:1);return 0;}
     case WM_TIMER:
         if(wParam==7){g_pageAnimation=std::min(1.0f,g_pageAnimation+0.12f);Render();if(g_pageAnimation>=1.0f)KillTimer(hwnd,7);}return 0;
     case WM_CAPTURECHANGED: g_dragging = false;g_pressedTile=-1;g_reordering=false; return 0;
-    case WM_DROPFILES: {
-        HDROP drop=(HDROP)wParam; POINT p{}; DragQueryPoint(drop,&p); int tile=HitTile(p);
-        if(tile>=0){ wchar_t path[32768]{}; if(DragQueryFileW(drop,0,path,ARRAYSIZE(path))){ g_shortcuts[tile]=ShortcutData{};SaveDroppedPath(tile,path); LoadAssignments(); Render(); }}
-        DragFinish(drop); return 0;
-    }
     case WM_APP_MEDIA: {
+        RefreshRunningWindows();
         if(g_settings.autoThemeSource==AutoThemeSource::Media)ApplyAutomaticTheme();
         Render();return 0;
     }
@@ -1189,37 +1394,218 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         LoadAssignments(); ApplyAutomaticTheme(); LayoutMetrics(); PositionWindow(); Render(); return 0;
     }
     case WM_DISPLAYCHANGE: PositionWindow(); Render(); return 0;
-    case WM_CLOSE:
+    case WM_DPICHANGED: {
+        g_dpi = HIWORD(wParam);
+        DestroyRenderSurface();
+        const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
+        SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                     PixelWidth(), PixelHeight(),
+                     SWP_NOACTIVATE | SWP_NOZORDER);
+        Render();
+        return 0;
+    }
+    case WM_SETTINGCHANGE:
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+        ApplyAutomaticTheme(); Render(); return 0;
+    case WM_CLOSE: DestroyWindow(hwnd);return 0;
+    case WM_DESTROY:
         if(g_dropRegistered){RevokeDragDrop(hwnd);g_dropRegistered=false;}
-        DestroyWindow(hwnd);return 0;
-    case WM_DESTROY: PostQuitMessage(0); return 0;
+        if(g_dropTarget){g_dropTarget->Release();g_dropTarget=nullptr;}
+        if(g_hwnd==hwnd)g_hwnd=nullptr;
+        g_desktopHost=nullptr;
+        return 0;
     }
     return DefWindowProcW(hwnd,msg,wParam,lParam);
 }
 
-DWORD WINAPI UiThreadProc(void*) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    HRESULT apartment=OleInitialize(nullptr);
-    GdiplusStartupInput input; GdiplusStartup(&g_gdiplusToken,&input,nullptr);
-    WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc); wc.lpfnWndProc=WindowProc; wc.hInstance=GetModuleHandleW(nullptr); wc.hCursor=LoadCursorW(nullptr,IDC_ARROW); wc.lpszClassName=kClassName;
-    RegisterClassExW(&wc); LoadPersistentUiState(); LayoutMetrics();
-    g_desktopHost = FindDesktopHost();
-    DWORD ex=WS_EX_LAYERED|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE;
-    g_hwnd=CreateWindowExW(ex,kClassName,L"Quick Launch & Media Panel",WS_POPUP,0,0,g_width,g_height,g_desktopHost,nullptr,wc.hInstance,nullptr);
-    if(!g_hwnd) {
+void DestroyPanelWindow() {
+    HWND panel = g_hwnd;
+    if (g_dropRegistered && panel) {
+        RevokeDragDrop(panel);
+        g_dropRegistered = false;
+    }
+    if (g_dropTarget) {
+        g_dropTarget->Release();
+        g_dropTarget = nullptr;
+    }
+    g_hwnd = nullptr;
+    g_desktopHost = nullptr;
+    if (panel && IsWindow(panel)) DestroyWindow(panel);
+}
+
+bool CreatePanelWindow(HWND desktopHost) {
+    g_desktopHost = desktopHost;
+    g_dpi = DpiForMonitor(SelectedMonitor());
+    DestroyRenderSurface();
+    DWORD exStyle = WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+    g_hwnd = CreateWindowExW(
+        exStyle, kClassName, L"Quick Launch & Media Panel", WS_POPUP, 0, 0,
+        PixelWidth(), PixelHeight(), desktopHost, nullptr, g_hInst, nullptr);
+    if (!g_hwnd) {
         Wh_Log(L"CreateWindowExW failed, error=%u", GetLastError());
+        g_desktopHost = nullptr;
+        return false;
+    }
+    UINT windowDpi = GetDpiForWindow(g_hwnd);
+    if (windowDpi) g_dpi = windowDpi;
+    g_dropTarget = new (std::nothrow) PanelDropTarget();
+    if (g_dropTarget) {
+        HRESULT result = RegisterDragDrop(g_hwnd, g_dropTarget);
+        g_dropRegistered = SUCCEEDED(result);
+        if (FAILED(result)) {
+            Wh_Log(L"RegisterDragDrop failed, error=0x%08X", result);
+        }
+    }
+    PositionWindow();
+    Render();
+    ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
+    Wh_Log(L"Panel window created, desktop owner=%p", desktopHost);
+    return true;
+}
+
+void EnsurePanelWindow() {
+    if (g_hwnd && IsWindow(g_hwnd) && IsWindow(g_desktopHost)) return;
+    DestroyPanelWindow();
+    HWND desktopHost = FindDesktopHost();
+    if (desktopHost) CreatePanelWindow(desktopHost);
+}
+
+void ReloadSettingsOnUiThread() {
+    LoadSettings();
+    if (!StateFile().empty()) {
+        WritePrivateProfileStringW(L"ui", L"tileSize", nullptr,
+                                   StateFile().c_str());
+    }
+    g_dpi = DpiForMonitor(SelectedMonitor());
+    LoadAssignments();
+    ApplyAutomaticTheme();
+    LayoutMetrics();
+    DestroyRenderSurface();
+    EnsurePanelWindow();
+    PositionWindow();
+    Render();
+}
+
+LRESULT CALLBACK SinkWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
+                                LPARAM lParam) {
+    switch (msg) {
+        case WM_TIMER:
+            if (wParam == kDesktopTimer) EnsurePanelWindow();
+            return 0;
+        case WM_APP_RELOAD:
+            ReloadSettingsOnUiThread();
+            return 0;
+        case WM_APP_QUIT:
+            DestroyPanelWindow();
+            PostQuitMessage(0);
+            return 0;
+        case WM_DISPLAYCHANGE:
+            EnsurePanelWindow();
+            PositionWindow();
+            Render();
+            return 0;
+        case WM_SETTINGCHANGE:
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            ApplyAutomaticTheme();
+            Render();
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+DWORD WINAPI UiThreadProc(void*) {
+    g_uiInitialized = false;
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    HRESULT apartment = OleInitialize(nullptr);
+    GdiplusStartupInput input;
+    GdiplusStartup(&g_gdiplusToken, &input, nullptr);
+
+    WNDCLASSEXW panelClass{};
+    panelClass.cbSize = sizeof(panelClass);
+    panelClass.lpfnWndProc = WindowProc;
+    panelClass.hInstance = g_hInst;
+    panelClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    panelClass.lpszClassName = kClassName;
+
+    WNDCLASSEXW sinkClass{};
+    sinkClass.cbSize = sizeof(sinkClass);
+    sinkClass.lpfnWndProc = SinkWindowProc;
+    sinkClass.hInstance = g_hInst;
+    sinkClass.lpszClassName = kSinkClassName;
+
+    WNDCLASSEXW promptClass{};
+    promptClass.cbSize = sizeof(promptClass);
+    promptClass.lpfnWndProc = PromptWindowProc;
+    promptClass.hInstance = g_hInst;
+    promptClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    promptClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    promptClass.lpszClassName = kPromptClassName;
+
+    bool panelRegistered = RegisterClassExW(&panelClass) != 0;
+    bool sinkRegistered = RegisterClassExW(&sinkClass) != 0;
+    bool promptRegistered = RegisterClassExW(&promptClass) != 0;
+    if (!panelRegistered || !sinkRegistered || !promptRegistered) {
+        Wh_Log(L"RegisterClassExW failed, error=%u", GetLastError());
+        if (promptRegistered) UnregisterClassW(kPromptClassName, g_hInst);
+        if (sinkRegistered) UnregisterClassW(kSinkClassName, g_hInst);
+        if (panelRegistered) UnregisterClassW(kClassName, g_hInst);
+        if (g_gdiplusToken) GdiplusShutdown(g_gdiplusToken);
+        if (SUCCEEDED(apartment)) OleUninitialize();
+        if (g_readyEvent) SetEvent(g_readyEvent);
         return 1;
     }
-    Wh_Log(L"Panel window created, desktop owner=%p", g_desktopHost);
-    g_dropTarget=new PanelDropTarget();
-    HRESULT dropRegistration=RegisterDragDrop(g_hwnd,g_dropTarget);
-    g_dropRegistered=SUCCEEDED(dropRegistration);
-    if(FAILED(dropRegistration))Wh_Log(L"RegisterDragDrop failed, error=0x%08X",dropRegistration);
-    LoadAssignments(); ApplyAutomaticTheme(); PositionWindow(); Render(); ShowWindow(g_hwnd,SW_SHOWNOACTIVATE);
-    MSG msg; while(GetMessageW(&msg,nullptr,0,0)>0){ TranslateMessage(&msg); DispatchMessageW(&msg); }
-    if(g_dropRegistered){RevokeDragDrop(g_hwnd);g_dropRegistered=false;}
-    if(g_dropTarget){g_dropTarget->Release();g_dropTarget=nullptr;}
-    DestroyIcons(); g_hwnd=nullptr; g_desktopHost=nullptr; UnregisterClassW(kClassName,wc.hInstance); GdiplusShutdown(g_gdiplusToken);if(SUCCEEDED(apartment))OleUninitialize(); return 0;
+
+    LoadPersistentUiState();
+    g_dpi = DpiForMonitor(SelectedMonitor());
+    LayoutMetrics();
+    LoadAssignments();
+    ApplyAutomaticTheme();
+    RefreshRunningWindows();
+
+    g_sinkWnd = CreateWindowExW(WS_EX_TOOLWINDOW, kSinkClassName, L"",
+                                WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
+                                g_hInst, nullptr);
+    if (!g_sinkWnd) {
+        Wh_Log(L"Failed to create controller window, error=%u", GetLastError());
+        PostQuitMessage(0);
+    } else {
+        SetTimer(g_sinkWnd, kDesktopTimer, 1000, nullptr);
+        EnsurePanelWindow();
+        g_uiInitialized = true;
+    }
+    if (g_readyEvent) SetEvent(g_readyEvent);
+
+    MSG msg{};
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (!msg.hwnd && msg.message == WM_APP_QUIT) {
+            PostQuitMessage(0);
+            continue;
+        }
+        if (!msg.hwnd && msg.message == WM_APP_RELOAD) {
+            ReloadSettingsOnUiThread();
+            continue;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    DestroyPanelWindow();
+    if (g_sinkWnd) {
+        KillTimer(g_sinkWnd, kDesktopTimer);
+        DestroyWindow(g_sinkWnd);
+        g_sinkWnd = nullptr;
+    }
+    DestroyIcons();
+    DestroyRenderSurface();
+    UnregisterClassW(kPromptClassName, g_hInst);
+    UnregisterClassW(kSinkClassName, g_hInst);
+    UnregisterClassW(kClassName, g_hInst);
+    if (g_gdiplusToken) {
+        GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
+    if (SUCCEEDED(apartment)) OleUninitialize();
+    return 0;
 }
 
 std::vector<uint8_t> ReadArtwork(
@@ -1244,69 +1630,412 @@ std::wstring FriendlySourceName(const std::wstring& id) {
     return id;
 }
 
-DWORD WINAPI MediaThreadProc(void*) {
-    winrt::init_apartment(winrt::apartment_type::multi_threaded); MediaManager manager{nullptr};
-    while(WaitForSingleObject(g_stopEvent,0)==WAIT_TIMEOUT){
-        MediaState next;
-        try {
-            if(!manager) manager=MediaManager::RequestAsync().get();
-            if(manager){
-                auto sessions=manager.GetSessions();
-                std::wstring requestedSession;{std::lock_guard lock(g_mediaMutex);requestedSession=g_selectedMediaSession;}
-                winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession selected{nullptr};
-                for(auto const& candidate:sessions){
-                    std::wstring id=candidate.SourceAppUserModelId().c_str();
-                    next.sessions.push_back({id,FriendlySourceName(id)});
-                    if(!requestedSession.empty()&&id==requestedSession)selected=candidate;
-                }
-                if(!selected)selected=manager.GetCurrentSession();
-                if(selected){
-                    auto p=selected.TryGetMediaPropertiesAsync().get();auto info=selected.GetPlaybackInfo();auto timeline=selected.GetTimelineProperties();
-                    next.available=true;next.playing=info.PlaybackStatus()==PlaybackStatus::Playing;
-                    next.title=p.Title().c_str();next.artist=p.Artist().c_str();next.sourceId=selected.SourceAppUserModelId().c_str();
-                    next.positionTicks=timeline.Position().count();next.endTicks=timeline.EndTime().count();
-                    bool reuse=false;{std::lock_guard lock(g_mediaMutex);if(g_media.title==next.title&&!g_media.artwork.empty()){next.artwork=g_media.artwork;reuse=true;}}
-                    if(!reuse)next.artwork=ReadArtwork(p.Thumbnail());
-                }
+using MediaSession = winrt::Windows::Media::Control::
+    GlobalSystemMediaTransportControlsSession;
+
+MediaSession SelectMediaSession(const MediaManager& manager) {
+    if (!manager) return nullptr;
+    std::wstring requested;
+    {
+        std::lock_guard lock(g_mediaMutex);
+        requested = g_selectedMediaSession;
+    }
+    if (!requested.empty()) {
+        for (const auto& candidate : manager.GetSessions()) {
+            if (candidate.SourceAppUserModelId().c_str() == requested) {
+                return candidate;
             }
         }
-        catch(...){ manager=nullptr; }
-        { std::lock_guard lock(g_mediaMutex); g_media=std::move(next); }
-        if(g_hwnd) PostMessageW(g_hwnd,WM_APP_MEDIA,0,0);
-        WaitForSingleObject(g_stopEvent,1000);
-    } return 0;
-}
-
-bool Start() {
-    g_stopEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr); if(!g_stopEvent) return false;
-    g_running=true; g_uiThread=CreateThread(nullptr,0,UiThreadProc,nullptr,0,nullptr); g_mediaThread=CreateThread(nullptr,0,MediaThreadProc,nullptr,0,nullptr);
-    return g_uiThread&&g_mediaThread;
-}
-void Stop() {
-    if(g_stopEvent) SetEvent(g_stopEvent); if(g_hwnd) PostMessageW(g_hwnd,WM_CLOSE,0,0);
-    HANDLE hs[]={g_uiThread,g_mediaThread}; for(HANDLE h:hs) if(h){WaitForSingleObject(h,3000);CloseHandle(h);} g_uiThread=g_mediaThread=nullptr;
-    for(int i=0;i<100&&g_asyncOperations.load()>0;i++)Sleep(20);
-    if(g_stopEvent){CloseHandle(g_stopEvent);g_stopEvent=nullptr;} g_running=false;
-}
-} // namespace
-
-BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Quick Launch & Media Panel in explorer.exe");
-    LoadSettings();
-    if (!Start()) {
-        Wh_Log(L"Failed to start panel threads");
-        Stop();
-        return FALSE;
     }
+    return manager.GetCurrentSession();
+}
+
+void ExecuteMediaActions(const MediaManager& manager) {
+    std::vector<MediaAction> actions;
+    {
+        std::lock_guard lock(g_mediaActionMutex);
+        actions.swap(g_mediaActions);
+    }
+    MediaSession session{nullptr};
+    for (const MediaAction& action : actions) {
+        if (action.kind == MediaActionKind::Volume) {
+            ApplyMasterVolume(static_cast<float>(action.value));
+            continue;
+        }
+        if (!session) session = SelectMediaSession(manager);
+        if (!session) continue;
+        try {
+            switch (action.kind) {
+                case MediaActionKind::Previous:
+                    session.TrySkipPreviousAsync().get();
+                    break;
+                case MediaActionKind::Toggle:
+                    session.TryTogglePlayPauseAsync().get();
+                    break;
+                case MediaActionKind::Next:
+                    session.TrySkipNextAsync().get();
+                    break;
+                case MediaActionKind::Seek: {
+                    auto timeline = session.GetTimelineProperties();
+                    int64_t start = timeline.StartTime().count();
+                    int64_t duration =
+                        timeline.EndTime().count() - timeline.StartTime().count();
+                    if (duration > 0) {
+                        session.TryChangePlaybackPositionAsync(
+                                   start + static_cast<int64_t>(duration * action.value))
+                            .get();
+                    }
+                    break;
+                }
+                case MediaActionKind::Volume:
+                    break;
+            }
+        } catch (...) {
+            Wh_Log(L"Media command failed");
+        }
+    }
+}
+
+MediaState ReadMediaState(const MediaManager& manager) {
+    MediaState next;
+    if (!manager) return next;
+    auto sessions = manager.GetSessions();
+    std::wstring requested;
+    {
+        std::lock_guard lock(g_mediaMutex);
+        requested = g_selectedMediaSession;
+    }
+    MediaSession selected{nullptr};
+    for (const auto& candidate : sessions) {
+        std::wstring id = candidate.SourceAppUserModelId().c_str();
+        next.sessions.push_back({id, FriendlySourceName(id)});
+        if (!requested.empty() && id == requested) selected = candidate;
+    }
+    if (!selected) selected = manager.GetCurrentSession();
+    if (!selected) return next;
+
+    auto properties = selected.TryGetMediaPropertiesAsync().get();
+    auto playback = selected.GetPlaybackInfo();
+    auto timeline = selected.GetTimelineProperties();
+    next.available = true;
+    next.playing = playback.PlaybackStatus() == PlaybackStatus::Playing;
+    next.title = properties.Title().c_str();
+    next.artist = properties.Artist().c_str();
+    next.sourceId = selected.SourceAppUserModelId().c_str();
+    next.startTicks = timeline.StartTime().count();
+    next.positionTicks = timeline.Position().count();
+    next.endTicks = timeline.EndTime().count();
+
+    bool reuseArtwork = false;
+    {
+        std::lock_guard lock(g_mediaMutex);
+        if (g_media.title == next.title && g_media.artist == next.artist &&
+            g_media.sourceId == next.sourceId && !g_media.artwork.empty()) {
+            next.artwork = g_media.artwork;
+            reuseArtwork = true;
+        }
+    }
+    if (!reuseArtwork) next.artwork = ReadArtwork(properties.Thumbnail());
+    return next;
+}
+
+DWORD WINAPI MediaThreadProc(void*) {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    MediaManager manager{nullptr};
+    HANDLE waits[] = {g_stopEvent, g_mediaActionEvent};
+    bool firstPass = true;
+    for (;;) {
+        DWORD waitResult = firstPass
+                               ? WAIT_TIMEOUT
+                               : WaitForMultipleObjects(ARRAYSIZE(waits), waits,
+                                                        FALSE, 1000);
+        firstPass = false;
+        if (waitResult == WAIT_OBJECT_0) break;
+        try {
+            if (!manager) manager = MediaManager::RequestAsync().get();
+            ExecuteMediaActions(manager);
+            MediaState next = ReadMediaState(manager);
+            {
+                std::lock_guard lock(g_mediaMutex);
+                g_media = std::move(next);
+            }
+        } catch (...) {
+            manager = nullptr;
+            std::lock_guard lock(g_mediaMutex);
+            g_media = {};
+        }
+        HWND panel = g_hwnd;
+        if (panel) PostMessageW(panel, WM_APP_MEDIA, 0, 0);
+    }
+    winrt::uninit_apartment();
+    return 0;
+}
+
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE instance = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle),
+                       &instance);
+    return instance;
+}
+
+BOOL CALLBACK CloseUiThreadWindow(HWND hwnd, LPARAM) {
+    if (hwnd != g_sinkWnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
     return TRUE;
 }
 
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Initializing Quick Launch & Media Panel tool process");
+    g_hInst = GetCurrentModuleHandle();
+    InitializeStateFile();
+    LoadSettings();
+
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_mediaActionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent || !g_mediaActionEvent || !g_readyEvent) {
+        Wh_Log(L"Failed to create synchronization events");
+        return FALSE;
+    }
+
+    g_uiThread =
+        CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
+    g_mediaThread = CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0,
+                                 nullptr);
+    if (!g_uiThread || !g_mediaThread) {
+        Wh_Log(L"Failed to create worker threads");
+        SetEvent(g_stopEvent);
+        if (g_sinkWnd) PostMessageW(g_sinkWnd, WM_APP_QUIT, 0, 0);
+        else if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_QUIT, 0, 0);
+        if (g_uiThread) WaitForSingleObject(g_uiThread, INFINITE);
+        if (g_mediaThread) WaitForSingleObject(g_mediaThread, INFINITE);
+        return FALSE;
+    }
+
+    if (WaitForSingleObject(g_readyEvent, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(L"UI thread did not signal ready in time");
+    }
+    CloseHandle(g_readyEvent);
+    g_readyEvent = nullptr;
+    return g_uiInitialized ? TRUE : FALSE;
+}
+
+void WhTool_ModSettingsChanged() {
+    HWND sink = g_sinkWnd;
+    if (sink) PostMessageW(sink, WM_APP_RELOAD, 0, 0);
+    else if (g_uiThreadId)
+        PostThreadMessageW(g_uiThreadId, WM_APP_RELOAD, 0, 0);
+}
+
+void WhTool_ModUninit() {
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (g_mediaActionEvent) SetEvent(g_mediaActionEvent);
+    HWND modal = g_modalDialog;
+    if (modal && IsWindow(modal)) PostMessageW(modal, WM_CLOSE, 0, 0);
+    if (g_uiThreadId) EnumThreadWindows(g_uiThreadId, CloseUiThreadWindow, 0);
+    HWND sink = g_sinkWnd;
+    if (sink) PostMessageW(sink, WM_APP_QUIT, 0, 0);
+    else if (g_uiThreadId)
+        PostThreadMessageW(g_uiThreadId, WM_APP_QUIT, 0, 0);
+
+    HANDLE threads[] = {g_uiThread, g_mediaThread};
+    for (HANDLE thread : threads) {
+        if (thread && WaitForSingleObject(thread, 5000) != WAIT_OBJECT_0) {
+            Wh_Log(L"A tool thread did not exit in time");
+            ExitProcess(1);
+        }
+    }
+    for (HANDLE thread : threads) {
+        if (thread) CloseHandle(thread);
+    }
+    g_uiThread = nullptr;
+    g_mediaThread = nullptr;
+    g_uiThreadId = 0;
+    if (g_stopEvent) CloseHandle(g_stopEvent);
+    if (g_mediaActionEvent) CloseHandle(g_mediaActionEvent);
+    if (g_readyEvent) CloseHandle(g_readyEvent);
+    g_stopEvent = nullptr;
+    g_mediaActionEvent = nullptr;
+    g_readyEvent = nullptr;
+    Wh_Log(L"Quick Launch & Media Panel stopped");
+}
+}  // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{};
+    si.cb = sizeof(STARTUPINFO);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi{};
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 void Wh_ModSettingsChanged() {
-    if (g_hwnd) PostMessageW(g_hwnd, WM_APP_RELOAD, 0, 0);
-    else LoadSettings();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    Stop();
-    Wh_Log(L"Quick Launch & Media Panel stopped");
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
