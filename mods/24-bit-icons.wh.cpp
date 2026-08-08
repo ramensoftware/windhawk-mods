@@ -227,7 +227,6 @@ BOOL Wh_ModInit()
         }
     };
 
-    // user32.dll
     const WindhawkUtils::SYMBOL_HOOK user32_10_DllHook
     {
         {
@@ -238,7 +237,6 @@ BOOL Wh_ModInit()
         false
     };
 
-    // user32.dll
     const WindhawkUtils::SYMBOL_HOOK user32_11_DllHook
     {
         {
