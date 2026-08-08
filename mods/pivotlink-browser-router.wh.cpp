@@ -2,9 +2,10 @@
 // @id             pivotlink-browser-router
 // @name           PivotLink: Browser Router
 // @description    Lightweight link redirection tool with an intuitive 5-tier ranked configuration layout.
-// @version        1.0
+// @version        1.1
 // @author         gauthumj
 // @github         https://github.com/gauthumj
+// @homepage       https://www.gauthumj.in/
 // @include        *
 // @compilerOptions -lshell32
 // @license        MIT
@@ -28,11 +29,14 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 ## Configuration
 
 - **Priority 1–5 Browsers**: Rank up to five browsers by executable name (e.g. `brave.exe`, `firefox.exe`). The first one found running wins.
+- **Bypass Method**: Choose how to skip routing and send a link to the OS default browser instead. Default is Mouse Back + Click (press both simultaneously).
 
 ## Notes
 
 - The mod skips Session 0 processes (system services) automatically.
 - A thread-local guard prevents recursive hook calls during redirection.
+
+If you'd like to see other features or have suggestions, feel free to open an issue on the [GitHub repository](https://github.com/gauthumj/pivotlink-browser-router)
 */
 // ==/WindhawkModReadme==
 
@@ -53,6 +57,15 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 - browser5: ""
   $name: Priority 5 Browser (Lowest)
   $description: Fifth choice browser fallback. Leave blank to skip.
+- bypassMethod: xbutton1
+  $name: Bypass Method
+  $description: Skip routing and let the OS default browser handle a link.
+  $options:
+  - xbutton1: Mouse Back + Click (press together)
+  - xbutton2: Mouse Forward + Click (press together)
+  - rightclick: Right + Left Click (press together)
+  - ctrl: Ctrl (hold while clicking — tab may open in background)
+  - none: Disabled
 */
 // ==/WindhawkModSettings==
 
@@ -63,9 +76,22 @@ PivotLink intercepts outgoing URL launches system-wide and redirects them to whi
 #include <mutex>
 #include <vector>
 #include <string>
+#include <atomic>
 
 std::mutex g_settingsMutex;
 std::vector<std::wstring> g_priorityBrowsers;
+
+enum class BypassMethod { None, XButton1, XButton2, RightClick, Ctrl };
+std::atomic<BypassMethod> g_bypassMethod{BypassMethod::XButton1};
+
+struct BypassSharedState {
+    volatile LONG64 lastActiveTickCount;
+};
+HANDLE g_hSharedMem = NULL;
+BypassSharedState* g_pSharedState = NULL;
+HANDLE g_hPollerThread = NULL;
+HANDLE g_hPollerStopEvent = NULL;
+
 thread_local bool t_inHook = false; 
 
 std::wstring TrimString(const std::wstring& str) {
@@ -75,17 +101,15 @@ std::wstring TrimString(const std::wstring& str) {
     return str.substr(first, (last - first + 1));
 }
 
-// Checks if a process has at least one visible top-level window (i.e., is truly "open")
-struct VisibleWindowCheck {
-    DWORD processId;
-    bool found;
+// Finds the highest-priority browser that is actively open (has a visible window).
+// Background-only processes (e.g., Edge service workers) are ignored.
+// Uses a single EnumWindows pass to collect PIDs with qualifying windows.
+struct WindowOwnerCollector {
+    std::vector<DWORD> pidsWithWindows;
 };
 
-static BOOL CALLBACK CheckVisibleWindowProc(HWND hwnd, LPARAM lParam) {
-    VisibleWindowCheck* check = reinterpret_cast<VisibleWindowCheck*>(lParam);
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != check->processId) return TRUE;
+static BOOL CALLBACK CollectWindowOwners(HWND hwnd, LPARAM lParam) {
+    WindowOwnerCollector* collector = reinterpret_cast<WindowOwnerCollector*>(lParam);
 
     if (!IsWindowVisible(hwnd)) return TRUE;
 
@@ -97,18 +121,12 @@ static BOOL CALLBACK CheckVisibleWindowProc(HWND hwnd, LPARAM lParam) {
     GetWindowRect(hwnd, &rect);
     if ((rect.right - rect.left) <= 1 || (rect.bottom - rect.top) <= 1) return TRUE;
 
-    check->found = true;
-    return FALSE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    collector->pidsWithWindows.push_back(pid);
+    return TRUE;
 }
 
-static bool HasVisibleWindow(DWORD processId) {
-    VisibleWindowCheck check = { processId, false };
-    EnumWindows(CheckVisibleWindowProc, reinterpret_cast<LPARAM>(&check));
-    return check.found;
-}
-
-// Finds the highest-priority browser that is actively open (has a visible window).
-// Background-only processes (e.g., Edge service workers) are ignored.
 std::wstring GetHighestPriorityRunningBrowser() {
     std::vector<std::wstring> browsers;
     {
@@ -116,12 +134,16 @@ std::wstring GetHighestPriorityRunningBrowser() {
         browsers = g_priorityBrowsers;
     }
 
+    // Single EnumWindows pass: collect all PIDs that own a qualifying window
+    WindowOwnerCollector collector;
+    EnumWindows(CollectWindowOwners, reinterpret_cast<LPARAM>(&collector));
+
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnap == INVALID_HANDLE_VALUE) return L"";
 
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(pe);
-    
+
     std::vector<std::vector<DWORD>> browserPids(browsers.size());
 
     if (Process32FirstW(hSnap, &pe)) {
@@ -136,14 +158,18 @@ std::wstring GetHighestPriorityRunningBrowser() {
     }
     CloseHandle(hSnap);
 
+    // Check priority order: first browser that has a PID in the visible-window set wins
     for (size_t i = 0; i < browsers.size(); ++i) {
         for (DWORD pid : browserPids[i]) {
-            if (HasVisibleWindow(pid)) return browsers[i];
+            for (DWORD visiblePid : collector.pidsWithWindows) {
+                if (pid == visiblePid) return browsers[i];
+            }
         }
     }
 
     return L"";
 }
+
 
 const std::wstring& GetCurrentProcessName() {
     static std::wstring name = []() -> std::wstring {
@@ -171,15 +197,63 @@ void LoadSettings() {
         }
     }
 
+    auto bypassSetting = WindhawkUtils::StringSetting::make(L"bypassMethod");
+    std::wstring bypassStr = TrimString(bypassSetting.get());
+    BypassMethod method = BypassMethod::XButton1;
+    if (_wcsicmp(bypassStr.c_str(), L"xbutton2") == 0) method = BypassMethod::XButton2;
+    else if (_wcsicmp(bypassStr.c_str(), L"rightclick") == 0) method = BypassMethod::RightClick;
+    else if (_wcsicmp(bypassStr.c_str(), L"ctrl") == 0) method = BypassMethod::Ctrl;
+    else if (_wcsicmp(bypassStr.c_str(), L"none") == 0) method = BypassMethod::None;
+
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_priorityBrowsers = std::move(browsers);
+    g_bypassMethod.store(method, std::memory_order_relaxed);
 }
 
 using ShellExecuteExW_t = decltype(&ShellExecuteExW);
 ShellExecuteExW_t ShellExecuteExW_Original;
 
-bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, const WCHAR* lpParameters, int nShow) {
+static int GetBypassVKey() {
+    switch (g_bypassMethod.load(std::memory_order_relaxed)) {
+        case BypassMethod::XButton1: return VK_XBUTTON1;
+        case BypassMethod::XButton2: return VK_XBUTTON2;
+        case BypassMethod::RightClick: return VK_RBUTTON;
+        case BypassMethod::Ctrl: return VK_CONTROL;
+        default: return 0;
+    }
+}
+
+static bool IsBypassActive() {
+    int vk = GetBypassVKey();
+    if (!vk) return false;
+
+    if (GetAsyncKeyState(vk) & 0x8000)
+        return true;
+
+    // Fallback for processes where GetAsyncKeyState doesn't work (e.g. MSIX-packaged apps)
+    if (g_pSharedState) {
+        LONG64 lastActive = InterlockedCompareExchange64(
+            &g_pSharedState->lastActiveTickCount, 0, 0);
+        if (lastActive > 0 && ((LONG64)GetTickCount64() - lastActive) < 500)
+            return true;
+    }
+
+    return false;
+}
+
+static DWORD WINAPI BypassPollerThread(LPVOID) {
+    while (WaitForSingleObject(g_hPollerStopEvent, 50) == WAIT_TIMEOUT) {
+        int vk = GetBypassVKey();
+        if (vk && (GetAsyncKeyState(vk) & 0x8000) && g_pSharedState)
+            InterlockedExchange64(&g_pSharedState->lastActiveTickCount, (LONG64)GetTickCount64());
+    }
+    return 0;
+}
+
+bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, int nShow) {
     if (!lpFile || t_inHook) return false;
+
+    if (IsBypassActive()) return false;
 
     // Only redirect default (NULL) or "open" verbs
     if (lpVerb && _wcsicmp(lpVerb, L"open") != 0) return false;
@@ -221,7 +295,7 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, const WCHAR*
 
 BOOL WINAPI ShellExecuteExW_Hook(LPSHELLEXECUTEINFOW pExecInfo) {
     if (pExecInfo && pExecInfo->lpFile) {
-        if (RouteLinkIfNecessary(pExecInfo->lpFile, pExecInfo->lpVerb, pExecInfo->lpParameters, pExecInfo->nShow)) {
+        if (RouteLinkIfNecessary(pExecInfo->lpFile, pExecInfo->lpVerb, pExecInfo->nShow)) {
             pExecInfo->hInstApp = (HINSTANCE)33;
             if (pExecInfo->fMask & SEE_MASK_NOCLOSEPROCESS)
                 pExecInfo->hProcess = NULL;
@@ -257,7 +331,7 @@ std::wstring GetBrowserFullPath(const std::wstring& exeName) {
 }
 
 HINSTANCE WINAPI ShellExecuteW_Hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShow) {
-    if (RouteLinkIfNecessary(lpFile, lpOperation, lpParameters, nShow)) {
+    if (RouteLinkIfNecessary(lpFile, lpOperation, nShow)) {
         return (HINSTANCE)33;
     }
     return ShellExecuteW_Original(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShow);
@@ -276,10 +350,8 @@ BOOL WINAPI ShellExecuteExA_Hook(LPSHELLEXECUTEINFOA pExecInfo) {
     if (pExecInfo && pExecInfo->lpFile) {
         std::wstring file = WideFromAnsi(pExecInfo->lpFile);
         std::wstring verb = WideFromAnsi(pExecInfo->lpVerb);
-        std::wstring params = WideFromAnsi(pExecInfo->lpParameters);
         if (RouteLinkIfNecessary(file.c_str(),
                 pExecInfo->lpVerb ? verb.c_str() : NULL,
-                pExecInfo->lpParameters ? params.c_str() : NULL,
                 pExecInfo->nShow)) {
             pExecInfo->hInstApp = (HINSTANCE)33;
             if (pExecInfo->fMask & SEE_MASK_NOCLOSEPROCESS)
@@ -293,10 +365,8 @@ BOOL WINAPI ShellExecuteExA_Hook(LPSHELLEXECUTEINFOA pExecInfo) {
 HINSTANCE WINAPI ShellExecuteA_Hook(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShow) {
     std::wstring file = WideFromAnsi(lpFile);
     std::wstring op = WideFromAnsi(lpOperation);
-    std::wstring params = WideFromAnsi(lpParameters);
     if (RouteLinkIfNecessary(file.c_str(),
             lpOperation ? op.c_str() : NULL,
-            lpParameters ? params.c_str() : NULL,
             nShow)) {
         return (HINSTANCE)33;
     }
@@ -359,6 +429,9 @@ BOOL WINAPI CreateProcessW_Hook(
             }
             if (!targetIsBrowser) goto passthrough;
 
+            // Check bypass after confirming this is a browser launch with a URL
+            if (IsBypassActive()) goto passthrough;
+
             std::wstring cmdLine(lpCommandLine);
 
             // Quick scan for URL in command line
@@ -414,15 +487,54 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    // Shared memory for bypass state — allows processes where GetAsyncKeyState
+    // doesn't work (MSIX-packaged apps) to read bypass state from a poller process.
+    if (g_bypassMethod.load(std::memory_order_relaxed) != BypassMethod::None) {
+        g_hSharedMem = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL,
+            PAGE_READWRITE, 0, sizeof(BypassSharedState), L"Local\\PivotLinkBypassState");
+        if (!g_hSharedMem)
+            g_hSharedMem = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE,
+                L"Local\\PivotLinkBypassState");
+        if (g_hSharedMem)
+            g_pSharedState = (BypassSharedState*)MapViewOfFile(
+                g_hSharedMem, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(BypassSharedState));
+
+        // Only explorer.exe runs the poller thread (single system-wide poller)
+        const std::wstring& proc = GetCurrentProcessName();
+        if (_wcsicmp(proc.c_str(), L"explorer.exe") == 0 && g_pSharedState) {
+            g_hPollerStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+            g_hPollerThread = CreateThread(NULL, 0, BypassPollerThread, NULL, 0, NULL);
+        }
+    }
+
     WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook, &ShellExecuteExW_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteExA, ShellExecuteExA_Hook, &ShellExecuteExA_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteA, ShellExecuteA_Hook, &ShellExecuteA_Original);
     WindhawkUtils::SetFunctionHook(CreateProcessW, CreateProcessW_Hook, &CreateProcessW_Original);
+
+    // Also hook kernelbase's CreateProcessW for apps that bypass kernel32
+    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (hKernelBase) {
+        void* pKB = (void*)GetProcAddress(hKernelBase, "CreateProcessW");
+        if (pKB && pKB != (void*)CreateProcessW)
+            Wh_SetFunctionHook(pKB, (void*)CreateProcessW_Hook, (void**)&CreateProcessW_Original);
+    }
+
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    if (g_hPollerStopEvent) {
+        SetEvent(g_hPollerStopEvent);
+        if (g_hPollerThread) {
+            WaitForSingleObject(g_hPollerThread, INFINITE);
+            CloseHandle(g_hPollerThread);
+        }
+        CloseHandle(g_hPollerStopEvent);
+    }
+    if (g_pSharedState) UnmapViewOfFile((void*)g_pSharedState);
+    if (g_hSharedMem) CloseHandle(g_hSharedMem);
 }
 
 void Wh_ModSettingsChanged() {
