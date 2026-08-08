@@ -19,6 +19,8 @@
 
 A modern, native Windows panel placed at the top-center of the selected monitor.
 
+![Quick Launch & Media Panel](https://i.imgur.com/rckHuTB.png)
+
 ## Features
 
 - 1 to 8 configurable application or game shortcuts.
