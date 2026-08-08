@@ -12,9 +12,14 @@
 // ==/WindhawkMod==
 
 // Note on @architecture x86-64:
-// While "amd64" is the common Windows designation for 64-bit x86, using `@architecture amd64`
-// causes repository validation errors on Windhawk. The repository schema strictly requires
-// `@architecture x86-64` as the mandatory specifier for x86-64 mods.
+// "x86-64" is the canonical specifier used by Windhawk mods and passes the
+// repository's PR validation cleanly. "amd64" is also accepted by
+// .github/pr_validation.py (the only hard rejections are architectures outside
+// {"x86", "x86-64", "amd64", "arm64"}), but it produces a "manual verification
+// required" warning for the maintainers, so x86-64 is used here. The payload
+// DLL is x64-only, and on ARM64 devices Windhawk may still inject this mod into
+// the native ARM64 explorer.exe; Wh_ModInit() refuses to start there before any
+// hook is installed (see IsRunningAsAmd64).
 
 // ==WindhawkModReadme==
 /*
@@ -46,7 +51,7 @@ The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
 - **Right DLL for the system**: Uses the Windows 8 DLL on Windows 8.1/10/11
 - **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. 
 - **Conservative resource handling**: The mod implements a conservative approach to be more stable
-- **100% reversible**: Disabling the mod removes everything it created (private resource module, loaded DLL, and downloaded files when the keep files setting is set to false). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
+- **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped; because Explorer keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after Explorer restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
 
 ## Requirements
 
@@ -109,7 +114,7 @@ If any problems are encountered, please report them to the mod's author.
 
 - keepFilesOnDisable: true
   $name: Keep downloaded files if the mod is disabled
-  $description: If this setting is enabled (which it is by default), the mod keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder, and the DLL is unloaded from memory.
+  $description: If this setting is enabled (which it is by default), the mod keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder on the next unload in which they are no longer mapped. The DLL stays loaded in memory until the process (Explorer) restarts, so files that are still in use at that moment are deleted on a later unload.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -434,6 +439,11 @@ static std::mutex g_localizedResourceMutex;
 static std::wstring g_localizedResourcePath;
 // Read lock-free on the hot path, written under g_localizedResourceMutex.
 static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
+// Monotonic counter appended to the resource module file name. The file of an
+// already-built module stays mapped (DirectUI caches the HINSTANCE), so the
+// same destination name can never be overwritten or deleted while it is still
+// mapped as a section - a fresh name per build avoids the sharing violation.
+static std::atomic<unsigned> g_resourceModuleSeq{0};
 
 // Setup is performed on a background worker thread that is joined on unload.
 // Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
@@ -670,13 +680,14 @@ DllVariant ResolveSelectedVariant() {
     return DllVariant::Win7;
 }
 
-// The mod and the downloaded PerfCenterCPL.dll are x64 only.
-// (Note: We use `@architecture x86-64` in the metadata because `@architecture amd64` causes
-// repository validation errors on Windhawk, even though Windows refers to x64 as AMD64).
-// With `@architecture x86-64`, on an ARM64 device Windhawk may still inject the mod
-// into a native ARM64 explorer.exe (it is a predefined shell process), where an
-// x64 DLL cannot load. Guard against that case so the mod cleanly does nothing
-// instead of failing setup.
+// The mod and the downloaded PerfCenterCPL.dll are x64 only, which is why the
+// metadata declares `@architecture x86-64`. On an ARM64 device Windhawk can
+// still inject the mod into the native ARM64 explorer.exe (a predefined shell
+// process), where the x64 binary runs under emulation. Wh_ModInit() calls
+// IsRunningAsAmd64() first and returns FALSE before installing any of the
+// process-wide hooks, so an ARM64 shell never pays the registry/COM/LoadString
+// hook cost for a mod that can never do anything there. RunSetup keeps the
+// same guard as a second line of defense.
 static bool IsRunningAsAmd64() {
 #if defined(_M_ARM64) || defined(__aarch64__)
     return false;
@@ -1196,8 +1207,13 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     }
 
     wchar_t fileName[96] = {};
-    swprintf_s(fileName, ARRAYSIZE(fileName), L"%s%u.dll", kLocalizedResourcePrefix,
-               GetCurrentProcessId());
+    // Never reuse a destination name: a previous module of the same name may
+    // still be mapped as a section in this process (DirectUI keeps the
+    // HINSTANCE), which would make DeleteFileW/MoveFileExW fail with a sharing
+    // violation and silently break translations until Explorer restarts.
+    swprintf_s(fileName, ARRAYSIZE(fileName), L"%s%u-%u.dll",
+               kLocalizedResourcePrefix, GetCurrentProcessId(),
+               g_resourceModuleSeq.fetch_add(1));
     const std::wstring destination = directory + L"\\" + fileName;
     const std::wstring temporary = destination + L".tmp";
     ScopedTemporaryFile temporaryGuard(temporary);
@@ -1291,9 +1307,13 @@ static HMODULE EnsureLocalizedResourceModuleLoaded() {
 }
 
 // Assumes g_localizedResourceMutex is already held.
-// Note: We do not call FreeLibrary or DeleteFileW on teardown or settings changes,
-// because DirectUI::XResourceProvider::Create caches this HINSTANCE and loads
-// resources from it lazily. Unloading/deleting it can crash Explorer if a page is open.
+// Note: We deliberately never call FreeLibrary or DeleteFileW here (nor on
+// teardown), because DirectUI::XResourceProvider::Create caches this HINSTANCE
+// and loads resources from it lazily. Unloading or deleting the file while a
+// page is open can crash Explorer. Dropping the handle and clearing the path
+// only means the next page that opens will use a freshly built module; pages
+// already open keep using the old (still-mapped) module, and RemoveOwnFiles
+// cleans up whichever copies are no longer mapped on a later unload.
 static void ReleaseLocalizedResourceModuleLocked() {
     g_hLocalizedResources.store(nullptr);
     g_localizedResourcePath.clear();
@@ -2011,22 +2031,6 @@ DWORD GetVirtualSubKeyCount(VNode n) {
     }
 }
 
-DWORD GetVirtualValueCount(VNode n) {
-    switch (n) {
-        case VNode::ClsidRoot: return 4;
-        case VNode::InProcServer32: return 2;
-        case VNode::ShellFolder: return 2;
-        case VNode::Instance: return 1;
-        case VNode::InitPropertyBag: return 2;
-        case VNode::DefaultIcon: return 1;
-        case VNode::ProviderRoot: return 1;
-        case VNode::ProviderInProc: return 2;
-        case VNode::NamespaceEntry: return 1;
-        default: return 0;
-    }
-}
-
-
 // -----------------------------------------------------------------------------
 // Conservative Registry Virtualization (Unicode *W only)
 // -----------------------------------------------------------------------------
@@ -2236,12 +2240,16 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
                 return ERROR_NO_MORE_ITEMS;
             }
         }
-        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        // Validate the output buffer BEFORE latching the one-shot injection
+        // state: a rejected attempt (ERROR_MORE_DATA / ERROR_INVALID_PARAMETER)
+        // must not consume the injection, or the caller's retry at the same
+        // index would hit the latched flag and silently lose the applet entry.
         if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
         if (*lpcch < g_clsidLower.size() + 1) {
             *lpcch = static_cast<DWORD>(g_clsidLower.size() + 1);
             return ERROR_MORE_DATA;
         }
+        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
         wcscpy_s(name, *lpcch, g_clsidLower.c_str());
         *lpcch = static_cast<DWORD>(g_clsidLower.size());
         if (ft) GetSystemTimeAsFileTime(ft);
@@ -2276,9 +2284,12 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
                 return ERROR_NO_MORE_ITEMS;
             }
         }
-        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        // Same ordering as RegEnumKeyExWHook: validate the buffer before
+        // latching the injection state so a retry after ERROR_MORE_DATA still
+        // sees the injected entry.
         if (!name) return ERROR_INVALID_PARAMETER;
         if (cch <= g_clsidLower.size()) return ERROR_MORE_DATA;
+        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
         wcscpy_s(name, cch, g_clsidLower.c_str());
         return ERROR_SUCCESS;
     } catch (...) {
@@ -2295,7 +2306,12 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
         std::wstring p = g_keyTracker.GetPath(k);
         VNode n = ClassifyPath(p);
         if (cSubKeys) *cSubKeys = GetVirtualSubKeyCount(n);
-        if (cValues) *cValues = GetVirtualValueCount(n);
+        // Report 0 values on synthetic keys: the virtualization layer has no
+        // enumerable value store (RegEnumValueW is not hooked), so a caller
+        // that sizes its enumeration from RegQueryInfoKeyW must not attempt to
+        // enumerate values on a fake handle (which would be interpreted as a
+        // kernel handle by the real RegEnumValueW and fail).
+        if (cValues) *cValues = 0;
         if (lpcMaxSub) *lpcMaxSub = 32;
         if (lpcMaxCls) *lpcMaxCls = 0;
         if (lpcMaxValName) *lpcMaxValName = 64;
@@ -3440,6 +3456,17 @@ void InstallComHook() {
 // -----------------------------------------------------------------------------
 BOOL Wh_ModInit(void) {
     try {
+        // The payload DLL is x64-only. On ARM64, Windhawk may inject this mod
+        // into the native ARM64 explorer.exe (a predefined shell process);
+        // refuse to start BEFORE installing any hook so an ARM64 shell never
+        // pays the registry/COM/LoadString hook cost for a mod that can never
+        // do anything there.
+        if (!IsRunningAsAmd64()) {
+            Wh_Log(L"PerfCenterCPL mod not started: system architecture is not "
+                   L"AMD64 (x64)");
+            return FALSE;
+        }
+
         InitClsidStrings();
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
@@ -3521,8 +3548,20 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         const bool requestedVistaSkin = ReadPageSkinVistaSetting();
         const bool requestedWindows7Skin = !requestedVistaSkin && ReadPageSkinSetting();
 
+        // Language/translation settings are handled in place - no reload is
+        // needed, because GetLocalizedDisplayName, GetLocalizedInfoTip and
+        // LoadStringWHook all read the language live. Rebuild the private
+        // resource module so pages opened from now on get the new language:
+        // the old module is released (kept mapped for pages that are already
+        // open) and the new build gets a fresh, never-before-used file name.
         g_forceTranslations.store(Wh_GetIntSetting(L"forceTranslations") != 0);
         LoadLanguageSetting();
+        const std::wstring* dll = CurrentDllPath();
+        if (dll && !dll->empty()) {
+            std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+            ReleaseLocalizedResourceModuleLocked();
+            BuildLocalizedResourceModule(*dll, StoreDir());
+        }
 
         if (oldWindows7Skin != requestedWindows7Skin ||
             oldWindowsVistaSkin != requestedVistaSkin) {
@@ -3546,8 +3585,10 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
             return TRUE;
         }
 
-        // Non-skin settings keep the previous conservative behavior.
-        if (reload) *reload = TRUE;
+        // Every setting is now applied in place, so the mod never needs to
+        // reload (a reload would tear down and re-run setup, and would fail to
+        // rebuild the resource module anyway while the old one is still mapped).
+        if (reload) *reload = FALSE;
         return TRUE;
     } catch (...) {
         if (reload) *reload = TRUE;
@@ -3587,11 +3628,14 @@ void Wh_ModUninit(void) {
         if (Wh_GetIntSetting(L"keepFilesOnDisable") == 0) {
             std::wstring dir = StoreDir();
             if (!dir.empty()) RemoveOwnFiles(dir, false);
-            Wh_Log(L"Mod disabled: DLL unloaded and mod-owned files removed");
+            Wh_Log(L"Mod disabled: mod-owned files removed (files still mapped "
+                   L"are retried on a later unload)");
         } else {
             std::wstring dir = StoreDir();
             if (!dir.empty()) RemoveOwnFiles(dir, true);
-            Wh_Log(L"Mod disabled: base files kept; private resource module removed");
+            Wh_Log(L"Mod disabled: base files kept; private resource module and "
+                   L"stale copies removed (files still mapped are retried on a "
+                   L"later unload)");
         }
         g_keyTracker.ClearWithoutFreeing();
     } catch (...) {
