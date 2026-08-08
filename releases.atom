@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-08T11:26:41.000Z</updated>
+    <updated>2026-08-08T13:02:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Widget Board Size and Position 0.1]]></title>
+        <id>https://windhawk.net/mods/widget-board-size-position#3464f4b275a5b6b7c1f34c94244904f631142a0e</id>
+        <link href="https://windhawk.net/mods/widget-board-size-position"/>
+        <updated>2026-08-08T13:02:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="widgetboardsizeandposition">Widget Board Size and Position</h1>
+<p>Set a custom size and position for the new Widget Board on Windows 11.</p>
+<p>Allows you to override the default position and dimensions of the new WinUI 3 Widget Board (<code>WidgetBoard.exe</code>).</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/widget-board-size-position/wboard-size.png" alt="Screenshot" />
+<em>Example for making the Widget Board smaller</em></p>
+<p>Width, height, and offsets are specified in DIPs (96-DPI logical pixels), so a
+700x600 setting becomes 1400x1200 native pixels on a 200% display.</p>
+<p><code>horizontalAnchor</code> accepts: <code>system</code>, <code>left</code>, <code>center</code>, <code>right</code>.
+<code>verticalAnchor</code> accepts: <code>system</code>, <code>top</code>, <code>center</code>, <code>bottom</code>.</p>
+<p>When an anchor is <code>system</code>, Windows' requested position is preserved on that
+axis. Positive offsets move inward from left/top/right/bottom; for <code>center</code>,
+they move right/down from center.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Control Panel in Modern File Explorer 1.0]]></title>
         <id>https://windhawk.net/mods/control-panel-in-modern-file-explorer#f619cf783ed8630d4973aaa7b10dd5ecf0bddf9f</id>
@@ -1004,20 +1026,6 @@ folder. Duplicates from the user+public Desktop merge are suppressed automatical
         <author>
             <name>sb4ssman</name>
             <uri>https://github.com/sb4ssman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Virtual Desktop Popups 1.0.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-popups-disable#63da15b3c6797a5bcb748cf0adcd24ad5c859d90</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-popups-disable"/>
-        <updated>2026-07-22T18:01:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablevirtualdesktoppopups">Disable Virtual Desktop Popups</h1>
-<p><img src="https://i.imgur.com/uena3MS.png" alt="Screenshot of Desktop 1 popup with the popup crossed out" /></p>
-<p>This simple mod disables the popups saying "Desktop N" that appear when the current virtual desktop is changed on Windows 11 build 226xx.2050+ and 23493+.</p>
-<p>Tested on Windows 11 22H2 22621.4317 x64 and 24H2 26100.6899 ARM64.</p>]]></content>
-        <author>
-            <name>Amrsatrio</name>
-            <uri>https://github.com/Amrsatrio</uri>
         </author>
     </entry>
 </feed>
