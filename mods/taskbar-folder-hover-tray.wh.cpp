@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.30
+// @version         1.38
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -293,30 +293,30 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
   $name: 3. Appearance ▸ Button icon size (px)
   $description: 0 matches the size Windows uses for its own taskbar icons.
 
+- showLabels: true
+  $name: 3. Appearance ▸ Show item labels
+  $description: >-
+    Turn off for an icons-only grid. Icons are centred in the cell when labels
+    are hidden.
+
 - fontSize: 12
   $name: 3. Appearance ▸ Item label size (px)
 
-- itemFontFamily: ""
-  $name: 3. Appearance ▸ Item label font
-  $description: >-
-    Font family for item labels, e.g. "Segoe UI". Leave empty to match the
-    system font.
-
-- itemFontWeight: regular
+- itemFontWeight: bold
   $name: 3. Appearance ▸ Item label weight
   $options:
   - regular: Regular
   - bold: Bold
 
+- showTitle: true
+  $name: 3. Appearance ▸ Show folder title
+  $description: >-
+    The folder name at the top of the main hover grid. Subfolder menus never
+    show one.
+
 - titleFontSize: 13
   $name: 3. Appearance ▸ Folder title size (px)
   $description: Size of the name shown at the top of the main hover grid.
-
-- titleFontFamily: ""
-  $name: 3. Appearance ▸ Folder title font
-  $description: >-
-    Font family for the folder title, e.g. "Segoe UI". Leave empty to match
-    the system font.
 
 - titleFontWeight: bold
   $name: 3. Appearance ▸ Folder title weight
@@ -337,12 +337,54 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 - cornerRadius: 8
   $name: 3. Appearance ▸ Grid corner radius (px)
 
+- popupTheme: system
+  $name: 3. Appearance ▸ Grid theme
+  $description: >-
+    Background and text colours of the hover grid. Windows default follows the
+    system app theme.
+  $options:
+  - system: Windows default
+  - light: Light
+  - dark: Dark
+
 - panelOpacity: 85
   $name: 3. Appearance ▸ Grid opacity (%)
+  $description: >-
+    A contrasting outline is added behind the text as the background fades out.
+    At 0 the background is invisible - icons and labels float straight over the
+    desktop - but the grid still takes clicks rather than passing them through
+    to whatever is behind it.
 
-- acrylic: true
-  $name: 3. Appearance ▸ Acrylic blur
-  $description: Blur the desktop behind the grid. Turn off if it looks wrong.
+- panelBorder: true
+  $name: 3. Appearance ▸ Grid border
+  $description: >-
+    Thin outline around the edge of the grid, plus the border Windows draws on
+    the rounded window. Turn off for a frameless look at low opacity.
+
+- blurType: gaussian
+  $name: 3. Appearance ▸ Blur type
+  $description: >-
+    Gaussian captures the screen behind the grid and blurs it ourselves - a
+    real, adjustable blur radius, but it costs a screen capture and a resample
+    every ~32ms to track a moving background live. Acrylic uses Windows' own
+    GPU-composited blur-behind instead - much cheaper (no capture, no per-frame
+    resample, updates live for free) but the blur radius itself is fixed by
+    Windows, not adjustable; the strength setting below controls the tint's
+    opacity instead of the blur radius. None skips blur entirely - cheaper
+    than either, same as setting the strength below to 0.
+  $options:
+  - none: None
+  - gaussian: Gaussian (adjustable, more expensive)
+  - acrylic: Acrylic (fixed radius, cheaper)
+
+- blurStrength: 40
+  $name: 3. Appearance ▸ Blur strength (%)
+  $description: >-
+    Transparent blur layered behind the grid, over whatever is on screen.
+    Independent of the grid opacity above. Ignored when blur type above is
+    None; 0 has the same effect. For Gaussian this is the blur radius; for
+    Acrylic (fixed blur radius) it is instead how opaque the tint over that
+    blur is.
 
 - gapAbove: 8
   $name: 3. Appearance ▸ Gap above taskbar (px)
@@ -421,6 +463,45 @@ using namespace winrt::Windows::UI::Xaml::Hosting;
 #ifndef DWMWCP_ROUND
 #define DWMWCP_ROUND 2
 #endif
+// Windows 10 2004+. Marks a window invisible to BitBlt/PrintWindow/desktop
+// capture, so CaptureBlurredBackdrop can grab the screen behind our own grid
+// window without that window's own pixels showing up in the shot - no need
+// to hide it first.
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
+// Undocumented SetWindowCompositionAttribute accent policy - the same
+// mechanism Windows itself uses for acrylic flyouts. Not in any public
+// header, so declared by hand and loaded dynamically (see
+// GetSetWindowCompositionAttribute).
+enum ACCENT_STATE {
+    ACCENT_DISABLED = 0,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+};
+struct ACCENT_POLICY {
+    ACCENT_STATE AccentState;
+    DWORD AccentFlags;
+    DWORD GradientColor;  // 0xAABBGGRR
+    DWORD AnimationId;
+};
+enum WINDOWCOMPOSITIONATTRIB {
+    WCA_ACCENT_POLICY = 19,
+};
+struct WINDOWCOMPOSITIONATTRIBDATA {
+    WINDOWCOMPOSITIONATTRIB Attrib;
+    PVOID pvData;
+    SIZE_T cbData;
+};
+using SetWindowCompositionAttributeFn =
+    BOOL(WINAPI*)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
+
+SetWindowCompositionAttributeFn GetSetWindowCompositionAttribute() {
+    static SetWindowCompositionAttributeFn fn =
+        reinterpret_cast<SetWindowCompositionAttributeFn>(GetProcAddress(
+            GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute"));
+    return fn;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
@@ -439,6 +520,7 @@ struct FolderEntry {
 };
 
 enum class SortMode { Name, Modified };
+enum class BlurType { None, Gaussian, Acrylic };
 
 struct Settings {
     std::vector<FolderEntry> folders;
@@ -459,16 +541,21 @@ struct Settings {
     int cellWidth = 92;
     int cellHeight = 88;
     int iconSize = 32;
+    bool showLabels = true;
     int fontSize = 12;
-    std::wstring itemFontFamily;
-    bool itemFontBold = false;
+    // LOGFONT lfWeight values. See MakePopupFont.
+    int itemFontWeight = FW_BOLD;
+    bool showTitle = true;
     int titleFontSize = 13;
-    std::wstring titleFontFamily;
-    bool titleFontBold = true;
+    int titleFontWeight = FW_BOLD;
     std::wstring titleAlign = L"center";
     int cornerRadius = 8;
+    // -1 follows the system app theme; 0 forces light, 1 forces dark.
+    int popupThemeOverride = -1;
     int panelOpacity = 85;
-    bool acrylic = true;
+    bool panelBorder = true;
+    BlurType blurType = BlurType::Gaussian;
+    int blurStrength = 40;
     int gapAbove = 8;
     int gapBefore = 0;
     int gapAfter = 0;
@@ -577,6 +664,18 @@ std::wstring ExpandEnv(const std::wstring& s) {
 
 std::wstring GetStringSetting(PCWSTR name) {
     return WindhawkUtils::StringSetting::make(name).get();
+}
+
+// Weight settings are stored as LOGFONT lfWeight values so MakePopupFont can
+// hand them straight to the GDI font mapper.
+int ParseFontWeight(const std::wstring& value, int fallback) {
+    if (value == L"regular") {
+        return FW_NORMAL;
+    }
+    if (value == L"bold") {
+        return FW_BOLD;
+    }
+    return fallback;
 }
 
 // An icon setting is a file reference if it looks like a path, otherwise it is
@@ -1023,23 +1122,33 @@ void LoadSettings() {
         g_settings.cellWidth = 92;
         g_settings.cellHeight = 88;
     }
+    g_settings.showLabels = Wh_GetIntSetting(L"showLabels");
     g_settings.fontSize = std::clamp<int>(Wh_GetIntSetting(L"fontSize"), 6, 48);
-    g_settings.itemFontFamily = GetStringSetting(L"itemFontFamily");
-    g_settings.itemFontBold = GetStringSetting(L"itemFontWeight") == L"bold";
+    g_settings.itemFontWeight =
+        ParseFontWeight(GetStringSetting(L"itemFontWeight"), FW_BOLD);
+    g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
     g_settings.titleFontSize =
         std::clamp<int>(Wh_GetIntSetting(L"titleFontSize"), 6, 48);
-    g_settings.titleFontFamily = GetStringSetting(L"titleFontFamily");
-    g_settings.titleFontBold =
-        GetStringSetting(L"titleFontWeight") != L"regular";
+    g_settings.titleFontWeight =
+        ParseFontWeight(GetStringSetting(L"titleFontWeight"), FW_BOLD);
     g_settings.titleAlign = GetStringSetting(L"titleAlign");
     if (g_settings.titleAlign != L"left" && g_settings.titleAlign != L"right") {
         g_settings.titleAlign = L"center";
     }
     g_settings.cornerRadius =
         std::clamp<int>(Wh_GetIntSetting(L"cornerRadius"), 0, 32);
+    std::wstring popupTheme = GetStringSetting(L"popupTheme");
+    g_settings.popupThemeOverride =
+        popupTheme == L"light" ? 0 : (popupTheme == L"dark" ? 1 : -1);
     g_settings.panelOpacity =
-        std::clamp<int>(Wh_GetIntSetting(L"panelOpacity"), 5, 100);
-    g_settings.acrylic = Wh_GetIntSetting(L"acrylic");
+        std::clamp<int>(Wh_GetIntSetting(L"panelOpacity"), 0, 100);
+    g_settings.panelBorder = Wh_GetIntSetting(L"panelBorder");
+    std::wstring blurType = GetStringSetting(L"blurType");
+    g_settings.blurType = blurType == L"acrylic"   ? BlurType::Acrylic
+                          : blurType == L"none"    ? BlurType::None
+                                                    : BlurType::Gaussian;
+    g_settings.blurStrength =
+        std::clamp<int>(Wh_GetIntSetting(L"blurStrength"), 0, 100);
     g_settings.gapAbove =
         std::clamp<int>(Wh_GetIntSetting(L"gapAbove"), 0, 200);
     g_settings.gapBefore =
@@ -1399,6 +1508,17 @@ bool IsDarkTheme() {
     return g_themeCache.dark;
 }
 
+// Theme the hover grid paints itself with: the popupTheme setting when it
+// forces light or dark, the system app theme otherwise. The taskbar button
+// highlight keeps following the system unconditionally so it stays consistent
+// with the shell's own icons.
+bool IsDarkPopupTheme() {
+    if (g_settings.popupThemeOverride >= 0) {
+        return g_settings.popupThemeOverride != 0;
+    }
+    return IsDarkTheme();
+}
+
 Gdiplus::Color GetAccentGdipColor(BYTE alpha) {
     if (!g_themeCache.resolved) {
         RefreshThemeCache();
@@ -1415,17 +1535,48 @@ PCWSTR PopupFontName() {
                                               : L"Segoe UI";
 }
 
-// Falls back to the system popup font when |custom| is empty or names a font
-// that isn't installed (FontFamily construction succeeds either way, but a
-// missing family leaves it in a bad state that GDI+ renders as boxes).
-std::wstring ResolvePopupFontName(const std::wstring& custom) {
-    if (!custom.empty()) {
-        Gdiplus::FontFamily family(custom.c_str());
-        if (family.GetLastStatus() == Gdiplus::Ok) {
-            return custom;
-        }
+// Grid text is Arial. FontFamily construction succeeds even for a missing
+// family but leaves the object in a state GDI+ renders as boxes, so an absent
+// Arial falls back to the system popup font.
+std::wstring PopupTextFontName() {
+    Gdiplus::FontFamily arial(L"Arial");
+    if (arial.GetLastStatus() == Gdiplus::Ok) {
+        return L"Arial";
     }
     return PopupFontName();
+}
+
+// Built from a LOGFONT rather than a FontFamily + FontStyle so lfWeight goes to
+// the GDI font mapper, which resolves it against the family's real members.
+// Falls back to the FontFamily path if the mapper gives us something GDI+
+// cannot use.
+std::unique_ptr<Gdiplus::Font> MakePopupFont(int sizePx, int weight) {
+    std::wstring name = PopupTextFontName();
+
+    LOGFONTW lf{};
+    // Negative lfHeight is the em size in pixels, matching what UnitPixel meant
+    // to the FontFamily constructor this replaced.
+    lf.lfHeight = -sizePx;
+    lf.lfWeight = weight;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_TT_PRECIS;
+    lf.lfQuality = CLEARTYPE_QUALITY;
+    wcsncpy_s(lf.lfFaceName, name.c_str(), _TRUNCATE);
+
+    if (HDC hdc = GetDC(nullptr)) {
+        auto font = std::make_unique<Gdiplus::Font>(hdc, &lf);
+        ReleaseDC(nullptr, hdc);
+        if (font && font->GetLastStatus() == Gdiplus::Ok) {
+            return font;
+        }
+    }
+
+    Gdiplus::FontFamily fallbackFamily(name.c_str());
+    return std::make_unique<Gdiplus::Font>(
+        &fallbackFamily, (Gdiplus::REAL)sizePx,
+        weight >= FW_BOLD ? Gdiplus::FontStyleBold
+                              : Gdiplus::FontStyleRegular,
+        Gdiplus::UnitPixel);
 }
 
 // True when the alpha channel carries real transparency (partial alpha, or a
@@ -1721,6 +1872,68 @@ std::shared_ptr<Gdiplus::Bitmap> BitmapFromBgraScaled(const BYTE* bgra,
     return result;
 }
 
+// An icon is treated as artwork centred in an oversized slot, rather than as an
+// icon with its own generous padding, only when it covers less than this much of
+// its canvas. Real icons run 80-100%; a 48px icon in a 256px slot is 19%.
+constexpr int kIconCanvasFillPercent = 62;
+
+// SHIL_JUMBO image-list entries are 256x256 slots, and an app whose icon has no
+// 256px variant gets its smaller artwork centred in that slot instead of scaled
+// up to fill it. Scaling the whole slot down to the requested size then renders
+// the artwork at a fraction of that size. Crop back to the artwork when it fills
+// only a small part of the canvas; ordinary icons are left untouched.
+bool CropIconCanvasPadding(std::vector<BYTE>& bgra, int* w, int* h) {
+    int width = *w;
+    int height = *h;
+    if (width <= 0 || height <= 0 ||
+        bgra.size() < (size_t)width * height * 4) {
+        return false;
+    }
+
+    int minX = width;
+    int minY = height;
+    int maxX = -1;
+    int maxY = -1;
+    for (int y = 0; y < height; y++) {
+        const BYTE* row = bgra.data() + (size_t)y * width * 4;
+        for (int x = 0; x < width; x++) {
+            if (row[x * 4 + 3] == 0) {
+                continue;
+            }
+            minX = std::min(minX, x);
+            maxX = std::max(maxX, x);
+            minY = std::min(minY, y);
+            maxY = std::max(maxY, y);
+        }
+    }
+    if (maxX < minX || maxY < minY) {
+        return false;  // Fully transparent; nothing to crop to.
+    }
+
+    int contentW = maxX - minX + 1;
+    int contentH = maxY - minY + 1;
+    if (contentW * 100 > width * kIconCanvasFillPercent ||
+        contentH * 100 > height * kIconCanvasFillPercent) {
+        return false;
+    }
+
+    // Square, centred on the artwork, so the aspect ratio survives the scale.
+    int side = std::min({std::max(contentW, contentH), width, height});
+    int left = std::clamp((minX + maxX) / 2 - side / 2, 0, width - side);
+    int top = std::clamp((minY + maxY) / 2 - side / 2, 0, height - side);
+
+    std::vector<BYTE> cropped((size_t)side * side * 4);
+    for (int y = 0; y < side; y++) {
+        memcpy(cropped.data() + (size_t)y * side * 4,
+               bgra.data() + (size_t)(top + y) * width * 4 + (size_t)left * 4,
+               (size_t)side * 4);
+    }
+    bgra.swap(cropped);
+    *w = side;
+    *h = side;
+    return true;
+}
+
 // Convert HICON to a sized 32bpp PARGB bitmap for every icon type:
 // 1) Prefer color-plane pixels that already carry useful alpha (modern ARGB).
 // 2) Otherwise apply the 1-bit AND mask (black=opaque, white=transparent) so
@@ -1790,6 +2003,7 @@ std::shared_ptr<Gdiplus::Bitmap> HIconToBitmap(HICON hIcon, int size) {
                 ApplyIconAndMaskToBgra(bgra.data(), srcW, srcH, ii.hbmMask,
                                        monoIcon);
             }
+            CropIconCanvasPadding(bgra, &srcW, &srcH);
             SanitizeAndPremultiplyBgra(bgra.data(), srcW, srcH, srcW * 4);
             auto scaled =
                 BitmapFromBgraScaled(bgra.data(), srcW, srcH, size);
@@ -2909,7 +3123,14 @@ constexpr PCWSTR kPopupClassName = L"WH_TaskbarFolderHoverTray_Grid";
 constexpr PCWSTR kMenuOwnerClassName = L"WH_TaskbarFolderHoverTray_MenuOwner";
 constexpr UINT_PTR kTickTimerId = 1;
 constexpr UINT_PTR kOpenTimerId = 2;
-constexpr UINT kTickTimerMs = 50;
+// Separate from kTickTimerId so the blur's refresh rate isn't tied to (or
+// capped by) the hover/close/submenu poll cadence.
+constexpr UINT_PTR kBlurTimerId = 3;
+constexpr UINT kTickTimerMs = 16;
+// 32ms = ~30fps. Fixed rather than matched to the monitor: simpler, and this
+// is capture+resample cost paid on a timer, not a true frame rate - no need
+// to chase 144/240Hz for a hover popup's backdrop.
+constexpr UINT kBlurTimerMs = 32;
 // Hard cap on cascade depth so a symlink loop cannot exhaust window handles.
 constexpr int kMaxLevels = 16;
 
@@ -2936,6 +3157,14 @@ struct PopupLevel {
     int cachedBaseW = 0;
     int cachedBaseH = 0;
     bool baseDirty = true;
+    // Screen capture behind the panel's rect, softened by CaptureBlurredBackdrop.
+    // Baked into cachedBase by RebuildLevelBase, not drawn separately - see
+    // PresentLevel for when this is (re)captured.
+    std::unique_ptr<Gdiplus::Bitmap> blurBackdrop;
+    // Size the rounded window region was last built for, so hover repaints do
+    // not rebuild it. See ApplyRoundedRegion.
+    int regionW = 0;
+    int regionH = 0;
 };
 
 // Created on the taskbar UI thread, read from the Windhawk engine thread, an
@@ -2954,6 +3183,20 @@ std::vector<std::unique_ptr<PopupLevel>>& Levels() {
         g_levels.emplace();
     }
     return *g_levels;
+}
+
+// Leaving WDA_EXCLUDEFROMCAPTURE set permanently kept the grid out of every
+// screenshot tool, not just our own BitBlt in CaptureBlurredBackdrop - the
+// whole tray would vanish from Snipping Tool/PrtScn/OBS any time it was open.
+// Toggled on for the few milliseconds our own capture runs, then back off
+// immediately after, so only that instant is blind to it.
+void SetOwnWindowsCaptureExcluded(bool excluded) {
+    DWORD affinity = excluded ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
+    for (HWND hWnd : g_levelWindows) {
+        if (hWnd) {
+            SetWindowDisplayAffinity(hWnd, affinity);
+        }
+    }
 }
 
 RECT g_rootAnchorRect{};
@@ -3032,50 +3275,65 @@ int ScaleForPopup(int value) {
     return MulDiv(value, g_popupDpi, 96);
 }
 
-struct AccentPolicy {
-    int accentState;
-    int accentFlags;
-    unsigned int gradientColor;
-    int animationId;
-};
+// Physical icon size in the grid. With labels hidden the icon grows to fill the
+// cell instead of leaving the label's share of it empty. Icons are extracted at
+// this size too, not upscaled from a cached bitmap made at the configured one.
+int PopupIconPixelSize() {
+    int size = ScaleForPopup(g_settings.iconSize);
+    if (!g_settings.showLabels) {
+        int fit = std::min<int>(ScaleForPopup(g_settings.cellWidth),
+                                ScaleForPopup(g_settings.cellHeight)) -
+                  ScaleForPopup(8) * 2;
+        size = std::max<int>(size, fit);
+    }
+    return size;
+}
 
-struct WindowCompositionAttributeData {
-    int attribute;
-    void* data;
-    size_t dataSize;
-};
-
+// Gaussian blur is rendered ourselves (see CaptureBlurredBackdrop): capturing
+// and blurring the screen by hand costs a BitBlt + resample every
+// kBlurTimerMs, but gives a real, adjustable, untinted blur radius. Acrylic
+// instead hands the backdrop to DWM's own SetWindowCompositionAttribute
+// accent below - much cheaper (no capture, no resample, updates live for
+// free) but the blur radius itself is fixed by Windows; only the tint's
+// opacity is ours to adjust, via GradientColor's alpha.
 void ApplyBackdrop(HWND hWnd) {
+    // Capture exclusion is applied transiently around our own BitBlt instead
+    // of here - see SetOwnWindowsCaptureExcluded - so the window stays
+    // screenshot/recording-visible the rest of the time.
+
     int corner = DWMWCP_ROUND;
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner,
                           sizeof(corner));
 
-    if (!g_settings.acrylic) {
-        return;
+    // DWM draws its own 1px border on a rounded window, independent of anything
+    // we paint. That is the outline that survived at opacity 0 - our own border
+    // pen was already skipped there, but this one is system chrome.
+    if (!g_settings.panelBorder) {
+        COLORREF border = DWMWA_COLOR_NONE;
+        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border,
+                              sizeof(border));
     }
 
-    using SetWindowCompositionAttribute_t =
-        BOOL(WINAPI*)(HWND, WindowCompositionAttributeData*);
-    static auto setWindowCompositionAttribute =
-        (SetWindowCompositionAttribute_t)GetProcAddress(
-            GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
-    if (!setWindowCompositionAttribute) {
-        return;
+    if (auto setWindowCompositionAttribute = GetSetWindowCompositionAttribute()) {
+        ACCENT_POLICY accent{};
+        if (g_settings.blurType == BlurType::Acrylic &&
+            g_settings.blurStrength > 0) {
+            accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
+            // Grayscale tint (R=G=B), so byte order within GradientColor
+            // doesn't matter. Strength is the tint's opacity, not the blur
+            // radius - Windows fixes that itself.
+            bool dark = IsDarkPopupTheme();
+            DWORD rgb = dark ? 0x2B2B2Bu : 0xF9F9F9u;
+            BYTE alpha =
+                (BYTE)(std::clamp(g_settings.blurStrength, 1, 100) * 255 / 100);
+            accent.GradientColor = ((DWORD)alpha << 24) | rgb;
+        } else {
+            accent.AccentState = ACCENT_DISABLED;
+        }
+        WINDOWCOMPOSITIONATTRIBDATA data{WCA_ACCENT_POLICY, &accent,
+                                         sizeof(accent)};
+        setWindowCompositionAttribute(hWnd, &data);
     }
-
-    // ACCENT_ENABLE_ACRYLICBLURBEHIND with a nearly transparent tint; the
-    // visible panel colour is painted by us so the blur only adds depth.
-    AccentPolicy policy{};
-    policy.accentState = 4;
-    policy.accentFlags = 0;
-    policy.gradientColor = IsDarkTheme() ? 0x20000000 : 0x20FFFFFF;
-    policy.animationId = 0;
-
-    WindowCompositionAttributeData data{};
-    data.attribute = 19;  // WCA_ACCENT_POLICY
-    data.data = &policy;
-    data.dataSize = sizeof(policy);
-    setWindowCompositionAttribute(hWnd, &data);
 }
 
 void AddRoundedRect(Gdiplus::GraphicsPath* path,
@@ -3092,6 +3350,19 @@ void AddRoundedRect(Gdiplus::GraphicsPath* path,
     path->AddArc(rect.GetRight() - d, rect.GetBottom() - d, d, d, 0.0f, 90.0f);
     path->AddArc(rect.X, rect.GetBottom() - d, d, d, 90.0f, 90.0f);
     path->CloseFigure();
+}
+
+// Signed distance from (px, py) to the boundary of an axis-aligned rounded
+// rect of half-extents (hw, hh) and corner radius r, both centered on the
+// origin. <=0 inside/on the shape, growing positive outward - the standard
+// rounded-box SDF. Gives the panel's own Gaussian blur a smoothly
+// antialiased edge (PaintLevel), rather than GDI+'s aliased region-clip.
+float RoundedBoxSDF(float px, float py, float hw, float hh, float r) {
+    float qx = std::abs(px) - (hw - r);
+    float qy = std::abs(py) - (hh - r);
+    float ax = std::max(qx, 0.0f);
+    float ay = std::max(qy, 0.0f);
+    return std::sqrt(ax * ax + ay * ay) + std::min(std::max(qx, qy), 0.0f) - r;
 }
 
 // A minimal folder silhouette: a body whose top edge steps up on the left to
@@ -3112,7 +3383,8 @@ void AddFolderGlyphPath(Gdiplus::GraphicsPath* path,
 
 // Extra top band reserved for the root folder title. Subfolder menus skip this.
 int RootTitleBandHeight(const PopupLevel* level) {
-    if (!level || level->depth != 0 || level->title.empty()) {
+    if (!level || !g_settings.showTitle || level->depth != 0 ||
+        level->title.empty()) {
         return 0;
     }
     return ScaleForPopup(8) + ScaleForPopup(g_settings.titleFontSize) +
@@ -3228,6 +3500,38 @@ bool CanExpand(int depth) {
     return depth < g_settings.maxFolderDepth && depth + 1 < kMaxLevels;
 }
 
+// Clips the window itself to the same rounded rect the panel is painted with.
+// The blur background and DWM's border are drawn against the window shape, not
+// against our alpha, so without this they kept square corners while the painted
+// background was round. Rebuilt only when the size changes - hover repaints run
+// through PaintLevel too.
+void ApplyRoundedRegion(PopupLevel* level, int width, int height) {
+    if (!level || !level->hwnd || width <= 0 || height <= 0) {
+        return;
+    }
+    if (level->regionW == width && level->regionH == height) {
+        return;
+    }
+
+    int radius = ScaleForPopup(g_settings.cornerRadius);
+    // CreateRoundRectRgn's ellipse size is the full diameter, and its right and
+    // bottom edges are exclusive.
+    HRGN region =
+        radius > 0 ? CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2,
+                                        radius * 2)
+                   : CreateRectRgn(0, 0, width, height);
+    if (!region) {
+        return;
+    }
+    // On success the window owns the region; do not delete it here.
+    if (SetWindowRgn(level->hwnd, region, FALSE)) {
+        level->regionW = width;
+        level->regionH = height;
+    } else {
+        DeleteObject(region);
+    }
+}
+
 void InvalidateLevelBase(PopupLevel* level) {
     if (!level) {
         return;
@@ -3238,11 +3542,57 @@ void InvalidateLevelBase(PopupLevel* level) {
     level->cachedBaseH = 0;
 }
 
+// Floor for the panel fill's alpha. UpdateLayeredWindow hit-tests against the
+// alpha channel: a 0-alpha pixel is click-through straight to whatever is
+// behind the grid, so without a floor the gaps between icons stop taking
+// clicks/WM_MOUSEMOVE. 1/255 is the standard "invisible but still hit-tests"
+// value for layered windows - premultiplied, it rounds a near-black or
+// near-white fill down to a 0 or 1 RGB component, which is not distinguishable
+// from true transparency on screen.
+constexpr int kHitTestAlpha = 1;
+
+BYTE PanelAlpha() {
+    return (BYTE)std::clamp<int>(g_settings.panelOpacity * 255 / 100,
+                                 kHitTestAlpha, 255);
+}
+
+
+// Grid text is white in both themes, so the outline is always black. Eight
+// offsets at one scaled pixel: corners covered, edge crisp.
+//
+// On a dark panel the outline only has to work once the desktop starts showing
+// through, so it fades in as the panel fades out. On a light panel white text
+// needs the outline at every opacity or it disappears into the panel, so there
+// it stays at full strength.
+void DrawStringWithShadow(Gdiplus::Graphics& g,
+                          PCWSTR text,
+                          Gdiplus::Font& font,
+                          const Gdiplus::RectF& rect,
+                          Gdiplus::StringFormat& format,
+                          const Gdiplus::Color& textColor,
+                          BYTE panelAlpha) {
+    int outline = IsDarkPopupTheme() ? 255 - panelAlpha : 255;
+    if (outline > 0) {
+        Gdiplus::SolidBrush outlineBrush(Gdiplus::Color((BYTE)outline, 0, 0, 0));
+        Gdiplus::REAL d = (Gdiplus::REAL)std::max<int>(1, ScaleForPopup(1));
+        const Gdiplus::REAL offsets[8][2] = {{-d, -d}, {0, -d}, {d, -d}, {-d, 0},
+                                             {d, 0},   {-d, d}, {0, d},  {d, d}};
+        for (const auto& off : offsets) {
+            Gdiplus::RectF outlineRect = rect;
+            outlineRect.Offset(off[0], off[1]);
+            g.DrawString(text, -1, &font, outlineRect, &format, &outlineBrush);
+        }
+    }
+    Gdiplus::SolidBrush textBrush(textColor);
+    g.DrawString(text, -1, &font, rect, &format, &textBrush);
+}
+
 // Icon, folder badge, and label for one grid cell. Shared by the static base
 // paint and the hover/press cell overlay so the two stay visually identical.
 void DrawCell(Gdiplus::Graphics& g,
               PopupLevel* level,
               int index,
+              BYTE panelAlpha,
               const Gdiplus::Color& textColor,
               const Gdiplus::Color& badgeFillColor,
               const Gdiplus::Color& badgeMarkColor,
@@ -3259,9 +3609,12 @@ void DrawCell(Gdiplus::Graphics& g,
     int cellH = cell.bottom - cell.top;
     const GridItem& item = level->items[index];
 
-    int iconSize = ScaleForPopup(g_settings.iconSize);
-    int iconTop = ScaleForPopup(10);
+    int iconSize = PopupIconPixelSize();
     int labelGap = ScaleForPopup(6);
+    // With labels hidden the icon owns the whole cell, so centre it instead of
+    // leaving it parked at the top over empty space.
+    int iconTop = g_settings.showLabels ? ScaleForPopup(10)
+                                        : (cellH - iconSize) / 2;
     bool expandable = CanExpand(level->depth);
 
     Gdiplus::Rect iconRect(cell.left + (cellW - iconSize) / 2,
@@ -3294,17 +3647,92 @@ void DrawCell(Gdiplus::Graphics& g,
         g.FillPath(&markBrush, &glyphPath);
     }
 
-    Gdiplus::SolidBrush textBrush(textColor);
     Gdiplus::RectF labelRect(
         (Gdiplus::REAL)(cell.left + ScaleForPopup(4)),
         (Gdiplus::REAL)(cell.top + iconTop + iconSize + labelGap),
         (Gdiplus::REAL)(cellW - ScaleForPopup(8)),
         (Gdiplus::REAL)(cellH - iconTop - iconSize - labelGap -
                         ScaleForPopup(4)));
-    if (labelRect.Height > 0) {
-        g.DrawString(item.displayName.c_str(), -1, &font, labelRect, &format,
-                     &textBrush);
+    if (g_settings.showLabels && labelRect.Height > 0) {
+        DrawStringWithShadow(g, item.displayName.c_str(), font, labelRect,
+                             format, textColor, panelAlpha);
     }
+}
+
+// Captures the desktop behind screenRect and softens it with a cheap,
+// tint-free blur: shrink heavily (the resampling itself is what blurs it),
+// then stretch back up. Higher strength shrinks further, so there is more
+// for the upscale to smooth over - a real, adjustable blur radius, unlike
+// DWM's fixed-radius accent blur. Safe to call with the level's own window
+// visible and covering screenRect: capture exclusion is toggled on for just
+// the BitBlt below (see SetOwnWindowsCaptureExcluded), so that window's
+// pixels don't show up in its own blur without staying invisible to
+// screenshot tools the rest of the time.
+std::unique_ptr<Gdiplus::Bitmap> CaptureBlurredBackdrop(const RECT& screenRect,
+                                                        int strength) {
+    int width = screenRect.right - screenRect.left;
+    int height = screenRect.bottom - screenRect.top;
+    if (width <= 0 || height <= 0 || strength <= 0) {
+        return nullptr;
+    }
+
+    HDC hScreenDC = GetDC(nullptr);
+    if (!hScreenDC) {
+        return nullptr;
+    }
+    HDC hMemDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hBmp =
+        hMemDC ? CreateCompatibleBitmap(hScreenDC, width, height) : nullptr;
+
+    std::unique_ptr<Gdiplus::Bitmap> captured;
+    if (hMemDC && hBmp) {
+        HGDIOBJ old = SelectObject(hMemDC, hBmp);
+        SetOwnWindowsCaptureExcluded(true);
+        BitBlt(hMemDC, 0, 0, width, height, hScreenDC, screenRect.left,
+              screenRect.top, SRCCOPY);
+        SetOwnWindowsCaptureExcluded(false);
+        SelectObject(hMemDC, old);
+        captured.reset(Gdiplus::Bitmap::FromHBITMAP(hBmp, nullptr));
+    }
+    if (hBmp) {
+        DeleteObject(hBmp);
+    }
+    if (hMemDC) {
+        DeleteDC(hMemDC);
+    }
+    ReleaseDC(nullptr, hScreenDC);
+
+    if (!captured || captured->GetLastStatus() != Gdiplus::Ok) {
+        return nullptr;
+    }
+
+    float shrink = 1.0f + (float)std::clamp(strength, 0, 100) / 100.0f * 14.0f;
+    int smallW = std::max(1, (int)(width / shrink));
+    int smallH = std::max(1, (int)(height / shrink));
+
+    Gdiplus::Bitmap small(smallW, smallH, PixelFormat32bppRGB);
+    if (small.GetLastStatus() != Gdiplus::Ok) {
+        return nullptr;
+    }
+    {
+        Gdiplus::Graphics g(&small);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        g.DrawImage(captured.get(), 0, 0, smallW, smallH);
+    }
+
+    auto result = std::make_unique<Gdiplus::Bitmap>(width, height,
+                                                     PixelFormat32bppRGB);
+    if (!result || result->GetLastStatus() != Gdiplus::Ok) {
+        return nullptr;
+    }
+    Gdiplus::Graphics g(result.get());
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    g.DrawImage(&small, 0, 0, width, height);
+    return result;
 }
 
 // Paints the static panel (no hover/press chrome) into level->cachedBase.
@@ -3320,19 +3748,27 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+    // GridFit, not plain AntiAlias: without grid fitting GDI+ places stems on
+    // fractional pixels, which is what made labels look thin and grainy. Only
+    // the GridFit variants hint the outline onto the pixel grid. ClearType is
+    // not an option here - subpixel AA has no defined result on the
+    // transparent PARGB surface a layered window needs.
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
     g.Clear(Gdiplus::Color(0, 0, 0, 0));
 
-    bool dark = IsDarkTheme();
-    BYTE panelAlpha =
-        (BYTE)std::clamp<int>(g_settings.panelOpacity * 255 / 100, 10, 255);
+    bool dark = IsDarkPopupTheme();
+    // 0 = gamma 1.0. The GDI+ default of 4 eats the edge coverage of light
+    // glyphs, and grid text is always light. Tuning knob if a font renders off.
+    g.SetTextContrast(0);
+    BYTE panelAlpha = PanelAlpha();
     Gdiplus::Color panelColor = dark
                                     ? Gdiplus::Color(panelAlpha, 43, 43, 43)
                                     : Gdiplus::Color(panelAlpha, 249, 249, 249);
     Gdiplus::Color borderColor =
         dark ? Gdiplus::Color(40, 255, 255, 255) : Gdiplus::Color(28, 0, 0, 0);
-    Gdiplus::Color textColor = dark ? Gdiplus::Color(255, 255, 255, 255)
-                                    : Gdiplus::Color(255, 26, 26, 26);
+    // White in both themes - the black outline carries the contrast, so the
+    // light theme does not need dark text.
+    Gdiplus::Color textColor(255, 255, 255, 255);
     Gdiplus::Color badgeFillColor = GetAccentGdipColor(255);
     bool lightAccent = ((int)badgeFillColor.GetR() + badgeFillColor.GetG() +
                         badgeFillColor.GetB()) > 500;
@@ -3347,18 +3783,34 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     Gdiplus::GraphicsPath panelPath;
     AddRoundedRect(&panelPath, panelRect, radius);
 
+    // Blur is not baked in here - see PaintLevel. It is re-captured far more
+    // often than icons/text/fill change, so it is composited straight into
+    // the final DIB every repaint instead of forcing a full RebuildLevelBase
+    // (icon/badge/text redraws) on every blur tick.
+    //
+    // The fill still runs at opacity 0 - see PanelAlpha() - but the border is
+    // optional so nothing of the panel need be left on screen.
+    //
+    // SourceCopy, not the default SourceOver: this Graphics runs at
+    // CompositingQualityHighQuality, which is GDI+'s gamma-corrected blend, and
+    // gamma-correcting an alpha of kHitTestAlpha against the transparent
+    // surface rounds it straight back down to 0 - which is exactly the
+    // click-through hole PanelAlpha()'s floor exists to prevent. The fill is
+    // the first thing drawn onto a just-cleared bitmap, so there is nothing
+    // underneath for SourceOver to preserve anyway; copying writes the alpha
+    // byte verbatim. Antialiasing still applies, so the rounded corners keep
+    // their partial-alpha edge.
     Gdiplus::SolidBrush panelBrush(panelColor);
+    g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
     g.FillPath(&panelBrush, &panelPath);
-    Gdiplus::Pen borderPen(borderColor, 1.0f);
-    g.DrawPath(&borderPen, &panelPath);
+    g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+    if (g_settings.panelBorder) {
+        Gdiplus::Pen borderPen(borderColor, 1.0f);
+        g.DrawPath(&borderPen, &panelPath);
+    }
 
-    Gdiplus::FontFamily family(
-        ResolvePopupFontName(g_settings.itemFontFamily).c_str());
-    Gdiplus::Font font(&family, (Gdiplus::REAL)ScaleForPopup(g_settings.fontSize),
-                       g_settings.itemFontBold ? Gdiplus::FontStyleBold
-                                                : Gdiplus::FontStyleRegular,
-                       Gdiplus::UnitPixel);
-    Gdiplus::SolidBrush textBrush(textColor);
+    auto font = MakePopupFont(ScaleForPopup(g_settings.fontSize),
+                              g_settings.itemFontWeight);
 
     Gdiplus::StringFormat format;
     format.SetAlignment(Gdiplus::StringAlignmentCenter);
@@ -3368,13 +3820,8 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
 
     int titleBand = RootTitleBandHeight(level);
     if (titleBand > 0) {
-        Gdiplus::FontFamily titleFamily(
-            ResolvePopupFontName(g_settings.titleFontFamily).c_str());
-        Gdiplus::Font titleFont(
-            &titleFamily, (Gdiplus::REAL)ScaleForPopup(g_settings.titleFontSize),
-            g_settings.titleFontBold ? Gdiplus::FontStyleBold
-                                      : Gdiplus::FontStyleRegular,
-            Gdiplus::UnitPixel);
+        auto titleFont = MakePopupFont(ScaleForPopup(g_settings.titleFontSize),
+                                       g_settings.titleFontWeight);
         Gdiplus::StringFormat titleFormat;
         if (g_settings.titleAlign == L"left") {
             titleFormat.SetAlignment(Gdiplus::StringAlignmentNear);
@@ -3392,8 +3839,8 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
             (Gdiplus::REAL)pad, (Gdiplus::REAL)ScaleForPopup(4),
             (Gdiplus::REAL)(width - pad * 2),
             (Gdiplus::REAL)(titleBand - ScaleForPopup(4)));
-        g.DrawString(level->title.c_str(), -1, &titleFont, titleRect,
-                     &titleFormat, &textBrush);
+        DrawStringWithShadow(g, level->title.c_str(), *titleFont, titleRect,
+                             titleFormat, textColor, panelAlpha);
     }
 
     if (level->items.empty()) {
@@ -3403,13 +3850,14 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
         PCWSTR message = level->loading ? L"Loading..." : L"Empty folder";
         Gdiplus::RectF area(0.0f, (Gdiplus::REAL)titleBand, (Gdiplus::REAL)width,
                             (Gdiplus::REAL)(height - titleBand));
-        g.DrawString(message, -1, &font, area, &centered, &textBrush);
+        DrawStringWithShadow(g, message, *font, area, centered, textColor,
+                             panelAlpha);
     }
 
     for (size_t i = 0; i < level->items.size() && i < level->cellRects.size();
          i++) {
-        DrawCell(g, level, (int)i, textColor, badgeFillColor, badgeMarkColor,
-                 badgeRingColor, font, format);
+        DrawCell(g, level, (int)i, panelAlpha, textColor, badgeFillColor,
+                 badgeMarkColor, badgeRingColor, *font, format);
     }
 
     level->cachedBase = std::move(bitmap);
@@ -3475,20 +3923,81 @@ void PaintLevel(PopupLevel* level) {
         g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
         g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
         g.Clear(Gdiplus::Color(0, 0, 0, 0));
-        g.DrawImage(level->cachedBase.get(), 0, 0, width, height);
 
+        // Blur goes down first, edged to the same rounded shape cachedBase's
+        // own fill/border/icons are clipped to (see RebuildLevelBase), so it
+        // never shows square corners under the panel. Composited fresh every
+        // repaint - re-captured far more often than icons/text change - while
+        // cachedBase underneath is cheap to reuse as-is.
+        //
+        // Written by hand via RoundedBoxSDF, not a GDI+ region clip: region
+        // clipping is always hard-edged in GDI+ regardless of SmoothingMode.
+        // Small (~1px) antialiasing band, just enough to not be a hard cut,
+        // matching the fill/border's own AntiAlias smoothing on top.
+        if (level->blurBackdrop &&
+            level->blurBackdrop->GetWidth() == (UINT)width &&
+            level->blurBackdrop->GetHeight() == (UINT)height) {
+            Gdiplus::Rect full(0, 0, width, height);
+            Gdiplus::BitmapData srcData;
+            if (level->blurBackdrop->LockBits(&full, Gdiplus::ImageLockModeRead,
+                                              PixelFormat32bppRGB,
+                                              &srcData) == Gdiplus::Ok) {
+                float radius = (float)ScaleForPopup(g_settings.cornerRadius);
+                float hw = (width - 1) / 2.0f;
+                float hh = (height - 1) / 2.0f;
+                constexpr float kEdgeAA = 1.0f;
+                for (int y = 0; y < height; y++) {
+                    auto* src =
+                        (uint32_t*)((BYTE*)srcData.Scan0 + y * srcData.Stride);
+                    auto* dst = (uint32_t*)((BYTE*)bits + y * width * 4);
+                    for (int x = 0; x < width; x++) {
+                        float d = RoundedBoxSDF((float)x - hw, (float)y - hh,
+                                                hw, hh, radius);
+                        float alpha =
+                            255.0f * (1.0f - std::clamp((d + kEdgeAA * 0.5f) /
+                                                        kEdgeAA,
+                                                    0.0f, 1.0f));
+                        if (alpha <= 0.0f) {
+                            continue;
+                        }
+                        uint32_t px = src[x];
+                        BYTE a = (BYTE)(alpha + 0.5f);
+                        BYTE b = (BYTE)(px & 0xFF);
+                        BYTE g8 = (BYTE)((px >> 8) & 0xFF);
+                        BYTE r = (BYTE)((px >> 16) & 0xFF);
+                        dst[x] = ((uint32_t)a << 24) | ((r * a / 255) << 16) |
+                                ((g8 * a / 255) << 8) | (b * a / 255);
+                    }
+                }
+                level->blurBackdrop->UnlockBits(&srcData);
+            }
+        }
+
+        // Point overload, not the dest-rect one: with the default
+        // PixelOffsetModeNone a dest-rect DrawImage lands the 1:1 blit on a
+        // half-pixel offset and resamples the whole base, smearing every glyph.
+        // SourceOver, not SourceCopy: cachedBase's own alpha (panel fill,
+        // transparent corners) has to blend with the blur just drawn, not
+        // stomp it.
         g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+        g.DrawImage(level->cachedBase.get(), 0, 0);
+
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        // Must match RebuildLevelBase - a hovered cell is repainted here and
+        // would otherwise not look like the same text as its neighbours.
+        g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
-        bool dark = IsDarkTheme();
+        bool dark = IsDarkPopupTheme();
+        // Must match RebuildLevelBase, or a hovered cell's text would not look
+        // like its neighbours'.
+        g.SetTextContrast(0);
         Gdiplus::Color hoverColor =
             dark ? Gdiplus::Color(28, 255, 255, 255) : Gdiplus::Color(18, 0, 0, 0);
         Gdiplus::Color pressColor =
             dark ? Gdiplus::Color(46, 255, 255, 255) : Gdiplus::Color(32, 0, 0, 0);
-        Gdiplus::Color textColor = dark ? Gdiplus::Color(255, 255, 255, 255)
-                                        : Gdiplus::Color(255, 26, 26, 26);
+        Gdiplus::Color textColor(255, 255, 255, 255);
         Gdiplus::Color badgeFillColor = GetAccentGdipColor(255);
         bool lightAccent = ((int)badgeFillColor.GetR() + badgeFillColor.GetG() +
                             badgeFillColor.GetB()) > 500;
@@ -3498,13 +4007,8 @@ void PaintLevel(PopupLevel* level) {
         Gdiplus::Color badgeRingColor = dark ? Gdiplus::Color(160, 0, 0, 0)
                                              : Gdiplus::Color(70, 255, 255, 255);
 
-        Gdiplus::FontFamily family(
-            ResolvePopupFontName(g_settings.itemFontFamily).c_str());
-        Gdiplus::Font font(&family,
-                           (Gdiplus::REAL)ScaleForPopup(g_settings.fontSize),
-                           g_settings.itemFontBold ? Gdiplus::FontStyleBold
-                                                    : Gdiplus::FontStyleRegular,
-                           Gdiplus::UnitPixel);
+        auto font = MakePopupFont(ScaleForPopup(g_settings.fontSize),
+                                  g_settings.itemFontWeight);
         Gdiplus::StringFormat format;
         format.SetAlignment(Gdiplus::StringAlignmentCenter);
         format.SetLineAlignment(Gdiplus::StringAlignmentNear);
@@ -3530,31 +4034,23 @@ void PaintLevel(PopupLevel* level) {
             Gdiplus::GraphicsPath highlightPath;
             AddRoundedRect(&highlightPath, highlight, ScaleForPopup(6));
 
-            bool darkPanel = IsDarkTheme();
-            BYTE panelAlpha = (BYTE)std::clamp<int>(
-                g_settings.panelOpacity * 255 / 100, 10, 255);
-            Gdiplus::Color panelColor =
-                darkPanel ? Gdiplus::Color(panelAlpha, 43, 43, 43)
-                          : Gdiplus::Color(panelAlpha, 249, 249, 249);
+            BYTE panelAlpha = PanelAlpha();
 
-            // Erase-then-overlay in two separate AA passes left a 1px fringe at
-            // the highlight's rounded edge (each pass antialiases against a
-            // different backdrop). Pre-blend the overlay onto the panel color
-            // and paint it in one SourceCopy pass instead.
+            // SourceOver straight onto whatever is already there (panel fill,
+            // and/or the blur backdrop composited further up) instead of
+            // erasing to a solid panelColor and recomputing alpha from
+            // panelAlpha alone. That erase used to throw away the blur
+            // backdrop's own opacity underneath the cell - with panelOpacity
+            // low, the recomputed alpha came out far below
+            // the blur's, punching a hole straight through to the real desktop
+            // instead of the blurred one. SourceOver only ever raises alpha
+            // (outA = srcA + dstA*(1-srcA)), so it can't create that hole.
             const Gdiplus::Color& overlay = pressed ? pressColor : hoverColor;
-            float a = overlay.GetA() / 255.0f;
-            Gdiplus::Color blended(
-                panelAlpha,
-                (BYTE)(panelColor.GetR() * (1 - a) + overlay.GetR() * a),
-                (BYTE)(panelColor.GetG() * (1 - a) + overlay.GetG() * a),
-                (BYTE)(panelColor.GetB() * (1 - a) + overlay.GetB() * a));
-            Gdiplus::SolidBrush highlightBrush(blended);
-            g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+            Gdiplus::SolidBrush highlightBrush(overlay);
             g.FillPath(&highlightBrush, &highlightPath);
-            g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
 
-            DrawCell(g, level, cellIndex, textColor, badgeFillColor,
-                     badgeMarkColor, badgeRingColor, font, format);
+            DrawCell(g, level, cellIndex, panelAlpha, textColor, badgeFillColor,
+                     badgeMarkColor, badgeRingColor, *font, format);
         };
 
         if (level->hoverCell >= 0 && level->hoverCell != level->pressedCell) {
@@ -3574,11 +4070,25 @@ void PaintLevel(PopupLevel* level) {
     blend.AlphaFormat = AC_SRC_ALPHA;
     UpdateLayeredWindow(level->hwnd, hScreenDC, &ptDst, &size, hMemDC, &ptSrc, 0,
                         &blend, ULW_ALPHA);
+    ApplyRoundedRegion(level, width, height);
 
     SelectObject(hMemDC, hOldBmp);
     DeleteObject(hBmp);
     DeleteDC(hMemDC);
     ReleaseDC(nullptr, hScreenDC);
+}
+
+// Only captures for Gaussian - Acrylic's blur comes live from DWM's own
+// compositor via the accent policy set in ApplyBackdrop, so there is nothing
+// for us to capture or composite per-frame.
+void CaptureLevelBlur(PopupLevel* level) {
+    if (g_settings.blurType != BlurType::Gaussian ||
+        g_settings.blurStrength <= 0) {
+        level->blurBackdrop.reset();
+        return;
+    }
+    level->blurBackdrop =
+        CaptureBlurredBackdrop(level->rect, g_settings.blurStrength);
 }
 
 PopupLevel* LevelFromHwnd(HWND hWnd) {
@@ -3622,17 +4132,43 @@ void CloseLevelsFrom(int depth) {
 void CloseChain() {
     if (!Levels().empty() && Levels()[0]->hwnd) {
         KillTimer(Levels()[0]->hwnd, kTickTimerId);
+        KillTimer(Levels()[0]->hwnd, kBlurTimerId);
     }
     CloseLevelsFrom(0);
     g_outsideSinceTick = 0;
 }
 
+// The seam between two side-by-side cascade grids: just the strip of
+// horizontal gap facing edge-to-edge, clipped to the vertical span where the
+// two rects actually overlap. Used to be the full bounding box of both rects
+// (min/max of every edge), which - whenever one grid was taller than the
+// other, as any parent/subfolder pair with a different item count is -
+// swallowed the dead space below (or above) the shorter one into the live
+// path too, so hovering there kept the whole cascade open instead of closing
+// it.
 RECT BridgingRect(const RECT& a, const RECT& b) {
-    RECT bridge;
-    bridge.left = std::min<LONG>(a.left, b.left);
-    bridge.right = std::max<LONG>(a.right, b.right);
-    bridge.top = std::min<LONG>(a.top, b.top);
-    bridge.bottom = std::max<LONG>(a.bottom, b.bottom);
+    RECT bridge{};
+    if (b.left >= a.right) {
+        bridge.left = a.right;
+        bridge.right = b.left;
+    } else if (a.left >= b.right) {
+        bridge.left = b.right;
+        bridge.right = a.left;
+    } else {
+        // Not actually side-by-side (shouldn't happen for cascade levels) -
+        // fall back to the old full-bounds behavior rather than a bogus
+        // empty/negative-width strip.
+        bridge.left = std::min<LONG>(a.left, b.left);
+        bridge.right = std::max<LONG>(a.right, b.right);
+    }
+    bridge.top = std::max<LONG>(a.top, b.top);
+    bridge.bottom = std::min<LONG>(a.bottom, b.bottom);
+    if (bridge.bottom <= bridge.top) {
+        // PtInRect excludes the bottom edge; inflate a zero-height overlap
+        // into a 1px seam so two rects that just touch top/bottom still
+        // bridge, same trick as CursorInRootCorridor.
+        bridge.bottom = bridge.top + 1;
+    }
     return bridge;
 }
 
@@ -4005,7 +4541,7 @@ void PrefetchSubfolders(PopupLevel* level) {
         return;
     }
     constexpr int kMaxPrefetch = 12;
-    int iconPixelSize = ScaleForPopup(g_settings.iconSize);
+    int iconPixelSize = PopupIconPixelSize();
     int queued = 0;
     for (const auto& item : level->items) {
         if (queued >= kMaxPrefetch) {
@@ -4015,6 +4551,33 @@ void PrefetchSubfolders(PopupLevel* level) {
             RequestScan(item.fullPath, iconPixelSize);
             queued++;
         }
+    }
+}
+
+// Re-captures every open level's blurred backdrop and repaints it, so the
+// blur tracks a moving/changing background live instead of freezing whatever
+// was behind the grid at the moment it opened. Runs off its own kBlurTimerId
+// (kBlurTimerMs), separate from kTickTimerMs so raising/lowering the
+// hover/close poll rate doesn't also have to raise (or cap) the blur's.
+// Gaussian only - Acrylic's blur is live from DWM already, nothing to
+// re-capture (see CaptureLevelBlur).
+//
+// Deliberately does not touch level->baseDirty: blur is composited straight
+// into PaintLevel's DIB (see there), not baked into cachedBase, so this stays
+// a cheap BitBlt + resample + composite - no icon/text/badge GDI+ redraw -
+// on every one of these ticks.
+void RefreshBlurBackdrops() {
+    if (g_settings.blurType != BlurType::Gaussian ||
+        g_settings.blurStrength <= 0) {
+        return;
+    }
+    for (auto& levelPtr : Levels()) {
+        PopupLevel* level = levelPtr.get();
+        if (!level || !level->hwnd || !IsWindowVisible(level->hwnd)) {
+            continue;
+        }
+        CaptureLevelBlur(level);
+        PaintLevel(level);
     }
 }
 
@@ -4097,6 +4660,11 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
 
     if (uMsg == WM_TIMER && wParam == kTickTimerId) {
         OnTick();
+        return 0;
+    }
+
+    if (uMsg == WM_TIMER && wParam == kBlurTimerId) {
+        RefreshBlurBackdrops();
         return 0;
     }
 
@@ -4184,6 +4752,7 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
         case WM_DESTROY:
             KillTimer(hWnd, kTickTimerId);
             KillTimer(hWnd, kOpenTimerId);
+            KillTimer(hWnd, kBlurTimerId);
             return 0;
     }
 
@@ -4315,15 +4884,31 @@ PopupLevel* InstallLevel(std::unique_ptr<PopupLevel> level) {
     return Levels()[depth].get();
 }
 
-// Places and shows a level's window, then paints it.
+// Paints a level's window, then shows it - deliberately in that order. The
+// window at this depth is reused across opens, so it can still be carrying
+// the previous open's bitmap; showing it before PaintLevel/UpdateLayeredWindow
+// replaces that content flashes the stale frame at the new position/size for
+// however long capture+repaint takes. That flash reads as a glitch most
+// visibly when blur is on, since the stale backdrop can differ sharply from
+// the real one, but it existed for plain content too. PaintLevel's own
+// UpdateLayeredWindow call already places and sizes the window (that is what
+// ptDst/size are for); the SetWindowPos below only has to raise it topmost
+// and make it visible, hidden window content updates just fine.
 void PresentLevel(PopupLevel* level, const SIZE& size) {
     level->rect.right = level->rect.left + size.cx;
     level->rect.bottom = level->rect.top + size.cy;
     InvalidateLevelBase(level);
 
+    // SetOwnWindowsCaptureExcluded keeps this window's own pixels out of its
+    // own Gaussian capture only for the instant that capture runs, so no need
+    // to hide it first. RefreshBlurBackdrops re-captures this on every tick
+    // to track a moving/changing background live (Gaussian only - Acrylic's
+    // blur is live from DWM already).
+    CaptureLevelBlur(level);
+
+    PaintLevel(level);
     SetWindowPos(level->hwnd, HWND_TOPMOST, level->rect.left, level->rect.top,
                  size.cx, size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    PaintLevel(level);
 }
 
 void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
@@ -4346,7 +4931,7 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     level->anchorRect = anchorRect;
 
     auto data =
-        GetFolderDataAndRefresh(path, ScaleForPopup(g_settings.iconSize));
+        GetFolderDataAndRefresh(path, PopupIconPixelSize());
     level->loading = true;
     if (data && data->ready) {
         level->items = data->items;
@@ -4402,6 +4987,7 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title) {
     PrefetchSubfolders(installed);
 
     SetTimer(hWnd, kTickTimerId, kTickTimerMs, nullptr);
+    SetTimer(hWnd, kBlurTimerId, kBlurTimerMs, nullptr);
 }
 
 // Opens the grid for the subfolder in `cell` of the level at `parentDepth`,
@@ -4433,8 +5019,7 @@ void OpenSubLevel(int parentDepth, int cell) {
     OffsetRect(&cellScreenRect, parent->rect.left, parent->rect.top);
     level->anchorRect = cellScreenRect;
 
-    auto data = GetFolderDataAndRefresh(level->path,
-                                        ScaleForPopup(g_settings.iconSize));
+    auto data = GetFolderDataAndRefresh(level->path, PopupIconPixelSize());
     level->loading = true;
     if (data && data->ready) {
         level->items = data->items;
@@ -7823,7 +8408,7 @@ bool InjectHostGridsOnTaskbarThread() {
         if (g_taskbarHosts && !g_taskbarHosts->empty()) {
             g_taskbarWnd = (*g_taskbarHosts)[0]->hwnd;
             UpdatePopupDpi();
-            int iconPixelSize = ScaleForPopup(g_settings.iconSize);
+            int iconPixelSize = PopupIconPixelSize();
             for (size_t i = 0; i < g_settings.folders.size(); i++) {
                 RequestScan(FolderPathForButton((int)i), iconPixelSize);
             }
@@ -8607,8 +9192,10 @@ void ReloadAndRefreshUI() {
     if (!ApplyOnWindowThread([](void*) {
             CloseChain();
             RemoveAllHostGrids();
-            // Popup HWNDs keep the acrylic accent applied at create time;
-            // destroy them so the next hover recreates with the current setting.
+            // Popup HWNDs keep the DWM corner/border attributes ApplyBackdrop
+            // set at create time; destroy them so the next hover recreates
+            // with the current settings. Blur strength itself is re-read
+            // every PresentLevel and needs no recreation.
             for (HWND hWnd : g_levelWindows) {
                 if (hWnd) {
                     DestroyWindow(hWnd);
