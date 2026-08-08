@@ -4,7 +4,7 @@
 // @description     Set a custom size and position for the new Widget Board on Windows 11.
 // @version         0.1
 // @author          meteoni
-// @github          https://github.com/meteony
+// @github          https://github.com/Meteony
 // @include         WidgetBoard.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lshcore
