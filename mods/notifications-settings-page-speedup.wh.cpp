@@ -2,7 +2,7 @@
 // @id              notifications-settings-page-speedup
 // @name            Faster Notifications Settings Page
 // @description     Stops Settings from re-scanning every notification app on each visit, so revisits load in seconds instead of minutes
-// @version         1.2
+// @version         1.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         SystemSettings.exe
@@ -502,51 +502,29 @@ static void HookHandlerDll(bool applyNow) {
     Wh_Log(L"installed symbol hooks");
 }
 
-// The handler DLL loads on demand when the Notifications page opens. Rather than
-// detour a load function (which misses load paths that don't go through it, and
-// hooking kernelbase's LoadLibraryExW directly fast-fails SystemSettings under
-// CFG), ask the loader to notify us. LdrRegisterDllNotification fires for every
-// load path, needs no detour, and lets the polling backstop go away.
-typedef struct _WH_UNICODE_STRING {
-    USHORT Length;
-    USHORT MaximumLength;
-    PWSTR  Buffer;
-} WH_UNICODE_STRING;
-typedef struct _WH_LDR_DLL_NOTIFICATION_DATA {
-    ULONG Flags;
-    const WH_UNICODE_STRING* FullDllName;
-    const WH_UNICODE_STRING* BaseDllName;
-    PVOID DllBase;
-    ULONG SizeOfImage;
-} WH_LDR_DLL_NOTIFICATION_DATA;
-typedef VOID(CALLBACK* WH_LDR_DLL_NOTIFICATION_FUNCTION)(
-    ULONG, const WH_LDR_DLL_NOTIFICATION_DATA*, PVOID);
-typedef LONG(NTAPI* LdrRegisterDllNotification_t)(
-    ULONG, WH_LDR_DLL_NOTIFICATION_FUNCTION, PVOID, PVOID*);
-typedef LONG(NTAPI* LdrUnregisterDllNotification_t)(PVOID);
-static const ULONG WH_LDR_DLL_NOTIFICATION_REASON_LOADED = 1;
+// The handler DLL loads on demand when the Notifications page opens. Hook the
+// imported LoadLibraryExW and, after any successful load, check whether the handler
+// DLL is now present, so it's caught whether it was loaded directly or pulled in as
+// a dependency of something else. Hooking kernelbase's LoadLibraryExW directly
+// fast-fails SystemSettings under CFG, so the imported thunk is the one to hook.
+// The check runs after the load returns (off the loader lock) and only signals the
+// worker; the slow HookSymbols work happens there, so this stays cheap.
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+static LoadLibraryExW_t LoadLibraryExW_Orig;
 
-static PVOID  g_ldrCookie = nullptr;
-static HANDLE g_dllLoadedEvent = nullptr;    // signalled by the loader callback
+static HANDLE g_dllLoadedEvent = nullptr;    // signalled once the handler DLL appears
 static HANDLE g_hookWorkerThread = nullptr;
 
-// Runs under the loader lock, so keep it minimal: exact name check, then signal
-// the worker. Only loads are interesting, because the module is referenced while
-// the hooks are installed and so can't unload underneath us.
-static VOID CALLBACK DllNotification(ULONG reason,
-                                     const WH_LDR_DLL_NOTIFICATION_DATA* data, PVOID) {
-    if (!data || !data->BaseDllName || !data->BaseDllName->Buffer) return;
-    const WH_UNICODE_STRING* n = data->BaseDllName;
-    USHORT chars = n->Length / sizeof(WCHAR);
-    if (chars == 0 || chars > MAX_PATH) return;
-    wchar_t name[MAX_PATH + 1];
-    memcpy(name, n->Buffer, chars * sizeof(WCHAR));
-    name[chars] = L'\0';
-    if (_wcsicmp(name, L"SettingsHandlers_Notifications.dll") != 0) return;
-
-    if (reason == WH_LDR_DLL_NOTIFICATION_REASON_LOADED) {
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    HMODULE mod = LoadLibraryExW_Orig(name, file, flags);
+    // g_symHooked makes a repeat signal a no-op, so firing on every load until the
+    // hooks are in is fine. GetModuleHandleW takes no reference; the worker takes
+    // one before hooking.
+    if (mod && !g_symHooked.load() &&
+        GetModuleHandleW(L"SettingsHandlers_Notifications.dll")) {
         if (g_dllLoadedEvent) SetEvent(g_dllLoadedEvent);
     }
+    return mod;
 }
 
 // Installs the symbol hooks off the loader lock once the handler DLL appears.
@@ -609,15 +587,11 @@ BOOL Wh_ModInit() {
     g_stopEvent      = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // manual reset
     g_dllLoadedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // auto reset
 
-    // Registered before the already-loaded check, not after, so a load that lands
-    // in between is caught rather than missed for the rest of the session. The
-    // g_symHooked latch makes the duplicate attempt a no-op.
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    auto reg = ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
-                           ntdll, "LdrRegisterDllNotification")
-                     : nullptr;
-    if (!reg || reg(0, DllNotification, nullptr, &g_ldrCookie) != 0)
-        Wh_Log(L"LdrRegisterDllNotification unavailable");
+    // Hooked before the already-loaded check, not after, so a load that lands in
+    // between is caught rather than missed. The g_symHooked latch makes the
+    // duplicate attempt a no-op.
+    Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)LoadLibraryExW_Hook,
+                       (void**)&LoadLibraryExW_Orig);
 
     HookHandlerDll(false);  // in case the DLL is already loaded (Windhawk applies
                             // the hooks after Wh_ModInit returns)
@@ -642,18 +616,9 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     g_uninitializing.store(true);
 
-    // Stop the loader callback first so it can't fire during teardown.
-    if (g_ldrCookie) {
-        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-        auto unreg = ntdll ? (LdrUnregisterDllNotification_t)GetProcAddress(
-                                 ntdll, "LdrUnregisterDllNotification")
-                           : nullptr;
-        if (unreg) unreg(g_ldrCookie);
-        g_ldrCookie = nullptr;
-    }
-
-    // Stop and join the worker while hook operations are still legal, so any hook
-    // it was mid-installing is applied here and Windhawk still removes it.
+    // The LoadLibraryExW hook is removed by Windhawk during uninit; nothing to undo
+    // here. Stop and join the worker while hook operations are still legal, so any
+    // hook it was mid-installing is applied here and Windhawk still removes it.
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_hookWorkerThread) {
         WaitForSingleObject(g_hookWorkerThread, INFINITE);
