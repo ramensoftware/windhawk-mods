@@ -594,10 +594,15 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
 }
 
 // A system button counts as active while its flyout/experience is open.
-// Start, Task view and Widgets are ToggleButtons: IsChecked is the primary
-// read, and an unchecked (or no-longer-tracking) toggle FALLS THROUGH to
-// the state-name scan below, so a future build where IsChecked stops
-// tracking the flyout degrades to the scan instead of going silent. The
+// Start, Task view, Widgets and the search icon are ToggleButtons: a
+// present IsChecked value is authoritative in BOTH directions — true and
+// false are final answers. Falling through on false was tried and froze
+// blobs on (observed on the search button): toggle entries only refresh on
+// Checked/Unchecked, so a scan that reads the still-Active* CommonStates
+// mid-dismissal is never re-evaluated — the correcting Active->Normal
+// transition fires no event a toggle entry subscribes to. Only a NULL
+// IsChecked (the property genuinely not tracking — the actual
+// future-build-broke-it case) falls through to the state-name scan. The
 // scan accepts both state families: the tray controls (OmniButton,
 // ChevronIconView) report Checked/CheckedNormal/..., while the shell's
 // flyout signal for the Experience buttons is the exact
@@ -606,8 +611,8 @@ bool IsSystemButtonChecked(FrameworkElement const& btn) {
     try {
         if (auto toggle = btn.try_as<winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton>()) {
             auto checked = toggle.IsChecked();
-            if (checked && checked.Value()) return true;
-            // fall through to the state-name scan
+            if (checked) return checked.Value();
+            // IsChecked holds no value: fall through to the state-name scan.
         }
     } catch (...) {}
     try {
