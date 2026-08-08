@@ -594,9 +594,14 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
 }
 
 // A system button counts as active while its flyout/experience is open.
-// Start and Task view are ToggleButtons (IsChecked); for anything that
-// isn't, fall back to scanning the template root's visual state groups for
-// a current state named Checked* (excluding Unchecked*).
+// Start, Task view and Widgets are ToggleButtons (IsChecked); for anything
+// that isn't, fall back to scanning the template root's visual state groups
+// for an open-state name. Two families exist: the tray controls
+// (OmniButton, ChevronIconView) report Checked/CheckedNormal/..., while the
+// shell's own flyout signal for the Experience buttons is
+// ActiveNormal/ActivePointerOver/ActivePressed on CommonStates — accepting
+// both means a future build where IsChecked stops tracking the flyout
+// degrades to the state-name path instead of going silent.
 bool IsSystemButtonChecked(FrameworkElement const& btn) {
     try {
         if (auto toggle = btn.try_as<winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton>()) {
@@ -612,9 +617,12 @@ bool IsSystemButtonChecked(FrameworkElement const& btn) {
             for (auto const& group : VisualStateManager::GetVisualStateGroups(root)) {
                 auto st = group.CurrentState();
                 if (!st) continue;
-                std::wstring name(st.Name());
-                if (name.find(L"Checked") != std::wstring::npos &&
-                    name.find(L"Unchecked") == std::wstring::npos) {
+                auto stateName = st.Name();
+                std::wstring_view name{stateName};
+                // ("Inactive*" can't false-positive: starts_with is
+                // case-sensitive on the capital A.)
+                if (name.find(L"Checked") != std::wstring_view::npos ||
+                    name.starts_with(L"Active")) {
                     return true;
                 }
             }
@@ -658,27 +666,58 @@ void RestoreNativeVisuals(winrt::Windows::UI::Xaml::FrameworkElement const& btn)
 
 // Inserts the blob below the visible content: directly below the
 // TaskbarFrameRepeater on the taskbar, or at index 0 — the very bottom of
-// the z-order, which can never cover content — on hosts without one, like
-// the system tray grid. Never appends on top.
-void InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes::Path const& blobShape) {
+// the z-order, which can never cover content — on the tray grid, which has
+// no repeater by design. On a taskbar host, a missing repeater is a
+// structural surprise: returns false (fail safe) so the caller leaves the
+// native indicator in charge, instead of hiding it in favor of a blob that
+// may render behind the taskbar background. Never appends on top.
+bool InsertBlobBelowRepeater(Grid const& grid, winrt::Windows::UI::Xaml::Shapes::Path const& blobShape, bool expectRepeater) {
     auto children = grid.Children();
     uint32_t count = children.Size();
     for (uint32_t i = 0; i < count; i++) {
         auto child = children.GetAt(i).try_as<FrameworkElement>();
         if (child && child.Name() == L"TaskbarFrameRepeater") {
             children.InsertAt(i, blobShape);
-            return;
+            return true;
         }
     }
+    if (expectRepeater) {
+        Wh_Log(L"TaskbarFrameRepeater not found as a direct RootGrid child");
+        return false;
+    }
     children.InsertAt(0, blobShape);
+    return true;
 }
 
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
 struct BlobEntry;
-std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button);
+std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool createIfMissing = true);
 void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button, std::shared_ptr<BlobEntry> const& entry, winrt::Windows::UI::Xaml::FrameworkElement const& iconPanel, bool isActive, const Settings& localSettings);
+
+int8_t ClassifyButton(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
+    auto cls = winrt::get_class_name(button);
+    std::wstring_view clsView{cls};
+    if (cls == L"Taskbar.TaskListButton") return BlobEntry::KindTask;
+    if (cls == L"Taskbar.AugmentedEntryPointButton") return BlobEntry::KindWidget;
+    if (clsView.starts_with(L"SystemTray.")) {
+        return (button.Name() == L"NotificationCenterButton")
+                   ? BlobEntry::KindDateTime
+                   : BlobEntry::KindTray;
+    }
+    return BlobEntry::KindSystem;
+}
+
+bool IsKindEnabled(int8_t kind, const Settings& localSettings) {
+    switch (kind) {
+        case BlobEntry::KindTask:     return true;
+        case BlobEntry::KindWidget:   return localSettings.WidgetsBlob;
+        case BlobEntry::KindDateTime: return localSettings.DateTimeBlob;
+        case BlobEntry::KindTray:     return localSettings.TrayButtonsBlob;
+        default:                      return localSettings.SystemButtonsBlob;
+    }
+}
 
 // The single entry point for every trigger (hook, SizeChanged, Loaded, stale
 // Unloaded, theme change, settings change, sibling sweep): resolves the
@@ -686,23 +725,19 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
 // applies the blob. The recursive tree walk only runs when the cached
 // element has expired or been detached.
 void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const Settings& localSettings) {
-    auto entry = FindOrCreateEntry(button);
-    if (!entry) return; // unloading
-
-    if (entry->kind == BlobEntry::KindUnknown) {
-        auto cls = winrt::get_class_name(button);
-        std::wstring_view clsView{cls};
-        if (cls == L"Taskbar.TaskListButton") {
-            entry->kind = BlobEntry::KindTask;
-        } else if (cls == L"Taskbar.AugmentedEntryPointButton") {
-            entry->kind = BlobEntry::KindWidget;
-        } else if (clsView.starts_with(L"SystemTray.")) {
-            entry->kind = (button.Name() == L"NotificationCenterButton")
-                              ? BlobEntry::KindDateTime
-                              : BlobEntry::KindTray;
-        } else {
-            entry->kind = BlobEntry::KindSystem;
-        }
+    auto entry = FindOrCreateEntry(button, false);
+    if (!entry) {
+        // No entry yet: classify first, and don't materialize one — with its
+        // hidden Path, lifecycle handlers and state subscriptions — for a
+        // kind whose toggle is off. Toggle-on later re-sweeps the hosts
+        // (Wh_ModSettingsChanged), which creates the entries then.
+        int8_t kind = ClassifyButton(button);
+        if (!IsKindEnabled(kind, localSettings)) return;
+        entry = FindOrCreateEntry(button);
+        if (!entry) return; // unloading
+        entry->kind = kind;
+    } else if (entry->kind == BlobEntry::KindUnknown) {
+        entry->kind = ClassifyButton(button);
     }
 
     auto iconPanel = entry->iconPanel.get();
@@ -731,13 +766,7 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
         // Gated per kind: with the toggle off, isActive stays false and the
         // normal show=false path hides the blob and restores the natives —
         // runtime toggling needs no teardown.
-        bool enabled = false;
-        switch (entry->kind) {
-            case BlobEntry::KindWidget:   enabled = localSettings.WidgetsBlob; break;
-            case BlobEntry::KindDateTime: enabled = localSettings.DateTimeBlob; break;
-            case BlobEntry::KindTray:     enabled = localSettings.TrayButtonsBlob; break;
-            default:                      enabled = localSettings.SystemButtonsBlob; break;
-        }
+        bool enabled = IsKindEnabled(entry->kind, localSettings);
         // Like the native active highlight, the blob shows on every
         // monitor's instance of the button: checked state propagates across
         // taskbars, and each instance simply follows its own checked state.
@@ -830,7 +859,10 @@ void TaskbarSweepBody(Grid const& grid, const Settings& localSettings) {
     try {
         auto xamlRoot = grid.XamlRoot();
         auto content = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
-        auto trayFrame = content ? FindDescendantByClass(content, L"SystemTray.SystemTrayFrame", 6) : nullptr;
+        auto trayFrame = content ? FindDescendantByClass(content, L"SystemTray.SystemTrayFrame", 10) : nullptr;
+        if (content && !trayFrame) {
+            Wh_Log(L"SystemTray.SystemTrayFrame not found under the XAML root; tray blobs inactive for this taskbar");
+        }
         auto trayGrid = trayFrame ? FindChildByName(trayFrame, L"SystemTrayFrameGrid").try_as<Grid>() : nullptr;
         if (trayGrid) SweepTray(trayGrid, localSettings);
     } catch (...) {}
@@ -864,11 +896,19 @@ void SweepExistingButtons(Grid const& grid, const Settings& localSettings) {
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try { TaskbarSweepBody(g, localSettings); } catch (...) {}
         });
+        bool stored = false;
         {
             std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-            for (auto& host : g_taskbarHosts) {
-                if (host.grid.get() == grid) { host.sizeToken = token; break; }
+            if (!g_unloading) {
+                for (auto& host : g_taskbarHosts) {
+                    if (host.grid.get() == grid) { host.sizeToken = token; stored = true; break; }
+                }
             }
+        }
+        if (!stored) {
+            // Uninit moved the host list out between attach and store —
+            // nothing else will ever revoke this subscription.
+            try { grid.SizeChanged(token); } catch (...) {}
         }
         TaskbarSweepBody(grid, localSettings);
     }
@@ -895,8 +935,11 @@ bool IsUnderElementNamed(FrameworkElement const& element, std::wstring_view name
 //   Shell_NotifyIcon icons — a one-way protocol that forwards clicks to the
 //   owning app with no feedback channel, so the shell cannot know whether
 //   anything is "open".
-// - IconViews under MainStack (microphone, location, ...): transient status
-//   indicators, not anchored toggles.
+// - IconViews under MainStack (microphone, location, ...): tested on
+//   current builds, these never entered a Checked*/Active* state when
+//   interacted with (the shared IconView template does STYLE Checked*
+//   states, but these instances were not observed to enter them), so a
+//   blob could never show for them.
 // Skipping them entirely avoids per-icon entries, hidden Paths, and
 // hover-driven state subscriptions that could never produce a visible blob.
 void CollectTrayButtons(FrameworkElement const& root, std::vector<FrameworkElement>& out, int depth = 0) {
@@ -955,18 +998,26 @@ void SweepTray(Grid const& trayGrid, const Settings& localSettings) {
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try { TrayRefreshAll(g, localSettings); } catch (...) {}
         });
+        bool stored = false;
         {
             std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-            for (auto& host : g_trayHosts) {
-                if (host.grid.get() == trayGrid) { host.sizeToken = token; break; }
+            if (!g_unloading) {
+                for (auto& host : g_trayHosts) {
+                    if (host.grid.get() == trayGrid) { host.sizeToken = token; stored = true; break; }
+                }
             }
+        }
+        if (!stored) {
+            // Uninit moved the host list out between attach and store —
+            // nothing else will ever revoke this subscription.
+            try { trayGrid.SizeChanged(token); } catch (...) {}
         }
     }
 
     TrayRefreshAll(trayGrid, localSettings);
 }
 
-std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button) {
+std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::FrameworkElement const& button, bool createIfMissing) {
     std::vector<std::shared_ptr<BlobEntry>> orphans;
     std::shared_ptr<BlobEntry> result;
     {
@@ -989,7 +1040,7 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
             if (btn == button) result = *it;
             ++it;
         }
-        if (!result) {
+        if (!result && createIfMissing) {
             result = std::make_shared<BlobEntry>();
             result->button = winrt::make_weak(button);
             g_blobEntries->push_back(result);
@@ -1271,7 +1322,6 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // available, otherwise CurrentStateChanged on every visual state group
     // of the template root.
     if (entry->kind != BlobEntry::KindTask && !entry->systemEventsAttached) {
-        entry->systemEventsAttached = true;
         std::weak_ptr<BlobEntry> weakSysEntry = entry;
         auto refresh = [weakSysEntry]() {
             if (g_unloading) return;
@@ -1283,9 +1333,11 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
             try { RefreshBlob(btn, localSettings); } catch (...) {}
         };
+        bool attached = false;
         if (auto toggle = button.try_as<winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton>()) {
             entry->checkedToken = toggle.Checked([refresh](auto const&, auto const&) { refresh(); });
             entry->uncheckedToken = toggle.Unchecked([refresh](auto const&, auto const&) { refresh(); });
+            attached = true;
         } else {
             try {
                 auto root = VisualTreeHelper::GetChildrenCount(button) > 0
@@ -1298,7 +1350,13 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
                     }
                 }
             } catch (...) {}
+            attached = !entry->stateTokens.empty();
         }
+        // Only latch when something was actually attached: a not-yet-templated
+        // element (zero visual children during startup or an early sweep) has
+        // nothing to subscribe to yet, and must retry on its next refresh
+        // (Loaded, sweep, SizeChanged) instead of staying event-less forever.
+        entry->systemEventsAttached = attached;
     }
 
     auto grid = entry->grid.get();
@@ -1313,8 +1371,13 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             return;
         }
         entry->grid = winrt::make_weak(grid);
-        // First contact with this taskbar: bring its pre-existing buttons up.
-        SweepExistingButtons(grid, localSettings);
+        if (entry->kind != BlobEntry::KindDateTime && entry->kind != BlobEntry::KindTray) {
+            // First contact with this taskbar: bring its pre-existing
+            // buttons up. Tray grids are swept by SweepTray instead —
+            // registering them here would add a taskbar-host SizeChanged
+            // subscription whose body always no-ops on a tray grid.
+            SweepExistingButtons(grid, localSettings);
+        }
     }
 
     auto blobShape = entry->blobShape.get();
@@ -1331,7 +1394,12 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         blobShape.Margin(winrt::Windows::UI::Xaml::ThicknessHelper::FromLengths(0, 0, -1000, -1000));
         blobShape.Opacity(0.0);
 
-        InsertBlobBelowRepeater(grid, blobShape);
+        bool expectRepeater = entry->kind != BlobEntry::KindDateTime &&
+                              entry->kind != BlobEntry::KindTray;
+        if (!InsertBlobBelowRepeater(grid, blobShape, expectRepeater)) {
+            setNativeHidden(false); // no blob will be shown; retried on the next event
+            return;
+        }
         ElementCompositionPreview::SetIsTranslationEnabled(blobShape, true);
 
         {
@@ -1370,7 +1438,12 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         if (parentGrid != grid) {
             RemoveFromParentPanel(blobShape);
             entry->bound = false;
-            InsertBlobBelowRepeater(grid, blobShape);
+            bool expectRepeater = entry->kind != BlobEntry::KindDateTime &&
+                                  entry->kind != BlobEntry::KindTray;
+            if (!InsertBlobBelowRepeater(grid, blobShape, expectRepeater)) {
+                setNativeHidden(false); // unparented renders nothing; retried on the next event
+                return;
+            }
         }
     }
 
@@ -1646,28 +1719,42 @@ void Wh_ModBeforeUninit() {
         // timers must never survive to the CRT's global destructors.
         g_blobEntries.reset();
     }
-    // Detach the re-sweep subscriptions (taskbar and tray grids) on their UI
-    // thread; posted at High before the cleanup items below, so the barrier
-    // covers them.
+    if (localEntries.empty() && localHosts.empty()) return;
+
+    // One barrier covers everything posted from here: entry cleanups AND the
+    // host SizeChanged detaches. The count is fixed up front (entries +
+    // hosts) and every non-posted path decrements, so the wait below can't
+    // complete while any posted lambda — whose code lives in this DLL — is
+    // still queued. In particular, hosts with no entries no longer escape
+    // via an early return.
+    std::shared_ptr<void> eventLifetime(CreateEvent(nullptr, TRUE, FALSE, nullptr), [](HANDLE h) { if(h) CloseHandle(h); });
+    auto pending = std::make_shared<std::atomic<int>>((int)localEntries.size() + (int)localHosts.size());
+
     for (auto& host : localHosts) {
-        auto trayGrid = host.grid.get();
-        if (!trayGrid) continue;
-        auto dispatcher = trayGrid.Dispatcher();
-        if (!dispatcher) continue;
+        auto hostGrid = host.grid.get();
+        auto dispatcher = hostGrid ? hostGrid.Dispatcher() : nullptr;
         auto token = host.sizeToken;
+        if (!dispatcher) {
+            if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+            continue;
+        }
         if (dispatcher.HasThreadAccess()) {
-            try { trayGrid.SizeChanged(token); } catch (...) {}
+            try { hostGrid.SizeChanged(token); } catch (...) {}
+            if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
         } else {
-            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [trayGrid, token]() {
-                try { trayGrid.SizeChanged(token); } catch (...) {}
-            });
+            bool posted = false;
+            try {
+                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [hostGrid, token, pending, eventLifetime]() {
+                    try { hostGrid.SizeChanged(token); } catch (...) {}
+                    if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+                });
+                posted = true;
+            } catch (...) {}
+            if (!posted) {
+                if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+            }
         }
     }
-
-    if (localEntries.empty()) return;
-
-    std::shared_ptr<void> eventLifetime(CreateEvent(nullptr, TRUE, FALSE, nullptr), [](HANDLE h) { if(h) CloseHandle(h); });
-    auto pending = std::make_shared<std::atomic<int>>((int)localEntries.size());
 
     for (auto& entry : localEntries) {
         winrt::Windows::UI::Xaml::Shapes::Path blobShape{nullptr};
@@ -1735,10 +1822,17 @@ void Wh_ModBeforeUninit() {
                 cleanup();
                 if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
             } else {
-                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [cleanup, pending, eventLifetime]() {
-                    cleanup();
+                bool posted = false;
+                try {
+                    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [cleanup, pending, eventLifetime]() {
+                        cleanup();
+                        if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
+                    });
+                    posted = true;
+                } catch (...) {}
+                if (!posted) {
                     if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
-                });
+                }
             }
         } else {
             // No dispatcher at all (island gone): best-effort inline stop so
@@ -1765,6 +1859,33 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+
+    // Kinds enabled just now may have no entries at all (entries aren't
+    // created while a kind's toggle is off), so the per-entry refresh below
+    // can't reach them — re-sweep the known hosts to materialize them.
+    std::vector<winrt::Windows::UI::Xaml::Controls::Grid> resweepGrids;
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        for (auto& host : g_taskbarHosts) {
+            if (auto g = host.grid.get()) resweepGrids.push_back(g);
+        }
+    }
+    for (auto& g : resweepGrids) {
+        auto dispatcher = g.Dispatcher();
+        if (!dispatcher) continue;
+        auto weakGrid = winrt::make_weak(g);
+        try {
+            dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [weakGrid]() {
+                if (g_unloading) return;
+                auto grid = weakGrid.get();
+                if (!grid) return;
+                Settings localSettings;
+                { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+                try { TaskbarSweepBody(grid, localSettings); } catch (...) {}
+            });
+        } catch (...) {}
+    }
+
     std::vector<std::shared_ptr<BlobEntry>> localEntries;
     {
         std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
