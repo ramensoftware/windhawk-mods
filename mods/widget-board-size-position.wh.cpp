@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              widget-board-size-position
 // @name            Widget Board Size and Position
-// @description     Set a custom size and position for the new Widget Board on Windows 11. 
+// @description     Set a custom size and position for the new Widget Board on Windows 11.
 // @version         0.1
 // @author          meteoni
 // @include         WidgetBoard.exe
@@ -13,7 +13,7 @@
 /*
 # Widget Board Size and Position
 
-Set a custom size and position for the new Widget Board on Windows 11. 
+Set a custom size and position for the new Widget Board on Windows 11.
 
 Allows you to override the default position and dimensions of the new WinUI 3 Widget Board (`WidgetBoard.exe`).
 
@@ -99,12 +99,12 @@ struct Settings {
 
 Settings g_settings;
 std::atomic<bool> g_unloading{false};
-std::atomic<bool> g_attaching{false};
-std::atomic<HWND> g_boardHwnd{nullptr};
 
-HWINEVENTHOOK g_showHook = nullptr;
+HANDLE g_winEventThread = nullptr;
+DWORD g_winEventThreadId = 0;
+HANDLE g_winEventThreadReady = nullptr;
+std::atomic<bool> g_winEventHookInstalled{false};
 
-constexpr UINT_PTR kSubclassId = 1;
 constexpr wchar_t kBoardClass[] = L"WindowsDashboard";
 
 // -----------------------------------------------------------------------------
@@ -112,7 +112,7 @@ constexpr wchar_t kBoardClass[] = L"WindowsDashboard";
 // -----------------------------------------------------------------------------
 
 HAnchor ParseHAnchor(PCWSTR value) {
-    if (!value || _wcsicmp(value, L"system") == 0)
+    if (_wcsicmp(value, L"system") == 0)
         return HAnchor::System;
     if (_wcsicmp(value, L"center") == 0)
         return HAnchor::Center;
@@ -122,7 +122,7 @@ HAnchor ParseHAnchor(PCWSTR value) {
 }
 
 VAnchor ParseVAnchor(PCWSTR value) {
-    if (!value || _wcsicmp(value, L"system") == 0)
+    if (_wcsicmp(value, L"system") == 0)
         return VAnchor::System;
     if (_wcsicmp(value, L"center") == 0)
         return VAnchor::Center;
@@ -137,69 +137,10 @@ void LoadSettings() {
     g_settings.offsetXDip = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetYDip = Wh_GetIntSetting(L"offsetY");
 
-    PCWSTR h = Wh_GetStringSetting(L"horizontalAnchor");
-    g_settings.hAnchor = static_cast<int>(ParseHAnchor(h));
-    if (h)
-        Wh_FreeStringSetting(h);
-
-    PCWSTR v = Wh_GetStringSetting(L"verticalAnchor");
-    g_settings.vAnchor = static_cast<int>(ParseVAnchor(v));
-    if (v)
-        Wh_FreeStringSetting(v);
-}
-
-// -----------------------------------------------------------------------------
-// Thread helper, adapted from the Start Menu Size mod.
-// SetWindowSubclass/RemoveWindowSubclass are performed on the HWND's GUI thread.
-// -----------------------------------------------------------------------------
-
-using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         PVOID procParam) {
-    static const UINT registeredMsg =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID param;
-    };
-
-    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (!threadId)
-        return false;
-
-    if (threadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (cwp->message == registeredMsg) {
-                    auto* param = reinterpret_cast<PARAM*>(cwp->lParam);
-                    param->proc(param->param);
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr,
-        threadId);
-
-    if (!hook) {
-        Wh_Log(L"SetWindowsHookEx failed, error=%u", GetLastError());
-        return false;
-    }
-
-    PARAM param{proc, procParam};
-    SendMessage(hWnd, registeredMsg, 0, reinterpret_cast<LPARAM>(&param));
-    UnhookWindowsHookEx(hook);
-    return true;
+    g_settings.hAnchor = static_cast<int>(ParseHAnchor(
+        WindhawkUtils::StringSetting::make(L"horizontalAnchor").get()));
+    g_settings.vAnchor = static_cast<int>(ParseVAnchor(
+        WindhawkUtils::StringSetting::make(L"verticalAnchor").get()));
 }
 
 // -----------------------------------------------------------------------------
@@ -222,23 +163,20 @@ bool IsBoardWindow(HWND hwnd) {
     return _wcsicmp(className, kBoardClass) == 0;
 }
 
-HWND FindBoardWindow() {
+using WindowCallback_t = void (*)(HWND hwnd);
+
+void ForEachTopLevelWindow(WindowCallback_t callback) {
     struct EnumData {
-        HWND result = nullptr;
-    } data;
+        WindowCallback_t callback;
+    } data{callback};
 
     EnumWindows(
         [](HWND hwnd, LPARAM lParam) -> BOOL {
             auto* data = reinterpret_cast<EnumData*>(lParam);
-            if (IsBoardWindow(hwnd)) {
-                data->result = hwnd;
-                return FALSE;
-            }
+            data->callback(hwnd);
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&data));
-
-    return data.result;
 }
 
 // -----------------------------------------------------------------------------
@@ -356,20 +294,15 @@ LRESULT CALLBACK BoardSubclassProc(HWND hwnd,
                                    UINT msg,
                                    WPARAM wParam,
                                    LPARAM lParam,
-                                   UINT_PTR subclassId,
-                                   DWORD_PTR refData) {
+                                   DWORD_PTR) {
     switch (msg) {
         case WM_WINDOWPOSCHANGING:
             ForceGeometry(hwnd, reinterpret_cast<WINDOWPOS*>(lParam));
             break;
 
-        case WM_NCDESTROY: {
-            RemoveWindowSubclass(hwnd, BoardSubclassProc, subclassId);
-            HWND expected = hwnd;
-            g_boardHwnd.compare_exchange_strong(expected, nullptr);
+        case WM_NCDESTROY:
             Wh_Log(L"WindowsDashboard destroyed: hwnd=%p", hwnd);
             break;
-        }
     }
 
     return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -393,30 +326,19 @@ void ApplyGeometry(HWND hwnd) {
                  SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-void WINAPI ApplyGeometryOnWindowThread(PVOID parameter) {
-    ApplyGeometry(reinterpret_cast<HWND>(parameter));
-}
-
 // -----------------------------------------------------------------------------
 // Attach / detach
 // -----------------------------------------------------------------------------
 
-void WINAPI AttachOnWindowThread(PVOID parameter) {
-    HWND hwnd = reinterpret_cast<HWND>(parameter);
+void AttachToBoardWindow(HWND hwnd) {
+    if (!IsBoardWindow(hwnd) || g_unloading)
+        return;
 
-    if (!IsBoardWindow(hwnd) || g_unloading) {
-        g_attaching = false;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, BoardSubclassProc, 0)) {
+        Wh_Log(L"Failed to subclass WindowsDashboard: hwnd=%p", hwnd);
         return;
     }
-
-    if (!SetWindowSubclass(hwnd, BoardSubclassProc, kSubclassId, 0)) {
-        Wh_Log(L"SetWindowSubclass failed, error=%u", GetLastError());
-        g_attaching = false;
-        return;
-    }
-
-    g_boardHwnd = hwnd;
-    g_attaching = false;
 
     Wh_Log(L"Attached to WindowsDashboard: hwnd=%p dpi=%u",
            hwnd,
@@ -425,46 +347,15 @@ void WINAPI AttachOnWindowThread(PVOID parameter) {
     ApplyGeometry(hwnd);
 }
 
-void WINAPI DetachOnWindowThread(PVOID parameter) {
-    HWND hwnd = reinterpret_cast<HWND>(parameter);
-    if (IsWindow(hwnd))
-        RemoveWindowSubclass(hwnd, BoardSubclassProc, kSubclassId);
+void DetachFromBoardWindow(HWND hwnd) {
+    if (!IsBoardWindow(hwnd))
+        return;
+
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BoardSubclassProc);
 }
 
-void AttachToBoardWindow(HWND hwnd) {
-    if (g_unloading || !IsBoardWindow(hwnd))
-        return;
-
-    HWND existing = g_boardHwnd.load();
-    if (existing == hwnd && IsWindow(existing))
-        return;
-
-    bool expected = false;
-    if (!g_attaching.compare_exchange_strong(expected, true))
-        return;
-
-    if (g_unloading || !IsBoardWindow(hwnd)) {
-        g_attaching = false;
-        return;
-    }
-
-    if (!RunFromWindowThread(hwnd, AttachOnWindowThread, hwnd))
-        g_attaching = false;
-}
-
-void ScanForBoardWindow() {
-    if (g_unloading)
-        return;
-
-    HWND existing = g_boardHwnd.load();
-    if (existing && IsWindow(existing))
-        return;
-
-    g_boardHwnd = nullptr;
-
-    HWND hwnd = FindBoardWindow();
-    if (hwnd)
-        AttachToBoardWindow(hwnd);
+void ScanForBoardWindows() {
+    ForEachTopLevelWindow(AttachToBoardWindow);
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK,
@@ -482,6 +373,94 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
     AttachToBoardWindow(hwnd);
 }
 
+DWORD WINAPI WinEventThreadProc(LPVOID) {
+    g_winEventThreadId = GetCurrentThreadId();
+
+    // Force creation of this thread's message queue before initialization is
+    // reported complete, so teardown can always use PostThreadMessage safely.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    HWINEVENTHOOK showHook = SetWinEventHook(
+        EVENT_OBJECT_SHOW,
+        EVENT_OBJECT_SHOW,
+        nullptr,
+        WinEventProc,
+        GetCurrentProcessId(),
+        0,
+        WINEVENT_OUTOFCONTEXT);
+
+    if (!showHook) {
+        Wh_Log(L"SetWinEventHook failed, error=%u", GetLastError());
+        SetEvent(g_winEventThreadReady);
+        return 0;
+    }
+
+    g_winEventHookInstalled = true;
+    ScanForBoardWindows();
+    SetEvent(g_winEventThreadReady);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (!msg.hwnd && msg.message == WM_APP)
+            break;
+
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    UnhookWinEvent(showHook);
+    g_winEventHookInstalled = false;
+    return 0;
+}
+
+bool StartWinEventThread() {
+    g_winEventThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_winEventThreadReady) {
+        Wh_Log(L"CreateEventW failed, error=%u", GetLastError());
+        return false;
+    }
+
+    g_winEventThread =
+        CreateThread(nullptr, 0, WinEventThreadProc, nullptr, 0, nullptr);
+    if (!g_winEventThread) {
+        Wh_Log(L"CreateThread failed, error=%u", GetLastError());
+        CloseHandle(g_winEventThreadReady);
+        g_winEventThreadReady = nullptr;
+        return false;
+    }
+
+    WaitForSingleObject(g_winEventThreadReady, INFINITE);
+    CloseHandle(g_winEventThreadReady);
+    g_winEventThreadReady = nullptr;
+
+    if (!g_winEventHookInstalled) {
+        WaitForSingleObject(g_winEventThread, INFINITE);
+        CloseHandle(g_winEventThread);
+        g_winEventThread = nullptr;
+        g_winEventThreadId = 0;
+        return false;
+    }
+
+    return true;
+}
+
+void StopWinEventThread() {
+    if (!g_winEventThread)
+        return;
+
+    if (!PostThreadMessageW(g_winEventThreadId, WM_APP, 0, 0))
+        Wh_Log(L"PostThreadMessageW failed, error=%u", GetLastError());
+
+    WaitForSingleObject(g_winEventThread, INFINITE);
+    CloseHandle(g_winEventThread);
+    g_winEventThread = nullptr;
+    g_winEventThreadId = 0;
+}
+
+void DetachFromAllBoardWindows() {
+    ForEachTopLevelWindow(DetachFromBoardWindow);
+}
+
 }  // namespace
 
 // -----------------------------------------------------------------------------
@@ -492,48 +471,15 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
     LoadSettings();
 
-    HMODULE modModule = nullptr;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&WinEventProc),
-            &modModule)) {
-        Wh_Log(L"GetModuleHandleExW failed, error=%u", GetLastError());
-        return FALSE;
-    }
-
-    g_showHook = SetWinEventHook(EVENT_OBJECT_SHOW,
-                                 EVENT_OBJECT_SHOW,
-                                 modModule,
-                                 WinEventProc,
-                                 GetCurrentProcessId(),
-                                 0,
-                                 WINEVENT_INCONTEXT);
-    if (!g_showHook) {
-        Wh_Log(L"SetWinEventHook failed, error=%u", GetLastError());
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    Wh_Log(L">");
-    ScanForBoardWindow();
+    return StartWinEventThread();
 }
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
     g_unloading = true;
 
-    if (g_showHook) {
-        UnhookWinEvent(g_showHook);
-        g_showHook = nullptr;
-    }
-
-    HWND hwnd = g_boardHwnd.exchange(nullptr);
-    if (hwnd && IsWindow(hwnd))
-        RunFromWindowThread(hwnd, DetachOnWindowThread, hwnd);
+    StopWinEventThread();
+    DetachFromAllBoardWindows();
 }
 
 void Wh_ModUninit() {
@@ -543,11 +489,5 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
-
-    HWND hwnd = g_boardHwnd.load();
-    if (hwnd && IsWindow(hwnd)) {
-        RunFromWindowThread(hwnd, ApplyGeometryOnWindowThread, hwnd);
-    } else {
-        ScanForBoardWindow();
-    }
+    ScanForBoardWindows();
 }
