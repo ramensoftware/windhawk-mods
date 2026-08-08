@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.39
+// @version         1.40
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -701,6 +701,13 @@ bool IconSettingIsFile(const std::wstring& icon) {
 // 64-bit NTFS file id for a directory, stable across in-place renames; 0 on
 // failure. Used to re-find a pinned folder after it gets renamed on disk.
 uint64_t GetDirFileId(const std::wstring& path) {
+    // CreateFileW on an offline share blocks for the network timeout. 0 is the
+    // same "no rename recovery for this entry" BuildFolderEntry already gives
+    // remote paths, so every caller — the edit dialog's Save, the Explorer pin
+    // flow, FindRenamedSibling — degrades the same way.
+    if (IsLikelyRemotePath(path)) {
+        return 0;
+    }
     HANDLE h = CreateFileW(path.c_str(), 0,
                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS,
@@ -6320,13 +6327,21 @@ HICON IconForEntry(const FolderStore::Entry& entry, int pixelSize) {
         if (!IconSettingIsFile(icon)) {
             return nullptr;  // Emoji or other literal text.
         }
-        if (HICON hIcon = ExtractIconFromResourceSpec(icon, pixelSize)) {
-            return hIcon;
+        if (!IsLikelyRemotePath(IconSpecFilePart(icon))) {
+            if (HICON hIcon = ExtractIconFromResourceSpec(icon, pixelSize)) {
+                return hIcon;
+            }
         }
     }
     std::wstring target = ResolveFolderPath(ExpandEnv(entry.path));
     if (target.empty()) {
         target = ExpandEnv(entry.path);
+    }
+    // SHGetFileInfoW on an offline share blocks for the network timeout, and a
+    // manager thread stuck in there cannot process the WM_CLOSE CloseAndWait
+    // posts — so uninit would hang with it. DrawRow copes with a null icon.
+    if (IsLikelyRemotePath(target)) {
+        return nullptr;
     }
     return GetShellIconForPath(target, pixelSize);
 }
