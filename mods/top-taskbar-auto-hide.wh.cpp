@@ -942,11 +942,13 @@ HMODULE GetTaskbarViewModule() {
 }
 
 
+// Taskbar.View.dll
 bool HookTaskbarViewSymbols(
     HMODULE module
 ) {
 
-    WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
 
         {
             {
@@ -965,8 +967,8 @@ bool HookTaskbarViewSymbols(
     if (
         !WindhawkUtils::HookSymbols(
             module,
-            taskbar_view_dll_hooks,
-            ARRAYSIZE(taskbar_view_dll_hooks)
+            taskbarViewHooks,
+            ARRAYSIZE(taskbarViewHooks)
         )
     ) {
 
