@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.14.0
+// @version         0.15.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -433,17 +433,23 @@ static std::wstring RenameByActiveWindow(const std::wstring& path) {
 // Path text formatting (Path clipboard mode)
 // ============================================================================
 
-// Minimal file URI: forward slashes and %20 for spaces, enough for a link or a
-// Markdown image to paste cleanly.
+// File URI with proper percent-encoding, so a name with #, %, ( or ) (which window
+// titles are full of, and which SanitizeForFilename keeps) still makes a link and a
+// Markdown image that paste cleanly rather than a broken one.
 static std::wstring PathToFileUri(const std::wstring& path) {
     std::wstring uri = L"file:///";
     for (wchar_t c : path) {
-        if (c == L'\\') {
+        if (c == L'\\' || c == L'/') {
             uri += L'/';
-        } else if (c == L' ') {
-            uri += L"%20";
+        } else if ((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') ||
+                   (c >= L'0' && c <= L'9') || wcschr(L"-._~:", c)) {
+            uri += c;  // unreserved, plus the drive colon
+        } else if (c < 0x80) {
+            wchar_t esc[4];
+            swprintf_s(esc, L"%%%02X", (unsigned)c);
+            uri += esc;  // ' ' -> %20, '#' -> %23, '(' -> %28, '%' -> %25
         } else {
-            uri += c;
+            uri += c;  // non-ASCII passes through; file: consumers accept it
         }
     }
     return uri;
