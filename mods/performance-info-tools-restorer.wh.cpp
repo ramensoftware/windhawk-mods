@@ -2103,11 +2103,8 @@ extern decltype(&RegCloseKey) RegCloseKeyOriginal;
 //      leaves no registry traces (consistent with the mod's "nothing is
 //      persisted" design).
 //
-// The path is per-process (suffixed with the PID) so multiple processes
-// (explorer.exe, control.exe) each own a private volatile key and never delete
-// a key another process still has handles open on.
 static const wchar_t kVirtualKeyParentPrefix[] =
-    L"Software\\Windhawk\\PerformanceInfoToolsRestorer";
+    L"Software\\WindhawkPerformanceInfoToolsRestorer";
 static const wchar_t kVirtualKeyNamePrefix[] = L"VirtualKeys";
 
 static std::wstring VirtualKeyPath() {
@@ -2177,16 +2174,17 @@ static void ReleaseVirtualKeyRoot() {
         RegDeleteKeyW(parent, VirtualKeyLeafName().c_str());
         RegCloseKeyOriginal(parent);
 
-        // Remove the empty mod-owned parent key too. This fails harmlessly
-        // (ERROR_KEY_HAS_CHILDREN) if another process still has its own
-        // VirtualKeys-<pid> leaf under it; that process will clean it up when
-        // it unloads.
-        HKEY grand = nullptr;
-        if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, L"Software\\Windhawk", 0,
-                                  DELETE, &grand) == ERROR_SUCCESS) {
-            RegDeleteKeyW(grand, L"PerformanceInfoToolsRestorer");
-            RegCloseKeyOriginal(grand);
-        }
+// Remove the empty mod-owned parent key too. This fails harmlessly
+// (ERROR_KEY_HAS_CHILDREN) if another process still has its own
+// VirtualKeys-<pid> leaf under it; that process will clean it up when
+// it unloads.
+HKEY grand = nullptr;
+// Now we use the new path directly, without the "Windhawk" intermediate key
+if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, L"Software", 0,
+                          DELETE, &grand) == ERROR_SUCCESS) {
+    RegDeleteKeyW(grand, L"WindhawkPerformanceInfoToolsRestorer");
+    RegCloseKeyOriginal(grand);
+}
     }
 }
 
