@@ -16,7 +16,8 @@
 
 Intercepts navigation to the "Gallery" folder in the Windows File Explorer navigation pane
 and launches the Microsoft Photos app (`ms-photos:`) instead of opening the built-in Gallery view.
-(Note: Only in-Explorer navigation is redirected. Opening Gallery from a pinned Start menu shortcut won't be intercepted.)
+
+*(Note: Only in-Explorer navigation is redirected. Opening Gallery from a pinned Start menu shortcut won't be intercepted. Using the Back/Forward history buttons to return to Gallery will also bypass the hook.)*
 
 ![Demonstration](https://raw.githubusercontent.com/jakubix30/explorer-gallery-photos-launcher/main/demo.gif)
 
@@ -24,7 +25,7 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 
 - Works with **ExplorerPatcher** (Win10 Ribbon overlay fix) and standard Windows 11
 - Hooks at the COM/Symbol level (`CShellBrowser::BrowseObject`) — completely UI-independent
-- Configurable launch command (useful if you prefer a different photo viewer)
+- Configurable launch command (useful if you prefer a different photo viewer). *Note: Arguments are not supported, only paths or protocols.*
 */
 // ==/WindhawkModReadme==
 
@@ -91,6 +92,11 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             break;  // stop requested
         }
         if (r == WAIT_OBJECT_0 + 1) {
+            // Don't start a new launch if a stop was requested in the meantime.
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                break;
+            }
+
             // Read target dynamically, preventing use-after-free and threading issues.
             WindhawkUtils::StringSetting cmd = WindhawkUtils::StringSetting::make(L"targetCommand");
             PCWSTR target = *cmd ? cmd.get() : L"ms-photos:";
@@ -98,9 +104,10 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             Wh_Log(L"Launching app asynchronously: %s", target);
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // SEE_MASK_FLAG_NO_UI suppresses blocking dialogs (e.g., if ms-photos: is uninstalled)
-            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
-            sei.lpVerb = L"open";
+            // SEE_MASK_NOASYNC restricts execution to this background worker thread.
+            // SEE_MASK_FLAG_NO_UI suppresses shell error dialogs (e.g. if the target is uninstalled).
+            sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+            sei.lpVerb = nullptr; // Default verb is safer for diverse targets than explicit L"open"
             sei.lpFile = target;
             sei.nShow = SW_SHOWNORMAL;
             
@@ -170,8 +177,8 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
                 LR"(public: virtual long __cdecl CShellBrowser::BrowseObject(struct _ITEMIDLIST_RELATIVE const * __ptr64,unsigned int))",
                 LR"(public: virtual long __cdecl CShellBrowser::BrowseObject(struct _ITEMIDLIST const *,unsigned int))",
             },
-            (void**)&g_BrowseObject_Original,
-            (void*)BrowseObject_Hook,
+            &g_BrowseObject_Original,
+            BrowseObject_Hook,
         },
     };
 
@@ -198,7 +205,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                           HANDLE hFile,
                                           DWORD dwFlags) {
     HMODULE hMod = g_LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (hMod && hMod == GetModuleHandleW(L"explorerframe.dll")) {
+    if (!g_explorerFrameHooked.load(std::memory_order_relaxed) && hMod && hMod == GetModuleHandleW(L"explorerframe.dll")) {
         HookExplorerFrame(hMod, true);
     }
     return hMod;
@@ -226,21 +233,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Hook LoadLibraryExW from kernelbase.dll
-    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (hKernelBase) {
-        auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
-        if (pLoadLibraryExW) {
-            WindhawkUtils::SetFunctionHook(pLoadLibraryExW,
-                                           LoadLibraryExW_Hook,
-                                           &g_LoadLibraryExW_Original);
-        }
-    }
-
+    bool delayLoadingNeeded = true;
+    
     // If explorerframe.dll is already loaded, hook it immediately
     HMODULE hEF = GetModuleHandleW(L"explorerframe.dll");
     if (hEF) {
-        if (!HookExplorerFrame(hEF, false)) {
+        if (HookExplorerFrame(hEF, false)) {
+            delayLoadingNeeded = false;
+        } else {
             Wh_Log(L"Failed to hook already loaded explorerframe.dll");
             
             SetEvent(g_stopEvent);
@@ -249,6 +249,19 @@ BOOL Wh_ModInit() {
             CloseHandle(g_launchEvent);
             CloseHandle(g_stopEvent);
             return FALSE;
+        }
+    }
+
+    if (delayLoadingNeeded) {
+        // Hook LoadLibraryExW from kernelbase.dll to monitor for explorerframe.dll late-loading
+        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+        if (hKernelBase) {
+            auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
+            if (pLoadLibraryExW) {
+                WindhawkUtils::SetFunctionHook(pLoadLibraryExW,
+                                               LoadLibraryExW_Hook,
+                                               &g_LoadLibraryExW_Original);
+            }
         }
     }
 
