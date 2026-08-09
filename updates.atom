@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-08T19:53:19.000Z</updated>
+    <updated>2026-08-09T11:35:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Blob Shape 1.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-blob-shape#53c9298760a1b89b1fbf686d7240d29dc65bc566</id>
+        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
+        <updated>2026-08-09T11:35:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Extends the blob beyond task list buttons, each group behind its own toggle (all default off): Start/Search/Task view, Widgets, date and time, and the other checkable system tray buttons (control center, language, overflow chevron), shown while their flyout is open — on every monitor's instance, matching the native active highlight.</li>
+<li>System buttons are event-driven (ToggleButton Checked/Unchecked, with a CurrentStateChanged fallback) on top of the existing entry/geometry/expression/lifecycle machinery, discovered by sweeping each taskbar's repeater (re-swept on grid SizeChanged) and an optional hook on TaskbarResources::OnExperienceToggleButtonVisualStateChanged for islands without task-button activity. The tray is reached via XamlRoot().Content(), hosts blobs at the bottom of SystemTrayFrameGrid's z-order, and re-discovers elements on the tray grid's SizeChanged. Notification-area app icons and MainStack status indicators are deliberately excluded (no open-state exists for them: Shell_NotifyIcon is a one-way protocol, and the indicators only track hover states).</li>
+<li>Fixes the CustomColor setting description being truncated in the UI (space-before-# triggered YAML's comment rule) and documents the Light | Dark color syntax with concrete examples.</li>
+</ul>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Launch & Media Panel 2.1.4]]></title>
         <id>https://windhawk.net/mods/quick-launch-media-panel#3ea0870af51aa79053f75123211aec980742ddff</id>
@@ -718,22 +733,6 @@ extends upward and outward. Total size is
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/disk-usage-bar-customizer#63c3f981eab16876679fce1c90a5bb7efd5751d6</id>
-        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
-        <updated>2026-08-02T22:20:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added ability to change the corner radius (thanks @sid-skippy!) (closes #4598)</li>
-<li>Added percentage label overlay (disabled by default) (thanks @sid-skippy!)</li>
-<li>Added intermediate state with customizable threshold</li>
-<li>Added Romanian translation and simplified settings</li>
-</ul>]]></content>
-        <author>
-            <name>Valer100</name>
-            <uri>https://github.com/Valer100</uri>
         </author>
     </entry>
 </feed>
