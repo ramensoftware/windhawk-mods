@@ -143,6 +143,7 @@ If any problems are encountered, please report them to the mod's author.
 #include <thread>
 #include <atomic>
 #include <optional>
+#include <memory>
 #include <windhawk_utils.h>
 
 // =============================================================================
@@ -2132,6 +2133,51 @@ static std::wstring VirtualKeyLeafName() {
 static HKEY g_virtualKeyRoot = nullptr;
 static std::mutex g_virtualKeyRootMutex;
 
+// Marker value stamped on the key at creation time so a later open can
+// confirm it's actually ours, not some pre-existing key that merely happens
+// to sit at the same path.
+static const wchar_t kVirtualKeyOwnerMarker[] = L"WindhawkOwnerPid";
+
+// Undocumented but stable NtQueryKey info class / layout used to check
+// whether an already-open key handle is volatile, without needing to create
+// or touch anything. Same family of NtQueryKey use as GetKeyPath elsewhere
+// in this codebase (there used with KeyNameInformation).
+enum { kKeyFlagsInformationClass = 4 };
+struct WhKeyFlagsInformation {
+    ULONG UserFlags;
+    ULONG KeyFlags;
+    ULONG ControlFlags;
+};
+static constexpr ULONG kKeyFlagVolatile = 0x1;
+
+static bool IsVolatileKeyHandle(HKEY k) {
+    static auto NtQueryKeyFn = reinterpret_cast<LONG(WINAPI*)(
+        HANDLE, int, PVOID, ULONG, PULONG)>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey"));
+    if (!NtQueryKeyFn) return false;
+    WhKeyFlagsInformation info{};
+    ULONG needed = 0;
+    LONG status = NtQueryKeyFn(reinterpret_cast<HANDLE>(k),
+                               kKeyFlagsInformationClass, &info, sizeof(info),
+                               &needed);
+    if (status != 0 /* STATUS_SUCCESS */) return false;
+    return (info.KeyFlags & kKeyFlagVolatile) != 0;
+}
+
+// Confirms the key carries our own owner marker with the current PID. Since
+// VirtualKeyPath() already embeds the PID, this is a defense-in-depth check
+// (e.g. against something else having created a same-named key), not the
+// primary uniqueness guarantee.
+static bool VerifyVirtualKeyOwner(HKEY k) {
+    DWORD value = 0, size = sizeof(value), type = 0;
+    if (RegQueryValueExW(k, kVirtualKeyOwnerMarker, nullptr, &type,
+                         reinterpret_cast<BYTE*>(&value), &size) != ERROR_SUCCESS ||
+        type != REG_DWORD) {
+        return false;
+    }
+    return value == GetCurrentProcessId();
+}
+
 // Ensure the volatile backing key exists and return a long-lived handle to it
 // (or nullptr on failure). Callers still open their own per-fake handle.
 static HKEY EnsureVirtualKeyRoot() {
@@ -2139,16 +2185,32 @@ static HKEY EnsureVirtualKeyRoot() {
     if (g_virtualKeyRoot) return g_virtualKeyRoot;
 
     HKEY root = nullptr;
-    LONG st = RegOpenKeyExWOriginal(HKEY_CURRENT_USER, VirtualKeyPath().c_str(),
-                                    0, KEY_READ, &root);
-    if (st != ERROR_SUCCESS) {
-        DWORD disp = 0;
-        st = RegCreateKeyExWOriginal(HKEY_CURRENT_USER,
-                                     VirtualKeyPath().c_str(), 0, nullptr,
-                                     REG_OPTION_VOLATILE, KEY_READ, nullptr,
-                                     &root, &disp);
-        if (st != ERROR_SUCCESS) return nullptr;
+    // Don't trust a pre-existing key at this path blindly - verify it's
+    // both volatile and stamped with our own PID marker before adopting it.
+    // Anything else (a stale non-volatile key left behind by something
+    // else, or a same-named key from a completely unrelated source) gets
+    // closed and replaced rather than reused as our disposable scratch key.
+    if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, VirtualKeyPath().c_str(), 0,
+                              KEY_READ | KEY_WRITE, &root) == ERROR_SUCCESS) {
+        if (IsVolatileKeyHandle(root) && VerifyVirtualKeyOwner(root)) {
+            g_virtualKeyRoot = root;
+            return root;
+        }
+        RegCloseKeyOriginal(root);
+        root = nullptr;
     }
+
+    DWORD disp = 0;
+    LONG st = RegCreateKeyExWOriginal(HKEY_CURRENT_USER,
+                                      VirtualKeyPath().c_str(), 0, nullptr,
+                                      REG_OPTION_VOLATILE, KEY_READ | KEY_WRITE,
+                                      nullptr, &root, &disp);
+    if (st != ERROR_SUCCESS) return nullptr;
+
+    DWORD pid = GetCurrentProcessId();
+    RegSetValueExW(root, kVirtualKeyOwnerMarker, 0, REG_DWORD,
+                  reinterpret_cast<const BYTE*>(&pid), sizeof(pid));
+
     g_virtualKeyRoot = root;
     return root;
 }
@@ -2271,16 +2333,19 @@ public:
         // caller is done with, and RegCloseKeyOriginal is the real function.
         if (backing) RegCloseKeyOriginal(backing);
     }
-    // Close every outstanding fake handle. A caller-held handle, if any, stays
-    // valid until that caller closes it - it is a genuine kernel handle that
-    // resolves to the volatile key, which is destroyed when its last handle
-    // closes. The volatile key itself is cleaned up separately by
-    // ReleaseVirtualKeyRoot in Wh_ModUninit.
+    // Drop bookkeeping for every outstanding fake handle without closing any
+    // of them. Ownership of a fake handle transfers to the caller the moment
+    // it's handed out, so any handle a caller still holds here is still
+    // theirs; closing it out from under them here would free it while it's
+    // in use, and after Wh_ModUninit removes the hooks, a later RegCloseKey
+    // from that caller goes straight to the real function on a handle that
+    // may since have been recycled for something unrelated in explorer.exe.
+    // Leaving it be is safe either way: the handle resolves to the volatile
+    // key that ReleaseVirtualKeyRoot() deletes right after this call, so a
+    // still-open handle on it just fails future operations with
+    // ERROR_KEY_DELETED instead of touching anything else.
     void ClearWithoutFreeing() {
         std::unique_lock<std::shared_mutex> l(mutex_);
-        for (auto& kv : fakeOwners_) {
-            if (kv.second) RegCloseKeyOriginal(kv.second);
-        }
         fakeOwners_.clear();
         paths_.clear();
     }
@@ -2744,6 +2809,14 @@ LSTATUS WINAPI RegCreateKeyExWHook(HKEY hk, LPCWSTR sub, DWORD reserved,
                                    LPWSTR cls, DWORD opt, REGSAM sam,
                                    LPSECURITY_ATTRIBUTES sa, PHKEY out,
                                    LPDWORD disposition) {
+    // Same fast path as the other registry hooks: skip the
+    // IsFakeAndGetPath copy and the "full += sub" allocation entirely for
+    // the overwhelming majority of RegCreateKeyExW calls in the process that
+    // can't possibly touch the virtualized tree.
+    if (!MightNeedVirtualization(hk, sub)) {
+        return RegCreateKeyExWOriginal(hk, sub, reserved, cls, opt, sam, sa,
+                                       out, disposition);
+    }
     std::wstring s = sub ? sub : L"";
     return CreateKeyVirtual(
         hk, s, sub && *sub, sam, out, disposition,
@@ -3335,6 +3408,14 @@ static const wchar_t* Win7ViewPrintText(MuiLanguage lang) {
 static const wchar_t* VistaNotSureText(MuiLanguage lang) {
     switch (lang) {
         case MuiLanguage::IT_IT: return L"Non sai da dove iniziare?";
+        case MuiLanguage::ES_ES: return L"¿No sabe por dónde empezar?";
+        case MuiLanguage::FR_FR: return L"Vous ne savez pas par où commencer ?";
+        case MuiLanguage::TR_TR: return L"Nereden başlayacağınızdan emin değil misiniz?";
+        case MuiLanguage::RU_RU: return L"Не знаете, с чего начать?";
+        case MuiLanguage::ZH_CN: return L"不知道从哪里开始？";
+        case MuiLanguage::DE_DE: return L"Nicht sicher, wo Sie anfangen sollen?";
+        case MuiLanguage::PT_BR: return L"Não sabe por onde começar?";
+        case MuiLanguage::PL_PL: return L"Nie wiesz, od czego zacząć?";
         default: return L"Not sure where to start?";
     }
 }
@@ -3342,6 +3423,14 @@ static const wchar_t* VistaNotSureText(MuiLanguage lang) {
 static const wchar_t* VistaImproveLinkText(MuiLanguage lang) {
     switch (lang) {
         case MuiLanguage::IT_IT: return L"Informazioni su come migliorare le prestazioni del computer.";
+        case MuiLanguage::ES_ES: return L"Descubra cómo puede mejorar el rendimiento de su equipo.";
+        case MuiLanguage::FR_FR: return L"Découvrez comment améliorer les performances de votre ordinateur.";
+        case MuiLanguage::TR_TR: return L"Bilgisayarınızın performansını nasıl artırabileceğinizi öğrenin.";
+        case MuiLanguage::RU_RU: return L"Узнайте, как повысить производительность компьютера.";
+        case MuiLanguage::ZH_CN: return L"了解如何提高计算机的性能。";
+        case MuiLanguage::DE_DE: return L"Erfahren Sie, wie Sie die Leistung Ihres Computers verbessern können.";
+        case MuiLanguage::PT_BR: return L"Saiba como você pode melhorar o desempenho do computador.";
+        case MuiLanguage::PL_PL: return L"Dowiedz się, jak poprawić wydajność komputera.";
         default: return L"Learn how you can improve your computer's performance.";
     }
 }
@@ -3349,6 +3438,14 @@ static const wchar_t* VistaImproveLinkText(MuiLanguage lang) {
 static const wchar_t* VistaLearnScoresText(MuiLanguage lang) {
     switch (lang) {
         case MuiLanguage::IT_IT: return L"Ulteriori informazioni sui punteggi online";
+        case MuiLanguage::ES_ES: return L"Más información sobre las puntuaciones en línea";
+        case MuiLanguage::FR_FR: return L"En savoir plus sur les scores en ligne";
+        case MuiLanguage::TR_TR: return L"Puanlar hakkında çevrimiçi daha fazla bilgi edinin";
+        case MuiLanguage::RU_RU: return L"Дополнительные сведения об оценках в Интернете";
+        case MuiLanguage::ZH_CN: return L"联机了解有关分数的详细信息";
+        case MuiLanguage::DE_DE: return L"Weitere Informationen zu den Bewertungen online";
+        case MuiLanguage::PT_BR: return L"Saiba mais sobre as pontuações online";
+        case MuiLanguage::PL_PL: return L"Dowiedz się więcej o wynikach online";
         default: return L"Learn more about the scores online";
     }
 }
@@ -3356,6 +3453,14 @@ static const wchar_t* VistaLearnScoresText(MuiLanguage lang) {
 static const wchar_t* VistaSoftwareForScoreText(MuiLanguage lang) {
     switch (lang) {
         case MuiLanguage::IT_IT: return L"Visualizza software per il punteggio di base online";
+        case MuiLanguage::ES_ES: return L"Ver software para mi puntuación base en línea";
+        case MuiLanguage::FR_FR: return L"Afficher les logiciels pour mon indice de base en ligne";
+        case MuiLanguage::TR_TR: return L"Temel puanım için çevrimiçi yazılımları görüntüleyin";
+        case MuiLanguage::RU_RU: return L"Просмотреть программное обеспечение для базовой оценки в Интернете";
+        case MuiLanguage::ZH_CN: return L"联机查看适用于我的基本分数的软件";
+        case MuiLanguage::DE_DE: return L"Software für meine Basisbewertung online anzeigen";
+        case MuiLanguage::PT_BR: return L"Exibir software para minha pontuação base online";
+        case MuiLanguage::PL_PL: return L"Wyświetl oprogramowanie dla mojego wyniku bazowego online";
         default: return L"View software for my base score online";
     }
 }
@@ -3671,10 +3776,15 @@ static LoadImageW_t LoadImageWOriginalForVistaLamp = nullptr;
 // Reachable from any thread that hits any of the five icon hooks below, so
 // this must not be a plain HICON: two concurrent first-callers could each
 // create an icon and one would leak. std::atomic<HICON> with compare-exchange
-// makes creation race-safe, and DestroyIcon in Wh_ModUninit reclaims it - the
-// CopyIcon() results handed out to callers are independent handles, so
-// destroying this master copy on unload is safe.
+// makes creation race-safe. The ExtractIconExW/PrivateExtractIconsW/
+// SHDefExtractIconW hooks only ever hand out independent CopyIcon() results,
+// so destroying this master copy on unload is safe for those callers.
+// LoadIconW and LR_SHARED LoadImageW calls, however, hand back this exact
+// handle (per their shared-icon contract - see the hooks below), so if any
+// of those ever fired, a still-open page may be holding this very HICON;
+// destroying it out from under that page would invalidate a live handle.
 static std::atomic<HICON> g_vistaLampIcon{nullptr};
+static std::atomic<bool> g_vistaLampIconSharedOut{false};
 
 static int Base64Value(char c) {
     if (c >= 'A' && c <= 'Z') return c - 'A';
@@ -3735,6 +3845,15 @@ HANDLE WINAPI LoadImageWHookForVistaLamp(HINSTANCE instance, LPCWSTR name, UINT 
         static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId &&
         instance == GetModuleHandleW(L"shell32.dll")) {
         if (HICON icon = GetVistaLampIcon()) {
+            // LR_SHARED asks for (and gets, from the real system image list
+            // cache) a shared icon that the caller must not destroy - hand
+            // back our own cached icon directly. Without LR_SHARED the
+            // caller owns whatever comes back and is expected to
+            // DestroyIcon it, so only that path needs a fresh CopyIcon.
+            if (flags & LR_SHARED) {
+                g_vistaLampIconSharedOut.store(true, std::memory_order_release);
+                return icon;
+            }
             return CopyIcon(icon);
         }
     }
@@ -3768,7 +3887,15 @@ HICON WINAPI LoadIconWHookForVistaLamp(HINSTANCE instance, LPCWSTR name) {
     if (g_useWindowsVistaSkin.load() && IS_INTRESOURCE(name) &&
         static_cast<UINT>(reinterpret_cast<UINT_PTR>(name)) == kVistaLampIconId &&
         instance == GetModuleHandleW(L"shell32.dll")) {
-        if (HICON icon = GetVistaLampIcon()) return CopyIcon(icon);
+        // LoadIconW's contract is that the returned icon is shared: callers
+        // must not (and the real shell doesn't) call DestroyIcon on it.
+        // Handing back a fresh CopyIcon here would leak one icon per
+        // intercepted call for as long as the Vista skin stays selected -
+        // return the cached icon itself instead.
+        if (HICON icon = GetVistaLampIcon()) {
+            g_vistaLampIconSharedOut.store(true, std::memory_order_release);
+            return icon;
+        }
     }
     return LoadIconWOriginalForVistaLamp(instance, name);
 }
@@ -3819,6 +3946,120 @@ using ShellExecuteExW_t = decltype(&ShellExecuteExW);
 static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
 static ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
 
+static const wchar_t* PerfMessageCaptionText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Prestazioni del computer";
+        case MuiLanguage::ES_ES: return L"Rendimiento del equipo";
+        case MuiLanguage::FR_FR: return L"Performances de l'ordinateur";
+        case MuiLanguage::TR_TR: return L"Bilgisayar performansı";
+        case MuiLanguage::RU_RU: return L"Производительность компьютера";
+        case MuiLanguage::ZH_CN: return L"计算机性能";
+        case MuiLanguage::DE_DE: return L"Computerleistung";
+        case MuiLanguage::PT_BR: return L"Desempenho do computador";
+        case MuiLanguage::PL_PL: return L"Wydajność komputera";
+        default: return L"Computer Performance";
+    }
+}
+
+static const wchar_t* PerfNumbersMessageText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"L'indice prestazioni Windows valutava i componenti chiave del sistema su una scala da 1,0 a 9,9: punteggi più alti indicavano hardware più performante. Questa funzionalità non è più disponibile nelle versioni recenti di Windows.";
+        case MuiLanguage::ES_ES: return L"El Índice de experiencia de Windows evaluaba los componentes principales del equipo en una escala de 1,0 a 9,9: las puntuaciones más altas indicaban un hardware con mejor rendimiento. Esta función ya no está disponible en las versiones recientes de Windows.";
+        case MuiLanguage::FR_FR: return L"L'indice de performance Windows évaluait les composants principaux de l'ordinateur sur une échelle de 1,0 à 9,9 : un score plus élevé indiquait un matériel plus performant. Cette fonctionnalité n'est plus disponible dans les versions récentes de Windows.";
+        case MuiLanguage::TR_TR: return L"Windows Deneyim Dizini, bilgisayarın temel bileşenlerini 1,0 ile 9,9 arasında bir ölçekte değerlendirirdi: daha yüksek puanlar daha güçlü donanım anlamına gelirdi. Bu özellik artık Windows'un yeni sürümlerinde bulunmuyor.";
+        case MuiLanguage::RU_RU: return L"Индекс производительности Windows оценивал ключевые компоненты компьютера по шкале от 1,0 до 9,9: более высокие оценки означали более производительное оборудование. Эта функция больше не доступна в новых версиях Windows.";
+        case MuiLanguage::ZH_CN: return L"Windows 体验指数按 1.0 到 9.9 的等级评估计算机的关键组件：分数越高，表示硬件性能越好。此功能在较新版本的 Windows 中已不再提供。";
+        case MuiLanguage::DE_DE: return L"Der Windows-Leistungsindex bewertete die wichtigsten Komponenten des Computers auf einer Skala von 1,0 bis 9,9: Höhere Werte bedeuteten leistungsfähigere Hardware. Diese Funktion ist in aktuellen Windows-Versionen nicht mehr verfügbar.";
+        case MuiLanguage::PT_BR: return L"O Índice de Experiência do Windows avaliava os principais componentes do computador em uma escala de 1,0 a 9,9: pontuações mais altas indicavam hardware com melhor desempenho. Esse recurso não está mais disponível nas versões recentes do Windows.";
+        case MuiLanguage::PL_PL: return L"Indeks wydajności systemu Windows oceniał główne składniki komputera w skali od 1,0 do 9,9: wyższe wyniki oznaczały wydajniejszy sprzęt. Ta funkcja nie jest już dostępna w nowszych wersjach systemu Windows.";
+        default: return L"The Windows Experience Index rated your computer's key components on a scale of 1.0 to 9.9: higher numbers meant better-performing hardware. This feature is no longer available in recent versions of Windows.";
+    }
+}
+
+static const wchar_t* PerfTipsMessageText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Alcuni suggerimenti generali per migliorare le prestazioni del computer: mantieni Windows e i driver aggiornati, libera spazio su disco, disattiva i programmi non necessari all'avvio ed esegui regolarmente la manutenzione del sistema.";
+        case MuiLanguage::ES_ES: return L"Algunos consejos generales para mejorar el rendimiento del equipo: mantén Windows y los controladores actualizados, libera espacio en disco, desactiva los programas innecesarios al inicio y realiza el mantenimiento del sistema con regularidad.";
+        case MuiLanguage::FR_FR: return L"Quelques conseils généraux pour améliorer les performances de l'ordinateur : maintenez Windows et les pilotes à jour, libérez de l'espace disque, désactivez les programmes inutiles au démarrage et effectuez régulièrement la maintenance du système.";
+        case MuiLanguage::TR_TR: return L"Bilgisayar performansını artırmak için bazı genel öneriler: Windows'u ve sürücüleri güncel tutun, disk alanı boşaltın, gereksiz başlangıç programlarını devre dışı bırakın ve düzenli olarak sistem bakımı yapın.";
+        case MuiLanguage::RU_RU: return L"Несколько общих советов по повышению производительности компьютера: обновляйте Windows и драйверы, освобождайте место на диске, отключайте ненужные программы автозагрузки и регулярно выполняйте обслуживание системы.";
+        case MuiLanguage::ZH_CN: return L"以下是一些提高计算机性能的通用建议：保持 Windows 和驱动程序为最新版本，释放磁盘空间，禁用不必要的启动程序，并定期执行系统维护。";
+        case MuiLanguage::DE_DE: return L"Einige allgemeine Tipps zur Verbesserung der Computerleistung: Halten Sie Windows und Treiber aktuell, geben Sie Speicherplatz frei, deaktivieren Sie unnötige Autostart-Programme und führen Sie regelmäßig eine Systemwartung durch.";
+        case MuiLanguage::PT_BR: return L"Algumas dicas gerais para melhorar o desempenho do computador: mantenha o Windows e os drivers atualizados, libere espaço em disco, desative programas desnecessários na inicialização e faça a manutenção do sistema regularmente.";
+        case MuiLanguage::PL_PL: return L"Kilka ogólnych wskazówek dotyczących poprawy wydajności komputera: aktualizuj system Windows i sterowniki, zwalniaj miejsce na dysku, wyłączaj niepotrzebne programy uruchamiane przy starcie i regularnie wykonuj konserwację systemu.";
+        default: return L"A few general tips for improving your computer's performance: keep Windows and drivers up to date, free up disk space, disable unnecessary startup programs, and run system maintenance regularly.";
+    }
+}
+
+static const wchar_t* PerfLearnMoreMessageText(MuiLanguage lang) {
+    switch (lang) {
+        case MuiLanguage::IT_IT: return L"Puoi trovare ulteriori software e strumenti per il tuo computer nel Microsoft Store.";
+        case MuiLanguage::ES_ES: return L"Puedes encontrar más software y herramientas para tu equipo en Microsoft Store.";
+        case MuiLanguage::FR_FR: return L"Vous pouvez trouver d'autres logiciels et outils pour votre ordinateur dans le Microsoft Store.";
+        case MuiLanguage::TR_TR: return L"Bilgisayarınız için daha fazla yazılım ve araç bulmak üzere Microsoft Store'u ziyaret edebilirsiniz.";
+        case MuiLanguage::RU_RU: return L"Дополнительное программное обеспечение и инструменты для компьютера можно найти в Microsoft Store.";
+        case MuiLanguage::ZH_CN: return L"你可以在 Microsoft Store 中找到适用于你计算机的更多软件和工具。";
+        case MuiLanguage::DE_DE: return L"Weitere Software und Tools für Ihren Computer finden Sie im Microsoft Store.";
+        case MuiLanguage::PT_BR: return L"Você pode encontrar mais softwares e ferramentas para o seu computador na Microsoft Store.";
+        case MuiLanguage::PL_PL: return L"Więcej oprogramowania i narzędzi dla komputera znajdziesz w Microsoft Store.";
+        default: return L"You can find additional software and tools for your computer in the Microsoft Store.";
+    }
+}
+
+// Parameters passed by value to the message-box thread below; each thread
+// owns its own copy, so no synchronization is needed between the hooked
+// caller's thread and the thread that actually shows the dialog.
+struct PerfMessageBoxParams {
+    std::wstring caption;
+    std::wstring text;
+    HMODULE pinnedModule;
+};
+
+static DWORD WINAPI PerfMessageBoxThreadProc(LPVOID param) {
+    std::unique_ptr<PerfMessageBoxParams> p(
+        reinterpret_cast<PerfMessageBoxParams*>(param));
+    MessageBoxW(nullptr, p->text.c_str(), p->caption.c_str(),
+               MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
+    HMODULE pinnedModule = p->pinnedModule;
+    p.reset();
+    // Drop the extra reference taken to keep this image mapped for the
+    // dialog's lifetime. Do this last, after the dialog is closed and all
+    // mod code for this thread has finished running.
+    if (pinnedModule) FreeLibrary(pinnedModule);
+    return 0;
+}
+
+// Shows a small generic MessageBoxW without blocking the calling thread.
+// HandlePerfCenterAction runs inside a hooked ShellExecuteW/ShellExecuteExW,
+// i.e. on the shell's own UI thread - a modal dialog shown directly there
+// would park that thread for as long as the dialog stayed open, and if the
+// mod were disabled/unloaded in that window, the blocked thread's return
+// address would point into an unloaded image. Showing the dialog from a
+// brand-new thread avoids blocking the caller entirely; pinning this module
+// (bumping its own reference count, like a self-LoadLibrary) for that
+// thread's lifetime additionally ensures the mod's image stays mapped for as
+// long as that thread is still running dialog/mod code, even if the mod is
+// disabled while the dialog is open.
+static void ShowPerfCenterMessage(const wchar_t* caption, const wchar_t* text) {
+    HMODULE pinnedModule = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<LPCWSTR>(&ShowPerfCenterMessage),
+                            &pinnedModule)) {
+        return; // Couldn't pin our own image; skip rather than risk an unload race.
+    }
+    auto params = std::make_unique<PerfMessageBoxParams>();
+    params->caption = caption;
+    params->text = text;
+    params->pinnedModule = pinnedModule;
+    HANDLE thread = CreateThread(nullptr, 0, PerfMessageBoxThreadProc,
+                                 params.release(), 0, nullptr);
+    if (!thread) {
+        FreeLibrary(pinnedModule);
+        return;
+    }
+    CloseHandle(thread); // Detached: the thread proc owns and frees everything.
+}
+
 static bool IsPerfCenterAction(PCWSTR params, const wchar_t* action) {
     if (!params || !action) return false;
     std::wstring value = params;
@@ -3839,26 +4080,28 @@ static bool HandlePerfCenterAction(HWND hwnd, PCWSTR params) {
     }
 
     // All actions are non-blocking: they never park the calling shell UI
-    // thread in mod code. (A modal MessageBoxW from inside a ShellExecute hook
-    // would block the caller for as long as the dialog is open, and if the mod
-    // is disabled/unloaded in that window the blocked thread's return address
-    // would be in the unloaded image.) Each action just delegates to the
-    // original ShellExecuteW and returns immediately, matching how Windows 7
-    // opened a help topic for these links.
-    if (IsPerfCenterAction(params, L"numbers") ||
-        IsPerfCenterAction(params, L"tips") ||
-        IsPerfCenterAction(params, L"learnmore")) {
-        if (ShellExecuteWOriginal) {
-            // Windows Experience Index help topic (deprecated upstream; the
-            // performance-optimization tips page is the closest stable,
-            // first-party target). Update these URLs if a better help topic is
-            // desired - the important property is that they are external and
-            // non-blocking, never a modal in-process dialog.
-            ShellExecuteWOriginal(
-                hwnd, L"open",
-                L"https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows",
-                nullptr, nullptr, SW_SHOWNORMAL);
-        }
+    // thread in mod code. numbers/tips/learnmore each show a small, generic
+    // informational MessageBoxW - matching the short explanatory text these
+    // links carried on Windows 7/Vista - but from a separate, pinned thread
+    // (see ShowPerfCenterMessage) rather than inline, so the hooked
+    // ShellExecuteW/ShellExecuteExW call itself still returns immediately
+    // and never blocks the shell's UI thread on a modal dialog.
+    if (IsPerfCenterAction(params, L"numbers")) {
+        MuiLanguage lang = GetCurrentEmbeddedLanguage();
+        ShowPerfCenterMessage(PerfMessageCaptionText(lang),
+                              PerfNumbersMessageText(lang));
+        return true;
+    }
+    if (IsPerfCenterAction(params, L"tips")) {
+        MuiLanguage lang = GetCurrentEmbeddedLanguage();
+        ShowPerfCenterMessage(PerfMessageCaptionText(lang),
+                              PerfTipsMessageText(lang));
+        return true;
+    }
+    if (IsPerfCenterAction(params, L"learnmore")) {
+        MuiLanguage lang = GetCurrentEmbeddedLanguage();
+        ShowPerfCenterMessage(PerfMessageCaptionText(lang),
+                              PerfLearnMoreMessageText(lang));
         return true;
     }
     if (IsPerfCenterAction(params, L"viewprint")) {
@@ -4277,12 +4520,19 @@ void Wh_ModUninit(void) {
             g_stopEvent = nullptr;
         }
 
-        // The master Vista-lamp icon is safe to destroy here even though
+        // The master Vista-lamp icon is normally safe to destroy here, since
         // CopyIcon() results already handed out to callers are independent
-        // handles unaffected by this. Without it, one HICON leaked in
-        // explorer.exe on every enable/disable cycle.
-        if (HICON lamp = g_vistaLampIcon.exchange(nullptr)) {
-            DestroyIcon(lamp);
+        // handles unaffected by this - without it, one HICON would leak in
+        // explorer.exe on every enable/disable cycle. But if this exact
+        // handle was ever handed out directly (LoadIconW / LR_SHARED
+        // LoadImageW - see those hooks), a still-open page may be holding
+        // it live; destroying it there would invalidate that page's handle
+        // instead. In that case, leave it: one icon leaked for the rest of
+        // the session is cheaper than breaking a handle a caller still owns.
+        if (!g_vistaLampIconSharedOut.load(std::memory_order_acquire)) {
+            if (HICON lamp = g_vistaLampIcon.exchange(nullptr)) {
+                DestroyIcon(lamp);
+            }
         }
 
         // Do not force-unload g_hPerfCenter or g_hLocalizedResources on teardown,
