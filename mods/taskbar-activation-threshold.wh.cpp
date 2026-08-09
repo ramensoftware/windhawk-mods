@@ -1240,6 +1240,7 @@ DWORD WINAPI ActivationWorkerThread(LPVOID) {
 }
 
 bool HookTaskbarViewSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
@@ -1278,7 +1279,7 @@ bool HookTaskbarSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const TrayUI::`vftable'{for `IInspectable'})"},
             &g_trayUiVtableIInspectable,
@@ -1324,7 +1325,8 @@ bool HookTaskbarSymbols() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(
+            module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Required native taskbar symbols are unavailable");
         return false;
     }
