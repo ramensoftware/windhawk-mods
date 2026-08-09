@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              windows-update-control-panel-restorer
 // @name            Windows Update Control Panel Restorer
-// @description     This mod restores the Windows 8.1 Windows Update Control Panel interface on Windows 10 and 11, with modern WUA backend
+// @description     This mod restores the Windows Update Control Panel page in Windows 10 and Windows 11
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -15,7 +15,7 @@
 /*
 - Language: auto
   $name: Language
-  $description: This setting is used to change the language shown on the restored page. "Auto" detects the system language automatically; otherwise English is used as the fallback if a language is not recognized.
+  $description: This setting changes the language shown on the restored page. "Auto" detects the system language automatically; otherwise English is used as the fallback if a language is not recognized.
   $options:
     - auto: Auto (detect system language)
     - en: English
@@ -30,16 +30,22 @@
     - nl: Nederlands
 - ShowServiceNotice: true
   $name: Show recreated interface
-  $description: Shows the mod's recreated interface, a recreation of the classic Windows 7 Control Panel page that uses the legacy Windows Update DLL as a fallback when it cannot be drawn (e.g. when the Windows Update service is disabled). Disable this to hide the recreated interface.
-- ShowAvailableUpdates: false
+  $description: This setting shows the mod's recreated interface, a best-effort recreation of the classic Windows Update Control Panel page. Disable this to hide the recreated interface.
+- UpdatePageSkin: windows7
+  $name: Update page skin
+  $description: This setting chooses the status banner and applet icon skin. Windows 7 keeps the current shield-style status icons and uses the supplied applet logo; Windows 8.1 uses the included Windows Update icon. The available-updates and disabled-service/fallback notices are unchanged.
+  $options:
+    - windows7: Windows 7 (current)
+    - windows81: Windows 8.1
+- ShowAvailableUpdates: true
   $name: Show available-updates banner
-  $description: When enabled, the status banner also shows the "updates available" state (amber/orange strip with an exclamation shield) when Windows reports pending available updates. Disabled by default; press Ctrl+P to toggle it at runtime.
-- ShowClassicTaskLinks: true
-  $name: Show classic left task links
-  $description: Restores the classic Windows 8.1 task links (Control Panel Home, Check for updates, Change settings, View update history, Restore hidden updates, Frequently asked questions, Installed Updates) inside the page's own left navigation pane, exactly like the original Control Panel page. Links with a working modern target are active; the others are shown for visual continuity. Disable this to leave the original (often empty) navigation pane untouched.
+  $description: This setting shows the "updates available" state (amber/orange strip with an exclamation shield) when Windows reports pending available updates. Disabled by default.
+- LinkSystemSettingsText: false
+  $name: Link system settings text
+  $description: This setting makes the "system settings" part of the recommendation text a blue link that opens Windows Update in the Settings app (ms-settings:windowsupdate). Disabled by default.
 - DebugForcePendingUpdate: false
   $name: Debug - force pending-updates state
-  $description: Debug/preview option. When enabled, the restored page always renders the "pending updates" interface (orange side strip, "Pending restart" status and shield icon) even when Windows reports no pending update, so the interface can be previewed without actually having updates pending. Disabled by default.
+  $description: This setting is a debug/preview option that forces the "pending updates" interface even when Windows reports no pending update. Disabled by default.
 */
 // ==/WindhawkModSettings==
 
@@ -47,67 +53,36 @@
 /*
 # Windows Update Control Panel Restorer
 
-This mod restores the classic Windows Update Control Panel page on Windows 10
-and Windows 11, without replacing system files or writing to the registry. It
-uses the Windows 8.1 legacy DLL (`wucltux.dll`) together with a modern backend
-(WUA) to show the real update status and partially recreates the legacy interface to avoid incompatibility issues.
+This mod adds a best-effort classic Windows Update page back to Control Panel on
+Windows 10 and Windows 11. It uses a private Windows 8.1 UI payload with a modern
+Windows Update backend/status layer, without replacing system files or writing
+real Control Panel registration keys.
 
-The mod has been tested on Windows 10 21H2 and Windows 11 25H2.
+This is a reimplementation, not the original Windows Update client. Some buttons
+and small visual details are intentionally limited, and more details may be
+improved in future versions.
 
 **Features**
 
-- **Classic interface**: The mod recreates the Windows 7/8 style Windows Update page
-  with a colored band, a shield/check icon and a clear status text (up to
-  date, restart pending, updates available).
-- **Real status**: The mod rreads the system's own flags (pending updates, restart
-  required, last check / last install date).
-- **Modern integration**: The mod includes native-looking WUA links, update history and the
-  "installed updates" page.
-- **Classic left task links**: the page's own left navigation pane is restored
-  with the classic Windows 8.1 links (Control Panel Home, Check for updates,
-  Change settings, View update history, Restore hidden updates, Frequently
-  asked questions, Installed Updates), exactly like the original
-  page. Links that map to a working handler are active; the others are shown
-  for visual continuity.
-- **Friendly notices**: If the Windows Update service is disabled or missing,
-  you get a clear, translated notice instead of the cryptic system message.
-- **Available updates banner**: The mod includes an amber banner that can be shown when updates
-  are available, toggled with **Ctrl+P** (disabled by default).
-- **Debug preview**: The `DebugForcePendingUpdate` setting renders the "pending updates" interface
-  (orange strip, "Pending restart", shield icon) even when Windows reports no pending update, so
-  the page can be previewed without actually having updates pending.
-- **Language support**: English, Italian, Spanish, French, Turkish, Russian,
+- Classic Windows Update-style status page with real restart/update status.
+- Windows 7 or Windows 8.1 skin option for the status/app icon.
+- Friendly notice when Windows Update is disabled or unavailable.
+- Optional available-updates banner and optional link to Windows Update Settings.
+- Multilingual UI: English, Italian, Spanish, French, Turkish, Russian,
   Portuguese, Chinese, Polish, Dutch, or auto-detect.
 
-**Requirements**
+**Notes**
 
-- Windows 10 or Windows 11.
-- The classic Control Panel (the Windows Update item is injected into it).
-- Internet access on first run, to download the verified Windows 8.1
-  `wucltux.dll` from the Microsoft Symbol Server.
-
-**Known limitations**
-
-- **"View-only" legacy interface**: the legacy page is restored so it can be
-  *accessed*, but it is very incomplete. Microsoft removed the interactive
-  install flow on modern Windows, so the original install and search buttons
-  are no longer reliable. Installing is still done from the Settings app.
-- **No MUI file is shipped**: the mod deliberately does not provide an MUI
-  resource file for the original page, to keep things simple and consistent
-  with modern Windows.
-- **"Last checked" timestamp**: the "Most recent check for updates" value is
-  the moment the mod queried the system, not Windows' own exact scan
-  timestamp. It is a reliable proxy, but it may differ slightly from the one
-  shown in Settings.
-
-**Hotkeys**
-
-- **Ctrl+P**- Toggle the available updates banner (disabled by default)
+- Installing updates is still handled by the modern Settings app.
+- The "last checked" time is the moment this mod queried the system, so it can
+  differ slightly from the Settings app.
+- The Windows 8.1 UI DLL is downloaded from Microsoft Symbol Server and verified
+  before use.
 
 **Credits**
 
-- **Cips** - Testing on Windows 11 25H2
-- **Tvor** - Testing on Windows 10 21H2
+- **Yvor** - Testing on Windows 10 21H2.
+- **Cips** - Testing on Windows 11 25H2.
 
 If you encounter issues, please report them to the author of the mod.
 */
@@ -605,102 +580,30 @@ static std::wstring g_builtLanguage = L"en";
 static std::mutex g_rebuildMutex;
 [[clang::no_destroy]] static std::optional<std::thread> g_rebuildThread;
 
+// Which icon skin to use for the normal Windows Update status banner.
+// 0 = Windows 7/current shield/check icons, 1 = Windows 8.1 update icon.
+static constexpr int kUpdatePageSkinWindows7 = 0;
+static constexpr int kUpdatePageSkinWindows81 = 1;
+static std::atomic<int> g_updatePageSkin{kUpdatePageSkinWindows7};
+static bool IsWindows81Skin() {
+    return g_updatePageSkin.load() == kUpdatePageSkinWindows81;
+}
+
 // Whether to show the "updates available" (amber) banner when Windows reports
-// pending available updates. Controlled by the "ShowAvailableUpdates" setting
-// (default off) and toggleable at runtime with Ctrl+P.
+// pending available updates. Controlled only by the "ShowAvailableUpdates"
+// setting (default off); no global hotkey is registered.
 static std::atomic<bool> g_showAvailableUpdates{false};
+
+// Optional, conservative bridge to the modern Settings app. When enabled, only
+// the translated "system settings" phrase in the up-to-date recommendation is
+// made clickable; the text is otherwise unchanged. Disabled by default.
+static std::atomic<bool> g_linkSystemSettingsText{false};
 
 // Debug/preview flag: when set, the restored page renders the "pending
 // updates" interface (orange strip, "Pending restart", shield icon) even when
 // Windows reports no pending update. Controlled by the
 // "DebugForcePendingUpdate" setting (default off).
 static std::atomic<bool> g_debugForcePending{false};
-
-// Whether the restored classic left task links (the Windows 8.1 sidebar) are
-// shown inside the page's own navigation pane. Controlled by the
-// "ShowClassicTaskLinks" setting (default on).
-static std::atomic<bool> g_showClassicTaskLinks{true};
-
-// Ctrl+P hotkey toggles the "available updates" (amber) banner at runtime.
-// A dedicated hidden window hosts the hotkey; the message loop runs on its own
-// thread so it never blocks the DirectUI thread.
-static constexpr int kToggleAvailHotkeyId = 0x4350; // arbitrary id
-static HWND g_hotkeyWnd = nullptr;
-static std::atomic<bool> g_hotkeyRunning{false};
-[[clang::no_destroy]] static std::optional<std::thread> g_hotkeyThread;
-static const wchar_t* kHotkeyClassName = L"Windhawk.WindowsUpdate.RestorerHotkey";
-
-static void ToggleAvailableUpdates() {
-    // Flip the flag. DirectUI re-renders must stay on the page's own (GUI)
-    // thread, so we do NOT touch DirectUI from this hotkey thread. The new
-    // state is picked up the next time the Windows Update page is rendered
-    // (e.g. on navigation or when the page is shown again).
-    g_showAvailableUpdates.store(!g_showAvailableUpdates.load());
-}
-
-static LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == WM_HOTKEY && static_cast<int>(wParam) == kToggleAvailHotkeyId) {
-        ToggleAvailableUpdates();
-        return 0;
-    }
-    if (msg == WM_CLOSE) {
-        DestroyWindow(hwnd);
-        PostQuitMessage(0); // wake the message loop so the thread exits
-        return 0;
-    }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-static void StartHotkeyListener() {
-    if (g_hotkeyRunning.load()) return;
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = HotkeyWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = kHotkeyClassName;
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        return; // cannot register the hotkey window class — skip safely
-    }
-    g_hotkeyRunning.store(true);
-    g_hotkeyThread.emplace([] {
-        // Create the window on this worker thread and run a local message loop.
-        HWND hwnd = CreateWindowExW(0, kHotkeyClassName, L"", 0,
-                                    0, 0, 0, 0, nullptr, nullptr,
-                                    GetModuleHandleW(nullptr), nullptr);
-        if (hwnd) {
-            g_hotkeyWnd = hwnd;
-            if (RegisterHotKey(hwnd, kToggleAvailHotkeyId, MOD_CONTROL, 'P')) {
-                MSG msg{};
-                while (g_hotkeyRunning.load() && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-                UnregisterHotKey(hwnd, kToggleAvailHotkeyId);
-            }
-            g_hotkeyWnd = nullptr;
-            DestroyWindow(hwnd);
-        }
-        g_hotkeyRunning.store(false);
-    });
-}
-
-// Stops the Ctrl+P hotkey listener: signals the worker thread to exit its
-// message loop and waits for it. Defined before UpdateHotkeyListener because the
-// latter calls it, and there is no forward declaration.
-static void StopHotkeyListener() {
-    g_hotkeyRunning.store(false);
-    if (HWND hwnd = g_hotkeyWnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
-    if (g_hotkeyThread && g_hotkeyThread->joinable()) g_hotkeyThread->join();
-    g_hotkeyThread.reset();
-    g_hotkeyWnd = nullptr;
-}
-
-// Called on Wh_ModInit and Wh_ModSettingsChanged. Starts the hotkey thread only
-// when the user has enabled the "available updates" feature; otherwise no window
-// or thread is created, avoiding any risk to explorer at startup.
-static void UpdateHotkeyListener() {
-    if (g_showAvailableUpdates.load()) StartHotkeyListener();
-    else StopHotkeyListener();
-}
 
 // Currently selected language code (default "en"). Declared early because the
 // embedded string table below resolves strings per language at runtime. Loaded
@@ -1000,7 +903,7 @@ static const WucltuxEmbeddedString kWucltuxMuiStrings[] = {
     { 1203, L"I &decline", L"&Non accetto", L"&Rechazo", L"Je &refuse", L"&Reddediyorum", L"&Не принимаю", L"&Recuso", L"我拒绝（&d）", L"&Odrzucam", L"Ik &weiger" },
     { 1204, L"Help", L"Guida", L"Ayuda", L"Aide", L"Yardım", L"Справка", L"Ajuda", L"帮助", L"Pomoc", L"Help" },
     { 1205, L"Install important and recommended updates as they become available. Allow standard users to install updates on this computer.", L"Installa gli aggiornamenti importanti e consigliati appena disponibili. Consenti agli utenti standard di installare aggiornamenti su questo computer.", L"Instale las actualizaciones importantes y recomendadas tan pronto como estén disponibles. Permita que los usuarios estándar instalen actualizaciones en este equipo.", L"Installez les mises à jour importantes et recommandées dès qu'elles sont disponibles. Autorisez les utilisateurs standard à installer des mises à jour sur cet ordinateur.", L"Önemli ve önerilen güncellemeleri kullanılabilir olduklarında yükleyin. Standart kullanıcıların bu bilgisayara güncelleme yüklemesine izin verin.", L"Устанавливайте важные и рекомендуемые обновления по мере их появления. Разрешите стандартным пользователям устанавливать обновления на этом компьютере.", L"Instale atualizações importantes e recomendadas assim que estiverem disponíveis. Permita que usuários padrão instalem atualizações neste computador.", L"及时安装重要和推荐更新。允许标准用户在此电脑上安装更新。", L"Instaluj ważne i zalecane aktualizacje, gdy tylko będą dostępne. Zezwól standardowym użytkownikom na instalowanie aktualizacji na tym komputerze.", L"Installeer belangrijke en aanbevolen updates zodra ze beschikbaar zijn. Sta standaardgebruikers toe updates op deze computer te installeren." },
-    { 1209, L"Note: Windows Update might update itself automatically first when checking for other updates.  Read our <a id=\\\"actionPrivacyStatement\\\">privacy statement online</a>.", L"Nota: Windows Update potrebbe aggiornarsi automaticamente prima di controllare altri aggiornamenti.  Leggi la nostra <a id=\\\"actionPrivacyStatement\\\">informativa sulla privacy online</a>.", L"Nota: Windows Update podría actualizarse automáticamente antes de buscar otras actualizaciones.  Lea nuestra <a id=\\\"actionPrivacyStatement\\\">declaración de privacidad en línea</a>.", L"Remarque : Windows Update peut d'abord se mettre à jour automatiquement lors de la recherche d'autres mises à jour.  Lisez notre <a id=\\\"actionPrivacyStatement\\\">déclaration de confidentialité en ligne</a>.", L"Not: Diğer güncellemeleri denetlerken Windows Update önce kendini otomatik olarak güncelleyebilir.  <a id=\\\"actionPrivacyStatement\\\">Çevrimiçi gizlilik bildirimimizi</a> okuyun.", L"Примечание. При проверке других обновлений Центр обновления Windows может сначала обновиться автоматически.  Ознакомьтесь с нашей <a id=\\\"actionPrivacyStatement\\\">политикой конфиденциальности в Интернете</a>.", L"Observação: o Windows Update pode se atualizar automaticamente antes de verificar outras atualizações.  Leia nossa <a id=\\\"actionPrivacyStatement\\\">declaração de privacidade online</a>.", L"注意：检查其他更新时，Windows 更新可能会先自动更新自身。请阅读我们的<a id=\\\"actionPrivacyStatement\\\">在线隐私声明</a>。", L"Uwaga: podczas sprawdzania innych aktualizacji Windows Update może najpierw zaktualizować się automatycznie.  Przeczytaj naszą <a id=\\\"actionPrivacyStatement\\\">politykę prywatności w trybie online</a>.", L"Opmerking: Windows Update kan zichzelf eerst automatisch bijwerken bij het controleren op andere updates.  Lees onze <a id=\\\"actionPrivacyStatement\\\">privacyverklaring online</a>." },
+    { 1209, L"Note: Windows Update might update itself automatically first when checking for other updates.  You can visit the Microsoft website to read the privacy statement online.", L"Nota: Windows Update potrebbe aggiornarsi automaticamente prima di controllare altri aggiornamenti.  È possibile visitare il sito Web di Microsoft per leggere l'informativa sulla privacy online.", L"Nota: Windows Update podría actualizarse automáticamente antes de buscar otras actualizaciones.  Puede visitar el sitio web de Microsoft para leer la declaración de privacidad en línea.", L"Remarque : Windows Update peut d'abord se mettre à jour automatiquement lors de la recherche d'autres mises à jour.  Vous pouvez visiter le site Web de Microsoft pour lire la déclaration de confidentialité en ligne.", L"Not: Diğer güncellemeleri denetlerken Windows Update önce kendini otomatik olarak güncelleyebilir.  Gizlilik bildirimini çevrimiçi okumak için Microsoft web sitesini ziyaret edebilirsiniz.", L"Примечание. При проверке других обновлений Центр обновления Windows может сначала обновиться автоматически.  Вы можете посетить веб-сайт Майкрософт, чтобы прочитать политику конфиденциальности в Интернете.", L"Observação: o Windows Update pode se atualizar automaticamente antes de verificar outras atualizações.  Você pode visitar o site da Microsoft para ler a declaração de privacidade online.", L"注意：检查其他更新时，Windows 更新可能会先自动更新自身。您可以访问 Microsoft 网站阅读在线隐私声明。", L"Uwaga: podczas sprawdzania innych aktualizacji Windows Update może najpierw zaktualizować się automatycznie.  Możesz odwiedzić witrynę firmy Microsoft, aby przeczytać politykę prywatności online.", L"Opmerking: Windows Update kan zichzelf eerst automatisch bijwerken bij het controleren op andere updates.  U kunt de Microsoft-website bezoeken om de privacyverklaring online te lezen." },
     { 1210, L"There aren't any hidden updates.", L"Non ci sono aggiornamenti nascosti.", L"No hay actualizaciones ocultas.", L"Il n'y a aucune mise à jour masquée.", L"Gizli güncelleme yok.", L"Нет скрытых обновлений.", L"Não há atualizações ocultas.", L"没有任何隐藏的更新。", L"Nie ma ukrytych aktualizacji.", L"Er zijn geen verborgen updates." },
     { 1211, L"You have not tried to install any updates for your computer.", L"Non hai provato a installare alcun aggiornamento per il computer.", L"No ha intentado instalar ninguna actualización para su equipo.", L"Vous n'avez pas essayé d'installer de mises à jour pour votre ordinateur.", L"Bilgisayarınız için herhangi bir güncelleme yüklemeyi denemediniz.", L"Вы не пытались установить обновления для компьютера.", L"Você não tentou instalar atualizações para seu computador.", L"你尚未尝试为你的电脑安装任何更新。", L"Nie próbowałeś zainstalować żadnych aktualizacji dla swojego komputera.", L"U hebt niet geprobeerd updates voor uw computer te installeren." },
     { 1213, L"Troubleshoot problems with installing updates", L"Risolvi i problemi di installazione degli aggiornamenti", L"Solucionar problemas con la instalación de actualizaciones", L"Résoudre les problèmes d'installation des mises à jour", L"Güncellemelerin yüklenmesiyle ilgili sorunları giderin", L"Устранение проблем с установкой обновлений", L"Solucionar problemas com a instalação de atualizações", L"解决更新安装问题", L"Rozwiązywanie problemów z instalacją aktualizacji", L"Problemen met het installeren van updates oplossen" },
@@ -1065,6 +968,9 @@ static const WucltuxEmbeddedString kWucltuxMuiStrings[] = {
     { 20021, L"Find out more", L"Scopri di più", L"Obtén más información", L"En savoir plus", L"Daha fazla bilgi edinin", L"Узнать больше", L"Saiba mais", L"了解更多信息", L"Dowiedz się więcej", L"Meer informatie" },
     { 20022, L"There are updates available", L"Sono disponibili aggiornamenti", L"Hay actualizaciones disponibles", L"Des mises à jour sont disponibles", L"Güncellemeler mevcut", L"Доступны обновления", L"Há atualizações disponíveis", L"有可用更新", L"Są dostępne aktualizacje", L"Er zijn updates beschikbaar" },
     { 20023, L"Go to Windows Settings to install them", L"Vai alle impostazioni di Windows per installarli", L"Ve a la configuración de Windows para instalarlas", L"Accédez aux paramètres Windows pour les installer", L"Bunları yüklemek için Windows Ayarları'na gidin", L"Перейдите в параметры Windows, чтобы установить их", L"Vá para as configurações do Windows para instalá-las", L"转到 Windows 设置以安装它们", L"Przejdź do ustawień systemu Windows, aby je zainstalować", L"Ga naar Windows-instellingen om ze te installeren" },
+    { 64540, L"To view the update history, choose one of the following settings:", L"Per visualizzare la cronologia degli aggiornamenti, scegliere una delle seguenti impostazioni:", L"Para ver el historial de actualizaciones, elija una de las siguientes opciones:", L"Pour afficher l'historique des mises à jour, choisissez l'une des options suivantes :", L"Güncelleme geçmişini görüntülemek için aşağıdaki seçeneklerden birini seçin:", L"Чтобы просмотреть журнал обновлений, выберите один из следующих параметров:", L"Para ver o histórico de atualizações, escolha uma das seguintes opções:", L"要查看更新历史记录，请选择以下选项之一：", L"Aby wyświetlić historię aktualizacji, wybierz jedną z następujących opcji:", L"Om de updategeschiedenis weer te geven, kiest u een van de volgende opties:" },
+    { 64541, L"View update history", L"Visualizza cronologia aggiornamenti", L"Ver historial de actualizaciones", L"Afficher l'historique des mises à jour", L"Güncelleme geçmişini görüntüle", L"Просмотреть журнал обновлений", L"Ver histórico de atualizações", L"查看更新历史记录", L"Wyświetl historię aktualizacji", L"Updategeschiedenis weergeven" },
+    { 64542, L"Manage updates from the system settings", L"Gestisci gli aggiornamenti dalle impostazioni di sistema", L"Administrar las actualizaciones desde la configuración del sistema", L"Gérer les mises à jour à partir des paramètres du système", L"Güncellemeleri sistem ayarlarından yönetin", L"Управление обновлениями из параметров системы", L"Gerenciar atualizações nas configurações do sistema", L"在系统设置中管理更新", L"Zarządzaj aktualizacjami w ustawieniach systemu", L"Updates beheren via de systeeminstellingen" },
     { 0, nullptr }
 };
 
@@ -2959,6 +2865,378 @@ static const char kUpdatesInstalledPngBase64[] =
     "S2SgXkEzy6SUniGCCx1t+TJymmRHX8cmKaajr8vu5D3QtQB08gF6DZon4gpnq0ppQsf0M/k6xnTZ"
     "nbwHuhaATj5AL9+8Vy1ChD4TXrUKugrqfD3QtQB0vjHpalFXD7xmPdC1ALxmXd1VUVcPdL4e6FoA"
     "Ot+YdLWoqwdesx74/wEAAP//yC6IpgAAAAZJREFUAwB9lYsW+Eyd5QAAAABJRU5ErkJggg==";
+
+// -----------------------------------------------------------------------------
+// Embedded Windows 8.1-style Windows Update status icon (user supplied PNG).
+// Used when UpdatePageSkin is set to windows81. Stored as a raw PNG so GDI+
+// can scale it with HighQualityBicubic interpolation at render time.
+// -----------------------------------------------------------------------------
+static const UINT kWindows81UpdateStatusIconId = 61005;
+static const char kWindows81UpdateStatusPngBase64[] =
+    "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";
+// -----------------------------------------------------------------------------
+// Embedded Control Panel applet logos. The Windows 7 logo is the user supplied
+// image with the edge-connected white background removed. Both ICO payloads are
+// multi-size and were resampled bicubically, so the shell can pick a matching
+// size instead of scaling a single bitmap. The Windows 8.1 ICO is generated from
+// the already embedded Windows 8.1 status PNG.
+// -----------------------------------------------------------------------------
+static const wchar_t* kAppletLogoWin7FileName = L"wuapplet-win7.ico";
+static const wchar_t* kAppletLogoWin81FileName = L"wuapplet-win81.ico";
+static const wchar_t* kAppletTasksXmlFileName = L"wuapplet-tasks.xml";
+static const char kAppletLogoWin7IcoBase64[] =
+    "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"
+    "v0+Ae1XW/weVWA8bq2S85gAAAABJRU5ErkJggg==";
+static const char kAppletLogoWin81IcoBase64[] =
+    "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"
+    "FKGUT5AAAAAASUVORK5CYII=";
+
+
 // -----------------------------------------------------------------------------
 // Embedded "service unavailable" shield (user supplied image, white background
 // removed -> transparent). Shown when the Windows Update service is disabled or
@@ -3391,6 +3669,13 @@ static HICON GetUpdatesInstalledIcon() {
     return g_updatesInstalledIcon;
 }
 
+static HICON g_windows81UpdateStatusIcon = nullptr;
+static HICON GetWindows81UpdateStatusIcon() {
+    if (g_windows81UpdateStatusIcon) return g_windows81UpdateStatusIcon;
+    g_windows81UpdateStatusIcon = CreateIconFromBase64PngBicubic(kWindows81UpdateStatusPngBase64, 48, 48);
+    return g_windows81UpdateStatusIcon;
+}
+
 static HICON g_wuDisabledShieldIcon = nullptr;
 static HICON GetWuDisabledShieldIcon() {
     if (g_wuDisabledShieldIcon) return g_wuDisabledShieldIcon;
@@ -3407,6 +3692,8 @@ static HANDLE WINAPI LoadImageWHookForLegacyWarningIcon(HINSTANCE instance, LPCW
             if (HICON icon = GetLegacyWarningShieldIcon()) return CopyIcon(icon);
         } else if (id == kUpdatesInstalledIconId) {
             if (HICON icon = GetUpdatesInstalledIcon()) return CopyIcon(icon);
+        } else if (id == kWindows81UpdateStatusIconId) {
+            if (HICON icon = GetWindows81UpdateStatusIcon()) return CopyIcon(icon);
         } else if (id == kWuDisabledShieldIconId) {
             if (HICON icon = GetWuDisabledShieldIcon()) return CopyIcon(icon);
         }
@@ -3542,10 +3829,20 @@ static void LoadLanguageSetting() {
     } else {
         g_language = value;
     }
+
+    PCWSTR skin = Wh_GetStringSetting(L"UpdatePageSkin");
+    std::wstring skinValue = (skin && *skin) ? skin : L"windows7";
+    if (skin) Wh_FreeStringSetting(skin);
+    for (auto& c : skinValue) c = towlower(c);
+    g_updatePageSkin.store(
+        (skinValue == L"windows81" || skinValue == L"windows8.1")
+            ? kUpdatePageSkinWindows81
+            : kUpdatePageSkinWindows7);
+
     // Whether the "service not available" shield notice is shown.
     g_showServiceNotice.store(Wh_GetIntSetting(L"ShowServiceNotice") != 0);
     g_showAvailableUpdates.store(Wh_GetIntSetting(L"ShowAvailableUpdates") != 0);
-    g_showClassicTaskLinks.store(Wh_GetIntSetting(L"ShowClassicTaskLinks") != 0);
+    g_linkSystemSettingsText.store(Wh_GetIntSetting(L"LinkSystemSettingsText") != 0);
     // Debug: force the "pending updates" interface even without a real pending update.
     g_debugForcePending.store(Wh_GetIntSetting(L"DebugForcePendingUpdate") != 0);
 }
@@ -3602,6 +3899,102 @@ static void SelectServiceMessage(const wchar_t*& title, const wchar_t*& text) {
     text = m.text;
 }
 
+
+// Returns the three pieces of string 324 ("It is recommended to use the system
+// settings to configure updates.") so the middle phrase can become a blue link
+// without changing the translated words. The suffix is rendered as its own row
+// to avoid DirectUI wrapping only the final word in narrow Control Panel windows.
+struct SettingsRecommendationLinkParts {
+    const wchar_t* before;
+    const wchar_t* link;
+    const wchar_t* after;
+};
+
+static SettingsRecommendationLinkParts SelectSettingsRecommendationLinkParts() {
+    static const std::unordered_map<std::wstring, SettingsRecommendationLinkParts> kParts = {
+        { L"en", { L"It is recommended to use the ", L"system settings", L"to configure updates." } },
+        { L"it", { L"Si consiglia di utilizzare le ", L"impostazioni del sistema", L"per configurare gli aggiornamenti." } },
+        { L"es", { L"Se recomienda usar la ", L"configuración del sistema", L"para configurar las actualizaciones." } },
+        { L"fr", { L"Il est recommandé d'utiliser les ", L"paramètres du système", L"pour configurer les mises à jour." } },
+        { L"tr", { L"Güncellemeleri yapılandırmak için ", L"sistem ayarlarını", L"kullanmanız önerilir." } },
+        { L"ru", { L"Рекомендуется использовать ", L"параметры системы", L"для настройки обновлений." } },
+        { L"pt", { L"Recomenda-se usar as ", L"configurações do sistema", L"para configurar atualizações." } },
+        { L"zh", { L"建议使用", L"系统设置", L"来配置更新。" } },
+        { L"pl", { L"Zaleca się korzystanie z ", L"ustawień systemowych", L"w celu skonfigurowania aktualizacji." } },
+        { L"nl", { L"Het wordt aanbevolen om de ", L"systeeminstellingen", L"te gebruiken om updates te configureren." } },
+    };
+
+    auto it = kParts.find(g_language);
+    if (it == kParts.end()) it = kParts.find(L"en");
+    return it->second;
+}
+
+static std::wstring BuildPlainStatusDescriptionXml(const wchar_t* desc) {
+    return L"<element sheet=\"wuappstyle\" class=\"cp_content_text\" contentalign=\"wrapleft\" content=\""
+        + XmlEscape(desc ? desc : L"") +
+        L"\"/>";
+}
+
+static std::wstring BuildLinkedSettingsRecommendationXml() {
+    const SettingsRecommendationLinkParts parts = SelectSettingsRecommendationLinkParts();
+    std::wstring xml =
+        L"<element layout=\"flowlayout(1)\" contentalign=\"wrapleft\">"
+        L"<element layout=\"flowlayout(0,0,0,2)\" contentalign=\"wrapleft\">";
+    if (parts.before && *parts.before) {
+        xml +=
+            L"<element sheet=\"wuappstyle\" class=\"cp_content_text\" content=\""
+            + XmlEscape(parts.before) +
+            L"\"/>";
+    }
+    xml +=
+        L"<NavigateButton layout=\"flowlayout()\" shellexecute=\"ms-settings:windowsupdate\">"
+        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
+        + XmlEscape(parts.link ? parts.link : L"system settings") +
+        L"\"/></NavigateButton></element>";
+    if (parts.after && *parts.after) {
+        xml +=
+            L"<element sheet=\"wuappstyle\" class=\"cp_content_text\" contentalign=\"wrapleft\" margin=\"rect(0,1rp,0,0)\" content=\""
+            + XmlEscape(parts.after) +
+            L"\"/>";
+    }
+    xml += L"</element>";
+    return xml;
+}
+
+
+static const wchar_t* SelectChangeWindowsUpdateSettingsLinkText() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Change Windows Update settings" },
+        { L"it", L"Cambia impostazioni di Windows Update" },
+        { L"es", L"Cambiar la configuración de Windows Update" },
+        { L"fr", L"Modifier les paramètres de Windows Update" },
+        { L"tr", L"Windows Update ayarlarını değiştir" },
+        { L"ru", L"Изменить параметры Центра обновления Windows" },
+        { L"pt", L"Alterar configurações do Windows Update" },
+        { L"zh", L"更改 Windows 更新设置" },
+        { L"pl", L"Zmień ustawienia Windows Update" },
+        { L"nl", L"Windows Update-instellingen wijzigen" },
+    };
+    auto it = kTexts.find(g_language);
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
+static std::wstring BuildWindowsUpdateSettingsPageParams() {
+    return L"shell:::" + std::wstring(kAppletClsid) + L"\\pageSettings";
+}
+
+static std::wstring BuildChangeWindowsUpdateSettingsLinkXml() {
+    return
+        L"<NavigateButton layout=\"flowlayout()\" margin=\"rect(0,5rp,0,0)\" "
+        L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"" +
+        BuildWindowsUpdateSettingsPageParams() +
+        L"\">"
+        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\"" +
+        XmlEscape(SelectChangeWindowsUpdateSettingsLinkText()) +
+        L"\"/></NavigateButton>";
+}
+
 static bool IsWindowsUpdatePageXml(const std::wstring& xml) {
     // The start/status and automatic-update pages do not all share one action
     // name. These are stable string/action references in the Win 8.1 wucltux
@@ -3630,6 +4023,89 @@ static bool FindElementEnd(const std::wstring& xml, size_t start, size_t& end) {
     return false;
 }
 
+
+static std::wstring BuildWuSidebarOpenCommandAttributes() {
+    return L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"shell:::" +
+           std::wstring(kAppletClsid) + L"\"";
+}
+
+static std::wstring BuildWuSidebarLinkRow(UINT stringId, bool withIcon) {
+    std::wstring row =
+        L"<element class=\"cp_nav_row\" layout=\"borderlayout()\" layoutpos=\"top\">";
+    if (withIcon) {
+        row += L"<element class=\"cp_nav_img\" layoutpos=\"left\" content=\"resbmp(10,2,255,16rp,16rp,0,0)\"/>";
+    } else {
+        row += L"<element class=\"cp_nav_h_spacer\" layoutpos=\"left\"/>";
+    }
+    wchar_t content[32];
+    swprintf_s(content, L"resstr(%u)", stringId);
+    row +=
+        L"<NavigateButton layoutpos=\"left\" layout=\"flowlayout()\" " +
+        BuildWuSidebarOpenCommandAttributes() + L">"
+        L"<Button class=\"cp_nav_link\" sheet=\"wu_cp_style\" active=\"mouse | keyboard\" content=\"" +
+        std::wstring(content) +
+        L"\"/></NavigateButton>"
+        L"</element>";
+    return row;
+}
+
+static std::wstring BuildWuNavigationPaneXml() {
+    // Reconstructed from the Windows 8.1 wucltux.dll UIFILE 123 navigation pane.
+    // The original buttons depended on legacy page actions; here every visible
+    // sidebar link conservatively reopens this restored Control Panel page.
+    return
+        L"<element class=\"cp_nav_pane\" id=\"atom(VistaNavigationPane)\" layout=\"filllayout()\" layoutpos=\"left\">"
+        L"<viewer><element id=\"atom(NavPanelWatermark)\" sheet=\"WUCommonNavPanelStyle\"/></viewer>"
+        L"<element class=\"cp_nav_list\" layout=\"borderlayout()\">"
+        L"<element class=\"cp_nav_task_box\" layout=\"borderlayout()\" layoutpos=\"top\">" +
+        BuildWuSidebarLinkRow(350, true) +
+        BuildWuSidebarLinkRow(351, false) +
+        BuildWuSidebarLinkRow(352, false) +
+        BuildWuSidebarLinkRow(353, false) +
+        L"</element>"
+        L"<element class=\"cp_nav_link_box\" layoutpos=\"bottom\" layout=\"borderlayout()\">"
+        L"<element class=\"cp_nav_row\" layout=\"borderlayout()\" layoutpos=\"top\">"
+        L"<element class=\"cp_nav_h_spacer\" layoutpos=\"left\"/>"
+        L"<element class=\"cp_nav_label\" layoutpos=\"left\" content=\"resstr(1128)\"/>"
+        L"</element>" +
+        BuildWuSidebarLinkRow(355, false) +
+        BuildWuSidebarLinkRow(356, false) +
+        L"</element>"
+        L"</element>"
+        L"</element>";
+}
+
+static bool IsWuTopLevelPageXml(const std::wstring& xml) {
+    return xml.find(L"atom(toplevel)") != std::wstring::npos ||
+           xml.find(L"atom(moduleAUNotConfigured)") != std::wstring::npos;
+}
+
+static std::wstring PatchWuNavigationPaneXml(const std::wstring& input) {
+    // Only the top-level Windows Update page gets this pane. Child pages such as
+    // pageSettings have their own legacy command surface; injecting the pane
+    // there can make the legacy DirectUI provider reject the page.
+    if (!IsWuTopLevelPageXml(input)) return input;
+
+    std::wstring out = input;
+    const std::wstring navMarker = L"id=\"atom(VistaNavigationPane)\"";
+    const size_t navId = out.find(navMarker);
+    const std::wstring navPane = BuildWuNavigationPaneXml();
+    if (navId != std::wstring::npos) {
+        const size_t navStart = out.rfind(L"<element", navId);
+        size_t navEnd = 0;
+        if (navStart != std::wstring::npos && FindElementEnd(out, navStart, navEnd)) {
+            out.replace(navStart, navEnd - navStart, navPane);
+        }
+        return out;
+    }
+
+    const size_t wuPageEnd = out.rfind(L"</WUAppPage>");
+    if (wuPageEnd != std::wstring::npos) {
+        out.insert(wuPageEnd, navPane);
+    }
+    return out;
+}
+
 // -----------------------------------------------------------------------------
 // Windows Update service availability
 // -----------------------------------------------------------------------------
@@ -3643,6 +4119,43 @@ static bool FindElementEnd(const std::wstring& xml, size_t start, size_t& end) {
 static std::atomic<bool> g_wuAvailable{false};
 static std::atomic<ULONGLONG> g_wuCheckedTick{0};
 static constexpr ULONGLONG kWuCheckIntervalMs = 5000;
+
+// RAII wrapper for Service Control Manager handles. This keeps the service
+// detection path exception/early-return safe and avoids repeating
+// CloseServiceHandle on every branch.
+class ScopedServiceHandle {
+public:
+    ScopedServiceHandle() = default;
+    explicit ScopedServiceHandle(SC_HANDLE handle) : handle_(handle) {}
+    ~ScopedServiceHandle() { Reset(); }
+
+    ScopedServiceHandle(const ScopedServiceHandle&) = delete;
+    ScopedServiceHandle& operator=(const ScopedServiceHandle&) = delete;
+
+    ScopedServiceHandle(ScopedServiceHandle&& other) noexcept
+        : handle_(other.Release()) {}
+    ScopedServiceHandle& operator=(ScopedServiceHandle&& other) noexcept {
+        if (this != &other) Reset(other.Release());
+        return *this;
+    }
+
+    bool IsValid() const { return handle_ != nullptr; }
+    SC_HANDLE Get() const { return handle_; }
+
+    SC_HANDLE Release() {
+        SC_HANDLE result = handle_;
+        handle_ = nullptr;
+        return result;
+    }
+
+    void Reset(SC_HANDLE handle = nullptr) {
+        if (handle_) CloseServiceHandle(handle_);
+        handle_ = handle;
+    }
+
+private:
+    SC_HANDLE handle_ = nullptr;
+};
 
 // Detects whether this is Windows 10 (build < 22000) rather than Windows 11.
 // Used to show the "View update history" link only on Windows 10, like the
@@ -3672,24 +4185,22 @@ static bool IsWindowsUpdateServiceAvailable() {
     if (now - last < kWuCheckIntervalMs) return g_wuAvailable.load();
 
     bool available = false;
-    SC_HANDLE scm = OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT);
-    if (scm) {
-        SC_HANDLE svc = OpenServiceW(scm, L"wuauserv", SERVICE_QUERY_CONFIG);
-        if (svc) {
+    ScopedServiceHandle scm(OpenSCManagerW(nullptr, SERVICES_ACTIVE_DATABASE, SC_MANAGER_CONNECT));
+    if (scm.IsValid()) {
+        ScopedServiceHandle svc(OpenServiceW(scm.Get(), L"wuauserv", SERVICE_QUERY_CONFIG));
+        if (svc.IsValid()) {
             DWORD needed = 0;
-            if (!QueryServiceConfigW(svc, nullptr, 0, &needed) &&
+            if (!QueryServiceConfigW(svc.Get(), nullptr, 0, &needed) &&
                 GetLastError() == ERROR_INSUFFICIENT_BUFFER && needed != 0) {
                 std::vector<BYTE> buffer(needed);
-                if (QueryServiceConfigW(svc, reinterpret_cast<QUERY_SERVICE_CONFIGW*>(buffer.data()),
+                if (QueryServiceConfigW(svc.Get(), reinterpret_cast<QUERY_SERVICE_CONFIGW*>(buffer.data()),
                                         needed, &needed)) {
                     const auto* cfg = reinterpret_cast<const QUERY_SERVICE_CONFIGW*>(buffer.data());
                     // Available unless explicitly disabled.
                     available = (cfg->dwStartType != SERVICE_DISABLED);
                 }
             }
-            CloseServiceHandle(svc);
         }
-        CloseServiceHandle(scm);
     }
 
     g_wuAvailable.store(available);
@@ -3845,287 +4356,125 @@ static std::wstring LastInstallTimeText() {
     return L"";
 }
 
-// Builds the "Most recent check for updates" value. The registry Detect key is
-// often missing on Windows 10, so we fall back to the WUA COM AutoUpdate Results
-// object (LastSearchSuccessDate). Returns a readable string, or empty.
 // -----------------------------------------------------------------------------
-// Settings-page patch: reflect the real OS Windows Update state
+// Settings page ("pageSettings") patch: the "Change settings" child page.
 // -----------------------------------------------------------------------------
-// The classic "settings" page shows a static red shield "automatic updates are
-// off" box (atom(auOptionSelectorWarningIcon) + atom(updateAUDisabledText)) that
-// does not reflect the actual system state. When the Windows Update service is
-// actually available we replace that red warning with a green "all clear" / 
-// pending-updates state, so the page matches the OS instead of always claiming
-// updates are disabled.
-static std::wstring PatchWuSettingsPageXml(const std::wstring& input) {
-    // This is the Settings page only (has the auto-update option selector).
-    if (input.find(L"atom(pageSettings)") == std::wstring::npos ||
-        input.find(L"auOptionSelectorWarningIcon") == std::wstring::npos) {
-        return input;
-    }
-    // If the Windows Update service is not available, leave the legacy warning
-    // exactly as it is (updates genuinely can't run).
-    if (!IsWindowsUpdateServiceAvailable()) return input;
-
-    std::wstring out = input;
-
-    // 1) Hide the red warning shield, show the green check icon.
-    {
-        const std::wstring warnTag = L"id=\"atom(auOptionSelectorWarningIcon)\"";
-        size_t p = out.find(warnTag);
-        if (p != std::wstring::npos)
-            out.insert(p + warnTag.size(), L" visible=\"false\"");
-    }
-    {
-        const std::wstring checkTag = L"id=\"atom(auOptionSelectorCheckIcon)\"";
-        size_t p = out.find(checkTag);
-        if (p != std::wstring::npos)
-            out.insert(p + checkTag.size(), L" visible=\"true\"");
-    }
-
-    // 2) Update the "disabled" text to reflect real state: pending updates that
-    //    need a restart, otherwise up to date.
-    {
-        const std::wstring marker = L"content=\"resstr(1272)\"";
-        size_t p = out.find(marker);
-        if (p != std::wstring::npos) {
-            const wchar_t* raw =
-                (IsPendingWindowsUpdate() || g_debugForcePending.load())
-                ? (EmbeddedMuiString(185) ? EmbeddedMuiString(185) : L"Pending restart")
-                : (EmbeddedMuiString(20008) ? EmbeddedMuiString(20008) : L"Your PC is up to date!");
-            std::wstring replacement = L"content=\"";
-            replacement += XmlEscape(raw);
-            replacement += L"\"";
-            out.replace(p, marker.size(), replacement);
-        }
-    }
-
-    return out;
-}
-
-// -----------------------------------------------------------------------------
-// Classic left task links (restored inside the page's own navigation pane)
-// -----------------------------------------------------------------------------
-// The Windows 8.1 wucltux main page (UIFILE 123) renders its own left
-// navigation pane (atom(VistaNavigationPane), layoutpos="left") with the
-// classic task links. On modern Windows that pane is often drawn empty or the
-// legacy atom-based buttons do not get created, so the mod replaces the pane's
-// inner content with plain, atom-free links. The pane element itself (classes,
-// position and light background) is kept, so the page keeps the exact Windows
-// 8.1 look. Links that map to a working handler route through the mod's
-// private "wuamodern:" ShellExecute protocol (or a real modern target);
-// the rest are shown for visual continuity only.
-
-// Two sidebar labels are not present in the embedded MUI string table
-// (the task pane strings come from the shell host, not wucltux), so they are
-// translated here.
-/*static const wchar_t* SidebarExtraString(const wchar_t* key) {
-    struct Entry { const wchar_t* home; const wchar_t* faq; };
-    static const std::unordered_map<std::wstring, Entry> kExtras = {
-        { L"en", { L"Control Panel Home", L"Updates: frequently asked questions" } },
-        { L"it", { L"Home page del Pannello di controllo", L"Aggiornamenti: domande frequenti" } },
-        { L"es", { L"Inicio del Panel de control", L"Actualizaciones: preguntas frecuentes" } },
-        { L"fr", { L"Page d'accueil du Panneau de configuration", L"Mises à jour : questions fréquentes" } },
-        { L"tr", { L"Denetim Masası Ana Sayfası", L"Güncelleştirmeler: sık sorulan sorular" } },
-        { L"ru", { L"Главная страница панели управления", L"Обновления: часто задаваемые вопросы" } },
-        { L"pt", { L"Página inicial do Painel de Controle", L"Atualizações: perguntas frequentes" } },
-        { L"zh", { L"控制面板主页", L"更新：常见问题" } },
-        { L"pl", { L"Strona główna Panelu sterowania", L"Aktualizacje: często zadawane pytania" } },
-        { L"nl", { L"Startpagina van Configuratiescherm", L"Updates: veelgestelde vragen" } },
-    };
-    auto it = kExtras.find(g_language);
-    if (it == kExtras.end()) it = kExtras.find(L"en");
-    return (std::wstring(key) == L"faq") ? it->second.faq : it->second.home;
-}*/
-
-// Builds the inner content of the page's left navigation pane: the classic
-// task box (top) and the link box (bottom), using the page's own style
-// classes (cp_nav_pane, cp_nav_row, cp_nav_link, ...). The marker id
-// "wuamodern_navpane" lets later re-renders detect that the pane was already
-// replaced.
-// Builds the restored task-link list for the page's own left navigation pane.
-// Returns ONLY the <element class="cp_nav_list">...</element> fragment; the
-// pane element itself is kept untouched (position, width and background stay
-// the same as in the stock page) while its inner content is replaced.
-// The rows are copied VERBATIM from the stock wucltux markup
-// (cp_nav_row + cp_nav_h_spacer + cp_nav_link Button, with sheet wu_cp_style
-// and active="mouse | keyboard"), so the DirectUI parser sees exactly the same
-// element types and attributes as the stock page - only the atom ids (which
-// bind to dead legacy actions) are dropped and the resstr() text is inlined.
-// The links are intentionally non-navigating (plain Buttons): the legacy
-// actions they used to trigger no longer exist on modern Windows, and this
-// keeps the injected markup byte-for-byte compatible with what the parser
-// already handles, so the page can never fail to load because of them.
-/*static std::wstring BuildWuNavPaneLinksXml() {
-    const wchar_t* home = SidebarExtraString(L"home");       // "Control Panel Home"
-    const wchar_t* check = EmbeddedMuiString(350);           // "Check for updates"
-    const wchar_t* change = EmbeddedMuiString(351);          // "Change settings"
-    const wchar_t* history = EmbeddedMuiString(352);         // "View update history"
-    const wchar_t* restore = EmbeddedMuiString(353);         // "Restore hidden updates"
-    const wchar_t* installed = EmbeddedMuiString(356);       // "Installed Updates"
-    const wchar_t* faq = SidebarExtraString(L"faq");         // "Updates: frequently asked questions"
-    if (!check) check = L"Check for updates";
-    if (!change) change = L"Change settings";
-    if (!history) history = L"View update history";
-    if (!restore) restore = L"Restore hidden updates";
-    if (!installed) installed = L"Installed Updates";
-
-    std::wstring xml;
-    xml += L"<element class=\"cp_nav_list\" id=\"atom(wuamodern_navpane)\" layout=\"borderlayout()\">"
-           L"<element class=\"cp_nav_task_box\" layout=\"borderlayout()\" layoutpos=\"top\">";
-
-    // One classic nav row per link. Markup identical to the stock page rows;
-    // only the atom id is omitted and the text is inlined.
-    auto addLink = [&](const wchar_t* label) {
-        xml += L"<element class=\"cp_nav_row\" layout=\"borderlayout()\" layoutpos=\"top\">"
-               L"<element class=\"cp_nav_h_spacer\" layoutpos=\"left\"/>"
-               L"<Button class=\"cp_nav_link\" sheet=\"wu_cp_style\" active=\"mouse | keyboard\" content=\""
-               + XmlEscape(label) + L"\"/>"
-               L"</element>";
-    };
-
-    // Top task box, in the classic order (Control Panel Home first).
-    addLink(home);
-    addLink(check);
-    addLink(change);
-    addLink(history);
-    addLink(restore);   // Restore hidden updates: visual only (no modern equivalent)
-
-    xml += L"</element>"
-           L"<element class=\"cp_nav_link_box\" layoutpos=\"bottom\" layout=\"borderlayout()\">";
-
-    // Bottom link box: FAQ and Installed Updates.
-    addLink(faq);
-    addLink(installed);
-
-    xml += L"</element>"
-           L"</element>";
-    return xml;
-}*/
-
-// Replaces ONLY the task-list element (cp_nav_list) inside the page's own left
-// navigation pane with the restored classic links. The pane element
-// (atom(VistaNavigationPane)) and its watermark viewer are kept exactly as in
-// the original page, so position, width and background stay the same. If
-// anything unexpected is found (missing pane, missing list, unbalanced
-// markup), the input is returned untouched so the page can never fail to load
-// because of this patch. Applies to the main Windows Update page only.
-static std::wstring PatchWuMainPageNavPane(const std::wstring& input) {
-    try {
-        // REVIEWER COMMENT:
-        // The entire classic navigation pane has been HIDDEN because it's NOT WORKING.
-        // The BuildWuNavPaneLinksXml() function creates the sidebar but links are not
-        // clickable/operational in modern Windows 10/11.
-        //
-        // REQUEST FOR HELP:
-        // I need to implement a working navigation sidebar that:
-        // 1. Shows the classic Windows 8.1 task links
-        // 2. Links are actually clickable and navigable
-        // 3. Maintains the original Control Panel style
-        // 4. Properly integrates with the DirectUI system
-        //
-        // CURRENT ISSUES:
-        // - The sidebar renders but links do NOT respond to clicks
-        // - Links do NOT execute the expected actions
-        // - The atom-based navigation system seems broken in modern Windows
-        // - DirectUI event handling for buttons is not working as expected
-        //
-        // NEED ASSISTANCE WITH:
-        // - Creating functional links in DirectUI
-        // - Properly handling button events
-        // - Integrating actions with the WUA backend
-        // - Understanding the correct atom/action binding mechanism
-        //
-        // For now, to avoid showing a non-functional sidebar to the user,
-        // I have hidden the ENTIRE navigation pane.
-        //
-        // If you can resolve these issues, re-implement the navigation sidebar
-        // by calling BuildWuNavPaneLinksXml() in the line below.
-        //
-        // POSSIBLE SOLUTIONS TO INVESTIGATE:
-        // 1. Use NavigateButton with shellexecute instead of atom actions
-        // 2. Implement custom event handlers for Button elements
-        // 3. Use a different approach entirely (e.g., overlay with HTML/JS)
-        // 4. Hook into the Control Panel's native navigation system
-
-        // Check if the pane was already patched
-        if (input.find(L"wuamodern_navpane") != std::wstring::npos) return input;
-        
-        // Locate the page's own left navigation pane
-        const std::wstring paneTag = L"<element class=\"cp_nav_pane\"";
-        const size_t paneStart = input.find(paneTag);
-        if (paneStart == std::wstring::npos) return input;
-        
-        size_t paneEnd = 0;
-        if (!FindElementEnd(input, paneStart, paneEnd)) return input;
-        
-        const size_t openEnd = input.find(L'>', paneStart);
-        if (openEnd == std::wstring::npos || openEnd >= paneEnd) return input;
-        if (paneEnd < openEnd + 12) return input;
-
-        // Replace the pane's ENTIRE content with an empty element + reviewer comment
-        const size_t innerStart = openEnd + 1;
-        const size_t innerEnd = paneEnd - 10;   // strip the pane's closing "</element>"
-        std::wstring patched = input;
-        
-        // Instead of calling BuildWuNavPaneLinksXml(), we:
-        // 1. Replace the inner content with an empty element
-        // 2. Add a reviewer comment
-        // 3. Hide the entire pane
-        std::wstring reviewerComment = 
-            L"<!-- REVIEWER: CLASSIC SIDEBAR REMOVED - NOT WORKING -->"
-            L"<!-- The entire navigation pane has been hidden because links don't work. -->"
-            L"<!-- HELP NEEDED: Implement a working navigation sidebar. See code comments. -->"
-            L"<!-- TODO: Fix DirectUI button event handling for navigation links. -->"
-            L"<element layoutpos=\"top\" height=\"0rp\" visible=\"false\"/>";
-        
-        patched.replace(innerStart, innerEnd - innerStart, reviewerComment);
-
-        // Hide the entire navigation pane by adding visible="false" to the pane element
-        const size_t newOpenEnd = patched.find(L'>', paneStart);
-        if (newOpenEnd != std::wstring::npos && newOpenEnd < paneEnd) {
-            // Remove any existing visible attribute
-            size_t visiblePos = patched.find(L"visible=", paneStart);
-            if (visiblePos != std::wstring::npos && visiblePos < newOpenEnd) {
-                // Find the end of the visible attribute
-                size_t attrEnd = patched.find(L'"', patched.find(L'"', visiblePos) + 1);
-                if (attrEnd != std::wstring::npos) {
-                    patched.erase(visiblePos, attrEnd - visiblePos + 1);
-                }
+// The classic settings page is otherwise left untouched. We only replace the
+// non-functional scrolling "Important updates" list module with a small,
+// conservative update-history shortcut block (two blue links) that routes to the
+// Installed Updates page (Win10) / modern Settings (Win11) and to the modern
+// Windows Update settings page.
+// Finds the innermost <element id="atom(...)"> containing marker and returns the
+// outer element boundaries (start, end) plus the inner content range (innerStart,
+// innerEnd) so callers can replace just the children while keeping the id-bearing
+// module element intact (DirectUI fails with "cannot find element" if a module
+// referenced by id is removed entirely).
+static bool FindAtomModuleContaining(const std::wstring& xml, const std::wstring& marker,
+                                     size_t& start, size_t& end,
+                                     size_t& innerStart, size_t& innerEnd) {
+    const size_t m = xml.find(marker);
+    if (m == std::wstring::npos) return false;
+    bool found = false;
+    for (size_t i = 0; i < xml.size();) {
+        const size_t lt = xml.find(L"<element", i);
+        if (lt == std::wstring::npos || lt > m) break;
+        const size_t gt = xml.find(L'>', lt);
+        if (gt == std::wstring::npos) break;
+        if (gt == lt || xml[gt - 1] == L'/') { i = gt + 1; continue; } // self-closing
+        size_t e = 0;
+        if (!FindElementEnd(xml, lt, e)) break;
+        const std::wstring tag = xml.substr(lt, gt - lt);
+        if (tag.find(L"id=\"atom(") != std::wstring::npos && lt < m && e > m) {
+            if (!found || lt > start) {
+                start = lt; end = e; found = true; // innermost
+                innerStart = gt + 1; innerEnd = e - (size_t)9; // strip trailing </element>
             }
-            // Add visible="false" to hide the entire pane
-            patched.insert(newOpenEnd, L" visible=\"false\" width=\"0rp\"");
         }
-        
-        Wh_Log(L"Windows Update Restorer: ENTIRE classic navigation pane HIDDEN - not working");
-        return patched;
-    } catch (...) {
-        // Never let an exception escape into the DirectUI load path: fall back
-        // to the untouched page instead of failing to render it.
-        return input;
+        i = gt + 1;
     }
+    return found;
 }
+
+static std::wstring BuildWuSettingsReplacementXml() {
+    const wchar_t* heading = EmbeddedMuiString(64540);
+    const wchar_t* linkHistory = EmbeddedMuiString(64541);
+    const wchar_t* linkSettings = EmbeddedMuiString(64542);
+    if (!heading) heading = L"To view the update history, choose one of the following settings:";
+    if (!linkHistory) linkHistory = L"View update history";
+    if (!linkSettings) linkSettings = L"Manage updates from the system settings";
+
+    // Link 1 opens the Installed Updates page on Windows 10 (classic CLSID) or
+    // the modern Settings update-history page on Windows 11.
+    std::wstring cmdHistory;
+    if (IsWindows10()) {
+        cmdHistory = L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}\"";
+    } else {
+        cmdHistory = L"shellexecute=\"ms-settings:windowsupdate-history\"";
+    }
+
+    std::wstring xml =
+        L"<element id=\"atom(wusettings_best_effort)\" layoutpos=\"top\" layout=\"borderlayout()\" margin=\"rect(12rp,14rp,12rp,0)\">"
+        L"<element sheet=\"wuappstyle\" class=\"moduleborder1\" layoutpos=\"top\" layout=\"borderlayout()\">"
+        L"<element layoutpos=\"client\" layout=\"flowlayout(1)\" contentalign=\"wrapleft\" padding=\"rect(12rp,15rp,12rp,15rp)\">"
+        L"<element sheet=\"wuappstyle\" class=\"wuapp_content_title\" foreground=\"gtc(CONTROLPANELSTYLE,10,1,3803)\" margin=\"rect(0,-3rp,0,0)\" contentalign=\"wrapleft\" content=\""
+        + XmlEscape(heading) + L"\"/>"
+        L"<element layout=\"flowlayout(0,0,0,2)\" contentalign=\"wrapleft\">"
+        L"<NavigateButton layout=\"flowlayout()\" " + cmdHistory + L">"
+        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
+        + XmlEscape(linkHistory) + L"\"/></NavigateButton></element>"
+        L"<element layout=\"flowlayout(0,0,0,2)\" contentalign=\"wrapleft\">"
+        L"<NavigateButton layout=\"flowlayout()\" shellexecute=\"ms-settings:windowsupdate\">"
+        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
+        + XmlEscape(linkSettings) + L"\"/></NavigateButton></element>"
+        L"</element></element></element>";
+    return xml;
+}
+
+static std::wstring PatchWuSettingsPageXml(const std::wstring& input) {
+    if (input.find(L"atom(pageSettings)") == std::wstring::npos)
+        return input;
+    // Replace the non-functional scrolling "Important updates" list (its heading
+    // is the "&Important updates" string, resstr 1232) with the update-history
+    // shortcut block. We keep the module element (and its id) and swap only its
+    // children so DirectUI never loses a referenced element.
+    size_t modStart = 0, modEnd = 0, innerStart = 0, innerEnd = 0;
+    if (FindAtomModuleContaining(input, L"resstr(1232)", modStart, modEnd, innerStart, innerEnd)) {
+        Wh_Log(L"Windows Update Restorer: replaced Important updates list children on settings page");
+        std::wstring out = input;
+        out.replace(innerStart, innerEnd - innerStart, BuildWuSettingsReplacementXml());
+        return out;
+    }
+    Wh_Log(L"Windows Update Restorer: settings page patched but Important updates marker not found");
+    return input;
+}
+
+// Applies the top-level Windows Update page XML patch. The settings child page
+// (pageSettings) gets its own targeted patch (the Important updates list swap).
 static std::wstring PatchModernWuPageXml(const std::wstring& input) {
-    // The Settings page is patched separately (it has no moduleAUNotConfigured).
+    if (!IsWindowsUpdatePageXml(input)) return input;
+
+    // The legacy Windows Update settings child page only gets the small
+    // "Important updates" list replacement (see PatchWuSettingsPageXml); the
+    // rest of it is left to the original legacy provider.
     if (input.find(L"atom(pageSettings)") != std::wstring::npos)
         return PatchWuSettingsPageXml(input);
 
-    if (input.find(L"wuamodern_best_effort") != std::wstring::npos ||
-        !IsWindowsUpdatePageXml(input)) return input;
+    // Restore/normalize the Windows 7/8.1-style left navigation pane for the
+    // top-level Windows Update page, including fallback layouts.
+    std::wstring withNavPane = PatchWuNavigationPaneXml(input);
 
-    // Restore the classic left task links inside the page's own navigation
-    // pane (atom(VistaNavigationPane)). This is independent of the status hub
-    // below, so it applies even when ShowServiceNotice is disabled.
-    std::wstring patched = PatchWuMainPageNavPane(input);
+    if (withNavPane.find(L"wuamodern_best_effort") != std::wstring::npos)
+        return withNavPane;
 
-    // Only inject anything if the user has the notice enabled.
-    if (!g_showServiceNotice.load()) return patched;
+    // Only inject anything if the user has the notice enabled. Keep the sidebar
+    // patch even when the recreated status box itself is disabled.
+    if (!g_showServiceNotice.load()) return withNavPane;
 
     // Place the new hub *after* the legacy warning module, in the normal white
     // document area. It deliberately does not alter the red legacy card.
     const std::wstring module = L"<element id=\"atom(moduleAUNotConfigured)\"";
-    const size_t moduleStart = input.find(module);
-    if (moduleStart == std::wstring::npos) return patched;
+    const size_t moduleStart = withNavPane.find(module);
+    if (moduleStart == std::wstring::npos) return withNavPane;
 
     // Decide what to show:
     //  - If Windows Update is actually available (service running), show a live
@@ -4136,6 +4485,7 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
     //  - Otherwise (service disabled/uninstalled) show the shield warning.
     const bool wuAvailable = IsWindowsUpdateServiceAvailable();
 
+    std::wstring patched = withNavPane;
     size_t insertAt = moduleStart;
     if (wuAvailable) {
         // When Windows Update is available and updates are applied, the native red
@@ -4145,7 +4495,7 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
         // Instead we remove the whole module element from the XML; the provider then
         // has nothing to show. The position it occupied becomes our insertion point.
         size_t moduleEnd = 0;
-        if (!FindElementEnd(patched, moduleStart, moduleEnd)) return patched;
+        if (!FindElementEnd(patched, moduleStart, moduleEnd)) return input;
         patched.erase(moduleStart, moduleEnd - moduleStart);
         insertAt = moduleStart;
     }
@@ -4166,11 +4516,18 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
         // enabled it (default off) — otherwise treat available updates as
         // "up to date".
         const bool updatesAvailable = IsUpdatesAvailable() && g_showAvailableUpdates.load();
-        // Icon: green check when up to date; yellow/amber shield with "!"
-        // (imageres 105) when updates are available; classic shield when pending.
+        // Icon skin: Windows 7/current uses the existing green/check and warning
+        // shields. Windows 8.1 uses the supplied Windows Update icon instead
+        // of those two embedded status shields. The amber available-updates
+        // shield and the disabled-service/fallback notice are intentionally unchanged.
         UINT iconId = kLegacyWarningShieldIconId;
-        if (!pending && !updatesAvailable) iconId = kUpdatesInstalledIconId;
-        else if (updatesAvailable) iconId = 105;
+        if (updatesAvailable) {
+            iconId = 105;
+        } else if (IsWindows81Skin()) {
+            iconId = kWindows81UpdateStatusIconId;
+        } else if (!pending) {
+            iconId = kUpdatesInstalledIconId;
+        }
         const wchar_t* statusText = nullptr;
         const wchar_t* desc = L"";
         if (pending) {
@@ -4182,10 +4539,15 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
             if (!desc) desc = L"Go to Windows Settings to install them";
         } else {
             statusText = EmbeddedMuiString(304);       // "No important updates available"
-            desc = EmbeddedMuiString(324);             // "No updates are selected."
+            desc = EmbeddedMuiString(324);             // "It is recommended to use the system settings..."
         }
         if (!statusText) statusText = L"";
         if (!desc) desc = L"";
+        const bool linkSettingsRecommendation =
+            !pending && !updatesAvailable && g_linkSystemSettingsText.load();
+        const std::wstring descXml = linkSettingsRecommendation
+            ? BuildLinkedSettingsRecommendationXml()
+            : BuildPlainStatusDescriptionXml(desc);
 
         wchar_t iconSpec[64];
         swprintf_s(iconSpec, L"icon(%u,48rp,48rp,library(shell32.dll))", iconId);
@@ -4299,9 +4661,10 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
             L"<element layoutpos=\"client\" layout=\"flowlayout(1)\" contentalign=\"wrapleft\">"
             L"<element sheet=\"wuappstyle\" class=\"wuapp_content_title\" foreground=\"gtc(CONTROLPANELSTYLE,10,1,3803)\" margin=\"rect(0,-3rp,0,0)\" contentalign=\"wrapleft\" content=\""
             + XmlEscape(statusText) +
-            L"\"/><element sheet=\"wuappstyle\" class=\"cp_content_text\" contentalign=\"wrapleft\" content=\""
-            + XmlEscape(desc) +
-            L"\"/></element></element>"
+            L"\"/>"
+            + descXml +
+            BuildChangeWindowsUpdateSettingsLinkXml() +
+            L"</element></element>"
             L"</element>"
             L"</element>"
             // --- info lines below the rectangle, each its own column row ---
@@ -4366,6 +4729,24 @@ static void ReRenderWuPage() {
 static void DoCheckForUpdatesInPage() {
     ReRenderWuPage();
 }
+// Debug helper: writes the raw settings-page XML to the mod storage folder so
+// the real element structure can be inspected. Remove in production.
+static void DumpSettingsXmlIfNeeded(const std::wstring& xml, const wchar_t* tag) {
+    if (xml.find(L"atom(pageSettings)") == std::wstring::npos) return;
+    std::wstring dir = StoreDir();
+    if (dir.empty()) return;
+    std::wstring path = dir + L"\\wusettings_dump_" + std::wstring(tag) + L".xml";
+    int need = WideCharToMultiByte(CP_UTF8, 0, xml.c_str(), (int)xml.size(), nullptr, 0, nullptr, nullptr);
+    std::string utf8;
+    if (need > 0) { utf8.resize(need); WideCharToMultiByte(CP_UTF8, 0, xml.c_str(), (int)xml.size(), &utf8[0], need, nullptr, nullptr); }
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    DWORD written = 0;
+    WriteFile(file, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
+    CloseHandle(file);
+    Wh_Log(L"Windows Update Restorer: settings XML dumped to %s", path.c_str());
+}
+
 static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
                                               HINSTANCE resourceModule,
                                               HINSTANCE hInstance) {
@@ -4374,6 +4755,7 @@ static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
         return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
     }
     std::wstring patched = PatchModernWuPageXml(xml);
+    DumpSettingsXmlIfNeeded(xml, L"setxml");
     if (patched == xml) return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
     {
         std::lock_guard<std::mutex> lock(g_wuRenderMutex);
@@ -4385,14 +4767,6 @@ static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
     Wh_Log(L"Windows Update Restorer: modern WUA links injected through SetXML");
     WuXmlPatchGuard guard;
     HRESULT hr = DUISetXMLOriginal(parser, patched.c_str(), resourceModule, hInstance);
-    if (FAILED(hr)) {
-        // The parser rejected the patched document (e.g. an unexpected
-        // element in this wucltux build). Fall back to the pristine page so
-        // the Control Panel item always loads, and log it for diagnosis.
-        Wh_Log(L"Windows Update Restorer: patched XML rejected (hr=0x%08X), loading the original page",
-               static_cast<unsigned>(hr));
-        hr = DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
-    }
     return hr;
 }
 
@@ -4412,6 +4786,7 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
                                              hInstance1, hInstance2);
     }
     std::wstring patched = PatchModernWuPageXml(xml);
+    DumpSettingsXmlIfNeeded(xml, L"fromres");
     if (patched == xml) return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType, resourceModule,
                                                               hInstance1, hInstance2);
     {
@@ -4422,15 +4797,7 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
         g_wuBaseXml = xml;
     }
     WuXmlPatchGuard guard;
-    HRESULT hr = DUISetXMLOriginal(parser, patched.c_str(), reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
-    if (FAILED(hr)) {
-        // The parser rejected the patched document (e.g. an unexpected
-        // element in this wucltux build). Fall back to the pristine page so
-        // the Control Panel item always loads, and log it for diagnosis.
-        Wh_Log(L"Windows Update Restorer: patched XML rejected (hr=0x%08X), loading the original page",
-               static_cast<unsigned>(hr));
-        hr = DUISetXMLOriginal(parser, xml.c_str(), reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
-    }
+    const HRESULT hr = DUISetXMLOriginal(parser, patched.c_str(), reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
     Wh_Log(L"Windows Update Restorer: modern WUA command links injected (hr=0x%08X)",
            static_cast<unsigned>(hr));
     return hr;
@@ -4488,6 +4855,8 @@ static HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceN
 using ShellExecuteW_t = decltype(&ShellExecuteW);
 static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
 
+static std::wstring EnsureAppletLogoIconFile(bool windows81Skin);
+
 static bool IsModernWuAction(PCWSTR params, const wchar_t* action) {
     if (!params || !action) return false;
     std::wstring value = params;
@@ -4526,6 +4895,164 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR 
         return reinterpret_cast<HINSTANCE>(static_cast<INT_PTR>(33));
     }
     return ShellExecuteWOriginal(hwnd, operation, file, parameters, directory, showCmd);
+}
+
+
+
+// -----------------------------------------------------------------------------
+// Shell presentation hooks for the restored Control Panel page.
+// -----------------------------------------------------------------------------
+// The legacy page definition uses indirect strings/icons such as
+// "@wucltux.dll,-73" and "wucltux.dll,-1" for child pages (for example
+// shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\pageSettings). On modern
+// systems those shell-level lookups can fail or use the wrong icon, even though
+// DirectUI's in-page strings are already supplied by our embedded MUI table.
+// These hooks keep the breadcrumb/page title and page icon consistent with the
+// selected skin without modifying the verified wucltux.dll payload.
+static bool IsWucltuxPathString(PCWSTR path) {
+    if (!path || !*path) return false;
+    std::wstring value = path;
+    for (auto& c : value) c = towlower(c);
+    return value.find(L"wucltux.dll") != std::wstring::npos;
+}
+
+static bool TryParseWucltuxIndirectStringId(PCWSTR source, UINT& id) {
+    id = 0;
+    if (!IsWucltuxPathString(source)) return false;
+    const wchar_t* comma = wcsrchr(source, L',');
+    if (!comma || !comma[1]) return false;
+    int parsed = _wtoi(comma + 1);
+    if (parsed < 0) parsed = -parsed;
+    if (parsed <= 0) return false;
+    id = static_cast<UINT>(parsed);
+    return true;
+}
+
+using SHLoadIndirectString_t = HRESULT(WINAPI*)(PCWSTR, PWSTR, UINT, void**);
+static SHLoadIndirectString_t SHLoadIndirectStringOriginal = nullptr;
+static HRESULT WINAPI SHLoadIndirectStringHook(PCWSTR source, PWSTR outBuf,
+                                               UINT outChars, void** reserved) {
+    UINT id = 0;
+    if (TryParseWucltuxIndirectStringId(source, id)) {
+        if (const wchar_t* text = EmbeddedMuiString(id)) {
+            if (outBuf && outChars) {
+                CopyEmbeddedString(text, outBuf, static_cast<int>(outChars));
+            }
+            return S_OK;
+        }
+    }
+    return SHLoadIndirectStringOriginal(source, outBuf, outChars, reserved);
+}
+
+static HICON LoadAppletLogoIconForShell(int size) {
+    if (size <= 0) size = GetSystemMetrics(SM_CXICON);
+    const std::wstring iconPath = EnsureAppletLogoIconFile(IsWindows81Skin());
+    if (iconPath.empty()) return nullptr;
+    return reinterpret_cast<HICON>(LoadImageW(nullptr, iconPath.c_str(), IMAGE_ICON,
+                                              size, size,
+                                              LR_LOADFROMFILE | LR_DEFAULTCOLOR));
+}
+
+using ExtractIconExW_t = UINT(WINAPI*)(LPCWSTR, int, HICON*, HICON*, UINT);
+static ExtractIconExW_t ExtractIconExWOriginal = nullptr;
+static UINT WINAPI ExtractIconExWHook(LPCWSTR file, int iconIndex,
+                                      HICON* largeIcons, HICON* smallIcons,
+                                      UINT icons) {
+    if (IsWucltuxPathString(file)) {
+        if (iconIndex == -1 || icons == 0) return 1;
+        UINT loaded = 0;
+        if (largeIcons) {
+            largeIcons[0] = LoadAppletLogoIconForShell(GetSystemMetrics(SM_CXICON));
+            if (largeIcons[0]) loaded = 1;
+        }
+        if (smallIcons) {
+            smallIcons[0] = LoadAppletLogoIconForShell(GetSystemMetrics(SM_CXSMICON));
+            if (smallIcons[0]) loaded = 1;
+        }
+        return loaded;
+    }
+    return ExtractIconExWOriginal(file, iconIndex, largeIcons, smallIcons, icons);
+}
+
+using PrivateExtractIconsW_t = UINT(WINAPI*)(LPCWSTR, int, int, int, HICON*, UINT*, UINT, UINT);
+static PrivateExtractIconsW_t PrivateExtractIconsWOriginal = nullptr;
+static UINT WINAPI PrivateExtractIconsWHook(LPCWSTR file, int iconIndex,
+                                            int cxIcon, int cyIcon, HICON* icons,
+                                            UINT* iconIds, UINT iconCount,
+                                            UINT flags) {
+    if (IsWucltuxPathString(file)) {
+        if (iconIndex == -1 || iconCount == 0) return 1;
+        const int size = cxIcon > 0 ? cxIcon : (cyIcon > 0 ? cyIcon : GetSystemMetrics(SM_CXICON));
+        UINT loaded = 0;
+        if (icons) {
+            icons[0] = LoadAppletLogoIconForShell(size);
+            if (icons[0]) loaded = 1;
+        }
+        if (iconIds) iconIds[0] = 0;
+        return loaded;
+    }
+    return PrivateExtractIconsWOriginal(file, iconIndex, cxIcon, cyIcon, icons,
+                                        iconIds, iconCount, flags);
+}
+
+using SHDefExtractIconW_t = HRESULT(WINAPI*)(LPCWSTR, int, UINT, HICON*, HICON*, UINT);
+static SHDefExtractIconW_t SHDefExtractIconWOriginal = nullptr;
+static HRESULT WINAPI SHDefExtractIconWHook(LPCWSTR iconFile, int iconIndex,
+                                            UINT flags, HICON* largeIcon,
+                                            HICON* smallIcon, UINT iconSize) {
+    if (IsWucltuxPathString(iconFile)) {
+        const int largeSize = LOWORD(iconSize) ? LOWORD(iconSize) : GetSystemMetrics(SM_CXICON);
+        const int smallSize = HIWORD(iconSize) ? HIWORD(iconSize) : GetSystemMetrics(SM_CXSMICON);
+        bool loaded = false;
+        if (largeIcon) {
+            *largeIcon = LoadAppletLogoIconForShell(largeSize);
+            loaded = loaded || *largeIcon;
+        }
+        if (smallIcon) {
+            *smallIcon = LoadAppletLogoIconForShell(smallSize);
+            loaded = loaded || *smallIcon;
+        }
+        return loaded ? S_OK : E_FAIL;
+    }
+    return SHDefExtractIconWOriginal(iconFile, iconIndex, flags, largeIcon,
+                                     smallIcon, iconSize);
+}
+
+static void InstallShellPresentationHooks() {
+    HMODULE shlwapi = GetModuleHandleW(L"shlwapi.dll");
+    if (!shlwapi) shlwapi = LoadLibraryExW(L"shlwapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (shlwapi) {
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shlwapi, "SHLoadIndirectString"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<SHLoadIndirectString_t>(p),
+                                           SHLoadIndirectStringHook,
+                                           &SHLoadIndirectStringOriginal);
+        }
+    }
+
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32) shell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (shell32) {
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ExtractIconExW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<ExtractIconExW_t>(p),
+                                           ExtractIconExWHook,
+                                           &ExtractIconExWOriginal);
+        }
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "SHDefExtractIconW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<SHDefExtractIconW_t>(p),
+                                           SHDefExtractIconWHook,
+                                           &SHDefExtractIconWOriginal);
+        }
+    }
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) user32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (user32) {
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(user32, "PrivateExtractIconsW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<PrivateExtractIconsW_t>(p),
+                                           PrivateExtractIconsWHook,
+                                           &PrivateExtractIconsWOriginal);
+        }
+    }
 }
 
 static void InstallModernWuHooks() {
@@ -4701,6 +5228,153 @@ static std::wstring ShdocvwPath() {
     return std::wstring(system) + L"\\shdocvw.dll";
 }
 
+static std::mutex g_appletLogoIconMutex;
+
+static bool FileHasExpectedSize(const std::wstring& path, DWORD expectedSize) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size{};
+    const bool ok = GetFileSizeEx(file, &size) && size.QuadPart == expectedSize;
+    CloseHandle(file);
+    return ok;
+}
+
+static bool WriteBinaryFile(const std::wstring& path, const std::vector<BYTE>& data) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = WriteFile(file, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) &&
+                    written == static_cast<DWORD>(data.size());
+    CloseHandle(file);
+    return ok;
+}
+
+static std::wstring EnsureAppletLogoIconFile(bool windows81Skin) {
+    std::lock_guard<std::mutex> lock(g_appletLogoIconMutex);
+    const std::wstring dir = StoreDir();
+    if (dir.empty()) return L"";
+    const wchar_t* fileName = windows81Skin ? kAppletLogoWin81FileName : kAppletLogoWin7FileName;
+    const char* base64 = windows81Skin ? kAppletLogoWin81IcoBase64 : kAppletLogoWin7IcoBase64;
+    std::vector<BYTE> data = DecodeBase64Icon(base64);
+    if (data.empty()) return L"";
+    const std::wstring path = dir + L"\\" + fileName;
+    if (!FileHasExpectedSize(path, static_cast<DWORD>(data.size()))) {
+        if (!WriteBinaryFile(path, data)) {
+            Wh_Log(L"Windows Update Restorer: failed to write applet logo icon %s (err=%u)",
+                   fileName, GetLastError());
+            return L"";
+        }
+    }
+    return path;
+}
+
+static std::wstring AppletDefaultIconValue(const std::wstring& fallbackPayload) {
+    const std::wstring iconPath = EnsureAppletLogoIconFile(IsWindows81Skin());
+    if (iconPath.empty()) return fallbackPayload + L",-1";
+    return L"\"" + iconPath + L"\",0";
+}
+
+static void CleanupAppletLogoIconFiles() {
+    const std::wstring dir = StoreDir();
+    if (dir.empty()) return;
+    DeleteFileW((dir + L"\\" + kAppletLogoWin7FileName).c_str());
+    DeleteFileW((dir + L"\\" + kAppletLogoWin81FileName).c_str());
+}
+
+
+static bool WriteUtf8TextFile(const std::wstring& path, const std::wstring& text) {
+    int bytesNeeded = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (bytesNeeded <= 1) return false;
+    std::string utf8(static_cast<size_t>(bytesNeeded - 1), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, &utf8[0], bytesNeeded, nullptr, nullptr);
+
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = WriteFile(file, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr) &&
+                    written == static_cast<DWORD>(utf8.size());
+    CloseHandle(file);
+    return ok;
+}
+
+static const wchar_t* TaskStringOrFallback(UINT id, const wchar_t* fallback) {
+    if (const wchar_t* text = EmbeddedMuiString(id)) return text;
+    return fallback ? fallback : L"";
+}
+
+static void AppendControlPanelTaskXml(std::wstring& xml, const wchar_t* id,
+                                      const wchar_t* name, const wchar_t* keywords) {
+    xml +=
+        L"        <sh:task id=\"" + std::wstring(id) + L"\">\r\n"
+        L"            <sh:name>" + XmlEscape(name) + L"</sh:name>\r\n"
+        L"            <sh:keywords>" + XmlEscape(keywords) + L"</sh:keywords>\r\n"
+        // All classic blue task links open the restored Windows Update page.
+        // Use explorer shell:::{CLSID} explicitly, as requested, rather than
+        // relying on canonical Control Panel task resolution.
+        L"            <sh:command>%SystemRoot%\\explorer.exe shell:::" + std::wstring(kAppletClsid) + L"</sh:command>\r\n"
+        L"        </sh:task>\r\n";
+}
+
+static std::wstring BuildControlPanelTasksXml() {
+    // These are the classic Windows 7/8.1 blue task links shown under the
+    // Control Panel item in category/search views. Labels come from the same
+    // multilingual MUI table used by the page. Every link conservatively opens
+    // our restored Windows Update Control Panel page.
+    struct TaskDef { const wchar_t* id; UINT labelId; const wchar_t* fallback; const wchar_t* keywords; };
+    static const TaskDef tasks[] = {
+        { L"{72F890EA-C723-4B30-B990-69897A70E42D}", 350, L"Check for updates", L"windows update;check;updates;scan;" },
+        { L"{0B11B6C6-4E9C-4E92-A3E4-1D31584546BA}", 351, L"Change settings", L"windows update;change settings;automatic updates;" },
+        { L"{B3F9A7F2-C2FA-42B5-9D4A-473C66A3D4C0}", 352, L"View update history", L"windows update;history;installed updates;" },
+        { L"{AC39E470-04F0-45C0-87D9-2B0C0B197350}", 353, L"Restore hidden updates", L"windows update;restore hidden updates;hidden;" },
+        { L"{5D0F2DCB-6393-4E76-998B-2DA9A2F04AA1}", 20004, L"View Installed Updates", L"windows update;view installed updates;uninstall;" },
+    };
+
+    std::wstring xml =
+        L"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n"
+        L"<applications xmlns=\"http://schemas.microsoft.com/windows/cpltasks/v1\"\r\n"
+        L"              xmlns:sh=\"http://schemas.microsoft.com/windows/tasks/v1\">\r\n"
+        L"    <application id=\"" + std::wstring(kAppletClsid) + L"\">\r\n";
+    for (const auto& task : tasks) {
+        AppendControlPanelTaskXml(xml, task.id,
+                                  TaskStringOrFallback(task.labelId, task.fallback),
+                                  task.keywords);
+    }
+    static const wchar_t* categories[] = { L"5", L"10" };
+    for (const wchar_t* category : categories) {
+        xml += L"        <category id=\"" + std::wstring(category) + L"\">\r\n";
+        for (const auto& task : tasks) {
+            xml += L"            <sh:task idref=\"" + std::wstring(task.id) + L"\"/>\r\n";
+        }
+        xml += L"        </category>\r\n";
+    }
+    xml +=
+        L"    </application>\r\n"
+        L"</applications>\r\n";
+    return xml;
+}
+
+static std::wstring EnsureControlPanelTasksXmlFile() {
+    const std::wstring dir = StoreDir();
+    if (dir.empty()) return L"";
+    const std::wstring path = dir + L"\\" + kAppletTasksXmlFileName;
+    if (!WriteUtf8TextFile(path, BuildControlPanelTasksXml())) {
+        Wh_Log(L"Windows Update Restorer: failed to write Control Panel task links XML (err=%u)",
+               GetLastError());
+        return L"";
+    }
+    return path;
+}
+
+static void CleanupControlPanelTasksXmlFile() {
+    const std::wstring dir = StoreDir();
+    if (dir.empty()) return;
+    DeleteFileW((dir + L"\\" + kAppletTasksXmlFileName).c_str());
+}
+
+
 
 static bool ProvideValue(const std::wstring& path, const std::wstring& name,
                          LPDWORD type, LPBYTE data, LPDWORD bytes, LSTATUS& result) {
@@ -4721,12 +5395,15 @@ static bool ProvideValue(const std::wstring& path, const std::wstring& name,
             else if (name == L"InfoTip") value = InfoTipForLanguage();
             else if (name == L"System.ApplicationName") value = kApplicationName;
             else if (name == L"System.ControlPanel.Category") value = L"5,10";
-            else if (name == L"System.Software.TasksFileUrl") value = L"Internal";
+            else if (name == L"System.Software.TasksFileUrl") {
+                value = EnsureControlPanelTasksXmlFile();
+                if (value.empty()) return false;
+            }
             else return false;
             break;
         case Node::Icon:
             if (!name.empty()) return false;
-            value = *payload + L",-1"; break;
+            value = AppletDefaultIconValue(*payload); break;
         case Node::Inproc:
             if (name.empty()) value = ShdocvwPath();
             else if (name == L"ThreadingModel") value = L"Apartment";
@@ -4994,48 +5671,7 @@ static HMODULE EnsurePrivateModuleLoaded() {
     return g_module.load();
 }
 
-// Deletes embedded-mui resource files left behind by previous explorer.exe /
-// control.exe sessions (their filenames embed the owning process id, so files
-// with a different pid than ours can never be reused by this process - the
-// reuse logic only matches the current pid). Removing them keeps the store
-// folder clean after crashes or unclean disables, and guarantees a stale or
-// partially-written resource file can never be picked up by a later start.
-// Files owned by the current process are managed by the reuse/cleanup logic
-// and are deliberately left alone here.
-static void SweepStaleEmbeddedMuiFiles() {
-    try {
-        const std::wstring dir = StoreDir();
-        if (dir.empty()) return;
-        const std::wstring pattern = dir + L"\\wucltux.embedded-mui-*";
-        const std::wstring ownPrefix =
-            L"wucltux.embedded-mui-" + std::to_wstring(GetCurrentProcessId()) + L"-";
-        WIN32_FIND_DATAW findData{};
-        HANDLE find = FindFirstFileW(pattern.c_str(), &findData);
-        if (find == INVALID_HANDLE_VALUE) return;
-        do {
-            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-            const std::wstring fileName = findData.cFileName;
-            // Keep files that belong to this process.
-            if (fileName.size() >= ownPrefix.size() &&
-                ToLower(fileName.substr(0, ownPrefix.size())) == ownPrefix) {
-                continue;
-            }
-            const std::wstring fullPath = dir + L"\\" + fileName;
-            if (DeleteFileW(fullPath.c_str())) {
-                Wh_Log(L"Windows Update Restorer: removed stale embedded MUI resource file: %s",
-                       findData.cFileName);
-            }
-        } while (FindNextFileW(find, &findData));
-        FindClose(find);
-    } catch (...) {
-        // Best-effort cleanup only; never fail startup because of it.
-    }
-}
-
 static void SetupWorker() {
-    // Clear any stale embedded-mui resource files from previous sessions
-    // before we (possibly) build or reuse our own.
-    SweepStaleEmbeddedMuiFiles();
     std::wstring path;
     if (!EnsurePayload(path) || g_stopping.load()) {
         Wh_Log(L"Windows Update Restorer: wucltux.dll was not downloaded or failed verification");
@@ -5125,8 +5761,8 @@ BOOL Wh_ModInit() {
         // Only patch the safe WUAppPage content anchor (never the outer Control Panel host).
         InstallModernWuXmlPatchHook();
         InstallModernWuHooks();
+        InstallShellPresentationHooks();
         InstallLegacyWarningIconHook();
-        UpdateHotkeyListener();
         g_setupThread.emplace(SetupWorker);
         return TRUE;
     } catch (...) { return FALSE; }
@@ -5141,10 +5777,7 @@ BOOL Wh_ModInit() {
 // new language without a full mod restart.
 void Wh_ModSettingsChanged() {
     const std::wstring oldLanguage = g_language;
-    const bool oldShowAvailable = g_showAvailableUpdates.load();
     LoadLanguageSetting();
-    // Start/stop the Ctrl+P hotkey thread when the "available updates" setting changes.
-    if (oldShowAvailable != g_showAvailableUpdates.load()) UpdateHotkeyListener();
     if (oldLanguage != g_language) {
         // Ensure a previous rebuild (if any) has finished before starting a new
         // one, so we never run two builds concurrently.
@@ -5201,7 +5834,6 @@ void Wh_ModUninit() {
     g_setupThread.reset();
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
     g_rebuildThread.reset();
-    StopHotkeyListener();
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     g_verified.store(false);
     delete g_dllPath.exchange(nullptr);
@@ -5211,7 +5843,10 @@ void Wh_ModUninit() {
         std::lock_guard<std::mutex> lock(g_resourceMutex);
         CleanupGeneratedResourceModuleFiles();
     }
+    CleanupAppletLogoIconFiles();
+    CleanupControlPanelTasksXmlFile();
     if (g_updatesInstalledIcon) { DestroyIcon(g_updatesInstalledIcon); g_updatesInstalledIcon = nullptr; }
+    if (g_windows81UpdateStatusIcon) { DestroyIcon(g_windows81UpdateStatusIcon); g_windows81UpdateStatusIcon = nullptr; }
     ShutdownGdiPlusRendering();
     g_keys.AbandonAll();
     { std::lock_guard lock(g_injectionMutex); g_injected.clear(); }
