@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.42
+// @version         1.43
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -635,6 +635,13 @@ bool IsLikelyRemotePath(const std::wstring& p);
 bool IsShellFolderPath(const std::wstring& path);
 void ResolvePendingFolderEntries();
 void ReloadAndRefreshUI();
+
+// Non-zero while a reload is executing. Wh_ModUninit waits this out: a reload
+// parks the taskbar UI thread in a join that pumps sent messages, so uninit's
+// own teardown send is dispatched re-entrantly and uninit would otherwise
+// return — and let the image be unmapped — with the rest of ReloadAndRefreshUI
+// still to run on that thread.
+std::atomic<int> g_reloadInFlight{0};
 
 std::wstring Trim(std::wstring s) {
     size_t b = s.find_first_not_of(L" \t\r\n");
@@ -1441,7 +1448,13 @@ bool RunFromWindowThread(HWND hWnd,
 
     UnhookWindowsHookEx(hook);
 
-    return true;
+    // A window destroyed between GetWindowThreadProcessId and the send makes
+    // SendMessage return without dispatching, so the hook never fires. Report
+    // that honestly: DeliverButtonIconToUi hands ownership over on a true and
+    // would leak the delivery, and Wh_ModUninit would skip its teardown and the
+    // warning that goes with it. Whichever hook copy ran the callback cleared
+    // param.proc, so this is already the answer.
+    return param.proc == nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9240,6 +9253,11 @@ void Wh_ModAfterInit() {
 // Tears down UI, reloads settings (+ pinned folders), and restarts. Shared by
 // Wh_ModSettingsChanged and the Explorer right-click "pin to taskbar" action.
 void ReloadAndRefreshUI() {
+    struct InFlightGuard {
+        InFlightGuard() { g_reloadInFlight++; }
+        ~InFlightGuard() { g_reloadInFlight--; }
+    } inFlight;
+
     StopRetryThread();
     // The scan thread reads g_settings, so it has to be parked before
     // reloading.
@@ -9424,6 +9442,16 @@ void Wh_ModUninit() {
     // this short; verbs that ignore it and show modal UI take as long as the
     // user does — see CMIC_MASK_ASYNCOK on the invoke path. Nothing to cancel.
     waitOut(L"a shell verb", [] { return g_invokeActive.load(); }, [] {});
+
+    // And a reload already past MenuOwnerWndProc's g_unloading check. It parks
+    // the taskbar UI thread in StopRetryThread/StopScanThread joins that pump
+    // sent messages, so the teardown send below runs re-entrantly inside it and
+    // this function would return — unmapping the image — with LoadSettings and
+    // the rest of ReloadAndRefreshUI still owed on that thread. Nothing to
+    // cancel, and it cannot restart a worker behind us: StartRetryThread bails
+    // on g_unloading. Waiting here also means the teardown send lands after the
+    // reload is done rather than inside its join.
+    waitOut(L"a UI reload", [] { return g_reloadInFlight.load() > 0; }, [] {});
 
     if (threadWnd) {
         if (!RunFromWindowThread(threadWnd, teardownOnUiThread, nullptr)) {
