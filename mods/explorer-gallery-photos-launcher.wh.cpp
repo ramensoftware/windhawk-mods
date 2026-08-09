@@ -17,23 +17,23 @@
 Intercepts navigation to the "Gallery" folder in the Windows File Explorer navigation pane
 and launches the Microsoft Photos app (`ms-photos:`) instead of opening the built-in Gallery view.
 
+![Demonstration](https://raw.githubusercontent.com/jakubix30/explorer-gallery-photos-launcher/main/demo.gif)
+
 ## Features
 
 - Works with **ExplorerPatcher** (Win10 Ribbon overlay fix) and standard Windows 11
 - Hooks at the COM/Symbol level (`CShellBrowser::BrowseObject`) — completely UI-independent
-- Configurable target CLSID and launch command
+- Configurable launch command (useful if you prefer a different photo viewer)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- settings:
-  - targetClsid: "{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}"
-  - targetCommand: "ms-photos:"
-  $name: Settings
-  $name:pl-PL: Ustawienia
-  $description: Target item CLSID to intercept and command to execute.
-  $description:pl-PL: CLSID elementu do przechwycenia i komenda do uruchomienia.
+- targetCommand: "ms-photos:"
+  $name: Command to launch
+  $name:pl-PL: Komenda do uruchomienia
+  $description: Protocol or program launched instead of navigating to the Gallery folder.
+  $description:pl-PL: Protokół lub program uruchamiany zamiast nawigacji do folderu Galerii.
 */
 // ==/WindhawkModSettings==
 
@@ -45,7 +45,6 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 #include <atomic>
 
 struct {
-    std::wstring targetClsid;
     std::wstring targetCommand;
 } g_settings;
 
@@ -58,6 +57,19 @@ typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
                                                    UINT wFlags);
 static BrowseObject_t g_BrowseObject_Original = nullptr;
 
+static PIDLIST_ABSOLUTE EnsureTargetPidl() {
+    if (!g_targetPidl) {
+        // Hardcoded Gallery CLSID
+        std::wstring parsingName = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
+        HRESULT hr = SHParseDisplayName(parsingName.c_str(), nullptr,
+                                        &g_targetPidl, 0, nullptr);
+        if (FAILED(hr)) {
+            Wh_Log(L"SHParseDisplayName(%s) failed: 0x%08X", parsingName.c_str(), (unsigned)hr);
+        }
+    }
+    return g_targetPidl;
+}
+
 static void FreeTargetPidl() {
     if (g_targetPidl) {
         CoTaskMemFree(g_targetPidl);
@@ -66,19 +78,9 @@ static void FreeTargetPidl() {
 }
 
 static void LoadSettings() {
-    PCWSTR s = Wh_GetStringSetting(L"settings.targetClsid");
-    g_settings.targetClsid =
-        s && *s ? s : L"{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
-    Wh_FreeStringSetting(s);
-
-    s = Wh_GetStringSetting(L"settings.targetCommand");
+    PCWSTR s = Wh_GetStringSetting(L"targetCommand");
     g_settings.targetCommand = s && *s ? s : L"ms-photos:";
     Wh_FreeStringSetting(s);
-
-    // Re-parse target PIDL
-    FreeTargetPidl();
-    std::wstring parsingName = L"::" + g_settings.targetClsid;
-    SHParseDisplayName(parsingName.c_str(), nullptr, &g_targetPidl, 0, nullptr);
 }
 
 // Asynchronous launch parameters
@@ -105,11 +107,14 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
                 Wh_Log(L"Launching app asynchronously: %s", cmd);
                 
                 SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
+                sei.fMask = SEE_MASK_ASYNCOK; // No SEE_MASK_FLAG_NO_UI so system missing-app prompts still appear
                 sei.lpVerb = L"open";
                 sei.lpFile = cmd;
                 sei.nShow = SW_SHOWNORMAL;
-                ShellExecuteExW(&sei);
+                
+                if (!ShellExecuteExW(&sei)) {
+                    Wh_Log(L"ShellExecuteExW(%s) failed: %u", cmd, GetLastError());
+                }
             }
         } else if (r == WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
             MSG msg;
@@ -137,9 +142,12 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
         return g_BrowseObject_Original(pThis, pidl, wFlags);
     }
 
-    if (g_targetPidl && pidl) {
-        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), g_targetPidl) ||
-            ILIsParent(g_targetPidl, reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), FALSE)) {
+    // Lazy load the PIDL on the UI thread to guarantee COM readiness
+    PIDLIST_ABSOLUTE target = EnsureTargetPidl();
+
+    if (target && pidl) {
+        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target) ||
+            ILIsParent(target, reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), FALSE)) {
             
             Wh_Log(L"Intercepted Gallery navigation! Triggering async launch: %s",
                    g_settings.targetCommand.c_str());
@@ -262,4 +270,6 @@ void Wh_ModUninit() {
     FreeTargetPidl();
 }
 
-void Wh_ModSettingsChanged() { LoadSettings(); }
+void Wh_ModSettingsChanged() { 
+    LoadSettings(); 
+}
