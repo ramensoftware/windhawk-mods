@@ -228,6 +228,9 @@ std::atomic<bool> g_unloading{false};
 struct SweptHost {
     winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> grid;
     winrt::event_token sizeToken{};
+    // Cached tray grid for this taskbar's island, resolved lazily: spares
+    // the depth-10 class search over the whole XAML root on every re-sweep.
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Grid> trayGrid;
 };
 std::vector<SweptHost> g_taskbarHosts;
 std::vector<SweptHost> g_trayHosts;
@@ -641,19 +644,18 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
 }
 
 // A system button counts as active while its flyout/experience is open.
-// Start, Task view, Widgets and the search icon are ToggleButtons: a
-// present IsChecked value is authoritative in BOTH directions — true and
-// false are final answers. Falling through on false was tried and froze
-// blobs on (observed on the search button): toggle entries only refresh on
-// Checked/Unchecked, so a scan that reads the still-Active* CommonStates
-// mid-dismissal is never re-evaluated — the correcting Active->Normal
-// transition fires no event a toggle entry subscribes to. Only a NULL
-// IsChecked (the property genuinely not tracking — the actual
-// future-build-broke-it case) falls through to the state-name scan. The
-// scan accepts both state families: the tray controls (OmniButton,
-// ChevronIconView) report Checked/CheckedNormal/..., while the shell's
-// flyout signal for the Experience buttons is the exact
-// ActiveNormal/ActivePointerOver/ActivePressed set on CommonStates.
+// Start, Task view, Widgets and the search icon are ToggleButtons, and a
+// present IsChecked value is authoritative in BOTH directions. Invariant:
+// toggle entries only refresh on Checked/Unchecked, so their state MUST be
+// read from IsChecked — a state-name read can catch CommonStates mid-
+// transition and is never re-evaluated for a toggle, freezing the blob.
+// The state-name scan below serves the NON-toggle elements: Checked* as a
+// prefix for the tray family (OmniButton, ChevronIconView), the exact
+// Active* set for the Experience family. The null fall-through is a cheap
+// safety valve, not a degradation path — a two-state ToggleButton always
+// holds a value, so a build where IsChecked stops tracking would report
+// false; if that ever happens, the known fix is the elastic-pill approach
+// (read the Active* names off the root panel and skip IsChecked).
 bool IsSystemButtonChecked(FrameworkElement const& btn) {
     try {
         if (auto toggle = btn.try_as<winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton>()) {
@@ -778,7 +780,8 @@ bool IsKindEnabled(int8_t kind, const Settings& localSettings) {
         case BlobEntry::KindWidget:   return localSettings.WidgetsBlob;
         case BlobEntry::KindDateTime: return localSettings.DateTimeBlob;
         case BlobEntry::KindTray:     return localSettings.TrayButtonsBlob;
-        default:                      return localSettings.SystemButtonsBlob;
+        case BlobEntry::KindSystem:   return localSettings.SystemButtonsBlob;
+        default:                      return false; // fail closed for future kinds
     }
 }
 
@@ -936,15 +939,37 @@ void TaskbarSweepBody(Grid const& grid, const Settings& localSettings) {
 
     // The system tray is a sibling frame under the same XAML root on current
     // builds — reach it from here, since no hook ever fires for its
-    // elements.
+    // elements. The resolved grid is cached on the host record; the class
+    // search only runs when the cache is empty or its element died.
     try {
-        auto xamlRoot = grid.XamlRoot();
-        auto content = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
-        auto trayFrame = content ? FindDescendantByClass(content, L"SystemTray.SystemTrayFrame", 10) : nullptr;
-        if (content && !trayFrame) {
-            Wh_Log(L"SystemTray.SystemTrayFrame not found under the XAML root; tray blobs inactive for this taskbar");
+        Grid trayGrid{nullptr};
+        {
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            for (auto& host : g_taskbarHosts) {
+                if (host.grid.get() == grid) {
+                    trayGrid = host.trayGrid.get();
+                    break;
+                }
+            }
         }
-        auto trayGrid = trayFrame ? FindChildByName(trayFrame, L"SystemTrayFrameGrid").try_as<Grid>() : nullptr;
+        if (!trayGrid) {
+            auto xamlRoot = grid.XamlRoot();
+            auto content = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+            auto trayFrame = content ? FindDescendantByClass(content, L"SystemTray.SystemTrayFrame", 10) : nullptr;
+            if (content && !trayFrame) {
+                Wh_Log(L"SystemTray.SystemTrayFrame not found under the XAML root; tray blobs inactive for this taskbar");
+            }
+            trayGrid = trayFrame ? FindChildByName(trayFrame, L"SystemTrayFrameGrid").try_as<Grid>() : nullptr;
+            if (trayGrid) {
+                std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+                for (auto& host : g_taskbarHosts) {
+                    if (host.grid.get() == grid) {
+                        host.trayGrid = winrt::make_weak(trayGrid);
+                        break;
+                    }
+                }
+            }
+        }
         if (trayGrid) SweepTray(trayGrid, localSettings);
     } catch (...) {}
 }
@@ -987,8 +1012,7 @@ void SweepExistingButtons(Grid const& grid, const Settings& localSettings) {
             }
         }
         if (!stored) {
-            // Uninit moved the host list out between attach and store —
-            // nothing else will ever revoke this subscription.
+            // Untracked subscription: revoke immediately.
             try { grid.SizeChanged(token); } catch (...) {}
         }
         TaskbarSweepBody(grid, localSettings);
@@ -1021,6 +1045,7 @@ bool IsUnderElementNamed(FrameworkElement const& element, std::wstring_view name
 //   interacted with (the shared IconView template does STYLE Checked*
 //   states, but these instances were not observed to enter them), so a
 //   blob could never show for them.
+// - The Show Desktop IconView (under ShowDesktopStack): no flyout at all.
 // Skipping them entirely avoids per-icon entries, hidden Paths, and
 // hover-driven state subscriptions that could never produce a visible blob.
 void CollectTrayButtons(FrameworkElement const& root, std::vector<FrameworkElement>& out, int depth = 0) {
@@ -1036,7 +1061,8 @@ void CollectTrayButtons(FrameworkElement const& root, std::vector<FrameworkEleme
             continue;
         }
         if (cls == L"SystemTray.IconView") {          // stack icons (language, ...)
-            if (!IsUnderElementNamed(child, L"MainStack", 8)) {
+            if (!IsUnderElementNamed(child, L"MainStack", 8) &&
+                !IsUnderElementNamed(child, L"ShowDesktopStack", 8)) {
                 out.push_back(child);
             }
             continue;
@@ -1096,8 +1122,7 @@ void SweepTray(Grid const& trayGrid, const Settings& localSettings) {
             }
         }
         if (!stored) {
-            // Uninit moved the host list out between attach and store —
-            // nothing else will ever revoke this subscription.
+            // Untracked subscription: revoke immediately.
             try { trayGrid.SizeChanged(token); } catch (...) {}
         }
     }
@@ -1157,8 +1182,12 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
             } catch (...) {}
             RemoveFromParentPanel(blob);
         } else if (dispatcher) {
-            PostToUiThread(dispatcher, [orphan, blob]() {
-                if (g_unloading) return; // the uninit cleanup restores natives itself
+            bool posted = PostToUiThread(dispatcher, [orphan, blob]() {
+                // No unload bail here: this orphan was erased from
+                // g_blobEntries before the post, so the uninit snapshot
+                // never sees it — this lambda is the only code that will
+                // ever stop its timer, and its ticket guarantees it runs
+                // before the DLL goes away.
                 if (orphan->restoreTimer) {
                     try { orphan->restoreTimer.Stop(); } catch (...) {}
                     orphan->restoreTimer = nullptr;
@@ -1168,6 +1197,13 @@ std::shared_ptr<BlobEntry> FindOrCreateEntry(winrt::Windows::UI::Xaml::Framework
                 } catch (...) {}
                 RemoveFromParentPanel(blob);
             });
+            if (!posted && orphan->restoreTimer) {
+                // Post refused (uninit already started): best-effort inline
+                // stop, like the no-dispatcher branch; the tick's sender
+                // self-stop backstops a failed cross-thread Stop().
+                try { orphan->restoreTimer.Stop(); } catch (...) {}
+                orphan->restoreTimer = nullptr;
+            }
         } else if (orphan->restoreTimer) {
             // No dispatcher handle (island likely gone): best-effort inline
             // stop. The tick also self-stops via its sender, so a failed
@@ -1792,7 +1828,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Taskbar Blob Shape Mod");
 
-    g_postsDrained = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     LoadSettings();
 
     HMODULE m = GetTaskbarViewModuleHandle();
@@ -1808,6 +1843,11 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     }
+
+    // Created only once init can no longer fail: Wh_ModUninit isn't called
+    // after a failed init, so an earlier creation would leak the handle on
+    // every failed attempt.
+    g_postsDrained = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
     return TRUE;
 }
@@ -1882,15 +1922,22 @@ void Wh_ModBeforeUninit() {
         winrt::Windows::UI::Xaml::Shapes::Path blobShape{nullptr};
         winrt::Windows::UI::Xaml::FrameworkElement btn{nullptr};
         {
-            // blobShape is written on the UI thread; resolve these weak refs
-            // under the entries mutex to keep the cross-thread read defined.
+            // These pre-reads pick the cleanup dispatcher ONLY. The cleanup
+            // itself re-resolves everything on the UI thread: a refresh
+            // in flight when this snapshot was taken can still create the
+            // blob afterwards, and a stale capture would leave that Path
+            // parented with a live ActualThemeChanged delegate in this DLL.
             std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
             blobShape = entry->blobShape.get();
             btn = entry->button.get();
         }
 
-        auto cleanup = [entry, blobShape]() {
+        auto cleanup = [entry]() {
             try {
+                // Resolved here, on the UI thread, after any in-flight
+                // refresh on this dispatcher has completed — never at
+                // snapshot time.
+                auto blobShape = entry->blobShape.get();
                 if (auto anchor = entry->anchor.get()) {
                     try { anchor.SizeChanged(entry->sizeToken); } catch (...) {}
                 }
@@ -1977,9 +2024,20 @@ void Wh_ModBeforeUninit() {
     // Second barrier: refreshes posted from the hooks and settings paths.
     // Their tickets were taken before g_unloading was set; wait for the
     // in-flight ones to finish executing.
-    if (g_postsDrained && g_pendingPosts.load() > 0) {
-        if (WaitForSingleObject(g_postsDrained, 2000) == WAIT_TIMEOUT) {
-            Wh_Log(L"Timed out waiting for posted refreshes to drain");
+    if (g_pendingPosts.load() > 0) {
+        if (g_postsDrained) {
+            if (WaitForSingleObject(g_postsDrained, 2000) == WAIT_TIMEOUT) {
+                Wh_Log(L"Timed out waiting for posted refreshes to drain");
+            }
+        } else {
+            // Degraded barrier (CreateEvent failed at init): bounded poll —
+            // still waits rather than silently skipping.
+            for (int i = 0; i < 200 && g_pendingPosts.load() > 0; i++) {
+                Sleep(10);
+            }
+            if (g_pendingPosts.load() > 0) {
+                Wh_Log(L"Timed out waiting for posted refreshes to drain");
+            }
         }
     }
 }
@@ -2038,10 +2096,7 @@ void Wh_ModSettingsChanged() {
                                     : (btn ? btn.Dispatcher() : nullptr);
         if (!dispatcher) continue;
         std::weak_ptr<BlobEntry> weakEntry = entry;
-        // Routed through PostToUiThread: the posted-refresh counter is what
-        // guarantees this can't run after unload — the FIFO/priority
-        // argument alone can't, since a post can land behind the uninit
-        // barrier's own items.
+        // Through PostToUiThread, so the unload drain covers this post.
         PostToUiThread(dispatcher, [weakEntry]() {
             if (g_unloading) return;
             auto e = weakEntry.lock();
