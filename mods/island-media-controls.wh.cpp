@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.211
+// @version         0.9.253
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -26,23 +26,27 @@ play/pause, and next controls.
 | :---: | :---: |
 | ![Island Media Controls in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif) | ![Island Media Controls in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif) |
 
+## Layout previews
+
+| Mode | Dark mode | Light mode |
+| :--- | :---: | :---: |
+| **Fullsize** | ![Island Media Controls fullsize mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/darkfull.gif) | ![Island Media Controls fullsize mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/lightfull.gif) |
+| **Compact** | ![Island Media Controls compact mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/darkcomp.gif) | ![Island Media Controls compact mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/lightcomp.gif) |
+
 ## What's new
 
-- **Liquid Glass refinements:** The material now uses a smoother edge-following
-  refraction band and stronger light-mode backdrop/control tint.
-- **Safer capture startup:** Borderless capture authorization is now bounded
-  and cleanly stopped before the mod unloads.
-- **Thread-safe live blur:** Capture rendering now uses a taskbar-thread
-  snapshot and serializes GPU presentation without blocking popup animation.
-- **Better light-mode visibility:** Liquid Glass now keeps the album-art
-  background wash enabled in light mode so the expanded surface remains legible.
-- **Current tuned defaults:** New installs now default to the tuned Liquid
-  Glass setup, Fluent bold controls, updated popup spacing, and the current
-  shadow depth while keeping browser thumbnails as the default artwork mode.
-- **Taskbar-aware expansion:** The expanded player adapts its opening direction,
-  layout, and artwork wash to the taskbar position.
-- **More cohesive morphing:** The compact island, artwork, progress bar, and
-  playback controls animate together during expand and collapse.
+- **Unified display modes:** Fullsize, compact expanded layout, and side
+  expansion are now selected from one clearer display-mode setting.
+- **New layout:** Adds a compact expanded player layout that keeps the cover,
+  track information, progress, and transport controls in a tighter card.
+- **Clearer settings layout:** Material, display mode, taskbar position, cover,
+  background, and button style are now grouped at the top, followed by toggles
+  and then numeric tuning controls.
+- **Elastic animation toggle:** The classic rebound option is now named
+  Elastic animation effect, remains enabled by default, and controls the
+  fullsize expand/collapse spring while compact click feedback stays on.
+- **Fresh previews:** The main dark/light preview is restored, and the new
+  fullsize and compact layout previews are shown below it.
 
 ## Features
 
@@ -74,8 +78,23 @@ play/pause, and next controls.
 // ==WindhawkModSettings==
 /*
 - Main:
+  - Material: "liquid_glass"
+    $name: Material
+    $description: Choose the surface style for the island and expanded player.
+    $options:
+    - "mica_like": "Mica-like"
+    - "solid": "Solid"
+    - "acrylic": "Acrylic glass"
+    - "liquid_glass": "Liquid Glass"
+  - DisplayMode: "fullsize"
+    $name: Display mode
+    $description: Choose how the compact island opens.
+    $options:
+    - "fullsize": "Fullsize"
+    - "compact": "Compact"
+    - "side_expand": "Side expansion mode"
   - Position: "tray_left"
-    $name: Taskbar position
+    $name: Taskbar placement
     $options:
     - "tray_left": "Tray - far left"
     - "tray_right": "Tray - far right"
@@ -84,65 +103,63 @@ play/pause, and next controls.
     - "taskbar_left_edge": "Taskbar - left overlay"
     - "taskbar_center_edge": "Taskbar - center overlay"
     - "taskbar_right_edge": "Taskbar - right overlay"
-  - CompactWidth: 169
-    $name: Compact width
-  - AutoSizeToTaskbar: true
-    $name: Auto size to taskbar
-  - ExpandedWidth: 360
-    $name: Expanded overlay width
-  - ExpandedHeight: 500
-    $name: Expanded overlay height
-  - Compact: false
-    $name: Compact expanded layout
-    $description: Use a single compact card with the cover beside the song and artist information.
-  - PopupSpacing: 20
-    $name: Expanded outer spacing
-  - PopupCardGap: 8
-    $name: Expanded cover-to-controls gap
-  - PopupShadowDepth: 58
-    $name: Expanded shadow depth
-  - PopupShadowOpacity: 70
-    $name: Expanded shadow opacity (%)
-  - PopupButtonStyle: "fluent_bold"
-    $name: Expanded button style
-    $options:
-    - "minimal_transport": "Minimal transport"
-    - "fluent_bold": "Fluent bold"
-  - PopupBackdropCoverEffect: "dark_only"
-    $name: Expanded background album wash
-    $description: Liquid Glass keeps this enabled in light mode for readability.
-    $options:
-    - "off": "Off"
-    - "dark_only": "Dark mode only"
-    - "on": "Always on"
   - ArtworkAbstractMode: "browser_original"
-    $name: Low-res video artwork mode
+    $name: Cover fallback
+    $description: Replace low-resolution video thumbnails with generated artwork when desired.
     $options:
     - "browser_original": "Browser thumbnail"
     - "mesh_gradient": "Mesh gradient"
     - "energy_flame": "Flame"
+  - PopupBackdropCoverEffect: "dark_only"
+    $name: Album-color background
+    $description: Add a blurred album-color wash behind the expanded player.
+    $options:
+    - "off": "Off"
+    - "dark_only": "Dark mode only"
+    - "on": "Always on"
+  - PopupButtonStyle: "fluent_bold"
+    $name: Button style
+    $options:
+    - "minimal_transport": "Minimal transport"
+    - "fluent_bold": "Fluent bold"
+  - AutoSizeToTaskbar: true
+    $name: Match taskbar height
+    $description: Automatically size the island to fit themed or non-standard taskbars.
+  - HideWhenNoMedia: false
+    $name: Hide when no media
+  - ClassicMorphScaleAnimation: true
+    $name: Elastic animation effect
+    $description: Enables elastic overshoot and rebound during fullsize expand/collapse. Compact click feedback always remains enabled.
+  - AllowScreenCapture: false
+    $name: Capturable blurred backdrop
+    $description: Uses a capturable static blurred backdrop for Acrylic and Liquid Glass, avoiding self-capture feedback.
+  - CompactWidth: 169
+    $name: Island width
   - Height: 40
-    $name: Component height
+    $name: Island height
   - MarginLeft: 4
     $name: Left margin
   - MarginRight: 4
     $name: Right margin
-  - HideWhenNoMedia: false
-    $name: Hide when no media
+  - ExpandedWidth: 360
+    $name: Expanded player width
+  - ExpandedHeight: 500
+    $name: Expanded player height
+  - PopupSpacing: 20
+    $name: Expanded outer spacing
+  - PopupCardGap: 8
+    $name: Cover-to-controls gap
+  - PopupShadowDepth: 58
+    $name: Shadow depth
+  - PopupShadowOpacity: 70
+    $name: Shadow opacity (%)
   - HoverScale: 106
     $name: Hover scale (%)
   - HoverLerpSpeed: 28
     $name: Hover smoothing
   - AnimationSpeed: 100
-    $name: Expanded animation speed (%)
+    $name: Animation speed (%)
     $description: 100 is normal speed. Use lower values such as 25 for slow-motion animation preview.
-  - Material: "liquid_glass"
-    $name: Background material
-    $options:
-    - "mica_like": "Mica-like content layer"
-    - "solid": "Solid"
-    - "acrylic": "Acrylic / glass"
-    - "liquid_glass": "Liquid glass"
   - BackdropInitialFrameSkip: 2
     $name: Backdrop initial frame skip
     $description: Number of WGC frames to skip before replacing the fallback frame.
@@ -155,9 +172,6 @@ play/pause, and next controls.
   - BackdropWgcBlurStdDev: 18
     $name: Backdrop WGC blur strength
     $description: Gaussian blur standard deviation for live WGC blur.
-  - AllowScreenCapture: false
-    $name: Allow screen capture of expanded popup
-    $description: Uses a capturable static blurred backdrop for Acrylic and Liquid glass, avoiding self-capture feedback.
 */
 // ==/WindhawkModSettings==
 
@@ -315,6 +329,7 @@ namespace {
 struct Settings {
     std::wstring position = L"tray_left";
     int compactWidth = 169;
+    std::wstring compactMode = L"classic";
     bool autoSizeToTaskbar = true;
     int expandedWidth = 360;
     int expandedHeight = 430;
@@ -333,6 +348,7 @@ struct Settings {
     double hoverScale = 1.06;
     double hoverLerpSpeed = 28.0;
     double animationSpeed = 1.0;
+    bool classicMorphScaleAnimation = true;
     std::wstring material = L"liquid_glass";
     int backdropInitialFrameSkip = 2;
     int backdropFallbackBlurPasses = 5;
@@ -366,6 +382,8 @@ struct MediaState {
     bool hasSession = false;
     bool isPlaying = false;
     bool canSeek = false;
+    bool canSkipPrevious = false;
+    bool canSkipNext = false;
     int64_t timelineStartTicks = 0;
     int64_t positionTicks = 0;
     int64_t durationTicks = 0;
@@ -466,6 +484,56 @@ FrameworkElement g_injectionParent = nullptr;
 int g_playerColumn = -1;
 bool g_expanded = false;
 ScaleTransform g_islandScale = nullptr;
+ScaleTransform g_islandPressScale = nullptr;
+TranslateTransform g_islandHoverTranslate = nullptr;
+double g_compactPressScaleValue = 1.0;
+double g_compactPressScaleTarget = 1.0;
+double g_compactPressScaleVelocity = 0.0;
+bool g_compactPressReleasePending = false;
+bool g_compactPressActivatePending = false;
+FrameworkElement g_dynamicMainIsland = nullptr;
+Border g_dynamicMainOcclusion = nullptr;
+Border g_dynamicMainWashHost = nullptr;
+Image g_dynamicMainWash = nullptr;
+Border g_dynamicMainEdgeGlow = nullptr;
+FrameworkElement g_dynamicTransportIsland = nullptr;
+FrameworkElement g_dynamicTransportSurface = nullptr;
+ScaleTransform g_dynamicTransportSurfaceScale = nullptr;
+FrameworkElement g_dynamicTransportControls = nullptr;
+struct DynamicTransportButtonMotion {
+    Border element{nullptr};
+    ScaleTransform scale{nullptr};
+    TranslateTransform translate{nullptr};
+    double scaleValue = 1.0;
+    double scaleTarget = 1.0;
+    double scaleVelocity = 0.0;
+    double translateValue = 0.0;
+    double translateTarget = 0.0;
+    double translateVelocity = 0.0;
+    int direction = 0;
+    bool releasePending = false;
+    int failurePhasesRemaining = 0;
+};
+DynamicTransportButtonMotion g_dynamicTransportPrevMotion;
+DynamicTransportButtonMotion g_dynamicTransportPlayMotion;
+DynamicTransportButtonMotion g_dynamicTransportNextMotion;
+DynamicTransportButtonMotion g_popupPrevMotion;
+DynamicTransportButtonMotion g_popupPlayMotion;
+DynamicTransportButtonMotion g_popupNextMotion;
+std::atomic<int> g_dynamicTransportNavigationFailureDirection{0};
+ScaleTransform g_dynamicMainScale = nullptr;
+ScaleTransform g_dynamicTransportScale = nullptr;
+TranslateTransform g_dynamicTransportTranslate = nullptr;
+winrt::event_token g_dynamicCompactRenderingToken{};
+bool g_dynamicCompactRenderingHooked = false;
+double g_dynamicTransportReveal = 0.0;
+double g_dynamicTransportTargetReveal = 0.0;
+double g_dynamicTransportRevealVelocity = 0.0;
+bool g_dynamicTransportLaunchPhase = false;
+std::chrono::steady_clock::time_point g_lastDynamicCompactFrameTime{};
+uint64_t g_dynamicTransportAccentThumbnailHash = UINT64_MAX;
+bool g_dynamicTransportAccentColorValid = false;
+winrt::Windows::UI::Color g_dynamicTransportAccentColor{0xFF, 0x4F, 0x7D, 0xE8};
 uint64_t g_lastThumbnailHash = 0;
 winrt::event_token g_hoverRenderingToken{};
 bool g_hoverRenderingHooked = false;
@@ -624,6 +692,7 @@ hosting::DesktopWindowXamlSource g_popupXamlSource = nullptr;
 HWND g_popupXamlChild = nullptr;
 bool g_popupXamlChildSubclassed = false;
 Grid g_popupXamlRoot = nullptr;
+ScaleTransform g_popupXamlJellyScale = nullptr;
 controls::Canvas g_popupXamlCanvas = nullptr;
 Border g_popupXamlShadow = nullptr;
 composition::SpriteVisual g_popupXamlShadowVisual = nullptr;
@@ -728,6 +797,7 @@ bool g_popupOpensDown = false;
 bool g_taskbarAtTop = false;
 double g_popupAnimationProgress = 0.0;
 double g_popupAnimationTarget = 0.0;
+double g_popupAnimationVelocity = 0.0;
 winrt::event_token g_popupRenderingToken{};
 bool g_popupRenderingHooked = false;
 std::chrono::steady_clock::time_point g_lastPopupFrameTime{};
@@ -749,6 +819,8 @@ TranslateTransform g_compactOutgoingTitleTranslate = nullptr;
 TranslateTransform g_compactOutgoingArtistTranslate = nullptr;
 Image g_compactAlbumArtImage = nullptr;
 Image g_compactAlbumArtFade = nullptr;
+Image g_dynamicTransportWash = nullptr;
+Image g_dynamicTransportWashFade = nullptr;
 ProgressBar g_compactProgress = nullptr;
 winrt::event_token g_compactProgressRenderingToken{};
 bool g_compactProgressRenderingHooked = false;
@@ -1034,6 +1106,12 @@ mediax::Brush IslandBackgroundBrush() {
     return Brush(IslandBackgroundColor());
 }
 
+mediax::Brush DynamicMainOcclusionBrush() {
+    auto color = IslandBackgroundColor();
+    color.A = 0xFF;
+    return Brush(color);
+}
+
 mediax::Brush LiquidGlassRimHighlightBrush() {
     bool dark = IsDarkModeApprox();
     mediax::LinearGradientBrush brush;
@@ -1092,12 +1170,82 @@ mediax::Brush LiquidGlassSurfaceHighlightBrush() {
 
 mediax::Brush IslandBorderBrush() {
     bool dark = IsDarkModeApprox();
-    if (IsLiquidGlassMaterial()) {
-        return LiquidGlassRimHighlightBrush();
-    }
-
+    // Keep the compact island outline identical in Mica and Liquid Glass.
     return Brush(dark ? Color(0x36, 0xFF, 0xFF, 0xFF)
                       : Color(0x26, 0x00, 0x00, 0x00));
+}
+
+winrt::Windows::UI::Color DynamicTransportAccentColor() {
+    return g_dynamicTransportAccentColorValid
+               ? g_dynamicTransportAccentColor
+               : Color(0xFF, 0x4F, 0x7D, 0xE8);
+}
+
+mediax::Brush DynamicTransportBorderBrush() {
+    bool dark = IsDarkModeApprox();
+    auto accent = DynamicTransportAccentColor();
+    mediax::LinearGradientBrush brush;
+    brush.StartPoint({0.0f, 0.0f});
+    brush.EndPoint({1.0f, 1.0f});
+    mediax::GradientStopCollection stops;
+    auto addStop = [&](double offset, winrt::Windows::UI::Color color) {
+        mediax::GradientStop stop;
+        stop.Offset(offset);
+        stop.Color(color);
+        stops.Append(stop);
+    };
+    // Keep all three exposed sides continuous. Only the diagonal endpoints,
+    // which coincide with the rounded corners, catch a softer/thinner light.
+    addStop(0.00, Color(dark ? 0x68 : 0x58, accent.R, accent.G, accent.B));
+    addStop(0.12, Color(dark ? 0x88 : 0x72, accent.R, accent.G, accent.B));
+    addStop(0.34, Color(dark ? 0xA4 : 0x8E, accent.R, accent.G, accent.B));
+    addStop(0.58, Color(dark ? 0x98 : 0x82, accent.R, accent.G, accent.B));
+    addStop(0.84, Color(dark ? 0x86 : 0x70, accent.R, accent.G, accent.B));
+    addStop(1.00, Color(dark ? 0x62 : 0x52, accent.R, accent.G, accent.B));
+    brush.GradientStops(stops);
+    return brush;
+}
+
+mediax::Brush DynamicMainEdgeGlowBrush() {
+    bool dark = IsDarkModeApprox();
+    auto accent = DynamicTransportAccentColor();
+    mediax::LinearGradientBrush brush;
+    brush.StartPoint({0.0f, 0.5f});
+    brush.EndPoint({1.0f, 0.5f});
+    mediax::GradientStopCollection stops;
+    auto addStop = [&](double offset, BYTE alpha) {
+        mediax::GradientStop stop;
+        stop.Offset(offset);
+        stop.Color(Color(alpha, accent.R, accent.G, accent.B));
+        stops.Append(stop);
+    };
+    addStop(0.00, dark ? 0xB8 : 0x98);
+    addStop(0.12, dark ? 0x82 : 0x68);
+    addStop(0.34, dark ? 0x38 : 0x2C);
+    addStop(0.62, 0x08);
+    addStop(0.78, 0x00);
+    addStop(1.00, 0x00);
+    brush.GradientStops(stops);
+    return brush;
+}
+
+double DynamicMainWashOpacity() {
+    return IsDarkModeApprox() ? 0.64 : 0.0;
+}
+
+mediax::Brush DynamicTransportWashTintBrush() {
+    bool dark = IsDarkModeApprox();
+    if (IsLiquidGlassMaterial()) {
+        return Brush(dark ? Color(0x64, 0x1B, 0x1D, 0x24)
+                          : Color(0xB8, 0xFC, 0xFD, 0xFF));
+    }
+    // Album Mica uses a stronger neutral tint while preserving low-frequency color.
+    return Brush(dark ? Color(0x88, 0x20, 0x20, 0x26)
+                      : Color(0xB4, 0xFA, 0xFA, 0xFC));
+}
+
+double DynamicTransportWashOpacity() {
+    return IsDarkModeApprox() ? 0.78 : 0.60;
 }
 
 mediax::Brush CompactPlaybackControlStrokeBrush() {
@@ -1194,10 +1342,39 @@ std::vector<uint8_t> ReadThumbnailBytes(streams::IRandomAccessStreamReference co
     return bytes;
 }
 
-std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
+std::wstring GetOptionalStringSetting(const wchar_t* key) {
     auto setting = WindhawkUtils::StringSetting::make(key);
     PCWSTR value = setting.get();
-    return value && *value ? value : fallback;
+    return value ? value : L"";
+}
+
+std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
+    std::wstring value = GetOptionalStringSetting(key);
+    return value.empty() ? fallback : value;
+}
+
+void ApplyDisplayModeSetting(Settings* settings) {
+    std::wstring displayMode = GetOptionalStringSetting(L"Main.DisplayMode");
+    if (displayMode.empty()) {
+        settings->compactMode = GetStringSetting(L"Main.CompactMode", L"classic");
+        if (settings->compactMode != L"classic" &&
+            settings->compactMode != L"dynamic_dual") {
+            settings->compactMode = L"classic";
+        }
+        settings->compact = Wh_GetIntSetting(L"Main.Compact") != 0;
+        return;
+    }
+
+    if (displayMode == L"side_expand" || displayMode == L"dynamic_dual") {
+        settings->compactMode = L"dynamic_dual";
+        settings->compact = false;
+    } else if (displayMode == L"compact") {
+        settings->compactMode = L"classic";
+        settings->compact = true;
+    } else {
+        settings->compactMode = L"classic";
+        settings->compact = false;
+    }
 }
 
 constexpr int kSettingsMigrationVersion = 1;
@@ -1226,10 +1403,12 @@ Settings ReadSettings() {
     Settings settings;
     settings.position = GetStringSetting(L"Main.Position", L"tray_left");
     settings.compactWidth = Clamp(Wh_GetIntSetting(L"Main.CompactWidth"), 96, 320);
+
+    ApplyDisplayModeSetting(&settings);
+
     settings.autoSizeToTaskbar = Wh_GetIntSetting(L"Main.AutoSizeToTaskbar") != 0;
     settings.expandedWidth = Clamp(Wh_GetIntSetting(L"Main.ExpandedWidth"), 240, 640);
     settings.expandedHeight = Clamp(Wh_GetIntSetting(L"Main.ExpandedHeight"), 430, 760);
-    settings.compact = Wh_GetIntSetting(L"Main.Compact") != 0;
     settings.popupSpacing = Clamp(Wh_GetIntSetting(L"Main.PopupSpacing"), 2, 40);
     settings.popupCardGap = Clamp(Wh_GetIntSetting(L"Main.PopupCardGap"), 0, 40);
     settings.popupShadowDepth = Clamp(Wh_GetIntSetting(L"Main.PopupShadowDepth"), 0, 128);
@@ -1266,6 +1445,8 @@ Settings ReadSettings() {
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.HoverLerpSpeed"), 1, 80));
     settings.animationSpeed =
         static_cast<double>(Clamp(Wh_GetIntSetting(L"Main.AnimationSpeed"), 10, 400)) / 100.0;
+    settings.classicMorphScaleAnimation =
+        Wh_GetIntSetting(L"Main.ClassicMorphScaleAnimation") != 0;
 
     settings.material = GetStringSetting(L"Main.Material", L"liquid_glass");
     if (settings.material != L"mica_like" &&
@@ -1763,10 +1944,14 @@ void RefreshMediaState(
                 playback.PlaybackStatus() ==
                 gsm::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
             try {
-                state.canSeek =
-                    playback.Controls().IsPlaybackPositionEnabled();
+                auto controls = playback.Controls();
+                state.canSeek = controls.IsPlaybackPositionEnabled();
+                state.canSkipPrevious = controls.IsPreviousEnabled();
+                state.canSkipNext = controls.IsNextEnabled();
             } catch (...) {
                 state.canSeek = false;
+                state.canSkipPrevious = false;
+                state.canSkipNext = false;
             }
 
             auto props = GetAsyncResultWithTimeout(
@@ -1945,7 +2130,10 @@ HBITMAP DecodeAlbumBitmap(std::vector<uint8_t> const& bytes, UINT size) {
 std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& bytes,
                                                      bool edgeFadeToMiddle = false,
                                                      bool fadeFromTop = false,
-                                                     bool fadeFromRight = false) {
+                                                     bool fadeFromRight = false,
+                                                     int blurPasses = 3,
+                                                     bool albumMicaGrade = false,
+                                                     bool fadeFromLeft = false) {
     std::vector<uint8_t> output;
     if (bytes.empty()) {
         return output;
@@ -1956,7 +2144,7 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
     // character.
     constexpr UINT kLowDetailSize = 20;
     constexpr UINT kBlurRadius = 1;
-    constexpr int kBlurPasses = 3;
+    blurPasses = Clamp(blurPasses, 1, 8);
     const UINT stride = kLowDetailSize * 4;
     const UINT bufferSize = stride * kLowDetailSize;
 
@@ -2040,11 +2228,67 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
         }
     };
     if (SUCCEEDED(hr)) {
-        for (int pass = 0; pass < kBlurPasses; ++pass) {
+        for (int pass = 0; pass < blurPasses; ++pass) {
             boxBlurPass();
         }
     }
 
+    if (SUCCEEDED(hr) && albumMicaGrade) {
+        // Approximate Mica's luminosity preparation before the XAML tint
+        // layer is composited. Work on straight RGB, then premultiply again.
+        const bool dark = IsDarkModeApprox();
+        const double saturation = dark ? 0.72 : 0.70;
+        const double minimumLuma = dark ? 52.0 : 206.0;
+        const double maximumLuma = dark ? 132.0 : 238.0;
+        const double edgeDarkening = dark ? 0.08 : 0.025;
+        const double center = (static_cast<double>(kLowDetailSize) - 1.0) * 0.5;
+        const double inverseCenter = center > 0.0 ? 1.0 / center : 0.0;
+        for (UINT y = 0; y < kLowDetailSize; ++y) {
+            for (UINT x = 0; x < kLowDetailSize; ++x) {
+                BYTE* pixel = pixels.data() +
+                    (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
+                const double alpha = static_cast<double>(pixel[3]);
+                if (alpha <= 0.0) {
+                    continue;
+                }
+                const double unpremultiply = 255.0 / alpha;
+                double blue = Clamp(pixel[0] * unpremultiply, 0.0, 255.0);
+                double green = Clamp(pixel[1] * unpremultiply, 0.0, 255.0);
+                double red = Clamp(pixel[2] * unpremultiply, 0.0, 255.0);
+                const double luma = 0.0722 * blue + 0.7152 * green + 0.2126 * red;
+                blue = luma + (blue - luma) * saturation;
+                green = luma + (green - luma) * saturation;
+                red = luma + (red - luma) * saturation;
+                // Compress covers into a narrow theme-aware brightness band
+                // while retaining their hue relationships.
+                const double normalizedLuma = luma / 255.0;
+                const double mappedLuma = dark
+                    ? normalizedLuma
+                    : std::pow(normalizedLuma, 0.72);
+                const double targetLuma =
+                    minimumLuma + mappedLuma * (maximumLuma - minimumLuma);
+                const double lumaOffset = targetLuma - luma;
+                blue += lumaOffset;
+                green += lumaOffset;
+                red += lumaOffset;
+                const double nx =
+                    std::abs(static_cast<double>(x) - center) * inverseCenter;
+                const double ny =
+                    std::abs(static_cast<double>(y) - center) * inverseCenter;
+                double edge =
+                    Clamp((std::max(nx, ny) - 0.35) / 0.65, 0.0, 1.0);
+                edge = edge * edge * (3.0 - 2.0 * edge);
+                const double vignette = 1.0 - edgeDarkening * edge;
+                const double premultiply = alpha / 255.0;
+                pixel[0] = static_cast<BYTE>(std::lround(
+                    Clamp(blue * vignette, 0.0, 255.0) * premultiply));
+                pixel[1] = static_cast<BYTE>(std::lround(
+                    Clamp(green * vignette, 0.0, 255.0) * premultiply));
+                pixel[2] = static_cast<BYTE>(std::lround(
+                    Clamp(red * vignette, 0.0, 255.0) * premultiply));
+            }
+        }
+    }
     if (SUCCEEDED(hr) && edgeFadeToMiddle) {
         // Expanded-surface color wash: keep only a low-frequency album glow
         // near the selected edge and ease it to transparent at the middle.
@@ -2054,10 +2298,12 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
         for (UINT y = 0; y < kLowDetailSize; ++y) {
             for (UINT x = 0; x < kLowDetailSize; ++x) {
                 double edgePosition =
-                    fadeFromRight
-                        ? static_cast<double>(x)
-                        : (fadeFromTop ? edge - static_cast<double>(y)
-                                       : static_cast<double>(y));
+                    fadeFromLeft
+                        ? edge - static_cast<double>(x)
+                        : (fadeFromRight
+                               ? static_cast<double>(x)
+                               : (fadeFromTop ? edge - static_cast<double>(y)
+                                              : static_cast<double>(y)));
                 double amount = 0.0;
                 if (edgePosition > middle && edge > middle) {
                     amount = (edgePosition - middle) / (edge - middle);
@@ -3588,6 +3834,29 @@ void ApplyElementClipWithPadding(FrameworkElement const& element,
     }
 }
 
+void ApplyElementClipWithPadding2D(FrameworkElement const& element,
+                                   double width,
+                                   double height,
+                                   double horizontalPadding,
+                                   double verticalPadding) {
+    if (!element || width <= 0.0 || height <= 0.0) {
+        return;
+    }
+    try {
+        horizontalPadding = std::max(0.0, horizontalPadding);
+        verticalPadding = std::max(0.0, verticalPadding);
+        mediax::RectangleGeometry clip;
+        clip.Rect({static_cast<float>(-horizontalPadding),
+                   static_cast<float>(-verticalPadding),
+                   static_cast<float>(std::max(
+                       1.0, width + horizontalPadding * 2.0)),
+                   static_cast<float>(std::max(
+                       1.0, height + verticalPadding * 2.0))});
+        element.Clip(clip);
+    } catch (...) {
+    }
+}
+
 mediax::Brush CompactTextEdgeFadeBrush(bool leftEdge) {
     auto bg = IslandBackgroundColor();
     auto clear = bg;
@@ -3618,8 +3887,52 @@ mediax::Brush CompactTextEdgeFadeBrush(bool leftEdge) {
     return brush;
 }
 
+bool StepPopupAnimationSpring(double dtSec) {
+    dtSec = Clamp(dtSec, 0.001, 0.033);
+    double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+    // Retain two rebound lobes at a higher natural frequency, so the whole
+    // classic morph settles promptly without losing its elastic character.
+    double stiffness = 520.0 * speed * speed;
+    // This setting controls the physical rebound itself, not merely the jelly
+    // rendering style. Slightly overdamped motion cannot cross either endpoint.
+    double damping = (g_settings.compactMode != L"classic" ||
+                      g_settings.classicMorphScaleAnimation
+                          ? 24.2
+                          : 48.0) * speed;
+
+    int substeps = std::max(1, static_cast<int>(std::ceil(dtSec / (1.0 / 120.0))));
+    double step = dtSec / static_cast<double>(substeps);
+    for (int i = 0; i < substeps; ++i) {
+        double acceleration =
+            (g_popupAnimationTarget - g_popupAnimationProgress) * stiffness -
+            g_popupAnimationVelocity * damping;
+        g_popupAnimationVelocity += acceleration * step;
+        g_popupAnimationProgress += g_popupAnimationVelocity * step;
+        g_popupAnimationProgress = Clamp(g_popupAnimationProgress, -0.08, 1.08);
+    }
+    bool settled =
+        std::abs(g_popupAnimationTarget - g_popupAnimationProgress) < 0.001 &&
+        std::abs(g_popupAnimationVelocity) < 0.02;
+    if (settled) {
+        g_popupAnimationProgress = g_popupAnimationTarget;
+        g_popupAnimationVelocity = 0.0;
+    }
+    return settled;
+}
 double PopupProgress() {
-    return SmoothStep(g_popupAnimationProgress);
+    // Preserve the familiar smooth morph inside the range, then expose only a
+    // small fraction of the physical spring overshoot to avoid host clipping.
+    if (g_popupAnimationProgress > 1.0) {
+        return 1.0 + (g_popupAnimationProgress - 1.0) * 0.38;
+    }
+    if (g_popupAnimationProgress < 0.0) {
+        return g_popupAnimationProgress * 0.38;
+    }
+    // Keep part of the physical spring velocity near both endpoints. A pure
+    // SmoothStep flattened the return stroke so the second rebound and the
+    // delayed child layers existed numerically but were almost invisible.
+    double smooth = SmoothStep(g_popupAnimationProgress);
+    return smooth * 0.58 + g_popupAnimationProgress * 0.42;
 }
 
 double PopupClosingShellOpacity(double progress) {
@@ -3637,9 +3950,11 @@ double PopupClosingCompactRevealOpacity(double progress) {
 
 double PopupClosingTextOpacity(double progress) {
     progress = Clamp(progress, 0.0, 1.0);
+    // Opening text replaces the hidden compact text on frame one at the exact
+    // captured position; fading from zero made the morph read as a new label.
     return g_popupClosing
                ? SmootherStep(Clamp((progress - 0.035) / 0.18, 0.0, 1.0))
-               : progress;
+               : 1.0;
 }
 
 double PopupShadowMorphOpacity(double progress) {
@@ -3649,9 +3964,33 @@ double PopupShadowMorphOpacity(double progress) {
                : SmootherStep(Clamp((progress - 0.12) / 0.58, 0.0, 1.0));
 }
 
+double PopupDelayedLayerProgress(double progress, double delay) {
+    delay = Clamp(delay, 0.0, 0.36);
+    if (g_popupClosing) {
+        // Closing is intentionally synchronous: only opening uses hierarchy.
+        return progress;
+    }
+    return progress >= 1.0
+               ? 1.0 + (progress - 1.0) / (1.0 - delay)
+               : Clamp((progress - delay) / (1.0 - delay), 0.0, 1.0);
+}
+
 double PopupControlMorphProgress(double progress) {
-    progress = Clamp(progress, 0.0, 1.0);
-    return g_popupClosing ? std::pow(progress, 1.45) : progress;
+    return PopupDelayedLayerProgress(progress, 0.34);
+}
+
+double PopupElasticDeformation() {
+    if (!g_settings.classicMorphScaleAnimation ||
+        g_settings.compactMode == L"dynamic_dual") {
+        return 0.0;
+    }
+    // The native Liquid Glass backdrop now mirrors this exact deformation in
+    // CalculatePopupBackdropOverlayRect, so the option has a visible and
+    // synchronized effect for every classic material.
+    double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+    double normalizedVelocity = Clamp(
+        g_popupAnimationVelocity / (8.0 * speed), -1.0, 1.0);
+    return normalizedVelocity * 0.034;
 }
 
 double PopupControlOpacityProgress(double progress) {
@@ -4733,6 +5072,75 @@ void ApplyPopupButtonVisual(Border const& surface, bool hovered = false) {
     }
 }
 
+void StartPopupXamlRenderLoop();
+bool StepDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion,
+                                      double dtSec,
+                                      double speed);
+
+void StartPopupButtonRelease(DynamicTransportButtonMotion* motion) {
+    if (!motion) return;
+    motion->releasePending = false;
+    motion->scaleTarget = 1.0;
+    motion->translateTarget = 0.0;
+    motion->scaleVelocity += motion->direction == 0 ? 5.8 : 2.6;
+    if (motion->direction != 0) {
+        motion->translateVelocity = -motion->direction * 92.0;
+    }
+}
+
+void BeginPopupButtonPress(DynamicTransportButtonMotion* motion) {
+    if (!motion) return;
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 0;
+    motion->scaleTarget = motion->direction == 0 ? 0.84 : 0.94;
+    motion->translateTarget = motion->direction * 3.8;
+    StartPopupXamlRenderLoop();
+}
+
+void EndPopupButtonPress(DynamicTransportButtonMotion* motion,
+                         bool applyReleaseKick) {
+    if (!motion) return;
+    if (!applyReleaseKick) {
+        motion->releasePending = false;
+        motion->scaleTarget = 1.0;
+        motion->translateTarget = 0.0;
+        StartPopupXamlRenderLoop();
+        return;
+    }
+    bool reachedPressExtreme =
+        std::abs(motion->scaleTarget - motion->scaleValue) < 0.008 &&
+        std::abs(motion->translateTarget - motion->translateValue) < 0.10;
+    if (reachedPressExtreme) {
+        StartPopupButtonRelease(motion);
+    } else {
+        motion->releasePending = true;
+    }
+    StartPopupXamlRenderLoop();
+}
+
+void TriggerPopupTransportNavigationFailure(
+    DynamicTransportButtonMotion* motion) {
+    if (!motion || motion->direction == 0) return;
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 3;
+    motion->scaleTarget = 1.0;
+    motion->scaleVelocity += 0.4;
+    motion->translateTarget = motion->direction * 2.2;
+    motion->translateVelocity = 0.0;
+    StartPopupXamlRenderLoop();
+}
+
+void TriggerPopupNoMediaPlayBounce(DynamicTransportButtonMotion* motion) {
+    if (!motion) return;
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 5;
+    motion->translateTarget = 0.0;
+    motion->translateVelocity = 0.0;
+    motion->scaleTarget = 0.84;
+    motion->scaleVelocity -= 1.0;
+    StartPopupXamlRenderLoop();
+}
+
 Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary = false) {
     Border surface;
     surface.Name(name);
@@ -4748,7 +5156,35 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
     icon.VerticalAlignment(VerticalAlignment::Center);
     surface.Child(icon);
     ApplyPopupButtonVisual(surface, false);
-
+    DynamicTransportButtonMotion* motion = nullptr;
+    int motionDirection = 0;
+    std::wstring buttonName(name);
+    if (buttonName == L"Popup_Prev") {
+        motion = &g_popupPrevMotion;
+        motionDirection = -1;
+    } else if (buttonName == L"Popup_Play") {
+        motion = &g_popupPlayMotion;
+    } else if (buttonName == L"Popup_Next") {
+        motion = &g_popupNextMotion;
+        motionDirection = 1;
+    }
+    if (motion) {
+        surface.RenderTransformOrigin({0.5, 0.5});
+        TransformGroup transformGroup;
+        ScaleTransform buttonScale;
+        buttonScale.ScaleX(1.0);
+        buttonScale.ScaleY(1.0);
+        TranslateTransform buttonTranslate;
+        buttonTranslate.X(0.0);
+        transformGroup.Children().Append(buttonScale);
+        transformGroup.Children().Append(buttonTranslate);
+        surface.RenderTransform(transformGroup);
+        *motion = {};
+        motion->element = surface;
+        motion->scale = buttonScale;
+        motion->translate = buttonTranslate;
+        motion->direction = motionDirection;
+    }
     surface.PointerEntered([](auto const& sender, input::PointerRoutedEventArgs const&) {
         if (auto border = sender.template try_as<Border>()) {
             ApplyPopupButtonVisual(border, true);
@@ -4759,27 +5195,46 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
             ApplyPopupButtonVisual(border, false);
         }
     });
-    surface.PointerPressed([](auto const& sender, input::PointerRoutedEventArgs const& args) {
+    surface.PointerPressed([motion](auto const& sender, input::PointerRoutedEventArgs const& args) {
         if (auto border = sender.template try_as<Border>()) {
-            border.Opacity(0.82);
+            border.CapturePointer(args.Pointer());
+            BeginPopupButtonPress(motion);
         }
         args.Handled(true);
     });
-    surface.PointerReleased([onClick](auto const& sender, input::PointerRoutedEventArgs const& args) {
+    surface.PointerReleased([onClick, primary, motion, motionDirection](auto const& sender, input::PointerRoutedEventArgs const& args) {
+        Border border = sender.template try_as<Border>();
+        if (border) {
+            border.ReleasePointerCapture(args.Pointer());
+            border.Opacity(1.0);
+            ApplyPopupButtonVisual(border, false);
+        }
+
+        MediaState state = SnapshotMedia();
+        bool navigationUnavailable =
+            motionDirection < 0 ? !state.canSkipPrevious :
+            motionDirection > 0 ? !state.canSkipNext : false;
+        if (primary && !state.hasSession) {
+            TriggerPopupNoMediaPlayBounce(motion);
+        } else if (motionDirection != 0 &&
+                   (!state.hasSession || navigationUnavailable)) {
+            TriggerPopupTransportNavigationFailure(motion);
+        } else {
+            if (primary && border) {
+                UpdatePopupTransportButtonGlyph(border, !state.isPlaying);
+            }
+            EndPopupButtonPress(motion, true);
+            onClick();
+        }
+        args.Handled(true);
+    });
+    surface.PointerCanceled([motion](auto const& sender, input::PointerRoutedEventArgs const&) {
         if (auto border = sender.template try_as<Border>()) {
             border.Opacity(1.0);
             ApplyPopupButtonVisual(border, false);
         }
-        onClick();
-        args.Handled(true);
-    });
-    surface.PointerCanceled([](auto const& sender, input::PointerRoutedEventArgs const&) {
-        if (auto border = sender.template try_as<Border>()) {
-            border.Opacity(1.0);
-            ApplyPopupButtonVisual(border, false);
-        }
-    });
-    return surface;
+        EndPopupButtonPress(motion, false);
+    });    return surface;
 }
 
 void InitializePopupCompositionShadow();
@@ -5145,6 +5600,7 @@ void ResetPopupXamlElementState() {
     g_popupXamlChildSubclassed = false;
     g_popupXamlChildCaptureExcluded = false;
     g_popupXamlRoot = nullptr;
+    g_popupXamlJellyScale = nullptr;
     g_popupXamlCanvas = nullptr;
     g_popupXamlShadow = nullptr;
     g_popupXamlShadowVisual = nullptr;
@@ -5210,6 +5666,9 @@ void ResetPopupXamlElementState() {
     g_popupXamlProgressCoreBlurLayers.clear();
     g_popupXamlProgressGlowCore = nullptr;
     g_popupXamlControls = nullptr;
+    g_popupPrevMotion = {};
+    g_popupPlayMotion = {};
+    g_popupNextMotion = {};
     g_popupXamlThumbnailHash = UINT64_MAX;
     g_popupXamlBackdropCoverEnabled = false;
     g_popupAccentThumbnailHash = UINT64_MAX;
@@ -5239,7 +5698,12 @@ bool InitializePopupXamlHost(HWND hwnd) {
 
         Grid root;
         root.Background(Brush(Color(0, 0, 0, 0)));
-
+        ScaleTransform rootJellyScale;
+        rootJellyScale.ScaleX(1.0);
+        rootJellyScale.ScaleY(1.0);
+        root.RenderTransformOrigin({0.5, 0.5});
+        root.RenderTransform(rootJellyScale);
+        g_popupXamlJellyScale = rootJellyScale;
         controls::Canvas canvas;
 
         // The host HWND stays fully transparent. Do not use a fake rounded black
@@ -5514,9 +5978,17 @@ bool InitializePopupXamlHost(HWND hwnd) {
             L"Popup_Prev", [] {
                 RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
                     NoteMediaNavigationDirection(-1);
-                    GetAsyncResultWithTimeout(s.TrySkipPreviousAsync(),
-                                           kMediaCommandAsyncTimeout,
-                                           L"TrySkipPreviousAsync");
+                    bool changed = false;
+                    try {
+                        changed = GetAsyncResultWithTimeout(
+                            s.TrySkipPreviousAsync(), kMediaCommandAsyncTimeout,
+                            L"TrySkipPreviousAsync");
+                    } catch (...) {
+                    }
+                    if (!changed) {
+                        g_dynamicTransportNavigationFailureDirection.store(-1);
+                        RequestMediaRefresh();
+                    }
                 });
             });
         Border playButton = MakePopupXamlButton(
@@ -5531,9 +6003,17 @@ bool InitializePopupXamlHost(HWND hwnd) {
             L"Popup_Next", [] {
                 RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
                     NoteMediaNavigationDirection(1);
-                    GetAsyncResultWithTimeout(s.TrySkipNextAsync(),
-                                           kMediaCommandAsyncTimeout,
-                                           L"TrySkipNextAsync");
+                    bool changed = false;
+                    try {
+                        changed = GetAsyncResultWithTimeout(
+                            s.TrySkipNextAsync(), kMediaCommandAsyncTimeout,
+                            L"TrySkipNextAsync");
+                    } catch (...) {
+                    }
+                    if (!changed) {
+                        g_dynamicTransportNavigationFailureDirection.store(1);
+                        RequestMediaRefresh();
+                    }
                 });
             });
 
@@ -5759,10 +6239,33 @@ void UpdatePopupXamlVisuals() {
     double closingTailFade = g_popupClosing
                                  ? SmootherStep(Clamp((morphProgress - 0.001) / 0.065, 0.0, 1.0))
                                  : morphProgress;
+    if (g_popupXamlJellyScale) {
+        double deformation = PopupElasticDeformation();
+        g_popupXamlRoot.RenderTransformOrigin(
+            {g_popupExpandsRight ? 0.0f : 1.0f,
+             g_popupOpensDown ? 0.0f : 1.0f});
+        g_popupXamlJellyScale.ScaleX(1.0 + deformation);
+        g_popupXamlJellyScale.ScaleY(1.0 - deformation * 0.62);
+    }
     if (g_popupClosing && g_playerGrid) {
         try {
             g_playerGrid.Opacity(compactRevealOpacity);
             g_playerGrid.IsHitTestVisible(false);
+            if (g_settings.classicMorphScaleAnimation &&
+                g_settings.compactMode != L"dynamic_dual" &&
+                g_islandPressScale) {
+                // Hand the final spring lobe from the disappearing popup to
+                // the compact island, so the close does not visually stop at
+                // the seam before the physical spring has settled.
+                double landingGate = 1.0 - SmootherStep(
+                    Clamp((morphProgress - 0.04) / 0.12, 0.0, 1.0));
+                double landingWave = Clamp(g_popupAnimationProgress,
+                                           -0.08, 0.12);
+                double landingScale =
+                    1.0 - landingWave * 0.38 * landingGate;
+                g_islandPressScale.ScaleX(landingScale);
+                g_islandPressScale.ScaleY(landingScale);
+            }
         } catch (...) {
         }
     }
@@ -5896,12 +6399,33 @@ void UpdatePopupXamlVisuals() {
                         backdropScreen,
                         popupScreen);
     }
+    double artProgress = PopupDelayedLayerProgress(progress, 0.22);
+    double artMorphProgress = Clamp(artProgress, 0.0, 1.0);
     RECT artScreen{
-        LerpInt(sourceArtRect.left, targetArtScreen.left, progress),
-        LerpInt(sourceArtRect.top, targetArtScreen.top, progress),
-        LerpInt(sourceArtRect.right, targetArtScreen.right, progress),
-        LerpInt(sourceArtRect.bottom, targetArtScreen.bottom, progress),
+        LerpInt(sourceArtRect.left, targetArtScreen.left, artProgress),
+        LerpInt(sourceArtRect.top, targetArtScreen.top, artProgress),
+        LerpInt(sourceArtRect.right, targetArtScreen.right, artProgress),
+        LerpInt(sourceArtRect.bottom, targetArtScreen.bottom, artProgress),
     };
+    // Add a physical trail as well as a time delay. It remains perceptible
+    // even when the captured compact and expanded rectangles nearly overlap.
+    double artLayerLag = g_popupClosing
+                             ? 0.0
+                             : Clamp(morphProgress - artMorphProgress,
+                                     0.0, 0.36);
+    int sourceArtCenterX = (sourceArtRect.left + sourceArtRect.right) / 2;
+    int sourceArtCenterY = (sourceArtRect.top + sourceArtRect.bottom) / 2;
+    int targetArtCenterX = (targetArtScreen.left + targetArtScreen.right) / 2;
+    int targetArtCenterY = (targetArtScreen.top + targetArtScreen.bottom) / 2;
+    int artTrailX = static_cast<int>(std::lround(
+        (sourceArtCenterX < targetArtCenterX ? -1.0 :
+         sourceArtCenterX > targetArtCenterX ? 1.0 : 0.0) *
+        artLayerLag * 68.0));
+    int artTrailY = static_cast<int>(std::lround(
+        (sourceArtCenterY < targetArtCenterY ? -1.0 :
+         sourceArtCenterY > targetArtCenterY ? 1.0 : 0.0) *
+        artLayerLag * 44.0));
+    OffsetRect(&artScreen, artTrailX, artTrailY);
     double popupArtTargetSize =
         static_cast<double>(std::max(1L, targetArtScreen.right - targetArtScreen.left));
     double popupArtTargetRadius =
@@ -5911,7 +6435,7 @@ void UpdatePopupXamlVisuals() {
                                                 sourceArtRect);
     double popupArtVisualRadius = LerpDouble(sourceArtRadius,
                                              popupArtTargetRadius,
-                                             morphProgress);
+                                             artMorphProgress);
     double popupArtRadius = Clamp(popupArtVisualRadius, 1.0,
                                   std::min(artScreen.right - artScreen.left,
                                            artScreen.bottom - artScreen.top) * 0.5);
@@ -5927,7 +6451,7 @@ void UpdatePopupXamlVisuals() {
     double sourceArtOverscan = std::min(
         SourceScaledRadius(1.0, g_layout.artSize, sourceArtRect),
         std::min(artWidth, artHeight) * 0.12);
-    double artOverscan = LerpDouble(sourceArtOverscan, 0.0, morphProgress);
+    double artOverscan = LerpDouble(sourceArtOverscan, 0.0, artMorphProgress);
     if (auto artHost = g_popupXamlArtFrame.Child().try_as<FrameworkElement>()) {
         artHost.Width(artWidth);
         artHost.Height(artHeight);
@@ -5993,6 +6517,7 @@ void UpdatePopupXamlVisuals() {
                     cardScreen,
                     popupScreen);
 
+    double textProgress = PopupDelayedLayerProgress(progress, 0.12);
     auto placeText = [&](FrameworkElement const& host,
                          TextBlock const& text,
                          Border const& leftFade,
@@ -6005,10 +6530,10 @@ void UpdatePopupXamlVisuals() {
             return;
         }
 
-        RECT screen{LerpInt(source.left, target.left, progress),
-                    LerpInt(source.top, target.top, progress),
-                    LerpInt(source.right, target.right, progress),
-                    LerpInt(source.bottom, target.bottom, progress)};
+        RECT screen{LerpInt(source.left, target.left, textProgress),
+                    LerpInt(source.top, target.top, textProgress),
+                    LerpInt(source.right, target.right, textProgress),
+                    LerpInt(source.bottom, target.bottom, textProgress)};
         double textWidth = std::max(1L, screen.right - screen.left);
         double textHeight = std::max(1L, screen.bottom - screen.top);
         host.Width(textWidth);
@@ -6021,22 +6546,22 @@ void UpdatePopupXamlVisuals() {
         text.Height(textHeight);
         text.TextTrimming(g_popupClosing ? xaml::TextTrimming::None
                                          : xaml::TextTrimming::CharacterEllipsis);
-        text.FontSize(LerpDouble(compactSize, expandedSize, progress));
+        text.FontSize(LerpDouble(compactSize, expandedSize, textProgress));
         controls::Canvas::SetLeft(host, screen.left - popupScreen.left);
         controls::Canvas::SetTop(host, screen.top - popupScreen.top);
     };
     placeText(g_popupXamlOutgoingTitleHost, g_popupXamlOutgoingTitle,
               g_popupXamlOutgoingTitleLeftFade, g_popupXamlOutgoingTitleRightFade,
-              sourceTitleRect, targetTitle, 12, 16);
+              sourceTitleRect, targetTitle, g_layout.titleFontSize, 16);
     placeText(g_popupXamlOutgoingArtistHost, g_popupXamlOutgoingArtist,
               g_popupXamlOutgoingArtistLeftFade, g_popupXamlOutgoingArtistRightFade,
-              sourceArtistRect, targetArtist, 10, 13);
+              sourceArtistRect, targetArtist, g_layout.artistFontSize, 13);
     placeText(g_popupXamlTitleHost, g_popupXamlTitle,
               g_popupXamlTitleLeftFade, g_popupXamlTitleRightFade,
-              sourceTitleRect, targetTitle, 12, 16);
+              sourceTitleRect, targetTitle, g_layout.titleFontSize, 16);
     placeText(g_popupXamlArtistHost, g_popupXamlArtist,
               g_popupXamlArtistLeftFade, g_popupXamlArtistRightFade,
-              sourceArtistRect, targetArtist, 10, 13);
+              sourceArtistRect, targetArtist, g_layout.artistFontSize, 13);
 
     double textOpacity = PopupClosingTextOpacity(morphProgress);
     g_popupTextBaseOpacity = textOpacity;
@@ -6057,8 +6582,9 @@ void UpdatePopupXamlVisuals() {
     // animation to progress 0.28~0.62. In practice that looked like a simple
     // fade-in because the source was already close to the target and the active
     // time window was too short.
-    double controlsProgress = PopupControlMorphProgress(morphProgress);
-    double controlsOpacity = PopupControlOpacityProgress(morphProgress);
+    double controlsProgress = PopupControlMorphProgress(progress);
+    double controlsOpacity = PopupControlOpacityProgress(
+        Clamp(controlsProgress, 0.0, 1.0));
     double controlsScale = 1.0;
     double buttonProgress = controlsProgress;
     bool showControls = controlsOpacity > 0.002;
@@ -6167,7 +6693,8 @@ void UpdatePopupXamlVisuals() {
             return;
         }
         RECT screen = lerpRect(source, target, controlsProgress);
-        text.Visibility(showControls ? Visibility::Visible : Visibility::Collapsed);
+        text.Visibility(showControls ? Visibility::Visible
+                                     : Visibility::Collapsed);
         text.Opacity(controlsOpacity);
         text.Width(std::max(1L, screen.right - screen.left));
         text.Height(std::max(1L, screen.bottom - screen.top));
@@ -6199,6 +6726,33 @@ void UpdatePopupXamlVisuals() {
                           sourceCenterY + 10};
     }
     RECT controlsScreen = lerpRect(controlsSource, targetControls, controlsProgress);
+    double controlsLayerLag = g_popupClosing
+                                  ? 0.0
+                                  : Clamp(
+                                        morphProgress - Clamp(
+                                            controlsProgress, 0.0, 1.0),
+                                        0.0, 0.40);
+    int sourceControlsCenterX =
+        (controlsSource.left + controlsSource.right) / 2;
+    int sourceControlsCenterY =
+        (controlsSource.top + controlsSource.bottom) / 2;
+    int targetControlsCenterX =
+        (targetControls.left + targetControls.right) / 2;
+    int targetControlsCenterY =
+        (targetControls.top + targetControls.bottom) / 2;
+    double controlsTrailDirectionX =
+        sourceControlsCenterX < targetControlsCenterX ? -1.0 :
+        sourceControlsCenterX > targetControlsCenterX ? 1.0 :
+        (g_popupExpandsRight ? -1.0 : 1.0);
+    double controlsTrailDirectionY =
+        sourceControlsCenterY < targetControlsCenterY ? -1.0 :
+        sourceControlsCenterY > targetControlsCenterY ? 1.0 :
+        (g_popupOpensDown ? -1.0 : 1.0);
+    OffsetRect(&controlsScreen,
+               static_cast<int>(std::lround(
+                   controlsTrailDirectionX * controlsLayerLag * 88.0)),
+               static_cast<int>(std::lround(
+                   controlsTrailDirectionY * controlsLayerLag * 58.0)));
     if (g_popupXamlControls) {
         g_popupXamlControls.Visibility(showControls ? Visibility::Visible : Visibility::Collapsed);
         g_popupXamlControls.Opacity(controlsOpacity);
@@ -6243,6 +6797,7 @@ void UpdatePopupXamlVisuals() {
                     controlsHeight * 0.5 - buttonHeight * 0.5;
                 double buttonLeft = sourceButtonLeft +
                     (finalButtonLeft - sourceButtonLeft) * buttonProgress;
+
                 double buttonTop = sourceButtonTop +
                     (finalButtonTop - sourceButtonTop) * buttonProgress;
                 controls::Canvas::SetLeft(buttonSurface, buttonLeft);
@@ -6880,11 +7435,20 @@ void ResetCompactTextAnimationVisuals() {
             g_compactAlbumArtFade.Opacity(0.0);
             g_compactAlbumArtFade.Source(nullptr);
         }
+        if (g_dynamicTransportWash) {
+            g_dynamicTransportWash.Opacity(DynamicTransportWashOpacity());
+        }
+        if (g_dynamicTransportWashFade) {
+            g_dynamicTransportWashFade.Opacity(0.0);
+            g_dynamicTransportWashFade.Source(nullptr);
+        }
         g_compactTextEdgeFadeActive = false;
         SetCompactTextEdgeFadeOpacity(0.0);
     } catch (...) {
     }
 }
+
+bool IsDynamicCompactMode();
 
 double CompactTextClipWidthFallback() {
     double width = g_layout.compactWidth -
@@ -7028,6 +7592,14 @@ void OnCompactTextRendering(winrt::Windows::Foundation::IInspectable const&,
         if (g_compactAlbumArtFade) {
             g_compactAlbumArtFade.Opacity(1.0 - artIn);
         }
+        double transportWashOpacity = DynamicTransportWashOpacity();
+        if (g_dynamicTransportWash) {
+            g_dynamicTransportWash.Opacity(transportWashOpacity * artIn);
+        }
+        if (g_dynamicTransportWashFade) {
+            g_dynamicTransportWashFade.Opacity(
+                transportWashOpacity * (1.0 - artIn));
+        }
 
         if (g_compactTextProgress >= 1.0) {
             ResetCompactTextAnimationVisuals();
@@ -7096,9 +7668,24 @@ void StartCompactTrackTransition(std::wstring const& oldTitle,
         if (g_compactAlbumArtFade) {
             g_compactAlbumArtFade.Opacity(g_compactAlbumArtFade.Source() != nullptr ? 1.0 : 0.0);
         }
+        if (g_dynamicTransportWash) {
+            g_dynamicTransportWash.Opacity(0.0);
+        }
+        if (g_dynamicTransportWashFade) {
+            g_dynamicTransportWashFade.Opacity(
+                g_dynamicTransportWashFade.Source() != nullptr
+                    ? DynamicTransportWashOpacity()
+                    : 0.0);
+        }
     } else {
         if (g_compactAlbumArtImage) g_compactAlbumArtImage.Opacity(1.0);
         if (g_compactAlbumArtFade) g_compactAlbumArtFade.Opacity(0.0);
+        if (g_dynamicTransportWash) {
+            g_dynamicTransportWash.Opacity(DynamicTransportWashOpacity());
+        }
+        if (g_dynamicTransportWashFade) {
+            g_dynamicTransportWashFade.Opacity(0.0);
+        }
     }
 
     if (!g_compactTextRenderingHooked) {
@@ -7111,6 +7698,7 @@ void StartCompactTrackTransition(std::wstring const& oldTitle,
 void SetCompactIslandSuppressed(bool suppressed);
 void StartPopupXamlRenderLoop();
 void StopHoverRenderLoop();
+void StartHoverRenderLoop(double targetScale);
 void ApplyExpandedState();
 void UpdatePlayerContents();
 
@@ -7359,6 +7947,9 @@ void SetCompactIslandSuppressed(bool suppressed) {
             g_islandScale.ScaleX(1.0);
             g_islandScale.ScaleY(1.0);
         }
+        if (g_islandHoverTranslate) {
+            g_islandHoverTranslate.Y(0.0);
+        }
         ApplyExpandedState();
         UpdatePlayerContents();
         try {
@@ -7394,6 +7985,9 @@ void FinishCloseExpandedPopup(HWND hwnd) {
             g_islandScale.ScaleX(1.0);
             g_islandScale.ScaleY(1.0);
         }
+        if (g_islandHoverTranslate) {
+            g_islandHoverTranslate.Y(0.0);
+        }
         ApplyExpandedState();
         if (g_playerGrid) {
             g_playerGrid.Opacity(1.0);
@@ -7416,6 +8010,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
     HidePopupBackdropOverlayWindowVisualOnly();
     g_popupAnimationProgress = 0.0;
     g_popupAnimationTarget = 0.0;
+    g_popupAnimationVelocity = 0.0;
     g_lastPopupVisualProgress = -1.0;
     g_lastPopupVisualRect = {LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
     g_lastPopupWindowRect = {LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
@@ -7455,34 +8050,64 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
     g_lastPopupFrameTime = now;
     dt = Clamp(dt, 0.0, 0.05);
     TickPopupMediaTransition(dt);
-    double animationDt = dt * g_settings.animationSpeed;
-    double alpha = 1.0 - std::exp(-14.0 * animationDt);
-    g_popupAnimationProgress +=
-        (g_popupAnimationTarget - g_popupAnimationProgress) * alpha;
+    double popupButtonSpeed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+    bool popupPrevButtonSettled = StepDynamicTransportButtonMotion(
+        g_popupPrevMotion, dt, popupButtonSpeed);
+    bool popupPlayButtonSettled = StepDynamicTransportButtonMotion(
+        g_popupPlayMotion, dt, popupButtonSpeed);
+    bool popupNextButtonSettled = StepDynamicTransportButtonMotion(
+        g_popupNextMotion, dt, popupButtonSpeed);
+    bool popupButtonsSettled = popupPrevButtonSettled &&
+                               popupPlayButtonSettled &&
+                               popupNextButtonSettled;
+    bool popupAnimationSettled = StepPopupAnimationSpring(dt);
 
-    if (g_popupClosing && g_popupAnimationTarget == 0.0 &&
-        g_popupAnimationProgress < 0.006) {
-        FinishCloseExpandedPopup(g_expandedPopup);
-        return;
-    } else if (std::abs(g_popupAnimationTarget - g_popupAnimationProgress) < 0.006) {
-        g_popupAnimationProgress = g_popupAnimationTarget;
-    }
     PositionExpandedPopup();
     UpdatePopupLiveProgressFromSnapshot();
     RenderExpandedPopupLayer();
 
-    if (g_popupAnimationProgress == g_popupAnimationTarget) {
+    // At the first compact-endpoint crossing, park the popup immediately so it
+    // cannot delay the next interaction, but transfer its remaining momentum
+    // into the compact island's own spring instead of discarding the rebound.
+    if (g_popupClosing && g_popupAnimationProgress <= 0.0) {
+        bool transferCompactRebound =
+            g_settings.classicMorphScaleAnimation &&
+            g_settings.compactMode != L"dynamic_dual" &&
+            g_islandPressScale;
+        double transferredScale = Clamp(
+            1.0 - g_popupAnimationProgress * 0.58, 1.014, 1.050);
+        double transferredVelocity = Clamp(
+            -g_popupAnimationVelocity * 0.24, 1.8, 4.6);
+        FinishCloseExpandedPopup(g_expandedPopup);
+        if (transferCompactRebound && g_islandPressScale) {
+            g_compactPressScaleValue = transferredScale;
+            g_compactPressScaleTarget = 1.0;
+            g_compactPressScaleVelocity = transferredVelocity;
+            g_compactPressReleasePending = false;
+            g_compactPressActivatePending = false;
+            g_islandPressScale.ScaleX(transferredScale);
+            g_islandPressScale.ScaleY(transferredScale);
+            StartHoverRenderLoop(1.0);
+        }
+        return;
+    }
+
+    if (popupAnimationSettled) {
         if (g_popupClosing && g_popupAnimationProgress == 0.0) {
             FinishCloseExpandedPopup(g_expandedPopup);
             return;
         }
-        if (g_popupMediaTransitionActive) {
+        if (g_popupMediaTransitionActive || !popupButtonsSettled) {
             return;
         }
         StopPopupXamlRenderLoop();
         if (g_popupPendingContentRefresh) {
             g_popupPendingContentRefresh = false;
             UpdatePlayerContents();
+            // Theme/content refresh can restore button dimensions. Reapply the
+            // final animated layout in the same UI turn so the play glyph does
+            // not jump one frame after the spring loop stops.
+            RenderExpandedPopupLayer();
         }
     }
     } catch (...) {
@@ -7597,18 +8222,8 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
                 return 0;
             }
 
-            double fallbackAlpha = 1.0 - std::pow(0.80, g_settings.animationSpeed);
-            fallbackAlpha = Clamp(fallbackAlpha, 0.01, 1.0);
-            g_popupAnimationProgress +=
-                (g_popupAnimationTarget - g_popupAnimationProgress) * fallbackAlpha;
-            if (g_popupClosing && g_popupAnimationTarget == 0.0 &&
-                g_popupAnimationProgress < 0.006) {
-                FinishCloseExpandedPopup(hwnd);
-                return 0;
-            } else if (std::abs(g_popupAnimationTarget - g_popupAnimationProgress) < 0.006) {
-                g_popupAnimationProgress = g_popupAnimationTarget;
-            }
-            if (g_popupAnimationProgress == g_popupAnimationTarget) {
+            bool popupAnimationSettled = StepPopupAnimationSpring(1.0 / 60.0);
+            if (popupAnimationSettled) {
                 if (g_popupClosing && g_popupAnimationProgress == 0.0) {
                     FinishCloseExpandedPopup(hwnd);
                     return 0;
@@ -10035,13 +10650,10 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
                               targetDuration, targetControls);
     RECT targetBackdrop = PopupBackdropRectFromParts(targetArt, targetCard);
 
+    // Sample the same spring as the XAML shell throughout both rebounds.
+    // Snapping this independent blur window at 0.995 left a static rounded
+    // rectangle beneath the still-moving main surface and caused a late flash.
     double progress = PopupProgress();
-    // Once the popup is visually at the end of the morph, snap the native
-    // backdrop to the exact final XAML shell. This avoids a late 1-3 px WGC
-    // handoff offset caused by starting capture at progress≈0.985.
-    if (!g_popupClosing && progress >= 0.995) {
-        progress = 1.0;
-    }
     RECT currentDip{
         LerpInt(sourceRect.left, targetBackdrop.left, progress),
         LerpInt(sourceRect.top, targetBackdrop.top, progress),
@@ -10060,6 +10672,33 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx) {
         popupScreenPx.left + static_cast<LONG>(std::lround(currentDip.right * dpiScale)),
         popupScreenPx.top + static_cast<LONG>(std::lround(currentDip.bottom * dpiScale)),
     };
+
+    // The Liquid Glass blur lives in a separate HWND, outside the XAML root
+    // transform. Mirror the root jelly scale here so its rounded shell no
+    // longer appears pinned underneath the rebounding component.
+    double deformation = PopupElasticDeformation();
+    if (std::abs(deformation) > 0.0001) {
+        double scaleX = 1.0 + deformation;
+        double scaleY = 1.0 - deformation * 0.62;
+        double anchorX = g_popupExpandsRight
+                             ? static_cast<double>(popupScreenPx.left)
+                             : static_cast<double>(popupScreenPx.right);
+        double anchorY = g_popupOpensDown
+                             ? static_cast<double>(popupScreenPx.top)
+                             : static_cast<double>(popupScreenPx.bottom);
+        auto transformX = [&](LONG value) {
+            return static_cast<LONG>(std::lround(
+                anchorX + (static_cast<double>(value) - anchorX) * scaleX));
+        };
+        auto transformY = [&](LONG value) {
+            return static_cast<LONG>(std::lround(
+                anchorY + (static_cast<double>(value) - anchorY) * scaleY));
+        };
+        overlayRect = {transformX(overlayRect.left),
+                       transformY(overlayRect.top),
+                       transformX(overlayRect.right),
+                       transformY(overlayRect.bottom)};
+    }
 
     int width = overlayRect.right - overlayRect.left;
     int height = overlayRect.bottom - overlayRect.top;
@@ -10168,7 +10807,10 @@ void ApplyPopupBackdropOverlayRegion(int width, int height, int cornerRadiusPx) 
         return;
     }
 
-    if (g_popupClosing) {
+    if (g_popupClosing || IsLiquidGlassMaterial()) {
+        // Keep the native Liquid Glass HWND itself rounded as well as its DComp
+        // content. Otherwise projection/capture can reveal the fixed transparent
+        // rectangular window underneath the animated rounded visual.
         HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
                                          cornerRadiusPx * 2,
                                          cornerRadiusPx * 2);
@@ -10219,8 +10861,13 @@ void UpdatePopupBackdropOverlayWindow() {
     int renderWidth = width;
     int renderHeight = height;
     int renderRadiusPx = cornerRadiusPx;
+    // Keep the final-size WGC textures alive until both displacement and
+    // velocity settle. Flipping morphing off during the last rebound resized
+    // the swap-chain twice and produced a late transparent flash.
     bool morphing =
-        std::abs(g_popupAnimationTarget - g_popupAnimationProgress) >= 0.006;
+        std::abs(g_popupAnimationTarget - g_popupAnimationProgress) >= 0.003 ||
+        std::abs(g_popupAnimationVelocity) >= 0.05 ||
+        std::abs(PopupElasticDeformation()) >= 0.0002;
     if (morphing) {
         int targetWidth = width;
         int targetHeight = height;
@@ -10429,6 +11076,7 @@ void ShowExpandedPopup() {
     g_popupHostRect = UnionPopupRects(g_popupSourceRect, g_popupFinalRect);
     g_popupAnimationProgress = 0.0;
     g_popupAnimationTarget = 1.0;
+    g_popupAnimationVelocity = 0.0;
     g_popupCurrentWidth = static_cast<double>(
         g_popupSourceRect.right - g_popupSourceRect.left);
     g_popupCurrentHeight = static_cast<double>(
@@ -10480,6 +11128,7 @@ void DestroyExpandedPopup() {
     g_popupXamlChildSubclassed = false;
     g_popupXamlChildCaptureExcluded = false;
     g_popupXamlRoot = nullptr;
+    g_popupXamlJellyScale = nullptr;
     g_popupXamlCanvas = nullptr;
     g_popupXamlShadow = nullptr;
     g_popupXamlShadowVisual = nullptr;
@@ -10540,6 +11189,9 @@ void DestroyExpandedPopup() {
     g_popupXamlProgressCoreBlurLayers.clear();
     g_popupXamlProgressGlowCore = nullptr;
     g_popupXamlControls = nullptr;
+    g_popupPrevMotion = {};
+    g_popupPlayMotion = {};
+    g_popupNextMotion = {};
     g_popupXamlThumbnailHash = UINT64_MAX;
     g_popupXamlBackdropCoverEnabled = false;
     g_popupAccentThumbnailHash = UINT64_MAX;
@@ -10590,10 +11242,24 @@ void StopHoverRenderLoop() {
     }
 }
 
+void StartExpandRenderLoop(bool expanded);
+
+void ResetCompactIslandPressMotion() {
+    g_compactPressScaleValue = 1.0;
+    g_compactPressScaleTarget = 1.0;
+    g_compactPressScaleVelocity = 0.0;
+    g_compactPressReleasePending = false;
+    g_compactPressActivatePending = false;
+    if (g_islandPressScale) {
+        g_islandPressScale.ScaleX(1.0);
+        g_islandPressScale.ScaleY(1.0);
+    }
+}
+
 void OnHoverRendering(winrt::Windows::Foundation::IInspectable const&,
                       winrt::Windows::Foundation::IInspectable const&) {
     try {
-        if (!g_islandScale || g_unloading) {
+        if (!g_islandScale || !g_islandPressScale || g_unloading) {
             StopHoverRenderLoop();
             return;
         }
@@ -10607,20 +11273,73 @@ void OnHoverRendering(winrt::Windows::Foundation::IInspectable const&,
                     1000000.0;
         }
         g_lastHoverFrameTime = now;
-        dtSec = Clamp(dtSec, 0.0, 0.05);
+        dtSec = Clamp(dtSec, 0.001, 0.05);
 
         double alpha = 1.0 - std::exp(-g_settings.hoverLerpSpeed * dtSec);
         alpha = Clamp(alpha, 0.0, 1.0);
         g_currentHoverScale += (g_targetHoverScale - g_currentHoverScale) * alpha;
-
-        if (std::abs(g_targetHoverScale - g_currentHoverScale) < 0.001) {
+        bool hoverSettled =
+            std::abs(g_targetHoverScale - g_currentHoverScale) < 0.001;
+        if (hoverSettled) {
             g_currentHoverScale = g_targetHoverScale;
+        }
+
+        double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+        int substeps = std::max(
+            1, static_cast<int>(std::ceil(dtSec / (1.0 / 120.0))));
+        double step = dtSec / static_cast<double>(substeps);
+        for (int i = 0; i < substeps; ++i) {
+            double acceleration =
+                (g_compactPressScaleTarget - g_compactPressScaleValue) *
+                    1250.0 * speed * speed -
+                g_compactPressScaleVelocity * 48.0 * speed;
+            g_compactPressScaleVelocity += acceleration * step;
+            g_compactPressScaleValue += g_compactPressScaleVelocity * step;
+            g_compactPressScaleValue =
+                Clamp(g_compactPressScaleValue, 0.91, 1.055);
+        }
+
+        bool pressAtTarget =
+            std::abs(g_compactPressScaleTarget - g_compactPressScaleValue) < 0.0015 &&
+            std::abs(g_compactPressScaleVelocity) < 0.08;
+        // A quick click still reaches the held pose, but releases as soon as
+        // that pose is crossed instead of waiting there for velocity to settle.
+        bool reachedCompressionPose = g_compactPressScaleValue <= 0.9415;
+        if (g_compactPressReleasePending &&
+            g_compactPressScaleTarget < 0.99 && reachedCompressionPose) {
+            g_compactPressReleasePending = false;
+            g_compactPressScaleTarget = 1.0;
+            g_compactPressScaleVelocity += 4.6;
+            pressAtTarget = false;
         }
 
         g_islandScale.ScaleX(g_currentHoverScale);
         g_islandScale.ScaleY(g_currentHoverScale);
+        g_islandPressScale.ScaleX(g_compactPressScaleValue);
+        g_islandPressScale.ScaleY(g_compactPressScaleValue);
+        if (g_islandHoverTranslate) {
+            double hoverRange = std::max(0.001, g_settings.hoverScale - 1.0);
+            double hoverAmount = Clamp(
+                (g_currentHoverScale - 1.0) / hoverRange, 0.0, 1.0);
+            g_islandHoverTranslate.Y(-hoverAmount);
+        }
 
-        if (std::abs(g_targetHoverScale - g_currentHoverScale) < 0.001) {
+        if (g_compactPressActivatePending &&
+            g_compactPressScaleTarget >= 0.99 &&
+            g_compactPressScaleValue >= 0.970) {
+            g_compactPressActivatePending = false;
+            ResetCompactIslandPressMotion();
+            StopHoverRenderLoop();
+            StartExpandRenderLoop(true);
+            return;
+        }
+
+        bool pressSettled =
+            !g_compactPressReleasePending &&
+            std::abs(g_compactPressScaleTarget - g_compactPressScaleValue) < 0.0015 &&
+            std::abs(g_compactPressScaleVelocity) < 0.08;
+        if (hoverSettled && pressSettled &&
+            !g_compactPressActivatePending) {
             StopHoverRenderLoop();
             g_lastHoverFrameTime = {};
         }
@@ -10631,7 +11350,7 @@ void OnHoverRendering(winrt::Windows::Foundation::IInspectable const&,
 
 void StartHoverRenderLoop(double targetScale) {
     g_targetHoverScale = targetScale;
-    if (!g_islandScale) {
+    if (!g_islandScale || !g_islandPressScale) {
         return;
     }
 
@@ -10642,14 +11361,575 @@ void StartHoverRenderLoop(double targetScale) {
     }
 }
 
+void BeginCompactIslandPress() {
+    if (IsDynamicCompactMode() || !g_islandPressScale) {
+        return;
+    }
+    g_compactPressReleasePending = false;
+    g_compactPressActivatePending = false;
+    g_compactPressScaleTarget = 0.94;
+    // Cancel the hover enlargement so 0.94 is the actual visible hold limit.
+    StartHoverRenderLoop(1.0);
+}
+
+void EndCompactIslandPress(bool activate) {
+    if (IsDynamicCompactMode() || !g_islandPressScale) {
+        return;
+    }
+    g_compactPressActivatePending = activate;
+    bool reachedExtreme = g_compactPressScaleValue <= 0.9415;
+    if (reachedExtreme) {
+        g_compactPressReleasePending = false;
+        g_compactPressScaleTarget = 1.0;
+        g_compactPressScaleVelocity += 4.6;
+    } else {
+        // A quick click must still finish the same compression pose as a hold.
+        g_compactPressReleasePending = true;
+        g_compactPressScaleTarget = 0.94;
+    }
+    StartHoverRenderLoop(1.0);
+}
+
+bool IsDynamicCompactMode() {
+    return g_settings.compactMode == L"dynamic_dual";
+}
+
+bool DynamicTransportExpandsRight() {
+    return g_settings.position == L"taskbar_left_edge";
+}
+
+double DynamicTransportButtonSize() {
+    return Clamp(g_layout.compactHeight - 14.0, 23.0, 32.0);
+}
+
+double DynamicTransportButtonGap() {
+    return Clamp(g_layout.compactHeight * 0.04, 1.25, 2.25);
+}
+
+double DynamicTransportOuterPadding() {
+    return Clamp(g_layout.compactHeight * 0.25, 8.0, 12.0);
+}
+
+double DynamicTransportInnerPadding() {
+    return Clamp(g_layout.compactHeight * 0.08, 2.5, 4.5);
+}
+
+double DynamicTransportButtonMotionPadding() {
+    return Clamp(DynamicTransportButtonSize() * 0.72, 18.0, 24.0);
+}
+
+
+double DynamicTransportControlsWidth() {
+    return (DynamicTransportButtonSize() + DynamicTransportButtonGap()) * 3.0;
+}
+
+double DynamicTransportVisibleWidth() {
+    return DynamicTransportControlsWidth() +
+           DynamicTransportOuterPadding() +
+           DynamicTransportInnerPadding();
+}
+
+double DynamicTransportOverlap() {
+    return Clamp(g_layout.compactWidth * 0.32, 42.0, 64.0);
+}
+
+double DynamicTransportWidth() {
+    return DynamicTransportVisibleWidth() + DynamicTransportOverlap();
+}
+
+void StopDynamicCompactRenderLoop() {
+    if (g_dynamicCompactRenderingHooked) {
+        try {
+            mediax::CompositionTarget::Rendering(g_dynamicCompactRenderingToken);
+        } catch (...) {
+        }
+        g_dynamicCompactRenderingHooked = false;
+    }
+    g_lastDynamicCompactFrameTime = {};
+}
+
+void ApplyDynamicCompactVisuals() {
+    if (!IsDynamicCompactMode() || !g_playerGrid || !g_dynamicMainIsland) {
+        return;
+    }
+
+    double rawReveal = Clamp(g_dynamicTransportReveal, -0.08, 1.08);
+    double reveal = Clamp(rawReveal, 0.0, 1.0);
+    bool openingChain = g_dynamicTransportTargetReveal > 0.5;
+    bool explosivePhase = openingChain && g_dynamicTransportLaunchPhase;
+    // Only the outward trip through its first overshoot uses the staged,
+    // held-then-explosive chain. Closing and rebound use the normal spring.
+    double launchReveal = explosivePhase ? std::pow(reveal, 1.92) : reveal;
+    double normalElasticReveal =
+        rawReveal > 1.0 ? 1.0 + (rawReveal - 1.0) * 0.42
+                        : rawReveal < 0.0 ? 0.0
+                                          : SmoothStep(reveal);
+    double easedReveal = explosivePhase
+                             ? SmootherStep(launchReveal)
+                             : normalElasticReveal;
+    double chainVisibility = explosivePhase
+                                 ? SmootherStep(Clamp(
+                                       reveal / 0.42, 0.0, 1.0))
+                                 : Clamp(normalElasticReveal, 0.0, 1.0);
+    double transportWidth = DynamicTransportWidth();
+    double revealedTransportWidth = transportWidth * easedReveal;
+    double transportElementWidth = std::max(0.5, revealedTransportWidth);
+
+    // The background is the final opening-chain link, but has no independent
+    // overshoot or reverse swing. Closing is deliberately undelayed.
+    constexpr double backgroundDelay = 0.16;
+    double backgroundProgress = explosivePhase
+        ? Clamp((reveal - backgroundDelay) / (1.0 - backgroundDelay),
+                0.0, 1.0)
+        : reveal;
+    double backgroundReveal = explosivePhase
+                                  ? SmootherStep(std::pow(
+                                        backgroundProgress, 1.72))
+                                  : normalElasticReveal;
+    double backgroundVisualReveal = Clamp(backgroundReveal, 0.0, 1.045);
+    double overlap = DynamicTransportOverlap() * easedReveal;
+    bool expandsRight = DynamicTransportExpandsRight();
+
+    g_dynamicMainIsland.Width(g_layout.compactWidth);
+    g_dynamicMainIsland.Height(g_layout.compactHeight);
+    g_dynamicMainIsland.HorizontalAlignment(
+        expandsRight ? HorizontalAlignment::Left
+                     : HorizontalAlignment::Right);
+    double motionOverflow =
+        DynamicTransportButtonMotionPadding() * easedReveal;
+    g_playerGrid.Width(g_layout.compactWidth + revealedTransportWidth -
+                       overlap + motionOverflow);
+    g_playerGrid.Margin(
+        expandsRight ? xaml::Thickness{0, 0, -motionOverflow, 0}
+                     : xaml::Thickness{-motionOverflow, 0, 0, 0});
+    g_playerGrid.Height(g_layout.compactHeight);
+    g_playerGrid.MinHeight(g_layout.compactHeight);
+
+    if (g_dynamicMainOcclusion) {
+        double occlusionOpacity =
+            g_dynamicTransportTargetReveal > 0.5
+                ? Clamp(easedReveal * 4.0, 0.0, 1.0)
+                : SmoothStep(Clamp(easedReveal / 0.08, 0.0, 1.0));
+        g_dynamicMainOcclusion.Opacity(occlusionOpacity);
+    }
+
+    if (g_dynamicMainWashHost) {
+        g_dynamicMainWashHost.Opacity(
+            SmoothStep(Clamp((easedReveal - 0.03) / 0.82, 0.0, 1.0)));
+    }
+    if (g_dynamicMainEdgeGlow) {
+        // The left edge wakes first and the brush itself fades toward the right.
+        g_dynamicMainEdgeGlow.Opacity(
+            SmoothStep(Clamp((easedReveal - 0.04) / 0.78, 0.0, 1.0)));
+    }
+    if (g_dynamicTransportIsland) {
+        g_dynamicTransportIsland.HorizontalAlignment(
+            expandsRight ? HorizontalAlignment::Right
+                         : HorizontalAlignment::Left);
+        double transportHostWidth = transportElementWidth + motionOverflow;
+        g_dynamicTransportIsland.Width(transportHostWidth);
+        g_dynamicTransportIsland.Height(g_layout.compactHeight);
+        g_dynamicTransportIsland.Opacity(chainVisibility);
+        g_dynamicTransportIsland.IsHitTestVisible(
+            g_dynamicTransportTargetReveal > 0.5 && easedReveal > 0.78);
+        double clipPadding =
+            Clamp(6.0 + g_layout.cornerRadius * easedReveal * 0.70,
+                  6.0, 20.0);
+        double verticalClipPadding =
+            Clamp(DynamicTransportButtonSize() * 0.16, 3.5, 5.5);
+        if (easedReveal >= 0.999) {
+            g_dynamicTransportIsland.Clip(nullptr);
+        } else {
+            ApplyElementClipWithPadding2D(g_dynamicTransportIsland,
+                                          transportHostWidth,
+                                          g_layout.compactHeight,
+                                          clipPadding,
+                                          verticalClipPadding);
+        }
+    }
+
+    if (g_dynamicTransportSurface) {
+        g_dynamicTransportSurface.Width(std::max(
+            0.5, transportWidth * backgroundVisualReveal));
+        g_dynamicTransportSurface.Height(g_layout.compactHeight);
+        g_dynamicTransportSurface.HorizontalAlignment(
+            expandsRight ? HorizontalAlignment::Left
+                         : HorizontalAlignment::Right);
+    }
+    if (g_dynamicTransportControls) {
+        g_dynamicTransportControls.Margin(
+            expandsRight
+                ? xaml::Thickness{DynamicTransportInnerPadding(), 0,
+                                  DynamicTransportOuterPadding() +
+                                      motionOverflow,
+                                  0}
+                : xaml::Thickness{DynamicTransportOuterPadding() +
+                                      motionOverflow,
+                                  0, DynamicTransportInnerPadding(), 0});
+
+        // 0.9.244 transport curve: the button touching the main island is the
+        // fixed anchor, and each farther button receives a slightly later,
+        // larger compression/release motion.
+        if (auto controlsPanel =
+                g_dynamicTransportControls.try_as<StackPanel>()) {
+            double halfGap = DynamicTransportButtonGap() * 0.5;
+            double awayFromMain = expandsRight ? 1.0 : -1.0;
+            int index = 0;
+            for (auto const& child : controlsPanel.Children()) {
+                if (auto host = child.try_as<Border>()) {
+                    host.Margin({halfGap - DynamicTransportButtonMotionPadding(), 0,
+                                 halfGap - DynamicTransportButtonMotionPadding(), 0});
+                    int distanceFromMain = expandsRight ? index : 2 - index;
+                    double distance = static_cast<double>(
+                        std::max(0, distanceFromMain));
+                    double stagger = 0.075 * distance;
+                    double localReveal = Clamp(
+                        (reveal - stagger) / std::max(0.55, 1.0 - stagger),
+                        0.0, 1.0);
+                    double localSpacing = SmootherStep(
+                        std::pow(localReveal, 1.38));
+                    // The near-main anchor now participates with a restrained
+                    // travel, while farther buttons keep the 0.9.244 spacing.
+                    double compressedTravel = 1.8 + distance * 5.8;
+                    double translation = -awayFromMain * compressedTravel *
+                        (1.0 - localSpacing);
+                    if (openingChain) {
+                        double overshootThreshold =
+                            1.0 + 0.004 * std::max(0.0, distance - 1.0);
+                        double burstRate =
+                            distance > 1.5 ? 235.0 :
+                            distance > 0.5 ? 170.0 : 120.0;
+                        double burstLimit =
+                            distance > 1.5 ? 9.0 :
+                            distance > 0.5 ? 4.5 : 2.0;
+                        double burst = Clamp(
+                            (rawReveal - overshootThreshold) * burstRate,
+                            0.0, burstLimit);
+                        translation += awayFromMain * burst;
+                    }
+                    host.Translation({static_cast<float>(translation),
+                                      0.0f, 0.0f});
+                }
+                ++index;
+            }
+        }
+    }
+
+    double jelly = Clamp(std::abs(g_dynamicTransportRevealVelocity) * 0.045,
+                          0.0, 0.055);
+    if (g_dynamicTransportScale) {
+        g_dynamicTransportScale.ScaleX(1.0 + jelly);
+        g_dynamicTransportScale.ScaleY(1.0 - jelly * 0.45);
+    }
+    if (g_dynamicTransportSurfaceScale) {
+        double backgroundImpulse = 0.0;
+        if (explosivePhase) {
+            double backgroundImpulseGate = SmootherStep(
+                Clamp((reveal - 0.68) / 0.32, 0.0, 1.0));
+            backgroundImpulse = Clamp(
+                std::max(0.0, g_dynamicTransportRevealVelocity) *
+                    0.022 * backgroundImpulseGate,
+                0.0, 0.110);
+        }
+        g_dynamicTransportSurfaceScale.ScaleX(1.0 + backgroundImpulse);
+        g_dynamicTransportSurfaceScale.ScaleY(
+            1.0 - backgroundImpulse * 0.62);
+    }
+    if (g_dynamicTransportTranslate) {
+        g_dynamicTransportTranslate.X((expandsRight ? -1.0 : 1.0) *
+            SmoothStep(Clamp(1.0 - easedReveal, 0.0, 1.0)) *
+            Clamp(DynamicTransportOverlap() * 0.30, 10.0, 18.0));
+    }
+}
+
+void StartDynamicTransportButtonRelease(DynamicTransportButtonMotion& motion) {
+    motion.releasePending = false;
+    motion.scaleTarget = 1.0;
+    motion.translateTarget = 0.0;
+    motion.scaleVelocity += motion.direction == 0 ? 5.8 : 2.6;
+    if (motion.direction != 0) {
+        motion.translateVelocity = -motion.direction * 92.0;
+    }
+}
+
+bool StepDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion,
+                                      double dtSec,
+                                      double speed) {
+    if (!motion.element || !motion.scale || !motion.translate) {
+        return true;
+    }
+
+    double stiffness = 520.0 * speed * speed;
+    double damping =
+        motion.failurePhasesRemaining > 0 && motion.direction == 0
+            ? 29.0 * speed
+            : 26.0 * speed;
+    motion.scaleVelocity +=
+        ((motion.scaleTarget - motion.scaleValue) * stiffness -
+         motion.scaleVelocity * damping) * dtSec;
+    motion.scaleValue += motion.scaleVelocity * dtSec;
+    motion.scaleValue = Clamp(motion.scaleValue, 0.76, 1.18);
+
+    bool rejectingNavigation =
+        motion.failurePhasesRemaining > 0 && motion.direction != 0;
+    double translationStiffness =
+        (rejectingNavigation ? 1100.0 : 455.0) * speed * speed;
+    double translationDamping =
+        (rejectingNavigation ? 50.0 : 24.0) * speed;
+    motion.translateVelocity +=
+        ((motion.translateTarget - motion.translateValue) *
+             translationStiffness -
+         motion.translateVelocity * translationDamping) * dtSec;
+    motion.translateValue += motion.translateVelocity * dtSec;
+    motion.translateValue = Clamp(motion.translateValue, -8.0, 8.0);
+
+    bool reachedCurrentTarget =
+        std::abs(motion.scaleTarget - motion.scaleValue) < 0.004 &&
+        std::abs(motion.translateTarget - motion.translateValue) < 0.06;
+    if (motion.releasePending && reachedCurrentTarget) {
+        StartDynamicTransportButtonRelease(motion);
+    }
+
+    if (motion.failurePhasesRemaining > 0 && motion.direction == 0 &&
+        std::abs(motion.scaleTarget - motion.scaleValue) < 0.008 &&
+        std::abs(motion.scaleVelocity) < 1.8) {
+        motion.failurePhasesRemaining--;
+        if (motion.failurePhasesRemaining > 0) {
+            bool expandNext = motion.scaleTarget < 1.0;
+            double amplitude = 0.012 +
+                0.008 * motion.failurePhasesRemaining;
+            motion.scaleTarget =
+                1.0 + (expandNext ? amplitude : -amplitude);
+            motion.scaleVelocity += expandNext ? 2.8 : -2.8;
+        } else {
+            motion.scaleTarget = 1.0;
+        }
+    } else if (motion.failurePhasesRemaining > 0 &&
+               motion.direction != 0 &&
+               std::abs(motion.translateTarget - motion.translateValue) < 0.32 &&
+               std::abs(motion.translateVelocity) < 16.0) {
+        motion.failurePhasesRemaining--;
+        if (motion.failurePhasesRemaining > 0) {
+            motion.translateTarget = -motion.translateTarget;
+            motion.translateVelocity +=
+                motion.translateTarget > motion.translateValue ? 8.0 : -8.0;
+        } else {
+            motion.translateTarget = 0.0;
+        }
+    }
+
+    bool settled = motion.failurePhasesRemaining == 0 &&
+        !motion.releasePending &&
+        std::abs(motion.scaleTarget - motion.scaleValue) < 0.0008 &&
+        std::abs(motion.scaleVelocity) < 0.018 &&
+        std::abs(motion.translateTarget - motion.translateValue) < 0.010 &&
+        std::abs(motion.translateVelocity) < 0.10;
+    if (settled) {
+        motion.scaleValue = motion.scaleTarget;
+        motion.scaleVelocity = 0.0;
+        motion.translateValue = motion.translateTarget;
+        motion.translateVelocity = 0.0;
+    }
+
+    motion.scale.ScaleX(motion.scaleValue);
+    motion.scale.ScaleY(motion.scaleValue);
+    motion.translate.X(motion.translateValue);
+    return settled;
+}
+
+void OnDynamicCompactRendering(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    try {
+        if (!IsDynamicCompactMode() || !g_playerGrid ||
+            !g_dynamicMainIsland || g_unloading) {
+            StopDynamicCompactRenderLoop();
+            return;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        double dtSec = 1.0 / 60.0;
+        if (g_lastDynamicCompactFrameTime.time_since_epoch().count() != 0) {
+            dtSec = std::chrono::duration_cast<std::chrono::microseconds>(
+                        now - g_lastDynamicCompactFrameTime)
+                        .count() /
+                    1000000.0;
+        }
+        g_lastDynamicCompactFrameTime = now;
+        dtSec = Clamp(dtSec, 0.001, 0.033);
+
+        double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+        double stiffness = 205.0 * speed * speed;
+        double damping = 20.5 * speed;
+        double acceleration =
+            (g_dynamicTransportTargetReveal - g_dynamicTransportReveal) *
+                stiffness -
+            g_dynamicTransportRevealVelocity * damping;
+        g_dynamicTransportRevealVelocity += acceleration * dtSec;
+        g_dynamicTransportReveal +=
+            g_dynamicTransportRevealVelocity * dtSec;
+        g_dynamicTransportReveal =
+            Clamp(g_dynamicTransportReveal, -0.08, 1.08);
+
+        // Keep the explosive mapping through the outward trip and physical
+        // overshoot peak only. The return trip then uses the ordinary spring.
+        if (g_dynamicTransportLaunchPhase &&
+            g_dynamicTransportTargetReveal > 0.5 &&
+            g_dynamicTransportReveal >= 0.995 &&
+            g_dynamicTransportRevealVelocity <= 0.0) {
+            g_dynamicTransportLaunchPhase = false;
+        }
+
+        bool revealSettled =
+            std::abs(g_dynamicTransportTargetReveal -
+                     g_dynamicTransportReveal) < 0.001 &&
+            std::abs(g_dynamicTransportRevealVelocity) < 0.02;
+        if (revealSettled) {
+            g_dynamicTransportReveal = g_dynamicTransportTargetReveal;
+            g_dynamicTransportRevealVelocity = 0.0;
+            g_dynamicTransportLaunchPhase = false;
+        }
+
+        bool previousButtonSettled =
+            StepDynamicTransportButtonMotion(g_dynamicTransportPrevMotion,
+                                             dtSec, speed);
+        bool playButtonSettled =
+            StepDynamicTransportButtonMotion(g_dynamicTransportPlayMotion,
+                                             dtSec, speed);
+        bool nextButtonSettled =
+            StepDynamicTransportButtonMotion(g_dynamicTransportNextMotion,
+                                             dtSec, speed);
+        bool buttonsSettled = previousButtonSettled && playButtonSettled &&
+                              nextButtonSettled;
+        ApplyDynamicCompactVisuals();
+        if (revealSettled && buttonsSettled) {
+            if (g_dynamicTransportScale) {
+                g_dynamicTransportScale.ScaleX(1.0);
+                g_dynamicTransportScale.ScaleY(1.0);
+            }
+            if (g_dynamicTransportSurfaceScale) {
+                g_dynamicTransportSurfaceScale.ScaleX(1.0);
+                g_dynamicTransportSurfaceScale.ScaleY(1.0);
+            }
+            StopDynamicCompactRenderLoop();
+        }
+    } catch (...) {
+        StopDynamicCompactRenderLoop();
+    }
+}
+
+void EnsureDynamicCompactRenderLoop() {
+    if (!IsDynamicCompactMode() || !g_dynamicTransportIsland) {
+        return;
+    }
+    if (!g_dynamicCompactRenderingHooked) {
+        g_lastDynamicCompactFrameTime = std::chrono::steady_clock::now();
+        g_dynamicCompactRenderingToken =
+            mediax::CompositionTarget::Rendering(OnDynamicCompactRendering);
+        g_dynamicCompactRenderingHooked = true;
+    }
+}
+
+void StartDynamicCompactRenderLoop(double targetReveal) {
+    double clampedTarget = Clamp(targetReveal, 0.0, 1.0);
+    if (clampedTarget > 0.5 &&
+        g_dynamicTransportTargetReveal <= 0.5) {
+        // A fresh launch from near the seam gets the held/explosive mapping;
+        // reversing a half-open close resumes with the normal spring instead.
+        g_dynamicTransportLaunchPhase =
+            g_dynamicTransportReveal < 0.55;
+    } else if (clampedTarget <= 0.5) {
+        g_dynamicTransportLaunchPhase = false;
+    }
+    g_dynamicTransportTargetReveal = clampedTarget;
+    EnsureDynamicCompactRenderLoop();
+}
+
+void BeginDynamicTransportButtonPress(DynamicTransportButtonMotion* motion) {
+    if (!motion) {
+        return;
+    }
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 0;
+    motion->scaleTarget = motion->direction == 0 ? 0.84 : 0.94;
+    motion->translateTarget = motion->direction * 3.8;
+    EnsureDynamicCompactRenderLoop();
+}
+
+void EndDynamicTransportButtonPress(DynamicTransportButtonMotion* motion,
+                                    bool applyReleaseKick) {
+    if (!motion) {
+        return;
+    }
+    if (!applyReleaseKick) {
+        motion->releasePending = false;
+        motion->scaleTarget = 1.0;
+        motion->translateTarget = 0.0;
+        EnsureDynamicCompactRenderLoop();
+        return;
+    }
+
+    bool reachedPressExtreme =
+        std::abs(motion->scaleTarget - motion->scaleValue) < 0.008 &&
+        std::abs(motion->translateTarget - motion->translateValue) < 0.10;
+    if (reachedPressExtreme) {
+        StartDynamicTransportButtonRelease(*motion);
+    } else {
+        motion->releasePending = true;
+    }
+    EnsureDynamicCompactRenderLoop();
+}
+
+void TriggerDynamicTransportNavigationFailure(
+    DynamicTransportButtonMotion* motion) {
+    if (!motion || motion->direction == 0) {
+        return;
+    }
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 3;
+    motion->scaleTarget = 1.0;
+    motion->scaleVelocity += 0.4;
+    motion->translateTarget = motion->direction * 2.2;
+    motion->translateVelocity = 0.0;
+    EnsureDynamicCompactRenderLoop();
+}
+
+void TriggerDynamicTransportNoMediaPlayBounce(
+    DynamicTransportButtonMotion* motion) {
+    if (!motion) return;
+    motion->releasePending = false;
+    motion->failurePhasesRemaining = 5;
+    motion->translateTarget = 0.0;
+    motion->translateVelocity = 0.0;
+    motion->scaleTarget = 0.84;
+    motion->scaleVelocity -= 1.0;
+    EnsureDynamicCompactRenderLoop();
+}
+
+void ClearDynamicTransportButtonMotions() {
+    g_dynamicTransportPrevMotion = {};
+    g_dynamicTransportPlayMotion = {};
+    g_dynamicTransportNextMotion = {};
+    g_dynamicTransportNavigationFailureDirection.store(0);
+}
+
 void ApplyExpandedState() {
     if (!g_playerGrid) {
         return;
     }
 
-    g_playerGrid.Width(g_layout.compactWidth);
-    g_playerGrid.Height(g_layout.compactHeight);
-    g_playerGrid.MinHeight(g_layout.compactHeight);
+    if (IsDynamicCompactMode()) {
+        ApplyDynamicCompactVisuals();
+    } else {
+        StopDynamicCompactRenderLoop();
+        g_playerGrid.Width(g_layout.compactWidth);
+        g_playerGrid.Height(g_layout.compactHeight);
+        g_playerGrid.MinHeight(g_layout.compactHeight);
+        if (g_dynamicMainIsland) {
+            g_dynamicMainIsland.Width(g_layout.compactWidth);
+            g_dynamicMainIsland.Height(g_layout.compactHeight);
+        }
+    }
 
     if (auto backgroundFe = FindChildByName(g_playerGrid, L"Island_Background")) {
         if (auto background = backgroundFe.try_as<Border>()) {
@@ -10657,6 +11937,35 @@ void ApplyExpandedState() {
                                      g_layout.cornerRadius, g_layout.cornerRadius});
             background.BorderBrush(IslandBorderBrush());
         }
+    }
+
+    if (auto occlusionFe =
+            FindChildByName(g_playerGrid, L"Island_MainTransportOcclusion")) {
+        if (auto occlusion = occlusionFe.try_as<Border>()) {
+            occlusion.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
+                                    g_layout.cornerRadius, g_layout.cornerRadius});
+        }
+    }
+
+    double transportRadius = g_layout.cornerRadius;
+    auto transportCorners =
+        DynamicTransportExpandsRight()
+            ? xaml::CornerRadius{0, transportRadius, transportRadius, 0}
+            : xaml::CornerRadius{transportRadius, 0, 0, transportRadius};
+    auto updateTransportCorners = [&](wchar_t const* name) {
+        if (auto element = FindChildByName(g_playerGrid, name)) {
+            if (auto border = element.try_as<Border>()) {
+                border.CornerRadius(transportCorners);
+            }
+        }
+    };
+    updateTransportCorners(L"Island_TransportBackground");
+    updateTransportCorners(L"Island_TransportWashHost");
+    updateTransportCorners(L"Island_TransportTint");
+    updateTransportCorners(L"Island_TransportStroke");
+
+    if (g_dynamicTransportIsland) {
+        g_dynamicTransportIsland.Height(g_layout.compactHeight);
     }
 
     if (auto contentFe = FindChildByName(g_playerGrid, L"Island_Content")) {
@@ -10738,6 +12047,53 @@ void ApplyExpandedState() {
         }
     }
 
+    if (IsDynamicCompactMode()) {
+        double buttonSize = DynamicTransportButtonSize();
+        double motionPadding = DynamicTransportButtonMotionPadding();
+        auto updateTransportButton = [&](wchar_t const* name) {
+            std::wstring hostName = std::wstring(name) + L"_Host";
+            if (auto hostFe = FindChildByName(g_playerGrid, hostName.c_str())) {
+                if (auto host = hostFe.try_as<Border>()) {
+                    host.Width(buttonSize + motionPadding * 2.0);
+                    host.Height(buttonSize);
+                    double halfGap = DynamicTransportButtonGap() * 0.5;
+                    host.Margin({halfGap - motionPadding, 0,
+                                 halfGap - motionPadding, 0});
+                }
+            }
+            if (auto buttonFe = FindChildByName(g_playerGrid, name)) {
+                if (auto button = buttonFe.try_as<Border>()) {
+                    button.Width(buttonSize);
+                    button.Height(buttonSize);
+                    button.Margin({0, 0, 0, 0});
+                    button.CornerRadius({buttonSize * 0.5, buttonSize * 0.5,
+                                         buttonSize * 0.5, buttonSize * 0.5});
+                    if (auto icon = button.Child().try_as<TextBlock>()) {
+                        icon.FontSize(
+                            Clamp(g_layout.compactHeight * 0.32, 11.5, 14.0));
+                    }
+                }
+            }
+        };
+        updateTransportButton(L"Island_TransportPrev");
+        updateTransportButton(L"Island_TransportPlay");
+        updateTransportButton(L"Island_TransportNext");
+        if (auto controlsFe =
+                FindChildByName(g_playerGrid, L"Island_TransportControls")) {
+            controlsFe.Width(DynamicTransportControlsWidth());
+            controlsFe.Margin(
+                DynamicTransportExpandsRight()
+                    ? xaml::Thickness{DynamicTransportInnerPadding(), 0,
+                                      DynamicTransportOuterPadding(), 0}
+                    : xaml::Thickness{DynamicTransportOuterPadding(), 0,
+                                      DynamicTransportInnerPadding(), 0});
+            controlsFe.HorizontalAlignment(
+                DynamicTransportExpandsRight()
+                    ? HorizontalAlignment::Right
+                    : HorizontalAlignment::Left);
+        }
+    }
+
     if (g_compactProgress) {
         g_compactProgress.Width(g_layout.progressWidth);
         g_compactProgress.Height(g_layout.progressHeight);
@@ -10778,6 +12134,7 @@ void RepairExpandedPopupStateIfHidden() {
     g_popupClosing = false;
     g_popupAnimationProgress = 0.0;
     g_popupAnimationTarget = 0.0;
+    g_popupAnimationVelocity = 0.0;
     g_popupOutsideClickArmed = false;
     HidePopupBackdropOverlayWindowVisualOnly();
     SetCompactIslandSuppressed(false);
@@ -10801,6 +12158,9 @@ void StartExpandRenderLoop(bool expanded) {
         if (g_islandScale) {
             g_islandScale.ScaleX(1.0);
             g_islandScale.ScaleY(1.0);
+        }
+        if (g_islandHoverTranslate) {
+            g_islandHoverTranslate.Y(0.0);
         }
         if (g_playerGrid) {
             g_playerGrid.UpdateLayout();
@@ -11111,6 +12471,97 @@ Button MakeMediaButton(const wchar_t* name, const wchar_t* glyph, void (*onClick
     return button;
 }
 
+Border MakeDynamicTransportButton(const wchar_t* name,
+                                  const wchar_t* glyph,
+                                  void (*onClick)(),
+                                  DynamicTransportButtonMotion* motion,
+                                  int direction) {
+    Border host;
+    host.Name(winrt::hstring(std::wstring(name) + L"_Host"));
+    Border button;
+    button.Name(name);
+    double size = DynamicTransportButtonSize();
+    double motionPadding = DynamicTransportButtonMotionPadding();
+    host.Width(size + motionPadding * 2.0);
+    host.Height(size);
+    host.HorizontalAlignment(HorizontalAlignment::Center);
+    host.VerticalAlignment(VerticalAlignment::Center);
+    double halfGap = DynamicTransportButtonGap() * 0.5;
+    host.Margin({halfGap - motionPadding, 0,
+                 halfGap - motionPadding, 0});
+    button.Width(size);
+    button.Height(size);
+    button.HorizontalAlignment(HorizontalAlignment::Center);
+    button.VerticalAlignment(VerticalAlignment::Center);
+    button.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+    button.CornerRadius({size * 0.5, size * 0.5,
+                         size * 0.5, size * 0.5});
+    button.RenderTransformOrigin({0.5, 0.5});
+
+    TransformGroup transformGroup;
+    ScaleTransform buttonScale;
+    buttonScale.ScaleX(1.0);
+    buttonScale.ScaleY(1.0);
+    TranslateTransform buttonTranslate;
+    buttonTranslate.X(0.0);
+    transformGroup.Children().Append(buttonScale);
+    transformGroup.Children().Append(buttonTranslate);
+    button.RenderTransform(transformGroup);
+
+    TextBlock icon = MakeTextBlock(
+        L"", Clamp(g_layout.compactHeight * 0.32, 11.5, 14.0), true);
+    icon.FontFamily(mediax::FontFamily(L"Segoe Fluent Icons"));
+    icon.Text(glyph);
+    icon.HorizontalAlignment(HorizontalAlignment::Center);
+    icon.VerticalAlignment(VerticalAlignment::Center);
+    button.Child(icon);
+    host.Child(button);
+
+    if (motion) {
+        *motion = {};
+        motion->element = button;
+        motion->scale = buttonScale;
+        motion->translate = buttonTranslate;
+        motion->direction = direction;
+    }
+    button.PointerEntered([](auto const& sender, auto const&) {
+        if (auto hoveredButton = sender.template try_as<Border>()) {
+            hoveredButton.Background(Brush(
+                IsDarkModeApprox() ? Color(0x2C, 0xFF, 0xFF, 0xFF)
+                                   : Color(0x20, 0x00, 0x00, 0x00)));
+        }
+    });
+    button.PointerExited([](auto const& sender, auto const&) {
+        if (auto hoveredButton = sender.template try_as<Border>()) {
+            hoveredButton.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        }
+    });
+    button.PointerPressed([motion](auto const& sender,
+                                   input::PointerRoutedEventArgs const& args) {
+        if (auto pressedButton = sender.template try_as<Border>()) {
+            pressedButton.CapturePointer(args.Pointer());
+        }
+        BeginDynamicTransportButtonPress(motion);
+        args.Handled(true);
+    });
+    button.PointerReleased([onClick, motion](auto const& sender,
+                                             input::PointerRoutedEventArgs const& args) {
+        if (auto releasedButton = sender.template try_as<Border>()) {
+            releasedButton.ReleasePointerCapture(args.Pointer());
+            releasedButton.Background(Brush(
+                IsDarkModeApprox() ? Color(0x2C, 0xFF, 0xFF, 0xFF)
+                                   : Color(0x20, 0x00, 0x00, 0x00)));
+        }
+        EndDynamicTransportButtonPress(motion, true);
+        onClick();
+        args.Handled(true);
+    });
+    button.PointerCanceled([motion](auto const&,
+                                    input::PointerRoutedEventArgs const&) {
+        EndDynamicTransportButtonPress(motion, false);
+    });
+    return host;
+}
 void UpdateButtonTheme(const wchar_t* name) {
     if (!g_playerGrid) {
         return;
@@ -11118,18 +12569,56 @@ void UpdateButtonTheme(const wchar_t* name) {
 
     bool dark = IsDarkModeApprox();
     if (auto buttonFe = FindChildByName(g_playerGrid, name)) {
+        bool transportButton =
+            std::wstring(name).rfind(L"Island_Transport", 0) == 0;
+        if (transportButton) {
+            if (auto button = buttonFe.try_as<Border>()) {
+                button.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+                if (auto icon = button.Child().try_as<TextBlock>()) {
+                    icon.Foreground(Brush(
+                        dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
+                             : Color(0xF2, 0x18, 0x18, 0x1B)));
+                }
+            }
+            return;
+        }
+
         if (auto button = buttonFe.try_as<Button>()) {
-            button.Background(Brush(dark ? Color(0x18, 0xFF, 0xFF, 0xFF)
-                                         : Color(0x14, 0x00, 0x00, 0x00)));
+            button.Background(Brush(
+                dark ? Color(0x18, 0xFF, 0xFF, 0xFF)
+                     : Color(0x14, 0x00, 0x00, 0x00)));
             button.BorderBrush(CompactPlaybackControlStrokeBrush());
             if (auto icon = button.Content().try_as<TextBlock>()) {
-                icon.Foreground(Brush(dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
-                                           : Color(0xF2, 0x18, 0x18, 0x1B)));
+                icon.Foreground(Brush(
+                    dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
+                         : Color(0xF2, 0x18, 0x18, 0x1B)));
             }
         }
     }
 }
 
+void ApplyDynamicMainIslandShadow() {
+    if (!g_playerGrid) {
+        return;
+    }
+    auto backgroundFe = FindChildByName(g_playerGrid, L"Island_Background");
+    auto background = backgroundFe ? backgroundFe.try_as<Border>() : nullptr;
+    if (!background) {
+        return;
+    }
+
+    // Light mode stays clean: the main island must not cast onto the side island.
+    if (!IsDarkModeApprox() || !g_dynamicTransportIsland) {
+        background.Shadow(mediax::Shadow{nullptr});
+        background.Translation({0.0f, 0.0f, 0.0f});
+        return;
+    }
+
+    mediax::ThemeShadow mainIslandShadow;
+    mainIslandShadow.Receivers().Append(g_dynamicTransportIsland);
+    background.Shadow(mainIslandShadow);
+    background.Translation({0.0f, 0.0f, 32.0f});
+}
 void UpdateThemeVisuals() {
     if (!g_playerGrid) {
         return;
@@ -11146,6 +12635,34 @@ void UpdateThemeVisuals() {
         if (auto bg = bgFe.try_as<Border>()) {
             bg.Background(IslandBackgroundBrush());
             bg.BorderBrush(IslandBorderBrush());
+        }
+    }
+    ApplyDynamicMainIslandShadow();
+    if (g_dynamicMainWash) {
+        g_dynamicMainWash.Opacity(DynamicMainWashOpacity());
+    }
+    if (g_dynamicMainOcclusion) {
+        g_dynamicMainOcclusion.Background(DynamicMainOcclusionBrush());
+    }
+    if (g_dynamicMainEdgeGlow) {
+        g_dynamicMainEdgeGlow.BorderBrush(DynamicMainEdgeGlowBrush());
+    }
+    if (auto bgFe = FindChildByName(g_playerGrid, L"Island_TransportBackground")) {
+        if (auto bg = bgFe.try_as<Border>()) {
+            bg.Background(IslandBackgroundBrush());
+        }
+    }
+    if (g_dynamicTransportWash) {
+        g_dynamicTransportWash.Opacity(DynamicTransportWashOpacity());
+    }
+    if (auto tintFe = FindChildByName(g_playerGrid, L"Island_TransportTint")) {
+        if (auto tint = tintFe.try_as<Border>()) {
+            tint.Background(DynamicTransportWashTintBrush());
+        }
+    }
+    if (auto strokeFe = FindChildByName(g_playerGrid, L"Island_TransportStroke")) {
+        if (auto stroke = strokeFe.try_as<Border>()) {
+            stroke.BorderBrush(DynamicTransportBorderBrush());
         }
     }
     auto primaryTextBrush = Brush(dark ? Color(0xF2, 0xFF, 0xFF, 0xFF)
@@ -11188,6 +12705,9 @@ void UpdateThemeVisuals() {
     UpdateButtonTheme(L"Island_Prev");
     UpdateButtonTheme(L"Island_Play");
     UpdateButtonTheme(L"Island_Next");
+    UpdateButtonTheme(L"Island_TransportPrev");
+    UpdateButtonTheme(L"Island_TransportPlay");
+    UpdateButtonTheme(L"Island_TransportNext");
 }
 
 double EffectiveElementVisualHeightDip(FrameworkElement const& element,
@@ -11321,7 +12841,9 @@ Grid BuildIslandGrid() {
     Grid wrapper;
     wrapper.Name(L"IslandMedia_Wrapper");
     wrapper.Tag(winrt::box_value(winrt::hstring(L"IslandMediaControls")));
-    wrapper.Width(g_layout.compactWidth);
+    double initialMainWidth = g_layout.compactWidth;
+    double initialWrapperWidth = initialMainWidth;
+    wrapper.Width(initialWrapperWidth);
     wrapper.Height(g_layout.compactHeight);
     wrapper.MinHeight(g_layout.compactHeight);
     wrapper.VerticalAlignment(VerticalAlignment::Center);
@@ -11331,13 +12853,55 @@ Grid BuildIslandGrid() {
     wrapper.Background(Brush(Color(0x01, 0, 0, 0)));
     wrapper.RenderTransformOrigin({0.5, 1.0});
 
+    TransformGroup hoverTransform;
     ScaleTransform hoverScale;
     hoverScale.ScaleX(1.0);
     hoverScale.ScaleY(1.0);
-    wrapper.RenderTransform(hoverScale);
+    ScaleTransform pressScale;
+    pressScale.ScaleX(1.0);
+    pressScale.ScaleY(1.0);
+    TranslateTransform hoverTranslate;
+    hoverTranslate.Y(0.0);
+    hoverTransform.Children().Append(hoverScale);
+    hoverTransform.Children().Append(pressScale);
+    hoverTransform.Children().Append(hoverTranslate);
+    wrapper.RenderTransform(hoverTransform);
     g_islandScale = hoverScale;
+    g_islandPressScale = pressScale;
+    g_islandHoverTranslate = hoverTranslate;
     g_currentHoverScale = 1.0;
     g_targetHoverScale = 1.0;
+
+    Grid mainIsland;
+    mainIsland.Name(L"Island_MainSurface");
+    mainIsland.Width(initialMainWidth);
+    mainIsland.Height(g_layout.compactHeight);
+    mainIsland.HorizontalAlignment(
+        IsDynamicCompactMode() && DynamicTransportExpandsRight()
+            ? HorizontalAlignment::Left
+            : HorizontalAlignment::Right);
+    mainIsland.VerticalAlignment(VerticalAlignment::Center);
+    mainIsland.RenderTransformOrigin({0.5, 0.5});
+    ScaleTransform mainScale;
+    mainScale.ScaleX(1.0);
+    mainScale.ScaleY(1.0);
+    mainIsland.RenderTransform(mainScale);
+    g_dynamicMainIsland = mainIsland;
+    g_dynamicMainScale = mainScale;
+    if (IsDynamicCompactMode()) {
+        g_islandScale = mainScale;
+    }
+    controls::Canvas::SetZIndex(mainIsland, 2);
+
+    Border mainOcclusion;
+    mainOcclusion.Name(L"Island_MainTransportOcclusion");
+    mainOcclusion.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
+                                g_layout.cornerRadius, g_layout.cornerRadius});
+    mainOcclusion.Background(DynamicMainOcclusionBrush());
+    mainOcclusion.Opacity(0.0);
+    mainOcclusion.IsHitTestVisible(false);
+    controls::Canvas::SetZIndex(mainOcclusion, -1);
+    g_dynamicMainOcclusion = IsDynamicCompactMode() ? mainOcclusion : nullptr;
 
     Border background;
     background.Name(L"Island_Background");
@@ -11347,6 +12911,36 @@ Grid BuildIslandGrid() {
     background.BorderThickness({1, 1, 1, 1});
     background.IsHitTestVisible(false);
     controls::Canvas::SetZIndex(background, 0);
+    Border mainWashHost;
+    mainWashHost.Name(L"Island_MainAlbumWashHost");
+    mainWashHost.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
+                               g_layout.cornerRadius, g_layout.cornerRadius});
+    mainWashHost.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+    mainWashHost.Opacity(0.0);
+    mainWashHost.IsHitTestVisible(false);
+    controls::Canvas::SetZIndex(mainWashHost, 0);
+    Grid mainWashLayers;
+    mainWashLayers.IsHitTestVisible(false);
+    Image mainWash;
+    mainWash.Name(L"Island_MainAlbumWash");
+    mainWash.Stretch(mediax::Stretch::UniformToFill);
+    mainWash.Opacity(DynamicMainWashOpacity());
+    mainWash.IsHitTestVisible(false);
+    mainWashLayers.Children().Append(mainWash);
+    mainWashHost.Child(mainWashLayers);
+    g_dynamicMainWashHost = IsDynamicCompactMode() ? mainWashHost : nullptr;
+    g_dynamicMainWash = IsDynamicCompactMode() ? mainWash : nullptr;
+    Border mainEdgeGlow;
+    mainEdgeGlow.Name(L"Island_MainEdgeGlow");
+    mainEdgeGlow.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
+                               g_layout.cornerRadius, g_layout.cornerRadius});
+    mainEdgeGlow.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+    mainEdgeGlow.BorderBrush(DynamicMainEdgeGlowBrush());
+    mainEdgeGlow.BorderThickness({0.90, 0.72, 0.24, 0.88});
+    mainEdgeGlow.Opacity(0.0);
+    mainEdgeGlow.IsHitTestVisible(false);
+    controls::Canvas::SetZIndex(mainEdgeGlow, 1);
+    g_dynamicMainEdgeGlow = IsDynamicCompactMode() ? mainEdgeGlow : nullptr;
 
     Grid content;
     content.Name(L"Island_Content");
@@ -11567,30 +13161,262 @@ Grid BuildIslandGrid() {
     details.Children().Append(progress);
     content.Children().Append(details);
 
-    wrapper.Children().Append(background);
-    wrapper.Children().Append(content);
+    if (IsDynamicCompactMode()) {
+        mainIsland.Children().Append(mainOcclusion);
+    }
+    mainIsland.Children().Append(background);
+    if (IsDynamicCompactMode()) {
+        mainIsland.Children().Append(mainWashHost);
+        mainIsland.Children().Append(mainEdgeGlow);
+    }
+    mainIsland.Children().Append(content);
+    wrapper.Children().Append(mainIsland);
 
-    wrapper.PointerEntered([hoverScale](auto const&, auto const&) {
-        g_islandScale = hoverScale;
-        StartHoverRenderLoop(g_settings.hoverScale);
-    });
-    wrapper.PointerExited([hoverScale](auto const&, auto const&) {
-        g_islandScale = hoverScale;
-        StartHoverRenderLoop(1.0);
-    });
-    wrapper.PointerPressed([](auto const& sender, input::PointerRoutedEventArgs const& e) {
-        auto source = sender.template try_as<UIElement>();
-        auto point = e.GetCurrentPoint(source);
-        if (point.Properties().IsLeftButtonPressed()) {
-            RepairExpandedPopupStateIfHidden();
-            bool popupActuallyExpanded =
-                g_expanded && g_expandedPopup &&
-                IsWindowVisible(g_expandedPopup) && !g_popupClosing;
-            StartExpandRenderLoop(!popupActuallyExpanded);
+    if (IsDynamicCompactMode()) {
+        Grid transportIsland;
+        transportIsland.Name(L"Island_TransportSurface");
+        transportIsland.Width(0.5);
+        transportIsland.Height(g_layout.compactHeight);
+        transportIsland.HorizontalAlignment(
+            DynamicTransportExpandsRight()
+                ? HorizontalAlignment::Right
+                : HorizontalAlignment::Left);
+        transportIsland.VerticalAlignment(VerticalAlignment::Center);
+        transportIsland.RenderTransformOrigin({0.5, 0.5});
+        transportIsland.Opacity(0.0);
+        transportIsland.IsHitTestVisible(false);
+        controls::Canvas::SetZIndex(transportIsland, 1);
+
+        TransformGroup transportTransform;
+        ScaleTransform transportScale;
+        transportScale.ScaleX(1.0);
+        transportScale.ScaleY(1.0);
+        TranslateTransform transportTranslate;
+        transportTranslate.X(0.0);
+        transportTransform.Children().Append(transportScale);
+        transportTransform.Children().Append(transportTranslate);
+        transportIsland.RenderTransform(transportTransform);
+        g_dynamicTransportIsland = transportIsland;
+        g_dynamicTransportScale = transportScale;
+        g_dynamicTransportTranslate = transportTranslate;
+
+        Grid transportSurface;
+        transportSurface.Name(L"Island_TransportVisualSurface");
+        transportSurface.Width(0.5);
+        transportSurface.Height(g_layout.compactHeight);
+        transportSurface.HorizontalAlignment(
+            DynamicTransportExpandsRight()
+                ? HorizontalAlignment::Left
+                : HorizontalAlignment::Right);
+        transportSurface.VerticalAlignment(VerticalAlignment::Center);
+        transportSurface.IsHitTestVisible(false);
+        transportSurface.RenderTransformOrigin(
+            {DynamicTransportExpandsRight() ? 0.0f : 1.0f, 0.5f});
+        ScaleTransform transportSurfaceScale;
+        transportSurfaceScale.ScaleX(1.0);
+        transportSurfaceScale.ScaleY(1.0);
+        transportSurface.RenderTransform(transportSurfaceScale);
+        transportIsland.Children().Append(transportSurface);
+        g_dynamicTransportSurface = transportSurface;
+        g_dynamicTransportSurfaceScale = transportSurfaceScale;
+
+        double transportRadius = g_layout.cornerRadius;
+        auto transportCorners =
+            DynamicTransportExpandsRight()
+                ? xaml::CornerRadius{0, transportRadius, transportRadius, 0}
+                : xaml::CornerRadius{transportRadius, 0, 0, transportRadius};
+
+        Border transportBackground;
+        transportBackground.Name(L"Island_TransportBackground");
+        transportBackground.CornerRadius(transportCorners);
+        transportBackground.Background(IslandBackgroundBrush());
+        transportBackground.BorderThickness({0, 0, 0, 0});
+        transportBackground.IsHitTestVisible(false);
+        transportSurface.Children().Append(transportBackground);
+
+        Border transportWashHost;
+        transportWashHost.Name(L"Island_TransportWashHost");
+        transportWashHost.CornerRadius(transportCorners);
+        transportWashHost.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        transportWashHost.IsHitTestVisible(false);
+        Grid transportWashLayers;
+        transportWashLayers.IsHitTestVisible(false);
+        Image transportWashFade;
+        transportWashFade.Name(L"Island_TransportWashFade");
+        transportWashFade.Stretch(mediax::Stretch::UniformToFill);
+        transportWashFade.Opacity(0.0);
+        transportWashFade.IsHitTestVisible(false);
+        transportWashLayers.Children().Append(transportWashFade);
+        Image transportWash;
+        transportWash.Name(L"Island_TransportWash");
+        transportWash.Stretch(mediax::Stretch::UniformToFill);
+        transportWash.Opacity(DynamicTransportWashOpacity());
+        transportWash.IsHitTestVisible(false);
+        transportWashLayers.Children().Append(transportWash);
+        transportWashHost.Child(transportWashLayers);
+        g_dynamicTransportWash = transportWash;
+        g_dynamicTransportWashFade = transportWashFade;
+        transportSurface.Children().Append(transportWashHost);
+
+        Border transportTint;
+        transportTint.Name(L"Island_TransportTint");
+        transportTint.CornerRadius(transportCorners);
+        transportTint.Background(DynamicTransportWashTintBrush());
+        transportTint.IsHitTestVisible(false);
+        transportSurface.Children().Append(transportTint);
+
+        Border transportStroke;
+        transportStroke.Name(L"Island_TransportStroke");
+        transportStroke.CornerRadius(transportCorners);
+        transportStroke.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        transportStroke.BorderBrush(DynamicTransportBorderBrush());
+        transportStroke.BorderThickness(
+            DynamicTransportExpandsRight() ? Thickness{0, 0.82, 0.82, 0.82}
+                                           : Thickness{0.82, 0.82, 0, 0.82});
+        transportStroke.IsHitTestVisible(false);
+        transportSurface.Children().Append(transportStroke);
+
+        StackPanel transportControls;
+        transportControls.Name(L"Island_TransportControls");
+        transportControls.Orientation(controls::Orientation::Horizontal);
+        transportControls.Width(DynamicTransportControlsWidth());
+        transportControls.Margin(
+            DynamicTransportExpandsRight()
+                ? xaml::Thickness{DynamicTransportInnerPadding(), 0,
+                                  DynamicTransportOuterPadding(), 0}
+                : xaml::Thickness{DynamicTransportOuterPadding(), 0,
+                                  DynamicTransportInnerPadding(), 0});
+        transportControls.HorizontalAlignment(
+            DynamicTransportExpandsRight()
+                ? HorizontalAlignment::Right
+                : HorizontalAlignment::Left);
+        transportControls.VerticalAlignment(VerticalAlignment::Center);
+        transportControls.Children().Append(MakeDynamicTransportButton(
+            L"Island_TransportPrev", L"\uE892",
+            [] {
+                MediaState state = SnapshotMedia();
+                if (!state.hasSession || !state.canSkipPrevious) {
+                    TriggerDynamicTransportNavigationFailure(
+                        &g_dynamicTransportPrevMotion);
+                    return;
+                }
+                RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
+                    NoteMediaNavigationDirection(-1);
+                    bool changed = false;
+                    try {
+                        changed = GetAsyncResultWithTimeout(
+                            s.TrySkipPreviousAsync(), kMediaCommandAsyncTimeout,
+                            L"TrySkipPreviousAsync");
+                    } catch (...) {
+                    }
+                    if (!changed) {
+                        g_dynamicTransportNavigationFailureDirection.store(-1);
+                        RequestMediaRefresh();
+                    }
+                });
+            },
+            &g_dynamicTransportPrevMotion, -1));
+        transportControls.Children().Append(MakeDynamicTransportButton(
+            L"Island_TransportPlay", L"\uE768",
+            [] {
+                if (!SnapshotMedia().hasSession) {
+                    TriggerDynamicTransportNoMediaPlayBounce(
+                        &g_dynamicTransportPlayMotion);
+                    return;
+                }
+                RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
+                    GetAsyncResultWithTimeout(s.TryTogglePlayPauseAsync(),
+                                               kMediaCommandAsyncTimeout,
+                                               L"TryTogglePlayPauseAsync");
+                });
+            },
+            &g_dynamicTransportPlayMotion, 0));
+        transportControls.Children().Append(MakeDynamicTransportButton(
+            L"Island_TransportNext", L"\uE893",
+            [] {
+                MediaState state = SnapshotMedia();
+                if (!state.hasSession || !state.canSkipNext) {
+                    TriggerDynamicTransportNavigationFailure(
+                        &g_dynamicTransportNextMotion);
+                    return;
+                }
+                RunMediaCommand([](gsm::GlobalSystemMediaTransportControlsSession const& s) {
+                    NoteMediaNavigationDirection(1);
+                    bool changed = false;
+                    try {
+                        changed = GetAsyncResultWithTimeout(
+                            s.TrySkipNextAsync(), kMediaCommandAsyncTimeout,
+                            L"TrySkipNextAsync");
+                    } catch (...) {
+                    }
+                    if (!changed) {
+                        g_dynamicTransportNavigationFailureDirection.store(1);
+                        RequestMediaRefresh();
+                    }
+                });
+            },
+            &g_dynamicTransportNextMotion, 1));
+        g_dynamicTransportControls = transportControls;
+        transportIsland.Children().Append(transportControls);
+        wrapper.Children().Append(transportIsland);
+
+        ApplyDynamicMainIslandShadow();
+
+        wrapper.PointerEntered([](auto const&, auto const&) {
+            StartHoverRenderLoop(g_settings.hoverScale);
+            StartDynamicCompactRenderLoop(1.0);
+        });
+        wrapper.PointerExited([](auto const&, auto const&) {
+            StartHoverRenderLoop(1.0);
+            StartDynamicCompactRenderLoop(0.0);
+        });
+
+        g_dynamicTransportReveal = 0.0;
+        g_dynamicTransportTargetReveal = 0.0;
+        g_dynamicTransportRevealVelocity = 0.0;
+        g_dynamicTransportLaunchPhase = false;
+    } else {
+        g_dynamicTransportIsland = nullptr;
+        g_dynamicTransportSurface = nullptr;
+        g_dynamicTransportSurfaceScale = nullptr;
+        g_dynamicTransportControls = nullptr;
+        g_dynamicTransportScale = nullptr;
+        g_dynamicTransportTranslate = nullptr;
+        wrapper.PointerEntered([hoverScale](auto const&, auto const&) {
+            g_islandScale = hoverScale;
+            StartHoverRenderLoop(g_settings.hoverScale);
+        });
+        wrapper.PointerExited([hoverScale](auto const&, auto const&) {
+            g_islandScale = hoverScale;
+            StartHoverRenderLoop(1.0);
+        });
+        wrapper.PointerPressed([](auto const& sender, input::PointerRoutedEventArgs const& e) {
+            auto source = sender.template try_as<UIElement>();
+            auto point = e.GetCurrentPoint(source);
+            if (point.Properties().IsLeftButtonPressed()) {
+                if (source) {
+                    source.CapturePointer(e.Pointer());
+                }
+                RepairExpandedPopupStateIfHidden();
+                BeginCompactIslandPress();
+                e.Handled(true);
+            }
+        });
+        wrapper.PointerReleased([](auto const& sender, input::PointerRoutedEventArgs const& e) {
+            if (auto source = sender.template try_as<UIElement>()) {
+                source.ReleasePointerCapture(e.Pointer());
+            }
+            EndCompactIslandPress(true);
             e.Handled(true);
-        }
-    });
-
+        });
+        wrapper.PointerCanceled([](auto const& sender, input::PointerRoutedEventArgs const& e) {
+            if (auto source = sender.template try_as<UIElement>()) {
+                source.ReleasePointerCapture(e.Pointer());
+            }
+            EndCompactIslandPress(false);
+            e.Handled(true);
+        });
+    }
     return wrapper;
 }
 
@@ -11701,6 +13527,17 @@ void UpdatePlayerContents() {
     }
 
     try {
+    int failedNavigationDirection =
+        g_dynamicTransportNavigationFailureDirection.exchange(0);
+    if (failedNavigationDirection < 0) {
+        TriggerDynamicTransportNavigationFailure(
+            &g_dynamicTransportPrevMotion);
+        TriggerPopupTransportNavigationFailure(&g_popupPrevMotion);
+    } else if (failedNavigationDirection > 0) {
+        TriggerDynamicTransportNavigationFailure(
+            &g_dynamicTransportNextMotion);
+        TriggerPopupTransportNavigationFailure(&g_popupNextMotion);
+    }
     MediaState state = SnapshotMedia();
 
     // Some providers briefly report metadata before the matching thumbnail is
@@ -11792,9 +13629,20 @@ void UpdatePlayerContents() {
     std::vector<uint8_t> popupBlurSourceBytes =
         useGeneratedBlurCover ? displayThumbnailBytes : visualThumbnailBytes;
 
+    uint64_t compactAccentHash = ThumbnailHash(displayThumbnailBytes);
+    if (compactAccentHash != g_dynamicTransportAccentThumbnailHash) {
+        g_dynamicTransportAccentThumbnailHash = compactAccentHash;
+        g_dynamicTransportAccentColorValid = !displayThumbnailBytes.empty();
+        g_dynamicTransportAccentColor = displayThumbnailBytes.empty()
+                                            ? Color(0xFF, 0x4F, 0x7D, 0xE8)
+                                            : ExtractAlbumAccentColor(displayThumbnailBytes);
+        // Theme refresh also rebuilds both XAML gradient brushes atomically.
+        g_themeVisualsValid = false;
+    }
     UpdateThemeVisuals();
 
-    auto makeBitmap = [](std::vector<uint8_t> const& bytes) -> imaging::BitmapImage {
+    auto makeBitmap = [](std::vector<uint8_t> const& bytes,
+                         bool decodeSynchronously = false) -> imaging::BitmapImage {
         imaging::BitmapImage bitmap;
         if (bytes.empty()) {
             return imaging::BitmapImage{nullptr};
@@ -11811,7 +13659,13 @@ void UpdatePlayerContents() {
         }
         writer.DetachStream();
         stream.Seek(0);
-        bitmap.SetSourceAsync(stream);
+        if (decodeSynchronously) {
+            // The transport wash is only a 20x20 PNG. Decode it before its
+            // crossfade begins so the new layer never contributes a blank frame.
+            bitmap.SetSource(stream);
+        } else {
+            bitmap.SetSourceAsync(stream);
+        }
         return bitmap;
     };
 
@@ -11857,13 +13711,21 @@ void UpdatePlayerContents() {
     g_compactLastTitle = compactTitle;
     g_compactLastArtist = compactArtist;
     g_compactLastTextMediaHash = compactTextMediaHash;
-    if (auto playFe = FindChildByName(g_playerGrid, L"Island_Play")) {
-        if (auto button = playFe.try_as<Button>()) {
-            if (auto icon = button.Content().try_as<TextBlock>()) {
+    auto updatePlayGlyph = [&](wchar_t const* name) {
+        if (auto playFe = FindChildByName(g_playerGrid, name)) {
+            TextBlock icon{nullptr};
+            if (auto button = playFe.try_as<Button>()) {
+                icon = button.Content().try_as<TextBlock>();
+            } else if (auto button = playFe.try_as<Border>()) {
+                icon = button.Child().try_as<TextBlock>();
+            }
+            if (icon) {
                 icon.Text(state.isPlaying ? L"\uE769" : L"\uE768");
             }
         }
-    }
+    };
+    updatePlayGlyph(L"Island_Play");
+    updatePlayGlyph(L"Island_TransportPlay");
     if (g_compactProgress) {
         bool shouldInterpolate = UpdateCompactProgressFromSnapshot();
         if (shouldInterpolate && !g_expanded) {
@@ -11881,6 +13743,13 @@ void UpdatePlayerContents() {
             }
             compactArtChanged = compactArtHash != g_lastThumbnailHash;
             if (compactArtChanged) {
+                // Metadata providers may report two artwork revisions for one
+                // track. Consolidate an in-flight transition before capturing
+                // its old layer, otherwise a half-visible new image is promoted
+                // to full opacity and the dual-island wash flashes.
+                if (g_compactTextRenderingHooked) {
+                    ResetCompactTextAnimationVisuals();
+                }
                 bool canAnimateArt = compactWasInitialized && !g_expanded && !g_unloading;
                 try {
                     if (canAnimateArt && g_compactAlbumArtFade) {
@@ -11907,6 +13776,70 @@ void UpdatePlayerContents() {
         }
     }
 
+    if (compactArtChanged && g_dynamicTransportWash) {
+        bool canAnimateTransportWash =
+            compactWasInitialized && !g_expanded && !g_unloading;
+        try {
+            if (canAnimateTransportWash && g_dynamicTransportWashFade) {
+                auto oldWashSource = g_dynamicTransportWash.Source();
+                g_dynamicTransportWashFade.Source(oldWashSource);
+                g_dynamicTransportWashFade.Opacity(
+                    oldWashSource != nullptr
+                        ? DynamicTransportWashOpacity()
+                        : 0.0);
+            } else if (g_dynamicTransportWashFade) {
+                g_dynamicTransportWashFade.Source(nullptr);
+                g_dynamicTransportWashFade.Opacity(0.0);
+            }
+
+            if (compactArtHash) {
+                auto lowDetailTransportBytes =
+                    CreateLowDetailAlbumCoverBytes(displayThumbnailBytes,
+                                                   false, false, false, 6, true);
+                auto const& transportWashBytes =
+                    lowDetailTransportBytes.empty()
+                        ? displayThumbnailBytes
+                        : lowDetailTransportBytes;
+                g_dynamicTransportWash.Source(makeBitmap(transportWashBytes, true));
+            } else {
+                g_dynamicTransportWash.Source(nullptr);
+            }
+            g_dynamicTransportWash.Opacity(
+                canAnimateTransportWash ? 0.0
+                                        : DynamicTransportWashOpacity());
+        } catch (...) {
+            g_dynamicTransportWash.Source(nullptr);
+            g_dynamicTransportWash.Opacity(DynamicTransportWashOpacity());
+            if (g_dynamicTransportWashFade) {
+                g_dynamicTransportWashFade.Source(nullptr);
+                g_dynamicTransportWashFade.Opacity(0.0);
+            }
+        }
+    }
+
+    if (g_dynamicMainWash &&
+        (compactArtChanged ||
+         (compactArtHash && g_dynamicMainWash.Source() == nullptr))) {
+        try {
+            if (compactArtHash) {
+                // A tiny synchronous decode supplies a stable, deliberately
+                // low-detail wash that reads as blur without a heavy effect graph.
+                auto lowDetailMainBytes =
+                    CreateLowDetailAlbumCoverBytes(displayThumbnailBytes,
+                                                   true, false, false, 5, true, true);
+                auto const& mainWashBytes = lowDetailMainBytes.empty()
+                                                ? displayThumbnailBytes
+                                                : lowDetailMainBytes;
+                g_dynamicMainWash.Source(makeBitmap(mainWashBytes, true));
+            } else {
+                g_dynamicMainWash.Source(nullptr);
+            }
+            g_dynamicMainWash.Opacity(DynamicMainWashOpacity());
+        } catch (...) {
+            g_dynamicMainWash.Source(nullptr);
+            g_dynamicMainWash.Opacity(DynamicMainWashOpacity());
+        }
+    }
     if (compactWasInitialized && !g_expanded && (compactTextChanged || compactArtChanged)) {
         StartCompactTrackTransition(compactOldTitle, compactOldArtist,
                                     compactTextChanged, compactArtChanged);
@@ -12178,6 +14111,8 @@ void UpdatePlayerContents() {
 void RemoveIslandGrid() {
     StopTaskbarLayoutMonitor();
     StopHoverRenderLoop();
+    StopDynamicCompactRenderLoop();
+    ClearDynamicTransportButtonMotions();
     StopCompactTextRenderLoop();
     StopCompactProgressRenderLoop();
     DestroyExpandedPopup();
@@ -12187,6 +14122,25 @@ void RemoveIslandGrid() {
         g_injectionParent = nullptr;
         g_playerColumn = -1;
         g_islandScale = nullptr;
+        g_islandPressScale = nullptr;
+        g_islandHoverTranslate = nullptr;
+        ResetCompactIslandPressMotion();
+        g_dynamicMainIsland = nullptr;
+        g_dynamicMainOcclusion = nullptr;
+        g_dynamicMainWashHost = nullptr;
+        g_dynamicMainWash = nullptr;
+        g_dynamicMainEdgeGlow = nullptr;
+        g_dynamicTransportIsland = nullptr;
+        g_dynamicTransportSurface = nullptr;
+        g_dynamicTransportSurfaceScale = nullptr;
+        g_dynamicTransportControls = nullptr;
+        g_dynamicMainScale = nullptr;
+        g_dynamicTransportScale = nullptr;
+        g_dynamicTransportTranslate = nullptr;
+        g_dynamicTransportReveal = 0.0;
+        g_dynamicTransportTargetReveal = 0.0;
+        g_dynamicTransportRevealVelocity = 0.0;
+        g_dynamicTransportLaunchPhase = false;
         g_compactTitleText = nullptr;
         g_compactArtistText = nullptr;
         g_compactTextHost = nullptr;
@@ -12200,6 +14154,8 @@ void RemoveIslandGrid() {
         g_compactOutgoingArtistTranslate = nullptr;
         g_compactAlbumArtImage = nullptr;
         g_compactAlbumArtFade = nullptr;
+        g_dynamicTransportWash = nullptr;
+        g_dynamicTransportWashFade = nullptr;
         g_compactProgress = nullptr;
         g_compactTextEdgeFadeActive = false;
         g_compactTextInitialized = false;
@@ -12255,6 +14211,25 @@ void RemoveIslandGrid() {
     g_playerColumn = -1;
     g_expanded = false;
     g_islandScale = nullptr;
+    g_islandPressScale = nullptr;
+    g_islandHoverTranslate = nullptr;
+    ResetCompactIslandPressMotion();
+    g_dynamicMainIsland = nullptr;
+    g_dynamicMainOcclusion = nullptr;
+    g_dynamicMainWashHost = nullptr;
+    g_dynamicMainWash = nullptr;
+    g_dynamicMainEdgeGlow = nullptr;
+    g_dynamicTransportIsland = nullptr;
+    g_dynamicTransportSurface = nullptr;
+    g_dynamicTransportSurfaceScale = nullptr;
+    g_dynamicTransportControls = nullptr;
+    g_dynamicMainScale = nullptr;
+    g_dynamicTransportScale = nullptr;
+    g_dynamicTransportTranslate = nullptr;
+    g_dynamicTransportReveal = 0.0;
+    g_dynamicTransportTargetReveal = 0.0;
+    g_dynamicTransportRevealVelocity = 0.0;
+    g_dynamicTransportLaunchPhase = false;
     g_compactTitleText = nullptr;
     g_compactArtistText = nullptr;
     g_compactTextHost = nullptr;
@@ -12268,6 +14243,8 @@ void RemoveIslandGrid() {
     g_compactOutgoingArtistTranslate = nullptr;
     g_compactAlbumArtImage = nullptr;
     g_compactAlbumArtFade = nullptr;
+    g_dynamicTransportWash = nullptr;
+    g_dynamicTransportWashFade = nullptr;
     g_compactProgress = nullptr;
     g_compactTextEdgeFadeActive = false;
     g_compactTextInitialized = false;
@@ -12275,6 +14252,9 @@ void RemoveIslandGrid() {
     g_compactLastArtist.clear();
     g_compactLastTextMediaHash = UINT64_MAX;
     g_lastThumbnailHash = 0;
+    g_dynamicTransportAccentThumbnailHash = UINT64_MAX;
+    g_dynamicTransportAccentColorValid = false;
+    g_dynamicTransportAccentColor = Color(0xFF, 0x4F, 0x7D, 0xE8);
     g_themeVisualsValid = false;
     g_popupXamlThemeValid = false;
     g_popupXamlThemeMaterial.clear();
