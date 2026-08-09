@@ -2,13 +2,14 @@
 // @id              start-menu-open-real-file-location
 // @name            Start Menu Open Real File Location
 // @description     Makes Open file location select a Start menu shortcut's target instead of the shortcut itself
-// @version         1.0.0
+// @version         1.1.0
 // @author          Alchemy
 // @github          https://github.com/alchemyyy
 // @license         MIT
 // @include         StartMenuExperienceHost.exe
 // @include         SearchHost.exe
 // @include         SearchApp.exe
+// @include         RuntimeBroker.exe
 // @architecture    x86-64
 // @compilerOptions -lole32
 // ==/WindhawkMod==
@@ -60,6 +61,7 @@ using UniqueWideString = std::unique_ptr<WCHAR, CoTaskMemoryDeleter>;
 SHOpenFolderAndSelectItemsFunction s_windowsStorageOriginal = nullptr;
 SHOpenFolderAndSelectItemsFunction s_shell32Original = nullptr;
 HMODULE s_windowsStorageModule = nullptr;
+bool s_isSearchProcess = false;
 
 void ReleaseWindowsStorageModule() {
     if (!s_windowsStorageModule) {
@@ -159,7 +161,7 @@ HRESULT HandleSHOpenFolderAndSelectItems(
     DWORD flags,
     void* returnAddress) {
     if (!folderPidl || childCount != 0 || childPidls ||
-        !IsAppResolverCaller(returnAddress)) {
+        (!s_isSearchProcess && !IsAppResolverCaller(returnAddress))) {
         return originalFunction(folderPidl, childCount, childPidls, flags);
     }
 
@@ -204,6 +206,9 @@ HRESULT WINAPI Shell32SHOpenFolderAndSelectItemsHook(
 }  // namespace
 
 BOOL Wh_ModInit() {
+    s_isSearchProcess = GetModuleHandleW(L"SearchHost.exe") ||
+                        GetModuleHandleW(L"SearchApp.exe");
+
     s_windowsStorageModule = LoadLibraryExW(
         L"Windows.Storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     HMODULE shell32Module = GetModuleHandleW(L"shell32.dll");
