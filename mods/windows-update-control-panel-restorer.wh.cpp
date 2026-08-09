@@ -43,15 +43,12 @@
 - LinkSystemSettingsText: false
   $name: Link system settings text
   $description: This setting makes the "system settings" part of the recommendation text a blue link that opens Windows Update in the Settings app (ms-settings:windowsupdate). Disabled by default.
-- DebugForcePendingUpdate: false
-  $name: Debug - force pending-updates state
-  $description: This setting is a debug/preview option that forces the "pending updates" interface even when Windows reports no pending update. Disabled by default.
 */
 // ==/WindhawkModSettings==
 
 // ==WindhawkModReadme==
 /*
-# Windows Update Control Panel Restorer
+## Windows Update Control Panel Restorer
 
 This mod adds a best-effort classic Windows Update page back to Control Panel on
 Windows 10 and Windows 11. It uses a private Windows 8.1 UI payload with a modern
@@ -62,12 +59,11 @@ This is a reimplementation, not the original Windows Update client. Some buttons
 and small visual details are intentionally limited, and more details may be
 improved in future versions.
 
-**Screenshots**
+## **Screenshot**
 
-Add one screenshot per skin here before submitting (only `i.imgur.com` and
-`raw.githubusercontent.com` hosts are allowed).
+![Windows Update Control Panel Restorer](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winupdate.PNG)
 
-**Features**
+## **Features**
 
 - Classic Windows Update-style status page with real restart/update status.
 - Windows 7 or Windows 8.1 skin option for the status/app icon.
@@ -76,12 +72,12 @@ Add one screenshot per skin here before submitting (only `i.imgur.com` and
 - Multilingual UI: English, Italian, Spanish, French, Turkish, Russian,
   Portuguese, Chinese, Polish, Dutch, or auto-detect.
 
-**Notes**
+## **Notes**
 
 - Installing updates is still handled by the modern Settings app.
 - The "last checked" time is the moment this mod queried the system, so it can
   differ slightly from the Settings app.
-- **Why the mod downloads a DLL.** The restored page is the real Windows 8.1
+- **Why the mod downloads a DLL:** The restored page is the real Windows 8.1
   Windows Update Control Panel UI (wucltux.dll), loaded privately from a
   verified copy obtained from the Microsoft Symbol Server. That DLL is a
   **necessary dependency**: it is what renders the classic page, and the whole
@@ -89,7 +85,7 @@ Add one screenshot per skin here before submitting (only `i.imgur.com` and
   nothing to show, so the mod cannot function offline or without this payload.
   The download is a one-time fetch (retried up to a few times), the file is
   pinned to a known SHA-256 and its PE machine type is validated before it is
-  ever loaded, and it is kept as a private copy outside System32 - nothing is
+  ever loaded, and it is kept as a private copy outside System32 and nothing is
   installed to or replaced in the operating system.
 
 **Credits**
@@ -118,6 +114,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <new>
 #include <mutex>
 #include <shared_mutex>
 #include <thread>
@@ -615,10 +612,8 @@ static std::atomic<bool> g_linkSystemSettingsText{false};
 // Debug/preview flag: when set, the restored page renders the "pending
 // updates" interface (orange strip, "Pending restart", shield icon) even when
 // Windows reports no pending update. This is a developer-only diagnostic switch.
-// It is gated behind a compile-time constant so it is inactive in shipped builds;
-// flip kWuDebugForcePendingEnabled to true (and recompile) to preview the state.
-// The user-facing "DebugForcePendingUpdate" setting is still read, but only when
-// the constant enables it, so it has no effect in production.
+// It is intentionally compile-time only: shipped builds do not expose a setting
+// which suggests that a diagnostic state can be enabled at runtime.
 static constexpr bool kWuDebugForcePendingEnabled = false;
 static std::atomic<bool> g_debugForcePending{false};
 
@@ -634,6 +629,7 @@ static std::atomic<bool> g_showServiceNotice{true};
 // Cached "last check" timestamp: the moment the mod last queried the system for
 // available updates (see LastCheckForUpdatesText). Kept as a formatted string.
 static std::wstring g_lastQueryTimeText;
+static std::mutex g_lastQueryTimeMutex;
 
 // Cached, background-gathered status values so the Control Panel UI thread never
 // has to do blocking SCM/WUA work during page rendering (see GatherBackgroundStatus).
@@ -1070,10 +1066,45 @@ static std::wstring StoreDir() {
 }
 
 
+// WinINet synchronous calls do not observe g_stopping until they return. Keep the
+// active handles published so teardown can close them and break a blocked read.
+static std::mutex g_downloadMutex;
+static HINTERNET g_downloadInternet = nullptr;
+static HINTERNET g_downloadUrl = nullptr;
+
+static void CloseActiveDownloadHandles() {
+    HINTERNET url = nullptr, internet = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_downloadMutex);
+        url = g_downloadUrl; g_downloadUrl = nullptr;
+        internet = g_downloadInternet; g_downloadInternet = nullptr;
+    }
+    if (url) InternetCloseHandle(url);
+    if (internet) InternetCloseHandle(internet);
+}
+
+// Removes handles only if this worker still owns them. If teardown already took
+// them, it is solely responsible for closing them, avoiding a double-close race.
+static void CloseOwnedDownloadHandles(HINTERNET url, HINTERNET internet) {
+    bool closeUrl = false, closeInternet = false;
+    {
+        std::lock_guard<std::mutex> lock(g_downloadMutex);
+        if (g_downloadUrl == url) { g_downloadUrl = nullptr; closeUrl = true; }
+        if (g_downloadInternet == internet) { g_downloadInternet = nullptr; closeInternet = true; }
+    }
+    if (closeUrl && url) InternetCloseHandle(url);
+    if (closeInternet && internet) InternetCloseHandle(internet);
+}
+
 static bool DownloadWithTimeout(const std::wstring& destination) {
     HINTERNET internet = InternetOpenW(L"Windhawk Windows Update Restorer",
                                        INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!internet) return false;
+    {
+        std::lock_guard<std::mutex> lock(g_downloadMutex);
+        if (g_stopping.load()) { InternetCloseHandle(internet); return false; }
+        g_downloadInternet = internet;
+    }
     DWORD timeout = kDownloadTimeoutMs;
     InternetSetOptionW(internet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
     InternetSetOptionW(internet, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
@@ -1082,7 +1113,18 @@ static bool DownloadWithTimeout(const std::wstring& destination) {
                                      INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE |
                                          INTERNET_FLAG_NO_UI,
                                      0);
-    if (!url) { InternetCloseHandle(internet); return false; }
+    if (!url) { CloseOwnedDownloadHandles(nullptr, internet); return false; }
+    {
+        std::lock_guard<std::mutex> lock(g_downloadMutex);
+        if (g_stopping.load()) {
+            // The stop path either owns the parent already or will take both.
+            // Publish the child before returning so it can abort it as well.
+            g_downloadUrl = url;
+        } else {
+            g_downloadUrl = url;
+        }
+    }
+    if (g_stopping.load()) { CloseOwnedDownloadHandles(url, internet); return false; }
     bool ok = false;
     DWORD status = 0, statusLength = sizeof(status), headerIndex = 0;
     if (HttpQueryInfoW(url, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status,
@@ -1107,8 +1149,7 @@ static bool DownloadWithTimeout(const std::wstring& destination) {
             CloseHandle(file);
         }
     }
-    InternetCloseHandle(url);
-    InternetCloseHandle(internet);
+    CloseOwnedDownloadHandles(url, internet);
     return ok;
 }
 
@@ -3137,7 +3178,7 @@ static const char kWindows81UpdateStatusPngBase64[] =
 // -----------------------------------------------------------------------------
 static const wchar_t* kAppletLogoWin7FileName = L"wuapplet-win7.ico";
 static const wchar_t* kAppletLogoWin81FileName = L"wuapplet-win81.ico";
-static const wchar_t* kAppletTasksXmlFileName = L"wuapplet-tasks.xml";
+static const wchar_t* kAppletTasksXmlFileName = L"wuapplet-tasks-v2.xml";
 static const char kAppletLogoWin7IcoBase64[] =
     "AAABAAUAEBAAAAAAIAB+AwAAVgAAABgYAAAAACAAMgYAANQDAAAgIAAAAAAgADIJAAAGCgAAMDAAAAAAIADaEAAAOBMAAEBA"
     "AAAAACAA6hkAABIkAACJUE5HDQoaCgAAAA1JSERSAAAAEAAAABAIBgAAAB/z/2EAAANFSURBVHicVZJfaFtlGMaf9zvfyWma"
@@ -3745,8 +3786,10 @@ static std::vector<BYTE> DecodeBase64Icon(const char* source) {
 struct EmbeddedIconHeader { WORD reserved, type, count; };
 struct EmbeddedIconEntry { BYTE width, height, colors, reserved; WORD planes, bitCount; DWORD bytes, offset; };
 #pragma pack(pop)
+static std::mutex g_statusIconMutex;
 static HICON g_legacyWarningShield = nullptr;
 static HICON GetLegacyWarningShieldIcon() {
+    std::lock_guard<std::mutex> lock(g_statusIconMutex);
     if (g_legacyWarningShield) return g_legacyWarningShield;
     std::vector<BYTE> ico = DecodeBase64Icon(kLegacyWarningShieldIcoBase64);
     if (ico.size() < sizeof(EmbeddedIconHeader) + sizeof(EmbeddedIconEntry)) return nullptr;
@@ -3769,6 +3812,7 @@ static HICON g_updatesInstalledIcon = nullptr;
 // any DPI. We resolve gdiplus.dll once and reuse the pointers/startup token.
 static HMODULE g_hGdiPlus = NULL;
 static ULONG_PTR g_gdiplusToken = 0;
+static std::mutex g_gdiPlusMutex;
 typedef int (WINAPI *GdipCreateBitmapFromStreamFunc)(IStream*, void**);
 typedef int (WINAPI *GdipCreateBitmapFromScan0Func)(int, int, int, int, const void*, void**);
 typedef int (WINAPI *GdipGetImageGraphicsContextFunc)(void*, void**);
@@ -3791,6 +3835,7 @@ static GdipDeleteGraphicsFunc pGdipDeleteGraphics = NULL;
 static GdipDisposeImageFunc pGdipDisposeImage = NULL;
 
 static BOOL InitGdiPlusRendering() {
+    std::lock_guard<std::mutex> lock(g_gdiPlusMutex);
     if (g_hGdiPlus) return TRUE;
     g_hGdiPlus = LoadLibraryExW(L"gdiplus.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_hGdiPlus) { Wh_Log(L"Windows Update Restorer: GDI+ failed to load"); return FALSE; }
@@ -3822,6 +3867,7 @@ static BOOL InitGdiPlusRendering() {
 }
 
 static void ShutdownGdiPlusRendering() {
+    std::lock_guard<std::mutex> lock(g_gdiPlusMutex);
     if (g_hGdiPlus) {
         typedef void (WINAPI *GdiplusShutdownFunc)(ULONG_PTR);
         GdiplusShutdownFunc pShutdown = (GdiplusShutdownFunc)GetProcAddress(g_hGdiPlus, "GdiplusShutdown");
@@ -3880,6 +3926,7 @@ static HICON CreateIconFromBase64PngBicubic(const char* base64Str, int targetWid
 }
 
 static HICON GetUpdatesInstalledIcon() {
+    std::lock_guard<std::mutex> lock(g_statusIconMutex);
     if (g_updatesInstalledIcon) return g_updatesInstalledIcon;
     g_updatesInstalledIcon = CreateIconFromBase64PngBicubic(kUpdatesInstalledPngBase64, 48, 48);
     return g_updatesInstalledIcon;
@@ -3887,6 +3934,7 @@ static HICON GetUpdatesInstalledIcon() {
 
 static HICON g_windows81UpdateStatusIcon = nullptr;
 static HICON GetWindows81UpdateStatusIcon() {
+    std::lock_guard<std::mutex> lock(g_statusIconMutex);
     if (g_windows81UpdateStatusIcon) return g_windows81UpdateStatusIcon;
     g_windows81UpdateStatusIcon = CreateIconFromBase64PngBicubic(kWindows81UpdateStatusPngBase64, 48, 48);
     return g_windows81UpdateStatusIcon;
@@ -3894,6 +3942,7 @@ static HICON GetWindows81UpdateStatusIcon() {
 
 static HICON g_wuDisabledShieldIcon = nullptr;
 static HICON GetWuDisabledShieldIcon() {
+    std::lock_guard<std::mutex> lock(g_statusIconMutex);
     if (g_wuDisabledShieldIcon) return g_wuDisabledShieldIcon;
     g_wuDisabledShieldIcon = CreateIconFromBase64PngBicubic(kWuDisabledShieldPngBase64, 48, 48);
     return g_wuDisabledShieldIcon;
@@ -4066,7 +4115,7 @@ static void LoadLanguageSetting() {
     g_linkSystemSettingsText.store(Wh_GetIntSetting(L"LinkSystemSettingsText") != 0);
     // Debug: force the "pending updates" interface even without a real pending update.
     if constexpr (kWuDebugForcePendingEnabled)
-        g_debugForcePending.store(Wh_GetIntSetting(L"DebugForcePendingUpdate") != 0);
+        g_debugForcePending.store(true);
     else
         g_debugForcePending.store(false);
 }
@@ -4403,14 +4452,8 @@ static bool IsWindows10() {
     return cached == 1;
 }
 
-static bool IsWindowsUpdateServiceAvailable() {
-    // If the background setup thread already probed the service, use that cached
-    // result so we never do blocking SCM RPC on the Control Panel UI thread.
-    if (g_cachedWuServiceProbed.load()) return g_cachedWuAvailable.load();
-
-    // Otherwise fall back to the short inline probe, but skip the broken cold-start
-    // short-circuit (g_wuCheckedTick starts as "never probed" so the first call
-    // always actually queries the SCM instead of returning uninitialized false).
+static bool ProbeWindowsUpdateServiceAvailable() {
+    // Called only by the setup worker; SCM RPC is not allowed on the render path.
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG last = g_wuCheckedTick.load();
     if (last != static_cast<ULONGLONG>(-1) && now - last < kWuCheckIntervalMs)
@@ -4438,6 +4481,12 @@ static bool IsWindowsUpdateServiceAvailable() {
     g_wuAvailable.store(available);
     g_wuCheckedTick.store(now);
     return available;
+}
+
+static bool IsWindowsUpdateServiceAvailable() {
+    // Rendering gets only a published value. Before the asynchronous probe has
+    // finished, false is a deliberately neutral state and avoids blocking SCM.
+    return g_cachedWuServiceProbed.load() && g_cachedWuAvailable.load();
 }
 
 // -----------------------------------------------------------------------------
@@ -4564,6 +4613,7 @@ static std::wstring NowLocalTimeText() {
 // time this mod asked the system (see the README limitation note). Returns the
 // cached value, or refreshes it to now if not set yet.
 static std::wstring LastCheckForUpdatesText() {
+    std::lock_guard<std::mutex> lock(g_lastQueryTimeMutex);
     if (g_lastQueryTimeText.empty()) g_lastQueryTimeText = NowLocalTimeText();
     return g_lastQueryTimeText;
 }
@@ -4580,8 +4630,11 @@ static std::wstring ComputeLastInstallTime() {
         std::wstring t = ReadWuaResultString(L"Install", v);
         if (!t.empty()) return t;
     }
-    // 2) WUA history: most recent successful install.
+    // 2) WUA history: most recent successful install. QueryHistory can block on
+    // an unhealthy datastore, so never enter it once teardown has started.
+    if (g_stopping.load()) return L"";
     std::vector<WuaHistoryEntry> history = GetUpdateHistory(200);
+    if (g_stopping.load()) return L"";
     for (const auto& h : history) {
         if (h.resultCode == orcSucceeded && h.date > 0) {
             std::wstring s = FormatWuaDate(h.date);
@@ -4594,15 +4647,10 @@ static std::wstring ComputeLastInstallTime() {
 // Returns the cached "Updates were installed" value computed on the background
 // thread. Never does blocking work here, so it is safe to call from the render path.
 static std::wstring LastInstallTimeText() {
+    // Rendering must never start WUA work or wait for the worker's WUA call.
+    // A blank value is neutral and the next render uses the completed cache.
     std::lock_guard<std::mutex> lock(g_statusMutex);
-    if (!g_lastInstallComputed) {
-        // Not gathered yet (e.g. page rendered before the setup thread finished).
-        // Compute once, synchronously, so the value is at least correct; subsequent
-        // renders use the cache and never block again.
-        g_cachedLastInstall = ComputeLastInstallTime();
-        g_lastInstallComputed = true;
-    }
-    return g_cachedLastInstall;
+    return g_lastInstallComputed ? g_cachedLastInstall : std::wstring();
 }
 
 // Background gathering (called from the setup thread): probes the Windows Update
@@ -4610,14 +4658,20 @@ static std::wstring LastInstallTimeText() {
 // Panel UI thread never does blocking SCM/WUA work while rendering the page.
 static void GatherBackgroundStatus() {
     // Probe the service (SCM RPC) and cache the outcome.
-    const bool available = IsWindowsUpdateServiceAvailable();
+    const bool available = ProbeWindowsUpdateServiceAvailable();
     g_cachedWuAvailable.store(available);
     g_cachedWuServiceProbed.store(true);
 
-    // Pre-compute the potentially slow update-history query.
-    std::lock_guard<std::mutex> lock(g_statusMutex);
-    g_cachedLastInstall = ComputeLastInstallTime();
-    g_lastInstallComputed = true;
+    // Do the slow WUA work without the cache mutex: renderers can return their
+    // neutral state immediately instead of waiting behind QueryHistory.
+    if (g_stopping.load()) return;
+    std::wstring lastInstall = ComputeLastInstallTime();
+    if (g_stopping.load()) return;
+    {
+        std::lock_guard<std::mutex> lock(g_statusMutex);
+        g_cachedLastInstall = std::move(lastInstall);
+        g_lastInstallComputed = true;
+    }
 }
 
 // =============================================================================
@@ -5262,6 +5316,19 @@ static std::wstring RootPath(HKEY key) {
 }
 
 
+// Cheap allocation-free filter for the RegOpenKey* hook hot path.
+static bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
+    static const wchar_t* needles[] = { L"clsid", L"controlpanel" };
+    for (size_t i = 0; i < path.size(); ++i) {
+        for (const auto* needle : needles) {
+            size_t j = 0;
+            while (needle[j] && i + j < path.size() && towlower(path[i + j]) == needle[j]) ++j;
+            if (!needle[j]) return true;
+        }
+    }
+    return false;
+}
+
 class KeyTracker {
 
 public:
@@ -5275,8 +5342,16 @@ public:
         std::shared_lock lock(mutex_);
         return fake_.count(key) != 0;
     }
+    bool IsFakeAndGetPath(HKEY key, std::wstring& path) const {
+        if (auto root = RootPath(key); !root.empty()) { path = std::move(root); return false; }
+        std::shared_lock lock(mutex_);
+        const auto found = paths_.find(key);
+        path = found == paths_.end() ? std::wstring() : found->second;
+        return fake_.count(key) != 0;
+    }
     HKEY CreateFake(const std::wstring& path) {
-        auto owner = std::make_unique<int>(1);
+        std::unique_ptr<int> owner(new (std::nothrow) int(1));
+        if (!owner) return nullptr;
         HKEY key = reinterpret_cast<HKEY>(owner.get());
         std::unique_lock lock(mutex_);
         paths_[key] = path;
@@ -5284,7 +5359,7 @@ public:
         return key;
     }
     void Track(HKEY key, const std::wstring& path) {
-        if (!key || IsRootKey(key)) return;
+        if (!key || IsRootKey(key) || !ContainsRelevantKeywordInsensitive(path)) return;
         std::unique_lock lock(mutex_);
         paths_[key] = path;
     }
@@ -5478,10 +5553,10 @@ static void AppendControlPanelTaskXml(std::wstring& xml, const wchar_t* id,
         L"        <sh:task id=\"" + std::wstring(id) + L"\">\r\n"
         L"            <sh:name>" + XmlEscape(name) + L"</sh:name>\r\n"
         L"            <sh:keywords>" + XmlEscape(keywords) + L"</sh:keywords>\r\n"
-        // All classic blue task links open the restored Windows Update page.
-        // Use explorer shell:::{CLSID} explicitly, as requested, rather than
-        // relying on canonical Control Panel task resolution.
-        L"            <sh:command>%SystemRoot%\\explorer.exe shell:::" + std::wstring(kAppletClsid) + L"</sh:command>\r\n"
+        // Windows 11 25H2 no longer reliably expands %SystemRoot% in a cpltasks
+        // command before splitting its executable and arguments. Use the normal
+        // PATH-resolved explorer command and an explicit shell namespace target.
+        L"            <sh:command>explorer.exe shell:::" + std::wstring(kAppletClsid) + L"</sh:command>\r\n"
         L"        </sh:task>\r\n";
 }
 
@@ -5636,21 +5711,35 @@ static bool WantsWrite(REGSAM access) {
     return (access & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
 }
 static LSTATUS OpenVirtual(HKEY key, LPCWSTR subKey, DWORD options, REGSAM access, PHKEY out) {
-    std::wstring base = g_keys.Path(key);
-    std::wstring full = base;
-    if (subKey && *subKey) { if (!full.empty()) full += L"\\"; full += subKey; }
-    if (g_keys.IsFake(key)) {
-        if (!IsTarget(full)) return ERROR_FILE_NOT_FOUND;
-        if (WantsWrite(access)) return ERROR_ACCESS_DENIED;
-        *out = g_keys.CreateFake(full); return ERROR_SUCCESS;
+    if (!out) return ERROR_INVALID_PARAMETER;
+    try {
+        std::wstring full;
+        const bool isFake = g_keys.IsFakeAndGetPath(key, full);
+        if (subKey && *subKey) { if (!full.empty()) full += L"\\"; full += subKey; }
+        if (isFake) {
+            if (!IsTarget(full)) return ERROR_FILE_NOT_FOUND;
+            if (WantsWrite(access)) return ERROR_ACCESS_DENIED;
+            HKEY fake = g_keys.CreateFake(full);
+            if (!fake) return ERROR_OUTOFMEMORY;
+            *out = fake;
+            return ERROR_SUCCESS;
+        }
+        LSTATUS status = RegOpenKeyExWOriginal(key, subKey, options, access, out);
+        if (status == ERROR_SUCCESS && *out) {
+            try { g_keys.Track(*out, full); }
+            catch (...) { Wh_Log(L"Windows Update Restorer: unable to track opened registry key"); }
+        } else if (status == ERROR_FILE_NOT_FOUND && IsTarget(full)) {
+            if (WantsWrite(access)) return ERROR_ACCESS_DENIED;
+            HKEY fake = g_keys.CreateFake(full);
+            if (!fake) return ERROR_OUTOFMEMORY;
+            *out = fake;
+            return ERROR_SUCCESS;
+        }
+        return status;
+    } catch (...) {
+        // Never unwind a C++ exception through a foreign registry API caller.
+        return ERROR_NOT_ENOUGH_MEMORY;
     }
-    LSTATUS status = RegOpenKeyExWOriginal(key, subKey, options, access, out);
-    if (status == ERROR_SUCCESS && out && *out) g_keys.Track(*out, full);
-    else if (status == ERROR_FILE_NOT_FOUND && IsTarget(full)) {
-        if (WantsWrite(access)) return ERROR_ACCESS_DENIED;
-        *out = g_keys.CreateFake(full); return ERROR_SUCCESS;
-    }
-    return status;
 }
 static LSTATUS WINAPI RegOpenKeyExWHook(HKEY key, LPCWSTR subKey, DWORD options,
                                         REGSAM access, PHKEY out) {
@@ -5669,21 +5758,24 @@ static LSTATUS WINAPI RegCloseKeyHook(HKEY key) {
 static LSTATUS WINAPI RegQueryValueExWHook(HKEY key, LPCWSTR valueName, LPDWORD reserved,
                                             LPDWORD type, LPBYTE data, LPDWORD bytes) {
 
-    std::wstring path = g_keys.Path(key), name = valueName ? valueName : L"";
+    std::wstring path;
+    const bool isFake = g_keys.IsFakeAndGetPath(key, path);
+    const std::wstring name = valueName ? valueName : L"";
     LSTATUS result = ERROR_FILE_NOT_FOUND;
     if (!path.empty() && ProvideValue(path, name, type, data, bytes, result)) return result;
-    if (g_keys.IsFake(key)) return ERROR_FILE_NOT_FOUND;
+    if (isFake) return ERROR_FILE_NOT_FOUND;
     return RegQueryValueExWOriginal(key, valueName, reserved, type, data, bytes);
 }
 static LSTATUS WINAPI RegGetValueWHook(HKEY key, LPCWSTR subKey, LPCWSTR valueName, DWORD flags,
                                        LPDWORD type, PVOID data, LPDWORD bytes) {
 
-    std::wstring path = g_keys.Path(key);
+    std::wstring path;
+    const bool isFake = g_keys.IsFakeAndGetPath(key, path);
     if (subKey && *subKey) { if (!path.empty()) path += L"\\"; path += subKey; }
     LSTATUS result = ERROR_FILE_NOT_FOUND;
     if (!path.empty() && ProvideValue(path, valueName ? valueName : L"", type,
                                       static_cast<LPBYTE>(data), bytes, result)) return result;
-    if (g_keys.IsFake(key)) return ERROR_FILE_NOT_FOUND;
+    if (isFake) return ERROR_FILE_NOT_FOUND;
     return RegGetValueWOriginal(key, subKey, valueName, flags, type, data, bytes);
 }
 
@@ -5699,9 +5791,11 @@ static bool VirtualSubkey(Node node, DWORD index, std::wstring& name) {
 static LSTATUS WINAPI RegEnumKeyExWHook(HKEY key, DWORD index, LPWSTR name, LPDWORD chars,
                                         LPDWORD reserved, LPWSTR cls, LPDWORD classChars,
                                         PFILETIME time) {
-    if (g_keys.IsFake(key)) {
+    std::wstring keyPath;
+    const bool isFake = g_keys.IsFakeAndGetPath(key, keyPath);
+    if (isFake) {
         std::wstring sub;
-        if (!VirtualSubkey(Classify(g_keys.Path(key)), index, sub)) return ERROR_NO_MORE_ITEMS;
+        if (!VirtualSubkey(Classify(keyPath), index, sub)) return ERROR_NO_MORE_ITEMS;
         if (!name || !chars) return ERROR_INVALID_PARAMETER;
         if (*chars <= sub.size()) { *chars = static_cast<DWORD>(sub.size() + 1); return ERROR_MORE_DATA; }
         wcscpy_s(name, *chars, sub.c_str()); *chars = static_cast<DWORD>(sub.size());
@@ -5724,8 +5818,10 @@ static LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY key, LPWSTR cls, LPDWORD classCh
                                            LPDWORD values, LPDWORD maxValueName, LPDWORD maxValueData,
                                            LPDWORD security, PFILETIME time) {
 
-    if (g_keys.IsFake(key)) {
-        Node node = Classify(g_keys.Path(key));
+    std::wstring keyPath;
+    const bool isFake = g_keys.IsFakeAndGetPath(key, keyPath);
+    if (isFake) {
+        Node node = Classify(keyPath);
         if (subKeys) *subKeys = node == Node::Root ? 4 :
                                 (node == Node::Instance || node == Node::Provider) ? 1 : 0;
         if (values) *values = 8; // Sizing hint; values are supplied on query.
@@ -6009,6 +6105,7 @@ static void CleanupGeneratedResourceModuleFiles() {
 void Wh_ModUninit() {
     g_stopping.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
+    CloseActiveDownloadHandles();
     if (g_setupThread && g_setupThread->joinable()) g_setupThread->join();
     g_setupThread.reset();
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
