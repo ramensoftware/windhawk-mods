@@ -2,12 +2,105 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-09T16:33:39.000Z</updated>
+    <updated>2026-08-09T17:40:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows SDR to HDR Tonemapping Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/dwm-eotf-gamma#c844e0ef160245b5c980282905a5fabd2dcbcc35</id>
+        <link href="https://windhawk.net/mods/dwm-eotf-gamma"/>
+        <updated>2026-08-09T17:40:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowssdrtohdrtonemappingfix">Windows SDR to HDR Tonemapping Fix</h1>
+<p>Viewing SDR content while using HDR in Windows causes washed out darker tones
+like shadows. This corrects it so that Windows uses a standard gamma curve. It
+should not affect native HDR content like games and movies.</p>
+<p>A simple, accurate fix for washed-out SDR shadows in Windows HDR mode.</p>
+<p><img src="https://i.imgur.com/GwegdeU.png" alt="Comparison Image" /></p>
+<p>See examples and read more on the <a href="https://github.com/dylanraga/win11hdr-srgb-to-gamma2.2-icm">win11hdr-srgb-to-gamma2.2-icm
+GitHub</a>, an
+alternative icc based solution by dylanraga</p>
+<h2 id="dwmeotfgammacurve">DWM EOTF Gamma Curve</h2>
+<p>When Windows HDR is enabled, DWM converts SDR content to HDR scRGB using the
+sRGB EOTF (a ~2.2 power curve with a linear toe segment near black). This mod
+patches the DXBC shader bytecode embedded in <code>dwmcore.dll</code> at DWM startup,
+replacing the sRGB curve with a simple power-law gamma. This gives you direct
+control over the SDR-to-HDR tone mapping without permanently modifying any files
+on disk.</p>
+<p>Originally based on <a href="https://github.com/ledoge/dwm_eotf">dwm_eotf</a> by ledoge
+(GPL-3.0), but expanded</p>
+<h2 id="howitworks">How it works</h2>
+<p>When DWM starts, Windhawk injects this mod early, ideally before Direct3D
+initializes, so the patched bytecode is what D3D compiles from. The mod walks
+<code>dwmcore.dll</code>'s read-only PE sections looking for DXBC shader blobs that contain
+all four sRGB EOTF float constants. When found, those constants are replaced
+with the equivalent pure power-law values and the shader checksum is
+recalculated so D3D accepts the modified bytecode.</p>
+<p>When the mod is unloaded while DWM is running (e.g. Windhawk disabled or
+settings changed), all patched bytes are restored in memory. Note that the
+unload callback does not run at process exit, so no restore occurs at Windows
+shutdown; this is harmless since the process is terminating anyway.</p>
+<h2 id="importantenableinjectionintodwmexe">Important: enable injection into dwm.exe</h2>
+<p><code>dwm.exe</code> is a critical system process. Windhawk does not inject into it by
+default — you must explicitly allow it in <strong>Windhawk's advanced settings</strong>:</p>
+<ol>
+<li>Open Windhawk → <strong>Advanced settings</strong> → <strong>More advanced settings</strong></li>
+<li>In the <strong>Process inclusion list</strong>, add <code>dwm.exe</code></li>
+<li>Click <strong>Save</strong></li>
+</ol>
+<p>Without this step the mod will be silently ignored.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Windhawk advanced settings" /></p>
+<h2 id="usage">Usage</h2>
+<ol>
+<li>Enable <strong>Windows HDR</strong> in display settings.</li>
+<li>Install and enable this mod.</li>
+<li>Select your preferred gamma value in the settings below.</li>
+<li><strong>Log off and back in</strong> (or otherwise restart DWM) for the change to take
+effect.</li>
+<li>To change the gamma value later, update the setting and restart DWM again.</li>
+</ol>
+<h2 id="gammareference">Gamma reference</h2>
+<p>| Value | Description |
+|-------|-------------|
+| 1.8   | Bright and low contrast, legacy Mac standard |
+| 2.0   | Compromise between 1.8 and 2.2 |
+| 2.2   | <strong>Default</strong> - Standard PC/monitor target, sRGB average and Display P3 |
+| 2.3   | Compromise between 2.2 and 2.4 |
+| 2.4   | Broadcast and HDTV, Rec.709 / BT.1886 |
+| 2.6   | Dark and high contrast, Digital cinema projection, DCI-P3 |</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>Only applies when Windows HDR is enabled.</strong> With HDR off, DWM does not use
+this code path.</li>
+<li><strong>Gamma changes require a DWM restart.</strong> D3D compiles the shader bytecode once
+at startup. Patching the bytecode after that has no effect until DWM restarts
+(log off and back on).</li>
+<li><strong>Disabling the mod also requires a DWM restart.</strong> After unloading, shaders
+already compiled from the patched bytecode retain the power-law curve while
+newly compiled ones revert, leaving a mixed state until DWM restarts.</li>
+<li><strong>Chromium-based browsers and Electron apps</strong> (Chrome, Edge, VS Code, Discord,
+etc.) switch between DWM's SDR compositing path and a direct scRGB path
+depending on tab/window content. Each
+transition passes one or two frames through DWM's patched SDR shader, which
+can produce a brief tone-mapping flicker. A per-app exclusion list is not
+feasible: the shader bytecode is patched once at DWM startup before Direct3D
+compiles it, the compiled shader objects are global across all windows, and
+patching or unpatching at runtime has no effect on shaders that are already
+compiled. The flicker is driven by Chrome's own mode-switching and cannot be
+suppressed from the DWM side.</li>
+<li>If the mod logs "No sRGB EOTF shaders found" after a Windows Update, the
+constant encoding in <code>dwmcore.dll</code> has changed format. Please file an issue.</li>
+<li>If the desktop stops rendering correctly after enabling this mod, boot into
+Safe Mode (Windhawk does not inject there) or start Windhawk with
+<code>windhawk.exe -safe-mode</code>, then disable or uninstall the mod.</li>
+</ul>]]></content>
+        <author>
+            <name>millerpb</name>
+            <uri>https://github.com/millerpb</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows XP Sorted Columns 1.0.0]]></title>
         <id>https://windhawk.net/mods/win-xp-sorted-columns#9158b3e75c9d87e40294f43fe9ae70bc5555e9a4</id>
@@ -694,18 +787,6 @@ extends upward and outward. Total size is
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[macOS magnifying cursor 1.4.7]]></title>
-        <id>https://windhawk.net/mods/mac-magnifying-cursor#e0d29aa93e04e8b7c093c05c7c3d4956878cf40c</id>
-        <link href="https://windhawk.net/mods/mac-magnifying-cursor"/>
-        <updated>2026-08-02T22:24:57.000Z</updated>
-        <content type="html"><![CDATA[<p>Recreates the macOS "Shake to Find" feature: rapidly shaking your mouse temporarily enlarges the cursor so you can instantly locate it on screen.</p>
-<p><img src="https://raw.githubusercontent.com/alivca/windhawk-mods-gif/main/github.gif" alt="Preview" /></p>]]></content>
-        <author>
-            <name>Jaali</name>
-            <uri>https://github.com/alivca</uri>
         </author>
     </entry>
 </feed>

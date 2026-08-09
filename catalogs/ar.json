@@ -4147,6 +4147,37 @@
         "version": "1.0.0"
       }
     },
+    "dwm-eotf-gamma": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786297204000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786297204000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "millerpb",
+        "description": "Replaces DWM's sRGB EOTF with a pure power-law gamma for SDR-to-HDR tone mapping",
+        "github": "https://github.com/millerpb",
+        "include": [
+          "dwm.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Windows SDR to HDR Tonemapping Fix",
+        "version": "1.0"
+      }
+    },
     "dwm-ghost-mods": {
       "details": {
         "defaultSorting": 4430,
