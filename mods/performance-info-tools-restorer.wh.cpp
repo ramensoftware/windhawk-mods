@@ -443,6 +443,8 @@ static HANDLE g_stopEvent = nullptr;
 // abort promptly instead of blocking shutdown.
 std::atomic<bool> g_shuttingDown{false};
 static const DWORD kDownloadTimeoutMs = 20000;
+static std::mutex g_msgBoxThreadsMutex;
+static std::vector<HANDLE> g_msgBoxThreads;
 static const int kMaxDownloadAttempts = 3;
 static const DWORD kRetryDelayMs = 3000;
 
@@ -3960,22 +3962,20 @@ static const wchar_t* PerfMessageCaptionText(MuiLanguage lang) {
         default: return L"Computer Performance";
     }
 }
-
 static const wchar_t* PerfNumbersMessageText(MuiLanguage lang) {
     switch (lang) {
-        case MuiLanguage::IT_IT: return L"L'indice prestazioni Windows valutava i componenti chiave del sistema su una scala da 1,0 a 9,9: punteggi più alti indicavano hardware più performante. Questa funzionalità non è più disponibile nelle versioni recenti di Windows.";
-        case MuiLanguage::ES_ES: return L"El Índice de experiencia de Windows evaluaba los componentes principales del equipo en una escala de 1,0 a 9,9: las puntuaciones más altas indicaban un hardware con mejor rendimiento. Esta función ya no está disponible en las versiones recientes de Windows.";
-        case MuiLanguage::FR_FR: return L"L'indice de performance Windows évaluait les composants principaux de l'ordinateur sur une échelle de 1,0 à 9,9 : un score plus élevé indiquait un matériel plus performant. Cette fonctionnalité n'est plus disponible dans les versions récentes de Windows.";
-        case MuiLanguage::TR_TR: return L"Windows Deneyim Dizini, bilgisayarın temel bileşenlerini 1,0 ile 9,9 arasında bir ölçekte değerlendirirdi: daha yüksek puanlar daha güçlü donanım anlamına gelirdi. Bu özellik artık Windows'un yeni sürümlerinde bulunmuyor.";
-        case MuiLanguage::RU_RU: return L"Индекс производительности Windows оценивал ключевые компоненты компьютера по шкале от 1,0 до 9,9: более высокие оценки означали более производительное оборудование. Эта функция больше не доступна в новых версиях Windows.";
-        case MuiLanguage::ZH_CN: return L"Windows 体验指数按 1.0 到 9.9 的等级评估计算机的关键组件：分数越高，表示硬件性能越好。此功能在较新版本的 Windows 中已不再提供。";
-        case MuiLanguage::DE_DE: return L"Der Windows-Leistungsindex bewertete die wichtigsten Komponenten des Computers auf einer Skala von 1,0 bis 9,9: Höhere Werte bedeuteten leistungsfähigere Hardware. Diese Funktion ist in aktuellen Windows-Versionen nicht mehr verfügbar.";
-        case MuiLanguage::PT_BR: return L"O Índice de Experiência do Windows avaliava os principais componentes do computador em uma escala de 1,0 a 9,9: pontuações mais altas indicavam hardware com melhor desempenho. Esse recurso não está mais disponível nas versões recentes do Windows.";
-        case MuiLanguage::PL_PL: return L"Indeks wydajności systemu Windows oceniał główne składniki komputera w skali od 1,0 do 9,9: wyższe wyniki oznaczały wydajniejszy sprzęt. Ta funkcja nie jest już dostępna w nowszych wersjach systemu Windows.";
-        default: return L"The Windows Experience Index rated your computer's key components on a scale of 1.0 to 9.9: higher numbers meant better-performing hardware. This feature is no longer available in recent versions of Windows.";
+        case MuiLanguage::IT_IT: return L"L'indice prestazioni Windows valuta i componenti chiave del sistema su una scala da 1,0 a 9,9: punteggi più alti indicano hardware più performante.";
+        case MuiLanguage::ES_ES: return L"El Índice de experiencia de Windows evalúa los componentes principales del equipo en una escala de 1,0 a 9,9: las puntuaciones más altas indican un hardware con mejor rendimiento.";
+        case MuiLanguage::FR_FR: return L"L'indice de performance Windows évalue les composants principaux de l'ordinateur sur une échelle de 1,0 à 9,9 : un score plus élevé indique un matériel plus performant.";
+        case MuiLanguage::TR_TR: return L"Windows Deneyim Dizini, bilgisayarın temel bileşenlerini 1,0 ile 9,9 arasında bir ölçekte değerlendirir: daha yüksek puanlar daha güçlü donanım anlamına gelir.";
+        case MuiLanguage::RU_RU: return L"Индекс производительности Windows оценивает ключевые компоненты компьютера по шкале от 1,0 до 9,9: более высокие оценки означают более производительное оборудование.";
+        case MuiLanguage::ZH_CN: return L"Windows 体验指数按 1.0 到 9.9 的等级评估计算机的关键组件：分数越高，表示硬件性能越好。";
+        case MuiLanguage::DE_DE: return L"Der Windows-Leistungsindex bewertet die wichtigsten Komponenten des Computers auf einer Skala von 1,0 bis 9,9: Höhere Werte bedeuten leistungsfähigere Hardware.";
+        case MuiLanguage::PT_BR: return L"O Índice de Experiência do Windows avalia os principais componentes do computador em uma escala de 1,0 a 9,9: pontuações mais altas indicam hardware com melhor desempenho.";
+        case MuiLanguage::PL_PL: return L"Indeks wydajności systemu Windows ocenia główne składniki komputera w skali od 1,0 do 9,9: wyższe wyniki oznaczają wydajniejszy sprzęt.";
+        default: return L"The Windows Experience Index rates your computer's key components on a scale of 1.0 to 9.9: higher numbers mean better-performing hardware.";
     }
 }
-
 static const wchar_t* PerfTipsMessageText(MuiLanguage lang) {
     switch (lang) {
         case MuiLanguage::IT_IT: return L"Alcuni suggerimenti generali per migliorare le prestazioni del computer: mantieni Windows e i driver aggiornati, libera spazio su disco, disattiva i programmi non necessari all'avvio ed esegui regolarmente la manutenzione del sistema.";
@@ -3990,22 +3990,20 @@ static const wchar_t* PerfTipsMessageText(MuiLanguage lang) {
         default: return L"A few general tips for improving your computer's performance: keep Windows and drivers up to date, free up disk space, disable unnecessary startup programs, and run system maintenance regularly.";
     }
 }
-
 static const wchar_t* PerfLearnMoreMessageText(MuiLanguage lang) {
     switch (lang) {
-        case MuiLanguage::IT_IT: return L"Puoi trovare ulteriori software e strumenti per il tuo computer nel Microsoft Store.";
-        case MuiLanguage::ES_ES: return L"Puedes encontrar más software y herramientas para tu equipo en Microsoft Store.";
-        case MuiLanguage::FR_FR: return L"Vous pouvez trouver d'autres logiciels et outils pour votre ordinateur dans le Microsoft Store.";
-        case MuiLanguage::TR_TR: return L"Bilgisayarınız için daha fazla yazılım ve araç bulmak üzere Microsoft Store'u ziyaret edebilirsiniz.";
-        case MuiLanguage::RU_RU: return L"Дополнительное программное обеспечение и инструменты для компьютера можно найти в Microsoft Store.";
-        case MuiLanguage::ZH_CN: return L"你可以在 Microsoft Store 中找到适用于你计算机的更多软件和工具。";
-        case MuiLanguage::DE_DE: return L"Weitere Software und Tools für Ihren Computer finden Sie im Microsoft Store.";
-        case MuiLanguage::PT_BR: return L"Você pode encontrar mais softwares e ferramentas para o seu computador na Microsoft Store.";
-        case MuiLanguage::PL_PL: return L"Więcej oprogramowania i narzędzi dla komputera znajdziesz w Microsoft Store.";
-        default: return L"You can find additional software and tools for your computer in the Microsoft Store.";
+        case MuiLanguage::IT_IT: return L"È possibile ottenere informazioni aggiuntive visitando il sito Web di Microsoft.";
+        case MuiLanguage::ES_ES: return L"Puede obtener información adicional visitando el sitio web de Microsoft.";
+        case MuiLanguage::FR_FR: return L"Vous pouvez obtenir des informations supplémentaires en visitant le site Web de Microsoft.";
+        case MuiLanguage::TR_TR: return L"Microsoft web sitesini ziyaret ederek ek bilgi alabilirsiniz.";
+        case MuiLanguage::RU_RU: return L"Дополнительную информацию можно получить на веб-сайте Microsoft.";
+        case MuiLanguage::ZH_CN: return L"您可以访问微软网站获取更多信息。";
+        case MuiLanguage::DE_DE: return L"Weitere Informationen erhalten Sie auf der Microsoft-Website.";
+        case MuiLanguage::PT_BR: return L"Você pode obter informações adicionais visitando o site da Microsoft.";
+        case MuiLanguage::PL_PL: return L"Dodatkowe informacje można uzyskać na stronie internetowej Microsoft.";
+        default: return L"You can get additional information by visiting the Microsoft website.";
     }
 }
-
 // Parameters passed by value to the message-box thread below; each thread
 // owns its own copy, so no synchronization is needed between the hooked
 // caller's thread and the thread that actually shows the dialog.
@@ -4020,12 +4018,6 @@ static DWORD WINAPI PerfMessageBoxThreadProc(LPVOID param) {
         reinterpret_cast<PerfMessageBoxParams*>(param));
     MessageBoxW(nullptr, p->text.c_str(), p->caption.c_str(),
                MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
-    HMODULE pinnedModule = p->pinnedModule;
-    p.reset();
-    // Drop the extra reference taken to keep this image mapped for the
-    // dialog's lifetime. Do this last, after the dialog is closed and all
-    // mod code for this thread has finished running.
-    if (pinnedModule) FreeLibrary(pinnedModule);
     return 0;
 }
 
@@ -4041,23 +4033,17 @@ static DWORD WINAPI PerfMessageBoxThreadProc(LPVOID param) {
 // long as that thread is still running dialog/mod code, even if the mod is
 // disabled while the dialog is open.
 static void ShowPerfCenterMessage(const wchar_t* caption, const wchar_t* text) {
-    HMODULE pinnedModule = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(&ShowPerfCenterMessage),
-                            &pinnedModule)) {
-        return; // Couldn't pin our own image; skip rather than risk an unload race.
-    }
     auto params = std::make_unique<PerfMessageBoxParams>();
     params->caption = caption;
     params->text = text;
-    params->pinnedModule = pinnedModule;
+    params->pinnedModule = nullptr;
     HANDLE thread = CreateThread(nullptr, 0, PerfMessageBoxThreadProc,
                                  params.release(), 0, nullptr);
     if (!thread) {
-        FreeLibrary(pinnedModule);
         return;
     }
-    CloseHandle(thread); // Detached: the thread proc owns and frees everything.
+    std::lock_guard<std::mutex> lock(g_msgBoxThreadsMutex);
+    g_msgBoxThreads.push_back(thread);
 }
 
 static bool IsPerfCenterAction(PCWSTR params, const wchar_t* action) {
