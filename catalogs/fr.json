@@ -14914,6 +14914,35 @@
         "version": "1.5.260416"
       }
     },
+    "win-xp-sorted-columns": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786293219000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786293219000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "aubymori",
+        "compilerOptions": "-lversion",
+        "description": "Tints sorted listview columns like in XP",
+        "github": "https://github.com/aubymori",
+        "include": [
+          "*"
+        ],
+        "license": "GPL-3.0",
+        "name": "Windows XP Sorted Columns",
+        "version": "1.0.0"
+      }
+    },
     "win10-colored-borders": {
       "details": {
         "defaultSorting": 8541,

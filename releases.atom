@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-08T19:53:19.000Z</updated>
+    <updated>2026-08-09T16:33:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows XP Sorted Columns 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win-xp-sorted-columns#9158b3e75c9d87e40294f43fe9ae70bc5555e9a4</id>
+        <link href="https://windhawk.net/mods/win-xp-sorted-columns"/>
+        <updated>2026-08-09T16:33:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsxpsortedcolumns">Windows XP Sorted Columns</h1>
+<p>In Windows XP, list views in the Details view could show the sorted column in
+a different color. This mod restores that behavior.</p>
+<p><strong><em>NOTE: In order for these changes to be seen in Explorer, you must be using the legacy
+   SysListView32. The default DirectUI ItemsView will not be affected.</em></strong></p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win-xp-sorted-columns/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win-xp-sorted-columns/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Launch & Media Panel 2.1.4]]></title>
         <id>https://windhawk.net/mods/quick-launch-media-panel#3ea0870af51aa79053f75123211aec980742ddff</id>
@@ -885,103 +904,6 @@ as well as the ability to configure mouse actions that close them.</p>
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Utility Customizer 1.1]]></title>
-        <id>https://windhawk.net/mods/tray-utility-customizer#c0d2cdf90c41060ac6f8f932491d0fba012ed2cb</id>
-        <link href="https://windhawk.net/mods/tray-utility-customizer"/>
-        <updated>2026-07-23T19:31:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="trayutilitycustomizer">Tray Utility Customizer</h1>
-<p>Granular, predictable control over the low-frequency Windows 11 system-tray
-utility icons:</p>
-<ul>
-<li><strong>Show hidden icons</strong> (the overflow chevron) — token <code>overflow</code></li>
-<li><strong>Emoji and more</strong> — token <code>emoji</code></li>
-<li><strong>Touch keyboard</strong> — token <code>touchKeyboard</code></li>
-<li><strong>Pen menu</strong> — token <code>penMenu</code></li>
-<li><strong>Virtual touchpad</strong> — token <code>virtualTouchpad</code></li>
-<li><strong>Input/language indicator</strong> — token <code>inputIndicator</code></li>
-</ul>
-<p>The native controls stay alive and Windows-owned — clicks, flyouts, and
-tooltips are untouched. The mod gathers their hosts into one owned group and
-positions each icon individually, at its native size by default.</p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/disabled.png" alt="Native tray before the mod" />
-<em>Mod disabled: the chevron, Emoji, and touch keyboard sit in their native positions.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/inline-overflow-emoji-touchkeyboard.png" alt="One row at the hidden-icons position" />
-<em>The default <code>overflow | emoji | touchKeyboard</code>: one row, native sizes.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/overflow-over-utility-row.png" alt="Chevron centered above a row of utilities" />
-<em><code>overflow, (emoji | touchKeyboard)</code>: the chevron centered on its own row above the pair.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/overflow-utility-stack.png" alt="Chevron above the utility stack" />
-<em>The chevron leading a stacked pair.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/utility-stack-overflow.png" alt="Utility stack above the chevron" />
-<em>The same stack with the chevron last instead.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/neat-stack.png" alt="A neat column" />
-<em>A full single column of utilities on a single-height taskbar.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/dedicated-tray-column.png" alt="A dedicated column elsewhere in the tray" />
-<em>The group leased into its own tray column at the right end of the taskbar.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/busy-tray.png" alt="On a busy double-height taskbar" />
-<em>Coexisting with a heavily modded double-height tray.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/unnecessary-but-possible.png" alt="Beside Start" />
-<em>The experimental Right of Start position — unnecessary, but possible.</em></p>
-<p><img src="https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/right-of-start-2x-taskmanager-height.png" alt="Right of Start, stacked on a double-height taskbar" />
-<em>Right of Start on a double-height taskbar, stacked as a column beside Start.</em></p>
-<h2 id="layoutexpression">Layout expression</h2>
-<p>One string describes the whole arrangement:</p>
-<ul>
-<li><code>|</code> places groups side by side along the <strong>primary axis</strong></li>
-<li><code>,</code> stacks items along the crossed axis</li>
-<li>parentheses nest, alternating axes</li>
-<li>every group is centered (or start/end-aligned) against its siblings</li>
-</ul>
-<p>Examples with the primary axis set to Row:</p>
-<ul>
-<li><code>overflow | emoji | touchKeyboard</code> — one row of three icons</li>
-<li><code>overflow | emoji, touchKeyboard</code> — chevron centered beside a stacked pair</li>
-<li><code>overflow | emoji, touchKeyboard | penMenu</code> — the diamond: two centered
-icons flanking a stacked middle column</li>
-</ul>
-<p>Set the primary axis to Column and the same strings arrange top-to-bottom
-instead. Icons omitted from the expression, and icons Windows currently
-hides, simply don't participate; anything visible that you didn't place is
-appended after the group so nothing is ever lost. The group re-adapts
-automatically as icons appear and disappear (for example the transient touch
-keyboard).</p>
-<p>Tokens accept forgiving aliases: <code>chevron</code>/<code>hidden</code> for <code>overflow</code>,
-<code>keyboard</code> for <code>touchKeyboard</code>, <code>pen</code> for <code>penMenu</code>, <code>touchpad</code> for
-<code>virtualTouchpad</code>, and <code>input</code>/<code>language</code> for <code>inputIndicator</code>.</p>
-<p>Icons render at their native size unless you set explicit button sizes, and
-each icon has fine X/Y nudge settings. A tall column of native-size icons can
-overhang a single-height taskbar; set the icon width/height to about 16 px if
-you want it to fit.</p>
-<h2 id="position">Position</h2>
-<p>The group can sit in the hidden-icons or Emoji column, or lease a dedicated
-tray column before the notification icons, before Wi-Fi/volume/battery,
-before or after the clock, or after the Show Desktop strip. The lease is
-marker-tracked and fully reversible on unload.</p>
-<p>Two <strong>experimental</strong> positions relocate the group out of the tray entirely:
-<strong>Left of Start</strong> and <strong>Right of Start</strong> place it beside the Start button and
-push the task list right to reserve room. The group follows Start as the
-taskbar re-centers. Primary taskbar only.</p>
-<h2 id="detection">Detection</h2>
-<p>Icons are identified by Windows' language-neutral runtime data-model classes,
-XAML names and content types, Automation IDs, and stable Segoe Fluent glyphs.
-Detection doesn't depend on translated accessibility labels. <strong>Force
-MainStack</strong> allows the complete native <code>MainStack</code> to participate as the
-<code>emoji</code> item when Windows doesn't expose a distinct identity.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The utility flyouts (the Emoji panel, the hidden-icons overflow) are
-positioned by Windows itself from the icon's location; at extreme
-screen-edge positions they can open partially off-screen. Prefer the
-tray positions if this bothers you.</li>
-<li>Left/Right of Start are experimental. The centered taskbar re-flows with
-an animation, and the group can briefly sit at a stale position until
-the taskbar's next layout pass settles it.</li>
-</ul>]]></content>
-        <author>
-            <name>sb4ssman</name>
-            <uri>https://github.com/sb4ssman</uri>
         </author>
     </entry>
 </feed>
