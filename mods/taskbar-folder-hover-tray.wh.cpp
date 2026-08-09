@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.41
+// @version         1.42
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -736,6 +736,8 @@ bool DirectoryExists(const std::wstring& path) {
 // new full path, or empty if no match.
 // ponytail: 64-bit nFileIndex id, NTFS only. ReFS/64-bit-unstable volumes
 // would need FILE_ID_INFO (128-bit) if that ever matters here.
+constexpr int kRenameSearchBudget = 512;
+
 std::wstring FindRenamedSibling(const std::wstring& oldPath, uint64_t fileId) {
     if (fileId == 0) {
         return L"";
@@ -751,10 +753,23 @@ std::wstring FindRenamedSibling(const std::wstring& oldPath, uint64_t fileId) {
         return L"";
     }
     std::wstring found;
+    // One CreateFileW per subfolder, and this runs on Explorer's main thread
+    // during Wh_ModInit and on the taskbar UI thread on every reload. A rename
+    // hits within the first handful of candidates; the case that would sweep a
+    // whole tree is a deleted pinned folder, which keeps its fileId and misses
+    // forever. Bound the sweep rather than stall the taskbar on a parent with
+    // thousands of subdirectories.
+    int budget = kRenameSearchBudget;
     do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
             wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) {
             continue;
+        }
+        if (budget-- <= 0) {
+            Wh_Log(L"Rename search for '%s' gave up after %d candidates under "
+                   L"'%s'",
+                   oldPath.c_str(), kRenameSearchBudget, parent.c_str());
+            break;
         }
         std::wstring candidate = parent + L"\\" + fd.cFileName;
         if (GetDirFileId(candidate) == fileId) {
@@ -1397,7 +1412,19 @@ bool RunFromWindowThread(HWND hWnd,
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
                     RUN_FROM_WINDOW_THREAD_PARAM* param =
                         (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                    param->proc(param->procParam);
+                    // The hook is thread-wide, so a second in-flight call from
+                    // another thread puts a second copy of this proc in the
+                    // chain — and both copies match this one message and this
+                    // one param. Running the callback twice would make
+                    // ApplyButtonIconOnUiThread adopt an already-deleted
+                    // ButtonIconDelivery. Claim it instead: the param lives on
+                    // the sender's stack and both copies run synchronously on
+                    // this thread, so no lock is needed (and a lock held across
+                    // SendMessage is the hazard the rest of the mod avoids).
+                    if (auto proc = param->proc) {
+                        param->proc = nullptr;
+                        proc(param->procParam);
+                    }
                 }
             }
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
