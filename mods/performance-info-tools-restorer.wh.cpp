@@ -27,7 +27,7 @@
 ## About
 This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.
 
-The mod has been tested on Windows 10 21H2, Windows 10 22H2 and Windows 11 25H2.
+The mod has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.
 ## Screenshots
 
 The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
@@ -51,8 +51,9 @@ The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
 - **Right DLL for the system**: Uses the Windows 8 DLL on Windows 8.1/10/11
 - **Built-in translations and language selector**: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. 
 - **Conservative resource handling**: The mod implements a conservative approach to be more stable
-- **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped; because explorer.exe keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after explorer.exe restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
+- **100% reversible**: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped because explorer.exe keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after explorer.exe restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.
 
+**Additional note**: To open the "Performance and Informations tools" without having to go to the Control Panel, the `shell:::{78F3955E-3B90-4184-BD14-5397C15F1EFC}` command can be run when pressing Windows+R like in the classic versions of Windows.
 ## Requirements
 
 - **Windows 10 or Windows 11** (64-bit) with the native Control Panel
@@ -60,7 +61,7 @@ The mod includes **3 skins**: Windows 7, Windows 8, and Windows Vista.
 
 ## Design and safety notes
 
-- The setup step (download + verification) runs on a background thread so it never blocks explorer.exe startup, and it is serialized across processes with a named mutex so two explorer.exe/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place.
+- The setup step (download + verification) runs on a background thread so it never blocks explorer.exe startup, and it is serialized across processes with a named mutex so two explorer.exe/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place. The verification is performed through the pinned, already-open file handle (never re-resolved by path), and after `LoadLibraryExW` the loaded module is confirmed to map that same file object via `GetFileInformationByHandleEx(FileIdInfo)`; if the two don't match the module is unloaded and refused. The private resource module is rebuilt from the verified source on every load (a leftover file with a predictable name is never trusted) and its final on-disk bytes are SHA-256 compared against the build.
 - The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.
 - If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart explorer.exe to retry).
 - The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through `Wh_GetModStoragePath`, so it also works with portable Windhawk installations.
@@ -117,6 +118,17 @@ If any problems are encountered, please report them to the mod's author.
   $description: If this setting is enabled (which it is by default), the mod keeps downloaded files for faster re-enabling. If disabled, when the mod is disabled or uninstalled, the downloaded DLL, variant marker, and any stale copies are removed from the mod's folder on the next unload in which they are no longer mapped. The DLL stays loaded in memory until the process (explorer.exe) restarts, so files that are still in use at that moment are deleted on a later unload.
 */
 // ==/WindhawkModSettings==
+// The mod targets Windows 10/11 and uses GetFileInformationByHandleEx with
+// FileIdInfo (FILE_ID_INFO) to prove a loaded module maps the same file object
+// that was verified. Ensure the SDK version is high enough for that struct.
+// Guarded with #ifndef because the Windhawk build environment already defines
+// these (usually to a higher value) via its precompiled headers.
+#ifndef WINVER
+#define WINVER 0x0602
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#endif
 #include <windows.h>
 #include <wininet.h>
 #include <wincrypt.h>
@@ -124,7 +136,6 @@ If any problems are encountered, please report them to the mod's author.
 #include <shellapi.h>
 #include <string>
 #include <unordered_map>
-#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <utility>
@@ -524,10 +535,17 @@ static wchar_t HexUpper(BYTE nibble) {
                        : static_cast<wchar_t>(L'A' + nibble - 10);
 }
 
-static bool ComputeFileSha256(const std::wstring& path, BYTE digest[32]) {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return false;
+// Compute the SHA-256 of the file behind the already-open handle `h`, after
+// rewinding it to the start. Hashed through the handle rather than by path, so
+// the digest covers the exact file object the caller pinned - a concurrent
+// rename/replace of the path does not change what we hash, which is what the
+// "verify -> load" pin is supposed to guarantee.
+static bool ComputeSha256OfHandle(HANDLE h, BYTE digest[32]) {
+    LARGE_INTEGER zero{};
+    if (!h || h == INVALID_HANDLE_VALUE || !SetFilePointerEx(h, zero, nullptr,
+                                                             FILE_BEGIN)) {
+        return false;
+    }
 
     HCRYPTPROV prov = 0;
     HCRYPTHASH hash = 0;
@@ -553,13 +571,10 @@ static bool ComputeFileSha256(const std::wstring& path, BYTE digest[32]) {
         }
         CryptReleaseContext(prov, 0);
     }
-    CloseHandle(h);
     return ok;
 }
 
-static bool FileSha256Matches(const std::wstring& path, const wchar_t* expectedHex) {
-    BYTE digest[32];
-    if (!ComputeFileSha256(path, digest)) return false;
+static bool Sha256MatchesHex(const BYTE digest[32], const wchar_t* expectedHex) {
     for (int i = 0; i < 32; ++i) {
         if (expectedHex[i * 2] != HexUpper(digest[i] >> 4) ||
             expectedHex[i * 2 + 1] != HexUpper(digest[i] & 0xF)) {
@@ -567,6 +582,19 @@ static bool FileSha256Matches(const std::wstring& path, const wchar_t* expectedH
         }
     }
     return true;
+}
+
+// Open `path` and hash it through the handle. Kept separate from the
+// pinned-handle path because the private resource module is rebuilt in-process
+// (so it is not pinned), and the point here is to prove the file on disk is
+// byte-identical to the module we just produced.
+static bool ComputeFileSha256ByPath(const std::wstring& path, BYTE digest[32]) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    const bool ok = ComputeSha256OfHandle(h, digest);
+    CloseHandle(h);
+    return ok;
 }
 
 // -----------------------------------------------------------------------------
@@ -598,6 +626,31 @@ bool VerifyDownloadedDllLooksValid(const std::wstring& p) {
     return br == sizeof(sig) && sig == IMAGE_NT_SIGNATURE;
 }
 
+// Same structural check as VerifyDownloadedDllLooksValid, but performed through
+// an already-open handle so it covers the pinned file object (never re-resolved
+// by path). Rewinds the handle before reading.
+bool VerifyDownloadedDllLooksValidFromHandle(HANDLE h) {
+    if (!h || h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER zero{};
+    LARGE_INTEGER sz{};
+    if (!GetFileSizeEx(h, &sz) || sz.QuadPart < kMinPlausibleDllSize ||
+        !SetFilePointerEx(h, zero, nullptr, FILE_BEGIN)) {
+        return false;
+    }
+    IMAGE_DOS_HEADER dos{};
+    DWORD br = 0;
+    if (!(ReadFile(h, &dos, sizeof(dos), &br, nullptr) && br == sizeof(dos) &&
+          dos.e_magic == IMAGE_DOS_SIGNATURE)) {
+        return false;
+    }
+    LARGE_INTEGER off{};
+    off.QuadPart = dos.e_lfanew;
+    if (!SetFilePointerEx(h, off, nullptr, FILE_BEGIN)) return false;
+    DWORD sig = 0;
+    return ReadFile(h, &sig, sizeof(sig), &br, nullptr) && br == sizeof(sig) &&
+           sig == IMAGE_NT_SIGNATURE;
+}
+
 bool GetRealOsVersion(DWORD& major, DWORD& minor, DWORD& build) {
     struct OsVersionInfoW {
         DWORD size, major, minor, build, platform;
@@ -627,10 +680,12 @@ bool IsOsWindows8OrNewer() {
     return (M > 6) || (M == 6 && m >= 2);
 }
 
-bool GetPeMachineType(const std::wstring& p, WORD& machine) {
-    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return false;
+// Read the PE machine type through an already-open handle (not by path), so
+// the value describes the pinned file object. Rewinds the handle.
+bool GetPeMachineTypeFromHandle(HANDLE h, WORD& machine) {
+    if (!h || h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER zero{};
+    if (!SetFilePointerEx(h, zero, nullptr, FILE_BEGIN)) return false;
     IMAGE_DOS_HEADER dos{};
     DWORD br = 0;
     bool ok = ReadFile(h, &dos, sizeof(dos), &br, nullptr) && br == sizeof(dos) &&
@@ -645,7 +700,6 @@ bool GetPeMachineType(const std::wstring& p, WORD& machine) {
         ok = ok && ReadFile(h, &machine, sizeof(machine), &br, nullptr) &&
              br == sizeof(machine);
     }
-    CloseHandle(h);
     return ok;
 }
 
@@ -762,18 +816,29 @@ std::wstring GetVariantUrl(DllVariant v) {
 
 // Structural + SHA-256 verification. Anything that is not the exact expected
 // binary is rejected and never loaded.
-bool VerifyDllIsCompatible(const std::wstring& p, DllVariant variant) {
-    if (!VerifyDownloadedDllLooksValid(p)) return false;
+// Structural + SHA-256 verification of a pinned, already-open file handle.
+// Everything is read through `h` - the same file object the caller will load -
+// so a concurrent rename/replace of the path cannot substitute a different
+// file between verification and load. Anything that is not the exact expected
+// binary is rejected.
+bool VerifyDllIsCompatibleByHandle(HANDLE h, DllVariant variant) {
+    if (!h || h == INVALID_HANDLE_VALUE) return false;
+    if (!VerifyDownloadedDllLooksValidFromHandle(h)) return false;
     WORD machine = 0;
-    if (!GetPeMachineType(p, machine) || machine != IMAGE_FILE_MACHINE_AMD64) {
-        Wh_Log(L"DLL at %s is not x64 (machine=%04X) - incompatible with this "
+    if (!GetPeMachineTypeFromHandle(h, machine) ||
+        machine != IMAGE_FILE_MACHINE_AMD64) {
+        Wh_Log(L"Pinned DLL is not x64 (machine=%04X) - incompatible with this "
                L"x64 mod",
-               p.c_str(), machine);
+               machine);
         return false;
     }
-    if (!FileSha256Matches(p, kExpectedSha256[static_cast<int>(variant)])) {
-        Wh_Log(L"DLL at %s failed SHA-256 verification; refusing to use it",
-               p.c_str());
+    BYTE digest[32];
+    if (!ComputeSha256OfHandle(h, digest)) {
+        Wh_Log(L"Could not hash the pinned DLL; refusing to use it");
+        return false;
+    }
+    if (!Sha256MatchesHex(digest, kExpectedSha256[static_cast<int>(variant)])) {
+        Wh_Log(L"Pinned DLL failed SHA-256 verification; refusing to use it");
         return false;
     }
     return true;
@@ -831,15 +896,56 @@ private:
 // Open the DLL denying write sharing for the whole verify -> load window.
 // FILE_SHARE_READ | FILE_SHARE_DELETE is required (not FILE_SHARE_READ only)
 // because the loader opens the file requesting delete sharing; with read-only
-// sharing LoadLibraryExW would fail with ERROR_SHARING_VIOLATION. What the pin
-// prevents is in-place modification: the bytes cannot be rewritten between
-// verification and load. The caller must keep the returned handle alive until
-// after LoadLibraryExW returns.
+// sharing LoadLibraryExW would fail with ERROR_SHARING_VIOLATION.
+//
+// What the pin guarantees is in-place immutability of the file object it is
+// open on: that object's bytes cannot be rewritten between verification and
+// load. It does NOT prevent the name being unlinked/replaced, because
+// FILE_SHARE_DELETE permits rename/delete and both the hash check and the load
+// resolve by path. That is why verification is done through the pinned handle
+// (VerifyDllIsCompatibleByHandle) and why the loaded module is afterwards
+// confirmed to map that same file object (ConfirmLoadedModuleMatchesPin). The
+// caller must keep the returned handle alive until after LoadLibraryExW
+// returns.
 static UniqueWinHandle PinDllForLoad(const std::wstring& path) {
     return UniqueWinHandle(
         CreateFileW(path.c_str(), GENERIC_READ,
                     FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                     FILE_ATTRIBUTE_NORMAL, nullptr));
+}
+
+// True if `a` and `b` refer to the same file object (same volume + 128-bit file
+// id). Used to prove that a module LoadLibraryExW just loaded came from the
+// exact file the mod verified, rather than a file that replaced it at the same
+// path in the verify -> load window.
+static bool SameFileObject(HANDLE a, HANDLE b) {
+    if (!a || a == INVALID_HANDLE_VALUE || !b || b == INVALID_HANDLE_VALUE)
+        return false;
+    FILE_ID_INFO ia{}, ib{};
+    if (!GetFileInformationByHandleEx(a, FileIdInfo, &ia, sizeof(ia))) return false;
+    if (!GetFileInformationByHandleEx(b, FileIdInfo, &ib, sizeof(ib))) return false;
+    return ia.VolumeSerialNumber == ib.VolumeSerialNumber &&
+           ia.FileId.Identifier[0] == ib.FileId.Identifier[0] &&
+           ia.FileId.Identifier[1] == ib.FileId.Identifier[1];
+}
+
+// After LoadLibraryExW(hModule), confirm the loaded module is backed by the
+// same file object as the verified pin. Re-resolves the module's path with
+// GetModuleFileNameW and compares file ids. Returns false (and the caller must
+// FreeLibrary + bail) if the module came from a file that replaced the verified
+// one.
+static bool ConfirmLoadedModuleMatchesPin(HMODULE hModule, HANDLE pin) {
+    if (!hModule || !pin || pin == INVALID_HANDLE_VALUE) return false;
+    wchar_t modPath[MAX_PATH]{};
+    const DWORD len = GetModuleFileNameW(hModule, modPath, ARRAYSIZE(modPath));
+    if (len == 0 || len >= ARRAYSIZE(modPath)) return false;
+    HANDLE hFile = CreateFileW(modPath, GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return false;
+    const bool same = SameFileObject(pin, hFile);
+    CloseHandle(hFile);
+    return same;
 }
 
 // Handles for the WinInet call currently in flight (if any), published under
@@ -1011,7 +1117,7 @@ bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
         bool markerOk = ReadVariantMarker(dir, marker);
         if (markerOk && marker == wanted) {
             UniqueWinHandle pin = PinDllForLoad(out);
-            if (pin.IsValid() && VerifyDllIsCompatible(out, variant)) {
+            if (pin.IsValid() && VerifyDllIsCompatibleByHandle(pin.Get(), variant)) {
                 outPath = out;
                 outPin = std::move(pin);
                 return true;
@@ -1034,7 +1140,7 @@ bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
             // Could not remove or rename the old file. Keep it only if it is
             // actually a valid DLL of the requested variant.
             UniqueWinHandle pin = PinDllForLoad(out);
-            if (pin.IsValid() && VerifyDllIsCompatible(out, variant)) {
+            if (pin.IsValid() && VerifyDllIsCompatibleByHandle(pin.Get(), variant)) {
                 outPath = out;
                 outPin = std::move(pin);
                 return true;
@@ -1054,7 +1160,7 @@ bool DownloadDllToPath(const std::wstring& dir, DllVariant variant,
     UniqueWinHandle pin;
     if (downloaded) {
         pin = PinDllForLoad(tmp);
-        ok = pin.IsValid() && VerifyDllIsCompatible(tmp, variant);
+        ok = pin.IsValid() && VerifyDllIsCompatibleByHandle(pin.Get(), variant);
     }
     if (ok) {
         // The pin handle stays open across the move: it was opened on the
@@ -1414,25 +1520,15 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     const std::wstring destination =
         directory + L"\\" + LocalizedResourceModuleFileName();
 
-    // Reuse an existing valid module for this exact configuration: the bytes
-    // are deterministic, so a file built earlier (by this process, a previous
-    // session, or control.exe) is byte-identical to a fresh build. Skipping
-    // the rebuild avoids the ~650 KB copy + PE patch + resource rewrite on
-    // every process load. If the file is valid it has not been modified in
-    // place (it was built by this mod from a pinned-verified source), so
-    // loading it is safe.
-    if (GetFileAttributesW(destination.c_str()) != INVALID_FILE_ATTRIBUTES &&
-        VerifyDownloadedDllLooksValid(destination)) {
-        g_localizedResourcePath = destination;
-        g_lastBuiltForceTranslations = g_forceTranslations.load();
-        g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
-        g_lastBuiltForcedLanguage = g_forcedLanguage.load();
-        g_lastBuiltValid = true;
-        Wh_Log(L"Reusing existing private resource module: %s",
-               destination.c_str());
-        return true;
-    }
-    // Invalid leftover from an interrupted build: remove it and rebuild.
+    // Never trust a leftover file at this fully predictable path. Anything
+    // already there that only passes VerifyDownloadedDllLooksValid ("size >=
+    // 64 KB and has an MZ/PE header") could be a planted binary - an attacker
+    // with write access to the storage folder - and its UIFILE XML can carry
+    // shellexecute= attributes that XResourceProvider::Create would honour.
+    // Always rebuild from the pinned-verified source instead of reusing a
+    // cached copy. The ~650 KB copy + patch runs on the background setup
+    // thread and only once per process, which is an acceptable price for never
+    // loading a file this mod did not produce in this instant.
     DeleteFileW(destination.c_str());
 
     // Unique per-process temp file: the destination name is now shared across
@@ -1498,19 +1594,30 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     }
 
     DeleteFileW(destination.c_str());
+
+    // Capture the SHA-256 of the module we just built, so both the concurrent-
+    // build fallback and the post-move check below can prove the file that
+    // actually sits at the predictable path is byte-identical to our own build.
+    BYTE builtDigest[32];
+    const bool haveDigest = ComputeFileSha256ByPath(temporary, builtDigest);
+
     if (!MoveFileExW(temporary.c_str(), destination.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        // Another process may have just built (or mapped) the same
-        // deterministic file; if the destination is already valid, use it.
-        if (VerifyDownloadedDllLooksValid(destination)) {
+        // Another process may have just built the same deterministic file and
+        // is racing our move. Only fall back to that file if it is byte-
+        // identical to the module we built ourselves; anything else could be a
+        // planted binary.
+        BYTE destDigest[32];
+        if (haveDigest && ComputeFileSha256ByPath(destination, destDigest) &&
+            memcmp(builtDigest, destDigest, 32) == 0) {
             temporaryGuard.Commit();
             g_localizedResourcePath = destination;
             g_lastBuiltForceTranslations = g_forceTranslations.load();
             g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
             g_lastBuiltForcedLanguage = g_forcedLanguage.load();
             g_lastBuiltValid = true;
-            Wh_Log(L"Private resource module already present (built by another "
-                   L"process): %s",
+            Wh_Log(L"Private resource module already present and byte-identical "
+                   L"to our build (raced with another process): %s",
                    destination.c_str());
             return true;
         }
@@ -1519,9 +1626,12 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     }
     temporaryGuard.Commit();
 
-    if (!VerifyDownloadedDllLooksValid(destination)) {
+    BYTE movedDigest[32];
+    if (!VerifyDownloadedDllLooksValid(destination) ||
+        !(haveDigest && ComputeFileSha256ByPath(destination, movedDigest) &&
+          memcmp(builtDigest, movedDigest, 32) == 0)) {
         DeleteFileW(destination.c_str());
-        Wh_Log(L"Private resource module failed PE validation");
+        Wh_Log(L"Private resource module failed integrity validation");
         return false;
     }
 
@@ -1685,14 +1795,33 @@ static void RunSetup() {
         // `pinnedDll` is still held here (write sharing denied), so the bytes
         // mapped as executable code are the bytes that passed verification.
         HMODULE h = LoadLibraryExW(outPath.c_str(), nullptr, 0);
-        g_hPerfCenter.store(h, std::memory_order_release);
-        {
-            std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
-            BuildLocalizedResourceModule(outPath, dir);
+        // LoadLibraryExW resolves by path, so a file that was renamed into
+        // place at `outPath` after verification (FILE_SHARE_DELETE allows the
+        // verified file to be unlinked and replaced) could have been loaded
+        // instead. Confirm the loaded module maps the exact file object we
+        // verified; refuse it otherwise.
+        if (h && (!pinnedDll.IsValid() ||
+                  !ConfirmLoadedModuleMatchesPin(h, pinnedDll.Get()))) {
+            Wh_Log(L"PerfCenterCPL load rejected: the loaded module does not "
+                   L"match the verified file; refusing to use it");
+            FreeLibrary(h);
+            h = nullptr;
         }
-        g_dllVerifiedOk.store(true, std::memory_order_release);
-        Wh_Log(L"PerfCenterCPL setup complete (variant %s)",
-               VariantMarkerName(variant).c_str());
+        g_hPerfCenter.store(h, std::memory_order_release);
+        if (h) {
+            {
+                std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+                BuildLocalizedResourceModule(outPath, dir);
+            }
+            g_dllVerifiedOk.store(true, std::memory_order_release);
+            Wh_Log(L"PerfCenterCPL setup complete (variant %s)",
+                   VariantMarkerName(variant).c_str());
+        } else {
+            g_dllVerifiedOk.store(false, std::memory_order_release);
+            Wh_Log(L"PerfCenterCPL could not be loaded/verified; the page will "
+                   L"not be exposed. Check your internet connection and restart "
+                   L"explorer.exe to retry.");
+        }
     } else {
         g_dllVerifiedOk.store(false, std::memory_order_release);
         Wh_Log(L"Performance Information and Tools is unavailable: the required "
@@ -1945,6 +2074,122 @@ void InitClsidStrings() {
         g_clsidLower;
 }
 
+// Forward declarations of the registry "Original" pointers the volatile-key
+// helpers below need. The actual definitions (with their `using` typedefs)
+// live in the registry-hooks section further down; these extern declarations
+// let the helpers call the un-hooked implementations without re-entering the
+// mod's own hooks.
+extern decltype(&RegOpenKeyExW) RegOpenKeyExWOriginal;
+extern decltype(&RegCreateKeyExW) RegCreateKeyExWOriginal;
+extern decltype(&RegCloseKey) RegCloseKeyOriginal;
+
+// -----------------------------------------------------------------------------
+// Volatile backing key for virtualized HKEYs
+// -----------------------------------------------------------------------------
+// Every virtual key the virtualization layer hands out is a real, harmless
+// kernel handle to a dedicated volatile registry key owned by this mod (the
+// same technique the "Startup App Delay Fix" mod uses for its redirect). This
+// gives three properties that a fabricated user-mode pointer cannot:
+//
+//   1. Every registry API - hooked or not (RegEnumValueW, RegQueryValueExA,
+//      RegGetValueA, RegOpenKeyExA, RegQueryInfoKeyA, RegNotifyChangeKeyValue,
+//      RegQueryValueW, CloseHandle, ...) - that receives one of these handles
+//      sees a genuine handle and behaves sanely on an empty, benign key.
+//   2. After the mod unloads and its hooks are gone, a caller still holding a
+//      fake key can safely RegCloseKey/RegQueryValueEx it: it is a real handle
+//      (worst case it returns an error, never a crash).
+//   3. The key is volatile (REG_OPTION_VOLATILE): it lives only in memory, is
+//      not persisted to disk, and is deleted when the mod is disabled, so it
+//      leaves no registry traces (consistent with the mod's "nothing is
+//      persisted" design).
+//
+// The path is per-process (suffixed with the PID) so multiple processes
+// (explorer.exe, control.exe) each own a private volatile key and never delete
+// a key another process still has handles open on.
+static const wchar_t kVirtualKeyParentPrefix[] =
+    L"Software\\Windhawk\\PerformanceInfoToolsRestorer";
+static const wchar_t kVirtualKeyNamePrefix[] = L"VirtualKeys";
+
+static std::wstring VirtualKeyPath() {
+    wchar_t key[96];
+    swprintf_s(key, ARRAYSIZE(key), L"%ls\\%ls-%lu", kVirtualKeyParentPrefix,
+               kVirtualKeyNamePrefix, GetCurrentProcessId());
+    return std::wstring(key);
+}
+
+static std::wstring VirtualKeyParentPath() {
+    return std::wstring(kVirtualKeyParentPrefix);
+}
+
+// The leaf (relative) name of the volatile key under its parent, used by
+// RegDeleteKeyW in ReleaseVirtualKeyRoot.
+static std::wstring VirtualKeyLeafName() {
+    wchar_t leaf[64];
+    swprintf_s(leaf, ARRAYSIZE(leaf), L"%ls-%lu", kVirtualKeyNamePrefix,
+               GetCurrentProcessId());
+    return std::wstring(leaf);
+}
+
+// Process-global handle to the volatile backing key, plus its mutex. Only the
+// helpers below touch it; the hot registry hooks never do.
+static HKEY g_virtualKeyRoot = nullptr;
+static std::mutex g_virtualKeyRootMutex;
+
+// Ensure the volatile backing key exists and return a long-lived handle to it
+// (or nullptr on failure). Callers still open their own per-fake handle.
+static HKEY EnsureVirtualKeyRoot() {
+    std::lock_guard<std::mutex> l(g_virtualKeyRootMutex);
+    if (g_virtualKeyRoot) return g_virtualKeyRoot;
+
+    HKEY root = nullptr;
+    LONG st = RegOpenKeyExWOriginal(HKEY_CURRENT_USER, VirtualKeyPath().c_str(),
+                                    0, KEY_READ, &root);
+    if (st != ERROR_SUCCESS) {
+        DWORD disp = 0;
+        st = RegCreateKeyExWOriginal(HKEY_CURRENT_USER,
+                                     VirtualKeyPath().c_str(), 0, nullptr,
+                                     REG_OPTION_VOLATILE, KEY_READ, nullptr,
+                                     &root, &disp);
+        if (st != ERROR_SUCCESS) return nullptr;
+    }
+    g_virtualKeyRoot = root;
+    return root;
+}
+
+// Close the process-global root handle and explicitly delete the volatile key.
+// Called from Wh_ModUninit after all outstanding fake handles have been closed.
+// Volatile keys under HKCU can persist for the session even with no open
+// handles, so delete it explicitly so nothing remains after a normal disable.
+static void ReleaseVirtualKeyRoot() {
+    HKEY root;
+    {
+        std::lock_guard<std::mutex> l(g_virtualKeyRootMutex);
+        root = g_virtualKeyRoot;
+        g_virtualKeyRoot = nullptr;
+    }
+    if (root) RegCloseKeyOriginal(root);
+
+    // Best-effort cleanup of the volatile key itself. RegDeleteKeyW is not
+    // hooked, so calling it directly is safe.
+    HKEY parent = nullptr;
+    if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, VirtualKeyParentPath().c_str(),
+                              0, KEY_WRITE | DELETE, &parent) == ERROR_SUCCESS) {
+        RegDeleteKeyW(parent, VirtualKeyLeafName().c_str());
+        RegCloseKeyOriginal(parent);
+
+        // Remove the empty mod-owned parent key too. This fails harmlessly
+        // (ERROR_KEY_HAS_CHILDREN) if another process still has its own
+        // VirtualKeys-<pid> leaf under it; that process will clean it up when
+        // it unloads.
+        HKEY grand = nullptr;
+        if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, L"Software\\Windhawk", 0,
+                                  DELETE, &grand) == ERROR_SUCCESS) {
+            RegDeleteKeyW(grand, L"PerformanceInfoToolsRestorer");
+            RegCloseKeyOriginal(grand);
+        }
+    }
+}
+
 // KeyTracker maps HKEY handles to registry paths and tracks the fake handles the
 // virtualization layer hands out. Reads use a shared lock (so concurrent
 // registry reads are not serialized against each other), writes use an
@@ -1996,30 +2241,50 @@ public:
         paths_.erase(k);
     }
     HKEY CreateFake(const std::wstring& p) {
-        std::unique_ptr<int> o(new (std::nothrow) int(1));
-        if (!o) return nullptr;
-        HKEY f = reinterpret_cast<HKEY>(o.get());
+        // Back each virtual key with a real, harmless kernel handle to the
+        // mod's dedicated volatile key (see the helpers above) instead of a
+        // fabricated user-mode pointer. Every API that can legitimately
+        // receive an HKEY - hooked or not (RegEnumValueW, RegQueryValueExA,
+        // RegGetValueA, RegOpenKeyExA, RegQueryInfoKeyA, RegNotifyChangeKeyValue,
+        // RegQueryValueW, CloseHandle, ...) - then sees a genuine handle that
+        // operates on an empty, benign, in-memory key. Value queries are still
+        // intercepted by path via paths_.
+        if (!EnsureVirtualKeyRoot()) return nullptr;
+        HKEY backing = nullptr;
+        if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, VirtualKeyPath().c_str(), 0,
+                                  KEY_READ, &backing) != ERROR_SUCCESS) {
+            return nullptr;
+        }
         std::unique_lock<std::shared_mutex> l(mutex_);
-        paths_[f] = p;
-        fakeOwners_[f] = std::move(o);
-        return f;
+        paths_[backing] = p;
+        fakeOwners_[backing] = backing;
+        return backing;
     }
     void FreeFake(HKEY k) {
         std::unique_lock<std::shared_mutex> l(mutex_);
+        HKEY backing = nullptr;
+        auto it = fakeOwners_.find(k);
+        if (it != fakeOwners_.end()) {
+            backing = it->second;
+            fakeOwners_.erase(it);
+        }
         paths_.erase(k);
-        fakeOwners_.erase(k);
+        // Closing a fake handle is safe: the backing handle is a real key the
+        // caller is done with, and RegCloseKeyOriginal is the real function.
+        if (backing) RegCloseKeyOriginal(backing);
     }
-    // On unload we deliberately abandon (leak) the backing int of each
-    // outstanding fake key. This keeps the addresses reserved so they can never
-    // be handed back by a subsequent allocation and mistaken for a valid OS
-    // handle. This is intentional, not a leak bug.
+    // Close every outstanding fake handle. A caller-held handle, if any, stays
+    // valid until that caller closes it - it is a genuine kernel handle that
+    // resolves to the volatile key, which is destroyed when its last handle
+    // closes. The volatile key itself is cleaned up separately by
+    // ReleaseVirtualKeyRoot in Wh_ModUninit.
     void ClearWithoutFreeing() {
         std::unique_lock<std::shared_mutex> l(mutex_);
-        paths_.clear();
         for (auto& kv : fakeOwners_) {
-            [[maybe_unused]] int* abandoned = kv.second.release();
+            if (kv.second) RegCloseKeyOriginal(kv.second);
         }
         fakeOwners_.clear();
+        paths_.clear();
     }
 
 private:
@@ -2045,7 +2310,10 @@ private:
     }
     mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
-    std::unordered_map<HKEY, std::unique_ptr<int>> fakeOwners_;
+    // For each virtual key, the real backing handle (to the mod's volatile
+    // key) that was handed out as the "fake" HKEY, so it can be closed on
+    // FreeFake and on unload.
+    std::unordered_map<HKEY, HKEY> fakeOwners_;
 };
 
 static KeyTracker g_keyTracker;
@@ -2089,11 +2357,23 @@ VNode ClassifyPath(const std::wstring& p) {
 }
 
 bool IsApprovedKey(const std::wstring& p) {
+    // Cheap keyword gate first: avoids the ToLower allocation (a second full
+    // string copy) for the vast majority of paths that can't possibly be the
+    // "Shell Extensions\Approved" key.
+    if (!ContainsRelevantKeywordCheap(p.c_str())) return false;
     return EndsWith(ToLower(p), L"shell extensions\\approved");
 }
 bool IsTargetKey(const std::wstring& p) { return ClassifyPath(p) != VNode::None; }
-bool IsNamespaceParentKey(const std::wstring& p) {
-    return EndsWith(ToLower(p), L"controlpanel\\namespace");
+
+// The lower-case HKCU Control Panel namespace parent path. The applet entry is
+// injected into the HKCU enumeration only, never the HKLM one, so a machine
+// where both hives expose a ControlPanel\NameSpace key does not report the
+// injected CLSID twice (the real-HKLM/HKCU-hive dedupe in the enum hooks cannot
+// see across hives).
+static const wchar_t kNamespaceHkcuParentLower[] =
+    L"software\\microsoft\\windows\\currentversion\\explorer\\controlpanel\\namespace";
+bool IsHkcuNamespaceParentKey(const std::wstring& p) {
+    return EndsWith(ToLower(p), kNamespaceHkcuParentLower);
 }
 
 LSTATUS ProvideStringValue(LPBYTE d, LPDWORD cb, const std::wstring& s) {
@@ -2481,20 +2761,36 @@ LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
         return ERROR_SUCCESS;
     }
     LSTATUS s = RegCloseKeyOriginal(k);
-    g_keyTracker.Untrack(k);
-    ClearInjectedState(k);
+    // Only take the tracker's exclusive lock and the injected-state mutex when
+    // this handle is actually known to the virtualization layer. The common
+    // case - an ordinary shell registry handle - is a single shared-lock
+    // presence probe (IsTrackedOrFake) with no allocation, instead of an
+    // unconditional unique_lock on the shared_mutex plus a std::mutex lock and
+    // map erase on every registry-key close in the process.
+    if (g_keyTracker.IsTrackedOrFake(k)) {
+        g_keyTracker.Untrack(k);
+        ClearInjectedState(k);
+    }
     return s;
 }
 
 LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
                                     LPBYTE d, LPDWORD cb) {
     try {
+        // Fast path: if this handle was never tracked and isn't one of our
+        // virtual keys, it cannot carry a virtualized value. Skip GetPath (a
+        // std::wstring copy per call on one of the hottest registry APIs in the
+        // shell) and go straight to the original.
+        if (!g_keyTracker.IsTrackedOrFake(k))
+            return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
         std::wstring p = g_keyTracker.GetPath(k);
-        if (!p.empty()) {
+        if (!p.empty() && g_dllVerifiedOk.load()) {
             std::wstring v = vn ? vn : L"";
             LSTATUS o;
             if (TryProvideValue(p, v, t, d, cb, o)) return o;
         }
+        // Never hand a fake handle to the original registry function; it would
+        // be interpreted as a kernel handle.
         if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
         return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
     } catch (...) {
@@ -2505,16 +2801,24 @@ LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
 LSTATUS WINAPI RegGetValueWHook(HKEY hk, LPCWSTR sub, LPCWSTR val, DWORD fl,
                                 LPDWORD tp, PVOID d, LPDWORD cb) {
     try {
+        // RegGetValueW is normally called with a predefined root plus a full
+        // subkey path, so gate on MightNeedVirtualization (which checks both the
+        // handle and the subkey text) rather than IsTrackedOrFake alone. This
+        // avoids the GetPath std::wstring copy plus the per-call "p += sub"
+        // append for the overwhelming majority of calls.
+        if (!MightNeedVirtualization(hk, sub))
+            return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
         std::wstring p = g_keyTracker.GetPath(hk);
         if (sub && *sub) {
             if (!p.empty()) p += L"\\";
             p += sub;
         }
-        if (!p.empty()) {
+        if (!p.empty() && g_dllVerifiedOk.load()) {
             std::wstring v = val ? val : L"";
             LSTATUS o;
             if (TryProvideValue(p, v, tp, static_cast<LPBYTE>(d), cb, o)) return o;
         }
+        // Never hand a fake handle to the original registry function.
         if (g_keyTracker.IsFake(hk)) return ERROR_FILE_NOT_FOUND;
         return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
     } catch (...) {
@@ -2526,6 +2830,10 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
                                  LPDWORD r, LPWSTR cls, LPDWORD lpcCls,
                                  PFILETIME ft) {
     try {
+        // Fast path: an untracked, non-fake handle can never be a namespace
+        // parent or a virtual key, so skip the GetPath copy entirely.
+        if (!g_keyTracker.IsTrackedOrFake(k))
+            return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         if (g_keyTracker.IsFake(k)) {
             std::wstring p = g_keyTracker.GetPath(k);
             VNode n = ClassifyPath(p);
@@ -2541,8 +2849,10 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
             if (ft) GetSystemTimeAsFileTime(ft);
             return ERROR_SUCCESS;
         }
+        if (!g_dllVerifiedOk.load())
+            return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         const std::wstring path = g_keyTracker.GetPath(k);
-        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+        if (!IsHkcuNamespaceParentKey(path))
             return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         const LSTATUS st = RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         if (st != ERROR_NO_MORE_ITEMS) return st;
@@ -2575,6 +2885,9 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
 
 LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
     try {
+        // Fast path: skip the GetPath copy for handles that can't be ours.
+        if (!g_keyTracker.IsTrackedOrFake(k))
+            return RegEnumKeyWOriginal(k, idx, name, cch);
         if (g_keyTracker.IsFake(k)) {
             std::wstring p = g_keyTracker.GetPath(k);
             VNode n = ClassifyPath(p);
@@ -2585,8 +2898,10 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
             wcscpy_s(name, cch, s.c_str());
             return ERROR_SUCCESS;
         }
+        if (!g_dllVerifiedOk.load())
+            return RegEnumKeyWOriginal(k, idx, name, cch);
         const std::wstring path = g_keyTracker.GetPath(k);
-        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+        if (!IsHkcuNamespaceParentKey(path))
             return RegEnumKeyWOriginal(k, idx, name, cch);
         const LSTATUS st = RegEnumKeyWOriginal(k, idx, name, cch);
         if (st != ERROR_NO_MORE_ITEMS) return st;
@@ -2637,8 +2952,14 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
         if (ft) GetSystemTimeAsFileTime(ft);
         return ERROR_SUCCESS;
     }
+    // Fast path: an untracked, non-fake handle is never a namespace parent, so
+    // skip the GetPath copy.
+    if (!g_dllVerifiedOk.load() || !g_keyTracker.IsTrackedOrFake(k))
+        return RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
+                                        lpcMaxCls, cValues, lpcMaxValName,
+                                        lpcMaxValData, sec, ft);
     std::wstring path = g_keyTracker.GetPath(k);
-    if (IsNamespaceParentKey(path) && g_dllVerifiedOk.load()) {
+    if (IsHkcuNamespaceParentKey(path)) {
         LSTATUS st =
             RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
                                      lpcMaxCls, cValues, lpcMaxValName, lpcMaxValData,
@@ -2995,56 +3316,6 @@ static const wchar_t* Win7MicrosoftLinkText(MuiLanguage lang) {
         case MuiLanguage::PT_BR: return L"Saiba mais online sobre pontuações e software";
         case MuiLanguage::PL_PL: return L"Dowiedz się więcej online o wynikach i oprogramowaniu";
         default: return L"Learn more about scores and software online";
-    }
-}
-
-static const wchar_t* Win7NumbersDialogText(MuiLanguage lang) {
-    switch (lang) {
-        case MuiLanguage::IT_IT:
-            return L"L'Indice prestazioni Windows valuta i componenti principali del computer, come processore, memoria, grafica, grafica dei giochi e disco rigido primario. Il punteggio di base è determinato dal sottopunteggio più basso, perché quel componente rappresenta il principale collo di bottiglia delle prestazioni.";
-        case MuiLanguage::ES_ES:
-            return L"El Índice de experiencia de Windows evalúa los componentes principales del equipo, como el procesador, la memoria, los gráficos, los gráficos de juego y el disco duro principal. La puntuación base viene determinada por la subpuntuación más baja, porque ese componente es el principal cuello de botella del rendimiento.";
-        case MuiLanguage::FR_FR:
-            return L"L'indice de performance Windows évalue les principaux composants de l'ordinateur, comme le processeur, la mémoire, les graphiques, les graphiques de jeu et le disque dur principal. Le score de base est déterminé par le sous-score le plus bas, car ce composant représente le principal goulot d'étranglement des performances.";
-        case MuiLanguage::TR_TR:
-            return L"Windows Deneyim Dizini işlemci, bellek, grafikler, oyun grafikleri ve birincil sabit disk gibi bilgisayarın temel bileşenlerini değerlendirir. Temel puan en düşük alt puana göre belirlenir, çünkü bu bileşen performansın ana darboğazıdır.";
-        case MuiLanguage::RU_RU:
-            return L"Индекс производительности Windows оценивает основные компоненты компьютера, такие как процессор, память, графика, игровая графика и основной жесткий диск. Базовая оценка определяется наименьшей подоценкой, поскольку этот компонент является главным ограничением производительности.";
-        case MuiLanguage::ZH_CN:
-            return L"Windows 体验指数会评估计算机的关键组件，例如处理器、内存、图形、游戏图形和主硬盘。基本分数由最低的子分数决定，因为该组件是主要的性能瓶颈。";
-        case MuiLanguage::DE_DE:
-            return L"Der Windows-Leistungsindex bewertet wichtige Komponenten des Computers, z. B. Prozessor, Arbeitsspeicher, Grafik, Gaminggrafik und primäre Festplatte. Die Basisbewertung wird durch die niedrigste Teilbewertung bestimmt, da diese Komponente den wichtigsten Leistungsengpass darstellt.";
-        case MuiLanguage::PT_BR:
-            return L"O Índice de Experiência do Windows avalia os principais componentes do computador, como processador, memória, elementos gráficos, gráficos de jogos e disco rígido principal. A pontuação base é determinada pela menor subpontuação, pois esse componente é o principal gargalo de desempenho.";
-        case MuiLanguage::PL_PL:
-            return L"Indeks wydajności systemu Windows ocenia główne składniki komputera, takie jak procesor, pamięć, grafika, grafika w grach i podstawowy dysk twardy. Wynik podstawowy jest określany przez najniższy podwynik, ponieważ ten składnik stanowi główne wąskie gardło wydajności.";
-        default:
-            return L"The Windows Experience Index rates key components of your computer, such as the processor, memory, graphics, gaming graphics and primary hard disk. The base score is determined by the lowest subscore, because that component is the main performance bottleneck.";
-    }
-}
-
-static const wchar_t* Win7TipsDialogText(MuiLanguage lang) {
-    switch (lang) {
-        case MuiLanguage::IT_IT:
-            return L"Per migliorare il punteggio, aggiorna i driver dei dispositivi, chiudi i programmi di avvio non necessari, usa un piano di alimentazione ad alte prestazioni, mantieni spazio libero sul disco ed esegui di nuovo la valutazione dopo modifiche hardware o driver.";
-        case MuiLanguage::ES_ES:
-            return L"Para mejorar la puntuación, actualiza los controladores de dispositivo, cierra programas de inicio innecesarios, usa un plan de energía de alto rendimiento, mantén suficiente espacio libre en disco y vuelve a ejecutar la evaluación después de cambios de hardware o controladores.";
-        case MuiLanguage::FR_FR:
-            return L"Pour améliorer le score, mettez à jour les pilotes de périphériques, fermez les programmes de démarrage inutiles, utilisez un mode de gestion de l'alimentation hautes performances, gardez suffisamment d'espace disque libre et relancez l'évaluation après des changements matériels ou de pilotes.";
-        case MuiLanguage::TR_TR:
-            return L"Puanınızı artırmak için aygıt sürücülerini güncelleyin, gereksiz başlangıç programlarını kapatın, yüksek performanslı bir güç planı kullanın, yeterli boş disk alanı bırakın ve donanım ya da sürücü değişikliklerinden sonra değerlendirmeyi yeniden çalıştırın.";
-        case MuiLanguage::RU_RU:
-            return L"Чтобы повысить оценку, обновите драйверы устройств, отключите ненужные программы автозагрузки, используйте план питания высокой производительности, оставляйте достаточно свободного места на диске и повторно запускайте оценку после изменений оборудования или драйверов.";
-        case MuiLanguage::ZH_CN:
-            return L"若要提高分数，请更新设备驱动程序，关闭不必要的启动程序，使用高性能电源计划，保留足够的可用磁盘空间，并在更改硬件或驱动程序后重新运行评估。";
-        case MuiLanguage::DE_DE:
-            return L"Um die Bewertung zu verbessern, aktualisieren Sie Gerätetreiber, schließen Sie unnötige Autostartprogramme, verwenden Sie einen Energiesparplan mit hoher Leistung, halten Sie genügend freien Speicherplatz bereit und führen Sie die Bewertung nach Hardware- oder Treiberänderungen erneut aus.";
-        case MuiLanguage::PT_BR:
-            return L"Para melhorar sua pontuação, atualize os drivers de dispositivo, feche programas de inicialização desnecessários, use um plano de energia de alto desempenho, mantenha espaço livre suficiente em disco e execute a avaliação novamente após alterações de hardware ou driver.";
-        case MuiLanguage::PL_PL:
-            return L"Aby poprawić wynik, zaktualizuj sterowniki urządzeń, zamknij niepotrzebne programy startowe, użyj planu zasilania o wysokiej wydajności, zachowaj wystarczającą ilość wolnego miejsca na dysku i ponownie uruchom ocenę po zmianach sprzętu lub sterowników.";
-        default:
-            return L"To improve your score, update device drivers, close unnecessary startup programs, use a high performance power plan, keep enough free disk space and re-run the assessment after hardware or driver changes.";
     }
 }
 
@@ -3561,29 +3832,40 @@ static bool IsPerfCenterAction(PCWSTR params, const wchar_t* action) {
 }
 
 static bool HandlePerfCenterAction(HWND hwnd, PCWSTR params) {
-    MuiLanguage lang = GetCurrentEmbeddedLanguage();
-
-    if (IsPerfCenterAction(params, L"numbers")) {
-        MessageBoxW(hwnd, Win7NumbersDialogText(lang), Win7NumbersMeanText(lang),
-                    MB_OK | MB_ICONINFORMATION);
-        return true;
+    // This runs on every ShellExecuteW/ShellExecuteExW in the process, so
+    // reject anything that cannot be one of our actions before doing any work
+    // (no lowercasing/allocations for unrelated ShellExecute calls).
+    if (!params ||
+        _wcsnicmp(params, L"perfcenter-restorer:", 20) != 0) {
+        return false;
     }
-    if (IsPerfCenterAction(params, L"tips")) {
-        MessageBoxW(hwnd, Win7TipsDialogText(lang), Win7ImproveText(lang),
-                    MB_OK | MB_ICONINFORMATION);
+
+    // All actions are non-blocking: they never park the calling shell UI
+    // thread in mod code. (A modal MessageBoxW from inside a ShellExecute hook
+    // would block the caller for as long as the dialog is open, and if the mod
+    // is disabled/unloaded in that window the blocked thread's return address
+    // would be in the unloaded image.) Each action just delegates to the
+    // original ShellExecuteW and returns immediately, matching how Windows 7
+    // opened a help topic for these links.
+    if (IsPerfCenterAction(params, L"numbers") ||
+        IsPerfCenterAction(params, L"tips") ||
+        IsPerfCenterAction(params, L"learnmore")) {
+        if (ShellExecuteWOriginal) {
+            // Windows Experience Index help topic (deprecated upstream; the
+            // performance-optimization tips page is the closest stable,
+            // first-party target). Update these URLs if a better help topic is
+            // desired - the important property is that they are external and
+            // non-blocking, never a modal in-process dialog.
+            ShellExecuteWOriginal(
+                hwnd, L"open",
+                L"https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows",
+                nullptr, nullptr, SW_SHOWNORMAL);
+        }
         return true;
     }
     if (IsPerfCenterAction(params, L"viewprint")) {
         if (ShellExecuteWOriginal) {
             ShellExecuteWOriginal(hwnd, L"open", L"msinfo32.exe", nullptr, nullptr, SW_SHOWNORMAL);
-        }
-        return true;
-    }
-    if (IsPerfCenterAction(params, L"learnmore")) {
-        if (ShellExecuteWOriginal) {
-            ShellExecuteWOriginal(hwnd, L"open",
-                                  L"https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows",
-                                  nullptr, nullptr, SW_SHOWNORMAL);
         }
         return true;
     }
@@ -4027,6 +4309,9 @@ void Wh_ModUninit(void) {
                    L"later unload)");
         }
         g_keyTracker.ClearWithoutFreeing();
+        // Close the volatile backing key and delete it, so no registry trace
+        // remains after disable/uninstall.
+        ReleaseVirtualKeyRoot();
     } catch (...) {
     }
 }
