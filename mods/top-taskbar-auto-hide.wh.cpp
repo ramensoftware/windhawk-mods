@@ -4,7 +4,7 @@
 // @description     Smooth auto-hide Windows 11 top taskbar with full maximized window area
 // @version         1.0
 // @author          Atharv Phatak
-// @github          https://github.com/atharvphatak/windhawk-mods
+// @github          https://github.com/atharvphatak
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
@@ -29,8 +29,35 @@
 */
 // ==/WindhawkModSettings==
 
+// ==WindhawkModReadme==
+/*
+# Top Taskbar Auto-Hide
+
+Smoothly auto-hides Windows 11 taskbar when taskbar is positioned at top.
+
+## Features
+
+- Smooth slide animation
+- Mouse-to-top reveal
+- Full monitor work area
+- Maximized windows use full screen
+- Taskbar remains clickable when visible
+- Configurable animation duration
+- Configurable hide/show delay
+- Configurable top-edge trigger
+
+## Requirements
+
+- Windows 11
+- Windhawk
+- Taskbar positioned at top of screen
+*/
+// ==/WindhawkModReadme==
+
 #include <windhawk_utils.h>
+
 #include <windows.h>
+
 #include <atomic>
 
 
@@ -42,6 +69,7 @@ struct Settings {
 };
 
 Settings g_settings;
+
 
 std::atomic<bool> g_running{false};
 std::atomic<bool> g_hidden{false};
@@ -918,7 +946,7 @@ bool HookTaskbarViewSymbols(
     HMODULE module
 ) {
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
 
         {
             {
@@ -937,8 +965,8 @@ bool HookTaskbarViewSymbols(
     if (
         !WindhawkUtils::HookSymbols(
             module,
-            hooks,
-            ARRAYSIZE(hooks)
+            taskbar_view_dll_hooks,
+            ARRAYSIZE(taskbar_view_dll_hooks)
         )
     ) {
 
@@ -1418,9 +1446,6 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
 
-    /*
-     * taskbar.dll
-     */
     HMODULE taskbarDll =
         LoadLibraryExW(
             L"taskbar.dll",
@@ -1439,7 +1464,7 @@ BOOL Wh_ModInit() {
     }
 
 
-    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
 
         {
             {
@@ -1524,8 +1549,8 @@ BOOL Wh_ModInit() {
     if (
         !WindhawkUtils::HookSymbols(
             taskbarDll,
-            taskbarHooks,
-            ARRAYSIZE(taskbarHooks)
+            taskbar_dll_hooks,
+            ARRAYSIZE(taskbar_dll_hooks)
         )
     ) {
 
@@ -1542,16 +1567,13 @@ BOOL Wh_ModInit() {
     );
 
 
-    /*
-     * explorer.exe
-     */
     HMODULE explorer =
         GetModuleHandleW(
             nullptr
         );
 
 
-    WindhawkUtils::SYMBOL_HOOK explorerHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorer_exe_hooks[] = {
 
         {
             {
@@ -1590,8 +1612,8 @@ BOOL Wh_ModInit() {
     if (
         !WindhawkUtils::HookSymbols(
             explorer,
-            explorerHooks,
-            ARRAYSIZE(explorerHooks)
+            explorer_exe_hooks,
+            ARRAYSIZE(explorer_exe_hooks)
         )
     ) {
 
@@ -1608,9 +1630,6 @@ BOOL Wh_ModInit() {
     );
 
 
-    /*
-     * Taskbar.View.dll
-     */
     HMODULE taskbarView =
         GetTaskbarViewModule();
 
@@ -1630,9 +1649,6 @@ BOOL Wh_ModInit() {
     }
 
 
-    /*
-     * Find taskbar.
-     */
     g_taskbarWindow =
         FindTopTaskbar();
 
@@ -1650,11 +1666,14 @@ BOOL Wh_ModInit() {
             g_taskbarWindow
         );
     }
+    else {
+
+        Wh_Log(
+            L"No top taskbar found"
+        );
+    }
 
 
-    /*
-     * Worker.
-     */
     g_running.store(
         true,
         std::memory_order_relaxed
