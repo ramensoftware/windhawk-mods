@@ -2,11 +2,11 @@
 // @id              taskbar-separators-prototype
 // @name            Taskbar Separators - Prototype
 // @description     Creates genuine independently reorderable taskbar separator pins.
-// @version         0.1
+// @version         0.2
 // @author          meteoni
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -luuid -lshell32 -lpropsys -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,12 +19,16 @@ The mod:
 2. Creates one uniquely identified .lnk per configured separator.
 3. Pins each shortcut with the private PinManager COM interface.
 4. Moves each pin to its configured position.
-5. Unpins the separators and deletes the generated files when the mod unloads.
+5. Gives only the generated separator TaskListButtons configurable normal/small widths.
+6. Unpins the separators and deletes the generated files when the mod unloads.
 
 The position setting is 1-based for the user: 1 means the first pinned position.
+Width overrides are per separator. They are applied after the normal
+TaskListButton::UpdateVisualStates hook chain returns, so they compose with
+the Taskbar height and icon size mod regardless of hook installation order.
 
-This is a prototype. XAML restyling/suppression of normal button behavior will be
-added separately.
+This is still a prototype. Click/context-menu suppression and richer XAML styling
+can be added separately.
 */
 // ==/WindhawkModReadme==
 
@@ -39,13 +43,29 @@ added separately.
     - - index: 5
         $name: Position
         $description: 1 = first pinned taskbar position.
+      - width: 14
+        $name: Width
+        $description: Width for the normal taskbar icon mode.
+      - widthSmall: 10
+        $name: Small width
+        $description: Width for the small taskbar icon mode.
     - - index: 10
         $name: Position
         $description: 1 = first pinned taskbar position.
+      - width: 14
+        $name: Width
+        $description: Width for the normal taskbar icon mode.
+      - widthSmall: 10
+        $name: Small width
+        $description: Width for the small taskbar icon mode.
   $name: Separators
   $description: Add or remove entries to control how many separators are created.
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
+
+#undef GetCurrentTime
 
 #include <windows.h>
 #include <shlobj.h>
@@ -53,9 +73,17 @@ added separately.
 #include <propkey.h>
 #include <propvarutil.h>
 
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+
 #include <algorithm>
+#include <atomic>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
+
+using namespace winrt::Windows::UI::Xaml;
 
 // -----------------------------------------------------------------------------
 // Private taskbar PinManager COM ABI, verified on the current Windows build.
@@ -130,6 +158,8 @@ struct IPinManagerInterop3 : IPinManagerInterop2 {
 struct SeparatorSetting {
     int ordinal;       // Stable within this loaded settings snapshot: 1, 2, ...
     int targetIndex;   // Zero-based value passed to MoveTaskbarPin.
+    double width;      // Normal taskbar icon mode.
+    double widthSmall; // Small taskbar icon mode.
 };
 
 struct Settings {
@@ -140,6 +170,10 @@ struct Settings {
 static Settings g_settings;
 static std::wstring g_storagePath;
 static std::wstring g_iconPath;
+
+static std::atomic<bool> g_taskbarViewDllHooked;
+static std::atomic<bool> g_unloading;
+static bool g_hasDynamicIconScaling;
 
 // Internal AppUserModelID namespace. Kept independent from the user-visible
 // filename prefix so user changes don't accidentally create invalid AppIDs.
@@ -356,9 +390,24 @@ static bool LoadSettings() {
             continue;
         }
 
+        int width =
+            Wh_GetIntSetting(L"separators[%d].width", i);
+        int widthSmall =
+            Wh_GetIntSetting(L"separators[%d].widthSmall", i);
+
+        // Keep old settings snapshots usable if these fields didn't exist yet.
+        if (width <= 0) {
+            width = 14;
+        }
+        if (widthSmall <= 0) {
+            widthSmall = 10;
+        }
+
         g_settings.separators.push_back({
             .ordinal = i + 1,
             .targetIndex = position - 1,
+            .width = static_cast<double>(width),
+            .widthSmall = static_cast<double>(widthSmall),
         });
     }
 
@@ -369,10 +418,13 @@ static bool LoadSettings() {
 
     for (const auto& separator : g_settings.separators) {
         Wh_Log(
-            L"[SETTINGS] separator=%d targetIndex=%d (user position=%d)",
+            L"[SETTINGS] separator=%d targetIndex=%d (user position=%d) "
+            L"width=%g widthSmall=%g",
             separator.ordinal,
             separator.targetIndex,
-            separator.targetIndex + 1);
+            separator.targetIndex + 1,
+            separator.width,
+            separator.widthSmall);
     }
 
     return true;
@@ -414,6 +466,475 @@ static bool InitializeStoragePath() {
 
     return true;
 }
+
+
+// -----------------------------------------------------------------------------
+// TaskListButton width styling.
+//
+// This deliberately owns only our generated separator buttons. In particular,
+// it does NOT override MediumTaskbarButtonExtent/SmallTaskbarButtonExtent
+// resources globally.
+//
+// Compatibility with "Taskbar height and icon size":
+// - that mod writes its global per-instance extents before calling its
+//   UpdateVisualStates trampoline;
+// - this mod calls its own trampoline first and applies the separator-specific
+//   override only on the unwind path.
+// Therefore our matched separator width wins regardless of hook nesting order,
+// while all unmatched buttons remain completely untouched.
+// -----------------------------------------------------------------------------
+
+static void* g_taskListButtonUpdateButtonPaddingAddress;
+static void* g_taskListButtonUpdateIconColumnDefinitionAddress;
+static void* g_taskbarConfigurationGetIconHeightInViewPixelsAddress;
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+static TaskListButton_UpdateVisualStates_t
+    g_taskListButtonUpdateVisualStatesOriginal;
+
+static std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
+    enum FEATURE_ENABLED_STATE {
+        FEATURE_ENABLED_STATE_DEFAULT = 0,
+        FEATURE_ENABLED_STATE_DISABLED = 1,
+        FEATURE_ENABLED_STATE_ENABLED = 2,
+    };
+
+#pragma pack(push, 1)
+    struct RTL_FEATURE_CONFIGURATION {
+        unsigned int featureId;
+        unsigned __int32 group : 4;
+        FEATURE_ENABLED_STATE enabledState : 2;
+        unsigned __int32 enabledStateOptions : 1;
+        unsigned __int32 unused1 : 1;
+        unsigned __int32 variant : 6;
+        unsigned __int32 variantPayloadKind : 2;
+        unsigned __int32 unused2 : 16;
+        unsigned int payload;
+    };
+#pragma pack(pop)
+
+    using RtlQueryFeatureConfiguration_t =
+        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
+
+    static RtlQueryFeatureConfiguration_t queryFeatureConfiguration = [] {
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        return ntdll
+                   ? reinterpret_cast<RtlQueryFeatureConfiguration_t>(
+                         GetProcAddress(ntdll, "RtlQueryFeatureConfiguration"))
+                   : nullptr;
+    }();
+
+    if (!queryFeatureConfiguration) {
+        return std::nullopt;
+    }
+
+    RTL_FEATURE_CONFIGURATION feature = {};
+    INT64 changeStamp = 0;
+
+    HRESULT hr = queryFeatureConfiguration(
+        featureId,
+        1,
+        &changeStamp,
+        &feature);
+
+    if (FAILED(hr)) {
+        return std::nullopt;
+    }
+
+    switch (feature.enabledState) {
+        case FEATURE_ENABLED_STATE_DISABLED:
+            return false;
+        case FEATURE_ENABLED_STATE_ENABLED:
+            return true;
+        default:
+            return std::nullopt;
+    }
+}
+
+static LONG GetMediumTaskbarButtonExtentOffset() {
+    static LONG offset = []() -> LONG {
+        if (!g_taskListButtonUpdateIconColumnDefinitionAddress) {
+            Wh_Log(
+                L"[STYLE] UpdateIconColumnDefinition address unavailable");
+            return 0;
+        }
+
+        // x64 logic from the upstream Taskbar height and icon size mod.
+        // Search for a movsd that loads the per-instance medium extent,
+        // followed by a subsd using the loaded value.
+        const BYTE* start =
+            reinterpret_cast<const BYTE*>(
+                g_taskListButtonUpdateIconColumnDefinitionAddress);
+        const BYTE* end = start + 0x200;
+
+        LONG offsetCandidate = 0;
+        LONG foundOffset = 0;
+
+        for (const BYTE* p = start; p != end; p++) {
+            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
+                (p[3] & 0xC0) == 0x80) {
+                offsetCandidate =
+                    *reinterpret_cast<const LONG*>(p + 4);
+            }
+
+            if (p[0] == 0xF2 && p[1] == 0x44 &&
+                p[2] == 0x0F && p[3] == 0x10 &&
+                (p[4] & 0xC0) == 0x80) {
+                offsetCandidate =
+                    *reinterpret_cast<const LONG*>(p + 5);
+            }
+
+            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x5C &&
+                (p[3] & 0xC0) == 0x80) {
+                foundOffset = offsetCandidate;
+                break;
+            }
+
+            if (p[0] == 0xF2 && p[1] == 0x44 &&
+                p[2] == 0x0F && p[3] == 0x5C &&
+                (p[4] & 0xC0) == 0x80) {
+                foundOffset = offsetCandidate;
+                break;
+            }
+        }
+
+        Wh_Log(
+            L"[STYLE] mediumTaskbarButtonExtentOffset=0x%X",
+            foundOffset);
+
+        return (foundOffset < 0 || foundOffset > 0xFFFF)
+                   ? 0
+                   : foundOffset;
+    }();
+
+    return offset;
+}
+
+static FrameworkElement GetTaskListButtonElement(void* pThis) {
+    FrameworkElement element = nullptr;
+
+    // Same C++/WinRT subobject adjustment used by the existing taskbar mods.
+    IUnknown* xamlUnknown =
+        reinterpret_cast<IUnknown*>(pThis) + 3;
+
+    HRESULT hr = xamlUnknown->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(element));
+
+    if (FAILED(hr)) {
+        return nullptr;
+    }
+
+    return element;
+}
+
+static const SeparatorSetting* FindSeparatorByAutomationName(
+    std::wstring_view name) {
+    if (g_settings.identifierPrefix.empty() || name.empty()) {
+        return nullptr;
+    }
+
+    const std::wstring needle =
+        g_settings.identifierPrefix + L"-";
+
+    size_t pos = name.find(needle);
+
+    while (pos != std::wstring_view::npos) {
+        size_t digitPos = pos + needle.size();
+
+        if (digitPos < name.size() &&
+            name[digitPos] >= L'0' &&
+            name[digitPos] <= L'9') {
+            unsigned int ordinal = 0;
+            size_t end = digitPos;
+
+            while (end < name.size() &&
+                   name[end] >= L'0' &&
+                   name[end] <= L'9') {
+                ordinal =
+                    ordinal * 10 +
+                    static_cast<unsigned int>(name[end] - L'0');
+
+                if (ordinal > 100000) {
+                    break;
+                }
+
+                end++;
+            }
+
+            for (const auto& separator : g_settings.separators) {
+                if (separator.ordinal ==
+                    static_cast<int>(ordinal)) {
+                    return &separator;
+                }
+            }
+        }
+
+        pos = name.find(needle, pos + 1);
+    }
+
+    return nullptr;
+}
+
+static void RefreshTaskListButtonLayout(void* pThis) {
+    // Call real function entry points, not our own trampolines.
+    //
+    // UpdateButtonPadding is intentionally invoked through its target address:
+    // if Taskbar height and icon size hooks it, that hook participates.
+    if (g_taskListButtonUpdateButtonPaddingAddress) {
+        auto updateButtonPadding =
+            reinterpret_cast<void(WINAPI*)(void*)>(
+                g_taskListButtonUpdateButtonPaddingAddress);
+
+        updateButtonPadding(pThis);
+    }
+
+    // Unlike the modified taskbar-icon-size experiment, our width write occurs
+    // after UpdateVisualStates has already returned. Re-run the column update
+    // explicitly so the XAML layout consumes the new extent immediately.
+    if (g_taskListButtonUpdateIconColumnDefinitionAddress) {
+        auto updateIconColumnDefinition =
+            reinterpret_cast<void(WINAPI*)(void*)>(
+                g_taskListButtonUpdateIconColumnDefinitionAddress);
+
+        updateIconColumnDefinition(pThis);
+    }
+}
+
+static void ApplySeparatorWidthOverride(void* pThis) {
+    if (g_unloading ||
+        !g_taskListButtonUpdateIconColumnDefinitionAddress) {
+        return;
+    }
+
+    FrameworkElement element = GetTaskListButtonElement(pThis);
+    if (!element) {
+        return;
+    }
+
+    winrt::hstring automationName;
+
+    try {
+        automationName =
+            winrt::Windows::UI::Xaml::Automation::
+                AutomationProperties::GetName(element);
+    } catch (...) {
+        return;
+    }
+
+    std::wstring_view name{
+        automationName.c_str(),
+        automationName.size()
+    };
+
+    const SeparatorSetting* separator =
+        FindSeparatorByAutomationName(name);
+
+    if (!separator) {
+        return;
+    }
+
+    LONG mediumOffset =
+        GetMediumTaskbarButtonExtentOffset();
+
+    if (!mediumOffset) {
+        return;
+    }
+
+    auto* mediumExtent =
+        reinterpret_cast<double*>(
+            reinterpret_cast<BYTE*>(pThis) + mediumOffset);
+
+    bool changed = false;
+
+    if (*mediumExtent >= 1 &&
+        *mediumExtent < 10000 &&
+        *mediumExtent != separator->width) {
+        Wh_Log(
+            L"[STYLE] '%s' medium width %g -> %g",
+            automationName.c_str(),
+            *mediumExtent,
+            separator->width);
+
+        *mediumExtent = separator->width;
+        changed = true;
+    }
+
+    // On DynamicIconScaling builds the small extent immediately precedes
+    // the medium extent. Don't assume that layout on older taskbars.
+    if (g_hasDynamicIconScaling) {
+        double* smallExtent = mediumExtent - 1;
+
+        if (*smallExtent >= 1 &&
+            *smallExtent < 10000 &&
+            *smallExtent != separator->widthSmall) {
+            Wh_Log(
+                L"[STYLE] '%s' small width %g -> %g",
+                automationName.c_str(),
+                *smallExtent,
+                separator->widthSmall);
+
+            *smallExtent = separator->widthSmall;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        RefreshTaskListButtonLayout(pThis);
+    }
+}
+
+static void WINAPI TaskListButton_UpdateVisualStates_Hook(
+    void* pThis) {
+    // Critical for coexistence with taskbar-icon-size:
+    // let Windows and every hook downstream of us finish first.
+    g_taskListButtonUpdateVisualStatesOriginal(pThis);
+
+    // Then take the final word only for our own separator instances.
+    ApplySeparatorWidthOverride(pThis);
+}
+
+static HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
+
+    if (!module) {
+        module = GetModuleHandleW(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+static bool HookTaskbarViewDllSymbols(HMODULE module) {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"
+            },
+            &g_taskListButtonUpdateButtonPaddingAddress,
+            nullptr,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateIconColumnDefinition(void))"
+            },
+            &g_taskListButtonUpdateIconColumnDefinitionAddress,
+            nullptr,
+            true, // Missing on older taskbar builds.
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"
+            },
+            &g_taskListButtonUpdateVisualStatesOriginal,
+            TaskListButton_UpdateVisualStates_Hook,
+        },
+        {
+            {
+                LR"(public: double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetIconHeightInViewPixels(void))"
+            },
+            &g_taskbarConfigurationGetIconHeightInViewPixelsAddress,
+            nullptr,
+            true, // DynamicIconScaling-era builds.
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(
+            module,
+            hooks,
+            ARRAYSIZE(hooks))) {
+        Wh_Log(L"[STYLE] HookSymbols(Taskbar view) failed");
+        return false;
+    }
+
+    if (g_taskListButtonUpdateIconColumnDefinitionAddress) {
+        GetMediumTaskbarButtonExtentOffset();
+    }
+
+    constexpr UINT kDynamicIconScaling = 29785184;
+
+    g_hasDynamicIconScaling =
+        g_taskbarConfigurationGetIconHeightInViewPixelsAddress &&
+        IsOsFeatureEnabled(kDynamicIconScaling).value_or(true);
+
+    Wh_Log(
+        L"[STYLE] Taskbar view hooks ready; "
+        L"DynamicIconScaling=%d",
+        g_hasDynamicIconScaling);
+
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t g_loadLibraryExWOriginal;
+
+static HMODULE WINAPI LoadLibraryExW_Hook(
+    LPCWSTR lpLibFileName,
+    HANDLE hFile,
+    DWORD dwFlags) {
+    HMODULE module =
+        g_loadLibraryExWOriginal(
+            lpLibFileName,
+            hFile,
+            dwFlags);
+
+    if (!module) {
+        return module;
+    }
+
+    if (!g_taskbarViewDllHooked &&
+        GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllHooked.exchange(true)) {
+        Wh_Log(
+            L"[STYLE] Taskbar view module loaded: %s",
+            lpLibFileName ? lpLibFileName : L"<unknown>");
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        } else {
+            g_taskbarViewDllHooked = false;
+        }
+    }
+
+    return module;
+}
+
+static bool InitializeTaskbarStylingHooks() {
+    if (HMODULE module = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllHooked = true;
+
+        if (!HookTaskbarViewDllSymbols(module)) {
+            g_taskbarViewDllHooked = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    Wh_Log(
+        L"[STYLE] Taskbar view module not loaded yet; "
+        L"installing LoadLibraryExW watcher");
+
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelBase) {
+        return false;
+    }
+
+    auto loadLibraryExW =
+        reinterpret_cast<decltype(&LoadLibraryExW)>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
+
+    if (!loadLibraryExW) {
+        return false;
+    }
+
+    WindhawkUtils::SetFunctionHook(
+        loadLibraryExW,
+        LoadLibraryExW_Hook,
+        &g_loadLibraryExWOriginal);
+
+    return true;
+}
+
 
 // -----------------------------------------------------------------------------
 // Shortcut creation.
@@ -848,6 +1369,35 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (!InitializeTaskbarStylingHooks()) {
+        Wh_Log(
+            L"[INIT] Failed to initialize TaskListButton styling hooks");
+        return FALSE;
+    }
+
+    // Hook operations installed during Wh_ModInit are applied automatically
+    // before Wh_ModAfterInit. Create the actual pins there so their first
+    // UpdateVisualStates pass can already be intercepted.
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L"[INIT] Taskbar separator backend starting");
+
+    // Close the small race where the module wasn't present in Wh_ModInit but
+    // appeared before/around Wh_ModAfterInit.
+    if (!g_taskbarViewDllHooked) {
+        if (HMODULE module = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllHooked.exchange(true)) {
+                if (HookTaskbarViewDllSymbols(module)) {
+                    Wh_ApplyHookOperations();
+                } else {
+                    g_taskbarViewDllHooked = false;
+                }
+            }
+        }
+    }
+
     HRESULT hrInit =
         CoInitializeEx(
             nullptr,
@@ -864,7 +1414,7 @@ BOOL Wh_ModInit() {
         Wh_Log(
             L"[INIT] CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(hrInit));
-        return FALSE;
+        return;
     }
 
     bool success =
@@ -881,7 +1431,12 @@ BOOL Wh_ModInit() {
     }
 
     Wh_Log(L"[INIT] Taskbar separator prototype loaded");
-    return TRUE;
+}
+
+void Wh_ModBeforeUninit() {
+    // Stop re-applying widths while Windhawk is unwinding hooks and while the
+    // backing taskbar items are about to be removed.
+    g_unloading = true;
 }
 
 void Wh_ModUninit() {
@@ -917,10 +1472,9 @@ void Wh_ModUninit() {
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    // Important: don't overwrite g_settings here. The old instance must retain
-    // its old filenames/ordinals so Wh_ModUninit can remove exactly what it
-    // created. Windhawk will then reload the mod and Wh_ModInit will read the
-    // new settings.
+    // Keep the old loaded settings intact. The old instance must unpin/delete
+    // exactly the separator identities it created; the reloaded instance then
+    // reads the new array (including new widths) and recreates fresh buttons.
     *bReload = TRUE;
     return TRUE;
 }
