@@ -11172,6 +11172,35 @@
         "version": "1.0.0"
       }
     },
+    "snap-sentry": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786386730000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786386730000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mario0318",
+        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -luuid",
+        "description": "Copy saved screenshots, delete them automatically, or choose what to do from a notification.",
+        "github": "https://github.com/mario0318",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "SnapSentry",
+        "version": "0.16.0"
+      }
+    },
     "spoof-light-dark-theme": {
       "details": {
         "defaultSorting": 5088,

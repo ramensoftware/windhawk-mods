@@ -2,12 +2,57 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-10T16:15:56.000Z</updated>
+    <updated>2026-08-10T18:32:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.16.0]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#e9237a6f4eb990817987ed34d41c00842f43dadd</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-08-10T18:32:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="snapsentry">SnapSentry</h1>
+<p>Watches your Windows <strong>Screenshots</strong> folder, wherever it is, and handles new
+screenshots as they are saved. Copy the image, delete the file after a delay, or
+choose what to do from a notification.</p>
+<p><img src="https://raw.githubusercontent.com/mario0318/SnapSentry/32558d49a40d02fb03661abad0c2d9d313ae00e9/assets/notification.png" alt="The SnapSentry notification" /></p>
+<h2 id="clipboardmodes">Clipboard modes</h2>
+<ul>
+<li><strong>Image</strong> copies the picture so it stays pasteable even after the file is deleted.</li>
+<li><strong>File</strong> copies the file for pasting into File Explorer. Deletion is disabled.</li>
+<li><strong>Path</strong> copies the full path as text. You can pick plain text, a quoted path, a
+file link, or a Markdown image link, which is handy for pasting a screenshot
+straight into notes or a bug report. Deletion is disabled.</li>
+<li><strong>None</strong> leaves the clipboard unchanged.</li>
+</ul>
+<h2 id="naming">Naming</h2>
+<p>You can have SnapSentry rename each new screenshot from the window that was in
+front when it was taken, together with a timestamp, so a file ends up named for
+what it shows instead of Screenshot (1). The file stays in the same folder.</p>
+<h2 id="thenotification">The notification</h2>
+<p>The popup is a real Windows notification, so it matches your light or dark theme.
+While the popup is turned on, SnapSentry registers itself with Windows so the
+notification buttons work, and turning the popup off or disabling the mod removes
+that registration again. If the notification can't be shown, SnapSentry falls back
+to a standard dialog. If you have turned its notifications off, it takes that as a
+cue to stay quiet: it still copies to the clipboard but shows no dialog and never
+auto deletes.</p>
+<h2 id="privacy">Privacy</h2>
+<p>SnapSentry treats any supported image written into the watched folder within the
+last few seconds as a new screenshot. Files that were already there, and copies of
+older images dragged in or synced from another device, are left alone. A brand new
+file saved or downloaded straight into the folder cannot be told apart from a
+capture, so avoid pointing the folder at a place where downloads land. By default a
+deleted screenshot goes to the Recycle Bin so it can be restored; if you turn that
+off, deletion is permanent. Deleting a screenshot does not remove copies already
+stored in clipboard history, cloud sync, backups, or other programs.</p>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Performance Information and Tools Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/performance-info-tools-restorer#80cd389071afb4876534e924c9ee32a39377b5c1</id>
@@ -799,19 +844,6 @@ Credits to m417z for the code review and enhancing the mod.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.3]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#4717dc4f00f7a7b85a397e94d1d49ff26c941a11</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-08-03T20:20:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Modern engine now computes its canvas from <code>MonitorFromRect</code> (window) and <code>data-&gt;hMon</code> (dock), clamped to both monitors, instead of <code>GetSystemMetrics(SM_*VIRTUALSCREEN)</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
         </author>
     </entry>
 </feed>
