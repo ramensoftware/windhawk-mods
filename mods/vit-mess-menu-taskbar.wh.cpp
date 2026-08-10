@@ -1810,7 +1810,18 @@ class MessBlurBrush : public XamlCompositionBrushBaseT<MessBlurBrush> {
 
 // A minimal "subtle" button template, so our buttons pick up the same quiet
 // hover treatment the surrounding taskbar buttons use.
-static Style MakeSubtleButtonStyle(bool light) {
+//
+// Two nested Borders, and the split matters. HitTarget fills the whole control
+// and is painted Transparent -- which, unlike a null Background, does take part
+// in hit testing -- so the button stays clickable across its entire area. Root
+// sits inside it with `verticalInset` of margin and carries the highlight.
+//
+// Doing the inset with a Margin on the Button itself instead would shrink the
+// control, and with it the hit area: the bottom few pixels of the taskbar would
+// stop responding, so slamming the pointer into the screen edge would miss the
+// button. Windows' own tray buttons take the full height and inset only the
+// paint, which is what this reproduces.
+static Style MakeSubtleButtonStyle(bool light, int verticalInset) {
     static const wchar_t* kTemplate =
         LR"XAML(<Style TargetType="Button"
        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -1826,10 +1837,7 @@ static Style MakeSubtleButtonStyle(bool light) {
   <Setter Property="Template">
     <Setter.Value>
       <ControlTemplate TargetType="Button">
-        <Border x:Name="Root"
-                Background="{TemplateBinding Background}"
-                CornerRadius="4"
-                Padding="{TemplateBinding Padding}">
+        <Border x:Name="HitTarget" Background="Transparent">
           <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="CommonStates">
               <VisualState x:Name="Normal"/>
@@ -1850,17 +1858,27 @@ static Style MakeSubtleButtonStyle(bool light) {
               </VisualState>
             </VisualStateGroup>
           </VisualStateManager.VisualStateGroups>
-          <ContentPresenter Content="{TemplateBinding Content}"
-                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+          <Border x:Name="Root"
+                  Background="{TemplateBinding Background}"
+                  CornerRadius="4"
+                  Margin="%INSET%"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+          </Border>
         </Border>
       </ControlTemplate>
     </Setter.Value>
   </Setter>
 </Style>)XAML";
 
+    std::wstring inset =
+        L"0," + std::to_wstring(verticalInset) + L",0," +
+        std::to_wstring(verticalInset);
+
     std::wstring xaml = kTemplate;
-    auto replace = [&xaml](const wchar_t* token, const wchar_t* value) {
+    auto replace = [&xaml](const wchar_t* token, const std::wstring& value) {
         size_t pos = xaml.find(token);
         if (pos != std::wstring::npos) {
             xaml.replace(pos, wcslen(token), value);
@@ -1868,6 +1886,7 @@ static Style MakeSubtleButtonStyle(bool light) {
     };
     replace(L"%HOVER%", light ? L"#18000000" : L"#20FFFFFF");
     replace(L"%PRESSED%", light ? L"#0C000000" : L"#12FFFFFF");
+    replace(L"%INSET%", inset);
 
     try {
         return Markup::XamlReader::Load(xaml).try_as<Style>();
@@ -1880,15 +1899,32 @@ static Style MakeSubtleButtonStyle(bool light) {
 // Parsing the template is the most expensive thing in building the flyout, and
 // it was running three times per open. One instance per theme is enough -- a
 // Style is immutable once applied and is happily shared between controls.
+//
+// Two variants: the flyout's own buttons sit inside a padded surface and need
+// no inset, while the taskbar button insets its highlight to match the height
+// of Windows' tray buttons.
+static constexpr int kTaskbarButtonInset = 4;
+
 [[clang::no_destroy]] static Style g_subtleButtonStyle{nullptr};
 static bool g_subtleButtonStyleIsLight = false;
+[[clang::no_destroy]] static Style g_taskbarButtonStyle{nullptr};
+static bool g_taskbarButtonStyleIsLight = false;
 
 static Style GetSubtleButtonStyle(bool light) {
     if (!g_subtleButtonStyle || g_subtleButtonStyleIsLight != light) {
-        g_subtleButtonStyle = MakeSubtleButtonStyle(light);
+        g_subtleButtonStyle = MakeSubtleButtonStyle(light, 0);
         g_subtleButtonStyleIsLight = light;
     }
     return g_subtleButtonStyle;
+}
+
+static Style GetTaskbarButtonStyle(bool light) {
+    if (!g_taskbarButtonStyle || g_taskbarButtonStyleIsLight != light) {
+        g_taskbarButtonStyle =
+            MakeSubtleButtonStyle(light, kTaskbarButtonInset);
+        g_taskbarButtonStyleIsLight = light;
+    }
+    return g_taskbarButtonStyle;
 }
 
 // ---------------------------------------------------------------------------
@@ -2127,16 +2163,16 @@ static void ShowMessFlyout(FrameworkElement const& target);
 
 static Button BuildTaskbarButton(bool light) {
     Button button;
-    if (auto style = GetSubtleButtonStyle(light)) {
+    if (auto style = GetTaskbarButtonStyle(light)) {
         button.Style(style);
     }
-    // Stretch to the tray's full height so the hover/pressed fill matches the
-    // neighbouring taskbar buttons instead of hugging the text. 4px is the
-    // inset Windows itself leaves: on a 48px taskbar its own buttons highlight
-    // 40px tall, so this lands the fill at the same height as theirs.
+    // No vertical margin: the button takes the tray's full height so it stays
+    // clickable right down to the screen edge, the way the clock and the other
+    // tray buttons do. The highlight is inset inside the template instead, so
+    // it still matches their height (40px of a 48px taskbar).
     button.Padding({8, 0, 8, 0});
-    button.Margin({(double)g_settings.buttonPaddingLeft, 4,
-                   (double)g_settings.buttonPaddingRight, 4});
+    button.Margin({(double)g_settings.buttonPaddingLeft, 0,
+                   (double)g_settings.buttonPaddingRight, 0});
     button.VerticalAlignment(VerticalAlignment::Stretch);
     button.HorizontalAlignment(HorizontalAlignment::Center);
 
@@ -2191,7 +2227,7 @@ static Button BuildTaskbarButton(bool light) {
                     return;
                 }
                 const bool nowLight = IsLightTheme();
-                if (auto style = GetSubtleButtonStyle(nowLight)) {
+                if (auto style = GetTaskbarButtonStyle(nowLight)) {
                     sender.as<Control>().Style(style);
                 }
                 if (g_taskbarLabel) {
@@ -4112,10 +4148,11 @@ void Wh_ModUninit() {
                     Wh_Log(L"Wh_ModUninit: exception removing the button");
                 }
 
-                // The Style comes out of XamlReader::Load on this thread and is
-                // a XAML DependencyObject, so it has to be released here rather
-                // than on whichever thread runs Wh_ModUninit.
+                // The Styles come out of XamlReader::Load on this thread and are
+                // XAML DependencyObjects, so they have to be released here
+                // rather than on whichever thread runs Wh_ModUninit.
                 g_subtleButtonStyle = nullptr;
+                g_taskbarButtonStyle = nullptr;
             },
             nullptr,
             /*blockIndefinitely=*/true);
@@ -4137,6 +4174,7 @@ void Wh_ModUninit() {
     g_reservedElement = nullptr;
     g_timer = nullptr;
     g_subtleButtonStyle = nullptr;
+    g_taskbarButtonStyle = nullptr;
     ClearFlyoutRefs();
 
     // These carry [[clang::no_destroy]], so release their buffers by hand.
