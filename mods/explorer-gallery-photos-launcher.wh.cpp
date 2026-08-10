@@ -39,23 +39,19 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 - targetArguments: ""
   $name: Command arguments
   $name:pl-PL: Argumenty komendy
-  $description: "Optional arguments to pass to the command (e.g. a specific path or switches)."
+  $description: "Optional arguments to pass to the command (only applies when the command is an executable, not a protocol)."
   $description:pl-PL: Opcjonalne argumenty przekazywane do komendy.
 */
 // ==/WindhawkModSettings==
 
 #include <shlobj.h>
 #include <shellapi.h>
-#include <windows.h>
 #include <windhawk_utils.h>
 #include <atomic>
-#include <mutex>
 
 static std::atomic<PIDLIST_ABSOLUTE> g_targetPidl{nullptr};
-static std::once_flag g_pidlOnce;
 static std::atomic<bool> g_explorerFrameHooked{false};
 static std::atomic<bool> g_unloading{false};
-static HMODULE g_explorerFrameModule = nullptr;
 
 // ---- BrowseObject Original & Hook ----
 typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
@@ -64,26 +60,33 @@ typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
 static BrowseObject_t g_BrowseObject_Original = nullptr;
 
 static PIDLIST_ABSOLUTE EnsureTargetPidl() {
-    std::call_once(g_pidlOnce, [] {
-        // Hardcoded Gallery CLSID
-        constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
-        PIDLIST_ABSOLUTE newPidl = nullptr;
-        HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr,
-                                        &newPidl, 0, nullptr);
-        if (SUCCEEDED(hr) && newPidl) {
-            g_targetPidl.store(newPidl, std::memory_order_release);
-        } else {
-            Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
-        }
-    });
-    return g_targetPidl.load(std::memory_order_acquire);
+    PIDLIST_ABSOLUTE pidl = g_targetPidl.load(std::memory_order_acquire);
+    if (pidl) {
+        return pidl;
+    }
+
+    constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
+    PIDLIST_ABSOLUTE newPidl = nullptr;
+    HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr, &newPidl, 0, nullptr);
+    if (FAILED(hr) || !newPidl) {
+        Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
+        return nullptr;
+    }
+
+    PIDLIST_ABSOLUTE expected = nullptr;
+    if (!g_targetPidl.compare_exchange_strong(expected, newPidl,
+                                              std::memory_order_release,
+                                              std::memory_order_acquire)) {
+        CoTaskMemFree(newPidl);  // lost the race
+        return expected;
+    }
+    return newPidl;
 }
 
 // Asynchronous launch parameters
 static HANDLE g_launchEvent = NULL;
 static HANDLE g_stopEvent = NULL;
 static HANDLE g_workerThread = NULL;
-static std::once_flag g_workerInitOnce;
 
 static DWORD WINAPI LaunchWorkerProc(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -105,16 +108,16 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             WindhawkUtils::StringSetting cmd = WindhawkUtils::StringSetting::make(L"targetCommand");
             WindhawkUtils::StringSetting args = WindhawkUtils::StringSetting::make(L"targetArguments");
             
-            PCWSTR target = (cmd.get() && cmd.get()[0]) ? cmd.get() : L"ms-photos:";
-            PCWSTR targetArgs = (args.get() && args.get()[0]) ? args.get() : nullptr;
+            PCWSTR target = cmd.get()[0] ? cmd.get() : L"ms-photos:";
+            PCWSTR targetArgs = args.get()[0] ? args.get() : nullptr;
             
             Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // SEE_MASK_ASYNCOK ensures that if the launch requires UI (e.g. UAC or "Open With"),
-            // the shell spawns a background thread for it rather than blocking our worker thread.
-            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
-            sei.lpVerb = nullptr; // Default verb is safer for diverse targets than explicit L"open"
+            // SEE_MASK_ASYNCOK permits the shell to perform the execution on a background thread.
+            // Leaving off SEE_MASK_FLAG_NO_UI ensures the shell's standard error/fallback prompts work.
+            sei.fMask = SEE_MASK_ASYNCOK;
+            sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
             sei.nShow = SW_SHOWNORMAL;
@@ -139,22 +142,6 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
     return 0;
 }
 
-static void EnsureWorkerThread() {
-    std::call_once(g_workerInitOnce, [] {
-        g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
-        g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
-        
-        if (g_launchEvent && g_stopEvent) {
-            g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
-            if (!g_workerThread) {
-                Wh_Log(L"Failed to create worker thread.");
-            }
-        } else {
-            Wh_Log(L"Failed to create thread synchronization events.");
-        }
-    });
-}
-
 // Hook on BrowseObject
 static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
                                                    PCUIDLIST_RELATIVE pidl,
@@ -172,7 +159,6 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
             
             Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
             
-            EnsureWorkerThread();
             if (g_launchEvent) {
                 SetEvent(g_launchEvent);
             }
@@ -195,10 +181,6 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
     if (!g_explorerFrameHooked.compare_exchange_strong(expected, true)) {
         return true;
     }
-
-    // Retain a reference to ExplorerFrame so it isn't unloaded while hooked
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                       reinterpret_cast<LPCWSTR>(hEF), &g_explorerFrameModule);
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
@@ -250,6 +232,25 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod v" WH_MOD_VERSION);
 
+    // Create background worker thread for asynchronous protocol launching
+    g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
+    g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
+    
+    if (!g_launchEvent || !g_stopEvent) {
+        Wh_Log(L"Failed to create thread synchronization events.");
+        if (g_launchEvent) CloseHandle(g_launchEvent);
+        if (g_stopEvent) CloseHandle(g_stopEvent);
+        return FALSE;
+    }
+
+    g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
+    if (!g_workerThread) {
+        Wh_Log(L"Failed to create worker thread.");
+        CloseHandle(g_launchEvent);
+        CloseHandle(g_stopEvent);
+        return FALSE;
+    }
+
     bool delayLoadingNeeded = true;
     
     // If explorerframe.dll is already loaded, hook it immediately
@@ -260,11 +261,11 @@ BOOL Wh_ModInit() {
         } else {
             Wh_Log(L"Failed to hook already loaded explorerframe.dll");
             
-            // Clean up the module reference on initialization failure
-            if (g_explorerFrameModule) {
-                FreeLibrary(g_explorerFrameModule);
-                g_explorerFrameModule = nullptr;
-            }
+            SetEvent(g_stopEvent);
+            WaitForSingleObject(g_workerThread, INFINITE);
+            CloseHandle(g_workerThread);
+            CloseHandle(g_launchEvent);
+            CloseHandle(g_stopEvent);
             return FALSE;
         }
     }
@@ -324,11 +325,5 @@ void Wh_ModUninit() {
     PIDLIST_ABSOLUTE target = g_targetPidl.exchange(nullptr, std::memory_order_acquire);
     if (target) {
         CoTaskMemFree(target);
-    }
-
-    // Release our manual reference so ExplorerFrame can unload naturally
-    if (g_explorerFrameModule) {
-        FreeLibrary(g_explorerFrameModule);
-        g_explorerFrameModule = nullptr;
     }
 }
