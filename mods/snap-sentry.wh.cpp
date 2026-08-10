@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.15.0
+// @version         0.16.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -17,9 +17,9 @@
 /*
 # SnapSentry
 
-Watches **Pictures\\Screenshots** and handles new screenshots as they are saved.
-Copy the image, delete the file after a delay, or choose what to do from a
-notification.
+Watches your Windows **Screenshots** folder, wherever it is, and handles new
+screenshots as they are saved. Copy the image, delete the file after a delay, or
+choose what to do from a notification.
 
 ![The SnapSentry notification](https://raw.githubusercontent.com/mario0318/SnapSentry/32558d49a40d02fb03661abad0c2d9d313ae00e9/assets/notification.png)
 
@@ -63,44 +63,51 @@ stored in clipboard history, cloud sync, backups, or other programs.
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable processing
-- delaySeconds: 5
-  $name: Seconds before deletion
-  $description: With the popup on, this is the countdown before the automatic action; 0 waits for you to choose, backstopped at 10 minutes so an unanswered popup can't hold things forever (and because processing is one at a time, a screenshot taken while a popup is open waits for it). With the popup off, 0 acts as soon as the clipboard copy finishes. Capped at 3600 seconds.
-- deleteFile: false
-  $name: Delete the saved screenshot
-  $description: Off by default, since deletion is the irreversible part; turn it on to opt in. Only applies to Image and None clipboard modes. File and Path modes reference the file, so deletion is always suppressed for them.
-- recycle: true
-  $name: Send deletions to the Recycle Bin
-  $description: Deleted screenshots go to the Recycle Bin so they can be restored. Turn off to delete permanently.
-- renameFromWindow: false
-  $name: Rename new screenshots by active window
-  $description: Renames each new screenshot using the title of the window that is in front, plus a timestamp, so files are easier to find later. The file stays in the same folder.
-- showActionPopup: false
-  $name: Show companion action popup
-  $description: Off by default. When on, shows a notification offering Delete now, Copy image and delete, or Keep (falls back to a dialog if notifications are unavailable), and registers a Start Menu shortcut and a COM entry so its buttons work (both removed when you turn this off or disable the mod). With it off, SnapSentry is a pure clipboard tool with no footprint outside its own settings.
+# ---- What to copy ----
 - clipboardMode: image
-  $name: Clipboard content
+  $name: What to copy to the clipboard
   $options:
-  - image: Image (recommended with deletion)
-  - file: File object (deletion suppressed)
-  - path: Full path text (deletion suppressed)
-  - none: Don't change clipboard
+  - image: The picture itself (best if you also delete)
+  - file: The file, for pasting into File Explorer (never deleted)
+  - path: The file's location as text (never deleted)
+  - none: Leave the clipboard alone
 - pathFormat: plain
-  $name: Path text format
-  $description: Only used when Clipboard content is set to Full path text.
+  $name: How to write the location
+  $description: Only used when the copy is set to the file's location. Plain is the bare path, Quoted wraps it in quotes, File link is a clickable link, and Markdown is an image tag for pasting into notes.
   $options:
   - plain: Plain path
   - quoted: Quoted path
   - uri: File link
-  - markdown: Markdown image link
+  - markdown: Markdown image
+
+# ---- Deleting the screenshot ----
+- deleteFile: false
+  $name: Delete the screenshot after copying
+  $description: Off by default, because deleting is the part you cannot undo. Turn it on to have the file removed once it has been copied. This only applies when copying the picture or nothing; copying the file or its location never deletes.
+- recycle: true
+  $name: Delete to the Recycle Bin
+  $description: When deletion is on, the file goes to the Recycle Bin so it can be restored. Turn this off to delete for good.
+
+# ---- The popup ----
+- showActionPopup: false
+  $name: Show a popup with buttons after each screenshot
+  $description: Off by default. When on, each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if notifications are turned off. It is the only setting that leaves anything outside the mod, namely a Start Menu entry and a small registration so the buttons work, both removed when you turn it off again or disable the mod. Left off, SnapSentry just copies and leaves nothing behind.
+- delaySeconds: 5
+  $name: Seconds to wait before the automatic action
+  $description: With the popup on, this is the countdown before the automatic action runs; set it to 0 to wait for you to click instead (it still gives up after 10 minutes so it cannot wait forever). With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
+
+# ---- Renaming ----
+- renameFromWindow: false
+  $name: Rename screenshots after the active window
+  $description: Renames each new screenshot to the title of the window that was in front, plus a timestamp, so they are easier to find later. The file stays in the same folder.
+
+# ---- Advanced ----
 - folder: ""
-  $name: Folder override
-  $description: Leave empty to watch your Windows Screenshots folder, wherever it is located. Environment variables like %USERPROFILE% are expanded. Whatever you point this at is treated the same way, so with deletion on, new images saved there are deleted too.
+  $name: Folder to watch (empty means Screenshots)
+  $description: Empty watches your Windows Screenshots folder, wherever it is. You can point this at a different folder, and things like %USERPROFILE% are filled in. Anything that lands in the folder you choose is handled the same way, so with deletion on, other images saved there are deleted too.
 - logDetails: false
   $name: Verbose logging (may include file paths)
-  $description: When off, log lines omit file paths. Turn on only while debugging.
+  $description: Off keeps file paths out of the log. Turn this on only while troubleshooting.
 */
 // ==/WindhawkModSettings==
 
@@ -156,7 +163,6 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 // ============================================================================
 
 struct Settings {
-    bool enabled;
     int delaySeconds;
     bool deleteFile;
     bool popup;
@@ -268,7 +274,6 @@ static std::wstring DefaultScreenshotsFolder() {
 
 static void LoadSettings() {
     Settings s{};
-    s.enabled = Wh_GetIntSetting(L"enabled") != 0;
     s.delaySeconds = Wh_GetIntSetting(L"delaySeconds");
     if (s.delaySeconds < 0) {
         s.delaySeconds = 0;
@@ -1723,7 +1728,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     {
         // Registration is only worth anything when a popup can actually appear.
         Settings s = SnapshotSettings();
-        SyncToastRegistration(s.enabled && s.popup);
+        SyncToastRegistration(s.popup);
     }
 
     // CoWaitForMultipleHandles (rather than plain WaitForMultipleObjects) pumps
@@ -1742,7 +1747,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         // on or off takes effect without a reload.
         {
             Settings s = SnapshotSettings();
-            SyncToastRegistration(s.enabled && s.popup);
+            SyncToastRegistration(s.popup);
         }
         std::wstring path;
         while (!WaitStop(0) && DequeueOne(path)) {
@@ -1893,7 +1898,7 @@ static DWORD WINAPI WatchThread(LPVOID) {
     int openFailures = 0;
     while (!WaitStop(0)) {
         Settings s = SnapshotSettings();
-        if (!s.enabled || s.folder.empty()) {
+        if (s.folder.empty()) {
             // Wait indefinitely: a settings change signals g_reloadEvent, so there
             // is nothing to poll for here.
             HANDLE idle[] = {g_stopEvent, g_reloadEvent};
