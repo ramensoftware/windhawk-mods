@@ -31,6 +31,20 @@ trading keystrokes with it forever.
 This is a tool mod: it hooks nothing and injects into nothing, it just runs in its own
 dedicated process as the logged-in user.
 
+## Before you install
+
+Two things are worth knowing up front, because both surprise people:
+
+- **While this mod is enabled you can't turn Instant Replay off by hand.** Switching it off in
+  the Nvidia overlay just makes the mod switch it back on within a few seconds - that is the
+  entire point of it. If you need it off for a while, disable the mod, or list the program you
+  want it off for under **Pause while these programs run**.
+- **Instant Replay is a persistent Nvidia setting, so whatever state this mod leaves it in
+  survives the mod being disabled.** That matters most with **Only keep it on while these
+  programs run**: if you disable the mod at a moment when none of those programs are running,
+  Instant Replay stays off, because the mod turned it off on purpose and is no longer around to
+  turn it back on. Check the setting in the Nvidia App after turning that option off.
+
 ## How is this different from "Shadowplay anti-disable"?
 
 They solve opposite halves of the same annoyance and work well together:
@@ -59,11 +73,12 @@ re-read every time, so changing it takes effect immediately.
 
 Because the shortcut is replayed as real keystrokes, two things follow. Whatever window has
 focus also receives the combination. And the key-ups the mod sends would release those keys if
-you were physically holding one - so the mod waits for a cycle when none of the shortcut's keys
-and no modifier is held down, and a shortcut built from keys you hold during normal use is
-still a poor choice. This is inherent to the approach: the Nvidia App no longer ships the local
-server GeForce Experience used to expose, so the shortcut is the only way left to switch
-Instant Replay from outside.
+you were physically holding one - so the mod waits for a moment when none of the shortcut's
+keys and no modifier is held down, and a shortcut built from keys you hold during normal use
+(Shift, Ctrl) is still a poor choice, because the mod will keep waiting while you hold them.
+This is inherent to the approach: the Nvidia App no longer ships the local server GeForce
+Experience used to expose, so the shortcut is the only way left to switch Instant Replay from
+outside.
 
 Because those keystrokes are the mod's main cost to you, it also caps how often it is willing
 to press at all. If something keeps switching Instant Replay off - even slowly, every few
@@ -71,15 +86,14 @@ minutes - the mod backs off progressively and stops after about an hour of that,
 trading keystrokes with it indefinitely. It starts again when the state settles, when you
 change the toggle shortcut, or after a few hours.
 
-## Notes
+## If it doesn't seem to be doing anything
+
+Everything the mod can't recover from - no toggle shortcut configured, the overlay switched
+off, giving up after a long conflict - is reported through the mod log, which is off by
+default. Turn on logging for this mod in its advanced settings and the reason will be in
+there.
 
 Works with the Nvidia App and with the old GeForce Experience.
-
-Instant Replay is a persistent Nvidia setting, so whatever state the mod leaves it in stays
-that way after the mod is disabled. In particular, if you use **Only keep it on while these
-programs run** and then disable the mod at a moment when none of those programs are running,
-Instant Replay is left off - the mod turned it off on purpose and isn't around any more to
-turn it back on.
 */
 // ==/WindhawkModReadme==
 
@@ -103,17 +117,21 @@ turn it back on.
 - pauseWhileRunning: [""]
   $name: Pause while these programs run
   $description: >-
-    While any of these is running, Instant Replay is left alone. An entry without a backslash
-    matches a process by exact file name, e.g. netflix.exe. An entry containing a backslash is
-    matched as a substring of the full image path, e.g. \Netflix\ - useful for covering a whole
-    install folder, but it can only match processes this mod is allowed to open, so prefer the
-    file name form unless you need the path. Matching ignores case either way.
+    While any of these is running, Instant Replay is left alone - this is the escape hatch for
+    when you want to switch it off by hand. An entry without a backslash matches a process by
+    exact file name, e.g. netflix.exe. An entry containing a backslash is matched as a
+    substring of the full image path, e.g. \Netflix\ - useful for covering a whole install
+    folder, but it can only match processes this mod is allowed to open, so prefer the file
+    name form unless you need the path. Matching ignores case either way.
     Leave the single empty entry to disable this.
 - onlyWhileRunning: [""]
   $name: Only keep it on while these programs run
   $description: >-
     Same matching. If this list is not empty, Instant Replay is forced ON while at least one of
-    these is running and forced OFF the rest of the time.
+    these is running and forced OFF the rest of the time. Note that an entry which never
+    matches anything - a typo, or a path form aimed at a process the mod can't open - leaves
+    Instant Replay switched off, and that it stays off if you disable the mod while nothing in
+    the list is running.
     Leave the single empty entry to disable this.
 */
 // ==/WindhawkModSettings==
@@ -154,6 +172,7 @@ static const int kStreakAfterBackoff = kMaxTogglesBeforeBackoff - 1;
 // A conflict slower than kToggleConfirmTimeoutMs confirms fine on every attempt, so the
 // consecutive-failure streak never sees it - something switching Instant Replay off every
 // minute would otherwise be answered forever. Bound how often we're willing to press at all.
+// The counter resets wholesale when the window elapses rather than expiring entry by entry.
 static const int kMaxTogglesPerWindow = 5;
 static const ULONGLONG kToggleWindowMs = 10ULL * 60 * 1000;
 
@@ -177,14 +196,21 @@ static const ULONGLONG kGiveUpRetryMs = 6ULL * 60 * 60 * 1000;
 static const DWORD kToggleConfirmTimeoutMs = 8000;
 static const DWORD kToggleConfirmPollMs = 500;
 
+// How long to keep waiting for held keys to be released before giving the outer loop a chance
+// to re-evaluate. Holding Shift or Ctrl for minutes at a time is normal in a game, so this
+// waits in place rather than restarting the cycle - restarting would re-enumerate every
+// process on the system each time round.
+static const DWORD kHeldKeyWaitMs = 30000;
+static const DWORD kHeldKeyPollMs = 250;
+
 // Don't press the shortcut faster than this, no matter how many notifications arrive.
 static const DWORD kMinToggleIntervalMs = 3000;
 
 // Nvidia writes several values when the state changes, so let it settle before reading back.
 static const DWORD kRegistryNotifyDebounceMs = 750;
 
-// Short-lived obstacles - a UAC prompt, a held modifier, a failed snapshot - shouldn't cost a
-// whole poll interval to recover from, which the user may have set high deliberately.
+// Short-lived obstacles - a UAC prompt, a failed snapshot - shouldn't cost a whole poll
+// interval to recover from, which the user may have set high deliberately.
 static const DWORD kTransientRetryMs = 2000;
 
 struct ModSettings {
@@ -368,23 +394,36 @@ static bool PressToggleHotkey(const std::vector<WORD>& keys) {
     if (sent != inputs.size()) {
         Wh_Log(L"SendInput only sent %u of %zu inputs, error %u", sent, inputs.size(),
                GetLastError());
+
+        // The sequence can be interrupted part way through by another thread's input. If it
+        // stopped after the key-downs, the system now believes those keys are held, system
+        // wide, until the user physically presses and releases them - a far worse outcome than
+        // a missed toggle. Releasing a key that isn't held is a no-op, so release them all.
+        std::vector<INPUT> release;
+        release.reserve(keys.size());
+        for (size_t i = keys.size(); i > 0; i--) {
+            AddKeyInput(&release, keys[i - 1], false);
+        }
+        SendInput((UINT)release.size(), release.data(), sizeof(INPUT));
+
         return false;
     }
 
     return true;
 }
 
-// If the user is physically holding any of these, the combination Nvidia sees isn't the one
-// that's configured, so the toggle would fail and be counted as a conflict - and the key-ups
-// we send would steal the keys out from under them.
-static bool IsAnyRelevantKeyHeld(const std::vector<WORD>& keys) {
-    static const WORD kModifiers[] = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
-
+static bool IsAnyKeyHeld(const std::vector<WORD>& keys) {
     for (WORD vkey : keys) {
         if (GetAsyncKeyState(vkey) & 0x8000) {
             return true;
         }
     }
+
+    return false;
+}
+
+static bool IsAnyModifierHeld() {
+    static const WORD kModifiers[] = {VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
 
     for (WORD vkey : kModifiers) {
         if (GetAsyncKeyState(vkey) & 0x8000) {
@@ -393,6 +432,13 @@ static bool IsAnyRelevantKeyHeld(const std::vector<WORD>& keys) {
     }
 
     return false;
+}
+
+// If the user is physically holding any of these, the combination Nvidia sees isn't the one
+// that's configured, so the toggle would fail and be counted as a conflict - and the key-ups
+// we send would steal the keys out from under them.
+static bool IsAnyRelevantKeyHeld(const std::vector<WORD>& keys) {
+    return IsAnyKeyHeld(keys) || IsAnyModifierHeld();
 }
 
 // A locked session or a secure desktop (UAC) means injected input can't reach anything. That's
@@ -411,8 +457,9 @@ static bool IsInputDesktopReachable() {
 
 #pragma region Process matching
 
-// CompareStringOrdinal / FindNLSStringEx rather than towlower, which only folds ASCII under the
-// default locale and would quietly fail to match paths containing non-ASCII characters.
+// Ordinal comparison throughout: these are file paths, not text, so linguistic collation with
+// its ignorable characters and locale folding rules would be the wrong tool. Both matching
+// modes stay consistent this way, and neither depends on the user's locale.
 static bool EqualsNoCase(std::wstring_view a, std::wstring_view b) {
     if (a.size() != b.size()) {
         return false;
@@ -431,9 +478,8 @@ static bool ContainsNoCase(std::wstring_view haystack, std::wstring_view needle)
         return false;
     }
 
-    return FindNLSStringEx(LOCALE_NAME_INVARIANT, FIND_FROMSTART | NORM_IGNORECASE,
-                           haystack.data(), (int)haystack.size(), needle.data(),
-                           (int)needle.size(), nullptr, nullptr, nullptr, 0) >= 0;
+    return FindStringOrdinal(FIND_FROMSTART, haystack.data(), (int)haystack.size(),
+                             needle.data(), (int)needle.size(), TRUE) >= 0;
 }
 
 static bool PatternNeedsPath(const std::wstring& pattern) {
@@ -575,6 +621,29 @@ static bool WaitForState(InstantReplayState expected, DWORD timeoutMs, bool* sto
     }
 }
 
+// Waits in place for held keys to clear. Returns true when they have. Waiting here rather than
+// restarting the outer loop matters: every restart re-enumerates every process on the system,
+// and holding a modifier for minutes is normal in a game.
+static bool WaitForKeysReleased(const std::vector<WORD>& keys, bool* stop) {
+    ULONGLONG deadline = GetTickCount64() + kHeldKeyWaitMs;
+
+    for (;;) {
+        if (!IsAnyRelevantKeyHeld(keys)) {
+            return true;
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) {
+            return false;
+        }
+
+        if (StopRequested((DWORD)std::min<ULONGLONG>(kHeldKeyPollMs, deadline - now))) {
+            *stop = true;
+            return false;
+        }
+    }
+}
+
 static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
     Wh_Log(L"Instant Replay watchdog started");
 
@@ -594,7 +663,7 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
     int toggleStreak = 0;
     int currentBackoffSec = 0;
     int togglesInWindow = 0;
-    ULONGLONG toggleWindowStart = 0;
+    ULONGLONG toggleWindowStart = GetTickCount64();
     ULONGLONG conflictSince = 0;
     bool gaveUp = false;
     std::vector<WORD> hotkeyAtGiveUp;
@@ -604,6 +673,8 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
     bool loggedUnreadableState = false;
     bool loggedEnumerationFailure = false;
     bool loggedMissingHotkey = false;
+    bool loggedHeldKeys = false;
+    bool loggedForcedOff = false;
 
     for (;;) {
         ModSettings settings = GetSettings();
@@ -664,9 +735,9 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
 
         ULONGLONG now = GetTickCount64();
 
-        // The toggle budget is per rolling window and is deliberately *not* cleared when the
-        // state matches - that branch is reached after every successful round, which is exactly
-        // what would hide a slow conflict from the ladder.
+        // The toggle budget is per window and is deliberately *not* cleared when the state
+        // matches - that branch is reached after every successful round, which is exactly what
+        // would hide a slow conflict from the ladder.
         if (now - toggleWindowStart >= kToggleWindowMs) {
             toggleWindowStart = now;
             togglesInWindow = 0;
@@ -700,22 +771,29 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         }
         loggedUnreadableState = false;
 
-        std::optional<ProcessListResults> processes =
-            EvaluateProcessLists(settings.onlyWhileRunning, settings.pauseWhileRunning);
-        if (!processes) {
-            if (!loggedEnumerationFailure) {
-                loggedEnumerationFailure = true;
-                Wh_Log(L"Couldn't enumerate processes, skipping this cycle rather than guessing "
-                       L"at the state Instant Replay should be in");
-            }
-            if (StopRequested(kTransientRetryMs)) {
-                break;
-            }
-            continue;
-        }
-        loggedEnumerationFailure = false;
+        // With no onlyWhileRunning list the desired state is always "on", so the pause list is
+        // the only one that matters - and it only matters once a mismatch is found. Deferring
+        // the snapshot keeps it off every quiet poll.
+        std::optional<ProcessListResults> processes;
+        bool shouldBeOn = true;
 
-        bool shouldBeOn = settings.onlyWhileRunning.empty() || processes->onlyRunning;
+        if (!settings.onlyWhileRunning.empty()) {
+            processes = EvaluateProcessLists(settings.onlyWhileRunning, settings.pauseWhileRunning);
+            if (!processes) {
+                if (!loggedEnumerationFailure) {
+                    loggedEnumerationFailure = true;
+                    Wh_Log(L"Couldn't enumerate processes, skipping this cycle rather than "
+                           L"guessing at the state Instant Replay should be in");
+                }
+                if (StopRequested(kTransientRetryMs)) {
+                    break;
+                }
+                continue;
+            }
+            loggedEnumerationFailure = false;
+            shouldBeOn = processes->onlyRunning;
+        }
+
         bool isOn = state == InstantReplayState::On;
 
         // Whatever we were fighting with has stopped, or never existed. Reached even while
@@ -733,9 +811,28 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
             continue;
         }
 
-        if (processes->pauseRunning) {
-            toggleStreak = 0;
-            continue;
+        if (!settings.pauseWhileRunning.empty()) {
+            if (!processes) {
+                const std::vector<std::wstring> noOnlyList;
+                processes = EvaluateProcessLists(noOnlyList, settings.pauseWhileRunning);
+                if (!processes) {
+                    if (!loggedEnumerationFailure) {
+                        loggedEnumerationFailure = true;
+                        Wh_Log(L"Couldn't enumerate processes, skipping this cycle rather than "
+                               L"acting while a paused program might be running");
+                    }
+                    if (StopRequested(kTransientRetryMs)) {
+                        break;
+                    }
+                    continue;
+                }
+                loggedEnumerationFailure = false;
+            }
+
+            if (processes->pauseRunning) {
+                toggleStreak = 0;
+                continue;
+            }
         }
 
         // Nothing we send can land right now, and that isn't a failure on our part.
@@ -814,20 +911,44 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
             continue;
         }
 
-        // Pressing now would send the wrong combination and steal the keys being held.
+        // Pressing now would send the wrong combination and steal the keys being held. Wait in
+        // place rather than restarting the cycle, which would re-enumerate every process.
         if (IsAnyRelevantKeyHeld(hotkey)) {
-            if (StopRequested(kTransientRetryMs)) {
+            bool stop = false;
+            if (!WaitForKeysReleased(hotkey, &stop)) {
+                if (stop) {
+                    break;
+                }
+                if (!loggedHeldKeys) {
+                    loggedHeldKeys = true;
+                    Wh_Log(L"Waiting for %s to be released before pressing the toggle shortcut. "
+                           L"Instant Replay stays as it is until then.",
+                           IsAnyKeyHeld(hotkey) ? L"a key of the toggle shortcut"
+                                                : L"a held modifier");
+                }
+                continue;
+            }
+            now = GetTickCount64();
+        }
+        loggedHeldKeys = false;
+
+        // A burst of registry notifications shouldn't turn into a burst of keystrokes. Go round
+        // again afterwards rather than pressing, so the state and the held keys are re-read -
+        // either could have changed while we waited.
+        if (now < nextToggleAllowed) {
+            if (StopRequested((DWORD)(nextToggleAllowed - now))) {
                 break;
             }
             continue;
         }
 
-        // A burst of registry notifications shouldn't turn into a burst of keystrokes.
-        if (now < nextToggleAllowed) {
-            if (StopRequested((DWORD)(nextToggleAllowed - now))) {
-                break;
-            }
-            now = GetTickCount64();
+        if (!shouldBeOn && !loggedForcedOff) {
+            loggedForcedOff = true;
+            Wh_Log(L"Turning Instant Replay off because nothing in 'Only keep it on while these "
+                   L"programs run' is running. If that isn't what you expect, check those "
+                   L"entries - one that never matches keeps Instant Replay off.");
+        } else if (shouldBeOn) {
+            loggedForcedOff = false;
         }
 
         nextToggleAllowed = now + kMinToggleIntervalMs;
