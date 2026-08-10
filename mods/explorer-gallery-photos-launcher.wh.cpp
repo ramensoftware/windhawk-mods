@@ -25,7 +25,7 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 
 - Works with **ExplorerPatcher** (Win10 Ribbon overlay fix) and standard Windows 11
 - Hooks at the COM/Symbol level (`CShellBrowser::BrowseObject`) — completely UI-independent
-- Configurable launch command (useful if you prefer a different photo viewer). *Note: Arguments are not supported, only paths or protocols. Please use non-interactive targets, as prompts (like UAC or "Open with") can freeze File Explorer while unloading the mod.*
+- Configurable launch command and arguments (useful if you prefer a different photo viewer). 
 */
 // ==/WindhawkModReadme==
 
@@ -34,8 +34,13 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 - targetCommand: "ms-photos:"
   $name: Command to launch
   $name:pl-PL: Komenda do uruchomienia
-  $description: "Protocol or program launched instead of navigating to the Gallery folder. Note: Use non-interactive targets to avoid freezing File Explorer on mod unload."
+  $description: "Protocol or program launched instead of navigating to the Gallery folder."
   $description:pl-PL: Protokół lub program uruchamiany zamiast nawigacji do folderu Galerii.
+- targetArguments: ""
+  $name: Command arguments
+  $name:pl-PL: Argumenty komendy
+  $description: "Optional arguments to pass to the command (e.g. a specific path or switches)."
+  $description:pl-PL: Opcjonalne argumenty przekazywane do komendy.
 */
 // ==/WindhawkModSettings==
 
@@ -47,6 +52,7 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 #include <mutex>
 
 static std::atomic<PIDLIST_ABSOLUTE> g_targetPidl{nullptr};
+static std::once_flag g_pidlOnce;
 static std::atomic<bool> g_explorerFrameHooked{false};
 static std::atomic<bool> g_unloading{false};
 static HMODULE g_explorerFrameModule = nullptr;
@@ -58,28 +64,19 @@ typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
 static BrowseObject_t g_BrowseObject_Original = nullptr;
 
 static PIDLIST_ABSOLUTE EnsureTargetPidl() {
-    PIDLIST_ABSOLUTE current = g_targetPidl.load(std::memory_order_acquire);
-    if (!current) {
+    std::call_once(g_pidlOnce, [] {
         // Hardcoded Gallery CLSID
         constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
         PIDLIST_ABSOLUTE newPidl = nullptr;
         HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr,
                                         &newPidl, 0, nullptr);
         if (SUCCEEDED(hr) && newPidl) {
-            PIDLIST_ABSOLUTE expected = nullptr;
-            if (g_targetPidl.compare_exchange_strong(expected, newPidl, 
-                                                     std::memory_order_release, 
-                                                     std::memory_order_relaxed)) {
-                current = newPidl;
-            } else {
-                CoTaskMemFree(newPidl); // Another thread beat us to it
-                current = expected;
-            }
+            g_targetPidl.store(newPidl, std::memory_order_release);
         } else {
             Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
         }
-    }
-    return current;
+    });
+    return g_targetPidl.load(std::memory_order_acquire);
 }
 
 // Asynchronous launch parameters
@@ -106,17 +103,20 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
 
             // Read target dynamically, preventing use-after-free and threading issues.
             WindhawkUtils::StringSetting cmd = WindhawkUtils::StringSetting::make(L"targetCommand");
-            PCWSTR target = *cmd ? cmd.get() : L"ms-photos:";
+            WindhawkUtils::StringSetting args = WindhawkUtils::StringSetting::make(L"targetArguments");
             
-            Wh_Log(L"Launching app asynchronously: %s", target);
+            PCWSTR target = (cmd.get() && cmd.get()[0]) ? cmd.get() : L"ms-photos:";
+            PCWSTR targetArgs = (args.get() && args.get()[0]) ? args.get() : nullptr;
+            
+            Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // SEE_MASK_NOASYNC makes ShellExecuteExW complete synchronously rather than returning early,
-            // which safely keeps the call bound to our worker thread for a clean teardown sequence.
-            // SEE_MASK_FLAG_NO_UI suppresses shell error dialogs (e.g. if the target is uninstalled).
-            sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+            // SEE_MASK_ASYNCOK ensures that if the launch requires UI (e.g. UAC or "Open With"),
+            // the shell spawns a background thread for it rather than blocking our worker thread.
+            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
             sei.lpVerb = nullptr; // Default verb is safer for diverse targets than explicit L"open"
             sei.lpFile = target;
+            sei.lpParameters = targetArgs;
             sei.nShow = SW_SHOWNORMAL;
             
             if (!ShellExecuteExW(&sei)) {
@@ -168,8 +168,7 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
     PIDLIST_ABSOLUTE target = EnsureTargetPidl();
 
     if (target && pidl) {
-        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target) ||
-            ILIsParent(target, reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), FALSE)) {
+        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target)) {
             
             Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
             
@@ -236,11 +235,15 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                           HANDLE hFile,
                                           DWORD dwFlags) {
     HMODULE hMod = g_LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (!g_unloading.load(std::memory_order_acquire) &&
-        !g_explorerFrameHooked.load(std::memory_order_relaxed) && 
-        hMod && hMod == GetModuleHandleW(L"explorerframe.dll")) {
-        HookExplorerFrame(hMod, true);
+    
+    // Check if explorerframe.dll is now available (whether it was the direct target or an indirect dependency)
+    if (hMod && !g_unloading.load(std::memory_order_acquire) &&
+        !g_explorerFrameHooked.load(std::memory_order_relaxed)) {
+        if (HMODULE hEF = GetModuleHandleW(L"explorerframe.dll")) {
+            HookExplorerFrame(hEF, true);
+        }
     }
+    
     return hMod;
 }
 
