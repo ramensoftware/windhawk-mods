@@ -2,7 +2,7 @@
 // @id              folder-thumbnail-style-switcher
 // @name            Folder Thumbnail Style Switcher
 // @description     Switch Explorer folder thumbnails between Windows 7, Windows 10, and Windows 11 styles.
-// @version         2.0
+// @version         2.0.1
 // @author          QCQ171-C
 // @github          https://github.com/QCQ171-C
 // @include         explorer.exe
@@ -28,8 +28,8 @@ And you need to clean the thumbnail cache after changing a style!
 |![10 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10.PNG)|Original 10 style|
 |![11 style](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11.png)|Original 11 style|
 |![7 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-7.PNG)|7 style on Windows 10|
-|![11 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png)|11 style on Windows 10|
-|![7 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG)|7 style on Windows 11|
+|![11 style on 10](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG)|11 style on Windows 10|
+|![7 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png)|7 style on Windows 11|
 |![10 style on 11](https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-10.png)|10 style on 11|
 
 What's the difference🤨? The position and the size of the thumbnails and the shadow are different.
