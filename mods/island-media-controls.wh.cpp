@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.253
+// @version         0.9.254
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -88,7 +88,7 @@ play/pause, and next controls.
     - "liquid_glass": "Liquid Glass"
   - DisplayMode: "fullsize"
     $name: Display mode
-    $description: Choose how the compact island opens.
+    $description: Choose how the island opens. Expanded player settings only apply to Fullsize and Compact; Side expansion mode uses the taskbar-side controls instead.
     $options:
     - "fullsize": "Fullsize"
     - "compact": "Compact"
@@ -111,14 +111,14 @@ play/pause, and next controls.
     - "mesh_gradient": "Mesh gradient"
     - "energy_flame": "Flame"
   - PopupBackdropCoverEffect: "dark_only"
-    $name: Album-color background
+    $name: Expanded player album-color background
     $description: Add a blurred album-color wash behind the expanded player.
     $options:
     - "off": "Off"
     - "dark_only": "Dark mode only"
     - "on": "Always on"
   - PopupButtonStyle: "fluent_bold"
-    $name: Button style
+    $name: Expanded player button style
     $options:
     - "minimal_transport": "Minimal transport"
     - "fluent_bold": "Fluent bold"
@@ -131,7 +131,7 @@ play/pause, and next controls.
     $name: Elastic animation effect
     $description: Enables elastic overshoot and rebound during fullsize expand/collapse. Compact click feedback always remains enabled.
   - AllowScreenCapture: false
-    $name: Capturable blurred backdrop
+    $name: Expanded player capturable blurred backdrop
     $description: Uses a capturable static blurred backdrop for Acrylic and Liquid Glass, avoiding self-capture feedback.
   - CompactWidth: 169
     $name: Island width
@@ -146,13 +146,13 @@ play/pause, and next controls.
   - ExpandedHeight: 500
     $name: Expanded player height
   - PopupSpacing: 20
-    $name: Expanded outer spacing
+    $name: Expanded player outer spacing
   - PopupCardGap: 8
-    $name: Cover-to-controls gap
+    $name: Expanded player cover-to-controls gap
   - PopupShadowDepth: 58
-    $name: Shadow depth
+    $name: Expanded player shadow depth
   - PopupShadowOpacity: 70
-    $name: Shadow opacity (%)
+    $name: Expanded player shadow opacity (%)
   - HoverScale: 106
     $name: Hover scale (%)
   - HoverLerpSpeed: 28
@@ -479,27 +479,27 @@ auto GetAsyncResultWithTimeout(AsyncOperation const& operation,
 }
 
 HWND g_taskbarWnd = nullptr;
-Grid g_playerGrid = nullptr;
-FrameworkElement g_injectionParent = nullptr;
+[[clang::no_destroy]] Grid g_playerGrid = nullptr;
+[[clang::no_destroy]] FrameworkElement g_injectionParent = nullptr;
 int g_playerColumn = -1;
 bool g_expanded = false;
-ScaleTransform g_islandScale = nullptr;
-ScaleTransform g_islandPressScale = nullptr;
-TranslateTransform g_islandHoverTranslate = nullptr;
+[[clang::no_destroy]] ScaleTransform g_islandScale = nullptr;
+[[clang::no_destroy]] ScaleTransform g_islandPressScale = nullptr;
+[[clang::no_destroy]] TranslateTransform g_islandHoverTranslate = nullptr;
 double g_compactPressScaleValue = 1.0;
 double g_compactPressScaleTarget = 1.0;
 double g_compactPressScaleVelocity = 0.0;
 bool g_compactPressReleasePending = false;
 bool g_compactPressActivatePending = false;
-FrameworkElement g_dynamicMainIsland = nullptr;
-Border g_dynamicMainOcclusion = nullptr;
-Border g_dynamicMainWashHost = nullptr;
-Image g_dynamicMainWash = nullptr;
-Border g_dynamicMainEdgeGlow = nullptr;
-FrameworkElement g_dynamicTransportIsland = nullptr;
-FrameworkElement g_dynamicTransportSurface = nullptr;
-ScaleTransform g_dynamicTransportSurfaceScale = nullptr;
-FrameworkElement g_dynamicTransportControls = nullptr;
+[[clang::no_destroy]] FrameworkElement g_dynamicMainIsland = nullptr;
+[[clang::no_destroy]] Border g_dynamicMainOcclusion = nullptr;
+[[clang::no_destroy]] Border g_dynamicMainWashHost = nullptr;
+[[clang::no_destroy]] Image g_dynamicMainWash = nullptr;
+[[clang::no_destroy]] Border g_dynamicMainEdgeGlow = nullptr;
+[[clang::no_destroy]] FrameworkElement g_dynamicTransportIsland = nullptr;
+[[clang::no_destroy]] FrameworkElement g_dynamicTransportSurface = nullptr;
+[[clang::no_destroy]] ScaleTransform g_dynamicTransportSurfaceScale = nullptr;
+[[clang::no_destroy]] FrameworkElement g_dynamicTransportControls = nullptr;
 struct DynamicTransportButtonMotion {
     Border element{nullptr};
     ScaleTransform scale{nullptr};
@@ -514,16 +514,31 @@ struct DynamicTransportButtonMotion {
     bool releasePending = false;
     int failurePhasesRemaining = 0;
 };
-DynamicTransportButtonMotion g_dynamicTransportPrevMotion;
-DynamicTransportButtonMotion g_dynamicTransportPlayMotion;
-DynamicTransportButtonMotion g_dynamicTransportNextMotion;
-DynamicTransportButtonMotion g_popupPrevMotion;
-DynamicTransportButtonMotion g_popupPlayMotion;
-DynamicTransportButtonMotion g_popupNextMotion;
+
+void ResetDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion) {
+    motion.element = nullptr;
+    motion.scale = nullptr;
+    motion.translate = nullptr;
+    motion.scaleValue = 1.0;
+    motion.scaleTarget = 1.0;
+    motion.scaleVelocity = 0.0;
+    motion.translateValue = 0.0;
+    motion.translateTarget = 0.0;
+    motion.translateVelocity = 0.0;
+    motion.direction = 0;
+    motion.releasePending = false;
+    motion.failurePhasesRemaining = 0;
+}
+[[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportPrevMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportPlayMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_dynamicTransportNextMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_popupPrevMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_popupPlayMotion;
+[[clang::no_destroy]] DynamicTransportButtonMotion g_popupNextMotion;
 std::atomic<int> g_dynamicTransportNavigationFailureDirection{0};
-ScaleTransform g_dynamicMainScale = nullptr;
-ScaleTransform g_dynamicTransportScale = nullptr;
-TranslateTransform g_dynamicTransportTranslate = nullptr;
+[[clang::no_destroy]] ScaleTransform g_dynamicMainScale = nullptr;
+[[clang::no_destroy]] ScaleTransform g_dynamicTransportScale = nullptr;
+[[clang::no_destroy]] TranslateTransform g_dynamicTransportTranslate = nullptr;
 winrt::event_token g_dynamicCompactRenderingToken{};
 bool g_dynamicCompactRenderingHooked = false;
 double g_dynamicTransportReveal = 0.0;
@@ -688,74 +703,74 @@ std::chrono::steady_clock::time_point g_popupOverlayWgcLastResizeTime{};
 double g_popupOverlayWgcFrameIntervalMs = 1000.0 / 60.0;
 
 
-hosting::DesktopWindowXamlSource g_popupXamlSource = nullptr;
+[[clang::no_destroy]] hosting::DesktopWindowXamlSource g_popupXamlSource = nullptr;
 HWND g_popupXamlChild = nullptr;
 bool g_popupXamlChildSubclassed = false;
-Grid g_popupXamlRoot = nullptr;
-ScaleTransform g_popupXamlJellyScale = nullptr;
-controls::Canvas g_popupXamlCanvas = nullptr;
-Border g_popupXamlShadow = nullptr;
-composition::SpriteVisual g_popupXamlShadowVisual = nullptr;
-composition::DropShadow g_popupXamlDropShadow = nullptr;
-Border g_popupXamlBackdrop = nullptr;
-ScaleTransform g_popupXamlBackdropScale = nullptr;
-TranslateTransform g_popupXamlBackdropTranslate = nullptr;
-Image g_popupXamlBackdropCoverFade = nullptr;
-Image g_popupXamlBackdropCover = nullptr;
-Border g_popupXamlBackdropTint = nullptr;
-Border g_popupXamlBackdropSurfaceHighlight = nullptr;
-Border g_popupXamlBackdropRimHighlight = nullptr;
-Border g_popupXamlPanelCoverFrame = nullptr;
-ScaleTransform g_popupXamlPanelCoverScale = nullptr;
-TranslateTransform g_popupXamlPanelCoverTranslate = nullptr;
-Image g_popupXamlPanelCoverFade = nullptr;
-Image g_popupXamlPanelCover = nullptr;
-Border g_popupXamlPanel = nullptr;
-ScaleTransform g_popupXamlPanelScale = nullptr;
-TranslateTransform g_popupXamlPanelTranslate = nullptr;
-Border g_popupXamlArtFrame = nullptr;
-ScaleTransform g_popupXamlArtScale = nullptr;
-TranslateTransform g_popupXamlArtTranslate = nullptr;
-Image g_popupXamlArtFade = nullptr;
-Image g_popupXamlArt = nullptr;
-FrameworkElement g_popupXamlTitleHost = nullptr;
-FrameworkElement g_popupXamlArtistHost = nullptr;
-FrameworkElement g_popupXamlOutgoingTitleHost = nullptr;
-FrameworkElement g_popupXamlOutgoingArtistHost = nullptr;
-Border g_popupXamlTitleLeftFade = nullptr;
-Border g_popupXamlTitleRightFade = nullptr;
-Border g_popupXamlArtistLeftFade = nullptr;
-Border g_popupXamlArtistRightFade = nullptr;
-Border g_popupXamlOutgoingTitleLeftFade = nullptr;
-Border g_popupXamlOutgoingTitleRightFade = nullptr;
-Border g_popupXamlOutgoingArtistLeftFade = nullptr;
-Border g_popupXamlOutgoingArtistRightFade = nullptr;
-TextBlock g_popupXamlTitle = nullptr;
-TextBlock g_popupXamlArtist = nullptr;
-TextBlock g_popupXamlOutgoingTitle = nullptr;
-TextBlock g_popupXamlOutgoingArtist = nullptr;
-TranslateTransform g_popupXamlTitleTranslate = nullptr;
-TranslateTransform g_popupXamlArtistTranslate = nullptr;
-TranslateTransform g_popupXamlOutgoingTitleTranslate = nullptr;
-TranslateTransform g_popupXamlOutgoingArtistTranslate = nullptr;
+[[clang::no_destroy]] Grid g_popupXamlRoot = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlJellyScale = nullptr;
+[[clang::no_destroy]] controls::Canvas g_popupXamlCanvas = nullptr;
+[[clang::no_destroy]] Border g_popupXamlShadow = nullptr;
+[[clang::no_destroy]] composition::SpriteVisual g_popupXamlShadowVisual = nullptr;
+[[clang::no_destroy]] composition::DropShadow g_popupXamlDropShadow = nullptr;
+[[clang::no_destroy]] Border g_popupXamlBackdrop = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlBackdropScale = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlBackdropTranslate = nullptr;
+[[clang::no_destroy]] Image g_popupXamlBackdropCoverFade = nullptr;
+[[clang::no_destroy]] Image g_popupXamlBackdropCover = nullptr;
+[[clang::no_destroy]] Border g_popupXamlBackdropTint = nullptr;
+[[clang::no_destroy]] Border g_popupXamlBackdropSurfaceHighlight = nullptr;
+[[clang::no_destroy]] Border g_popupXamlBackdropRimHighlight = nullptr;
+[[clang::no_destroy]] Border g_popupXamlPanelCoverFrame = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlPanelCoverScale = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlPanelCoverTranslate = nullptr;
+[[clang::no_destroy]] Image g_popupXamlPanelCoverFade = nullptr;
+[[clang::no_destroy]] Image g_popupXamlPanelCover = nullptr;
+[[clang::no_destroy]] Border g_popupXamlPanel = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlPanelScale = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlPanelTranslate = nullptr;
+[[clang::no_destroy]] Border g_popupXamlArtFrame = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlArtScale = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlArtTranslate = nullptr;
+[[clang::no_destroy]] Image g_popupXamlArtFade = nullptr;
+[[clang::no_destroy]] Image g_popupXamlArt = nullptr;
+[[clang::no_destroy]] FrameworkElement g_popupXamlTitleHost = nullptr;
+[[clang::no_destroy]] FrameworkElement g_popupXamlArtistHost = nullptr;
+[[clang::no_destroy]] FrameworkElement g_popupXamlOutgoingTitleHost = nullptr;
+[[clang::no_destroy]] FrameworkElement g_popupXamlOutgoingArtistHost = nullptr;
+[[clang::no_destroy]] Border g_popupXamlTitleLeftFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlTitleRightFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlArtistLeftFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlArtistRightFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlOutgoingTitleLeftFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlOutgoingTitleRightFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlOutgoingArtistLeftFade = nullptr;
+[[clang::no_destroy]] Border g_popupXamlOutgoingArtistRightFade = nullptr;
+[[clang::no_destroy]] TextBlock g_popupXamlTitle = nullptr;
+[[clang::no_destroy]] TextBlock g_popupXamlArtist = nullptr;
+[[clang::no_destroy]] TextBlock g_popupXamlOutgoingTitle = nullptr;
+[[clang::no_destroy]] TextBlock g_popupXamlOutgoingArtist = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlTitleTranslate = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlArtistTranslate = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlOutgoingTitleTranslate = nullptr;
+[[clang::no_destroy]] TranslateTransform g_popupXamlOutgoingArtistTranslate = nullptr;
 double g_popupTextBaseOpacity = 1.0;
 bool g_popupTextTransitionActive = false;
 int g_popupTextTransitionDirection = 1;
 int g_pendingMediaNavigationDirection = 0;
 std::chrono::steady_clock::time_point g_pendingMediaNavigationTime{};
-TextBlock g_popupXamlElapsed = nullptr;
-TextBlock g_popupXamlDuration = nullptr;
-ProgressBar g_popupXamlProgress = nullptr;
-ScaleTransform g_popupXamlProgressScale = nullptr;
-Border g_popupXamlProgressTrack = nullptr;
-Border g_popupXamlProgressFill = nullptr;
-Border g_popupXamlProgressHitTarget = nullptr;
-controls::Canvas g_popupXamlProgressGlowMask = nullptr;
-mediax::RectangleGeometry g_popupXamlProgressGlowClip = nullptr;
-std::vector<Border> g_popupXamlProgressGlowLayers;
-std::vector<Border> g_popupXamlProgressCoreBlurLayers;
-Border g_popupXamlProgressGlowCore = nullptr;
-controls::Canvas g_popupXamlControls = nullptr;
+[[clang::no_destroy]] TextBlock g_popupXamlElapsed = nullptr;
+[[clang::no_destroy]] TextBlock g_popupXamlDuration = nullptr;
+[[clang::no_destroy]] ProgressBar g_popupXamlProgress = nullptr;
+[[clang::no_destroy]] ScaleTransform g_popupXamlProgressScale = nullptr;
+[[clang::no_destroy]] Border g_popupXamlProgressTrack = nullptr;
+[[clang::no_destroy]] Border g_popupXamlProgressFill = nullptr;
+[[clang::no_destroy]] Border g_popupXamlProgressHitTarget = nullptr;
+[[clang::no_destroy]] controls::Canvas g_popupXamlProgressGlowMask = nullptr;
+[[clang::no_destroy]] mediax::RectangleGeometry g_popupXamlProgressGlowClip = nullptr;
+[[clang::no_destroy]] std::vector<Border> g_popupXamlProgressGlowLayers;
+[[clang::no_destroy]] std::vector<Border> g_popupXamlProgressCoreBlurLayers;
+[[clang::no_destroy]] Border g_popupXamlProgressGlowCore = nullptr;
+[[clang::no_destroy]] controls::Canvas g_popupXamlControls = nullptr;
 uint64_t g_popupXamlThumbnailHash = UINT64_MAX;
 std::wstring g_popupXamlThumbnailMaterial;
 bool g_popupXamlThumbnailCompact = false;
@@ -806,22 +821,22 @@ double g_lastPopupVisualProgress = -1.0;
 RECT g_lastPopupVisualRect{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 RECT g_lastPopupWindowRect{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 
-TextBlock g_compactTitleText = nullptr;
-TextBlock g_compactArtistText = nullptr;
-FrameworkElement g_compactTextHost = nullptr;
-Border g_compactTextLeftFade = nullptr;
-Border g_compactTextRightFade = nullptr;
-TextBlock g_compactOutgoingTitleText = nullptr;
-TextBlock g_compactOutgoingArtistText = nullptr;
-TranslateTransform g_compactTitleTranslate = nullptr;
-TranslateTransform g_compactArtistTranslate = nullptr;
-TranslateTransform g_compactOutgoingTitleTranslate = nullptr;
-TranslateTransform g_compactOutgoingArtistTranslate = nullptr;
-Image g_compactAlbumArtImage = nullptr;
-Image g_compactAlbumArtFade = nullptr;
-Image g_dynamicTransportWash = nullptr;
-Image g_dynamicTransportWashFade = nullptr;
-ProgressBar g_compactProgress = nullptr;
+[[clang::no_destroy]] TextBlock g_compactTitleText = nullptr;
+[[clang::no_destroy]] TextBlock g_compactArtistText = nullptr;
+[[clang::no_destroy]] FrameworkElement g_compactTextHost = nullptr;
+[[clang::no_destroy]] Border g_compactTextLeftFade = nullptr;
+[[clang::no_destroy]] Border g_compactTextRightFade = nullptr;
+[[clang::no_destroy]] TextBlock g_compactOutgoingTitleText = nullptr;
+[[clang::no_destroy]] TextBlock g_compactOutgoingArtistText = nullptr;
+[[clang::no_destroy]] TranslateTransform g_compactTitleTranslate = nullptr;
+[[clang::no_destroy]] TranslateTransform g_compactArtistTranslate = nullptr;
+[[clang::no_destroy]] TranslateTransform g_compactOutgoingTitleTranslate = nullptr;
+[[clang::no_destroy]] TranslateTransform g_compactOutgoingArtistTranslate = nullptr;
+[[clang::no_destroy]] Image g_compactAlbumArtImage = nullptr;
+[[clang::no_destroy]] Image g_compactAlbumArtFade = nullptr;
+[[clang::no_destroy]] Image g_dynamicTransportWash = nullptr;
+[[clang::no_destroy]] Image g_dynamicTransportWashFade = nullptr;
+[[clang::no_destroy]] ProgressBar g_compactProgress = nullptr;
 winrt::event_token g_compactProgressRenderingToken{};
 bool g_compactProgressRenderingHooked = false;
 std::chrono::steady_clock::time_point g_lastCompactProgressFrameTime;
@@ -831,8 +846,8 @@ double g_compactTextProgress = 1.0;
 std::chrono::steady_clock::time_point g_lastCompactTextFrameTime{};
 bool g_compactTextEdgeFadeActive = false;
 HWND g_taskbarLayoutTimerWindow = nullptr;
-FrameworkElement g_taskbarLayoutWatchRoot = nullptr;
-FrameworkElement g_taskbarLayoutWatchTarget = nullptr;
+[[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchRoot = nullptr;
+[[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchTarget = nullptr;
 bool g_compactTextInitialized = false;
 std::wstring g_compactLastTitle;
 std::wstring g_compactLastArtist;
@@ -1345,7 +1360,7 @@ std::vector<uint8_t> ReadThumbnailBytes(streams::IRandomAccessStreamReference co
 std::wstring GetOptionalStringSetting(const wchar_t* key) {
     auto setting = WindhawkUtils::StringSetting::make(key);
     PCWSTR value = setting.get();
-    return value ? value : L"";
+    return value;
 }
 
 std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
@@ -1354,16 +1369,7 @@ std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
 }
 
 void ApplyDisplayModeSetting(Settings* settings) {
-    std::wstring displayMode = GetOptionalStringSetting(L"Main.DisplayMode");
-    if (displayMode.empty()) {
-        settings->compactMode = GetStringSetting(L"Main.CompactMode", L"classic");
-        if (settings->compactMode != L"classic" &&
-            settings->compactMode != L"dynamic_dual") {
-            settings->compactMode = L"classic";
-        }
-        settings->compact = Wh_GetIntSetting(L"Main.Compact") != 0;
-        return;
-    }
+    std::wstring displayMode = GetStringSetting(L"Main.DisplayMode", L"fullsize");
 
     if (displayMode == L"side_expand" || displayMode == L"dynamic_dual") {
         settings->compactMode = L"dynamic_dual";
@@ -1377,15 +1383,20 @@ void ApplyDisplayModeSetting(Settings* settings) {
     }
 }
 
-constexpr int kSettingsMigrationVersion = 1;
+constexpr int kSettingsMigrationVersion = 2;
 constexpr wchar_t kMigrateMicaLikeMaterialValue[] =
     L"MigrateMicaLikeMaterialToAcrylic";
+constexpr wchar_t kMigrateLegacyCompactValue[] =
+    L"MigrateLegacyCompactToDisplayMode";
 
 void ApplySettingsMigrations(Settings* settings) {
     int migratedVersion = Wh_GetIntValue(L"SettingsMigrationVersion", 0);
     if (migratedVersion < kSettingsMigrationVersion) {
         if (settings->material == L"mica_like") {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 1);
+        }
+        if (migratedVersion < 2 && Wh_GetIntSetting(L"Main.Compact") != 0) {
+            Wh_SetIntValue(kMigrateLegacyCompactValue, 1);
         }
         Wh_SetIntValue(L"SettingsMigrationVersion", kSettingsMigrationVersion);
     }
@@ -1396,6 +1407,11 @@ void ApplySettingsMigrations(Settings* settings) {
         } else {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 0);
         }
+    }
+
+    if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0)) {
+        settings->compactMode = L"classic";
+        settings->compact = true;
     }
 }
 
@@ -5179,7 +5195,7 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         transformGroup.Children().Append(buttonScale);
         transformGroup.Children().Append(buttonTranslate);
         surface.RenderTransform(transformGroup);
-        *motion = {};
+        ResetDynamicTransportButtonMotion(*motion);
         motion->element = surface;
         motion->scale = buttonScale;
         motion->translate = buttonTranslate;
@@ -5234,7 +5250,8 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
             ApplyPopupButtonVisual(border, false);
         }
         EndPopupButtonPress(motion, false);
-    });    return surface;
+    });
+    return surface;
 }
 
 void InitializePopupCompositionShadow();
@@ -5666,9 +5683,9 @@ void ResetPopupXamlElementState() {
     g_popupXamlProgressCoreBlurLayers.clear();
     g_popupXamlProgressGlowCore = nullptr;
     g_popupXamlControls = nullptr;
-    g_popupPrevMotion = {};
-    g_popupPlayMotion = {};
-    g_popupNextMotion = {};
+    ResetDynamicTransportButtonMotion(g_popupPrevMotion);
+    ResetDynamicTransportButtonMotion(g_popupPlayMotion);
+    ResetDynamicTransportButtonMotion(g_popupNextMotion);
     g_popupXamlThumbnailHash = UINT64_MAX;
     g_popupXamlBackdropCoverEnabled = false;
     g_popupAccentThumbnailHash = UINT64_MAX;
@@ -11189,9 +11206,9 @@ void DestroyExpandedPopup() {
     g_popupXamlProgressCoreBlurLayers.clear();
     g_popupXamlProgressGlowCore = nullptr;
     g_popupXamlControls = nullptr;
-    g_popupPrevMotion = {};
-    g_popupPlayMotion = {};
-    g_popupNextMotion = {};
+    ResetDynamicTransportButtonMotion(g_popupPrevMotion);
+    ResetDynamicTransportButtonMotion(g_popupPlayMotion);
+    ResetDynamicTransportButtonMotion(g_popupNextMotion);
     g_popupXamlThumbnailHash = UINT64_MAX;
     g_popupXamlBackdropCoverEnabled = false;
     g_popupAccentThumbnailHash = UINT64_MAX;
@@ -11907,9 +11924,9 @@ void TriggerDynamicTransportNoMediaPlayBounce(
 }
 
 void ClearDynamicTransportButtonMotions() {
-    g_dynamicTransportPrevMotion = {};
-    g_dynamicTransportPlayMotion = {};
-    g_dynamicTransportNextMotion = {};
+    ResetDynamicTransportButtonMotion(g_dynamicTransportPrevMotion);
+    ResetDynamicTransportButtonMotion(g_dynamicTransportPlayMotion);
+    ResetDynamicTransportButtonMotion(g_dynamicTransportNextMotion);
     g_dynamicTransportNavigationFailureDirection.store(0);
 }
 
@@ -12408,22 +12425,9 @@ void StopMediaThread() {
     if (g_mediaThread) {
         if (g_mediaThread->joinable()) {
             if (g_mediaThread->get_id() != std::this_thread::get_id()) {
-                auto deadline =
-                    std::chrono::steady_clock::now() +
-                    kMediaThreadStopTimeout;
-                while (!g_mediaThreadExited.load() &&
-                       std::chrono::steady_clock::now() < deadline) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-                }
-
-                if (g_mediaThreadExited.load()) {
-                    g_mediaThread->join();
-                } else {
-                    Wh_Log(L"Island: media thread stop timed out; detaching");
-                    g_mediaThread->detach();
-                }
+                g_mediaThread->join();
             } else {
-                g_mediaThread->detach();
+                Wh_Log(L"Island: StopMediaThread called from media thread; skipping self-join");
             }
         }
         delete g_mediaThread;
@@ -12518,7 +12522,7 @@ Border MakeDynamicTransportButton(const wchar_t* name,
     host.Child(button);
 
     if (motion) {
-        *motion = {};
+        ResetDynamicTransportButtonMotion(*motion);
         motion->element = button;
         motion->scale = buttonScale;
         motion->translate = buttonTranslate;
@@ -12556,12 +12560,16 @@ Border MakeDynamicTransportButton(const wchar_t* name,
         onClick();
         args.Handled(true);
     });
-    button.PointerCanceled([motion](auto const&,
+    button.PointerCanceled([motion](auto const& sender,
                                     input::PointerRoutedEventArgs const&) {
+        if (auto canceledButton = sender.template try_as<Border>()) {
+            canceledButton.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        }
         EndDynamicTransportButtonPress(motion, false);
     });
     return host;
 }
+
 void UpdateButtonTheme(const wchar_t* name) {
     if (!g_playerGrid) {
         return;
@@ -12619,6 +12627,7 @@ void ApplyDynamicMainIslandShadow() {
     background.Shadow(mainIslandShadow);
     background.Translation({0.0f, 0.0f, 32.0f});
 }
+
 void UpdateThemeVisuals() {
     if (!g_playerGrid) {
         return;
@@ -14481,6 +14490,14 @@ void Wh_ModSettingsChanged() {
     if (!IsModActive()) {
         return;
     }
+    if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0) &&
+        GetStringSetting(L"Main.DisplayMode", L"fullsize") != L"compact") {
+        // A settings-page change makes the current display mode an explicit
+        // user choice. Stop applying the one-time old Compact migration so
+        // Fullsize and Side expansion can be selected normally after update.
+        Wh_SetIntValue(kMigrateLegacyCompactValue, 0);
+    }
+
     if (Wh_GetIntValue(kMigrateMicaLikeMaterialValue, 0) &&
         GetStringSetting(L"Main.Material", L"acrylic") == L"mica_like") {
         // A settings-page change makes the current material an explicit user
