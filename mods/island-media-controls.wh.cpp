@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.255
+// @version         0.9.256
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -48,6 +48,8 @@ play/pause, and next controls.
   fullsize expand/collapse spring while compact click feedback stays on.
 - **Fresh previews:** The main dark/light preview is restored, and the new
   fullsize, compact, and side expansion layout previews are shown below it.
+- **Old Compact users:** If you used the previous Compact option, choose
+  Display mode -> Compact once after updating.
 
 ## Features
 
@@ -515,6 +517,7 @@ struct DynamicTransportButtonMotion {
     double translateTarget = 0.0;
     double translateVelocity = 0.0;
     int direction = 0;
+    bool pressStarted = false;
     bool releasePending = false;
     int failurePhasesRemaining = 0;
 };
@@ -530,6 +533,7 @@ void ResetDynamicTransportButtonMotion(DynamicTransportButtonMotion& motion) {
     motion.translateTarget = 0.0;
     motion.translateVelocity = 0.0;
     motion.direction = 0;
+    motion.pressStarted = false;
     motion.releasePending = false;
     motion.failurePhasesRemaining = 0;
 }
@@ -1393,16 +1397,6 @@ std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
     return value.empty() ? fallback : value;
 }
 
-std::wstring GetStoredStringValue(const wchar_t* key) {
-    wchar_t value[64]{};
-    Wh_GetStringValue(key, value, ARRAYSIZE(value));
-    return value;
-}
-
-void SetStoredStringValue(const wchar_t* key, std::wstring const& value) {
-    Wh_SetStringValue(key, value.c_str());
-}
-
 void ApplyDisplayModeSetting(Settings* settings) {
     std::wstring displayMode = GetStringSetting(L"Main.DisplayMode", L"fullsize");
 
@@ -1421,24 +1415,12 @@ void ApplyDisplayModeSetting(Settings* settings) {
 constexpr int kSettingsMigrationVersion = 2;
 constexpr wchar_t kMigrateMicaLikeMaterialValue[] =
     L"MigrateMicaLikeMaterialToAcrylic";
-constexpr wchar_t kMigrateLegacyCompactValue[] =
-    L"MigrateLegacyCompactToDisplayMode";
-constexpr wchar_t kLegacyCompactLastDisplayModeValue[] =
-    L"LegacyCompactLastDisplayMode";
 
 void ApplySettingsMigrations(Settings* settings) {
     int migratedVersion = Wh_GetIntValue(L"SettingsMigrationVersion", 0);
     if (migratedVersion < kSettingsMigrationVersion) {
-        if (settings->material == L"mica_like") {
+        if (migratedVersion < 1 && settings->material == L"mica_like") {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 1);
-        }
-        // Intentional legacy-only read: Main.Compact was the shipped boolean
-        // setting before DisplayMode replaced it.
-        if (migratedVersion < 2 && Wh_GetIntSetting(L"Main.Compact") != 0) {
-            Wh_SetIntValue(kMigrateLegacyCompactValue, 1);
-            SetStoredStringValue(kLegacyCompactLastDisplayModeValue,
-                                 GetStringSetting(L"Main.DisplayMode",
-                                                  L"fullsize"));
         }
         Wh_SetIntValue(L"SettingsMigrationVersion", kSettingsMigrationVersion);
     }
@@ -1449,16 +1431,6 @@ void ApplySettingsMigrations(Settings* settings) {
         } else {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 0);
         }
-    }
-
-    if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0)) {
-        if (GetStoredStringValue(kLegacyCompactLastDisplayModeValue).empty()) {
-            SetStoredStringValue(kLegacyCompactLastDisplayModeValue,
-                                 GetStringSetting(L"Main.DisplayMode",
-                                                  L"fullsize"));
-        }
-        settings->compactMode = L"classic";
-        settings->compact = true;
     }
 }
 
@@ -5259,18 +5231,44 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         }
     });
     surface.PointerPressed([motion](auto const& sender, input::PointerRoutedEventArgs const& args) {
-        if (auto border = sender.template try_as<Border>()) {
-            border.CapturePointer(args.Pointer());
-            BeginPopupButtonPress(motion);
+        auto border = sender.template try_as<Border>();
+        auto point = args.GetCurrentPoint(border);
+        if (!point.Properties().IsLeftButtonPressed()) {
+            return;
         }
+        if (border) {
+            border.CapturePointer(args.Pointer());
+        }
+        if (motion) {
+            motion->pressStarted = true;
+        }
+        BeginPopupButtonPress(motion);
         args.Handled(true);
     });
     surface.PointerReleased([onClick, primary, motion, motionDirection](auto const& sender, input::PointerRoutedEventArgs const& args) {
+        if (!motion || !motion->pressStarted) {
+            return;
+        }
+        motion->pressStarted = false;
         Border border = sender.template try_as<Border>();
         if (border) {
             border.ReleasePointerCapture(args.Pointer());
             border.Opacity(1.0);
             ApplyPopupButtonVisual(border, false);
+        }
+        bool releaseInside = false;
+        if (auto element = sender.template try_as<FrameworkElement>()) {
+            auto point = args.GetCurrentPoint(element);
+            auto position = point.Position();
+            releaseInside = position.X >= 0.0 &&
+                            position.Y >= 0.0 &&
+                            position.X <= element.ActualWidth() &&
+                            position.Y <= element.ActualHeight();
+        }
+        if (!releaseInside) {
+            EndPopupButtonPress(motion, false);
+            args.Handled(true);
+            return;
         }
 
         MediaState state = SnapshotMedia();
@@ -5292,6 +5290,10 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         args.Handled(true);
     });
     surface.PointerCanceled([motion](auto const& sender, input::PointerRoutedEventArgs const&) {
+        if (!motion || !motion->pressStarted) {
+            return;
+        }
+        motion->pressStarted = false;
         if (auto border = sender.template try_as<Border>()) {
             border.Opacity(1.0);
             ApplyPopupButtonVisual(border, false);
@@ -11452,6 +11454,7 @@ void EndCompactIslandPress(bool activate) {
         g_compactPressReleasePending = true;
         g_compactPressScaleTarget = 0.94;
     }
+    StartHoverRenderLoop(1.0);
 }
 
 bool IsDynamicCompactMode() {
@@ -12597,26 +12600,53 @@ Border MakeDynamicTransportButton(const wchar_t* name,
     });
     button.PointerPressed([motion](auto const& sender,
                                    input::PointerRoutedEventArgs const& args) {
-        if (auto pressedButton = sender.template try_as<Border>()) {
+        auto pressedButton = sender.template try_as<Border>();
+        auto point = args.GetCurrentPoint(pressedButton);
+        if (!point.Properties().IsLeftButtonPressed()) {
+            return;
+        }
+        if (pressedButton) {
             pressedButton.CapturePointer(args.Pointer());
+        }
+        if (motion) {
+            motion->pressStarted = true;
         }
         BeginDynamicTransportButtonPress(motion);
         args.Handled(true);
     });
     button.PointerReleased([onClick, motion](auto const& sender,
                                              input::PointerRoutedEventArgs const& args) {
+        if (!motion || !motion->pressStarted) {
+            return;
+        }
+        motion->pressStarted = false;
         if (auto releasedButton = sender.template try_as<Border>()) {
             releasedButton.ReleasePointerCapture(args.Pointer());
             releasedButton.Background(Brush(
                 IsDarkModeApprox() ? Color(0x2C, 0xFF, 0xFF, 0xFF)
                                    : Color(0x20, 0x00, 0x00, 0x00)));
         }
-        EndDynamicTransportButtonPress(motion, true);
-        onClick();
+        bool releaseInside = false;
+        if (auto element = sender.template try_as<FrameworkElement>()) {
+            auto point = args.GetCurrentPoint(element);
+            auto position = point.Position();
+            releaseInside = position.X >= 0.0 &&
+                            position.Y >= 0.0 &&
+                            position.X <= element.ActualWidth() &&
+                            position.Y <= element.ActualHeight();
+        }
+        EndDynamicTransportButtonPress(motion, releaseInside);
+        if (releaseInside) {
+            onClick();
+        }
         args.Handled(true);
     });
     button.PointerCanceled([motion](auto const& sender,
                                     input::PointerRoutedEventArgs const&) {
+        if (!motion || !motion->pressStarted) {
+            return;
+        }
+        motion->pressStarted = false;
         if (auto canceledButton = sender.template try_as<Border>()) {
             canceledButton.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
         }
@@ -14561,17 +14591,6 @@ void Wh_ModSettingsChanged() {
     if (!IsModActive()) {
         return;
     }
-    std::wstring displayMode = GetStringSetting(L"Main.DisplayMode", L"fullsize");
-    std::wstring lastDisplayMode =
-        GetStoredStringValue(kLegacyCompactLastDisplayModeValue);
-    if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0) &&
-        !lastDisplayMode.empty() && displayMode != lastDisplayMode) {
-        // The user changed Display mode itself. Stop applying the one-time old
-        // Compact migration so the explicit choice takes over.
-        Wh_SetIntValue(kMigrateLegacyCompactValue, 0);
-    }
-    SetStoredStringValue(kLegacyCompactLastDisplayModeValue, displayMode);
-
     if (Wh_GetIntValue(kMigrateMicaLikeMaterialValue, 0) &&
         GetStringSetting(L"Main.Material", L"acrylic") == L"mica_like") {
         // A settings-page change makes the current material an explicit user
