@@ -6,7 +6,9 @@
 // @author          ashishkupadhyay
 // @github          https://github.com/ashishkupadhyay
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lwinhttp
+// @architecture    x86-64
+// @architecture    arm64
+// @compilerOptions -lole32 -lruntimeobject -luser32 -lwindowsapp -lwinhttp
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -57,12 +59,20 @@ hours until the site publishes it, and you can force a check with the reload
 button at the bottom of the flyout. The previous month's menu is never shown as
 if it were the current one.
 
-Cached files live in `%LOCALAPPDATA%\Windhawk\MessMenu`.
+Cached menus are kept in Windhawk's own per-mod storage folder, which Windhawk
+deletes when the mod is removed — so the mod leaves nothing behind.
 
 ## Notes
 
 Requires Windows 11 (22H2 or newer) — it hooks the XAML taskbar, which does not
 exist on Windows 10.
+
+The button is added to the primary taskbar only. On a multi-monitor setup with
+taskbars on every display, it appears on the primary one.
+
+The menu data comes from `messit.vinnovateit.com`, a third-party site this mod
+does not control. If that site changes its data format or goes away, the mod
+will report that no menu is available.
 */
 // ==/WindhawkModReadme==
 
@@ -195,11 +205,22 @@ using namespace winrt::Windows::UI::Xaml::Media::Animation;
 // Section 1: settings
 // ---------------------------------------------------------------------------
 
+// Stored as an enum rather than a std::wstring: g_settings is written by
+// LoadSettings on the engine thread and read from the taskbar UI thread and the
+// network worker. The scalar members are benign to race on, but a std::wstring
+// can be read mid-reassignment.
+enum class ButtonPosition {
+    TaskbarLeft,
+    TrayLeft,
+    ClockLeft,
+    ClockRight,
+};
+
 struct ModSettings {
     int  hostel          = 1;       // 1 = men's, 2 = women's
     int  mess            = 2;       // 1 = special, 2 = veg, 3 = non-veg
     bool compact         = false;
-    std::wstring position = L"tray_left";
+    ButtonPosition position = ButtonPosition::TrayLeft;
     int  buttonPaddingLeft  = 4;
     int  buttonPaddingRight = 4;
     bool reserveTaskbarSpace = true;
@@ -277,7 +298,12 @@ static void LoadSettings() {
     g_settings.mess = (mess == L"special") ? 1 : (mess == L"nonveg") ? 3 : 2;
 
     g_settings.compact = (GetStringSetting(L"buttonMode", L"expanded") == L"compact");
-    g_settings.position = GetStringSetting(L"position", L"tray_left");
+    std::wstring position = GetStringSetting(L"position", L"tray_left");
+    g_settings.position =
+        (position == L"taskbar_left")  ? ButtonPosition::TaskbarLeft
+        : (position == L"clock_left")  ? ButtonPosition::ClockLeft
+        : (position == L"clock_right") ? ButtonPosition::ClockRight
+                                       : ButtonPosition::TrayLeft;
     // Wide enough to slide the button across any monitor; the bound is only
     // here to stop a typo pushing it off-screen with no way back.
     g_settings.buttonPaddingLeft =
@@ -634,10 +660,10 @@ static Group ClassifyItem(const std::wstring& item) {
         return Group::Dairy;
     }
 
-    static const wchar_t* const kDrinkTails[] = {L"tea",     L"coffee",
-                                                 L"milk",    L"sharbat",
-                                                 L"juice",   L"lassi",
-                                                 L"shake",   L"buttermilk"};
+    // No "buttermilk" here: kDairy above matches it first.
+    static const wchar_t* const kDrinkTails[] = {L"tea",   L"coffee", L"milk",
+                                                 L"sharbat", L"juice",
+                                                 L"lassi", L"shake"};
     if (InList(LastWord(key), kDrinkTails, ARRAYSIZE(kDrinkTails))) {
         return Group::Drinks;
     }
@@ -1135,9 +1161,10 @@ struct RunFromWindowThreadPayload {
 // the id is already gone from the map and the late dispatch is a no-op -- where
 // a stack address would have been a dangling read into a dead frame.
 static std::mutex g_runPayloadsMutex;
-[[clang::no_destroy]] static std::optional<
-    std::map<UINT_PTR, std::shared_ptr<RunFromWindowThreadPayload>>>
-    g_runPayloads{std::in_place};
+// No [[clang::no_destroy]]: this holds no UI-thread-affine object, so its
+// destructor is a plain heap free and is safe at process exit.
+static std::map<UINT_PTR, std::shared_ptr<RunFromWindowThreadPayload>>
+    g_runPayloads;
 static std::atomic<UINT_PTR> g_nextRunPayloadId{1};
 
 static UINT GetRunFromWindowThreadMessage() {
@@ -1154,11 +1181,9 @@ static LRESULT CALLBACK RunFromWindowThreadHookProc(int code, WPARAM wParam,
             std::shared_ptr<RunFromWindowThreadPayload> payload;
             {
                 std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
-                if (g_runPayloads) {
-                    auto it = g_runPayloads->find((UINT_PTR)message->lParam);
-                    if (it != g_runPayloads->end()) {
-                        payload = it->second;
-                    }
+                auto it = g_runPayloads.find((UINT_PTR)message->lParam);
+                if (it != g_runPayloads.end()) {
+                    payload = it->second;
                 }
             }
             // Released the lock first: proc may call back in.
@@ -1173,8 +1198,15 @@ static LRESULT CALLBACK RunFromWindowThreadHookProc(int code, WPARAM wParam,
 
 // Runs proc on the thread that owns hWnd. A message hook catches the sent
 // message, so no window subclassing or extra window is needed. Returns whether
-// proc actually ran -- callers, Wh_ModUninit above all, need to know.
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
+// proc actually ran.
+//
+// `blockIndefinitely` is for the teardown path. Everywhere else a timeout is
+// the safe choice, but at unload the alternative to waiting is unloading with
+// the button, its Click delegate, the MessBlurBrush and the live timers all
+// still pointing into an image Windhawk is about to unmap. A guaranteed slow
+// unload beats a probabilistic Explorer crash.
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
+                                bool blockIndefinitely = false) {
     DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (!threadId) {
         return false;
@@ -1197,17 +1229,22 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     const UINT_PTR id = g_nextRunPayloadId.fetch_add(1);
     {
         std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
-        (*g_runPayloads)[id] = payload;
+        g_runPayloads[id] = payload;
     }
 
-    DWORD_PTR result = 0;
-    LRESULT sent =
-        SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
-                            (LPARAM)id, SMTO_ABORTIFHUNG, 10000, &result);
+    LRESULT sent = 1;
+    if (blockIndefinitely) {
+        SendMessageW(hWnd, GetRunFromWindowThreadMessage(), 0, (LPARAM)id);
+    } else {
+        DWORD_PTR result = 0;
+        sent = SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
+                                   (LPARAM)id, SMTO_ABORTIFHUNG, 10000,
+                                   &result);
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
-        g_runPayloads->erase(id);
+        g_runPayloads.erase(id);
     }
     UnhookWindowsHookEx(hook);
 
@@ -1386,8 +1423,9 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         }
     }
 #else
-    elementOffset = 0x10;
-    recognized = true;
+// Guessing an offset here would hand a fabricated pointer to QueryInterface on
+// an architecture nobody has validated. Fail the build instead.
+#error "Unsupported architecture"
 #endif
 
     if (!recognized ||
@@ -1850,6 +1888,7 @@ static int g_injectedColumn = -1;
 static Thickness g_reservedOriginalMargin{};
 static bool g_hasReservedOriginalMargin = false;
 static winrt::event_token g_buttonSizeToken{};
+static winrt::event_token g_buttonThemeToken{};
 
 [[clang::no_destroy]] static Flyout g_flyout{nullptr};
 [[clang::no_destroy]] static Border g_flyoutRoot{nullptr};
@@ -1858,7 +1897,7 @@ static winrt::event_token g_buttonSizeToken{};
 [[clang::no_destroy]] static Button g_prevDayButton{nullptr};
 [[clang::no_destroy]] static Button g_nextDayButton{nullptr};
 [[clang::no_destroy]] static StackPanel g_cardsPanel{nullptr};
-[[clang::no_destroy]] static TextBlock g_footerText{nullptr};
+[[clang::no_destroy]] static Button g_reloadButton{nullptr};
 [[clang::no_destroy]] static FontIcon g_reloadIcon{nullptr};
 [[clang::no_destroy]] static ProgressRing g_reloadRing{nullptr};
 [[clang::no_destroy]] static DispatcherTimer g_timer{nullptr};
@@ -1870,8 +1909,9 @@ static winrt::event_token g_buttonSizeToken{};
     g_cardCountdowns{std::in_place};
 [[clang::no_destroy]] static std::optional<std::vector<Border>> g_cardBorders{
     std::in_place};
-[[clang::no_destroy]] static std::optional<std::vector<int>> g_cardMeals{
-    std::in_place};
+// Plain ints, so no [[clang::no_destroy]] needed -- only the two vectors above
+// hold XAML objects.
+static std::vector<int> g_cardMeals;
 
 // Every DispatcherTimer we start, so Wh_ModUninit can stop the pending ones.
 // A timer that fires into an unmapped image crashes Explorer regardless of any
@@ -1968,22 +2008,24 @@ static std::wstring MessDisplayName() {
 static std::wstring ComputeButtonLabel(const MealState& state) {
     const int todayKey = TodayKey();
 
-    // The grouping work happens under the lock, against a reference rather than
-    // a copy: copying DayMenu means copying four std::wstrings every time.
-    std::lock_guard<std::mutex> lock(g_dataMutex);
-    auto it = g_store.days.find(todayKey);
-    if (it == g_store.days.end()) {
-        return L"No menu";
-    }
-    const DayMenu& day = it->second;
-
+    // Only the dish list needs the menu; the countdown does not. Reaching for
+    // the store first and bailing out on a miss used to show "No menu" between
+    // meals on first run or over an uncached month boundary, even though the
+    // countdown was perfectly computable.
     if (state.currentMeal >= 0) {
-        GroupedMenu grouped = GroupMenuItems(day.raw[state.currentMeal]);
-        // Prefer the main dishes: "Idli - Vada" is a more useful glance than
-        // "Tea - Coffee - Milk".
-        for (int group = 0; group < kGroupCount; group++) {
-            if (!grouped.groups[group].empty()) {
-                return JoinItems(grouped.groups[group], 4);
+        // The grouping work happens under the lock, against a reference rather
+        // than a copy: copying DayMenu copies four std::wstrings every time.
+        std::lock_guard<std::mutex> lock(g_dataMutex);
+        auto it = g_store.days.find(todayKey);
+        if (it != g_store.days.end()) {
+            GroupedMenu grouped =
+                GroupMenuItems(it->second.raw[state.currentMeal]);
+            // Prefer the main dishes: "Idli - Vada" is a more useful glance
+            // than "Tea - Coffee - Milk".
+            for (int group = 0; group < kGroupCount; group++) {
+                if (!grouped.groups[group].empty()) {
+                    return JoinItems(grouped.groups[group], 4);
+                }
             }
         }
         return std::wstring(kMealNames[state.currentMeal]) + L" is being served";
@@ -2052,11 +2094,12 @@ static Button BuildTaskbarButton(bool light) {
         button.Style(style);
     }
     // Stretch to the tray's full height so the hover/pressed fill matches the
-    // neighbouring taskbar buttons instead of hugging the text. The small
-    // vertical margin is the inset Windows itself leaves around tray buttons.
+    // neighbouring taskbar buttons instead of hugging the text. 4px is the
+    // inset Windows itself leaves: on a 48px taskbar its own buttons highlight
+    // 40px tall, so this lands the fill at the same height as theirs.
     button.Padding({8, 0, 8, 0});
-    button.Margin({(double)g_settings.buttonPaddingLeft, 6,
-                   (double)g_settings.buttonPaddingRight, 6});
+    button.Margin({(double)g_settings.buttonPaddingLeft, 4,
+                   (double)g_settings.buttonPaddingRight, 4});
     button.VerticalAlignment(VerticalAlignment::Stretch);
     button.HorizontalAlignment(HorizontalAlignment::Center);
 
@@ -2099,6 +2142,30 @@ static Button BuildTaskbarButton(bool light) {
         }
     });
 
+    // The theme is baked into the label colour and the style's hover/pressed
+    // colours, and the button outlives a theme switch -- without this, going
+    // dark -> light leaves white text on a light taskbar, i.e. invisible. The
+    // flyout is already fine because it is rebuilt on every open.
+    g_buttonThemeToken = button.ActualThemeChanged(
+        [](FrameworkElement const& sender,
+           winrt::Windows::Foundation::IInspectable const&) {
+            try {
+                if (g_unloading) {
+                    return;
+                }
+                const bool nowLight = IsLightTheme();
+                if (auto style = GetSubtleButtonStyle(nowLight)) {
+                    sender.as<Control>().Style(style);
+                }
+                if (g_taskbarLabel) {
+                    g_taskbarLabel.Foreground(
+                        MakeBrush(TextPrimaryColor(nowLight)));
+                }
+            } catch (...) {
+                Wh_Log(L"ActualThemeChanged: exception");
+            }
+        });
+
     return button;
 }
 
@@ -2118,17 +2185,19 @@ static int ColumnOfChildContaining(Grid const& grid, const wchar_t* name) {
 }
 
 static int ResolveInsertColumn(Grid const& trayGrid) {
-    const std::wstring& position = g_settings.position;
+    const ButtonPosition position = g_settings.position;
     int columnCount = (int)trayGrid.ColumnDefinitions().Size();
 
-    if (position == L"tray_left") {
+    if (position == ButtonPosition::TrayLeft) {
         return 0;
     }
-    if (position == L"clock_left" || position == L"clock_right") {
+    if (position == ButtonPosition::ClockLeft ||
+        position == ButtonPosition::ClockRight) {
         int clockColumn = ColumnOfChildContaining(trayGrid,
                                                   L"NotificationCenterButton");
         if (clockColumn >= 0) {
-            return position == L"clock_left" ? clockColumn : clockColumn + 1;
+            return position == ButtonPosition::ClockLeft ? clockColumn
+                                                         : clockColumn + 1;
         }
         // Clock not found -- fall through and append at the end.
     }
@@ -2137,7 +2206,7 @@ static int ResolveInsertColumn(Grid const& trayGrid) {
 }
 
 static bool IsTaskbarAreaPosition() {
-    return g_settings.position == L"taskbar_left";
+    return g_settings.position == ButtonPosition::TaskbarLeft;
 }
 
 // Holds the taskbar's icon strip clear of the button by widening its left
@@ -2192,6 +2261,14 @@ static void RemoveTaskbarButton() {
     } catch (...) {
     }
     g_buttonSizeToken = {};
+
+    try {
+        if (g_taskbarButton && g_buttonThemeToken.value) {
+            g_taskbarButton.ActualThemeChanged(g_buttonThemeToken);
+        }
+    } catch (...) {
+    }
+    g_buttonThemeToken = {};
 
     try {
         if (g_reservedElement && g_hasReservedOriginalMargin) {
@@ -2503,7 +2580,7 @@ static Border BuildMealCard(Meal meal, const DayMenu& day, bool light,
 
     g_cardBorders->push_back(card);
     g_cardCountdowns->push_back(countdown);
-    g_cardMeals->push_back((int)meal);
+    g_cardMeals.push_back((int)meal);
     return card;
 }
 
@@ -2555,7 +2632,7 @@ static void RenderFlyoutPage() {
         g_cardsPanel.Children().Clear();
         g_cardBorders->clear();
         g_cardCountdowns->clear();
-        g_cardMeals->clear();
+        g_cardMeals.clear();
 
         DayMenu day;
         bool haveDay = false;
@@ -2647,8 +2724,14 @@ static void UpdateReloadIndicator() {
                 tooltip = L"Last check failed: " + g_lastFetchError;
             }
         }
-        ToolTipService::SetToolTip(g_reloadIcon,
-                                   winrt::box_value(winrt::hstring{tooltip}));
+        // On the button, not the glyph: the glyph is swapped for the progress
+        // ring while a fetch runs, so a tooltip on it would vanish exactly when
+        // there is something to say, and would only appear on the icon's own
+        // few pixels the rest of the time.
+        if (g_reloadButton) {
+            ToolTipService::SetToolTip(
+                g_reloadButton, winrt::box_value(winrt::hstring{tooltip}));
+        }
     } catch (...) {
     }
 }
@@ -2819,14 +2902,15 @@ static Border BuildFlyoutContent() {
         return definition;
     }());
 
-    g_footerText = MakeTextBlock(
+    auto footerText = MakeTextBlock(
         HostelDisplayName() + L" • " + MessDisplayName(), 11,
         TextTertiaryColor(light));
-    g_footerText.VerticalAlignment(VerticalAlignment::Center);
-    Grid::SetColumn(g_footerText, 0);
-    footerRow.Children().Append(g_footerText);
+    footerText.VerticalAlignment(VerticalAlignment::Center);
+    Grid::SetColumn(footerText, 0);
+    footerRow.Children().Append(footerText);
 
     Button reloadButton;
+    g_reloadButton = reloadButton;
     if (buttonStyle) {
         reloadButton.Style(buttonStyle);
     }
@@ -2914,12 +2998,12 @@ static void ClearFlyoutRefs() {
     g_prevDayButton = nullptr;
     g_nextDayButton = nullptr;
     g_cardsPanel = nullptr;
-    g_footerText = nullptr;
+    g_reloadButton = nullptr;
     g_reloadIcon = nullptr;
     g_reloadRing = nullptr;
     g_cardBorders->clear();
     g_cardCountdowns->clear();
-    g_cardMeals->clear();
+    g_cardMeals.clear();
 }
 
 static void ShowMessFlyout(FrameworkElement const& target) {
@@ -3304,7 +3388,7 @@ static void ApplyTimerInterval() {
 }
 
 static void OnTimerTick() {
-    if (g_unloading || !g_cardCountdowns || !g_cardMeals) {
+    if (g_unloading || !g_cardCountdowns) {
         return;
     }
 
@@ -3339,7 +3423,7 @@ static void OnTimerTick() {
 
         // Same state, only the countdown moved. Touch just that text.
         for (size_t i = 0; i < g_cardCountdowns->size(); i++) {
-            int meal = (*g_cardMeals)[i];
+            int meal = g_cardMeals[i];
             std::wstring text;
             if (state.currentMeal == meal) {
                 text = L"Ends in " + FormatCountdown(state.remainingSec);
@@ -3390,6 +3474,17 @@ static void StopUiTimer() {
 // Section 18: network worker
 // ---------------------------------------------------------------------------
 
+// Guards the worker's lifecycle. StartNetThread is reachable from two threads
+// at once (the engine thread via Wh_ModAfterInit, the taskbar thread via
+// TrayUI::StartTaskbar), and losing that race would start a second worker whose
+// handle is then overwritten -- leaving an unjoinable thread running after the
+// image is unmapped. KickFetch takes it too, so it cannot signal an event that
+// StopNetThread has just closed.
+//
+// StopNetThread deliberately drops the lock before joining: the worker can be
+// blocked in SendMessageTimeoutW to the UI thread, and the UI thread can be in
+// KickFetch waiting on this very mutex.
+static std::mutex g_netMutex;
 static HANDLE g_netThread = nullptr;
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_kickEvent = nullptr;
@@ -3403,6 +3498,7 @@ static constexpr DWORD kIdleIntervalMs = 6 * 60 * 60 * 1000;   // 6 hours
 static constexpr DWORD kFirstBackoffMs = 15 * 60 * 1000;       // 15 minutes
 
 static void KickFetch() {
+    std::lock_guard<std::mutex> lock(g_netMutex);
     if (g_kickEvent) {
         SetEvent(g_kickEvent);
     }
@@ -3494,6 +3590,12 @@ static bool PerformFetch() {
 }
 
 static DWORD WINAPI NetThreadProc(void*) {
+    // Snapshot the handles: StopNetThread clears the globals under the lock
+    // before it joins, so the worker must not read them afterwards. They are
+    // set before CreateThread, so this is safe without the lock.
+    HANDLE stopEvent = g_stopEvent;
+    HANDLE kickEvent = g_kickEvent;
+
     bool apartmentInitialized = false;
     try {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -3552,7 +3654,7 @@ static DWORD WINAPI NetThreadProc(void*) {
             break;
         }
 
-        HANDLE handles[2] = {g_stopEvent, g_kickEvent};
+        HANDLE handles[2] = {stopEvent, kickEvent};
         DWORD result = WaitForMultipleObjects(2, handles, FALSE, waitMs);
         if (result == WAIT_FAILED) {
             // Otherwise the loop would spin at 100% CPU on a bad handle.
@@ -3563,7 +3665,7 @@ static DWORD WINAPI NetThreadProc(void*) {
             break;
         }
         if (result == WAIT_OBJECT_0 + 1) {
-            ResetEvent(g_kickEvent);
+            ResetEvent(kickEvent);
             forced = true;          // a manual reload ignores the backoff
             backoffMs = kFirstBackoffMs;
         }
@@ -3583,6 +3685,7 @@ static DWORD WINAPI NetThreadProc(void*) {
 // explorer.exe would run a worker and download the menu -- with "launch folder
 // windows in a separate process" enabled that is one per Explorer window.
 static void StartNetThread() {
+    std::lock_guard<std::mutex> lock(g_netMutex);
     if (g_netThread) {
         return;
     }
@@ -3613,34 +3716,49 @@ static void StartNetThread() {
 }
 
 static void StopNetThread() {
-    if (g_stopEvent) {
-        SetEvent(g_stopEvent);
+    HANDLE thread = nullptr;
+    HANDLE stopEvent = nullptr;
+    HANDLE kickEvent = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(g_netMutex);
+        thread = g_netThread;
+        stopEvent = g_stopEvent;
+        kickEvent = g_kickEvent;
+
+        if (stopEvent) {
+            SetEvent(stopEvent);
+        }
+
+        // Cleared under the lock so KickFetch stops touching them from now on;
+        // the handles stay open until after the join below, because the worker
+        // is still waiting on them.
+        g_netThread = nullptr;
+        g_stopEvent = nullptr;
+        g_kickEvent = nullptr;
     }
 
     // Unblock a read that is already in flight.
-    void* request = g_activeRequest.exchange(nullptr);
-    if (request) {
+    if (void* request = g_activeRequest.exchange(nullptr)) {
         WinHttpCloseHandle((HINTERNET)request);
     }
 
-    if (g_netThread) {
-        // INFINITE, deliberately. Windhawk unloads the mod image as soon as
-        // Wh_ModUninit returns, so a worker still running mod code after a
-        // timed-out wait would be executing unmapped memory. The wait is
-        // already bounded by the stop event, the closed WinHTTP handle and the
-        // g_unloading checks -- a timeout here could only convert a slow exit
-        // into a crash.
-        WaitForSingleObject(g_netThread, INFINITE);
-        CloseHandle(g_netThread);
-        g_netThread = nullptr;
+    if (thread) {
+        // INFINITE, deliberately, and outside the lock. Windhawk unloads the
+        // mod image as soon as Wh_ModUninit returns, so a worker still running
+        // mod code after a timed-out wait would be executing unmapped memory.
+        // The wait is already bounded by the stop event, the closed WinHTTP
+        // handle and the g_unloading checks -- a timeout could only convert a
+        // slow exit into a crash. Holding the lock here would deadlock against
+        // a KickFetch on the UI thread that the worker is itself waiting on.
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+    if (stopEvent) {
+        CloseHandle(stopEvent);
     }
-    if (g_kickEvent) {
-        CloseHandle(g_kickEvent);
-        g_kickEvent = nullptr;
+    if (kickEvent) {
+        CloseHandle(kickEvent);
     }
 }
 
@@ -3948,12 +4066,11 @@ void Wh_ModUninit() {
                     Wh_Log(L"Wh_ModUninit: exception removing the button");
                 }
             },
-            nullptr);
+            nullptr,
+            /*blockIndefinitely=*/true);
 
         if (!cleaned) {
-            // The UI thread never ran our cleanup, so the button and its
-            // handlers are still live in a taskbar whose mod is about to
-            // vanish. Nothing safe can be done about it from this thread.
+            // Only reachable if the window died before the message landed.
             Wh_Log(L"Wh_ModUninit: UI-thread cleanup did not run");
         }
     }
@@ -3975,9 +4092,4 @@ void Wh_ModUninit() {
     g_liveTimers.reset();
     g_cardCountdowns.reset();
     g_cardBorders.reset();
-    g_cardMeals.reset();
-    {
-        std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
-        g_runPayloads.reset();
-    }
 }
