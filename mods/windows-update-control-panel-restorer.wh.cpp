@@ -138,6 +138,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <shared_mutex>
 #include <thread>
 #include <atomic>
+#include <algorithm>
 #include <optional>
 #include <vector>
 #include <windhawk_utils.h>
@@ -646,7 +647,23 @@ static std::atomic<bool> g_debugForcePending{false};
 // Currently selected language code (default "en"). Declared early because the
 // embedded string table below resolves strings per language at runtime. Loaded
 // from the mod settings in LoadLanguageSetting().
-static std::wstring g_language = L"en";
+// Published as an index: UI hooks may run on several Explorer threads. Never
+// share a mutable std::wstring with them.
+enum class Language : int { en, it, es, fr, tr, ru, pt, zh, pl, nl };
+static std::atomic<Language> g_language{Language::en};
+static Language LanguageFromCode(const std::wstring& value) {
+    if (value == L"it") return Language::it; if (value == L"es") return Language::es;
+    if (value == L"fr") return Language::fr; if (value == L"tr") return Language::tr;
+    if (value == L"ru") return Language::ru; if (value == L"pt") return Language::pt;
+    if (value == L"zh") return Language::zh; if (value == L"pl") return Language::pl;
+    if (value == L"nl") return Language::nl; return Language::en;
+}
+static const wchar_t* LanguageCode() {
+    static constexpr const wchar_t* kCodes[] = { L"en", L"it", L"es", L"fr", L"tr", L"ru", L"pt", L"zh", L"pl", L"nl" };
+    return kCodes[static_cast<int>(g_language.load(std::memory_order_acquire))];
+}
+static std::wstring CurrentLanguage() { return LanguageCode(); }
+static bool LanguageIs(PCWSTR code) { return wcscmp(LanguageCode(), code) == 0; }
 
 // Whether to show the mod's "service not available" notice (the shield box).
 // Controlled by the "ShowServiceNotice" setting (default on).
@@ -1479,15 +1496,15 @@ static LoadStringW_t LoadStringWOriginal = nullptr;
 static const wchar_t* EmbeddedMuiString(UINT id) {
     for (const auto* item = kWucltuxMuiStrings; item->en; ++item) {
         if (item->id != id) continue;
-        if (g_language == L"it") return item->it;
-        if (g_language == L"es") return item->es;
-        if (g_language == L"fr") return item->fr;
-        if (g_language == L"tr") return item->tr;
-        if (g_language == L"ru") return item->ru;
-        if (g_language == L"pt") return item->pt;
-        if (g_language == L"zh") return item->zh;
-        if (g_language == L"pl") return item->pl;
-        if (g_language == L"nl") return item->nl;
+        if (LanguageIs(L"it")) return item->it;
+        if (LanguageIs(L"es")) return item->es;
+        if (LanguageIs(L"fr")) return item->fr;
+        if (LanguageIs(L"tr")) return item->tr;
+        if (LanguageIs(L"ru")) return item->ru;
+        if (LanguageIs(L"pt")) return item->pt;
+        if (LanguageIs(L"zh")) return item->zh;
+        if (LanguageIs(L"pl")) return item->pl;
+        if (LanguageIs(L"nl")) return item->nl;
         return item->en; // default / fallback
     }
     return nullptr;
@@ -1497,23 +1514,23 @@ static const wchar_t* EmbeddedMuiString(UINT id) {
 // over the "Windows Update" item in the Control Panel) for the currently
 // selected language. English is the fallback for any unknown code.
 static const wchar_t* InfoTipForLanguage() {
-    if (g_language == L"it")
+    if (LanguageIs(L"it"))
         return L"Controlla gli aggiornamenti e visualizza la cronologia degli aggiornamenti.";
-    if (g_language == L"es")
+    if (LanguageIs(L"es"))
         return L"Busca actualizaciones y consulta el historial de actualizaciones.";
-    if (g_language == L"fr")
+    if (LanguageIs(L"fr"))
         return L"Recherchez les mises à jour et consultez l'historique des mises à jour.";
-    if (g_language == L"tr")
+    if (LanguageIs(L"tr"))
         return L"Güncellemeleri denetleyin ve güncelleme geçmişini görüntüleyin.";
-    if (g_language == L"ru")
+    if (LanguageIs(L"ru"))
         return L"Проверьте наличие обновлений и просмотрите журнал обновлений.";
-    if (g_language == L"pt")
+    if (LanguageIs(L"pt"))
         return L"Verifique atualizações e consulte o histórico de atualizações.";
-    if (g_language == L"zh")
+    if (LanguageIs(L"zh"))
         return L"检查更新并查看更新历史记录。";
-    if (g_language == L"pl")
+    if (LanguageIs(L"pl"))
         return L"Sprawdź aktualizacje i wyświetl historię aktualizacji.";
-    if (g_language == L"nl")
+    if (LanguageIs(L"nl"))
         return L"Controleer op updates en bekijk de updategeschiedenis.";
     return L"Check for updates and view update history."; // en / fallback
 }
@@ -1604,7 +1621,7 @@ static bool ReuseExistingEmbeddedMuiResourceModule(const std::wstring& sourceDir
     // ID-1 is not enough to tell them apart).
     const std::wstring prefix =
         L"wucltux.embedded-mui-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
-        g_language + L"-";
+        CurrentLanguage() + L"-";
     const std::wstring pattern = sourceDir + L"\\" + prefix + L"*.mres";
 
     WIN32_FIND_DATAW findData{};
@@ -1660,7 +1677,7 @@ static bool BuildEmbeddedMuiResourceModule(const std::wstring& sourcePath) {
     const std::wstring destination = sourcePath.substr(0, slash + 1) +
                                      L"wucltux.embedded-mui-" +
                                      std::to_wstring(GetCurrentProcessId()) + L"-" +
-                                     g_language + L"-" +
+                                     CurrentLanguage() + L"-" +
                                      std::to_wstring(generation.fetch_add(1) + 1) + L".mres";
     const std::wstring temporary = destination + L".tmp";
     ScopedTemporaryFile temporaryGuard(temporary);
@@ -1792,8 +1809,8 @@ static void RebuildEmbeddedMuiForLanguage() {
         g_resourceModule.store(nullptr);
     }
     EmbeddedMuiResourceModule();
-    g_builtLanguage = g_language;
-    Wh_Log(L"Windows Update Restorer: embedded MUI module rebuilt for language %s", g_language.c_str());
+    g_builtLanguage = CurrentLanguage();
+    Wh_Log(L"Windows Update Restorer: embedded MUI module rebuilt for language %s", LanguageCode());
 }
 
 
@@ -4122,9 +4139,9 @@ static void LoadLanguageSetting() {
     for (auto& c : value) c = towlower(c);
     if (value == L"auto" || value.empty()) {
         std::wstring detected = DetectSystemLanguage();
-        g_language = detected.empty() ? L"en" : detected;
+        g_language.store(LanguageFromCode(detected.empty() ? L"en" : detected), std::memory_order_release);
     } else {
-        g_language = value;
+        g_language.store(LanguageFromCode(value), std::memory_order_release);
     }
 
     PCWSTR skin = Wh_GetStringSetting(L"UpdatePageSkin");
@@ -4190,7 +4207,7 @@ static SettingsRecommendationLinkParts SelectSettingsRecommendationLinkParts() {
         { L"nl", { L"Het wordt aanbevolen om de ", L"systeeminstellingen", L"te gebruiken om updates te configureren." } },
     };
 
-    auto it = kParts.find(g_language);
+    auto it = kParts.find(CurrentLanguage());
     if (it == kParts.end()) it = kParts.find(L"en");
     return it->second;
 }
@@ -4241,7 +4258,7 @@ static const wchar_t* SelectChangeWindowsUpdateSettingsLinkText() {
         { L"pl", L"Zmień ustawienia Windows Update" },
         { L"nl", L"Windows Update-instellingen wijzigen" },
     };
-    auto it = kTexts.find(g_language);
+    auto it = kTexts.find(CurrentLanguage());
     if (it == kTexts.end()) it = kTexts.find(L"en");
     return it->second;
 }
@@ -4289,7 +4306,7 @@ static const wchar_t* SelectOpenWindowsUpdateSettingsLinkText() {
         { L"pl", L"Otwórz ustawienia Windows Update" },
         { L"nl", L"Windows Update-instellingen openen" },
     };
-    auto it = kTexts.find(g_language);
+    auto it = kTexts.find(CurrentLanguage());
     if (it == kTexts.end()) it = kTexts.find(L"en");
     return it->second;
 }
@@ -4478,56 +4495,11 @@ static DWORD ReadAuOptionsValue() {
 }
 
 static bool WriteAuOptionsValue(DWORD value) {
-    if (value < 1 || value > 4) return false;
-    const DWORD noAuto = (value == 1) ? 1 : 0;
-    bool ok = true;
-
-    // 1) Local (classic) Automatic Updates settings.
-    HKEY hKey = nullptr;
-    LSTATUS status = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
-        0, KEY_SET_VALUE, &hKey);
-    if (status == ERROR_SUCCESS) {
-        if (RegSetValueExW(hKey, L"NoAutoUpdate", 0, REG_DWORD,
-                           reinterpret_cast<const BYTE*>(&noAuto), sizeof(noAuto)) != ERROR_SUCCESS)
-            ok = false;
-        if (RegSetValueExW(hKey, L"AUOptions", 0, REG_DWORD,
-                           reinterpret_cast<const BYTE*>(&value), sizeof(value)) != ERROR_SUCCESS)
-            ok = false;
-        RegCloseKey(hKey);
-    } else {
-        Wh_Log(L"Windows Update Restorer: AUOptions local write failed to open key (status=%d)", status);
-        ok = false;
-    }
-
-    // 2) Group-Policy key (HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU):
-    //    this is the key Windows 10/11 actually honour for NoAutoUpdate. Write it
-    //    best-effort - it needs the key to exist (created here) and admin rights.
-    HKEY hPolicy = nullptr;
-    status = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU",
-        0, nullptr, 0, KEY_SET_VALUE, nullptr, &hPolicy, nullptr);
-    if (status == ERROR_SUCCESS) {
-        if (RegSetValueExW(hPolicy, L"NoAutoUpdate", 0, REG_DWORD,
-                           reinterpret_cast<const BYTE*>(&noAuto), sizeof(noAuto)) != ERROR_SUCCESS)
-            ok = false;
-        if (RegSetValueExW(hPolicy, L"AUOptions", 0, REG_DWORD,
-                           reinterpret_cast<const BYTE*>(&value), sizeof(value)) != ERROR_SUCCESS)
-            ok = false;
-        RegCloseKey(hPolicy);
-    } else {
-        Wh_Log(L"Windows Update Restorer: AUOptions policy write failed (status=%d)", status);
-    }
-
-    Wh_Log(L"Windows Update Restorer: AUOptions set to %lu (ok=%d)", value, static_cast<int>(ok));
-    return ok;
+    // The restored page is intentionally read-only. A shell extension must not
+    // create or modify machine-wide Windows Update/Group Policy settings.
+    Wh_Log(L"Windows Update Restorer: AUOptions change (%lu) was not applied; open Settings to change update policy.", value);
+    return false;
 }
-
-// Builds the classic four-option "Important updates" list, with the current
-// AUOptions selection marked. Labels come from the embedded multilingual MUI
-// table via resstr() so they follow the selected language automatically.
-// Short, formal introduction shown above the ComboBox on the settings page:
-// explains what Windows Update is for and why updates matter. Very brief.
 static const wchar_t* SelectUpdateIntroText() {
     static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
         { L"en", L"Windows Update keeps your PC secure and reliable by installing the latest updates." },
@@ -4541,7 +4513,7 @@ static const wchar_t* SelectUpdateIntroText() {
         { L"pl", L"Windows Update utrzymuje komputer bezpieczny i niezawodny, instalując najnowsze aktualizacje." },
         { L"nl", L"Windows Update houdt uw pc veilig en betrouwbaar door de nieuwste updates te installeren." },
     };
-    auto it = kTexts.find(g_language);
+    auto it = kTexts.find(CurrentLanguage());
     if (it == kTexts.end()) it = kTexts.find(L"en");
     return it->second;
 }
@@ -4561,28 +4533,6 @@ static std::wstring BuildUpdateIntroTextXml() {
         L"\"/></element>";
 }
 
-static bool FindModuleContaining(const std::wstring& xml, const std::wstring& markerA,
-                                 const std::wstring& markerB, size_t& start, size_t& end) {
-    const size_t mA = xml.find(markerA);
-    const size_t mB = xml.find(markerB);
-    if (mA == std::wstring::npos || mB == std::wstring::npos) return false;
-    const size_t m = (mA < mB) ? mB : mA;
-    bool found = false;
-    for (size_t i = 0; i < xml.size();) {
-        const size_t lt = xml.find(L"<element", i);
-        if (lt == std::wstring::npos || lt > m) break;
-        const size_t gt = xml.find(L'>', lt);
-        if (gt == std::wstring::npos) break;
-        if (gt == lt || xml[gt - 1] == L'/') { i = gt + 1; continue; }
-        size_t e = 0;
-        if (!FindElementEnd(xml, lt, e)) break;
-        if (lt < mA && lt < mB && e > mA && e > mB) {
-            if (!found || lt > start) { start = lt; end = e; found = true; }
-        }
-        i = gt + 1;
-    }
-    return found;
-}
 
 // =============================================================================
 // Native Win32 Drop-down ComboBox for Settings Page ("pageSettings")
@@ -4599,8 +4549,13 @@ typedef HRESULT (*DUI_Element_GetBounds_t)(DirectUI_Element, RECT*);
 
 static void RefreshWuPage(HWND host);
 static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
-static void PositionNativeSettingsCombobox(HWND hwndParent);
-static void CreateOrUpdateNativeSettingsCombobox(HWND hwndParent = nullptr);
+
+// Subclass APIs and timers are thread-affine. This message is synchronously
+// delivered by the owner thread before an any-thread subclass removal.
+static const UINT g_wmUiTeardown = RegisterWindowMessageW(L"Windhawk.WUControlPanelRestorer.UiTeardown");
+static std::mutex g_subclassWindowsMutex;
+static std::vector<HWND> g_settingsSubclassWindows;
+static std::vector<HWND> g_sidebarSubclassWindows;
 
 // =============================================================================
 // NATIVE DIRECTUI COMBOBOX REPAIR (No Win32 Overlay)
@@ -4750,14 +4705,16 @@ static void InitDirectUIExports() {
 
 static void DestroySettingsCombobox() {
     g_isSettingsPageActive.store(false);
-    if (g_hwndDirectUiParent && IsWindow(g_hwndDirectUiParent)) {
-        KillTimer(g_hwndDirectUiParent, 889);
-        RemoveWindowSubclass(g_hwndDirectUiParent, SettingsDirectUiSubclassProc, 888);
-        g_hwndDirectUiParent = nullptr;
+    std::vector<HWND> windows;
+    { std::lock_guard lock(g_subclassWindowsMutex); windows = g_settingsSubclassWindows; }
+    // Do not hold the lock: SendMessage executes the teardown in the window's
+    // owner thread, where both KillTimer and RemoveWindowSubclass are valid.
+    for (HWND hwnd : windows) if (IsWindow(hwnd)) {
+        SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
     }
-    g_nativeComboPopulated = false;
-    g_lastComboPtr = nullptr;
-    g_protectedCombo.store(nullptr);
+    { std::lock_guard lock(g_subclassWindowsMutex); g_settingsSubclassWindows.clear(); }
+    g_hwndDirectUiParent = nullptr;
+    g_nativeComboPopulated = false; g_lastComboPtr = nullptr; g_protectedCombo.store(nullptr);
 }
 
 static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
@@ -4766,6 +4723,24 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARA
         RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
         if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
         return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    // RegisterWindowMessage returns a run-time value, so it cannot be a case
+    // label. Handle it before the switch instead.
+    if (uMsg == g_wmUiTeardown) {
+        KillTimer(hwnd, 889);
+        RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
+        {
+            std::lock_guard lock(g_subclassWindowsMutex);
+            auto it = std::remove(g_settingsSubclassWindows.begin(),
+                                  g_settingsSubclassWindows.end(), hwnd);
+            g_settingsSubclassWindows.erase(it, g_settingsSubclassWindows.end());
+        }
+        if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
+        g_nativeComboPopulated = false;
+        g_lastComboPtr = nullptr;
+        g_protectedCombo.store(nullptr);
+        return 0;
     }
 
     switch (uMsg) {
@@ -4896,7 +4871,11 @@ static void InitializeNativeSettingsCombobox(HWND hwndParent) {
     if (!hwndParent || !IsWindow(hwndParent)) hwndParent = FindSettingsDirectUiHwnd();
     if (!hwndParent || !IsWindow(hwndParent)) return;
     g_hwndDirectUiParent = hwndParent;
-    SetWindowSubclass(hwndParent, SettingsDirectUiSubclassProc, 888, 0);
+    if (SetWindowSubclass(hwndParent, SettingsDirectUiSubclassProc, 888, 0)) {
+        std::lock_guard lock(g_subclassWindowsMutex);
+        if (std::find(g_settingsSubclassWindows.begin(), g_settingsSubclassWindows.end(), hwndParent) == g_settingsSubclassWindows.end())
+            g_settingsSubclassWindows.push_back(hwndParent);
+    }
     SetTimer(hwndParent, 889, 200, nullptr);
 }
 
@@ -4967,7 +4946,7 @@ static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
         { L"pl", L"Wybierz sposób instalowania aktualizacji" },
         { L"nl", L"Kies hoe updates worden geïnstalleerd" },
     };
-    auto it = kTexts.find(g_language);
+    auto it = kTexts.find(CurrentLanguage());
     if (it == kTexts.end()) it = kTexts.find(L"en");
     return it->second;
 }
@@ -5072,7 +5051,7 @@ static const wchar_t* SelectRecommendedUpdatesLabel() {
         { L"pl", L"Zapewniaj zalecane aktualizacje w taki sam sposób, jak ważne" },
         { L"nl", L"Geef mij aanbevolen updates op dezelfde manier als belangrijke updates" },
     };
-    auto it = kTexts.find(g_language);
+    auto it = kTexts.find(CurrentLanguage());
     if (it == kTexts.end()) it = kTexts.find(L"en");
     return it->second;
 }
@@ -5573,7 +5552,10 @@ static bool IsWindowsUpdateServiceAvailable() {
     // configured, skip the recreated hub entirely - same effect as if
     // "Show recreated interface" were off - instead of fighting a native
     // re-show we cannot suppress from the XML.
-    return ProbeWindowsUpdateServiceAvailable() && IsAutomaticUpdatesConfigured();
+    // This function is called from DirectUI rendering. It must never make SCM RPC.
+    const bool available = !g_cachedWuServiceProbed.load(std::memory_order_acquire) ||
+                           g_cachedWuAvailable.load(std::memory_order_acquire);
+    return available && IsAutomaticUpdatesConfigured();
 }
 
 // -----------------------------------------------------------------------------
@@ -5786,6 +5768,52 @@ static void GatherBackgroundStatus() {
 
 
 
+// Keep every atom(module...) identifier that wucltux expects, but make the
+// legacy module itself empty.  Removing an ID makes some versions of the
+// provider return S_FALSE and reconstruct its stock UI, which is precisely how
+// duplicate native/recreated panes appear.  This is deliberately applied only
+// to the top-level WU page, never to pageSettings.
+static void CollapseNativeWuModules(std::wstring& xml) {
+    constexpr PCWSTR kPrefix = L"<element id=\"atom(module";
+    size_t pos = 0;
+    unsigned collapsed = 0;
+    while ((pos = xml.find(kPrefix, pos)) != std::wstring::npos) {
+        const size_t idEnd = xml.find(L"\"", pos + wcslen(L"<element id=\""));
+        size_t elementEnd = 0;
+        if (idEnd == std::wstring::npos || !FindElementEnd(xml, pos, elementEnd)) {
+            pos += wcslen(kPrefix);
+            continue;
+        }
+
+        // A stock module can also be a layout wrapper around other modules.
+        // After our surface is inserted, collapsing such an ancestor would also
+        // delete the recreated UI and leave the landing page completely empty.
+        // Preserve every ancestor containing one of our markers, then continue
+        // scanning so nested stock modules can still be collapsed individually.
+        const size_t customHub = xml.find(L"atom(wuamodern_best_effort)", pos);
+        const size_t customFallback = xml.find(L"atom(wuamodern_redbox_fallback)", pos);
+        if ((customHub != std::wstring::npos && customHub < elementEnd) ||
+            (customFallback != std::wstring::npos && customFallback < elementEnd)) {
+            pos += wcslen(kPrefix);
+            continue;
+        }
+
+        // Retain just id="atom(module...)". The retained atom prevents the
+        // provider from falling back to its original template at runtime.
+        const std::wstring idAttribute =
+            xml.substr(pos + wcslen(L"<element "),
+                       idEnd - (pos + wcslen(L"<element ")) + 1);
+        const std::wstring empty = L"<element " + idAttribute +
+            L" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
+        xml.replace(pos, elementEnd - pos, empty);
+        pos += empty.size();
+        ++collapsed;
+    }
+    if (collapsed) {
+        Wh_Log(L"Windows Update Restorer: suppressed %u native top-level WU module(s)", collapsed);
+    }
+}
+
 // Applies the top-level Windows Update page XML patch. The settings child page
 // (pageSettings) is intentionally left untouched to guarantee it always loads.
 static std::wstring PatchModernWuPageXml(const std::wstring& input) {
@@ -5863,13 +5891,23 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
         // included below the box; with it OFF the box is shown without the
         // link (the user explicitly wants the "Turn on automatic updating"
         // box to be present in this state too).
+        // moduleCheckForUpdates can appear before moduleAUNotConfigured. If it
+        // was collapsed above, the replacement changed the XML length, so the
+        // moduleStart offset computed from withNavPane is now stale. Re-find the
+        // AU module in the modified string before replacing/inserting; otherwise
+        // the recreated surface can be skipped (or the wrong element parsed).
+        const size_t currentModuleStart = patched.find(module);
+        if (currentModuleStart == std::wstring::npos) return patched;
         size_t moduleEnd = 0;
-        if (!FindElementEnd(patched, moduleStart, moduleEnd)) return withNavPane;
+        if (!FindElementEnd(patched, currentModuleStart, moduleEnd)) return patched;
         const std::wstring emptiedModule =
             L"<element id=\"atom(moduleAUNotConfigured)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
-        patched.replace(moduleStart, moduleEnd - moduleStart, emptiedModule);
-        const size_t insertAt = moduleStart + emptiedModule.size();
+        patched.replace(currentModuleStart, moduleEnd - currentModuleStart, emptiedModule);
+        const size_t insertAt = currentModuleStart + emptiedModule.size();
         patched.insert(insertAt, BuildRedBoxFallbackXml(g_showServiceNotice.load()));
+        // The replacement is the sole visible status surface. Suppress every
+        // remaining stock module as well, not merely the two known red boxes.
+        CollapseNativeWuModules(patched);
         Wh_Log(L"Windows Update Restorer: replaced native red box with recreation (link=%d)",
                static_cast<int>(g_showServiceNotice.load()));
         return patched;
@@ -6084,238 +6122,28 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
     }
 
     patched.insert(insertAt, hub);
+    // The recreated hub owns the top-level content. Retain native atom IDs for
+    // provider compatibility, but never let their original visual modules render.
+    CollapseNativeWuModules(patched);
     return patched;
 }
 
 // =============================================================================
 // Windows 7-Style Custom Task Pane Section for Control Panel Sidebar
 // =============================================================================
-static int g_hoveredTaskPaneItem = -1;
-static HWND g_subclassedSidebarHwnd = nullptr;
 
-static BOOL CALLBACK EnumSidebarChildProc(HWND hwnd, LPARAM lParam) {
-    auto* pFound = reinterpret_cast<HWND*>(lParam);
-    if (!IsWindowVisible(hwnd)) return TRUE;
 
-    RECT rc{};
-    GetClientRect(hwnd, &rc);
-    int width = rc.right - rc.left;
-    int height = rc.bottom - rc.top;
 
-    if (width >= 140 && width <= 260 && height > 300) {
-        wchar_t className[64] = {};
-        GetClassNameW(hwnd, className, ARRAYSIZE(className));
-        if (_wcsicmp(className, L"DirectUIHWND") == 0 || (width >= 140 && width <= 260)) {
-            *pFound = hwnd;
-            return FALSE;
-        }
-    }
-    return TRUE;
-}
 
-static HWND FindControlPanelSidebar(HWND hwndPage) {
-    if (!hwndPage || !IsWindow(hwndPage)) return nullptr;
-    HWND found = nullptr;
-    EnumChildWindows(hwndPage, EnumSidebarChildProc, reinterpret_cast<LPARAM>(&found));
-    if (!found) {
-        HWND root = GetAncestor(hwndPage, GA_ROOT);
-        if (root && root != hwndPage) {
-            EnumChildWindows(root, EnumSidebarChildProc, reinterpret_cast<LPARAM>(&found));
-        }
-    }
-    return found;
-}
 
-static void PaintCustomTaskPaneSection(HDC hdc, const RECT& rcClient) {
-    int startY = 220;
-    int lineHeight = 22;
-    int leftMargin = 12;
 
-    const UINT stringIds[4] = { 350, 351, 352, 353 };
-    const wchar_t* fallbacks[4] = {
-        L"Check for updates",
-        L"Change settings",
-        L"View update history",
-        L"Restore hidden updates"
-    };
 
-    HPEN hPen = CreatePen(PS_SOLID, 1, RGB(229, 229, 229));
-    if (hPen) {
-        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-        MoveToEx(hdc, rcClient.left + leftMargin, startY - 10, nullptr);
-        LineTo(hdc, rcClient.right - leftMargin, startY - 10);
-        SelectObject(hdc, hOldPen);
-        DeleteObject(hPen);
-    }
 
-    HFONT hFont = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                              CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    if (!hFont) return;
-    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-    SetBkMode(hdc, TRANSPARENT);
 
-    for (int i = 0; i < 4; ++i) {
-        RECT rcItem = {
-            rcClient.left + leftMargin,
-            startY + i * lineHeight,
-            rcClient.right - leftMargin,
-            startY + (i + 1) * lineHeight
-        };
-
-        COLORREF color = (i == g_hoveredTaskPaneItem) ? RGB(51, 153, 255) : RGB(0, 102, 204);
-        SetTextColor(hdc, color);
-
-        const wchar_t* text = EmbeddedMuiString(stringIds[i]);
-        if (!text || !*text) text = fallbacks[i];
-
-        DrawTextW(hdc, text, -1, &rcItem, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
-
-    SelectObject(hdc, hOldFont);
-    DeleteObject(hFont);
-}
-
-static LRESULT CALLBACK SidebarSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
-                                            UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    switch (uMsg) {
-        case WM_PAINT: {
-            LRESULT lRes = DefSubclassProc(hwnd, uMsg, wParam, lParam);
-            if (!IsWindow(hwnd)) return lRes;
-
-            RECT rcClient{};
-            GetClientRect(hwnd, &rcClient);
-
-            HDC hdc = GetDC(hwnd);
-            if (hdc) {
-                PaintCustomTaskPaneSection(hdc, rcClient);
-                ReleaseDC(hwnd, hdc);
-            }
-            return lRes;
-        }
-        case WM_MOUSEMOVE: {
-            int x = GET_X_LPARAM(lParam);
-            int y = GET_Y_LPARAM(lParam);
-
-            int startY = 220;
-            int lineHeight = 22;
-            int leftMargin = 12;
-            RECT rcClient{};
-            GetClientRect(hwnd, &rcClient);
-
-            int hit = -1;
-            for (int i = 0; i < 4; ++i) {
-                RECT rcItem = {
-                    rcClient.left + leftMargin,
-                    startY + i * lineHeight,
-                    rcClient.right - leftMargin,
-                    startY + (i + 1) * lineHeight
-                };
-                if (x >= rcItem.left && x <= rcItem.right && y >= rcItem.top && y <= rcItem.bottom) {
-                    hit = i;
-                    break;
-                }
-            }
-
-            if (g_hoveredTaskPaneItem != hit) {
-                g_hoveredTaskPaneItem = hit;
-                InvalidateRect(hwnd, nullptr, FALSE);
-
-                if (hit != -1) {
-                    TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
-                    TrackMouseEvent(&tme);
-                }
-            }
-            break;
-        }
-        case WM_MOUSELEAVE: {
-            if (g_hoveredTaskPaneItem != -1) {
-                g_hoveredTaskPaneItem = -1;
-                InvalidateRect(hwnd, nullptr, FALSE);
-            }
-            break;
-        }
-        case WM_LBUTTONUP: {
-            int x = GET_X_LPARAM(lParam);
-            int y = GET_Y_LPARAM(lParam);
-
-            int startY = 220;
-            int lineHeight = 22;
-            int leftMargin = 12;
-            RECT rcClient{};
-            GetClientRect(hwnd, &rcClient);
-
-            int hit = -1;
-            for (int i = 0; i < 4; ++i) {
-                RECT rcItem = {
-                    rcClient.left + leftMargin,
-                    startY + i * lineHeight,
-                    rcClient.right - leftMargin,
-                    startY + (i + 1) * lineHeight
-                };
-                if (x >= rcItem.left && x <= rcItem.right && y >= rcItem.top && y <= rcItem.bottom) {
-                    hit = i;
-                    break;
-                }
-            }
-
-            if (hit != -1) {
-                if (hit != 1) {
-                    DestroySettingsCombobox();
-                }
-                if (hit == 0) {
-                    ShellExecuteW(hwnd, L"open", L"explorer.exe",
-                                  (L"shell:::" + std::wstring(kAppletClsid)).c_str(),
-                                  nullptr, SW_SHOWNORMAL);
-                } else if (hit == 1) {
-                    ShowWuSettingsDialog(hwnd);
-                } else if (hit == 2) {
-                    OpenInstalledUpdates(hwnd);
-                } else if (hit == 3) {
-                    ShellExecuteW(hwnd, L"open", L"explorer.exe",
-                                  (L"shell:::" + std::wstring(kAppletClsid)).c_str(),
-                                  nullptr, SW_SHOWNORMAL);
-                }
-            }
-            break;
-        }
-        case WM_NCDESTROY: {
-            RemoveWindowSubclass(hwnd, SidebarSubclassProc, uIdSubclass);
-            if (g_subclassedSidebarHwnd == hwnd) {
-                g_subclassedSidebarHwnd = nullptr;
-            }
-            break;
-        }
-    }
-    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-static void TryInstallSidebarSubclass(HWND hwndPage) {
-    if (g_subclassedSidebarHwnd && IsWindow(g_subclassedSidebarHwnd)) return;
-
-    HWND sidebar = FindControlPanelSidebar(hwndPage);
-    if (sidebar && IsWindow(sidebar)) {
-        if (SetWindowSubclass(sidebar, SidebarSubclassProc, 1, 0)) {
-            g_subclassedSidebarHwnd = sidebar;
-            Wh_Log(L"Windows Update Restorer: successfully subclassed control panel sidebar HWND %p", sidebar);
-        }
-    }
-}
-
-static void CheckAndInstallSidebarSubclass() {
-    if (g_subclassedSidebarHwnd && IsWindow(g_subclassedSidebarHwnd)) return;
-    HWND hwndForeground = GetForegroundWindow();
-    if (hwndForeground) TryInstallSidebarSubclass(hwndForeground);
-    if (!g_subclassedSidebarHwnd) {
-        HWND hwndActive = GetActiveWindow();
-        if (hwndActive) TryInstallSidebarSubclass(hwndActive);
-    }
-}
 
 static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
                                               HINSTANCE resourceModule,
                                               HINSTANCE hInstance) {
-    CheckAndInstallSidebarSubclass();
     if (!DUISetXMLOriginal) return E_FAIL;
     if (g_inWuXmlPatch || !xml) {
         return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
@@ -6358,35 +6186,8 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
     } else {
         DestroySettingsCombobox();
     }
-    Wh_Log(L"Windows Update Restorer: [BUILD-MARKER-DEBUG-v4] modern WUA command links injected (hr=0x%08X, patchedLen=%zu, origLen=%zu, wuAvailable=%d)",
+    Wh_Log(L"Windows Update Restorer: modern WUA command links injected (hr=0x%08X, patchedLen=%zu, origLen=%zu, wuAvailable=%d)",
            static_cast<unsigned>(hr), patched.size(), xml.size(), static_cast<int>(IsWindowsUpdateServiceAvailable()));
-    // One-time diagnostic dump of both the original and patched XML so the
-    // actual wucltux structure can be inspected directly instead of guessed.
-    {
-        static std::atomic<bool> dumped{false};
-        bool expected = false;
-        if (dumped.compare_exchange_strong(expected, true)) {
-            const std::wstring dir = StoreDir();
-            if (!dir.empty()) {
-                HANDLE f1 = CreateFileW((dir + L"\\wu_orig_dump.xml").c_str(), GENERIC_WRITE, 0, nullptr,
-                                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-                if (f1 != INVALID_HANDLE_VALUE) {
-                    DWORD written = 0;
-                    WriteFile(f1, xml.c_str(), static_cast<DWORD>(xml.size() * sizeof(wchar_t)), &written, nullptr);
-                    CloseHandle(f1);
-                }
-                HANDLE f2 = CreateFileW((dir + L"\\wu_patched_dump.xml").c_str(), GENERIC_WRITE, 0, nullptr,
-                                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-                if (f2 != INVALID_HANDLE_VALUE) {
-                    DWORD written = 0;
-                    WriteFile(f2, patched.c_str(), static_cast<DWORD>(patched.size() * sizeof(wchar_t)), &written, nullptr);
-                    CloseHandle(f2);
-                }
-                Wh_Log(L"Windows Update Restorer: DEBUG dumped XML to %s\\wu_orig_dump.xml and wu_patched_dump.xml",
-                       dir.c_str());
-            }
-        }
-    }
     if (hr == S_FALSE) {
         Wh_Log(L"Windows Update Restorer: WARNING - SetXML returned S_FALSE, provider may reject/re-show native modules");
     }
@@ -7285,7 +7086,7 @@ static void SetupWorker() {
     if (!BuildEmbeddedMuiResourceModule(path)) {
         Wh_Log(L"Windows Update Restorer: embedded MUI resource module could not be built");
     } else {
-        g_builtLanguage = g_language;
+        g_builtLanguage = CurrentLanguage();
     }
 
     g_verified.store(true, std::memory_order_release);
@@ -7384,10 +7185,10 @@ BOOL Wh_ModInit() {
 // the embedded MUI module in the background so the classic page reflects the
 // new language without a full mod restart.
 void Wh_ModSettingsChanged() {
-    const std::wstring oldLanguage = g_language;
+    const std::wstring oldLanguage = CurrentLanguage();
     LoadLanguageSetting();
     UpdateSettingsComboboxLanguage();
-    if (oldLanguage != g_language) {
+    if (oldLanguage != CurrentLanguage()) {
         // Ensure a previous rebuild (if any) has finished before starting a new
         // one, so we never run two builds concurrently.
         if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
@@ -7440,7 +7241,16 @@ static void CleanupGeneratedResourceModuleFiles() {
 }
 
 void Wh_ModUninit() {
+    // Modeless dialog proc and all subclass callbacks are mod code: make them
+    // unreachable before Windhawk unloads this image.
+    if (g_wuSettingsDlg && IsWindow(g_wuSettingsDlg)) DestroyWindow(g_wuSettingsDlg);
+    g_wuSettingsDlg = nullptr;
     DestroySettingsCombobox();
+    std::vector<HWND> sidebars;
+    { std::lock_guard lock(g_subclassWindowsMutex); sidebars = g_sidebarSubclassWindows; }
+    for (HWND hwnd : sidebars) if (IsWindow(hwnd))
+        SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
+    { std::lock_guard lock(g_subclassWindowsMutex); g_sidebarSubclassWindows.clear(); }
     g_stopping.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
     CloseActiveDownloadHandles();
