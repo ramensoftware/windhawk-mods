@@ -4,7 +4,7 @@
 // @name:de-DE      Countdown vor Energieaktionen
 // @description     Shows a configurable cancellable countdown before shutdown, restart, sleep, or hibernation.
 // @description:de-DE Zeigt vor Herunterfahren, Neustart, Standby oder Ruhezustand einen konfigurierbaren, abbrechbaren Countdown an.
-// @version         1.1
+// @version         1.2
 // @author          Nerdworld
 // @github          https://github.com/nerdworldDE
 // @homepage        https://nerdworld.de/
@@ -65,18 +65,24 @@ can differ between builds.
 
 // ==WindhawkModSettings==
 /*
-- shutdownCountdownSeconds: 30
+- shutdownCountdownSeconds: 5
   $name: Shutdown countdown in seconds
-- restartCountdownSeconds: 15
+  $name:de-DE: Countdown vor Herunterfahren in Sekunden
+- restartCountdownSeconds: 5
   $name: Restart countdown in seconds
+  $name:de-DE: Countdown vor Neustart in Sekunden
 - sleepCountdownSeconds: 5
   $name: Sleep countdown in seconds
+  $name:de-DE: Countdown vor Standby in Sekunden
 - hibernateCountdownSeconds: 5
   $name: Hibernation countdown in seconds
+  $name:de-DE: Countdown vor Ruhezustand in Sekunden
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windhawk_utils.h>
+#include <objbase.h>
 
 #include <algorithm>
 #include <atomic>
@@ -85,7 +91,7 @@ can differ between builds.
 
 namespace {
 
-constexpr int kMaximumCountdownSeconds = 60;
+constexpr int kMaximumCountdownSeconds = 30;
 constexpr UINT kCancelCountdownMessage = WM_APP + 1;
 constexpr UINT_PTR kCountdownTimerId = 1;
 constexpr UINT kCountdownTimerIntervalMs = 250;
@@ -116,14 +122,17 @@ struct CountdownThreadContext {
     bool proceed;
     HHOOK keyboardHook;
     HHOOK mouseHook;
+    bool swallowedKeys[256]{};
+    bool swallowedMouseButtons[4]{};
 };
 
-std::atomic<int> g_shutdownCountdownSeconds{7};
-std::atomic<int> g_restartCountdownSeconds{7};
-std::atomic<int> g_sleepCountdownSeconds{7};
-std::atomic<int> g_hibernateCountdownSeconds{7};
+std::atomic<int> g_shutdownCountdownSeconds{5};
+std::atomic<int> g_restartCountdownSeconds{5};
+std::atomic<int> g_sleepCountdownSeconds{5};
+std::atomic<int> g_hibernateCountdownSeconds{5};
 std::atomic<bool> g_unloading{false};
 std::atomic<HWND> g_countdownWindow{nullptr};
+std::atomic<CountdownThreadContext*> g_inputContext{nullptr};
 
 HMODULE g_modModule = nullptr;
 ATOM g_countdownWindowClassAtom = 0;
@@ -170,7 +179,6 @@ struct CountdownActivityGuard {
 using ExitWindowsEx_t = decltype(&ExitWindowsEx);
 using InitiateShutdownW_t = decltype(&InitiateShutdownW);
 using InitiateSystemShutdownExW_t = decltype(&InitiateSystemShutdownExW);
-using SetSuspendState_t = BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
 using SetSystemPowerState_t = decltype(&SetSystemPowerState);
 using NtInitiatePowerAction_t = NTSTATUS(NTAPI*)(
     POWER_ACTION, SYSTEM_POWER_STATE, ULONG, BOOLEAN);
@@ -180,7 +188,6 @@ using NtSetSystemPowerState_t = NTSTATUS(NTAPI*)(
 ExitWindowsEx_t ExitWindowsEx_Original = nullptr;
 InitiateShutdownW_t InitiateShutdownW_Original = nullptr;
 InitiateSystemShutdownExW_t InitiateSystemShutdownExW_Original = nullptr;
-SetSuspendState_t SetSuspendState_Original = nullptr;
 SetSystemPowerState_t SetSystemPowerState_Original = nullptr;
 NtInitiatePowerAction_t NtInitiatePowerAction_Original = nullptr;
 NtSetSystemPowerState_t NtSetSystemPowerState_Original = nullptr;
@@ -304,19 +311,27 @@ bool PostCancelToCountdown() {
            PostMessageW(hWnd, kCancelCountdownMessage, 0, 0);
 }
 
-LRESULT CALLBACK LowLevelKeyboardProc(int code,
-                                      WPARAM wParam,
-                                      LPARAM lParam) {
-    if (code == HC_ACTION &&
-        (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) &&
-        PostCancelToCountdown()) {
-        return 1;
-    }
-
-    return CallNextHookEx(nullptr, code, wParam, lParam);
+bool IsKeyboardReleaseMessage(WPARAM wParam) {
+    return wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
 }
 
-bool IsCancellingMouseMessage(WPARAM message) {
+bool IsKeyboardPressMessage(WPARAM wParam) {
+    return wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+}
+
+bool IsMouseReleaseMessage(WPARAM message) {
+    switch (message) {
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_XBUTTONUP:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsMousePressMessage(WPARAM message) {
     switch (message) {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
@@ -330,14 +345,58 @@ bool IsCancellingMouseMessage(WPARAM message) {
     }
 }
 
-LRESULT CALLBACK LowLevelMouseProc(int code,
-                                   WPARAM wParam,
-                                   LPARAM lParam) {
-    if (code == HC_ACTION && IsCancellingMouseMessage(wParam) &&
-        PostCancelToCountdown()) {
-        return 1;
+int GetMouseButtonIndex(WPARAM message) {
+    switch (message) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+            return 0;
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+            return 1;
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+            return 2;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+            return 3;
+        default:
+            return -1;
     }
+}
 
+LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
+    auto* context = g_inputContext.load(std::memory_order_acquire);
+    if (code == HC_ACTION && context) {
+        const auto* keyboard = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+        const unsigned int vk = keyboard ? keyboard->vkCode : 0;
+        if (vk < std::size(context->swallowedKeys)) {
+            if (IsKeyboardPressMessage(wParam) && PostCancelToCountdown()) {
+                context->swallowedKeys[vk] = true;
+                return 1;
+            }
+            if (IsKeyboardReleaseMessage(wParam) && context->swallowedKeys[vk]) {
+                context->swallowedKeys[vk] = false;
+                return 1;
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wParam, LPARAM lParam) {
+    auto* context = g_inputContext.load(std::memory_order_acquire);
+    if (code == HC_ACTION && context) {
+        const int buttonIndex = GetMouseButtonIndex(wParam);
+        if (IsMousePressMessage(wParam) && PostCancelToCountdown()) {
+            if (buttonIndex >= 0) context->swallowedMouseButtons[buttonIndex] = true;
+            return 1;
+        }
+        if (IsMouseReleaseMessage(wParam) && buttonIndex >= 0 &&
+            context->swallowedMouseButtons[buttonIndex]) {
+            context->swallowedMouseButtons[buttonIndex] = false;
+            return 1;
+        }
+    }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
@@ -564,6 +623,7 @@ void UninstallCountdownInputHooks(CountdownThreadContext* context) {
 
 DWORD WINAPI CountdownThreadProc(void* parameter) {
     auto* context = static_cast<CountdownThreadContext*>(parameter);
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     context->proceed = true;  // Fail open until the UI is fully established.
 
     if (WaitForSingleObject(g_countdownStopEvent, 0) == WAIT_OBJECT_0 ||
@@ -606,6 +666,7 @@ DWORD WINAPI CountdownThreadProc(void* parameter) {
     }
 
     g_countdownWindow.store(hWnd, std::memory_order_release);
+    g_inputContext.store(context, std::memory_order_release);
     InstallCountdownInputHooks(context);
 
     ShowWindow(hWnd, SW_SHOW);
@@ -647,15 +708,6 @@ DWORD WINAPI CountdownThreadProc(void* parameter) {
 
         MSG message;
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            if (message.message == WM_QUIT) {
-                context->proceed = false;
-                running = false;
-                if (IsWindow(hWnd)) {
-                    DestroyWindow(hWnd);
-                }
-                break;
-            }
-
             TranslateMessage(&message);
             DispatchMessageW(&message);
 
@@ -667,6 +719,7 @@ DWORD WINAPI CountdownThreadProc(void* parameter) {
     }
 
     UninstallCountdownInputHooks(context);
+    g_inputContext.store(nullptr, std::memory_order_release);
 
     if (IsWindow(hWnd)) {
         DestroyWindow(hWnd);
@@ -704,25 +757,15 @@ void ReleaseCountdownMutex(HANDLE mutex) {
 }
 
 bool WaitForCountdownWithoutPumpingPostedMessages(HANDLE doneEvent) {
+    HANDLE handles[] = {doneEvent};
     for (;;) {
-        const DWORD waitResult = MsgWaitForMultipleObjects(
-            1, &doneEvent, FALSE, INFINITE, QS_SENDMESSAGE);
-
-        if (waitResult == WAIT_OBJECT_0) {
-            return true;
-        }
-
-        if (waitResult == WAIT_OBJECT_0 + 1) {
-            // PeekMessage dispatches pending cross-thread SendMessage calls,
-            // but PM_NOREMOVE and PM_QS_SENDMESSAGE avoid dispatching posted
-            // shell/UI messages re-entrantly on the hooked caller's thread.
-            MSG message;
-            PeekMessageW(&message, nullptr, 0, 0,
-                         PM_NOREMOVE | PM_QS_SENDMESSAGE);
-            continue;
-        }
-
-        Wh_Log(L"Waiting for countdown failed: %lu", GetLastError());
+        DWORD index = 0;
+        HRESULT hr = CoWaitForMultipleHandles(
+            COWAIT_DISPATCH_CALLS, INFINITE, std::size(handles), handles, &index);
+        if (SUCCEEDED(hr) && index == 0) return true;
+        if (hr == RPC_S_CALLPENDING) continue;
+        Wh_Log(L"CoWaitForMultipleHandles failed: 0x%08X",
+               static_cast<unsigned int>(hr));
         return false;
     }
 }
@@ -915,25 +958,6 @@ BOOL WINAPI InitiateSystemShutdownExW_Hook(LPWSTR machineName,
         rebootAfterShutdown, reason);
 }
 
-BOOLEAN WINAPI SetSuspendState_Hook(BOOLEAN hibernate,
-                                    BOOLEAN force,
-                                    BOOLEAN disableWakeEvents) {
-    if (g_bypassHooks || g_unloading.load(std::memory_order_acquire)) {
-        return SetSuspendState_Original(hibernate, force, disableWakeEvents);
-    }
-
-    const PowerAction action = hibernate
-                                   ? PowerAction::Hibernate
-                                   : PowerAction::Sleep;
-    if (!ConfirmAction(action, L"SetSuspendState")) {
-        SetLastError(ERROR_CANCELLED);
-        return FALSE;
-    }
-
-    BypassHooksGuard bypass;
-    return SetSuspendState_Original(hibernate, force, disableWakeEvents);
-}
-
 BOOL WINAPI SetSystemPowerState_Hook(BOOL suspend, BOOL force) {
     if (g_bypassHooks || g_unloading.load(std::memory_order_acquire)) {
         return SetSystemPowerState_Original(suspend, force);
@@ -1051,35 +1075,22 @@ bool RegisterCountdownWindowClass() {
 }
 
 template <typename FunctionPointer>
-bool HookExport(const wchar_t* moduleName,
-                const char* functionName,
-                FunctionPointer hookFunction,
-                FunctionPointer* originalFunction) {
+bool HookExport(const wchar_t* moduleName, const char* functionName,
+                FunctionPointer hookFunction, FunctionPointer* originalFunction) {
     HMODULE module = GetModuleHandleW(moduleName);
     if (!module) {
-        module = LoadLibraryExW(
-            moduleName, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-
-    if (!module) {
-        Wh_Log(L"Couldn't load %ls: %lu", moduleName, GetLastError());
+        Wh_Log(L"Module %ls isn't loaded; skipping %S", moduleName, functionName);
         return false;
     }
-
-    FARPROC target = GetProcAddress(module, functionName);
+    auto target = reinterpret_cast<FunctionPointer>(GetProcAddress(module, functionName));
     if (!target) {
         Wh_Log(L"Couldn't find %S in %ls", functionName, moduleName);
         return false;
     }
-
-    if (!Wh_SetFunctionHook(
-            reinterpret_cast<void*>(target),
-            reinterpret_cast<void*>(hookFunction),
-            reinterpret_cast<void**>(originalFunction))) {
+    if (!WindhawkUtils::SetFunctionHook(target, hookFunction, originalFunction)) {
         Wh_Log(L"Couldn't hook %S", functionName);
         return false;
     }
-
     Wh_Log(L"Hooked %S", functionName);
     return true;
 }
@@ -1137,9 +1148,6 @@ BOOL Wh_ModInit() {
     hooked |= HookExport(L"advapi32.dll", "InitiateSystemShutdownExW",
                          InitiateSystemShutdownExW_Hook,
                          &InitiateSystemShutdownExW_Original);
-    hooked |= HookExport(L"powrprof.dll", "SetSuspendState",
-                         SetSuspendState_Hook,
-                         &SetSuspendState_Original);
     hooked |= HookExport(L"kernel32.dll", "SetSystemPowerState",
                          SetSystemPowerState_Hook,
                          &SetSystemPowerState_Original);
