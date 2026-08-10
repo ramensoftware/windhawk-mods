@@ -1360,6 +1360,12 @@ static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
     return ok;
 }
 
+static bool ShouldUseDesktopFolderFallback(bool targetResolved,
+                                           bool sawSelection,
+                                           bool isDesktopShellView) {
+    return !targetResolved && !sawSelection && isDesktopShellView;
+}
+
 static bool ResolveMenuTarget(HWND hwnd,
                               const Settings& settings,
                               const POINT& invocationPoint,
@@ -1396,6 +1402,7 @@ static bool ResolveMenuTarget(HWND hwnd,
     }
 
     bool ok = false;
+    bool sawSelection = false;
     IFolderView* folderView = nullptr;
     if (SUCCEEDED(shellView->QueryInterface(IID_IFolderView,
                                             reinterpret_cast<void**>(&folderView))) &&
@@ -1403,6 +1410,9 @@ static bool ResolveMenuTarget(HWND hwnd,
         int selectedCount = 0;
         bool hasSelectedCount =
             SUCCEEDED(folderView->ItemCount(SVGIO_SELECTION, &selectedCount));
+        if (hasSelectedCount && selectedCount > 0) {
+            sawSelection = true;
+        }
 
         if (hasSelectedCount && selectedCount > 1) {
             ok = false;
@@ -1417,6 +1427,12 @@ static bool ResolveMenuTarget(HWND hwnd,
         } else {
             std::vector<std::wstring> selectedPaths;
             UINT shellSelectedCount = GetSelectedPaths(shellView, selectedPaths, 2);
+            if (shellSelectedCount > 0) {
+                sawSelection = true;
+            }
+            if (!selectedPaths.empty()) {
+                sawSelection = true;
+            }
 
             if (selectedPaths.empty()) {
                 if (!hasSelectedCount && shellSelectedCount == 0) {
@@ -1450,7 +1466,8 @@ static bool ResolveMenuTarget(HWND hwnd,
         folderView->Release();
     }
 
-    if (!ok && isDesktopShellView) {
+    if (ShouldUseDesktopFolderFallback(ok, sawSelection,
+                                       isDesktopShellView)) {
         std::wstring folderPath;
         if (GetDesktopFolderPath(folderPath) && IsDirectoryPath(folderPath)) {
             targetOut.kind = TargetKind::FolderBackground;
