@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              windows-update-control-panel-restorer
-// @name            Windows Update Control Panel Restorer
+// @name            Windows Update Control Panel Page Restorer
 // @description     This mod restores the Windows Update Control Panel page in Windows 10 and Windows 11
 // @version         1.0.0
 // @author          babamohammed
@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lwininet -ladvapi32 -lcrypt32 -lole32 -luuid -loleaut32 -lgdi32
+// @compilerOptions -lwininet -ladvapi32 -lcrypt32 -lole32 -luuid -loleaut32 -lgdi32 -lcomctl32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -43,6 +43,9 @@
 - LinkSystemSettingsText: false
   $name: Link system settings text
   $description: This setting makes the "system settings" part of the recommendation text a blue link that opens Windows Update in the Settings app (ms-settings:windowsupdate). Disabled by default.
+- RemoveLegacyBrokenOption: true
+  $name: Remove Legacy Broken Option Fix
+  $description: When Windows Update is unavailable or disabled, the restored page shows a legacy red "Check for updates for your PC" box whose button cannot work (the service is stopped). With this enabled, that broken legacy box is removed so only the "Turn on automatic updating" box remains (plus the blue settings link when the recreated interface is shown). Disable to keep the legacy box.
 */
 // ==/WindhawkModSettings==
 
@@ -59,6 +62,8 @@ This is a reimplementation, not the original Windows Update client. Some buttons
 and small visual details are intentionally limited, and more details may be
 improved in future versions.
 
+The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+
 ## **Screenshot**
 
 ![Windows Update Control Panel Restorer](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winupdate.PNG)
@@ -69,6 +74,13 @@ improved in future versions.
 - Windows 7 or Windows 8.1 skin option for the status/app icon.
 - Friendly notice when Windows Update is disabled or unavailable.
 - Optional available-updates banner and optional link to Windows Update Settings.
+- Optional "Remove Legacy Broken Option Fix" that hides the broken legacy
+  "Check for updates for your PC" box when Windows Update is unavailable, so
+  only the "Turn on automatic updating" box (and the settings link) remains.
+- Restored classic "Important updates" selector on the "Change settings" page:
+  the four classic options (install automatically / download / check / never)
+  are shown in every supported language, the current AUOptions value is read
+  from the registry and selecting an option writes it back.
 - Multilingual UI: English, Italian, Spanish, French, Turkish, Russian,
   Portuguese, Chinese, Polish, Dutch, or auto-detect.
 
@@ -98,6 +110,12 @@ If you encounter issues, please report them to the author of the mod.
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
 #include <windowsx.h>  // GET_Y_LPARAM
 #include <wininet.h>
 #include <wincrypt.h>
@@ -106,6 +124,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <winsvc.h>
 #include <shlobj.h>
 #include <shellapi.h>
+#include <commctrl.h>
 #include <objidl.h>
 #include <oaidl.h>
 #include <oleauto.h>
@@ -609,6 +628,13 @@ static std::atomic<bool> g_showAvailableUpdates{false};
 // made clickable; the text is otherwise unchanged. Disabled by default.
 static std::atomic<bool> g_linkSystemSettingsText{false};
 
+// Whether to remove the broken legacy "Check for updates for your PC" red box
+// (moduleCheckForUpdates) when Windows Update is unavailable/disabled and only
+// the "Turn on automatic updating" box is shown. With the service stopped that
+// legacy box's button cannot work, so it is removed by default. Controlled by
+// the "RemoveLegacyBrokenOption" setting ("Remove Legacy Broken Option Fix").
+static std::atomic<bool> g_removeLegacyBrokenOption{true};
+
 // Debug/preview flag: when set, the restored page renders the "pending
 // updates" interface (orange strip, "Pending restart", shield icon) even when
 // Windows reports no pending update. This is a developer-only diagnostic switch.
@@ -805,10 +831,10 @@ static const WucltuxEmbeddedString kWucltuxMuiStrings[] = {
     { 330, L"Review important updates", L"Rivedi gli aggiornamenti importanti", L"Revisar las actualizaciones importantes", L"Passer en revue les mises à jour importantes", L"Önemli güncellemeleri gözden geçirin", L"Просмотр важных обновлений", L"Revisar atualizações importantes", L"查看重要更新", L"Przejrzyj ważne aktualizacje", L"Belangrijke updates controleren" },
     { 331, L"Review all important updates", L"Rivedi tutti gli aggiornamenti importanti", L"Revisar todas las actualizaciones importantes", L"Passer en revue toutes les mises à jour importantes", L"Tüm önemli güncellemeleri gözden geçirin", L"Просмотр всех важных обновлений", L"Revisar todas as atualizações importantes", L"查看所有重要更新", L"Przejrzyj wszystkie ważne aktualizacje", L"Alle belangrijke updates controleren" },
     { 333, L"Downloaded", L"Scaricato", L"Descargada", L"Téléchargée", L"İndirildi", L"Загружено", L"Baixado", L"已下载", L"Pobrano", L"Gedownload" },
-    { 334, L"Install updates automatically (recommended)", L"Installa aggiornamenti automaticamente (consigliato)", L"Instalar actualizaciones automáticamente (recomendado)", L"Installer automatiquement les mises à jour (recommandé)", L"Güncellemeleri otomatik olarak yükle (önerilir)", L"Автоматически устанавливать обновления (рекомендуется)", L"Instalar atualizações automaticamente (recomendado)", L"自动安装更新（推荐）", L"Automatycznie instaluj aktualizacje (zalecane)", L"Updates automatisch installeren (aanbevolen)" },
-    { 335, L"Download updates but let me choose whether to install them", L"Scarica gli aggiornamenti ma lascia che sia io a decidere se installarli", L"Descargar actualizaciones pero permitirme elegir si instalarlas", L"Télécharger les mises à jour mais me laisser choisir de les installer", L"Güncellemeleri indir, ancak bunları yükleyip yüklemeyeceğimi ben seçeyim", L"Загружать обновления, но я сам решу, устанавливать ли их", L"Baixar atualizações, mas deixar que eu escolha se desejo instalá-las", L"下载更新，但让我选择是否安装", L"Pobieraj aktualizacje, ale pozwól mi wybrać, czy je zainstalować", L"Updates downloaden, maar mij laten kiezen of ik ze wil installeren" },
-    { 336, L"Check for updates but let me choose whether to download and install them", L"Controlla gli aggiornamenti ma lascia che sia io a decidere se scaricarli e installarli", L"Comprobar actualizaciones pero permitirme elegir si descargarlas e instalarlas", L"Rechercher les mises à jour mais me laisser choisir de les télécharger et de les installer", L"Güncellemeleri denetle, ancak bunları indirip yükleyip yüklemeyeceğimi ben seçeyim", L"Проверять обновления, но я сам решу, загружать и устанавливать ли их", L"Verificar atualizações, mas deixar que eu escolha se desejo baixá-las e instalá-las", L"检查更新，但让我选择是否下载和安装", L"Sprawdzaj aktualizacje, ale pozwól mi wybrać, czy je pobrać i zainstalować", L"Controleren op updates, maar mij laten kiezen of ik ze wil downloaden en installeren" },
-    { 337, L"Never check for updates (not recommended)", L"Non controllare mai gli aggiornamenti (sconsigliato)", L"No comprobar nunca las actualizaciones (no recomendado)", L"Ne jamais rechercher les mises à jour (non recommandé)", L"Güncellemeleri hiç denetleme (önerilmez)", L"Никогда не проверять обновления (не рекомендуется)", L"Nunca verificar atualizações (não recomendado)", L"从不检查更新（不推荐）", L"Nigdy nie sprawdzaj aktualizacji (niezalecane)", L"Nooit naar updates zoeken (niet aanbevolen)" },
+    { 334, L"Install updates automatically (recommended)", L"Installa gli aggiornamenti automaticamente (scelta consigliata)", L"Instalar actualizaciones automáticamente (recomendado)", L"Installer automatiquement les mises à jour (recommandé)", L"Güncellemeleri otomatik olarak yükle (önerilir)", L"Автоматически устанавливать обновления (рекомендуется)", L"Instalar atualizações automaticamente (recomendado)", L"自动安装更新（推荐）", L"Automatycznie instaluj aktualizacje (zalecane)", L"Updates automatisch installeren (aanbevolen)" },
+    { 335, L"Download updates but let me choose whether to install them", L"Scarica gli aggiornamenti ma consenti di scegliere se installarli", L"Descargar actualizaciones pero permitirme elegir si instalarlas", L"Télécharger les mises à jour mais me laisser choisir de les installer", L"Güncellemeleri indir, ancak bunları yükleyip yüklemeyeceğimi ben seçeyim", L"Загружать обновления, но я сам решу, устанавливать ли их", L"Baixar atualizações, mas deixar que eu escolha se desejo instalá-las", L"下载更新，但让我选择是否安装", L"Pobieraj aktualizacje, ale pozwól mi wybrać, czy je zainstalować", L"Updates downloaden, maar mij laten kiezen of ik ze wil installeren" },
+    { 336, L"Check for updates but let me choose whether to download and install them", L"Verifica la disponibilità di aggiornamenti ma consenti di scegliere se scaricarli e installarli", L"Comprobar actualizaciones pero permitirme elegir si descargarlas e instalarlas", L"Rechercher les mises à jour mais me laisser choisir de les télécharger et de les installer", L"Güncellemeleri denetle, ancak bunları indirip yükleyip yüklemeyeceğimi ben seçeyim", L"Проверять обновления, но я сам решу, загружать и устанавливать ли их", L"Verificar atualizações, mas deixar que eu escolha se desejo baixá-las e instalá-las", L"检查更新，但让我选择是否下载和安装", L"Sprawdzaj aktualizacje, ale pozwól mi wybrać, czy je pobrać i zainstalować", L"Controleren op updates, maar mij laten kiezen of ik ze wil downloaden en installeren" },
+    { 337, L"Never check for updates (not recommended)", L"Non verificare mai la disponibilità di aggiornamenti (scelta sconsigliata)", L"No comprobar nunca las actualizaciones (no recomendado)", L"Ne jamais rechercher les mises à jour (non recommandé)", L"Güncellemeleri hiç denetleme (önerilmez)", L"Никогда не проверять обновления (не рекомендуется)", L"Nunca verificar atualizações (não recomendado)", L"从不检查更新（不推荐）", L"Nigdy nie sprawdzaj aktualizacji (niezalecane)", L"Nooit naar updates zoeken (niet aanbevolen)" },
     { 338, L"Please select an option:", L"Seleziona un'opzione:", L"Seleccione una opción:", L"Veuillez sélectionner une option :", L"Lütfen bir seçenek seçin:", L"Выберите вариант:", L"Selecione uma opção:", L"请选择选项：", L"Wybierz opcję:", L"Selecteer een optie:" },
     { 339, L"Download and install your selected updates", L"Scarica e installa gli aggiornamenti selezionati", L"Descargar e instalar las actualizaciones seleccionadas", L"Télécharger et installer les mises à jour sélectionnées", L"Seçilen güncellemeleri indirip yükleyin", L"Загрузить и установить выбранные обновления", L"Baixar e instalar as atualizações selecionadas", L"下载并安装所选更新", L"Pobierz i zainstaluj wybrane aktualizacje", L"Download de geselecteerde updates en installeer ze" },
     { 340, L"Install your selected updates", L"Installa gli aggiornamenti selezionati", L"Instalar las actualizaciones seleccionadas", L"Installer les mises à jour sélectionnées", L"Seçilen güncellemeleri yükleyin", L"Установить выбранные обновления", L"Instalar as atualizações selecionadas", L"安装所选更新", L"Zainstaluj wybrane aktualizacje", L"Installeer de geselecteerde updates" },
@@ -950,7 +976,7 @@ static const WucltuxEmbeddedString kWucltuxMuiStrings[] = {
     { 1268, L"Optional", L"Facoltativo", L"Opcional", L"Facultatif", L"İsteğe bağlı", L"Необязательное", L"Opcional", L"可选", L"Opcjonalne", L"Optioneel" },
     { 1269, L"Recommended Update", L"Aggiornamento consigliato", L"Actualización recomendada", L"Mise à jour recommandée", L"Önerilen Güncelleme", L"Рекомендуемое обновление", L"Atualização recomendada", L"推荐更新", L"Zalecana aktualizacja", L"Aanbevolen update" },
     { 1270, L"No updates are available.", L"Nessun aggiornamento disponibile.", L"No hay actualizaciones disponibles.", L"Aucune mise à jour disponible.", L"Kullanılabilir güncelleme yok.", L"Нет доступных обновлений.", L"Nenhuma atualização disponível.", L"没有可用更新。", L"Brak dostępnych aktualizacji.", L"Er zijn geen updates beschikbaar." },
-    { 1272, L"Windows will never check for, download, or install updates.", L"Windows non controllerà, scaricherà né installerà mai gli aggiornamenti.", L"Windows nunca comprobará, descargará ni instalará actualizaciones.", L"Windows ne recherchera, ne téléchargera ni n'installera jamais les mises à jour.", L"Windows güncellemeleri asla denetlemeyecek, indirmeyecek veya yüklemeyecek.", L"Windows никогда не будет проверять, загружать или устанавливать обновления.", L"O Windows nunca verificará, baixará nem instalará atualizações.", L"Windows 将永不检查、下载或安装更新。", L"System Windows nigdy nie będzie sprawdzać, pobierać ani instalować aktualizacji.", L"Windows zal nooit controleren op, downloaden of installeren van updates." },
+    { 1272, L"", L"", L"", L"", L"", L"", L"", L"", L"", L"" },
     { 1273, L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%", L"%rebootPendingForInstall%" },
     { 1279, L"There was a problem getting the list of updates for your PC. To continue, please reopen Windows Update", L"Si è verificato un problema durante il recupero dell'elenco degli aggiornamenti per il tuo PC. Per continuare, riapri Windows Update", L"Hubo un problema al obtener la lista de actualizaciones para su PC. Para continuar, vuelva a abrir Windows Update", L"Un problème est survenu lors de l'obtention de la liste des mises à jour pour votre PC. Pour continuer, rouvrez Windows Update", L"Bilgisayarınız için güncelleme listesi alınırken bir sorun oluştu. Devam etmek için Windows Update'i yeniden açın", L"При получении списка обновлений для компьютера возникла проблема. Чтобы продолжить, снова откройте Центр обновления Windows", L"Houve um problema ao obter a lista de atualizações para seu PC. Para continuar, reabra o Windows Update", L"获取你电脑的更新列表时出现问题。若要继续，请重新打开 Windows 更新", L"Wystąpił problem podczas pobierania listy aktualizacji dla Twojego komputera. Aby kontynuować, otwórz ponownie Windows Update", L"Er is een probleem opgetreden bij het ophalen van de updatelijst voor uw pc. Open Windows Update opnieuw om verder te gaan" },
     { 1281, L"Time until reboot", L"Tempo prima del riavvio", L"Tiempo hasta el reinicio", L"Temps avant redémarrage", L"Yeniden başlatmaya kalan süre", L"Время до перезагрузки", L"Tempo até a reinicialização", L"距重启的时间", L"Czas do ponownego uruchomienia", L"Tijd tot opnieuw opstarten" },
@@ -3989,6 +4015,7 @@ static void InstallLegacyWarningIconHook() {
 #define WU_DUI_THISCALL __thiscall
 #endif
 
+
 using DUISetXML_t = HRESULT(WU_DUI_THISCALL*)(void*, const WCHAR*, HINSTANCE, HINSTANCE);
 using DUISetXMLFromResource_t = HRESULT(WU_DUI_THISCALL*)(
     void*, PCWSTR, PCWSTR, HMODULE, HINSTANCE, HINSTANCE);
@@ -4113,6 +4140,7 @@ static void LoadLanguageSetting() {
     g_showServiceNotice.store(Wh_GetIntSetting(L"ShowServiceNotice") != 0);
     g_showAvailableUpdates.store(Wh_GetIntSetting(L"ShowAvailableUpdates") != 0);
     g_linkSystemSettingsText.store(Wh_GetIntSetting(L"LinkSystemSettingsText") != 0);
+    g_removeLegacyBrokenOption.store(Wh_GetIntSetting(L"RemoveLegacyBrokenOption") != 0);
     // Debug: force the "pending updates" interface even without a real pending update.
     if constexpr (kWuDebugForcePendingEnabled)
         g_debugForcePending.store(true);
@@ -4135,41 +4163,6 @@ static std::wstring XmlEscape(const wchar_t* s) {
         }
     }
     return out;
-}
-
-// Returns the translated "bold" title and the "normal" explanation for the
-// currently selected language. English is used as the fallback.
-static void SelectServiceMessage(const wchar_t*& title, const wchar_t*& text) {
-    struct Msg { const wchar_t* title; const wchar_t* text; };
-
-    static const std::unordered_map<std::wstring, Msg> kMessages = {
-        { L"en", { L"The legacy Windows Update service is currently not available",
-                   L"The classic service is not available on this version of Windows. It is recommended to use the modern Settings app to do operations with updates" } },
-        { L"it", { L"Il servizio Windows Update legacy non è al momento disponibile",
-                   L"Il servizio classico non è disponibile in questa versione di Windows. Si consiglia di usare l'app Impostazioni moderna per eseguire operazioni con gli aggiornamenti" } },
-        { L"es", { L"El servicio heredado de Windows Update no está disponible actualmente",
-                   L"El servicio clásico no está disponible en esta versión de Windows. Se recomienda usar la aplicación Configuración moderna para realizar operaciones con las actualizaciones" } },
-        { L"fr", { L"Le service Windows Update hérité n'est actuellement pas disponible",
-                   L"Le service classique n'est pas disponible sur cette version de Windows. Il est recommandé d'utiliser l'application Paramètres moderne pour effectuer des opérations avec les mises à jour" } },
-        { L"tr", { L"Eski Windows Update hizmeti şu anda kullanılamıyor",
-                   L"Klasik hizmet bu Windows sürümünde kullanılamıyor. Güncellemelerle işlem yapmak için modern Ayarlar uygulamasını kullanmanız önerilir" } },
-        { L"ru", { L"Устаревшая служба Windows Update в настоящее время недоступна",
-                   L"Классическая служба недоступна в этой версии Windows. Рекомендуется использовать современное приложение «Параметры» для операций с обновлениями" } },
-        { L"pt", { L"O serviço herdado do Windows Update não está disponível no momento",
-                   L"O serviço clássico não está disponível nesta versão do Windows. Recomenda-se usar o aplicativo Configurações moderno para fazer operações com as atualizações" } },
-        { L"zh", { L"旧版 Windows 更新服务当前不可用",
-                   L"此版本的 Windows 中经典服务不可用。建议使用现代“设置”应用执行更新操作" } },
-        { L"pl", { L"Starsza usługa Windows Update jest obecnie niedostępna",
-                   L"Klasyczna usługa nie jest dostępna w tej wersji systemu Windows. Zaleca się korzystanie z nowoczesnej aplikacji Ustawienia w celu wykonywania operacji na aktualizacjach" } },
-        { L"nl", { L"De verouderde Windows Update-service is momenteel niet beschikbaar",
-                   L"De klassieke service is niet beschikbaar in deze versie van Windows. Het wordt aanbevolen om de moderne app Instellingen te gebruiken om bewerkingen met updates uit te voeren" } },
-    };
-
-    auto it = kMessages.find(g_language);
-    if (it == kMessages.end()) it = kMessages.find(L"en"); // fallback
-    const Msg& m = it->second;
-    title = m.title;
-    text = m.text;
 }
 
 
@@ -4268,6 +4261,135 @@ static std::wstring BuildChangeWindowsUpdateSettingsLinkXml() {
         L"\"/></NavigateButton>";
 }
 
+// -----------------------------------------------------------------------------
+// Blue link to the Windows Update settings child page ("Open Windows Update
+// settings"). Shown only when the recreated hub cannot be built (Windows Update
+// service unavailable / AU not configured) and only the red warning box remains
+// on the page, so the user still gets a one-click path to the classic settings
+// page (shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\pageSettings).
+//
+// Additionally, there is this explorer shell:::{1138506a_b949_46a7_b6c0_ee26499fdeaf} which I don't know what was used for
+// The link is NOT attached to the native moduleAUNotConfigured element: wucltux
+// re-shows/re-sizes that module at runtime and overrides any XML added inside
+// it (and re-appends it, pushing siblings below it). Instead, when only the red
+// box would be shown, the native module is collapsed to a zero-size element and
+// BuildRedBoxFallbackXml() renders a faithful recreation of the red box with
+// this link directly below it - a self-contained module wucltux does not touch.
+// -----------------------------------------------------------------------------
+static const wchar_t* SelectOpenWindowsUpdateSettingsLinkText() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Open Windows Update settings" },
+        { L"it", L"Apri Impostazioni di Windows Update" },
+        { L"es", L"Abrir la configuración de Windows Update" },
+        { L"fr", L"Ouvrir les paramètres de Windows Update" },
+        { L"tr", L"Windows Update ayarlarını aç" },
+        { L"ru", L"Открыть параметры Центра обновления Windows" },
+        { L"pt", L"Abrir as configurações do Windows Update" },
+        { L"zh", L"打开 Windows 更新设置" },
+        { L"pl", L"Otwórz ustawienia Windows Update" },
+        { L"nl", L"Windows Update-instellingen openen" },
+    };
+    auto it = kTexts.find(g_language);
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
+// Forward declaration: defined below (used by BuildRedBoxFallbackXml).
+static const wchar_t* WuOptionText(DWORD opt) {
+    switch (opt) {
+        case 4: return EmbeddedMuiString(334);  // Install updates automatically (recommended)
+        case 3: return EmbeddedMuiString(335);  // Download updates but let me choose...
+        case 2: return EmbeddedMuiString(336);  // Check for updates but let me choose...
+        case 1: return EmbeddedMuiString(337);  // Never check for updates (not recommended)
+        default: return EmbeddedMuiString(334);
+    }
+}
+
+// Replaced with native ComboBox
+
+static std::wstring BuildOpenWindowsUpdateSettingsLinkXml() {
+    // Opens the classic settings child page via the shell URI directly
+    // (shell:::{36EEF7DB-...}\pageSettings). We deliberately do NOT launch
+    // "%SystemRoot%\explorer.exe" with shellexecuteparams: that spawns a NEW
+    // explorer.exe process (which reloads Windhawk mods and then hands the
+    // command over), which is unstable inside the shell and crashes explorer.
+    // A bare shell: URI is dispatched by the existing shell instance - same
+    // mechanism as ms-settings: and https:// links used elsewhere in the mod.
+    return
+        L"<element layoutpos=\"top\" layout=\"flowlayout()\" margin=\"rect(12rp,8rp,12rp,0)\">"
+        L"<NavigateButton layout=\"flowlayout()\" shellexecute=\"shell:::"
+        + std::wstring(kAppletClsid) + L"\\pageSettings\">"
+        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
+        + XmlEscape(SelectOpenWindowsUpdateSettingsLinkText()) +
+        L"\"/></NavigateButton></element>";
+}
+
+// -----------------------------------------------------------------------------
+// Faithful recreation of the native red "Automatic updates are not configured"
+// box (moduleAUNotConfigured, UIFILE 123) with the blue settings link below it.
+// Used when Windows Update is unavailable / AU is not configured: the native
+// module is collapsed to a zero-size element (atom stays resolvable -> no
+// S_FALSE, no provider fallback re-materialization, as proven by the hub path)
+// and this self-contained module is rendered instead. The inner atoms
+// (actionTurnOnAU, actionAdvancedAUSettings, ...) are kept identical so
+// wucltux's code-behind still finds them and the "Turn on automatic updating"
+// button keeps working; the module root gets a unique atom wucltux ignores, so
+// nothing is moved, resized or overridden at runtime and the link stays put.
+//
+// includeLink controls whether the blue "Open Windows Update settings" link is
+// appended below the box: it is shown with "Show recreated interface" ON and
+// omitted with it OFF. The box itself is always rendered - even with the
+// recreated interface disabled, the user must still get the "Turn on automatic
+// updating" box (the native one is re-shown/overridden by the provider and
+// unreliable on modern builds).
+// -----------------------------------------------------------------------------
+static std::wstring BuildRedBoxFallbackXml(bool includeLink = true) {
+    std::wstring xml =
+        L"<element id=\"atom(wuamodern_redbox_fallback)\" sheet=\"wuappstyle\" layoutpos=\"top\" "
+        L"layout=\"borderlayout()\" margin=\"rect(0,12rp,0,12rp)\">"
+        // --- the red box itself (native moduleborder1 structure) ---
+        L"<element class=\"moduleborder1\" layoutpos=\"top\" layout=\"borderlayout()\">"
+        L"<element id=\"atom(areaModuleColorBox)\" layoutpos=\"left\" layout=\"borderlayout()\" "
+        L"sheet=\"wuappstyle\" class=\"security_box_gradient_red\"/>"
+        L"<element id=\"atom(areaModuleIcon)\" layoutpos=\"left\" layout=\"borderlayout()\" "
+        L"padding=\"rect(12rp,12rp,4rp,0)\" contentalign=\"topleft\">"
+        L"<element layoutpos=\"top\" layout=\"borderlayout()\" contentalign=\"topleft\">"
+        L"<viewer class=\"wuapp_module_img\">"
+        L"<element id=\"atom(elementRedModuleIcon)\" class=\"wuapp_module_img\" layoutpos=\"top\" "
+        L"content=\"icon(105,48rp,48rp,library(imageres.dll))\"/>"
+        L"</viewer></element></element>"
+        L"<element layoutpos=\"top\" layout=\"flowlayout(1,0,0,2)\" padding=\"rect(0,12rp,12rp,4rp)\">"
+        L"<element class=\"wuapp_module_instruction\" content=\"resstr(1149)\"/>"
+        L"</element>"
+        L"<element layoutpos=\"top\" layout=\"flowlayout(1,0,0,2)\" padding=\"rect(2rp,0,48rp,0)\">"
+        L"<element class=\"wuapp_content_title\" content=\"resstr(1153)\"/>"
+        L"</element>"
+        L"<element layoutpos=\"top\" layout=\"flowlayout(1,0,0,2)\" padding=\"rect(2rp,12rp,48rp,0)\">"
+        L"<element sheet=\"wu_cp_style\" class=\"cp_content_text\" content=\"resstr(1154)\"/>"
+        L"</element>"
+        L"<element layoutpos=\"top\" layout=\"borderlayout()\" padding=\"rect(0,7rp,18rp,18rp)\">"
+        L"<element layoutpos=\"right\" layout=\"borderlayout()\" padding=\"rect(0,0,0,0)\">"
+        L"<element layoutpos=\"top\" layout=\"flowlayout(0,0,2,2)\" padding=\"rect(0,0,0,0)\">"
+        L"<viewer>"
+        L"<CCPushButton id=\"atom(actionTurnOnAU)\" layoutpos=\"right\" active=\"mouse | keyboard\" "
+        L"sheet=\"wu_cp_style\" shortcut=\"auto\" content=\"resstr(1150)\"/>"
+        L"</viewer></element>"
+        L"<element id=\"atom(actionAdvancedAUSettingsArea)\" layoutpos=\"top\" layout=\"flowlayout(0,0,2,2)\" "
+        L"padding=\"rect(0,2rp,0,0)\">"
+        L"<NavigateButton id=\"atom(actionAdvancedAUSettings)\" layoutpos=\"top\" layout=\"flowlayout()\" "
+        L"padding=\"rect(0,0,0,0)\" navigationtargetroot=\"\" navigationtargetrelative=\"pageSettings\">"
+        L"<Button id=\"atom(actionAdvancedAUSettingsText)\" sheet=\"wu_cp_style\" class=\"cp_content_link\" "
+        L"active=\"mouse | keyboard\" content=\"resstr(1254)\"/>"
+        L"</NavigateButton></element>"
+        L"</element></element></element>";
+    // --- our blue link, directly below the red box (only with recreated UI on) ---
+    // Opens the settings page, which now shows the classic option list and the
+    // blue "change update frequency" link that opens the Win32 dialog.
+    if (includeLink) xml += BuildOpenWindowsUpdateSettingsLinkXml();
+    xml += L"</element>";
+    return xml;
+}
+
 static bool IsWindowsUpdatePageXml(const std::wstring& xml) {
     // The start/status and automatic-update pages do not all share one action
     // name. These are stable string/action references in the Win 8.1 wucltux
@@ -4296,6 +4418,907 @@ static bool FindElementEnd(const std::wstring& xml, size_t start, size_t& end) {
     return false;
 }
 
+// -----------------------------------------------------------------------------
+// "Important updates" selector on the classic settings page (pageSettings).
+//
+// On modern Windows the legacy combobox (atom(auOptionSelectorCombobox)) is
+// populated by wucltux code-behind that no longer works (the Windows Update
+// service is stopped/broken), so the "Important updates" section shows an
+// empty box. The atom cannot be removed (the page would fail to load), so we
+// collapse it to a zero-size element (atom stays resolvable, same trick as the
+// hub modules) and render our own list of the four classic options instead,
+// reading the current AUOptions value from the registry. Clicking an option
+// writes AUOptions through a private "wurestorer:auoptions=N" URI handled by
+// the ShellExecuteExW/ShellExecuteW hooks below.
+//
+// AUOptions values (Windows Update Agent / classic Control Panel):
+//   4 = install updates automatically (recommended)          -> resstr(334)
+//   3 = download updates but let me choose whether to install -> resstr(335)
+//   2 = check for updates but let me choose download/install  -> resstr(336)
+//   1 = never check for updates (not recommended)             -> resstr(337)
+// -----------------------------------------------------------------------------
+static const wchar_t* kWuRestorerProtocol = L"wurestorer:";
+
+static DWORD ReadAuOptionsValue() {
+    // Windows 10/11 honour the Group-Policy key first; read it when present so
+    // the shown selection reflects the effective state.
+    HKEY hPolicy = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU",
+            0, KEY_READ, &hPolicy) == ERROR_SUCCESS) {
+        DWORD noAuto = 0, size = sizeof(noAuto);
+        if (RegQueryValueExW(hPolicy, L"NoAutoUpdate", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&noAuto), &size) == ERROR_SUCCESS && noAuto != 0) {
+            RegCloseKey(hPolicy);
+            return 1; // never check
+        }
+        RegCloseKey(hPolicy);
+    }
+
+    DWORD auOptions = 4; // default: recommended
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
+            0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD noAuto = 0, size = sizeof(noAuto);
+        if (RegQueryValueExW(hKey, L"NoAutoUpdate", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&noAuto), &size) == ERROR_SUCCESS && noAuto != 0) {
+            auOptions = 1; // never check
+        } else {
+            size = sizeof(auOptions);
+            if (RegQueryValueExW(hKey, L"AUOptions", nullptr, nullptr,
+                                 reinterpret_cast<LPBYTE>(&auOptions), &size) != ERROR_SUCCESS ||
+                auOptions < 1 || auOptions > 4) {
+                auOptions = 4;
+            }
+        }
+        RegCloseKey(hKey);
+    }
+    return auOptions;
+}
+
+static bool WriteAuOptionsValue(DWORD value) {
+    if (value < 1 || value > 4) return false;
+    const DWORD noAuto = (value == 1) ? 1 : 0;
+    bool ok = true;
+
+    // 1) Local (classic) Automatic Updates settings.
+    HKEY hKey = nullptr;
+    LSTATUS status = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
+        0, KEY_SET_VALUE, &hKey);
+    if (status == ERROR_SUCCESS) {
+        if (RegSetValueExW(hKey, L"NoAutoUpdate", 0, REG_DWORD,
+                           reinterpret_cast<const BYTE*>(&noAuto), sizeof(noAuto)) != ERROR_SUCCESS)
+            ok = false;
+        if (RegSetValueExW(hKey, L"AUOptions", 0, REG_DWORD,
+                           reinterpret_cast<const BYTE*>(&value), sizeof(value)) != ERROR_SUCCESS)
+            ok = false;
+        RegCloseKey(hKey);
+    } else {
+        Wh_Log(L"Windows Update Restorer: AUOptions local write failed to open key (status=%d)", status);
+        ok = false;
+    }
+
+    // 2) Group-Policy key (HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU):
+    //    this is the key Windows 10/11 actually honour for NoAutoUpdate. Write it
+    //    best-effort - it needs the key to exist (created here) and admin rights.
+    HKEY hPolicy = nullptr;
+    status = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU",
+        0, nullptr, 0, KEY_SET_VALUE, nullptr, &hPolicy, nullptr);
+    if (status == ERROR_SUCCESS) {
+        if (RegSetValueExW(hPolicy, L"NoAutoUpdate", 0, REG_DWORD,
+                           reinterpret_cast<const BYTE*>(&noAuto), sizeof(noAuto)) != ERROR_SUCCESS)
+            ok = false;
+        if (RegSetValueExW(hPolicy, L"AUOptions", 0, REG_DWORD,
+                           reinterpret_cast<const BYTE*>(&value), sizeof(value)) != ERROR_SUCCESS)
+            ok = false;
+        RegCloseKey(hPolicy);
+    } else {
+        Wh_Log(L"Windows Update Restorer: AUOptions policy write failed (status=%d)", status);
+    }
+
+    Wh_Log(L"Windows Update Restorer: AUOptions set to %lu (ok=%d)", value, static_cast<int>(ok));
+    return ok;
+}
+
+// Builds the classic four-option "Important updates" list, with the current
+// AUOptions selection marked. Labels come from the embedded multilingual MUI
+// table via resstr() so they follow the selected language automatically.
+// Short, formal introduction shown above the ComboBox on the settings page:
+// explains what Windows Update is for and why updates matter. Very brief.
+static const wchar_t* SelectUpdateIntroText() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Windows Update keeps your PC secure and reliable by installing the latest updates." },
+        { L"it", L"Windows Update mantiene il PC sicuro e affidabile installando gli aggiornamenti più recenti." },
+        { L"es", L"Windows Update mantiene su PC seguro y fiable instalando las actualizaciones más recientes." },
+        { L"fr", L"Windows Update maintient votre PC sûr et fiable en installant les dernières mises à jour." },
+        { L"tr", L"Windows Update, bilgisayarınızı en son güncellemeleri yükleyerek güvenli ve güvenilir tutar." },
+        { L"ru", L"Центр обновления Windows поддерживает компьютер в безопасности и стабильной работе, устанавливая последние обновления." },
+        { L"pt", L"O Windows Update mantém seu PC seguro e confiável instalando as atualizações mais recentes." },
+        { L"zh", L"Windows 更新通过安装最新更新，让您的电脑保持安全和稳定。" },
+        { L"pl", L"Windows Update utrzymuje komputer bezpieczny i niezawodny, instalując najnowsze aktualizacje." },
+        { L"nl", L"Windows Update houdt uw pc veilig en betrouwbaar door de nieuwste updates te installeren." },
+    };
+    auto it = kTexts.find(g_language);
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
+// Renders the introduction above the native ComboBox control
+// FIX: originale wucltux.dll (UIFILE 125) posiziona la combobox INLINE dentro al flowlayout delle icone (layoutpos="left", width="10rp",
+// margin="rect(0,3rp,0,10rp)", classe aupsp_auComboBox). Il placeholder precedente era un elemento "top" a larghezza piena (28rp, 0,8rp,0,12rp)
+// posizionato SOPRA la riga delle icone, non inline: risultava spostato (~90px in basso con fallback 180,240) e la dropdown ereditava coordinate errate
+// (altezza dropdown = altezza collapsed = 28rp -> lista troncata a 1 voce). Qui si mantiene solo il testo introduttivo come riga "top"; il placeholder
+// vero viene iniettato INLINE al posto del <combobox> originale (vedi PatchSettingsPageXml), usando identica posizione originale ma con width corretta (285rp)
+// per contenere le 4 opzioni lunghe e altezza dropdown separata.
+static std::wstring BuildUpdateIntroTextXml() {
+    return
+        L"<element layoutpos=\"top\" layout=\"flowlayout(0,0,0,2)\" margin=\"rect(0,0,0,6rp)\">"
+        L"<element id=\"atom(auUpdateIntroText)\" sheet=\"wuappstyle\" class=\"cp_content_text\" content=\""
+        + XmlEscape(SelectUpdateIntroText()) +
+        L"\"/></element>";
+}
+
+static bool FindModuleContaining(const std::wstring& xml, const std::wstring& markerA,
+                                 const std::wstring& markerB, size_t& start, size_t& end) {
+    const size_t mA = xml.find(markerA);
+    const size_t mB = xml.find(markerB);
+    if (mA == std::wstring::npos || mB == std::wstring::npos) return false;
+    const size_t m = (mA < mB) ? mB : mA;
+    bool found = false;
+    for (size_t i = 0; i < xml.size();) {
+        const size_t lt = xml.find(L"<element", i);
+        if (lt == std::wstring::npos || lt > m) break;
+        const size_t gt = xml.find(L'>', lt);
+        if (gt == std::wstring::npos) break;
+        if (gt == lt || xml[gt - 1] == L'/') { i = gt + 1; continue; }
+        size_t e = 0;
+        if (!FindElementEnd(xml, lt, e)) break;
+        if (lt < mA && lt < mB && e > mA && e > mB) {
+            if (!found || lt > start) { start = lt; end = e; found = true; }
+        }
+        i = gt + 1;
+    }
+    return found;
+}
+
+// =============================================================================
+// Native Win32 Drop-down ComboBox for Settings Page ("pageSettings")
+// =============================================================================
+#define IDC_NATIVE_AU_COMBO 0x7720
+
+static HWND g_hwndDirectUiParent = nullptr;
+static std::atomic<bool> g_isSettingsPageActive{false};
+
+typedef void* DirectUI_Element;
+typedef DirectUI_Element (*DUI_HWNDElement_GetElement_t)(HWND);
+typedef DirectUI_Element (*DUI_Element_FindDescendent_t)(DirectUI_Element, unsigned short);
+typedef HRESULT (*DUI_Element_GetBounds_t)(DirectUI_Element, RECT*);
+
+static void RefreshWuPage(HWND host);
+static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static void PositionNativeSettingsCombobox(HWND hwndParent);
+static void CreateOrUpdateNativeSettingsCombobox(HWND hwndParent = nullptr);
+
+// =============================================================================
+// NATIVE DIRECTUI COMBOBOX REPAIR (No Win32 Overlay)
+// =============================================================================
+
+typedef ATOM (WINAPI *DirectUI_StrToID_t)(const wchar_t* str);
+typedef void* (*DirectUI_FindDescendent_t)(void* element, ATOM atom);
+typedef HRESULT (*DirectUI_Combobox_AddString_t)(void* combobox, const wchar_t* str);
+typedef HRESULT (*DirectUI_Combobox_SetSelection_t)(void* combobox, int index);
+typedef int (*DirectUI_Combobox_GetSelection_t)(void* combobox);
+typedef HRESULT (*DirectUI_Element_SetEnabled_t)(void* element, bool enabled);
+typedef void* (*DirectUI_Element_GetParent_t)(void* element);
+// DirectUI::Element::GetID() -> the element's atom (same space as StrToID).
+// Try both const and non-const x64 manglings; only one is actually exported.
+typedef unsigned int (*DirectUI_Element_GetID_t)(void* element);
+
+static DirectUI_StrToID_t pStrToID = nullptr;
+static DirectUI_FindDescendent_t pFindDescendent = nullptr;
+static DirectUI_Combobox_AddString_t pAddString = nullptr;
+static DirectUI_Combobox_SetSelection_t pSetSelection = nullptr;
+static DirectUI_Combobox_GetSelection_t pGetSelection = nullptr;
+static DirectUI_Element_SetEnabled_t pSetEnabled = nullptr;
+static DirectUI_Element_GetParent_t pGetParent = nullptr;
+static DirectUI_Element_GetID_t pGetID = nullptr;
+
+static bool g_nativeComboPopulated = false;
+static DWORD g_lastAuOptions = 4;
+static void* g_lastComboPtr = nullptr;
+
+// -----------------------------------------------------------------------------
+// DirectUI SetEnabled hook - keeps the settings combobox enabled.
+// -----------------------------------------------------------------------------
+// The "Important updates" combobox (atom auOptionSelectorCombobox) renders
+// disabled because wucltux.dll's code-behind calls Element::SetEnabled(combo,
+// false) based on its stale Win8.1 view of whether the AU option may change.
+// Our 200 ms timer calling SetEnabled(combo, true) only races it - and worse,
+// the pointer lookup (GetWindowLongPtrW(hwnd,0) + FindDescendent) can fail
+// entirely on some builds, so the timer never even reaches the control.
+//
+// Fix: hook Element::SetEnabled itself and identify the combobox by its ATOM
+// via Element::GetID() - this needs no root/pointer lookup at all, so it works
+// even when FindDescendent never resolves the element. The hook is installed
+// early (Wh_ModInit, before any page XML is parsed) so it catches the disable
+// both at parse time and during wucltux's runtime state passes. As a bonus,
+// when the combo pointer IS known we also protect its ancestors/children.
+static UINT g_comboAtom = 0; // StrToID(L"auOptionSelectorCombobox"), resolved once
+static std::atomic<void*> g_protectedCombo{nullptr};
+
+using DirectUI_SetEnabledHook_t = HRESULT(WU_DUI_THISCALL*)(void* element, bool enabled);
+static DirectUI_SetEnabledHook_t SetEnabledOriginal = nullptr;
+
+// True when disabling 'el' would grey out the protected combobox: that is when
+// el is the combobox itself (matched by atom, pointer-independently) or, when
+// the pointer is known, an ancestor or descendant of it.
+static bool IsProtectedComboElement(void* el) {
+    if (!el) return false;
+    // Primary: match the combobox by its atom. Works without ever finding the
+    // element pointer, so it does not depend on GetWindowLongPtrW/FindDescendent.
+    if (g_comboAtom && pGetID && pGetID(el) == g_comboAtom) return true;
+    // Secondary (pointer known): protect ancestors and descendants too.
+    void* combo = g_protectedCombo.load();
+    if (!combo || !pGetParent) return false;
+    if (el == combo) return true;
+    void* cur = el;
+    for (int i = 0; i < 64 && cur; ++i) { cur = pGetParent(cur); if (cur == combo) return true; } // descendant
+    cur = combo;
+    for (int i = 0; i < 64 && cur; ++i) { cur = pGetParent(cur); if (cur == el) return true; }    // ancestor
+    return false;
+}
+
+static HRESULT WU_DUI_THISCALL SetEnabledHook(void* element, bool enabled) {
+    if (!enabled) {
+        // DIAGNOSTIC: log the first few SetEnabled(false) calls with the
+        // element's GetID so we can see whether the combobox is disabled via
+        // SetEnabled at all, and whether GetID identifies it. Throttled.
+        static std::atomic<int> s_disableLogged{0};
+        int n = s_disableLogged.fetch_add(1);
+        if (n < 20) {
+            unsigned int id = (pGetID && element) ? pGetID(element) : 0;
+            Wh_Log(L"Windows Update Restorer: SetEnabled(false) el=%p id=%u comboAtom=%u getID=%hs protected=%d",
+                   element, id, g_comboAtom, pGetID ? "ok" : "MISSING",
+                   (int)IsProtectedComboElement(element));
+        }
+    }
+    if (!enabled && IsProtectedComboElement(element)) {
+        // Swallow the disable: keep the combobox enabled.
+        return SetEnabledOriginal(element, true);
+    }
+    return SetEnabledOriginal(element, enabled);
+}
+
+// Resolves the dui70 exports we need and the combobox atom. Idempotent.
+static void EnsureDui70ComboboxExports() {
+    if (!pStrToID) {
+        HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
+        if (!dui70) dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (dui70) {
+            pStrToID = (DirectUI_StrToID_t)GetProcAddress(dui70, "StrToID");
+            pFindDescendent = (DirectUI_FindDescendent_t)GetProcAddress(dui70, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z");
+            pAddString = (DirectUI_Combobox_AddString_t)GetProcAddress(dui70, "?AddString@Combobox@DirectUI@@QEAAHPEBG@Z");
+            pSetSelection = (DirectUI_Combobox_SetSelection_t)GetProcAddress(dui70, "?SetSelection@Combobox@DirectUI@@QEAAJH@Z");
+            pGetSelection = (DirectUI_Combobox_GetSelection_t)GetProcAddress(dui70, "?GetSelection@Combobox@DirectUI@@QEAAHXZ");
+            pSetEnabled = (DirectUI_Element_SetEnabled_t)GetProcAddress(dui70, "?SetEnabled@Element@DirectUI@@QEAAJ_N@Z");
+            pGetParent = (DirectUI_Element_GetParent_t)GetProcAddress(dui70, "?GetParent@Element@DirectUI@@QEAAPEAV12@XZ");
+            // GetID: try several manglings (const/non-const x UINT/int return).
+            // At the x64 ABI level all of them return the value in EAX, so the
+            // unsigned int typedef below reads it correctly regardless of which
+            // is the true signature - we just need the right symbol string.
+            const char* getIdNames[] = {
+                "?GetID@Element@DirectUI@@QEBAIXZ",  // UINT, const
+                "?GetID@Element@DirectUI@@QEAAIXZ",  // UINT, non-const
+                "?GetID@Element@DirectUI@@QEBAHXZ",  // int, const
+                "?GetID@Element@DirectUI@@QEAAHXZ",  // int, non-const
+            };
+            for (const char* n : getIdNames) {
+                pGetID = (DirectUI_Element_GetID_t)GetProcAddress(dui70, n);
+                if (pGetID) break;
+            }
+        }
+    }
+    if (!g_comboAtom && pStrToID) {
+        g_comboAtom = (UINT)pStrToID(L"auOptionSelectorCombobox");
+    }
+}
+
+// Installs the Element::SetEnabled hook exactly once (SetFunctionHook must not
+// be called twice). Called early from Wh_ModInit and again lazily from the
+// settings page timer so it is in place before the page XML is parsed.
+static void EnsureSetEnabledHookInstalled() {
+    EnsureDui70ComboboxExports();
+    static bool s_hookInstalled = false;
+    if (!s_hookInstalled && pSetEnabled) {
+        if (WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<DirectUI_SetEnabledHook_t>(pSetEnabled),
+                SetEnabledHook, &SetEnabledOriginal)) {
+            s_hookInstalled = true;
+            Wh_Log(L"Windows Update Restorer: hooked DirectUI Element::SetEnabled (combo atom=%u, GetID=%hs)",
+                   g_comboAtom, pGetID ? "ok" : "MISSING");
+        }
+    }
+}
+
+static void InitDirectUIExports() {
+    EnsureDui70ComboboxExports();
+    EnsureSetEnabledHookInstalled();
+}
+
+static void DestroySettingsCombobox() {
+    g_isSettingsPageActive.store(false);
+    if (g_hwndDirectUiParent && IsWindow(g_hwndDirectUiParent)) {
+        KillTimer(g_hwndDirectUiParent, 889);
+        RemoveWindowSubclass(g_hwndDirectUiParent, SettingsDirectUiSubclassProc, 888);
+        g_hwndDirectUiParent = nullptr;
+    }
+    g_nativeComboPopulated = false;
+    g_lastComboPtr = nullptr;
+    g_protectedCombo.store(nullptr);
+}
+
+static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (!g_isSettingsPageActive.load()) {
+        KillTimer(hwnd, 889);
+        RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
+        if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
+        return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    switch (uMsg) {
+        case WM_TIMER: {
+            if (wParam == 889) {
+                InitDirectUIExports();
+                // DIAGNOSTIC (one-shot): report what the pointer-based lookup
+                // sees, so we know whether root/atom/GetID are resolving.
+                static bool s_diagOnce = false;
+                if (!s_diagOnce) {
+                    s_diagOnce = true;
+                    void* r = (void*)GetWindowLongPtrW(hwnd, 0);
+                    ATOM a = pStrToID ? pStrToID(L"auOptionSelectorCombobox") : 0;
+                    Wh_Log(L"Windows Update Restorer: combo diag hwnd=%p root=%p atom=%u getID=%hs findDesc=%hs",
+                           hwnd, r, (unsigned)a, pGetID ? "ok" : "MISSING",
+                           pFindDescendent ? "ok" : "MISSING");
+                }
+                if (pStrToID && pFindDescendent && pAddString && pSetSelection && pGetSelection) {
+                    void* root = (void*)GetWindowLongPtrW(hwnd, 0);
+                    if (root) {
+                        ATOM atom = pStrToID(L"auOptionSelectorCombobox");
+                        if (atom) {
+                            void* combo = pFindDescendent(root, atom);
+                            if (combo) {
+                                if (g_lastComboPtr != combo) {
+                                    g_lastComboPtr = combo;
+                                    g_nativeComboPopulated = false;
+                                }
+                                g_protectedCombo.store(combo); // SetEnabled hook keeps it enabled
+                                if (pSetEnabled) pSetEnabled(combo, true); // immediate re-enable
+                                
+                                if (!g_nativeComboPopulated) {
+                                    pAddString(combo, WuOptionText(4));
+                                    pAddString(combo, WuOptionText(3));
+                                    pAddString(combo, WuOptionText(2));
+                                    pAddString(combo, WuOptionText(1));
+                                    
+                                    DWORD current = ReadAuOptionsValue();
+                                    g_lastAuOptions = current;
+                                    int selIdx = (current == 4) ? 0 : (current == 3) ? 1 : (current == 2) ? 2 : 3;
+                                    pSetSelection(combo, selIdx);
+                                    g_nativeComboPopulated = true;
+                                    Wh_Log(L"Windows Update Restorer: Native DirectUI Combobox populated (addr=%p)!", combo);
+                                } else {
+                                    int sel = pGetSelection(combo);
+                                    if (sel >= 0 && sel <= 3) {
+                                        DWORD auOpt = (sel == 0) ? 4 : (sel == 1) ? 3 : (sel == 2) ? 2 : 1;
+                                        if (auOpt != g_lastAuOptions) {
+                                            g_lastAuOptions = auOpt;
+                                            WriteAuOptionsValue(auOpt);
+                                            Wh_Log(L"Windows Update Restorer: Native combo sel changed to %d (AUOptions=%lu)", sel, auOpt);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        case WM_DESTROY: {
+            KillTimer(hwnd, 889);
+            RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
+            if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
+            g_nativeComboPopulated = false;
+            g_protectedCombo.store(nullptr);
+            break;
+        }
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+struct EnumSettingsDirectUiCtx {
+    HWND verified = nullptr; // DirectUIHWND con atom pageSettings confermato
+    HWND fallback = nullptr; // primo DirectUIHWND dimensionalmente valido, se nessuno verificato
+};
+
+static BOOL CALLBACK EnumSettingsDirectUiProc(HWND hwnd, LPARAM lParam) {
+    if (!IsWindow(hwnd)) return TRUE;
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (_wcsicmp(cls, L"DirectUIHWND") == 0) {
+        RECT rc{};
+        GetClientRect(hwnd, &rc);
+        int width = rc.right - rc.left;
+        int height = rc.bottom - rc.top;
+        if (width > 260 && height > 150) {
+            EnumSettingsDirectUiCtx* ctx = reinterpret_cast<EnumSettingsDirectUiCtx*>(lParam);
+            if (!ctx->fallback) ctx->fallback = hwnd;
+        }
+    }
+    return TRUE;
+}
+
+static HWND FindSettingsDirectUiHwnd() {
+    EnumSettingsDirectUiCtx ctx;
+    HWND hwndFg = GetForegroundWindow();
+    if (hwndFg) {
+        EnumChildWindows(hwndFg, EnumSettingsDirectUiProc, reinterpret_cast<LPARAM>(&ctx));
+        if (ctx.fallback) return ctx.fallback;
+    }
+    HWND hwndActive = GetActiveWindow();
+    if (hwndActive && hwndActive != hwndFg) {
+        EnumChildWindows(hwndActive, EnumSettingsDirectUiProc, reinterpret_cast<LPARAM>(&ctx));
+        if (ctx.fallback) return ctx.fallback;
+    }
+    HWND hwndFocus = GetFocus();
+    if (hwndFocus) {
+        HWND root = GetAncestor(hwndFocus, GA_ROOT);
+        if (root && root != hwndFg && root != hwndActive) {
+            EnumChildWindows(root, EnumSettingsDirectUiProc, reinterpret_cast<LPARAM>(&ctx));
+            if (ctx.fallback) return ctx.fallback;
+        }
+    }
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND top, LPARAM lp) -> BOOL {
+        EnumSettingsDirectUiCtx* pCtx = reinterpret_cast<EnumSettingsDirectUiCtx*>(lp);
+        EnumChildWindows(top, EnumSettingsDirectUiProc, lp);
+        if (pCtx->fallback) return FALSE;
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    
+    return ctx.fallback;
+}
+
+static void InitializeNativeSettingsCombobox(HWND hwndParent) {
+    g_isSettingsPageActive.store(true);
+    if (!hwndParent || !IsWindow(hwndParent)) hwndParent = FindSettingsDirectUiHwnd();
+    if (!hwndParent || !IsWindow(hwndParent)) return;
+    g_hwndDirectUiParent = hwndParent;
+    SetWindowSubclass(hwndParent, SettingsDirectUiSubclassProc, 888, 0);
+    SetTimer(hwndParent, 889, 200, nullptr);
+}
+
+static void UpdateSettingsComboboxLanguage() {
+    // Il testo del combobox nativo si ricaricherà alla prossima apertura della pagina
+}
+
+static std::wstring PatchSettingsPageXml(const std::wstring& input) {
+    InitializeNativeSettingsCombobox(nullptr);
+
+    std::wstring out = input;
+    const size_t cbAtom = out.find(L"atom(auOptionSelectorCombobox)");
+    if (cbAtom == std::wstring::npos) return input;
+
+    // FIX NATIVO: Allarga il combobox mantenendo l'XML originale
+    size_t tagStart = out.rfind(L"<combobox", cbAtom);
+    if (tagStart == std::wstring::npos) tagStart = out.rfind(L"<ComboBox", cbAtom);
+    if (tagStart == std::wstring::npos) tagStart = out.rfind(L"<COMBOBOX", cbAtom);
+    if (tagStart != std::wstring::npos) {
+        size_t widthPos = out.find(L"width=\"10rp\"", tagStart);
+        if (widthPos != std::wstring::npos && widthPos < cbAtom) {
+            out.replace(widthPos, 12, L"width=\"285rp\"");
+            Wh_Log(L"Windows Update Restorer: Native combobox width expanded to 285rp");
+        }
+    }
+
+    // Insert intro text SOPRA la flow row delle icone+combo (non dentro), come riga separata top
+    // Questo preserva identica Y originale della flow row (spostata in basso di ~ altezza intro), ma il placeholder INLINE rimane nella flow originale.
+    // Trova l'inizio della flow row che contiene le icone+placeholder (ora placeholder)
+    const size_t placeholderPos = out.find(L"atom(auOptionSelectorPlaceholder)");
+    const size_t rowStart = out.rfind(
+        L"<element layoutpos=\"top\" layout=\"flowlayout(0,0,0,2)\" margin=\"rect(0,14rp,0,0)\">", placeholderPos != std::wstring::npos ? placeholderPos : cbAtom);
+    if (rowStart != std::wstring::npos) {
+        out.insert(rowStart, BuildUpdateIntroTextXml());
+        Wh_Log(L"Windows Update Restorer: settings page - inserted intro text above icon row (placeholder now INLINE at original position)");
+    }
+
+    // Hide the red warning shield: blank the icon element INSIDE the
+    // atom(auOptionSelectorWarningIcon) viewer (zero-size, empty content).
+    const size_t warnAtom = out.find(L"atom(auOptionSelectorWarningIcon)");
+    if (warnAtom != std::wstring::npos) {
+        const size_t iconPos = out.find(L"content=\"icon(105,", warnAtom);
+        if (iconPos != std::wstring::npos) {
+            const size_t tagStart = out.rfind(L"<element", iconPos);
+            const size_t tagEnd = out.find(L"/>", tagStart);
+            if (tagStart != std::wstring::npos && tagEnd != std::wstring::npos) {
+                const std::wstring hidden =
+                    L"<element sheet=\"wuappstyle\" class=\"aupsp_left_img\" width=\"0rp\" height=\"0rp\" content=\"\"/>";
+                out.replace(tagStart, tagEnd + 2 - tagStart, hidden);
+                Wh_Log(L"Windows Update Restorer: settings page - red warning shield hidden (icon content blanked)");
+            }
+        }
+    }
+    return out;
+}
+
+// "Choose how to install updates" - group box title of the classic dialog.
+static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Choose how to install updates" },
+        { L"it", L"Scegli come installare gli aggiornamenti" },
+        { L"es", L"Elija cómo instalar las actualizaciones" },
+        { L"fr", L"Choisissez comment installer les mises à jour" },
+        { L"tr", L"Güncellemelerin nasıl yükleneceğini seçin" },
+        { L"ru", L"Выберите способ установки обновлений" },
+        { L"pt", L"Escolha como instalar as atualizações" },
+        { L"zh", L"选择如何安装更新" },
+        { L"pl", L"Wybierz sposób instalowania aktualizacji" },
+        { L"nl", L"Kies hoe updates worden geïnstalleerd" },
+    };
+    auto it = kTexts.find(g_language);
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
+// Private command protocol handled by the ShellExecute hooks: the DirectUI
+// NavigateButton of each classic option calls ShellExecuteExW with
+// "wurestorer:auoptions=N"; we intercept it, write AUOptions and consume it
+// (nothing is launched). Unknown wurestorer: commands are swallowed too.
+// Forward declarations for the classic settings dialog (defined below).
+static void ShowWuSettingsDialog(HWND parent);
+static void RefreshWuPage(HWND host);
+using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
+static ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
+static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
+    if (info && info->lpFile &&
+        wcsncmp(info->lpFile, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
+        const wchar_t* p = info->lpFile + wcslen(kWuRestorerProtocol);
+        if (wcsncmp(p, L"auoptions=", 10) == 0) {
+            const int value = _wtoi(p + 10);
+            if (value >= 1 && value <= 4) {
+                WriteAuOptionsValue(static_cast<DWORD>(value));
+                // The page hosting the option list re-renders so the selection
+                // marker reflects the new AUOptions value.
+                RefreshWuPage(info->hwnd);
+                info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+                return TRUE;
+            }
+        } else if (wcscmp(p, L"opensettings") == 0) {
+            // Open the classic settings dialog as an ADDITIONAL window on top
+            // of the settings page (which stays open - we do not navigate away).
+            ShowWuSettingsDialog(info->hwnd);
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            return TRUE;
+        }
+        return TRUE; // consume unknown wurestorer: commands
+    }
+    return ShellExecuteExWOriginal(info);
+}
+
+using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
+static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
+static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR file,
+                                          LPCWSTR parameters, LPCWSTR directory, INT show) {
+    if (file && wcsncmp(file, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
+        const wchar_t* p = file + wcslen(kWuRestorerProtocol);
+        if (wcsncmp(p, L"auoptions=", 10) == 0) {
+            const int value = _wtoi(p + 10);
+            if (value >= 1 && value <= 4) WriteAuOptionsValue(static_cast<DWORD>(value));
+        } else if (wcscmp(p, L"opensettings") == 0) {
+            ShowWuSettingsDialog(hwnd);
+        }
+        return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+    }
+    return ShellExecuteWOriginal(hwnd, operation, file, parameters, directory, show);
+}
+
+// =============================================================================
+// Classic "Change settings" dialog (Win32).
+// -----------------------------------------------------------------------------
+// Modeled on the classic-taskbar-properties mod: a real Win32 dialog built from
+// an in-memory DLGTEMPLATE and shown with CreateDialogIndirectParamW - no
+// DirectUI involved. It replaces the broken DirectUI pageSettings page: any
+// navigation that would open shell:::{CLSID}\pageSettings is intercepted by the
+// ShellExecute hooks above and this dialog is shown instead.
+//
+// The dialog offers a TrackBar (the "bar") to scroll between the four classic
+// important-updates modes, plus the recommended-updates and Microsoft-products
+// checkboxes. On OK the values are written to the registry (local AU key AND
+// the policy key Windows 10/11 actually honour) and the Windows Update page is
+// refreshed so it re-renders with the new state.
+// =============================================================================
+enum {
+    kWuDlgSettings = 0x7701,
+    kWuCtlCombo = 0x7710,
+    kWuCtlOptionLabel = 0x7711,
+    kWuCtlRecommended = 0x7712,
+    kWuCtlMsProducts = 0x7713,
+    kWuCtlAllUsers = 0x7714,
+    kWuCtlNote = 0x7715,
+};
+
+static HWND g_wuSettingsDlg = nullptr;
+static HWND g_wuSettingsParent = nullptr;
+static DWORD g_wuDlgAuOptions = 4;
+static bool g_wuDlgRecommended = false;
+static bool g_wuDlgMsProducts = false;
+static bool g_wuDlgAllUsers = false;
+
+// True when the ShellExecute target is our applet's settings child page
+// (shell:::{CLSID}\pageSettings), either as a bare shell: URI or as
+// "%SystemRoot%\explorer.exe" + shellexecuteparams.
+static const wchar_t* SelectRecommendedUpdatesLabel() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Give me recommended updates the same way I receive important updates" },
+        { L"it", L"Fornisci gli aggiornamenti consigliati nello stesso modo in cui ricevo gli aggiornamenti importanti" },
+        { L"es", L"Proporcionar actualizaciones recomendadas de la misma manera que recibo las actualizaciones importantes" },
+        { L"fr", L"Me donner les mises à jour recommandées de la même manière que les mises à jour importantes" },
+        { L"tr", L"Önemli güncellemelerle aynı şekilde önerilen güncellemeleri de ver" },
+        { L"ru", L"Предоставлять рекомендуемые обновления так же, как и важные" },
+        { L"pt", L"Dar-me atualizações recomendadas da mesma forma que recebo as importantes" },
+        { L"zh", L"以接收重要更新的相同方式为我提供推荐更新" },
+        { L"pl", L"Zapewniaj zalecane aktualizacje w taki sam sposób, jak ważne" },
+        { L"nl", L"Geef mij aanbevolen updates op dezelfde manier als belangrijke updates" },
+    };
+    auto it = kTexts.find(g_language);
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
+// Classic option text for an AUOptions value (1..4), multilingual via resstr.
+
+
+static void ReadAuxAuValues(bool& recommended, bool& msProducts, bool& allUsers) {
+    recommended = false;
+    msProducts = false;
+    allUsers = false;
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
+            0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD v = 0, sz = sizeof(v);
+        if (RegQueryValueExW(hKey, L"IncludeRecommendedUpdates", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&v), &sz) == ERROR_SUCCESS && v)
+            recommended = true;
+        sz = sizeof(v);
+        if (RegQueryValueExW(hKey, L"MicrosoftUpdate", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&v), &sz) == ERROR_SUCCESS && v)
+            msProducts = true;
+        sz = sizeof(v);
+        if (RegQueryValueExW(hKey, L"AllowAllUsers", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&v), &sz) == ERROR_SUCCESS && v)
+            allUsers = true;
+        RegCloseKey(hKey);
+    }
+}
+
+static void WriteAuxAuValues(bool recommended, bool msProducts, bool allUsers) {
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update",
+            0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        const DWORD rec = recommended ? 1 : 0;
+        RegSetValueExW(hKey, L"IncludeRecommendedUpdates", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&rec), sizeof(rec));
+        const DWORD ms = msProducts ? 1 : 0;
+        RegSetValueExW(hKey, L"MicrosoftUpdate", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&ms), sizeof(ms));
+        const DWORD au = allUsers ? 1 : 0;
+        RegSetValueExW(hKey, L"AllowAllUsers", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&au), sizeof(au));
+        RegCloseKey(hKey);
+    }
+}
+
+// Asks the window hosting the Windows Update page to re-render (standard shell
+// view refresh command), so the main page reflects the new AUOptions state.
+// The DirectUI host may be a child of the shell view, so post to both the given
+// window and its top-level ancestor.
+static void RefreshWuPage(HWND host) {
+    if (host && IsWindow(host)) {
+        PostMessageW(host, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0); // FCIDM_REFRESH
+        HWND root = GetAncestor(host, GA_ROOT);
+        if (root && root != host && IsWindow(root))
+            PostMessageW(root, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0);
+    } else {
+        ShellExecuteW(nullptr, L"open",
+                      (L"shell:::" + std::wstring(kAppletClsid)).c_str(),
+                      nullptr, nullptr, SW_SHOWNORMAL);
+    }
+}
+
+static void SaveWuSettingsAndClose(HWND hwnd) {
+    HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
+    int sel = hCombo ? static_cast<int>(SendMessageW(hCombo, CB_GETCURSEL, 0, 0)) : 0;
+    DWORD pos = 4;
+    if (sel == 0) pos = 4;
+    else if (sel == 1) pos = 3;
+    else if (sel == 2) pos = 2;
+    else if (sel == 3) pos = 1;
+    WriteAuOptionsValue(pos);
+    const bool rec = IsDlgButtonChecked(hwnd, kWuCtlRecommended) == BST_CHECKED;
+    const bool ms = IsDlgButtonChecked(hwnd, kWuCtlMsProducts) == BST_CHECKED;
+    const bool au = IsDlgButtonChecked(hwnd, kWuCtlAllUsers) == BST_CHECKED;
+    WriteAuxAuValues(rec, ms, au);
+    HWND parent = g_wuSettingsParent;
+    DestroyWindow(hwnd);
+    RefreshWuPage(parent);
+}
+
+static std::wstring StripAmpersand(const wchar_t* s) {
+    std::wstring out;
+    if (!s) return out;
+    for (const wchar_t* p = s; *p; ++p) {
+        if (*p != L'&') out += *p;
+    }
+    return out;
+}
+
+static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_INITDIALOG: {
+            g_wuSettingsDlg = hwnd;
+            HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
+            if (hCombo) {
+                SendMessageW(hCombo, CB_RESETCONTENT, 0, 0);
+                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(4));
+                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(3));
+                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(2));
+                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(1));
+                int sel = 0;
+                if (g_wuDlgAuOptions == 4) sel = 0;
+                else if (g_wuDlgAuOptions == 3) sel = 1;
+                else if (g_wuDlgAuOptions == 2) sel = 2;
+                else if (g_wuDlgAuOptions == 1) sel = 3;
+                SendMessageW(hCombo, CB_SETCURSEL, sel, 0);
+            }
+            CheckDlgButton(hwnd, kWuCtlRecommended, g_wuDlgRecommended ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, kWuCtlMsProducts, g_wuDlgMsProducts ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, kWuCtlAllUsers, g_wuDlgAllUsers ? BST_CHECKED : BST_UNCHECKED);
+            return TRUE;
+        }
+        case WM_CTLCOLORSTATIC: {
+            // The privacy note is drawn in grey, like the original page.
+            HDC hdc = reinterpret_cast<HDC>(wParam);
+            HWND hCtl = reinterpret_cast<HWND>(lParam);
+            if (hCtl == GetDlgItem(hwnd, kWuCtlNote)) {
+                SetTextColor(hdc, RGB(90, 90, 90));
+                SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
+                return reinterpret_cast<INT_PTR>(GetSysColorBrush(COLOR_BTNFACE));
+            }
+            break;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK:
+                    SaveWuSettingsAndClose(hwnd);
+                    return TRUE;
+                case IDCANCEL:
+                    DestroyWindow(hwnd);
+                    return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return TRUE;
+        case WM_DESTROY:
+            if (g_wuSettingsDlg == hwnd) g_wuSettingsDlg = nullptr;
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void ShowWuSettingsDialog(HWND parent) {
+    if (g_wuSettingsDlg && IsWindow(g_wuSettingsDlg)) {
+        SetForegroundWindow(g_wuSettingsDlg);
+        return;
+    }
+
+    g_wuSettingsParent = parent;
+    g_wuDlgAuOptions = ReadAuOptionsValue();
+    ReadAuxAuValues(g_wuDlgRecommended, g_wuDlgMsProducts, g_wuDlgAllUsers);
+
+    const int kControls = 10; // group, desc, label, combo, 3 checkboxes, note, OK, Cancel
+    BYTE* buf = new (std::nothrow) BYTE[4096];
+    if (!buf) return;
+    BYTE* p = buf;
+    auto align4 = [](BYTE*& ptr) { ptr = reinterpret_cast<BYTE*>((reinterpret_cast<UINT_PTR>(ptr) + 3) & ~static_cast<UINT_PTR>(3)); };
+
+    LPDLGTEMPLATEW pDlg = reinterpret_cast<LPDLGTEMPLATEW>(p);
+    pDlg->style = DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU;
+    pDlg->dwExtendedStyle = 0;
+    pDlg->cdit = kControls;
+    pDlg->x = 0; pDlg->y = 0;
+    pDlg->cx = 380; pDlg->cy = 272;
+    p += sizeof(DLGTEMPLATE);
+    *(WORD*)p = 0; p += 2;                       // no menu
+    *(WORD*)p = 0; p += 2;                       // no class
+    *(WORD*)p = 0; p += 2;                       // empty title (set later)
+    *(WORD*)p = 8; p += 2;                       // font point size
+    const wchar_t kFont[] = L"Segoe UI";
+    memcpy(p, kFont, sizeof(kFont)); p += sizeof(kFont);
+
+    auto addCtrl = [&](DWORD style, DWORD exStyle, short x, short y, short cx, short cy,
+                       WORD id, LPCWSTR cls, LPCWSTR cap) {
+        align4(p);
+        LPDLGITEMTEMPLATE pi = reinterpret_cast<LPDLGITEMTEMPLATE>(p);
+        pi->style = WS_CHILD | WS_VISIBLE | style;
+        pi->dwExtendedStyle = exStyle;
+        pi->x = x; pi->y = y; pi->cx = cx; pi->cy = cy; pi->id = id;
+        p += sizeof(DLGITEMTEMPLATE);
+        const int clsLen = static_cast<int>(wcslen(cls));
+        memcpy(p, cls, (clsLen + 1) * sizeof(wchar_t)); p += (clsLen + 1) * sizeof(wchar_t);
+        const int capLen = static_cast<int>(wcslen(cap));
+        memcpy(p, cap, (capLen + 1) * sizeof(wchar_t)); p += (capLen + 1) * sizeof(wchar_t);
+        *(WORD*)p = 0; p += 2;                   // no creation data
+    };
+
+    // Translated texts (all with fallbacks so no label is ever empty)
+    const std::wstring grp = SelectChooseHowToInstallUpdatesLabel();
+    const std::wstring title = StripAmpersand(
+        EmbeddedMuiString(351) ? EmbeddedMuiString(351) : L"Change settings");
+    const std::wstring importantLabel = StripAmpersand(
+        EmbeddedMuiString(1232) ? EmbeddedMuiString(1232) : L"Important updates");
+    const wchar_t* descText = EmbeddedMuiString(1102);
+    if (!descText) descText = L"When your PC is online, Windows can automatically check for important updates and install them using these settings.";
+    const wchar_t* noteText = EmbeddedMuiString(1209);
+    if (!noteText) noteText = L"Note: Windows Update might update itself automatically first when checking for other updates.";
+    const wchar_t* allUsersText = EmbeddedMuiString(1001);
+    if (!allUsersText) allUsersText = L"Allow all users to install updates on this computer";
+    wchar_t okText[64] = L"OK";
+    wchar_t cancelText[64] = L"Cancel";
+    {
+        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+        if (shell32) {
+            LoadStringW(shell32, 800, okText, ARRAYSIZE(okText));       // IDS_OK
+            LoadStringW(shell32, 801, cancelText, ARRAYSIZE(cancelText)); // IDS_CANCEL
+        }
+    }
+
+    // --- Windows 7-style layout ---
+    // "Choose how to install updates" group box with description + combobox.
+    addCtrl(BS_GROUPBOX | WS_TABSTOP, 0, 8, 6, 352, 122, 0x7F00, L"Button", grp.c_str());
+    addCtrl(SS_LEFT, 0, 18, 18, 332, 38, 0x7F01, L"Static", descText);              // description (wraps)
+    addCtrl(SS_LEFT, 0, 18, 62, 240, 12, 0x7F02, L"Static", importantLabel.c_str()); // "Important updates:"
+    addCtrl(CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, 0, 18, 76, 332, 120, kWuCtlCombo, L"ComboBox", L"");
+    // Options below the group box (classic checkboxes)
+    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 138, 344, 14, kWuCtlRecommended, L"Button", SelectRecommendedUpdatesLabel());
+    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 156, 344, 14, kWuCtlMsProducts, L"Button",
+            EmbeddedMuiString(475) ? EmbeddedMuiString(475) : L"Give me updates for other Microsoft products");
+    addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 174, 344, 14, kWuCtlAllUsers, L"Button", allUsersText);
+    // Privacy note (grey)
+    addCtrl(SS_LEFT, 0, 16, 194, 344, 28, kWuCtlNote, L"Static", noteText);
+    // OK / Cancel - bottom right, classic size, always visible.
+    addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 248, 248, 60, 16, IDOK, L"Button", okText);
+    addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 312, 248, 60, 16, IDCANCEL, L"Button", cancelText);
+
+    HWND hwnd = CreateDialogIndirectParamW(GetModuleHandleW(nullptr),
+                                           reinterpret_cast<LPDLGTEMPLATE>(buf),
+                                           parent, WuSettingsDlgProc, 0);
+    if (!hwnd) {
+        Wh_Log(L"Windows Update Restorer: classic settings dialog creation FAILED (err=%u)", GetLastError());
+    }
+    delete[] buf;
+
+    if (hwnd && IsWindow(hwnd)) {
+        SetWindowTextW(hwnd, title.c_str());
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+    }
+}
+
 
 static std::wstring BuildWuSidebarOpenCommandAttributes() {
     return L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"shell:::" +
@@ -4312,9 +5335,16 @@ static std::wstring BuildWuSidebarLinkRow(UINT stringId, bool withIcon) {
     }
     wchar_t content[32];
     swprintf_s(content, L"resstr(%u)", stringId);
+    // "Change settings" (351) opens the classic Win32 settings dialog: the
+    // ShellExecute hooks intercept the pageSettings target and show it instead
+    // of the broken DirectUI page.
+    std::wstring cmd = BuildWuSidebarOpenCommandAttributes();
+    if (stringId == 351) {
+        cmd = L"shellexecute=\"shell:::" + std::wstring(kAppletClsid) + L"\\pageSettings\"";
+    }
     row +=
         L"<NavigateButton layoutpos=\"left\" layout=\"flowlayout()\" " +
-        BuildWuSidebarOpenCommandAttributes() + L">"
+        cmd + L">"
         L"<Button class=\"cp_nav_link\" sheet=\"wu_cp_style\" active=\"mouse | keyboard\" content=\"" +
         std::wstring(content) +
         L"\"/></NavigateButton>"
@@ -4483,10 +5513,67 @@ static bool ProbeWindowsUpdateServiceAvailable() {
     return available;
 }
 
+// The native moduleAUNotConfigured warning ("Automatic updates are not
+// configured for this computer") is driven by the Automatic Updates
+// configuration (AUOptions/NoAutoUpdate), not by whether the wuauserv
+// service happens to be running - wucltux re-shows/re-sizes that module at
+// runtime after SetXML regardless of what the XML says, so fighting it in
+// the XML patch never works (confirmed via raw XML dump: our patch is
+// well-formed and still gets overridden). Instead, detect the same
+// condition natively used for that box and mirror it: if AU is not
+// configured, skip inserting the recreated hub entirely, exactly as if
+// "Show recreated interface" were off - matching the native page and
+// avoiding any conflict with the provider's own re-show logic.
+static bool IsAutomaticUpdatesConfigured() {
+    bool configured = true;  // default optimistic: assume configured unless proven otherwise
+
+    // Group Policy override takes precedence when present.
+    HKEY hPolicy = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU", 0, KEY_READ, &hPolicy) == ERROR_SUCCESS) {
+        DWORD noAutoUpdate = 0, size = sizeof(noAutoUpdate);
+        if (RegQueryValueExW(hPolicy, L"NoAutoUpdate", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&noAutoUpdate), &size) == ERROR_SUCCESS) {
+            configured = (noAutoUpdate == 0);
+        }
+        RegCloseKey(hPolicy);
+        return configured;
+    }
+
+    // Otherwise fall back to the local (non-policy) Automatic Updates setting.
+    // AUOptions == 1 means "Never check for updates" (AU turned off), which is
+    // exactly the state that makes wucltux show the native warning.
+    HKEY hLocal = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update", 0, KEY_READ, &hLocal) == ERROR_SUCCESS) {
+        DWORD auOptions = 0, size = sizeof(auOptions);
+        if (RegQueryValueExW(hLocal, L"AUOptions", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(&auOptions), &size) == ERROR_SUCCESS) {
+            configured = (auOptions != 1);
+        }
+        RegCloseKey(hLocal);
+    }
+    return configured;
+}
+
 static bool IsWindowsUpdateServiceAvailable() {
-    // Rendering gets only a published value. Before the asynchronous probe has
-    // finished, false is a deliberately neutral state and avoids blocking SCM.
-    return g_cachedWuServiceProbed.load() && g_cachedWuAvailable.load();
+    // Previously this returned a value cached once at mod startup
+    // (GatherBackgroundStatus, called a single time from SetupWorker) and
+    // never refreshed afterwards - so the recreated hub kept showing/hiding
+    // based on whatever the service state was when Explorer/the mod first
+    // loaded, regardless of later changes. ProbeWindowsUpdateServiceAvailable()
+    // already self-throttles to one real SCM query per kWuCheckIntervalMs
+    // (5s), so calling it directly here keeps the render path cheap while
+    // actually reflecting the current state on every page (re)load.
+    //
+    // Additionally require Automatic Updates to actually be configured
+    // (see IsAutomaticUpdatesConfigured): that is the real condition behind
+    // the native moduleAUNotConfigured warning box, which wucltux re-shows
+    // at runtime regardless of what our XML patch says. When AU is not
+    // configured, skip the recreated hub entirely - same effect as if
+    // "Show recreated interface" were off - instead of fighting a native
+    // re-show we cannot suppress from the XML.
+    return ProbeWindowsUpdateServiceAvailable() && IsAutomaticUpdatesConfigured();
 }
 
 // -----------------------------------------------------------------------------
@@ -4692,107 +5779,27 @@ static void GatherBackgroundStatus() {
 // PatchWuSettingsPageXml) are kept here as a reference for a future, safe
 // re-implementation. The translated strings 64540/64541/64542 in the MUI table
 // are also reserved for that same feature.
-#if 0
-static bool FindModuleContaining(const std::wstring& xml, const std::wstring& markerA,
-                                 const std::wstring& markerB, size_t& start, size_t& end) {
-    const size_t mA = xml.find(markerA);
-    const size_t mB = xml.find(markerB);
-    if (mA == std::wstring::npos || mB == std::wstring::npos) return false;
-    const size_t m = (mA < mB) ? mB : mA; // the marker farthest to the right
-    bool found = false;
-    for (size_t i = 0; i < xml.size();) {
-        const size_t lt = xml.find(L"<element", i);
-        if (lt == std::wstring::npos || lt > m) break;
-        const size_t gt = xml.find(L'>', lt);
-        if (gt == std::wstring::npos) break;
-        if (gt == lt || xml[gt - 1] == L'/') { i = gt + 1; continue; } // self-closing
-        size_t e = 0;
-        if (!FindElementEnd(xml, lt, e)) break;
-        // Must contain both markers inside [lt, e) and start before them.
-        if (lt < mA && lt < mB && e > mA && e > mB) {
-            // Keep the innermost (deepest = largest lt) enclosing element.
-            if (!found || lt > start) { start = lt; end = e; found = true; }
-        }
-        i = gt + 1;
-    }
-    return found;
-}
-
-static std::wstring BuildWuSettingsReplacementXml() {
-    const wchar_t* heading = EmbeddedMuiString(64540);
-    const wchar_t* linkHistory = EmbeddedMuiString(64541);
-    const wchar_t* linkSettings = EmbeddedMuiString(64542);
-    if (!heading) heading = L"To view the update history, choose one of the following settings:";
-    if (!linkHistory) linkHistory = L"View update history";
-    if (!linkSettings) linkSettings = L"Manage updates from the system settings";
-
-    // Link 1 opens the Installed Updates page on Windows 10 (classic CLSID) or
-    // the modern Settings update-history page on Windows 11.
-    std::wstring cmdHistory;
-    if (IsWindows10()) {
-        cmdHistory = L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}\"";
-    } else {
-        cmdHistory = L"shellexecute=\"ms-settings:windowsupdate-history\"";
-    }
-
-    std::wstring xml =
-        L"<element layoutpos=\"top\" layout=\"borderlayout()\" margin=\"rect(12rp,14rp,12rp,0)\">"
-        L"<element sheet=\"wuappstyle\" class=\"moduleborder1\" layoutpos=\"top\" layout=\"borderlayout()\">"
-        L"<element layoutpos=\"client\" layout=\"flowlayout(1)\" contentalign=\"wrapleft\" padding=\"rect(12rp,15rp,12rp,15rp)\">"
-        L"<element sheet=\"wuappstyle\" class=\"wuapp_content_title\" foreground=\"gtc(CONTROLPANELSTYLE,10,1,3803)\" margin=\"rect(0,-3rp,0,0)\" contentalign=\"wrapleft\" content=\""
-        + XmlEscape(heading) + L"\"/>"
-        L"<element layout=\"flowlayout(0,0,0,2)\" contentalign=\"wrapleft\">"
-        L"<NavigateButton layout=\"flowlayout()\" " + cmdHistory + L">"
-        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
-        + XmlEscape(linkHistory) + L"\"/></NavigateButton></element>"
-        L"<element layout=\"flowlayout(0,0,0,2)\" contentalign=\"wrapleft\">"
-        L"<NavigateButton layout=\"flowlayout()\" shellexecute=\"ms-settings:windowsupdate\">"
-        L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
-        + XmlEscape(linkSettings) + L"\"/></NavigateButton></element>"
-        L"</element></element></element>";
-    return xml;
-}
-
-static std::wstring PatchWuSettingsPageXml(const std::wstring& input) {
-    if (input.find(L"atom(pageSettings)") == std::wstring::npos)
-        return input;
-    // The settings-page "Important updates" module is referenced by name from
-    // wucltux code-behind (its atom ids like auOptionSelectorCombobox are looked
-    // up programmatically), so we CANNOT remove it (the page would fail to load).
-    // Instead we keep the whole module element and all its children intact (so the
-    // atoms still exist for the code-behind), mark it hidden, and insert the
-    // update-history shortcut block just before it.
-    size_t modStart = 0, modEnd = 0;
-    if (FindModuleContaining(input, L"resstr(1232)", L"atom(auOptionSelectorCombobox)", modStart, modEnd)) {
-        size_t gt = input.find(L'>', modStart);   // end of the module opening tag
-        if (gt != std::wstring::npos && gt < modEnd) {
-            std::wstring openTag = input.substr(modStart, gt - modStart);
-            openTag += L" visible=\"false\"";
-            std::wstring out = input.substr(0, modStart)
-                + BuildWuSettingsReplacementXml()
-                + openTag + L">"
-                + input.substr(gt + 1); // rest of module (children + close) + rest of page
-            Wh_Log(L"Windows Update Restorer: hidden Important updates module and inserted replacement on settings page");
-            return out;
-        }
-    }
-    Wh_Log(L"Windows Update Restorer: settings page patched but Important updates module not found");
-    return input;
-}
 
 
-#endif // 0 — settings-page patch reserved for future use
+
+
+
+
 
 // Applies the top-level Windows Update page XML patch. The settings child page
 // (pageSettings) is intentionally left untouched to guarantee it always loads.
 static std::wstring PatchModernWuPageXml(const std::wstring& input) {
-    if (!IsWindowsUpdatePageXml(input)) return input;
-
-    // Leave the legacy Windows Update settings child page completely untouched
-    // so it always renders (its code-behind resolves many atoms by name and any
-    // structural change to the page breaks loading).
-    if (input.find(L"atom(pageSettings)") != std::wstring::npos)
+    if (!IsWindowsUpdatePageXml(input)) {
+        DestroySettingsCombobox();
         return input;
+    }
+
+    // Settings child page (pageSettings, UIFILE 125): embeds the native Win32 ComboBox
+    if (input.find(L"atom(pageSettings)") != std::wstring::npos)
+        return PatchSettingsPageXml(input);
+
+    // Strictly isolate the ComboBox: destroy it immediately on any other page
+    DestroySettingsCombobox();
 
     // Restore/normalize the Windows 7/8.1-style left navigation pane for the
     // top-level Windows Update page, including fallback layouts.
@@ -4801,24 +5808,80 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
     if (withNavPane.find(L"wuamodern_best_effort") != std::wstring::npos)
         return withNavPane;
 
-    // Only inject anything if the user has the notice enabled. Keep the sidebar
-    // patch even when the recreated status box itself is disabled.
-    if (!g_showServiceNotice.load()) return withNavPane;
-
     // Place the new hub *after* the legacy warning module, in the normal white
-    // document area. It deliberately does not alter the red legacy card.
+    // document area. It deliberately does not alter the red legacy card. The
+    // same anchor is reused below when only the red box is shown.
     const std::wstring module = L"<element id=\"atom(moduleAUNotConfigured)\"";
     const size_t moduleStart = withNavPane.find(module);
-    if (moduleStart == std::wstring::npos) return withNavPane;
 
-    // Decide what to show:
-    //  - If Windows Update is actually available (service running), show a live
-    //    status box based on the standard pending-update registry flags (the same
-    //    approach as the Win7 Action Center Recreation mod). If updates are
-    //    pending, prompt to restart; otherwise show "up to date". The obsolete
-    //    "service not available" warning is suppressed in this case.
-    //  - Otherwise (service disabled/uninstalled) show the shield warning.
     const bool wuAvailable = IsWindowsUpdateServiceAvailable();
+
+    // If Windows Update is unavailable (service disabled/uninstalled or AU not
+    // configured), the recreated hub must disappear entirely and dynamically -
+    // not via a manual setting toggle. The user only sees the red warning box,
+    // so we replace it with our own faithful recreation that adds the blue link
+    // to the Windows Update settings page directly below it.
+    //
+    // We cannot attach the link to the native module: wucltux re-shows/re-sizes
+    // moduleAUNotConfigured at runtime and overrides whatever XML is added
+    // inside it, and re-appending it pushes any sibling after it below the box.
+    // Instead, collapse the native module to a zero-size element (its atom stays
+    // resolvable, so no S_FALSE and no provider fallback re-materialization -
+    // the same trick the hub path uses when the service is available) and render
+    // our self-contained red box + link module (BuildRedBoxFallbackXml), which
+    // wucltux does not touch: the link reliably stays directly under the box.
+    if (!wuAvailable) {
+        if (moduleStart == std::wstring::npos) return withNavPane;
+
+        // Remove the broken legacy "Check for updates for your PC" red box
+        // (moduleCheckForUpdates) when the setting is enabled: with the service
+        // stopped its "Check for updates" button cannot work, and it would
+        // duplicate the box shown below. Collapsing it to a zero-size element
+        // keeps the atom resolvable (no S_FALSE) and renders nothing, exactly
+        // like the moduleAUNotConfigured collapse above/below.
+        std::wstring patched = withNavPane;
+        if (g_removeLegacyBrokenOption.load()) {
+            const std::wstring checkModule = L"<element id=\"atom(moduleCheckForUpdates)\"";
+            const size_t checkStart = patched.find(checkModule);
+            if (checkStart != std::wstring::npos) {
+                size_t checkEnd = 0;
+                if (FindElementEnd(patched, checkStart, checkEnd)) {
+                    const std::wstring emptiedCheck =
+                        L"<element id=\"atom(moduleCheckForUpdates)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
+                    patched.replace(checkStart, checkEnd - checkStart, emptiedCheck);
+                    Wh_Log(L"Windows Update Restorer: removed broken legacy 'Check for updates' red box (RemoveLegacyBrokenOption)");
+                }
+            }
+        }
+
+        // Always render our self-contained "Turn on automatic updating" box
+        // recreation - both with "Show recreated interface" ON and OFF. The
+        // native module (moduleAUNotConfigured) is collapsed to a zero-size
+        // element (atom stays resolvable, no S_FALSE) because the provider
+        // re-shows/re-sizes it at runtime and it is unreliable on modern
+        // builds. With the recreated interface ON the blue settings link is
+        // included below the box; with it OFF the box is shown without the
+        // link (the user explicitly wants the "Turn on automatic updating"
+        // box to be present in this state too).
+        size_t moduleEnd = 0;
+        if (!FindElementEnd(patched, moduleStart, moduleEnd)) return withNavPane;
+        const std::wstring emptiedModule =
+            L"<element id=\"atom(moduleAUNotConfigured)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
+        patched.replace(moduleStart, moduleEnd - moduleStart, emptiedModule);
+        const size_t insertAt = moduleStart + emptiedModule.size();
+        patched.insert(insertAt, BuildRedBoxFallbackXml(g_showServiceNotice.load()));
+        Wh_Log(L"Windows Update Restorer: replaced native red box with recreation (link=%d)",
+               static_cast<int>(g_showServiceNotice.load()));
+        return patched;
+    }
+
+    // Only inject anything if the user has the notice enabled. Keep the sidebar
+    // patch even when the recreated status box itself is disabled. (The
+    // "service unavailable" case above already returned with the broken legacy
+    // box removed when the setting is on.)
+    if (!g_showServiceNotice.load()) return withNavPane;
+
+    if (moduleStart == std::wstring::npos) return withNavPane;
 
     std::wstring patched = withNavPane;
     size_t insertAt = moduleStart;
@@ -4827,17 +5890,30 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
         // "automatic updates are off" box (moduleAUNotConfigured) is misleading and
         // must be suppressed. The DirectUI provider re-shows modules at runtime, so
         // simply adding visible="false" in XML is overridden and does NOT hide it.
-        // Instead we remove the whole module element from the XML; the provider then
-        // has nothing to show. The position it occupied becomes our insertion point.
+        //
+        // Fully erasing the <element>...</element> (previous approach) removes the
+        // atom(moduleAUNotConfigured) id from the tree entirely. On Windows 11 24H2
+        // the provider apparently still expects to resolve that id while finishing
+        // its own setup pass; when it can't, DUISetXML returns S_FALSE (hr=1)
+        // instead of S_OK, and the provider's fallback is to re-materialize the
+        // native red module from its own internal template - producing the legacy
+        // box duplicated alongside our recreated hub.
+        //
+        // Fix: keep the id present but collapse the element to an empty,
+        // self-closing, zero-sized node. The atom still resolves (no S_FALSE,
+        // no fallback re-show), but there is nothing left to render.
         size_t moduleEnd = 0;
         if (!FindElementEnd(patched, moduleStart, moduleEnd)) return input;
-        patched.erase(moduleStart, moduleEnd - moduleStart);
-        insertAt = moduleStart;
+        const std::wstring emptiedModule =
+            L"<element id=\"atom(moduleAUNotConfigured)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
+        patched.replace(moduleStart, moduleEnd - moduleStart, emptiedModule);
+        insertAt = moduleStart + emptiedModule.size();
     }
 
     std::wstring hub;
-    if (wuAvailable) {
-        // Windows Update is available: replicate the classic Windows 7 header.
+    {
+        // Windows Update is available (already guaranteed above): replicate the
+        // classic Windows 7 header.
         //  - A colored rectangle (green = up to date, orange = pending updates
         //    or updates available) with a shield/check icon, the "Windows Update"
         //    title and a status line ("No important updates available", etc.).
@@ -5005,48 +6081,241 @@ static std::wstring PatchModernWuPageXml(const std::wstring& input) {
             // --- info lines below the rectangle, each its own column row ---
             + infoBlock +
             L"</element>";
-    } else {
-        // Windows Update is disabled/missing. Instead of leaving the user with
-        // the cryptic native red box alone, show a friendly, fully translated
-        // notice (the "service not available" message) with the embedded shield
-        // icon. It is inserted just above the native box, which is still
-        // accurate, so the user gets a clear explanation plus the system's own
-        // indicator.
-        const wchar_t* title = nullptr;
-        const wchar_t* text = nullptr;
-        SelectServiceMessage(title, text);
-        if (!title) title = L"Windows Update service is not available";
-        if (!text) text = L"";
-        wchar_t iconSpec[64];
-        swprintf_s(iconSpec, L"icon(%u,48rp,48rp,library(shell32.dll))",
-                   static_cast<unsigned>(kWuDisabledShieldIconId));
-        hub =
-            L"<element id=\"atom(wuamodern_best_effort)\" layoutpos=\"top\" layout=\"borderlayout()\" "
-            L"margin=\"rect(12rp,14rp,12rp,0)\">"
-            L"<element sheet=\"wuappstyle\" class=\"moduleborder1\" layoutpos=\"top\" layout=\"borderlayout()\">"
-            L"<element layoutpos=\"left\" sheet=\"wuappstyle\" class=\"security_box_gradient_red\" width=\"16rp\"/>"
-            L"<element layoutpos=\"client\" layout=\"borderlayout()\" padding=\"rect(12rp,15rp,12rp,15rp)\">"
-            L"<element layoutpos=\"top\" layout=\"borderlayout()\">"
-            L"<viewer layoutpos=\"left\" padding=\"rect(0,0,12rp,0)\">"
-            L"<element content=\"" + std::wstring(iconSpec) + L"\"/></viewer>"
-            L"<element layoutpos=\"client\" layout=\"flowlayout(1)\" contentalign=\"wrapleft\">"
-            L"<element sheet=\"wuappstyle\" class=\"wuapp_content_title\" foreground=\"gtc(CONTROLPANELSTYLE,10,1,3803)\" margin=\"rect(0,-3rp,0,0)\" contentalign=\"wrapleft\" content=\""
-            + XmlEscape(title) +
-            L"\"/><element sheet=\"wuappstyle\" class=\"cp_content_text\" contentalign=\"wrapleft\" content=\""
-            + XmlEscape(text) +
-            L"\"/></element></element>"
-            L"</element>"
-            L"</element>"
-            L"</element>";
     }
 
     patched.insert(insertAt, hub);
     return patched;
 }
 
+// =============================================================================
+// Windows 7-Style Custom Task Pane Section for Control Panel Sidebar
+// =============================================================================
+static int g_hoveredTaskPaneItem = -1;
+static HWND g_subclassedSidebarHwnd = nullptr;
+
+static BOOL CALLBACK EnumSidebarChildProc(HWND hwnd, LPARAM lParam) {
+    auto* pFound = reinterpret_cast<HWND*>(lParam);
+    if (!IsWindowVisible(hwnd)) return TRUE;
+
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    int width = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+
+    if (width >= 140 && width <= 260 && height > 300) {
+        wchar_t className[64] = {};
+        GetClassNameW(hwnd, className, ARRAYSIZE(className));
+        if (_wcsicmp(className, L"DirectUIHWND") == 0 || (width >= 140 && width <= 260)) {
+            *pFound = hwnd;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static HWND FindControlPanelSidebar(HWND hwndPage) {
+    if (!hwndPage || !IsWindow(hwndPage)) return nullptr;
+    HWND found = nullptr;
+    EnumChildWindows(hwndPage, EnumSidebarChildProc, reinterpret_cast<LPARAM>(&found));
+    if (!found) {
+        HWND root = GetAncestor(hwndPage, GA_ROOT);
+        if (root && root != hwndPage) {
+            EnumChildWindows(root, EnumSidebarChildProc, reinterpret_cast<LPARAM>(&found));
+        }
+    }
+    return found;
+}
+
+static void PaintCustomTaskPaneSection(HDC hdc, const RECT& rcClient) {
+    int startY = 220;
+    int lineHeight = 22;
+    int leftMargin = 12;
+
+    const UINT stringIds[4] = { 350, 351, 352, 353 };
+    const wchar_t* fallbacks[4] = {
+        L"Check for updates",
+        L"Change settings",
+        L"View update history",
+        L"Restore hidden updates"
+    };
+
+    HPEN hPen = CreatePen(PS_SOLID, 1, RGB(229, 229, 229));
+    if (hPen) {
+        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+        MoveToEx(hdc, rcClient.left + leftMargin, startY - 10, nullptr);
+        LineTo(hdc, rcClient.right - leftMargin, startY - 10);
+        SelectObject(hdc, hOldPen);
+        DeleteObject(hPen);
+    }
+
+    HFONT hFont = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                              CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    if (!hFont) return;
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    SetBkMode(hdc, TRANSPARENT);
+
+    for (int i = 0; i < 4; ++i) {
+        RECT rcItem = {
+            rcClient.left + leftMargin,
+            startY + i * lineHeight,
+            rcClient.right - leftMargin,
+            startY + (i + 1) * lineHeight
+        };
+
+        COLORREF color = (i == g_hoveredTaskPaneItem) ? RGB(51, 153, 255) : RGB(0, 102, 204);
+        SetTextColor(hdc, color);
+
+        const wchar_t* text = EmbeddedMuiString(stringIds[i]);
+        if (!text || !*text) text = fallbacks[i];
+
+        DrawTextW(hdc, text, -1, &rcItem, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+
+    SelectObject(hdc, hOldFont);
+    DeleteObject(hFont);
+}
+
+static LRESULT CALLBACK SidebarSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                            UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+        case WM_PAINT: {
+            LRESULT lRes = DefSubclassProc(hwnd, uMsg, wParam, lParam);
+            if (!IsWindow(hwnd)) return lRes;
+
+            RECT rcClient{};
+            GetClientRect(hwnd, &rcClient);
+
+            HDC hdc = GetDC(hwnd);
+            if (hdc) {
+                PaintCustomTaskPaneSection(hdc, rcClient);
+                ReleaseDC(hwnd, hdc);
+            }
+            return lRes;
+        }
+        case WM_MOUSEMOVE: {
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
+
+            int startY = 220;
+            int lineHeight = 22;
+            int leftMargin = 12;
+            RECT rcClient{};
+            GetClientRect(hwnd, &rcClient);
+
+            int hit = -1;
+            for (int i = 0; i < 4; ++i) {
+                RECT rcItem = {
+                    rcClient.left + leftMargin,
+                    startY + i * lineHeight,
+                    rcClient.right - leftMargin,
+                    startY + (i + 1) * lineHeight
+                };
+                if (x >= rcItem.left && x <= rcItem.right && y >= rcItem.top && y <= rcItem.bottom) {
+                    hit = i;
+                    break;
+                }
+            }
+
+            if (g_hoveredTaskPaneItem != hit) {
+                g_hoveredTaskPaneItem = hit;
+                InvalidateRect(hwnd, nullptr, FALSE);
+
+                if (hit != -1) {
+                    TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
+                    TrackMouseEvent(&tme);
+                }
+            }
+            break;
+        }
+        case WM_MOUSELEAVE: {
+            if (g_hoveredTaskPaneItem != -1) {
+                g_hoveredTaskPaneItem = -1;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            break;
+        }
+        case WM_LBUTTONUP: {
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
+
+            int startY = 220;
+            int lineHeight = 22;
+            int leftMargin = 12;
+            RECT rcClient{};
+            GetClientRect(hwnd, &rcClient);
+
+            int hit = -1;
+            for (int i = 0; i < 4; ++i) {
+                RECT rcItem = {
+                    rcClient.left + leftMargin,
+                    startY + i * lineHeight,
+                    rcClient.right - leftMargin,
+                    startY + (i + 1) * lineHeight
+                };
+                if (x >= rcItem.left && x <= rcItem.right && y >= rcItem.top && y <= rcItem.bottom) {
+                    hit = i;
+                    break;
+                }
+            }
+
+            if (hit != -1) {
+                if (hit != 1) {
+                    DestroySettingsCombobox();
+                }
+                if (hit == 0) {
+                    ShellExecuteW(hwnd, L"open", L"explorer.exe",
+                                  (L"shell:::" + std::wstring(kAppletClsid)).c_str(),
+                                  nullptr, SW_SHOWNORMAL);
+                } else if (hit == 1) {
+                    ShowWuSettingsDialog(hwnd);
+                } else if (hit == 2) {
+                    OpenInstalledUpdates(hwnd);
+                } else if (hit == 3) {
+                    ShellExecuteW(hwnd, L"open", L"explorer.exe",
+                                  (L"shell:::" + std::wstring(kAppletClsid)).c_str(),
+                                  nullptr, SW_SHOWNORMAL);
+                }
+            }
+            break;
+        }
+        case WM_NCDESTROY: {
+            RemoveWindowSubclass(hwnd, SidebarSubclassProc, uIdSubclass);
+            if (g_subclassedSidebarHwnd == hwnd) {
+                g_subclassedSidebarHwnd = nullptr;
+            }
+            break;
+        }
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+static void TryInstallSidebarSubclass(HWND hwndPage) {
+    if (g_subclassedSidebarHwnd && IsWindow(g_subclassedSidebarHwnd)) return;
+
+    HWND sidebar = FindControlPanelSidebar(hwndPage);
+    if (sidebar && IsWindow(sidebar)) {
+        if (SetWindowSubclass(sidebar, SidebarSubclassProc, 1, 0)) {
+            g_subclassedSidebarHwnd = sidebar;
+            Wh_Log(L"Windows Update Restorer: successfully subclassed control panel sidebar HWND %p", sidebar);
+        }
+    }
+}
+
+static void CheckAndInstallSidebarSubclass() {
+    if (g_subclassedSidebarHwnd && IsWindow(g_subclassedSidebarHwnd)) return;
+    HWND hwndForeground = GetForegroundWindow();
+    if (hwndForeground) TryInstallSidebarSubclass(hwndForeground);
+    if (!g_subclassedSidebarHwnd) {
+        HWND hwndActive = GetActiveWindow();
+        if (hwndActive) TryInstallSidebarSubclass(hwndActive);
+    }
+}
+
 static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
                                               HINSTANCE resourceModule,
                                               HINSTANCE hInstance) {
+    CheckAndInstallSidebarSubclass();
     if (!DUISetXMLOriginal) return E_FAIL;
     if (g_inWuXmlPatch || !xml) {
         return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
@@ -5056,6 +6325,11 @@ static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
     Wh_Log(L"Windows Update Restorer: modern WUA links injected through SetXML");
     WuXmlPatchGuard guard;
     HRESULT hr = DUISetXMLOriginal(parser, patched.c_str(), resourceModule, hInstance);
+    if (patched.find(L"atom(pageSettings)") != std::wstring::npos) {
+        InitializeNativeSettingsCombobox(nullptr);
+    } else {
+        DestroySettingsCombobox();
+    }
     return hr;
 }
 
@@ -5079,8 +6353,43 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
                                                               hInstance1, hInstance2);
     WuXmlPatchGuard guard;
     const HRESULT hr = DUISetXMLOriginal(parser, patched.c_str(), reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
-    Wh_Log(L"Windows Update Restorer: modern WUA command links injected (hr=0x%08X)",
-           static_cast<unsigned>(hr));
+    if (patched.find(L"atom(pageSettings)") != std::wstring::npos) {
+        InitializeNativeSettingsCombobox(nullptr);
+    } else {
+        DestroySettingsCombobox();
+    }
+    Wh_Log(L"Windows Update Restorer: [BUILD-MARKER-DEBUG-v4] modern WUA command links injected (hr=0x%08X, patchedLen=%zu, origLen=%zu, wuAvailable=%d)",
+           static_cast<unsigned>(hr), patched.size(), xml.size(), static_cast<int>(IsWindowsUpdateServiceAvailable()));
+    // One-time diagnostic dump of both the original and patched XML so the
+    // actual wucltux structure can be inspected directly instead of guessed.
+    {
+        static std::atomic<bool> dumped{false};
+        bool expected = false;
+        if (dumped.compare_exchange_strong(expected, true)) {
+            const std::wstring dir = StoreDir();
+            if (!dir.empty()) {
+                HANDLE f1 = CreateFileW((dir + L"\\wu_orig_dump.xml").c_str(), GENERIC_WRITE, 0, nullptr,
+                                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (f1 != INVALID_HANDLE_VALUE) {
+                    DWORD written = 0;
+                    WriteFile(f1, xml.c_str(), static_cast<DWORD>(xml.size() * sizeof(wchar_t)), &written, nullptr);
+                    CloseHandle(f1);
+                }
+                HANDLE f2 = CreateFileW((dir + L"\\wu_patched_dump.xml").c_str(), GENERIC_WRITE, 0, nullptr,
+                                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (f2 != INVALID_HANDLE_VALUE) {
+                    DWORD written = 0;
+                    WriteFile(f2, patched.c_str(), static_cast<DWORD>(patched.size() * sizeof(wchar_t)), &written, nullptr);
+                    CloseHandle(f2);
+                }
+                Wh_Log(L"Windows Update Restorer: DEBUG dumped XML to %s\\wu_orig_dump.xml and wu_patched_dump.xml",
+                       dir.c_str());
+            }
+        }
+    }
+    if (hr == S_FALSE) {
+        Wh_Log(L"Windows Update Restorer: WARNING - SetXML returned S_FALSE, provider may reject/re-show native modules");
+    }
     return hr;
 }
 
@@ -5090,8 +6399,9 @@ static void InstallModernWuXmlPatchHook() {
     if (!dui70) return;
     for (const char* name : {
 #ifdef _WIN64
-             "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z",
 #endif
+             "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z",
+
              "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z" }) {
         if (FARPROC proc = GetProcAddress(dui70, name)) { DUISetXMLOriginal = reinterpret_cast<DUISetXML_t>(proc); break; }
     }
@@ -5102,8 +6412,9 @@ static void InstallModernWuXmlPatchHook() {
     WindhawkUtils::SetFunctionHook(setXmlTarget, DUISetXMLHook, &DUISetXMLOriginal);
     for (const char* name : {
 #ifdef _WIN64
-             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z",
 #endif
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z",
+
              "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z" }) {
         if (FARPROC proc = GetProcAddress(dui70, name)) {
             WindhawkUtils::SetFunctionHook(reinterpret_cast<DUISetXMLFromResource_t>(proc),
@@ -5275,6 +6586,18 @@ static void InstallShellPresentationHooks() {
             WindhawkUtils::SetFunctionHook(reinterpret_cast<SHDefExtractIconW_t>(p),
                                            SHDefExtractIconWHook,
                                            &SHDefExtractIconWOriginal);
+        }
+        // Private "wurestorer:" command protocol for the classic option
+        // selector on the settings page (DirectUI NavigateButton -> ShellExecute).
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteExW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteExW_t>(p),
+                                           ShellExecuteExWHook,
+                                           &ShellExecuteExWOriginal);
+        }
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteW"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteW_t>(p),
+                                           ShellExecuteWHook,
+                                           &ShellExecuteWOriginal);
         }
     }
 
@@ -5976,6 +7299,10 @@ static void SetupWorker() {
 
 BOOL Wh_ModInit() {
     try {
+        // TrackBar (and common controls) support for the classic settings dialog.
+        INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_BAR_CLASSES };
+        InitCommonControlsEx(&icc);
+
         LoadLanguageSetting();
         InitPaths();
         void* openEx = RegistryFunction("RegOpenKeyExW");
@@ -6030,6 +7357,12 @@ BOOL Wh_ModInit() {
             }
         }
 
+        // Install the DirectUI Element::SetEnabled hook early (before any page
+        // XML is parsed) so the settings combobox disable is intercepted at the
+        // source from the very first render. Idempotent; a no-op for every
+        // control that is not the protected combobox.
+        EnsureSetEnabledHookInstalled();
+
         // The requested actions live in the host Control Panel navigation pane.
         // Prepare shutdown signalling before either worker starts.
         g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -6053,12 +7386,16 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     const std::wstring oldLanguage = g_language;
     LoadLanguageSetting();
+    UpdateSettingsComboboxLanguage();
     if (oldLanguage != g_language) {
         // Ensure a previous rebuild (if any) has finished before starting a new
         // one, so we never run two builds concurrently.
         if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
         g_rebuildThread.reset();
-        g_rebuildThread.emplace([] { RebuildEmbeddedMuiForLanguage(); });
+        g_rebuildThread.emplace([] {
+            RebuildEmbeddedMuiForLanguage();
+            UpdateSettingsComboboxLanguage();
+        });
     }
 }
 
@@ -6103,6 +7440,7 @@ static void CleanupGeneratedResourceModuleFiles() {
 }
 
 void Wh_ModUninit() {
+    DestroySettingsCombobox();
     g_stopping.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
     CloseActiveDownloadHandles();
