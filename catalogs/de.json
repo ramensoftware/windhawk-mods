@@ -9677,6 +9677,38 @@
         "version": "1.3.0"
       }
     },
+    "performance-info-tools-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786378556000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786378556000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwininet -ladvapi32 -lole32 -luser32",
+        "description": "This mod restores the classic Windows Performance Information and Tools (Windows Experience Index) page for Windows 10 and 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "control.exe"
+        ],
+        "name": "Performance Information and Tools Restorer",
+        "version": "1.0.0"
+      }
+    },
     "photos-fullscreen": {
       "details": {
         "defaultSorting": 1989,

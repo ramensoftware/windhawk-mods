@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-09T17:40:04.000Z</updated>
+    <updated>2026-08-10T16:15:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Performance Information and Tools Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/performance-info-tools-restorer#80cd389071afb4876534e924c9ee32a39377b5c1</id>
+        <link href="https://windhawk.net/mods/performance-info-tools-restorer"/>
+        <updated>2026-08-10T16:15:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="performanceinformationandtoolsrestorer">Performance Information and Tools Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.</p>
+<p>The mod has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>The mod includes <strong>3 skins</strong>: Windows 7, Windows 8, and Windows Vista.</p>
+<h3 id="windows7skin">Windows 7 skin</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows7perf.png" alt="Windows 7 skin" /></p>
+<h3 id="windows8skin">Windows 8 skin</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows8perf.png" alt="Windows 8 skin" /></p>
+<h3 id="windowsvistaskin">Windows Vista skin</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsvistaperf.png" alt="Windows Vista skin" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Classic WEI page</strong>: The mod restores "Performance Information and Tools" in Control Panel (Large/Small icons view)</li>
+<li><strong>Automatic setup</strong>: The required PerfCenterCPL.dll is downloaded and verified automatically, nothing to install manually</li>
+<li><strong>Right DLL for the system</strong>: Uses the Windows 8 DLL on Windows 8.1/10/11</li>
+<li><strong>Built-in translations and language selector</strong>: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. </li>
+<li><strong>Conservative resource handling</strong>: The mod implements a conservative approach to be more stable</li>
+<li><strong>100% reversible</strong>: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped because explorer.exe keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after explorer.exe restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.</li>
+</ul>
+<p><strong>Additional note</strong>: To open the "Performance and Informations tools" without having to go to the Control Panel, the <code>shell:::{78F3955E-3B90-4184-BD14-5397C15F1EFC}</code> command can be run when pressing Windows+R like in the classic versions of Windows.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><strong>Windows 10 or Windows 11</strong> (64-bit) with the native Control Panel</li>
+<li>An internet connection the first time the mod runs (to download the DLL)</li>
+</ul>
+<h2 id="designandsafetynotes">Design and safety notes</h2>
+<ul>
+<li>The setup step (download + verification) runs on a background thread so it never blocks explorer.exe startup, and it is serialized across processes with a named mutex so two explorer.exe/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place. The verification is performed through the pinned, already-open file handle (never re-resolved by path), and after <code>LoadLibraryExW</code> the loaded module is confirmed to map that same file object via <code>GetFileInformationByHandleEx(FileIdInfo)</code>; if the two don't match the module is unloaded and refused. The private resource module is rebuilt from the verified source on every load (a leftover file with a predictable name is never trusted) and its final on-disk bytes are SHA-256 compared against the build.</li>
+<li>The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.</li>
+<li>If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart explorer.exe to retry).</li>
+<li>The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through <code>Wh_GetModStoragePath</code>, so it also works with portable Windhawk installations.</li>
+<li>All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>"(unrated)" scores</strong>: If your PC has never been rated, plug in power and run <code>winsat formal</code> once as admin</li>
+<li><strong>On battery</strong>: The assessment is not applicable while running on battery</li>
+<li><strong>Windows 7 page on modern systems</strong>: The Windows 7 version of the page is not compatible with Windows 8.1/10/11 (It displays the "cannot load page" error), so the Windows 8 DLL is always used there</li>
+<li><strong>Windows 7 skin score scale</strong>: The optional Windows 7 skin is only a visual/layout recreation. The restored page still uses the Windows 8 scoring range, so ratings can go up to 9.9 rather than Windows 7's original 7.9 scale.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>Cips</strong> — Testing the mod on Windows 11 25H2</li>
+<li><strong>susiked</strong> — Testing the mod on Windows 10 22H2 and providing the Windows 8 skin screenshot</li>
+<li><strong>MzKo</strong> — Testing the mod on Windows 10 22H2, providing feedback, and providing the Windows Vista skin screenshot</li>
+</ul>
+<p>If any problems are encountered, please report them to the mod's author.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows SDR to HDR Tonemapping Fix 1.0]]></title>
         <id>https://windhawk.net/mods/dwm-eotf-gamma#c844e0ef160245b5c980282905a5fabd2dcbcc35</id>
@@ -753,40 +812,6 @@ Credits to m417z for the code review and enhancing the mod.</p>]]></content>
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Blob Shape 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-blob-shape#e5d8d9d8d4380fd4f18e08737e3925bc0c48665d</id>
-        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
-        <updated>2026-08-03T20:11:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarblobshape">Taskbar Blob Shape</h1>
-<p>Adds a blob shape behind active taskbar buttons.</p>
-<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo.gif" alt="Taskbar Blob Shape" /></p>
-<p>Based on <strong>Taskbar Elastic WinUI Pill</strong> and the unreleased <strong>Taskbar Elastic
-Border</strong> by <strong>Lockframe</strong>.</p>
-<p>Every taskbar button gets its own blob shape, shown or hidden as the
-button's running indicator state changes. The shapes are hosted in the
-taskbar's RootGrid (above the task list's clipping region, so the flares
-render fully) and each one is glued to its button with a composition
-expression, so it follows the button through reordering, reflow, and
-animations on the render thread.</p>
-<p>The blob shape is a rounded rectangle whose top extends upward and flares
-outward with concave (outside) corner radii, ending in a flat top edge:</p>
-<ul>
-<li><strong>Width / Height</strong>: the main area of the blob shape ('auto' matches the
-button's background element). Horizontally the shape is centered on the
-button; vertically its flat top edge is anchored to the top of the
-taskbar, with the body hanging downward.</li>
-<li><strong>Top corner radius</strong>: the radius of the concave top flares. The flares
-are circular quarter arcs, so this also sets how far the blob shape
-extends upward and outward. Total size is
-(Width + 2*TopRadius) x (Height + TopRadius).</li>
-<li><strong>Bottom corner radius</strong>: the convex bottom corners of the blob shape.</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>

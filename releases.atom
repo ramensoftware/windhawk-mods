@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-09T17:40:04.000Z</updated>
+    <updated>2026-08-10T16:15:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Performance Information and Tools Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/performance-info-tools-restorer#80cd389071afb4876534e924c9ee32a39377b5c1</id>
+        <link href="https://windhawk.net/mods/performance-info-tools-restorer"/>
+        <updated>2026-08-10T16:15:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="performanceinformationandtoolsrestorer">Performance Information and Tools Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod restores the classic Windows "Performance Information and Tools" (Windows Experience Index) page on Windows 10 and 11, bringing back the CPU, RAM, graphics and disk scores in Control Panel.</p>
+<p>The mod has been tested on Windows 10 21H2, Windows 10 22H2, Windows 11 24H2 and Windows 11 25H2.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>The mod includes <strong>3 skins</strong>: Windows 7, Windows 8, and Windows Vista.</p>
+<h3 id="windows7skin">Windows 7 skin</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows7perf.png" alt="Windows 7 skin" /></p>
+<h3 id="windows8skin">Windows 8 skin</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windows8perf.png" alt="Windows 8 skin" /></p>
+<h3 id="windowsvistaskin">Windows Vista skin</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsvistaperf.png" alt="Windows Vista skin" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Classic WEI page</strong>: The mod restores "Performance Information and Tools" in Control Panel (Large/Small icons view)</li>
+<li><strong>Automatic setup</strong>: The required PerfCenterCPL.dll is downloaded and verified automatically, nothing to install manually</li>
+<li><strong>Right DLL for the system</strong>: Uses the Windows 8 DLL on Windows 8.1/10/11</li>
+<li><strong>Built-in translations and language selector</strong>: All 147 page strings are embedded for Italian, Spanish, French, English, Turkish, Russian, Chinese simplified, German, Portuguese and Polish. The language can follow Windows automatically or be selected manually. </li>
+<li><strong>Conservative resource handling</strong>: The mod implements a conservative approach to be more stable</li>
+<li><strong>100% reversible</strong>: Disabling the mod makes the Control Panel entry disappear immediately. The files it created (private resource module, downloaded DLL, variant marker, and any stale copies) are removed on the next unload of the mod in a process where they are no longer mapped because explorer.exe keeps the DLL loaded in memory for the rest of its session, a file that is still in use at that moment is retried on a later unload (e.g. after explorer.exe restarts). By default, downloaded files are preserved for faster offline re-enabling and registry keys are not written.</li>
+</ul>
+<p><strong>Additional note</strong>: To open the "Performance and Informations tools" without having to go to the Control Panel, the <code>shell:::{78F3955E-3B90-4184-BD14-5397C15F1EFC}</code> command can be run when pressing Windows+R like in the classic versions of Windows.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><strong>Windows 10 or Windows 11</strong> (64-bit) with the native Control Panel</li>
+<li>An internet connection the first time the mod runs (to download the DLL)</li>
+</ul>
+<h2 id="designandsafetynotes">Design and safety notes</h2>
+<ul>
+<li>The setup step (download + verification) runs on a background thread so it never blocks explorer.exe startup, and it is serialized across processes with a named mutex so two explorer.exe/Control Panel instances can't write the same file at once. The download always goes to a temporary file that is SHA-256 checked against a pinned digest and then atomically moved into place. The verification is performed through the pinned, already-open file handle (never re-resolved by path), and after <code>LoadLibraryExW</code> the loaded module is confirmed to map that same file object via <code>GetFileInformationByHandleEx(FileIdInfo)</code>; if the two don't match the module is unloaded and refused. The private resource module is rebuilt from the verified source on every load (a leftover file with a predictable name is never trusted) and its final on-disk bytes are SHA-256 compared against the build.</li>
+<li>The download is time-limited (connect/send/receive and an overall deadline), retried a bounded number of times, and aborts immediately on shutdown, so a slow or captive-portal network can never hang explorer.exe or block sign-out. If a valid DLL was already downloaded previously, it is reused with no network access at all, so the page keeps working offline.</li>
+<li>If the DLL cannot be obtained, the mod fails gracefully: nothing crashes or blocks, and a clear message is written to the mod's log explaining that an internet connection is required (restart explorer.exe to retry).</li>
+<li>The mod only stores files in its dedicated Windhawk mod-storage folder and never touches files it did not create. This location is obtained through <code>Wh_GetModStoragePath</code>, so it also works with portable Windhawk installations.</li>
+<li>All registry values are provided through an in-memory virtualization layer and nothing is persisted to the registry, so uninstalling the mod does not leave traces.</li>
+</ul>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li><strong>"(unrated)" scores</strong>: If your PC has never been rated, plug in power and run <code>winsat formal</code> once as admin</li>
+<li><strong>On battery</strong>: The assessment is not applicable while running on battery</li>
+<li><strong>Windows 7 page on modern systems</strong>: The Windows 7 version of the page is not compatible with Windows 8.1/10/11 (It displays the "cannot load page" error), so the Windows 8 DLL is always used there</li>
+<li><strong>Windows 7 skin score scale</strong>: The optional Windows 7 skin is only a visual/layout recreation. The restored page still uses the Windows 8 scoring range, so ratings can go up to 9.9 rather than Windows 7's original 7.9 scale.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>Cips</strong> — Testing the mod on Windows 11 25H2</li>
+<li><strong>susiked</strong> — Testing the mod on Windows 10 22H2 and providing the Windows 8 skin screenshot</li>
+<li><strong>MzKo</strong> — Testing the mod on Windows 10 22H2, providing feedback, and providing the Windows Vista skin screenshot</li>
+</ul>
+<p>If any problems are encountered, please report them to the mod's author.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows SDR to HDR Tonemapping Fix 1.0]]></title>
         <id>https://windhawk.net/mods/dwm-eotf-gamma#c844e0ef160245b5c980282905a5fabd2dcbcc35</id>
@@ -916,70 +975,6 @@ timedate.cpl).</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar audio device switcher 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-device-switcher#ca9e7ad4464eaf177d708b5646e0a22b264c879b</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-device-switcher"/>
-        <updated>2026-07-30T22:29:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaraudiodeviceswitcher">Taskbar audio device switcher</h1>
-<p>Adds one tray (notification area) icon per connected audio device. The icon of
-the device that is currently the default one is drawn normally, all the other
-ones are dimmed and grayed out. <strong>Left click</strong> on an icon makes that device the
-default playback/recording device, <strong>right click</strong> opens a menu with additional
-options.</p>
-<p>Each device uses its own icon, the one Windows shows in the sound settings, so
-headphones, speakers, HDMI output and a microphone are easy to tell apart.</p>
-<p><img src="https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/tray-icons.png" alt="Tray icons" /><br />
-<em>Two playback devices: the default one is drawn normally, the other one dimmed</em></p>
-<p><img src="https://raw.githubusercontent.com/umnik1/windhawk-mods/refs/heads/assets/taskbar-audio-device-switcher/context-menu.png" alt="Right click menu" /><br />
-<em>The right click menu of a device</em></p>
-<h2 id="howthisdiffersfromtheotheraudioswitchingmods">How this differs from the other audio switching mods</h2>
-<p>The catalog already has several mods for switching audio devices, but the
-interaction model here is different: instead of one icon that you click through
-or scroll on, every device gets its own icon, with its own graphic, and you
-click the device you want directly. Nothing is cycled, and no list of devices
-has to be configured in advance.</p>
-<ul>
-<li><strong>Audioswap</strong> / <strong>Microswap</strong> — a single tray icon which cycles through a
-preconfigured list of up to 6 devices.</li>
-<li><strong>Mic Tray Control</strong> — one microphone icon, focused on mute and volume.</li>
-<li><strong>Audio scroll switcher</strong> — switches devices by scrolling over the taskbar,
-without adding any icon.</li>
-</ul>
-<h2 id="choosingwhichdevicesareshown">Choosing which devices are shown</h2>
-<p>The right click menu has a <strong>Shown devices</strong> submenu which lists every device,
-including the ones which are currently hidden, with a check mark next to the
-ones that have an icon. Clicking an entry shows or hides that device, and the
-choice is remembered across restarts. There is also <strong>Hide this icon</strong> for the
-device that was clicked, and <strong>Show all devices</strong> to undo everything.</p>
-<p>The icon of the last remaining device can't be hidden, otherwise there would be
-no menu left to bring the other ones back. For the same reason, if every device
-that is currently connected happens to be hidden — say the only visible one was
-unplugged — the hidden ones are shown anyway until that changes.</p>
-<h2 id="windows11note">Windows 11 note</h2>
-<p>New tray icons are hidden inside the overflow ("^") flyout by default. To make
-the audio device icons always visible, either drag them out of the flyout onto
-the taskbar, or go to
-<em>Settings → Personalization → Taskbar → Other system tray icons</em> and turn the
-<code>windhawk.exe</code> entries on.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod runs in a dedicated <code>windhawk.exe</code> process and doesn't hook anything,
-see <a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Mods as
-tools</a>.</li>
-<li>Devices are refreshed automatically when a device is plugged in/out, enabled,
-disabled, or when the default device changes from somewhere else.</li>
-<li>Switching the default device uses the undocumented <code>IPolicyConfig</code> interface,
-the same one used by nircmd, SoundSwitch and similar tools.</li>
-<li>Middle click sets the device as the communications device only. With the
-default settings a left click already does that too, so middle click is only
-useful if the <em>Switch the communications device too</em> option is turned off.</li>
-</ul>]]></content>
-        <author>
-            <name>Maksim Chingin</name>
-            <uri>https://github.com/umnik1</uri>
         </author>
     </entry>
 </feed>
