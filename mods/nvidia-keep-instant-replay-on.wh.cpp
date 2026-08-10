@@ -25,7 +25,8 @@ mod, so there's no extra program to install, no tray icon, and nothing to rememb
 
 It watches the registry key Nvidia stores the state in, so it reacts the moment the state
 changes rather than waiting for the next poll. And if it finds itself fighting with something
-that keeps switching Instant Replay back off, it backs off instead of flip-flopping forever.
+that keeps switching Instant Replay back off, it backs off and eventually stops, rather than
+trading keystrokes with it forever.
 
 This is a tool mod: it hooks nothing and injects into nothing, it just runs in its own
 dedicated process as the logged-in user.
@@ -64,6 +65,12 @@ still a poor choice. This is inherent to the approach: the Nvidia App no longer 
 server GeForce Experience used to expose, so the shortcut is the only way left to switch
 Instant Replay from outside.
 
+Because those keystrokes are the mod's main cost to you, it also caps how often it is willing
+to press at all. If something keeps switching Instant Replay off - even slowly, every few
+minutes - the mod backs off progressively and stops after about an hour of that, rather than
+trading keystrokes with it indefinitely. It starts again when the state settles, when you
+change the toggle shortcut, or after a few hours.
+
 ## Notes
 
 Works with the Nvidia App and with the old GeForce Experience.
@@ -87,12 +94,12 @@ turn it back on.
 - conflictBackoffSec: 900
   $name: Maximum conflict backoff (seconds)
   $description: >-
-    If Instant Replay keeps turning itself back off, something is fighting us. After 2
-    attempts in a row that don't stick, wait before trying again instead of flip-flopping -
-    30 seconds at first, doubling each round up to this limit (from 30 to 86400), and reset as
-    soon as Instant Replay is in the state it should be. Once the wait has sat at this limit
-    for a few rounds the mod stops trying, and starts again when the toggle shortcut changes,
-    when the state changes, or after a few hours.
+    If Instant Replay keeps turning itself back off, something is fighting us. Rather than
+    trading keystrokes with it, the mod waits before trying again - 30 seconds at first,
+    doubling each round up to this limit (from 30 to 86400). It resets once the state has been
+    left alone for a while. After about an hour of continuous conflict the mod stops trying,
+    and starts again when the state settles, when the toggle shortcut changes, or after a few
+    hours.
 - pauseWhileRunning: [""]
   $name: Pause while these programs run
   $description: >-
@@ -144,14 +151,20 @@ static const int kMaxTogglesBeforeBackoff = 2;
 // so a conflict that has since resolved recovers on the very next attempt.
 static const int kStreakAfterBackoff = kMaxTogglesBeforeBackoff - 1;
 
+// A conflict slower than kToggleConfirmTimeoutMs confirms fine on every attempt, so the
+// consecutive-failure streak never sees it - something switching Instant Replay off every
+// minute would otherwise be answered forever. Bound how often we're willing to press at all.
+static const int kMaxTogglesPerWindow = 5;
+static const ULONGLONG kToggleWindowMs = 10ULL * 60 * 1000;
+
 // Where the backoff starts before doubling towards the configured limit. Short enough that a
 // one-off failure costs almost nothing, and it only grows if the fight is real.
 static const int kInitialBackoffSec = 30;
 
-// Once the backoff has sat at its maximum for this many rounds, stop pressing the shortcut.
-// A toggle that has failed this persistently isn't going to start working on the next attempt,
-// and continuing would inject keystrokes into the user's session indefinitely.
-static const int kMaxRoundsAtMaxBackoff = 3;
+// Stop pressing once a conflict has gone on this long. Measured as elapsed time rather than
+// rounds spent at the maximum backoff, so lowering the maximum makes the mod retry more often
+// - which is what the setting's name implies - instead of making it give up sooner.
+static const ULONGLONG kGiveUpAfterConflictMs = 60ULL * 60 * 1000;
 
 // Having given up, try again this long afterwards. The user may have fixed the cause in a way
 // the mod cannot observe - switching the In-Game Overlay back on doesn't touch the registry
@@ -169,6 +182,10 @@ static const DWORD kMinToggleIntervalMs = 3000;
 
 // Nvidia writes several values when the state changes, so let it settle before reading back.
 static const DWORD kRegistryNotifyDebounceMs = 750;
+
+// Short-lived obstacles - a UAC prompt, a held modifier, a failed snapshot - shouldn't cost a
+// whole poll interval to recover from, which the user may have set high deliberately.
+static const DWORD kTransientRetryMs = 2000;
 
 struct ModSettings {
     int pollIntervalSec = 10;
@@ -426,30 +443,48 @@ static bool PatternNeedsPath(const std::wstring& pattern) {
 // A pattern without a backslash is matched against the process file name exactly, so
 // "notepad" doesn't quietly match ...\notepad++\notepad++.exe. A pattern with a backslash is
 // matched as a substring of the full image path, which covers "everything in this folder".
-static bool MatchesProcess(std::wstring_view imagePath,
-                           std::wstring_view fileName,
-                           const std::wstring& pattern) {
-    if (PatternNeedsPath(pattern)) {
-        return ContainsNoCase(imagePath, pattern);
+static bool MatchesAnyPattern(std::wstring_view imagePath,
+                              std::wstring_view fileName,
+                              const std::vector<std::wstring>& patterns) {
+    for (const std::wstring& pattern : patterns) {
+        bool matched = PatternNeedsPath(pattern) ? ContainsNoCase(imagePath, pattern)
+                                                 : EqualsNoCase(fileName, pattern);
+        if (matched) {
+            Wh_Log(L"Process match: '%s' matches '%s'", std::wstring(imagePath).c_str(),
+                   pattern.c_str());
+            return true;
+        }
     }
 
-    return EqualsNoCase(fileName, pattern);
+    return false;
 }
 
-// Returns nullopt when the process list couldn't be read at all. That has to stay
-// distinguishable from "nothing matched": with a non-empty onlyWhileRunning list, treating a
-// failed enumeration as "nothing matched" would make the mod switch Instant Replay *off* while
-// a game is running, which is the exact thing it exists to prevent. CreateToolhelp32Snapshot is
-// documented to fail transiently with ERROR_BAD_LENGTH, so this isn't hypothetical.
-static std::optional<bool> IsAnyProcessRunning(const std::vector<std::wstring>& patterns) {
-    if (patterns.empty()) {
-        return false;
+struct ProcessListResults {
+    bool onlyRunning = false;
+    bool pauseRunning = false;
+};
+
+// Answers both lists from a single snapshot. Returns nullopt when the process list couldn't be
+// read at all, which has to stay distinguishable from "nothing matched": with a non-empty
+// onlyWhileRunning list, treating a failed enumeration as "nothing matched" would make the mod
+// switch Instant Replay *off* while a game is running, which is the exact thing it exists to
+// prevent. CreateToolhelp32Snapshot is documented to fail transiently with ERROR_BAD_LENGTH.
+static std::optional<ProcessListResults> EvaluateProcessLists(
+    const std::vector<std::wstring>& onlyList,
+    const std::vector<std::wstring>& pauseList) {
+    ProcessListResults results;
+
+    const bool needOnly = !onlyList.empty();
+    const bool needPause = !pauseList.empty();
+    if (!needOnly && !needPause) {
+        return results;
     }
 
     // Resolving full paths costs an OpenProcess for every process on the system. Only pay it
     // when a pattern actually asks for a path - entry.szExeFile is already the file name that
     // the exact-match form compares against.
-    const bool needsPath = std::any_of(patterns.begin(), patterns.end(), PatternNeedsPath);
+    const bool needsPath = std::any_of(onlyList.begin(), onlyList.end(), PatternNeedsPath) ||
+                           std::any_of(pauseList.begin(), pauseList.end(), PatternNeedsPath);
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
@@ -465,8 +500,6 @@ static std::optional<bool> IsAnyProcessRunning(const std::vector<std::wstring>& 
         CloseHandle(snapshot);
         return std::nullopt;
     }
-
-    bool found = false;
 
     do {
         std::wstring imagePath = entry.szExeFile;
@@ -492,17 +525,20 @@ static std::optional<bool> IsAnyProcessRunning(const std::vector<std::wstring>& 
             fileName = fileName.substr(lastSeparator + 1);
         }
 
-        for (const std::wstring& pattern : patterns) {
-            if (MatchesProcess(imagePath, fileName, pattern)) {
-                Wh_Log(L"Process match: '%s' matches '%s'", imagePath.c_str(), pattern.c_str());
-                found = true;
-                break;
-            }
+        if (needOnly && !results.onlyRunning) {
+            results.onlyRunning = MatchesAnyPattern(imagePath, fileName, onlyList);
         }
-    } while (!found && Process32NextW(snapshot, &entry));
+        if (needPause && !results.pauseRunning) {
+            results.pauseRunning = MatchesAnyPattern(imagePath, fileName, pauseList);
+        }
+
+        if ((!needOnly || results.onlyRunning) && (!needPause || results.pauseRunning)) {
+            break;
+        }
+    } while (Process32NextW(snapshot, &entry));
 
     CloseHandle(snapshot);
-    return found;
+    return results;
 }
 
 #pragma endregion  // Process matching
@@ -557,7 +593,9 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
 
     int toggleStreak = 0;
     int currentBackoffSec = 0;
-    int roundsAtMaxBackoff = 0;
+    int togglesInWindow = 0;
+    ULONGLONG toggleWindowStart = 0;
+    ULONGLONG conflictSince = 0;
     bool gaveUp = false;
     std::vector<WORD> hotkeyAtGiveUp;
     ULONGLONG giveUpRetryAt = 0;
@@ -624,19 +662,31 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
             continue;
         }
 
+        ULONGLONG now = GetTickCount64();
+
+        // The toggle budget is per rolling window and is deliberately *not* cleared when the
+        // state matches - that branch is reached after every successful round, which is exactly
+        // what would hide a slow conflict from the ladder.
+        if (now - toggleWindowStart >= kToggleWindowMs) {
+            toggleWindowStart = now;
+            togglesInWindow = 0;
+        }
+
         if (waited == WAIT_OBJECT_0 + 1) {
-            // Settings changed. Give the new configuration an immediate retry, but keep the
-            // backoff ladder where it was so repeated tweaking during a real conflict doesn't
-            // restart it from the bottom every time.
+            // Settings changed. Give the new configuration a clean slate.
             toggleStreak = 0;
+            currentBackoffSec = 0;
+            conflictSince = 0;
             conflictUntil = 0;
-            roundsAtMaxBackoff = 0;
+            togglesInWindow = 0;
+            toggleWindowStart = now;
             gaveUp = false;
         } else if (waited == WAIT_OBJECT_0 + 2) {
             notifyArmed = false;
             if (StopRequested(kRegistryNotifyDebounceMs)) {
                 break;
             }
+            now = GetTickCount64();
         }
 
         InstantReplayState state = GetInstantReplayState();
@@ -650,54 +700,49 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         }
         loggedUnreadableState = false;
 
-        bool shouldBeOn = true;
-        if (!settings.onlyWhileRunning.empty()) {
-            std::optional<bool> running = IsAnyProcessRunning(settings.onlyWhileRunning);
-            if (!running) {
-                if (!loggedEnumerationFailure) {
-                    loggedEnumerationFailure = true;
-                    Wh_Log(L"Couldn't enumerate processes, skipping this cycle rather than "
-                           L"guessing at the state Instant Replay should be in");
-                }
-                continue;
+        std::optional<ProcessListResults> processes =
+            EvaluateProcessLists(settings.onlyWhileRunning, settings.pauseWhileRunning);
+        if (!processes) {
+            if (!loggedEnumerationFailure) {
+                loggedEnumerationFailure = true;
+                Wh_Log(L"Couldn't enumerate processes, skipping this cycle rather than guessing "
+                       L"at the state Instant Replay should be in");
             }
-            loggedEnumerationFailure = false;
-            shouldBeOn = *running;
+            if (StopRequested(kTransientRetryMs)) {
+                break;
+            }
+            continue;
         }
+        loggedEnumerationFailure = false;
 
+        bool shouldBeOn = settings.onlyWhileRunning.empty() || processes->onlyRunning;
         bool isOn = state == InstantReplayState::On;
 
-        // Whatever we were fighting with has stopped, or never existed. Note this is reached
-        // even while backing off or after giving up: neither state stops the mod noticing that
-        // the situation has resolved.
+        // Whatever we were fighting with has stopped, or never existed. Reached even while
+        // backing off or after giving up: neither state stops the mod noticing that things
+        // resolved. The backoff ladder itself only clears once a whole window has passed
+        // without any toggle being needed.
         if (isOn == shouldBeOn) {
             toggleStreak = 0;
-            currentBackoffSec = 0;
-            roundsAtMaxBackoff = 0;
             conflictUntil = 0;
             gaveUp = false;
+            if (togglesInWindow == 0) {
+                currentBackoffSec = 0;
+                conflictSince = 0;
+            }
             continue;
         }
 
-        if (!settings.pauseWhileRunning.empty()) {
-            std::optional<bool> paused = IsAnyProcessRunning(settings.pauseWhileRunning);
-            if (!paused) {
-                if (!loggedEnumerationFailure) {
-                    loggedEnumerationFailure = true;
-                    Wh_Log(L"Couldn't enumerate processes, skipping this cycle rather than "
-                           L"acting while a paused program might be running");
-                }
-                continue;
-            }
-            loggedEnumerationFailure = false;
-            if (*paused) {
-                toggleStreak = 0;
-                continue;
-            }
+        if (processes->pauseRunning) {
+            toggleStreak = 0;
+            continue;
         }
 
         // Nothing we send can land right now, and that isn't a failure on our part.
         if (!IsInputDesktopReachable()) {
+            if (StopRequested(kTransientRetryMs)) {
+                break;
+            }
             continue;
         }
 
@@ -715,8 +760,6 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         }
         loggedMissingHotkey = false;
 
-        ULONGLONG now = GetTickCount64();
-
         // Pressing the shortcut failed persistently enough that we stopped. Re-arm when the
         // user acts on what the log asked for - the shortcut changing is observable, and a
         // periodic retry covers the causes that aren't, like the overlay being switched on.
@@ -726,40 +769,46 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
                 continue;
             }
 
-            Wh_Log(L"Trying again after giving up (%s)",
+            Wh_Log(L"Trying again after stopping (%s)",
                    hotkeyChanged ? L"the toggle shortcut changed" : L"periodic retry");
             gaveUp = false;
             toggleStreak = 0;
             currentBackoffSec = 0;
-            roundsAtMaxBackoff = 0;
+            conflictSince = 0;
             conflictUntil = 0;
+            togglesInWindow = 0;
+            toggleWindowStart = now;
         }
 
         if (now < conflictUntil) {
             continue;
         }
 
-        // If our toggles keep failing to stick, something is undoing them. Yield for a while
-        // rather than flip-flopping forever, growing the wait only as the fight continues.
-        if (toggleStreak >= kMaxTogglesBeforeBackoff) {
-            bool wasAtMax = currentBackoffSec >= settings.conflictBackoffSec;
-            currentBackoffSec = currentBackoffSec == 0
-                                    ? std::min(kInitialBackoffSec, settings.conflictBackoffSec)
-                                    : std::min(currentBackoffSec * 2, settings.conflictBackoffSec);
+        // Two ways to conclude we're in a fight: our toggles keep failing to stick, or they
+        // keep sticking and something keeps undoing them slowly. Both feed the same ladder.
+        bool overToggleBudget = togglesInWindow >= kMaxTogglesPerWindow;
+        if (toggleStreak >= kMaxTogglesBeforeBackoff || overToggleBudget) {
+            if (currentBackoffSec == 0) {
+                conflictSince = now;
+                currentBackoffSec = std::min(kInitialBackoffSec, settings.conflictBackoffSec);
+            } else {
+                currentBackoffSec =
+                    std::min(currentBackoffSec * 2, settings.conflictBackoffSec);
+            }
             conflictUntil = now + (ULONGLONG)currentBackoffSec * 1000;
             toggleStreak = kStreakAfterBackoff;
 
-            if (wasAtMax && ++roundsAtMaxBackoff >= kMaxRoundsAtMaxBackoff) {
+            if (now - conflictSince >= kGiveUpAfterConflictMs) {
                 gaveUp = true;
                 hotkeyAtGiveUp = hotkey;
                 giveUpRetryAt = now + kGiveUpRetryMs;
-                Wh_Log(L"Pressing the toggle shortcut hasn't worked after repeated attempts at "
-                       L"the maximum backoff. Pausing until the Instant Replay state changes, "
-                       L"the toggle shortcut changes, or a few hours pass. Check that the "
-                       L"In-Game Overlay is on and that a Toggle Instant Replay shortcut is "
-                       L"set.");
+                Wh_Log(L"Instant Replay has been in conflict for over an hour. Pausing until "
+                       L"the state settles, the toggle shortcut changes, or a few hours pass. "
+                       L"Check that the In-Game Overlay is on and that a Toggle Instant Replay "
+                       L"shortcut is set.");
             } else {
-                Wh_Log(L"Instant Replay keeps changing back. Backing off for %d seconds.",
+                Wh_Log(L"Instant Replay keeps changing back (%s). Backing off for %d seconds.",
+                       overToggleBudget ? L"toggling too often" : L"toggles aren't sticking",
                        currentBackoffSec);
             }
             continue;
@@ -767,6 +816,9 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
 
         // Pressing now would send the wrong combination and steal the keys being held.
         if (IsAnyRelevantKeyHeld(hotkey)) {
+            if (StopRequested(kTransientRetryMs)) {
+                break;
+            }
             continue;
         }
 
@@ -779,6 +831,7 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
         }
 
         nextToggleAllowed = now + kMinToggleIntervalMs;
+        togglesInWindow++;
         Wh_Log(L"Instant Replay is %s but should be %s, pressing the toggle shortcut",
                isOn ? L"on" : L"off", shouldBeOn ? L"on" : L"off");
 
@@ -789,13 +842,12 @@ static DWORD WINAPI InstantReplayWatchdogThread(LPVOID) {
 
         // Wait for the press to actually take effect before deciding whether it worked. A slow
         // but successful toggle then costs nothing, and toggleStreak counts real failures only.
+        // The backoff ladder is deliberately not cleared here - only a quiet window clears it.
         bool stop = false;
         InstantReplayState expected =
             shouldBeOn ? InstantReplayState::On : InstantReplayState::Off;
         if (WaitForState(expected, kToggleConfirmTimeoutMs, &stop)) {
             toggleStreak = 0;
-            currentBackoffSec = 0;
-            roundsAtMaxBackoff = 0;
         } else {
             if (stop) {
                 break;
@@ -827,7 +879,11 @@ BOOL WhTool_ModInit() {
     LoadSettings();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
+    // Created signalled so the first loop iteration evaluates the state immediately instead of
+    // waiting out a poll interval, which the user may have set as high as an hour.
+    g_wakeEvent = CreateEventW(nullptr, FALSE, TRUE, nullptr);
+
     if (!g_stopEvent || !g_wakeEvent) {
         Wh_Log(L"Failed to create the watchdog events, error %u", GetLastError());
         return FALSE;
