@@ -760,11 +760,17 @@ static bool SplitCustomCommand(const std::wstring& command,
     return !executable.empty();
 }
 
-static void ReplaceAll(std::wstring& value,
-                       const std::wstring& placeholder,
-                       const std::wstring& replacement) {
+static void ExpandCustomPlaceholder(std::wstring& value,
+                                    const std::wstring& placeholder,
+                                    const std::wstring& target) {
     size_t pos = 0;
     while ((pos = value.find(placeholder, pos)) != std::wstring::npos) {
+        bool alreadyQuoted = pos > 0 &&
+                             pos + placeholder.size() < value.size() &&
+                             value[pos - 1] == L'"' &&
+                             value[pos + placeholder.size()] == L'"';
+        std::wstring replacement =
+            alreadyQuoted ? target : QuoteCommandLineArgument(target);
         value.replace(pos, placeholder.size(), replacement);
         pos += replacement.size();
     }
@@ -773,8 +779,8 @@ static void ReplaceAll(std::wstring& value,
 static std::wstring ExpandCustomParameters(const std::wstring& parameters,
                                            const std::wstring& target) {
     std::wstring result = parameters;
-    ReplaceAll(result, L"%V", target);
-    ReplaceAll(result, L"%1", target);
+    ExpandCustomPlaceholder(result, L"%V", target);
+    ExpandCustomPlaceholder(result, L"%1", target);
     return result;
 }
 
@@ -1263,9 +1269,11 @@ static bool IsKeyboardContextMenuPoint(const POINT& invocationPoint) {
 static bool ShouldUseFocusedNavigationPaneFallback(
     bool invocationPointIsNavigationPane,
     bool focusedWindowIsNavigationPane,
-    bool ownerIsShellView) {
-    return !invocationPointIsNavigationPane && focusedWindowIsNavigationPane &&
-           !ownerIsShellView;
+    bool ownerIsShellView,
+    bool invocationPointIsSameExplorerFrame) {
+    return !invocationPointIsNavigationPane &&
+           !invocationPointIsSameExplorerFrame &&
+           focusedWindowIsNavigationPane && !ownerIsShellView;
 }
 
 static bool IsNavigationPaneContextWindow(HWND hwnd,
@@ -1273,6 +1281,7 @@ static bool IsNavigationPaneContextWindow(HWND hwnd,
                                           bool& useSelectionFallback) {
     useSelectionFallback = false;
     bool invocationPointIsNavigationPane = false;
+    bool invocationPointIsSameExplorerFrame = false;
     if (!IsKeyboardContextMenuPoint(invocationPoint)) {
         HWND invocationWindow = WindowFromPoint(invocationPoint);
         invocationPointIsNavigationPane =
@@ -1280,13 +1289,19 @@ static bool IsNavigationPaneContextWindow(HWND hwnd,
         if (invocationPointIsNavigationPane) {
             return true;
         }
+
+        HWND invocationRoot =
+            invocationWindow ? GetAncestor(invocationWindow, GA_ROOT) : nullptr;
+        HWND ownerRoot = GetAncestor(hwnd, GA_ROOT);
+        invocationPointIsSameExplorerFrame =
+            invocationRoot && ownerRoot && invocationRoot == ownerRoot;
     }
 
     HWND focusedWindow = GetFocus();
     useSelectionFallback = ShouldUseFocusedNavigationPaneFallback(
         invocationPointIsNavigationPane,
         focusedWindow && IsNavigationPaneWindow(focusedWindow),
-        IsShellViewWindow(hwnd));
+        IsShellViewWindow(hwnd), invocationPointIsSameExplorerFrame);
     return useSelectionFallback;
 }
 
