@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-separators-prototype
 // @name            Taskbar Separators - Prototype
-// @description     Creates genuine independently reorderable taskbar separator pins.
-// @version         0.4.2
+// @description     Creates genuine taskbar separator pins with configurable positions and inert separator interactions.
+// @version         0.5.0
 // @author          meteoni
 // @include         explorer.exe
 // @architecture    x86-64
@@ -20,17 +20,18 @@ The mod:
 3. Pins each shortcut with the private PinManager COM interface.
 4. Moves each pin to its configured position.
 5. Gives only the generated separator TaskListButtons configurable normal/small widths.
-6. Suppresses activation clicks and tooltips for separator groups.
-7. Neutralizes pointer-over visuals and keeps narrow separator glyphs centered.
-8. Unpins the separators and deletes the generated files when the mod unloads.
+6. Suppresses activation clicks, tooltips, and legacy/modern context menus.
+7. Marks separator TaskListButtons non-draggable through their native IsDraggable property.
+8. Neutralizes pointer-over visuals and keeps narrow separator glyphs centered.
+9. Unpins the separators and deletes the generated files when the mod unloads.
 
 The position setting is 1-based for the user: 1 means the first pinned position.
 Width overrides are per separator. They are applied after the normal
 TaskListButton::UpdateVisualStates hook chain returns, so they compose with
 the Taskbar height and icon size mod regardless of hook installation order.
 
-This is still a prototype. Right-click/context-menu suppression can be added
-separately.
+This is still a prototype. Separator interaction suppression is scoped to
+the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
 */
 // ==/WindhawkModReadme==
 
@@ -80,6 +81,7 @@ separately.
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
 #include <algorithm>
@@ -193,12 +195,6 @@ static constexpr wchar_t kInternalAppIdPrefix[] =
 // Keeps native 16/24/32/48 px taskbar frames plus a crisp 256 px fallback.
 // Main stroke max alpha is ~68% to retain the original separator's subtlety.
 // -----------------------------------------------------------------------------
-
-// Taskbar separator icon.
-// Frames: 16x16, 24x24, 32x32, 48x48, 256x256.
-// Main stroke max alpha: ~68%.
-// Artwork horizontally re-centered with whole-pixel shifts only.
-// No resampling was used, preserving native-frame crispness.
 
 static constexpr unsigned char kSeparatorIcon[] = {
     0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01, 0x00,
@@ -607,6 +603,27 @@ static void* g_taskListButtonUpdateButtonPaddingAddress;
 static void* g_taskListButtonUpdateIconColumnDefinitionAddress;
 static void* g_taskbarConfigurationGetIconHeightInViewPixelsAddress;
 
+// Native TaskListButton IsDraggable XAML binding helpers, resolved from
+// Taskbar.View.dll. The isolated runtime probe verified that setting this
+// property to false prevents drag initiation without touching pointer input,
+// drag gesture handlers, or the taskbar model's reorder path.
+using TaskListButton_GetIsDraggable_t =
+    winrt::Windows::Foundation::IInspectable(*)(
+        winrt::Windows::Foundation::IInspectable const& target);
+
+static TaskListButton_GetIsDraggable_t
+    g_taskListButtonGetIsDraggable;
+
+using TaskListButton_SetIsDraggable_t =
+    void(*)(
+        winrt::Windows::Foundation::IInspectable const& target,
+        winrt::Windows::Foundation::IInspectable const& value);
+
+static TaskListButton_SetIsDraggable_t
+    g_taskListButtonSetIsDraggable;
+
+static thread_local bool g_settingSeparatorIsDraggable;
+
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 static TaskListButton_UpdateVisualStates_t
     g_taskListButtonUpdateVisualStatesOriginal;
@@ -842,12 +859,8 @@ static const SeparatorSetting* FindSeparatorByAutomationName(
     return nullptr;
 }
 
-static const SeparatorSetting* GetSeparatorForTaskListButton(
-    void* pThis,
-    FrameworkElement* elementOut = nullptr) {
-    FrameworkElement element =
-        GetTaskListButtonElement(pThis);
-
+static const SeparatorSetting* GetSeparatorForElement(
+    const FrameworkElement& element) {
     if (!element) {
         return nullptr;
     }
@@ -867,8 +880,17 @@ static const SeparatorSetting* GetSeparatorForTaskListButton(
         automationName.size()
     };
 
+    return FindSeparatorByAutomationName(name);
+}
+
+static const SeparatorSetting* GetSeparatorForTaskListButton(
+    void* pThis,
+    FrameworkElement* elementOut = nullptr) {
+    FrameworkElement element =
+        GetTaskListButtonElement(pThis);
+
     const SeparatorSetting* separator =
-        FindSeparatorByAutomationName(name);
+        GetSeparatorForElement(element);
 
     if (separator && elementOut) {
         *elementOut = element;
@@ -1032,6 +1054,101 @@ static void SuppressSeparatorHoverChrome(
     }
 }
 
+static void DisableSeparatorDragging(
+    const FrameworkElement& taskListButton) {
+    if (!taskListButton ||
+        g_unloading ||
+        g_settingSeparatorIsDraggable ||
+        !g_taskListButtonGetIsDraggable ||
+        !g_taskListButtonSetIsDraggable) {
+        return;
+    }
+
+    g_settingSeparatorIsDraggable = true;
+
+    try {
+        auto target =
+            taskListButton.as<
+                winrt::Windows::Foundation::IInspectable>();
+
+        auto beforeBox =
+            g_taskListButtonGetIsDraggable(target);
+
+        bool before =
+            winrt::unbox_value<bool>(beforeBox);
+
+        if (before) {
+            auto falseBox =
+                winrt::box_value(false);
+
+            g_taskListButtonSetIsDraggable(
+                target,
+                falseBox);
+        }
+    } catch (...) {
+        // Input hardening only. If a future Taskbar.View build changes the
+        // binding helper ABI, leave stock drag behavior rather than affecting
+        // unrelated taskbar buttons.
+    }
+
+    g_settingSeparatorIsDraggable = false;
+}
+
+// Modern WinUI taskbar context-menu paths.
+//
+// Both hooks are retained because the runtime probe showed that a separator
+// right-click reaches both handlers on the current build. They are filtered
+// independently and neither touches generic pointer input.
+using TaskListButton_OnContextRequested_t =
+    void(WINAPI*)(
+        void* pThis,
+        winrt::Windows::UI::Xaml::UIElement const& sender,
+        winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args);
+
+static TaskListButton_OnContextRequested_t
+    g_taskListButtonOnContextRequestedOriginal;
+
+static void WINAPI TaskListButton_OnContextRequested_Hook(
+    void* pThis,
+    winrt::Windows::UI::Xaml::UIElement const& sender,
+    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
+    if (!g_unloading &&
+        GetSeparatorForTaskListButton(pThis)) {
+        return;
+    }
+
+    g_taskListButtonOnContextRequestedOriginal(
+        pThis,
+        sender,
+        args);
+}
+
+using TaskListButtonHandlers_HandleContextRequested_t =
+    void(WINAPI*)(
+        winrt::Windows::UI::Xaml::UIElement const& sender,
+        winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args);
+
+static TaskListButtonHandlers_HandleContextRequested_t
+    g_taskListButtonHandlersHandleContextRequestedOriginal;
+
+static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
+    winrt::Windows::UI::Xaml::UIElement const& sender,
+    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
+    if (!g_unloading) {
+        auto element =
+            sender.try_as<FrameworkElement>();
+
+        if (element &&
+            GetSeparatorForElement(element)) {
+            return;
+        }
+    }
+
+    g_taskListButtonHandlersHandleContextRequestedOriginal(
+        sender,
+        args);
+}
+
 static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     void* pThis) {
     // Critical for coexistence with taskbar-icon-size:
@@ -1053,6 +1170,7 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
 
     CenterSeparatorIcon(element);
     SuppressSeparatorHoverChrome(element);
+    DisableSeparatorDragging(element);
 }
 
 static HMODULE GetTaskbarViewModuleHandle() {
@@ -1091,6 +1209,34 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
         {
             {
+                LR"(struct winrt::Windows::Foundation::IInspectable __cdecl winrt::Taskbar::implementation::GetValueTypeMember_IsDraggable<struct winrt::Taskbar::TaskListButton,bool>(struct winrt::Windows::Foundation::IInspectable const &))"
+            },
+            &g_taskListButtonGetIsDraggable,
+            nullptr,
+        },
+        {
+            {
+                LR"(void __cdecl winrt::Taskbar::implementation::SetValueTypeMember_IsDraggable<struct winrt::Taskbar::TaskListButton,bool>(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Windows::Foundation::IInspectable const &))"
+            },
+            &g_taskListButtonSetIsDraggable,
+            nullptr,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))"
+            },
+            &g_taskListButtonOnContextRequestedOriginal,
+            TaskListButton_OnContextRequested_Hook,
+        },
+        {
+            {
+                LR"(public: static void __cdecl winrt::Taskbar::implementation::TaskListButtonHandlers::HandleContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))"
+            },
+            &g_taskListButtonHandlersHandleContextRequestedOriginal,
+            TaskListButtonHandlers_HandleContextRequested_Hook,
+        },
+        {
+            {
                 LR"(public: double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetIconHeightInViewPixels(void))"
             },
             &g_taskbarConfigurationGetIconHeightInViewPixelsAddress,
@@ -1119,7 +1265,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     Wh_Log(
         L"[STYLE] Taskbar view hooks ready; "
-        L"DynamicIconScaling=%d",
+        L"DynamicIconScaling=%d IsDraggable=1 modernContext=1",
         g_hasDynamicIconScaling);
 
     return true;
@@ -1201,20 +1347,21 @@ static bool InitializeTaskbarStylingHooks() {
 // -----------------------------------------------------------------------------
 // Separator interaction suppression.
 //
-// Keep the separator as a genuine taskbar group so native drag/reorder continues
-// to work. Suppress only semantic actions that don't participate in dragging:
+// Taskbar.View owns modern context requests and the native IsDraggable property;
+// those are handled above. taskbar.dll is used only for model-level semantic
+// actions that already expose the exact ITaskGroup:
 //
 // - CTaskListWnd::HandleClick:
 //     swallow activation for our separator groups.
+// - CTaskListWnd::OnContextMenu:
+//     swallow the legacy context-menu route.
 // - CTaskBtnGroup::ShouldShowToolTip:
 //     legacy tooltip gate fallback.
 // - CTaskGroup::GetToolTipText:
 //     directly report no tooltip text for separator groups.
 //
-// Pointer press/move handling and TryMoveGroup are untouched.
-// Jumplist-on-hover isn't hooked: these separator groups have no running task
-// items and no useful destination list, so there is no need to carry a separate
-// jumplist-specific interception path.
+// No pointer press/move hooks, drag gesture hooks, TryMoveGroup hooks, or
+// jumplist-hover hooks are needed.
 // -----------------------------------------------------------------------------
 
 static void* g_taskGroupGetAppIdAddress;
@@ -1229,6 +1376,18 @@ using TaskListWnd_HandleClick_t =
 
 static TaskListWnd_HandleClick_t
     g_taskListWndHandleClickOriginal;
+
+using TaskListWnd_OnContextMenu_t =
+    void(WINAPI*)(
+        void* pThis,
+        POINT point,
+        HWND hwnd,
+        bool keyboardInvoked,
+        void* taskGroup,
+        void* taskItem);
+
+static TaskListWnd_OnContextMenu_t
+    g_taskListWndOnContextMenuOriginal;
 
 using TaskBtnGroup_ShouldShowToolTip_t =
     int(WINAPI*)(
@@ -1330,6 +1489,27 @@ static HRESULT WINAPI TaskListWnd_HandleClick_Hook(
         launcherOptions);
 }
 
+static void WINAPI TaskListWnd_OnContextMenu_Hook(
+    void* pThis,
+    POINT point,
+    HWND hwnd,
+    bool keyboardInvoked,
+    void* taskGroup,
+    void* taskItem) {
+    if (!g_unloading &&
+        IsSeparatorTaskGroup(taskGroup)) {
+        return;
+    }
+
+    g_taskListWndOnContextMenuOriginal(
+        pThis,
+        point,
+        hwnd,
+        keyboardInvoked,
+        taskGroup,
+        taskItem);
+}
+
 static int WINAPI TaskBtnGroup_ShouldShowToolTip_Hook(
     void* pThis,
     void* taskItem) {
@@ -1420,6 +1600,13 @@ static bool InitializeTaskbarInteractionHooks() {
         },
         {
             {
+                LR"(public: virtual void __cdecl CTaskListWnd::OnContextMenu(struct tagPOINT,struct HWND__ *,bool,struct ITaskGroup *,struct ITaskItem *))"
+            },
+            &g_taskListWndOnContextMenuOriginal,
+            TaskListWnd_OnContextMenu_Hook,
+        },
+        {
+            {
                 LR"(public: virtual int __cdecl CTaskBtnGroup::ShouldShowToolTip(struct ITaskItem *))"
             },
             &g_taskBtnGroupShouldShowToolTipOriginal,
@@ -1438,7 +1625,7 @@ static bool InitializeTaskbarInteractionHooks() {
 
     Wh_Log(
         L"[INPUT] Taskbar interaction hooks ready; "
-        L"click=1 tooltip=1");
+        L"click=1 legacyContext=1 tooltip=1");
 
     return true;
 }
@@ -1948,8 +2135,15 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    // Stop re-applying widths while Windhawk is unwinding hooks and while the
-    // backing taskbar items are about to be removed.
+    // Stop re-applying widths/interaction state while Windhawk is unwinding
+    // hooks and while the backing taskbar items are about to be removed.
+    //
+    // IsDraggable is mutable state on the live XAML TaskListButton, so a tiny
+    // standalone probe can leave it false after that probe is disabled. The
+    // production mod owns these separator pins and unpins them in Wh_ModUninit,
+    // which destroys the corresponding TaskListButtons and their property
+    // state. Don't try to restore the XAML property here: this callback isn't
+    // guaranteed to execute on the taskbar UI thread.
     g_unloading = true;
 }
 
