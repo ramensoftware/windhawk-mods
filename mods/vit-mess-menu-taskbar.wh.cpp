@@ -7,7 +7,6 @@
 // @github          https://github.com/ashishkupadhyay
 // @include         explorer.exe
 // @architecture    x86-64
-// @architecture    arm64
 // @compilerOptions -lole32 -lruntimeobject -luser32 -lwindowsapp -lwinhttp
 // @license         MIT
 // ==/WindhawkMod==
@@ -73,6 +72,18 @@ taskbars on every display, it appears on the primary one.
 The menu data comes from `messit.vinnovateit.com`, a third-party site this mod
 does not control. If that site changes its data format or goes away, the mod
 will report that no menu is available.
+
+## Credits
+
+The taskbar plumbing follows two existing mods closely, both MIT licensed:
+
+- **Taskbar AI Quota** and **Taskbar Fluent Media Player** — reaching the
+  taskbar's XAML root through `CTaskBand::GetTaskbarHost` and the
+  `TaskbarHost::FrameHeight` prologue, the system-tray column insert/remove, and
+  the `RunFromWindowThread` helper.
+- **Windows 11 Taskbar Styler** — the Composition backdrop-blur brush
+  (`CreateBackdropBrush` into a D2D Gaussian blur, exposed as a
+  `XamlCompositionBrushBase`).
 */
 // ==/WindhawkModReadme==
 
@@ -153,7 +164,6 @@ will report that no menu is available.
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -909,8 +919,21 @@ static bool ParseMenuJson(const std::wstring& json, ParsedMonth& out) {
             }
 
             out.days[dayKey] = std::move(day);
-            if (out.monthKey < 0) {
-                out.monthKey = MonthKeyFromDayKey(dayKey);
+        }
+
+        // Which month this file gets cached under. Taken from the most common
+        // date in it rather than the first one: a file that opened with a
+        // trailing day or two of the previous month would otherwise be filed
+        // under the wrong name and become eligible for pruning a month early.
+        std::map<int, int> monthCounts;
+        for (auto& entry : out.days) {
+            monthCounts[MonthKeyFromDayKey(entry.first)]++;
+        }
+        int bestCount = 0;
+        for (auto& entry : monthCounts) {
+            if (entry.second > bestCount) {
+                bestCount = entry.second;
+                out.monthKey = entry.first;
             }
         }
     } catch (...) {
@@ -1917,7 +1940,13 @@ static std::vector<int> g_cardMeals;
 // A timer that fires into an unmapped image crashes Explorer regardless of any
 // g_unloading check inside the callback -- the crash is the call itself.
 // Touched only from the taskbar UI thread, so it needs no lock.
-[[clang::no_destroy]] static std::optional<std::vector<DispatcherTimer>>
+//
+// The token is stored alongside the timer because every Tick handler captures
+// its own timer by value: timer -> delegate -> timer is a cycle that only the
+// handler's own detach breaks. Stopping a timer that never fires would
+// otherwise leak it, its delegate, and everything else the handler captured.
+[[clang::no_destroy]] static std::optional<
+    std::vector<std::pair<DispatcherTimer, winrt::event_token>>>
     g_liveTimers{std::in_place};
 
 // The reveal animation's SizeChanged handler races its fallback timer and is
@@ -1928,12 +1957,12 @@ static winrt::event_token g_revealSizeToken{};
 
 // Each of these checks the optional first: Wh_ModUninit reset()s it, and a
 // stray callback arriving afterwards must not dereference an empty one.
-static void TrackTimer(DispatcherTimer const& timer) {
+static void TrackTimer(DispatcherTimer const& timer, winrt::event_token token) {
     if (!g_liveTimers) {
         return;
     }
     try {
-        g_liveTimers->push_back(timer);
+        g_liveTimers->emplace_back(timer, token);
     } catch (...) {
     }
 }
@@ -1944,7 +1973,10 @@ static void UntrackTimer(DispatcherTimer const& timer) {
     }
     try {
         auto& timers = *g_liveTimers;
-        timers.erase(std::remove(timers.begin(), timers.end(), timer),
+        timers.erase(std::remove_if(timers.begin(), timers.end(),
+                                    [&timer](auto const& entry) {
+                                        return entry.first == timer;
+                                    }),
                      timers.end());
     } catch (...) {
     }
@@ -1955,9 +1987,14 @@ static void StopAllTimers() {
         return;
     }
     try {
-        for (auto& timer : *g_liveTimers) {
+        for (auto& entry : *g_liveTimers) {
             try {
-                timer.Stop();
+                entry.first.Stop();
+                // Breaks the timer -> delegate -> timer cycle. Stop() alone
+                // leaves the handler attached and the whole graph alive.
+                if (entry.second.value) {
+                    entry.first.Tick(entry.second);
+                }
             } catch (...) {
             }
         }
@@ -3006,6 +3043,63 @@ static void ClearFlyoutRefs() {
     g_cardMeals.clear();
 }
 
+// One teardown for every path that discards the flyout: unload, settings
+// change, and taskbar recreation.
+//
+// The order matters. Anything whose code lives in this image -- the closing
+// Storyboard, the reveal handler, MessBlurBrush -- has to be released before
+// the tree that owns it. Note that clearing the Flyout's Content is what
+// actually releases the brush: by the time the flyout has been closed once,
+// ClearFlyoutRefs has already nulled g_flyoutRoot, but the Flyout still owns
+// clipHost -> content -> Background -> brush, so touching g_flyoutRoot alone
+// would silently do nothing in the common case.
+static void TearDownFlyout() {
+    try {
+        if (g_closingStoryboard) {
+            g_closingStoryboard.Stop();
+        }
+    } catch (...) {
+    }
+    g_closingStoryboard = nullptr;
+
+    // The reveal handler detaches itself when it fires; if it has not fired, it
+    // is still attached here.
+    try {
+        if (g_revealTarget && g_revealSizeToken.value) {
+            g_revealTarget.SizeChanged(g_revealSizeToken);
+        }
+    } catch (...) {
+    }
+    g_revealSizeToken = {};
+    g_revealTarget = nullptr;
+
+    try {
+        if (g_flyoutRoot) {
+            g_flyoutRoot.Background(nullptr);
+        }
+    } catch (...) {
+    }
+
+    try {
+        if (g_flyout) {
+            if (g_flyoutOpen.load()) {
+                // Tell the Closing handler this is our own Hide, so it does not
+                // cancel it to run the close animation.
+                g_flyoutClosingAnimInProgress.store(true);
+                g_flyout.Hide();
+            }
+            g_flyout.Content(nullptr);
+        }
+    } catch (...) {
+        g_flyoutClosingAnimInProgress.store(false);
+    }
+
+    g_flyout = nullptr;
+    g_flyoutOpen = false;
+    g_flyoutClosingAnimStarted.store(false);
+    ClearFlyoutRefs();
+}
+
 static void ShowMessFlyout(FrameworkElement const& target) {
     if (!target || g_unloading) {
         return;
@@ -3172,7 +3266,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                     }
                     reveal();
                 });
-            TrackTimer(fallback);
+            TrackTimer(fallback, *fallbackToken);
             fallback.Start();
         });
 
@@ -3250,7 +3344,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                             hide();
                         }
                     });
-                TrackTimer(safety);
+                TrackTimer(safety, *safetyToken);
                 safety.Start();
                 storyboard.Begin();
             } catch (...) {
@@ -3814,7 +3908,7 @@ static void InjectWithRetry(FrameworkElement rootContent, int generation,
                 }
                 InjectWithRetry(rootContent, generation, attempt + 1);
             });
-        TrackTimer(timer);
+        TrackTimer(timer, *token);
         timer.Start();
     } catch (...) {
         Wh_Log(L"InjectWithRetry: could not schedule a retry");
@@ -3842,14 +3936,12 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         // and retire any retry chain still running for the previous taskbar.
         g_injectGeneration++;
         StopAllTimers();
+        StopUiTimer();
+        TearDownFlyout();
         g_taskbarButton = nullptr;
         g_taskbarLabel = nullptr;
         g_injectionParent = nullptr;
         g_injectedColumn = -1;
-        g_flyout = nullptr;
-        g_flyoutOpen = false;
-        ClearFlyoutRefs();
-        StopUiTimer();
 
         g_taskbarWnd.store(hWnd);
 
@@ -3960,15 +4052,7 @@ void Wh_ModSettingsChanged() {
         RunFromWindowThread(
             hWnd,
             [](void*) {
-                try {
-                    if (g_flyout && g_flyoutOpen) {
-                        g_flyout.Hide();
-                    }
-                } catch (...) {
-                }
-                g_flyout = nullptr;
-                g_flyoutOpen = false;
-                ClearFlyoutRefs();
+                TearDownFlyout();
 
                 try {
                     RemoveTaskbarButton();
@@ -4020,51 +4104,18 @@ void Wh_ModUninit() {
                 } catch (...) {
                 }
 
-                // The reveal handler normally detaches itself when it fires;
-                // if it has not fired yet, it is still attached here.
-                try {
-                    if (g_revealTarget && g_revealSizeToken.value) {
-                        g_revealTarget.SizeChanged(g_revealSizeToken);
-                    }
-                } catch (...) {
-                }
-                g_revealSizeToken = {};
-                g_revealTarget = nullptr;
-
-                try {
-                    if (g_closingStoryboard) {
-                        g_closingStoryboard.Stop();
-                    }
-                } catch (...) {
-                }
-                g_closingStoryboard = nullptr;
-
-                // MessBlurBrush is defined in this image and lives on the
-                // flyout Border's Background. Hide() does not tear the popup's
-                // visual tree down synchronously, so drop the brush now to run
-                // its OnDisconnected while the code still exists.
-                try {
-                    if (g_flyoutRoot) {
-                        g_flyoutRoot.Background(nullptr);
-                    }
-                } catch (...) {
-                }
-
-                try {
-                    if (g_flyout && g_flyoutOpen) {
-                        g_flyout.Hide();
-                    }
-                } catch (...) {
-                }
-                g_flyout = nullptr;
-                g_flyoutOpen = false;
-                ClearFlyoutRefs();
+                TearDownFlyout();
 
                 try {
                     RemoveTaskbarButton();
                 } catch (...) {
                     Wh_Log(L"Wh_ModUninit: exception removing the button");
                 }
+
+                // The Style comes out of XamlReader::Load on this thread and is
+                // a XAML DependencyObject, so it has to be released here rather
+                // than on whichever thread runs Wh_ModUninit.
+                g_subtleButtonStyle = nullptr;
             },
             nullptr,
             /*blockIndefinitely=*/true);
