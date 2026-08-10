@@ -202,6 +202,7 @@ static void LaunchTerminalNonElevated(const MenuTarget&);
 static LaunchSpec BuildScriptLaunchSpec(const Settings&, const std::wstring&);
 static bool IsScriptExtension(const std::wstring&, const Settings&);
 static bool IsShellViewWindow(HWND hwnd);
+static bool ResolveSystemExecutablePath(PCWSTR exe, std::wstring& pathOut);
 
 static Settings g_settings;
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
@@ -478,7 +479,7 @@ static void ResolveSettingsTerminal(Settings& s) {
     }
 
     s.terminalEffectiveChoice = L"cmd";
-    s.terminalDisplayCommand = L"cmd.exe";
+    ResolveSystemExecutablePath(L"cmd.exe", s.terminalDisplayCommand);
 }
 
 static std::wstring GetTerminalDisplayNameForChoice(const std::wstring& choice) {
@@ -782,15 +783,25 @@ static LaunchSpec BuildLaunchSpec(const Settings& s, const std::wstring& target)
                                      ? s.terminalChoice
                                      : s.terminalEffectiveChoice;
     LaunchSpec spec;
-    spec.executable =
-        s.terminalDisplayCommand.empty() ? L"cmd.exe" : s.terminalDisplayCommand;
+    if (s.terminalDisplayCommand.empty()) {
+        ResolveSystemExecutablePath(L"cmd.exe", spec.executable);
+    } else {
+        spec.executable = s.terminalDisplayCommand;
+    }
     spec.workingDirectory = target;
 
     if (choice == L"custom") {
         std::wstring executable;
         std::wstring parameters;
         if (SplitCustomCommand(s.customTerminalCommand, executable, parameters)) {
-            spec.executable = executable;
+            if (PathIsRelativeW(executable.c_str())) {
+                std::wstring resolved;
+                if (!SearchExecutablePath(executable.c_str(), resolved)) {
+                    return {};
+                }
+                executable = std::move(resolved);
+            }
+            spec.executable = std::move(executable);
             spec.parameters = ExpandCustomParameters(parameters, target);
         }
         return spec;
