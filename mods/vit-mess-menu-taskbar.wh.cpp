@@ -22,6 +22,10 @@ now, or how long until the next meal starts. Click it and a native-looking
 flyout slides up with the full day's menu, split into Breakfast, Lunch, Snacks
 and Dinner. Chevrons at the top let you browse to other days.
 
+## The flyout open above the taskbar
+![The flyout open above the taskbar on the left side](https://raw.githubusercontent.com/ashishkupadhyay/VIT-Mess-Menu-Taskbar-Flyout/refs/heads/main/docs/screenshots/hero.png)
+![The flyout open above the taskbar on the right side](https://raw.githubusercontent.com/ashishkupadhyay/VIT-Mess-Menu-Taskbar-Flyout/main/docs/screenshots/flyout-next.png)
+
 ## What it does
 
 - **Taskbar button** — `Idli - Vada - Khichdi...` while a meal is being served,
