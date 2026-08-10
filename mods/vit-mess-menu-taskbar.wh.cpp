@@ -4,9 +4,9 @@
 // @description     Shows the VIT Vellore hostel mess menu on the Windows 11 taskbar, with a native flyout for the full day's menu.
 // @version         1.0.0
 // @author          ashishkupadhyay
-// @github          https://github.com/ashishkupadhyay/
+// @github          https://github.com/ashishkupadhyay
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lshlwapi -ldwmapi -lshcore -lwinhttp
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lwinhttp
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -128,8 +128,7 @@ exist on Windows 10.
 - autoUpdate: true
   $name: Check for new menus automatically
   $description: When off, the menu is only downloaded when you press the reload button in the flyout.
-- verboseLogging: false
-  $name: Verbose logging
+
 */
 // ==/WindhawkModSettings==
 
@@ -154,8 +153,6 @@ exist on Windows 10.
 #include <winrt/Windows.Graphics.Effects.h>
 
 #include <windows.h>
-#include <shlobj.h>
-#include <shlwapi.h>
 #include <winhttp.h>
 #include <windhawk_utils.h>
 
@@ -170,7 +167,9 @@ exist on Windows 10.
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Older MinGW winhttp.h revisions predate some of these.
@@ -212,23 +211,17 @@ struct ModSettings {
     BYTE bgA = 0x80, bgR = 0, bgG = 0, bgB = 0;
     int  blurAmount      = 18;
     bool autoUpdate      = true;
-    bool verbose         = false;
 };
 
 static ModSettings g_settings;
 
-#define LOGV(...)                     \
-    do {                              \
-        if (g_settings.verbose) {     \
-            Wh_Log(__VA_ARGS__);      \
-        }                             \
-    } while (0)
-
+// Wh_GetStringSetting never returns null -- it yields L"" when unset or on
+// error -- so an empty test is all that is needed. StringSetting is RAII, so
+// Wh_FreeStringSetting cannot be missed.
 static std::wstring GetStringSetting(PCWSTR key, PCWSTR fallback) {
-    PCWSTR value = Wh_GetStringSetting(key);
-    std::wstring result = (value && *value) ? value : fallback;
-    Wh_FreeStringSetting(value);
-    return result;
+    WindhawkUtils::StringSetting value =
+        WindhawkUtils::StringSetting::make(key);
+    return *value ? std::wstring(value.get()) : std::wstring(fallback);
 }
 
 // Accepts #AARRGGBB and #RRGGBB, with or without the leading '#', in either
@@ -316,7 +309,6 @@ static void LoadSettings() {
 
     g_settings.blurAmount = std::clamp(Wh_GetIntSetting(L"blurAmount"), 0, 100);
     g_settings.autoUpdate = Wh_GetIntSetting(L"autoUpdate") != 0;
-    g_settings.verbose = Wh_GetIntSetting(L"verboseLogging") != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +348,10 @@ struct MenuStore {
 static std::mutex g_dataMutex;
 static MenuStore g_store;
 static std::wstring g_lastFetchError;
+
+// Bumped on every mutation of g_store, so the taskbar label's cache knows when
+// the menu behind it changed.
+static std::atomic<uint32_t> g_storeVersion{0};
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_fetching{false};
@@ -473,7 +469,11 @@ static MealWindow GetMealWindow(Meal meal, bool weekend) {
     }
 }
 
-static bool MealVisible(Meal meal) {
+// "Show the Snacks card" hides a card; it does not change when snacks are
+// served. The state machine below therefore always considers all four meals --
+// otherwise, with the card hidden, the button would read "Dinner starts in
+// 1 hr 20 min" at 17:00 while snacks were actually being served.
+static bool MealCardVisible(Meal meal) {
     return meal != Meal::Snacks || g_settings.showSnacks;
 }
 
@@ -492,9 +492,6 @@ static MealState ComputeMealState() {
     const bool weekendToday = IsWeekend(todayKey);
 
     for (int i = 0; i < kMealCount; i++) {
-        if (!MealVisible((Meal)i)) {
-            continue;
-        }
         MealWindow window = GetMealWindow((Meal)i, weekendToday);
         if (nowSec >= window.startSec && nowSec < window.endSec) {
             state.currentMeal = i;
@@ -504,9 +501,6 @@ static MealState ComputeMealState() {
     }
 
     for (int i = 0; i < kMealCount; i++) {
-        if (!MealVisible((Meal)i)) {
-            continue;
-        }
         MealWindow window = GetMealWindow((Meal)i, weekendToday);
         if (window.startSec > nowSec) {
             state.nextMeal = i;
@@ -531,10 +525,7 @@ static std::wstring FormatCountdown(int seconds) {
     if (seconds <= 0) {
         return L"<1 min";
     }
-    int minutes = (seconds + 59) / 60;
-    if (minutes < 1) {
-        return L"<1 min";
-    }
+    int minutes = (seconds + 59) / 60;  // seconds > 0, so minutes >= 1
     if (minutes < 60) {
         return std::to_wstring(minutes) + L" min";
     }
@@ -704,25 +695,26 @@ static std::wstring JoinItems(const std::vector<std::wstring>& items,
 // Section 6: cache paths and file I/O
 // ---------------------------------------------------------------------------
 
+// Windhawk's own per-mod storage directory. Using it rather than a folder of
+// our own under %LOCALAPPDATA% means Windhawk deletes the cached menus when the
+// mod is removed, so the mod leaves nothing behind.
 static std::wstring GetCacheDirectory() {
-    PWSTR localAppData = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr,
-                                    &localAppData))) {
+    WCHAR path[MAX_PATH];
+    size_t length = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+    if (length == 0 || length >= ARRAYSIZE(path)) {
         return L"";
     }
-    std::wstring path = localAppData;
-    CoTaskMemFree(localAppData);
-    path += L"\\Windhawk\\MessMenu";
-    return path;
+    return std::wstring(path, length);
 }
 
 static bool EnsureCacheDirectory(const std::wstring& path) {
     if (path.empty()) {
         return false;
     }
-    int result = SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
-    return result == ERROR_SUCCESS || result == ERROR_ALREADY_EXISTS ||
-           result == ERROR_FILE_EXISTS;
+    if (CreateDirectoryW(path.c_str(), nullptr)) {
+        return true;
+    }
+    return GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
 static std::wstring CacheFilePrefix(int hostel, int mess) {
@@ -1062,7 +1054,7 @@ static void PruneOldCacheFiles(int hostel, int mess, int keepFromMonthKey) {
         if (monthKey < keepFromMonthKey) {
             std::wstring full = directory + L"\\" + name;
             DeleteFileW(full.c_str());
-            LOGV(L"PruneOldCacheFiles: removed %s", name.c_str());
+            Wh_Log(L"PruneOldCacheFiles: removed %s", name.c_str());
         }
     } while (FindNextFileW(find, &findData));
 
@@ -1091,7 +1083,7 @@ static void LoadCacheFromDisk() {
                 }
                 ParsedMonth parsed;
                 if (!ParseMenuJson(Utf8ToWide(bytes), parsed)) {
-                    LOGV(L"LoadCacheFromDisk: could not parse %s",
+                    Wh_Log(L"LoadCacheFromDisk: could not parse %s",
                          findData.cFileName);
                     continue;
                 }
@@ -1103,11 +1095,12 @@ static void LoadCacheFromDisk() {
         }
     }
 
-    LOGV(L"LoadCacheFromDisk: %d days loaded for hostel %d mess %d",
+    Wh_Log(L"LoadCacheFromDisk: %d days loaded for hostel %d mess %d",
          (int)store.days.size(), store.hostel, store.mess);
 
     std::lock_guard<std::mutex> lock(g_dataMutex);
     g_store = std::move(store);
+    g_storeVersion.fetch_add(1);
 }
 
 static bool StoreCoversDay(int dayKey) {
@@ -1132,9 +1125,20 @@ static bool StoreCoversMonth(int monthKey) {
 using WindowThreadProc = void (*)(void*);
 
 struct RunFromWindowThreadPayload {
-    WindowThreadProc proc;
-    void* param;
+    WindowThreadProc proc = nullptr;
+    void* param = nullptr;
+    std::atomic<bool> ran{false};
 };
+
+// The payload is owned here rather than on the caller's stack, and addressed by
+// id. If SendMessageTimeoutW gives up but the message is dispatched afterwards,
+// the id is already gone from the map and the late dispatch is a no-op -- where
+// a stack address would have been a dangling read into a dead frame.
+static std::mutex g_runPayloadsMutex;
+[[clang::no_destroy]] static std::optional<
+    std::map<UINT_PTR, std::shared_ptr<RunFromWindowThreadPayload>>>
+    g_runPayloads{std::in_place};
+static std::atomic<UINT_PTR> g_nextRunPayloadId{1};
 
 static UINT GetRunFromWindowThreadMessage() {
     static const UINT kMsg =
@@ -1147,16 +1151,29 @@ static LRESULT CALLBACK RunFromWindowThreadHookProc(int code, WPARAM wParam,
     if (code == HC_ACTION) {
         auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
         if (message->message == GetRunFromWindowThreadMessage()) {
-            auto* payload =
-                reinterpret_cast<RunFromWindowThreadPayload*>(message->lParam);
-            payload->proc(payload->param);
+            std::shared_ptr<RunFromWindowThreadPayload> payload;
+            {
+                std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
+                if (g_runPayloads) {
+                    auto it = g_runPayloads->find((UINT_PTR)message->lParam);
+                    if (it != g_runPayloads->end()) {
+                        payload = it->second;
+                    }
+                }
+            }
+            // Released the lock first: proc may call back in.
+            if (payload) {
+                payload->proc(payload->param);
+                payload->ran.store(true);
+            }
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
 // Runs proc on the thread that owns hWnd. A message hook catches the sent
-// message, so no window subclassing or extra window is needed.
+// message, so no window subclassing or extra window is needed. Returns whether
+// proc actually ran -- callers, Wh_ModUninit above all, need to know.
 static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (!threadId) {
@@ -1173,13 +1190,28 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
         return false;
     }
 
-    RunFromWindowThreadPayload payload{proc, param};
+    auto payload = std::make_shared<RunFromWindowThreadPayload>();
+    payload->proc = proc;
+    payload->param = param;
+
+    const UINT_PTR id = g_nextRunPayloadId.fetch_add(1);
+    {
+        std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
+        (*g_runPayloads)[id] = payload;
+    }
+
     DWORD_PTR result = 0;
-    SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
-                        reinterpret_cast<LPARAM>(&payload), SMTO_ABORTIFHUNG,
-                        10000, &result);
+    LRESULT sent =
+        SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
+                            (LPARAM)id, SMTO_ABORTIFHUNG, 10000, &result);
+
+    {
+        std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
+        g_runPayloads->erase(id);
+    }
     UnhookWindowsHookEx(hook);
-    return true;
+
+    return sent != 0 && payload->ran.load();
 }
 
 static bool IsReadableMemoryRange(const void* address, size_t size) {
@@ -1246,20 +1278,21 @@ static FrameworkElement FindChildByClassName(FrameworkElement const& root,
 // Section 11: taskbar XAML root (via taskbar.dll internals)
 // ---------------------------------------------------------------------------
 
+// Only the primary taskbar (Shell_TrayWnd) is targeted, so the CSecondaryTaskBand
+// symbols are deliberately not resolved: they are non-optional entries in the
+// hook array, and failing to resolve them would take the whole mod down for a
+// code path that cannot run.
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
-using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
 using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
 using Std_Ref_Decref_t = void(WINAPI*)(void*);
 
 static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
-static CSecondaryTaskBand_GetTaskbarHost_t
-    CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
 static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
-static HWND g_taskbarWnd = nullptr;
+// Written from the taskbar thread, read from the network worker.
+static std::atomic<HWND> g_taskbarWnd{nullptr};
 
 static BOOL CALLBACK FindTaskbarWndEnumProc(HWND hWnd, LPARAM lParam) {
     DWORD processId = 0;
@@ -1281,13 +1314,7 @@ static HWND FindCurrentProcessTaskbarWnd() {
 }
 
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    wchar_t className[64] = {};
-    GetClassNameW(hTaskbarWnd, className, ARRAYSIZE(className));
-    bool isSecondary = _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
-
-    HWND hTaskSwWnd = isSecondary
-                          ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
-                          : (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
     if (!hTaskSwWnd) {
         Wh_Log(L"GetTaskbarXamlRoot: taskband window not found");
         return nullptr;
@@ -1299,10 +1326,8 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         return nullptr;
     }
 
-    void* expectedVftable = isSecondary ? CSecondaryTaskBand_ITaskListWndSite_vftable
-                                        : CTaskBand_ITaskListWndSite_vftable;
-    auto getTaskbarHost = isSecondary ? CSecondaryTaskBand_GetTaskbarHost_Original
-                                      : CTaskBand_GetTaskbarHost_Original;
+    void* expectedVftable = CTaskBand_ITaskListWndSite_vftable;
+    auto getTaskbarHost = CTaskBand_GetTaskbarHost_Original;
     if (!expectedVftable || !getTaskbarHost) {
         Wh_Log(L"GetTaskbarXamlRoot: symbols not resolved");
         return nullptr;
@@ -1791,36 +1816,115 @@ static Style MakeSubtleButtonStyle(bool light) {
     }
 }
 
+// Parsing the template is the most expensive thing in building the flyout, and
+// it was running three times per open. One instance per theme is enough -- a
+// Style is immutable once applied and is happily shared between controls.
+[[clang::no_destroy]] static Style g_subtleButtonStyle{nullptr};
+static bool g_subtleButtonStyleIsLight = false;
+
+static Style GetSubtleButtonStyle(bool light) {
+    if (!g_subtleButtonStyle || g_subtleButtonStyleIsLight != light) {
+        g_subtleButtonStyle = MakeSubtleButtonStyle(light);
+        g_subtleButtonStyleIsLight = light;
+    }
+    return g_subtleButtonStyle;
+}
+
 // ---------------------------------------------------------------------------
 // Section 13: UI state
 // ---------------------------------------------------------------------------
 
-static Button g_taskbarButton{nullptr};
-static TextBlock g_taskbarLabel{nullptr};
-static Grid g_injectionParent{nullptr};
+// Every global holding a XAML object carries [[clang::no_destroy]]. Wh_ModUninit
+// clears them on a normal unload, but it does not run when explorer.exe itself
+// terminates (restart, sign-out, reboot) -- there the CRT would run these
+// destructors alone on the shutdown thread, releasing UI-thread-affine XAML
+// objects after the XAML core is gone.
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+[[clang::no_destroy]] static Button g_taskbarButton{nullptr};
+[[clang::no_destroy]] static TextBlock g_taskbarLabel{nullptr};
+[[clang::no_destroy]] static Grid g_injectionParent{nullptr};
 // -1 means we appended without adding a column (taskbar-area positions).
 static int g_injectedColumn = -1;
 // The taskbar's icon strip, when we are holding space open in front of it.
-static FrameworkElement g_reservedElement{nullptr};
+[[clang::no_destroy]] static FrameworkElement g_reservedElement{nullptr};
 static Thickness g_reservedOriginalMargin{};
 static bool g_hasReservedOriginalMargin = false;
 static winrt::event_token g_buttonSizeToken{};
 
-static Flyout g_flyout{nullptr};
-static Border g_flyoutRoot{nullptr};
-static TextBlock g_headerDay{nullptr};
-static TextBlock g_headerDate{nullptr};
-static Button g_prevDayButton{nullptr};
-static Button g_nextDayButton{nullptr};
-static StackPanel g_cardsPanel{nullptr};
-static TextBlock g_footerText{nullptr};
-static FontIcon g_reloadIcon{nullptr};
-static ProgressRing g_reloadRing{nullptr};
-static DispatcherTimer g_timer{nullptr};
+[[clang::no_destroy]] static Flyout g_flyout{nullptr};
+[[clang::no_destroy]] static Border g_flyoutRoot{nullptr};
+[[clang::no_destroy]] static TextBlock g_headerDay{nullptr};
+[[clang::no_destroy]] static TextBlock g_headerDate{nullptr};
+[[clang::no_destroy]] static Button g_prevDayButton{nullptr};
+[[clang::no_destroy]] static Button g_nextDayButton{nullptr};
+[[clang::no_destroy]] static StackPanel g_cardsPanel{nullptr};
+[[clang::no_destroy]] static TextBlock g_footerText{nullptr};
+[[clang::no_destroy]] static FontIcon g_reloadIcon{nullptr};
+[[clang::no_destroy]] static ProgressRing g_reloadRing{nullptr};
+[[clang::no_destroy]] static DispatcherTimer g_timer{nullptr};
 
-static std::vector<TextBlock> g_cardCountdowns;
-static std::vector<Border> g_cardBorders;
-static std::vector<int> g_cardMeals;
+// std::vector is not nullable, so clear() alone would leave the heap buffer for
+// the CRT to free at shutdown. The optional wrapper gives a reset() that
+// releases it while the mod is still mapped.
+[[clang::no_destroy]] static std::optional<std::vector<TextBlock>>
+    g_cardCountdowns{std::in_place};
+[[clang::no_destroy]] static std::optional<std::vector<Border>> g_cardBorders{
+    std::in_place};
+[[clang::no_destroy]] static std::optional<std::vector<int>> g_cardMeals{
+    std::in_place};
+
+// Every DispatcherTimer we start, so Wh_ModUninit can stop the pending ones.
+// A timer that fires into an unmapped image crashes Explorer regardless of any
+// g_unloading check inside the callback -- the crash is the call itself.
+// Touched only from the taskbar UI thread, so it needs no lock.
+[[clang::no_destroy]] static std::optional<std::vector<DispatcherTimer>>
+    g_liveTimers{std::in_place};
+
+// The reveal animation's SizeChanged handler races its fallback timer and is
+// only detached when one of them wins; if neither has by unload, detach here.
+[[clang::no_destroy]] static Border g_revealTarget{nullptr};
+static winrt::event_token g_revealSizeToken{};
+[[clang::no_destroy]] static Storyboard g_closingStoryboard{nullptr};
+
+// Each of these checks the optional first: Wh_ModUninit reset()s it, and a
+// stray callback arriving afterwards must not dereference an empty one.
+static void TrackTimer(DispatcherTimer const& timer) {
+    if (!g_liveTimers) {
+        return;
+    }
+    try {
+        g_liveTimers->push_back(timer);
+    } catch (...) {
+    }
+}
+
+static void UntrackTimer(DispatcherTimer const& timer) {
+    if (!g_liveTimers) {
+        return;
+    }
+    try {
+        auto& timers = *g_liveTimers;
+        timers.erase(std::remove(timers.begin(), timers.end(), timer),
+                     timers.end());
+    } catch (...) {
+    }
+}
+
+static void StopAllTimers() {
+    if (!g_liveTimers) {
+        return;
+    }
+    try {
+        for (auto& timer : *g_liveTimers) {
+            try {
+                timer.Stop();
+            } catch (...) {
+            }
+        }
+        g_liveTimers->clear();
+    } catch (...) {
+    }
+}
 
 static std::atomic<bool> g_flyoutOpen{false};
 static std::atomic<bool> g_flyoutClosingAnimStarted{false};
@@ -1829,11 +1933,18 @@ static int g_dayOffset = 0;
 static double g_flyoutAnimSign = 1.0;
 
 static std::wstring g_lastLabelText;
+static long long g_lastLabelKey = LLONG_MIN;
 static int g_lastRenderedStateKey = INT_MIN;
+
+static void InvalidateLabelCache() {
+    g_lastLabelText.clear();
+    g_lastLabelKey = LLONG_MIN;
+}
 
 static void RenderFlyoutPage();
 static void UpdateTaskbarLabel();
 static void KickFetch();
+static void ApplyTimerInterval();
 
 static std::wstring HostelDisplayName() {
     return g_settings.hostel == 2 ? L"Women's Hostel" : L"Men's Hostel";
@@ -1854,24 +1965,17 @@ static std::wstring MessDisplayName() {
 // Section 14: taskbar button
 // ---------------------------------------------------------------------------
 
-static std::wstring ComputeButtonLabel() {
+static std::wstring ComputeButtonLabel(const MealState& state) {
     const int todayKey = TodayKey();
-    MealState state = ComputeMealState();
 
-    DayMenu day;
-    bool haveDay = false;
-    {
-        std::lock_guard<std::mutex> lock(g_dataMutex);
-        auto it = g_store.days.find(todayKey);
-        if (it != g_store.days.end()) {
-            day = it->second;
-            haveDay = true;
-        }
-    }
-
-    if (!haveDay) {
+    // The grouping work happens under the lock, against a reference rather than
+    // a copy: copying DayMenu means copying four std::wstrings every time.
+    std::lock_guard<std::mutex> lock(g_dataMutex);
+    auto it = g_store.days.find(todayKey);
+    if (it == g_store.days.end()) {
         return L"No menu";
     }
+    const DayMenu& day = it->second;
 
     if (state.currentMeal >= 0) {
         GroupedMenu grouped = GroupMenuItems(day.raw[state.currentMeal]);
@@ -1898,7 +2002,28 @@ static void UpdateTaskbarLabel() {
         return;
     }
     try {
-        std::wstring text = ComputeButtonLabel();
+        MealState state = ComputeMealState();
+
+        // Everything the label depends on, as one cheap integer, so the split /
+        // classify / join work only runs when the text can actually have
+        // changed. During a meal the label is a dish list, which does not move
+        // with the clock at all -- so the countdown is left out of the key
+        // there, and the label is then recomputed only when the meal or the
+        // cached menu changes.
+        const long long minutePart =
+            (state.currentMeal >= 0) ? 0 : ((state.remainingSec + 59) / 60);
+        const long long key =
+            (long long)g_storeVersion.load() * 1000000LL +
+            (long long)(state.currentMeal + 1) * 100000LL +
+            (long long)(state.nextMeal + 1) * 10000LL +
+            (state.nextIsTomorrow ? 5000LL : 0LL) + minutePart;
+
+        if (key == g_lastLabelKey) {
+            return;
+        }
+        g_lastLabelKey = key;
+
+        std::wstring text = ComputeButtonLabel(state);
         if (text == g_lastLabelText) {
             return;
         }
@@ -1923,7 +2048,7 @@ static void ShowMessFlyout(FrameworkElement const& target);
 
 static Button BuildTaskbarButton(bool light) {
     Button button;
-    if (auto style = MakeSubtleButtonStyle(light)) {
+    if (auto style = GetSubtleButtonStyle(light)) {
         button.Style(style);
     }
     // Stretch to the tray's full height so the hover/pressed fill matches the
@@ -2111,16 +2236,17 @@ static void RemoveTaskbarButton() {
     g_taskbarLabel = nullptr;
     g_injectionParent = nullptr;
     g_injectedColumn = -1;
-    g_lastLabelText.clear();
+    InvalidateLabelCache();
 }
 
 static bool InjectTaskbarButton() {
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = g_taskbarWnd.load() ? g_taskbarWnd.load()
+                                    : FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
         Wh_Log(L"InjectTaskbarButton: taskbar window not found");
         return false;
     }
-    g_taskbarWnd = hWnd;
+    g_taskbarWnd.store(hWnd);
 
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
@@ -2190,7 +2316,7 @@ static bool InjectTaskbarButton() {
                 }
             }
 
-            g_lastLabelText.clear();
+            InvalidateLabelCache();
             UpdateTaskbarLabel();
             return true;
         }
@@ -2225,7 +2351,7 @@ static bool InjectTaskbarButton() {
         g_injectionParent = trayGrid;
         g_injectedColumn = insertColumn;
 
-        g_lastLabelText.clear();
+        InvalidateLabelCache();
         UpdateTaskbarLabel();
         return true;
     } catch (...) {
@@ -2375,9 +2501,9 @@ static Border BuildMealCard(Meal meal, const DayMenu& day, bool light,
 
     card.Child(content);
 
-    g_cardBorders.push_back(card);
-    g_cardCountdowns.push_back(countdown);
-    g_cardMeals.push_back((int)meal);
+    g_cardBorders->push_back(card);
+    g_cardCountdowns->push_back(countdown);
+    g_cardMeals->push_back((int)meal);
     return card;
 }
 
@@ -2427,9 +2553,9 @@ static void RenderFlyoutPage() {
         g_headerDate.Text(FormatLongDate(dayKey));
 
         g_cardsPanel.Children().Clear();
-        g_cardBorders.clear();
-        g_cardCountdowns.clear();
-        g_cardMeals.clear();
+        g_cardBorders->clear();
+        g_cardCountdowns->clear();
+        g_cardMeals->clear();
 
         DayMenu day;
         bool haveDay = false;
@@ -2475,7 +2601,7 @@ static void RenderFlyoutPage() {
         const bool isToday = (g_dayOffset == 0);
 
         for (int i = 0; i < kMealCount; i++) {
-            if (!MealVisible((Meal)i)) {
+            if (!MealCardVisible((Meal)i)) {
                 continue;
             }
 
@@ -2582,7 +2708,7 @@ static Border BuildFlyoutContent() {
         return definition;
     }());
 
-    Style buttonStyle = MakeSubtleButtonStyle(light);
+    Style buttonStyle = GetSubtleButtonStyle(light);
 
     // --- header ---------------------------------------------------------
     StackPanel header;
@@ -2650,7 +2776,7 @@ static Border BuildFlyoutContent() {
     double maxHeight = 520.0;
     try {
         HMONITOR monitor =
-            MonitorFromWindow(g_taskbarWnd, MONITOR_DEFAULTTONEAREST);
+            MonitorFromWindow(g_taskbarWnd.load(), MONITOR_DEFAULTTONEAREST);
         MONITORINFO info{};
         info.cbSize = sizeof(info);
         if (monitor && GetMonitorInfo(monitor, &info)) {
@@ -2760,14 +2886,14 @@ static Border BuildFlyoutContent() {
 static constexpr double kTaskbarGap = 12.0;
 
 static bool IsTaskbarAtTop() {
-    if (!g_taskbarWnd) {
+    if (!g_taskbarWnd.load()) {
         return false;
     }
     RECT taskbarRect{};
-    if (!GetWindowRect(g_taskbarWnd, &taskbarRect)) {
+    if (!GetWindowRect(g_taskbarWnd.load(), &taskbarRect)) {
         return false;
     }
-    HMONITOR monitor = MonitorFromWindow(g_taskbarWnd, MONITOR_DEFAULTTONEAREST);
+    HMONITOR monitor = MonitorFromWindow(g_taskbarWnd.load(), MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     if (!monitor || !GetMonitorInfo(monitor, &info)) {
@@ -2779,6 +2905,9 @@ static bool IsTaskbarAtTop() {
 }
 
 static void ClearFlyoutRefs() {
+    if (!g_cardBorders) {
+        return;  // already reset by Wh_ModUninit
+    }
     g_flyoutRoot = nullptr;
     g_headerDay = nullptr;
     g_headerDate = nullptr;
@@ -2788,9 +2917,9 @@ static void ClearFlyoutRefs() {
     g_footerText = nullptr;
     g_reloadIcon = nullptr;
     g_reloadRing = nullptr;
-    g_cardBorders.clear();
-    g_cardCountdowns.clear();
-    g_cardMeals.clear();
+    g_cardBorders->clear();
+    g_cardCountdowns->clear();
+    g_cardMeals->clear();
 }
 
 static void ShowMessFlyout(FrameworkElement const& target) {
@@ -2847,6 +2976,9 @@ static void ShowMessFlyout(FrameworkElement const& target) {
             try {
                 RenderFlyoutPage();
                 UpdateReloadIndicator();
+                // Countdowns are on screen now, so speed the tick up at once
+                // rather than waiting out the current idle interval.
+                ApplyTimerInterval();
             } catch (...) {
             }
 
@@ -2922,13 +3054,19 @@ static void ShowMessFlyout(FrameworkElement const& target) {
 
             // Prefer the first real layout pass; fall back on a short timer,
             // because a re-shown flyout may not raise SizeChanged at all.
-            auto token = std::make_shared<winrt::event_token>();
-            *token = content.SizeChanged(
-                [content, token, reveal](
+            // Both are recorded globally so Wh_ModUninit can cancel whichever
+            // has not fired yet.
+            g_revealTarget = content;
+            g_revealSizeToken = content.SizeChanged(
+                [content, reveal](
                     winrt::Windows::Foundation::IInspectable const&,
                     SizeChangedEventArgs const&) mutable {
                     try {
-                        content.SizeChanged(*token);
+                        if (g_revealSizeToken.value) {
+                            content.SizeChanged(g_revealSizeToken);
+                            g_revealSizeToken = {};
+                            g_revealTarget = nullptr;
+                        }
                     } catch (...) {
                     }
                     reveal();
@@ -2945,10 +3083,12 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                     try {
                         fallback.Stop();
                         fallback.Tick(*fallbackToken);
+                        UntrackTimer(fallback);
                     } catch (...) {
                     }
                     reveal();
                 });
+            TrackTimer(fallback);
             fallback.Start();
         });
 
@@ -2993,6 +3133,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                     L"(UIElement.RenderTransform).(CompositeTransform."
                     L"TranslateY)");
                 storyboard.Children().Append(animation);
+                g_closingStoryboard = storyboard;
 
                 g_flyoutClosingAnimStarted.store(true);
                 auto hide = [sender]() {
@@ -3018,12 +3159,14 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                         try {
                             safety.Stop();
                             safety.Tick(*safetyToken);
+                            UntrackTimer(safety);
                         } catch (...) {
                         }
                         if (g_flyoutClosingAnimStarted.load()) {
                             hide();
                         }
                     });
+                TrackTimer(safety);
                 safety.Start();
                 storyboard.Begin();
             } catch (...) {
@@ -3036,6 +3179,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
             g_flyoutClosingAnimStarted.store(false);
             g_dayOffset = 0;
             ClearFlyoutRefs();
+            ApplyTimerInterval();
         });
 
         // Anchor above the button (or below it, for a top taskbar).
@@ -3076,12 +3220,12 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                     double workLeft = 0.0;
                     double workRight = (double)rootContent.ActualWidth();
                     HMONITOR monitor =
-                        MonitorFromWindow(g_taskbarWnd, MONITOR_DEFAULTTONEAREST);
+                        MonitorFromWindow(g_taskbarWnd.load(), MONITOR_DEFAULTTONEAREST);
                     MONITORINFO monitorInfo{};
                     monitorInfo.cbSize = sizeof(monitorInfo);
                     POINT origin{0, 0};
                     if (monitor && GetMonitorInfo(monitor, &monitorInfo) &&
-                        ClientToScreen(g_taskbarWnd, &origin)) {
+                        ClientToScreen(g_taskbarWnd.load(), &origin)) {
                         double scale = xamlRoot.RasterizationScale();
                         if (scale <= 0.0) {
                             scale = 1.0;
@@ -3135,12 +3279,37 @@ static void ShowMessFlyout(FrameworkElement const& target) {
 
 static int g_lastSeenDayKey = 0;
 
+// A per-second tick is only needed while a live countdown is on screen, which
+// means the flyout open on today's page. The taskbar label alone has minute
+// granularity, so the rest of the time a much slower tick is indistinguishable.
+static constexpr int kFastTickMs = 1000;
+static constexpr int kIdleTickMs = 20000;
+static int g_timerIntervalMs = kFastTickMs;
+
+static void ApplyTimerInterval() {
+    if (!g_timer) {
+        return;
+    }
+    const bool countdownVisible = g_flyoutOpen.load() && g_dayOffset == 0;
+    const int wanted = countdownVisible ? kFastTickMs : kIdleTickMs;
+    if (wanted == g_timerIntervalMs) {
+        return;
+    }
+    try {
+        g_timer.Interval(winrt::Windows::Foundation::TimeSpan{
+            std::chrono::milliseconds(wanted)});
+        g_timerIntervalMs = wanted;
+    } catch (...) {
+    }
+}
+
 static void OnTimerTick() {
-    if (g_unloading) {
+    if (g_unloading || !g_cardCountdowns || !g_cardMeals) {
         return;
     }
 
     try {
+        ApplyTimerInterval();
         UpdateTaskbarLabel();
 
         const int todayKey = TodayKey();
@@ -3156,7 +3325,7 @@ static void OnTimerTick() {
             return;
         }
 
-        if (!g_flyoutOpen || g_dayOffset != 0 || g_cardCountdowns.empty()) {
+        if (!g_flyoutOpen || g_dayOffset != 0 || g_cardCountdowns->empty()) {
             return;
         }
 
@@ -3169,16 +3338,16 @@ static void OnTimerTick() {
         }
 
         // Same state, only the countdown moved. Touch just that text.
-        for (size_t i = 0; i < g_cardCountdowns.size(); i++) {
-            int meal = g_cardMeals[i];
+        for (size_t i = 0; i < g_cardCountdowns->size(); i++) {
+            int meal = (*g_cardMeals)[i];
             std::wstring text;
             if (state.currentMeal == meal) {
                 text = L"Ends in " + FormatCountdown(state.remainingSec);
             } else if (state.nextMeal == meal && !state.nextIsTomorrow) {
                 text = L"Starts in " + FormatCountdown(state.remainingSec);
             }
-            if (g_cardCountdowns[i].Text() != text) {
-                g_cardCountdowns[i].Text(text);
+            if ((*g_cardCountdowns)[i].Text() != text) {
+                (*g_cardCountdowns)[i].Text(text);
             }
         }
     } catch (...) {
@@ -3240,7 +3409,7 @@ static void KickFetch() {
 }
 
 static void NotifyUiDataChanged() {
-    HWND hWnd = g_taskbarWnd;
+    HWND hWnd = g_taskbarWnd.load();
     if (!hWnd || g_unloading) {
         return;
     }
@@ -3248,7 +3417,7 @@ static void NotifyUiDataChanged() {
         hWnd,
         [](void*) {
             try {
-                g_lastLabelText.clear();
+                InvalidateLabelCache();
                 UpdateTaskbarLabel();
                 UpdateReloadIndicator();
                 if (g_flyoutOpen) {
@@ -3301,6 +3470,7 @@ static bool PerformFetch() {
                 g_store.days[entry.first] = entry.second;
             }
             g_lastFetchError.clear();
+            g_storeVersion.fetch_add(1);
         }
 
         // Keep the previous, current and next month; drop anything older.
@@ -3309,7 +3479,7 @@ static bool PerformFetch() {
         int year;
         unsigned month;
         MonthKeyToParts(parsed.monthKey, year, month);
-        LOGV(L"PerformFetch: got %04d-%02u with %d days", year, month,
+        Wh_Log(L"PerformFetch: got %04d-%02u with %d days", year, month,
              (int)parsed.days.size());
     } else {
         std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -3384,6 +3554,11 @@ static DWORD WINAPI NetThreadProc(void*) {
 
         HANDLE handles[2] = {g_stopEvent, g_kickEvent};
         DWORD result = WaitForMultipleObjects(2, handles, FALSE, waitMs);
+        if (result == WAIT_FAILED) {
+            // Otherwise the loop would spin at 100% CPU on a bad handle.
+            Wh_Log(L"NetThreadProc: wait failed, stopping");
+            break;
+        }
         if (result == WAIT_OBJECT_0) {
             break;
         }
@@ -3403,10 +3578,38 @@ static DWORD WINAPI NetThreadProc(void*) {
     return 0;
 }
 
+// Idempotent: called from Wh_ModAfterInit when a taskbar is already present,
+// and from the taskbar creation hook otherwise. Without the gate, every
+// explorer.exe would run a worker and download the menu -- with "launch folder
+// windows in a separate process" enabled that is one per Explorer window.
 static void StartNetThread() {
+    if (g_netThread) {
+        return;
+    }
+
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_kickEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_kickEvent) {
+        Wh_Log(L"StartNetThread: could not create the events");
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+        if (g_kickEvent) {
+            CloseHandle(g_kickEvent);
+            g_kickEvent = nullptr;
+        }
+        return;
+    }
+
     g_netThread = CreateThread(nullptr, 0, NetThreadProc, nullptr, 0, nullptr);
+    if (!g_netThread) {
+        Wh_Log(L"StartNetThread: could not start the worker");
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        CloseHandle(g_kickEvent);
+        g_kickEvent = nullptr;
+    }
 }
 
 static void StopNetThread() {
@@ -3421,9 +3624,13 @@ static void StopNetThread() {
     }
 
     if (g_netThread) {
-        if (WaitForSingleObject(g_netThread, 8000) == WAIT_TIMEOUT) {
-            Wh_Log(L"StopNetThread: worker did not exit in time");
-        }
+        // INFINITE, deliberately. Windhawk unloads the mod image as soon as
+        // Wh_ModUninit returns, so a worker still running mod code after a
+        // timed-out wait would be executing unmapped memory. The wait is
+        // already bounded by the stop event, the closed WinHTTP handle and the
+        // g_unloading checks -- a timeout here could only convert a slow exit
+        // into a crash.
+        WaitForSingleObject(g_netThread, INFINITE);
         CloseHandle(g_netThread);
         g_netThread = nullptr;
     }
@@ -3441,10 +3648,18 @@ static void StopNetThread() {
 // Section 19: injection retry and the taskbar creation hook
 // ---------------------------------------------------------------------------
 
-static void InjectWithRetry(FrameworkElement rootContent, int attempt = 0) {
+// Bumped every time the taskbar is (re)created. A retry chain started for an
+// older taskbar carries its generation and gives up when it no longer matches,
+// so two chains racing after a quick double restart cannot both inject -- which
+// would otherwise leave the visible button unmanaged while the globals point at
+// a dead tree.
+static int g_injectGeneration = 0;
+
+static void InjectWithRetry(FrameworkElement rootContent, int generation,
+                            int attempt = 0) {
     static constexpr int kMaxAttempts = 50;
 
-    if (g_unloading) {
+    if (g_unloading || generation != g_injectGeneration) {
         return;
     }
 
@@ -3470,16 +3685,18 @@ static void InjectWithRetry(FrameworkElement rootContent, int attempt = 0) {
             winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(100)});
         auto token = std::make_shared<winrt::event_token>();
         *token = timer.Tick(
-            [timer, token, rootContent, attempt](
+            [timer, token, rootContent, generation, attempt](
                 winrt::Windows::Foundation::IInspectable const&,
                 winrt::Windows::Foundation::IInspectable const&) mutable {
                 try {
                     timer.Stop();
                     timer.Tick(*token);
+                    UntrackTimer(timer);
                 } catch (...) {
                 }
-                InjectWithRetry(rootContent, attempt + 1);
+                InjectWithRetry(rootContent, generation, attempt + 1);
             });
+        TrackTimer(timer);
         timer.Start();
     } catch (...) {
         Wh_Log(L"InjectWithRetry: could not schedule a retry");
@@ -3503,7 +3720,10 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
             return;
         }
 
-        // The old tree is gone; drop every reference into it before rebuilding.
+        // The old tree is gone; drop every reference into it before rebuilding,
+        // and retire any retry chain still running for the previous taskbar.
+        g_injectGeneration++;
+        StopAllTimers();
         g_taskbarButton = nullptr;
         g_taskbarLabel = nullptr;
         g_injectionParent = nullptr;
@@ -3513,7 +3733,10 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         ClearFlyoutRefs();
         StopUiTimer();
 
-        g_taskbarWnd = hWnd;
+        g_taskbarWnd.store(hWnd);
+
+        // If the taskbar only appeared now, this is where the worker starts.
+        StartNetThread();
 
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
         if (!xamlRoot) {
@@ -3523,7 +3746,7 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         if (!rootContent) {
             return;
         }
-        InjectWithRetry(rootContent);
+        InjectWithRetry(rootContent, g_injectGeneration);
     } catch (...) {
         Wh_Log(L"TrayUI_StartTaskbar_Hook: exception");
     }
@@ -3537,15 +3760,11 @@ static bool HookTaskbarSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
          &CTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-         &CSecondaryTaskBand_GetTaskbarHost_Original},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
          &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
@@ -3554,7 +3773,8 @@ static bool HookTaskbarSymbols() {
          &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
     };
 
-    return WindhawkUtils::HookSymbols(taskbarModule, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(taskbarModule, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
 }
 
 // ---------------------------------------------------------------------------
@@ -3565,7 +3785,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
     g_unloading = false;
-    g_taskbarWnd = nullptr;
+    g_taskbarWnd.store(nullptr);
 
     LoadSettings();
 
@@ -3578,13 +3798,16 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+    g_taskbarWnd.store(FindCurrentProcessTaskbarWnd());
 
-    StartNetThread();
+    if (g_taskbarWnd.load()) {
+        // Only the Explorer instance that owns the taskbar needs the menu.
+        StartNetThread();
+    }
 
-    if (g_taskbarWnd) {
+    if (g_taskbarWnd.load()) {
         RunFromWindowThread(
-            g_taskbarWnd,
+            g_taskbarWnd.load(),
             [](void*) {
                 try {
                     RemoveTaskbarButton();
@@ -3611,11 +3834,11 @@ void Wh_ModSettingsChanged() {
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
-        hWnd = g_taskbarWnd;
+        hWnd = g_taskbarWnd.load();
     }
 
     if (hWnd) {
-        g_taskbarWnd = hWnd;
+        g_taskbarWnd.store(hWnd);
         RunFromWindowThread(
             hWnd,
             [](void*) {
@@ -3649,6 +3872,7 @@ void Wh_ModSettingsChanged() {
             g_store.hostel = g_settings.hostel;
             g_store.mess = g_settings.mess;
             g_lastFetchError.clear();
+            g_storeVersion.fetch_add(1);
         }
         g_reloadCacheRequested.store(true);
         KickFetch();
@@ -3662,12 +3886,53 @@ void Wh_ModUninit() {
 
     StopNetThread();
 
-    if (g_taskbarWnd) {
-        RunFromWindowThread(
-            g_taskbarWnd,
+    if (g_taskbarWnd.load()) {
+        bool cleaned = RunFromWindowThread(
+            g_taskbarWnd.load(),
             [](void*) {
+                // Order matters. Everything that could still call into this
+                // image has to be cancelled before the references are dropped,
+                // because the image is unmapped the moment Wh_ModUninit
+                // returns and a pending callback would then run in freed
+                // memory -- a g_unloading check inside it cannot help, since
+                // the crash is the call itself.
                 try {
                     StopUiTimer();
+                    StopAllTimers();
+                } catch (...) {
+                }
+
+                // The reveal handler normally detaches itself when it fires;
+                // if it has not fired yet, it is still attached here.
+                try {
+                    if (g_revealTarget && g_revealSizeToken.value) {
+                        g_revealTarget.SizeChanged(g_revealSizeToken);
+                    }
+                } catch (...) {
+                }
+                g_revealSizeToken = {};
+                g_revealTarget = nullptr;
+
+                try {
+                    if (g_closingStoryboard) {
+                        g_closingStoryboard.Stop();
+                    }
+                } catch (...) {
+                }
+                g_closingStoryboard = nullptr;
+
+                // MessBlurBrush is defined in this image and lives on the
+                // flyout Border's Background. Hide() does not tear the popup's
+                // visual tree down synchronously, so drop the brush now to run
+                // its OnDisconnected while the code still exists.
+                try {
+                    if (g_flyoutRoot) {
+                        g_flyoutRoot.Background(nullptr);
+                    }
+                } catch (...) {
+                }
+
+                try {
                     if (g_flyout && g_flyoutOpen) {
                         g_flyout.Hide();
                     }
@@ -3684,14 +3949,35 @@ void Wh_ModUninit() {
                 }
             },
             nullptr);
+
+        if (!cleaned) {
+            // The UI thread never ran our cleanup, so the button and its
+            // handlers are still live in a taskbar whose mod is about to
+            // vanish. Nothing safe can be done about it from this thread.
+            Wh_Log(L"Wh_ModUninit: UI-thread cleanup did not run");
+        }
     }
 
     // Anything still holding a XAML object here would outlive the mod's code.
     g_flyout = nullptr;
     g_flyoutRoot = nullptr;
+    g_revealTarget = nullptr;
+    g_closingStoryboard = nullptr;
     g_taskbarButton = nullptr;
     g_taskbarLabel = nullptr;
     g_injectionParent = nullptr;
+    g_reservedElement = nullptr;
     g_timer = nullptr;
+    g_subtleButtonStyle = nullptr;
     ClearFlyoutRefs();
+
+    // These carry [[clang::no_destroy]], so release their buffers by hand.
+    g_liveTimers.reset();
+    g_cardCountdowns.reset();
+    g_cardBorders.reset();
+    g_cardMeals.reset();
+    {
+        std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
+        g_runPayloads.reset();
+    }
 }
