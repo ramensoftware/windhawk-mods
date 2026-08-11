@@ -1142,7 +1142,7 @@ static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, 
 
 // ---- Helper: find ExplorerWrapper by shellTab HWND and run action ----
 
-static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
+static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match) {
     if (!hWnd || !IsWindow(hWnd) || !action) {
         Wh_Log(L"FindShellTabAndDoAction: invalid args hWnd=%p action=%s", hWnd, action ? action : L"null");
         return false;
