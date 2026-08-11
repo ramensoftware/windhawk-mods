@@ -6,7 +6,6 @@
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm -lmsimg32
 // ==/WindhawkMod==
 
