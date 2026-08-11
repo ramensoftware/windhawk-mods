@@ -50,8 +50,10 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 #include <atomic>
 
 static std::atomic<PIDLIST_ABSOLUTE> g_targetPidl{nullptr};
+static std::atomic<bool> g_targetPidlResolveFailed{false};
 static std::atomic<bool> g_explorerFrameHooked{false};
 static std::atomic<bool> g_unloading{false};
+static HMODULE g_explorerFrameRef = nullptr;
 
 // ---- BrowseObject Original & Hook ----
 typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
@@ -64,12 +66,17 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
     if (pidl) {
         return pidl;
     }
+    
+    if (g_targetPidlResolveFailed.load(std::memory_order_relaxed)) {
+        return nullptr;
+    }
 
     constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
     PIDLIST_ABSOLUTE newPidl = nullptr;
     HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr, &newPidl, 0, nullptr);
     if (FAILED(hr) || !newPidl) {
         Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
+        g_targetPidlResolveFailed.store(true, std::memory_order_relaxed);
         return nullptr;
     }
 
@@ -87,6 +94,29 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
 static HANDLE g_launchEvent = NULL;
 static HANDLE g_stopEvent = NULL;
 static HANDLE g_workerThread = NULL;
+
+static void CleanupWorkerThread() {
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+    if (g_workerThread) {
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = NULL;
+    }
+    if (g_launchEvent) {
+        CloseHandle(g_launchEvent);
+        g_launchEvent = NULL;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
+    }
+    if (g_explorerFrameRef) {
+        FreeLibrary(g_explorerFrameRef);
+        g_explorerFrameRef = nullptr;
+    }
+}
 
 static DWORD WINAPI LaunchWorkerProc(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -114,9 +144,9 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // SEE_MASK_ASYNCOK permits the shell to perform the execution on a background thread.
-            // Leaving off SEE_MASK_FLAG_NO_UI ensures the shell's standard error/fallback prompts work.
-            sei.fMask = SEE_MASK_ASYNCOK;
+            // Keep the shell's work on this thread and bounded: no modal UI to hang the
+            // join in Wh_ModUninit, and no async operation to be aborted when we exit.
+            sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
             sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
@@ -181,6 +211,10 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
     if (!g_explorerFrameHooked.compare_exchange_strong(expected, true)) {
         return true;
     }
+    
+    // Hold a reference so the module is not unloaded out from under the hook
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                       reinterpret_cast<LPCWSTR>(hEF), &g_explorerFrameRef);
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
@@ -205,7 +239,7 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
     }
 
     // Hook failed - latch remains true to prevent repeated HookSymbols failure retries
-    Wh_Log(L"Failed to hook ExplorerFrame symbols.");
+    Wh_Log(L"Failed to hook ExplorerFrame symbols. Mod will remain inactive until restarted/reloaded.");
     return false;
 }
 
@@ -238,16 +272,14 @@ BOOL Wh_ModInit() {
     
     if (!g_launchEvent || !g_stopEvent) {
         Wh_Log(L"Failed to create thread synchronization events.");
-        if (g_launchEvent) CloseHandle(g_launchEvent);
-        if (g_stopEvent) CloseHandle(g_stopEvent);
+        CleanupWorkerThread();
         return FALSE;
     }
 
     g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
     if (!g_workerThread) {
         Wh_Log(L"Failed to create worker thread.");
-        CloseHandle(g_launchEvent);
-        CloseHandle(g_stopEvent);
+        CleanupWorkerThread();
         return FALSE;
     }
 
@@ -259,13 +291,7 @@ BOOL Wh_ModInit() {
         if (HookExplorerFrame(hEF, false)) {
             delayLoadingNeeded = false;
         } else {
-            Wh_Log(L"Failed to hook already loaded explorerframe.dll");
-            
-            SetEvent(g_stopEvent);
-            WaitForSingleObject(g_workerThread, INFINITE);
-            CloseHandle(g_workerThread);
-            CloseHandle(g_launchEvent);
-            CloseHandle(g_stopEvent);
+            CleanupWorkerThread();
             return FALSE;
         }
     }
@@ -302,25 +328,7 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing mod");
 
-    if (g_stopEvent) {
-        SetEvent(g_stopEvent);
-    }
-
-    if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, INFINITE);
-        CloseHandle(g_workerThread);
-        g_workerThread = NULL;
-    }
-
-    if (g_launchEvent) {
-        CloseHandle(g_launchEvent);
-        g_launchEvent = NULL;
-    }
-    
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = NULL;
-    }
+    CleanupWorkerThread();
 
     PIDLIST_ABSOLUTE target = g_targetPidl.exchange(nullptr, std::memory_order_acquire);
     if (target) {
