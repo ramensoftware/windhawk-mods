@@ -180,24 +180,244 @@ If any issues are encountered, please report them to the author of the mod.
 // Per-call diagnostic tracing is intentionally omitted from release builds so
 // the ShellExecute, COM, registry and DirectUI hook paths remain lightweight.
 
-// Opens the modern Installed Updates page used by the restored history links.
-static void OpenInstalledUpdates(HWND hwnd) {
-    ShellExecuteW(
-        hwnd,
-        L"open",
-        L"explorer.exe",
-        L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}",
-        nullptr,
-        SW_SHOWNORMAL);
+// Use RtlGetVersion as the authoritative source. Unlike GetVersionEx and the
+// version-helper macros, it is not affected by the executable's compatibility
+// manifest. The registry values are read independently and can only upgrade the
+// detected build; this prevents a compatibility shim from making Windows 11
+// (build 22000 or later) look like Windows 10.
+struct RealWindowsVersion {
+    DWORD major = 0;
+    DWORD minor = 0;
+    DWORD build = 0;
+    bool valid = false;
+};
+
+static bool ParseBuildNumber(const wchar_t* text, DWORD& build) {
+    if (!text || !*text) return false;
+    wchar_t* end = nullptr;
+    const unsigned long value = wcstoul(text, &end, 10);
+    while (end && (*end == L' ' || *end == L'\t')) ++end;
+    if (!end || end == text || *end != L'\0' || value == 0) return false;
+    build = static_cast<DWORD>(value);
+    return true;
 }
 
-// Opens the same classic Security and Maintenance page represented by
-// {BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}, but through control.exe. Navigating
-// directly to that legacy CLSID in the current Explorer process crashes the
-// Windows 10 19044 shell after the page is created.
+static RealWindowsVersion DetectRealWindowsVersion() {
+    RealWindowsVersion result{};
+
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOEXW*);
+    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
+        if (auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+                GetProcAddress(ntdll, "RtlGetVersion"))) {
+            OSVERSIONINFOEXW version{};
+            version.dwOSVersionInfoSize = sizeof(version);
+            if (rtlGetVersion(&version) >= 0) {
+                result.major = version.dwMajorVersion;
+                result.minor = version.dwMinorVersion;
+                result.build = version.dwBuildNumber;
+                result.valid = result.major != 0;
+            }
+        }
+    }
+
+    // Query the native 64-bit CurrentVersion key as an independent fallback.
+    // This mod is x64-only, but KEY_WOW64_64KEY also makes the intent explicit.
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", 0,
+            KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
+        DWORD registryMajor = 0;
+        DWORD registryMinor = 0;
+        DWORD type = 0;
+        DWORD size = sizeof(registryMajor);
+        if (RegQueryValueExW(key, L"CurrentMajorVersionNumber", nullptr, &type,
+                            reinterpret_cast<LPBYTE>(&registryMajor), &size) != ERROR_SUCCESS ||
+            type != REG_DWORD) {
+            registryMajor = 0;
+        }
+        type = 0;
+        size = sizeof(registryMinor);
+        if (RegQueryValueExW(key, L"CurrentMinorVersionNumber", nullptr, &type,
+                            reinterpret_cast<LPBYTE>(&registryMinor), &size) != ERROR_SUCCESS ||
+            type != REG_DWORD) {
+            registryMinor = 0;
+        }
+
+        DWORD registryBuild = 0;
+        wchar_t buildText[64] = {};
+        type = 0;
+        size = sizeof(buildText);
+        bool haveRegistryBuild =
+            RegQueryValueExW(key, L"CurrentBuildNumber", nullptr, &type,
+                             reinterpret_cast<LPBYTE>(buildText), &size) == ERROR_SUCCESS &&
+            (type == REG_SZ || type == REG_EXPAND_SZ) &&
+            ParseBuildNumber(buildText, registryBuild);
+        if (!haveRegistryBuild) {
+            buildText[0] = L'\0';
+            type = 0;
+            size = sizeof(buildText);
+            haveRegistryBuild =
+                RegQueryValueExW(key, L"CurrentBuild", nullptr, &type,
+                                 reinterpret_cast<LPBYTE>(buildText), &size) == ERROR_SUCCESS &&
+                (type == REG_SZ || type == REG_EXPAND_SZ) &&
+                ParseBuildNumber(buildText, registryBuild);
+        }
+        RegCloseKey(key);
+
+        // Never downgrade a valid RtlGetVersion result. A higher native registry
+        // build is useful when another compatibility layer has altered the API.
+        if (!result.valid && registryMajor != 0) {
+            result.major = registryMajor;
+            result.minor = registryMinor;
+            result.valid = true;
+        } else if (registryMajor > result.major) {
+            result.major = registryMajor;
+            result.minor = registryMinor;
+        }
+        if (haveRegistryBuild && registryBuild > result.build) {
+            result.build = registryBuild;
+            if (!result.valid && registryBuild >= 10240) {
+                result.major = 10;
+                result.minor = 0;
+                result.valid = true;
+            }
+        }
+    }
+
+    return result;
+}
+
+static const RealWindowsVersion& GetRealWindowsVersion() {
+    static const RealWindowsVersion version = DetectRealWindowsVersion();
+    return version;
+}
+
+static bool IsWindows10() {
+    const RealWindowsVersion& version = GetRealWindowsVersion();
+    return version.valid && version.major == 10 &&
+           version.build >= 10240 && version.build < 22000;
+}
+
+static bool IsWindows11OrLater() {
+    const RealWindowsVersion& version = GetRealWindowsVersion();
+    return version.valid &&
+           (version.major > 10 ||
+            (version.major == 10 && version.build >= 22000));
+}
+
+static bool ShellExecuteSucceeded(HINSTANCE result) {
+    return reinterpret_cast<INT_PTR>(result) > 32;
+}
+
+static bool TryShellExecute(HWND hwnd, PCWSTR file, PCWSTR parameters = nullptr) {
+    return ShellExecuteSucceeded(ShellExecuteW(
+        hwnd, L"open", file, parameters, nullptr, SW_SHOWNORMAL));
+}
+
+// A shell namespace target is considered available only when its CLSID is
+// registered. The subsequent ShellExecute result is checked too, so a removed
+// or disabled page cannot strand the user on a broken classic target.
+static bool IsShellClsidRegistered(PCWSTR clsid) {
+    if (!clsid || !*clsid) return false;
+    wchar_t keyPath[64] = {};
+    if (swprintf_s(keyPath, ARRAYSIZE(keyPath), L"CLSID\\%s", clsid) < 0)
+        return false;
+
+    HKEY key = nullptr;
+    const LSTATUS status = RegOpenKeyExW(
+        HKEY_CLASSES_ROOT, keyPath, 0, KEY_READ, &key);
+    if (status == ERROR_SUCCESS) RegCloseKey(key);
+    return status == ERROR_SUCCESS;
+}
+
+static bool TryOpenRegisteredShellClsid(HWND hwnd, PCWSTR clsid) {
+    if (!IsShellClsidRegistered(clsid)) return false;
+    wchar_t target[64] = {};
+    if (swprintf_s(target, ARRAYSIZE(target), L"shell:::%s", clsid) < 0)
+        return false;
+    // Keep the legacy page isolated in Explorer on Windows 10, as before.
+    return TryShellExecute(hwnd, L"explorer.exe", target);
+}
+
+static void OpenSettingsWithFallback(HWND hwnd, PCWSTR primary,
+                                     PCWSTR secondary, PCWSTR finalFallback) {
+    if (primary && *primary && TryShellExecute(hwnd, primary)) return;
+    if (secondary && *secondary &&
+        (!primary || _wcsicmp(primary, secondary) != 0) &&
+        TryShellExecute(hwnd, secondary)) return;
+    if (finalFallback && *finalFallback &&
+        (!primary || _wcsicmp(primary, finalFallback) != 0) &&
+        (!secondary || _wcsicmp(secondary, finalFallback) != 0)) {
+        TryShellExecute(hwnd, finalFallback);
+    }
+}
+
+enum class InstalledUpdatesDestination {
+    History,
+    HiddenUpdates,
+    UninstallUpdates,
+};
+
+static PCWSTR ModernInstalledUpdatesUri(InstalledUpdatesDestination destination) {
+    switch (destination) {
+        case InstalledUpdatesDestination::UninstallUpdates:
+            return L"ms-settings:windowsupdate-uninstallupdates";
+        case InstalledUpdatesDestination::HiddenUpdates:
+            // Current Windows releases have no equivalent "restore hidden"
+            // page. Windows Update home is the safest supported destination.
+            return L"ms-settings:windowsupdate";
+        case InstalledUpdatesDestination::History:
+        default:
+            return L"ms-settings:windowsupdate-history";
+    }
+}
+
+static void OpenModernInstalledUpdates(HWND hwnd,
+                                       InstalledUpdatesDestination destination) {
+    const PCWSTR primary = ModernInstalledUpdatesUri(destination);
+    // Uninstall/optional subpages vary by Windows release. Update History is the
+    // closest stable fallback, followed by the Windows Update landing page.
+    OpenSettingsWithFallback(hwnd, primary,
+                             L"ms-settings:windowsupdate-history",
+                             L"ms-settings:windowsupdate");
+}
+
+// Windows 11 always uses Settings for update history/installed-update links.
+// Windows 10 retains the classic Installed Updates CLSID when it is registered;
+// Settings is used if the namespace target is missing or cannot be launched.
+static void OpenInstalledUpdates(HWND hwnd,
+                                 InstalledUpdatesDestination destination) {
+    static constexpr PCWSTR kInstalledUpdatesClsid =
+        L"{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}";
+
+    if (IsWindows11OrLater()) {
+        OpenModernInstalledUpdates(hwnd, destination);
+        return;
+    }
+    // An unknown/future version is deliberately treated as modern. Only a
+    // positively identified Windows 10 build may use the legacy namespace.
+    if (!IsWindows10() ||
+        !TryOpenRegisteredShellClsid(hwnd, kInstalledUpdatesClsid)) {
+        OpenModernInstalledUpdates(hwnd, destination);
+    }
+}
+
+// Security and Maintenance has no complete Settings equivalent. On Windows 11
+// (and on an unknown/future build), avoid control.exe entirely and open Windows
+// Security. On Windows 10, preserve the classic page only when its CLSID exists;
+// otherwise use Settings. This also avoids the OlderUI.dll/control.exe failure
+// reported when a removed classic page is invoked on Windows 11.
 static void OpenSecurityAndMaintenance(HWND hwnd) {
-    ShellExecuteW(hwnd, L"open", L"control.exe",
-                  L"/name Microsoft.ActionCenter", nullptr, SW_SHOWNORMAL);
+    static constexpr PCWSTR kSecurityAndMaintenanceClsid =
+        L"{BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}";
+
+    if (IsWindows10() &&
+        IsShellClsidRegistered(kSecurityAndMaintenanceClsid) &&
+        TryShellExecute(hwnd, L"control.exe", L"/name Microsoft.ActionCenter")) {
+        return;
+    }
+    OpenSettingsWithFallback(hwnd, L"ms-settings:windowsdefender",
+                             L"ms-settings:privacy", L"ms-settings:");
 }
 
 // -----------------------------------------------------------------------------
@@ -292,6 +512,13 @@ static std::atomic<bool> g_registrationReady{false};
 static std::atomic<HMODULE> g_module{nullptr};
 static std::atomic<const std::wstring*> g_dllPath{nullptr};
 static std::atomic<bool> g_stopping{false};
+// Setup completion is separate from payload readiness: false means a short wait
+// can still turn an otherwise transient COM activation failure into success; true
+// means setup definitively ended and the existing offline/failure notice should be
+// shown immediately. The worker thread id prevents a re-entrant COM activation
+// during LoadLibrary from waiting on the very worker that must make progress.
+static std::atomic<bool> g_setupFinished{false};
+static std::atomic<DWORD> g_setupWorkerThreadId{0};
 static HANDLE g_stopEvent = nullptr;
 // DirectUI resolves resstr(...) via XResourceProvider, bypassing LoadStringW.
 // This private resource copy supplies the embedded MUI string blocks to it.
@@ -302,6 +529,12 @@ static std::atomic<HMODULE> g_resourceModule{nullptr};
 
 static std::mutex g_rebuildMutex;
 [[clang::no_destroy]] static std::optional<std::thread> g_rebuildThread;
+// Set by Wh_ModSettingsChanged to interrupt an in-flight rebuild's retry
+// backoff before joining it, so two quick language changes in a row don't
+// stall settings-apply for up to ~10s. Distinct from g_stopEvent: signalling
+// g_stopEvent here would also be observed by the unrelated download/setup
+// workers, which is not what a settings change should do.
+static HANDLE g_rebuildAbortEvent = nullptr;
 
 // Which icon skin to use for the normal Windows Update status banner.
 // 0 = Windows 7/current shield/check icons, 1 = Windows 8.1 update icon.
@@ -1491,7 +1724,18 @@ static bool BuildEmbeddedMuiResourceModule(const std::wstring& sourcePath) {
         if (attempt < kMaxMoveAttempts) {
             Wh_Log(L"Windows Update Restorer: activating embedded MUI module failed (%u), retrying in %ums (%d/%d)",
                    lastMoveError, retryDelayMs, attempt, kMaxMoveAttempts);
-            if (g_stopEvent && WaitForSingleObject(g_stopEvent, retryDelayMs) == WAIT_OBJECT_0) break;
+            // Wait on both the global teardown event and the per-rebuild abort
+            // event: a newer Wh_ModSettingsChanged call signals the latter to
+            // cut this stale rebuild's backoff short instead of waiting out
+            // the join.
+            HANDLE waitOn[2];
+            DWORD waitCount = 0;
+            if (g_stopEvent) waitOn[waitCount++] = g_stopEvent;
+            if (g_rebuildAbortEvent) waitOn[waitCount++] = g_rebuildAbortEvent;
+            if (waitCount > 0 &&
+                WaitForMultipleObjects(waitCount, waitOn, FALSE, retryDelayMs) < WAIT_OBJECT_0 + waitCount) {
+                break;
+            }
             retryDelayMs = retryDelayMs < kMaxMoveRetryDelayMs / 2 ? retryDelayMs * 2 : kMaxMoveRetryDelayMs;
         }
     }
@@ -4264,6 +4508,7 @@ static bool IsWindowsUpdatePageXml(const std::wstring& xml) {
            xml.find(L"resstr(1153)") != std::wstring::npos;
 }
 
+
 static bool FindElementEnd(const std::wstring& xml, size_t start, size_t& end) {
     int depth = 0;
     for (size_t pos = start; pos < xml.size();) {
@@ -4396,7 +4641,13 @@ static std::wstring BuildUpdateIntroTextXml() {
 // open fight over the same flags (one combobox staying empty, or re-population
 // every 200 ms).
 static thread_local HWND g_hwndDirectUiParent = nullptr;
-static std::atomic<bool> g_isSettingsPageActive{false};
+// thread_local, not a shared atomic: this describes whether *this* Explorer
+// window's settings page is active. DUISetXMLHook/DUISetXMLFromResourceHook
+// fire for every DirectUI document parsed anywhere in explorer.exe, so a
+// shared flag meant any other shell window's non-WU page would unconditionally
+// switch off the combobox repair for the settings page open on a different
+// thread (see DestroySettingsComboboxImpl's g_isSettingsPageActive reset).
+static thread_local bool g_isSettingsPageActive = false;
 
 static LRESULT CALLBACK SettingsDirectUiSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
@@ -4413,7 +4664,7 @@ static std::vector<HWND> g_settingsSubclassWindows;
 
 typedef ATOM (WINAPI *DirectUI_StrToID_t)(const wchar_t* str);
 typedef void* (*DirectUI_FindDescendent_t)(void* element, ATOM atom);
-typedef HRESULT (*DirectUI_Combobox_AddString_t)(void* combobox, const wchar_t* str);
+typedef int (*DirectUI_Combobox_AddString_t)(void* combobox, const wchar_t* str);
 typedef HRESULT (*DirectUI_Combobox_SetSelection_t)(void* combobox, int index);
 typedef HRESULT (*DirectUI_Element_SetEnabled_t)(void* element, bool enabled);
 
@@ -4454,7 +4705,7 @@ static void InitDirectUIExports() {
 // XML patch path, which runs for EVERY DirectUI document parsed in explorer.exe
 // - including folder windows and shell dialogs on other threads).
 static void DestroySettingsComboboxImpl(bool currentThreadOnly) {
-    g_isSettingsPageActive.store(false);
+    g_isSettingsPageActive = false;
     std::vector<HWND> windows;
     { std::lock_guard lock(g_subclassWindowsMutex); windows = g_settingsSubclassWindows; }
     for (HWND hwnd : windows) if (IsWindow(hwnd)) {
@@ -4501,10 +4752,14 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(
         if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
         g_nativeComboPopulated = false;
         g_lastComboPtr = nullptr;
+        // Runs on this window's own owning thread (SendMessageW above is
+        // synchronous cross-thread), so this is the thread-local copy for
+        // that thread - matches the "reset only this thread's state" contract.
+        g_isSettingsPageActive = false;
         if (uMsg == g_wmUiTeardown) return 0;
     }
 
-    if (g_isSettingsPageActive.load() && uMsg == WM_TIMER && wParam == 889) {
+    if (g_isSettingsPageActive && uMsg == WM_TIMER && wParam == 889) {
         InitDirectUIExports();
         if (pStrToID && pFindDescendent && pAddString && pSetSelection) {
             void* root = reinterpret_cast<void*>(GetWindowLongPtrW(hwnd, 0));
@@ -4516,15 +4771,25 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(
                     g_nativeComboPopulated = false;
                 }
                 if (!g_nativeComboPopulated) {
-                    pAddString(combo, WuOptionText(4));
-                    pAddString(combo, WuOptionText(3));
-                    pAddString(combo, WuOptionText(2));
-                    pAddString(combo, WuOptionText(1));
-                    const DWORD current = ReadAuOptionsValue();
-                    const int selection = current == 4 ? 0 : current == 3 ? 1
-                                                    : current == 2 ? 2 : 3;
-                    pSetSelection(combo, selection);
-                    g_nativeComboPopulated = true;
+                    // AddString returns the actual item index. The legacy page can
+                    // already contain four empty resource-backed entries, so selecting
+                    // hard-coded indexes 0..3 leaves the combobox visibly blank even
+                    // though the translated fallback strings were appended correctly.
+                    const int optionIndices[] = {
+                        pAddString(combo, WuOptionText(4)),
+                        pAddString(combo, WuOptionText(3)),
+                        pAddString(combo, WuOptionText(2)),
+                        pAddString(combo, WuOptionText(1)),
+                    };
+                    if (optionIndices[0] >= 0 && optionIndices[1] >= 0 &&
+                        optionIndices[2] >= 0 && optionIndices[3] >= 0) {
+                        const DWORD current = ReadAuOptionsValue();
+                        const int optionSlot = current == 4 ? 0 : current == 3 ? 1
+                                                       : current == 2 ? 2 : 3;
+                        if (SUCCEEDED(pSetSelection(combo, optionIndices[optionSlot]))) {
+                            g_nativeComboPopulated = true;
+                        }
+                    }
                 }
                 // The legacy page is presentational only on modern Windows.
                 if (pSetEnabled) pSetEnabled(combo, false);
@@ -4585,7 +4850,7 @@ static HWND FindSettingsDirectUiHwnd() {
 }
 
 static void InitializeNativeSettingsCombobox(HWND hwndParent) {
-    g_isSettingsPageActive.store(true);
+    g_isSettingsPageActive = true;
     if (!hwndParent || !IsSettingsDirectUiWindow(hwndParent))
         hwndParent = FindSettingsDirectUiHwnd();
     if (!hwndParent) return;
@@ -4671,7 +4936,8 @@ static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
 }
 
 // Private command protocol used only by this applet's navigation links. Known
-// commands are consumed; unknown commands report failure with hInstApp set.
+// commands are consumed and return 33 (ShellExecute success is any value > 32);
+// unknown commands report failure with hInstApp set.
 static void ShowWuSettingsDialog(HWND parent);
 static void ShowWuFaqDialog(HWND parent);
 static void StartWuUpdateCheck(HWND host);
@@ -4688,26 +4954,34 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
             // Open the classic settings dialog as an ADDITIONAL window on top
             // of the settings page (which stays open - we do not navigate away).
             ShowWuSettingsDialog(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
         } else if (wcscmp(p, L"check") == 0) {
             // "Check for updates" micro-feature (see StartWuUpdateCheck): opens
             // a small Win32 dialog with a native progress bar that runs the
             // ~12-second check; the page itself is left untouched.
             StartWuUpdateCheck(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
         } else if (wcscmp(p, L"faq") == 0) {
             ShowWuFaqDialog(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"history") == 0 || wcscmp(p, L"hidden") == 0) {
-            OpenInstalledUpdates(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+        } else if (wcscmp(p, L"history") == 0) {
+            OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::History);
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
+            return TRUE;
+        } else if (wcscmp(p, L"hidden") == 0) {
+            OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::HiddenUpdates);
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
+            return TRUE;
+        } else if (wcscmp(p, L"installed") == 0) {
+            OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::UninstallUpdates);
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
         } else if (wcscmp(p, L"security") == 0) {
             OpenSecurityAndMaintenance(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
         }
         info->hInstApp = reinterpret_cast<HINSTANCE>(SE_ERR_FNF);
@@ -4731,14 +5005,18 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR 
             StartWuUpdateCheck(hwnd);
         } else if (wcscmp(p, L"faq") == 0) {
             ShowWuFaqDialog(hwnd);
-        } else if (wcscmp(p, L"history") == 0 || wcscmp(p, L"hidden") == 0) {
-            OpenInstalledUpdates(hwnd);
+        } else if (wcscmp(p, L"history") == 0) {
+            OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::History);
+        } else if (wcscmp(p, L"hidden") == 0) {
+            OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::HiddenUpdates);
+        } else if (wcscmp(p, L"installed") == 0) {
+            OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::UninstallUpdates);
         } else if (wcscmp(p, L"security") == 0) {
             OpenSecurityAndMaintenance(hwnd);
         } else {
             handled = false;
         }
-        if (handled) return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+        if (handled) return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
     }
     return ShellExecuteWOriginal(hwnd, operation, file, parameters, directory, show);
 }
@@ -4875,7 +5153,7 @@ static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
         L"wurestorer:check",
         L"shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\\pageSettings",
         L"wurestorer:history",
-        L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}",
+        L"wurestorer:hidden",
     };
 
     unsigned patched = 0;
@@ -4909,7 +5187,7 @@ static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
                 target = L"wurestorer:security";
             } else if (NativeNavLabelEquals(link->name, 356) ||
                        NativeNavLabelEquals(link->name, 20004)) {
-                target = L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}";
+                target = L"wurestorer:installed";
             }
         }
 
@@ -5034,11 +5312,11 @@ static NativeControlPanelNavLinks* CreateNativeControlPanelNavLinks() {
          L"shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\\pageSettings", L""},
         {0, 352, L"View update history", L"wurestorer:history", L""},
         {0, 353, L"Restore hidden updates",
-         L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L""},
+         L"wurestorer:hidden", L""},
         {0, 20024, L"Updates: frequently asked questions", L"wurestorer:faq", L""},
         {1, 355, L"Security Center", L"wurestorer:security", L""},
         {1, 356, L"Installed Updates",
-         L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L""},
+         L"wurestorer:installed", L""},
     };
 
     for (const auto& definition : definitions) {
@@ -6326,6 +6604,148 @@ static void ShowWuCheckResultDialog();
 // ("YYYYMMDD"). We scan those keys and keep the most recent date. The scan is
 // a few dozen quick registry reads, so it is safe to run on the dialog thread.
 // -----------------------------------------------------------------------------
+// Format all displayed dates/times with the current Windows user's regional
+// settings. DATE_SHORTDATE respects the configured date order/separator, while
+// TIME_NOSECONDS preserves the classic page's minute-level precision and honors
+// the user's 12/24-hour clock and AM/PM designator.
+static std::wstring FormatWindowsRegionalDate(const SYSTEMTIME& st) {
+    wchar_t date[128] = {};
+    if (GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr,
+                        date, ARRAYSIZE(date), nullptr) > 0 ||
+        GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, date,
+                       ARRAYSIZE(date)) > 0) {
+        return date;
+    }
+
+    // The locale APIs should not fail for a validated SYSTEMTIME, but retain a
+    // deterministic, unambiguous fallback rather than hiding an available date.
+    swprintf_s(date, L"%04u-%02u-%02u", st.wYear, st.wMonth, st.wDay);
+    return date;
+}
+
+static std::wstring FormatWindowsRegionalDateTime(const SYSTEMTIME& st) {
+    std::wstring result = FormatWindowsRegionalDate(st);
+    wchar_t time[128] = {};
+    if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr,
+                        time, ARRAYSIZE(time)) <= 0 &&
+        GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr, time,
+                       ARRAYSIZE(time)) <= 0) {
+        swprintf_s(time, L"%02u:%02u", st.wHour, st.wMinute);
+    }
+    if (*time) {
+        if (!result.empty()) result += L" ";
+        result += time;
+    }
+    return result;
+}
+
+static bool ParseFixedDecimalWord(const std::wstring& text, size_t position,
+                                  size_t digits, WORD& value) {
+    if (position > text.size() || digits > text.size() - position) return false;
+    unsigned parsed = 0;
+    for (size_t i = 0; i < digits; ++i) {
+        const wchar_t ch = text[position + i];
+        if (ch < L'0' || ch > L'9') return false;
+        parsed = parsed * 10 + static_cast<unsigned>(ch - L'0');
+    }
+    if (parsed > 0xffff) return false;
+    value = static_cast<WORD>(parsed);
+    return true;
+}
+
+// WUA commonly stores REG_SZ result times as ISO-like
+// "yyyy-MM-dd HH:mm:ss" or "yyyy-MM-ddTHH:mm:ss(.fff)Z" strings. Convert only
+// those unambiguous forms; an unknown/already-localized string is left untouched.
+static bool TryParseWuaTimestamp(const std::wstring& text, SYSTEMTIME& parsed,
+                                 bool& hasTime, bool& isUtc) {
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end && (text[begin] == L' ' || text[begin] == L'\t')) ++begin;
+    while (end > begin && (text[end - 1] == L' ' || text[end - 1] == L'\t')) --end;
+    if (end - begin < 10) return false;
+
+    SYSTEMTIME st{};
+    if (!ParseFixedDecimalWord(text, begin, 4, st.wYear) ||
+        !ParseFixedDecimalWord(text, begin + 5, 2, st.wMonth) ||
+        !ParseFixedDecimalWord(text, begin + 8, 2, st.wDay)) {
+        return false;
+    }
+    const wchar_t dateSeparator = text[begin + 4];
+    if ((dateSeparator != L'-' && dateSeparator != L'/') ||
+        text[begin + 7] != dateSeparator) {
+        return false;
+    }
+
+    hasTime = false;
+    isUtc = false;
+    size_t position = begin + 10;
+    while (position < end && (text[position] == L' ' || text[position] == L'\t'))
+        ++position;
+    if (position < end) {
+        if (text[position] == L'T' || text[position] == L't') {
+            ++position;
+        } else if (position == begin + 10) {
+            return false;
+        }
+        if (end - position < 5 ||
+            !ParseFixedDecimalWord(text, position, 2, st.wHour) ||
+            text[position + 2] != L':' ||
+            !ParseFixedDecimalWord(text, position + 3, 2, st.wMinute)) {
+            return false;
+        }
+        position += 5;
+        hasTime = true;
+        if (position < end && text[position] == L':') {
+            if (!ParseFixedDecimalWord(text, position + 1, 2, st.wSecond))
+                return false;
+            position += 3;
+        }
+        if (position < end && text[position] == L'.') {
+            ++position;
+            const size_t fractionalStart = position;
+            while (position < end && text[position] >= L'0' &&
+                   text[position] <= L'9') {
+                ++position;
+            }
+            if (position == fractionalStart) return false;
+        }
+        while (position < end && (text[position] == L' ' || text[position] == L'\t'))
+            ++position;
+        if (position < end && (text[position] == L'Z' || text[position] == L'z')) {
+            isUtc = true;
+            ++position;
+        } else if (end - position == 3 &&
+                   (text[position] == L'U' || text[position] == L'u') &&
+                   (text[position + 1] == L'T' || text[position + 1] == L't') &&
+                   (text[position + 2] == L'C' || text[position + 2] == L'c')) {
+            isUtc = true;
+            position += 3;
+        }
+        while (position < end && (text[position] == L' ' || text[position] == L'\t'))
+            ++position;
+        if (position != end) return false;
+    }
+
+    FILETIME validation{};
+    if (!SystemTimeToFileTime(&st, &validation)) return false;
+    if (isUtc && hasTime) {
+        SYSTEMTIME local{};
+        if (!SystemTimeToTzSpecificLocalTime(nullptr, &st, &local)) return false;
+        st = local;
+    }
+    parsed = st;
+    return true;
+}
+
+static std::wstring FormatStoredWuaTimestampForDisplay(const std::wstring& text) {
+    SYSTEMTIME st{};
+    bool hasTime = false;
+    bool isUtc = false;
+    if (!TryParseWuaTimestamp(text, st, hasTime, isUtc)) return text;
+    return hasTime ? FormatWindowsRegionalDateTime(st)
+                   : FormatWindowsRegionalDate(st);
+}
+
 static std::wstring ComputeLastInstallDateFromUninstall() {
     struct Best {
         SYSTEMTIME st{};
@@ -6399,10 +6819,7 @@ static std::wstring ComputeLastInstallDateFromUninstall() {
     }
 
     if (!best.found) return L"";
-    wchar_t buf[64];
-    swprintf_s(buf, L"%04u/%02u/%02u", best.st.wYear, best.st.wMonth,
-               best.st.wDay);
-    return buf;
+    return FormatWindowsRegionalDate(best.st);
 }
 
 // Check window: small, header + native progress bar, no buttons (auto-closes).
@@ -6476,19 +6893,16 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                     g_checkStartedTick.load(std::memory_order_acquire);
                 const ULONGLONG elapsed = now >= start ? now - start : 0;
                 if (elapsed >= kWuCheckDurationMs) {
-                    // Finished: record the time, clear the flag, AUTO-CLOSE the
-                    // window and show the personalized result message.
+                    // Finished: clear the flag, AUTO-CLOSE the window and show
+                    // the personalized result message. We deliberately do NOT
+                    // stamp "now" as the last-check time here: this loop only
+                    // animates a progress bar and classifies the outcome from
+                    // registry state that predates it (see IsPendingWindowsUpdate
+                    // / IsUpdatesAvailable below) - no query actually ran, so
+                    // recording a fresh timestamp would misreport a check that
+                    // never happened. LastCheckForUpdatesText() continues to
+                    // report Windows Update's own recorded scan time instead.
                     KillTimer(hwnd, kWuCheckTimerId);
-                    {
-                        std::lock_guard<std::mutex> lock(g_lastQueryTimeMutex);
-                        SYSTEMTIME st{};
-                        GetLocalTime(&st);
-                        wchar_t buffer[64];
-                        swprintf_s(buffer, L"%04u/%02u/%02u %02u:%02u",
-                                   st.wYear, st.wMonth, st.wDay, st.wHour,
-                                   st.wMinute);
-                        g_lastQueryTimeText = buffer;
-                    }
                     // Classify the outcome from the same simple registry
                     // state the banner uses (pending restart / updates
                     // available / nothing new), then show the result window.
@@ -6812,28 +7226,6 @@ private:
     SC_HANDLE handle_ = nullptr;
 };
 
-// Detects whether this is Windows 10 (build < 22000) rather than Windows 11.
-// Used to show the "View update history" link only on Windows 10, like the
-// classic Control Panel page did. Reads the CurrentBuildNumber once and caches it.
-static bool IsWindows10() {
-    static int cached = -1;  // -1 = not yet detected
-    if (cached != -1) return cached == 1;
-    cached = 0;
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-            L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        wchar_t buf[64] = {};
-        DWORD size = sizeof(buf);
-        if (RegQueryValueExW(hKey, L"CurrentBuildNumber", nullptr, nullptr,
-                             reinterpret_cast<LPBYTE>(buf), &size) == ERROR_SUCCESS) {
-            long build = wcstol(buf, nullptr, 10);
-            if (build >= 10000 && build < 22000) cached = 1;
-        }
-        RegCloseKey(hKey);
-    }
-    return cached == 1;
-}
-
 static bool ProbeWindowsUpdateServiceAvailable() {
     // Called only by the setup worker; SCM RPC is not allowed on the render path.
     const ULONGLONG now = GetTickCount64();
@@ -6919,9 +7311,49 @@ static bool ResultKeyHasStagedUpdate(const wchar_t* subkey) {
     return false;
 }
 
+// Reads the raw FILETIME behind a Windows Update results value (Result keys
+// store this as REG_BINARY FILETIME on modern Windows), so we can compare two
+// timestamps chronologically instead of just checking "is it non-empty".
+// Returns 0 (as a ULONGLONG) when the value is missing or not a FILETIME.
+static ULONGLONG ReadWuaResultFileTimeRaw(const wchar_t* subkey, const wchar_t* valueName) {
+    HKEY hKey = nullptr;
+    ULONGLONG out = 0;
+    const std::wstring path =
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\Results\\"
+        + std::wstring(subkey);
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, path.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD type = 0;
+        FILETIME ft{};
+        DWORD size = sizeof(ft);
+        if (RegQueryValueExW(hKey, valueName, nullptr, &type,
+                             reinterpret_cast<LPBYTE>(&ft), &size) == ERROR_SUCCESS &&
+            type == REG_BINARY && size == sizeof(FILETIME)) {
+            ULARGE_INTEGER u{};
+            u.LowPart = ft.dwLowDateTime;
+            u.HighPart = ft.dwHighDateTime;
+            out = u.QuadPart;
+        }
+        RegCloseKey(hKey);
+    }
+    return out;
+}
+
 static bool IsUpdatesAvailable() {
     if (IsPendingWindowsUpdate()) return false;
-    return ResultKeyHasStagedUpdate(L"Download") || ResultKeyHasStagedUpdate(L"Install");
+    if (!ResultKeyHasStagedUpdate(L"Download") && !ResultKeyHasStagedUpdate(L"Install")) return false;
+    // Both Results\Download and Results\Install are populated on essentially
+    // every Windows install that has ever taken an update, so mere presence
+    // (the check above) cannot tell "staged and not yet installed" apart from
+    // "installed a while ago" - the latter is not something we want to flag
+    // as "updates available". Compare the two timestamps: only report
+    // available updates when the last successful download is strictly newer
+    // than the last successful install (or there is a download but no
+    // recorded install at all), i.e. something was fetched that the install
+    // step has not caught up to yet.
+    const ULONGLONG downloadTime = ReadWuaResultFileTimeRaw(L"Download", L"LastSuccessTime");
+    if (downloadTime == 0) return false;
+    const ULONGLONG installTime = ReadWuaResultFileTimeRaw(L"Install", L"LastSuccessTime");
+    return downloadTime > installTime;
 }
 
 // Reads a REG_SZ value from the Windows Update results registry (Auto Update).
@@ -6942,6 +7374,8 @@ static std::wstring ReadWuaResultString(const wchar_t* subkey, const wchar_t* va
                 if (RegQueryValueExW(hKey, valueName, nullptr, &type,
                                      reinterpret_cast<LPBYTE>(&out[0]), &written) == ERROR_SUCCESS) {
                     while (!out.empty() && out.back() == L'\0') out.pop_back();
+                    if (!out.empty())
+                        out = FormatStoredWuaTimestampForDisplay(out);
                 } else {
                     out.clear();
                 }
@@ -6952,11 +7386,9 @@ static std::wstring ReadWuaResultString(const wchar_t* subkey, const wchar_t* va
                                      reinterpret_cast<LPBYTE>(&ft), &written) == ERROR_SUCCESS) {
                     SYSTEMTIME st{};
                     FILETIME local{};
-                    if (FileTimeToLocalFileTime(&ft, &local) && FileTimeToSystemTime(&local, &st)) {
-                        wchar_t buf[64];
-                        swprintf_s(buf, L"%04u/%02u/%02u %02u:%02u",
-                                   st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
-                        out = buf;
+                    if (FileTimeToLocalFileTime(&ft, &local) &&
+                        FileTimeToSystemTime(&local, &st)) {
+                        out = FormatWindowsRegionalDateTime(st);
                     }
                 }
             }
@@ -6975,10 +7407,7 @@ static std::wstring LastCheckForUpdatesText() {
         if (g_lastQueryTimeText.empty()) {
             SYSTEMTIME st{};
             GetLocalTime(&st);
-            wchar_t buffer[64];
-            swprintf_s(buffer, L"%04u/%02u/%02u %02u:%02u",
-                       st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
-            g_lastQueryTimeText = buffer;
+            g_lastQueryTimeText = FormatWindowsRegionalDateTime(st);
         }
     }
     return g_lastQueryTimeText;
@@ -7014,8 +7443,11 @@ static void GatherBackgroundStatus() {
     g_cachedWuServiceProbed.store(true);
 
     // Read timestamps without the cache mutex so renderers never wait on the worker.
+    // Prefer the Installed Updates list, which remains populated on Windows 10/11;
+    // retain the legacy Auto Update result timestamp as a conservative fallback.
     if (g_stopping.load()) return;
-    std::wstring lastInstall = ComputeLastInstallTime();
+    std::wstring lastInstall = ComputeLastInstallDateFromUninstall();
+    if (lastInstall.empty()) lastInstall = ComputeLastInstallTime();
     if (g_stopping.load()) return;
     {
         std::lock_guard<std::mutex> lock(g_statusMutex);
@@ -7241,30 +7673,26 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
         };
         if (!lastCheck.empty() && lastCheck.back() != L'.') lastCheck += L".";
         addInfoLine(EmbeddedMuiString(1144), lastCheck); // "Most recent check for updates:"
-        // "Updates were installed:" row, always shown, with the optional Windows 10
-        // "View update history" blue link that opens the Installed Updates page.
+        // "Updates were installed:" row, always shown, with a history link.
+        // The private handler keeps the classic CLSID on supported Windows 10
+        // systems and opens Settings on Windows 11 or whenever that CLSID is absent.
         {
             infoBlock +=
                 L"<element layoutpos=\"top\" layout=\"flowlayout()\" margin=\"rect(0,5rp,0,0)\">"
                 L"<element sheet=\"wuappstyle\" class=\"cp_content_text\" content=\""
                 + XmlEscape(EmbeddedMuiString(1145)) +
                 L"\"/>";
-            if (!lastInstall.empty()) {
-                std::wstring installVal = lastInstall;
-                if (installVal.back() != L'.') installVal += L".";
-                infoBlock +=
-                    L"<element sheet=\"wuappstyle\" class=\"cp_content_text\" content=\""
-                    + XmlEscape(installVal.c_str()) +
-                    L"\"/>";
-            }
-            if (IsWindows10()) {
-                infoBlock +=
-                    L"<NavigateButton layout=\"flowlayout()\" shellexecute=\"%SystemRoot%\\explorer.exe\" "
-                    L"shellexecuteparams=\"shell:::{d450a8a1-9568-45c7-9c0e-b4f9fb4537bd}\">"
-                    L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
-                    + std::wstring(EmbeddedMuiString(74) ? EmbeddedMuiString(74) : L"View update history") +
-                    L"\"/></NavigateButton>";
-            }
+            std::wstring installVal = lastInstall.empty() ? L"N/A" : lastInstall;
+            if (!lastInstall.empty() && installVal.back() != L'.') installVal += L".";
+            infoBlock +=
+                L"<element sheet=\"wuappstyle\" class=\"cp_content_text\" content=\""
+                + XmlEscape(installVal.c_str()) +
+                L"\"/>";
+            infoBlock +=
+                L"<NavigateButton layout=\"flowlayout()\" shellexecute=\"wurestorer:history\">"
+                L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\""
+                + std::wstring(EmbeddedMuiString(74) ? EmbeddedMuiString(74) : L"View update history") +
+                L"\"/></NavigateButton>";
             infoBlock += L"</element>";
         }
         {
@@ -7503,9 +7931,23 @@ static HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceN
 // selected skin without modifying the verified wucltux.dll payload.
 static bool IsWucltuxPathString(PCWSTR path) {
     if (!path || !*path) return false;
-    std::wstring value = path;
-    for (auto& c : value) c = towlower(c);
-    return value.find(L"wucltux.dll") != std::wstring::npos;
+    // No-allocation case-insensitive scan: this gates SHLoadIndirectString,
+    // which runs for essentially every shell item display name and package
+    // resource in the process, so building/lowercasing a std::wstring copy
+    // per call here is a real hot-path cost. Same substring search as
+    // before, just without the copy.
+    static constexpr wchar_t kNeedle[] = L"wucltux.dll";
+    static constexpr size_t kNeedleLen = ARRAYSIZE(kNeedle) - 1;
+    size_t haystackLen = wcslen(path);
+    if (haystackLen < kNeedleLen) return false;
+    for (size_t start = 0; start <= haystackLen - kNeedleLen; ++start) {
+        size_t i = 0;
+        for (; i < kNeedleLen; ++i) {
+            if (towlower(path[start + i]) != kNeedle[i]) break;
+        }
+        if (i == kNeedleLen) return true;
+    }
+    return false;
 }
 
 static bool TryParseWucltuxIndirectStringId(PCWSTR source, UINT& id) {
@@ -8351,6 +8793,39 @@ static LSTATUS OpenVirtual(HKEY key, LPCWSTR subKey, DWORD options,
     }
 }
 
+// Small negative cache of registry handles that were already resolved and are
+// NOT the ControlPanel\NameSpace parent. RegQueryInfoKeyW runs constantly in
+// explorer.exe; remembering the answer avoids two NtQueryKey calls and an
+// allocation on every unrelated key. Bounded: when it grows past the cap it is
+// cleared wholesale (it is only a performance hint). Declared here (before
+// RegCloseKeyHook) so the handle can be evicted the moment it closes - the
+// kernel is free to recycle the numeric HKEY value for an unrelated key right
+// after, and a stale "known not the NameSpace parent" entry would then be a
+// false positive for that new key, not just a harmless miss.
+static std::mutex g_nonNamespaceCacheMutex;
+static std::unordered_set<HKEY> g_nonNamespaceKeys;
+static constexpr size_t kNonNamespaceCacheMax = 512;
+
+static bool IsKnownNonNamespaceKey(HKEY key) {
+    if (!key) return false;
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
+    return g_nonNamespaceKeys.count(key) != 0;
+}
+
+static void RememberNonNamespaceKey(HKEY key) {
+    if (!key) return;
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
+    if (g_nonNamespaceKeys.size() >= kNonNamespaceCacheMax)
+        g_nonNamespaceKeys.clear();
+    g_nonNamespaceKeys.insert(key);
+}
+
+static void ForgetNonNamespaceKey(HKEY key) {
+    if (!key) return;
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
+    g_nonNamespaceKeys.erase(key);
+}
+
 static LSTATUS WINAPI RegOpenKeyExWHook(HKEY key, LPCWSTR subKey, DWORD options,
                                         REGSAM access, PHKEY out) {
     return OpenVirtual(key, subKey, options, access, out);
@@ -8368,6 +8843,10 @@ static LSTATUS WINAPI RegCloseKeyHook(HKEY key) {
     // another thread. Untracking first guarantees the stale entry can never be
     // erased for a handle that now legitimately belongs to someone else.
     g_keys.Untrack(key);
+    // Same reasoning applies to the non-namespace negative cache: evict this
+    // handle before the close returns, so a recycled value can never inherit
+    // a stale "definitely not the NameSpace parent" verdict.
+    ForgetNonNamespaceKey(key);
     return RegCloseKeyOriginal(key);
 }
 static LSTATUS WINAPI RegQueryValueExWHook(
@@ -8514,29 +8993,6 @@ static LSTATUS WINAPI RegEnumKeyWHook(HKEY key, DWORD index, LPWSTR name,
     // RegEnumKeyW reports a too-small buffer as ERROR_MORE_DATA with no size
     // out-parameter, which matches RegEnumKeyExW's contract closely enough.
     return status;
-}
-
-// Small negative cache of registry handles that were already resolved and are
-// NOT the ControlPanel\NameSpace parent. RegQueryInfoKeyW runs constantly in
-// explorer.exe; remembering the answer avoids two NtQueryKey calls and an
-// allocation on every unrelated key. Bounded: when it grows past the cap it is
-// cleared wholesale (it is only a performance hint).
-static std::mutex g_nonNamespaceCacheMutex;
-static std::unordered_set<HKEY> g_nonNamespaceKeys;
-static constexpr size_t kNonNamespaceCacheMax = 512;
-
-static bool IsKnownNonNamespaceKey(HKEY key) {
-    if (!key) return false;
-    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
-    return g_nonNamespaceKeys.count(key) != 0;
-}
-
-static void RememberNonNamespaceKey(HKEY key) {
-    if (!key) return;
-    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
-    if (g_nonNamespaceKeys.size() >= kNonNamespaceCacheMax)
-        g_nonNamespaceKeys.clear();
-    g_nonNamespaceKeys.insert(key);
 }
 
 static LSTATUS WINAPI RegQueryInfoKeyWHook(
@@ -8785,6 +9241,51 @@ static CoGetClassObject_t CoGetClassObjectOriginalOle32 = nullptr;
 // hook can lazily load wucltux.dll if the page is constructed in a process that
 // skipped the eager heavy setup (e.g. a shell/explorer.exe fallback).
 static HMODULE EnsurePrivateModuleLoaded();
+
+// Registration deliberately becomes visible before asynchronous payload setup.
+// A shell:: child-page launch can therefore start a fresh Explorer process and
+// request our virtual folder a few milliseconds before g_verified is published.
+// Give a fast cached setup a small grace period; once the worker has published
+// the verified path/module and is only finalizing hooks, MUI resources and the
+// status cache, allow a longer bounded wait. Never wait on the setup worker itself
+// and never turn a genuine completed/offline failure into a repeated delay.
+static bool WaitForPayloadReadinessWindow() {
+    if (g_verified.load(std::memory_order_acquire)) return true;
+    if (g_stopping.load(std::memory_order_acquire) ||
+        g_setupFinished.load(std::memory_order_acquire) ||
+        g_setupWorkerThreadId.load(std::memory_order_acquire) == GetCurrentThreadId()) {
+        return false;
+    }
+
+    constexpr ULONGLONG kInitialSetupGraceMs = 250;
+    constexpr ULONGLONG kFinalizationGraceMs = 3000;
+    const ULONGLONG started = GetTickCount64();
+    ULONGLONG finalizationStarted = 0;
+
+    for (;;) {
+        if (g_verified.load(std::memory_order_acquire)) return true;
+        if (g_stopping.load(std::memory_order_acquire) ||
+            g_setupFinished.load(std::memory_order_acquire)) {
+            break;
+        }
+
+        const ULONGLONG now = GetTickCount64();
+        if (!finalizationStarted &&
+            (g_module.load(std::memory_order_acquire) != nullptr ||
+             g_dllPath.load(std::memory_order_acquire) != nullptr)) {
+            finalizationStarted = now;
+        }
+
+        const bool timedOut = finalizationStarted
+            ? now - finalizationStarted >= kFinalizationGraceMs
+            : now - started >= kInitialSetupGraceMs;
+        if (timedOut) break;
+        Sleep(10);
+    }
+
+    return g_verified.load(std::memory_order_acquire);
+}
+
 static HRESULT HandleCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD context,
                                       REFIID iid, LPVOID* result,
                                       CoCreateInstance_t original) {
@@ -8794,11 +9295,18 @@ static HRESULT HandleCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD con
         return original(clsid, outer, context, iid, result);
 
     const bool isElementProvider = IsEqualGUID(clsid, kElementProviderGuid);
-    if (!g_verified.load()) {
-        // The item is registered independently of the payload, so the user can
-        // legitimately land here with nothing downloaded yet. Tell them what is
-        // going on and offer Settings instead of failing silently.
-        Wh_Log(L"Windows Update Restorer: %s requested before wucltux.dll was verified/ready; showing fallback notice",
+    if (!g_verified.load(std::memory_order_acquire)) {
+        Wh_Log(L"Windows Update Restorer: %s requested while payload setup is still publishing readiness; waiting briefly",
+               isElementProvider ? L"WUAppElementProvider" : L"Windows Update folder");
+        if (WaitForPayloadReadinessWindow()) {
+            Wh_Log(L"Windows Update Restorer: payload became ready during COM activation; continuing");
+        }
+    }
+    if (!g_verified.load(std::memory_order_acquire)) {
+        // The item is registered independently of the payload, so a first-time
+        // offline setup can still legitimately land here. Only after the bounded
+        // synchronization above fails do we show the existing Settings fallback.
+        Wh_Log(L"Windows Update Restorer: %s requested but wucltux.dll did not become ready; showing fallback notice",
                isElementProvider ? L"WUAppElementProvider" : L"Windows Update folder");
         ShowPayloadUnavailableNotice();
         return REGDB_E_CLASSNOTREG;
@@ -8887,8 +9395,14 @@ static HRESULT HandleCoGetClassObject(REFCLSID clsid, DWORD context, LPVOID rese
     if (!isWUFolder && !isWUProvider)
         return original(clsid, context, reserved, iid, result);
 
-    if (!g_verified.load()) {
-        Wh_Log(L"Windows Update Restorer: class factory requested before the payload was ready");
+    if (!g_verified.load(std::memory_order_acquire)) {
+        Wh_Log(L"Windows Update Restorer: class factory requested while payload setup is still publishing readiness; waiting briefly");
+        if (WaitForPayloadReadinessWindow()) {
+            Wh_Log(L"Windows Update Restorer: payload became ready during class-factory activation; continuing");
+        }
+    }
+    if (!g_verified.load(std::memory_order_acquire)) {
+        Wh_Log(L"Windows Update Restorer: class factory requested but the payload did not become ready; showing fallback notice");
         ShowPayloadUnavailableNotice();
         return REGDB_E_CLASSNOTREG;
     }
@@ -9069,17 +9583,21 @@ static void SetupWorkerImpl() {
                L"falling back to the payload's native resources");
     }
 
+    // Finish the cached status first so the page's first render can show the
+    // installed-update date (or N/A) without doing registry/SCM work on the UI
+    // thread. Publishing g_verified before this step allowed a newly opened page
+    // to race the worker and permanently render an empty value.
+    if (!g_stopping.load()) GatherBackgroundStatus();
+    if (g_stopping.load()) return;
+
     g_verified.store(true, std::memory_order_release);
     Wh_Log(L"Windows Update Restorer ready: verified Windows 8.1 wucltux.dll loaded privately");
-
-    // Gather status and registry timestamps on this worker thread so the
-    // Control Panel UI thread never blocks on service probing.
-    if (!g_stopping.load()) GatherBackgroundStatus();
 }
 
 // Hard exception boundary: this runs on a std::thread, where an escaping
 // exception would call std::terminate and take explorer.exe down with it.
 static void SetupWorker() {
+    g_setupWorkerThreadId.store(GetCurrentThreadId(), std::memory_order_release);
     try {
         SetupWorkerImpl();
     } catch (const std::exception& e) {
@@ -9089,6 +9607,11 @@ static void SetupWorker() {
         Wh_Log(L"Windows Update Restorer: setup failed with an unknown exception; "
                L"the Control Panel entry remains available");
     }
+    // Publish this on every return path (success, offline failure or exception).
+    // COM requests that raced setup will observe g_verified first; later requests
+    // after a real failure skip the grace period and get the fallback immediately.
+    g_setupFinished.store(true, std::memory_order_release);
+    g_setupWorkerThreadId.store(0, std::memory_order_release);
 }
 
 
@@ -9096,6 +9619,8 @@ static void CleanupGeneratedResourceModuleFiles(bool includeCurrentProcess);
 
 BOOL Wh_ModInit() {
     try {
+        g_setupFinished.store(false, std::memory_order_release);
+        g_setupWorkerThreadId.store(0, std::memory_order_release);
         if (!IsRunningAsAmd64()) {
             Wh_Log(L"Windows Update Restorer not started: the process is not AMD64");
             return FALSE;
@@ -9228,6 +9753,10 @@ BOOL Wh_ModInit() {
 
         // Prepare shutdown signalling before the setup worker starts.
         g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        // Manual-reset, initially unsignaled; Wh_ModSettingsChanged sets it
+        // to abort a stale in-flight rebuild and resets it before starting
+        // the next one (see there).
+        g_rebuildAbortEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         g_stopping.store(false);
         // Only patch the safe WUAppPage content anchor (never the outer Control Panel host).
         InstallModernWuXmlPatchHook();
@@ -9251,6 +9780,8 @@ BOOL Wh_ModInit() {
         g_registrationReady.store(false);
         g_verified.store(false);
         g_stopping.store(true);
+        g_setupFinished.store(true, std::memory_order_release);
+        g_setupWorkerThreadId.store(0, std::memory_order_release);
         Wh_Log(L"Windows Update Restorer: initialization failed; the mod is inactive");
         return FALSE;
     }
@@ -9262,6 +9793,8 @@ void Wh_ModAfterInit() {
     try {
         g_setupThread.emplace(SetupWorker);
     } catch (...) {
+        g_setupFinished.store(true, std::memory_order_release);
+        g_setupWorkerThreadId.store(0, std::memory_order_release);
         Wh_Log(L"Windows Update Restorer: could not start the setup thread; "
                L"the Control Panel entry stays available and the payload will "
                L"be retried on the next start");
@@ -9285,8 +9818,17 @@ void Wh_ModSettingsChanged() {
         if (g_stopping.load()) return;  // teardown in progress: don't start work
 
         // Ensure a previous rebuild (if any) has finished before starting a new
-        // one, so we never run two builds concurrently.
-        if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
+        // one, so we never run two builds concurrently. Signal it to abort its
+        // retry backoff first: otherwise two language changes in quick
+        // succession can stall this call (Windhawk's own thread) for up to
+        // ~10s while the stale rebuild works through kMaxMoveAttempts.
+        if (g_rebuildThread && g_rebuildThread->joinable()) {
+            if (g_rebuildAbortEvent) SetEvent(g_rebuildAbortEvent);
+            g_rebuildThread->join();
+            // Reset before starting the new rebuild below, or its own retry
+            // waits would immediately fall through as "aborted".
+            if (g_rebuildAbortEvent) ResetEvent(g_rebuildAbortEvent);
+        }
         g_rebuildThread.reset();
         g_rebuildThread.emplace([] {
             // Same hard boundary as the setup worker: an exception escaping a
@@ -9377,6 +9919,7 @@ void Wh_ModUninit() {
     // Signal teardown before touching any thread, so workers observe it while
     // we are still tearing the UI down.
     g_stopping.store(true);
+    g_setupFinished.store(true, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent);
     // Unblocks a WinInet call that is stuck mid-download so the join below
     // returns promptly instead of waiting out the receive timeout.
@@ -9412,6 +9955,7 @@ void Wh_ModUninit() {
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
     g_rebuildThread.reset();
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
+    if (g_rebuildAbortEvent) { CloseHandle(g_rebuildAbortEvent); g_rebuildAbortEvent = nullptr; }
     delete g_dllPath.exchange(nullptr);
     // Deliberately do not unload the datafile while a Control Panel page can cache it.
     g_module.store(nullptr);
