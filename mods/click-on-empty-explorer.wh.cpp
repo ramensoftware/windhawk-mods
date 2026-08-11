@@ -65,8 +65,8 @@ no file or folder is located) and performs the action you've configured.
 - **Custom Hotkey** — Send a custom key combination, configured per trigger (see below)
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
-- **Open in VS Code** — Invoke "Open with Code" from the context menu; uses browser-based menu (works in virtual folders)
-- **Open in Terminal** — Invoke "Open in Terminal" from the context menu
+- **Open in VS Code** — Invoke "Open with Code" from the context menu (matches English "Code"; for non-English Windows use "Open Context Menu Item" instead)
+- **Open in Terminal** — Launch Windows Terminal (`wt.exe -d <folder>`) directly in the current folder. Works regardless of Windows language; requires Windows Terminal to be installed.
 - **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for Cursor, Git Bash, PowerShell, or any program that registered an entry.
 - **None** — Do nothing
 
@@ -438,6 +438,13 @@ struct SettingsSnapshot {
     std::wstring ctrlClickCombo;
     std::wstring altClickCombo;
     std::wstring shiftClickCombo;
+    std::wstring doubleClickCtxMatch;
+    std::wstring tripleClickCtxMatch;
+    std::wstring middleClickCtxMatch;
+    std::wstring doubleMiddleClickCtxMatch;
+    std::wstring ctrlClickCtxMatch;
+    std::wstring altClickCtxMatch;
+    std::wstring shiftClickCtxMatch;
 };
 
 static SettingsSnapshot CopySettings() {
@@ -456,54 +463,24 @@ static SettingsSnapshot CopySettings() {
         g_doubleMiddleClickCustomCombo.Get() ? g_doubleMiddleClickCustomCombo.Get() : L"",
         g_ctrlClickCustomCombo.Get() ? g_ctrlClickCustomCombo.Get() : L"",
         g_altClickCustomCombo.Get() ? g_altClickCustomCombo.Get() : L"",
-        g_shiftClickCustomCombo.Get() ? g_shiftClickCustomCombo.Get() : L""
+        g_shiftClickCustomCombo.Get() ? g_shiftClickCustomCombo.Get() : L"",
+        g_doubleClickCtxMatch.Get() ? g_doubleClickCtxMatch.Get() : L"",
+        g_tripleClickCtxMatch.Get() ? g_tripleClickCtxMatch.Get() : L"",
+        g_middleClickCtxMatch.Get() ? g_middleClickCtxMatch.Get() : L"",
+        g_doubleMiddleClickCtxMatch.Get() ? g_doubleMiddleClickCtxMatch.Get() : L"",
+        g_ctrlClickCtxMatch.Get() ? g_ctrlClickCtxMatch.Get() : L"",
+        g_altClickCtxMatch.Get() ? g_altClickCtxMatch.Get() : L"",
+        g_shiftClickCtxMatch.Get() ? g_shiftClickCtxMatch.Get() : L"",
     };
 }
 
 static void SendParsedHotkey(const std::wstring& combo);
-
-// Bridge: per-trigger contextMenuMatch (defined below near other thread_locals)
-extern thread_local std::wstring g_pendingCtxMenuMatch;
-
-// Helper: set per-trigger contextMenuMatch before dispatching "openWithContextMenu".
-// Falls back to global setting if per-trigger is empty.
-static void SetCtxMenuMatch(PCWSTR action, StringSetting& perTriggerMatch) {
-    if (action && wcscmp(action, L"openWithContextMenu") == 0) {
-        g_pendingCtxMenuMatch = perTriggerMatch.Get() ? perTriggerMatch.Get() : L"";
-    }
-}
 
 // Helper: execute custom hotkey if the selected action is "customHotkey"
 static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
     if (wcscmp(action, L"customHotkey") != 0) return false;
     if (!combo.empty()) SendParsedHotkey(combo);
     return true;
-}
-
-// ---- Helper: Send key combination ----
-
-static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
-    // Release held modifiers before injecting, restore after — all in one
-    // atomic SendInput batch so nothing can interleave. Side-specific VKs
-    // handle Left/Right variants (VK_CONTROL only reports combined state).
-    static constexpr WORD kSideMods[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU,
-                                         VK_RMENU, VK_LSHIFT, VK_RSHIFT};
-    std::vector<INPUT> in;
-    auto Key = [&](WORD vk, DWORD flags) {
-        in.push_back(INPUT{INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = flags}}});
-    };
-
-    std::vector<WORD> held;
-    for (WORD vk : kSideMods)
-        if (GetKeyState(vk) & 0x8000) held.push_back(vk);
-
-    for (WORD vk : held) Key(vk, KEYEVENTF_KEYUP);
-    Key(vk1, 0); Key(vk2, 0); if (vk3) Key(vk3, 0);
-    if (vk3) Key(vk3, KEYEVENTF_KEYUP);
-    Key(vk2, KEYEVENTF_KEYUP); Key(vk1, KEYEVENTF_KEYUP);
-    for (WORD vk : held) Key(vk, 0);
-
-    SendInput((UINT)in.size(), in.data(), sizeof(INPUT));
 }
 
 // ---- Custom hotkey parsing ----
@@ -551,6 +528,37 @@ static WORD ParseHotkeyToken(const wchar_t* token) {
     return 0;
 }
 
+// Release held side-modifiers, build combo, restore — all in one SendInput.
+// Factored out so both SendKeyCombo and SendParsedHotkey use it.
+static void InjectKeys(std::vector<INPUT>& in) {
+    static constexpr WORD kSideMods[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU,
+                                         VK_RMENU, VK_LSHIFT, VK_RSHIFT};
+    std::vector<WORD> held;
+    for (WORD vk : kSideMods)
+        if (GetKeyState(vk) & 0x8000) held.push_back(vk);
+
+    std::vector<INPUT> batch;
+    auto Key = [&](WORD vk, DWORD flags) {
+        batch.push_back(INPUT{INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = flags}}});
+    };
+    for (WORD vk : held) Key(vk, KEYEVENTF_KEYUP);
+    batch.insert(batch.end(), in.begin(), in.end());
+    for (WORD vk : held) Key(vk, 0);
+
+    SendInput((UINT)batch.size(), batch.data(), sizeof(INPUT));
+}
+
+static void SendKeyCombo(WORD vk1, WORD vk2, WORD vk3 = 0) {
+    std::vector<INPUT> in;
+    auto Key = [&](WORD vk, DWORD flags) {
+        in.push_back(INPUT{INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = flags}}});
+    };
+    Key(vk1, 0); Key(vk2, 0); if (vk3) Key(vk3, 0);
+    if (vk3) Key(vk3, KEYEVENTF_KEYUP);
+    Key(vk2, KEYEVENTF_KEYUP); Key(vk1, KEYEVENTF_KEYUP);
+    InjectKeys(in);
+}
+
 static void SendParsedHotkey(const std::wstring& combo) {
     auto trim = [](std::wstring s) {
         size_t a = s.find_first_not_of(L" \t");
@@ -570,24 +578,15 @@ static void SendParsedHotkey(const std::wstring& combo) {
         if (end == std::wstring::npos) break;
         start = end + 1;
     }
-    if (keys.empty() || keys.size() > 4) return; // safety cap
+    if (keys.empty() || keys.size() > 4) return;
 
-    INPUT inputs[8] = {};
-    int count = 0;
-    // Press all
-    for (size_t i = 0; i < keys.size(); i++) {
-        inputs[count].type = INPUT_KEYBOARD;
-        inputs[count].ki.wVk = keys[i];
-        count++;
-    }
-    // Release in reverse
-    for (int i = (int)keys.size() - 1; i >= 0; i--) {
-        inputs[count].type = INPUT_KEYBOARD;
-        inputs[count].ki.wVk = keys[i];
-        inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
-        count++;
-    }
-    SendInput(count, inputs, sizeof(INPUT));  // single atomic call
+    std::vector<INPUT> in;
+    auto Key = [&](WORD vk, DWORD flags) {
+        in.push_back(INPUT{INPUT_KEYBOARD, {.ki = {.wVk = vk, .dwFlags = flags}}});
+    };
+    for (size_t i = 0; i < keys.size(); i++) Key(keys[i], 0);
+    for (int i = (int)keys.size() - 1; i >= 0; i--) Key(keys[i], KEYEVENTF_KEYUP);
+    InjectKeys(in);
 }
 
 // ---- Invoke a folder background context menu entry (borrow the right-click menu) ----
@@ -626,29 +625,42 @@ static bool StrContainsNorm(PCWSTR haystack, PCWSTR needle) {
 
 // Recursively walk the (possibly nested) context menu, invoking the first item whose
 // display text or verb contains matchText. Returns true and invokes on success.
+// If dumpLines is non-null, collects diagnostic lines during the walk so the caller
+// doesn't need a second walk on failure (avoids re-running shell extensions).
 static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* pcm2,
-                                 HWND hwnd, PCWSTR matchText, int idCmdFirst) {
+                                 HWND hwnd, PCWSTR matchText, int idCmdFirst,
+                                 std::vector<std::wstring>* dumpLines = nullptr,
+                                 int depth = 0) {
     int count = GetMenuItemCount(hMenu);
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = { sizeof(mii) };
         mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
 
-        // Cascading submenu — check before wID guards, since submenu items
-        // carry an HMENU as wID (not a valid command ID in the context-menu range).
         if (mii.hSubMenu != NULL) {
             if (pcm2)
                 pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)mii.hSubMenu, MAKELPARAM(i, 0));
-            if (EnumContextMenuMatch(mii.hSubMenu, pcm, pcm2, hwnd, matchText, idCmdFirst))
+            if (dumpLines) {
+                wchar_t stext[MAX_PATH] = {};
+                MENUITEMINFOW miiT = { sizeof(miiT), MIIM_STRING };
+                miiT.dwTypeData = stext; miiT.cch = MAX_PATH;
+                GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
+                wchar_t buf[512];
+                swprintf_s(buf, L"CMENU%s[%s] (submenu) wID=%u",
+                    std::wstring(depth, L' ').c_str(),
+                    stext[0] ? stext : L"(no text)", mii.wID);
+                dumpLines->push_back(buf);
+            }
+            if (EnumContextMenuMatch(mii.hSubMenu, pcm, pcm2, hwnd, matchText, idCmdFirst,
+                                     dumpLines, depth + 2))
                 return true;
             continue;
         }
 
         // Leaf item: skip separators and items outside the context-menu command range.
-        if (mii.wID == 0) continue;                                     // separator
-        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;  // outside range
+        if (mii.wID == 0) continue;
+        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
 
-        // Read verb + display text.
         UINT offset = mii.wID - idCmdFirst;
 
         CHAR verbA[MAX_PATH] = {};
@@ -658,11 +670,21 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
             MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, MAX_PATH);
 
         wchar_t text[MAX_PATH] = {};
-        MENUITEMINFOW miiT = { sizeof(miiT) };
-        miiT.fMask = MIIM_STRING;
-        miiT.dwTypeData = text;
-        miiT.cch = MAX_PATH;
+        MENUITEMINFOW miiT = { sizeof(miiT), MIIM_STRING };
+        miiT.dwTypeData = text; miiT.cch = MAX_PATH;
         GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
+
+        if (dumpLines) {
+            std::wstring normText = NormalizeForMatch(text);
+            std::wstring normVerb = NormalizeForMatch(verb);
+            wchar_t buf[640];
+            swprintf_s(buf, L"CMENU%s[%s] wID=%u offset=%u verb=[%s]  → match: \"%s\" or \"%s\"",
+                std::wstring(depth, L' ').c_str(),
+                text[0] ? text : L"(no text)", mii.wID, offset,
+                verb[0] ? verb : L"(none)",
+                normText.c_str(), normVerb[0] ? normVerb.c_str() : L"<no verb>");
+            dumpLines->push_back(buf);
+        }
 
         if (StrContainsNorm(text, matchText) || StrContainsNorm(verb, matchText)) {
             CMINVOKECOMMANDINFO ci = { sizeof(ci) };
@@ -674,64 +696,6 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
         }
     }
     return false;
-}
-
-// Diagnostic: recursively dump all context-menu leaf items.
-// Called when a match fails, so the user can see what verbs/text are available
-// and adjust the "Context Menu Match" setting accordingly.
-static void DumpContextMenuRecursive(HMENU hMenu, IContextMenu* pcm, IContextMenu2* pcm2,
-                                     int idCmdFirst, int depth) {
-    int count = GetMenuItemCount(hMenu);
-    for (int i = 0; i < count; i++) {
-        MENUITEMINFOW mii = { sizeof(mii) };
-        mii.fMask = MIIM_ID | MIIM_SUBMENU;
-        if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
-
-        wchar_t indent[64] = {};
-        for (int d = 0; d < depth && d < 31; d++) indent[d] = L' ';
-        indent[depth < 31 ? depth : 31] = 0;
-
-        // Cascading submenu — check before wID guards.
-        if (mii.hSubMenu != NULL) {
-            wchar_t stext[MAX_PATH] = {};
-            MENUITEMINFOW miiT = { sizeof(miiT) };
-            miiT.fMask = MIIM_STRING;
-            miiT.dwTypeData = stext;
-            miiT.cch = MAX_PATH;
-            GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
-            Wh_Log(L"CMENU%s[%s] (submenu) wID=%u", indent,
-                   stext[0] ? stext : L"(no text)", mii.wID);
-            if (pcm2)
-                pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)mii.hSubMenu, MAKELPARAM(i, 0));
-            DumpContextMenuRecursive(mii.hSubMenu, pcm, pcm2, idCmdFirst, depth + 2);
-            continue;
-        }
-
-        // Leaf item: skip separators and items outside the context-menu command range.
-        if (mii.wID == 0) continue;
-        if (mii.wID < (UINT)idCmdFirst || mii.wID > 0x7FFF) continue;
-
-        UINT offset = mii.wID - idCmdFirst;
-        CHAR verbA[MAX_PATH] = {};
-        pcm->GetCommandString(offset, GCS_VERBA, NULL, verbA, MAX_PATH);
-        wchar_t verb[MAX_PATH] = {};
-        if (verbA[0])
-            MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, MAX_PATH);
-        wchar_t text[MAX_PATH] = {};
-        MENUITEMINFOW miiT = { sizeof(miiT) };
-        miiT.fMask = MIIM_STRING;
-        miiT.dwTypeData = text;
-        miiT.cch = MAX_PATH;
-        GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
-
-        // Show normalized text so user knows exactly what substring to type
-        std::wstring normText = NormalizeForMatch(text);
-        std::wstring normVerb = NormalizeForMatch(verb);
-        Wh_Log(L"CMENU%s[%s] wID=%u offset=%u verb=[%s]  → match: \"%s\" or \"%s\"", indent,
-               text[0] ? text : L"(no text)", mii.wID, offset,
-               verb[0] ? verb : L"(none)",
-               normText.c_str(), normVerb[0] ? normVerb.c_str() : L"<no verb>");
-    }
 }
 
 // Get the background context menu directly from the shell view.
@@ -754,10 +718,11 @@ static bool InvokeFolderContextMenuFromBrowser(IShellBrowser* browser, HWND hwnd
     bool found = false;
     HMENU hMenu = CreatePopupMenu();
     if (hMenu && SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
-        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1);
+        std::vector<std::wstring> dumpLines;
+        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1, &dumpLines);
         if (!found) {
             Wh_Log(L"No match for '%s' — dumping all context menu items:", matchText);
-            DumpContextMenuRecursive(hMenu, pcm, pcm2, 1, 0);
+            for (auto& line : dumpLines) Wh_Log(L"%s", line.c_str());
         }
     }
     if (hMenu) DestroyMenu(hMenu);
@@ -803,10 +768,11 @@ static bool InvokeFolderContextMenuVerb(PCWSTR folderPath, HWND hwnd, PCWSTR mat
     bool found = false;
     HMENU hMenu = CreatePopupMenu();
     if (hMenu && SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
-        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1);
+        std::vector<std::wstring> dumpLines;
+        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1, &dumpLines);
         if (!found) {
             Wh_Log(L"No match for '%s' — dumping all context menu items:", matchText);
-            DumpContextMenuRecursive(hMenu, pcm, pcm2, 1, 0);
+            for (auto& line : dumpLines) Wh_Log(L"%s", line.c_str());
         }
     }
     if (hMenu) DestroyMenu(hMenu);
@@ -841,10 +807,6 @@ static thread_local UINT_PTR g_pendingDblClickTimerId = 0;
 static thread_local std::wstring g_pendingDblClickAction;
 static thread_local std::wstring g_pendingDblClickCombo;
 
-// Bridge: per-trigger contextMenuMatch set by subclass proc before PostDoAction,
-// consumed by OpenWithContextMenu. Cleared after use.
-thread_local std::wstring g_pendingCtxMenuMatch;
-
 // Private message: dequeues action dispatch from mouse handlers to avoid
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
 // wParam = (WPARAM)strdup(actionString), lParam = (LPARAM)hWnd
@@ -854,12 +816,17 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action);
 
 // Post an action to be handled asynchronously — avoids synchronously activating
 // context-menu handlers inside the mouse-down handler.
-static void PostDoAction(HWND hWnd, PCWSTR action) {
+// If match is non-null and non-empty, it is packed into the same heap block
+// after the action string (double-null terminated). The dispatch handler picks it up.
+static void PostDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
     if (!g_msgDoAction || !action || !*action) return;
-    size_t len = wcslen(action) + 1;
-    wchar_t* s = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, len * sizeof(wchar_t));
+    size_t actionLen = wcslen(action) + 1;
+    size_t matchLen = (match && *match) ? (wcslen(match) + 1) : 0;
+    size_t total = actionLen + matchLen;
+    wchar_t* s = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, total * sizeof(wchar_t));
     if (!s) return;
-    wcscpy_s(s, len, action);
+    wcscpy_s(s, actionLen, action);
+    if (matchLen) wcscpy_s(s + actionLen, matchLen, match);
     if (!PostMessage(hWnd, g_msgDoAction, (WPARAM)s, (LPARAM)hWnd))
         HeapFree(GetProcessHeap(), 0, s);
 }
@@ -1055,15 +1022,31 @@ public:
     }
 
     void OpenInTerminal() {
-        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, L"Terminal"))
-            Wh_Log(L"OpenInTerminal: no matching context menu entry found");
+        wchar_t path[MAX_PATH] = {};
+        if (!GetCurrentFolderPath(path, MAX_PATH)) {
+            Wh_Log(L"OpenInTerminal: no real folder path (virtual folder?), nothing to open");
+            return;
+        }
+        // Launch Windows Terminal directly in the current folder. Avoids the fragile
+        // context-menu text/verb matching (which breaks on non-English Windows / updates).
+        wchar_t cmdLine[MAX_PATH + 32] = {};
+        swprintf_s(cmdLine, L"wt.exe -d \"%s\"", path);
+        STARTUPINFOW si = { sizeof(si) };
+        PROCESS_INFORMATION pi = {};
+        if (CreateProcessW(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, path, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        } else {
+            Wh_Log(L"OpenInTerminal: failed to launch wt.exe (err=%lu)", GetLastError());
+        }
     }
 
     void OpenWithContextMenu() {
         // Prefer per-trigger match (set by subclass proc before dispatching),
-        // fall back to global Context Menu Match setting.
-        std::wstring match = std::move(g_pendingCtxMenuMatch);
-        g_pendingCtxMenuMatch.clear();
+        // Per-trigger match was stashed in g_pendingDblClickAction by the
+        // dispatch handler before calling DoAction. Clear it after reading.
+        std::wstring match = std::move(g_pendingDblClickAction);
+        g_pendingDblClickAction.clear();
         if (match.empty()) {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             PCWSTR s = g_contextMenuMatch.Get();
@@ -1110,15 +1093,14 @@ struct SubclassEntry { HWND hWnd; bool isListView; };
 static std::vector<SubclassEntry> g_subclassed;
 static std::mutex g_subclassMutex;
 
-// Lazily initialized on first use (Explorer UI thread has COM already).
+// Per-thread UIAutomation — each Explorer window runs on its own STA thread.
 // Intentionally leaked (raw pointer) to avoid Release() during DLL_PROCESS_DETACH.
 static IUIAutomation* GetUIAutomation() {
-    static IUIAutomation* s_pUIAutomation = []{
-        IUIAutomation* p = nullptr;
+    thread_local IUIAutomation* s_pUIAutomation = nullptr;
+    if (!s_pUIAutomation) {
         CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
-                         __uuidof(IUIAutomation), (void**)&p);
-        return p;
-    }();
+                         __uuidof(IUIAutomation), (void**)&s_pUIAutomation);
+    }
     return s_pUIAutomation;
 }
 
@@ -1192,12 +1174,21 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    // Deferred action dispatch (posted from mouse handlers to avoid blocking)
+    // Deferred action dispatch (posted from mouse handlers to avoid blocking).
+    // Block layout: action\0[match\0] — match follows action if present.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
         PCWSTR action = (PCWSTR)wParam;
         HWND target = (HWND)lParam;
-        if (action && *action && target)
+        if (action && *action && target) {
+            // Extract match if present (double-null terminated block)
+            size_t aLen = wcslen(action) + 1;
+            PCWSTR match = action[aLen] ? action + aLen : nullptr;
+            if (match && wcscmp(action, L"openWithContextMenu") == 0) {
+                // Set match before calling DoAction so OpenWithContextMenu sees it
+                g_pendingDblClickAction = match;
+            }
             FindShellTabAndDoAction(target, action);
+        }
         HeapFree(GetProcessHeap(), 0, (void*)wParam);
         return 0;
     }
@@ -1242,9 +1233,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
             CancelPendingDblClick();
             if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
-            SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
-                SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
-                PostDoAction(hWnd, s.tripleClick.c_str());
+                PostDoAction(hWnd, s.tripleClick.c_str(), s.tripleClickCtxMatch.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -1255,16 +1244,13 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (ctrlOn && ctrlDown) {
             if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
-                SetCtxMenuMatch(s.ctrlClick.c_str(), g_ctrlClickCtxMatch);
-                PostDoAction(hWnd, s.ctrlClick.c_str());
+                PostDoAction(hWnd, s.ctrlClick.c_str(), s.ctrlClickCtxMatch.c_str());
         } else if (altOn && altDown) {
             if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
-                SetCtxMenuMatch(s.altClick.c_str(), g_altClickCtxMatch);
-                PostDoAction(hWnd, s.altClick.c_str());
+                PostDoAction(hWnd, s.altClick.c_str(), s.altClickCtxMatch.c_str());
         } else if (shiftOn && shiftDown) {
             if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
-                SetCtxMenuMatch(s.shiftClick.c_str(), g_shiftClickCtxMatch);
-                PostDoAction(hWnd, s.shiftClick.c_str());
+                PostDoAction(hWnd, s.shiftClick.c_str(), s.shiftClickCtxMatch.c_str());
         }
 
     } else if (uMsg == WM_LBUTTONDBLCLK) {
@@ -1294,8 +1280,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         } else {
             // Instant double-click (no triple-click configured)
             if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                SetCtxMenuMatch(s.doubleClick.c_str(), g_doubleClickCtxMatch);
-                PostDoAction(hWnd, s.doubleClick.c_str());
+                PostDoAction(hWnd, s.doubleClick.c_str(), s.doubleClickCtxMatch.c_str());
         }
 
     } else if (uMsg == WM_MBUTTONDOWN) {
@@ -1315,8 +1300,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 
         if (singleOn && !doubleOn) {
             if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                SetCtxMenuMatch(s.middleClick.c_str(), g_middleClickCtxMatch);
-                PostDoAction(hWnd, s.middleClick.c_str());
+                PostDoAction(hWnd, s.middleClick.c_str(), s.middleClickCtxMatch.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -1325,8 +1309,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         if (isDouble) {
             CancelPendingMidClick();
             if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
-                SetCtxMenuMatch(s.doubleMiddleClick.c_str(), g_doubleMiddleClickCtxMatch);
-                PostDoAction(hWnd, s.doubleMiddleClick.c_str());
+                PostDoAction(hWnd, s.doubleMiddleClick.c_str(), s.doubleMiddleClickCtxMatch.c_str());
         } else {
             CancelPendingMidClick();
             g_midClickPendingHwnd = hWnd;
@@ -1360,12 +1343,21 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    // Deferred action dispatch (posted from mouse handlers to avoid blocking)
+    // Deferred action dispatch (posted from mouse handlers to avoid blocking).
+    // Block layout: action\0[match\0] — match follows action if present.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
         PCWSTR action = (PCWSTR)wParam;
         HWND target = (HWND)lParam;
-        if (action && *action && target)
+        if (action && *action && target) {
+            // Extract match if present (double-null terminated block)
+            size_t aLen = wcslen(action) + 1;
+            PCWSTR match = action[aLen] ? action + aLen : nullptr;
+            if (match && wcscmp(action, L"openWithContextMenu") == 0) {
+                // Set match before calling DoAction so OpenWithContextMenu sees it
+                g_pendingDblClickAction = match;
+            }
             FindShellTabAndDoAction(target, action);
+        }
         HeapFree(GetProcessHeap(), 0, (void*)wParam);
         return 0;
     }
@@ -1411,19 +1403,16 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
                     if (singleOn && !doubleOn) {
                         if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                            SetCtxMenuMatch(s.middleClick.c_str(), g_middleClickCtxMatch);
-                            PostDoAction(hWnd, s.middleClick.c_str());
+                            PostDoAction(hWnd, s.middleClick.c_str(), s.middleClickCtxMatch.c_str());
                         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
 
                     bool isDouble = (g_midClickTimerId != 0 && g_midClickPendingHwnd == hWnd);
 
                     if (isDouble) {
-                            CancelPendingMidClick();
-                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo)) {
-                            SetCtxMenuMatch(s.doubleMiddleClick.c_str(), g_doubleMiddleClickCtxMatch);
-                            PostDoAction(hWnd, s.doubleMiddleClick.c_str());
-                        }
+                        CancelPendingMidClick();
+                        if (!TryCustomHotkey(s.doubleMiddleClick.c_str(), s.doubleMiddleClickCombo))
+                            PostDoAction(hWnd, s.doubleMiddleClick.c_str(), s.doubleMiddleClickCtxMatch.c_str());
                     } else {
                         CancelPendingMidClick();
                         g_midClickPendingHwnd = hWnd;
@@ -1468,9 +1457,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         if (tripleOn && g_pendingDblClickHwnd == hWnd && g_pendingDblClickTimerId != 0) {
             CancelPendingDblClick();
             if (!TryCustomHotkey(s.tripleClick.c_str(), s.tripleClickCombo))
-            SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
-                SetCtxMenuMatch(s.tripleClick.c_str(), g_tripleClickCtxMatch);
-                PostDoAction(hWnd, s.tripleClick.c_str());
+                PostDoAction(hWnd, s.tripleClick.c_str(), s.tripleClickCtxMatch.c_str());
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
 
@@ -1500,8 +1487,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
             } else if (dblOn) {
                 // Instant double-click (no triple-click configured)
                 if (!TryCustomHotkey(s.doubleClick.c_str(), s.doubleClickCombo))
-                    SetCtxMenuMatch(s.doubleClick.c_str(), g_doubleClickCtxMatch);
-                PostDoAction(hWnd, s.doubleClick.c_str());
+                    PostDoAction(hWnd, s.doubleClick.c_str(), s.doubleClickCtxMatch.c_str());
             }
             g_lastClick.time = 0;   // prevent next click from being another double-click
         } else {
@@ -1512,14 +1498,13 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
             if (ctrlOn && ctrlDown) {
                 if (!TryCustomHotkey(s.ctrlClick.c_str(), s.ctrlClickCombo))
-                    PostDoAction(hWnd, s.ctrlClick.c_str());
+                    PostDoAction(hWnd, s.ctrlClick.c_str(), s.ctrlClickCtxMatch.c_str());
             } else if (altOn && altDown) {
                 if (!TryCustomHotkey(s.altClick.c_str(), s.altClickCombo))
-                    PostDoAction(hWnd, s.altClick.c_str());
+                    PostDoAction(hWnd, s.altClick.c_str(), s.altClickCtxMatch.c_str());
             } else if (shiftOn && shiftDown) {
                 if (!TryCustomHotkey(s.shiftClick.c_str(), s.shiftClickCombo))
-                    SetCtxMenuMatch(s.shiftClick.c_str(), g_shiftClickCtxMatch);
-                    PostDoAction(hWnd, s.shiftClick.c_str());
+                    PostDoAction(hWnd, s.shiftClick.c_str(), s.shiftClickCtxMatch.c_str());
             }
 
             g_lastClick.time = now;
