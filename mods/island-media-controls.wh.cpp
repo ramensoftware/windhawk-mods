@@ -1395,14 +1395,9 @@ std::vector<uint8_t> ReadThumbnailBytes(streams::IRandomAccessStreamReference co
     return bytes;
 }
 
-std::wstring GetOptionalStringSetting(const wchar_t* key) {
-    auto setting = WindhawkUtils::StringSetting::make(key);
-    PCWSTR value = setting.get();
-    return value;
-}
-
 std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
-    std::wstring value = GetOptionalStringSetting(key);
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    std::wstring value = setting.get();
     return value.empty() ? fallback : value;
 }
 
@@ -1421,15 +1416,20 @@ void ApplyDisplayModeSetting(Settings* settings) {
     }
 }
 
-constexpr int kSettingsMigrationVersion = 1;
+constexpr int kSettingsMigrationVersion = 2;
 constexpr wchar_t kMigrateMicaLikeMaterialValue[] =
     L"MigrateMicaLikeMaterialToAcrylic";
+constexpr wchar_t kMigrateLegacyCompactValue[] =
+    L"MigrateLegacyCompactToDisplayMode";
 
 void ApplySettingsMigrations(Settings* settings) {
     int migratedVersion = Wh_GetIntValue(L"SettingsMigrationVersion", 0);
     if (migratedVersion < kSettingsMigrationVersion) {
         if (migratedVersion < 1 && settings->material == L"mica_like") {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 1);
+        }
+        if (migratedVersion < 2 && Wh_GetIntSetting(L"Main.Compact") != 0) {
+            Wh_SetIntValue(kMigrateLegacyCompactValue, 1);
         }
         Wh_SetIntValue(L"SettingsMigrationVersion", kSettingsMigrationVersion);
     }
@@ -1440,6 +1440,11 @@ void ApplySettingsMigrations(Settings* settings) {
         } else {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 0);
         }
+    }
+
+    if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0)) {
+        settings->compactMode = L"classic";
+        settings->compact = true;
     }
 }
 
@@ -1880,7 +1885,10 @@ void RequestMediaRefresh() {
     if (!IsModActive() || !g_mediaThreadRunning.load()) {
         return;
     }
-    g_mediaRefreshRequested = true;
+    {
+        std::lock_guard lock(g_mediaCommandMutex);
+        g_mediaRefreshRequested = true;
+    }
     g_mediaCommandCv.notify_one();
 }
 
@@ -3939,10 +3947,7 @@ bool StepPopupAnimationSpring(double dtSec) {
     double stiffness = 520.0 * speed * speed;
     // This setting controls the physical rebound itself, not merely the jelly
     // rendering style. Slightly overdamped motion cannot cross either endpoint.
-    double damping = (g_settings.compactMode != L"classic" ||
-                      g_settings.classicMorphScaleAnimation
-                          ? 24.2
-                          : 48.0) * speed;
+    double damping = (g_settings.classicMorphScaleAnimation ? 24.2 : 48.0) * speed;
 
     int substeps = std::max(1, static_cast<int>(std::ceil(dtSec / (1.0 / 120.0))));
     double step = dtSec / static_cast<double>(substeps);
@@ -12483,8 +12488,11 @@ void StartMediaThread() {
 }
 
 void StopMediaThread() {
-    g_mediaThreadRunning = false;
-    g_mediaRefreshRequested = false;
+    {
+        std::lock_guard lock(g_mediaCommandMutex);
+        g_mediaThreadRunning = false;
+        g_mediaRefreshRequested = false;
+    }
     g_mediaCommandCv.notify_all();
     if (g_mediaThread) {
         if (g_mediaThread->joinable()) {
@@ -13518,9 +13526,6 @@ Grid BuildIslandGrid() {
                 return;
             }
             auto source = sender.template try_as<UIElement>();
-            if (source) {
-                source.ReleasePointerCapture(e.Pointer());
-            }
             bool releaseInside = false;
             if (auto element = sender.template try_as<FrameworkElement>()) {
                 auto point = e.GetCurrentPoint(element);
@@ -13529,6 +13534,10 @@ Grid BuildIslandGrid() {
                                 position.Y >= 0.0 &&
                                 position.X <= element.ActualWidth() &&
                                 position.Y <= element.ActualHeight();
+            }
+            g_compactPressStarted = false;
+            if (source) {
+                source.ReleasePointerCapture(e.Pointer());
             }
             EndCompactIslandPress(releaseInside);
             e.Handled(true);
@@ -13931,11 +13940,12 @@ void UpdatePlayerContents() {
                 auto lowDetailTransportBytes =
                     CreateLowDetailAlbumCoverBytes(displayThumbnailBytes,
                                                    false, false, false, 6, true);
-                auto const& transportWashBytes =
-                    lowDetailTransportBytes.empty()
-                        ? displayThumbnailBytes
-                        : lowDetailTransportBytes;
-                g_dynamicTransportWash.Source(makeBitmap(transportWashBytes, true));
+                bool haveLowDetailTransportBytes = !lowDetailTransportBytes.empty();
+                auto const& transportWashBytes = haveLowDetailTransportBytes
+                                                     ? lowDetailTransportBytes
+                                                     : displayThumbnailBytes;
+                g_dynamicTransportWash.Source(
+                    makeBitmap(transportWashBytes, haveLowDetailTransportBytes));
             } else {
                 g_dynamicTransportWash.Source(nullptr);
             }
@@ -13962,10 +13972,12 @@ void UpdatePlayerContents() {
                 auto lowDetailMainBytes =
                     CreateLowDetailAlbumCoverBytes(displayThumbnailBytes,
                                                    true, false, false, 5, true, true);
-                auto const& mainWashBytes = lowDetailMainBytes.empty()
-                                                ? displayThumbnailBytes
-                                                : lowDetailMainBytes;
-                g_dynamicMainWash.Source(makeBitmap(mainWashBytes, true));
+                bool haveLowDetailMainBytes = !lowDetailMainBytes.empty();
+                auto const& mainWashBytes = haveLowDetailMainBytes
+                                                ? lowDetailMainBytes
+                                                : displayThumbnailBytes;
+                g_dynamicMainWash.Source(
+                    makeBitmap(mainWashBytes, haveLowDetailMainBytes));
             } else {
                 g_dynamicMainWash.Source(nullptr);
             }
@@ -14616,6 +14628,14 @@ void Wh_ModSettingsChanged() {
     if (!IsModActive()) {
         return;
     }
+    if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0) &&
+        GetStringSetting(L"Main.DisplayMode", L"fullsize") != L"compact") {
+        // A settings-page change makes the current display mode an explicit
+        // user choice. Stop applying the one-time old Compact migration so
+        // Fullsize and Side expansion can be selected normally after update.
+        Wh_SetIntValue(kMigrateLegacyCompactValue, 0);
+    }
+
     if (Wh_GetIntValue(kMigrateMicaLikeMaterialValue, 0) &&
         GetStringSetting(L"Main.Material", L"acrylic") == L"mica_like") {
         // A settings-page change makes the current material an explicit user
