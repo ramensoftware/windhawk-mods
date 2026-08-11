@@ -1,7 +1,9 @@
 // ==WindhawkMod==
 // @id                  explorer-gallery-photos-launcher
 // @name                Open Photos App instead of Gallery
+// @name:pl-PL          Otwieraj aplikację Zdjęcia zamiast Galerii
 // @description         Intercepts Gallery navigation in File Explorer and launches the Microsoft Photos app (ms-photos:) instead.
+// @description:pl-PL   Przechwytuje nawigację do Galerii w Eksploratorze plików i uruchamia zamiast niej aplikację Zdjęcia (ms-photos:).
 // @version             2.0
 // @author              Jäkubix
 // @github              https://github.com/jakubix30
@@ -48,9 +50,9 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 #include <shellapi.h>
 #include <windhawk_utils.h>
 #include <atomic>
+#include <mutex>
 
 static std::atomic<PIDLIST_ABSOLUTE> g_targetPidl{nullptr};
-static std::atomic<bool> g_targetPidlResolveFailed{false};
 static std::atomic<bool> g_explorerFrameHooked{false};
 static std::atomic<bool> g_unloading{false};
 static HMODULE g_explorerFrameRef = nullptr;
@@ -66,17 +68,12 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
     if (pidl) {
         return pidl;
     }
-    
-    if (g_targetPidlResolveFailed.load(std::memory_order_relaxed)) {
-        return nullptr;
-    }
 
     constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
     PIDLIST_ABSOLUTE newPidl = nullptr;
     HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr, &newPidl, 0, nullptr);
     if (FAILED(hr) || !newPidl) {
         Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
-        g_targetPidlResolveFailed.store(true, std::memory_order_relaxed);
         return nullptr;
     }
 
@@ -94,8 +91,9 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
 static HANDLE g_launchEvent = NULL;
 static HANDLE g_stopEvent = NULL;
 static HANDLE g_workerThread = NULL;
+static std::once_flag g_workerInitOnce;
 
-static void CleanupWorkerThread() {
+static void CleanupResources() {
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
@@ -144,9 +142,9 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // Keep the shell's work on this thread and bounded: no modal UI to hang the
-            // join in Wh_ModUninit, and no async operation to be aborted when we exit.
-            sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+            // SEE_MASK_ASYNCOK allows shell interactions (like UAC prompts) to offload to a background 
+            // thread without blocking our worker, ensuring Wh_ModUninit can always complete a clean join.
+            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
             sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
@@ -172,6 +170,22 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
     return 0;
 }
 
+static void EnsureWorkerThread() {
+    std::call_once(g_workerInitOnce, [] {
+        g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
+        g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
+        
+        if (g_launchEvent && g_stopEvent) {
+            g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
+            if (!g_workerThread) {
+                Wh_Log(L"Failed to create worker thread.");
+            }
+        } else {
+            Wh_Log(L"Failed to create thread synchronization events.");
+        }
+    });
+}
+
 // Hook on BrowseObject
 static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
                                                    PCUIDLIST_RELATIVE pidl,
@@ -189,6 +203,7 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
             
             Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
             
+            EnsureWorkerThread();
             if (g_launchEvent) {
                 SetEvent(g_launchEvent);
             }
@@ -213,8 +228,9 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
     }
     
     // Hold a reference so the module is not unloaded out from under the hook
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                       reinterpret_cast<LPCWSTR>(hEF), &g_explorerFrameRef);
+    if (!GetModuleHandleExW(0, L"explorerframe.dll", &g_explorerFrameRef)) {
+        Wh_Log(L"Failed to retain reference to explorerframe.dll: %u", GetLastError());
+    }
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
@@ -266,23 +282,6 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod v" WH_MOD_VERSION);
 
-    // Create background worker thread for asynchronous protocol launching
-    g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
-    g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
-    
-    if (!g_launchEvent || !g_stopEvent) {
-        Wh_Log(L"Failed to create thread synchronization events.");
-        CleanupWorkerThread();
-        return FALSE;
-    }
-
-    g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
-    if (!g_workerThread) {
-        Wh_Log(L"Failed to create worker thread.");
-        CleanupWorkerThread();
-        return FALSE;
-    }
-
     bool delayLoadingNeeded = true;
     
     // If explorerframe.dll is already loaded, hook it immediately
@@ -291,7 +290,7 @@ BOOL Wh_ModInit() {
         if (HookExplorerFrame(hEF, false)) {
             delayLoadingNeeded = false;
         } else {
-            CleanupWorkerThread();
+            CleanupResources();
             return FALSE;
         }
     }
@@ -328,7 +327,7 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing mod");
 
-    CleanupWorkerThread();
+    CleanupResources();
 
     PIDLIST_ABSOLUTE target = g_targetPidl.exchange(nullptr, std::memory_order_acquire);
     if (target) {
