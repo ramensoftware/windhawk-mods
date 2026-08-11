@@ -23,7 +23,7 @@
 # Click on Empty Explorer
 
 Configure what happens when you double click, triple click, middle click, double middle click,
-or modifier+click (Ctrl/Alt/Shift+Click) on empty space in File Explorer. Supports 16 different
+or modifier+click (Ctrl/Alt/Shift+Click) on empty space in File Explorer. Supports 17 different
 actions.
 
 ## How it works
@@ -341,7 +341,6 @@ require Windows 11 for tabbed Explorer support.
 #include <comutil.h>
 #include <winrt/base.h>
 
-#include <algorithm>
 #include <cwctype>
 #include <memory>
 #include <mutex>
@@ -648,7 +647,8 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
                 miiT.dwTypeData = stext; miiT.cch = MAX_PATH;
                 GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
                 wchar_t buf[512];
-                swprintf_s(buf, L"CMENU%s[%s] (submenu) wID=%u",
+                _snwprintf_s(buf, _countof(buf), _TRUNCATE,
+                    L"CMENU%s[%s] (submenu) wID=%u",
                     std::wstring(depth, L' ').c_str(),
                     stext[0] ? stext : L"(no text)", mii.wID);
                 dumpLines->push_back(buf);
@@ -736,59 +736,25 @@ static bool InvokeFolderContextMenuFromBrowser(IShellBrowser* browser, HWND hwnd
 
 // Legacy path-based fallback — only used by brand-specific actions (OpenInVSCode etc.)
 // which are kept for backward compatibility. The browser-based version above is preferred.
-static bool InvokeFolderContextMenuVerb(PCWSTR folderPath, HWND hwnd, PCWSTR matchText) {
-    if (!folderPath || !folderPath[0] || !matchText || !matchText[0]) return false;
-
-    // SHParseDisplayName returns an absolute PIDL (relative to Desktop root).
-    // We bind it directly on the desktop IShellFolder — no PIDL splitting needed.
-    PIDLIST_ABSOLUTE pidl = nullptr;
-    if (FAILED(SHParseDisplayName(folderPath, NULL, &pidl, 0, NULL)) || !pidl)
-        return false;
-
-    IShellFolder* psfDesktop = nullptr;
-    if (FAILED(SHGetDesktopFolder(&psfDesktop))) {
-        CoTaskMemFree(pidl);
-        return false;
-    }
-
-    IShellFolder* psfFolder = nullptr;
-    HRESULT hr = psfDesktop->BindToObject(pidl, NULL, IID_IShellFolder, (void**)&psfFolder);
-    psfDesktop->Release();
-    CoTaskMemFree(pidl);
-    if (FAILED(hr) || !psfFolder) return false;
-
-    // Background context menu for THIS folder (right-click empty space).
-    IContextMenu* pcm = nullptr;
-    hr = psfFolder->CreateViewObject(hwnd, IID_IContextMenu, (void**)&pcm);
-    psfFolder->Release();
-    if (FAILED(hr) || !pcm) return false;
-
-    // IContextMenu2 is needed to populate cascading submenus (WM_INITMENUPOPUP).
-    // QueryInterface for IContextMenu2 also succeeds when only IContextMenu3 exists.
-    IContextMenu2* pcm2 = nullptr;
-    pcm->QueryInterface(IID_IContextMenu2, (void**)&pcm2);
-
-    bool found = false;
-    HMENU hMenu = CreatePopupMenu();
-    if (hMenu && SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
-        std::vector<std::wstring> dumpLines;
-        found = EnumContextMenuMatch(hMenu, pcm, pcm2, hwnd, matchText, 1, &dumpLines);
-        if (!found) {
-            Wh_Log(L"No match for '%s' — dumping all context menu items:", matchText);
-            for (auto& line : dumpLines) Wh_Log(L"%s", line.c_str());
-        }
-    }
-    if (hMenu) DestroyMenu(hMenu);
-    if (pcm2) pcm2->Release();
-    pcm->Release();
-    return found;
-}
-
 // ---- Duplicate Tab infrastructure ----
 
 static thread_local wchar_t g_pendingNavPath[MAX_PATH] = {};
-static thread_local winrt::com_ptr<IShellBrowser> g_pendingNavBrowser;
-static thread_local HWND g_pendingNavHwnd = NULL;
+// Raw pointer with explicit AddRef/Release (instead of winrt::com_ptr) so the
+// thread-local has a trivial destructor — a com_ptr would register a thread-exit
+// destructor living in the mod image. Released on the window's own thread via
+// ReleasePendingNavForThread (g_msgTeardown / WM_NCDESTROY), never from
+// Wh_ModUninit's arbitrary thread.
+static thread_local IShellBrowser* g_pendingNavBrowser = nullptr;
+
+// Release the per-thread pending-nav browser and clear the pending path.
+// Must run on the thread that stored them (the Explorer UI thread).
+static void ReleasePendingNavForThread() {
+    if (g_pendingNavBrowser) {
+        g_pendingNavBrowser->Release();
+        g_pendingNavBrowser = nullptr;
+    }
+    g_pendingNavPath[0] = L'\0';
+}
 
 static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
@@ -934,9 +900,6 @@ public:
         m_timerHwnd = timerHwnd;
     }
 
-    // Return a ref-counted copy of the browser for thread-safe access
-    winrt::com_ptr<IShellBrowser> GetBrowser() const { return hBrowser; }
-
     // ---- Navigation ----
 
     void GoUp() {
@@ -990,8 +953,10 @@ public:
         if (!GetCurrentFolderPath(path, MAX_PATH)) return;
         wcsncpy(g_pendingNavPath, path, MAX_PATH - 1);
         g_pendingNavPath[MAX_PATH - 1] = L'\0';
-        g_pendingNavBrowser = nullptr;
-        g_pendingNavHwnd = m_timerHwnd;
+        if (g_pendingNavBrowser) {  // release a previously pending browser, if any
+            g_pendingNavBrowser->Release();
+            g_pendingNavBrowser = nullptr;
+        }
         SendKeyCombo(VK_CONTROL, 'T');
         SetTimer(m_timerHwnd, 0x4D43, 500, nullptr);
     }
@@ -1045,11 +1010,15 @@ public:
         }
         // Launch Windows Terminal directly in the current folder. Avoids the fragile
         // context-menu text/verb matching (which breaks on non-English Windows / updates).
-        wchar_t cmdLine[MAX_PATH + 32] = {};
-        swprintf_s(cmdLine, L"wt.exe -d \"%s\"", path);
+        // A drive root (C:\) ends with a backslash; double it so the closing quote
+        // isn't escaped by command-line parsing ("C:\" -> "C:\\").
+        std::wstring dir = path;
+        if (!dir.empty() && dir.back() == L'\\')
+            dir.push_back(L'\\');
+        std::wstring cmdLine = L"wt.exe -d \"" + dir + L"\"";
         STARTUPINFOW si = { sizeof(si) };
         PROCESS_INFORMATION pi = {};
-        if (CreateProcessW(NULL, cmdLine, NULL, NULL, FALSE, 0, NULL, path, &si, &pi)) {
+        if (CreateProcessW(NULL, cmdLine.data(), NULL, NULL, FALSE, 0, NULL, path, &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
         } else {
@@ -1108,6 +1077,16 @@ struct SubclassEntry { HWND hWnd; bool isListView; };
 static std::vector<SubclassEntry> g_subclassed;
 static std::mutex g_subclassMutex;
 
+// Record a subclassed window, skipping duplicates (e.g. a view that was
+// recreated after a view-mode switch, or a window already picked up by both
+// the CreateWindowExW hook and the Wh_ModAfterInit enumeration).
+static void TrackSubclassedWindow(HWND hWnd, bool isListView) {
+    std::lock_guard<std::mutex> lk(g_subclassMutex);
+    for (auto& e : g_subclassed)
+        if (e.hWnd == hWnd) return;
+    g_subclassed.push_back({ hWnd, isListView });
+}
+
 // Per-thread UIAutomation — each Explorer window runs on its own STA thread.
 // Stored thread_local and released on the window's own thread (see
 // ReleaseUIAutomationForThread / g_msgTeardown): a COM object has thread
@@ -1139,9 +1118,7 @@ static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, 
     CHECK_INIT_OR_RETURN_VOID();
 
     if (!g_pendingNavPath[0] || !g_pendingNavBrowser) {
-        g_pendingNavPath[0] = L'\0';
-        g_pendingNavBrowser = nullptr;
-        g_pendingNavHwnd = NULL;
+        ReleasePendingNavForThread();
         return;
     }
 
@@ -1151,9 +1128,7 @@ static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, 
         CoTaskMemFree(pidl);
     }
 
-    g_pendingNavPath[0] = L'\0';
-    g_pendingNavBrowser = nullptr;
-    g_pendingNavHwnd = NULL;
+    ReleasePendingNavForThread();
 }
 
 // ---- Helper: find ExplorerWrapper by shellTab HWND and run action ----
@@ -1202,6 +1177,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         KillTimer(hWnd, 0x4D44);
         KillTimer(hWnd, 0x4D45);
         ReleaseUIAutomationForThread();
+        ReleasePendingNavForThread();
         return 0;
     }
 
@@ -1213,6 +1189,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
             std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
         }
         ReleaseUIAutomationForThread();
+        ReleasePendingNavForThread();
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -1379,6 +1356,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         KillTimer(hWnd, 0x4D44);
         KillTimer(hWnd, 0x4D45);
         ReleaseUIAutomationForThread();
+        ReleasePendingNavForThread();
         return 0;
     }
 
@@ -1390,6 +1368,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
             std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
         }
         ReleaseUIAutomationForThread();
+        ReleasePendingNavForThread();
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -1419,7 +1398,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
     // Fast path: only handle mouse button events
-    if (wParam != WM_LBUTTONDOWN && wParam != WM_MBUTTONDOWN)
+    if (LOWORD(wParam) != WM_LBUTTONDOWN && LOWORD(wParam) != WM_MBUTTONDOWN)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
     auto pUIA = GetUIAutomation();
@@ -1429,7 +1408,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     SettingsSnapshot s = CopySettings();
 
     // Middle click — timer-based double-click detection
-    if (wParam == WM_MBUTTONDOWN) {
+    if (LOWORD(wParam) == WM_MBUTTONDOWN) {
         bool singleOn = wcscmp(s.middleClick.c_str(), L"none") != 0;
         bool doubleOn = wcscmp(s.doubleMiddleClick.c_str(), L"none") != 0;
         if (!singleOn && !doubleOn)
@@ -1469,7 +1448,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     }
 
     // Left click — double-click, triple-click, and modifier+click detection
-    if (wParam == WM_LBUTTONDOWN) {
+    if (LOWORD(wParam) == WM_LBUTTONDOWN) {
         bool dblOn    = (wcscmp(s.doubleClick.c_str(), L"none") != 0);
         bool tripleOn = (wcscmp(s.tripleClick.c_str(), L"none") != 0);
         bool ctrlOn   = (wcscmp(s.ctrlClick.c_str(), L"none") != 0);
@@ -1594,17 +1573,12 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
     if (!shellTab || !defView || !IsWindow(shellTab)) return hWnd;
 
     if (wcscmp(className, L"SysListView32") == 0) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SysListViewSubclass, 0);
-        { std::lock_guard<std::mutex> lk(g_subclassMutex);
-          g_subclassed.push_back({ hWnd, true });
-        }
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SysListViewSubclass, 0))
+            TrackSubclassedWindow(hWnd, true);
     } else {
-        if (IsWindow(defView)) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(defView, DUISubclass, 0);
-            { std::lock_guard<std::mutex> lk(g_subclassMutex);
-              g_subclassed.push_back({ defView, false });
-            }
-        }
+        if (IsWindow(defView) &&
+            WindhawkUtils::SetWindowSubclassFromAnyThread(defView, DUISubclass, 0))
+            TrackSubclassedWindow(defView, false);
     }
     return hWnd;
 }
@@ -1614,6 +1588,9 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName,
 typedef HRESULT (*__cdecl FileCabinet_CreateViewWindow2_t)(
     IShellBrowser*, void*, IShellView*, IShellView*, void*, HWND*);
 FileCabinet_CreateViewWindow2_t FileCabinet_CreateViewWindow2Original;
+// Loaded in Wh_ModInit to install the symbol hook, kept loaded for the hook's
+// lifetime, freed in Wh_ModUninit to balance the reference.
+static HMODULE g_hExplorerFrame = nullptr;
 
 HRESULT __cdecl FileCabinet_CreateViewWindow2Hook(
     IShellBrowser* pBrowser, void* var1, IShellView* psv1,
@@ -1623,8 +1600,9 @@ HRESULT __cdecl FileCabinet_CreateViewWindow2Hook(
 
     HWND shellTab = GetParent(*hWnd);
     if (shellTab && IsWindow(shellTab)) {
-        if (g_pendingNavPath[0] && !g_pendingNavBrowser) {
-            g_pendingNavBrowser.copy_from(pBrowser);
+        if (g_pendingNavPath[0] && !g_pendingNavBrowser && pBrowser) {
+            g_pendingNavBrowser = pBrowser;
+            g_pendingNavBrowser->AddRef();
         }
     }
     return hRes;
@@ -1637,21 +1615,19 @@ BOOL CALLBACK InitEnumChildWindowsProc(HWND hWnd, LPARAM lParam) {
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
         wchar_t className[256];
-        GetClassName(hWnd, className, 256);
+        if (!GetClassName(hWnd, className, 256)) return TRUE;
         if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
             HWND lv = FindWindowEx(hWnd, NULL, L"SysListView32", NULL);
             HWND dui = FindWindowEx(hWnd, NULL, L"DirectUIHWND", NULL);
             if (lv) {
                 if (WindhawkUtils::SetWindowSubclassFromAnyThread(lv, SysListViewSubclass, 0)) {
                     Wh_Log(L"SysListView32 Subclassed %p", lv);
-                    std::lock_guard<std::mutex> slk(g_subclassMutex);
-                    g_subclassed.push_back({ lv, true });
+                    TrackSubclassedWindow(lv, true);
                 }
             } else if (dui) {
                 if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DUISubclass, 0)) {
                     Wh_Log(L"DirectUIHWND Subclassed %p", hWnd);
-                    std::lock_guard<std::mutex> slk(g_subclassMutex);
-                    g_subclassed.push_back({ hWnd, false });
+                    TrackSubclassedWindow(hWnd, false);
                 }
             }
             return FALSE;
@@ -1665,7 +1641,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
         wchar_t className[256];
-        GetClassName(hWnd, className, 256);
+        if (!GetClassName(hWnd, className, 256)) return TRUE;
         if (wcscmp(className, L"CabinetWClass") == 0) {
             for (HWND shellTab = FindWindowEx(hWnd, NULL, L"ShellTabWindowClass", NULL);
                  shellTab;
@@ -1686,8 +1662,8 @@ BOOL Wh_ModInit() {
     g_msgTeardown = RegisterWindowMessage(L"ClickOnEmptyExplorer_Teardown");
     LoadSettings();
 
-    HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hExplorerFrame) {
+    g_hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!g_hExplorerFrame) {
         Wh_Log(L"Failed to load explorerframe.dll");
         return FALSE;
     }
@@ -1700,7 +1676,7 @@ BOOL Wh_ModInit() {
         (void*)FileCabinet_CreateViewWindow2Hook,
         FALSE}
     };
-    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks))) {
+    if (!WindhawkUtils::HookSymbols(g_hExplorerFrame, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks))) {
         // FileCabinet_CreateViewWindow2 is only used to capture the new tab's
         // IShellBrowser for the Duplicate Tab action. If the symbol can't be
         // resolved (new Windows build, symbol server down), don't disable the
@@ -1708,9 +1684,11 @@ BOOL Wh_ModInit() {
         // installed, so FileCabinet_CreateViewWindow2Original stays null and is
         // never called.
         Wh_Log(L"Failed to hook ExplorerFrame.dll — Duplicate Tab will be unavailable, other actions still work");
-        FreeLibrary(hExplorerFrame);
+        FreeLibrary(g_hExplorerFrame);
+        g_hExplorerFrame = nullptr;
     }
-    // On success, keep explorerframe.dll loaded so the installed hook stays valid.
+    // On success, keep explorerframe.dll loaded so the installed hook stays valid;
+    // the reference is released in Wh_ModUninit.
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
 
@@ -1730,9 +1708,9 @@ void Wh_ModUninit() {
     // Block subclass callbacks and hook code before cleanup
     InterlockedExchange(&g_initialized, 0);
 
-    g_pendingNavHwnd = NULL;
-    g_pendingNavBrowser = nullptr;
-    g_pendingNavPath[0] = L'\0';
+    // g_pendingNav* are thread_local and owned by the Explorer UI threads; they
+    // are released on those threads via the g_msgTeardown / WM_NCDESTROY paths
+    // below, not here (this runs on Windhawk's arbitrary thread).
 
     // Collect subclassed HWNDs under lock, then teardown + remove subclasses
     // outside the lock. Timers use nullptr callback now (WM_TIMER handled in
@@ -1751,5 +1729,13 @@ void Wh_ModUninit() {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 e.hWnd, e.isListView ? SysListViewSubclass : DUISubclass);
         }
+    }
+
+    // Balance the LoadLibraryExW reference taken in Wh_ModInit. explorerframe.dll
+    // stays loaded regardless (Explorer itself holds a reference), so this only
+    // releases the mod's own reference — the hooks are gone by now.
+    if (g_hExplorerFrame) {
+        FreeLibrary(g_hExplorerFrame);
+        g_hExplorerFrame = nullptr;
     }
 }
