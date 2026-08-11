@@ -1,3 +1,9 @@
+## 1.3.2 ([Aug 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f54228f470bf21b8c0d7d291a80fc4d7d802084c/mods/taskbar-start-button-position.wh.cpp))
+
+* Added an option to position the search menu in all cases. By default, the search menu is only repositioned when it's opened from the Start menu, not when it's opened in other ways, such as with the Win+S shortcut or the taskbar search icon.
+* Fixed an issue with the Start button moving to the right in some cases.
+* Improved compatibility with older Windows 11 versions.
+
 ## 1.3.1 ([Jun 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/85926525df30b8fca5c589f5bcb17b98839b4fc9/mods/taskbar-start-button-position.wh.cpp))
 
 * Improve search menu handling when the "Start menu on the left" option is enabled - search menu is no longer affected when opened outside of the start menu (Win+S or taskbar search button).
