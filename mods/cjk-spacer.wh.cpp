@@ -1869,6 +1869,10 @@ struct XamlDiagnosticsRetry {
     }
 };
 
+// Keep the full compatibility range for initial and event-driven attempts,
+// which can encounter an already-running or reused XAML core. Timed startup
+// retries only probe whether a core has become ready, so a smaller range avoids
+// repeating the expensive full scan while Explorer starts.
 constexpr int kInitialXamlDiagnosticsConnectionLimit = 10000;
 constexpr int kRetryXamlDiagnosticsConnectionLimit = 256;
 
@@ -2535,10 +2539,14 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
             ResetXamlDiagnosticsAttempts(retries);
             ++retryIndex;
             delayedRetry = true;
-        } else {
+        } else if (waitResult == WAIT_FAILED) {
             Wh_Log(L"XAML diagnostics worker wait failed: %u",
-                   waitResult == WAIT_FAILED ? GetLastError()
-                                             : ERROR_GEN_FAILURE);
+                   GetLastError());
+            break;
+        } else {
+            Wh_Log(L"XAML diagnostics worker returned unexpected wait "
+                   L"result: %u",
+                   waitResult);
             break;
         }
 
