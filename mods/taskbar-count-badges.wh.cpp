@@ -331,14 +331,14 @@ Settings g_settings;
 // Globals
 // -----------------------------------------------------------------------------
 
-bool g_isTaskbarProcess = false;
-
 std::atomic<bool> g_taskbarViewHooked = false;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_recountQueued = false;
 
-winrt::Windows::UI::Core::CoreDispatcher
+[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher
     g_taskbarDispatcher{nullptr};
+
+bool g_countsInitialized = false;
 
 struct TrackedButton {
     void* identity;
@@ -1257,29 +1257,29 @@ void ApplyBadgeVisualStyle(
         text.FontWeight(
             GetConfiguredFontWeight());
 
-    text.HorizontalAlignment(
-        HorizontalAlignment::Center);
+        text.HorizontalAlignment(
+            HorizontalAlignment::Center);
 
-    text.VerticalAlignment(
-        VerticalAlignment::Center);
+        text.VerticalAlignment(
+            VerticalAlignment::Center);
 
-    text.TextAlignment(
-        TextAlignment::Center);
+        text.TextAlignment(
+            TextAlignment::Center);
 
-    // Optical correction for the font baseline.
-    text.Margin(
-        Thickness{
-            0,
-            -2,
-            0,
-            0});
+        // Optical correction for the font baseline.
+        text.Margin(
+            Thickness{
+                0,
+                -2,
+                0,
+                0});
 
-    text.Text(
-        MakeNumberText(
-            count));
+        text.Text(
+            MakeNumberText(
+                count));
 
-    return;
-}
+        return;
+    }
 
     // ---------------------------------------------------------------------
     // VERTICAL DOTS
@@ -1829,14 +1829,7 @@ XamlRoot GetTaskbarXamlRoot(
         Wh_Log(
             L"Taskbar Count Badges: "
             L"couldn't detect TaskbarHost "
-            L"XAML offset");
-
-        if (hostShared[1]) {
-            g_RefCount_Decref(
-                hostShared[1]);
-        }
-
-        return nullptr;
+            L"XAML offset, using 0x48");
     }
 
 #elif defined(_M_ARM64)
@@ -2048,6 +2041,79 @@ struct IAppResolver_8 :
             void* unknown3) = 0;
 };
 
+IAppResolver_8* g_appResolver = nullptr;
+CO_MTA_USAGE_COOKIE g_appResolverMtaCookie{};
+
+bool EnsureAppResolver() {
+    if (g_appResolver) {
+        return true;
+    }
+
+    CO_MTA_USAGE_COOKIE cookie{};
+
+    bool mta =
+        SUCCEEDED(
+            CoIncrementMTAUsage(
+                &cookie));
+
+    IAppResolver_8* resolver =
+        nullptr;
+
+    HRESULT hr =
+        CoCreateInstance(
+            CLSID_StartMenuCacheAndAppResolver,
+            nullptr,
+            CLSCTX_INPROC_SERVER |
+                CLSCTX_INPROC_HANDLER,
+            IID_IAppResolver_8,
+            reinterpret_cast<void**>(
+                &resolver));
+
+    if (FAILED(
+            hr) ||
+        !resolver) {
+        Wh_Log(
+            L"Taskbar Count Badges: "
+            L"AppResolver failed "
+            L"hr=0x%08X",
+            static_cast<unsigned int>(
+                hr));
+
+        if (mta) {
+            CoDecrementMTAUsage(
+                cookie);
+        }
+
+        return false;
+    }
+
+    g_appResolver =
+        resolver;
+
+    if (mta) {
+        g_appResolverMtaCookie =
+            cookie;
+    }
+
+    return true;
+}
+
+void ReleaseAppResolver() {
+    if (g_appResolver) {
+        g_appResolver->Release();
+        g_appResolver =
+            nullptr;
+    }
+
+    if (g_appResolverMtaCookie) {
+        CoDecrementMTAUsage(
+            g_appResolverMtaCookie);
+
+        g_appResolverMtaCookie =
+            nullptr;
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Which HWNDs count
 // -----------------------------------------------------------------------------
@@ -2232,41 +2298,7 @@ bool BuildRealWindowCounts(
     std::unordered_set<
         std::wstring>* changedIds,
     bool initialBuild) {
-    CO_MTA_USAGE_COOKIE cookie{};
-
-    bool mta =
-        SUCCEEDED(
-            CoIncrementMTAUsage(
-                &cookie));
-
-    winrt::com_ptr<
-        IAppResolver_8>
-        resolver;
-
-    HRESULT hr =
-        CoCreateInstance(
-            CLSID_StartMenuCacheAndAppResolver,
-            nullptr,
-            CLSCTX_INPROC_SERVER |
-                CLSCTX_INPROC_HANDLER,
-            IID_IAppResolver_8,
-            resolver.put_void());
-
-    if (FAILED(
-            hr) ||
-        !resolver) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"AppResolver failed "
-            L"hr=0x%08X",
-            static_cast<unsigned int>(
-                hr));
-
-        if (mta) {
-            CoDecrementMTAUsage(
-                cookie);
-        }
-
+    if (!EnsureAppResolver()) {
         return false;
     }
 
@@ -2276,7 +2308,7 @@ bool BuildRealWindowCounts(
         newCounts;
 
     WindowEnumContext context{
-        resolver.get(),
+        g_appResolver,
         &newCounts,
     };
 
@@ -2285,18 +2317,13 @@ bool BuildRealWindowCounts(
         reinterpret_cast<LPARAM>(
             &context));
 
-    resolver =
-        nullptr;
-
-    if (mta) {
-        CoDecrementMTAUsage(
-            cookie);
-    }
-
     if (initialBuild) {
         g_appCounts =
             std::move(
                 newCounts);
+
+        g_countsInitialized =
+            true;
 
         size_t multiWindowApps =
             0;
@@ -2377,6 +2404,9 @@ bool BuildRealWindowCounts(
     g_appCounts =
         std::move(
             newCounts);
+
+    g_countsInitialized =
+        true;
 
     return true;
 }
@@ -2460,29 +2490,30 @@ void QueueRealWindowRecount() {
                 CoreDispatcherPriority::
                     Normal,
             []() {
+                try {
+                    if (!g_unloading) {
+                        std::unordered_set<
+                            std::wstring>
+                            changedIds;
+
+                        if (BuildRealWindowCounts(
+                                &changedIds,
+                                false) &&
+                            !changedIds.empty()) {
+                            RefreshChangedTrackedButtons(
+                                changedIds);
+                        }
+                    }
+                } catch (...) {
+                    Wh_Log(
+                        L"Taskbar Count Badges: "
+                        L"HWND recount failed");
+                }
+
+                // Keep the flag set until all enumeration and UI refresh work
+                // is complete so getter bursts collapse into one recount.
                 g_recountQueued =
                     false;
-
-                if (g_unloading) {
-                    return;
-                }
-
-                std::unordered_set<
-                    std::wstring>
-                    changedIds;
-
-                if (!BuildRealWindowCounts(
-                        &changedIds,
-                        false)) {
-                    return;
-                }
-
-                if (changedIds.empty()) {
-                    return;
-                }
-
-                RefreshChangedTrackedButtons(
-                    changedIds);
             });
     } catch (...) {
         g_recountQueued =
@@ -2544,6 +2575,12 @@ TaskListButton_UpdateVisualStates_Hook(
                 element.Dispatcher();
         }
 
+        if (!g_countsInitialized) {
+            BuildRealWindowCounts(
+                nullptr,
+                true);
+        }
+
         TrackTaskbarButton(
             element);
 
@@ -2597,33 +2634,19 @@ GetViewModelCount_Hook(
 // Apply settings live
 // -----------------------------------------------------------------------------
 
-void ApplySettingsToTaskbar() {
-    if (g_unloading ||
-        !g_taskbarDispatcher) {
+void WINAPI
+ApplySettingsOnTaskbarThread(
+    void*) {
+    if (g_unloading) {
         return;
     }
 
-    try {
-        g_taskbarDispatcher.RunAsync(
-            winrt::Windows::UI::Core::
-                CoreDispatcherPriority::
-                    Normal,
-            []() {
-                if (g_unloading) {
-                    return;
-                }
+    LoadSettings();
+    RefreshAllTrackedButtons();
 
-                RefreshAllTrackedButtons();
-
-                Wh_Log(
-                    L"Taskbar Count Badges: "
-                    L"settings applied");
-            });
-    } catch (...) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"failed to apply settings");
-    }
+    Wh_Log(
+        L"Taskbar Count Badges: "
+        L"settings applied");
 }
 
 // -----------------------------------------------------------------------------
@@ -2676,6 +2699,15 @@ void CleanupOnTaskbarThread() {
 
     g_trackedButtons.clear();
 
+    ReleaseAppResolver();
+
+    g_recountQueued =
+        false;
+
+    // Release the strong XAML/UI-thread object on its owning thread.
+    g_taskbarDispatcher =
+        nullptr;
+
     Wh_Log(
         L"Taskbar Count Badges: "
         L"cleanup complete");
@@ -2699,7 +2731,7 @@ bool CleanupSynchronously() {
                     winrt::Windows::UI::
                         Core::
                             CoreDispatcherPriority::
-                                High,
+                                Normal,
                     []() {
                         CleanupOnTaskbarThread();
                     });
@@ -2857,7 +2889,6 @@ LoadLibraryExW_Hook(
 
     if (module &&
         !g_unloading &&
-        g_isTaskbarProcess &&
         !g_taskbarViewHooked) {
         HMODULE taskbarView =
             GetTaskbarViewModuleHandle();
@@ -2886,23 +2917,15 @@ BOOL Wh_ModInit() {
     g_recountQueued =
         false;
 
-    LoadSettings();
+    g_countsInitialized =
+        false;
 
-    g_isTaskbarProcess =
-        FindCurrentProcessTaskbarWnd() !=
-        nullptr;
+    LoadSettings();
 
     Wh_Log(
         L"Taskbar Count Badges: "
-        L"init PID=%lu taskbar=%s",
-        GetCurrentProcessId(),
-        g_isTaskbarProcess
-            ? L"YES"
-            : L"NO");
-
-    if (!g_isTaskbarProcess) {
-        return TRUE;
-    }
+        L"init PID=%lu",
+        GetCurrentProcessId());
 
     if (!HookTaskbarDll()) {
         return FALSE;
@@ -2952,10 +2975,6 @@ void Wh_ModAfterInit() {
         L"Taskbar Count Badges: "
         L"after init");
 
-    if (!g_isTaskbarProcess) {
-        return;
-    }
-
     HWND taskbarWnd =
         FindCurrentProcessTaskbarWnd();
 
@@ -2974,13 +2993,23 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
+    HWND taskbarWnd =
+        FindCurrentProcessTaskbarWnd();
 
-    if (!g_isTaskbarProcess) {
+    if (!taskbarWnd) {
+        // No taskbar UI exists yet, so there are no concurrent UI reads.
+        LoadSettings();
         return;
     }
 
-    ApplySettingsToTaskbar();
+    if (!RunOnTaskbarThread(
+            taskbarWnd,
+            ApplySettingsOnTaskbarThread,
+            nullptr)) {
+        Wh_Log(
+            L"Taskbar Count Badges: "
+            L"failed to apply settings on taskbar thread");
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -3006,11 +3035,11 @@ void Wh_ModUninit() {
     g_recountQueued =
         false;
 
+    g_countsInitialized =
+        false;
+
     g_appCounts.clear();
     g_trackedButtons.clear();
-
-    g_taskbarDispatcher =
-        nullptr;
 
     Wh_Log(
         L"Taskbar Count Badges: "
