@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lwininet -ladvapi32 -lcrypt32 -lole32 -luuid -loleaut32 -lgdi32 -lcomctl32 -luser32 -lshell32
+// @compilerOptions -lwininet -ladvapi32 -lole32 -luuid -loleaut32 -lgdi32 -lcomctl32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -46,9 +46,6 @@
 - RemoveLegacyBrokenOption: true
   $name: Remove Legacy Broken Option Fix
   $description: When Windows Update is unavailable or disabled, the restored page shows a legacy red Check for updates for your PC box whose button cannot work, because the service is stopped. With this enabled, that broken legacy box is removed so only the Turn on automatic updating box remains, plus the blue settings link when the recreated interface is shown. Disable to keep the legacy box.
-- UseComSidebar: false
-  $name: Use COM sidebar (experimental)
-  $description: EXPERIMENTAL. Attempts to populate the Control Panel host navigation pane via the CControlPaneNavLinks and ControlPaneNavLinks property-bag mechanism instead of, or alongside, the DirectUI XML pane. The private interface IID is undocumented, so this is a diagnostic scaffold, enable it and read the Windhawk log to capture the real SID and GUIDs. Default off, cannot affect the shell when disabled.
 */
 // ==/WindhawkModSettings==
 
@@ -80,18 +77,30 @@ The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
 - Optional "Remove Legacy Broken Option Fix" that hides the broken legacy
   "Check for updates for your PC" box when Windows Update is unavailable, so
   only the "Turn on automatic updating" box (and the settings link) remains.
-- Restored classic "Important updates" selector on the "Change settings" page:
+- Read-only classic "Important updates" status on the "Change settings" page:
   the four classic options (install automatically / download / check / never)
-  are shown in every supported language, the current AUOptions value is read
-  from the registry and selecting an option writes it back.
+  are shown in every supported language and the current AUOptions value is read
+  from the registry. Changes must be made in the modern Windows Settings app.
 - Multilingual UI: English, Italian, Spanish, French, Turkish, Russian,
   Portuguese, Chinese, Polish, Dutch, or auto-detect.
+- **Native Control Panel sidebar.** The restored page now keeps the sidebar
+  owned by Windows and publishes the Windows Update commands directly into its
+  per-layout `ControlPanelNavLinks` object. No second Windhawk/DirectUI sidebar is
+  drawn, and the native pane is no longer patched or hidden.
 
 ## **Notes**
 
+- **The Control Panel entry appears immediately.** Registration is published
+  when the mod is enabled and is completely independent of the payload
+  download, so "Windows Update" is in Control Panel right away - on first run,
+  with no internet connection, and even if the download fails. Only the classic
+  page's own content needs the payload; if it is not ready yet, opening the item
+  shows a translated explanation and offers to open Windows Update in Settings.
+- After the first successful setup the verified payload is cached and reused
+  with no network access at all, so the page works fully offline afterwards.
 - Installing updates is still handled by the modern Settings app.
-- The "last checked" time is the moment this mod queried the system, so it can
-  differ slightly from the Settings app.
+- The "last checked" and "updates were installed" times come from Windows
+  Update's recorded registry timestamps when those values are available.
 - **Why the mod downloads a DLL:** The restored page is the real Windows 8.1
   Windows Update Control Panel UI (wucltux.dll), loaded privately from a
   verified copy obtained from the Microsoft Symbol Server. That DLL is a
@@ -101,12 +110,37 @@ The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
   The download is a one-time fetch (retried up to a few times), the file is
   pinned to a known SHA-256 and its PE machine type is validated before it is
   ever loaded, and it is kept as a private copy outside System32 and nothing is
-  installed to or replaced in the operating system.
+  installed to or replaced in the operating system. The Microsoft Symbol Server
+  URL is tied to this exact historical build; if Microsoft removes that file,
+  first-time setup will no longer work unless the verified payload was cached.
+
+## **Stability and safety design**
+
+- **Nothing is written to the real registry or to system files.** Every key and
+  value is served from an in-memory virtualization layer, and each synthetic
+  handle is backed by a genuine per-process *volatile* key that is deleted on
+  unload, so no trace remains.
+- **Setup never blocks the shell.** The download runs on a background thread,
+  is serialized across processes with a named mutex, is bounded per call, per
+  attempt and by an overall deadline, and aborts immediately on shutdown, so a
+  slow or captive-portal network can never hang Explorer or delay sign-out.
+- **Every failure is contained.** The setup worker, the language rebuild worker
+  and both mod entry points have hard exception boundaries, so no failure can
+  reach `std::terminate` and take Explorer down. Any step that fails degrades to
+  a working fallback instead of an error.
+- **Payload integrity is pinned.** The download goes to a private temporary file
+  that is size-, PE-machine- and SHA-256-checked against a pinned digest before
+  it is atomically moved into place and loaded from outside System32.
+- **Clean teardown.** Disabling the mod hides the entry immediately, stops the
+  workers, and removes the files it created. A file still mapped by another
+  process is left alone and retried on a later load or unload - never
+  force-deleted and never scheduled machine-wide.
 
 **Credits**
 
 - **Yvor** - Testing on Windows 10 21H2.
 - **Cips** - Testing on Windows 11 25H2.
+- **Allison** - Suggestions for the implementation of the native Control Panel navigation links.
 
 If you encounter issues, please report them to the author of the mod.
 */
@@ -126,6 +160,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <winnls.h>
 #include <winsvc.h>
 #include <shlobj.h>
+#include <servprov.h>
 #include <shellapi.h>
 #include <commctrl.h>
 #include <objidl.h>
@@ -147,342 +182,11 @@ If you encounter issues, please report them to the author of the mod.
 #include <vector>
 #include <windhawk_utils.h>
 
-// Forward declaration for ToLower (defined later near 6819) — needed for early IsControlPanelApplet cache
-static std::wstring ToLower(std::wstring text);
+// Per-call diagnostic tracing is intentionally omitted from release builds so
+// the ShellExecute, COM, registry and DirectUI hook paths remain lightweight.
 
-// =============================================================================
-// Windows Update API (WUA) Headers and Implementation
-// =============================================================================
-#include <wuapi.h>
-#include <wuerror.h>
-#include <comdef.h>
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunknown-pragmas"
-#pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "uuid.lib")
-#pragma comment(lib, "oleaut32.lib")
-#pragma clang diagnostic pop
-
-// -----------------------------------------------------------------------------
-// WUA Data Structures
-// -----------------------------------------------------------------------------
-struct WuaUpdateInfo {
-    std::wstring title;
-    std::wstring kb;
-    std::wstring description;
-    std::wstring msrcSeverity;
-    ULONGLONG maxDownloadSize = 0;
-    bool mandatory = false;
-    bool isImportant = false;
-    bool isInstalled = false;
-    bool isOptional = false;
-};
-
-struct WuaSearchResult {
-    HRESULT hr = E_FAIL;
-    std::vector<WuaUpdateInfo> updates;
-    std::wstring lastChecked;
-    int importantCount = 0;
-    int optionalCount = 0;
-};
-
-struct WuaHistoryEntry {
-    std::wstring title;
-    DATE date = 0;
-    OperationResultCode resultCode = orcNotStarted;
-    int errorCode = 0;
-};
-
-// -----------------------------------------------------------------------------
-// WUA Helper Functions
-// -----------------------------------------------------------------------------
-static std::wstring BstrToWString(BSTR value) {
-    return value ? std::wstring(value, SysStringLen(value)) : L"";
-}
-
-static std::wstring GetKbList(IUpdate* update) {
-    IStringCollection* kbIds = nullptr;
-    if (FAILED(update->get_KBArticleIDs(&kbIds)) || !kbIds) {
-        return L"";
-    }
-    LONG count = 0;
-    kbIds->get_Count(&count);
-    std::wstring result;
-    for (LONG i = 0; i < count; ++i) {
-        BSTR kb = nullptr;
-        if (SUCCEEDED(kbIds->get_Item(i, &kb)) && kb) {
-            if (!result.empty()) {
-                result += L", ";
-            }
-            result += L"KB";
-            result += BstrToWString(kb);
-            SysFreeString(kb);
-        }
-    }
-    kbIds->Release();
-    return result;
-}
-
-static std::wstring GetMsrcSeverity(IUpdate* update) {
-    BSTR severity = nullptr;
-    if (SUCCEEDED(update->get_MsrcSeverity(&severity)) && severity) {
-        std::wstring result = BstrToWString(severity);
-        SysFreeString(severity);
-        return result;
-    }
-    return L"";
-}
-
-static bool IsUpdateImportant(IUpdate* update) {
-    ICategoryCollection* categories = nullptr;
-    if (FAILED(update->get_Categories(&categories)) || !categories) {
-        return false;
-    }
-    
-    LONG count = 0;
-    categories->get_Count(&count);
-    bool isImportant = false;
-    
-    for (LONG i = 0; i < count && !isImportant; ++i) {
-        ICategory* category = nullptr;
-        if (SUCCEEDED(categories->get_Item(i, &category)) && category) {
-            BSTR name = nullptr;
-            if (SUCCEEDED(category->get_Name(&name)) && name) {
-                std::wstring categoryName = BstrToWString(name);
-                // Check for common important update category patterns
-                if (categoryName.find(L"Security") != std::wstring::npos ||
-                    categoryName.find(L"Critical") != std::wstring::npos ||
-                    categoryName.find(L"Important") != std::wstring::npos ||
-                    categoryName.find(L"Update") != std::wstring::npos) {
-                    isImportant = true;
-                }
-                SysFreeString(name);
-            }
-            category->Release();
-        }
-    }
-    categories->Release();
-    return isImportant;
-}
-
-// -----------------------------------------------------------------------------
-// Search for Available Updates using WUA
-// -----------------------------------------------------------------------------
-// Conservative RAII guard for a short-lived COM apartment on this thread.
-// CoInitializeEx can return S_FALSE / RPC_E_CHANGED_MODE when the thread is
-// already in an apartment — in that case we must NOT call CoUninitialize. The
-// guard tracks that and uninitializes only when it actually initialized.
-class ComGuard {
-public:
-    ComGuard() {
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        mustUninit_ = SUCCEEDED(hr);
-    }
-    ComGuard(const ComGuard&) = delete;
-    ComGuard& operator=(const ComGuard&) = delete;
-    ~ComGuard() {
-        if (mustUninit_) CoUninitialize();
-    }
-private:
-    bool mustUninit_ = false;
-};
-
-[[maybe_unused]] static WuaSearchResult SearchAvailableUpdates() {
-    WuaSearchResult result;
-
-    ComGuard comGuard; // RAII: uninitializes COM on scope exit (only if we initialized it)
-    
-    IUpdateSession* session = nullptr;
-    IUpdateSearcher* searcher = nullptr;
-    ISearchResult* searchResult = nullptr;
-    
-    result.hr = CoCreateInstance(
-        __uuidof(UpdateSession),
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        __uuidof(IUpdateSession),
-        reinterpret_cast<void**>(&session));
-    
-    if (FAILED(result.hr)) {
-        return result;
-    }
-    
-    // Set client application ID for tracking
-    BSTR clientId = SysAllocString(L"Windhawk Windows Update Control Panel");
-    session->put_ClientApplicationID(clientId);
-    SysFreeString(clientId);
-    
-    result.hr = session->CreateUpdateSearcher(&searcher);
-    if (FAILED(result.hr)) {
-        session->Release();
-        return result;
-    }
-    
-    // Search for updates that are not installed and not hidden
-    BSTR criteria = SysAllocString(L"IsInstalled=0 and IsHidden=0");
-    result.hr = searcher->Search(criteria, &searchResult);
-    SysFreeString(criteria);
-    
-    if (FAILED(result.hr)) {
-        searcher->Release();
-        session->Release();
-        return result;
-    }
-    
-    // Note: ISearchResult doesn't have get_LastSearchTime in the standard API
-    // The last check time would need to be obtained from registry or another source
-    
-    IUpdateCollection* collection = nullptr;
-    result.hr = searchResult->get_Updates(&collection);
-    
-    if (SUCCEEDED(result.hr) && collection) {
-        LONG count = 0;
-        collection->get_Count(&count);
-        
-        for (LONG i = 0; i < count; ++i) {
-            IUpdate* update = nullptr;
-            if (FAILED(collection->get_Item(i, &update)) || !update) {
-                continue;
-            }
-            
-            WuaUpdateInfo info;
-            
-            // Get title
-            BSTR title = nullptr;
-            if (SUCCEEDED(update->get_Title(&title)) && title) {
-                info.title = BstrToWString(title);
-                SysFreeString(title);
-            }
-            
-            // Get KB article IDs
-            info.kb = GetKbList(update);
-            
-            // Get MSRC severity (for important updates)
-            info.msrcSeverity = GetMsrcSeverity(update);
-            
-            // Get download size (returns DECIMAL, convert to bytes)
-            DECIMAL sizeDec;
-            sizeDec.Lo64 = 0;
-            if (SUCCEEDED(update->get_MaxDownloadSize(&sizeDec))) {
-                info.maxDownloadSize = sizeDec.Lo64;
-            }
-            
-            // Check if mandatory
-            VARIANT_BOOL mandatory = VARIANT_FALSE;
-            update->get_IsMandatory(&mandatory);
-            info.mandatory = mandatory == VARIANT_TRUE;
-            
-            // Determine if important or optional
-            info.isImportant = IsUpdateImportant(update);
-            if (!info.isImportant) {
-                info.isOptional = true;
-                result.optionalCount++;
-            } else {
-                result.importantCount++;
-            }
-            
-            // Get description
-            BSTR description = nullptr;
-            if (SUCCEEDED(update->get_Description(&description)) && description) {
-                info.description = BstrToWString(description);
-                SysFreeString(description);
-            }
-            
-            result.updates.push_back(std::move(info));
-            update->Release();
-        }
-        collection->Release();
-    }
-    
-    searchResult->Release();
-    searcher->Release();
-    session->Release();
-    
-    return result;
-}
-
-// -----------------------------------------------------------------------------
-// Get Update History using WUA
-// -----------------------------------------------------------------------------
-static std::vector<WuaHistoryEntry> GetUpdateHistory(int maxEntries = 100) {
-    std::vector<WuaHistoryEntry> history;
-    
-    ComGuard comGuard; // RAII: uninitializes COM on scope exit (only if we initialized it)
-
-    IUpdateSession* session = nullptr;
-    IUpdateSearcher* searcher = nullptr;
-    IUpdateHistoryEntryCollection* entries = nullptr;
-    
-    HRESULT hr = CoCreateInstance(
-        __uuidof(UpdateSession),
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        __uuidof(IUpdateSession),
-        reinterpret_cast<void**>(&session));
-    
-    if (FAILED(hr)) {
-        return history;
-    }
-    
-    hr = session->CreateUpdateSearcher(&searcher);
-    if (FAILED(hr)) {
-        session->Release();
-        return history;
-    }
-    
-    LONG total = 0;
-    hr = searcher->GetTotalHistoryCount(&total);
-    
-    if (SUCCEEDED(hr) && total > 0) {
-        LONG requestCount = total > maxEntries ? maxEntries : total;
-        hr = searcher->QueryHistory(0, requestCount, &entries);
-        
-        if (SUCCEEDED(hr) && entries) {
-            LONG count = 0;
-            entries->get_Count(&count);
-            
-            for (LONG i = 0; i < count; ++i) {
-                IUpdateHistoryEntry* entry = nullptr;
-                if (FAILED(entries->get_Item(i, &entry)) || !entry) {
-                    continue;
-                }
-                
-                WuaHistoryEntry hist;
-                
-                BSTR title = nullptr;
-                if (SUCCEEDED(entry->get_Title(&title)) && title) {
-                    hist.title = BstrToWString(title);
-                    SysFreeString(title);
-                }
-                
-                entry->get_Date(&hist.date);
-                entry->get_ResultCode(&hist.resultCode);
-                
-                // Get error code if failed
-                if (hist.resultCode == orcFailed) {
-                    LONG error = 0;
-                    entry->get_HResult(&error);
-                    hist.errorCode = error;
-                }
-                
-                history.push_back(std::move(hist));
-                entry->Release();
-            }
-            entries->Release();
-        }
-    }
-    
-    searcher->Release();
-    session->Release();
-    
-    return history;
-}
-
-// -----------------------------------------------------------------------------
-// Open Installed Updates Page
-// -----------------------------------------------------------------------------
-[[maybe_unused]] static void OpenInstalledUpdates(HWND hwnd) {
+// Opens the modern Installed Updates page used by the restored history links.
+static void OpenInstalledUpdates(HWND hwnd) {
     ShellExecuteW(
         hwnd,
         L"open",
@@ -492,76 +196,13 @@ static std::vector<WuaHistoryEntry> GetUpdateHistory(int maxEntries = 100) {
         SW_SHOWNORMAL);
 }
 
-// -----------------------------------------------------------------------------
-// Format file size for display
-// -----------------------------------------------------------------------------
-[[maybe_unused]] static std::wstring FormatFileSize(ULONGLONG bytes) {
-    if (bytes == 0) return L"0 B";
-    
-    const double kb = static_cast<double>(bytes) / 1024.0;
-    const double mb = kb / 1024.0;
-    const double gb = mb / 1024.0;
-    
-    wchar_t buffer[64];
-    if (gb >= 1.0) {
-        swprintf_s(buffer, L"%.1f GB", gb);
-    } else if (mb >= 1.0) {
-        swprintf_s(buffer, L"%.1f MB", mb);
-    } else if (kb >= 1.0) {
-        swprintf_s(buffer, L"%.1f KB", kb);
-    } else {
-        swprintf_s(buffer, L"%llu B", bytes);
-    }
-    return std::wstring(buffer);
-}
-
-// -----------------------------------------------------------------------------
-// Show Update Search Results in a Message Box (for testing/debugging)
-// -----------------------------------------------------------------------------
-[[maybe_unused]] static void ShowUpdateHistory(HWND hwnd) {
-    std::vector<WuaHistoryEntry> history = GetUpdateHistory(50);
-    
-    if (history.empty()) {
-        MessageBoxW(hwnd, L"No update history found.", L"Windows Update History", 
-                    MB_ICONINFORMATION | MB_OK);
-        return;
-    }
-    
-    std::wstring text = L"Recent Update History:\n\n";
-    
-    for (const WuaHistoryEntry& entry : history) {
-        SYSTEMTIME st{};
-        VariantTimeToSystemTime(entry.date, &st);
-        
-        wchar_t dateBuf[64];
-        swprintf_s(dateBuf, L"%04u-%02u-%02u", st.wYear, st.wMonth, st.wDay);
-        
-        text += dateBuf;
-        text += L" - ";
-        
-        // Result code description
-        switch (entry.resultCode) {
-            case orcNotStarted: text += L"Not started"; break;
-            case orcInProgress: text += L"In progress"; break;
-            case orcSucceeded: text += L"Succeeded"; break;
-            case orcSucceededWithErrors: text += L"Succeeded with errors"; break;
-            case orcFailed: 
-                text += L"Failed";
-                if (entry.errorCode != 0) {
-                    wchar_t errBuf[32];
-                    swprintf_s(errBuf, L" (0x%08X)", entry.errorCode);
-                    text += errBuf;
-                }
-                break;
-            case orcAborted: text += L"Aborted"; break;
-            default: text += L"Unknown"; break;
-        }
-        
-        text += L"\n  " + entry.title + L"\n\n";
-    }
-    
-    MessageBoxW(hwnd, text.c_str(), L"Windows Update History", 
-                MB_ICONINFORMATION | MB_OK);
+// Opens the same classic Security and Maintenance page represented by
+// {BB64F8A7-BEE7-4E1A-AB8D-7D8273F7FDB6}, but through control.exe. Navigating
+// directly to that legacy CLSID in the current Explorer process crashes the
+// Windows 10 19044 shell after the page is created.
+static void OpenSecurityAndMaintenance(HWND hwnd) {
+    ShellExecuteW(hwnd, L"open", L"control.exe",
+                  L"/name Microsoft.ActionCenter", nullptr, SW_SHOWNORMAL);
 }
 
 // -----------------------------------------------------------------------------
@@ -579,6 +220,42 @@ static const DWORD kMinDllSize = 65536;
 static const DWORD kDownloadTimeoutMs = 20000;
 static const int kMaxDownloadAttempts = 3;
 static const DWORD kRetryDelayMs = 3000;
+// Hard ceiling across ALL attempts. Each individual WinInet call is already
+// bounded, but a captive portal that trickles bytes can keep a single transfer
+// technically "alive" indefinitely; this bounds the whole setup.
+static const ULONGLONG kOverallSetupDeadlineMs = 120000;
+// Refuse an implausibly large response instead of filling the user's disk.
+static const ULONGLONG kMaxDownloadBytes = 32ull * 1024 * 1024;
+
+// The private Windows 8.1 payload is AMD64-only. Windhawk can still inject an
+// ARM64 build into the native shell on ARM64 Windows, so reject that process
+// before installing hooks, starting workers, or touching the network.
+static bool IsRunningAsAmd64() {
+#if defined(_M_ARM64) || defined(__aarch64__)
+    return false;
+#else
+    using IsWow64Process2_t = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
+    USHORT processMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+    USHORT nativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (kernel32) {
+        auto isWow64Process2 = reinterpret_cast<IsWow64Process2_t>(
+            GetProcAddress(kernel32, "IsWow64Process2"));
+        if (isWow64Process2 &&
+            isWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine)) {
+            const USHORT actualMachine = processMachine == IMAGE_FILE_MACHINE_UNKNOWN
+                                             ? nativeMachine
+                                             : processMachine;
+            return actualMachine == IMAGE_FILE_MACHINE_AMD64;
+        }
+    }
+#if defined(_M_X64) || defined(__x86_64__)
+    return true;
+#else
+    return false;
+#endif
+#endif
+}
 
 // Windows Update's classic Control Panel namespace item.
 static const wchar_t* kAppletClsid = L"{36eef7db-88ad-4e81-ad49-0e313f0c35f8}";
@@ -588,7 +265,16 @@ static const wchar_t* kApplicationName = L"Microsoft.WindowsUpdate";
 // XMLFILE resource 100 names this COM element provider. It is required to
 // construct the legacy DirectUI page; omitting it produces "Unable to load page".
 static const wchar_t* kElementProviderClsid = L"{cfbc05bc-1b9e-4693-a49c-4e7181d69e0a}";
-static const DWORD kShellFolderAttributes = 0xA0000000;
+// The INF ships 0xa0000000 (SFGAO_FOLDER | SFGAO_HASSUBFOLDER), which was
+// enough on Windows 7 where wucltux.dll was a real, fully registered system
+// component. On Windows 10/11 the Control Panel host additionally requires
+// SFGAO_BROWSABLE (0x08000000) to navigate the item in place; without it the
+// shell resolves the CLSID, reads every value (as the log confirms) and then
+// refuses to browse it, surfacing the generic "no app associated" error.
+// SFGAO_DROPTARGET|SFGAO_CANLINK (0x000001a0) match what the Performance
+// Information and Tools Restorer uses for the same shdocvw-hosted layout
+// folder, so the item behaves like a normal Control Panel applet.
+static const DWORD kShellFolderAttributes = 0xA80001A0;
 static const DWORD kInitResourceId = 100;
 
 static const GUID kAppletFolderGuid = {0x36eef7db, 0x88ad, 0x4e81,
@@ -598,7 +284,16 @@ static const GUID kElementProviderGuid = {0xcfbc05bc, 0x1b9e, 0x4693,
 static const IID IID_IClassFactory_GUID = {0x00000001, 0x0000, 0x0000,
                                            {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
 
+// Payload (wucltux.dll) verified + loaded. Gates ONLY the values that require
+// the DLL to exist (InitPropertyBag\ResourceDLL and the element provider's
+// InProcServer32).
 static std::atomic<bool> g_verified{false};
+// Control Panel registration is live. Set at the end of Wh_ModInit, before the
+// background setup worker has done anything, so the "Windows Update" item shows
+// up in Control Panel immediately and stays visible even when the machine is
+// offline or the download fails. Keeping this separate from g_verified is what
+// makes the entry independent of the network.
+static std::atomic<bool> g_registrationReady{false};
 static std::atomic<HMODULE> g_module{nullptr};
 static std::atomic<const std::wstring*> g_dllPath{nullptr};
 static std::atomic<bool> g_stopping{false};
@@ -610,10 +305,6 @@ static std::wstring g_resourcePath;
 static std::atomic<HMODULE> g_resourceModule{nullptr};
 [[clang::no_destroy]] static std::optional<std::thread> g_setupThread;
 
-// The language the currently-loaded embedded MUI resource module was built for.
-// When the user changes the language, the module must be rebuilt and reloaded so
-// the classic page actually shows the new strings (it is built once at startup).
-static std::wstring g_builtLanguage = L"en";
 static std::mutex g_rebuildMutex;
 [[clang::no_destroy]] static std::optional<std::thread> g_rebuildThread;
 
@@ -628,7 +319,7 @@ static bool IsWindows81Skin() {
 
 // Whether to show the "updates available" (amber) banner when Windows reports
 // pending available updates. Controlled only by the "ShowAvailableUpdates"
-// setting (default off); no global hotkey is registered.
+// setting (enabled by default); no global hotkey is registered.
 static std::atomic<bool> g_showAvailableUpdates{false};
 
 // Optional, conservative bridge to the modern Settings app. When enabled, only
@@ -643,44 +334,12 @@ static std::atomic<bool> g_linkSystemSettingsText{false};
 // the "RemoveLegacyBrokenOption" setting ("Remove Legacy Broken Option Fix").
 static std::atomic<bool> g_removeLegacyBrokenOption{true};
 
-// EXPERIMENTAL: opt-in attempt to populate the Control Panel host's nav pane
-// via the CControlPaneNavLinks property-bag mechanism. See the "UseComSidebar"
-// setting. Off by default; never touches the shell when disabled.
-static std::atomic<bool> g_useComSidebar{false};
-// True while the top-level WU page XML was most recently patched. Used by the
-// experimental COM sidebar hook to know when to inspect the host.
-static std::atomic<bool> g_wuTopLevelActive{false};
-// Set only while the WU element provider is being constructed. The common
-// CPNav XML template is shared by every Control Panel applet, so static links
-// must be scoped to this provider or they appear on every page.
-static std::atomic<bool> g_wuNavTemplateScope{false};
-// Deliberately thread-local: the shared Control Panel navigation template is
-// used by unrelated applets. Only the thread that successfully created the
-// WU element provider may modify it. If Windows parses the template on another
-// thread, we leave it untouched rather than risking links on other pages.
-static thread_local bool g_tlsWuNavTemplateScope = false;
-// True when the current navigation on this thread is for the WU applet.
-// Used to dynamically hide/show the injected nav links in the *cached* pane
-// that is reused across navigations without re-parsing the template.
-static thread_local bool g_tlsIsWUActive = false;
-// Cache of Control Panel applet CLSIDs for IsControlPanelApplet()
-static std::unordered_set<std::wstring> g_controlPanelApplets;
-static std::once_flag g_controlPanelAppletsInit;
-static void EnsureControlPanelAppletCache();
-// Returns true if clsid is a registered Control Panel applet (appears under
-// ControlPanel\Namespace or has System.ControlPanel.Category). Used to
-// distinguish applet navigations from random COM creations (e.g. IUpdateSession).
-static bool IsControlPanelApplet(REFCLSID clsid);
-static void HideWuNavElementsIfNeeded();
+// Windows owns the one visible Control Panel pane. Its links are patched
+// in-place when wucltux publishes the per-layout ControlPanelNavLinks object
+// (see PSPropertyBag_WriteUnknownHook below).
 
 
-// Debug/preview flag: when set, the restored page renders the "pending
-// updates" interface (orange strip, "Pending restart", shield icon) even when
-// Windows reports no pending update. This is a developer-only diagnostic switch.
-// It is intentionally compile-time only: shipped builds do not expose a setting
-// which suggests that a diagnostic state can be enabled at runtime.
-static constexpr bool kWuDebugForcePendingEnabled = false;
-static std::atomic<bool> g_debugForcePending{false};
+
 
 // Currently selected language code (default "en"). Declared early because the
 // embedded string table below resolves strings per language at runtime. Loaded
@@ -690,11 +349,16 @@ static std::atomic<bool> g_debugForcePending{false};
 enum class Language : int { en, it, es, fr, tr, ru, pt, zh, pl, nl };
 static std::atomic<Language> g_language{Language::en};
 static Language LanguageFromCode(const std::wstring& value) {
-    if (value == L"it") return Language::it; if (value == L"es") return Language::es;
-    if (value == L"fr") return Language::fr; if (value == L"tr") return Language::tr;
-    if (value == L"ru") return Language::ru; if (value == L"pt") return Language::pt;
-    if (value == L"zh") return Language::zh; if (value == L"pl") return Language::pl;
-    if (value == L"nl") return Language::nl; return Language::en;
+    if (value == L"it") return Language::it;
+    if (value == L"es") return Language::es;
+    if (value == L"fr") return Language::fr;
+    if (value == L"tr") return Language::tr;
+    if (value == L"ru") return Language::ru;
+    if (value == L"pt") return Language::pt;
+    if (value == L"zh") return Language::zh;
+    if (value == L"pl") return Language::pl;
+    if (value == L"nl") return Language::nl;
+    return Language::en;
 }
 static const wchar_t* LanguageCode() {
     static constexpr const wchar_t* kCodes[] = { L"en", L"it", L"es", L"fr", L"tr", L"ru", L"pt", L"zh", L"pl", L"nl" };
@@ -707,13 +371,13 @@ static bool LanguageIs(PCWSTR code) { return wcscmp(LanguageCode(), code) == 0; 
 // Controlled by the "ShowServiceNotice" setting (default on).
 static std::atomic<bool> g_showServiceNotice{true};
 
-// Cached "last check" timestamp: the moment the mod last queried the system for
-// available updates (see LastCheckForUpdatesText). Kept as a formatted string.
+// Cached Windows Update "last successful detection" timestamp, formatted for
+// the classic page (see LastCheckForUpdatesText).
 static std::wstring g_lastQueryTimeText;
 static std::mutex g_lastQueryTimeMutex;
 
 // Cached, background-gathered status values so the Control Panel UI thread never
-// has to do blocking SCM/WUA work during page rendering (see GatherBackgroundStatus).
+// has to do blocking service work during page rendering (see GatherBackgroundStatus).
 // They are computed once on the setup thread and read from the render path.
 static std::atomic<bool> g_cachedWuAvailable{false};
 static std::atomic<bool> g_cachedWuServiceProbed{false};
@@ -1136,13 +800,16 @@ static bool IsValidPayload(const std::wstring& path) {
 }
 
 
-static std::wstring StoreDir() {
-    wchar_t path[32768] = {};
-    size_t length = Wh_GetModStoragePath(path, ARRAYSIZE(path));
-    if (length == 0 || length >= ARRAYSIZE(path)) {
-        Wh_Log(L"Windows Update Restorer: Wh_GetModStoragePath failed");
-        return {};
-    }
+static const std::wstring& StoreDir() {
+    static const std::wstring path = [] {
+        std::vector<wchar_t> buffer(32768);
+        size_t length = Wh_GetModStoragePath(buffer.data(), buffer.size());
+        if (length == 0 || length >= buffer.size()) {
+            Wh_Log(L"Windows Update Restorer: Wh_GetModStoragePath failed");
+            return std::wstring();
+        }
+        return std::wstring(buffer.data(), length);
+    }();
     return path;
 }
 
@@ -1216,6 +883,7 @@ static bool DownloadWithTimeout(const std::wstring& destination) {
             BYTE buffer[65536];
             DWORD available = 0, read = 0, written = 0;
             const ULONGLONG started = GetTickCount64();
+            ULONGLONG total = 0;
             ok = true;
             for (;;) {
                 if (g_stopping.load() || GetTickCount64() - started > kDownloadTimeoutMs ||
@@ -1225,6 +893,14 @@ static bool DownloadWithTimeout(const std::wstring& destination) {
                 if (!InternetReadFile(url, buffer, available, &read) || !read ||
                     !WriteFile(file, buffer, read, &written, nullptr) || written != read) {
                     ok = false; break;
+                }
+                total += read;
+                if (total > kMaxDownloadBytes) {
+                    // Wrong/hostile endpoint: stop rather than keep writing. The
+                    // SHA-256 check would reject it anyway.
+                    Wh_Log(L"Windows Update Restorer: download exceeded the size limit; aborting");
+                    ok = false;
+                    break;
                 }
             }
             CloseHandle(file);
@@ -1239,21 +915,48 @@ static bool EnsurePayload(std::wstring& outPath) {
     std::wstring dir = StoreDir();
     if (dir.empty()) return false;
     const std::wstring finalPath = dir + L"\\" + kDllName;
+    // Offline-first: a previously verified copy is reused with no network access
+    // at all, so after the first successful run the page keeps working with no
+    // internet connection.
     if (GetFileAttributesW(finalPath.c_str()) != INVALID_FILE_ATTRIBUTES &&
         IsValidPayload(finalPath)) {
+        Wh_Log(L"Windows Update Restorer: reusing the cached verified payload (no download needed)");
         outPath = finalPath;
         return true;
     }
-    const std::wstring temporaryPath = finalPath + L".tmp";
+    if (g_stopping.load()) return false;
+    // Per-process unique temp name: two processes that both slip past the setup
+    // mutex (e.g. its 60s wait timed out) must never write the same temp file.
+    const std::wstring temporaryPath =
+        finalPath + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+    const ULONGLONG setupStarted = GetTickCount64();
     for (int attempt = 1; attempt <= kMaxDownloadAttempts && !g_stopping.load(); ++attempt) {
+        if (GetTickCount64() - setupStarted > kOverallSetupDeadlineMs) {
+            Wh_Log(L"Windows Update Restorer: overall setup deadline reached; giving up for this session");
+            break;
+        }
         DeleteFileW(temporaryPath.c_str());
         Wh_Log(L"Downloading verified Windows 8.1 wucltux.dll, attempt %d/%d", attempt,
                kMaxDownloadAttempts);
-        if (DownloadWithTimeout(temporaryPath) && IsValidPayload(temporaryPath) &&
-            MoveFileExW(temporaryPath.c_str(), finalPath.c_str(),
-                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            outPath = finalPath;
-            return true;
+        if (DownloadWithTimeout(temporaryPath) && IsValidPayload(temporaryPath)) {
+            // Another process may have completed and loaded the same payload
+            // while we were downloading; replacing a mapped DLL fails. Treat an
+            // already-valid destination as success rather than an error.
+            if (MoveFileExW(temporaryPath.c_str(), finalPath.c_str(),
+                            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+                outPath = finalPath;
+                Wh_Log(L"Windows Update Restorer: payload downloaded and verified (SHA-256 match)");
+                return true;
+            }
+            const DWORD moveError = GetLastError();
+            if (IsValidPayload(finalPath)) {
+                Wh_Log(L"Windows Update Restorer: another process installed the verified payload first (err=%u); reusing it",
+                       moveError);
+                DeleteFileW(temporaryPath.c_str());
+                outPath = finalPath;
+                return true;
+            }
+            Wh_Log(L"Windows Update Restorer: could not install the verified payload (err=%u)", moveError);
         }
         DeleteFileW(temporaryPath.c_str());
         if (attempt < kMaxDownloadAttempts && g_stopEvent &&
@@ -1847,7 +1550,6 @@ static void RebuildEmbeddedMuiForLanguage() {
         g_resourceModule.store(nullptr);
     }
     EmbeddedMuiResourceModule();
-    g_builtLanguage = CurrentLanguage();
     Wh_Log(L"Windows Update Restorer: embedded MUI module rebuilt for language %s", LanguageCode());
 }
 
@@ -3855,8 +3557,12 @@ static const char kWuDisabledShieldPngBase64[] =
 
 
 static int Base64Digit(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A'; if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52; if (c == '+') return 62; if (c == '/') return 63; return -1;
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
 }
 static std::vector<BYTE> DecodeBase64Icon(const char* source) {
     std::vector<BYTE> out; int value = 0, bits = -8;
@@ -3868,21 +3574,7 @@ struct EmbeddedIconHeader { WORD reserved, type, count; };
 struct EmbeddedIconEntry { BYTE width, height, colors, reserved; WORD planes, bitCount; DWORD bytes, offset; };
 #pragma pack(pop)
 static std::mutex g_statusIconMutex;
-static HICON g_legacyWarningShield = nullptr;
-static HICON GetLegacyWarningShieldIcon() {
-    std::lock_guard<std::mutex> lock(g_statusIconMutex);
-    if (g_legacyWarningShield) return g_legacyWarningShield;
-    std::vector<BYTE> ico = DecodeBase64Icon(kLegacyWarningShieldIcoBase64);
-    if (ico.size() < sizeof(EmbeddedIconHeader) + sizeof(EmbeddedIconEntry)) return nullptr;
-    const auto* header = reinterpret_cast<const EmbeddedIconHeader*>(ico.data());
-    if (header->type != 1 || !header->count) return nullptr;
-    const auto* entry = reinterpret_cast<const EmbeddedIconEntry*>(ico.data() + sizeof(EmbeddedIconHeader));
-    if (entry->offset > ico.size() || entry->bytes > ico.size() - entry->offset) return nullptr;
-    g_legacyWarningShield = CreateIconFromResourceEx(ico.data() + entry->offset, entry->bytes, TRUE, 0x00030000, 48, 48, LR_DEFAULTCOLOR);
-    return g_legacyWarningShield;
-}
-
-static HICON g_updatesInstalledIcon = nullptr;
+static std::unordered_map<ULONGLONG, HICON> g_statusIconCache;
 
 // -----------------------------------------------------------------------------
 // GDI+ HighQualityBicubic icon rendering (mirrors win7-network-flyout-recreation)
@@ -4006,27 +3698,43 @@ static HICON CreateIconFromBase64PngBicubic(const char* base64Str, int targetWid
     return hIcon;
 }
 
-static HICON GetUpdatesInstalledIcon() {
-    std::lock_guard<std::mutex> lock(g_statusIconMutex);
-    if (g_updatesInstalledIcon) return g_updatesInstalledIcon;
-    g_updatesInstalledIcon = CreateIconFromBase64PngBicubic(kUpdatesInstalledPngBase64, 48, 48);
-    return g_updatesInstalledIcon;
-}
+static HICON GetStatusIcon(UINT id, int requestedWidth, int requestedHeight) {
+    const int width = requestedWidth > 0 ? requestedWidth : GetSystemMetrics(SM_CXICON);
+    const int height = requestedHeight > 0 ? requestedHeight : GetSystemMetrics(SM_CYICON);
+    const ULONGLONG cacheKey = (static_cast<ULONGLONG>(id) << 48) |
+                               (static_cast<ULONGLONG>(width & 0xFFFFFF) << 24) |
+                               static_cast<ULONGLONG>(height & 0xFFFFFF);
 
-static HICON g_windows81UpdateStatusIcon = nullptr;
-static HICON GetWindows81UpdateStatusIcon() {
     std::lock_guard<std::mutex> lock(g_statusIconMutex);
-    if (g_windows81UpdateStatusIcon) return g_windows81UpdateStatusIcon;
-    g_windows81UpdateStatusIcon = CreateIconFromBase64PngBicubic(kWindows81UpdateStatusPngBase64, 48, 48);
-    return g_windows81UpdateStatusIcon;
-}
+    if (auto it = g_statusIconCache.find(cacheKey); it != g_statusIconCache.end())
+        return it->second;
 
-static HICON g_wuDisabledShieldIcon = nullptr;
-static HICON GetWuDisabledShieldIcon() {
-    std::lock_guard<std::mutex> lock(g_statusIconMutex);
-    if (g_wuDisabledShieldIcon) return g_wuDisabledShieldIcon;
-    g_wuDisabledShieldIcon = CreateIconFromBase64PngBicubic(kWuDisabledShieldPngBase64, 48, 48);
-    return g_wuDisabledShieldIcon;
+    HICON icon = nullptr;
+    if (id == kLegacyWarningShieldIconId) {
+        std::vector<BYTE> ico = DecodeBase64Icon(kLegacyWarningShieldIcoBase64);
+        if (ico.size() >= sizeof(EmbeddedIconHeader) + sizeof(EmbeddedIconEntry)) {
+            const auto* header = reinterpret_cast<const EmbeddedIconHeader*>(ico.data());
+            const auto* entry = reinterpret_cast<const EmbeddedIconEntry*>(
+                ico.data() + sizeof(EmbeddedIconHeader));
+            if (header->type == 1 && header->count && entry->offset <= ico.size() &&
+                entry->bytes <= ico.size() - entry->offset) {
+                icon = CreateIconFromResourceEx(ico.data() + entry->offset, entry->bytes,
+                                                TRUE, 0x00030000, width, height,
+                                                LR_DEFAULTCOLOR);
+            }
+        }
+    } else {
+        const char* png = id == kUpdatesInstalledIconId
+                              ? kUpdatesInstalledPngBase64
+                              : id == kWindows81UpdateStatusIconId
+                                    ? kWindows81UpdateStatusPngBase64
+                                    : id == kWuDisabledShieldIconId
+                                          ? kWuDisabledShieldPngBase64
+                                          : nullptr;
+        if (png) icon = CreateIconFromBase64PngBicubic(png, width, height);
+    }
+    if (icon) g_statusIconCache.emplace(cacheKey, icon);
+    return icon;
 }
 
 using LoadImageW_t = decltype(&LoadImageW);
@@ -4039,14 +3747,9 @@ static HANDLE WINAPI LoadImageWHookForLegacyWarningIcon(HINSTANCE instance, LPCW
     if (instance != GetModuleHandleW(L"shell32.dll")) return LoadImageWOriginalForLegacyWarningIcon(instance, name, type, cx, cy, flags);
     if (type == IMAGE_ICON && IS_INTRESOURCE(name)) {
         const UINT id = static_cast<UINT>(reinterpret_cast<UINT_PTR>(name));
-        if (id == kLegacyWarningShieldIconId) {
-            if (HICON icon = GetLegacyWarningShieldIcon()) return CopyIcon(icon);
-        } else if (id == kUpdatesInstalledIconId) {
-            if (HICON icon = GetUpdatesInstalledIcon()) return CopyIcon(icon);
-        } else if (id == kWindows81UpdateStatusIconId) {
-            if (HICON icon = GetWindows81UpdateStatusIcon()) return CopyIcon(icon);
-        } else if (id == kWuDisabledShieldIconId) {
-            if (HICON icon = GetWuDisabledShieldIcon()) return CopyIcon(icon);
+        if (id == kLegacyWarningShieldIconId || id == kUpdatesInstalledIconId ||
+            id == kWindows81UpdateStatusIconId || id == kWuDisabledShieldIconId) {
+            if (HICON icon = GetStatusIcon(id, cx, cy)) return CopyIcon(icon);
         }
     }
     return LoadImageWOriginalForLegacyWarningIcon(instance, name, type, cx, cy, flags);
@@ -4107,29 +3810,6 @@ static std::wstring LoadDirectUiResourceXml(HMODULE module, PCWSTR name, PCWSTR 
     return xml;
 }
 
-// Finds the closing tag for the first <element>. DirectUI's XML uses nested
-// elements, so inserting before the final tag keeps the added group inside the
-// original page instead of creating a second root.
-[[maybe_unused]] static bool FindRootElementEnd(const std::wstring& xml, size_t& end) {
-    const size_t root = xml.find(L"<element");
-    if (root == std::wstring::npos) return false;
-    int depth = 0;
-    for (size_t i = root; i < xml.size();) {
-        if (xml.compare(i, 8, L"<element") == 0) {
-            const size_t gt = xml.find(L'>', i);
-            if (gt == std::wstring::npos) return false;
-            if (gt == i || xml[gt - 1] != L'/') ++depth;
-            i = gt + 1;
-        } else if (xml.compare(i, 10, L"</element>") == 0) {
-            if (--depth == 0) { end = i; return true; }
-            i += 10;
-        } else {
-            ++i;
-        }
-    }
-    return false;
-}
-
 // -----------------------------------------------------------------------------
 // Multilingual service message (10 languages + English fallback)
 // -----------------------------------------------------------------------------
@@ -4170,10 +3850,27 @@ static std::wstring DetectSystemLanguage() {
 // Loads the message language from the mod settings. The "auto" value (or an
 // empty one) triggers automatic system-language detection. English is the final
 // fallback if nothing matches.
+// Removes task-XML files left by builds that predate native ControlPanelNavLinks.
+static void CleanupControlPanelTasksXmlFile();
+
+static void LogCurrentSettings() {
+    Wh_Log(L"WUR: SETTINGS: Language=%s Skin=%s ShowServiceNotice=%d ShowAvailable=%d LinkSettings=%d RemoveLegacy=%d NativeNavLinks=1",
+        LanguageCode(),
+        IsWindows81Skin() ? L"81" : L"7",
+        (int)g_showServiceNotice.load(),
+        (int)g_showAvailableUpdates.load(),
+        (int)g_linkSystemSettingsText.load(),
+        (int)g_removeLegacyBrokenOption.load()
+    );
+    // Remove a stale file left by an older build. This version does not publish
+    // System.Software.TasksFileUrl: it uses the page's native per-layout links.
+    CleanupControlPanelTasksXmlFile();
+}
+
 static void LoadLanguageSetting() {
-    PCWSTR lang = Wh_GetStringSetting(L"Language");
-    std::wstring value = (lang && *lang) ? lang : L"auto";
-    if (lang) Wh_FreeStringSetting(lang);
+    auto languageSetting = WindhawkUtils::StringSetting::make(L"Language");
+    PCWSTR lang = languageSetting.get();
+    std::wstring value = *lang ? lang : L"auto";
     for (auto& c : value) c = towlower(c);
     if (value == L"auto" || value.empty()) {
         std::wstring detected = DetectSystemLanguage();
@@ -4182,9 +3879,9 @@ static void LoadLanguageSetting() {
         g_language.store(LanguageFromCode(value), std::memory_order_release);
     }
 
-    PCWSTR skin = Wh_GetStringSetting(L"UpdatePageSkin");
-    std::wstring skinValue = (skin && *skin) ? skin : L"windows7";
-    if (skin) Wh_FreeStringSetting(skin);
+    auto skinSetting = WindhawkUtils::StringSetting::make(L"UpdatePageSkin");
+    PCWSTR skin = skinSetting.get();
+    std::wstring skinValue = *skin ? skin : L"windows7";
     for (auto& c : skinValue) c = towlower(c);
     g_updatePageSkin.store(
         (skinValue == L"windows81" || skinValue == L"windows8.1")
@@ -4196,12 +3893,9 @@ static void LoadLanguageSetting() {
     g_showAvailableUpdates.store(Wh_GetIntSetting(L"ShowAvailableUpdates") != 0);
     g_linkSystemSettingsText.store(Wh_GetIntSetting(L"LinkSystemSettingsText") != 0);
     g_removeLegacyBrokenOption.store(Wh_GetIntSetting(L"RemoveLegacyBrokenOption") != 0);
-    g_useComSidebar.store(Wh_GetIntSetting(L"UseComSidebar") != 0);
-    // Debug: force the "pending updates" interface even without a real pending update.
-    if constexpr (kWuDebugForcePendingEnabled)
-        g_debugForcePending.store(true);
-    else
-        g_debugForcePending.store(false);
+    // One sidebar only: leave the Windows-owned pane visible and don't publish
+    // the obsolete TasksFileUrl/private-DirectUI alternatives.
+    LogCurrentSettings();
 }
 
 // Escapes XML special characters so a translation string is safe to embed in the
@@ -4322,7 +4016,7 @@ static std::wstring BuildChangeWindowsUpdateSettingsLinkXml() {
 // settings"). Shown only when the recreated hub cannot be built (Windows Update
 // service unavailable / AU not configured) and only the red warning box remains
 // on the page, so the user still gets a one-click path to the classic settings
-// page (shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\pageSettings).
+// page (shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\\pageSettings).
 //
 // Additionally, there is this explorer shell:::{1138506a_b949_46a7_b6c0_ee26499fdeaf} which I don't know what was used for
 // The link is NOT attached to the native moduleAUNotConfigured element: wucltux
@@ -4365,7 +4059,7 @@ static const wchar_t* WuOptionText(DWORD opt) {
 
 static std::wstring BuildOpenWindowsUpdateSettingsLinkXml() {
     // Opens the classic settings child page via the shell URI directly
-    // (shell:::{36EEF7DB-...}\pageSettings). We deliberately do NOT launch
+    // (shell:::{36EEF7DB-...}\\pageSettings). We deliberately do NOT launch
     // "%SystemRoot%\explorer.exe" with shellexecuteparams: that spawns a NEW
     // explorer.exe process (which reloads Windhawk mods and then hands the
     // command over), which is unstable inside the shell and crashes explorer.
@@ -4459,26 +4153,6 @@ static bool IsWindowsUpdatePageXml(const std::wstring& xml) {
            xml.find(L"resstr(1153)") != std::wstring::npos;
 }
 
-static void LogWuNavigationAnchors(const std::wstring& xml) {
-    // DirectUI has no supported FindDescendent/Clone API exported to mods.
-    // Before attempting another XML mutation, record the real anchors present
-    // in this exact wucltux resource instead of guessing atom names.
-    const wchar_t* markers[] = {
-        L"AllControlPanelItems", L"All Control Panel Items",
-        L"atom(AllControlPanelItems)", L"atom(cp_nav_allitems)",
-        L"atom(NavAllItems)", L"atom(VistaNavigationPane)",
-        L"atom(NavPanel)", L"ControlPanelLink", L"TaskNavLink",
-        L"CPNavPanel", L"SeeAlso"
-    };
-    Wh_Log(L"WUR: navigation-anchor scan: xmlLen=%zu", xml.size());
-    for (const wchar_t* marker : markers) {
-        size_t count = 0;
-        for (size_t at = 0; (at = xml.find(marker, at)) != std::wstring::npos; at += wcslen(marker))
-            ++count;
-        if (count) Wh_Log(L"WUR: navigation anchor '%s' count=%zu", marker, count);
-    }
-}
-
 static bool FindElementEnd(const std::wstring& xml, size_t start, size_t& end) {
     int depth = 0;
     for (size_t pos = start; pos < xml.size();) {
@@ -4503,9 +4177,8 @@ static bool FindElementEnd(const std::wstring& xml, size_t start, size_t& end) {
 // empty box. The atom cannot be removed (the page would fail to load), so we
 // collapse it to a zero-size element (atom stays resolvable, same trick as the
 // hub modules) and render our own list of the four classic options instead,
-// reading the current AUOptions value from the registry. Clicking an option
-// writes AUOptions through a private "wurestorer:auoptions=N" URI handled by
-// the ShellExecuteExW/ShellExecuteW hooks below.
+// reading the current AUOptions value from the registry. The selector is
+// intentionally read-only; modern Windows Settings owns policy changes.
 //
 // AUOptions values (Windows Update Agent / classic Control Panel):
 //   4 = install updates automatically (recommended)          -> resstr(334)
@@ -4553,12 +4226,24 @@ static DWORD ReadAuOptionsValue() {
     return auOptions;
 }
 
-static bool WriteAuOptionsValue(DWORD value) {
-    // The restored page is intentionally read-only. A shell extension must not
-    // create or modify machine-wide Windows Update/Group Policy settings.
-    Wh_Log(L"Windows Update Restorer: AUOptions change (%lu) was not applied; open Settings to change update policy.", value);
-    return false;
+static const wchar_t* SelectReadOnlySettingsNote() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"These settings are read-only here. Use Windows Settings to make changes." },
+        { L"it", L"Queste impostazioni sono di sola lettura. Usa Impostazioni di Windows per modificarle." },
+        { L"es", L"Esta configuración es de solo lectura. Use Configuración de Windows para cambiarla." },
+        { L"fr", L"Ces paramètres sont en lecture seule. Utilisez les Paramètres Windows pour les modifier." },
+        { L"tr", L"Bu ayarlar burada salt okunurdur. Değişiklik yapmak için Windows Ayarları'nı kullanın." },
+        { L"ru", L"Здесь эти параметры доступны только для чтения. Изменяйте их в Параметрах Windows." },
+        { L"pt", L"Estas configurações são somente leitura. Use as Configurações do Windows para alterá-las." },
+        { L"zh", L"这些设置在此处为只读。请使用 Windows 设置进行更改。" },
+        { L"pl", L"Te ustawienia są tutaj tylko do odczytu. Zmień je w Ustawieniach systemu Windows." },
+        { L"nl", L"Deze instellingen zijn hier alleen-lezen. Wijzig ze via Windows-instellingen." },
+    };
+    auto it = kTexts.find(CurrentLanguage());
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
 }
+
 static const wchar_t* SelectUpdateIntroText() {
     static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
         { L"en", L"Windows Update keeps your PC secure and reliable by installing the latest updates." },
@@ -4577,18 +4262,16 @@ static const wchar_t* SelectUpdateIntroText() {
     return it->second;
 }
 
-// Renders the introduction above the native ComboBox control
-// FIX: originale wucltux.dll (UIFILE 125) posiziona la combobox INLINE dentro al flowlayout delle icone (layoutpos="left", width="10rp",
-// margin="rect(0,3rp,0,10rp)", classe aupsp_auComboBox). Il placeholder precedente era un elemento "top" a larghezza piena (28rp, 0,8rp,0,12rp)
-// posizionato SOPRA la riga delle icone, non inline: risultava spostato (~90px in basso con fallback 180,240) e la dropdown ereditava coordinate errate
-// (altezza dropdown = altezza collapsed = 28rp -> lista troncata a 1 voce). Qui si mantiene solo il testo introduttivo come riga "top"; il placeholder
-// vero viene iniettato INLINE al posto del <combobox> originale (vedi PatchSettingsPageXml), usando identica posizione originale ma con width corretta (285rp)
-// per contenere le 4 opzioni lunghe e altezza dropdown separata.
+// Renders the introduction above the native ComboBox. UIFILE 125 places the
+// combobox inline in the icon flow row. Keep that structure, widen the control
+// for translated options, and add the explanatory text as a separate top row.
 static std::wstring BuildUpdateIntroTextXml() {
     return
         L"<element layoutpos=\"top\" layout=\"flowlayout(0,0,0,2)\" margin=\"rect(0,0,0,6rp)\">"
         L"<element id=\"atom(auUpdateIntroText)\" sheet=\"wuappstyle\" class=\"cp_content_text\" content=\""
         + XmlEscape(SelectUpdateIntroText()) +
+        L"\"/><element layoutpos=\"top\" sheet=\"wuappstyle\" class=\"cp_content_text\" "
+        L"content=\"" + XmlEscape(SelectReadOnlySettingsNote()) +
         L"\"/></element>";
 }
 
@@ -4596,25 +4279,18 @@ static std::wstring BuildUpdateIntroTextXml() {
 // =============================================================================
 // Native Win32 Drop-down ComboBox for Settings Page ("pageSettings")
 // =============================================================================
-#define IDC_NATIVE_AU_COMBO 0x7720
-
 static HWND g_hwndDirectUiParent = nullptr;
 static std::atomic<bool> g_isSettingsPageActive{false};
 
-typedef void* DirectUI_Element;
-typedef DirectUI_Element (*DUI_HWNDElement_GetElement_t)(HWND);
-typedef DirectUI_Element (*DUI_Element_FindDescendent_t)(DirectUI_Element, unsigned short);
-typedef HRESULT (*DUI_Element_GetBounds_t)(DirectUI_Element, RECT*);
-
 static void RefreshWuPage(HWND host);
-static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+static LRESULT CALLBACK SettingsDirectUiSubclassProc(
+    HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
 
 // Subclass APIs and timers are thread-affine. This message is synchronously
 // delivered by the owner thread before an any-thread subclass removal.
 static const UINT g_wmUiTeardown = RegisterWindowMessageW(L"Windhawk.WUControlPanelRestorer.UiTeardown");
 static std::mutex g_subclassWindowsMutex;
 static std::vector<HWND> g_settingsSubclassWindows;
-static std::vector<HWND> g_sidebarSubclassWindows;
 
 // =============================================================================
 // NATIVE DIRECTUI COMBOBOX REPAIR (No Win32 Overlay)
@@ -4624,282 +4300,58 @@ typedef ATOM (WINAPI *DirectUI_StrToID_t)(const wchar_t* str);
 typedef void* (*DirectUI_FindDescendent_t)(void* element, ATOM atom);
 typedef HRESULT (*DirectUI_Combobox_AddString_t)(void* combobox, const wchar_t* str);
 typedef HRESULT (*DirectUI_Combobox_SetSelection_t)(void* combobox, int index);
-typedef int (*DirectUI_Combobox_GetSelection_t)(void* combobox);
 typedef HRESULT (*DirectUI_Element_SetEnabled_t)(void* element, bool enabled);
-typedef void* (*DirectUI_Element_GetParent_t)(void* element);
-// DirectUI::Element::GetID() -> the element's atom (same space as StrToID).
-// Try both const and non-const x64 manglings; only one is actually exported.
-typedef unsigned int (*DirectUI_Element_GetID_t)(void* element);
 
 static DirectUI_StrToID_t pStrToID = nullptr;
 static DirectUI_FindDescendent_t pFindDescendent = nullptr;
 static DirectUI_Combobox_AddString_t pAddString = nullptr;
 static DirectUI_Combobox_SetSelection_t pSetSelection = nullptr;
-static DirectUI_Combobox_GetSelection_t pGetSelection = nullptr;
 static DirectUI_Element_SetEnabled_t pSetEnabled = nullptr;
-static DirectUI_Element_GetParent_t pGetParent = nullptr;
-static DirectUI_Element_GetID_t pGetID = nullptr;
 
 static bool g_nativeComboPopulated = false;
-static DWORD g_lastAuOptions = 4;
 static void* g_lastComboPtr = nullptr;
 
-// -----------------------------------------------------------------------------
-// DirectUI SetEnabled hook - keeps the settings combobox enabled.
-// -----------------------------------------------------------------------------
-// The "Important updates" combobox (atom auOptionSelectorCombobox) renders
-// disabled because wucltux.dll's code-behind calls Element::SetEnabled(combo,
-// false) based on its stale Win8.1 view of whether the AU option may change.
-// Our 200 ms timer calling SetEnabled(combo, true) only races it - and worse,
-// the pointer lookup (GetWindowLongPtrW(hwnd,0) + FindDescendent) can fail
-// entirely on some builds, so the timer never even reaches the control.
-//
-// Fix: hook Element::SetEnabled itself and identify the combobox by its ATOM
-// via Element::GetID() - this needs no root/pointer lookup at all, so it works
-// even when FindDescendent never resolves the element. The hook is installed
-// early (Wh_ModInit, before any page XML is parsed) so it catches the disable
-// both at parse time and during wucltux's runtime state passes. As a bonus,
-// when the combo pointer IS known we also protect its ancestors/children.
-static UINT g_comboAtom = 0; // StrToID(L"auOptionSelectorCombobox"), resolved once
-static std::atomic<void*> g_protectedCombo{nullptr};
-
-using DirectUI_SetEnabledHook_t = HRESULT(WU_DUI_THISCALL*)(void* element, bool enabled);
-static DirectUI_SetEnabledHook_t SetEnabledOriginal = nullptr;
-
-// True when disabling 'el' would grey out the protected combobox: that is when
-// el is the combobox itself (matched by atom, pointer-independently) or, when
-// the pointer is known, an ancestor or descendant of it.
-static bool IsProtectedComboElement(void* el) {
-    if (!el) return false;
-    // Primary: match the combobox by its atom. Works without ever finding the
-    // element pointer, so it does not depend on GetWindowLongPtrW/FindDescendent.
-    if (g_comboAtom && pGetID && pGetID(el) == g_comboAtom) return true;
-    // Secondary (pointer known): protect ancestors and descendants too.
-    void* combo = g_protectedCombo.load();
-    if (!combo || !pGetParent) return false;
-    if (el == combo) return true;
-    void* cur = el;
-    for (int i = 0; i < 64 && cur; ++i) { cur = pGetParent(cur); if (cur == combo) return true; } // descendant
-    cur = combo;
-    for (int i = 0; i < 64 && cur; ++i) { cur = pGetParent(cur); if (cur == el) return true; }    // ancestor
-    return false;
-}
-
-static HRESULT WU_DUI_THISCALL SetEnabledHook(void* element, bool enabled) {
-    if (!enabled) {
-        // DIAGNOSTIC: log the first few SetEnabled(false) calls with the
-        // element's GetID so we can see whether the combobox is disabled via
-        // SetEnabled at all, and whether GetID identifies it. Throttled.
-        static std::atomic<int> s_disableLogged{0};
-        int n = s_disableLogged.fetch_add(1);
-        if (n < 20) {
-            unsigned int id = (pGetID && element) ? pGetID(element) : 0;
-            Wh_Log(L"Windows Update Restorer: SetEnabled(false) el=%p id=%u comboAtom=%u getID=%hs protected=%d",
-                   element, id, g_comboAtom, pGetID ? "ok" : "MISSING",
-                   (int)IsProtectedComboElement(element));
-        }
-    }
-    if (!enabled && IsProtectedComboElement(element)) {
-        // Swallow the disable: keep the combobox enabled.
-        return SetEnabledOriginal(element, true);
-    }
-    return SetEnabledOriginal(element, enabled);
-}
-
-// Resolves the dui70 exports we need and the combobox atom. Idempotent.
+// Resolve only the DirectUI exports required to populate the read-only selector.
 static void EnsureDui70ComboboxExports() {
-    if (!pStrToID) {
-        HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
-        if (!dui70) dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (dui70) {
-            pStrToID = (DirectUI_StrToID_t)GetProcAddress(dui70, "StrToID");
-            pFindDescendent = (DirectUI_FindDescendent_t)GetProcAddress(dui70, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z");
-            pAddString = (DirectUI_Combobox_AddString_t)GetProcAddress(dui70, "?AddString@Combobox@DirectUI@@QEAAHPEBG@Z");
-            pSetSelection = (DirectUI_Combobox_SetSelection_t)GetProcAddress(dui70, "?SetSelection@Combobox@DirectUI@@QEAAJH@Z");
-            pGetSelection = (DirectUI_Combobox_GetSelection_t)GetProcAddress(dui70, "?GetSelection@Combobox@DirectUI@@QEAAHXZ");
-            pSetEnabled = (DirectUI_Element_SetEnabled_t)GetProcAddress(dui70, "?SetEnabled@Element@DirectUI@@QEAAJ_N@Z");
-            pGetParent = (DirectUI_Element_GetParent_t)GetProcAddress(dui70, "?GetParent@Element@DirectUI@@QEAAPEAV12@XZ");
-            // GetID: try several manglings (const/non-const x UINT/int return).
-            // At the x64 ABI level all of them return the value in EAX, so the
-            // unsigned int typedef below reads it correctly regardless of which
-            // is the true signature - we just need the right symbol string.
-            const char* getIdNames[] = {
-                "?GetID@Element@DirectUI@@QEBAIXZ",  // UINT, const
-                "?GetID@Element@DirectUI@@QEAAIXZ",  // UINT, non-const
-                "?GetID@Element@DirectUI@@QEBAHXZ",  // int, const
-                "?GetID@Element@DirectUI@@QEAAHXZ",  // int, non-const
-            };
-            for (const char* n : getIdNames) {
-                pGetID = (DirectUI_Element_GetID_t)GetProcAddress(dui70, n);
-                if (pGetID) break;
-            }
-        }
-    }
-    if (!g_comboAtom && pStrToID) {
-        g_comboAtom = (UINT)pStrToID(L"auOptionSelectorCombobox");
-    }
-}
-
-// Installs the Element::SetEnabled hook exactly once (SetFunctionHook must not
-// be called twice). Called early from Wh_ModInit and again lazily from the
-// settings page timer so it is in place before the page XML is parsed.
-static void EnsureSetEnabledHookInstalled() {
-    EnsureDui70ComboboxExports();
-    static bool s_hookInstalled = false;
-    if (!s_hookInstalled && pSetEnabled) {
-        if (WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<DirectUI_SetEnabledHook_t>(pSetEnabled),
-                SetEnabledHook, &SetEnabledOriginal)) {
-            s_hookInstalled = true;
-            Wh_Log(L"Windows Update Restorer: hooked DirectUI Element::SetEnabled (combo atom=%u, GetID=%hs)",
-                   g_comboAtom, pGetID ? "ok" : "MISSING");
-        }
-    }
-}
-
-// ------------------------------------------------------------------
-// DirectUI Element::SetVisible hook — hides WU nav links on non-WU pages
-// The CPNav pane (DirectUIHWND) is cached per Explorer window and reused
-// without re-parsing the XML when navigating between applets. The XML
-// one-shot gate above prevents *future* parses from being contaminated,
-// but it cannot clean an already-cached pane that was patched for WU.
-// This hook dynamically hides the injected containers when the current
-// thread is not on WU, using the same thread-local IsWUActive gate.
-// ------------------------------------------------------------------
-typedef HRESULT (*DirectUI_Element_SetVisible_t)(void* element, bool visible);
-static DirectUI_Element_SetVisible_t pSetVisible = nullptr;
-using DirectUI_SetVisibleHook_t = HRESULT(WU_DUI_THISCALL*)(void* element, bool visible);
-static DirectUI_SetVisibleHook_t SetVisibleOriginal = nullptr;
-static UINT g_wuTaskAtom = 0;
-static UINT g_wuSeeAlsoAtom = 0;
-static std::atomic<void*> g_lastWuTaskElement{nullptr};
-static std::atomic<void*> g_lastWuSeeAlsoElement{nullptr};
-
-static HRESULT WU_DUI_THISCALL SetVisibleHook(void* element, bool visible) {
-    if (visible && element && pGetID) {
-        if (!g_wuTaskAtom && pStrToID) {
-            g_wuTaskAtom = (UINT)pStrToID(L"windhawk_wu_template_links");
-            g_wuSeeAlsoAtom = (UINT)pStrToID(L"windhawk_wu_template_seealso");
-        }
-        unsigned int id = pGetID(element);
-        if (id == g_wuTaskAtom || id == g_wuSeeAlsoAtom) {
-            // Remember the live element pointers for proactive hide
-            if (id == g_wuTaskAtom) g_lastWuTaskElement.store(element);
-            else g_lastWuSeeAlsoElement.store(element);
-            // Only allow visible when this thread is on WU
-            if (!g_tlsIsWUActive || !g_tlsWuNavTemplateScope) {
-                // Check global IsWUActive too? No, thread-local is correct for DirectUI thread
-                // If we are not on WU, force hidden
-                // But allow the initial creation (when WU is active) to show
-                // The flag g_tlsIsWUActive is set in CoCreateInstanceHook for WU
-                // For non-WU it is false, so we hide
-                if (!g_tlsIsWUActive) {
-                    // Don't log too verbosely — only first time per navigation
-                    static thread_local bool s_loggedHide = false;
-                    if (!s_loggedHide) {
-                        Wh_Log(L"WUR: SetVisible hiding WU nav element id=%u (IsWUActive=0, tlsScope=%d)", id, (int)g_tlsWuNavTemplateScope);
-                        s_loggedHide = true;
-                    }
-                    return SetVisibleOriginal(element, false);
-                }
-            } else {
-                // On WU, reset the hide log flag
-            }
-        }
-    }
-    // Also handle the case where WU element is being hidden/shown due to navigation
-    // Reset hide log when navigating to WU
-    if (g_tlsIsWUActive) {
-        // reset for next non-WU navigation
-    }
-    return SetVisibleOriginal(element, visible);
-}
-
-static void HideWuNavElementsIfNeeded() {
-    // Proactively hide the cached pane elements if we have pointers and we are no longer on WU.
-    // This is called synchronously when navigating to a non-WU applet, before the pane is redrawn.
-    void* taskEl = g_lastWuTaskElement.load();
-    void* seeEl = g_lastWuSeeAlsoElement.load();
-    if (taskEl && pSetVisible && SetVisibleOriginal) {
-        // Only hide if we are not on WU
-        if (!g_tlsIsWUActive) {
-            SetVisibleOriginal(taskEl, false);
-            Wh_Log(L"WUR: proactively hid cached WU task nav element %p", taskEl);
-        }
-    }
-    if (seeEl && pSetVisible && SetVisibleOriginal) {
-        if (!g_tlsIsWUActive) {
-            SetVisibleOriginal(seeEl, false);
-            Wh_Log(L"WUR: proactively hid cached WU seealso nav element %p", seeEl);
-        }
-    }
-}
-
-static void EnsureSetVisibleHookInstalled() {
-    EnsureDui70ComboboxExports();
-    static bool s_hookInstalled = false;
-    if (s_hookInstalled) return;
-    if (!pSetVisible) {
-        HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
-        if (!dui70) dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (dui70) {
-            // Try several manglings for SetVisible (bool param)
-            const char* names[] = {
-                "?SetVisible@Element@DirectUI@@QEAAJ_N@Z",
-                "?SetVisible@Element@DirectUI@@QAAJ_N@Z",
-                "?SetVisible@Element@DirectUI@@QEAAJX_N@Z",
-            };
-            for (auto n : names) {
-                pSetVisible = (DirectUI_Element_SetVisible_t)GetProcAddress(dui70, n);
-                if (pSetVisible) break;
-            }
-        }
-    }
-    if (pSetVisible) {
-        if (WindhawkUtils::SetFunctionHook(
-                reinterpret_cast<DirectUI_SetVisibleHook_t>(pSetVisible),
-                SetVisibleHook, &SetVisibleOriginal)) {
-            s_hookInstalled = true;
-            Wh_Log(L"WUR: hooked DirectUI Element::SetVisible (taskAtom=%u seeAlsoAtom=%u)", g_wuTaskAtom, g_wuSeeAlsoAtom);
-        }
-    } else {
-        Wh_Log(L"WUR: DirectUI Element::SetVisible not found — cached pane will rely on XML gate only");
-    }
+    if (pStrToID) return;
+    HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
+    if (!dui70) dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!dui70) return;
+    pStrToID = reinterpret_cast<DirectUI_StrToID_t>(GetProcAddress(dui70, "StrToID"));
+    pFindDescendent = reinterpret_cast<DirectUI_FindDescendent_t>(
+        GetProcAddress(dui70, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z"));
+    pAddString = reinterpret_cast<DirectUI_Combobox_AddString_t>(
+        GetProcAddress(dui70, "?AddString@Combobox@DirectUI@@QEAAHPEBG@Z"));
+    pSetSelection = reinterpret_cast<DirectUI_Combobox_SetSelection_t>(
+        GetProcAddress(dui70, "?SetSelection@Combobox@DirectUI@@QEAAJH@Z"));
+    pSetEnabled = reinterpret_cast<DirectUI_Element_SetEnabled_t>(
+        GetProcAddress(dui70, "?SetEnabled@Element@DirectUI@@QEAAJ_N@Z"));
 }
 
 static void InitDirectUIExports() {
     EnsureDui70ComboboxExports();
-    EnsureSetEnabledHookInstalled();
-    EnsureSetVisibleHookInstalled();
 }
 
 static void DestroySettingsCombobox() {
     g_isSettingsPageActive.store(false);
     std::vector<HWND> windows;
     { std::lock_guard lock(g_subclassWindowsMutex); windows = g_settingsSubclassWindows; }
-    // Do not hold the lock: SendMessage executes the teardown in the window's
-    // owner thread, where both KillTimer and RemoveWindowSubclass are valid.
+    // Ask each owner thread to stop its timer, then remove the wrapper with
+    // Windhawk's cross-thread-safe helper.
     for (HWND hwnd : windows) if (IsWindow(hwnd)) {
         SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, SettingsDirectUiSubclassProc);
     }
     { std::lock_guard lock(g_subclassWindowsMutex); g_settingsSubclassWindows.clear(); }
     g_hwndDirectUiParent = nullptr;
-    g_nativeComboPopulated = false; g_lastComboPtr = nullptr; g_protectedCombo.store(nullptr);
+    g_nativeComboPopulated = false; g_lastComboPtr = nullptr;
 }
 
-static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (!g_isSettingsPageActive.load()) {
+static LRESULT CALLBACK SettingsDirectUiSubclassProc(
+    HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg == g_wmUiTeardown || uMsg == WM_NCDESTROY) {
         KillTimer(hwnd, 889);
-        RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
-        if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
-        return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-    }
-
-    // RegisterWindowMessage returns a run-time value, so it cannot be a case
-    // label. Handle it before the switch instead.
-    if (uMsg == g_wmUiTeardown) {
-        KillTimer(hwnd, 889);
-        RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
         {
             std::lock_guard lock(g_subclassWindowsMutex);
             auto it = std::remove(g_settingsSubclassWindows.begin(),
@@ -4909,156 +4361,108 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(HWND hwnd, UINT uMsg, WPARA
         if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
         g_nativeComboPopulated = false;
         g_lastComboPtr = nullptr;
-        g_protectedCombo.store(nullptr);
-        return 0;
+        if (uMsg == g_wmUiTeardown) return 0;
     }
 
-    switch (uMsg) {
-        case WM_TIMER: {
-            if (wParam == 889) {
-                InitDirectUIExports();
-                // DIAGNOSTIC (one-shot): report what the pointer-based lookup
-                // sees, so we know whether root/atom/GetID are resolving.
-                static bool s_diagOnce = false;
-                if (!s_diagOnce) {
-                    s_diagOnce = true;
-                    void* r = (void*)GetWindowLongPtrW(hwnd, 0);
-                    ATOM a = pStrToID ? pStrToID(L"auOptionSelectorCombobox") : 0;
-                    Wh_Log(L"Windows Update Restorer: combo diag hwnd=%p root=%p atom=%u getID=%hs findDesc=%hs",
-                           hwnd, r, (unsigned)a, pGetID ? "ok" : "MISSING",
-                           pFindDescendent ? "ok" : "MISSING");
+    if (g_isSettingsPageActive.load() && uMsg == WM_TIMER && wParam == 889) {
+        InitDirectUIExports();
+        if (pStrToID && pFindDescendent && pAddString && pSetSelection) {
+            void* root = reinterpret_cast<void*>(GetWindowLongPtrW(hwnd, 0));
+            ATOM atom = pStrToID(L"auOptionSelectorCombobox");
+            void* combo = root && atom ? pFindDescendent(root, atom) : nullptr;
+            if (combo) {
+                if (g_lastComboPtr != combo) {
+                    g_lastComboPtr = combo;
+                    g_nativeComboPopulated = false;
                 }
-                if (pStrToID && pFindDescendent && pAddString && pSetSelection && pGetSelection) {
-                    void* root = (void*)GetWindowLongPtrW(hwnd, 0);
-                    if (root) {
-                        ATOM atom = pStrToID(L"auOptionSelectorCombobox");
-                        if (atom) {
-                            void* combo = pFindDescendent(root, atom);
-                            if (combo) {
-                                if (g_lastComboPtr != combo) {
-                                    g_lastComboPtr = combo;
-                                    g_nativeComboPopulated = false;
-                                }
-                                g_protectedCombo.store(combo); // SetEnabled hook keeps it enabled
-                                if (pSetEnabled) pSetEnabled(combo, true); // immediate re-enable
-                                
-                                if (!g_nativeComboPopulated) {
-                                    pAddString(combo, WuOptionText(4));
-                                    pAddString(combo, WuOptionText(3));
-                                    pAddString(combo, WuOptionText(2));
-                                    pAddString(combo, WuOptionText(1));
-                                    
-                                    DWORD current = ReadAuOptionsValue();
-                                    g_lastAuOptions = current;
-                                    int selIdx = (current == 4) ? 0 : (current == 3) ? 1 : (current == 2) ? 2 : 3;
-                                    pSetSelection(combo, selIdx);
-                                    g_nativeComboPopulated = true;
-                                    Wh_Log(L"Windows Update Restorer: Native DirectUI Combobox populated (addr=%p)!", combo);
-                                } else {
-                                    int sel = pGetSelection(combo);
-                                    if (sel >= 0 && sel <= 3) {
-                                        DWORD auOpt = (sel == 0) ? 4 : (sel == 1) ? 3 : (sel == 2) ? 2 : 1;
-                                        if (auOpt != g_lastAuOptions) {
-                                            g_lastAuOptions = auOpt;
-                                            WriteAuOptionsValue(auOpt);
-                                            Wh_Log(L"Windows Update Restorer: Native combo sel changed to %d (AUOptions=%lu)", sel, auOpt);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                if (!g_nativeComboPopulated) {
+                    pAddString(combo, WuOptionText(4));
+                    pAddString(combo, WuOptionText(3));
+                    pAddString(combo, WuOptionText(2));
+                    pAddString(combo, WuOptionText(1));
+                    const DWORD current = ReadAuOptionsValue();
+                    const int selection = current == 4 ? 0 : current == 3 ? 1
+                                                    : current == 2 ? 2 : 3;
+                    pSetSelection(combo, selection);
+                    g_nativeComboPopulated = true;
                 }
+                // The legacy page is presentational only on modern Windows.
+                if (pSetEnabled) pSetEnabled(combo, false);
             }
-            break;
-        }
-        case WM_DESTROY: {
-            KillTimer(hwnd, 889);
-            RemoveWindowSubclass(hwnd, SettingsDirectUiSubclassProc, uIdSubclass);
-            if (g_hwndDirectUiParent == hwnd) g_hwndDirectUiParent = nullptr;
-            g_nativeComboPopulated = false;
-            g_protectedCombo.store(nullptr);
-            break;
         }
     }
     return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
 struct EnumSettingsDirectUiCtx {
-    HWND verified = nullptr; // DirectUIHWND con atom pageSettings confermato
-    HWND fallback = nullptr; // primo DirectUIHWND dimensionalmente valido, se nessuno verificato
+    HWND verified = nullptr;
 };
 
-static BOOL CALLBACK EnumSettingsDirectUiProc(HWND hwnd, LPARAM lParam) {
-    if (!IsWindow(hwnd)) return TRUE;
+static bool IsSettingsDirectUiWindow(HWND hwnd) {
+    if (!IsWindow(hwnd) ||
+        GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) {
+        return false;
+    }
     wchar_t cls[64] = {};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    if (_wcsicmp(cls, L"DirectUIHWND") == 0) {
-        // Only match windows in this process: the foreground/active window at
-        // DirectUI-parse time is often another process's, and matching it here
-        // would make us subclass and SetTimer a window we do not own.
-        DWORD procId = 0;
-        GetWindowThreadProcessId(hwnd, &procId);
-        if (procId != GetCurrentProcessId()) return TRUE;
-        RECT rc{};
-        GetClientRect(hwnd, &rc);
-        int width = rc.right - rc.left;
-        int height = rc.bottom - rc.top;
-        if (width > 260 && height > 150) {
-            EnumSettingsDirectUiCtx* ctx = reinterpret_cast<EnumSettingsDirectUiCtx*>(lParam);
-            if (!ctx->fallback) ctx->fallback = hwnd;
-        }
+    if (_wcsicmp(cls, L"DirectUIHWND") != 0) return false;
+
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    if (rc.right - rc.left <= 260 || rc.bottom - rc.top <= 150) return false;
+
+    EnsureDui70ComboboxExports();
+    if (!pStrToID || !pFindDescendent) return false;
+    void* root = reinterpret_cast<void*>(GetWindowLongPtrW(hwnd, 0));
+    ATOM atom = pStrToID(L"auOptionSelectorCombobox");
+    return root && atom && pFindDescendent(root, atom);
+}
+
+static BOOL CALLBACK EnumSettingsDirectUiProc(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<EnumSettingsDirectUiCtx*>(lParam);
+    if (IsSettingsDirectUiWindow(hwnd)) {
+        ctx->verified = hwnd;
+        return FALSE;
     }
     return TRUE;
 }
 
 static HWND FindSettingsDirectUiHwnd() {
     EnumSettingsDirectUiCtx ctx;
-    HWND hwndFg = GetForegroundWindow();
-    if (hwndFg) {
-        EnumChildWindows(hwndFg, EnumSettingsDirectUiProc, reinterpret_cast<LPARAM>(&ctx));
-        if (ctx.fallback) return ctx.fallback;
-    }
-    HWND hwndActive = GetActiveWindow();
-    if (hwndActive && hwndActive != hwndFg) {
-        EnumChildWindows(hwndActive, EnumSettingsDirectUiProc, reinterpret_cast<LPARAM>(&ctx));
-        if (ctx.fallback) return ctx.fallback;
-    }
-    HWND hwndFocus = GetFocus();
-    if (hwndFocus) {
-        HWND root = GetAncestor(hwndFocus, GA_ROOT);
-        if (root && root != hwndFg && root != hwndActive) {
-            EnumChildWindows(root, EnumSettingsDirectUiProc, reinterpret_cast<LPARAM>(&ctx));
-            if (ctx.fallback) return ctx.fallback;
-        }
-    }
-    EnumThreadWindows(GetCurrentThreadId(), [](HWND top, LPARAM lp) -> BOOL {
-        EnumSettingsDirectUiCtx* pCtx = reinterpret_cast<EnumSettingsDirectUiCtx*>(lp);
-        EnumChildWindows(top, EnumSettingsDirectUiProc, lp);
-        if (pCtx->fallback) return FALSE;
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&ctx));
-    
-    return ctx.fallback;
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND top, LPARAM lParam) -> BOOL {
+            auto* ctx = reinterpret_cast<EnumSettingsDirectUiCtx*>(lParam);
+            if (IsSettingsDirectUiWindow(top)) {
+                ctx->verified = top;
+                return FALSE;
+            }
+            EnumChildWindows(top, EnumSettingsDirectUiProc, lParam);
+            return ctx->verified ? FALSE : TRUE;
+        },
+        reinterpret_cast<LPARAM>(&ctx));
+    return ctx.verified;
 }
 
 static void InitializeNativeSettingsCombobox(HWND hwndParent) {
     g_isSettingsPageActive.store(true);
-    if (!hwndParent || !IsWindow(hwndParent)) hwndParent = FindSettingsDirectUiHwnd();
-    if (!hwndParent || !IsWindow(hwndParent)) return;
+    if (!hwndParent || !IsSettingsDirectUiWindow(hwndParent))
+        hwndParent = FindSettingsDirectUiHwnd();
+    if (!hwndParent) return;
+
     g_hwndDirectUiParent = hwndParent;
-    // SetTimer only when the subclass succeeded: otherwise timer 889 would be
-    // installed on a window we do not own, clobbering that window's own timer.
-    if (SetWindowSubclass(hwndParent, SettingsDirectUiSubclassProc, 888, 0)) {
-        std::lock_guard lock(g_subclassWindowsMutex);
-        if (std::find(g_settingsSubclassWindows.begin(), g_settingsSubclassWindows.end(), hwndParent) == g_settingsSubclassWindows.end())
-            g_settingsSubclassWindows.push_back(hwndParent);
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwndParent, SettingsDirectUiSubclassProc, 0)) {
+        {
+            std::lock_guard lock(g_subclassWindowsMutex);
+            if (std::find(g_settingsSubclassWindows.begin(),
+                          g_settingsSubclassWindows.end(), hwndParent) ==
+                g_settingsSubclassWindows.end()) {
+                g_settingsSubclassWindows.push_back(hwndParent);
+            }
+        }
         SetTimer(hwndParent, 889, 200, nullptr);
     }
-}
-
-static void UpdateSettingsComboboxLanguage() {
-    // Il testo del combobox nativo si ricaricherà alla prossima apertura della pagina
 }
 
 static std::wstring PatchSettingsPageXml(const std::wstring& input) {
@@ -5068,7 +4472,7 @@ static std::wstring PatchSettingsPageXml(const std::wstring& input) {
     const size_t cbAtom = out.find(L"atom(auOptionSelectorCombobox)");
     if (cbAtom == std::wstring::npos) return input;
 
-    // FIX NATIVO: Allarga il combobox mantenendo l'XML originale
+    // Expand the native combobox while preserving the original XML structure
     size_t tagStart = out.rfind(L"<combobox", cbAtom);
     if (tagStart == std::wstring::npos) tagStart = out.rfind(L"<ComboBox", cbAtom);
     if (tagStart == std::wstring::npos) tagStart = out.rfind(L"<COMBOBOX", cbAtom);
@@ -5076,19 +4480,17 @@ static std::wstring PatchSettingsPageXml(const std::wstring& input) {
         size_t widthPos = out.find(L"width=\"10rp\"", tagStart);
         if (widthPos != std::wstring::npos && widthPos < cbAtom) {
             out.replace(widthPos, 12, L"width=\"285rp\"");
-            Wh_Log(L"Windows Update Restorer: Native combobox width expanded to 285rp");
         }
     }
 
-    // Insert intro text SOPRA la flow row delle icone+combo (non dentro), come riga separata top
-    // Questo preserva identica Y originale della flow row (spostata in basso di ~ altezza intro), ma il placeholder INLINE rimane nella flow originale.
-    // Trova l'inizio della flow row che contiene le icone+placeholder (ora placeholder)
+    // Insert the intro text above the icon/combobox flow row as a separate top row
+    // Keep the inline placeholder in its original flow row.
+    // Find the flow row containing the icons and placeholder.
     const size_t placeholderPos = out.find(L"atom(auOptionSelectorPlaceholder)");
     const size_t rowStart = out.rfind(
         L"<element layoutpos=\"top\" layout=\"flowlayout(0,0,0,2)\" margin=\"rect(0,14rp,0,0)\">", placeholderPos != std::wstring::npos ? placeholderPos : cbAtom);
     if (rowStart != std::wstring::npos) {
         out.insert(rowStart, BuildUpdateIntroTextXml());
-        Wh_Log(L"Windows Update Restorer: settings page - inserted intro text above icon row (placeholder now INLINE at original position)");
     }
 
     // Hide the red warning shield: blank the icon element INSIDE the
@@ -5103,7 +4505,6 @@ static std::wstring PatchSettingsPageXml(const std::wstring& input) {
                 const std::wstring hidden =
                     L"<element sheet=\"wuappstyle\" class=\"aupsp_left_img\" width=\"0rp\" height=\"0rp\" content=\"\"/>";
                 out.replace(tagStart, tagEnd + 2 - tagStart, hidden);
-                Wh_Log(L"Windows Update Restorer: settings page - red warning shield hidden (icon content blanked)");
             }
         }
     }
@@ -5129,30 +4530,19 @@ static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
     return it->second;
 }
 
-// Private command protocol handled by the ShellExecute hooks: the DirectUI
-// NavigateButton of each classic option calls ShellExecuteExW with
-// "wurestorer:auoptions=N"; we intercept it, write AUOptions and consume it
-// (nothing is launched). Unknown wurestorer: commands are swallowed too.
-// Forward declarations for the classic settings dialog (defined below).
+// Private command protocol used only by this applet's navigation links. Known
+// commands are consumed; unknown commands report failure with hInstApp set.
 static void ShowWuSettingsDialog(HWND parent);
 static void RefreshWuPage(HWND host);
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
 static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
-    if (info && info->lpFile &&
+    // Once teardown has begun, stop handling our private protocol: the handlers
+    // create windows/dialogs whose procedures live in this image.
+    if (!g_stopping.load() && info && info->lpFile &&
         wcsncmp(info->lpFile, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
         const wchar_t* p = info->lpFile + wcslen(kWuRestorerProtocol);
-        if (wcsncmp(p, L"auoptions=", 10) == 0) {
-            const int value = _wtoi(p + 10);
-            if (value >= 1 && value <= 4) {
-                WriteAuOptionsValue(static_cast<DWORD>(value));
-                // The page hosting the option list re-renders so the selection
-                // marker reflects the new AUOptions value.
-                RefreshWuPage(info->hwnd);
-                info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
-                return TRUE;
-            }
-        } else if (wcscmp(p, L"opensettings") == 0) {
+        if (wcscmp(p, L"opensettings") == 0) {
             // Open the classic settings dialog as an ADDITIONAL window on top
             // of the settings page (which stays open - we do not navigate away).
             ShowWuSettingsDialog(info->hwnd);
@@ -5166,8 +4556,14 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
             OpenInstalledUpdates(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
             return TRUE;
+        } else if (wcscmp(p, L"security") == 0) {
+            OpenSecurityAndMaintenance(info->hwnd);
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            return TRUE;
         }
-        return TRUE; // consume unknown wurestorer: commands
+        info->hInstApp = reinterpret_cast<HINSTANCE>(SE_ERR_FNF);
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return FALSE;
     }
     return ShellExecuteExWOriginal(info);
 }
@@ -5176,21 +4572,467 @@ using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCW
 static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
 static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR file,
                                           LPCWSTR parameters, LPCWSTR directory, INT show) {
-    if (file && wcsncmp(file, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
+    if (!g_stopping.load() && file &&
+        wcsncmp(file, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
         const wchar_t* p = file + wcslen(kWuRestorerProtocol);
-        if (wcsncmp(p, L"auoptions=", 10) == 0) {
-            const int value = _wtoi(p + 10);
-            if (value >= 1 && value <= 4) WriteAuOptionsValue(static_cast<DWORD>(value));
-        } else if (wcscmp(p, L"opensettings") == 0) {
+        bool handled = true;
+        if (wcscmp(p, L"opensettings") == 0) {
             ShowWuSettingsDialog(hwnd);
         } else if (wcscmp(p, L"check") == 0) {
             RefreshWuPage(hwnd);
         } else if (wcscmp(p, L"history") == 0 || wcscmp(p, L"hidden") == 0) {
             OpenInstalledUpdates(hwnd);
+        } else if (wcscmp(p, L"security") == 0) {
+            OpenSecurityAndMaintenance(hwnd);
+        } else {
+            handled = false;
         }
-        return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+        if (handled) return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
     }
     return ShellExecuteWOriginal(hwnd, operation, file, parameters, directory, show);
+}
+
+// -----------------------------------------------------------------------------
+// Native Control Panel navigation links
+// -----------------------------------------------------------------------------
+// wucltux publishes a private CControlPanelNavLinks object by writing it to the
+// page's SID_PerLayoutPropertyBag under "ControlPanelNavLinks". Windows then
+// builds the standard blue Control Panel sidebar from that object. Earlier
+// versions of this mod tried to hide that pane and injected a second DirectUI
+// copy; current Windows builds can recreate the native pane after the XML pass,
+// which leaves two sidebars.
+//
+// Keep the Windows-owned pane instead. Immediately before PROPSYS stores the
+// object, redirect the four normal WU task links to the safe handlers already
+// implemented by this mod. This follows the same mechanism as the classic
+// CControlPanelNavLinks::AddLinkNotify/AddLinkShellEx sample, but it patches the
+// real wucltux object in place. Therefore its vtable and lifetime remain owned by
+// wucltux -- important when a Windhawk mod is disabled while Explorer stays up.
+//
+// These layouts are private Windows ABI. They are intentionally limited to the
+// one pinned x64 wucltux.dll payload used by this mod. The offsets match that
+// payload and the reverse-engineered CControlPanelNavLinks implementation.
+struct NativeControlPanelNavLinkCommand {
+    int execType;                   // 0=none/notify, 1=ShellExecute, 2=navigate
+    DWORD reserved;
+    PWSTR appletOrCommand;
+    PWSTR arguments;
+};
+
+struct NativeControlPanelNavLink {
+    int list;                       // 0=Tasks, 1=See also, 2=other
+    DWORD reserved;
+    PWSTR name;
+    PWSTR auxiliaryArguments;
+    HICON icon;
+    NativeControlPanelNavLinkCommand command;
+    BYTE privateState[0x33];        // tail used by the pinned private ABI
+};
+
+struct NativeControlPanelNavLinks {
+    void* vtable;
+    HDPA links;
+    LONG referenceCount;
+};
+
+static_assert(sizeof(void*) == 8, "The pinned wucltux navigation ABI is x64-only");
+static_assert(offsetof(NativeControlPanelNavLink, command) == 32,
+              "Unexpected CControlPanelNavLink layout");
+static_assert(sizeof(NativeControlPanelNavLink) == 0x70,
+              "Unexpected CControlPanelNavLink size");
+static_assert(offsetof(NativeControlPanelNavLinks, links) == 8,
+              "Unexpected CControlPanelNavLinks layout");
+
+static std::wstring NormalizeNativeNavLabel(PCWSTR text) {
+    std::wstring normalized;
+    if (!text) return normalized;
+    for (; *text; ++text) {
+        if (*text == L'&') continue;  // keyboard accelerator marker
+        normalized += towlower(*text);
+    }
+    return normalized;
+}
+
+static bool NativeNavLabelEquals(PCWSTR actual, UINT resourceId) {
+    const wchar_t* expected = EmbeddedMuiString(resourceId);
+    return expected && NormalizeNativeNavLabel(actual) ==
+                           NormalizeNativeNavLabel(expected);
+}
+
+static HRESULT DuplicateNativeNavString(PCWSTR source, PWSTR* destination) {
+    if (!source || !destination) return E_INVALIDARG;
+    *destination = nullptr;
+    const size_t chars = wcslen(source) + 1;
+    if (chars > SIZE_MAX / sizeof(wchar_t)) return E_OUTOFMEMORY;
+    auto* copy = static_cast<PWSTR>(
+        CoTaskMemAlloc(chars * sizeof(wchar_t)));
+    if (!copy) return E_OUTOFMEMORY;
+    memcpy(copy, source, chars * sizeof(wchar_t));
+    *destination = copy;
+    return S_OK;
+}
+
+static HRESULT RedirectNativeNavLink(NativeControlPanelNavLink* link,
+                                     PCWSTR command) {
+    if (!link || !command || !*command) return E_INVALIDARG;
+
+    // PSPropertyBag_WriteUnknown can be reached more than once for one page.
+    // Don't allocate a second copy if this link was already redirected.
+    if (link->command.execType == 1 && link->command.appletOrCommand &&
+        _wcsicmp(link->command.appletOrCommand, command) == 0) {
+        return S_FALSE;
+    }
+
+    PWSTR commandCopy = nullptr;
+    HRESULT hr = DuplicateNativeNavString(command, &commandCopy);
+    if (FAILED(hr)) return hr;
+    PWSTR argumentsCopy = nullptr;
+    hr = DuplicateNativeNavString(L"", &argumentsCopy);
+    if (FAILED(hr)) {
+        CoTaskMemFree(commandCopy);
+        return hr;
+    }
+
+    // Do not free the previous union fields: AddLinkNotify stores notification
+    // data there rather than two allocated strings. Once execType is changed to
+    // ShellExecute, wucltux's own link destructor owns these CoTaskMem buffers.
+    link->command.execType = 1;  // CPNAVTYPE_ShellExec
+    link->command.reserved = 0;
+    link->command.appletOrCommand = commandCopy;
+    link->command.arguments = argumentsCopy;
+    return S_OK;
+}
+
+static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
+    if (!unknown) return 0;
+    auto* navLinks = reinterpret_cast<NativeControlPanelNavLinks*>(unknown);
+    if (!navLinks->links) return 0;
+
+    const int count = DPA_GetPtrCount(navLinks->links);
+    // A genuine WU navigation list is tiny. Refuse an implausible object rather
+    // than walking memory if a future payload changes this private layout.
+    if (count <= 0 || count > 32) {
+        Wh_Log(L"WUR: native ControlPanelNavLinks rejected (count=%d)", count);
+        return 0;
+    }
+
+    static constexpr PCWSTR kFallbackCommands[] = {
+        L"wurestorer:check",
+        L"shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\\pageSettings",
+        L"wurestorer:history",
+        L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}",
+    };
+
+    unsigned patched = 0;
+    unsigned taskOrdinal = 0;
+    for (int index = 0; index < count; ++index) {
+        auto* link = reinterpret_cast<NativeControlPanelNavLink*>(
+            DPA_GetPtr(navLinks->links, index));
+        if (!link) continue;
+
+        PCWSTR target = nullptr;
+        if (link->list == 0) {
+            // Prefer the translated label, since WU can omit one task in some
+            // states. The ordinal fallback covers older resource variants.
+            if (NativeNavLabelEquals(link->name, 350)) {
+                target = kFallbackCommands[0];       // Check for updates
+            } else if (NativeNavLabelEquals(link->name, 351) ||
+                       NativeNavLabelEquals(link->name, 73)) {
+                target = kFallbackCommands[1];       // Classic WU settings page
+            } else if (NativeNavLabelEquals(link->name, 352) ||
+                       NativeNavLabelEquals(link->name, 74)) {
+                target = kFallbackCommands[2];       // View update history
+            } else if (NativeNavLabelEquals(link->name, 353) ||
+                       NativeNavLabelEquals(link->name, 75)) {
+                target = kFallbackCommands[3];       // Installed Updates
+            } else if (taskOrdinal < ARRAYSIZE(kFallbackCommands)) {
+                target = kFallbackCommands[taskOrdinal];
+            }
+            ++taskOrdinal;
+        } else if (link->list == 1) {
+            if (NativeNavLabelEquals(link->name, 355)) {
+                target = L"wurestorer:security";
+            } else if (NativeNavLabelEquals(link->name, 356) ||
+                       NativeNavLabelEquals(link->name, 20004)) {
+                target = L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}";
+            }
+        }
+
+        if (target) {
+            const HRESULT hr = RedirectNativeNavLink(link, target);
+            if (hr == S_OK) ++patched;
+        }
+    }
+    return patched;
+}
+
+// Builds a complete native navigation object when Windows 10 21H2 doesn't call
+// wucltux's own PopulateControlPanelNavLinks routine. The native vtable RVA is
+// from the exact SHA-256-pinned wucltux.dll payload above. A deliberately high
+// reference count keeps Windows from invoking a cross-CRT deleting destructor;
+// the object is only a few kilobytes and lives until this host process exits.
+static constexpr ULONG_PTR kControlPanelNavLinksVtableRva = 0x2350;
+static constexpr LONG kPinnedNavLinksReferenceCount = 0x10000000;
+
+static int CALLBACK DestroyUnpublishedNativeNavLink(void* item, void*) {
+    auto* link = static_cast<NativeControlPanelNavLink*>(item);
+    if (!link) return 1;
+    CoTaskMemFree(link->name);
+    CoTaskMemFree(link->auxiliaryArguments);
+    CoTaskMemFree(link->command.appletOrCommand);
+    CoTaskMemFree(link->command.arguments);
+    VirtualFree(link, 0, MEM_RELEASE);
+    return 1;
+}
+
+static NativeControlPanelNavLink* CreateNativeNavLink(
+    int list, PCWSTR name, PCWSTR command, PCWSTR arguments = L"") {
+    auto* link = static_cast<NativeControlPanelNavLink*>(VirtualAlloc(
+        nullptr, sizeof(NativeControlPanelNavLink), MEM_RESERVE | MEM_COMMIT,
+        PAGE_READWRITE));
+    if (!link) return nullptr;
+
+    link->list = list;
+    link->command.execType = 1;  // CPNAVTYPE_ShellExec
+    HRESULT hr = DuplicateNativeNavString(name ? name : L"", &link->name);
+    if (SUCCEEDED(hr))
+        hr = DuplicateNativeNavString(command ? command : L"",
+                                      &link->command.appletOrCommand);
+    if (SUCCEEDED(hr))
+        hr = DuplicateNativeNavString(arguments ? arguments : L"",
+                                      &link->command.arguments);
+    if (FAILED(hr)) {
+        DestroyUnpublishedNativeNavLink(link, nullptr);
+        return nullptr;
+    }
+    return link;
+}
+
+static void DestroyUnpublishedNativeNavLinks(NativeControlPanelNavLinks* links) {
+    if (!links) return;
+    if (links->links) {
+        DPA_DestroyCallback(links->links,
+                            reinterpret_cast<PFNDAENUMCALLBACK>(
+                                DestroyUnpublishedNativeNavLink),
+                            nullptr);
+    }
+    VirtualFree(links, 0, MEM_RELEASE);
+}
+
+static NativeControlPanelNavLinks* CreateNativeControlPanelNavLinks() {
+    HMODULE module = g_module.load(std::memory_order_acquire);
+    if (!module) return nullptr;
+
+    auto* links = static_cast<NativeControlPanelNavLinks*>(VirtualAlloc(
+        nullptr, sizeof(NativeControlPanelNavLinks), MEM_RESERVE | MEM_COMMIT,
+        PAGE_READWRITE));
+    if (!links) return nullptr;
+    links->vtable = reinterpret_cast<BYTE*>(module) +
+                    kControlPanelNavLinksVtableRva;
+    links->referenceCount = kPinnedNavLinksReferenceCount;
+    links->links = DPA_Create(8);
+    if (!links->links) {
+        DestroyUnpublishedNativeNavLinks(links);
+        return nullptr;
+    }
+
+    struct Definition {
+        int list;
+        UINT labelId;
+        PCWSTR fallback;
+        PCWSTR command;
+        PCWSTR arguments;
+    };
+    static constexpr Definition definitions[] = {
+        {0, 350, L"Check for updates", L"wurestorer:check", L""},
+        {0, 351, L"Change settings",
+         L"shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\\pageSettings", L""},
+        {0, 352, L"View update history", L"wurestorer:history", L""},
+        {0, 353, L"Restore hidden updates",
+         L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L""},
+        {1, 355, L"Security Center", L"wurestorer:security", L""},
+        {1, 356, L"Installed Updates",
+         L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L""},
+    };
+
+    for (const auto& definition : definitions) {
+        const wchar_t* label = EmbeddedMuiString(definition.labelId);
+        auto* link = CreateNativeNavLink(
+            definition.list, label ? label : definition.fallback,
+            definition.command, definition.arguments);
+        if (!link || DPA_InsertPtr(links->links, 0x7fffffff, link) == -1) {
+            if (link) DestroyUnpublishedNativeNavLink(link, nullptr);
+            DestroyUnpublishedNativeNavLinks(links);
+            return nullptr;
+        }
+    }
+    return links;
+}
+
+using PSPropertyBag_WriteUnknown_t = HRESULT(WINAPI*)(IPropertyBag*, PCWSTR,
+                                                       IUnknown*);
+static PSPropertyBag_WriteUnknown_t PSPropertyBag_WriteUnknownOriginal = nullptr;
+
+static bool IsPrivateWucltuxAddress(const void* address) {
+    if (!address) return false;
+    HMODULE callerModule = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<PCWSTR>(address), &callerModule)) {
+        return false;
+    }
+    return callerModule && callerModule == g_module.load(std::memory_order_acquire);
+}
+
+static HRESULT WINAPI PSPropertyBag_WriteUnknownHook(IPropertyBag* bag,
+                                                      PCWSTR propertyName,
+                                                      IUnknown* value) {
+    // Check the object's vtable rather than the return address. The first call
+    // can pass through the PE delay-load helper, so its immediate caller isn't
+    // necessarily wucltux even though the object itself always is.
+    const auto* navLinks =
+        reinterpret_cast<const NativeControlPanelNavLinks*>(value);
+    if (propertyName && value &&
+        wcscmp(propertyName, L"ControlPanelNavLinks") == 0 &&
+        IsPrivateWucltuxAddress(navLinks->vtable)) {
+        try {
+            const unsigned patched = RedirectNativeControlPanelNavLinks(value);
+            Wh_Log(L"WUR: published native ControlPanelNavLinks (redirected=%u)",
+                   patched);
+        } catch (...) {
+            // Never let an allocation or malformed private object escape through
+            // the PROPSYS ABI. The untouched list remains a valid fallback.
+            Wh_Log(L"WUR: could not redirect native ControlPanelNavLinks; using wucltux links");
+        }
+    }
+    return PSPropertyBag_WriteUnknownOriginal(bag, propertyName, value);
+}
+
+static void InstallNativeControlPanelNavLinksHook() {
+    HMODULE propsys = GetModuleHandleW(L"propsys.dll");
+    if (!propsys)
+        propsys = LoadLibraryExW(L"propsys.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!propsys) {
+        Wh_Log(L"WUR: propsys.dll unavailable; native WU navigation remains unmodified");
+        return;
+    }
+    void* target = reinterpret_cast<void*>(
+        GetProcAddress(propsys, "PSPropertyBag_WriteUnknown"));
+    if (!target) {
+        Wh_Log(L"WUR: PSPropertyBag_WriteUnknown not found; native WU navigation remains unmodified");
+        return;
+    }
+    WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<PSPropertyBag_WriteUnknown_t>(target),
+        PSPropertyBag_WriteUnknownHook,
+        &PSPropertyBag_WriteUnknownOriginal);
+}
+
+// Windows 10 21H2 can create the native sidebar but skip wucltux's private
+// PopulateControlPanelNavLinks call, leaving the pane empty. CElementWithSite is
+// where the page receives the shell site used by the sample's _punkSite call.
+// Hook that exact method in the pinned payload and publish our complete list.
+static const GUID kSidPerLayoutPropertyBag = {
+    0xa46e5c25, 0xc09c, 0x4ca8,
+    {0x9a, 0x53, 0x49, 0xcf, 0x7f, 0x86, 0x55, 0x25}};
+static constexpr ULONG_PTR kCElementWithSiteSetSiteRva = 0x26960;
+
+static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
+    if (!site) return E_INVALIDARG;
+
+    IServiceProvider* services = nullptr;
+    HRESULT hr = site->QueryInterface(IID_PPV_ARGS(&services));
+    if (FAILED(hr) || !services) return FAILED(hr) ? hr : E_NOINTERFACE;
+
+    IPropertyBag* bag = nullptr;
+    hr = services->QueryService(kSidPerLayoutPropertyBag, IID_PPV_ARGS(&bag));
+    services->Release();
+    if (FAILED(hr) || !bag) return FAILED(hr) ? hr : E_NOINTERFACE;
+
+    // CElementWithSite::SetSite can be called for several page elements sharing
+    // one per-layout bag. Publish only once per UI thread and bag.
+    static thread_local IPropertyBag* lastPublishedBag = nullptr;
+    if (lastPublishedBag == bag) {
+        bag->Release();
+        return S_FALSE;
+    }
+
+    NativeControlPanelNavLinks* links = CreateNativeControlPanelNavLinks();
+    if (!links) {
+        bag->Release();
+        return E_OUTOFMEMORY;
+    }
+
+    PSPropertyBag_WriteUnknown_t writer = PSPropertyBag_WriteUnknownOriginal;
+    if (!writer) {
+        HMODULE propsys = GetModuleHandleW(L"propsys.dll");
+        if (propsys) {
+            writer = reinterpret_cast<PSPropertyBag_WriteUnknown_t>(
+                GetProcAddress(propsys, "PSPropertyBag_WriteUnknown"));
+        }
+    }
+    if (!writer) {
+        DestroyUnpublishedNativeNavLinks(links);
+        bag->Release();
+        return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+    }
+
+    hr = writer(bag, L"ControlPanelNavLinks",
+                reinterpret_cast<IUnknown*>(links));
+    if (SUCCEEDED(hr)) {
+        lastPublishedBag = bag;
+        Wh_Log(L"WUR: complete native ControlPanelNavLinks list published");
+        // The list intentionally remains process-lifetime. Its vtable belongs to
+        // the payload, which this mod already keeps mapped after page creation.
+    } else {
+        DestroyUnpublishedNativeNavLinks(links);
+        Wh_Log(L"WUR: native ControlPanelNavLinks publication failed (hr=0x%08X)",
+               static_cast<unsigned>(hr));
+    }
+    bag->Release();
+    return hr;
+}
+
+using CElementWithSiteSetSite_t = HRESULT(WINAPI*)(void*, IUnknown*);
+static CElementWithSiteSetSite_t CElementWithSiteSetSiteOriginal = nullptr;
+static std::atomic<bool> g_setSiteHookInstalled{false};
+
+static HRESULT WINAPI CElementWithSiteSetSiteHook(void* self, IUnknown* site) {
+    if (!CElementWithSiteSetSiteOriginal) return E_FAIL;
+    const HRESULT hr = CElementWithSiteSetSiteOriginal(self, site);
+    if (SUCCEEDED(hr) && site && !g_stopping.load()) {
+        const HRESULT publishHr = PublishNativeNavigationLinks(site);
+        if (FAILED(publishHr)) {
+            Wh_Log(L"WUR: per-layout navigation bag unavailable (hr=0x%08X)",
+                   static_cast<unsigned>(publishHr));
+        }
+    }
+    return hr;
+}
+
+static bool InstallWucltuxSetSiteHook(HMODULE module) {
+    if (!module) return false;
+    bool expected = false;
+    if (!g_setSiteHookInstalled.compare_exchange_strong(expected, true))
+        return true;
+
+    void* target = reinterpret_cast<BYTE*>(module) +
+                   kCElementWithSiteSetSiteRva;
+    if (!Wh_SetFunctionHook(
+            target, reinterpret_cast<void*>(CElementWithSiteSetSiteHook),
+            reinterpret_cast<void**>(&CElementWithSiteSetSiteOriginal))) {
+        g_setSiteHookInstalled.store(false);
+        Wh_Log(L"WUR: failed to register CElementWithSite::SetSite hook");
+        return false;
+    }
+    if (!Wh_ApplyHookOperations()) {
+        g_setSiteHookInstalled.store(false);
+        Wh_Log(L"WUR: failed to apply CElementWithSite::SetSite hook");
+        return false;
+    }
+    Wh_Log(L"WUR: CElementWithSite::SetSite hook active; native links will be published");
+    return true;
 }
 
 // =============================================================================
@@ -5199,14 +5041,12 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR 
 // Modeled on the classic-taskbar-properties mod: a real Win32 dialog built from
 // an in-memory DLGTEMPLATE and shown with CreateDialogIndirectParamW - no
 // DirectUI involved. It replaces the broken DirectUI pageSettings page: any
-// navigation that would open shell:::{CLSID}\pageSettings is intercepted by the
+// navigation that would open shell:::{CLSID}\\pageSettings is intercepted by the
 // ShellExecute hooks above and this dialog is shown instead.
 //
-// The dialog offers a TrackBar (the "bar") to scroll between the four classic
-// important-updates modes, plus the recommended-updates and Microsoft-products
-// checkboxes. On OK the values are written to the registry (local AU key AND
-// the policy key Windows 10/11 actually honour) and the Windows Update page is
-// refreshed so it re-renders with the new state.
+// The dialog shows the four classic important-update modes and related options
+// as a read-only snapshot. Modern Windows owns these machine-wide settings, so
+// changes must be made in the Windows Settings app.
 // =============================================================================
 enum {
     kWuDlgSettings = 0x7701,
@@ -5219,14 +5059,13 @@ enum {
 };
 
 static HWND g_wuSettingsDlg = nullptr;
-static HWND g_wuSettingsParent = nullptr;
 static DWORD g_wuDlgAuOptions = 4;
 static bool g_wuDlgRecommended = false;
 static bool g_wuDlgMsProducts = false;
 static bool g_wuDlgAllUsers = false;
 
 // True when the ShellExecute target is our applet's settings child page
-// (shell:::{CLSID}\pageSettings), either as a bare shell: URI or as
+// (shell:::{CLSID}\\pageSettings), either as a bare shell: URI or as
 // "%SystemRoot%\explorer.exe" + shellexecuteparams.
 static const wchar_t* SelectRecommendedUpdatesLabel() {
     static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
@@ -5273,16 +5112,6 @@ static void ReadAuxAuValues(bool& recommended, bool& msProducts, bool& allUsers)
     }
 }
 
-static void WriteAuxAuValues(bool recommended, bool msProducts, bool allUsers) {
-    // Deliberately read-only, for the same reasons as WriteAuOptionsValue:
-    //  - a non-elevated explorer.exe cannot open this HKLM key with
-    //    KEY_SET_VALUE, so the values would appear to change but would not;
-    //  - writing machine-wide policy that survives after the mod is disabled
-    //    violates Windhawk's reversibility principle.
-    // The settings surface is intentionally presentational on Windows 8.1.
-    (void)recommended; (void)msProducts; (void)allUsers;
-    Wh_Log(L"Windows Update Restorer: auxiliary update settings are read-only; no HKLM values were written.");
-}
 
 // Asks the window hosting the Windows Update page to re-render (standard shell
 // view refresh command), so the main page reflects the new AUOptions state.
@@ -5301,22 +5130,8 @@ static void RefreshWuPage(HWND host) {
     }
 }
 
-static void SaveWuSettingsAndClose(HWND hwnd) {
-    HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
-    int sel = hCombo ? static_cast<int>(SendMessageW(hCombo, CB_GETCURSEL, 0, 0)) : 0;
-    DWORD pos = 4;
-    if (sel == 0) pos = 4;
-    else if (sel == 1) pos = 3;
-    else if (sel == 2) pos = 2;
-    else if (sel == 3) pos = 1;
-    WriteAuOptionsValue(pos);
-    const bool rec = IsDlgButtonChecked(hwnd, kWuCtlRecommended) == BST_CHECKED;
-    const bool ms = IsDlgButtonChecked(hwnd, kWuCtlMsProducts) == BST_CHECKED;
-    const bool au = IsDlgButtonChecked(hwnd, kWuCtlAllUsers) == BST_CHECKED;
-    WriteAuxAuValues(rec, ms, au);
-    HWND parent = g_wuSettingsParent;
+static void CloseWuSettingsDialog(HWND hwnd) {
     DestroyWindow(hwnd);
-    RefreshWuPage(parent);
 }
 
 static std::wstring StripAmpersand(const wchar_t* s) {
@@ -5349,6 +5164,10 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             CheckDlgButton(hwnd, kWuCtlRecommended, g_wuDlgRecommended ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlMsProducts, g_wuDlgMsProducts ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlAllUsers, g_wuDlgAllUsers ? BST_CHECKED : BST_UNCHECKED);
+            EnableWindow(hCombo, FALSE);
+            EnableWindow(GetDlgItem(hwnd, kWuCtlRecommended), FALSE);
+            EnableWindow(GetDlgItem(hwnd, kWuCtlMsProducts), FALSE);
+            EnableWindow(GetDlgItem(hwnd, kWuCtlAllUsers), FALSE);
             return TRUE;
         }
         case WM_CTLCOLORSTATIC: {
@@ -5365,7 +5184,7 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
                 case IDOK:
-                    SaveWuSettingsAndClose(hwnd);
+                    CloseWuSettingsDialog(hwnd);
                     return TRUE;
                 case IDCANCEL:
                     DestroyWindow(hwnd);
@@ -5388,7 +5207,6 @@ static void ShowWuSettingsDialog(HWND parent) {
         return;
     }
 
-    g_wuSettingsParent = parent;
     g_wuDlgAuOptions = ReadAuOptionsValue();
     ReadAuxAuValues(g_wuDlgRecommended, g_wuDlgMsProducts, g_wuDlgAllUsers);
 
@@ -5402,7 +5220,7 @@ static void ShowWuSettingsDialog(HWND parent) {
     LPDLGTEMPLATEW pDlg = reinterpret_cast<LPDLGTEMPLATEW>(p);
     pDlg->style = DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU;
     pDlg->dwExtendedStyle = 0;
-    pDlg->cdit = kControls;
+    pDlg->cdit = 0;
     pDlg->x = 0; pDlg->y = 0;
     pDlg->cx = 380; pDlg->cy = 272;
     p += sizeof(DLGTEMPLATE);
@@ -5413,23 +5231,37 @@ static void ShowWuSettingsDialog(HWND parent) {
     const wchar_t kFont[] = L"Segoe UI";
     memcpy(p, kFont, sizeof(kFont)); p += sizeof(kFont);
 
+    bool templateValid = true;
     auto addCtrl = [&](DWORD style, DWORD exStyle, short x, short y, short cx, short cy,
                        WORD id, LPCWSTR cls, LPCWSTR cap) {
+        if (!templateValid) return;
         align4(p);
-        if (p + sizeof(DLGITEMTEMPLATE) > bufEnd) return; // bail: buffer full
+        if (p + sizeof(DLGITEMTEMPLATE) > bufEnd) {
+            templateValid = false;
+            return;
+        }
         LPDLGITEMTEMPLATE pi = reinterpret_cast<LPDLGITEMTEMPLATE>(p);
         pi->style = WS_CHILD | WS_VISIBLE | style;
         pi->dwExtendedStyle = exStyle;
         pi->x = x; pi->y = y; pi->cx = cx; pi->cy = cy; pi->id = id;
         p += sizeof(DLGITEMTEMPLATE);
-        const int clsLen = static_cast<int>(wcslen(cls));
-        if (p + (clsLen + 1) * sizeof(wchar_t) > bufEnd) return;
-        memcpy(p, cls, (clsLen + 1) * sizeof(wchar_t)); p += (clsLen + 1) * sizeof(wchar_t);
-        const int capLen = static_cast<int>(wcslen(cap));
-        if (p + (capLen + 1) * sizeof(wchar_t) > bufEnd) return;
-        memcpy(p, cap, (capLen + 1) * sizeof(wchar_t)); p += (capLen + 1) * sizeof(wchar_t);
-        if (p + sizeof(WORD) > bufEnd) return;
-        *(WORD*)p = 0; p += 2;                   // no creation data
+        const size_t clsBytes = (wcslen(cls) + 1) * sizeof(wchar_t);
+        if (p + clsBytes > bufEnd) {
+            templateValid = false;
+            return;
+        }
+        memcpy(p, cls, clsBytes);
+        p += clsBytes;
+        const size_t captionBytes = (wcslen(cap) + 1) * sizeof(wchar_t);
+        if (p + captionBytes + sizeof(WORD) > bufEnd) {
+            templateValid = false;
+            return;
+        }
+        memcpy(p, cap, captionBytes);
+        p += captionBytes;
+        *reinterpret_cast<WORD*>(p) = 0;  // no creation data
+        p += sizeof(WORD);
+        ++pDlg->cdit;
     };
 
     // Translated texts (all with fallbacks so no label is ever empty)
@@ -5440,8 +5272,7 @@ static void ShowWuSettingsDialog(HWND parent) {
         EmbeddedMuiString(1232) ? EmbeddedMuiString(1232) : L"Important updates");
     const wchar_t* descText = EmbeddedMuiString(1102);
     if (!descText) descText = L"When your PC is online, Windows can automatically check for important updates and install them using these settings.";
-    const wchar_t* noteText = EmbeddedMuiString(1209);
-    if (!noteText) noteText = L"Note: Windows Update might update itself automatically first when checking for other updates.";
+    const wchar_t* noteText = SelectReadOnlySettingsNote();
     const wchar_t* allUsersText = EmbeddedMuiString(1001);
     if (!allUsersText) allUsersText = L"Allow all users to install updates on this computer";
     wchar_t okText[64] = L"OK";
@@ -5471,6 +5302,12 @@ static void ShowWuSettingsDialog(HWND parent) {
     addCtrl(BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 248, 248, 60, 16, IDOK, L"Button", okText);
     addCtrl(BS_PUSHBUTTON | WS_TABSTOP, 0, 312, 248, 60, 16, IDCANCEL, L"Button", cancelText);
 
+    if (!templateValid || pDlg->cdit != kControls) {
+        Wh_Log(L"Windows Update Restorer: settings dialog template buffer was too small");
+        delete[] buf;
+        return;
+    }
+
     HWND hwnd = CreateDialogIndirectParamW(GetModuleHandleW(nullptr),
                                            reinterpret_cast<LPDLGTEMPLATE>(buf),
                                            parent, WuSettingsDlgProc, 0);
@@ -5487,164 +5324,10 @@ static void ShowWuSettingsDialog(HWND parent) {
 }
 
 
-static std::wstring BuildWuSidebarOpenCommandAttributes() {
-    return L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"shell:::" +
-           std::wstring(kAppletClsid) + L"\"";
-}
+// The old hand-built WindhawkVistaNavigationPane was removed. Navigation is
+// supplied by Windows through the native ControlPanelNavLinks property bag.
 
-static std::wstring BuildWuSidebarLinkRow(UINT stringId, bool withIcon) {
-    std::wstring row =
-        L"<element class=\"cp_nav_row\" layout=\"borderlayout()\" layoutpos=\"top\">";
-    if (withIcon) {
-        row += L"<element class=\"cp_nav_img\" layoutpos=\"left\" content=\"resbmp(10,2,255,16rp,16rp,0,0)\"/>";
-    } else {
-        row += L"<element class=\"cp_nav_h_spacer\" layoutpos=\"left\"/>";
-    }
-    wchar_t content[32];
-    swprintf_s(content, L"resstr(%u)", stringId);
-    // "Change settings" (351) opens the classic Win32 settings dialog: the
-    // ShellExecute hooks intercept the pageSettings target and show it instead
-    // of the broken DirectUI page.
-    std::wstring cmd = BuildWuSidebarOpenCommandAttributes();
-    if (stringId == 351) {
-        cmd = L"shellexecute=\"shell:::" + std::wstring(kAppletClsid) + L"\\pageSettings\"";
-    }
-    row +=
-        L"<NavigateButton layoutpos=\"left\" layout=\"flowlayout()\" " +
-        cmd + L">"
-        L"<Button class=\"cp_nav_link\" sheet=\"wu_cp_style\" active=\"mouse | keyboard\" content=\"" +
-        std::wstring(content) +
-        L"\"/></NavigateButton>"
-        L"</element>";
-    return row;
-}
 
-static std::wstring BuildWuNativeTemplateLinksXml(bool seeAlso) {
-    std::wstring xml;
-    auto add = [&](const wchar_t* text, const std::wstring& target) {
-        xml += L"<element class=\"" + std::wstring(seeAlso ? L"TaskNavLink" : L"TaskNavLink") +
-               L"\" layoutpos=\"top\" layout=\"FlowLayout(0,0,0,0)\">"
-               L"<NavigateButton layoutpos=\"left\" layout=\"flowlayout()\" shellexecute=\"" +
-               target + L"\">"
-               L"<ControlPanelLink class=\"link\" cursor=\"hand\" active=\"mouse|keyboard\" content=\"" +
-               XmlEscape(text) + L"\"/></NavigateButton></element>";
-    };
-    const std::wstring wu = L"shell:::" + std::wstring(kAppletClsid);
-    if (!seeAlso) {
-        add(L"Control Panel Home", L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}");
-        add(L"Check for updates", wu);
-        add(SelectChangeWindowsUpdateSettingsLinkText(), wu + L"\\pageSettings");
-        add(L"View update history", wu + L"\\pageHistory");
-        add(L"Restore hidden updates", wu + L"\\pageRestoreHiddenUpdates");
-        add(L"Updates: frequently asked questions", L"https://support.microsoft.com/windows/windows-update-faq");
-    } else {
-        add(L"Installed Updates", L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}");
-    }
-    return xml;
-}
-
-static std::wstring BuildWuNativeNavigationRowsXml() {
-    // Insert rows into the already-existing CPNavPanel instead of creating a
-    // second navigation root. The target XML is the native Control Panel nav
-    // resource (the diagnostic scan finds CPNavPanel/ControlPanelLink there).
-    std::wstring xml;
-    auto add = [&](UINT id, const wchar_t* target) {
-        wchar_t text[32];
-        swprintf_s(text, L"resstr(%u)", id);
-        xml += L"<element class=\"TaskNavLink\" layoutpos=\"top\" "
-               L"layout=\"flowlayout(0,2,0,2)\">"
-               L"<NavigateButton layoutpos=\"left\" layout=\"flowlayout()\" "
-               L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"";
-        xml += target;
-        xml += L"\"><ControlPanelLink class=\"link\" cursor=\"hand\" "
-               L"active=\"mouse|keyboard\" content=\"";
-        xml += text;
-        xml += L"\"/></NavigateButton></element>";
-    };
-    add(350, L"wurestorer:check");
-    add(351, L"wurestorer:opensettings");
-    add(352, L"wurestorer:history");
-    add(353, L"wurestorer:hidden");
-    return xml;
-}
-
-static std::wstring BuildWuNavigationPaneXml() {
-    // Reconstructed from the Windows 8.1 wucltux.dll UIFILE 123 navigation pane.
-    // The original buttons depended on legacy page actions; here every visible
-    // sidebar link conservatively reopens this restored Control Panel page.
-    return
-        // Private id (not atom(VistaNavigationPane)): the wucltux provider can
-        // create a stock VistaNavigationPane at runtime; reusing that atom here
-        // causes a silent duplicate-id conflict and the pane is dropped. A
-        // mod-specific atom keeps the injected pane as a true sibling.
-        L"<element class=\"cp_nav_pane\" id=\"atom(WindhawkVistaNavigationPane)\" layout=\"filllayout()\" layoutpos=\"left\">"
-        L"<viewer><element id=\"atom(NavPanelWatermark)\" sheet=\"WUCommonNavPanelStyle\"/></viewer>"
-        L"<element class=\"cp_nav_list\" layout=\"borderlayout()\">"
-        L"<element class=\"cp_nav_task_box\" layout=\"borderlayout()\" layoutpos=\"top\">" +
-        BuildWuSidebarLinkRow(350, true) +
-        BuildWuSidebarLinkRow(351, false) +
-        BuildWuSidebarLinkRow(352, false) +
-        BuildWuSidebarLinkRow(353, false) +
-        L"</element>"
-        L"<element class=\"cp_nav_link_box\" layoutpos=\"bottom\" layout=\"borderlayout()\">"
-        L"<element class=\"cp_nav_row\" layout=\"borderlayout()\" layoutpos=\"top\">"
-        L"<element class=\"cp_nav_h_spacer\" layoutpos=\"left\"/>"
-        L"<element class=\"cp_nav_label\" layoutpos=\"left\" content=\"resstr(1128)\"/>"
-        L"</element>" +
-        BuildWuSidebarLinkRow(355, false) +
-        BuildWuSidebarLinkRow(356, false) +
-        L"</element>"
-        L"</element>"
-        L"</element>";
-}
-
-static bool IsWuTopLevelPageXml(const std::wstring& xml) {
-    return xml.find(L"atom(toplevel)") != std::wstring::npos ||
-           xml.find(L"atom(moduleAUNotConfigured)") != std::wstring::npos;
-}
-
-static std::wstring PatchWuNavigationPaneXml(const std::wstring& input) {
-    // V3: DISABILITATO — copia del comportamento nativo.
-    // Le pagine native NON patchano il template condiviso ControlPanelNavPane;
-    // forniscono i link tramite property bag per-applet. Patchare il template
-    // condiviso causa contaminazione cache + ordine di parsing fragile
-    // (il template 4582 viene parsato PRIMA del provider, quindi la prima
-    // apertura non mostra i link). Per copiare il nativo, usiamo un pane
-    // privato dentro il contenuto WU (BuildWuNavigationPaneXml) che è
-    // per-pagina e viene distrutto navigando altrove.
-    (void)g_tlsWuNavTemplateScope; (void)g_tlsIsWUActive;
-    return input;
-    if (input.find(L"resid=\"ControlPanelNavPane\"") == std::wstring::npos ||
-        input.find(L"AppletTaskLinks") == std::wstring::npos ||
-        input.find(L"AppletSeeAlsoLinks") == std::wstring::npos) {
-        return input;
-    }
-    if (input.find(L"atom(windhawk_wu_template_links)") != std::wstring::npos)
-        return input;
-
-    std::wstring out = input;
-    const std::wstring taskEmpty =
-        L"<element id=\"atom(AppletTaskLinks)\" layout=\"verticalflowlayout(0,0,0,0)\" layoutpos=\"top\" />";
-    const std::wstring seeEmpty =
-        L"<element id=\"atom(AppletSeeAlsoLinks)\" layout=\"verticalflowlayout(0,0,0,0)\" />";
-    const size_t taskAt = out.find(taskEmpty);
-    const size_t seeAt = out.find(seeEmpty);
-    if (taskAt == std::wstring::npos || seeAt == std::wstring::npos) {
-        Wh_Log(L"WUR: exact native task/see-also anchors missing; template left untouched");
-        return input;
-    }
-    const std::wstring taskRows =
-        L"<element id=\"atom(windhawk_wu_template_links)\" layout=\"verticalflowlayout(0,0,0,0)\">" +
-        BuildWuNativeTemplateLinksXml(false) + L"</element>";
-    const std::wstring seeRows =
-        L"<element id=\"atom(windhawk_wu_template_seealso)\" layout=\"verticalflowlayout(0,0,0,0)\">" +
-        BuildWuNativeTemplateLinksXml(true) + L"</element>";
-    out.replace(taskAt, taskEmpty.size(), taskEmpty + taskRows);
-    const size_t adjustedSeeAt = out.find(seeEmpty);
-    out.replace(adjustedSeeAt, seeEmpty.size(), seeEmpty + seeRows);
-    Wh_Log(L"WUR: inserted WU-only native task and See Also links");
-    return out;
-}
 
 // -----------------------------------------------------------------------------
 // Windows Update service availability
@@ -5750,78 +5433,11 @@ static bool ProbeWindowsUpdateServiceAvailable() {
     return available;
 }
 
-// The native moduleAUNotConfigured warning ("Automatic updates are not
-// configured for this computer") is driven by the Automatic Updates
-// configuration (AUOptions/NoAutoUpdate), not by whether the wuauserv
-// service happens to be running - wucltux re-shows/re-sizes that module at
-// runtime after SetXML regardless of what the XML says, so fighting it in
-// the XML patch never works (confirmed via raw XML dump: our patch is
-// well-formed and still gets overridden). Instead, detect the same
-// condition natively used for that box and mirror it: if AU is not
-// configured, skip inserting the recreated hub entirely, exactly as if
-// "Show recreated interface" were off - matching the native page and
-// avoiding any conflict with the provider's own re-show logic.
-static bool IsAutomaticUpdatesConfigured() {
-    bool configured = true;  // default optimistic: assume configured unless proven otherwise
-
-    // Group Policy override takes precedence when present.
-    HKEY hPolicy = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-            L"SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU", 0, KEY_READ, &hPolicy) == ERROR_SUCCESS) {
-        DWORD noAutoUpdate = 0, size = sizeof(noAutoUpdate);
-        if (RegQueryValueExW(hPolicy, L"NoAutoUpdate", nullptr, nullptr,
-                             reinterpret_cast<LPBYTE>(&noAutoUpdate), &size) == ERROR_SUCCESS) {
-            configured = (noAutoUpdate == 0);
-        }
-        RegCloseKey(hPolicy);
-        return configured;
-    }
-
-    // Otherwise fall back to the local (non-policy) Automatic Updates setting.
-    // AUOptions == 1 means "Never check for updates" (AU turned off), which is
-    // exactly the state that makes wucltux show the native warning.
-    HKEY hLocal = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update", 0, KEY_READ, &hLocal) == ERROR_SUCCESS) {
-        DWORD auOptions = 0, size = sizeof(auOptions);
-        if (RegQueryValueExW(hLocal, L"AUOptions", nullptr, nullptr,
-                             reinterpret_cast<LPBYTE>(&auOptions), &size) == ERROR_SUCCESS) {
-            configured = (auOptions != 1);
-        }
-        RegCloseKey(hLocal);
-    }
-    return configured;
-}
-
 static bool IsWindowsUpdateServiceAvailable() {
-    // Previously this returned a value cached once at mod startup
-    // (GatherBackgroundStatus, called a single time from SetupWorker) and
-    // never refreshed afterwards - so the recreated hub kept showing/hiding
-    // based on whatever the service state was when Explorer/the mod first
-    // loaded, regardless of later changes. ProbeWindowsUpdateServiceAvailable()
-    // already self-throttles to one real SCM query per kWuCheckIntervalMs
-    // (5s), so calling it directly here keeps the render path cheap while
-    // actually reflecting the current state on every page (re)load.
-    //
-    // Additionally require Automatic Updates to actually be configured
-    // (see IsAutomaticUpdatesConfigured): that is the real condition behind
-    // the native moduleAUNotConfigured warning box, which wucltux re-shows
-    // at runtime regardless of what our XML patch says. When AU is not
-    // configured, skip the recreated hub entirely - same effect as if
-    // "Show recreated interface" were off - instead of fighting a native
-    // re-show we cannot suppress from the XML.
-    // This function is called from DirectUI rendering. It must never make SCM RPC.
+    // Rendering must not make an SCM RPC. The setup worker publishes the probe;
+    // until it finishes, preserve the optimistic state used by the native page.
     const bool probed = g_cachedWuServiceProbed.load(std::memory_order_acquire);
-    const bool available = !probed || g_cachedWuAvailable.load(std::memory_order_acquire);
-    // The wuauserv service and Automatic Updates policy are different states.
-    // A running service must not be reported as unavailable merely because
-    // AUOptions is missing, policy-managed, or set to a legacy value.  The
-    // latter only controls the native warning module; it is not proof that the
-    // service is stopped.
-    Wh_Log(L"WUR: WU availability: probed=%d serviceAvailable=%d automaticUpdatesConfigured=%d",
-           static_cast<int>(probed), static_cast<int>(available),
-           static_cast<int>(IsAutomaticUpdatesConfigured()));
-    return available;
+    return !probed || g_cachedWuAvailable.load(std::memory_order_acquire);
 }
 
 // -----------------------------------------------------------------------------
@@ -5918,63 +5534,32 @@ static std::wstring ReadWuaResultString(const wchar_t* subkey, const wchar_t* va
     return out;
 }
 
-// Builds the "Most recent check for updates" value from the registry. Windows
-// Formats a WUA DATE (VT_DATE / OLE automation date) as "YYYY/MM/DD HH:MM".
-static std::wstring FormatWuaDate(DATE date) {
-    SYSTEMTIME st{};
-    if (VariantTimeToSystemTime(date, &st) && st.wYear >= 1601) {
-        wchar_t buf[64];
-        swprintf_s(buf, L"%04u/%02u/%02u %02u:%02u",
-                   st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
-        return buf;
-    }
-    return L"";
-}
-
-// Returns the current local date/time as "YYYY/MM/DD HH:MM". Used as the "last
-// check" timestamp: it reflects the moment the mod queried the system for update
-// availability (not Windows' own recorded scan time).
-static std::wstring NowLocalTimeText() {
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    wchar_t buf[64];
-    swprintf_s(buf, L"%04u/%02u/%02u %02u:%02u",
-               st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
-    return buf;
-}
-
-// Returns the "last check" timestamp: the moment the mod queried the system for
-// update availability. This is NOT Windows' own recorded scan time — it is the
-// time this mod asked the system (see the README limitation note). Returns the
-// cached value, or refreshes it to now if not set yet.
+// Returns Windows Update's recorded scan time, falling back to the render time
+// only when modern Windows has no compatible timestamp value.
 static std::wstring LastCheckForUpdatesText() {
     std::lock_guard<std::mutex> lock(g_lastQueryTimeMutex);
-    if (g_lastQueryTimeText.empty()) g_lastQueryTimeText = NowLocalTimeText();
+    if (g_lastQueryTimeText.empty()) {
+        g_lastQueryTimeText = ReadWuaResultString(L"Detect", L"LastSuccessTime");
+        if (g_lastQueryTimeText.empty()) {
+            SYSTEMTIME st{};
+            GetLocalTime(&st);
+            wchar_t buffer[64];
+            swprintf_s(buffer, L"%04u/%02u/%02u %02u:%02u",
+                       st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
+            g_lastQueryTimeText = buffer;
+        }
+    }
     return g_lastQueryTimeText;
 }
 
-// Computes the "Updates were installed" value. This is the expensive part (it can
-// block for seconds on a cold/unhealthy Windows Update datastore via QueryHistory),
-// so it must run on a background thread, never on the Control Panel UI thread.
-// The registry key is often missing on Windows 10, so we fall back to the WUA
-// update history (most recent successful install), which is the reliable source.
+// The classic page used the Auto Update Results\Install registry timestamps.
+// Avoid the WUA QueryHistory RPC here so mod unload can always join its worker.
 static std::wstring ComputeLastInstallTime() {
-    // 1) Registry (works on Windows 7/8).
-    const wchar_t* values[] = { L"LastSuccessTime", L"Success", L"InstallTime" };
-    for (const wchar_t* v : values) {
-        std::wstring t = ReadWuaResultString(L"Install", v);
-        if (!t.empty()) return t;
-    }
-    // 2) WUA history: most recent successful install. QueryHistory can block on
-    // an unhealthy datastore, so never enter it once teardown has started.
-    if (g_stopping.load()) return L"";
-    std::vector<WuaHistoryEntry> history = GetUpdateHistory(200);
-    if (g_stopping.load()) return L"";
-    for (const auto& h : history) {
-        if (h.resultCode == orcSucceeded && h.date > 0) {
-            std::wstring s = FormatWuaDate(h.date);
-            if (!s.empty()) return s;
-        }
+    static constexpr PCWSTR values[] = {
+        L"LastSuccessTime", L"Success", L"InstallTime"};
+    for (PCWSTR value : values) {
+        std::wstring timestamp = ReadWuaResultString(L"Install", value);
+        if (!timestamp.empty()) return timestamp;
     }
     return L"";
 }
@@ -5982,23 +5567,21 @@ static std::wstring ComputeLastInstallTime() {
 // Returns the cached "Updates were installed" value computed on the background
 // thread. Never does blocking work here, so it is safe to call from the render path.
 static std::wstring LastInstallTimeText() {
-    // Rendering must never start WUA work or wait for the worker's WUA call.
     // A blank value is neutral and the next render uses the completed cache.
     std::lock_guard<std::mutex> lock(g_statusMutex);
     return g_lastInstallComputed ? g_cachedLastInstall : std::wstring();
 }
 
 // Background gathering (called from the setup thread): probes the Windows Update
-// service and pre-computes the update history, caching the results so the Control
-// Panel UI thread never does blocking SCM/WUA work while rendering the page.
+// service and reads the registry timestamps, caching the results so the Control
+// Panel UI thread never does blocking service work while rendering the page.
 static void GatherBackgroundStatus() {
     // Probe the service (SCM RPC) and cache the outcome.
     const bool available = ProbeWindowsUpdateServiceAvailable();
     g_cachedWuAvailable.store(available);
     g_cachedWuServiceProbed.store(true);
 
-    // Do the slow WUA work without the cache mutex: renderers can return their
-    // neutral state immediately instead of waiting behind QueryHistory.
+    // Read timestamps without the cache mutex so renderers never wait on the worker.
     if (g_stopping.load()) return;
     std::wstring lastInstall = ComputeLastInstallTime();
     if (g_stopping.load()) return;
@@ -6009,124 +5592,12 @@ static void GatherBackgroundStatus() {
     }
 }
 
-// =============================================================================
-// Settings page ("pageSettings") patch — RESERVED FOR FUTURE USE.
-// =============================================================================
-// This block is intentionally NOT compiled right now (#if 0). It was an attempt
-// to replace the non-functional scrolling "Important updates" module on the
-// legacy "Change settings" child page with an update-history shortcut block
-// (two blue links). It is kept in the source for future implementation and is
-// NOT removed for simplicity: the code is simply unused NOW, not abandoned.
-//
-// Why it is disabled: the settings-page "Important updates" module is resolved
-// by name from wucltux code-behind (atoms such as auOptionSelectorCombobox are
-// looked up programmatically). Removing or hiding the module made the page fail
-// to load ("impossibile caricare la pagina"). To avoid breaking the page, the
-// mod currently leaves pageSettings completely untouched (see PatchModernWuPageXml).
-// The helper functions below (FindModuleContaining, BuildWuSettingsReplacementXml,
-// PatchWuSettingsPageXml) are kept here as a reference for a future, safe
-// re-implementation. The translated strings 64540/64541/64542 in the MUI table
-// are also reserved for that same feature.
-
-
-
-
-
-
-
-// Keep every atom(module...) identifier that wucltux expects, but make the
-// legacy module itself empty.  Removing an ID makes some versions of the
-// provider return S_FALSE and reconstruct its stock UI, which is precisely how
-// duplicate native/recreated panes appear.  This is deliberately applied only
-// to the top-level WU page, never to pageSettings.
-static void CollapseNativeWuModules(std::wstring& xml) {
-    constexpr PCWSTR kPrefix = L"<element id=\"atom(module";
-    size_t pos = 0;
-    unsigned collapsed = 0;
-    while ((pos = xml.find(kPrefix, pos)) != std::wstring::npos) {
-        const size_t idEnd = xml.find(L"\"", pos + wcslen(L"<element id=\""));
-        size_t elementEnd = 0;
-        if (idEnd == std::wstring::npos || !FindElementEnd(xml, pos, elementEnd)) {
-            pos += wcslen(kPrefix);
-            continue;
-        }
-
-        // A stock module can also be a layout wrapper around other modules.
-        // After our surface is inserted, collapsing such an ancestor would also
-        // delete the recreated UI and leave the landing page completely empty.
-        // Preserve every ancestor containing one of our markers, then continue
-        // scanning so nested stock modules can still be collapsed individually.
-        const size_t customHub = xml.find(L"atom(wuamodern_best_effort)", pos);
-        const size_t customFallback = xml.find(L"atom(wuamodern_redbox_fallback)", pos);
-        if ((customHub != std::wstring::npos && customHub < elementEnd) ||
-            (customFallback != std::wstring::npos && customFallback < elementEnd)) {
-            pos += wcslen(kPrefix);
-            continue;
-        }
-
-        // Retain just id="atom(module...)". The retained atom prevents the
-        // provider from falling back to its original template at runtime.
-        const std::wstring idAttribute =
-            xml.substr(pos + wcslen(L"<element "),
-                       idEnd - (pos + wcslen(L"<element ")) + 1);
-        const std::wstring empty = L"<element " + idAttribute +
-            L" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
-        xml.replace(pos, elementEnd - pos, empty);
-        pos += empty.size();
-        ++collapsed;
-    }
-    if (collapsed) {
-        Wh_Log(L"Windows Update Restorer: suppressed %u native top-level WU module(s)", collapsed);
-    }
-}
-
-class WuNavPatchScope final {
-public:
-    explicit WuNavPatchScope(const std::wstring& xml) noexcept {
-        isCPNav_ = xml.find(L"resid=\"ControlPanelNavPane\"") != std::wstring::npos &&
-                   xml.find(L"AppletTaskLinks") != std::wstring::npos;
-        shouldConsume_ = isCPNav_ && g_tlsWuNavTemplateScope;
-        eligible_ = shouldConsume_ &&
-                    xml.find(L"AppletSeeAlsoLinks") != std::wstring::npos &&
-                    xml.find(L"ControlPanelLink") != std::wstring::npos;
-    }
-    WuNavPatchScope(const WuNavPatchScope&) = delete;
-    WuNavPatchScope& operator=(const WuNavPatchScope&) = delete;
-    explicit operator bool() const noexcept { return eligible_; }
-    bool ShouldConsume() const noexcept { return shouldConsume_; }
-    ~WuNavPatchScope() noexcept {
-        if (shouldConsume_) {
-            // One-shot: brucia il permesso anche se gli anchor non combaciano,
-            // così nessuna pagina successiva sullo stesso thread può riusarlo.
-            g_tlsWuNavTemplateScope = false;
-            g_wuNavTemplateScope.store(false, std::memory_order_release);
-        }
-    }
-private:
-    bool isCPNav_ = false;
-    bool shouldConsume_ = false;
-    bool eligible_ = false;
-};
 
 // Applies the top-level Windows Update page XML patch. The settings child page
 // (pageSettings) is intentionally left untouched to guarantee it always loads.
 static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
-    // The native sidebar is delivered as a small companion XML resource
-    // (the diagnostic size was about 4582 bytes), not necessarily in the
-    // 78 KB landing-page resource. Handle that resource before applying the
-    // landing-page checks.
-    WuNavPatchScope navScope(input);
-    if (navScope) {
-        try {
-            std::wstring scoped = PatchWuNavigationPaneXml(input);
-            if (scoped != input)
-                Wh_Log(L"WUR: native CPNav template patch consumed for WU only (RAII scope)");
-            return scoped;
-        } catch (...) {
-            Wh_Log(L"WUR: exception while patching CPNav template; original XML preserved");
-            return input;
-        }
-    }
+    // The outer ControlPanelNavPane is deliberately left untouched. Links are
+    // published through the pane's per-layout ControlPanelNavLinks object.
 
     if (!IsWindowsUpdatePageXml(input)) {
         DestroySettingsCombobox();
@@ -6140,12 +5611,9 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
     // Strictly isolate the ComboBox: destroy it immediately on any other page
     DestroySettingsCombobox();
 
-    // Restore/normalize the Windows 7/8.1-style left navigation pane for the
-    // top-level Windows Update page, including fallback layouts.
-    // Navigation is registered through System.Software.TasksFileUrl below.
-    // Do not inject a second DirectUI pane here: on modern wucltux builds that
-    // private XML sibling is rejected and causes “Unable to load page”.
-    std::wstring withNavPane = PatchWuNavigationPaneXml(input);
+    // Keep the Windows 7/8.1 native navigation pane. Do not inject or strip any
+    // DirectUI sidebar; only the document-area content is patched below.
+    std::wstring withNavPane = input;
 
     if (withNavPane.find(L"wuamodern_best_effort") != std::wstring::npos)
         return withNavPane;
@@ -6174,7 +5642,6 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
     // wucltux does not touch: the link reliably stays directly under the box.
     if (!wuAvailable) {
         if (moduleStart == std::wstring::npos) return withNavPane;
-
         // Remove the broken legacy "Check for updates for your PC" red box
         // (moduleCheckForUpdates) when the setting is enabled: with the service
         // stopped its "Check for updates" button cannot work, and it would
@@ -6191,7 +5658,6 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
                     const std::wstring emptiedCheck =
                         L"<element id=\"atom(moduleCheckForUpdates)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
                     patched.replace(checkStart, checkEnd - checkStart, emptiedCheck);
-                    Wh_Log(L"Windows Update Restorer: removed broken legacy 'Check for updates' red box (RemoveLegacyBrokenOption)");
                 }
             }
         }
@@ -6218,24 +5684,30 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
             L"<element id=\"atom(moduleAUNotConfigured)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
         patched.replace(currentModuleStart, moduleEnd - currentModuleStart, emptiedModule);
         const size_t insertAt = currentModuleStart + emptiedModule.size();
-        // V3: anche nel caso non disponibile, inietta il pane privato
-        std::wstring privateNavUnavail = BuildWuNavigationPaneXml();
-        patched.insert(insertAt, privateNavUnavail);
-        patched.insert(insertAt + privateNavUnavail.size(), BuildRedBoxFallbackXml(g_showServiceNotice.load()));
-        Wh_Log(L"WUR: injected private nav (%zu) + red box fallback (link=%d)", privateNavUnavail.size(), (int)g_showServiceNotice.load());
+        // The Windows-owned navigation pane remains untouched. Inject only the
+        // recreated content module into the document area.
+        patched.insert(insertAt, BuildRedBoxFallbackXml(g_showServiceNotice.load()));
         return patched;
     }
 
-    // Only inject anything if the user has the notice enabled. Keep the sidebar
-    // patch even when the recreated status box itself is disabled. (The
-    // "service unavailable" case above already returned with the broken legacy
-    // box removed when the setting is on.)
-    if (!g_showServiceNotice.load()) return withNavPane;
+    // With the recreated hub disabled, leave the page and its Windows-owned
+    // navigation pane exactly as they are.
+    if (!g_showServiceNotice.load()) {
+        return withNavPane;
+    }
 
-    if (moduleStart == std::wstring::npos) return withNavPane;
+    if (moduleStart == std::wstring::npos) {
+        // No anchor on this page (e.g. sub-pages like history) - do not inject, return as-is
+        return withNavPane;
+    }
 
+    // The native Control Panel navigation pane is intentionally untouched.
+    size_t recalcModuleStart = withNavPane.find(module);
+    if (recalcModuleStart == std::wstring::npos) {
+        return withNavPane;
+    }
     std::wstring patched = withNavPane;
-    size_t insertAt = moduleStart;
+    size_t insertAt = recalcModuleStart;
     if (wuAvailable) {
         // When Windows Update is available and updates are applied, the native red
         // "automatic updates are off" box (moduleAUNotConfigured) is misleading and
@@ -6254,11 +5726,11 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
         // self-closing, zero-sized node. The atom still resolves (no S_FALSE,
         // no fallback re-show), but there is nothing left to render.
         size_t moduleEnd = 0;
-        if (!FindElementEnd(patched, moduleStart, moduleEnd)) return input;
+        if (!FindElementEnd(patched, recalcModuleStart, moduleEnd)) return input;
         const std::wstring emptiedModule =
             L"<element id=\"atom(moduleAUNotConfigured)\" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
-        patched.replace(moduleStart, moduleEnd - moduleStart, emptiedModule);
-        insertAt = moduleStart + emptiedModule.size();
+        patched.replace(recalcModuleStart, moduleEnd - recalcModuleStart, emptiedModule);
+        insertAt = recalcModuleStart + emptiedModule.size();
     }
 
     std::wstring hub;
@@ -6270,13 +5742,9 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
         //    title and a status line ("No important updates available", etc.).
         //  - Below it, three info lines: most recent check, updates installed,
         //    and which updates you receive.
-        // DebugForcePendingUpdate forces the "pending updates" state so the
-        // interface can be previewed even when Windows reports nothing pending.
-        const bool pending =
-            IsPendingWindowsUpdate() || g_debugForcePending.load();
+        const bool pending = IsPendingWindowsUpdate();
         // Only surface the "updates available" (amber) state when the user
-        // enabled it (default off) — otherwise treat available updates as
-        // "up to date".
+        // enabled it (the setting defaults to on).
         const bool updatesAvailable = IsUpdatesAvailable() && g_showAvailableUpdates.load();
         // Icon skin: Windows 7/current uses the existing green/check and warning
         // shields. Windows 8.1 uses the supplied Windows Update icon instead
@@ -6434,18 +5902,9 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
             L"</element>";
     }
 
-    // V3: Inietta il pane di navigazione PRIVATO (per-pagina) invece di quello condiviso.
-    // Questo copia il comportamento nativo dove ogni applet fornisce i propri
-    // Task links via property bag, non via template condiviso. Il pane privato
-    // ha id WindhawkVistaNavigationPane (non atom(VistaNavigationPane)) per
-    // evitare conflitti, ed è distrutto automaticamente quando si naviga via.
-    std::wstring privateNav = BuildWuNavigationPaneXml();
-    // Inserisci il pane privato come left sibling del hub. Richiede che il parent
-    // sia borderlayout (lo è per atom(toplevel)), altrimenti layoutpos è ignorato
-    // ma il pane appare comunque come box verticale sopra il contenuto.
-    patched.insert(insertAt, privateNav);
-    patched.insert(insertAt + privateNav.size(), hub);
-    Wh_Log(L"WUR: injected private WU nav pane (%zu chars) + hub (%zu chars)", privateNav.size(), hub.size());
+    // Inject only the content hub. Windows owns the left pane and consumes the
+    // ControlPanelNavLinks object published by wucltux.
+    patched.insert(insertAt, hub);
     // The recreated hub owns the top-level content. Retain native atom IDs for
     // provider compatibility, but never let their original visual modules render.
     // Keep provider-owned modules intact; only the specific AU module above is
@@ -6455,7 +5914,7 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
 }
 
 // =============================================================================
-// Windows 7-Style Custom Task Pane Section for Control Panel Sidebar
+// DirectUI page-content hooks (the native Control Panel sidebar is not modified)
 // =============================================================================
 
 
@@ -6478,11 +5937,8 @@ static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
     if (g_inWuXmlPatch || !xml) {
         return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
     }
-    LogWuNavigationAnchors(xml);
     std::wstring patched = PatchModernWuPageXml(xml);
-    g_wuTopLevelActive.store(IsWuTopLevelPageXml(xml));
     if (patched == xml) return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
-    Wh_Log(L"Windows Update Restorer: modern WUA links injected through SetXML");
     WuXmlPatchGuard guard;
     HRESULT hr = DUISetXMLOriginal(parser, patched.c_str(), resourceModule, hInstance);
     // Never leave the host with a failed XML tree. S_FALSE is not a FAILED
@@ -6547,15 +6003,9 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
     } else {
         DestroySettingsCombobox();
     }
-    Wh_Log(L"Windows Update Restorer: modern WUA command links injected (hr=0x%08X, patchedLen=%zu, origLen=%zu, wuAvailable=%d)",
-           static_cast<unsigned>(hr), patched.size(), xml.size(), static_cast<int>(IsWindowsUpdateServiceAvailable()));
     if (hr == S_FALSE) {
-        // Diagnostic workaround: wucltux uses S_FALSE as a soft result on
-        // some builds. Returning S_FALSE makes the Control Panel host show
-        // "Unable to load page" even when the parser created a usable tree.
-        // Do not alter the XML or retry here: the parser has already consumed
-        // it, and a second SetXML call can corrupt the page state.
-        Wh_Log(L"Windows Update Restorer: SetXML returned S_FALSE; forcing S_OK for host compatibility");
+        // wucltux uses S_FALSE as a soft result on some builds. Returning it can
+        // make the host show "Unable to load page" despite a usable XML tree.
         return S_OK;
     }
     return hr;
@@ -6614,7 +6064,7 @@ static HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceN
 // -----------------------------------------------------------------------------
 // The legacy page definition uses indirect strings/icons such as
 // "@wucltux.dll,-73" and "wucltux.dll,-1" for child pages (for example
-// shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\pageSettings). On modern
+// shell:::{36EEF7DB-88AD-4E81-AD49-0E313F0C35F8}\\pageSettings). On modern
 // systems those shell-level lookups can fail or use the wrong icon, even though
 // DirectUI's in-page strings are already supplied by our embedded MUI table.
 // These hooks keep the breadcrumb/page title and page icon consistent with the
@@ -6794,106 +6244,325 @@ static bool EndsWith(const std::wstring& value, const std::wstring& suffix) {
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 static bool IsRootKey(HKEY key) {
-    uintptr_t value = reinterpret_cast<uintptr_t>(key);
+    const uintptr_t value = reinterpret_cast<uintptr_t>(key);
     return value >= 0x80000000 && value <= 0x80000004;
 }
-static std::wstring RootPath(HKEY key) {
+static const wchar_t* RootPathLiteral(HKEY key) {
     switch (reinterpret_cast<uintptr_t>(key)) {
         case 0x80000000: return L"HKEY_CLASSES_ROOT";
         case 0x80000001: return L"HKEY_CURRENT_USER";
         case 0x80000002: return L"HKEY_LOCAL_MACHINE";
-        default: return {};
+        case 0x80000003: return L"HKEY_USERS";
+        case 0x80000004: return L"HKEY_CURRENT_CONFIG";
+        default: return nullptr;
     }
 }
 
-
-// Cheap allocation-free filter for the RegOpenKey* hook hot path.
-static bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
-    static const wchar_t* needles[] = { L"clsid", L"controlpanel" };
-    for (size_t i = 0; i < path.size(); ++i) {
-        for (const auto* needle : needles) {
-            size_t j = 0;
-            while (needle[j] && i + j < path.size() && towlower(path[i + j]) == needle[j]) ++j;
-            if (!needle[j]) return true;
+// Allocation-free text gate for the process-wide registry hooks.
+static bool ContainsRelevantKeywordInsensitive(PCWSTR path) {
+    if (!path) return false;
+    // "shell extensions" is required for the Shell Extensions\Approved key:
+    // without it that path is filtered out before it ever reaches the
+    // virtualization layer, and the shell then treats the CLSID as unapproved.
+    static constexpr PCWSTR needles[] = {L"clsid", L"controlpanel",
+                                         L"shell extensions"};
+    for (const wchar_t* at = path; *at; ++at) {
+        for (PCWSTR needle : needles) {
+            size_t i = 0;
+            while (needle[i] && at[i] && towlower(at[i]) == needle[i]) ++i;
+            if (!needle[i]) return true;
         }
     }
     return false;
 }
 
-class KeyTracker {
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegOpenKeyW_t = decltype(&RegOpenKeyW);
+using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
+using RegCloseKey_t = decltype(&RegCloseKey);
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegEnumKeyW_t = decltype(&RegEnumKeyW);
+using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
+static RegOpenKeyExW_t RegOpenKeyExWOriginal = nullptr;
+static RegOpenKeyW_t RegOpenKeyWOriginal = nullptr;
+static RegCreateKeyExW_t RegCreateKeyExWOriginal = nullptr;
+static RegCloseKey_t RegCloseKeyOriginal = nullptr;
+static RegQueryValueExW_t RegQueryValueExWOriginal = nullptr;
+static RegGetValueW_t RegGetValueWOriginal = nullptr;
+static RegEnumKeyW_t RegEnumKeyWOriginal = nullptr;
+static RegEnumKeyExW_t RegEnumKeyExWOriginal = nullptr;
+static RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal = nullptr;
 
+// Each synthetic key is backed by a genuine handle to this per-process volatile
+// key. The mod-owned parent is directly below Software; no Software\Windhawk
+// intermediate key is created, which also works with portable installations.
+static constexpr PCWSTR kVirtualKeyParentPath =
+    L"Software\\WindhawkWindowsUpdateControlPanelRestorer";
+static constexpr PCWSTR kVirtualKeyOwnerMarker = L"WindhawkOwnerPid";
+static HKEY g_virtualKeyRoot = nullptr;
+static std::mutex g_virtualKeyRootMutex;
+
+enum { kKeyFlagsInformationClass = 4 };
+struct KeyFlagsInformation {
+    ULONG userFlags;
+    ULONG keyFlags;
+    ULONG controlFlags;
+};
+static constexpr ULONG kKeyFlagVolatile = 0x1;
+
+static bool IsVolatileKeyHandle(HKEY key) {
+    static auto ntQueryKey = reinterpret_cast<LONG(WINAPI*)(
+        HANDLE, int, PVOID, ULONG, PULONG)>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey"));
+    if (!ntQueryKey) return false;
+    KeyFlagsInformation information{};
+    ULONG needed = 0;
+    return ntQueryKey(reinterpret_cast<HANDLE>(key),
+                      kKeyFlagsInformationClass, &information,
+                      sizeof(information), &needed) == 0 &&
+           (information.keyFlags & kKeyFlagVolatile) != 0;
+}
+
+static bool HasCurrentVirtualKeyOwner(HKEY key) {
+    DWORD value = 0;
+    DWORD type = 0;
+    DWORD size = sizeof(value);
+    return RegQueryValueExWOriginal &&
+           RegQueryValueExWOriginal(
+               key, kVirtualKeyOwnerMarker, nullptr, &type,
+               reinterpret_cast<BYTE*>(&value), &size) == ERROR_SUCCESS &&
+           type == REG_DWORD && size == sizeof(value) &&
+           value == GetCurrentProcessId();
+}
+
+static std::wstring QueryNativeRegistryPath(HKEY key) {
+    static auto ntQueryKey = reinterpret_cast<LONG(WINAPI*)(
+        HANDLE, int, PVOID, ULONG, PULONG)>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey"));
+    if (!ntQueryKey || !key || IsRootKey(key)) return {};
+
+    // KeyNameInformation (3): ULONG NameLength followed by UTF-16 bytes.
+    ULONG needed = 0;
+    ntQueryKey(reinterpret_cast<HANDLE>(key), 3, nullptr, 0, &needed);
+    if (needed <= sizeof(ULONG) || needed > 65536) return {};
+    std::vector<BYTE> buffer(needed + sizeof(wchar_t));
+    if (ntQueryKey(reinterpret_cast<HANDLE>(key), 3, buffer.data(), needed,
+                   &needed) != 0) {
+        return {};
+    }
+    const ULONG nameBytes = *reinterpret_cast<const ULONG*>(buffer.data());
+    if (nameBytes > needed - sizeof(ULONG) || nameBytes % sizeof(wchar_t))
+        return {};
+    const wchar_t* name = reinterpret_cast<const wchar_t*>(
+        buffer.data() + sizeof(ULONG));
+    return std::wstring(name, nameBytes / sizeof(wchar_t));
+}
+
+static std::wstring VirtualKeyLeafName() {
+    return L"VirtualKeys-" + std::to_wstring(GetCurrentProcessId());
+}
+static std::wstring VirtualKeyPath() {
+    return std::wstring(kVirtualKeyParentPath) + L"\\" + VirtualKeyLeafName();
+}
+
+static HKEY EnsureVirtualKeyRoot() {
+    std::lock_guard lock(g_virtualKeyRootMutex);
+    if (g_virtualKeyRoot) return g_virtualKeyRoot;
+    if (!RegCreateKeyExWOriginal || !RegOpenKeyExWOriginal ||
+        !RegCloseKeyOriginal || !RegQueryValueExWOriginal) {
+        return nullptr;
+    }
+
+    HKEY root = nullptr;
+    const std::wstring path = VirtualKeyPath();
+    if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, path.c_str(), 0,
+                              KEY_READ | KEY_WRITE, &root) == ERROR_SUCCESS) {
+        if (IsVolatileKeyHandle(root) && HasCurrentVirtualKeyOwner(root)) {
+            g_virtualKeyRoot = root;
+            return root;
+        }
+        RegCloseKeyOriginal(root);
+        root = nullptr;
+
+        // Never adopt a persistent or foreign key at our disposable path. This
+        // is best-effort cleanup: if it fails, RegCreateKeyEx below still
+        // returns a usable handle to the existing key, and failing the whole
+        // virtualization layer over it would silently hide the applet.
+        HKEY parent = nullptr;
+        if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, kVirtualKeyParentPath, 0,
+                                  KEY_WRITE | DELETE, &parent) == ERROR_SUCCESS) {
+            RegDeleteTreeW(parent, VirtualKeyLeafName().c_str());
+            RegCloseKeyOriginal(parent);
+        }
+    }
+
+    DWORD disposition = 0;
+    const LSTATUS createStatus = RegCreateKeyExWOriginal(
+        HKEY_CURRENT_USER, path.c_str(), 0, nullptr, REG_OPTION_VOLATILE,
+        KEY_READ | KEY_WRITE, nullptr, &root, &disposition);
+    if (createStatus != ERROR_SUCCESS || !root) {
+        Wh_Log(L"Windows Update Restorer: could not create the volatile backing key (err=%d); "
+               L"the Control Panel item cannot be virtualized",
+               static_cast<int>(createStatus));
+        return nullptr;
+    }
+
+    // The owner marker is defence-in-depth (the path already embeds the PID), so
+    // a failure to stamp it must not disable the whole mod. Likewise the
+    // volatile recheck: REG_OPTION_VOLATILE was requested, and on some systems
+    // NtQueryKey's KeyFlagsInformation is not reliable enough to justify
+    // refusing to run.
+    const DWORD pid = GetCurrentProcessId();
+    RegSetValueExW(root, kVirtualKeyOwnerMarker, 0, REG_DWORD,
+                   reinterpret_cast<const BYTE*>(&pid), sizeof(pid));
+
+    g_virtualKeyRoot = root;
+    return root;
+}
+
+static void ReleaseVirtualKeyRoot() {
+    HKEY root = nullptr;
+    {
+        std::lock_guard lock(g_virtualKeyRootMutex);
+        root = g_virtualKeyRoot;
+        g_virtualKeyRoot = nullptr;
+    }
+    if (root && RegCloseKeyOriginal) RegCloseKeyOriginal(root);
+    if (!RegOpenKeyExWOriginal || !RegCloseKeyOriginal) return;
+
+    HKEY parent = nullptr;
+    if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, kVirtualKeyParentPath, 0,
+                              KEY_WRITE | DELETE, &parent) == ERROR_SUCCESS) {
+        RegDeleteKeyW(parent, VirtualKeyLeafName().c_str());
+        RegCloseKeyOriginal(parent);
+    }
+    HKEY software = nullptr;
+    if (RegOpenKeyExWOriginal(HKEY_CURRENT_USER, L"Software", 0, DELETE,
+                              &software) == ERROR_SUCCESS) {
+        RegDeleteKeyW(software, L"WindhawkWindowsUpdateControlPanelRestorer");
+        RegCloseKeyOriginal(software);
+    }
+}
+
+// True when a path mentions either of our CLSIDs, so we can trace every single
+// registry touch the shell makes against them - successful or not.
+static bool MentionsOurClsid(const std::wstring& path) {
+    const std::wstring lower = ToLower(path);
+    return lower.find(L"36eef7db-88ad-4e81-ad49-0e313f0c35f8") != std::wstring::npos ||
+           lower.find(L"cfbc05bc-1b9e-4693-a49c-4e7181d69e0a") != std::wstring::npos;
+}
+
+class KeyTracker {
 public:
-    std::wstring Path(HKEY key) const {
-        if (auto root = RootPath(key); !root.empty()) return root;
+    // Lock-free negative gate for hot registry calls. A small counting table can
+    // have false positives from collisions, but never false negatives, so most
+    // unrelated HKEYs avoid the shared mutex entirely.
+    bool MightContain(HKEY key) const {
+        if (!key || IsRootKey(key)) return false;
+        if (presence_[Bucket(key)].load(std::memory_order_relaxed) != 0) return true;
+        // The counting filter is only a fast negative hint. Because counts are
+        // decremented on Untrack, a bucket can read zero while a different live
+        // handle still hashes into it - a false negative there would send a
+        // CLSID subkey straight to the real registry and silently break the
+        // whole registration. Confirm against the map before giving up.
+        std::shared_lock lock(mutex_);
+        return paths_.find(key) != paths_.end();
+    }
+    bool GetPathAndFake(HKEY key, std::wstring& path, bool& isFake) const {
+        if (const wchar_t* root = RootPathLiteral(key)) {
+            path = root;
+            isFake = false;
+            return true;
+        }
         std::shared_lock lock(mutex_);
         auto found = paths_.find(key);
-        return found == paths_.end() ? std::wstring() : found->second;
+        if (found == paths_.end()) {
+            path.clear();
+            isFake = false;
+            return false;
+        }
+        path = found->second;
+        isFake = fake_.count(key) != 0;
+        return true;
     }
     bool IsFake(HKEY key) const {
+        if (!key || IsRootKey(key)) return false;
         std::shared_lock lock(mutex_);
         return fake_.count(key) != 0;
     }
-    bool IsFakeAndGetPath(HKEY key, std::wstring& path) const {
-        if (auto root = RootPath(key); !root.empty()) { path = std::move(root); return false; }
-        std::shared_lock lock(mutex_);
-        const auto found = paths_.find(key);
-        path = found == paths_.end() ? std::wstring() : found->second;
-        return fake_.count(key) != 0;
-    }
-    HKEY CreateFake(const std::wstring& path) {
-        std::unique_ptr<int> owner(new (std::nothrow) int(1));
-        if (!owner) return nullptr;
-        HKEY key = reinterpret_cast<HKEY>(owner.get());
+    HKEY CreateVirtual(const std::wstring& path) {
+        if (!EnsureVirtualKeyRoot()) {
+            return nullptr;
+        }
+        HKEY backing = nullptr;
+        const LSTATUS backingStatus = RegOpenKeyExWOriginal(
+            HKEY_CURRENT_USER, VirtualKeyPath().c_str(), 0, KEY_READ, &backing);
+        if (backingStatus != ERROR_SUCCESS) {
+            return nullptr;
+        }
         std::unique_lock lock(mutex_);
-        paths_[key] = path;
-        fake_[key] = std::move(owner);
-        return key;
+        const bool inserted = paths_.find(backing) == paths_.end();
+        paths_[backing] = path;
+        fake_.insert(backing);
+        if (inserted) presence_[Bucket(backing)].fetch_add(1, std::memory_order_relaxed);
+        return backing;
     }
     void Track(HKEY key, const std::wstring& path) {
-        if (!key || IsRootKey(key) || !ContainsRelevantKeywordInsensitive(path)) return;
+        if (!key || IsRootKey(key)) return;
+        // Child opens under our CLSID use keyword-free subkey names
+        // ("ShellFolder", "InProcServer32", "Instance", "DefaultIcon"), so they
+        // can only be virtualized through a tracked parent handle. Never drop a
+        // path that mentions our CLSIDs, whatever the cheap keyword gate says.
+        if (!ContainsRelevantKeywordInsensitive(path.c_str()) &&
+            !MentionsOurClsid(path)) {
+            return;
+        }
         std::unique_lock lock(mutex_);
+        const bool inserted = paths_.find(key) == paths_.end();
         paths_[key] = path;
+        if (inserted) presence_[Bucket(key)].fetch_add(1, std::memory_order_relaxed);
     }
-    void Close(HKEY key) {
+    void Untrack(HKEY key) {
+        if (!key || IsRootKey(key) || !MightContain(key)) return;
         std::unique_lock lock(mutex_);
-        paths_.erase(key);
+        if (paths_.erase(key))
+            presence_[Bucket(key)].fetch_sub(1, std::memory_order_relaxed);
         fake_.erase(key);
     }
-    void AbandonAll() {
-        std::unique_lock lock(mutex_);
-        paths_.clear();
-        for (auto& item : fake_) {
-            int* ptr = item.second.release();
-            (void)ptr;
+    void CloseVirtual(HKEY key) {
+        bool owned = false;
+        {
+            std::unique_lock lock(mutex_);
+            owned = fake_.erase(key) != 0;
+            if (paths_.erase(key))
+                presence_[Bucket(key)].fetch_sub(1, std::memory_order_relaxed);
         }
+        if (owned) RegCloseKeyOriginal(key);
+    }
+    void ClearWithoutFreeing() {
+        std::unique_lock lock(mutex_);
+        for (const auto& [key, path] : paths_)
+            presence_[Bucket(key)].fetch_sub(1, std::memory_order_relaxed);
+        paths_.clear();
         fake_.clear();
     }
 
 private:
+    static constexpr size_t kPresenceBuckets = 256;
+    static size_t Bucket(HKEY key) {
+        const uintptr_t value = reinterpret_cast<uintptr_t>(key);
+        return ((value >> 3) ^ (value >> 13) ^ (value >> 23)) &
+               (kPresenceBuckets - 1);
+    }
+
     mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
-    std::unordered_map<HKEY, std::unique_ptr<int>> fake_;
+    std::unordered_set<HKEY> fake_;
+    mutable std::atomic<unsigned> presence_[kPresenceBuckets]{};
 };
 static KeyTracker g_keys;
-
-// A namespace enumeration can ask for ERROR_NO_MORE_ITEMS more than once.
-// Inject the virtual item once per enumeration pass only; otherwise callers that
-// increment the index after the injected item would see it repeatedly.
-static std::mutex g_injectionMutex;
-static std::unordered_map<HKEY, bool> g_injected;
-static bool ShouldInject(HKEY key, DWORD index) {
-    std::lock_guard lock(g_injectionMutex);
-    if (index == 0) g_injected[key] = false;
-    bool& injected = g_injected[key];
-    if (injected) return false;
-    injected = true;
-    return true;
-}
-static void ClearInjection(HKEY key) {
-    std::lock_guard lock(g_injectionMutex);
-    g_injected.erase(key);
-}
-
 
 static std::wstring g_clsidSuffix;
 static std::wstring g_defaultIconSuffix;
@@ -6938,6 +6607,17 @@ static bool IsNamespaceParent(const std::wstring& path) {
 
     return EndsWith(ToLower(path), L"controlpanel\\namespace");
 }
+
+// HKLM\...\Shell Extensions\Approved. The INF registers the applet CLSID here,
+// and an explorer.exe running with "enforce approved shell extensions" (the
+// default on many managed/Enterprise systems, and the state Windows 10 21H2
+// ships with for Control Panel namespace items) refuses to instantiate a
+// namespace CLSID that is absent from it. The entry is enumerated successfully
+// but never bound, which is exactly the "entry injected, nothing appears"
+// symptom. Serving this value is what makes the item actually materialize.
+static bool IsApprovedKey(const std::wstring& path) {
+    return EndsWith(ToLower(path), L"shell extensions\\approved");
+}
 static bool IsTarget(const std::wstring& path) { return Classify(path) != Node::None; }
 
 
@@ -6962,6 +6642,8 @@ static std::wstring ShdocvwPath() {
 }
 
 static std::mutex g_appletLogoIconMutex;
+static std::wstring g_appletLogoIconPaths[2];
+static bool g_appletLogoIconInitialized[2] = {false, false};
 
 static bool FileHasExpectedSize(const std::wstring& path, DWORD expectedSize) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -6986,20 +6668,26 @@ static bool WriteBinaryFile(const std::wstring& path, const std::vector<BYTE>& d
 
 static std::wstring EnsureAppletLogoIconFile(bool windows81Skin) {
     std::lock_guard<std::mutex> lock(g_appletLogoIconMutex);
-    const std::wstring dir = StoreDir();
+    const size_t index = windows81Skin ? 1 : 0;
+    if (g_appletLogoIconInitialized[index]) return g_appletLogoIconPaths[index];
+    g_appletLogoIconInitialized[index] = true;
+
+    const std::wstring& dir = StoreDir();
     if (dir.empty()) return L"";
-    const wchar_t* fileName = windows81Skin ? kAppletLogoWin81FileName : kAppletLogoWin7FileName;
-    const char* base64 = windows81Skin ? kAppletLogoWin81IcoBase64 : kAppletLogoWin7IcoBase64;
+    const wchar_t* fileName = windows81Skin ? kAppletLogoWin81FileName
+                                            : kAppletLogoWin7FileName;
+    const char* base64 = windows81Skin ? kAppletLogoWin81IcoBase64
+                                      : kAppletLogoWin7IcoBase64;
     std::vector<BYTE> data = DecodeBase64Icon(base64);
     if (data.empty()) return L"";
     const std::wstring path = dir + L"\\" + fileName;
-    if (!FileHasExpectedSize(path, static_cast<DWORD>(data.size()))) {
-        if (!WriteBinaryFile(path, data)) {
-            Wh_Log(L"Windows Update Restorer: failed to write applet logo icon %s (err=%u)",
-                   fileName, GetLastError());
-            return L"";
-        }
+    if (!FileHasExpectedSize(path, static_cast<DWORD>(data.size())) &&
+        !WriteBinaryFile(path, data)) {
+        Wh_Log(L"Windows Update Restorer: failed to write applet logo icon %s (err=%u)",
+               fileName, GetLastError());
+        return L"";
     }
+    g_appletLogoIconPaths[index] = path;
     return path;
 }
 
@@ -7009,122 +6697,95 @@ static std::wstring AppletDefaultIconValue(const std::wstring& fallbackPayload) 
     return L"\"" + iconPath + L"\",0";
 }
 
+// Deletes one mod-generated file, logging (but never failing on) a file that is
+// still mapped by another process. Nothing machine-wide is scheduled: a locked
+// file is simply retried by the sweep on a later load/unload.
+static bool DeleteGeneratedFile(const std::wstring& path) {
+    if (DeleteFileW(path.c_str())) return true;
+    const DWORD error = GetLastError();
+    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return true;
+    Wh_Log(L"Windows Update Restorer: could not delete %s (err=%u, still in use); will retry on a later load/unload",
+           path.c_str(), error);
+    return false;
+}
+
 static void CleanupAppletLogoIconFiles() {
     const std::wstring dir = StoreDir();
     if (dir.empty()) return;
-    DeleteFileW((dir + L"\\" + kAppletLogoWin7FileName).c_str());
-    DeleteFileW((dir + L"\\" + kAppletLogoWin81FileName).c_str());
-}
-
-
-static bool WriteUtf8TextFile(const std::wstring& path, const std::wstring& text) {
-    int bytesNeeded = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (bytesNeeded <= 1) return false;
-    std::string utf8(static_cast<size_t>(bytesNeeded - 1), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, &utf8[0], bytesNeeded, nullptr, nullptr);
-
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return false;
-    DWORD written = 0;
-    const bool ok = WriteFile(file, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr) &&
-                    written == static_cast<DWORD>(utf8.size());
-    CloseHandle(file);
-    return ok;
-}
-
-static const wchar_t* TaskStringOrFallback(UINT id, const wchar_t* fallback) {
-    if (const wchar_t* text = EmbeddedMuiString(id)) return text;
-    return fallback ? fallback : L"";
-}
-
-static void AppendControlPanelTaskXml(std::wstring& xml, const wchar_t* id,
-                                      const wchar_t* name, const wchar_t* keywords,
-                                      const wchar_t* target) {
-    xml +=
-        L"        <sh:task id=\"" + std::wstring(id) + L"\">\r\n"
-        L"            <sh:name>" + XmlEscape(name) + L"</sh:name>\r\n"
-        L"            <sh:keywords>" + XmlEscape(keywords) + L"</sh:keywords>\r\n"
-        // Windows 11 25H2 no longer reliably expands %SystemRoot% in a cpltasks
-        // command before splitting its executable and arguments. Use the normal
-        // PATH-resolved explorer command and an explicit shell namespace target.
-        L"            <sh:command>explorer.exe shell:::" + std::wstring(kAppletClsid) +
-        (target ? std::wstring(target) : std::wstring()) + L"</sh:command>\r\n"
-        L"        </sh:task>\r\n";
-}
-
-static std::wstring BuildControlPanelTasksXml() {
-    // These are the classic Windows 7/8.1 blue task links shown under the
-    // Control Panel item in category/search views. Labels come from the same
-    // multilingual MUI table used by the page. Every link conservatively opens
-    // our restored Windows Update Control Panel page.
-    struct TaskDef { const wchar_t* id; UINT labelId; const wchar_t* fallback; const wchar_t* keywords; const wchar_t* target; };
-    static const TaskDef tasks[] = {
-        { L"{72F890EA-C723-4B30-B990-69897A70E42D}", 350, L"Check for updates", L"windows update;check;updates;scan;", L"" },
-        { L"{0B11B6C6-4E9C-4E92-A3E4-1D31584546BA}", 351, L"Change settings", L"windows update;change settings;automatic updates;", L"\\pageSettings" },
-        { L"{B3F9A7F2-C2FA-42B5-9D4A-473C66A3D4C0}", 352, L"View update history", L"windows update;history;installed updates;", L"\\pageHistory" },
-        { L"{AC39E470-04F0-45C0-87D9-2B0C0B197350}", 353, L"Restore hidden updates", L"windows update;restore hidden updates;hidden;", L"\\pageRestoreHiddenUpdates" },
-        { L"{5D0F2DCB-6393-4E76-998B-2DA9A2F04AA1}", 20004, L"View Installed Updates", L"windows update;view installed updates;uninstall;", L"\\pageInstalledUpdates" },
-    };
-
-    std::wstring xml =
-        L"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n"
-        L"<applications xmlns=\"http://schemas.microsoft.com/windows/cpltasks/v1\"\r\n"
-        L"              xmlns:sh=\"http://schemas.microsoft.com/windows/tasks/v1\">\r\n"
-        L"    <application id=\"" + std::wstring(kAppletClsid) + L"\">\r\n";
-    for (const auto& task : tasks) {
-        AppendControlPanelTaskXml(xml, task.id,
-                                  TaskStringOrFallback(task.labelId, task.fallback),
-                                  task.keywords, task.target);
+    DeleteGeneratedFile(dir + L"\\" + kAppletLogoWin7FileName);
+    DeleteGeneratedFile(dir + L"\\" + kAppletLogoWin81FileName);
+    std::lock_guard<std::mutex> lock(g_appletLogoIconMutex);
+    for (size_t index = 0; index < 2; ++index) {
+        g_appletLogoIconPaths[index].clear();
+        g_appletLogoIconInitialized[index] = false;
     }
-    static const wchar_t* categories[] = { L"5", L"10" };
-    for (const wchar_t* category : categories) {
-        xml += L"        <category id=\"" + std::wstring(category) + L"\">\r\n";
-        for (const auto& task : tasks) {
-            xml += L"            <sh:task idref=\"" + std::wstring(task.id) + L"\"/>\r\n";
-        }
-        xml += L"        </category>\r\n";
-    }
-    xml +=
-        L"    </application>\r\n"
-        L"</applications>\r\n";
-    return xml;
 }
 
-// Guard + cached path so the tasks-XML file is written at most once, even though
-// the hook may ask for System.Software.TasksFileUrl concurrently from multiple
-// Explorer windows/threads. Writes happen under a mutex (like the applet logo
-// file); after the first success we just return the cached path.
-static std::mutex g_tasksXmlMutex;
-static std::wstring g_tasksXmlPath;
-static std::wstring EnsureControlPanelTasksXmlFile() {
-    std::lock_guard<std::mutex> lock(g_tasksXmlMutex);
-    if (!g_tasksXmlPath.empty()) return g_tasksXmlPath;
-    const std::wstring dir = StoreDir();
-    if (dir.empty()) return L"";
-    const std::wstring path = dir + L"\\" + kAppletTasksXmlFileName;
-    if (!WriteUtf8TextFile(path, BuildControlPanelTasksXml())) {
-        Wh_Log(L"Windows Update Restorer: failed to write Control Panel task links XML (err=%u)",
-               GetLastError());
-        return L"";
-    }
-    g_tasksXmlPath = path;
-    return path;
-}
 
 static void CleanupControlPanelTasksXmlFile() {
     const std::wstring dir = StoreDir();
     if (dir.empty()) return;
-    DeleteFileW((dir + L"\\" + kAppletTasksXmlFileName).c_str());
+    DeleteGeneratedFile(dir + L"\\" + kAppletTasksXmlFileName);
+}
+
+// Sweep of leftovers from processes that were killed without ever running
+// Wh_ModUninit (explorer.exe restarts, logoff, crashes). Called at load time,
+// which is exactly the moment those files are no longer mapped, satisfying the
+// "retry on next start" half of the cleanup contract. The verified payload
+// itself is deliberately kept: it is the expensive, network-dependent artifact
+// and reusing it is what lets the mod work offline on later runs.
+static void SweepStaleGeneratedFiles() {
+    const std::wstring dir = StoreDir();
+    if (dir.empty()) return;
+    unsigned removed = 0;
+    // Partial downloads only; the verified wucltux.dll is intentionally cached.
+    static constexpr PCWSTR kStalePatterns[] = {L"\\*.tmp", L"\\wucltux.dll.tmp"};
+    for (PCWSTR pattern : kStalePatterns) {
+        WIN32_FIND_DATAW findData{};
+        HANDLE find = FindFirstFileW((dir + pattern).c_str(), &findData);
+        if (find == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            if (DeleteGeneratedFile(dir + L"\\" + findData.cFileName)) ++removed;
+        } while (FindNextFileW(find, &findData));
+        FindClose(find);
+    }
+    if (removed)
+        Wh_Log(L"Windows Update Restorer: removed %u stale temporary file(s) from a previous session", removed);
 }
 
 
 
 static bool ProvideValue(const std::wstring& path, const std::wstring& name,
                          LPDWORD type, LPBYTE data, LPDWORD bytes, LSTATUS& result) {
-    if (!g_verified.load()) return false;
-    const std::wstring* payload = g_dllPath.load();
-    if (!payload || payload->empty()) return false;
+    // Publish the lightweight Control Panel metadata immediately, even while
+    // the setup worker is still validating/loading the payload. Explorer can
+    // enumerate and cache applets very early in process startup; waiting for the
+    // MUI build here makes the entry miss that one-time enumeration pass.
+    //
+    // Everything that does not strictly need wucltux.dll (display name, icon,
+    // InfoTip, category, task links, shell-folder attributes) is answered from
+    // constants, so the Control Panel item appears and is browsable even with no
+    // network at all. Only ResourceDLL and the provider's InProcServer32 are
+    // withheld until the payload is verified.
+    const std::wstring* payload = g_dllPath.load(std::memory_order_acquire);
+    const bool payloadReady = payload && !payload->empty() && g_verified.load();
+    // Approved is keyed by CLSID *value name*, not by a subkey, so it is handled
+    // before the node classification below.
+    if (IsApprovedKey(path)) {
+        if (_wcsicmp(name.c_str(), kAppletClsid) == 0) {
+            if (type) *type = REG_SZ;
+            result = PutString(data, bytes, kDisplayName);
+            return true;
+        }
+        if (_wcsicmp(name.c_str(), kElementProviderClsid) == 0) {
+            if (type) *type = REG_SZ;
+            result = PutString(data, bytes, kDisplayName);
+            return true;
+        }
+        return false;
+    }
+
     const Node node = Classify(path);
     std::wstring value;
     DWORD number = 0;
@@ -7135,19 +6796,32 @@ static bool ProvideValue(const std::wstring& path, const std::wstring& name,
             break;
         case Node::Root:
             if (name.empty()) value = kDisplayName;
-            else if (name == L"LocalizedString") value = L"@" + *payload + L",-1";
+            else if (name == L"LocalizedString")
+                value = payloadReady ? L"@" + *payload + L",-1" : kDisplayName;
             else if (name == L"InfoTip") value = InfoTipForLanguage();
             else if (name == L"System.ApplicationName") value = kApplicationName;
+            // Requested right after the display name during enumeration. The
+            // shell uses it to order the item in the Control Panel grid; the
+            // real Windows Update applet ships index 5.
+            else if (name == L"SortOrderIndex") { isDword = true; number = 5; }
+            // Probed by the shell right after binding. The stock Control Panel
+            // applets define them; leaving them unanswered makes the item look
+            // like a plain COM object rather than a namespace folder.
+            else if (name == L"NoRecentDocs") value.clear();
+            else if (name == L"NoStaticDefaultVerb") value.clear();
             else if (name == L"System.ControlPanel.Category") value = L"5,10";
             else if (name == L"System.Software.TasksFileUrl") {
-                value = EnsureControlPanelTasksXmlFile();
-                if (value.empty()) return false;
+                // Do not publish the separate task-file mechanism. The one
+                // visible Windows pane is supplied by ControlPanelNavLinks from
+                // wucltux and redirected by PSPropertyBag_WriteUnknownHook.
+                return false;
             }
             else return false;
             break;
         case Node::Icon:
             if (!name.empty()) return false;
-            value = AppletDefaultIconValue(*payload); break;
+            value = AppletDefaultIconValue(payloadReady ? *payload : ShdocvwPath());
+            break;
         case Node::Inproc:
             if (name.empty()) value = ShdocvwPath();
             else if (name == L"ThreadingModel") value = L"Apartment";
@@ -7157,9 +6831,13 @@ static bool ProvideValue(const std::wstring& path, const std::wstring& name,
             if (name != L"CLSID") return false;
             value = kLayoutFolderClsid; break;
         case Node::Bag:
-            if (name == L"ResourceDLL") value = *payload;
-            else if (name == L"ResourceID") { isDword = true; number = kInitResourceId; }
-            else return false;
+            if (name == L"ResourceDLL") {
+                if (!payloadReady) return false;
+                value = *payload;
+            } else if (name == L"ResourceID") {
+                isDword = true;
+                number = kInitResourceId;
+            } else return false;
             break;
         case Node::ShellFolder:
             if (name == L"Attributes") { isDword = true; number = kShellFolderAttributes; }
@@ -7171,8 +6849,14 @@ static bool ProvideValue(const std::wstring& path, const std::wstring& name,
             value.clear();
             break;
         case Node::ProviderInproc:
-            if (name.empty()) value = *payload;
-            else if (name == L"ThreadingModel") value = L"Apartment";
+            // The element provider's server path is the one value that is
+            // meaningless without the payload. Never dereference `payload`
+            // unguarded: registration goes live before the background download
+            // finishes, so this is routinely reached with no payload yet.
+            if (name.empty()) {
+                if (!payloadReady) return false;
+                value = *payload;
+            } else if (name == L"ThreadingModel") value = L"Apartment";
             else return false;
             break;
         default: return false;
@@ -7183,323 +6867,461 @@ static bool ProvideValue(const std::wstring& path, const std::wstring& name,
 }
 
 
-using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-using RegOpenKeyW_t = decltype(&RegOpenKeyW);
-using RegCloseKey_t = decltype(&RegCloseKey);
-using RegQueryValueExW_t = decltype(&RegQueryValueExW);
-using RegGetValueW_t = decltype(&RegGetValueW);
-using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
-using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
-static RegOpenKeyExW_t RegOpenKeyExWOriginal;
-static RegOpenKeyW_t RegOpenKeyWOriginal;
-static RegCloseKey_t RegCloseKeyOriginal;
-static RegQueryValueExW_t RegQueryValueExWOriginal;
-static RegGetValueW_t RegGetValueWOriginal;
-static RegEnumKeyExW_t RegEnumKeyExWOriginal;
-static RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal;
 
 
 static bool WantsWrite(REGSAM access) {
-
     return (access & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
 }
-static LSTATUS OpenVirtual(HKEY key, LPCWSTR subKey, DWORD options, REGSAM access, PHKEY out) {
+
+static LSTATUS OpenVirtual(HKEY key, LPCWSTR subKey, DWORD options,
+                           REGSAM access, PHKEY out) {
     if (!out) return ERROR_INVALID_PARAMETER;
+
+    const bool textRelevant = ContainsRelevantKeywordInsensitive(subKey);
+    if (IsRootKey(key) && !textRelevant)
+        return RegOpenKeyExWOriginal(key, subKey, options, access, out);
+    if (!IsRootKey(key) && !textRelevant && !g_keys.MightContain(key))
+        return RegOpenKeyExWOriginal(key, subKey, options, access, out);
+
     try {
         std::wstring full;
-        const bool isFake = g_keys.IsFakeAndGetPath(key, full);
-        if (subKey && *subKey) { if (!full.empty()) full += L"\\"; full += subKey; }
+        bool isFake = false;
+        g_keys.GetPathAndFake(key, full, isFake);
+        if (subKey && *subKey) {
+            if (!full.empty()) full += L"\\";
+            full += subKey;
+        }
         if (isFake) {
-            if (!IsTarget(full)) return ERROR_FILE_NOT_FOUND;
+            if (!g_registrationReady.load() || !IsTarget(full))
+                return ERROR_FILE_NOT_FOUND;
             if (WantsWrite(access)) return ERROR_ACCESS_DENIED;
-            HKEY fake = g_keys.CreateFake(full);
-            if (!fake) return ERROR_OUTOFMEMORY;
-            *out = fake;
+            HKEY virtualKey = g_keys.CreateVirtual(full);
+            if (!virtualKey) return ERROR_OUTOFMEMORY;
+            *out = virtualKey;
             return ERROR_SUCCESS;
         }
+
         LSTATUS status = RegOpenKeyExWOriginal(key, subKey, options, access, out);
         if (status == ERROR_SUCCESS && *out) {
-            try { g_keys.Track(*out, full); }
-            catch (...) { Wh_Log(L"Windows Update Restorer: unable to track opened registry key"); }
-        } else if (status == ERROR_FILE_NOT_FOUND && IsTarget(full)) {
+            // Track real keys at virtualized paths so their child opens and
+            // value reads continue through the lightweight virtualization path.
+            g_keys.Track(*out, full);
+        } else if (status == ERROR_FILE_NOT_FOUND && g_registrationReady.load() &&
+                   IsTarget(full)) {
             if (WantsWrite(access)) return ERROR_ACCESS_DENIED;
-            HKEY fake = g_keys.CreateFake(full);
-            if (!fake) return ERROR_OUTOFMEMORY;
-            *out = fake;
+            HKEY virtualKey = g_keys.CreateVirtual(full);
+            if (!virtualKey) return ERROR_OUTOFMEMORY;
+            *out = virtualKey;
             return ERROR_SUCCESS;
         }
         return status;
     } catch (...) {
-        // Never unwind a C++ exception through a foreign registry API caller.
         return ERROR_NOT_ENOUGH_MEMORY;
     }
 }
+
 static LSTATUS WINAPI RegOpenKeyExWHook(HKEY key, LPCWSTR subKey, DWORD options,
                                         REGSAM access, PHKEY out) {
-
     return OpenVirtual(key, subKey, options, access, out);
 }
 static LSTATUS WINAPI RegOpenKeyWHook(HKEY key, LPCWSTR subKey, PHKEY out) {
-
     return OpenVirtual(key, subKey, 0, MAXIMUM_ALLOWED, out);
 }
 static LSTATUS WINAPI RegCloseKeyHook(HKEY key) {
-
-    if (g_keys.IsFake(key)) { g_keys.Close(key); ClearInjection(key); return ERROR_SUCCESS; }
-    LSTATUS status = RegCloseKeyOriginal(key); g_keys.Close(key); ClearInjection(key); return status;
+    if (g_keys.MightContain(key) && g_keys.IsFake(key)) {
+        g_keys.CloseVirtual(key);
+        return ERROR_SUCCESS;
+    }
+    LSTATUS status = RegCloseKeyOriginal(key);
+    g_keys.Untrack(key);
+    return status;
 }
-static LSTATUS WINAPI RegQueryValueExWHook(HKEY key, LPCWSTR valueName, LPDWORD reserved,
-                                            LPDWORD type, LPBYTE data, LPDWORD bytes) {
+static LSTATUS WINAPI RegQueryValueExWHook(
+    HKEY key, LPCWSTR valueName, LPDWORD reserved, LPDWORD type,
+    LPBYTE data, LPDWORD bytes) {
+    if (IsRootKey(key) || !g_keys.MightContain(key))
+        return RegQueryValueExWOriginal(key, valueName, reserved, type, data, bytes);
 
     std::wstring path;
-    const bool isFake = g_keys.IsFakeAndGetPath(key, path);
-    const std::wstring name = valueName ? valueName : L"";
+    bool isFake = false;
+    g_keys.GetPathAndFake(key, path, isFake);
     LSTATUS result = ERROR_FILE_NOT_FOUND;
-    if (!path.empty() && ProvideValue(path, name, type, data, bytes, result)) return result;
+    if (g_registrationReady.load() && !path.empty() &&
+        ProvideValue(path, valueName ? valueName : L"", type, data, bytes, result)) {
+        return result;
+    }
     if (isFake) return ERROR_FILE_NOT_FOUND;
     return RegQueryValueExWOriginal(key, valueName, reserved, type, data, bytes);
 }
-static LSTATUS WINAPI RegGetValueWHook(HKEY key, LPCWSTR subKey, LPCWSTR valueName, DWORD flags,
-                                       LPDWORD type, PVOID data, LPDWORD bytes) {
+static LSTATUS WINAPI RegGetValueWHook(
+    HKEY key, LPCWSTR subKey, LPCWSTR valueName, DWORD flags, LPDWORD type,
+    PVOID data, LPDWORD bytes) {
+    const bool textRelevant = ContainsRelevantKeywordInsensitive(subKey);
+    if (IsRootKey(key) && !textRelevant)
+        return RegGetValueWOriginal(key, subKey, valueName, flags, type, data, bytes);
+    if (!IsRootKey(key) && !textRelevant && !g_keys.MightContain(key))
+        return RegGetValueWOriginal(key, subKey, valueName, flags, type, data, bytes);
 
     std::wstring path;
-    const bool isFake = g_keys.IsFakeAndGetPath(key, path);
-    if (subKey && *subKey) { if (!path.empty()) path += L"\\"; path += subKey; }
+    bool isFake = false;
+    g_keys.GetPathAndFake(key, path, isFake);
+    if (subKey && *subKey) {
+        if (!path.empty()) path += L"\\";
+        path += subKey;
+    }
     LSTATUS result = ERROR_FILE_NOT_FOUND;
-    if (!path.empty() && ProvideValue(path, valueName ? valueName : L"", type,
-                                      static_cast<LPBYTE>(data), bytes, result)) return result;
+    if (g_registrationReady.load() && !path.empty() &&
+        ProvideValue(path, valueName ? valueName : L"", type,
+                     static_cast<LPBYTE>(data), bytes, result)) {
+        return result;
+    }
     if (isFake) return ERROR_FILE_NOT_FOUND;
     return RegGetValueWOriginal(key, subKey, valueName, flags, type, data, bytes);
 }
 
-
 static bool VirtualSubkey(Node node, DWORD index, std::wstring& name) {
     if (node == Node::Root) {
-        static const wchar_t* names[] = {L"DefaultIcon", L"InProcServer32", L"Instance", L"ShellFolder"};
-        if (index < ARRAYSIZE(names)) { name = names[index]; return true; }
-    } else if (node == Node::Instance && index == 0) { name = L"InitPropertyBag"; return true; }
-    else if (node == Node::Provider && index == 0) { name = L"InProcServer32"; return true; }
+        static constexpr PCWSTR names[] = {
+            L"DefaultIcon", L"InProcServer32", L"Instance", L"ShellFolder"};
+        if (index < ARRAYSIZE(names)) {
+            name = names[index];
+            return true;
+        }
+    } else if (node == Node::Instance && index == 0) {
+        name = L"InitPropertyBag";
+        return true;
+    } else if (node == Node::Provider && index == 0) {
+        name = L"InProcServer32";
+        return true;
+    }
     return false;
 }
-static LSTATUS WINAPI RegEnumKeyExWHook(HKEY key, DWORD index, LPWSTR name, LPDWORD chars,
-                                        LPDWORD reserved, LPWSTR cls, LPDWORD classChars,
-                                        PFILETIME time) {
+
+// Counts exactly what the next hook/original API exposes. RegEnumKeyExW is
+// stateless for an explicit (HKEY,index), so this composes with the other
+// Control Panel restorer mods and gives the same answer on every pass.
+static DWORD CountOriginalNamespaceEntries(HKEY key, bool& alreadyPresent) {
+    alreadyPresent = false;
+    wchar_t subKey[256];
+    DWORD index = 0;
+    for (; index < 4096; ++index) {
+        DWORD chars = ARRAYSIZE(subKey);
+        LSTATUS status = RegEnumKeyExWOriginal(key, index, subKey, &chars,
+                                               nullptr, nullptr, nullptr, nullptr);
+        if (status == ERROR_NO_MORE_ITEMS) break;
+        if (status != ERROR_SUCCESS) break;
+        if (_wcsicmp(subKey, kAppletClsid) == 0) alreadyPresent = true;
+    }
+    return index;
+}
+
+static LSTATUS WINAPI RegEnumKeyExWHook(
+    HKEY key, DWORD index, LPWSTR name, LPDWORD chars, LPDWORD reserved,
+    LPWSTR cls, LPDWORD classChars, PFILETIME time) {
     std::wstring keyPath;
-    const bool isFake = g_keys.IsFakeAndGetPath(key, keyPath);
+    bool isFake = false;
+    const bool known = g_keys.MightContain(key) &&
+                       g_keys.GetPathAndFake(key, keyPath, isFake);
     if (isFake) {
         std::wstring sub;
-        if (!VirtualSubkey(Classify(keyPath), index, sub)) return ERROR_NO_MORE_ITEMS;
+        if (!VirtualSubkey(Classify(keyPath), index, sub)) {
+            return ERROR_NO_MORE_ITEMS;
+        }
         if (!name || !chars) return ERROR_INVALID_PARAMETER;
-        if (*chars <= sub.size()) { *chars = static_cast<DWORD>(sub.size() + 1); return ERROR_MORE_DATA; }
-        wcscpy_s(name, *chars, sub.c_str()); *chars = static_cast<DWORD>(sub.size());
-        if (time) GetSystemTimeAsFileTime(time); return ERROR_SUCCESS;
-    }
-    LSTATUS status = RegEnumKeyExWOriginal(key, index, name, chars, reserved, cls, classChars, time);
-    if (status != ERROR_NO_MORE_ITEMS || !IsNamespaceParent(g_keys.Path(key)) || !g_verified.load()) return status;
-    // Validate the output buffer BEFORE latching the injection flag. If the
-    // caller's buffer is too small we return ERROR_MORE_DATA and it retries at
-    // the same index; consuming the flag here would make that retry return
-    // ERROR_NO_MORE_ITEMS and the injected applet would silently not appear.
-    if (!name || !chars) return ERROR_INVALID_PARAMETER;
-    if (*chars <= wcslen(kAppletClsid)) { *chars = static_cast<DWORD>(wcslen(kAppletClsid) + 1); return ERROR_MORE_DATA; }
-    if (!ShouldInject(key, index)) return ERROR_NO_MORE_ITEMS;
-    wcscpy_s(name, *chars, kAppletClsid); *chars = static_cast<DWORD>(wcslen(kAppletClsid));
-    if (time) GetSystemTimeAsFileTime(time); return ERROR_SUCCESS;
-}
-static LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY key, LPWSTR cls, LPDWORD classChars, LPDWORD reserved,
-                                           LPDWORD subKeys, LPDWORD maxSubKey, LPDWORD maxClass,
-                                           LPDWORD values, LPDWORD maxValueName, LPDWORD maxValueData,
-                                           LPDWORD security, PFILETIME time) {
-
-    std::wstring keyPath;
-    const bool isFake = g_keys.IsFakeAndGetPath(key, keyPath);
-    if (isFake) {
-        Node node = Classify(keyPath);
-        if (subKeys) *subKeys = node == Node::Root ? 4 :
-                                (node == Node::Instance || node == Node::Provider) ? 1 : 0;
-        if (values) *values = 8; // Sizing hint; values are supplied on query.
-        if (maxSubKey) *maxSubKey = 32; if (maxClass) *maxClass = 0;
-        if (maxValueName) *maxValueName = 40; if (maxValueData) *maxValueData = 1024;
-        if (cls && classChars && *classChars) cls[0] = 0;
-        if (classChars) *classChars = 0; if (time) GetSystemTimeAsFileTime(time);
+        if (*chars <= sub.size()) {
+            *chars = static_cast<DWORD>(sub.size() + 1);
+            return ERROR_MORE_DATA;
+        }
+        wcscpy_s(name, *chars, sub.c_str());
+        *chars = static_cast<DWORD>(sub.size());
+        if (time) GetSystemTimeAsFileTime(time);
         return ERROR_SUCCESS;
     }
-    LSTATUS status = RegQueryInfoKeyWOriginal(key, cls, classChars, reserved, subKeys, maxSubKey,
-                                              maxClass, values, maxValueName, maxValueData, security, time);
-    if (status == ERROR_SUCCESS && IsNamespaceParent(g_keys.Path(key)) && g_verified.load() && subKeys) {
-        ++*subKeys;
-        if (maxSubKey && *maxSubKey < wcslen(kAppletClsid)) *maxSubKey = static_cast<DWORD>(wcslen(kAppletClsid));
+
+    const LSTATUS status = RegEnumKeyExWOriginal(
+        key, index, name, chars, reserved, cls, classChars, time);
+    if (status != ERROR_NO_MORE_ITEMS || !g_registrationReady.load()) return status;
+
+    // A namespace HKEY can predate our RegOpenKey hooks or be opened through an
+    // unhooked API. Resolve its native name only at enumeration exhaustion, so
+    // ordinary RegEnumKeyExW calls retain the allocation-free fast path.
+    if (!known) {
+        keyPath = QueryNativeRegistryPath(key);
+        if (!IsNamespaceParent(keyPath)) return status;
+        g_keys.Track(key, keyPath);
+    } else if (!IsNamespaceParent(keyPath)) {
+        return status;
     }
+
+    bool alreadyPresent = false;
+    const DWORD originalCount = CountOriginalNamespaceEntries(key, alreadyPresent);
+    if (alreadyPresent || index != originalCount) return ERROR_NO_MORE_ITEMS;
+    if (!name || !chars) return ERROR_INVALID_PARAMETER;
+    const DWORD required = static_cast<DWORD>(wcslen(kAppletClsid) + 1);
+    if (*chars < required) {
+        *chars = required;
+        return ERROR_MORE_DATA;
+    }
+    wcscpy_s(name, *chars, kAppletClsid);
+    *chars = required - 1;
+    if (time) GetSystemTimeAsFileTime(time);
+    return ERROR_SUCCESS;
+}
+
+// Thin wrapper over the RegEnumKeyExW hook so callers using the older
+// RegEnumKeyW entry point see the injected entry too. Without this, a shell
+// code path that enumerates through RegEnumKeyW never observes the applet.
+static LSTATUS WINAPI RegEnumKeyWHook(HKEY key, DWORD index, LPWSTR name,
+                                      DWORD chars) {
+    DWORD size = chars;
+    const LSTATUS status =
+        RegEnumKeyExWHook(key, index, name, &size, nullptr, nullptr, nullptr,
+                          nullptr);
+    // RegEnumKeyW reports a too-small buffer as ERROR_MORE_DATA with no size
+    // out-parameter, which matches RegEnumKeyExW's contract closely enough.
+    return status;
+}
+
+static LSTATUS WINAPI RegQueryInfoKeyWHook(
+    HKEY key, LPWSTR cls, LPDWORD classChars, LPDWORD reserved,
+    LPDWORD subKeys, LPDWORD maxSubKey, LPDWORD maxClass, LPDWORD values,
+    LPDWORD maxValueName, LPDWORD maxValueData, LPDWORD security,
+    PFILETIME time) {
+    std::wstring keyPath;
+    bool isFake = false;
+    const bool known = g_keys.MightContain(key) &&
+                       g_keys.GetPathAndFake(key, keyPath, isFake);
+    if (isFake) {
+        const Node node = Classify(keyPath);
+        if (subKeys) *subKeys = node == Node::Root ? 4
+                                  : (node == Node::Instance || node == Node::Provider)
+                                        ? 1
+                                        : 0;
+        // Values are queryable through the W hooks but aren't enumerable on the
+        // empty backing key, so don't invite callers to call RegEnumValueW.
+        if (values) *values = 0;
+        if (maxSubKey) *maxSubKey = 32;
+        if (maxClass) *maxClass = 0;
+        if (maxValueName) *maxValueName = 0;
+        if (maxValueData) *maxValueData = 0;
+        if (cls && classChars && *classChars) cls[0] = 0;
+        if (classChars) *classChars = 0;
+        if (time) GetSystemTimeAsFileTime(time);
+        return ERROR_SUCCESS;
+    }
+
+    const LSTATUS status = RegQueryInfoKeyWOriginal(
+        key, cls, classChars, reserved, subKeys, maxSubKey, maxClass, values,
+        maxValueName, maxValueData, security, time);
+    if (status != ERROR_SUCCESS || !g_registrationReady.load()) return status;
+
+    if (!known) {
+        keyPath = QueryNativeRegistryPath(key);
+        if (!IsNamespaceParent(keyPath)) return status;
+        g_keys.Track(key, keyPath);
+    } else if (!IsNamespaceParent(keyPath)) {
+        return status;
+    }
+
+    if (subKeys) {
+        bool alreadyPresent = false;
+        const DWORD originalCount =
+            CountOriginalNamespaceEntries(key, alreadyPresent);
+        *subKeys = (std::max)(*subKeys, originalCount);
+        if (!alreadyPresent) ++*subKeys;
+    }
+    if (maxSubKey && *maxSubKey < wcslen(kAppletClsid))
+        *maxSubKey = static_cast<DWORD>(wcslen(kAppletClsid));
     return status;
 }
 
 
-// Definitions for Control Panel applet cache (moved here after registry hooks are declared)
-static bool IsControlPanelApplet(REFCLSID clsid) {
-    EnsureControlPanelAppletCache();
-    LPOLESTR str = nullptr;
-    if (FAILED(StringFromCLSID(clsid, &str))) return false;
-    std::wstring s(str);
-    CoTaskMemFree(str);
-    for (auto &c : s) c = towlower(c);
-    return g_controlPanelApplets.find(s) != g_controlPanelApplets.end();
+
+// -----------------------------------------------------------------------------
+// Graceful degradation when the payload is not (yet) available
+// -----------------------------------------------------------------------------
+// The Control Panel item is registered before - and independently of - the
+// wucltux.dll download, so it is always visible. If the user opens it while the
+// payload is missing (first run with no internet, symbol server unreachable,
+// download still in flight), the classic page cannot be constructed. Rather
+// than letting the shell emit a bare "unable to load page", explain what is
+// happening and offer the modern Settings page as a working alternative.
+static const wchar_t* PayloadNoticeCaption() {
+    if (LanguageIs(L"it")) return L"Windows Update";
+    return L"Windows Update";
 }
 
-static void EnsureControlPanelAppletCache() {
-    std::call_once(g_controlPanelAppletsInit, []{
-        // Always include WU itself
-        g_controlPanelApplets.insert(ToLower(std::wstring(kAppletClsid)));
-        g_controlPanelApplets.insert(ToLower(std::wstring(kElementProviderClsid)));
-        // Enumerate ControlPanel\\Namespace
-        HKEY hNs = nullptr;
-        if (RegOpenKeyExWOriginal) {
-            if (RegOpenKeyExWOriginal(HKEY_LOCAL_MACHINE,
-                    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\Namespace",
-                    0, KEY_READ, &hNs) == ERROR_SUCCESS) {
-                wchar_t name[64];
-                DWORD index = 0;
-                while (true) {
-                    DWORD len = ARRAYSIZE(name);
-                    LONG rc = RegEnumKeyExWOriginal(hNs, index, name, &len, nullptr, nullptr, nullptr, nullptr);
-                    if (rc != ERROR_SUCCESS) break;
-                    std::wstring wname(name, len);
-                    g_controlPanelApplets.insert(ToLower(wname));
-                    ++index;
-                }
-                RegCloseKey(hNs);
-            }
-        } else {
-            // Fallback to direct RegOpenKeyExW if original not yet hooked (early init)
-            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\Namespace",
-                    0, KEY_READ, &hNs) == ERROR_SUCCESS) {
-                wchar_t name[64];
-                DWORD index = 0;
-                while (true) {
-                    DWORD len = ARRAYSIZE(name);
-                    LONG rc = RegEnumKeyExW(hNs, index, name, &len, nullptr, nullptr, nullptr, nullptr);
-                    if (rc != ERROR_SUCCESS) break;
-                    std::wstring wname(name, len);
-                    g_controlPanelApplets.insert(ToLower(wname));
-                    ++index;
-                }
-                RegCloseKey(hNs);
-            }
-        }
-        Wh_Log(L"WUR: ControlPanel applet cache initialized with %zu entries", g_controlPanelApplets.size());
-    });
+static const wchar_t* PayloadNoticeText() {
+    if (LanguageIs(L"it"))
+        return L"La pagina classica di Windows Update non e' ancora pronta.\n\n"
+               L"Al primo avvio la mod deve scaricare un componente verificato "
+               L"(wucltux.dll) dal server dei simboli Microsoft. Verifica la "
+               L"connessione a Internet e riprova tra qualche istante, oppure "
+               L"riavvia Esplora risorse.\n\n"
+               L"Vuoi aprire Windows Update nelle Impostazioni?";
+    if (LanguageIs(L"es"))
+        return L"La pagina clasica de Windows Update aun no esta lista.\n\n"
+               L"En el primer inicio, el mod debe descargar un componente "
+               L"verificado (wucltux.dll) del servidor de simbolos de Microsoft. "
+               L"Comprueba tu conexion a Internet e intentalo de nuevo, o "
+               L"reinicia el Explorador.\n\n"
+               L"Quieres abrir Windows Update en Configuracion?";
+    if (LanguageIs(L"fr"))
+        return L"La page classique de Windows Update n'est pas encore prete.\n\n"
+               L"Au premier demarrage, le mod doit telecharger un composant "
+               L"verifie (wucltux.dll) depuis le serveur de symboles Microsoft. "
+               L"Verifiez votre connexion Internet et reessayez, ou redemarrez "
+               L"l'Explorateur.\n\n"
+               L"Voulez-vous ouvrir Windows Update dans les Parametres ?";
+    if (LanguageIs(L"tr"))
+        return L"Klasik Windows Update sayfasi henuz hazir degil.\n\n"
+               L"Ilk calistirmada mod, Microsoft sembol sunucusundan dogrulanmis "
+               L"bir bilesen (wucltux.dll) indirmelidir. Internet baglantinizi "
+               L"kontrol edip tekrar deneyin veya Dosya Gezgini'ni yeniden "
+               L"baslatin.\n\n"
+               L"Windows Update'i Ayarlar'da acmak ister misiniz?";
+    if (LanguageIs(L"ru"))
+        return L"\u041a\u043b\u0430\u0441\u0441\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0430 \u0426\u0435\u043d\u0442\u0440\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f Windows \u0435\u0449\u0451 \u043d\u0435 \u0433\u043e\u0442\u043e\u0432\u0430.\n\n"
+               L"\u041f\u0440\u0438 \u043f\u0435\u0440\u0432\u043e\u043c \u0437\u0430\u043f\u0443\u0441\u043a\u0435 \u043c\u043e\u0434\u0443 \u043d\u0443\u0436\u043d\u043e \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u044b\u0439 \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442 (wucltux.dll) \u0441 \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432 Microsoft. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u0418\u043d\u0442\u0435\u0440\u043d\u0435\u0442\u0443 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u043e\u043f\u044b\u0442\u043a\u0443.\n\n"
+               L"\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0426\u0435\u043d\u0442\u0440 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f Windows \u0432 \u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u0430\u0445?";
+    if (LanguageIs(L"pt"))
+        return L"A pagina classica do Windows Update ainda nao esta pronta.\n\n"
+               L"Na primeira execucao, o mod precisa baixar um componente "
+               L"verificado (wucltux.dll) do servidor de simbolos da Microsoft. "
+               L"Verifique sua conexao com a Internet e tente novamente.\n\n"
+               L"Deseja abrir o Windows Update nas Configuracoes?";
+    if (LanguageIs(L"zh"))
+        return L"\u7ecf\u5178 Windows \u66f4\u65b0\u9875\u9762\u5c1a\u672a\u5c31\u7eea\u3002\n\n"
+               L"\u9996\u6b21\u8fd0\u884c\u65f6\uff0c\u6b64\u6a21\u7ec4\u9700\u8981\u4ece Microsoft \u7b26\u53f7\u670d\u52a1\u5668\u4e0b\u8f7d\u7ecf\u8fc7\u9a8c\u8bc1\u7684\u7ec4\u4ef6 (wucltux.dll)\u3002\u8bf7\u68c0\u67e5\u60a8\u7684 Internet \u8fde\u63a5\u540e\u91cd\u8bd5\u3002\n\n"
+               L"\u662f\u5426\u5728\u201c\u8bbe\u7f6e\u201d\u4e2d\u6253\u5f00 Windows \u66f4\u65b0\uff1f";
+    if (LanguageIs(L"pl"))
+        return L"Klasyczna strona Windows Update nie jest jeszcze gotowa.\n\n"
+               L"Przy pierwszym uruchomieniu mod musi pobrac zweryfikowany "
+               L"skladnik (wucltux.dll) z serwera symboli firmy Microsoft. "
+               L"Sprawdz polaczenie internetowe i sprobuj ponownie.\n\n"
+               L"Czy chcesz otworzyc Windows Update w Ustawieniach?";
+    if (LanguageIs(L"nl"))
+        return L"De klassieke Windows Update-pagina is nog niet gereed.\n\n"
+               L"Bij de eerste start moet de mod een geverifieerd onderdeel "
+               L"(wucltux.dll) downloaden van de Microsoft-symboolserver. "
+               L"Controleer je internetverbinding en probeer het opnieuw.\n\n"
+               L"Wil je Windows Update openen in Instellingen?";
+    return L"The classic Windows Update page isn't ready yet.\n\n"
+           L"On first run the mod needs to download a verified component "
+           L"(wucltux.dll) from the Microsoft Symbol Server. Check your internet "
+           L"connection and try again in a moment, or restart Explorer.\n\n"
+           L"Do you want to open Windows Update in Settings instead?";
 }
 
-// =============================================================================
-// EXPERIMENTAL: CControlPaneNavLinks / ControlPaneNavLinks COM sidebar.
-// -----------------------------------------------------------------------------
-// The expert's sample populates the Control Panel host's navigation pane by
-// writing a CControlPaneNavLinks object into the SID_PerLayoutPropertyBag
-// property bag under the "ControlPaneNavLinks" property. That is the real
-// Win7/8 mechanism, but the interface IID and the exact SID GUID are private
-// and undocumented. This is a safe, opt-in (g_useComSidebar) diagnostic
-// scaffold:
-//   * It hooks shlwapi!IUnknown_QueryService (the helper the sample calls).
-//   * When the WU top-level page is active, it logs every QueryService
-//     (guidService) and QueryInterface (riid) the host performs, so the real
-//     constants can be captured at runtime and the scaffold completed.
-// It never alters behavior when disabled and never crashes: every call passes
-// through to the original.
-// -----------------------------------------------------------------------------
-// (g_wuTopLevelActive is declared near the other module flags above.)
-using IUnknown_QueryService_t = HRESULT(WINAPI*)(IUnknown*, REFGUID, REFIID, void**);
-static IUnknown_QueryService_t IUnknown_QueryServiceOriginal = nullptr;
-// Formats a GUID into a wide buffer (avoids relying on StringFromGUID2/<objbase.h>).
-static void FormatGuid(const GUID& g, wchar_t* out, size_t n) {
-    if (!out || n < 1) return;
-    swprintf_s(out, n,
-        L"{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
-        (unsigned long)g.Data1, g.Data2, g.Data3,
-        g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3],
-        g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7]);
-}
-static HRESULT WINAPI IUnknown_QueryServiceHook(IUnknown* punk, REFGUID guidService,
-                                                REFIID riid, void** ppvObject) {
-    if (g_useComSidebar.load() && g_wuTopLevelActive.load()) {
-        // Diagnostic: capture the private SID + IID the host uses so the
-        // scaffold can be completed with real constants.
-        wchar_t serviceName[64] = L""; wchar_t iidName[64] = L"";
-        FormatGuid(guidService, serviceName, ARRAYSIZE(serviceName));
-        FormatGuid(riid, iidName, ARRAYSIZE(iidName));
-        Wh_Log(L"WUR[com]: QueryService guidService=%ls riid=%ls (punk=%p)",
-               serviceName, iidName, punk);
-        if (IsEqualGUID(riid, IID_IPropertyBag) || !ppvObject) {
-            return IUnknown_QueryServiceOriginal(punk, guidService, riid, ppvObject);
+// One notice at a time, and never on a shell thread: the message box is modal
+// and would otherwise block the Control Panel window that is mid-navigation.
+static std::atomic<bool> g_payloadNoticeOpen{false};
+
+// The strings are snapshotted on the caller's side so the dialog thread never
+// reads mod state that Wh_ModSettingsChanged could change underneath it.
+struct PayloadNoticeParams {
+    std::wstring caption;
+    std::wstring text;
+};
+
+static DWORD WINAPI PayloadNoticeThreadProc(LPVOID param) {
+    {
+        std::unique_ptr<PayloadNoticeParams> p(
+            reinterpret_cast<PayloadNoticeParams*>(param));
+        const int answer = MessageBoxW(nullptr, p->text.c_str(), p->caption.c_str(),
+                                       MB_YESNO | MB_ICONINFORMATION |
+                                           MB_SETFOREGROUND | MB_DEFBUTTON1);
+        if (answer == IDYES) {
+            // ms-settings: is present on every Windows 10/11 build and never
+            // depends on the payload, so this always gives the user a way out.
+            ShellExecuteW(nullptr, L"open", L"ms-settings:windowsupdate", nullptr,
+                          nullptr, SW_SHOWNORMAL);
         }
+        g_payloadNoticeOpen.store(false, std::memory_order_release);
+    }  // every destructor runs before the image reference is dropped
+
+    // Release the self-reference taken in ShowPayloadUnavailableNotice and exit
+    // atomically, so this mod's image cannot be unmapped while this thread is
+    // still executing code inside it.
+    HMODULE self = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&PayloadNoticeThreadProc),
+                           &self) && self) {
+        FreeLibraryAndExitThread(self, 0);
     }
-    return IUnknown_QueryServiceOriginal(punk, guidService, riid, ppvObject);
+    return 0;
 }
 
-static void InstallComSidebarHook() {
-    HMODULE shlwapi = GetModuleHandleW(L"shlwapi.dll");
-    if (!shlwapi) shlwapi = LoadLibraryExW(L"shlwapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!shlwapi) return;
-    // Cast to the concrete function type *before* passing to SetFunctionHook:
-    // passing a raw void* makes the template deduce 'void' and fail to match.
-    auto fn = reinterpret_cast<IUnknown_QueryService_t>(
-        GetProcAddress(shlwapi, "IUnknown_QueryService"));
-    if (!fn) { Wh_Log(L"WUR[com]: IUnknown_QueryService export not found"); return; }
-    if (WindhawkUtils::SetFunctionHook(fn, IUnknown_QueryServiceHook,
-                                       &IUnknown_QueryServiceOriginal))
-        Wh_Log(L"WUR[com]: IUnknown_QueryService hook installed");
+static void ShowPayloadUnavailableNotice() {
+    if (g_stopping.load()) return;
+    bool expected = false;
+    if (!g_payloadNoticeOpen.compare_exchange_strong(expected, true)) return;
+
+    // Pin this mod's image for the dialog thread's lifetime. Wh_ModUninit can
+    // run while the message box is still up (the user may leave it open for
+    // minutes); without this extra reference the thread's return address would
+    // point into an unmapped image. Released by FreeLibraryAndExitThread above.
+    HMODULE self = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<LPCWSTR>(&PayloadNoticeThreadProc),
+                            &self)) {
+        self = nullptr;
+    }
+
+    std::unique_ptr<PayloadNoticeParams> params;
+    try {
+        params = std::make_unique<PayloadNoticeParams>();
+        params->caption = PayloadNoticeCaption();
+        params->text = PayloadNoticeText();
+    } catch (...) {
+        if (self) FreeLibrary(self);
+        g_payloadNoticeOpen.store(false, std::memory_order_release);
+        return;
+    }
+
+    HANDLE thread = CreateThread(nullptr, 0, PayloadNoticeThreadProc,
+                                 params.get(), 0, nullptr);
+    if (thread) {
+        PayloadNoticeParams* threadOwnedParams = params.release();
+        (void)threadOwnedParams;  // ownership was transferred to the thread
+        CloseHandle(thread);
+        return;
+    }
+    if (self) FreeLibrary(self);
+    g_payloadNoticeOpen.store(false, std::memory_order_release);
 }
 
 // shdocvw.dll implements the standard layout-folder class used by old CPL items.
 using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
-static CoCreateInstance_t CoCreateInstanceOriginal = nullptr;
+static CoCreateInstance_t CoCreateInstanceOriginal = nullptr;       // combase
+static CoCreateInstance_t CoCreateInstanceOriginalOle32 = nullptr;  // ole32
+// CoGetClassObject is the other activation entry point: the shell's folder
+// binding often goes through it instead of CoCreateInstance, in which case a
+// CoCreateInstance-only hook never fires - which is exactly what the log shows.
+using CoGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, DWORD, LPVOID, REFIID, LPVOID*);
+static CoGetClassObject_t CoGetClassObjectOriginal = nullptr;
+static CoGetClassObject_t CoGetClassObjectOriginalOle32 = nullptr;
 // Defined later (before SetupWorker); declared here so the CoCreateInstance
 // hook can lazily load wucltux.dll if the page is constructed in a process that
 // skipped the eager heavy setup (e.g. a shell/explorer.exe fallback).
 static HMODULE EnsurePrivateModuleLoaded();
-static HRESULT WINAPI CoCreateInstanceHook(REFCLSID clsid, LPUNKNOWN outer, DWORD context,
-                                           REFIID iid, LPVOID* result) {
+static HRESULT HandleCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD context,
+                                      REFIID iid, LPVOID* result,
+                                      CoCreateInstance_t original) {
     const bool isWUFolder = IsEqualGUID(clsid, kAppletFolderGuid);
     const bool isWUProvider = IsEqualGUID(clsid, kElementProviderGuid);
-    const bool isWU = isWUFolder || isWUProvider;
+    if (!isWUFolder && !isWUProvider)
+        return original(clsid, outer, context, iid, result);
 
-    // Update thread-local current applet tracking for *any* Control Panel applet.
-    // This is the COM/DirectUI context gate — not window title.
-    // Must be done BEFORE calling original, so subsequent CPNav parse on same thread
-    // sees the correct target. For non-applet COM (e.g. IUpdateSession) we don't touch.
-    if (isWU || IsControlPanelApplet(clsid)) {
-        g_tlsIsWUActive = isWU;
-        if (!isWU) {
-            // Navigating to a different applet: clear the one-shot WU nav flag
-            // to prevent the shared CPNav template (4582) from being contaminated
-            // if it is re-parsed for this non-WU applet in the 4-10s window.
-            if (g_tlsWuNavTemplateScope) {
-                Wh_Log(L"WUR: navigation to non-WU applet — clearing WU nav scope (was ARMED)");
-            }
-            g_tlsWuNavTemplateScope = false;
-            g_wuNavTemplateScope.store(false, std::memory_order_release);
-            // If the navigation pane is cached and already contains WU links,
-            // the SetVisible hook will hide them on next SetVisible, but we also
-            // proactively try to hide via stored pointers.
-            HideWuNavElementsIfNeeded();
-        }
-        // For isWU we don't set the nav template scope yet — that is done only
-        // after the WU provider's CreateInstance succeeds (see below), to keep
-        // the window narrow and thread-local.
-        if (!isWU) {
-            // For non-WU applets, just forward to original after clearing
-            return CoCreateInstanceOriginal(clsid, outer, context, iid, result);
-        }
-        // isWU falls through to WU handling below
-    } else {
-        // Not a Control Panel applet at all (e.g. UpdateSession) — don't touch flags
-        if (!isWU) {
-            return CoCreateInstanceOriginal(clsid, outer, context, iid, result);
-        }
-    }
     const bool isElementProvider = IsEqualGUID(clsid, kElementProviderGuid);
     if (!g_verified.load()) {
-        if (isElementProvider)
-            Wh_Log(L"Windows Update Restorer: WUAppElementProvider requested before wucltux.dll was verified/ready");
+        // The item is registered independently of the payload, so the user can
+        // legitimately land here with nothing downloaded yet. Tell them what is
+        // going on and offer Settings instead of failing silently.
+        Wh_Log(L"Windows Update Restorer: %s requested before wucltux.dll was verified/ready; showing fallback notice",
+               isElementProvider ? L"WUAppElementProvider" : L"Windows Update folder");
+        ShowPayloadUnavailableNotice();
         return REGDB_E_CLASSNOTREG;
     }
 
@@ -7540,37 +7362,104 @@ static HRESULT WINAPI CoCreateInstanceHook(REFCLSID clsid, LPUNKNOWN outer, DWOR
         return hr;
     }
     hr = factory->CreateInstance(outer, iid, result);
-    // WU provider arms the one-shot CPNav scope; WU folder just marks IsWUActive.
-    // Keeping the window narrow: only the provider (cfbc05bc-...) arms the template
-    // patch, not the folder enumeration ({36eef7db-...}).
-    if (isWUProvider) {
-        if (SUCCEEDED(hr)) {
-            g_tlsWuNavTemplateScope = true;
-            g_wuNavTemplateScope.store(true, std::memory_order_release);
-            g_tlsIsWUActive = true;
-            Wh_Log(L"WUR: WUAppElementProvider created (hr=0x%08X); thread-local CPNav scope ARMED, IsWUActive=1",
-                   static_cast<unsigned>(hr));
-        } else {
-            g_tlsWuNavTemplateScope = false;
-            g_wuNavTemplateScope.store(false, std::memory_order_release);
-            Wh_Log(L"WUR: WUAppElementProvider CreateInstance FAILED (hr=0x%08X) — scope NOT armed",
-                   static_cast<unsigned>(hr));
-        }
-    } else if (isWUFolder && SUCCEEDED(hr)) {
-        g_tlsIsWUActive = true;
-        Wh_Log(L"WUR: WU folder created (hr=0x%08X); IsWUActive=1 (nav scope not armed yet)", static_cast<unsigned>(hr));
-    }
     factory->Release();
     return hr;
 }
 
+
+// Per-module wrappers. Each target keeps its own original pointer so a call
+// into combase can never be forwarded through ole32's trampoline (or vice
+// versa), which is how the Performance Information and Tools Restorer does it.
+static HRESULT WINAPI CoCreateInstanceHookCombase(REFCLSID clsid, LPUNKNOWN outer,
+                                                  DWORD context, REFIID iid,
+                                                  LPVOID* result) {
+    return HandleCoCreateInstance(clsid, outer, context, iid, result,
+                                  CoCreateInstanceOriginal);
+}
+
+static HRESULT WINAPI CoCreateInstanceHookOle32(REFCLSID clsid, LPUNKNOWN outer,
+                                                DWORD context, REFIID iid,
+                                                LPVOID* result) {
+    return HandleCoCreateInstance(clsid, outer, context, iid, result,
+                                  CoCreateInstanceOriginalOle32);
+}
+
+// The shell binds a namespace folder by asking for its class *factory*, not by
+// calling CoCreateInstance. With only a CoCreateInstance hook installed, that
+// request goes to the real COM runtime, finds no registered server for our
+// synthetic CLSID, and fails with "no app associated" - precisely the observed
+// behaviour. Serve the factory ourselves from the right in-proc server.
+static HRESULT HandleCoGetClassObject(REFCLSID clsid, DWORD context, LPVOID reserved,
+                                      REFIID iid, LPVOID* result,
+                                      CoGetClassObject_t original) {
+    const bool isWUFolder = IsEqualGUID(clsid, kAppletFolderGuid);
+    const bool isWUProvider = IsEqualGUID(clsid, kElementProviderGuid);
+    if (!isWUFolder && !isWUProvider)
+        return original(clsid, context, reserved, iid, result);
+
+    if (!g_verified.load()) {
+        Wh_Log(L"Windows Update Restorer: class factory requested before the payload was ready");
+        ShowPayloadUnavailableNotice();
+        return REGDB_E_CLASSNOTREG;
+    }
+
+    // The namespace folder is implemented by shdocvw's standard layout folder;
+    // only the element provider comes from the private wucltux.dll copy.
+    HMODULE server = nullptr;
+    if (isWUFolder) {
+        server = GetModuleHandleW(L"shdocvw.dll");
+        if (!server)
+            server = LoadLibraryExW(L"shdocvw.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    } else {
+        server = g_module.load();
+        if (!server) server = EnsurePrivateModuleLoaded();
+    }
+    if (!server) {
+        Wh_Log(L"Windows Update Restorer: no in-proc server available for the class factory");
+        return REGDB_E_CLASSNOTREG;
+    }
+
+    auto getClassObject = reinterpret_cast<HRESULT(WINAPI*)(REFCLSID, REFIID, LPVOID*)>(
+        GetProcAddress(server, "DllGetClassObject"));
+    if (!getClassObject) {
+        Wh_Log(L"Windows Update Restorer: DllGetClassObject not exported by the in-proc server");
+        return REGDB_E_CLASSNOTREG;
+    }
+
+    // For the layout folder, shdocvw registers the standard folder under a
+    // different CLSID, so ask it for that one rather than for our namespace id.
+    CLSID effective = clsid;
+    if (isWUFolder) {
+        CLSID layout{};
+        if (SUCCEEDED(CLSIDFromString(kLayoutFolderClsid, &layout))) effective = layout;
+    }
+
+    const HRESULT hr = getClassObject(effective, iid, result);
+    Wh_Log(L"Windows Update Restorer: served class factory (hr=0x%08X)",
+           static_cast<unsigned>(hr));
+    return hr;
+}
+
+static HRESULT WINAPI CoGetClassObjectHookCombase(REFCLSID clsid, DWORD context,
+                                                  LPVOID reserved, REFIID iid,
+                                                  LPVOID* result) {
+    return HandleCoGetClassObject(clsid, context, reserved, iid, result,
+                                  CoGetClassObjectOriginal);
+}
+
+static HRESULT WINAPI CoGetClassObjectHookOle32(REFCLSID clsid, DWORD context,
+                                                LPVOID reserved, REFIID iid,
+                                                LPVOID* result) {
+    return HandleCoGetClassObject(clsid, context, reserved, iid, result,
+                                  CoGetClassObjectOriginalOle32);
+}
 
 static void* RegistryFunction(const char* name) {
     HMODULE module = GetModuleHandleW(L"kernelbase.dll");
     void* function = module ? reinterpret_cast<void*>(GetProcAddress(module, name)) : nullptr;
     if (!function) {
         module = GetModuleHandleW(L"advapi32.dll");
-        if (!module) module = LoadLibraryW(L"advapi32.dll");
+        if (!module) module = LoadLibraryExW(L"advapi32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (module) function = reinterpret_cast<void*>(GetProcAddress(module, name));
     }
     return function;
@@ -7598,10 +7487,59 @@ static HMODULE EnsurePrivateModuleLoaded() {
     return g_module.load();
 }
 
-static void SetupWorker() {
+// RAII for the cross-process setup mutex, so an early return or an exception can
+// never leave the named mutex held and wedge every other explorer.exe/control.exe.
+class ScopedSetupMutex {
+public:
+    ScopedSetupMutex() {
+        handle_ = CreateMutexW(nullptr, FALSE,
+                               L"Windhawk.WindowsUpdateControlPanelRestorer.Setup");
+        if (!handle_) return;
+        HANDLE waitOn[2] = {handle_, g_stopEvent};
+        const DWORD count = g_stopEvent ? 2 : 1;
+        const DWORD wait = WaitForMultipleObjects(count, waitOn, FALSE, 60000);
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) {
+            owned_ = true;              // WAIT_ABANDONED still transfers ownership
+        } else if (wait == WAIT_OBJECT_0 + 1) {
+            aborted_ = true;            // teardown requested while queueing
+        }
+        // On timeout we proceed unowned: the download always lands on a private
+        // temp file and is atomically moved into place, so a concurrent setup is
+        // still correct, just redundant.
+    }
+    ~ScopedSetupMutex() {
+        if (handle_) {
+            if (owned_) ReleaseMutex(handle_);
+            CloseHandle(handle_);
+        }
+    }
+    ScopedSetupMutex(const ScopedSetupMutex&) = delete;
+    ScopedSetupMutex& operator=(const ScopedSetupMutex&) = delete;
+    bool aborted() const { return aborted_; }
+
+private:
+    HANDLE handle_ = nullptr;
+    bool owned_ = false;
+    bool aborted_ = false;
+};
+
+static void SetupWorkerImpl() {
+    // Serialize first-time setup across every process running this mod (several
+    // explorer.exe instances plus control.exe can start at once), so two of them
+    // never download and rename the same file concurrently.
+    ScopedSetupMutex setupLock;
+    if (setupLock.aborted() || g_stopping.load()) {
+        Wh_Log(L"Windows Update Restorer: setup aborted before it started (mod is unloading)");
+        return;
+    }
+
     std::wstring path;
     if (!EnsurePayload(path) || g_stopping.load()) {
-        Wh_Log(L"Windows Update Restorer: wucltux.dll was not downloaded or failed verification");
+        // Not fatal: the Control Panel entry stays registered and visible, and
+        // opening it shows the localized notice with a link to Settings.
+        Wh_Log(L"Windows Update Restorer: wucltux.dll was not downloaded or failed verification. "
+               L"The Control Panel entry stays available; check the internet connection and "
+               L"restart Explorer to retry.");
         return;
     }
     // The page's XMLFILE creates WUAppElementProvider through DllGetClassObject,
@@ -7612,56 +7550,164 @@ static void SetupWorker() {
         Wh_Log(L"Windows Update Restorer: LoadLibraryEx failed (%u)", GetLastError());
         return;
     }
+
+    // Publish the path before the module: the CoCreateInstance fallback reads
+    // g_dllPath to load the payload lazily, and a non-null g_module with no path
+    // would make that fallback unable to recover. Allocation failure here must
+    // not take the process down, so it is contained.
+    std::wstring* published = nullptr;
+    try {
+        published = new std::wstring(path);
+    } catch (...) {
+        Wh_Log(L"Windows Update Restorer: out of memory publishing the payload path");
+        FreeLibrary(module);
+        return;
+    }
+    if (const std::wstring* previous =
+            g_dllPath.exchange(published, std::memory_order_acq_rel)) {
+        delete previous;  // never leak on a re-entrant/second setup
+    }
     g_module.store(module);
-    g_dllPath.store(new std::wstring(path));
+
+    // The setup worker starts from Wh_ModAfterInit, so dynamic hook operations
+    // are legal here. Install this before g_verified exposes the page.
+    if (!g_stopping.load()) InstallWucltuxSetSiteHook(module);
+
     if (!BuildEmbeddedMuiResourceModule(path)) {
-        Wh_Log(L"Windows Update Restorer: embedded MUI resource module could not be built");
-    } else {
-        g_builtLanguage = CurrentLanguage();
+        // Non-fatal: the page still renders using the DLL's own resources.
+        Wh_Log(L"Windows Update Restorer: embedded MUI resource module could not be built; "
+               L"falling back to the payload's native resources");
     }
 
     g_verified.store(true, std::memory_order_release);
     Wh_Log(L"Windows Update Restorer ready: verified Windows 8.1 wucltux.dll loaded privately");
 
-    // Gather status (SCM probe + update history) on this worker thread so the
-    // Control Panel UI thread never blocks on it during page rendering.
+    // Gather status and registry timestamps on this worker thread so the
+    // Control Panel UI thread never blocks on service probing.
     if (!g_stopping.load()) GatherBackgroundStatus();
 }
 
+// Hard exception boundary: this runs on a std::thread, where an escaping
+// exception would call std::terminate and take explorer.exe down with it.
+static void SetupWorker() {
+    try {
+        SetupWorkerImpl();
+    } catch (const std::exception& e) {
+        Wh_Log(L"Windows Update Restorer: setup failed with an exception (%S); "
+               L"the Control Panel entry remains available", e.what());
+    } catch (...) {
+        Wh_Log(L"Windows Update Restorer: setup failed with an unknown exception; "
+               L"the Control Panel entry remains available");
+    }
+}
+
+
+static void CleanupGeneratedResourceModuleFiles(bool includeCurrentProcess);
 
 BOOL Wh_ModInit() {
     try {
-        // TrackBar (and common controls) support for the classic settings dialog.
-        INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_BAR_CLASSES };
-        InitCommonControlsEx(&icc);
+        if (!IsRunningAsAmd64()) {
+            Wh_Log(L"Windows Update Restorer not started: the process is not AMD64");
+            return FALSE;
+        }
 
+        // Informational only - the mod never refuses to run on a build it does
+        // not recognize. Targets Windows 10 21H2+ and every Windows 11 build;
+        // all behaviour is feature-probed rather than version-gated.
+        {
+            OSVERSIONINFOEXW osInfo{sizeof(osInfo)};
+            using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOEXW*);
+            if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
+                if (auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+                        GetProcAddress(ntdll, "RtlGetVersion"))) {
+                    if (rtlGetVersion(&osInfo) == 0) {
+                        Wh_Log(L"Windows Update Restorer 1.0.0: starting on Windows %lu.%lu build %lu",
+                               osInfo.dwMajorVersion, osInfo.dwMinorVersion,
+                               osInfo.dwBuildNumber);
+                    }
+                }
+            }
+        }
+
+        // Remove unlocked files left by Explorer/control.exe processes that
+        // exited without Wh_ModUninit. Files still mapped elsewhere are skipped.
+        CleanupGeneratedResourceModuleFiles(false);
+        // Same contract for partial downloads left by a killed process.
+        SweepStaleGeneratedFiles();
         LoadLanguageSetting();
         InitPaths();
-        EnsureControlPanelAppletCache();
         void* openEx = RegistryFunction("RegOpenKeyExW");
         void* open = RegistryFunction("RegOpenKeyW");
+        void* create = RegistryFunction("RegCreateKeyExW");
         void* close = RegistryFunction("RegCloseKey");
         void* query = RegistryFunction("RegQueryValueExW");
         void* get = RegistryFunction("RegGetValueW");
         void* enumerate = RegistryFunction("RegEnumKeyExW");
+        void* enumerateOld = RegistryFunction("RegEnumKeyW");
         void* info = RegistryFunction("RegQueryInfoKeyW");
-        if (!openEx || !open || !close || !query || !get || !enumerate || !info) return FALSE;
+        if (!openEx || !open || !create || !close || !query || !get ||
+            !enumerate || !info) return FALSE;
+        RegCreateKeyExWOriginal = reinterpret_cast<RegCreateKeyExW_t>(create);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyExW_t>(openEx), RegOpenKeyExWHook, &RegOpenKeyExWOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegOpenKeyW_t>(open), RegOpenKeyWHook, &RegOpenKeyWOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegCloseKey_t>(close), RegCloseKeyHook, &RegCloseKeyOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryValueExW_t>(query), RegQueryValueExWHook, &RegQueryValueExWOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegGetValueW_t>(get), RegGetValueWHook, &RegGetValueWOriginal);
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyExW_t>(enumerate), RegEnumKeyExWHook, &RegEnumKeyExWOriginal);
+        if (enumerateOld) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<RegEnumKeyW_t>(enumerateOld),
+                                           RegEnumKeyWHook, &RegEnumKeyWOriginal);
+        }
         WindhawkUtils::SetFunctionHook(reinterpret_cast<RegQueryInfoKeyW_t>(info), RegQueryInfoKeyWHook, &RegQueryInfoKeyWOriginal);
 
 
+        // Hook COM activation on BOTH combase.dll (the real implementation) and
+        // ole32.dll (the legacy forwarder). The shell's Control Panel binding
+        // path can reach either one, and hooking only combase leaves the other
+        // route unhooked - the log showed activation never being intercepted.
+        // Cover CoGetClassObject too: folder binding asks for a class factory
+        // rather than calling CoCreateInstance.
         HMODULE combase = GetModuleHandleW(L"combase.dll");
         if (!combase) combase = LoadLibraryExW(L"combase.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (combase) {
-            if (void* create = reinterpret_cast<void*>(GetProcAddress(combase, "CoCreateInstance")))
-                WindhawkUtils::SetFunctionHook(reinterpret_cast<CoCreateInstance_t>(create), CoCreateInstanceHook, &CoCreateInstanceOriginal);
+        HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
+        if (!ole32) ole32 = LoadLibraryExW(L"ole32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
+        void* createCombase = combase ? reinterpret_cast<void*>(
+                                            GetProcAddress(combase, "CoCreateInstance"))
+                                      : nullptr;
+        void* createOle32 = ole32 ? reinterpret_cast<void*>(
+                                        GetProcAddress(ole32, "CoCreateInstance"))
+                                  : nullptr;
+        if (createCombase) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<CoCreateInstance_t>(createCombase),
+                                           CoCreateInstanceHookCombase,
+                                           &CoCreateInstanceOriginal);
         }
+        if (createOle32 && createOle32 != createCombase) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<CoCreateInstance_t>(createOle32),
+                                           CoCreateInstanceHookOle32,
+                                           &CoCreateInstanceOriginalOle32);
+        }
+
+        void* factoryCombase = combase ? reinterpret_cast<void*>(
+                                             GetProcAddress(combase, "CoGetClassObject"))
+                                       : nullptr;
+        void* factoryOle32 = ole32 ? reinterpret_cast<void*>(
+                                         GetProcAddress(ole32, "CoGetClassObject"))
+                                   : nullptr;
+        if (factoryCombase) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<CoGetClassObject_t>(factoryCombase),
+                                           CoGetClassObjectHookCombase,
+                                           &CoGetClassObjectOriginal);
+        }
+        if (factoryOle32 && factoryOle32 != factoryCombase) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<CoGetClassObject_t>(factoryOle32),
+                                           CoGetClassObjectHookOle32,
+                                           &CoGetClassObjectOriginalOle32);
+        }
+        Wh_Log(L"Windows Update Restorer: COM hooks installed (combase=%d/%d, ole32=%d/%d)",
+               createCombase ? 1 : 0, factoryCombase ? 1 : 0,
+               createOle32 ? 1 : 0, factoryOle32 ? 1 : 0);
         // wucltux.dll imports LoadStringW through the normal User32 API. Its
         // original MUI is embedded above, so no external .mui file is needed.
         HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -7690,91 +7736,162 @@ BOOL Wh_ModInit() {
             }
         }
 
-        // Install the DirectUI Element::SetEnabled hook early (before any page
-        // XML is parsed) so the settings combobox disable is intercepted at the
-        // source from the very first render. Idempotent; a no-op for every
-        // control that is not the protected combobox.
-        EnsureSetEnabledHookInstalled();
-        EnsureSetVisibleHookInstalled();
-
-        // The requested actions live in the host Control Panel navigation pane.
-        // Prepare shutdown signalling before either worker starts.
+        // Prepare shutdown signalling before the setup worker starts.
         g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         g_stopping.store(false);
         // Only patch the safe WUAppPage content anchor (never the outer Control Panel host).
         InstallModernWuXmlPatchHook();
         InstallShellPresentationHooks();
+        InstallNativeControlPanelNavLinksHook();
         InstallLegacyWarningIconHook();
-        InstallComSidebarHook();
-        g_setupThread.emplace(SetupWorker);
+        // Publish the Control Panel registration BEFORE the background setup
+        // starts. Every value the shell needs to draw and browse the item is
+        // served from constants, so "Windows Update" is present in Control Panel
+        // the moment the mod is enabled - no download, no network, no waiting.
+        // The payload only gates the page's own content (see g_verified).
+        g_registrationReady.store(true, std::memory_order_release);
+        Wh_Log(L"Windows Update Restorer: Control Panel registration is live (payload setup continues in the background)");
+
+        // Setup starts in Wh_ModAfterInit. This matters because the cached
+        // payload can load immediately and its SetSite hook must then be applied
+        // dynamically; Wh_ApplyHookOperations isn't legal before ModInit returns.
         return TRUE;
-    } catch (...) { return FALSE; }
+    } catch (...) {
+        // Never leave a half-initialized mod behind: make every hook inert.
+        g_registrationReady.store(false);
+        g_verified.store(false);
+        g_stopping.store(true);
+        Wh_Log(L"Windows Update Restorer: initialization failed; the mod is inactive");
+        return FALSE;
+    }
 }
 
-// Called whenever the user changes the mod settings (e.g. picks a different
-// language). We just reload the flag; the next DirectUI page render uses it, so
-// no full mod restart is needed.
+void Wh_ModAfterInit() {
+    // If the worker thread cannot be created, the registration still works and
+    // the existing fallback notice explains that the payload isn't ready.
+    try {
+        g_setupThread.emplace(SetupWorker);
+    } catch (...) {
+        Wh_Log(L"Windows Update Restorer: could not start the setup thread; "
+               L"the Control Panel entry stays available and the payload will "
+               L"be retried on the next start");
+    }
+}
+
 // Called whenever the user changes the mod settings (e.g. picks a different
 // language). We reload the flag and, if the language actually changed, rebuild
 // the embedded MUI module in the background so the classic page reflects the
 // new language without a full mod restart.
 void Wh_ModSettingsChanged() {
-    const std::wstring oldLanguage = CurrentLanguage();
-    LoadLanguageSetting();
-    UpdateSettingsComboboxLanguage();
-    if (oldLanguage != CurrentLanguage()) {
+    // Windhawk calls this on its own thread while the shell keeps running, so a
+    // thrown exception here would propagate into the host. Contain everything.
+    try {
+        const std::wstring oldLanguage = CurrentLanguage();
+        LoadLanguageSetting();
+
+        if (oldLanguage == CurrentLanguage()) return;
+        // Language changed: the tasks file embeds translated labels.
+        CleanupControlPanelTasksXmlFile();
+        if (g_stopping.load()) return;  // teardown in progress: don't start work
+
         // Ensure a previous rebuild (if any) has finished before starting a new
         // one, so we never run two builds concurrently.
         if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
         g_rebuildThread.reset();
         g_rebuildThread.emplace([] {
-            RebuildEmbeddedMuiForLanguage();
-            UpdateSettingsComboboxLanguage();
+            // Same hard boundary as the setup worker: an exception escaping a
+            // std::thread would call std::terminate and kill explorer.exe.
+            try {
+                RebuildEmbeddedMuiForLanguage();
+            } catch (...) {
+                Wh_Log(L"Windows Update Restorer: language rebuild failed; keeping the previous strings");
+            }
         });
+    } catch (...) {
+        Wh_Log(L"Windows Update Restorer: settings change could not be applied");
     }
 }
 
 
-// Best-effort cleanup of leftover embedded-mui generation files from this
-// process (see BuildEmbeddedMuiResourceModule). We deliberately never call
-// FreeLibrary on g_resourceModule/g_module while the mod is loaded, since a
-// Control Panel page may still hold a reference into them - so on disable we
-// can only try to delete the *files*. A copy still mapped by an open page
-// simply fails to delete here (harmless) and Windows will let it go once the
-// last handle to it closes, at the latest when explorer.exe restarts.
-// Deletes every embedded-mui resource file this process has created, including
-// the currently active one. Called when the mod is disabled so no stale or
-// partially-written .mres is left behind that a later start could reuse as if
-// it were valid (which is what causes "corrupted" strings). The module is
-// already mapped into memory at this point, so deleting the file on disk is
-// safe: Windows keeps the mapping alive until the last reference to it closes.
-static void CleanupGeneratedResourceModuleFiles() {
-    const std::wstring dir = StoreDir();
-    if (dir.empty()) return;
-    const std::wstring prefix =
-        L"wucltux.embedded-mui-" + std::to_wstring(GetCurrentProcessId()) + L"-";
-    const std::wstring pattern = dir + L"\\" + prefix + L"*";
+// Sweep generated embedded-MUI files from previous processes at startup and
+// again on controlled unload. A second Explorer/control.exe process can be
+// building its resource file concurrently, so never touch files owned by a PID
+// that is still alive even when DeleteFile would happen to succeed.
+static DWORD GeneratedResourceFilePid(PCWSTR fileName) {
+    constexpr PCWSTR prefix = L"wucltux.embedded-mui-";
+    if (wcsncmp(fileName, prefix, wcslen(prefix)) != 0) return 0;
+    wchar_t* end = nullptr;
+    const unsigned long pid = wcstoul(fileName + wcslen(prefix), &end, 10);
+    return end && end != fileName + wcslen(prefix) && *end == L'-'
+               ? static_cast<DWORD>(pid)
+               : 0;
+}
 
+static bool IsProcessStillRunning(DWORD pid) {
+    if (!pid) return false;
+    HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (!process) {
+        // Access denied isn't evidence that a process has exited; skip the file
+        // conservatively. ERROR_INVALID_PARAMETER is the normal dead-PID case.
+        return GetLastError() != ERROR_INVALID_PARAMETER;
+    }
+    const bool running = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+    CloseHandle(process);
+    return running;
+}
+
+static void CleanupGeneratedResourceModuleFiles(bool includeCurrentProcess) {
+    const std::wstring& dir = StoreDir();
+    if (dir.empty()) return;
+    const std::wstring pattern = dir + L"\\wucltux.embedded-mui-*";
+
+    unsigned deleted = 0;
+    unsigned active = 0;
+    unsigned locked = 0;
     WIN32_FIND_DATAW findData{};
     HANDLE find = FindFirstFileW(pattern.c_str(), &findData);
     if (find == INVALID_HANDLE_VALUE) return;
     do {
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const DWORD ownerPid = GeneratedResourceFilePid(findData.cFileName);
+        if (ownerPid &&
+            ((ownerPid == GetCurrentProcessId() && !includeCurrentProcess) ||
+             (ownerPid != GetCurrentProcessId() &&
+              IsProcessStillRunning(ownerPid)))) {
+            ++active;
+            continue;
+        }
+
         const std::wstring fullPath = dir + L"\\" + findData.cFileName;
         if (DeleteFileW(fullPath.c_str())) {
-            Wh_Log(L"Windows Update Restorer: deleted embedded MUI resource file: %s",
-                   findData.cFileName);
+            ++deleted;
         } else if (GetLastError() != ERROR_FILE_NOT_FOUND) {
-            // The file is still mapped by an open page; Windows will remove it
-            // once the last handle to it closes (harmless to leave for now).
-            Wh_Log(L"Windows Update Restorer: resource file in use, removal deferred: %s (err=%u)",
-                   findData.cFileName, GetLastError());
+            ++locked;
         }
     } while (FindNextFileW(find, &findData));
     FindClose(find);
+
+    if (deleted || active || locked) {
+        Wh_Log(L"Windows Update Restorer: embedded MUI cleanup: deleted=%u active-skipped=%u locked=%u",
+               deleted, active, locked);
+    }
 }
 
 void Wh_ModUninit() {
+  try {
+    // Stop answering registry queries first. The Control Panel item then
+    // disappears immediately on disable, and no hook can hand out a synthetic
+    // key or read state that the rest of this function is about to release.
+    g_registrationReady.store(false);
+    g_verified.store(false);
+    // Signal teardown before touching any thread, so workers observe it while
+    // we are still tearing the UI down.
+    g_stopping.store(true);
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    // Unblocks a WinInet call that is stuck mid-download so the join below
+    // returns promptly instead of waiting out the receive timeout.
+    CloseActiveDownloadHandles();
+
     // Modeless dialog proc and all subclass callbacks are mod code: make them
     // unreachable before Windhawk unloads this image. Wh_ModUninit runs on an
     // arbitrary Windhawk thread, so DestroyWindow() here would fail (the dialog
@@ -7785,34 +7902,36 @@ void Wh_ModUninit() {
         SendMessageW(g_wuSettingsDlg, WM_CLOSE, 0, 0);
     g_wuSettingsDlg = nullptr;
     DestroySettingsCombobox();
-    std::vector<HWND> sidebars;
-    { std::lock_guard lock(g_subclassWindowsMutex); sidebars = g_sidebarSubclassWindows; }
-    for (HWND hwnd : sidebars) if (IsWindow(hwnd))
-        SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
-    { std::lock_guard lock(g_subclassWindowsMutex); g_sidebarSubclassWindows.clear(); }
-    g_stopping.store(true);
-    if (g_stopEvent) SetEvent(g_stopEvent);
-    CloseActiveDownloadHandles();
+
+    // Both workers poll g_stopping and their blocking waits are bounded, so
+    // these joins return quickly. They must complete before the image is
+    // unmapped: a running worker's code lives in this image.
     if (g_setupThread && g_setupThread->joinable()) g_setupThread->join();
     g_setupThread.reset();
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
     g_rebuildThread.reset();
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
-    g_verified.store(false);
     delete g_dllPath.exchange(nullptr);
     // Deliberately do not unload the datafile while a Control Panel page can cache it.
     g_module.store(nullptr);
     {
         std::lock_guard<std::mutex> lock(g_resourceMutex);
-        CleanupGeneratedResourceModuleFiles();
+        CleanupGeneratedResourceModuleFiles(true);
     }
     CleanupAppletLogoIconFiles();
     CleanupControlPanelTasksXmlFile();
-    if (g_updatesInstalledIcon) { DestroyIcon(g_updatesInstalledIcon); g_updatesInstalledIcon = nullptr; }
-    if (g_windows81UpdateStatusIcon) { DestroyIcon(g_windows81UpdateStatusIcon); g_windows81UpdateStatusIcon = nullptr; }
-    if (g_legacyWarningShield) { DestroyIcon(g_legacyWarningShield); g_legacyWarningShield = nullptr; }
-    if (g_wuDisabledShieldIcon) { DestroyIcon(g_wuDisabledShieldIcon); g_wuDisabledShieldIcon = nullptr; }
+    {
+        std::lock_guard lock(g_statusIconMutex);
+        for (auto& [key, icon] : g_statusIconCache) DestroyIcon(icon);
+        g_statusIconCache.clear();
+    }
     ShutdownGdiPlusRendering();
-    g_keys.AbandonAll();
-    { std::lock_guard lock(g_injectionMutex); g_injected.clear(); }
+    g_keys.ClearWithoutFreeing();
+    ReleaseVirtualKeyRoot();
+    Wh_Log(L"Windows Update Restorer: unloaded cleanly; no registry or system files were modified");
+  } catch (...) {
+    // Teardown must never throw into Windhawk. Whatever failed above, the
+    // registration flags are already cleared, so the mod is inert.
+    Wh_Log(L"Windows Update Restorer: exception during teardown (mod is already inert)");
+  }
 }
