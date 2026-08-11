@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              open-in-admin-terminal
 // @name            Open in Admin Terminal
-// @description     Adds an Explorer classic context menu entry to open an elevated terminal in the current or selected folder.
+// @description     Adds Explorer classic context menu entries to open a terminal (elevated or not) in the current or selected folder, and to run script files.
 // @version         1.17.1
 // @author          aimagist
 // @github          https://github.com/aimagist
@@ -133,7 +133,7 @@ Screenshots may show earlier builds, but current releases use runtime classic-me
   $description: Add the selected terminal name to script actions. Disable for shorter labels.
 - scriptExtensions: ".ps1;.bat;.cmd;.vbs;.js"
   $name: Script extensions
-  $description: Semicolon-separated filter for supported script extensions: .ps1, .bat, .cmd, .vbs, and .js.
+  $description: "Semicolon-separated filter for supported script extensions: .ps1, .bat, .cmd, .vbs, and .js."
 - keepOpenAfterScript: true
   $name: Keep terminal open after script
   $description: Terminal stays open after script finishes.
