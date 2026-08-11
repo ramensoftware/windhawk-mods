@@ -36,6 +36,10 @@ and linear scales. Rapid taskbar layout tracking temporarily increases geometry
 checks after the taskbar changes, which helps the overlay follow animations and
 layout updates.
 
+The default 16384-point FFT prioritizes low-frequency resolution. Select 4096
+for faster-looking motion when resolving the lowest third-octave bands is less
+important.
+
 Unlike **Taskbar Fluent Media Player**, this mod doesn't add a media-player
 widget. Unlike **Desktop Audio Visualizer**, it renders inside the taskbar search
 box. It runs in a dedicated `windhawk.exe` tool process instead of injecting the
@@ -77,7 +81,7 @@ Source, standalone downloads, and detailed documentation are available on the
   $description: Reference used to calculate nominal third-octave centers; ignored by other scales.
 - bandAggregation: "energy"
   $name: Band amplitude calculation
-  $description: Method used to combine FFT bins inside each frequency band.
+  $description: Method used to combine FFT bins. Slaney normalization is specific to Mel; on other scales it matches energy.
   $options:
   - "peak": Peak
   - "energy": Energy
@@ -92,10 +96,10 @@ Source, standalone downloads, and detailed documentation are available on the
   - "C": C-weighting
 - foldBelowMinimum: false
   $name: Fold lower frequencies into first bar
-  $description: Adds energy below the configured minimum to the first visible band.
+  $description: Adds energy below the configured minimum to the first visible band on third-octave, Bark, logarithmic, and linear scales; ignored by Mel.
 - fftSize: 16384
   $name: FFT size
-  $description: Analysis window size; supported values are 4096, 8192, and 16384.
+  $description: Analysis window size. 4096 reacts faster; 16384 resolves the lowest third-octave bands more accurately but adds latency. Supported values are 4096, 8192, and 16384.
 - overlapPercent: 75
   $name: FFT overlap (percent)
   $description: Overlap between consecutive analysis windows. Higher values update the analysis more often and use more CPU.
@@ -180,8 +184,6 @@ Source, standalone downloads, and detailed documentation are available on the
   $description: Temporarily checks geometry more frequently after taskbar layout changes.
 */
 // ==/WindhawkModSettings==
-
-#define TAS_WINDHAWK_HOST
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -354,6 +356,7 @@ bool TryParseWindowFunction(PCWSTR text, WindowFunction* function);
 PCWSTR WindowFunctionName(WindowFunction function);
 bool IsSupportedFftSize(int fftSize);
 int CalculateFftHopSamples(int fftSize, int overlapPercent);
+bool TryParseColor(PCWSTR text, COLORREF* color);
 COLORREF ParseColor(PCWSTR text, COLORREF fallback);
 Settings LoadSettings();
 
@@ -521,10 +524,12 @@ struct SearchLayoutState {
 struct ApplicationContext {
     Settings settings;
     std::array<std::atomic<float>, kMaxBars> bands{};
+    std::atomic<bool> publishedSignalActive{false};
     std::atomic<bool> visualizerActive{false};
     std::atomic<bool> locatorShutdownIncomplete{false};
     ScopedHandle stopEvent;
     ScopedHandle activityChangedEvent;
+    ScopedHandle bandActivityEvent;
     ScopedHandle layoutChangedEvent;
     SearchLayoutState searchLayout;
 };
@@ -797,15 +802,25 @@ int CalculateFftHopSamples(int fftSize, int overlapPercent) {
 }
 
 
-COLORREF ParseColor(PCWSTR text, COLORREF fallback) {
-    if (!text || text[0] != L'#' || wcslen(text) != 7) return fallback;
+bool TryParseColor(PCWSTR text, COLORREF* color) {
+    if (!color || !text || text[0] != L'#' || wcslen(text) != 7) {
+        return false;
+    }
     int digits[6];
     for (int index = 0; index < 6; ++index) {
         digits[index] = HexValue(text[index + 1]);
-        if (digits[index] < 0) return fallback;
+        if (digits[index] < 0) return false;
     }
-    return RGB(digits[0] * 16 + digits[1], digits[2] * 16 + digits[3],
-               digits[4] * 16 + digits[5]);
+    *color = RGB(digits[0] * 16 + digits[1],
+                 digits[2] * 16 + digits[3],
+                 digits[4] * 16 + digits[5]);
+    return true;
+}
+
+COLORREF ParseColor(PCWSTR text, COLORREF fallback) {
+    COLORREF color = fallback;
+    TryParseColor(text, &color);
+    return color;
 }
 
 
@@ -987,12 +1002,19 @@ Settings LoadSettings() {
         HostGetIntSetting(L"rightPadding", 10), 0, 40);
     loaded.barWidthPercent = std::clamp(
         HostGetIntSetting(L"barWidthPercent", 48), 15, 95);
-    loaded.color = ParseColor(
-        HostGetStringSetting(L"barColor", L"#FF78D4").c_str(),
-        RGB(255, 120, 212));
-    loaded.secondColor = ParseColor(
-        HostGetStringSetting(L"secondColor", L"#00C2FF").c_str(),
-        RGB(0, 194, 255));
+    const std::wstring barColor =
+        HostGetStringSetting(L"barColor", L"#FF78D4");
+    if (!TryParseColor(barColor.c_str(), &loaded.color)) {
+        loaded.color = RGB(255, 120, 212);
+        Wh_Log(L"Invalid barColor '%ls'; using #FF78D4", barColor.c_str());
+    }
+    const std::wstring secondColor =
+        HostGetStringSetting(L"secondColor", L"#00C2FF");
+    if (!TryParseColor(secondColor.c_str(), &loaded.secondColor)) {
+        loaded.secondColor = RGB(0, 194, 255);
+        Wh_Log(L"Invalid secondColor '%ls'; using #00C2FF",
+            secondColor.c_str());
+    }
 
     loaded.leftPadding = std::clamp(
         HostGetIntSetting(L"spectrumLeftOffset", 66), 0, 4096);
@@ -2617,8 +2639,14 @@ namespace {
 
 constexpr UINT_PTR kFrameTimer = 1;
 constexpr UINT_PTR kStateSafetyTimer = 2;
+constexpr UINT_PTR kShellStateDebounceTimer = 3;
 constexpr UINT kShellStateChangedMessage = WM_APP + 1;
 constexpr UINT kStateSafetyRefreshMs = 30000;
+constexpr UINT kShellStateDebounceMs = 200;
+constexpr UINT kPendingForegroundChange = 1 << 0;
+constexpr UINT kPendingLocationChange = 1 << 1;
+constexpr DWORD kEventHookFlags =
+    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
 
 struct WindowState {
     ApplicationContext* context = nullptr;
@@ -2635,7 +2663,9 @@ struct WindowState {
     int surfaceHeight = 0;
     ULONGLONG lastFrameTick = 0;
     ULONGLONG lastAudibleTick = 0;
+    UINT frameInterval = 0;
     HWND ownerTaskbar = nullptr;
+    HWINEVENTHOOK locationHook = nullptr;
     DWORD searchMode = 0;
     bool searchInterfaceOpen = false;
     bool searchInterfaceWasOpen = false;
@@ -2643,23 +2673,28 @@ struct WindowState {
     bool positioned = false;
     bool eligible = false;
     bool visible = false;
+    bool frameTimerActive = false;
+    bool frameTimerErrorLogged = false;
+    bool locationHookErrorLogged = false;
     bool updateErrorLogged = false;
     bool zOrderErrorLogged = false;
 };
 
 thread_local HWND g_shellStateTargetWindow = nullptr;
 thread_local HWND g_foregroundRootWindow = nullptr;
+thread_local UINT g_pendingShellStateChanges = 0;
 
 void CALLBACK ShellStateWinEventProc(HWINEVENTHOOK, DWORD event,
                                      HWND eventWindow, LONG objectId,
                                      LONG childId, DWORD, DWORD) {
     if (!g_shellStateTargetWindow) return;
+    UINT pendingChange = 0;
     if (event == EVENT_SYSTEM_FOREGROUND) {
         g_foregroundRootWindow = eventWindow
             ? GetAncestor(eventWindow, GA_ROOT)
             : nullptr;
-    }
-    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+        pendingChange = kPendingForegroundChange;
+    } else if (event == EVENT_OBJECT_LOCATIONCHANGE) {
         if (!eventWindow || objectId != OBJID_WINDOW ||
             childId != CHILDID_SELF) {
             return;
@@ -2668,9 +2703,72 @@ void CALLBACK ShellStateWinEventProc(HWINEVENTHOOK, DWORD event,
             GetAncestor(eventWindow, GA_ROOT) != g_foregroundRootWindow) {
             return;
         }
+        pendingChange = kPendingLocationChange;
+    } else {
+        return;
     }
-    PostMessageW(g_shellStateTargetWindow, kShellStateChangedMessage,
-                 event, 0);
+
+    const UINT previousChanges = g_pendingShellStateChanges;
+    g_pendingShellStateChanges |= pendingChange;
+    if (!previousChanges &&
+        !PostMessageW(g_shellStateTargetWindow,
+                      kShellStateChangedMessage, 0, 0)) {
+        g_pendingShellStateChanges = 0;
+    }
+}
+
+void UpdateForegroundLocationHook(WindowState* state) {
+    if (!state) return;
+    if (state->locationHook) {
+        UnhookWinEvent(state->locationHook);
+        state->locationHook = nullptr;
+    }
+
+    DWORD foregroundProcessId = 0;
+    if (g_foregroundRootWindow && IsWindow(g_foregroundRootWindow)) {
+        GetWindowThreadProcessId(g_foregroundRootWindow,
+                                 &foregroundProcessId);
+    }
+    if (!foregroundProcessId) {
+        state->locationHookErrorLogged = false;
+        return;
+    }
+
+    state->locationHook = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
+        nullptr, ShellStateWinEventProc, foregroundProcessId, 0,
+        kEventHookFlags);
+    if (!state->locationHook) {
+        if (!state->locationHookErrorLogged) {
+            Wh_Log(L"Failed to watch foreground-window geometry: %u",
+                GetLastError());
+            state->locationHookErrorLogged = true;
+        }
+        return;
+    }
+    state->locationHookErrorLogged = false;
+}
+
+bool StartFrameTimer(HWND window, WindowState* state) {
+    if (!state || state->frameTimerActive) return state != nullptr;
+    if (!SetTimer(window, kFrameTimer, state->frameInterval, nullptr)) {
+        if (!state->frameTimerErrorLogged) {
+            Wh_Log(L"Failed to start spectrum frame timer: %u", GetLastError());
+            state->frameTimerErrorLogged = true;
+        }
+        return false;
+    }
+    state->frameTimerActive = true;
+    state->frameTimerErrorLogged = false;
+    state->lastFrameTick = 0;
+    return true;
+}
+
+void StopFrameTimer(HWND window, WindowState* state) {
+    if (!state || !state->frameTimerActive) return;
+    KillTimer(window, kFrameTimer);
+    state->frameTimerActive = false;
+    state->lastFrameTick = 0;
 }
 
 bool IsWindowAbove(HWND first, HWND second) {
@@ -2742,7 +2840,10 @@ bool EnsureTaskbarOwner(HWND window, WindowState* state,
 
 void HideOverlay(HWND window, WindowState* state, bool deactivate = true) {
     if (!state) return;
-    if (deactivate) SetVisualizerActive(*state->context, false);
+    if (deactivate) {
+        StopFrameTimer(window, state);
+        SetVisualizerActive(*state->context, false);
+    }
     state->peaks = {};
     if (deactivate) state->displayed = {};
     state->lastFrameTick = 0;
@@ -2831,12 +2932,28 @@ bool EnsureSurface(WindowState* state, int width, int height) {
     return true;
 }
 
-void DrawSpectrum(HWND window, WindowState* state) {
+bool NeedsFrameUpdates(const WindowState* state) {
+    if (!state) return false;
+    if (state->context->publishedSignalActive.load(
+            std::memory_order_acquire)) {
+        return true;
+    }
+    for (int index = 0; index < state->context->settings.barCount; ++index) {
+        const PeakState& peak = state->peaks[index];
+        if (state->displayed[index] != 0.0f || peak.level != 0.0f ||
+            peak.velocity != 0.0f || peak.holdSeconds != 0.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool DrawSpectrum(HWND window, WindowState* state) {
     ApplicationContext& context = *state->context;
     const Settings& settings = context.settings;
     const int width = state->layout.rect.right - state->layout.rect.left;
     const int height = state->layout.rect.bottom - state->layout.rect.top;
-    if (width <= 0 || height <= 0) return;
+    if (width <= 0 || height <= 0) return false;
 
     const int bars = settings.barCount;
     const ULONGLONG frameTick = GetTickCount64();
@@ -2874,7 +2991,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
             static_cast<ULONGLONG>(settings.silenceHideDelayMs);
     if (settings.hideWhenSilent && silenceDelayElapsed) {
         HideOverlay(window, state, false);
-        return;
+        return NeedsFrameUpdates(state);
     }
 
     const RECT spectrumBounds =
@@ -2887,7 +3004,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
     const int maximumHeight = spectrumBottom - spectrumTop;
     if (usableWidth <= 0 || maximumHeight <= 0) {
         HideOverlay(window, state, false);
-        return;
+        return false;
     }
     if (!EnsureSurface(state, width, height)) {
         if (!state->updateErrorLogged) {
@@ -2895,7 +3012,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
             state->updateErrorLogged = true;
         }
         HideOverlay(window, state);
-        return;
+        return false;
     }
     const size_t pixelCount = static_cast<size_t>(width) * height;
     state->framePixels.assign(pixelCount, 0);
@@ -2988,7 +3105,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
     POINT source{};
     BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     if (state->visible && state->presentedPixels == state->framePixels) {
-        return;
+        return NeedsFrameUpdates(state);
     }
     memcpy(state->pixels, state->framePixels.data(),
            pixelCount * sizeof(uint32_t));
@@ -2998,7 +3115,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
             Wh_Log(L"UpdateLayeredWindow failed: %u", GetLastError());
             state->updateErrorLogged = true;
         }
-        return;
+        return NeedsFrameUpdates(state);
     }
     state->updateErrorLogged = false;
     state->presentedPixels = state->framePixels;
@@ -3010,6 +3127,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
         SetVisualizerActive(context, true);
         EnsureAboveTaskbar(window, state);
     }
+    return NeedsFrameUpdates(state);
 }
 
 void RefreshOverlayState(HWND window, WindowState* state,
@@ -3089,6 +3207,7 @@ void RefreshOverlayState(HWND window, WindowState* state,
                 latest.dpi);
         }
     }
+    StartFrameTimer(window, state);
 }
 
 LRESULT CALLBACK OverlayWindowProc(HWND window, UINT message,
@@ -3103,18 +3222,34 @@ LRESULT CALLBACK OverlayWindowProc(HWND window, UINT message,
                 reinterpret_cast<LONG_PTR>(create->lpCreateParams));
             return TRUE;
         }
-        case kShellStateChangedMessage:
-            RefreshOverlayState(
-                window, state, false,
-                wParam != EVENT_OBJECT_LOCATIONCHANGE);
+        case kShellStateChangedMessage: {
+            if (!state) return 0;
+            const UINT pendingChanges =
+                std::exchange(g_pendingShellStateChanges, 0u);
+            if (pendingChanges & kPendingForegroundChange) {
+                KillTimer(window, kShellStateDebounceTimer);
+                UpdateForegroundLocationHook(state);
+                RefreshOverlayState(window, state, false, true);
+            } else if (pendingChanges & kPendingLocationChange) {
+                if (!SetTimer(window, kShellStateDebounceTimer,
+                              kShellStateDebounceMs, nullptr)) {
+                    RefreshOverlayState(window, state, false, false);
+                }
+            }
             return 0;
+        }
         case WM_TIMER:
             if (!state) return 0;
             if (wParam == kStateSafetyTimer) {
                 RefreshOverlayState(window, state, true, true);
+            } else if (wParam == kShellStateDebounceTimer) {
+                KillTimer(window, kShellStateDebounceTimer);
+                RefreshOverlayState(window, state, false, false);
             } else if (wParam == kFrameTimer && state->positioned &&
                        state->eligible) {
-                DrawSpectrum(window, state);
+                if (!DrawSpectrum(window, state)) {
+                    StopFrameTimer(window, state);
+                }
             }
             return 0;
         case WM_MOUSEACTIVATE:
@@ -3168,6 +3303,7 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
     while (WaitForSingleObject(context.stopEvent.get(), 0) != WAIT_OBJECT_0) {
         WindowState state;
         state.context = &context;
+        state.frameInterval = frameInterval;
         HWND window = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
                 WS_EX_NOACTIVATE,
@@ -3177,8 +3313,7 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
             Wh_Log(L"Failed to create overlay window: %u", GetLastError());
             break;
         }
-        if (!SetTimer(window, kFrameTimer, frameInterval, nullptr) ||
-            !SetTimer(window, kStateSafetyTimer,
+        if (!SetTimer(window, kStateSafetyTimer,
                       kStateSafetyRefreshMs, nullptr)) {
             Wh_Log(L"Failed to create overlay timer: %u", GetLastError());
             DestroyWindow(window);
@@ -3190,16 +3325,16 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
         g_foregroundRootWindow = foreground
             ? GetAncestor(foreground, GA_ROOT)
             : nullptr;
-        constexpr DWORD eventHookFlags =
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
+        g_pendingShellStateChanges = 0;
         const HWINEVENTHOOK foregroundHook = SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
-            ShellStateWinEventProc, 0, 0, eventHookFlags);
-        const HWINEVENTHOOK locationHook = SetWinEventHook(
-            EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-            nullptr, ShellStateWinEventProc, 0, 0, eventHookFlags);
-        if (!foregroundHook || !locationHook) {
-            Wh_Log(L"Foreground event watcher incomplete: %u", GetLastError());
+            ShellStateWinEventProc, 0, 0, kEventHookFlags);
+        const DWORD foregroundHookError =
+            foregroundHook ? ERROR_SUCCESS : GetLastError();
+        UpdateForegroundLocationHook(&state);
+        if (!foregroundHook) {
+            Wh_Log(L"Foreground event watcher unavailable: %u",
+                foregroundHookError);
         }
         if (rendererStarted) {
             Wh_Log(L"Spectrum renderer recreated after taskbar replacement");
@@ -3212,9 +3347,10 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
         bool messageLoopFailed = false;
         bool ownerReplaced = false;
         while (!ownerReplaced) {
-            HANDLE waits[3] = {context.stopEvent.get(),
-                               context.layoutChangedEvent.get()};
-            DWORD waitCount = 2;
+            HANDLE waits[4] = {context.stopEvent.get(),
+                               context.layoutChangedEvent.get(),
+                               context.bandActivityEvent.get()};
+            DWORD waitCount = 3;
             DWORD searchModeWaitIndex = MAXDWORD;
             if (searchModeWatcher.changedEvent()) {
                 searchModeWaitIndex = waitCount;
@@ -3231,6 +3367,12 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
             if (waitResult == WAIT_OBJECT_0) break;
             if (waitResult == WAIT_OBJECT_0 + 1) {
                 RefreshOverlayState(window, &state, false, false);
+                continue;
+            }
+            if (waitResult == WAIT_OBJECT_0 + 2) {
+                if (state.positioned && state.eligible) {
+                    StartFrameTimer(window, &state);
+                }
                 continue;
             }
             if (searchModeWaitIndex != MAXDWORD &&
@@ -3261,10 +3403,12 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
         }
         g_shellStateTargetWindow = nullptr;
         g_foregroundRootWindow = nullptr;
+        g_pendingShellStateChanges = 0;
         if (foregroundHook) UnhookWinEvent(foregroundHook);
-        if (locationHook) UnhookWinEvent(locationHook);
-        KillTimer(window, kFrameTimer);
+        if (state.locationHook) UnhookWinEvent(state.locationHook);
+        StopFrameTimer(window, &state);
         KillTimer(window, kStateSafetyTimer);
+        KillTimer(window, kShellStateDebounceTimer);
         if (IsWindow(window)) DestroyWindow(window);
         DestroySurface(&state);
         if (messageLoopFailed ||
@@ -3290,22 +3434,38 @@ void ClearPublishedBands(ApplicationContext& context) {
     for (auto& band : context.bands) {
         band.store(0.0f, std::memory_order_relaxed);
     }
+    context.publishedSignalActive.store(false, std::memory_order_release);
 }
 
 void PublishBandLevels(ApplicationContext& context, const BandLevels& levels) {
+    bool signalActive = false;
     for (size_t index = 0; index < levels.size(); ++index) {
         context.bands[index].store(levels[index], std::memory_order_relaxed);
+        signalActive = signalActive || levels[index] > 0.0f;
+    }
+    const bool wasActive = context.publishedSignalActive.exchange(
+        signalActive, std::memory_order_acq_rel);
+    if (signalActive && !wasActive && context.bandActivityEvent) {
+        SetEvent(context.bandActivityEvent.get());
     }
 }
 
 namespace {
 
-bool WaitForThread(HANDLE thread, DWORD timeout, PCWSTR name) {
+constexpr DWORD kRuntimeShutdownTimeoutMs = 5500;
+
+bool WaitForThreadUntil(HANDLE thread, ULONGLONG deadline, PCWSTR name) {
     if (!thread) return true;
-    const DWORD result = WaitForSingleObject(thread, timeout);
+    const ULONGLONG now = GetTickCount64();
+    const DWORD remaining = now >= deadline
+        ? 0
+        : static_cast<DWORD>(std::min<ULONGLONG>(
+              deadline - now, MAXDWORD));
+    const DWORD result = WaitForSingleObject(thread, remaining);
     if (result == WAIT_OBJECT_0) return true;
     if (result == WAIT_TIMEOUT) {
-        Wh_Log(L"%ls thread did not stop within %u ms", name, timeout);
+        Wh_Log(L"%ls thread did not stop before the shared shutdown deadline",
+            name);
     } else {
         Wh_Log(L"%ls thread wait failed: %u", name, GetLastError());
     }
@@ -3342,10 +3502,12 @@ bool Runtime::Start(const Settings& settings) {
     context_->stopEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
     context_->activityChangedEvent.reset(
         CreateEventW(nullptr, FALSE, FALSE, nullptr));
+    context_->bandActivityEvent.reset(
+        CreateEventW(nullptr, FALSE, FALSE, nullptr));
     context_->layoutChangedEvent.reset(
         CreateEventW(nullptr, FALSE, FALSE, nullptr));
     if (!context_->stopEvent || !context_->activityChangedEvent ||
-        !context_->layoutChangedEvent) {
+        !context_->bandActivityEvent || !context_->layoutChangedEvent) {
         context_.reset();
         return false;
     }
@@ -3373,12 +3535,14 @@ bool Runtime::Stop() {
         SetEvent(context_->activityChangedEvent.get());
     }
 
+    const ULONGLONG shutdownDeadline =
+        GetTickCount64() + kRuntimeShutdownTimeoutMs;
     const bool locatorStopped =
-        WaitForThread(locatorThread_.get(), 5500, L"Locator");
+        WaitForThreadUntil(locatorThread_.get(), shutdownDeadline, L"Locator");
     const bool overlayStopped =
-        WaitForThread(overlayThread_.get(), 3000, L"Overlay");
+        WaitForThreadUntil(overlayThread_.get(), shutdownDeadline, L"Overlay");
     const bool audioStopped =
-        WaitForThread(audioThread_.get(), 3000, L"Audio");
+        WaitForThreadUntil(audioThread_.get(), shutdownDeadline, L"Audio");
     if (!locatorStopped ||
         context_->locatorShutdownIncomplete.load(std::memory_order_acquire) ||
         !overlayStopped || !audioStopped) {
