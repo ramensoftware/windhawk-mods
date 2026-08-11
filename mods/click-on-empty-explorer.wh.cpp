@@ -66,7 +66,7 @@ no file or folder is located) and performs the action you've configured.
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
 - **Open in VS Code** — Invoke "Open with Code" from the context menu (matches English "Code"; for non-English Windows use "Open Context Menu Item" instead)
-- **Open in Terminal** — Launch Windows Terminal (`wt.exe -d <folder>`) directly in the current folder. Works regardless of Windows language; requires Windows Terminal to be installed.
+- **Open in Terminal** — Launch Windows Terminal (`wt.exe -d <folder>`) directly in the current folder. Works regardless of Windows language; requires Windows Terminal to be installed. If Windows Terminal is not installed, or the current location is a virtual folder (This PC, Recycle Bin), nothing happens and the reason is written to the Windhawk debug log.
 - **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for Cursor, Git Bash, PowerShell, or any program that registered an entry.
 - **None** — Do nothing
 
@@ -817,6 +817,9 @@ static thread_local std::wstring g_pendingDblClickCtxMatch;
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
 // wParam = (WPARAM)std::unique_ptr<PendingAction>, lParam = (LPARAM)hWnd
 static UINT g_msgDoAction = 0;
+// Teardown message: handled on the window's own thread to kill pending timers
+// (timers must be killed on their creating thread) and release per-thread COM.
+static UINT g_msgTeardown = 0;
 
 // Carries an action plus an optional context-menu match string across the
 // posted-message boundary. Using an owned object (instead of a hand-packed
@@ -1106,14 +1109,27 @@ static std::vector<SubclassEntry> g_subclassed;
 static std::mutex g_subclassMutex;
 
 // Per-thread UIAutomation — each Explorer window runs on its own STA thread.
-// Intentionally leaked (raw pointer) to avoid Release() during DLL_PROCESS_DETACH.
+// Stored thread_local and released on the window's own thread (see
+// ReleaseUIAutomationForThread / g_msgTeardown): a COM object has thread
+// affinity, so it must not be released from Wh_ModUninit's arbitrary thread,
+// and Releasing during DLL_PROCESS_DETACH is unsafe too.
+static thread_local IUIAutomation* g_pUIAutomation = nullptr;
+
 static IUIAutomation* GetUIAutomation() {
-    thread_local IUIAutomation* s_pUIAutomation = nullptr;
-    if (!s_pUIAutomation) {
+    if (!g_pUIAutomation) {
         CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
-                         __uuidof(IUIAutomation), (void**)&s_pUIAutomation);
+                         __uuidof(IUIAutomation), (void**)&g_pUIAutomation);
     }
-    return s_pUIAutomation;
+    return g_pUIAutomation;
+}
+
+// Release the per-thread UIAutomation. Must be called on the thread that
+// created it (the window's own thread), never from Wh_ModUninit.
+static void ReleaseUIAutomationForThread() {
+    if (g_pUIAutomation) {
+        g_pUIAutomation->Release();
+        g_pUIAutomation = nullptr;
+    }
 }
 
 // ---- NavigateNewTabProc (timer callback for duplicate tab) ----
@@ -1177,14 +1193,30 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match) {
 
 LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                                       DWORD_PTR dwRefData) {
-    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
+    // Teardown on the window's own thread, before the init guard so it still
+    // runs while Wh_ModUninit is tearing down (g_initialized is already 0 then).
+    // Kills pending timers (must be killed on their creating thread) and
+    // releases the per-thread UIAutomation.
+    if (g_msgTeardown && uMsg == g_msgTeardown) {
+        KillTimer(hWnd, 0x4D43);
+        KillTimer(hWnd, 0x4D44);
+        KillTimer(hWnd, 0x4D45);
+        ReleaseUIAutomationForThread();
+        return 0;
+    }
 
-    // Remove from subclass tracking on destroy (even during teardown)
+    // Remove from subclass tracking on destroy and release per-thread COM.
+    // Handled before the init guard so it runs even during teardown.
     if (uMsg == WM_NCDESTROY) {
-        std::lock_guard<std::mutex> lk(g_subclassMutex);
-        std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        {
+            std::lock_guard<std::mutex> lk(g_subclassMutex);
+            std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        }
+        ReleaseUIAutomationForThread();
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
+
+    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
 
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
     // wParam owns a PendingAction object; the unique_ptr frees it on scope exit.
@@ -1338,14 +1370,30 @@ static thread_local ClickHelper g_lastClick;
 
 LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                               DWORD_PTR dwRefData) {
-    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
+    // Teardown on the window's own thread, before the init guard so it still
+    // runs while Wh_ModUninit is tearing down (g_initialized is already 0 then).
+    // Kills pending timers (must be killed on their creating thread) and
+    // releases the per-thread UIAutomation.
+    if (g_msgTeardown && uMsg == g_msgTeardown) {
+        KillTimer(hWnd, 0x4D43);
+        KillTimer(hWnd, 0x4D44);
+        KillTimer(hWnd, 0x4D45);
+        ReleaseUIAutomationForThread();
+        return 0;
+    }
 
-    // Remove from subclass tracking on destroy (even during teardown)
+    // Remove from subclass tracking on destroy and release per-thread COM.
+    // Handled before the init guard so it runs even during teardown.
     if (uMsg == WM_NCDESTROY) {
-        std::lock_guard<std::mutex> lk(g_subclassMutex);
-        std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        {
+            std::lock_guard<std::mutex> lk(g_subclassMutex);
+            std::erase_if(g_subclassed, [hWnd](const SubclassEntry& e) { return e.hWnd == hWnd; });
+        }
+        ReleaseUIAutomationForThread();
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
+
+    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
 
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
     // wParam owns a PendingAction object; the unique_ptr frees it on scope exit.
@@ -1635,6 +1683,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Click on Empty Explorer Init");
 
     g_msgDoAction = RegisterWindowMessage(L"ClickOnEmptyExplorer_DoAction");
+    g_msgTeardown = RegisterWindowMessage(L"ClickOnEmptyExplorer_Teardown");
     LoadSettings();
 
     HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -1652,9 +1701,16 @@ BOOL Wh_ModInit() {
         FALSE}
     };
     if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks))) {
-        Wh_Log(L"Failed to hook ExplorerFrame.dll");
-        return FALSE;
+        // FileCabinet_CreateViewWindow2 is only used to capture the new tab's
+        // IShellBrowser for the Duplicate Tab action. If the symbol can't be
+        // resolved (new Windows build, symbol server down), don't disable the
+        // whole mod — only Duplicate Tab should degrade. The hook simply isn't
+        // installed, so FileCabinet_CreateViewWindow2Original stays null and is
+        // never called.
+        Wh_Log(L"Failed to hook ExplorerFrame.dll — Duplicate Tab will be unavailable, other actions still work");
+        FreeLibrary(hExplorerFrame);
     }
+    // On success, keep explorerframe.dll loaded so the installed hook stays valid.
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
 
@@ -1678,9 +1734,12 @@ void Wh_ModUninit() {
     g_pendingNavBrowser = nullptr;
     g_pendingNavPath[0] = L'\0';
 
-    // Collect subclassed HWNDs under lock, kill timers + remove subclasses
+    // Collect subclassed HWNDs under lock, then teardown + remove subclasses
     // outside the lock. Timers use nullptr callback now (WM_TIMER handled in
-    // subclass proc), so KillTimer here is clean — no mod-image callback fire.
+    // the subclass proc), so no mod-image callback can fire after unload.
+    // Send the teardown message so KillTimer + per-thread COM release happen on
+    // the window's own thread (a timer must be killed on its creating thread,
+    // and the UIAutomation COM object has thread affinity).
     std::vector<SubclassEntry> toRemove;
     {
         std::lock_guard<std::mutex> lk(g_subclassMutex);
@@ -1688,9 +1747,7 @@ void Wh_ModUninit() {
     }
     for (auto& e : toRemove) {
         if (e.hWnd && IsWindow(e.hWnd)) {
-            KillTimer(e.hWnd, 0x4D43);
-            KillTimer(e.hWnd, 0x4D44);
-            KillTimer(e.hWnd, 0x4D45);
+            if (g_msgTeardown) SendMessage(e.hWnd, g_msgTeardown, 0, 0);
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 e.hWnd, e.isListView ? SysListViewSubclass : DUISubclass);
         }
