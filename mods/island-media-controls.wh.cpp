@@ -36,51 +36,45 @@ play/pause, and next controls.
 
 ## What's new
 
-- **Pointer handling fixes:** Lost pointer capture now releases pressed
-  animation state correctly, preventing stuck compact islands and accidental
-  right-click activation after an interrupted press.
-- **Transport polish:** Releasing side controls outside their button no longer
-  leaves a hover tint behind, and transport presses recover cleanly when
-  capture is lost.
-- **Performance cleanup:** Liquid Glass overlay clipping is skipped when its
-  geometry has not changed, and side-expansion album accent extraction runs
-  only when that mode can use it.
-- **Code cleanup:** Removed stale migration/dead media-thread state and other
-  unused branches left from the display-mode refactor.
-- **Unified display modes:** Fullsize, compact expanded layout, and side
-  expansion are now selected from one clearer display-mode setting.
 - **New layout:** Adds a compact expanded player layout that keeps the cover,
   track information, progress, and transport controls in a tighter card.
-- **Clearer settings layout:** Material, display mode, taskbar position, cover,
-  background, and button style are now grouped at the top, followed by toggles
-  and then numeric tuning controls.
-- **Elastic animation toggle:** The classic rebound option is now named
-  Elastic animation effect, remains enabled by default, and controls the
-  fullsize expand/collapse spring while compact click feedback stays on.
-- **Fresh previews:** The main dark/light preview is restored, and the new
-  fullsize, compact, and side expansion layout previews are shown below it.
+- **Unified display modes:** Fullsize, compact expanded layout, and side
+  expansion are now selected from one clearer display-mode setting.
+- **New feedback animations:** Buttons now react with quicker press, release,
+  bounce, and rejection animations, including clearer no-media and failed-skip
+  feedback.
+- **Side expansion polish:** Side controls feel more responsive, recover cleanly
+  when a press is interrupted, and no longer leave hover highlights behind.
+- **Smoother Liquid Glass:** The Liquid Glass backdrop avoids redundant clipping
+  work and stays better synchronized with the expanded player animation.
+- **More reliable updates:** Media refresh and shutdown handling are more stable,
+  with fewer chances for stale track info or slow mod disable/apply behavior.
 - **Old Compact users:** If the previous Compact option is detected, the island
   keeps that layout until you save settings here; select Display mode -> Compact
   before saving to keep it.
 
 ## Features
 
-- **Taskbar placement:** Put the island near the tray, clock, or taskbar edge,
-  with automatic sizing for different taskbar heights.
-- **Compact media glance:** See artwork, title, artist, playback state, and
-  progress without opening the full player.
-- **Expanded player:** Open a larger player with artwork, seekable progress,
-  transport buttons, album-color wash, and optional compact expanded layout.
-- **Side expansion mode:** Hover the island to reveal transport buttons beside
-  it without opening the expanded player.
-- **Taskbar-position awareness:** When the taskbar moves, the popup direction,
-  layout, and background wash update to match.
-- **Multiple materials:** Choose Mica-like, Solid, Acrylic, or Liquid Glass
-  styling for the compact and expanded surfaces.
-- **Artwork options:** Keep browser thumbnails as-is, or replace low-resolution
-  video thumbnails with generated mesh-gradient or flame artwork.
-- **Animation controls:** Tune hover scale, smoothing, and popup animation speed
-  for normal use or slow-motion preview.
+- **A Dynamic Island-style media hub:** Bring your current song, artwork,
+  progress, and playback controls into a small island on the Windows 11 taskbar.
+- **Multiple layout styles:** Use a full expanded player, a tighter compact
+  player, or a side-expansion mode that reveals quick controls next to the island.
+- **Detailed layout customization:** Adjust the island size, expanded player
+  size, cover behavior, background strength, button style, and animation feel to
+  match your setup.
+- **Flexible taskbar placement:** Place the island near the tray, beside the
+  clock, or along the taskbar edge, with automatic sizing for different taskbar
+  heights.
+- **Smooth, playful animations:** Hover, click, expand, collapse, play/pause,
+  and failed actions all respond with soft motion so the island feels alive
+  instead of static.
+- **Polished visual styles:** Choose from Mica-like, Solid, Acrylic, and Liquid
+  Glass materials, with album-color highlights and refined dark/light mode
+  treatment.
+- **Artwork that fits the moment:** Keep original thumbnails or replace rough
+  browser/video artwork with generated abstract covers for a cleaner look.
+- **Useful playback controls:** Open the player to seek through the track, switch
+  songs, and control playback without leaving the taskbar.
 
 ## Material previews
 
