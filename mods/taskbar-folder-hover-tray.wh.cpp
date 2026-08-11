@@ -2,7 +2,7 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.43
+// @version         1.44
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
@@ -279,12 +279,15 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
   $name: 2. Content ▸ Grid columns
   $description: 0 chooses a square-ish grid automatically.
 
-- itemSize: medium
+- itemSize: small
   $name: 3. Appearance ▸ Item size
   $description: >-
-    Preset size for each item's icon and grid cell. Small/large scale both the
+    Preset size for each item's icon and grid cell. Every step scales both the
     icon and the overall tray size.
   $options:
+  - smallest: Smallest
+  - tiny: Tiny
+  - xsmall: Extra small
   - small: Small
   - medium: Medium
   - large: Large
@@ -361,7 +364,7 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
     Thin outline around the edge of the grid, plus the border Windows draws on
     the rounded window. Turn off for a frameless look at low opacity.
 
-- blurType: gaussian
+- blurType: acrylic
   $name: 3. Appearance ▸ Blur type
   $description: >-
     Gaussian captures the screen behind the grid and blurs it ourselves - a
@@ -373,9 +376,9 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
     opacity instead of the blur radius. None skips blur entirely - cheaper
     than either, same as setting the strength below to 0.
   $options:
-  - none: None
-  - gaussian: Gaussian (adjustable, more expensive)
   - acrylic: Acrylic (fixed radius, cheaper)
+  - gaussian: Gaussian (adjustable, more expensive)
+  - none: None
 
 - blurStrength: 40
   $name: 3. Appearance ▸ Blur strength (%)
@@ -538,9 +541,9 @@ struct Settings {
     bool showExtensions = false;
     SortMode sortBy = SortMode::Name;
     // Derived from itemSize in LoadSettings(); not settings-bound directly.
-    int cellWidth = 92;
-    int cellHeight = 88;
-    int iconSize = 32;
+    int cellWidth = 76;
+    int cellHeight = 72;
+    int iconSize = 24;
     bool showLabels = true;
     int fontSize = 12;
     // LOGFONT lfWeight values. See MakePopupFont.
@@ -554,7 +557,7 @@ struct Settings {
     int popupThemeOverride = -1;
     int panelOpacity = 85;
     bool panelBorder = true;
-    BlurType blurType = BlurType::Gaussian;
+    BlurType blurType = BlurType::Acrylic;
     int blurStrength = 40;
     int gapAbove = 8;
     int gapBefore = 0;
@@ -1151,19 +1154,35 @@ void LoadSettings() {
         std::clamp<int>(Wh_GetIntSetting(L"submenuCloseDelayMs"), 0, 5000);
     g_settings.showHidden = Wh_GetIntSetting(L"showHidden");
     g_settings.showExtensions = Wh_GetIntSetting(L"showExtensions");
+    // Cell padding grows with the icon rather than staying fixed, so the label
+    // keeps its room at the small end. The small/medium/large numbers are the
+    // originals — the three steps below them were added later, so an existing
+    // setting keeps the size it already had.
     std::wstring itemSize = GetStringSetting(L"itemSize");
-    if (itemSize == L"small") {
-        g_settings.iconSize = 24;
-        g_settings.cellWidth = 76;
-        g_settings.cellHeight = 72;
+    if (itemSize == L"smallest") {
+        g_settings.iconSize = 12;
+        g_settings.cellWidth = 56;
+        g_settings.cellHeight = 52;
+    } else if (itemSize == L"tiny") {
+        g_settings.iconSize = 16;
+        g_settings.cellWidth = 62;
+        g_settings.cellHeight = 58;
+    } else if (itemSize == L"xsmall") {
+        g_settings.iconSize = 20;
+        g_settings.cellWidth = 70;
+        g_settings.cellHeight = 66;
+    } else if (itemSize == L"medium") {
+        g_settings.iconSize = 32;
+        g_settings.cellWidth = 92;
+        g_settings.cellHeight = 88;
     } else if (itemSize == L"large") {
         g_settings.iconSize = 48;
         g_settings.cellWidth = 120;
         g_settings.cellHeight = 112;
     } else {
-        g_settings.iconSize = 32;
-        g_settings.cellWidth = 92;
-        g_settings.cellHeight = 88;
+        g_settings.iconSize = 24;
+        g_settings.cellWidth = 76;
+        g_settings.cellHeight = 72;
     }
     g_settings.showLabels = Wh_GetIntSetting(L"showLabels");
     g_settings.fontSize = std::clamp<int>(Wh_GetIntSetting(L"fontSize"), 6, 48);
@@ -1187,9 +1206,9 @@ void LoadSettings() {
         std::clamp<int>(Wh_GetIntSetting(L"panelOpacity"), 0, 100);
     g_settings.panelBorder = Wh_GetIntSetting(L"panelBorder");
     std::wstring blurType = GetStringSetting(L"blurType");
-    g_settings.blurType = blurType == L"acrylic"   ? BlurType::Acrylic
-                          : blurType == L"none"    ? BlurType::None
-                                                    : BlurType::Gaussian;
+    g_settings.blurType = blurType == L"gaussian" ? BlurType::Gaussian
+                          : blurType == L"none"   ? BlurType::None
+                                                  : BlurType::Acrylic;
     g_settings.blurStrength =
         std::clamp<int>(Wh_GetIntSetting(L"blurStrength"), 0, 100);
     g_settings.gapAbove =
@@ -9353,20 +9372,6 @@ void Wh_ModUninit() {
         g_taskbarHosts.reset();
     };
 
-    HWND threadWnd = nullptr;
-    for (HWND h : g_levelWindows) {
-        if (h) {
-            threadWnd = h;
-            break;
-        }
-    }
-    if (!threadWnd) {
-        threadWnd = g_menuOwnerWnd;
-    }
-    if (!threadWnd) {
-        threadWnd = FindCurrentProcessTaskbarWnd();
-    }
-
     // Every one of these waits is unbounded on purpose, for the reason
     // FolderManager::CloseAndWait spells out: Wh_ModUninit runs on a Windhawk
     // engine thread, not on any Explorer UI thread, so blocking here does not
@@ -9389,6 +9394,34 @@ void Wh_ModUninit() {
             Sleep(kUninitWaitPollMs);
         }
     };
+
+    // First, before any window handle is picked: a reload already past
+    // MenuOwnerWndProc's g_unloading check destroys every level window and
+    // clears g_levelWindows, so a handle latched ahead of this wait would be
+    // dead by the time it is used — and RunFromWindowThread would then skip the
+    // teardown entirely, leaving g_menuOwnerWnd (which no reload destroys) alive
+    // with its WndProc in the image about to be unmapped. The reload also parks
+    // the taskbar UI thread in joins that pump sent messages, so waiting here
+    // keeps the teardown send below from running re-entrantly inside one.
+    // Nothing to cancel, and it cannot restart a worker behind us:
+    // StartRetryThread bails on g_unloading.
+    waitOut(L"a UI reload", [] { return g_reloadInFlight.load() > 0; }, [] {});
+
+    // g_menuOwnerWnd first: it lives on the same taskbar UI thread and nothing
+    // but the teardown itself destroys it, so it is the stable choice. A level
+    // window and then the taskbar itself are the fallbacks.
+    HWND threadWnd = g_menuOwnerWnd;
+    if (!threadWnd) {
+        for (HWND h : g_levelWindows) {
+            if (h) {
+                threadWnd = h;
+                break;
+            }
+        }
+    }
+    if (!threadWnd) {
+        threadWnd = FindCurrentProcessTaskbarWnd();
+    }
 
     // ShowItemContextMenu runs a modal TrackPopupMenuEx loop on the UI thread.
     // Teardown via RunFromWindowThread would destroy windows and let Windhawk
@@ -9443,15 +9476,12 @@ void Wh_ModUninit() {
     // user does — see CMIC_MASK_ASYNCOK on the invoke path. Nothing to cancel.
     waitOut(L"a shell verb", [] { return g_invokeActive.load(); }, [] {});
 
-    // And a reload already past MenuOwnerWndProc's g_unloading check. It parks
-    // the taskbar UI thread in StopRetryThread/StopScanThread joins that pump
-    // sent messages, so the teardown send below runs re-entrantly inside it and
-    // this function would return — unmapping the image — with LoadSettings and
-    // the rest of ReloadAndRefreshUI still owed on that thread. Nothing to
-    // cancel, and it cannot restart a worker behind us: StartRetryThread bails
-    // on g_unloading. Waiting here also means the teardown send lands after the
-    // reload is done rather than inside its join.
-    waitOut(L"a UI reload", [] { return g_reloadInFlight.load() > 0; }, [] {});
+    // The waits above run for as long as the user does, so re-validate rather
+    // than trust a handle picked before them. The teardown is the one thing
+    // that must not be skipped.
+    if (threadWnd && !IsWindow(threadWnd)) {
+        threadWnd = FindCurrentProcessTaskbarWnd();
+    }
 
     if (threadWnd) {
         if (!RunFromWindowThread(threadWnd, teardownOnUiThread, nullptr)) {
