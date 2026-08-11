@@ -236,6 +236,7 @@ ordering, or application behavior.
 #include <cwctype>
 #include <cstdint>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -334,6 +335,7 @@ Settings g_settings;
 std::atomic<bool> g_taskbarViewHooked = false;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_recountQueued = false;
+std::mutex g_queueMutex;
 
 [[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher
     g_taskbarDispatcher{nullptr};
@@ -2043,10 +2045,23 @@ struct IAppResolver_8 :
 
 IAppResolver_8* g_appResolver = nullptr;
 CO_MTA_USAGE_COOKIE g_appResolverMtaCookie{};
+ULONGLONG g_appResolverRetryAfter = 0;
+
+// A window keeps the same app ID for its lifetime. Cache the normalized ID so
+// steady-state recounts don't repeatedly call the shell resolver for every HWND.
+std::unordered_map<HWND, std::wstring> g_appIdCache;
 
 bool EnsureAppResolver() {
     if (g_appResolver) {
         return true;
+    }
+
+    ULONGLONG now =
+        GetTickCount64();
+
+    if (now <
+        g_appResolverRetryAfter) {
+        return false;
     }
 
     CO_MTA_USAGE_COOKIE cookie{};
@@ -2084,8 +2099,16 @@ bool EnsureAppResolver() {
                 cookie);
         }
 
+        // Avoid retrying COM activation on every TaskListButton state update.
+        // A later recount can retry after this short backoff.
+        g_appResolverRetryAfter =
+            now + 5000;
+
         return false;
     }
+
+    g_appResolverRetryAfter =
+        0;
 
     g_appResolver =
         resolver;
@@ -2112,6 +2135,11 @@ void ReleaseAppResolver() {
         g_appResolverMtaCookie =
             nullptr;
     }
+
+    g_appResolverRetryAfter =
+        0;
+
+    g_appIdCache.clear();
 }
 
 // -----------------------------------------------------------------------------
@@ -2230,6 +2258,9 @@ struct WindowEnumContext {
     std::unordered_map<
         std::wstring,
         unsigned int>* counts;
+
+    std::unordered_set<HWND>*
+        seenWindows;
 };
 
 BOOL CALLBACK EnumCountableWindows(
@@ -2247,7 +2278,23 @@ BOOL CALLBACK EnumCountableWindows(
 
     if (!context ||
         !context->resolver ||
-        !context->counts) {
+        !context->counts ||
+        !context->seenWindows) {
+        return TRUE;
+    }
+
+    context->seenWindows->insert(
+        hWnd);
+
+    auto cached =
+        g_appIdCache.find(
+            hWnd);
+
+    if (cached !=
+        g_appIdCache.end()) {
+        (*context->counts)[
+            cached->second]++;
+
         return TRUE;
     }
 
@@ -2284,6 +2331,10 @@ BOOL CALLBACK EnumCountableWindows(
     CoTaskMemFree(
         appId);
 
+    g_appIdCache.emplace(
+        hWnd,
+        key);
+
     (*context->counts)[
         key]++;
 
@@ -2307,15 +2358,33 @@ bool BuildRealWindowCounts(
         unsigned int>
         newCounts;
 
+    std::unordered_set<HWND>
+        seenWindows;
+
     WindowEnumContext context{
         g_appResolver,
         &newCounts,
+        &seenWindows,
     };
 
     EnumWindows(
         EnumCountableWindows,
         reinterpret_cast<LPARAM>(
             &context));
+
+    for (auto it =
+             g_appIdCache.begin();
+         it !=
+         g_appIdCache.end();) {
+        if (!seenWindows.contains(
+                it->first)) {
+            it =
+                g_appIdCache.erase(
+                    it);
+        } else {
+            ++it;
+        }
+    }
 
     if (initialBuild) {
         g_appCounts =
@@ -2418,55 +2487,61 @@ bool BuildRealWindowCounts(
 void WINAPI
 InitializeExistingButtonsOnTaskbarThread(
     void* parameter) {
-    HWND taskbarWnd =
-        reinterpret_cast<HWND>(
-            parameter);
+    try {
+        HWND taskbarWnd =
+            reinterpret_cast<HWND>(
+                parameter);
 
-    auto xamlRoot =
-        GetTaskbarXamlRoot(
-            taskbarWnd);
+        auto xamlRoot =
+            GetTaskbarXamlRoot(
+                taskbarWnd);
 
-    if (!xamlRoot) {
+        if (!xamlRoot) {
+            Wh_Log(
+                L"Taskbar Count Badges: "
+                L"failed to get taskbar XamlRoot");
+
+            return;
+        }
+
+        auto content =
+            xamlRoot.Content()
+                .try_as<
+                    FrameworkElement>();
+
+        if (!content) {
+            Wh_Log(
+                L"Taskbar Count Badges: "
+                L"XamlRoot content unavailable");
+
+            return;
+        }
+
+        if (!g_taskbarDispatcher) {
+            g_taskbarDispatcher =
+                content.Dispatcher();
+        }
+
+        // Keep the count map on the taskbar UI thread. Live recounts and badge
+        // updates also run on this thread, avoiding concurrent map access during
+        // initialization.
+        BuildRealWindowCounts(
+            nullptr,
+            true);
+
+        int buttonCount =
+            EnumerateExistingTaskbarButtons(
+                content);
+
         Wh_Log(
             L"Taskbar Count Badges: "
-            L"failed to get taskbar XamlRoot");
-
-        return;
-    }
-
-    auto content =
-        xamlRoot.Content()
-            .try_as<
-                FrameworkElement>();
-
-    if (!content) {
+            L"initial taskbar buttons=%d",
+            buttonCount);
+    } catch (...) {
         Wh_Log(
             L"Taskbar Count Badges: "
-            L"XamlRoot content unavailable");
-
-        return;
+            L"initial taskbar UI setup failed");
     }
-
-    if (!g_taskbarDispatcher) {
-        g_taskbarDispatcher =
-            content.Dispatcher();
-    }
-
-    // Keep the count map on the taskbar UI thread. Live recounts and badge
-    // updates also run on this thread, avoiding concurrent map access during
-    // initialization.
-    BuildRealWindowCounts(
-        nullptr,
-        true);
-
-    int buttonCount =
-        EnumerateExistingTaskbarButtons(
-            content);
-
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"initial taskbar buttons=%d",
-        buttonCount);
 }
 
 // -----------------------------------------------------------------------------
@@ -2474,6 +2549,9 @@ InitializeExistingButtonsOnTaskbarThread(
 // -----------------------------------------------------------------------------
 
 void QueueRealWindowRecount() {
+    std::lock_guard<std::mutex> guard(
+        g_queueMutex);
+
     if (g_unloading ||
         !g_taskbarDispatcher) {
         return;
@@ -2641,12 +2719,18 @@ ApplySettingsOnTaskbarThread(
         return;
     }
 
-    LoadSettings();
-    RefreshAllTrackedButtons();
+    try {
+        LoadSettings();
+        RefreshAllTrackedButtons();
 
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"settings applied");
+        Wh_Log(
+            L"Taskbar Count Badges: "
+            L"settings applied");
+    } catch (...) {
+        Wh_Log(
+            L"Taskbar Count Badges: "
+            L"settings apply failed");
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -3017,8 +3101,13 @@ void Wh_ModBeforeUninit() {
         L"Taskbar Count Badges: "
         L"before uninit");
 
-    g_unloading =
-        true;
+    {
+        std::lock_guard<std::mutex> guard(
+            g_queueMutex);
+
+        g_unloading =
+            true;
+    }
 
     bool ok =
         CleanupSynchronously();
@@ -3039,6 +3128,7 @@ void Wh_ModUninit() {
         false;
 
     g_appCounts.clear();
+    g_appIdCache.clear();
     g_trackedButtons.clear();
 
     Wh_Log(
