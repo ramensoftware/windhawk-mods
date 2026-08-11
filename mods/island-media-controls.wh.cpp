@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.9.256
+// @version         0.10.0
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -32,10 +32,21 @@ play/pause, and next controls.
 | :--- | :---: | :---: |
 | **Fullsize** | ![Island Media Controls fullsize mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/darkfull.gif) | ![Island Media Controls fullsize mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/lightfull.gif) |
 | **Compact** | ![Island Media Controls compact mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/darkcomp.gif) | ![Island Media Controls compact mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/lightcomp.gif) |
-| **Side expansion** | ![Island Media Controls side expansion mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark-mode.gif) | ![Island Media Controls side expansion mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light-mode.gif) |
+| **Side expansion** | ![Island Media Controls side expansion mode in dark mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/dark.gif) | ![Island Media Controls side expansion mode in light mode](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/light.gif) |
 
 ## What's new
 
+- **Pointer handling fixes:** Lost pointer capture now releases pressed
+  animation state correctly, preventing stuck compact islands and accidental
+  right-click activation after an interrupted press.
+- **Transport polish:** Releasing side controls outside their button no longer
+  leaves a hover tint behind, and transport presses recover cleanly when
+  capture is lost.
+- **Performance cleanup:** Liquid Glass overlay clipping is skipped when its
+  geometry has not changed, and side-expansion album accent extraction runs
+  only when that mode can use it.
+- **Code cleanup:** Removed stale migration/dead media-thread state and other
+  unused branches left from the display-mode refactor.
 - **Unified display modes:** Fullsize, compact expanded layout, and side
   expansion are now selected from one clearer display-mode setting.
 - **New layout:** Adds a compact expanded player layout that keeps the cover,
@@ -427,8 +438,7 @@ std::chrono::steady_clock::time_point g_popupSeekCommitUntil;
 std::atomic_bool g_unloading = false;
 std::atomic_bool g_modActive = false;
 std::atomic_bool g_mediaThreadRunning = false;
-std::thread* g_mediaThread = nullptr;
-std::atomic_bool g_mediaThreadExited = true;
+[[clang::no_destroy]] std::optional<std::thread> g_mediaThread;
 std::mutex g_mediaCommandMutex;
 std::condition_variable g_mediaCommandCv;
 std::deque<MediaCommand> g_mediaCommands;
@@ -442,7 +452,6 @@ constexpr auto kMediaPropertiesAsyncTimeout = std::chrono::milliseconds(1500);
 constexpr auto kThumbnailAsyncTimeout = std::chrono::milliseconds(900);
 constexpr auto kMediaCommandAsyncTimeout = std::chrono::milliseconds(1500);
 constexpr auto kUiLocalAsyncTimeout = std::chrono::milliseconds(500);
-constexpr auto kMediaThreadStopTimeout = std::chrono::milliseconds(5000);
 constexpr auto kPopupOverlayWgcBorderlessAccessTimeout =
     std::chrono::milliseconds(5000);
 
@@ -659,7 +668,7 @@ bool g_popupOverlayWgcFrameCallbackHooked = false;
 std::atomic<bool> g_popupOverlayWgcDirtyRegionsEnabled{false};
 std::atomic<int> g_popupOverlayWgcBorderlessAccessState{0};
 std::mutex g_popupOverlayWgcBorderlessAccessThreadMutex;
-std::thread* g_popupOverlayWgcBorderlessAccessThread = nullptr;
+[[clang::no_destroy]] std::optional<std::thread> g_popupOverlayWgcBorderlessAccessThread;
 RECT g_popupOverlayWgcCaptureRectPx{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 RECT g_popupOverlayWgcMonitorRectPx{};
 int g_popupOverlayWgcTargetWidthPx = 0;
@@ -1400,7 +1409,7 @@ std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
 void ApplyDisplayModeSetting(Settings* settings) {
     std::wstring displayMode = GetStringSetting(L"Main.DisplayMode", L"fullsize");
 
-    if (displayMode == L"side_expand" || displayMode == L"dynamic_dual") {
+    if (displayMode == L"side_expand") {
         settings->compactMode = L"dynamic_dual";
         settings->compact = false;
     } else if (displayMode == L"compact") {
@@ -1412,7 +1421,7 @@ void ApplyDisplayModeSetting(Settings* settings) {
     }
 }
 
-constexpr int kSettingsMigrationVersion = 2;
+constexpr int kSettingsMigrationVersion = 1;
 constexpr wchar_t kMigrateMicaLikeMaterialValue[] =
     L"MigrateMicaLikeMaterialToAcrylic";
 
@@ -4015,8 +4024,7 @@ double PopupControlMorphProgress(double progress) {
 }
 
 double PopupElasticDeformation() {
-    if (!g_settings.classicMorphScaleAnimation ||
-        g_settings.compactMode == L"dynamic_dual") {
+    if (!g_settings.classicMorphScaleAnimation) {
         return 0.0;
     }
     // The native Liquid Glass backdrop now mirrors this exact deformation in
@@ -5272,13 +5280,9 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         }
 
         MediaState state = SnapshotMedia();
-        bool navigationUnavailable =
-            motionDirection < 0 ? !state.canSkipPrevious :
-            motionDirection > 0 ? !state.canSkipNext : false;
         if (primary && !state.hasSession) {
             TriggerPopupNoMediaPlayBounce(motion);
-        } else if (motionDirection != 0 &&
-                   (!state.hasSession || navigationUnavailable)) {
+        } else if (motionDirection != 0 && !state.hasSession) {
             TriggerPopupTransportNavigationFailure(motion);
         } else {
             if (primary && border) {
@@ -5290,6 +5294,17 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
         args.Handled(true);
     });
     surface.PointerCanceled([motion](auto const& sender, input::PointerRoutedEventArgs const&) {
+        if (!motion || !motion->pressStarted) {
+            return;
+        }
+        motion->pressStarted = false;
+        if (auto border = sender.template try_as<Border>()) {
+            border.Opacity(1.0);
+            ApplyPopupButtonVisual(border, false);
+        }
+        EndPopupButtonPress(motion, false);
+    });
+    surface.PointerCaptureLost([motion](auto const& sender, input::PointerRoutedEventArgs const&) {
         if (!motion || !motion->pressStarted) {
             return;
         }
@@ -6317,7 +6332,6 @@ void UpdatePopupXamlVisuals() {
             g_playerGrid.Opacity(compactRevealOpacity);
             g_playerGrid.IsHitTestVisible(false);
             if (g_settings.classicMorphScaleAnimation &&
-                g_settings.compactMode != L"dynamic_dual" &&
                 g_islandPressScale) {
                 // Hand the final spring lobe from the disappearing popup to
                 // the compact island, so the close does not visually stop at
@@ -8137,7 +8151,6 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
     if (g_popupClosing && g_popupAnimationProgress <= 0.0) {
         bool transferCompactRebound =
             g_settings.classicMorphScaleAnimation &&
-            g_settings.compactMode != L"dynamic_dual" &&
             g_islandPressScale;
         double transferredScale = Clamp(
             1.0 - g_popupAnimationProgress * 0.58, 1.014, 1.050);
@@ -9205,7 +9218,7 @@ void RequestPopupOverlayWgcBorderlessAccessAsync() {
     }
 
     try {
-        g_popupOverlayWgcBorderlessAccessThread = new std::thread([]() {
+        g_popupOverlayWgcBorderlessAccessThread.emplace([]() {
             try {
                 auto operation =
                     capture::GraphicsCaptureAccess::RequestAccessAsync(
@@ -9247,18 +9260,17 @@ void RequestPopupOverlayWgcBorderlessAccessAsync() {
     } catch (...) {
         g_popupOverlayWgcBorderlessAccessState.store(
             4, std::memory_order_release);
-        g_popupOverlayWgcBorderlessAccessThread = nullptr;
+        g_popupOverlayWgcBorderlessAccessThread.reset();
         Wh_Log(L"Island: failed to start overlay WGC access thread");
     }
 }
 
 void StopPopupOverlayWgcBorderlessAccessThread() {
-    std::thread* thread = nullptr;
+    std::optional<std::thread> thread;
     {
         std::lock_guard threadLock(
             g_popupOverlayWgcBorderlessAccessThreadMutex);
-        thread = g_popupOverlayWgcBorderlessAccessThread;
-        g_popupOverlayWgcBorderlessAccessThread = nullptr;
+        thread.swap(g_popupOverlayWgcBorderlessAccessThread);
     }
 
     if (!thread) {
@@ -9268,7 +9280,6 @@ void StopPopupOverlayWgcBorderlessAccessThread() {
     if (thread->joinable()) {
         thread->join();
     }
-    delete thread;
 }
 
 bool PopupOverlayWgcDirtyRegionsSupported() {
@@ -10876,12 +10887,18 @@ void ApplyPopupBackdropOverlayRegion(int width, int height, int cornerRadiusPx) 
         // Keep the native Liquid Glass HWND itself rounded as well as its DComp
         // content. Otherwise projection/capture can reveal the fixed transparent
         // rectangular window underneath the animated rounded visual.
-        HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
-                                         cornerRadiusPx * 2,
-                                         cornerRadiusPx * 2);
-        if (region) {
-            if (!SetWindowRgn(g_popupBackdropOverlay, region, FALSE)) {
-                DeleteObject(region);
+        bool regionChanged =
+            width != g_popupBackdropOverlayLastWidth ||
+            height != g_popupBackdropOverlayLastHeight ||
+            cornerRadiusPx != g_popupBackdropOverlayLastRadius;
+        if (regionChanged) {
+            HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                             cornerRadiusPx * 2,
+                                             cornerRadiusPx * 2);
+            if (region) {
+                if (!SetWindowRgn(g_popupBackdropOverlay, region, FALSE)) {
+                    DeleteObject(region);
+                }
             }
         }
         return;
@@ -11309,6 +11326,7 @@ void StopHoverRenderLoop() {
 void StartExpandRenderLoop(bool expanded);
 
 void ResetCompactIslandPressMotion() {
+    g_compactPressStarted = false;
     g_compactPressScaleValue = 1.0;
     g_compactPressScaleTarget = 1.0;
     g_compactPressScaleVelocity = 0.0;
@@ -11363,9 +11381,6 @@ void OnHoverRendering(winrt::Windows::Foundation::IInspectable const&,
                 Clamp(g_compactPressScaleValue, 0.91, 1.055);
         }
 
-        bool pressAtTarget =
-            std::abs(g_compactPressScaleTarget - g_compactPressScaleValue) < 0.0015 &&
-            std::abs(g_compactPressScaleVelocity) < 0.08;
         // A quick click still reaches the held pose, but releases as soon as
         // that pose is crossed instead of waiting there for velocity to settle.
         bool reachedCompressionPose = g_compactPressScaleValue <= 0.9415;
@@ -11374,7 +11389,6 @@ void OnHoverRendering(winrt::Windows::Foundation::IInspectable const&,
             g_compactPressReleasePending = false;
             g_compactPressScaleTarget = 1.0;
             g_compactPressScaleVelocity += 4.6;
-            pressAtTarget = false;
         }
 
         g_islandScale.ScaleX(g_currentHoverScale);
@@ -11426,7 +11440,7 @@ void StartHoverRenderLoop(double targetScale) {
 }
 
 void BeginCompactIslandPress() {
-    if (IsDynamicCompactMode() || !g_islandPressScale) {
+    if (!g_islandPressScale) {
         return;
     }
     g_compactPressStarted = true;
@@ -11438,7 +11452,7 @@ void BeginCompactIslandPress() {
 }
 
 void EndCompactIslandPress(bool activate) {
-    if (IsDynamicCompactMode() || !g_islandPressScale) {
+    if (!g_islandPressScale) {
         g_compactPressStarted = false;
         return;
     }
@@ -12250,12 +12264,6 @@ void StartExpandRenderLoop(bool expanded) {
 bool InjectIslandGrid();
 
 void MediaThreadProc() {
-    struct MediaThreadExitGuard {
-        ~MediaThreadExitGuard() {
-            g_mediaThreadExited = true;
-        }
-    } mediaThreadExitGuard;
-
     bool apartmentInitialized = false;
     try {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -12465,13 +12473,11 @@ void StartMediaThread() {
     if (g_mediaThreadRunning.exchange(true)) {
         return;
     }
-    g_mediaThreadExited = false;
     try {
-        g_mediaThread = new std::thread(MediaThreadProc);
+        g_mediaThread.emplace(MediaThreadProc);
     } catch (...) {
         g_mediaThreadRunning = false;
-        g_mediaThreadExited = true;
-        g_mediaThread = nullptr;
+        g_mediaThread.reset();
         Wh_Log(L"Island: failed to start media thread");
     }
 }
@@ -12482,14 +12488,9 @@ void StopMediaThread() {
     g_mediaCommandCv.notify_all();
     if (g_mediaThread) {
         if (g_mediaThread->joinable()) {
-            if (g_mediaThread->get_id() != std::this_thread::get_id()) {
-                g_mediaThread->join();
-            } else {
-                Wh_Log(L"Island: StopMediaThread called from media thread; skipping self-join");
-            }
+            g_mediaThread->join();
         }
-        delete g_mediaThread;
-        g_mediaThread = nullptr;
+        g_mediaThread.reset();
     }
     std::lock_guard lock(g_mediaCommandMutex);
     g_mediaCommands.clear();
@@ -12620,11 +12621,9 @@ Border MakeDynamicTransportButton(const wchar_t* name,
             return;
         }
         motion->pressStarted = false;
-        if (auto releasedButton = sender.template try_as<Border>()) {
+        Border releasedButton = sender.template try_as<Border>();
+        if (releasedButton) {
             releasedButton.ReleasePointerCapture(args.Pointer());
-            releasedButton.Background(Brush(
-                IsDarkModeApprox() ? Color(0x2C, 0xFF, 0xFF, 0xFF)
-                                   : Color(0x20, 0x00, 0x00, 0x00)));
         }
         bool releaseInside = false;
         if (auto element = sender.template try_as<FrameworkElement>()) {
@@ -12634,6 +12633,13 @@ Border MakeDynamicTransportButton(const wchar_t* name,
                             position.Y >= 0.0 &&
                             position.X <= element.ActualWidth() &&
                             position.Y <= element.ActualHeight();
+        }
+        if (releasedButton) {
+            releasedButton.Background(Brush(
+                releaseInside
+                    ? (IsDarkModeApprox() ? Color(0x2C, 0xFF, 0xFF, 0xFF)
+                                          : Color(0x20, 0x00, 0x00, 0x00))
+                    : Color(0x00, 0x00, 0x00, 0x00)));
         }
         EndDynamicTransportButtonPress(motion, releaseInside);
         if (releaseInside) {
@@ -12649,6 +12655,17 @@ Border MakeDynamicTransportButton(const wchar_t* name,
         motion->pressStarted = false;
         if (auto canceledButton = sender.template try_as<Border>()) {
             canceledButton.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
+        }
+        EndDynamicTransportButtonPress(motion, false);
+    });
+    button.PointerCaptureLost([motion](auto const& sender,
+                                       input::PointerRoutedEventArgs const&) {
+        if (!motion || !motion->pressStarted) {
+            return;
+        }
+        motion->pressStarted = false;
+        if (auto lostButton = sender.template try_as<Border>()) {
+            lostButton.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
         }
         EndDynamicTransportButtonPress(motion, false);
     });
@@ -13389,7 +13406,7 @@ Grid BuildIslandGrid() {
             L"Island_TransportPrev", L"\uE892",
             [] {
                 MediaState state = SnapshotMedia();
-                if (!state.hasSession || !state.canSkipPrevious) {
+                if (!state.hasSession) {
                     TriggerDynamicTransportNavigationFailure(
                         &g_dynamicTransportPrevMotion);
                     return;
@@ -13429,7 +13446,7 @@ Grid BuildIslandGrid() {
             L"Island_TransportNext", L"\uE893",
             [] {
                 MediaState state = SnapshotMedia();
-                if (!state.hasSession || !state.canSkipNext) {
+                if (!state.hasSession) {
                     TriggerDynamicTransportNavigationFailure(
                         &g_dynamicTransportNextMotion);
                     return;
@@ -13525,6 +13542,12 @@ Grid BuildIslandGrid() {
             }
             EndCompactIslandPress(false);
             e.Handled(true);
+        });
+        wrapper.PointerCaptureLost([](auto const&, input::PointerRoutedEventArgs const&) {
+            if (!g_compactPressStarted) {
+                return;
+            }
+            EndCompactIslandPress(false);
         });
     }
     return wrapper;
@@ -13739,15 +13762,17 @@ void UpdatePlayerContents() {
     std::vector<uint8_t> popupBlurSourceBytes =
         useGeneratedBlurCover ? displayThumbnailBytes : visualThumbnailBytes;
 
-    uint64_t compactAccentHash = ThumbnailHash(displayThumbnailBytes);
-    if (compactAccentHash != g_dynamicTransportAccentThumbnailHash) {
-        g_dynamicTransportAccentThumbnailHash = compactAccentHash;
-        g_dynamicTransportAccentColorValid = !displayThumbnailBytes.empty();
-        g_dynamicTransportAccentColor = displayThumbnailBytes.empty()
-                                            ? Color(0xFF, 0x4F, 0x7D, 0xE8)
-                                            : ExtractAlbumAccentColor(displayThumbnailBytes);
-        // Theme refresh also rebuilds both XAML gradient brushes atomically.
-        g_themeVisualsValid = false;
+    if (IsDynamicCompactMode()) {
+        uint64_t compactAccentHash = ThumbnailHash(displayThumbnailBytes);
+        if (compactAccentHash != g_dynamicTransportAccentThumbnailHash) {
+            g_dynamicTransportAccentThumbnailHash = compactAccentHash;
+            g_dynamicTransportAccentColorValid = !displayThumbnailBytes.empty();
+            g_dynamicTransportAccentColor = displayThumbnailBytes.empty()
+                                                ? Color(0xFF, 0x4F, 0x7D, 0xE8)
+                                                : ExtractAlbumAccentColor(displayThumbnailBytes);
+            // Theme refresh also rebuilds both XAML gradient brushes atomically.
+            g_themeVisualsValid = false;
+        }
     }
     UpdateThemeVisuals();
 
