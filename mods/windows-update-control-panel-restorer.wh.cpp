@@ -77,7 +77,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
 - Option to hide outdated "Check for updates" box when the service is disabled.
 - Read-only view of classic update settings; changes must be made via the modern Settings app.
 - **Multilingual UI**: English, Italian, Spanish, French, Turkish, Russian, Portuguese, Chinese, Polish, Dutch, or auto-detect.
-- **"Check for updates" feature**: click the sidebar link to run a 12-second scan in a small window with a progress bar. The main page remains stable; results appear automatically upon completion.
+- **"Check for updates" feature**: click the sidebar link to run a REAL online search against Windows Update/Microsoft Update in a small window with a progress bar. The main page remains stable; results appear automatically upon completion.
 - **"Updates FAQ" link**: opens a compact window with ten common questions and answers about Windows updates.
 - **Native sidebar**: preserves the original Windows Control Panel sidebar without adding or modifying external elements.
 
@@ -129,8 +129,12 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
   workers, and removes the files it created. A file still mapped by another
   process is left alone and retried on a later load or unload - never
   force-deleted and never scheduled machine-wide.
+## **Known Limitations**
 
-**Credits**
+- **Update installation**: The mod provides a read‑only view of Windows Update status. Installing updates still needs to be done through the modern Settings app, as adding this functionality would require extensive reverse engineering of the original Windows Update client.
+- **Visual differences**: The restored interface may not be 100% identical to the original Windows 7/8.1 Control Panel page in the first versions. Visual improvements will come in future updates.
+- **Classic Settings page**: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible.
+## **Credits**
 
 - **Yvor** - Testing on Windows 10 21H2.
 - **Cips** - Testing on Windows 11 25H2.
@@ -161,12 +165,15 @@ If any issues are encountered, please report them to the author of the mod.
 #include <objidl.h>
 #include <oaidl.h>
 #include <oleauto.h>
+#include <initguid.h>
+#include <wuapi.h>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
+#include <type_traits>
 #include <new>
 #include <mutex>
 #include <shared_mutex>
@@ -179,6 +186,16 @@ If any issues are encountered, please report them to the author of the mod.
 
 // Per-call diagnostic tracing is intentionally omitted from release builds so
 // the ShellExecute, COM, registry and DirectUI hook paths remain lightweight.
+
+// Windows Update Agent (wuapi.h) CLSID/IID. The header only *declares* the
+// stock CLSID_UpdateSession / IID_IUpdateSession / IID_IUpdateSearcher
+// symbols (their storage lives in Wuguid.lib), and this mod does not link
+// that extra import library. DEFINE_GUID with <initguid.h> included first
+// gives these local copies real storage instead, so CoCreateInstance works
+// with no additional linker dependency. Values are Microsoft's own stable,
+// documented GUIDs for these interfaces.
+DEFINE_GUID(kClsidUpdateSession, 0x4CB43D7F, 0x7EEE, 0x4906, 0x86, 0x98, 0x60, 0xDA, 0x1C, 0x38, 0xF2, 0xFE);
+DEFINE_GUID(kIidUpdateSession, 0x816858A4, 0x260D, 0x4260, 0x93, 0x3A, 0x25, 0x85, 0xF1, 0xAB, 0xC7, 0x6B);
 
 // Use RtlGetVersion as the authoritative source. Unlike GetVersionEx and the
 // version-helper macros, it is not affected by the executable's compatibility
@@ -4958,8 +4975,8 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
             return TRUE;
         } else if (wcscmp(p, L"check") == 0) {
             // "Check for updates" micro-feature (see StartWuUpdateCheck): opens
-            // a small Win32 dialog with a native progress bar that runs the
-            // ~12-second check; the page itself is left untouched.
+            // a small Win32 dialog with a native progress bar that runs a
+            // real online Windows Update search; the page itself is left untouched.
             StartWuUpdateCheck(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
@@ -5978,10 +5995,84 @@ static void CloseAllWuFaqDialogs() {
 }
 
 static HWND g_wuFaqParent = nullptr;
-static HICON g_wuFaqIconBig = nullptr;
-static HICON g_wuFaqIconSmall = nullptr;
-static HICON g_wuFaqHeaderIcon = nullptr;  // 32x32 bicubic logo for the header
-static HFONT g_wuFaqTitleFont = nullptr;
+
+// RAII wrappers for the per-window GDI resources (icons + header font) used
+// by the FAQ, "check for updates" and result windows. Previously these were
+// held in global HICON/HFONT variables shared across every window of a kind
+// (the FAQ dialog can have several live instances at once - one per Explorer
+// window - and the check/result windows literally share globals with each
+// other). WM_INITDIALOG of one instance would silently reassign the same
+// global out from under a still-visible sibling window, and WM_DESTROY of
+// either would DestroyIcon/DeleteObject handles a sibling's WM_PAINT was
+// still using - a use-after-free that could crash explorer.exe. Each window
+// now owns its own resources, allocated in WM_INITDIALOG and freed
+// automatically (no manual Destroy/Delete calls needed) when the owning
+// struct is deleted in WM_DESTROY, stored via GWLP_USERDATA so instances
+// never share or race over each other's handles.
+struct GdiIconDeleter {
+    void operator()(HICON icon) const {
+        if (icon) DestroyIcon(icon);
+    }
+};
+struct GdiFontDeleter {
+    void operator()(HFONT font) const {
+        if (font) DeleteObject(font);
+    }
+};
+using UniqueIcon = std::unique_ptr<std::remove_pointer_t<HICON>, GdiIconDeleter>;
+using UniqueFont = std::unique_ptr<std::remove_pointer_t<HFONT>, GdiFontDeleter>;
+
+// Icon set + header font for one header-style dialog instance (FAQ, check,
+// or result window). Not copyable; each window's GWLP_USERDATA owns exactly
+// one, heap-allocated in WM_INITDIALOG and deleted in WM_DESTROY.
+struct WuHeaderDialogResources {
+    UniqueIcon big{nullptr};
+    UniqueIcon small{nullptr};
+    UniqueIcon header{nullptr};
+    UniqueFont titleFont{nullptr};
+};
+
+static WuHeaderDialogResources* GetWuHeaderDialogResources(HWND hwnd) {
+    return reinterpret_cast<WuHeaderDialogResources*>(
+        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+}
+
+// Allocates and fills a WuHeaderDialogResources for hwnd, sets it as the
+// window's WM_SETICON big/small icons, and stores it in GWLP_USERDATA for
+// WM_PAINT/WM_DESTROY to retrieve. Returns the (non-owning) header icon and
+// title font for immediate use by the caller, or {nullptr, nullptr} if the
+// allocation failed - callers must tolerate that gracefully, same as before.
+struct WuHeaderIconAndFont {
+    HICON header = nullptr;
+    HFONT titleFont = nullptr;
+};
+static WuHeaderIconAndFont CreateWuHeaderDialogResources(HWND hwnd, int headerIconSize) {
+    auto res = std::make_unique<WuHeaderDialogResources>();
+    res->big.reset(CreateAppletLogoIconBicubic(
+        IsWindows81Skin(), GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON)));
+    if (res->big)
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                     reinterpret_cast<LPARAM>(res->big.get()));
+    res->small.reset(CreateAppletLogoIconBicubic(
+        IsWindows81Skin(), GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON)));
+    if (res->small)
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                     reinterpret_cast<LPARAM>(res->small.get()));
+    res->header.reset(CreateAppletLogoIconBicubic(IsWindows81Skin(), headerIconSize, headerIconSize));
+    res->titleFont.reset(WuCreateHeaderFont());
+
+    WuHeaderIconAndFont out{res->header.get(), res->titleFont.get()};
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA,
+                       reinterpret_cast<LONG_PTR>(res.release()));
+    return out;
+}
+
+// Frees the WuHeaderDialogResources owned by hwnd, if any. Safe to call even
+// if CreateWuHeaderDialogResources() never ran or already failed.
+static void DestroyWuHeaderDialogResources(HWND hwnd) {
+    delete GetWuHeaderDialogResources(hwnd);
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+}
 
 struct WuFaqEntry {
     const wchar_t* q;
@@ -6170,22 +6261,9 @@ static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_INITDIALOG: {
             RegisterWuFaqDialog(hwnd);
 
-            // Window icon + header logo (GDI+ HighQualityBicubic).
-            g_wuFaqIconBig = CreateAppletLogoIconBicubic(
-                IsWindows81Skin(), GetSystemMetrics(SM_CXICON),
-                GetSystemMetrics(SM_CYICON));
-            if (g_wuFaqIconBig)
-                SendMessageW(hwnd, WM_SETICON, ICON_BIG,
-                             reinterpret_cast<LPARAM>(g_wuFaqIconBig));
-            g_wuFaqIconSmall = CreateAppletLogoIconBicubic(
-                IsWindows81Skin(), GetSystemMetrics(SM_CXSMICON),
-                GetSystemMetrics(SM_CYSMICON));
-            if (g_wuFaqIconSmall)
-                SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
-                             reinterpret_cast<LPARAM>(g_wuFaqIconSmall));
-            g_wuFaqHeaderIcon = CreateAppletLogoIconBicubic(
-                IsWindows81Skin(), 32, 32);
-            g_wuFaqTitleFont = WuCreateHeaderFont();
+            // Window icon + header logo (GDI+ HighQualityBicubic), owned
+            // solely by this window instance - see WuHeaderDialogResources.
+            CreateWuHeaderDialogResources(hwnd, 32);
 
             // Read-only RichEdit body below the header (bold questions),
             // with a clean 3D edge. All controls are laid out from the client
@@ -6264,8 +6342,9 @@ static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
             wchar_t title[128] = {};
             GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            WuPaintDialogHeader(hdc, rc, 56, g_wuFaqHeaderIcon, 32,
-                                g_wuFaqTitleFont, title);
+            const WuHeaderDialogResources* res = GetWuHeaderDialogResources(hwnd);
+            WuPaintDialogHeader(hdc, rc, 56, res ? res->header.get() : nullptr, 32,
+                                res ? res->titleFont.get() : nullptr, title);
             EndPaint(hwnd, &ps);
             return TRUE;
         }
@@ -6284,22 +6363,7 @@ static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             return TRUE;
         case WM_DESTROY:
             UnregisterWuFaqDialog(hwnd);
-            if (g_wuFaqTitleFont) {
-                DeleteObject(g_wuFaqTitleFont);
-                g_wuFaqTitleFont = nullptr;
-            }
-            if (g_wuFaqHeaderIcon) {
-                DestroyIcon(g_wuFaqHeaderIcon);
-                g_wuFaqHeaderIcon = nullptr;
-            }
-            if (g_wuFaqIconBig) {
-                DestroyIcon(g_wuFaqIconBig);
-                g_wuFaqIconBig = nullptr;
-            }
-            if (g_wuFaqIconSmall) {
-                DestroyIcon(g_wuFaqIconSmall);
-                g_wuFaqIconSmall = nullptr;
-            }
+            DestroyWuHeaderDialogResources(hwnd);
             return TRUE;
     }
     return FALSE;
@@ -6362,12 +6426,16 @@ static void ShowWuFaqDialog(HWND parent) {
 // -----------------------------------------------------------------------------
 // Clicking "Check for updates" in the sidebar opens a SMALL Win32 window with
 // a light-blue header (bicubic applet logo + title) and a NATIVE progress bar
-// (msctls_progress32). The DirectUI page is never touched. When the ~12-second
-// check finishes, the window AUTO-CLOSES and a small result window appears
-// with a personalized translated message and a "Reopen Windows Update" button.
-// A check only starts if no other check is in progress.
+// (msctls_progress32). The DirectUI page is never touched. A background
+// thread runs a REAL search against Windows Update via the Windows Update
+// Agent COM API (RunRealWindowsUpdateSearch) while the progress bar
+// animates; when it finishes (or the max wait elapses) the window
+// AUTO-CLOSES and a small result window appears with a personalized
+// translated message and a "Reopen Windows Update" button. A check only
+// starts if no other check is in progress.
 // =============================================================================
-static constexpr ULONGLONG kWuCheckDurationMs = 12000;  // 10-15 s target
+static constexpr ULONGLONG kWuCheckMinDurationMs = 2500;   // floor, for UX only
+static constexpr ULONGLONG kWuCheckMaxDurationMs = 45000;  // give up and report failure
 static constexpr DWORD kWuCheckTimerMs = 100;           // progress animation tick
 static constexpr UINT_PTR kWuCheckTimerId = 893;
 static constexpr WORD kWuCtlCheckLabel = 0x77A0;
@@ -6387,23 +6455,36 @@ enum WuCheckOutcome {
     kCheckNoUpdates = 0,
     kCheckUpdatesFound = 1,
     kCheckPendingRestart = 2,
+    // The real online search below did not complete (no network, WUA service
+    // unavailable/disabled, or it simply took too long) - shown instead of
+    // guessing an outcome from stale registry timestamps.
+    kCheckSearchFailed = 3,
 };
 static std::atomic<int> g_checkOutcome{kCheckNoUpdates};
+
+// Result of the real Windows Update Agent search performed by
+// RunRealWindowsUpdateSearch() on a background thread (see below). The
+// WM_TIMER handler in WuCheckDlgProc waits for g_realCheckDone before
+// classifying the outcome, so the "Check for updates" result reflects an
+// actual online query against Microsoft's servers rather than a leftover
+// registry timestamp.
+static std::atomic<bool> g_realCheckDone{false};
+static std::atomic<long> g_realCheckHr{S_OK};
+static std::atomic<int> g_realCheckUpdateCount{0};
+static std::atomic<bool> g_realCheckPendingReboot{false};
+static std::optional<std::thread> g_wuSearchThread;
 
 static std::atomic<bool> g_checkingForUpdates{false};
 static std::atomic<ULONGLONG> g_checkStartedTick{0};
 static std::mutex g_checkFrameMutex;
 static HWND g_checkFrame = nullptr;  // Control Panel frame used by "Reopen"
 
-// The check and result windows share this container and the icon/font handles
-// (only one of them exists at a time - the check window closes before the
-// result window opens).
+// (only the HWND registry below is shared - the check window closes before
+// the result window opens, but each now owns its own icons/font via
+// WuHeaderDialogResources, so even if that assumption is ever violated
+// nothing can race or double-free).
 static std::mutex g_wuCheckDlgMutex;
 static std::vector<HWND> g_wuCheckDlgs;
-static HICON g_wuCheckIconBig = nullptr;
-static HICON g_wuCheckIconSmall = nullptr;
-static HICON g_wuCheckHeaderIcon = nullptr;  // 28x28 bicubic logo for the header
-static HFONT g_wuCheckTitleFont = nullptr;
 
 static void RegisterWuCheckDialog(HWND hwnd) {
     std::lock_guard<std::mutex> lock(g_wuCheckDlgMutex);
@@ -6481,11 +6562,35 @@ static const WuCheckResultTexts* SelectWuCheckResultTexts() {
     return &kTexts[0].t;
 }
 
+// Message shown when the real online search (RunRealWindowsUpdateSearch)
+// could not complete - no network, the Windows Update service unavailable,
+// or it simply took too long. Kept separate from WuCheckResultTexts so this
+// doesn't require touching every language row in that table.
+static const wchar_t* SelectWuCheckSearchFailedText() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Windows couldn't check for updates. Make sure you're connected to the internet, then try again." },
+        { L"it", L"Windows non è riuscito a verificare la presenza di aggiornamenti. Assicurati di essere connesso a Internet, quindi riprova." },
+        { L"es", L"Windows no pudo buscar actualizaciones. Asegúrate de estar conectado a Internet y vuelve a intentarlo." },
+        { L"fr", L"Windows n'a pas pu rechercher de mises à jour. Vérifiez votre connexion Internet, puis réessayez." },
+        { L"tr", L"Windows güncelleştirmeleri denetleyemedi. İnternet bağlantınızı denetleyip yeniden deneyin." },
+        { L"ru", L"Windows не удалось выполнить поиск обновлений. Проверьте подключение к Интернету и повторите попытку." },
+        { L"pt", L"O Windows não conseguiu verificar se há atualizações. Verifique sua conexão com a internet e tente novamente." },
+        { L"zh", L"Windows 无法检查更新。请确保已连接到 Internet，然后重试。" },
+        { L"pl", L"Windows nie mógł wyszukać aktualizacji. Sprawdź połączenie z Internetem i spróbuj ponownie." },
+        { L"nl", L"Windows kon niet controleren op updates. Controleer uw internetverbinding en probeer het opnieuw." },
+    };
+    const std::wstring code = CurrentLanguage();
+    const auto it = kTexts.find(code);
+    return it != kTexts.end() ? it->second : kTexts.at(L"en");
+}
+
 // Picks the result message for the stored outcome (kCheckNoUpdates /
-// kCheckUpdatesFound / kCheckPendingRestart).
+// kCheckUpdatesFound / kCheckPendingRestart / kCheckSearchFailed).
 static const wchar_t* SelectWuCheckResultText() {
+    const int outcome = g_checkOutcome.load(std::memory_order_acquire);
+    if (outcome == kCheckSearchFailed) return SelectWuCheckSearchFailedText();
     const WuCheckResultTexts* t = SelectWuCheckResultTexts();
-    switch (g_checkOutcome.load(std::memory_order_acquire)) {
+    switch (outcome) {
         case kCheckUpdatesFound: return t->updatesFound;
         case kCheckPendingRestart: return t->pendingRestart;
         default: return t->noUpdates;
@@ -6533,23 +6638,11 @@ static void PostControlPanelRefresh(HWND frame) {
         PostMessageW(root, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0);
 }
 
-// Shared icon/font setup + centering for the check and result windows.
+// Shared icon/font setup + centering for the check and result windows. Each
+// call gives hwnd its own WuHeaderDialogResources (see above) - the two
+// window kinds no longer share any GDI handle.
 static void SetupWuCheckWindow(HWND hwnd, const wchar_t* title) {
-    g_wuCheckIconBig = CreateAppletLogoIconBicubic(
-        IsWindows81Skin(), GetSystemMetrics(SM_CXICON),
-        GetSystemMetrics(SM_CYICON));
-    if (g_wuCheckIconBig)
-        SendMessageW(hwnd, WM_SETICON, ICON_BIG,
-                     reinterpret_cast<LPARAM>(g_wuCheckIconBig));
-    g_wuCheckIconSmall = CreateAppletLogoIconBicubic(
-        IsWindows81Skin(), GetSystemMetrics(SM_CXSMICON),
-        GetSystemMetrics(SM_CYSMICON));
-    if (g_wuCheckIconSmall)
-        SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
-                     reinterpret_cast<LPARAM>(g_wuCheckIconSmall));
-    g_wuCheckHeaderIcon = CreateAppletLogoIconBicubic(
-        IsWindows81Skin(), 28, 28);
-    g_wuCheckTitleFont = WuCreateHeaderFont();
+    CreateWuHeaderDialogResources(hwnd, 28);
     SetWindowTextW(hwnd, title);
 
     HWND frame = nullptr;
@@ -6568,25 +6661,6 @@ static void SetupWuCheckWindow(HWND hwnd, const wchar_t* title) {
         const int y = parentRect.top + ((parentRect.bottom - parentRect.top) - h) / 2;
         SetWindowPos(hwnd, nullptr, x, y, 0, 0,
                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-    }
-}
-
-static void DestroyWuCheckWindowResources() {
-    if (g_wuCheckTitleFont) {
-        DeleteObject(g_wuCheckTitleFont);
-        g_wuCheckTitleFont = nullptr;
-    }
-    if (g_wuCheckHeaderIcon) {
-        DestroyIcon(g_wuCheckHeaderIcon);
-        g_wuCheckHeaderIcon = nullptr;
-    }
-    if (g_wuCheckIconBig) {
-        DestroyIcon(g_wuCheckIconBig);
-        g_wuCheckIconBig = nullptr;
-    }
-    if (g_wuCheckIconSmall) {
-        DestroyIcon(g_wuCheckIconSmall);
-        g_wuCheckIconSmall = nullptr;
     }
 }
 
@@ -6879,8 +6953,9 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
             wchar_t title[128] = {};
             GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            WuPaintDialogHeader(hdc, rc, 40, g_wuCheckHeaderIcon, 28,
-                                g_wuCheckTitleFont, title);
+            const WuHeaderDialogResources* checkRes = GetWuHeaderDialogResources(hwnd);
+            WuPaintDialogHeader(hdc, rc, 40, checkRes ? checkRes->header.get() : nullptr, 28,
+                                checkRes ? checkRes->titleFont.get() : nullptr, title);
             EndPaint(hwnd, &ps);
             return TRUE;
         }
@@ -6892,25 +6967,33 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                 const ULONGLONG start =
                     g_checkStartedTick.load(std::memory_order_acquire);
                 const ULONGLONG elapsed = now >= start ? now - start : 0;
-                if (elapsed >= kWuCheckDurationMs) {
-                    // Finished: clear the flag, AUTO-CLOSE the window and show
-                    // the personalized result message. We deliberately do NOT
-                    // stamp "now" as the last-check time here: this loop only
-                    // animates a progress bar and classifies the outcome from
-                    // registry state that predates it (see IsPendingWindowsUpdate
-                    // / IsUpdatesAvailable below) - no query actually ran, so
-                    // recording a fresh timestamp would misreport a check that
-                    // never happened. LastCheckForUpdatesText() continues to
-                    // report Windows Update's own recorded scan time instead.
+
+                const bool searchDone = g_realCheckDone.load(std::memory_order_acquire);
+                const bool timedOut = elapsed >= kWuCheckMaxDurationMs;
+                // Finish once the real background search has actually
+                // completed AND at least the minimum UX duration has passed
+                // (so the window doesn't just flash for a cached-fast
+                // answer), or once the max wait is hit (no network / WUA
+                // stuck) so the mod never hangs waiting forever.
+                if ((searchDone && elapsed >= kWuCheckMinDurationMs) || timedOut) {
                     KillTimer(hwnd, kWuCheckTimerId);
-                    // Classify the outcome from the same simple registry
-                    // state the banner uses (pending restart / updates
-                    // available / nothing new), then show the result window.
-                    int outcome = kCheckNoUpdates;
-                    if (IsPendingWindowsUpdate()) {
-                        outcome = kCheckPendingRestart;
-                    } else if (IsUpdatesAvailable()) {
-                        outcome = kCheckUpdatesFound;
+
+                    int outcome;
+                    if (!searchDone) {
+                        // Timed out before the real search finished at all.
+                        outcome = kCheckSearchFailed;
+                    } else {
+                        const HRESULT hr =
+                            static_cast<HRESULT>(g_realCheckHr.load(std::memory_order_acquire));
+                        if (FAILED(hr)) {
+                            outcome = kCheckSearchFailed;
+                        } else if (g_realCheckPendingReboot.load(std::memory_order_acquire)) {
+                            outcome = kCheckPendingRestart;
+                        } else if (g_realCheckUpdateCount.load(std::memory_order_acquire) > 0) {
+                            outcome = kCheckUpdatesFound;
+                        } else {
+                            outcome = kCheckNoUpdates;
+                        }
                     }
                     g_checkOutcome.store(outcome, std::memory_order_release);
                     g_checkingForUpdates.store(false, std::memory_order_release);
@@ -6918,11 +7001,15 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                     ShowWuCheckResultDialog();
                     return TRUE;
                 }
+                // Progress animation only - creeps toward 90% while the real
+                // search runs in the background, then jumps to 100% once the
+                // outcome branch above actually fires.
+                const ULONGLONG span = (std::min)(elapsed, kWuCheckMaxDurationMs);
                 const int percent =
-                    static_cast<int>((elapsed * 100ull) / kWuCheckDurationMs);
+                    static_cast<int>((span * 90ull) / kWuCheckMaxDurationMs);
                 HWND bar = GetDlgItem(hwnd, kWuCtlCheckProgress);
                 if (bar && IsWindow(bar))
-                    SendMessageW(bar, PBM_SETPOS, (std::min)(percent, 100), 0);
+                    SendMessageW(bar, PBM_SETPOS, (std::min)(percent, 90), 0);
                 return TRUE;
             }
             break;
@@ -6934,7 +7021,7 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             UnregisterWuCheckDialog(hwnd);
             // Closing mid-check must let the user start a new check later.
             g_checkingForUpdates.store(false, std::memory_order_release);
-            DestroyWuCheckWindowResources();
+            DestroyWuHeaderDialogResources(hwnd);
             return TRUE;
     }
     return FALSE;
@@ -7055,8 +7142,9 @@ static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam,
             FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
             wchar_t title[128] = {};
             GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            WuPaintDialogHeader(hdc, rc, 40, g_wuCheckHeaderIcon, 28,
-                                g_wuCheckTitleFont, title);
+            const WuHeaderDialogResources* checkRes = GetWuHeaderDialogResources(hwnd);
+            WuPaintDialogHeader(hdc, rc, 40, checkRes ? checkRes->header.get() : nullptr, 28,
+                                checkRes ? checkRes->titleFont.get() : nullptr, title);
             EndPaint(hwnd, &ps);
             return TRUE;
         }
@@ -7084,7 +7172,7 @@ static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam,
             return TRUE;
         case WM_DESTROY:
             UnregisterWuCheckDialog(hwnd);
-            DestroyWuCheckWindowResources();
+            DestroyWuHeaderDialogResources(hwnd);
             return TRUE;
     }
     return FALSE;
@@ -7127,7 +7215,20 @@ static HWND CreateWuCheckTemplateDialog(HWND frame, int cx, int cy,
 }
 
 static void ShowWuCheckResultDialog() {
-    HWND hwnd = CreateWuCheckTemplateDialog(nullptr, 320, 96,
+    // Must share the same owner as the check window (the Control Panel
+    // frame), not nullptr: an unowned top-level window has no guaranteed
+    // z-order relationship to the frame it logically belongs to, so right
+    // after the check window is destroyed and focus reverts to the frame,
+    // this window could end up appearing behind it. Passing the frame as
+    // owner keeps it correctly stacked above.
+    HWND frame = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_checkFrameMutex);
+        frame = g_checkFrame;
+    }
+    if (frame && !IsWindow(frame)) frame = nullptr;
+
+    HWND hwnd = CreateWuCheckTemplateDialog(frame, 320, 96,
                                             WuCheckResultDlgProc);
     if (!hwnd) {
         Wh_Log(L"Windows Update Restorer: result dialog creation FAILED (err=%u)",
@@ -7135,7 +7236,121 @@ static void ShowWuCheckResultDialog() {
         return;
     }
     ShowWindow(hwnd, SW_SHOWNORMAL);
+    // Belt-and-braces: force this window above whatever currently has
+    // z-order priority (the owner frame reclaiming activation right as the
+    // check window is torn down is exactly the race that could otherwise
+    // leave the result window behind it), then release topmost so it
+    // behaves like a normal window afterward instead of staying pinned.
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     SetForegroundWindow(hwnd);
+}
+
+// Performs a REAL online search against Windows Update / Microsoft Update
+// using the same Windows Update Agent COM API the modern Settings app and
+// the original Windows Update Control Panel applet use. This runs on a
+// background thread started by StartWuUpdateCheck(). It deliberately does
+// NOT infer anything from cached registry timestamps - those only reflect
+// the last time the automatic-update service happened to run, which can be
+// long stale or empty on a system that has updates pending. put_Online is
+// forced to TRUE so the search always reaches Microsoft's servers rather
+// than answering from a local cache.
+static void RunRealWindowsUpdateSearch() {
+    g_realCheckDone.store(false, std::memory_order_release);
+
+    HRESULT hrInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool needUninit = SUCCEEDED(hrInit);
+    // RPC_E_CHANGED_MODE means COM is already initialized on this thread
+    // with a different concurrency model (fine, we just reuse it) - anything
+    // else FAILED is a real init failure and the search below will fail too.
+    HRESULT hr = (SUCCEEDED(hrInit) || hrInit == RPC_E_CHANGED_MODE) ? S_OK : hrInit;
+    int updateCount = 0;
+
+    if (SUCCEEDED(hr)) {
+        IUpdateSession* session = nullptr;
+        hr = CoCreateInstance(kClsidUpdateSession, nullptr, CLSCTX_INPROC_SERVER,
+                               kIidUpdateSession, reinterpret_cast<void**>(&session));
+        if (SUCCEEDED(hr) && session) {
+            IUpdateSearcher* searcher = nullptr;
+            hr = session->CreateUpdateSearcher(&searcher);
+            if (SUCCEEDED(hr) && searcher) {
+                searcher->put_Online(VARIANT_TRUE);
+                BSTR criteria = SysAllocString(
+                    L"IsInstalled=0 and IsHidden=0 and Type='Software'");
+                ISearchResult* result = nullptr;
+                hr = criteria ? searcher->Search(criteria, &result) : E_OUTOFMEMORY;
+                if (criteria) SysFreeString(criteria);
+                if (SUCCEEDED(hr) && result) {
+                    OperationResultCode resultCode = orcNotStarted;
+                    result->get_ResultCode(&resultCode);
+                    if (resultCode == orcSucceeded ||
+                        resultCode == orcSucceededWithErrors) {
+                        IUpdateCollection* updates = nullptr;
+                        if (SUCCEEDED(result->get_Updates(&updates)) && updates) {
+                            LONG count = 0;
+                            updates->get_Count(&count);
+                            updateCount = static_cast<int>(count);
+
+                            // Distinguish "already downloaded, waiting to
+                            // install" from "still needs to be downloaded"
+                            // for diagnostics - both are still correctly
+                            // reported as "updates found" to the user, since
+                            // IsInstalled=0 already covers every state
+                            // before install (queued, mid-download, or fully
+                            // staged), unlike the old registry heuristic.
+                            int downloadedCount = 0;
+                            for (LONG i = 0; i < count; ++i) {
+                                IUpdate* update = nullptr;
+                                if (SUCCEEDED(updates->get_Item(i, &update)) && update) {
+                                    VARIANT_BOOL isDownloaded = VARIANT_FALSE;
+                                    if (SUCCEEDED(update->get_IsDownloaded(&isDownloaded)) &&
+                                        isDownloaded == VARIANT_TRUE) {
+                                        ++downloadedCount;
+                                    }
+                                    update->Release();
+                                }
+                            }
+                            Wh_Log(L"Windows Update Restorer: %d update(s) not installed, "
+                                   L"%d already downloaded and staged, %d still to download",
+                                   updateCount, downloadedCount, updateCount - downloadedCount);
+                            updates->Release();
+                        }
+                        hr = S_OK;
+                    } else {
+                        // Search ran but didn't actually succeed (e.g. no
+                        // network reached the update service) - treat as
+                        // failed rather than silently reporting "no updates".
+                        hr = E_FAIL;
+                    }
+                    result->Release();
+                }
+                searcher->Release();
+            }
+            session->Release();
+        }
+    }
+
+    if (needUninit) CoUninitialize();
+
+    // A pending reboot from an update already downloaded/installed is not
+    // something a fresh search reports (those updates are IsInstalled=1 by
+    // then); the registry flag is the correct and only source for that.
+    const bool pendingReboot = IsPendingWindowsUpdate();
+
+    g_realCheckHr.store(static_cast<long>(hr), std::memory_order_release);
+    g_realCheckUpdateCount.store(updateCount, std::memory_order_release);
+    g_realCheckPendingReboot.store(pendingReboot, std::memory_order_release);
+    g_realCheckDone.store(true, std::memory_order_release);
+
+    if (FAILED(hr)) {
+        Wh_Log(L"Windows Update Restorer: real update search failed (hr=0x%08lX)",
+               static_cast<unsigned long>(hr));
+    } else {
+        Wh_Log(L"Windows Update Restorer: real update search found %d update(s)",
+               updateCount);
+    }
 }
 
 // Starts the "Check for updates" flow: opens the small Win32 window with the
@@ -7147,6 +7362,23 @@ static void StartWuUpdateCheck(HWND host) {
     bool expected = false;
     if (!g_checkingForUpdates.compare_exchange_strong(expected, true)) return;
     g_checkStartedTick.store(GetTickCount64());
+    g_realCheckDone.store(false, std::memory_order_release);
+
+    // Launch the real online search in the background. WuCheckDlgProc's
+    // WM_TIMER waits for it to finish before showing a result, so the
+    // outcome always reflects an actual query, not stale registry state.
+    if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
+    g_wuSearchThread.reset();
+    g_wuSearchThread.emplace([] {
+        try {
+            RunRealWindowsUpdateSearch();
+        } catch (...) {
+            g_realCheckHr.store(static_cast<long>(E_FAIL), std::memory_order_release);
+            g_realCheckUpdateCount.store(0, std::memory_order_release);
+            g_realCheckDone.store(true, std::memory_order_release);
+            Wh_Log(L"Windows Update Restorer: real update search threw; treating as failed");
+        }
+    });
 
     HWND frame = host;
     if (!frame || !IsWindow(frame))
@@ -9954,6 +10186,11 @@ void Wh_ModUninit() {
     g_setupThread.reset();
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
     g_rebuildThread.reset();
+    // The real Windows Update search thread's code lives in this image too;
+    // it is bounded by IUpdateSearcher's own timeouts, but wait for it here
+    // so it can never run past unload.
+    if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
+    g_wuSearchThread.reset();
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_rebuildAbortEvent) { CloseHandle(g_rebuildAbortEvent); g_rebuildAbortEvent = nullptr; }
     delete g_dllPath.exchange(nullptr);
