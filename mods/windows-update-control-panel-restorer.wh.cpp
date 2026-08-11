@@ -54,39 +54,33 @@
 ## Windows Update Control Panel Restorer
 
 This mod adds a best-effort classic Windows Update page back to Control Panel on
-Windows 10 and Windows 11. It uses a private Windows 8.1 UI payload with a modern
+Windows 10 and Windows 11 by reimplementing it where possible and by partially recreating the legacy interface. The mod utilizes a Windows 8.1 UI dll with the modern
 Windows Update backend/status layer, without replacing system files or writing
 real Control Panel registration keys.
 
 This is a reimplementation, not the original Windows Update client. Some buttons
-and small visual details are intentionally limited, and more details may be
+and small visual details are limited due to modern Windows versions' architecutre, and more details may be
 improved in future versions.
 
-The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
 
 ## **Screenshot**
 
-![Windows Update Control Panel Restorer](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winupdate.PNG)
+![Windows Update Control Panel Restorer](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/windowsupdate.PNG)
 
-## **Features**
+## **Key Features**
 
-- Classic Windows Update-style status page with real restart/update status.
-- Windows 7 or Windows 8.1 skin option for the status/app icon.
-- Friendly notice when Windows Update is disabled or unavailable.
-- Optional available-updates banner and optional link to Windows Update Settings.
-- Optional "Remove Legacy Broken Option Fix" that hides the broken legacy
-  "Check for updates for your PC" box when Windows Update is unavailable, so
-  only the "Turn on automatic updating" box (and the settings link) remains.
-- Read-only classic "Important updates" status on the "Change settings" page:
-  the four classic options (install automatically / download / check / never)
-  are shown in every supported language and the current AUOptions value is read
-  from the registry. Changes must be made in the modern Windows Settings app.
-- Multilingual UI: English, Italian, Spanish, French, Turkish, Russian,
-  Portuguese, Chinese, Polish, Dutch, or auto-detect.
-- **Native Control Panel sidebar.** The restored page now keeps the sidebar
-  owned by Windows and publishes the Windows Update commands directly into its
-  per-layout `ControlPanelNavLinks` object. No second Windhawk/DirectUI sidebar is
-  drawn, and the native pane is no longer patched or hidden.
+- Classic Windows Update interface with real-time status.
+- Option to choose between Windows 7 or Windows 8.1 visual style.
+- Clear notification when Windows Update is unavailable.
+- Optional banner for available updates and link to settings.
+- Option to hide outdated "Check for updates" box when the service is disabled.
+- Read-only view of classic update settings; changes must be made via the modern Settings app.
+- **Multilingual UI**: English, Italian, Spanish, French, Turkish, Russian, Portuguese, Chinese, Polish, Dutch, or auto-detect.
+- **"Check for updates" feature**: click the sidebar link to run a 12-second scan in a small window with a progress bar. The main page remains stable; results appear automatically upon completion.
+- **"Updates FAQ" link**: opens a compact window with ten common questions and answers about Windows updates.
+- **Native sidebar**: preserves the original Windows Control Panel sidebar without adding or modifying external elements.
+
 
 ## **Notes**
 
@@ -142,7 +136,7 @@ The mod has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
 - **Cips** - Testing on Windows 11 25H2.
 - **Allison** - Suggestions for the implementation of the native Control Panel navigation links.
 
-If you encounter issues, please report them to the author of the mod.
+If any issues are encountered, please report them to the author of the mod.
 */
 // ==/WindhawkModReadme==
 
@@ -163,6 +157,7 @@ If you encounter issues, please report them to the author of the mod.
 #include <servprov.h>
 #include <shellapi.h>
 #include <commctrl.h>
+#include <richedit.h>   // CHARFORMAT2W / EM_SETCHARFORMAT for the FAQ RichEdit
 #include <objidl.h>
 #include <oaidl.h>
 #include <oleauto.h>
@@ -726,6 +721,7 @@ static const WucltuxEmbeddedString kWucltuxMuiStrings[] = {
     { 20021, L"Find out more", L"Scopri di più", L"Obtén más información", L"En savoir plus", L"Daha fazla bilgi edinin", L"Узнать больше", L"Saiba mais", L"了解更多信息", L"Dowiedz się więcej", L"Meer informatie" },
     { 20022, L"There are updates available", L"Sono disponibili aggiornamenti", L"Hay actualizaciones disponibles", L"Des mises à jour sont disponibles", L"Güncellemeler mevcut", L"Доступны обновления", L"Há atualizações disponíveis", L"有可用更新", L"Są dostępne aktualizacje", L"Er zijn updates beschikbaar" },
     { 20023, L"Go to Windows Settings to install them", L"Vai alle impostazioni di Windows per installarli", L"Ve a la configuración de Windows para instalarlas", L"Accédez aux paramètres Windows pour les installer", L"Bunları yüklemek için Windows Ayarları'na gidin", L"Перейдите в параметры Windows, чтобы установить их", L"Vá para as configurações do Windows para instalá-las", L"转到 Windows 设置以安装它们", L"Przejdź do ustawień systemu Windows, aby je zainstalować", L"Ga naar Windows-instellingen om ze te installeren" },
+    { 20024, L"Updates: frequently asked questions", L"Aggiornamenti: domande frequenti", L"Actualizaciones: preguntas frecuentes", L"Mises à jour : questions fréquentes", L"Güncelleştirmeler: sık sorulan sorular", L"Обновления: часто задаваемые вопросы", L"Atualizações: perguntas frequentes", L"更新：常见问题", L"Aktualizacje: najczęściej zadawane pytania", L"Updates: veelgestelde vragen" },
     { 1190, L"Microsoft Update", L"Microsoft Update", L"Microsoft Update", L"Microsoft Update", L"Microsoft Update", L"Центр обновления Microsoft", L"Microsoft Update", L"Microsoft 更新", L"Microsoft Update", L"Microsoft Update" },
     { 1191, L"Give me updates for other Microsoft products when I update Windows", L"Dammi aggiornamenti per altri prodotti Microsoft quando aggiorno Windows", L"Darme actualizaciones para otros productos de Microsoft cuando actualizo Windows", L"Me donner les mises à jour pour d'autres produits Microsoft quand je mets à jour Windows", L"Windows'u güncellediğimde diğer Microsoft ürünleri için güncellemeler ver", L"Предоставлять обновления для других продуктов Microsoft при обновлении Windows", L"Dar-me atualizações para outros produtos da Microsoft ao atualizar o Windows", L"更新 Windows 时为我提供其他 Microsoft 产品的更新", L"Daj mi aktualizacje dla innych produktów Microsoft, gdy aktualizuję Windows", L"Geef mij updates voor andere Microsoft-producten wanneer ik Windows bijwerk" },
     { 64540, L"To view the update history, choose one of the following settings:", L"Per visualizzare la cronologia degli aggiornamenti, scegliere una delle seguenti impostazioni:", L"Para ver el historial de actualizaciones, elija una de las siguientes opciones:", L"Pour afficher l'historique des mises à jour, choisissez l'une des options suivantes :", L"Güncelleme geçmişini görüntülemek için aşağıdaki seçeneklerden birini seçin:", L"Чтобы просмотреть журнал обновлений, выберите один из следующих параметров:", L"Para ver o histórico de atualizações, escolha uma das seguintes opções:", L"要查看更新历史记录，请选择以下选项之一：", L"Aby wyświetlić historię aktualizacji, wybierz jedną z następujących opcji:", L"Om de updategeschiedenis weer te geven, kiest u een van de volgende opties:" },
@@ -3569,6 +3565,35 @@ static std::vector<BYTE> DecodeBase64Icon(const char* source) {
     for (const char* p = source; p && *p; ++p) { if (*p == '=') break; int d = Base64Digit(*p); if (d < 0) continue; value = (value << 6) + d; bits += 6; if (bits >= 0) { out.push_back(static_cast<BYTE>((value >> bits) & 0xFF)); bits -= 8; } }
     return out;
 }
+
+// Base64 encoder (used to feed an extracted PNG back into the GDI+ bicubic
+// path, which consumes base64).
+static std::string Base64Encode(const BYTE* data, size_t len) {
+    static const char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+    size_t i = 0;
+    while (i + 2 < len) {
+        const DWORD v = (static_cast<DWORD>(data[i]) << 16) |
+                        (static_cast<DWORD>(data[i + 1]) << 8) |
+                        static_cast<DWORD>(data[i + 2]);
+        out += kAlphabet[(v >> 18) & 63];
+        out += kAlphabet[(v >> 12) & 63];
+        out += kAlphabet[(v >> 6) & 63];
+        out += kAlphabet[v & 63];
+        i += 3;
+    }
+    if (i < len) {
+        const DWORD v = static_cast<DWORD>(data[i]) << 16 |
+                        (i + 1 < len ? static_cast<DWORD>(data[i + 1]) << 8 : 0);
+        out += kAlphabet[(v >> 18) & 63];
+        out += kAlphabet[(v >> 12) & 63];
+        out += (i + 1 < len) ? kAlphabet[(v >> 6) & 63] : '=';
+        out += '=';
+    }
+    return out;
+}
 #pragma pack(push, 1)
 struct EmbeddedIconHeader { WORD reserved, type, count; };
 struct EmbeddedIconEntry { BYTE width, height, colors, reserved; WORD planes, bitCount; DWORD bytes, offset; };
@@ -3696,6 +3721,92 @@ static HICON CreateIconFromBase64PngBicubic(const char* base64Str, int targetWid
     }
     stream->Release();
     return hIcon;
+}
+
+// Defined below (in the icon-file helper section); declared here so the
+// "Checking for updates..." state can load the skinned applet logo.
+static std::wstring EnsureAppletLogoIconFile(bool windows81Skin);
+
+// Renders the skinned applet logo (Windows 7 or Windows 8.1) at the requested
+// size using GDI+ HighQualityBicubic interpolation. The generated .ico stores
+// PNG-compressed entries; the largest entry is extracted, base64-encoded and
+// fed through the same bicubic path used by the status icons, so the FAQ
+// window's header icon stays crisp at any DPI instead of being downscaled by
+// GDI (which blurs it). Falls back to a plain LoadImageW of the .ico, then to
+// the embedded status PNG, on any failure.
+static HICON CreateAppletLogoIconBicubic(bool windows81Skin, int width, int height) {
+    if (width <= 0 || height <= 0)
+        width = height = GetSystemMetrics(SM_CXICON);
+
+    const std::wstring path = EnsureAppletLogoIconFile(windows81Skin);
+    std::vector<BYTE> ico;
+    if (!path.empty()) {
+        HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                  nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                                  nullptr);
+        if (file != INVALID_HANDLE_VALUE) {
+            LARGE_INTEGER size{};
+            if (GetFileSizeEx(file, &size) && size.QuadPart > 0 &&
+                size.QuadPart < 4 * 1024 * 1024) {
+                ico.resize(static_cast<size_t>(size.QuadPart));
+                DWORD read = 0;
+                if (!ReadFile(file, ico.data(), static_cast<DWORD>(ico.size()),
+                              &read, nullptr) ||
+                    read != ico.size())
+                    ico.clear();
+            }
+            CloseHandle(file);
+        }
+    }
+
+    if (ico.size() >= 6) {
+        const WORD count = static_cast<WORD>(ico[4]) |
+                           (static_cast<WORD>(ico[5]) << 8);
+        // Find the entry with the largest effective size (0 in the header
+        // means 256). Downscaling a larger source with bicubic looks best.
+        size_t bestOffset = 0;
+        size_t bestBytes = 0;
+        int bestSize = -1;
+        for (int i = 0; i < count && i < 64; ++i) {
+            const size_t base = 6 + static_cast<size_t>(i) * 16;
+            if (base + 16 > ico.size()) break;
+            const BYTE w = ico[base];
+            const int eff = w == 0 ? 256 : static_cast<int>(w);
+            const DWORD bytes = static_cast<DWORD>(ico[base + 8]) |
+                                (static_cast<DWORD>(ico[base + 9]) << 8) |
+                                (static_cast<DWORD>(ico[base + 10]) << 16) |
+                                (static_cast<DWORD>(ico[base + 11]) << 24);
+            const DWORD offset = static_cast<DWORD>(ico[base + 12]) |
+                                 (static_cast<DWORD>(ico[base + 13]) << 8) |
+                                 (static_cast<DWORD>(ico[base + 14]) << 16) |
+                                 (static_cast<DWORD>(ico[base + 15]) << 24);
+            if (eff > bestSize) {
+                bestSize = eff;
+                bestOffset = offset;
+                bestBytes = bytes;
+            }
+        }
+        // PNG-compressed entry: extract it and scale with GDI+ bicubic.
+        if (bestBytes >= 8 && bestOffset + bestBytes <= ico.size() &&
+            ico[bestOffset] == 0x89 && ico[bestOffset + 1] == 'P' &&
+            ico[bestOffset + 2] == 'N' && ico[bestOffset + 3] == 'G') {
+            const std::string b64 = Base64Encode(
+                ico.data() + bestOffset, bestBytes);
+            if (HICON icon = CreateIconFromBase64PngBicubic(b64.c_str(), width, height))
+                return icon;
+        }
+    }
+
+    // Fallback: plain .ico load, then the embedded status PNG.
+    if (!path.empty()) {
+        if (HICON icon = reinterpret_cast<HICON>(LoadImageW(
+                nullptr, path.c_str(), IMAGE_ICON, width, height,
+                LR_LOADFROMFILE | LR_DEFAULTCOLOR)))
+            return icon;
+    }
+    const char* png = windows81Skin ? kWindows81UpdateStatusPngBase64
+                                    : kUpdatesInstalledPngBase64;
+    return png ? CreateIconFromBase64PngBicubic(png, width, height) : nullptr;
 }
 
 static HICON GetStatusIcon(UINT id, int requestedWidth, int requestedHeight) {
@@ -4279,10 +4390,14 @@ static std::wstring BuildUpdateIntroTextXml() {
 // =============================================================================
 // Native Win32 Drop-down ComboBox for Settings Page ("pageSettings")
 // =============================================================================
-static HWND g_hwndDirectUiParent = nullptr;
+// The native combobox is per-window state: each Explorer window runs its own
+// UI thread, so the DirectUI parent handle and the population flags must be
+// thread-local. A shared plain global made two windows with the settings page
+// open fight over the same flags (one combobox staying empty, or re-population
+// every 200 ms).
+static thread_local HWND g_hwndDirectUiParent = nullptr;
 static std::atomic<bool> g_isSettingsPageActive{false};
 
-static void RefreshWuPage(HWND host);
 static LRESULT CALLBACK SettingsDirectUiSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
 
@@ -4308,8 +4423,8 @@ static DirectUI_Combobox_AddString_t pAddString = nullptr;
 static DirectUI_Combobox_SetSelection_t pSetSelection = nullptr;
 static DirectUI_Element_SetEnabled_t pSetEnabled = nullptr;
 
-static bool g_nativeComboPopulated = false;
-static void* g_lastComboPtr = nullptr;
+static thread_local bool g_nativeComboPopulated = false;
+static thread_local void* g_lastComboPtr = nullptr;
 
 // Resolve only the DirectUI exports required to populate the read-only selector.
 static void EnsureDui70ComboboxExports() {
@@ -4332,20 +4447,45 @@ static void InitDirectUIExports() {
     EnsureDui70ComboboxExports();
 }
 
-static void DestroySettingsCombobox() {
+// Tears down the native combobox subclasses. The subclass and the timer are
+// thread-affine, so a window belonging to another thread must never be torn
+// down from here unless the whole mod is unloading. With currentThreadOnly set,
+// only windows owned by the calling thread are touched (used by the DirectUI
+// XML patch path, which runs for EVERY DirectUI document parsed in explorer.exe
+// - including folder windows and shell dialogs on other threads).
+static void DestroySettingsComboboxImpl(bool currentThreadOnly) {
     g_isSettingsPageActive.store(false);
     std::vector<HWND> windows;
     { std::lock_guard lock(g_subclassWindowsMutex); windows = g_settingsSubclassWindows; }
-    // Ask each owner thread to stop its timer, then remove the wrapper with
-    // Windhawk's cross-thread-safe helper.
     for (HWND hwnd : windows) if (IsWindow(hwnd)) {
+        if (currentThreadOnly &&
+            GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId())
+            continue;
+        // Ask the owner thread to stop its timer, then remove the wrapper with
+        // Windhawk's cross-thread-safe helper.
         SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, SettingsDirectUiSubclassProc);
     }
-    { std::lock_guard lock(g_subclassWindowsMutex); g_settingsSubclassWindows.clear(); }
+    if (!currentThreadOnly) {
+        std::lock_guard lock(g_subclassWindowsMutex);
+        g_settingsSubclassWindows.clear();
+    }
+    // Reset only this thread's state. Other threads reset their own copies in
+    // SettingsDirectUiSubclassProc when their window is torn down.
     g_hwndDirectUiParent = nullptr;
-    g_nativeComboPopulated = false; g_lastComboPtr = nullptr;
+    g_nativeComboPopulated = false;
+    g_lastComboPtr = nullptr;
+}
+
+// Full teardown (Wh_ModUninit): every window, regardless of owning thread.
+static void DestroySettingsCombobox() {
+    DestroySettingsComboboxImpl(false);
+}
+
+// Teardown restricted to the calling thread (DirectUI page-load path).
+static void DestroySettingsComboboxOnThisThread() {
+    DestroySettingsComboboxImpl(true);
 }
 
 static LRESULT CALLBACK SettingsDirectUiSubclassProc(
@@ -4533,7 +4673,9 @@ static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
 // Private command protocol used only by this applet's navigation links. Known
 // commands are consumed; unknown commands report failure with hInstApp set.
 static void ShowWuSettingsDialog(HWND parent);
-static void RefreshWuPage(HWND host);
+static void ShowWuFaqDialog(HWND parent);
+static void StartWuUpdateCheck(HWND host);
+static HICON LoadAppletLogoIconForShell(int size);
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
 static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
@@ -4549,7 +4691,14 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
             return TRUE;
         } else if (wcscmp(p, L"check") == 0) {
-            RefreshWuPage(info->hwnd);
+            // "Check for updates" micro-feature (see StartWuUpdateCheck): opens
+            // a small Win32 dialog with a native progress bar that runs the
+            // ~12-second check; the page itself is left untouched.
+            StartWuUpdateCheck(info->hwnd);
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
+            return TRUE;
+        } else if (wcscmp(p, L"faq") == 0) {
+            ShowWuFaqDialog(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(32));
             return TRUE;
         } else if (wcscmp(p, L"history") == 0 || wcscmp(p, L"hidden") == 0) {
@@ -4579,7 +4728,9 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR 
         if (wcscmp(p, L"opensettings") == 0) {
             ShowWuSettingsDialog(hwnd);
         } else if (wcscmp(p, L"check") == 0) {
-            RefreshWuPage(hwnd);
+            StartWuUpdateCheck(hwnd);
+        } else if (wcscmp(p, L"faq") == 0) {
+            ShowWuFaqDialog(hwnd);
         } else if (wcscmp(p, L"history") == 0 || wcscmp(p, L"hidden") == 0) {
             OpenInstalledUpdates(hwnd);
         } else if (wcscmp(p, L"security") == 0) {
@@ -4703,6 +4854,10 @@ static HRESULT RedirectNativeNavLink(NativeControlPanelNavLink* link,
     return S_OK;
 }
 
+// Appends the FAQ task link to a wucltux-owned sidebar. Defined below (after
+// CreateNativeNavLink); declared here so the redirect can call it.
+static void AppendFaqNavLinkIfMissing(NativeControlPanelNavLinks* navLinks);
+
 static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
     if (!unknown) return 0;
     auto* navLinks = reinterpret_cast<NativeControlPanelNavLinks*>(unknown);
@@ -4763,6 +4918,11 @@ static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
             if (hr == S_OK) ++patched;
         }
     }
+
+    // Append the mod's own "Updates: frequently asked questions" link below
+    // "Restore hidden updates" when wucltux built the task list itself (the
+    // rebuilt list already contains it, see CreateNativeControlPanelNavLinks).
+    AppendFaqNavLinkIfMissing(navLinks);
     return patched;
 }
 
@@ -4774,6 +4934,10 @@ static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
 static constexpr ULONG_PTR kControlPanelNavLinksVtableRva = 0x2350;
 static constexpr LONG kPinnedNavLinksReferenceCount = 0x10000000;
 
+// The fabricated CControlPanelNavLinks object and its links are tiny (24 bytes
+// and 0x70 bytes). VirtualAlloc would reserve a full 64 KB region per object
+// (~448 KB per page navigation); CoTaskMemAlloc is the right tool for objects
+// this size and is what the rest of the private ABI already frees with.
 static int CALLBACK DestroyUnpublishedNativeNavLink(void* item, void*) {
     auto* link = static_cast<NativeControlPanelNavLink*>(item);
     if (!link) return 1;
@@ -4781,16 +4945,16 @@ static int CALLBACK DestroyUnpublishedNativeNavLink(void* item, void*) {
     CoTaskMemFree(link->auxiliaryArguments);
     CoTaskMemFree(link->command.appletOrCommand);
     CoTaskMemFree(link->command.arguments);
-    VirtualFree(link, 0, MEM_RELEASE);
+    CoTaskMemFree(link);
     return 1;
 }
 
 static NativeControlPanelNavLink* CreateNativeNavLink(
     int list, PCWSTR name, PCWSTR command, PCWSTR arguments = L"") {
-    auto* link = static_cast<NativeControlPanelNavLink*>(VirtualAlloc(
-        nullptr, sizeof(NativeControlPanelNavLink), MEM_RESERVE | MEM_COMMIT,
-        PAGE_READWRITE));
+    auto* link = static_cast<NativeControlPanelNavLink*>(
+        CoTaskMemAlloc(sizeof(NativeControlPanelNavLink)));
     if (!link) return nullptr;
+    memset(link, 0, sizeof(*link));
 
     link->list = list;
     link->command.execType = 1;  // CPNAVTYPE_ShellExec
@@ -4816,17 +4980,38 @@ static void DestroyUnpublishedNativeNavLinks(NativeControlPanelNavLinks* links) 
                                 DestroyUnpublishedNativeNavLink),
                             nullptr);
     }
-    VirtualFree(links, 0, MEM_RELEASE);
+    CoTaskMemFree(links);
+}
+
+static void AppendFaqNavLinkIfMissing(NativeControlPanelNavLinks* navLinks) {
+    if (!navLinks || !navLinks->links) return;
+
+    // The same list can be published more than once; never insert a duplicate.
+    const int count = DPA_GetPtrCount(navLinks->links);
+    for (int index = 0; index < count; ++index) {
+        auto* link = reinterpret_cast<NativeControlPanelNavLink*>(
+            DPA_GetPtr(navLinks->links, index));
+        if (link && link->command.execType == 1 && link->command.appletOrCommand &&
+            _wcsicmp(link->command.appletOrCommand, L"wurestorer:faq") == 0)
+            return;
+    }
+
+    const wchar_t* label = EmbeddedMuiString(20024);
+    auto* faqLink = CreateNativeNavLink(
+        0, label ? label : L"Updates: frequently asked questions",
+        L"wurestorer:faq", L"");
+    if (faqLink && DPA_InsertPtr(navLinks->links, 0x7fffffff, faqLink) == -1)
+        DestroyUnpublishedNativeNavLink(faqLink, nullptr);
 }
 
 static NativeControlPanelNavLinks* CreateNativeControlPanelNavLinks() {
     HMODULE module = g_module.load(std::memory_order_acquire);
     if (!module) return nullptr;
 
-    auto* links = static_cast<NativeControlPanelNavLinks*>(VirtualAlloc(
-        nullptr, sizeof(NativeControlPanelNavLinks), MEM_RESERVE | MEM_COMMIT,
-        PAGE_READWRITE));
+    auto* links = static_cast<NativeControlPanelNavLinks*>(
+        CoTaskMemAlloc(sizeof(NativeControlPanelNavLinks)));
     if (!links) return nullptr;
+    memset(links, 0, sizeof(*links));
     links->vtable = reinterpret_cast<BYTE*>(module) +
                     kControlPanelNavLinksVtableRva;
     links->referenceCount = kPinnedNavLinksReferenceCount;
@@ -4850,6 +5035,7 @@ static NativeControlPanelNavLinks* CreateNativeControlPanelNavLinks() {
         {0, 352, L"View update history", L"wurestorer:history", L""},
         {0, 353, L"Restore hidden updates",
          L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L""},
+        {0, 20024, L"Updates: frequently asked questions", L"wurestorer:faq", L""},
         {1, 355, L"Security Center", L"wurestorer:security", L""},
         {1, 356, L"Installed Updates",
          L"shell:::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L""},
@@ -4896,6 +5082,15 @@ static HRESULT WINAPI PSPropertyBag_WriteUnknownHook(IPropertyBag* bag,
         wcscmp(propertyName, L"ControlPanelNavLinks") == 0 &&
         IsPrivateWucltuxAddress(navLinks->vtable)) {
         try {
+            // This bag now has a real wucltux-owned list, so PublishNative-
+            // NavigationLinks must not allocate a replacement (see there). The
+            // bag is reference-held so the marker pointer stays valid.
+            static thread_local IPropertyBag* wucltuxWroteToBag = nullptr;
+            if (wucltuxWroteToBag != bag) {
+                if (wucltuxWroteToBag) wucltuxWroteToBag->Release();
+                bag->AddRef();
+                wucltuxWroteToBag = bag;
+            }
             const unsigned patched = RedirectNativeControlPanelNavLinks(value);
             Wh_Log(L"WUR: published native ControlPanelNavLinks (redirected=%u)",
                    patched);
@@ -4933,6 +5128,11 @@ static void InstallNativeControlPanelNavLinksHook() {
 // PopulateControlPanelNavLinks call, leaving the pane empty. CElementWithSite is
 // where the page receives the shell site used by the sample's _punkSite call.
 // Hook that exact method in the pinned payload and publish our complete list.
+//
+// kCElementWithSiteSetSiteRva (0x26960) and kControlPanelNavLinksVtableRva
+// (0x2350) are RVAs into the EXACT SHA-256-pinned wucltux.dll payload declared
+// at the top of this file (7.9.9600.17415, winblue_r4.141028-1500). They were
+// verified against that precise build; a different payload would need new RVAs.
 static const GUID kSidPerLayoutPropertyBag = {
     0xa46e5c25, 0xc09c, 0x4ca8,
     {0x9a, 0x53, 0x49, 0xcf, 0x7f, 0x86, 0x55, 0x25}};
@@ -4950,8 +5150,22 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
     services->Release();
     if (FAILED(hr) || !bag) return FAILED(hr) ? hr : E_NOINTERFACE;
 
+    // On builds where wucltux DOES publish its own list for this bag (Windows
+    // 11), PSPropertyBag_WriteUnknownHook records the bag here; publishing a
+    // second list afterwards would only allocate and leak. Only publish when
+    // wucltux has not already supplied one. The pointer is reference-held so a
+    // recycled bag address can never be misread as "already written".
+    static thread_local IPropertyBag* wucltuxWroteToBag = nullptr;
+    if (wucltuxWroteToBag == bag) {
+        bag->Release();
+        return S_FALSE;
+    }
+
     // CElementWithSite::SetSite can be called for several page elements sharing
-    // one per-layout bag. Publish only once per UI thread and bag.
+    // one per-layout bag. Publish only once per UI thread and bag. The bag is
+    // reference-held (AddRef) so the stored pointer stays valid; comparing a
+    // raw released pointer could collide with a recycled bag address and leave
+    // the sidebar empty.
     static thread_local IPropertyBag* lastPublishedBag = nullptr;
     if (lastPublishedBag == bag) {
         bag->Release();
@@ -4981,6 +5195,8 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
     hr = writer(bag, L"ControlPanelNavLinks",
                 reinterpret_cast<IUnknown*>(links));
     if (SUCCEEDED(hr)) {
+        if (lastPublishedBag) lastPublishedBag->Release();
+        bag->AddRef();
         lastPublishedBag = bag;
         Wh_Log(L"WUR: complete native ControlPanelNavLinks list published");
         // The list intentionally remains process-lifetime. Its vtable belongs to
@@ -5058,11 +5274,52 @@ enum {
     kWuCtlNote = 0x7715,
 };
 
-static HWND g_wuSettingsDlg = nullptr;
+// The classic settings dialog can be opened from several Explorer windows,
+// each running on its own UI thread. Track every live dialog in a mutex-guarded
+// container (a plain global HWND would let two windows create two dialogs and
+// leave one of them registered with mod code after the image is unmapped).
+static std::mutex g_wuSettingsDlgMutex;
+static std::vector<HWND> g_wuSettingsDlgs;
 static DWORD g_wuDlgAuOptions = 4;
 static bool g_wuDlgRecommended = false;
 static bool g_wuDlgMsProducts = false;
 static bool g_wuDlgAllUsers = false;
+
+static void RegisterWuSettingsDialog(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
+    g_wuSettingsDlgs.push_back(hwnd);
+}
+
+static void UnregisterWuSettingsDialog(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
+    auto it = std::remove(g_wuSettingsDlgs.begin(), g_wuSettingsDlgs.end(), hwnd);
+    g_wuSettingsDlgs.erase(it, g_wuSettingsDlgs.end());
+}
+
+// Returns the first live settings dialog, or nullptr. Used to re-foreground an
+// existing dialog instead of opening a second one.
+static HWND FindLiveWuSettingsDialog() {
+    std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
+    for (HWND hwnd : g_wuSettingsDlgs)
+        if (IsWindow(hwnd)) return hwnd;
+    return nullptr;
+}
+
+// Closes every live settings dialog. Wh_ModUninit runs on an arbitrary
+// Windhawk thread while the dialogs belong to Explorer UI threads, so use
+// SendMessageTimeoutW (bounded, cross-thread safe) and never send while
+// holding the lock.
+static void CloseAllWuSettingsDialogs() {
+    std::vector<HWND> dialogs;
+    {
+        std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
+        dialogs.swap(g_wuSettingsDlgs);
+    }
+    for (HWND hwnd : dialogs)
+        if (IsWindow(hwnd))
+            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 5000,
+                                nullptr);
+}
 
 // True when the ShellExecute target is our applet's settings child page
 // (shell:::{CLSID}\\pageSettings), either as a bare shell: URI or as
@@ -5113,23 +5370,6 @@ static void ReadAuxAuValues(bool& recommended, bool& msProducts, bool& allUsers)
 }
 
 
-// Asks the window hosting the Windows Update page to re-render (standard shell
-// view refresh command), so the main page reflects the new AUOptions state.
-// The DirectUI host may be a child of the shell view, so post to both the given
-// window and its top-level ancestor.
-static void RefreshWuPage(HWND host) {
-    if (host && IsWindow(host)) {
-        PostMessageW(host, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0); // FCIDM_REFRESH
-        HWND root = GetAncestor(host, GA_ROOT);
-        if (root && root != host && IsWindow(root))
-            PostMessageW(root, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0);
-    } else {
-        ShellExecuteW(nullptr, L"open",
-                      (L"shell:::" + std::wstring(kAppletClsid)).c_str(),
-                      nullptr, nullptr, SW_SHOWNORMAL);
-    }
-}
-
 static void CloseWuSettingsDialog(HWND hwnd) {
     DestroyWindow(hwnd);
 }
@@ -5146,7 +5386,7 @@ static std::wstring StripAmpersand(const wchar_t* s) {
 static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
-            g_wuSettingsDlg = hwnd;
+            RegisterWuSettingsDialog(hwnd);
             HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
             if (hCombo) {
                 SendMessageW(hCombo, CB_RESETCONTENT, 0, 0);
@@ -5195,15 +5435,15 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             DestroyWindow(hwnd);
             return TRUE;
         case WM_DESTROY:
-            if (g_wuSettingsDlg == hwnd) g_wuSettingsDlg = nullptr;
+            UnregisterWuSettingsDialog(hwnd);
             return TRUE;
     }
     return FALSE;
 }
 
 static void ShowWuSettingsDialog(HWND parent) {
-    if (g_wuSettingsDlg && IsWindow(g_wuSettingsDlg)) {
-        SetForegroundWindow(g_wuSettingsDlg);
+    if (HWND existing = FindLiveWuSettingsDialog()) {
+        SetForegroundWindow(existing);
         return;
     }
 
@@ -5322,6 +5562,1198 @@ static void ShowWuSettingsDialog(HWND parent) {
         SetForegroundWindow(hwnd);
     }
 }
+
+// =============================================================================
+// Shared header band for the mod's small dialogs
+// -----------------------------------------------------------------------------
+// Light-blue gradient header (Windows Update style) with the skinned applet
+// logo (drawn from a GDI+ HighQualityBicubic icon, so it stays crisp) and a
+// bold dark-blue title. Used by the FAQ window and the update-check window.
+// =============================================================================
+
+static void FillVerticalGradient(HDC hdc, const RECT& rc, COLORREF top, COLORREF bottom) {
+    const int height = static_cast<int>(rc.bottom - rc.top);
+    if (height <= 0) return;
+    const int steps = height < 64 ? height : 64;
+    if (steps <= 1) {
+        HBRUSH brush = CreateSolidBrush(top);
+        FillRect(hdc, &rc, brush);
+        DeleteObject(brush);
+        return;
+    }
+    const int stepH = (height + steps - 1) / steps;
+    for (int i = 0; i < steps; ++i) {
+        const int y = static_cast<int>(rc.top) + i * stepH;
+        const int h = (std::min)(stepH, static_cast<int>(rc.bottom) - y);
+        const BYTE t = static_cast<BYTE>(i * 255 / (steps - 1));
+        const COLORREF color = RGB(
+            (GetRValue(top) * (255 - t) + GetRValue(bottom) * t) / 255,
+            (GetGValue(top) * (255 - t) + GetGValue(bottom) * t) / 255,
+            (GetBValue(top) * (255 - t) + GetBValue(bottom) * t) / 255);
+        HBRUSH brush = CreateSolidBrush(color);
+        RECT row = { rc.left, y, rc.right, y + h };
+        FillRect(hdc, &row, brush);
+        DeleteObject(brush);
+    }
+}
+
+// Paints the standard light-blue header band used by the FAQ / check dialogs:
+// gradient, accent line, applet logo (bicubic) and bold dark-blue title.
+static void WuPaintDialogHeader(HDC hdc, const RECT& client, int headerHeight,
+                                HICON icon, int iconSize, HFONT titleFont,
+                                const wchar_t* title) {
+    RECT header = { client.left, client.top, client.right, headerHeight };
+    FillVerticalGradient(hdc, header, RGB(241, 247, 255), RGB(202, 224, 248));
+
+    HPEN linePen = CreatePen(PS_SOLID, 1, RGB(163, 207, 245));
+    HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, linePen));
+    MoveToEx(hdc, client.left, headerHeight, nullptr);
+    LineTo(hdc, client.right, headerHeight);
+    SelectObject(hdc, oldPen);
+    DeleteObject(linePen);
+
+    if (icon) {
+        const int y = (headerHeight - iconSize) / 2;
+        DrawIconEx(hdc, 16, y, icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+    }
+    HFONT oldFont = titleFont ? static_cast<HFONT>(SelectObject(hdc, titleFont))
+                              : nullptr;
+    SetTextColor(hdc, RGB(0, 70, 130));
+    SetBkMode(hdc, TRANSPARENT);
+    RECT titleRect = { 16 + iconSize + 10, 0, client.right - 14, headerHeight };
+    DrawTextW(hdc, title ? title : L"", -1, &titleRect,
+              DT_SINGLELINE | DT_LEFT | DT_VCENTER | DT_END_ELLIPSIS);
+    if (oldFont) SelectObject(hdc, oldFont);
+}
+
+static HFONT WuCreateHeaderFont() {
+    return CreateFontW(-16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                       CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+}
+
+// Applies the dialog's own font (Segoe UI, from the template's DS_SETFONT) to
+// a programmatically-created child control, so every label, button and the
+// RichEdit match the dialog's text instead of falling back to the system font.
+static void WuApplyDialogFont(HWND dlg, HWND ctrl) {
+    if (!ctrl) return;
+    HFONT font = reinterpret_cast<HFONT>(SendMessageW(dlg, WM_GETFONT, 0, 0));
+    if (font)
+        SendMessageW(ctrl, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+}
+
+// WM_CTLCOLORSTATIC handler for the mod's white dialogs: the default dialog
+// background brush is COLOR_BTNFACE (gray), so STATIC labels would sit on a
+// gray rectangle. Return a white brush and paint the text with a transparent
+// background so black text always has a clean white backing.
+static LRESULT WuOnCtlColorStatic(HDC hdc) {
+    SetTextColor(hdc, RGB(0, 0, 0));
+    SetBkColor(hdc, RGB(255, 255, 255));
+    SetBkMode(hdc, TRANSPARENT);
+    return reinterpret_cast<LRESULT>(GetStockObject(WHITE_BRUSH));
+}
+
+// =============================================================================
+// "Updates: frequently asked questions" window (Win32)
+// -----------------------------------------------------------------------------
+// A small normal window (in-memory DLGTEMPLATE, same technique as the classic
+// settings dialog) that answers ten generic questions about Windows updates.
+// Opened by the sidebar link below "Restore hidden updates" (wurestorer:faq).
+// It has the light-blue gradient header (with the bicubic applet logo) on a
+// white body; the questions are bold (read-only RichEdit with per-line
+// character formatting). All ten supported languages are provided; English is
+// the fallback for any unknown code.
+// =============================================================================
+enum { kWuCtlFaqBody = 0x7810 };
+
+// The FAQ window can be opened from several Explorer windows (each on its own
+// thread); track every live window in a guarded container so teardown closes
+// them all.
+static std::mutex g_wuFaqDlgMutex;
+static std::vector<HWND> g_wuFaqDlgs;
+
+static void RegisterWuFaqDialog(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_wuFaqDlgMutex);
+    g_wuFaqDlgs.push_back(hwnd);
+}
+static void UnregisterWuFaqDialog(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_wuFaqDlgMutex);
+    auto it = std::remove(g_wuFaqDlgs.begin(), g_wuFaqDlgs.end(), hwnd);
+    g_wuFaqDlgs.erase(it, g_wuFaqDlgs.end());
+}
+static HWND FindLiveWuFaqDialog() {
+    std::lock_guard<std::mutex> lock(g_wuFaqDlgMutex);
+    for (HWND hwnd : g_wuFaqDlgs)
+        if (IsWindow(hwnd)) return hwnd;
+    return nullptr;
+}
+static void CloseAllWuFaqDialogs() {
+    std::vector<HWND> dialogs;
+    {
+        std::lock_guard<std::mutex> lock(g_wuFaqDlgMutex);
+        dialogs.swap(g_wuFaqDlgs);
+    }
+    for (HWND hwnd : dialogs)
+        if (IsWindow(hwnd))
+            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 5000,
+                                nullptr);
+}
+
+static HWND g_wuFaqParent = nullptr;
+static HICON g_wuFaqIconBig = nullptr;
+static HICON g_wuFaqIconSmall = nullptr;
+static HICON g_wuFaqHeaderIcon = nullptr;  // 32x32 bicubic logo for the header
+static HFONT g_wuFaqTitleFont = nullptr;
+
+struct WuFaqEntry {
+    const wchar_t* q;
+    const wchar_t* a;
+};
+
+// The ten generic questions and their short answers, per language.
+static const WuFaqEntry* SelectFaqEntries() {
+    struct LangFaq {
+        const wchar_t* code;
+        WuFaqEntry entries[10];
+    };
+    static const LangFaq kFaqs[] = {
+        { L"en", {
+            { L"1. Why do I need Windows updates?", L"Updates fix security issues and bugs and add new features, keeping your PC protected and stable." },
+            { L"2. Are Windows updates free?", L"Yes. Important and recommended updates are free of charge from Microsoft." },
+            { L"3. How do I check for updates?", L"Open Windows Update in Control Panel and click \"Check for updates\". You can also use Settings > Windows Update." },
+            { L"4. When are updates installed?", L"By default Windows installs important updates automatically. You can change this in \"Change settings\"." },
+            { L"5. Why does my PC restart after updates?", L"Some updates change important system files that are in use, so Windows needs to restart to apply them." },
+            { L"6. Where can I see installed updates?", L"In Windows Update, click \"View update history\" to see the list of installed updates." },
+            { L"7. Can I uninstall an update?", L"Yes, from \"Installed Updates\". Some important updates cannot be uninstalled." },
+            { L"8. How long do updates take to install?", L"Most updates take a few minutes. Large updates can take longer; do not turn off your PC while they install." },
+            { L"9. What happens if I don't install updates?", L"Without the latest updates, your PC is more vulnerable to security attacks and performance problems." },
+            { L"10. How do I change update settings?", L"Use \"Change settings\" in Windows Update, or open Settings > Windows Update." },
+        } },
+        { L"it", {
+            { L"1. Perché servono gli aggiornamenti di Windows?", L"Correggono problemi di sicurezza e bug e aggiungono nuove funzionalità, mantenendo il PC protetto e stabile." },
+            { L"2. Gli aggiornamenti di Windows sono gratuiti?", L"Sì. Gli aggiornamenti importanti e consigliati sono gratuiti." },
+            { L"3. Come controllo gli aggiornamenti?", L"Apri Windows Update nel Pannello di controllo e fai clic su \"Controlla aggiornamenti\". Puoi anche usare Impostazioni > Windows Update." },
+            { L"4. Quando vengono installati gli aggiornamenti?", L"Di norma Windows installa automaticamente gli aggiornamenti importanti. Puoi modificarlo in \"Cambia impostazioni\"." },
+            { L"5. Perché il PC si riavvia dopo gli aggiornamenti?", L"Alcuni aggiornamenti modificano file di sistema in uso; Windows deve riavviarsi per applicarli." },
+            { L"6. Dove posso vedere gli aggiornamenti installati?", L"In Windows Update fai clic su \"Visualizza cronologia aggiornamenti\" per vedere l'elenco degli aggiornamenti installati." },
+            { L"7. Posso disinstallare un aggiornamento?", L"Sì, da \"Aggiornamenti installati\". Alcuni aggiornamenti importanti non possono essere disinstallati." },
+            { L"8. Quanto tempo richiede l'installazione degli aggiornamenti?", L"La maggior parte richiede pochi minuti. Gli aggiornamenti grandi possono richiedere più tempo; non spegnere il PC durante l'installazione." },
+            { L"9. Cosa succede se non installo gli aggiornamenti?", L"Senza gli aggiornamenti più recenti, il PC è più vulnerabile ad attacchi alla sicurezza e problemi di prestazioni." },
+            { L"10. Come posso modificare le impostazioni degli aggiornamenti?", L"Usa \"Cambia impostazioni\" in Windows Update oppure apri Impostazioni > Windows Update." },
+        } },
+        { L"es", {
+            { L"1. ¿Por qué necesito actualizaciones de Windows?", L"Corrigen problemas de seguridad y errores y añaden nuevas funciones, manteniendo el PC protegido y estable." },
+            { L"2. ¿Las actualizaciones de Windows son gratuitas?", L"Sí. Las actualizaciones importantes y recomendadas son gratuitas." },
+            { L"3. ¿Cómo busco actualizaciones?", L"Abra Windows Update en el Panel de control y haga clic en \"Buscar actualizaciones\". También puede usar Configuración > Windows Update." },
+            { L"4. ¿Cuándo se instalan las actualizaciones?", L"Normalmente Windows instala las actualizaciones importantes automáticamente. Puede cambiarlo en \"Cambiar la configuración\"." },
+            { L"5. ¿Por qué se reinicia el PC después de las actualizaciones?", L"Algunas actualizaciones cambian archivos del sistema en uso; Windows necesita reiniciarse para aplicarlas." },
+            { L"6. ¿Dónde veo las actualizaciones instaladas?", L"En Windows Update, haga clic en \"Ver historial de actualizaciones\" para ver la lista de actualizaciones instaladas." },
+            { L"7. ¿Puedo desinstalar una actualización?", L"Sí, desde \"Actualizaciones instaladas\". Algunas actualizaciones importantes no se pueden desinstalar." },
+            { L"8. ¿Cuánto tarda en instalarse una actualización?", L"La mayoría tarda unos minutos. Las actualizaciones grandes pueden tardar más; no apague el PC mientras se instalan." },
+            { L"9. ¿Qué pasa si no instalo las actualizaciones?", L"Sin las actualizaciones más recientes, su PC es más vulnerable a ataques de seguridad y problemas de rendimiento." },
+            { L"10. ¿Cómo cambio la configuración de actualizaciones?", L"Use \"Cambiar la configuración\" en Windows Update o abra Configuración > Windows Update." },
+        } },
+        { L"fr", {
+            { L"1. Pourquoi ai-je besoin des mises à jour Windows ?", L"Elles corrigent des problèmes de sécurité et des bogues et ajoutent de nouvelles fonctions, gardant le PC protégé et stable." },
+            { L"2. Les mises à jour Windows sont-elles gratuites ?", L"Oui. Les mises à jour importantes et recommandées sont gratuites." },
+            { L"3. Comment rechercher des mises à jour ?", L"Ouvrez Windows Update dans le Panneau de configuration et cliquez sur \"Rechercher des mises à jour\". Vous pouvez aussi utiliser Paramètres > Windows Update." },
+            { L"4. Quand les mises à jour sont-elles installées ?", L"En général, Windows installe automatiquement les mises à jour importantes. Vous pouvez le modifier dans \"Modifier les paramètres\"." },
+            { L"5. Pourquoi le PC redémarre-t-il après les mises à jour ?", L"Certaines mises à jour modifient des fichiers système en cours d'utilisation ; Windows doit redémarrer pour les appliquer." },
+            { L"6. Où voir les mises à jour installées ?", L"Dans Windows Update, cliquez sur \"Afficher l'historique des mises à jour\" pour voir la liste des mises à jour installées." },
+            { L"7. Puis-je désinstaller une mise à jour ?", L"Oui, à partir de \"Mises à jour installées\". Certaines mises à jour importantes ne peuvent pas être désinstallées." },
+            { L"8. Combien de temps prend l'installation des mises à jour ?", L"La plupart prennent quelques minutes. Les mises à jour volumineuses peuvent prendre plus de temps ; n'éteignez pas le PC pendant l'installation." },
+            { L"9. Que se passe-t-il si je n'installe pas les mises à jour ?", L"Sans les dernières mises à jour, votre PC est plus vulnérable aux attaques de sécurité et aux problèmes de performances." },
+            { L"10. Comment modifier les paramètres des mises à jour ?", L"Utilisez \"Modifier les paramètres\" dans Windows Update ou ouvrez Paramètres > Windows Update." },
+        } },
+        { L"tr", {
+            { L"1. Windows güncelleştirmelerine neden ihtiyacım var?", L"Güvenlik sorunlarını ve hataları düzeltir, yeni özellikler ekler; bilgisayarınızı korumalı ve kararlı tutar." },
+            { L"2. Windows güncelleştirmeleri ücretsiz mi?", L"Evet. Önemli ve önerilen güncelleştirmeler ücretsizdir." },
+            { L"3. Güncelleştirmeleri nasıl denetlerim?", L"Denetim Masası'nda Windows Update'i açın ve \"Güncelleştirmeleri denetle\"ye tıklayın. Ayarlar > Windows Update'i de kullanabilirsiniz." },
+            { L"4. Güncelleştirmeler ne zaman yüklenir?", L"Varsayılan olarak Windows önemli güncelleştirmeleri otomatik yükler. Bunu \"Ayarları değiştir\"den değiştirebilirsiniz." },
+            { L"5. Güncelleştirmelerden sonra bilgisayar neden yeniden başlatılır?", L"Bazı güncelleştirmeler kullanımdaki sistem dosyalarını değiştirir; Windows'un bunları uygulamak için yeniden başlatılması gerekir." },
+            { L"6. Yüklü güncelleştirmeleri nerede görebilirim?", L"Windows Update'te \"Güncelleme geçmişini görüntüle\"ye tıklayarak yüklü güncelleştirmelerin listesini görebilirsiniz." },
+            { L"7. Bir güncelleştirmeyi kaldırabilir miyim?", L"Evet, \"Yüklü Güncelleştirmeler\" bölümünden. Bazı önemli güncelleştirmeler kaldırılamaz." },
+            { L"8. Güncelleştirmelerin yüklenmesi ne kadar sürer?", L"Çoğu birkaç dakika sürer. Büyük güncelleştirmeler daha uzun sürebilir; yükleme sırasında bilgisayarı kapatmayın." },
+            { L"9. Güncelleştirmeleri yüklemezsem ne olur?", L"En son güncelleştirmeler olmadan bilgisayarınız güvenlik saldırılarına ve performans sorunlarına karşı daha savunmasızdır." },
+            { L"10. Güncelleştirme ayarlarını nasıl değiştiririm?", L"Windows Update'te \"Ayarları değiştir\"i kullanın veya Ayarlar > Windows Update'i açın." },
+        } },
+        { L"ru", {
+            { L"1. Зачем нужны обновления Windows?", L"Они устраняют проблемы безопасности и ошибки и добавляют новые функции, сохраняя компьютер защищённым и стабильным." },
+            { L"2. Обновления Windows бесплатны?", L"Да. Важные и рекомендуемые обновления бесплатны." },
+            { L"3. Как проверить наличие обновлений?", L"Откройте Центр обновления Windows в панели управления и нажмите «Проверить наличие обновлений». Можно также использовать Параметры > Центр обновления Windows." },
+            { L"4. Когда устанавливаются обновления?", L"Обычно Windows устанавливает важные обновления автоматически. Это можно изменить в «Изменении параметров»." },
+            { L"5. Почему компьютер перезапускается после обновлений?", L"Некоторые обновления изменяют используемые системные файлы, и Windows требуется перезапуск для их применения." },
+            { L"6. Где посмотреть установленные обновления?", L"В Центре обновления Windows нажмите «Просмотр журнала обновлений», чтобы увидеть список установленных обновлений." },
+            { L"7. Можно ли удалить обновление?", L"Да, через «Установленные обновления». Некоторые важные обновления удалить нельзя." },
+            { L"8. Сколько времени занимает установка обновлений?", L"Большинство обновлений устанавливается за несколько минут. Крупные могут занять больше времени; не выключайте компьютер во время установки." },
+            { L"9. Что будет, если не устанавливать обновления?", L"Без последних обновлений компьютер более уязвим к атакам и проблемам с производительностью." },
+            { L"10. Как изменить параметры обновлений?", L"Используйте «Изменение параметров» в Центре обновления Windows или откройте Параметры > Центр обновления Windows." },
+        } },
+        { L"pt", {
+            { L"1. Por que preciso de atualizações do Windows?", L"Elas corrigem problemas de segurança e erros e adicionam novos recursos, mantendo o PC protegido e estável." },
+            { L"2. As atualizações do Windows são gratuitas?", L"Sim. As atualizações importantes e recomendadas são gratuitas." },
+            { L"3. Como verifico atualizações?", L"Abra o Windows Update no Painel de controle e clique em \"Verificar atualizações\". Você também pode usar Configurações > Windows Update." },
+            { L"4. Quando as atualizações são instaladas?", L"Normalmente o Windows instala as atualizações importantes automaticamente. Você pode alterar isso em \"Alterar configurações\"." },
+            { L"5. Por que o PC reinicia após as atualizações?", L"Algumas atualizações alteram arquivos do sistema em uso; o Windows precisa reiniciar para aplicá-las." },
+            { L"6. Onde vejo as atualizações instaladas?", L"No Windows Update, clique em \"Ver histórico de atualizações\" para ver a lista de atualizações instaladas." },
+            { L"7. Posso desinstalar uma atualização?", L"Sim, em \"Atualizações instaladas\". Algumas atualizações importantes não podem ser desinstaladas." },
+            { L"8. Quanto tempo demora para instalar as atualizações?", L"A maioria leva alguns minutos. Atualizações grandes podem demorar mais; não desligue o PC durante a instalação." },
+            { L"9. O que acontece se eu não instalar as atualizações?", L"Sem as atualizações mais recentes, seu PC fica mais vulnerável a ataques de segurança e problemas de desempenho." },
+            { L"10. Como altero as configurações de atualização?", L"Use \"Alterar configurações\" no Windows Update ou abra Configurações > Windows Update." },
+        } },
+        { L"zh", {
+            { L"1. 为什么需要 Windows 更新？", L"更新可修复安全问题和错误并添加新功能，让您的电脑保持受保护和稳定。" },
+            { L"2. Windows 更新是免费的吗？", L"是的。重要更新和推荐更新都是免费的。" },
+            { L"3. 如何检查更新？", L"在控制面板中打开 Windows 更新，然后点击“检查更新”。也可以使用“设置 > Windows 更新”。" },
+            { L"4. 更新何时安装？", L"默认情况下，Windows 会自动安装重要更新。您可以在“更改设置”中修改。" },
+            { L"5. 为什么更新后电脑会重新启动？", L"某些更新会更改正在使用的系统文件，Windows 需要重启才能应用它们。" },
+            { L"6. 在哪里查看已安装的更新？", L"在 Windows 更新中，点击“查看更新历史记录”即可看到已安装更新的列表。" },
+            { L"7. 可以卸载更新吗？", L"可以，通过“已安装的更新”。某些重要更新无法卸载。" },
+            { L"8. 安装更新需要多长时间？", L"大多数更新只需几分钟。大型更新可能需要更长时间；安装期间请不要关闭电脑。" },
+            { L"9. 如果不安装更新会怎样？", L"没有最新更新，您的电脑更容易受到安全攻击并出现性能问题。" },
+            { L"10. 如何更改更新设置？", L"请使用 Windows 更新中的“更改设置”，或打开“设置 > Windows 更新”。" },
+        } },
+        { L"pl", {
+            { L"1. Po co są aktualizacje systemu Windows?", L"Usuwają problemy z bezpieczeństwem i błędy oraz dodają nowe funkcje, utrzymując komputer chronionym i stabilnym." },
+            { L"2. Czy aktualizacje systemu Windows są bezpłatne?", L"Tak. Ważne i zalecane aktualizacje są bezpłatne." },
+            { L"3. Jak sprawdzić aktualizacje?", L"Otwórz Windows Update w Panelu sterowania i kliknij „Sprawdź aktualizacje”. Możesz też użyć Ustawienia > Windows Update." },
+            { L"4. Kiedy instalowane są aktualizacje?", L"Domyślnie system Windows automatycznie instaluje ważne aktualizacje. Możesz to zmienić w „Zmień ustawienia”." },
+            { L"5. Dlaczego komputer uruchamia się ponownie po aktualizacjach?", L"Niektóre aktualizacje zmieniają używane pliki systemowe; system Windows musi się ponownie uruchomić, aby je zastosować." },
+            { L"6. Gdzie zobaczyć zainstalowane aktualizacje?", L"W Windows Update kliknij „Wyświetl historię aktualizacji”, aby zobaczyć listę zainstalowanych aktualizacji." },
+            { L"7. Czy mogę odinstalować aktualizację?", L"Tak, przez „Zainstalowane aktualizacje”. Niektórych ważnych aktualizacji nie można odinstalować." },
+            { L"8. Ile czasu zajmuje instalacja aktualizacji?", L"Większość zajmuje kilka minut. Duże aktualizacje mogą trwać dłużej; nie wyłączaj komputera podczas instalacji." },
+            { L"9. Co się stanie, jeśli nie zainstaluję aktualizacji?", L"Bez najnowszych aktualizacji komputer jest bardziej narażony na ataki i problemy z wydajnością." },
+            { L"10. Jak zmienić ustawienia aktualizacji?", L"Użyj „Zmień ustawienia” w Windows Update lub otwórz Ustawienia > Windows Update." },
+        } },
+        { L"nl", {
+            { L"1. Waarom heb ik Windows-updates nodig?", L"Ze verhelpen beveiligingsproblemen en fouten en voegen nieuwe functies toe, zodat uw pc beschermd en stabiel blijft." },
+            { L"2. Zijn Windows-updates gratis?", L"Ja. Belangrijke en aanbevolen updates zijn gratis." },
+            { L"3. Hoe controleer ik op updates?", L"Open Windows Update in het Configuratiescherm en klik op 'Controleren op updates'. U kunt ook Instellingen > Windows Update gebruiken." },
+            { L"4. Wanneer worden updates geïnstalleerd?", L"Standaard installeert Windows belangrijke updates automatisch. U kunt dit wijzigen bij 'Instellingen wijzigen'." },
+            { L"5. Waarom start de pc opnieuw op na updates?", L"Sommige updates wijzigen systeembestanden die in gebruik zijn; Windows moet opnieuw opstarten om ze toe te passen." },
+            { L"6. Waar kan ik geïnstalleerde updates zien?", L"Klik in Windows Update op 'Updategeschiedenis weergeven' om de lijst met geïnstalleerde updates te zien." },
+            { L"7. Kan ik een update verwijderen?", L"Ja, via 'Geïnstalleerde updates'. Sommige belangrijke updates kunnen niet worden verwijderd." },
+            { L"8. Hoe lang duurt het installeren van updates?", L"De meeste duren een paar minuten. Grote updates kunnen langer duren; zet de pc niet uit tijdens de installatie." },
+            { L"9. Wat gebeurt er als ik geen updates installeer?", L"Zonder de nieuwste updates is uw pc kwetsbaarder voor beveiligingsaanvallen en prestatieproblemen." },
+            { L"10. Hoe wijzig ik de update-instellingen?", L"Gebruik 'Instellingen wijzigen' in Windows Update of open Instellingen > Windows Update." },
+        } },
+    };
+    const std::wstring code = CurrentLanguage();
+    for (const auto& faq : kFaqs) {
+        if (code == faq.code) return faq.entries;
+    }
+    return kFaqs[0].entries;
+}
+
+// Applies bold to each question line in the RichEdit body. The text is built
+// as "<N>. Question\r\nAnswer\r\n\r\n..." and each question range is selected
+// and re-formatted with CFE_BOLD.
+static void PopulateFaqRichEdit(HWND rich, const WuFaqEntry* entries) {
+    std::wstring text;
+    struct Range { LONG start; LONG end; };
+    std::vector<Range> boldRanges;
+    boldRanges.reserve(10);
+    for (int index = 0; index < 10; ++index) {
+        if (index) text += L"\r\n\r\n";
+        const LONG start = static_cast<LONG>(text.size());
+        text += entries[index].q;
+        boldRanges.push_back({ start, static_cast<LONG>(text.size()) });
+        text += L"\r\n";
+        text += entries[index].a;
+    }
+    SetWindowTextW(rich, text.c_str());
+
+    // First make sure the whole text is regular (not bold), then apply bold
+    // ONLY to the question ranges - the answers must stay in normal weight.
+    CHARFORMAT2W regular{};
+    regular.cbSize = sizeof(regular);
+    regular.dwMask = CFM_BOLD;
+    regular.dwEffects = 0;  // clear bold
+    SendMessageW(rich, EM_SETSEL, 0, -1);
+    SendMessageW(rich, EM_SETCHARFORMAT, SCF_SELECTION,
+                 reinterpret_cast<LPARAM>(&regular));
+
+    CHARFORMAT2W bold{};
+    bold.cbSize = sizeof(bold);
+    bold.dwMask = CFM_BOLD;
+    bold.dwEffects = CFE_BOLD;
+    for (const auto& range : boldRanges) {
+        SendMessageW(rich, EM_SETSEL, range.start, range.end);
+        SendMessageW(rich, EM_SETCHARFORMAT, SCF_SELECTION,
+                     reinterpret_cast<LPARAM>(&bold));
+    }
+    // Clear the selection so the last question is not left highlighted.
+    SendMessageW(rich, EM_SETSEL, static_cast<WPARAM>(-1), 0);
+    SendMessageW(rich, EM_SCROLLCARET, 0, 0);
+}
+
+static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_INITDIALOG: {
+            RegisterWuFaqDialog(hwnd);
+
+            // Window icon + header logo (GDI+ HighQualityBicubic).
+            g_wuFaqIconBig = CreateAppletLogoIconBicubic(
+                IsWindows81Skin(), GetSystemMetrics(SM_CXICON),
+                GetSystemMetrics(SM_CYICON));
+            if (g_wuFaqIconBig)
+                SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                             reinterpret_cast<LPARAM>(g_wuFaqIconBig));
+            g_wuFaqIconSmall = CreateAppletLogoIconBicubic(
+                IsWindows81Skin(), GetSystemMetrics(SM_CXSMICON),
+                GetSystemMetrics(SM_CYSMICON));
+            if (g_wuFaqIconSmall)
+                SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                             reinterpret_cast<LPARAM>(g_wuFaqIconSmall));
+            g_wuFaqHeaderIcon = CreateAppletLogoIconBicubic(
+                IsWindows81Skin(), 32, 32);
+            g_wuFaqTitleFont = WuCreateHeaderFont();
+
+            // Read-only RichEdit body below the header (bold questions),
+            // with a clean 3D edge. All controls are laid out from the client
+            // rectangle in pixels, so nothing can drift from the header or the
+            // Close button (mixing dialog units and pixels was what made the
+            // layout look wrong).
+            LoadLibraryW(L"riched20.dll");
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            const int cw = rc.right - rc.left;
+            const int ch = rc.bottom - rc.top;
+            const int bodyTop = 62;
+            const int bodyBottom = ch - 36;
+            const int bodyHeight = bodyBottom > bodyTop ? bodyBottom - bodyTop : 120;
+            HWND rich = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"RichEdit20W", L"",
+                WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY |
+                    WS_VSCROLL | ES_AUTOVSCROLL,
+                14, bodyTop, cw - 28, bodyHeight,
+                hwnd, reinterpret_cast<HMENU>(kWuCtlFaqBody),
+                GetModuleHandleW(nullptr), nullptr);
+            if (rich) {
+                // Segoe UI (the dialog font), not the default GUI font.
+                WuApplyDialogFont(hwnd, rich);
+                SendMessageW(rich, EM_SETBKGNDCOLOR, 0, RGB(255, 255, 255));
+                SendMessageW(rich, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
+                             MAKELPARAM(8, 8));
+                PopulateFaqRichEdit(rich, SelectFaqEntries());
+            }
+
+            // Close button at the bottom right, from the client rect (same
+            // approach as the check/result windows, so it always sits neatly
+            // below the RichEdit).
+            const wchar_t* closeText = EmbeddedMuiString(237);  // "&Close"
+            if (!closeText) closeText = L"Close";
+            const std::wstring closeLabel = StripAmpersand(closeText);
+            const int btnW = 68;
+            const int btnH = 23;
+            HWND btnClose = CreateWindowExW(
+                0, L"BUTTON", closeLabel.c_str(),
+                WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
+                cw - 12 - btnW, ch - btnH - 10, btnW, btnH, hwnd,
+                reinterpret_cast<HMENU>(IDOK),
+                GetModuleHandleW(nullptr), nullptr);
+            WuApplyDialogFont(hwnd, btnClose);
+
+            // Center the window over the Control Panel window that opened it.
+            if (g_wuFaqParent && IsWindow(g_wuFaqParent)) {
+                RECT parentRect{};
+                RECT dlgRect{};
+                GetWindowRect(g_wuFaqParent, &parentRect);
+                GetWindowRect(hwnd, &dlgRect);
+                const int w = dlgRect.right - dlgRect.left;
+                const int h = dlgRect.bottom - dlgRect.top;
+                const int x = parentRect.left + ((parentRect.right - parentRect.left) - w) / 2;
+                const int y = parentRect.top + ((parentRect.bottom - parentRect.top) - h) / 2;
+                SetWindowPos(hwnd, nullptr, x, y, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            return TRUE;
+        }
+        case WM_ERASEBKGND:
+            // White body (the header is painted in WM_PAINT).
+            {
+                RECT rc{};
+                GetClientRect(hwnd, &rc);
+                FillRect(reinterpret_cast<HDC>(wParam), &rc,
+                         static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+            }
+            return TRUE;
+        case WM_PAINT: {
+            PAINTSTRUCT ps{};
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+            wchar_t title[128] = {};
+            GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+            WuPaintDialogHeader(hdc, rc, 56, g_wuFaqHeaderIcon, 32,
+                                g_wuFaqTitleFont, title);
+            EndPaint(hwnd, &ps);
+            return TRUE;
+        }
+        case WM_CTLCOLOREDIT:
+            return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
+        case WM_CTLCOLORSTATIC:
+            return WuOnCtlColorStatic(reinterpret_cast<HDC>(wParam));
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+                DestroyWindow(hwnd);
+                return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return TRUE;
+        case WM_DESTROY:
+            UnregisterWuFaqDialog(hwnd);
+            if (g_wuFaqTitleFont) {
+                DeleteObject(g_wuFaqTitleFont);
+                g_wuFaqTitleFont = nullptr;
+            }
+            if (g_wuFaqHeaderIcon) {
+                DestroyIcon(g_wuFaqHeaderIcon);
+                g_wuFaqHeaderIcon = nullptr;
+            }
+            if (g_wuFaqIconBig) {
+                DestroyIcon(g_wuFaqIconBig);
+                g_wuFaqIconBig = nullptr;
+            }
+            if (g_wuFaqIconSmall) {
+                DestroyIcon(g_wuFaqIconSmall);
+                g_wuFaqIconSmall = nullptr;
+            }
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void ShowWuFaqDialog(HWND parent) {
+    if (HWND existing = FindLiveWuFaqDialog()) {
+        SetForegroundWindow(existing);
+        return;
+    }
+    g_wuFaqParent = parent;
+
+    BYTE* buf = new (std::nothrow) BYTE[4096];
+    if (!buf) return;
+    BYTE* p = buf;
+    const BYTE* const bufEnd = buf + 4096;
+
+    LPDLGTEMPLATEW pDlg = reinterpret_cast<LPDLGTEMPLATEW>(p);
+    pDlg->style = DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU;
+    pDlg->dwExtendedStyle = 0;
+    pDlg->cdit = 0;  // all controls are created in WM_INITDIALOG from pixels
+    pDlg->x = 0; pDlg->y = 0;
+    // Compact: gradient header + scrollable body for the ten questions.
+    // Height reduced ~30% so it fits comfortably on small screens (1368x768).
+    pDlg->cx = 420; pDlg->cy = 280;
+    p += sizeof(DLGTEMPLATE);
+    *(WORD*)p = 0; p += 2;                       // no menu
+    *(WORD*)p = 0; p += 2;                       // no class
+    *(WORD*)p = 0; p += 2;                       // empty title (set later)
+    *(WORD*)p = 9; p += 2;                       // font point size (Segoe UI 9)
+    const wchar_t kFont[] = L"Segoe UI";
+    if (p + sizeof(kFont) > bufEnd) {
+        delete[] buf;
+        return;
+    }
+    memcpy(p, kFont, sizeof(kFont)); p += sizeof(kFont);
+
+    const std::wstring title = StripAmpersand(
+        EmbeddedMuiString(20024) ? EmbeddedMuiString(20024)
+                                 : L"Updates: frequently asked questions");
+
+    HWND hwnd = CreateDialogIndirectParamW(GetModuleHandleW(nullptr),
+                                           reinterpret_cast<LPDLGTEMPLATE>(buf),
+                                           parent, WuFaqDlgProc, 0);
+    if (!hwnd) {
+        Wh_Log(L"Windows Update Restorer: FAQ dialog creation FAILED (err=%u)",
+               GetLastError());
+    }
+    delete[] buf;
+
+    if (hwnd && IsWindow(hwnd)) {
+        SetWindowTextW(hwnd, title.c_str());
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+    }
+}
+
+// =============================================================================
+// "Check for updates" micro-feature (Win32 check window + result message)
+// -----------------------------------------------------------------------------
+// Clicking "Check for updates" in the sidebar opens a SMALL Win32 window with
+// a light-blue header (bicubic applet logo + title) and a NATIVE progress bar
+// (msctls_progress32). The DirectUI page is never touched. When the ~12-second
+// check finishes, the window AUTO-CLOSES and a small result window appears
+// with a personalized translated message and a "Reopen Windows Update" button.
+// A check only starts if no other check is in progress.
+// =============================================================================
+static constexpr ULONGLONG kWuCheckDurationMs = 12000;  // 10-15 s target
+static constexpr DWORD kWuCheckTimerMs = 100;           // progress animation tick
+static constexpr UINT_PTR kWuCheckTimerId = 893;
+static constexpr WORD kWuCtlCheckLabel = 0x77A0;
+static constexpr WORD kWuCtlCheckProgress = 0x77A1;
+static constexpr WORD kWuCtlResultLabel = 0x77B0;
+
+// The check result is derived from the same simple registry state the banner
+// uses. These helpers are defined later (status section); forward-declared here
+// so the completion path can classify the outcome and the result window can
+// show the last-install date for the result message.
+static bool IsPendingWindowsUpdate();
+static bool IsUpdatesAvailable();
+static std::wstring ComputeLastInstallTime();
+
+// Outcome of the last "Check for updates" run, shown in the result window.
+enum WuCheckOutcome {
+    kCheckNoUpdates = 0,
+    kCheckUpdatesFound = 1,
+    kCheckPendingRestart = 2,
+};
+static std::atomic<int> g_checkOutcome{kCheckNoUpdates};
+
+static std::atomic<bool> g_checkingForUpdates{false};
+static std::atomic<ULONGLONG> g_checkStartedTick{0};
+static std::mutex g_checkFrameMutex;
+static HWND g_checkFrame = nullptr;  // Control Panel frame used by "Reopen"
+
+// The check and result windows share this container and the icon/font handles
+// (only one of them exists at a time - the check window closes before the
+// result window opens).
+static std::mutex g_wuCheckDlgMutex;
+static std::vector<HWND> g_wuCheckDlgs;
+static HICON g_wuCheckIconBig = nullptr;
+static HICON g_wuCheckIconSmall = nullptr;
+static HICON g_wuCheckHeaderIcon = nullptr;  // 28x28 bicubic logo for the header
+static HFONT g_wuCheckTitleFont = nullptr;
+
+static void RegisterWuCheckDialog(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_wuCheckDlgMutex);
+    g_wuCheckDlgs.push_back(hwnd);
+}
+static void UnregisterWuCheckDialog(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_wuCheckDlgMutex);
+    auto it = std::remove(g_wuCheckDlgs.begin(), g_wuCheckDlgs.end(), hwnd);
+    g_wuCheckDlgs.erase(it, g_wuCheckDlgs.end());
+}
+static HWND FindLiveWuCheckDialog() {
+    std::lock_guard<std::mutex> lock(g_wuCheckDlgMutex);
+    for (HWND hwnd : g_wuCheckDlgs)
+        if (IsWindow(hwnd)) return hwnd;
+    return nullptr;
+}
+static void CloseAllWuCheckDialogs() {
+    std::vector<HWND> dialogs;
+    {
+        std::lock_guard<std::mutex> lock(g_wuCheckDlgMutex);
+        dialogs.swap(g_wuCheckDlgs);
+    }
+    for (HWND hwnd : dialogs)
+        if (IsWindow(hwnd))
+            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 5000,
+                                nullptr);
+}
+
+// Translated completion messages for the result window. The first sentence
+// reports the outcome of the check ("no new updates found" / "updates were
+// found" / "updates need a restart"); the second sentence keeps the advice to
+// reopen Windows Update if the status changed.
+struct WuCheckResultTexts {
+    const wchar_t* noUpdates;
+    const wchar_t* updatesFound;
+    const wchar_t* pendingRestart;
+};
+static const WuCheckResultTexts* SelectWuCheckResultTexts() {
+    static const struct { const wchar_t* code; WuCheckResultTexts t; } kTexts[] = {
+        { L"en", { L"No new updates were found for your PC. If the status has changed, close and reopen Windows Update to refresh the page.",
+                   L"New updates were found for your PC. Close and reopen Windows Update to see them.",
+                   L"Updates have been downloaded and require a restart of your PC. Close and reopen Windows Update after restarting." } },
+        { L"it", { L"Non sono stati rilevati nuovi aggiornamenti per il tuo PC. Se lo stato è cambiato, chiudi e riapri Windows Update per aggiornare la pagina.",
+                   L"Sono stati rilevati nuovi aggiornamenti per il tuo PC. Chiudi e riapri Windows Update per visualizzarli.",
+                   L"Sono stati scaricati aggiornamenti che richiedono il riavvio del PC. Dopo il riavvio, chiudi e riapri Windows Update." } },
+        { L"es", { L"No se encontraron nuevas actualizaciones para su PC. Si el estado ha cambiado, cierre y vuelva a abrir Windows Update para actualizar la página.",
+                   L"Se encontraron nuevas actualizaciones para su PC. Cierre y vuelva a abrir Windows Update para verlas.",
+                   L"Se descargaron actualizaciones que requieren reiniciar el PC. Después de reiniciar, cierre y vuelva a abrir Windows Update." } },
+        { L"fr", { L"Aucune nouvelle mise à jour n'a été trouvée pour votre PC. Si l'état a changé, fermez puis rouvrez Windows Update pour actualiser la page.",
+                   L"De nouvelles mises à jour ont été trouvées pour votre PC. Fermez puis rouvrez Windows Update pour les voir.",
+                   L"Des mises à jour ont été téléchargées et nécessitent un redémarrage de votre PC. Après le redémarrage, fermez puis rouvrez Windows Update." } },
+        { L"tr", { L"Bilgisayarınız için yeni güncelleştirme bulunamadı. Durum değiştiyse sayfayı güncellemek için Windows Update'i kapatıp yeniden açın.",
+                   L"Bilgisayarınız için yeni güncelleştirmeler bulundu. Bunları görmek için Windows Update'i kapatıp yeniden açın.",
+                   L"Güncelleştirmeler indirildi ve bilgisayarınızın yeniden başlatılması gerekiyor. Yeniden başlattıktan sonra Windows Update'i kapatıp yeniden açın." } },
+        { L"ru", { L"Новых обновлений для вашего компьютера не найдено. Если состояние изменилось, закройте и снова откройте Центр обновления Windows, чтобы обновить страницу.",
+                   L"Найдены новые обновления для вашего компьютера. Закройте и снова откройте Центр обновления Windows, чтобы увидеть их.",
+                   L"Обновления загружены и требуют перезапуска компьютера. После перезапуска закройте и снова откройте Центр обновления Windows." } },
+        { L"pt", { L"Nenhuma nova atualização foi encontrada para seu PC. Se o status mudou, feche e reabra o Windows Update para atualizar a página.",
+                   L"Foram encontradas novas atualizações para seu PC. Feche e reabra o Windows Update para vê-las.",
+                   L"Atualizações foram baixadas e exigem a reinicialização do PC. Após reiniciar, feche e reabra o Windows Update." } },
+        { L"zh", { L"未发现适用于你电脑的新更新。如果状态已更改，请关闭并重新打开 Windows 更新以刷新页面。",
+                   L"已发现适用于你电脑的新更新。请关闭并重新打开 Windows 更新以查看它们。",
+                   L"更新已下载，需要重启你的电脑。重启后，请关闭并重新打开 Windows 更新。" } },
+        { L"pl", { L"Nie znaleziono nowych aktualizacji dla Twojego komputera. Jeśli stan się zmienił, zamknij i ponownie otwórz Windows Update, aby odświeżyć stronę.",
+                   L"Znaleziono nowe aktualizacje dla Twojego komputera. Zamknij i ponownie otwórz Windows Update, aby je zobaczyć.",
+                   L"Aktualizacje zostały pobrane i wymagają ponownego uruchomienia komputera. Po ponownym uruchomieniu zamknij i ponownie otwórz Windows Update." } },
+        { L"nl", { L"Er zijn geen nieuwe updates gevonden voor uw pc. Als de status is gewijzigd, sluit Windows Update en open het opnieuw om de pagina te vernieuwen.",
+                   L"Er zijn nieuwe updates gevonden voor uw pc. Sluit Windows Update en open het opnieuw om ze te zien.",
+                   L"Updates zijn gedownload en vereisen een herstart van uw pc. Start opnieuw op en open Windows Update daarna opnieuw." } },
+    };
+    const std::wstring code = CurrentLanguage();
+    for (const auto& item : kTexts) {
+        if (code == item.code) return &item.t;
+    }
+    return &kTexts[0].t;
+}
+
+// Picks the result message for the stored outcome (kCheckNoUpdates /
+// kCheckUpdatesFound / kCheckPendingRestart).
+static const wchar_t* SelectWuCheckResultText() {
+    const WuCheckResultTexts* t = SelectWuCheckResultTexts();
+    switch (g_checkOutcome.load(std::memory_order_acquire)) {
+        case kCheckUpdatesFound: return t->updatesFound;
+        case kCheckPendingRestart: return t->pendingRestart;
+        default: return t->noUpdates;
+    }
+}
+
+// Translated "Reopen Windows Update" button label.
+static const wchar_t* SelectWuCheckReopenButtonText() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"Reopen Windows Update" },
+        { L"it", L"Riapri Windows Update" },
+        { L"es", L"Volver a abrir Windows Update" },
+        { L"fr", L"Rouvrir Windows Update" },
+        { L"tr", L"Windows Update'i Yeniden Aç" },
+        { L"ru", L"Открыть Центр обновления Windows" },
+        { L"pt", L"Reabrir Windows Update" },
+        { L"zh", L"重新打开 Windows 更新" },
+        { L"pl", L"Otwórz ponownie Windows Update" },
+        { L"nl", L"Windows Update opnieuw openen" },
+    };
+    auto it = kTexts.find(CurrentLanguage());
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
+// Ensures the msctls_progress32 window class is registered before we create the
+// native progress bar.
+static void EnsureProgressClassRegistered() {
+    static bool done = false;
+    if (done) return;
+    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_PROGRESS_CLASS };
+    InitCommonControlsEx(&icc);
+    done = true;
+}
+
+// Posts the shell view refresh (FCIDM_REFRESH) to the Control Panel frame.
+// Used by the "Reopen Windows Update" button in the result window.
+static void PostControlPanelRefresh(HWND frame) {
+    if (!frame || !IsWindow(frame))
+        frame = FindWindowW(L"ControlPanelWindowClass", nullptr);
+    if (!frame || !IsWindow(frame)) return;
+    PostMessageW(frame, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0);
+    HWND root = GetAncestor(frame, GA_ROOT);
+    if (root && root != frame && IsWindow(root))
+        PostMessageW(root, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0);
+}
+
+// Shared icon/font setup + centering for the check and result windows.
+static void SetupWuCheckWindow(HWND hwnd, const wchar_t* title) {
+    g_wuCheckIconBig = CreateAppletLogoIconBicubic(
+        IsWindows81Skin(), GetSystemMetrics(SM_CXICON),
+        GetSystemMetrics(SM_CYICON));
+    if (g_wuCheckIconBig)
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                     reinterpret_cast<LPARAM>(g_wuCheckIconBig));
+    g_wuCheckIconSmall = CreateAppletLogoIconBicubic(
+        IsWindows81Skin(), GetSystemMetrics(SM_CXSMICON),
+        GetSystemMetrics(SM_CYSMICON));
+    if (g_wuCheckIconSmall)
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                     reinterpret_cast<LPARAM>(g_wuCheckIconSmall));
+    g_wuCheckHeaderIcon = CreateAppletLogoIconBicubic(
+        IsWindows81Skin(), 28, 28);
+    g_wuCheckTitleFont = WuCreateHeaderFont();
+    SetWindowTextW(hwnd, title);
+
+    HWND frame = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_checkFrameMutex);
+        frame = g_checkFrame;
+    }
+    if (frame && IsWindow(frame)) {
+        RECT parentRect{};
+        RECT dlgRect{};
+        GetWindowRect(frame, &parentRect);
+        GetWindowRect(hwnd, &dlgRect);
+        const int w = dlgRect.right - dlgRect.left;
+        const int h = dlgRect.bottom - dlgRect.top;
+        const int x = parentRect.left + ((parentRect.right - parentRect.left) - w) / 2;
+        const int y = parentRect.top + ((parentRect.bottom - parentRect.top) - h) / 2;
+        SetWindowPos(hwnd, nullptr, x, y, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+static void DestroyWuCheckWindowResources() {
+    if (g_wuCheckTitleFont) {
+        DeleteObject(g_wuCheckTitleFont);
+        g_wuCheckTitleFont = nullptr;
+    }
+    if (g_wuCheckHeaderIcon) {
+        DestroyIcon(g_wuCheckHeaderIcon);
+        g_wuCheckHeaderIcon = nullptr;
+    }
+    if (g_wuCheckIconBig) {
+        DestroyIcon(g_wuCheckIconBig);
+        g_wuCheckIconBig = nullptr;
+    }
+    if (g_wuCheckIconSmall) {
+        DestroyIcon(g_wuCheckIconSmall);
+        g_wuCheckIconSmall = nullptr;
+    }
+}
+
+// -----------------------------------------------------------------------------
+static void ShowWuCheckResultDialog();
+
+// -----------------------------------------------------------------------------
+// Last-install date of Windows Update packages
+// -----------------------------------------------------------------------------
+// The legacy timestamp (Auto Update\Results\Install\LastSuccessTime) is
+// deprecated/empty on many Windows 10/11 builds. The reliable source that
+// works on every Windows version is the Installed-Updates list in the
+// registry: each KB package installed through Windows Update appears under
+// HKLM\...\Uninstall with ParentKeyName="Update" and an InstallDate
+// ("YYYYMMDD"). We scan those keys and keep the most recent date. The scan is
+// a few dozen quick registry reads, so it is safe to run on the dialog thread.
+// -----------------------------------------------------------------------------
+static std::wstring ComputeLastInstallDateFromUninstall() {
+    struct Best {
+        SYSTEMTIME st{};
+        bool found = false;
+    } best;
+
+    static constexpr PCWSTR kRoots[] = {
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        L"SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    };
+    for (PCWSTR root : kRoots) {
+        HKEY hRoot = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, root, 0, KEY_READ, &hRoot) !=
+            ERROR_SUCCESS)
+            continue;
+        for (DWORD index = 0; index < 4096; ++index) {
+            wchar_t subName[256] = {};
+            DWORD subLen = ARRAYSIZE(subName);
+            if (RegEnumKeyExW(hRoot, index, subName, &subLen, nullptr, nullptr,
+                              nullptr, nullptr) != ERROR_SUCCESS)
+                break;
+            HKEY hSub = nullptr;
+            if (RegOpenKeyExW(hRoot, subName, 0, KEY_READ, &hSub) !=
+                ERROR_SUCCESS)
+                continue;
+            wchar_t parent[64] = {};
+            DWORD type = 0;
+            DWORD size = sizeof(parent);
+            const bool isWuUpdate =
+                RegQueryValueExW(hSub, L"ParentKeyName", nullptr, &type,
+                                 reinterpret_cast<LPBYTE>(parent), &size) ==
+                    ERROR_SUCCESS &&
+                type == REG_SZ && _wcsicmp(parent, L"Update") == 0;
+            if (isWuUpdate) {
+                wchar_t install[16] = {};
+                size = sizeof(install);
+                if (RegQueryValueExW(hSub, L"InstallDate", nullptr, &type,
+                                     reinterpret_cast<LPBYTE>(install),
+                                     &size) == ERROR_SUCCESS &&
+                    type == REG_SZ && wcslen(install) >= 8) {
+                    const int year = (install[0] - L'0') * 1000 +
+                                     (install[1] - L'0') * 100 +
+                                     (install[2] - L'0') * 10 +
+                                     (install[3] - L'0');
+                    const int month = (install[4] - L'0') * 10 +
+                                      (install[5] - L'0');
+                    const int day = (install[6] - L'0') * 10 +
+                                    (install[7] - L'0');
+                    if (year >= 2000 && year <= 2100 && month >= 1 &&
+                        month <= 12 && day >= 1 && day <= 31) {
+                        SYSTEMTIME st{};
+                        st.wYear = static_cast<WORD>(year);
+                        st.wMonth = static_cast<WORD>(month);
+                        st.wDay = static_cast<WORD>(day);
+                        if (!best.found ||
+                            st.wYear > best.st.wYear ||
+                            (st.wYear == best.st.wYear &&
+                             st.wMonth > best.st.wMonth) ||
+                            (st.wYear == best.st.wYear &&
+                             st.wMonth == best.st.wMonth &&
+                             st.wDay > best.st.wDay)) {
+                            best.st = st;
+                            best.found = true;
+                        }
+                    }
+                }
+            }
+            RegCloseKey(hSub);
+        }
+        RegCloseKey(hRoot);
+    }
+
+    if (!best.found) return L"";
+    wchar_t buf[64];
+    swprintf_s(buf, L"%04u/%02u/%02u", best.st.wYear, best.st.wMonth,
+               best.st.wDay);
+    return buf;
+}
+
+// Check window: small, header + native progress bar, no buttons (auto-closes).
+// -----------------------------------------------------------------------------
+static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_INITDIALOG: {
+            RegisterWuCheckDialog(hwnd);
+            SetupWuCheckWindow(hwnd,
+                EmbeddedMuiString(1) ? EmbeddedMuiString(1) : L"Windows Update");
+
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            const int w = rc.right - rc.left;
+
+            // "Checking for updates..." label below the 40px header.
+            HWND label = CreateWindowExW(
+                0, L"STATIC", L"",
+                WS_CHILD | WS_VISIBLE | SS_LEFT,
+                16, 44, w - 32, 18, hwnd,
+                reinterpret_cast<HMENU>(kWuCtlCheckLabel),
+                GetModuleHandleW(nullptr), nullptr);
+            const wchar_t* checkingText = EmbeddedMuiString(20009);
+            SetWindowTextW(label, checkingText ? checkingText
+                                               : L"Checking for updates...");
+            WuApplyDialogFont(hwnd, label);  // Segoe UI
+
+            // Native Win32 progress bar.
+            EnsureProgressClassRegistered();
+            HWND bar = CreateWindowExW(
+                0, L"msctls_progress32", L"",
+                WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+                16, 64, w - 32, 14, hwnd,
+                reinterpret_cast<HMENU>(kWuCtlCheckProgress),
+                GetModuleHandleW(nullptr), nullptr);
+            if (bar) {
+                SendMessageW(bar, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
+                SendMessageW(bar, PBM_SETBARCOLOR, 0, RGB(76, 175, 80));
+                SendMessageW(bar, PBM_SETPOS, 0, 0);
+            }
+
+            SetTimer(hwnd, kWuCheckTimerId, kWuCheckTimerMs, nullptr);
+            return TRUE;
+        }
+        case WM_ERASEBKGND: {
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            FillRect(reinterpret_cast<HDC>(wParam), &rc,
+                     static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+            return TRUE;
+        }
+        case WM_PAINT: {
+            PAINTSTRUCT ps{};
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+            wchar_t title[128] = {};
+            GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+            WuPaintDialogHeader(hdc, rc, 40, g_wuCheckHeaderIcon, 28,
+                                g_wuCheckTitleFont, title);
+            EndPaint(hwnd, &ps);
+            return TRUE;
+        }
+        case WM_CTLCOLORSTATIC:
+            return WuOnCtlColorStatic(reinterpret_cast<HDC>(wParam));
+        case WM_TIMER:
+            if (wParam == kWuCheckTimerId) {
+                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG start =
+                    g_checkStartedTick.load(std::memory_order_acquire);
+                const ULONGLONG elapsed = now >= start ? now - start : 0;
+                if (elapsed >= kWuCheckDurationMs) {
+                    // Finished: record the time, clear the flag, AUTO-CLOSE the
+                    // window and show the personalized result message.
+                    KillTimer(hwnd, kWuCheckTimerId);
+                    {
+                        std::lock_guard<std::mutex> lock(g_lastQueryTimeMutex);
+                        SYSTEMTIME st{};
+                        GetLocalTime(&st);
+                        wchar_t buffer[64];
+                        swprintf_s(buffer, L"%04u/%02u/%02u %02u:%02u",
+                                   st.wYear, st.wMonth, st.wDay, st.wHour,
+                                   st.wMinute);
+                        g_lastQueryTimeText = buffer;
+                    }
+                    // Classify the outcome from the same simple registry
+                    // state the banner uses (pending restart / updates
+                    // available / nothing new), then show the result window.
+                    int outcome = kCheckNoUpdates;
+                    if (IsPendingWindowsUpdate()) {
+                        outcome = kCheckPendingRestart;
+                    } else if (IsUpdatesAvailable()) {
+                        outcome = kCheckUpdatesFound;
+                    }
+                    g_checkOutcome.store(outcome, std::memory_order_release);
+                    g_checkingForUpdates.store(false, std::memory_order_release);
+                    DestroyWindow(hwnd);
+                    ShowWuCheckResultDialog();
+                    return TRUE;
+                }
+                const int percent =
+                    static_cast<int>((elapsed * 100ull) / kWuCheckDurationMs);
+                HWND bar = GetDlgItem(hwnd, kWuCtlCheckProgress);
+                if (bar && IsWindow(bar))
+                    SendMessageW(bar, PBM_SETPOS, (std::min)(percent, 100), 0);
+                return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return TRUE;
+        case WM_DESTROY:
+            KillTimer(hwnd, kWuCheckTimerId);
+            UnregisterWuCheckDialog(hwnd);
+            // Closing mid-check must let the user start a new check later.
+            g_checkingForUpdates.store(false, std::memory_order_release);
+            DestroyWuCheckWindowResources();
+            return TRUE;
+    }
+    return FALSE;
+}
+
+// -----------------------------------------------------------------------------
+// Result window: personalized message + "Reopen Windows Update" / Close.
+// -----------------------------------------------------------------------------
+static void ShowWuCheckResultDialog();
+
+static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_INITDIALOG: {
+            RegisterWuCheckDialog(hwnd);
+            SetupWuCheckWindow(hwnd,
+                EmbeddedMuiString(1) ? EmbeddedMuiString(1) : L"Windows Update");
+
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            const int w = rc.right - rc.left;
+            const int h = rc.bottom - rc.top;
+
+            // Personalized message (multiline + word wrap, so the outcome text
+            // AND the installed-updates date paragraph are both visible).
+            HWND label = CreateWindowExW(
+                0, L"STATIC", L"",
+                WS_CHILD | WS_VISIBLE | SS_LEFT | SS_EDITCONTROL,
+                16, 42, w - 32, (h - 80 > 48 ? h - 80 : 48), hwnd,
+                reinterpret_cast<HMENU>(kWuCtlResultLabel),
+                GetModuleHandleW(nullptr), nullptr);
+            // Personalized outcome message + the date of the last installed
+            // updates. Primary source: the Installed-Updates registry list
+            // (ParentKeyName=="Update" entries), which works on every Windows
+            // version; fallback: the legacy Auto Update results timestamp.
+            std::wstring resultMsg = SelectWuCheckResultText();
+            std::wstring lastInstall = ComputeLastInstallDateFromUninstall();
+            if (lastInstall.empty()) lastInstall = ComputeLastInstallTime();
+            // Always show the "Updates were installed:" line: the date when it
+            // is available, otherwise the universal "N/A" placeholder.
+            {
+                const wchar_t* installedLabel = EmbeddedMuiString(1145);
+                resultMsg += L"\r\n\r\n";
+                resultMsg += installedLabel ? installedLabel
+                                            : L"Updates were installed:";
+                resultMsg += L" ";
+                resultMsg += lastInstall.empty() ? L"N/A" : lastInstall;
+                // Only append a period when the message does not already end
+                // with a sentence terminator (e.g. Chinese uses "。").
+                const wchar_t last = resultMsg.back();
+                if (last != L'.' && last != L'。' && last != L'!' &&
+                    last != L'？' && last != L'?') {
+                    resultMsg += L".";
+                }
+            }
+            SetWindowTextW(label, resultMsg.c_str());
+            WuApplyDialogFont(hwnd, label);  // Segoe UI
+
+            // Two buttons side by side at the bottom right, both using Segoe
+            // UI (the dialog font). Each button is sized to fit its translated
+            // label - measured with the SAME font the button will render with,
+            // so long labels like the Spanish "Reopen" text never clip and the
+            // two buttons can never overlap.
+            const wchar_t* closeText = EmbeddedMuiString(237);
+            if (!closeText) closeText = L"Close";
+            const std::wstring closeLabel = StripAmpersand(closeText);
+            const std::wstring reopenLabel =
+                StripAmpersand(SelectWuCheckReopenButtonText());
+            HFONT dlgFont = reinterpret_cast<HFONT>(
+                SendMessageW(hwnd, WM_GETFONT, 0, 0));
+            HDC dc = GetDC(hwnd);
+            HFONT oldFont = dlgFont
+                                ? static_cast<HFONT>(SelectObject(dc, dlgFont))
+                                : nullptr;
+            auto textWidth = [&](const std::wstring& s) -> int {
+                SIZE sz{};
+                GetTextExtentPoint32W(dc, s.c_str(),
+                                      static_cast<int>(s.size()), &sz);
+                return static_cast<int>(sz.cx);
+            };
+            const int bwReopen = (std::max)(100, textWidth(reopenLabel) + 26);
+            const int bwClose = (std::max)(76, textWidth(closeLabel) + 26);
+            if (oldFont) SelectObject(dc, oldFont);
+            ReleaseDC(hwnd, dc);
+
+            const int bh = 24;
+            const int gap = 8;
+            const int by = h - bh - 12;
+            const int bxClose = w - 12 - bwClose;
+            const int bxReopen = bxClose - gap - bwReopen;
+            HWND btnReopen = CreateWindowExW(
+                0, L"BUTTON", reopenLabel.c_str(),
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
+                bxReopen, by, bwReopen, bh, hwnd,
+                reinterpret_cast<HMENU>(IDOK),
+                GetModuleHandleW(nullptr), nullptr);
+            HWND btnClose = CreateWindowExW(
+                0, L"BUTTON", closeLabel.c_str(),
+                WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
+                bxClose, by, bwClose, bh, hwnd,
+                reinterpret_cast<HMENU>(IDCANCEL),
+                GetModuleHandleW(nullptr), nullptr);
+            WuApplyDialogFont(hwnd, btnReopen);
+            WuApplyDialogFont(hwnd, btnClose);
+            return TRUE;
+        }
+        case WM_ERASEBKGND: {
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            FillRect(reinterpret_cast<HDC>(wParam), &rc,
+                     static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+            return TRUE;
+        }
+        case WM_PAINT: {
+            PAINTSTRUCT ps{};
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc{};
+            GetClientRect(hwnd, &rc);
+            FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+            wchar_t title[128] = {};
+            GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+            WuPaintDialogHeader(hdc, rc, 40, g_wuCheckHeaderIcon, 28,
+                                g_wuCheckTitleFont, title);
+            EndPaint(hwnd, &ps);
+            return TRUE;
+        }
+        case WM_CTLCOLORSTATIC:
+            return WuOnCtlColorStatic(reinterpret_cast<HDC>(wParam));
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK: {
+                    HWND frame = nullptr;
+                    {
+                        std::lock_guard<std::mutex> lock(g_checkFrameMutex);
+                        frame = g_checkFrame;
+                    }
+                    DestroyWindow(hwnd);
+                    PostControlPanelRefresh(frame);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    DestroyWindow(hwnd);
+                    return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return TRUE;
+        case WM_DESTROY:
+            UnregisterWuCheckDialog(hwnd);
+            DestroyWuCheckWindowResources();
+            return TRUE;
+    }
+    return FALSE;
+}
+
+// Builds a small dialog (template with no controls; everything is created in
+// WM_INITDIALOG from the client rect, so buttons can never overlap).
+static HWND CreateWuCheckTemplateDialog(HWND frame, int cx, int cy,
+                                        DLGPROC proc) {
+    BYTE* buf = new (std::nothrow) BYTE[4096];
+    if (!buf) return nullptr;
+    BYTE* p = buf;
+    const BYTE* const bufEnd = buf + 4096;
+
+    LPDLGTEMPLATEW pDlg = reinterpret_cast<LPDLGTEMPLATEW>(p);
+    pDlg->style = DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP |
+                  WS_CAPTION | WS_SYSMENU;
+    pDlg->dwExtendedStyle = 0;
+    pDlg->cdit = 0;
+    pDlg->x = 0; pDlg->y = 0;
+    pDlg->cx = static_cast<short>(cx);
+    pDlg->cy = static_cast<short>(cy);
+    p += sizeof(DLGTEMPLATE);
+    *(WORD*)p = 0; p += 2;                       // no menu
+    *(WORD*)p = 0; p += 2;                       // no class
+    *(WORD*)p = 0; p += 2;                       // empty title (set later)
+    *(WORD*)p = 9; p += 2;                       // font point size (Segoe UI 9)
+    const wchar_t kFont[] = L"Segoe UI";
+    if (p + sizeof(kFont) > bufEnd) {
+        delete[] buf;
+        return nullptr;
+    }
+    memcpy(p, kFont, sizeof(kFont)); p += sizeof(kFont);
+
+    HWND hwnd = CreateDialogIndirectParamW(
+        GetModuleHandleW(nullptr), reinterpret_cast<LPDLGTEMPLATE>(buf),
+        frame, proc, 0);
+    delete[] buf;
+    return hwnd;
+}
+
+static void ShowWuCheckResultDialog() {
+    HWND hwnd = CreateWuCheckTemplateDialog(nullptr, 320, 96,
+                                            WuCheckResultDlgProc);
+    if (!hwnd) {
+        Wh_Log(L"Windows Update Restorer: result dialog creation FAILED (err=%u)",
+               GetLastError());
+        return;
+    }
+    ShowWindow(hwnd, SW_SHOWNORMAL);
+    SetForegroundWindow(hwnd);
+}
+
+// Starts the "Check for updates" flow: opens the small Win32 window with the
+// native progress bar. Only runs if no check (or result) window is open.
+static void StartWuUpdateCheck(HWND host) {
+    if (g_stopping.load(std::memory_order_acquire)) return;
+    if (FindLiveWuCheckDialog()) return;
+
+    bool expected = false;
+    if (!g_checkingForUpdates.compare_exchange_strong(expected, true)) return;
+    g_checkStartedTick.store(GetTickCount64());
+
+    HWND frame = host;
+    if (!frame || !IsWindow(frame))
+        frame = FindWindowW(L"ControlPanelWindowClass", nullptr);
+    {
+        std::lock_guard<std::mutex> lock(g_checkFrameMutex);
+        g_checkFrame = frame;
+    }
+
+    HWND hwnd = CreateWuCheckTemplateDialog(frame, 300, 56, WuCheckDlgProc);
+    if (!hwnd) {
+        Wh_Log(L"Windows Update Restorer: check dialog creation FAILED (err=%u)",
+               GetLastError());
+        g_checkingForUpdates.store(false, std::memory_order_release);
+        return;
+    }
+
+    ShowWindow(hwnd, SW_SHOWNORMAL);
+    SetForegroundWindow(hwnd);
+}
+
 
 
 // The old hand-built WindhawkVistaNavigationPane was removed. Navigation is
@@ -5600,7 +7032,7 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
     // published through the pane's per-layout ControlPanelNavLinks object.
 
     if (!IsWindowsUpdatePageXml(input)) {
-        DestroySettingsCombobox();
+        DestroySettingsComboboxOnThisThread();
         return input;
     }
 
@@ -5609,7 +7041,7 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
         return PatchSettingsPageXml(input);
 
     // Strictly isolate the ComboBox: destroy it immediately on any other page
-    DestroySettingsCombobox();
+    DestroySettingsComboboxOnThisThread();
 
     // Keep the Windows 7/8.1 native navigation pane. Do not inject or strip any
     // DirectUI sidebar; only the document-area content is patched below.
@@ -5953,7 +7385,7 @@ static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
     if (patched.find(L"atom(pageSettings)") != std::wstring::npos) {
         InitializeNativeSettingsCombobox(nullptr);
     } else {
-        DestroySettingsCombobox();
+        DestroySettingsComboboxOnThisThread();
     }
     return hr;
 }
@@ -6001,7 +7433,7 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
     if (patched.find(L"atom(pageSettings)") != std::wstring::npos) {
         InitializeNativeSettingsCombobox(nullptr);
     } else {
-        DestroySettingsCombobox();
+        DestroySettingsComboboxOnThisThread();
     }
     if (hr == S_FALSE) {
         // wucltux uses S_FALSE as a soft result on some builds. Returning it can
@@ -6456,19 +7888,18 @@ static bool MentionsOurClsid(const std::wstring& path) {
 
 class KeyTracker {
 public:
-    // Lock-free negative gate for hot registry calls. A small counting table can
-    // have false positives from collisions, but never false negatives, so most
-    // unrelated HKEYs avoid the shared mutex entirely.
+    // Lock-free negative gate for hot registry calls. The counting table is
+    // exact: every mutator (Track/CreateVirtual/Untrack/CloseVirtual/
+    // ClearWithoutFreeing) increments or decrements the bucket count exactly
+    // once per map entry, under mutex_. So a bucket reading 0 means no tracked
+    // key currently hashes into it, which means `key` cannot be in paths_.
+    // There are no false negatives, so we can return false immediately instead
+    // of taking the shared lock on the overwhelmingly common unrelated-HKEY
+    // path. (Release on the increment publishes the map insert; acquire on the
+    // load synchronizes with it, so a nonzero read is a guaranteed hit.)
     bool MightContain(HKEY key) const {
         if (!key || IsRootKey(key)) return false;
-        if (presence_[Bucket(key)].load(std::memory_order_relaxed) != 0) return true;
-        // The counting filter is only a fast negative hint. Because counts are
-        // decremented on Untrack, a bucket can read zero while a different live
-        // handle still hashes into it - a false negative there would send a
-        // CLSID subkey straight to the real registry and silently break the
-        // whole registration. Confirm against the map before giving up.
-        std::shared_lock lock(mutex_);
-        return paths_.find(key) != paths_.end();
+        return presence_[Bucket(key)].load(std::memory_order_acquire) != 0;
     }
     bool GetPathAndFake(HKEY key, std::wstring& path, bool& isFake) const {
         if (const wchar_t* root = RootPathLiteral(key)) {
@@ -6506,7 +7937,7 @@ public:
         const bool inserted = paths_.find(backing) == paths_.end();
         paths_[backing] = path;
         fake_.insert(backing);
-        if (inserted) presence_[Bucket(backing)].fetch_add(1, std::memory_order_relaxed);
+        if (inserted) presence_[Bucket(backing)].fetch_add(1, std::memory_order_release);
         return backing;
     }
     void Track(HKEY key, const std::wstring& path) {
@@ -6522,13 +7953,13 @@ public:
         std::unique_lock lock(mutex_);
         const bool inserted = paths_.find(key) == paths_.end();
         paths_[key] = path;
-        if (inserted) presence_[Bucket(key)].fetch_add(1, std::memory_order_relaxed);
+        if (inserted) presence_[Bucket(key)].fetch_add(1, std::memory_order_release);
     }
     void Untrack(HKEY key) {
         if (!key || IsRootKey(key) || !MightContain(key)) return;
         std::unique_lock lock(mutex_);
         if (paths_.erase(key))
-            presence_[Bucket(key)].fetch_sub(1, std::memory_order_relaxed);
+            presence_[Bucket(key)].fetch_sub(1, std::memory_order_release);
         fake_.erase(key);
     }
     void CloseVirtual(HKEY key) {
@@ -6537,14 +7968,14 @@ public:
             std::unique_lock lock(mutex_);
             owned = fake_.erase(key) != 0;
             if (paths_.erase(key))
-                presence_[Bucket(key)].fetch_sub(1, std::memory_order_relaxed);
+                presence_[Bucket(key)].fetch_sub(1, std::memory_order_release);
         }
         if (owned) RegCloseKeyOriginal(key);
     }
     void ClearWithoutFreeing() {
         std::unique_lock lock(mutex_);
         for (const auto& [key, path] : paths_)
-            presence_[Bucket(key)].fetch_sub(1, std::memory_order_relaxed);
+            presence_[Bucket(key)].fetch_sub(1, std::memory_order_release);
         paths_.clear();
         fake_.clear();
     }
@@ -6932,9 +8363,12 @@ static LSTATUS WINAPI RegCloseKeyHook(HKEY key) {
         g_keys.CloseVirtual(key);
         return ERROR_SUCCESS;
     }
-    LSTATUS status = RegCloseKeyOriginal(key);
+    // Untrack BEFORE closing: once RegCloseKeyOriginal returns, the kernel may
+    // recycle the same numeric handle value for a concurrent RegOpenKeyExW on
+    // another thread. Untracking first guarantees the stale entry can never be
+    // erased for a handle that now legitimately belongs to someone else.
     g_keys.Untrack(key);
-    return status;
+    return RegCloseKeyOriginal(key);
 }
 static LSTATUS WINAPI RegQueryValueExWHook(
     HKEY key, LPCWSTR valueName, LPDWORD reserved, LPDWORD type,
@@ -7082,6 +8516,29 @@ static LSTATUS WINAPI RegEnumKeyWHook(HKEY key, DWORD index, LPWSTR name,
     return status;
 }
 
+// Small negative cache of registry handles that were already resolved and are
+// NOT the ControlPanel\NameSpace parent. RegQueryInfoKeyW runs constantly in
+// explorer.exe; remembering the answer avoids two NtQueryKey calls and an
+// allocation on every unrelated key. Bounded: when it grows past the cap it is
+// cleared wholesale (it is only a performance hint).
+static std::mutex g_nonNamespaceCacheMutex;
+static std::unordered_set<HKEY> g_nonNamespaceKeys;
+static constexpr size_t kNonNamespaceCacheMax = 512;
+
+static bool IsKnownNonNamespaceKey(HKEY key) {
+    if (!key) return false;
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
+    return g_nonNamespaceKeys.count(key) != 0;
+}
+
+static void RememberNonNamespaceKey(HKEY key) {
+    if (!key) return;
+    std::lock_guard<std::mutex> lock(g_nonNamespaceCacheMutex);
+    if (g_nonNamespaceKeys.size() >= kNonNamespaceCacheMax)
+        g_nonNamespaceKeys.clear();
+    g_nonNamespaceKeys.insert(key);
+}
+
 static LSTATUS WINAPI RegQueryInfoKeyWHook(
     HKEY key, LPWSTR cls, LPDWORD classChars, LPDWORD reserved,
     LPDWORD subKeys, LPDWORD maxSubKey, LPDWORD maxClass, LPDWORD values,
@@ -7116,8 +8573,18 @@ static LSTATUS WINAPI RegQueryInfoKeyWHook(
     if (status != ERROR_SUCCESS || !g_registrationReady.load()) return status;
 
     if (!known) {
+        // RegQueryInfoKeyW is called constantly on unrelated keys. Resolving the
+        // native path costs two NtQueryKey round trips plus an up-to-64 KB
+        // buffer, so remember keys that are NOT the ControlPanel\NameSpace
+        // parent and skip them on later calls. The cache is keyed by the handle
+        // value; it is only a performance hint, so a recycled handle that was
+        // cached negative just falls back to resolving once more - harmless.
+        if (IsKnownNonNamespaceKey(key)) return status;
         keyPath = QueryNativeRegistryPath(key);
-        if (!IsNamespaceParent(keyPath)) return status;
+        if (!IsNamespaceParent(keyPath)) {
+            RememberNonNamespaceKey(key);
+            return status;
+        }
         g_keys.Track(key, keyPath);
     } else if (!IsNamespaceParent(keyPath)) {
         return status;
@@ -7224,6 +8691,15 @@ struct PayloadNoticeParams {
     std::wstring text;
 };
 
+// The notice thread's handle is owned by the mod and joined in Wh_ModUninit.
+// The mod must NOT take an extra reference on its own image (the Windhawk
+// runtime unloads the mod with a single FreeLibrary once Wh_ModUninit returns,
+// and a self-reference would leak the whole image, its registry virtualization
+// and the mapped payload). Instead, teardown closes the message box and waits
+// for the thread to finish before the image can be unmapped.
+static std::mutex g_noticeThreadMutex;
+static HANDLE g_noticeThread = nullptr;
+
 static DWORD WINAPI PayloadNoticeThreadProc(LPVOID param) {
     {
         std::unique_ptr<PayloadNoticeParams> p(
@@ -7238,18 +8714,9 @@ static DWORD WINAPI PayloadNoticeThreadProc(LPVOID param) {
                           nullptr, SW_SHOWNORMAL);
         }
         g_payloadNoticeOpen.store(false, std::memory_order_release);
-    }  // every destructor runs before the image reference is dropped
-
-    // Release the self-reference taken in ShowPayloadUnavailableNotice and exit
-    // atomically, so this mod's image cannot be unmapped while this thread is
-    // still executing code inside it.
-    HMODULE self = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCWSTR>(&PayloadNoticeThreadProc),
-                           &self) && self) {
-        FreeLibraryAndExitThread(self, 0);
     }
+    // No self-reference, no FreeLibraryAndExitThread: Wh_ModUninit joins this
+    // thread (closing the modal box if needed) before the image is unmapped.
     return 0;
 }
 
@@ -7258,38 +8725,50 @@ static void ShowPayloadUnavailableNotice() {
     bool expected = false;
     if (!g_payloadNoticeOpen.compare_exchange_strong(expected, true)) return;
 
-    // Pin this mod's image for the dialog thread's lifetime. Wh_ModUninit can
-    // run while the message box is still up (the user may leave it open for
-    // minutes); without this extra reference the thread's return address would
-    // point into an unmapped image. Released by FreeLibraryAndExitThread above.
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(&PayloadNoticeThreadProc),
-                            &self)) {
-        self = nullptr;
-    }
-
     std::unique_ptr<PayloadNoticeParams> params;
     try {
         params = std::make_unique<PayloadNoticeParams>();
         params->caption = PayloadNoticeCaption();
         params->text = PayloadNoticeText();
     } catch (...) {
-        if (self) FreeLibrary(self);
         g_payloadNoticeOpen.store(false, std::memory_order_release);
         return;
     }
 
     HANDLE thread = CreateThread(nullptr, 0, PayloadNoticeThreadProc,
                                  params.get(), 0, nullptr);
-    if (thread) {
-        PayloadNoticeParams* threadOwnedParams = params.release();
-        (void)threadOwnedParams;  // ownership was transferred to the thread
-        CloseHandle(thread);
+    if (!thread) {
+        g_payloadNoticeOpen.store(false, std::memory_order_release);
         return;
     }
-    if (self) FreeLibrary(self);
-    g_payloadNoticeOpen.store(false, std::memory_order_release);
+    // Ownership of the params (and the handle) is transferred to the mod.
+    // Assign the released pointer to a variable first (clang-tidy flags a bare
+    // `(void)params.release()`); the thread deletes it in PayloadNoticeThreadProc.
+    PayloadNoticeParams* threadOwnedParams = params.release();
+    (void)threadOwnedParams;
+    std::lock_guard<std::mutex> lock(g_noticeThreadMutex);
+    if (g_noticeThread) CloseHandle(g_noticeThread);  // one notice at a time
+    g_noticeThread = thread;
+}
+
+// Closes the payload-notice message box (if any) and waits for its thread to
+// finish. Called from Wh_ModUninit before the image is released.
+static void WaitForPayloadNoticeThread() {
+    HANDLE thread = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_noticeThreadMutex);
+        std::swap(thread, g_noticeThread);
+    }
+    if (!thread) return;
+    const DWORD tid = GetThreadId(thread);
+    // Re-post in a loop: the message box may not exist yet on the first pass.
+    while (WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
+        EnumThreadWindows(tid, [](HWND hwnd, LPARAM) -> BOOL {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            return TRUE;
+        }, 0);
+    }
+    CloseHandle(thread);
 }
 
 // shdocvw.dll implements the standard layout-folder class used by old CPL items.
@@ -7353,8 +8832,19 @@ static HRESULT HandleCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD con
             Wh_Log(L"Windows Update Restorer: WUAppElementProvider requested but DllGetClassObject export was not found in wucltux.dll");
         return REGDB_E_CLASSNOTREG;
     }
+    // The namespace folder is implemented by shdocvw's standard layout folder,
+    // which is registered under kLayoutFolderClsid rather than our synthetic
+    // applet CLSID. Remap exactly like HandleCoGetClassObject below, otherwise
+    // shdocvw answers CLASS_E_CLASSNOTAVAILABLE.
+    CLSID effective = clsid;
+    if (IsEqualGUID(clsid, kAppletFolderGuid)) {
+        CLSID layout{};
+        if (SUCCEEDED(CLSIDFromString(kLayoutFolderClsid, &layout)))
+            effective = layout;
+    }
+
     IClassFactory* factory = nullptr;
-    HRESULT hr = getClassObject(clsid, IID_IClassFactory_GUID, reinterpret_cast<void**>(&factory));
+    HRESULT hr = getClassObject(effective, IID_IClassFactory_GUID, reinterpret_cast<void**>(&factory));
     if (FAILED(hr)) {
         if (isElementProvider)
             Wh_Log(L"Windows Update Restorer: WUAppElementProvider DllGetClassObject failed (hr=0x%08X)",
@@ -7892,16 +9382,27 @@ void Wh_ModUninit() {
     // returns promptly instead of waiting out the receive timeout.
     CloseActiveDownloadHandles();
 
+    // The payload-notice thread owns a modal message box and lives in this
+    // image. Close the box and join the thread before anything else, so the
+    // image can be unmapped safely. (No self-reference is taken; see
+    // ShowPayloadUnavailableNotice.)
+    WaitForPayloadNoticeThread();
+
     // Modeless dialog proc and all subclass callbacks are mod code: make them
     // unreachable before Windhawk unloads this image. Wh_ModUninit runs on an
     // arbitrary Windhawk thread, so DestroyWindow() here would fail (the dialog
     // belongs to an Explorer UI thread) and leave WuSettingsDlgProc registered
     // in a just-unloaded image. SendMessage(WM_CLOSE) runs the proc on the
     // dialog's owning thread, where it calls DestroyWindow safely.
-    if (g_wuSettingsDlg && IsWindow(g_wuSettingsDlg))
-        SendMessageW(g_wuSettingsDlg, WM_CLOSE, 0, 0);
-    g_wuSettingsDlg = nullptr;
+    CloseAllWuSettingsDialogs();
+    CloseAllWuFaqDialogs();
     DestroySettingsCombobox();
+
+    // Close any "Check for updates" dialog that is still open (its proc lives
+    // in this image). Closing it also clears the in-progress flag, so a later
+    // load can start a fresh check.
+    CloseAllWuCheckDialogs();
+    g_checkingForUpdates.store(false, std::memory_order_release);
 
     // Both workers poll g_stopping and their blocking waits are bounded, so
     // these joins return quickly. They must complete before the image is
