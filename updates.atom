@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-10T18:32:10.000Z</updated>
+    <updated>2026-08-11T07:59:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Flip 3D Recreation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/aero-flip3d-recreation#8c4b1809861d6b36247c5f5de7ef79aa003d9b9f</id>
+        <link href="https://windhawk.net/mods/aero-flip3d-recreation"/>
+        <updated>2026-08-11T07:59:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a compatibility problem</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SnapSentry 0.16.0]]></title>
         <id>https://windhawk.net/mods/snap-sentry#e9237a6f4eb990817987ed34d41c00842f43dadd</id>
@@ -833,17 +846,6 @@ Credits to m417z for the code review and enhancing the mod.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 or 25H2 0.1.8]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#3ab9b84f90335f699a88178f3b1c486bc1876ab9</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
-        <updated>2026-08-03T20:25:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Added a mitigation note for notification toast crashes and linked to relevant fixes.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

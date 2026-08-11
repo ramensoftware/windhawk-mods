@@ -197,13 +197,10 @@
           3
         ],
         "ratingUsers": 6,
-        "updated": 1785492982000,
+        "updated": 1786435185000,
         "users": 214
       },
       "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
         "author": "babamohammed",
         "compilerOptions": "-ldwmapi -luser32 -lgdi32 -lwinmm -lmsimg32",
         "description": "This mod recreates the classic Windows Vista/7 Flip 3D effect in modern Windows versions",
@@ -212,7 +209,7 @@
           "windhawk.exe"
         ],
         "name": "Aero Flip 3D Recreation",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "aero-flyout-fix": {
