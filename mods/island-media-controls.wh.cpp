@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1 -ldcomp -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1 -ldcomp -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,8 +59,9 @@ play/pause, and next controls.
   fullsize expand/collapse spring while compact click feedback stays on.
 - **Fresh previews:** The main dark/light preview is restored, and the new
   fullsize, compact, and side expansion layout previews are shown below it.
-- **Old Compact users:** If you used the previous Compact option, choose
-  Display mode -> Compact once after updating.
+- **Old Compact users:** If the previous Compact option is detected, the island
+  keeps that layout until you save settings here; select Display mode -> Compact
+  before saving to keep it.
 
 ## Features
 
@@ -104,7 +105,7 @@ play/pause, and next controls.
     - "liquid_glass": "Liquid Glass"
   - DisplayMode: "fullsize"
     $name: Display mode
-    $description: Choose how the island opens. Expanded player settings only apply to Fullsize and Compact; Side expansion mode uses the taskbar-side controls instead.
+    $description: Choose how the island opens. Expanded player settings only apply to Fullsize and Compact; Side expansion mode uses the taskbar-side controls instead. If the previous Compact option is detected, the island keeps that layout until you save settings here - select Compact to keep it.
     $options:
     - "fullsize": "Fullsize"
     - "compact": "Compact"
@@ -345,7 +346,7 @@ namespace {
 struct Settings {
     std::wstring position = L"tray_left";
     int compactWidth = 169;
-    std::wstring compactMode = L"classic";
+    bool sideExpand = false;
     bool autoSizeToTaskbar = true;
     int expandedWidth = 360;
     int expandedHeight = 430;
@@ -398,8 +399,6 @@ struct MediaState {
     bool hasSession = false;
     bool isPlaying = false;
     bool canSeek = false;
-    bool canSkipPrevious = false;
-    bool canSkipNext = false;
     int64_t timelineStartTicks = 0;
     int64_t positionTicks = 0;
     int64_t durationTicks = 0;
@@ -1405,13 +1404,13 @@ void ApplyDisplayModeSetting(Settings* settings) {
     std::wstring displayMode = GetStringSetting(L"Main.DisplayMode", L"fullsize");
 
     if (displayMode == L"side_expand") {
-        settings->compactMode = L"dynamic_dual";
+        settings->sideExpand = true;
         settings->compact = false;
     } else if (displayMode == L"compact") {
-        settings->compactMode = L"classic";
+        settings->sideExpand = false;
         settings->compact = true;
     } else {
-        settings->compactMode = L"classic";
+        settings->sideExpand = false;
         settings->compact = false;
     }
 }
@@ -1443,7 +1442,7 @@ void ApplySettingsMigrations(Settings* settings) {
     }
 
     if (Wh_GetIntValue(kMigrateLegacyCompactValue, 0)) {
-        settings->compactMode = L"classic";
+        settings->sideExpand = false;
         settings->compact = true;
     }
 }
@@ -1998,12 +1997,8 @@ void RefreshMediaState(
             try {
                 auto controls = playback.Controls();
                 state.canSeek = controls.IsPlaybackPositionEnabled();
-                state.canSkipPrevious = controls.IsPreviousEnabled();
-                state.canSkipNext = controls.IsNextEnabled();
             } catch (...) {
                 state.canSeek = false;
-                state.canSkipPrevious = false;
-                state.canSkipNext = false;
             }
 
             auto props = GetAsyncResultWithTimeout(
@@ -11477,7 +11472,7 @@ void EndCompactIslandPress(bool activate) {
 }
 
 bool IsDynamicCompactMode() {
-    return g_settings.compactMode == L"dynamic_dual";
+    return g_settings.sideExpand;
 }
 
 bool DynamicTransportExpandsRight() {
@@ -13546,6 +13541,7 @@ Grid BuildIslandGrid() {
             if (!g_compactPressStarted) {
                 return;
             }
+            g_compactPressStarted = false;
             if (auto source = sender.template try_as<UIElement>()) {
                 source.ReleasePointerCapture(e.Pointer());
             }
@@ -14482,6 +14478,8 @@ bool InjectIslandGrid() {
         g_playerGrid = island;
         g_injectionParent = target.grid;
         StartTaskbarLayoutMonitor(root, target.grid);
+        StartMediaThread();
+        RequestMediaRefresh();
         ApplyExpandedState();
         UpdatePlayerContents();
         target.grid.UpdateLayout();
@@ -14599,8 +14597,6 @@ void Wh_ModAfterInit() {
     g_modActive = true;
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     ApplySettingsOnTaskbarThread();
-    StartMediaThread();
-    RequestMediaRefresh();
 }
 
 void Wh_ModUninit() {
