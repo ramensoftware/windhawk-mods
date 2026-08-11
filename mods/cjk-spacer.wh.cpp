@@ -96,23 +96,12 @@ The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
 hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
 so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
-initializing. Connection attempts are scheduled outside the Windows loader
-  path; one managed worker retains requests that arrive while it is running,
-  tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
-  retries `ERROR_NOT_FOUND` during concurrent Explorer startup with bounded,
-  interruptible backoff, and later retries only the connection that was lost.
-  It doesn't add a module
-  reference: the worker is signaled to stop and joined before Windhawk removes
-  hooks. Asynchronous visual-tree watcher setup threads are tracked by handle
-  and joined at the same point, so the engine's single module reference remains
-  sufficient.
-  `Wh_ModAfterInit` covers XAML modules that are already loaded, while the
-  `LoadLibraryExW` hook covers modules loaded later, including the
-  `CoreMessagingXP.dll` static-import path used by
-  `Microsoft.Internal.FrameworkUdk.dll`.
-  A connection blocked with a successful return isn't retried automatically;
-  after startup backoff is exhausted, a newly loaded XAML module or an
-  established connection being disconnected provides the next opportunity.
+initializing. If Explorer's diagnostics endpoint isn't ready yet, the mod
+retries for about one minute during startup. Afterwards, it retries only when a
+relevant XAML module loads or an established connection is disconnected.
+Connections blocked by another diagnostics consumer aren't retried
+automatically. All connection work runs outside the Windows loader path and is
+stopped before the mod unloads.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, enabling this path can show its confirmation dialog.
 The mod is injected only into `explorer.exe`. Start, Search, and some shell
@@ -1871,24 +1860,17 @@ enum class XamlDiagnosticsFlavor {
     Microsoft,
 };
 
-enum class XamlDiagnosticsRetry : unsigned char {
-    None = 0,
-    Windows = 1,
-    Microsoft = 2,
+struct XamlDiagnosticsRetry {
+    bool windows = false;
+    bool microsoft = false;
+
+    explicit operator bool() const {
+        return windows || microsoft;
+    }
 };
 
-XamlDiagnosticsRetry operator|(XamlDiagnosticsRetry left,
-                               XamlDiagnosticsRetry right) {
-    return static_cast<XamlDiagnosticsRetry>(
-        static_cast<unsigned char>(left) |
-        static_cast<unsigned char>(right));
-}
-
-bool HasXamlDiagnosticsRetry(XamlDiagnosticsRetry retries,
-                             XamlDiagnosticsRetry flavor) {
-    return (static_cast<unsigned char>(retries) &
-            static_cast<unsigned char>(flavor)) != 0;
-}
+constexpr int kInitialXamlDiagnosticsConnectionLimit = 10000;
+constexpr int kRetryXamlDiagnosticsConnectionLimit = 256;
 
 void RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor retryFlavor = XamlDiagnosticsFlavor::None);
@@ -2354,7 +2336,8 @@ thread_local XamlDiagnosticsFlavor g_connectingXamlDiagnostics =
 
 HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
                               LPCWSTR connectionPrefix,
-                              XamlDiagnosticsFlavor flavor) {
+                              XamlDiagnosticsFlavor flavor,
+                              int connectionLimit) {
     const auto initialize =
         reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
             GetProcAddress(xamlModule,
@@ -2377,7 +2360,7 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
     }
 
     HRESULT result = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-    for (int index = 1; index <= 10000; ++index) {
+    for (int index = 1; index <= connectionLimit; ++index) {
         if (g_stoppingModernUi.load(std::memory_order_acquire)) {
             return HRESULT_FROM_WIN32(ERROR_CANCELLED);
         }
@@ -2400,8 +2383,11 @@ HRESULT InjectXamlDiagnostics(HMODULE xamlModule,
     return result;
 }
 
-XamlDiagnosticsRetry EnsureModernXamlDiagnostics() {
-    XamlDiagnosticsRetry retries = XamlDiagnosticsRetry::None;
+XamlDiagnosticsRetry EnsureModernXamlDiagnostics(bool delayedRetry) {
+    XamlDiagnosticsRetry retries;
+    const int connectionLimit =
+        delayedRetry ? kRetryXamlDiagnosticsConnectionLimit
+                     : kInitialXamlDiagnosticsConnectionLimit;
     if (g_stoppingModernUi.load(std::memory_order_acquire) ||
         g_loadingXamlDiagnostics) {
         return retries;
@@ -2428,7 +2414,7 @@ XamlDiagnosticsRetry EnsureModernXamlDiagnostics() {
                     std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
                 module, L"VisualDiagConnection",
-                XamlDiagnosticsFlavor::Windows);
+                XamlDiagnosticsFlavor::Windows, connectionLimit);
             if (SUCCEEDED(result) &&
                 !g_stoppingModernUi.load(std::memory_order_acquire) &&
                 g_visualTreeWatcherGeneration.load(
@@ -2443,7 +2429,7 @@ XamlDiagnosticsRetry EnsureModernXamlDiagnostics() {
                        L"tool probably blocked the connection");
             } else if (result ==
                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-                retries = retries | XamlDiagnosticsRetry::Windows;
+                retries.windows = true;
             } else if (result !=
                        HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
                 Wh_Log(L"Windows.UI.Xaml diagnostics failed: "
@@ -2465,7 +2451,7 @@ XamlDiagnosticsRetry EnsureModernXamlDiagnostics() {
                     std::memory_order_acquire);
             const HRESULT result = InjectXamlDiagnostics(
                 module, L"WinUIVisualDiagConnection",
-                XamlDiagnosticsFlavor::Microsoft);
+                XamlDiagnosticsFlavor::Microsoft, connectionLimit);
             if (SUCCEEDED(result) &&
                 !g_stoppingModernUi.load(std::memory_order_acquire) &&
                 g_visualTreeWatcherGeneration.load(
@@ -2480,7 +2466,7 @@ XamlDiagnosticsRetry EnsureModernXamlDiagnostics() {
                        L"tool probably blocked the connection");
             } else if (result ==
                        HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-                retries = retries | XamlDiagnosticsRetry::Microsoft;
+                retries.microsoft = true;
             } else if (result !=
                        HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
                 Wh_Log(L"Microsoft.UI.Xaml diagnostics failed: "
@@ -2492,13 +2478,11 @@ XamlDiagnosticsRetry EnsureModernXamlDiagnostics() {
 }
 
 void ResetXamlDiagnosticsAttempts(XamlDiagnosticsRetry retries) {
-    if (HasXamlDiagnosticsRetry(
-            retries, XamlDiagnosticsRetry::Windows)) {
+    if (retries.windows) {
         g_windowsUiXamlDiagnosticsAttempted.store(
             false, std::memory_order_release);
     }
-    if (HasXamlDiagnosticsRetry(
-            retries, XamlDiagnosticsRetry::Microsoft)) {
+    if (retries.microsoft) {
         g_microsoftUiXamlDiagnosticsAttempted.store(
             false, std::memory_order_release);
     }
@@ -2523,11 +2507,11 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     constexpr DWORD retryDelaysMs[] = {
         1000, 2000, 5000, 10000, 20000, 30000};
-    XamlDiagnosticsRetry retries = XamlDiagnosticsRetry::None;
+    XamlDiagnosticsRetry retries;
     size_t retryIndex = 0;
     for (;;) {
         const DWORD waitTimeout =
-            retries == XamlDiagnosticsRetry::None
+            !retries
                 ? INFINITE
                 : retryDelaysMs[retryIndex];
         const DWORD waitResult =
@@ -2536,19 +2520,21 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
             break;
         }
 
+        bool delayedRetry = false;
         if (waitResult == WAIT_OBJECT_0) {
             if (!g_xamlDiagnosticsRequestPending.exchange(
                     false, std::memory_order_acq_rel)) {
                 continue;
             }
-            // Preserve a scheduled startup retry when another flavor or a
-            // reconnect request wakes the worker in the meantime.
+            // An explicit wake is a genuine new opportunity. Preserve all
+            // pending flavors and intentionally restart their backoff ladder.
             ResetXamlDiagnosticsAttempts(retries);
             retryIndex = 0;
         } else if (waitResult == WAIT_TIMEOUT &&
-                   retries != XamlDiagnosticsRetry::None) {
+                   retries) {
             ResetXamlDiagnosticsAttempts(retries);
             ++retryIndex;
+            delayedRetry = true;
         } else {
             Wh_Log(L"XAML diagnostics worker wait failed: %u",
                    waitResult == WAIT_FAILED ? GetLastError()
@@ -2556,15 +2542,15 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
             break;
         }
 
-        retries = EnsureModernXamlDiagnostics();
-        if (retries != XamlDiagnosticsRetry::None) {
+        retries = EnsureModernXamlDiagnostics(delayedRetry);
+        if (retries) {
             if (retryIndex < ARRAYSIZE(retryDelaysMs)) {
                 Wh_Log(L"XAML diagnostics isn't ready; retrying in %u ms",
                        retryDelaysMs[retryIndex]);
             } else {
                 Wh_Log(L"XAML diagnostics remained unavailable after "
                        L"startup retries");
-                retries = XamlDiagnosticsRetry::None;
+                retries = {};
                 retryIndex = 0;
             }
         }
