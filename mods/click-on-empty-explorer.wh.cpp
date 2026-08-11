@@ -342,6 +342,8 @@ require Windows 11 for tabbed Explorer support.
 #include <winrt/base.h>
 
 #include <algorithm>
+#include <cwctype>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -678,7 +680,8 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
             std::wstring normText = NormalizeForMatch(text);
             std::wstring normVerb = NormalizeForMatch(verb);
             wchar_t buf[640];
-            swprintf_s(buf, L"CMENU%s[%s] wID=%u offset=%u verb=[%s]  → match: \"%s\" or \"%s\"",
+            _snwprintf_s(buf, _countof(buf), _TRUNCATE,
+                L"CMENU%s[%s] wID=%u offset=%u verb=[%s]  → match: \"%s\" or \"%s\"",
                 std::wstring(depth, L' ').c_str(),
                 text[0] ? text : L"(no text)", mii.wID, offset,
                 verb[0] ? verb : L"(none)",
@@ -806,29 +809,35 @@ static thread_local HWND g_pendingDblClickHwnd = NULL;
 static thread_local UINT_PTR g_pendingDblClickTimerId = 0;
 static thread_local std::wstring g_pendingDblClickAction;
 static thread_local std::wstring g_pendingDblClickCombo;
+// Per-trigger context-menu match for the delayed double-click path. Kept separate
+// from g_pendingDblClickAction so the two never alias each other.
+static thread_local std::wstring g_pendingDblClickCtxMatch;
 
 // Private message: dequeues action dispatch from mouse handlers to avoid
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
-// wParam = (WPARAM)strdup(actionString), lParam = (LPARAM)hWnd
+// wParam = (WPARAM)std::unique_ptr<PendingAction>, lParam = (LPARAM)hWnd
 static UINT g_msgDoAction = 0;
 
-static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action);
+// Carries an action plus an optional context-menu match string across the
+// posted-message boundary. Using an owned object (instead of a hand-packed
+// wchar buffer) avoids the out-of-bounds read the previous layout had when
+// no match text was present.
+struct PendingAction {
+    std::wstring action;
+    std::wstring match;
+};
+
+static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr);
 
 // Post an action to be handled asynchronously — avoids synchronously activating
 // context-menu handlers inside the mouse-down handler.
-// If match is non-null and non-empty, it is packed into the same heap block
-// after the action string (double-null terminated). The dispatch handler picks it up.
 static void PostDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
     if (!g_msgDoAction || !action || !*action) return;
-    size_t actionLen = wcslen(action) + 1;
-    size_t matchLen = (match && *match) ? (wcslen(match) + 1) : 0;
-    size_t total = actionLen + matchLen;
-    wchar_t* s = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, total * sizeof(wchar_t));
-    if (!s) return;
-    wcscpy_s(s, actionLen, action);
-    if (matchLen) wcscpy_s(s + actionLen, matchLen, match);
-    if (!PostMessage(hWnd, g_msgDoAction, (WPARAM)s, (LPARAM)hWnd))
-        HeapFree(GetProcessHeap(), 0, s);
+    auto p = std::make_unique<PendingAction>();
+    p->action = action;
+    p->match = (match && *match) ? match : L"";
+    if (PostMessage(hWnd, g_msgDoAction, (WPARAM)p.get(), (LPARAM)hWnd))
+        p.release();
 }
 
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -838,7 +847,8 @@ static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, D
         SettingsSnapshot s = CopySettings();
         if (wcscmp(s.middleClick.c_str(), L"none") != 0) {
             if (!TryCustomHotkey(s.middleClick.c_str(), s.middleClickCombo))
-                FindShellTabAndDoAction(g_midClickPendingHwnd, s.middleClick.c_str());
+                FindShellTabAndDoAction(g_midClickPendingHwnd, s.middleClick.c_str(),
+                                        s.middleClickCtxMatch.c_str());
         }
     }
     g_midClickPendingHwnd = NULL;
@@ -859,12 +869,14 @@ static VOID CALLBACK DblClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, D
     if (g_pendingDblClickHwnd && IsWindow(g_pendingDblClickHwnd)) {
         if (!g_pendingDblClickAction.empty()) {
             if (!TryCustomHotkey(g_pendingDblClickAction.c_str(), g_pendingDblClickCombo))
-                FindShellTabAndDoAction(g_pendingDblClickHwnd, g_pendingDblClickAction.c_str());
+                FindShellTabAndDoAction(g_pendingDblClickHwnd, g_pendingDblClickAction.c_str(),
+                                        g_pendingDblClickCtxMatch.c_str());
         }
     }
     g_pendingDblClickHwnd = NULL;
     g_pendingDblClickAction.clear();
     g_pendingDblClickCombo.clear();
+    g_pendingDblClickCtxMatch.clear();
 }
 
 static void CancelPendingDblClick() {
@@ -875,6 +887,7 @@ static void CancelPendingDblClick() {
     g_pendingDblClickHwnd = NULL;
     g_pendingDblClickAction.clear();
     g_pendingDblClickCombo.clear();
+    g_pendingDblClickCtxMatch.clear();
 }
 
 // ---- ExplorerWrapper ----
@@ -1041,29 +1054,28 @@ public:
         }
     }
 
-    void OpenWithContextMenu() {
-        // Prefer per-trigger match (set by subclass proc before dispatching),
-        // Per-trigger match was stashed in g_pendingDblClickAction by the
-        // dispatch handler before calling DoAction. Clear it after reading.
-        std::wstring match = std::move(g_pendingDblClickAction);
-        g_pendingDblClickAction.clear();
-        if (match.empty()) {
+    void OpenWithContextMenu(PCWSTR match = nullptr) {
+        // match is passed explicitly from the dispatch path (see DoAction). If no
+        // per-trigger match was supplied, fall back to the global setting.
+        std::wstring m;
+        if (match && *match) m = match;
+        if (m.empty()) {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             PCWSTR s = g_contextMenuMatch.Get();
-            if (s) match = s;
+            if (s) m = s;
         }
-        if (match.empty()) {
+        if (m.empty()) {
             Wh_Log(L"OpenWithContextMenu: no match text configured (Context Menu Match setting)");
             return;
         }
         // Use browser directly — works for virtual folders too (This PC, Libraries, etc.)
-        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, match.c_str()))
-            Wh_Log(L"OpenWithContextMenu: no context menu entry matching '%s'", match.c_str());
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, m.c_str()))
+            Wh_Log(L"OpenWithContextMenu: no context menu entry matching '%s'", m.c_str());
     }
 
     // ---- Dispatch ----
 
-    void DoAction(PCWSTR action) {
+    void DoAction(PCWSTR action, PCWSTR match = nullptr) {
         if (!action || !hBrowser || !IsWindow(hShellTab)) return;
 
         if (wcscmp(action, L"goUp") == 0)            GoUp();
@@ -1080,7 +1092,7 @@ public:
         else if (wcscmp(action, L"paste") == 0)       Paste();
         else if (wcscmp(action, L"openInVSCode") == 0)  OpenInVSCode();
         else if (wcscmp(action, L"openInTerminal") == 0) OpenInTerminal();
-        else if (wcscmp(action, L"openWithContextMenu") == 0) OpenWithContextMenu();
+        else if (wcscmp(action, L"openWithContextMenu") == 0) OpenWithContextMenu(match);
         // "none" or unknown — do nothing
     }
 };
@@ -1130,7 +1142,7 @@ static VOID CALLBACK NavigateNewTabProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, 
 
 // ---- Helper: find ExplorerWrapper by shellTab HWND and run action ----
 
-static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action) {
+static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
     if (!hWnd || !IsWindow(hWnd) || !action) {
         Wh_Log(L"FindShellTabAndDoAction: invalid args hWnd=%p action=%s", hWnd, action ? action : L"null");
         return false;
@@ -1149,7 +1161,7 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action) {
                 (void*)SendMessage(shellTab, WM_USER + 7, 0, 0)));
             if (browser) {
                 ExplorerWrapper tmp(shellTab, browser.get(), hWnd);
-                tmp.DoAction(action);
+                tmp.DoAction(action, match);
                 return true;
             }
             Wh_Log(L"FindShellTabAndDoAction: no browser for shellTab=%p, action=%s", shellTab, action);
@@ -1175,21 +1187,12 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     }
 
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
-    // Block layout: action\0[match\0] — match follows action if present.
+    // wParam owns a PendingAction object; the unique_ptr frees it on scope exit.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
-        PCWSTR action = (PCWSTR)wParam;
+        std::unique_ptr<PendingAction> p((PendingAction*)wParam);
         HWND target = (HWND)lParam;
-        if (action && *action && target) {
-            // Extract match if present (double-null terminated block)
-            size_t aLen = wcslen(action) + 1;
-            PCWSTR match = action[aLen] ? action + aLen : nullptr;
-            if (match && wcscmp(action, L"openWithContextMenu") == 0) {
-                // Set match before calling DoAction so OpenWithContextMenu sees it
-                g_pendingDblClickAction = match;
-            }
-            FindShellTabAndDoAction(target, action);
-        }
-        HeapFree(GetProcessHeap(), 0, (void*)wParam);
+        if (p && target && !p->action.empty())
+            FindShellTabAndDoAction(target, p->action.c_str(), p->match.c_str());
         return 0;
     }
 
@@ -1275,6 +1278,7 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
             g_pendingDblClickHwnd = hWnd;
             g_pendingDblClickAction = dblOn ? s.doubleClick : L"";
             g_pendingDblClickCombo = s.doubleClickCombo;
+            g_pendingDblClickCtxMatch = dblOn ? s.doubleClickCtxMatch : L"";
             g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
                 GetDoubleClickTime(), nullptr);
         } else {
@@ -1344,21 +1348,12 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     }
 
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
-    // Block layout: action\0[match\0] — match follows action if present.
+    // wParam owns a PendingAction object; the unique_ptr frees it on scope exit.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
-        PCWSTR action = (PCWSTR)wParam;
+        std::unique_ptr<PendingAction> p((PendingAction*)wParam);
         HWND target = (HWND)lParam;
-        if (action && *action && target) {
-            // Extract match if present (double-null terminated block)
-            size_t aLen = wcslen(action) + 1;
-            PCWSTR match = action[aLen] ? action + aLen : nullptr;
-            if (match && wcscmp(action, L"openWithContextMenu") == 0) {
-                // Set match before calling DoAction so OpenWithContextMenu sees it
-                g_pendingDblClickAction = match;
-            }
-            FindShellTabAndDoAction(target, action);
-        }
-        HeapFree(GetProcessHeap(), 0, (void*)wParam);
+        if (p && target && !p->action.empty())
+            FindShellTabAndDoAction(target, p->action.c_str(), p->match.c_str());
         return 0;
     }
 
@@ -1482,6 +1477,7 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
                 g_pendingDblClickHwnd = hWnd;
                 g_pendingDblClickAction = dblOn ? s.doubleClick : L"";
                 g_pendingDblClickCombo = s.doubleClickCombo;
+                g_pendingDblClickCtxMatch = dblOn ? s.doubleClickCtxMatch : L"";
                 g_pendingDblClickTimerId = SetTimer(hWnd, 0x4D45,
                     GetDoubleClickTime(), nullptr);
             } else if (dblOn) {
@@ -1660,7 +1656,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook, (void**)&CreateWindowExW_original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
 
     InterlockedExchange(&g_initialized, 1);
     return TRUE;
