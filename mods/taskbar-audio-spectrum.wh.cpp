@@ -2,7 +2,7 @@
 // @id              taskbar-audio-spectrum
 // @name            Taskbar Audio Spectrum
 // @description     Render the system audio spectrum in the native Windows 10/11 taskbar search box
-// @version         1.0.0
+// @version         1.1.0
 // @author          shanght
 // @github          https://github.com/ShangHTao
 // @homepage        https://github.com/ShangHTao/TaskbarAudioSpectrum
@@ -98,7 +98,7 @@ Source, standalone downloads, and detailed documentation are available on the
   $description: Analysis window size; supported values are 4096, 8192, and 16384.
 - overlapPercent: 75
   $name: FFT overlap (percent)
-  $description: Overlap between consecutive analysis windows.
+  $description: Overlap between consecutive analysis windows. Higher values update the analysis more often and use more CPU.
 - windowFunction: "hann"
   $name: FFT window
   $description: Window function applied before each FFT.
@@ -202,21 +202,17 @@ Source, standalone downloads, and detailed documentation are available on the
 #include <cmath>
 #include <complex>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 
 
 
@@ -278,6 +274,21 @@ inline void EnablePerMonitorDpiAwarenessForThread() {
         setThreadDpiAwarenessContext(
             reinterpret_cast<HANDLE>(static_cast<LONG_PTR>(-4)));
     }
+}
+
+inline UINT GetWindowDpiOrDefault(HWND window) {
+    using GetDpiForWindowFunction = UINT(WINAPI*)(HWND);
+    static const auto getDpiForWindow = [] {
+        const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 ? reinterpret_cast<GetDpiForWindowFunction>(
+                           GetProcAddress(user32, "GetDpiForWindow"))
+                      : nullptr;
+    }();
+    if (getDpiForWindow && window) {
+        const UINT dpi = getDpiForWindow(window);
+        if (dpi) return dpi;
+    }
+    return 96;
 }
 
 }  // namespace tas
@@ -355,14 +366,12 @@ namespace tas {
 
 struct AnalysisPlan {
     int bars = 0;
-    int sampleRate = 0;
     int fftSize = 0;
     int fftBins = 0;
     int hopSamples = 0;
     float sensitivity = 1.0f;
     float binWidth = 0.0f;
     double windowSumSquares = 0.0;
-    float releaseRetention = 0.0f;
     float minimumDecibels = -72.0f;
     float maximumDecibels = -6.0f;
     BandAggregation bandAggregation = BandAggregation::Energy;
@@ -445,7 +454,6 @@ struct SearchLayout {
     bool valid = false;
 };
 DWORD GetSearchMode();
-SearchHostKind DetectOperatingSystemSearchHostKind();
 bool IsSearchBoxMode(DWORD mode, SearchHostKind hostKind);
 bool IsSearchBoxMode(DWORD mode);
 int ScaleForDpi(int value, UINT dpi);
@@ -490,7 +498,6 @@ private:
     ScopedHandle audioThread_;
     ScopedHandle locatorThread_;
     ScopedHandle overlayThread_;
-    DWORD overlayThreadId_ = 0;
     std::unique_ptr<ApplicationContext> context_;
 };
 
@@ -1030,7 +1037,16 @@ Settings LoadSettings() {
 
 }  // namespace tas
 
+
 namespace tas {
+
+namespace {
+
+constexpr GUID kIeeeFloatSubformat = {
+    WAVE_FORMAT_IEEE_FLOAT, 0x0000, 0x0010,
+    {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};
+
+}  // namespace
 
 void ClearBands(BandLevels* levels) {
     if (levels) levels->fill(0.0f);
@@ -1051,7 +1067,7 @@ float ReadSample(const BYTE* data, UINT32 frame, int channel,
         format->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
         const auto* extensible =
             reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format);
-        isFloat = extensible->SubFormat.Data1 == WAVE_FORMAT_IEEE_FLOAT;
+        isFloat = IsEqualGUID(extensible->SubFormat, kIeeeFloatSubformat);
     }
     if (isFloat && bits == 32) {
         float value;
@@ -1289,7 +1305,6 @@ AnalysisPlan MakeAnalysisPlan(int sampleRate, const Settings& settings) {
     if (sampleRate <= 0) return plan;
     plan.bars = std::clamp(settings.barCount, 1, kMaxBars);
     plan.binWeights.resize(kMaxBars);
-    plan.sampleRate = sampleRate;
     plan.fftSize = IsSupportedFftSize(settings.fftSize)
         ? settings.fftSize : kDefaultFftSamples;
     plan.fftBins = plan.fftSize / 2 + 1;
@@ -1314,10 +1329,6 @@ AnalysisPlan MakeAnalysisPlan(int sampleRate, const Settings& settings) {
         plan.window[index] = value;
         plan.windowSumSquares += static_cast<double>(value) * value;
     }
-    const float hopSeconds = plan.hopSamples / static_cast<float>(sampleRate);
-    plan.releaseRetention = settings.releaseMs <= 0 ? 0.0f :
-        std::exp(-hopSeconds / (settings.releaseMs / 1000.0f));
-
     if (settings.frequencyScale == FrequencyScale::ThirdOctaveNominal) {
         const int firstIndex = static_cast<int>(std::lround(
             3.0 * std::log2(settings.minimumCenterFrequency /
@@ -1445,7 +1456,6 @@ void AnalyzeChannels(const std::vector<std::vector<float>>& channels,
     }
     PublishBandPower(scratch->spectrumPower, channels.size(), plan, levels);
 }
-
 
 float SmoothDisplayLevel(float current, float target, float deltaSeconds,
                          int attackMs, int releaseMs) {
@@ -1590,7 +1600,6 @@ DWORD WINAPI AudioThreadProc(void* parameter) {
     auto& context = *static_cast<ApplicationContext*>(parameter);
     const Settings& settings = context.settings;
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    const bool uninitialize = SUCCEEDED(hr);
     if (FAILED(hr)) {
         Wh_Log(L"Audio COM initialization failed: 0x%08X", hr);
         return 0;
@@ -1798,12 +1807,15 @@ DWORD WINAPI AudioThreadProc(void* parameter) {
                             AnalyzeChannels(samples, writeIndex, plan,
                                             &analysisScratch, &levels);
                             PublishBandLevels(context, levels);
-                            const float strongest = *std::max_element(
-                                levels.begin(), levels.begin() + plan.bars);
-                            if (strongest > 0.03f && !signalSeen) {
-                                Wh_Log(L"Audio signal detected, peak band level %.3f",
-                                    strongest);
-                                signalSeen = true;
+                            if (plan.bars > 0) {
+                                const float strongest = *std::max_element(
+                                    levels.begin(),
+                                    levels.begin() + plan.bars);
+                                if (strongest > 0.03f && !signalSeen) {
+                                    Wh_Log(L"Audio signal detected, peak band level %.3f",
+                                        strongest);
+                                    signalSeen = true;
+                                }
                             }
                             framesSinceAnalysis = 0;
                         }
@@ -1852,7 +1864,7 @@ DWORD WINAPI AudioThreadProc(void* parameter) {
 
 finished:
     ClearPublishedBands(context);
-    if (uninitialize) CoUninitialize();
+    CoUninitialize();
     return 0;
 }
 
@@ -1956,8 +1968,7 @@ bool QuerySearchLayout(IUIAutomation* automation, HWND taskbar,
     SearchLayout layout;
     layout.taskbar = taskbar;
     GetWindowThreadProcessId(taskbar, &layout.explorerProcessId);
-    layout.dpi = GetDpiForWindow(taskbar);
-    if (!layout.dpi) layout.dpi = 96;
+    layout.dpi = GetWindowDpiOrDefault(taskbar);
 
     HRESULT hr = E_FAIL;
     if (*cachedSearch) {
@@ -2053,7 +2064,7 @@ bool BuildLayoutFromTemplate(ApplicationContext& context, HWND taskbar,
         templateDpi = state.templateDpi;
     }
 
-    const UINT dpi = std::max<UINT>(96, GetDpiForWindow(taskbar));
+    const UINT dpi = GetWindowDpiOrDefault(taskbar);
     const auto scale = [&](LONG value) {
         return MulDiv(value, static_cast<int>(dpi),
                       static_cast<int>(templateDpi));
@@ -2334,6 +2345,8 @@ SearchHostKind DetectSearchHostKind(PCWSTR executablePath) {
     return SearchHostKind::Unknown;
 }
 
+namespace {
+
 SearchHostKind DetectOperatingSystemSearchHostKind() {
     using RtlGetVersionFunction = LONG(WINAPI*)(OSVERSIONINFOW*);
     static const SearchHostKind hostKind = [] {
@@ -2358,6 +2371,8 @@ SearchHostKind DetectOperatingSystemSearchHostKind() {
     return hostKind;
 }
 
+}  // namespace
+
 bool IsSearchExecutableName(PCWSTR executablePath) {
     return DetectSearchHostKind(executablePath) != SearchHostKind::Unknown;
 }
@@ -2368,15 +2383,22 @@ bool IsSearchProcessWindow(HWND window) {
     DWORD processId = 0;
     GetWindowThreadProcessId(window, &processId);
     if (!processId) return false;
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
-                                 processId);
+    ScopedHandle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                     processId));
     if (!process) return false;
-    thread_local std::array<wchar_t, 32768> executablePath{};
+    std::array<wchar_t, MAX_PATH> executablePath{};
     DWORD pathLength = static_cast<DWORD>(executablePath.size());
-    const bool queried = QueryFullProcessImageNameW(
-        process, 0, executablePath.data(), &pathLength) != FALSE;
-    CloseHandle(process);
-    return queried && IsSearchExecutableName(executablePath.data());
+    if (QueryFullProcessImageNameW(
+            process.get(), 0, executablePath.data(), &pathLength)) {
+        return IsSearchExecutableName(executablePath.data());
+    }
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) return false;
+
+    std::vector<wchar_t> longExecutablePath(32768);
+    pathLength = static_cast<DWORD>(longExecutablePath.size());
+    return QueryFullProcessImageNameW(
+               process.get(), 0, longExecutablePath.data(), &pathLength) &&
+           IsSearchExecutableName(longExecutablePath.data());
 }
 
 bool IsSearchInterfaceOpen() {
@@ -2626,20 +2648,24 @@ struct WindowState {
 };
 
 thread_local HWND g_shellStateTargetWindow = nullptr;
+thread_local HWND g_foregroundRootWindow = nullptr;
 
 void CALLBACK ShellStateWinEventProc(HWINEVENTHOOK, DWORD event,
                                      HWND eventWindow, LONG objectId,
                                      LONG childId, DWORD, DWORD) {
     if (!g_shellStateTargetWindow) return;
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+        g_foregroundRootWindow = eventWindow
+            ? GetAncestor(eventWindow, GA_ROOT)
+            : nullptr;
+    }
     if (event == EVENT_OBJECT_LOCATIONCHANGE) {
         if (!eventWindow || objectId != OBJID_WINDOW ||
             childId != CHILDID_SELF) {
             return;
         }
-        const HWND foreground = GetForegroundWindow();
-        if (!foreground ||
-            GetAncestor(eventWindow, GA_ROOT) !=
-                GetAncestor(foreground, GA_ROOT)) {
+        if (!g_foregroundRootWindow ||
+            GetAncestor(eventWindow, GA_ROOT) != g_foregroundRootWindow) {
             return;
         }
     }
@@ -2846,8 +2872,7 @@ void DrawSpectrum(HWND window, WindowState* state) {
     const bool silenceDelayElapsed = !audible &&
         frameTick - state->lastAudibleTick >=
             static_cast<ULONGLONG>(settings.silenceHideDelayMs);
-    if (settings.opacity == 0 ||
-        (settings.hideWhenSilent && silenceDelayElapsed)) {
+    if (settings.hideWhenSilent && silenceDelayElapsed) {
         HideOverlay(window, state, false);
         return;
     }
@@ -2963,7 +2988,6 @@ void DrawSpectrum(HWND window, WindowState* state) {
     POINT source{};
     BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     if (state->visible && state->presentedPixels == state->framePixels) {
-        EnsureAboveTaskbar(window, state);
         return;
     }
     memcpy(state->pixels, state->framePixels.data(),
@@ -2984,14 +3008,19 @@ void DrawSpectrum(HWND window, WindowState* state) {
                          SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
         state->visible = true;
         SetVisualizerActive(context, true);
+        EnsureAboveTaskbar(window, state);
     }
-    EnsureAboveTaskbar(window, state);
 }
 
 void RefreshOverlayState(HWND window, WindowState* state,
                          bool refreshSearchMode,
                          bool refreshSearchInterface) {
     if (!state) return;
+    if (state->context->settings.opacity == 0) {
+        state->eligible = false;
+        HideOverlay(window, state);
+        return;
+    }
     if (refreshSearchMode) {
         state->searchMode = GetSearchMode();
     }
@@ -3108,11 +3137,19 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
     WNDCLASSEXW windowClass{};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.lpfnWndProc = OverlayWindowProc;
-    windowClass.hInstance = GetModuleHandleW(nullptr);
+    HMODULE currentModule = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<PCWSTR>(&OverlayThreadProc), &currentModule)) {
+        Wh_Log(L"Failed to resolve overlay module: %u", GetLastError());
+        return 0;
+    }
+    windowClass.hInstance = currentModule;
     windowClass.lpszClassName = kOverlayWindowClass;
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     const bool registeredWindowClass = RegisterClassExW(&windowClass) != 0;
-    if (!registeredWindowClass && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!registeredWindowClass) {
         Wh_Log(L"Failed to register overlay class: %u", GetLastError());
         return 0;
     }
@@ -3149,6 +3186,10 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
             break;
         }
         g_shellStateTargetWindow = window;
+        const HWND foreground = GetForegroundWindow();
+        g_foregroundRootWindow = foreground
+            ? GetAncestor(foreground, GA_ROOT)
+            : nullptr;
         constexpr DWORD eventHookFlags =
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
         const HWINEVENTHOOK foregroundHook = SetWinEventHook(
@@ -3219,6 +3260,7 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
             }
         }
         g_shellStateTargetWindow = nullptr;
+        g_foregroundRootWindow = nullptr;
         if (foregroundHook) UnhookWinEvent(foregroundHook);
         if (locationHook) UnhookWinEvent(locationHook);
         KillTimer(window, kFrameTimer);
@@ -3272,15 +3314,6 @@ bool WaitForThread(HANDLE thread, DWORD timeout, PCWSTR name) {
 
 }  // namespace
 
-Runtime& AppRuntime() {
-#ifdef TAS_WINDHAWK_HOST
-    [[clang::no_destroy]] static Runtime runtime;
-#else
-    static Runtime runtime;
-#endif
-    return runtime;
-}
-
 Runtime::Runtime() = default;
 
 Runtime::~Runtime() {
@@ -3320,7 +3353,7 @@ bool Runtime::Start(const Settings& settings) {
     locatorThread_.reset(CreateThread(
         nullptr, 0, SearchLocatorThreadProc, context_.get(), 0, nullptr));
     overlayThread_.reset(CreateThread(
-        nullptr, 0, OverlayThreadProc, context_.get(), 0, &overlayThreadId_));
+        nullptr, 0, OverlayThreadProc, context_.get(), 0, nullptr));
     audioThread_.reset(CreateThread(
         nullptr, 0, AudioThreadProc, context_.get(), 0, nullptr));
     if (!locatorThread_ || !overlayThread_ || !audioThread_) {
@@ -3339,7 +3372,6 @@ bool Runtime::Stop() {
     if (context_->activityChangedEvent) {
         SetEvent(context_->activityChangedEvent.get());
     }
-    if (overlayThreadId_) PostThreadMessageW(overlayThreadId_, WM_QUIT, 0, 0);
 
     const bool locatorStopped =
         WaitForThread(locatorThread_.get(), 5500, L"Locator");
@@ -3354,7 +3386,6 @@ bool Runtime::Stop() {
         locatorThread_.reset();
         overlayThread_.reset();
         audioThread_.reset();
-        overlayThreadId_ = 0;
         context_.release();
         return false;
     }
@@ -3362,7 +3393,6 @@ bool Runtime::Stop() {
     locatorThread_.reset();
     overlayThread_.reset();
     audioThread_.reset();
-    overlayThreadId_ = 0;
     ClearPublishedBands(*context_);
     context_.reset();
     Wh_Log(L"Runtime stopped cleanly");
@@ -3371,7 +3401,18 @@ bool Runtime::Stop() {
 
 }  // namespace tas
 
+namespace {
+
+[[clang::no_destroy]] std::optional<tas::Runtime> g_appRuntime;
+
+}  // namespace
+
 namespace tas {
+
+Runtime& AppRuntime() {
+    if (!g_appRuntime) g_appRuntime.emplace();
+    return *g_appRuntime;
+}
 
 int HostGetIntSetting(PCWSTR key, int) {
     return Wh_GetIntSetting(key);
@@ -3399,7 +3440,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    tas::AppRuntime().Stop();
+    g_appRuntime.reset();
     Wh_Log(L"Windhawk host stopped");
 }
 
