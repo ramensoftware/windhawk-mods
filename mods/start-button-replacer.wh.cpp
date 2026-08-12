@@ -7,7 +7,7 @@
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
@@ -3246,8 +3246,14 @@ XamlRootFromTaskbarHostSharedPtr(
             L"Unrecognized TaskbarHost::FrameHeight; using fallback offset 0x48");
     }
 
+#elif defined(_M_ARM64)
+
+    // The x64 instruction pattern above doesn't apply to ARM64. Use the
+    // established TaskbarHost layout fallback used by Windhawk's current
+    // Windows 11 taskbar mods.
+
 #else
-#error This version of the mod currently supports x86-64 only.
+#error Unsupported architecture.
 #endif
 
     auto* taskbarElementIUnknown =
