@@ -425,6 +425,12 @@ bool IsMenuPopupWindow(HWND hWnd) {
     return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"#32768") == 0;
 }
 
+// The system reuses menu popup windows, so a subclassed popup can still be
+// alive when the mod unloads - and its window procedure would then point into
+// an unloaded DLL. Track them and remove each subclass at uninit.
+std::unordered_set<HWND> g_subclassedPopups;
+std::mutex g_subclassedPopupsMutex;
+
 // Subclassing the popup rather than watching messages from a hook: WM_PAINT is
 // posted, not sent, so a WH_CALLWNDPROCRET hook never sees it, and a popup that
 // repaints that way would keep the system frame.
@@ -433,6 +439,11 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
                                        WPARAM wParam,
                                        LPARAM lParam,
                                        DWORD_PTR dwRefData) {
+    if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
+        g_subclassedPopups.erase(hWnd);
+    }
+
     LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
     switch (uMsg) {
@@ -460,7 +471,10 @@ LRESULT CALLBACK CbtProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HCBT_CREATEWND) {
         HWND hWnd = (HWND)wParam;
         if (IsMenuPopupWindow(hWnd) && g_hBorderBrush.load(std::memory_order_acquire)) {
-            if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc, 0)) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc, 0)) {
+                std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
+                g_subclassedPopups.insert(hWnd);
+            } else {
                 DBG(L"Failed to subclass menu popup %p; it keeps the system frame.", hWnd);
             }
         }
@@ -635,7 +649,18 @@ void Wh_ModUninit() {
         UnhookWindowsHookEx(tl_cbtHook);
         tl_cbtHook = nullptr;
     }
-    WindhawkUtils::RemoveAllWindowSubclasses();
+    // Not WindhawkUtils::RemoveAllWindowSubclasses(), which needs Windhawk 1.8.
+    {
+        std::vector<HWND> popups;
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
+            popups.assign(g_subclassedPopups.begin(), g_subclassedPopups.end());
+            g_subclassedPopups.clear();
+        }
+        for (HWND hWnd : popups) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc);
+        }
+    }
 
     // Undo the background brush stamped on Photoshop's menus, so disabling the
     // mod restores the normal menus without restarting the application.
