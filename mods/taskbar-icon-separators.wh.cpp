@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
-// @version         0.5.6
+// @version         0.5.12
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -13,6 +13,8 @@
 // ==WindhawkModReadme==
 /*
 Prototype for genuine Windows 11 taskbar separators.
+
+This mod supports Windows 11 only.
 
 Each configured separator is represented by its own real pinned Shell shortcut.
 The mod:
@@ -64,21 +66,6 @@ the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
     normal and small icon modes: Width is used for both and Small width is
     ignored. Changing this setting reloads the mod and recreates the separator
     buttons cleanly.
-- startupRetryAttempts: 4
-  $name: Startup attempts
-  $description: >-
-    Maximum number of attempts to pin and position separators during Explorer
-    startup. The first attempt is immediate. Values are limited to 1 through 20.
-- startupRetryDelay: 250
-  $name: Initial retry delay
-  $description: >-
-    Delay in milliseconds before the second startup attempt. Later delays are
-    multiplied by the retry backoff. Values are limited to 0 through 60000.
-- startupRetryBackoff: 2
-  $name: Retry backoff
-  $description: >-
-    Multiplier applied to the delay after each failed startup attempt. Values
-    are limited to 1 through 10.
 - separators:
     - - index: 5
         $name: Position
@@ -211,9 +198,6 @@ struct SeparatorSetting {
 struct Settings {
     std::wstring identifierPrefix;
     bool maxWidthCompatibilityMode;
-    int startupRetryAttempts;
-    DWORD startupRetryDelay;
-    int startupRetryBackoff;
     std::vector<SeparatorSetting> separators;
 };
 
@@ -222,11 +206,8 @@ static std::wstring g_storagePath;
 static std::wstring g_iconPath;
 
 static std::atomic<bool> g_taskbarViewDllHooked = false;
-static std::atomic<bool> g_taskbarViewHooksReady = false;
 static std::atomic<bool> g_taskbarInteractionHooksInstalled = false;
-static std::atomic<bool> g_taskbarInteractionHooksReady = false;
 static std::atomic<bool> g_loadLibraryWatcherInstalled = false;
-static std::atomic<bool> g_backendStarted = false;
 static std::atomic<bool> g_unloading = false;
 static HANDLE g_backendThread = nullptr;
 static HANDLE g_backendStopEvent = nullptr;
@@ -541,27 +522,6 @@ static bool LoadSettings() {
     g_settings.maxWidthCompatibilityMode =
         Wh_GetIntSetting(L"maxWidthCompatibilityMode") != 0;
 
-    int startupRetryAttempts =
-        Wh_GetIntSetting(L"startupRetryAttempts");
-    if (startupRetryAttempts <= 0) {
-        startupRetryAttempts = 4;
-    }
-    g_settings.startupRetryAttempts =
-        std::clamp(startupRetryAttempts, 1, 20);
-
-    int startupRetryDelay =
-        Wh_GetIntSetting(L"startupRetryDelay");
-    g_settings.startupRetryDelay = static_cast<DWORD>(
-        std::clamp(startupRetryDelay, 0, 60000));
-
-    int startupRetryBackoff =
-        Wh_GetIntSetting(L"startupRetryBackoff");
-    if (startupRetryBackoff <= 0) {
-        startupRetryBackoff = 2;
-    }
-    g_settings.startupRetryBackoff =
-        std::clamp(startupRetryBackoff, 1, 10);
-
     // Wh_GetIntSetting returns 0 for a missing setting.
     // Positions are therefore deliberately user-facing 1-based values.
     constexpr int kMaxSeparators = 64;
@@ -604,16 +564,12 @@ static bool LoadSettings() {
     }
 
     Wh_Log(
-        L"[SETTINGS] prefix='%s' separators=%zu widthMode=%s "
-        L"startupAttempts=%d retryDelay=%u retryBackoff=%d",
+        L"[SETTINGS] prefix='%s' separators=%zu widthMode=%s",
         g_settings.identifierPrefix.c_str(),
         g_settings.separators.size(),
         g_settings.maxWidthCompatibilityMode
             ? L"MaxWidthCompatibility"
-            : L"NativeExtent",
-        g_settings.startupRetryAttempts,
-        g_settings.startupRetryDelay,
-        g_settings.startupRetryBackoff);
+            : L"NativeExtent");
 
     for (const auto& separator : g_settings.separators) {
         Wh_Log(
@@ -1288,9 +1244,8 @@ static void DisableSeparatorDragging(
 
 // Modern WinUI taskbar context-menu paths.
 //
-// Both hooks are retained because the runtime probe showed that a separator
-// right-click reaches both handlers on the current build. They are filtered
-// independently and neither touches generic pointer input.
+// These hooks cover the context-request routes seen across Taskbar.View builds.
+// They are filtered independently and don't touch generic pointer input.
 using TaskListButton_OnContextRequested_t =
     void(WINAPI*)(
         void* pThis,
@@ -1340,6 +1295,39 @@ static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
     }
 
     g_taskListButtonHandlersHandleContextRequestedOriginal(
+        sender,
+        args);
+}
+
+using TaskbarResources_OnTaskListButtonContextRequested_t =
+    void(WINAPI*)(
+        void* pThis,
+        winrt::Windows::UI::Xaml::UIElement const& sender,
+        winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args);
+
+static TaskbarResources_OnTaskListButtonContextRequested_t
+    g_taskbarResourcesOnTaskListButtonContextRequestedOriginal;
+
+static void WINAPI TaskbarResources_OnTaskListButtonContextRequested_Hook(
+    void* pThis,
+    winrt::Windows::UI::Xaml::UIElement const& sender,
+    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
+    if (!g_unloading) {
+        auto element =
+            sender.try_as<FrameworkElement>();
+
+        if (element &&
+            GetSeparatorForElement(element)) {
+            Wh_Log(
+                L"[INPUT] Suppressed separator TaskbarResources context request");
+            // Don't set args.Handled here. That path is crash-prone on some
+            // Taskbar.View builds; skipping the handler is sufficient.
+            return;
+        }
+    }
+
+    g_taskbarResourcesOnTaskListButtonContextRequestedOriginal(
+        pThis,
         sender,
         args);
 }
@@ -1439,6 +1427,14 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
         {
             {
+                LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarResources::OnTaskListButtonContextRequested(struct winrt::Windows::UI::Xaml::UIElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &))"
+            },
+            &g_taskbarResourcesOnTaskListButtonContextRequestedOriginal,
+            TaskbarResources_OnTaskListButtonContextRequested_Hook,
+            true,
+        },
+        {
+            {
                 LR"(public: double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetIconHeightInViewPixels(void))"
             },
             &g_taskbarConfigurationGetIconHeightInViewPixelsAddress,
@@ -1489,7 +1485,6 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t g_loadLibraryExWOriginal;
 
 static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll);
-static void TryStartBackendWorker();
 
 static HMODULE WINAPI LoadLibraryExW_Hook(
     LPCWSTR lpLibFileName,
@@ -1513,10 +1508,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
             lpLibFileName ? lpLibFileName : L"<unknown>");
 
         if (HookTaskbarViewDllSymbols(module)) {
-            if (Wh_ApplyHookOperations()) {
-                g_taskbarViewHooksReady = true;
-                TryStartBackendWorker();
-            } else {
+            if (!Wh_ApplyHookOperations()) {
                 Wh_Log(L"[STYLE] Wh_ApplyHookOperations failed");
             }
         }
@@ -1528,10 +1520,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
         Wh_Log(L"[INPUT] taskbar.dll loaded; installing interaction hooks");
 
         if (HookTaskbarInteractionSymbols(module)) {
-            if (Wh_ApplyHookOperations()) {
-                g_taskbarInteractionHooksReady = true;
-                TryStartBackendWorker();
-            } else {
+            if (!Wh_ApplyHookOperations()) {
                 Wh_Log(L"[INPUT] Wh_ApplyHookOperations failed");
             }
         }
@@ -1574,7 +1563,6 @@ static bool InitializeTaskbarStylingHooks() {
             return false;
         }
 
-        g_taskbarViewHooksReady = true;
         return true;
     }
 
@@ -2116,7 +2104,6 @@ static bool InitializeTaskbarInteractionHooks() {
             return false;
         }
 
-        g_taskbarInteractionHooksReady = true;
         return true;
     }
 
@@ -2314,10 +2301,13 @@ static bool CreateAndPinSeparators() {
         return true;
     }
 
-    DWORD retryDelay = g_settings.startupRetryDelay;
+    constexpr int kStartupAttempts = 5;
+    constexpr DWORD kInitialStartupRetryDelay = 250;
+    constexpr DWORD kStartupRetryBackoff = 2;
+    DWORD retryDelay = kInitialStartupRetryDelay;
 
     for (int attempt = 1;
-         attempt <= g_settings.startupRetryAttempts;
+         attempt <= kStartupAttempts;
          ++attempt) {
         if (IsBackendStopRequested()) {
             Wh_Log(L"[INIT] Separator startup cancelled");
@@ -2327,7 +2317,7 @@ static bool CreateAndPinSeparators() {
         Wh_Log(
             L"[INIT] Separator startup attempt %d/%d",
             attempt,
-            g_settings.startupRetryAttempts);
+            kStartupAttempts);
 
         IPinManagerInterop3* pinManager = nullptr;
         HRESULT hr = CreatePinManager(&pinManager);
@@ -2365,30 +2355,27 @@ static bool CreateAndPinSeparators() {
             return false;
         }
 
-        if (attempt < g_settings.startupRetryAttempts) {
+        if (attempt < kStartupAttempts) {
             Wh_Log(
                 L"[INIT] Separator startup attempt failed; "
                 L"retrying in %u ms",
                 retryDelay);
 
-            if (WaitForSingleObject(g_backendStopEvent, retryDelay) ==
+            if (WaitForSingleObject(
+                    g_backendStopEvent,
+                    retryDelay) ==
                 WAIT_OBJECT_0) {
                 Wh_Log(L"[INIT] Separator startup cancelled");
                 return false;
             }
 
-            ULONGLONG nextDelay =
-                static_cast<ULONGLONG>(retryDelay) *
-                g_settings.startupRetryBackoff;
-            retryDelay = nextDelay > 60000
-                ? 60000
-                : static_cast<DWORD>(nextDelay);
+            retryDelay *= kStartupRetryBackoff;
         }
     }
 
     Wh_Log(
         L"[INIT] Separator startup did not converge after %d attempts",
-        g_settings.startupRetryAttempts);
+        kStartupAttempts);
     return false;
 }
 
@@ -2603,20 +2590,6 @@ static bool StartBackendWorker() {
     return true;
 }
 
-static void TryStartBackendWorker() {
-    if (g_unloading ||
-        !g_taskbarViewHooksReady ||
-        !g_taskbarInteractionHooksReady ||
-        g_backendStarted.exchange(true)) {
-        return;
-    }
-
-    if (!StartBackendWorker()) {
-        g_backendStarted = false;
-        Wh_Log(L"[INIT] Failed to start separator backend worker");
-    }
-}
-
 static void StopBackendWorker() {
     if (g_backendStopEvent) {
         SetEvent(g_backendStopEvent);
@@ -2635,39 +2608,8 @@ static void StopBackendWorker() {
     }
 }
 
-static std::optional<DWORD> GetWindowsBuildNumber() {
-    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW* versionInfo);
-
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    auto rtlGetVersion = ntdll
-        ? reinterpret_cast<RtlGetVersion_t>(
-              GetProcAddress(ntdll, "RtlGetVersion"))
-        : nullptr;
-
-    if (!rtlGetVersion) {
-        return std::nullopt;
-    }
-
-    OSVERSIONINFOW versionInfo = {};
-    versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
-
-    if (rtlGetVersion(&versionInfo) < 0) {
-        return std::nullopt;
-    }
-
-    return versionInfo.dwBuildNumber;
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L"[INIT] Taskbar Icon Separators loading");
-
-    auto windowsBuild = GetWindowsBuildNumber();
-    if (!windowsBuild || *windowsBuild < 22000) {
-        Wh_Log(
-            L"[INIT] Unsupported Windows build: %u",
-            windowsBuild.value_or(0));
-        return FALSE;
-    }
 
     LoadSettings();
 
@@ -2677,19 +2619,19 @@ BOOL Wh_ModInit() {
 
     if (!InitializeTaskbarStylingHooks()) {
         Wh_Log(
-            L"[INIT] Failed to initialize TaskListButton styling hooks");
-        return FALSE;
+            L"[INIT] TaskListButton styling hooks unavailable; "
+            L"continuing without separator styling");
     }
 
     if (!InitializeTaskbarInteractionHooks()) {
         Wh_Log(
-            L"[INIT] Failed to initialize taskbar interaction hooks");
-        return FALSE;
+            L"[INIT] Taskbar interaction hooks unavailable; "
+            L"continuing without input suppression");
     }
 
     // Hook operations installed during Wh_ModInit are applied automatically
-    // before Wh_ModAfterInit. Create the actual pins there so their first
-    // UpdateVisualStates pass can already be intercepted.
+    // before Wh_ModAfterInit. Pin creation is deliberately independent of
+    // optional taskbar styling and interaction suppression.
     return TRUE;
 }
 
@@ -2702,9 +2644,7 @@ void Wh_ModAfterInit() {
         if (HMODULE module = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllHooked.exchange(true)) {
                 if (HookTaskbarViewDllSymbols(module)) {
-                    if (Wh_ApplyHookOperations()) {
-                        g_taskbarViewHooksReady = true;
-                    } else {
+                    if (!Wh_ApplyHookOperations()) {
                         Wh_Log(L"[STYLE] Wh_ApplyHookOperations failed");
                     }
                 }
@@ -2719,9 +2659,7 @@ void Wh_ModAfterInit() {
         if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
             if (!g_taskbarInteractionHooksInstalled.exchange(true)) {
                 if (HookTaskbarInteractionSymbols(module)) {
-                    if (Wh_ApplyHookOperations()) {
-                        g_taskbarInteractionHooksReady = true;
-                    } else {
+                    if (!Wh_ApplyHookOperations()) {
                         Wh_Log(L"[INPUT] Wh_ApplyHookOperations failed");
                     }
                 }
@@ -2729,7 +2667,9 @@ void Wh_ModAfterInit() {
         }
     }
 
-    TryStartBackendWorker();
+    if (!StartBackendWorker()) {
+        Wh_Log(L"[INIT] Failed to start separator backend worker");
+    }
 
     Wh_Log(L"[INIT] Taskbar Icon Separators initialized");
 }
