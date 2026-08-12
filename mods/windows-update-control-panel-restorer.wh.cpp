@@ -4753,7 +4753,8 @@ static void DestroySettingsComboboxImpl(bool currentThreadOnly) {
             continue;
         // Ask the owner thread to stop its timer, then remove the wrapper with
         // Windhawk's cross-thread-safe helper.
-        SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
+        SendMessageTimeoutW(hwnd, g_wmUiTeardown, 0, 0,
+                            SMTO_ABORTIFHUNG, 5000, nullptr);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, SettingsDirectUiSubclassProc);
     }
@@ -5347,6 +5348,15 @@ static void AppendFaqNavLinkIfMissing(NativeControlPanelNavLinks* navLinks) {
         DestroyUnpublishedNativeNavLink(faqLink, nullptr);
 }
 
+// NOTE: earlier revisions of this mod tried to cache and reuse a single
+// fabricated object across every page navigation to bound the per-navigation
+// allocation growth described above. That was reverted: if Explorer's own
+// per-page teardown ever releases/destroys the "ControlPanelNavLinks" DPA
+// natively (not only through this object's pinned refcount), a later page
+// reusing the same cached pointer would dereference freed memory. A fresh
+// allocation per navigation is slower to reclaim but cannot dangle across
+// page instances, so it is the safer default until that teardown path is
+// confirmed safe to share across pages.
 static NativeControlPanelNavLinks* CreateNativeControlPanelNavLinks() {
     HMODULE module = g_module.load(std::memory_order_acquire);
     if (!module) return nullptr;
@@ -6642,7 +6652,8 @@ static std::atomic<bool> g_realCheckDone{false};
 static std::atomic<long> g_realCheckHr{S_OK};
 static std::atomic<int> g_realCheckUpdateCount{0};
 static std::atomic<bool> g_realCheckPendingReboot{false};
-static std::optional<std::thread> g_wuSearchThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_wuSearchThread;
+static std::mutex g_wuSearchThreadMutex;
 
 static std::atomic<bool> g_checkingForUpdates{false};
 static std::atomic<ULONGLONG> g_checkStartedTick{0};
@@ -7537,9 +7548,12 @@ static void StartWuUpdateCheck(HWND host) {
     // Launch the real online search in the background. WuCheckDlgProc's
     // WM_TIMER waits for it to finish before showing a result, so the
     // outcome always reflects an actual query, not stale registry state.
-    if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
-    g_wuSearchThread.reset();
-    g_wuSearchThread.emplace([] {
+    {
+        std::lock_guard<std::mutex> lock(g_wuSearchThreadMutex);
+        if (g_stopping.load(std::memory_order_acquire)) return;
+        if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
+        g_wuSearchThread.reset();
+        g_wuSearchThread.emplace([] {
         try {
             RunRealWindowsUpdateSearch();
         } catch (...) {
@@ -7548,7 +7562,8 @@ static void StartWuUpdateCheck(HWND host) {
             g_realCheckDone.store(true, std::memory_order_release);
             Wh_Log(L"Windows Update Restorer: real update search threw; treating as failed");
         }
-    });
+        });
+    }
 
     HWND frame = host;
     if (!frame || !IsWindow(frame))
@@ -9569,7 +9584,7 @@ static DWORD WINAPI PayloadNoticeThreadProc(LPVOID param) {
         std::unique_ptr<PayloadNoticeParams> p(
             reinterpret_cast<PayloadNoticeParams*>(param));
         const int answer = MessageBoxW(nullptr, p->text.c_str(), p->caption.c_str(),
-                                       MB_YESNO | MB_ICONINFORMATION |
+                                       MB_YESNOCANCEL | MB_ICONINFORMATION |
                                            MB_SETFOREGROUND | MB_DEFBUTTON1);
         if (answer == IDYES) {
             // ms-settings: is present on every Windows 10/11 build and never
@@ -9626,11 +9641,25 @@ static void WaitForPayloadNoticeThread() {
     if (!thread) return;
     const DWORD tid = GetThreadId(thread);
     // Re-post in a loop: the message box may not exist yet on the first pass.
-    while (WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
+    // Bounded: give up after a few seconds rather than waiting indefinitely
+    // for the user to click a button, and fall back to forcing IDCANCEL so
+    // teardown can still make progress.
+    constexpr DWORD kGiveUpAfterMs = 5000;
+    DWORD waitedMs = 0;
+    while (waitedMs < kGiveUpAfterMs &&
+           WaitForSingleObject(thread, 50) == WAIT_TIMEOUT) {
+        waitedMs += 50;
         EnumThreadWindows(tid, [](HWND hwnd, LPARAM) -> BOOL {
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
             return TRUE;
         }, 0);
+    }
+    if (WaitForSingleObject(thread, 0) == WAIT_TIMEOUT) {
+        EnumThreadWindows(tid, [](HWND hwnd, LPARAM) -> BOOL {
+            PostMessageW(hwnd, WM_COMMAND, IDCANCEL, 0);
+            return TRUE;
+        }, 0);
+        WaitForSingleObject(thread, INFINITE);
     }
     CloseHandle(thread);
 }
@@ -10365,8 +10394,11 @@ void Wh_ModUninit() {
     // The real Windows Update search thread's code lives in this image too;
     // it is bounded by IUpdateSearcher's own timeouts, but wait for it here
     // so it can never run past unload.
-    if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
-    g_wuSearchThread.reset();
+    {
+        std::lock_guard<std::mutex> lock(g_wuSearchThreadMutex);
+        if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
+        g_wuSearchThread.reset();
+    }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_rebuildAbortEvent) { CloseHandle(g_rebuildAbortEvent); g_rebuildAbortEvent = nullptr; }
     delete g_dllPath.exchange(nullptr);
