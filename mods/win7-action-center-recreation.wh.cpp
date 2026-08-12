@@ -482,7 +482,6 @@ static BYTE B64Val(WCHAR c) {
 }
 
 
-// Helper to load GDI+ Bitmap directly from Base64 PNG string, bypassing HICON
 static void ShutdownGdiPlus() {
     // Dispose cached GDI+ bitmaps BEFORE shutting down the runtime
     if (g_pBmpFlyoutGood) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutGood); g_pBmpFlyoutGood = NULL; }
@@ -491,6 +490,8 @@ static void ShutdownGdiPlus() {
     if (g_pStreamFlyoutWarning) { g_pStreamFlyoutWarning->Release(); g_pStreamFlyoutWarning = NULL; }
     if (g_pBmpFlyoutAlert) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutAlert); g_pBmpFlyoutAlert = NULL; }
     if (g_pStreamFlyoutAlert) { g_pStreamFlyoutAlert->Release(); g_pStreamFlyoutAlert = NULL; }
+    if (g_pBmpShield) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield); g_pBmpShield = NULL; }
+    if (g_pStreamShield) { g_pStreamShield->Release(); g_pStreamShield = NULL; }
 
     // Shutdown GDI+ runtime
     if (g_hGdiPlus) {
@@ -519,9 +520,7 @@ static void ShutdownGdiPlus() {
     pGdipCreateBitmapFromStream = NULL;
     pGdipCreateHICON = NULL;
     pGdiplusShutdown = NULL;
-
 }
-
 
 // ============================================================================
 // RAII Guard Classes
