@@ -44,7 +44,7 @@ If you'd like to see other features or have suggestions, feel free to open an is
 /*
 - browser1: "brave.exe"
   $name: Priority 1 Browser (Highest)
-  $description: Ideally your default browser — but any browser works. Links route to the highest-priority one that's running.
+  $description: Executable name (e.g. brave.exe) or full path for portable installs (e.g. C:\\Browsers\\firefox.exe).
 - browser2: "firefox.exe"
   $name: Priority 2 Browser
   $description: Second choice browser if Priority 1 is not running. Leave blank to skip.
@@ -101,6 +101,29 @@ std::wstring TrimString(const std::wstring& str) {
     return str.substr(first, (last - first + 1));
 }
 
+// Extract just the filename from a browser setting (which may be a full path or just an exe name)
+static std::wstring GetExeName(const std::wstring& browserEntry) {
+    size_t pos = browserEntry.find_last_of(L"\\/");
+    return (pos != std::wstring::npos) ? browserEntry.substr(pos + 1) : browserEntry;
+}
+
+// Resolve full path of a browser. If the setting already contains a backslash,
+// treat it as a full path (supports portable installs). Otherwise consult App Paths.
+std::wstring GetBrowserFullPath(const std::wstring& exeName) {
+    if (exeName.find(L'\\') != std::wstring::npos)
+        return exeName;
+
+    std::wstring keyPath = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + exeName;
+    WCHAR path[MAX_PATH] = {};
+    DWORD size = sizeof(path);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, keyPath.c_str(), NULL, RRF_RT_REG_SZ, NULL, path, &size) == ERROR_SUCCESS)
+        return path;
+    size = sizeof(path);
+    if (RegGetValueW(HKEY_CURRENT_USER, keyPath.c_str(), NULL, RRF_RT_REG_SZ, NULL, path, &size) == ERROR_SUCCESS)
+        return path;
+    return L"";
+}
+
 // Finds the highest-priority browser that is actively open (has a visible window).
 // Background-only processes (e.g., Edge service workers) are ignored.
 // Uses a single EnumWindows pass to collect PIDs with qualifying windows.
@@ -149,7 +172,7 @@ std::wstring GetHighestPriorityRunningBrowser() {
     if (Process32FirstW(hSnap, &pe)) {
         do {
             for (size_t i = 0; i < browsers.size(); ++i) {
-                if (_wcsicmp(pe.szExeFile, browsers[i].c_str()) == 0) {
+                if (_wcsicmp(pe.szExeFile, GetExeName(browsers[i]).c_str()) == 0) {
                     browserPids[i].push_back(pe.th32ProcessID);
                     break;
                 }
@@ -267,21 +290,29 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, int nShow) {
     bool isLink = (_wcsnicmp(cleanUrl.c_str(), L"http://", 7) == 0 || _wcsnicmp(cleanUrl.c_str(), L"https://", 8) == 0);
     if (!isLink) return false;
 
-    std::wstring currentProc = GetCurrentProcessName();
+    // Reject URLs with characters that could break command-line quoting
+    if (cleanUrl.find_first_of(L"\" \t\r\n") != std::wstring::npos)
+        return false;
+
+    const auto& currentProc = GetCurrentProcessName();
     std::wstring targetBrowser = GetHighestPriorityRunningBrowser();
 
     if (!targetBrowser.empty()) {
         // Prevent circular routing inside the target browser
-        if (_wcsicmp(currentProc.c_str(), targetBrowser.c_str()) == 0) {
+        if (_wcsicmp(currentProc.c_str(), GetExeName(targetBrowser).c_str()) == 0) {
             return false;
         }
 
         Wh_Log(L"Routing link to: %s", targetBrowser.c_str());
 
+        std::wstring targetPath = GetBrowserFullPath(targetBrowser);
+        if (targetPath.empty()) return false;
+
+        std::wstring quotedUrl = L"\"" + cleanUrl + L"\"";
         SHELLEXECUTEINFOW sei = { sizeof(sei) };
         sei.fMask = SEE_MASK_FLAG_NO_UI;
-        sei.lpFile = targetBrowser.c_str();         
-        sei.lpParameters = cleanUrl.c_str(); 
+        sei.lpFile = targetPath.c_str();
+        sei.lpParameters = quotedUrl.c_str();
         sei.nShow = nShow;
         
         t_inHook = true;
@@ -317,18 +348,7 @@ ShellExecuteA_t ShellExecuteA_Original;
 using CreateProcessW_t = decltype(&CreateProcessW);
 CreateProcessW_t CreateProcessW_Original;
 
-// Resolve full path of a browser via Windows App Paths registry
-std::wstring GetBrowserFullPath(const std::wstring& exeName) {
-    std::wstring keyPath = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + exeName;
-    WCHAR path[MAX_PATH] = {};
-    DWORD size = sizeof(path);
-    if (RegGetValueW(HKEY_LOCAL_MACHINE, keyPath.c_str(), NULL, RRF_RT_REG_SZ, NULL, path, &size) == ERROR_SUCCESS)
-        return path;
-    size = sizeof(path);
-    if (RegGetValueW(HKEY_CURRENT_USER, keyPath.c_str(), NULL, RRF_RT_REG_SZ, NULL, path, &size) == ERROR_SUCCESS)
-        return path;
-    return L"";
-}
+
 
 HINSTANCE WINAPI ShellExecuteW_Hook(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShow) {
     if (RouteLinkIfNecessary(lpFile, lpOperation, nShow)) {
@@ -389,11 +409,11 @@ BOOL WINAPI CreateProcessW_Hook(
         // Skip if the calling process is itself a configured browser —
         // prevents catching internal browser URLs (cr.brave.com, telemetry)
         // and cascading redirects when the default browser starts up.
-        std::wstring currentProc = GetCurrentProcessName();
+        const auto& currentProc = GetCurrentProcessName();
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             for (const auto& b : g_priorityBrowsers) {
-                if (_wcsicmp(currentProc.c_str(), b.c_str()) == 0) {
+                if (_wcsicmp(currentProc.c_str(), GetExeName(b).c_str()) == 0) {
                     goto passthrough;
                 }
             }
@@ -421,7 +441,7 @@ BOOL WINAPI CreateProcessW_Hook(
             {
                 std::lock_guard<std::mutex> lock(g_settingsMutex);
                 for (const auto& b : g_priorityBrowsers) {
-                    if (_wcsicmp(targetExe.c_str(), b.c_str()) == 0) {
+                    if (_wcsicmp(targetExe.c_str(), GetExeName(b).c_str()) == 0) {
                         targetIsBrowser = true;
                         break;
                     }
@@ -449,7 +469,8 @@ BOOL WINAPI CreateProcessW_Hook(
 
                 std::wstring targetBrowser = GetHighestPriorityRunningBrowser();
                 if (!targetBrowser.empty() &&
-                    _wcsicmp(currentProc.c_str(), targetBrowser.c_str()) != 0) {
+                    _wcsicmp(currentProc.c_str(), GetExeName(targetBrowser).c_str()) != 0 &&
+                    _wcsicmp(targetExe.c_str(), GetExeName(targetBrowser).c_str()) != 0) {
 
                     std::wstring targetPath = GetBrowserFullPath(targetBrowser);
                     if (!targetPath.empty()) {
@@ -511,13 +532,12 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook, &ShellExecuteW_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteExA, ShellExecuteExA_Hook, &ShellExecuteExA_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteA, ShellExecuteA_Hook, &ShellExecuteA_Original);
-    WindhawkUtils::SetFunctionHook(CreateProcessW, CreateProcessW_Hook, &CreateProcessW_Original);
 
-    // Also hook kernelbase's CreateProcessW for apps that bypass kernel32
+    // Hook kernelbase's CreateProcessW — the single choke point all CreateProcess variants funnel through
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         void* pKB = (void*)GetProcAddress(hKernelBase, "CreateProcessW");
-        if (pKB && pKB != (void*)CreateProcessW)
+        if (pKB)
             Wh_SetFunctionHook(pKB, (void*)CreateProcessW_Hook, (void**)&CreateProcessW_Original);
     }
 
@@ -537,6 +557,16 @@ void Wh_ModUninit() {
     if (g_hSharedMem) CloseHandle(g_hSharedMem);
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    BypassMethod oldMethod = g_bypassMethod.load(std::memory_order_relaxed);
     LoadSettings();
+    BypassMethod newMethod = g_bypassMethod.load(std::memory_order_relaxed);
+
+    // Reload when crossing the None <-> non-None boundary
+    bool wasNone = (oldMethod == BypassMethod::None);
+    bool isNone = (newMethod == BypassMethod::None);
+    if (wasNone != isNone) {
+        *bReload = TRUE;
+    }
+    return TRUE;
 }
