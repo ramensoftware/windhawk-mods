@@ -2,7 +2,7 @@
 // @id              gnome-dynamic-desktops
 // @name            GNOME-like dynamic virtual desktops
 // @description     Makes the Windows 11 virtual desktop system behave like the GNOME desktop environment
-// @version         1.2
+// @version         1.3
 // @author          Giggig
 // @github          https://github.com/Giggigx
 // @include         windhawk.exe
@@ -93,6 +93,7 @@ IVirtualDesktopManager* g_pPublicDesktopManager = nullptr;
 
 DWORD g_threadId = 0;
 HANDLE g_hThread = nullptr;
+HANDLE g_hReadyEvent = nullptr;
 HWINEVENTHOOK g_hHookFg = nullptr;
 HWINEVENTHOOK g_hHookShowHide = nullptr;
 UINT_PTR g_debounceTimer = 0;
@@ -224,6 +225,7 @@ void EvaluateDesktops() {
     EnumCtx ctx;
     EnumWindows(CollectWindowDesktops, (LPARAM)&ctx);
 
+    // Protezione contro il fallimento totale di COM.
     if (ctx.candidates > 0 && ctx.windowDesktops.empty()) {
         Wh_Log(L"Could not map any window to a desktop, skipping evaluation to prevent data loss.");
         pDesktops->Release();
@@ -268,20 +270,13 @@ void EvaluateDesktops() {
     // RULE 1
     if (lastPopulatedIndex == -1) {
         Wh_Log(L"No populated desktops.");
-        int i = totalDesktops - 1;
         while (totalDesktops > (UINT)g_settings.initialDesktops) {
-            bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
-            if (g_settings.delayedDeletion && isCurrent) {
-                Wh_Log(L"Rule 1: Skipping deletion of in-use desktop.");
-                break;
-            }
             Wh_Log(L"Rule 1: Destroying excess desktop (remaining: %u).", totalDesktops - 1);
-            g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : 0]);
-            desktops[i]->Release(); 
+            g_pDesktopManager->RemoveDesktop(desktops.back(), desktops.front());
+            desktops.back()->Release(); 
             totalDesktops--;
             desktops.pop_back();
             desktopIds.pop_back();
-            i--;
         }
         while (totalDesktops < (UINT)g_settings.initialDesktops) {
             Wh_Log(L"Creating missing base desktop.");
@@ -303,13 +298,12 @@ void EvaluateDesktops() {
             if (newDesktop) newDesktop->Release();
         } else if (totalDesktops > (UINT)desiredTotal) {
             for (int i = totalDesktops - 1; i >= desiredTotal; --i) {
-                bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
-                if (g_settings.delayedDeletion && isCurrent) {
+                if (g_settings.delayedDeletion && memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0 && !triggeredBySwitch) {
                     Wh_Log(L"Skipping deletion of in-use desktop (Still on desktop).");
-                    break; 
+                    continue; 
                 }
                 Wh_Log(L"Destroying excess empty desktop at the end.");
-                g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : 0]);
+                g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i-1]);
             }
         }
     }
@@ -355,6 +349,10 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
 DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
+    MSG msg;
+    PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE); // forces queue creation
+    if (g_hReadyEvent) SetEvent(g_hReadyEvent);
+
     g_hHookFg = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_hHookShowHide = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
 
@@ -362,8 +360,11 @@ DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
     
     EvaluateDesktops();
 
-    MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
+        if (!msg.hwnd && msg.message == WM_APP) {
+            EvaluateDesktops();
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -385,8 +386,24 @@ BOOL WhTool_ModInit() {
     Wh_Log(L"=== INITIALIZATION ===");
     LoadSettings();
     
+    g_hReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hThread = CreateThread(NULL, 0, BackgroundEventThread, NULL, 0, &g_threadId);
-    return g_hThread != nullptr;
+    
+    if (!g_hThread) {
+        if (g_hReadyEvent) {
+            CloseHandle(g_hReadyEvent);
+            g_hReadyEvent = nullptr;
+        }
+        return FALSE;
+    }
+    
+    if (g_hReadyEvent) {
+        WaitForSingleObject(g_hReadyEvent, 5000);
+        CloseHandle(g_hReadyEvent);
+        g_hReadyEvent = nullptr;
+    }
+    
+    return TRUE;
 }
 
 void WhTool_ModUninit() {
@@ -403,7 +420,9 @@ void WhTool_ModUninit() {
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"=== SETTING CHANGED ===");
     LoadSettings();
-    EvaluateDesktops();
+    if (g_threadId) {
+        PostThreadMessage(g_threadId, WM_APP, 0, 0);
+    }
 }
 
 // -------------------------------------------------------------------------
