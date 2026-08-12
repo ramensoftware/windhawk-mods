@@ -2,7 +2,7 @@
 // @id              gnome-dynamic-desktops
 // @name            GNOME-like dynamic virtual desktops
 // @description     Makes the Windows 11 virtual desktop system behave like the GNOME desktop environment
-// @version         1.1
+// @version         1.2
 // @author          Giggig
 // @github          https://github.com/Giggigx
 // @include         windhawk.exe
@@ -38,10 +38,10 @@ Special thanks to [VD.ahk](https://github.com/FuPeiJiang/VD.ahk) for providing t
 
 // ==WindhawkModSettings==
 /*
-- two_initial_desktops: false
+- twoInitialDesktops: false
   $name: Start with two empty desktops
   $description: Start with two empty desktops instead of one, more akin to GNOME's behavior.
-- delayed_deletion: true
+- delayedDeletion: true
   $name: Don't delete empty desktop immediately
   $description: When a desktop gets empty, it waits for you to switch desktop before deleting it.
 */
@@ -53,14 +53,15 @@ Special thanks to [VD.ahk](https://github.com/FuPeiJiang/VD.ahk) for providing t
 #include <ObjectArray.h>
 #include <dwmapi.h>
 #include <vector>
+#include <algorithm>
 
 // -------------------------------------------------------------------------
 // GUID  (Windows 11 26100+)
 // -------------------------------------------------------------------------
-const GUID IID_IVirtualDesktop = { 0x3f07f4be, 0xb107, 0x441a, { 0xaf, 0x0f, 0x39, 0xd8, 0x25, 0x29, 0x07, 0x2c } };
-const GUID IID_IVirtualDesktopManagerInternal = { 0x53f5ca0b, 0x158f, 0x4124, { 0x90, 0x0c, 0x05, 0x71, 0x58, 0x06, 0x0b, 0x27 } };
 const GUID CLSID_ImmersiveShell = { 0xc2f03a33, 0x21f5, 0x47fa, { 0xb4, 0xbb, 0x15, 0x63, 0x62, 0xa2, 0xf2, 0x39 } };
 const GUID CLSID_VirtualDesktopManagerInternal = { 0xc5e0cdca, 0x7b6e, 0x41b2, { 0x9f, 0xc4, 0xd9, 0x39, 0x75, 0xcc, 0x46, 0x7b } };
+const GUID IID_IVirtualDesktop = { 0x3f07f4be, 0xb107, 0x441a, { 0xaf, 0x0f, 0x39, 0xd8, 0x25, 0x29, 0x07, 0x2c } };
+const GUID IID_IVirtualDesktopManagerInternal = { 0x53f5ca0b, 0x158f, 0x4124, { 0x90, 0x0c, 0x05, 0x71, 0x58, 0x06, 0x0b, 0x27 } };
 
 DECLARE_INTERFACE_IID_(IVirtualDesktop, IUnknown, "3f07f4be-b107-441a-af0f-39d82529072c") {
     STDMETHOD(Dummy3)() PURE;
@@ -68,9 +69,6 @@ DECLARE_INTERFACE_IID_(IVirtualDesktop, IUnknown, "3f07f4be-b107-441a-af0f-39d82
 };
 
 DECLARE_INTERFACE_IID_(IVirtualDesktopManagerInternal, IUnknown, "53f5ca0b-158f-4124-900c-057158060b27") {
-    STDMETHOD(QueryInterface)(REFIID riid, void** ppvObject) PURE;
-    STDMETHOD_(ULONG, AddRef)() PURE;
-    STDMETHOD_(ULONG, Release)() PURE;
     STDMETHOD(Dummy3)() PURE;
     STDMETHOD(MoveViewToDesktop)(IUnknown* pView, IVirtualDesktop* pDesktop) PURE;
     STDMETHOD(Dummy5)() PURE;
@@ -86,8 +84,8 @@ DECLARE_INTERFACE_IID_(IVirtualDesktopManagerInternal, IUnknown, "53f5ca0b-158f-
 
 // Global Variables
 struct ModSettings {
-    int initial_desktops;
-    bool delayed_deletion;
+    int initialDesktops;
+    bool delayedDeletion;
 } g_settings;
 
 IVirtualDesktopManagerInternal* g_pDesktopManager = nullptr;
@@ -101,27 +99,14 @@ UINT_PTR g_debounceTimer = 0;
 GUID g_lastActiveDesktop = {0};
 
 void LoadSettings() {
-    // Read the toggle value: true (1) or false (0)
-    bool use_two = Wh_GetIntSetting(L"two_initial_desktops") != 0;
+    bool useTwo = Wh_GetIntSetting(L"twoInitialDesktops") != 0;
+    g_settings.initialDesktops = useTwo ? 2 : 1; 
+    g_settings.delayedDeletion = Wh_GetIntSetting(L"delayedDeletion") != 0;
     
-    // Set 2 desktops if active, else 1
-    g_settings.initial_desktops = use_two ? 2 : 1; 
-    
-    g_settings.delayed_deletion = Wh_GetIntSetting(L"delayed_deletion") != 0;
-    
-    Wh_Log(L"initial_desktops: %d, delayed_deletion: %d", g_settings.initial_desktops, g_settings.delayed_deletion);
+    Wh_Log(L"twoInitialDesktops: %d, delayedDeletion: %d", g_settings.initialDesktops, g_settings.delayedDeletion);
 }
 
 void CleanupCOM() {
-    // Check if Explorer is still running. If not, skip Release calls to avoid hangs.
-    HWND hShell = GetShellWindow();
-    if (!hShell || !IsWindow(hShell)) {
-        Wh_Log(L"Explorer not available, skipping COM cleanup to avoid thread hang");
-        g_pDesktopManager = nullptr;
-        g_pPublicDesktopManager = nullptr;
-        return;
-    }
-
     if (g_pDesktopManager) { g_pDesktopManager->Release(); g_pDesktopManager = nullptr; }
     if (g_pPublicDesktopManager) { g_pPublicDesktopManager->Release(); g_pPublicDesktopManager = nullptr; }
 }
@@ -151,55 +136,68 @@ bool IsValidAppWindow(HWND hwnd) {
     
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_TOOLWINDOW) return false;
-    
     if (GetWindow(hwnd, GW_OWNER) != NULL) return false;
+
+    if (hwnd == GetShellWindow()) return false;
+
+    WCHAR className[64];
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+        if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
+            return false;
+        }
+    }
 
     int cloaked = 0;
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
         // 1 = DWM_CLOAKED_APP (phantom UWP background apps)
-        // 2 = DWM_CLOAKED_SHELL (legitimate windows on OTHER virtual desktops)
-        // We only skip the fake app ones, NOT the ones on other desktops!
         if (cloaked & 1) return false;
     }
 
     return true;
 }
 
-int CountWindowsInDesktop(GUID desktopId) {
-    if (!g_pPublicDesktopManager) return 0;
-    int count = 0;
-    HWND hwnd = GetTopWindow(NULL);
-    while (hwnd) {
-        if (IsValidAppWindow(hwnd)) {
-            GUID winDesktopId = {0};
-            if (SUCCEEDED(g_pPublicDesktopManager->GetWindowDesktopId(hwnd, &winDesktopId))) {
-                if (memcmp(&winDesktopId, &desktopId, sizeof(GUID)) == 0) {
-                    count++;
-                }
-            }
+struct EnumCtx {
+    std::vector<GUID> windowDesktops;
+    int candidates = 0;
+};
+
+BOOL CALLBACK CollectWindowDesktops(HWND hwnd, LPARAM lParam) {
+    auto* ctx = (EnumCtx*)lParam;
+    if (IsValidAppWindow(hwnd)) {
+        ctx->candidates++;
+        GUID id{};
+        if (SUCCEEDED(g_pPublicDesktopManager->GetWindowDesktopId(hwnd, &id))) {
+            ctx->windowDesktops.push_back(id);
         }
-        hwnd = GetNextWindow(hwnd, GW_HWNDNEXT);
     }
-    return count;
+    return TRUE;
 }
 
+struct ReentrancyGuard {
+    bool& flag;
+    ReentrancyGuard(bool& f) : flag(f) { flag = true; }
+    ~ReentrancyGuard() { flag = false; }
+};
 
 // Core Logic
 void EvaluateDesktops() {
+    static bool g_evaluating = false;
+    if (g_evaluating) return;
+    ReentrancyGuard guard(g_evaluating);
+
     if (!InitializeCOM()) return;
 
     IObjectArray* pDesktops = nullptr;
     HRESULT hr = g_pDesktopManager->GetDesktops(&pDesktops);
     
-    // Crash recovery
     if (FAILED(hr)) {
-        Wh_Log(L"COM call failed (0x%08X). Explorer might have restarted. Reinitializing...", hr);
+        Wh_Log(L"COM call failed (0x%08X). Explorer might have restarted. Reinitializing and skipping this cycle...", hr);
         CleanupCOM();
-        if (!InitializeCOM()) return;
-        hr = g_pDesktopManager->GetDesktops(&pDesktops);
+        InitializeCOM();
+        return;
     }
 
-    if (FAILED(hr) || !pDesktops) return;
+    if (!pDesktops) return;
 
     UINT totalDesktops = 0;
     pDesktops->GetCount(&totalDesktops);
@@ -223,22 +221,41 @@ void EvaluateDesktops() {
         Wh_Log(L"Desktop switched!");
     }
 
+    EnumCtx ctx;
+    EnumWindows(CollectWindowDesktops, (LPARAM)&ctx);
+
+    if (ctx.candidates > 0 && ctx.windowDesktops.empty()) {
+        Wh_Log(L"Could not map any window to a desktop, skipping evaluation to prevent data loss.");
+        pDesktops->Release();
+        return;
+    }
+
     std::vector<IVirtualDesktop*> desktops;
     std::vector<GUID> desktopIds;
     std::vector<int> windowCounts;
 
     for (UINT i = 0; i < totalDesktops; ++i) {
         IVirtualDesktop* pDesktop = nullptr;
-        pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop);
-        if (pDesktop) {
+        if (SUCCEEDED(pDesktops->GetAt(i, IID_IVirtualDesktop, (void**)&pDesktop)) && pDesktop) {
             GUID id = {0};
-            pDesktop->GetId(&id);
-            desktops.push_back(pDesktop);
-            desktopIds.push_back(id);
-            windowCounts.push_back(CountWindowsInDesktop(id));
+            if (SUCCEEDED(pDesktop->GetId(&id))) {
+                desktops.push_back(pDesktop);
+                desktopIds.push_back(id);
+                
+                int count = (int)std::count_if(ctx.windowDesktops.begin(), ctx.windowDesktops.end(), 
+                    [&id](const GUID& winId) { return memcmp(&winId, &id, sizeof(GUID)) == 0; });
+                windowCounts.push_back(count);
+            } else {
+                pDesktop->Release();
+            }
         }
     }
     pDesktops->Release();
+
+    totalDesktops = (UINT)desktops.size();
+    if (totalDesktops == 0) {
+        return;
+    }
 
     int lastPopulatedIndex = -1;
     for (int i = totalDesktops - 1; i >= 0; --i) {
@@ -252,11 +269,11 @@ void EvaluateDesktops() {
     if (lastPopulatedIndex == -1) {
         Wh_Log(L"No populated desktops.");
         int i = totalDesktops - 1;
-        while (totalDesktops > g_settings.initial_desktops) {
+        while (totalDesktops > (UINT)g_settings.initialDesktops) {
             bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
-            if (g_settings.delayed_deletion && isCurrent) {
+            if (g_settings.delayedDeletion && isCurrent) {
                 Wh_Log(L"Rule 1: Skipping deletion of in-use desktop.");
-                break; // Stop trimming if we reached the desktop we are currently viewing
+                break;
             }
             Wh_Log(L"Rule 1: Destroying excess desktop (remaining: %u).", totalDesktops - 1);
             g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : 0]);
@@ -266,7 +283,7 @@ void EvaluateDesktops() {
             desktopIds.pop_back();
             i--;
         }
-        while (totalDesktops < g_settings.initial_desktops) {
+        while (totalDesktops < (UINT)g_settings.initialDesktops) {
             Wh_Log(L"Creating missing base desktop.");
             IVirtualDesktop* newDesktop = nullptr;
             g_pDesktopManager->CreateDesktop(&newDesktop);
@@ -279,17 +296,17 @@ void EvaluateDesktops() {
     // RULE 2
     {
         int desiredTotal = lastPopulatedIndex + 2;
-        if (totalDesktops < desiredTotal) {
+        if (totalDesktops < (UINT)desiredTotal) {
             Wh_Log(L"Creating a new empty desktop on the right.");
             IVirtualDesktop* newDesktop = nullptr;
             g_pDesktopManager->CreateDesktop(&newDesktop);
             if (newDesktop) newDesktop->Release();
-        } else if (totalDesktops > desiredTotal) {
+        } else if (totalDesktops > (UINT)desiredTotal) {
             for (int i = totalDesktops - 1; i >= desiredTotal; --i) {
                 bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
-                if (g_settings.delayed_deletion && isCurrent) {
+                if (g_settings.delayedDeletion && isCurrent) {
                     Wh_Log(L"Skipping deletion of in-use desktop (Still on desktop).");
-                    continue; 
+                    break; 
                 }
                 Wh_Log(L"Destroying excess empty desktop at the end.");
                 g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : 0]);
@@ -301,7 +318,7 @@ void EvaluateDesktops() {
     for (int i = 0; i <= lastPopulatedIndex; ++i) {
         if (windowCounts[i] == 0) {
             bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
-            if (g_settings.delayed_deletion) {
+            if (g_settings.delayedDeletion) {
                 if (triggeredBySwitch && !isCurrent) {
                     Wh_Log(L"Destroying empty desktop in the middle (Switched to other desktop).");
                     g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : i + 1]);
@@ -331,16 +348,15 @@ VOID CALLBACK TimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
     if (idObject != OBJID_WINDOW || hwnd == NULL) return;
     
-    if (g_threadId) {
-        PostThreadMessage(g_threadId, WM_USER + 1, 0, 0);
-    }
+    if (g_debounceTimer) KillTimer(NULL, g_debounceTimer);
+    g_debounceTimer = SetTimer(NULL, 1, 150, TimerProc);
 }
 
 DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
     g_hHookFg = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    g_hHookShowHide = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    g_hHookShowHide = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
 
     Wh_Log(L"Listening background thread started");
     
@@ -348,12 +364,6 @@ DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == WM_USER + 1) {
-            if (g_debounceTimer) KillTimer(NULL, g_debounceTimer);
-            g_debounceTimer = SetTimer(NULL, 1, 150, TimerProc);
-        } else if (msg.message == WM_QUIT) {
-            break;
-        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -364,20 +374,19 @@ DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
     if (g_hHookShowHide) UnhookWinEvent(g_hHookShowHide);
 
     CleanupCOM();
-
     CoUninitialize();
     return 0;
 }
 
 // -------------------------------------------------------------------------
-// Tool Lifecycle (Renamed for tool-mod pattern)
+// Tool Lifecycle
 // -------------------------------------------------------------------------
 BOOL WhTool_ModInit() {
     Wh_Log(L"=== INITIALIZATION ===");
     LoadSettings();
     
     g_hThread = CreateThread(NULL, 0, BackgroundEventThread, NULL, 0, &g_threadId);
-    return TRUE;
+    return g_hThread != nullptr;
 }
 
 void WhTool_ModUninit() {
@@ -394,13 +403,11 @@ void WhTool_ModUninit() {
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"=== SETTING CHANGED ===");
     LoadSettings();
-    if (g_threadId) {
-        PostThreadMessage(g_threadId, WM_USER + 1, 0, 0);
-    }
+    EvaluateDesktops();
 }
 
 // -------------------------------------------------------------------------
-// Windhawk tool mod implementation
+// Launcher Boilerplate
 // -------------------------------------------------------------------------
 
 bool g_isToolModProcessLauncher;
