@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
-// @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
-// @version         0.5.13
+// @description     Create tracked icon separators with configurable padding on the taskbar.
+// @version         0.5.14
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -12,56 +12,50 @@
 
 // ==WindhawkModReadme==
 /*
-Creates tracked icon seperators with custom padding on the Taskbar. 
+# Taskbar Icon Separators
 
-(Yes, I know there is a mod that does this. However! Our implementation here is vastly different.)
+Create tracked icon separators with configurable padding on the taskbar.
 
-This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. All separators are safely removed on unload. 
+![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP.png)
+_Example for creating separators on the taskbar_
+
+Another mod offers similar functionality, but this implementation takes a different approach.
+
+This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. All separators are removed on unload. 
 
 As an additional bonus, we achieve separator tracking with zero manual tracking code. 
 
-# P.S. This mod supports Windows 11 only.
+Windows 11 only.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - identifierPrefix: WindhawkSeparator-8F31A7D2
-  $name: Separator identifier
+  $name: Separator Identifier
   $description: >-
-    File/display-name prefix for generated separator shortcuts. Unsupported
-    filename/regex characters are replaced with underscores.
+    Prefix for generated separator shortcuts. (Invalid characters are replaced with underscores.)
 - maxWidthCompatibilityMode: false
-  $name: MaxWidth compatibility mode
+  $name: Taskbar Icon Size Compatibility Mode
   $description: >-
-    Compatibility mode for Taskbar height and icon size / TaskbarIconSize.
-    Leave disabled normally. Enable this if the normal separator width mode
-    causes Explorer or taskbar crashes when used with that mod. MaxWidth mode
-    leaves native taskbar button extents untouched, but it cannot distinguish
-    normal and small icon modes: Width is used for both and Small width is
-    ignored. Changing this setting reloads the mod and recreates the separator
-    buttons cleanly.
+    Only normal icon sizes take effect with this option enabled. 
+
+    Compatibility mode for Taskbar height and icon size. 
+    Sets MaxWidth property while keeping native taskbar icon sizes untouched to avoid collision. 
+    
+    Enable this if you observe crashes when used with that mod. 
 - separators:
-    - - index: 5
-        $name: Position
-        $description: 1 = first pinned taskbar position.
-      - width: 14
-        $name: Width
-        $description: Width for the normal taskbar icon mode. In MaxWidth compatibility mode, this width is used for both modes.
+    - - index: 1
+        $name: Final Position
+        $description: 1 = first pinned taskbar position. Right after Search / Taskview. 
+      - width: 20
+        $name: Normal Width
+        $description: Width for normal taskbar icon mode. 
       - widthSmall: 10
         $name: Small width
-        $description: Width for the small taskbar icon mode. Ignored in MaxWidth compatibility mode.
-    - - index: 10
-        $name: Position
-        $description: 1 = first pinned taskbar position.
-      - width: 14
-        $name: Width
-        $description: Width for the normal taskbar icon mode. In MaxWidth compatibility mode, this width is used for both modes.
-      - widthSmall: 10
-        $name: Small width
-        $description: Width for the small taskbar icon mode. Ignored in MaxWidth compatibility mode.
+        $description: Width for small taskbar icon mode. 
   $name: Separators
-  $description: Add or remove entries to control how many separators are created.
+  $description: Each new entry correspond to a new separator being created.
 */
 // ==/WindhawkModSettings==
 
