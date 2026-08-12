@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id              taskbar-separators-prototype
-// @name            Taskbar Separators - Prototype
+// @id              taskbar-icon-separators
+// @name            Taskbar Icon Separators
 // @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
-// @version         0.5.4
+// @version         0.5.6
 // @author          meteoni
+// @github          https://github.com/Meteony
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi
@@ -220,12 +221,15 @@ static Settings g_settings;
 static std::wstring g_storagePath;
 static std::wstring g_iconPath;
 
-static std::atomic<bool> g_taskbarViewDllHooked;
-static std::atomic<bool> g_taskbarInteractionHooksInstalled;
-static std::atomic<bool> g_loadLibraryWatcherInstalled;
-static std::atomic<bool> g_unloading;
-static HANDLE g_backendThread;
-static HANDLE g_backendStopEvent;
+static std::atomic<bool> g_taskbarViewDllHooked = false;
+static std::atomic<bool> g_taskbarViewHooksReady = false;
+static std::atomic<bool> g_taskbarInteractionHooksInstalled = false;
+static std::atomic<bool> g_taskbarInteractionHooksReady = false;
+static std::atomic<bool> g_loadLibraryWatcherInstalled = false;
+static std::atomic<bool> g_backendStarted = false;
+static std::atomic<bool> g_unloading = false;
+static HANDLE g_backendThread = nullptr;
+static HANDLE g_backendStopEvent = nullptr;
 
 // Internal AppUserModelID namespace. Kept independent from the user-visible
 // filename prefix so user changes don't accidentally create invalid AppIDs.
@@ -1302,6 +1306,7 @@ static void WINAPI TaskListButton_OnContextRequested_Hook(
     winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
     if (!g_unloading &&
         GetSeparatorForTaskListButton(pThis)) {
+        Wh_Log(L"[INPUT] Suppressed separator modern context request");
         return;
     }
 
@@ -1328,6 +1333,8 @@ static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
 
         if (element &&
             GetSeparatorForElement(element)) {
+            Wh_Log(
+                L"[INPUT] Suppressed separator context-request handler");
             return;
         }
     }
@@ -1482,6 +1489,7 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t g_loadLibraryExWOriginal;
 
 static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll);
+static void TryStartBackendWorker();
 
 static HMODULE WINAPI LoadLibraryExW_Hook(
     LPCWSTR lpLibFileName,
@@ -1493,7 +1501,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
             hFile,
             dwFlags);
 
-    if (!module) {
+    if (!module || g_unloading) {
         return module;
     }
 
@@ -1505,9 +1513,12 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
             lpLibFileName ? lpLibFileName : L"<unknown>");
 
         if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-        } else {
-            g_taskbarViewDllHooked = false;
+            if (Wh_ApplyHookOperations()) {
+                g_taskbarViewHooksReady = true;
+                TryStartBackendWorker();
+            } else {
+                Wh_Log(L"[STYLE] Wh_ApplyHookOperations failed");
+            }
         }
     }
 
@@ -1517,9 +1528,12 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
         Wh_Log(L"[INPUT] taskbar.dll loaded; installing interaction hooks");
 
         if (HookTaskbarInteractionSymbols(module)) {
-            Wh_ApplyHookOperations();
-        } else {
-            g_taskbarInteractionHooksInstalled = false;
+            if (Wh_ApplyHookOperations()) {
+                g_taskbarInteractionHooksReady = true;
+                TryStartBackendWorker();
+            } else {
+                Wh_Log(L"[INPUT] Wh_ApplyHookOperations failed");
+            }
         }
     }
 
@@ -1556,12 +1570,11 @@ static bool InstallLoadLibraryWatcher() {
 static bool InitializeTaskbarStylingHooks() {
     if (HMODULE module = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllHooked = true;
-
         if (!HookTaskbarViewDllSymbols(module)) {
-            g_taskbarViewDllHooked = false;
             return false;
         }
 
+        g_taskbarViewHooksReady = true;
         return true;
     }
 
@@ -1728,6 +1741,7 @@ static void WINAPI TaskListWnd_OnContextMenu_Hook(
     void* taskItem) {
     if (!g_unloading &&
         IsSeparatorTaskGroup(taskGroup)) {
+        Wh_Log(L"[INPUT] Suppressed separator legacy context menu");
         return;
     }
 
@@ -2098,12 +2112,11 @@ static bool PrepareSeparatorFiles() {
 static bool InitializeTaskbarInteractionHooks() {
     if (HMODULE taskbarDll = GetModuleHandleW(L"taskbar.dll")) {
         g_taskbarInteractionHooksInstalled = true;
-
         if (!HookTaskbarInteractionSymbols(taskbarDll)) {
-            g_taskbarInteractionHooksInstalled = false;
             return false;
         }
 
+        g_taskbarInteractionHooksReady = true;
         return true;
     }
 
@@ -2413,19 +2426,35 @@ static bool UnpinAndDeleteSeparators() {
         hr = GetPidlForPath(refreshShortcutPath, &refreshPidl);
 
         if (SUCCEEDED(hr) && refreshPidl) {
-            Wh_Log(L"[CLEANUP] Unpin transient refresh item");
-            HRESULT unpinHr =
-                pinManager->UnpinTaskbarItem(
+            // File existence alone doesn't prove whether an earlier pulse got
+            // as far as pinning. First ensure the stable helper identity is
+            // pinned, then unpin it from a known state.
+            Wh_Log(L"[CLEANUP] Ensure transient refresh item is pinned");
+            HRESULT pinHr =
+                pinManager->PinItemFromTrustedCaller(
                     refreshPidl,
-                    PMC_JUMPVIEWBROKER);
+                    PMC_TASKBANDPIN);
 
             Wh_Log(
-                L"[CLEANUP] Refresh UnpinTaskbarItem -> hr=0x%08X",
-                static_cast<unsigned int>(unpinHr));
+                L"[CLEANUP] Refresh PinItemFromTrustedCaller -> hr=0x%08X",
+                static_cast<unsigned int>(pinHr));
+
+            HRESULT unpinHr = E_FAIL;
+            if (SUCCEEDED(pinHr)) {
+                Wh_Log(L"[CLEANUP] Unpin transient refresh item");
+                unpinHr =
+                    pinManager->UnpinTaskbarItem(
+                        refreshPidl,
+                        PMC_JUMPVIEWBROKER);
+
+                Wh_Log(
+                    L"[CLEANUP] Refresh UnpinTaskbarItem -> hr=0x%08X",
+                    static_cast<unsigned int>(unpinHr));
+            }
 
             CoTaskMemFree(refreshPidl);
 
-            if (SUCCEEDED(unpinHr)) {
+            if (SUCCEEDED(pinHr) && SUCCEEDED(unpinHr)) {
                 if (!DeleteFileIfPresent(refreshShortcutPath)) {
                     allUnpinned = false;
                 }
@@ -2530,7 +2559,7 @@ static DWORD WINAPI BackendThreadProc(void*) {
 
     if (!success && !IsBackendStopRequested()) {
         Wh_Log(
-            L"[INIT] One or more prototype operations failed; "
+            L"[INIT] One or more separator operations failed; "
             L"mod remains loaded so unload can still clean up");
     }
 
@@ -2574,6 +2603,20 @@ static bool StartBackendWorker() {
     return true;
 }
 
+static void TryStartBackendWorker() {
+    if (g_unloading ||
+        !g_taskbarViewHooksReady ||
+        !g_taskbarInteractionHooksReady ||
+        g_backendStarted.exchange(true)) {
+        return;
+    }
+
+    if (!StartBackendWorker()) {
+        g_backendStarted = false;
+        Wh_Log(L"[INIT] Failed to start separator backend worker");
+    }
+}
+
 static void StopBackendWorker() {
     if (g_backendStopEvent) {
         SetEvent(g_backendStopEvent);
@@ -2592,8 +2635,39 @@ static void StopBackendWorker() {
     }
 }
 
+static std::optional<DWORD> GetWindowsBuildNumber() {
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW* versionInfo);
+
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto rtlGetVersion = ntdll
+        ? reinterpret_cast<RtlGetVersion_t>(
+              GetProcAddress(ntdll, "RtlGetVersion"))
+        : nullptr;
+
+    if (!rtlGetVersion) {
+        return std::nullopt;
+    }
+
+    OSVERSIONINFOW versionInfo = {};
+    versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
+
+    if (rtlGetVersion(&versionInfo) < 0) {
+        return std::nullopt;
+    }
+
+    return versionInfo.dwBuildNumber;
+}
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"[INIT] Taskbar separator prototype MaxWidth test loading");
+    Wh_Log(L"[INIT] Taskbar Icon Separators loading");
+
+    auto windowsBuild = GetWindowsBuildNumber();
+    if (!windowsBuild || *windowsBuild < 22000) {
+        Wh_Log(
+            L"[INIT] Unsupported Windows build: %u",
+            windowsBuild.value_or(0));
+        return FALSE;
+    }
 
     LoadSettings();
 
@@ -2628,9 +2702,11 @@ void Wh_ModAfterInit() {
         if (HMODULE module = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllHooked.exchange(true)) {
                 if (HookTaskbarViewDllSymbols(module)) {
-                    Wh_ApplyHookOperations();
-                } else {
-                    g_taskbarViewDllHooked = false;
+                    if (Wh_ApplyHookOperations()) {
+                        g_taskbarViewHooksReady = true;
+                    } else {
+                        Wh_Log(L"[STYLE] Wh_ApplyHookOperations failed");
+                    }
                 }
             }
         }
@@ -2643,20 +2719,19 @@ void Wh_ModAfterInit() {
         if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
             if (!g_taskbarInteractionHooksInstalled.exchange(true)) {
                 if (HookTaskbarInteractionSymbols(module)) {
-                    Wh_ApplyHookOperations();
-                } else {
-                    g_taskbarInteractionHooksInstalled = false;
+                    if (Wh_ApplyHookOperations()) {
+                        g_taskbarInteractionHooksReady = true;
+                    } else {
+                        Wh_Log(L"[INPUT] Wh_ApplyHookOperations failed");
+                    }
                 }
             }
         }
     }
 
-    if (!StartBackendWorker()) {
-        Wh_Log(
-            L"[INIT] Failed to start separator backend worker");
-    }
+    TryStartBackendWorker();
 
-    Wh_Log(L"[INIT] Taskbar separator prototype loaded");
+    Wh_Log(L"[INIT] Taskbar Icon Separators initialized");
 }
 
 void Wh_ModBeforeUninit() {
@@ -2674,9 +2749,10 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"[UNINIT] Taskbar separator prototype unloading");
+    Wh_Log(L"[UNINIT] Taskbar Icon Separators unloading");
 
     // Defensive in case an older Windhawk build skips Wh_ModBeforeUninit.
+    g_unloading = true;
     StopBackendWorker();
 
     HRESULT hrInit =
@@ -2705,7 +2781,7 @@ void Wh_ModUninit() {
         CoUninitialize();
     }
 
-    Wh_Log(L"[UNINIT] Taskbar separator prototype unloaded");
+    Wh_Log(L"[UNINIT] Taskbar Icon Separators unloaded");
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
