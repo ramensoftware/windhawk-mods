@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-count-badges
 // @name            Taskbar Count Badges
-// @description     Show customizable window-count badges or vertical dots on Windows 11 taskbar.
+// @description     Show customizable per-taskbar-button window counts as badges or vertical dots on Windows 11.
 // @version         1.0.0
 // @author          digART
 // @github          https://github.com/digart11
@@ -17,9 +17,10 @@
 // the Free Software Foundation, either version 3 of the License, or
 // any later version.
 //
-// Taskbar hook, AppResolver, and taskbar XAML/UI-thread infrastructure include
-// techniques adapted from Windhawk mods by Michael Maltsev (m417z), including
-// Taskbar Labels for Windows 11 and Taskbar Tray Show on Hover.
+// Taskbar hook and taskbar XAML/UI-thread infrastructure include techniques
+// adapted from Windhawk mods by Michael Maltsev (m417z), including
+// Taskbar Labels for Windows 11, Taskbar Button Scroll, and Taskbar Tray Show
+// on Hover.
 
 
 
@@ -27,10 +28,10 @@
 /*
 # Taskbar Count Badges
 
-See how many windows are open for each app directly on the Windows 11 taskbar.
+See how many windows are represented by each app button on the Windows 11 taskbar.
 
-Taskbar Count Badges adds a small customizable indicator to taskbar app buttons
-when an app has multiple open windows. The indicator can be shown as either a
+Taskbar Count Badges adds a small customizable indicator when a taskbar app
+button represents multiple windows. The indicator can be shown as either a
 **number badge** or a compact stack of **vertical dots**.
 
 ## Screenshots
@@ -47,7 +48,7 @@ when an app has multiple open windows. The indicator can be shown as either a
 
 ### Number badge
 
-Shows the exact number of open windows for an app.
+Shows the number of windows represented by that taskbar button.
 
 The badge can be customized with:
 
@@ -69,8 +70,8 @@ Shows a minimal vertical stack of dots beside the app icon.
 
 ## Behavior
 
-By default, no indicator is shown for a single open window. The indicator appears
-when an app reaches two open windows.
+By default, no indicator is shown when a taskbar button represents a single
+window. The indicator appears when that button represents two or more windows.
 
 The minimum window count can be changed in the settings.
 
@@ -83,6 +84,11 @@ settings are applied live.
 - Supports x64 and ARM64 Windows
 - Works with multiple monitors and secondary Windows taskbars
 
+On multi-monitor systems, the count follows each individual taskbar button.
+Depending on the Windows multi-monitor taskbar configuration, the same app can
+therefore show different counts on different monitors. Moving a window between
+monitors can change the count shown on each taskbar.
+
 The mod is designed primarily for grouped/combined taskbar app buttons. When
 taskbar buttons are configured to stay uncombined, Windows can expose multiple
 buttons for the same app group, so the same app count may appear on more than
@@ -93,9 +99,9 @@ taskbar may not be compatible.
 
 ## Notes
 
-The mod counts real top-level application windows and maps them to their Windows
-application IDs. Windows shell infrastructure windows are excluded from the
-count.
+The mod uses the taskbar's own per-button grouping information instead of
+independently scanning all desktop windows. Counts therefore follow Windows
+taskbar grouping, including per-taskbar behavior on multi-monitor systems.
 
 The badge is visual only and doesn't change taskbar grouping, combining, window
 ordering, or application behavior.
@@ -212,36 +218,30 @@ ordering, or application behavior.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <winstring.h>
-#include <windhawk_utils.h>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.h>
 #include <winrt/base.h>
 
 #include <algorithm>
 #include <atomic>
-#include <cwctype>
 #include <cstdint>
 #include <limits>
-#include <mutex>
+#include <list>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -281,46 +281,36 @@ enum class BadgeFontWeight {
 };
 
 struct Settings {
-    DisplayStyle displayStyle =
-        DisplayStyle::Number;
+    DisplayStyle displayStyle = DisplayStyle::Number;
 
-    BadgeShape badgeShape =
-        BadgeShape::Circle;
+    BadgeShape badgeShape = BadgeShape::Circle;
 
-    BadgePosition badgePosition =
-        BadgePosition::TopRight;
+    BadgePosition badgePosition = BadgePosition::TopRight;
 
     int badgeOffsetX = -2;
     int badgeOffsetY = -2;
 
     int badgeSize = 16;
 
-    std::wstring badgeBackgroundColor =
-        L"#D90000";
+    std::wstring badgeBackgroundColor = L"#D90000";
 
-    std::wstring badgeBorderColor =
-        L"#FFFFFF";
+    std::wstring badgeBorderColor = L"#FFFFFF";
 
     int badgeBorderThickness = 0;
 
-    std::wstring textColor =
-        L"#FFFFFF";
+    std::wstring textColor = L"#FFFFFF";
 
-    std::wstring fontFamily =
-        L"Segoe UI";
+    std::wstring fontFamily = L"Segoe UI";
 
     int fontSize = 10;
 
-    BadgeFontWeight fontWeight =
-        BadgeFontWeight::SemiBold;
+    BadgeFontWeight fontWeight = BadgeFontWeight::SemiBold;
 
-    DotPosition dotPosition =
-        DotPosition::Right;
+    DotPosition dotPosition = DotPosition::Right;
 
     int dotSize = 4;
 
-    std::wstring dotColor =
-        L"#FFFFFF";
+    std::wstring dotColor = L"#FFFFFF";
 
     int minimumCount = 2;
     int maximumNumber = 99;
@@ -334,311 +324,201 @@ Settings g_settings;
 
 std::atomic<bool> g_taskbarViewHooked = false;
 std::atomic<bool> g_unloading = false;
-std::atomic<bool> g_recountQueued = false;
-std::mutex g_queueMutex;
-
-[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher
-    g_taskbarDispatcher{nullptr};
-
-bool g_countsInitialized = false;
+std::atomic<bool> g_settingsReloadPending = false;
+std::atomic<DWORD> g_taskbarThreadId = 0;
+uint64_t g_settingsGeneration = 0;
 
 struct TrackedButton {
-    void* identity;
-    std::wstring automationId;
+    void* identity = nullptr;
+    void* viewModel = nullptr;
     winrt::weak_ref<FrameworkElement> element;
+    unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
+    uint64_t lastSettingsGeneration = 0;
 };
 
-std::vector<TrackedButton> g_trackedButtons;
-
-// Always contains REAL HWND-derived counts.
-// ViewModelCount is only used as a change notification.
-std::unordered_map<std::wstring, unsigned int>
-    g_appCounts;
+std::list<TrackedButton> g_trackedButtons;
 
 // -----------------------------------------------------------------------------
-// taskbar.dll symbols used to access existing XamlRoot
+// Taskbar.View symbols used for direct group counts
+// -----------------------------------------------------------------------------
+
+using TryGetItemFromContainer_TaskListGroupViewModel_t =
+    void*(WINAPI*)(void** output, UIElement* container);
+TryGetItemFromContainer_TaskListGroupViewModel_t
+    TryGetItemFromContainer_TaskListGroupViewModel_Original = nullptr;
+
+using GetViewModelCount_t = HRESULT(WINAPI*)(void* pThis, unsigned int* count);
+GetViewModelCount_t GetViewModelCount_Original = nullptr;
+
+unsigned int WindowCountFromViewModelCount(unsigned int viewModelCount) {
+    // For the TaskListGroupViewModel returned for a taskbar button, Windows
+    // reports ViewModelCount one higher than the represented window count
+    // (1 window -> 2, 2 windows -> 3). Keep Windows' value untouched and
+    // normalize only the count displayed by this mod.
+    return viewModelCount > 0 ? viewModelCount - 1 : 0;
+}
+
+// -----------------------------------------------------------------------------
+// taskbar.dll symbols used to access primary and secondary XamlRoot
 // -----------------------------------------------------------------------------
 
 void* g_CTaskBand_ITaskListWndSite_vftable = nullptr;
+void* g_CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
-using CTaskBand_GetTaskbarHost_t =
-    void*(__cdecl*)(
-        void* pThis,
-        void** result);
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t g_CTaskBand_GetTaskbarHost = nullptr;
 
-CTaskBand_GetTaskbarHost_t
-    g_CTaskBand_GetTaskbarHost = nullptr;
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                          void** result);
+CSecondaryTaskBand_GetTaskbarHost_t g_CSecondaryTaskBand_GetTaskbarHost =
+    nullptr;
 
 void* g_TaskbarHost_FrameHeight = nullptr;
 
-using RefCount_Decref_t =
-    void(__cdecl*)(
-        void* pThis);
-
-RefCount_Decref_t
-    g_RefCount_Decref = nullptr;
-
-// -----------------------------------------------------------------------------
-// COM compatibility
-// -----------------------------------------------------------------------------
-
-#if __cplusplus < 202302L
-DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
-
-WINOLEAPI CoIncrementMTAUsage(
-    CO_MTA_USAGE_COOKIE* cookie);
-
-WINOLEAPI CoDecrementMTAUsage(
-    CO_MTA_USAGE_COOKIE cookie);
-#endif
+using RefCount_Decref_t = void(WINAPI*)(void* pThis);
+RefCount_Decref_t g_RefCount_Decref = nullptr;
 
 // -----------------------------------------------------------------------------
 // Setting helpers
 // -----------------------------------------------------------------------------
 
-std::wstring ReadStringSetting(
-    PCWSTR name) {
-    PCWSTR value =
-        Wh_GetStringSetting(name);
-
-    std::wstring result =
-        value ? value : L"";
-
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
-
-    return result;
+std::wstring ReadStringSetting(PCWSTR name) {
+    auto value = WindhawkUtils::StringSetting::make(name);
+    return value.get();
 }
 
 void LoadSettings() {
     // Display ---------------------------------------------------------------
 
-    std::wstring displayStyle =
-        ReadStringSetting(
-            L"Display.style");
+    std::wstring displayStyle = ReadStringSetting(L"Display.style");
 
     g_settings.displayStyle =
-        displayStyle == L"dots"
-            ? DisplayStyle::Dots
-            : DisplayStyle::Number;
+        displayStyle == L"dots" ? DisplayStyle::Dots : DisplayStyle::Number;
 
     // Badge -----------------------------------------------------------------
 
-    std::wstring shape =
-        ReadStringSetting(
-            L"Badge.shape");
+    std::wstring shape = ReadStringSetting(L"Badge.shape");
 
     if (shape == L"square") {
-        g_settings.badgeShape =
-            BadgeShape::Square;
+        g_settings.badgeShape = BadgeShape::Square;
     } else if (shape == L"rounded") {
-        g_settings.badgeShape =
-            BadgeShape::Rounded;
+        g_settings.badgeShape = BadgeShape::Rounded;
     } else {
-        g_settings.badgeShape =
-            BadgeShape::Circle;
+        g_settings.badgeShape = BadgeShape::Circle;
     }
 
-    std::wstring position =
-        ReadStringSetting(
-            L"Badge.position");
+    std::wstring position = ReadStringSetting(L"Badge.position");
 
     if (position == L"topLeft") {
-        g_settings.badgePosition =
-            BadgePosition::TopLeft;
+        g_settings.badgePosition = BadgePosition::TopLeft;
     } else if (position == L"topCenter") {
-        g_settings.badgePosition =
-            BadgePosition::TopCenter;
+        g_settings.badgePosition = BadgePosition::TopCenter;
     } else if (position == L"bottomLeft") {
-        g_settings.badgePosition =
-            BadgePosition::BottomLeft;
+        g_settings.badgePosition = BadgePosition::BottomLeft;
     } else if (position == L"bottomCenter") {
-        g_settings.badgePosition =
-            BadgePosition::BottomCenter;
+        g_settings.badgePosition = BadgePosition::BottomCenter;
     } else if (position == L"bottomRight") {
-        g_settings.badgePosition =
-            BadgePosition::BottomRight;
+        g_settings.badgePosition = BadgePosition::BottomRight;
     } else {
-        g_settings.badgePosition =
-            BadgePosition::TopRight;
+        g_settings.badgePosition = BadgePosition::TopRight;
     }
 
-    g_settings.badgeOffsetX =
-        Wh_GetIntSetting(
-            L"Badge.offsetX");
+    g_settings.badgeOffsetX = Wh_GetIntSetting(L"Badge.offsetX");
 
-    g_settings.badgeOffsetY =
-        Wh_GetIntSetting(
-            L"Badge.offsetY");
+    g_settings.badgeOffsetY = Wh_GetIntSetting(L"Badge.offsetY");
 
-    g_settings.badgeSize =
-        std::max(
-            4,
-            Wh_GetIntSetting(
-                L"Badge.size"));
-
+    g_settings.badgeSize = std::max(4, Wh_GetIntSetting(L"Badge.size"));
 
     g_settings.badgeBackgroundColor =
-        ReadStringSetting(
-            L"Badge.backgroundColor");
+        ReadStringSetting(L"Badge.backgroundColor");
 
-    g_settings.badgeBorderColor =
-        ReadStringSetting(
-            L"Badge.borderColor");
+    g_settings.badgeBorderColor = ReadStringSetting(L"Badge.borderColor");
 
     g_settings.badgeBorderThickness =
-        std::max(
-            0,
-            Wh_GetIntSetting(
-                L"Badge.borderThickness"));
+        std::max(0, Wh_GetIntSetting(L"Badge.borderThickness"));
 
     // Text ------------------------------------------------------------------
 
-    g_settings.textColor =
-        ReadStringSetting(
-            L"Text.color");
+    g_settings.textColor = ReadStringSetting(L"Text.color");
 
-    g_settings.fontFamily =
-        ReadStringSetting(
-            L"Text.fontFamily");
+    g_settings.fontFamily = ReadStringSetting(L"Text.fontFamily");
 
     if (g_settings.fontFamily.empty()) {
-        g_settings.fontFamily =
-            L"Segoe UI";
+        g_settings.fontFamily = L"Segoe UI";
     }
 
-    g_settings.fontSize =
-        std::max(
-            1,
-            Wh_GetIntSetting(
-                L"Text.fontSize"));
+    g_settings.fontSize = std::max(1, Wh_GetIntSetting(L"Text.fontSize"));
 
-    std::wstring fontWeight =
-        ReadStringSetting(
-            L"Text.fontWeight");
+    std::wstring fontWeight = ReadStringSetting(L"Text.fontWeight");
 
     if (fontWeight == L"bold") {
-        g_settings.fontWeight =
-            BadgeFontWeight::Bold;
+        g_settings.fontWeight = BadgeFontWeight::Bold;
     } else if (fontWeight == L"normal") {
-        g_settings.fontWeight =
-            BadgeFontWeight::Normal;
+        g_settings.fontWeight = BadgeFontWeight::Normal;
     } else {
-        g_settings.fontWeight =
-            BadgeFontWeight::SemiBold;
+        g_settings.fontWeight = BadgeFontWeight::SemiBold;
     }
 
     // Vertical dots ---------------------------------------------------------
 
-    std::wstring dotPosition =
-        ReadStringSetting(
-            L"VerticalDots.position");
+    std::wstring dotPosition = ReadStringSetting(L"VerticalDots.position");
 
     g_settings.dotPosition =
-        dotPosition == L"left"
-            ? DotPosition::Left
-            : DotPosition::Right;
+        dotPosition == L"left" ? DotPosition::Left : DotPosition::Right;
 
-    g_settings.dotSize =
-        std::max(
-            2,
-            Wh_GetIntSetting(
-                L"VerticalDots.size"));
+    g_settings.dotSize = std::max(2, Wh_GetIntSetting(L"VerticalDots.size"));
 
-    g_settings.dotColor =
-        ReadStringSetting(
-            L"VerticalDots.color");
+    g_settings.dotColor = ReadStringSetting(L"VerticalDots.color");
 
     // Behavior --------------------------------------------------------------
 
     g_settings.minimumCount =
-        std::max(
-            1,
-            Wh_GetIntSetting(
-                L"Behavior.minimumCount"));
+        std::max(1, Wh_GetIntSetting(L"Behavior.minimumCount"));
 
     g_settings.maximumNumber =
-        std::max(
-            1,
-            Wh_GetIntSetting(
-                L"Behavior.maximumNumber"));
-}
+        std::max(1, Wh_GetIntSetting(L"Behavior.maximumNumber"));
 
-// -----------------------------------------------------------------------------
-// Generic helpers
-// -----------------------------------------------------------------------------
-
-std::wstring NormalizeId(
-    std::wstring value) {
-    std::transform(
-        value.begin(),
-        value.end(),
-        value.begin(),
-        [](wchar_t c) {
-            return static_cast<wchar_t>(
-                std::towlower(c));
-        });
-
-    return value;
+    ++g_settingsGeneration;
 }
 
 // -----------------------------------------------------------------------------
 // Color parsing
 // -----------------------------------------------------------------------------
 
-bool ParseHexByte(
-    wchar_t high,
-    wchar_t low,
-    BYTE* result) {
-    auto getValue =
-        [](wchar_t c) -> int {
-            if (c >= L'0' &&
-                c <= L'9') {
-                return c - L'0';
-            }
+bool ParseHexByte(wchar_t high, wchar_t low, BYTE* result) {
+    auto getValue = [](wchar_t c) -> int {
+        if (c >= L'0' && c <= L'9') {
+            return c - L'0';
+        }
 
-            c =
-                static_cast<wchar_t>(
-                    std::towupper(c));
+        c = static_cast<wchar_t>(std::towupper(c));
 
-            if (c >= L'A' &&
-                c <= L'F') {
-                return c - L'A' + 10;
-            }
+        if (c >= L'A' && c <= L'F') {
+            return c - L'A' + 10;
+        }
 
-            return -1;
-        };
+        return -1;
+    };
 
-    int highValue =
-        getValue(high);
+    int highValue = getValue(high);
 
-    int lowValue =
-        getValue(low);
+    int lowValue = getValue(low);
 
-    if (highValue < 0 ||
-        lowValue < 0) {
+    if (highValue < 0 || lowValue < 0) {
         return false;
     }
 
-    *result =
-        static_cast<BYTE>(
-            highValue * 16 +
-            lowValue);
+    *result = static_cast<BYTE>(highValue * 16 + lowValue);
 
     return true;
 }
 
-winrt::Windows::UI::Color ParseColor(
-    const std::wstring& value,
-    winrt::Windows::UI::Color fallback) {
-    std::wstring text =
-        value;
+winrt::Windows::UI::Color ParseColor(const std::wstring& value,
+                                     winrt::Windows::UI::Color fallback) {
+    std::wstring text = value;
 
-    if (!text.empty() &&
-        text[0] == L'#') {
-        text.erase(
-            text.begin());
+    if (!text.empty() && text[0] == L'#') {
+        text.erase(text.begin());
     }
 
     BYTE a = 255;
@@ -647,37 +527,16 @@ winrt::Windows::UI::Color ParseColor(
     BYTE b = 0;
 
     if (text.length() == 6) {
-        if (!ParseHexByte(
-                text[0],
-                text[1],
-                &r) ||
-            !ParseHexByte(
-                text[2],
-                text[3],
-                &g) ||
-            !ParseHexByte(
-                text[4],
-                text[5],
-                &b)) {
+        if (!ParseHexByte(text[0], text[1], &r) ||
+            !ParseHexByte(text[2], text[3], &g) ||
+            !ParseHexByte(text[4], text[5], &b)) {
             return fallback;
         }
     } else if (text.length() == 8) {
-        if (!ParseHexByte(
-                text[0],
-                text[1],
-                &a) ||
-            !ParseHexByte(
-                text[2],
-                text[3],
-                &r) ||
-            !ParseHexByte(
-                text[4],
-                text[5],
-                &g) ||
-            !ParseHexByte(
-                text[6],
-                text[7],
-                &b)) {
+        if (!ParseHexByte(text[0], text[1], &a) ||
+            !ParseHexByte(text[2], text[3], &r) ||
+            !ParseHexByte(text[4], text[5], &g) ||
+            !ParseHexByte(text[6], text[7], &b)) {
             return fallback;
         }
     } else {
@@ -694,26 +553,19 @@ winrt::Windows::UI::Color ParseColor(
     return color;
 }
 
-Media::SolidColorBrush CreateBrush(
-    const std::wstring& value,
-    winrt::Windows::UI::Color fallback) {
-    return Media::SolidColorBrush(
-        ParseColor(
-            value,
-            fallback));
+Media::SolidColorBrush CreateBrush(const std::wstring& value,
+                                   winrt::Windows::UI::Color fallback) {
+    return Media::SolidColorBrush(ParseColor(value, fallback));
 }
 
 // -----------------------------------------------------------------------------
 // Position helpers
 // -----------------------------------------------------------------------------
 
-void ApplyNumberBadgePosition(
-    Controls::Border badge) {
-    HorizontalAlignment horizontal =
-        HorizontalAlignment::Right;
+void ApplyNumberBadgePosition(Controls::Border badge) {
+    HorizontalAlignment horizontal = HorizontalAlignment::Right;
 
-    VerticalAlignment vertical =
-        VerticalAlignment::Top;
+    VerticalAlignment vertical = VerticalAlignment::Top;
 
     switch (g_settings.badgePosition) {
         case BadgePosition::TopLeft:
@@ -752,48 +604,35 @@ void ApplyNumberBadgePosition(
     badge.Margin(Thickness{});
 
     auto transform =
-        badge.RenderTransform()
-            .try_as<Media::TranslateTransform>();
+        badge.RenderTransform().try_as<Media::TranslateTransform>();
 
     if (!transform) {
-        transform =
-            Media::TranslateTransform();
+        transform = Media::TranslateTransform();
 
         badge.RenderTransform(transform);
     }
 
-    transform.X(
-        static_cast<double>(
-            g_settings.badgeOffsetX));
+    transform.X(static_cast<double>(g_settings.badgeOffsetX));
 
-    transform.Y(
-        static_cast<double>(
-            g_settings.badgeOffsetY));
+    transform.Y(static_cast<double>(g_settings.badgeOffsetY));
 }
 
-void ApplyDotPosition(
-    Controls::Border badge) {
-    badge.VerticalAlignment(
-        VerticalAlignment::Center);
+void ApplyDotPosition(Controls::Border badge) {
+    badge.VerticalAlignment(VerticalAlignment::Center);
 
     badge.Margin(Thickness{});
 
-    if (g_settings.dotPosition ==
-        DotPosition::Left) {
-        badge.HorizontalAlignment(
-            HorizontalAlignment::Left);
+    if (g_settings.dotPosition == DotPosition::Left) {
+        badge.HorizontalAlignment(HorizontalAlignment::Left);
     } else {
-        badge.HorizontalAlignment(
-            HorizontalAlignment::Right);
+        badge.HorizontalAlignment(HorizontalAlignment::Right);
     }
 
     auto transform =
-        badge.RenderTransform()
-            .try_as<Media::TranslateTransform>();
+        badge.RenderTransform().try_as<Media::TranslateTransform>();
 
     if (!transform) {
-        transform =
-            Media::TranslateTransform();
+        transform = Media::TranslateTransform();
 
         badge.RenderTransform(transform);
     }
@@ -803,11 +642,7 @@ void ApplyDotPosition(
     // Moving them outside causes the taskbar XAML to clip them.
     //
     // 2 px gives a little separation from the panel edge.
-    transform.X(
-        g_settings.dotPosition ==
-                DotPosition::Left
-            ? 2.0
-            : -2.0);
+    transform.X(g_settings.dotPosition == DotPosition::Left ? 2.0 : -2.0);
 
     transform.Y(0.0);
 }
@@ -816,8 +651,7 @@ void ApplyDotPosition(
 // Font helper
 // -----------------------------------------------------------------------------
 
-winrt::Windows::UI::Text::FontWeight
-GetConfiguredFontWeight() {
+winrt::Windows::UI::Text::FontWeight GetConfiguredFontWeight() {
     uint16_t weight = 600;
 
     switch (g_settings.fontWeight) {
@@ -836,8 +670,7 @@ GetConfiguredFontWeight() {
 
     winrt::Windows::UI::Text::FontWeight result{};
 
-    result.Weight =
-        weight;
+    result.Weight = weight;
 
     return result;
 }
@@ -850,43 +683,29 @@ HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
 
     EnumWindows(
-        [](HWND hWnd,
-           LPARAM param) -> BOOL {
+        [](HWND hWnd, LPARAM param) -> BOOL {
             DWORD pid = 0;
             WCHAR className[64] = {};
 
-            GetWindowThreadProcessId(
-                hWnd,
-                &pid);
+            GetWindowThreadProcessId(hWnd, &pid);
 
-            if (pid !=
-                GetCurrentProcessId()) {
+            if (pid != GetCurrentProcessId()) {
                 return TRUE;
             }
 
-            if (!GetClassNameW(
-                    hWnd,
-                    className,
-                    ARRAYSIZE(
-                        className))) {
+            if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
                 return TRUE;
             }
 
-            if (_wcsicmp(
-                    className,
-                    L"Shell_TrayWnd") !=
-                0) {
+            if (_wcsicmp(className, L"Shell_TrayWnd") != 0) {
                 return TRUE;
             }
 
-            *reinterpret_cast<HWND*>(
-                param) =
-                hWnd;
+            *reinterpret_cast<HWND*>(param) = hWnd;
 
             return FALSE;
         },
-        reinterpret_cast<LPARAM>(
-            &result));
+        reinterpret_cast<LPARAM>(&result));
 
     return result;
 }
@@ -896,14 +715,10 @@ HWND FindCurrentProcessTaskbarWnd() {
 // -----------------------------------------------------------------------------
 
 HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module =
-        GetModuleHandleW(
-            L"Taskbar.View.dll");
+    HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
 
     if (!module) {
-        module =
-            GetModuleHandleW(
-                L"ExplorerExtensions.dll");
+        module = GetModuleHandleW(L"ExplorerExtensions.dll");
     }
 
     return module;
@@ -913,38 +728,22 @@ HMODULE GetTaskbarViewModuleHandle() {
 // XAML helpers
 // -----------------------------------------------------------------------------
 
-FrameworkElement FindChildByName(
-    FrameworkElement element,
-    PCWSTR name) {
-    int count =
-        Media::VisualTreeHelper::
-            GetChildrenCount(
-                element);
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
 
-    for (int i = 0;
-         i < count;
-         i++) {
-        auto child =
-            Media::VisualTreeHelper::
-                GetChild(
-                    element,
-                    i)
-                    .try_as<
-                        FrameworkElement>();
+    for (int i = 0; i < count; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
 
         if (!child) {
             continue;
         }
 
-        if (child.Name() ==
-            name) {
+        if (child.Name() == name) {
             return child;
         }
 
-        auto result =
-            FindChildByName(
-                child,
-                name);
+        auto result = FindChildByName(child, name);
 
         if (result) {
             return result;
@@ -958,97 +757,55 @@ FrameworkElement FindChildByName(
 // Badge text / dot content
 // -----------------------------------------------------------------------------
 
-std::wstring MakeNumberText(
-    unsigned int count) {
-    if (count >
-        static_cast<unsigned int>(
-            g_settings.maximumNumber)) {
-        return std::to_wstring(
-                   g_settings.maximumNumber) +
-               L"+";
+std::wstring MakeNumberText(unsigned int count) {
+    if (count > static_cast<unsigned int>(g_settings.maximumNumber)) {
+        return std::to_wstring(g_settings.maximumNumber) + L"+";
     }
 
-    return std::to_wstring(
-        count);
+    return std::to_wstring(count);
 }
 
-unsigned int GetVisibleDotCount(
-    unsigned int count) {
+unsigned int GetVisibleDotCount(unsigned int count) {
     // Five dots means five or more windows.
-    return std::min<unsigned int>(
-        count,
-        5);
+    return std::min<unsigned int>(count, 5);
 }
 
-void RebuildDots(
-    Controls::StackPanel dotStack,
-    unsigned int count) {
+void RebuildDots(Controls::StackPanel dotStack, unsigned int count) {
     dotStack.Children().Clear();
 
-    winrt::Windows::UI::Color
-        defaultDotColor{};
+    winrt::Windows::UI::Color defaultDotColor{};
 
     defaultDotColor.A = 255;
     defaultDotColor.R = 255;
     defaultDotColor.G = 255;
     defaultDotColor.B = 255;
 
-    auto brush =
-        CreateBrush(
-            g_settings.dotColor,
-            defaultDotColor);
+    auto brush = CreateBrush(g_settings.dotColor, defaultDotColor);
 
-    unsigned int dotCount =
-        GetVisibleDotCount(
-            count);
+    unsigned int dotCount = GetVisibleDotCount(count);
 
     constexpr double kDotSpacing = 2.0;
 
-    for (unsigned int i = 0;
-         i < dotCount;
-         i++) {
+    for (unsigned int i = 0; i < dotCount; i++) {
         Controls::Border dot;
 
-        dot.Width(
-            static_cast<double>(
-                g_settings.dotSize));
+        dot.Width(static_cast<double>(g_settings.dotSize));
 
-        dot.Height(
-            static_cast<double>(
-                g_settings.dotSize));
+        dot.Height(static_cast<double>(g_settings.dotSize));
 
-        double radius =
-            static_cast<double>(
-                g_settings.dotSize) /
-            2.0;
+        double radius = static_cast<double>(g_settings.dotSize) / 2.0;
 
-        dot.CornerRadius(
-            CornerRadius{
-                radius,
-                radius,
-                radius,
-                radius});
+        dot.CornerRadius(CornerRadius{radius, radius, radius, radius});
 
-        dot.Background(
-            brush);
+        dot.Background(brush);
 
-        double topMargin =
-            i == 0
-                ? 0.0
-                : kDotSpacing;
+        double topMargin = i == 0 ? 0.0 : kDotSpacing;
 
-        dot.Margin(
-            Thickness{
-                0,
-                topMargin,
-                0,
-                0});
+        dot.Margin(Thickness{0, topMargin, 0, 0});
 
-        dot.IsHitTestVisible(
-            false);
+        dot.IsHitTestVisible(false);
 
-        dotStack.Children().Append(
-            dot);
+        dotStack.Children().Append(dot);
     }
 }
 
@@ -1056,62 +813,38 @@ void RebuildDots(
 // Apply visual style
 // -----------------------------------------------------------------------------
 
-void ApplyBadgeVisualStyle(
-    Controls::Border badge,
-    unsigned int count) {
-    auto circleVisual =
-        FindChildByName(
-            badge,
-            L"WindhawkCircleVisual")
-            .try_as<
-                Shapes::Ellipse>();
+void ApplyBadgeVisualStyle(Controls::Border badge, unsigned int count) {
+    auto circleVisual = FindChildByName(badge, L"WindhawkCircleVisual")
+                            .try_as<Shapes::Ellipse>();
 
-    auto badgeVisual =
-        FindChildByName(
-            badge,
-            L"WindhawkBadgeVisual")
-            .try_as<
-                Controls::Border>();
+    auto badgeVisual = FindChildByName(badge, L"WindhawkBadgeVisual")
+                           .try_as<Controls::Border>();
 
-    auto text =
-        FindChildByName(
-            badge,
-            L"WindhawkCountText")
-            .try_as<
-                Controls::TextBlock>();
+    auto text = FindChildByName(badge, L"WindhawkCountText")
+                    .try_as<Controls::TextBlock>();
 
-    auto dotStack =
-        FindChildByName(
-            badge,
-            L"WindhawkDotStack")
-            .try_as<
-                Controls::StackPanel>();
+    auto dotStack = FindChildByName(badge, L"WindhawkDotStack")
+                        .try_as<Controls::StackPanel>();
 
-    if (!circleVisual ||
-        !badgeVisual ||
-        !text ||
-        !dotStack) {
+    if (!circleVisual || !badgeVisual || !text || !dotStack) {
         return;
     }
 
-    winrt::Windows::UI::Color
-        defaultBackground{};
+    winrt::Windows::UI::Color defaultBackground{};
 
     defaultBackground.A = 255;
     defaultBackground.R = 217;
     defaultBackground.G = 0;
     defaultBackground.B = 0;
 
-    winrt::Windows::UI::Color
-        defaultText{};
+    winrt::Windows::UI::Color defaultText{};
 
     defaultText.A = 255;
     defaultText.R = 255;
     defaultText.G = 255;
     defaultText.B = 255;
 
-    winrt::Windows::UI::Color
-        defaultBorder{};
+    winrt::Windows::UI::Color defaultBorder{};
 
     defaultBorder.A = 255;
     defaultBorder.R = 255;
@@ -1120,165 +853,104 @@ void ApplyBadgeVisualStyle(
 
     badge.IsHitTestVisible(false);
 
-    Controls::Canvas::SetZIndex(
-        badge,
-        100);
+    Controls::Canvas::SetZIndex(badge, 100);
 
     // ---------------------------------------------------------------------
     // NUMBER BADGE
     // ---------------------------------------------------------------------
 
-    if (g_settings.displayStyle ==
-        DisplayStyle::Number) {
-        ApplyNumberBadgePosition(
-            badge);
+    if (g_settings.displayStyle == DisplayStyle::Number) {
+        ApplyNumberBadgePosition(badge);
 
-        dotStack.Visibility(
-            Visibility::Collapsed);
+        dotStack.Visibility(Visibility::Collapsed);
 
-        text.Visibility(
-            Visibility::Visible);
+        text.Visibility(Visibility::Visible);
 
-        double size =
-            static_cast<double>(
-                g_settings.badgeSize);
+        double size = static_cast<double>(g_settings.badgeSize);
 
         badge.Width(size);
         badge.Height(size);
 
         auto backgroundBrush =
-            CreateBrush(
-                g_settings.badgeBackgroundColor,
-                defaultBackground);
+            CreateBrush(g_settings.badgeBackgroundColor, defaultBackground);
 
         auto borderBrush =
-            CreateBrush(
-                g_settings.badgeBorderColor,
-                defaultBorder);
+            CreateBrush(g_settings.badgeBorderColor, defaultBorder);
 
         double borderThickness =
-            static_cast<double>(
-                g_settings.badgeBorderThickness);
+            static_cast<double>(g_settings.badgeBorderThickness);
 
-        if (g_settings.badgeShape ==
-            BadgeShape::Circle) {
-            badgeVisual.Visibility(
-                Visibility::Collapsed);
+        if (g_settings.badgeShape == BadgeShape::Circle) {
+            badgeVisual.Visibility(Visibility::Collapsed);
 
-            circleVisual.Visibility(
-                Visibility::Visible);
+            circleVisual.Visibility(Visibility::Visible);
 
             circleVisual.Width(size);
             circleVisual.Height(size);
 
-            circleVisual.Fill(
-                backgroundBrush);
+            circleVisual.Fill(backgroundBrush);
 
             if (g_settings.badgeBorderThickness > 0) {
-                circleVisual.Stroke(
-                    borderBrush);
+                circleVisual.Stroke(borderBrush);
 
-                circleVisual.StrokeThickness(
-                    borderThickness);
+                circleVisual.StrokeThickness(borderThickness);
             } else {
-                circleVisual.Stroke(
-                    nullptr);
+                circleVisual.Stroke(nullptr);
 
-                circleVisual.StrokeThickness(
-                    0);
+                circleVisual.StrokeThickness(0);
             }
         } else {
-            circleVisual.Visibility(
-                Visibility::Collapsed);
+            circleVisual.Visibility(Visibility::Collapsed);
 
-            badgeVisual.Visibility(
-                Visibility::Visible);
+            badgeVisual.Visibility(Visibility::Visible);
 
             badgeVisual.Width(size);
             badgeVisual.Height(size);
 
-            badgeVisual.HorizontalAlignment(
-                HorizontalAlignment::Center);
+            badgeVisual.HorizontalAlignment(HorizontalAlignment::Center);
 
-            badgeVisual.VerticalAlignment(
-                VerticalAlignment::Center);
+            badgeVisual.VerticalAlignment(VerticalAlignment::Center);
 
             double cornerRadius =
-                g_settings.badgeShape ==
-                        BadgeShape::Rounded
-                    ? size / 4.0
-                    : 0.0;
+                g_settings.badgeShape == BadgeShape::Rounded ? size / 4.0 : 0.0;
 
-            badgeVisual.CornerRadius(
-                CornerRadius{
-                    cornerRadius,
-                    cornerRadius,
-                    cornerRadius,
-                    cornerRadius});
+            badgeVisual.CornerRadius(CornerRadius{cornerRadius, cornerRadius,
+                                                  cornerRadius, cornerRadius});
 
-            badgeVisual.Background(
-                backgroundBrush);
+            badgeVisual.Background(backgroundBrush);
 
             if (g_settings.badgeBorderThickness > 0) {
-                badgeVisual.BorderBrush(
-                    borderBrush);
+                badgeVisual.BorderBrush(borderBrush);
 
                 badgeVisual.BorderThickness(
-                    Thickness{
-                        borderThickness,
-                        borderThickness,
-                        borderThickness,
-                        borderThickness});
+                    Thickness{borderThickness, borderThickness, borderThickness,
+                              borderThickness});
             } else {
-                badgeVisual.BorderBrush(
-                    nullptr);
+                badgeVisual.BorderBrush(nullptr);
 
-                badgeVisual.BorderThickness(
-                    Thickness{
-                        0,
-                        0,
-                        0,
-                        0});
+                badgeVisual.BorderThickness(Thickness{0, 0, 0, 0});
             }
         }
 
-        text.Foreground(
-            CreateBrush(
-                g_settings.textColor,
-                defaultText));
+        text.Foreground(CreateBrush(g_settings.textColor, defaultText));
 
-        text.FontSize(
-            static_cast<double>(
-                g_settings.fontSize));
+        text.FontSize(static_cast<double>(g_settings.fontSize));
 
         text.FontFamily(
-            Media::FontFamily(
-                winrt::hstring(
-                    g_settings.fontFamily)));
+            Media::FontFamily(winrt::hstring(g_settings.fontFamily)));
 
-        text.FontWeight(
-            GetConfiguredFontWeight());
+        text.FontWeight(GetConfiguredFontWeight());
 
-        text.HorizontalAlignment(
-            HorizontalAlignment::Center);
+        text.HorizontalAlignment(HorizontalAlignment::Center);
 
-        text.VerticalAlignment(
-            VerticalAlignment::Center);
+        text.VerticalAlignment(VerticalAlignment::Center);
 
-        text.TextAlignment(
-            TextAlignment::Center);
+        text.TextAlignment(TextAlignment::Center);
 
         // Optical correction for the font baseline.
-        text.Margin(
-            Thickness{
-                0,
-                -2,
-                0,
-                0});
+        text.Margin(Thickness{0, -2, 0, 0});
 
-        text.Text(
-            MakeNumberText(
-                count));
+        text.Text(MakeNumberText(count));
 
         return;
     }
@@ -1287,78 +959,50 @@ void ApplyBadgeVisualStyle(
     // VERTICAL DOTS
     // ---------------------------------------------------------------------
 
-    ApplyDotPosition(
-        badge);
+    ApplyDotPosition(badge);
 
-    circleVisual.Visibility(
-        Visibility::Collapsed);
+    circleVisual.Visibility(Visibility::Collapsed);
 
-    badgeVisual.Visibility(
-        Visibility::Collapsed);
+    badgeVisual.Visibility(Visibility::Collapsed);
 
-    text.Visibility(
-        Visibility::Collapsed);
+    text.Visibility(Visibility::Collapsed);
 
-    dotStack.Visibility(
-        Visibility::Visible);
+    dotStack.Visibility(Visibility::Visible);
 
-    badge.Width(
-        std::numeric_limits<double>::
-            quiet_NaN());
+    badge.Width(std::numeric_limits<double>::quiet_NaN());
 
-    badge.Height(
-        std::numeric_limits<double>::
-            quiet_NaN());
+    badge.Height(std::numeric_limits<double>::quiet_NaN());
 
-    badge.Background(
-        nullptr);
+    badge.Background(nullptr);
 
-    badge.BorderBrush(
-        nullptr);
+    badge.BorderBrush(nullptr);
 
-    badge.BorderThickness(
-        Thickness{
-            0,
-            0,
-            0,
-            0});
+    badge.BorderThickness(Thickness{0, 0, 0, 0});
 
-    dotStack.Orientation(
-        Controls::Orientation::Vertical);
+    dotStack.Orientation(Controls::Orientation::Vertical);
 
-    dotStack.HorizontalAlignment(
-        HorizontalAlignment::Center);
+    dotStack.HorizontalAlignment(HorizontalAlignment::Center);
 
-    dotStack.VerticalAlignment(
-        VerticalAlignment::Center);
+    dotStack.VerticalAlignment(VerticalAlignment::Center);
 
-    RebuildDots(
-        dotStack,
-        count);
+    RebuildDots(dotStack, count);
 }
 // -----------------------------------------------------------------------------
 // Badge
 // -----------------------------------------------------------------------------
 
-void RemoveBadgeFromPanel(
-    Controls::Panel iconPanel,
-    Controls::Border badge) {
-    auto children =
-        iconPanel.Children();
+void RemoveBadgeFromPanel(Controls::Panel iconPanel, Controls::Border badge) {
+    auto children = iconPanel.Children();
 
-    for (uint32_t i = 0;
-         i < children.Size();
-         i++) {
-        if (children.GetAt(i) ==
-            badge) {
+    for (uint32_t i = 0; i < children.Size(); i++) {
+        if (children.GetAt(i) == badge) {
             children.RemoveAt(i);
             return;
         }
     }
 }
 
-Controls::Border CreateCountBadge(
-    Controls::Panel iconPanel) {
+Controls::Border CreateCountBadge(Controls::Panel iconPanel) {
     PCWSTR xaml =
         LR"(
 <Border
@@ -1400,264 +1044,224 @@ Controls::Border CreateCountBadge(
 </Border>
 )";
 
-    auto badge =
-        Markup::XamlReader::
-            Load(xaml)
-            .as<
-                Controls::Border>();
+    auto badge = Markup::XamlReader::Load(xaml).as<Controls::Border>();
 
-    badge.IsHitTestVisible(
-        false);
+    badge.IsHitTestVisible(false);
 
-    Controls::Canvas::SetZIndex(
-        badge,
-        100);
+    Controls::Canvas::SetZIndex(badge, 100);
 
-    iconPanel.Children().Append(
-        badge);
+    iconPanel.Children().Append(badge);
 
     return badge;
 }
 
-void UpdateCountBadge(
-    FrameworkElement taskListButton,
-    unsigned int count) {
+bool UpdateCountBadge(FrameworkElement taskListButton, unsigned int count) {
     if (g_unloading) {
-        return;
+        return false;
     }
 
-    auto iconPanelElement =
-        FindChildByName(
-            taskListButton,
-            L"IconPanel");
+    auto iconPanelElement = FindChildByName(taskListButton, L"IconPanel");
 
     if (!iconPanelElement) {
-        return;
+        return false;
     }
 
-    auto iconPanel =
-        iconPanelElement
-            .try_as<
-                Controls::Panel>();
+    auto iconPanel = iconPanelElement.try_as<Controls::Panel>();
 
     if (!iconPanel) {
-        return;
+        return false;
     }
 
-    auto badge =
-        FindChildByName(
-            iconPanelElement,
-            L"WindhawkCountBadge")
-            .try_as<
-                Controls::Border>();
+    auto badge = FindChildByName(iconPanelElement, L"WindhawkCountBadge")
+                     .try_as<Controls::Border>();
 
     // Rebuild badges created by older visual-layout versions.
     if (badge) {
-        auto circleVisual =
-            FindChildByName(
-                badge,
-                L"WindhawkCircleVisual");
+        auto circleVisual = FindChildByName(badge, L"WindhawkCircleVisual");
 
-        auto badgeVisual =
-            FindChildByName(
-                badge,
-                L"WindhawkBadgeVisual");
+        auto badgeVisual = FindChildByName(badge, L"WindhawkBadgeVisual");
 
-        auto countText =
-            FindChildByName(
-                badge,
-                L"WindhawkCountText");
+        auto countText = FindChildByName(badge, L"WindhawkCountText");
 
-        auto dotStack =
-            FindChildByName(
-                badge,
-                L"WindhawkDotStack");
+        auto dotStack = FindChildByName(badge, L"WindhawkDotStack");
 
-        if (!circleVisual ||
-            !badgeVisual ||
-            !countText ||
-            !dotStack) {
-            RemoveBadgeFromPanel(
-                iconPanel,
-                badge);
+        if (!circleVisual || !badgeVisual || !countText || !dotStack) {
+            RemoveBadgeFromPanel(iconPanel, badge);
 
             badge = nullptr;
         }
     }
 
-    if (count <
-        static_cast<unsigned int>(
-            g_settings.minimumCount)) {
+    if (count < static_cast<unsigned int>(g_settings.minimumCount)) {
         if (badge) {
-            badge.Visibility(
-                Visibility::Collapsed);
+            badge.Visibility(Visibility::Collapsed);
         }
 
-        return;
+        return true;
     }
 
     if (!badge) {
-        badge =
-            CreateCountBadge(
-                iconPanel);
+        badge = CreateCountBadge(iconPanel);
     }
 
-    ApplyBadgeVisualStyle(
-        badge,
-        count);
+    ApplyBadgeVisualStyle(badge, count);
 
-    badge.Visibility(
-        Visibility::Visible);
+    badge.Visibility(Visibility::Visible);
+
+    return true;
 }
 // -----------------------------------------------------------------------------
-// Tracked buttons
+// Direct taskbar group count / tracked buttons
 // -----------------------------------------------------------------------------
 
 void PruneDeadTrackedButtons() {
-    for (auto it =
-             g_trackedButtons.begin();
-         it !=
-         g_trackedButtons.end();) {
+    for (auto it = g_trackedButtons.begin(); it != g_trackedButtons.end();) {
         if (!it->element.get()) {
-            it =
-                g_trackedButtons.erase(
-                    it);
+            it = g_trackedButtons.erase(it);
         } else {
             ++it;
         }
     }
 }
 
-void TrackTaskbarButton(
-    FrameworkElement element) {
+TrackedButton* TrackTaskbarButton(FrameworkElement element, void* viewModel) {
     PruneDeadTrackedButtons();
-    auto unknown =
-        element.as<
-            winrt::Windows::
-                Foundation::IUnknown>();
 
-    void* identity =
-        winrt::get_abi(
-            unknown);
-
-    auto automationId =
-        winrt::Windows::UI::
-            Xaml::Automation::
-                AutomationProperties::
-                    GetAutomationId(
-                        element);
-
-    if (automationId.empty()) {
-        return;
-    }
+    auto unknown = element.as<winrt::Windows::Foundation::IUnknown>();
+    void* identity = winrt::get_abi(unknown);
 
     auto existing =
-        std::find_if(
-            g_trackedButtons.begin(),
-            g_trackedButtons.end(),
-            [identity](
-                const TrackedButton& item) {
-                return item.identity ==
-                       identity;
-            });
+        std::find_if(g_trackedButtons.begin(), g_trackedButtons.end(),
+                     [identity](const TrackedButton& item) {
+                         return item.identity == identity;
+                     });
 
-    if (existing !=
-        g_trackedButtons.end()) {
-        existing->automationId =
-            automationId.c_str();
-
-        return;
+    if (existing != g_trackedButtons.end()) {
+        existing->viewModel = viewModel;
+        return &*existing;
     }
 
-    g_trackedButtons.push_back(
-        {
-            identity,
-            automationId.c_str(),
-            winrt::make_weak(
-                element),
-        });
+    g_trackedButtons.push_back({
+        .identity = identity,
+        .viewModel = viewModel,
+        .element = winrt::make_weak(element),
+    });
+
+    return &g_trackedButtons.back();
 }
 
-// -----------------------------------------------------------------------------
-// Apply cached HWND count
-// -----------------------------------------------------------------------------
+bool GetTaskbarButtonViewModelCount(FrameworkElement element,
+                                    void** viewModel,
+                                    unsigned int* count) {
+    if (!viewModel || !count ||
+        !TryGetItemFromContainer_TaskListGroupViewModel_Original ||
+        !GetViewModelCount_Original) {
+        return false;
+    }
 
-void ApplyCountToButton(
-    FrameworkElement element) {
-    auto automationId =
-        winrt::Windows::UI::
-            Xaml::Automation::
-                AutomationProperties::
-                    GetAutomationId(
-                        element);
+    *viewModel = nullptr;
+    *count = 0;
 
-    if (automationId.empty()) {
+    UIElement uiElement = element.as<UIElement>();
+    winrt::com_ptr<IUnknown> groupViewModel;
+    TryGetItemFromContainer_TaskListGroupViewModel_Original(
+        groupViewModel.put_void(), &uiElement);
+
+    if (!groupViewModel) {
+        return false;
+    }
+
+    *viewModel = groupViewModel.get();
+
+    HRESULT hr = GetViewModelCount_Original(groupViewModel.get(), count);
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    *count = WindowCountFromViewModelCount(*count);
+    return true;
+}
+
+void ApplyCountToTrackedButton(TrackedButton& item, unsigned int count) {
+    uint64_t settingsGeneration = g_settingsGeneration;
+    if (item.lastAppliedCount == count &&
+        item.lastSettingsGeneration == settingsGeneration) {
         return;
     }
 
-    std::wstring key =
-        NormalizeId(
-            automationId.c_str());
-
-    unsigned int count = 0;
-
-    auto it =
-        g_appCounts.find(
-            key);
-
-    if (it !=
-        g_appCounts.end()) {
-        count =
-            it->second;
+    auto element = item.element.get();
+    if (!element) {
+        return;
     }
 
-    UpdateCountBadge(
-        element,
-        count);
+    // Mark the state before touching XAML so a synchronous re-entrant taskbar
+    // update doesn't apply the same visual change recursively. Roll it back if
+    // the visual couldn't be updated.
+    unsigned int previousCount = item.lastAppliedCount;
+    uint64_t previousGeneration = item.lastSettingsGeneration;
+    item.lastAppliedCount = count;
+    item.lastSettingsGeneration = settingsGeneration;
+
+    try {
+        if (!UpdateCountBadge(element, count)) {
+            item.lastAppliedCount = previousCount;
+            item.lastSettingsGeneration = previousGeneration;
+        }
+    } catch (...) {
+        item.lastAppliedCount = previousCount;
+        item.lastSettingsGeneration = previousGeneration;
+        throw;
+    }
+}
+
+void ApplyCountToButton(FrameworkElement element) {
+    void* viewModel = nullptr;
+    unsigned int count = 0;
+    bool haveCount =
+        GetTaskbarButtonViewModelCount(element, &viewModel, &count);
+
+    auto* tracked = TrackTaskbarButton(element, viewModel);
+    if (!tracked) {
+        return;
+    }
+
+    // A recycled/pinned button can temporarily have no group view model. Treat
+    // it as zero so a badge from the previous container contents can't remain
+    // visible.
+    ApplyCountToTrackedButton(*tracked, haveCount ? count : 0);
 }
 
 void RefreshAllTrackedButtons() {
     PruneDeadTrackedButtons();
 
-    for (auto& item :
-         g_trackedButtons) {
-        auto element =
-            item.element.get();
-
+    for (auto& item : g_trackedButtons) {
+        auto element = item.element.get();
         if (!element) {
             continue;
         }
 
-        ApplyCountToButton(
-            element);
+        void* viewModel = nullptr;
+        unsigned int count = 0;
+        bool haveCount =
+            GetTaskbarButtonViewModelCount(element, &viewModel, &count);
+        item.viewModel = viewModel;
+        ApplyCountToTrackedButton(item, haveCount ? count : 0);
     }
 }
 
-void RefreshChangedTrackedButtons(
-    const std::unordered_set<
-        std::wstring>& changedIds) {
+void RefreshTrackedButtonsForViewModel(void* viewModel, unsigned int count) {
+    DWORD taskbarThreadId = g_taskbarThreadId.load();
+    if (!viewModel || !taskbarThreadId ||
+        taskbarThreadId != GetCurrentThreadId()) {
+        return;
+    }
+
     PruneDeadTrackedButtons();
 
-    for (auto& item :
-         g_trackedButtons) {
-        std::wstring key =
-            NormalizeId(
-                item.automationId);
-
-        if (!changedIds.contains(
-                key)) {
-            continue;
+    for (auto& item : g_trackedButtons) {
+        if (item.viewModel == viewModel) {
+            ApplyCountToTrackedButton(item, count);
         }
-
-        auto element =
-            item.element.get();
-
-        if (!element) {
-            continue;
-        }
-
-        ApplyCountToButton(
-            element);
     }
 }
 
@@ -1665,8 +1269,7 @@ void RefreshChangedTrackedButtons(
 // Existing XAML tree enumeration
 // -----------------------------------------------------------------------------
 
-int EnumerateExistingTaskbarButtons(
-    FrameworkElement element) {
+int EnumerateExistingTaskbarButtons(FrameworkElement element) {
     if (!element) {
         return 0;
     }
@@ -1674,45 +1277,18 @@ int EnumerateExistingTaskbarButtons(
     int found = 0;
 
     try {
-        if (element.Name() ==
-            L"TaskListButton") {
-            if (!g_taskbarDispatcher) {
-                g_taskbarDispatcher =
-                    element.Dispatcher();
-            }
-
-            TrackTaskbarButton(
-                element);
-
-            ApplyCountToButton(
-                element);
-
-            found++;
+        if (element.Name() == L"TaskListButton") {
+            ApplyCountToButton(element);
+            ++found;
         }
 
-        int children =
-            Media::VisualTreeHelper::
-                GetChildrenCount(
-                    element);
-
-        for (int i = 0;
-             i < children;
-             i++) {
-            auto child =
-                Media::VisualTreeHelper::
-                    GetChild(
-                        element,
-                        i)
-                    .try_as<
-                        FrameworkElement>();
-
-            if (!child) {
-                continue;
+        int children = Media::VisualTreeHelper::GetChildrenCount(element);
+        for (int i = 0; i < children; ++i) {
+            auto child = Media::VisualTreeHelper::GetChild(element, i)
+                             .try_as<FrameworkElement>();
+            if (child) {
+                found += EnumerateExistingTaskbarButtons(child);
             }
-
-            found +=
-                EnumerateExistingTaskbarButtons(
-                    child);
         }
     } catch (...) {
     }
@@ -1724,195 +1300,155 @@ int EnumerateExistingTaskbarButtons(
 // Existing taskbar XamlRoot
 // -----------------------------------------------------------------------------
 
-XamlRoot GetTaskbarXamlRoot(
-    HWND taskbarWnd) {
-    if (!taskbarWnd ||
-        !g_CTaskBand_ITaskListWndSite_vftable ||
-        !g_CTaskBand_GetTaskbarHost ||
-        !g_TaskbarHost_FrameHeight ||
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void* hostShared[2]) {
+    if (!hostShared[0]) {
+        if (hostShared[1]) {
+            g_RefCount_Decref(hostShared[1]);
+        }
+        return nullptr;
+    }
+
+    // Current Windows 11 TaskbarHost layout uses 0x48 on ARM64. On x64,
+    // detect the offset from TaskbarHost::FrameHeight where possible.
+    size_t elementOffset = 0x48;
+
+#if defined(_M_X64)
+    const BYTE* code = reinterpret_cast<const BYTE*>(g_TaskbarHost_FrameHeight);
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[7] <= 0x7F) {
+        elementOffset = code[7];
+    } else {
+        Wh_Log(L"Couldn't detect TaskbarHost XAML offset, using 0x48");
+    }
+#elif defined(_M_ARM64)
+    // Use the known/default TaskbarHost XAML element offset.
+#else
+#error "Unsupported architecture"
+#endif
+
+    IUnknown* xamlUnknown = *reinterpret_cast<IUnknown**>(
+        reinterpret_cast<BYTE*>(hostShared[0]) + elementOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    if (xamlUnknown) {
+        xamlUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                    winrt::put_abi(taskbarElement));
+    }
+
+    XamlRoot result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    if (hostShared[1]) {
+        g_RefCount_Decref(hostShared[1]);
+    }
+
+    return result;
+}
+
+XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
+    if (!taskbarWnd || !g_CTaskBand_ITaskListWndSite_vftable ||
+        !g_CTaskBand_GetTaskbarHost || !g_TaskbarHost_FrameHeight ||
         !g_RefCount_Decref) {
         return nullptr;
     }
 
     HWND taskBandWnd =
-        reinterpret_cast<HWND>(
-            GetPropW(
-                taskbarWnd,
-                L"TaskbandHWND"));
-
+        reinterpret_cast<HWND>(GetPropW(taskbarWnd, L"TaskbandHWND"));
     if (!taskBandWnd) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"TaskbandHWND not found");
-
+        Wh_Log(L"TaskbandHWND not found");
         return nullptr;
     }
 
-    void* taskBand =
-        reinterpret_cast<void*>(
-            GetWindowLongPtrW(
-                taskBandWnd,
-                0));
-
+    void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(taskBandWnd, 0));
     if (!taskBand) {
         return nullptr;
     }
 
-    void* site =
-        taskBand;
-
-    bool siteFound =
-        false;
-
-    for (int i = 0;
-         i < 20;
-         i++) {
-        if (*reinterpret_cast<void**>(
-                site) ==
+    void* site = taskBand;
+    bool siteFound = false;
+    for (int i = 0; i < 20; ++i) {
+        if (*reinterpret_cast<void**>(site) ==
             g_CTaskBand_ITaskListWndSite_vftable) {
-            siteFound =
-                true;
-
+            siteFound = true;
             break;
         }
-
-        site =
-            reinterpret_cast<void**>(
-                site) +
-            1;
+        site = reinterpret_cast<void**>(site) + 1;
     }
 
     if (!siteFound) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"ITaskListWndSite not found");
-
+        Wh_Log(L"ITaskListWndSite not found for primary taskbar");
         return nullptr;
     }
 
     void* hostShared[2] = {};
+    g_CTaskBand_GetTaskbarHost(site, hostShared);
+    return XamlRootFromTaskbarHostSharedPtr(hostShared);
+}
 
-    g_CTaskBand_GetTaskbarHost(
-        site,
-        hostShared);
-
-    if (!hostShared[0]) {
-        if (hostShared[1]) {
-            g_RefCount_Decref(
-                hostShared[1]);
-        }
-
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND taskbarWnd) {
+    if (!taskbarWnd || !g_CSecondaryTaskBand_ITaskListWndSite_vftable ||
+        !g_CSecondaryTaskBand_GetTaskbarHost || !g_TaskbarHost_FrameHeight ||
+        !g_RefCount_Decref) {
         return nullptr;
     }
 
-    // Current Windows 11 TaskbarHost layout uses 0x48 on ARM64.
-    // On x64, detect the offset from TaskbarHost::FrameHeight so the mod can
-    // tolerate layout changes where possible.
-    size_t elementOffset =
-        0x48;
-
-#if defined(_M_X64)
-
-    const BYTE* code =
-        reinterpret_cast<
-            const BYTE*>(
-            g_TaskbarHost_FrameHeight);
-
-    if (code[0] == 0x48 &&
-        code[1] == 0x83 &&
-        code[2] == 0xEC &&
-        code[4] == 0x48 &&
-        code[5] == 0x83 &&
-        code[6] == 0xC1 &&
-        code[7] <= 0x7F) {
-        elementOffset =
-            code[7];
-    } else {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"couldn't detect TaskbarHost "
-            L"XAML offset, using 0x48");
+    HWND taskBandWnd = FindWindowExW(taskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!taskBandWnd) {
+        return nullptr;
     }
 
-#elif defined(_M_ARM64)
-
-    // Use the known/default TaskbarHost XAML element offset.
-    // This follows the ARM64 fallback used by current Windhawk taskbar mods.
-
-#else
-
-#error "Unsupported architecture"
-
-#endif
-
-    IUnknown* xamlUnknown =
-        *reinterpret_cast<IUnknown**>(
-            reinterpret_cast<BYTE*>(
-                hostShared[0]) +
-            elementOffset);
-
-    FrameworkElement taskbarElement =
-        nullptr;
-
-    if (xamlUnknown) {
-        xamlUnknown->QueryInterface(
-            winrt::guid_of<
-                FrameworkElement>(),
-            winrt::put_abi(
-                taskbarElement));
+    void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(taskBandWnd, 0));
+    if (!taskBand) {
+        return nullptr;
     }
 
-    XamlRoot result =
-        taskbarElement
-            ? taskbarElement.XamlRoot()
-            : nullptr;
-
-    if (hostShared[1]) {
-        g_RefCount_Decref(
-            hostShared[1]);
+    void* site = taskBand;
+    bool siteFound = false;
+    for (int i = 0; i < 20; ++i) {
+        if (*reinterpret_cast<void**>(site) ==
+            g_CSecondaryTaskBand_ITaskListWndSite_vftable) {
+            siteFound = true;
+            break;
+        }
+        site = reinterpret_cast<void**>(site) + 1;
     }
 
-    return result;
+    if (!siteFound) {
+        Wh_Log(L"ITaskListWndSite not found for secondary taskbar");
+        return nullptr;
+    }
+
+    void* hostShared[2] = {};
+    g_CSecondaryTaskBand_GetTaskbarHost(site, hostShared);
+    return XamlRootFromTaskbarHostSharedPtr(hostShared);
 }
 
 // -----------------------------------------------------------------------------
 // Run synchronously on taskbar UI thread
 // -----------------------------------------------------------------------------
 
-using TaskbarThreadProc =
-    void(WINAPI*)(
-        void* parameter);
+using TaskbarThreadProc = void(WINAPI*)(void* parameter);
 
-bool RunOnTaskbarThread(
-    HWND hWnd,
-    TaskbarThreadProc proc,
-    void* parameter) {
-    if (!hWnd ||
-        !proc) {
+bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void* parameter) {
+    if (!hWnd || !proc) {
         return false;
     }
 
-    DWORD threadId =
-        GetWindowThreadProcessId(
-            hWnd,
-            nullptr);
+    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
 
     if (!threadId) {
         return false;
     }
 
-    if (threadId ==
-        GetCurrentThreadId()) {
-        proc(
-            parameter);
+    if (threadId == GetCurrentThreadId()) {
+        proc(parameter);
 
         return true;
     }
 
-    static UINT message =
-        RegisterWindowMessageW(
-            L"Windhawk_TaskbarCountBadges_"
-            L"RunOnTaskbarThread");
+    static UINT message = RegisterWindowMessageW(
+        L"Windhawk_TaskbarCountBadges_"
+        L"RunOnTaskbarThread");
 
     if (!message) {
         return false;
@@ -1923,42 +1459,24 @@ bool RunOnTaskbarThread(
         void* parameter;
     };
 
-    HHOOK hook =
-        SetWindowsHookExW(
-            WH_CALLWNDPROC,
-            [](int code,
-               WPARAM wParam,
-               LPARAM lParam) -> LRESULT {
-                if (code ==
-                    HC_ACTION) {
-                    auto data =
-                        reinterpret_cast<
-                            CWPSTRUCT*>(
-                            lParam);
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto data = reinterpret_cast<CWPSTRUCT*>(lParam);
 
-                    if (data->message ==
-                        message) {
-                        auto request =
-                            reinterpret_cast<
-                                Request*>(
-                                data->lParam);
+                if (data->message == message) {
+                    auto request = reinterpret_cast<Request*>(data->lParam);
 
-                        if (request &&
-                            request->proc) {
-                            request->proc(
-                                request->parameter);
-                        }
+                    if (request && request->proc) {
+                        request->proc(request->parameter);
                     }
                 }
+            }
 
-                return CallNextHookEx(
-                    nullptr,
-                    code,
-                    wParam,
-                    lParam);
-            },
-            nullptr,
-            threadId);
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
 
     if (!hook) {
         return false;
@@ -1969,513 +1487,9 @@ bool RunOnTaskbarThread(
         parameter,
     };
 
-    SendMessageW(
-        hWnd,
-        message,
-        0,
-        reinterpret_cast<LPARAM>(
-            &request));
+    SendMessageW(hWnd, message, 0, reinterpret_cast<LPARAM>(&request));
 
-    UnhookWindowsHookEx(
-        hook);
-
-    return true;
-}
-
-// -----------------------------------------------------------------------------
-// App resolver
-// -----------------------------------------------------------------------------
-
-constexpr winrt::guid
-    CLSID_StartMenuCacheAndAppResolver{
-        0x660B90C8,
-        0x73A9,
-        0x4B58,
-        {
-            0x8C,
-            0xAE,
-            0x35,
-            0x5B,
-            0x7F,
-            0x55,
-            0x34,
-            0x1B,
-        }};
-
-constexpr winrt::guid
-    IID_IAppResolver_8{
-        0xDE25675A,
-        0x72DE,
-        0x44B4,
-        {
-            0x93,
-            0x73,
-            0x05,
-            0x17,
-            0x04,
-            0x50,
-            0xC1,
-            0x40,
-        }};
-
-struct IAppResolver_8 :
-    public IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE
-        GetAppIDForShortcut() = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE
-        GetAppIDForShortcutObject() = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE
-        GetAppIDForWindow(
-            HWND hWnd,
-            WCHAR** appId,
-            void* unknown1,
-            void* unknown2,
-            void* unknown3) = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE
-        GetAppIDForProcess(
-            DWORD processId,
-            WCHAR** appId,
-            void* unknown1,
-            void* unknown2,
-            void* unknown3) = 0;
-};
-
-IAppResolver_8* g_appResolver = nullptr;
-CO_MTA_USAGE_COOKIE g_appResolverMtaCookie{};
-ULONGLONG g_appResolverRetryAfter = 0;
-
-// A window keeps the same app ID for its lifetime. Cache the normalized ID so
-// steady-state recounts don't repeatedly call the shell resolver for every HWND.
-std::unordered_map<HWND, std::wstring> g_appIdCache;
-
-bool EnsureAppResolver() {
-    if (g_appResolver) {
-        return true;
-    }
-
-    ULONGLONG now =
-        GetTickCount64();
-
-    if (now <
-        g_appResolverRetryAfter) {
-        return false;
-    }
-
-    CO_MTA_USAGE_COOKIE cookie{};
-
-    bool mta =
-        SUCCEEDED(
-            CoIncrementMTAUsage(
-                &cookie));
-
-    IAppResolver_8* resolver =
-        nullptr;
-
-    HRESULT hr =
-        CoCreateInstance(
-            CLSID_StartMenuCacheAndAppResolver,
-            nullptr,
-            CLSCTX_INPROC_SERVER |
-                CLSCTX_INPROC_HANDLER,
-            IID_IAppResolver_8,
-            reinterpret_cast<void**>(
-                &resolver));
-
-    if (FAILED(
-            hr) ||
-        !resolver) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"AppResolver failed "
-            L"hr=0x%08X",
-            static_cast<unsigned int>(
-                hr));
-
-        if (mta) {
-            CoDecrementMTAUsage(
-                cookie);
-        }
-
-        // Avoid retrying COM activation on every TaskListButton state update.
-        // A later recount can retry after this short backoff.
-        g_appResolverRetryAfter =
-            now + 5000;
-
-        return false;
-    }
-
-    g_appResolverRetryAfter =
-        0;
-
-    g_appResolver =
-        resolver;
-
-    if (mta) {
-        g_appResolverMtaCookie =
-            cookie;
-    }
-
-    return true;
-}
-
-void ReleaseAppResolver() {
-    if (g_appResolver) {
-        g_appResolver->Release();
-        g_appResolver =
-            nullptr;
-    }
-
-    if (g_appResolverMtaCookie) {
-        CoDecrementMTAUsage(
-            g_appResolverMtaCookie);
-
-        g_appResolverMtaCookie =
-            nullptr;
-    }
-
-    g_appResolverRetryAfter =
-        0;
-
-    g_appIdCache.clear();
-}
-
-// -----------------------------------------------------------------------------
-// Which HWNDs count
-// -----------------------------------------------------------------------------
-
-bool IsCountableWindow(
-    HWND hWnd) {
-    if (!hWnd ||
-        !IsWindowVisible(
-            hWnd)) {
-        return false;
-    }
-
-    WCHAR className[128] = {};
-
-    if (GetClassNameW(
-            hWnd,
-            className,
-            ARRAYSIZE(className))) {
-
-        // Shell/taskbar infrastructure windows.
-        // These are not real application taskbar windows.
-        if (_wcsicmp(
-                className,
-                L"Shell_TrayWnd") == 0 ||
-            _wcsicmp(
-                className,
-                L"Shell_SecondaryTrayWnd") == 0 ||
-            _wcsicmp(
-                className,
-                L"Progman") == 0 ||
-            _wcsicmp(
-                className,
-                L"WorkerW") == 0 ||
-            _wcsicmp(
-                className,
-                L"ApplicationManager_ImmersiveShellWindow") == 0) {
-            return false;
-        }
-    }
-
-    LONG_PTR exStyle =
-        GetWindowLongPtrW(
-            hWnd,
-            GWL_EXSTYLE);
-
-    if ((exStyle &
-         WS_EX_TOOLWINDOW) &&
-        !(exStyle &
-          WS_EX_APPWINDOW)) {
-        return false;
-    }
-
-    HWND owner =
-        GetWindow(
-            hWnd,
-            GW_OWNER);
-
-    if (owner &&
-        !(exStyle &
-          WS_EX_APPWINDOW)) {
-        return false;
-    }
-
-    using DwmGetWindowAttribute_t =
-        HRESULT(WINAPI*)(
-            HWND,
-            DWORD,
-            PVOID,
-            DWORD);
-
-    static DwmGetWindowAttribute_t
-        getDwmWindowAttribute = nullptr;
-
-    if (!getDwmWindowAttribute) {
-        HMODULE dwmApi =
-            GetModuleHandleW(
-                L"dwmapi.dll");
-
-        if (dwmApi) {
-            getDwmWindowAttribute =
-                reinterpret_cast<
-                    DwmGetWindowAttribute_t>(
-                    GetProcAddress(
-                        dwmApi,
-                        "DwmGetWindowAttribute"));
-        }
-    }
-
-    if (getDwmWindowAttribute) {
-        DWORD cloaked = 0;
-
-        // DWMWA_CLOAKED = 14
-        if (SUCCEEDED(
-                getDwmWindowAttribute(
-                    hWnd,
-                    14,
-                    &cloaked,
-                    sizeof(cloaked))) &&
-            cloaked) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// -----------------------------------------------------------------------------
-// Build HWND/AppID count map
-// -----------------------------------------------------------------------------
-
-struct WindowEnumContext {
-    IAppResolver_8* resolver;
-
-    std::unordered_map<
-        std::wstring,
-        unsigned int>* counts;
-
-    std::unordered_set<HWND>*
-        seenWindows;
-};
-
-BOOL CALLBACK EnumCountableWindows(
-    HWND hWnd,
-    LPARAM param) {
-    if (!IsCountableWindow(
-            hWnd)) {
-        return TRUE;
-    }
-
-    auto context =
-        reinterpret_cast<
-            WindowEnumContext*>(
-            param);
-
-    if (!context ||
-        !context->resolver ||
-        !context->counts ||
-        !context->seenWindows) {
-        return TRUE;
-    }
-
-    context->seenWindows->insert(
-        hWnd);
-
-    auto cached =
-        g_appIdCache.find(
-            hWnd);
-
-    if (cached !=
-        g_appIdCache.end()) {
-        (*context->counts)[
-            cached->second]++;
-
-        return TRUE;
-    }
-
-    WCHAR* appId =
-        nullptr;
-
-    HRESULT hr =
-        context->resolver
-            ->GetAppIDForWindow(
-                hWnd,
-                &appId,
-                nullptr,
-                nullptr,
-                nullptr);
-
-    if (FAILED(
-            hr) ||
-        !appId ||
-        !*appId) {
-        if (appId) {
-            CoTaskMemFree(
-                appId);
-        }
-
-        return TRUE;
-    }
-
-    std::wstring key =
-        NormalizeId(
-            L"Appid: " +
-            std::wstring(
-                appId));
-
-    CoTaskMemFree(
-        appId);
-
-    g_appIdCache.emplace(
-        hWnd,
-        key);
-
-    (*context->counts)[
-        key]++;
-
-    return TRUE;
-}
-
-// -----------------------------------------------------------------------------
-// Rebuild counts
-// -----------------------------------------------------------------------------
-
-bool BuildRealWindowCounts(
-    std::unordered_set<
-        std::wstring>* changedIds,
-    bool initialBuild) {
-    if (!EnsureAppResolver()) {
-        return false;
-    }
-
-    std::unordered_map<
-        std::wstring,
-        unsigned int>
-        newCounts;
-
-    std::unordered_set<HWND>
-        seenWindows;
-
-    WindowEnumContext context{
-        g_appResolver,
-        &newCounts,
-        &seenWindows,
-    };
-
-    EnumWindows(
-        EnumCountableWindows,
-        reinterpret_cast<LPARAM>(
-            &context));
-
-    for (auto it =
-             g_appIdCache.begin();
-         it !=
-         g_appIdCache.end();) {
-        if (!seenWindows.contains(
-                it->first)) {
-            it =
-                g_appIdCache.erase(
-                    it);
-        } else {
-            ++it;
-        }
-    }
-
-    if (initialBuild) {
-        g_appCounts =
-            std::move(
-                newCounts);
-
-        g_countsInitialized =
-            true;
-
-        size_t multiWindowApps =
-            0;
-
-        for (const auto& pair :
-             g_appCounts) {
-            if (pair.second >=
-                static_cast<unsigned int>(
-                    g_settings.minimumCount)) {
-                multiWindowApps++;
-            }
-        }
-
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"initial window counts ready "
-            L"apps=%zu visible=%zu",
-            g_appCounts.size(),
-            multiWindowApps);
-
-        return true;
-    }
-
-    if (!changedIds) {
-        return false;
-    }
-
-    changedIds->clear();
-
-    for (const auto& oldPair :
-         g_appCounts) {
-        auto newIt =
-            newCounts.find(
-                oldPair.first);
-
-        unsigned int newCount =
-            newIt !=
-                    newCounts.end()
-                ? newIt->second
-                : 0;
-
-        if (oldPair.second ==
-            newCount) {
-            continue;
-        }
-
-        changedIds->insert(
-            oldPair.first);
-
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"count changed id=\"%s\" "
-            L"%u -> %u",
-            oldPair.first.c_str(),
-            oldPair.second,
-            newCount);
-    }
-
-    for (const auto& newPair :
-         newCounts) {
-        if (g_appCounts.find(
-                newPair.first) !=
-            g_appCounts.end()) {
-            continue;
-        }
-
-        changedIds->insert(
-            newPair.first);
-
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"count changed id=\"%s\" "
-            L"0 -> %u",
-            newPair.first.c_str(),
-            newPair.second);
-    }
-
-    g_appCounts =
-        std::move(
-            newCounts);
-
-    g_countsInitialized =
-        true;
+    UnhookWindowsHookEx(hook);
 
     return true;
 }
@@ -2484,122 +1498,59 @@ bool BuildRealWindowCounts(
 // Existing taskbar initialization
 // -----------------------------------------------------------------------------
 
-void WINAPI
-InitializeExistingButtonsOnTaskbarThread(
-    void* parameter) {
-    try {
-        HWND taskbarWnd =
-            reinterpret_cast<HWND>(
-                parameter);
+struct ExistingButtonsInitContext {
+    int taskbarCount = 0;
+    int buttonCount = 0;
+};
 
-        auto xamlRoot =
-            GetTaskbarXamlRoot(
-                taskbarWnd);
-
-        if (!xamlRoot) {
-            Wh_Log(
-                L"Taskbar Count Badges: "
-                L"failed to get taskbar XamlRoot");
-
-            return;
-        }
-
-        auto content =
-            xamlRoot.Content()
-                .try_as<
-                    FrameworkElement>();
-
-        if (!content) {
-            Wh_Log(
-                L"Taskbar Count Badges: "
-                L"XamlRoot content unavailable");
-
-            return;
-        }
-
-        if (!g_taskbarDispatcher) {
-            g_taskbarDispatcher =
-                content.Dispatcher();
-        }
-
-        // Keep the count map on the taskbar UI thread. Live recounts and badge
-        // updates also run on this thread, avoiding concurrent map access during
-        // initialization.
-        BuildRealWindowCounts(
-            nullptr,
-            true);
-
-        int buttonCount =
-            EnumerateExistingTaskbarButtons(
-                content);
-
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"initial taskbar buttons=%d",
-            buttonCount);
-    } catch (...) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"initial taskbar UI setup failed");
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Recount queue
-// -----------------------------------------------------------------------------
-
-void QueueRealWindowRecount() {
-    std::lock_guard<std::mutex> guard(
-        g_queueMutex);
-
-    if (g_unloading ||
-        !g_taskbarDispatcher) {
-        return;
-    }
-
-    if (g_recountQueued.exchange(
-            true)) {
-        return;
-    }
+void WINAPI InitializeExistingButtonsOnTaskbarThread(void*) {
+    g_taskbarThreadId = GetCurrentThreadId();
+    ExistingButtonsInitContext context;
 
     try {
-        g_taskbarDispatcher.RunAsync(
-            winrt::Windows::UI::Core::
-                CoreDispatcherPriority::
-                    Normal,
-            []() {
-                try {
-                    if (!g_unloading) {
-                        std::unordered_set<
-                            std::wstring>
-                            changedIds;
+        EnumThreadWindows(
+            GetCurrentThreadId(),
+            [](HWND hWnd, LPARAM param) -> BOOL {
+                auto* context =
+                    reinterpret_cast<ExistingButtonsInitContext*>(param);
 
-                        if (BuildRealWindowCounts(
-                                &changedIds,
-                                false) &&
-                            !changedIds.empty()) {
-                            RefreshChangedTrackedButtons(
-                                changedIds);
-                        }
-                    }
-                } catch (...) {
-                    Wh_Log(
-                        L"Taskbar Count Badges: "
-                        L"HWND recount failed");
+                WCHAR className[32] = {};
+                if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+                    return TRUE;
                 }
 
-                // Keep the flag set until all enumeration and UI refresh work
-                // is complete so getter bursts collapse into one recount.
-                g_recountQueued =
-                    false;
-            });
-    } catch (...) {
-        g_recountQueued =
-            false;
+                XamlRoot xamlRoot = nullptr;
+                if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                    xamlRoot = GetTaskbarXamlRoot(hWnd);
+                } else if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") ==
+                           0) {
+                    xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
+                } else {
+                    return TRUE;
+                }
 
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"failed to queue HWND recount");
+                if (!xamlRoot) {
+                    Wh_Log(L"Failed to get taskbar XamlRoot for %s", className);
+                    return TRUE;
+                }
+
+                auto content = xamlRoot.Content().try_as<FrameworkElement>();
+                if (!content) {
+                    Wh_Log(L"XamlRoot content unavailable for %s", className);
+                    return TRUE;
+                }
+
+                ++context->taskbarCount;
+                context->buttonCount +=
+                    EnumerateExistingTaskbarButtons(content);
+                return TRUE;
+            },
+            reinterpret_cast<LPARAM>(&context));
+
+        Wh_Log(L"Initial taskbars=%d buttons=%d", context.taskbarCount,
+               context.buttonCount);
+    } catch (...) {
+        Wh_Log(L"Initial taskbar UI setup failed");
     }
 }
 
@@ -2607,103 +1558,65 @@ void QueueRealWindowRecount() {
 // TaskListButton::UpdateVisualStates
 // -----------------------------------------------------------------------------
 
-using TaskListButton_UpdateVisualStates_t =
-    void(__cdecl*)(
-        void* pThis);
+using TaskListButton_UpdateVisualStates_t = void(__cdecl*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original =
+    nullptr;
 
-TaskListButton_UpdateVisualStates_t
-    TaskListButton_UpdateVisualStates_Original =
-        nullptr;
-
-void __cdecl
-TaskListButton_UpdateVisualStates_Hook(
-    void* pThis) {
-    TaskListButton_UpdateVisualStates_Original(
-        pThis);
+void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    TaskListButton_UpdateVisualStates_Original(pThis);
 
     if (g_unloading) {
         return;
     }
 
     try {
-        void* taskListButtonIUnknownPtr =
-            reinterpret_cast<void**>(
-                pThis) +
-            3;
+        g_taskbarThreadId = GetCurrentThreadId();
+        void* taskListButtonIUnknownPtr = reinterpret_cast<void**>(pThis) + 3;
 
-        winrt::Windows::
-            Foundation::IUnknown
-                taskListButtonIUnknown;
+        winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
+        winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
 
-        winrt::copy_from_abi(
-            taskListButtonIUnknown,
-            taskListButtonIUnknownPtr);
-
-        auto element =
-            taskListButtonIUnknown
-                .try_as<
-                    FrameworkElement>();
-
+        auto element = taskListButtonIUnknown.try_as<FrameworkElement>();
         if (!element) {
             return;
         }
 
-        if (!g_taskbarDispatcher) {
-            g_taskbarDispatcher =
-                element.Dispatcher();
+        // If a settings-change callback couldn't marshal to the taskbar thread,
+        // apply it here the next time the taskbar naturally updates a button.
+        if (g_settingsReloadPending.exchange(false)) {
+            LoadSettings();
+            RefreshAllTrackedButtons();
+            Wh_Log(L"Deferred settings applied");
         }
 
-        if (!g_countsInitialized) {
-            BuildRealWindowCounts(
-                nullptr,
-                true);
-        }
-
-        TrackTaskbarButton(
-            element);
-
-        ApplyCountToButton(
-            element);
+        ApplyCountToButton(element);
     } catch (...) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"TaskListButton update failed");
+        Wh_Log(L"TaskListButton update failed");
     }
 }
 
 // -----------------------------------------------------------------------------
-// ViewModelCount
-//
-// This value is NOT used as the displayed count.
-// It only tells us that taskbar group state changed.
+// TaskListGroupViewModel::get_ViewModelCount
 // -----------------------------------------------------------------------------
 
-using GetViewModelCount_t =
-    HRESULT(WINAPI*)(
-        void* pThis,
-        unsigned int* count);
+HRESULT WINAPI GetViewModelCount_Hook(void* pThis, unsigned int* count) {
+    HRESULT hr = GetViewModelCount_Original(pThis, count);
 
-GetViewModelCount_t
-    GetViewModelCount_Original =
-        nullptr;
-
-HRESULT WINAPI
-GetViewModelCount_Hook(
-    void* pThis,
-    unsigned int* count) {
-    HRESULT hr =
-        GetViewModelCount_Original(
-            pThis,
-            count);
-
-    if (FAILED(
-            hr) ||
-        !count ||
-        g_unloading) {
+    if (FAILED(hr) || !count || g_unloading) {
         return hr;
     }
 
-    QueueRealWindowRecount();
+    // pThis is the same ITaskListGroupViewModel interface returned by
+    // TryGetItemFromContainer<TaskListGroupViewModel>. Update only buttons that
+    // are backed by this group; no desktop/window enumeration is needed. Keep
+    // the original ViewModelCount untouched for Windows and normalize only the
+    // count used by the badge.
+    try {
+        RefreshTrackedButtonsForViewModel(
+            pThis, WindowCountFromViewModelCount(*count));
+    } catch (...) {
+        Wh_Log(L"ViewModel count update failed");
+    }
 
     return hr;
 }
@@ -2712,24 +1625,19 @@ GetViewModelCount_Hook(
 // Apply settings live
 // -----------------------------------------------------------------------------
 
-void WINAPI
-ApplySettingsOnTaskbarThread(
-    void*) {
+void WINAPI ApplySettingsOnTaskbarThread(void*) {
     if (g_unloading) {
         return;
     }
 
+    g_settingsReloadPending = false;
     try {
         LoadSettings();
         RefreshAllTrackedButtons();
-
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"settings applied");
+        Wh_Log(L"Settings applied");
     } catch (...) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"settings apply failed");
+        g_settingsReloadPending = true;
+        Wh_Log(L"Settings apply failed");
     }
 }
 
@@ -2740,144 +1648,77 @@ ApplySettingsOnTaskbarThread(
 void CleanupOnTaskbarThread() {
     PruneDeadTrackedButtons();
 
-    for (auto& item :
-         g_trackedButtons) {
-        auto element =
-            item.element.get();
-
+    for (auto& item : g_trackedButtons) {
+        auto element = item.element.get();
         if (!element) {
             continue;
         }
 
-        auto iconPanelElement =
-            FindChildByName(
-                element,
-                L"IconPanel");
-
+        auto iconPanelElement = FindChildByName(element, L"IconPanel");
         if (!iconPanelElement) {
             continue;
         }
 
-        auto iconPanel =
-            iconPanelElement
-                .try_as<
-                    Controls::Panel>();
-
+        auto iconPanel = iconPanelElement.try_as<Controls::Panel>();
         if (!iconPanel) {
             continue;
         }
 
-        auto badge =
-            FindChildByName(
-                iconPanelElement,
-                L"WindhawkCountBadge")
-                .try_as<
-                    Controls::Border>();
-
+        auto badge = FindChildByName(iconPanelElement, L"WindhawkCountBadge")
+                         .try_as<Controls::Border>();
         if (badge) {
-            RemoveBadgeFromPanel(
-                iconPanel,
-                badge);
+            RemoveBadgeFromPanel(iconPanel, badge);
         }
     }
 
     g_trackedButtons.clear();
-
-    ReleaseAppResolver();
-
-    g_recountQueued =
-        false;
-
-    // Release the strong XAML/UI-thread object on its owning thread.
-    g_taskbarDispatcher =
-        nullptr;
-
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"cleanup complete");
+    Wh_Log(L"Cleanup complete");
 }
 
-bool CleanupSynchronously() {
-    if (!g_taskbarDispatcher) {
-        return true;
-    }
-
-    try {
-        if (g_taskbarDispatcher
-                .HasThreadAccess()) {
-            CleanupOnTaskbarThread();
-            return true;
-        }
-
-        auto operation =
-            g_taskbarDispatcher
-                .RunAsync(
-                    winrt::Windows::UI::
-                        Core::
-                            CoreDispatcherPriority::
-                                Normal,
-                    []() {
-                        CleanupOnTaskbarThread();
-                    });
-
-        operation.get();
-
-        return true;
-    } catch (...) {
-        return false;
-    }
+void WINAPI CleanupOnTaskbarThreadProc(void*) {
+    CleanupOnTaskbarThread();
 }
 
 // -----------------------------------------------------------------------------
 // Taskbar.View hooks
 // -----------------------------------------------------------------------------
 
-bool HookTaskbarView(
-    HMODULE module) {
-    if (g_taskbarViewHooked
-            .exchange(
-                true)) {
+bool HookTaskbarView(HMODULE module) {
+    if (g_taskbarViewHooked.exchange(true)) {
         return true;
     }
 
-    WindhawkUtils::SYMBOL_HOOK
-        hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+        {
             {
-                {
-                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))",
-                },
-                &TaskListButton_UpdateVisualStates_Original,
-                TaskListButton_UpdateVisualStates_Hook,
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))",
             },
+            &TaskListButton_UpdateVisualStates_Original,
+            TaskListButton_UpdateVisualStates_Hook,
+        },
+        {
             {
-                {
-                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskListGroupViewModel>::get_ViewModelCount(unsigned int *))",
-                },
-                &GetViewModelCount_Original,
-                GetViewModelCount_Hook,
+                LR"(struct winrt::Taskbar::TaskListGroupViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListGroupViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))",
             },
-        };
+            &TryGetItemFromContainer_TaskListGroupViewModel_Original,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskListGroupViewModel>::get_ViewModelCount(unsigned int *))",
+            },
+            &GetViewModelCount_Original,
+            GetViewModelCount_Hook,
+        },
+    };
 
-    if (!WindhawkUtils::
-            HookSymbols(
-                module,
-                hooks,
-                ARRAYSIZE(
-                    hooks))) {
-        g_taskbarViewHooked =
-            false;
-
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"Taskbar.View hooks failed");
-
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks,
+                                    ARRAYSIZE(taskbarViewHooks))) {
+        g_taskbarViewHooked = false;
+        Wh_Log(L"Taskbar.View hooks failed");
         return false;
     }
 
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"Taskbar.View hooks installed");
-
+    Wh_Log(L"Taskbar.View hooks installed");
     return true;
 }
 
@@ -2887,64 +1728,58 @@ bool HookTaskbarView(
 
 bool HookTaskbarDll() {
     HMODULE module =
-        LoadLibraryExW(
-            L"taskbar.dll",
-            nullptr,
-            LOAD_LIBRARY_SEARCH_SYSTEM32);
-
+        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"taskbar.dll load failed");
-
+        Wh_Log(L"taskbar.dll load failed");
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK
-        hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
             {
-                {
-                    LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})",
-                },
-                &g_CTaskBand_ITaskListWndSite_vftable,
+                LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})",
             },
+            &g_CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
             {
-                {
-                    LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )",
-                },
-                &g_CTaskBand_GetTaskbarHost,
+                LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})",
             },
+            &g_CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
             {
-                {
-                    LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )",
-                },
-                &g_TaskbarHost_FrameHeight,
+                LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )",
             },
+            &g_CTaskBand_GetTaskbarHost,
+        },
+        {
             {
-                {
-                    LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))",
-                },
-                &g_RefCount_Decref,
+                LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )",
             },
-        };
+            &g_CSecondaryTaskBand_GetTaskbarHost,
+        },
+        {
+            {
+                LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )",
+            },
+            &g_TaskbarHost_FrameHeight,
+        },
+        {
+            {
+                LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))",
+            },
+            &g_RefCount_Decref,
+        },
+    };
 
-    if (!WindhawkUtils::
-            HookSymbols(
-                module,
-                hooks,
-                ARRAYSIZE(
-                    hooks))) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"taskbar.dll symbols failed");
-
+    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"taskbar.dll symbols failed");
         return false;
     }
 
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"taskbar XamlRoot symbols installed");
-
+    Wh_Log(L"Taskbar XamlRoot symbols installed");
     return true;
 }
 
@@ -2952,36 +1787,18 @@ bool HookTaskbarDll() {
 // Late Taskbar.View loading
 // -----------------------------------------------------------------------------
 
-using LoadLibraryExW_t =
-    decltype(
-        &LoadLibraryExW);
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 
-LoadLibraryExW_t
-    LoadLibraryExW_Original =
-        nullptr;
+LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
-HMODULE WINAPI
-LoadLibraryExW_Hook(
-    LPCWSTR fileName,
-    HANDLE file,
-    DWORD flags) {
-    HMODULE module =
-        LoadLibraryExW_Original(
-            fileName,
-            file,
-            flags);
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
 
-    if (module &&
-        !g_unloading &&
-        !g_taskbarViewHooked) {
-        HMODULE taskbarView =
-            GetTaskbarViewModuleHandle();
+    if (module && !g_unloading && !g_taskbarViewHooked) {
+        HMODULE taskbarView = GetTaskbarViewModuleHandle();
 
-        if (taskbarView &&
-            taskbarView ==
-                module) {
-            if (HookTaskbarView(
-                    taskbarView)) {
+        if (taskbarView && taskbarView == module) {
+            if (HookTaskbarView(taskbarView)) {
                 Wh_ApplyHookOperations();
             }
         }
@@ -2995,143 +1812,92 @@ LoadLibraryExW_Hook(
 // -----------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    g_unloading =
-        false;
-
-    g_recountQueued =
-        false;
-
-    g_countsInitialized =
-        false;
+    g_unloading = false;
+    g_settingsReloadPending = false;
+    g_taskbarThreadId = 0;
+    g_trackedButtons.clear();
 
     LoadSettings();
-
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"init PID=%lu",
-        GetCurrentProcessId());
+    Wh_Log(L"Init PID=%lu", GetCurrentProcessId());
 
     if (!HookTaskbarDll()) {
         return FALSE;
     }
 
-    if (HMODULE module =
-            GetTaskbarViewModuleHandle()) {
-        if (!HookTaskbarView(
-                module)) {
+    if (HMODULE module = GetTaskbarViewModuleHandle()) {
+        if (!HookTaskbarView(module)) {
             return FALSE;
         }
-
         return TRUE;
     }
 
-    HMODULE kernelBase =
-        GetModuleHandleW(
-            L"kernelbase.dll");
-
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (!kernelBase) {
         return FALSE;
     }
 
-    auto loadLibraryExW =
-        reinterpret_cast<
-            decltype(
-                &LoadLibraryExW)>(
-            GetProcAddress(
-                kernelBase,
-                "LoadLibraryExW"));
-
+    auto loadLibraryExW = reinterpret_cast<decltype(&LoadLibraryExW)>(
+        GetProcAddress(kernelBase, "LoadLibraryExW"));
     if (!loadLibraryExW) {
         return FALSE;
     }
 
-    WindhawkUtils::
-        SetFunctionHook(
-            loadLibraryExW,
-            LoadLibraryExW_Hook,
-            &LoadLibraryExW_Original);
-
+    WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"after init");
+    Wh_Log(L"After init");
 
-    HWND taskbarWnd =
-        FindCurrentProcessTaskbarWnd();
-
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!taskbarWnd) {
         return;
     }
 
     if (!RunOnTaskbarThread(
-            taskbarWnd,
-            InitializeExistingButtonsOnTaskbarThread,
-            taskbarWnd)) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"initial taskbar-thread execution failed");
+            taskbarWnd, InitializeExistingButtonsOnTaskbarThread, nullptr)) {
+        Wh_Log(L"Initial taskbar-thread execution failed");
     }
 }
 
 void Wh_ModSettingsChanged() {
-    HWND taskbarWnd =
-        FindCurrentProcessTaskbarWnd();
-
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    g_settingsReloadPending = true;
     if (!taskbarWnd) {
-        // No taskbar UI exists yet, so there are no concurrent UI reads.
-        LoadSettings();
+        // Apply on the taskbar UI thread when a button is next realized.
         return;
     }
-
-    if (!RunOnTaskbarThread(
-            taskbarWnd,
-            ApplySettingsOnTaskbarThread,
-            nullptr)) {
-        Wh_Log(
-            L"Taskbar Count Badges: "
-            L"failed to apply settings on taskbar thread");
+    if (!RunOnTaskbarThread(taskbarWnd, ApplySettingsOnTaskbarThread,
+                            nullptr)) {
+        // Don't rewrite std::wstring settings from this arbitrary callback
+        // thread. The next TaskListButton update will apply the pending change
+        // on the UI thread instead.
+        Wh_Log(L"Settings deferred until next taskbar update");
     }
 }
 
 void Wh_ModBeforeUninit() {
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"before uninit");
+    Wh_Log(L"Before uninit");
+    g_unloading = true;
+    g_settingsReloadPending = false;
 
-    {
-        std::lock_guard<std::mutex> guard(
-            g_queueMutex);
-
-        g_unloading =
-            true;
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd) {
+        // The taskbar UI is already gone, so there are no visible badges to
+        // remove.
+        return;
     }
 
-    bool ok =
-        CleanupSynchronously();
-
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"cleanup=%s",
-        ok
-            ? L"OK"
-            : L"FAILED");
+    if (!RunOnTaskbarThread(taskbarWnd, CleanupOnTaskbarThreadProc, nullptr)) {
+        Wh_Log(L"Cleanup taskbar-thread execution failed");
+    }
 }
 
 void Wh_ModUninit() {
-    g_recountQueued =
-        false;
-
-    g_countsInitialized =
-        false;
-
-    g_appCounts.clear();
-    g_appIdCache.clear();
+    // Tracked buttons contain weak WinRT references only; releasing them here
+    // is safe even if Explorer is already tearing the taskbar down.
     g_trackedButtons.clear();
-
-    Wh_Log(
-        L"Taskbar Count Badges: "
-        L"uninit");
+    g_taskbarThreadId = 0;
+    Wh_Log(L"Uninit");
 }
