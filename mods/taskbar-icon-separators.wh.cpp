@@ -2,7 +2,7 @@
 // @id              taskbar-separators-prototype
 // @name            Taskbar Separators - Prototype
 // @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
-// @version         0.5.2
+// @version         0.5.3
 // @author          meteoni
 // @include         explorer.exe
 // @architecture    x86-64
@@ -62,6 +62,21 @@ the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
     normal and small icon modes: Width is used for both and Small width is
     ignored. Changing this setting reloads the mod and recreates the separator
     buttons cleanly.
+- startupRetryAttempts: 4
+  $name: Startup attempts
+  $description: >-
+    Maximum number of attempts to pin and position separators during Explorer
+    startup. The first attempt is immediate. Values are limited to 1 through 20.
+- startupRetryDelay: 250
+  $name: Initial retry delay
+  $description: >-
+    Delay in milliseconds before the second startup attempt. Later delays are
+    multiplied by the retry backoff. Values are limited to 0 through 60000.
+- startupRetryBackoff: 2
+  $name: Retry backoff
+  $description: >-
+    Multiplier applied to the delay after each failed startup attempt. Values
+    are limited to 1 through 10.
 - separators:
     - - index: 5
         $name: Position
@@ -194,6 +209,9 @@ struct SeparatorSetting {
 struct Settings {
     std::wstring identifierPrefix;
     bool maxWidthCompatibilityMode;
+    int startupRetryAttempts;
+    DWORD startupRetryDelay;
+    int startupRetryBackoff;
     std::vector<SeparatorSetting> separators;
 };
 
@@ -202,7 +220,11 @@ static std::wstring g_storagePath;
 static std::wstring g_iconPath;
 
 static std::atomic<bool> g_taskbarViewDllHooked;
+static std::atomic<bool> g_taskbarInteractionHooksInstalled;
+static std::atomic<bool> g_loadLibraryWatcherInstalled;
 static std::atomic<bool> g_unloading;
+static HANDLE g_backendThread;
+static HANDLE g_backendStopEvent;
 
 // Internal AppUserModelID namespace. Kept independent from the user-visible
 // filename prefix so user changes don't accidentally create invalid AppIDs.
@@ -509,6 +531,27 @@ static bool LoadSettings() {
     g_settings.maxWidthCompatibilityMode =
         Wh_GetIntSetting(L"maxWidthCompatibilityMode") != 0;
 
+    int startupRetryAttempts =
+        Wh_GetIntSetting(L"startupRetryAttempts");
+    if (startupRetryAttempts <= 0) {
+        startupRetryAttempts = 4;
+    }
+    g_settings.startupRetryAttempts =
+        std::clamp(startupRetryAttempts, 1, 20);
+
+    int startupRetryDelay =
+        Wh_GetIntSetting(L"startupRetryDelay");
+    g_settings.startupRetryDelay = static_cast<DWORD>(
+        std::clamp(startupRetryDelay, 0, 60000));
+
+    int startupRetryBackoff =
+        Wh_GetIntSetting(L"startupRetryBackoff");
+    if (startupRetryBackoff <= 0) {
+        startupRetryBackoff = 2;
+    }
+    g_settings.startupRetryBackoff =
+        std::clamp(startupRetryBackoff, 1, 10);
+
     // Wh_GetIntSetting returns 0 for a missing setting.
     // Positions are therefore deliberately user-facing 1-based values.
     constexpr int kMaxSeparators = 64;
@@ -551,12 +594,16 @@ static bool LoadSettings() {
     }
 
     Wh_Log(
-        L"[SETTINGS] prefix='%s' separators=%zu widthMode=%s",
+        L"[SETTINGS] prefix='%s' separators=%zu widthMode=%s "
+        L"startupAttempts=%d retryDelay=%u retryBackoff=%d",
         g_settings.identifierPrefix.c_str(),
         g_settings.separators.size(),
         g_settings.maxWidthCompatibilityMode
             ? L"MaxWidthCompatibility"
-            : L"NativeExtent");
+            : L"NativeExtent",
+        g_settings.startupRetryAttempts,
+        g_settings.startupRetryDelay,
+        g_settings.startupRetryBackoff);
 
     for (const auto& separator : g_settings.separators) {
         Wh_Log(
@@ -1428,6 +1475,8 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t g_loadLibraryExWOriginal;
 
+static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll);
+
 static HMODULE WINAPI LoadLibraryExW_Hook(
     LPCWSTR lpLibFileName,
     HANDLE hFile,
@@ -1456,7 +1505,46 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
         }
     }
 
+    if (!g_taskbarInteractionHooksInstalled &&
+        GetModuleHandleW(L"taskbar.dll") == module &&
+        !g_taskbarInteractionHooksInstalled.exchange(true)) {
+        Wh_Log(L"[INPUT] taskbar.dll loaded; installing interaction hooks");
+
+        if (HookTaskbarInteractionSymbols(module)) {
+            Wh_ApplyHookOperations();
+        } else {
+            g_taskbarInteractionHooksInstalled = false;
+        }
+    }
+
     return module;
+}
+
+static bool InstallLoadLibraryWatcher() {
+    if (g_loadLibraryWatcherInstalled.exchange(true)) {
+        return true;
+    }
+
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelBase) {
+        g_loadLibraryWatcherInstalled = false;
+        return false;
+    }
+
+    auto loadLibraryExW =
+        reinterpret_cast<decltype(&LoadLibraryExW)>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
+
+    if (!loadLibraryExW ||
+        !WindhawkUtils::SetFunctionHook(
+            loadLibraryExW,
+            LoadLibraryExW_Hook,
+            &g_loadLibraryExWOriginal)) {
+        g_loadLibraryWatcherInstalled = false;
+        return false;
+    }
+
+    return true;
 }
 
 static bool InitializeTaskbarStylingHooks() {
@@ -1475,25 +1563,7 @@ static bool InitializeTaskbarStylingHooks() {
         L"[STYLE] Taskbar view module not loaded yet; "
         L"installing LoadLibraryExW watcher");
 
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernelBase) {
-        return false;
-    }
-
-    auto loadLibraryExW =
-        reinterpret_cast<decltype(&LoadLibraryExW)>(
-            GetProcAddress(kernelBase, "LoadLibraryExW"));
-
-    if (!loadLibraryExW) {
-        return false;
-    }
-
-    WindhawkUtils::SetFunctionHook(
-        loadLibraryExW,
-        LoadLibraryExW_Hook,
-        &g_loadLibraryExWOriginal);
-
-    return true;
+    return InstallLoadLibraryWatcher();
 }
 
 
@@ -1712,17 +1782,7 @@ static HRESULT WINAPI TaskGroup_GetToolTipText_Hook(
         cchText);
 }
 
-static bool InitializeTaskbarInteractionHooks() {
-    HMODULE taskbarDll =
-        GetModuleHandleW(L"taskbar.dll");
-
-    if (!taskbarDll) {
-        Wh_Log(
-            L"[INPUT] taskbar.dll isn't loaded; "
-            L"interaction suppression unavailable");
-        return false;
-    }
-
+static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
@@ -1983,7 +2043,7 @@ static HRESULT CreatePinManager(
 // Creation / positioning.
 // -----------------------------------------------------------------------------
 
-static bool CreateAndPinSeparators() {
+static bool PrepareSeparatorFiles() {
     if (g_settings.separators.empty()) {
         Wh_Log(L"[PIN] No separators configured");
         return true;
@@ -2014,28 +2074,56 @@ static bool CreateAndPinSeparators() {
         }
     }
 
-    IPinManagerInterop3* pinManager = nullptr;
+    return true;
+}
 
-    HRESULT hr = CreatePinManager(&pinManager);
-    if (FAILED(hr) || !pinManager) {
-        return false;
+static bool InitializeTaskbarInteractionHooks() {
+    if (HMODULE taskbarDll = GetModuleHandleW(L"taskbar.dll")) {
+        g_taskbarInteractionHooksInstalled = true;
+
+        if (!HookTaskbarInteractionSymbols(taskbarDll)) {
+            g_taskbarInteractionHooksInstalled = false;
+            return false;
+        }
+
+        return true;
     }
 
-    // Pin all shortcuts first. PinItemFromTrustedCaller is the modern working
-    // path on this build; PinItemToTaskbarShim was observed to be a no-op.
+    Wh_Log(
+        L"[INPUT] taskbar.dll isn't loaded yet; "
+        L"installing LoadLibraryExW watcher");
+    return InstallLoadLibraryWatcher();
+}
+
+static bool IsBackendStopRequested() {
+    return g_backendStopEvent &&
+        WaitForSingleObject(g_backendStopEvent, 0) == WAIT_OBJECT_0;
+}
+
+static bool PinSeparators(IPinManagerInterop3* pinManager) {
     bool success = true;
 
+    // Complete the entire pin phase before positioning anything. Retrying this
+    // operation is safe because each shortcut has a stable path and AppUserModelID.
     for (const auto& separator : g_settings.separators) {
+        if (IsBackendStopRequested()) {
+            return false;
+        }
+
         std::wstring shortcutPath =
             GetSeparatorShortcutPath(separator.ordinal);
 
         PIDLIST_ABSOLUTE pidl = nullptr;
 
-        hr = GetPidlForPath(
+        HRESULT hr = GetPidlForPath(
             shortcutPath,
             &pidl);
 
         if (FAILED(hr) || !pidl) {
+            Wh_Log(
+                L"[PIN] Can't resolve separator #%d hr=0x%08X",
+                separator.ordinal,
+                static_cast<unsigned int>(hr));
             success = false;
             continue;
         }
@@ -2061,6 +2149,12 @@ static bool CreateAndPinSeparators() {
         CoTaskMemFree(pidl);
     }
 
+    return success;
+}
+
+static bool PositionSeparators(IPinManagerInterop3* pinManager) {
+    bool success = true;
+
     // Moving in ascending destination order makes multiple requested positions
     // deterministic as items are pulled forward from their initial appended
     // locations.
@@ -2075,16 +2169,24 @@ static bool CreateAndPinSeparators() {
         });
 
     for (const auto& separator : moveOrder) {
+        if (IsBackendStopRequested()) {
+            return false;
+        }
+
         std::wstring shortcutPath =
             GetSeparatorShortcutPath(separator.ordinal);
 
         PIDLIST_ABSOLUTE pidl = nullptr;
 
-        hr = GetPidlForPath(
+        HRESULT hr = GetPidlForPath(
             shortcutPath,
             &pidl);
 
         if (FAILED(hr) || !pidl) {
+            Wh_Log(
+                L"[MOVE] Can't resolve separator #%d hr=0x%08X",
+                separator.ordinal,
+                static_cast<unsigned int>(hr));
             success = false;
             continue;
         }
@@ -2112,9 +2214,89 @@ static bool CreateAndPinSeparators() {
         CoTaskMemFree(pidl);
     }
 
-    pinManager->Release();
-
     return success;
+}
+
+static bool CreateAndPinSeparators() {
+    if (!PrepareSeparatorFiles()) {
+        return false;
+    }
+
+    if (g_settings.separators.empty()) {
+        return true;
+    }
+
+    DWORD retryDelay = g_settings.startupRetryDelay;
+
+    for (int attempt = 1;
+         attempt <= g_settings.startupRetryAttempts;
+         ++attempt) {
+        if (IsBackendStopRequested()) {
+            Wh_Log(L"[INIT] Separator startup cancelled");
+            return false;
+        }
+
+        Wh_Log(
+            L"[INIT] Separator startup attempt %d/%d",
+            attempt,
+            g_settings.startupRetryAttempts);
+
+        IPinManagerInterop3* pinManager = nullptr;
+        HRESULT hr = CreatePinManager(&pinManager);
+
+        bool pinsReady = false;
+        bool positioned = false;
+
+        if (SUCCEEDED(hr) && pinManager) {
+            pinsReady = PinSeparators(pinManager);
+
+            if (pinsReady) {
+                positioned = PositionSeparators(pinManager);
+            } else {
+                Wh_Log(
+                    L"[INIT] Pin pass incomplete; skipping move pass");
+            }
+
+            pinManager->Release();
+        }
+
+        if (pinsReady && positioned) {
+            Wh_Log(
+                L"[INIT] Separator startup converged on attempt %d",
+                attempt);
+            return true;
+        }
+
+        if (IsBackendStopRequested()) {
+            Wh_Log(L"[INIT] Separator startup cancelled");
+            return false;
+        }
+
+        if (attempt < g_settings.startupRetryAttempts) {
+            Wh_Log(
+                L"[INIT] Separator startup attempt failed; "
+                L"retrying in %u ms",
+                retryDelay);
+
+            if (WaitForSingleObject(g_backendStopEvent, retryDelay) ==
+                WAIT_OBJECT_0) {
+                Wh_Log(L"[INIT] Separator startup cancelled");
+                return false;
+            }
+
+            ULONGLONG nextDelay =
+                static_cast<ULONGLONG>(retryDelay) *
+                g_settings.startupRetryBackoff;
+            retryDelay = nextDelay > 60000
+                ? 60000
+                : static_cast<DWORD>(nextDelay);
+        }
+    }
+
+    Wh_Log(
+        L"[INIT] Separator startup did not converge after %d attempts",
+        g_settings.startupRetryAttempts);
+    return false;
 }
 
 // -----------------------------------------------------------------------------
@@ -2209,6 +2391,89 @@ static bool UnpinAndDeleteSeparators() {
 // Windhawk lifetime.
 // -----------------------------------------------------------------------------
 
+static DWORD WINAPI BackendThreadProc(void*) {
+    Wh_Log(L"[INIT] Separator backend worker starting");
+
+    HRESULT hrInit =
+        CoInitializeEx(
+            nullptr,
+            COINIT_APARTMENTTHREADED);
+
+    if (FAILED(hrInit)) {
+        Wh_Log(
+            L"[INIT] Backend worker CoInitializeEx failed hr=0x%08X",
+            static_cast<unsigned int>(hrInit));
+        return 0;
+    }
+
+    bool success = CreateAndPinSeparators();
+
+    CoUninitialize();
+
+    if (!success && !IsBackendStopRequested()) {
+        Wh_Log(
+            L"[INIT] One or more prototype operations failed; "
+            L"mod remains loaded so unload can still clean up");
+    }
+
+    Wh_Log(L"[INIT] Separator backend worker finished");
+    return 0;
+}
+
+static bool StartBackendWorker() {
+    g_backendStopEvent =
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
+
+    if (!g_backendStopEvent) {
+        Wh_Log(
+            L"[INIT] CreateEvent for backend worker failed error=%u",
+            GetLastError());
+        return false;
+    }
+
+    g_backendThread =
+        CreateThread(
+            nullptr,
+            0,
+            BackendThreadProc,
+            nullptr,
+            0,
+            nullptr);
+
+    if (!g_backendThread) {
+        Wh_Log(
+            L"[INIT] CreateThread for backend worker failed error=%u",
+            GetLastError());
+        CloseHandle(g_backendStopEvent);
+        g_backendStopEvent = nullptr;
+        return false;
+    }
+
+    return true;
+}
+
+static void StopBackendWorker() {
+    if (g_backendStopEvent) {
+        SetEvent(g_backendStopEvent);
+    }
+
+    if (g_backendThread) {
+        Wh_Log(L"[UNINIT] Waiting for separator backend worker");
+        WaitForSingleObject(g_backendThread, INFINITE);
+        CloseHandle(g_backendThread);
+        g_backendThread = nullptr;
+    }
+
+    if (g_backendStopEvent) {
+        CloseHandle(g_backendStopEvent);
+        g_backendStopEvent = nullptr;
+    }
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"[INIT] Taskbar separator prototype MaxWidth test loading");
 
@@ -2253,36 +2518,24 @@ void Wh_ModAfterInit() {
         }
     }
 
-    HRESULT hrInit =
-        CoInitializeEx(
-            nullptr,
-            COINIT_APARTMENTTHREADED);
-
-    const bool shouldUninitialize =
-        SUCCEEDED(hrInit);
-
-    if (hrInit == RPC_E_CHANGED_MODE) {
-        Wh_Log(
-            L"[INIT] COM already initialized with another "
-            L"apartment model; continuing");
-    } else if (FAILED(hrInit)) {
-        Wh_Log(
-            L"[INIT] CoInitializeEx failed hr=0x%08X",
-            static_cast<unsigned int>(hrInit));
-        return;
+    // Do the equivalent late-attach check for taskbar.dll. It might have
+    // loaded between Wh_ModInit and hook activation, before the watcher could
+    // observe its LoadLibraryExW call.
+    if (!g_taskbarInteractionHooksInstalled) {
+        if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
+            if (!g_taskbarInteractionHooksInstalled.exchange(true)) {
+                if (HookTaskbarInteractionSymbols(module)) {
+                    Wh_ApplyHookOperations();
+                } else {
+                    g_taskbarInteractionHooksInstalled = false;
+                }
+            }
+        }
     }
 
-    bool success =
-        CreateAndPinSeparators();
-
-    if (shouldUninitialize) {
-        CoUninitialize();
-    }
-
-    if (!success) {
+    if (!StartBackendWorker()) {
         Wh_Log(
-            L"[INIT] One or more prototype operations failed; "
-            L"mod remains loaded so unload can still clean up");
+            L"[INIT] Failed to start separator backend worker");
     }
 
     Wh_Log(L"[INIT] Taskbar separator prototype loaded");
@@ -2299,10 +2552,14 @@ void Wh_ModBeforeUninit() {
     // state. Don't try to restore the XAML property here: this callback isn't
     // guaranteed to execute on the taskbar UI thread.
     g_unloading = true;
+    StopBackendWorker();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"[UNINIT] Taskbar separator prototype unloading");
+
+    // Defensive in case an older Windhawk build skips Wh_ModBeforeUninit.
+    StopBackendWorker();
 
     HRESULT hrInit =
         CoInitializeEx(
