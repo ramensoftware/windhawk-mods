@@ -41,7 +41,7 @@ Windows 8.1 theme
   - The pending-update check reads the standard CBS and Windows Update registry keys that Windows sets when a reboot is required to finish installing updates.
 - **Startup Notification**: After Windows starts, if problems are detected, a balloon notification is shown regardless of cooldown, so you are never left unaware of existing issues after a reboot. The notification is driven by the periodic security check; if the notification area isn't ready yet, a fallback timer waits up to ~2 minutes before giving up.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
-- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian are currently supported.
+- **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian and Turkish are currently supported.
 - **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
 
 ## Hotkeys
@@ -72,6 +72,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
 ## Credits 
 - Yvor - Testing on Windows 10 21H2 with the Windows 8.1 theme
 - TheWolf - Testing on Windows 11 23H2
+- cips_35 - Testing on Windows 11 25H2 and Turkish Translation
 - ✮⋆˙ Holly B!!──★ ˙🍓 ̟ ˙✧˖°🪼⋆.ೃ [NURO] - Screenshot of the mod under a Windows 7 theme
 */
 // ==/WindhawkModReadme==
@@ -107,6 +108,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 23H2 
     - nl: Nederlands
     - pl: Polski
     - ro: Română
+    - tr: Türkçe
 - restoreCplHubLinks: true
   $name: Control Panel links
   $description: On the Security and Maintenance page, show Troubleshooting and Recovery side by side (classic layout). Turn off if you only want the tray flyout.
@@ -693,6 +695,7 @@ void LoadSettings() {
         else if (_wcsicmp(lang, L"nl") == 0) g_Settings.language = 8;
         else if (_wcsicmp(lang, L"pl") == 0) g_Settings.language = 9;
         else if (_wcsicmp(lang, L"ro") == 0) g_Settings.language = 10;
+        else if (_wcsicmp(lang, L"tr") == 0) g_Settings.language = 11;
         else g_Settings.language = 0;
     } else {
         g_Settings.language = 0; // auto-detect
@@ -1277,6 +1280,48 @@ static const LocalePack g_Locales[] = {
         L"A fost detectat\u0103 o nou\u0103 problem\u0103 critic\u0103. Face\u021Bi clic pentru a o examina acum.",
         L"Problema critic\u0103 este \u00EEnc\u0103 prezent\u0103. Face\u021Bi clic pentru a o remedia."
     }},
+    // Turco (0x041F) - COMPLETO - autentico Windows 7/8.1 turco
+{ 0x041F, {
+    L"Eylem Merkezi",
+    L"Eylem Merkezi'ni a\u00E7",
+    L"Eylem Merkezi",
+    L"Sorun Giderme",
+    L"Windows Update",
+    L"2 \u00F6nemli ileti",
+    L"1 \u00F6nemli ileti",
+    L"\u015Eu anda alg\u0131lanan sorun yok\nBilgisayar\u0131n\u0131z\u0131n durumuyla ilgili son iletilere g\u00F6z atmak ve sorunlara \u00E7\u00F6z\u00FCm bulmak i\u00E7in Eylem Merkezi'ni kullanabilirsiniz.",
+    L"Eylem Merkezi",
+    L"Eylem Merkezi",
+    L"Eylem Merkezi",
+    L"Windows G\u00FCvenlik Duvar\u0131 kapat\u0131ld\u0131.",
+    L"Vir\u00FCsten koruma kapat\u0131ld\u0131.",
+    L"Windows Update yap\u0131land\u0131r\u0131lmad\u0131.",
+    L"Kullan\u0131c\u0131 Hesab\u0131 Denetimi kapat\u0131ld\u0131.",
+    L"Eylem Merkezi'ni a\u00E7mak i\u00E7in t\u0131klay\u0131n.",
+    L"Eylem Merkezi yeni sorunlar alg\u0131lad\u0131.",
+    L"Windows Update otomatik g\u00FCncelle\u015Ftirme olarak ayarlanmad\u0131.",
+    L"Casus yaz\u0131l\u0131mdan koruma kapat\u0131ld\u0131.",
+    L"\u0130nternet g\u00FCvenli\u011Fi ayarlar\u0131nda dikkat edilmesi gerekenler var.",
+    L"G\u00FCvenlik Merkezi hizmeti \u00E7al\u0131\u015Fm\u0131yor.",
+    L"Windows Defender ger\u00E7ek zamanl\u0131 korumas\u0131 kapat\u0131ld\u0131.",
+    L"...ve daha fazlas\u0131",
+    L"\u015Eu anda alg\u0131lanan sorun yok",
+    L"%d sorun alg\u0131land\u0131.",
+    L"Bir sorun alg\u0131land\u0131. L\u00FCtfen g\u00FCvenlik durumunuzu g\u00F6zden ge\u00E7irin.",
+    L"SmartScreen kapat\u0131ld\u0131. Web'den al\u0131nan uygulamalar denetlenmeyecek.",
+    L"Sistem yedeklemesi yap\u0131land\u0131r\u0131lmad\u0131 veya \u00E7al\u0131\u015Fm\u0131yor.",
+    L"Windows Hata Bildirimi hizmeti devre d\u0131\u015F\u0131 b\u0131rak\u0131ld\u0131.",
+    L"Disk durumu denetimi \u00F6nerilir.",
+    L"Sorunlar\u0131 incelemek ve d\u00FCzeltmek i\u00E7in Eylem Merkezi'ni a\u00E7\u0131n.",
+    L"Sistem durumunuzu g\u00F6zden ge\u00E7irin",
+    L"Pil zay\u0131f. Cihaz\u0131n\u0131z\u0131 bir g\u00FC\u00E7 kayna\u011F\u0131na ba\u011Flay\u0131n.",
+    L"Windows g\u00FCncelle\u015Ftirmeleri bekliyor. Bunlar\u0131 uygulamak i\u00E7in bilgisayar\u0131n\u0131z\u0131 yeniden ba\u015Flat\u0131n.",
+    L"Uzak Masa\u00FCst\u00FC, A\u011F D\u00FCzeyi Kimlik Do\u011Frulamas\u0131 olmadan etkinle\u015Ftirildi.",
+    L"Sistem s\u00FCr\u00FCc\u00FCs\u00FC BitLocker ile korunmuyor.",
+    L"Yenilikleri g\u00F6rmek i\u00E7in t\u0131klay\u0131n.",
+    L"Yeni kritik sorun alg\u0131land\u0131. \u015Eimdi incelemek i\u00E7in t\u0131klay\u0131n.",
+    L"Kritik sorun h\u00E2l\u00E2 mevcut. D\u00FCzeltmek i\u00E7in t\u0131klay\u0131n."
+}},
 };
 static const LocalePack* g_CurrentLocalePack = &g_Locales[0];
 #define LOC(id) (g_CurrentLocalePack->strings[id])
@@ -1453,6 +1498,7 @@ void DetermineLocale() {
         case 8: g_CurrentLocalePack = FindLocalePack(0x0413); g_LastDetectedUILang = 0x0413; break;
         case 9: g_CurrentLocalePack = FindLocalePack(0x0415); g_LastDetectedUILang = 0x0415; break;
         case 10: g_CurrentLocalePack = FindLocalePack(0x0418); g_LastDetectedUILang = 0x0418; break;
+        case 11: g_CurrentLocalePack = FindLocalePack(0x041F); g_LastDetectedUILang = 0x041F; break;
         default: {
             LANGID ui = GetUserDefaultUILanguage();
             g_CurrentLocalePack = FindLocalePack(ui);
@@ -4378,6 +4424,9 @@ if (activeProblems > 0) {
         case 0x0418: // Română
             totalText = (activeProblems == 1) ? L"mesaj total" : L"mesaje totale";
             break;
+        case 0x041F: // Türkçe
+            totalText = L"toplam ileti";
+            break;
         default:     // English
             totalText = (activeProblems == 1) ? L"total message" : L"total messages";
             break;
@@ -5332,19 +5381,38 @@ struct LangPack {
 };
 
 static const LangPack g_langPacks[] = {
+    // English (0x09)
     {0x09, L"If the problem isn't listed, try one of these:", L"Troubleshooting", L"Find and fix problems with your computer.", L"Recovery", L"Refresh your PC without affecting your files, or reset it and start over."},
+    
+    // Italian (0x10)
     {0x10, L"Se il problema non \u00e8 incluso nell'elenco, provare uno dei metodi seguenti:", L"Risoluzione dei problemi", L"Trovare e risolvere i problemi del computer.", L"Ripristino", L"Aggiorna il PC mantenendo i file o reimpostalo e ricomincia dall'inizio."},
+    
+    // French (0x0c)
     {0x0c, L"Si le probl\u00e8me n'est pas r\u00e9pertori\u00e9, essayez l'une des m\u00e9thodes suivantes :", L"R\u00e9solution des probl\u00e8mes", L"Rechercher et r\u00e9soudre les probl\u00e8mes de l'ordinateur.", L"R\u00e9cup\u00e9ration", L"Actualisez le PC sans affecter vos fichiers, ou r\u00e9initialisez-le et recommencez."},
+    
+    // Spanish (0x0a)
     {0x0a, L"Si el problema no est\u00e1 en la lista, pruebe uno de estos m\u00e9todos:", L"Soluci\u00f3n de problemas", L"Buscar y solucionar problemas del equipo.", L"Recuperaci\u00f3n", L"Actualiza el PC sin afectar a los archivos o restabl\u00e9celo y empieza de nuevo."},
+    
+    // Russian (0x19)
     {0x19, L"\u0415\u0441\u043b\u0438 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430 \u0432 \u0441\u043f\u0438\u0441\u043a\u0435, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0434\u0438\u043d \u0438\u0437 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u0441\u043f\u043e\u0441\u043e\u0431\u043e\u0432:", L"\u0423\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043e\u043a", L"\u041f\u043e\u0438\u0441\u043a \u0438 \u0443\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0431\u043b\u0435\u043c \u0441 \u043a\u043e\u043c\u043f\u044c\u044e\u0442\u0435\u0440\u043e\u043c.", L"\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435", L"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u041f\u041a, \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0432 \u0444\u0430\u0439\u043b\u044b, \u0438\u043b\u0438 \u0441\u0431\u0440\u043e\u0441\u044c\u0442\u0435 \u0435\u0433\u043e \u0438 \u043d\u0430\u0447\u043d\u0438\u0442\u0435 \u0441\u043d\u0430\u0447\u0430\u043b\u0430."},
+    
+    // Portuguese (0x16)
     {0x16, L"Se o problema n\u00E3o estiver na lista, experimente um destes m\u00E9todos:", L"Resolu\u00E7\u00E3o de Problemas", L"Encontrar e corrigir problemas do computador.", L"Recupera\u00E7\u00E3o", L"Atualize o PC sem afetar os ficheiros ou restaure-o e recomece do in\u00EDcio."},
+    
+    // German (0x07)
     {0x07, L"Falls das Problem nicht aufgef\u00FChrt ist, versuchen Sie eine der folgenden Methoden:", L"Problembehandlung", L"Suchen und Beheben von Problemen mit dem Computer.", L"Wiederherstellung", L"Aktualisieren Sie den PC, ohne Ihre Dateien zu beeintr\u00E4chtigen, oder setzen Sie ihn zur\u00FCck und fangen Sie von vorn an."},
+    
     // Dutch (primary lang 0x13)
     {0x13, L"Als het probleem niet in de lijst staat, probeer dan een van deze methoden:", L"Probleemoplossing", L"Zoek naar en los problemen met uw computer op.", L"Herstel", L"Werk uw pc bij zonder uw bestanden te verliezen, of stel deze opnieuw in en begin opnieuw."},
+    
     // Polish (primary lang 0x15)
     {0x15, L"Je\u015Bli problemu nie ma na li\u015Bcie, wypr\u00F3buj jedn\u0105 z tych metod:", L"Rozwi\u0105zywanie problem\u00F3w", L"Znajd\u017A i rozwi\u0105\u017C problemy z komputerem.", L"Odzyskiwanie", L"Od\u015Bwie\u017C komputer bez utraty plik\u00F3w lub zresetuj go i zacznij od nowa."},
+    
     // Romanian (primary lang 0x18)
-    {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."}
+    {0x18, L"Dac\u0103 problema nu este listat\u0103, \u00Eencerca\u021Bi una dintre aceste metode:", L"Depanare", L"G\u0103si\u021Bi \u0219i remedia\u021Bi problemele computerului.", L"Recuperare", L"Re\u00EEmprosp\u0103ta\u021Bi PC-ul f\u0103r\u0103 a afecta fi\u0219ierele sau reseta\u021Bi-l \u0219i \u00Eencepe\u021Bi din nou."},
+    
+    // Turkish (primary lang 0x1f) - NUOVO
+    {0x1f, L"Sorun listede yoksa a\u015Fa\u011F\u0131daki y\u00F6ntemlerden birini deneyin:", L"Sorun Giderme", L"Bilgisayar\u0131n\u0131zla ilgili sorunlar\u0131 bulur ve d\u00FCzeltir.", L"Kurtarma", L"Bilgisayar\u0131n\u0131z\u0131 dosyalar\u0131n\u0131z\u0131 etkilemeden yenileyin veya s\u0131f\u0131rlay\u0131p yeniden ba\u015Flay\u0131n."}
 };
 
 static const LangPack* GetLangPack() {
