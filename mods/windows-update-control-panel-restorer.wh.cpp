@@ -5633,14 +5633,37 @@ enum {
 // leave one of them registered with mod code after the image is unmapped).
 static std::mutex g_wuSettingsDlgMutex;
 static std::vector<HWND> g_wuSettingsDlgs;
-static DWORD g_wuDlgAuOptions = 4;
-static bool g_wuDlgRecommended = false;
-static bool g_wuDlgMsProducts = false;
-static bool g_wuDlgAllUsers = false;
+// Per-instance dialog state (AUOptions snapshot + dark-mode resources),
+// owned by the dialog window itself via GWLP_USERDATA - see
+// WuHeaderDialogResources above for the same pattern. This replaces the
+// previous plain-static globals, which assumed only one settings dialog
+// could ever be open; that assumption did not hold, because the "is one
+// already open" check and this dialog's own registration were not atomic
+// (see TryReserveWuSettingsDialogSlot below).
+struct WuSettingsDlgState {
+    DWORD auOptions = 4;
+    bool recommended = false;
+    bool msProducts = false;
+    bool allUsers = false;
+    bool darkMode = false;
+    HBRUSH darkBrush = nullptr;
+};
+
+static WuSettingsDlgState* GetWuSettingsDlgState(HWND hwnd) {
+    return reinterpret_cast<WuSettingsDlgState*>(
+        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+}
+
+// True between the moment ShowWuSettingsDialog decides to create a dialog
+// and the moment WM_INITDIALOG registers it (or creation fails) - closes the
+// race where two Explorer-window threads both see "no dialog open" and both
+// create one.
+static bool g_wuSettingsDlgPending = false;
 
 static void RegisterWuSettingsDialog(HWND hwnd) {
     std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
     g_wuSettingsDlgs.push_back(hwnd);
+    g_wuSettingsDlgPending = false;
 }
 
 static void UnregisterWuSettingsDialog(HWND hwnd) {
@@ -5649,13 +5672,24 @@ static void UnregisterWuSettingsDialog(HWND hwnd) {
     g_wuSettingsDlgs.erase(it, g_wuSettingsDlgs.end());
 }
 
-// Returns the first live settings dialog, or nullptr. Used to re-foreground an
-// existing dialog instead of opening a second one.
-static HWND FindLiveWuSettingsDialog() {
+// Atomically checks for a live (or in-progress) dialog and, if none exists,
+// reserves the slot so a concurrent call on another thread doesn't also
+// start creating one. Returns the existing HWND to foreground, or nullptr
+// if the caller now holds the reservation and should proceed to create one.
+// On any exit that doesn't end in a successful RegisterWuSettingsDialog
+// call, the caller must call ReleaseWuSettingsDialogReservation().
+static HWND TryReserveWuSettingsDialogSlot() {
     std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
     for (HWND hwnd : g_wuSettingsDlgs)
         if (IsWindow(hwnd)) return hwnd;
+    if (g_wuSettingsDlgPending) return nullptr;  // another thread is creating one
+    g_wuSettingsDlgPending = true;
     return nullptr;
+}
+
+static void ReleaseWuSettingsDialogReservation() {
+    std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
+    g_wuSettingsDlgPending = false;
 }
 
 // Closes every live settings dialog. Wh_ModUninit runs on an arbitrary
@@ -5779,21 +5813,15 @@ static bool IsAppsDarkModeEnabled() {
     return result == ERROR_SUCCESS && value == 0;
 }
 
-// Only one settings dialog instance can ever be open at a time (see
-// FindLiveWuSettingsDialog in ShowWuSettingsDialog), so plain statics are
-// safe here, matching the style already used elsewhere in this mod.
-static bool g_wuDlgDarkMode = false;
-static HBRUSH g_wuDlgDarkBrush = nullptr;
-
-static void ApplyWuSettingsDialogDarkMode(HWND hwnd, HWND hCombo) {
-    g_wuDlgDarkMode = IsAppsDarkModeEnabled();
-    if (!g_wuDlgDarkMode) return;
+static void ApplyWuSettingsDialogDarkMode(HWND hwnd, HWND hCombo, WuSettingsDlgState* state) {
+    state->darkMode = IsAppsDarkModeEnabled();
+    if (!state->darkMode) return;
     EnsureDarkModeApis();
     if (pDwmSetWindowAttribute) {
         BOOL enable = TRUE;
         pDwmSetWindowAttribute(hwnd, /*DWMWA_USE_IMMERSIVE_DARK_MODE*/ 20, &enable, sizeof(enable));
     }
-    if (!g_wuDlgDarkBrush) g_wuDlgDarkBrush = CreateSolidBrush(RGB(32, 32, 32));
+    if (!state->darkBrush) state->darkBrush = CreateSolidBrush(RGB(32, 32, 32));
     if (pSetWindowTheme) {
         // "DarkMode_CFD" is what Explorer's own common-file-dialog-derived
         // combobox uses; it's what actually darkens the dropdown list itself.
@@ -5804,14 +5832,18 @@ static void ApplyWuSettingsDialogDarkMode(HWND hwnd, HWND hCombo) {
     }
 }
 
-static void TeardownWuSettingsDialogDarkMode() {
-    if (g_wuDlgDarkBrush) { DeleteObject(g_wuDlgDarkBrush); g_wuDlgDarkBrush = nullptr; }
-    g_wuDlgDarkMode = false;
+static void TeardownWuSettingsDialogDarkMode(WuSettingsDlgState* state) {
+    if (state->darkBrush) { DeleteObject(state->darkBrush); state->darkBrush = nullptr; }
+    state->darkMode = false;
 }
 
 static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
+            // lParam is the dwInitParam passed to CreateDialogIndirectParamW:
+            // the state ShowWuSettingsDialog allocated for this instance.
+            auto* state = reinterpret_cast<WuSettingsDlgState*>(lParam);
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
             RegisterWuSettingsDialog(hwnd);
             HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
             if (hCombo) {
@@ -5828,17 +5860,17 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                     Wh_Log(L"Windows Update Restorer: settings combobox has 0 items after population");
                 }
                 int sel = 0;
-                if (g_wuDlgAuOptions == 4) sel = 0;
-                else if (g_wuDlgAuOptions == 3) sel = 1;
-                else if (g_wuDlgAuOptions == 2) sel = 2;
-                else if (g_wuDlgAuOptions == 1) sel = 3;
+                if (state->auOptions == 4) sel = 0;
+                else if (state->auOptions == 3) sel = 1;
+                else if (state->auOptions == 2) sel = 2;
+                else if (state->auOptions == 1) sel = 3;
                 SendMessageW(hCombo, CB_SETCURSEL, sel, 0);
             } else {
                 Wh_Log(L"Windows Update Restorer: settings dialog combobox control not found (GetDlgItem returned null)");
             }
-            CheckDlgButton(hwnd, kWuCtlRecommended, g_wuDlgRecommended ? BST_CHECKED : BST_UNCHECKED);
-            CheckDlgButton(hwnd, kWuCtlMsProducts, g_wuDlgMsProducts ? BST_CHECKED : BST_UNCHECKED);
-            CheckDlgButton(hwnd, kWuCtlAllUsers, g_wuDlgAllUsers ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, kWuCtlRecommended, state->recommended ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, kWuCtlMsProducts, state->msProducts ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, kWuCtlAllUsers, state->allUsers ? BST_CHECKED : BST_UNCHECKED);
             // Visual-only: the combobox stays enabled so the user can browse the
             // options, but nothing here is written back to the real Windows
             // Update policy/registry yet.
@@ -5846,52 +5878,53 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             EnableWindow(GetDlgItem(hwnd, kWuCtlRecommended), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlMsProducts), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlAllUsers), FALSE);
-            ApplyWuSettingsDialogDarkMode(hwnd, hCombo);
+            ApplyWuSettingsDialogDarkMode(hwnd, hCombo, state);
             return TRUE;
         }
         case WM_CTLCOLORDLG:
-            if (g_wuDlgDarkMode && g_wuDlgDarkBrush)
-                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+            if (auto* state = GetWuSettingsDlgState(hwnd); state && state->darkMode && state->darkBrush)
+                return reinterpret_cast<INT_PTR>(state->darkBrush);
             break;
         case WM_CTLCOLORLISTBOX:
             // This is what the combobox's own dropdown list paints through -
             // the actual fix for the blank/unreadable items in dark mode.
-            if (g_wuDlgDarkMode) {
+            if (auto* state = GetWuSettingsDlgState(hwnd); state && state->darkMode) {
                 HDC hdc = reinterpret_cast<HDC>(wParam);
                 SetTextColor(hdc, RGB(255, 255, 255));
                 SetBkColor(hdc, RGB(43, 43, 43));
-                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+                return reinterpret_cast<INT_PTR>(state->darkBrush);
             }
             break;
         case WM_CTLCOLORBTN:
-            if (g_wuDlgDarkMode) {
+            if (auto* state = GetWuSettingsDlgState(hwnd); state && state->darkMode) {
                 HDC hdc = reinterpret_cast<HDC>(wParam);
                 SetTextColor(hdc, RGB(255, 255, 255));
                 SetBkColor(hdc, RGB(32, 32, 32));
                 SetBkMode(hdc, TRANSPARENT);
-                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+                return reinterpret_cast<INT_PTR>(state->darkBrush);
             }
             break;
         case WM_CTLCOLORSTATIC: {
             // The privacy note is drawn in grey, like the original page.
+            auto* state = GetWuSettingsDlgState(hwnd);
             HDC hdc = reinterpret_cast<HDC>(wParam);
             HWND hCtl = reinterpret_cast<HWND>(lParam);
             if (hCtl == GetDlgItem(hwnd, kWuCtlNote)) {
-                if (g_wuDlgDarkMode) {
+                if (state && state->darkMode) {
                     SetTextColor(hdc, RGB(170, 170, 170));
                     SetBkColor(hdc, RGB(32, 32, 32));
                     SetBkMode(hdc, TRANSPARENT);
-                    return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+                    return reinterpret_cast<INT_PTR>(state->darkBrush);
                 }
                 SetTextColor(hdc, RGB(90, 90, 90));
                 SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
                 return reinterpret_cast<INT_PTR>(GetSysColorBrush(COLOR_BTNFACE));
             }
-            if (g_wuDlgDarkMode) {
+            if (state && state->darkMode) {
                 SetTextColor(hdc, RGB(255, 255, 255));
                 SetBkColor(hdc, RGB(32, 32, 32));
                 SetBkMode(hdc, TRANSPARENT);
-                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+                return reinterpret_cast<INT_PTR>(state->darkBrush);
             }
             break;
         }
@@ -5910,24 +5943,35 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             return TRUE;
         case WM_DESTROY:
             UnregisterWuSettingsDialog(hwnd);
-            TeardownWuSettingsDialogDarkMode();
+            if (auto* state = GetWuSettingsDlgState(hwnd)) {
+                TeardownWuSettingsDialogDarkMode(state);
+                delete state;
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            }
             return TRUE;
     }
     return FALSE;
 }
 
 static void ShowWuSettingsDialog(HWND parent) {
-    if (HWND existing = FindLiveWuSettingsDialog()) {
+    if (HWND existing = TryReserveWuSettingsDialogSlot()) {
         SetForegroundWindow(existing);
         return;
     }
+    // This thread now holds the reservation: any early return below must
+    // release it, and WM_INITDIALOG (via RegisterWuSettingsDialog) releases
+    // it on the success path.
 
-    g_wuDlgAuOptions = ReadAuOptionsValue();
-    ReadAuxAuValues(g_wuDlgRecommended, g_wuDlgMsProducts, g_wuDlgAllUsers);
+    auto state = std::make_unique<WuSettingsDlgState>();
+    state->auOptions = ReadAuOptionsValue();
+    ReadAuxAuValues(state->recommended, state->msProducts, state->allUsers);
 
     const int kControls = 10; // group, desc, label, combo, 3 checkboxes, note, OK, Cancel
     BYTE* buf = new (std::nothrow) BYTE[4096];
-    if (!buf) return;
+    if (!buf) {
+        ReleaseWuSettingsDialogReservation();
+        return;
+    }
     BYTE* p = buf;
     const BYTE* const bufEnd = buf + 4096; // upper bound for every write below
     auto align4 = [](BYTE*& ptr) { ptr = reinterpret_cast<BYTE*>((reinterpret_cast<UINT_PTR>(ptr) + 3) & ~static_cast<UINT_PTR>(3)); };
@@ -6020,14 +6064,23 @@ static void ShowWuSettingsDialog(HWND parent) {
     if (!templateValid || pDlg->cdit != kControls) {
         Wh_Log(L"Windows Update Restorer: settings dialog template buffer was too small");
         delete[] buf;
+        ReleaseWuSettingsDialogReservation();
         return;
     }
 
     HWND hwnd = CreateDialogIndirectParamW(GetModuleHandleW(nullptr),
                                            reinterpret_cast<LPDLGTEMPLATE>(buf),
-                                           parent, WuSettingsDlgProc, 0);
+                                           parent, WuSettingsDlgProc,
+                                           reinterpret_cast<LPARAM>(state.get()));
     if (!hwnd) {
         Wh_Log(L"Windows Update Restorer: classic settings dialog creation FAILED (err=%u)", GetLastError());
+        ReleaseWuSettingsDialogReservation();
+    } else {
+        // WM_INITDIALOG (run synchronously inside CreateDialogIndirectParamW)
+        // has stored this pointer in the window's GWLP_USERDATA and released
+        // the reservation; WM_DESTROY deletes it. Ownership has moved to the
+        // window.
+        std::ignore = state.release();
     }
     delete[] buf;
 
