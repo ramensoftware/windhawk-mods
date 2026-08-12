@@ -4417,13 +4417,35 @@ static const wchar_t* SelectOpenWindowsUpdateSettingsLinkText() {
 }
 
 // Forward declaration: defined below (used by BuildRedBoxFallbackXml).
+// Unlike EmbeddedMuiString(), this must never return nullptr: it feeds
+// CB_ADDSTRING directly (see WuSettingsDlgProc / SettingsDirectUiSubclassProc),
+// and CB_ADDSTRING silently no-ops on a null pointer, so a missing table
+// entry used to mean the combobox item was just never added - the dropdown
+// looked completely empty instead of merely untranslated. Hardcoded English
+// fallbacks close that gap, the same way title/descText/noteText and the
+// other labels below already do for this dialog.
 static const wchar_t* WuOptionText(DWORD opt) {
     switch (opt) {
-        case 4: return EmbeddedMuiString(334);  // Install updates automatically (recommended)
-        case 3: return EmbeddedMuiString(335);  // Download updates but let me choose...
-        case 2: return EmbeddedMuiString(336);  // Check for updates but let me choose...
-        case 1: return EmbeddedMuiString(337);  // Never check for updates (not recommended)
-        default: return EmbeddedMuiString(334);
+        case 4: {
+            const wchar_t* s = EmbeddedMuiString(334);  // Install updates automatically (recommended)
+            return s ? s : L"Install updates automatically (recommended)";
+        }
+        case 3: {
+            const wchar_t* s = EmbeddedMuiString(335);  // Download updates but let me choose...
+            return s ? s : L"Download updates but let me choose whether to install them";
+        }
+        case 2: {
+            const wchar_t* s = EmbeddedMuiString(336);  // Check for updates but let me choose...
+            return s ? s : L"Check for updates but let me choose whether to download and install them";
+        }
+        case 1: {
+            const wchar_t* s = EmbeddedMuiString(337);  // Never check for updates (not recommended)
+            return s ? s : L"Never check for updates (not recommended)";
+        }
+        default: {
+            const wchar_t* s = EmbeddedMuiString(334);
+            return s ? s : L"Install updates automatically (recommended)";
+        }
     }
 }
 
@@ -4778,10 +4800,26 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(
 
     if (g_isSettingsPageActive && uMsg == WM_TIMER && wParam == 889) {
         InitDirectUIExports();
+        if (!pStrToID || !pFindDescendent || !pAddString || !pSetSelection) {
+            static bool loggedMissingExports = false;
+            if (!loggedMissingExports) {
+                loggedMissingExports = true;
+                Wh_Log(L"Windows Update Restorer: DirectUI combobox exports missing (StrToID=%d FindDescendent=%d AddString=%d SetSelection=%d)",
+                       pStrToID != nullptr, pFindDescendent != nullptr, pAddString != nullptr, pSetSelection != nullptr);
+            }
+        }
         if (pStrToID && pFindDescendent && pAddString && pSetSelection) {
             void* root = reinterpret_cast<void*>(GetWindowLongPtrW(hwnd, 0));
             ATOM atom = pStrToID(L"auOptionSelectorCombobox");
             void* combo = root && atom ? pFindDescendent(root, atom) : nullptr;
+            if (!combo) {
+                static bool loggedNoCombo = false;
+                if (!loggedNoCombo) {
+                    loggedNoCombo = true;
+                    Wh_Log(L"Windows Update Restorer: DirectUI combobox not found (root=%p atom=%u)",
+                           root, (unsigned)atom);
+                }
+            }
             if (combo) {
                 if (g_lastComboPtr != combo) {
                     g_lastComboPtr = combo;
@@ -4798,18 +4836,28 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(
                         pAddString(combo, WuOptionText(2)),
                         pAddString(combo, WuOptionText(1)),
                     };
+                    Wh_Log(L"Windows Update Restorer: DirectUI combobox AddString results: %d %d %d %d",
+                           optionIndices[0], optionIndices[1], optionIndices[2], optionIndices[3]);
                     if (optionIndices[0] >= 0 && optionIndices[1] >= 0 &&
                         optionIndices[2] >= 0 && optionIndices[3] >= 0) {
                         const DWORD current = ReadAuOptionsValue();
                         const int optionSlot = current == 4 ? 0 : current == 3 ? 1
                                                        : current == 2 ? 2 : 3;
-                        if (SUCCEEDED(pSetSelection(combo, optionIndices[optionSlot]))) {
+                        const HRESULT selResult = pSetSelection(combo, optionIndices[optionSlot]);
+                        Wh_Log(L"Windows Update Restorer: DirectUI combobox current=%u slot=%d targetIndex=%d SetSelection hr=0x%08X",
+                               current, optionSlot, optionIndices[optionSlot], (unsigned)selResult);
+                        if (SUCCEEDED(selResult)) {
                             g_nativeComboPopulated = true;
                         }
+                    } else {
+                        Wh_Log(L"Windows Update Restorer: DirectUI combobox AddString failed, skipping SetSelection");
                     }
                 }
-                // The legacy page is presentational only on modern Windows.
-                if (pSetEnabled) pSetEnabled(combo, false);
+                // The legacy page is presentational only on modern Windows: the
+                // combobox is left enabled so it feels interactive, but no
+                // selection is ever written back to the real Windows Update
+                // policy/registry - it's a visual-only choice for now.
+                if (pSetEnabled) pSetEnabled(combo, true);
             }
         }
     }
@@ -5678,6 +5726,79 @@ static std::wstring StripAmpersand(const wchar_t* s) {
     return out;
 }
 
+// =============================================================================
+// Minimal dark-mode support for the classic "Change settings" dialog
+// =============================================================================
+// This dialog is a raw DLGTEMPLATE shown with CreateDialogIndirectParamW, so
+// it gets none of the dark theming Explorer applies to its own windows. On a
+// system with dark mode on, that leaves standard controls painted with
+// light-mode colors while the surrounding shell is dark - the combobox items
+// end up effectively unreadable (white-on-white/blank-looking) once opened.
+// We opt into the same "DarkMode_*" theme classes Explorer itself uses for
+// standard controls and paint backgrounds/text ourselves for the rest.
+typedef HRESULT(WINAPI* SetWindowTheme_t)(HWND, LPCWSTR, LPCWSTR);
+typedef HRESULT(WINAPI* DwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
+static SetWindowTheme_t pSetWindowTheme = nullptr;
+static DwmSetWindowAttribute_t pDwmSetWindowAttribute = nullptr;
+
+static void EnsureDarkModeApis() {
+    if (!pSetWindowTheme) {
+        HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+        if (!uxtheme) uxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (uxtheme)
+            pSetWindowTheme = reinterpret_cast<SetWindowTheme_t>(GetProcAddress(uxtheme, "SetWindowTheme"));
+    }
+    if (!pDwmSetWindowAttribute) {
+        HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
+        if (!dwmapi) dwmapi = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (dwmapi)
+            pDwmSetWindowAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
+                GetProcAddress(dwmapi, "DwmSetWindowAttribute"));
+    }
+}
+
+// Reads the same registry value Explorer itself uses to decide whether apps
+// should draw with the dark palette.
+static bool IsAppsDarkModeEnabled() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    const LSTATUS result = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    return result == ERROR_SUCCESS && value == 0;
+}
+
+// Only one settings dialog instance can ever be open at a time (see
+// FindLiveWuSettingsDialog in ShowWuSettingsDialog), so plain statics are
+// safe here, matching the style already used elsewhere in this mod.
+static bool g_wuDlgDarkMode = false;
+static HBRUSH g_wuDlgDarkBrush = nullptr;
+
+static void ApplyWuSettingsDialogDarkMode(HWND hwnd, HWND hCombo) {
+    g_wuDlgDarkMode = IsAppsDarkModeEnabled();
+    if (!g_wuDlgDarkMode) return;
+    EnsureDarkModeApis();
+    if (pDwmSetWindowAttribute) {
+        BOOL enable = TRUE;
+        pDwmSetWindowAttribute(hwnd, /*DWMWA_USE_IMMERSIVE_DARK_MODE*/ 20, &enable, sizeof(enable));
+    }
+    if (!g_wuDlgDarkBrush) g_wuDlgDarkBrush = CreateSolidBrush(RGB(32, 32, 32));
+    if (pSetWindowTheme) {
+        // "DarkMode_CFD" is what Explorer's own common-file-dialog-derived
+        // combobox uses; it's what actually darkens the dropdown list itself.
+        if (hCombo) pSetWindowTheme(hCombo, L"DarkMode_CFD", nullptr);
+        for (int id : {kWuCtlRecommended, kWuCtlMsProducts, kWuCtlAllUsers}) {
+            if (HWND ctl = GetDlgItem(hwnd, id)) pSetWindowTheme(ctl, L"DarkMode_Explorer", nullptr);
+        }
+    }
+}
+
+static void TeardownWuSettingsDialogDarkMode() {
+    if (g_wuDlgDarkBrush) { DeleteObject(g_wuDlgDarkBrush); g_wuDlgDarkBrush = nullptr; }
+    g_wuDlgDarkMode = false;
+}
+
 static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
@@ -5685,34 +5806,82 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
             if (hCombo) {
                 SendMessageW(hCombo, CB_RESETCONTENT, 0, 0);
-                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(4));
-                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(3));
-                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(2));
-                SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(1));
+                const LRESULT r4 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(4));
+                const LRESULT r3 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(3));
+                const LRESULT r2 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(2));
+                const LRESULT r1 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(1));
+                if (r4 < 0 || r3 < 0 || r2 < 0 || r1 < 0) {
+                    Wh_Log(L"Windows Update Restorer: settings combobox CB_ADDSTRING failed (r4=%d r3=%d r2=%d r1=%d)",
+                           (int)r4, (int)r3, (int)r2, (int)r1);
+                }
+                if (SendMessageW(hCombo, CB_GETCOUNT, 0, 0) == 0) {
+                    Wh_Log(L"Windows Update Restorer: settings combobox has 0 items after population");
+                }
                 int sel = 0;
                 if (g_wuDlgAuOptions == 4) sel = 0;
                 else if (g_wuDlgAuOptions == 3) sel = 1;
                 else if (g_wuDlgAuOptions == 2) sel = 2;
                 else if (g_wuDlgAuOptions == 1) sel = 3;
                 SendMessageW(hCombo, CB_SETCURSEL, sel, 0);
+            } else {
+                Wh_Log(L"Windows Update Restorer: settings dialog combobox control not found (GetDlgItem returned null)");
             }
             CheckDlgButton(hwnd, kWuCtlRecommended, g_wuDlgRecommended ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlMsProducts, g_wuDlgMsProducts ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlAllUsers, g_wuDlgAllUsers ? BST_CHECKED : BST_UNCHECKED);
-            EnableWindow(hCombo, FALSE);
+            // Visual-only: the combobox stays enabled so the user can browse the
+            // options, but nothing here is written back to the real Windows
+            // Update policy/registry yet.
+            EnableWindow(hCombo, TRUE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlRecommended), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlMsProducts), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlAllUsers), FALSE);
+            ApplyWuSettingsDialogDarkMode(hwnd, hCombo);
             return TRUE;
         }
+        case WM_CTLCOLORDLG:
+            if (g_wuDlgDarkMode && g_wuDlgDarkBrush)
+                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+            break;
+        case WM_CTLCOLORLISTBOX:
+            // This is what the combobox's own dropdown list paints through -
+            // the actual fix for the blank/unreadable items in dark mode.
+            if (g_wuDlgDarkMode) {
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                SetBkColor(hdc, RGB(43, 43, 43));
+                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+            }
+            break;
+        case WM_CTLCOLORBTN:
+            if (g_wuDlgDarkMode) {
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                SetTextColor(hdc, RGB(255, 255, 255));
+                SetBkColor(hdc, RGB(32, 32, 32));
+                SetBkMode(hdc, TRANSPARENT);
+                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+            }
+            break;
         case WM_CTLCOLORSTATIC: {
             // The privacy note is drawn in grey, like the original page.
             HDC hdc = reinterpret_cast<HDC>(wParam);
             HWND hCtl = reinterpret_cast<HWND>(lParam);
             if (hCtl == GetDlgItem(hwnd, kWuCtlNote)) {
+                if (g_wuDlgDarkMode) {
+                    SetTextColor(hdc, RGB(170, 170, 170));
+                    SetBkColor(hdc, RGB(32, 32, 32));
+                    SetBkMode(hdc, TRANSPARENT);
+                    return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
+                }
                 SetTextColor(hdc, RGB(90, 90, 90));
                 SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
                 return reinterpret_cast<INT_PTR>(GetSysColorBrush(COLOR_BTNFACE));
+            }
+            if (g_wuDlgDarkMode) {
+                SetTextColor(hdc, RGB(255, 255, 255));
+                SetBkColor(hdc, RGB(32, 32, 32));
+                SetBkMode(hdc, TRANSPARENT);
+                return reinterpret_cast<INT_PTR>(g_wuDlgDarkBrush);
             }
             break;
         }
@@ -5731,6 +5900,7 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             return TRUE;
         case WM_DESTROY:
             UnregisterWuSettingsDialog(hwnd);
+            TeardownWuSettingsDialogDarkMode();
             return TRUE;
     }
     return FALSE;
@@ -7689,20 +7859,26 @@ static void GatherBackgroundStatus() {
 }
 
 
-// Applies the top-level Windows Update page XML patch. The settings child page
-// (pageSettings) is intentionally left untouched to guarantee it always loads.
+// Applies the top-level Windows Update page XML patch.
 static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
     // The outer ControlPanelNavPane is deliberately left untouched. Links are
     // published through the pane's per-layout ControlPanelNavLinks object.
+
+    // Settings child page (pageSettings, UIFILE 125): embeds the native Win32
+    // ComboBox. Checked BEFORE the IsWindowsUpdatePageXml() gate below: that
+    // gate looks for markers (actionCheckForUpdates, resstr(1100), etc.) that
+    // are specific to the landing/automatic-update pages and are not
+    // guaranteed to appear in this separate settings document, so gating on
+    // it here used to skip pageSettings entirely - the combobox was never
+    // populated because this whole function returned before ever checking
+    // for it.
+    if (input.find(L"atom(pageSettings)") != std::wstring::npos)
+        return PatchSettingsPageXml(input);
 
     if (!IsWindowsUpdatePageXml(input)) {
         DestroySettingsComboboxOnThisThread();
         return input;
     }
-
-    // Settings child page (pageSettings, UIFILE 125): embeds the native Win32 ComboBox
-    if (input.find(L"atom(pageSettings)") != std::wstring::npos)
-        return PatchSettingsPageXml(input);
 
     // Strictly isolate the ComboBox: destroy it immediately on any other page
     DestroySettingsComboboxOnThisThread();
