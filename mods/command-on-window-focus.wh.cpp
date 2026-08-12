@@ -13,9 +13,9 @@
 // ==WindhawkModReadme==
 /*
 # Command On Window Focus
-This mod intercepts a window focus and will run any command on window focus. 
+This mod observes a window focus and will run any command on window focus. 
 This mod has a filter which lets you specify which windows will be allowed to have focus based on the path of the executable
-running them. There is also the option of alternate commands which will only run if none of the filters match.
+running them. There is also the option of alternate commands which will only run if none of the filters match. Filters are regexes (ECMAScript).
 An example use case for me personally is running a script that sets the scroll wheel on my mouse to a different scroll type every time 
 I focus a game (and the alternate command will reset it to the original type). 
 */
