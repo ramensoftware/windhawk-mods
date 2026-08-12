@@ -2,7 +2,7 @@
 // @id              taskbar-separators-prototype
 // @name            Taskbar Separators - Prototype
 // @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
-// @version         0.5.3
+// @version         0.5.4
 // @author          meteoni
 // @include         explorer.exe
 // @architecture    x86-64
@@ -19,11 +19,12 @@ The mod:
 2. Creates one uniquely identified .lnk per configured separator.
 3. Pins each shortcut with the private PinManager COM interface.
 4. Moves each pin to its configured position.
-5. Gives generated separator TaskListButtons configurable normal/small widths.
-6. Suppresses activation clicks, tooltips, and legacy/modern context menus.
-7. Marks separator TaskListButtons non-draggable through their native IsDraggable property.
-8. Neutralizes pointer-over visuals and keeps narrow separator glyphs centered.
-9. Unpins the separators and deletes the generated files when the mod unloads.
+5. Briefly pins and unpins a transient helper to flush stale taskbar pin visuals.
+6. Gives generated separator TaskListButtons configurable normal/small widths.
+7. Suppresses activation clicks, tooltips, and legacy/modern context menus.
+8. Marks separator TaskListButtons non-draggable through their native IsDraggable property.
+9. Neutralizes pointer-over visuals and keeps narrow separator glyphs centered.
+10. Unpins the separators and deletes the generated files when the mod unloads.
 
 The position setting is 1-based for the user: 1 means the first pinned position.
 
@@ -230,6 +231,11 @@ static HANDLE g_backendStopEvent;
 // filename prefix so user changes don't accidentally create invalid AppIDs.
 static constexpr wchar_t kInternalAppIdPrefix[] =
     L"Windhawk.TaskbarSeparator.8F31A7D2";
+
+// Reserved outside the supported separator range. The helper is briefly
+// pinned and unpinned after positioning to make Explorer process a concrete
+// pin-list mutation and reconcile stale taskbar visuals.
+static constexpr int kRefreshPulseOrdinal = 100001;
 
 // -----------------------------------------------------------------------------
 // Embedded icon.
@@ -2074,6 +2080,18 @@ static bool PrepareSeparatorFiles() {
         }
     }
 
+    std::wstring refreshShortcutPath =
+        GetSeparatorShortcutPath(kRefreshPulseOrdinal);
+    HRESULT refreshHr =
+        CreateSeparatorShortcut(
+            kRefreshPulseOrdinal,
+            refreshShortcutPath);
+
+    if (FAILED(refreshHr)) {
+        Wh_Log(L"[REFRESH] Failed to create pin-pulse shortcut");
+        return false;
+    }
+
     return true;
 }
 
@@ -2217,6 +2235,63 @@ static bool PositionSeparators(IPinManagerInterop3* pinManager) {
     return success;
 }
 
+static bool PulseTaskbarPinList(IPinManagerInterop3* pinManager) {
+    if (IsBackendStopRequested()) {
+        return false;
+    }
+
+    std::wstring shortcutPath =
+        GetSeparatorShortcutPath(kRefreshPulseOrdinal);
+
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    HRESULT hr = GetPidlForPath(shortcutPath, &pidl);
+
+    if (FAILED(hr) || !pidl) {
+        Wh_Log(
+            L"[REFRESH] Can't resolve pin-pulse shortcut hr=0x%08X",
+            static_cast<unsigned int>(hr));
+        return false;
+    }
+
+    Wh_Log(L"[REFRESH] Pinning transient refresh item");
+    HRESULT pinHr =
+        pinManager->PinItemFromTrustedCaller(
+            pidl,
+            PMC_TASKBANDPIN);
+
+    Wh_Log(
+        L"[REFRESH] PinItemFromTrustedCaller -> hr=0x%08X",
+        static_cast<unsigned int>(pinHr));
+
+    if (FAILED(pinHr)) {
+        CoTaskMemFree(pidl);
+        return false;
+    }
+
+    // Once the helper is pinned, always attempt the matching unpin even if an
+    // unload was requested in between. Wh_ModBeforeUninit joins this worker
+    // before general cleanup, so completing the pair can't race shutdown.
+    Wh_Log(L"[REFRESH] Unpinning transient refresh item");
+    HRESULT unpinHr =
+        pinManager->UnpinTaskbarItem(
+            pidl,
+            PMC_JUMPVIEWBROKER);
+
+    Wh_Log(
+        L"[REFRESH] UnpinTaskbarItem -> hr=0x%08X",
+        static_cast<unsigned int>(unpinHr));
+
+    CoTaskMemFree(pidl);
+
+    if (SUCCEEDED(unpinHr)) {
+        return DeleteFileIfPresent(shortcutPath);
+    }
+
+    // Keep the shortcut when unpinning fails so a later retry or unload can
+    // resolve the same PIDL and remove the helper safely.
+    return false;
+}
+
 static bool CreateAndPinSeparators() {
     if (!PrepareSeparatorFiles()) {
         return false;
@@ -2246,12 +2321,17 @@ static bool CreateAndPinSeparators() {
 
         bool pinsReady = false;
         bool positioned = false;
+        bool refreshed = false;
 
         if (SUCCEEDED(hr) && pinManager) {
             pinsReady = PinSeparators(pinManager);
 
             if (pinsReady) {
                 positioned = PositionSeparators(pinManager);
+
+                if (positioned) {
+                    refreshed = PulseTaskbarPinList(pinManager);
+                }
             } else {
                 Wh_Log(
                     L"[INIT] Pin pass incomplete; skipping move pass");
@@ -2260,7 +2340,7 @@ static bool CreateAndPinSeparators() {
             pinManager->Release();
         }
 
-        if (pinsReady && positioned) {
+        if (pinsReady && positioned && refreshed) {
             Wh_Log(
                 L"[INIT] Separator startup converged on attempt %d",
                 attempt);
@@ -2304,7 +2384,11 @@ static bool CreateAndPinSeparators() {
 // -----------------------------------------------------------------------------
 
 static bool UnpinAndDeleteSeparators() {
-    if (g_settings.separators.empty()) {
+    std::wstring refreshShortcutPath =
+        GetSeparatorShortcutPath(kRefreshPulseOrdinal);
+
+    if (g_settings.separators.empty() &&
+        !FileExists(refreshShortcutPath)) {
         DeleteFileIfPresent(g_iconPath);
         return true;
     }
@@ -2321,6 +2405,40 @@ static bool UnpinAndDeleteSeparators() {
     }
 
     bool allUnpinned = true;
+
+    // Recover a transient refresh helper left pinned by a failed pulse, mod
+    // reload, or Explorer termination between its pin and unpin operations.
+    if (FileExists(refreshShortcutPath)) {
+        PIDLIST_ABSOLUTE refreshPidl = nullptr;
+        hr = GetPidlForPath(refreshShortcutPath, &refreshPidl);
+
+        if (SUCCEEDED(hr) && refreshPidl) {
+            Wh_Log(L"[CLEANUP] Unpin transient refresh item");
+            HRESULT unpinHr =
+                pinManager->UnpinTaskbarItem(
+                    refreshPidl,
+                    PMC_JUMPVIEWBROKER);
+
+            Wh_Log(
+                L"[CLEANUP] Refresh UnpinTaskbarItem -> hr=0x%08X",
+                static_cast<unsigned int>(unpinHr));
+
+            CoTaskMemFree(refreshPidl);
+
+            if (SUCCEEDED(unpinHr)) {
+                if (!DeleteFileIfPresent(refreshShortcutPath)) {
+                    allUnpinned = false;
+                }
+            } else {
+                allUnpinned = false;
+            }
+        } else {
+            Wh_Log(
+                L"[CLEANUP] Can't resolve transient refresh item; "
+                L"keeping its shortcut");
+            allUnpinned = false;
+        }
+    }
 
     // Reverse order isn't required because unpinning is PIDL-based, but it
     // minimizes visual/index churn while several separators disappear.
