@@ -201,7 +201,8 @@ static Settings GetSettingsSnapshot();
 static void LaunchTerminalNonElevated(const MenuTarget&);
 static LaunchSpec BuildScriptLaunchSpec(const Settings&, const std::wstring&);
 static bool IsScriptExtension(const std::wstring&, const Settings&);
-static bool IsShellViewWindow(HWND hwnd);
+static HWND FindShellViewWindow(HWND hwnd);
+static HWND FindShellTabWindow(HWND hwnd);
 static bool ResolveSystemExecutablePath(PCWSTR exe, std::wstring& pathOut);
 
 static Settings g_settings;
@@ -218,10 +219,6 @@ static const UINT kMenuCommandIdNonElevated = 0xBF32;
 #define MAXIMUM_REPARSE_DATA_BUFFER_SIZE (16 * 1024)
 #endif
 
-static thread_local HWND g_currentMenuHwnd = nullptr;
-static thread_local bool g_currentMenuEligible = false;
-static thread_local MenuTarget g_currentTarget;
-
 struct MenuBitmapCacheEntry {
     std::wstring key;
     HBITMAP bitmap;
@@ -233,9 +230,6 @@ static std::vector<MenuBitmapCacheEntry> g_menuBitmapCache;
 
 using TrackPopupMenuEx_t = BOOL(WINAPI*)(HMENU, UINT, int, int, HWND, LPTPMPARAMS);
 static TrackPopupMenuEx_t TrackPopupMenuEx_Orig;
-
-using PostMessageW_t = BOOL(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
-static PostMessageW_t PostMessageW_Orig;
 
 static std::wstring GetSettingString(PCWSTR name, const wchar_t* fallback) {
     std::wstring value = fallback;
@@ -760,27 +754,30 @@ static bool SplitCustomCommand(const std::wstring& command,
     return !executable.empty();
 }
 
-static void ExpandCustomPlaceholder(std::wstring& value,
-                                    const std::wstring& placeholder,
-                                    const std::wstring& target) {
-    size_t pos = 0;
-    while ((pos = value.find(placeholder, pos)) != std::wstring::npos) {
-        bool alreadyQuoted = pos > 0 &&
-                             pos + placeholder.size() < value.size() &&
-                             value[pos - 1] == L'"' &&
-                             value[pos + placeholder.size()] == L'"';
-        std::wstring replacement =
-            alreadyQuoted ? target : QuoteCommandLineArgument(target);
-        value.replace(pos, placeholder.size(), replacement);
-        pos += replacement.size();
-    }
-}
-
 static std::wstring ExpandCustomParameters(const std::wstring& parameters,
                                            const std::wstring& target) {
     std::wstring result = parameters;
-    ExpandCustomPlaceholder(result, L"%V", target);
-    ExpandCustomPlaceholder(result, L"%1", target);
+    std::wstring replacement = QuoteCommandLineArgument(target);
+    size_t searchFrom = 0;
+    while ((searchFrom = result.find(L'%', searchFrom)) != std::wstring::npos) {
+        if (searchFrom + 1 >= result.size() ||
+            (result[searchFrom + 1] != L'V' &&
+             result[searchFrom + 1] != L'1')) {
+            searchFrom++;
+            continue;
+        }
+
+        size_t replaceFrom = searchFrom;
+        size_t replaceLength = 2;
+        if (searchFrom > 0 && searchFrom + 2 < result.size() &&
+            result[searchFrom - 1] == L'"' && result[searchFrom + 2] == L'"') {
+            replaceFrom--;
+            replaceLength += 2;
+        }
+
+        result.replace(replaceFrom, replaceLength, replacement);
+        searchFrom = replaceFrom + replacement.size();
+    }
     return result;
 }
 
@@ -962,7 +959,27 @@ static LaunchSpec BuildScriptLaunchSpec(const Settings& s,
     return spec;
 }
 
-static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
+static bool IsExplorerContextMatch(HWND expectedShellView,
+                                   HWND expectedShellTab,
+                                   HWND candidateShellView,
+                                   HWND candidateShellTab) {
+    if (expectedShellView) {
+        return candidateShellView == expectedShellView;
+    }
+    if (expectedShellTab) {
+        return candidateShellTab == expectedShellTab;
+    }
+    return true;
+}
+
+static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND hwnd) {
+    HWND topLevel = GetAncestor(hwnd, GA_ROOT);
+    if (!topLevel) {
+        topLevel = hwnd;
+    }
+    HWND expectedShellView = FindShellViewWindow(hwnd);
+    HWND expectedShellTab = FindShellTabWindow(hwnd);
+
     IShellWindows* shellWindows = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                   IID_IShellWindows,
@@ -992,8 +1009,40 @@ static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
             HWND browserHwnd = nullptr;
             browser->get_HWND(reinterpret_cast<SHANDLE_PTR*>(&browserHwnd));
             if (browserHwnd == topLevel) {
+                IServiceProvider* candidate = nullptr;
                 browser->QueryInterface(IID_IServiceProvider,
-                                        reinterpret_cast<void**>(&result));
+                                        reinterpret_cast<void**>(&candidate));
+                if (candidate) {
+                    HWND candidateShellView = nullptr;
+                    HWND candidateShellTab = nullptr;
+                    IShellBrowser* shellBrowser = nullptr;
+                    if (expectedShellView || expectedShellTab) {
+                        candidate->QueryService(
+                            SID_STopLevelBrowser, IID_IShellBrowser,
+                            reinterpret_cast<void**>(&shellBrowser));
+                    }
+                    if (shellBrowser && expectedShellView) {
+                        IShellView* shellView = nullptr;
+                        if (SUCCEEDED(shellBrowser->QueryActiveShellView(
+                                &shellView)) && shellView) {
+                            shellView->GetWindow(&candidateShellView);
+                            shellView->Release();
+                        }
+                    } else if (shellBrowser && expectedShellTab) {
+                        shellBrowser->GetWindow(&candidateShellTab);
+                    }
+                    if (shellBrowser) {
+                        shellBrowser->Release();
+                    }
+
+                    if (IsExplorerContextMatch(
+                            expectedShellView, expectedShellTab,
+                            candidateShellView, candidateShellTab)) {
+                        result = candidate;
+                    } else {
+                        candidate->Release();
+                    }
+                }
             }
             browser->Release();
         }
@@ -1004,8 +1053,8 @@ static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND topLevel) {
     return result;
 }
 
-static IShellBrowser* GetShellBrowserForHwnd(HWND topLevel) {
-    IServiceProvider* serviceProvider = GetExplorerServiceProviderForHwnd(topLevel);
+static IShellBrowser* GetShellBrowserForHwnd(HWND hwnd) {
+    IServiceProvider* serviceProvider = GetExplorerServiceProviderForHwnd(hwnd);
     if (!serviceProvider) {
         return nullptr;
     }
@@ -1017,8 +1066,8 @@ static IShellBrowser* GetShellBrowserForHwnd(HWND topLevel) {
     return result;
 }
 
-static IShellView* GetActiveShellViewForHwnd(HWND topLevel) {
-    IShellBrowser* shellBrowser = GetShellBrowserForHwnd(topLevel);
+static IShellView* GetActiveShellViewForHwnd(HWND hwnd) {
+    IShellBrowser* shellBrowser = GetShellBrowserForHwnd(hwnd);
     if (!shellBrowser) {
         return nullptr;
     }
@@ -1301,22 +1350,25 @@ static bool IsNavigationPaneContextWindow(HWND hwnd,
     useSelectionFallback = ShouldUseFocusedNavigationPaneFallback(
         invocationPointIsNavigationPane,
         focusedWindow && IsNavigationPaneWindow(focusedWindow),
-        IsShellViewWindow(hwnd), invocationPointIsSameExplorerFrame);
+        FindShellViewWindow(hwnd) != nullptr,
+        invocationPointIsSameExplorerFrame);
     return useSelectionFallback;
 }
 
-static bool ResolveNavigationPaneMenuTarget(HWND hwnd,
-                                            const POINT& invocationPoint,
+static bool ResolveNavigationPaneMenuTarget(const POINT& invocationPoint,
                                             bool useSelectionFallback,
                                             MenuTarget& targetOut) {
     targetOut = {};
 
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    if (!root) {
-        root = hwnd;
+    HWND navigationWindow = useSelectionFallback
+                                ? GetFocus()
+                                : WindowFromPoint(invocationPoint);
+    if (!navigationWindow || !IsNavigationPaneWindow(navigationWindow)) {
+        return false;
     }
 
-    IServiceProvider* serviceProvider = GetExplorerServiceProviderForHwnd(root);
+    IServiceProvider* serviceProvider =
+        GetExplorerServiceProviderForHwnd(navigationWindow);
     if (!serviceProvider) {
         return false;
     }
@@ -1406,20 +1458,15 @@ static bool ResolveMenuTarget(HWND hwnd,
             return false;
         }
         return ResolveNavigationPaneMenuTarget(
-            hwnd, invocationPoint, useNavigationPaneSelectionFallback, targetOut);
+            invocationPoint, useNavigationPaneSelectionFallback, targetOut);
     }
 
-    if (!IsShellViewWindow(hwnd)) {
+    if (!FindShellViewWindow(hwnd)) {
         return false;
     }
 
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    if (!root) {
-        root = hwnd;
-    }
-
     bool isDesktopShellView = IsDesktopShellViewWindow(hwnd);
-    IShellView* shellView = GetActiveShellViewForHwnd(root);
+    IShellView* shellView = GetActiveShellViewForHwnd(hwnd);
     if (!shellView && isDesktopShellView) {
         shellView = GetDesktopShellView();
     }
@@ -1506,13 +1553,13 @@ static bool ResolveMenuTarget(HWND hwnd,
     return ok;
 }
 
-static bool IsShellViewWindow(HWND hwnd) {
+static HWND FindShellViewWindow(HWND hwnd) {
     HWND w = hwnd;
     while (w) {
         WCHAR className[64] = {};
         GetClassNameW(w, className, ARRAYSIZE(className));
         if (_wcsicmp(className, L"SHELLDLL_DefView") == 0) {
-            return true;
+            return w;
         }
 
         HWND parent = GetParent(w);
@@ -1521,7 +1568,25 @@ static bool IsShellViewWindow(HWND hwnd) {
         }
         w = parent;
     }
-    return false;
+    return nullptr;
+}
+
+static HWND FindShellTabWindow(HWND hwnd) {
+    HWND w = hwnd;
+    while (w) {
+        WCHAR className[64] = {};
+        GetClassNameW(w, className, ARRAYSIZE(className));
+        if (_wcsicmp(className, L"ShellTabWindowClass") == 0) {
+            return w;
+        }
+
+        HWND parent = GetParent(w);
+        if (!parent) {
+            parent = GetWindow(w, GW_OWNER);
+        }
+        w = parent;
+    }
+    return nullptr;
 }
 
 static Settings GetSettingsSnapshot() {
@@ -1815,16 +1880,6 @@ static void ClearMenuBitmapCache() {
     ReleaseSRWLockExclusive(&g_menuBitmapLock);
 }
 
-static void ClearCurrentMenuState() {
-    g_currentMenuEligible = false;
-    g_currentTarget = {};
-    g_currentMenuHwnd = nullptr;
-}
-
-static bool ShouldClearMenuStateAfterTracking(UINT flags, BOOL result) {
-    return (flags & TPM_RETURNCMD) || !result;
-}
-
 static std::wstring GetScriptTerminalDisplayName(const Settings& settings,
                                                  const std::wstring& scriptPath) {
     if (UsesSelectedTerminalHost(settings, scriptPath)) {
@@ -2073,7 +2128,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
                                   HWND hwnd,
                                   LPTPMPARAMS params) {
     bool injected = false;
-    ClearCurrentMenuState();
+    MenuTarget target;
 
     HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
     WCHAR rootClass[64] = {};
@@ -2081,12 +2136,11 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
         GetClassNameW(root, rootClass, ARRAYSIZE(rootClass));
     }
     bool eligibleWindow = hwnd &&
-                          (IsShellViewWindow(hwnd) ||
+                          (FindShellViewWindow(hwnd) ||
                            _wcsicmp(rootClass, L"CabinetWClass") == 0 ||
                            _wcsicmp(rootClass, L"ExploreWClass") == 0);
 
-    if (menu && eligibleWindow) {
-        MenuTarget target;
+    if (menu && eligibleWindow && (flags & TPM_RETURNCMD)) {
         Settings settings = GetSettingsSnapshot();
         POINT invocationPoint = {x, y};
         if (!ResolveMenuTarget(hwnd, settings, invocationPoint, target)) {
@@ -2107,9 +2161,6 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
             Wh_Log(L"Injection inserted: position=%ls kind=%ls",
                    settings.position.c_str(), TargetKindName(target.kind));
             injected = true;
-            g_currentMenuHwnd = hwnd;
-            g_currentMenuEligible = true;
-            g_currentTarget = std::move(target);
         }
     }
 
@@ -2117,48 +2168,17 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
 
     if (injected && (flags & TPM_RETURNCMD) &&
         static_cast<UINT>(result) == kMenuCommandId) {
-        MenuTarget target = g_currentTarget;
-        ClearCurrentMenuState();
         LaunchAdminTerminal(target);
         return 0;
     }
 
     if (injected && (flags & TPM_RETURNCMD) &&
         static_cast<UINT>(result) == kMenuCommandIdNonElevated) {
-        MenuTarget target = g_currentTarget;
-        ClearCurrentMenuState();
         LaunchTerminalNonElevated(target);
         return 0;
     }
 
-    if (ShouldClearMenuStateAfterTracking(flags, result)) {
-        ClearCurrentMenuState();
-    }
     return result;
-}
-
-BOOL WINAPI PostMessageW_Hook(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    if (message == WM_COMMAND &&
-        LOWORD(wParam) == kMenuCommandId &&
-        g_currentMenuEligible &&
-        hwnd == g_currentMenuHwnd) {
-        MenuTarget target = g_currentTarget;
-        ClearCurrentMenuState();
-        LaunchAdminTerminal(target);
-        return TRUE;
-    }
-
-    if (message == WM_COMMAND &&
-        LOWORD(wParam) == kMenuCommandIdNonElevated &&
-        g_currentMenuEligible &&
-        hwnd == g_currentMenuHwnd) {
-        MenuTarget target = g_currentTarget;
-        ClearCurrentMenuState();
-        LaunchTerminalNonElevated(target);
-        return TRUE;
-    }
-
-    return PostMessageW_Orig(hwnd, message, wParam, lParam);
 }
 
 BOOL Wh_ModInit() {
@@ -2184,13 +2204,6 @@ BOOL Wh_ModInit() {
                             reinterpret_cast<void*>(TrackPopupMenuEx_Hook),
                             reinterpret_cast<void**>(&TrackPopupMenuEx_Orig))) {
         Wh_Log(L"Failed to hook TrackPopupMenuEx");
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(PostMessageW),
-                            reinterpret_cast<void*>(PostMessageW_Hook),
-                            reinterpret_cast<void**>(&PostMessageW_Orig))) {
-        Wh_Log(L"Failed to hook PostMessageW");
         return FALSE;
     }
 
