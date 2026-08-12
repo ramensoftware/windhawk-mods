@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
-// @version         0.5.12
+// @version         0.5.13
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -12,40 +12,15 @@
 
 // ==WindhawkModReadme==
 /*
-Prototype for genuine Windows 11 taskbar separators.
+Creates tracked icon seperators with custom padding on the Taskbar. 
 
-This mod supports Windows 11 only.
+(Yes, I know there is a mod that does this. However! Our implementation here is vastly different.)
 
-Each configured separator is represented by its own real pinned Shell shortcut.
-The mod:
-1. Writes a compact embedded multi-size separator icon to its Windhawk storage folder.
-2. Creates one uniquely identified .lnk per configured separator.
-3. Pins each shortcut with the private PinManager COM interface.
-4. Moves each pin to its configured position.
-5. Briefly pins and unpins a transient helper to flush stale taskbar pin visuals.
-6. Gives generated separator TaskListButtons configurable normal/small widths.
-7. Suppresses activation clicks, tooltips, and legacy/modern context menus.
-8. Marks separator TaskListButtons non-draggable through their native IsDraggable property.
-9. Neutralizes pointer-over visuals and keeps narrow separator glyphs centered.
-10. Unpins the separators and deletes the generated files when the mod unloads.
+This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. All separators are safely removed on unload. 
 
-The position setting is 1-based for the user: 1 means the first pinned position.
+As an additional bonus, we achieve separator tracking with zero manual tracking code. 
 
-By default, separator width uses the original per-instance taskbar extent
-override. It writes only the matched separator's MediumTaskbarButtonExtent and,
-on DynamicIconScaling builds, SmallTaskbarButtonExtent after the normal
-TaskListButton::UpdateVisualStates hook chain returns. This preserves separate
-'width' and 'widthSmall' values and still allows Taskbar height and icon size to
-participate in the normal hook chain.
-
-If Taskbar height and icon size compatibility causes Explorer/taskbar crashes,
-enable MaxWidth compatibility mode. That mode leaves native/TIS button extents
-untouched and constrains only the separator FrameworkElement::MaxWidth. It is
-intentionally simpler, but it does NOT distinguish normal and small icon modes:
-'width' is used in both modes and 'widthSmall' is ignored.
-
-This is still a prototype. Separator interaction suppression is scoped to
-the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
+# P.S. This mod supports Windows 11 only.
 */
 // ==/WindhawkModReadme==
 
@@ -571,17 +546,6 @@ static bool LoadSettings() {
             ? L"MaxWidthCompatibility"
             : L"NativeExtent");
 
-    for (const auto& separator : g_settings.separators) {
-        Wh_Log(
-            L"[SETTINGS] separator=%d targetIndex=%d (user position=%d) "
-            L"width=%g widthSmall=%g",
-            separator.ordinal,
-            separator.targetIndex,
-            separator.targetIndex + 1,
-            separator.width,
-            separator.widthSmall);
-    }
-
     return true;
 }
 
@@ -615,9 +579,6 @@ static bool InitializeStoragePath() {
         JoinPath(
             g_storagePath,
             g_settings.identifierPrefix + L".ico");
-
-    Wh_Log(L"[FILES] storage='%s'", g_storagePath.c_str());
-    Wh_Log(L"[FILES] icon='%s'", g_iconPath.c_str());
 
     return true;
 }
@@ -934,10 +895,6 @@ static LONG GetMediumTaskbarButtonExtentOffset() {
             }
         }
 
-        Wh_Log(
-            L"[STYLE] mediumTaskbarButtonExtentOffset=0x%X",
-            foundOffset);
-
         return (foundOffset < 0 || foundOffset > 0xFFFF)
                    ? 0
                    : foundOffset;
@@ -1067,11 +1024,6 @@ static void ApplySeparatorMaxWidthOverride(
         if (stateIt != g_separatorMaxWidthStates.end()) {
             try {
                 if (element.MaxWidth() != stateIt->originalMaxWidth) {
-                    Wh_Log(
-                        L"[STYLE] Restoring recycled TaskListButton MaxWidth: "
-                        L"%g -> %g",
-                        element.MaxWidth(),
-                        stateIt->originalMaxWidth);
                     element.MaxWidth(stateIt->originalMaxWidth);
                 }
             } catch (...) {
@@ -1110,11 +1062,6 @@ static void ApplySeparatorMaxWidthOverride(
 
     try {
         if (element.MaxWidth() != desiredMaxWidth) {
-            Wh_Log(
-                L"[STYLE] Separator MaxWidth: %g -> %g "
-                L"(native/TIS extents untouched)",
-                element.MaxWidth(),
-                desiredMaxWidth);
             element.MaxWidth(desiredMaxWidth);
         }
     } catch (...) {
@@ -1261,7 +1208,6 @@ static void WINAPI TaskListButton_OnContextRequested_Hook(
     winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
     if (!g_unloading &&
         GetSeparatorForTaskListButton(pThis)) {
-        Wh_Log(L"[INPUT] Suppressed separator modern context request");
         return;
     }
 
@@ -1288,8 +1234,6 @@ static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
 
         if (element &&
             GetSeparatorForElement(element)) {
-            Wh_Log(
-                L"[INPUT] Suppressed separator context-request handler");
             return;
         }
     }
@@ -1318,8 +1262,6 @@ static void WINAPI TaskbarResources_OnTaskListButtonContextRequested_Hook(
 
         if (element &&
             GetSeparatorForElement(element)) {
-            Wh_Log(
-                L"[INPUT] Suppressed separator TaskbarResources context request");
             // Don't set args.Handled here. That path is crash-prone on some
             // Taskbar.View builds; skipping the handler is sufficient.
             return;
@@ -1471,12 +1413,10 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
     }
 
     Wh_Log(
-        L"[STYLE] Taskbar view hooks ready; widthMode=%s "
-        L"DynamicIconScaling=%d IsDraggable=1 modernContext=1",
+        L"[STYLE] Taskbar view hooks installed; widthMode=%s",
         g_settings.maxWidthCompatibilityMode
             ? L"MaxWidthCompatibility"
-            : L"NativeExtent",
-        g_hasDynamicIconScaling);
+            : L"NativeExtent");
 
     return true;
 }
@@ -1705,11 +1645,6 @@ static HRESULT WINAPI TaskListWnd_HandleClick_Hook(
     const void* launcherOptions) {
     if (!g_unloading &&
         IsSeparatorTaskGroup(taskGroup)) {
-        Wh_Log(
-            L"[INPUT] Suppressed separator click group=%p item=%p",
-            taskGroup,
-            taskItem);
-
         return S_OK;
     }
 
@@ -1729,7 +1664,6 @@ static void WINAPI TaskListWnd_OnContextMenu_Hook(
     void* taskItem) {
     if (!g_unloading &&
         IsSeparatorTaskGroup(taskGroup)) {
-        Wh_Log(L"[INPUT] Suppressed separator legacy context menu");
         return;
     }
 
@@ -1845,9 +1779,7 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
         return false;
     }
 
-    Wh_Log(
-        L"[INPUT] Taskbar interaction hooks ready; "
-        L"click=1 legacyContext=1 tooltip=1");
+    Wh_Log(L"[INPUT] Taskbar interaction hooks installed");
 
     return true;
 }
@@ -1975,12 +1907,6 @@ static HRESULT CreateSeparatorShortcut(
 
     shellLink->Release();
 
-    Wh_Log(
-        L"[FILES] Create shortcut #%d '%s' hr=0x%08X",
-        ordinal,
-        shortcutPath.c_str(),
-        static_cast<unsigned int>(hr));
-
     return hr;
 }
 
@@ -2001,12 +1927,6 @@ static HRESULT GetPidlForPath(
         pidl,
         0,
         &attrs);
-
-    Wh_Log(
-        L"[PIDL] '%s' -> hr=0x%08X pidl=%p",
-        path.c_str(),
-        static_cast<unsigned int>(hr),
-        *pidl);
 
     return hr;
 }
@@ -2038,11 +1958,12 @@ static HRESULT CreatePinManager(
 
     interop2->Release();
 
-    Wh_Log(
-        L"[PIN] QueryInterface(IPinManagerInterop3) "
-        L"hr=0x%08X ptr=%p",
-        static_cast<unsigned int>(hr),
-        *pinManager);
+    if (FAILED(hr)) {
+        Wh_Log(
+            L"[PIN] QueryInterface(IPinManagerInterop3) "
+            L"failed hr=0x%08X",
+            static_cast<unsigned int>(hr));
+    }
 
     return hr;
 }
@@ -2076,8 +1997,9 @@ static bool PrepareSeparatorFiles() {
 
         if (FAILED(hr)) {
             Wh_Log(
-                L"[PIN] Failed to create separator #%d",
-                separator.ordinal);
+                L"[PIN] Failed to create separator #%d hr=0x%08X",
+                separator.ordinal,
+                static_cast<unsigned int>(hr));
             return false;
         }
     }
@@ -2090,7 +2012,9 @@ static bool PrepareSeparatorFiles() {
             refreshShortcutPath);
 
     if (FAILED(refreshHr)) {
-        Wh_Log(L"[REFRESH] Failed to create pin-pulse shortcut");
+        Wh_Log(
+            L"[REFRESH] Failed to create pin-pulse shortcut hr=0x%08X",
+            static_cast<unsigned int>(refreshHr));
         return false;
     }
 
@@ -2146,21 +2070,16 @@ static bool PinSeparators(IPinManagerInterop3* pinManager) {
             continue;
         }
 
-        Wh_Log(
-            L"[PIN] Pin separator #%d",
-            separator.ordinal);
-
         HRESULT pinHr =
             pinManager->PinItemFromTrustedCaller(
                 pidl,
                 PMC_TASKBANDPIN);
 
-        Wh_Log(
-            L"[PIN] PinItemFromTrustedCaller #%d -> hr=0x%08X",
-            separator.ordinal,
-            static_cast<unsigned int>(pinHr));
-
         if (FAILED(pinHr)) {
+            Wh_Log(
+                L"[PIN] Failed to pin separator #%d hr=0x%08X",
+                separator.ordinal,
+                static_cast<unsigned int>(pinHr));
             success = false;
         }
 
@@ -2209,23 +2128,19 @@ static bool PositionSeparators(IPinManagerInterop3* pinManager) {
             continue;
         }
 
-        Wh_Log(
-            L"[MOVE] separator #%d -> index=%d",
-            separator.ordinal,
-            separator.targetIndex);
-
         HRESULT moveHr =
             pinManager->MoveTaskbarPin(
                 pidl,
                 separator.targetIndex,
                 PMC_TASKBANDREORDER);
 
-        Wh_Log(
-            L"[MOVE] MoveTaskbarPin #%d -> hr=0x%08X",
-            separator.ordinal,
-            static_cast<unsigned int>(moveHr));
-
         if (FAILED(moveHr)) {
+            Wh_Log(
+                L"[MOVE] Failed to move separator #%d to index=%d "
+                L"hr=0x%08X",
+                separator.ordinal,
+                separator.targetIndex,
+                static_cast<unsigned int>(moveHr));
             success = false;
         }
 
@@ -2253,17 +2168,15 @@ static bool PulseTaskbarPinList(IPinManagerInterop3* pinManager) {
         return false;
     }
 
-    Wh_Log(L"[REFRESH] Pinning transient refresh item");
     HRESULT pinHr =
         pinManager->PinItemFromTrustedCaller(
             pidl,
             PMC_TASKBANDPIN);
 
-    Wh_Log(
-        L"[REFRESH] PinItemFromTrustedCaller -> hr=0x%08X",
-        static_cast<unsigned int>(pinHr));
-
     if (FAILED(pinHr)) {
+        Wh_Log(
+            L"[REFRESH] Failed to pin transient refresh item hr=0x%08X",
+            static_cast<unsigned int>(pinHr));
         CoTaskMemFree(pidl);
         return false;
     }
@@ -2271,21 +2184,20 @@ static bool PulseTaskbarPinList(IPinManagerInterop3* pinManager) {
     // Once the helper is pinned, always attempt the matching unpin even if an
     // unload was requested in between. Wh_ModBeforeUninit joins this worker
     // before general cleanup, so completing the pair can't race shutdown.
-    Wh_Log(L"[REFRESH] Unpinning transient refresh item");
     HRESULT unpinHr =
         pinManager->UnpinTaskbarItem(
             pidl,
             PMC_JUMPVIEWBROKER);
-
-    Wh_Log(
-        L"[REFRESH] UnpinTaskbarItem -> hr=0x%08X",
-        static_cast<unsigned int>(unpinHr));
 
     CoTaskMemFree(pidl);
 
     if (SUCCEEDED(unpinHr)) {
         return DeleteFileIfPresent(shortcutPath);
     }
+
+    Wh_Log(
+        L"[REFRESH] Failed to unpin transient refresh item hr=0x%08X",
+        static_cast<unsigned int>(unpinHr));
 
     // Keep the shortcut when unpinning fails so a later retry or unload can
     // resolve the same PIDL and remove the helper safely.
@@ -2416,27 +2328,17 @@ static bool UnpinAndDeleteSeparators() {
             // File existence alone doesn't prove whether an earlier pulse got
             // as far as pinning. First ensure the stable helper identity is
             // pinned, then unpin it from a known state.
-            Wh_Log(L"[CLEANUP] Ensure transient refresh item is pinned");
             HRESULT pinHr =
                 pinManager->PinItemFromTrustedCaller(
                     refreshPidl,
                     PMC_TASKBANDPIN);
 
-            Wh_Log(
-                L"[CLEANUP] Refresh PinItemFromTrustedCaller -> hr=0x%08X",
-                static_cast<unsigned int>(pinHr));
-
             HRESULT unpinHr = E_FAIL;
             if (SUCCEEDED(pinHr)) {
-                Wh_Log(L"[CLEANUP] Unpin transient refresh item");
                 unpinHr =
                     pinManager->UnpinTaskbarItem(
                         refreshPidl,
                         PMC_JUMPVIEWBROKER);
-
-                Wh_Log(
-                    L"[CLEANUP] Refresh UnpinTaskbarItem -> hr=0x%08X",
-                    static_cast<unsigned int>(unpinHr));
             }
 
             CoTaskMemFree(refreshPidl);
@@ -2446,6 +2348,11 @@ static bool UnpinAndDeleteSeparators() {
                     allUnpinned = false;
                 }
             } else {
+                Wh_Log(
+                    L"[CLEANUP] Failed to remove transient refresh item "
+                    L"pinHr=0x%08X unpinHr=0x%08X",
+                    static_cast<unsigned int>(pinHr),
+                    static_cast<unsigned int>(unpinHr));
                 allUnpinned = false;
             }
         } else {
@@ -2481,10 +2388,6 @@ static bool UnpinAndDeleteSeparators() {
             continue;
         }
 
-        Wh_Log(
-            L"[CLEANUP] Unpin separator #%d",
-            separator.ordinal);
-
         // 11 is the exact caller value observed during the native modern
         // Notepad unpin trace on this build, and was already tested with
         // UnpinTaskbarItem successfully.
@@ -2493,16 +2396,15 @@ static bool UnpinAndDeleteSeparators() {
                 pidl,
                 PMC_JUMPVIEWBROKER);
 
-        Wh_Log(
-            L"[CLEANUP] UnpinTaskbarItem #%d -> hr=0x%08X",
-            separator.ordinal,
-            static_cast<unsigned int>(unpinHr));
-
         CoTaskMemFree(pidl);
 
         if (SUCCEEDED(unpinHr)) {
             DeleteFileIfPresent(shortcutPath);
         } else {
+            Wh_Log(
+                L"[CLEANUP] Failed to unpin separator #%d hr=0x%08X",
+                separator.ordinal,
+                static_cast<unsigned int>(unpinHr));
             allUnpinned = false;
         }
     }
@@ -2596,7 +2498,10 @@ static void StopBackendWorker() {
     }
 
     if (g_backendThread) {
-        Wh_Log(L"[UNINIT] Waiting for separator backend worker");
+        if (WaitForSingleObject(g_backendThread, 0) == WAIT_TIMEOUT) {
+            Wh_Log(L"[UNINIT] Waiting for separator backend worker");
+        }
+
         WaitForSingleObject(g_backendThread, INFINITE);
         CloseHandle(g_backendThread);
         g_backendThread = nullptr;
@@ -2636,8 +2541,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L"[INIT] Taskbar separator backend starting");
-
     // Close the small race where the module wasn't present in Wh_ModInit but
     // appeared before/around Wh_ModAfterInit.
     if (!g_taskbarViewDllHooked) {
@@ -2670,8 +2573,6 @@ void Wh_ModAfterInit() {
     if (!StartBackendWorker()) {
         Wh_Log(L"[INIT] Failed to start separator backend worker");
     }
-
-    Wh_Log(L"[INIT] Taskbar Icon Separators initialized");
 }
 
 void Wh_ModBeforeUninit() {
@@ -2703,11 +2604,7 @@ void Wh_ModUninit() {
     const bool shouldUninitialize =
         SUCCEEDED(hrInit);
 
-    if (hrInit == RPC_E_CHANGED_MODE) {
-        Wh_Log(
-            L"[UNINIT] COM already initialized with another "
-            L"apartment model; continuing");
-    } else if (FAILED(hrInit)) {
+    if (hrInit != RPC_E_CHANGED_MODE && FAILED(hrInit)) {
         Wh_Log(
             L"[UNINIT] CoInitializeEx failed hr=0x%08X; "
             L"can't safely remove separators",
