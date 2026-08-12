@@ -2,7 +2,7 @@
 // @id             win7-action-center-recreation
 // @name           Windows 7/8.1 Action Center Recreation
 // @description    This mod recreates the Windows 7/8.1 Action Center tray/flyout and restores the classic Security and Maintenance CPL links
-// @version        2.0.0
+// @version        2.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -2073,33 +2073,8 @@ HICON LoadActionCenterIcon(int index) {
 }
 
 
-// Returns TRUE if the running OS is older than Windows 10 21H2 (build 19044).
-// Uses VerifyVersionInfoW so it is NOT affected by the compatibility shim that
-// makes GetVersionExW report 6.2 on Windows 8.1 and later.
-static BOOL IsSystemOlderThanWin1021H2(void) {
-    OSVERSIONINFOEXW osvi = { sizeof(osvi) };
-    osvi.dwMajorVersion = 10;
-    osvi.dwMinorVersion = 0;
-    osvi.dwBuildNumber  = 19044; // Windows 10 21H2
 
-    DWORDLONG mask = 0;
-    mask = VerSetConditionMask(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-    mask = VerSetConditionMask(mask, VER_BUILDNUMBER,  VER_GREATER_EQUAL);
-
-    // VerifyVersionInfoW returns TRUE only if ALL conditions hold:
-    // Major >= 10 AND Minor >= 0 AND Build >= 19044.
-    if (VerifyVersionInfoW(&osvi,
-            VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask))
-        return FALSE; // Windows 10 21H2 or newer (includes Windows 11)
-
-    return TRUE; // older than Windows 10 21H2
-}
 void InitFlyoutIcons() {
-
-    // Conserva i PNG originali delle bandiere ID 0, 1 e 2. Il flyout li
-    // disegna direttamente tramite GDI+ con la stessa pipeline HQ, evitando
-    // la rasterizzazione aggiuntiva introdotta dalla conversione in HICON.
     if (g_pBmpFlyoutGood && pGdipDisposeImage) {
         pGdipDisposeImage(g_pBmpFlyoutGood);
         g_pBmpFlyoutGood = NULL;
@@ -2138,24 +2113,13 @@ void InitFlyoutIcons() {
     g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
     
     g_hFlyoutIconAlert   = Base64ToIcon(icon_id2_b64);
-        // Choose the shield icon based on the OS version:
-    //  - Older than Windows 10 21H2 (build 19044): use the embedded base64 shield.
-    //  - Windows 10 21H2 or newer (incl. Windows 11): use the original system shield.
-    if (IsSystemOlderThanWin1021H2()) {
-        g_hShieldIcon = Base64ToIcon(icon_shield_b64);
-    } else {
-        g_hShieldIcon = NULL;
-    }
-    if (!g_hShieldIcon) {
-        // Original system shield (imageres.dll / IDI_SHIELD / shell32.dll)
-        ExtractIconExW(L"imageres.dll", 73, NULL, &g_hShieldIcon, 1);
-        if (!g_hShieldIcon) {
-            HICON hSharedShield = (HICON)LoadImageW(
-                NULL, (LPCWSTR)32518, IMAGE_ICON, 16, 16, LR_SHARED); // IDI_SHIELD
-            if (hSharedShield) g_hShieldIcon = CopyIcon(hSharedShield);
-            if (!g_hShieldIcon) ExtractIconExW(L"shell32.dll", 77, NULL, &g_hShieldIcon, 1);
-        }
-    }
+    
+    // MODIFICA: Usa SEMPRE l'icona scudo incorporata (base4)
+    // indipendentemente dalla versione di Windows
+    g_hShieldIcon = Base64ToIcon(icon_shield_b64);
+    
+    // Rimuovi il controllo sulla versione di Windows e il fallback
+    // alle DLL di sistema
     
     // Fallback se Base64 decode fallisce
     if (!g_hFlyoutIconGood)
