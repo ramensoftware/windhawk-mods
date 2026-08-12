@@ -1309,7 +1309,7 @@ static HMODULE GetTaskbarViewModuleHandle() {
 }
 
 static bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"
@@ -1381,8 +1381,8 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     if (!WindhawkUtils::HookSymbols(
             module,
-            hooks,
-            ARRAYSIZE(hooks))) {
+            taskbarViewDllHooks,
+            ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"[STYLE] HookSymbols(Taskbar view) failed");
         return false;
     }
@@ -1719,7 +1719,7 @@ static HRESULT WINAPI TaskGroup_GetToolTipText_Hook(
 }
 
 static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {
                 LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))"
@@ -1766,8 +1766,8 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
 
     if (!WindhawkUtils::HookSymbols(
             taskbarDll,
-            hooks,
-            ARRAYSIZE(hooks))) {
+            taskbarDllHooks,
+            ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(
             L"[INPUT] HookSymbols(taskbar.dll) failed");
         return false;
