@@ -178,9 +178,6 @@ void CALLBACK WinEventProc(
             RunCommandHidden(settings.negcmd);
         }
     }
-
-
-    CloseHandle(hProcess);
 }
 
 
