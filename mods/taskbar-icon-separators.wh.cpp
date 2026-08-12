@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-separators-prototype
 // @name            Taskbar Separators - Prototype
-// @description     Creates genuine taskbar separator pins with configurable positions and inert separator interactions.
-// @version         0.5.0
+// @description     Creates genuine taskbar separators with selectable native-extent and MaxWidth compatibility width modes.
+// @version         0.5.2
 // @author          meteoni
 // @include         explorer.exe
 // @architecture    x86-64
@@ -19,16 +19,26 @@ The mod:
 2. Creates one uniquely identified .lnk per configured separator.
 3. Pins each shortcut with the private PinManager COM interface.
 4. Moves each pin to its configured position.
-5. Gives only the generated separator TaskListButtons configurable normal/small widths.
+5. Gives generated separator TaskListButtons configurable normal/small widths.
 6. Suppresses activation clicks, tooltips, and legacy/modern context menus.
 7. Marks separator TaskListButtons non-draggable through their native IsDraggable property.
 8. Neutralizes pointer-over visuals and keeps narrow separator glyphs centered.
 9. Unpins the separators and deletes the generated files when the mod unloads.
 
 The position setting is 1-based for the user: 1 means the first pinned position.
-Width overrides are per separator. They are applied after the normal
-TaskListButton::UpdateVisualStates hook chain returns, so they compose with
-the Taskbar height and icon size mod regardless of hook installation order.
+
+By default, separator width uses the original per-instance taskbar extent
+override. It writes only the matched separator's MediumTaskbarButtonExtent and,
+on DynamicIconScaling builds, SmallTaskbarButtonExtent after the normal
+TaskListButton::UpdateVisualStates hook chain returns. This preserves separate
+'width' and 'widthSmall' values and still allows Taskbar height and icon size to
+participate in the normal hook chain.
+
+If Taskbar height and icon size compatibility causes Explorer/taskbar crashes,
+enable MaxWidth compatibility mode. That mode leaves native/TIS button extents
+untouched and constrains only the separator FrameworkElement::MaxWidth. It is
+intentionally simpler, but it does NOT distinguish normal and small icon modes:
+'width' is used in both modes and 'widthSmall' is ignored.
 
 This is still a prototype. Separator interaction suppression is scoped to
 the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
@@ -42,25 +52,35 @@ the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
   $description: >-
     File/display-name prefix for generated separator shortcuts. Unsupported
     filename/regex characters are replaced with underscores.
+- maxWidthCompatibilityMode: false
+  $name: MaxWidth compatibility mode
+  $description: >-
+    Compatibility mode for Taskbar height and icon size / TaskbarIconSize.
+    Leave disabled normally. Enable this if the normal separator width mode
+    causes Explorer or taskbar crashes when used with that mod. MaxWidth mode
+    leaves native taskbar button extents untouched, but it cannot distinguish
+    normal and small icon modes: Width is used for both and Small width is
+    ignored. Changing this setting reloads the mod and recreates the separator
+    buttons cleanly.
 - separators:
     - - index: 5
         $name: Position
         $description: 1 = first pinned taskbar position.
       - width: 14
         $name: Width
-        $description: Width for the normal taskbar icon mode.
+        $description: Width for the normal taskbar icon mode. In MaxWidth compatibility mode, this width is used for both modes.
       - widthSmall: 10
         $name: Small width
-        $description: Width for the small taskbar icon mode.
+        $description: Width for the small taskbar icon mode. Ignored in MaxWidth compatibility mode.
     - - index: 10
         $name: Position
         $description: 1 = first pinned taskbar position.
       - width: 14
         $name: Width
-        $description: Width for the normal taskbar icon mode.
+        $description: Width for the normal taskbar icon mode. In MaxWidth compatibility mode, this width is used for both modes.
       - widthSmall: 10
         $name: Small width
-        $description: Width for the small taskbar icon mode.
+        $description: Width for the small taskbar icon mode. Ignored in MaxWidth compatibility mode.
   $name: Separators
   $description: Add or remove entries to control how many separators are created.
 */
@@ -86,6 +106,7 @@ the generated taskbar groups/buttons only; ordinary taskbar items are untouched.
 
 #include <algorithm>
 #include <atomic>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -166,12 +187,13 @@ struct IPinManagerInterop3 : IPinManagerInterop2 {
 struct SeparatorSetting {
     int ordinal;       // Stable within this loaded settings snapshot: 1, 2, ...
     int targetIndex;   // Zero-based value passed to MoveTaskbarPin.
-    double width;      // Normal taskbar icon mode.
-    double widthSmall; // Small taskbar icon mode.
+    double width;      // Normal width; also used as MaxWidth in compatibility mode.
+    double widthSmall; // Small icon mode width in native-extent mode.
 };
 
 struct Settings {
     std::wstring identifierPrefix;
+    bool maxWidthCompatibilityMode;
     std::vector<SeparatorSetting> separators;
 };
 
@@ -181,7 +203,6 @@ static std::wstring g_iconPath;
 
 static std::atomic<bool> g_taskbarViewDllHooked;
 static std::atomic<bool> g_unloading;
-static bool g_hasDynamicIconScaling;
 
 // Internal AppUserModelID namespace. Kept independent from the user-visible
 // filename prefix so user changes don't accidentally create invalid AppIDs.
@@ -485,6 +506,9 @@ static bool LoadSettings() {
             L"WindhawkSeparator-8F31A7D2";
     }
 
+    g_settings.maxWidthCompatibilityMode =
+        Wh_GetIntSetting(L"maxWidthCompatibilityMode") != 0;
+
     // Wh_GetIntSetting returns 0 for a missing setting.
     // Positions are therefore deliberately user-facing 1-based values.
     constexpr int kMaxSeparators = 64;
@@ -527,9 +551,12 @@ static bool LoadSettings() {
     }
 
     Wh_Log(
-        L"[SETTINGS] prefix='%s' separators=%zu",
+        L"[SETTINGS] prefix='%s' separators=%zu widthMode=%s",
         g_settings.identifierPrefix.c_str(),
-        g_settings.separators.size());
+        g_settings.separators.size(),
+        g_settings.maxWidthCompatibilityMode
+            ? L"MaxWidthCompatibility"
+            : L"NativeExtent");
 
     for (const auto& separator : g_settings.separators) {
         Wh_Log(
@@ -584,24 +611,31 @@ static bool InitializeStoragePath() {
 
 
 // -----------------------------------------------------------------------------
-// TaskListButton width styling.
+// TaskListButton separator width styling.
 //
-// This deliberately owns only our generated separator buttons. In particular,
-// it does NOT override MediumTaskbarButtonExtent/SmallTaskbarButtonExtent
-// resources globally.
+// Native-extent mode (default):
+// - restore the original separator width mechanism;
+// - let Windows and all downstream UpdateVisualStates hooks finish first;
+// - then write only this separator instance's medium/small taskbar extents;
+// - re-run the real padding/column entry points so other installed hooks can
+//   still participate.
 //
-// Compatibility with "Taskbar height and icon size":
-// - that mod writes its global per-instance extents before calling its
-//   UpdateVisualStates trampoline;
-// - this mod calls its own trampoline first and applies the separator-specific
-//   override only on the unwind path.
-// Therefore our matched separator width wins regardless of hook nesting order,
-// while all unmatched buttons remain completely untouched.
+// MaxWidth compatibility mode:
+// - never writes the private medium/small taskbar extent fields;
+// - after UpdateVisualStates finishes, constrains only FrameworkElement::MaxWidth;
+// - intended as a fallback if Taskbar height and icon size / TaskbarIconSize
+//   compatibility causes Explorer/taskbar crashes;
+// - deliberately uses 'width' in both icon modes, so widthSmall is unavailable.
+//
+// Settings changes always request a full mod reload, so changing width mode
+// destroys/recreates the separator buttons instead of hot-swapping ownership on
+// live TaskListButtons.
 // -----------------------------------------------------------------------------
 
 static void* g_taskListButtonUpdateButtonPaddingAddress;
 static void* g_taskListButtonUpdateIconColumnDefinitionAddress;
 static void* g_taskbarConfigurationGetIconHeightInViewPixelsAddress;
+static bool g_hasDynamicIconScaling;
 
 // Native TaskListButton IsDraggable XAML binding helpers, resolved from
 // Taskbar.View.dll. The isolated runtime probe verified that setting this
@@ -623,10 +657,6 @@ static TaskListButton_SetIsDraggable_t
     g_taskListButtonSetIsDraggable;
 
 static thread_local bool g_settingSeparatorIsDraggable;
-
-using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
-static TaskListButton_UpdateVisualStates_t
-    g_taskListButtonUpdateVisualStatesOriginal;
 
 static std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
     enum FEATURE_ENABLED_STATE {
@@ -687,64 +717,9 @@ static std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
     }
 }
 
-static LONG GetMediumTaskbarButtonExtentOffset() {
-    static LONG offset = []() -> LONG {
-        if (!g_taskListButtonUpdateIconColumnDefinitionAddress) {
-            Wh_Log(
-                L"[STYLE] UpdateIconColumnDefinition address unavailable");
-            return 0;
-        }
-
-        // x64 logic from the upstream Taskbar height and icon size mod.
-        // Search for a movsd that loads the per-instance medium extent,
-        // followed by a subsd using the loaded value.
-        const BYTE* start =
-            reinterpret_cast<const BYTE*>(
-                g_taskListButtonUpdateIconColumnDefinitionAddress);
-        const BYTE* end = start + 0x200;
-
-        LONG offsetCandidate = 0;
-        LONG foundOffset = 0;
-
-        for (const BYTE* p = start; p != end; p++) {
-            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
-                (p[3] & 0xC0) == 0x80) {
-                offsetCandidate =
-                    *reinterpret_cast<const LONG*>(p + 4);
-            }
-
-            if (p[0] == 0xF2 && p[1] == 0x44 &&
-                p[2] == 0x0F && p[3] == 0x10 &&
-                (p[4] & 0xC0) == 0x80) {
-                offsetCandidate =
-                    *reinterpret_cast<const LONG*>(p + 5);
-            }
-
-            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x5C &&
-                (p[3] & 0xC0) == 0x80) {
-                foundOffset = offsetCandidate;
-                break;
-            }
-
-            if (p[0] == 0xF2 && p[1] == 0x44 &&
-                p[2] == 0x0F && p[3] == 0x5C &&
-                (p[4] & 0xC0) == 0x80) {
-                foundOffset = offsetCandidate;
-                break;
-            }
-        }
-
-        Wh_Log(
-            L"[STYLE] mediumTaskbarButtonExtentOffset=0x%X",
-            foundOffset);
-
-        return (foundOffset < 0 || foundOffset > 0xFFFF)
-                   ? 0
-                   : foundOffset;
-    }();
-
-    return offset;
-}
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+static TaskListButton_UpdateVisualStates_t
+    g_taskListButtonUpdateVisualStatesOriginal;
 
 static FrameworkElement GetTaskListButtonElement(void* pThis) {
     FrameworkElement element = nullptr;
@@ -899,6 +874,65 @@ static const SeparatorSetting* GetSeparatorForTaskListButton(
     return separator;
 }
 
+static LONG GetMediumTaskbarButtonExtentOffset() {
+    static LONG offset = []() -> LONG {
+        if (!g_taskListButtonUpdateIconColumnDefinitionAddress) {
+            Wh_Log(
+                L"[STYLE] UpdateIconColumnDefinition address unavailable");
+            return 0;
+        }
+
+        // x64 logic from the upstream Taskbar height and icon size mod.
+        // Search for a movsd that loads the per-instance medium extent,
+        // followed by a subsd using the loaded value.
+        const BYTE* start =
+            reinterpret_cast<const BYTE*>(
+                g_taskListButtonUpdateIconColumnDefinitionAddress);
+        const BYTE* end = start + 0x200;
+
+        LONG offsetCandidate = 0;
+        LONG foundOffset = 0;
+
+        for (const BYTE* p = start; p != end; p++) {
+            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
+                (p[3] & 0xC0) == 0x80) {
+                offsetCandidate =
+                    *reinterpret_cast<const LONG*>(p + 4);
+            }
+
+            if (p[0] == 0xF2 && p[1] == 0x44 &&
+                p[2] == 0x0F && p[3] == 0x10 &&
+                (p[4] & 0xC0) == 0x80) {
+                offsetCandidate =
+                    *reinterpret_cast<const LONG*>(p + 5);
+            }
+
+            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x5C &&
+                (p[3] & 0xC0) == 0x80) {
+                foundOffset = offsetCandidate;
+                break;
+            }
+
+            if (p[0] == 0xF2 && p[1] == 0x44 &&
+                p[2] == 0x0F && p[3] == 0x5C &&
+                (p[4] & 0xC0) == 0x80) {
+                foundOffset = offsetCandidate;
+                break;
+            }
+        }
+
+        Wh_Log(
+            L"[STYLE] mediumTaskbarButtonExtentOffset=0x%X",
+            foundOffset);
+
+        return (foundOffset < 0 || foundOffset > 0xFFFF)
+                   ? 0
+                   : foundOffset;
+    }();
+
+    return offset;
+}
+
 static void RefreshTaskListButtonLayout(void* pThis) {
     // Call real function entry points, not our own trampolines.
     //
@@ -971,6 +1005,107 @@ static void ApplySeparatorWidthOverride(void* pThis) {
 
     if (changed) {
         RefreshTaskListButtonLayout(pThis);
+    }
+}
+
+struct SeparatorMaxWidthState {
+    winrt::weak_ref<FrameworkElement> element;
+    void* identity;
+    double originalMaxWidth;
+};
+
+static std::vector<SeparatorMaxWidthState> g_separatorMaxWidthStates;
+
+static void PruneExpiredSeparatorMaxWidthStates() {
+    g_separatorMaxWidthStates.erase(
+        std::remove_if(
+            g_separatorMaxWidthStates.begin(),
+            g_separatorMaxWidthStates.end(),
+            [](const SeparatorMaxWidthState& state) {
+                return !state.element.get();
+            }),
+        g_separatorMaxWidthStates.end());
+}
+
+static auto FindSeparatorMaxWidthState(void* identity) {
+    return std::find_if(
+        g_separatorMaxWidthStates.begin(),
+        g_separatorMaxWidthStates.end(),
+        [identity](const SeparatorMaxWidthState& state) {
+            return state.identity == identity;
+        });
+}
+
+static void ApplySeparatorMaxWidthOverride(
+    const FrameworkElement& element,
+    const SeparatorSetting* separator) {
+    if (!element) {
+        return;
+    }
+
+    PruneExpiredSeparatorMaxWidthStates();
+
+    void* identity = winrt::get_abi(element);
+    auto stateIt = FindSeparatorMaxWidthState(identity);
+
+    // If a TaskListButton is recycled/rebound and no longer represents one of
+    // our separators, undo only the MaxWidth value that SEP itself installed.
+    if (g_unloading || !separator) {
+        if (stateIt != g_separatorMaxWidthStates.end()) {
+            try {
+                if (element.MaxWidth() != stateIt->originalMaxWidth) {
+                    Wh_Log(
+                        L"[STYLE] Restoring recycled TaskListButton MaxWidth: "
+                        L"%g -> %g",
+                        element.MaxWidth(),
+                        stateIt->originalMaxWidth);
+                    element.MaxWidth(stateIt->originalMaxWidth);
+                }
+            } catch (...) {
+                // The element may be disappearing during taskbar reconstruction.
+            }
+
+            g_separatorMaxWidthStates.erase(stateIt);
+        }
+
+        return;
+    }
+
+    // Compatibility mode intentionally has one width only.
+    const double desiredMaxWidth = separator->width;
+    if (!(desiredMaxWidth > 0)) {
+        return;
+    }
+
+    if (stateIt == g_separatorMaxWidthStates.end()) {
+        double originalMaxWidth;
+
+        try {
+            originalMaxWidth = element.MaxWidth();
+        } catch (...) {
+            return;
+        }
+
+        g_separatorMaxWidthStates.push_back({
+            .element = winrt::make_weak(element),
+            .identity = identity,
+            .originalMaxWidth = originalMaxWidth,
+        });
+
+        stateIt = std::prev(g_separatorMaxWidthStates.end());
+    }
+
+    try {
+        if (element.MaxWidth() != desiredMaxWidth) {
+            Wh_Log(
+                L"[STYLE] Separator MaxWidth: %g -> %g "
+                L"(native/TIS extents untouched)",
+                element.MaxWidth(),
+                desiredMaxWidth);
+            element.MaxWidth(desiredMaxWidth);
+        }
+    } catch (...) {
+        // Treat taskbar reconstruction as a transient miss.
     }
 }
 
@@ -1151,20 +1286,26 @@ static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
 
 static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     void* pThis) {
-    // Critical for coexistence with taskbar-icon-size:
-    // let Windows and every hook downstream of us finish first.
+    // Preserve the original precedence: Windows and every downstream hook,
+    // including Taskbar height and icon size, finish first.
     g_taskListButtonUpdateVisualStatesOriginal(pThis);
 
-    // Then take the final word only for our own separator instances.
-    ApplySeparatorWidthOverride(pThis);
-
-    FrameworkElement element{nullptr};
+    FrameworkElement element =
+        GetTaskListButtonElement(pThis);
     const SeparatorSetting* separator =
-        GetSeparatorForTaskListButton(
-            pThis,
-            &element);
+        GetSeparatorForElement(element);
 
-    if (!separator || !element) {
+    if (g_settings.maxWidthCompatibilityMode) {
+        // Compatibility path: native/TIS extents remain untouched.
+        ApplySeparatorMaxWidthOverride(
+            element,
+            separator);
+    } else {
+        // Default path: original per-instance medium/small extent override.
+        ApplySeparatorWidthOverride(pThis);
+    }
+
+    if (!separator || !element || g_unloading) {
         return;
     }
 
@@ -1191,6 +1332,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_taskListButtonUpdateButtonPaddingAddress,
             nullptr,
+            true, // Used only by native-extent mode.
         },
         {
             {
@@ -1198,7 +1340,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_taskListButtonUpdateIconColumnDefinitionAddress,
             nullptr,
-            true, // Missing on older taskbar builds.
+            true, // Used only by native-extent mode.
         },
         {
             {
@@ -1241,7 +1383,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_taskbarConfigurationGetIconHeightInViewPixelsAddress,
             nullptr,
-            true, // DynamicIconScaling-era builds.
+            true, // DynamicIconScaling-era builds; native-extent mode only.
         },
     };
 
@@ -1253,19 +1395,31 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
 
-    if (g_taskListButtonUpdateIconColumnDefinitionAddress) {
-        GetMediumTaskbarButtonExtentOffset();
-    }
-
     constexpr UINT kDynamicIconScaling = 29785184;
 
     g_hasDynamicIconScaling =
         g_taskbarConfigurationGetIconHeightInViewPixelsAddress &&
         IsOsFeatureEnabled(kDynamicIconScaling).value_or(true);
 
+    if (!g_settings.maxWidthCompatibilityMode) {
+        // Preserve the requirements of the original native-extent path.
+        if (!g_taskListButtonUpdateButtonPaddingAddress ||
+            !g_taskListButtonUpdateIconColumnDefinitionAddress ||
+            !GetMediumTaskbarButtonExtentOffset()) {
+            Wh_Log(
+                L"[STYLE] Native-extent width mode is unavailable on this "
+                L"Taskbar.View build. Enable 'MaxWidth compatibility mode' "
+                L"as a fallback.");
+            return false;
+        }
+    }
+
     Wh_Log(
-        L"[STYLE] Taskbar view hooks ready; "
+        L"[STYLE] Taskbar view hooks ready; widthMode=%s "
         L"DynamicIconScaling=%d IsDraggable=1 modernContext=1",
+        g_settings.maxWidthCompatibilityMode
+            ? L"MaxWidthCompatibility"
+            : L"NativeExtent",
         g_hasDynamicIconScaling);
 
     return true;
@@ -2056,7 +2210,7 @@ static bool UnpinAndDeleteSeparators() {
 // -----------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[INIT] Taskbar separator prototype loading");
+    Wh_Log(L"[INIT] Taskbar separator prototype MaxWidth test loading");
 
     LoadSettings();
 
@@ -2182,7 +2336,9 @@ void Wh_ModUninit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     // Keep the old loaded settings intact. The old instance must unpin/delete
     // exactly the separator identities it created; the reloaded instance then
-    // reads the new array (including new widths) and recreates fresh buttons.
+    // reads the new settings and recreates fresh buttons. This is also how the
+    // native-extent <-> MaxWidth compatibility mode switch stays clean: width
+    // ownership is never hot-swapped on an existing TaskListButton.
     *bReload = TRUE;
     return TRUE;
 }
