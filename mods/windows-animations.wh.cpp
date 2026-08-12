@@ -56,11 +56,13 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
 
     ![Pixel Melt Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/b96dea88ab53f4b781e472d3683f645f4e368f8e/pixel_melt.gif)
 
-* **🧞 Fluid Minimize & Restore:** Transform how windows minimize and restore with seven fluid, physics-inspired animations:
+* **🧞 Fluid Minimize & Restore:** Transform how windows minimize and restore with eight fluid, physics-inspired animations:
 
   * **Genie:** The window is pulled toward the taskbar like a classic macOS Genie effect, bending and compressing smoothly into its destination.
 
     ![Genie Minimize Preview](https://raw.githubusercontent.com/redrag2105/windhawk-windows-animations-preview/a7e46c466c7b88552d5d92cad113b652fbd3f10e/genie_preview.gif)
+
+  * **Windows 10:** The window follows the classic Windows 10 thumbnail transition, smoothly collapsing into its taskbar button and expanding back from it.
 
   * **Ink Splash:** The window collapses into a fluid splash of ink, spreading and deforming organically before fading away.
 
@@ -393,7 +395,6 @@ namespace AnimConstants {
     constexpr int UiaLookupInFlightMs = 3000;
     constexpr int UiaNegativeCacheMs = 10000;
     constexpr int UiaPositiveFallbackCacheMs = 10000;
-    constexpr int TaskbarSignatureRefreshMs = 250;
     constexpr int UiaMinAcceptScore = 400;
     constexpr int TaskbarExpandWaitMs = 250;
     constexpr int Win10MinRestoreMs = 280;
@@ -436,7 +437,6 @@ std::unordered_map<HWND, DWORD> g_TaskbarDockPositiveUntilTicks;
 uint64_t g_NextTaskbarDockLookupGeneration = 0;
 uint64_t g_TaskbarWindowSetSignature = 0;
 bool g_TaskbarWindowSetSignatureInitialized = false;
-DWORD g_TaskbarWindowSetSignatureTick = 0;
 LONG g_seenTaskbarLayoutEpoch = 0;
 DWORD g_seenTaskbarExplorerPid = 0;
 std::unordered_map<HWND, std::wstring> g_ProcessNameCache;
@@ -456,6 +456,7 @@ HANDLE g_hAltTabSessionThread = NULL;
 HANDLE g_hExplorerFgThread = NULL;
 HANDLE g_hWinEventThread = NULL;
 std::mutex g_AltTabSessionMutex;
+std::mutex g_ExplorerFgThreadMutex;
 std::atomic<bool> g_winEventThreadStarted{false};
 std::atomic<bool> g_explorerAltTabTrackerEnabled{false};
 std::atomic<bool> g_altTabSessionPollRunning{false};
@@ -463,6 +464,7 @@ std::atomic<HWND> g_lastAppForeground{nullptr};
 DWORD WINAPI WinEventHookThread(LPVOID lpParam);
 DWORD WINAPI ExplorerFgHookThread(LPVOID lpParam);
 DWORD WINAPI AltTabSessionPollThread(LPVOID lpParam);
+static void EnsureExplorerForegroundThreadStarted();
 struct alignas(8) SharedAnimState {
     volatile LONG magic;
     volatile LONG sessionEpoch;
@@ -474,12 +476,15 @@ struct alignas(8) SharedAnimState {
     volatile LONG taskbarLayoutEpoch;
     volatile LONG taskbarObserverPid;
 };
-static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_13";
+static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_12";
 static constexpr LONG kSharedStateMagic = 0x57415338;
 static constexpr LONG kSharedHeartbeatStaleMs = 2500;
 HANDLE g_hMapFile = NULL;
 SharedAnimState* g_pSharedState = nullptr;
 bool g_sharedStateWritable = false;
+// Shell ownership can be established after injection. Serialize every shared
+// view access so promotion can't unmap a view while a hook reads it.
+std::mutex g_SharedStateMutex;
 std::atomic<LONG> g_consumedGeneration{0};
 std::atomic<LONG> g_seenSessionEpoch{0};
 std::atomic<int> g_durationMs{360};
@@ -572,11 +577,15 @@ static LONG NonZeroTick() {
 static void FlushDwmOrYield() {
     if (FAILED(DwmFlush())) Sleep(1);
 }
-static void PulseSharedHeartbeat() {
+static void PulseSharedHeartbeatLocked() {
     if (!g_pSharedState || !g_sharedStateWritable) return;
     InterlockedExchange(&g_pSharedState->heartbeatTick, NonZeroTick());
 }
-static void ResetAltTabState() {
+static void PulseSharedHeartbeat() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    PulseSharedHeartbeatLocked();
+}
+static void ResetAltTabStateLocked() {
     if (!g_pSharedState || !g_sharedStateWritable) return;
     InterlockedExchange(&g_pSharedState->magic, kSharedStateMagic);
     InterlockedIncrement(&g_pSharedState->sessionEpoch);
@@ -588,49 +597,60 @@ static void ResetAltTabState() {
     LONG taskbarEpoch = InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
     if (taskbarEpoch == 0) InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
     InterlockedExchange(&g_pSharedState->taskbarObserverPid, 0);
-    PulseSharedHeartbeat();
+    PulseSharedHeartbeatLocked();
 }
 static void BeginAltTabSession(HWND source) {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
     if (!g_pSharedState || !g_sharedStateWritable) return;
     InterlockedExchange(&g_pSharedState->altTabSourceWindow, HwndToShared(source));
     InterlockedExchange(&g_pSharedState->altTabStartTick, (LONG)GetTickCount());
     LONG generation = InterlockedIncrement(&g_pSharedState->altTabGeneration);
     if (generation == 0) InterlockedIncrement(&g_pSharedState->altTabGeneration);
     InterlockedExchange(&g_pSharedState->lastAltTabTick, NonZeroTick());
-    PulseSharedHeartbeat();
+    PulseSharedHeartbeatLocked();
 }
 static void TouchAltTabSession() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
     if (g_pSharedState && g_sharedStateWritable) {
         InterlockedExchange(&g_pSharedState->lastAltTabTick, NonZeroTick());
-        PulseSharedHeartbeat();
+        PulseSharedHeartbeatLocked();
     }
 }
 static bool EnsureSharedStateMapped();
 static bool ConsumeAltTabIntent(HWND target, DWORD eventTime) {
-    if (!EnsureSharedStateMapped() || !g_pSharedState) return false;
-    if (g_pSharedState->magic != kSharedStateMagic) return false;
-    const LONG epoch = g_pSharedState->sessionEpoch;
+    if (!EnsureSharedStateMapped()) return false;
+    LONG epoch = 0;
+    LONG heartbeat = 0;
+    LONG stamp = 0;
+    LONG generation = 0;
+    DWORD startTick = 0;
+    LONG source = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+        if (!g_pSharedState || g_pSharedState->magic != kSharedStateMagic) return false;
+        epoch = g_pSharedState->sessionEpoch;
+        heartbeat = g_pSharedState->heartbeatTick;
+        stamp = g_pSharedState->lastAltTabTick;
+        generation = g_pSharedState->altTabGeneration;
+        startTick = static_cast<DWORD>(g_pSharedState->altTabStartTick);
+        source = g_pSharedState->altTabSourceWindow;
+        if (generation != g_pSharedState->altTabGeneration) return false;
+    }
     LONG seen = g_seenSessionEpoch.load(std::memory_order_relaxed);
     if (epoch != seen) {
         g_seenSessionEpoch.store(epoch, std::memory_order_relaxed);
         g_consumedGeneration.store(0, std::memory_order_relaxed);
     }
-    const LONG heartbeat = g_pSharedState->heartbeatTick;
     if (!heartbeat ||
         (LONG)(GetTickCount() - (DWORD)heartbeat) > kSharedHeartbeatStaleMs) {
         return false;
     }
-    const LONG stamp = g_pSharedState->lastAltTabTick;
     if (!stamp || (LONG)(GetTickCount() - (DWORD)stamp) > AnimConstants::AltTabSessionMs) return false;
-    const LONG generation = g_pSharedState->altTabGeneration;
     if (!generation) return false;
-    const DWORD startTick = (DWORD)g_pSharedState->altTabStartTick;
     if (eventTime && startTick &&
         (LONG)(eventTime - startTick) < -(40 + AnimConstants::AltTabPollMs)) {
         return false;
     }
-    const LONG source = g_pSharedState->altTabSourceWindow;
-    if (generation != g_pSharedState->altTabGeneration) return false;
     LONG consumed = g_consumedGeneration.load(std::memory_order_relaxed);
     if (consumed == generation ||
         !g_consumedGeneration.compare_exchange_strong(consumed, generation, std::memory_order_relaxed)) {
@@ -650,10 +670,13 @@ static bool IsAltTabSourceCandidate(HWND hWnd) {
     return true;
 }
 static bool IsExplorerProcess() {
-    WCHAR path[MAX_PATH]{};
-    if (!GetModuleFileNameW(NULL, path, ARRAYSIZE(path))) return false;
-    const WCHAR* name = wcsrchr(path, L'\\');
-    return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    static const bool isExplorer = [] {
+        WCHAR path[MAX_PATH]{};
+        if (!GetModuleFileNameW(NULL, path, ARRAYSIZE(path))) return false;
+        const WCHAR* name = wcsrchr(path, L'\\');
+        return _wcsicmp(name ? name + 1 : path, L"explorer.exe") == 0;
+    }();
+    return isExplorer;
 }
 static bool IsShellExplorerProcess() {
     if (!IsExplorerProcess()) return false;
@@ -667,6 +690,39 @@ static bool IsShellExplorerProcess() {
         }
     }
     return shellPid == GetCurrentProcessId();
+}
+
+// UI Automation and DWM extended-frame bounds use physical screen pixels,
+// while GetWindowRect is DPI-virtualized for the process running this hook.
+// Use an HWND owned by this process as the transform reference. Taskbar-side
+// calls animate foreign HWNDs from per-monitor-aware Explorer, whose animation
+// space is already physical, so those coordinates deliberately stay unchanged.
+static HWND GetAnimationCoordinateWindow(HWND hTarget) {
+    DWORD targetPid = 0;
+    if (hTarget) GetWindowThreadProcessId(hTarget, &targetPid);
+    if (targetPid == GetCurrentProcessId()) return hTarget;
+    // Foreign animations are normally created by Explorer, whose coordinate
+    // space is already physical. Don't transform with the foreign app's DPI.
+    return nullptr;
+}
+
+static void PhysicalPointToAnimationSpace(HWND hTarget, POINT* point) {
+    if (!point) return;
+    if (HWND hTransform = GetAnimationCoordinateWindow(hTarget)) {
+        PhysicalToLogicalPointForPerMonitorDPI(hTransform, point);
+    }
+}
+
+static void PhysicalRectToAnimationSpace(HWND hTarget, RECT* rect) {
+    if (!rect) return;
+    POINT topLeft{rect->left, rect->top};
+    POINT bottomRight{rect->right, rect->bottom};
+    PhysicalPointToAnimationSpace(hTarget, &topLeft);
+    PhysicalPointToAnimationSpace(hTarget, &bottomRight);
+    rect->left = topLeft.x;
+    rect->top = topLeft.y;
+    rect->right = bottomRight.x;
+    rect->bottom = bottomRight.y;
 }
 static std::wstring GetClassNameStr(HWND hWnd) {
     WCHAR name[256];
@@ -960,7 +1016,7 @@ static PSECURITY_DESCRIPTOR BuildSharedStateSd() {
     }
     return pSd;
 }
-static void CloseSharedState() {
+static void CloseSharedStateLocked() {
     if (g_pSharedState) {
         UnmapViewOfFile(g_pSharedState);
         g_pSharedState = nullptr;
@@ -971,8 +1027,12 @@ static void CloseSharedState() {
     }
     g_sharedStateWritable = false;
 }
-void InitSharedMemory() {
-    CloseSharedState();
+static void CloseSharedState() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    CloseSharedStateLocked();
+}
+static void InitSharedMemoryLocked() {
+    CloseSharedStateLocked();
     const bool explorer = IsShellExplorerProcess();
     if (explorer) {
         PSECURITY_DESCRIPTOR pSd = BuildSharedStateSd();
@@ -994,11 +1054,11 @@ void InitSharedMemory() {
         if (!g_pSharedState) {
             Wh_Log(L"Explorer failed to map shared state for write err=%lu — switch anim disabled",
                    GetLastError());
-            CloseSharedState();
+            CloseSharedStateLocked();
             return;
         }
         g_sharedStateWritable = true;
-        ResetAltTabState();
+        ResetAltTabStateLocked();
         Wh_Log(L"Explorer claimed Alt+Tab shared state epoch=%ld existing=%d",
                g_pSharedState->sessionEpoch, createErr == ERROR_ALREADY_EXISTS ? 1 : 0);
         return;
@@ -1012,18 +1072,23 @@ void InitSharedMemory() {
                                                      sizeof(SharedAnimState));
     if (!g_pSharedState) {
         Wh_Log(L"Failed to map shared Alt+Tab state err=%lu", GetLastError());
-        CloseSharedState();
+        CloseSharedStateLocked();
     }
 }
+void InitSharedMemory() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    InitSharedMemoryLocked();
+}
 static bool EnsureSharedStateMapped() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
     if (IsShellExplorerProcess() && !g_sharedStateWritable) {
-        InitSharedMemory();
+        InitSharedMemoryLocked();
         return g_pSharedState && g_sharedStateWritable &&
                g_pSharedState->magic == kSharedStateMagic;
     }
     if (g_pSharedState) {
         if (g_pSharedState->magic == kSharedStateMagic) return true;
-        if (!g_sharedStateWritable) CloseSharedState();
+        if (!g_sharedStateWritable) CloseSharedStateLocked();
         else return false;
     }
     if (g_sharedStateWritable) return false;
@@ -1342,6 +1407,11 @@ std::wstring GetProcessNameCached(HWND hWnd) {
     return procNameLower;
 }
 void EnsureWinEventThreadStarted() {
+    // This is also a lazy recovery path for a shell that became ready after
+    // the ownership probe's initial fast-poll period.
+    if (g_switchAnimation.load(std::memory_order_relaxed)) {
+        EnsureExplorerForegroundThreadStarted();
+    }
     if (g_winEventThreadStarted.load(std::memory_order_relaxed)) return;
     if (g_unloading.load(std::memory_order_relaxed)) return;
     const bool needTaskbarObserver =
@@ -1577,6 +1647,22 @@ static DWORD GetTaskbarExplorerPid() {
     return explorerPid;
 }
 
+static bool ReadSharedTaskbarState(LONG* epochOut, LONG* observerPidOut) {
+    if (!EnsureSharedStateMapped()) return false;
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    if (!g_pSharedState || g_pSharedState->magic != kSharedStateMagic) return false;
+    if (epochOut) *epochOut = g_pSharedState->taskbarLayoutEpoch;
+    if (observerPidOut) *observerPidOut = g_pSharedState->taskbarObserverPid;
+    return true;
+}
+
+static LONG GetSharedTaskbarLayoutEpoch() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    return g_pSharedState && g_pSharedState->magic == kSharedStateMagic
+               ? g_pSharedState->taskbarLayoutEpoch
+               : 0;
+}
+
 static bool SyncTaskbarLayoutEpoch() {
     const DWORD explorerPid = GetTaskbarExplorerPid();
     {
@@ -1587,13 +1673,11 @@ static bool SyncTaskbarLayoutEpoch() {
             g_seenTaskbarLayoutEpoch = 0;
         }
     }
-    if (!explorerPid || !EnsureSharedStateMapped() || !g_pSharedState ||
-        g_pSharedState->magic != kSharedStateMagic) {
+    LONG epoch = 0;
+    LONG observerPid = 0;
+    if (!explorerPid || !ReadSharedTaskbarState(&epoch, &observerPid)) {
         return false;
     }
-
-    const LONG epoch = g_pSharedState->taskbarLayoutEpoch;
-    const LONG observerPid = g_pSharedState->taskbarObserverPid;
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         if (epoch != g_seenTaskbarLayoutEpoch) {
@@ -1633,17 +1717,6 @@ static BOOL CALLBACK HashTaskbarWindowProc(HWND hWnd, LPARAM lParam) {
 }
 
 static void RefreshTaskbarWindowSetSignature() {
-    const DWORD now = GetTickCount();
-    {
-        std::lock_guard<std::mutex> lock(g_StateMutex);
-        if (g_TaskbarWindowSetSignatureInitialized &&
-            (LONG)(now - g_TaskbarWindowSetSignatureTick) <
-                AnimConstants::TaskbarSignatureRefreshMs) {
-            return;
-        }
-        g_TaskbarWindowSetSignatureTick = now;
-    }
-
     TaskbarWindowSetSignatureContext context;
     EnumWindows(HashTaskbarWindowProc, reinterpret_cast<LPARAM>(&context));
     const uint64_t signature = context.xorHash ^
@@ -1708,9 +1781,15 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
                     if (pOrCond && SUCCEEDED(pTrayElement->FindAll(TreeScope_Descendants, pOrCond, &pArray)) && pArray) {
                         int length = 0;
                         pArray->get_Length(&length);
-                        MONITORINFO mi = {0};
+                        MONITORINFO mi{};
                         mi.cbSize = sizeof(MONITORINFO);
-                        GetMonitorInfoW(t->hMon, &mi);
+                        if (!GetMonitorInfoW(t->hMon, &mi)) {
+                            mi.rcMonitor.left = 0;
+                            mi.rcMonitor.top = 0;
+                            mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
+                            mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+                            mi.rcWork = mi.rcMonitor;
+                        }
                         int monRight = mi.rcMonitor.right;
                         int bestScore = 0;
                         for (int i = 0; i < length; i++) {
@@ -1751,8 +1830,9 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
                                         if (uiaNameLower.find(L"task view") != std::wstring::npos) score -= 500;
                                         if (uiaNameLower.find(L"widgets") != std::wstring::npos) score -= 500;
                                         if (score >= AnimConstants::UiaMinAcceptScore && score > bestScore) {
-                                            RECT bRect;
+                                            RECT bRect{};
                                             if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect))) {
+                                                PhysicalRectToAnimationSpace(t->hWndApp, &bRect);
                                                 if (bRect.right > bRect.left && bRect.left < monRight - 50) {
                                                     bestScore = score;
                                                     targetX = bRect.left + (bRect.right - bRect.left) / 2;
@@ -1822,7 +1902,12 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
 }
 int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallbackX, HMONITOR hMon) {
     const bool sharedLayoutTracking = SyncTaskbarLayoutEpoch();
-    if (!sharedLayoutTracking) RefreshTaskbarWindowSetSignature();
+    // Win11's XAML taskbar doesn't reliably surface every button removal or
+    // reflow through the HWND WinEvent bridge. Keep the shared epoch for
+    // taskbar-only layout changes, but also verify the top-level app set before
+    // trusting a hot per-window position. This intentionally runs on every
+    // Genie/Windows 10 lookup so the first animation after a close is correct.
+    RefreshTaskbarWindowSetSignature();
     std::wstring procNameLower = GetProcessNameCached(hWndApp);
     std::wstring processKey = MakeProcessDockKey(procNameLower, hMon);
     int hwndCachedX = 0;
@@ -1862,9 +1947,9 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
             (LONG)(now - positiveIt->second) < 0;
         layoutEpochAtRead = g_seenTaskbarLayoutEpoch;
     }
-    const bool layoutEpochStillCurrent =
-        !sharedLayoutTracking ||
-        (g_pSharedState && g_pSharedState->taskbarLayoutEpoch == layoutEpochAtRead);
+    const bool layoutEpochStillCurrent = !sharedLayoutTracking ||
+                                         GetSharedTaskbarLayoutEpoch() ==
+                                             layoutEpochAtRead;
     if (haveHwndCache && layoutEpochStillCurrent &&
         (sharedLayoutTracking || positiveFallbackCacheActive)) {
         return hwndCachedX;
@@ -2176,6 +2261,28 @@ static bool IsTaskbarEventWindow(HWND hWnd) {
     return false;
 }
 
+static void IncrementSharedTaskbarLayoutEpoch() {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    if (!g_pSharedState || !g_sharedStateWritable) return;
+    LONG epoch = InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
+    if (epoch == 0) InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
+}
+
+static bool PublishSharedTaskbarObserver(DWORD explorerPid, bool ready) {
+    std::lock_guard<std::mutex> lock(g_SharedStateMutex);
+    if (!g_pSharedState || !g_sharedStateWritable) return false;
+    const LONG ownPid = static_cast<LONG>(explorerPid);
+    const LONG previous = InterlockedCompareExchange(
+        &g_pSharedState->taskbarObserverPid, ready ? ownPid : 0,
+        ready ? 0 : ownPid);
+    if (ready && previous != 0 && previous != ownPid) return false;
+    if ((ready && previous != ownPid) || (!ready && previous == ownPid)) {
+        LONG epoch = InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
+        if (epoch == 0) InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
+    }
+    return ready ? (previous == 0 || previous == ownPid) : previous == ownPid;
+}
+
 void CALLBACK TaskbarLayoutEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd,
                                      LONG idObject, LONG idChild, DWORD dwEventThread,
                                      DWORD dwmsEventTime) {
@@ -2197,10 +2304,7 @@ void CALLBACK TaskbarLayoutEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, H
         return;
     }
 
-    if (g_pSharedState && g_sharedStateWritable) {
-        LONG epoch = InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
-        if (epoch == 0) InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
-    }
+    IncrementSharedTaskbarLayoutEpoch();
     std::lock_guard<std::mutex> lock(g_StateMutex);
     InvalidateTaskbarDockCachesLocked();
 }
@@ -2218,17 +2322,7 @@ DWORD WINAPI WinEventHookThread(LPVOID lpParam) {
     HWINEVENTHOOK taskbarLocationHook = nullptr;
     HWINEVENTHOOK taskbarHostedObjectsHook = nullptr;
     auto publishObserver = [&](bool ready) -> bool {
-        if (!g_pSharedState || !g_sharedStateWritable) return false;
-        const LONG ownPid = static_cast<LONG>(explorerPid);
-        const LONG previous = InterlockedCompareExchange(
-            &g_pSharedState->taskbarObserverPid, ready ? ownPid : 0,
-            ready ? 0 : ownPid);
-        if (ready && previous != 0 && previous != ownPid) return false;
-        if ((ready && previous != ownPid) || (!ready && previous == ownPid)) {
-            LONG epoch = InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
-            if (epoch == 0) InterlockedIncrement(&g_pSharedState->taskbarLayoutEpoch);
-        }
-        return ready ? (previous == 0 || previous == ownPid) : previous == ownPid;
+        return PublishSharedTaskbarObserver(explorerPid, ready);
     };
     auto removeTaskbarHooks = [&]() {
         if (taskbarLayoutHook) UnhookWinEvent(taskbarLayoutHook);
@@ -2926,11 +3020,13 @@ public:
         origTop  = data->targetRect.top;
         origCenterX = (float)origLeft + W * 0.5f;
         HMONITOR hMon = MonitorFromWindow(data->hRealWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mmi; mmi.cbSize = sizeof(mmi);
+        MONITORINFO mmi{};
+        mmi.cbSize = sizeof(mmi);
         if (!hMon || !GetMonitorInfoW(hMon, &mmi)) {
             mmi.rcMonitor.left = 0; mmi.rcMonitor.top = 0;
             mmi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
             mmi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+            mmi.rcWork = mmi.rcMonitor;
         }
         HWND hTray = FindTaskbarForMonitor(hMon ? hMon : data->hMon);
         taskbarDpiScale = static_cast<float>(GetWindowDpiCompat(hTray)) / 96.0f;
@@ -4004,10 +4100,6 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     const BOOL restoreMaximized =
         !isClosing &&
         (restoreMaximizedHint || WindowRestoresMaximized(hWnd));
-    if (restoreMaximized) {
-        ArmMaximizedRestoreGuard(
-            hWnd, static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
-    }
     
     static std::atomic<int> s_animCount{0};
     if (s_animCount.fetch_add(1, std::memory_order_relaxed) % 10 == 0) {
@@ -4018,8 +4110,9 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden);
         return false;
     }
-    RECT rect = winRect, extRect;
+    RECT rect = winRect, extRect{};
     if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extRect, sizeof(extRect)))) {
+        PhysicalRectToAnimationSpace(hWnd, &extRect);
         rect = extRect;
     }
     int w = rect.right - rect.left;
@@ -4077,21 +4170,40 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     }
     LONG_PTR storedExStyle = originalExStyle;
     if (!isClosing) {
-        if (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
+        const LONG_PTR currentExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+        storedExStyle = (originalExStyle & ~WS_EX_TOPMOST) |
+                        (currentExStyle & WS_EX_TOPMOST);
+        if (currentExStyle & WS_EX_TOPMOST) {
+            // Let the animation ghost cover the real window temporarily. Keep
+            // the bit in storedExStyle so endpoint/failure cleanup promotes it
+            // back into the topmost band.
             RestoreZOrderAfterGhost(hWnd, 0);
         }
-        storedExStyle &= ~WS_EX_TOPMOST;
+    }
+    // A long guard is needed only while an accepted minimize/restore session
+    // can receive a duplicate taskbar restore in another injected process.
+    // Launch animations don't need it and must not suppress later taskbar use.
+    if (restoreMaximized && (!rising || cloakHidden)) {
+        ArmMaximizedRestoreGuard(
+            hWnd, static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
     }
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi; mi.cbSize = sizeof(mi);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
     if (!GetMonitorInfoW(hMon, &mi)) {
         mi.rcMonitor.left = 0; mi.rcMonitor.top = 0; mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN); mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+        mi.rcWork = mi.rcMonitor;
     }
     int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
     DWORD alignVal = 1, dataSize = sizeof(alignVal);
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarAl", RRF_RT_REG_DWORD, NULL, &alignVal, &dataSize);
     HWND hTrayForDpi = FindTaskbarForMonitor(hMon);
-    const int leftAlignedOffset = ScaleTaskbarPx(hTrayForDpi, 160);
+    HWND hCoordinateWindow = GetAnimationCoordinateWindow(hWnd);
+    const int leftAlignedOffset = MulDiv(
+        160,
+        static_cast<int>(GetWindowDpiCompat(
+            hCoordinateWindow ? hCoordinateWindow : hTrayForDpi)),
+        96);
     int learnedTargetX = (alignVal == 0) ? (mi.rcMonitor.left + leftAlignedOffset)
                                          : (mi.rcMonitor.left + monWidth / 2);
     const bool randomMinRestorePair =
@@ -4164,7 +4276,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     auto finalizeClaimAfterStartFailure = [&]() {
         if (asyncRestoreReservation) return;
         if (isClosing) {
-            FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden);
+            FailAnimationStart(hWnd, rising, storedExStyle, cloakHidden);
             std::lock_guard<std::mutex> lock(g_StateMutex);
             g_AnimActive.erase(hWnd);
             return;
@@ -4191,10 +4303,10 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
             } else if (finalRising &&
                        (IsIconic(hWnd) ||
                         (restoreMaximized && !IsZoomed(hWnd)))) {
-                RestoreWindowUnderGhost(hWnd, originalExStyle,
+                RestoreWindowUnderGhost(hWnd, storedExStyle,
                                         restoreMaximized);
             }
-            FailAnimationStart(hWnd, finalRising, originalExStyle, cloakHidden);
+            FailAnimationStart(hWnd, finalRising, storedExStyle, cloakHidden);
 
             bool directionChanged = false;
             bool clearPairedEffect = false;
@@ -4519,9 +4631,16 @@ static bool PrepareRestoreAnimation(HWND hWnd) {
     return true;
 }
 static void CommitRestoreAnimation(HWND hWnd, BOOL restoreMaximizedHint) {
-    StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE,
-                   FALSE, 0, NULL, FALSE, FALSE, NULL, 0, -1, FALSE,
-                   nullptr, 0, nullptr, restoreMaximizedHint);
+    const bool started =
+        StartAnimation(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE,
+                       FALSE, 0, NULL, FALSE, FALSE, NULL, 0, -1, FALSE,
+                       nullptr, 0, nullptr, restoreMaximizedHint);
+    if (!started && restoreMaximizedHint && !IsAnimating(hWnd)) {
+        // The native restore was already issued, but no long-lived animation
+        // session exists to receive duplicates. Keep only the short debounce.
+        ArmMaximizedRestoreGuard(
+            hWnd, static_cast<DWORD>(GetDoubleClickTime() + 100));
+    }
 }
 DWORD WINAPI AsyncRestoreAnimThread(LPVOID lpParam) {
     auto* restoreData = (AsyncRestoreAnimData*)lpParam;
@@ -4630,12 +4749,12 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         if (RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return TRUE;
         const BOOL restoreMaximized =
             cmd == SW_RESTORE && WindowRestoresMaximized(hWnd);
-        if (restoreMaximized) {
-            ArmMaximizedRestoreGuard(
-                hWnd,
-                static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
-        }
         if (PrepareRestoreAnimation(hWnd)) {
+            if (restoreMaximized) {
+                ArmMaximizedRestoreGuard(
+                    hWnd,
+                    static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
+            }
             BOOL result = ShowWindow_Original(hWnd, cmd);
             CommitRestoreAnimation(hWnd, restoreMaximized);
             return result;
@@ -4646,6 +4765,9 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return TRUE;
     if (cmd == SW_RESTORE && IsShellTaskbarRestoreCall(hWnd) &&
         ShouldSuppressRedundantMaximizedRestore(hWnd)) {
+        // This hook can run in a different injected process while the restore
+        // worker owns and cloaks the real window. Keep suppression side-effect
+        // free; the owning worker activates only after it safely uncloaks.
         return IsWindowVisible(hWnd);
     }
     if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
@@ -4693,6 +4815,8 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return TRUE;
     if (cmd == SW_RESTORE && IsShellTaskbarRestoreCall(hWnd) &&
         ShouldSuppressRedundantMaximizedRestore(hWnd)) {
+        // See ShowWindow_Hook: foregrounding here can re-enter Explorer's
+        // taskbar toggle logic and enqueue an unowned late minimize.
         return TRUE;
     }
     if ((cmd == SW_RESTORE || cmd == SW_SHOWNORMAL) && IsIconic(hWnd) &&
@@ -4700,15 +4824,15 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         const LONG_PTR originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
         const BOOL restoreMaximized =
             cmd == SW_RESTORE && WindowRestoresMaximized(hWnd);
-        if (restoreMaximized) {
-            ArmMaximizedRestoreGuard(
-                hWnd,
-                static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
-        }
         uint64_t reservationGeneration = 0;
         if (!ReserveAsyncRestore(hWnd, &reservationGeneration)) {
             if (RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return TRUE;
             return ShowWindowAsync_Original(hWnd, cmd);
+        }
+        if (restoreMaximized) {
+            ArmMaximizedRestoreGuard(
+                hWnd,
+                static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
         }
         UpdateDwmTransitions(hWnd, FALSE);
         SetWindowCloak(hWnd, TRUE);
@@ -4833,15 +4957,17 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
             if (RetargetLiveMinRestore(hWnd, true) == MinRestoreRetarget::Accepted) return 0;
             if (IsTaskbarRestoreSysCommand(hWnd, lParam) &&
                 ShouldSuppressRedundantMaximizedRestore(hWnd)) {
+                // The animation owner performs endpoint activation. This
+                // cross-process debounce must not mutate foreground state.
                 return 0;
             }
             const BOOL restoreMaximized = WindowRestoresMaximized(hWnd);
-            if (restoreMaximized) {
-                ArmMaximizedRestoreGuard(
-                    hWnd,
-                    static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
-            }
             if (IsIconic(hWnd) && PrepareRestoreAnimation(hWnd)) {
+                if (restoreMaximized) {
+                    ArmMaximizedRestoreGuard(
+                        hWnd,
+                        static_cast<DWORD>(AnimConstants::MaximizedRestoreGuardMs));
+                }
                 LRESULT result = DefWindowProcW_Original(hWnd, msg, wParam, lParam);
                 CommitRestoreAnimation(hWnd, restoreMaximized);
                 return result;
@@ -4879,6 +5005,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
     if (placement && placement->showCmd == SW_RESTORE &&
         IsShellTaskbarRestoreCall(hWnd) &&
         ShouldSuppressRedundantMaximizedRestore(hWnd)) {
+        // Keep the cross-process redundant-restore guard side-effect free.
         return TRUE;
     }
     if (placement && (placement->showCmd == SW_RESTORE || placement->showCmd == SW_SHOWNORMAL) &&
@@ -4893,7 +5020,9 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement)
         const LONG_PTR originalExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
         BOOL result = SetWindowPlacement_Original(hWnd, placement);
         if (result) CommitRestoreAnimation(hWnd, restoreMaximized);
-        else if (!IsAnimating(hWnd)) UndoRisingHide(hWnd, originalExStyle, TRUE);
+        else if (!IsAnimating(hWnd)) {
+            UndoRisingHide(hWnd, originalExStyle, TRUE);
+        }
         return result;
     }
     if (!IsOurWindow(hWnd)) return SetWindowPlacement_Original(hWnd, placement);
@@ -4960,16 +5089,59 @@ static BOOL CALLBACK EnumWindowsInitProc(HWND hWnd, LPARAM lParam) {
     }
     return TRUE;
 }
-void StartSwitchThreads() {
-    if (IsShellExplorerProcess() && !g_hExplorerFgThread) {
-        g_explorerAltTabTrackerEnabled.store(true, std::memory_order_relaxed);
-        g_hExplorerFgThread = CreateThread(NULL, 0, ExplorerFgHookThread, NULL, 0, NULL);
-        if (!g_hExplorerFgThread) {
-            g_explorerAltTabTrackerEnabled.store(false, std::memory_order_relaxed);
-            Wh_Log(L"Explorer FOREGROUND thread failed to start");
-        }
+static void EnsureExplorerForegroundThreadStarted() {
+    if (g_unloading.load(std::memory_order_relaxed) ||
+        !g_switchAnimation.load(std::memory_order_relaxed) ||
+        !IsShellExplorerProcess()) {
+        return;
     }
-    EnumWindows(EnumWindowsInitProc, 0);
+
+    std::lock_guard<std::mutex> lock(g_ExplorerFgThreadMutex);
+    if (g_unloading.load(std::memory_order_relaxed) ||
+        !g_switchAnimation.load(std::memory_order_relaxed) ||
+        !IsShellExplorerProcess()) {
+        return;
+    }
+    if (g_hExplorerFgThread &&
+        WaitForSingleObject(g_hExplorerFgThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_hExplorerFgThread);
+        g_hExplorerFgThread = NULL;
+    }
+    if (g_hExplorerFgThread) return;
+
+    g_explorerAltTabTrackerEnabled.store(true, std::memory_order_relaxed);
+    HANDLE hThread = CreateThread(NULL, 0, ExplorerFgHookThread, NULL, 0, NULL);
+    if (!hThread) {
+        g_explorerAltTabTrackerEnabled.store(false, std::memory_order_relaxed);
+        Wh_Log(L"Explorer FOREGROUND thread failed to start");
+        return;
+    }
+    g_hExplorerFgThread = hThread;
+}
+
+static void StopExplorerForegroundThread() {
+    g_explorerAltTabTrackerEnabled.store(false, std::memory_order_relaxed);
+    HANDLE hThread = NULL;
+    {
+        std::lock_guard<std::mutex> lock(g_ExplorerFgThreadMutex);
+        hThread = g_hExplorerFgThread;
+        g_hExplorerFgThread = NULL;
+    }
+    if (!hThread) return;
+    DWORD tid = GetThreadId(hThread);
+    while (tid && !PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
+        if (WaitForSingleObject(hThread, 10) != WAIT_TIMEOUT) break;
+    }
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+}
+
+void StartSwitchThreads() {
+    EnsureExplorerForegroundThreadStarted();
+    if (!g_unloading.load(std::memory_order_relaxed) &&
+        g_switchAnimation.load(std::memory_order_relaxed)) {
+        EnumWindows(EnumWindowsInitProc, 0);
+    }
 }
 static void StopWinEventThread() {
     HANDLE hWinEvent = NULL;
@@ -4998,15 +5170,7 @@ void StopSwitchThreads() {
             g_hAltTabSessionThread = NULL;
         }
     }
-    if (g_hExplorerFgThread) {
-        DWORD tid = GetThreadId(g_hExplorerFgThread);
-        while (tid && !PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
-            if (WaitForSingleObject(g_hExplorerFgThread, 10) != WAIT_TIMEOUT) break;
-        }
-        WaitForSingleObject(g_hExplorerFgThread, INFINITE);
-        CloseHandle(g_hExplorerFgThread);
-        g_hExplorerFgThread = NULL;
-    }
+    StopExplorerForegroundThread();
     const bool keepTaskbarObserver =
         !g_unloading.load(std::memory_order_relaxed) && IsShellExplorerProcess() &&
         (g_minimizeAnimation.load(std::memory_order_relaxed) ||
@@ -5016,9 +5180,8 @@ void StopSwitchThreads() {
     }
 }
 static DWORD WINAPI ShellOwnershipProbeThread(LPVOID) {
-    const DWORD deadline = GetTickCount() + 5000;
-    while (!g_unloading.load(std::memory_order_relaxed) &&
-           (LONG)(GetTickCount() - deadline) < 0) {
+    const DWORD started = GetTickCount();
+    while (!g_unloading.load(std::memory_order_relaxed)) {
         if (IsShellExplorerProcess()) {
             StopWinEventThread();
             EnsureWinEventThreadStarted();
@@ -5027,7 +5190,8 @@ static DWORD WINAPI ShellOwnershipProbeThread(LPVOID) {
             }
             return 0;
         }
-        Sleep(50);
+        const DWORD elapsed = GetTickCount() - started;
+        Sleep(elapsed < 5000 ? 50 : 500);
     }
     return 0;
 }
@@ -5092,8 +5256,11 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L"BeforeUninit: joining workers");
     g_unloading.store(true, std::memory_order_relaxed);
-    StopSwitchThreads();
+    // The ownership probe is a registered worker and is the only worker that
+    // can request the separately-owned Explorer foreground thread. Join it
+    // before detaching that thread, in addition to the start-side lock/check.
     JoinWorkerThreads();
+    StopSwitchThreads();
 }
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
@@ -5114,18 +5281,19 @@ void Wh_ModUninit() {
         RemovePropW(hWnd, kPropCloseBypass);
         RemovePropW(hWnd, kPropClosed);
     }
-    std::lock_guard<std::mutex> lock(g_StateMutex);
-    for (auto& pair : g_WndSnapshots) DeleteObject(pair.second.hBmp);
-    g_WndSnapshots.clear(); g_TaskbarDockXs.clear(); g_ProcessDockXs.clear();
-    g_TaskbarDockLookupGenerations.clear();
-    g_TaskbarDockLookupStartedTicks.clear();
-    g_TaskbarDockNegativeUntilTicks.clear();
-    g_TaskbarDockPositiveUntilTicks.clear();
-    g_ProcessNameCache.clear(); g_LaunchSeen.clear();
-    g_TaskbarWindowSetSignature = 0;
-    g_TaskbarWindowSetSignatureInitialized = false;
-    g_TaskbarWindowSetSignatureTick = 0;
-    g_seenTaskbarLayoutEpoch = 0;
-    g_seenTaskbarExplorerPid = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        for (auto& pair : g_WndSnapshots) DeleteObject(pair.second.hBmp);
+        g_WndSnapshots.clear(); g_TaskbarDockXs.clear(); g_ProcessDockXs.clear();
+        g_TaskbarDockLookupGenerations.clear();
+        g_TaskbarDockLookupStartedTicks.clear();
+        g_TaskbarDockNegativeUntilTicks.clear();
+        g_TaskbarDockPositiveUntilTicks.clear();
+        g_ProcessNameCache.clear(); g_LaunchSeen.clear();
+        g_TaskbarWindowSetSignature = 0;
+        g_TaskbarWindowSetSignatureInitialized = false;
+        g_seenTaskbarLayoutEpoch = 0;
+        g_seenTaskbarExplorerPid = 0;
+    }
     CloseSharedState();
 }
