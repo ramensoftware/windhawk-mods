@@ -2,7 +2,7 @@
 // @id              explorer-force-details-columns
 // @name            Explorer Details View Columns
 // @description     Forces a fixed set of columns, and optionally sorting, in File Explorer Details view. Columns and their order are configurable. Has no effect on other view modes.
-// @version         1.3
+// @version         1.4
 // @author          ernisn
 // @github          https://github.com/ernisn
 // @include         explorer.exe
@@ -33,11 +33,14 @@ Common property names:
 For a full list of available Shell property names, see: https://learn.microsoft.com/en-us/windows/win32/properties/props
 
 **Note:**
-- Any property name not recognised by Windows will be skipped.
-- Duplicate property entries will only take the first occurrence.
-- To allow a column to be freely resized, turn off "Force Width". Set Width to -1 to auto-size the column to its content.
-- If "Sort By" is set, manual sorting changes stay temporary, like manual width changes of forced-width columns.
+- Any property name not recognised by Windows will be skipped. Duplicate property entries will only take the first occurrence.
+- To allow a column to be freely resized, turn off "Force Width". To auto-size the column to its content, set Width to -1  (optional).
+- If "Sort By" is set, manual sorting changes stay temporary, e.g. manual width changes of forced-width columns.
 - By default, virtual folders that have their own specialized columns (such as the Recycle Bin with _Original Location_ and _Date Deleted_) are not affected. Turn off "Exclude virtual folders" to force the columns there as well.
+
+**Issues Related to Minimum Width:**
+- Columns other than _Name_ can't go below Windows' own minimum width. On Windows 11, there is an unreasonable minimum column width limit when a non-custom scaling is set for the display instead of a custom scaling (under "Advanced Scaling Settings"). This is a known issue and smaller widths set here will be ignored by Explorer.
+
 */
 // ==/WindhawkModReadme==
 
@@ -77,7 +80,6 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 
 #include <initguid.h>
 #include <shobjidl.h>
-#include <shlobj.h>
 #include <propkey.h>
 #include <propsys.h>
 #include <exdisp.h>
@@ -89,6 +91,7 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 #include <cstdlib>
 #include <mutex>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include <windhawk_utils.h>
 
@@ -175,21 +178,20 @@ static LRESULT CALLBACK ViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Virtual folders (Recycle Bin, This PC, search results, etc.) have no file system path + with specialized columns
+// Virtual folders (Recycle Bin, This PC, search results, etc.) aren't part of the file system + with specialized columns
 static bool IsVirtualFolder(IFolderView2* folderView) {
-    ComPtr<IPersistFolder2> persist;
-    if (FAILED(folderView->GetFolder(IID_PPV_ARGS(&persist))))
-        return false;
-
     PIDLIST_ABSOLUTE pidl;
-    if (FAILED(persist->GetCurFolder(&pidl)))
+    if (FAILED(SHGetIDListFromObject(folderView, &pidl)))
         return false;
 
-    WCHAR path[1024];
-    bool isVirtual =
-        !SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path), GPFIDL_DEFAULT);
+    ComPtr<IShellItem> item;
+    SFGAOF attributes = 0;
+    HRESULT hr = SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item));
+    if (SUCCEEDED(hr))
+        hr = item->GetAttributes(SFGAO_FILESYSTEM, &attributes);
     CoTaskMemFree(pidl);
-    return isVirtual;
+
+    return SUCCEEDED(hr) && !(attributes & SFGAO_FILESYSTEM);
 }
 
 // Returns true if anything actually changed. subclassForDpi is set only when view can be retained
@@ -211,8 +213,10 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
         viewMode != FVM_DETAILS)
         return false;
 
-    if (g_excludeVirtualFolders && IsVirtualFolder(folderView.Get()))
+    if (g_excludeVirtualFolders && IsVirtualFolder(folderView.Get())) {
+        Wh_Log(L"Skipping virtual folder");
         return false;
+    }
 
     bool changed = false;
 
@@ -229,11 +233,27 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
             setColumns = !(current[i] == g_columns[i].key);
     }
     if (setColumns) {
+        // SetColumns resets widths to the defaults, which Explorer won't let the user drag back down, so widths that aren't forced are kept
         std::vector<PROPERTYKEY> keys;
-        for (const auto& col : g_columns)
+        std::vector<std::pair<PROPERTYKEY, UINT>> keptWidths;
+        for (const auto& col : g_columns) {
             keys.push_back(col.key);
+
+            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+            if (!col.width &&
+                SUCCEEDED(columnManager->GetColumnInfo(col.key, &ci)) &&
+                ci.uWidth)
+                keptWidths.push_back({col.key, ci.uWidth});
+        }
+
         changed |= SUCCEEDED(
             columnManager->SetColumns(keys.data(), (UINT)keys.size()));
+
+        for (const auto& [key, width] : keptWidths) {
+            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+            ci.uWidth = width;
+            columnManager->SetColumnInfo(key, &ci);
+        }
     }
 
     // Widths
@@ -254,6 +274,11 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
         // ±1px tolerance avoids update loops from DPI rounding
         if (col.width < 0 || std::abs((int)ci.uWidth - (int)width) > 1) {
             ci.uWidth = width;
+            if (col.width > 0) {
+                // Used when the column is resized or auto-sized
+                ci.dwMask |= CM_MASK_DEFAULTWIDTH | CM_MASK_IDEALWIDTH;
+                ci.uDefaultWidth = ci.uIdealWidth = width;
+            }
             changed |= SUCCEEDED(columnManager->SetColumnInfo(col.key, &ci));
         }
     }
