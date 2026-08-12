@@ -36,13 +36,13 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 - targetCommand: "ms-photos:"
   $name: Command to launch
   $name:pl-PL: Komenda do uruchomienia
-  $description: "Protocol or executable path launched instead of navigating to the Gallery folder. Do not include arguments here."
-  $description:pl-PL: Protokół lub ścieżka programu uruchamianego zamiast nawigacji do folderu Galerii. Nie dołączaj tutaj argumentów.
+  $description: "Protocol or executable path launched instead of navigating to the Gallery folder. Do not include arguments here. (Note: If the target is invalid, clicking Gallery will silently fail. Check Windhawk logs.)"
+  $description:pl-PL: "Protokół lub ścieżka programu uruchamianego zamiast nawigacji do folderu Galerii. Nie dołączaj tutaj argumentów. (Uwaga: W przypadku nieprawidłowego celu, kliknięcie Galerii nie wywoła żadnej akcji. Sprawdź logi Windhawk.)"
 - targetArguments: ""
   $name: Command arguments
   $name:pl-PL: Argumenty komendy
   $description: "Optional arguments to pass to the command (only applies when the command is an executable, not a protocol)."
-  $description:pl-PL: Opcjonalne argumenty przekazywane do komendy.
+  $description:pl-PL: "Opcjonalne argumenty przekazywane do komendy (dotyczy tylko programów wykonywalnych, nie protokołów)."
 */
 // ==/WindhawkModSettings==
 
@@ -144,10 +144,9 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // SEE_MASK_ASYNCOK requests (but does not strictly guarantee) that the shell performs 
-            // execution on a background thread. SEE_MASK_FLAG_NO_UI is intentionally omitted so 
-            // users see native shell error prompts if the target is invalid/uninstalled.
-            sei.fMask = SEE_MASK_ASYNCOK;
+            // Keep the shell's work bounded to this thread. SEE_MASK_FLAG_NO_UI ensures modal dialogs 
+            // do not spawn and block the thread, guaranteeing Wh_ModUninit can cleanly complete the join.
+            sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
             sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
@@ -205,7 +204,7 @@ static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
         Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
         
         EnsureWorkerThread();
-        if (!g_launchEvent || !SetEvent(g_launchEvent)) {
+        if (!g_workerThread || !g_launchEvent || !SetEvent(g_launchEvent)) {
             // If we couldn't trigger the launch, gracefully fallback to the normal navigation
             Wh_Log(L"Failed to signal launch event, falling back to original navigation.");
             return g_BrowseObject_Original(pThis, pidl, wFlags);
@@ -278,18 +277,12 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod v" WH_MOD_VERSION);
-
-    bool delayLoadingNeeded = true;
     
     // If explorerframe.dll is already loaded, hook it immediately
     HMODULE hEF = GetModuleHandleW(L"explorerframe.dll");
     if (hEF) {
-        if (HookExplorerFrame(hEF, false)) {
-            delayLoadingNeeded = false;
-        }
-    }
-
-    if (delayLoadingNeeded) {
+        HookExplorerFrame(hEF, false);
+    } else {
         // Hook LoadLibraryExW from kernelbase.dll to monitor for explorerframe.dll late-loading
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
         if (hKernelBase) {
