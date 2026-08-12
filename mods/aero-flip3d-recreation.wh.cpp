@@ -2,13 +2,13 @@
 // @id              aero-flip3d-recreation
 // @name            Aero Flip 3D Recreation
 // @description     This mod recreates the classic Windows Vista/7 Flip 3D effect in modern Windows versions
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -ldwmapi -luser32 -lgdi32 -lwinmm -lmsimg32
 // ==/WindhawkMod==
+
 
 // ==WindhawkModReadme==
 /*
