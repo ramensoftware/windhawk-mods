@@ -977,6 +977,10 @@ static bool IsExplorerContextMatch(HWND expectedShellView,
     return true;
 }
 
+static bool ShouldInjectForMenuFlags(UINT flags) {
+    return (flags & TPM_RETURNCMD) != 0;
+}
+
 static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND hwnd) {
     HWND topLevel = GetAncestor(hwnd, GA_ROOT);
     if (!topLevel) {
@@ -1026,15 +1030,15 @@ static IServiceProvider* GetExplorerServiceProviderForHwnd(HWND hwnd) {
                             SID_STopLevelBrowser, IID_IShellBrowser,
                             reinterpret_cast<void**>(&shellBrowser));
                     }
-                    if (shellBrowser && expectedShellView) {
+                    if (shellBrowser) {
                         IShellView* shellView = nullptr;
                         if (SUCCEEDED(shellBrowser->QueryActiveShellView(
                                 &shellView)) && shellView) {
                             shellView->GetWindow(&candidateShellView);
+                            candidateShellTab =
+                                FindShellTabWindow(candidateShellView);
                             shellView->Release();
                         }
-                    } else if (shellBrowser && expectedShellTab) {
-                        shellBrowser->GetWindow(&candidateShellTab);
                     }
                     if (shellBrowser) {
                         shellBrowser->Release();
@@ -2189,7 +2193,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
                            _wcsicmp(rootClass, L"CabinetWClass") == 0 ||
                            _wcsicmp(rootClass, L"ExploreWClass") == 0);
 
-    if (menu && eligibleWindow && (flags & TPM_RETURNCMD)) {
+    if (menu && eligibleWindow && ShouldInjectForMenuFlags(flags)) {
         Settings settings = GetSettingsSnapshot();
         POINT invocationPoint = {x, y};
         if (!ResolveMenuTarget(hwnd, settings, invocationPoint, target)) {
