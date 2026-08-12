@@ -2,7 +2,7 @@
 // @id            photoshop-dark-menus
 // @name          Photoshop Dark Menus
 // @description   Enables dark mode and custom colors for all menus in Adobe Photoshop.
-// @version       2.0.0
+// @version       1.0.0
 // @author        Saber Naeemi
 // @github        https://github.com/sabergraphics
 // @twitter       https://x.com/SaberNaeemi
@@ -60,14 +60,13 @@ So every pixel of a menu item is reachable from inside the process:
 
 ## Options
 
-- **Menu Background Color**: Background color for all menu popups (Default: `#282828`).
+- **Menu Background Color**: Background color for all menu popups (Default: `#2D2D2D`).
 - **Menu Text Color**: Text color for active items (Default: `#DCDCDC`).
 - **Highlight Background Color**: Color when hovering over an item (Default: `#505050`).
 - **Highlight Text Color**: Text color when hovering over an item (Default: `#FFFFFF`).
 - **Separator Line Color**: Color for separator lines. Set to match the background color to hide them completely (Default: `#383838`).
 - **Disabled Text Color**: Text color for disabled menu items (Default: `#808080`).
-- **Border Color**: Color of the popup frame. Leave empty to keep the system frame (Default: `#282828`).
-- **Debug Logging**: Diagnostic logging, off by default.
+- **Border Color**: Color of the popup frame. Leave empty to keep the system frame (Default: `#2D2D2D`).
 
 ## Scope
 
@@ -75,29 +74,16 @@ The menu bar itself (File, Edit, Image, ...) is drawn by Photoshop's own UI
 framework and already follows Photoshop's interface theme; this mod covers the
 dropdown popups and context menus.
 
-## Changelog
-
-### 2.0.0
-- Replaced the global `SetSysColors` engine with a fully process-local one.
-  Nothing outside Photoshop changes any more, and with it went the registry
-  backup, the `RtlExitUserProcess` teardown, crash recovery, the multi-instance
-  semaphore and the two-engine setting.
-- `FillRect` now re-resolves system color pseudo-handles, which is what actually
-  reaches Photoshop's item backgrounds and hover highlight.
-- System color overrides are scoped to open menus, so Photoshop's dialogs and
-  panels keep the system colors.
-- The popup frame is repainted from a subclass on the popup, with a new border
-  color setting.
-- Menus stamped with the background brush are restored when the mod is
-  unloaded, so disabling the mod brings the normal menus back without
-  restarting Photoshop.
+Menus that Windows pops up through its own internal paths, without going through
+the exported `TrackPopupMenu` / `TrackPopupMenuEx` - a window's system menu, for
+example - are outside the reach of an in-process hook and keep the system colors.
 */
 // ==/WindhawkModReadme==
 
 
 // ==WindhawkModSettings==
 /*
-- MenuBgColor: "#282828"
+- MenuBgColor: "#2D2D2D"
   $name: "Menu Background Color"
 - MenuTextColor: "#DCDCDC"
   $name: "Menu Text Color"
@@ -110,15 +96,11 @@ dropdown popups and context menus.
   $description: Set this to the menu background color to hide separators.
 - GrayTextColor: "#808080"
   $name: "Disabled Text Color"
-- BorderColor: "#282828"
+- BorderColor: "#2D2D2D"
   $name: "Border Color"
   $description: >-
     Color of the popup frame, which the system draws from the 3D colors. Leave
     empty to keep the system frame.
-- DebugLogging: false
-  $name: "Debug Logging"
-  $description: >-
-    Logs menu drawing diagnostics. Leave off for normal use.
 */
 // ==/WindhawkModSettings==
 
@@ -138,7 +120,7 @@ dropdown popups and context menus.
 // ---------------------------------------------------------------------------
 
 // Colors read by the in-process hooks.
-std::atomic<COLORREF> g_colMenu{RGB(40, 40, 40)};
+std::atomic<COLORREF> g_colMenu{RGB(45, 45, 45)};
 std::atomic<COLORREF> g_colText{RGB(220, 220, 220)};
 std::atomic<COLORREF> g_colHighlight{RGB(80, 80, 80)};
 std::atomic<COLORREF> g_colHiText{RGB(255, 255, 255)};
@@ -156,11 +138,12 @@ std::atomic<HBRUSH> g_hBorderBrush{nullptr};
 std::vector<HBRUSH> g_retiredBrushes;
 std::mutex g_brushMutex;
 
-std::atomic<bool> g_debugLog{false};
-
-// Number of menu tracking calls currently on the stack. The hot GDI hooks bail
-// out on a single relaxed load when no menu is up.
-std::atomic<int> g_menuDepth{0};
+// Number of menu tracking calls currently on this thread's stack. A menu is
+// modal on the thread that opened it: the popup window, the WM_DRAWITEM painting
+// into the per-item memory DCs and the popup's own repaints all happen there. So
+// the state is thread-local, which keeps a menu on the UI thread from recoloring
+// another thread's drawing, and makes the hot path a plain TLS read.
+thread_local int tl_menuDepth = 0;
 
 // Set while this thread is painting on the mod's behalf, so our own drawing
 // does not re-enter the hooks.
@@ -169,9 +152,35 @@ thread_local bool tl_inOurPaint = false;
 // Hooks installed for the duration of a menu, on the menu's own thread.
 thread_local HHOOK tl_msgHook = nullptr;
 thread_local HHOOK tl_cbtHook = nullptr;
-thread_local int tl_menuHookDepth = 0;
 
-#define DBG(...) do { if (g_debugLog.load(std::memory_order_relaxed)) Wh_Log(__VA_ARGS__); } while (0)
+// Unlike the mod's function hooks, SetWindowsHookEx hooks are not removed by the
+// Windhawk engine, and their procedures live in the mod image - so one still
+// registered when the image is unmapped calls into freed memory on the next
+// message for that thread. The handles are tracked globally because Wh_ModUninit
+// never runs on the thread that installed them: while a menu is up that thread
+// is blocked in the modal menu loop. UnhookWindowsHookEx is not thread-affine,
+// so the handles can be released from any thread in the process.
+std::unordered_set<HHOOK> g_winHooks;
+std::mutex g_winHooksMutex;
+
+void TrackWinHook(HHOOK hHook) {
+    if (!hHook) return;
+
+    std::lock_guard<std::mutex> lock(g_winHooksMutex);
+    g_winHooks.insert(hHook);
+}
+
+// Releasing a handle Wh_ModUninit already dropped is harmless: the call just
+// fails on a handle that is no longer registered.
+void ReleaseWinHook(HHOOK hHook) {
+    if (!hHook) return;
+
+    {
+        std::lock_guard<std::mutex> lock(g_winHooksMutex);
+        g_winHooks.erase(hHook);
+    }
+    UnhookWindowsHookEx(hHook);
+}
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -227,9 +236,7 @@ void PublishSolidBrush(std::atomic<HBRUSH>* pSlot, COLORREF color) {
 }
 
 void LoadSettings() {
-    g_debugLog.store(Wh_GetIntSetting(L"DebugLogging") != 0, std::memory_order_relaxed);
-
-    COLORREF colMenu  = ParseHexColorOr(WindhawkUtils::StringSetting::make(L"MenuBgColor").get(), RGB(40, 40, 40));
+    COLORREF colMenu  = ParseHexColorOr(WindhawkUtils::StringSetting::make(L"MenuBgColor").get(), RGB(45, 45, 45));
     COLORREF colText  = ParseHexColorOr(WindhawkUtils::StringSetting::make(L"MenuTextColor").get(), RGB(220, 220, 220));
     COLORREF colHigh  = ParseHexColorOr(WindhawkUtils::StringSetting::make(L"HighlightBgColor").get(), RGB(80, 80, 80));
     COLORREF colHiTxt = ParseHexColorOr(WindhawkUtils::StringSetting::make(L"HighlightTextColor").get(), RGB(255, 255, 255));
@@ -263,13 +270,15 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 inline bool MenuIsOpen() {
-    return g_menuDepth.load(std::memory_order_relaxed) > 0;
+    return tl_menuDepth > 0;
 }
 
 // Photoshop paints menu items into per-item memory DCs while the popup is being
 // laid out, and directly onto the popup's own window DC when an item is
-// re-drawn on hover. Both are only reached while a menu is up, which the caller
-// has already established with MenuIsOpen().
+// re-drawn on hover. The memory DC fallback matches any memory DC, so it leans
+// on the caller having established MenuIsOpen() first - which is thread-local,
+// i.e. this thread is the one inside the modal menu loop and is not drawing
+// anything else.
 bool IsMenuContext(HDC hdc) {
     HWND hWnd = WindowFromDC(hdc);
     if (hWnd) {
@@ -331,15 +340,26 @@ void ApplyMenuBackground(HMENU hMenu) {
     HBRUSH hBrush = g_hMenuBrush.load(std::memory_order_acquire);
     if (!hMenu || !hBrush) return;
 
+    // The cap is checked before stamping, not after: a menu that is stamped but
+    // not recorded would stay dark for the life of the process, which is the one
+    // thing the tracking exists to prevent.
+    {
+        std::lock_guard<std::mutex> lock(g_stampedMenusMutex);
+        if (g_stampedMenus.size() >= kMaxTrackedMenus && !g_stampedMenus.contains(hMenu)) {
+            return;
+        }
+    }
+
     MENUINFO mi = { sizeof(mi) };
     mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
     mi.hbrBack = hBrush;
     if (!SetMenuInfo(hMenu, &mi)) return;
 
+    // SetMenuInfo can reach a menu owned by another thread, so it is called
+    // outside the lock; two threads racing past the check can leave the set one
+    // entry over the cap, which is harmless.
     std::lock_guard<std::mutex> lock(g_stampedMenusMutex);
-    if (g_stampedMenus.size() < kMaxTrackedMenus) {
-        g_stampedMenus.insert(hMenu);
-    }
+    g_stampedMenus.insert(hMenu);
 }
 
 // MIM_APPLYTOSUBMENUS propagates the cleared brush down each menu tree, so
@@ -392,6 +412,12 @@ int GetPopupFrameWidth(HWND hWnd, const RECT& windowRect) {
 // offscreen and blitted (WM_PRINT / WM_NCUAHDRAWFRAME carry that DC in wParam),
 // so painting on the window DC instead would just be overwritten by the blit.
 void PaintPopupBorder(HWND hWnd, HDC hdcTarget) {
+    // Popups are subclassed unconditionally and the system reuses them, so a
+    // popup can be shown again later by a menu this mod doesn't theme - one that
+    // never went through TrackPopupMenu(Ex). Painting only while this thread is
+    // tracking a menu keeps the dark frame off an otherwise untouched menu.
+    if (!MenuIsOpen()) return;
+
     HBRUSH hBorder = g_hBorderBrush.load(std::memory_order_acquire);
     if (!hBorder) return;
 
@@ -465,18 +491,35 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
     return result;
 }
 
-// Catches the popup at creation, which is the only reliable moment: it exists
-// on this thread and has not painted yet.
+// Subclassed even when Border Color is empty, and regardless of whether a menu
+// is up: the system reuses menu popup windows, so a popup passed over here is
+// never revisited, and setting a border color later would silently do nothing
+// for the rest of the session. PaintPopupBorder returns immediately when there
+// is no border brush.
+void SubclassPopup(HWND hWnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
+        if (g_subclassedPopups.contains(hWnd)) return;
+    }
+
+    // Not subclassed under the lock: from another thread the helper gets there
+    // with a SendMessage, and the subclass procedure takes the same lock on
+    // WM_NCDESTROY.
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc, 0)) {
+        std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
+        g_subclassedPopups.insert(hWnd);
+    } else {
+        Wh_Log(L"Failed to subclass menu popup %p; it keeps the system frame.", hWnd);
+    }
+}
+
+// Catches a popup at creation, before it has painted. Popups that already exist
+// are picked up by the sweep in EnterMenu.
 LRESULT CALLBACK CbtProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HCBT_CREATEWND) {
         HWND hWnd = (HWND)wParam;
-        if (IsMenuPopupWindow(hWnd) && g_hBorderBrush.load(std::memory_order_acquire)) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc, 0)) {
-                std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
-                g_subclassedPopups.insert(hWnd);
-            } else {
-                DBG(L"Failed to subclass menu popup %p; it keeps the system frame.", hWnd);
-            }
+        if (IsMenuPopupWindow(hWnd)) {
+            SubclassPopup(hWnd);
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -493,39 +536,43 @@ LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// Menus are modal, so the hook only exists while one is up. Nested tracking
-// calls (submenus opened via TrackPopupMenu) share the outermost hook.
+// Menus are modal, so the hooks only exist while one is up. Nested tracking
+// calls (submenus opened via TrackPopupMenu) share the outermost hooks.
 void EnterMenu(HMENU hMenu) {
-    g_menuDepth.fetch_add(1, std::memory_order_relaxed);
+    bool outermost = (tl_menuDepth++ == 0);
     ApplyMenuBackground(hMenu);
+    if (!outermost) return;
 
-    if (tl_menuHookDepth++ == 0) {
-        DWORD tid = GetCurrentThreadId();
-        tl_msgHook = SetWindowsHookExW(WH_CALLWNDPROCRET, CallWndRetProcHook, nullptr, tid);
-        tl_cbtHook = SetWindowsHookExW(WH_CBT, CbtProcHook, nullptr, tid);
-        if (!tl_msgHook || !tl_cbtHook) {
-            Wh_Log(L"SetWindowsHookEx failed (%u); popup border and submenu "
-                   L"backgrounds fall back to the system's.", GetLastError());
-        }
+    DWORD tid = GetCurrentThreadId();
+    tl_msgHook = SetWindowsHookExW(WH_CALLWNDPROCRET, CallWndRetProcHook, nullptr, tid);
+    tl_cbtHook = SetWindowsHookExW(WH_CBT, CbtProcHook, nullptr, tid);
+    TrackWinHook(tl_msgHook);
+    TrackWinHook(tl_cbtHook);
+    if (!tl_msgHook || !tl_cbtHook) {
+        Wh_Log(L"SetWindowsHookEx failed (%u); popup border and submenu "
+               L"backgrounds fall back to the system's.", GetLastError());
     }
+
+    // Popup windows this thread already has, which CbtProcHook by definition
+    // never sees: the system caches and reuses them, so every popup from a menu
+    // opened before the mod was enabled - the usual way a mod is first tried -
+    // would otherwise keep the system frame for the rest of the session.
+    EnumThreadWindows(tid, [](HWND hWnd, LPARAM) WINAPI -> BOOL {
+        if (IsMenuPopupWindow(hWnd)) {
+            SubclassPopup(hWnd);
+        }
+        return TRUE;
+    }, 0);
 }
 
 void LeaveMenu() {
-    if (--tl_menuHookDepth <= 0) {
-        tl_menuHookDepth = 0;
-        if (tl_msgHook) {
-            UnhookWindowsHookEx(tl_msgHook);
-            tl_msgHook = nullptr;
-        }
-        if (tl_cbtHook) {
-            UnhookWindowsHookEx(tl_cbtHook);
-            tl_cbtHook = nullptr;
-        }
-    }
+    if (--tl_menuDepth > 0) return;
 
-    if (g_menuDepth.fetch_sub(1, std::memory_order_relaxed) <= 0) {
-        g_menuDepth.store(0, std::memory_order_relaxed);
-    }
+    tl_menuDepth = 0;
+    ReleaseWinHook(tl_msgHook);
+    tl_msgHook = nullptr;
+    ReleaseWinHook(tl_cbtHook);
+    tl_cbtHook = nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -587,7 +634,7 @@ int WINAPI FillRect_Hook(HDC hdc, const RECT* lprc, HBRUSH hbr) {
     if (sysIndex <= (ULONG_PTR)COLOR_MENUBAR) {
         HBRUSH ours = BrushForSysColor((int)sysIndex);
         if (ours && IsMenuContext(hdc)) {
-            DBG(L"FillRect: system color %d -> mod color, %dx%d", (int)sysIndex, w, h);
+            Wh_Log(L"FillRect: system color %d -> mod color, %dx%d", (int)sysIndex, w, h);
             return FillRect_Original(hdc, lprc, ours);
         }
         return FillRect_Original(hdc, lprc, hbr);
@@ -595,7 +642,7 @@ int WINAPI FillRect_Hook(HDC hdc, const RECT* lprc, HBRUSH hbr) {
 
     HBRUSH hSep = g_hSeparatorBrush.load(std::memory_order_acquire);
     if (hSep && IsSeparatorGeometry(hdc, w, h) && IsMenuContext(hdc)) {
-        DBG(L"FillRect: separator %dx%d recolored", w, h);
+        Wh_Log(L"FillRect: separator %dx%d recolored", w, h);
         return FillRect_Original(hdc, lprc, hSep);
     }
 
@@ -641,14 +688,20 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    if (tl_msgHook) {
-        UnhookWindowsHookEx(tl_msgHook);
-        tl_msgHook = nullptr;
+    // The message hooks belong to whichever Photoshop thread had a menu up, not
+    // to this one, so they are released through the global set - see g_winHooks.
+    {
+        std::vector<HHOOK> hooks;
+        {
+            std::lock_guard<std::mutex> lock(g_winHooksMutex);
+            hooks.assign(g_winHooks.begin(), g_winHooks.end());
+            g_winHooks.clear();
+        }
+        for (HHOOK hHook : hooks) {
+            UnhookWindowsHookEx(hHook);
+        }
     }
-    if (tl_cbtHook) {
-        UnhookWindowsHookEx(tl_cbtHook);
-        tl_cbtHook = nullptr;
-    }
+
     // Not WindhawkUtils::RemoveAllWindowSubclasses(), which needs Windhawk 1.8.
     {
         std::vector<HWND> popups;
