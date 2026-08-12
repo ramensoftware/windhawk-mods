@@ -1,27 +1,24 @@
-Mute Media & Mic on System Mute
-mute-media-and-mic-on-mute
-1.2
-SP_ENJIXX
-explorer.exe
-Automatically pauses media playback and toggles microphone mute when system audio is muted.
-Описание
-Настройки
-Исходный код
-Дополнительно
-Скрыть настройки и Readme
-
 // ==WindhawkMod==
 // @id           mute-media-and-mic-on-mute
 // @name         Mute Media & Mic on System Mute
 // @description  Automatically pauses media playback and toggles microphone mute when system audio is muted.
 // @version      1.2
 // @author       SP_ENJIXX
-// @include      explorer.exe
+// @include      windhawk.exe
 // @compilerOptions -lole32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# Mute Media & Mic on System Mute
+
+Automatically synchronizes your default microphone and media playback state with the primary system audio mute setting.
+
+### Features
+* **Microphone Mute:** When primary audio output is muted, the default recording endpoint (microphone) is automatically muted at the Windows endpoint level.
+* **Media Pause:** Sends standard playback toggles when audio status transitions between muted and active states.
+* **Lightweight Tool:** Runs as an isolated background utility thread without injecting into system processes like Explorer.
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
@@ -30,13 +27,40 @@ Automatically pauses media playback and toggles microphone mute when system audi
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
+#include <atomic>
 
 HANDLE g_hThread = NULL;
-BOOL g_bRunning = TRUE;
+HANDLE g_hStopEvent = NULL;
 
-// Функция проверки состояния звука
-bool IsSystemMuted() {
+void SetMicrophoneMute(bool mute) {
+    IMMDeviceEnumerator* pEnumerator = NULL;
+    IMMDevice* pMic = NULL;
+    IAudioEndpointVolume* pVol = NULL;
+
+    HRESULT hr = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), NULL, CLSCTX_INPROC_SERVER,
+        __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator
+    );
+
+    if (SUCCEEDED(hr)) {
+        hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, &pMic);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = pMic->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, NULL, (void**)&pVol);
+    }
+    if (SUCCEEDED(hr)) {
+        pVol->SetMute(mute ? TRUE : FALSE, NULL);
+    }
+
+    if (pVol) pVol->Release();
+    if (pMic) pMic->Release();
+    if (pEnumerator) pEnumerator->Release();
+}
+
+bool IsSystemMuted(bool* pSuccess) {
     bool isMuted = false;
+    *pSuccess = false;
+
     IMMDeviceEnumerator* pEnumerator = NULL;
     IMMDevice* pDevice = NULL;
     IAudioEndpointVolume* pEndpointVolume = NULL;
@@ -56,6 +80,7 @@ bool IsSystemMuted() {
         BOOL muted = FALSE;
         if (SUCCEEDED(pEndpointVolume->GetMute(&muted))) {
             isMuted = (muted == TRUE);
+            *pSuccess = true;
         }
     }
 
@@ -66,50 +91,64 @@ bool IsSystemMuted() {
     return isMuted;
 }
 
-// Вспомогательная функция отправки сочетания клавиш
-void TriggerActions() {
-    // 1. Поставить на паузу / Возобновить медиа
+void TriggerMediaPause() {
     keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 0, 0);
     keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_KEYUP, 0);
-
-    // 2. Переключить микрофон (Win + Alt + M)
-    keybd_event(VK_LWIN, 0, 0, 0);
-    keybd_event(VK_MENU, 0, 0, 0);
-    keybd_event('M', 0, 0, 0);
-    keybd_event('M', 0, KEYEVENTF_KEYUP, 0);
-    keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-    keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0);
 }
 
 DWORD WINAPI MonitorAudioThread(LPVOID lpParam) {
-    CoInitialize(NULL);
-    bool lastState = false;
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
-    while (g_bRunning) {
-        bool currentState = IsSystemMuted();
+    bool success = false;
+    bool lastState = IsSystemMuted(&success);
 
-        if (currentState != lastState) {
-            TriggerActions();
-            lastState = currentState;
+    while (WaitForSingleObject(g_hStopEvent, 200) == WAIT_TIMEOUT) {
+        bool querySuccess = false;
+        bool currentState = IsSystemMuted(&querySuccess);
+
+        if (!querySuccess) {
+            continue;
         }
 
-        Sleep(200);
+        if (currentState != lastState) {
+            TriggerMediaPause();
+            SetMicrophoneMute(currentState);
+            lastState = currentState;
+        }
     }
 
     CoUninitialize();
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    g_bRunning = TRUE;
+BOOL WhTool_ModInit() {
+    g_hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_hStopEvent) return FALSE;
+
     g_hThread = CreateThread(NULL, 0, MonitorAudioThread, NULL, 0, NULL);
     return (g_hThread != NULL);
 }
 
-void Wh_ModUninit() {
-    g_bRunning = FALSE;
-    if (g_hThread) {
-        WaitForSingleObject(g_hThread, 1000);
-        CloseHandle(g_hThread);
+void WhTool_ModUninit() {
+    if (g_hStopEvent) {
+        SetEvent(g_hStopEvent);
     }
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, INFINITE);
+        CloseHandle(g_hThread);
+        g_hThread = NULL;
+    }
+    if (g_hStopEvent) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
+    }
+}
+
+// Boilerplate launcher code for Windhawk Tool Mod
+BOOL Wh_ModInit() {
+    return WhTool_ModInit();
+}
+
+void Wh_ModUninit() {
+    WhTool_ModUninit();
 }
