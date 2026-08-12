@@ -36,13 +36,13 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 - targetCommand: "ms-photos:"
   $name: Command to launch
   $name:pl-PL: Komenda do uruchomienia
-  $description: "Protocol or executable path launched instead of navigating to the Gallery folder. Do not include arguments here. (Note: If the target is invalid, clicking Gallery will silently fail. Check Windhawk logs.)"
-  $description:pl-PL: "Protokół lub ścieżka programu uruchamianego zamiast nawigacji do folderu Galerii. Nie dołączaj tutaj argumentów. (Uwaga: W przypadku nieprawidłowego celu, kliknięcie Galerii nie wywoła żadnej akcji. Sprawdź logi Windhawk.)"
+  $description: "Protocol or program launched instead of navigating to the Gallery folder."
+  $description:pl-PL: Protokół lub program uruchamiany zamiast nawigacji do folderu Galerii.
 - targetArguments: ""
   $name: Command arguments
   $name:pl-PL: Argumenty komendy
   $description: "Optional arguments to pass to the command (only applies when the command is an executable, not a protocol)."
-  $description:pl-PL: "Opcjonalne argumenty przekazywane do komendy (dotyczy tylko programów wykonywalnych, nie protokołów)."
+  $description:pl-PL: Opcjonalne argumenty przekazywane do komendy.
 */
 // ==/WindhawkModSettings==
 
@@ -53,9 +53,9 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 #include <mutex>
 
 static std::atomic<PIDLIST_ABSOLUTE> g_targetPidl{nullptr};
-static std::atomic<bool> g_pidlFailed{false};
 static std::atomic<bool> g_explorerFrameHooked{false};
 static std::atomic<bool> g_unloading{false};
+static HMODULE g_explorerFrameRef = nullptr;
 
 // ---- BrowseObject Original & Hook ----
 typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
@@ -69,17 +69,11 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
         return pidl;
     }
 
-    // Don't retry endlessly if the parsing name doesn't exist on this OS
-    if (g_pidlFailed.load(std::memory_order_relaxed)) {
-        return nullptr;
-    }
-
     constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
     PIDLIST_ABSOLUTE newPidl = nullptr;
     HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr, &newPidl, 0, nullptr);
     if (FAILED(hr) || !newPidl) {
         Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
-        g_pidlFailed.store(true, std::memory_order_relaxed);
         return nullptr;
     }
 
@@ -116,6 +110,10 @@ static void CleanupResources() {
         CloseHandle(g_stopEvent);
         g_stopEvent = NULL;
     }
+    if (g_explorerFrameRef) {
+        FreeLibrary(g_explorerFrameRef);
+        g_explorerFrameRef = nullptr;
+    }
 }
 
 static DWORD WINAPI LaunchWorkerProc(LPVOID) {
@@ -144,9 +142,9 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // Keep the shell's work bounded to this thread. SEE_MASK_FLAG_NO_UI ensures modal dialogs 
-            // do not spawn and block the thread, guaranteeing Wh_ModUninit can cleanly complete the join.
-            sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+            // SEE_MASK_ASYNCOK allows shell interactions (like UAC prompts) to offload to a background 
+            // thread without blocking our worker, ensuring Wh_ModUninit can always complete a clean join.
+            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
             sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
@@ -192,26 +190,27 @@ static void EnsureWorkerThread() {
 static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
                                                    PCUIDLIST_RELATIVE pidl,
                                                    UINT wFlags) {
-    // Ignore relative or navigation-history PIDLs, and avoid unnecessary parses
-    if (!pidl || (wFlags & (SBSP_RELATIVE | SBSP_PARENT | SBSP_NAVIGATEBACK | SBSP_NAVIGATEFORWARD))) {
+    // Ignore relative or navigation-history PIDLs
+    if (wFlags & (SBSP_RELATIVE | SBSP_PARENT | SBSP_NAVIGATEBACK | SBSP_NAVIGATEFORWARD)) {
         return g_BrowseObject_Original(pThis, pidl, wFlags);
     }
 
     // Lazy load the PIDL on the UI thread to guarantee COM readiness
     PIDLIST_ABSOLUTE target = EnsureTargetPidl();
 
-    if (target && ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target)) {
-        Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
-        
-        EnsureWorkerThread();
-        if (!g_workerThread || !g_launchEvent || !SetEvent(g_launchEvent)) {
-            // If we couldn't trigger the launch, gracefully fallback to the normal navigation
-            Wh_Log(L"Failed to signal launch event, falling back to original navigation.");
-            return g_BrowseObject_Original(pThis, pidl, wFlags);
-        }
+    if (target && pidl) {
+        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target)) {
+            
+            Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
+            
+            EnsureWorkerThread();
+            if (g_launchEvent) {
+                SetEvent(g_launchEvent);
+            }
 
-        // Block original navigation without tricking the address bar into switching state
-        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+            // Block original navigation without tricking the address bar into switching state
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        }
     }
 
     return g_BrowseObject_Original(pThis, pidl, wFlags);
@@ -226,6 +225,11 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
     // Fast path: bail if we already successfully hooked or attempted to hook.
     if (!g_explorerFrameHooked.compare_exchange_strong(expected, true)) {
         return true;
+    }
+    
+    // Hold a reference so the module is not unloaded out from under the hook
+    if (!GetModuleHandleExW(0, L"explorerframe.dll", &g_explorerFrameRef)) {
+        Wh_Log(L"Failed to retain reference to explorerframe.dll: %u", GetLastError());
     }
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
@@ -277,12 +281,21 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod v" WH_MOD_VERSION);
+
+    bool delayLoadingNeeded = true;
     
     // If explorerframe.dll is already loaded, hook it immediately
     HMODULE hEF = GetModuleHandleW(L"explorerframe.dll");
     if (hEF) {
-        HookExplorerFrame(hEF, false);
-    } else {
+        if (HookExplorerFrame(hEF, false)) {
+            delayLoadingNeeded = false;
+        } else {
+            CleanupResources();
+            return FALSE;
+        }
+    }
+
+    if (delayLoadingNeeded) {
         // Hook LoadLibraryExW from kernelbase.dll to monitor for explorerframe.dll late-loading
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
         if (hKernelBase) {
