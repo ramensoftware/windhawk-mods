@@ -191,6 +191,11 @@ struct MenuTarget {
     std::wstring path;
 };
 
+struct MenuCommandIds {
+    UINT admin = 0;
+    UINT nonElevated = 0;
+};
+
 struct LaunchSpec {
     std::wstring executable;
     std::wstring parameters;
@@ -208,8 +213,8 @@ static bool ResolveSystemExecutablePath(PCWSTR exe, std::wstring& pathOut);
 static Settings g_settings;
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 
-static const UINT kMenuCommandId = 0xBF31;
-static const UINT kMenuCommandIdNonElevated = 0xBF32;
+static const UINT kPreferredAdminMenuCommandId = 0xC7E1;
+static const UINT kPreferredNonElevatedMenuCommandId = 0xC7E2;
 
 #ifndef IO_REPARSE_TAG_APPEXECLINK
 #define IO_REPARSE_TAG_APPEXECLINK (0x8000001BL)
@@ -1315,6 +1320,11 @@ static bool IsKeyboardContextMenuPoint(const POINT& invocationPoint) {
     return invocationPoint.x == -1 && invocationPoint.y == -1;
 }
 
+static HWND SelectNavigationPaneWindow(HWND controlWindow,
+                                       HWND fallbackWindow) {
+    return controlWindow ? controlWindow : fallbackWindow;
+}
+
 static bool ShouldUseFocusedNavigationPaneFallback(
     bool invocationPointIsNavigationPane,
     bool focusedWindowIsNavigationPane,
@@ -1379,14 +1389,25 @@ static bool ResolveNavigationPaneMenuTarget(const POINT& invocationPoint,
             SID_SNavigationPane, IID_INameSpaceTreeControl,
             reinterpret_cast<void**>(&navigationPane))) &&
         navigationPane) {
-        IShellBrowser* shellBrowser = nullptr;
         HWND treeWindow = nullptr;
-        if (SUCCEEDED(serviceProvider->QueryService(
-                SID_STopLevelBrowser, IID_IShellBrowser,
-                reinterpret_cast<void**>(&shellBrowser))) &&
-            shellBrowser) {
-            shellBrowser->GetControlWindow(FCW_TREE, &treeWindow);
-            shellBrowser->Release();
+        IOleWindow* oleWindow = nullptr;
+        if (SUCCEEDED(navigationPane->QueryInterface(
+                IID_IOleWindow, reinterpret_cast<void**>(&oleWindow))) &&
+            oleWindow) {
+            oleWindow->GetWindow(&treeWindow);
+            oleWindow->Release();
+        }
+        if (!treeWindow) {
+            IShellBrowser* shellBrowser = nullptr;
+            HWND fallbackWindow = nullptr;
+            if (SUCCEEDED(serviceProvider->QueryService(
+                    SID_STopLevelBrowser, IID_IShellBrowser,
+                    reinterpret_cast<void**>(&shellBrowser))) &&
+                shellBrowser) {
+                shellBrowser->GetControlWindow(FCW_TREE, &fallbackWindow);
+                shellBrowser->Release();
+            }
+            treeWindow = SelectNavigationPaneWindow(treeWindow, fallbackWindow);
         }
 
         POINT clientPoint = invocationPoint;
@@ -1915,8 +1936,18 @@ static Settings GetScriptIconSettings(const Settings& settings,
     return iconSettings;
 }
 
-static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings,
-                                        const MenuTarget& target) {
+static UINT ReserveMenuCommandId(HMENU menu, UINT preferred,
+                                 UINT excluded = 0) {
+    for (UINT id = preferred; id < preferred + 0x20; id++) {
+        if (id != excluded && GetMenuState(menu, id, MF_BYCOMMAND) == UINT(-1)) {
+            return id;
+        }
+    }
+    return 0;
+}
+
+static MenuCommandIds InsertAdminTerminalMenuItem(
+    HMENU menu, const Settings& settings, const MenuTarget& target) {
     int itemCount = GetMenuItemCount(menu);
     int insertPos = 0;
     bool separatorAbove = false;
@@ -1954,6 +1985,21 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings,
                           ? settings.scriptMenuEntries == L"normal" ||
                                 settings.scriptMenuEntries == L"both"
                           : settings.showNonElevatedEntry;
+    MenuCommandIds commandIds;
+    if (showAdmin) {
+        commandIds.admin =
+            ReserveMenuCommandId(menu, kPreferredAdminMenuCommandId);
+        if (!commandIds.admin) {
+            return {};
+        }
+    }
+    if (showNormal) {
+        commandIds.nonElevated = ReserveMenuCommandId(
+            menu, kPreferredNonElevatedMenuCommandId, commandIds.admin);
+        if (!commandIds.nonElevated) {
+            return {};
+        }
+    }
     Settings iconSettings = isScript
                                 ? GetScriptIconSettings(settings, target.path)
                                 : settings;
@@ -1990,12 +2036,13 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings,
     }
 
     if (showAdmin) {
-        InsertMenuW(menu, actionPos++, MF_BYPOSITION | MF_STRING, kMenuCommandId,
+        InsertMenuW(menu, actionPos++, MF_BYPOSITION | MF_STRING,
+                    commandIds.admin,
                     adminLabel.c_str());
     }
     if (showNormal) {
         InsertMenuW(menu, actionPos++, MF_BYPOSITION | MF_STRING,
-                    kMenuCommandIdNonElevated, normalLabel.c_str());
+                    commandIds.nonElevated, normalLabel.c_str());
     }
     if (!separatorAbove) {
         InsertMenuW(menu, actionPos, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
@@ -2008,7 +2055,7 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings,
             itemInfo.cbSize = sizeof(itemInfo);
             itemInfo.fMask = MIIM_BITMAP;
             itemInfo.hbmpItem = menuBitmap;
-            if (!SetMenuItemInfoW(menu, kMenuCommandId, FALSE, &itemInfo)) {
+            if (!SetMenuItemInfoW(menu, commandIds.admin, FALSE, &itemInfo)) {
                 Wh_Log(L"Menu icon assignment failed");
             } else {
                 Wh_Log(L"Menu icon assigned");
@@ -2025,7 +2072,7 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings,
             itemInfo.cbSize = sizeof(itemInfo);
             itemInfo.fMask = MIIM_BITMAP;
             itemInfo.hbmpItem = menuBitmapNoShield;
-            if (!SetMenuItemInfoW(menu, kMenuCommandIdNonElevated, FALSE,
+            if (!SetMenuItemInfoW(menu, commandIds.nonElevated, FALSE,
                                   &itemInfo)) {
                 Wh_Log(L"Non-elevated menu icon assignment failed");
             } else {
@@ -2035,6 +2082,7 @@ static void InsertAdminTerminalMenuItem(HMENU menu, const Settings& settings,
             Wh_Log(L"Non-elevated menu icon unavailable");
         }
     }
+    return commandIds;
 }
 
 static void LaunchAdminTerminal(const MenuTarget& target) {
@@ -2129,6 +2177,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
                                   LPTPMPARAMS params) {
     bool injected = false;
     MenuTarget target;
+    MenuCommandIds commandIds;
 
     HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
     WCHAR rootClass[64] = {};
@@ -2157,23 +2206,28 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU menu,
             }
             Wh_Log(L"Injection target: kind=%ls path=%ls",
                    TargetKindName(target.kind), target.path.c_str());
-            InsertAdminTerminalMenuItem(menu, settings, target);
-            Wh_Log(L"Injection inserted: position=%ls kind=%ls",
-                   settings.position.c_str(), TargetKindName(target.kind));
-            injected = true;
+            commandIds = InsertAdminTerminalMenuItem(menu, settings, target);
+            injected = commandIds.admin || commandIds.nonElevated;
+            if (injected) {
+                Wh_Log(L"Injection inserted: position=%ls kind=%ls",
+                       settings.position.c_str(), TargetKindName(target.kind));
+            } else {
+                Wh_Log(L"Injection skipped: no free menu command IDs");
+            }
         }
     }
 
     BOOL result = TrackPopupMenuEx_Orig(menu, flags, x, y, hwnd, params);
 
     if (injected && (flags & TPM_RETURNCMD) &&
-        static_cast<UINT>(result) == kMenuCommandId) {
+        commandIds.admin && static_cast<UINT>(result) == commandIds.admin) {
         LaunchAdminTerminal(target);
         return 0;
     }
 
     if (injected && (flags & TPM_RETURNCMD) &&
-        static_cast<UINT>(result) == kMenuCommandIdNonElevated) {
+        commandIds.nonElevated &&
+        static_cast<UINT>(result) == commandIds.nonElevated) {
         LaunchTerminalNonElevated(target);
         return 0;
     }
