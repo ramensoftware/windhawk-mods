@@ -36,6 +36,8 @@ Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or
 GIF image. Animated GIF playback and hover/pressed effects are optional
 features.
 
+![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/preview-1.gif)
+
 Only the icon is replaced. Windows continues to handle clicking, keyboard
 navigation, accessibility and Start menu activation.
 
