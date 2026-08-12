@@ -1309,7 +1309,8 @@ static HMODULE GetTaskbarViewModuleHandle() {
 }
 
 static bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"
@@ -1381,8 +1382,8 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     if (!WindhawkUtils::HookSymbols(
             module,
-            taskbarViewDllHooks,
-            ARRAYSIZE(taskbarViewDllHooks))) {
+            taskbarViewHooks,
+            ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"[STYLE] HookSymbols(Taskbar view) failed");
         return false;
     }
