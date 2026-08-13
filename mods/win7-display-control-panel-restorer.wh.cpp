@@ -18,6 +18,15 @@
 
 This mod restores the classic **Display** and **Screen Resolution** Control Panel pages on Windows 10 and 11.
 
+## Screenshots 
+
+# Change Resolution Page
+
+![Display](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/display1.PNG) 
+
+# Change DPI Page
+
+![Display 2](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/display2.PNG)
 ---
 
 ## Features
@@ -96,7 +105,7 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 /*
 - language: auto
   $name: Page language
-  $description: Select the authenticated Windows 8.1 Update language catalog used by the restored page and its Control Panel tooltip. Automatic follows the current Windows UI language and falls back to English when that language is unavailable.
+  $description: Select the language used by the restored page and its Control Panel tooltip. Automatic follows the current Windows UI language and falls back to English when that language is unavailable.
   $options:
     - auto: Automatic (Windows UI language)
     - en-US: English (United States)
@@ -116,15 +125,15 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 
 - showSidebarLinks: true
   $name: Show sidebar task links
-  $description: Publish the complete Windows 8.1 task list into the native Control Panel sidebar of the restored Display pages (Adjust resolution, Change display settings, Calibrate color, Adjust ClearType text, and the other genuine destinations). When disabled, the provider's untouched list is used instead and the sidebar is never modified.
+  $description: Publish the complete Windows 7 task list into the native Control Panel sidebar of the restored Display pages (Adjust resolution, Change display settings, Calibrate color, Adjust ClearType text, and the other genuine destinations). When disabled, the provider's untouched list is used instead and the sidebar is never modified.
 
 - resolutionPageCompatibility: true
   $name: Screen Resolution page compatibility adaptation
-  $description: Apply the in-memory ResolutionControl composition fix that the Windows 8.1 Screen Resolution page needs on modern dui70.dll. Disable only if you need the untouched provider markup; the page layout, strings, and Apply behavior are unchanged either way.
+  $description: Apply the in-memory ResolutionControl composition fix that the Windows 7 Screen Resolution page needs on modern dui70.dll. Disable only if you need the untouched provider markup; the page layout, strings, and Apply behavior are unchanged either way.
 
 - redirectClassicLaunch: true
   $name: Redirect classic Display launch routes
-  $description: Intercept the exact legacy Display command lines (bare desk.cpl, control.exe /name Microsoft.Display, and desk.cpl,,2 for Screen Resolution) and open the restored Windows 8.1 pages instead of the modern Settings handoff. When disabled, Windows keeps its default modern behavior for those launches.
+  $description: Intercept the exact legacy Display command lines (bare desk.cpl, control.exe /name Microsoft.Display, and desk.cpl,,2 for Screen Resolution) and open the restored Windows 7 pages instead of the modern Settings handoff. When disabled, Windows keeps its default modern behavior for those launches.
 
 - redirectDisplaySettingsUri: true
   $name: Redirect "Display settings" to the restored page
@@ -204,7 +213,7 @@ struct MuiStringTable {
     const wchar_t* pl;
 };
 
-// The base catalog contains the authentic Microsoft Windows 8.1 Update
+// The base catalog contains the authentic Microsoft Windows 7 Update
 // (6.3.9600.17031) Display strings for ten languages. IDs match that release's
 // display.dll.mui / UIFILE 201-202 resources (Hub chrome, Screen Resolution,
 // and common desktop-metrics strings). Each language was recovered from its
@@ -413,7 +422,7 @@ static const MuiStringTable kMuiStrings[] = {
 };
 
 // Windows 10 1511 retained most legacy text but moved several string IDs. Map
-// those IDs to semantically identical, authenticated Windows 8.1 rows. This is
+// those IDs to semantically identical, authenticated Windows 7 rows. This is
 // essential for the provider-owned navigation pane and for orientation/topology
 // choices populated by code rather than directly by UIFILE 201/202.
 struct MuiStringIdRemap {
@@ -431,7 +440,7 @@ static const MuiStringIdRemap kProviderStringIdRemaps[] = {
 };
 
 // These 1511-only semantics have no exact-ID or format-compatible counterpart
-// in the authenticated Windows 8.1 catalog. Keep the overlay deliberately
+// in the authenticated Windows 7 catalog. Keep the overlay deliberately
 // narrow; the legacy table above remains authoritative for every other ID.
 static const MuiStringTable kProviderCompatibilityStrings[] = {
     {17, L"Set custom text size (DPI)", L"Imposta dimensione testo personalizzata (DPI)", L"Establecer tamaño de texto personalizado (PPP)", L"Définir une taille de texte personnalisée (PPP)", L"Özel metin boyutu ayarla (DPI)", L"Задать пользовательский размер текста (т/д)", L"设置自定义文本大小 (DPI)", L"Benutzerdefinierte Textgröße festlegen (DPI)", L"Definir tamanho de texto personalizado (DPI)", L"Ustaw niestandardowy rozmiar tekstu (DPI)"},
@@ -519,7 +528,7 @@ static const MuiStringTable kProviderCompatibilityStrings[] = {
 // The restored task-pane list is built through the pinned provider's own
 // AddLink methods, which resolve label IDs with LoadString against the
 // provider instance and therefore arrive in GetMuiString. The authentic
-// Windows 8.1 labels live at their legacy IDs in kMuiStrings, but several of
+// Windows 7 labels live at their legacy IDs in kMuiStrings, but several of
 // those legacy IDs (16, 17, 18, 20, 22, 23) are intercepted by
 // kProviderStringIdRemaps / kProviderCompatibilityStrings because the 1511
 // provider reuses the same IDs for unrelated DPI-page strings. Passing the
@@ -527,7 +536,7 @@ static const MuiStringTable kProviderCompatibilityStrings[] = {
 // (for example "Adjust resolution" would show as "What display settings
 // should I choose?"). Instead the task list uses this private alias range,
 // which the pinned provider never requests for its own UI, so each label
-// resolves to exactly the authenticated Windows 8.1 wording in the selected
+// resolves to exactly the authenticated Windows 7 wording in the selected
 // language.
 struct NavLabelAlias {
     UINT navId;
@@ -1659,7 +1668,7 @@ static bool ReadSourceStringBlock(HMODULE sourceModule, UINT blockId,
     return true;
 }
 
-// Overlay the authenticated Windows 8.1 translations onto a source block rather
+// Overlay the authenticated Windows 7 translations onto a source block rather
 // than replacing the whole block with empty entries. Windows 10 1511 added a few
 // strings in blocks that otherwise share legacy IDs; preserving those base
 // entries keeps the compatibility provider's own controls and action links
@@ -7104,7 +7113,7 @@ static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
 // Classic DPI radio hooks are installed together with the orientation hooks
 // in InstallDui70SymbolHooks (a single HookSymbols call for dui70.dll).
 
-// UIFILE 202 is byte-identical in Windows 8.1 and Windows 10 1511 and expects
+// UIFILE 202 is byte-identical in Windows 7 and Windows 10 1511 and expects
 // ResolutionControl to behave as a composite accessible control. On modern
 // dui70.dll the two child buttons can otherwise be composed as siblings. Add
 // a plain generic inner container so the buttons keep a composing parent.
@@ -7639,7 +7648,7 @@ static NativeDisplayNavList* CreateProviderNativeDisplayNavigation()   {
     };
 
     // Sidebar labels use the mod-private alias range (see
-    // kNavLinkLabelAliases) so each link shows the authentic Windows 8.1
+    // kNavLinkLabelAliases) so each link shows the authentic Windows 7
     // wording. The legacy IDs must not be passed to the provider's AddLink
     // methods directly: several of them are remapped to unrelated 1511
     // DPI-page strings by the translation hook, which would mislabel the
@@ -7662,7 +7671,7 @@ static NativeDisplayNavList* CreateProviderNativeDisplayNavigation()   {
     // condition gates, same list groups (0 = Tasks, 1 = See also), same
     // canonical names, page tokens, commands and arguments. Only the label
     // IDs differ (mod-private alias range, see kNavLinkLabelAliases) so the
-    // translation hook renders the authentic Windows 8.1 wording instead of
+    // translation hook renders the authentic Windows 7 wording instead of
     // the 1511 remapped strings.
     if (!addExe(0, kLabelAdjustResolution, kRestoredResolutionPageTarget,
                 nullptr))
