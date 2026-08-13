@@ -38,6 +38,7 @@ Windows 11 only.
   $name: Separator Identifier Prefix
   $description: >-
     Customizable part of separator identities. A fixed unique suffix is always appended.
+    
     Change this if naming collision occurs (very rare!). Changing this while the mod isn't fully unloaded may cause troubles with cleanup, so be careful.
 - maxWidthCompatibilityMode: false
   $name: Taskbar Icon Size Compatibility Mode
