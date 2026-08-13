@@ -46,6 +46,9 @@
 - RemoveLegacyBrokenOption: true
   $name: Remove Legacy Broken Option Fix
   $description: When Windows Update is unavailable or disabled, the restored page shows a legacy red Check for updates for your PC box whose button cannot work, because the service is stopped. With this enabled, that broken legacy box is removed so only the Turn on automatic updating box remains, plus the blue settings link when the recreated interface is shown. Disable to keep the legacy box.
+- ShowNativeCombobox: false
+  $name: Show native combobox
+  $description: The "Important updates" combobox on the classic settings page looks interactive, but it is not functional yet. Therefore, selecting an option does not actually change Windows Update's behavior. Disabled by default, which shows a single, disabled placeholder item pointing to the real Settings app instead. Enable this to show the full option list again (still without saving a selection).
 */
 // ==/WindhawkModSettings==
 
@@ -579,6 +582,15 @@ static std::atomic<bool> g_linkSystemSettingsText{false};
 // the "RemoveLegacyBrokenOption" setting ("Remove Legacy Broken Option Fix").
 static std::atomic<bool> g_removeLegacyBrokenOption{true};
 
+// Whether the native DirectUI "Important updates" combobox on the settings
+// page is populated with the real options and left enabled. It looks
+// interactive but currently never writes a selection back to the real
+// Windows Update policy (see PatchSettingsPageXml/InitializeNativeSettingsCombobox),
+// so it is disabled by default: when off, a single disabled placeholder item
+// pointing at the real Settings app is shown instead of the (misleadingly
+// interactive) option list. Controlled by the "ShowNativeCombobox" setting.
+static std::atomic<bool> g_showNativeCombobox{false};
+
 // Windows owns the one visible Control Panel pane. Its links are patched
 // in-place when wucltux publishes the per-layout ControlPanelNavLinks object
 // (see PSPropertyBag_WriteUnknownHook below).
@@ -987,10 +999,15 @@ static wchar_t HexUpper(BYTE nibble) {
 }
 
 
-static bool ComputeSha256(const std::wstring& path, BYTE digest[32]) {
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return false;
+
+
+
+// SHA-256 over an already-open handle, so the verify step in
+// IsValidPayloadHandle can run against the exact same file object that will
+// later be pinned across the load, instead of re-opening the path by name.
+static bool ComputeSha256Handle(HANDLE file, BYTE digest[32]) {
+    LARGE_INTEGER zero{};
+    if (!SetFilePointerEx(file, zero, nullptr, FILE_BEGIN)) return false;
     HCRYPTPROV provider = 0;
     HCRYPTHASH hash = 0;
     bool ok = false;
@@ -1008,19 +1025,21 @@ static bool ComputeSha256(const std::wstring& path, BYTE digest[32]) {
     }
     if (hash) CryptDestroyHash(hash);
     if (provider) CryptReleaseContext(provider, 0);
-    CloseHandle(file);
     return ok;
 }
 
-
-static bool IsValidPayload(const std::wstring& path) {
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return false;
+// Verifies the payload through an already-open handle (no re-open by path),
+// so this can be used both for a one-shot check and, with a handle opened by
+// PinDllForLoad, as the first half of a verify-then-load window that never
+// lets go of the file object in between.
+static bool IsValidPayloadHandle(HANDLE file) {
+    if (file == INVALID_HANDLE_VALUE || !file) return false;
     LARGE_INTEGER fileSize{};
     IMAGE_DOS_HEADER dos{};
     DWORD read = 0;
-    bool ok = GetFileSizeEx(file, &fileSize) && fileSize.QuadPart >= kMinDllSize &&
+    LARGE_INTEGER zero{};
+    bool ok = SetFilePointerEx(file, zero, nullptr, FILE_BEGIN) &&
+              GetFileSizeEx(file, &fileSize) && fileSize.QuadPart >= kMinDllSize &&
               ReadFile(file, &dos, sizeof(dos), &read, nullptr) &&
               read == sizeof(dos) && dos.e_magic == IMAGE_DOS_SIGNATURE;
     DWORD signature = 0;
@@ -1034,15 +1053,69 @@ static bool IsValidPayload(const std::wstring& path) {
              ReadFile(file, &machine, sizeof(machine), &read, nullptr) &&
              read == sizeof(machine) && machine == IMAGE_FILE_MACHINE_AMD64;
     }
-    CloseHandle(file);
     if (!ok) return false;
     BYTE digest[32];
-    if (!ComputeSha256(path, digest)) return false;
+    if (!ComputeSha256Handle(file, digest)) return false;
     for (int i = 0; i < 32; ++i) {
         if (kExpectedSha256[i * 2] != HexUpper(digest[i] >> 4) ||
             kExpectedSha256[i * 2 + 1] != HexUpper(digest[i] & 15)) return false;
     }
     return true;
+}
+
+static bool IsValidPayload(const std::wstring& path) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    bool ok = IsValidPayloadHandle(file);
+    CloseHandle(file);
+    return ok;
+}
+
+// Opens `path` with FILE_SHARE_READ | FILE_SHARE_DELETE and keeps the handle
+// alive for the caller, so the file object being verified is the same file
+// object later confirmed against the loaded module (see
+// ConfirmLoadedModuleMatchesPin). Sharing DELETE is required so
+// MoveFileExW(..., MOVEFILE_REPLACE_EXISTING) from another process's download
+// doesn't fail while we hold the pin; it does not defeat the pin, since a
+// rename/delete-replace changes which file object the path names, not the
+// one we already opened. Returns INVALID_HANDLE_VALUE on failure.
+static HANDLE PinDllForLoad(const std::wstring& path) {
+    return CreateFileW(path.c_str(), GENERIC_READ,
+                       FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                       FILE_ATTRIBUTE_NORMAL, nullptr);
+}
+
+// True if both handles refer to the same underlying file object (same
+// volume + file id), regardless of the path used to open them.
+static bool SameFileObject(HANDLE a, HANDLE b) {
+    if (a == INVALID_HANDLE_VALUE || b == INVALID_HANDLE_VALUE || !a || !b) return false;
+    FILE_ID_INFO idA{}, idB{};
+    if (!GetFileInformationByHandleEx(a, FileIdInfo, &idA, sizeof(idA)) ||
+        !GetFileInformationByHandleEx(b, FileIdInfo, &idB, sizeof(idB))) {
+        return false;
+    }
+    return idA.VolumeSerialNumber == idB.VolumeSerialNumber &&
+           memcmp(&idA.FileId, &idB.FileId, sizeof(idA.FileId)) == 0;
+}
+
+// After LoadLibraryExW(path) succeeds, confirms the module the loader
+// actually mapped is the same file object that was verified through
+// `pinnedHandle` - closing the TOCTOU window where the file on disk could
+// have been swapped between the verify and the load. Callers must
+// FreeLibrary(module) if this returns false.
+static bool ConfirmLoadedModuleMatchesPin(HANDLE pinnedHandle, HMODULE module) {
+    if (pinnedHandle == INVALID_HANDLE_VALUE || !pinnedHandle || !module) return false;
+    wchar_t loadedPath[MAX_PATH];
+    DWORD length = GetModuleFileNameW(module, loadedPath, ARRAYSIZE(loadedPath));
+    if (length == 0 || length >= ARRAYSIZE(loadedPath)) return false;
+    HANDLE loadedHandle = CreateFileW(loadedPath, GENERIC_READ,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (loadedHandle == INVALID_HANDLE_VALUE) return false;
+    bool same = SameFileObject(pinnedHandle, loadedHandle);
+    CloseHandle(loadedHandle);
+    return same;
 }
 
 
@@ -1157,7 +1230,33 @@ static bool DownloadWithTimeout(const std::wstring& destination) {
 }
 
 
-static bool EnsurePayload(std::wstring& outPath) {
+// Pins `finalPath` (FILE_SHARE_READ | FILE_SHARE_DELETE) and verifies through
+// that same handle. On success the pin is left open and handed to the
+// caller via outPin, which must stay alive until the subsequent
+// LoadLibraryExW + ConfirmLoadedModuleMatchesPin has run - that's what
+// closes the verify-then-load TOCTOU window. On failure outPin is closed
+// and set to INVALID_HANDLE_VALUE.
+static bool PinAndValidatePayload(const std::wstring& finalPath, HANDLE& outPin) {
+    HANDLE pin = PinDllForLoad(finalPath);
+    if (pin == INVALID_HANDLE_VALUE) {
+        outPin = INVALID_HANDLE_VALUE;
+        return false;
+    }
+    if (!IsValidPayloadHandle(pin)) {
+        CloseHandle(pin);
+        outPin = INVALID_HANDLE_VALUE;
+        return false;
+    }
+    outPin = pin;
+    return true;
+}
+
+// On success, outPin holds an open handle pinned to the exact file object
+// that was verified; the caller must LoadLibraryExW(outPath), call
+// ConfirmLoadedModuleMatchesPin(outPin, module) before trusting the result,
+// and then CloseHandle(outPin) either way.
+static bool EnsurePayload(std::wstring& outPath, HANDLE& outPin) {
+    outPin = INVALID_HANDLE_VALUE;
     std::wstring dir = StoreDir();
     if (dir.empty()) return false;
     const std::wstring finalPath = dir + L"\\" + kDllName;
@@ -1165,7 +1264,7 @@ static bool EnsurePayload(std::wstring& outPath) {
     // at all, so after the first successful run the page keeps working with no
     // internet connection.
     if (GetFileAttributesW(finalPath.c_str()) != INVALID_FILE_ATTRIBUTES &&
-        IsValidPayload(finalPath)) {
+        PinAndValidatePayload(finalPath, outPin)) {
         Wh_Log(L"Windows Update Restorer: reusing the cached verified payload (no download needed)");
         outPath = finalPath;
         return true;
@@ -1190,19 +1289,23 @@ static bool EnsurePayload(std::wstring& outPath) {
             // already-valid destination as success rather than an error.
             if (MoveFileExW(temporaryPath.c_str(), finalPath.c_str(),
                             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-                outPath = finalPath;
-                Wh_Log(L"Windows Update Restorer: payload downloaded and verified (SHA-256 match)");
-                return true;
+                if (PinAndValidatePayload(finalPath, outPin)) {
+                    outPath = finalPath;
+                    Wh_Log(L"Windows Update Restorer: payload downloaded and verified (SHA-256 match)");
+                    return true;
+                }
+                Wh_Log(L"Windows Update Restorer: payload changed on disk right after install; retrying");
+            } else {
+                const DWORD moveError = GetLastError();
+                if (PinAndValidatePayload(finalPath, outPin)) {
+                    Wh_Log(L"Windows Update Restorer: another process installed the verified payload first (err=%u); reusing it",
+                           moveError);
+                    DeleteFileW(temporaryPath.c_str());
+                    outPath = finalPath;
+                    return true;
+                }
+                Wh_Log(L"Windows Update Restorer: could not install the verified payload (err=%u)", moveError);
             }
-            const DWORD moveError = GetLastError();
-            if (IsValidPayload(finalPath)) {
-                Wh_Log(L"Windows Update Restorer: another process installed the verified payload first (err=%u); reusing it",
-                       moveError);
-                DeleteFileW(temporaryPath.c_str());
-                outPath = finalPath;
-                return true;
-            }
-            Wh_Log(L"Windows Update Restorer: could not install the verified payload (err=%u)", moveError);
         }
         DeleteFileW(temporaryPath.c_str());
         if (attempt < kMaxDownloadAttempts && g_stopEvent &&
@@ -4111,12 +4214,18 @@ static HICON GetStatusIcon(UINT id, int requestedWidth, int requestedHeight) {
 
 using LoadImageW_t = decltype(&LoadImageW);
 static LoadImageW_t LoadImageWOriginalForLegacyWarningIcon = nullptr;
+// Resolved once in InstallLegacyWarningIconHook (shell32.dll is always
+// already loaded in explorer.exe by the time this mod initializes). LoadImageW
+// fires constantly in the shell, so re-resolving shell32's HMODULE via
+// GetModuleHandleW on every single call would take the loader lock each time
+// for no reason - the module's base address never changes for the process.
+static HMODULE g_shell32ForLegacyWarningIcon = nullptr;
 static HANDLE WINAPI LoadImageWHookForLegacyWarningIcon(HINSTANCE instance, LPCWSTR name, UINT type, int cx, int cy, UINT flags) {
     // Only substitute our private status icons when the request actually targets
     // the shell32.dll resource library, which is how our DirectUI XML references
     // them (icon(... library(shell32.dll))). This keeps other modules in
     // explorer.exe that happen to use one of the same numeric IDs unaffected.
-    if (instance != GetModuleHandleW(L"shell32.dll")) return LoadImageWOriginalForLegacyWarningIcon(instance, name, type, cx, cy, flags);
+    if (instance != g_shell32ForLegacyWarningIcon) return LoadImageWOriginalForLegacyWarningIcon(instance, name, type, cx, cy, flags);
     if (type == IMAGE_ICON && IS_INTRESOURCE(name)) {
         const UINT id = static_cast<UINT>(reinterpret_cast<UINT_PTR>(name));
         if (id == kLegacyWarningShieldIconId || id == kUpdatesInstalledIconId ||
@@ -4129,7 +4238,15 @@ static HANDLE WINAPI LoadImageWHookForLegacyWarningIcon(HINSTANCE instance, LPCW
 static void InstallLegacyWarningIconHook() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) user32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (user32) if (void* p = reinterpret_cast<void*>(GetProcAddress(user32, "LoadImageW")))
+    if (!user32) return;
+    g_shell32ForLegacyWarningIcon = GetModuleHandleW(L"shell32.dll");
+    if (!g_shell32ForLegacyWarningIcon) {
+        // Shouldn't happen in explorer.exe, but if it ever does, fail safe by
+        // never matching rather than comparing against a stale nullptr.
+        Wh_Log(L"WUR: shell32.dll module handle unavailable; legacy warning icon substitution disabled");
+        return;
+    }
+    if (void* p = reinterpret_cast<void*>(GetProcAddress(user32, "LoadImageW")))
         WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadImageW_t>(p), LoadImageWHookForLegacyWarningIcon, &LoadImageWOriginalForLegacyWarningIcon);
 }
 
@@ -4265,6 +4382,7 @@ static void LoadLanguageSetting() {
     g_showAvailableUpdates.store(Wh_GetIntSetting(L"ShowAvailableUpdates") != 0);
     g_linkSystemSettingsText.store(Wh_GetIntSetting(L"LinkSystemSettingsText") != 0);
     g_removeLegacyBrokenOption.store(Wh_GetIntSetting(L"RemoveLegacyBrokenOption") != 0);
+    g_showNativeCombobox.store(Wh_GetIntSetting(L"ShowNativeCombobox") != 0);
     // One sidebar only: leave the Windows-owned pane visible and don't publish
     // the obsolete TasksFileUrl/private-DirectUI alternatives.
     LogCurrentSettings();
@@ -4714,6 +4832,14 @@ static DirectUI_Combobox_SetSelection_t pSetSelection = nullptr;
 static DirectUI_Element_SetEnabled_t pSetEnabled = nullptr;
 
 static thread_local bool g_nativeComboPopulated = false;
+// Timer IDs are per-window, and hwndParent here is a DirectUIHWND owned by
+// Explorer, not by this mod - a hardcoded ID like 889 could silently collide
+// with (and replace) a timer that window, or another Windhawk mod, already
+// uses. SetTimer(hwnd, 0, ...) asks the system to assign a free ID instead,
+// and the actual ID is remembered here (thread_local to match the rest of
+// this per-thread settings-page state) so WM_TIMER and KillTimer can match
+// against the real ID rather than a literal.
+static thread_local UINT_PTR g_settingsComboTimerId = 0;
 static thread_local void* g_lastComboPtr = nullptr;
 
 // Resolve only the DirectUI exports required to populate the read-only selector.
@@ -4782,7 +4908,10 @@ static void DestroySettingsComboboxOnThisThread() {
 static LRESULT CALLBACK SettingsDirectUiSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == g_wmUiTeardown || uMsg == WM_NCDESTROY) {
-        KillTimer(hwnd, 889);
+        if (g_settingsComboTimerId) {
+            KillTimer(hwnd, g_settingsComboTimerId);
+            g_settingsComboTimerId = 0;
+        }
         {
             std::lock_guard lock(g_subclassWindowsMutex);
             auto it = std::remove(g_settingsSubclassWindows.begin(),
@@ -4799,7 +4928,8 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(
         if (uMsg == g_wmUiTeardown) return 0;
     }
 
-    if (g_isSettingsPageActive && uMsg == WM_TIMER && wParam == 889) {
+    if (g_isSettingsPageActive && uMsg == WM_TIMER && g_settingsComboTimerId &&
+        wParam == g_settingsComboTimerId) {
         InitDirectUIExports();
         if (!pStrToID || !pFindDescendent || !pAddString || !pSetSelection) {
             static bool loggedMissingExports = false;
@@ -4826,39 +4956,74 @@ static LRESULT CALLBACK SettingsDirectUiSubclassProc(
                     g_lastComboPtr = combo;
                     g_nativeComboPopulated = false;
                 }
+                const bool showNative = g_showNativeCombobox.load(std::memory_order_acquire);
                 if (!g_nativeComboPopulated) {
-                    // AddString returns the actual item index. The legacy page can
-                    // already contain four empty resource-backed entries, so selecting
-                    // hard-coded indexes 0..3 leaves the combobox visibly blank even
-                    // though the translated fallback strings were appended correctly.
-                    const int optionIndices[] = {
-                        pAddString(combo, WuOptionText(4)),
-                        pAddString(combo, WuOptionText(3)),
-                        pAddString(combo, WuOptionText(2)),
-                        pAddString(combo, WuOptionText(1)),
-                    };
-                    Wh_Log(L"Windows Update Restorer: DirectUI combobox AddString results: %d %d %d %d",
-                           optionIndices[0], optionIndices[1], optionIndices[2], optionIndices[3]);
-                    if (optionIndices[0] >= 0 && optionIndices[1] >= 0 &&
-                        optionIndices[2] >= 0 && optionIndices[3] >= 0) {
-                        const DWORD current = ReadAuOptionsValue();
-                        const int optionSlot = current == 4 ? 0 : current == 3 ? 1
-                                                       : current == 2 ? 2 : 3;
-                        const HRESULT selResult = pSetSelection(combo, optionIndices[optionSlot]);
-                        Wh_Log(L"Windows Update Restorer: DirectUI combobox current=%u slot=%d targetIndex=%d SetSelection hr=0x%08X",
-                               current, optionSlot, optionIndices[optionSlot], (unsigned)selResult);
-                        if (SUCCEEDED(selResult)) {
-                            g_nativeComboPopulated = true;
+                    if (showNative) {
+                        // AddString returns the actual item index. The legacy page can
+                        // already contain four empty resource-backed entries, so selecting
+                        // hard-coded indexes 0..3 leaves the combobox visibly blank even
+                        // though the translated fallback strings were appended correctly.
+                        const int optionIndices[] = {
+                            pAddString(combo, WuOptionText(4)),
+                            pAddString(combo, WuOptionText(3)),
+                            pAddString(combo, WuOptionText(2)),
+                            pAddString(combo, WuOptionText(1)),
+                        };
+                        Wh_Log(L"Windows Update Restorer: DirectUI combobox AddString results: %d %d %d %d",
+                               optionIndices[0], optionIndices[1], optionIndices[2], optionIndices[3]);
+                        if (optionIndices[0] >= 0 && optionIndices[1] >= 0 &&
+                            optionIndices[2] >= 0 && optionIndices[3] >= 0) {
+                            const DWORD current = ReadAuOptionsValue();
+                            const int optionSlot = current == 4 ? 0 : current == 3 ? 1
+                                                           : current == 2 ? 2 : 3;
+                            const HRESULT selResult = pSetSelection(combo, optionIndices[optionSlot]);
+                            Wh_Log(L"Windows Update Restorer: DirectUI combobox current=%u slot=%d targetIndex=%d SetSelection hr=0x%08X",
+                                   current, optionSlot, optionIndices[optionSlot], (unsigned)selResult);
+                            if (SUCCEEDED(selResult)) {
+                                g_nativeComboPopulated = true;
+                                // Nothing left for the poll to do: stop ticking
+                                // every 200ms instead of continuing to call
+                                // pStrToID/pFindDescendent/pSetEnabled for as
+                                // long as the settings page stays open.
+                                if (g_settingsComboTimerId) {
+                                    KillTimer(hwnd, g_settingsComboTimerId);
+                                    g_settingsComboTimerId = 0;
+                                }
+                            }
+                        } else {
+                            Wh_Log(L"Windows Update Restorer: DirectUI combobox AddString failed, skipping SetSelection");
                         }
                     } else {
-                        Wh_Log(L"Windows Update Restorer: DirectUI combobox AddString failed, skipping SetSelection");
+                        // ShowNativeCombobox is off (default): the combobox does not
+                        // actually save a selection anywhere, so instead of the full
+                        // option list, show one disabled placeholder item that points
+                        // the user at the real Settings app.
+                        const wchar_t* placeholder = EmbeddedMuiString(324);
+                        if (!placeholder) placeholder = L"Use the Windows Settings app to change this.";
+                        const int placeholderIndex = pAddString(combo, placeholder);
+                        Wh_Log(L"Windows Update Restorer: DirectUI combobox placeholder AddString result: %d",
+                               placeholderIndex);
+                        if (placeholderIndex >= 0) {
+                            const HRESULT selResult = pSetSelection(combo, placeholderIndex);
+                            Wh_Log(L"Windows Update Restorer: DirectUI combobox placeholder SetSelection hr=0x%08X",
+                                   (unsigned)selResult);
+                            if (SUCCEEDED(selResult)) {
+                                g_nativeComboPopulated = true;
+                                if (g_settingsComboTimerId) {
+                                    KillTimer(hwnd, g_settingsComboTimerId);
+                                    g_settingsComboTimerId = 0;
+                                }
+                            }
+                        }
                     }
                 }
-                // The legacy page is presentational only on modern Windows: the
-                // combobox is left enabled so it feels interactive, but no
-                // selection is ever written back to the real Windows Update
-                // policy/registry - it's a visual-only choice for now.
-                if (pSetEnabled) pSetEnabled(combo, true);
+                // With ShowNativeCombobox enabled the combobox is left enabled so it
+                // feels interactive, even though no selection is ever written back to
+                // the real Windows Update policy/registry yet - it's a visual-only
+                // choice for now. With the setting off (default) the combobox is kept
+                // disabled instead, since it now shows a placeholder rather than real,
+                // selectable options.
+                if (pSetEnabled) pSetEnabled(combo, showNative);
             }
         }
     }
@@ -4932,7 +5097,11 @@ static void InitializeNativeSettingsCombobox(HWND hwndParent) {
                 g_settingsSubclassWindows.push_back(hwndParent);
             }
         }
-        SetTimer(hwndParent, 889, 200, nullptr);
+        g_settingsComboTimerId = SetTimer(hwndParent, 0, 200, nullptr);
+        if (!g_settingsComboTimerId) {
+            Wh_Log(L"Windows Update Restorer: SetTimer for the settings combobox poll failed (%u)",
+                   GetLastError());
+        }
     }
 }
 
@@ -5423,6 +5592,15 @@ static bool IsPrivateWucltuxAddress(const void* address) {
     return callerModule && callerModule == g_module.load(std::memory_order_acquire);
 }
 
+// Shared by PSPropertyBag_WriteUnknownHook and PublishNativeNavigationLinks:
+// records, per UI thread, which bag wucltux itself already wrote a
+// ControlPanelNavLinks list into, so PublishNativeNavigationLinks does not
+// allocate and publish a second (leaked, never-destroyed) list on top of it.
+// This MUST be the single file-scope instance both functions use - two
+// separate function-local statics with the same name are two different
+// objects and the check between them silently never fires.
+static thread_local IPropertyBag* g_wucltuxWroteToBag = nullptr;
+
 static HRESULT WINAPI PSPropertyBag_WriteUnknownHook(IPropertyBag* bag,
                                                       PCWSTR propertyName,
                                                       IUnknown* value) {
@@ -5438,11 +5616,10 @@ static HRESULT WINAPI PSPropertyBag_WriteUnknownHook(IPropertyBag* bag,
             // This bag now has a real wucltux-owned list, so PublishNative-
             // NavigationLinks must not allocate a replacement (see there). The
             // bag is reference-held so the marker pointer stays valid.
-            static thread_local IPropertyBag* wucltuxWroteToBag = nullptr;
-            if (wucltuxWroteToBag != bag) {
-                if (wucltuxWroteToBag) wucltuxWroteToBag->Release();
+            if (g_wucltuxWroteToBag != bag) {
+                if (g_wucltuxWroteToBag) g_wucltuxWroteToBag->Release();
                 bag->AddRef();
-                wucltuxWroteToBag = bag;
+                g_wucltuxWroteToBag = bag;
             }
             const unsigned patched = RedirectNativeControlPanelNavLinks(value);
             Wh_Log(L"WUR: published native ControlPanelNavLinks (redirected=%u)",
@@ -5508,8 +5685,7 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
     // second list afterwards would only allocate and leak. Only publish when
     // wucltux has not already supplied one. The pointer is reference-held so a
     // recycled bag address can never be misread as "already written".
-    static thread_local IPropertyBag* wucltuxWroteToBag = nullptr;
-    if (wucltuxWroteToBag == bag) {
+    if (g_wucltuxWroteToBag == bag) {
         bag->Release();
         return S_FALSE;
     }
@@ -5672,19 +5848,29 @@ static void UnregisterWuSettingsDialog(HWND hwnd) {
     g_wuSettingsDlgs.erase(it, g_wuSettingsDlgs.end());
 }
 
+// Reserved: caller now holds the reservation and should proceed to create
+//   the dialog (and must eventually call RegisterWuSettingsDialog on success
+//   or ReleaseWuSettingsDialogReservation on any earlier exit).
+// AlreadyOpen: a live dialog exists; outExisting names it.
+// PendingElsewhere: another thread is in the middle of creating one; the
+//   caller must NOT proceed to create a second one.
+enum class WuSettingsDlgSlotResult { Reserved, AlreadyOpen, PendingElsewhere };
+
 // Atomically checks for a live (or in-progress) dialog and, if none exists,
 // reserves the slot so a concurrent call on another thread doesn't also
-// start creating one. Returns the existing HWND to foreground, or nullptr
-// if the caller now holds the reservation and should proceed to create one.
-// On any exit that doesn't end in a successful RegisterWuSettingsDialog
-// call, the caller must call ReleaseWuSettingsDialogReservation().
-static HWND TryReserveWuSettingsDialogSlot() {
+// start creating one.
+static WuSettingsDlgSlotResult TryReserveWuSettingsDialogSlot(HWND& outExisting) {
+    outExisting = nullptr;
     std::lock_guard<std::mutex> lock(g_wuSettingsDlgMutex);
-    for (HWND hwnd : g_wuSettingsDlgs)
-        if (IsWindow(hwnd)) return hwnd;
-    if (g_wuSettingsDlgPending) return nullptr;  // another thread is creating one
+    for (HWND hwnd : g_wuSettingsDlgs) {
+        if (IsWindow(hwnd)) {
+            outExisting = hwnd;
+            return WuSettingsDlgSlotResult::AlreadyOpen;
+        }
+    }
+    if (g_wuSettingsDlgPending) return WuSettingsDlgSlotResult::PendingElsewhere;
     g_wuSettingsDlgPending = true;
-    return nullptr;
+    return WuSettingsDlgSlotResult::Reserved;
 }
 
 static void ReleaseWuSettingsDialogReservation() {
@@ -5954,9 +6140,17 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
 }
 
 static void ShowWuSettingsDialog(HWND parent) {
-    if (HWND existing = TryReserveWuSettingsDialogSlot()) {
-        SetForegroundWindow(existing);
-        return;
+    HWND existing = nullptr;
+    switch (TryReserveWuSettingsDialogSlot(existing)) {
+        case WuSettingsDlgSlotResult::AlreadyOpen:
+            SetForegroundWindow(existing);
+            return;
+        case WuSettingsDlgSlotResult::PendingElsewhere:
+            // Another thread is already creating one; do not race it into
+            // creating a second dialog.
+            return;
+        case WuSettingsDlgSlotResult::Reserved:
+            break;
     }
     // This thread now holds the reservation: any early return below must
     // release it, and WM_INITDIALOG (via RegisterWuSettingsDialog) releases
@@ -6860,11 +7054,43 @@ static void EnsureProgressClassRegistered() {
     done = true;
 }
 
+// Desktop-wide FindWindowW(class, nullptr) can return a ControlPanelWindowClass
+// window belonging to a different process (another user's session, or just
+// another process that happens to host a window of that class). Posting a
+// shell command to it or using it as a dialog owner would then reach across
+// process boundaries. Enumerate top-level windows instead and keep only the
+// one that both matches the class and belongs to this process.
+struct FindOwnProcessWindowByClassContext {
+    const wchar_t* className;
+    DWORD processId;
+    HWND result;
+};
+static BOOL CALLBACK FindOwnProcessWindowByClassProc(HWND hwnd, LPARAM lparam) {
+    auto* ctx = reinterpret_cast<FindOwnProcessWindowByClassContext*>(lparam);
+    wchar_t className[256];
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+        wcscmp(className, ctx->className) == 0) {
+        DWORD windowProcessId = 0;
+        GetWindowThreadProcessId(hwnd, &windowProcessId);
+        if (windowProcessId == ctx->processId) {
+            ctx->result = hwnd;
+            return FALSE;  // stop enumerating
+        }
+    }
+    return TRUE;
+}
+static HWND FindControlPanelWindowInCurrentProcess() {
+    FindOwnProcessWindowByClassContext ctx{L"ControlPanelWindowClass",
+                                           GetCurrentProcessId(), nullptr};
+    EnumWindows(FindOwnProcessWindowByClassProc, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.result;
+}
+
 // Posts the shell view refresh (FCIDM_REFRESH) to the Control Panel frame.
 // Used by the "Reopen Windows Update" button in the result window.
 static void PostControlPanelRefresh(HWND frame) {
     if (!frame || !IsWindow(frame))
-        frame = FindWindowW(L"ControlPanelWindowClass", nullptr);
+        frame = FindControlPanelWindowInCurrentProcess();
     if (!frame || !IsWindow(frame)) return;
     PostMessageW(frame, WM_COMMAND, MAKEWPARAM(0xA220, 0), 0);
     HWND root = GetAncestor(frame, GA_ROOT);
@@ -7603,8 +7829,24 @@ static void StartWuUpdateCheck(HWND host) {
     // outcome always reflects an actual query, not stale registry state.
     {
         std::lock_guard<std::mutex> lock(g_wuSearchThreadMutex);
-        if (g_stopping.load(std::memory_order_acquire)) return;
-        if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
+        if (g_stopping.load(std::memory_order_acquire)) {
+            g_checkingForUpdates.store(false, std::memory_order_release);
+            return;
+        }
+        if (g_wuSearchThread && g_wuSearchThread->joinable()) {
+            // IUpdateSearcher::Search is a synchronous, effectively
+            // uncancellable call that can run for minutes. This function runs
+            // on the Explorer UI thread, so joining a still-running search
+            // here would freeze the shell until it finishes. Only join (which
+            // returns immediately) once the search has actually finished;
+            // otherwise refuse to start an overlapping check.
+            if (!g_realCheckDone.load(std::memory_order_acquire)) {
+                Wh_Log(L"Windows Update Restorer: a search is still running in the background; not starting another check");
+                g_checkingForUpdates.store(false, std::memory_order_release);
+                return;
+            }
+            g_wuSearchThread->join();
+        }
         g_wuSearchThread.reset();
         g_wuSearchThread.emplace([] {
         try {
@@ -7620,7 +7862,7 @@ static void StartWuUpdateCheck(HWND host) {
 
     HWND frame = host;
     if (!frame || !IsWindow(frame))
-        frame = FindWindowW(L"ControlPanelWindowClass", nullptr);
+        frame = FindControlPanelWindowInCurrentProcess();
     {
         std::lock_guard<std::mutex> lock(g_checkFrameMutex);
         g_checkFrame = frame;
@@ -9712,7 +9954,16 @@ static void WaitForPayloadNoticeThread() {
             PostMessageW(hwnd, WM_COMMAND, IDCANCEL, 0);
             return TRUE;
         }, 0);
-        WaitForSingleObject(thread, INFINITE);
+        // Bounded even here: WM_CLOSE/IDCANCEL should close the message box
+        // almost immediately, but an unbounded wait in the teardown path is
+        // still a risk if that ever doesn't happen for some reason. Give up
+        // after a few more seconds rather than blocking unload indefinitely;
+        // closing the handle does not affect the thread if it is still
+        // running.
+        constexpr DWORD kFinalWaitMs = 3000;
+        if (WaitForSingleObject(thread, kFinalWaitMs) == WAIT_TIMEOUT) {
+            Wh_Log(L"Windows Update Restorer: payload-notice thread did not exit in time; giving up rather than blocking unload");
+        }
     }
     CloseHandle(thread);
 }
@@ -9970,11 +10221,29 @@ static HMODULE EnsurePrivateModuleLoaded() {
     if (HMODULE m = g_module.load()) return m;
     const std::wstring* path = g_dllPath.load();
     if (!path || path->empty()) return nullptr;
+    // Pin-then-load-then-confirm, same as SetupWorkerImpl: g_dllPath only ever
+    // names a location we ourselves verified, but by the time this fallback
+    // runs the file on disk could have been swapped by anything else running
+    // as this user, so it is re-verified through a pinned handle rather than
+    // trusted on path alone.
+    HANDLE pin = INVALID_HANDLE_VALUE;
+    if (!PinAndValidatePayload(*path, pin)) {
+        Wh_Log(L"Windows Update Restorer: lazy load failed re-verification of the pinned payload");
+        return nullptr;
+    }
     HMODULE module = LoadLibraryExW(path->c_str(), nullptr, 0);
     if (!module) {
         Wh_Log(L"Windows Update Restorer: lazy LoadLibraryEx of wucltux failed (%u)", GetLastError());
+        CloseHandle(pin);
         return nullptr;
     }
+    if (!ConfirmLoadedModuleMatchesPin(pin, module)) {
+        Wh_Log(L"Windows Update Restorer: lazy load's mapped file did not match the verified pin; aborting");
+        FreeLibrary(module);
+        CloseHandle(pin);
+        return nullptr;
+    }
+    CloseHandle(pin);
     HMODULE expected = nullptr;
     if (g_module.compare_exchange_strong(expected, module)) return module;
     FreeLibrary(module);  // another thread won the race; do not leak ours
@@ -10028,9 +10297,11 @@ static void SetupWorkerImpl() {
     }
 
     std::wstring path;
-    if (!EnsurePayload(path) || g_stopping.load()) {
+    HANDLE pin = INVALID_HANDLE_VALUE;
+    if (!EnsurePayload(path, pin) || g_stopping.load()) {
         // Not fatal: the Control Panel entry stays registered and visible, and
         // opening it shows the localized notice with a link to Settings.
+        if (pin != INVALID_HANDLE_VALUE) CloseHandle(pin);
         Wh_Log(L"Windows Update Restorer: wucltux.dll was not downloaded or failed verification. "
                L"The Control Panel entry stays available; check the internet connection and "
                L"restart Explorer to retry.");
@@ -10042,8 +10313,19 @@ static void SetupWorkerImpl() {
     HMODULE module = LoadLibraryExW(path.c_str(), nullptr, 0);
     if (!module) {
         Wh_Log(L"Windows Update Restorer: LoadLibraryEx failed (%u)", GetLastError());
+        CloseHandle(pin);
         return;
     }
+    // Close the verify-then-load TOCTOU window: confirm the file the loader
+    // actually mapped is the same file object `pin` verified, not something
+    // swapped in on disk between EnsurePayload's check and this LoadLibraryExW.
+    if (!ConfirmLoadedModuleMatchesPin(pin, module)) {
+        Wh_Log(L"Windows Update Restorer: loaded module did not match the verified pin; aborting");
+        FreeLibrary(module);
+        CloseHandle(pin);
+        return;
+    }
+    CloseHandle(pin);
 
     // Publish the path before the module: the CoCreateInstance fallback reads
     // g_dllPath to load the payload lazily, and a non-null g_module with no path
@@ -10444,12 +10726,31 @@ void Wh_ModUninit() {
     g_setupThread.reset();
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
     g_rebuildThread.reset();
-    // The real Windows Update search thread's code lives in this image too;
-    // it is bounded by IUpdateSearcher's own timeouts, but wait for it here
-    // so it can never run past unload.
+    // The real Windows Update search thread's code lives in this image too,
+    // so it must not still be running once the image is unmapped. It is NOT
+    // actually bounded by IUpdateSearcher's own timeouts - an online
+    // IUpdateSearcher::Search call routinely takes minutes with no
+    // cancellation - so join()ing it unconditionally here can hang unload
+    // for that whole time. Wait with a timeout instead; if the search hasn't
+    // finished, detach so unload can proceed rather than block on it. The
+    // detached thread's code page becomes invalid once the image is
+    // unmapped, but by that point explorer.exe would already be blocked
+    // waiting on the WUA COM call, which is the pre-existing risk this
+    // cannot fully close without moving to the async
+    // BeginSearch/RequestAbort API - flagging that as a follow-up rather
+    // than reworking the search call in this pass.
     {
         std::lock_guard<std::mutex> lock(g_wuSearchThreadMutex);
-        if (g_wuSearchThread && g_wuSearchThread->joinable()) g_wuSearchThread->join();
+        if (g_wuSearchThread && g_wuSearchThread->joinable()) {
+            constexpr DWORD kSearchThreadUnloadWaitMs = 5000;
+            HANDLE handle = reinterpret_cast<HANDLE>(g_wuSearchThread->native_handle());
+            if (WaitForSingleObject(handle, kSearchThreadUnloadWaitMs) == WAIT_OBJECT_0) {
+                g_wuSearchThread->join();
+            } else {
+                Wh_Log(L"Windows Update Restorer: online update search still running at unload; detaching instead of blocking Explorer");
+                g_wuSearchThread->detach();
+            }
+        }
         g_wuSearchThread.reset();
     }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
