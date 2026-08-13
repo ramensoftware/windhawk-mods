@@ -325,12 +325,15 @@ Settings g_settings;
 std::atomic<bool> g_taskbarViewHooked = false;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_settingsReloadPending = false;
+std::atomic<bool> g_deferredCountRefreshQueued = false;
 std::atomic<DWORD> g_taskbarThreadId = 0;
 uint64_t g_settingsGeneration = 0;
 
+HHOOK g_taskbarGetMessageHook = nullptr;
+UINT g_deferredCountRefreshMessage = 0;
+
 struct TrackedButton {
     void* identity = nullptr;
-    void* viewModel = nullptr;
     winrt::weak_ref<FrameworkElement> element;
     unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
     uint64_t lastSettingsGeneration = 0;
@@ -1124,9 +1127,7 @@ void PruneDeadTrackedButtons() {
     }
 }
 
-TrackedButton* TrackTaskbarButton(FrameworkElement element, void* viewModel) {
-    PruneDeadTrackedButtons();
-
+TrackedButton* TrackTaskbarButton(FrameworkElement element) {
     auto unknown = element.as<winrt::Windows::Foundation::IUnknown>();
     void* identity = winrt::get_abi(unknown);
 
@@ -1137,13 +1138,11 @@ TrackedButton* TrackTaskbarButton(FrameworkElement element, void* viewModel) {
                      });
 
     if (existing != g_trackedButtons.end()) {
-        existing->viewModel = viewModel;
         return &*existing;
     }
 
     g_trackedButtons.push_back({
         .identity = identity,
-        .viewModel = viewModel,
         .element = winrt::make_weak(element),
     });
 
@@ -1151,15 +1150,12 @@ TrackedButton* TrackTaskbarButton(FrameworkElement element, void* viewModel) {
 }
 
 bool GetTaskbarButtonViewModelCount(FrameworkElement element,
-                                    void** viewModel,
                                     unsigned int* count) {
-    if (!viewModel || !count ||
-        !TryGetItemFromContainer_TaskListGroupViewModel_Original ||
+    if (!count || !TryGetItemFromContainer_TaskListGroupViewModel_Original ||
         !GetViewModelCount_Original) {
         return false;
     }
 
-    *viewModel = nullptr;
     *count = 0;
 
     UIElement uiElement = element.as<UIElement>();
@@ -1170,8 +1166,6 @@ bool GetTaskbarButtonViewModelCount(FrameworkElement element,
     if (!groupViewModel) {
         return false;
     }
-
-    *viewModel = groupViewModel.get();
 
     HRESULT hr = GetViewModelCount_Original(groupViewModel.get(), count);
     if (FAILED(hr)) {
@@ -1195,8 +1189,8 @@ void ApplyCountToTrackedButton(TrackedButton& item, unsigned int count) {
     }
 
     // Mark the state before touching XAML so a synchronous re-entrant taskbar
-    // update doesn't apply the same visual change recursively. Roll it back if
-    // the visual couldn't be updated.
+    // update doesn't apply the same visual change recursively. TrackTaskbarButton
+    // never erases entries, so this reference stays valid across re-entry.
     unsigned int previousCount = item.lastAppliedCount;
     uint64_t previousGeneration = item.lastSettingsGeneration;
     item.lastAppliedCount = count;
@@ -1215,15 +1209,13 @@ void ApplyCountToTrackedButton(TrackedButton& item, unsigned int count) {
 }
 
 void ApplyCountToButton(FrameworkElement element) {
-    void* viewModel = nullptr;
-    unsigned int count = 0;
-    bool haveCount =
-        GetTaskbarButtonViewModelCount(element, &viewModel, &count);
-
-    auto* tracked = TrackTaskbarButton(element, viewModel);
+    auto* tracked = TrackTaskbarButton(element);
     if (!tracked) {
         return;
     }
+
+    unsigned int count = 0;
+    bool haveCount = GetTaskbarButtonViewModelCount(element, &count);
 
     // A recycled/pinned button can temporarily have no group view model. Treat
     // it as zero so a badge from the previous container contents can't remain
@@ -1232,6 +1224,8 @@ void ApplyCountToButton(FrameworkElement element) {
 }
 
 void RefreshAllTrackedButtons() {
+    // Prune before walking. TrackTaskbarButton doesn't prune, so XAML re-entry
+    // during this loop can't erase the element currently being visited.
     PruneDeadTrackedButtons();
 
     for (auto& item : g_trackedButtons) {
@@ -1240,28 +1234,9 @@ void RefreshAllTrackedButtons() {
             continue;
         }
 
-        void* viewModel = nullptr;
         unsigned int count = 0;
-        bool haveCount =
-            GetTaskbarButtonViewModelCount(element, &viewModel, &count);
-        item.viewModel = viewModel;
+        bool haveCount = GetTaskbarButtonViewModelCount(element, &count);
         ApplyCountToTrackedButton(item, haveCount ? count : 0);
-    }
-}
-
-void RefreshTrackedButtonsForViewModel(void* viewModel, unsigned int count) {
-    DWORD taskbarThreadId = g_taskbarThreadId.load();
-    if (!viewModel || !taskbarThreadId ||
-        taskbarThreadId != GetCurrentThreadId()) {
-        return;
-    }
-
-    PruneDeadTrackedButtons();
-
-    for (auto& item : g_trackedButtons) {
-        if (item.viewModel == viewModel) {
-            ApplyCountToTrackedButton(item, count);
-        }
     }
 }
 
@@ -1495,6 +1470,93 @@ bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void* parameter) {
 }
 
 // -----------------------------------------------------------------------------
+// Deferred count refresh
+// -----------------------------------------------------------------------------
+
+LRESULT CALLBACK TaskbarGetMessageHookProc(int code,
+                                           WPARAM wParam,
+                                           LPARAM lParam) {
+    if (code >= 0 && wParam == PM_REMOVE && lParam) {
+        auto* message = reinterpret_cast<MSG*>(lParam);
+        if (g_deferredCountRefreshMessage &&
+            message->message == g_deferredCountRefreshMessage) {
+            // Consume the private thread message. The refresh now runs from the
+            // taskbar message loop, after the ViewModel getter/layout stack has
+            // returned, so XAML isn't mutated from inside the property getter.
+            message->message = WM_NULL;
+            g_deferredCountRefreshQueued = false;
+
+            if (!g_unloading) {
+                try {
+                    RefreshAllTrackedButtons();
+                } catch (...) {
+                    Wh_Log(L"Deferred count refresh failed");
+                }
+            }
+        }
+    }
+
+    return CallNextHookEx(g_taskbarGetMessageHook, code, wParam, lParam);
+}
+
+bool EnsureDeferredCountRefreshHookOnTaskbarThread() {
+    DWORD threadId = GetCurrentThreadId();
+
+    if (g_taskbarGetMessageHook && g_taskbarThreadId.load() == threadId) {
+        return true;
+    }
+
+    if (g_taskbarGetMessageHook) {
+        UnhookWindowsHookEx(g_taskbarGetMessageHook);
+        g_taskbarGetMessageHook = nullptr;
+    }
+
+    g_taskbarThreadId = threadId;
+
+    if (!g_deferredCountRefreshMessage) {
+        g_deferredCountRefreshMessage = RegisterWindowMessageW(
+            L"Windhawk_TaskbarCountBadges_DeferredCountRefresh");
+        if (!g_deferredCountRefreshMessage) {
+            return false;
+        }
+    }
+
+    g_taskbarGetMessageHook = SetWindowsHookExW(
+        WH_GETMESSAGE, TaskbarGetMessageHookProc, nullptr, threadId);
+    return g_taskbarGetMessageHook != nullptr;
+}
+
+void StopDeferredCountRefreshHook() {
+    if (g_taskbarGetMessageHook) {
+        UnhookWindowsHookEx(g_taskbarGetMessageHook);
+        g_taskbarGetMessageHook = nullptr;
+    }
+
+    g_deferredCountRefreshQueued = false;
+}
+
+void QueueDeferredCountRefresh() {
+    if (g_unloading || !g_taskbarGetMessageHook ||
+        !g_deferredCountRefreshMessage) {
+        return;
+    }
+
+    DWORD threadId = g_taskbarThreadId.load();
+    if (!threadId || threadId != GetCurrentThreadId()) {
+        return;
+    }
+
+    if (g_deferredCountRefreshQueued.exchange(true)) {
+        return;
+    }
+
+    if (!PostThreadMessageW(threadId, g_deferredCountRefreshMessage, 0, 0)) {
+        g_deferredCountRefreshQueued = false;
+        Wh_Log(L"Failed to queue deferred count refresh");
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Existing taskbar initialization
 // -----------------------------------------------------------------------------
 
@@ -1504,13 +1566,16 @@ struct ExistingButtonsInitContext {
 };
 
 void WINAPI InitializeExistingButtonsOnTaskbarThread(void*) {
-    g_taskbarThreadId = GetCurrentThreadId();
+    if (!EnsureDeferredCountRefreshHookOnTaskbarThread()) {
+        Wh_Log(L"Failed to install deferred count refresh hook");
+    }
+
     ExistingButtonsInitContext context;
 
-    try {
-        EnumThreadWindows(
-            GetCurrentThreadId(),
-            [](HWND hWnd, LPARAM param) -> BOOL {
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM param) -> BOOL {
+            try {
                 auto* context =
                     reinterpret_cast<ExistingButtonsInitContext*>(param);
 
@@ -1543,15 +1608,18 @@ void WINAPI InitializeExistingButtonsOnTaskbarThread(void*) {
                 ++context->taskbarCount;
                 context->buttonCount +=
                     EnumerateExistingTaskbarButtons(content);
-                return TRUE;
-            },
-            reinterpret_cast<LPARAM>(&context));
+            } catch (...) {
+                // Never let a C++/WinRT exception unwind through the Win32
+                // EnumThreadWindows callback boundary.
+                Wh_Log(L"Taskbar XamlRoot enumeration failed");
+            }
 
-        Wh_Log(L"Initial taskbars=%d buttons=%d", context.taskbarCount,
-               context.buttonCount);
-    } catch (...) {
-        Wh_Log(L"Initial taskbar UI setup failed");
-    }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    Wh_Log(L"Initial taskbars=%d buttons=%d", context.taskbarCount,
+           context.buttonCount);
 }
 
 // -----------------------------------------------------------------------------
@@ -1570,7 +1638,9 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
 
     try {
-        g_taskbarThreadId = GetCurrentThreadId();
+        if (!EnsureDeferredCountRefreshHookOnTaskbarThread()) {
+            g_taskbarThreadId = GetCurrentThreadId();
+        }
         void* taskListButtonIUnknownPtr = reinterpret_cast<void**>(pThis) + 3;
 
         winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
@@ -1606,17 +1676,10 @@ HRESULT WINAPI GetViewModelCount_Hook(void* pThis, unsigned int* count) {
         return hr;
     }
 
-    // pThis is the same ITaskListGroupViewModel interface returned by
-    // TryGetItemFromContainer<TaskListGroupViewModel>. Update only buttons that
-    // are backed by this group; no desktop/window enumeration is needed. Keep
-    // the original ViewModelCount untouched for Windows and normalize only the
-    // count used by the badge.
-    try {
-        RefreshTrackedButtonsForViewModel(
-            pThis, WindowCountFromViewModelCount(*count));
-    } catch (...) {
-        Wh_Log(L"ViewModel count update failed");
-    }
+    // Keep this bindable property getter notification-only. XAML changes are
+    // deferred to the taskbar message loop so they can't occur while the
+    // ItemsRepeater is measuring/realizing a TaskListButton.
+    QueueDeferredCountRefresh();
 
     return hr;
 }
@@ -1670,13 +1733,21 @@ void CleanupOnTaskbarThread() {
             RemoveBadgeFromPanel(iconPanel, badge);
         }
     }
-
-    g_trackedButtons.clear();
-    Wh_Log(L"Cleanup complete");
 }
 
 void WINAPI CleanupOnTaskbarThreadProc(void*) {
-    CleanupOnTaskbarThread();
+    try {
+        CleanupOnTaskbarThread();
+        Wh_Log(L"Cleanup complete");
+    } catch (...) {
+        // Never allow a C++/WinRT exception to escape through the Win32 hook
+        // callback used by RunOnTaskbarThread.
+        Wh_Log(L"Cleanup failed");
+    }
+
+    // Always drop weak references, even if part of the XAML tree was already
+    // closed while Explorer was rebuilding/shutting down.
+    g_trackedButtons.clear();
 }
 
 // -----------------------------------------------------------------------------
@@ -1687,7 +1758,8 @@ bool HookTaskbarView(HMODULE module) {
     if (g_taskbarViewHooked.exchange(true)) {
         return true;
     }
-// Taskbar.View.dll, ExplorerExtensions.dll
+
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
@@ -1814,7 +1886,10 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
 BOOL Wh_ModInit() {
     g_unloading = false;
     g_settingsReloadPending = false;
+    g_deferredCountRefreshQueued = false;
     g_taskbarThreadId = 0;
+    g_taskbarGetMessageHook = nullptr;
+    g_deferredCountRefreshMessage = 0;
     g_trackedButtons.clear();
 
     LoadSettings();
@@ -1850,6 +1925,19 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L"After init");
 
+    // Taskbar.View can load after Wh_ModInit checked for it but before the
+    // LoadLibraryExW hook becomes active. Re-check after hook operations are
+    // installed so that narrow startup race can't leave the mod unhooked.
+    if (!g_taskbarViewHooked) {
+        if (HMODULE module = GetTaskbarViewModuleHandle()) {
+            if (HookTaskbarView(module)) {
+                Wh_ApplyHookOperations();
+            } else {
+                Wh_Log(L"Late Taskbar.View hook failed");
+            }
+        }
+    }
+
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!taskbarWnd) {
         return;
@@ -1881,6 +1969,7 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"Before uninit");
     g_unloading = true;
     g_settingsReloadPending = false;
+    StopDeferredCountRefreshHook();
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!taskbarWnd) {
@@ -1895,6 +1984,9 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    StopDeferredCountRefreshHook();
+    g_deferredCountRefreshQueued = false;
+
     // Tracked buttons contain weak WinRT references only; releasing them here
     // is safe even if Explorer is already tearing the taskbar down.
     g_trackedButtons.clear();
