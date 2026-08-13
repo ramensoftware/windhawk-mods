@@ -63,21 +63,23 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 
 ## Notes
 
-- The mod runs inside `explorer.exe` and requires **64‑bit Windows 10 or Windows 11**.
+- The mod runs inside `explorer.exe` and requires **64‑bit Windows 10 or Windows 11**. It is **x64-only and is not supported on ARM64** (on an ARM64 device the mod has no effect; see Known Limitations).
 - On first use, wait a few seconds for the setup to finish, then reopen Control Panel.
 - After changing a setting or language, close any already open Display page and reopen it.
 - If the page does not appear, check the Windhawk log for download or hash verification errors.
 - Keep **Screen Resolution compatibility adaptation** enabled for the normal recommended configuration.
+- **Overlap with other mods:** the **Redirect Display settings** option hooks ShellExecuteW/ShellExecuteExW in explorer.exe to intercept ms-settings:display - the same API and URI that the separate **settings-to-control-panel** mod (and similar redirectors) also hook. With both enabled, the result depends on Windhawk hook ordering and one redirect wins. Enable only one of them for ms-settings:display, or disable **Redirect Display settings** here and let a general settings-to-Control-Panel mod handle it. (restore-classic-cpls uses the same registry-virtualization technique this mod uses to publish its applet, so the two do not conflict.)
 
 ---
 
 ## Known Limitations
 
 - **Combobox inside the screen preview:** The combobox that appears inside the screen preview area does not function correctly.
-- **Orientation:** The Orientation row is intentionally hidden because the provider list is empty.
+- **Orientation:** By default the Orientation row is hidden because the provider list is empty on current adapters. Enable the **Show the classic Orientation row** setting to restore the provider's untouched Orientation markup (screen rotation is still applied when you change the selection and press Apply).
 - The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.
 - The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.
 - Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.
+- **ARM64 (x64-only):** the mod targets x64. On an ARM64 device IsRunningAsAmd64() is false, so Wh_ModInit declines to activate and the mod has no effect (a clean no-op, not a crash). No ARM64 build is provided; use it on an x64 (Intel/AMD) installation.
 
 ---
 
@@ -130,7 +132,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 
 - showOrientationPanel: false
   $name: Show the classic Orientation row
-  $description: Kept off. The native Orientation row is empty on current adapters and stays hidden so the Screen Resolution page does not show a blank combo.
+  $description: Show the native Orientation row on the Screen Resolution page. Off by default because the row's combo is empty on current adapters; turning it on restores the provider's untouched Orientation markup. Screen rotation is still applied when you change the selection and press Apply.
 
 - enableDpiPresets: true
   $name: Keep the classic DPI presets selectable
@@ -1376,16 +1378,18 @@ void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
     std::wstring pattern = dir + L"\\*";
     FindFileHandleGuard find(FindFirstFileW(pattern.c_str(), &fd));
     if (!find.IsValid()) return;
-    std::vector<std::wstring> folders;
     do {
         std::wstring name = fd.cFileName;
         if (name == L"." || name == L"..") continue;
         const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        const std::wstring p = dir + L"\\" + name;
         if (isDir) {
-            folders.push_back(p);
+            // All of this mod's outputs are flat files in its storage folder.
+            // Never delete a subdirectory the mod did not create - leave it and
+            // anything inside it untouched (the file-scope comment promises the
+            // mod never deletes files created by other mods).
             continue;
         }
+        const std::wstring p = dir + L"\\" + name;
         const bool ownFile =
             name == kDllRelativeName || name == kObsoleteWin81DllRelativeName ||
             name == kLegacyVariantMarkerName ||
@@ -1405,7 +1409,11 @@ void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
                    p.c_str(), GetLastError());
         }
     } while (FindNextFileW(find.Get(), &fd));
-    for (const auto& f : folders) RemoveDirectoryW(f.c_str());
+    // The storage directory itself is this mod's own (see StoreDir); remove it
+    // best-effort, only when empty. RemoveDirectoryW fails harmlessly on a
+    // non-empty directory, so files still in use (or anything else stored here)
+    // are left untouched and retried on a later unload. Subdirectories are
+    // deliberately not removed - see the loop above.
     RemoveDirectoryW(dir.c_str());
 }
 
@@ -6935,7 +6943,12 @@ static void SetPendingDisplayOrientation(DWORD orientation,
                                          void* contextElement);
 static int OrientationFromComboItem(void* element);
 static void HandleOrientationUiEvent(void* element);
-static void InstallOrientationHooks(HMODULE dui70);
+// All dui70.dll symbol hooks (classic DPI radio + Screen Resolution
+// orientation) are resolved in a single HookSymbols call; see the definition
+// later in the file. Splitting them across two HookSymbols calls for the same
+// module invalidates Windhawk's per-module symbol cache and forces the slow
+// re-resolution path.
+static bool InstallDui70SymbolHooks(HMODULE dui70);
 static void ShowDisplaySettingsAdvisory(HWND owner);
 static bool TryHandleDisplayHelpLink(void* element);
 
@@ -7025,8 +7038,17 @@ static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
             // disabled/enabled visual state and must never commit DPI.
             if (!g_dpiApplyButtonInitialized) {
                 // selected=true in the existing markup always emits one setup
-                // callback. Never mutate DirectUI from that construction pass.
+                // callback. Never commit DPI from that construction pass.
                 g_dpiApplyButtonInitialized = true;
+                // The provider's hub initialization can leave Apply enabled
+                // even when nothing is pending (the markup's enabled="false"
+                // is not authoritative in practice). With no pending DPI there
+                // is nothing to apply, so force the button gray to match the
+                // actual no-change state - otherwise it stays colored on open
+                // and after a DPI change re-renders the page.
+                if (pending == 0) {
+                    SetDpiApplyButtonEnabled(element, false);
+                }
                 return;
             }
 
@@ -7079,38 +7101,8 @@ static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
     }
 }
 
-static bool InstallClassicDpiRadioHooks(HMODULE dui70) {
-    if (!dui70) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{L"StrToID"},
-         reinterpret_cast<void**>(&DirectUiStrToId)},
-        {{L"public: unsigned short __cdecl DirectUI::Element::GetID(void)"},
-         reinterpret_cast<void**>(&DirectUiElementGetId)},
-        {{L"public: bool __cdecl DirectUI::Element::GetSelected(void)"},
-         reinterpret_cast<void**>(&DirectUiElementGetSelected)},
-        {{L"public: class DirectUI::Element * __cdecl "
-           L"DirectUI::Element::GetParent(void)"},
-         reinterpret_cast<void**>(&DirectUiElementGetParent)},
-        {{L"public: class DirectUI::Element * __cdecl "
-           L"DirectUI::Element::FindDescendent(unsigned short)"},
-         reinterpret_cast<void**>(&DirectUiElementFindDescendent)},
-        {{L"public: long __cdecl DirectUI::Element::SetEnabled(bool)"},
-         reinterpret_cast<void**>(&DirectUiElementSetEnabled)},
-        {{L"public: virtual void __cdecl "
-           L"DirectUI::CCPushButton::OnSelectedPropertyChanged(void)"},
-         reinterpret_cast<void**>(
-             &DirectUiPushButtonSelectedChangedOriginal),
-         reinterpret_cast<void*>(
-             DirectUiPushButtonSelectedChangedHook)},
-    };
-    const bool installed =
-        WindhawkUtils::HookSymbols(dui70, hooks, ARRAYSIZE(hooks));
-    g_directDpiRadioHookActive.store(installed,
-                                     std::memory_order_release);
-    Wh_Log(L"Display hub: DirectUI DPI radio hook %s",
-           installed ? L"scheduled" : L"failed");
-    return installed;
-}
+// Classic DPI radio hooks are installed together with the orientation hooks
+// in InstallDui70SymbolHooks (a single HookSymbols call for dui70.dll).
 
 // UIFILE 202 is byte-identical in Windows 8.1 and Windows 10 1511 and expects
 // ResolutionControl to behave as a composite accessible control. On modern
@@ -7207,8 +7199,10 @@ static bool PatchResolutionControlCompatibilityXml(std::wstring& xml) {
     return true;
 }
 
-// The native Orientation row is empty on current adapters. Always leave
+// The native Orientation row is empty on current adapters. Leave
 // OrientationPanel out of layout so the page never shows a blank combo.
+// Applied only when the "Show the classic Orientation row" setting is off
+// (g_showOrientationPanel); when on, the provider markup is left untouched.
 static bool HideEmptyOrientationPanelXml(std::wstring& xml) {
     const size_t panelId = xml.find(L"id=\"atom(OrientationPanel)\"");
     if (panelId == std::wstring::npos) return false;
@@ -7287,7 +7281,8 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
                     Wh_Log(L"Display UIFILE 202: ResolutionControl adaptation "
                            L"disabled by setting; using provider markup");
                 }
-                if (HideEmptyOrientationPanelXml(xml)) {
+                if (!g_showOrientationPanel.load(std::memory_order_acquire) &&
+                    HideEmptyOrientationPanelXml(xml)) {
                     patched = true;
                     if (!*patchDescription) {
                         patchDescription = L"Orientation row kept hidden";
@@ -7518,8 +7513,7 @@ void InstallTranslationHook() {
             reinterpret_cast<XResourceProviderCreate_t>(xResourceProviderCreate),
             XResourceProviderCreateHook, &XResourceProviderCreateOriginal);
 
-    InstallClassicDpiRadioHooks(dui70);
-    InstallOrientationHooks(dui70);
+    InstallDui70SymbolHooks(dui70);
     InstallDisplayXmlPatchHook();
 }
 
@@ -8252,10 +8246,18 @@ static HRESULT __cdecl DisplayElementWithSiteSetSiteHook(
 }
 
 // The provider normally calls _InitializeElements from
-// _LoadSystemFontsAndMetrics. On modern builds a down-level metrics query can
-// fail first, so the call is skipped and the desktop-element ComboBox remains
-// empty. Observe the native call and invoke the same native initializer only
-// when it was skipped. No DirectUI object layout is inspected or fabricated.
+// _LoadSystemFontsAndMetrics. This hook intentionally SUPPRESSES that call
+// rather than observing/re-invoking it: the Desktop-element ComboBox is
+// populated statically by the patched markup, and on hosts where the
+// provider's runtime initializer fails its string loading it removes those
+// static items and leaves the combo empty (or adds duplicates). Invoking the
+// original would therefore regress the combo, so it is never called.
+// NOTE: this is a workaround, not a fix for the failing down-level metrics
+// query. The initializer that wires up provider-owned font-size selection
+// never runs, so that path stays provider-owned and is expected to remain
+// non-functional here; a future provider path that depends on the initializer
+// running may need this revisited. No DirectUI object layout is inspected or
+// fabricated.
 using DisplayHubVoidMethod_t = void(__cdecl*)(void*);
 static DisplayHubVoidMethod_t DisplayHubInitializeElementsOriginal = nullptr;
 
@@ -8891,26 +8893,61 @@ static LRESULT CALLBACK ClassicDpiWaitWindowProc(HWND window, UINT message,
     }
 }
 
+// The classic DPI "Please wait" window class must be owned by this mod's own
+// module, not by explorer.exe (GetModuleHandleW(nullptr)). Registering with the
+// host process handle leaves the class registered after the mod DLL unloads;
+// the next load then resolves the stale class to a lpfnWndProc that points into
+// the now-unmapped mod image, and Explorer crashes on the first dispatched
+// message (WM_NCCREATE). The class is registered with the mod handle here and
+// unregistered in Wh_ModUninit.
+static const wchar_t kClassicDpiWaitClassName[] =
+    L"WindhawkDisplayRestorerClassicPleaseWait";
+
+static HMODULE g_classicDpiWaitModInstance = nullptr;
+
+static HINSTANCE ClassicDpiWaitModInstance() {
+    if (!g_classicDpiWaitModInstance) {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&ClassicDpiWaitModInstance),
+            &g_classicDpiWaitModInstance);
+    }
+    return reinterpret_cast<HINSTANCE>(g_classicDpiWaitModInstance);
+}
+
 static HWND CreateClassicDpiWaitWindow(UINT /*percent*/) {
-    static const wchar_t kWaitClass[] =
-        L"WindhawkDisplayRestorerClassicPleaseWait";
-    const HINSTANCE instance = GetModuleHandleW(nullptr);
-    WNDCLASSEXW windowClass{};
-    windowClass.cbSize = sizeof(windowClass);
-    windowClass.lpfnWndProc = ClassicDpiWaitWindowProc;
-    windowClass.hInstance = instance;
-    windowClass.hCursor = LoadCursorW(nullptr, IDC_WAIT);
-    windowClass.lpszClassName = kWaitClass;
-    if (!RegisterClassExW(&windowClass) &&
-        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        return nullptr;
+    const HINSTANCE instance = ClassicDpiWaitModInstance();
+    if (!instance) return nullptr;
+
+    // Register the window class exactly once per process. It is owned by the
+    // mod's own module and unregistered in Wh_ModUninit, so it never outlives
+    // the mod image (no dangling lpfnWndProc after an unload/reload).
+    // Registering only once - instead of on every DPI change - is also what
+    // makes a *second* DPI change in the same session work: re-registering an
+    // already-registered class fails with ERROR_CLASS_ALREADY_EXISTS, and
+    // bailing there would skip the "Please wait" window on every change after
+    // the first. This function runs only on the single DPI worker thread, so
+    // the flag needs no extra synchronization.
+    static bool s_classRegistered = false;
+    if (!s_classRegistered) {
+        WNDCLASSEXW windowClass{};
+        windowClass.cbSize = sizeof(windowClass);
+        windowClass.lpfnWndProc = ClassicDpiWaitWindowProc;
+        windowClass.hInstance = instance;
+        windowClass.hCursor = LoadCursorW(nullptr, IDC_WAIT);
+        windowClass.lpszClassName = kClassicDpiWaitClassName;
+        if (!RegisterClassExW(&windowClass)) {
+            return nullptr;
+        }
+        s_classRegistered = true;
     }
 
     ClassicDpiWaitSurface* surface = BuildClassicDpiWaitSurface();
     if (!surface) return nullptr;
     HWND window = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kWaitClass, L"", WS_POPUP,
+        kClassicDpiWaitClassName, L"", WS_POPUP,
         surface->virtualX, surface->virtualY,
         surface->width, surface->height,
         nullptr, nullptr, instance, surface);
@@ -9069,10 +9106,6 @@ static void CancelScheduledClassicDpiApply() {
 
 static DirectUiPushButtonSelectedChanged_t
     DirectUiButtonSelectedChangedOriginal = nullptr;
-static DirectUiElementSetEnabled_t DirectUiElementSetVisibleOriginal = nullptr;
-using DirectUiElementSetLayoutPos_t = long(__cdecl*)(void*, int);
-static DirectUiElementSetLayoutPos_t DirectUiElementSetLayoutPosOriginal =
-    nullptr;
 using DirectUiSelectorOnSelectionChange_t =
     void(__cdecl*)(void*, void*, void*);
 static DirectUiSelectorOnSelectionChange_t
@@ -9127,6 +9160,17 @@ static void* FindDescendentByAtom(void* context, const wchar_t* atomName) {
     return DirectUiElementFindDescendent(
         FindPageRoot(context),
         DirectUiStrToId(reinterpret_cast<const unsigned short*>(atomName)));
+}
+
+// Page anchor: the restored Screen Resolution page is the only dui70 surface
+// that contains an OrientationCombobox element. bttnApply / bttnOk etc. are
+// generic DirectUI ids reused across every dui70 shell surface, so the
+// orientation hooks must never act on them unless they actually live on our
+// page. g_dllVerifiedOk (checked in the hooks) only proves the provider is
+// active process-wide; this anchor proves the specific event is ours.
+static bool IsRestoredResolutionPage(void* element) {
+    if (!element) return false;
+    return FindDescendentByAtom(element, L"OrientationCombobox") != nullptr;
 }
 
 static std::wstring GetPrimaryGdiDeviceName() {
@@ -9487,6 +9531,13 @@ static void HandleOrientationUiEvent(void* element) {
 
     if (ElementIdEquals(element, L"bttnApply") ||
         ElementIdEquals(element, L"bttnOk")) {
+        // bttnApply / bttnOk are generic DirectUI ids reused across many
+        // shell surfaces. Only reach the rotation path when this button
+        // actually lives on the restored Screen Resolution page (the only
+        // dui70 surface with an OrientationCombobox); a generic OK click
+        // elsewhere must never rotate the screen. The other branches below
+        // self-gate via cheap ancestor checks, so they need no extra walk.
+        if (!IsRestoredResolutionPage(element)) return;
         if (g_resolutionApplyButtonElement != element) {
             g_resolutionApplyButtonElement = element;
             g_resolutionApplyButtonInitialized = false;
@@ -9555,6 +9606,15 @@ static bool TryHandleDisplayHelpLink(void* element) {
 }
 
 static void __cdecl DirectUiButtonSelectedChangedHook(void* element) {
+    // These hooks run for every DirectUI button event process-wide. Until the
+    // provider is verified the restored page cannot exist, so short-circuit to
+    // a plain pass-through and skip every atom lookup. HandleOrientationUiEvent
+    // additionally anchors on IsRestoredResolutionPage before doing anything.
+    if (!g_dllVerifiedOk.load(std::memory_order_acquire)) {
+        if (DirectUiButtonSelectedChangedOriginal)
+            DirectUiButtonSelectedChangedOriginal(element);
+        return;
+    }
     // Intercept before the provider so mshelp / support URLs are never opened.
     if (!g_shuttingDown.load(std::memory_order_acquire)) {
         try {
@@ -9580,7 +9640,13 @@ static void __cdecl DirectUiSelectorOnSelectionChangeHook(void* self,
     if (DirectUiSelectorOnSelectionChangeOriginal) {
         DirectUiSelectorOnSelectionChangeOriginal(self, oldElement, newElement);
     }
-    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+    // No provider -> no restored page: skip the atom lookups entirely. The
+    // ElementIdEquals checks below are cheap, but gating on g_dllVerifiedOk
+    // keeps this hook a pure pass-through whenever the mod is inactive, and
+    // HandleOrientationUiEvent re-checks the page anchor for safety.
+    if (!g_dllVerifiedOk.load(std::memory_order_acquire) ||
+        g_shuttingDown.load(std::memory_order_acquire))
+        return;
     try {
         if (ElementIdEquals(self, L"OrientationCombobox") ||
             ElementIdEquals(self, L"DisplayCombobox")) {
@@ -9591,26 +9657,39 @@ static void __cdecl DirectUiSelectorOnSelectionChangeHook(void* self,
     }
 }
 
-static long __cdecl DirectUiElementSetVisibleHook(void* element, bool visible) {
-    if (!DirectUiElementSetVisibleOriginal) return E_UNEXPECTED;
-    // OrientationPanel stays hidden: the combo is empty on current adapters.
-    (void)element;
-    return DirectUiElementSetVisibleOriginal(element, visible);
-}
-
-static long __cdecl DirectUiElementSetLayoutPosHook(void* element, int pos) {
-    if (!DirectUiElementSetLayoutPosOriginal) return E_UNEXPECTED;
-    // DirectUI LP_None / LP_Auto / LP_Absolute are negative. The provider
-    // uses LP_None to take OrientationPanel out of layout when rotation is
-    // not advertised.
-    (void)element;
-    (void)pos;
-    return DirectUiElementSetLayoutPosOriginal(element, pos);
-}
-
-static void InstallOrientationHooks(HMODULE dui70) {
-    if (!dui70) return;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+// Resolve every dui70.dll symbol this mod needs in ONE HookSymbols call.
+// WindhawkUtils caches resolved symbols per module; calling it twice for the
+// same module (as the former separate radio/orientation installers did)
+// invalidates that cache and forces a full re-resolution - the slow PDB /
+// symbol-server path - so all targets are merged here. The classic DPI radio
+// and Screen Resolution orientation hooks share none of these pointers, but
+// the orientation helpers rely on several Element accessors that are also radio
+// targets, so a single pass is both faster and the only correct ordering.
+static bool InstallDui70SymbolHooks(HMODULE dui70) {
+    if (!dui70) return false;
+    WindhawkUtils::SYMBOL_HOOK dui70DllHooks[] = {
+        // --- Classic DPI radio (Element accessors + CCPushButton) ---
+        {{L"StrToID"},
+         reinterpret_cast<void**>(&DirectUiStrToId)},
+        {{L"public: unsigned short __cdecl DirectUI::Element::GetID(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetId)},
+        {{L"public: bool __cdecl DirectUI::Element::GetSelected(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetSelected)},
+        {{L"public: class DirectUI::Element * __cdecl "
+           L"DirectUI::Element::GetParent(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetParent)},
+        {{L"public: class DirectUI::Element * __cdecl "
+           L"DirectUI::Element::FindDescendent(unsigned short)"},
+         reinterpret_cast<void**>(&DirectUiElementFindDescendent)},
+        {{L"public: long __cdecl DirectUI::Element::SetEnabled(bool)"},
+         reinterpret_cast<void**>(&DirectUiElementSetEnabled)},
+        {{L"public: virtual void __cdecl "
+           L"DirectUI::CCPushButton::OnSelectedPropertyChanged(void)"},
+         reinterpret_cast<void**>(
+             &DirectUiPushButtonSelectedChangedOriginal),
+         reinterpret_cast<void*>(
+             DirectUiPushButtonSelectedChangedHook)},
+        // --- Screen Resolution orientation ---
         {{L"public: virtual void __cdecl "
           L"DirectUI::Button::OnSelectedPropertyChanged(void)"},
          reinterpret_cast<void**>(&DirectUiButtonSelectedChangedOriginal),
@@ -9624,12 +9703,6 @@ static void InstallOrientationHooks(HMODULE dui70) {
           L"DirectUI::Selector::GetSelection(void)"},
          reinterpret_cast<void**>(&DirectUiSelectorGetSelection), nullptr,
          true},
-        {{L"public: long __cdecl DirectUI::Element::SetVisible(bool)"},
-         reinterpret_cast<void**>(&DirectUiElementSetVisibleOriginal),
-         reinterpret_cast<void*>(DirectUiElementSetVisibleHook), true},
-        {{L"public: long __cdecl DirectUI::Element::SetLayoutPos(int)"},
-         reinterpret_cast<void**>(&DirectUiElementSetLayoutPosOriginal),
-         reinterpret_cast<void*>(DirectUiElementSetLayoutPosHook), true},
         {{L"public: class DirectUI::Element * __cdecl "
           L"DirectUI::Element::GetFirstChild(void)"},
          reinterpret_cast<void**>(&DirectUiElementGetFirstChild), nullptr,
@@ -9642,18 +9715,18 @@ static void InstallOrientationHooks(HMODULE dui70) {
          true},
     };
     const bool installed =
-        WindhawkUtils::HookSymbols(dui70, hooks, ARRAYSIZE(hooks));
-    Wh_Log(L"Display orientation: DirectUI hooks %s "
-           L"(button=%d selector=%d getSel=%d visible=%d layout=%d "
-           L"child=%d sibling=%d)",
+        WindhawkUtils::HookSymbols(dui70, dui70DllHooks, ARRAYSIZE(dui70DllHooks));
+    g_directDpiRadioHookActive.store(installed, std::memory_order_release);
+    Wh_Log(L"Display dui70 hooks %s "
+           L"(dpiRadio=%d button=%d selector=%d getSel=%d child=%d sibling=%d)",
            installed ? L"scheduled" : L"failed",
+           DirectUiPushButtonSelectedChangedOriginal != nullptr,
            DirectUiButtonSelectedChangedOriginal != nullptr,
            DirectUiSelectorOnSelectionChangeOriginal != nullptr,
            DirectUiSelectorGetSelection != nullptr,
-           DirectUiElementSetVisibleOriginal != nullptr,
-           DirectUiElementSetLayoutPosOriginal != nullptr,
            DirectUiElementGetFirstChild != nullptr,
            DirectUiElementGetNextSibling != nullptr);
+    return installed;
 }
 
 // Shared routing for the native SysLinks the mod adds to the restored hub.
@@ -11658,6 +11731,12 @@ void Wh_ModUninit(void) {
         // Drop hosted-window subclasses before the mod image is unmapped so a
         // still-open Display page cannot call into unloaded code.
         RemoveAllHostedSubclasses();
+        // Unregister the classic DPI "Please wait" window class (registered
+        // with the mod's own module handle in CreateClassicDpiWaitWindow). Both
+        // worker threads are joined above, so no wait window still exists. This
+        // must happen before the image is unmapped, or the class survives with
+        // a dangling lpfnWndProc and the next mod load crashes Explorer.
+        UnregisterClassW(kClassicDpiWaitClassName, ClassicDpiWaitModInstance());
         if (g_dpiApplyWakeEvent) {
             CloseHandle(g_dpiApplyWakeEvent);
             g_dpiApplyWakeEvent = nullptr;
