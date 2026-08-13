@@ -351,6 +351,7 @@ require Windows 11 for tabbed Explorer support.
 #include <comutil.h>
 #include <winrt/base.h>
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cwchar>
@@ -364,76 +365,65 @@ using bstr_ptr = _bstr_t;
 
 // ---- Global init/shutdown guard ----
 
-static volatile LONG g_initialized = 0;
+static std::atomic<bool> g_initialized = false;
 
 #define CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam) \
     if (!g_initialized) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 #define CHECK_INIT_OR_RETURN_VOID()  if (!g_initialized) return
 
 // ---- Settings cache (RAII, thread-safe against settings-changed reload) ----
-
-class StringSetting {
-    PCWSTR m_str = nullptr;
-public:
-    void Load(PCWSTR name) {
-        if (m_str) Wh_FreeStringSetting(m_str);
-        m_str = Wh_GetStringSetting(name);
-    }
-    ~StringSetting() { if (m_str) Wh_FreeStringSetting(m_str); }
-    PCWSTR Get() const { return m_str; }
-    StringSetting(const StringSetting&) = delete;
-    StringSetting& operator=(const StringSetting&) = delete;
-    StringSetting() = default;
-};
+// Uses WindhawkUtils::StringSetting; reloading is an assignment of a fresh
+// make() result. Wh_GetStringSetting never returns NULL (it returns L"" when
+// unset or on error), so .get() is always a valid pointer.
 
 static std::mutex g_settingsMutex;
-static StringSetting g_doubleClickAction;
-static StringSetting g_tripleClickAction;
-static StringSetting g_middleClickAction;
-static StringSetting g_doubleMiddleClickAction;
-static StringSetting g_ctrlClickAction;
-static StringSetting g_altClickAction;
-static StringSetting g_shiftClickAction;
-static StringSetting g_doubleClickCustomCombo;
-static StringSetting g_tripleClickCustomCombo;
-static StringSetting g_middleClickCustomCombo;
-static StringSetting g_doubleMiddleClickCustomCombo;
-static StringSetting g_ctrlClickCustomCombo;
-static StringSetting g_altClickCustomCombo;
-static StringSetting g_shiftClickCustomCombo;
-static StringSetting g_doubleClickCtxMatch;
-static StringSetting g_tripleClickCtxMatch;
-static StringSetting g_middleClickCtxMatch;
-static StringSetting g_doubleMiddleClickCtxMatch;
-static StringSetting g_ctrlClickCtxMatch;
-static StringSetting g_altClickCtxMatch;
-static StringSetting g_shiftClickCtxMatch;
-static StringSetting g_contextMenuMatch;
+static WindhawkUtils::StringSetting g_doubleClickAction;
+static WindhawkUtils::StringSetting g_tripleClickAction;
+static WindhawkUtils::StringSetting g_middleClickAction;
+static WindhawkUtils::StringSetting g_doubleMiddleClickAction;
+static WindhawkUtils::StringSetting g_ctrlClickAction;
+static WindhawkUtils::StringSetting g_altClickAction;
+static WindhawkUtils::StringSetting g_shiftClickAction;
+static WindhawkUtils::StringSetting g_doubleClickCustomCombo;
+static WindhawkUtils::StringSetting g_tripleClickCustomCombo;
+static WindhawkUtils::StringSetting g_middleClickCustomCombo;
+static WindhawkUtils::StringSetting g_doubleMiddleClickCustomCombo;
+static WindhawkUtils::StringSetting g_ctrlClickCustomCombo;
+static WindhawkUtils::StringSetting g_altClickCustomCombo;
+static WindhawkUtils::StringSetting g_shiftClickCustomCombo;
+static WindhawkUtils::StringSetting g_doubleClickCtxMatch;
+static WindhawkUtils::StringSetting g_tripleClickCtxMatch;
+static WindhawkUtils::StringSetting g_middleClickCtxMatch;
+static WindhawkUtils::StringSetting g_doubleMiddleClickCtxMatch;
+static WindhawkUtils::StringSetting g_ctrlClickCtxMatch;
+static WindhawkUtils::StringSetting g_altClickCtxMatch;
+static WindhawkUtils::StringSetting g_shiftClickCtxMatch;
+static WindhawkUtils::StringSetting g_contextMenuMatch;
 
 static void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    g_doubleClickAction.Load(L"doubleClickAction");
-    g_tripleClickAction.Load(L"tripleClickAction");
-    g_middleClickAction.Load(L"middleClickAction");
-    g_doubleMiddleClickAction.Load(L"doubleMiddleClickAction");
-    g_ctrlClickAction.Load(L"ctrlClickAction");
-    g_altClickAction.Load(L"altClickAction");
-    g_shiftClickAction.Load(L"shiftClickAction");
-    g_doubleClickCustomCombo.Load(L"doubleClickCustomHotkey");
-    g_tripleClickCustomCombo.Load(L"tripleClickCustomHotkey");
-    g_middleClickCustomCombo.Load(L"middleClickCustomHotkey");
-    g_doubleMiddleClickCustomCombo.Load(L"doubleMiddleClickCustomHotkey");
-    g_ctrlClickCustomCombo.Load(L"ctrlClickCustomHotkey");
-    g_altClickCustomCombo.Load(L"altClickCustomHotkey");
-    g_shiftClickCustomCombo.Load(L"shiftClickCustomHotkey");
-    g_doubleClickCtxMatch.Load(L"doubleClickContextMenuMatch");
-    g_tripleClickCtxMatch.Load(L"tripleClickContextMenuMatch");
-    g_middleClickCtxMatch.Load(L"middleClickContextMenuMatch");
-    g_doubleMiddleClickCtxMatch.Load(L"doubleMiddleClickContextMenuMatch");
-    g_ctrlClickCtxMatch.Load(L"ctrlClickContextMenuMatch");
-    g_altClickCtxMatch.Load(L"altClickContextMenuMatch");
-    g_shiftClickCtxMatch.Load(L"shiftClickContextMenuMatch");
-    g_contextMenuMatch.Load(L"contextMenuMatch");
+    g_doubleClickAction = WindhawkUtils::StringSetting::make(L"doubleClickAction");
+    g_tripleClickAction = WindhawkUtils::StringSetting::make(L"tripleClickAction");
+    g_middleClickAction = WindhawkUtils::StringSetting::make(L"middleClickAction");
+    g_doubleMiddleClickAction = WindhawkUtils::StringSetting::make(L"doubleMiddleClickAction");
+    g_ctrlClickAction = WindhawkUtils::StringSetting::make(L"ctrlClickAction");
+    g_altClickAction = WindhawkUtils::StringSetting::make(L"altClickAction");
+    g_shiftClickAction = WindhawkUtils::StringSetting::make(L"shiftClickAction");
+    g_doubleClickCustomCombo = WindhawkUtils::StringSetting::make(L"doubleClickCustomHotkey");
+    g_tripleClickCustomCombo = WindhawkUtils::StringSetting::make(L"tripleClickCustomHotkey");
+    g_middleClickCustomCombo = WindhawkUtils::StringSetting::make(L"middleClickCustomHotkey");
+    g_doubleMiddleClickCustomCombo = WindhawkUtils::StringSetting::make(L"doubleMiddleClickCustomHotkey");
+    g_ctrlClickCustomCombo = WindhawkUtils::StringSetting::make(L"ctrlClickCustomHotkey");
+    g_altClickCustomCombo = WindhawkUtils::StringSetting::make(L"altClickCustomHotkey");
+    g_shiftClickCustomCombo = WindhawkUtils::StringSetting::make(L"shiftClickCustomHotkey");
+    g_doubleClickCtxMatch = WindhawkUtils::StringSetting::make(L"doubleClickContextMenuMatch");
+    g_tripleClickCtxMatch = WindhawkUtils::StringSetting::make(L"tripleClickContextMenuMatch");
+    g_middleClickCtxMatch = WindhawkUtils::StringSetting::make(L"middleClickContextMenuMatch");
+    g_doubleMiddleClickCtxMatch = WindhawkUtils::StringSetting::make(L"doubleMiddleClickContextMenuMatch");
+    g_ctrlClickCtxMatch = WindhawkUtils::StringSetting::make(L"ctrlClickContextMenuMatch");
+    g_altClickCtxMatch = WindhawkUtils::StringSetting::make(L"altClickContextMenuMatch");
+    g_shiftClickCtxMatch = WindhawkUtils::StringSetting::make(L"shiftClickContextMenuMatch");
+    g_contextMenuMatch = WindhawkUtils::StringSetting::make(L"contextMenuMatch");
 }
 
 // Read settings under lock, deep-copy strings so they outlive the lock
@@ -464,27 +454,27 @@ struct SettingsSnapshot {
 static SettingsSnapshot CopySettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return {
-        g_doubleClickAction.Get() ? g_doubleClickAction.Get() : L"",
-        g_tripleClickAction.Get() ? g_tripleClickAction.Get() : L"",
-        g_middleClickAction.Get() ? g_middleClickAction.Get() : L"",
-        g_doubleMiddleClickAction.Get() ? g_doubleMiddleClickAction.Get() : L"",
-        g_ctrlClickAction.Get() ? g_ctrlClickAction.Get() : L"",
-        g_altClickAction.Get() ? g_altClickAction.Get() : L"",
-        g_shiftClickAction.Get() ? g_shiftClickAction.Get() : L"",
-        g_doubleClickCustomCombo.Get() ? g_doubleClickCustomCombo.Get() : L"",
-        g_tripleClickCustomCombo.Get() ? g_tripleClickCustomCombo.Get() : L"",
-        g_middleClickCustomCombo.Get() ? g_middleClickCustomCombo.Get() : L"",
-        g_doubleMiddleClickCustomCombo.Get() ? g_doubleMiddleClickCustomCombo.Get() : L"",
-        g_ctrlClickCustomCombo.Get() ? g_ctrlClickCustomCombo.Get() : L"",
-        g_altClickCustomCombo.Get() ? g_altClickCustomCombo.Get() : L"",
-        g_shiftClickCustomCombo.Get() ? g_shiftClickCustomCombo.Get() : L"",
-        g_doubleClickCtxMatch.Get() ? g_doubleClickCtxMatch.Get() : L"",
-        g_tripleClickCtxMatch.Get() ? g_tripleClickCtxMatch.Get() : L"",
-        g_middleClickCtxMatch.Get() ? g_middleClickCtxMatch.Get() : L"",
-        g_doubleMiddleClickCtxMatch.Get() ? g_doubleMiddleClickCtxMatch.Get() : L"",
-        g_ctrlClickCtxMatch.Get() ? g_ctrlClickCtxMatch.Get() : L"",
-        g_altClickCtxMatch.Get() ? g_altClickCtxMatch.Get() : L"",
-        g_shiftClickCtxMatch.Get() ? g_shiftClickCtxMatch.Get() : L"",
+        g_doubleClickAction.get(),
+        g_tripleClickAction.get(),
+        g_middleClickAction.get(),
+        g_doubleMiddleClickAction.get(),
+        g_ctrlClickAction.get(),
+        g_altClickAction.get(),
+        g_shiftClickAction.get(),
+        g_doubleClickCustomCombo.get(),
+        g_tripleClickCustomCombo.get(),
+        g_middleClickCustomCombo.get(),
+        g_doubleMiddleClickCustomCombo.get(),
+        g_ctrlClickCustomCombo.get(),
+        g_altClickCustomCombo.get(),
+        g_shiftClickCustomCombo.get(),
+        g_doubleClickCtxMatch.get(),
+        g_tripleClickCtxMatch.get(),
+        g_middleClickCtxMatch.get(),
+        g_doubleMiddleClickCtxMatch.get(),
+        g_ctrlClickCtxMatch.get(),
+        g_altClickCtxMatch.get(),
+        g_shiftClickCtxMatch.get(),
     };
 }
 
@@ -788,7 +778,8 @@ static thread_local std::wstring g_pendingDblClickCtxMatch;
 
 // Private message: dequeues action dispatch from mouse handlers to avoid
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
-// wParam = (WPARAM)std::unique_ptr<PendingAction>, lParam = (LPARAM)hWnd
+// wParam = (WPARAM)std::unique_ptr<PendingAction>, lParam = 0 (the receiver
+// uses its own hWnd).
 static UINT g_msgDoAction = 0;
 // Teardown message: handled on the window's own thread to kill pending timers
 // (timers must be killed on their creating thread) and release per-thread COM.
@@ -812,7 +803,7 @@ static void PostDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
     auto p = std::make_unique<PendingAction>();
     p->action = action;
     p->match = (match && *match) ? match : L"";
-    if (PostMessage(hWnd, g_msgDoAction, (WPARAM)p.get(), (LPARAM)hWnd))
+    if (PostMessage(hWnd, g_msgDoAction, (WPARAM)p.get(), 0))
         p.release();
 }
 
@@ -1043,8 +1034,7 @@ public:
         if (match && *match) m = match;
         if (m.empty()) {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
-            PCWSTR s = g_contextMenuMatch.Get();
-            if (s) m = s;
+            m = g_contextMenuMatch.get();
         }
         if (m.empty()) {
             Wh_Log(L"OpenWithContextMenu: no match text configured (Context Menu Match setting)");
@@ -1209,9 +1199,8 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     // dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
         std::unique_ptr<PendingAction> p((PendingAction*)wParam);
-        HWND target = (HWND)lParam;
-        if (g_initialized && p && target && !p->action.empty())
-            FindShellTabAndDoAction(target, p->action.c_str(), p->match.c_str());
+        if (g_initialized && p && !p->action.empty())
+            FindShellTabAndDoAction(hWnd, p->action.c_str(), p->match.c_str());
         return 0;
     }
 
@@ -1389,9 +1378,8 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     // dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
         std::unique_ptr<PendingAction> p((PendingAction*)wParam);
-        HWND target = (HWND)lParam;
-        if (g_initialized && p && target && !p->action.empty())
-            FindShellTabAndDoAction(target, p->action.c_str(), p->match.c_str());
+        if (g_initialized && p && !p->action.empty())
+            FindShellTabAndDoAction(hWnd, p->action.c_str(), p->match.c_str());
         return 0;
     }
 
@@ -1702,7 +1690,7 @@ BOOL Wh_ModInit() {
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
 
-    InterlockedExchange(&g_initialized, 1);
+    g_initialized.store(true);
     return TRUE;
 }
 
@@ -1716,7 +1704,7 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     // Block subclass callbacks and hook code before cleanup
-    InterlockedExchange(&g_initialized, 0);
+    g_initialized.store(false);
 
     // g_pendingNav* are thread_local and owned by the Explorer UI threads; they
     // are released on those threads via the g_msgTeardown / WM_NCDESTROY paths
