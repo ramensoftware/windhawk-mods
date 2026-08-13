@@ -20,6 +20,7 @@ In the GNOME desktop environment (popular on Linux), virtual workspaces are mana
 * There is always exactly *one* empty desktop at the end of your workspace list.
 * If you move or open a window in that last empty desktop, a new empty desktop is immediately created to its right.
 * If a desktop in the middle of your workspaces becomes completely empty, it is automatically deleted, shifting the others over.
+* When absolutely no windows are open, the system cleanly reduces itself to a single empty desktop.
 
 This mod implements this exact logic on Windows 11. It's perfect for laptops with trackpad gestures, allowing for endless, seamless switching between workspaces without ever having to manually create or close a desktop again.
 
@@ -29,7 +30,6 @@ Works with Windows 11 build 26100+
 
 **Settings**
 
-* **Start with two empty desktops**: When no windows are open in any desktop you can choose to start with a single virtual desktop open or start with two virtual desktops like GNOME does.
 * **Don't delete empty desktop immediately**: If you're in an empty virtual desktop it waits for you to switch into another virtual desktop before deleting it. If disabled the desktop will be deleted as soon as it becomes empty.
 
 Special thanks to [VD.ahk](https://github.com/FuPeiJiang/VD.ahk) for providing the correct GUIDs to interface with the virtual desktops system.
@@ -38,9 +38,6 @@ Special thanks to [VD.ahk](https://github.com/FuPeiJiang/VD.ahk) for providing t
 
 // ==WindhawkModSettings==
 /*
-- twoInitialDesktops: false
-  $name: Start with two empty desktops
-  $description: Start with two empty desktops instead of one, more akin to GNOME's behavior.
 - delayedDeletion: true
   $name: Don't delete empty desktop immediately
   $description: When a desktop gets empty, it waits for you to switch desktop before deleting it.
@@ -84,7 +81,6 @@ DECLARE_INTERFACE_IID_(IVirtualDesktopManagerInternal, IUnknown, "53f5ca0b-158f-
 
 // Global Variables
 struct ModSettings {
-    int initialDesktops;
     bool delayedDeletion;
 } g_settings;
 
@@ -100,11 +96,8 @@ UINT_PTR g_debounceTimer = 0;
 GUID g_lastActiveDesktop = {0};
 
 void LoadSettings() {
-    bool useTwo = Wh_GetIntSetting(L"twoInitialDesktops") != 0;
-    g_settings.initialDesktops = useTwo ? 2 : 1; 
     g_settings.delayedDeletion = Wh_GetIntSetting(L"delayedDeletion") != 0;
-    
-    Wh_Log(L"twoInitialDesktops: %d, delayedDeletion: %d", g_settings.initialDesktops, g_settings.delayedDeletion);
+    Wh_Log(L"Settings Loaded - delayedDeletion: %d", g_settings.delayedDeletion);
 }
 
 void CleanupCOM() {
@@ -132,7 +125,7 @@ bool InitializeCOM() {
     return true;
 }
 
-bool IsValidAppWindow(HWND hwnd) {
+bool IsValidAppWindow(HWND hwnd, const GUID& currentDesktopId) {
     if (!IsWindowVisible(hwnd)) return false;
     
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
@@ -152,6 +145,17 @@ bool IsValidAppWindow(HWND hwnd) {
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
         // 1 = DWM_CLOAKED_APP (phantom UWP background apps)
         if (cloaked & 1) return false;
+        
+        // 2 = DWM_CLOAKED_SHELL 
+        // Ensures suspended UWP apps don't falsely populate desktops
+        if (cloaked & 2) {
+            GUID winDesktopId = {0};
+            if (g_pPublicDesktopManager && SUCCEEDED(g_pPublicDesktopManager->GetWindowDesktopId(hwnd, &winDesktopId))) {
+                if (memcmp(&winDesktopId, &currentDesktopId, sizeof(GUID)) == 0) {
+                    return false;
+                }
+            }
+        }
     }
 
     return true;
@@ -160,11 +164,12 @@ bool IsValidAppWindow(HWND hwnd) {
 struct EnumCtx {
     std::vector<GUID> windowDesktops;
     int candidates = 0;
+    GUID currentDesktopId;
 };
 
 BOOL CALLBACK CollectWindowDesktops(HWND hwnd, LPARAM lParam) {
     auto* ctx = (EnumCtx*)lParam;
-    if (IsValidAppWindow(hwnd)) {
+    if (IsValidAppWindow(hwnd, ctx->currentDesktopId)) {
         ctx->candidates++;
         GUID id{};
         if (SUCCEEDED(g_pPublicDesktopManager->GetWindowDesktopId(hwnd, &id))) {
@@ -223,9 +228,10 @@ void EvaluateDesktops() {
     }
 
     EnumCtx ctx;
+    ctx.currentDesktopId = currentDesktopId;
     EnumWindows(CollectWindowDesktops, (LPARAM)&ctx);
 
-    // Protezione contro il fallimento totale di COM.
+    // Safeguard against complete temporary COM failure mapping to prevent unintended deletions
     if (ctx.candidates > 0 && ctx.windowDesktops.empty()) {
         Wh_Log(L"Could not map any window to a desktop, skipping evaluation to prevent data loss.");
         pDesktops->Release();
@@ -267,66 +273,55 @@ void EvaluateDesktops() {
         }
     }
 
-    // RULE 1
+    // Determine the desired total number of desktops (GNOME behavior)
+    int desiredTotal = lastPopulatedIndex + 2;
     if (lastPopulatedIndex == -1) {
-        Wh_Log(L"No populated desktops.");
-        while (totalDesktops > (UINT)g_settings.initialDesktops) {
-            Wh_Log(L"Rule 1: Destroying excess desktop (remaining: %u).", totalDesktops - 1);
-            g_pDesktopManager->RemoveDesktop(desktops.back(), desktops.front());
-            desktops.back()->Release(); 
-            totalDesktops--;
-            desktops.pop_back();
-            desktopIds.pop_back();
-        }
-        while (totalDesktops < (UINT)g_settings.initialDesktops) {
-            Wh_Log(L"Creating missing base desktop.");
-            IVirtualDesktop* newDesktop = nullptr;
-            g_pDesktopManager->CreateDesktop(&newDesktop);
-            if (newDesktop) newDesktop->Release();
-            totalDesktops++;
-        }
-        goto Cleanup;
+        // If ZERO windows are open in the entire system, we strictly enforce EXACTLY ONE desktop.
+        desiredTotal = 1;
     }
 
-    // RULE 2
-    {
-        int desiredTotal = lastPopulatedIndex + 2;
-        if (totalDesktops < (UINT)desiredTotal) {
-            Wh_Log(L"Creating a new empty desktop on the right.");
-            IVirtualDesktop* newDesktop = nullptr;
-            g_pDesktopManager->CreateDesktop(&newDesktop);
-            if (newDesktop) newDesktop->Release();
-        } else if (totalDesktops > (UINT)desiredTotal) {
-            for (int i = totalDesktops - 1; i >= desiredTotal; --i) {
-                if (g_settings.delayedDeletion && memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0 && !triggeredBySwitch) {
-                    Wh_Log(L"Skipping deletion of in-use desktop (Still on desktop).");
-                    continue; 
-                }
-                Wh_Log(L"Destroying excess empty desktop at the end.");
-                g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i-1]);
-            }
-        }
-    }
-
-    // RULE 3
-    for (int i = 0; i <= lastPopulatedIndex; ++i) {
-        if (windowCounts[i] == 0) {
+    // Handle Trailing Desktops (Excess or Missing at the end)
+    if (totalDesktops < (UINT)desiredTotal) {
+        Wh_Log(L"Creating a new empty desktop on the right.");
+        IVirtualDesktop* newDesktop = nullptr;
+        g_pDesktopManager->CreateDesktop(&newDesktop);
+        if (newDesktop) newDesktop->Release();
+    } else if (totalDesktops > (UINT)desiredTotal) {
+        for (int i = totalDesktops - 1; i >= desiredTotal; --i) {
             bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
-            if (g_settings.delayedDeletion) {
-                if (triggeredBySwitch && !isCurrent) {
-                    Wh_Log(L"Destroying empty desktop in the middle (Switched to other desktop).");
-                    g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : i + 1]);
-                }
-            } else {
-                if (!isCurrent) {
+            
+            // Only respect delayedDeletion if the system IS NOT completely empty. 
+            // If the system is completely empty (lastPopulatedIndex == -1), ruthlessly destroy down to 1.
+            if (lastPopulatedIndex != -1 && g_settings.delayedDeletion && isCurrent) {
+                Wh_Log(L"Skipping deletion of in-use trailing desktop.");
+                break; 
+            }
+            
+            Wh_Log(L"Destroying excess empty trailing desktop.");
+            g_pDesktopManager->RemoveDesktop(desktops[i], desktops[0]);
+        }
+    }
+
+    // Handle Middle Desktops
+    if (lastPopulatedIndex != -1) {
+        // Safe fallback guaranteed to survive (the last populated desktop)
+        IVirtualDesktop* pFallback = desktops[lastPopulatedIndex];
+        for (int i = 0; i < lastPopulatedIndex; ++i) {
+            if (windowCounts[i] == 0) {
+                bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
+                if (g_settings.delayedDeletion) {
+                    if (triggeredBySwitch && !isCurrent) {
+                        Wh_Log(L"Destroying empty desktop in the middle (Switched to other desktop).");
+                        g_pDesktopManager->RemoveDesktop(desktops[i], pFallback);
+                    }
+                } else {
                     Wh_Log(L"Destroying empty desktop in the middle (Immediate).");
-                    g_pDesktopManager->RemoveDesktop(desktops[i], desktops[i > 0 ? i - 1 : i + 1]);
+                    g_pDesktopManager->RemoveDesktop(desktops[i], pFallback);
                 }
             }
         }
     }
 
-Cleanup:
     for (auto* p : desktops) {
         p->Release();
     }
@@ -387,22 +382,24 @@ BOOL WhTool_ModInit() {
     LoadSettings();
     
     g_hReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hReadyEvent) {
+        return FALSE;
+    }
+
     g_hThread = CreateThread(NULL, 0, BackgroundEventThread, NULL, 0, &g_threadId);
-    
-    if (!g_hThread) {
-        if (g_hReadyEvent) {
-            CloseHandle(g_hReadyEvent);
-            g_hReadyEvent = nullptr;
+    if (!g_hThread || WaitForSingleObject(g_hReadyEvent, 5000) != WAIT_OBJECT_0) {
+        if (g_hThread) {
+            CloseHandle(g_hThread);
+            g_hThread = nullptr;
+            g_threadId = 0;
         }
+        CloseHandle(g_hReadyEvent);
+        g_hReadyEvent = nullptr;
         return FALSE;
     }
     
-    if (g_hReadyEvent) {
-        WaitForSingleObject(g_hReadyEvent, 5000);
-        CloseHandle(g_hReadyEvent);
-        g_hReadyEvent = nullptr;
-    }
-    
+    CloseHandle(g_hReadyEvent);
+    g_hReadyEvent = nullptr;
     return TRUE;
 }
 
