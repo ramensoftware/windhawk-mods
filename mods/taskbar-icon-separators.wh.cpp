@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         0.5.32
+// @version         0.5.35
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -39,7 +39,7 @@ Windows 11 only.
   $description: >-
     Customizable part of separator identities. A fixed unique suffix is always appended.
     
-    Change this if naming collision occurs (very rare!). Changing this while the mod isn't fully unloaded may cause troubles with cleanup, so be careful.
+    Change this only if a naming collision occurs (very rare).
 - maxWidthCompatibilityMode: false
   $name: Taskbar Icon Size Compatibility Mode
   $description: >-
@@ -568,7 +568,9 @@ static void LoadSettings() {
 
     // Wh_GetIntSetting returns 0 for a missing setting.
     // Positions are therefore deliberately user-facing 1-based values.
-    constexpr int kMaxSeparators = 64;
+    constexpr int kMaxSeparators = 256;
+    constexpr int kMinWidth = 1;
+    constexpr int kMaxWidth = 1000;
 
     for (int i = 0; i < kMaxSeparators; i++) {
         int position =
@@ -586,10 +588,33 @@ static void LoadSettings() {
             continue;
         }
 
-        int width =
+        int configuredWidth =
             Wh_GetIntSetting(L"separators[%d].width", i);
-        int widthSmall =
+        int configuredWidthSmall =
             Wh_GetIntSetting(L"separators[%d].widthSmall", i);
+        int width = std::clamp(
+            configuredWidth,
+            kMinWidth,
+            kMaxWidth);
+        int widthSmall = std::clamp(
+            configuredWidthSmall,
+            kMinWidth,
+            kMaxWidth);
+
+        if (width != configuredWidth) {
+            Wh_Log(
+                L"[SETTINGS] Clamped separator %d width from %d to %d",
+                i + 1,
+                configuredWidth,
+                width);
+        }
+        if (widthSmall != configuredWidthSmall) {
+            Wh_Log(
+                L"[SETTINGS] Clamped separator %d small width from %d to %d",
+                i + 1,
+                configuredWidthSmall,
+                widthSmall);
+        }
 
         g_settings.separators.push_back({
             .ordinal = i + 1,
@@ -1135,8 +1160,12 @@ struct SeparatorVisualState {
 
     bool mediumExtentCaptured = false;
     double originalMediumExtent = 0;
+    bool mediumExtentApplied = false;
+    double lastAppliedMediumExtent = 0;
     bool smallExtentCaptured = false;
     double originalSmallExtent = 0;
+    bool smallExtentApplied = false;
+    double lastAppliedSmallExtent = 0;
 
     bool maxWidthCaptured = false;
     winrt::Windows::Foundation::IInspectable originalMaxWidthLocalValue{
@@ -1208,7 +1237,12 @@ static bool ApplySeparatorWidthOverride(
         return false;
     }
 
-    if (!state.mediumExtentCaptured) {
+    // UpdateVisualStates runs after Windows and downstream hooks. If their
+    // latest extent differs from the value this mod previously enforced,
+    // treat it as the new stock value to restore later.
+    if (!state.mediumExtentCaptured ||
+        !state.mediumExtentApplied ||
+        *mediumExtent != state.lastAppliedMediumExtent) {
         state.originalMediumExtent = *mediumExtent;
         state.mediumExtentCaptured = true;
     }
@@ -1217,6 +1251,8 @@ static bool ApplySeparatorWidthOverride(
         *mediumExtent = separator.width;
         changed = true;
     }
+    state.lastAppliedMediumExtent = separator.width;
+    state.mediumExtentApplied = true;
 
     // On DynamicIconScaling builds the small extent immediately precedes
     // the medium extent. Don't assume that layout on older taskbars.
@@ -1224,7 +1260,9 @@ static bool ApplySeparatorWidthOverride(
         double* smallExtent = mediumExtent - 1;
 
         if (*smallExtent >= 1 && *smallExtent < 10000) {
-            if (!state.smallExtentCaptured) {
+            if (!state.smallExtentCaptured ||
+                !state.smallExtentApplied ||
+                *smallExtent != state.lastAppliedSmallExtent) {
                 state.originalSmallExtent = *smallExtent;
                 state.smallExtentCaptured = true;
             }
@@ -1233,6 +1271,8 @@ static bool ApplySeparatorWidthOverride(
                 *smallExtent = separator.widthSmall;
                 changed = true;
             }
+            state.lastAppliedSmallExtent = separator.widthSmall;
+            state.smallExtentApplied = true;
         }
     }
 
@@ -1824,27 +1864,42 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         stateIt = std::prev(g_separatorVisualStates.end());
     }
 
-    SeparatorVisualState& state = *stateIt;
-
     if (g_settings.maxWidthCompatibilityMode) {
         // Compatibility path: native/TIS extents remain untouched.
         ApplySeparatorMaxWidthOverride(
-            state,
+            *stateIt,
             element,
             *separator);
     } else {
         // Default path: original per-instance medium/small extent override.
         if (!ApplySeparatorWidthOverride(
-                state,
+                *stateIt,
                 *separator)) {
             // A future build can retain the symbol while changing the object
             // layout. Keep the separator usable with the public XAML fallback.
             ApplySeparatorMaxWidthOverride(
-                state,
+                *stateIt,
                 element,
                 *separator);
         }
     }
+
+    // Native layout refresh can synchronously re-enter UpdateVisualStates. A
+    // nested frame that observes unload can restore and erase this entry, so
+    // don't retain its iterator or reference across width application.
+    stateIt = FindSeparatorVisualState(pThis);
+    if (stateIt == g_separatorVisualStates.end()) {
+        return;
+    }
+    if (g_unloading) {
+        RestoreSeparatorVisualState(stateIt);
+        return;
+    }
+    if (stateIt->restoring) {
+        return;
+    }
+
+    SeparatorVisualState& state = *stateIt;
 
     FrameworkElement iconPanel =
         FindChildByName(element, L"IconPanel");
@@ -2562,7 +2617,8 @@ static bool IsBackendStopRequested();
 static bool UnpinAndDeleteShortcut(
     IPinManagerInterop3* pinManager,
     const std::wstring& shortcutPath,
-    const wchar_t* logCategory) {
+    const wchar_t* logCategory,
+    bool recoverMissingPin = true) {
     PIDLIST_ABSOLUTE pidl = nullptr;
     HRESULT hr = GetPidlForPath(shortcutPath, &pidl);
 
@@ -2583,7 +2639,7 @@ static bool UnpinAndDeleteShortcut(
     // Establish a known pinned state, then remove it, so such backing files
     // don't become permanent false failures in future cleanup passes.
     HRESULT pinHr = S_OK;
-    if (FAILED(unpinHr)) {
+    if (FAILED(unpinHr) && recoverMissingPin) {
         pinHr =
             pinManager->PinItemFromTrustedCaller(
                 pidl,
@@ -2599,13 +2655,22 @@ static bool UnpinAndDeleteShortcut(
     CoTaskMemFree(pidl);
 
     if (FAILED(unpinHr)) {
-        Wh_Log(
-            L"[%s] Failed to remove owned shortcut '%s' "
-            L"pinHr=0x%08X unpinHr=0x%08X",
-            logCategory,
-            shortcutPath.c_str(),
-            static_cast<unsigned int>(pinHr),
-            static_cast<unsigned int>(unpinHr));
+        if (recoverMissingPin) {
+            Wh_Log(
+                L"[%s] Failed to remove owned shortcut '%s' "
+                L"pinHr=0x%08X unpinHr=0x%08X",
+                logCategory,
+                shortcutPath.c_str(),
+                static_cast<unsigned int>(pinHr),
+                static_cast<unsigned int>(unpinHr));
+        } else {
+            Wh_Log(
+                L"[%s] Failed to unpin owned shortcut '%s' "
+                L"hr=0x%08X; recovery disabled after hook removal",
+                logCategory,
+                shortcutPath.c_str(),
+                static_cast<unsigned int>(unpinHr));
+        }
         return false;
     }
 
@@ -3007,7 +3072,7 @@ static bool SeparatorShortcutArtifactsExist() {
     return !EnumerateSeparatorShortcuts().empty();
 }
 
-static bool UnpinAndDeleteSeparators() {
+static bool UnpinAndDeleteSeparators(bool recoverMissingPins) {
     std::vector<std::wstring> shortcutPaths =
         EnumerateSeparatorShortcuts();
 
@@ -3037,7 +3102,8 @@ static bool UnpinAndDeleteSeparators() {
         if (!UnpinAndDeleteShortcut(
                 pinManager,
                 *it,
-                L"CLEANUP")) {
+                L"CLEANUP",
+                recoverMissingPins)) {
             allUnpinned = false;
         }
     }
@@ -3144,6 +3210,39 @@ static HWND FindCurrentProcessTaskbarWnd() {
         reinterpret_cast<LPARAM>(&taskbarWnd));
 
     return taskbarWnd;
+}
+
+static bool CleanupSeparatorArtifacts(bool recoverMissingPins) {
+    // Shared mod storage may be visible to several explorer.exe instances.
+    // Only the process that owns Shell_TrayWnd may mutate the taskbar pin list.
+    if (!FindCurrentProcessTaskbarWnd() ||
+        !SeparatorShortcutArtifactsExist()) {
+        return true;
+    }
+
+    HRESULT hrInit =
+        CoInitializeEx(
+            nullptr,
+            COINIT_APARTMENTTHREADED);
+
+    const bool shouldUninitialize = SUCCEEDED(hrInit);
+
+    if (hrInit != RPC_E_CHANGED_MODE && FAILED(hrInit)) {
+        Wh_Log(
+            L"[CLEANUP] CoInitializeEx failed hr=0x%08X; "
+            L"can't safely remove separators",
+            static_cast<unsigned int>(hrInit));
+        return false;
+    }
+
+    bool success =
+        UnpinAndDeleteSeparators(recoverMissingPins);
+
+    if (shouldUninitialize) {
+        CoUninitialize();
+    }
+
+    return success;
 }
 
 static bool StartBackendWorkerLocked() {
@@ -3319,10 +3418,14 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
+    // Join the worker first, then remove pins while the styling and input
+    // hooks can still keep a transient recovery pin styled and inert.
+    StopBackendWorker();
+    CleanupSeparatorArtifacts(true);
+
     // Stop applying separator state, then restore every tracked container on
     // its owning taskbar UI thread before Windhawk removes the hooks.
     g_unloading = true;
-    StopBackendWorker();
     RestoreTrackedSeparatorVisualStates();
 }
 
@@ -3333,35 +3436,11 @@ void Wh_ModUninit() {
     g_unloading = true;
     StopBackendWorker();
 
-    // Cleanup is based on durable artifacts, not worker or hook readiness.
-    // This also removes leftovers from an earlier Explorer session when the
-    // current taskbar implementation couldn't be hooked.
-    if (!SeparatorShortcutArtifactsExist()) {
-        Wh_Log(L"[UNINIT] Taskbar Icon Separators unloaded");
-        return;
-    }
-
-    HRESULT hrInit =
-        CoInitializeEx(
-            nullptr,
-            COINIT_APARTMENTTHREADED);
-
-    const bool shouldUninitialize =
-        SUCCEEDED(hrInit);
-
-    if (hrInit != RPC_E_CHANGED_MODE && FAILED(hrInit)) {
-        Wh_Log(
-            L"[UNINIT] CoInitializeEx failed hr=0x%08X; "
-            L"can't safely remove separators",
-            static_cast<unsigned int>(hrInit));
-        return;
-    }
-
-    UnpinAndDeleteSeparators();
-
-    if (shouldUninitialize) {
-        CoUninitialize();
-    }
+    // Defensive fallback for Windhawk builds that skip Wh_ModBeforeUninit.
+    // Hooks may already be gone here, so never recover an absent pin by
+    // temporarily pinning it again. Cleanup is also restricted to the
+    // explorer.exe instance that actually owns the taskbar.
+    CleanupSeparatorArtifacts(false);
 
     Wh_Log(L"[UNINIT] Taskbar Icon Separators unloaded");
 }
