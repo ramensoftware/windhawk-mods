@@ -1688,7 +1688,7 @@ bool HookTaskbarView(HMODULE module) {
         return true;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))",
@@ -1711,8 +1711,8 @@ bool HookTaskbarView(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
-                                    ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks,
+                                    ARRAYSIZE(taskbarViewHooks))) {
         g_taskbarViewHooked = false;
         Wh_Log(L"Taskbar.View hooks failed");
         return false;
