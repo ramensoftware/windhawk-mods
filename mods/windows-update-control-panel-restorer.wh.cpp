@@ -48,7 +48,7 @@
   $description: When Windows Update is unavailable or disabled, the restored page shows a legacy red Check for updates for your PC box whose button cannot work, because the service is stopped. With this enabled, that broken legacy box is removed so only the Turn on automatic updating box remains, plus the blue settings link when the recreated interface is shown. Disable to keep the legacy box.
 - ShowNativeCombobox: false
   $name: Show native combobox
-  $description: The "Important updates" combobox on the classic settings page looks interactive, but it is not functional yet. Therefore, selecting an option does not actually change Windows Update's behavior. Disabled by default, which shows a single, disabled placeholder item pointing to the real Settings app instead. Enable this to show the full option list again (still without saving a selection).
+  $description: The "Important updates" combobox on the classic settings page looks interactive, but it is not functional yet - selecting an option does not actually change Windows Update's behavior. Disabled by default, which shows a single, disabled placeholder item pointing to the real Settings app instead. Enable this to show the full option list again (still without saving a selection).
 */
 // ==/WindhawkModSettings==
 
@@ -136,7 +136,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
 
 - **Update installation**: The mod provides a read‑only view of Windows Update status. Installing updates still needs to be done through the modern Settings app, as adding this functionality would require extensive reverse engineering of the original Windows Update client.
 - **Visual differences**: The restored interface may not be 100% identical to the original Windows 7/8.1 Control Panel page in the first versions. Visual improvements will come in future updates.
-- **Classic Settings page**: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible.
+- **Classic Settings page**: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible and it's currently a decorative page. However, if proper documentation to improve it is found, a better implementation will be done.
 ## **Credits**
 
 - **Yvor** - Testing on Windows 10 21H2.
@@ -199,6 +199,10 @@ If any issues are encountered, please report them to the author of the mod.
 // documented GUIDs for these interfaces.
 DEFINE_GUID(kClsidUpdateSession, 0x4CB43D7F, 0x7EEE, 0x4906, 0x86, 0x98, 0x60, 0xDA, 0x1C, 0x38, 0xF2, 0xFE);
 DEFINE_GUID(kIidUpdateSession, 0x816858A4, 0x260D, 0x4260, 0x93, 0x3A, 0x25, 0x85, 0xF1, 0xAB, 0xC7, 0x6B);
+// ISearchCompletedCallback is not declared by Windhawk's bundled wuapi.h.
+// BeginSearch takes IUnknown* and QueryInterfaces it for this documented IID
+// ({88AEE058-D4B0-4725-A2F1-814A67AE964C}).
+DEFINE_GUID(kIidSearchCompletedCallback, 0x88AEE058, 0xD4B0, 0x4725, 0xA2, 0xF1, 0x81, 0x4A, 0x67, 0xAE, 0x96, 0x4C);
 
 // Use RtlGetVersion as the authoritative source. Unlike GetVersionEx and the
 // version-helper macros, it is not affected by the executable's compatibility
@@ -555,6 +559,21 @@ static std::mutex g_rebuildMutex;
 // g_stopEvent here would also be observed by the unrelated download/setup
 // workers, which is not what a settings change should do.
 static HANDLE g_rebuildAbortEvent = nullptr;
+
+// Manual-reset, initially unsignaled; SetEvent()'d only from Wh_ModUninit, so
+// RunRealWindowsUpdateSearch can turn its otherwise-uncancellable, minutes-long
+// IUpdateSearcher::Search into something bounded: it waits on this event
+// alongside the search's own completion event and, once signaled, requests
+// the search job to abort instead of continuing to block. This is what lets
+// Wh_ModUninit join() the search thread unconditionally rather than ever
+// detach()ing it (a detached thread would keep running mod code after the
+// image is unmapped - see the join in Wh_ModUninit).
+static HANDLE g_wuSearchAbortEvent = nullptr;
+// Guards g_activeSearchJob, which Wh_ModUninit uses to call RequestAbort()
+// immediately rather than waiting for the search thread to notice
+// g_wuSearchAbortEvent on its own.
+static std::mutex g_searchJobMutex;
+static ISearchJob* g_activeSearchJob = nullptr;
 
 // Which icon skin to use for the normal Windows Update status banner.
 // 0 = Windows 7/current shield/check icons, 1 = Windows 8.1 update icon.
@@ -997,9 +1016,6 @@ static wchar_t HexUpper(BYTE nibble) {
     return nibble < 10 ? static_cast<wchar_t>(L'0' + nibble)
                        : static_cast<wchar_t>(L'A' + nibble - 10);
 }
-
-
-
 
 
 // SHA-256 over an already-open handle, so the verify step in
@@ -5170,6 +5186,27 @@ static const wchar_t* SelectChooseHowToInstallUpdatesLabel() {
     return it->second;
 }
 
+// Replaces the non-functional "Important updates" combobox on the classic
+// Change settings dialog. The selector does not write back to Windows Update
+// policy yet, so point the user at the native Settings app instead.
+static const wchar_t* SelectSettingsComboboxReplacementText() {
+    static const std::unordered_map<std::wstring, const wchar_t*> kTexts = {
+        { L"en", L"This option is still being improved. Please use the native Windows Settings app to change how updates are installed." },
+        { L"it", L"Questa opzione è ancora in miglioramento. Usa le Impostazioni di Windows per scegliere come installare gli aggiornamenti." },
+        { L"es", L"Esta opción se está mejorando. Usa Configuración de Windows para elegir cómo se instalan las actualizaciones." },
+        { L"fr", L"Cette option est encore en cours d'amélioration. Utilisez les Paramètres Windows pour choisir comment installer les mises à jour." },
+        { L"tr", L"Bu seçenek hâlâ geliştiriliyor. Güncellemelerin nasıl yükleneceğini değiştirmek için Windows Ayarları'nı kullanın." },
+        { L"ru", L"Этот параметр ещё дорабатывается. Измените способ установки обновлений в Параметрах Windows." },
+        { L"pt", L"Esta opção ainda está a ser melhorada. Use as Configurações do Windows para escolher como as atualizações são instaladas." },
+        { L"zh", L"此选项仍在改进中。请使用 Windows 设置来更改更新的安装方式。" },
+        { L"pl", L"Ta opcja jest jeszcze ulepszana. Użyj Ustawień systemu Windows, aby zmienić sposób instalacji aktualizacji." },
+        { L"nl", L"Deze optie wordt nog verbeterd. Gebruik Windows-instellingen om te kiezen hoe updates worden geïnstalleerd." },
+    };
+    auto it = kTexts.find(CurrentLanguage());
+    if (it == kTexts.end()) it = kTexts.find(L"en");
+    return it->second;
+}
+
 // Private command protocol used only by this applet's navigation links. Known
 // commands are consumed and return 33 (ShellExecute success is any value > 32);
 // unknown commands report failure with hInstApp set.
@@ -6031,40 +6068,17 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             auto* state = reinterpret_cast<WuSettingsDlgState*>(lParam);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
             RegisterWuSettingsDialog(hwnd);
-            HWND hCombo = GetDlgItem(hwnd, kWuCtlCombo);
-            if (hCombo) {
-                SendMessageW(hCombo, CB_RESETCONTENT, 0, 0);
-                const LRESULT r4 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(4));
-                const LRESULT r3 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(3));
-                const LRESULT r2 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(2));
-                const LRESULT r1 = SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)WuOptionText(1));
-                if (r4 < 0 || r3 < 0 || r2 < 0 || r1 < 0) {
-                    Wh_Log(L"Windows Update Restorer: settings combobox CB_ADDSTRING failed (r4=%d r3=%d r2=%d r1=%d)",
-                           (int)r4, (int)r3, (int)r2, (int)r1);
-                }
-                if (SendMessageW(hCombo, CB_GETCOUNT, 0, 0) == 0) {
-                    Wh_Log(L"Windows Update Restorer: settings combobox has 0 items after population");
-                }
-                int sel = 0;
-                if (state->auOptions == 4) sel = 0;
-                else if (state->auOptions == 3) sel = 1;
-                else if (state->auOptions == 2) sel = 2;
-                else if (state->auOptions == 1) sel = 3;
-                SendMessageW(hCombo, CB_SETCURSEL, sel, 0);
-            } else {
-                Wh_Log(L"Windows Update Restorer: settings dialog combobox control not found (GetDlgItem returned null)");
-            }
             CheckDlgButton(hwnd, kWuCtlRecommended, state->recommended ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlMsProducts, state->msProducts ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, kWuCtlAllUsers, state->allUsers ? BST_CHECKED : BST_UNCHECKED);
-            // Visual-only: the combobox stays enabled so the user can browse the
-            // options, but nothing here is written back to the real Windows
-            // Update policy/registry yet.
-            EnableWindow(hCombo, TRUE);
+            // The "Important updates" selector is not functional yet (it does
+            // not write back to Windows Update policy), so it is a static
+            // notice rather than a combobox. The checkboxes stay disabled
+            // for the same reason.
             EnableWindow(GetDlgItem(hwnd, kWuCtlRecommended), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlMsProducts), FALSE);
             EnableWindow(GetDlgItem(hwnd, kWuCtlAllUsers), FALSE);
-            ApplyWuSettingsDialogDarkMode(hwnd, hCombo, state);
+            ApplyWuSettingsDialogDarkMode(hwnd, nullptr, state);
             return TRUE;
         }
         case WM_CTLCOLORDLG:
@@ -6095,7 +6109,8 @@ static INT_PTR CALLBACK WuSettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             auto* state = GetWuSettingsDlgState(hwnd);
             HDC hdc = reinterpret_cast<HDC>(wParam);
             HWND hCtl = reinterpret_cast<HWND>(lParam);
-            if (hCtl == GetDlgItem(hwnd, kWuCtlNote)) {
+            if (hCtl == GetDlgItem(hwnd, kWuCtlNote) ||
+                hCtl == GetDlgItem(hwnd, kWuCtlCombo)) {
                 if (state && state->darkMode) {
                     SetTextColor(hdc, RGB(170, 170, 170));
                     SetBkColor(hdc, RGB(32, 32, 32));
@@ -6160,7 +6175,7 @@ static void ShowWuSettingsDialog(HWND parent) {
     state->auOptions = ReadAuOptionsValue();
     ReadAuxAuValues(state->recommended, state->msProducts, state->allUsers);
 
-    const int kControls = 10; // group, desc, label, combo, 3 checkboxes, note, OK, Cancel
+    const int kControls = 10; // group, desc, label, notice, 3 checkboxes, note, OK, Cancel
     BYTE* buf = new (std::nothrow) BYTE[4096];
     if (!buf) {
         ReleaseWuSettingsDialogReservation();
@@ -6239,11 +6254,13 @@ static void ShowWuSettingsDialog(HWND parent) {
     }
 
     // --- Windows 7-style layout ---
-    // "Choose how to install updates" group box with description + combobox.
+    // "Choose how to install updates" group box with description + a notice
+    // in place of the non-functional Important-updates combobox.
+    const wchar_t* comboReplacement = SelectSettingsComboboxReplacementText();
     addCtrl(BS_GROUPBOX | WS_TABSTOP, 0, 8, 6, 352, 122, 0x7F00, L"Button", grp.c_str());
     addCtrl(SS_LEFT, 0, 18, 18, 332, 38, 0x7F01, L"Static", descText);              // description (wraps)
     addCtrl(SS_LEFT, 0, 18, 62, 240, 12, 0x7F02, L"Static", importantLabel.c_str()); // "Important updates:"
-    addCtrl(CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, 0, 18, 76, 332, 120, kWuCtlCombo, L"ComboBox", L"");
+    addCtrl(SS_LEFT, 0, 18, 76, 332, 40, kWuCtlCombo, L"Static", comboReplacement);
     // Options below the group box (classic checkboxes)
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 138, 344, 14, kWuCtlRecommended, L"Button", SelectRecommendedUpdatesLabel());
     addCtrl(BS_AUTOCHECKBOX | WS_TABSTOP, 0, 16, 156, 344, 14, kWuCtlMsProducts, L"Button",
@@ -6319,15 +6336,54 @@ static void FillVerticalGradient(HDC hdc, const RECT& rc, COLORREF top, COLORREF
     }
 }
 
+// Per-monitor DPI helpers for the mod's own pixel-laid-out Win32 dialogs
+// (FAQ, check, result). The dialog shells come from a DS_SETFONT
+// DLGTEMPLATE, so their client area already scales - but the children and
+// the shared header were laid out in raw 96-DPI pixels. Explorer is
+// per-monitor-v2 aware, so GetDpiForWindow is the right source; fall back
+// to the DC's LOGPIXELSX (or 96) if the API is missing. Same pattern as
+// classic-taskbar-properties.wh.cpp.
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+#ifndef USER_DEFAULT_SCREEN_DPI
+#define USER_DEFAULT_SCREEN_DPI 96
+#endif
+
+static UINT WuGetWindowDpi(HWND hwnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    static const GetDpiForWindow_t getDpiForWindow =
+        reinterpret_cast<GetDpiForWindow_t>(
+            GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+    if (getDpiForWindow && hwnd && IsWindow(hwnd)) {
+        if (const UINT dpi = getDpiForWindow(hwnd))
+            return dpi;
+    }
+    HDC dc = GetDC(hwnd);
+    int dpi = USER_DEFAULT_SCREEN_DPI;
+    if (dc) {
+        dpi = GetDeviceCaps(dc, LOGPIXELSX);
+        ReleaseDC(hwnd, dc);
+    }
+    return dpi > 0 ? static_cast<UINT>(dpi) : USER_DEFAULT_SCREEN_DPI;
+}
+
+static int WuScalePx(int px, UINT dpi) {
+    return MulDiv(px, static_cast<int>(dpi), USER_DEFAULT_SCREEN_DPI);
+}
+
 // Paints the standard light-blue header band used by the FAQ / check dialogs:
 // gradient, accent line, applet logo (bicubic) and bold dark-blue title.
+// headerHeight and iconSize are already DPI-scaled pixels; the remaining
+// hard-coded 96-DPI offsets (16 / 10 / 14) are scaled here via `dpi`.
 static void WuPaintDialogHeader(HDC hdc, const RECT& client, int headerHeight,
                                 HICON icon, int iconSize, HFONT titleFont,
-                                const wchar_t* title) {
+                                const wchar_t* title, UINT dpi) {
+    const auto S = [dpi](int px) { return WuScalePx(px, dpi); };
     RECT header = { client.left, client.top, client.right, headerHeight };
     FillVerticalGradient(hdc, header, RGB(241, 247, 255), RGB(202, 224, 248));
 
-    HPEN linePen = CreatePen(PS_SOLID, 1, RGB(163, 207, 245));
+    HPEN linePen = CreatePen(PS_SOLID, (std::max)(1, S(1)), RGB(163, 207, 245));
     HPEN oldPen = static_cast<HPEN>(SelectObject(hdc, linePen));
     MoveToEx(hdc, client.left, headerHeight, nullptr);
     LineTo(hdc, client.right, headerHeight);
@@ -6336,20 +6392,20 @@ static void WuPaintDialogHeader(HDC hdc, const RECT& client, int headerHeight,
 
     if (icon) {
         const int y = (headerHeight - iconSize) / 2;
-        DrawIconEx(hdc, 16, y, icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+        DrawIconEx(hdc, S(16), y, icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
     }
     HFONT oldFont = titleFont ? static_cast<HFONT>(SelectObject(hdc, titleFont))
                               : nullptr;
     SetTextColor(hdc, RGB(0, 70, 130));
     SetBkMode(hdc, TRANSPARENT);
-    RECT titleRect = { 16 + iconSize + 10, 0, client.right - 14, headerHeight };
+    RECT titleRect = { S(16) + iconSize + S(10), 0, client.right - S(14), headerHeight };
     DrawTextW(hdc, title ? title : L"", -1, &titleRect,
               DT_SINGLELINE | DT_LEFT | DT_VCENTER | DT_END_ELLIPSIS);
     if (oldFont) SelectObject(hdc, oldFont);
 }
 
-static HFONT WuCreateHeaderFont() {
-    return CreateFontW(-16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+static HFONT WuCreateHeaderFont(UINT dpi) {
+    return CreateFontW(-WuScalePx(16, dpi), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 }
@@ -6473,8 +6529,10 @@ struct WuHeaderIconAndFont {
     HICON header = nullptr;
     HFONT titleFont = nullptr;
 };
-static WuHeaderIconAndFont CreateWuHeaderDialogResources(HWND hwnd, int headerIconSize) {
+static WuHeaderIconAndFont CreateWuHeaderDialogResources(HWND hwnd, int headerIconSize96) {
     auto res = std::make_unique<WuHeaderDialogResources>();
+    const UINT dpi = WuGetWindowDpi(hwnd);
+    const int headerIconSize = WuScalePx(headerIconSize96, dpi);
     res->big.reset(CreateAppletLogoIconBicubic(
         IsWindows81Skin(), GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON)));
     if (res->big)
@@ -6486,7 +6544,7 @@ static WuHeaderIconAndFont CreateWuHeaderDialogResources(HWND hwnd, int headerIc
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
                      reinterpret_cast<LPARAM>(res->small.get()));
     res->header.reset(CreateAppletLogoIconBicubic(IsWindows81Skin(), headerIconSize, headerIconSize));
-    res->titleFont.reset(WuCreateHeaderFont());
+    res->titleFont.reset(WuCreateHeaderFont(dpi));
 
     WuHeaderIconAndFont out{res->header.get(), res->titleFont.get()};
     SetWindowLongPtrW(hwnd, GWLP_USERDATA,
@@ -6499,6 +6557,41 @@ static WuHeaderIconAndFont CreateWuHeaderDialogResources(HWND hwnd, int headerIc
 static void DestroyWuHeaderDialogResources(HWND hwnd) {
     delete GetWuHeaderDialogResources(hwnd);
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+}
+
+// Recreates the per-window header icon/font at the current window DPI. Used
+// from WM_DPICHANGED so a drag between monitors does not leave a 96-DPI
+// header on a 150%/200% dialog.
+static void WuRecreateHeaderDialogResources(HWND hwnd, int headerIconSize96) {
+    DestroyWuHeaderDialogResources(hwnd);
+    CreateWuHeaderDialogResources(hwnd, headerIconSize96);
+}
+
+static void WuPaintDialogHeaderForWindow(HWND hwnd, HDC hdc, const RECT& client,
+                                         int headerHeight96, int iconSize96,
+                                         const wchar_t* title) {
+    const UINT dpi = WuGetWindowDpi(hwnd);
+    const WuHeaderDialogResources* res = GetWuHeaderDialogResources(hwnd);
+    WuPaintDialogHeader(hdc, client, WuScalePx(headerHeight96, dpi),
+                        res ? res->header.get() : nullptr,
+                        WuScalePx(iconSize96, dpi),
+                        res ? res->titleFont.get() : nullptr, title, dpi);
+}
+
+static void WuApplySuggestedDpiRect(HWND hwnd, LPARAM lParam) {
+    if (const RECT* suggested = reinterpret_cast<const RECT*>(lParam)) {
+        SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                     suggested->right - suggested->left,
+                     suggested->bottom - suggested->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+static void WuApplyDialogFontToChildren(HWND dlg) {
+    for (HWND child = GetWindow(dlg, GW_CHILD); child;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+        WuApplyDialogFont(dlg, child);
+    }
 }
 
 struct WuFaqEntry {
@@ -6683,6 +6776,34 @@ static void PopulateFaqRichEdit(HWND rich, const WuFaqEntry* entries) {
     SendMessageW(rich, EM_SCROLLCARET, 0, 0);
 }
 
+// Lays the FAQ RichEdit and Close button out in DPI-scaled pixels. Shared
+// by WM_INITDIALOG and WM_DPICHANGED so the two paths cannot drift.
+static void LayoutWuFaqDialog(HWND hwnd) {
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const int cw = rc.right - rc.left;
+    const int ch = rc.bottom - rc.top;
+    const UINT dpi = WuGetWindowDpi(hwnd);
+    const auto S = [dpi](int px) { return WuScalePx(px, dpi); };
+
+    const int bodyTop = S(62);
+    const int bodyBottom = ch - S(36);
+    const int bodyHeight = bodyBottom > bodyTop ? bodyBottom - bodyTop : S(120);
+    if (HWND rich = GetDlgItem(hwnd, kWuCtlFaqBody)) {
+        SetWindowPos(rich, nullptr, S(14), bodyTop, cw - S(28), bodyHeight,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        SendMessageW(rich, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
+                     MAKELPARAM(S(8), S(8)));
+    }
+
+    const int btnW = S(68);
+    const int btnH = S(23);
+    if (HWND btnClose = GetDlgItem(hwnd, IDOK)) {
+        SetWindowPos(btnClose, nullptr, cw - S(12) - btnW, ch - btnH - S(10),
+                     btnW, btnH, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
 static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
@@ -6694,30 +6815,21 @@ static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
             // Read-only RichEdit body below the header (bold questions),
             // with a clean 3D edge. All controls are laid out from the client
-            // rectangle in pixels, so nothing can drift from the header or the
-            // Close button (mixing dialog units and pixels was what made the
-            // layout look wrong).
+            // rectangle in DPI-scaled pixels, so nothing can drift from the
+            // header or the Close button (mixing dialog units and pixels was
+            // what made the layout look wrong).
             LoadLibraryW(L"riched20.dll");
-            RECT rc{};
-            GetClientRect(hwnd, &rc);
-            const int cw = rc.right - rc.left;
-            const int ch = rc.bottom - rc.top;
-            const int bodyTop = 62;
-            const int bodyBottom = ch - 36;
-            const int bodyHeight = bodyBottom > bodyTop ? bodyBottom - bodyTop : 120;
             HWND rich = CreateWindowExW(
                 WS_EX_CLIENTEDGE, L"RichEdit20W", L"",
                 WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY |
                     WS_VSCROLL | ES_AUTOVSCROLL,
-                14, bodyTop, cw - 28, bodyHeight,
+                0, 0, 0, 0,
                 hwnd, reinterpret_cast<HMENU>(kWuCtlFaqBody),
                 GetModuleHandleW(nullptr), nullptr);
             if (rich) {
                 // Segoe UI (the dialog font), not the default GUI font.
                 WuApplyDialogFont(hwnd, rich);
                 SendMessageW(rich, EM_SETBKGNDCOLOR, 0, RGB(255, 255, 255));
-                SendMessageW(rich, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
-                             MAKELPARAM(8, 8));
                 PopulateFaqRichEdit(rich, SelectFaqEntries());
             }
 
@@ -6727,15 +6839,14 @@ static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             const wchar_t* closeText = EmbeddedMuiString(237);  // "&Close"
             if (!closeText) closeText = L"Close";
             const std::wstring closeLabel = StripAmpersand(closeText);
-            const int btnW = 68;
-            const int btnH = 23;
             HWND btnClose = CreateWindowExW(
                 0, L"BUTTON", closeLabel.c_str(),
                 WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
-                cw - 12 - btnW, ch - btnH - 10, btnW, btnH, hwnd,
+                0, 0, 0, 0, hwnd,
                 reinterpret_cast<HMENU>(IDOK),
                 GetModuleHandleW(nullptr), nullptr);
             WuApplyDialogFont(hwnd, btnClose);
+            LayoutWuFaqDialog(hwnd);
 
             // Center the window over the Control Panel window that opened it.
             if (g_wuFaqParent && IsWindow(g_wuFaqParent)) {
@@ -6769,12 +6880,17 @@ static INT_PTR CALLBACK WuFaqDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
             wchar_t title[128] = {};
             GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            const WuHeaderDialogResources* res = GetWuHeaderDialogResources(hwnd);
-            WuPaintDialogHeader(hdc, rc, 56, res ? res->header.get() : nullptr, 32,
-                                res ? res->titleFont.get() : nullptr, title);
+            WuPaintDialogHeaderForWindow(hwnd, hdc, rc, 56, 32, title);
             EndPaint(hwnd, &ps);
             return TRUE;
         }
+        case WM_DPICHANGED:
+            WuApplySuggestedDpiRect(hwnd, lParam);
+            WuRecreateHeaderDialogResources(hwnd, 32);
+            WuApplyDialogFontToChildren(hwnd);
+            LayoutWuFaqDialog(hwnd);
+            InvalidateRect(hwnd, nullptr, TRUE);
+            return TRUE;
         case WM_CTLCOLOREDIT:
             return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
         case WM_CTLCOLORSTATIC:
@@ -7356,6 +7472,23 @@ static std::wstring ComputeLastInstallDateFromUninstall() {
     return FormatWindowsRegionalDate(best.st);
 }
 
+// Lays the check-window label and progress bar out in DPI-scaled pixels.
+static void LayoutWuCheckDialog(HWND hwnd) {
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const int w = rc.right - rc.left;
+    const UINT dpi = WuGetWindowDpi(hwnd);
+    const auto S = [dpi](int px) { return WuScalePx(px, dpi); };
+    if (HWND label = GetDlgItem(hwnd, kWuCtlCheckLabel)) {
+        SetWindowPos(label, nullptr, S(16), S(44), w - S(32), S(18),
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (HWND bar = GetDlgItem(hwnd, kWuCtlCheckProgress)) {
+        SetWindowPos(bar, nullptr, S(16), S(64), w - S(32), S(14),
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
 // Check window: small, header + native progress bar, no buttons (auto-closes).
 // -----------------------------------------------------------------------------
 static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -7365,15 +7498,11 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             SetupWuCheckWindow(hwnd,
                 EmbeddedMuiString(1) ? EmbeddedMuiString(1) : L"Windows Update");
 
-            RECT rc{};
-            GetClientRect(hwnd, &rc);
-            const int w = rc.right - rc.left;
-
-            // "Checking for updates..." label below the 40px header.
+            // "Checking for updates..." label below the 40px (96-DPI) header.
             HWND label = CreateWindowExW(
                 0, L"STATIC", L"",
                 WS_CHILD | WS_VISIBLE | SS_LEFT,
-                16, 44, w - 32, 18, hwnd,
+                0, 0, 0, 0, hwnd,
                 reinterpret_cast<HMENU>(kWuCtlCheckLabel),
                 GetModuleHandleW(nullptr), nullptr);
             const wchar_t* checkingText = EmbeddedMuiString(20009);
@@ -7386,7 +7515,7 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             HWND bar = CreateWindowExW(
                 0, L"msctls_progress32", L"",
                 WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
-                16, 64, w - 32, 14, hwnd,
+                0, 0, 0, 0, hwnd,
                 reinterpret_cast<HMENU>(kWuCtlCheckProgress),
                 GetModuleHandleW(nullptr), nullptr);
             if (bar) {
@@ -7394,6 +7523,7 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                 SendMessageW(bar, PBM_SETBARCOLOR, 0, RGB(76, 175, 80));
                 SendMessageW(bar, PBM_SETPOS, 0, 0);
             }
+            LayoutWuCheckDialog(hwnd);
 
             SetTimer(hwnd, kWuCheckTimerId, kWuCheckTimerMs, nullptr);
             return TRUE;
@@ -7413,12 +7543,17 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
             wchar_t title[128] = {};
             GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            const WuHeaderDialogResources* checkRes = GetWuHeaderDialogResources(hwnd);
-            WuPaintDialogHeader(hdc, rc, 40, checkRes ? checkRes->header.get() : nullptr, 28,
-                                checkRes ? checkRes->titleFont.get() : nullptr, title);
+            WuPaintDialogHeaderForWindow(hwnd, hdc, rc, 40, 28, title);
             EndPaint(hwnd, &ps);
             return TRUE;
         }
+        case WM_DPICHANGED:
+            WuApplySuggestedDpiRect(hwnd, lParam);
+            WuRecreateHeaderDialogResources(hwnd, 28);
+            WuApplyDialogFontToChildren(hwnd);
+            LayoutWuCheckDialog(hwnd);
+            InvalidateRect(hwnd, nullptr, TRUE);
+            return TRUE;
         case WM_CTLCOLORSTATIC:
             return WuOnCtlColorStatic(reinterpret_cast<HDC>(wParam));
         case WM_TIMER:
@@ -7492,6 +7627,58 @@ static INT_PTR CALLBACK WuCheckDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 // -----------------------------------------------------------------------------
 static void ShowWuCheckResultDialog();
 
+// Lays the result-window label and the two bottom buttons out in DPI-scaled
+// pixels. Button widths are re-measured against the (already DPI-aware)
+// dialog font so a long translated "Reopen" label still cannot overlap Close.
+static void LayoutWuCheckResultDialog(HWND hwnd) {
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    const UINT dpi = WuGetWindowDpi(hwnd);
+    const auto S = [dpi](int px) { return WuScalePx(px, dpi); };
+
+    const int labelH = (h - S(80) > S(48) ? h - S(80) : S(48));
+    if (HWND label = GetDlgItem(hwnd, kWuCtlResultLabel)) {
+        SetWindowPos(label, nullptr, S(16), S(42), w - S(32), labelH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    HWND btnReopen = GetDlgItem(hwnd, IDOK);
+    HWND btnClose = GetDlgItem(hwnd, IDCANCEL);
+    if (!btnReopen || !btnClose) return;
+
+    wchar_t reopenBuf[128] = {};
+    wchar_t closeBuf[128] = {};
+    GetWindowTextW(btnReopen, reopenBuf, ARRAYSIZE(reopenBuf));
+    GetWindowTextW(btnClose, closeBuf, ARRAYSIZE(closeBuf));
+
+    HFONT dlgFont = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
+    HDC dc = GetDC(hwnd);
+    HFONT oldFont = dlgFont
+                        ? static_cast<HFONT>(SelectObject(dc, dlgFont))
+                        : nullptr;
+    auto textWidth = [&](const wchar_t* s) -> int {
+        SIZE sz{};
+        GetTextExtentPoint32W(dc, s, static_cast<int>(wcslen(s)), &sz);
+        return static_cast<int>(sz.cx);
+    };
+    const int bwReopen = (std::max)(S(100), textWidth(reopenBuf) + S(26));
+    const int bwClose = (std::max)(S(76), textWidth(closeBuf) + S(26));
+    if (oldFont) SelectObject(dc, oldFont);
+    ReleaseDC(hwnd, dc);
+
+    const int bh = S(24);
+    const int gap = S(8);
+    const int by = h - bh - S(12);
+    const int bxClose = w - S(12) - bwClose;
+    const int bxReopen = bxClose - gap - bwReopen;
+    SetWindowPos(btnReopen, nullptr, bxReopen, by, bwReopen, bh,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(btnClose, nullptr, bxClose, by, bwClose, bh,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
@@ -7499,17 +7686,12 @@ static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam,
             SetupWuCheckWindow(hwnd,
                 EmbeddedMuiString(1) ? EmbeddedMuiString(1) : L"Windows Update");
 
-            RECT rc{};
-            GetClientRect(hwnd, &rc);
-            const int w = rc.right - rc.left;
-            const int h = rc.bottom - rc.top;
-
             // Personalized message (multiline + word wrap, so the outcome text
             // AND the installed-updates date paragraph are both visible).
             HWND label = CreateWindowExW(
                 0, L"STATIC", L"",
                 WS_CHILD | WS_VISIBLE | SS_LEFT | SS_EDITCONTROL,
-                16, 42, w - 32, (h - 80 > 48 ? h - 80 : 48), hwnd,
+                0, 0, 0, 0, hwnd,
                 reinterpret_cast<HMENU>(kWuCtlResultLabel),
                 GetModuleHandleW(nullptr), nullptr);
             // Personalized outcome message + the date of the last installed
@@ -7543,48 +7725,28 @@ static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam,
             // UI (the dialog font). Each button is sized to fit its translated
             // label - measured with the SAME font the button will render with,
             // so long labels like the Spanish "Reopen" text never clip and the
-            // two buttons can never overlap.
+            // two buttons can never overlap. LayoutWuCheckResultDialog does the
+            // DPI-scaled placement.
             const wchar_t* closeText = EmbeddedMuiString(237);
             if (!closeText) closeText = L"Close";
             const std::wstring closeLabel = StripAmpersand(closeText);
             const std::wstring reopenLabel =
                 StripAmpersand(SelectWuCheckReopenButtonText());
-            HFONT dlgFont = reinterpret_cast<HFONT>(
-                SendMessageW(hwnd, WM_GETFONT, 0, 0));
-            HDC dc = GetDC(hwnd);
-            HFONT oldFont = dlgFont
-                                ? static_cast<HFONT>(SelectObject(dc, dlgFont))
-                                : nullptr;
-            auto textWidth = [&](const std::wstring& s) -> int {
-                SIZE sz{};
-                GetTextExtentPoint32W(dc, s.c_str(),
-                                      static_cast<int>(s.size()), &sz);
-                return static_cast<int>(sz.cx);
-            };
-            const int bwReopen = (std::max)(100, textWidth(reopenLabel) + 26);
-            const int bwClose = (std::max)(76, textWidth(closeLabel) + 26);
-            if (oldFont) SelectObject(dc, oldFont);
-            ReleaseDC(hwnd, dc);
-
-            const int bh = 24;
-            const int gap = 8;
-            const int by = h - bh - 12;
-            const int bxClose = w - 12 - bwClose;
-            const int bxReopen = bxClose - gap - bwReopen;
             HWND btnReopen = CreateWindowExW(
                 0, L"BUTTON", reopenLabel.c_str(),
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                bxReopen, by, bwReopen, bh, hwnd,
+                0, 0, 0, 0, hwnd,
                 reinterpret_cast<HMENU>(IDOK),
                 GetModuleHandleW(nullptr), nullptr);
             HWND btnClose = CreateWindowExW(
                 0, L"BUTTON", closeLabel.c_str(),
                 WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
-                bxClose, by, bwClose, bh, hwnd,
+                0, 0, 0, 0, hwnd,
                 reinterpret_cast<HMENU>(IDCANCEL),
                 GetModuleHandleW(nullptr), nullptr);
             WuApplyDialogFont(hwnd, btnReopen);
             WuApplyDialogFont(hwnd, btnClose);
+            LayoutWuCheckResultDialog(hwnd);
             return TRUE;
         }
         case WM_ERASEBKGND: {
@@ -7602,12 +7764,17 @@ static INT_PTR CALLBACK WuCheckResultDlgProc(HWND hwnd, UINT msg, WPARAM wParam,
             FillRect(hdc, &rc, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
             wchar_t title[128] = {};
             GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-            const WuHeaderDialogResources* checkRes = GetWuHeaderDialogResources(hwnd);
-            WuPaintDialogHeader(hdc, rc, 40, checkRes ? checkRes->header.get() : nullptr, 28,
-                                checkRes ? checkRes->titleFont.get() : nullptr, title);
+            WuPaintDialogHeaderForWindow(hwnd, hdc, rc, 40, 28, title);
             EndPaint(hwnd, &ps);
             return TRUE;
         }
+        case WM_DPICHANGED:
+            WuApplySuggestedDpiRect(hwnd, lParam);
+            WuRecreateHeaderDialogResources(hwnd, 28);
+            WuApplyDialogFontToChildren(hwnd);
+            LayoutWuCheckResultDialog(hwnd);
+            InvalidateRect(hwnd, nullptr, TRUE);
+            return TRUE;
         case WM_CTLCOLORSTATIC:
             return WuOnCtlColorStatic(reinterpret_cast<HDC>(wParam));
         case WM_COMMAND:
@@ -7708,6 +7875,46 @@ static void ShowWuCheckResultDialog() {
     SetForegroundWindow(hwnd);
 }
 
+// Minimal ISearchCompletedCallback: just signals an event so the worker
+// thread below can wait on it (alongside g_wuSearchAbortEvent) instead of
+// blocking inside IUpdateSearcher::Search with no way to interrupt it.
+//
+// Windhawk's bundled wuapi.h does not declare ISearchCompletedCallback, and
+// IUpdateSearcher::BeginSearch takes IUnknown* for the callback. Inherit
+// from IUnknown and keep Invoke as the next vtable slot so the layout
+// matches the official interface (QI / AddRef / Release / Invoke). WUA
+// QueryInterfaces this object for kIidSearchCompletedCallback.
+class WuSearchCompletedCallback : public IUnknown {
+public:
+    explicit WuSearchCompletedCallback(HANDLE completedEvent) : completedEvent_(completedEvent) {}
+    virtual ~WuSearchCompletedCallback() = default;
+
+    HRESULT __stdcall QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        if (riid == IID_IUnknown || riid == kIidSearchCompletedCallback) {
+            *ppv = static_cast<IUnknown*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG __stdcall AddRef() override { return InterlockedIncrement(&refCount_); }
+    ULONG __stdcall Release() override {
+        LONG r = InterlockedDecrement(&refCount_);
+        if (r == 0) delete this;
+        return static_cast<ULONG>(r);
+    }
+    HRESULT __stdcall Invoke(IUnknown* /*searchJob*/, IUnknown* /*callbackArgs*/) {
+        if (completedEvent_) SetEvent(completedEvent_);
+        return S_OK;
+    }
+
+private:
+    LONG refCount_ = 1;
+    HANDLE completedEvent_ = nullptr;
+};
+
 // Performs a REAL online search against Windows Update / Microsoft Update
 // using the same Windows Update Agent COM API the modern Settings app and
 // the original Windows Update Control Panel applet use. This runs on a
@@ -7717,6 +7924,15 @@ static void ShowWuCheckResultDialog() {
 // long stale or empty on a system that has updates pending. put_Online is
 // forced to TRUE so the search always reaches Microsoft's servers rather
 // than answering from a local cache.
+//
+// The search itself uses the asynchronous BeginSearch/EndSearch pair rather
+// than the synchronous Search() call: Search() has no way to be interrupted
+// and can run for minutes, which would make it impossible for Wh_ModUninit
+// to ever safely and promptly join() this thread. BeginSearch instead hands
+// back an ISearchJob that can be told to RequestAbort() at any time; the
+// wait below always returns once either the search finishes on its own or
+// g_wuSearchAbortEvent is signaled (mod unloading), so the thread's runtime
+// is now bounded by the abort path instead of by the search.
 static void RunRealWindowsUpdateSearch() {
     g_realCheckDone.store(false, std::memory_order_release);
 
@@ -7727,70 +7943,138 @@ static void RunRealWindowsUpdateSearch() {
     // else FAILED is a real init failure and the search below will fail too.
     HRESULT hr = (SUCCEEDED(hrInit) || hrInit == RPC_E_CHANGED_MODE) ? S_OK : hrInit;
     int updateCount = 0;
+    bool aborted = false;
+
+    // If unload was already requested before this thread even got going,
+    // don't start a fresh online search at all.
+    if (SUCCEEDED(hr) && g_wuSearchAbortEvent &&
+        WaitForSingleObject(g_wuSearchAbortEvent, 0) == WAIT_OBJECT_0) {
+        hr = E_ABORT;
+        aborted = true;
+    }
+
+    IUpdateSession* session = nullptr;
+    IUpdateSearcher* searcher = nullptr;
+    HANDLE completedEvent = nullptr;
+    WuSearchCompletedCallback* callback = nullptr;
+    ISearchJob* job = nullptr;
+    ISearchResult* result = nullptr;
 
     if (SUCCEEDED(hr)) {
-        IUpdateSession* session = nullptr;
         hr = CoCreateInstance(kClsidUpdateSession, nullptr, CLSCTX_INPROC_SERVER,
                                kIidUpdateSession, reinterpret_cast<void**>(&session));
-        if (SUCCEEDED(hr) && session) {
-            IUpdateSearcher* searcher = nullptr;
-            hr = session->CreateUpdateSearcher(&searcher);
-            if (SUCCEEDED(hr) && searcher) {
-                searcher->put_Online(VARIANT_TRUE);
-                BSTR criteria = SysAllocString(
-                    L"IsInstalled=0 and IsHidden=0 and Type='Software'");
-                ISearchResult* result = nullptr;
-                hr = criteria ? searcher->Search(criteria, &result) : E_OUTOFMEMORY;
-                if (criteria) SysFreeString(criteria);
-                if (SUCCEEDED(hr) && result) {
-                    OperationResultCode resultCode = orcNotStarted;
-                    result->get_ResultCode(&resultCode);
-                    if (resultCode == orcSucceeded ||
-                        resultCode == orcSucceededWithErrors) {
-                        IUpdateCollection* updates = nullptr;
-                        if (SUCCEEDED(result->get_Updates(&updates)) && updates) {
-                            LONG count = 0;
-                            updates->get_Count(&count);
-                            updateCount = static_cast<int>(count);
-
-                            // Distinguish "already downloaded, waiting to
-                            // install" from "still needs to be downloaded"
-                            // for diagnostics - both are still correctly
-                            // reported as "updates found" to the user, since
-                            // IsInstalled=0 already covers every state
-                            // before install (queued, mid-download, or fully
-                            // staged), unlike the old registry heuristic.
-                            int downloadedCount = 0;
-                            for (LONG i = 0; i < count; ++i) {
-                                IUpdate* update = nullptr;
-                                if (SUCCEEDED(updates->get_Item(i, &update)) && update) {
-                                    VARIANT_BOOL isDownloaded = VARIANT_FALSE;
-                                    if (SUCCEEDED(update->get_IsDownloaded(&isDownloaded)) &&
-                                        isDownloaded == VARIANT_TRUE) {
-                                        ++downloadedCount;
-                                    }
-                                    update->Release();
-                                }
-                            }
-                            Wh_Log(L"Windows Update Restorer: %d update(s) not installed, "
-                                   L"%d already downloaded and staged, %d still to download",
-                                   updateCount, downloadedCount, updateCount - downloadedCount);
-                            updates->Release();
+    }
+    if (SUCCEEDED(hr) && session) {
+        hr = session->CreateUpdateSearcher(&searcher);
+    }
+    if (SUCCEEDED(hr) && searcher) {
+        searcher->put_Online(VARIANT_TRUE);
+        BSTR criteria = SysAllocString(
+            L"IsInstalled=0 and IsHidden=0 and Type='Software'");
+        if (!criteria) {
+            hr = E_OUTOFMEMORY;
+        } else {
+            completedEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!completedEvent) {
+                hr = HRESULT_FROM_WIN32(GetLastError());
+            } else {
+                callback = new (std::nothrow) WuSearchCompletedCallback(completedEvent);
+                if (!callback) {
+                    hr = E_OUTOFMEMORY;
+                } else {
+                    VARIANT state{};
+                    VariantInit(&state);
+                    hr = searcher->BeginSearch(criteria, callback, state, &job);
+                    if (SUCCEEDED(hr) && job) {
+                        // Published so Wh_ModUninit can RequestAbort() this
+                        // exact job immediately, without waiting for this
+                        // thread to notice g_wuSearchAbortEvent on its own.
+                        {
+                            std::lock_guard<std::mutex> lock(g_searchJobMutex);
+                            g_activeSearchJob = job;
                         }
-                        hr = S_OK;
-                    } else {
-                        // Search ran but didn't actually succeed (e.g. no
-                        // network reached the update service) - treat as
-                        // failed rather than silently reporting "no updates".
-                        hr = E_FAIL;
+                        HANDLE waitHandles[2] = {completedEvent, g_wuSearchAbortEvent};
+                        const DWORD waitCount = g_wuSearchAbortEvent ? 2 : 1;
+                        DWORD waitResult =
+                            WaitForMultipleObjects(waitCount, waitHandles, FALSE, INFINITE);
+                        {
+                            std::lock_guard<std::mutex> lock(g_searchJobMutex);
+                            g_activeSearchJob = nullptr;
+                        }
+                        if (waitCount == 2 && waitResult == WAIT_OBJECT_0 + 1) {
+                            // Unload requested: ask the job to stop (this does
+                            // not itself block) and wait for the completed
+                            // event WUA still signals once it has actually
+                            // unwound, rather than tearing down COM state out
+                            // from under it.
+                            aborted = true;
+                            job->RequestAbort();
+                            WaitForSingleObject(completedEvent, INFINITE);
+                        }
+                        HRESULT endHr = searcher->EndSearch(job, &result);
+                        job->CleanUp();
+                        if (aborted) {
+                            hr = E_ABORT;
+                        } else if (FAILED(endHr)) {
+                            hr = endHr;
+                        } else {
+                            hr = S_OK;
+                        }
                     }
-                    result->Release();
                 }
-                searcher->Release();
             }
-            session->Release();
+            SysFreeString(criteria);
         }
     }
+
+    if (SUCCEEDED(hr) && result) {
+        OperationResultCode resultCode = orcNotStarted;
+        result->get_ResultCode(&resultCode);
+        if (resultCode == orcSucceeded || resultCode == orcSucceededWithErrors) {
+            IUpdateCollection* updates = nullptr;
+            if (SUCCEEDED(result->get_Updates(&updates)) && updates) {
+                LONG count = 0;
+                updates->get_Count(&count);
+                updateCount = static_cast<int>(count);
+
+                // Distinguish "already downloaded, waiting to
+                // install" from "still needs to be downloaded"
+                // for diagnostics - both are still correctly
+                // reported as "updates found" to the user, since
+                // IsInstalled=0 already covers every state
+                // before install (queued, mid-download, or fully
+                // staged), unlike the old registry heuristic.
+                int downloadedCount = 0;
+                for (LONG i = 0; i < count; ++i) {
+                    IUpdate* update = nullptr;
+                    if (SUCCEEDED(updates->get_Item(i, &update)) && update) {
+                        VARIANT_BOOL isDownloaded = VARIANT_FALSE;
+                        if (SUCCEEDED(update->get_IsDownloaded(&isDownloaded)) &&
+                            isDownloaded == VARIANT_TRUE) {
+                            ++downloadedCount;
+                        }
+                        update->Release();
+                    }
+                }
+                Wh_Log(L"Windows Update Restorer: %d update(s) not installed, "
+                       L"%d already downloaded and staged, %d still to download",
+                       updateCount, downloadedCount, updateCount - downloadedCount);
+                updates->Release();
+            }
+        } else {
+            // Search ran but didn't actually succeed (e.g. no
+            // network reached the update service) - treat as
+            // failed rather than silently reporting "no updates".
+            hr = E_FAIL;
+        }
+    }
+
+    if (result) result->Release();
+    if (job) job->Release();
+    if (callback) callback->Release();
+    if (completedEvent) CloseHandle(completedEvent);
+    if (searcher) searcher->Release();
+    if (session) session->Release();
 
     if (needUninit) CoUninitialize();
 
@@ -9954,16 +10238,14 @@ static void WaitForPayloadNoticeThread() {
             PostMessageW(hwnd, WM_COMMAND, IDCANCEL, 0);
             return TRUE;
         }, 0);
-        // Bounded even here: WM_CLOSE/IDCANCEL should close the message box
-        // almost immediately, but an unbounded wait in the teardown path is
-        // still a risk if that ever doesn't happen for some reason. Give up
-        // after a few more seconds rather than blocking unload indefinitely;
-        // closing the handle does not affect the thread if it is still
-        // running.
-        constexpr DWORD kFinalWaitMs = 3000;
-        if (WaitForSingleObject(thread, kFinalWaitMs) == WAIT_TIMEOUT) {
-            Wh_Log(L"Windows Update Restorer: payload-notice thread did not exit in time; giving up rather than blocking unload");
-        }
+        // This wait is safe to make unconditional: the notice thread holds no
+        // locks, runs a single MB_YESNOCANCEL MessageBoxW, and the IDCANCEL
+        // just posted will dismiss it, so this always returns promptly. An
+        // early timeout here would leave PayloadNoticeThreadProc's stack
+        // frame (return address inside this image) still running after
+        // Wh_ModUninit returns and the image is unmapped - a crash, not a
+        // hang - so this must not be bounded.
+        WaitForSingleObject(thread, INFINITE);
     }
     CloseHandle(thread);
 }
@@ -10529,6 +10811,10 @@ BOOL Wh_ModInit() {
         // to abort a stale in-flight rebuild and resets it before starting
         // the next one (see there).
         g_rebuildAbortEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        // Manual-reset, initially unsignaled; see the declaration comment -
+        // this is what lets Wh_ModUninit bound the update-search thread's
+        // wait instead of ever having to detach() it.
+        g_wuSearchAbortEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         g_stopping.store(false);
         // Only patch the safe WUAppPage content anchor (never the outer Control Panel host).
         InstallModernWuXmlPatchHook();
@@ -10727,32 +11013,28 @@ void Wh_ModUninit() {
     if (g_rebuildThread && g_rebuildThread->joinable()) g_rebuildThread->join();
     g_rebuildThread.reset();
     // The real Windows Update search thread's code lives in this image too,
-    // so it must not still be running once the image is unmapped. It is NOT
-    // actually bounded by IUpdateSearcher's own timeouts - an online
-    // IUpdateSearcher::Search call routinely takes minutes with no
-    // cancellation - so join()ing it unconditionally here can hang unload
-    // for that whole time. Wait with a timeout instead; if the search hasn't
-    // finished, detach so unload can proceed rather than block on it. The
-    // detached thread's code page becomes invalid once the image is
-    // unmapped, but by that point explorer.exe would already be blocked
-    // waiting on the WUA COM call, which is the pre-existing risk this
-    // cannot fully close without moving to the async
-    // BeginSearch/RequestAbort API - flagging that as a follow-up rather
-    // than reworking the search call in this pass.
+    // so it must not still be running once the image is unmapped.
+    // IUpdateSearcher::Search itself is uncancellable and can run for
+    // minutes, which is why RunRealWindowsUpdateSearch uses the async
+    // BeginSearch/ISearchJob API instead: signalling g_wuSearchAbortEvent and
+    // calling RequestAbort() on the active job (if any) makes the thread's
+    // wait return promptly, so the join below is bounded by the abort path
+    // rather than by the search - detach()ing here would leave mod code
+    // (the thread's own return address, IsPendingWindowsUpdate(), the
+    // g_realCheck* stores, the Wh_Log calls) running after FreeLibrary.
     {
         std::lock_guard<std::mutex> lock(g_wuSearchThreadMutex);
         if (g_wuSearchThread && g_wuSearchThread->joinable()) {
-            constexpr DWORD kSearchThreadUnloadWaitMs = 5000;
-            HANDLE handle = reinterpret_cast<HANDLE>(g_wuSearchThread->native_handle());
-            if (WaitForSingleObject(handle, kSearchThreadUnloadWaitMs) == WAIT_OBJECT_0) {
-                g_wuSearchThread->join();
-            } else {
-                Wh_Log(L"Windows Update Restorer: online update search still running at unload; detaching instead of blocking Explorer");
-                g_wuSearchThread->detach();
+            if (g_wuSearchAbortEvent) SetEvent(g_wuSearchAbortEvent);
+            {
+                std::lock_guard<std::mutex> jobLock(g_searchJobMutex);
+                if (g_activeSearchJob) g_activeSearchJob->RequestAbort();
             }
+            g_wuSearchThread->join();
         }
         g_wuSearchThread.reset();
     }
+    if (g_wuSearchAbortEvent) { CloseHandle(g_wuSearchAbortEvent); g_wuSearchAbortEvent = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_rebuildAbortEvent) { CloseHandle(g_rebuildAbortEvent); g_rebuildAbortEvent = nullptr; }
     delete g_dllPath.exchange(nullptr);
