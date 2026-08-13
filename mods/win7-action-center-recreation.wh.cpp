@@ -42,7 +42,7 @@ Windows 8.1 theme
 - **Startup Notification**: After Windows starts, if problems are detected, a balloon notification is shown regardless of cooldown, so you are never left unaware of existing issues after a reboot. The notification is driven by the periodic security check; if the notification area isn't ready yet, a fallback timer waits up to ~2 minutes before giving up.
 - **ESC to Close**: Press Escape to quickly close the flyout window.
 - **Multiple Languages Support**: English, Italian, Spanish, French, Russian, Portuguese, German, Dutch, Polish, Romanian and Turkish are currently supported.
-- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
+- **Security and Maintenance CPL Links**: The mod restores the classic side-by-side **Troubleshooting** and **Recovery** entries on the Control Panel *Security and Maintenance* hub page (as on Windows 7/8.1). The labels follow the UI language (EN/IT/ES/FR/RU/PT/DE/NL/PL/RO/TR). Troubleshooting opens the system troubleshooter shell folder while Recovery opens the Recovery applet.
 
 ## Hotkeys
 These are the hotkeys that can be configured in the mod.
@@ -414,8 +414,10 @@ static void* g_pBmpFlyoutAlert = NULL;
 static IStream* g_pStreamFlyoutGood = NULL;
 static IStream* g_pStreamFlyoutWarning = NULL;
 static IStream* g_pStreamFlyoutAlert = NULL;
-static void* g_pBmpShield = NULL;
-static IStream* g_pStreamShield = NULL;
+static void* g_pBmpShield16 = NULL;      // native 16x16, used when drawing at <=16 px
+static void* g_pBmpShield64 = NULL;      // 64x64 source, downscaled above 16 px
+static IStream* g_pStreamShield16 = NULL;
+static IStream* g_pStreamShield64 = NULL;
 
 static BOOL InitGdiPlusRendering() {
     if (g_hGdiPlus) return TRUE;
@@ -490,8 +492,10 @@ static void ShutdownGdiPlus() {
     if (g_pStreamFlyoutWarning) { g_pStreamFlyoutWarning->Release(); g_pStreamFlyoutWarning = NULL; }
     if (g_pBmpFlyoutAlert) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpFlyoutAlert); g_pBmpFlyoutAlert = NULL; }
     if (g_pStreamFlyoutAlert) { g_pStreamFlyoutAlert->Release(); g_pStreamFlyoutAlert = NULL; }
-    if (g_pBmpShield) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield); g_pBmpShield = NULL; }
-    if (g_pStreamShield) { g_pStreamShield->Release(); g_pStreamShield = NULL; }
+    if (g_pBmpShield16) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield16); g_pBmpShield16 = NULL; }
+    if (g_pStreamShield16) { g_pStreamShield16->Release(); g_pStreamShield16 = NULL; }
+    if (g_pBmpShield64) { if (pGdipDisposeImage) pGdipDisposeImage(g_pBmpShield64); g_pBmpShield64 = NULL; }
+    if (g_pStreamShield64) { g_pStreamShield64->Release(); g_pStreamShield64 = NULL; }
 
     // Shutdown GDI+ runtime
     if (g_hGdiPlus) {
@@ -1696,22 +1700,8 @@ static const WCHAR icon_shield_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAC
 
 // Smaller variant of the shield asset, used on lower-resolution displays
 // (e.g. ~1366x768 and similar common laptop panels) to keep the icon crisp
-// without upscaling a larger source image.
+// without downscaling a larger source image.
 static const WCHAR icon_shield_small_b64[] = L"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAC9klEQVR4nG2TTWgcdRjGf//5yM7sxP2o2aRGa5rDVgUjEgpV0UOFzUG9RBGhohfxIAiFTXPTi0IRY2YuoifFU1i9LEgMIhK9iEKMhZWUYmqaQJqEWdPsrNmZnZ2Pv4fYmMa+l/fyPD/e93l5BXeparU6Ojg4+LkQ4hFASdO00Ww2X7Fte/e4Vhwzni6Xy9NCiJfGx8dP5HI5VUop2+12vLS0dEtV1a9XV1c/sG17/Q7A1NTUC6VS6V1FUUYmJiaKQgjt0o++0sLgo+Kb5PIFvPw7vf7+/nRxcdFL03Sl2Ww6s7Oz8xqAaZqXK5XKw5Zlac9/qwo96HDh/Bm+/HmL+/Mup8abXLtysa+zM0ylcllN0/SZer0+AswrAIqiWIVCQat8lxPnRi0uPPsgV3clcRDRly0h9JcZO6dzcnidcOktPZvNKqqqZgCU26tIKens74Ou88vNHldXW+itAEUN0NQNpHyckbJPTHJHiNq/PRXiIM9fNzyinsDa9oiDGEXvcmv9CqqmoWYstEwKgJTyP4CU0hdCyDj4W4SxDt0OfhSj6DoyhtBTSBH0ejEiUgFSKeXeISBJkmXf9898cuL1zPkn+skWMwd7CcnoF/OEsaBPE+QzCqf2b/Dx2TBJkuT3wwziOP7Ndd3wsYESGjpG9h6MooEQCgiFxBzCGBhB3jdIsziA67qtOI6XjwK+aTQaW/rZT6O224PIgOhgCkWAmTUxCymFtXXef7ovWllZ2Y6i6KtDgG3ba67rbgoh0r/CIfwgQaZZEKBpguEHUiy/w70Zj0dLauK67jXHcTaPnpEgCF6bm5vbKox92LtxXefmnz7hXkoGyDX+YGBjGefFfFir1Ta73W71tu8Q4DjOju/7b9dqtZb10Hu9be8pfvo+Ymj7OmOnd3FePRnW6/W27/sXHcfZueszAUxPTz9nmuZnk5OTRcMwNEB6npcsLCzsBUHwxszMzMJR/f8AANVqtWwYhq3r+pOAGkXRD91u95Jt22vHtf8AU4dOukbuXlEAAAAASUVORK5CYII=";
-
-// Picks the small or the large shield asset based on the primary display resolution.
-static const WCHAR* SelectShieldAssetForResolution() {
-    int screenW = GetSystemMetrics(SM_CXSCREEN);
-    int screenH = GetSystemMetrics(SM_CYSCREEN);
-    // Common laptop panels: 1366x768, 1280x720, 1360x768, 1024x768, etc.
-    // Anything at or below ~1366x768 in area uses the small asset; sharper
-    // panels (1080p and above) use the large one.
-    const int kLowResThreshold = 1366 * 768;
-    if (screenW > 0 && screenH > 0 && (screenW * screenH) <= kLowResThreshold) {
-        return icon_shield_small_b64;
-    }
-    return icon_shield_b64;
-}
 
 
 static HICON Base64ToIcon(const WCHAR* b64) {
@@ -2166,14 +2156,22 @@ void InitFlyoutIcons() {
         g_pStreamFlyoutAlert = NULL;
     }
     
-    // Clean up existing shield bitmap
-    if (g_pBmpShield && pGdipDisposeImage) {
-        pGdipDisposeImage(g_pBmpShield);
-        g_pBmpShield = NULL;
+    // Clean up existing shield bitmaps
+    if (g_pBmpShield16 && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpShield16);
+        g_pBmpShield16 = NULL;
     }
-    if (g_pStreamShield) {
-        g_pStreamShield->Release();
-        g_pStreamShield = NULL;
+    if (g_pStreamShield16) {
+        g_pStreamShield16->Release();
+        g_pStreamShield16 = NULL;
+    }
+    if (g_pBmpShield64 && pGdipDisposeImage) {
+        pGdipDisposeImage(g_pBmpShield64);
+        g_pBmpShield64 = NULL;
+    }
+    if (g_pStreamShield64) {
+        g_pStreamShield64->Release();
+        g_pStreamShield64 = NULL;
     }
 
     // Load flyout flag GDI+ bitmaps for high-quality rendering
@@ -2186,13 +2184,15 @@ void InitFlyoutIcons() {
     g_hFlyoutIconWarning = Base64ToIcon(icon_id1_b64);
     g_hFlyoutIconAlert = Base64ToIcon(icon_id2_b64);
     
-    // Load SHIELD GDI+ bitmap for high-quality rendering
-    // (picks the small or large asset depending on the display resolution)
-    const WCHAR* selectedShieldB64 = SelectShieldAssetForResolution();
-    g_pBmpShield = Base64ToGdipBitmap(selectedShieldB64, &g_pStreamShield);
+    // Load SHIELD GDI+ bitmaps for high-quality rendering.
+    // Both the native 16x16 and the 64x64 source are decoded once;
+    // the paint site picks between them based on the actual DPI-scaled
+    // draw size, since resolution and DPI are independent.
+    g_pBmpShield16 = Base64ToGdipBitmap(icon_shield_small_b64, &g_pStreamShield16);
+    g_pBmpShield64 = Base64ToGdipBitmap(icon_shield_b64, &g_pStreamShield64);
     
-    // Load shield HICON as fallback
-    g_hShieldIcon = Base64ToIcon(selectedShieldB64);
+    // Load shield HICON as fallback (always from the 64x64 source)
+    g_hShieldIcon = Base64ToIcon(icon_shield_b64);
     
     // --- FALLBACK CHAIN FOR SHIELD ICON ---
     // If the embedded shield icon failed to decode, try system DLLs
@@ -2206,10 +2206,10 @@ void InitFlyoutIcons() {
         }
     }
     
-    // Also ensure the GDI+ shield bitmap has a fallback
+    // Also ensure the GDI+ shield bitmaps have a fallback
     // If GDI+ failed, we'll still have the HICON from above
-    if (!g_pBmpShield && g_hShieldIcon) {
-        // GDI+ bitmap not available, but we have the HICON - that's fine
+    if (!g_pBmpShield16 && !g_pBmpShield64 && g_hShieldIcon) {
+        // GDI+ bitmaps not available, but we have the HICON - that's fine
         // The paint code will fall back to DrawIconEx
     }
     
@@ -4582,10 +4582,11 @@ if (activeProblems > 0) {
                     RoundRect(hdcMem, rcHover.left, rcHover.top, rcHover.right, rcHover.bottom, 3, 3);
                     SetCursor(LoadCursor(NULL, IDC_HAND));
                 }
-if (g_pBmpShield || g_hShieldIcon) {
+if (g_pBmpShield16 || g_pBmpShield64 || g_hShieldIcon) {
     int iconSize = ScaleDpi(16);
     int shieldY = rowTop;
-    if (!DrawGdipBitmapHighQuality(hdcMem, g_pBmpShield, shieldX, shieldY, iconSize, iconSize)) {
+    void* bmpShield = (iconSize <= 16 && g_pBmpShield16) ? g_pBmpShield16 : g_pBmpShield64;
+    if (!DrawGdipBitmapHighQuality(hdcMem, bmpShield, shieldX, shieldY, iconSize, iconSize)) {
         // Fallback 
         DrawIconEx(hdcMem, shieldX, shieldY, g_hShieldIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
     }
