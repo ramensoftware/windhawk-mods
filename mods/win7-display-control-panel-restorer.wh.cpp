@@ -1,0 +1,9694 @@
+// ==WindhawkMod==
+// @id              win7-display-control-panel-restorer
+// @name            Classic Display Control Panel Restorer
+// @description     This mod restores the classic Display and Screen Resolution Control Panel pages on Windows 10 and 11
+// @version         1.0.0
+// @author          babamohammed
+// @github          https://github.com/babamohammed2022
+// @include         explorer.exe
+// @include         control.exe
+// @include         rundll32.exe
+// @architecture    x86-64
+// @compilerOptions -lwininet -ladvapi32 -lshlwapi -lole32 -loleaut32 -loleacc -luser32 -lshell32 -luuid -lwinpthread -lgdi32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Classic Display Control Panel Restorer
+
+This mod restores the classic **Display** and **Screen Resolution** Control Panel pages on Windows 10 and 11.
+
+---
+
+## Features
+
+- **No File Replacement:** The mod is stable and user-friendly, and does not require replacing any Windows system files.
+- **Complete Classic UI:** Restores the original Control Panel layout with monitor, resolution, orientation controls, Detect, Identify, Advanced settings, Apply, and keep-changes confirmation.
+- **Full Breadcrumb & Sidebar:** Shows the original **Display > Screen Resolution** breadcrumb title and the classic Control Panel sidebar task links.
+- **Working DPI & Text Size Controls:** Custom DPI link and desktop-element text-size selector are fully functional.
+- **Classic Icon & Localized Text:** Uses the classic Display icon and localized strings for all supported languages.
+- **Optional Redirects:** Can redirect `desk.cpl`, related legacy commands, and even `ms-settings:display` to the restored classic page.
+- **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use.
+- **Safe Fallback:** If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.
+- **Instant Toggle:** Disabling the mod immediately restores normal Windows behavior for newly opened pages.
+
+---
+
+## Settings
+
+- **Page language:** Follow Windows automatically or choose a supported language.
+- **Show sidebar task links:** Show or hide the complete classic task list.
+- **Screen Resolution compatibility adaptation:** Keep enabled for the normal recommended layout.
+- **Redirect classic Display launch routes:** Restore `desk.cpl` and other classic commands.
+- **Redirect Display settings:** Open the restored classic page instead of the Settings app.
+- **Show the classic Orientation row:** Optional visual fallback for drivers that don't expose rotation.
+- **Keep classic DPI presets selectable:** Keep the classic scaling choices enabled on the Display page.
+- **Keep downloaded files:** Retain the verified component for faster re-enabling.
+
+---
+
+## How It Works
+
+The mod hooks into `explorer.exe`, `control.exe`, and `rundll32.exe` to intercept requests for the modern Display and Screen Resolution pages, and instead loads the classic Control Panel versions. The first run downloads one specific Microsoft Display component, which is verified using a pinned SHA‑256 hash before it is used. All subsequent runs use the cached copy, so an internet connection is normally needed only once.
+
+The mod has been tested on **Windows 10 21H2** and **Windows 11 25H2**, and works with the native 64‑bit Control Panel environment.
+
+---
+
+## Supported Languages
+
+English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German, Brazilian Portuguese, and Polish. The page content and the complete breadcrumb follow the selected language.
+
+---
+
+## Notes
+
+- The mod runs inside `explorer.exe` and requires **64‑bit Windows 10 or Windows 11**.
+- On first use, wait a few seconds for the setup to finish, then reopen Control Panel.
+- After changing a setting or language, close any already open Display page and reopen it.
+- If the page does not appear, check the Windhawk log for download or hash verification errors.
+- Keep **Screen Resolution compatibility adaptation** enabled for the normal recommended configuration.
+
+---
+
+## Known Limitations
+
+- **Incomplete resolution list:** In some configurations, not all available resolutions are shown in the resolution dropdown.
+- **Combobox inside the screen preview:** The combobox that appears inside the screen preview area does not function correctly.
+- The mod does not replace or modify any Windows system file; all registration is virtual and exists only while the mod is active.
+- Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.
+
+---
+
+## Credits
+
+- **Cips** — testing on Windows 11 25H2
+
+---
+
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- language: auto
+  $name: Page language
+  $description: Select the authenticated Windows 8.1 Update language catalog used by the restored page and its Control Panel tooltip. Automatic follows the current Windows UI language and falls back to English when that language is unavailable.
+  $options:
+    - auto: Automatic (Windows UI language)
+    - en-US: English (United States)
+    - it-IT: Italian
+    - es-ES: Spanish
+    - fr-FR: French
+    - tr-TR: Turkish
+    - ru-RU: Russian
+    - zh-CN: Simplified Chinese
+    - de-DE: German
+    - pt-BR: Portuguese (Brazil)
+    - pl-PL: Polish
+
+- keepFilesOnDisable: true
+  $name: Keep downloaded files if the mod is disabled
+  $description: Keep the verified Microsoft DLL for faster offline re-enabling. Private localized resource copies and stale temporary files are still cleaned when possible.
+
+- showSidebarLinks: true
+  $name: Show sidebar task links
+  $description: Publish the complete Windows 8.1 task list into the native Control Panel sidebar of the restored Display pages (Adjust resolution, Change display settings, Calibrate color, Adjust ClearType text, and the other genuine destinations). When disabled, the provider's untouched list is used instead and the sidebar is never modified.
+
+- resolutionPageCompatibility: true
+  $name: Screen Resolution page compatibility adaptation
+  $description: Apply the in-memory ResolutionControl composition fix that the Windows 8.1 Screen Resolution page needs on modern dui70.dll. Disable only if you need the untouched provider markup; the page layout, strings, and Apply behavior are unchanged either way.
+
+- redirectClassicLaunch: true
+  $name: Redirect classic Display launch routes
+  $description: Intercept the exact legacy Display command lines (bare desk.cpl, control.exe /name Microsoft.Display, and desk.cpl,,2 for Screen Resolution) and open the restored Windows 8.1 pages instead of the modern Settings handoff. When disabled, Windows keeps its default modern behavior for those launches.
+
+- redirectDisplaySettingsUri: true
+  $name: Redirect "Display settings" to the restored page
+  $description: When the desktop context menu (or any other shell component inside Explorer) opens ms-settings:display, open the restored Display page instead of the modern Settings app, like the Windows 7 desktop menu did. The Screen Resolution page is then one sidebar click away (Adjust resolution), exactly as in Windows 7. Disable to keep the modern Settings app.
+
+- showOrientationPanel: false
+  $name: Show the classic Orientation row
+  $description: Restores the Windows 7-style Orientation row (Landscape, Portrait and flipped variants) on the Screen Resolution page for adapters whose driver does not advertise rotation, where the 1511 provider hides its own row. Visual restore; on rotation-capable displays the native row already appears, so leave this OFF there to avoid a duplicate.
+
+- enableDpiPresets: true
+  $name: Keep the classic DPI preset radios selectable
+  $description: Keeps the classic 100/125/150/200% radios and the scaling checkbox on the restored Display hub selectable, like the original Windows 7 page (ON by default). Turning it OFF shows them as a static preview. Changing the scale is done through "Custom sizing options" or Display settings.
+
+*/
+// ==/WindhawkModSettings==
+#include <windows.h>
+#include <VersionHelpers.h>
+#include <commctrl.h>  // TBM_* message constants only; comctl32 stays dynamic
+#include <wininet.h>
+#include <wincrypt.h>
+#include <combaseapi.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#include <servprov.h>
+#include <oaidl.h>
+#include <oleacc.h>
+#include <cstdint>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
+#include <cwchar>
+#include <cwctype>
+#include <cctype>
+#include <new>
+#include <string>
+#include <unordered_map>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <utility>
+#include <vector>
+#include <thread>
+#include <atomic>
+#include <optional>
+#include <algorithm>
+#include <windhawk_utils.h>
+
+// Constants - the mod keeps all of its files in its own folder and never
+// shares (or deletes) files created by other mods.
+// =============================================================================
+static const wchar_t* kDllRelativeName = L"display-10.0.10586.0.dll";
+static const wchar_t* kObsoleteWin81DllRelativeName = L"display.dll";
+
+// EMBEDDED STRING CATALOG - No external MUI payload is required
+// =============================================================================
+enum class MuiLanguage {
+    EN_US, IT_IT, ES_ES, FR_FR, TR_TR, RU_RU, ZH_CN, DE_DE, PT_BR, PL_PL
+};
+
+struct MuiStringTable {
+    UINT id;
+    const wchar_t* en;
+    const wchar_t* it;
+    const wchar_t* es;
+    const wchar_t* fr;
+    const wchar_t* tr;
+    const wchar_t* ru;
+    const wchar_t* zh;
+    const wchar_t* de;
+    const wchar_t* pt;
+    const wchar_t* pl;
+};
+
+// The base catalog contains the authentic Microsoft Windows 8.1 Update
+// (6.3.9600.17031) Display strings for ten languages. IDs match that release's
+// display.dll.mui / UIFILE 201-202 resources (Hub chrome, Screen Resolution,
+// and common desktop-metrics strings). Each language was recovered from its
+// official component payload and validated MUI -> SHA-256 manifest ->
+// Microsoft-signed KB2919355 catalog. A small compatibility overlay below maps
+// the pinned 1511 provider's moved IDs back to matching legacy semantics.
+static const MuiStringTable kMuiStrings[] = {
+    {1, L"Display", L"Schermo", L"Pantalla", L"Affichage", L"Görüntü", L"Экран", L"显示", L"Anzeige", L"Vídeo", L"Ekran"},
+    {2, L"Change your display settings and make it easier to read what's on the desktop.", L"Modifica le impostazioni di visualizzazione e rendi più leggibile il contenuto del desktop.", L"Cambie la configuración de pantalla para facilitar la lectura de los elementos en el escritorio.", L"Modifiez vos paramètres d’affichage et améliorez la lisibilité sur le Bureau.", L"Görüntü ayarlarınızı değiştirin ve masaüstünüzdekileri okumayı kolaylaştırın.", L"Изменение параметров дисплея для облегчения чтения содержимого на рабочем столе.", L"更改显示器设置，使桌面上的内容更易于阅读。", L"Ändern Sie Ihre Anzeigeeinstellungen, und verbessern Sie die Lesbarkeit auf dem Desktop.", L"Altere as configurações de vídeo e facilite a leitura dos itens na área de trabalho.", L"Zmień ustawienia ekranu i popraw czytelność pulpitu."},
+    {3, L"Microsoft Display DPI Settings", L"Impostazioni DPI video Microsoft", L"Configuración de PPP de pantalla de Microsoft", L"Paramètres d’affichage haute résolution Microsoft", L"Microsoft Görüntü DPI Ayarları", L"Масштаб экрана Майкрософт", L"Microsoft 显示 DPI 设置", L"DPI-Einstellungen der Microsoft-Anzeige", L"Configurações de DPI de Vídeo da Microsoft", L"Ustawienia DPI ekranu Microsoft"},
+    {4, L"S&creen resolution", L"Risoluzione dello sc&hermo", L"Resol&ución de pantalla", L"Résol&ution d’écran", L"Ekran çöz&ünürlüğü", L"Разре&шение экрана", L"屏幕分辨率(&C)", L"&Bildschirmauflösung", L"Resolução da &tela", L"Ro&zdzielczość ekranu"},
+    {8, L"This program is blocked by group policy. For more information, contact your system administrator.", L"Questo programma è bloccato da Criteri di gruppo. Per ulteriori informazioni, contattare l'amministratore di sistema.", L"La directiva de grupo bloquea a este programa. Para obtener más información, póngase en contacto con el administrador de sistema.", L"Ce programme est bloqué par une stratégie de groupe. Pour plus d’informations, contactez votre administrateur système.", L"Bu program grup ilkesi tarafından engellendi. Daha fazla bilgi için sistem yöneticinize danışın.", L"Эта программа заблокирована групповой политикой. За дополнительными сведениями обращайтесь к системному администратору.", L"此程序被组策略阻止。有关详细信息，请与系统管理员联系。", L"Dieses Programm wurde durch eine Gruppenrichtlinie blockiert. Weitere Informationen erhalten Sie vom Systemadministrator.", L"Este programa está bloqueado pela política de grupo. Para obter mais informações, contate o administrador do sistema.", L"Ten program jest blokowany przez zasady grupy. Aby uzyskać więcej informacji, skontaktuj się z administratorem systemu."},
+    {9, L"Display Control Panel", L"Pannello di controllo Schermo", L"Panel de control de Pantalla", L"Panneau de configuration d’affichage", L"Görüntü Denetim Masası", L"Панель управления экраном", L"显示控制面板", L"Systemsteuerungsoption \"Bildschirm\"", L"Painel de Controle de Vídeo", L"Panel sterowania ekranu"},
+    {11, L"Personalization Related Tasks Pane", L"Riquadro attività correlate alla personalizzazione", L"Panel de tareas relacionadas con la personalización", L"Volet des tâches liées à la personnalisation", L"Kişiselleştirmeyle İlgili Görevler Bölmesi", L"Панель задач, связанных с персонализацией", L"与个性化相关的任务窗格", L"Verwandte Aufgaben zur Anpassung", L"Painel de Tarefas relacionadas a Personalização", L"Okienko zadań dotyczących personalizacji"},
+    {12, L"Security icon", L"Icona Sicurezza", L"Icono de seguridad", L"Icône Sécurité", L"Güvenlik simgesi", L"Значок безопасности", L"安全图标", L"Sicherheitssymbol", L"Ícone de segurança", L"Ikona zabezpieczeń"},
+    {14, L"Preview image", L"Anteprima immagine", L"Imagen de vista previa", L"Image d’aperçu", L"Önizleme görüntüsü", L"Просмотр изображения", L"预览图像", L"Vorschaubild", L"Imagem de visualização", L"Obraz podglądu"},
+    {15, L"Warning", L"Avviso", L"Advertencia", L"Avertissement", L"Uyarı", L"Предупреждение", L"警告", L"Warnung", L"Aviso", L"Ostrzeżenie"},
+    {16, L"Adjust resolution", L"Modifica risoluzione", L"Ajustar resolución", L"Ajuster la résolution", L"Çözünürlüğü ayarla", L"Настройка разрешения экрана", L"调整分辨率", L"Auflösung anpassen", L"Ajustar resolução", L"Dopasuj rozdzielczość"},
+    {17, L"Project to a second screen", L"Proietta su un secondo schermo", L"Proyectar en una segunda pantalla", L"Projeter sur un deuxième écran", L"İkinci ekrana yansıt", L"Передать изображение на второй экран", L"投影到第二屏幕", L"Auf einem zweiten Bildschirm anzeigen", L"Projetar em uma segunda tela", L"Użyj drugiego ekranu"},
+    {18, L"Change display settings", L"Cambia le impostazioni dello schermo", L"Cambiar configuración de pantalla", L"Modifier les paramètres d’affichage", L"Görüntü ayarlarını değiştir", L"Настройка параметров экрана", L"更改显示器设置", L"Anzeigeeinstellungen ändern", L"Alterar configurações de vídeo", L"Zmień ustawienia ekranu"},
+    {20, L"Change desktop background", L"Cambia lo sfondo del desktop", L"Cambiar fondo de escritorio", L"Modifier l’arrière-plan du Bureau", L"Masaüstü arka planını değiştir", L"Изменение фонового рисунка рабочего стола", L"更改桌面背景", L"Desktophintergrund ändern", L"Alterar tela de fundo da área de trabalho", L"Zmień tło pulpitu"},
+    {22, L"Change screen saver", L"Cambia screen saver", L"Cambiar protector de pantalla", L"Modifier l’écran de veille", L"Ekran koruyucuyu değiştir", L"Изменение заставки", L"更改屏幕保护程序", L"Bildschirmschoner ändern", L"Alterar a proteção de tela", L"Zmień wygaszacz ekranu"},
+    {23, L"Change window colors", L"Cambia i colori delle finestre", L"Cambiar los colores de la ventana", L"Modifier les couleurs de la fenêtre", L"Pencere renklerini değiştir", L"Изменение цветов окна", L"更改窗口颜色", L"Fensterfarben ändern", L"Alterar cores da janela", L"Zmień kolory okien"},
+    {24, L"Personalization", L"Personalizzazione", L"Personalización", L"Personnalisation", L"Kişiselleştirme", L"Персонализация", L"个性化", L"Anpassung", L"Personalização", L"Personalizacja"},
+    {25, L"Devices and Printers", L"Dispositivi e stampanti", L"Dispositivos e impresoras", L"Périphériques et imprimantes", L"Aygıtlar ve Yazıcılar", L"Устройства и принтеры", L"设备和打印机", L"Geräte und Drucker", L"Dispositivos e Impressoras", L"Urządzenia i drukarki"},
+    {26, L"Adjust brightness", L"Regola luminosità", L"Ajustar brillo", L"Ajuster la luminosité", L"Parlaklığı ayarla", L"Настройка яркости", L"调整亮度", L"Helligkeit anpassen", L"Ajustar brilho", L"Dopasuj jasność"},
+    {27, L"&Smaller - 100% (default)", L"Picc&olo - 100% (impostazione predefinita)", L"Más pe&queño: 100% (predeterminado)", L"P&etite - 100 % (par défaut)", L"Da&ha Küçük - %100 (varsayılan)", L"&Мелкий — 100% (по умолчанию)", L"较小(&S) - 100% (默认)", L"&Kleiner - 100 % (Standard)", L"&Menor - 100% (padrão)", L"&Mniejsze — 100% (domyślnie)"},
+    {28, L"&Medium - 125% (default)", L"&Medio - 125% (impostazione predefinita)", L"M&ediano: 125% (predeterminado)", L"&Moyenne - 125 % (par défaut)", L"&Orta - %125 (varsayılan)", L"&Средний — 125% (по умолчанию)", L"中等(&M) - 125% (默认)", L"&Mittel - 125 % (Standard)", L"Mé&dio - 125% (padrão)", L"Ś&rednie — 125% (domyślnie)"},
+    {29, L"&Larger - 150% (default)", L"&Grande - 150% (impostazione predefinita)", L"Má&s grande: 150% (predeterminado)", L"&Grande - 150 % (par défaut)", L"Daha &Büyük - %150 (varsayılan)", L"&Крупный — 150% (по умолчанию)", L"较大(&L) - 150% (默认)", L"&Größer - 150 % (Standard)", L"Mai&or - 150% (padrão)", L"&Większe — 150% (domyślnie)"},
+    {30, L"&Extra Large - 200% (default)", L"Molto grand&e - 200% (predefinito)", L"&Muy grande: 200% (predeterminado)", L"Très grand&e - 200 % (par défaut)", L"Ç&ok Büyük - %200 (varsayılan)", L"&Огромный — 200% (по умолчанию)", L"特大 - 200% (默认值)(&E)", L"&Extra groß - 200 % (Standard)", L"&Extra Grande - 200% (padrão)", L"&Bardzo duże — 200% (domyślnie)"},
+    {31, L"Calibrate color", L"Esegui calibrazione colore", L"Calibrar color", L"Étalonner les couleurs", L"Rengi ayarla", L"Калибровка цветов", L"校准颜色", L"Farbe kalibrieren", L"Calibrar cor", L"Kalibruj kolor"},
+    {32, L"Adjust ClearType text", L"Modifica testo ClearType", L"Ajustar texto ClearType", L"Ajuster le texte ClearType", L"ClearType metnini ayarla", L"Настройка текста ClearType", L"调整 ClearType 文本", L"ClearType-Text anpassen", L"Ajustar texto ClearType", L"Dopasuj tekst ClearType"},
+    {48, L"&Extra Extra Large - 250% (default)", L"&Grandissimo - 250% (predefinito)", L"&Extra Extra grande: 250% (predeterminado)", L"&Très très grand - 250 % (par défaut)", L"&Ekstra Ekstra Büyük - %250 (varsayılan)", L"&Гигантский - 250% (по умолчанию)", L"超特大 - 250% (默认值)(&E)", L"&Extra, extra groß - 250% (Standard)", L"&Extra Extra Grande - 250% (padrão)", L"&Bardzo, bardzo duże — 250% (domyślnie)"},
+    {200, L"Change DPI Setting", L"Cambiamento impostazione DPI", L"Cambiar configuración de PPP", L"Modifier le paramètre PPP", L"DPI Ayarını değiştir", L"Изменение масштабного коэффициента", L"更改 DPI 设置", L"DPI-Einstellung ändern", L"Alterar Configuração de DPI", L"Zmień ustawienie DPI"},
+    {201, L"Windows Setup has not changed the requested settings.  You may not have the required Administrative privilege to install or uninstall new files or drivers.  Please contact your Administrator.", L"Le impostazioni richieste non sono state modificate. Probabilmente non si dispone dei privilegi amministrativi necessari per installare o disinstallare nuovi file o driver. Contattare l'amministratore.", L"El programa de instalación de Windows no cambió la configuración solicitada. Es posible que no tenga los privilegios administrativos necesarios para instalar o desinstalar nuevos archivos o controladores. Póngase en contacto con el  administrador.", L"Le programme d’installation de Windows n’a pas modifié les paramètres demandés. Vous ne disposez peut-être pas des privilèges requis pour installer ou désinstaller de nouveaux fichiers ou pilotes. Contactez votre administrateur.", L"Windows Kurulumu, istenen ayarları değiştirmedi. Yeni dosya ya da sürücü yüklemek ya da kaldırmak için gerekli Yönetici ayrıcalığınız olmayabilir. Lütfen Yöneticinize başvurun.", L"Программа установки Windows не изменила запрашиваемые параметры.  Вы не имеете достаточных прав администрирования для установки или удаления новых файлов или драйверов.  Обратитесь к системному администратору.", L"Windows 安装程序没有更改请求的设置。你可能没有安装或卸载新文件或驱动程序所必需的管理员权限。请与管理员联系。", L"Windows Setup hat die gewünschten Einstellungen nicht geändert. Sie besitzen möglicherweise nicht die erforderlichen Administratorenrechte, um neue Dateien oder Treiber zu installieren bzw. zu entfernen. Wenden Sie sich an den Administrator.", L"O Programa de Instalação do Windows não alterou as configurações solicitadas. Você pode não possuir o privilégio administrativo necessário para instalar ou desinstalar novos arquivos ou drivers. Entre em contato com o administrador.", L"Instalator systemu Windows nie zmienił żądanych ustawień. Być może nie masz uprawnień administracyjnych wymaganych do zainstalowania lub odinstalowania nowych plików lub sterowników. Skontaktuj się z administratorem."},
+    {202, L"&Custom - %1!d!%%", L"&Personalizzato -%1!d!%%", L"&Personalizado: %1!d!%%", L"P&ersonnalisée - %1!d!%%", L"&Özel - %%%1!d!", L"По&льзовательский — %1!d!%%", L"自定义(&C) - %1!d!%%", L"Ben&utzerdefiniert - %1!d!%%", L"&Personalizado - %1!d!%%", L"&Niestandardowy — %1!d!%%"},
+    {203, L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Microsoft YaHei UI", L"Segoe UI", L"Segoe UI", L"Segoe UI"},
+    {204, L"9 point %s.", L"9 punti %s.", L"%s de 9 puntos.", L"9 points %s.", L"9 nokta %s.", L"%s, 9 пт.", L"9 点 %s。", L"9-Punkt %s", L"%s de 9 pontos.", L"9-punktowa czcionka %s."},
+    {210, L"Do you want to keep these display settings?", L"Mantenere le impostazioni dello schermo correnti?", L"¿Desea conservar esta configuración de pantalla?", L"Voulez-vous conserver ces paramètres d’affichage ?", L"Bu görüntü ayarlarını korumak istiyor musunuz?", L"Вы хотите сохранить эти параметры экрана?", L"是否要保留这些显示设置?", L"Möchten Sie diese Anzeigeeinstellungen beibehalten?", L"Deseja manter essas configurações de vídeo?", L"Czy chcesz zachować te ustawienia ekranu?"},
+    {211, L"Reverting to previous display settings in %d seconds.", L"Tra %d secondi verranno ripristinate le impostazioni dello schermo precedenti.", L"Se revertirá a la configuración anterior de pantalla en %d segundos.", L"Rétablissement des paramètres d’affichage précédents dans %d secondes.", L"%d saniye içinde önceki görüntü ayarlarına dönülecek.", L"Возврат к прежним параметрам экрана через %d сек.", L"%d 秒钟后转换为以前的显示设置。", L"In %d Sekunden auf vorherige Anzeigeeinstellungen zurücksetzen", L"Revertendo para configurações de vídeo anteriores em %d segundos.", L"Powrót do poprzednich ustawień ekranu w ciągu %d sekund."},
+    {252, L"<unavailable>", L"<non disponibile>", L"<no disponible>", L"<non disponible>", L"<yok>", L"<недоступно>", L"<无法使用>", L"<nicht verfügbar>", L"<não disponível>", L"<niedostępne>"},
+    {253, L"The display settings being saved are invalid.  Please try a different combination of display settings.", L"Le impostazioni dello schermo salvate non sono valide. Provare con una combinazione di impostazioni diversa.", L"La configuración de pantalla que se está guardando no es válida. Pruebe otra combinación para la configuración de pantalla.", L"Les paramètres d’affichage enregistrés ne sont pas valides. Essayez une autre combinaison des paramètres d’affichage.", L"Kaydedilmekte olan görüntü seçenekleri geçersiz. Farklı bir görüntü ayarı bileşimi deneyin.", L"Сохраняемые параметры дисплея недопустимы. Попробуйте задать другое сочетание параметров дисплея.", L"保存的显示设置无效。请尝试其他显示设置组合。", L"Die zu speichernden Anzeigeeinstellungen sind ungültig. Versuchen Sie es mit einer anderen Kombination von Anzeigeeinstellungen.", L"As configurações de vídeo que estão sendo salvas são inválidas.  Tente uma combinação diferente de configurações de vídeo.", L"Zapisywane ustawienia ekranu są nieprawidłowe. Spróbuj zastosować inną kombinację ustawień ekranu."},
+    {254, L"The display settings could not be saved.  You may not have the required privileges to change the machine's configuration.", L"Impossibile salvare le impostazioni dello schermo. Probabilmente non si dispone dei privilegi necessari per modificare la configurazione del computer.", L"No se puede guardar la configuración de pantalla. Es posible que no disponga de los privilegios necesarios para cambiar la configuración del equipo.", L"Les paramètres d’affichage n’ont pas pu être enregistrés. Vous ne disposez peut-être pas les droits d’accès requis pour modifier la configuration de l’ordinateur.", L"Görüntü ayarları kaydedilemedi. Makine yapılandırmasını değiştirmek için gereken ayrıcalıklara sahip olmayabilirsiniz.", L"Не удалось сохранить параметры дисплея. Возможно, у вас недостаточно привилегий для изменения конфигурации компьютера.", L"显示设置无法保存。你可能没有更改计算机配置所需的权限。", L"Die Anzeigeeinstellungen konnten nicht gespeichert werden. Möglicherweise haben Sie nicht die Berechtigungen, die zum Ändern der Konfiguration des Computers erforderlich sind.", L"Não foi possível salvar as configurações de vídeo.  Talvez você não tenha os privilégios necessários para alterar a configuração do computador.", L"Nie można zapisać ustawień ekranu. Być może nie masz uprawnień wymaganych do zmiany konfiguracji komputera."},
+    {255, L"%s and %s", L"%s e %s", L"%s y %s", L"%s et %s", L"%s ve %s", L"%s и %s", L"%s 和 %s", L"%s und %s", L"%s e %s", L"%s i %s"},
+    {256, L"Applications that are running may be preventing you from changing modes. Please close them and try again.", L"Le applicazioni in esecuzione potrebbero impedire di cambiare modalità. Chiuderle e riprovare.", L"Es posible que las aplicaciones que se están ejecutando le impidan cambiar de modo. Ciérrelas e inténtelo de nuevo.", L"Des applications en cours d’exécution peuvent vous empêcher de changer de modes. Fermez-les et réessayez.", L"Çalışan uygulamalar mod değiştirmenize engel oluyor olabilir. Bu uygulamaları kapatıp yeniden deneyin.", L"Возможно, выполняемые приложения препятствуют смене режима. Закройте эти приложения и попробуйте еще раз.", L"正在运行的应用程序可能会阻止你更改模式。请关闭这些应用程序，然后再试一次。", L"Anwendungen, die momentan ausgeführt werden, verhindern eventuell ein Ändern der Modi. Schließen Sie diese Anwendungen, und wiederholen Sie den Vorgang.", L"Aplicativos em execução podem estar impedindo a mudança de modo. Feche-os e tente de novo.", L"Uruchomione w tle aplikacje mogą przeszkadzać w zmianie trybów. Zamknij je i spróbuj ponownie."},
+    {257, L"The display control panel is unable to change the display settings.  You may not have appropriate administrative rights to change these settings.", L"Impossibile modificare le impostazioni dello schermo. È possibile che non si disponga dei diritti di amministrazione necessari per modificare tali impostazioni.", L"El panel de control de pantalla no puede cambiar la configuración de pantalla. Puede que no disponga de los derechos administrativos adecuados para cambiar esta configuración.", L"Le panneau de configuration de l’affichage ne permet pas de modifier les paramètres d’affichage. Vous ne disposez peut-être pas des droits d’administration appropriés pour modifier ces paramètres.", L"Görüntü denetim masası görüntü ayarlarını değiştiremiyor. Bu ayarları değiştirmek için uygun yönetici haklarına sahip olmayabilirsiniz.", L"Не удалось изменить параметры дисплея в панели управления. Возможно, у вас нет прав администратора для изменения этих параметров.", L"显示控制面板无法更改显示设置。你可能没有更改这些设置的相应管理权限。", L"\"Anzeige\" aus der Systemsteuerung konnte die Anzeigeeinstellungen nicht ändern. Sie haben möglicherweise nicht die erforderlichen Rechte, um diese Einstellungen zu ändern.", L"O painel de controle de vídeo não pode alterar as configurações de vídeo.  Talvez você não tenha os direitos administrativos apropriados para alterar essas configurações.", L"Nie można zmienić ustawień ekranu za pomocą apletu Ekran w Panelu sterowania. Być może nie masz odpowiednich praw administracyjnych wymaganych do zmiany tych ustawień."},
+    {300, L"Screen Resolution", L"Risoluzione dello schermo", L"Resolución de pantalla", L"Résolution d’écran", L"Ekran Çözünürlüğü", L"Разрешение экрана", L"屏幕分辨率", L"Bildschirmauflösung", L"Resolução de Tela", L"Rozdzielczość ekranu"},
+    {301, L"Unknown Monitor", L"Monitor sconosciuto", L"Monitor desconocido", L"Moniteur inconnu", L"Bilinmeyen Monitör", L"Неизвестный монитор", L"未知监视器", L"Unbekannter Monitor", L"Monitor Desconhecido", L"Nieznany monitor"},
+    {302, L"Multiple Monitors", L"Più monitor", L"Varios monitores", L"Moniteurs multiples", L"Birden Çok Monitör", L"Несколько мониторов", L"多个显示器", L"Mehrere Monitore", L"Vários Monitores", L"Kilka monitorów"},
+    {303, L"Some settings are managed by your system administrator. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Why can't I change some settings?</a>", L"Alcune impostazioni sono gestite dall'amministratore di sistema. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Perché non è possibile modificare alcune impostazioni</a>", L"El administrador del sistema administra algunas de las configuraciones. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">¿Por qué no puedo cambiar algunas configuraciones?</a>", L"Certains paramètres sont gérés par votre administrateur système. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Pourquoi certains paramètres ne sont-ils pas modifiables ?</a>", L"Bazı ayarlar sistem yöneticiniz tarafından yönetilir. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Neden bazı ayarları değiştiremiyorum?</a>", L"Некоторыми параметрами управляет системный администратор. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Почему я не могу изменить некоторые параметры?</a>", L"某些设置由系统管理员进行管理。\n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">为什么我无法更改某些设置?</a>", L"Einige Einstellungen werden vom Systemadministrator verwaltet. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Warum kann ich einige Einstellungen nicht ändern?</a>", L"Algumas configurações são gerenciadas pelo administrador do sistema. \n <a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Por que não posso alterar algumas configurações?</a>", L"Niektóre ustawienia są zarządzane przez administratora systemu. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Dlaczego nie mogę zmienić niektórych ustawień?</a>"},
+    {304, L"Some settings are managed by your system administrator. Why can't I change some settings?", L"Alcune impostazioni sono gestite dall'amministratore del sistema. Ragioni che impediscono la modifica di alcune impostazioni", L"El administrador del sistema administra algunas de las configuraciones. ¿Por qué no puedo cambiar algunas configuraciones?", L"Certains paramètres sont gérés par votre administrateur système. Pourquoi est-il impossible de changer certains paramètres ?", L"Bazı ayarlar sistem yöneticiniz tarafından yönetilir. Neden bazı ayarları değiştiremiyorum?", L"Некоторыми параметрами управляет системный администратор. Почему я не могу изменить некоторые параметры?", L"某些设置由系统管理员进行管理。为什么我无法更改某些设置?", L"Einige Einstellungen werden vom Systemadministrator verwaltet. Warum kann ich einige Einstellungen nicht ändern?", L"Algumas configurações são gerenciadas pelo administrador do sistema. Por que não posso alterar algumas configurações?", L"Niektórymi ustawieniami zarządza administrator systemu. Dlaczego nie mogę zmienić niektórych ustawień?"},
+    {305, L"The display settings can't be changed from a remote session.", L"Impossibile modificare le impostazioni di visualizzazione da una sessione remota.", L"No se puede cambiar la configuración de pantalla desde una sesión remota.", L"Les paramètres d’affichage ne sont pas modifiables depuis une session distante.", L"Görüntü ayarları uzak oturumdan değiştirilemez.", L"Параметры дисплея невозможно изменить во время удаленного сеанса.", L"无法从远程会话更改显示设置。", L"Die Anzeigeeinstellungen können nicht über eine Remotesitzung geändert werden.", L"As configurações de vídeo não podem ser alteradas de uma sessão remota.", L"Ustawień ekranu nie można zmienić z sesji zdalnej."},
+    {306, L"Another display\nnot detected", L"Altro schermo\nnon rilevato", L"No se detectó\notra pantalla", L"Autre affichage\nnon détecté", L"Başka ekran\nalgılanmadı", L"Другой дисплей\nне обнаружен", L"未检测到\n其他显示器", L"Andere Anzeige\nnicht erkannt.", L"Outro vídeo\nnão detectado", L"Nie wykryto\ninnego ekranu"},
+    {307, L"Landscape", L"Orizzontale", L"Horizontal", L"Paysage", L"Yatay", L"Альбомная", L"横向", L"Querformat", L"Paisagem", L"Pozioma"},
+    {308, L"Portrait", L"Verticale", L"Vertical", L"Portrait", L"Dikey", L"Портретная", L"纵向", L"Hochformat", L"Retrato", L"Pionowa"},
+    {309, L"Landscape (flipped)", L"Orizzontale (capovolto)", L"Horizontal (volteado)", L"Paysage (renversé)", L"Yatay (döndürülmüş)", L"Альбомная (перевернутая)", L"横向(翻转)", L"Querformat (gedreht)", L"Paisagem (virado)", L"Pozioma (odwrócona)"},
+    {310, L"Portrait (flipped)", L"Verticale (capovolto)", L"Vertical (volteado)", L"Portrait (renversé)", L"Dikey (döndürülmüş)", L"Портретная (перевернутая)", L"纵向(翻转)", L"Hochformat (gedreht)", L"Retrato (virado)", L"Pionowa (odwrócona)"},
+    {311, L"Portrait", L"Verticale", L"Vertical", L"Portrait", L"Dikey", L"Портретная", L"纵向", L"Hochformat", L"Retrato", L"Pionowa"},
+    {312, L"Landscape", L"Orizzontale", L"Horizontal", L"Paysage", L"Yatay", L"Альбомная", L"横向", L"Querformat", L"Paisagem", L"Pozioma"},
+    {313, L"Portrait (flipped)", L"Verticale (capovolto)", L"Vertical (volteado)", L"Portrait (renversé)", L"Dikey (döndürülmüş)", L"Портретная (перевернутая)", L"纵向(翻转)", L"Hochformat (gedreht)", L"Retrato (virado)", L"Pionowa (odwrócony)"},
+    {314, L"Landscape (flipped)", L"Orizzontale (capovolto)", L"Horizontal (volteado)", L"Paysage (renversé)", L"Yatay (döndürülmüş)", L"Альбомная (перевернутая)", L"横向(翻转)", L"Querformat (gedreht)", L"Paisagem (virado)", L"Pozioma (odwrócona)"},
+    {315, L"No display detected", L"Nessuno schermo rilevato", L"No se detectó ninguna pantalla", L"Aucun affichage détecté", L"Ekran algılanmadı", L"Экран не выбран", L"未检测到任何显示器", L"Keine Anzeige erkannt.", L"Nenhum vídeo detectado", L"Nie wykryto żadnego ekranu"},
+    {316, L"Primary desktop", L"Desktop primario", L"Escritorio principal", L"Bureau principal", L"Birincil masaüstü", L"Основной рабочий стол", L"主桌面", L"Primärer Desktop", L"Área de trabalho principal", L"Pulpit główny"},
+    {317, L"Extend desktop to this display", L"Estendi il desktop a questo schermo", L"Extender escritorio a esta pantalla", L"Étendre le Bureau à cet affichage", L"Masaüstünü bu ekrana genişlet", L"Расширить рабочий стол на этот экран", L"将桌面扩展到此显示器", L"Desktop auf diese Anzeige erweitern", L"Estender área de trabalho a este vídeo", L"Rozszerz pulpit na ten ekran"},
+    {318, L"Extend desktop on %d and %d", L"Estendi il desktop in %d e %d", L"Extender escritorio en %d y %d", L"Étendre le Bureau sur %d et %d", L"Masaüstünü %d ve %d üzerinde genişlet", L"Расширить рабочий стол на %d и %d", L"在 %d 和 %d 上扩展桌面", L"Desktop für %d und %d erweitern", L"Estender área de trabalho em %d e %d", L"Rozszerz pulpit na %d i %d"},
+    {319, L"Duplicate desktop on %d and %d", L"Desktop duplicato in %d e %d", L"Duplicar escritorio en %d y %d", L"Dupliquer le Bureau sur %d et %d", L"Masaüstünü %d ve %d üzerinde yinele", L"Дублировать рабочий стол на %d и %d", L"在 %d 和 %d 上复制桌面", L"Desktop auf %d und %d duplizieren", L"Duplicar a área de trabalho em %d e %d", L"Powiel pulpit na %d i %d"},
+    {320, L"Duplicate these displays", L"Duplica questi schermi", L"Duplicar estas pantallas", L"Dupliquer ces affichages", L"Bu ekranı yinele", L"Дублировать эти экраны", L"复制这些显示", L"Diese Anzeigen duplizieren", L"Duplicar estes vídeos", L"Powiel te ekrany"},
+    {321, L"Disconnect this display", L"Disconnetti lo schermo", L"Desconectar esta pantalla", L"Déconnecter cet affichage", L"Bu ekranın bağlantısını kes", L"Отключить этот монитор", L"断开此显示器的连接", L"Diesen Bildschirm trennen", L"Desconectar este vídeo", L"Odłącz ten wyświetlacz"},
+    {322, L"Disconnected", L"Disconnesso", L"Desconectado", L"Déconnecté", L"Bağlantı kesildi", L"Отключено", L"已断开", L"Getrennt", L"Desconectado", L"Odłączono"},
+    {323, L"Show desktop only on %d", L"Mostra desktop solo per %d", L"Mostrar escritorio solo en %d", L"Afficher le Bureau uniquement sur %d", L"Masaüstünü yalnızca %d üzerinde göster", L"Отобразить рабочий стол только на %d", L"只在 %d 上显示桌面", L"Desktop nur auf %d anzeigen", L"Mostrar área de trabalho somente em %d", L"Pokazuj pulpit tylko na %d"},
+    {324, L"Try to connect anyway on: %s", L"Tenta la connessione per %s comunque", L"Intentar conectarse de todos modos en: %s", L"Essayez de vous connecter quand même sur : %s", L"Her durumda bağlanmayı dene: %s", L"Попытаться в любом случае подключиться к: %s", L"仍然尝试在以下对象上进行连接: %s", L"Dennoch versuchen, auf %s eine Verbindung herzustellen", L"Tentar conectar de qualquer maneira em: %s", L"Mimo to spróbuj podłączyć na: %s"},
+    {325, L"Multiple displays", L"Più schermi", L"Varias pantallas", L"Plusieurs affichages", L"Birden çok ekran", L"Несколько экранов", L"多显示器", L"Mehrere Anzeigen", L"Múltiplos vídeos", L"Wiele ekranów"},
+    {326, L"Extend these displays", L"Estendi questi schermi", L"Extender estas pantallas", L"Étendre ces affichages", L"Bu ekranları genişlet", L"Расширить эти экраны", L"扩展这些显示", L"Diese Anzeigen erweitern", L"Estender estes vídeos", L"Rozszerz te ekrany"},
+    {327, L"Remove this display", L"Rimuovi questo schermo", L"Quitar esta pantalla", L"Supprimer cet affichage", L"Bu ekranı kaldır", L"Удалить этот монитор", L"删除此显示", L"Diesen Bildschirm entfernen", L"Remover este vídeo", L"Usuń ten wyświetlacz"},
+    {330, L"Available display output on: %1", L"Output schermo disponibile per: %1", L"Salida de pantalla disponible en: %1", L"Sortie d’affichage disponible sur : %1", L"Kullanılabilir çıktı kaynağı: %1", L"Доступен выход экрана на: %1", L"以下对象上的可用显示输出: %1", L"Verfügbare Anzeigeausgabe auf: %1", L"Saída de vídeo disponível em: %1", L"Dostępne wyjście ekranowe na: %1"},
+    {331, L"Available display output on: default adapter", L"Output schermo disponibile per: scheda predefinita", L"Salida de pantalla disponible en: adaptador predeterminado", L"Sortie d’affichage disponible sur : carte par défaut", L"Kullanılabilir çıktı kaynağı: varsayılan bağdaştırıcı", L"Доступен выход экрана на: адаптер по умолчанию", L"以下对象上的可用显示输出: 默认适配器", L"Verfügbare Anzeigeausgabe auf: Standardadapter", L"Saída de vídeo disponível em: adaptador padrão", L"Dostępne wyjście ekranowe na: adapter domyślny"},
+    {337, L"%1. Display device on: %2", L"%1. Dispositivo di visualizzazione per %2", L"%1. Mostrar dispositivo en: %2", L"%1. Périphérique d’affichage sur %2", L"%1. Görüntü aygıtının yeri: %2", L"%1. Устройство отображения на: %2", L"%1. 在 %2 上显示设备", L"%1. Anzeigegerät auf: %2", L"%1. Dispositivo de vídeo em: %2", L"%1. Urządzenie wyświetlające na: %2"},
+    {338, L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2"},
+    {339, L"Other", L"Altro", L"Otros", L"Autre", L"Diğer", L"Другие", L"其他", L"Anderer", L"Outros", L"Inne"},
+    {340, L"VGA", L"VGA", L"VGA", L"VGA", L"VGA", L"VGA", L"VGA", L"VGA", L"VGA", L"VGA"},
+    {341, L"S-Video", L"S-Video", L"S-Video", L"S-Vidéo", L"S-Video", L"S-видео", L"S-视频", L"S-Video", L"S-Video", L"S-Video"},
+    {342, L"Composite", L"Composito", L"Compuesto", L"Composite", L"Bileşik", L"Композитный", L"合成", L"FBAS", L"Composto", L"Kompozytowe"},
+    {343, L"Component", L"Componente", L"Componente", L"Composant", L"Bileşen", L"Компонентный", L"组件", L"Komponentenausgang", L"Componente", L"Component"},
+    {344, L"DVI", L"DVI", L"DVI", L"DVI", L"DVI", L"DVI", L"DVI", L"DVI", L"DVI", L"DVI"},
+    {345, L"HDMI", L"HDMI", L"HDMI", L"HDMI", L"HDMI", L"HDMI", L"HDMI", L"HDMI", L"HDMI", L"HDMI"},
+    {346, L"Mobile PC Display", L"Schermo PC portatile", L"Pantalla de equipo portátil", L"Affichage MobilePC", L"Taşınabilir Bilgisayar Ekranı", L"Дисплей мобильного ПК", L"移动电脑显示屏", L"Anzeige für mobilen PC", L"Vídeo do PC Móvel", L"Ekran komputera przenośnego"},
+    {347, L"TV", L"TV", L"TV", L"TV", L"TV", L"ТВ", L"电视", L"TV", L"TV", L"Telewizja"},
+    {348, L"SDI", L"SDI", L"SDI", L"SDI", L"SDI", L"SDI", L"SDI", L"SDI", L"SDI", L"SDI"},
+    {349, L"DisplayPort", L"DisplayPort", L"DisplayPort", L"DisplayPort", L"Ekran Bağlantı Noktası", L"Порт дисплея", L"显示端口", L"DisplayPort", L"DisplayPort", L"DisplayPort"},
+    {350, L"Mobile PC Display", L"Schermo PC portatile", L"Pantalla de equipo portátil", L"Affichage d’ordinateur portable", L"Taşınabilir Bilgisayar Ekranı", L"Дисплей мобильного ПК", L"移动电脑显示屏", L"Anzeige für mobilen PC", L"Vídeo do PC Móvel", L"Ekran komputera przenośnego"},
+    {351, L"UDI", L"UDI", L"UDI", L"UDI", L"UDI", L"UDI", L"UDI", L"UDI", L"UDI", L"UDI"},
+    {352, L"Mobile PC Display", L"Schermo PC portatile", L"Pantalla de equipo portátil", L"Affichage d’ordinateur portable", L"Taşınabilir Bilgisayar Ekranı", L"Дисплей мобильного ПК", L"移动电脑显示屏", L"Anzeige für mobilen PC", L"Vídeo do PC Móvel", L"Ekran komputera przenośnego"},
+    {353, L"TV", L"TV", L"TV", L"TV", L"TV", L"ТВ", L"TV", L"TV", L"TV", L"Telewizja"},
+    {354, L"Mobile PC Display", L"Schermo PC portatile", L"Pantalla de equipo portátil", L"Affichage d’ordinateur portable", L"Taşınabilir Bilgisayar Ekranı", L"Дисплей мобильного ПК", L"移动电脑显示屏", L"Anzeige für mobilen PC", L"Vídeo do PC Móvel", L"Ekran komputera przenośnego"},
+    {356, L"%1!d! × %2!d!", L"%1!d! x %2!d!", L"%1!d! × %2!d!", L"%1!d! x %2!d!", L"%1!d! × %2!d!", L"%1!d! × %2!d!", L"%1!d! × %2!d!", L"%1!d! × %2!d!", L"%1!d! × %2!d!", L"%1!d! × %2!d!"},
+    {357, L"%1!d! × %2!d! (Recommended)", L"%1!d! x %2!d! (scelta consigliata)", L"%1!d! × %2!d! (recomendada)", L"%1!d! × %2!d! (recommandé)", L"%1!d! × %2!d! (Önerilen)", L"%1!d! × %2!d! (рекомендуется)", L"%1!d! × %2!d! (推荐)", L"%1!d! × %2!d! (empfohlen)", L"%1!d! × %2!d! (Recomendado)", L"%1!d! × %2!d! (zalecana)"},
+    {358, L"%1!d!. %2 on %3", L"%1!d!. %2 su %3", L"%1!d!. %2 en %3", L"%1!d!. %2 sur %3", L"%1!d!. %3 üzerinde %2", L"%1!d!. %2 на %3", L"%1!d!. %3 上的 %2", L"%1!d!. %2 mit %3", L"%1!d!. %2 em %3", L"%1!d!. %2 na %3"},
+    {359, L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!", L"%1!d!|%2!d!"},
+    {360, L"%1", L"%1", L"%1", L"%1", L"%1", L"\"%1\"", L"%1", L"%1", L"%1", L"%1"},
+    {361, L"Change Settings", L"Cambia impostazioni", L"Cambiar la configuración", L"Modifier les paramètres", L"Ayarları Değiştir", L"Изменить параметры", L"更改设置", L"Einstellungen ändern", L"Alterar configurações", L"Zmień ustawienia"},
+    {362, L"%1!d! × %2!d! (Recommended, 3D)", L"%1!d! × %2!d! (scelta consigliata, 3D)", L"%1!d! × %2!d! (recomendada, 3D)", L"%1!d! × %2!d! (recommandé, 3D)", L"%1!d! × %2!d! (Önerilen, 3B)", L"%1!d! × %2!d! (рекомендуется, трехмерное)", L"%1!d! × %2!d! (推荐，3D)", L"%1!d! × %2!d! (empfohlen, 3D)", L"%1!d! ? %2!d! (Recomendado, 3D)", L"%1!d! × %2!d! (zalecana, 3W)"},
+    {363, L"%1!d! by %2!d! (Recommended, 3D)", L"%1!d! per %2!d! (scelta consigliata, 3D)", L"%1!d! por %2!d! (recomendada, 3D)", L"%1!d! by %2!d! (recommandé, 3D)", L"%1!d! / %2!d! (Önerilen, 3B)", L"%1!d! на %2!d! (рекомендуется, трехмерное)", L"%1!d! × %2!d! (推荐，3D)", L"%1!d! mal %2!d! (empfohlen, 3D)", L"%1!d! por %2!d! (Recomendado, 3D)", L"%1!d! na %2!d! (zalecana, 3W)"},
+    {364, L"The display settings could not be saved.  Please try a different combination of display settings.", L"Impossibile salvare le impostazioni dello schermo. Provare con una combinazione di impostazioni diversa.", L"No se pudo guardar la configuración de pantalla. Pruebe otra combinación para la configuración de pantalla.", L"Impossible d’enregistrer les paramètres d’affichage. Essayez une autre combinaison de paramètres d’affichage.", L"Görüntü ayarları kaydedilemedi. Farklı bir görüntü ayarı bileşimi deneyin.", L"Не удалось сохранить параметры дисплея. Попробуйте задать другое сочетание параметров дисплея.", L"显示设置无法保存。请尝试其他显示设置组合。", L"Die Anzeigeeinstellungen konnten nicht gespeichert werden. Versuchen Sie es mit einer anderen Kombination von Anzeigeeinstellungen.", L"Não foi possível salvar as configurações de vídeo.  Tente uma combinação diferente de configurações de vídeo.", L"Nie można zapisać ustawień ekranu. Spróbuj zastosować inną kombinację ustawień ekranu."},
+    {365, L"Windows could not change your display to this resolution. Try a different resolution.", L"Impossibile impostare lo schermo sulla risoluzione specificata. Provare una risoluzione diversa.", L"Windows no pudo cambiar la pantalla a esta resolución. Pruebe con una resolución distinta.", L"Windows ne peut pas appliquer votre résolution à votre affichage. Essayez avec une autre résolution.", L"Windows ekranınızın çözünürlüğünü bu değere değiştiremedi. Başka bir çözünürlük deneyin.", L"Windows не удалось изменить разрешение экрана на данное значение. Попробуйте другое разрешение.", L"Windows 无法将显示器更改为此分辨率。请尝试其他分辨率。", L"Ihre Anzeige konnte nicht in diese Auflösung geändert werden. Verwenden Sie eine andere Auflösung.", L"O Windows não pôde alterar o vídeo para esta resolução. Tente uma resolução diferente.", L"System Windows nie może ustawić tej rozdzielczości ekranu. Spróbuj wybrać inną rozdzielczość."},
+    {366, L"%1!d! × %2!d! (3D)", L"%1!d! × %2!d! (3D)", L"%1!d! × %2!d! (3D)", L"%1!d! × %2!d! (3D)", L"%1!d! × %2!d! (3B)", L"%1!d! × %2!d! (трехмерное)", L"%1!d! × %2!d! (3D)", L"%1!d! × %2!d! (3D)", L"%1!d! ? %2!d! (3D)", L"%1!d! × %2!d! (3W)"},
+    {367, L"%1!d! by %2!d! (3D)", L"%1!d! per %2!d! (3D)", L"%1!d! por %2!d! (3D)", L"%1!d! par %2!d! (3D)", L"%1!d! x %2!d! (3B)", L"%1!d! на %2!d! (трехмерное)", L"%1!d! × %2!d! (3D)", L"%1!d! mal %2!d! (3D)", L"%1!d! por %2!d! (3D)", L"%1!d! na %2!d! (3W)"},
+    {368, L"The display control panel is unable to change the display settings.  The graphics driver returned an unexpected error.", L"Impossibile modificare le impostazioni dello schermo. Il driver di grafica ha riportato un errore non previsto.", L"El panel de control de pantalla no puede cambiar la configuración de pantalla. El controlador de gráficos devolvió un error inesperado.", L"Le panneau de configuration d’affichage ne permet pas de modifier les paramètres d’affichage. Le pilote graphique a renvoyé une erreur inattendue.", L"Görüntü denetim masası, görüntü ayarlarını değiştiremiyor. Grafik sürücüsü beklenmeyen bir hata döndürdü.", L"Не удалось изменить параметры дисплея в панели управления.  Графический драйвер возвратил непредвиденную ошибку.", L"显示控制面板无法更改显示设置。图形驱动程序返回一个意外错误。", L"\"Anzeige\" aus der Systemsteuerung konnte die Anzeigeeinstellungen nicht ändern. Der Grafiktreiber hat einen unerwarteten Fehler zurückgegeben.", L"O painel de controle de vídeo não pode alterar as configurações de vídeo.  O driver de gráficos retornou um erro inesperado.", L"Aplet Ekran z Panelu sterowania nie może zmienić ustawień ekranu. Sterownik graficzny zwrócił nieoczekiwany błąd."},
+    {370, L"High", L"Max", L"Alta", L"Élevé", L"Yüksek", L"Высокое", L"高", L"Hoch", L"Alta", L"Wysoka"},
+    {371, L"Low", L"Min", L"Baja", L"Bas", L"Düşük", L"Низкое", L"低", L"Niedrig", L"Baixa", L"Niska"},
+    {372, L"Make text and other items on the desktop smaller and larger. To temporarily enlarge just part of the screen, use the <a href=\"magnify.exe\">Magnifier</a> tool.", L"Consente di ingrandire e ridurre il testo e altri elementi del desktop. Per ingrandire temporaneamente una parte dello schermo, utilizzare lo strumento <a href=\"magnify.exe\">Lente di ingrandimento</a>.", L"Puede hacer que el texto y otros elementos del escritorio sean más pequeños o más grandes. Para agrandar temporalmente solo una parte de la pantalla, use la herramienta <a href=\"magnify.exe\">Lupa</a>.", L"Agrandissez ou réduisez le texte et d’autres éléments du Bureau. Pour agrandir temporairement une partie de l’écran seulement, utilisez l’outil <a href=\"magnify.exe\">Loupe</a>.", L"Masaüstünüzdeki metni ve diğer öğeleri küçültün ve büyütün. Ekranın yalnızca bir bölümünü geçici olarak büyütmek için <a href=\"magnify.exe\">Büyüteç</a> aracını kullanın.", L"Вы можете увеличить или уменьшить размер текста и других элементов на рабочем столе. Чтобы временно увеличить только часть экрана, используйте <a href=\"magnify.exe\">экранную лупу</a>.", L"将桌面上的文本及其他项缩小和增大。若要临时仅放大部分屏幕，请使用<a href=\"magnify.exe\">放大镜</a>工具。", L"Vergrößern oder verkleinern Sie Text und andere Elemente auf dem Desktop. Verwenden Sie die <a href=\"magnify.exe\">Bildschirmlupe</a>, um nur einen Teil des Bildschirms vorübergehend zu vergrößern.", L"Aumente e diminua o texto e outros itens na área de trabalho. Para ampliar temporariamente apenas uma parte da tela, use a ferramenta <a href=\"magnify.exe\">Lupa</a>.", L"Umożliwia zmniejszanie i powiększanie tekstu i innych elementów na pulpicie. Aby chwilowo powiększyć fragment ekranu, użyj narzędzia <a href=\"magnify.exe\">Lupa</a>."},
+    {373, L"Make text and other items on the desktop smaller and larger. To temporarily enlarge just part of the screen, use the Magnifier tool.", L"Consente di ingrandire e ridurre il testo e altri elementi del desktop. Per ingrandire temporaneamente una parte dello schermo, utilizzare lo strumento Lente di ingrandimento.", L"Puede hacer que el texto y otros elementos del escritorio sean más pequeños o más grandes. Para agrandar temporalmente solo una parte de la pantalla, use la herramienta Lupa.", L"Agrandissez ou réduisez le texte et d’autres éléments du Bureau. Pour agrandir temporairement une partie de l’écran seulement, utilisez l’outil Loupe.", L"Masaüstünüzdeki metni ve diğer öğeleri küçültün ve büyütün. Ekranın yalnızca bir bölümünü geçici olarak büyütmek için Büyüteç aracını kullanın.", L"Вы можете увеличить или уменьшить размер текста и других элементов на рабочем столе. Чтобы временно увеличить только часть экрана, используйте экранную лупу.", L"将桌面上的文本及其他项缩小和增大。若要临时仅放大部分屏幕，请使用放大镜工具。", L"Vergrößern oder verkleinern Sie Text und andere Elemente auf dem Desktop. Verwenden Sie die Bildschirmlupe, um nur einen Teil des Bildschirms vorübergehend zu vergrößern.", L"Aumente e diminua o texto e outros itens na área de trabalho. Para ampliar temporariamente apenas uma parte da tela, use a ferramenta Lupa.", L"Umożliwia zmniejszanie i powiększanie tekstu i innych elementów na pulpicie. Aby chwilowo powiększyć fragment ekranu, użyj narzędzia Lupa."},
+    {374, L"Resolution Slider", L"Dispositivo di scorrimento risoluzione", L"Control deslizante de resolución", L"Curseur de résolution", L"Çözünürlük Kaydırıcısı", L"Ползунок управления разрешением", L"分辨率滑块", L"Schieberegler für die Auflösung", L"Controle Deslizante de Resolução", L"Suwak rozdzielczości"},
+    {375, L"Resolution Slider Pane", L"Riquadro dispositivo di scorrimento risoluzione", L"Panel del control deslizante de resolución", L"Volet Curseur de résolution", L"Çözünürlük Kaydırıcısı Bölmesi", L"Панель ползунка управления разрешением", L"分辨率滑块窗格", L"Bereich des Schiebereglers für die Auflösung", L"Painel do Controle Deslizante de Resolução", L"Okienko suwaka rozdzielczości"},
+    {376, L"%1!d! by %2!d!", L"%1!d! per %2!d!", L"%1!d! por %2!d!", L"%1!d! par %2!d!", L"%1!d! / %2!d!", L"%1!d! на %2!d!", L"%1!d! x %2!d!", L"%1!d! mal %2!d!", L"%1!d! por %2!d!", L"%1!d! na %2!d!"},
+    {377, L"%1!d! by %2!d! (Recommended)", L"%1!d! per %2!d! (scelta consigliata)", L"%1!d! por %2!d! (recomendada)", L"%1!d! par %2!d! (recommandé)", L"%1!d! x %2!d! (Önerilen)", L"%1!d! на %2!d! (рекомендуется)", L"%1!d! × %2!d! (推荐)", L"%1!d! mal %2!d! (empfohlen)", L"%1!d! por %2!d! (Recomendado)", L"%1!d! na %2!d! (zalecana)"},
+    {378, L"You must restart to apply these changes. Do you want to continue?", L"Per rendere effettive le modifiche è necessario riavviare il computer. Continuare?", L"Debe reiniciar el equipo para aplicar los cambios. ¿Desea continuar?", L"Vous devez redémarrer pour appliquer ces modifications. Voulez-vous continuer ?", L"Değişiklikleri uygulamak için yeniden başlatmalısınız. Devam etmek istiyor musunuz?", L"Чтобы изменения вступили в силу, необходимо перезагрузить компьютер. Вы хотите продолжить?", L"必须重新启动才能应用这些更改。你想继续吗?", L"Sie müssen einen Neustart vornehmen, damit diese Änderungen wirksam werden. Soll der Vorgang fortgesetzt werden?", L"Você deve reiniciar o computador para aplicar estas alterações. Deseja continuar?", L"Musisz ponownie uruchomić komputer, aby zastosować te zmiany. Czy chcesz kontynuować?"},
+    {379, L"%1!d!, %2!d!", L"%1!d!,%2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!", L"%1!d!,%2!d!", L"%1!d!、%2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!"},
+    {380, L"Your resolution is lower than %d x %d. Some items might not fit and apps might not open.", L"Se la risoluzione è inferiore a %d x %d, potrebbe non essere disponibile spazio sufficiente per alcuni elementi e le app potrebbero non aprirsi.", L"Su resolución es inferior a %d x %d. Es posible que algunos elementos no quepan y que no se abran las aplicaciones.", L"Votre résolution est inférieure à %d x %d. Il est possible que certains éléments ne tiennent pas sur l’écran et que des applications ne s’ouvrent pas.", L"Çözünürlüğünüz %d x %d değerinden düşük. Bazı öğeler ekrana sığmayabilir ve uygulamalar açılmayabilir.", L"Установлено разрешение ниже %d x %d. Некоторые элементы могут не поместиться на экран, а приложения — не открыться.", L"你的分辨率低于 %d x %d。某些项目可能无法正常显示，某些应用可能无法打开。", L"Die Auflösung ist niedriger als %d x %d. Einige Elemente sind möglicherweise zu groß, und Apps werden möglicherweise nicht geöffnet.", L"Sua resolução está abaixo de %d x %d. Alguns itens podem não se ajustar e os aplicativos podem não abrir.", L"Jeśli rozdzielczość jest mniejsza niż %d x %d, niektóre elementy mogą się nie mieścić na ekranie, a aplikacje mogą się nie otwierać."},
+    {381, L"Your resolution is lower than %d x %d. Some items might not fit on your screen.", L"La risoluzione dello schermo corrente è inferiore a %d x %d. È possibile che alcuni elementi non vengano visualizzati.", L"Su resolución es inferior a %d x %d. Es posible que algunos elementos no quepan en la pantalla.", L"Votre résolution est inférieure à %d x %d. Il est possible que certains éléments ne tiennent pas sur l’écran.", L"Çözünürlüğünüz %d x %d değerinden düşük. Bazı öğeler ekranınıza sığmayabilir.", L"Установлено разрешение ниже %d x %d. Некоторые элементы могут не поместиться на экране.", L"你的分辨率低于 %d x %d。某些项目可能无法在屏幕上显示。", L"Die Auflösung ist niedriger als %d x %d. Einige Elemente sind möglicherweise zu groß, und können nicht auf dem Bildschirm angezeigt werden.", L"Sua resolução está abaixo de %d x %d. Alguns itens podem não se ajustar à tela.", L"Jeśli rozdzielczość jest mniejsza niż %d x %d, niektóre elementy mogą się nie mieścić na ekranie."},
+    {390, L"Display Settings", L"Impostazioni schermo", L"Configuración de pantalla", L"Paramètres d’affichage", L"Görüntü Ayarları", L"Параметры экрана", L"显示设置", L"Anzeigeeinstellungen", L"Configurações de Vídeo", L"Ustawienia ekranu"},
+    {391, L"&Keep changes", L"&Mantieni le modifiche", L"C&onservar cambios", L"&Conserver les modifications", L"&Değişiklikleri koru", L"&Сохранить изменения", L"保留更改(&K)", L"Änderungen &beibehalten", L"&Manter alterações", L"&Zachowaj zmiany"},
+    {392, L"&Revert", L"&Ripristina", L"&Revertir", L"&Rétablir", L"Geri &al", L"&Отменить изменения", L"还原(&R)", L"&Wiederherstellen", L"&Reverter", L"&Przywróć"},
+    {393, L"Windows adjusted these settings to match your hardware capabilities.", L"Le impostazioni sono state modificate in base alle funzionalità hardware.", L"Windows ajustó estas opciones según la configuración del hardware.", L"Windows a ajusté ces paramètres en fonction du matériel.", L"Windows bu ayarları donanım özelliklerinize uyacak şekilde düzenledi.", L"Эти параметры настроены Windows в соответствии с возможностями оборудования.", L"Windows 调整了这些设置以与你的硬件性能匹配。", L"Die Einstellungen wurden so angepasst, dass sie den Hardwarefunktionen entsprechen.", L"O Windows ajustou essas definições para corresponder aos seus recursos de hardware.", L"System Windows dostosował te ustawienia na podstawie konfiguracji sprzętu."},
+    {400, L"%1. Unknown display device", L"%1. Dispositivo di visualizzazione sconosciuto", L"%1. Pantalla desconocida", L"%1. Périphérique d’affichage inconnu", L"%1. Bilinmeyen görüntü aygıtı", L"%1. Неизвестное устройство отображения", L"%1。未知显示设备", L"%1. Unbekanntes Anzeigegerät", L"%1. Dispositivo de vídeo desconhecido", L"%1. Nieznane urządzenie wyświetlające"},
+    {410, L"Display %1", L"Schermo %1", L"Pantalla %1", L"Affichage %1", L"Ekran: %1", L"Монитор %1", L"显示器 %1", L"Anzeige %1", L"Vídeo %1", L"Ekran %1"},
+    {411, L"Undetected display", L"Schermo non rilevato", L"Pantalla no detectada", L"Affichage non détecté", L"Belirlenmeyen ekran", L"Необнаруживаемый монитор", L"未检测到的显示器", L"Nicht erkannte Anzeige", L"Vídeo não detectado", L"Niewykryty wyświetlacz"},
+    {420, L"Instead of changing the size of everything on the desktop, change only the text size for a specific item.", L"Anziché modificare le dimensioni di tutti gli elementi sul desktop, è possibile modificare solo la dimensione del testo di un elemento specifico.", L"En lugar de cambiar el tamaño de todo lo que hay en el escritorio, cambie únicamente el tamaño del texto de un elemento concreto.", L"Au lieu de modifier la taille de tous les éléments sur le Bureau, modifiez uniquement la taille du texte d’un élément spécifique.", L"Masaüstündeki her şeyin boyutunu değiştirmek yerine, yalnızca belli bir öğeye ait metin boyutunu değiştirin.", L"Вам необязательно изменять размер всех элементов рабочего стола — можно изменить только размер текста определенного элемента.", L"还可以不更改桌面上所有项目的大小，只更改指定项目的文本大小。", L"Sie können auch nur die Textgröße eines bestimmten Elements statt die Größe aller Elemente auf dem Desktop ändern.", L"Em vez de alterar o tamanho de todos os itens da área de trabalho, altere apenas o tamanho do texto de um item específico.", L"Możesz również zmienić sam rozmiar tekstu konkretnego elementu, pozostawiając wszystkie inne elementy na pulpicie bez zmian."},
+    {430, L"Title bars", L"Barre del titolo", L"Barras de título", L"Barres de titre", L"Başlık çubukları", L"Заголовки окон", L"标题栏", L"Titelleisten", L"Barras de título", L"Paski tytułu"},
+    {431, L"Menus", L"Menu", L"Menús", L"Menus", L"Menüler", L"Меню:", L"菜单", L"Menüs", L"Menus", L"Menu"},
+    {432, L"Message boxes", L"Finestre di messaggio", L"Cuadros de mensaje", L"Boîtes de message", L"İleti kutuları", L"Окна сообщений", L"消息框", L"Meldungsfelder", L"Caixas de mensagem", L"Okna komunikatów"},
+    {433, L"Palette titles", L"Titoli delle tavolozze", L"Títulos de la paleta", L"Titres de palette", L"Palet başlıkları", L"Названия панелей", L"调色板标题", L"Palettentitel", L"Títulos de paleta", L"Nazwy palet"},
+    {434, L"Icons", L"Icone", L"Iconos", L"Icônes", L"Simgeler", L"Значки", L"图标", L"Symbole", L"Ícones", L"Ikony"},
+    {435, L"Tooltips", L"Descrizioni comandi", L"Inf. sobre herramientas", L"Info-bulles", L"Araç ipuçları", L"Подсказки", L"工具提示", L"QuickInfo", L"Dicas de ferramentas", L"Etykietki narzędzi"},
+    {440, L"Some items might not fit on the screen.", L"Alcuni elementi potrebbero non essere visualizzati.", L"Puede que algunos elementos no se ajusten a la pantalla.", L"Il est possible que certains éléments ne tiennent pas à l’écran.", L"Bazı öğeler ekrana sığmayabilir.", L"Некоторые элементы могут не поместиться на экране.", L"某些项目可能不适合屏幕。", L"Einige Elemente passen möglicherweise nicht auf den Bildschirm.", L"Alguns itens podem não caber na tela.", L"Niektóre elementy mogą nie mieścić się na ekranie."},
+    {442, L"You'll lose any changes you made to the text size.", L"Le eventuali modifiche apportate alla dimensione del testo verranno annullate.", L"Perderá cualquier cambio de tamaño de texto que haya realizado.", L"Vous perdrez également toutes les modifications apportées à la taille du texte.", L"Metin boyutunda yapmış olduğunuz değişiklikleri kaybedeceksiniz.", L"Вы потеряете все изменения размера текста.", L"你将会丢失对文本大小所执行的所有更改。", L"An der Textgröße vorgenommene Änderungen gehen verloren.", L"As alterações de tamanho de texto serão perdidas.", L"Utracisz wszystkie wprowadzone przez siebie zmiany w rozmiarze tekstu."},
+    {443, L"Some changes might not be applied until the next time you sign in to your PC.", L"Alcune modifiche potrebbero non essere applicate fino al successivo accesso al PC.", L"Algunos cambios podrían no aplicarse hasta la próxima vez que inicie sesión en su PC.", L"Certaines modifications peuvent ne pas s’appliquer avant votre prochaine connexion au PC.", L"Bazı değişiklikler bilgisayarınızda bir sonraki oturum açışınıza kadar uygulanmayabilir.", L"Возможно, некоторые изменения будут применены только тогда, когда вы в следующий раз войдете в систему.", L"某些更改可能需要你下次登录到电脑时才能应用。", L"Einige Änderungen werden möglicherweise erst angewendet, wenn Sie sich das nächste Mal an Ihrem PC anmelden.", L"Algumas alterações talvez não sejam aplicadas até a próxima vez em que você entrar em seu computador.", L"Niektóre zmiany mogą nie zostać zastosowane do czasu ponownego zalogowania się do komputera."},
+    {451, L"Let me choose one scaling level for all my displays", L"Consenti di scegliere il livello di ridimensionamento per tutti gli schermi", L"Dejarme elegir un nivel de ajuste de escala para todas mis pantallas", L"Me laisser choisir un niveau de mise à l’échelle pour tous mes affichages", L"Tüm görüntülerim için bir ölçekleme düzeyi seçmeme izin ver", L"Я хочу выбрать один масштаб для всех дисплеев", L"让我选择一个适合我的所有显示器的缩放级别", L"Manuell eine Skalierungsstufe für alle Anzeigegeräte auswählen", L"Deixe-me escolher um nível de escala para todos os meus vídeos", L"Pozwól mi wybrać jeden poziom skalowania dla wszystkich ekranów"},
+    {452, L"DPI Scaling Override", L"Sostituzione ridimensionamento DPI", L"Invalidar ajuste de PPP", L"Remplacement de la mise à l’échelle PPP", L"DPI Ölçeklemesini Geçersiz Kılma", L"Переопределение масштабирования", L"DPI 缩放替代", L"Überschreibung der DPI-Skalierung", L"Substituir Ajuste de DPI", L"Zastępowanie skalowania DPI"},
+    {453, L"Smaller", L"Piccolo", L"Más pequeño", L"Plus petite", L"Küçük", L"Мелкий", L"较小", L"Kleiner", L"Pequeno", L"Mniejsze"},
+    {454, L"Larger", L"Grande", L"Más grande", L"Plus grande", L"Büyük", L"Крупный", L"较大", L"Größer", L"Grande", L"Większe"},
+    {455, L"Can't change the size of items on this display.", L"Impossibile modificare le dimensioni degli elementi su questo schermo.", L"No se puede cambiar el tamaño de los elementos en esta pantalla.", L"Impossible de modifier la taille des éléments sur cet affichage.", L"Bu görüntüdeki öğelerin boyutu değiştirilemiyor.", L"Невозможно изменить размер элементов на этом дисплее.", L"不能更改此显示器上的项的大小。", L"Die Größe von Elementen kann auf diesem Anzeigegerät nicht geändert werden.", L"Não é possível alterar o tamanho dos itens neste vídeo.", L"Nie można zmienić rozmiaru elementów na tym ekranie."},
+    {456, L"These changes will only be made on displays that can support them.", L"Queste modifiche verranno apportate sugli schermi che le supportano.", L"Estos cambios solo se realizarán en pantallas que sean compatibles.", L"Ces modifications ne seront effectives que sur les affichages qui peuvent les prendre en charge.", L"Bu değişiklikler, yalnızca bunları destekleyen görüntülerde yapılacak.", L"Изменения будут применены только к тем дисплеям, которые их поддерживают.", L"这些更改将只能在可支持该更改的显示器上进行。", L"Die Änderungen werden nur auf Anzeigegeräten angewendet, die dies unterstützen.", L"Estas alterações só serão feitas em vídeos com suporte para elas.", L"Te zmiany zostaną wprowadzone tylko na ekranach, które je obsługują."},
+    {457, L"If you use one scaling level, some items might be different sizes on different displays.", L"Se si usa un solo livello di ridimensionamento, alcuni elementi potrebbero apparire di dimensioni diverse a seconda dello schermo.", L"Si usa un nivel de ajuste de escala, algunos elementos podrían tener tamaños diferentes en pantallas distintas.", L"Si vous utilisez un niveau de mise à l’échelle, certains éléments peuvent être de différentes tailles selon les affichages.", L"Tek bir ölçekleme düzeyi kullanıyorsanız, bazı öğeler farklı görüntülerde farklı boyutlarda olabilir.", L"Если вы используете один масштаб, некоторые элементы могут иметь различный размер на разных дисплеях.", L"如果你使用一个缩放级别，则某些项在不同的显示器上的大小可能各不相同。", L"Wenn Sie eine Skalierungsstufe verwenden, werden einige Elemente auf unterschiedlichen Anzeigegeräten möglicherweise mit verschiedenen Größen dargestellt.", L"Se você usar um nível de escala, alguns itens poderão ter tamanhos diferentes em vídeos diferentes.", L"Jeśli będziesz używać jednego poziomu skalowania, niektóre elementy mogą mieć różne rozmiary na poszczególnych ekranach."},
+    {458, L"You'll see this change the next time you sign in.", L"La modifica verrà applicata al prossimo accesso.", L"Verá este cambio reflejado la próxima vez que inicie sesión.", L"Vous verrez cette modification lors de votre prochaine connexion.", L"Bu değişikliği bir sonraki oturum açışınızda göreceksiniz.", L"Вы увидите это изменение, когда в следующий раз войдете в систему.", L"你会在下次登录时看到此更改。", L"Diese Änderung ist bei Ihrer nächsten Anmeldung sichtbar.", L"Você verá esta alteração na próxima vez que entrar.", L"Ta zmiana będzie widoczna po ponownym zalogowaniu."},
+    {459, L"Recommended size", L"Dimensioni consigliate", L"Tamaño recomendado", L"Taille recommandée", L"Önerilen boyut", L"Рекомендуемый размер", L"建议的大小", L"Empfohlene Größe", L"Tamanho recomendado", L"Zalecany rozmiar"},
+    {460, L"Some display settings can’t be changed from a remote session.", L"Non è possibile modificare alcune impostazioni dello schermo da una sessione remota.", L"No se puede cambiar parte de la configuración de pantalla desde una sesión remota.", L"Certains paramètres d’affichage ne peuvent pas être modifiés depuis une session distante.", L"Bazı ekran ayarları uzak oturumdan değiştirilemez.", L"Некоторые параметры дисплея невозможно изменить во время удаленного сеанса.", L"无法从远程会话更改某些显示设置。", L"Einige Anzeigeeinstellungen können nicht über eine Remotesitzung geändert werden.", L"Algumas configurações de vídeo não podem ser alteradas de uma sessão remota.", L"Niektórych ustawień ekranu nie można zmienić z sesji zdalnej."},
+    {500, L"Change the appearance of your displays", L"Modifica l'aspetto degli schermi", L"Cambiar apariencia de las pantallas", L"Modifier l’apparence de vos affichages", L"Ekranlarınızın görünümünü değiştirin", L"Параметры дисплеев", L"更改显示器的外观", L"Die Darstellung auf den Bildschirmen ändern", L"Altere a aparência dos vídeos", L"Zmień wygląd ekranów"},
+    {501, L"Change the appearance of your display", L"Modifica l'aspetto della visualizzazione", L"Cambiar apariencia de la pantalla", L"Modifier l’apparence de votre affichage", L"Ekranınızın görünümünü değiştirin", L"Параметры дисплея", L"更改显示器的外观", L"Die Darstellung auf dem Bildschirm ändern", L"Alterar a aparência do vídeo", L"Zmień wygląd ekranu"},
+    {502, L"click", L"clic", L"haga clic en", L"clic", L"tıklatın", L"щелкните", L"单击", L"klicken", L"clicar", L"kliknij"},
+    {503, L"Dete&ct", L"&Rileva", L"Dete&ctar", L"Déte&cter", L"&Algıla", L"&Найти", L"检测(&C)", L"Erke&nnen", L"Dete&ctar", L"&Wykryj"},
+    {504, L"click", L"clic", L"haga clic en", L"clic", L"tıklatın", L"щелкните", L"单击", L"klicken", L"clicar", L"kliknij"},
+    {505, L"&Identify", L"Identi&fica", L"&Identificar", L"&Identifier", L"&Tanımla", L"Опр&еделить", L"识别(&I)", L"&Identifizieren", L"&Identificar", L"&Identyfikuj"},
+    {506, L"Monitor layout", L"Layout del monitor", L"Diseño del monitor", L"Disposition du moniteur", L"Monitör düzeni", L"Расположение мониторов", L"监视器布局", L"Monitorlayout", L"Layout do monitor", L"Układ monitorów"},
+    {507, L"Di&splay:", L"&Schermo:", L"&Pantalla:", L"A&ffichage :", L"&Ekran:", L"Д&исплей:", L"显示器(&S):", L"An&zeige:", L"&Vídeo:", L"&Ekran:"},
+    {508, L"Display", L"Schermo", L"Pantalla", L"Affichage", L"Ekran", L"Дисплей", L"显示器", L"Anzeige", L"Vídeo", L"Ekran"},
+    {509, L"&Resolution:", L"&Risoluzione:", L"&Resolución:", L"&Résolution :", L"Çö&zünürlük:", L"&Разрешение:", L"分辨率(&R):", L"Auf&lösung:", L"&Resolução:", L"&Rozdzielczość:"},
+    {510, L"Resolution", L"Risoluzione", L"Resolución", L"Résolution", L"Çözünürlük", L"Разрешение", L"分辨率", L"Auflösung", L"Resolução", L"Rozdzielczość"},
+    {511, L"Choose resolution.", L"Scegliere la risoluzione.", L"Elegir resolución.", L"Choisissez une résolution.", L"Çözünürlüğü seçin.", L"Выберите разрешение.", L"选择分辨率。", L"Wählen Sie eine Auflösung aus.", L"Escolha a resolução.", L"Wybierz rozdzielczość."},
+    {512, L"Click", L"Clic", L"Hacer clic en", L"Clic", L"Tıklatın", L"Щелчок", L"单击", L"Klicken", L"Clique", L"Kliknij"},
+    {513, L"Header", L"Intestazione", L"Encabezado", L"En-tête", L"Üstbilgi", L"Заголовок", L"标题", L"Kopfzeile", L"Cabeçalho", L"Nagłówek"},
+    {514, L"Open", L"Apri", L"Abrir", L"Ouvrir", L"Aç", L"Открыть", L"打开", L"Öffnen", L"Abrir", L"Otwórz"},
+    {515, L"More options", L"Altre opzioni", L"Más opciones", L"Plus d’options", L"Diğer seçenekler", L"Дополнительно", L"更多选项", L"Weitere Optionen", L"Mais opções", L"Więcej opcji"},
+    {516, L"Click", L"Clic", L"Hacer clic en", L"Clic", L"Tıklatın", L"Щелчок", L"单击", L"Klicken", L"Clique", L"Kliknij"},
+    {518, L"&Orientation:", L"&Orientamento:", L"&Orientación:", L"&Orientation :", L"&Yön:", L"&Ориентация:", L"方向(&O):", L"A&usrichtung:", L"&Orientação:", L"&Orientacja:"},
+    {519, L"Orientation", L"Orientamento", L"Orientación", L"Orientation", L"Yön", L"Ориентация", L"方向", L"Ausrichtung", L"Orientação", L"Orientacja"},
+    {520, L"&Multiple displays:", L"Più scher&mi:", L"&Varias pantallas:", L"Affichages &multiples :", L"&Birden çok ekran:", L"Несколько д&исплеев:", L"多显示器(&M):", L"&Mehrere Anzeigen:", L"&Múltiplos vídeos:", L"Wiele e&kranów:"},
+    {521, L"Multiple displays", L"Più schermi", L"Varias pantallas", L"Plusieurs affichages", L"Birden çok ekran", L"Несколько дисплеев", L"多显示器", L"Mehrere Anzeigen", L"Múltiplos vídeos", L"Wiele ekranów"},
+    {522, L"You must select Apply before making additional changes.", L"Prima di eseguire ulteriori modifiche, è necessario scegliere Applica.", L"Debe seleccionar Aplicar antes de realizar más cambios.", L"Vous devez sélectionner Appliquer avant d’effectuer d’autres modifications.", L"Başka değişiklikler yapmadan önce Uygula'yı seçmelisiniz.", L"Перед внесением дополнительных изменений нажмите \"Применить\".", L"你必须在进行其他更改之前选择“应用”。", L"Sie müssen auf \"Übernehmen\" klicken, bevor Sie weitere Änderungen vornehmen.", L"Selecione Aplicar antes de fazer mais alterações.", L"Przed wprowadzeniem dodatkowych zmian musisz wybrać opcję Zastosuj."},
+    {523, L"If you try to connect, other display changes you have made won't be saved.", L"Se si tenta di connettersi, le altre modifiche apportate alla visualizzazione non verranno salvate.", L"Si intenta conectarse, no se guardarán los otros cambios de pantalla que haya realizado.", L"Si vous essayez de vous connecter, les autres modifications d’affichage que vous avez effectuées ne seront pas enregistrées.", L"Bağlanmayı denerseniz, yaptığınız diğer ekran değişiklikleri kaydedilmez.", L"При попытке подключения другие изменения, которые вы внесли в параметры дисплея, сохранены не будут.", L"如果你尝试连接，则不会保存你已进行的其他显示器更改。", L"Wenn Sie versuchen, eine Verbindung herzustellen, werden weitere Änderungen an den Anzeigeeinstellungen nicht gespeichert.", L"Se você tentar conectar, outras alterações de vídeo feitas não serão salvas.", L"Jeśli próbujesz się połączyć, inne wprowadzone zmiany dotyczące ekranu nie zostaną zapisane."},
+    {524, L"Advanced settings", L"Impostazioni avanzate", L"Configuración avanzada", L"Paramètres avancés", L"Gelişmiş ayarlar", L"Дополнительные параметры", L"高级设置", L"Erweiterte Einstellungen", L"Configurações avançadas", L"Ustawienia zaawansowane"},
+    {525, L"This is currently your main display.", L"Questo è lo schermo principale attualmente in uso.", L"Actualmente ésta es la pantalla principal.", L"Il s’agit actuellement de votre affichage principal.", L"Bu, şu anda ana ekranınız.", L"Сейчас это основной дисплей.", L"这是你当前的主显示器。", L"Dies ist zurzeit die Hauptanzeige.", L"No momento, este é o seu vídeo principal.", L"To jest obecnie wyświetlacz główny."},
+    {526, L"Ma&ke this my main display", L"&Imposta come schermo principale", L"&Convertir esta pantalla en la principal", L"F&aire de cet affichage l’affichage principal", L"Bu&nu, ana ekranım yap", L"Сде&лать основным дисплеем", L"使它成为我的主显示器(&K)", L"Diese Anzeige als Hauptanzeige &verwenden", L"&Tornar este meu vídeo principal", L"&Ustaw ten wyświetlacz jako główny"},
+    {527, L"A&llow the screen to auto-rotate", L"C&onsenti rotazione automatica dello schermo", L"Permitir el &giro automático de la pantalla", L"Autoriser &la rotation automatique de l’écran", L"Ekranın &otomatik döndürülmesine izin ver", L"Р&азрешить автоматический поворот экрана", L"允许屏幕自动旋转(&L)", L"&Automatisches Drehen des Bildschirms zulassen", L"&Permitir à tela girar automaticamente", L"Zezw&alaj na automatyczne obracanie ekranu"},
+    {528, L"Auto-rotation is not supported for multiple displays.", L"Rotazione automatica non supportata per più schermi.", L"El giro automático no es compatible con el uso de varias pantallas.", L"La rotation automatique n’est pas prise en charge pour plusieurs affichages.", L"Birden fazla ekran için otomatik döndürme desteklenmiyor.", L"Автоматический поворот не поддерживается при использовании нескольких дисплеев.", L"多显示器不支持自动旋转。", L"Die automatische Drehung wird bei Verwendung mehrerer Anzeigen nicht unterstützt.", L"Não há suporte ao giro automático para múltiplos vídeos.", L"Funkcja automatycznego obracania nie jest obsługiwana dla wielu ekranów."},
+    {529, L"Enable Stereoscopic 3D settings for all supported displays", L"Abilita le impostazioni della modalità 3D stereoscopico per tutti gli schermi supportati", L"Permitir la configuración de 3D estereoscópico para todas las pantallas compatibles", L"Activer les paramètres 3D stéréoscopiques pour tous les affichages pris en charge", L"Desteklenen tüm ekranlar için Stereoskopik 3B ayarlarını etkinleştir", L"Включить параметры трехмерного стереоскопического режима для всех поддерживаемых дисплеев", L"为所有支持的显示器启用 3D 设置", L"Einstellungen für stereoskopisches 3D für alle unterstützten Anzeigen aktivieren", L"Habilitar configurações 3D Estereoscópicas para todos os monitores com suporte", L"Włącz ustawienia stereoskopowe 3W dla wszystkich obsługiwanych ekranów"},
+    {530, L"You need to change the resolution on one or more of your displays to view Stereoscopic 3D video.", L"Per visualizzare video con la modalità 3D stereoscopico, è necessario cambiare la risoluzione di uno o più schermi.", L"Debe cambiar la resolución de una o varias de las pantallas para ver vídeo 3D estereoscópico.", L"Vous devez modifier la résolution d’un ou de plusieurs de vos affichages pour afficher une vidéo 3D stéréoscopique.", L"Stereoskopik 3B video izlemek için ekranlarınızdan birinin veya birden fazlasının çözünürlüğünü değiştirmeniz gerekiyor.", L"Для просмотра трехмерного стереоскопического видео необходимо изменить разрешение на одном или нескольких дисплеях.", L"你需要更改一个或多个显示器的分辨率才能观看 3D 视频。", L"Zum Anzeigen von stereoskopischem 3D-Video muss die Auflösung mindestens einer Anzeige geändert werden.", L"É necessário alterar a resolução de um ou mais monitores para exibir vídeo 3D Estereoscópico.", L"Aby wyświetlać obraz wideo w trybie stereoskopowym 3W, należy zmienić rozdzielczość co najmniej jednego ekranu."},
+    {531, L"Project to a second screen", L"Proietta su un altro schermo", L"Proyectar en una segunda pantalla", L"Projeter sur un deuxième écran", L"İkinci ekrana yansıt", L"Вывод изображения на второй экран", L"投影到第二屏幕", L"An ein zweites Anzeigegerät weiterleiten", L"Projetar em uma segunda tela", L"Użyj drugiego ekranu"},
+    {532, L" (or press the Windows logo key", L" (o premere il tasto logo Windows", L" (o presione la tecla del logotipo de Windows", L" (ou appuyez sur la touche du logo Windows", L" (veya Windows logosu tuşuna", L" (или нажмите клавишу с логотипом Windows", L" (或按下 Windows 徽标键", L" (oder drücken Sie die Windows-Logo-Taste", L" (ou pressione a tecla do logotipo do Windows", L" (lub naciśnij klawisz logo systemu Windows"},
+    {533, L"Windows logo key", L"Tasto logo Windows", L"Tecla del logotipo de Windows", L"Touche du logo Windows", L"Windows logosu tuşu", L"Клавиша с логотипом Windows", L"Windows 徽标键", L"Windows-Logo-Taste", L"Tecla do logotipo do Windows", L"Klawisz logo systemu Windows"},
+    {534, L"+ P)", L"+ P)", L"+ P)", L"+ P)", L"ve P'ye basın)", L"и P)", L"+ P)", L"+ P)", L"+ P)", L"+ P)"},
+    {535, L"Make text and other items larger or smaller", L"Ingrandisci o riduci dimensioni di testo e altri elementi", L"Aumentar o reducir el tamaño del texto y de otros elementos", L"Rendre le texte et d’autres éléments plus petits ou plus grands", L"Metni ve diğer öğeleri daha büyük veya daha küçük yapın", L"Изменение размеров текста и других элементов", L"放大或缩小文本和其他项目", L"Text und weitere Elemente vergrößern oder verkleinern", L"Ampliar ou reduzir texto e outros itens", L"Zmień wielkość tekstu i innych elementów"},
+    {536, L"What display settings should I choose?", L"Quali impostazioni dello schermo è consigliabile scegliere?", L"¿Qué configuración de pantalla debo elegir?", L"Quels paramètres d’affichage choisir ?", L"Hangi ekran ayarlarını seçmeliyim?", L"Какие параметры монитора следует выбрать?", L"我应该选择什么显示器设置?", L"Welche Anzeigeeinstellungen soll ich auswählen?", L"Quais configurações de vídeo devo escolher?", L"Które ustawienia ekranu należy wybrać?"},
+    {537, L"OK", L"OK", L"Aceptar", L"OK", L"Tamam", L"ОК", L"确定", L"OK", L"OK", L"OK"},
+    {538, L"Cancel", L"Annulla", L"Cancelar", L"Annuler", L"İptal", L"Отмена", L"取消", L"Abbrechen", L"Cancelar", L"Anuluj"},
+    {539, L"&Apply", L"&Applica", L"Apli&car", L"&Appliquer", L"&Uygula", L"&Применить", L"应用(&A)", L"Ü&bernehmen", L"Ap&licar", L"&Zastosuj"},
+    {540, L"Help", L"Guida", L"Ayuda", L"Aide", L"Yardım", L"Справка", L"帮助", L"Hilfe", L"Ajuda", L"Pomoc"},
+    {541, L"Help", L"Guida", L"Ayuda", L"Aide", L"Yardım", L"Справка", L"帮助", L"Hilfe", L"Ajuda", L"Pomoc"},
+    {542, L"Change the size of all items", L"Modifica le dimensioni di tutti gli elementi", L"Cambiar el tamaño de todos los elementos", L"Modifier la taille de tous les éléments", L"Tüm öğelerin boyutunu değiştir", L"Изменение размера всех элементов", L"更改所有项目的大小", L"Die Größe aller Elemente ändern", L"Alterar o tamanho de todos os itens", L"Zmień rozmiar wszystkich elementów"},
+    {543, L"&Smaller - 100%", L"&Piccolo - 100%", L"Más &pequeño: 100%", L"&Petite - 100 %", L"&Daha küçük - %100", L"&Мелкий — 100%", L"较小 - 100%(&S)", L"&Kleiner - 100 %", L"Me&nor - 100%", L"&Mniejsze — 100%"},
+    {544, L"&Medium - 125%", L"&Medio - 125%", L"&Mediano: 125%", L"&Moyenne - 125 %", L"&Orta - %125", L"&Средний — 125%", L"中等 - 125%(&M)", L"&Mittel - 125 %", L"Mé&dio - 125%", L"Ś&rednie — 125%"},
+    {545, L"&Larger - 150%", L"&Grande - 150%", L"Más gran&de: 150%", L"G&rande - 150 %", L"Daha &büyük - %150", L"&Крупный — 150%", L"较大 - 150%(&L)", L"&Größer - 150 %", L"Maio&r - 150%", L"&Większe — 150%"},
+    {546, L"&Custom", L"&Personalizzate", L"&Personalizado", L"&Personnaliser", L"&Özel", L"Дру&гой", L"自定义(&C)", L"Be&nutzerdefiniert", L"&Personalizado", L"&Niestandardowy"},
+    {547, L"Custom sizing options", L"Opzioni dimensioni personalizzate", L"Opciones de tamaño personalizado", L"Options de dimensionnement personnalisé", L"Özel boyutlandırma seçenekleri", L"Пользовательские параметры размера", L"自定义大小选项", L"Benutzerdefinierte Optionen für die Größenanpassung", L"Opções de dimensionamento personalizado", L"Opcje rozmiaru niestandardowego"},
+    {548, L"Change only the text size", L"Modifica solo la dimensione del testo", L"Cambiar solo el tamaño del texto", L"Modifier uniquement la taille du texte", L"Yalnızca metin boyutunu değiştir", L"Изменение только размера текста", L"仅更改文本大小", L"Nur die Textgröße ändern", L"Alterar somente o tamanho de texto", L"Zmień tylko rozmiar tekstu"},
+    {549, L"Desktop element", L"Elemento desktop", L"Elemento de escritorio", L"Élément de Bureau", L"Masaüstü öğesi", L"Элемент рабочего стола", L"桌面元素", L"Desktopelement", L"Elemento da área de trabalho", L"Element pulpitu"},
+    {550, L"Font size", L"Dimensione carattere", L"Tamaño de fuente", L"Taille de police", L"Yazı tipi boyutu", L"Размер шрифта", L"字体大小", L"Schriftgrad", L"Tamanho da fonte", L"Rozmiar czcionki"},
+    {551, L"&Bold", L"Gra&ssetto", L"&Negrita", L"&Gras", L"&Kalın", L"&Полужирный", L"粗体(&B)", L"&Fett", L"&Negrito", L"&Pogrubienie"},
+    {552, L"Bold", L"Grassetto", L"Negrita", L"Gras", L"Kalın", L"Полужирный", L"粗体", L"Fett", L"Negrito", L"Pogrubienie"},
+    {553, L"&Apply", L"&Applica", L"&Aplicar", L"&Appliquer", L"&Uygula", L"П&рименить", L"应用(&A)", L"Ü&bernehmen", L"&Aplicar", L"&Zastosuj"},
+    {554, L"click", L"clic", L"haga clic en", L"clic", L"tıklatın", L"щелкните", L"单击", L"klicken", L"clicar", L"kliknij"},
+    {557, L"ManageDpi", L"ManageDpi", L"Administrar PPP", L"GérerPPP", L"ManageDpi", L"Управление DPI", L"ManageDpi", L"DPI verwalten", L"ManageDpi", L"ManageDpi"},
+    {558, L"&Extra Large - 200%", L"Molto grand&e - 200%", L"&Muy grande - 200%", L"Très grand&e - 200 %", L"Ç&ok Büyük - %200", L"&Огромный — 200%", L"特大 - 200%(&E)", L"&Extra groß - 200 %", L"&Extra Grande - 200%", L"&Bardzo duże — 200%"},
+    {561, L"Adjust the DPI Scaling of your displays.", L"Regola il ridimensionamento DPI per gli schermi.", L"Defina el ajuste de PPP de sus pantallas.", L"Ajuster la mise à l’échelle PPP de vos affichages.", L"Ekranlarınız için DPI Ölçekleme'yi ayarlayın.", L"Настройка масштабирования для экранов.", L"调整显示器的 DPI 缩放。", L"Passen Sie die DPI-Skalierung Ihrer Anzeigen an.", L"Ajustar DPI de seus monitores.", L"Dostosuj wartość skalowania DPI ekranów."},
+    {576, L"&Extra Extra Large - 250%", L"&Grandissimo - 250%", L"&Extra Extra grande: 250%", L"&Très très grand - 250 %", L"&Ekstra Ekstra Büyük - %250", L"&Гигантский - 250%", L"超特大 - 250%(&E)", L"&Extra, extra groß - 250%", L"&Extra Extra Grande - 250%", L"&Bardzo, bardzo duże — 250%"},
+    {}
+};
+
+// Windows 10 1511 retained most legacy text but moved several string IDs. Map
+// those IDs to semantically identical, authenticated Windows 8.1 rows. This is
+// essential for the provider-owned navigation pane and for orientation/topology
+// choices populated by code rather than directly by UIFILE 201/202.
+struct MuiStringIdRemap {
+    UINT providerId;
+    UINT legacyId;
+};
+
+static const MuiStringIdRemap kProviderStringIdRemaps[] = {
+    {2, 535}, {3, 508}, {4, 508}, {9, 508}, {10, 16}, {11, 31},
+    {12, 18}, {13, 531}, {14, 32}, {16, 536}, {18, 542}, {19, 453},
+    {21, 454}, {22, 451}, {23, 547}, {301, 501}, {555, 312},
+    {556, 311}, {557, 314}, {558, 313}, {559, 320}, {560, 326},
+    {575, 211},
+    {}
+};
+
+// These 1511-only semantics have no exact-ID or format-compatible counterpart
+// in the authenticated Windows 8.1 catalog. Keep the overlay deliberately
+// narrow; the legacy table above remains authoritative for every other ID.
+static const MuiStringTable kProviderCompatibilityStrings[] = {
+    {17, L"Set custom text size (DPI)", L"Imposta dimensione testo personalizzata (DPI)", L"Establecer tamaño de texto personalizado (PPP)", L"Définir une taille de texte personnalisée (PPP)", L"Özel metin boyutu ayarla (DPI)", L"Задать пользовательский размер текста (т/д)", L"设置自定义文本大小 (DPI)", L"Benutzerdefinierte Textgröße festlegen (DPI)", L"Definir tamanho de texto personalizado (DPI)", L"Ustaw niestandardowy rozmiar tekstu (DPI)"},
+    {20, L"Medium", L"Medio", L"Mediano", L"Moyen", L"Orta", L"Средний", L"中", L"Mittel", L"Médio", L"Średnie"},
+    {36, L"The display settings on this computer are managed by your network administrator through Group Policy. Your administrator has turned off the features on this page.", L"Le impostazioni dello schermo di questo computer sono gestite dall'amministratore di rete tramite Criteri di gruppo. L'amministratore ha disattivato le funzionalità di questa pagina.", L"La configuración de pantalla de este equipo está administrada por el administrador de red mediante directivas de grupo. El administrador ha desactivado las características de esta página.", L"Les paramètres d'affichage de cet ordinateur sont gérés par votre administrateur réseau via la stratégie de groupe. Votre administrateur a désactivé les fonctionnalités de cette page.", L"Bu bilgisayardaki görüntü ayarları, ağ yöneticiniz tarafından Grup İlkesi aracılığıyla yönetiliyor. Yöneticiniz bu sayfadaki özellikleri kapatmış.", L"Параметры экрана этого компьютера управляются сетевым администратором через групповую политику. Администратор отключил функции на этой странице.", L"此计算机上的显示设置由网络管理员通过组策略进行管理。管理员已关闭此页面上的功能。", L"Die Anzeigeeinstellungen auf diesem Computer werden von Ihrem Netzwerkadministrator über Gruppenrichtlinien verwaltet. Ihr Administrator hat die Funktionen auf dieser Seite deaktiviert.", L"As configurações de vídeo neste computador são gerenciadas pelo administrador de rede por meio da Diretiva de Grupo. Seu administrador desligou os recursos desta página.", L"Ustawienia ekranu na tym komputerze są zarządzane przez administratora sieci za pomocą zasad grupy. Administrator wyłączył funkcje na tej stronie."},
+    {37, L"Windows is currently running in safe mode. Display settings are currently unavailable.", L"Windows è attualmente in esecuzione in modalità provvisoria. Le impostazioni dello schermo non sono disponibili.", L"Windows se está ejecutando en modo seguro. La configuración de pantalla no está disponible.", L"Windows est actuellement en mode sans échec. Les paramètres d'affichage ne sont pas disponibles.", L"Windows şu anda güvenli modda çalışıyor. Görüntü ayarları şu anda kullanılamıyor.", L"Windows работает в безопасном режиме. Параметры экрана сейчас недоступны.", L"Windows 当前正在安全模式下运行。显示设置目前不可用。", L"Windows wird derzeit im abgesicherten Modus ausgeführt. Anzeigeeinstellungen sind derzeit nicht verfügbar.", L"O Windows está sendo executado no modo de segurança. As configurações de vídeo não estão disponíveis.", L"System Windows jest obecnie uruchomiony w trybie awaryjnym. Ustawienia ekranu są obecnie niedostępne."},
+    {303, L"Some settings are hidden or managed by your system administrator.", L"Alcune impostazioni sono nascoste o gestite dall'amministratore di sistema.", L"Algunas opciones están ocultas o las administra el administrador del sistema.", L"Certains paramètres sont masqués ou gérés par votre administrateur système.", L"Bazı ayarlar sistem yöneticiniz tarafından gizlenmiş veya yönetiliyor.", L"Некоторые параметры скрыты или управляются администратором.", L"某些设置已被系统管理员隐藏或管理。", L"Einige Einstellungen sind ausgeblendet oder werden von Ihrem Administrator verwaltet.", L"Algumas configurações estão ocultas ou são gerenciadas pelo administrador.", L"Niektóre ustawienia są ukryte lub zarządzane przez administratora."},
+    {372, L"<a href=\"customscaledialog\">Set custom text size (DPI)</a>", L"<a href=\"customscaledialog\">Imposta dimensione testo personalizzata (DPI)</a>", L"<a href=\"customscaledialog\">Establecer tamaño de texto personalizado (PPP)</a>", L"<a href=\"customscaledialog\">Définir une taille de texte personnalisée (PPP)</a>", L"<a href=\"customscaledialog\">Özel metin boyutu ayarla (DPI)</a>", L"<a href=\"customscaledialog\">Задать пользовательский размер текста (т/д)</a>", L"<a href=\"customscaledialog\">设置自定义文本大小 (DPI)</a>", L"<a href=\"customscaledialog\">Benutzerdefinierte Textgröße festlegen (DPI)</a>", L"<a href=\"customscaledialog\">Definir tamanho de texto personalizado (DPI)</a>", L"<a href=\"customscaledialog\">Ustaw niestandardowy rozmiar tekstu (DPI)</a>"},
+    {517, L"This resolution might not be supported by your display and can cause visual problems.", L"Questa risoluzione potrebbe non essere supportata dallo schermo e causare problemi visivi.", L"Es posible que la pantalla no admita esta resolución y que cause problemas visuales.", L"Cette résolution risque de ne pas être prise en charge par votre écran et de provoquer des problèmes visuels.", L"Bu çözünürlük ekranınız tarafından desteklenmeyebilir ve görsel sorunlara yol açabilir.", L"Это разрешение может не поддерживаться экраном и вызвать проблемы с изображением.", L"你的显示器可能不支持此分辨率，并可能导致显示问题。", L"Diese Auflösung wird möglicherweise nicht von Ihrer Anzeige unterstützt und kann zu Darstellungsproblemen führen.", L"Esta resolução pode não ser compatível com a tela e causar problemas visuais.", L"Ta rozdzielczość może nie być obsługiwana przez ekran i powodować problemy z obrazem."},
+    {561, L"Show desktop only on 1", L"Mostra desktop solo su 1", L"Mostrar escritorio solo en 1", L"Afficher le Bureau uniquement sur 1", L"Masaüstünü yalnızca 1'de göster", L"Показать рабочий стол только на 1", L"仅在 1 上显示桌面", L"Desktop nur auf 1 anzeigen", L"Mostrar a área de trabalho somente em 1", L"Pokaż pulpit tylko na 1"},
+    {562, L"Preview", L"Anteprima", L"Vista previa", L"Aperçu", L"Önizleme", L"Предпросмотр", L"预览", L"Vorschau", L"Visualização", L"Podgląd"},
+    {563, L"Show desktop only on 2", L"Mostra desktop solo su 2", L"Mostrar escritorio solo en 2", L"Afficher le Bureau uniquement sur 2", L"Masaüstünü yalnızca 2'de göster", L"Показать рабочий стол только на 2", L"仅在 2 上显示桌面", L"Desktop nur auf 2 anzeigen", L"Mostrar a área de trabalho somente em 2", L"Pokaż pulpit tylko na 2"},
+    {564, L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d", L"%d x %d"},
+    {565, L"%d x %d (recommended)", L"%d x %d (consigliata)", L"%d x %d (recomendado)", L"%d x %d (recommandé)", L"%d x %d (önerilen)", L"%d x %d (рекомендуется)", L"%d x %d（推荐）", L"%d x %d (empfohlen)", L"%d x %d (recomendado)", L"%d x %d (zalecane)"},
+    {566, L"Display %d", L"Schermo %d", L"Pantalla %d", L"Écran %d", L"Ekran %d", L"Экран %d", L"显示器 %d", L"Anzeige %d", L"Tela %d", L"Ekran %d"},
+    {567, L"100%", L"100%", L"100%", L"100 %", L"%100", L"100%", L"100%", L"100 %", L"100%", L"100%"},
+    {568, L"125%", L"125%", L"125%", L"125 %", L"%125", L"125%", L"125%", L"125 %", L"125%", L"125%"},
+    {569, L"150%", L"150%", L"150%", L"150 %", L"%150", L"150%", L"150%", L"150 %", L"150%", L"150%"},
+    {570, L"175%", L"175%", L"175%", L"175 %", L"%175", L"175%", L"175%", L"175 %", L"175%", L"175%"},
+    {571, L"200%", L"200%", L"200%", L"200 %", L"%200", L"200%", L"200%", L"200 %", L"200%", L"200%"},
+    {572, L"Recommended", L"Consigliata", L"Recomendado", L"Recommandé", L"Önerilen", L"Рекомендуется", L"推荐", L"Empfohlen", L"Recomendado", L"Zalecane"},
+    {573, L"Could not apply the display settings.", L"Impossibile applicare le impostazioni dello schermo.", L"No se pudo aplicar la configuración de pantalla.", L"Impossible d'appliquer les paramètres d'affichage.", L"Görüntü ayarları uygulanamadı.", L"Не удалось применить параметры экрана.", L"无法应用显示设置。", L"Die Anzeigeeinstellungen konnten nicht übernommen werden.", L"Não foi possível aplicar as configurações de vídeo.", L"Nie można zastosować ustawień ekranu."},
+    {574, L"Keep these display settings?", L"Mantenere queste impostazioni dello schermo?", L"¿Desea conservar esta configuración de pantalla?", L"Conserver ces paramètres d'affichage ?", L"Bu görüntü ayarları korunsun mu?", L"Сохранить эти параметры экрана?", L"保留这些显示设置吗？", L"Diese Anzeigeeinstellungen beibehalten?", L"Manter estas configurações de vídeo?", L"Zachować te ustawienia ekranu?"},
+    // Official Windows 7 Display hub link (custom text size / DPI dialog).
+    // href remains the provider-owned customscaledialog command.
+    {600,
+     L"<a href=\"customscaledialog\">Set custom text size (DPI)</a>",
+     L"<a href=\"customscaledialog\">Imposta dimensione testo personalizzata (DPI)</a>",
+     L"<a href=\"customscaledialog\">Establecer tamaño de texto personalizado (PPP)</a>",
+     L"<a href=\"customscaledialog\">Définir une taille de texte personnalisée (PPP)</a>",
+     L"<a href=\"customscaledialog\">Özel metin boyutu ayarla (DPI)</a>",
+     L"<a href=\"customscaledialog\">Задать пользовательский размер текста (т/д)</a>",
+     L"<a href=\"customscaledialog\">设置自定义文本大小 (DPI)</a>",
+     L"<a href=\"customscaledialog\">Benutzerdefinierte Textgröße festlegen (DPI)</a>",
+     L"<a href=\"customscaledialog\">Definir tamanho de texto personalizado (DPI)</a>",
+     L"<a href=\"customscaledialog\">Ustaw niestandardowy rozmiar tekstu (DPI)</a>"},
+    {601,
+     L"To use a size that is not listed, click Set custom text size (DPI).",
+     L"Per usare una dimensione non presente nell'elenco, fare clic su Imposta dimensione testo personalizzata (DPI).",
+     L"Para usar un tamaño que no aparece en la lista, haga clic en Establecer tamaño de texto personalizado (PPP).",
+     L"Pour utiliser une taille qui n’est pas répertoriée, cliquez sur Définir une taille de texte personnalisée (PPP).",
+     L"Listede olmayan bir boyut kullanmak için Özel metin boyutu ayarla (DPI) öğesini tıklatın.",
+     L"Чтобы задать размер, которого нет в списке, нажмите «Задать пользовательский размер текста (т/д)».",
+     L"若要使用未列出的大小，请单击“设置自定义文本大小 (DPI)”。",
+     L"Um eine nicht aufgeführte Größe zu verwenden, klicken Sie auf Benutzerdefinierte Textgröße festlegen (DPI).",
+     L"Para usar um tamanho que não está na lista, clique em Definir tamanho de texto personalizado (DPI).",
+     L"Aby użyć rozmiaru spoza listy, kliknij Ustaw niestandardowy rozmiar tekstu (DPI)."},
+    {602, L"&Extra Large - 200%", L"Molto grand&e - 200%", L"&Muy grande - 200%", L"Très grand&e - 200 %", L"Ç&ok Büyük - %200", L"&Огромный — 200%", L"特大 - 200%(&E)", L"&Extra groß - 200 %", L"&Extra Grande - 200%", L"&Bardzo duże — 200%"},
+    {621, L"High", L"Alta", L"Alta", L"Haute", L"Y\u00fcksek", L"\u0412\u044b\u0441\u043e\u043a\u0430\u044f", L"\u9ad8", L"Hoch", L"Alta", L"Wysoka"},
+    {622, L"Low", L"Bassa", L"Baja", L"Basse", L"D\u00fc\u015f\u00fck", L"\u041d\u0438\u0437\u043a\u0430\u044f", L"\u4f4e", L"Niedrig", L"Baixa", L"Niska"},
+    // Mod-private range 630-631: the generic advisory shown by the
+    // "What display settings should I choose?" link. Windows 7 opened a Help
+    // and Support topic here; the Help engine (helppane.exe / mshelp: topics)
+    // no longer resolves that Display topic on Windows 10/11, so the link did
+    // nothing. A small self-contained advisory dialog is shown instead, with
+    // the same practical guidance the original topic gave.
+    {632,
+     L"Make it easier to read what's on your screen",
+     L"Rendi più facile la lettura del contenuto dello schermo",
+     L"Hacer que sea más fácil leer lo que hay en la pantalla",
+     L"Facilitez la lecture du contenu de l’écran",
+     L"Ekrandakileri okumayı kolaylaştırın",
+     L"Упростите чтение текста на экране",
+     L"使屏幕上的内容更易于阅读",
+     L"Bildschirminhalte leichter lesbar machen",
+     L"Facilite a leitura do que está na tela",
+     L"Ułatw czytanie zawartości ekranu"},
+    {630, L"Screen resolution", L"Risoluzione dello schermo", L"Resolución de pantalla", L"Résolution d’écran", L"Ekran çözünürlüğü", L"Разрешение экрана", L"屏幕分辨率", L"Bildschirmauflösung", L"Resolução da tela", L"Rozdzielczość ekranu"},
+    {631,
+     L"For the sharpest picture, choose the resolution marked (recommended). That is your display's native resolution, the one it was built for.\n\nLower resolutions make text and icons bigger, but the image looks softer because the screen has to stretch it.\n\nIf text is too small at the recommended resolution, keep that resolution and use \"Make text and other items larger or smaller\" instead. This keeps the picture sharp while enlarging what is on screen.",
+     L"Per ottenere l'immagine più nitida, scegliere la risoluzione contrassegnata come (consigliata). È la risoluzione nativa dello schermo, quella per cui è stato progettato.\n\nLe risoluzioni inferiori ingrandiscono testo e icone, ma l'immagine risulta meno definita perché lo schermo deve adattarla.\n\nSe alla risoluzione consigliata il testo è troppo piccolo, mantenere tale risoluzione e usare \"Ingrandisci o riduci dimensioni di testo e altri elementi\". In questo modo l'immagine resta nitida e il contenuto viene ingrandito.",
+     L"Para obtener la imagen más nítida, elija la resolución marcada como (recomendado). Es la resolución nativa de la pantalla, aquella para la que se diseñó.\n\nLas resoluciones más bajas agrandan el texto y los iconos, pero la imagen se ve menos definida porque la pantalla debe estirarla.\n\nSi el texto es demasiado pequeño en la resolución recomendada, mantenga esa resolución y use \"Cambiar el tamaño del texto y de otros elementos\". Así la imagen sigue nítida y el contenido se agranda.",
+     L"Pour obtenir l'image la plus nette, choisissez la résolution marquée (recommandé). Il s'agit de la résolution native de votre écran, celle pour laquelle il a été conçu.\n\nLes résolutions inférieures agrandissent le texte et les icônes, mais l'image paraît moins nette car l'écran doit l'étirer.\n\nSi le texte est trop petit à la résolution recommandée, conservez cette résolution et utilisez « Modifier la taille du texte et d'autres éléments ». L'image reste ainsi nette tout en agrandissant le contenu.",
+     L"En keskin görüntü için (önerilen) olarak işaretlenmiş çözünürlüğü seçin. Bu, ekranınızın üretildiği yerel çözünürlüktür.\n\nDaha düşük çözünürlükler metni ve simgeleri büyütür, ancak ekran görüntüyü esnetmek zorunda kaldığı için görüntü daha bulanık görünür.\n\nÖnerilen çözünürlükte metin çok küçükse, bu çözünürlüğü koruyun ve bunun yerine \"Metin ve diğer öğeleri büyüt veya küçült\" seçeneğini kullanın. Böylece görüntü keskin kalırken ekrandakiler büyür.",
+     L"Для наиболее четкого изображения выберите разрешение с пометкой (рекомендуется). Это собственное разрешение вашего экрана, для которого он создан.\n\nПри более низких разрешениях текст и значки становятся крупнее, но изображение выглядит менее четким, так как экрану приходится его растягивать.\n\nЕсли при рекомендуемом разрешении текст слишком мелкий, оставьте это разрешение и воспользуйтесь параметром \"Изменение размера текста и других элементов\". Изображение останется четким, а содержимое станет крупнее.",
+     L"若要获得最清晰的画面，请选择标有(推荐)的分辨率。这是显示器的原生分辨率，也是其设计使用的分辨率。\n\n较低的分辨率会使文本和图标变大，但由于屏幕需要拉伸图像，画面会显得比较模糊。\n\n如果在推荐分辨率下文本太小，请保留该分辨率并改用“放大或缩小文本和其他项目”。这样既能保持画面清晰，又能放大屏幕上的内容。",
+     L"Für das schärfste Bild wählen Sie die mit (empfohlen) gekennzeichnete Auflösung. Dies ist die native Auflösung Ihres Bildschirms, für die er gebaut wurde.\n\nNiedrigere Auflösungen vergrößern Text und Symbole, das Bild wirkt jedoch unschärfer, da der Bildschirm es strecken muss.\n\nIst der Text bei der empfohlenen Auflösung zu klein, behalten Sie diese Auflösung bei und verwenden Sie stattdessen \"Text und weitere Elemente vergrößern oder verkleinern\". So bleibt das Bild scharf und der Inhalt wird größer.",
+     L"Para obter a imagem mais nítida, escolha a resolução marcada como (recomendado). Essa é a resolução nativa da tela, aquela para a qual ela foi construída.\n\nResoluções menores aumentam o texto e os ícones, mas a imagem fica menos definida porque a tela precisa esticá-la.\n\nSe o texto estiver muito pequeno na resolução recomendada, mantenha essa resolução e use \"Facilitar a leitura do texto e de outros itens\". Assim a imagem continua nítida e o conteúdo fica maior.",
+     L"Aby uzyskać najostrzejszy obraz, wybierz rozdzielczość oznaczoną jako (zalecane). Jest to rozdzielczość natywna ekranu, czyli ta, dla której został zbudowany.\n\nNiższe rozdzielczości powiększają tekst i ikony, ale obraz wygląda na mniej wyraźny, ponieważ ekran musi go rozciągnąć.\n\nJeśli przy zalecanej rozdzielczości tekst jest za mały, zachowaj tę rozdzielczość i użyj opcji \"Powiększ lub pomniejsz tekst i inne elementy\". Dzięki temu obraz pozostanie ostry, a zawartość zostanie powiększona."},
+    {}
+};
+
+// Sidebar task-link labels (mod-private ID range 610-620).
+// =============================================================================
+// The restored task-pane list is built through the pinned provider's own
+// AddLink methods, which resolve label IDs with LoadString against the
+// provider instance and therefore arrive in GetMuiString. The authentic
+// Windows 8.1 labels live at their legacy IDs in kMuiStrings, but several of
+// those legacy IDs (16, 17, 18, 20, 22, 23) are intercepted by
+// kProviderStringIdRemaps / kProviderCompatibilityStrings because the 1511
+// provider reuses the same IDs for unrelated DPI-page strings. Passing the
+// legacy IDs directly to AddLink would therefore render mislabeled links
+// (for example "Adjust resolution" would show as "What display settings
+// should I choose?"). Instead the task list uses this private alias range,
+// which the pinned provider never requests for its own UI, so each label
+// resolves to exactly the authenticated Windows 8.1 wording in the selected
+// language.
+struct NavLabelAlias {
+    UINT navId;
+    UINT legacyId;
+};
+
+static const NavLabelAlias kNavLinkLabelAliases[] = {
+    {610, 16},  // Adjust resolution
+    {611, 26},  // Adjust brightness
+    {612, 20},  // Change desktop background
+    {613, 23},  // Change window colors
+    {614, 22},  // Change screen saver
+    {615, 31},  // Calibrate color
+    {616, 18},  // Change display settings
+    {617, 17},  // Project to a second screen
+    {618, 32},  // Adjust ClearType text
+    {619, 24},  // Personalization
+    {620, 25},  // Devices and Printers
+    {}
+};
+
+static const MuiStringTable* FindMuiStringRow(const MuiStringTable* table,
+                                              UINT id) {
+    for (const MuiStringTable* row = table; row->en != nullptr; ++row) {
+        if (row->id == id) return row;
+    }
+    return nullptr;
+}
+
+static const wchar_t* SelectMuiTranslation(const MuiStringTable* row,
+                                            MuiLanguage lang) {
+    if (!row) return nullptr;
+    switch (lang) {
+        case MuiLanguage::IT_IT: return row->it;
+        case MuiLanguage::ES_ES: return row->es;
+        case MuiLanguage::FR_FR: return row->fr;
+        case MuiLanguage::TR_TR: return row->tr;
+        case MuiLanguage::RU_RU: return row->ru;
+        case MuiLanguage::ZH_CN: return row->zh;
+        case MuiLanguage::DE_DE: return row->de;
+        case MuiLanguage::PT_BR: return row->pt;
+        case MuiLanguage::PL_PL: return row->pl;
+        default: return row->en;
+    }
+}
+
+static const wchar_t* GetMuiString(UINT id, MuiLanguage lang) {
+    for (const NavLabelAlias* alias = kNavLinkLabelAliases;
+         alias->navId != 0; ++alias) {
+        if (alias->navId == id) {
+            // Resolve through the legacy row directly: the remap and
+            // compatibility overlays below are defined for provider-native
+            // IDs and must never touch the mod-private alias range.
+            return SelectMuiTranslation(
+                FindMuiStringRow(kMuiStrings, alias->legacyId), lang);
+        }
+    }
+
+    for (const MuiStringIdRemap* remap = kProviderStringIdRemaps;
+         remap->providerId != 0; ++remap) {
+        if (remap->providerId == id) {
+            return SelectMuiTranslation(
+                FindMuiStringRow(kMuiStrings, remap->legacyId), lang);
+        }
+    }
+
+    if (const MuiStringTable* compatibility =
+            FindMuiStringRow(kProviderCompatibilityStrings, id)) {
+        return SelectMuiTranslation(compatibility, lang);
+    }
+
+    return SelectMuiTranslation(FindMuiStringRow(kMuiStrings, id), lang);
+}
+
+static MuiLanguage DetectMuiLanguage(const wchar_t* locale) {
+    if (!locale || !*locale) return MuiLanguage::EN_US;
+
+    std::wstring normalized(locale);
+    for (auto& c : normalized) c = towlower(c);
+
+    if (normalized.rfind(L"it", 0) == 0) return MuiLanguage::IT_IT;
+    if (normalized.rfind(L"es", 0) == 0) return MuiLanguage::ES_ES;
+    if (normalized.rfind(L"fr", 0) == 0) return MuiLanguage::FR_FR;
+    if (normalized.rfind(L"tr", 0) == 0) return MuiLanguage::TR_TR;
+    if (normalized.rfind(L"ru", 0) == 0) return MuiLanguage::RU_RU;
+    if (normalized.rfind(L"zh", 0) == 0) return MuiLanguage::ZH_CN;
+    if (normalized.rfind(L"de", 0) == 0) return MuiLanguage::DE_DE;
+    if (normalized.rfind(L"pt", 0) == 0) return MuiLanguage::PT_BR;
+    if (normalized.rfind(L"pl", 0) == 0) return MuiLanguage::PL_PL;
+    return MuiLanguage::EN_US;
+}
+
+// END OF EMBEDDED STRING CATALOG
+
+
+static const wchar_t* kAppletClsidEnglish = L"{c555438b-3c23-4769-a71f-b6d3d9b6053a}";
+static const wchar_t* kAppletDisplayNameEN = L"Display";
+// Launch route of the restored Display hub (bare applet folder). The
+// separate Screen Resolution page is reached in-place through the sidebar
+// "Adjust resolution" canonical link (Microsoft.Display + "Settings"), the
+// same navigation the pinned provider uses for its genuine task link.
+static const wchar_t kRestoredDisplayHubTarget[] =
+    L"shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}";
+// Exact shell route of the separate Screen Resolution page, used verbatim
+// ("nulla di piu'"): the sidebar Adjust-resolution entries, the desktop
+// context-menu redirect and the desk.cpl,,2 route all open this URI.
+static const wchar_t kRestoredResolutionPageTarget[] =
+    L"shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\Settings";
+static const wchar_t* kLayoutFolderClsid = L"{328B0346-7EAF-4BBE-A479-7CB88A095F5B}";
+static const wchar_t* kProviderClsid = L"{2b6da137-316e-458b-a0ab-be48c8ec39b9}";
+static const DWORD kShellFolderAttributes = 0xa80001a0; // + SFGAO_BROWSABLE (0x08000000): required for the Control Panel to navigate the item in-place on double click
+// Original Display applet task-list contract: XMLFILE 100 is the override and
+// XMLFILE 101 selects the Display, Desktop Background, and Window Color tasks.
+static const DWORD kOverrideResourceId = 100;
+static const DWORD kInitResourceId = 101;
+// Microsoft Windows 10 1511 x64 Display provider, version 10.0.10586.0.
+// This is the compatibility engine for the modern DirectUI class-registration
+// ABI. The public Symbol Server key encodes its PE identity.
+static const wchar_t* kDownloadUrl =
+    L"https://msdl.microsoft.com/download/symbols/display.dll/5632D659c3000/display.dll";
+static const wchar_t* kExpectedSha256 =
+    L"A2624A5E908FC9B99EDF89A1AAEEE0C70DD10ED3142D1F922F308AD35993D30C";
+static const wchar_t* kLocalizedResourcePrefix = L"display.resources-";
+static const wchar_t* kLegacyVariantMarkerName = L"display.dll.variant";
+// The exact provider is 775,168 bytes. SHA-256 is authoritative; this floor
+// cheaply rejects a truncated response before hashing.
+static const DWORD kMinPlausibleDllSize = 65536;
+
+static const GUID kAppletFolderGuid = {0xC555438B, 0x3C23, 0x4769,
+                                       {0xA7, 0x1F, 0xB6, 0xD3, 0xD9, 0xB6, 0x05, 0x3A}};
+static GUID kProviderGuid = {0x2B6DA137, 0x316E, 0x458B,
+                             {0xA0, 0xAB, 0xBE, 0x48, 0xC8, 0xEC, 0x39, 0xB9}};
+static const IID IID_IClassFactory_GUID = {0x00000001, 0x0000, 0x0000,
+                                           {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+
+// -----------------------------------------------------------------------------
+// Shared state. Most of this is read on hot paths by hooks, so it is published
+// atomically. The setup thread populates it in one direction; hooks only read.
+// -----------------------------------------------------------------------------
+std::atomic<HMODULE> g_hDisplayDll{nullptr};
+// The DLL path is written exactly once by the setup thread and never mutated
+// afterwards, so an atomic raw pointer to a heap-allocated string is sufficient
+// (std::atomic<shared_ptr> is not available on the Windhawk compiler).
+std::atomic<const std::wstring*> g_dllPath{nullptr};
+std::atomic<bool> g_dllVerifiedOk{false};
+std::atomic<bool> g_languageAutomatic{true};
+std::atomic<int> g_forcedLanguage{static_cast<int>(MuiLanguage::EN_US)};
+
+// Functional feature toggles. All defaults preserve the established
+// behavior; each flag is read live at the exact decision point so changing a
+// setting takes effect on the next page/launch without an Explorer restart.
+std::atomic<bool> g_showSidebarLinks{true};
+std::atomic<bool> g_resolutionPageCompatibility{true};
+std::atomic<bool> g_redirectClassicLaunch{true};
+std::atomic<bool> g_redirectDisplaySettingsUri{true};
+std::atomic<bool> g_enableDpiPresets{true};
+std::atomic<bool> g_showOrientationPanel{false};
+
+// Manual-reset stop event set by Wh_ModUninit so that setup waits and retry
+// delays can be interrupted immediately.
+static HANDLE g_stopEvent = nullptr;
+
+// Set by Wh_ModUninit so the background setup (and any in-flight download) can
+// abort promptly instead of blocking shutdown.
+std::atomic<bool> g_shuttingDown{false};
+static const DWORD kDownloadTimeoutMs = 20000;
+static const int kMaxDownloadAttempts = 3;
+static const DWORD kRetryDelayMs = 3000;
+static const DWORD kRetryCycleDelayMs = 60000;
+
+// The private DirectUI resource module is built once and loaded lazily; it is
+// guarded by a mutex because both the setup thread and settings changes can
+// (re)build it.
+static std::mutex g_localizedResourceMutex;
+// Cache of the language inputs the private resource module was last built
+// with, guarded by g_localizedResourceMutex. Automatic mode also records the
+// effective Windows UI language because the page-definition titles are embedded
+// as literal localized text. This avoids both stale titles after a UI-language
+// change and needless remapping when no language input changed.
+static bool g_lastBuiltValid = false;
+static bool g_lastBuiltLanguageAutomatic = true;
+static int g_lastBuiltForcedLanguage = static_cast<int>(MuiLanguage::EN_US);
+static int g_lastBuiltEffectiveLanguage =
+    static_cast<int>(MuiLanguage::EN_US);
+static std::wstring g_localizedResourcePath;
+// Read lock-free on the hot path, written under g_localizedResourceMutex.
+static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
+// Version tag embedded in the private resource module's file name. The module
+// content is fully determined by the translation inputs plus the mod's
+// embedded string catalog, so bumping this invalidates files built by older
+// versions of the mod whenever the catalog changes.
+static constexpr DWORD kLocalizedResourceFormatVersion = 15;
+
+// Setup is performed on a background worker thread that is joined on unload.
+// Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
+// (when Wh_ModUninit is not called), ~thread() is not invoked on a joinable thread,
+// avoiding std::terminate() and process crashes.
+#if defined(__clang__)
+[[clang::no_destroy]]
+#endif
+static std::optional<std::thread> g_setupThread;
+
+const std::wstring* CurrentDllPath() {
+    return g_dllPath.load(std::memory_order_acquire);
+}
+
+std::wstring ToLower(const std::wstring& s) {
+    std::wstring r = s;
+    for (auto& c : r) c = towlower(c);
+    return r;
+}
+bool EndsWith(const std::wstring& s, const std::wstring& suf) {
+    if (s.size() < suf.size()) return false;
+    return s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
+}
+std::wstring ExpandEnv(const wchar_t* p) {
+    wchar_t b[MAX_PATH]{};
+    ExpandEnvironmentStringsW(p, b, MAX_PATH);
+    return std::wstring(b);
+}
+
+// Cheap, non-allocating ASCII case-insensitive substring test. Used to gate the
+// expensive registry hooks so they do no allocation for the vast majority of
+// registry accesses that are irrelevant to this mod.
+static bool AsciiCaseInsensitiveContains(const wchar_t* s, const char* needle) {
+    if (!s || !*s || !needle) return false;
+    wchar_t needleW[32] = {};
+    size_t nlen = 0;
+    for (; needle[nlen] && nlen < 31; ++nlen) {
+        char c = needle[nlen];
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        needleW[nlen] = static_cast<wchar_t>(c);
+    }
+    needleW[nlen] = 0;
+    if (!nlen) return false;
+    for (const wchar_t* p = s; *p; ++p) {
+        const wchar_t* a = p;
+        const wchar_t* b = needleW;
+        while (*b) {
+            wchar_t ca = *a;
+            if (ca >= L'a' && ca <= L'z') ca = static_cast<wchar_t>(ca - L'a' + L'A');
+            if (ca != *b) break;
+            ++a;
+            ++b;
+        }
+        if (!*b) return true;
+    }
+    return false;
+}
+
+static bool ContainsRelevantKeywordCheap(const wchar_t* s) {
+    return s && (AsciiCaseInsensitiveContains(s, "clsid") ||
+                 AsciiCaseInsensitiveContains(s, "controlpanel") ||
+                 AsciiCaseInsensitiveContains(s, "shell extensions"));
+}
+
+class UniqueWinHandle {
+public:
+    UniqueWinHandle() = default;
+    explicit UniqueWinHandle(HANDLE handle) : handle_(handle) {}
+    ~UniqueWinHandle() { Reset(); }
+
+    UniqueWinHandle(const UniqueWinHandle&) = delete;
+    UniqueWinHandle& operator=(const UniqueWinHandle&) = delete;
+
+    UniqueWinHandle(UniqueWinHandle&& other)  
+        : handle_(other.Release()) {}
+    UniqueWinHandle& operator=(UniqueWinHandle&& other)   {
+        if (this != &other) Reset(other.Release());
+        return *this;
+    }
+
+    bool IsValid() const { return handle_ && handle_ != INVALID_HANDLE_VALUE; }
+    HANDLE Get() const { return handle_; }
+    HANDLE Release() {
+        HANDLE result = handle_;
+        handle_ = INVALID_HANDLE_VALUE;
+        return result;
+    }
+    void Reset(HANDLE handle = INVALID_HANDLE_VALUE) {
+        if (IsValid()) CloseHandle(handle_);
+        handle_ = handle;
+    }
+
+private:
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+};
+
+// Open the DLL denying write sharing for the whole verify -> load window.
+// FILE_SHARE_READ | FILE_SHARE_DELETE is required (not FILE_SHARE_READ only)
+// because the loader opens the file requesting delete sharing; with read-only
+// sharing LoadLibraryExW would fail with ERROR_SHARING_VIOLATION. What the pin
+// prevents is in-place modification: the bytes cannot be rewritten between
+// verification and load. The caller must keep the returned handle alive until
+// after LoadLibraryExW returns.
+// RAII owner of a FindFirstFileW/FindNextFileW search handle: guarantees
+// FindClose on every exit path (early returns included), matching the
+// conservative never-leak policy used for the other native handles.
+class FindFileHandleGuard {
+   public:
+    FindFileHandleGuard() = default;
+    explicit FindFileHandleGuard(HANDLE handle) : handle_(handle) {}
+    ~FindFileHandleGuard() {
+        if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE)
+            FindClose(handle_);
+    }
+    FindFileHandleGuard(const FindFileHandleGuard&) = delete;
+    FindFileHandleGuard& operator=(const FindFileHandleGuard&) = delete;
+    HANDLE Get() const { return handle_; }
+    bool IsValid() const {
+        return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
+    }
+
+   private:
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+};
+
+// RAII owner of the CommandLineToArgvW allocation: LocalFree on destruction,
+// so every parse path (including the early exits of the launch detector)
+// releases the argv buffer exactly once.
+class CommandLineArgvGuard {
+   public:
+    CommandLineArgvGuard()
+        : argv_(CommandLineToArgvW(GetCommandLineW(), &count_)) {}
+    ~CommandLineArgvGuard() {
+        if (argv_) LocalFree(argv_);
+    }
+    CommandLineArgvGuard(const CommandLineArgvGuard&) = delete;
+    CommandLineArgvGuard& operator=(const CommandLineArgvGuard&) = delete;
+    LPWSTR* Get() const { return argv_; }
+    int Count() const { return count_; }
+
+   private:
+    LPWSTR* argv_ = nullptr;
+    int count_ = 0;
+};
+
+// RAII owners for the CryptoAPI objects used by the SHA-256 verification:
+// release the hash and the provider context on every exit path.
+class CryptProvGuard {
+   public:
+    CryptProvGuard() = default;
+    ~CryptProvGuard() {
+        if (prov_) CryptReleaseContext(prov_, 0);
+    }
+    CryptProvGuard(const CryptProvGuard&) = delete;
+    CryptProvGuard& operator=(const CryptProvGuard&) = delete;
+    HCRYPTPROV* Address() { return &prov_; }
+    HCRYPTPROV Get() const { return prov_; }
+
+   private:
+    HCRYPTPROV prov_ = 0;
+};
+
+class CryptHashGuard {
+   public:
+    CryptHashGuard() = default;
+    ~CryptHashGuard() {
+        if (hash_) CryptDestroyHash(hash_);
+    }
+    CryptHashGuard(const CryptHashGuard&) = delete;
+    CryptHashGuard& operator=(const CryptHashGuard&) = delete;
+    HCRYPTHASH* Address() { return &hash_; }
+    HCRYPTHASH Get() const { return hash_; }
+
+   private:
+    HCRYPTHASH hash_ = 0;
+};
+
+// -----------------------------------------------------------------------------
+// File integrity - SHA-256 via CryptoAPI (advapi32, already linked).
+// -----------------------------------------------------------------------------
+static wchar_t HexUpper(BYTE nibble) {
+    return nibble < 10 ? static_cast<wchar_t>(L'0' + nibble)
+                       : static_cast<wchar_t>(L'A' + nibble - 10);
+}
+
+static bool ComputeFileSha256(const std::wstring& path, BYTE digest[32]) {
+    UniqueWinHandle file(CreateFileW(path.c_str(), GENERIC_READ,
+                                     FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                     FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!file.IsValid()) return false;
+
+    CryptProvGuard prov;
+    CryptHashGuard hash;
+    bool ok = false;
+    if (CryptAcquireContextW(prov.Address(), nullptr, nullptr, PROV_RSA_AES,
+                             CRYPT_VERIFYCONTEXT)) {
+        if (CryptCreateHash(prov.Get(), CALG_SHA_256, 0, 0, hash.Address())) {
+            BYTE buf[65536];
+            bool readOk = true;
+            for (;;) {
+                DWORD rd = 0;
+                if (!ReadFile(file.Get(), buf, sizeof(buf), &rd, nullptr)) {
+                    readOk = false;
+                    break;
+                }
+                if (rd == 0) break;
+                if (!CryptHashData(hash.Get(), buf, rd, 0)) {
+                    readOk = false;
+                    break;
+                }
+            }
+            if (readOk) {
+                DWORD cb = 32;
+                ok = CryptGetHashParam(hash.Get(), HP_HASHVAL, digest, &cb,
+                                       0) != FALSE && cb == 32;
+            }
+        }
+    }
+    return ok;
+}
+
+static bool FileSha256Matches(const std::wstring& path, const wchar_t* expectedHex) {
+    BYTE digest[32];
+    if (!ComputeFileSha256(path, digest)) return false;
+    for (int i = 0; i < 32; ++i) {
+        if (expectedHex[i * 2] != HexUpper(digest[i] >> 4) ||
+            expectedHex[i * 2 + 1] != HexUpper(digest[i] & 0xF)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// PE validation helpers
+// -----------------------------------------------------------------------------
+bool VerifyDownloadedDllLooksValid(const std::wstring& p) {
+    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER sz{};
+    GetFileSizeEx(h, &sz);
+    if (sz.QuadPart < kMinPlausibleDllSize) {
+        CloseHandle(h);
+        return false;
+    }
+    IMAGE_DOS_HEADER dos{};
+    DWORD br = 0;
+    ReadFile(h, &dos, sizeof(dos), &br, nullptr);
+    if (br != sizeof(dos) || dos.e_magic != IMAGE_DOS_SIGNATURE) {
+        CloseHandle(h);
+        return false;
+    }
+    LARGE_INTEGER off{};
+    off.QuadPart = dos.e_lfanew;
+    SetFilePointerEx(h, off, nullptr, FILE_BEGIN);
+    DWORD sig = 0;
+    ReadFile(h, &sig, sizeof(sig), &br, nullptr);
+    CloseHandle(h);
+    return br == sizeof(sig) && sig == IMAGE_NT_SIGNATURE;
+}
+
+bool GetPeMachineType(const std::wstring& p, WORD& machine) {
+    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    IMAGE_DOS_HEADER dos{};
+    DWORD br = 0;
+    bool ok = ReadFile(h, &dos, sizeof(dos), &br, nullptr) && br == sizeof(dos) &&
+              dos.e_magic == IMAGE_DOS_SIGNATURE;
+    if (ok) {
+        LARGE_INTEGER off{};
+        off.QuadPart = dos.e_lfanew;
+        ok = SetFilePointerEx(h, off, nullptr, FILE_BEGIN) != FALSE;
+        DWORD sig = 0;
+        ok = ok && ReadFile(h, &sig, sizeof(sig), &br, nullptr) &&
+             br == sizeof(sig) && sig == IMAGE_NT_SIGNATURE;
+        ok = ok && ReadFile(h, &machine, sizeof(machine), &br, nullptr) &&
+             br == sizeof(machine);
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+// Both this mod and display.dll are x64-only. Windhawk's `@architecture
+// x86-64` filter is authoritative: if this code is executing, the current
+// process can load an AMD64 DLL. A previous runtime IsWow64Process2 check added
+// another failure point before the first useful startup log and could reject
+// unusual emulation configurations even though Windhawk had loaded the x64
+// mod successfully. Keep the defensive check compile-time-only and observable.
+static constexpr bool IsRunningAsAmd64() {
+#if defined(_M_X64) || defined(__x86_64__)
+    return true;
+#else
+    return false;
+#endif
+}
+
+// Download one exact, known-good Microsoft build so setup is deterministic.
+// It is kept in mod-owned storage and never replaces a system file.
+
+// Structural + SHA-256 verification. Anything other than the adopted
+// Windows 10 1511 x64 compatibility provider is rejected and never loaded.
+bool VerifyDllIsCompatible(const std::wstring& path) {
+    if (!VerifyDownloadedDllLooksValid(path)) return false;
+    WORD machine = 0;
+    if (!GetPeMachineType(path, machine) ||
+        machine != IMAGE_FILE_MACHINE_AMD64) {
+        Wh_Log(L"DLL at %s is not x64 (machine=%04X)", path.c_str(), machine);
+        return false;
+    }
+    if (!FileSha256Matches(path, kExpectedSha256)) {
+        Wh_Log(L"DLL at %s failed the pinned Windows 10 1511 SHA-256 check",
+               path.c_str());
+        return false;
+    }
+    return true;
+}
+
+// Delete the mod's own stale "*.old-*" files (renamed-out previous variants).
+void CleanupOldDlls(const std::wstring& dir) {
+    WIN32_FIND_DATAW fd{};
+    std::wstring pattern = dir + L"\\" + kDllRelativeName + L".old*";
+    FindFileHandleGuard find(FindFirstFileW(pattern.c_str(), &fd));
+    if (!find.IsValid()) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            DeleteFileW((dir + L"\\" + fd.cFileName).c_str());
+        }
+    } while (FindNextFileW(find.Get(), &fd));
+}
+
+// -----------------------------------------------------------------------------
+// Verified load of the downloaded DLL
+// -----------------------------------------------------------------------------
+static UniqueWinHandle PinDllForLoad(const std::wstring& path) {
+    return UniqueWinHandle(
+        CreateFileW(path.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL, nullptr));
+}
+
+// Handles for the WinInet call currently in flight (if any), published under
+// g_downloadHandlesMutex so Wh_ModUninit can close them from the outside.
+// InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile each block for
+// up to kDownloadTimeoutMs and do not otherwise notice g_shuttingDown, so on a
+// captive-portal/dead network the only way to make them return immediately is
+// to close the handle out from under them - WinInet fails the blocked call
+// with ERROR_INTERNET_OPERATION_CANCELLED instead of waiting out the timeout.
+static std::mutex g_downloadHandlesMutex;
+static HINTERNET g_downloadHNet = nullptr;
+static HINTERNET g_downloadHUrl = nullptr;
+
+static void CancelInFlightDownload() {
+    std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+    if (g_downloadHUrl) {
+        InternetCloseHandle(g_downloadHUrl);
+        g_downloadHUrl = nullptr;
+    }
+    if (g_downloadHNet) {
+        InternetCloseHandle(g_downloadHNet);
+        g_downloadHNet = nullptr;
+    }
+}
+
+// Download a file to `dest` using WinInet. Unlike URLDownloadToFileW this gives
+// us real control over timeouts and lets us abort on shutdown. connect/send/
+// receive are each bounded to kDownloadTimeoutMs at the WinInet level, and we
+// additionally enforce an overall deadline so a stuck/captive-portal connection
+// can never block for minutes. Returns true only when the full file was written.
+static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& dest) {
+    HINTERNET hNet = InternetOpenW(L"Windhawk Display Restorer",
+                                   INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr,
+                                   0);
+    if (!hNet) return false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+        g_downloadHNet = hNet;
+    }
+
+    // If shutdown was requested while we were setting hNet up, cancel right
+    // away instead of starting a request we'd only have to unwind.
+    if (g_shuttingDown.load(std::memory_order_relaxed)) {
+        CancelInFlightDownload();
+        return false;
+    }
+
+    DWORD timeoutMs = kDownloadTimeoutMs;
+    InternetSetOptionW(hNet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs,
+                       sizeof(timeoutMs));
+    InternetSetOptionW(hNet, INTERNET_OPTION_SEND_TIMEOUT, &timeoutMs,
+                       sizeof(timeoutMs));
+    InternetSetOptionW(hNet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs,
+                       sizeof(timeoutMs));
+
+    HINTERNET hUrl = InternetOpenUrlW(
+        hNet, url.c_str(), nullptr, 0,
+        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_UI,
+        0);
+    if (!hUrl) {
+        CancelInFlightDownload();
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+        // CancelInFlightDownload() may have already closed g_downloadHNet from
+        // under us (shutdown raced this open); if so, hUrl is bogus, back out.
+        if (!g_downloadHNet) {
+            InternetCloseHandle(hUrl);
+            return false;
+        }
+        g_downloadHUrl = hUrl;
+    }
+
+    bool ok = false;
+    do {
+        // Redirects are followed automatically (INTERNET_FLAG_NO_AUTO_REDIRECT
+        // is not set). Confirm we actually got a 200 OK response.
+        DWORD status = 0;
+        DWORD statusLen = sizeof(status);
+        DWORD headerIndex = 0;
+        if (!HttpQueryInfoW(hUrl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                            &status, &statusLen, &headerIndex) ||
+            status != HTTP_STATUS_OK) {
+            break;
+        }
+
+        HANDLE hFile = CreateFileW(dest.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                                   nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                   nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) break;
+
+        const ULONGLONG start = GetTickCount64();
+        BYTE buf[65536];
+        bool readOk = true;
+        DWORD rd = 0;
+        for (;;) {
+            if (g_shuttingDown.load(std::memory_order_relaxed)) {
+                readOk = false;
+                break;
+            }
+            DWORD avail = 0;
+            if (!InternetQueryDataAvailable(hUrl, &avail, 0, 0)) {
+                readOk = false;
+                break;
+            }
+            if (avail == 0) break;  // normal EOF
+            if (avail > sizeof(buf)) avail = static_cast<DWORD>(sizeof(buf));
+            if (!InternetReadFile(hUrl, buf, avail, &rd) || rd == 0) {
+                readOk = false;
+                break;
+            }
+            DWORD wr = 0;
+            if (!WriteFile(hFile, buf, rd, &wr, nullptr) || wr != rd) {
+                readOk = false;
+                break;
+            }
+            if (GetTickCount64() - start > kDownloadTimeoutMs) {
+                readOk = false;  // overall deadline exceeded
+                break;
+            }
+        }
+        CloseHandle(hFile);
+        ok = readOk;
+    } while (false);
+
+    // Normal completion path. Only close a handle here if a concurrent
+    // CancelInFlightDownload() hasn't already closed it out from under us
+    // (checked-and-cleared under the same lock, to avoid a double-close race
+    // with the shutdown path).
+    {
+        std::lock_guard<std::mutex> lock(g_downloadHandlesMutex);
+        if (g_downloadHUrl == hUrl) {
+            g_downloadHUrl = nullptr;
+        } else {
+            hUrl = nullptr;  // already closed by CancelInFlightDownload
+        }
+        if (g_downloadHNet == hNet) {
+            g_downloadHNet = nullptr;
+        } else {
+            hNet = nullptr;  // already closed by CancelInFlightDownload
+        }
+    }
+    if (hUrl) InternetCloseHandle(hUrl);
+    if (hNet) InternetCloseHandle(hNet);
+    return ok;
+}
+
+// Download the required DLL (if needed), verify it, and make it visible only
+// once valid. Returns true and sets outPath when a valid DLL is available.
+// The cross-process serialization is done by the caller (the setup thread).
+// Download the required DLL (if needed), verify it, and make it visible only
+// once valid. On success, `outPin` holds an open handle to the verified file
+// (opened denying write sharing) and `outPath` its path; the caller must keep
+// `outPin` alive until after LoadLibraryExW so the executed bytes are the
+// verified bytes. The cross-process serialization is done by the caller (the
+// setup thread).
+bool DownloadDllToPath(const std::wstring& dir, std::wstring& outPath,
+                       UniqueWinHandle& outPin) {
+    const std::wstring out = dir + L"\\" + kDllRelativeName;
+    CleanupOldDlls(dir);
+
+    if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        UniqueWinHandle pin = PinDllForLoad(out);
+        if (pin.IsValid() && VerifyDllIsCompatible(out)) {
+            outPath = out;
+            outPin = std::move(pin);
+            return true;
+        }
+
+        DeleteFileW(out.c_str());
+        if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            FILETIME ft{};
+            SYSTEMTIME st{};
+            GetSystemTime(&st);
+            SystemTimeToFileTime(&st, &ft);
+            wchar_t suffix[48] = {};
+            swprintf_s(suffix, ARRAYSIZE(suffix), L".old-%08X%08X",
+                       static_cast<unsigned>(ft.dwHighDateTime),
+                       static_cast<unsigned>(ft.dwLowDateTime));
+            MoveFileW(out.c_str(), (out + suffix).c_str());
+        }
+        if (GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"An incompatible display.dll is locked in mod storage");
+            return false;
+        }
+    }
+
+    const std::wstring temporary = out + L".tmp";
+    DeleteFileW(temporary.c_str());
+    Wh_Log(L"Downloading pinned Microsoft Windows 10 1511 display.dll from %s",
+           kDownloadUrl);
+    const bool downloaded = DownloadWithTimeout(kDownloadUrl, temporary);
+    UniqueWinHandle pin;
+    if (downloaded) {
+        pin = PinDllForLoad(temporary);
+    }
+    if (!downloaded || !pin.IsValid() ||
+        !VerifyDllIsCompatible(temporary)) {
+        Wh_Log(L"Download/verification failed; the DLL was not installed");
+        DeleteFileW(temporary.c_str());
+        return false;
+    }
+
+    // The no-write-sharing pin remains valid across this same-file-object move,
+    // closing the verification-to-load replacement window.
+    if (!MoveFileExW(temporary.c_str(), out.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        Wh_Log(L"Activating verified display.dll failed: %u", GetLastError());
+        DeleteFileW(temporary.c_str());
+        return false;
+    }
+    outPath = out;
+    outPin = std::move(pin);
+    return true;
+}
+
+// Remove only files this mod created. keepBase=true leaves the base DLL and the
+// verified provider behind (used when the "keep files" setting is ON), but still
+// removes per-process resource modules and stale copies. If a file is still in
+// use it is left alone and retried on the next unload.
+void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
+    WIN32_FIND_DATAW fd{};
+    std::wstring pattern = dir + L"\\*";
+    FindFileHandleGuard find(FindFirstFileW(pattern.c_str(), &fd));
+    if (!find.IsValid()) return;
+    std::vector<std::wstring> folders;
+    do {
+        std::wstring name = fd.cFileName;
+        if (name == L"." || name == L"..") continue;
+        const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        const std::wstring p = dir + L"\\" + name;
+        if (isDir) {
+            folders.push_back(p);
+            continue;
+        }
+        const bool ownFile =
+            name == kDllRelativeName || name == kObsoleteWin81DllRelativeName ||
+            name == kLegacyVariantMarkerName ||
+            name.rfind(kLocalizedResourcePrefix, 0) == 0 ||
+            (name.rfind(kDllRelativeName, 0) == 0 &&
+             name.find(L".old") != std::wstring::npos) ||
+            (name.size() >= 4 &&
+             name.compare(name.size() - 4, 4, L".tmp") == 0);
+        if (!ownFile) continue;
+        if (keepBase && name == kDllRelativeName) continue;
+        if (!DeleteFileW(p.c_str())) {
+            // No MOVEFILE_DELAY_UNTIL_REBOOT here: a machine-wide persistent
+            // operation is not appropriate. Just leave the file; it will be
+            // retried on a later unload.
+            Wh_Log(L"Could not delete %s (err=%u, in use); will retry on next "
+                   L"unload",
+                   p.c_str(), GetLastError());
+        }
+    } while (FindNextFileW(find.Get(), &fd));
+    for (const auto& f : folders) RemoveDirectoryW(f.c_str());
+    RemoveDirectoryW(dir.c_str());
+}
+
+// -----------------------------------------------------------------------------
+// Conservative DirectUI resource module
+// -----------------------------------------------------------------------------
+class ScopedTemporaryFile {
+public:
+    explicit ScopedTemporaryFile(std::wstring path) : path_(std::move(path)) {}
+    ~ScopedTemporaryFile() {
+        if (!committed_ && !path_.empty()) DeleteFileW(path_.c_str());
+    }
+    ScopedTemporaryFile(const ScopedTemporaryFile&) = delete;
+    ScopedTemporaryFile& operator=(const ScopedTemporaryFile&) = delete;
+    void Commit() { committed_ = true; }
+
+private:
+    std::wstring path_;
+    bool committed_ = false;
+};
+
+class ResourceUpdateTransaction {
+public:
+    explicit ResourceUpdateTransaction(const std::wstring& path)
+        : update_(BeginUpdateResourceW(path.c_str(), FALSE)) {}
+    ~ResourceUpdateTransaction() {
+        if (update_) EndUpdateResourceW(update_, TRUE);
+    }
+    ResourceUpdateTransaction(const ResourceUpdateTransaction&) = delete;
+    ResourceUpdateTransaction& operator=(const ResourceUpdateTransaction&) = delete;
+
+    bool IsValid() const { return update_ != nullptr; }
+    HANDLE Get() const { return update_; }
+    bool Commit() {
+        if (!update_) return false;
+        HANDLE update = update_;
+        update_ = nullptr;
+        return EndUpdateResourceW(update, FALSE) != FALSE;
+    }
+
+private:
+    HANDLE update_ = nullptr;
+};
+
+template <typename T>
+static bool ReadPeValue(const std::vector<BYTE>& file, size_t offset, T& value) {
+    if (offset > file.size() || file.size() - offset < sizeof(T)) return false;
+    memcpy(&value, file.data() + offset, sizeof(T));
+    return true;
+}
+
+// UpdateResource intentionally restricts LN/MUI binaries. Rename the private
+// copy's named "MUI" RC-config resource to the unused name "CUI" first. This
+// changes only the copy and makes it a normal resource PE. Note: this depends on
+// undocumented layout details of the specific Microsoft binary at the symbol
+// server URL; it may need updating if that binary ever changes. It is confined
+// to a private copy, so the blast radius is small.
+static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
+    UniqueWinHandle file(CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                                     FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                     FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!file.IsValid()) return false;
+
+    LARGE_INTEGER size = {};
+    if (!GetFileSizeEx(file.Get(), &size) || size.QuadPart <= 0 ||
+        size.QuadPart > 64 * 1024 * 1024) {
+        return false;
+    }
+
+    std::vector<BYTE> bytes(static_cast<size_t>(size.QuadPart));
+    DWORD bytesRead = 0;
+    if (!ReadFile(file.Get(), bytes.data(), static_cast<DWORD>(bytes.size()),
+                  &bytesRead, nullptr) ||
+        bytesRead != bytes.size()) {
+        return false;
+    }
+
+    IMAGE_DOS_HEADER dos = {};
+    if (!ReadPeValue(bytes, 0, dos) || dos.e_magic != IMAGE_DOS_SIGNATURE ||
+        dos.e_lfanew < 0) {
+        return false;
+    }
+
+    const size_t ntOffset = static_cast<size_t>(dos.e_lfanew);
+    DWORD signature = 0;
+    IMAGE_FILE_HEADER fileHeader = {};
+    if (!ReadPeValue(bytes, ntOffset, signature) ||
+        signature != IMAGE_NT_SIGNATURE ||
+        !ReadPeValue(bytes, ntOffset + sizeof(DWORD), fileHeader)) {
+        return false;
+    }
+
+    const size_t optionalOffset = ntOffset + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
+    WORD optionalMagic = 0;
+    if (!ReadPeValue(bytes, optionalOffset, optionalMagic)) return false;
+
+    DWORD resourceRva = 0;
+    if (optionalMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        IMAGE_OPTIONAL_HEADER64 optional = {};
+        if (!ReadPeValue(bytes, optionalOffset, optional) ||
+            optional.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_RESOURCE) {
+            return false;
+        }
+        resourceRva =
+            optional.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+    } else if (optionalMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        IMAGE_OPTIONAL_HEADER32 optional = {};
+        if (!ReadPeValue(bytes, optionalOffset, optional) ||
+            optional.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_RESOURCE) {
+            return false;
+        }
+        resourceRva =
+            optional.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress;
+    } else {
+        return false;
+    }
+    if (!resourceRva) return false;
+
+    const size_t sectionOffset = optionalOffset + fileHeader.SizeOfOptionalHeader;
+    DWORD resourceRaw = 0;
+    for (WORD i = 0; i < fileHeader.NumberOfSections; ++i) {
+        IMAGE_SECTION_HEADER section = {};
+        if (!ReadPeValue(bytes, sectionOffset + i * sizeof(IMAGE_SECTION_HEADER),
+                         section)) {
+            return false;
+        }
+        const DWORD virtualSize = section.Misc.VirtualSize;
+        const DWORD span = virtualSize > section.SizeOfRawData ? virtualSize
+                                                               : section.SizeOfRawData;
+        if (resourceRva >= section.VirtualAddress &&
+            resourceRva - section.VirtualAddress < span) {
+            resourceRaw = section.PointerToRawData +
+                          (resourceRva - section.VirtualAddress);
+            break;
+        }
+    }
+    if (!resourceRaw || resourceRaw >= bytes.size()) return false;
+
+    IMAGE_RESOURCE_DIRECTORY root = {};
+    if (!ReadPeValue(bytes, resourceRaw, root)) return false;
+    const DWORD entryCount = static_cast<DWORD>(root.NumberOfNamedEntries) +
+                             root.NumberOfIdEntries;
+    const size_t entriesOffset = resourceRaw + sizeof(root);
+
+    size_t muiFirstCharacterOffset = 0;
+    for (DWORD i = 0; i < entryCount; ++i) {
+        IMAGE_RESOURCE_DIRECTORY_ENTRY entry = {};
+        if (!ReadPeValue(bytes, entriesOffset + i * sizeof(entry), entry)) {
+            return false;
+        }
+        DWORD nameField = 0;
+        memcpy(&nameField, &entry, sizeof(nameField));
+        if (!(nameField & 0x80000000u)) continue;
+        const size_t stringOffset = resourceRaw + (nameField & 0x7FFFFFFFu);
+        WORD length = 0;
+        if (!ReadPeValue(bytes, stringOffset, length) || length != 3) continue;
+        WCHAR name[3] = {};
+        if (stringOffset + sizeof(WORD) > bytes.size() ||
+            bytes.size() - (stringOffset + sizeof(WORD)) < sizeof(name)) {
+            return false;
+        }
+        memcpy(name, bytes.data() + stringOffset + sizeof(WORD), sizeof(name));
+        if (name[0] == L'M' && name[1] == L'U' && name[2] == L'I') {
+            muiFirstCharacterOffset = stringOffset + sizeof(WORD);
+            break;
+        }
+    }
+    if (!muiFirstCharacterOffset) return false;
+
+    LARGE_INTEGER position = {};
+    position.QuadPart = static_cast<LONGLONG>(muiFirstCharacterOffset);
+    if (!SetFilePointerEx(file.Get(), position, nullptr, FILE_BEGIN)) return false;
+    const WCHAR replacement = L'C';
+    DWORD written = 0;
+    return WriteFile(file.Get(), &replacement, sizeof(replacement), &written,
+                     nullptr) &&
+           written == sizeof(replacement);
+}
+
+static WORD GetEmbeddedLanguageId(MuiLanguage language) {
+    switch (language) {
+        case MuiLanguage::IT_IT: return 0x0410;
+        case MuiLanguage::ES_ES: return 0x0C0A;
+        case MuiLanguage::FR_FR: return 0x040C;
+        case MuiLanguage::TR_TR: return 0x041F;
+        case MuiLanguage::RU_RU: return 0x0419;
+        case MuiLanguage::ZH_CN: return 0x0804;
+        case MuiLanguage::DE_DE: return 0x0407;
+        case MuiLanguage::PT_BR: return 0x0416;
+        case MuiLanguage::PL_PL: return 0x0415;
+        default: return 0x0409;
+    }
+}
+
+static bool ReadSourceStringBlock(HMODULE sourceModule, UINT blockId,
+                                  WORD preferredLanguage,
+                                  std::vector<std::wstring>& entries) {
+    entries.assign(16, std::wstring());
+    if (!sourceModule) return false;
+
+    HRSRC resource = FindResourceExW(sourceModule, RT_STRING,
+                                     MAKEINTRESOURCEW(blockId),
+                                     preferredLanguage);
+    if (!resource && preferredLanguage != MAKELANGID(LANG_ENGLISH,
+                                                      SUBLANG_ENGLISH_US)) {
+        resource = FindResourceExW(sourceModule, RT_STRING,
+                                   MAKEINTRESOURCEW(blockId),
+                                   MAKELANGID(LANG_ENGLISH,
+                                              SUBLANG_ENGLISH_US));
+    }
+    if (!resource) {
+        resource = FindResourceExW(sourceModule, RT_STRING,
+                                   MAKEINTRESOURCEW(blockId),
+                                   MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
+    }
+    if (!resource) {
+        resource = FindResourceW(sourceModule, MAKEINTRESOURCEW(blockId),
+                                 RT_STRING);
+    }
+    if (!resource) return false;
+
+    HGLOBAL loaded = LoadResource(sourceModule, resource);
+    const BYTE* bytes = loaded
+                            ? static_cast<const BYTE*>(LockResource(loaded))
+                            : nullptr;
+    const DWORD size = SizeofResource(sourceModule, resource);
+    if (!bytes || size < sizeof(WORD)) return false;
+
+    size_t offset = 0;
+    for (size_t index = 0; index < entries.size(); ++index) {
+        if (offset + sizeof(WORD) > size) return false;
+        WORD length = 0;
+        std::memcpy(&length, bytes + offset, sizeof(length));
+        offset += sizeof(length);
+        const size_t textBytes = static_cast<size_t>(length) * sizeof(wchar_t);
+        if (offset + textBytes > size) return false;
+        entries[index].resize(length);
+        if (textBytes) {
+            std::memcpy(entries[index].data(), bytes + offset, textBytes);
+        }
+        offset += textBytes;
+    }
+    return true;
+}
+
+// Overlay the authenticated Windows 8.1 translations onto a source block rather
+// than replacing the whole block with empty entries. Windows 10 1511 added a few
+// strings in blocks that otherwise share legacy IDs; preserving those base
+// entries keeps the compatibility provider's own controls and action links
+// complete while translated legacy strings retain their original wording.
+static bool BuildEmbeddedStringBlock(HMODULE sourceModule, UINT blockId,
+                                     MuiLanguage language,
+                                     WORD resourceLanguage,
+                                     std::vector<BYTE>& output) {
+    std::vector<std::wstring> entries;
+    ReadSourceStringBlock(sourceModule, blockId, resourceLanguage, entries);
+    if (entries.size() != 16) entries.assign(16, std::wstring());
+
+    bool hasTranslation = false;
+    for (UINT index = 0; index < 16; ++index) {
+        const UINT id = (blockId - 1) * 16 + index;
+        if (const wchar_t* text = GetMuiString(id, language)) {
+            entries[index] = text;
+            hasTranslation = true;
+        }
+    }
+    if (!hasTranslation) return false;
+
+    output.clear();
+    for (const std::wstring& text : entries) {
+        if (text.size() > 0xFFFF) return false;
+        const WORD length = static_cast<WORD>(text.size());
+        const BYTE* lengthBytes = reinterpret_cast<const BYTE*>(&length);
+        output.insert(output.end(), lengthBytes, lengthBytes + sizeof(length));
+        if (!text.empty()) {
+            const BYTE* textBytes = reinterpret_cast<const BYTE*>(text.data());
+            output.insert(output.end(), textBytes,
+                          textBytes + text.size() * sizeof(wchar_t));
+        }
+    }
+    return true;
+}
+
+// Forward declaration: resource naming and page-definition generation need the
+// same effective language that the translation hooks use later in this file.
+static MuiLanguage GetCurrentEmbeddedLanguage();
+
+static const wchar_t* MuiLanguageStorageTag(MuiLanguage language) {
+    switch (language) {
+        case MuiLanguage::IT_IT: return L"it";
+        case MuiLanguage::ES_ES: return L"es";
+        case MuiLanguage::FR_FR: return L"fr";
+        case MuiLanguage::TR_TR: return L"tr";
+        case MuiLanguage::RU_RU: return L"ru";
+        case MuiLanguage::ZH_CN: return L"zh";
+        case MuiLanguage::DE_DE: return L"de";
+        case MuiLanguage::PT_BR: return L"pt";
+        case MuiLanguage::PL_PL: return L"pl";
+        default: return L"en";
+    }
+}
+
+// The private module includes the effective language in its name. Automatic
+// builds still embed all ten string-table languages, but their page-definition
+// titles are literal text, so auto-it and auto-en must not share one cached
+// file. A given configuration remains reusable across processes and restarts,
+// while stale mapped copies keep the conservative never-unload policy.
+static std::wstring LocalizedResourceModuleFileName() {
+    const bool automatic = g_languageAutomatic.load();
+    const MuiLanguage effective = GetCurrentEmbeddedLanguage();
+    const wchar_t* tag = MuiLanguageStorageTag(effective);
+    wchar_t name[96] = {};
+    if (automatic) {
+        swprintf_s(name, ARRAYSIZE(name), L"%sv%lu-auto-%s.dll",
+                   kLocalizedResourcePrefix, kLocalizedResourceFormatVersion,
+                   tag);
+    } else {
+        swprintf_s(name, ARRAYSIZE(name), L"%sv%lu-%s.dll",
+                   kLocalizedResourcePrefix, kLocalizedResourceFormatVersion,
+                   tag);
+    }
+    return name;
+}
+
+// Remove resource-module files that are no longer needed: anything that does
+// not match the current configuration's file name. This also cleans up the
+// legacy per-process "Display.resources-<pid>-<seq>.dll" files created
+// by older versions of the mod. Files still mapped (by this process or
+// another one) fail to delete and are simply left for a later sweep/unload.
+// Intentionally called only at setup time (before this process has loaded any
+// resource module), never while modules may be referenced.
+static void SweepStaleResourceModules(const std::wstring& directory) {
+    if (directory.empty()) return;
+    const std::wstring currentName = LocalizedResourceModuleFileName();
+    WIN32_FIND_DATAW fd{};
+    const std::wstring pattern =
+        directory + L"\\" + kLocalizedResourcePrefix + L"*";
+    FindFileHandleGuard find(FindFirstFileW(pattern.c_str(), &fd));
+    if (!find.IsValid()) return;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        const std::wstring name = fd.cFileName;
+        if (name == currentName) continue;
+        const std::wstring p = directory + L"\\" + name;
+        if (!DeleteFileW(p.c_str())) {
+            // Still mapped (this or another process) or transiently locked;
+            // retried on a later sweep/unload.
+        }
+    } while (FindNextFileW(find.Get(), &fd));
+}
+
+
+// Windows 7 Display preview images supplied as Bitmap20/21/22 PNG files.
+// They are converted losslessly to 150 x 116 x 32-bpp bottom-up DIB resources
+// and embedded as Base64 so the mod remains a single plug-and-play source file.
+// Resource IDs 20/21/22 are selected for 100/125/150% preview scaling.
+static const char kWin7PreviewBitmap20Base64[] =
+    "KAAAAJYAAAB0AAAAAQAgAAAAAADgDwEAxA4AAMQOAAAAAAAAAAAAANbX2J2hoKH/iYiI/3+Af/96fHz/e319/3p8ff96fH3/ent7/3p7e/96e3v/ent7/3t7"
+    "fP97e3z/e3x9/3t8ff97fH3/e3x9/3t8ff97fX3/fH59/3x+fv98fn7/fH1+/3x+fv99fn7/fn5+/35+fv9+f3//f4GB/4CCgv+AgoL/gYOE/4KEhf+DhYX/"
+    "hIaG/4WGhv+Ghof/h4iI/4eJif+IiYr/iYqK/4mLiv+Ji4v/iouL/4qLi/+Li4z/i4uM/4uLjP+LjIz/jI2N/4yNjv+NjY7/jY6O/42Ojv+Mjo7/i42O/4uN"
+    "jv+LjI3/i4uM/4uLjP+Ki4v/iouK/4qLiv+IiYr/iIiK/4iIif+HiIj/hoiI/4WHiP+EhYb/hISF/4OEhf+Cg4T/goOC/4GCgv+AgYL/gIGC/3+Agf9+f4D/"
+    "fn+A/35/f/99fn7/fX5+/319fv98fX7/fH1+/3t8ff98fH3/fHx9/3x8ff97fH3/e3x9/3t7ff97fH3/e3x9/3t8ff96fH3/enx9/3t8fP97e3z/e3t8/3p7"
+    "e/95fHv/eXx8/3p7fP97e3v/e3t7/3p8fP95fHz/eXt7/3p8e/96fHv/eXt7/3l7fP95e3z/eXt7/3l8e/95fHv/enx7/3l8ev95fHr/eXt6/3l6ev95enr/"
+    "eXl7/3h6ev94enr/eXp6/3p7ev96e3v/eXp8/3l6fP96env/ent7/3p7e/96e3z/ent8/3p7fP96e3z/ent7/3p6fP97e3z/e3t7/3t6fP96env/enl7/3V2"
+    "dv93eHj/vLy8t8PDw/+qqqn/tLSz/7a2tf+3t7b/t7e2/7e3t/+4t7b/uLe2/7i3t/+4t7f/uLi4/7q5uP+6ubj/urm5/7u6uv+7urr/u7u6/7y8u/+8vbz/"
+    "vb69/72+vf+/wL//wMHA/8HCwP/DwsL/xMTE/8XGxf/HyMf/ycrJ/8vLzP/Mzc7/zs/P/8/Q0f/Q0NL/0tLT/9PU1P/U1dX/1dfX/9fX1//Y2Nj/2Nra/9na"
+    "2v/a2tr/29rb/9va2//c2tv/3dvb/93b2//e3Nv/393d/9/e3v/f3t7/393d/97d3f/d3d3/3dzc/93c3P/c29v/29rZ/9nZ1//X2Nb/1tfW/9XV1P/T0tL/"
+    "0tDR/9HP0P/Qzc7/zc3N/8rMy//Jysn/yMjH/8fHx//GxcX/xMPD/8LDwv/AwsH/v8HA/7/Av/++v77/vr29/728vP+8u7v/u7u7/7u7u/+6u7r/ubm6/7m4"
+    "uf+4ubn/uLm5/7i5uP+4ubj/uLe3/7e2tv+3trb/t7e3/7e3t/+3trf/t7a2/7e3tf+3t7b/tra2/7W1tf+0tbb/tLW2/7W0tP+1tLT/tbS0/7S1tP+0tbT/"
+    "tLS0/7S0s/+0tLL/tLSy/7S0tP+0tLT/s7Oz/7O0sv+ztbL/srWy/7K0sf+ytLH/srOx/7Kysf+ysrH/sbGy/7Gxsf+xsbD/srGw/7Kysf+ysrL/sLCy/7Cw"
+    "sf+xsbH/srKy/7Kysv+wsLL/sLCy/7Gxsf+ysbH/sLCw/7GvsP+xsLD/sa+u/7Cur/+vrq7/sK6u/6mpqf+HiIj/d3d5/7i4ufW9vb7/wcHA/8PDwv/ExMT/"
+    "xcTF/8fGxv/Ixsb/x8fG/8jJyP/Ly8r/zczM/87Pzf/Oz83/z9DO/9DR0P/Q0dD/0dLR/9LT0//T09X/1NTU/9XV1f/V1tX/1tfW/9bX1//X2Nn/2dra/9vb"
+    "2//c3Nv/3d3d/97d3v/e3t//3+Dg/9/h4P/g4eH/4eLi/+Li4v/i4uL/4uPi/+Lj4v/i4+L/4uPj/+Lj4//i4+P/4+Pj/+Pi4//k4uL/5OLi/+Ti4v/i4uP/"
+    "4+Pj/+Tj4//l5OP/5OPi/+Li4v/h4uL/4uHi/+Lh4v/h4eD/4eHg/+Dg4P/e3+D/3d7f/93d3f/b3Nz/2tvb/9ra2//Y2Nr/19fZ/9bW1//U1Nb/1NTV/9PU"
+    "1P/R0tP/0dLT/9HS0v/P0NH/z9DQ/9DQ0P/Q0ND/0NDQ/8/Q0P/Ozs//zc7P/83Pz//Ozs7/zs7O/83Nzv/Mzc7/y83O/8vOzv/Mzs3/zM3M/8vMy//LzMv/"
+    "y8zL/8vLy//Ly8v/ysvL/8nLyv/Jysv/ycrL/8rLyv/Kysr/ysnK/8nJyv/Iycn/x8nJ/8jHyv/JyMv/ycnL/8jIyf/IyMn/yMjJ/8jIyf/IyMn/x8fJ/8fI"
+    "yf/HyMf/x8jG/8fIxv/HyMb/x8fH/8bHx//Fx8f/xcfH/8bHxv/Hx8b/xcXG/8XFxf/FxcX/xcXF/8XFxf/ExcX/w8TE/8PExP/BwsX/wcLF/8PDw//Cw8P/"
+    "wcLD/8HCwv/BwsH/wcHB/8DAv/+7u7v/t7e3/66urv+en5//dnd3/7u8vfXAwMD/wcLA/8LDwf/CxcL/w8XD/8bFxP/IyMb/ysvK/87Pzv/U0tP/1dbX/9fY"
+    "2f/X2dn/2drb/9rb3P/b3d3/3N7d/93f3v/e39//3t/f/97g4P/e4OD/3+Hg/9/i4P/f4uH/4OLi/+Hi4//i4+P/4+Tk/+Tl5f/k5eX/5OXl/+Tl5f/k5eX/"
+    "5ebm/+bk5//m5Of/5ubm/+bm5v/m5uf/5ubm/+bm5v/m5ub/5ubm/+bm5v/n5uX/5ubm/+bn6P/l6Oj/5ufm/+bm5v/o5+f/6Ofn/+fn6P/l5uf/5ubm/+bm"
+    "5v/l5+b/5ebm/+Xm5//l5uj/5ebn/+Xl5v/j5OX/4uTl/+Lk5f/i4ub/4uLl/+Li4//h4eL/4OHi/9/g4f/e39//3t/f/97f4P/c3uD/3N3g/93d3//e3t7/"
+    "397e/9/e3//d3d7/3N7e/9zf3//d3t7/3dze/9zc3//a3N7/2dze/9rd3v/b3Nz/3Nvb/9zc3P/c3Nz/3Nzc/9va3P/a29z/2dzc/9ja2//Y2dr/2dna/9rb"
+    "2f/a29n/2trZ/9na2f/Y2tj/19rY/9jY2P/Y2dv/2Nvc/9fa2//X2dr/2Nna/9nY2v/Y19v/19fc/9fY3P/X2dr/2NnX/9jZ1//X2dj/1tjY/9XY2P/V2Nj/"
+    "1djY/9bY2P/X2Nj/1tfX/9bW1v/W1tb/1tbW/9bX1v/V2Nb/1NXV/9TV1f/T1Nb/09TW/9TU1f/T1dX/0tXW/9LU1f/S1dT/0tTU/9XT1f/Nzc7/vb29/7Cv"
+    "sP+goKD/e3x8/77AwfXCwsL/vr+9/7q7uf+traz+x8bF1c7O0NTS09PU19fX1NfZ2tTc3dvU4eHa1ODh2tTg4drU3+Db1N3e29Tb3N3U3Nzd1Nzc3dTc3N3U"
+    "3Nzd1Nzc3dTc3N3U3Nzd1Nzc3dTb3N3U29zd1Nvc3dTb3N3U29zd1Nvd3dTc3d3U3d3d1N3c3dTd3N3U3N3d1Nzd3dTd3N3U3Nzd1Nzc3dTc3N3U3d7d1N3e"
+    "3dTd3d3U3t3d1N7d3dTe3d3U3d7f1N3e4NTd3t/U3t7f1N3e39Td3+DU3uDh09/h4tPe4OLT3+Di09/g4tPe4eLT3+Di09/g4tPf4ePT4OLk0+Di5NPf4uTT"
+    "3+Lk09/i5NPf4uTT3+Lk09/i5NPf4eTT3uHk097h49Pf4eLT3+Hi09/h4tPe4uLT3uLi09/h4tPf4ePT3+Hj09/g49Pe4OPT3uDj097h49Pf4OLT3+Di097g"
+    "49Pe4eLT3uHi097g4tPe4OLT3uDi097g4dPe4OHT3uDh097g4tPd4OLT3eDi093g4dPe4OHT3uDh097g4dPd4OHT3d/h097f4dPe3+HT3eDh093g4dPd4OHT"
+    "3d/h09zg4dPc4OHT3d/g097f4dPd3+LT3N/i09zf4dPc3+HT3d/h093f4dPd3+HT3d/g093f4NPd3+DT3d/g09zf4dPc3+HT3N/g09ze4NPc3uDT3N/g09vf"
+    "4NPb3+DT3N/g09zf4NPb3uDT297g09ze39Pb3+DT297g09ve4NPa3uDT29/f097f4NPX2Nr5xcTF/7Kxsf+gn6D/e3p7/8LBwvXFxcT/vLu7/7Kys/+JjY74"
+    "m15D/5xeQ/+aXkT/j2ZE/72WHv/AoBX/nXUw/5VhQ/+cXkP/nF5D/5xfQ/+cX0P/nF9D/5xfQ/+cX0P/nF9D/5xfQ/+cX0P/nF9D/5xfQ/+cX0P/nF9D/5xf"
+    "Q/+cXkP/nF5D/5xeQ/+cXkP/nF5D/5xeQ/+cXkP/nF5D/5xeQ/+cXkP/nF5D/5xeQ/+cXkP/nF5D/5xeQ/+cXkP/nF5D/5xeQ/+cXkP/nF5D/5xeQ/+cXkP/"
+    "nF5D/5teQ/+cXkP/nF5D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ//S1dbdx8fI/7Gxsf+fn6D/ent7/8XExfXJycn/vLm6/7KvsP+ChYj4pGpQ/7h+Zf+Pa1T/p2cA/6yLI/9Nsqr/Y49z/5Rn"
+    "Kv+3fWT/t31k/7d9ZP+2fGT/t3xk/7Z8Y/+2fGP/tnti/7Z7Yv+1e2L/tnti/7V7Yv+1e2L/tXpi/7R6Yf+0emH/tHph/7R5YP+0eWD/s3lg/7N5YP+zeWD/"
+    "s3hg/7N4X/+yeF//snhf/7J3X/+yd17/snde/7J3Xv+yd17/snZe/7F2Xf+xdl3/sXZd/7F2Xf+wdVz/sHVc/7B1XP+wdVz/sHVb/7B0W/+vdFv/r3Rb/690"
+    "W/+vc1r/r3Na/69zWv+vc1r/rnNa/65yWf+ucln/rnJZ/65yWf+tclj/rXJY/61xWP+tcVj/rXFY/6xwV/+scVf/rHBX/6xwV/+scFb/rHBW/6xvVv+sb1b/"
+    "q29W/6tvVf+rb1X/q29V/6tuVf+rblX/qm5V/6puVP+qbVT/qm5U/6ptVP+pbVT/qW1T/6ptU/+pbFP/qWxT/6lsUv+pbFL/qWxS/6hsUv+obFL/qGtS/6hr"
+    "Uf+oa1H/qGtR/6hqUf+oalH/qGpQ/6dqUf+nalD/p2pQ/6dqUP+nalD/pmlP/6dpT/+maU//p2lP/6ZpT/+maU//pmhP/6ZpTv+maE7/pmhO/6VoTv+laE7/"
+    "pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+kZ03/pGdM/6RmTP+kZkz/pGZM/6RmTP+kZkz/pGZM/6RqUP/R1NXexsfH/7Gx"
+    "sf+foKD/ent7/8fHxvXLy8z/vLq8/7Kxsv+Hion4pGpQ/7h+Zv9wShb/uHUK/86nYv9mxtj/P6W5/29RHv+3fWT/tn1k/7d9ZP+3fWT/t31j/7Z8Y/+2fGP/"
+    "tnxj/7Z7Y/+1e2L/tXtj/7V7Yv+1e2L/tXth/7R6Yf+0emH/tHph/7R6Yf+0eWD/tHlg/7N5YP+zeWD/s3hf/7N4X/+yeF//s3hf/7J4X/+yd1//snde/7J3"
+    "Xv+yd17/sXdd/7F2Xf+xdl7/sXZd/7F2Xf+xdVz/sHVc/7B1XP+wdVz/sHVc/7B1W/+wdFv/r3Rb/690W/+vc1v/r3Ra/69zWv+uc1r/rnNZ/65zWf+uc1n/"
+    "rnJZ/65yWf+tclj/rnJY/61xWP+tcVj/rXFX/6xxWP+tcVf/rHBX/6xwV/+scFf/rHBW/6xwVv+rb1b/q29W/6tvVv+rb1X/q29V/6tuVf+rblX/q25U/6pu"
+    "VP+qblT/qm1U/6ptVP+qbVT/qm1T/6ptU/+pbVP/qWxT/6lsUv+pbFP/qWxS/6lsUv+obFL/qWxS/6hrUf+oa1H/qGtR/6hrUf+oa1H/p2pR/6hqUf+nalD/"
+    "p2pQ/6dqUP+nalD/p2pQ/6ZqUP+naU//p2lP/6ZpT/+maU//pmlP/6ZpT/+maE7/pmhO/6VoTv+laE7/pWdO/6VnTv+lZ03/pWdN/6VnTf+lZ03/pWdN/6Vn"
+    "Tf+lZ03/pGdN/6RnTf+2h23/todt/7aHbf+2h23/todt/7aHbf+kZkz/pGZM/6RqUP/S1NXexsbH/7Gxsf+goKD/eXl5/8nIx/XNzc7/vby9/7Ozs/+Hiov4"
+    "pGpQ/7h+Zv95VCf/gWlC/4mem/91rJn/TbGG/1NdKv+2fWT/t31k/7d9ZP+3fWT/tn1k/7Z8ZP+2fGT/tnxj/7Z8Y/+2e2P/tntj/7V7Yv+2e2L/tXti/7V6"
+    "Yv+0emL/tHph/7R6Yf+0eWH/tHlh/7N5YP+zeWD/s3lg/7N5YP+zeF//snhf/7J4X/+yeF//snhf/7J3Xv+yd17/sXde/7J3Xv+ydl3/sXZd/7F2Xf+xdl3/"
+    "sHZc/7F1XP+wdVz/sHVc/7B1W/+vdVv/sHRb/7B0W/+vdFv/r3Ra/69zWv+vc1r/rnNa/65zWf+uc1n/rnJZ/65yWf+ucln/rXJY/61yWP+tcVj/rXFY/61x"
+    "WP+tcVf/rHFX/61wV/+scFf/rHBW/6xwVv+scFb/rG9W/6xvVv+rb1X/q29V/6tuVf+rblX/q25V/6tuVP+qblX/qm5U/6puVP+qbVT/qm1T/6ptU/+pbVP/"
+    "qW1T/6ltU/+pbFL/qWxS/6lsUv+obFL/qWxS/6hrUf+oa1H/qGtR/6hrUf+oa1H/qGtR/6hqUP+oalH/p2pQ/6dqUP+nalD/p2lQ/6dpUP+naVD/pmlP/6Zp"
+    "T/+maU//pmlP/6ZpT/+maE7/pmhP/6ZoTv+laE7/pWhO/6VnTv+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6RnTf+9kHn/vJB5/7yQef+8kHn/"
+    "vJB5/7yQef+kZkz/pGZM/6RqUP/R1dXexcbG/7CwsP+foKD/enp6/8jJyPXQz8//v769/7a0s/+GiYv4pGpQ/7h/Zv+RdFn/amuH/w5q5/9Gk67/bKJm/3J7"
+    "VP+3fWT/t31k/7d9ZP+3fWT/t31k/7Z8ZP+2fGT/tnxj/7Z8Y/+2fGP/tXtj/7V7Yv+1e2L/tXti/7V7Yv+1emH/tHph/7R6Yf+0emH/tHph/7R5Yf+zeWD/"
+    "s3lg/7N5YP+zeGD/s3hf/7N4X/+zeF//s3he/7N3Xv+yd17/snde/7J3Xv+ydl3/sXZd/7F3Xf+xdl3/sXZc/7B1XP+xdlz/sXVc/7B1W/+wdVv/sHRb/7B0"
+    "W/+vdFv/r3Rb/690W/+vc1r/r3Na/65zWv+uc1r/rnNZ/65yWf+ucln/rnJY/65yWP+tcVj/rXFY/61xWP+tcVf/rXFX/61wV/+scFf/rHBX/6xwV/+scFb/"
+    "rHBW/6xwVv+rb1b/q29V/6tvVf+rb1X/q29V/6tuVf+rblT/qm5U/6puVP+qblT/qm1U/6ptU/+pbVP/qWxT/6lsU/+pbFP/qWxS/6lsUv+pbFL/qGxS/6hs"
+    "Uv+oa1L/qGtS/6hrUf+oa1H/qGtR/6hqUf+na1H/p2pQ/6dqUP+nalD/p2pQ/6dqUP+naVD/p2lQ/6dpT/+maU//p2lP/6ZpT/+maU//pmhP/6VoTv+maE7/"
+    "pWdO/6VnTf+lZ07/pWdO/6VnTv+lZ07/pWdO/6VnTv+lZ03/pWdN/6RnTf+kZ03/pGdN/6VnTf+kZkz/pGdN/6RnTf+kZkz/pGZM/6RqUP/S1NXexMTF/7Cw"
+    "r/+goKD/enp6/8nLyvXQz8//v7+9/7W0s/+FiYr4tINt/8WUfv+th3X/n4t9/4aFp/+clZr/u6CD/6KLe//Dkn3/w5J9/8OSff/Dkn3/w5F9/8KRff/CkX3/"
+    "wpF9/8KRfP/CkXz/wpF8/8KRfP/BkXz/wZF7/8GRe//BkXv/wZF6/8GRev/BkHr/wZB6/8GPev/Bj3n/wI95/8CPef/Aj3n/wI95/8COef/Ajnn/v455/7+O"
+    "ef+/jXn/v414/7+NeP+/jXj/vo14/76Nd/++jXf/vo13/76Nd/++jHf/vox3/72Mdv+9jHb/vYt2/72Ldf+9i3b/vYt1/72Ldf+9inX/vYp1/72Kdf+8inX/"
+    "vIp1/7yKdP+8inX/vIl0/7uJdP+7iXT/u4l0/7uJc/+7iXP/u4lz/7uJc/+7iHP/uohy/7qIcv+6iHL/uodx/7mIcv+5h3H/uYdx/7mHcf+5h3H/uYZx/7mG"
+    "cf+5hnH/uYZx/7mGcf+5hnD/uYZw/7mFcP+5hXD/uYVw/7iFb/+4hW//uIVv/7iFb/+4hW//uIVv/7eFbv+4hG7/t4Vu/7eEbv+3hG7/t4Ru/7eEbv+3g23/"
+    "toNt/7aDbf+2g23/toNt/7aDbf+2g23/toJt/7WCbf+2gm3/tYJs/7WCbP+1gm3/tYFs/7WBbP+1gWz/tYFr/7WBa/+1gWv/tYFr/7WBa/+1gWv/tYFr/7WB"
+    "a/+1gWv/tYFr/7WBa/+1gWv/tYFq/7SBav+0gGr/tIBq/7SAav+0gGr/tIBq/7SDbf/S1NXexMTF/7Cwr/+gn5//enp5/8rKy/XS0dH/v7++/7S1tf+Giov4"
+    "ilI8/7F8aP+peGT/onNh/59yXv+gcF7/n3Be/59wXv+ecF3/nnBc/55vXf+eb1z/nW9b/51uW/+dbVv/nG1a/5xtWf+cbFn/nGxZ/5tsWf+cbFn/m2tZ/5tr"
+    "WP+aa1j/mWpY/5lqWP+ZaVf/mWhX/5loVv+YaFb/l2dV/5hnVP+XZ1X/l2dT/5ZmU/+WZlP/lmVT/5ZmUv+WZVP/lmVS/5ZkUv+VZVL/lGRR/5VjUf+UZFD/"
+    "lGNP/5RjUP+VYE7/nWRQ/6BoUv+haVP/oWhT/6FoUv+hZ1L/oGdR/6BnUf+fZlH/n2ZQ/59lUP+eZU//nmRO/55kTv+eY07/nmNN/51jTf+dYk3/nWJM/5xh"
+    "TP+cYUv/m2FL/5tgSv+aYEr/m19K/5pfSf+aXkn/mV9I/5leSP+ZXUj/mF1H/5hdR/+YXEb/l1xG/5dcRv+XW0X/lltF/5dbRf+WWkT/lllE/5VaQ/+VWUL/"
+    "lVhC/5VYQf+UWEH/lFdB/5RXQf+TV0D/k1ZA/5JWQP+TVkD/klY//5JVP/+SVT7/kVQ+/5FUPv+RVD3/kVQ9/5FTPf+QUzz/kFI7/49TPP+PUjv/j1I7/49R"
+    "O/+PUTr/jlE6/49QOv+OUDr/jlA5/41POP+NTzj/jU43/41ON/+MTTf/jE03/4xNN/+MTTf/jE03/4xNN/+MTjb/jE02/4tNNv+MTTb/i001/4tMNf+LTDX/"
+    "iks1/4tMNf+KSzX/iks0/4pSPP/R1dXexcXG/7Cur/+gnqD/enp7/8rKyvXS0tP/v7/A/7a1tv+HjIz4ilI8/6R+av+7noj/up6I/7meiP+5noj/uZ6I/7md"
+    "h/+5nYj/uZ2H/7mdh/+5nYf/uZ2H/7mdh/+5nYf/uZ2H/7mdh/+5nYf/uZyH/7mch/+5nIf/uZyG/7mchv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/"
+    "uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7echv+4nIb/t5yG/7ichv+3nIX/t5yF/7ebhf+3m4X/t5uF/7ebhf+TcFz/iFhG/5xmUf+iaVP/oWhT/6Fo"
+    "Uv+haFL/oWdS/6BnUf+gZlH/oGZQ/59mUP+fZVD/nmRP/55kTv+eY07/nmNO/51jTf+dYk3/nWJN/5xhTP+cYUv/nGFL/5tgS/+bYEr/ml9K/5pfSf+aX0n/"
+    "mV9I/5leSP+ZXkj/mV1H/5hdR/+YXEb/mFxH/5dcRv+XXEX/l1tF/5ZaRP+WWkT/llpE/5VaRP+VWUL/lVhD/5VZQv+VWEL/lFhC/5RYQf+TV0H/k1dA/5NW"
+    "QP+SVkD/k1Y//5JVP/+SVT//klU+/5FUPf+RVD7/kFM9/5BUPf+QUzz/kFM8/5BSO/+QUjv/j1I7/49RO/+PUTv/j1E7/49QOv+OUDn/jlA5/41POP+MTzj/"
+    "jU44/41ON/+MTTf/jE03/4xNN/+MTTf/jE03/4xNN/+LTTf/i043/4tNNv+LTDb/i0w2/4tNNf+LTDX/ikw1/4pLNf+KSzT/iks0/4pSPP/S1dTexcXG/7Cu"
+    "sP+gn6H/fHt9/8rKyv/S0tP/v7/A/7a1tv+HjIz/ilI8/6KAav+hcV3/oW5a/6BuW/+gblr/oG1a/6BtWv+gbVr/oG1a/6BtWv+gbVr/oG1a/6BtWv+gbVr/"
+    "oG1Z/6BtWf+gbVn/n21Z/59tWf+fbFn/n2xZ/59sWf+fbFn/n2xZ/59sWf+fbFj/n2xY/59sWP+fbFj/n2xY/59rWP+fa1j/n2tY/55rWP+ea1j/nmtY/55r"
+    "WP+ea1j/nmtX/55rV/+ea1f/nmtX/55qV/+ealf/nmtX/55uWf+WdWH/eE4+/5ljT/+iaVT/oWlT/6FoUv+haFL/oWhS/6BnUv+gZlH/oGZR/6BmUP+fZVD/"
+    "n2VP/55kT/+eZE//nmRO/51jTv+eY03/nWJM/5xiTf+cYUz/nGFL/5thS/+bYUv/mmBL/5tfSv+aX0n/ml9J/5leSf+ZXkj/mV1I/5hdSP+YXUf/mF1H/5dd"
+    "Rv+YXEb/l1tG/5daRP+WW0T/llpE/5ZaRP+WWUT/lVlD/5VZQ/+UWEL/lFhC/5RYQf+UV0H/k1dA/5NWQP+TVkD/klY//5JVP/+SVT//klU+/5JUPv+SVD7/"
+    "kVQ+/5FTPf+RUzz/kFM9/5BTPf+QUjz/j1I7/5BRO/+PUTr/jlE7/49QOv+PUTr/jlA5/41POP+NTzj/jE83/4xOOP+MTjj/jE44/4xOOP+MTjj/jE44/4xO"
+    "N/+MTTb/i043/4xONv+LTDb/jE01/4tMNf+LTDX/i0w1/4pLNf+LSzX/ikw1/4pSPP/S1dTexsbF/7Cvr/+gn6D/e3t8/8nKy/jT09P/wcHC/7e3uP+Ii437"
+    "ilI8/6J/a/+hcV3//fr6//759//79vX/+/b1//v29f/79vX/+/b1//z39v/79/X/+/b1//z39v/79vX/+/b1//v29f/79vT/+/b0//v29P/79vT/+/b0//v2"
+    "9P/79vT/+/b0//v29f/79vX/+/f1//v29f/79vT//Pf1//75+P+fa1j/nmtY/55rWP+ea1j/nmtY/55rWP+ea1j/nmtX/55rWP+ea1f/nmtX/55rV/+ea1f/"
+    "nmpX/55uWf+WdWH/cks7/5lkT/+iaVT/omhU/6JpU/+iaFP/oWhS/6FoUv+hZ1L/oGZR/6BmUP+fZlD/n2ZQ/55lT/+eZE//nmRO/55jTv+dY07/nWNN/5xi"
+    "Tf+dYkz/nGJM/5thTP+bYEv/m2FL/5tgSv+bYEr/ml9J/5pfSf+ZXkn/mV5I/5ldSP+YXUf/mFxH/5hdRv+YXEb/l1xG/5dbRf+XW0X/l1pE/5ZaRP+VWkT/"
+    "llpD/5VZQ/+VWUL/lFhC/5RYQv+UV0H/lFdB/5RXQP+UVkD/k1Y//5JWP/+TVT//klU//5JVPv+SVT7/klQ+/5BUPf+QVD3/kVM9/5BTPf+QUzz/j1I8/49S"
+    "PP+PUjv/j1E6/49ROv+OUTv/jlE6/41POf+NTzj/jE84/41OOP+NTjj/jU44/41OOP+NTjj/jU44/4xON/+MTjf/jE02/4xNN/+LTTb/i002/4tMNv+LTTX/"
+    "i0w1/4pMNf+KTDT/iks1/4pSPP/R1NXexcXG/7Cvr/+gn6D/e3x8/8nKy/XU09P/wsLC/7i4uP+Ii434ilI8/6J/a/+hcV3//fn2/+fm5P/19PP/9vT0//Tz"
+    "8//08/P/9PPz//Tz8//08/P/9PPz//Tz8//29PT/9/b1//b19f/19PP/9fTz//b09P/08/P/9PPz//Tz8//08/P/9PPz//Tz8//08/P/8vDv//X29v/19fX/"
+    "8u/s//749P+fa1j/n2tY/59rWP+ea1j/nmtY/55rWP+ea1j/nmtX/55rV/+ea1f/nmtX/55rV/+ea1f/nmtX/55uWf+WdWH/cks7/5pkT/+jaVT/omlU/6Jo"
+    "U/+iaFP/oWhT/6FoUv+hZ1L/oGdR/59nUf+fZlH/n2ZQ/59lT/+fZFD/nmVP/55kTv+eZE7/nWNN/51iTf+dY03/nGJM/5xhTP+bYUz/m2FK/5tgS/+bYEr/"
+    "ml9J/5pfSf+ZX0n/mV5I/5ldSP+ZXkf/mF1H/5hdR/+YXEf/mFxG/5hcRv+WW0X/l1tE/5ZbRf+WWkT/lVpD/5VZQ/+VWUL/lVlD/5VYQf+VWEL/lFhC/5NX"
+    "QP+TV0D/k1ZA/5NWQP+SVj//klU//5JVP/+SVT7/klQ+/5FUPv+RVD3/kFM9/5BTPf+QUzz/kFM8/5BSO/+PUjv/j1I7/49ROv+OUTr/j1E6/41POf+NTzn/"
+    "jU84/41POP+MTjf/jE43/4xON/+MTjf/jE43/41OOP+MTjf/jE03/4xONv+MTTb/jE02/4xMNf+LTDb/i002/4tMNv+LTDX/i0w1/4pSPP/R1dXexcbH/7Cv"
+    "sP+gn6D/e3x8/8rLyvXU09P/w8LC/7m4uP+IjI34ilI8/6KAa/+hcV3//vn2/8zMzP/9/f3//f39//39/f/9/f3////////////////////////////9/f3/"
+    "/f39//39/f/9/f3//f39//39/f/9/f3//f39/////////////////////////////////+DIuP/17Ob/8fDv//749P+fbFj/sI53/7OQef+3loD/uJqG/7iV"
+    "ff+ujXf/tZR9/8Gnlv+/oY3/ro12/6+Od/+4lX3/tJJ6/55uWf+WdWH/cks9/5plT/+jalX/o2pU/6NpVP+iaFP/omhT/6FoUv+haFL/oGdS/6BnUf+fZlD/"
+    "oGVQ/59lUP+fZU//nmVP/55kT/+eZE7/nmRO/51jTf+dY0z/nGJN/5xiTP+cYkv/nGFL/5thS/+bYEr/m19K/5pfSf+aX0n/mV9I/5leSP+ZXkj/mV1H/5ld"
+    "R/+YXEf/mFxG/5hbRv+XXEX/l1tF/5daRP+XW0T/llpD/5ZaQ/+VWUP/lVhD/5RZQv+UWEL/lFhC/5RYQv+UV0H/lFdB/5NWQP+TVj//klY//5JVP/+SVT7/"
+    "kVQ+/5JUPv+RVD7/kVM9/5FTPf+QUz3/kFM8/5BSPP+PUjz/kFI8/49SO/+PUTr/jlE6/45QOf+NTzj/jU85/41OOP+MTjj/jE44/4xOOP+MTjj/jE44/41P"
+    "N/+MTjf/jU43/4xON/+MTTb/jE03/4xNNv+LTDb/i0w2/4tMNf+LTDb/iks1/4pSPP/R1NTexsbG/7CwsP+goKL/fH18/8vMyvXU1NX/xMTE/7q6uv+Jjo74"
+    "ilI8/6J/a/+hcV3//vn2/8vKyv/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39"
+    "/f/9/f3//f39//39/f/9/f3//f38/+jVwf/q3M7/7ezs//749f+fa1j/rY57/7WXgf+1mor/r5iM/7mciP+sj3r/t5iE/8q5sf/Hr6H/rI96/6mMef+yl4X/"
+    "rI55/55uWv+WdWH/c0s9/5llT/+jalX/o2pV/6NqVP+iaVP/omhU/6JoU/+haFL/oWdS/6FnUv+gZlH/oGZQ/59mUf+fZU//nmVQ/59kT/+eZE7/nmRO/55j"
+    "Tf+dY03/nGNN/51iTP+cYkz/nGFM/5xgS/+bYEv/m2BK/5tgSv+bX0r/mV9I/5pfSP+ZXkj/mV5I/5ldSP+YXEb/mF1G/5hcRv+XXEb/l1tF/5dbRf+WW0T/"
+    "l1pE/5ZZQ/+VWkP/lVlD/5VZQv+VWEL/lFhC/5RYQf+UWEH/k1dA/5NXQf+SVkD/klY//5NVQP+SVT7/klU//5FVPv+RVD7/kVM+/5FUPv+RUz3/kVM9/5BT"
+    "PP+QUzv/kFI7/49SO/+PUTv/j1E7/41QOf+OUDn/jlA4/41POP+NTzj/jU84/41POP+NTzj/jU84/41OOP+NTjf/jU43/4xON/+MTjf/i003/4xNN/+MTTb/"
+    "i0w2/4tNNf+LTDX/ikw1/4pSPP/R1NXexsbG/7CxsP+goKH/fHx8/8vNy/XV1Nb/xcXF/7u7u/+Mjo74ilI8/6OAa/+hcV3//vn3/+Ti4P/o5eT/6ebl/+fk"
+    "4//n5OP/5+Tj/+fk4//n5OP/5+Tj/+fk4//p5+X/6efl/+nn5f/o5eT/6OXk/+nm5f/n5OP/5+Tj/+fk4//n5OP/5+Tj/+fk4//n5OP/5+Xj/+fl4//m5OP/"
+    "7Ojm//769v+fbFj/uJqG/72gjf+7noz/tJmH/76hjv+3m4f/v6GN/7ebif+7noz/uZ2K/7KXhP+7oI3/tJWA/55uWv+WdWL/c0s9/5plUP+jalX/o2pV/6Nq"
+    "VP+ialT/omlU/6JoU/+iaFL/oWhS/6FnUv+gZ1H/oGdR/6BmUP+fZlD/n2VQ/59lT/+fZE7/nmRP/55jTv+dY03/nWJN/51jTf+cYk3/nGJM/5xhS/+bYEv/"
+    "m2BK/5tgSv+aYEn/ml9J/5peSP+aXkj/mV5I/5leSP+ZXUf/mV1H/5hdRv+YXEX/l1tG/5dbRf+WW0T/llpE/5ZaRP+VWkP/lVlD/5VZQ/+VWUL/lFhC/5VY"
+    "Qf+UV0L/k1dB/5NXQf+TVkD/klZA/5NWQP+TVT//k1U+/5JVP/+RVD7/kVQ+/5FTPf+RUz3/kVM9/5BTPf+QUjz/kFM8/49SO/+PUjv/j1E7/45QOv+OUDn/"
+    "jU84/41QOP+NTzn/jU85/41POf+NTzn/jU85/41POP+NTjj/jU84/4xON/+MTjf/jE02/4xNN/+LTTf/i002/4tMNf+LTDX/i0w1/4pSPP/R09TexsXH/6+w"
+    "sP+goaD/fH18/8vNzPXW1db/xsXF/7y7u/+Njo/4ilI8/6KAa/+hcV3//vbx//317v/99O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3/"
+    "/PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07v/99O7//PTt//718P+fbFj/n2xY/59sWP+fa1j/nmtY/55r"
+    "WP+ea1j/nmtY/55rWP+ea1j/nmtY/55rV/+ea1f/nmtX/55uWv+WdWL/c0s9/5plUP+ka1b/pGtV/6NqVf+jalT/omlU/6JpVP+iaVP/oWhT/6FoU/+hZ1H/"
+    "oWZR/6BmUf+gZlH/n2VQ/59lT/+fZVD/nmVP/55kTv+dZE7/nWNN/51jTP+dYk3/nWJM/5xhTP+cYUv/nGBL/5tgS/+aYEr/mmBJ/5pfSf+aX0n/ml5I/5ld"
+    "SP+ZXkj/mF1H/5ldR/+YXEf/l1xF/5dcRv+XW0b/l1tE/5ZaRP+WWkP/llpE/5VaQ/+VWUP/lVhC/5VYQv+UWEL/lFhB/5RXQf+TVkD/k1dA/5JWQP+TVT//"
+    "klY//5JVP/+RVT7/kVU+/5FUPf+RVD3/kFQ9/5BTPf+QUzz/kFM8/49SPP+PUjz/j1E7/45ROv+OUDn/jk85/45POf+NTzn/jU85/41POf+NTzn/jU85/41P"
+    "Of+NTzj/jU83/4xPN/+NTjf/jE03/4xON/+LTTb/jE03/4tNNv+MTTX/i001/4pSPP/R1NTexsbG/7CwsP+goKD/e3t8/8zMzPXY19b/x8bF/727u/+Mj5D4"
+    "ilI8/6KAa/+hcV3/8/Hy//Hv8P/y7/D/8u/w//Lv8P/z8fL/9PLz//Px8v/y8PH/8/Hy//b19//z8fL/9PLz//Px8v/z8fL/8/Hy//Lv8P/y7/D/8u/w//Lv"
+    "8P/y7/D/8u/w//Lv8P/y7/D/8u/w//Lv8P/y7/D/8u/w//Lw8f+fbFj/n2xY/59sWP+fbFj/nmtY/59rWP+ea1j/n2tY/55rWP+ea1j/nmtY/55rWP+ea1j/"
+    "nmtX/55uWv+WdWL/c0w9/5tmUf+kbFb/pGtW/6RrVf+jalT/o2pU/6JqVP+haFP/omhT/6JoU/+haFL/oWdS/6FmUf+gZlH/oGZQ/59lUP+fZU//n2VP/55k"
+    "Tv+dZE7/nmNO/51jTf+dYk3/nGJM/5xiTP+cYkv/m2FL/5thS/+bYEr/m2BJ/5pfSv+aX0n/ml5J/5leSP+ZXUj/mV1I/5hdR/+YXUb/mFxG/5dcRv+YXEX/"
+    "lltF/5dbRP+WWkX/lVpE/5ZZRP+WWUP/lVlD/5RZQv+VWEH/lFhB/5RYQf+UV0H/lFdA/5NWQP+TVkD/klVA/5JVP/+RVT7/kVU//5JUPv+RVD7/kVM+/5FU"
+    "Pf+QUzz/kFM8/5BSPP+PUjv/kFI8/49QOv+OUDr/jlA6/45QOf+NUDn/jVA5/41QOf+NUDn/jVA5/41POP+NTzj/jU44/4xON/+MTzf/jU43/4xON/+MTTf/"
+    "jE03/4xNNv+LTTb/i002/4pSPP/R1dTexcjG/6+wr/+goKD/fHt8/87NzfXY2dj/x8fH/729vP+LkZD4ilI8/6OAa/+ecF3/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+calf/nGpX/5xqV/+balf/m2pW/5tqVv+balb/m2pW/5tqVv+balb/m2lW/5tpVv+baVb/m2lW/5xsWf+WdWL/dE09/5pmUf+kbFb/pGtW/6Nq"
+    "Vf+ka1X/o2pU/6NqVf+iaVP/oWhU/6FpU/+haFL/oWdS/6BnUv+gZ1H/oGZQ/55mUP+eZE//nWRO/5xjTv+cY07/m2JM/5phTP+aYUv/mmBL/5pgS/+ZYEv/"
+    "mF9K/5hfSv+YX0r/mF5J/5deSf+XXkj/l1xI/5dcSP+WXEj/lVxG/5ZcRv+WW0b/lVpF/5RaRf+VWUT/lFlE/5RZQ/+TWUT/k1hD/5JYQ/+SWEP/kldB/5JW"
+    "Qf+SV0H/kVZB/5FWQP+RVUD/kVVA/5BVP/+QVT//j1Q+/49UPv+PUz7/j1M+/49TPv+OUz3/jlI8/41RPP+OUTz/jVE8/41QO/+MUTr/jFA7/4tPOf+LTjn/"
+    "i044/4pOOP+LTjj/i044/4xPOP+MTzj/jE84/4xOOf+MTzj/jU44/4xPN/+MTjj/jU44/4xON/+MTTf/jE43/4tNN/+LTTb/i002/4pSPP/Q1NTexcbG/7Cw"
+    "r/+goKD/e3t7/87Oz/XY2tr/x8jJ/72/v/+LkpH4ilI8/6J/a/+abVv/////////////////8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/"
+    "8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//////////////////////+YZ1X/mGdV/5hnVf+YZ1X/l2dV/5dn"
+    "Vf+XZ1X/l2dV/5dmVf+XZlT/l2ZU/5dmVf+XZlT/l2ZU/5hpWP+WdWL/c0w+/5tmUv+kbFf/pGtW/6NrVv+ja1X/pGpV/6NqVP+jaVT/omlU/6JpU/+haVP/"
+    "oWdS/6FoUv+gZ1L/n2ZR/55lT/+bY07/m2JN/5hgTP+XX0v/ll9K/5ReSv+UXkn/lF5J/5NeSP+UXUn/k11I/5JcR/+SXEf/k1tH/5JbRv+SW0b/klpF/5Ja"
+    "Rf+RWUX/kVhE/5FYRP+QWEP/kFhD/49YQv+QV0L/j1dC/49XQf+PVkH/jlZA/45VQP+OVD//jVRA/41UP/+NVD7/jVM+/4xTPv+MUj7/jFI9/4tSPP+LUjz/"
+    "i1E8/4tRPP+KUTz/ilA8/4lQO/+KTzv/ilA7/4lPOv+JTjr/iE46/4hOOf+ITjr/h044/4dNOP+GTDf/h0w2/4ZNNv+GTDb/h0w2/4dMNv+ITTf/ik03/4pN"
+    "OP+LTjj/jE45/41POP+NTzj/jE44/41ON/+MTjf/jE03/4xNN/+MTjb/i0w2/4pSPP/Q1NTexcfG/7CwsP+foKD/e3t8/8/Oz/XZ2tr/yMnL/77Awf+MkZL4"
+    "ilI8/6J/a/+Walr/////////////////19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY"
+    "1//X2Nf/19jX/9fY1//X2Nf///////////////////////////+TZFT/k2RU/5NkVP+TZFP/k2RT/5NkU/+TY1P/k2NT/5NjU/+SY1P/kmNT/5JjU/+SY1P/"
+    "kmNT/5RnVv+WdWH/c0w+/5tmUf+lbFf/pWxX/6RsVv+ka1b/pGpV/6RrVf+jalT/omlU/6JpU/+iaVP/omhS/6FnUv+faFH/nmZQ/5xkT/+ZYk7/lF9L/5Jd"
+    "Sf+PW0j/jVlG/41ZRv+NWEX/jFhF/4tYRf+LV0T/i1dE/4tXRP+LVkP/i1VD/4pVQv+JVUL/iVVB/4lVQf+JVEH/iFVA/4hTQP+IUz//h1M//4dTP/+HUz7/"
+    "hlI+/4ZSPf+GUj3/hlA9/4ZRPf+GUD3/hk88/4VQPP+FTzz/hU87/4ROO/+ETjv/hE06/4NNOv+ETTr/g006/4NNOf+DTTj/gkw4/4JNOP+BSzj/gUs3/4FL"
+    "N/+BSzb/gUs2/4BKNf+ASjX/gEk1/39INf9+SDT/f0g0/35HNP9+RzP/f0gz/4BIM/+CSTT/hUs1/4hNN/+JTjf/i043/4xPOf+NTzj/jE44/41ON/+MTjj/"
+    "jE43/4tNNv+LTTb/jE02/4pSPP/R1dXexMfH/66wsP+foKD/e3t8/8/OzvXb29r/ysnL/8DAwv+NkZP4ilI8/6J/a/+SaFj/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+NYVH/jWFR/41hUf+NYVH/jWBR/41gUf+NYFH/jWBR/41gUf+NYFH/jWBR/41gUf+NYFH/jWBQ/49kVP+VdWH/dEw+/5xmUv+mbVj/pWxX/6Rs"
+    "V/+kbFb/pGtW/6NrVf+jalX/omlU/6JpVP+iaVT/omhT/6FoU/+gZ1H/nWVP/5ljTv+VX0v/jltH/4lYRf+FVUP/g1NB/4FSQP+AUUD/gVFA/4BRP/+AUD//"
+    "gFA//4BPPv9/Tz3/f089/39OPP9+Tj3/fk48/35NPP9+TTz/fU08/31NO/99TDv/fU06/3xMOf98Szr/fEw6/3xLOP98Sjn/eks4/3pKN/96STf/ekk3/3pJ"
+    "N/96STf/ekk2/3pJNv96SDb/eUg1/3lHNf95RzX/eUY1/3hGNP94RjT/d0Uz/3dFM/93RTP/dkUz/3ZFM/92RTL/dkUy/3VEMv91RDL/dUQx/3VCMP91Qi//"
+    "dUIw/3RCL/90QS//dUIw/3dDMf96RTL/fkc0/4NKNf+ITDf/i044/4xPOP+NTzj/jE84/41POP+NTzf/jE43/4xONv+MTjb/jE02/4pSPP/S1dXexMbH/66v"
+    "sP+enp7/e3t6/87PzvXd3Nz/zMnL/8G/wf+NkpP4ilI8/6F/a/+NZFb/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+HXU//h11P/4ddT/+HXU//h1xP/4dc"
+    "T/+HXE//h1xP/4dcTv+GXE7/hlxO/4ZcTv+GXE7/hlxO/4phUv+VdGH/dU0+/5tnUv+lbVj/pW1X/6VtV/+ka1b/pGxW/6NrVv+jalX/o2pV/6JpVP+iaVP/"
+    "omhT/6JoU/+fZ1L/nGRP/5VgTP+OW0j/hlZE/35QQP95TT3/dUo6/3NJOf9zSTn/c0g5/3NJOf9ySDj/ckg4/3FHN/9xRjf/cUY3/3FGNv9wRjb/cEY2/3BF"
+    "Nv9wRTb/cEU1/29FNP9wRDX/b0M0/29DNP9vQzT/bkMz/25DM/9uQzL/bkIy/25CMv9tQTL/bUEx/2xBMf9sQTH/bEEx/2xBMf9rQDH/a0Aw/2s/L/9rPy//"
+    "az8v/2s/L/9rPi7/aj4u/2s+Lv9qPi7/aj4t/2k9Lf9pPi3/aT0s/2k8LP9pPCz/aDws/2g7K/9oOyv/Zzsq/2c6Kv9nOyr/aTwr/2s9LP9wQC7/d0Qw/35I"
+    "M/+FSzb/ik03/4xPOP+NTzn/jU84/41POP+MTjf/jE43/4xON/+MTjf/jE02/4pSPP/R1NXexMXI/6+vsP+fn57/fHt6/8/PzvXe3d3/zMrL/8HAwf+Nk5L4"
+    "ilI8/6F/av+HYFP/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+BWEz/gVhM/4FYTP+AWEz/gFhM/4BYS/+AWEv/gFhM/4BXS/+AV0v/gFdL/4BXS/+AV0v/"
+    "gFdL/4VdUP+VdGH/dU0+/5xmU/+lblj/pW1Y/6VsWP+kbFf/pGtW/6RrVv+ja1b/o2pV/6JqVf+jaVX/omlU/6JoVP+eZlL/m2RO/5RfSv+DVkb/WDQl/1g0"
+    "Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/"
+    "WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0"
+    "Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/cUAu/3pFMv+CSTX/iE03/4xOOP+NUDn/jU84/41POP+NTzf/"
+    "jE43/4xOOP+MTjf/jE43/4pSPP/R1NTexsfH/6+wsP+fn5//e3t7/9DPz/Xe3d7/zMzM/8HCwv+Ok5L4ilI8/6F/a/+CXVH/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////96VEr/elRK/3pUSf96VEn/elRJ/3pUSf96VEn/elRJ/3pTSf96VEn/elNJ/3pTSf96U0n/elNJ/39aTf+VdWH/dU1A/5xnU/+mbVj/pW1Y/6Vt"
+    "V/+kbFj/pWxX/6RrVv+ka1X/pGtW/6NqVf+jalX/o2lU/6JpVP+eZ1L/mmNO/5JdSv9lX1z/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/"
+    "uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7ir"
+    "of+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/"
+    "uKuh/7irof+4q6H/uKuh/7iqov9YNCX/bD0t/3hEMf+ASTT/h0w2/4xPOP+NTzn/jVA5/41POf+MTjj/jU84/41ON/+MTjf/jE03/4pSPP/R1NTexsjJ/7Cx"
+    "sP+foKD/e3x7/9DR0PXf397/zM3N/8LDw/+Pk5T4ilI8/6B/a/97WU//////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9yT0f/ck9H/3JPR/9yT0f/ck9H/3JP"
+    "R/9yT0f/ck9H/3JPR/9yT0f/ck9G/3JPR/9yT0b/ck9G/3hWTP+VdGH/dU1A/5xnVP+mbln/pm5Y/6VtWP+mbVj/pWxX/6VsVv+kbFb/pGtW/6RqVv+jalX/"
+    "o2pU/6NpVP+fZ1L/mWRP/5BdSv9lX1z/3NfV/97e3f/e3t7/3d3d/97d3f/e3d3/3dzc/93c3P/c3Nz/3Nzb/9zb2//c2tv/3Nva/9va2v/a2tr/2tra/9va"
+    "2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1f/X1dX/19XV/9bW1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aTwr/3ZD"
+    "Mf+ASDT/iEw3/4tOOP+OUDn/jlA5/41POP+NTzn/jU44/4xOOP+MTjj/jU43/4pSPP/R1NTexcfJ/7Cxsf+goKD/fHx7/9DR0fXg4N//zMzO/8PDwv+PkpX4"
+    "ilI8/6B/a/92VUz/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9sS0T/bEtE/2xLRP9sSkT/bEpE/2xKRP9sSkT/bEpE/2xKQ/9rSkP/a0pD/2tKQ/9rSkP/"
+    "a0pD/3NSSf+UdGH/dk1A/51nVP+nblr/pm1Z/6ZtWP+lbVj/pW1Y/6RtV/+kbFf/pGtW/6NrVf+ka1X/o2pU/6JqVP+fZ1H/mGNO/5BdSv9lX1z/3NfV/9/f"
+    "3//e3t7/397e/9/e3f/e3d3/3d3d/93c3f/d3Nz/3dzc/93c3P/c29v/3Nzb/9zb2//c29r/29ra/9ra2v/a2tr/2tna/9rZ2f/a2dn/2dnZ/9nZ2P/Z2Nj/"
+    "2djY/9nY2P/Z2Nj/2NfX/9nX1//Y19f/2NfW/9fX1v/X1tb/19bW/9fW1v/W1tX/19bW/9fV1v/W1dX/1tbV/9bV1v/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDsr/3VDL/9/SDT/hkw3/4xPOf+OUDn/jlA5/41QOP+NTzj/"
+    "jU84/41POP+MTjj/jU43/4pSPP/R1NTexcjI/6+wsP+fn57/e3t8/9DR0fXg4eD/zMzO/8PCwv+PkZX4ilI8/6B/a/9vUUv/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9kRkL/ZEZC/2RGQv9kRkL/ZEZB/2RFQf9kRUH/ZEVB/2RFQf9jRUH/Y0VB/2NFQf9jRUH/Y0VB/2xOR/+TdGH/dU5A/51oVP+nb1r/pm5Z/6Zu"
+    "Wf+mbVj/pm1Y/6VsV/+kbFf/pGxW/6NrVv+ja1X/o2tV/6NqVf+fZ1L/mWNO/5BdS/9lX1z/3NXS/+Df3//f397/4N/e/9/e3//f3t7/3t7e/97d3f/e3d3/"
+    "3t3d/93d3P/d3dz/3dzb/9zc2//c3Nv/29vb/9za2//b2tv/29ra/9va2v/a2tn/29nZ/9rZ2v/Z2dn/2tnY/9nY2P/a2Nj/2djY/9jY2P/Y2Nf/2djX/9jX"
+    "1//Y19f/2NbX/9fW1v/Y1tb/19bW/9fW1v/X1tb/1tbW/9fV1v/W1db/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDsr/3VDMP9/SDX/hkw3/4tPOf+OUDr/jlA5/41POf+OUDj/jU85/41POf+MTjj/jE83/4pSPP/R1NTexsjJ/7Cx"
+    "r/+fnp7/e3p8/9LS0vXh4uL/zc7O/8PDw/+QkZL4ilI8/6B+av9pTUj/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9eQT//XkE//11BPv9dQT7/XUE+/11B"
+    "Pv9dQT7/XUE+/11APv9dQT7/XUA+/11BPv9dQD7/XUA+/2dKRP+TdGH/dU5A/51oVf+nb1r/p25Z/6ZuWf+mbVn/pm1Y/6VtV/+lbFf/pWxX/6RrVv+ka1b/"
+    "o2pV/6RrVf+gaFP/mmNP/5FdS/9lX1z/3NXT/+Hg4P/g4OD/4N/g/+Dg3//g39//39/f/9/e3v/f3t7/3t3e/97d3v/e3d3/3d3d/93d3f/d3Nz/3dzc/93c"
+    "3P/c3Nv/3Nvb/9za2//b2tv/29ra/9va2f/a2tr/29nZ/9rZ2f/a2dn/2tnZ/9rY2f/Z2Nj/2djY/9nX2P/Z19j/2NfX/9jX1//Y19f/2NfX/9jX1v/X1tf/"
+    "19bW/9fW1v/X1tX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDsr/3VD"
+    "MP9/STT/h003/4tOOv+OUTr/jlA5/45QOf+OUDn/jk85/41POP+NTzj/jE83/4pSPP/Q1NTex8jJ/7CxsP+gn5//e3t7/9PU0/Xh4+L/zc7O/8PExf+Qk5P4"
+    "ilI8/59+av9kSUb/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9WPDz/Vjw8/56Jef+eiXn/nol5/56Jef+eiXn/nol5/56Jef+eiXn/nol5/56Jef9WOzv/"
+    "Vjw7/2FGQ/+Tc2H/dk5A/55oVf+nb1r/p29a/6ZuWv+mbln/pm5Z/6ZtWP+lbVj/pGxX/6VrVv+ka1b/pGtV/6RrVf+gaFP/mmRP/5FdS/9lX1z/3NbT/+Hh"
+    "4f/h4eD/4eHg/+Hg4P/g3+D/4ODg/+Dg3//f39//397e/9/e3v/f3t3/3t7e/97d3f/d3d3/3d3c/93c3P/d3Nz/3Nzb/9zc3P/c29v/3Nvb/9va2//b2tr/"
+    "29rZ/9ra2f/b2tn/2tna/9rZ2f/a2Nj/2djY/9rY2f/Z2Nj/2djY/9nX1//Y19j/2NfX/9jX1//Y1tf/19fX/9fW1//Y1tb/1tXV/9bV1f/W1db/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDwr/3VDMP9/SDX/h003/4xPOf+OUTr/jlA6/45QOv+OUDn/"
+    "jU84/45POf+NTzj/jE44/4pSPP/R1NTeyMfI/7Gwsf+goJ7/e3t6/9PV0/Xi4+L/zs7P/8PFxv+QlZX4ilI8/59+av9eRUP/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9QODn/UDg5/6mZj/+pmY//qZmP/6mZj/+pmY//qZmP/6mZj/+pmY//qZmP/6mZj/9PNzj/Tzg4/1tCP/+Sc2H/dk9A/55pVf+ncFr/p29a/6dv"
+    "Wv+nblr/pm5Z/6ZtWP+lbVj/pW1Y/6VsV/+kbFb/pGtW/6RqVv+gaVP/mmRQ/5BdS/9lX1z/29XS/+Pi4v/i4uL/4uHh/+Lh4P/h4OD/4ODg/+Hg4P/g4N//"
+    "4ODf/+Df3//g39//397e/97f3v/e3d3/3t3d/97d3f/e3N3/3dzc/9zc3P/c3Nz/3dzc/9zc3P/c29v/3Nvb/9va2v/b29v/29ra/9va2v/a2tn/2trZ/9nZ"
+    "2f/a2dn/2dnY/9nY2P/Z2Nj/2djY/9jX1//Z2Nf/2NfX/9jX1//X19f/19XW/9bW1v/X1tX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDws/3VDMP9/STX/h004/4tPOf+PUDr/jlE6/45QOv+OUDn/jlA5/45QOP+NTzj/jU84/4pSPP/R09XeyMfK/7Gw"
+    "sf+foJ//e3x7/9TU0/Xj4+P/z9DQ/8THxv+Rlpb4ilI8/599av9YQkH/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9JNDf/SDQ3/0g0Nv9INDb/SDQ2/0g0"
+    "Nv9INDb/SDQ2/0g0Nv9INDb/SDM2/0gzNv9IMzb/SDQ2/1U/Pv+Sc2H/dk5A/55qVf+ncFv/qHBa/6hvWv+mblr/p25Z/6ZuWP+mbVj/pW1Y/6VsV/+kbFb/"
+    "pGtW/6RrVv+haVP/mmVQ/5FeTP9lX1z/3NXS/+Pj4//t6+n/5N/d/+Tf3f/j39z/4d7a/+Hd2f/g29n/39vY/9/a1//c2NX/29fU/9rW1P/Z1dP/2dXT/9nV"
+    "0//Z1dP/2dXT/9nV0//Z1dP/2dXT/9nV0//Z1dP/2dXT/9nV0//Z1dP/2dXT/9nV0//Z1dH/2NPR/9jU0P/W0tD/1tLP/9TPzP/Szcr/1tLQ/9nY2P/Z2Nj/"
+    "2dfY/9jX1//Y19f/19bX/9fW1v/X1tb/19XW/9fW1f/X1tX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDss/3VD"
+    "Mf9/STX/h004/4xQOv+PUTv/jlA6/45QOv+OUDn/jk85/41POf+NUDj/jVA5/4pSPP/R1NXeyMrK/7Gxsf+foJ7/ent6/9TT0/Xj5OP/z9DS/8bHxv+Rlpf4"
+    "ilI8/559av9TPz//////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9DMDT/QzA0/0IwNP9CMDT/QjA0/0IwNP9CMDT/QjA0/0IvNP9CMDP/Qi8z/0IvM/9CMDP/"
+    "QjAz/1A7O/+Rc2H/dk9A/55pVf+ocFv/p3Bb/6hvWv+nb1r/p25a/6duWf+lbVn/pW1Y/6VtWP+kbVf/pGxX/6RrVv+haVT/mmVR/5FeTP9lX1z/29XT/+Tj"
+    "4/+ijn7/pZGD/6WQgv+kkIH/o4+A/6KOf/+ijn//oY1+/6CMff+finv/nol7/52Iev+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/"
+    "nId5/5yHef+ch3n/nId5/5yHef+chXj/m4V3/5qFdv+ZhHX/mYR1/5mDdf+YgXL/nYx//9rZ2f/Z2dn/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HB"
+    "wf/BwcH/wcHB/9bW1v/W1dX/1tbV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDws/3VEMf+ASTX/iE05/4xPOv+PUTv/j1E7/49ROv+OUDn/"
+    "jlE6/41QOf+OTzn/jk85/4pSPP/S1dTexcXG/7CusP+gn6H/fHt9/9TT0/Xk5eT/0NDS/8fGx/+Rlpj4ilI8/55+av9OOz3///////////+Dg4P/j4+P/4+P"
+    "j/////////////Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy////////////"
+    "//////////89LDL/PSwy/5aEdv+WhHb/loR2/5aEdv+WhHb/loR2/5aEdv+WhHb/loR2/5aEdv88LDH/PSwx/0s3Ov+Rc2D/dU9A/59qVv+ocVv/qHBb/6hw"
+    "W/+nb1r/p29Z/6ZvWv+mbln/pm5Z/6VtWP+lbVj/pW1X/6RsVv+halT/m2VR/5FeTf9lX1z/3NXS/+Xl5P+smYv/pZGD/6WRg/+lkYP/pZGC/6WRg/+lkYP/"
+    "pZGC/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGD/6WRgv+lkYP/pZGD/6WRg/+lkYL/pZGD/6WRgv+lkYL/pZGC/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGD/6WR"
+    "gv+lkYP/pZGD/6WRg/+lkYP/uauf/9ra2f/a2dn/2dnZ/9rZ2f/Z2Nj/2dfX/9jX1//Y19f/2NbX/9fW1v/Y1tb/19bW/9fW1v/W1tb/19bW/9bV1f/W1tX/"
+    "1tXV/9bV1f/W1dX/1tXV/7iqov9YNCX/aDws/3VEMf+ASjX/h005/4xQOv+PUjv/j1I7/45ROv+OUDr/jlA6/45QOf+OUDr/jlA4/4pSPP/S1dTexsbF/7Cv"
+    "r/+gn6D/e3t8/9XU1PXl5eX/0tHR/8jGx/+Rlpf4ilI8/55+av9JOTv///////////+Dg4P/j4+P/4+Pj////////////9fY1//X2Nf/19jX/9fY1//X2Nf/"
+    "19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf///////////////////////////83KTD/Nykw/6KUjf+ilI3/opSM/6KU"
+    "jP+hlIz/opSM/6GUjP+ilIz/oZSM/6GUjP83KC//Nygv/0Y1N/+Rc2D/dU9B/59qV/+ocVz/qHBb/6hwW/+nb1v/p29a/6dvWv+mblr/pm5Z/6ZtWP+lbVj/"
+    "pWxY/6VtV/+haVX/m2VR/5JfTf9lX1z/2tTS/+Xm5f+tmo3/ppKE/6WShP+lkoT/ppKE/6WShP+lkoT/pZKE/6WShP+lkoT/pZGE/6WRhP+lkoT/pZKE/6WS"
+    "hP+lkoT/pZKE/6WShP+lkYT/pZKE/6WShP+mkoT/pZKE/6aShP+lkYT/pZKE/6WShP+lkoT/ppKE/6aShP+lkoT/ppKE/6WShP+lkoT/uauf/9va2v/b2tr/"
+    "wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/9fW1v/X1tb/19bW/9fW1v/X1tX/1tXW/9bW1v/W1dX/1tXV/7iqov9YNCX/aDws/3VE"
+    "Mv+ASjX/iE04/4xQOv+QUjv/j1I7/49RO/+PUTv/jlA6/45ROv+OUDr/jlA5/4pSPP/R1NXexcXG/7Cvr/+gn6D/e3x8/9XV1PXl5eX/0tHR/8jIyP+Tl5f4"
+    "ilI8/55+av9GNzr///////////9/f3//g4OD/4ODg///////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////8zJy//Mycv/zMnL/8yJy//Micv/zImL/8yJi//MiYv/zImL/8yJi//MiYv/zImL/8yJi7/"
+    "MiYu/0I0N/+Qc2D/c09B/5xpVP+mb1r/pW5a/6VuWf+lbln/pW5Z/6RtWP+jbFf/o2xX/6NsV/+ja1b/omtW/6JqVf+eaFP/mGNQ/45dS/9lX1z/2tTS/+bn"
+    "5/+unY//ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/p5SF/6eUhf+mk4X/ppOF/6aThf+mk4X/ppSF/6eThf+mk4X/ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/"
+    "ppOF/6aThf+mk4X/ppOF/6eThf+mk4X/ppSF/6aThf+mk4X/ppSF/6aThf+mk4X/uauf/9vb2//b29r/29ra/9va2v/a2tr/2dnY/9nY2f/Z2Nj/2NjY/9jX"
+    "1//Y2Nf/2NfX/9jX1//Y1tf/2NbX/9fW1//Y1tb/19bW/9fW1v/W1db/19XV/7iqov9YNCX/aTws/3ZEMf+ASjb/iE45/41RO/+PUjz/j1E7/49SO/+PUjr/"
+    "jlE6/45QOf+OUDr/jlA5/4pSPP/R1dXexcbH/7CvsP+gn6D/e3x8/9bV1fXl5ub/0dHT/8jJyv+UmJn4ilI8/559av9FNTn/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////8wJS7/MCUu/zAlLv8wJS7/MCUu/zAlLv8wJS7/MCUu/zAlLv8wJC7/MCQu/zAkLf8wJC3/MCQt/0AxNf+Pc2H/cE5A/5dmUv+ga1f/n2tY/59q"
+    "V/+falb/nmpW/55pVv+eaVX/nWhU/51oVP+dZ1P/nWhT/5xnU/+ZZFH/kmBN/4pbSP9lX1z/2tTR/+jo5/+wnpH/p5SF/6eUhv+olIX/p5WF/6eVhf+nlIX/"
+    "p5WG/6eVhf+nlYX/p5SG/6iVhf+nlIX/qJSG/6iVhv+olIX/p5WG/6eUhf+nlIX/p5SF/6iUhv+nlIb/qJWG/6eUhv+nlIb/p5SG/6eVhv+olYb/qJSG/6eU"
+    "hv+olYX/p5WG/6eUhf+olIX/uauf/9zc2//c29v/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/9nX1//Z19j/2NfX/9jX1v/X1tb/"
+    "19bW/9fW1v/X1tb/19bW/7iqov9YNCX/aT0s/3ZEMv+ASjb/iE46/41RO/+PUjv/kFI7/49RO/+PUTv/j1I6/45QOv+PUDr/jlA5/4pSPP/R1NTexsbG/7Cw"
+    "sP+goKL/fH18/9fW1vXm5uf/09PU/8jKyf+UmZn4ilI8/55+a/9GNzr/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////8zKDH/Mygx/5ODdv+Tg3b/k4N2/5OD"
+    "dv+Tg3b/k4N2/5ODdv+Tg3X/k4N1/5ODdf8yJy//MiYv/0E0OP+OcmH/bU1A/41fTf+WZVP/lmVS/5ZlUv+WZVL/lmVS/5VkUf+WZFD/lWJP/5ViT/+UYk//"
+    "lGJP/5NhTv+QXkz/i1tJ/4NVRf9lX1z/2tTS/+jo6P+xoZH/qZWH/6mVh/+olYf/qZWH/6mVh/+olYf/qZWH/6iVh/+olYf/qZWH/6iVh/+olYf/qJWH/6iV"
+    "h/+olYf/qJWH/6mVh/+plYf/qJWH/6iVh/+olYf/qJWH/6mVh/+olYf/qZWH/6iVh/+olYf/qZWG/6mVh/+olYf/qJWH/6mVh/+olYf/uauf/9zd3f/d3Nz/"
+    "3Nzb/9zc2//c29r/2tra/9vZ2v/a2dn/2tnZ/9nZ2f/Z2dj/2dnY/9nY2P/Z2Nj/2djX/9jY2P/Y19f/2NfX/9jX1//X19b/2NfW/7iqov9YNCX/aT0t/3ZF"
+    "M/+ASjb/iE46/41RPP+QUzz/kFI7/49SO/+PUjv/j1E7/45RO/+OUTr/jlA5/4pSPP/R1NXexsbG/7CxsP+goKH/fHx8/9fW1vXo5uf/1dXU/8nKyv+TmZn4"
+    "ilI8/55+a/9KOTv/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////83LDP/Nywz/6KVjv+ilY7/opWO/6KVjv+ilY7/opWO/6KVjv+hlY3/oZWN/6GVjf81KjH/"
+    "NSkx/0Q1OP+OcmH/aUtA/4JXSP+LXUz/ilxM/4pcS/+KXEv/iVtL/4hbSv+JW0n/iFtJ/4dbSf+HWkn/h1pJ/4dZSf+EV0f/gFRE/3dPP/9lX1z/2tPS/+np"
+    "6f+yopT/qZaI/6mXif+plon/qZeJ/6mWif+plon/qZeI/6mWif+plon/qZaI/6mXiP+plon/qZeI/6mWif+ploj/qZaI/6mWiP+ploj/qZeJ/6mWif+plon/"
+    "qZeI/6mWif+pl4j/qZaJ/6mWiP+ploj/qZaI/6mXif+ploj/qZeJ/6mWiP+pl4j/uauf/97d3f/d3dz/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HB"
+    "wf/BwcH/wcHB/9nZ2P/a2Nj/2djY/9nY2P/Z2Nf/2dfY/9jX1//Y19f/2NfW/7iqov9YNCX/aT0t/3ZFM/+BSzb/iE46/41RPP+QUjz/kFI8/5BSO/+PUjv/"
+    "j1I7/49RO/+PUTr/j1A6/4pSPP/R09TexsXH/6+wsP+goaD/fH18/9fX1vXp5+j/1tbW/8vMzP+SmJj4ilI8/59+a/9OOz7///////////+Dg4P/j4+P/4+P"
+    "j/////////////Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy////////////"
+    "//////////89MDf/PTA3/z0wOP89MDj/PTA4/z0wN/89MDf/PTA3/z0wN/88Lzf/PC82/zsuNf87LjT/Oi00/0c4O/+NcmH/Y0k//3RNQP97U0T/e1NE/3tS"
+    "Q/97UkP/elJD/3pRQ/96UUL/eVFB/3lRQv94UEH/eVBB/3hPQP92Tj//cUs8/2tFOP9lX1z/2dTR/+rq6v+1pZX/qpiJ/6qYif+qmIn/qpiJ/6qYif+qmIn/"
+    "qpiJ/6qYif+qmIn/qZiJ/6qYif+qmIn/qpeJ/6qYif+qmIn/qpiJ/6qYif+pl4n/qpiJ/6qYif+qmIn/qpeJ/6qYif+ql4n/qpiJ/6qYif+qmIn/qpiJ/6qY"
+    "if+qmIn/qpiJ/6qXif+qmIn/uauf/9/e3v/e3d7/3t7d/93d3P/e3N3/3Nvb/9vb2//b2tv/29vb/9va2v/b2tn/29rZ/9rZ2v/a2dn/2tnZ/7Gilv+Xf27/"
+    "ln9u/5J6aP/Y19j/2NfX/7iqov9YNCX/aT0t/3dFM/+BSzb/iU86/45SPP+QUz3/kFI8/5BTPP+PUjv/kFE7/49SO/+PUTv/jlA6/4pSPP/R1NTexsbG/7Cw"
+    "sP+goKD/e3t8/9fX1vXq6On/19fY/8zNzf+Tl5j4ilI8/59+a/9TPz////////////+Dg4P/j4+P/4+Pj////////////9fY1//X2Nf/19jX/9fY1//X2Nf/"
+    "19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf///////////////////////////9ENjz/RDY8/0Q2PP9ENjz/RDY8/0Q2"
+    "PP9DNjz/QzY8/0M1O/9CNTr/QTQ5/0AzOP8/MTf/PjA2/0o6O/+JcF//VD41/1IxI/9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/"
+    "WDQl/1g0Jf9WMyT/UzEj/04uIf9lX1z/2dTR/+vr6v+1ppj/rJmK/6uZiv+rmYv/q5mL/6uZiv+rmYr/q5mK/6uZiv+rmYr/q5mL/6uZiv+smYv/q5mL/6uZ"
+    "i/+rmYv/q5mK/6uZi/+smYv/q5mK/6uZi/+rmYv/q5mL/6uZi/+rmYv/q5mK/6uZi/+smYv/q5mL/6uZiv+smYv/rJmK/6uZi/+rmYv/uauf/9/e3//f397/"
+    "397e/97e3v/e3t3/3dzc/93b2//c29v/3Nvb/9vb2//c2tv/29ra/9va2v/a2dr/2tnZ/62dkP+olYb/qJaI/5qDc//Z2dj/2djX/7iqov9YNCX/aj4t/3ZF"
+    "M/+BSzb/iU87/45SPP+RUzz/kFI9/5BTPP+QUjv/j1I7/5BSO/+PUTv/jlE6/4pSPP/R1dTexcjG/6+wr/+goKD/fHt8/9fX1/Xq6er/2NjZ/8zOzf+Ul5j4"
+    "ilI8/6B+a/9YQ0L///////////9/f3//g4OD/4ODg///////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9KPED/SjxB/5qJe/+aiXv/mol7/5qJe/+aiXv/mol7/5qJe/+aiXv/mop7/5qKe/9KPUH/"
+    "Sz1C/1dJSv+Vfm7/f3Rt/62hl/+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+0qJ7/rqKY/6SYj/9lX1z/2dPR/+zs"
+    "7P+3qZn/rZqM/62ajP+tmo3/rJqN/62ajP+tmoz/rJuN/6yajP+smoz/rZqM/62ajP+tmoz/rJqM/62ajP+smo3/rZqN/62ajf+tmoz/rJqM/6yajf+tmo3/"
+    "rZqN/6yajP+smo3/rZqM/62ajP+tmoz/rZqN/62ajf+smoz/rZqM/62ajP+smoz/uauf/+Df3//f39//4N/f/9/e3v/f3t7/3dzc/93d3P/d3dz/3Nzc/9zc"
+    "3P/c29v/3Nvb/9vb2//b2tr/29ra/7CglP+plof/qZaI/5uFdv/a2dn/2dnZ/7iqov9YNCX/aj4u/3dFM/+CSzf/ilA7/45SPf+RVDz/kVM9/5BSPP+QUjz/"
+    "kFI8/49RO/+QUjv/j1E7/4pSPP/Q1NTexcbG/7Cwr/+goKD/e3t7/9jZ2fXq6+v/2dna/87Pz/+VmZr4ilI8/6B/bP9fRkT/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9SQkX/U0JF/6qck/+qnJP/qpyT/6qck/+qnJP/qpyT/6qclP+qnJT/qpyU/6qclP9URUn/VUZK/2FRUv+ahXb/j4qJ/8vLy//a2Nj/2djY/9rY"
+    "2f/Z2Nj/2djY/9nY2P/Y2Nf/2NjY/9jX1//Y19f/2NfX/9jX1//U09P/y8vL/8C/v/9lX1z/2dPR/+zt7f+3qZn/rZuN/62cjf+tm43/rZyN/62cjf+tnI3/"
+    "rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/rZuN/62cjf+tnI3/rZyN/62cjf+tm43/rZyN/62bjf+tm43/rZyN/62bjf+tnI3/rZyN/62cjf+tnI3/rZyN/62b"
+    "jf+tm43/rZyN/62bjf+tm43/uauf/+Hg4P/h4OD/4eDg/+Df3//g39//3t7e/97d3f/e3dz/3dzd/9zc3P/d3Nz/3Nzb/9zb2//c29v/3Nvb/7CglP+plof/"
+    "qZaI/5uFdv/a2tr/2tra/7iqov9YNCX/aj4u/3dFM/+CTDf/ilA7/45SPP+RUz7/kVM9/5FTPf+QUzz/kFM8/49SPP+QUjv/j1I7/4pSPP/Q1NTexcfG/7Cw"
+    "sP+foKD/e3t8/9jZ2fXr7Ov/2tra/8/P0P+WmZv4ilI8/6B/bP9kSkf/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9aSEr/WkhL/1pIS/9bSUz/W0lM/1tJ"
+    "TP9bSUz/W0lM/1tJTP9bSUz/W0pN/1xKTf9cS07/XEtP/2hWVv+bhnj/ko2M/8zMy//a2dn/2tnZ/9rZ2f/Z2dn/2tnZ/9nZ2P/Z2Nj/2NjY/9jX1//Z19j/"
+    "2NfX/9jX1//U09P/zMvK/8C/v/9lX1z/2dPR/+3u7f+3qZn/r52P/6+dj/+unY//r52O/66dj/+vnY//rp2P/66dj/+unY//rp2P/6+dj/+vnY//r52P/6+d"
+    "j/+unY//rp2P/66dj/+unY//r52P/66djv+vnY//rp2P/6+dj/+unY//r52P/66dj/+unY//r52P/6+dj/+unY//r52P/6+dj/+vnY//uauf/+Hh4f/h4eD/"
+    "4eDh/+Hg4P/g4N//39/e/9/e3v/e3t3/3t7d/93d3f/e3dz/3d3c/93c3P/c3Nz/3Nvc/7CglP+plof/qZaI/5uFdv/b2tr/29ra/7iqov9YNCX/aj4u/3dF"
+    "M/+CTDf/ik87/45SPf+RVD3/kVQ9/5FTPP+QUz3/kFM8/5BSPP+QUjv/j1I8/4pSPP/R1dXexMfH/66wsP+foKD/e3t8/9nZ2fXs7Ov/29va/9DQ0P+YmZv4"
+    "ilI8/6CAbP9qTkj/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9iTk//Y09Q/2NPUP9jT1D/Y09Q/2NQUP9jT1D/ZFBR/2NQUf9kUFH/ZFBR/2RQUf9kUVL/"
+    "ZVJT/25cWf+ciHn/lJGP/83MzP/a2tr/2tra/9va2f/a2dn/2tnZ/9rZ2P/Z2dn/2dnZ/9nY2P/Z2Nj/2NjY/9nY1//V09T/zMvM/8C/wP9lX1z/2dPR/+7v"
+    "7v+3qZn/sJ+R/7Cekf+wnpH/sJ6R/7CekP+wn5H/sJ+Q/7Cfkf+wn5H/r56Q/6+ekf+wnpD/r5+R/7CekP+wnpD/sJ6Q/7CekP+wnpD/sJ6Q/6+ekP+wnpD/"
+    "sJ6Q/7CekP+wn5D/r5+Q/7CekP+wnpH/r5+R/7Cekf+wnpH/sJ+Q/6+ekf+wnpH/uauf/+Li4f/i4uL/4uLh/+Hh4f/i4eD/4N/e/9/e3//f39//3t/d/97e"
+    "3v/e3t3/3t3d/93d3P/d3Nz/3dzc/7CglP+plof/qZaI/5uFdv/b29v/3Nva/7iqov9YNCX/az4u/3dFM/+CTDj/iU87/45TPf+RVD3/kVQ+/5BUPf+QUzz/"
+    "kFM8/5BTPP+PUjv/j1I8/4pSPP/S1dXexMbH/66vsP+enp7/e3t6/9rZ2fXt7ez/29zb/9DR0f+Ympv4ilI8/6GAbP9wUkz///////////+Dg4P/j4+P/4+P"
+    "j/////////////Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy////////////"
+    "//////////9qVVT/alVV/6SRgf+kkYH/pJGB/6SRgf+kkYH/pJGB/6SRgf+kkYH/pJGB/6SRgf9sV1f/bFhX/3VhXv+eiXr/lZSS/83Nzf/b29r/29va/9va"
+    "2v/b2tr/2trZ/9ra2f/a2dn/2tnZ/9nZ2f/a2dj/2tjY/9nY2P/V1NT/zMzM/8DAwP9lX1z/2dPR/+/w7v+3qZn/saCR/7Ggkf+xoJH/saCR/7Ggkf+xoJH/"
+    "saCS/7Ggkf+xoJH/saCS/7Ggkf+xoJH/saCS/7Ggkv+xoJH/saCS/7Ggkf+xoJH/saCR/7Ggkf+xoJL/saCS/7Ggkv+xoJL/saCS/7Ggkv+xoZL/saCS/7Gg"
+    "kv+xoJH/saCR/7Ggkf+xoJH/uauf/+Tj4//j4+L/4+Li/+Li4f/i4uH/4ODf/+Df3//g4OD/39/f/9/f3v/f3t7/3t/e/97d3f/e3t3/3t3d/7CglP+plof/"
+    "qZaI/5uFdv/c3Nz/3Nvb/7iqov9YNCX/az4u/3dGM/+CTDj/ilA8/49TPf+SVD7/kVQ9/5FUPf+QUz3/kFM9/5BTPP+QUzz/j1I7/4pSPP/R1NXexMXI/6+v"
+    "sP+fn57/fHt6/9ra2fXu7e3/3Nzd/9HS0f+YnJz4ilI8/6GAbP93Vk3///////////+Dg4P/j4+P/4+Pj////////////9fY1//X2Nf/19jX/9fY1//X2Nf/"
+    "19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf///////////////////////////9zW1j/c1xZ/7Skmf+0pJn/tKSZ/7Sk"
+    "mf+0pJn/tKSZ/7Skmf+0pJn/tKSZ/7Skmf90XVr/dV1b/31lYP+ei3z/l5aV/87Nzf+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9rZ2f/a2dn/"
+    "2tnZ/9nZ2f+fkIv/mYuG/5CDfv9lX1z/2dPR//Dw8P+3qZn/sqGT/7Khk/+yoZP/sqGT/7Khk/+xoZP/sqGT/7Khk/+yoZP/sqGT/7Khk/+xoZT/sqGU/7Kh"
+    "k/+yoZT/sqGT/7KhlP+yoZP/sqGU/7KhlP+yoZP/saGU/7Khk/+yoZT/sqGT/7Khk/+yoZP/sqGT/7KhlP+xoZP/sqGT/7Khk/+yoZT/uauf/+Xk5P/k5OT/"
+    "4+Pj/+Pj4//j4+L/4eHh/+Hg4f/g4OD/4ODg/+Dg3//f39//39/f/9/f3v/e3t7/3t7e/7CglP+plof/qZaI/5uFdv/d3dz/3dzc/7iqov9YNCX/az4u/3hG"
+    "M/+CTTj/ilA8/49TPv+SVT7/kVQ+/5JUPv+RVD3/kFM9/5BTPf+QUz3/kFM8/4pSPP/R1NTexsfH/6+wsP+fn5//e3t7/9rb2vXv7e7/3dve/9LS0v+XnJ34"
+    "ilI8/6GAbf98WlH///////////9/f3//g4OD/4ODg///////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////96YVz/emJd/3tiXv97Yl7/e2Je/3tiXv97Y17/e2Ne/3tiXv97Y17/e2Ne/3tjX/97Y1//"
+    "fGNf/4JqZP+gi33/mJeX/87Ozv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9va2v/a2tr/29rZ/9rZ2f+fkIv/mYuG/5CDfv9lX1z/2dPR//Hx"
+    "8P+3qZn/tKKV/7Sjlf+0o5X/s6OV/7Oilf+0o5X/tKOV/7Sjlf+zo5X/tKOV/7Ojlf+zopX/tKOV/7Oilf+zopX/s6OV/7Ojlf+zopX/tKOV/7Silf+zo5X/"
+    "s6OV/7Sjlf+zo5X/tKKV/7Sjlf+zo5X/tKOV/7Sjlf+zopX/s6OV/7Oilf+0o5X/uauf/+Xl5f/l5eX/5eTk/+Tj5P/j5OP/4uLh/+Li4f/i4eH/4uHg/+Dh"
+    "4P/g4OD/4N/g/9/g3//f39//39/e/7CglP+plof/qZaI/5uFdv/e3t3/3d3d/7iqov9YNCX/az8u/3hGNP+DTTn/i1E8/49UPv+SVT7/kVQ+/5JVPv+RVD7/"
+    "kFQ9/5BUPf+QUz3/kFM8/4pSPP/R1NTexsjJ/7CxsP+foKD/e3x7/9za2/Xv7u7/3tzd/9PS1P+YnJ/4ilI8/6KBbf+DXlL/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+DZmD/g2dg/4NoYf+EaGH/hGhh/4RoYv+EaGL/hGhi/4RoYv+EaGL/hGhi/4RoYv+EaGL/hGli/4lvZ/+gjH3/mZmY/8/Oz/+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/9za2//b2tr/29ra/9va2f+fkIv/mYuG/5CDfv9lX1z/2dPR//Hy8v+3qZn/taWW/7Wllv+1pJb/taWW/7Wllv+1pZb/"
+    "taWW/7Wllv+1pJb/taWW/7Wll/+1pJb/taSW/7Wklv+1pZb/taWW/7Wllv+1pJb/taWW/7Wllv+1pJb/taSW/7Wllv+1pJb/taWW/7Wklv+1pZb/taSW/7Wl"
+    "lv+1pZb/taWW/7Wklv+1pJb/uauf/+Xl5v/l5eX/5eXk/+Xl5f/l5OT/4+Lj/+Pj4v/j4uL/4uHh/+Hh4f/i4eD/4eHg/+Hh4P/h4OD/4ODg/7CglP+plof/"
+    "qZaI/5uFdv/f3t7/397d/7iqov9YNCX/az8u/3lHNP+DTTn/i1A8/5BUPv+SVT//klU+/5JVPv+RVD7/kVQ+/5BUPf+RUz3/kFM9/4pSPP/R1NTexcfJ/7Cx"
+    "sf+goKD/fHx7/9zZ2vXv8O7/3t7d/9PT1P+YnJ/4ilI8/6KBbf+JYVX/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+Ja2P/imxj/62Yhf+tmIX/rZiF/62Y"
+    "hf+tmIX/rZiF/62Yhf+tmIX/rZiF/62Yhf+LbWX/i21l/5Byav+hjX7/m5ua/9DPz/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9zb2//c29r/"
+    "29vb/9za2/+fkIv/mYuG/5CDfv9lX1z/2dPR//Lz8v+3qZn/tqaY/7WlmP+2ppj/tqaY/7WlmP+2pZj/tqWY/7WlmP+1ppj/taWY/7WlmP+2pZj/taWY/7Wm"
+    "mP+1ppj/tqWY/7WmmP+2pZj/taWY/7WlmP+1ppj/taaY/7WmmP+2pZj/taaY/7WlmP+2ppj/tqaY/7WmmP+2ppj/tqaY/7WmmP+1pZj/uauf/+fm5v/m5ub/"
+    "5ubm/+bl5f/m5eX/5OPj/+Pj4//k4+P/4+Pj/+Pi4v/i4uH/4eHh/+Hh4P/h4eH/4OHh/7CglP+plof/qZaI/5uFdv/g3t//39/e/7iqov9YNCX/a0Av/3hH"
+    "NP+DTTn/i1E8/49TPv+SVj//klU+/5JVPv+RVD7/kVQ9/5FTPv+RUz3/kFM9/4pSPP/R1NTexcjI/6+wsP+fn57/e3t8/9va2fXv8O7/3t/e/9PU0/+ZnZ/4"
+    "ilI8/6OBbf+OZlf/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+QcGb/kXFn/72qnf+9qp3/vaqd/72qnv+9qp3/vaqd/72qnf+9qp3/vaqd/72qnf+Rcmj/"
+    "knJo/5V3bP+hjX7/m5ub/9HQ0P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9zc2//c3Nz/3Nzc/9zb2/+fkIv/mYuG/5CDfv9lX1z/2dPR//Pz"
+    "8/+3qZn/uKiZ/7enmf+3p5n/t6iZ/7eomf+3qJn/t6iZ/7enmf+3p5n/t6eZ/7enmf+3p5n/t6iZ/7eomf+3p5n/t6eZ/7eomf+3p5n/t6eZ/7enmf+3qJn/"
+    "t6iZ/7enmf+3p5n/t6iZ/7enmf+3qJn/t6eZ/7eomf+3p5n/t6iZ/7enmf+3p5n/uauf/+jo5//n5+f/5+fm/+fm5v/m5uX/5OXk/+Tk4//k4+P/5OTj/+Pj"
+    "4//j4uL/4+Pi/+Pi4v/i4eH/4uHh/7CglP+plof/qZaI/5uFdv/g4N//4N/f/7iqov9YNCX/a0Av/3lHNP+DTTr/i1E8/5BUP/+SVT//klY//5FVP/+RVD7/"
+    "klU+/5JUPf+QVD3/kFM9/4pSPP/R1NTexsjJ/7Cxr/+fnp7/e3p8/9ra2vXw8O7/4ODf/9XV1f+anqD4ilI8/6OCbf+Talr///////////+Dg4P/j4+P/4+P"
+    "j/////////////Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy////////////"
+    "//////////+XdGn/l3Vq/5h2av+Ydmv/mHZr/5h3a/+Yd2v/mHZr/5h2a/+Ydmv/mHZr/5h2a/+Ydmv/mHZr/5p7b/+ijX//nJyc/9HR0P+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/93c3f/c3dz/3Nzc/93c2/+fkIv/mYuG/5CDfv9lX1z/2dPR//P09P+3qZn/uKmb/7mpm/+4qZv/uama/7ipm/+4qZv/"
+    "uama/7ipm/+5qZv/uKma/7mpm/+4qZv/uamb/7mpmv+4qZv/uKmb/7ipm/+4qZr/uamb/7mpmv+5qZr/uKma/7ipm/+5qZv/uamb/7mpm/+4qZv/uamb/7mp"
+    "mv+5qZv/uKmb/7mpm/+5qZv/uauf/+np6P/o6Oj/6Ojn/+fn5//o5+f/5eXl/+Xl5f/k5OX/5eTk/+Tj4//j4+P/5OPi/+Pj4v/j4+L/4uLi/7CglP+plof/"
+    "qZaI/5uFdv/h4eD/4eDf/7iqov9YNCX/a0Av/3lINf+ETTn/jFE8/5BVP/+TVkD/k1ZA/5JVP/+SVT7/klQ+/5FUPf+RVD7/kVM9/4pSPP/Q1NTex8jJ/7Cx"
+    "sP+gn5//e3t7/9na2/Xw8PD/4uHh/9fW1/+cn6H4ilI8/6SCbf+YbFv///////////+Dg4P/j4+P/4+Pj////////////9fY1//X2Nf/19jX/9fY1//X2Nf/"
+    "19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf///////////////////////////+deGz/nXlt/555bf+eem7/nnpu/556"
+    "bv+eem7/nnpu/556bv+eem7/nnpu/556bv+eem7/nnpu/6B+cf+jjn//nZyc/9LR0f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/97d3f/d3d3/"
+    "3d3c/93c3P+fkIv/mYuG/5CDfv9lX1z/2dPR//X19P+3qZn/uaqd/7mqnf+5qp3/uqqc/7mqnf+5qp3/uaqd/7mrnf+5qp3/uaqd/7mqnf+5qp3/uaqd/7mq"
+    "nf+5qpz/uaqd/7mqnf+5qpz/uaqd/7mqnP+6qp3/uaqd/7mqnf+5qp3/uaqd/7mqnf+5qp3/uaqd/7mqnf+5qp3/uqqd/7mqnf+5qp3/uauf/+np6f/p6en/"
+    "6eno/+jo6P/o6Oj/5ubm/+bm5f/m5uX/5eXl/+Xl5P/k5eT/5OXk/+Tk5P/k5OP/5OPj/7CglP+plof/qZaI/5uFdv/h4uH/4eHh/7iqov9YNCX/a0Aw/3lI"
+    "Nv+ETTr/i1E9/5FVP/+TVkD/k1ZA/5JWP/+SVT//klU+/5FVPv+RVD7/kVQ9/4pSPP/R1NTeyMfI/7Gwsf+goJ7/e3t6/9ra2vXx8fH/4uLj/9jX2P+doKH4"
+    "ilI8/6SCbv+cb13///////////9/f3//g4OD/4ODg///////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+ie23/onxu/7SdiP+1nYj/tZ2J/7Wdif+1nYn/tZ2J/7WdiP+1nYj/tZ2I/7Wdif+jfW//"
+    "o31v/6SAc/+jjn//np2d/9PS0v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9/e3v/e3t3/3t3d/97d3f+fkIv/mYuG/5CDfv9lX1z/2dPR//X2"
+    "9f+3qZn/u6ye/7usnf+7rJ7/u6ye/7usnf+7rJ7/u6yd/7usnv+6rJ7/uqyd/7qsnv+7rJ3/uqye/7usnf+7rJ3/u6yd/7usnf+7rJ3/uqyd/7qsnf+7rJ3/"
+    "uqyd/7qrnf+7rJ3/uqyd/7usnf+7rJ7/uqye/7usnv+7rJ7/u6yd/7qsnv+7rJ7/uauf/+rq6f/q6ur/6unp/+np6f/p6ej/5+fn/+fn5v/n5ub/5ubm/+bm"
+    "5f/m5uT/5eXl/+Tl5f/l5eT/5eTk/7CglP+plof/qZaI/5uFdv/i4uL/4uLh/7iqov9YNCX/bEAw/3lINv+ETjr/jFI9/5BVQP+TVkD/k1ZA/5JVQP+TVkD/"
+    "klU//5FVP/+RVD7/kVQ9/4pSPP/R09XeyMfK/7Gwsf+foJ//e3x7/9vZ2vXx8vL/4+Pk/9nY2f+eoaH4ilI8/6SCbv+gcl//////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+mfm//pn9w/8OuoP/DrqD/w66g/8OvoP/Dr6D/w6+g/8OuoP/DrqD/w66g/8OvoP+ngXH/p4Bx/6iEdP+jj3//np2d/9PT0//h4OD/4eDg/+Hg"
+    "3//g4N//4N/g/9/f3//f39//39/f/9/e3v/f3t7/3t7e/97d3v/a2tr/0tLR/8bFxf9lX1z/2dPR//b29f+3qZn/vK2f/7ytn/+9rZ//vK2f/7ytn/+8rZ//"
+    "vK2g/7ytn/+8rZ//vK2g/7ytn/+8rZ//va2g/7ytoP+9rZ//vK2g/7ytn/+8rZ//vK2f/7ytn/+8raD/va2g/7ytoP+8raD/vK2g/7ytoP+9raD/vK2g/7yt"
+    "oP+9rZ//vK2f/7ytn/+9rZ//uauf/+zs6//r6+v/6urq/+rq6f/p6un/6Ojo/+jn5//n5+b/5+fn/+fm5v/m5ub/5ubm/+Xm5v/m5eX/5eXk/7CglP+plof/"
+    "qZaI/5uFdv/j4+L/4+Pi/7iqov9YNCX/a0Ew/3lINf+ETjr/jFI9/5BVQP+TV0H/k1ZA/5NWQP+TVj//klU//5JVP/+RVD7/kVU+/4pSPP/R1NXeyMrK/7Gx"
+    "sf+foJ7/ent6/9vZ2vXx8vL/4+Tk/9rZ2v+goqP4ilI8/6SCbv+jc2D/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+pgHH/qYFy/6qCcv+qgnP/qoJz/6qC"
+    "c/+rgnP/qoJz/6qCc/+qgnP/qoJz/6qCc/+qgnP/qoJz/6qFdf+kj4D/np6d/9TU0//h4eH/4eHg/+Hh4f/g4eD/4eDg/+Dg4P/g4N//4ODg/9/f3//g39//"
+    "397e/9/e3v/b2tr/09LS/8fFxv9lX1z/2dPR//b39v+3qZn/va6h/72uof+9r6H/va6h/72vof+9r6H/va+h/72uof+9rqH/va6h/72vof+9rqH/va+h/72v"
+    "of+9r6H/va6h/72uof+9rqH/va6h/72uof+9rqH/va6h/72vof+9rqH/va+h/72uof+9r6H/va6h/72uof+9rqH/va+h/72vof+9rqH/uauf/+zt7P/s7Ov/"
+    "6+vr/+vr6v/r6ur/6eno/+np6P/p6Oj/6Ojn/+jn5//o5+b/5+fm/+fm5//m5ub/5ubm/7CglP+plof/qZaI/5uFdv/k5OP/5OTj/7iqov9YNCX/a0Ew/3lI"
+    "Nv+ETjv/jFM9/5FVQP+UV0H/k1dB/5NWQP+TVj//klU//5NWP/+SVD7/kVQ//4pSPP/R1NTex8jJ/7Gxsf+fn53/e3t6/9va2vXx8fH/4+Tk/9rZ2/+hoaX4"
+    "ilI8/6SDbv+jdGD/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+pgXH/qoFy/6qCcv+qgnP/qoJz/6qCc/+rg3P/q4Nz/6qCc/+qgnP/qoJz/6qCc/+qgnP/"
+    "qoJz/6qFdf+kj4D/n5+f/9TV1P/i4uH/4uLi/+Li4f/i4eH/4uHh/+Hh4P/h4OD/4ODg/+Dg3//h3+D/4N/f/9/f3//c29v/09PS/8fGxv9lX1z/2dPR//b4"
+    "9v+5qpz/vrCi/76xov++sKL/vrGi/76wov++sKL/vrGi/76wov++sKL/vrCi/76xov++sKL/vrGi/76wov++sKL/vrCi/76wov++sKL/vrGi/76wov++sKL/"
+    "vrGi/76wov++saL/vrCi/76wov++sKL/vrCi/7+xov++sKL/vrGi/76wov++saL/uauf/+3t7P/t7Oz/7Ozr/+zs6//s7Ov/6urq/+rq6f/p6uj/6ejo/+no"
+    "6P/o6Of/6Ojn/+fn5//n5+f/5ufn/7Kjlf+rmIr/qpiK/5yGeP/l5eX/5eXk/7iqov9YNCX/bEEx/3pJNv+ETjz/jFM+/5FVQP+UV0H/k1dB/5RXQP+TVj//"
+    "k1ZA/5NWP/+SVT//kVU+/4pSPP/S1dbeycjK/7Kysf+en5//ent7/9rb2vXx8fH/4+Pk/9ra2/+hoqX4ilI8/6WDbv+ic2D///////////+Dg4P/j4+P/4+P"
+    "j/////////////Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy//Dx8v/w8fL/8PHy////////////"
+    "//////////+pgXH/qoFy/7eeif+3non/t56J/7eeif+3non/t56J/7eeiv+3non/t56J/7eeif+qgnP/q4Nz/6qGdv+kj4D/n5+f/9XV1f/j4+P/4uLi/+Pi"
+    "4v/i4uL/4uLi/+Li4f/h4eH/4eHh/+Hg4P/h4eD/4ODg/+Hg3//d29v/1NPT/8fHx/9lX1z/2dPR//f4+P+6rJ3/v7Gj/8Cxo/+/saP/wLGk/8CxpP+/saP/"
+    "v7Gk/7+xo//AsaP/v7Gj/8CxpP/AsaT/v7Gk/8CxpP/AsaT/v7Gj/8Cxo/+/saT/wLGk/8CxpP/AsaT/v7Gk/7+xpP/AsaT/wLGj/8CxpP/AsaT/wLGk/7+x"
+    "pP/AsaP/v7Gk/7+xpP/AsaT/uauf/+3u7f/t7u3/7e3t/+3t7P/s7ez/6+vq/+rq6v/q6un/6erp/+np6f/p6ej/6eno/+np6P/o6Oj/6Ofn/7SlmP+unI3/"
+    "rZqN/56Kev/l5ub/5uXl/7iqov9YNCX/bUEx/3pJN/+FTjv/jFM+/5FWQf+UV0H/k1dB/5NXQf+TVkD/k1ZA/5JWP/+SVj//klY//4pSPP/S1dXeyMnL/7Ky"
+    "sf+gn5//e3t7/9rc2/Xy8fL/4+Pk/9vb2/+gpKX4ilI8/6WDbv+jdGD///////////+Dg4P/j4+P/4+Pj////////////9fY1//X2Nf/19jX/9fY1//X2Nf/"
+    "19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf/19jX/9fY1//X2Nf///////////////////////////+pgXH/qoJy/8Svof/Er6H/xK+h/8Sv"
+    "of/Er6H/xK+h/8Svof/Er6H/xK+h/8Svof+rg3P/q4Nz/6uGdv+kj4D/n5+f/9bW1v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Hh4f/i4uH/"
+    "4uHh/+Hg4f+fkIv/mYuG/5CDfv9lX1z/2dPR//j59/+8rZ//wbOl/8Gypf/Bs6X/wbOl/8Cypf/BsqX/wbKl/8Gypf/Bs6X/wLOl/8Gzpf/BsqX/wLKl/8Gz"
+    "pf/Bs6X/wbKl/8Gzpf/Bs6X/wbOl/8Cypf/As6X/wbOl/8Gzpf/Bs6X/wbOl/8Czpf/Bs6X/wbOl/8Gzpf/Bs6X/wbOl/8Czpf/AsqX/uauf/+7v7v/u7+7/"
+    "7e7t/+7u7f/t7e3/7Ozr/+vs6//q6+r/6+rq/+rq6v/q6ur/6enp/+rp6P/p6en/6eno/7anm/+wn5D/rp2P/6GMfP/m5+b/5ubm/7iqov9YNCX/bUEx/3pJ"
+    "N/+FTzv/jVM//5FWQf+UWEL/lFdB/5RXQP+TV0D/k1dA/5JWP/+SVUD/klU//4pSPP/R1NXex8rK/7Gysf+goJ//fHt8/9vc2/X08vP/5OTl/9zd3P+hpqX4"
+    "ilI8/6WDbv+jdGD///////////9/f3//g4OD/4ODg///////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+qgXL/qoJz/6uCc/+rg3P/pn9w/514av+YdWf/mHVm/5h1Zv+YdWb/nXhq/6Z/cP+rg3P/"
+    "q4Nz/6uGdv+kj4D/n5+f/9fW1v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Li4v/i4uL/4uHh/+Lh4f+fkIv/mYuG/5CDfv9lX1z/2dPR//j5"
+    "+P+9sKH/wrWm/8G0pv/BtKb/wbWm/8G0pv/Ctab/wbWm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/"
+    "wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G1pv/BtKb/wbWm/8G0pv/BtKb/uauf/+/w7//v7+//wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HB"
+    "wf/BwcH/wcHB/+rq6v/q6un/6unp/7iqnf+zopP/saCS/6OOf//n6Of/6Ojm/7iqov9YNCX/bUEx/3pJN/+FUDz/jVM//5JWQf+VWEL/lFhB/5RXQf+TV0H/"
+    "k1ZB/5NWQP+TVkD/k1Y//4pSPP/S1NTeycnK/7Kys/+foKD/e3x7/93c2/X19PP/5uXm/93e3P+hp6b4ilI8/6WDbv+jdGD/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+qgXL/qoJz/6uCc/+rg3P/nXhq/4FjV/9zWE7/c1hO/3NYTv9zWE7/gWNX/514av+rg3T/q4N0/6uGdv+kkID/oKCg/9fY1/+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/+Pj4//j4+P/4+Pi/+Li4f+fkIv/mYuG/5CDfv9lX1z/2NLQ//n5+f++saP/wrWo/8O1qP/Ctaj/w7Wn/8K1p//Ctaf/"
+    "wrWn/8K1qP/Ctaj/wrWn/8O1qP/Ctaj/wrWo/8K1p//Ctaf/wrWn/8K1qP/Ctaf/w7Wo/8O1p//Dtaf/wrWn/8K1qP/Ctaj/w7Wn/8K1qP/Ctaj/w7Wo/8O1"
+    "p//Ctaf/wrWo/8K1qP/Dtaj/uauf//Dw7//v8PD/7/Dv/+/v7//v7+//7e3s/+zt7f/t7e3/7Ozs/+zs7P/r7Ov/6+vr/+vr6v/q6+r/6urq/7qtoP+1pZf/"
+    "tKKV/6WRgf/p6Oj/6Ojo/7iqov9YNCX/bUEx/3pJN/+GUDz/jlQ+/5JXQf+VWEL/lFhC/5RXQv+UV0H/k1dB/5RXQP+TVkD/k1Y//4pSPP/S1dTeysrK/7Oy"
+    "sv+fn5//e3t6/93d3PX19fT/5ubm/93e3f+ip6f4ilI8/6WDbv+jdGD/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+qgnL/q4Jz/6uDc/+rg3T/zLOq/8yz"
+    "qv/Ms6r/zLOq/8yzqv/Ms6r/c1hO/5h1Z/+rg3T/q4N0/6uGdv+kkID/oKCg/9jY2P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Tj5P/k4+P/"
+    "4+Pj/+Tj4v+fkIv/mYuG/5CDfv9lX1z/3djW//n6+f/As6T/xLap/8S2qf/Etqn/xLap/8O2qf/Etqn/w7ap/8O3qf/Dtqn/xLap/8S2qf/Etqn/xLap/8S2"
+    "qf/Dtqn/w7ap/8O2qf/Dtqn/xLap/8S2qf/Etqn/w7ap/8S2qf/Dtqn/xLap/8O2qf/Etqn/xLap/8S2qf/Dtqn/xLap/8S2qf/Etqn/uauf//Hx8f/w8fH/"
+    "wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/+zs6//r6+v/6+vq/7ywo/+3qJr/tqWY/6iVhf/p6en/6eno/7iqov9YNCX/bUEy/3pJ"
+    "N/+FUD3/jVU//5JXQv+VWEP/lVhC/5VYQv+UWEH/k1dB/5NWQP+TVkD/k1ZA/4pSPP/R1dXeycrL/7Oysf+goKD/e3t8/9vc3fX09PX/5+fm/93f3v+iqKj4"
+    "ilI8/6WDbv+kemb/pHpm/6N6Zv+jemb/o3pm/6N6Zv+jemb/o3pm/6N6Zv+jemb/o3pm/6N6Zv+jeWX/o3ll/6N5Zf+jeWX/onll/6J5Zf+ieWb/onlm/6J6"
+    "Zv+iemf/onpn/6F7aP+cemj/p4V0/6mIeP+qinn/qop6/6uLe/+rjHz/rIx8/6yMfP+sjX3/zLmv/8Svof/Er6H/xK+h/8Svof/Mua//c19U/5l+b/+sjX3/"
+    "rI19/6yNfP+ok4T/srKx/9zc3P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Tk5P/l5OP/5OTk/+Tj5P+fkIv/mYuG/5CDfv9lX1z/3tnY//n6"
+    "+f/BtKX/xbiq/8W4qf/Ft6r/xbeq/8W3qf/FuKr/xbip/8W4qf/FuKr/xLip/8S4qv/FuKn/xLiq/8W3qf/Ft6n/xbip/8W3qf/Ft6n/xLip/8S3qf/Ft6n/"
+    "xLep/8W3qf/FuKn/xLip/8W3qf/FuKr/xLiq/8W4qf/FuKr/xbip/8S4qv/FuKr/uauf//Ly8f/x8fH/8fLx//Dx8f/x8PD/7+/u/+7v7v/u7u7/7u7t/+7t"
+    "7f/t7ez/7e3s/+3t7P/t7Ov/7Ozs/76wpP+7q53/t6ib/6qXiP/q6+r/6urp/7iqov9YNCX/bUIx/3pJOP+GUD3/jVVA/5NYQv+VWEL/lVhC/5RYQv+VV0L/"
+    "lFhB/5RXQf+UVkH/k1dA/4pSPP/R1dTeyMnJ/7Kxsv+ioKD/fHt7/9vc3fX09fX/5+jn/93g3v+kqaj4ilI8/7iIdv+pgm//o31r/6B7av+fe2n/n3tp/597"
+    "af+fe2f/n3tn/597Z/+femf/n3pn/596Z/+femf/n3pn/595Z/+eeWf/nnln/555Z/+eeWf/nnln/557af+ce2n/m3tq/5l7a/+Jd2v/qpmP/7CjmP+ypZv/"
+    "s6ad/7Son/+1qaD/tqqh/7aqov+2q6P/0szH/8Svof/Er6H/xK+h/8Svof/SzMb/enJt/6GXj/+2qqL/tqqi/7Wqof/Cwb//1tbW/+Tk4/+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/+Xm5f/l5eX/5eXl/+Xk5f+fkIv/mYuG/5CDfv9lX1z/3djX//n6+f/Btab/xbmq/8W5q//Fuar/xbmq/8W5qv/Fuar/"
+    "xbmr/8W5q//Fuar/xbmr/8W5qv/FuKv/xbmr/8W5q//Fuav/xbmr/8W5q//Fuar/xbmr/8W5q//Fuav/xbmr/8W4q//Fuav/xbmr/8W5q//Fuav/xbir/8W5"
+    "q//Fuav/xbmr/8W5q//Fuav/uauf//Lz8v/y8/L/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/+3u7f/t7u3/7e3s/76xpf+9rqD/"
+    "uque/62bi//r7Or/6+vr/7iqov9YNCX/bkIy/3tKOP+GUD3/jlVA/5NXQ/+VWkP/lVlC/5VYQv+UWEL/lVdB/5RXQf+TV0H/k1ZA/4pSPP/R1NTeyMrJ/7Oz"
+    "s/+hoKL/fXt9/9zd3fX19vb/5+no/97h3v+mqqf4ilI8/7+Mef+/jHn/vox5/76LeP++i3j/vYp3/72Kd/+9inb/vIl2/72Jdv+8inb/vIl1/7yIdf+8iXX/"
+    "u4d0/7uHc/+7iHT/u4dz/7qGc/+6hnP/uYVy/7mFcv+1gm//r31r/6V2Zf9lX1z/2dTR/+3u7v/t7e3/7e3t/+3t7P/t7e3/7O3s/+zs7P/s7Oz/8/Pz/8Sv"
+    "of/Er6H/xK+h/8Svof/z8/L/np2d/8/Rz//q6ur/6erp/+rp6P/p6ej/6ejp/+np6P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+bm5v/l5uX/"
+    "5eXm/+bl5f+fkIv/mYuG/5CDfv9lX1z/3djW//n6+f/Dtqj/xrms/8a5rP/Guqz/xrms/8a5rP/Fuaz/xrqs/8a5rP/Guaz/xrms/8W5rP/Fuaz/xrms/8a6"
+    "rP/Fuaz/xbms/8a5rP/Guaz/xrms/8a5rP/Guaz/xbms/8a5rP/Guaz/xrqs/8a5rP/Guqz/xrms/8a5rf/Fuaz/xrqs/8a5rP/Guaz/uauf//Pz8v/z9PP/"
+    "8vPy//Ly8v/y8vH/8PHx//Dw7//w8O//8O/v//Dw7v/v7+7/7u7u/+7v7v/u7+7/7u7u/76zpv++sKL/vbCi/7CgkP/s7Oz/7Ozr/7iqov9YNCX/bkIy/3tK"
+    "OP+GUT3/jlVA/5NYQ/+WWUP/lllD/5VYQv+VWEL/lVhC/5RYQv+UV0H/lFdB/4pSPP/R1dXeyMnK/7Kysv+hoqH/fHx8/9zd3vX29vf/6Oro/+Hh3/+mqqj4"
+    "ilI8/7+Nef+/jHj/v4x5/76MeP++i3j/vot4/72Ld/++inf/vYp2/7yJdv+8iXb/vIl1/7yJdf+8iXX/vIh1/7uIdP+7h3P/uodz/7qHc/+6hnP/uoZy/7mF"
+    "cv+1gm//r35r/6R2Zf9lX1z/2dPR/+7v7v/u7+3/7u7t/+3u7v/t7e3/7e3t/+3t7f/t7ez/8/Tz/8Svof/Er6H/xK+h/8Svof/z8/L/sbGx/9jY1//r6+r/"
+    "6urq/+rq6f/q6en/6enp/+np6P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+fn5v/m5ub/5ufl/+bm5v+fkIv/mYuG/5CDfv9lX1z/3NfV//n6"
+    "+f/Et6n/x7qt/8e7rf/Huq3/xrut/8a6rf/Huq3/x7ut/8e6rf/Guq3/x7qt/8e7rf/Huq3/x7ut/8a6rf/Guq3/x7qt/8a6rf/Guq3/x7ut/8e6rf/Guq3/"
+    "x7ut/8e6rf/Gu63/x7qt/8e6rf/Guq3/x7qt/8e7rf/Guq3/x7ut/8a6rf/Hu63/uauf//T18//z9PP/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HB"
+    "wf/BwcH/wcHB/+/w7//v7+7/7u/u/8C0p//As6X/v7Gk/7Kik//t7ez/7e3s/7iqov9YNCX/bkIz/3tKOP+GUT3/j1ZA/5NYQ/+WWkT/lllE/5VZQ/+VWEL/"
+    "lVhC/5VYQv+UWEH/lFdB/4pSPP/R1dTeyMrK/7Kysf+goaH/e3x8/9zd3vX29vf/6ero/+Li4f+mq6n4ilI8/7+Nev+/jHn/v4x5/7+MeP++i3j/vYx3/76L"
+    "d/+9i3f/vYp3/72Kd/+9inf/vIp2/7yJdv+8iHX/u4l1/7yIdP+7iHT/u4d0/7qHc/+6h3L/uoZz/7qGcv+1gnD/r39r/6V2Zf9lX1z/3djW/+/v7//u8O7/"
+    "7+/u/+7v7v/u7+7/7u7u/+3u7f/t7u3/9PTz//T19P/z9PP/9PTz//Tz8//z8/P/2dnZ/+bl5f/r6+v/6+vr/+vr6v/q6ur/6+rp/+rq6v/p6un/6erp/+nq"
+    "6P/p6en/6eno/+jo6P/o6Oj/5+fo/+jo5//o5+f/5+fn/+fn5v/i4uL/2tnZ/87Nzf9lX1z/3NfV//n6+f/Euan/x7ut/8i7rf/Hu63/yLut/8i7rf/Hu63/"
+    "x7ut/8e8rf/Iu63/x7yt/8i7rv/Iu63/yLut/8i7rf/IvK3/x7ut/8i7rf/Hu67/yLyt/8i8rf/Iu67/x7uu/8i7rf/Iu67/yLyt/8i7rf/Iu67/yLut/8e8"
+    "rv/Iu63/x7yt/8e7rf/Iu63/vrGl//T19P/09fT/9PT0//T08//z9PP/8vLy//Ly8f/y8vH/8fHx//Hx8P/x8fD/8PHv//Dw8P/v8O//7/Dv/8C1p//Dtaj/"
+    "wbOm/7SjlP/u7u3/7e7t/7iqov9YNCX/bkMz/3tKOf+GUT3/j1ZB/5RZQ/+WWkP/lVlE/5ZZQ/+WWUL/lVhC/5VYQv+UWEH/k1dB/4pSPP/S1dTeysvK/7Oz"
+    "sf+foKD/e3t7/97e3/X39/j/6uvq/+Lk4v+nrar4ilI8/8CNef+/jHn/v415/7+Mef+/i3j/v4t4/76Md/+9i3j/vYt3/72Kd/+9inb/vYp2/7yJdv+9iXX/"
+    "vIl1/7uIdf+7iHT/u4h0/7qHdP+6h3P/uody/7qGc/+2g3D/r39r/6V3Zf9lX1z/3tnY//Dx8P/w8O//7/Dv/+/v7//u7+//7+7u/+7u7v/u7+7/7u7t/+7u"
+    "7f/t7u3/7e3t/+3t7P/t7ez/7Ozs/+zs6//s7Ov/6+zs/+zr6//r6+v/6+vq/+rr6//q6ur/6urq/+rq6f/q6un/6enp/+np6P/p6ej/6Onp/+jo6P/o6Of/"
+    "5+jn/+fn5//i4uL/2tvZ/87Ozf9lX1z/3NfV//n6+f/Fuar/yb2u/8i8rv/JvK7/ybyu/8i8rv/IvK7/ybyu/8i8rv/IvK7/yLyv/8i8rv/JvK7/yLyv/8i9"
+    "rv/IvK7/yLyu/8i8rv/JvK7/yLyu/8i8rv/Iva//yLyu/8i8rv/IvK7/yLyu/8i8rv/JvK7/ybyu/8i8rv/JvK7/ybyu/8i8r//IvK//v7Km//X19P/19fT/"
+    "wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB//Dx8P/w8fD/8PHw/8G1qf/Et6r/w7ep/7Wmlv/u7u7/7+/u/7iqov9YNCX/bkMz/3xL"
+    "Of+GUT3/j1ZB/5NZRP+WW0T/lllE/5ZZQ/+VWUP/lVlD/5RYQv+VWEL/lFhC/4pSPP/S1NTeysvK/7Kzsf+goKD/e3t7/9/f3vX4+Pj/6uvr/+Lk4/+nrar4"
+    "ilI8/7+Nev+/jXn/v415/7+Nef+/jHn/vot4/76LeP++jHj/vYt4/72Ld/+9inf/vYp2/7yKdv+8iXX/vIl2/7yIdf+7iHX/u4h1/7uHc/+6h3P/uodz/7qG"
+    "c/+2g3D/r39s/6V2Zf9lX1z/3djW//Dx8P/w8PD/8PHw//Dx8P/v8O//7+/v/+/v7//v7+//7u/u/+7v7v/u7u7/7u7t/+7u7f/t7e3/7e3t/+3t7P/t7ez/"
+    "7O3s/+zs7P/s7Oz/7Ozr/+zs6//r6+v/6+vq/+rr6v/q6+r/6uvq/+rq6v/q6en/6erp/+np6P/p6ej/6Ojo/+jo6P/j4+P/29va/8/Ozv9lX1z/3NfV//n6"
+    "+f/Fuqv/yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//"
+    "yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//wLOm//X39f/19vX/9fb1//X29f/19vX/8/Tz//P08//z8/L/8vPy//Lz"
+    "8v/y8/L/8vLx//Ly8f/x8fH/8fHx/8G0p//Iva7/x7yv/7eomP/v7+//7+/v/7iqov9YNCX/bkMz/3tLOf+HUj7/j1dB/5RZRP+XWkX/llpE/5ZaRP+VWkP/"
+    "lllD/5VZQ/+VWUL/lFhC/4pSPP/S1NTeycrJ/7Kzs/+hoqP/fHx7/9/g3vX4+Pj/6+zs/+Pl4/+oraz4ilI8/8COev/AjXr/v415/7+Nev+/jXn/vox5/76M"
+    "ef++i3j/vYx3/72Ld/+9i3f/vYp3/72Kdv+9inb/vIl2/7yIdf+8iHT/u4h1/7uIdP+7h3T/uod0/7qGc/+2g3H/r39t/6Z2Zf9lX1z/3tnY//Hx8f/x8fH/"
+    "8PHw//Hw8P/w8O//8PDw//Dw7//w8O//7/Dv/+/v7v/u8O//7+/u/+/u7v/u7u7/7e7t/+7u7f/t7e3/7e3t/+zt7f/s7ez/7Ozs/+zt6//s7Ov/7Ozr/+zs"
+    "6//r6+v/6+vr/+vr6v/r6ur/6urq/+rq6f/q6en/6enp/+np6P/k4+T/29zb/8/Pzv9lX1z/2dTR//n6+f/BtKb/xLir/8S5q//EuKr/xLiq/8S4q//EuKv/"
+    "w7eq/8O3qv/Dt6r/wrap/8K2qf/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaf/wbSn/8C0"
+    "pv/Bs6X/wLOl/7+ypf+9r6H/x7qv//b39v/29/b/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB//Pz8v/y8vL/8vLx/8rBtv+4q5v/"
+    "uKqc/7ipmv/w8O//8PDw/7iqov9YNCX/bkM0/3xLOf+HUj7/kFZB/5RZRP+WW0X/l1tF/5ZaRP+WWkT/llpD/5ZZQ/+VWUL/lFlC/4pSPP/R1dXeyMrK/7Sz"
+    "sv+io6L/fH19/+Dh4PX5+ff/7e7s/+Xn5f+qr674ilI8/8CNev+/jXr/v415/7+Mef+/jXn/v415/76Mef++i3j/vot3/76LeP+9inj/vYp3/72Kd/+8inb/"
+    "vYp2/7yJdf+8iXX/vIl1/7uIdP+7iHT/u4d0/7qHc/+3hHH/sIBs/6Z3Zv9lX1z/3djX//Ly8v/x8vH/8vLx//Hy8f/w8fH/8PHw//Dx8P/w8O//7/Dw//Dw"
+    "7//v8O//8O/v/+/v7//v7+7/7+/u/+7u7v/u7+7/7u7t/+7u7f/t7u3/7e3t/+3t7f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+vq6v/q6+r/"
+    "6urq/+rq6f+fkIv/moyH/5GDf/9lX1z/2NTS//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+P/5+fn/+fr5//j5+P/4+fj/+Pn4//j4+P/3+fj/+Pj3//f49//3+Pf/9/j3//b49//39/f/"
+    "9vf2//b39v/29/X/9PX1//X19P/09PT/9PX0//P19P/z9fP/8/Tz//Lz8//z8/P/8vPy//Lz8v/y8vH/8vLy//Hy8f/w8vD/8fHw/7iqov9YNCX/cUU0/31M"
+    "Ov+IUj//j1ZB/5RaRP+XW0X/l1tF/5ZbRf+WWkP/llpD/5VZQ/+VWUL/lVlD/4pSPP/R1dbeycvM/7S0s/+jo6L/fH19/+Dh4fX5+ff/7e/s/+bn5f+rr6/4"
+    "ilI8/8COe//Ajnr/v416/8CNev+/jXr/v4x5/7+MeP+/jHn/vox4/76LeP++i3j/vop3/72Kd/+9inb/vYp2/7yJdv+8iXb/u4h1/7yIdP+7iHT/u4d0/7uI"
+    "c/+3hHH/sIBt/6Z3Zv9lX1z/3djW//Lz8v/y8/L/8vPy//Hy8v/x8vL/8fLx//Hy8f/w8fH/8fHw//Dw8P/w8fD/8PDw//Dw7//v8O//7+/v/+/v7//v7+7/"
+    "7u/u/+/v7v/u7u7/7u7u/+7u7f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+vr6//r7Ov/6+vq/+rq6v+fkYz/moyH/5KFgP9lX1z/0MnG/8rK"
+    "yP/P0M3/zs/O/8/Qz//P0M//0NHP/9DRz//Q0c//0NHP/9DS0P/Q0tD/0dLR/9HS0f/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/"
+    "0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HT0v/T09L/09PT/9PT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPS/9TU"
+    "0v/U09L/0tHQ/9PT0f/S09H/0tLR/9DQ0P/R0tD/0dHQ/9DR0P/Ozs7/0MzK/7iqov9YNCX/dEY2/4BOPP+JVD//kFhD/5VbRf+YW0b/lltF/5dbRP+WWkT/"
+    "lllE/5ZaQ/+WWkP/lVhC/4pSPP/S1dbeysnN/7S0tf+jo6L/fXx7/+Dg4fX5+fj/7e/s/+bn5f+rr6/4ilI8/8GOev/Ajnr/wI16/8COev+/jXr/v416/7+M"
+    "ef+/jHn/vox4/76MeP++i3j/vYt3/72Kd/+9inf/vYp2/72Jdv+8iXX/vIh1/7yJdf+7iXT/u4h0/7uHdP+2hHH/sIBt/6Z3Zf9lX1z/3NfV//Pz8//y8/L/"
+    "8vTz//Lz8//y8vL/8vLy//Hy8f/x8vH/8vHx//Hx8f/x8vH/8fHw//Dx8f/w8e//8PDw//Dw7//v8O//7+/u/+/w7v/u7+7/7u/u/+/u7v+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/+zs7P/r7Ov/7Ovr/+vr6/+fkYz/m42I/5SGgv9lX1z/zcG9/87Evv/PxsD/zsW+/83Dvv/Nwr7/y8K9/8zCvP/Mwrz/"
+    "zMC6/8u9uf/Kvrf/yL23/8i8tv/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7"
+    "tf/Iu7X/yLu1/8e6tP/Fu7T/xrmz/8W5sv/FuLH/xLiy/8S4sv/FuLH/xrmx/8a5sv/GubP/yLuz/8e7s//Hu7T/zMK8/8zBu//Mwbz/y7+6/9DFwP/Ow73/"
+    "y8G8/83CvP/Nwb3/zMG8/83Bvf9YNCX/eEo5/4NQPf+LVUH/kVhE/5ZbRf+XXEX/l1tF/5dbRf+WW0T/llpF/5VZRP+VWUT/lVlD/4pSPP/S1dXeycrM/7S0"
+    "tf+jo6P/fHx8/+Dg4fX4+fj/7O/t/+Xo5/+tsLD4ilI8/8COe//Ajnv/wI57/8CNev/AjXr/v415/7+Nev++jHn/vox4/76MeP++i3f/vot3/76Ld/+9i3f/"
+    "vYp3/72Kdv+8iXb/vIl2/7yIdv+8iXX/vIh0/7uIdf+3hXL/sYBu/6Z4Zv9lX1z/3djW//P08//z9PT/8/Tz//L08v/z8/P/8/Py//Pz8v/y8/L/8fPy//Ly"
+    "8f/x8vL/8vLx//Hx8f/w8vH/8fHw//Hw8P/w8fD/7/Hv/+/w7//v8O//7+/v/+/w7/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+3t7f/s7e3/"
+    "7e3r/+zs6/+gkYz/nY6K/5eJhf9lX1z///////////////////////////////////////////////////////////////7///78///++////Pn///z5///8"
+    "+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///69v/++fX//vn0//749P/89/P/"
+    "/Pfx//z28v/79fL//fjy//369f//+fb///r3//v38/////////n0/52Ul//Z0tP/+fHt/52Ul//Z0tP///r2/52Ul//Z0tP///fy///7+f9YNCX/gE88/4hT"
+    "QP+PV0L/lFpF/5VcRv+YXEb/l1tF/5dcRf+XW0X/lltE/5ZbRP+WWkT/llpD/4pSPP/S1dbeysrN/7S0tf+ioqL/e3x8/+Dg4fX4+fj/7O/v/+Xo5/+tsLD4"
+    "ilI8/8GOe//Bjnv/wI57/8COe//Ajnr/v416/7+Nef+/jXn/v4x5/7+Mef+/i3j/vot3/72LeP+9inf/vYp3/72Kd/+8inf/vYl1/7yJdf+8iHX/vIh1/7yJ"
+    "dP+3hHL/sIBt/6Z4Zv9lX1z/3tnY//T19P/09PP/8/T0//T08//z9PP/8/Pz//P08v/z8/L/8/Py//Lz8v/y8/L/8vLy//Ly8f/x8vH/8fHx//Hx8P/x8fH/"
+    "8PHx//Hx8P/w8PD/7/Dw/+/w8P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+7t7f/t7ez/7e3t/+3t7P+hko3/npCL/5uNiP+leWf/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP+OUzz/iFRA/45XQ/+RWkX/lFtF/5dcRv+YXUf/l1xG/5hcRv+XW0b/"
+    "l1tF/5ZbRP+WWkT/llpE/4pSPP/S1dXeycrL/7S0tP+jo6P/fXx9/+Dg4fX5+fn/7e/w/+bo6P+ssLD4ilI8/8GPe//Bjnv/wI57/8COev/AjXv/v456/7+N"
+    "ev+/jXr/v4x5/7+MeP+/i3n/v4x4/76Ld/+9i3f/vYt3/72Kd/+9inf/vIl2/72Jdf+8iXX/vIl1/7yIdf+3hXP/sYFu/6Z4Z/9lX1z/3djX//T19P/09fT/"
+    "9fX1//T19P/09fP/9PTz//P09P/z9PP/8/Tz//P08//z8/L/8/Pz//Lz8v/y8/H/8vPx//Hy8f/y8vH/8fHx//Hx8f/x8fH/8fHw//Dx8P+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/+7u7f/u7u3/7u7u/+7t7v+hko3/oJGM/56Piv+bjYj/l4mF/5SGgv+ShYD/kYN//9HR0f/R0dH/0NHQ/9DR0P+Qg37/"
+    "kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/kIN+/8/Pz//Pz8//zs/O/8/Ozv+Qg37/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/kIN+/83Ny//My8v/zMvL/8vM"
+    "y//My8v/y8vK/6SXkP9OLiH/aEM1/3VMPP9/UkH/hlZF/4xaRv+OW0f/jlpH/45aRv+OWkb/jllF/41ZRf+NWEX/jFhF/4xXRf+MV0T/i1ZE/4pVQv+KVUL/"
+    "iVVC/4lUQf+JVUH/ilVB/4tWQv+NV0P/kFlE/5JaRf+VWkX/l1xH/5ddR/+YXUb/mF1G/5hcRv+XW0X/l1tF/5ZaRf+WWkX/llpE/4pSPP/S1dXeysrK/7W0"
+    "tP+ko6P/fX19/+Dg4fX6+fr/7+/x/+jo6v+tsbL4ilI8/8GPfP/Bj3v/wI57/8CPev/Ajnr/wI16/7+Nev+/jXr/v415/7+Nef+/jHn/vox4/76MeP++jHj/"
+    "vot4/72KeP+9i3b/vYp3/72Jdv+8inb/vIl1/7yJdf+3hXP/sYBu/6Z4Zv9lX1z/3djW//X29f/19fX/9PX0//X29P/09fT/9PT0//T09P/09fT/9PTz//P0"
+    "8//z9PP/8/Tz//P08v/z9PP/8/Py//Pz8v/y8/L/8vPy//Ly8f/x8fH/8fHx//Hy8f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+7w7v/v7+//"
+    "7u/u/+7u7v+ik47/oZKN/6CRjP+ekIv/nY6K/5uNiP+ajIf/moyH/9/f3v/e39//39/e/9/f3v+Zi4b/mYuG/5mLhv+Zi4b/mYuG/5mLhv+Zi4b/mYuG/9zc"
+    "2//b3Nz/3Nvb/9vc2/+Zi4b/mYuG/5mLhv+Zi4b/mYuG/5mLhv+Zi4b/mYuG/9nY2P/Z2dn/2djY/9nY2P/Y2Nj/2NjX/66hmf9TMSP/cEg5/3xPP/+HV0X/"
+    "kFxJ/5RfS/+XYUz/lmBM/5ZfTP+WX0z/ll9L/5VfSv+UXkr/lF9K/5ReSf+UXkn/k11J/5JbRv+SW0f/kltG/5JaRf+SWkX/klpF/5NbRv+TW0b/lVxH/5Zc"
+    "Rv+XXUf/mF1H/5heSP+YXUf/mF1G/5dcRv+XW0b/l1xG/5dbRP+WW0T/llpE/4pSPP/S1dXey8vL/7a1tP+kpaT/fX1+/+Dg4fX6+fr/7+/x/+jo6v+tsbP4"
+    "ilI8/8GPe//Bj3z/wY57/8GOe//Ajnv/wI17/7+Nev+/jnr/wI16/7+Mef+/jHn/vox4/76MeP++jHf/vot4/76Ld/++i3f/vYp2/7yKdv+9iXb/vIl2/7yJ"
+    "dv+4hnP/sYFu/6d4Z/9lX1z/3NfV//X39v/19vb/9fb2//X29f/19vX/9fb0//X19P/09fX/9PX0//T19P/09PP/9PX0//P18//09PP/8/Pz//L08//z8/P/"
+    "8vPy//Py8v/y8vL/8vLy//Ly8f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+/w8P/v8O//7+/v/+/v7v+ik47/opOO/6GSjf+hko3/oJGM/5+R"
+    "jP+fkYz/n5CL/+fo5//n6Of/5+jm/+fn5/+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/n5CL/+Tl5f/l5OT/5OTk/+Tk5P+fkIv/n5CL/5+Qi/+fkIv/"
+    "n5CL/5+Qi/+fkIv/n5CL/+Li4v/h4eH/4eHh/+Hh4f/h4eH/4eHh/7Snn/9WMyT/dEs7/4FUQ/+MW0j/lWBL/5tjTf+dZE//nWRO/5xjTv+cZE7/nGNO/5ti"
+    "TP+bYkz/mmJM/5thTP+aYUv/mWFL/5hfSv+YXkn/mF5J/5deSf+XXUj/l11I/5heSP+YXkj/mF5I/5leSP+ZXkj/ml1I/5leR/+YXUf/mV1H/5hdRv+YXEb/"
+    "l1tG/5dbRf+XW0X/l1pF/4pSPP/S1dXeysvL/7W1tv+lpKT/fX19/+Dg4vX6+fr/7+/w/+jo6v+ssLP4ilI8/8GQfP/BkHz/wY98/8CPe//Bjnv/wI57/8CN"
+    "e//Ajnr/v416/7+Nef+/jXn/v4x4/76Mef++jHj/vot4/76LeP+9i3j/vot3/72Kdv+9inb/vYl1/7yJdv+4hXP/soFv/6Z5aP9lX1z/3djW//b39v/29/X/"
+    "9vb2//X39v/19vX/9fb2//X19f/19vX/9Pb1//X19P/09fT/9PX0//T19P/z9PP/9PT0//T08//z9PP/8/Pz//Pz8v/z8/L/8vPy//Ly8v/y8/L/8fPx//Hy"
+    "8f/x8vL/8fLx//Hx8P/w8fD/8PHw//Dx8P/w8PD/8PDv//Dw7//w8O//7/Dv/+/v7//u7+7/7+/u/+7u7f/u7+3/7u7u/+3u7v/t7e3/7e3t/+zt7P/t7Oz/"
+    "7ezs/+zs6//s7Ov/6+zr/+vs6//r6+v/6+vq/+rr6v/r6ur/6uvq/+nq6v/p6en/6erp/+np6P/o6en/6ejo/+np6P/o6Of/6Ojn/+jo5//n6Of/5+fn/+fm"
+    "5v/n5ub/5ufm/7iqov9YNCX/dkw9/4RVRP+PXUr/mGFN/51lUP+gZlL/oGZR/6BmUP+fZlD/n2VP/55kT/+eZE//nmNO/55kTv+dY07/nWNN/5xhS/+bYUv/"
+    "m2BK/5tgSv+bYEr/m2BK/5tgSv+bYEr/m2BK/5pfSf+aXkj/mV5I/5peSP+ZXUj/mV1I/5hdR/+XXEb/l1xG/5dcRf+WW0X/l1tF/4pSPP/S1dXey8zL/7a2"
+    "tv+lpaT/fX19/+Dh4vX6+vr/7+/x/+jo6v+tsbP4ilI8/8GQfP/BkHz/wY97/8GOe//Bj3v/wI57/8COe//Ajnr/v456/7+Nef+/jXn/v4x5/7+MeP++jHj/"
+    "vot4/76MeP+9i3f/vYt3/72Ldv+9inb/vYl2/72Jdv+4hnP/soFv/6Z5aP9lX1z/3tnY//f39//2+Pb/9/f2//b39//29/b/9vf2//X39v/19vX/9fb1//X2"
+    "9f/19vX/9fb1//X19P/09fT/9PX1//T09P/09PT/8/T0//T08//z9PP/8/Tz//Pz8//y8/L/8vPy//Lz8v/y8vL/8vPy//Hy8v/x8vH/8fHx//Hx8f/x8fD/"
+    "8fHw//Hx8P/w8fD/8PDw//Dw7//v8O//8O/v/+/w7//u7+//7+/u/+7v7f/u7u7/7e7t/+3u7f/t7u3/7e3t/+zt7P/s7ez/7O3s/+zs6//r7Oz/6+zr/+vr"
+    "6//r6+v/6uvq/+vr6v/q6+r/6urq/+rq6f/p6en/6unp/+np6P/p6ej/6ejo/+jo6P/o6Of/6Ofn/+fn5//n6Of/5+fm/7iqov9YNCX/dkw9/4RWRP+QXUr/"
+    "mWJO/55mUP+haFL/oGZR/6BmUf+fZlH/n2VQ/59lUP+fZE//nmRP/55kTv+dY07/nWJN/5xhTP+cYUv/m2BK/5tgSv+bYEr/m2BK/5tgSv+bYEr/m2BK/5pg"
+    "Sf+aX0n/mV5J/5lfSP+ZXUj/mV1H/5hdR/+YXUf/mFxG/5dcRv+XW0X/lltF/4pSPP/S1dbey8vM/7a2tf+kpKX/fX19/+Dh4vX6+vr/7+/x/+jo6v+vs7P4"
+    "ilI8/8GQff/Bj3z/wY98/8GPe//Aj3v/wI57/8COe//BjXr/wI16/8CNev+/jXr/v415/7+Nef+/jHn/v4x4/76LeP++i3f/vYp3/76Kd/+9inb/vIp3/7yJ"
+    "dv+4hnP/soFw/6d6aP9lX1z/3djX//f49//39/b/9/j3//b39//29/f/9/f2//b39v/29/b/9vf1//b39f/19/X/9fb1//X19f/19vX/9PX1//T19P/09fT/"
+    "9PX0//T09P/09PT/9PTz//P09P/z8/P/8/Tz//Pz8v/y8/L/8vPz//Ly8v/y8vL/8vPy//Ly8f/x8fH/8fLx//Hx8f/x8fH/8PHw//Dx8P/w8PD/8PDw//Dw"
+    "7//v7+//7/Dv/+/v7//u7+//7+/u/+7u7v/u7u3/7u7t/+7u7f/u7uz/7O3s/+zt7P/t7Oz/7ezs/+zs7P/s7Ov/6+vs/+zr6//r6+r/6uvq/+rr6v/q6un/"
+    "6urp/+rq6f/p6un/6uno/+np6P/o6Oj/6Ojo/+jo6P/o5+j/6Ofo/7iqov9YNCX/dkw9/4RWRf+QXUv/mWNO/59mUP+hZ1L/oWdS/6BnUv+gZ1H/oGVQ/59l"
+    "T/+fZVD/n2VP/55kTv+eY07/nmNN/5xhTP+cYUz/m2FL/5tgS/+bYEr/m2BK/5tgSv+bYEr/m2BK/5pgSf+aYEn/ml9J/5leSP+ZXkn/mV1H/5ldSP+ZXUf/"
+    "mFxH/5hcRv+XW0b/l1xF/4pSPP/T1tbezMzN/7W2tf+kpaX/fXx+/+Dh4vX6+vr/8O/x/+np6v+vtLP4ilI8/8GQff/Bj3z/wY98/8GPfP/Bj3z/wY57/8GP"
+    "e//Ajnr/wI16/8CNev+/jXr/v416/7+Mef+/jHn/vox5/7+LeP++jHj/vot4/72Ld/+9i3f/vYp2/72Jdv+4h3T/soFv/6d6aP9lX1z/3djW//f49//3+Pf/"
+    "9/n3/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/9fb2//X29f/19vX/9PX0//T19f/19fX/9PX0//T19P/z9PT/8/Tz//P0"
+    "8//z9PP/8/Tz//P08//z8/L/8vPz//Lz8v/y8/L/8fLx//Hy8f/y8vH/8fLx//Hx8f/w8fH/8PHw//Dx8P/w8e//8PDv/+/w8P/v8O//7/Dv/+/v7v/v7+7/"
+    "7u/u/+/u7v/u7u7/7e7u/+7u7f/u7ez/7e3s/+zt7P/s7ez/7O3s/+zs7P/s6+v/7Ovr/+vs6//r6+v/6+vq/+rq6v/q6+r/6urp/+nq6f/p6en/6enp/+np"
+    "6P/p6ej/6ejo/7iqov9YNCX/dk0+/4RWRf+QXUv/mWNO/55mUf+haFL/oGdS/6FnUv+gZlH/oGZQ/59lUP+fZVD/n2RQ/59lT/+eZE7/nmNO/51iTf+cYkz/"
+    "nGFM/5xhS/+bYUr/m2FK/5thSv+bYUr/m2FK/5tgSv+aX0r/m19J/5pfSP+aXkn/mV5I/5ldSP+ZXUf/mFxG/5hdRv+YXEb/l1tG/4pSPP/S1dbey8vN/7W3"
+    "tv+kpqb/fX19/+Dh4vX6+vr/8O/x/+nq6v+utLP4ilI8/8KQff/BkH3/wY98/8GQfP/Bj3v/wY98/8GPe//Ajnv/wY56/8COev/AjXr/wI56/7+Nef+/jHn/"
+    "v4x5/7+MeP++i3j/vot3/72LeP+9i3f/vYt2/72Kdv+5hnX/soFv/6d6aP9lX1z/3djX//j4+P/4+Pj/9/n4//j4+P/3+Pf/9/j3//f49//39/f/9/j3//f3"
+    "9v/2+Pf/9vf3//f39v/29vb/9ff2//b29v/19vX/9vb2//X29f/19vT/9fX1//T29P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Lz8v/z8/P/"
+    "8vPy//Lz8v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Dx8P/w8PD/8PDw/+/w7/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+3u"
+    "7f/t7ez/7e3s/+3t7P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+rq6v/q6+r/6urp/+rq6v/p6un/6enp/7iqov9YNCX/dk0+/4VWRf+RXUv/"
+    "mWNO/55mUf+iaFP/oWhT/6BoUv+hZ1H/oGZR/59mUP+fZlD/n2VQ/59lUP+eZE//nmRP/5xiTf+cYkz/nGFM/5xhS/+bYUv/m2FL/5thS/+bYUv/m2FL/5tg"
+    "Sv+aYEr/ml9K/5pfSf+aXkn/mV5J/5leSP+ZXkf/mV1I/5hdRv+XXEb/l1xF/4pSPP/S1dXey8zL/7e3t/+mpqb/fX1+/+Dh4vX6+vr/8O/x/+nq6v+utLP4"
+    "ilI8/8KQff/CkH3/wZB9/8KPff/CkHz/wY98/8CPfP/Aj3v/wY57/8COe//Ajnr/wI56/8CNev+/jXn/v4x5/76Nef++jHn/vot4/76LeP++i3f/vYp3/72K"
+    "d/+5h3X/soJw/6d6af9lX1z/3djW//j5+f/4+vj/+Pn4/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/9/f2//b39v/29/b/"
+    "9vf1//b39v/19vX/9fb1//X29f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//P08//z9PP/8/Tz//P08v+ik47/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO//Hy8f/x8vD/8fHw//Dx8P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+/u7v/u7u3/7u7t/+3t7f+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv+ik47/opOO/+vr6//r6+v/6uvq/+rr6v/r6+n/6urq/7iqov9YNCX/dk4+/4VWRf+RXkz/mWRP/59mUf+haFP/oWhT/6BnUv+hZ1L/oGZS/6Bn"
+    "Uf+gZlD/n2VP/59lUP+fZFD/nmRO/51jTf+dYk3/nWJM/5xhTP+cYUv/nGFL/5xhS/+cYUv/nGFL/5xgS/+bYEr/ml9K/5pgSv+aX0n/mV5J/5leSP+ZXkj/"
+    "mV1H/5hdR/+YXUb/mF1G/4pSPP/S1dXezMzL/7e3tv+mpqb/fX1+/+Dh4vX5+vr/8PDx/+rr6/+ws7X4ilI8/8KRff/CkH3/wpB9/8KQfP/Bj3z/wY98/8CP"
+    "fP/Bj3v/wY57/8COev/Ajnv/wI16/8CNev/AjXn/v416/76Mef+/jHj/vot5/76MeP++i3j/vot3/72Ld/+5h3X/s4Jw/6h6af9lX1z/3NfV//j6+P/5+vj/"
+    "+fr5//j5+f/4+fj/+Pn4//j5+P/3+fj/+Pj3//f4+P/3+Pf/9/j3//f49//3+Pb/9/f2//b39//39/b/9vj2//f39v/19/b/9vf2//b39v+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO//T09P/09fP/9PTz//P08/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Ly8f/x8vH/8fHx//Hy8f+ik47/"
+    "opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+/v7v/u7+7/7+/u/+7v7v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+zs7P/s7Ov/6+vr/+vr"
+    "6//r6+r/6urq/7iqov9YNCX/d04+/4VWRf+RXkv/mWRP/6BnUf+iaVT/omlS/6FoU/+gZ1L/oWdR/6FmUf+gZlH/oGZQ/59lUP+fZU//n2RP/51jTf+dYkz/"
+    "nWJN/5xiTP+cYUz/nGFM/5xhTP+cYUz/nGFM/5xhS/+bYEr/m2BK/5pfSv+aX0r/ml5J/5pfSP+ZXkj/mV5I/5heR/+YXUf/mFxH/4pSPP/S1dbey8zM/7a2"
+    "tv+mpab/fn19/+Dh4vX5+vr/8PHx/+vs6/+ytLX4ilI8/8ORff/CkX7/wpB9/8KQff/CkHz/wY98/8GPfP/Aj3v/wI97/8GPe//Ajnv/wI57/8CNev/AjXr/"
+    "v415/7+Mev+/jHn/v4x4/76MeP++jHj/vot4/76Ld/+5h3X/s4Jw/6h7af9lX1z/3djW//n6+f/5+fn/+fr5/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HB"
+    "wf/BwcH/wcHB/8HBwf/BwcH/9/j3//f49//3+Pf/9/f2//f49v/2+Pb/9vj2//b39v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//T19P/09fT/"
+    "9PT0//T19P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Pz8v/y8vL/8vPy//Ly8f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Dw"
+    "7//v8O//7+/v/+/v7v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+3t7P/t7Oz/7e3r/+zs6//r7Oz/6+vr/7iqov9YNCX/d04+/4VXRv+RXk3/"
+    "mmRP/6BnUv+iaVP/omlU/6JoU/+haFL/oWdS/6BnUf+hZlH/n2ZR/6BmUP+fZk//n2RP/51jTv+dY07/nWJN/5xiTf+cYUz/nGFM/5xhTP+cYUz/nGFM/5xh"
+    "TP+bYUv/m2BL/5tgSv+bYEr/mmBJ/5pfSf+ZXkn/mV5J/5ldR/+ZXUj/mF1G/4pSPP/R1dbey8vM/7a3t/+mpqb/fn5+/+Dh4vX6+vr/8fHx/+zs6/+ztbX4"
+    "ilI8/8ORfv/CkX7/wpB9/8KQff/Cj3z/wo98/8GQfP/Bj3z/wY97/8GOe//Ajnv/wI97/8COev+/jXr/v416/7+Nev+/jHn/v4x5/76Mef+/jHj/vot4/76L"
+    "d/+5iHX/s4Jw/6h7av9lX1z/3tnY//n6+f/5+vn/+fr5//j6+f/5+vn/+fr4//n6+P/5+fn/+Pr5//n5+P/4+fn/+Pn4//j4+P/3+fj/+Pj4//j4+P/3+Pj/"
+    "9/j3//f49//3+Pb/9vf3//f49v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//X19f/19vX/9fb0//T19P+ik47/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO//P08//y8/L/8vPy//Ly8f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Hx8P/w8PD/8PDv//Dw8P+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv+ik47/opOO/+3u7f/t7ez/7e3t/+zt7P/t7ez/7Ozs/7iqov9YNCX/d04+/4VXRv+RX03/mmVQ/6BoUv+ialT/omlT/6FpVP+haFL/oWhS/6Fn"
+    "Uv+hZ1H/oGZR/6BmUf+gZlH/n2VQ/55kTv+eY07/nWNN/51jTf+cYkz/nGJM/5xiTP+cYkz/nGJM/5xhTP+cYUv/nGFK/5tgSv+bYEr/mmBK/5pfSv+aX0n/"
+    "mV5I/5leSP+YXUj/mV5H/4pSPP/S1dbezMvN/7e3t/+mpqb/fn59/+Dh4vX6+vr/8vHy/+3r7P+zt7j4ilI8/8ORfv/CkX7/wpB9/8KQff/CkH3/wZB8/8GQ"
+    "fP/Bj3z/wY98/8GPe//Bjnv/wY97/8COev+/jXr/wI16/8CNef+/jXn/v4x5/7+MeP+/jHj/vox4/72LeP+5iHX/s4Jw/6h7af9lX1z/3djX//n6+f/5+vn/"
+    "+fr5/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/+Pn4//j59//4+fj/9/j4//j59//3+Pf/9/j3//f49/+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO//b29v/19vX/9fb1//X19f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//P09P/z9PP/8/Tz//Pz8v+ik47/"
+    "opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Dy8f/x8vD/8fDw//Dx8P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+7u7v/u7u7/7e7u/+3t"
+    "7f/t7e3/7e3s/7iqov9YNCX/eE4//4ZXRv+SX03/mmRQ/6BoU/+jalT/omlT/6JoU/+iaFP/oWhT/6FnUv+gZ1L/oWdR/6BmUf+fZVD/n2ZQ/55kTv+dZE3/"
+    "nWNN/51iTf+dYk3/nWJN/51iTf+dYk3/nWJN/5xhTP+cYUz/m2FL/5thS/+bYEv/m19J/5tgSv+aX0n/mV9J/5leSP+ZXUj/mF1I/4pSPP/S1dXey8vM/7e3"
+    "t/+op6b/f35+/+Dh4vX6+vr/8vHy/+zr7P+yt7j4ilI8/8ORfv/DkX3/wpF9/8KRfv/CkH3/wpB9/8KQff/BkHz/wZB8/8GPe//Bj3z/wI57/8CPe//Ajnv/"
+    "wI17/8CNev+/jXr/v416/7+Nef+/jHn/v4x5/76MeP+5iHb/s4Nw/6h8av9lX1z/3djW//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/4+vj/+Pr4//j5+P/5+fj/+Pn4//j5+P/4+fj/+Pn3//f4+P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//b39v/29/X/"
+    "9vb2//b29v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//P09P/09PT/8/Tz//P08/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Ly"
+    "8v/x8vH/8fHx//Hx8P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+/w7v/u7u7/7u7u/+7v7f/u7u7/7e7t/7iqov9YNCX/eE4//4dXRv+SX03/"
+    "m2VR/6FoU/+jalX/o2pV/6JpVP+iaVP/oWhT/6JnUv+hZ1L/oGdS/6BmUf+gZlH/oGVQ/55kTv+eZE7/nWNO/51jTf+dYkz/nWJM/51iTP+dYkz/nWJM/5xi"
+    "Tf+cYUz/nGJM/5xhS/+bYEr/m2BK/5pfSv+bX0r/ml9J/5peSf+aXkj/mV5H/4pSPP/S1dXey8vL/7e2t/+np6b/fn5+/+Dh4vX6+vr/8fHy/+zs7P+yt7f4"
+    "ilI8/8ORfv/DkX7/wpB+/8KRfv/DkX3/wpB9/8KQff/Cj3z/wY98/8GPfP/Aj3z/wY98/8GOe//Ajnv/wI57/8COev+/jXr/v416/7+Nef+/jHn/vox4/76L"
+    "eP+6iHb/tINx/6l8av9lX1z/3NfV//n6+f/5+vn/+fr5/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/wcHB/8HBwf/BwcH/+fr4//n6+f/5+vn/"
+    "+Pr5//j6+P/4+fj/+Pn4//j5+P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//b49v/3+Pf/9vj2//b29v+ik47/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO//T19P/09fT/9PX0//T19P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Ly8v/y8/L/8vLx//Hy8v+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv+ik47/opOO/+/v7//v8O//7+/v/+/v7v/v7+7/7u/u/7iqov9YNCX/eE8//4dYR/+TYE3/m2VR/6BpU/+ja1X/o2pU/6NqVP+iaVT/omlU/6Fo"
+    "U/+haFL/oWdS/6BnUv+gZlH/n2ZR/55kTv+eZE7/nWRO/51jTv+dYk3/nWJN/51iTf+dYk3/nWJN/51iTf+cYkz/nGJM/5xhTP+bYUv/m2BK/5tgSv+aYEr/"
+    "m19J/5peSf+ZX0n/mV5I/4pSPP/S1dbezMrM/7e0tv+lpab/fX1+/+Dh4vX6+vr/8fDx/+3t7f+zuLn4ilI8/8OSf//DkX//w5F+/8OQfv/CkX7/wpB9/8KQ"
+    "ff/CkH3/wY99/8KPfP/Bj3z/wY97/8COe//Bj3v/wI56/8COev/Ajnv/wI16/7+Nev+/jXn/v4x5/76MeP+6iXb/tINx/6l8a/9lX1z/3NfV//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+f/5+vn/+fr5//n5+P/5+fj/+Pn5//j5+P/4+fj/+Pn4//j4"
+    "+P/4+Pj/9/j4//f4+P/4+Pf/9/j3//f49//2+Pf/9vf3//f39v/39/f/9/f2//b39v/29/b/9vb1//b39f/29vb/9fb1//X29f/19vT/9Pb0//T19f/09fT/"
+    "9PX0//T19P/z9fP/8/T0//T08//z9PP/8/Pz//Lz8//z8/L/8vPy//Lz8v/y8vL/8fPy//Hy8f/x8vH/8fLx//Hx8P/w8fH/8fHw//Dw8P/w8PD/7/Dv/+/w"
+    "7//w7+//7+/u/7iqov9YNCX/eE9A/4dZR/+TYE3/m2VR/6BpVP+ja1b/o2pV/6NqVf+jaVT/o2lT/6JpU/+haFP/oWhT/6FnUv+gZ1H/oGdR/55kT/+eZE//"
+    "nmRO/55kTv+dY07/nWNO/51jTv+dY07/nWNO/51jTv+dYkz/nGFN/5xiTP+cYUv/nGBL/5xgSv+bYEr/m2BJ/5pfSv+aXkn/ml5J/4pSPP/S1dXey8rM/7e1"
+    "tf+mpqX/fX19/+Dh4vX6+vr/8fDx/+/u7f+1urj4ilI8/8OSf//DkX7/w5F+/8KRfv/CkX7/w5F+/8KQff/CkH3/wZB8/8GPfP/Bj3z/wY97/8CPe//Bj3z/"
+    "wY57/8COe//AjXr/v456/7+Nev+/jHr/v415/76Mef+6iHb/tIRx/6l8a/9lX1z/3NfV//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+fj/+fn5//j5+P/4+vn/+Pr4//j5+P/4+fj/+Pn4//f5+P/3+fj/9/j4//f49//3+Pj/"
+    "9/j3//f49//3+Pb/9vj3//f39//29/b/9/f2//b29v/29/X/9vf2//X39v/19vX/9vb1//X19P/19fX/9fX0//T19P/09fT/9PX0//T18//z9PT/9PTz//P0"
+    "8//z9PP/8/Tz//L08//y8/L/8vPy//Lz8v/y8vL/8vLy//Ly8f/x8vH/8fLx//Hy8f/w8fD/8PDx//Dw7//w8O//8PDv/7iqov9YNCX/eE9A/4dZR/+TYE3/"
+    "m2VS/6FpVP+ka1b/pGpV/6NqVf+jaVX/ompU/6JpU/+haFP/omhT/6FoUv+gZ1L/oGdS/59mUP+eZE//nmRP/51jT/+dY07/nWNO/51jTv+dY07/nWNO/55j"
+    "Tf+dY03/nWJN/5xiTP+cYUz/nGFM/5thS/+bYEr/m19K/5tgSv+aX0n/ml5J/4pSPP/S1dXeysvL/7W1tv+lpKT/fX19/+Dh4vX6+vr/8fHx/+/v7f+3vLf4"
+    "ilI8/8OSf//DkX//w5J+/8OSfv/CkX7/wpF9/8KQff/CkH3/wZB9/8GQff/BkH3/wZB8/8GPfP/Bjnz/wI97/8GOe//Bjnr/wI16/7+Oev+/jXn/v416/7+M"
+    "ef+6iXf/tIRx/6p8a/9lX1z/3NfV//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vj/+Pr4//j6+P/4+fn/+fr5//j5+P/4+fj/+Pj4//j5+P/4+ff/+Pj4//j49//3+Pj/9/j4//f49//3+Pf/9/f3//b4"
+    "9//29/f/9/f3//b39f/29vb/9ff2//X29f/29vX/9fb1//X19f/19vT/9fb1//X19P/09fT/9PX0//T09P/09fT/8/Tz//T08//z9PP/8/Pz//Pz8v/y8/L/"
+    "8/Py//Lz8v/y8vH/8vLy//Hy8v/x8fH/8fHx//Dx8P/x8fH/8fDw/7iqov9YNCX/eFBB/4dZSP+TYU7/nGZS/6FqVP+kbFb/o2pW/6RqVf+jalX/o2pU/6Jq"
+    "U/+iaVP/omhT/6FoU/+hZ1L/oGdR/59lUP+fZU//n2VP/55kTv+eZE7/nmRO/55kTv+eZE7/nmRO/51jTv+dY03/nWJN/51iTP+cYkz/m2FM/5xhS/+cYEr/"
+    "m2BK/5tgSf+aX0n/mV9J/4pSPP/S1dXey8zL/7a2tv+lpaT/fX19/+Dh4vX6+vr/8fHx/+7v7v+2vLn4ilI8/8SSfv/Dkn7/w5J//8ORf//DkX7/w5F+/8KR"
+    "ff/CkH7/wpF9/8KQff/CkHz/wpB8/8GPfP/Bj3v/wY98/8COe//Ajnr/wI56/7+Nev+/jnr/v415/8CNev+7inf/tYVx/6l9a/9lX1z/2dTR//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n5"
+    "+f/5+vn/+fn5//j5+P/4+fj/+Pr5//j5+P/4+fj/+Pn4//j4+P/4+fj/9/n3//j49//3+Pf/+Pj4//f49//39/b/9/j3//b39v/2+Pf/9vf2//b29v/29vX/"
+    "9vb1//b29f/29vX/9fb1//X19f/19fX/9fX1//T19f/09fT/9PT0//T09P/z9PP/8/Tz//P08//z8/P/8/Ty//Pz8v/y8/P/8/Py//Lz8f/x8vL/8vLy//Hy"
+    "8f/x8fH/8fHx/7iqov9YNCX/eE9B/4daSP+UYU7/nGZT/6JqVf+ka1f/pGtW/6NqVv+jalX/o2pU/6JqVP+jaVT/omlU/6FoU/+haFL/oGdS/6BmUP+fZVD/"
+    "nmVP/55lT/+eZE7/nmRO/55kTv+eZE7/nmRO/55kT/+eY03/nmNO/51jTf+cYkz/nGFM/5xhS/+bYUv/m2FL/5pfSv+bYEn/ml9K/4pSPP/S1dbey8vM/7a2"
+    "tf+kpKX/fX19/+Dh4vX6+vr/8fHx/+7v7v+2vLv4ilI8/8OSf//Dk3//w5J+/8OSfv/DkX7/wpF+/8KRff/DkX7/wpB9/8KQff/CkH3/wY98/8GQfP/Bj3z/"
+    "wY98/8GOfP/Aj3v/wI57/8CNev+/jXr/v415/7+Nev+7iXf/tIZz/6p9bP9lX1z/2NTS//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+P/5+vn/"
+    "+Pn4//j5+P/4+fj/+Pn4//j4+P/3+Pj/9/j3//j5+P/4+Pf/9/j3//f49//2+Pf/9/j3//b39v/29/b/9vf2//b39v/29/b/9ff2//b39f/29vX/9fb1//X2"
+    "9P/19vT/9fb0//X19P/09PT/9PX0//T19P/09PP/9PTz//P09P/z9PP/8vTy//Lz8v/y8/P/8vPy//Lz8v/y8/H/8vLx/7iqov9YNCX/elJC/4laSP+UYU//"
+    "nWdU/6JrVf+kbFf/pGxW/6RrVv+ka1b/o2tV/6NqVf+jaVT/omlU/6FoVP+haFL/oWdS/6BmUP+gZlD/n2VP/59lT/+eZE//nmRP/55kT/+eZE//nmRP/55k"
+    "T/+eY07/nmNO/51jTf+dYk3/nWFM/5xiTP+bYUv/nGFL/5tgS/+bYEr/mmBK/4pSPP/T1tbezMzN/7W2tf+kpaX/fXx+/+Dh4vX6+vr/8fHx/+7v7v+4u7v4"
+    "ilI8/8STf//Ekn//w5J+/8OSf//Dkn7/wpJ+/8KRfv/DkX3/wpF9/8KQff/BkH3/wZB9/8GQfP/CkHz/wY98/8GOe//Bjnv/wI57/8COe//Ajnv/v416/7+N"
+    "ef+9inj/tYV0/6x+bf9lX1z/0MnG/8rKyP/P0M3/zs/O/8/Qz//P0M//0NHP/9DRz//Q0c//0NHP/9DS0P/Q0tD/0dLR/9HS0f/R0tL/0dPS/9PT0v/T09P/"
+    "09PT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT"
+    "0//U09P/1NPT/9HS0f/R0tL/0dPS/9PT0v/T09P/09PT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPS/9TU0v/U09L/"
+    "0tHQ/9PT0f/S09H/0tLR/9DQ0P/R0tD/0dHQ/9DR0P/Ozs7/0MzK/7iqov9YNCX/flRD/4tcS/+WYk//nWhU/6JqVv+kbFf/pGxW/6RsVv+ka1b/o2pW/6Nq"
+    "Vf+jalT/o2pU/6JoVP+haVP/omhT/6BmUf+fZVH/n2ZQ/59mUP+eZU//nmVP/55lT/+eZU//nmVP/59kTv+eZE7/nmNN/51jTf+dY03/nWJN/5xiTP+cYUz/"
+    "nGFL/5xgS/+bYEr/mmBK/4pSPP/S1dbey8vN/7W3tv+kpqb/fX19/+Dh4vX6+vr/8fHx/+7u7v+5u7v4ilI8/8SSf//Dkn//xJJ//8OSf//Dkn7/w5J+/8OR"
+    "fv/DkX7/wpF9/8KRfv/CkH3/wpB9/8KPff/Bj3z/wpB8/8GPfP/Bj3v/wY97/8COe//Ajnv/wI56/8CNev+9i3j/t4d0/6+Ab/9lX1z/zcG9/87Evv/PxsD/"
+    "zsW+/83Dvv/Nwr7/y8K9/8zCvP/Mwrz/zMC6/8u9uf/Kvrf/yL23/8i8tv/Iu7X/x7q0/8W7tP/GubP/xbmy/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4"
+    "sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8S4sv/EuLL/xbix/8i8tv/Iu7X/x7q0/8W7tP/GubP/"
+    "xbmy/8W4sf/EuLL/xLiy/8W4sf/FuLH/xbex/8S4sf/FubL/xrmx/8a5sv/GubP/yLuz/8e7s//Hu7T/zMK8/8zBu//Mwbz/y7+6/9DFwP/Ow73/y8G8/83C"
+    "vP/Nwb3/zMG8/83Bvf9YNCX/hFdH/49eTf+YZVH/nmhU/6JrV/+lbFf/pWxX/6RsVv+kbFb/o2tW/6NqVf+jalX/ompU/6NpVP+iaVT/oWhT/6BnUf+fZlH/"
+    "n2ZQ/59mUP+fZVD/n2VQ/59lUP+fZVD/n2VQ/55kT/+eZE//nmNO/51kTf+dY03/nWNN/5xjTf+cYUz/nGJL/5thS/+bYEr/m2BL/4pSPP/S1dXey8zL/7e3"
+    "t/+mpqb/fX1+/+Dh4vX6+vr/8fHx/+7u7v+5vLv4ilI8/8STgP/EkoD/w5KA/8SSf//Ekn//w5F+/8OSfv/DkX7/wpF9/8KRfv/CkX3/wpB9/8KQff/Bj3z/"
+    "wo98/8GPfP/Bj3z/wI98/8GOe//Ajnv/wI16/8COev++i3n/uYl2/7KDcv9lX1z/////////////////////////////////////////////////////////"
+    "//////7///78///++////Pn///r2//759f/++fT//vj0//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P/"
+    "/Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38f/89vL/+/Xy///++////Pn///r2//759f/++fT//vj0//z38//89/H//Pby//v18v/79fL/+/by//z3"
+    "8v/89/L//fjy//369f//+fb///r3//v38/////////n0/52Ul//Z0tP/+fHt/52Ul//Z0tP///r2/52Ul//Z0tP///fy///7+f9YNCX/i11L/5RjUP+bZ1P/"
+    "oWtW/6RtV/+lbVj/pWxX/6RsV/+lbFb/pGxW/6NrVv+jalX/ompV/6NqVP+iaVT/omlT/6FnUf+gZlH/oGZR/6BmUP+fZU//n2VP/59lT/+fZU//n2VP/55l"
+    "T/+fZU//nmRO/55kTv+eY07/nWNN/51jTf+cYkz/nGFM/5xhS/+cYUv/m2BK/4pSPP/S1dXezMzL/7e3tv+mpqb/fX1+/+Dh4vX6+vr/8fHx/+7v7v+5vb34"
+    "ilI8/8STf//Ekn//xJKA/8STgP/Dkn//xJJ//8OSfv/DkX7/wpF+/8ORff/CkH7/wpB9/8KQff/CkH3/wpB8/8GPfP/Bj3v/wY57/8GPe//Aj3v/wI57/8CO"
+    "e/++jHn/u4p3/7iHdP+leWf/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP+OUzz/lmNQ/5tnU/+galb/omtX/6VtV/+mbVj/pW1Y/6VtV/+kbFf/pGtW/6Nr"
+    "Vv+ka1X/o2tV/6NqVf+iaVT/omlU/6FnUv+gZ1H/oWZR/6BmUP+fZVD/n2VQ/59lUP+fZVD/n2VQ/59lUP+eZU//nmRP/55kTv+eZE7/nWNN/51jTf+dY0z/"
+    "nGJN/5xhTP+bYUz/nGFL/4pSPP/S1dbey8zM/7a2tv+mpab/fn19/+Dh4v/6+vr/8fHx/+/v7v+5vb3/ilI8/8STgP/EkoD/xJOA/8SSf//Ekn//w5J//8OS"
+    "f//DkX7/wpJ+/8KSfv/CkX3/w5F9/8KRff/CkH3/wZB9/8GPff/Bj3z/wY98/8GOfP/Bj3v/wI97/8COe/+/jXr/vox5/7uJd/+3h3T/soRx/6+Ab/+sfm3/"
+    "qn1s/6l8a/+pfGv/qHtq/6h7av+oe2n/p3tp/6h6af+nemj/p3po/6d6Z/+meWj/pnln/6Z5Z/+meGb/pnhm/6Z4Zv+md2X/pXZl/6V2Zf+ldmX/pXZl/6R2"
+    "ZP+jdmT/o3Vj/6N1Y/+jdWL/onRi/6J0Yf+idGL/onNh/6FzYf+hcmD/oXJf/6ByYP+gcV//oHFe/6BxXv+fcF7/n3Be/55vXf+ebl3/nm5d/55uXP+ebVz/"
+    "nm1c/55tW/+dbVv/nW1a/51sWv+cbFr/m2xZ/5xrWf+ba1j/mmtY/5tqV/+aaVf/mmpW/5loVv+ZaFb/mWhV/5lnVf+YZ1X/l2dV/5dmVP+XZVT/lmVU/5dl"
+    "U/+WZVP/lmVS/5hmUv+aZlP/nWlV/6BqV/+ibFj/pW1Y/6ZuWf+mbVj/pW1Y/6VtV/+lbFf/pGxX/6RsVv+ka1X/o2tV/6NqVf+ialT/omlU/6FoUv+hZ1L/"
+    "oWdR/6BmUf+gZlD/oGZQ/6BmUP+gZlD/oGZQ/6BlUP+fZVD/n2VP/55lT/+eY07/nWNN/55jTf+dY03/nGJM/5xiTP+cYkz/nGFL/4pSPP/R1dbey8vM/7a3"
+    "t/+mpqb/fn5+/+Dh4vX6+vr/8fHx/+/v7v+5vb34ilI8/8WTgP/Ek4D/xJOA/8STgP/Ek3//w5J//8OSfv/Dkn//w5F//8ORf//DkX7/w5F9/8KQfv/CkH3/"
+    "wpB9/8KPff/BkH3/wo98/8GPe//Bjnz/wY57/8GPe//Ajnr/vox5/76Mef+7inf/uYl1/7eGdP+2hXL/tIVz/7SEcf+0g3H/s4Nw/7SCcP+zgnD/s4Jw/7OC"
+    "cP+ygXD/soFv/7KBb/+xgW//sYFu/7GAbv+wgG7/sYBt/7B/bf+wf2z/sH9s/69/a/+vf2v/r35r/65+a/+ufWr/rn1q/619av+tfGn/rXtp/6x7aP+semj/"
+    "rHpo/6x6Z/+reWb/q3lm/6t5Zv+qeGX/qnhl/6l3Zf+qd2T/qXZk/6l2Y/+pdmP/qHVi/6h1Yf+ndWH/p3Vh/6Z0Yf+mc2H/pnNg/6ZzYP+lcl//pXJf/6Vx"
+    "X/+kcV7/pHFf/6RxXv+kcF3/pHBd/6RwXP+kb1z/o29b/6NvW/+jblr/om5a/6JuWv+hbVn/oG1Z/6BsWf+gbFj/oGtX/6BsWP+ha1f/o2xY/6RsWP+lbln/"
+    "pm5Z/6ZvWf+mbVn/pm1Z/6ZtWP+lbVf/pWxX/6RsVv+kbFb/pGtW/6RqVf+jalX/o2lU/6FoUv+haFL/oGdS/6BmUf+gZlD/oGZQ/6BmUP+gZlD/oGZQ/6Bm"
+    "Uf+fZlD/n2VP/59lT/+eZE//nmRO/55kTv+dYk7/nWJN/5xiTP+dYkz/nGFM/4pSPP/S1dbezMvN/7e3t/+mpqb/fn59/+Dh4vX6+vr/8fHx/+/w7/+5v734"
+    "ilI8/8WTgP/Fk4D/xJOA/8STf//EkoD/xJN//8OSf//Dkn//xJF+/8OSfv/DkX7/w5F+/8ORff/CkH3/wpB9/8GQff/CkH3/wY98/8KPfP/Aj3v/wY97/8GO"
+    "e//Ajnv/wI57/7+Mev++jHn/vYt5/7yLd/+8i3f/uol3/7qJdv+7iHb/uoh1/7mIdf+5h3X/uYd1/7mHdP+5h3T/uYZ0/7iFc/+4hXP/uIVz/7iFc/+3hXL/"
+    "t4Rx/7eDcf+2g3H/toNw/7aCcP+1g2//tYJv/7SCb/+0gm//tIFu/7SBbf+zgG3/s4Bt/7KAbP+zf2z/sn5r/7J+bP+xfmv/sn5r/7F9av+xfWr/sH1p/7B9"
+    "aP+wfWn/r3xo/698Z/+ve2f/r3tn/696Zv+vemb/r3pl/655Zf+ueGT/rXlk/614ZP+sd2P/rHdj/6x3Y/+sdmL/q3Zh/6t2Yf+qdWD/qnVg/6p0X/+pdF//"
+    "qXRf/6lzXv+oc17/qXNd/6hyXf+ocV3/p3Fc/6dxW/+mcFv/pm9a/6ZwXP+mblv/pnBb/6dvWv+mb1r/p29b/6dvWf+mb1n/pm1Z/6ZtWP+mbVj/pWxX/6Vs"
+    "V/+ka1f/pGtW/6RqVf+ka1X/o2pV/6FoU/+haFP/oWdS/6FnUv+gZ1H/oGdR/6BnUf+gZ1H/oGdR/6BmUf+gZVD/oGVQ/59kT/+eZU//nmRO/55kTv+dY03/"
+    "nWNN/5xiTf+cYk3/nGJM/4pSPP/R1dXeysvL/7a3tf+lpqX/fX59/+Dh4fX6+vr/8fHy/+/w8P+6v774ilI8/8SUgf/Ek4D/xJOA/8STf//EkoD/w5J//8OS"
+    "f//Dkn//xJJ//8OSf//Dkn//w5F+/8KRfv/DkX3/wpF+/8KQff/BkHz/wpB9/8KPfP/BkHz/wY98/8GPe//Ajnv/wI57/8CNev/Ajnr/v416/7+Nef+/jXn/"
+    "vox5/76MeP+/jHj/vot4/72Ld/++i3f/vop2/72Kdv+8inf/vYp2/7yJdv+8iXX/vIh1/7yIdf+7h3T/u4d0/7qHdP+6h3P/uoZz/7mGcv+5hnL/uYVy/7mF"
+    "cf+4hHH/uIVx/7iEcP+3g3D/t4Nv/7eCbv+3gm//t4Ju/7aBbv+1gm3/toFt/7WAbP+1gGz/tH9s/7WAa/+0fmr/tH5q/7N+av+yfmn/s31p/7J9af+yfGj/"
+    "snxn/7F8aP+xfGf/sHtm/7B6Zv+wemb/sHpl/696ZP+ueWT/r3lk/694Y/+ueGP/rndi/613Yv+td2H/rXZh/6x2Yf+rdWD/rHVg/6t0YP+rdF//qnNf/6tz"
+    "Xv+qc17/qnJd/6lyXP+pcVz/qHFc/6hwW/+ocFr/qG9b/6dvWv+nb1n/pm5Z/6ZuWf+mblj/pm1Y/6VtV/+kbFf/pGxW/6RrVv+ka1X/o2pV/6JoU/+haFP/"
+    "oWhS/6BnUv+gZ1H/oGdR/6BnUf+gZ1H/oGdR/6FnUf+gZlH/oGZQ/59mUP+fZE//nmVP/55kTv+dY07/nmNO/51iTf+cY03/nGFM/4pSPP/S1dXey8vL/7a2"
+    "tv+mpKb/fn19/+Dh4fX6+vr/8fHx/+/w7/+7wL74ilI8/8SUgP/Fk4H/xJOA/8STgP/EkoD/xJKA/8OSgP/Dk3//xJJ//8SRf//DkX7/w5F+/8KRff/CkX3/"
+    "wpB+/8KQff/CkH3/wY98/8GQfP/Cj3z/wY98/8GPfP/Bj3z/wI57/8GOe//Ajnr/wI16/8CNev+/jXn/v4x5/76Mef++jHn/v4t4/76LeP++i3j/vYt3/72K"
+    "d/+9inb/vYl2/7yKdv+8inb/vIl1/7uIdP+7iHX/u4h1/7qIdP+7h3T/uoZz/7qGcv+5hnL/uYZy/7mFcv+5hXH/uIRx/7iEcf+4hHD/t4Nw/7iDb/+2gm7/"
+    "t4Ju/7eCbv+2gm3/tYFt/7WBbf+1gGz/tYBs/7R/a/+1gGv/tH9r/7R+a/+0fmr/s35p/7J9af+zfWj/snxo/7F8aP+xfGj/sXtm/7B6Zv+wemX/sHpm/695"
+    "Zf+veWT/rnhk/654ZP+ud2T/rndj/613Yv+tdmL/rHZh/611Yf+sdWH/rHVg/6t0YP+rdGD/qnRf/6pzXv+qc17/qnJe/6lyXf+pcV3/qXFc/6hxXP+ocVv/"
+    "qHBb/6hvWv+nb1r/p25Z/6ZuWf+mbln/pm1Y/6VsV/+lbVf/pGxW/6RsVv+ka1b/o2tW/6JpVP+iaFP/oWhT/6FoUv+hZ1L/oWdS/6FnUv+hZ1L/oWdS/6Bn"
+    "Uv+gZlD/oGVQ/59mUP+fZVD/n2VQ/55lT/+eZE7/nmNO/51jTf+dY03/nWJN/4pSPP/S1dXey8zL/7e1t/+mpKb/fn19/+Dh4fX6+vr/8fHz/+/w8f+7wMD4"
+    "ilI8/8SUgP/ElIH/xZOB/8SUgP/Fk4D/xJOA/8SSgP/Ek3//w5KA/8OSf//Dkn7/w5F+/8KSfv/DkX3/wpF+/8KQfv/CkH7/wpF9/8GPfP/CkHz/wY98/8GP"
+    "fP/Bjnz/wY97/8COe//Ajnv/wI56/8COev+/jXn/v416/7+Mev++jHn/v4x5/76LeP++i3f/vot3/76Ld/+9i3f/vYp3/72Jd/+8iXb/vIl1/7yIdf+8iHX/"
+    "u4h0/7uIdP+7iHP/u4d0/7qGc/+6hnL/uoVy/7mFcv+5hXL/uYVx/7iFcP+4hHD/uIRw/7eDb/+3g2//t4Nv/7aDbv+2gm7/tYJt/7aBbP+1gG3/tYBt/7WA"
+    "bP+0f2v/tIBr/7R+av+zfmr/s35q/7N9af+zfWn/snxp/7F9aP+xfGj/sXtn/7F7Zv+we2b/sHpm/696Zv+weWX/r3ll/654ZP+veGT/rnhj/613Y/+ud2P/"
+    "rXZi/612Yv+tdWH/rHZg/6x1YP+rdV//q3Rf/6tzX/+qc17/qXJe/6pyXf+pcl3/qXFc/6lxXP+ocFz/qHBb/6dwWv+nb1v/p25Z/6ZvWf+mblj/pm5Y/6Vt"
+    "WP+lbFj/pWxX/6VsV/+ka1b/pGtW/6NpVP+iaVT/omhT/6FoUv+haFP/oWhT/6FoU/+haFP/oWhT/6BnUv+gZlH/n2ZR/6BmUP+fZVD/n2VQ/59lT/+eZE//"
+    "nmRO/51jTv+dY03/nWNN/4pSPP/S1dXey8vM/7e2tv+lpaX/fn19/+Dh4fX6+vr/8vHz//Hw8v+8wMD4ilI8/8WUgf/FlIH/xZSA/8STgP/FlID/xJOA/8ST"
+    "gP/Ekn//w5OA/8OSf//Dkn//w5F//8ORfv/Dkn7/w5F+/8KRfv/CkH3/wpB9/8KQfP/Bj3z/wY98/8GPfP/Aj3v/wY57/8COe//Bjnv/wI56/8CNev/AjXr/"
+    "v415/7+Nef+/jXn/vox5/76Mef++i3j/vYt4/76Ld/++i3f/vYp3/72Kd/+9inb/vIp2/7yJdv+8iXX/u4h0/7uIdf+7iHP/uoh0/7qHc/+7h3P/uoZy/7mG"
+    "cv+5hXL/uYVy/7mFcf+4hXH/uIRw/7eEb/+3hG//t4Nv/7eCb/+2gm7/toJu/7aBbf+1gWz/tYBs/7WAbP+0f2v/tH9r/7R+a/+0f2v/s35q/7N9av+yfWn/"
+    "s3xo/7J9aP+yfGj/sXxo/7F7Z/+xe2f/sHpm/7B6Zf+weWb/sHll/695ZP+veWT/r3hj/653Y/+td2L/rndi/612Yv+sdmH/rHZh/6x1YP+rdWD/q3Vg/6tz"
+    "X/+qc1//qnNe/6pyXv+qcl7/qXFd/6hxXP+ocVz/qXBc/6hwW/+ocFr/p29a/6ZvWv+mblr/pm5Z/6ZtWP+mbVj/pW1Y/6VsV/+kbFf/pGtW/6JpVP+iaVT/"
+    "omlT/6FoUv+haFP/oWhT/6FoU/+haFP/oWhT/6FoUv+hZ1L/oGZS/6BnUf+fZVD/n2VQ/55lUP+fZU//nmRP/55kTv+dY07/nWNN/4pSPP/S1dXey8vM/7e2"
+    "tf+mpqP/fn59/+Dh4fX6+vr/8vLz//Py8//DxMT4ilI8/8WUgf/FlIH/xZOB/8SUgP/ElID/xJOA/8STgP/Ekn//xJJ//8SSgP/Dk3//w5J//8OSf//Dkn//"
+    "w5J+/8KRfv/CkH3/wpB9/8KQff/CkHz/wZB9/8GPfP/Bj3z/wY98/8GPe//Ajnv/wI57/8COev/Ajnr/wI16/7+Nev+/jXn/vox5/76MeP+/i3j/vot4/72L"
+    "d/++i3j/vYp3/72Kd/+9iXb/vIp2/7yJdv+8iXX/vIl1/7uIdf+7iHX/u4h0/7qHc/+6h3P/uoZz/7mGcv+6hXL/uYVy/7iFcf+5hXH/uYVx/7iEcP+4g2//"
+    "t4Nw/7eDb/+3g27/t4Ju/7eBbf+1gW7/toFt/7aBbP+0gGz/tIBr/7R/a/+0f2r/s35r/7N+af+zfmn/sn5p/7J9aP+yfGj/snxn/7F8Z/+xe2f/sXtm/7B6"
+    "Zv+wemb/sHll/695Zf+veWT/rnhk/654Y/+ueGL/rXdi/613Yv+tdmL/rXVh/612Yf+rdWH/q3Vf/6t0YP+qdF//qnRe/6pzXv+pc13/qnJd/6lyXf+pcl3/"
+    "qXFc/6hwW/+ocFv/p3Bb/6dvWv+nb1n/pm5Z/6ZtWP+lbln/pm1Y/6VsV/+lbFf/pGxW/6NqVf+jaVT/omlU/6JoVP+haFP/oWhT/6FoU/+haFP/oWhT/6Fo"
+    "Uv+gaFL/oGdS/6BmUf+gZlH/n2VQ/6BlUP+fZU//n2RP/55kTv+dY07/nWNN/4pSPP/U2NneysjL/7a0tP+mpaT/fn19/+Dg4fX6+fr/8vLy//Pz8v/W1Nb4"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP/IysrgwsPC/7S0sv+lpaX/fn5+/+Dg4fX6+fr/8/Lz//Ty8//s6+v/1dbV+cPFxfjHyMj4ycrL+MjKyvjJysz4yczN+MnM"
+    "zfjJzM34y83N+cvNzvjLzc/4zM7O+MzNzvjMzc74zM7Q+MzP0fjNz9H4zs/S+M3P0vjN0NH4z9HS+M/R0vjO0NH4z9HS+M/Q0vjOz9H4zdDR+M7R0vjP0dP4"
+    "z9HT+M/R0/jQ0tT40NLT+NDR0/jP0NP40NHT+NDS0/jR09T40tTU+NPU1PjT1NT40tPU+NHT0/jQ0tL4z9HT+M/Q1PjQ0dP4z9HR+M7R0PjNz8/4zs7O+M/O"
+    "zvjOz874zM/O+MvNzvjKy834ysvN+MrMzfjKy8z4ysvL+MnLy/jIy8z4yMrM+MjJzPjHy8r4xsvK+MbKy/jHycr4x8nK+MbIyvjFyMn4xcjJ+MbHyPjGxsj4"
+    "xMbH+MPGxvjCxMX4wsPF+MHFxfjAxMP4wMPB+MDDwfi/wsL4vsHC+L/Awfi+wMD4vMDA+LvAwPi6wMD4ur+/+Lq9vfi5vLz4uLy7+Le8vPi4u7v4uLq5+Le6"
+    "uPi1ubf4tLe3+LS2t/i0trf4tLa2+LS0tPi0s7T4s7O0+LK1tfiwtLT4sLKx+K+wsPivsLD4rrCw+K2vsPitr674rK6t+KyurPisrqz4q66t+Kysrfirqaz4"
+    "qKmr+Kepqvinqar4p6ip+Kenqfinp6n4paan+KOmpviipqX4oqWk+KGlo/+hpaL4oaWi+KCiovifoqH4nqGg+J2fn/icnZ74nqCg+KGgovivr7H+u7u6/7S0"
+    "tP+oqKf/f39+/+Dh4fX6+vn/8/L0//Py9P/08/P/8fHx/+/v8f/y8vL/8/T0//P09P/z9PT/9PX1//P19v/z9fb/9PX2//T19f/09fX/9PX1//X09v/19Pb/"
+    "9PT2//T19v/09fb/9vX3//b19//29ff/9vX3//X19//19ff/9vX3//b19//19ff/9fX3//X19//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX3//b1"
+    "9//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX2//b19v/09fb/9fX2//b19v/19PX/9PT1//T09f/z8/P/8/Pz//Pz8//z8vP/"
+    "8/Hz//Lx8v/x8fH/8PHx/+/x8f/v8fH/7/Dx/+/v8f/u7u//7u7t/+3t7f/s7O3/7Ozt/+zr7P/q6uz/6ers/+nq6//o6ur/6Oro/+jr6P/n6uj/5+jo/+bn"
+    "5//l5ub/5ebm/+Tl5//j5Of/4+Tl/+Pk5P/j5OT/4uTk/+Di4v/g4eH/4ODg/97h4f/d4OD/3d/f/93d3v/d3N7/3Nvd/9vb2//Z29v/2Nva/9ra2P/a2Nj/"
+    "2djZ/9fX2f/V19j/1dbX/9XU1//U1NX/0tXT/9LU0//R0tP/z9DT/8/Q0f/Q0ND/0NDQ/8/Qz//Ozs//zc3O/83Mzf/Ly83/ysrM/8nKzP/Jysr/yMrJ/8fK"
+    "yf/GyMn/xMfH/8PExP/Cw8P/wsPD/8LCw//Dw8P/wMHA/7/Av/+9vb7/uru8/7m4uv+3t7n/t7i5/7S1t/+tq67/f3+A/+Dg4fX7+/v/9PL0//Tz9P/z8vT/"
+    "8/L0//Py9P/z8vT/8/L0//Py9P/z8vP/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py"
+    "9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/"
+    "8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/y8vL/8vLy//Lx8v/y8fL/8vHx//Hw8P/w8PD/8PDw//Dw7//w7+//8O7v/+/u"
+    "7v/u7uz/7u7s/+3t7P/s7Oz/7Ovr/+vq6v/q6ur/6urq/+rq6v/p6en/6enp/+jo6P/n6Of/5+jn/+fn6P/m5uf/5eXm/+Tk5f/j5OT/4+Tk/+Tj4//j4uL/"
+    "4uLi/+Hh4v/h4eH/4eHh/+Dg4f/f4OD/39/f/9/e3v/e3t7/3d7d/9vc3P/b3Nv/29zb/9vb2//b29v/29va/9ra2f/Y2Nn/2NjY/9jX1//X19b/1tbV/9XV"
+    "1f/V1dX/1NTV/9PT1P/T0tP/0tLS/9HS0f/R0ND/0M/P/9DPz//Pz8//zc3N/8zNzP/Lzcz/y8vL/8vKyv/Kysr/ycjJ/8fHx//Gxsb/xsbG/8bGxv/ExcT/"
+    "w8PD/8HBwv++vr//vb29/7u8vP+6urv/t7i6/7OztP+rq6z/goOD/+Tl5f/19fb/+vr6//n3+f/49/b/9/f2//f3+P/49vf/9/f4//f1+P/39/f/+Pj4//j2"
+    "+P/49vj/+Pf3//j4+P/5+fn/+vr5//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/"
+    "+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+fn5//n5+f/5+vr/+vr6//r5"
+    "+f/59/j/+ff4//j4+P/29/f/9vb2//f29v/29vb/9fb2//T19f/09PT/9PP0//Tz9P/08/P/9PPz//Py8v/x8fD/8fHw//Hx8f/v8PH/7/Dw//Dw7//w7/D/"
+    "7+/v/+7v7v/u7u//7u7v/+7u7v/t7e3/7e3t/+zs7f/r6+3/6+vs/+vr6//q6+r/6uvq/+rp6v/p6Or/6ejp/+np6P/o6ej/6Ono/+jo5//o5+b/5+bm/+bm"
+    "5v/l5uX/5Obk/+Tk4//k4+P/5OPj/+Pj4//i4+P/4eLi/+Dg4f/g4N//3+Df/9/f3v/f3d7/3t3d/93c3P/d3Nz/3Nvc/9va2//a2tv/2drb/9jZ2v/Y2Nj/"
+    "2NjX/9jX1v/X1tb/1dXV/9TV1P/T1dT/09PU/9PS1P/T0dT/0dLS/9DS0f/P0dH/z9HR/8/P0P/Ozs//zMvM/8rKyf/HyMf/xMPE/8HBwv++vr7/t7e4/7S0"
+    "tP+foKD/kpKS//Hx8XPm5uf14OHh9eDf4PXf3t713t7d9d7f3vXg39313t/f9d7f3/Xe39/13t7g9d/f3/Xf39/139/e9uDf3/Xg39/14OHf9eHh4PXh4OH1"
+    "4eHh9eHh4PXg4OD139/g9d/g4fXf4eH13+Dg9eDg4PXh4OD14eHh9eHh4fXh4eH14eHg9eHh4PXh4eD14eHg9eHh3/Xh4d/14eHh9eHh4fXh4eD14eHh9eHg"
+    "4fXg3+H14d/h9eHg4fXh4eH14eHg9eHh4PXh4eH14eHg9eHh4PXg4OD139/f9d/f3/Xf4OD13+Dg9d/g3/Xf3t713t7e9d3e3vXd3t313d7d9d3d3fXd3d31"
+    "3N3d9dzd3fXd3Nz13dvc9dzb3PXc29v13Nvb9dvb2/Xa2tn12trZ9drZ2vXZ2Nr119jY9dfY1/XY19f12NfX9dbW1vXV1tX11dbV9dTU1PXT09P10tLS9dHR"
+    "0fXQ0dD1z8/P9c7OzvXNzs31y8zL9cnKyvXIycj1x8jH9cbHxvXFxsX1xcXE9cTEwvXExMH1w8PB9cLCwfXBwsH1wcLB9cHCwPXBwsD1wcLA9cHCwPXBwsD1"
+    "wcLA9cHBwPXBwcD1wMG/9cDBv/XAwb/1wMG/9cDBv/XAwb/1wMC/9b/Av/W/wL/1v8C/9b+/vvW/v771v8C+9b+/vfW/v731vr++9b6/vvW+v731vr+99b6+"
+    "vfW+vr31vr+89b2/vP+9vr31vb699b2+vPW8vbz1vL279bu8u/W6u7n1ubm49be4tvW1trT1srKx9aurqvWqq6r12NfY9Q==";
+
+static const char kWin7PreviewBitmap21Base64[] =
+    "KAAAAJYAAAB0AAAAAQAgAAAAAADgDwEAxA4AAMQOAAAAAAAAAAAAANbX2J2hoKH/iYiI/3+Af/96fHz/e319/3p8ff96fH3/ent7/3p7e/96e3v/ent7/3t7"
+    "fP97e3z/e3x9/3t8ff97fH3/e3x9/3t8ff97fX3/fH59/3x+fv98fn7/fH1+/3x+fv99fn7/fn5+/35+fv9+f3//f4GB/4CCgv+AgoL/gYOE/4KEhf+DhYX/"
+    "hIaG/4WGhv+Ghof/h4iI/4eJif+IiYr/iYqK/4mLiv+Ji4v/iouL/4qLi/+Li4z/i4uM/4uLjP+LjIz/jI2N/4yNjv+NjY7/jY6O/42Ojv+Mjo7/i42O/4uN"
+    "jv+LjI3/i4uM/4uLjP+Ki4v/iouK/4qLiv+IiYr/iIiK/4iIif+HiIj/hoiI/4WHiP+EhYb/hISF/4OEhf+Cg4T/goOC/4GCgv+AgYL/gIGC/3+Agf9+f4D/"
+    "fn+A/35/f/99fn7/fX5+/319fv98fX7/fH1+/3t8ff98fH3/fHx9/3x8ff97fH3/e3x9/3t7ff97fH3/e3x9/3t8ff96fH3/enx9/3t8fP97e3z/e3t8/3p7"
+    "e/95fHv/eXx8/3p7fP97e3v/e3t7/3p8fP95fHz/eXt7/3p8e/96fHv/eXt7/3l7fP95e3z/eXt7/3l8e/95fHv/enx7/3l8ev95fHr/eXt6/3l6ev95enr/"
+    "eXl7/3h6ev94enr/eXp6/3p7ev96e3v/eXp8/3l6fP96env/ent7/3p7e/96e3z/ent8/3p7fP96e3z/ent7/3p6fP97e3z/e3t7/3t6fP96env/enl7/3V2"
+    "dv93eHj/vLy8t8PDw/+qqqn/tLSz/7a2tf+3t7b/t7e2/7e3t/+4t7b/uLe2/7i3t/+4t7f/uLi4/7q5uP+6ubj/urm5/7u6uv+7urr/u7u6/7y8u/+8vbz/"
+    "vb69/72+vf+/wL//wMHA/8HCwP/DwsL/xMTE/8XGxf/HyMf/ycrJ/8vLzP/Mzc7/zs/P/8/Q0f/Q0NL/0tLT/9PU1P/U1dX/1dfX/9fX1//Y2Nj/2Nra/9na"
+    "2v/a2tr/29rb/9va2//c2tv/3dvb/93b2//e3Nv/393d/9/e3v/f3t7/393d/97d3f/d3d3/3dzc/93c3P/c29v/29rZ/9nZ1//X2Nb/1tfW/9XV1P/T0tL/"
+    "0tDR/9HP0P/Qzc7/zc3N/8rMy//Jysn/yMjH/8fHx//GxcX/xMPD/8LDwv/AwsH/v8HA/7/Av/++v77/vr29/728vP+8u7v/u7u7/7u7u/+6u7r/ubm6/7m4"
+    "uf+4ubn/uLm5/7i5uP+4ubj/uLe3/7e2tv+3trb/t7e3/7e3t/+3trf/t7a2/7e3tf+3t7b/tra2/7W1tf+0tbb/tLW2/7W0tP+1tLT/tbS0/7S1tP+0tbT/"
+    "tLS0/7S0s/+0tLL/tLSy/7S0tP+0tLT/s7Oz/7O0sv+ztbL/srWy/7K0sf+ytLH/srOx/7Kysf+ysrH/sbGy/7Gxsf+xsbD/srGw/7Kysf+ysrL/sLCy/7Cw"
+    "sf+xsbH/srKy/7Kysv+wsLL/sLCy/7Gxsf+ysbH/sLCw/7GvsP+xsLD/sa+u/7Cur/+vrq7/sK6u/6mpqf+HiIj/d3d5/7i4ufW9vb7/wcHA/8PDwv/ExMT/"
+    "xcTF/8fGxv/Jx8f/yMjH/8nKyf/LzMv/zc3N/87Pzv/Oz87/z9DP/9DR0P/Q0dD/0dLR/9LT0//T09X/1NTV/9XV1v/V1tb/1tfX/9bX2P/X2Nr/2drb/9vb"
+    "3P/c3Nz/3d3e/97d3//e3uD/3+Dh/9/h4f/g4eL/4eLj/+Li4//i4uP/4uPj/+Lj4//i4+P/4uPk/+Lj5P/i4+T/4+Pk/+Pj5P/k4+P/5OPj/+Tj4//j4+T/"
+    "5OTk/+Xk5P/l5OP/5OPi/+Li4v/h4uL/4uHi/+Lh4v/h4eD/4eHg/+Dg4P/e3+D/3d7f/93d3f/b3Nz/2tvb/9ra2//Y2Nr/19fZ/9bW1//U1Nb/1NTV/9PU"
+    "1P/R0tP/0dLT/9HS0v/P0NH/z9DQ/9DQ0P/Q0ND/0NDQ/8/Q0P/Ozs//zc7P/83Pz//Ozs7/zs7O/83Nzv/Mzc7/y83O/8vOzv/Mzs3/zM3M/8vMy//LzMv/"
+    "y8zL/8vLy//Ly8v/ysvL/8nLyv/Jysv/ycrL/8rLyv/Kysr/ysnK/8nJyv/Iycn/x8nJ/8jHyv/JyMv/ycnL/8jIyf/IyMn/yMjJ/8jIyf/IyMn/x8fJ/8fI"
+    "yf/HyMf/x8jG/8fIxv/HyMb/x8fH/8bHx//Fx8f/xcfH/8bHxv/Hx8b/xcXG/8XFxf/FxcX/xcXF/8XFxf/ExcX/w8TE/8PExP/BwsX/wcLF/8PDw//Cw8P/"
+    "wcLD/8HCwv/BwsH/wcHB/8DAv/+7u7v/t7e3/66urv+en5//dnd3/7u8vfXAwMD/wcLA/8LDwf/CxcL/w8XD/8bGxf/Jycj/y8zL/8/Qz//U09T/1tjZ/9ja"
+    "2//Y2tv/2tvd/9vc3v/c3t//3d/f/97g4P/f4OH/3+Dh/9/h4v/f4eL/4OLi/+Dj4v/g4+P/4ePk/+Lj5f/j5OX/5OXm/+Xm5//l5uf/5ebn/+Xm5//l5uf/"
+    "5ufo/+fm6f/n5un/5+jo/+fo6P/n6On/5+jo/+fo6P/n6Oj/5+jo/+fo6P/o6Of/5+jo/+bo6f/m6en/5+jo/+fo6P/o6Oj/6Ojo/+fn6P/l5uf/5ubm/+bm"
+    "5v/l5+b/5ebm/+Xm5//l5uj/5ebn/+Xl5v/j5OX/4uTl/+Lk5f/i4ub/4uLl/+Li4//h4eL/4OHi/9/g4f/e39//3t/f/97f4P/c3uD/3N3g/93d3//e3t7/"
+    "397e/9/e3//d3d7/3N7e/9zf3//d3t7/3dze/9zc3//a3N7/2dze/9rd3v/b3Nz/3Nvb/9zc3P/c3Nz/3Nzc/9va3P/a29z/2dzc/9ja2//Y2dr/2dna/9rb"
+    "2f/a29n/2trZ/9na2f/Y2tj/19rY/9jY2P/Y2dv/2Nvc/9fa2//X2dr/2Nna/9nY2v/Y19v/19fc/9fY3P/X2dr/2NnX/9jZ1//X2dj/1tjY/9XY2P/V2Nj/"
+    "1djY/9bY2P/X2Nj/1tfX/9bW1v/W1tb/1tbW/9bX1v/V2Nb/1NXV/9TV1f/T1Nb/09TW/9TU1f/T1dX/0tXW/9LU1f/S1dT/0tTU/9XT1f/Nzc7/vb29/7Cv"
+    "sP+goKD/e3x8/77AwfXCwsL/vr+9/7q7uf+traz+x8bF1c/Q0tPT1NXT1tjZ09jb3NPe393T4eLc0+Lk3dPi5N3T4OPe09/i4NPd4OLT3eDi093g4tPd4OLT"
+    "3eDi093g4tPd4OHT3eDh093g4dPd4OHT3eDh093g4dPd4OHT3eDh093h4dPe4eHT3+Hh09/g4dPf4OHT3uHh097h4dPf4OHT3uDh097g4dPe4OHT3+Lh09/i"
+    "4dPf4eHT3+Hg09/h4NPf4eDT3+Hh09/h4tPf4OLT3+Dh09/g4dPe4OHT3+Dh097g4dPd3+HT3t/h09/g4tPe4eLT3+Di09/g4tPf4ePT4OLk0+Di5NPf4uTT"
+    "3+Lk09/i5NPf4uTT3+Lk09/i5NPf4eTT3uHk097h49Pf4eLT3+Hi09/h4tPe4uLT3uLi09/h4tPf4ePT3+Hj09/g49Pe4OPT3uDj097h49Pf4OLT3+Di097g"
+    "49Pe4eLT3uHi097g4tPe4OLT3uDi097g4dPe4OHT3uDh097g4tPd4OLT3eDi093g4dPe4OHT3uDh097g4dPd4OHT3d/h097f4dPe3+HT3eDh093g4dPd4OHT"
+    "3d/h09zg4dPc4OHT3d/g097f4dPd3+LT3N/i09zf4dPc3+HT3d/h093f4dPd3+HT3d/g093f4NPd3+DT3d/g09zf4dPc3+HT3N/g09ze4NPc3uDT3N/g09vf"
+    "4NPb3+DT3N/g09zf4NPb3uDT297g09ze39Pb3+DT297g09ve4NPa3uDT29/f097f4NPX2Nr5xcTF/7Kxsf+gn6D/e3p7/8LBwvXFxcT/vLu7/7Kys/+JjY74"
+    "m15D/5teQ/+bXkP/kGBI/6B7Ov/NqBf/x6AP/512NP+VYUL/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/nF5D/5teQ/+bXkP/m11D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ//S1dbdx8fI/7Gxsf+fn6D/ent7/8XExfXJycn/vLm6/7KvsP+ChYj4pGpQ/7h+Zf+kd2P/jWIb/8SEAP+glS3/YJ9//4GE"
+    "Rv+bbBz/pnlh/7Z9Y/+2fGP/tnxj/7Z8Y/+2fGP/tXti/7V7Yv+1e2L/tXti/7V7Yf+1e2H/tHph/7R6Yf+0emH/s3pg/7N5YP+zeWD/s3lg/7N5YP+zeWD/"
+    "snhg/7J4X/+yeF//snhf/7J3X/+yd17/sXde/7F3Xv+xd17/sXZd/7F2Xf+xdl3/sXZd/7F1Xf+wdVz/sHVc/7B1XP+wdVz/sHVb/7B0Wv+vdFv/r3Rb/690"
+    "W/+vc1r/r3Na/69zWv+vc1r/rnNa/65yWf+ucln/rnJZ/65yWf+tclj/rXJY/61xWP+tcVj/rXFY/6xwV/+scVf/rHBX/6xwV/+scFb/rHBW/6xvVv+sb1b/"
+    "q29W/6tvVf+rb1X/q29V/6tuVf+rblX/qm5V/6puVP+qbVT/qm5U/6ptVP+pbVT/qW1T/6ptU/+pbFP/qWxT/6lsUv+pbFL/qWxS/6hsUv+obFL/qGtS/6hr"
+    "Uf+oa1H/qGtR/6hqUf+oalH/qGpQ/6dqUf+nalD/p2pQ/6dqUP+nalD/pmlP/6dpT/+maU//p2lP/6ZpT/+maU//pmhP/6ZpTv+maE7/pmhO/6VoTv+laE7/"
+    "pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+kZ03/pGdM/6RmTP+kZkz/pGZM/6RmTP+kZkz/pGZM/6RqUP/R1NXexsfH/7Gx"
+    "sf+foKD/ent7/8fHxvXLy8z/vLq8/7Kxsv+Hion4pGpQ/7h+Zv96Wjn/ll0A/7d6Ef+IoYT/K9f//zOnyv9+WBn/kWdA/7d9Y/+2fGP/tn1j/7Z8Y/+2fGP/"
+    "tnxi/7Z8Yv+1fGL/tXxi/7V7Yv+1e2L/tXti/7R7Yf+0emH/tHph/7R6Yf+0eWD/tHlg/7N5YP+zeWD/s3lf/7N4X/+yeF//s3hf/7J4X/+yd1//snde/7J3"
+    "Xv+yd17/sXdd/7F2Xf+xdl3/sXZd/7F2Xf+xdlz/sHVc/7B1Xf+wdVz/sHVc/7B1W/+wdFv/r3Rb/690W/+vc1v/r3Ra/69zWv+uc1r/rnNZ/65zWf+uc1n/"
+    "rnJZ/65yWf+tclj/rnJY/61xWP+tcVj/rXFX/6xxWP+tcVf/rHBX/6xwV/+scFf/rHBW/6xwVv+rb1b/q29W/6tvVv+rb1X/q29V/6tuVf+rblX/q25U/6pu"
+    "VP+qblT/qm1U/6ptVP+qbVT/qm1T/6ptU/+pbVP/qWxT/6lsUv+pbFP/qWxS/6lsUv+obFL/qWxS/6hrUf+oa1H/qGtR/6hrUf+oa1H/p2pR/6hqUf+nalD/"
+    "p2pQ/6dqUP+nalD/p2pQ/6ZqUP+naU//p2lP/6ZpT/+maU//pmlP/6ZpT/+maE7/pmhO/6VoTv+laE7/pWdO/6VnTv+lZ03/pWdN/6VnTf+lZ03/pWdN/6Vn"
+    "Tf+lZ03/pGdN/6RnTf+1ln7/tZZ+/7WWfv+1ln7/tZZ+/7WWfv+1ln7/pGZM/6RqUP/S1NXexsbH/7Gxsf+goKD/eXl5/8nIx/XNzc7/vby9/7Ozs/+Hiov4"
+    "pGpQ/7h/Zv9oQxT/mGMK/+WqRP/Jsoz/erSw/1Csqv9eXDH/ekwc/7d9ZP+3fWT/t31k/7Z8Y/+2fGP/tnxj/7Z8Y/+2e2L/tnti/7V7Yv+2e2L/tXti/7V6"
+    "Yv+0emL/tHph/7R6Yf+0eWH/tHlg/7N5YP+zeWD/s3lg/7N5YP+zeF//s3hf/7N4X/+yd1//sndf/7J3Xv+yd17/sXde/7J3Xv+ydl7/snZe/7F2Xf+xdl3/"
+    "sHZc/7B1XP+wdVz/sHVc/7B1W/+vdVv/r3Rb/690W/+vdFv/r3Ra/69zWv+vc1r/rnNa/65zWf+uc1n/rnJZ/65yWf+ucln/rXJY/61yWP+tcVj/rXFY/61x"
+    "WP+tcVf/rHFX/61wV/+scFf/rHBW/6xwVv+scFb/rG9W/6xvVv+rb1X/q29V/6tuVf+rblX/q25V/6tuVP+qblX/qm5U/6puVP+qbVT/qm1T/6ptU/+pbVP/"
+    "qW1T/6ltU/+pbFL/qWxS/6lsUv+obFL/qWxS/6hrUf+oa1H/qGtR/6hrUf+oa1H/qGtR/6hqUP+oalH/p2pQ/6dqUP+nalD/p2lQ/6dpUP+naVD/pmlP/6Zp"
+    "T/+maU//pmlP/6ZpT/+maE7/pmhP/6ZoTv+laE7/pWhO/6VnTv+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6RnTf+lZ03/pGZN/6RmTf+kZk3/"
+    "pGZM/6RmTP+kZkz/pGZM/6RqUP/R1dXexcbG/7CwsP+foKD/enp6/8jJyPXQz8//v769/7a0s/+GiYv4pGpQ/7h/Zv98Xzn/c1Qs/2yAj/9rnqH/Z6qQ/06/"
+    "jv9Hai7/e1o4/7d9ZP+3fWT/t31k/7Z8ZP+2fGT/tnxj/7Z8Y/+2fGP/tXtj/7V7Yv+1e2L/tXti/7V7Yf+1emH/tHph/7R6Yf+0emH/tHph/7R5Yf+zeWD/"
+    "s3lg/7N4YP+zeF//s3hf/7N4X/+zeF//snhe/7J3Xv+yd13/sndd/7J3Xf+ydl3/snZd/7F2Xf+xdl3/sXZc/7B1XP+xdVz/sHVc/7B1W/+wdVv/r3Rb/7B0"
+    "W/+vdFv/r3Rb/690W/+vc1r/r3Na/65zWv+uc1r/rnNZ/65yWf+ucln/rnJY/65yWP+tcVj/rXFY/61xWP+tcVf/rXFX/61wV/+scFf/rHBX/6xwV/+scFb/"
+    "rHBW/6xwVv+rb1b/q29V/6tvVf+rb1X/q29V/6tuVf+rblT/qm5U/6puVP+qblT/qm1U/6ptU/+pbVP/qWxT/6lsU/+pbFP/qWxS/6lsUv+pbFL/qGxS/6hs"
+    "Uv+oa1L/qGtS/6hrUf+oa1H/qGtR/6hqUf+na1H/p2pQ/6dqUP+nalD/p2pQ/6dqUP+naVD/p2lQ/6dpT/+maU//p2lP/6ZpT/+maU//pmhP/6VoTv+maE7/"
+    "pWdO/6VnTf+lZ07/pWdO/6VnTv+lZ07/pWdO/6VnTv+lZ03/pWdN/6RnTf+1ln7/tZZ+/7WWfv+1ln7/tZZ+/7WWfv+1ln7/pGZM/6RqUP/S1NXexMTF/7Cw"
+    "r/+goKD/enp6/8nLyvXQz8//v7+9/7W0s/+FiYr4pGpQ/7l/Zv+NdF3/j3dj/xJUzf8Lfen/TpWd/1ygZ/9nf03/i3Vh/7d9Zf+3fWT/t31k/7Z8ZP+2fGT/"
+    "tnxk/7Z8ZP+2fGP/tnxj/7Z8Y/+1e2L/tnti/7V7Yv+1emL/tHph/7R6Yf+0emH/tHph/7R5Yf+0eWD/s3lg/7N5YP+zeGD/s3lf/7J4X/+yeF//snhf/7J3"
+    "X/+yd1//sndf/7J3Xv+yd17/snde/7J2Xf+xdl3/sXZd/7F2Xf+xdVz/sHVc/7F2XP+wdVz/sHRb/7B0W/+vdFv/r3Rb/690W/+vc1r/r3Na/69zWv+uc1n/"
+    "rnNa/65zWf+uc1n/rnJZ/61yWf+tclj/rXFY/61xWP+tcVj/rXFY/61xV/+tcFf/rHBX/6xwV/+scFb/rG9W/6twVv+rb1b/q29V/6tvVf+rb1X/q25V/6tu"
+    "Vf+rblX/qm5U/6puVP+qblT/qm5U/6ptVP+qbVT/qm1T/6ltU/+pbFP/qWxT/6lsUv+pbFL/qWxS/6hsUv+pa1L/qGxS/6hrUf+oa1H/qGtR/6hrUf+oalH/"
+    "p2pR/6dqUP+nalD/p2pQ/6dqUP+nalD/p2lP/6ZpT/+naU//pmlP/6ZpT/+maU//pmhP/6ZoTv+maE7/pWhO/6VoTv+lZ07/pWdO/6VnTv+lZ07/pWdO/6Vn"
+    "Tv+lZ03/pWdN/6VnTf/Cp5X/wqeV/8Knlf/Cp5X/wqeV/8Knlf/Cp5X/pGZM/6RqUP/S1NXexMTF/7Cwr/+gn5//enp5/8rKy/XS0dH/v7++/7S1tf+Giov4"
+    "pGpQ/7l/Zv+idmL/nopy/46Ipv9ufL3/nZiW/8Smf/+kkHj/o3tn/7d9ZP+3fWT/t31k/7Z9ZP+2fGT/tnxk/7Z8Y/+2fGP/tnxj/7V8Y/+2fGL/tXti/7V7"
+    "Yv+1e2L/tHth/7R6Yf+0emH/tHph/7R6Yf+0emH/s3lh/7R5YP+zeWD/s3hg/7N4YP+zeF//s3hf/7J4X/+yeF//snde/7J3Xv+yd17/sXZe/7J2Xf+xd17/"
+    "sXZd/7F2Xf+xdl3/sXVd/7B2XP+wdVz/sHVc/7B1W/+wdFv/r3Rb/690W/+vdFv/r3Ra/69zWv+uc1r/rnNZ/65zWf+ucln/rnJZ/65yWf+ucln/rnJY/61x"
+    "WP+tcVj/rXFY/61xV/+scVf/rXBX/6xwV/+scFf/rHBW/6xwVv+sb1b/q29W/6tvVv+rb1X/q29V/6tvVf+rblX/qm5V/6tuVf+qblT/qm1U/6puVP+qbVP/"
+    "qm1T/6ptU/+pbVP/qWxT/6lsU/+pbFL/qWxS/6hsUv+pbFL/qGxS/6hrUv+oa1H/qGtR/6hrUf+oa1H/qGtR/6hqUf+nalD/p2pQ/6dqUP+nalD/p2pQ/6dp"
+    "UP+naU//pmlP/6dpT/+maU//pmlP/6ZoTv+maE7/pmhO/6ZoTv+lZ07/pWdO/6VnTv+lZ07/pWdO/6VnTv+laE3/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/"
+    "pGZN/6VnTf+kZk3/pGZM/6RqUP/R1dXexcXG/7Cur/+gnqD/enp7/8rKyvXS0tP/v7/A/7a1tv+HjIz4tINt/8WUf//Fk37/sot4/6WLdf+xmYD/tJ6I/6qV"
+    "h/+xjXz/w5J+/8OSff/Dkn3/w5J9/8KSff/CkX3/wpF9/8KRff/CkX3/wpF8/8KRfP/CkXz/wZF8/8GRe//BkXv/wZF7/8GRev/BkXr/wZF6/8GQev/BkHr/"
+    "wZB6/8CPef/Aj3n/wI95/8CPef/Ajnn/wI55/7+Oef+/jnn/v454/7+OeP+/jXj/v414/76Nd/+/jXf/v414/76Nd/++jXf/vo13/76Nd/+9jHf/vYx2/72M"
+    "dv+9jHb/vYt2/72Ldf+9i3X/vYt1/72Ldf+9inX/vIp1/7yKdf+8iXX/vIl1/7yJdP+8iXT/vIl0/7uJdP+7iXP/u4lz/7uJc/+7iXP/uohz/7qIcv+6iHL/"
+    "uohy/7qIcv+6iHL/uodx/7mHcf+5h3H/uYdx/7mHcf+5h3H/uYZx/7mGcf+5hnH/uYZx/7mGcf+5hXD/uYVw/7mFcP+5hXD/uIVw/7iFb/+4hW//uIVv/7iF"
+    "b/+3hW//uIVu/7eEbv+3hG7/t4Ru/7eEbf+3hG7/toNt/7aEbf+2g23/toNt/7aDbf+2g23/toNt/7aCbf+2gm3/toJt/7aCbf+1gmz/tYJs/7WBbP+1gWz/"
+    "tYFs/7WBa/+1gWv/tYFr/7WBa/+1gWv/tYFr/7WBa/+1gWv/tYFr/7WBa/+1gWv/tYFr/7WBav+1gWr/tIFq/7SAav+0gGr/tIBq/7SDbf/S1dTexcXG/7Cu"
+    "sP+gn6H/fHt9/8rKyv/S0tP/v7/A/7a1tv+HjIz/ilI8/7F8aP+qeGX/onNh/6ByYP+gcV//oHFe/6BxX/+fcF7/nnBe/55vXf+eb1z/nW9c/51vW/+db1v/"
+    "nW1b/5xtW/+cbVr/nG1Z/5xtWf+cbFn/m2xZ/5trWf+ba1n/mmtY/5lqWP+Zalj/mWlY/5lpV/+ZaFb/mWhW/5hnVv+XZ1X/l2dV/5ZnVP+XZ1P/lmZT/5Zm"
+    "Uv+WZVL/lmVS/5VlUv+WZVL/lWRS/5VkUf+WZFH/lWRQ/5RkUP+UYlD/lGNP/5RhT/+UYU//kmFN/5VgTf+cZVH/oWhS/6BnUv+gZlH/oGZR/6BmUP+fZVD/"
+    "n2VP/55kT/+eZE//nmRO/51jTv+eY03/nWJM/5xiTf+cYUz/nGFL/5thS/+bYUv/mmBL/5tfSv+aX0n/ml9J/5leSf+ZXkj/mV1I/5hdSP+YXUf/mF1H/5dd"
+    "Rv+YXEb/l1tG/5daRP+WW0T/llpE/5ZaRP+WWUT/lVlD/5VZQ/+UWEL/lFhC/5RYQf+UV0H/k1dA/5NWQP+TVkD/klY//5JVP/+SVT//klU+/5JUPv+SVD7/"
+    "kVQ+/5FTPf+RUzz/kFM9/5BTPf+QUjz/j1I7/5BRO/+PUTr/jlE7/49QOv+PUTr/jlA5/41POP+NTzj/jE83/4xOOP+MTjj/jE44/4xOOP+MTjj/jE44/4xO"
+    "N/+MTTb/i043/4xONv+LTDb/jE01/4tMNf+LTDX/i0w1/4pLNf+LSzX/ikw1/4pSPP/S1dTexsbF/7Cvr/+gn6D/e3t8/8nKy/jT09P/wcHC/7e3uP+Ii437"
+    "ilI8/6R/av+7non/up6I/7meiP+5noj/uZ6I/7mdiP+5nYj/uZ2H/7mdiP+5nYj/uZ2H/7mdh/+5nYf/uZ2H/7mdh/+5nYf/uZ2H/7mdh/+5nIf/uZyH/7mc"
+    "hv+5nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+3nIb/t5yG/7echf+3m4X/"
+    "t5uF/7ebhf+3m4X/t5uF/7ebhf+3m4X/t5uF/3hPQP+SXkv/oWhS/6FoUv+hZ1L/oGZR/6BmUP+fZlD/n2ZQ/55lT/+eZE//nmRO/55jTv+dY07/nWNN/5xi"
+    "Tf+dYkz/nGJM/5thTP+bYEv/m2FL/5tgSv+bYEr/ml9J/5pfSf+ZXkn/mV5I/5ldSP+YXUf/mFxH/5hdRv+YXEb/l1xG/5dbRf+XW0X/l1pE/5ZaRP+VWkT/"
+    "llpD/5VZQ/+VWUL/lFhC/5RYQv+UV0H/lFdB/5RXQP+UVkD/k1Y//5JWP/+TVT//klU//5JVPv+SVT7/klQ+/5BUPf+QVD3/kVM9/5BTPf+QUzz/j1I8/49S"
+    "PP+PUjv/j1E6/49ROv+OUTv/jlE6/41POf+NTzj/jE84/41OOP+NTjj/jU44/41OOP+NTjj/jU44/4xON/+MTjf/jE02/4xNN/+LTTb/i002/4tMNv+LTTX/"
+    "i0w1/4pMNf+KTDT/iks1/4pSPP/R1NXexcXG/7Cvr/+gn6D/e3x8/8nKy/XU09P/wsLC/7i4uP+Ii434ilI8/6KAa/+hcV3/oW5b/6BuW/+gblv/oG1a/6Bu"
+    "W/+gblr/oG1a/6BtWv+gbVr/oG1a/6BtWv+gbVr/oG1a/6BtWf+gbVn/oG1Z/6BtWf+fbVn/n2xZ/59sWf+fbFn/n2xZ/59sWf+fbFn/n2xY/59sWP+fbFj/"
+    "n2xY/59sWP+fbFj/n2tY/59rWP+ea1j/nmtY/55rWP+ea1f/nmtX/55rWP+ea1f/nmtX/55rV/+ea1f/nmtX/55qV/+ealf/nmpX/55qV/+dalf/nnNf/3pb"
+    "Sv+JWEb/oWhT/6FoUv+hZ1L/oGdR/59nUf+fZlH/n2ZQ/59lT/+fZFD/nmVP/55kTv+eZE7/nWNN/51iTf+dY03/nGJM/5xhTP+bYUz/m2FK/5tgS/+bYEr/"
+    "ml9J/5pfSf+ZX0n/mV5I/5ldSP+ZXkf/mF1H/5hdR/+YXEf/mFxG/5hcRv+WW0X/l1tE/5ZbRf+WWkT/lVpD/5VZQ/+VWUL/lVlD/5VYQf+VWEL/lFhC/5NX"
+    "QP+TV0D/k1ZA/5NWQP+SVj//klU//5JVP/+SVT7/klQ+/5FUPv+RVD3/kFM9/5BTPf+QUzz/kFM8/5BSO/+PUjv/j1I7/49ROv+OUTr/j1E6/41POf+NTzn/"
+    "jU84/41POP+MTjf/jE43/4xON/+MTjf/jE43/41OOP+MTjf/jE03/4xONv+MTTb/jE02/4xMNf+LTDb/i002/4tMNv+LTDX/i0w1/4pSPP/R1dXexcbH/7Cv"
+    "sP+gn6D/e3x8/8rLyvXU09P/w8LC/7m4uP+IjI34ilI8/6KAa/+hcV3//fr6//759//79vX/+/b1//v29f/79vX/+/b1//z39v/79/X/+/b1//z39v/79vX/"
+    "+/b1//v29f/79vT/+/b0//v29P/79vT/+/b0//v29P/79vT/+/b0//v29f/79vX/+/f1//v29f/79vT//Pf1//75+P+fbFj/n2tY/55rWP+ea1j/nmtY/55r"
+    "WP+ea1j/nmtY/55rWP+ea1f/nmtX/55rV/+ea1f/nmtX/55qV/+ealf/nmpX/55qV/+dalf/nnRf/3ZYSP+GVkX/omhT/6FoUv+haFL/oGdS/6BnUf+fZlD/"
+    "oGVQ/59lUP+fZU//nmVP/55kT/+eZE7/nmRO/51jTf+dY0z/nGJN/5xiTP+cYkv/nGFL/5thS/+bYEr/m19K/5pfSf+aX0n/mV9I/5leSP+ZXkj/mV1H/5ld"
+    "R/+YXEf/mFxG/5hbRv+XXEX/l1tF/5daRP+XW0T/llpD/5ZaQ/+VWUP/lVhD/5RZQv+UWEL/lFhC/5RYQv+UV0H/lFdB/5NWQP+TVj//klY//5JVP/+SVT7/"
+    "kVQ+/5JUPv+RVD7/kVM9/5FTPf+QUz3/kFM8/5BSPP+PUjz/kFI8/49SO/+PUTr/jlE6/45QOf+NTzj/jU85/41OOP+MTjj/jE44/4xOOP+MTjj/jE44/41P"
+    "N/+MTjf/jU43/4xON/+MTTb/jE03/4xNNv+LTDb/i0w2/4tMNf+LTDb/iks1/4pSPP/R1NTexsbG/7CwsP+goKL/fH18/8vMyvXU1NX/xMTE/7q6uv+Jjo74"
+    "ilI8/6KAa/+hcV3//fn2/+fm5P/19PP/9vT0//Tz8//08/P/9PPz//Tz8//08/P/9PPz//Tz8//29PT/9/b1//b19f/19PP/9fTz//b09P/08/P/9PPz//Tz"
+    "8//08/P/9PPz//Tz8//08/P/8vDv//X29v/19fX/8u/s//749P+fbFj/n2xY/59rWP+fa1j/nmtY/55rWP+ea1j/nmtY/55rWP+ea1f/nmtX/55rV/+ea1f/"
+    "nmtX/55rV/+ealf/nmpX/51qV/+ealf/nnRf/3ZYSP+GV0b/omhU/6JoU/+haFL/oWdS/6FnUv+gZlH/oGZQ/59mUf+fZU//nmVQ/59kT/+eZE7/nmRO/55j"
+    "Tf+dY03/nGNN/51iTP+cYkz/nGFM/5xgS/+bYEv/m2BK/5tgSv+bX0r/mV9I/5pfSP+ZXkj/mV5I/5ldSP+YXEb/mF1G/5hcRv+XXEb/l1tF/5dbRf+WW0T/"
+    "l1pE/5ZZQ/+VWkP/lVlD/5VZQv+VWEL/lFhC/5RYQf+UWEH/k1dA/5NXQf+SVkD/klY//5NVQP+SVT7/klU//5FVPv+RVD7/kVM+/5FUPv+RUz3/kVM9/5BT"
+    "PP+QUzv/kFI7/49SO/+PUTv/j1E7/41QOf+OUDn/jlA4/41POP+NTzj/jU84/41POP+NTzj/jU84/41OOP+NTjf/jU43/4xON/+MTjf/i003/4xNN/+MTTb/"
+    "i0w2/4tNNf+LTDX/ikw1/4pSPP/R1NXexsbG/7CxsP+goKH/fHx8/8vNy/XV1Nb/xcXF/7u7u/+Mjo74ilI8/6OAa/+hcV3//vn2/8zMzP/9/f3//f39//39"
+    "/f/9/f3////////////////////////////9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39////////////////////////////4Mi4/+DIuP/17Ob/"
+    "8fDv//749P+fbFj/n2xY/59sWP+1k3v/uJiC/7iahv+5l4H/s5B5/66Nd/+1lH3/v6SS/8Knlf+6moX/rox1/66Mdv+0knv/uZZ+/7SSev+ealf/nnRf/3ZY"
+    "SP+FWEb/omlU/6JoU/+iaFL/oWhS/6FnUv+gZ1H/oGdR/6BmUP+fZlD/n2VQ/55lT/+eY03/nGNO/5xhTf+bYUz/mmBL/5phS/+ZYEv/mWBL/5lfSv+YXkr/"
+    "mF5J/5heSf+XXkj/l11I/5dcR/+XXEf/llxH/5ZcR/+WW0b/lltG/5VbRf+VWkT/lFlF/5RZRP+TWUP/k1hD/5NYQ/+SWEL/kldC/5JXQv+SV0H/kVZB/5JW"
+    "QP+RVUH/kFVA/5BVQP+QVD//j1Q//5BUP/+QUz7/kFM9/49TPv+OUj3/jlI9/45RPP+OUTz/jlE8/41RPP+NUDv/jVE7/4xQOv+MUDr/jE86/4tOOf+LTjj/"
+    "ik03/4pON/+KTTj/ik04/4pNOP+KTTj/ik04/4pNN/+KTDf/ik03/4lMNv+KTTb/ikw1/4pMNv+KTDf/ik02/4tMNf+LTDX/i0w1/4pSPP/R09TexsXH/6+w"
+    "sP+goaD/fH18/8vNzPXW1db/xsXF/7y7u/+Njo/4ilI8/6KAa/+hcV3//vn2/8vKyv/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3/"
+    "/f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3/6NXB/+jVwf/q3M7/7ezs//749f+fbFj/n2xY/59rWP+2mYX/s5qL/6+Y"
+    "jP+4nIv/s5aB/6yOev+3mIT/x7Op/826sP+/pZX/q415/6mLeP+vlIH/sZWC/6yOef+ealf/nnRf/3ZZSP+GWEb/omlU/6JpVP+iaVP/oWhT/6FoU/+hZ1H/"
+    "oWZR/6BmUf+gZlH/nmVQ/51kTv+bY07/mWJN/5dgS/+WX0r/lV5J/5ReSP+UXUn/lF1I/5NcSP+TXEf/k1tH/5JbR/+SW0b/kltF/5JaRf+SWkX/kllE/5FY"
+    "RP+RWUT/kFhD/5FYQ/+QV0P/j1dB/49XQv+PVkL/j1ZA/45VQP+OVT//jlVA/41VP/+NVD//jVM+/41TPv+MUz7/jFM9/4xSPf+LUTz/i1I8/4pRPP+LUDz/"
+    "ilE8/4pQPP+JUDv/iVA7/4lPOv+JTzr/iE86/4hOOv+ITjn/iE45/4dNOf+HTTn/h004/4ZNN/+GTDb/hks2/4ZLNv+FSzb/hUs2/4VLNv+FSzb/hUs2/4VL"
+    "Nv+FSzX/hUs0/4VLNP+GSjT/hko1/4hMNf+ISzX/ikw2/4pMNv+MTTX/i001/4pSPP/R1NTexsbG/7CwsP+goKD/e3t8/8zMzPXY19b/x8bF/727u/+Mj5D4"
+    "ilI8/6OAa/+hcV3//vn2/8vKyv/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39"
+    "/f/9/f3//f39//39/f/9/f3/6NXB/+jVwf/q3M7/7ezs//749f+fbFj/n2xY/59sWP+9oY3/up2L/7SZh/+7n43/u56L/7ibiP++oY3/uZ2K/7mdiv+7noz/"
+    "uZyJ/7KXhP+4nYr/up6K/7SVgP+ealf/nnRg/3ZZSP+HWUb/o2pU/6JqVP+haFP/omhT/6JoU/+haFL/oWdS/6FmUf+fZlH/nmVP/5tjTv+YYUz/lF5K/5Fc"
+    "SP+OW0f/jVlG/4xYRf+MV0X/i1dE/4tXRP+LV0P/ilZD/4pWQ/+KVUL/ilVB/4lVQv+JVUH/iVRB/4hUQP+IU0D/iFNA/4dTP/+HUz7/h1I+/4ZSPv+HUj3/"
+    "hlE9/4ZRPf+GUD3/hVA9/4ZPPf+GTzz/hU88/4RPO/+FTjr/hE46/4ROOv+ETTr/hE05/4NNOf+DTTn/gkw5/4JMOP+BTDf/gUw4/4JLN/+BSzf/gUo3/4FL"
+    "Nv+ASjX/gEo1/4BJNf9/STX/gEk1/39HNP9+RzT/fkc0/35HM/9+RzP/fkcz/35HM/9+RzP/fkcz/35GMv9+RjL/fkUy/31GMf9+RzL/gUcy/4NJM/+GSjX/"
+    "iEs1/4pMNf+KTTb/i002/4pSPP/R1dTexcjG/6+wr/+goKD/fHt8/87NzfXY2dj/x8fH/729vP+LkZD4ilI8/6KAa/+hcV3//vn3/+Ti4P/o5eT/6ebl/+fk"
+    "4//n5OP/5+Tj/+fk4//n5OP/5+Tj/+fk4//p5+X/6efl/+nn5f/o5eT/6OXk/+nm5f/n5OP/5+Tj/+fk4//n5OP/5+Tj/+fk4//n5OP/5+Xj/+fl4//m5OP/"
+    "7Ojm//769v+fbFj/n2xY/59sWP+fbFj/n2xY/59rWP+ea1j/nmtY/55rWP+ea1j/nmtY/55rV/+ea1j/nmtX/55rV/+ea1f/nmtX/55qV/+ealf/n3Rg/3ZZ"
+    "SP+HWUf/o2pU/6NqVf+iaVP/oWhU/6FpU/+haFL/oWdS/6BnUv+fZlD/nGRO/5hiTf+UXkr/jlpG/4hXRP+FVUL/glJA/4BRQP+AUT//gFA//4BQPv9/UD7/"
+    "fk89/35PPf9+Tz3/fk48/35OPP9+Tjz/fk08/35NPP99TTz/fE06/31NOv99TDr/fEs5/3tLOf98Sjj/e0o4/3tKN/96Sjj/ekk3/3pJN/96STf/ekk2/3pI"
+    "Nv96STb/eUg2/3lINf95RzX/eUc1/3hHNP94RzT/d0Yz/3dGM/93RTP/d0Uz/3dFM/92RTP/dkUy/3VEMv92RDL/dUQy/3VDMf91RDD/dUMx/3RCL/90QS//"
+    "dEEu/3NBLv90QS7/dEEu/3RBLv90QS7/dEEu/3NALv9zQC7/c0Au/3NBLf91QS//eUMw/31FMf+CRzP/hks1/4hLNv+KTDb/i002/4pSPP/Q1NTexcbG/7Cw"
+    "r/+goKD/e3t7/87Oz/XY2tr/x8jJ/72/v/+LkpH4ilI8/6KAa/+hcl7//vbx//317v/99O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3/"
+    "/PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07v/99O7//PTt//718P+fbFj/n2xY/59sWP+fbFj/n2xY/59s"
+    "WP+fa1j/nmtY/55rWP+ea1j/nmtY/55rWP+ea1j/nmtX/55rV/+ea1f/nmtX/55rV/+ea1f/n3Rg/3ZZSf+GWUf/pGpV/6NqVP+jaVT/omlU/6JpU/+haVP/"
+    "oWdS/6FoUv+eZlH/m2NO/5VfS/+OWkf/hlVD/35PP/94TDz/dEo6/3JIOf9ySDj/ckg4/3FIN/9yRzj/cUc3/3BGNv9wRjb/cUY2/3BGNv9wRjb/cEU1/3BF"
+    "Nf9vRDX/b0M0/29DNP9uQzT/bkM0/25DM/9uQzP/bkMz/25DMv9uQjL/bUIx/21BMf9tQTH/bEEx/2xBMf9sQTD/bEAw/2tAMP9rPzD/az8v/2s/Lv9rPy7/"
+    "az4u/2s+Lv9qPi7/aj4u/2k+Lf9qPS3/aj4t/2k9LP9pPCz/aDws/2g8LP9oPCz/aDwr/2g7K/9nOir/aDop/2c7Kf9nOin/Zzop/2c6Kf9nOin/Zzop/2Y5"
+    "Kf9mOSn/Zjkp/2g6Kf9rPCr/bz4s/3ZBLv99RTH/g0gz/4hLNf+KTTX/i0w2/4pSPP/Q1NTexcfG/7CwsP+foKD/e3t8/8/Oz/XZ2tr/yMnL/77Awf+MkZL4"
+    "ilI8/6OAa/+fcF3/8/Hy//Hv8P/y7/D/8u/w//Lv8P/z8fL/9PLz//Px8v/y8PH/8/Hy//b19//z8fL/9PLz//Px8v/z8fL/8/Hy//Lv8P/y7/D/8u/w//Lv"
+    "8P/y7/D/8u/w//Lv8P/y7/D/8u/w//Lv8P/y7/D/8u/w//Lw8f+dalf/nWpX/5xqV/+calf/nGpX/5xqV/+calb/nGpW/5xqVv+calb/nGlW/5xpVv+caVb/"
+    "nGlW/5xpVv+caVb/nGlW/5tpVv+baVb/nXNf/3dZSP+HWUf/pGpV/6RrVf+jalT/omlU/6JpU/+iaVP/omhS/6FnUv+dZlD/mWNO/5NeSv+DVkb/WDQl/1g0"
+    "Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/"
+    "WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0"
+    "Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/3A+LP94QzD/"
+    "gEcy/4VKNP+JTDX/jE02/4pSPP/R1dXexMfH/66wsP+foKD/e3t8/8/OzvXb29r/ysnL/8DAwv+NkZP4ilI8/6OAa/+cbVv/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+ZaFX/mWhV/5loVf+ZaFX/mWhV/5lnVf+ZZ1X/mWdV/5lnVf+ZZ1X/mWdV/5lnVf+ZZ1X/mGdU/5hnVP+YZ1T/mGdU/5hnVP+YZ1T/m3Je/3ZZ"
+    "Sv+HWUj/pGtW/6NrVf+jalX/omlU/6JpVP+iaVT/omhT/6FoU/+eZlH/mWJN/5FdSf9lX1z/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/"
+    "uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7ir"
+    "of+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/"
+    "uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4qqL/WDQl/2s8Kv92Qi7/fkYy/4VKM/+KTTX/jE02/4pSPP/S1dXexMbH/66v"
+    "sP+enp7/e3t6/87PzvXd3Nz/zMnL/8G/wf+NkpP4ilI8/6J/a/+YbFr/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+VZlX/lGZV/5RlVP+UZVT/lGVU/5Rl"
+    "VP+UZVT/lGVU/5RlVP+UZVT/lGVU/5RlVP+UZVT/lGVU/5RkU/+UZVT/lGVT/5RkU/+UZFP/mXFe/3dZSv+HWUj/pGxW/6NrVv+jalX/o2pV/6JpVP+iaVP/"
+    "omhT/6JoU/+eZlH/mWJO/49cSP9lX1z/3NfV/97e3f/e3t7/3d3d/97d3f/e3d3/3dzc/93c3P/c3Nz/3Nzb/9zb2//c2tv/3Nva/9va2v/a2tr/2tra/9va"
+    "2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/"
+    "19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2g6Kf9zQC3/fUYx/4VKNP+JTDb/jE02/4pSPP/R1NXexMXI/6+vsP+fn57/fHt6/8/PzvXe3d3/zMrL/8HAwf+Nk5L4"
+    "ilI8/6J/a/+UaVj/////////////////4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh"
+    "4v/g4eL/4OHi/+Dh4v/g4eL/4OHi//////////////////////+QYlL/kGJS/5BiUv+QYlL/kGJS/49iUv+PYlL/j2JS/49iUv+PYlL/j2JS/49iUv+PYVH/"
+    "j2JR/49hUf+PYVH/j2FR/49hUf+PYVH/l3Bd/3dZSv+IWUn/pGtW/6RrVv+ja1b/o2pV/6JqVf+jaVX/omlU/6JoVP+eZlH/mWJN/49cSP9lX1z/3NfV/97e"
+    "3f/e3t7/3d3d/97d3f/e3d3/3dzc/93c3P/c3Nz/3Nzb/9zb2//c2tv/3Nva/9va2v/a2tr/2tra/9va2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/"
+    "2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9zQC3/"
+    "fUUx/4RKNf+JTDb/jE43/4pSPP/R1NTexsfH/6+wsP+fn5//e3t7/9DPz/Xe3d7/zMzM/8HCwv+Ok5L4ilI8/6J/bP+QZlf/////////////////ycrJ/8nK"
+    "yf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/////////////////"
+    "//////////+LX1H/i19R/4tfUf+LX1D/i19Q/4tfUP+LX1D/i19Q/4pfUP+KXlD/il5Q/4peUP+KXlD/il5Q/4peUP+KXk//il5Q/4peUP+KXk//lG5c/3dZ"
+    "Sv+IWUn/pWxX/6RrVv+ka1X/pGtW/6NqVf+jalX/o2lU/6JpVP+eZ1H/mWJN/49cSf9lX1z/3NfV/97e3f/e3t7/3d3d/97d3f/e3d3/3dzc/93c3P/c3Nz/"
+    "3Nzb/9zb2//c2tv/3Nva/9va2v/a2tr/2tra/9va2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX"
+    "1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9yQC7/fkYy/4VKNP+JTDb/jE03/4pSPP/R1NTexsjJ/7Cx"
+    "sP+foKD/e3x7/9DR0PXf397/zM3N/8LDw/+Pk5T4ilI8/6F/a/+LZFX/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+FXE7/hVxO/4VcTv+FXE7/hVxO/4Vc"
+    "Tv+FXE7/hVxO/4VbTv+FW07/hVtO/4VbTf+EW03/hFtN/4RbTf+EW03/hFtN/4RbTf+EW03/kmxb/3dZSv+JWkn/pWxX/6VsVv+kbFb/pGtW/6RqVv+jalX/"
+    "o2pU/6NpVP+fZ1L/mGNO/49dSv9lX1z/3NfV/97e3f/e3t7/3d3d/97d3f/e3d3/3dzc/93c3P/c3Nz/3Nzb/9zb2//c2tv/3Nva/9va2v/a2tr/2tra/9va"
+    "2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/"
+    "19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9zQC7/fkUy/4RKNf+JTDf/jU43/4pSPP/R1NTexcfJ/7Cxsf+goKD/fHx7/9DR0fXg4N//zMzO/8PDwv+PkpX4"
+    "ilI8/6GAa/+HYFP/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+AWEz/gFhM/4BYTP+AWEz/gFhM/4BYTP+AWEv/gFdL/4BXS/+AV0v/gFdL/4BXS/+AV0v/"
+    "gFdL/4BXS/9/V0v/gFdL/39XS/9/V0v/j2ta/3dZSv+IWkn/pW1Y/6RtV/+kbFf/pGtW/6NrVf+ka1X/o2pU/6JqVP+fZ1H/mGNO/5BdSv9lX1z/3NfV/9/f"
+    "3//e3t7/397e/9/e3f/e3d3/3d3d/93c3f/d3Nz/3dzc/93c3P/c29v/3Nzb/9zb2//c29r/29ra/9ra2v/a2tr/2tna/9rZ2f/a2dn/2dnZ/9nZ2P/Z2Nj/"
+    "2djY/9nY2P/Z2Nj/2NfX/9nX1//Y19f/2NfW/9fX1v/X1tb/19bW/9fW1v/X1tb/19bW/9fW1v/W1tX/19bW/9fV1v/W1dX/1tbV/9bV1v/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y6Kf9zQC7/"
+    "fkYy/4VLNf+JTDf/jU43/4pSPP/R1NTexcjI/6+wsP+fn57/e3t8/9DR0fXg4eD/zMzO/8PCwv+PkZX4ilI8/6F/a/+DXVL/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////97VEr/e1RK/3tUSv96VEr/elRK/3pUSv96VEr/elNK/3pTSv96U0r/elNK/3pTSf96U0n/elNJ/3pTSf96U0n/elNJ/3pTSf96U0n/jGhZ/3dZ"
+    "Sv+IWkn/pm1Y/6VsV/+kbFf/pGxW/6NrVv+ja1X/o2tV/6NqVf+fZ1L/mWNO/5BdS/9lX1z/3NXS/+Df3//f397/4N/e/9/e3//f3t7/3t7e/97d3f/e3d3/"
+    "3t3d/93d3P/d3dz/3dzb/9zc2//c3Nv/29vb/9za2//b2tv/29ra/9va2v/a2tn/29nZ/9rZ2v/Z2dn/2tnY/9nY2P/a2Nj/2djY/9jY2P/Y2Nf/2djX/9jX"
+    "1//Y19f/2NbX/9jW1//Y1tf/2NbX/9fW1v/Y1tb/19bW/9fW1v/X1tb/1tbW/9fV1v/W1db/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf90QS7/fkYz/4VLNv+JTDf/jE83/4pSPP/R1NTexsjJ/7Cx"
+    "r/+fnp7/e3p8/9LS0vXh4uL/zc7O/8PDw/+QkZL4ilI8/6B/a/99WlD/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////90UEf/dFBH/3RQR/90UEf/dFBH/3RQ"
+    "R/90T0f/dE9H/3NPRv9zT0b/c09G/3NPRv9zT0b/c09G/3NPRv9zT0b/c09G/3NPRv9zT0b/iWdX/3dZSv+IWkn/pm1Y/6VtV/+lbFf/pWxX/6RrVv+ka1b/"
+    "o2pV/6RrVf+gaFP/mmNP/5FdS/9lX1z/3NXT/+Hg4P/n5eP/3tnW/97Z1v/d2dX/29jU/9rW0//Z1NL/2NTR/9jT0P/V0c7/1NDN/9PPzf/Tzsz/087M/9PO"
+    "zP/Szsz/0s7M/9LOzP/Szsz/0s7M/9LOy//Szsz/0s7L/9LOy//Szsv/0s7L/9LOy//Szsv/0s7L/9LNy//Szcv/0s3L/9HNyf/Qy8n/0MzI/87KyP/Oysf/"
+    "zMfE/8rFwv/Oysj/19bW/9fW1v/X1tX/19XV/9bV1f/W1tb/19XV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kf90QS7/fkYz/4VLNf+KTTf/jE83/4pSPP/Q1NTex8jJ/7CxsP+gn5//e3t7/9PU0/Xh4+L/zc7O/8PExf+Qk5P4"
+    "ilI8/6B/a/94V07/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9tTEb/bUxG/21MRv9tTEX/bUxF/21MRf9tS0X/bUtF/21LRf9tS0X/bUtF/21LRf9sS0X/"
+    "bEtF/21LRP9sS0T/bEtE/21LRP9tS0T/hWRX/3ZZSv+HWkn/pm5Z/6ZtWP+lbVj/pGxX/6VrVv+ka1b/pGtV/6RrVf+gaFP/mmRP/5FdS/9lX1z/3NbT/+Hh"
+    "4f+ijn7/pZGD/6WQgv+kkIH/o4+A/6KOf/+ijn//oY1+/6CMff+finv/nol7/52Iev+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/"
+    "nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yFeP+bhXf/moV2/5mEdf+ZhHX/mYN1/5iBcv+djH//19fX/9fW1/+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kv90QS7/"
+    "fkYy/4ZLNv+KTTf/jE44/4pSPP/R1NTeyMfI/7Gwsf+goJ7/e3t6/9PV0/Xi4+L/zs7P/8PFxv+QlZX4ilI8/6B/a/9zVEv/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9oSUP/Z0lD/2dJQ/9nSUL/Z0lC/2dIQv9nSEL/Z0hC/2dIQv9nSEL/Z0hC/2dIQv9nSEL/Z0hC/2dIQv9nSEL/Z0hB/2dIQf9nSEH/g2NV/3ZZ"
+    "Sv+IW0r/pm5Z/6ZtWP+lbVj/pW1Y/6VsV/+kbFb/pGtW/6RqVv+gaVP/mmRQ/5BdS/9lX1z/29XS/+Pi4v+mkoT/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+5q5//2NfX/9jX1//X19f/19bX/9fW1//X1tb/19bW/9fV1v/W1tb/19bV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kv90QS7/fkcz/4ZMNf+KTTf/jU84/4pSPP/R09XeyMfK/7Gw"
+    "sf+foJ//e3x7/9TU0/Xj4+P/z9DQ/8THxv+Rlpb4ilI8/6B+a/9tUEn/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9hRUH/YUVB/2FFQf9hRUH/YUVA/2FF"
+    "QP9gRUD/YEVA/2BFQP9gRED/YERA/2BEQP9gRED/YERA/2BEQP9gRED/YEQ//2BEP/9gRD//f2FV/3ZZSv+FWkn/pGxX/6NsVv+ja1b/omtW/6JqVf+halT/"
+    "oWlU/6FpVP+eZ1H/l2NO/45dSv9lX1z/3NXS/+Pj4/+mkoT/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+5q5//2dfY/9jX1/+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kv90QS7/fkYz/4VLNv+KTjf/jVA5/4pSPP/R1NXeyMrK/7Gxsf+foJ7/ent6/9TT0/Xj5OP/z9DS/8bHxv+Rlpf4"
+    "ilI8/6B+a/9pTUf/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9aQT//WkE//1pBP/9aQT//WkE//1pBP/9aQD//WkA//1pAP/9aQD7/WkA+/1pAPv9aQD7/"
+    "WkA+/1lAPv9aQD7/WT8+/1k/Pf9aPz3/fF9T/3VZSv+CWUn/nmhV/55oVP+cZ1T/nGdT/5xnU/+bZ1L/m2ZS/5tlUf+YY0//kl9N/4lZR/9lX1z/29XT/+Tj"
+    "4/+mkoT/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+5q5//2djY/9nY2P/Y2Nj/2NfY/9nX"
+    "1//Y19f/2NfX/9fX1//Y1tb/19bW/9fW1v/X1tb/1tbW/9bV1v/W1tb/1tXV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2g7Kv90QS7/"
+    "fkg0/4VMNv+LTTj/jk85/4pSPP/S1dTexcXG/7CusP+gn6H/fHt9/9TT0/Xk5eT/0NDS/8fGx/+Rlpj4ilI8/6B/av9jSUX/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9UPj7/VD4+/1Q+Pv9UPj7/VD0+/1Q9Pv9UPT3/VD09/1Q9Pf9UPT3/VD09/1Q9Pf9TPT3/Uz09/1M8PP9TPDz/Uzw8/1M8O/9SOzv/eFxT/3NZ"
+    "Sv9+WEn/lWNP/5RjUP+UYk//lGJP/5NhTv+TYU7/k2FN/5JgTf+PXkv/ilpJ/4FURf9lX1z/3NXS/+Xl5P+olYb/o5CB/6SQgf+kkIH/pJCB/6SPgf+jkIH/"
+    "pJCB/6SQgf+kkIH/o4+B/6SQgf+kkIH/o4+B/6SQgf+jkIH/pJCB/6OQgf+kkIH/o5CB/6OPgf+jkIH/o5CB/6SQgf+jkIH/pI+B/6SQgf+kkIH/pJCB/6SQ"
+    "gf+kkIH/o5CB/6OQgf+kkIH/pJCB/6SQgf+jkIH/o4+B/6OPgf+5q5//2dnZ/9rZ2f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv/X1tb/1tbW/9fW1v/W1dX/1tbV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c7Kv90QS//fkc0/4ZMNv+LTjn/jlA4/4pSPP/S1dTexsbF/7Cv"
+    "r/+gn6D/e3t8/9XU1PXl5eX/0tHR/8jGx/+Rlpf4ilI8/59/av9eRUP/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9POz3/Tzs9/087Pf9POz3/Tzs9/087"
+    "Pf9POz3/Tzs9/046PP9POzz/Tjo8/046PP9OOjz/Tjo8/045O/9NOTv/TTk7/004Ov9MODn/dFtR/3FZSv93VUj/iFtJ/4hbSf+HWkn/h1pJ/4dZSP+HWUj/"
+    "h1hI/4dZR/+DVUb/f1JC/3dNPv9lX1z/2tTS/+Xm5f+ql4n/pZGC/6SRgv+kkYL/pZGC/6SRgv+kkYL/pZCC/6WQgv+kkYH/pJGC/6SRgf+kkYH/pZCC/6WR"
+    "gv+lkYL/pJGB/6SRgv+kkYL/pJCB/6SQgf+kkIL/pZGC/6SRgv+kkYL/pJCB/6SRgv+kkYL/pZCC/6SQgf+kkYL/pJGC/6SRgv+lkYH/pJGC/6SQgv+kkYL/"
+    "pJGC/6WRgv+5q5//2trZ/9vZ2f/a2dj/2tnZ/9nY2f/Z2dj/2djY/9nY2P/Z2Nf/2NjX/9jX1//Y19f/2NbX/9jX1v/X1tb/19bW/9fW1v/X1tb/19bV/9bV"
+    "1v/W1tb/1tXV/9bV1f+4qqL/WDQl/2g7K/91QjD/fkc0/4ZNN/+LTjn/jlA5/4pSPP/R1NXexcXG/7Cvr/+gn6D/e3x8/9XV1PXl5eX/0tHR/8jIyP+Tl5f4"
+    "ilI8/59/av9ZQ0L/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9KOT3/Sjk9/5qIef+aiHn/moh5/5qIef+aiHn/moh5/5qIef+aiHn/moh5/5qIef+aiHn/"
+    "moh5/5mIef+ZiHn/Rzc6/0c2Of9GNTj/cFlR/29XSv9yUkf/elFC/3lRQf94UEH/eFBB/3hQQf94T0D/eE9A/3hOP/91TD7/cEo8/2lFN/9lX1z/2tTS/+bn"
+    "5/+smYv/pZGD/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGD/6WRgv+lkYP/pZGD/6WRg/+lkYP/pZGD/6WRg/+lkYP/"
+    "pZGD/6WRgv+lkYP/pZGC/6WRgv+lkYL/pZGD/6WRg/+lkYL/pZGD/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGD/6WRg/+5q5//29ra/9va2v+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/Y19f/2NbX/9jW1//X1tf/2NbW/9fW1v/X1tb/1tXW/9fV1f+4qqL/WDQl/2g7K/91Qy//"
+    "fkg0/4ZMNv+LTjn/jlA5/4pSPP/R1dXexcbH/7CvsP+gn6D/e3x8/9bV1fXl5ub/0dHT/8jJyv+UmJn4ilI8/55+av9VQD//////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9FNzz/RTc8/6aZkP+mmZD/ppmQ/6aZkP+mmZD/ppmQ/6aZkP+mmZD/ppiQ/6aYkP+mmJD/ppiQ/6WYkP+lmI//QTM4/0AxNv8/MDT/alVO/2lT"
+    "Rv9gRjv/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9WMyT/UzEj/04uIf9lX1z/2tTR/+jo5/+tmo3/ppKE/6WShP+lkoT/ppKE/6WShP+lkoT/"
+    "pZKE/6WShP+lkoT/pZGE/6WRhP+lkoT/pZKE/6WShP+lkoT/pZKE/6aShP+lkoT/pZKE/6WShP+lkoT/pZKE/6WRhP+lkoT/pZKE/6aShP+lkoT/ppKE/6WR"
+    "hP+lkoT/pZKE/6WShP+mkoT/ppKE/6WShP+mkoT/pZKE/6WShP+5q5//29va/9za2//b2tv/29ra/9rZ2v/a2tn/2trZ/9rZ2f/a2dn/2dnY/9nY2P/Z2Nj/"
+    "2djY/9jX1//Z19f/2dfY/9jX1//Y19b/19bW/9fW1v/X1tb/19bW/9fW1v+4qqL/WDQl/2g7K/91QjD/f0k0/4ZMN/+MTjn/jlA5/4pSPP/R1NTexsbG/7Cw"
+    "sP+goKL/fH18/9fW1vXm5uf/09PU/8jKyf+UmZn4ilI8/55+a/9RPT7///////////+Dg4P/j4+P/4+Pj/+Pj4//////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9BNT3/QTU9/0E2Pf9BNj7/QTY+/0E2"
+    "Pv9BNj7/QTY+/0E2Pf9BNj7/QTY9/0E1Pf9BNj3/QTY9/0E2Pf9BNj7/QTY+/0E2Pv9CNz7/cmBb/3xrYP+ViID/uKuh/7irof+4q6H/uKuh/7irof+4q6H/"
+    "uKuh/7irof+0qJ7/rqKY/6SYj/9lX1z/2tTR/+jo5/+unY//ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/p5SF/6eUhf+mk4X/ppOF/6aThf+mk4X/ppSF/6eT"
+    "hf+mk4X/ppOF/6aThf+mk4X/p5OF/6aThf+mk4X/ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/p5OF/6aThf+mlIX/ppOF/6aThf+mlIX/"
+    "ppOF/6aThf+5q5//29va/9za2//b2tv/29ra/9rZ2v/a2tn/2trZ/9rZ2f/a2dn/2dnY/9nY2P/Z2Nj/2djY/9jX1//Z19f/2dfY/9jX1//Y19b/19bW/9fW"
+    "1v/X1tb/19bW/9fW1v+4qqL/WDQl/2g7K/91QzD/f0g1/4ZNOP+LTzn/jlA5/4pSPP/R1NXexsbG/7CxsP+goKH/fHx8/9fW1vXo5uf/1dXU/8nKyv+TmZn4"
+    "ilI8/55+a/9OOz3///////////+Dg4P/j4+P/4+Pj/+Pj4///////+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh"
+    "4v/g4eL/4OHi/+Dh4v/g4eL/4OHi//////////////////////8+NT3/PjU9/z81Pf8/Nj7/PzY+/z82Pv8/Nj7/PzY+/z81Pv8/Nj7/PjU9/z82Pv8/Nj7/"
+    "PzY+/z82Pv8/Nz//QDdA/0A4Qf9BOUH/dGRf/4N1bP+ppKH/2djY/9nY2P/Y2Nf/2NjY/9jX1//Y19f/2NfX/9jX1//U09P/y8vL/8C/v/9lX1z/2tTR/+jo"
+    "5/+wnpH/p5SF/6eUhv+olIX/p5WF/6eVhf+nlIX/p5WG/6eVhf+nlYX/p5SG/6iVhf+nlIX/qJSG/6iVhv+olIX/p5WG/6iUhv+nlIX/p5SF/6eVhf+nlIb/"
+    "p5SF/6eUhf+nlIX/qJSG/6eUhv+olYb/p5SG/6eUhv+nlIb/p5WG/6iVhv+olIb/p5SG/6iVhf+nlYb/p5SF/6iUhf+5q5//29va/9za2//b2tv/29ra/9rZ"
+    "2v/a2tn/2trZ/9rZ2f/a2dn/2dnY/9nY2P/Z2Nj/2djY/9jX1//Z19f/2dfY/9jX1//Y19b/19bW/9fW1v/X1tb/19bW/9fW1v+4qqL/WDQl/2g7K/91QzD/"
+    "f0k1/4dNOP+MTzn/j1A6/4pSPP/R09TexsXH/6+wsP+goaD/fH18/9fX1vXp5+j/1tbW/8vMzP+SmJj4ilI8/59+a/9KODv///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4///////8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/////////////////"
+    "//////////87Mz3/PDQ+/5aHev+Wh3r/lod6/5aHev+Wh3r/lod6/5aHev+Wh3r/lod6/5aHev+Wh3r/lod6/5aHev+Wh3r/PTZA/z02Qf89N0H/cmRg/4R3"
+    "bv+rpqT/2djY/9nY2P/Y2Nf/2NjY/9jX1//Y19f/2NfX/9jX1//U09P/y8vL/8C/v/9lX1z/2tTR/+jo5/+xoZH/qZWH/6mVh/+olYf/qZWH/6mVh/+olYf/"
+    "qZWH/6iVh/+olYf/qZWH/6iVh/+olYf/qJWH/6iVh/+olYf/qJWH/6iVh/+olYf/qJWG/6iVh/+olYf/qZWH/6mVh/+olYf/qJWH/6iVh/+olYf/qZWH/6iV"
+    "h/+plYf/qJWH/6iVh/+plYb/qZWH/6iVh/+olYf/qZWH/6iVh/+5q5//29va/9za2//b2tv/29ra/9rZ2v/a2tn/2trZ/9rZ2f/a2dn/2dnY/9nY2P/Z2Nj/"
+    "2djY/9jX1//Z19f/2dfY/7Gilv+Xf27/ln9u/5Z/bv+Semj/19bW/9fW1v+4qqL/WDQl/2g8LP91QzD/gEg1/4dNOP+MTzr/jlA6/4pSPP/R1NTexsbG/7Cw"
+    "sP+goKD/e3t8/9fX1vXq6On/19fY/8zNzf+Tl5j4ilI8/55+a/9HNzv///////////9/f3//g4OD/4ODg/+Dg4P/////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////85ND//OTQ//6KYkf+imJH/opiR/6KY"
+    "kf+imJH/opiR/6KYkf+imJH/opiR/6KYkf+imJH/opiR/6KYkf+imJL/OjZB/zo2Qv87N0L/cWRh/4V4b/+tqaf/2djY/9nY2P/Y2Nf/2NjY/9jX1//Y19f/"
+    "2NfX/9jX1//U09P/y8vL/8C/v/9lX1z/2tTS/+jo6P+yopT/qZaI/6mXif+plon/qZeJ/6mWif+plon/qZeI/6mWif+plon/qZaI/6mXiP+plon/qZeI/6mW"
+    "if+ploj/qZaI/6mWiP+ploj/qZaJ/6mWif+ploj/qZaI/6mWiP+pl4n/qZaJ/6mWif+pl4j/qZaJ/6mXiP+plon/qZaI/6mWiP+ploj/qZeJ/6mWiP+pl4n/"
+    "qZaI/6mXiP+5q5//3Nzb/9zc2//c29r/29vb/9va2//b29r/29rZ/9ra2v/b2dr/2tnZ/9rZ2f/Z2dn/2dnY/9nZ2P/Z2Nj/2djY/62dkP+olYb/qJaI/6iW"
+    "iP+ag3P/19fW/9jX1v+4qqL/WDQl/2g8LP91QzD/f0k1/4hNOP+MTzr/jlE6/4pSPP/R1dTexcjG/6+wr/+goKD/fHt8/9fX1/Xq6er/2NjZ/8zOzf+Ul5j4"
+    "ilI8/559a/9FNTn/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////83Mz//ODNA/zg0QP84NED/ODRA/zg0QP84NED/ODRA/zg0QP84NED/ODRA/zg0QP84NED/"
+    "ODRA/zg0QP84NEH/ODVB/zk1Qf85NUL/cGNh/4Z6cf+uq6v/2djY/9nY2P/Y2Nf/2NjY/9jX1//Y19f/2NfX/9jX1//U09P/y8vL/8C/v/9lX1z/2tPS/+np"
+    "6f+1pZX/qpiJ/6qYif+qmIn/qpiJ/6qYif+qmIn/qpiJ/6qYif+qmIn/qZiJ/6qYif+qmIn/qpeJ/6qYif+qmIn/qpiJ/6qXif+qmIn/qpiJ/6qXif+qmIn/"
+    "qpiJ/6mXif+qmIn/qpiJ/6qYif+ql4n/qpiJ/6qXif+qmIn/qpiJ/6qYif+qmIn/qpiJ/6qYif+qmIn/qpeJ/6qYif+5q5//3d3c/9zc3P/c29z/3dzc/9vb"
+    "2//c29v/3Nvb/9va2v/b2tr/2tra/9vZ2v/a2tn/2tnZ/9rZ2f/Z2dj/2tjY/62dkP+olYb/qJaI/6iWiP+ag3P/2NfX/9jX1v+4qqL/WDQl/2g7LP91QzH/"
+    "gEk1/4dNOP+NUDr/j1E7/4pSPP/Q1NTexcbG/7Cwr/+goKD/e3t7/9jZ2fXq6+v/2dna/87Pz/+VmZr4ilI8/55+a/9HODv/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////86N0L/OzdD/zs4Q/87OEP/OzhE/zw4RP88OET/OzhE/zs4RP87OET/OzhE/zs4Q/87OET/OzhE/zs4RP87OET/PDhE/zw5RP88OUT/cmZj/4d7"
+    "c/+wrq3/2djY/9nY2P/Y2Nf/2NjY/9jX1//Y19f/2NfX/9jX1//U09P/y8vL/8C/v/9lX1z/2dTR/+rq6v+1ppj/rJmK/6uZiv+rmYv/q5mL/6uZiv+rmYr/"
+    "q5mK/6uZiv+rmYr/q5mL/6uZiv+smYv/q5mL/6uZi/+rmYv/q5mK/6uZi/+smYr/q5mL/6uZiv+rmYv/q5mL/6yZi/+rmYr/q5mL/6uZi/+rmYv/q5mL/6uZ"
+    "i/+rmYr/q5mL/6yZi/+rmYv/q5mK/6yZi/+smYr/q5mL/6uZi/+5q5//3t7d/93d3P/e3N3/3d3c/9zc3P/d3Nv/3Nvb/9zb2//b29v/29rb/9vb2//b2tr/"
+    "29rZ/9va2f/a2dr/2tnZ/62dkP+olYb/qJaI/6iWiP+ag3P/2NfY/9jX1/+4qqL/WDQl/2k8LP91RDH/gEo1/4dNOf+NUDr/j1I7/4pSPP/Q1NTexcfG/7Cw"
+    "sP+foKD/e3t8/9jZ2fXr7Ov/2tra/8/P0P+WmZv4ilI8/59+a/9KODz/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////8/OUT/QDpF/5eJfP+XiXz/l4l8/5eJ"
+    "fP+XiXz/l4l8/5eJfP+XiXz/l4l8/5eJfP+XiXz/l4l8/5eJfP+XiXz/QDtG/0A7Rv9AO0b/dGdk/4h8c/+xsK//2tnZ/9nZ2P/Z2Nj/2NjY/9jX1//Z19j/"
+    "2NfX/9jX1//U09P/zMvK/8C/v/9lX1z/2dTR/+vr6v+3qZn/rZqM/62ajP+tmo3/rJqN/62ajP+tmoz/rJuN/6yajP+smoz/rZqM/62ajP+tmoz/rJqM/62a"
+    "jP+smo3/rZqN/62ajP+tmo3/rJqM/6yajP+smoz/rZqN/62ajP+smoz/rJqN/62ajf+tmo3/rJqM/6yajf+tmoz/rZqM/62ajP+tmo3/rZqN/6yajP+tmoz/"
+    "rZqM/6yajP+5q5//397e/97e3v/e3t3/3t3d/97d3P/e3Nz/3dzc/93c3P/d29v/3Nvb/9zb2//b29v/3Nrb/9va2v/b2tr/2tna/7CglP+plof/qZaI/6mW"
+    "iP+bhXb/2dnY/9nY1/+4qqL/WDQl/2k8LP91RDL/gEo1/4hNOf+NUDr/j1I8/4pSPP/R1dXexMfH/66wsP+foKD/e3t8/9nZ2fXs7Ov/29va/9DQ0P+YmZv4"
+    "ilI8/59+a/9OPD3///////////+Dg4P/j4+P/4+Pj/+Pj4//////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9EPUb/RD5H/6ablP+mm5T/ppuU/6ablP+mm5T/ppuU/6ablP+mm5T/ppuU/6ablP+mm5T/"
+    "ppuU/6ablP+mm5T/RT9I/0U/SP9FP0j/d2ll/4h9dP+ysrH/2tnZ/9rZ2P/Z2dn/2dnZ/9nY2P/Z2Nj/2NjY/9nY1//V09T/zMvM/8C/wP9lX1z/2dPR/+zs"
+    "7P+3qZn/rZuN/62cjf+tm43/rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/rZuN/62cjf+tnI3/rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/"
+    "rZyN/62bjf+tnI3/rZuN/62bjf+tnI3/rZuN/62cjf+tnI3/rZyN/62cjf+tnI3/rZuN/62bjf+tnI3/rZuN/62bjf+5q5//4N/f/9/e3v/f3t7/3t7d/97e"
+    "3v/e3d3/3t3d/93c3P/d3dz/3d3c/9zc3P/c3Nz/3Nvb/9zb2//b29v/29ra/7CglP+plof/qZaI/6mWiP+bhXb/2tnZ/9nZ2f+4qqL/WDQl/2g9LP91RDH/"
+    "gEo1/4hOOf+MUDr/j1I8/4pSPP/S1dXexMbH/66vsP+enp7/e3t6/9rZ2fXt7ez/29zb/9DR0f+Ympv4ilI8/59+a/9RPT////////////+Dg4P/j4+P/4+P"
+    "j/+Pj4///////+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi////////////"
+    "//////////9IQEn/SUFK/0lBS/9JQkv/SUJL/0lCS/9JQkv/SUJL/0lCS/9JQkv/SUJL/0lCS/9JQkv/SUJL/0lCS/9JQkv/SUJL/0lCS/9JQkv/eWtn/4h9"
+    "df+0s7L/2trZ/9ra2f/a2dn/2tnZ/9nZ2f/a2dj/2tjY/9nY2P/V1NT/zMzM/8DAwP9lX1z/2dPR/+zt7f+3qZn/r52P/6+dj/+unY//r52O/66dj/+vnY//"
+    "rp2P/66dj/+unY//rp2P/6+dj/+vnY//r52P/6+dj/+unY//rp2P/6+dj/+unY//rp2P/66dj/+unY7/rp2P/66dj/+vnY//rp2O/6+dj/+unY//r52P/66d"
+    "j/+vnY//rp2P/66dj/+vnY//r52P/66dj/+vnY//r52P/6+dj/+5q5//4eDg/+Df3//g39//397e/9/e3//f3t7/393e/97e3v/e3d3/3t3c/93c3f/c3Nz/"
+    "3dzc/9zc2//c29v/3Nvb/7CglP+plof/qZaI/6mWiP+bhXb/2tra/9ra2v+4qqL/WDQl/2k9LP91RDL/gEo2/4hOOf+NUTv/j1I7/4pSPP/R1NXexMXI/6+v"
+    "sP+fn57/fHt6/9ra2fXu7e3/3Nzd/9HS0f+YnJz4ilI8/6B+a/9VQED///////////+Dg4P/j4+P/4+Pj/+Pj4///////8nKyf/Jysn/ycrJ/8nKyf/Jysn/"
+    "ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn///////////////////////////9NREv/TkVL/05FTP9ORUz/T0VN/09G"
+    "Tf9PRk3/T0ZN/05FTf9PRk3/TkZN/05FTP9ORUz/TkVM/05FTP9ORUz/TkVM/05FTP9ORUz/fGxo/35xZ/+Xj4v/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/9nZ2f/W1dT/zszN/8HBwP9lX1z/2dPR/+3u7f+3qZn/sJ+R/7Cekf+wnpH/sJ6R/7CekP+wn5H/sJ+Q/7Cfkf+wn5H/r56Q/6+ekf+wnpD/r5+R/7Ce"
+    "kP+wnpD/sJ6Q/7CfkP+wn5D/sJ6Q/7Cekf+wnpD/sJ6Q/7CekP+wnpD/r56Q/7CekP+wnpD/sJ6Q/7CfkP+vn5D/sJ6Q/7Cekf+vn5H/sJ6R/7Cekf+wn5D/"
+    "r56R/7Cekf+5q5//4eDh/+Hg4P/g4N//4N/g/+Df3//f397/39/f/9/f3v/f3t7/3t7d/97e3f/d3d3/3t3c/93d3P/d3Nz/3Nzc/7CglP+plof/qZaI/6mW"
+    "iP+bhXb/29ra/9va2v+4qqL/WDQl/2o9Lf92RTL/gEo2/4hOOv+NUTz/kFM8/4pSPP/R1NTexsfH/6+wsP+fn5//e3t7/9rb2vXv7e7/3dve/9LS0v+XnJ34"
+    "ilI8/6B/bP9aREP///////////9/f3//g4OD/4ODg/+Dg4P/////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9TSE7/VElP/52Nf/+djX//nY1//52Nf/+djX//nY1//52Nf/+djX//nY1//52Nf/+djX//"
+    "nY1//52Nf/+djX//VElQ/1RJUP9USVD/f29p/35xZ/+Xj4z/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9rZ2f/W1dX/zc3N/8HBwf9lX1z/2dPR/+7v"
+    "7v+3qZn/saCR/7Ggkf+xoJH/saCR/7Ggkf+xoJH/saCS/7Ggkf+xoJH/saCS/7Ggkf+xoJH/saCS/7Ggkv+xoJH/saCS/7Ggkv+xoJH/saCR/7Ghkf+xoJL/"
+    "saCR/7Ggkf+xoJH/saCR/7Ggkv+xoJL/saCS/7Ggkv+xoJL/saCS/7Ghkv+xoJL/saCS/7Ggkf+xoJH/saCR/7Ggkf+5q5//4uLh/+Hh4f/i4eD/4eHh/+Hg"
+    "4P/g4OD/4ODf/+Df3v/f3t//39/f/97f3f/e3t7/3t7d/97d3f/d3dz/3dzc/7CglP+plof/qZaI/6mWiP+bhXb/29vb/9zb2v+4qqL/WDQl/2o+Lf92RTP/"
+    "gEs2/4hPOv+NUTz/kFM8/4pSPP/R1NTexsjJ/7CxsP+foKD/e3x7/9za2/Xv7u7/3tzd/9PS1P+YnJ/4ilI8/6B/bP9fRkT/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9ZS1D/WUxR/6yflv+sn5f/rJ+X/6yfl/+sn5f/rJ+X/6yfl/+sn5f/rJ+X/6yfl/+sn5f/rJ+X/6yfl/+sn5f/Wk1S/1pNUv9aTVL/gnFq/39x"
+    "Z/+Xj4z/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9va2f/X1tX/z83N/8LCwf9lX1z/2dPR/+/w7v+3qZn/sqGT/7Khk/+yoZP/sqGT/7Khk/+xoZP/"
+    "sqGT/7Khk/+yoZP/sqGT/7Khk/+xoZT/sqGU/7Khk/+yoZT/sqGT/7Khk/+yoZP/sqGT/7Khk/+yoZT/sqGU/7Khk/+yoZT/sqGU/7Khk/+xoZT/sqGT/7Kh"
+    "lP+yoZP/sqGT/7Khk/+yoZP/sqGU/7Ghk/+yoZP/sqGT/7KhlP+5q5//4+Li/+Li4f/i4uH/4uHh/+Hh4P/i4OH/4eDg/+Dg3//g39//4ODg/9/f3//f397/"
+    "397e/97f3v/e3d3/3t7d/7CglP+plof/qZaI/6mWiP+bhXb/3Nzc/9zb2/+4qqL/WDQl/2o+Lf92RTP/gUs3/4hPOv+OUTz/kFM9/4pSPP/R1NTexcfJ/7Cx"
+    "sf+goKD/fHx7/9zZ2vXv8O7/3t7d/9PT1P+YnJ/4ilI8/6F/bP9kSkb/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////9fUFL/X1BT/2BRVP9gUVT/YFFV/2BR"
+    "Vf9gUVX/YFFV/2BRVf9gUVX/YFFV/2BRVP9gUVT/YFFU/2BRVP9fUVT/X1FU/2BRVP9gUVT/hXJs/39xaP+YkIz/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/9za2//X1tf/z87O/8PCwv9lX1z/2dPR//Dw8P+3qZn/tKKV/7Sjlf+0o5X/s6OV/7Oilf+0o5X/tKOV/7Sjlf+zo5X/tKOV/7Ojlf+zopX/tKOV/7Oi"
+    "lf+zopX/s6OV/7Ojlf+zo5X/s6KV/7Sjlf+0opX/s6OV/7Oilf+0o5X/tKKV/7Ojlf+zo5X/tKOV/7Ojlf+0opX/tKOV/7Ojlf+0o5X/tKOV/7Oilf+zo5X/"
+    "s6KV/7Sjlf+5q5//4+Pj/+Pj4//j4+L/4+Li/+Li4v/i4eL/4eHh/+Hh4f/h4OH/4ODg/+Dg4P/g4N//39/f/9/f3//f397/3t7e/7CglP+plof/qZaI/6mW"
+    "iP+bhXb/3d3c/93c3P+4qqL/WDQl/2o+Lf92RTP/gUs2/4lOO/+OUTz/kFM9/4pSPP/R1NTexcjI/6+wsP+fn57/e3t8/9va2fXv8O7/3t/e/9PU0/+ZnZ/4"
+    "ilI8/6GAbP9pTkj/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////9lVFX/ZlRW/2ZVVv9mVVf/ZlZX/2dWV/9nVlf/ZlZX/2ZWV/9mVlf/ZlZX/2ZVV/9mVVf/"
+    "ZlVX/2ZVV/9mVVf/ZlVX/2ZVV/9mVVf/iHVt/39xaP+YkI3/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/9zb2//Y19b/z8/P/8PDw/9lX1z/2dPR//Hx"
+    "8P+3qZn/taWW/7Wllv+1pJb/taWW/7Wllv+1pZb/taWW/7Wllv+1pJb/taWW/7Wll/+1pJb/taSW/7Wklv+1pZb/taWW/7Wklv+1pJb/taWW/7Wklv+1pZb/"
+    "taWW/7Wklv+1pZb/taWW/7Wklv+1pJb/taWW/7Wklv+1pZb/taSW/7Wllv+1pJb/taWW/7Wllv+1pZb/taSW/7Wklv+5q5//5eTk/+Tj5P/j5OP/4+Pi/+Pj"
+    "4//i4+L/4+Li/+Li4f/i4uH/4uHh/+Lh4P/g4eD/4ODg/+Df4P/f4N//39/f/7CglP+plof/qZaI/6mWiP+bhXb/3t7d/93d3f+4qqL/WDQl/2k+Lv92RTP/"
+    "gkw3/4pPOv+NUjz/kFM9/4pSPP/R1NTexsjJ/7Cxr/+fnp7/e3p8/9ra2vXw8O7/4ODf/9XV1f+anqD4ilI8/6KAbP9uUkr///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9sWVf/bFlY/6SSgv+kkoL/pJKC/6SSgv+kkoL/pJKC/6SSgv+kkoL/pJKC/6SSgv+kkoL/pJKC/6SSgv+kkoL/bVpZ/21aWf9tWln/jHhu/39x"
+    "aP+YkI3/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/93c2//Y19j/0M/P/8TDw/9lX1z/2dPR//Hy8v+3qZn/tqaY/7WlmP+2ppj/tqaY/7WlmP+2pZj/"
+    "tqWY/7WlmP+1ppj/taWY/7WlmP+2pZj/taWY/7WmmP+1ppj/tqWY/7almP+2ppj/tqaY/7WmmP+2pZj/taaY/7almP+1pZj/taWY/7WmmP+1ppj/taaY/7al"
+    "mP+1ppj/taWY/7ammP+2ppj/taaY/7ammP+2ppj/taaY/7WlmP+5q5//5eXk/+Xl5f/l5OT/5OTj/+Pj5P/k5OP/5OPi/+Pi4//j4+L/4+Li/+Lh4f/h4eH/"
+    "4uHg/+Hh4P/h4eD/4eDg/7CglP+plof/qZaI/6mWiP+bhXb/397e/9/e3f+4qqL/WDQl/2o+Lv93RTP/gks3/4lPOv+OUj3/kVM9/4pSPP/Q1NTex8jJ/7Cx"
+    "sP+gn5//e3t7/9na2/Xw8PD/4uHh/9fW1/+cn6H4ilI8/6KAbP90VUz///////////+Dg4P/j4+P/4+Pj/+Pj4///////+Dh4v/g4eL/4OHi/+Dh4v/g4eL/"
+    "4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi//////////////////////9yXVr/c15b/7Skmv+0pJr/tKSa/7Sk"
+    "mv+0pJr/tKSa/7Skmv+0pJr/tKSa/7Skmv+0pJr/tKSa/7Skmv+0pJr/c15c/3NeXP9zXlz/j3lw/39xaP+YkY3/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/93c3P/Z2Nj/0NDQ/8XExP9lX1z/2dPR//Lz8v+3qZn/uKiZ/7enmf+3p5n/t6iZ/7eomf+3qJn/t6iZ/7enmf+3p5n/t6eZ/7enmf+3p5n/t6iZ/7eo"
+    "mf+3p5n/t6eZ/7enmf+3p5n/t6eZ/7enmf+3p5n/t6iZ/7enmf+3p5n/t6eZ/7eomf+3qJn/t6eZ/7enmf+3qJn/t6eZ/7eomf+3p5n/t6iZ/7enmf+3qJn/"
+    "t6eZ/7enmf+5q5//5ubm/+bl5f/m5eX/5eXk/+Tk5P/l5eP/5OTk/+Tj4//j4+P/5OPj/+Pj4//j4uL/4uLh/+Hh4f/h4eD/4eHh/7CglP+plof/qZaI/6mW"
+    "iP+bhXb/4N7f/9/f3v+4qqL/WDQl/2o+Lv93RTP/gkw3/4lQO/+OUj3/kVQ9/4pSPP/R1NTeyMfI/7Gwsf+goJ7/e3t6/9ra2vXx8fH/4uLj/9jX2P+doKH4"
+    "ilI8/6KAbf95WE////////////+Dg4P/j4+P/4+Pj/+Pj4///////8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nK"
+    "yf/Jysn/ycrJ/8nKyf/Jysn///////////////////////////94YF3/eWFe/3lhX/95Yl//eWJg/3liYP95YmD/eWJg/3liX/95YmD/eWJg/3liX/95Yl//"
+    "eWJf/3liX/95Yl//eWJf/3lhX/95Yl//kntx/39xaP+YkY7/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/97d3f/Z2dn/0tHR/8bFxP9lX1z/2dPR//Pz"
+    "8/+3qZn/uKmb/7mpm/+4qZv/uama/7ipm/+4qZv/uama/7ipm/+5qZv/uKma/7mpm/+4qZv/uamb/7mpmv+4qZv/uKmb/7mpm/+5qZv/uamb/7mpm/+5qZv/"
+    "uKmb/7ipmv+5qZv/uama/7mpmv+4qZr/uKmb/7mpm/+5qZv/uamb/7ipm/+5qZv/uama/7mpm/+4qZv/uamb/7mpm/+5q5//5+fm/+fm5v/m5uX/5ubl/+Xl"
+    "5f/l5uX/5eTl/+Tl5P/k5OP/5OPj/+Tk4//j4+P/4+Li/+Pj4v/j4uL/4uHh/7CglP+plof/qZaI/6mWiP+bhXb/4ODf/+Df3/+4qqL/WDQl/2o+Lv94RjT/"
+    "gkw4/4lQPP+OUj3/kVQ9/4pSPP/R09XeyMfK/7Gwsf+foJ//e3x7/9vZ2vXx8vL/4+Pk/9nY2f+eoaH4ilI8/6KBbf9+W1H///////////9/f3//g4OD/4OD"
+    "g/+Dg4P/////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////9+ZF//f2Vg/39mYf+AZmH/gGZh/4BmYf+AZmH/gGZh/4BmYf+AZmH/gGZh/4BmYf+AZmH/f2Zh/39mYf9/ZmH/f2Zh/39mYf9/ZmH/lX5y/39x"
+    "aP+YkY7/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/97d3v/a2tr/0tLR/8bFxf9lX1z/2dPR//P09P+3qZn/uaqd/7mqnf+5qp3/uqqc/7mqnf+5qp3/"
+    "uaqd/7mrnf+5qp3/uaqd/7mqnf+5qp3/uaqd/7mqnf+5qpz/uaqd/7qqnf+5qp3/uaqd/7mqnf+5qpz/uaqd/7mqnP+5qp3/uaqc/7qqnf+5qp3/uaqd/7mq"
+    "nf+5qp3/uaqd/7mqnf+5qp3/uaqd/7mqnf+6qp3/uaqd/7mqnf+5q5//6Ojn/+fn5//o5+f/5ufm/+fm5v/m5ub/5uXl/+Xl5f/l5eX/5OTl/+Xk5P/k4+P/"
+    "4+Pj/+Tj4v/j4+L/4+Pi/7CglP+plof/qZaI/6mWiP+bhXb/4eHg/+Hg3/+4qqL/WDQl/2s+Lv94RjP/gkw4/4pQPP+OUj3/kVU+/4pSPP/R1NXeyMrK/7Gx"
+    "sf+foJ7/ent6/9vZ2vXx8vL/4+Tk/9rZ2v+goqP4ilI8/6KBbf+EX1P/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+FaGL/hmlj/6yXhf+sl4X/rJeF/6yX"
+    "hf+sl4X/rJeF/6yXhf+sl4X/rJeF/6yXhf+sl4X/rJeF/6yXhf+sl4X/hmpk/4ZqZP+GamT/mH90/4uAd/+5urn/4eDg/+Dg4P/g4N//4ODg/9/f3//g39//"
+    "397e/9/e3v/b2tr/09LS/8fFxv9lX1z/2dPR//X19P+3qZn/u6ye/7usnf+7rJ7/u6ye/7usnf+7rJ7/u6yd/7usnv+6rJ7/uqyd/7qsnv+7rJ3/uqye/7us"
+    "nf+7rJ3/u6yd/7qsnf+6rJ3/u6yd/7qsnv+6rJ3/u6yd/7usnf+6rJ3/uqyd/7usnf+6rJ3/uqud/7usnf+6rJ3/u6yd/7usnv+6rJ7/u6ye/7usnv+7rJ3/"
+    "uqye/7usnv+5q5//6eno/+jo6P/o6Oj/5+fn/+fn5//n5+b/5+fm/+bm5v/m5uX/5ubl/+Xl5f/l5eT/5OXk/+Tl5P/k5OT/5OTj/7CglP+plof/qZaI/6mW"
+    "iP+bhXb/4eLh/+Hh4f+4qqL/WDQl/2s+Lv94RjP/gkw4/4tRPP+PUj3/kVQ//4pSPP/R1NTex8jJ/7Gxsf+fn53/e3t6/9va2vXx8fH/4+Tk/9rZ2/+hoaX4"
+    "ilI8/6OBbf+JYlX/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+LbGT/i21l/7upnf+7qZ3/u6md/7upnf+7qZ3/u6md/7upnf+7qZ3/u6md/7upnf+7qZ3/"
+    "u6md/7upnf+7qZ3/jG5m/4xuZv+Mbmb/nIJ1/4uAd/+6urr/4uHh/+Hh4P/h4OD/4ODg/+Dg3//h3+D/4N/f/9/f3//c29v/09PS/8fGxv9lX1z/2dPR//X2"
+    "9f+3qZn/vK2f/7ytn/+9rZ//vK2f/7ytn/+8rZ//vK2g/7ytn/+8rZ//vK2g/7ytn/+8rZ//va2g/7ytoP+9rZ//vK2g/72toP+8rZ//vK2f/7ytn/+8rZ//"
+    "vK2f/7ytn/+8rZ//vK2f/7ytoP+9raD/vK2g/7ytoP+8raD/vK2g/72toP+8raD/vK2g/72tn/+8rZ//vK2f/72tn/+5q5//6unp/+np6f/p6ej/6Ojo/+jo"
+    "5//o5+f/5+jn/+fn5//n5+b/5+bm/+bm5v/m5uX/5ubk/+Xl5f/k5eX/5eXk/7CglP+plof/qZaI/6mWiP+bhXb/4uLi/+Li4f+4qqL/WDQl/2s/Lv94RjP/"
+    "g005/4tRPP+PUz7/kVU+/4pSPP/S1dbeycjK/7Kysf+en5//ent7/9rb2vXx8fH/4+Pk/9ra2/+hoqX4ilI8/6OCbf+NZlf/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+QcWf/kHFo/5FyaP+Rcmn/kXNp/5Fzaf+Rc2n/kXNp/5Fzaf+Rc2n/kXNp/5Fzaf+Rcmn/kXJp/5Fyaf+Rcmj/kXJo/5FyaP+Rcmn/noR3/4uB"
+    "eP+6urr/4uLi/+Li4f/h4eH/4eHh/+Hg4P/h4eD/4ODg/+Hg3//d29v/1NPT/8fHx/9lX1z/2dPR//b29f+3qZn/va6h/72uof+9r6H/va6h/72vof+9r6H/"
+    "va+h/72uof+9rqH/va6h/72vof+9rqH/va+h/72vof+9r6H/va6h/72vof+9r6H/va+h/72uof+9r6H/va6h/72uof+9rqH/va6h/72uof+9rqH/va+h/72u"
+    "of+9r6H/va6h/72vof+9rqH/va6h/72uof+9r6H/va+h/72uof+5q5//6urq/+rq6f/p6un/6enp/+np6f/p6en/6eno/+jo6P/o5+f/5+fm/+fn5//n5ub/"
+    "5ubm/+bm5v/l5ub/5uXl/7CglP+plof/qZaI/6mWiP+bhXb/4+Pi/+Pj4v+4qqL/WDQl/2s/L/94RjT/g005/4pRPP+PVD7/klY//4pSPP/S1dXeyMnL/7Ky"
+    "sf+gn5//e3t7/9rc2/Xy8fL/4+Pk/9vb2/+gpKX4ilI8/6SCbf+SaFn///////////+Dg4P/j4+P/4+Pj/+Pj4//////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+VdGn/lnVq/5Z1a/+Xdmv/l3Zr/5d2"
+    "bP+Xdmz/l3Zs/5d2a/+Xdmv/l3Zr/5d2a/+Xdmv/l3Zr/5d2a/+WdWv/lnZr/5Z1a/+Wdmv/oYZ4/4Byaf+YkY//opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/+Hg4f/c3dz/1NTU/8fHx/9lX1z/2dPR//b39v+5qpz/vrCi/76xov++sKL/vrGi/76wov++sKL/vrGi/76wov++sKL/vrCi/76xov++sKL/vrGi/76w"
+    "ov++sKL/vrCi/76xov++sKL/vrCi/76wov++sKL/vrCi/76wov++saL/vrCi/76wov++saL/vrCi/76xov++sKL/vrCi/76wov++sKL/v7Gi/76wov++saL/"
+    "vrCi/76xov+5q5//6+vr/+vr6v/r6ur/6urq/+rq6f/p6en/6enp/+np6P/p6ej/6ejo/+jo5//o5+f/6Ofm/+fn5v/n5uf/5ubm/7Kjlf+rmIr/qpiK/6qY"
+    "iv+chnj/5OTj/+Tk4/+4qqL/WDQl/2s/Lv94RzT/g005/4pRPP+PUz//klU//4pSPP/R1NXex8rK/7Gysf+goJ//fHt8/9vc2/X08vP/5OTl/9zd3P+hpqX4"
+    "ilI8/6SCbf+Wa1r///////////+Dg4P/j4+P/4+Pj/+Pj4///////+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh"
+    "4v/g4eL/4OHi/+Dh4v/g4eL/4OHi//////////////////////+ad2v/m3hs/7KbiP+ym4j/spuI/7KbiP+ym4j/spuI/7KbiP+ym4j/spuI/7KbiP+ym4j/"
+    "spuI/7KbiP+ym4j/m3lt/5t5bf+beW3/o4d5/4Byaf+YkY//opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Lh4f/e3t3/1tXV/8jIx/9lX1z/2dPR//b4"
+    "9v+6rJ3/v7Gj/8Cxo/+/saP/wLGk/8CxpP+/saP/v7Gk/7+xo//AsaP/v7Gj/8CxpP/AsaT/v7Gk/8CxpP/AsaT/v7Gj/7+xpP+/saT/wLGk/8Cxo/+/saP/"
+    "wLGj/7+xpP/AsaT/wLGk/8CxpP+/saT/v7Gk/8CxpP/AsaP/wLGk/8CxpP/AsaT/v7Gk/8Cxo/+/saT/v7Gk/8CxpP+5q5//7Ozr/+zs6//s7Ov/6+vr/+vr"
+    "6//q6+r/6urq/+rq6v/q6un/6ero/+no6P/p6Oj/6Ojn/+jo5//n5+f/5+fn/7SlmP+unI3/rZqN/62ajf+einr/5eXl/+Xl5P+4qqL/WDQl/2s/L/94RzX/"
+    "g006/4tRPP+QVD//k1Y//4pSPP/S1NTeycnK/7Kys/+foKD/e3x7/93c2/X19PP/5uXm/93e3P+hp6b4ilI8/6SCbv+abl3///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4///////8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/////////////////"
+    "//////////+fe23/oHtu/8Gtn//BrZ//wa2g/8GtoP/BraD/wa2g/8GtoP/BraD/wa2g/8GtoP/BrZ//wa2g/8GtoP/BrZ//oHxw/6B8b/+gfG//pol7/4Bz"
+    "af+YkY//opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Li4f/f3t7/1tbW/8jJyP9lX1z/2dPR//f4+P+8rZ//wbOl/8Gypf/Bs6X/wbOl/8Cypf/BsqX/"
+    "wbKl/8Gypf/Bs6X/wLOl/8Gzpf/BsqX/wLKl/8Gzpf/Bs6X/wbKl/8Gzpf/Bs6X/wbOl/8Czpf/BsqX/wbOl/8Gzpf/Bs6X/wLKl/8Czpf/Bs6X/wbOl/8Gz"
+    "pf/Bs6X/wLOl/8Gzpf/Bs6X/wbOl/8Gzpf/Bs6X/wLOl/8Cypf+5q5//7e3t/+3t7P/s7ez/7Ozs/+vr6//r6+v/6+zr/+vr6v/q6ur/6urp/+nq6f/p6en/"
+    "6eno/+np6P/p6ej/6Ojo/7anm/+wn5D/rp2P/66dj/+hjHz/5ebm/+bl5f+4qqL/WDQl/2s/MP95RzX/g006/4xSPP+QVD//k1Y//4pSPP/S1dTeysrK/7Oy"
+    "sv+fn5//e3t6/93d3PX19fT/5ubm/93e3f+ip6f4ilI8/6SCbv+ecF7///////////9/f3//g4OD/4ODg/+Dg4P/////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+kfW//pX5v/6V/cP+mf3H/pn9x/6Z/"
+    "cf+mf3H/pn9x/6Z/cf+mf3H/pn9x/6Z/cf+lf3H/pX9x/6V/cf+mf3D/pX9w/6V/cP+lf3D/qIt7/4Bzaf+Zko//opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/+Tj4v/f397/19bW/8nJyf9lX1z/2dPR//j59/+9sKH/wrWm/8G0pv/BtKb/wbWm/8G0pv/Ctab/wbWm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0"
+    "pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbWm/8G0pv/Btab/"
+    "wbSm/8G0pv+5q5//7e7t/+7u7f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/q6ej/6enp/7iqnf+zopP/saCS/7Gg"
+    "kv+jjn//5ufm/+bm5v+4qqL/WDQl/2xAMP95SDX/g006/4tRPP+QVD//k1ZA/4pSPP/R1dXeycrL/7Oysf+goKD/e3t8/9vc3fX09PX/5+fm/93f3v+iqKj4"
+    "ilI8/6SDbv+hcl//////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+ogHD/qIFx/6mBcv+pgnL/qYJy/6mCc/+pgnP/qYJz/6mCcv+pgnP/qYJy/6mBcv+pgnL/"
+    "qYJy/6mCcv+pgnL/qYFy/6mBcv+pgXL/qox8/4Bzaf+Zko//opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Tj5P/g39//19fX/8rKyv9lX1z/2dPR//j5"
+    "+P++saP/wrWo/8O1qP/Ctaj/w7Wn/8K1p//Ctaf/wrWn/8K1qP/Ctaj/wrWn/8O1qP/Ctaj/wrWo/8K1p//Ctaf/wrWn/8O1p//Dtaf/wrWn/8O1qP/Dtaf/"
+    "wrWo/8K1p//Dtaj/w7Wn/8O1p//Ctaf/wrWo/8K1qP/Dtaf/wrWo/8K1qP/Dtaj/w7Wn/8K1p//Ctaj/wrWo/8O1qP+5q5//7u/u/+/v7v/u7u3/7e7t/+3t"
+    "7f/t7uz/7e3s/+zs7P/s7Oz/6+zr/+vs6//r7Ov/6+vq/+rr6v/q6ur/6urp/7qtoP+1pZf/tKKV/7Silf+lkYH/5+jn/+jo5v+4qqL/WDQl/2tAMP96Rzb/"
+    "hE46/4xSPf+RVED/k1dA/4pSPP/R1dTeyMnJ/7Kxsv+ioKD/fHt7/9vc3fX09fX/5+jn/93g3v+kqaj4ilI8/6WDbv+jdGD/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+qgnL/q4Jz/7eeiv+3nor/t56K/7efiv+3n4r/t5+K/7efiv+3n4r/t56K/7eeiv+3nor/t56K/7efiv+3nor/q4N0/6uDdP+rg3T/rI19/4Bz"
+    "af+akpD/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+Xk5f/h4eD/19fX/8vLy/9lX1z/2NLQ//n5+f/As6T/xLap/8S2qf/Etqn/xLap/8O2qf/Etqn/"
+    "w7ap/8O3qf/Dtqn/xLap/8S2qf/Etqn/xLap/8S2qf/Dtqn/w7ap/8S2qf/Dtqn/w7ap/8S2qf/Dtqn/w7ap/8O2qf/Etqn/xLap/8S2qf/Dtqn/xLap/8O2"
+    "qf/Etqn/w7ap/8S2qf/Etqn/xLap/8O2qf/Etqn/xLap/8S2qf+5q5//7/Dv/+/v7/+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv/r6+r/6uvq/7ywo/+3qJr/tqWY/7almP+olYX/6ejo/+jo6P+4qqL/WDQl/2xAMP95SDb/hU06/4xSPf+QVUD/k1ZA/4pSPP/R1NTeyMrJ/7Oz"
+    "s/+hoKL/fXt9/9zd3fX19vb/5+no/97h3v+mqqf4ilI8/6WDbv+jdGD/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+qgnL/q4Jz/8Svof/Er6H/xbCh/8Ww"
+    "of/FsKH/xbCh/8Svof/FsKH/xK+h/8Wwof/FsKH/xK+h/8Svof/Er6H/q4N0/6uDdP+rg3T/rI19/4Bzaf+Zko//opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/+bl5f/h4eH/2NjX/8zLy/9lX1z/3djW//n6+f/BtKX/xbiq/8W4qf/Ft6r/xbeq/8W3qf/FuKr/xbip/8W4qf/FuKr/xLip/8S4qv/FuKn/xLiq/8W3"
+    "qf/Ft6n/xbip/8S4qf/EuKn/xbip/8S4qv/EuKn/xbep/8W3qf/EuKn/xLep/8W3qf/Et6n/xbep/8W4qf/EuKn/xbep/8W4qv/EuKr/xbip/8W4qv/FuKn/"
+    "xLiq/8W4qv+5q5//8PHv//Dw8P/w8O//8O/v/+/v7//u7+//7+7u/+7v7v/u7u3/7u3t/+3u7f/t7e3/7ezs/+zs6//s7Ov/6+vr/76wpP+7q53/t6ib/7eo"
+    "m/+ql4j/6enp/+np6P+4qqL/WDQl/2xAMP96SDb/hU47/4xTPv+RVUD/lFdB/4pSPP/R1dXeyMnK/7Kysv+hoqH/fHx8/9zd3vX29vf/6Oro/+Hh3/+mqqj4"
+    "ilI8/6WDb/+jdGD///////////+Dg4P/j4+P/4+Pj/+Pj4//////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+qgnL/q4Nz/6uDdP+shHT/rIR0/6yEdP+shHT/rIR0/6yEdf+shHT/rIR0/6yEdP+shHT/"
+    "rIR0/6yEdP+rg3T/rIR0/6uDdP+rg3T/rI19/4BxaP+ZkY//opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+bm5v/h4eH/2NnZ/83MzP9lX1z/3tnY//n6"
+    "+f/Btab/xbmq/8W5q//Fuar/xbmq/8W5qv/Fuar/xbmr/8W5q//Fuar/xbmr/8W5qv/FuKv/xbmr/8W5q//Fuav/xbmr/8W5q//Fuav/xbmr/8W5qv/FuKv/"
+    "xbmr/8W5qv/Fuav/xbmr/8W5q//Fuav/xbir/8W5q//Fuav/xbmr/8W5q//FuKv/xbmr/8W5q//Fuav/xbmr/8W5q/+5q5//8fLx//Dx8f+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/t7ez/7ezr/76xpf+9rqD/uque/7qrnv+tm4v/6uvq/+rq6f+4qqL/WDQl/2xBMf96SDb/"
+    "hU47/41TPv+RVkD/lFdB/4pSPP/R1dTeyMrK/7Kysf+goaH/e3x8/9zd3vX29vf/6ero/+Li4f+mq6n4ilI8/6WDb/+jdGD///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4///////+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi/+Dh4v/g4eL/4OHi////////////"
+    "//////////+rgnL/q4Nz/6uDdP+shHT/rIR0/6yEdP+shHX/rIR0/6yEdf+shHT/rIR0/6yEdf+shHX/rIR0/6yEdP+shHT/rIR0/6yEdP+shHT/rI19/39x"
+    "aP+YkY7/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+fn5v/i4uL/2tnZ/87Nzf9lX1z/3djX//n6+f/Dtqj/xrms/8a5rP/Guqz/xrms/8a5rP/Fuaz/"
+    "xrqs/8a5rP/Guaz/xrms/8W5rP/Fuaz/xrms/8a6rP/Fuaz/xbms/8W5rP/Guaz/xrms/8W5rP/Guaz/xrms/8a5rP/Guaz/xrms/8a5rP/Fuaz/xrms/8a5"
+    "rP/Guqz/xrms/8a6rP/Guaz/xrmt/8W5rP/Guqz/xrms/8a5rP+5q5//8vLx//Hy8f/x8vH/8PHx//Dx8f/w8PD/8PHw//Dw8P/v8O//7+/u/+7v7//u7+7/"
+    "7u/t/+7u7v/t7u3/7e7t/76zpv++sKL/vbCi/72wov+woJD/6+zq/+vr6/+4qqL/WDQl/21BMf96STb/hU47/41TPv+RVkD/k1dB/4pSPP/S1dTeysvK/7Oz"
+    "sf+foKD/e3t7/97e3/X39/j/6uvq/+Lk4v+nrar4ilI8/6WDb/+jdGD///////////+Dg4P/j4+P/4+Pj/+Pj4///////8nKyf/Jysn/ycrJ/8nKyf/Jysn/"
+    "ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn/ycrJ/8nKyf/Jysn///////////////////////////+rgnP/q4Nz/6yDdP+shHT/rIR0/6yE"
+    "df+ngHL/nnlr/5l2aP+Zdmj/mXZo/5l2aP+Zdmj/mXZn/555av+ngHH/rIR1/6yEdP+shHX/rI19/46Dev/AwMD/6enp/+np6P/p6ej/6Onp/+jo6P/o6Of/"
+    "5+jn/+fn5//i4uL/2tvZ/87Ozf9lX1z/3djW//n6+f/Et6n/x7qt/8e7rf/Huq3/xrut/8a6rf/Huq3/x7ut/8e6rf/Guq3/x7qt/8e7rf/Huq3/x7ut/8a6"
+    "rf/Guq3/x7qt/8a6rf/Huq3/x7qt/8e6rf/Huq3/xrqt/8a6rf/Hu63/x7qt/8a6rf/Hu63/x7qt/8a7rf/Huq3/x7qt/8a6rf/Huq3/x7ut/8a6rf/Hu63/"
+    "xrqt/8e7rf+5q5//8vPy//Ly8v+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/u7+7/7u/u/8C0p//As6X/v7Gk/7+x"
+    "pP+yopP/7Ozs/+zs6/+4qqL/WDQl/21BMf96STf/hU88/4xTPv+SVkH/lFhC/4pSPP/S1NTeysvK/7Kzsf+goKD/e3t7/9/f3vX4+Pj/6uvr/+Lk4/+nrar4"
+    "ilI8/6WDb/+jdGD///////////9/f3//g4OD/4ODg/+Dg4P/////////////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////+rgnP/q4N0/6yEdP+shHX/rIR1/6yEdf+eeWv/gmNY/3NZTv9zWU7/c1lO/3NZTv9zWU7/"
+    "c1lO/4JjWP+eeWv/rIR0/6yEdP+shHT/rI19/46De//BwcH/6uvq/+rq6v/q6en/6erp/+np6P/p6ej/6Ojo/+jo6P/j4+P/29va/8/Ozv9lX1z/3NfV//n6"
+    "+f/Euan/x7ut/8i7rf/Hu63/yLut/8i7rf/Hu63/x7ut/8e8rf/Iu63/x7yt/8i7rv/Iu63/yLut/8i7rf/IvK3/x7ut/8e7rf/Hu63/yLut/8i7rf/HvK3/"
+    "yLut/8e7rv/IvK3/yLyt/8i7rv/Hu67/yLut/8i7rv/IvK3/yLut/8i7rv/Iu63/x7yu/8i7rf/HvK3/x7ut/8i7rf++saX/8/Pz//Pz8v/y8/P/8vPz//Lz"
+    "8v/y8vL/8vLx//Hx8f/x8fD/8PHw//Dw8P/w8PD/7/Dw/+/w7//v8O//7+/u/8C1p//Dtaj/wbOm/8Gzpv+0o5T/7e3s/+3t7P+4qqL/WDQl/21BMf96STf/"
+    "hk88/41UP/+SV0H/lFhC/4pSPP/S1NTeycrJ/7Kzs/+hoqP/fHx7/9/g3vX4+Pj/6+zs/+Pl4/+oraz4ilI8/6aDb/+jdGD/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "//////////+rg3P/rIN0/6yEdP+shHX/rIR1/6yEdf/MtKv/zLSr/8y0q//MtKv/zLSr/8y0q//MtKv/zLSr/3NZTv+Zdmj/rIR1/6yEdP+shHT/rY59/46D"
+    "e//BwcH/6+vr/+vr6v/r6ur/6urq/+rq6f/q6en/6enp/+np6P/k4+T/29zb/8/Pzv9lX1z/3NfV//n6+f/Fuar/yb2u/8i8rv/JvK7/ybyu/8i8rv/IvK7/"
+    "ybyu/8i8rv/IvK7/yLyv/8i8rv/JvK7/yLyv/8i9rv/IvK7/yLyu/8i8rv/JvK7/ybyu/8i8rv/IvK//yLyu/8m8rv/IvK7/yLyu/8i9r//IvK7/yLyu/8i8"
+    "rv/IvK7/yLyu/8m8rv/JvK7/yLyu/8m8rv/JvK7/yLyv/8i8r/+/sqb/9PT0//T08/+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv/w8PD/7/Dv/8G1qf/Et6r/w7ep/8O3qf+1ppb/7u7t/+3u7f+4qqL/WDQl/21BMf96STf/hlA8/45UP/+SV0H/lFlC/4pSPP/R1dXeyMrK/7Sz"
+    "sv+io6L/fH19/+Dh4PX5+ff/7e7s/+Xn5f+qr674ilI8/6WDb/+jdGD/////////////////////////////////////////////////////////////////"
+    "//////////////////////////////////////////////////////////////////////////////////////////+rg3T/rIR0/6yEdf+shHX/rIR1/6yF"
+    "df/MtKv/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/zLSr/3NZTv+Zdmj/rIR1/6yEdf+shHX/rY5+/31uZf+TiYb/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/+rq6f/l5OT/3Nzc/8/Pz/9lX1z/3NfV//n6+f/Duar/x7yu/8e8rv/HvK7/x7yu/8e8rv/HvK7/x7yu/8e8rv/HvK7/x7yu/8e8rv/HvK7/x7yu/8e8"
+    "rv/Hu67/x7yu/8e8rv/Hu67/x7uu/8e7rv/Hu67/x7ut/8e7rf/Hu67/x7ut/8e7rf/Hu63/x7ut/8e7rf/Hu63/x7ut/8e7rf/Hu63/x7ut/8e7rf/Hu63/"
+    "x7ut/8e7rf++saT/9PX0//X19P/09fP/9PT0//P09P/z9PP/8/Tz//Pz8//z8/L/8vPx//Ly8f/y8vH/8fHx//Hy8f/w8fD/8PHw/8G0p//Iva7/x7yv/8e8"
+    "r/+3qJj/7u7u/+/v7v+4qqL/WDQl/21CMv96STf/hlA8/41UP/+SV0H/lVlD/4pSPP/R1dbeycvM/7S0s/+jo6L/fH19/+Dh4fX5+ff/7e/s/+bn5f+rr6/4"
+    "ilI8/6aDb/+ke2f/pHtn/6R7Z/+ke2f/pHpm/6R6Zv+jemb/o3pm/6N6Zv+jemb/o3pm/6N6Zv+jemb/o3pm/6N6Zv+jemb/o3lm/6N5Zv+jemb/o3pm/6N6"
+    "Z/+je2f/onto/6J7aP+cemn/qIZ1/6qKef+ri3r/rIx7/6yMfP+sjX3/rY19/62Ofv+tjn7/rY5+/62Ofv/NurD/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/"
+    "zbqw/3RfVP+afnD/rY5+/62Ofv+tjn7/rY5+/4d4bv+Zjov/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+rq6v/l5uX/3d3d/8/Q0P9lX1z/3NfV//n6"
+    "+f+/s6X/w7eq/8O4qv/Dt6n/w7ep/8O3qv/Dt6r/wrap/8K2qf/Ctqn/wbWo/8G1p//AtKf/wLSn/8C0p//AtKf/wLSn/8C0p//AtKb/wLSn/8C0pv/AtKb/"
+    "wLSm/8C0pv/AtKb/wLSm/8C0pv/AtKb/wLSm/8C0pv/AtKb/wLSm/8Czpf+/sqX/vrKl/7+xpP++saT/vbGk/7utn//FuK3/9fb1//X29f+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv/y8vH/8fHx/8rBtv+4q5v/uKqc/7iqnP+4qZr/7+/v/+/v7/+4qqL/WDQl/25CMf96STf/"
+    "hk89/45VP/+TWEL/lVhC/4pSPP/S1dbeysnN/7S0tf+jo6L/fXx7/+Dg4fX5+fj/7e/s/+bn5f+rr6/4ilI8/7uLd/+qhG//pH5r/6J8av+hfGr/oHxq/6F8"
+    "av+gfGr/oHxp/598av+fe2n/n3tp/597af+fe2n/n3to/597aP+femf/n3pn/597Z/+ee2j/nntq/597av+efGv/m3xs/5p7a/+Jd2v/q5uQ/7Olm/+0qJ3/"
+    "tqmh/7eso/+4raT/uK6l/7iupf+5rqb/uq6m/7mupv/Uzsn/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/1M3I/3t1b/+km5P/uK6l/7itpf+4raT/uK2l/5uP"
+    "iv+mmpb/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+vr6//m5+X/3t7e/9DR0P9lX1z/2dTR//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+P/5+vn/+Pn4//n5+f/5+fj/+fn4//j5+P/4+fj/9/j4//f4"
+    "9//3+Pf/9/j3//f49//3+Pf/9/j3//f39//29/b/9vf3//b39v/29/b/9fb1//b29v/19vX/9fX1//T19f/19fT/9PX0//T19P/09fT/8/Tz//Pz8//z8/P/"
+    "8/Pz//Lz8v/z8/L/8vLy//Ly8f/x8vH/8fHw//Hx8P/w8PD/8PDv//Dw8P+4qqL/WDQl/25CMv96Sjf/hlA9/41UQP+SV0P/lVlD/4pSPP/S1dXeycrM/7S0"
+    "tf+jo6P/fHx8/+Dg4fX4+fj/7O/t/+Xo5/+tsLD4ilI8/8COe//Ajnv/wI57/8CNev/AjXr/v415/7+Nev++jHn/vox4/76MeP++i3f/vot3/76Ld/+9i3f/"
+    "vYp3/72Kdv+8iXb/vIl2/7yIdv+8iXX/vIh0/7uIdf+3hXL/sYBu/6Z4Zv9lX1z/3djW//P08//z9PT/8/Tz//L08v/z8/P/8/Py//Pz8v/y8/L/8fPy//Ly"
+    "8f/29/f/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/9fb1/6ChoP/V1tX/7+/v/+/w7//v7+//7u/u/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/+zs6//n5+f/3t/e/9HS0f9lX1z/2NTS//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+P/5+fn/+fr5//j5+P/4+fj/+Pn4//j4+P/3+fj/+Pj3//j49//4+Pf/+Pj3//f49//3+Pf/"
+    "9/j3//b49//39/f/9vf2//b39v/29/X/9fb1//X29v/19vX/9fb0//T19f/19fT/9PT0//T19P/z9fT/8/Xz//P08//y8/P/8/Pz//Lz8v/y8/L/8vLx//Ly"
+    "8v/x8vH/8PLw//Hx8P+4qqL/WDQl/25DMv97Sjj/hlE9/45WQP+TWEP/llpD/4pSPP/S1dbeysrN/7S0tf+ioqL/e3x8/+Dg4fX4+fj/7O/v/+Xo5/+tsLD4"
+    "ilI8/8GOe//Bjnv/wI57/8COe//Ajnr/v416/7+Nef+/jXn/v4x5/7+Mef+/i3j/vot3/72LeP+9inf/vYp3/72Kd/+8inf/vYl1/7yJdf+8iHX/vIh1/7yJ"
+    "dP+3hHL/sIBt/6Z4Zv9lX1z/3tnY//T19P/09PP/8/T0//T08//z9PP/8/Pz//P08v/z8/L/8/Py//Lz8v/3+Pf/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/"
+    "9vb2/6Kiof/W1tb/7/Dw/+/w8P/v8O//7+/v/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+3t7P/o6Of/4eDg/9PT0/9lX1z/0MnG/8rK"
+    "yP/P0M3/zs/O/8/Qz//P0M//0NHP/9DRz//Q0c//0NHP/9DS0P/Q0tD/0dLR/9HS0f/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/"
+    "0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HT0v/T09L/09PT/9PT0//U09P/1NPT/9TT0//U09P/1NPT/9TT"
+    "0//U09P/1NPT/9TT0//U09P/1NPT/9TT0v/U1NL/1NPS/9LR0P/T09H/0tPR/9LS0f/Q0ND/0dLQ/9HR0P/Q0dD/zs7O/9DMyv+4qqL/WDQl/3BENP98Szr/"
+    "h1E+/45WQf+TWEP/llpE/4pSPP/S1dXeycrL/7S0tP+jo6P/fXx9/+Dg4fX5+fn/7e/w/+bo6P+ssLD4ilI8/8GPe//Bjnv/wI57/8COev/AjXv/v456/7+N"
+    "ev+/jXr/v4x5/7+MeP+/i3n/v4x4/76Ld/+9i3f/vYt3/72Kd/+9inf/vIl2/72Jdf+8iXX/vIl1/7yIdf+3hXP/sYFu/6Z4Z/9lX1z/3djX//T19P/09fT/"
+    "9fX1//T19P/09fP/9PTz//P09P/z9PP/8/Tz//P08//4+Pf/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/9vb2/7W1tf/d3d3/8fHw//Dx8P/w8PD/8PDw/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+7t7v/p6un/4uLi/9bW1f9lX1z/zcG9/87Evv/PxsD/zsW+/83Dvv/Nwr7/y8K9/8zCvP/Mwrz/"
+    "zMC6/8u9uf/Kvrf/yL23/8i8tv/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7"
+    "tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8e6tP/Fu7T/xrmz/8W5sv/FuLH/xLiy/8S4sv/FuLH/xbix/8W3sf/EuLH/xbmy/8a5sf/GubL/xrmz/8i7s//Hu7P/"
+    "x7u0/8zCvP/Mwbv/zMG8/8u/uv/QxcD/zsO9/8vBvP/Nwrz/zcG9/8zBvP/Nwb3/WDQl/3NGNf9/TDr/iFI+/49WQv+UWUT/llpE/4pSPP/S1dXeysrK/7W0"
+    "tP+ko6P/fX19/+Dg4fX6+fr/7+/x/+jo6v+tsbL4ilI8/8GPfP/Bj3v/wI57/8CPev/Ajnr/wI16/7+Nev+/jXr/v415/7+Nef+/jHn/vox4/76MeP++jHj/"
+    "vot4/72KeP+9i3b/vYp3/72Jdv+8inb/vIl1/7yJdf+3hXP/sYBu/6Z4Zv9lX1z/3djW//X29f/19fX/9PX0//X29P/09fT/9PT0//T09P/09fT/9PTz//P0"
+    "8//4+Pj/+Pj4//j49//4+Pj/+Pj3//j49//3+Pf/9/j3/97e3f/q6ur/8fHx//Hy8f/x8fD/8fHw/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/+7u7v/q6+n/4+Tk/9nZ2f9oYl///v7+//7+/v////////////////////////////////////////////////////7///78///++////Pn///z5///8"
+    "+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///69v/++fX//vn0//749P/89/P/"
+    "/Pfx//z28v/79fL/+/Xy//v28v/89/L//Pfy//z38v/89/L//Pfy//348v/9+vX/+/fz//z38//Curr/5+Df/+fg3//79O//wrq6/+fg3//n4N///vn0/8K6"
+    "uv/n4N//5+Df///38v//+/n/WDQl/3hJN/+CTjz/ilRA/5BXQf+UWkP/llpE/4pSPP/S1dXey8vL/7a1tP+kpaT/fX1+/+Dg4fX6+fr/7+/x/+jo6v+tsbP4"
+    "ilI8/8GPe//Bj3z/wY57/8GOe//Ajnv/wI17/7+Nev+/jnr/wI16/7+Mef+/jHn/vox4/76MeP++jHf/vot4/76Ld/++i3f/vYp2/7yKdv+9iXb/vIl2/7yJ"
+    "dv+4hnP/sYFu/6d4Z/9lX1z/3NfV//X39v/19vb/9fb2//X29f/19vX/9fb0//X19P/09fX/9PX0//T19P/09PP/9PX0//P18//09PP/8/Pz//L08//z8/P/"
+    "8vPy//Py8v/y8vL/8vLy//Ly8f/x8vH/8fLx/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+/v7v/s7Oz/6Ojn/97e3v9oYl///v39////"
+    "//////////////////////////////////////////////////////7///78///++////Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn/"
+    "//z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///69v/++fX//vn0//749P/89/P//Pfx//z28v/79fL/+/Xy//v28v/89/L//Pfy//z3"
+    "8v/89/L//Pfy//348v/9+vX/+/fz//v38/+dlJf/2dLT/9nS0//58e3/nZSX/9nS0//Z0tP///r2/52Ul//Z0tP/2dLT///38v//+/n/WDQl/39OOv+HUj7/"
+    "jVVB/5JYQ/+VWkT/l1pF/4pSPP/S1dXeysvL/7W1tv+lpKT/fX19/+Dg4vX6+fr/7+/w/+jo6v+ssLP4ilI8/8GQfP/BkHz/wY98/8CPe//Bjnv/wI57/8CN"
+    "e//Ajnr/v416/7+Nef+/jXn/v4x4/76Mef++jHj/vot4/76LeP+9i3j/vot3/72Kdv+9inb/vYl1/7yJdv+4hXP/soFv/6Z5aP9lX1z/3djW//b39v/29/X/"
+    "9vb2//X39v/19vX/9fb2//X19f/19vX/9Pb1//X19P/09fT/9PX0//T19P/z9PP/9PT0//T08//z9PP/8/Pz//Pz8v/z8/L/8vPy//Ly8v/y8/L/8fPx/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Dw7//u7u3/6erp/+Xl5f+me2r/ZmFe/2ZfXP9mX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/jlM8/4dTP/+MVUH/kFhD/5NaQ/+VWkT/l1tF/4pSPP/S1dXey8zL/7a2"
+    "tv+lpaT/fX19/+Dh4vX6+vr/7+/x/+jo6v+tsbP4ilI8/8GQfP/BkHz/wY97/8GOe//Bj3v/wI57/8COe//Ajnr/v456/7+Nef+/jXn/v4x5/7+MeP++jHj/"
+    "vot4/76MeP+9i3f/vYt3/72Ldv+9inb/vYl2/72Jdv+4hnP/soFv/6Z5aP9lX1z/3tnY//f39//2+Pb/9/f2//b39//29/b/9vf2//X39v/19vX/9fb1//X2"
+    "9f/19vX/9fb1//X19P/09fT/9PX1//T09P/09PT/8/T0//T08//z9PP/8/Tz//Pz8//y8/L/8vPy//Lz8v/y8vL/8vPy//Hy8v/x8vH/8fHx//Hx8f/x8fD/"
+    "8fHw//Hx8P/v8O//7e3t/+np6P/l5uX/4N/f/9rb2v/X2Nj/1tbV/9XV1P/V1dT/1dXU/9XV1P/V1dT/1NXT/9TU1P/T1NP/09TT/9PU0//T09P/0tPS/9LT"
+    "0v/S09L/0tLR/9HS0v/R0tH/0dHR/9HR0f/Q0dD/0dHQ/9DR0P/Q0ND/0NDP/8/Pz//Qz8//z8/P/8/Pz//Pz8//z8/P/8/Pzv/Pzs7/zs7O/87Pzv/Ozs3/"
+    "pJeQ/04uIf9oQzX/dUo7/35RQP+GVUX/i1hF/45aR/+OWUb/jVlG/41ZRf+MWEX/jFdF/4tWRP+LVkP/ilVC/4pVQv+KVUL/ilVC/4pVQv+KVUL/ilVC/4lV"
+    "Qf+JVUH/iFRB/4lVQP+KVEH/jFVB/45XQv+RWUT/lFlE/5VbRf+WW0X/lltF/4pSPP/S1dbey8vM/7a2tf+kpKX/fX19/+Dh4vX6+vr/7+/x/+jo6v+vs7P4"
+    "ilI8/8GQff/Bj3z/wY98/8GPe//Aj3v/wI57/8COe//BjXr/wI16/8CNev+/jXr/v415/7+Nef+/jHn/v4x4/76LeP++i3f/vYp3/76Kd/+9inb/vIp3/7yJ"
+    "dv+4hnP/soFw/6d6aP9lX1z/3djX//f49//39/b/9/j3//b39//29/f/9/f2//b39v/29/b/9vf1//b39f/19/X/9fb1//X19f/19vX/9PX1//T19P/09fT/"
+    "9PX0//T09P/09PT/9PTz//P09P/z8/P/8/Tz//Pz8v/y8/L/8vPz//Ly8v/y8vL/8vPy//Ly8f/x8fH/8fLx//Hx8f/x8fH/7u/u/+3u7f/q6ur/6Ojo/+bm"
+    "5f/k5OT/4+Tj/+Lj4v/i4+L/4uPi/+Lj4v/i4+L/4uLi/+Hi4v/i4uH/4eHh/+Hh4P/h4eD/4eHg/+Hh3//f4N//3+Df/+Df3//g39//39/f/9/f3v/e3t//"
+    "397e/97e3f/d3t3/3d7d/93d3P/d3dz/3d3c/9zd3P/d3Nv/3Nzb/9vb2//b29v/29vb/9va2//b2tv/rqGZ/1MxI/9vRzj/fE8//4ZXRf+PXEn/lF5K/5Zf"
+    "S/+WX0z/ll9L/5VfSv+VXkr/lV5J/5NcSP+TXEj/klxH/5JbR/+SW0b/kltG/5JbRv+SW0b/kltG/5JbRf+SW0X/klpF/5FZRP+SWkb/kllE/5RaRv+VW0X/"
+    "lltG/5dbRf+XW0b/l1xF/4pSPP/T1tbezMzN/7W2tf+kpaX/fXx+/+Dh4vX6+vr/8O/x/+np6v+vtLP4ilI8/8GQff/Bj3z/wY98/8GPfP/Bj3z/wY57/8GP"
+    "e//Ajnr/wI16/8CNev+/jXr/v416/7+Mef+/jHn/vox5/7+LeP++jHj/vot4/72Ld/+9i3f/vYp2/72Jdv+4h3T/soFv/6d6aP9lX1z/3djW//f49//3+Pf/"
+    "9/n3//f49//3+Pf/9/f3//f39//29/f/9vf2//b39v/29/b/9vf1//b29f/29vX/9fb2//X29f/19vX/9PX0//T19f/19fX/9PX0//T19P/z9PT/8/Tz//P0"
+    "8//z9PP/8/Tz//P08//z8/L/8vPz//Lz8v/y8/L/8fLx//Hy8f/y8vH/8fLx//Dw8P/u7+//7e7t/+zt7P/s7ev/6+vq/+vr6v/r6+r/6+vq/+vr6v/r6+r/"
+    "6uvr/+rr6v/q6+r/6urp/+rq6f/p6un/6unp/+np6f/o6en/6eno/+no5//o6Of/5+jn/+fo5//n6Of/5+fn/+fm5v/n5ub/5ufm/+bm5v/m5uX/5eXl/+Xm"
+    "5f/l5eT/5OXk/+Tk5P/k5OT/5OTj/+Tk4//k4+P/tKef/1YzJP9zSjr/gFJC/4xaSP+UXkv/mmJM/5xjTv+cY07/nGJO/5xjTf+bYkz/m2FM/5pgS/+ZYEv/"
+    "mV9L/5lfSv+YX0n/mF9J/5hfSf+YX0n/mF9J/5heSf+XXUn/mF1I/5ddR/+YXUj/l11H/5dcR/+YXEb/l1xG/5hdRv+YXEb/l1tG/4pSPP/S1dbey8vN/7W3"
+    "tv+kpqb/fX19/+Dh4vX6+vr/8O/x/+nq6v+utLP4ilI8/8KQff/BkH3/wY98/8GQfP/Bj3v/wY98/8GPe//Ajnv/wY56/8COev/AjXr/wI56/7+Nef+/jHn/"
+    "v4x5/7+MeP++i3j/vot3/72LeP+9i3f/vYt2/72Kdv+5hnX/soFv/6d6aP9lX1z/3djX//j4+P/4+Pj/9/n4/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq//X29f/19vT/9fX1//T29P/09fT/9PX0/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO//Lz8v/y8vL/8fLx//Ly8f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/w8fD/8PHw//Dw8P/w8PD/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/7e7t/+3t7P/t7ez/7e3s/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+rr6v/q6un/6urq/+nq6f/p6en/"
+    "uKqi/1g0Jf92Szz/g1VE/45dSf+YYU3/nWRP/59mUP+fZlD/n2VQ/59lUP+eZE//nmRP/5xiTf+cYkz/nGFM/5xhS/+bYUv/m2FL/5thS/+bYUv/m2FL/5tg"
+    "Sv+aYEr/ml9K/5pfSf+aXkn/mV5J/5leSP+ZXkf/mV1I/5hdRv+XXEb/l1xF/4pSPP/S1dXey8zL/7e3t/+mpqb/fX1+/+Dh4vX6+vr/8O/x/+nq6v+utLP4"
+    "ilI8/8KQff/CkH3/wZB9/8KPff/CkHz/wY98/8CPfP/Aj3v/wY57/8COe//Ajnr/wI56/8CNev+/jXn/v4x5/76Nef++jHn/vot4/76LeP++i3f/vYp3/72K"
+    "d/+5h3X/soJw/6d6af9lX1z/3djW//j5+f/4+vj/+Pn4//j5+P/3+Pj/9/n3//f4+P/3+Pf/9/j3//f49//3+Pf/9/f2//f39//29/b/9/f2//b39v/29/b/"
+    "9vf1//b39v/19vX/9fb1//X29f/19vX/9PX1/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//P08v/z8/L/8vPy//Lz8v+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/x8vH/8fLx//Hy8P/x8fD/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/7+7u/+7u7f/u7u3/"
+    "7e3t/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+vr6//q6+r/6uvq/+vr6f/q6ur/uKqi/1g0Jf91Szz/g1VE/45cSf+YYU3/nWRQ/6Bn"
+    "Uf+gZlD/n2VP/59lUP+fZFD/nmRO/51jTf+dYk3/nWJM/5xhTP+cYUv/nGFL/5xhS/+cYUv/nGFL/5xgS/+bYEr/ml9K/5pgSv+aX0n/mV5J/5leSP+ZXkj/"
+    "mV1H/5hdR/+YXUb/mF1G/4pSPP/S1dXezMzL/7e3tv+mpqb/fX1+/+Dh4vX5+vr/8PDx/+rr6/+ws7X4ilI8/8KRff/CkH3/wpB9/8KQfP/Bj3z/wY98/8CP"
+    "fP/Bj3v/wY57/8COev/Ajnv/wI16/8CNev/AjXn/v416/76Mef+/jHj/vot5/76MeP++i3j/vot3/72Ld/+5h3X/s4Jw/6h6af9lX1z/3NfV//j6+P/5+vj/"
+    "+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq//f39v/19/b/9vf2//b39v/19/X/9fb1/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//P08//z9PP/8/Tz//L08/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/y8vH/"
+    "8vLx//Hy8f/x8fH/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/7+/u/+7v7v/v7+7/7u/u/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO/+zs6//r6+v/6+vr/+vr6v/q6ur/uKqi/1g0Jf92TD3/hFZD/49dSv+XYU3/nmVP/6FmUf+gZlH/oGZQ/59lUP+fZU//n2RP/51jTf+dYkz/"
+    "nWJN/5xiTP+cYUz/nGFM/5xhTP+cYUz/nGFM/5xhS/+bYEr/m2BK/5pfSv+aX0r/ml5J/5pfSP+ZXkj/mV5I/5heR/+YXUf/mFxH/4pSPP/S1dbey8zM/7a2"
+    "tv+mpab/fn19/+Dh4vX5+vr/8PHx/+vs6/+ytLX4ilI8/8ORff/CkX7/wpB9/8KQff/CkHz/wY98/8GPfP/Aj3v/wI97/8GPe//Ajnv/wI57/8CNev/AjXr/"
+    "v415/7+Mev+/jHn/v4x4/76MeP++jHj/vot4/76Ld/+5h3X/s4Jw/6h7af9lX1z/3djW//n6+f/5+fn/+fr5//j6+f/4+fn/+Pn5//j5+P/4+fj/+Pj4//j5"
+    "+P/4+fj/+Pn4//f5+P/3+Pf/9/j3//f49//3+Pf/9/f2//f49v/2+Pb/9vj2//b39v/29/b/9vf2/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO//T19P/09fP/9PT0//P08/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/y8/L/8/Py//Ly8v/y8/L/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/8PDv/+/w7//v7+//7+/u/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+3s7P/t7ev/7Ozr/+vs7P/r6+v/"
+    "uKqi/1g0Jf92TDz/hFZF/5BdSv+YYk3/nmVQ/6BnUf+hZlH/n2ZR/6BmUP+fZk//n2RP/51jTv+dY07/nWJN/5xiTf+cYUz/nGFM/5xhTP+cYUz/nGFM/5xh"
+    "TP+bYUv/m2BL/5tgSv+bYEr/mmBJ/5pfSf+ZXkn/mV5J/5ldR/+ZXUj/mF1G/4pSPP/R1dbey8vM/7a3t/+mpqb/fn5+/+Dh4vX6+vr/8fHx/+zs6/+ztbX4"
+    "ilI8/8ORfv/CkX7/wpB9/8KQff/Cj3z/wo98/8GQfP/Bj3z/wY97/8GOe//Ajnv/wI97/8COev+/jXr/v416/7+Nev+/jHn/v4x5/76Mef+/jHj/vot4/76L"
+    "d/+5iHX/s4Jw/6h7av9lX1z/3tnY//n6+f/5+vn/+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq//f49//3+Pb/9vf3//f49v/29/f/9vf2/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//T19P/19fT/9PX0//T19P+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/z8/L/8/Tz//Lz8v/y8/L/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/8fHw//Dw8P/w8O//"
+    "8PDw/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+3t7P/t7e3/7O3s/+3t7P/s7Oz/uKqi/1g0Jf92TT3/hFZE/49dS/+YYk3/nmZQ/6Fn"
+    "Uv+hZ1H/oGZR/6BmUf+gZlH/n2VQ/55kTv+eY07/nWNN/51jTf+cYkz/nGJM/5xiTP+cYkz/nGJM/5xhTP+cYUv/nGFK/5tgSv+bYEr/mmBK/5pfSv+aX0n/"
+    "mV5I/5leSP+YXUj/mV5H/4pSPP/S1dbezMvN/7e3t/+mpqb/fn59/+Dh4vX6+vr/8vHy/+3r7P+zt7j4ilI8/8ORfv/CkX7/wpB9/8KQff/CkH3/wZB8/8GQ"
+    "fP/Bj3z/wY98/8GPe//Bjnv/wY97/8COev+/jXr/wI16/8CNef+/jXn/v4x5/7+MeP+/jHj/vox4/72LeP+5iHX/s4Jw/6h7af9lX1z/3djX//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr4//n6+P/4+vj/+fn5//j5+P/4+fj/+Pn4//j59//4+fj/9/j4//j59//3+Pf/9/j3//f49//3+Pf/9/f3/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//X19f/19vT/9fX1//T19P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/z9PT/"
+    "8/T0//P08//z9PP/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/8PLx//Hy8P/x8PD/8PHw/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO/+7u7v/t7u7/7e3t/+3t7f/t7ez/uKqi/1g0Jf92TT3/hFZE/5BdSv+ZYk7/nmZR/6FnUv+gZ1L/oWdR/6BmUf+fZVD/n2ZQ/55kTv+dZE3/"
+    "nWNN/51iTf+dYk3/nWJN/51iTf+dYk3/nWJN/5xhTP+cYUz/m2FL/5thS/+bYEv/m19J/5tgSv+aX0n/mV9J/5leSP+ZXUj/mF1I/4pSPP/S1dXey8vM/7e3"
+    "t/+op6b/f35+/+Dh4vX6+vr/8vHy/+zr7P+yt7j4ilI8/8ORfv/DkX3/wpF9/8KRfv/CkH3/wpB9/8KQff/BkHz/wZB8/8GPe//Bj3z/wI57/8CPe//Ajnv/"
+    "wI17/8CNev+/jXr/v416/7+Nef+/jHn/v4x5/76MeP+5iHb/s4Nw/6h8av9lX1z/3djW//n6+f/5+vn/+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq//j5+P/4+fj/+Pn3//f4+P/3+Pf/+Pj3/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO//b29v/19vb/9fb1//X29f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/09fT/8/T0//T09P/z9PP/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/8vLy//Hy8f/x8fH/8fHw/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+7u7v/u7u7/7u/t/+7u7v/t7u3/"
+    "uKqi/1g0Jf92TT7/hVZF/5BdS/+ZY07/nmZR/6JnUv+hZ1L/oGdS/6BmUf+gZlH/oGVQ/55kTv+eZE7/nWNO/51jTf+dYkz/nWJM/51iTP+dYkz/nWJM/5xi"
+    "Tf+cYUz/nGJM/5xhS/+bYEr/m2BK/5pfSv+bX0r/ml9J/5peSf+aXkj/mV5H/4pSPP/S1dXey8vL/7e2t/+np6b/fn5+/+Dh4vX6+vr/8fHy/+zs7P+yt7f4"
+    "ilI8/8ORfv/DkX7/wpB+/8KRfv/DkX3/wpB9/8KQff/Cj3z/wY98/8GPfP/Aj3z/wY98/8GOe//Ajnv/wI57/8COev+/jXr/v416/7+Nef+/jHn/vox4/76L"
+    "eP+6iHb/tINx/6l8av9lX1z/3NfV//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr4//n6+f/5+vn/"
+    "+Pr5//j6+P/4+fj/+Pn4//j5+P/4+ff/+Pn4/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//b29v/29/X/9vf2//X39v+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/19fT/9PX0//T19P/09fT/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/8vLy//Lz8v/y8vH/"
+    "8fLy/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/+/w7//v7+//7+/u/+/v7v/u7+7/uKqi/1g0Jf92Tj7/hVZF/5FeS/+ZY0//n2dS/6Fo"
+    "U/+haFL/oWdS/6BnUv+gZlH/n2ZR/55kTv+eZE7/nWRO/51jTv+dYk3/nWJN/51iTf+dYk3/nWJN/51iTf+cYkz/nGJM/5xhTP+bYUv/m2BK/5tgSv+aYEr/"
+    "m19J/5peSf+ZX0n/mV5I/4pSPP/S1dbezMrM/7e0tv+lpab/fX1+/+Dh4vX6+vr/8fDx/+3t7f+zuLn4ilI8/8OSf//DkX//w5F+/8OQfv/CkX7/wpB9/8KQ"
+    "ff/CkH3/wY99/8KPfP/Bj3z/wY97/8COe//Bj3v/wI56/8COev/Ajnv/wI16/7+Nev+/jXn/v4x5/76MeP+6iXb/tINx/6l8a/9lX1z/3NfV//n6+f/5+vn/"
+    "+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq//n5+P/5+fj/+Pn5//j5+P/4+fj/+Pn4/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//f39v/39/f/9/f2//b39v+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/19vX/"
+    "9fb1//X29P/09vT/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/8vPz//Pz8v/y8/L/8vPy/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KT"
+    "jv+ik47/opOO//Dw8P/v8O//7/Dv//Dv7//v7+7/uKqi/1g0Jf92Tj7/hVZF/5FeTP+aY0//oGdR/6JpU/+haFP/oWhT/6FnUv+gZ1H/oGdR/55kT/+eZE//"
+    "nmRO/55kTv+dY07/nWNO/51jTv+dY07/nWNO/51jTv+dYkz/nGFN/5xiTP+cYUv/nGBL/5xgSv+bYEr/m2BJ/5pfSv+aXkn/ml5J/4pSPP/S1dXey8rM/7e1"
+    "tf+mpqX/fX19/+Dh4vX6+vr/8fDx/+/u7f+1urj4ilI8/8OSf//DkX7/w5F+/8KRfv/CkX7/w5F+/8KQff/CkH3/wZB8/8GPfP/Bj3z/wY97/8CPe//Bj3z/"
+    "wY57/8COe//AjXr/v456/7+Nev+/jHr/v415/76Mef+6iHb/tIRx/6l8a/9lX1z/3NfV//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+fj/+fn5//j5+P/4+vn/+Pr4//j5+P/4+fj/+Pn4//f5+P/3+fj/9/j4//f49//3+Pj/"
+    "9/j3//f49//3+Pb/9vj3//f39//29/b/9/f2//b29v/29/X/9vf2//b39v/29/b/9vf2//b39v/29/b/9ff2//X29f/29vX/9fX0//X19f/19fT/9PX0//T1"
+    "9P/09fT/9PXz//P09P/09PP/8/Tz//P08//z9PP/8vTz//Lz8v/y8/L/8vPy//Ly8v/y8vL/8vLx//Hy8f/x8vH/8fLx//Dx8P/w8PH/8PDv//Dw7//w8O//"
+    "uKqi/1g0Jf93Tj7/hlZF/5FeTP+aY1D/n2hS/6JpU/+haFP/omhT/6FoUv+gZ1L/oGdS/59mUP+eZE//nmRP/51jT/+dY07/nWNO/51jTv+dY07/nWNO/55j"
+    "Tf+dY03/nWJN/5xiTP+cYUz/nGFM/5thS/+bYEr/m19K/5tgSv+aX0n/ml5J/4pSPP/S1dXeysvL/7W1tv+lpKT/fX19/+Dh4vX6+vr/8fHx/+/v7f+3vLf4"
+    "ilI8/8OSf//DkX//w5J+/8OSfv/CkX7/wpF9/8KQff/CkH3/wZB9/8GQff/BkH3/wZB8/8GPfP/Bjnz/wI97/8GOe//Bjnr/wI16/7+Oev+/jXn/v416/7+M"
+    "ef+6iXf/tIRx/6p8a/9lX1z/3NfV//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vj/+Pr4//j6+P/4+fn/+fr5//j5+P/4+fj/+Pj4//j5+P/4+ff/+Pj4//j49//3+Pj/9/j4//f49//3+Pf/9/f3//b4"
+    "9//29/f/9/f3//f39//39/f/9/f3//f39//39/f/9vf1//b29v/19/b/9fb1//b29f/19vX/9fX1//X29P/19vX/9fX0//T19P/09fT/9PT0//T19P/z9PP/"
+    "9PTz//P08//z8/P/8/Py//Lz8v/z8/L/8vPy//Ly8f/y8vL/8fLy//Hx8f/x8fH/8PHw//Hx8f/x8PD/uKqi/1g0Jf93Tj7/hVZG/5JeTP+aZFD/oGhS/6Jq"
+    "U/+iaVP/omhT/6FoU/+hZ1L/oGdR/59lUP+fZU//n2VP/55kTv+eZE7/nmRO/55kTv+eZE7/nmRO/51jTv+dY03/nWJN/51iTP+cYkz/m2FM/5xhS/+cYEr/"
+    "m2BK/5tgSf+aX0n/mV9J/4pSPP/S1dXey8zL/7a2tv+lpaT/fX19/+Dh4vX6+vr/8fHx/+7v7v+2vLn4ilI8/8SSfv/Dkn7/w5J//8ORf//DkX7/w5F+/8KR"
+    "ff/CkH7/wpF9/8KQff/CkHz/wpB8/8GPfP/Bj3v/wY98/8COe//Ajnr/wI56/7+Nev+/jnr/v415/8CNev+7inf/tYVx/6l9a/9lX1z/2dTR//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n5"
+    "+f/5+vn/+fn5//j5+P/4+fj/+Pr5//j5+P/4+fj/+Pn4//j4+P/4+fj/9/n3//j49//3+Pf/+Pj4//f49//39/b/9/j3//f49//3+Pf/9/j3//f49//3+Pf/"
+    "9vf2//b49//29/b/9vb2//b29f/29vX/9vb1//b29f/19vX/9fX1//X19f/19fX/9PX1//T19P/09PT/9PT0//P08//z9PP/8/Tz//Pz8//z9PL/8/Py//Lz"
+    "8//z8/L/8vPx//Hy8v/y8vL/8fLx//Hx8f/x8fH/uKqi/1g0Jf93Tj//hldG/5FeTf+aZFD/oGhS/6JqVP+jaVT/omlU/6FoU/+haFL/oGdS/6BmUP+fZVD/"
+    "nmVP/55lT/+eZE7/nmRO/55kTv+eZE7/nmRO/55kT/+eY03/nmNO/51jTf+cYkz/nGFM/5xhS/+bYUv/m2FL/5pfSv+bYEn/ml9K/4pSPP/S1dbey8vM/7a2"
+    "tf+kpKX/fX19/+Dh4vX6+vr/8fHx/+7v7v+2vLv4ilI8/8OSf//Dk3//w5J+/8OSfv/DkX7/wpF+/8KRff/DkX7/wpB9/8KQff/CkH3/wY98/8GQfP/Bj3z/"
+    "wY98/8GOfP/Aj3v/wI57/8CNev+/jXr/v415/7+Nev+7iXf/tIVy/6l9bP9lX1z/2NTS//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+P/5+vn/"
+    "+Pn4//j5+P/4+fj/+Pn4//j4+P/3+Pj/9/j3//j5+P/4+Pf/9/j3//f49//3+Pf/9/j3//f49//3+Pf/9/j3//b49//3+Pf/9vf2//b39v/29/b/9vf2//b3"
+    "9v/19/b/9vf1//b29f/19vX/9fb0//X29P/19vT/9fX0//T09P/09fT/9PX0//T08//09PP/8/T0//P08//y9PL/8vPy//Lz8//y8/L/8vPy//Lz8f/y8vH/"
+    "uKqi/1g0Jf93Tj//hlhG/5JfTf+bZVH/oGlT/6NqVf+jaVT/omlU/6FoVP+haFL/oWdS/6BmUP+gZlD/n2VP/59lT/+eZE//nmRP/55kT/+eZE//nmRP/55k"
+    "T/+eY07/nmNO/51jTf+dYk3/nWFM/5xiTP+bYUv/nGFL/5tgS/+bYEr/mmBK/4pSPP/T1tbezMzN/7W2tf+kpaX/fXx+/+Dh4vX6+vr/8fHx/+7v7v+4u7v4"
+    "ilI8/8STf//Ekn//w5J+/8OSf//Dkn7/wpJ+/8KRfv/DkX3/wpF9/8KQff/BkH3/wZB9/8GQfP/CkHz/wY98/8GOe//Bjnv/wI57/8COe//Ajnv/v416/7+N"
+    "ef+8iXj/tIV0/6t9bP9lX1z/0MnG/8rKyP/P0M3/zs/O/8/Qz//P0M//0NHP/9DRz//Q0c//0NHP/9DS0P/Q0tD/0dLR/9HS0f/R0tL/0dPS/9PT0v/T09P/"
+    "09PT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT"
+    "0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/0dLR/9HS0v/R09L/09PS/9PT0//T09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/"
+    "1NPT/9TT0//U09L/1NTS/9TT0v/S0dD/09PR/9LT0f/S0tH/0NDQ/9HS0P/R0dD/0NHQ/87Ozv/QzMr/uKqi/1g0Jf95UED/h1lH/5NhTf+cZlL/oGhU/6Nq"
+    "Vf+jalT/o2pU/6JoVP+haVP/omhT/6BmUf+fZVH/n2ZQ/59mUP+eZU//nmVP/55lT/+eZU//nmVP/59kTv+eZE7/nmNN/51jTf+dY03/nWJN/5xiTP+cYUz/"
+    "nGFL/5xgS/+bYEr/mmBK/4pSPP/S1dbey8vN/7W3tv+kpqb/fX19/+Dh4vX6+vr/8fHx/+7u7v+5u7v4ilI8/8SSf//Dkn//xJJ//8OSf//Dkn7/w5J+/8OR"
+    "fv/DkX7/wpF9/8KRfv/CkH3/wpB9/8KPff/Bj3z/wpB8/8GPfP/Bj3v/wY97/8COe//Ajnv/wI56/8CNev+9i3j/toZz/6x+bf9lX1z/zcG9/87Evv/PxsD/"
+    "zsW+/83Dvv/Nwr7/y8K9/8zCvP/Mwrz/zMC6/8u9uf/Kvrf/yL23/8i8tv/Iu7X/x7q0/8W7tP/GubP/xbmy/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4"
+    "sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8S4sv/EuLL/xbix/8W4sf/FuLH/xbix/8W4sf/FubL/"
+    "xbix/8S4sv/EuLL/xbix/8W4sf/Ft7H/xbex/8W3sf/Ft7H/xbex/8W3sf/Ft7H/xLix/8W5sv/GubH/xrmy/8a5s//Iu7P/x7uz/8e7tP/Mwrz/zMG7/8zB"
+    "vP/Lv7r/0MXA/87Dvf/Lwbz/zcK8/83Bvf/Mwbz/zcG9/1g0Jf99UkL/iltJ/5RhTv+cZ1L/oGlV/6NqVf+jalX/ompU/6NpVP+iaVT/oWhT/6BnUf+fZlH/"
+    "n2ZQ/59mUP+fZVD/n2VQ/59lUP+fZVD/n2VQ/55kT/+eZE//nmNO/51kTf+dY03/nWNN/5xjTf+cYUz/nGJL/5thS/+bYEr/m2BL/4pSPP/S1dXey8zL/7e3"
+    "t/+mpqb/fX1+/+Dh4vX6+vr/8fHx/+7u7v+5vLv4ilI8/8STgP/EkoD/w5KA/8SSf//Ekn//w5F+/8OSfv/DkX7/wpF9/8KRfv/CkX3/wpB9/8KQff/Bj3z/"
+    "wo98/8GPfP/Bj3z/wI98/8GOe//Ajnv/wI16/8COev+9i3j/t4d1/6+Ab/9lX1z/////////////////////////////////////////////////////////"
+    "//////7///78///++////Pn///r2//759f/++fT//vj0//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P/"
+    "/Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38f/89vL/+/Xy//749P/++PT//vj0//749P/++PT//Pfz//z38f/89vL/+/Xy//v18v/79vL/+/by//v2"
+    "8v/79vL/+/by//v28v/79vL//Pfy//z38v/9+PL//fr1//759f/89/P/wrq6/+fg3//n4N//+/Tv/8K6uv/n4N//5+Df//759P/Curr/5+Df/+fg3//+9/L/"
+    "//v5/1g0Jf+DVkb/jl1L/5ZjT/+eZ1L/oWpV/6NrVv+jalX/ompV/6NqVP+iaVT/omlT/6FnUf+gZlH/oGZR/6BmUP+fZU//n2VP/59lT/+fZU//n2VP/55l"
+    "T/+fZU//nmRO/55kTv+eY07/nWNN/51jTf+cYkz/nGFM/5xhS/+cYUv/m2BK/4pSPP/S1dXezMzL/7e3tv+mpqb/fX1+/+Dh4vX6+vr/8fHx/+7v7v+5vb34"
+    "ilI8/8STf//Ekn//xJKA/8STgP/Dkn//xJJ//8OSfv/DkX7/wpF+/8ORff/CkH7/wpB9/8KQff/CkH3/wpB8/8GPfP/Bj3v/wY57/8GPe//Aj3v/wI57/8CO"
+    "e/++i3n/uYl2/7OEcf9lX1z///////////////////////////////////////////////////////////////7///78///++////Pn///r2//759f/++fT/"
+    "/vj0//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z3"
+    "8f/89vL/+/Xy//749P/++PT//vj0//749P/++PT//Pfz//z38f/89vL/+/Xy//v18v/79vL/+/by//v28v/79vL/+/by//v28v/79vL//Pfy//z38v/9+PL/"
+    "/fr1///69//79/P/nZSX/9nS0//Z0tP/+fHt/52Ul//Z0tP/2dLT///69v+dlJf/2dLT/9nS0///9/L///v5/1g0Jf+LW0r/k2FO/5pmUf+faVT/ompV/6Nr"
+    "Vv+ka1X/o2tV/6NqVf+iaVT/omlU/6FnUv+gZ1H/oWZR/6BmUP+fZVD/n2VQ/59lUP+fZVD/n2VQ/59lUP+eZU//nmRP/55kTv+eZE7/nWNN/51jTf+dY0z/"
+    "nGJN/5xhTP+bYUz/nGFL/4pSPP/S1dbey8zM/7a2tv+mpab/fn19/+Dh4v/6+vr/8fHx/+/v7v+5vb3/ilI8/8STgP/EkoD/xJOA/8SSf//Ekn//w5J//8OS"
+    "f//DkX7/wpJ+/8KSfv/CkX3/w5F9/8KRff/CkH3/wZB9/8GPff/Bj3z/wY98/8GOfP/Bj3v/wI97/8COe/++jXn/u4t3/7iHdf+leWf/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/45TPP+UYU7/mWVR/55oU/+haVX/o2tW/6RsVv+ka1X/o2tV/6NqVf+ialT/omlU/6FoUv+hZ1L/"
+    "oWdR/6BmUf+gZlD/oGZQ/6BmUP+gZlD/oGZQ/6BlUP+fZVD/n2VP/55lT/+eY07/nWNN/55jTf+dY03/nGJM/5xiTP+cYkz/nGFL/4pSPP/R1dbey8vM/7a3"
+    "t/+mpqb/fn5+/+Dh4vX6+vr/8fHx/+/v7v+5vb34ilI8/8WTgP/Ek4D/xJOA/8STgP/Ek3//w5J//8OSfv/Dkn//w5F//8ORf//DkX7/w5F9/8KQfv/CkH3/"
+    "wpB9/8KPff/BkH3/wo98/8GPe//Bjnz/wY57/8GPe/+/jXr/vYt5/7uKd/+3h3X/soRx/6+Ab/+sfmz/qn1s/6l9a/+pfGv/qHxq/6l7av+oe2n/qHtp/6h7"
+    "af+nemn/p3po/6d6aP+meWj/pnln/6Z4Z/+meGf/pnhm/6Z3Zv+md2X/pndl/6V3Zf+ld2X/pXZl/6R2Zf+kdmT/pHZk/6N2ZP+jdWP/o3Rj/6J0Yv+ic2L/"
+    "onNi/6JzYf+hcmD/oXJg/6FyYP+gcV//oHFf/59wX/+gcF7/n29e/59vXf+fb13/nm5d/55uXP+eblz/nm5c/51tXP+dbVz/nW1b/51tW/+cbFr/nGxZ/5xr"
+    "Wf+ba1j/m2tZ/5prWP+baVf/mmlX/5ppVv+aaFb/mWhV/5loVf+ZZ1X/mGdV/5hnVf+XZlT/lmZU/5ZlVP+WZVP/lmVS/5ZlUv+WZFH/lmRR/5ZjUP+VY1D/"
+    "l2RR/5hlUf+bZlP/n2hV/6FqVv+jbFb/pGxX/6RsVv+kbFb/pGtW/6RqVf+jalX/o2lU/6FoUv+haFL/oGdS/6BmUf+gZlD/oGZQ/6BmUP+gZlD/oGZQ/6Bm"
+    "Uf+fZlD/n2VP/59lT/+eZE//nmRO/55kTv+dYk7/nWJN/5xiTP+dYkz/nGFM/4pSPP/S1dbezMvN/7e3t/+mpqb/fn59/+Dh4vX6+vr/8fHx/+/w7/+5v734"
+    "ilI8/8WTgP/Fk4D/xJOA/8STf//EkoD/xJN//8OSf//Dkn//xJF+/8OSfv/DkX7/w5F+/8ORff/CkH3/wpB9/8GQff/CkH3/wY98/8KPfP/Aj3v/wY97/8GO"
+    "e//Ajnv/vo16/76Lef+7inf/uYl2/7eHdP+2hnP/tIVz/7SEcf+1g3H/tINw/7ODcP+zgnD/s4Jw/7OCcP+zgnD/s4Fw/7KBb/+ygW//soFv/7KBb/+xgW7/"
+    "sYBt/7F/bf+wf23/sH9s/7B+bP+vf2v/r35r/65+a/+ufmv/rn1q/659af+tfGn/rXxp/6x8aP+te2j/rHpn/6x6aP+remf/rHpn/6t5Zv+reGb/qnhl/6p4"
+    "ZP+qeGX/qXdk/6l3Y/+pdmP/qXZj/6h1Yv+odWL/qHVh/6d0Yf+nc2D/pnRg/6ZzYP+lcl//pXJf/6VyX/+lcV//pHFe/6RxXv+kcF3/pHBd/6RwXP+jcFz/"
+    "o3Bc/6NvW/+ib1v/o29a/6JuWv+ibVr/oW1Z/6FtWP+gbFj/oGtX/6BsWP+galf/n2tX/59qVv+eaVX/n2pX/6BqVf+hbFb/ompX/6RsV/+lbFf/pWxX/6Vs"
+    "V/+ka1f/pGtW/6RqVf+ka1X/o2pV/6FoU/+haFP/oWdS/6FnUv+gZ1H/oGdR/6BnUf+gZ1H/oGdR/6BmUf+gZVD/oGVQ/59kT/+eZU//nmRO/55kTv+dY03/"
+    "nWNN/5xiTf+cYk3/nGJM/4pSPP/R1dXeysvL/7a3tf+lpqX/fX59/+Dh4fX6+vr/8fHy/+/w8P+6v774ilI8/8SUgf/Ek4D/xJOA/8STf//EkoD/w5J//8OS"
+    "f//Dkn//xJJ//8OSf//Dkn//w5F+/8KRfv/DkX3/wpF+/8KQff/BkHz/wpB9/8KPfP/BkHz/wY98/8GPe//Ajnv/wI57/7+Mev++jXn/vYt5/7yLd/+8i3f/"
+    "uol3/7qJdv+7iXb/uoh2/7mIdf+6iHX/uod0/7mHdP+4h3X/uYd0/7iGdP+4hnP/uIVz/7iFc/+3hHL/t4Ry/7aEcv+2hHH/toNx/7WDcP+1g3D/tYJw/7WC"
+    "b/+0gW//tIJv/7SBbv+zgG7/s4Bt/7N/bP+zf23/s39s/7J+bP+xf2v/sn5r/7F9av+xfWr/sH1q/7F9af+wfGj/sHxo/698aP+vfGf/r3tn/697Z/+vemb/"
+    "r3pl/656Zv+uemX/rXlk/614ZP+teGT/rXhj/6x4Yv+rd2L/rHdi/6x2Yf+rdmH/q3Vg/6p1YP+qdV//qnRf/6l0X/+oc17/qXNe/6hyXv+ocl3/p3Fd/6hx"
+    "XP+ncVz/p3Bb/6ZwWv+mb1r/pW9a/6VuWf+lblj/pW1a/6RtWf+lblj/pW1Y/6VuWf+mblj/pm1Y/6VtV/+kbFf/pGxW/6RrVv+ka1X/o2pV/6JoU/+haFP/"
+    "oWhS/6BnUv+gZ1H/oGdR/6BnUf+gZ1H/oGdR/6FnUf+gZlH/oGZQ/59mUP+fZE//nmVP/55kTv+dY07/nmNO/51iTf+cY03/nGFM/4pSPP/S1dXey8vL/7a2"
+    "tv+mpKb/fn19/+Dh4fX6+vr/8fHx/+/w7/+7wL74ilI8/8SUgP/Fk4H/xJOA/8STgP/EkoD/xJKA/8OSgP/Dk3//xJJ//8SRf//DkX7/w5F+/8KRff/CkX3/"
+    "wpB+/8KQff/CkH3/wY98/8GQfP/Cj3z/wY98/8GPfP/Bj3z/wI57/8GOe//Ajnr/wI16/8CNev+/jXn/v4x5/76Mef++jHn/v4t4/76LeP++i3j/vYt3/72K"
+    "d/+9inb/vYl2/7yKdv+8inb/vIl1/7uIdP+7iHX/u4h1/7qIdP+7h3T/uoZz/7qGcv+5hnL/uYZy/7mFcv+5hXH/uIRx/7iEcf+4hHD/t4Nw/7iDb/+2gm7/"
+    "t4Ju/7eCbv+2gm3/tYFt/7WBbf+1gGz/tYBs/7R/a/+1gGv/tH9r/7R+a/+0fmr/s35p/7J9af+zfWj/snxo/7F8aP+xfGj/sXtm/7B6Zv+wemX/sHpm/695"
+    "Zf+veWT/rnhk/654ZP+ud2T/rndj/613Yv+tdmL/rHZh/611Yf+sdWH/rHVg/6t0YP+rdGD/qnRf/6pzXv+qc17/qnJe/6lyXf+pcV3/qXFc/6hxXP+ocVv/"
+    "qHBb/6hvWv+nb1r/p25Z/6ZuWf+mbln/pm1Y/6VsV/+lbVf/pGxW/6RsVv+ka1b/o2tW/6JpVP+iaFP/oWhT/6FoUv+hZ1L/oWdS/6FnUv+hZ1L/oWdS/6Bn"
+    "Uv+gZlD/oGVQ/59mUP+fZVD/n2VQ/55lT/+eZE7/nmNO/51jTf+dY03/nWJN/4pSPP/S1dXey8zL/7e1t/+mpKb/fn19/+Dh4fX6+vr/8fHz/+/w8f+7wMD4"
+    "ilI8/8SUgP/ElIH/xZOB/8SUgP/Fk4D/xJOA/8SSgP/Ek3//w5KA/8OSf//Dkn7/w5F+/8KSfv/DkX3/wpF+/8KQfv/CkH7/wpF9/8GPfP/CkHz/wY98/8GP"
+    "fP/Bjnz/wY97/8COe//Ajnv/wI56/8COev+/jXn/v416/7+Mev++jHn/v4x5/76LeP++i3f/vot3/76Ld/+9i3f/vYp3/72Jd/+8iXb/vIl1/7yIdf+8iHX/"
+    "u4h0/7uIdP+7iHP/u4d0/7qGc/+6hnL/uoVy/7mFcv+5hXL/uYVx/7iFcP+4hHD/uIRw/7eDb/+3g2//t4Nv/7aDbv+2gm7/tYJt/7aBbP+1gG3/tYBt/7WA"
+    "bP+0f2v/tIBr/7R+av+zfmr/s35q/7N9af+zfWn/snxp/7F9aP+xfGj/sXtn/7F7Zv+we2b/sHpm/696Zv+weWX/r3ll/654ZP+veGT/rnhj/613Y/+ud2P/"
+    "rXZi/612Yv+tdWH/rHZg/6x1YP+rdV//q3Rf/6tzX/+qc17/qXJe/6pyXf+pcl3/qXFc/6lxXP+ocFz/qHBb/6dwWv+nb1v/p25Z/6ZvWf+mblj/pm5Y/6Vt"
+    "WP+lbFj/pWxX/6VsV/+ka1b/pGtW/6NpVP+iaVT/omhT/6FoUv+haFP/oWhT/6FoU/+haFP/oWhT/6BnUv+gZlH/n2ZR/6BmUP+fZVD/n2VQ/59lT/+eZE//"
+    "nmRO/51jTv+dY03/nWNN/4pSPP/S1dXey8vM/7e2tv+lpaX/fn19/+Dh4fX6+vr/8vHz//Hw8v+8wMD4ilI8/8WUgf/FlIH/xZSA/8STgP/FlID/xJOA/8ST"
+    "gP/Ekn//w5OA/8OSf//Dkn//w5F//8ORfv/Dkn7/w5F+/8KRfv/CkH3/wpB9/8KQfP/Bj3z/wY98/8GPfP/Aj3v/wY57/8COe//Bjnv/wI56/8CNev/AjXr/"
+    "v415/7+Nef+/jXn/vox5/76Mef++i3j/vYt4/76Ld/++i3f/vYp3/72Kd/+9inb/vIp2/7yJdv+8iXX/u4h0/7uIdf+7iHP/uoh0/7qHc/+7h3P/uoZy/7mG"
+    "cv+5hXL/uYVy/7mFcf+4hXH/uIRw/7eEb/+3hG//t4Nv/7eCb/+2gm7/toJu/7aBbf+1gWz/tYBs/7WAbP+0f2v/tH9r/7R+a/+0f2v/s35q/7N9av+yfWn/"
+    "s3xo/7J9aP+yfGj/sXxo/7F7Z/+xe2f/sHpm/7B6Zf+weWb/sHll/695ZP+veWT/r3hj/653Y/+td2L/rndi/612Yv+sdmH/rHZh/6x1YP+rdWD/q3Vg/6tz"
+    "X/+qc1//qnNe/6pyXv+qcl7/qXFd/6hxXP+ocVz/qXBc/6hwW/+ocFr/p29a/6ZvWv+mblr/pm5Z/6ZtWP+mbVj/pW1Y/6VsV/+kbFf/pGtW/6JpVP+iaVT/"
+    "omlT/6FoUv+haFP/oWhT/6FoU/+haFP/oWhT/6FoUv+hZ1L/oGZS/6BnUf+fZVD/n2VQ/55lUP+fZU//nmRP/55kTv+dY07/nWNN/4pSPP/S1dXey8vM/7e2"
+    "tf+mpqP/fn59/+Dh4fX6+vr/8vLz//Py8//DxMT4ilI8/8WUgf/FlIH/xZOB/8SUgP/ElID/xJOA/8STgP/Ekn//xJJ//8SSgP/Dk3//w5J//8OSf//Dkn//"
+    "w5J+/8KRfv/CkH3/wpB9/8KQff/CkHz/wZB9/8GPfP/Bj3z/wY98/8GPe//Ajnv/wI57/8COev/Ajnr/wI16/7+Nev+/jXn/vox5/76MeP+/i3j/vot4/72L"
+    "d/++i3j/vYp3/72Kd/+9iXb/vIp2/7yJdv+8iXX/vIl1/7uIdf+7iHX/u4h0/7qHc/+6h3P/uoZz/7mGcv+6hXL/uYVy/7iFcf+5hXH/uYVx/7iEcP+4g2//"
+    "t4Nw/7eDb/+3g27/t4Ju/7eBbf+1gW7/toFt/7aBbP+0gGz/tIBr/7R/a/+0f2r/s35r/7N+af+zfmn/sn5p/7J9aP+yfGj/snxn/7F8Z/+xe2f/sXtm/7B6"
+    "Zv+wemb/sHll/695Zf+veWT/rnhk/654Y/+ueGL/rXdi/613Yv+tdmL/rXVh/612Yf+rdWH/q3Vf/6t0YP+qdF//qnRe/6pzXv+pc13/qnJd/6lyXf+pcl3/"
+    "qXFc/6hwW/+ocFv/p3Bb/6dvWv+nb1n/pm5Z/6ZtWP+lbln/pm1Y/6VsV/+lbFf/pGxW/6NqVf+jaVT/omlU/6JoVP+haFP/oWhT/6FoU/+haFP/oWhT/6Fo"
+    "Uv+gaFL/oGdS/6BmUf+gZlH/n2VQ/6BlUP+fZU//n2RP/55kTv+dY07/nWNN/4pSPP/U2NneysjL/7a0tP+mpaT/fn19/+Dg4fX6+fr/8vLy//Pz8v/W1Nb4"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP/IysrgwsPC/7S0sv+lpaX/fn5+/+Dg4fX6+fr/8/Lz//Ty8//s6+v/1dbV+cPFxfjHyMj4ycrL+MjKyvjJysz4yczN+MnM"
+    "zfjJzM34y83N+cvNzvjLzc/4zM7O+MzNzvjMzc74zM7Q+MzP0fjNz9H4zs/S+M3P0vjN0NH4z9HS+M/R0vjO0NH4z9HS+M/Q0vjOz9H4zdDR+M7R0vjP0dP4"
+    "z9HT+M/R0/jQ0tT40NLT+NDR0/jP0NP40NHT+NDS0/jR09T40tTU+NPU1PjT1NT40tPU+NHT0/jQ0tL4z9HT+M/Q1PjQ0dP4z9HR+M7R0PjNz8/4zs7O+M/O"
+    "zvjOz874zM/O+MvNzvjKy834ysvN+MrMzfjKy8z4ysvL+MnLy/jIy8z4yMrM+MjJzPjHy8r4xsvK+MbKy/jHycr4x8nK+MbIyvjFyMn4xcjJ+MbHyPjGxsj4"
+    "xMbH+MPGxvjCxMX4wsPF+MHFxfjAxMP4wMPB+MDDwfi/wsL4vsHC+L/Awfi+wMD4vMDA+LvAwPi6wMD4ur+/+Lq9vfi5vLz4uLy7+Le8vPi4u7v4uLq5+Le6"
+    "uPi1ubf4tLe3+LS2t/i0trf4tLa2+LS0tPi0s7T4s7O0+LK1tfiwtLT4sLKx+K+wsPivsLD4rrCw+K2vsPitr674rK6t+KyurPisrqz4q66t+Kysrfirqaz4"
+    "qKmr+Kepqvinqar4p6ip+Kenqfinp6n4paan+KOmpviipqX4oqWk+KGlo/+hpaL4oaWi+KCiovifoqH4nqGg+J2fn/icnZ74nqCg+KGgovivr7H+u7u6/7S0"
+    "tP+oqKf/f39+/+Dh4fX6+vn/8/L0//Py9P/08/P/8fHx/+/v8f/y8vL/8/T0//P09P/z9PT/9PX1//P19v/z9fb/9PX2//T19f/09fX/9PX1//X09v/19Pb/"
+    "9PT2//T19v/09fb/9vX3//b19//29ff/9vX3//X19//19ff/9vX3//b19//19ff/9fX3//X19//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX3//b1"
+    "9//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX2//b19v/09fb/9fX2//b19v/19PX/9PT1//T09f/z8/P/8/Pz//Pz8//z8vP/"
+    "8/Hz//Lx8v/x8fH/8PHx/+/x8f/v8fH/7/Dx/+/v8f/u7u//7u7t/+3t7f/s7O3/7Ozt/+zr7P/q6uz/6ers/+nq6//o6ur/6Oro/+jr6P/n6uj/5+jo/+bn"
+    "5//l5ub/5ebm/+Tl5//j5Of/4+Tl/+Pk5P/j5OT/4uTk/+Di4v/g4eH/4ODg/97h4f/d4OD/3d/f/93d3v/d3N7/3Nvd/9vb2//Z29v/2Nva/9ra2P/a2Nj/"
+    "2djZ/9fX2f/V19j/1dbX/9XU1//U1NX/0tXT/9LU0//R0tP/z9DT/8/Q0f/Q0ND/0NDQ/8/Qz//Ozs//zc3O/83Mzf/Ly83/ysrM/8nKzP/Jysr/yMrJ/8fK"
+    "yf/GyMn/xMfH/8PExP/Cw8P/wsPD/8LCw//Dw8P/wMHA/7/Av/+9vb7/uru8/7m4uv+3t7n/t7i5/7S1t/+tq67/f3+A/+Dg4fX7+/v/9PL0//Tz9P/z8vT/"
+    "8/L0//Py9P/z8vT/8/L0//Py9P/z8vP/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py"
+    "9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/"
+    "8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/y8vL/8vLy//Lx8v/y8fL/8vHx//Hw8P/w8PD/8PDw//Dw7//w7+//8O7v/+/u"
+    "7v/u7uz/7u7s/+3t7P/s7Oz/7Ovr/+vq6v/q6ur/6urq/+rq6v/p6en/6enp/+jo6P/n6Of/5+jn/+fn6P/m5uf/5eXm/+Tk5f/j5OT/4+Tk/+Tj4//j4uL/"
+    "4uLi/+Hh4v/h4eH/4eHh/+Dg4f/f4OD/39/f/9/e3v/e3t7/3d7d/9vc3P/b3Nv/29zb/9vb2//b29v/29va/9ra2f/Y2Nn/2NjY/9jX1//X19b/1tbV/9XV"
+    "1f/V1dX/1NTV/9PT1P/T0tP/0tLS/9HS0f/R0ND/0M/P/9DPz//Pz8//zc3N/8zNzP/Lzcz/y8vL/8vKyv/Kysr/ycjJ/8fHx//Gxsb/xsbG/8bGxv/ExcT/"
+    "w8PD/8HBwv++vr//vb29/7u8vP+6urv/t7i6/7OztP+rq6z/goOD/+Tl5f/19fb/+vr6//n3+f/49/b/9/f2//f3+P/49vf/9/f4//f1+P/39/f/+Pj4//j2"
+    "+P/49vj/+Pf3//j4+P/5+fn/+vr5//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/"
+    "+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+fn5//n5+f/5+vr/+vr6//r5"
+    "+f/59/j/+ff4//j4+P/29/f/9vb2//f29v/29vb/9fb2//T19f/09PT/9PP0//Tz9P/08/P/9PPz//Py8v/x8fD/8fHw//Hx8f/v8PH/7/Dw//Dw7//w7/D/"
+    "7+/v/+7v7v/u7u//7u7v/+7u7v/t7e3/7e3t/+zs7f/r6+3/6+vs/+vr6//q6+r/6uvq/+rp6v/p6Or/6ejp/+np6P/o6ej/6Ono/+jo5//o5+b/5+bm/+bm"
+    "5v/l5uX/5Obk/+Tk4//k4+P/5OPj/+Pj4//i4+P/4eLi/+Dg4f/g4N//3+Df/9/f3v/f3d7/3t3d/93c3P/d3Nz/3Nvc/9va2//a2tv/2drb/9jZ2v/Y2Nj/"
+    "2NjX/9jX1v/X1tb/1dXV/9TV1P/T1dT/09PU/9PS1P/T0dT/0dLS/9DS0f/P0dH/z9HR/8/P0P/Ozs//zMvM/8rKyf/HyMf/xMPE/8HBwv++vr7/t7e4/7S0"
+    "tP+foKD/kpKS//Hx8XPm5uf14OHh9eDf4PXf3t713t7d9d7f3vXg39313t/f9d7f3/Xe39/13t7g9d/f3/Xf39/139/e9uDf3/Xg39/14OHf9eHh4PXh4OH1"
+    "4eHh9eHh4PXg4OD139/g9d/g4fXf4eH13+Dg9eDg4PXh4OD14eHh9eHh4fXh4eH14eHg9eHh4PXh4eD14eHg9eHh3/Xh4d/14eHh9eHh4fXh4eD14eHh9eHg"
+    "4fXg3+H14d/h9eHg4fXh4eH14eHg9eHh4PXh4eH14eHg9eHh4PXg4OD139/f9d/f3/Xf4OD13+Dg9d/g3/Xf3t713t7e9d3e3vXd3t313d7d9d3d3fXd3d31"
+    "3N3d9dzd3fXd3Nz13dvc9dzb3PXc29v13Nvb9dvb2/Xa2tn12trZ9drZ2vXZ2Nr119jY9dfY1/XY19f12NfX9dbW1vXV1tX11dbV9dTU1PXT09P10tLS9dHR"
+    "0fXQ0dD1z8/P9c7OzvXNzs31y8zL9cnKyvXIycj1x8jH9cbHxvXFxsX1xcXE9cTEwvXExMH1w8PB9cLCwfXBwsH1wcLB9cHCwPXBwsD1wcLA9cHCwPXBwsD1"
+    "wcLA9cHBwPXBwcD1wMG/9cDBv/XAwb/1wMG/9cDBv/XAwb/1wMC/9b/Av/W/wL/1v8C/9b+/vvW/v771v8C+9b+/vfW/v731vr++9b6/vvW+v731vr+99b6+"
+    "vfW+vr31vr+89b2/vP+9vr31vb699b2+vPW8vbz1vL279bu8u/W6u7n1ubm49be4tvW1trT1srKx9aurqvWqq6r12NfY9Q==";
+
+static const char kWin7PreviewBitmap22Base64[] =
+    "KAAAAJYAAAB0AAAAAQAgAAAAAADgDwEAxA4AAMQOAAAAAAAAAAAAANbX2J2hoKH/iYiI/3+Af/96fHz/e319/3p8ff96fH3/ent7/3p7e/96e3v/ent7/3t7"
+    "fP97e3z/e3x9/3t8ff97fH3/e3x9/3t8ff97fX3/fH59/3x+fv98fn7/fH1+/3x+fv99fn7/fn5+/35+fv9+f3//f4GB/4CCgv+AgoL/gYOE/4KEhf+DhYX/"
+    "hIaG/4WGhv+Ghof/h4iI/4eJif+IiYr/iYqK/4mLiv+Ji4v/iouL/4qLi/+Li4z/i4uM/4uLjP+LjIz/jI2N/4yNjv+NjY7/jY6O/42Ojv+Mjo7/i42O/4uN"
+    "jv+LjI3/i4uM/4uLjP+Ki4v/iouK/4qLiv+IiYr/iIiK/4iIif+HiIj/hoiI/4WHiP+EhYb/hISF/4OEhf+Cg4T/goOC/4GCgv+AgYL/gIGC/3+Agf9+f4D/"
+    "fn+A/35/f/99fn7/fX5+/319fv98fX7/fH1+/3t8ff98fH3/fHx9/3x8ff97fH3/e3x9/3t7ff97fH3/e3x9/3t8ff96fH3/enx9/3t8fP97e3z/e3t8/3p7"
+    "e/95fHv/eXx8/3p7fP97e3v/e3t7/3p8fP95fHz/eXt7/3p8e/96fHv/eXt7/3l7fP95e3z/eXt7/3l8e/95fHv/enx7/3l8ev95fHr/eXt6/3l6ev95enr/"
+    "eXl7/3h6ev94enr/eXp6/3p7ev96e3v/eXp8/3l6fP96env/ent7/3p7e/96e3z/ent8/3p7fP96e3z/ent7/3p6fP97e3z/e3t7/3t6fP96env/enl7/3V2"
+    "dv93eHj/vLy8t8PDw/+qqqn/tLSz/7a2tf+3t7b/t7e2/7e3t/+4t7b/uLe2/7i3t/+4t7f/uLi4/7q5uP+6ubj/urm5/7u6uv+7urr/u7u6/7y8u/+8vbz/"
+    "vb69/72+vf+/wL//wMHA/8HCwP/DwsL/xMTE/8XGxf/HyMf/ycrJ/8vLzP/Mzc7/zs/P/8/Q0f/Q0NL/0tLT/9PU1P/U1dX/1dfX/9fX1//Y2Nj/2Nra/9na"
+    "2v/a2tr/29rb/9va2//c2tv/3dvb/93b2//e3Nv/393d/9/e3v/f3t7/393d/97d3f/d3d3/3dzc/93c3P/c29v/29rZ/9nZ1//X2Nb/1tfW/9XV1P/T0tL/"
+    "0tDR/9HP0P/Qzc7/zc3N/8rMy//Jysn/yMjH/8fHx//GxcX/xMPD/8LDwv/AwsH/v8HA/7/Av/++v77/vr29/728vP+8u7v/u7u7/7u7u/+6u7r/ubm6/7m4"
+    "uf+4ubn/uLm5/7i5uP+4ubj/uLe3/7e2tv+3trb/t7e3/7e3t/+3trf/t7a2/7e3tf+3t7b/tra2/7W1tf+0tbb/tLW2/7W0tP+1tLT/tbS0/7S1tP+0tbT/"
+    "tLS0/7S0s/+0tLL/tLSy/7S0tP+0tLT/s7Oz/7O0sv+ztbL/srWy/7K0sf+ytLH/srOx/7Kysf+ysrH/sbGy/7Gxsf+xsbD/srGw/7Kysf+ysrL/sLCy/7Cw"
+    "sf+xsbH/srKy/7Kysv+wsLL/sLCy/7Gxsf+ysbH/sLCw/7GvsP+xsLD/sa+u/7Cur/+vrq7/sK6u/6mpqf+HiIj/d3d5/7i4ufW9vb7/wcHA/8PDwv/ExMT/"
+    "xcTF/8fGxv/Jx8f/yMjH/8nKyf/LzMv/zc3N/87Pzv/Oz87/z9DP/9DR0P/Q0dD/0dLR/9LT0//T09X/1NTV/9XV1v/V1tb/1tfX/9bX2P/X2Nr/2drb/9vb"
+    "3P/c3Nz/3d3e/97d3//e3uD/3+Dh/9/h4f/g4eL/4eLj/+Li4//i4uP/4uPj/+Lj4//i4+P/4uPk/+Lj5P/i4+T/4+Pk/+Pj5P/k4+P/5OPj/+Tj4//j4+T/"
+    "5OTk/+Xk5P/l5OP/5OPi/+Li4v/h4uL/4uHi/+Lh4v/h4eD/4eHg/+Dg4P/e3+D/3d7f/93d3f/b3Nz/2tvb/9ra2//Y2Nr/19fZ/9bW1//U1Nb/1NTV/9PU"
+    "1P/R0tP/0dLT/9HS0v/P0NH/z9DQ/9DQ0P/Q0ND/0NDQ/8/Q0P/Ozs//zc7P/83Pz//Ozs7/zs7O/83Nzv/Mzc7/y83O/8vOzv/Mzs3/zM3M/8vMy//LzMv/"
+    "y8zL/8vLy//Ly8v/ysvL/8nLyv/Jysv/ycrL/8rLyv/Kysr/ysnK/8nJyv/Iycn/x8nJ/8jHyv/JyMv/ycnL/8jIyf/IyMn/yMjJ/8jIyf/IyMn/x8fJ/8fI"
+    "yf/HyMf/x8jG/8fIxv/HyMb/x8fH/8bHx//Fx8f/xcfH/8bHxv/Hx8b/xcXG/8XFxf/FxcX/xcXF/8XFxf/ExcX/w8TE/8PExP/BwsX/wcLF/8PDw//Cw8P/"
+    "wcLD/8HCwv/BwsH/wcHB/8DAv/+7u7v/t7e3/66urv+en5//dnd3/7u8vfXAwMD/wcLA/8LDwf/CxcL/w8XD/8bGxf/Jycj/y8zL/8/Qz//U09T/1tjZ/9ja"
+    "2//Y2tv/2tvd/9vc3v/c3t//3d/f/97g4P/f4OH/3+Dh/9/h4v/f4eL/4OLi/+Dj4v/g4+P/4ePk/+Lj5f/j5OX/5OXm/+Xm5//l5uf/5ebn/+Xm5//l5uf/"
+    "5ufo/+fm6f/n5un/5+jo/+fo6P/n6On/5+jo/+fo6P/n6Oj/5+jo/+fo6P/o6Of/5+jo/+bo6f/m6en/5+jo/+fo6P/o6Oj/6Ojo/+fn6P/l5uf/5ubm/+bm"
+    "5v/l5+b/5ebm/+Xm5//l5uj/5ebn/+Xl5v/j5OX/4uTl/+Lk5f/i4ub/4uLl/+Li4//h4eL/4OHi/9/g4f/e39//3t/f/97f4P/c3uD/3N3g/93d3//e3t7/"
+    "397e/9/e3//d3d7/3N7e/9zf3//d3t7/3dze/9zc3//a3N7/2dze/9rd3v/b3Nz/3Nvb/9zc3P/c3Nz/3Nzc/9va3P/a29z/2dzc/9ja2//Y2dr/2dna/9rb"
+    "2f/a29n/2trZ/9na2f/Y2tj/19rY/9jY2P/Y2dv/2Nvc/9fa2//X2dr/2Nna/9nY2v/Y19v/19fc/9fY3P/X2dr/2NnX/9jZ1//X2dj/1tjY/9XY2P/V2Nj/"
+    "1djY/9bY2P/X2Nj/1tfX/9bW1v/W1tb/1tbW/9bX1v/V2Nb/1NXV/9TV1f/T1Nb/09TW/9TU1f/T1dX/0tXW/9LU1f/S1dT/0tTU/9XT1f/Nzc7/vb29/7Cv"
+    "sP+goKD/e3x8/77AwfXCwsL/vr+9/7q7uf+traz+x8bF1c/Q0tPU1dbT19na09nc3dPe4N7T4ePd0+Lk3tPi5N7T4OPf09/i4NPd4OLT3eDi093g4tPd4OLT"
+    "3eDi093g4tPd4OLT3eDi093g4tPd4OLT3eDi093g4tPd4OLT3eDi093h4tPe4eLT3+Hi09/g4tPf4OLT3uHi097h4tPf4OLT3uDi097g4tPe4OLT3+Li09/i"
+    "4tPf4eLT3+Hh09/h4dPf4eHT3+Hi09/h49Pf4ePT3+Hi09/h4tPe4eLT3+Hi09/h4tPe4OLT3+Di09/g4tPe4eLT3+Di09/g4tPf4ePT4OLk0+Di5NPf4uTT"
+    "3+Lk09/i5NPf4uTT3+Lk09/i5NPf4eTT3uHk097h49Pf4eLT3+Hi09/h4tPe4uLT3uLi09/h4tPf4ePT3+Hj09/g49Pe4OPT3uDj097h49Pf4OLT3+Di097g"
+    "49Pe4eLT3uHi097g4tPe4OLT3uDi097g4dPe4OHT3uDh097g4tPd4OLT3eDi093g4dPe4OHT3uDh097g4dPd4OHT3d/h097f4dPe3+HT3eDh093g4dPd4OHT"
+    "3d/h09zg4dPc4OHT3d/g097f4dPd3+LT3N/i09zf4dPc3+HT3d/h093f4dPd3+HT3d/g093f4NPd3+DT3d/g09zf4dPc3+HT3N/g09ze4NPc3uDT3N/g09vf"
+    "4NPb3+DT3N/g09zf4NPb3uDT297g09ze39Pb3+DT297g09ve4NPa3uDT29/f097f4NPX2Nr5xcTF/7Kxsf+gn6D/e3p7/8LBwvXFxcT/vLu7/7Kys/+JjY74"
+    "m15D/5teQ/+bXkP/l15F/5BrRv+8mCj/z6sP/7uPGf+Sa0H/mF9G/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5te"
+    "Q/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/m15D/5teQ/+bXkP/"
+    "m15D/5teQ/+bXkP/m15D/5teQ//S1dbdx8fI/7Gxsf+fn6D/ent7/8XExfXJycn/vLm6/7KvsP+ChYj4pGpQ/7h+Zf+xfGX/hmMz/8GEBv/Hlgb/kptA/3uO"
+    "Vf+jeRT/l20y/7J9Zv+2fWT/tn1j/7Z8Y/+2fGP/tXxj/7V8Y/+1fGL/tXxi/7V7Yv+1e2L/tXti/7R6Yf+0e2H/tHph/7R6YP+0emD/s3lg/7N5YP+zeWD/"
+    "s3lg/7N5X/+yeV//snhf/7J3X/+yd17/snde/7J3Xv+yd17/snZd/7F2Xf+xdl3/sXZd/7F2Xf+wdVz/sHVc/7B1XP+wdVz/sHVb/7B0W/+vdFv/r3Rb/7B0"
+    "W/+vc1r/r3Na/69zWf+vc1n/rnNa/65yWf+tcln/rnJZ/65yWf+tclj/rXJY/61xWP+tcVj/rXFY/6xwV/+scVf/rHBX/6xwV/+scFb/rHBW/6xvVv+sb1b/"
+    "q29W/6tvVf+rb1X/q29V/6tuVf+rblX/qm5V/6puVP+qbVT/qm5U/6ptVP+pbVT/qW1T/6ptU/+pbFP/qWxT/6lsUv+pbFL/qWxS/6hsUv+obFL/qGtS/6hr"
+    "Uf+oa1H/qGtR/6hqUf+oalH/qGpQ/6dqUf+nalD/p2pQ/6dqUP+nalD/pmlP/6dpT/+maU//p2lP/6ZpT/+maU//pmhP/6ZpTv+maE7/pmhO/6VoTv+laE7/"
+    "pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+kZ03/pGdM/6RmTP+kZkz/pGZM/6RmTP+kZkz/pGZM/6RqUP/R1NXexsfH/7Gx"
+    "sf+foKD/ent7/8fHxvXLy8z/vLq8/7Kxsv+Hion4pGpQ/7h+Zv+GZk//h1UD/6FqBf+YdyT/Or7v/x3G//9Lh5T/mFcA/5BwVv+2fGP/tn1j/7Z8Y/+2fGP/"
+    "tnxi/7Z7Yv+1e2L/tXti/7V7Yv+1e2L/tXth/7R6Yf+0emD/s3pg/7N6YP+zeWD/s3lg/7N5YP+zeWD/snlf/7J4X/+yeF//snhf/7J4X/+yd1//snde/7F3"
+    "Xv+xd17/sXdd/7F2Xf+xdl3/sXZd/7F2Xf+xdlz/sHVc/7B1XP+wdVz/sHVc/7B1W/+wdFv/r3Rb/690W/+vc1v/r3Ra/69zWv+uc1r/rnNZ/65zWf+ucln/"
+    "rnJZ/65yWf+tclj/rnJY/61xWP+tcVj/rXFX/6xxWP+tcVf/rHBX/6xwV/+scFf/rHBW/6xwVv+rb1b/q29W/6tvVv+rb1X/q29V/6tuVf+rblX/q25U/6pu"
+    "VP+qblT/qm1U/6ptVP+qbVT/qm1T/6ptU/+pbVP/qWxT/6lsUv+pbFP/qWxS/6lsUv+obFL/qWxS/6hrUf+oa1H/qGtR/6hrUf+oa1H/p2pR/6hqUf+nalD/"
+    "p2pQ/6dqUP+nalD/p2pQ/6ZqUP+naU//p2lP/6ZpT/+maU//pmlP/6ZpT/+maE7/pmhO/6VoTv+laE7/pWdO/6VnTv+lZ03/pWdN/6VnTf+lZ03/pWdN/6Vn"
+    "Tf+lZ03/pGdN/6RnTf+lZk3/pGdN/6VmTP+kZk3/pGZM/6RmTP+kZkz/pGZM/6RqUP/S1NXexsbH/7Gxsf+goKD/eXl5/8nIx/XNzc7/vby9/7Ozs/+Hiov4"
+    "pGpQ/7l/Zv9pSB7/kVwE/9iZI//dsm3/j7y8/2PH1P86l7H/fk0D/3ZSIf+3fWT/tn1j/7Z8Y/+2fGP/tnxj/7V8Yv+1fGL/tXxi/7V8Yv+1e2L/tXti/7V7"
+    "Yv+0e2L/tHth/7R6Yf+0eWH/tHlg/7N5YP+zeWD/s3lg/7N5YP+zeF//s3hf/7N4X/+yeF//snhf/7J3Xv+yd17/sXde/7J3Xv+xdl3/sXZd/7F2Xf+xdl3/"
+    "sHZc/7B1XP+wdVz/sHVc/7B1W/+vdVv/sHRb/7B0W/+vdFv/r3Ra/69zWv+vc1r/rnNZ/65yWf+uc1n/rnJZ/65yWf+ucln/rXJY/61yWP+tcVj/rXFY/61x"
+    "WP+tcVf/rHFX/61wV/+scFf/rHBW/6xwVv+scFb/rG9W/6xvVv+rb1X/q29V/6tuVf+rblX/q25V/6tuVP+qblX/qm5U/6puVP+qbVT/qm1T/6ptU/+pbVP/"
+    "qW1T/6ltU/+pbFL/qWxS/6lsUv+obFL/qWxS/6hrUf+oa1H/qGtR/6hrUf+oa1H/qGtR/6hqUP+oalH/p2pQ/6dqUP+nalD/p2lQ/6dpUP+naVD/pmlP/6Zp"
+    "T/+maU//pmlP/6ZpT/+maE7/pmhP/6ZoTv+laE7/pWhO/6VnTv+lZ03/pWdN/6VnTf+lZ03/pWdN/6VnTf+lZ03/pWdN/8GWgP/Bln//wZV//8GVf//BlX//"
+    "wZV//8GVf//AlX//pGZM/6RqUP/R1dXexcbG/7CwsP+foKD/enp6/8jJyPXQz8//v769/7a0s/+GiYv4pGpQ/7h/Zv9sTSP/eU8M/7OIOv/IrYT/eodr/3m4"
+    "m/9InXb/Yk8U/3RRJf+3fWT/t31k/7Z8ZP+2fGT/tnxj/7Z8Y/+2fGL/tnti/7Z7Yv+2e2L/tXti/7V7Yv+1emH/tHph/7R6Yf+0emH/tHph/7R5Yf+zeWD/"
+    "s3lg/7N5YP+zeF//s3hf/7N4X/+zeF//snde/7J3Xv+yd17/snde/7J3Xv+ydl3/sXZd/7F2Xf+xdl3/sXZd/7F1Xf+xdV3/sHVc/7B1W/+wdVv/sHRc/7B1"
+    "W/+wdFv/r3Rb/690W/+vc1r/r3Na/65zWv+uc1n/rnNZ/65yWf+ucln/rnJY/65yWP+tcVj/rXFY/61xWP+tcVf/rXFX/61wV/+scFf/rHBX/6xwV/+scFb/"
+    "rHBW/6xwVv+rb1b/q29V/6tvVf+rb1X/q29V/6tuVf+rblT/qm5U/6puVP+qblT/qm1U/6ptU/+pbVP/qWxT/6lsU/+pbFP/qWxS/6lsUv+pbFL/qGxS/6hs"
+    "Uv+oa1L/qGtS/6hrUf+oa1H/qGtR/6hqUf+na1H/p2pQ/6dqUP+nalD/p2pQ/6dqUP+naVD/p2lQ/6dpT/+maU//p2lP/6ZpT/+maU//pmhP/6VoTv+maE7/"
+    "pWdO/6VnTf+lZ07/pWdO/6VnTv+lZ07/pWdO/6VnTv+lZ03/pWdN/6RnTf+kZ03/pGdN/6VnTf+kZkz/pGdN/6RnTf+kZkz/pGZM/6RqUP/S1NXexMTF/7Cw"
+    "r/+goKD/enp6/8nLyvXQz8//v7+9/7W0s/+FiYr4pGpQ/7h/Zv+FbFD/gF82/zVcqP8pltP/R5+v/2rLrP8zrnn/T2gy/4hrUf+3fmT/t31k/7Z8ZP+2fGP/"
+    "tnxk/7Z8Y/+2fGP/tnxj/7V8Y/+1e2L/tXti/7V7Yv+1emH/tHph/7R6Yf+0emH/tHph/7R5Yf+0eWD/s3lg/7N5YP+zeGD/s3hf/7N4X/+zeF//snhf/7J3"
+    "X/+yd17/snde/7J3Xv+yd13/sXdd/7F2Xf+xdl3/sXZd/7F2Xf+xdlz/sHVc/7F1XP+wdVz/sHRb/7B0W/+vdFv/sHRb/690W/+vc1r/r3Na/69zWv+uc1n/"
+    "rnNa/65zWf+uc1n/rnJZ/61yWf+tclj/rXFY/61xWP+tcVj/rXFY/61xV/+tcFf/rHBX/6xwV/+scFb/rG9W/6twVv+rb1b/q29V/6tvVf+rb1X/q25V/6tu"
+    "Vf+rblX/qm5U/6puVP+qblT/qm5U/6ptVP+qbVT/qm1T/6ltU/+pbFP/qWxT/6lsUv+pbFL/qWxS/6hsUv+pa1L/qGxS/6hrUf+oa1H/qGtR/6hrUf+oalH/"
+    "p2pR/6dqUP+nalD/p2pQ/6dqUP+nalD/p2lP/6ZpT/+naU//pmlP/6ZpT/+maU//pmhP/6ZoTv+maE7/pWhO/6VoTv+lZ07/pWdO/6VnTv+lZ07/pWdO/6Vn"
+    "Tv+lZ03/pWdN/8Sahv/Emob/xJqF/8Sahf/EmoX/xJqF/8Sahf/EmoX/pGZM/6RqUP/S1NXexMTF/7Cwr/+gn5//enp5/8rKy/XS0dH/v7++/7S1tf+Giov4"
+    "pGpQ/7l/Zv+McmH/qIpg/0lWmP8UZOr/MHXE/2iQbf9yhFf/eYFW/5N4aP+3fWT/tn1k/7Z9ZP+2fGT/tnxk/7Z8ZP+2fGP/tnxj/7Z8Y/+2fGL/tXti/7V7"
+    "Yv+1e2L/tHph/7R6Yf+0emH/tHph/7R6Yf+0emH/s3lh/7R5YP+zeWD/s3lf/7N4X/+yeF//snhf/7J4X/+yeF//sndf/7J3X/+xd17/sXZe/7J2Xf+xdl3/"
+    "sXZd/7F2Xf+xdV3/sXVd/7F1XP+wdVz/sHVc/7B1W/+wdFv/sHRb/690W/+vdFv/r3Ra/69zWv+uc1r/rnNZ/65zWf+ucln/rnJZ/65yWf+ucln/rnJY/61x"
+    "WP+tcVj/rXFY/61xV/+scVf/rXBX/6xwV/+scFf/rHBW/6xwVv+sb1b/q29W/6tvVv+rb1X/q29V/6tvVf+rblX/qm5V/6tuVf+qblT/qm1U/6puVP+qbVP/"
+    "qm1T/6ptU/+pbVP/qWxT/6lsU/+pbFL/qWxS/6hsUv+pbFL/qGxS/6hrUv+oa1H/qGtR/6hrUf+oa1H/qGtR/6hqUf+nalD/p2pQ/6dqUP+nalD/p2pQ/6dp"
+    "UP+naU//pmlP/6dpT/+maU//pmlP/6ZoTv+maE7/pmhO/6ZoTv+lZ07/pWdO/6VnTv+lZ07/pWdO/6VnTv+laE3/pWdN/8Sahv/Emob/xJqF/8Sahf/EmoX/"
+    "xJqF/8Sahf/EmoX/pGZM/6RqUP/R1dXexcXG/7Cur/+gnqD/enp7/8rKyvXS0tP/v7/A/7a1tv+HjIz4pGpQ/7l/Zv+we2T/mYVv/7Khl/+CfqL/k4yZ/8Gl"
+    "if/Lr5X/o499/7F8ZP+3fWT/t31k/7Z9ZP+2fWT/tnxk/7Z8ZP+2fGT/tnxj/7Z8Y/+2e2P/tXti/7V7Yv+1e2L/tXti/7R6Yf+0emH/tHph/7R6Yf+0emD/"
+    "tHph/7N5YP+zeWD/s3lg/7N4YP+zeGD/s3hf/7J4X/+yeF//snhe/7J3Xv+yd17/sXde/7F3Xf+xdl3/sXZd/7F2Xf+xdl3/sXZd/7F2XP+wdVz/sHVc/7B1"
+    "W/+wdVv/sHRb/7B1W/+vdFv/r3Rb/690Wv+vc1r/rnNa/65zWf+ucln/rnJZ/65yWf+ucln/rnJZ/61xWP+tcVj/rXFY/61xWP+tcVf/rHBX/6xwV/+scFf/"
+    "rHBW/6xwVv+scFb/rG9W/6tvVv+rb1X/q29W/6tvVf+rb1X/q25V/6puVP+qblT/qm5U/6puVP+qbVP/qm1U/6ptU/+qbVP/qW1T/6ltU/+pbFP/qWxS/6ls"
+    "Uv+obFL/qWxS/6hrUv+oa1L/qGtR/6hrUf+oa1H/p2pR/6drUf+nalD/p2pQ/6dqUP+nalD/p2pQ/6dpUP+naVD/p2lQ/6dpT/+maU//pmlP/6ZoTv+laE7/"
+    "pmhO/6ZoTv+lZ07/pWdO/6VnTv+lZ07/pWdO/6VnTv+lZ07/pWhO/6VnTf+lZ03/pWdN/6VnTf+lZ03/pGdN/6RmTf+kZkz/pGZM/6RqUP/S1dTexcXG/7Cu"
+    "sP+gn6H/fHt9/8rKyv/S0tP/v7/A/7a1tv+HjIz/tINt/8WUf//Fk3//vY97/56Ecf+3o4n/va2V/7OklP+ijoD/vZB9/8OSff/Dkn3/w5J9/8OSff/Ckn3/"
+    "wpF9/8KRff/CkX3/wpF8/8KRfP/CkXz/wpF8/8GRfP/BkXv/wZF7/8GRe//BkXv/wZF6/8GRev/BkHr/wZB6/8GPef/Aj3n/wI95/8CPef/Aj3n/wI55/8CO"
+    "ef/Ajnn/v455/7+OeP+/jnj/v414/7+NeP+/jXj/v413/76Nd/++jXf/vo13/76Md/+9jHf/vY13/72Mdv+9jHb/vYx2/72Ldv+9i3X/vYt2/72Ldf+9i3X/"
+    "vYp1/7yKdf+8inX/vIp1/7yJdf+8iXT/vIl0/7uJdP+7iXT/u4lz/7uJc/+7iXP/uolz/7uIc/+6iHL/uohy/7qIcv+6iHL/uody/7mHcv+5h3H/uYdx/7mH"
+    "cf+5h3H/uYZx/7mGcf+5hnH/uYZx/7mGcf+5hXH/uYVw/7mFcP+4hXD/uIVw/7iFb/+4hW//uIVv/7iFb/+4hW//t4Vu/7eEbv+3hG7/t4Ru/7eEbv+3hG7/"
+    "t4Ru/7eDbf+3g23/toNt/7aDbf+2g23/toNt/7aCbf+2gm3/tYJt/7aCbf+2gm3/tYJs/7WBbP+1gWz/tYFr/7WBbP+1gWz/tYFs/7WBbP+1gWz/tYFs/7WB"
+    "a/+1gWv/tYFr/7WBa/+1gWv/tYFq/7WBav+1gWr/tYFq/7SAav+1gGr/tIFq/7SDbf/S1dTexsbF/7Cvr/+gn6D/e3t8/8nKy/jT09P/wcHC/7e3uP+Ii437"
+    "ilI8/7F9af+qeGb/onNh/6ByYP+gcl//n3Jf/6BxX/+fcF7/nnBe/55vXf+eb13/nm9c/55vXP+db1v/nW9b/51uW/+cbVv/nG1a/5xtWf+cbFn/m2xZ/5tr"
+    "Wf+ba1n/m2tZ/5trWP+aaVj/mWlY/5loWP+ZaVf/mWhW/5loVv+YZ1b/mGdV/5dnVf+WZ1T/l2ZT/5ZmU/+WZlP/lmVS/5ZlUv+WZVL/lWVS/5VkUv+VZFD/"
+    "lGRQ/5RkUP+UYlD/lGNP/5RjT/+TYU7/lGFP/5NhTv+TYU3/k2FM/5NhTP+TYUz/kmBM/5BdSf+VYEv/nGRO/55lT/+eZE//nmRO/55jTv+dY07/nWNN/5xi"
+    "Tf+dYkz/nGJM/5thTP+bYEv/m2FL/5tgSv+bYEr/ml9J/5pfSf+ZXkn/mV5I/5ldSP+YXUf/mFxH/5hdRv+YXEb/l1xG/5dbRf+XW0X/l1pE/5ZaRP+VWkT/"
+    "llpD/5VZQ/+VWUL/lFhC/5RYQv+UV0H/lFdB/5RXQP+UVkD/k1Y//5JWP/+TVT//klU//5JVPv+SVT7/klQ+/5BUPf+QVD3/kVM9/5BTPf+QUzz/j1I8/49S"
+    "PP+PUjv/j1E6/49ROv+OUTv/jlE6/41POf+NTzj/jE84/41OOP+NTjj/jU44/41OOP+NTjj/jU44/4xON/+MTjf/jE02/4xNN/+LTTb/i002/4tMNv+LTTX/"
+    "i0w1/4pMNf+KTDT/iks1/4pSPP/R1NXexcXG/7Cvr/+gn6D/e3x8/8nKy/XU09P/wsLC/7i4uP+Ii434ilI8/6R/av+7non/up6I/7meiP+5noj/uZ6I/7me"
+    "iP+5nYj/uZ2I/7meiP+5nYj/uZ2I/7mdh/+5nYf/uZ2H/7mdh/+5nYf/uZ2H/7mdh/+5nIf/uZyH/7mch/+5nIb/uZyG/7ichv+4nIb/uJyG/7ichv+4nIb/"
+    "uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7ichv+4nIb/uJyG/7echv+3m4b/t5uF/7ebhf+3m4X/t5uF/7ebhf+3m4X/t5uF/7eb"
+    "hf+3m4X/t5uF/7ebhP+2m4T/tpqE/7ichv94TT7/k15K/59lT/+fZFD/nmVP/55kTv+eZE7/nWNN/51iTf+dY03/nGJM/5xhTP+bYUz/m2FK/5tgS/+bYEr/"
+    "ml9J/5pfSf+ZX0n/mV5I/5ldSP+ZXkf/mF1H/5hdR/+YXEf/mFxG/5hcRv+WW0X/l1tE/5ZbRf+WWkT/lVpD/5VZQ/+VWUL/lVlD/5VYQf+VWEL/lFhC/5NX"
+    "QP+TV0D/k1ZA/5NWQP+SVj//klU//5JVP/+SVT7/klQ+/5FUPv+RVD3/kFM9/5BTPf+QUzz/kFM8/5BSO/+PUjv/j1I7/49ROv+OUTr/j1E6/41POf+NTzn/"
+    "jU84/41POP+MTjf/jE43/4xON/+MTjf/jE43/41OOP+MTjf/jE03/4xONv+MTTb/jE02/4xMNf+LTDb/i002/4tMNv+LTDX/i0w1/4pSPP/R1dXexcbH/7Cv"
+    "sP+gn6D/e3x8/8rLyvXU09P/w8LC/7m4uP+IjI34ilI8/6KAa/+hcV3/oW5b/6BuW/+gblv/oG5a/6BuW/+gblr/oG5a/6BtWv+gbVr/oG1a/6BtWv+gbVr/"
+    "oG1a/6BtWv+gbVn/oG1Z/6BtWf+gbVn/n21Z/59sWf+fbFn/n2xZ/59sWf+fbFn/n2xZ/59sWP+fbFj/n2xY/59sWP+fbFj/n2xY/59rWP+fa1j/nmtY/55r"
+    "WP+ea1j/nmtX/55rV/+ea1f/nmtX/55rV/+ea1f/nmpX/55qV/+ealf/nmpX/55qV/+dalf/nWpX/51qVv+dalb/nWpW/51qVv+dalb/nWlW/5h0X/9xTj//"
+    "jVlG/59lUP+fZU//nmVP/55kT/+eZE7/nmRO/51jTf+dY0z/nGJN/5xiTP+cYkv/nGFL/5thS/+bYEr/m19K/5pfSf+aX0n/mV9I/5leSP+ZXkj/mV1H/5ld"
+    "R/+YXEf/mFxG/5hbRv+XXEX/l1tF/5daRP+XW0T/llpD/5ZaQ/+VWUP/lVhD/5RZQv+UWEL/lFhC/5RYQv+UV0H/lFdB/5NWQP+TVj//klY//5JVP/+SVT7/"
+    "kVQ+/5JUPv+RVD7/kVM9/5FTPf+QUz3/kFM8/5BSPP+PUjz/kFI8/49SO/+PUTr/jlE6/45QOf+NTzj/jU85/41OOP+MTjj/jE44/4xOOP+MTjj/jE44/41P"
+    "N/+MTjf/jU43/4xON/+MTTb/jE03/4xNNv+LTDb/i0w2/4tMNf+LTDb/iks1/4pSPP/R1NTexsbG/7CwsP+goKL/fH18/8vMyvXU1NX/xMTE/7q6uv+Jjo74"
+    "ilI8/6KAa/+hcV3//fr6//759//79vX/+/b1//v29f/79vX/+/b1//z39v/79/X/+/b1//z39v/79vX/+/b1//v29f/79vX/+/b1//v29f/79vX/+/b0//v2"
+    "9P/79vT/+/b0//v29P/79vT/+/b0//v29P/79vX/+/b1//v39f/79vX/+/b0//z39f/++fj/nmtY/55rWP+ea1j/nmtY/55rWP+ea1j/nmtY/55rV/+ea1f/"
+    "nmtX/55qV/+ealf/nmpX/55qV/+ealf/nWpX/51qV/+dalf/nWpW/51qVv+dalb/nWpW/5dzYP9sSz3/ilhG/59mUf+eZU//nWRP/51jTv+cYk3/nGJN/5th"
+    "S/+aYUv/mWFL/5pgS/+ZYEv/mV9L/5leSv+YXkr/mF5J/5heSf+YXUn/ll1H/5ddR/+WXEf/llxH/5ZbR/+VWkX/lVtF/5VaRf+UWkX/lFlE/5RZRP+TWUP/"
+    "lFhD/5NXQv+SWEL/kldC/5JXQf+SVkH/kVZB/5FWQP+RVkD/kFU//5BVQP+PVD//j1Q+/5BTP/+PUz3/j1M+/45TPf+OUj3/jlE9/45SPf+OUTz/jlE8/41R"
+    "O/+NUTr/jVA6/4xQOv+MTzr/jE86/4pOOP+LTjj/i043/4pNN/+KTTf/ik03/4pNN/+KTTf/ik03/4pMN/+KTDb/ikw2/4lMNv+JTDb/iEs2/4lLNv+KTDX/"
+    "iUs1/4lMNP+KSzX/iUw1/4pSPP/R1NXexsbG/7CxsP+goKH/fHx8/8vNy/XV1Nb/xcXF/7u7u/+Mjo74ilI8/6OAa/+hcV3//fn2/+fm5P/19PP/9vT0//Tz"
+    "8//08/P/9PPz//Tz8//08/P/9PPz//Tz8//29PT/9/b1//f29f/39vX/9/b1//f29f/29fX/9fTz//X08//29PT/9PPz//Tz8//08/P/9PPz//Tz8//08/P/"
+    "9PPz//Lw7//19vb/9fX1//Lv7P/++PT/n2tY/55rWP+yjnf/tpF6/7aTfv+2lYH/t5J6/7SQef+0kHn/rot1/6uJdP+1kHn/tZB5/7eWgv+6mYb/tpJ6/66M"
+    "dv+ui3X/uZR8/7SQef+dalb/nWpW/5dzYP9sSz3/illG/59mUP+dZU//m2NO/5piTf+YYEv/l19L/5ZeSv+UXkn/lF1J/5ReSf+TXUn/k11I/5NcR/+SW0f/"
+    "kltG/5JbRv+SW0X/klpF/5JZRP+SWUT/kVlE/5FZRP+RWEP/kVhD/5BYQv+QV0H/j1ZC/49WQf+OVkD/jlVA/45VQP+NVT//jVQ//41UP/+NVD7/jFM+/41T"
+    "Pf+MUj7/i1I9/4tSPf+LUTz/ilE8/4tRPP+LUDz/i1A7/4pQPP+JTzv/iU87/4lOOv+JTjr/iU46/4hOOv+ITTn/iE45/4dNOP+HTTj/h004/4ZMN/+GTDb/"
+    "hUs1/4VMNf+FSzb/hUs2/4VLNv+FSzb/hUs2/4VLNf+FSjX/hUs1/4RKNP+ESjT/hEkz/4VJNP+ESTT/hUo0/4dKM/+ISjT/iUs0/4lRPP/R09TexsXH/6+w"
+    "sP+goaD/fH18/8vNzPXW1db/xsXF/7y7u/+Njo/4ilI8/6KAa/+hcV3//vn2/8zMzP/9/f3//f39//39/f/9/f3////////////////////////////9/f3/"
+    "/f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/////////////////CrKD/8+vn//z5+P////////////Hw7//++PT/n2tY/59r"
+    "WP+mhXD/r4x1/62QgP+vk4T/sI97/6yJcf+siXH/ooFt/59+a/+phW7/qYVu/8Orof/Tvrb/r413/6SDbv+jgW3/rIt3/6iHcv+dalb/nWpW/5hzYP9sSzz/"
+    "ilhG/55lUP+cZE//mGFN/5ReSv+SXUn/j1tI/41ZRv+MWUX/jFhF/4xYRP+MV0X/jFdE/4tWRP+LVkP/i1VD/4pVQ/+JVUL/iVVB/4lVQf+JVUH/iVRA/4hT"
+    "QP+IVED/h1M//4hTP/+HUj//hlI9/4ZSPv+GUT7/hlE9/4ZQPf+GUDz/hlA9/4VQPP+FTzz/hU47/4VOO/+ETjv/hE46/4RNOv+DTTn/g005/4JNOf+DTDj/"
+    "gk04/4JMOP+BTDf/gUw3/4FLNv+BSzb/gEs2/4BKNv+ASjX/gEo1/39JNf9/STX/f0g1/35INP9+RzP/fkYz/35GM/9+RjP/fkYz/35GM/9+RjP/fkYz/35G"
+    "M/9+RjL/fkYx/31GMf9+RTH/fUUx/31GMf99RTH/gEYy/4JIMv+GSjP/h0s0/4hRO//Q09PexsbG/7CwsP+goKD/e3t8/8zMzPXY19b/x8bF/727u/+Mj5D4"
+    "ilI8/6KAa/+hcV3//vn2/8vKyv/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39"
+    "/f/9/f3//f39//39/f/9/f3//f39///////y6OL/w45r/8+liv/u3tL//////+3s7P/++PX/n2tY/59rWP+mhXD/r4x1/62QgP+vk4T/sI97/6yJcf+siXH/"
+    "ooFt/59+a/+phW7/qYVu/8Orof/Tvrb/r413/6SDbv+jgW3/rIt3/6iHcv+dalb/nWpW/5hzYP9sSz3/ilhG/51kT/+ZYk7/lV9K/45aR/+JV0T/hVVC/4JS"
+    "QP+AUkD/gVFA/4BRP/+AUD//f1A+/39QPv9/UD3/fk89/35PPf9+Tjz/fk48/35NPP9+TTz/fk08/31NO/99TDv/fUw7/3xMOv98TDn/fEs5/3tLOf98Szj/"
+    "eko4/3tKN/96STj/ekk3/3pJN/96STf/ekk3/3lJNv96SDX/eUg1/3lINf95RzX/eUc0/3hGNP94RjT/d0U0/3dFM/92RTP/dkUz/3dFM/92RTP/dkQz/3ZF"
+    "Mv91RDH/dUQx/3VDMf91QzD/dUMx/3VBL/90QS//dEEv/3RBLv9zQS7/c0Eu/3NBLv9zQS7/c0Eu/3NALv9zQC7/c0Au/3JALf9yQC3/c0At/3NALf91QS7/"
+    "eEIv/31FMP+BRzL/hUo0/4dQO//P09LexcjG/6+wr/+goKD/fHt8/87NzfXY2dj/x8fH/729vP+LkZD4ilI8/6OAa/+hcV3//vn2/8vKyv/9/f3//f39//39"
+    "/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39///////8+fX/"
+    "3rmO//Xn1v/gvZX//////+3s7P/++PX/n2tY/59rWP+xkoD/vZ2K/7GXif+pj4L/u52L/7uciP+7nIj/r5GA/6qNfP+9nYn/vZyJ/7abjP+3nZD/vp6L/7KT"
+    "g/+sjXz/t5mI/7SWhf+dalb/nWpW/5hzYP9sSz3/iVhG/5tkT/+VYEz/jltH/4VWQ/9+UD//eU08/3RKOv9zSTn/c0k5/3JIOf9ySDj/ckc4/3JHN/9xRzf/"
+    "cEY2/3BGNv9wRjb/cEY2/3BGNv9wRjX/cEQ1/3BENf9vRDX/bkQ0/29ENP9vQzT/bkMz/25DM/9uQjL/bkIy/25CMf9tQjL/bUEx/2xBMf9sQTH/bEEw/2xA"
+    "MP9sQTD/a0Aw/2tAL/9rPy//az8v/2s/Lv9rPy7/aj4u/2o+Lv9qPi7/aj4u/2o+Lv9pPi3/aT0s/2g8LP9pPCz/aDws/2g7LP9oPCv/aDss/2c7Kv9nOir/"
+    "Zzop/2Y6Kf9nOin/Zzop/2c6Kf9nOin/Zzop/2Y5Kf9mOSn/Zjkp/2Y5KP9mOSn/Zjkp/2c6Kf9qOir/bz4s/3RALv98RTD/gkgy/4ZPOv/O0tLexcbG/7Cw"
+    "r/+goKD/e3t7/87Oz/XY2tr/x8jJ/72/v/+LkpH4ilI8/6OAa/+hcV3//vn2/8vKyv/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3/"
+    "/f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3///////////////7/8ODB/+XLiv/37+H//////+3s7P/++PX/n2xY/55r"
+    "WP+ykHv/tZSA/7WUgP+0k37/tpWA/7WUgP+1lID/sZB8/6+Pev+1lID/tZSA/7WTf/+0k3//tpSA/7GRff+ujXr/tpWA/7OSfv+dalf/nWpW/5hzYP9sTD3/"
+    "iFdG/5pkTv+TX0v/g1ZG/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0"
+    "Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/"
+    "WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0"
+    "Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/1g0Jf9YNCX/WDQl/289LP94Qy7/f0Ux/4ROOf/M0NDfxcfG/7CwsP+foKD/e3t8/8/Oz/XZ2tr/yMnL/77Awf+MkZL4"
+    "ilI8/6OAa/+hcl7//vn2/8vKyv/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39/f/9/f3//f39//39"
+    "/f/9/f3//f39//39/f/9/f3//////////////////////////////////////+3s7P/++PX/nmxY/55rWP+ea1j/nmtY/55rWP+ea1j/nmtY/55rV/+ea1f/"
+    "nmtX/55rV/+ealf/nmtX/55qV/+ealf/nmpX/51qV/+dalf/nWpX/51qVv+dalf/nWpX/5hzYP9sTD3/iVhG/5liTv+RXkn/ZV9c/7irof+4q6H/uKuh/7ir"
+    "of+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/"
+    "uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7ir"
+    "of+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4q6H/uKuh/7irof+4qqL/"
+    "WDQl/2k6Kf91QS3/fkUx/4ROOf/N0dHfxMfH/66wsP+foKD/e3t8/8/OzvXb29r/ysnL/8DAwv+NkZP4ilI8/6OAa/+hcl7//vn3/+Ti4P/o5eT/6ebl/+fk"
+    "4//n5OP/5+Tj/+fk4//n5OP/5+Tj/+fk4//p5+X/6efl/+nn5f/p5+X/6efl/+nn5f/p5+X/6OXk/+jl5P/p5uX/5+Tj/+fk4//n5OP/5+Tj/+fk4//n5OP/"
+    "5+Tj/+fl4//n5eP/5uTj/+zo5v/++vb/nmtY/55rWP+ea1j/nmtY/55rWP+ea1j/nmtY/55rV/+ea1f/nmtX/55rV/+ea1f/nWpX/51qV/+dalf/nWpX/51q"
+    "V/+dalf/nWpX/51qV/+dalf/nWpW/5d0YP9sTD3/iVhG/5ljT/+QXUn/ZV9c/9zX1f/e3t3/3t7e/93d3f/e3d3/3t3d/93c3P/d3Nz/3Nzc/9zc2//c29v/"
+    "3Nrb/9zb2v/b2tr/2tra/9ra2v/b2tn/29rZ/9va2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX"
+    "1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6KP9zQCz/fUUw/4NOOf/N0NDfxMbH/66v"
+    "sP+enp7/e3t6/87PzvXd3Nz/zMnL/8G/wf+NkpP4ilI8/6OAa/+fcV3//vbx//317v/99O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3/"
+    "/PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O3//PTt//z07f/89O7//fTu//z07f/+9fD/nGpX/5xq"
+    "V/+calf/nGpX/5tqV/+balf/m2pX/5tqV/+balb/m2pX/5tqVv+balb/m2pW/5tqVv+balb/m2lW/5tpVv+baVb/m2lW/5tpVv+baVb/m2lW/5d0X/9sTD3/"
+    "iVhG/5liTv+PXUr/ZV9c/9zX1f/e3t3/3t7e/93d3f/e3d3/3t3d/93c3P/d3Nz/3Nzc/9zc2//c29v/3Nrb/9zb2v/b2tr/2tra/9ra2v/b2tn/29rZ/9va"
+    "2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/"
+    "19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5KP9yQC3/fUUw/4JNOf/Mz9DfxMXI/6+vsP+fn57/fHt6/8/PzvXe3d3/zMrL/8HAwf+Nk5L4"
+    "ilI8/6OAa/+cblz/8/Hy//Hv8P/y7/D/8u/w//Lv8P/z8fL/9PLz//Px8v/y8PH/8/Hy//b19//z8fL/9PLz//Ty8//08vP/9PLz//Ty8//z8fL/8/Hy//Px"
+    "8v/y7/D/8u/w//Lv8P/y7/D/8u/w//Lv8P/y7/D/8u/w//Lv8P/y7/D/8u/w//Lv8P/y8PH/mGhW/5hoVv+YaFb/mGhV/5hoVf+YaFX/mGhV/5hoVf+YZ1X/"
+    "mGdV/5hnVf+YZ1X/mGdV/5dnVf+XZ1X/l2dU/5hnVf+XZ1T/l2dU/5dnVP+XZ1T/mGdU/5dzX/9sTD//iVlH/5liT/+PXUr/ZV9c/9zX1f/e3t3/3t7e/93d"
+    "3f/e3d3/3t3d/93c3P/d3Nz/3Nzc/9zc2//c29v/3Nrb/9zb2v/b2tr/2tra/9ra2v/b2tn/29rZ/9va2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/"
+    "2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/"
+    "WDQl/2Y5Kf9yQC3/fUUx/4JNOf/Mz8/fxsfH/6+wsP+fn5//e3t7/9DPz/Xe3d7/zMzM/8HCwv+Ok5L4ilI8/6J/bP+abVv/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////lWZV/5VmVf+VZlX/lWVV/5VlVf+UZVX/lGVU/5RlVP+UZVT/lGVU/5RlVP+UZVT/lGVU/5RlVP+UZVT/lGVU/5Rk"
+    "VP+UZFT/lGVU/5RlVP+UZVT/lGVU/5VzX/9sTD//illH/5ljT/+PXUr/ZV9c/9zX1f/e3t3/3t7e/93d3f/e3d3/3t3d/93c3P/d3Nz/3Nzc/9zc2//c29v/"
+    "3Nrb/9zb2v/b2tr/2tra/9ra2v/b2tn/29rZ/9va2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX"
+    "1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5KP9yQC3/fUUx/4JNOf/Mz8/fxsjJ/7Cx"
+    "sP+foKD/e3x7/9DR0PXf397/zM3N/8LDw/+Pk5T4ilI8/6J/bP+Xaln/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////kWNT/5Fj"
+    "U/+QYlP/kGJT/5BiU/+QYlL/kGJS/5BiUv+QYlL/kGJS/5BiUv+QYlL/kGJS/5BiUv+QYlL/kGJS/5BhUv+QYlL/kGFS/5BhUf+QYVH/kGFR/5VyX/9sTD//"
+    "ilpH/5pjT/+QXUv/ZV9c/9zX1f/e3t3/3t7e/93d3f/e3d3/3t3d/93c3P/d3Nz/3Nzc/9zc2//c29v/3Nrb/9zb2v/b2tr/2tra/9ra2v/b2tn/29rZ/9va"
+    "2f/a2dn/2dnZ/9rY2f/Z2Nj/2djY/9nY2P/Z2Nj/2NfX/9jX1//Y2Nf/2NfX/9jX1//X19b/19bX/9fX1//X1tb/19bW/9fW1v/X1tb/19bW/9fW1f/X1dX/"
+    "19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9yQC7/fkUx/4JNOf/Mz8/fxcfJ/7Cxsf+goKD/fHx7/9DR0fXg4N//zMzO/8PDwv+PkpX4"
+    "ilI8/6KAbP+SaFj/////////////////4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj"
+    "5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/////////////////jGFS/4xhUv+LYFL/i2BS/4tgUf+LYFH/i2BR/4tgUf+LYFH/"
+    "i2BR/4tgUf+LYFH/i2BR/4tgUf+LYFH/i19R/4tfUP+LX1D/i19Q/4tfUP+LX1D/i19Q/5NyX/9rTD//iFhG/5ZiTf+OXEj/ZV9c/9zX1f/e3t3/3t7e/+fk"
+    "4//d2Nb/3djW/9zY1f/b19P/2tbS/9nU0f/Y1NH/2NPQ/9XRzf/U0Mz/08/M/9LOzP/Szsv/0s7L/9LOy//Szsv/0s7L/9LOy//Szsv/0s7L/9LOy//Szsv/"
+    "0s3L/9LNy//Szsv/0s3L/9LNy//Rzcv/0c3L/9HNy//QzMj/zsrI/87Kx//Mx8T/ysXC/87Kx//X1dX/19XV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/"
+    "WDQl/2Y5Kf9yQC7/fkUx/4JNOf/Mz8/fxcjI/6+wsP+fn57/e3t8/9DR0fXg4eD/zMzO/8PCwv+PkZX4ilI8/6KAbP+OZVf/////////////////ysvK/8rL"
+    "yv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/"
+    "ysvK/8rLyv//////////////////////h15R/4deUf+HXlH/h15R/4deUf+GXlH/hl5R/4ZdUP+GXVD/hl1Q/4ZdUP+GXVD/hl1Q/4ZdUP+GXVD/hl1Q/4Zd"
+    "UP+GXE//hlxP/4ZcT/+GXE7/hVxO/5FxX/9oSz3/g1VE/5JfTP+IWEb/ZV9c/9zX1f/e3t3/3t7e/6KOfv+lkYP/pZCC/6SQgf+jj4D/oo5//6KOf/+hjX7/"
+    "oIx9/5+Ke/+eiXv/nYh6/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yHef+ch3n/nId5/5yH"
+    "ef+ahXb/mYR1/5mEdf+Zg3X/mIFy/5WEd//X1dX/19XV/9bW1f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9yQC7/fUYx/4JNOf/Mz8/fxsjJ/7Cx"
+    "r/+fnp7/e3p8/9LS0vXh4uL/zc7O/8PDw/+QkZL4ilI8/6GAa/+KY1T/////////////////ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/"
+    "ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv//////////////////////glxQ/4Jc"
+    "UP+CXFD/gltQ/4JbUP+CW0//gltP/4JbT/+CW0//gltP/4JbT/+BW0//gVtP/4FbT/+BWk7/gVpO/4FaTv+BWk7/gFlN/4BZTf+AWUz/gFhM/49vXv9mSj3/"
+    "e09B/4paSP+BVET/ZV9c/9zX1f/e3t3/3t7e/6aShP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Gjl//X1dX/"
+    "19XV/9bW1f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9zQC7/fUYx/4JNOf/Lz8/fx8jJ/7CxsP+gn5//e3t7/9PU0/Xh4+L/zc7O/8PExf+Qk5P4"
+    "ilI8/6GAa/+FYFT/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////fVpQ/31aUP99WlD/fVpQ/31aT/99WU//fVlP/31ZT/99WU//"
+    "fFlP/31ZT/98WU//fFlP/3xZT/98WE7/fFhO/3tYTf97V03/eldM/3pWTP95VUv/eVRK/41uXf9iSDz/cUo7/39SQf92TT3/ZV9c/9zX1f/f39//3t7e/6aS"
+    "hP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Gjl//W1tX/19bW/9fV1v/W1dX/1tbV/9bV1v/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/"
+    "WDQl/2c5Kf9zQC7/fUUy/4JNOf/Mz8/fyMfI/7Gwsf+goJ7/e3t6/9PV0/Xi4+L/zs7P/8PFxv+QlZX4ilI8/6F/a/+BXFH/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////eVdP/3lXT/95V0//eVdP/3lXT/95V0//eVdP/3hXT/94V0//eFdP/3hXT/94V0//eFZO/3hWTv93Vk7/d1VN/3dV"
+    "TP92VEz/dVNL/3RSSv9zUUj/c1BI/4psXP9dRjr/ZUI1/3BJO/9pRTf/ZV9c/9zV0v/g39//39/e/6aShP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Gjl//Y1tb/19bW/9fW1v/X1tb/1tbW/9fV1v/W1db/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/"
+    "1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kf9zQC7/fkYy/4JNOf/MztDfyMfK/7Gw"
+    "sf+foJ//e3x7/9TU0/Xj4+P/z9DQ/8THxv+Rlpb4ilI8/6F/a/98WVD/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////c1VP/3NV"
+    "T/9zVU//c1VP/3NVT/9zVU//c1VP/3NVT/9zVU//c1VP/3NVT/9yVE7/clRO/3JUTv9xU03/cVJM/3BRS/9vUEr/bU5I/2xNRv9qS0X/aUlD/4RpWP9TPTL/"
+    "Siwf/1MxI/9OLiH/ZV9c/9zV0//h4OD/4ODg/6aShP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Kjl//Y19f/"
+    "2NfX/9jX1v+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/1tXV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2Y5Kf9zQS7/fkcz/4JNOf/Mz9DfyMrK/7Gxsf+foJ7/ent6/9TT0/Xj5OP/z9DS/8bHxv+Rlpf4"
+    "ilI8/6F/a/93V03/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////b1RP/29UT/9vVE//b1RP/29UT/9vVE//b1RP/29UT/9vVE//"
+    "blRP/25UT/9uU07/blNO/25TTv9uU07/blNO/25TTv9uU07/blNO/25UT/9uVE//b1VP/5F5av91Z17/nJKI/66imP+kmI//ZV9c/9zW0//h4eH/4eHg/6aS"
+    "hP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Kjl//Y19j/2NfX/9jX1/+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/"
+    "WDQl/2Y6Kf90QC7/fkYz/4JNOf/N0M/fxcXG/7CusP+gn6H/fHt9/9TT0/Xk5eT/0NDS/8fGx/+Rlpj4ilI8/6F/a/9zVEv/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////a1NP/2tTT/+6raP/uq2j/7qto/+6raP/uq2j/7qto/+6raP/uq2j/7qto/+6raP/uq2j/7qto/+6raP/uq2j/7qt"
+    "o/+6raT/bFRR/2xVUv9tVlP/bldU/5V+cf+Ad3H/t7a2/8zLy//Av7//ZV9c/9vV0v/j4uL/4uLi/6aShP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Kjl//Z2Nj/2djY/9jX1//Z2Nf/2NfX/9jX1//X19f/19bX/9fW1//X1tb/19bW/9fW1v/X1tb/19bW/9fV1v/W1tb/"
+    "19bV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kf90QS//fkcy/4JNOf/N0M/fxsbF/7Cv"
+    "r/+gn6D/e3t8/9XU1PXl5eX/0tHR/8jGx/+Rlpf4ilI8/6B/a/9tUUr/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////ZlFQ/2ZR"
+    "UP/Ata//wLWv/8C1r//Ata//wLWv/8C1r//Ata//wLWv/8C1r//AtK//wLSv/8C0r//AtK//wLSv/8C0r//Ata//ZlFQ/2dSUf9nU1L/aFRT/5N/cv+AeHP/"
+    "t7a2/8zLy//Av7//ZV9c/9zV0v/j4+P/4+Pi/6aShP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OP"
+    "gf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/7Kjl//Z2dj/"
+    "2djZ/9nY2P/Z2Nj/2dfY/9jX1//Y19f/2NfX/9fX1//Y1tf/19fX/9fX1//X19f/19fX/9fW1//X1tb/19bW/9fV1v/X1tX/19bV/9bV1f/W1dX/1tXV/9bV"
+    "1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c7Kv90QS//fkcz/4JNOf/Mz9DfxcXG/7Cvr/+gn6D/e3x8/9XV1PXl5eX/0tHR/8jIyP+Tl5f4"
+    "ilI8/6B/a/9pTkf/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////Yk9P/2JPT/+/tK//v7Sv/7+0r/+/tK//v7Sv/7+0r/+/tK//"
+    "v7Sv/7+0r/++tK//vrSv/760r/++tK//vrSv/760r/++tK//YU5O/2FPT/9iUFD/YlBR/5N+cf+AeHP/t7a2/8zLy//Av7//ZV9c/9vV0//k4+P/5OPj/6aS"
+    "hP+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/"
+    "o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/6OPgf+jj4H/o4+B/7KkmP/a2dr/2tnY/9rZ2f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/1tbW/9bV1v/W1tb/1tXV/9bW1f/W1dX/1tXV/9bV1f/W1dX/1tXV/9bV1f+4qqL/"
+    "WDQl/2c6Kf90QS//fkcz/4JNOf/M0NDfxcbH/7CvsP+gn6D/e3x8/9bV1fXl5ub/0dHT/8jJyv+UmJn4ilI8/6B/a/9lSkb/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////Xk1Q/15NUP9eTVD/Xk1Q/15NUP9eTVD/Xk1P/11NT/9dTU//XUxP/11MT/9dTE7/XUxP/1xMTv9cS07/XEtO/1xL"
+    "Tf9cS07/XEtO/1xLTv9dTE//XU1Q/5F9cv+AeXP/t7a2/8zLy//Av7//ZV9c/9zV0v/l5eT/5OTk/6iVhv+jkIH/pJCB/6SQgf+kkIH/pI+B/6OQgf+kkIH/"
+    "pJCB/6SQgf+jj4H/pJCB/6SQgf+jj4H/pJCB/6OQgf+kkIH/o5CB/6SQgf+jkIH/o4+B/6OQgf+jkIH/pJCB/6OQgf+kj4H/pJCB/6SQgf+kkIH/pJCB/6SQ"
+    "gf+kkIH/pJCB/6OQgf+jj4H/o4+B/7KkmP/b2tr/2tna/9ra2f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/2NbW/9fW1v/X1tb/1tbW/9fW1v/W1dX/1tbV/9bV1f/W1dX/1tXV/9bV1f+4qqL/WDQl/2c6Kv91QS//fkcz/4JNOf/Mz8/fxsbG/7Cw"
+    "sP+goKL/fH18/9fW1vXm5uf/09PU/8jKyf+UmZn4ilI8/59/a/9gR0T/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////WUtP/1lL"
+    "T/9ZS0//WUtP/1lLT/9ZS0//WUtP/1lLT/9ZS0//WUtO/1hLTv9YSk7/WEpN/1hKTf9XSU3/V0lM/1dJTP9URUn/VERI/1NDR/9SQ0b/UUJF/4l0aP9uYlv/"
+    "iX15/5mLhv+Qg37/ZV9c/9rU0v/l5uX/5eXl/6qXif+lkYL/pJGC/6SRgv+lkYL/pJGC/6SRgv+lkIL/pZCC/6SRgf+kkYL/pJGB/6SRgf+lkIL/pZGC/6WR"
+    "gv+kkYH/pJGC/6SRgv+kkIH/pJCB/6SQgv+lkYL/pJGC/6SRgv+kkIH/pJGC/6SRgv+lkIL/pJCB/6SRgv+kkYL/pJCC/6SRgv+kkYL/pZGC/7KkmP/b29r/"
+    "29ra/9va2v/b2tr/2trZ/9vZ2f/a2dj/2tnZ/9nY2f/Z2dj/2djY/9nY2P/Z2Nj/2djY/9nY2P/Z2Nf/2NjX/9jX1//Y19f/2NbX/9jX1v/X1tb/19bW/9fW"
+    "1v/X1tb/19bV/9bV1v/W1tb/1tXV/9bV1f+4qqL/WDQl/2c7K/90Qi//fkcz/4JNOf/Mz9DfxsbG/7CxsP+goKH/fHx8/9fW1vXo5uf/1dXU/8nKyv+TmZn4"
+    "ilI8/59/a/9bREP/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////VEhO/1RIT/+zqqP/s6qj/7Oqo/+zqqP/s6qj/7Oqo/+zqqP/"
+    "s6qj/7Oqo/+zqaP/s6mj/7Opo/+zqaL/s6mi/7Opov+yqKH/TkFH/01ARf9NP0T/TD5E/4hzZ/9uYlv/iX15/5mLhv+Qg37/ZV9c/9rU0v/m5+f/5+bm/6yZ"
+    "i/+lkYP/pZGD/6WRg/+lkYL/pZGD/6WRg/+lkYL/pZGD/6WRg/+lkYL/pZGD/6WRg/+lkYP/pZGC/6WRg/+lkYP/pZGD/6WRg/+lkYP/pZGD/6WRg/+lkYP/"
+    "pZGC/6WRg/+lkYL/pZGC/6WRgv+lkYP/pZGD/6WRgv+lkYL/pZGD/6WRg/+lkYP/pZGD/7KkmP/c29v/3Nzb/9vb2//b29r/29ra/9va2v/a2tr/2tnZ/9rZ"
+    "2f/Z2dn/2dnZ/9nZ2f/Z2dn/2dnZ/9nZ2P/Z2Nn/2djY/9jY2P/Y19f/2NjX/9jX1//Y19f/2NbX/9jW1//X1tf/2NbW/9fW1v/X1tb/1tXW/9fV1f+4qqL/"
+    "WDQl/2g7K/91Qi//f0c0/4JNOf/Mzs/fxsXH/6+wsP+goaD/fH18/9fX1vXp5+j/1tbW/8vMzP+SmJj4ilI8/6B+a/9XQUH///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////UEZN/1BGTf+5sa//ubGv/7mxr/+5sa//ubGv/7mxr/+5sa//ubGu/7mxrv+5sa7/ubGu/7mxrv+5sa7/ubGu/7iw"
+    "rf+4r6z/Sj5F/0k9Q/9IPEL/RztB/4dyZ/9uY1v/iX15/5mLhv+Qg37/ZV9c/9rU0f/o6Of/5+fn/62ajf+mkoT/pZKE/6WShP+mkoT/pZKE/6WShP+lkoT/"
+    "pZKE/6WShP+lkYT/pZGE/6WShP+lkoT/pZKE/6WShP+lkoT/ppKE/6WShP+lkoT/pZKE/6WShP+lkoT/pZGE/6WShP+lkoT/ppKE/6WShP+mkoT/pZGE/6WS"
+    "hP+mkoT/pZKE/6aShP+lkoT/pZKE/7OkmP/c3Nz/3Nzc/9zc2//c29v/29va/9za2//b2tv/29ra/9rZ2v/a2tn/2trZ/9ra2f/a2tn/2trZ/9rZ2f/a2dn/"
+    "2dnY/9nY2P/Z2Nj/2djY/9jX1/+xopb/l39u/5d/bv+Xf27/ln9u/5Z/bv+Semj/19bW/9fW1v+4qqL/WDQl/2g7K/91QjD/fkc0/4JNOf/Mz8/fxsbG/7Cw"
+    "sP+goKD/e3t8/9fX1vXq6On/19fY/8zNzf+Tl5j4ilI8/59+a/9TPz////////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////+Lj5P/i4+T/"
+    "4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk////////////////////////////TERM/0xE"
+    "TP+4sa7/uLGu/7ixrv+4sa7/uLGu/7ixrv+4sa7/uLGu/7ixrv+4sa7/uLGu/7iwrv+3sK3/t7Ct/7ewrf+2r6z/RTxD/0Q7Qv9DOkH/QjlA/4ZyZv9vY1v/"
+    "iX15/5mLhv+Qg37/ZV9c/9rU0f/o6Of/5+fn/66dj/+mk4X/ppOF/6aThf+mk4X/ppOF/6aThf+nlIX/p5SF/6aThf+mk4X/ppOF/6aThf+mlIX/p5OF/6aT"
+    "hf+mk4X/ppOF/6aThf+nk4X/ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/ppOF/6aThf+mk4X/ppOF/6aUhf+mk4X/ppOF/7OkmP/c3Nz/"
+    "3Nzc/9zc2//c29v/29va/9za2//b2tv/29ra/9rZ2v/a2tn/2trZ/9ra2f/a2tn/2trZ/9rZ2f/a2dn/2dnY/9nY2P/Z2Nj/2djY/9jX1/+tnZD/qJWG/6iV"
+    "hv+olYb/qJaI/6iWiP+ag3P/19bW/9fW1v+4qqL/WDQl/2g7K/91QjD/fkg0/4JNOf/M0M/fxcjG/6+wr/+goKD/fHt8/9fX1/Xq6er/2NjZ/8zOzf+Ul5j4"
+    "ilI8/59+a/9PPD7///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rL"
+    "yv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////SEFL/0hCS/9IQkv/SEJL/0hCS/9IQUv/SEFL/0hBS/9IQUv/"
+    "SEFK/0dBSv9HQEr/R0BJ/0Y/SP9GP0j/RT5H/0U+R/9COkP/QTlC/0A4QP8/Nz//PjY+/4ZyZv9vY1v/iX15/5mLhv+Qg37/ZV9c/9rU0f/o6Of/5+fn/7Ce"
+    "kf+nlIX/p5SG/6iUhf+nlYX/p5WF/6eUhf+nlYb/p5WF/6eVhf+nlIb/qJWF/6eUhf+olIb/qJWG/6iUhf+nlYb/qJSG/6eUhf+nlIX/p5WF/6eUhv+nlIX/"
+    "p5SF/6eUhf+olIb/p5SG/6iVhv+nlIb/p5SG/6eUhv+nlIb/qJWF/6eVhv+nlIX/qJSF/7OkmP/c3Nz/3Nzc/9zc2//c29v/29va/9za2//b2tv/29ra/9rZ"
+    "2v/a2tn/2trZ/9ra2f/a2tn/2trZ/9rZ2f/a2dn/2dnY/9nY2P/Z2Nj/2djY/9jX1/+tnZD/qJWG/6iVhv+olYb/qJaI/6iWiP+ag3P/19bW/9fW1v+4qqL/"
+    "WDQl/2g7K/91QzD/f0g1/4JNOf/Lz8/fxcbG/7Cwr/+goKD/e3t7/9jZ2fXq6+v/2dna/87Pz/+VmZr4ilI8/59+a/9MOzz///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/"
+    "////////////////////////////////RD9J/0Q/Sf9EQEn/RD9J/0Q/Sf9EP0n/RD9J/0Q/Sf9EP0n/RD9I/0Q/SP9DPkj/Qz5H/0I9Rv9CPEb/QTxF/0E7"
+    "Rf8+OEH/PTZA/zw1Pv87ND3/OjM8/4VxZv9vY1v/iX15/5mLhv+Qg37/ZV9c/9rU0f/o6Of/5+fn/7Ghkf+plYf/qZWH/6iVh/+plYf/qZWH/6iVh/+plYf/"
+    "qJWH/6iVh/+plYf/qJWH/6iVh/+olYf/qJWH/6iVh/+olYf/qJWH/6iVh/+olYb/qJWH/6iVh/+plYf/qZWH/6iVh/+olYf/qJWH/6iVh/+plYf/qJWH/6mV"
+    "h/+plYf/qJWH/6iVh/+plYf/qJWH/7OkmP/c3Nz/3Nzc/9zc2//c29v/29va/9za2//b2tv/29ra/9rZ2v/a2tn/2trZ/9ra2f/a2tn/2trZ/9rZ2f/a2dn/"
+    "2dnY/9nY2P/Z2Nj/2djY/9jX1/+tnZD/qJWG/6iVhv+olYb/qJaI/6iWiP+ag3P/19bW/9fW1v+4qqL/WDQl/2g7LP91QzD/f0k1/4JNOf/Lz8/fxcfG/7Cw"
+    "sP+foKD/e3t8/9jZ2fXr7Ov/2tra/8/P0P+WmZv4ilI8/59+a/9KODv///////////9/f3//g4OD/4ODg/+Dg4P/g4OD////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////QTxI/0E9"
+    "SP+upqH/rqah/66mof+upqH/rqah/66mof+upqH/rqah/66mof+upqH/rqah/62loP+tpaD/raWg/62loP+spJ7/OjM+/zkyPf84MTz/NzA7/4RxZv9vY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/9rU0v/o6Oj/6Ojn/7KilP+ploj/qZeJ/6mWif+pl4n/qZaJ/6mWif+pl4j/qZaJ/6mWif+ploj/qZeI/6mWif+pl4j/qZaJ/6mW"
+    "iP+ploj/qZaI/6mWiP+plon/qZaJ/6mWiP+ploj/qZaI/6mXif+plon/qZaJ/6mXiP+plon/qZeI/6mWif+pl4n/qZaI/6mXif+ploj/qZeI/7OkmP/e3d3/"
+    "3d3c/9zd3f/d3Nz/3Nzb/9zc2//c29r/29vb/9va2//b29r/29rZ/9va2f/b2tn/29rZ/9ra2v/b2dr/2tnZ/9rZ2f/Z2dn/2dnY/9nZ2P+tnZD/qJWG/6iV"
+    "hv+olYb/qJaI/6iWiP+ag3P/19fW/9jX1v+4qqL/WDQl/2g7LP91QzD/f0k1/4JNOf/M0NDfxMfH/66wsP+foKD/e3t8/9nZ2fXs7Ov/29va/9DQ0P+YmZv4"
+    "ilI8/55+a/9GNzv/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////PjtI/z47SP+0rq3/tK6t/7Surf+0rq3/tK6t/7Surf+0rq3/"
+    "tK6t/7Surf+zrqz/s66s/7OtrP+zraz/s62s/7OtrP+yrKv/NjI+/zUxPf80MDz/My87/4RwZv9vY1z/iX15/5mLhv+Qg37/ZV9c/9rT0v/p6en/6eno/7Wl"
+    "lf+qmIn/qpiJ/6qYif+qmIn/qpiJ/6qYif+qmIn/qpiJ/6qYif+pmIn/qpiJ/6qYif+ql4n/qpiJ/6qYif+qmIn/qpeJ/6qYif+qmIn/qpeJ/6qYif+qmIn/"
+    "qZeJ/6qYif+qmIn/qpiJ/6qXif+qmIn/qpeJ/6qYif+qmIn/qpiJ/6qYif+ql4n/qpiJ/7OkmP/e3t7/3d3d/97d3f/d3dz/3d3c/9zc3P/c29z/3dzc/9vb"
+    "2//c29v/3Nvb/9zb2//c29v/3Nvb/9va2v/b2tr/2tra/9vZ2v/a2tn/2tnZ/9rZ2f+tnZD/qJWG/6iVhv+olYb/qJaI/6iWiP+ag3P/2NfX/9jX1v+4qqL/"
+    "WDQl/2g8LP91QzD/f0k1/4JNOf/N0NDfxMbH/66vsP+enp7/e3t6/9rZ2fXt7ez/29zb/9DR0f+Ympv4ilI8/55+a/9FNTn/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////PDpG/zw6Rv+zrqz/s66s/7OurP+zrqz/s66s/7OurP+zrqz/s66s/7OurP+zraz/s62s/7OtrP+zraz/sq2s/7Kt"
+    "q/+yq6r/NTE9/zQvPP8zLjr/Mi05/4RwZv9vY1z/iX15/5mLhv+Qg37/ZV9c/9nU0f/q6ur/6urq/7WmmP+smYr/q5mK/6uZi/+rmYv/q5mK/6uZiv+rmYr/"
+    "q5mK/6uZiv+rmYv/q5mK/6yZi/+rmYv/q5mL/6uZi/+rmYr/q5mL/6yZiv+rmYv/q5mK/6uZi/+rmYv/rJmL/6uZiv+rmYv/q5mL/6uZi/+rmYv/q5mL/6uZ"
+    "iv+rmYr/rJmL/6yZiv+rmYv/q5mL/7Olmf/f397/397e/9/e3v/e3d7/3t7d/93d3P/e3N3/3d3c/9zc3P/d3Nv/3Nvb/9zb2//c29v/3Nvb/9zb2//b29v/"
+    "29rb/9vb2//b2tr/29rZ/9va2f+tnZD/qJWG/6iVhv+olYb/qJaI/6iWiP+ag3P/2NfY/9jX1/+4qqL/WDQl/2g8LP91RDH/f0k1/4JNOf/Mz9DfxMXI/6+v"
+    "sP+fn57/fHt6/9ra2fXu7e3/3Nzd/9HS0f+YnJz4ilI8/55+a/9GNzv/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////PjtI/z47"
+    "SP8+O0j/PjtI/z47SP8+O0j/PjtI/z47SP89O0j/PTtH/z07R/89Okf/PDpG/zw5Rf87OEX/OzhF/zs3RP84NED/NzI//zYxPf81MDz/NC87/4RwZv9vY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/9nU0f/r6+r/6+vr/7epmf+tmoz/rZqM/62ajf+smo3/rZqM/62ajP+sm43/rJqM/6yajP+tmoz/rZqM/62ajP+smoz/rZqM/6ya"
+    "jf+tmo3/rZqM/62ajf+smoz/rJqM/6yajP+tmo3/rZqM/6yajP+smo3/rZqN/62ajf+smoz/rJqN/62ajP+tmo3/rJqM/62ajP+tmoz/rJqM/7Olmf/g39//"
+    "39/f/9/e3//f397/397e/97e3v/e3t3/3t3d/97d3P/e3Nz/3dzc/93c3P/d3Nz/3dzc/93c3P/d29v/3Nvb/9zb2//b29v/3Nrb/9va2v+woJT/qZaH/6mW"
+    "h/+plof/qZaI/6mWiP+bhXb/2dnY/9nY1/+4qqL/WDQl/2g8LP91RDL/gEo1/4JNOf/Mz8/fxsfH/6+wsP+fn5//e3t7/9rb2vXv7e7/3dve/9LS0v+XnJ34"
+    "ilI8/59+a/9KODv///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////Qj1I/0I9SP9CPUj/Qj1I/0I9SP9CPUj/Qj1I/0I9SP9CPUj/"
+    "QTxI/0E8R/9BPEf/QDtG/0A7Rv9AOkX/PzpF/z85RP88NkD/OzQ//zozPf85Mjz/ODE7/4VxZv9vY13/iX15/5mLhv+Qg37/ZV9c/9nT0f/s7Oz/7Ozr/7ep"
+    "mf+tm43/rZyN/62bjf+tnI3/rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/rZyN/62cjf+tm43/rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/rZyN/62cjf+tnI3/"
+    "rZuN/62cjf+tm43/rZuN/62cjf+tm43/rZyN/62cjf+tm43/rZuN/62cjf+tm43/rZuN/7Olmf/h4N//4eDf/+Df3//f39//4N/f/9/e3v/f3t7/3t7d/97e"
+    "3v/e3d3/3t3d/97d3f/e3d3/3t3d/93c3P/d3dz/3d3c/9zc3P/c3Nz/3Nvb/9zb2/+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/2tnZ/9nZ2f+4qqL/"
+    "WDQl/2g9LP91RDL/gEo1/4JNOf/Mz8/fxsjJ/7CxsP+foKD/e3x7/9za2/Xv7u7/3tzd/9PS1P+YnJ/4ilI8/59+a/9NOz3///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P/////////////////+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/"
+    "4uPk////////////////////////////RUBK/0VASv+vp6L/r6ei/6+nov+vp6L/r6ei/6+nov+vp6L/r6eh/6+nof+vp6H/r6eh/66nof+up6H/rqah/66m"
+    "of+upqD/QTxF/0I8Rf9CPEX/QjxG/458cf+EfXj/vLu7/9LR0f/FxcX/ZV9c/9nT0f/s7e3/7Ozs/7epmf+vnY//r52P/66dj/+vnY7/rp2P/6+dj/+unY//"
+    "rp2P/66dj/+unY//r52P/6+dj/+vnY//r52P/66dj/+unY//r52P/66dj/+unY//rp2P/66djv+unY//rp2P/6+dj/+unY7/r52P/66dj/+vnY//rp2P/6+d"
+    "j/+vnY//rp2P/6+dj/+vnY//r52P/7Olmf/i4eD/4eHg/+Hg4P/h4OD/4eDg/+Df3//g39//397e/9/e3//f3t7/393e/9/d3v/f3d7/393e/97e3v/e3d3/"
+    "3t3c/93c3f/c3Nz/3dzc/9zc2/+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/2tra/9ra2v+4qqL/WDQl/2g9LP92RDL/gEo2/4JNOf/Mz8/fxcfJ/7Cx"
+    "sf+goKD/fHx7/9zZ2vXv8O7/3t7d/9PT1P+YnJ/4ilI8/59/a/9QPT7///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/"
+    "ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////SUNM/0lD"
+    "Tf+3sa//t7Gv/7exr/+3sa7/t7Gu/7exrv+3sa7/t7Cu/7ewrv+3sK7/t7Cu/7ewrv+3sK3/t7Ct/7avrf+2r63/Rj5I/0Y+SP9GP0j/Rj9I/458cf+EfXn/"
+    "vLy8/9LR0v/Gxsb/ZV9c/9nT0f/t7u3/7e7t/7epmf+wn5H/sJ6R/7Cekf+wnpH/sJ6Q/7Cfkf+wn5D/sJ+R/7Cfkf+vnpD/r56R/7CekP+vn5H/sJ6Q/7Ce"
+    "kP+wnpD/sJ+Q/7CfkP+wnpD/sJ6R/7CekP+wnpD/sJ6Q/7CekP+vnpD/sJ6Q/7CekP+wnpD/sJ+Q/6+fkP+wnpH/sJ6R/7CfkP+vnpH/sJ6R/7Slmf/i4uH/"
+    "4uHi/+Hh4f/h4eD/4eDh/+Hg4P/g4N//4N/g/+Df3//f397/39/f/9/f3//f39//39/f/9/f3v/f3t7/3t7d/97e3f/d3d3/3t3c/93d3P+woJT/qZaH/6mW"
+    "h/+plof/qZaI/6mWiP+bhXb/29ra/9va2v+4qqL/WDQl/2k8Lf92RDL/gEo2/4JNOf/Mz8/fxcjI/6+wsP+fn57/e3t8/9va2fXv8O7/3t/e/9PU0/+ZnZ/4"
+    "ilI8/6B/a/9TQED///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rL"
+    "yv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////TkZO/05GTv+5sa//ubGv/7mxr/+5sa//uLGv/7ixr/+4sa//"
+    "uLGv/7ixr/+4sa//uLGu/7ixrv+4sa7/uLGu/7iwrv+4sK7/SkJJ/0pCSf9KQkr/SkJK/499cv+EfXj/vby8/9PS0v/Hxsb/ZV9c/9nT0f/u7+7/7u7u/7ep"
+    "mf+xoJH/saCR/7Ggkf+xoJH/saCR/7Ggkf+xoJL/saCR/7Ggkf+xoJL/saCR/7Ggkf+xoJL/saCS/7Ggkf+xoJL/saCS/7Ggkf+xoJH/saGR/7Ggkv+xoJH/"
+    "saCR/7Ggkf+xoJH/saCS/7Ggkv+xoJL/saCS/7Ggkv+xoJL/saCR/7Ggkf+xoJH/saCR/7Slmf/j4+L/4+Li/+Li4f/i4uL/4uLh/+Hh4f/i4eD/4eHh/+Hg"
+    "4P/g4OD/4ODf/+Dg3//g4N//4ODf/+Df3v/f3t//39/f/97f3f/e3t7/3t7d/97d3f+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/29vb/9zb2v+4qqL/"
+    "WDQl/2o9LP91RTL/gEo2/4JNOf/Mz8/fxsjJ/7Cxr/+fnp7/e3p8/9ra2vXw8O7/4ODf/9XV1f+anqD4ilI8/6B/bP9YQkL///////////9/f3//g4OD/4OD"
+    "g/+Dg4P/g4OD////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////UklQ/1NJUP9TSVD/U0lQ/1NJUP9SSVD/UklQ/1JJUP9SSFD/UkhP/1JIT/9RSE//UUdO/1BGTf9QRk3/T0VM/09F"
+    "TP9MQUj/S0BG/0o+Rf9JPUP/SDxC/4hzaP9vY1z/iX15/5mLhv+Qg37/ZV9c/9nT0f/v8O7/7vDv/7epmf+yoZP/sqGT/7Khk/+yoZP/sqGT/7Ghk/+yoZP/"
+    "sqGT/7Khk/+yoZP/sqGT/7GhlP+yoZT/sqGT/7KhlP+yoZP/sqGT/7Khk/+yoZP/sqGT/7KhlP+yoZT/sqGT/7KhlP+yoZT/sqGT/7GhlP+yoZP/sqGU/7Kh"
+    "k/+yoZT/saGT/7Khk/+yoZP/sqGU/7Smmv/k5OP/5OTj/+Tj4//j4+L/4+Li/+Li4f/i4uH/4uHh/+Hh4P/i4OH/4eDg/+Hg4P/h4OD/4eDg/+Dg3//g39//"
+    "4ODg/9/f3//f397/397e/97f3v+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/3Nzc/9zb2/+4qqL/WDQl/2k9LP92RTP/gUo2/4JNOf/Lz8/fx8jJ/7Cx"
+    "sP+gn5//e3t7/9na2/Xw8PD/4uHh/9fW1/+cn6H4ilI8/6B/bP9cRUP/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////V0xS/1dM"
+    "U/9YTFP/V0xT/1dMU/9XTFL/V0xS/1dMUv9XTFL/V0xS/1dLUv9WS1H/VkpQ/1VKUP9VSU//VEhO/1RITv9RREr/UEJI/05BR/9NQEb/TD9F/4l0aP9vY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/9nT0f/w8PD/7/Dv/7epmf+0opX/tKOV/7Sjlf+zo5X/s6KV/7Sjlf+0o5X/tKOV/7Ojlf+0o5X/s6OV/7Oilf+0o5X/s6KV/7Oi"
+    "lf+zo5X/s6OV/7Ojlf+zopX/tKOV/7Silf+zo5X/s6KV/7Sjlf+0opX/s6OV/7Ojlf+0o5X/s6OV/7Silf+0o5X/s6KV/7Ojlf+zopX/tKOV/7Smmv/l5eT/"
+    "5OTk/+Xk5P/k5OT/4+Pj/+Pj4//j4+L/4+Li/+Li4v/i4eL/4eHh/+Hh4f/h4eH/4eHh/+Hh4f/h4OH/4ODg/+Dg4P/g4N//39/f/9/f3/+woJT/qZaH/6mW"
+    "h/+plof/qZaI/6mWiP+bhXb/3d3c/93c3P+4qqL/WDQl/2k+Lf92RTP/gUs2/4JNOf/Mz8/fyMfI/7Gwsf+goJ7/e3t6/9ra2vXx8fH/4uLj/9jX2P+doKH4"
+    "ilI8/6F/bP9hSEX/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////XVBU/11QVP+2rKX/tqyl/7aspf+2rKX/tqyl/7aspf+2rKX/"
+    "tqyl/7aspP+2rKT/tquk/7arpP+2q6T/tauk/7WrpP+0qqL/VUZK/1RFSP9TREf/UkNG/4l0aP9vY1z/iX15/5mLhv+Qg37/ZV9c/9nT0f/x8fD/8PHw/7ep"
+    "mf+1pZb/taWW/7Wklv+1pZb/taWW/7Wllv+1pZb/taWW/7Wklv+1pZb/taWX/7Wklv+1pJb/taSW/7Wllv+1pZb/taSW/7Wklv+1pZb/taSW/7Wllv+1pZb/"
+    "taSW/7Wllv+1pZb/taSW/7Wklv+1pZb/taSW/7Wllv+1pZb/taWW/7Wllv+1pJb/taSW/7Smmv/m5eX/5ebl/+Xl5f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/4ODg/+Df4P+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/3t7d/93d3f+4qqL/"
+    "WDQl/2k+Lv92RTP/gUs2/4JNOf/MztDfyMfK/7Gwsf+foJ//e3x7/9vZ2vXx8vL/4+Pk/9nY2f+eoaH4ilI8/6F/bP9mSkf/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////Y1RX/2NUV/+/trL/v7ay/7+2sv+/trL/v7ay/7+1sv+/tbH/v7Wx/7+1sf+/tbH/vrWx/761sf++tLD/vrSw/760"
+    "sP+9s6//W0pM/1pIS/9YR0r/WEZI/4t1aP9vY1z/iX15/5mLhv+Qg37/ZV9c/9nT0f/x8vL/8fLx/7epmf+2ppj/taWY/7ammP+2ppj/taWY/7almP+2pZj/"
+    "taWY/7WmmP+1pZj/taWY/7almP+1pZj/taaY/7WmmP+2pZj/tqWY/7ammP+2ppj/taaY/7almP+1ppj/tqWY/7WlmP+1pZj/taaY/7WmmP+1ppj/tqWY/7Wm"
+    "mP+1ppj/tqaY/7ammP+1ppj/taWY/7Wmmv/m5ub/5ubm/+Xl5v+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/4uHg/+Hh4P+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/397e/9/e3f+4qqL/WDQl/2o+Lv92RTP/gUw3/4JNOf/Mz9DfyMrK/7Gx"
+    "sf+foJ7/ent6/9vZ2vXx8vL/4+Tk/9rZ2v+goqP4ilI8/6GAbP9qT0j///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////aVhZ/2lY"
+    "Wf/Bt7L/wbey/8G3sv/Bt7L/wbey/8C3sv/AtrL/wLay/8C2sv/AtrL/wLax/8C2sf/AtrH/wLax/8C1sf++tK//YE5O/19MTP9eS0v/XUpK/4x2af9vY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/9nT0f/y8/L/8fPx/7epmf+4qJn/t6eZ/7enmf+3qJn/t6iZ/7eomf+3qJn/t6eZ/7enmf+3p5n/t6eZ/7enmf+3qJn/t6iZ/7en"
+    "mf+3p5n/t6eZ/7enmf+3p5n/t6eZ/7enmf+3qJn/t6eZ/7enmf+3p5n/t6iZ/7eomf+3p5n/t6eZ/7eomf+3qJn/t6eZ/7eomf+3p5n/t6eZ/7Wmmv/o5+f/"
+    "5+fn/+fm5v/m5ub/5ubm/+bl5f/m5eX/5eXk/+Tk5P/l5eP/5OTk/+Tk5P/k5OT/5OTk/+Tj4//j4+P/5OPj/+Pj4//j4uL/4uLh/+Hh4f+woJT/qZaH/6mW"
+    "h/+plof/qZaI/6mWiP+bhXb/4N7f/9/f3v+4qqL/WDQl/2s+Lv93RTP/gUs4/4JNOf/Mz8/fx8jJ/7Gxsf+fn53/e3t6/9va2vXx8fH/4+Tk/9rZ2/+hoaX4"
+    "ilI8/6KAbP9uUkz///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj"
+    "5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk////////////////////////////blxc/25cXP9vXFz/blxc/25cXP9uXFz/blxc/25cXP9uXFv/"
+    "bltb/25bW/9tWlr/bVpa/2xZWf9sWFj/a1hY/2pXV/9nU1P/ZlJR/2VQUP9kT07/Y05N/413af9vY1z/iX15/5mLhv+Qg37/ZV9c/9nT0f/z8/P/8vTy/7ep"
+    "mf+4qZv/uamb/7ipm/+5qZr/uKmb/7ipm/+5qZr/uKmb/7mpm/+4qZr/uamb/7ipm/+5qZv/uama/7ipm/+4qZv/uamb/7mpm/+5qZv/uamb/7mpm/+4qZv/"
+    "uKma/7mpm/+5qZr/uama/7ipmv+4qZv/uamb/7mpm/+5qZr/uamb/7ipm/+5qZv/uamb/7Wnmv/o6Oj/6Ojo/+jo5//n5+f/5+fm/+fm5v/m5uX/5ubl/+Xl"
+    "5f/l5uX/5eTl/+Xk5f/l5OX/5eTl/+Tl5P/k5OP/5OPj/+Tk4//j4+P/4+Li/+Pj4v+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/4ODf/+Df3/+4qqL/"
+    "WDQl/2s+Lv93RTP/gUw3/4JNOf/N0NHfycjK/7Kysf+en5//ent7/9rb2vXx8fH/4+Pk/9ra2/+hoqX4ilI8/6KBbP90VUz///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/"
+    "////////////////////////////////dWBe/3VgXv91YF7/dWBe/3VgXv91YF7/dWBe/3VgXf91YF3/dF9d/3RfXf90X1z/c15b/3NdW/9yXVr/clxZ/3Fb"
+    "Wf9uV1X/bVZT/2tVUf9qU1D/aVJP/454av9vY1z/iX15/5mLhv+Qg37/ZV9c/9nT0f/z9PT/8/Tz/7epmf+5qp3/uaqd/7mqnf+6qpz/uaqd/7mqnf+5qp3/"
+    "uaud/7mqnf+5qp3/uaqd/7mqnf+5qp3/uaqd/7mqnP+5qp3/uqqd/7mqnf+5qp3/uaqd/7mqnP+5qp3/uaqc/7mqnf+5qpz/uqqd/7mqnf+5qp3/uaqd/7mq"
+    "nf+5qp3/uaqd/7qqnf+5qp3/uaqd/7Wnm//p6en/6eno/+np6P+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/4+Pj/+Tj4v+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/4eHg/+Hg3/+4qqL/WDQl/2o+Lv93RjP/gk04/4JNOf/N0NDfyMnL/7Ky"
+    "sf+gn5//e3t7/9rc2/Xy8fL/4+Pk/9vb2/+gpKX4ilI8/6KBbf94WE////////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/"
+    "ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////emRg/3pk"
+    "YP+/sqj/v7Ko/7+yqP+/sqj/v7Ko/7+yqP+/sqj/vrKo/76yqP++saj/vrGo/76xp/++saf/vrGn/76wp/+9r6b/cllW/3BYVP9vV1P/blVS/5B5a/9vY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/9nT0f/19fT/9PX0/7epmf+7rJ7/u6yd/7usnv+7rJ7/u6yd/7usnv+7rJ3/u6ye/7qsnv+6rJ3/uqye/7usnf+6rJ7/u6yd/7us"
+    "nf+7rJ3/uqyd/7qsnf+7rJ3/uqye/7qsnf+7rJ3/u6yd/7qsnf+6rJ3/u6yd/7qsnf+6q53/u6yd/7qsnf+7rJ7/u6ye/7usnf+6rJ7/u6ye/7Wnm//q6un/"
+    "6urq/+np6f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/5OXk/+Tl5P+woJT/qZaH/6mW"
+    "h/+plof/qZaI/6mWiP+bhXb/4eLh/+Hh4f+4qqL/WDQl/2o+Lv93RTT/gkw4/4JNOf/Mz9Dfx8rK/7Gysf+goJ//fHt8/9vc2/X08vP/5OTl/9zd3P+hpqX4"
+    "ilI8/6OBbf99W1H///////////9/f3//g4OD/4ODg/+Dg4P/g4OD////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////gGdj/4BnY//Iu7X/yLu1/8i7tf/Iu7X/yLu1/8e7tf/Hu7X/"
+    "x7u1/8e7tf/Hu7X/x7u1/8e6tP/HurT/xrq0/8a6tP/FubL/d11Y/3ZbV/91WlX/dFlU/5F6a/9wZF3/iX15/5mLhv+Qg37/ZV9c/9nT0f/19vX/9fX1/7ep"
+    "mf+8rZ//vK2f/72tn/+8rZ//vK2f/7ytn/+8raD/vK2f/7ytn/+8raD/vK2f/7ytn/+9raD/vK2g/72tn/+8raD/va2g/7ytn/+8rZ//vK2f/7ytn/+8rZ//"
+    "vK2f/7ytn/+8rZ//vK2g/72toP+8raD/vK2g/7ytoP+8raD/va2f/7ytn/+8rZ//va2f/7Wnm//q6+r/6urq/+rq6f/q6ur/6unp/+np6f/p6ej/6Ojo/+jo"
+    "5//o5+f/5+jn/+fo5//n6Of/5+jn/+fn5//n5+b/5+bm/+bm5v/m5uX/5ubk/+Xl5f+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/4uLi/+Li4f+4qqL/"
+    "WDQl/2s+Lv94RjT/g004/4JNOf/Nz8/fycnK/7Kys/+foKD/e3x7/93c2/X19PP/5uXm/93e3P+hp6b4ilI8/6OBbv+DXlP/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////hmtl/4ZrZf/JvLb/yby2/8m8tv/JvLb/yby2/8m8tv/JvLb/yby2/8m8tf/JvLX/yby1/8m8tf/JvLX/yLu1/8i7"
+    "tf/HurP/fmFb/31gWf98Xlj/e11X/5J6bP9wZF3/iX15/5mLhv+Qg37/ZV9c/9nT0f/29vX/9fb1/7epmf+9rqH/va6h/72vof+9rqH/va+h/72vof+9r6H/"
+    "va6h/72uof+9rqH/va+h/72uof+9r6H/va+h/72vof+9rqH/va+h/72vof+9r6H/va6h/72vof+9rqH/va6h/72uof+9rqH/va6h/72uof+9r6H/va6h/72v"
+    "of+9rqH/va6h/72vof+9r6H/va6h/7anm//s7Oz/6+zq/+zs6//r6+v/6urq/+rq6f/p6un/6enp/+np6f/p6en/6eno/+np6P/p6ej/6eno/+jo6P/o5+f/"
+    "5+fm/+fn5//n5ub/5ubm/+bm5v+woJT/qZaH/6mWh/+plof/qZaI/6mWiP+bhXb/4+Pi/+Pj4v+4qqL/WDQl/2s/Lv94RjT/g004/4JNOf/N0M/fysrK/7Oy"
+    "sv+fn5//e3t6/93d3PX19fT/5ubm/93e3f+ip6f4ilI8/6SBbv+HYVX/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////i29o/4tv"
+    "aP+Lb2j/i29o/4tvaP+Lb2j/i29o/4tvaP+Lb2f/im5n/4puZ/+Kbmb/iW1m/4ltZf+JbGX/iGxk/4hrY/+EZ1//g2Vd/4FkXP+BYlr/f2FZ/5R7bP9wZF3/"
+    "iX15/5mLhv+Qg37/ZV9c/9nT0f/29/b/9vf2/7mqnP++sKL/vrGi/76wov++saL/vrCi/76wov++saL/vrCi/76wov++sKL/vrGi/76wov++saL/vrCi/76w"
+    "ov++sKL/vrGi/76wov++sKL/vrCi/76wov++sKL/vrCi/76xov++sKL/vrCi/76xov++sKL/vrGi/76wov+/saL/vrCi/76xov++sKL/vrGi/7anm//t7ez/"
+    "7Ozs/+zt7P+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/6Ofm/+fn5v+yo5X/q5iK/6uY"
+    "iv+rmIr/qpiK/6qYiv+chnj/5OTj/+Tk4/+4qqL/WDQl/2s+Lv94RjT/g005/4JNOf/M0NDfycrL/7Oysf+goKD/e3t8/9vc3fX09PX/5+fm/93f3v+iqKj4"
+    "ilI8/6SBbv+MZFb/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////kXJp/5Fyav+Rc2r/kXJq/5Fyaf+Rcmn/kXJp/5Fyaf+Qcmn/"
+    "kHJp/5Bxaf+QcWj/j3Bn/49wZ/+Ob2b/jm9m/41uZf+NbmX/jW5k/41uZP+NbmX/jW5l/56Hef+Ignz/xMXE/9ra2v/Ozs7/ZV9c/9nT0f/2+Pb/9vf3/7qs"
+    "nf+/saP/wLGj/7+xo//AsaT/wLGk/7+xo/+/saT/v7Gj/8Cxo/+/saP/wLGk/8CxpP+/saT/wLGk/8CxpP+/saP/v7Gk/7+xpP/AsaT/wLGj/7+xo//AsaP/"
+    "v7Gk/8CxpP/AsaT/wLGk/7+xpP+/saT/wLGk/8Cxo/+/saT/wLGj/7+xpP+/saT/wLGk/7aom//t7u3/7e3t/+3t7P+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/6Ojn/+jo5/+0pZj/rpyN/66cjf+unI3/rZqN/62ajf+einr/5eXl/+Xl5P+4qqL/"
+    "WDQl/2s/L/95RjX/g005/4JNOf/M0M/fyMnJ/7Kxsv+ioKD/fHt7/9vc3fX09fX/5+jn/93g3v+kqaj4ilI8/6SCbv+QZ1n///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////lnZs/5Z2bP/Ht6z/x7es/8e3rP/Ht6z/x7es/8e3rP/Ht6z/x7es/8e3rP/Ht6z/x7er/8a2q//Gtqv/xrar/8a2"
+    "q//Gtqr/knFn/5JxZ/+ScWf/knFo/5+Iev+Jgn3/xcXF/9vb2//Pz8//ZV9c/9nT0f/3+Pj/9/j3/7ytn//Bs6X/wbKl/8Gzpf/Bs6X/wLKl/8Gypf/BsqX/"
+    "wbKl/8Gzpf/As6X/wbOl/8Gypf/AsqX/wbOl/8Gzpf/BsqX/wbOl/8Gzpf/Bs6X/wLOl/8Gypf/Bs6X/wbOl/8Gzpf/AsqX/wLOl/8Gzpf/Bs6X/wbOl/8Gz"
+    "pf/Bs6X/wbOl/8Gzpf/As6X/wLKl/7aonP/v7u7/7u/t/+3u7f/t7u3/7e3t/+3t7P/s7ez/7Ozs/+vr6//r6+v/6+zr/+vs6//r7Ov/6+zr/+vr6v/q6ur/"
+    "6urp/+nq6f/p6en/6eno/+np6P+2p5v/sJ+Q/7CfkP+wn5D/rp2P/66dj/+hjHz/5ebm/+bl5f+4qqL/WDQl/2s/L/94RzX/g005/4JNOf/Mz8/fyMrJ/7Oz"
+    "s/+hoKL/fXt9/9zd3fX19vb/5+no/97h3v+mqqf4ilI8/6SCbv+Ualr///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////+Lj5P/i4+T/"
+    "4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk////////////////////////////mnlt/5p5"
+    "bv/Pwbj/z8G4/8/BuP/Pwbj/z8G4/8/BuP/PwLj/z8C4/8/AuP/PwLj/z8C4/8/AuP/PwLf/zr+3/86/t//Ov7f/lnRo/5Z0aP+XdGn/l3Vp/6CJev+Ign3/"
+    "xsbG/9zc2//Pz8//ZV9c/9nT0f/4+ff/9/n4/72wof/Ctab/wbSm/8G0pv/Btab/wbSm/8K1pv/Btab/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0"
+    "pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/BtKb/wbSm/8G0pv/Btab/wbSm/8G1pv/BtKb/wbSm/7aonP/v7+//"
+    "7+/v/+7v7v/u7+7/7e7t/+7u7f/t7e3/7e3t/+zs7P/s7ez/7Ozr/+zs6//s7Ov/7Ozr/+zs6//r7Ov/6uvq/+vq6v/q6ur/6urq/+np6f+4qp3/s6KT/7Oi"
+    "k/+zopP/saCS/7Ggkv+jjn//5ufm/+bm5v+4qqL/WDQl/2tAMP95RzX/hE06/4JNOf/M0NDfyMnK/7Kysv+hoqH/fHx8/9zd3vX29vf/6Oro/+Hh3/+mqqj4"
+    "ilI8/6SDbv+YbFv///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rL"
+    "yv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////n3tv/597b//Rwbn/0cG5/9HBuf/Rwbn/0cG5/9HBuf/Rwbn/"
+    "0cG4/9HBuP/Rwbj/0cG4/9DBuP/QwLj/0MC4/9DAuP/Pv7b/l3Fl/5VwY/+UbmH/k21g/5d+bv9wZF3/iX15/5mLhv+Qg37/ZV9c/9nT0f/4+fj/+Pj4/76x"
+    "o//Ctaj/w7Wo/8K1qP/Dtaf/wrWn/8K1p//Ctaf/wrWo/8K1qP/Ctaf/w7Wo/8K1qP/Ctaj/wrWn/8K1p//Ctaf/w7Wn/8O1p//Ctaf/w7Wo/8O1p//Ctaj/"
+    "wrWn/8O1qP/Dtaf/w7Wn/8K1p//Ctaj/wrWo/8O1p//Dtaf/wrWn/8K1qP/Ctaj/w7Wo/7aonP/w8PD/8PDv/+/w7/+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/6+vq/+rr6v+6raD/taWX/7Wll/+1pZf/tKKV/7Silf+lkYH/5+jn/+jo5v+4qqL/"
+    "WDQl/2xAMP95SDX/hE06/4JNOf/M0M/fyMrK/7Kysf+goaH/e3x8/9zd3vX29vf/6ero/+Li4f+mq6n4ilI8/6SDb/+cb17///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/"
+    "////////////////////////////////o35x/6N+cf+jfnH/o35x/6N+cf+jfnH/o35x/6N+cf+jfnH/on5x/6J9cP+ifXD/oXxv/6F8b/+hfG7/oHtu/6B6"
+    "bf+cdmj/m3Rn/5lzZf+YcWT/l3Bi/5h9bv9wY1z/iX15/5mLhv+Qg37/ZV9c/9jS0P/5+fn/+Pr4/8CzpP/Etqn/xLap/8S2qf/Etqn/w7ap/8S2qf/Dtqn/"
+    "w7ep/8O2qf/Etqn/xLap/8S2qf/Etqn/xLap/8O2qf/Dtqn/xLap/8O2qf/Dtqn/xLap/8O2qf/Dtqn/w7ap/8S2qf/Etqn/xLap/8O2qf/Etqn/w7ap/8S2"
+    "qf/Etqn/w7ap/8S2qf/Etqn/xLap/7eonP/x8fD/8PDw//Dw7/+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/6+zr/+vr6/+8sKP/t6ia/7eomv+3qJr/tqWY/7almP+olYX/6ejo/+jo6P+4qqL/WDQl/2xAMP95SDX/g006/4JNOf/N0M/fysvK/7Oz"
+    "sf+foKD/e3t7/97e3/X39/j/6uvq/+Lk4v+nrar4ilI8/6WDb/+ecV7///////////9/f3//g4OD/4ODg/+Dg4P/g4OD////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////poBy/6aA"
+    "cv+mgHL/poBy/6aAcv+mgHL/poBy/6aAcv+mgHL/poBx/6WAcf+lf3H/pX9w/6R+cP+kfm//o31v/6N9bv+feGn/nndn/511Zv+bdGT/mnJj/5l+bv9vY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/93Y1v/5+vn/+fr5/8G0pf/FuKr/xbip/8W3qv/Ft6r/xbep/8W4qv/FuKn/xbip/8W4qv/EuKn/xLiq/8W4qf/EuKr/xbep/8W3"
+    "qf/FuKn/xLip/8S4qf/FuKn/xLiq/8S4qf/Ft6n/xbep/8S4qf/Et6n/xbep/8S3qf/Ft6n/xbip/8S4qf/FuKn/xbiq/8W4qf/EuKr/xbiq/7eonP/x8vH/"
+    "8fHx//Hx8f/w8fH/8PHv//Dw8P/w8O//8O/v/+/v7//u7+//7+7u/+/u7v/v7u7/7+7u/+7v7v/u7u3/7u3t/+3u7f/t7e3/7ezs/+zs6/++sKT/u6ud/7ur"
+    "nf+7q53/t6ib/7eom/+ql4j/6enp/+np6P+4qqL/WDQl/2tAMP96SDb/hE47/4JNOf/Nz8/fysvK/7Kzsf+goKD/e3t7/9/f3vX4+Pj/6uvr/+Lk4/+nrar4"
+    "ilI8/6WDb/+hc1//////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////qYJz/6mDc//Nu67/zbuu/827rv/Nu67/zbuu/827rv/Nu67/"
+    "zbuu/827rv/Nu67/zbuu/827rf/Muq3/zLqt/8y6rf/LuKz/oXlp/6B3Z/+edmb/nXVl/5l/bv9wY13/iX15/5mLhv+Qg37/ZV9c/97Z2P/5+vn/+fr5/8G1"
+    "pv/Fuar/xbmr/8W5qv/Fuar/xbmq/8W5qv/Fuav/xbmr/8W5qv/Fuav/xbmq/8W4q//Fuav/xbmr/8W5q//Fuav/xbmr/8W5q//Fuav/xbmq/8W4q//Fuav/"
+    "xbmq/8W5q//Fuav/xbmr/8W5q//FuKv/xbmr/8W5q//Fuav/xbmr/8W5q//Fuav/xbmr/7epnP/y8vL/8vLx//Ly8f/x8fH/8fLx//Dx8f/x8PD/8PDw//Dw"
+    "8P/w8O//8O/v//Dv7//w7+//8O/v/+/v7v/u7+7/7u7u/+7u7f/u7e3/7e3s/+3t7P++saX/va6g/72uoP+9rqD/uque/7qrnv+tm4v/6uvq/+rq6f+4qqL/"
+    "WDQl/2xBMf96STb/hE47/4JNOf/Nz8/fycrJ/7Kzs/+hoqP/fHx7/9/g3vX4+Pj/6+zs/+Pl4/+oraz4ilI8/6aDb/+jdGD/////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////q4N0/6uDdP/UxLr/1MS6/9TEuv/UxLr/1MS6/9TEuv/UxLr/1MS6/9TEuv/Uw7r/1MO6/9TDuv/Uw7n/1MO5/9TD"
+    "uf/Twbj/o3lq/6J4aP+hd2f/oHVl/5l/b/9wY1z/iX15/5mLhv+Qg37/ZV9c/93Y1//5+vn/+fr5/8O2qP/Guaz/xrms/8a6rP/Guaz/xrms/8W5rP/Guqz/"
+    "xrms/8a5rP/Guaz/xbms/8W5rP/Guaz/xrqs/8W5rP/Fuaz/xbms/8a5rP/Guaz/xbms/8a5rP/Guaz/xrms/8a5rP/Guaz/xrms/8W5rP/Guaz/xrms/8a6"
+    "rP/Gua3/xbms/8a6rP/Guaz/xrms/7epnf/z8/P/8/Pz//Lz8v+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/7u/t/+7u7v++s6b/vrCi/76wov++sKL/vbCi/72wov+woJD/6+zq/+vr6/+4qqL/WDQl/21BMf96STb/hE87/4JNOf/M0NDfyMrK/7Sz"
+    "sv+io6L/fH19/+Dh4PX5+ff/7e7s/+Xn5f+qr674ilI8/6aDb/+jdGD/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////q4Nz/6uD"
+    "c//UxLr/1MS6/9TEuv/UxLr/1MS6/9TEuv/Uw7r/1MO6/9TDuv/Uw7r/1MO6/9TDuv/Uw7n/1MO5/9TDuf/Twbj/o3pq/6J4aP+hd2f/oHZl/5p/b/9wY1z/"
+    "iX15/5mLhv+Qg37/ZV9c/93Y1v/5+vn/+fr5/8S3qf/Huq3/x7ut/8e6rf/Gu63/xrqt/8e6rf/Hu63/x7qt/8a6rf/Huq3/x7ut/8e6rf/Hu63/xrqt/8a6"
+    "rf/Huq3/xrqt/8e6rf/Huq3/x7qt/8e6rf/Guq3/xrqt/8e7rf/Huq3/xrqt/8e7rf/Huq3/xrut/8e6rf/Hu63/xrqt/8e7rf/Guq3/x7ut/7epnf/z9PP/"
+    "8/Tz//Pz8v+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/7+/u/+7u7v/AtKf/wLOl/8Cz"
+    "pf/As6X/v7Gk/7+xpP+yopP/7Ozs/+zs6/+4qqL/WDQl/2xBMf96STb/hU88/4JNOf/M0NHfycvM/7S0s/+jo6L/fH19/+Dh4fX5+ff/7e/s/+bn5f+rr6/4"
+    "ilI8/6aEb/+jdGD///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////qoJz/6qCc/+qgnP/qoJz/6qCc/+qgnP/qoJz/6qCc/+rg3P/"
+    "q4Nz/6uCc/+rgnP/qoJy/6qCcv+pgXH/qYFx/6mAcf+le2v/o3pq/6J4aP+hd2f/oHZm/5p/b/9wZF3/iX15/5mLhv+Qg37/ZV9c/9zX1f/5+vn/+fr5/8S5"
+    "qf/Hu63/yLut/8e7rf/Iu63/yLut/8e7rf/Hu63/x7yt/8i7rf/HvK3/yLuu/8i7rf/Iu63/yLut/8i8rf/Hu63/x7ut/8e7rf/Iu63/yLut/8e8rf/Iu63/"
+    "x7uu/8i8rf/IvK3/yLuu/8e7rv/Iu63/yLuu/8i8rf/HvK7/yLut/8e8rf/Hu63/yLut/7yvo//09fT/9PXz//T18//z9PP/8/Pz//Pz8v/y8/P/8vPz//Lz"
+    "8v/y8vL/8vLx//Ly8f/y8vH/8vLx//Hx8f/x8fD/8PHw//Dw8P/w8PD/7/Dw/+/w7//Ataf/w7Wo/8O1qP/Dtaj/wbOm/8Gzpv+0o5T/7e3s/+3t7P+4qqL/"
+    "WDQl/21BMf96STf/hU47/4JNOf/N0NHfysnN/7S0tf+jo6L/fXx7/+Dg4fX5+fj/7e/s/+bn5f+rr6/4ilI8/6aEb/+jdGD///////////+Dg4P/j4+P/4+P"
+    "j/+Pj4//j4+P/////////////////+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/4uPk/+Lj5P/i4+T/"
+    "4uPk////////////////////////////qYFy/6mBcv+pgXL/qYFy/6mBcv+pgXL/qYFy/6mBcv+pgXL/qoJy/6mBcv+pgXL/qoJz/6qCcv+qgXL/qYFx/6mA"
+    "cf+le2v/o3pq/6J4aP+hd2f/oHZm/5p/b/9wY13/iX15/5mLhv+Qg37/ZV9c/9zX1f/5+vn/+fr5/8W5qv/Jva7/yLyu/8m8rv/JvK7/yLyu/8i8rv/JvK7/"
+    "yLyu/8i8rv/IvK//yLyu/8m8rv/IvK//yL2u/8i8rv/IvK7/yLyu/8m8rv/JvK7/yLyu/8i8r//IvK7/ybyu/8i8rv/IvK7/yL2v/8i8rv/IvK7/yLyu/8i8"
+    "rv/IvK7/ybyu/8m8rv/IvK//yLyv/72wpP/19vX/9fX0//T19P/09fT/9PT0//T08//z9PP/8/Pz//Pz8v/y8/L/8vPy//Lz8v/y8/L/8vPy//Ly8v/y8vH/"
+    "8vLx//Hx8f/x8fD/8fHw//Dx7//Btan/xLeq/8S3qv/Et6r/w7ep/8O3qf+1ppb/7u7t/+3u7f+4qqL/WDQl/2xBMf96STf/hU88/4JNOf/N0NDfycrM/7S0"
+    "tf+jo6P/fHx8/+Dg4fX4+fj/7O/t/+Xo5/+tsLD4ilI8/6aDb/+jdGD///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/"
+    "ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////qYFx/6mB"
+    "cf+pgXH/qYFx/6mBcf+pgXH/pH1u/5t2af+Wc2X/lnNl/5ZzZf+Wc2X/l3Rm/5d0Zv+XdGX/l3Nl/5t2aP+geGj/pHpq/6J4aP+hd2f/oHZm/5p/b/9wZF3/"
+    "iX15/5mLhv+Qg37/ZV9c/9zX1f/5+vn/+fr5/8W6q//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9"
+    "r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/8m9r//Jva//yb2v/76xpP/19/X/"
+    "9vb1//X19P+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/8fHx//Hy8f/BtKf/yL2u/8i9"
+    "rv/Iva7/x7yv/8e8r/+3qJj/7u7u/+/v7v+4qqL/WDQl/21CMf96STf/hlA8/4JNOf/N0NHfysrN/7S0tf+ioqL/e3x8/+Dg4fX4+fj/7O/v/+Xo5/+tsLD4"
+    "ilI8/6aEb/+jdGH///////////+Dg4P/j4+P/4+Pj/+Pj4//j4+P/////////////////8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rL"
+    "yv/Ky8r/ysvK/8rLyv/Ky8r/ysvK/8rLyv/Ky8r/////////////////////////////////qoJz/6qCc/+qgnP/qoJz/6qCc/+qgnP/nHdq/4BiV/9yWE3/"
+    "c1hN/3NYTv9zWE3/c1dN/3JXTf9yV03/cldM/4BhVv+WcWL/o3lq/6J4aP+hd2f/oHZm/5p/b/9wZF7/iX15/5mLhv+Qg37/ZV9c/9zX1f/5+vn/+fr5/8G0"
+    "pv/EuKv/xLmr/8S4qv/EuKr/xLir/8S4q//Dt6r/w7eq/8O3qv/Ctqn/wrap/8G1qP/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaj/"
+    "wbWo/8G1qP/Btaj/wbWo/8G1qP/Btaj/wbWo/8G1qP/AtKb/wbOl/8Czpf+/sqX/va+h/8W5rf/29vb/9vf2//X39f+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/8vPy//Ly8f/Kwbb/uKub/7irm/+4q5v/uKqc/7iqnP+4qZr/7+/v/+/v7/+4qqL/"
+    "WDQl/21CMf96STf/hlA9/4JNOf/N0NDfycrL/7S0tP+jo6P/fXx9/+Dg4fX5+fn/7e/w/+bo6P+ssLD4ilI8/6aEb/+jdGD///////////9/f3//g4OD/4OD"
+    "g/+Dg4P/g4OD////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////qoNz/6qDc/+qgnP/qoJz/6qCc/+qg3P/y7Op/8uzqf/Ms6n/zLOq/8yzqv/Ms6n/zLOp/8yzqf/Ms6n/y7Op/3JX"
+    "Tf+SbV//o3lp/6J4aP+hd2f/oHZm/5p/b/9wZF7/iX15/5mLhv+Qg37/ZV9c/9nU0f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+P/5+vn/+Pn4//n5+f/5+fj/+fn4//j5+P/4+fj/9/j4//f4"
+    "9//3+Pf/9/j3//f49//3+Pf/9/j3//f39//29/b/9vf3//b39v/29/b/9fb1//b29v/19vX/9fX1//T19f/19fT/9PX0//T19P/09fT/9PX0//T19P/09fT/"
+    "8/Tz//Pz8//z8/P/8/Pz//Lz8v/z8/L/8vLy//Ly8f/x8vH/8fHw//Hx8P/w8PD/8PDv//Dw8P+4qqL/WDQl/21BMv96STj/hlA9/4JNOf/N0NDfysrK/7W0"
+    "tP+ko6P/fX19/+Dg4fX6+fr/7+/x/+jo6v+tsbL4ilI8/6aEb/+jdWH/////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////////////////////////////////////////////pn9v/6Z+"
+    "b/+mfm//pn5v/6Z+b/+mf2//ybGn/8Svof/Er6H/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/zLOp/3NYTf+YdGb/q4Nz/6uDc/+rg3P/q4N0/6eOfv+OiYP/"
+    "zM3M/+Tl5P/X19f/ZV9c/9jU0v/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+P/5+fn/+fr5//j5+P/4+fj/+Pn4//j4+P/3+fj/+Pj3//j49//4+Pf/+Pj3//f49//3+Pf/"
+    "9/j3//b49//39/f/9vf2//b39v/29/X/9fb1//X29v/19vX/9fb0//X29P/19vT/9fb0//T19f/19fT/9PT0//T19P/z9fT/8/Xz//P08//y8/P/8/Pz//Lz"
+    "8v/y8/L/8vLx//Ly8v/x8vH/8PLw//Hx8P+4qqL/WDQl/25CMf96Sjf/hlA9/4JNOf/N0NDfy8vL/7a1tP+kpaT/fX1+/+Dg4fX6+fr/7+/x/+jo6v+tsbP4"
+    "ilI8/6aEb/+jdGH/////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    "////////////////////////////////////////////////////////////////////////pX1u/6V9bv+lfW7/pX1u/6V9bv+lfW7/yK+m/8Svof/Er6H/"
+    "xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/zLOq/3NYTv+YdWf/q4N0/6uDdP+sg3T/rIN0/6ePgP+UjYj/z9DP/+Xm5f/X19f/ZV9c/9DJxv/Kysj/z9DN/87P"
+    "zv/P0M//z9DP/9DRz//Q0c//0NHP/9DRz//Q0tD/0NLQ/9HS0f/R0tH/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/"
+    "0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HS0v/R0tL/0dLS/9HT0v/T09L/09PT/9PT0//U09P/1NPT/9TT0//U09P/1NPT/9TT"
+    "0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0v/U1NL/1NPS/9LR0P/T09H/0tPR/9LS0f/Q0ND/0dLQ/9HR0P/Q0dD/zs7O/9DMyv+4qqL/"
+    "WDQl/25CMv97Sjj/hlA9/4JNOf/N0NDfysvL/7W1tv+lpKT/fX19/+Dg4vX6+fr/7+/w/+jo6v+ssLP4ilI8/6eFcP+jf2v/oX1p/6B8aP+gfGn/oHxo/6B8"
+    "aP+gfGj/oHxo/6B8aP+gfGj/oHxo/6B8aP+ffGj/n3xo/598aP+ffGj/n3xo/598aP+ffGj/n3xo/598af+ffGn/nn1r/559a/+Xe2v/pYl4/6iNfv+ojn7/"
+    "qY9//6mQgP+pkYH/qZGB/6mRgf+pkoH/qZKB/6mSgf+pkoH/qZGB/6mRgf+pkYH/yryy/8Svof/Er6H/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/yryy/3Jh"
+    "V/+WgXP/qZGB/6qRgf+qkYH/qpKC/6yWhv+qqKX/2drZ/+fo5v/Z2dj/ZV9c/83Bvf/OxL7/z8bA/87Fvv/Nw77/zcK+/8vCvf/Mwrz/zMK8/8zAuv/Lvbn/"
+    "yr63/8i9t//IvLb/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8i7"
+    "tf/Iu7X/yLu1/8i7tf/Iu7X/yLu1/8e6tP/Fu7T/xrmz/8W5sv/FuLH/xLiy/8S4sv/FuLH/xbix/8W3sf/EuLH/xbmy/8W5sv/FubL/xbmy/8a5sf/GubL/"
+    "xrmz/8i7s//Hu7P/x7u0/8zCvP/Mwbv/zMG8/8u/uv/QxcD/zsO9/8vBvP/Nwrz/zcG9/8zBvP/Nwb3/WDQl/29EM/98Szn/h1E+/4NOOf/N0NDfy8zL/7a2"
+    "tv+lpaT/fX19/+Dh4vX6+vr/7+/x/+jo6v+tsbP4ilI8/76Oev+whXP/p4Bt/6V9a/+lfWv/pHxr/6R8a/+kfWv/o3xr/6N8a/+kfGv/pHxr/6N7av+je2r/"
+    "o3tp/6N7af+ie2j/onto/6J7aP+he2r/oXtr/6J8a/+gfGz/nnxu/5x7bv+FdGz/sqSb/72zrP+/tq//wbmy/8G6s//Cu7X/w7u2/8O8t//Dvbf/w7y3/8O8"
+    "t//DvLf/w7y3/8O8t//DvLf/2tXT/8Svof/Er6H/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/2tfT/4N+e/+OgXv/nY+I/5yNhf+YioP/mImB/5WHgf+ZjIj/"
+    "mo2I/5qMh/+ShYD/ZV9c///////////////////////////////////////////////////////////////+///+/P///vv///z5///8+f///Pn///z5///8"
+    "+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///69v/++fX/"
+    "/vn0//749P/89/P//Pfx//z28v/79fL/+/Xy//v28v/89/L//Pfy//z38v/89/L//Pfy//348v/9+vX/+/fz//z48v/TzMr/7efk/+3n5P/79fD/08zK/+3n"
+    "5P/t5+T//vn0/9PMyv/t5+T/7efk//748v//+/n/WDQl/3JGNf9/TDr/h1I+/4ROOf/O0dLfy8vM/7a2tf+kpKX/fX19/+Dh4vX6+vr/7+/x/+jo6v+vs7P4"
+    "ilI8/8GQff/Bj3z/wY98/8GPe//Aj3v/wI57/8COe//BjXr/wI16/8CNev+/jXr/v415/7+Nef+/jHn/v4x4/76LeP++i3f/vYp3/76Kd/+9inb/vIp3/7yJ"
+    "dv+4hnP/soFw/6d6aP9lX1z/3djW//n6+f/5+fn/+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/y8vL/8Svof/Er6H/"
+    "xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/+fr5/6Slpf+Qg37/opOO/6KTjv+ik47/opOO/6KTjv+ik47/n5GM/5uNiP+UhoL/ZV9c////////////////////"
+    "///////////////////////////////////////////+///+/P///vv///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn/"
+    "//z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///69v/++fX//vn0//749P/89/P//Pfx//z28v/79fL/+/Xy//v2"
+    "8v/89/L//Pfy//z38v/89/L//Pfy//348v/9+vX/+/fz//v38/+dlJf/2dLT/9nS0//58e3/nZSX/9nS0//Z0tP///r2/52Ul//Z0tP/2dLT///38v//+/n/"
+    "WDQl/3hJN/+CTjz/ilQ//4ROOf/P0tLfzMzN/7W2tf+kpaX/fXx+/+Dh4vX6+vr/8O/x/+np6v+vtLP4ilI8/8GQff/Bj3z/wY98/8GPfP/Bj3z/wY57/8GP"
+    "e//Ajnr/wI16/8CNev+/jXr/v416/7+Mef+/jHn/vox5/7+LeP++jHj/vot4/72Ld/+9i3f/vYp2/72Jdv+4h3T/soFv/6d6aP9lX1z/3tnY//n6+f/5+vn/"
+    "+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/y8vL/8Svof/Er6H/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/+fr5/6Wm"
+    "pf+Qg37/opOO/6KTjv+ik47/opOO/6KTjv+ik47/oJGM/52Oiv+XiYX/ZV9c////////////////////////////////////////////////////////////"
+    "///+///+/P///vv///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8+f///Pn///z5///8"
+    "+f///Pn///z5///8+f///Pn///z5///69v/++fX//vn0//749P/89/P//Pfx//z28v/79fL/+/Xy//v28v/89/L//Pfy//z38v/89/L//Pfy//348v/9+vX/"
+    "+/fz//v38/+dlJf/2dLT/9nS0//58e3/nZSX/9nS0//Z0tP///r2/52Ul//Z0tP/2dLT///38v//+/n/WDQl/39OOv+HUj7/jVVB/4ZPOv/Q0tPey8vN/7W3"
+    "tv+kpqb/fX19/+Dh4vX6+vr/8O/x/+nq6v+utLP4ilI8/8KQff/BkH3/wY98/8GQfP/Bj3v/wY98/8GPe//Ajnv/wY56/8COev/AjXr/wI56/7+Nef+/jHn/"
+    "v4x5/7+MeP++i3j/vot3/72LeP+9i3f/vYt2/72Kdv+5hnX/soFv/6d6aP9lX1z/3djX//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr4//n6"
+    "+P/4+vj/+fn5//j5+P/4+fj/+/v7/8Svof/Er6H/xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/+vr6/6Wmpv+Qg37/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "oZKN/56Qi/+bjYj/pXln/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/jlM8/4dTPv+MVUH/kFhC/4dQO//Q09Pey8zL/7e3t/+mpqb/fX1+/+Dh4vX6+vr/8O/x/+nq6v+utLP4"
+    "ilI8/8KQff/CkH3/wZB9/8KPff/CkHz/wY98/8CPfP/Aj3v/wY57/8COe//Ajnr/wI56/8CNev+/jXn/v4x5/76Nef++jHn/vot4/76LeP++i3f/vYp3/72K"
+    "d/+5h3X/soJw/6d6af9lX1z/3djW//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/4+vj/+/z7/8Svof/Er6H/"
+    "xK+h/8Svof/Er6H/xK+h/8Svof/Er6H/+/v6/7q7uv+Vh4L/opOO/6KTjv+ik47/opOO/6KTjv+ik47/oZKN/6CRjP+ej4r/m42I/+Xm5f/g4d//3N3c/5GD"
+    "f/+Qg37/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/2NnY/9jZ2P/Y2Nj/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/"
+    "kIN+/5CDfv/X19f/19fX/9fX1/+Qg37/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/kIN+/5CDfv+Qg37/kIN+/9TU1P/U1NT/1NXT/9TU1P/T1NP/pJeQ/04u"
+    "If9nQjT/dEk5/35QP/+GVUT/ildE/4xYRf+MV0X/jFdE/4tWRP+LVkP/i1ZD/4tWQ/+LVkP/i1ZD/4tVQ/+KVUL/iVVC/4lVQv+JVUH/iFRB/4lUQP+KVUH/"
+    "jFVB/45XQv+RWUP/lFpE/4hRO//R1NTezMzL/7e3tv+mpqb/fX1+/+Dh4vX5+vr/8PDx/+rr6/+ws7X4ilI8/8KRff/CkH3/wpB9/8KQfP/Bj3z/wY98/8CP"
+    "fP/Bj3v/wY57/8COev/Ajnv/wI16/8CNev/AjXn/v416/76Mef+/jHj/vot5/76MeP++i3j/vot3/72Ld/+5h3X/s4Jw/6h6af9lX1z/3NfV//n6+f/5+vn/"
+    "+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/y8vL/8vLy//Ly8v/y8vL/8vLy//Ly8v/+/v7//v7+//7+/r/+/v7/+Tk"
+    "4/+ej4r/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6GSjf+gkYz/npCL/+3v7v/q7Or/6erp/5qMh/+Zi4b/mYuG/5mLhv+Zi4b/mYuG/5mLhv+Zi4b/"
+    "mYuG/5mLhv+Zi4b/5+jn/+fn5//n5+f/mYuG/5mLhv+Zi4b/mYuG/5mLhv+Zi4b/mYuG/5mLhv+Zi4b/mYuG/5mLhv/l5uX/5eXl/+Xm5f+Zi4b/mYuG/5mL"
+    "hv+Zi4b/mYuG/5mLhv+Zi4b/mYuG/5mLhv+Zi4b/mYuG/+Lj4v/i4uL/4uLh/+Li4f/h4uH/rqGZ/1MxI/9uRjj/fE49/4ZVQ/+OWkf/k11J/5ReSf+UXUj/"
+    "lF1J/5NdSP+TXEj/k1xI/5NcSP+TXEj/k1xI/5NcR/+SW0b/kltG/5JaRv+SWkb/kllF/5JaRP+SWkX/klpF/5NbRf+UW0X/lltG/4lRPP/S1dbey8zM/7a2"
+    "tv+mpab/fn19/+Dh4vX5+vr/8PHx/+vs6/+ytLX4ilI8/8ORff/CkX7/wpB9/8KQff/CkHz/wY98/8GPfP/Aj3v/wI97/8GPe//Ajnv/wI57/8CNev/AjXr/"
+    "v415/7+Mev+/jHn/v4x4/76MeP++jHj/vot4/76Ld/+5h3X/s4Jw/6h7af9lX1z/3NfV//n6+f/5+vn/+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/+Pn5//j5+P/4+fj/+Pn4//j4+P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv+hko3/oZKN//P08//y8/L/8vLx/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/7/Dw/+/w7//v8O//n5CL/5+Q"
+    "i/+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi//u7u7/7e7u/+7u7f+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/n5CL/5+Qi/+fkIv/"
+    "n5CL/+vr6//q6+r/6uvq/+vq6v/q6un/tKef/1YzJP9zSTr/f1FB/4tZRv+TXkr/mWBL/5phTP+aYUz/mmBL/5lgS/+ZX0v/mV9L/5lfS/+ZX0v/mV9L/5lf"
+    "S/+YX0r/mF5K/5heSf+YXkn/l15I/5ddSP+XXUj/l11I/5dcRv+YXEf/l11G/4pSPP/R1dbey8vM/7a3t/+mpqb/fn5+/+Dh4vX6+vr/8fHx/+zs6/+ztbX4"
+    "ilI8/8ORfv/CkX7/wpB9/8KQff/Cj3z/wo98/8GQfP/Bj3z/wY97/8GOe//Ajnv/wI97/8COev+/jXr/v416/7+Nev+/jHn/v4x5/76Mef+/jHj/vot4/76L"
+    "d/+5iHX/s4Jw/6h7av9lX1z/3NfV//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/"
+    "+fr5//n6+f/5+fj/+fn5//j5+P/4+vn/+Pr4//j5+P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//f39//29/b/9/f2/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/9fX0//X19f/19fT/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv/09PP/8/Tz//P08/+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Dx8P/w8PH/8PDv//Dw7//w8O//uKqi/1g0"
+    "Jf91Szv/g1NC/45bSP+XYE3/nGNO/55kTv+eY07/nWNN/51jTf+cYkz/nGJM/5xiTP+cYkz/nGJM/5xhTP+cYUv/nGFK/5tgSv+bYEr/mmBK/5pfSv+aX0n/"
+    "mV5I/5leSP+YXUj/mV5H/4pSPP/S1dbezMvN/7e3t/+mpqb/fn59/+Dh4vX6+vr/8vHy/+3r7P+zt7j4ilI8/8ORfv/CkX7/wpB9/8KQff/CkH3/wZB8/8GQ"
+    "fP/Bj3z/wY98/8GPe//Bjnv/wY97/8COev+/jXr/wI16/8CNef+/jXn/v4x5/7+MeP+/jHj/vox4/72LeP+5iHX/s4Jw/6h7af9lX1z/3NfV//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vj/+Pr4//j6"
+    "+P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//f49//3+Pf/9/f3/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv+ik47/9fb1//b29f/19vX/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/09fT/9PT0//T19P+ik47/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Hx8f/x8fH/8PHw//Hx8f/x8PD/uKqi/1g0Jf90Szv/g1RC/45bSP+WX0z/nGRO/55kTv+dZE3/"
+    "nWNN/51iTf+dYk3/nWJN/51iTf+dYk3/nWJN/5xhTP+cYUz/m2FL/5thS/+bYEv/m19J/5tgSv+aX0n/mV9J/5leSP+ZXUj/mF1I/4pSPP/S1dXey8vM/7e3"
+    "t/+op6b/f35+/+Dh4vX6+vr/8vHy/+zr7P+yt7j4ilI8/8ORfv/DkX3/wpF9/8KRfv/CkH3/wpB9/8KQff/BkHz/wZB8/8GPe//Bj3z/wI57/8CPe//Ajnv/"
+    "wI17/8CNev+/jXr/v416/7+Nef+/jHn/v4x5/76MeP+5iHb/s4Nw/6h8av9lX1z/2dTR//n6+f/5+vn/+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qq"
+    "qv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/+fr5//n6+f/5+vn/+fr5//n5+f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv+ik47/opOO//j49//3+Pf/+Pj4/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/9vb2//b29f/29vX/opOO/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv/19fX/9PX1//T19P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO//Hy8v/y8vL/8fLx//Hx8f/x8fH/uKqi/1g0Jf91Szv/g1RD/45bSP+XYE3/nWNO/55kTv+eZE7/nWNO/51jTf+dYkz/nWJM/51iTP+dYkz/nWJM/5xi"
+    "Tf+cYUz/nGJM/5xhS/+bYEr/m2BK/5pfSv+bX0r/ml9J/5peSf+aXkj/mV5H/4pSPP/S1dXey8vL/7e2t/+np6b/fn5+/+Dh4vX6+vr/8fHy/+zs7P+yt7f4"
+    "ilI8/8ORfv/DkX7/wpB+/8KRfv/DkX3/wpB9/8KQff/Cj3z/wY98/8GPfP/Aj3z/wY98/8GOe//Ajnv/wI57/8COev+/jXr/v416/7+Nef+/jHn/vox4/76L"
+    "eP+6iHb/tINx/6l8av9lX1z/2NTS//n6+f/5+vn/+fr5/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/qqqq/6qqqv+qqqr/"
+    "qqqq/6qqqv+qqqr/+fr5//n6+f/5+vn/+fr5//n6+f+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//j4+P/3+Pj/9/j3/6KT"
+    "jv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/9vf2//b39v/29/b/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/"
+    "opOO/6KTjv/19vX/9fb0//X29P+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO/6KTjv+ik47/opOO//Lz8//y8/L/8vPy//Lz8f/y8vH/uKqi/1g0"
+    "Jf91Szv/g1RD/45cSf+XYE3/nGRP/55kTv+eZE7/nWRO/51jTv+dYk3/nWJN/51iTf+dYk3/nWJN/51iTf+cYkz/nGJM/5xhTP+bYUv/m2BK/5tgSv+aYEr/"
+    "m19J/5peSf+ZX0n/mV5I/4pSPP/S1dbezMrM/7e0tv+lpab/fX1+/+Dh4vX6+vr/8fDx/+3t7f+zuLn4ilI8/8OSf//DkX//w5F+/8OQfv/CkX7/wpB9/8KQ"
+    "ff/CkH3/wY99/8KPfP/Bj3z/wY97/8COe//Bj3v/wI56/8COev/Ajnv/wI16/7+Nev+/jXn/v4x5/76MeP+6iXb/tINx/6l8a/9lX1z/2NTS//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+P/5+vn/+Pn4//j5+P/4+fj/+Pn4//j4+P/3+Pj/9/j3//j5+P/4+Pf/9/j3//f49//3+Pf/9/j3//f49//3+Pf/"
+    "9/j3//b49//3+Pf/9vf2//b39v/29/b/9vf2//b39v/19/b/9vf1//b29f/19vX/9fb1//X29f/19vX/9fb1//X29f/19vX/9fb0//X29P/19vT/9fX0//T0"
+    "9P/09fT/9PX0//T08//09PP/8/T0//P08//y9PL/8vPy//Lz8//y8/L/8vPy//Lz8f/y8vH/uKqi/1g0Jf91Szz/g1VE/49cSf+XYU3/nWVP/55kT/+eZE//"
+    "nmRO/55kTv+dY07/nWNO/51jTv+dY07/nWNO/51jTv+dYkz/nGFN/5xiTP+cYUv/nGBL/5xgSv+bYEr/m2BJ/5pfSv+aXkn/ml5J/4pSPP/S1dXey8rM/7e1"
+    "tf+mpqX/fX19/+Dh4vX6+vr/8fDx/+/u7f+1urj4ilI8/8OSf//DkX7/w5F+/8KRfv/CkX7/w5F+/8KQff/CkH3/wZB8/8GPfP/Bj3z/wY97/8CPe//Bj3z/"
+    "wY57/8COe//AjXr/v456/7+Nev+/jHr/v415/76Mef+6iHb/tIRx/6l8a/9lX1z/2NTS//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+P/5+vn/"
+    "+Pn4//j5+P/4+fj/+Pn4//j4+P/3+Pj/9/j3//j5+P/4+Pf/9/j3//f49//3+Pf/9/j3//f49//3+Pf/9/j3//b49//3+Pf/9vf2//b39v/29/b/9vf2//b3"
+    "9v/19/b/9vf1//b29f/19vX/9fb1//X29f/19vX/9fb1//X29f/19vX/9fb0//X29P/19vT/9fX0//T09P/09fT/9PX0//T08//09PP/8/T0//P08//y9PL/"
+    "8vPy//Lz8//y8/L/8vPy//Lz8f/y8vH/uKqi/1g0Jf91Szz/hFVE/49dSf+XYU3/nWVQ/59mUP+eZE//nmRP/51jT/+dY07/nWNO/51jTv+dY07/nWNO/55j"
+    "Tf+dY03/nWJN/5xiTP+cYUz/nGFM/5thS/+bYEr/m19K/5tgSv+aX0n/ml5J/4pSPP/S1dXeysvL/7W1tv+lpKT/fX19/+Dh4vX6+vr/8fHx/+/v7f+3vLf4"
+    "ilI8/8OSf//DkX//w5J+/8OSfv/CkX7/wpF9/8KQff/CkH3/wZB9/8GQff/BkH3/wZB8/8GPfP/Bjnz/wI97/8GOe//Bjnr/wI16/7+Oev+/jXn/v416/7+M"
+    "ef+6iXf/tIRx/6p8a/9lX1z/2NTS//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+P/5+vn/+Pn4//j5+P/4+fj/+Pn4//j4+P/3+Pj/9/j3//j5"
+    "+P/4+Pf/9/j3//f49//3+Pf/9/j3//f49//3+Pf/9/j3//b49//3+Pf/9vf2//b39v/29/b/9vf2//b39v/19/b/9vf1//b29f/19vX/9fb1//X29f/19vX/"
+    "9fb1//X29f/19vX/9fb0//X29P/19vT/9fX0//T09P/09fT/9PX0//T08//09PP/8/T0//P08//y9PL/8vPy//Lz8//y8/L/8vPy//Lz8f/y8vH/uKqi/1g0"
+    "Jf92TDz/hFVE/49dSv+YYU3/nWVP/59lUP+fZU//n2VP/55kTv+eZE7/nmRO/55kTv+eZE7/nmRO/51jTv+dY03/nWJN/51iTP+cYkz/m2FM/5xhS/+cYEr/"
+    "m2BK/5tgSf+aX0n/mV9J/4pSPP/S1dXey8zL/7a2tv+lpaT/fX19/+Dh4vX6+vr/8fHx/+7v7v+2vLn4ilI8/8SSfv/Dkn7/w5J//8ORf//DkX7/w5F+/8KR"
+    "ff/CkH7/wpF9/8KQff/CkHz/wpB8/8GPfP/Bj3v/wY98/8COe//Ajnr/wI56/7+Nev+/jnr/v415/8CNev+7inf/tYVx/6l9a/9lX1z/2NTS//n6+f/5+vn/"
+    "+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6+f/5+vn/+fr5//n6"
+    "+f/5+vn/+fr5//n6+f/5+vn/+fr5//j6+P/5+vn/+Pn4//j5+P/4+fj/+Pn4//j4+P/3+Pj/9/j3//j5+P/4+Pf/9/j3//f49//3+Pf/9/j3//f49//3+Pf/"
+    "9/j3//b49//3+Pf/9vf2//b39v/29/b/9vf2//b39v/19/b/9vf1//b29f/19vX/9fb1//X29f/19vX/9fb1//X29f/19vX/9fb0//X29P/19vT/9fX0//T0"
+    "9P/09fT/9PX0//T08//09PP/8/T0//P08//y9PL/8vPy//Lz8//y8/L/8vPy//Lz8f/y8vH/uKqi/1g0Jf92TD3/hFZF/49dSv+YYk3/nWVQ/6BmUP+fZVD/"
+    "nmVP/55lT/+eZE7/nmRO/55kTv+eZE7/nmRO/55kT/+eY03/nmNO/51jTf+cYkz/nGFM/5xhS/+bYUv/m2FL/5pfSv+bYEn/ml9K/4pSPP/S1dbey8vM/7a2"
+    "tf+kpKX/fX19/+Dh4vX6+vr/8fHx/+7v7v+2vLv4ilI8/8OSf//Dk3//w5J+/8OSfv/DkX7/wpF+/8KRff/DkX7/wpB9/8KQff/CkH3/wY98/8GQfP/Bj3z/"
+    "wY98/8GOfP/Aj3v/wI57/8CNev+/jXr/v415/7+Nev+7iXf/tIVy/6l9bP9lX1z/0MnG/8rKyP/P0M3/zs/O/8/Qz//P0M//0NHP/9DRz//Q0c//0NHP/9DS"
+    "0P/Q0tD/0dLR/9HS0f/R0tL/0dPS/9PT0v/T09P/09PT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/"
+    "1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/0dLR/9HS0v/R09L/09PS/9PT0//T09P/1NPT/9TT"
+    "0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09P/1NPT/9TT0//U09L/1NTS/9TT0v/S0dD/09PR/9LT0f/S0tH/"
+    "0NDQ/9HS0P/R0dD/0NHQ/87Ozv/QzMr/uKqi/1g0Jf92TD3/hFZF/49dS/+YYk3/nmVQ/6BmUP+gZlD/n2VP/59lT/+eZE//nmRP/55kT/+eZE//nmRP/55k"
+    "T/+eY07/nmNO/51jTf+dYk3/nWFM/5xiTP+bYUv/nGFL/5tgS/+bYEr/mmBK/4pSPP/T1tbezMzN/7W2tf+kpaX/fXx+/+Dh4vX6+vr/8fHx/+7v7v+4u7v4"
+    "ilI8/8STf//Ekn//w5J+/8OSf//Dkn7/wpJ+/8KRfv/DkX3/wpF9/8KQff/BkH3/wZB9/8GQfP/CkHz/wY98/8GOe//Bjnv/wI57/8COe//Ajnv/v416/7+N"
+    "ef+8iXj/tIV0/6t9bP9lX1z/zcG9/87Evv/PxsD/zsW+/83Dvv/Nwr7/y8K9/8zCvP/Mwrz/zMC6/8u9uf/Kvrf/yL23/8i8tv/Iu7X/x7q0/8W7tP/GubP/"
+    "xbmy/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/xbix/8S4"
+    "sv/EuLL/xbix/8W4sf/FuLH/xbix/8W4sf/FuLH/yLy2/8i7tf/HurT/xbu0/8a5s//FubL/xbix/8S4sv/EuLL/xbix/8W4sf/Ft7H/xbex/8W3sf/Ft7H/"
+    "xbex/8W3sf/Ft7H/xLix/8W5sv/GubH/xrmy/8a5s//Iu7P/x7uz/8e7tP/Mwrz/zMG7/8zBvP/Lv7r/0MXA/87Dvf/Lwbz/zcK8/83Bvf/Mwbz/zcG9/1g0"
+    "Jf94Tj7/hldF/5FdS/+ZZE//n2ZR/6BmUf+fZVH/n2ZQ/59mUP+eZU//nmVP/55lT/+eZU//nmVP/59kTv+eZE7/nmNN/51jTf+dY03/nWJN/5xiTP+cYUz/"
+    "nGFL/5xgS/+bYEr/mmBK/4pSPP/S1dbey8vN/7W3tv+kpqb/fX19/+Dh4vX6+vr/8fHx/+7u7v+5u7v4ilI8/8SSf//Dkn//xJJ//8OSf//Dkn7/w5J+/8OR"
+    "fv/DkX7/wpF9/8KRfv/CkH3/wpB9/8KPff/Bj3z/wpB8/8GPfP/Bj3v/wY97/8COe//Ajnv/wI56/8CNev+9i3j/toZz/6x+bf9lX1z/////////////////"
+    "//////////////////////////////////////////////7///78///++////Pn///r2//759f/++fT//vj0//z38//89/P//Pfz//z38//89/P//Pfz//z3"
+    "8//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38f/89vL/+/Xy//749P/++PT//vj0//749P/++PT/"
+    "/vj0//749P/++PT//vj0//759P/++PT//Pfz//z38f/89vL/+/Xy//v18v/79vL/+/by//v28v/79vL/+/by//v28v/79vL//Pfy//z38v/9+PL//fr1///6"
+    "9//8+PL/08zK/+3n5P/t5+T/+/Xw/9PMyv/t5+T/7efk//759P/TzMr/7efk/+3n5P/++PL///v5/1g0Jf97UED/iFlG/5NfTP+aZFD/nmZS/6BnUf+fZlH/"
+    "n2ZQ/59mUP+fZVD/n2VQ/59lUP+fZVD/n2VQ/55kT/+eZE//nmNO/51kTf+dY03/nWNN/5xjTf+cYUz/nGJL/5thS/+bYEr/m2BL/4pSPP/S1dXey8zL/7e3"
+    "t/+mpqb/fX1+/+Dh4vX6+vr/8fHx/+7u7v+5vLv4ilI8/8STgP/EkoD/w5KA/8SSf//Ekn//w5F+/8OSfv/DkX7/wpF9/8KRfv/CkX3/wpB9/8KQff/Bj3z/"
+    "wo98/8GPfP/Bj3z/wI98/8GOe//Ajnv/wI16/8COev+9i3j/t4d1/6+Ab/9lX1z/////////////////////////////////////////////////////////"
+    "//////7///78///++////Pn///r2//759f/++fT//vj0//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P/"
+    "/Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38f/89vL/+/Xy//749P/++PT//vj0//749P/++PT//vj0//749P/++PT//vj0//759P/++PT//Pfz//z3"
+    "8f/89vL/+/Xy//v18v/79vL/+/by//v28v/79vL/+/by//v28v/79vL//Pfy//z38v/9+PL//fr1///69//79/P/nZSX/9nS0//Z0tP/+fHt/52Ul//Z0tP/"
+    "2dLT///69v+dlJf/2dLT/9nS0///9/L///v5/1g0Jf+BVEP/i1tJ/5VhTf+bZFD/n2dS/6FnUf+gZlH/oGZR/6BmUP+fZU//n2VP/59lT/+fZU//n2VP/55l"
+    "T/+fZU//nmRO/55kTv+eY07/nWNN/51jTf+cYkz/nGFM/5xhS/+cYUv/m2BK/4pSPP/S1dXezMzL/7e3tv+mpqb/fX1+/+Dh4vX6+vr/8fHx/+7v7v+5vb34"
+    "ilI8/8STf//Ekn//xJKA/8STgP/Dkn//xJJ//8OSfv/DkX7/wpF+/8ORff/CkH7/wpB9/8KQff/CkH3/wpB8/8GPfP/Bj3v/wY57/8GPe//Aj3v/wI57/8CO"
+    "e/++i3n/uYl2/7OEcf9lX1z///////////////////////////////////////////////////////////////7///78///++////Pn///r2//759f/++fT/"
+    "/vj0//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z38//89/P//Pfz//z3"
+    "8f/89vL/+/Xy//749P/++PT//vj0//749P/++PT//vj0//749P/++PT//vj0//759P/++PT//Pfz//z38f/89vL/+/Xy//v18v/79vL/+/by//v28v/79vL/"
+    "+/by//v28v/79vL//Pfy//z38v/9+PL//fr1///69//79/P/nZSX/9nS0//Z0tP/+fHt/52Ul//Z0tP/2dLT///69v+dlJf/2dLT/9nS0///9/L///v5/1g0"
+    "Jf+JWUf/kV9M/5hjT/+dZlH/oGhT/6FnUv+gZ1H/oWZR/6BmUP+fZVD/n2VQ/59lUP+fZVD/n2VQ/59lUP+eZU//nmRP/55kTv+eZE7/nWNN/51jTf+dY0z/"
+    "nGJN/5xhTP+bYUz/nGFL/4pSPP/S1dbey8zM/7a2tv+mpab/fn19/+Dh4v/6+vr/8fHx/+/v7v+5vb3/ilI8/8STgP/EkoD/xJOA/8SSf//Ekn//w5J//8OS"
+    "f//DkX7/wpJ+/8KSfv/CkX3/w5F9/8KRff/CkH3/wZB9/8GPff/Bj3z/wY98/8GOfP/Bj3v/wI97/8COe/++jXn/u4t3/7iHdf+leWf/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/"
+    "ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2Vf"
+    "XP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/2VfXP9lX1z/ZV9c/45TPP+SX0z/l2NP/5xlUf+eaFL/oWhT/6FoUv+hZ1L/"
+    "oWdR/6BmUf+gZlD/oGZQ/6BmUP+gZlD/oGZQ/6BlUP+fZVD/n2VP/55lT/+eY07/nWNN/55jTf+dY03/nGJM/5xiTP+cYkz/nGFL/4pSPP/R1dbey8vM/7a3"
+    "t/+mpqb/fn5+/+Dh4vX6+vr/8fHx/+/v7v+5vb34ilI8/8WTgP/Ek4D/xJOA/8STgP/Ek3//w5J//8OSfv/Dkn//w5F//8ORf//DkX7/w5F9/8KQfv/CkH3/"
+    "wpB9/8KPff/BkH3/wo98/8GPe//Bjnz/wY57/8GPe/+/jXr/vYt5/7uKd/+3h3X/soRx/6+Ab/+sfmz/qn1s/6l9a/+pfGv/qHxq/6l7av+oe2n/qHtp/6h7"
+    "af+nemn/p3po/6d6aP+meWj/pnln/6Z4Z/+meGf/pnhm/6Z3Zv+md2X/pndl/6V3Zf+ld2X/pXZl/6R2Zf+kdmT/pHZk/6N2ZP+jdWP/o3Rj/6J0Yv+ic2L/"
+    "onNi/6JzYf+hcmD/oXJg/6FyYP+gcV//oHFf/59wX/+gcF7/n29e/59vXf+fb13/nm5d/55uXP+eblz/nm5c/51tXP+dbVz/nW1b/51tW/+cbFr/nGxZ/5xr"
+    "Wf+ba1j/m2tZ/5prWP+baVf/mmlX/5ppVv+aaFb/mWhV/5loVf+ZZ1X/mGdV/5hnVf+XZlT/lmZU/5ZlVP+WZVP/lmVS/5ZlUv+WZFH/lmRR/5ZjUP+VY1D/"
+    "lWNQ/5RjT/+UYU//lGFP/5RhTv+UYU7/lWFO/5ZjT/+ZZVD/nWZS/59nU/+haVT/omlU/6FoUv+haFL/oGdS/6BmUf+gZlD/oGZQ/6BmUP+gZlD/oGZQ/6Bm"
+    "Uf+fZlD/n2VP/59lT/+eZE//nmRO/55kTv+dYk7/nWJN/5xiTP+dYkz/nGFM/4pSPP/S1dbezMvN/7e3t/+mpqb/fn59/+Dh4vX6+vr/8fHx/+/w7/+5v734"
+    "ilI8/8WTgP/Fk4D/xJOA/8STf//EkoD/xJN//8OSf//Dkn//xJF+/8OSfv/DkX7/w5F+/8ORff/CkH3/wpB9/8GQff/CkH3/wY98/8KPfP/Aj3v/wY97/8GO"
+    "e//Ajnv/vo16/76Lef+7inf/uYl2/7eHdP+2hnP/tIVz/7SEcf+1g3H/tINw/7ODcP+zgnD/s4Jw/7OCcP+zgnD/s4Fw/7KBb/+ygW//soFv/7KBb/+xgW7/"
+    "sYBt/7F/bf+wf23/sH9s/7B+bP+vf2v/r35r/65+a/+ufmv/rn1q/659af+tfGn/rXxp/6x8aP+te2j/rHpn/6x6aP+remf/rHpn/6t5Zv+reGb/qnhl/6p4"
+    "ZP+qeGX/qXdk/6l3Y/+pdmP/qXZj/6h1Yv+odWL/qHVh/6d0Yf+nc2D/pnRg/6ZzYP+lcl//pXJf/6VyX/+lcV//pHFe/6RxXv+kcF3/pHBd/6RwXP+jcFz/"
+    "o3Bc/6NvW/+ib1v/o29a/6JuWv+ibVr/oW1Z/6FtWP+gbFj/oGtX/6BsWP+galf/n2tX/59qVv+eaVX/nmlW/55pVP+daVT/nWdU/51nU/+eZ1T/nWdT/55n"
+    "U/+faFT/oGhU/6JpVP+jalT/o2pV/6FoU/+haFP/oWdS/6FnUv+gZ1H/oGdR/6BnUf+gZ1H/oGdR/6BmUf+gZVD/oGVQ/59kT/+eZU//nmRO/55kTv+dY03/"
+    "nWNN/5xiTf+cYk3/nGJM/4pSPP/R1dXeysvL/7a3tf+lpqX/fX59/+Dh4fX6+vr/8fHy/+/w8P+6v774ilI8/8SUgf/Ek4D/xJOA/8STf//EkoD/w5J//8OS"
+    "f//Dkn//xJJ//8OSf//Dkn//w5F+/8KRfv/DkX3/wpF+/8KQff/BkHz/wpB9/8KPfP/BkHz/wY98/8GPe//Ajnv/wI57/7+Mev++jXn/vYt5/7yLd/+8i3f/"
+    "uol3/7qJdv+7iXb/uoh2/7mIdf+6iHX/uod0/7mHdP+4h3X/uYd0/7iGdP+4hnP/uIVz/7iFc/+3hHL/t4Ry/7aEcv+2hHH/toNx/7WDcP+1g3D/tYJw/7WC"
+    "b/+0gW//tIJv/7SBbv+zgG7/s4Bt/7N/bP+zf23/s39s/7J+bP+xf2v/sn5r/7F9av+xfWr/sH1q/7F9af+wfGj/sHxo/698aP+vfGf/r3tn/697Z/+vemb/"
+    "r3pl/656Zv+uemX/rXlk/614ZP+teGT/rXhj/6x4Yv+rd2L/rHdi/6x2Yf+rdmH/q3Vg/6p1YP+qdV//qnRf/6l0X/+oc17/qXNe/6hyXv+ocl3/p3Fd/6hx"
+    "XP+ncVz/p3Bb/6ZwWv+mb1r/pW9a/6VuWf+lblj/pW1Z/6RtWP+kbVf/o2xX/6NsV/+jbFb/o2tX/6JrVv+ia1b/o2tV/6NrVv+ka1X/o2pV/6JoU/+haFP/"
+    "oWhS/6BnUv+gZ1H/oGdR/6BnUf+gZ1H/oGdR/6FnUf+gZlH/oGZQ/59mUP+fZE//nmVP/55kTv+dY07/nmNO/51iTf+cY03/nGFM/4pSPP/S1dXey8vL/7a2"
+    "tv+mpKb/fn19/+Dh4fX6+vr/8fHx/+/w7/+7wL74ilI8/8SUgP/Fk4H/xJOA/8STgP/EkoD/xJKA/8OSgP/Dk3//xJJ//8SRf//DkX7/w5F+/8KRff/CkX3/"
+    "wpB+/8KQff/CkH3/wY98/8GQfP/Cj3z/wY98/8GPfP/Bj3z/wI57/8GOe//Ajnr/wI16/8CNev+/jXn/v4x5/76Mef++jHn/v4t4/76LeP++i3j/vYt3/72K"
+    "d/+9inb/vYl2/7yKdv+8inb/vIl1/7uIdP+7iHX/u4h1/7qIdP+7h3T/uoZz/7qGcv+5hnL/uYZy/7mFcv+5hXH/uIRx/7iEcf+4hHD/t4Nw/7iDb/+2gm7/"
+    "t4Ju/7eCbv+2gm3/tYFt/7WBbf+1gGz/tYBs/7R/a/+1gGv/tH9r/7R+a/+0fmr/s35p/7J9af+zfWj/snxo/7F8aP+xfGj/sXtm/7B6Zv+wemX/sHpm/695"
+    "Zf+veWT/rnhk/654ZP+ud2T/rndj/613Yv+tdmL/rHZh/611Yf+sdWH/rHVg/6t0YP+rdGD/qnRf/6pzXv+qc17/qnJe/6lyXf+pcV3/qXFc/6hxXP+ocVv/"
+    "qHBb/6hvWv+nb1r/p25Z/6ZuWf+mbln/pm1Y/6VsV/+lbVf/pGxW/6RsVv+ka1b/o2tW/6JpVP+iaFP/oWhT/6FoUv+hZ1L/oWdS/6FnUv+hZ1L/oWdS/6Bn"
+    "Uv+gZlD/oGVQ/59mUP+fZVD/n2VQ/55lT/+eZE7/nmNO/51jTf+dY03/nWJN/4pSPP/S1dXey8zL/7e1t/+mpKb/fn19/+Dh4fX6+vr/8fHz/+/w8f+7wMD4"
+    "ilI8/8SUgP/ElIH/xZOB/8SUgP/Fk4D/xJOA/8SSgP/Ek3//w5KA/8OSf//Dkn7/w5F+/8KSfv/DkX3/wpF+/8KQfv/CkH7/wpF9/8GPfP/CkHz/wY98/8GP"
+    "fP/Bjnz/wY97/8COe//Ajnv/wI56/8COev+/jXn/v416/7+Mev++jHn/v4x5/76LeP++i3f/vot3/76Ld/+9i3f/vYp3/72Jd/+8iXb/vIl1/7yIdf+8iHX/"
+    "u4h0/7uIdP+7iHP/u4d0/7qGc/+6hnL/uoVy/7mFcv+5hXL/uYVx/7iFcP+4hHD/uIRw/7eDb/+3g2//t4Nv/7aDbv+2gm7/tYJt/7aBbP+1gG3/tYBt/7WA"
+    "bP+0f2v/tIBr/7R+av+zfmr/s35q/7N9af+zfWn/snxp/7F9aP+xfGj/sXtn/7F7Zv+we2b/sHpm/696Zv+weWX/r3ll/654ZP+veGT/rnhj/613Y/+ud2P/"
+    "rXZi/612Yv+tdWH/rHZg/6x1YP+rdV//q3Rf/6tzX/+qc17/qXJe/6pyXf+pcl3/qXFc/6lxXP+ocFz/qHBb/6dwWv+nb1v/p25Z/6ZvWf+mblj/pm5Y/6Vt"
+    "WP+lbFj/pWxX/6VsV/+ka1b/pGtW/6NpVP+iaVT/omhT/6FoUv+haFP/oWhT/6FoU/+haFP/oWhT/6BnUv+gZlH/n2ZR/6BmUP+fZVD/n2VQ/59lT/+eZE//"
+    "nmRO/51jTv+dY03/nWNN/4pSPP/S1dXey8vM/7e2tv+lpaX/fn19/+Dh4fX6+vr/8vHz//Hw8v+8wMD4ilI8/8WUgf/FlIH/xZSA/8STgP/FlID/xJOA/8ST"
+    "gP/Ekn//w5OA/8OSf//Dkn//w5F//8ORfv/Dkn7/w5F+/8KRfv/CkH3/wpB9/8KQfP/Bj3z/wY98/8GPfP/Aj3v/wY57/8COe//Bjnv/wI56/8CNev/AjXr/"
+    "v415/7+Nef+/jXn/vox5/76Mef++i3j/vYt4/76Ld/++i3f/vYp3/72Kd/+9inb/vIp2/7yJdv+8iXX/u4h0/7uIdf+7iHP/uoh0/7qHc/+7h3P/uoZy/7mG"
+    "cv+5hXL/uYVy/7mFcf+4hXH/uIRw/7eEb/+3hG//t4Nv/7eCb/+2gm7/toJu/7aBbf+1gWz/tYBs/7WAbP+0f2v/tH9r/7R+a/+0f2v/s35q/7N9av+yfWn/"
+    "s3xo/7J9aP+yfGj/sXxo/7F7Z/+xe2f/sHpm/7B6Zf+weWb/sHll/695ZP+veWT/r3hj/653Y/+td2L/rndi/612Yv+sdmH/rHZh/6x1YP+rdWD/q3Vg/6tz"
+    "X/+qc1//qnNe/6pyXv+qcl7/qXFd/6hxXP+ocVz/qXBc/6hwW/+ocFr/p29a/6ZvWv+mblr/pm5Z/6ZtWP+mbVj/pW1Y/6VsV/+kbFf/pGtW/6JpVP+iaVT/"
+    "omlT/6FoUv+haFP/oWhT/6FoU/+haFP/oWhT/6FoUv+hZ1L/oGZS/6BnUf+fZVD/n2VQ/55lUP+fZU//nmRP/55kTv+dY07/nWNN/4pSPP/S1dXey8vM/7e2"
+    "tf+mpqP/fn59/+Dh4fX6+vr/8vLz//Py8//DxMT4ilI8/8WUgf/FlIH/xZOB/8SUgP/ElID/xJOA/8STgP/Ekn//xJJ//8SSgP/Dk3//w5J//8OSf//Dkn//"
+    "w5J+/8KRfv/CkH3/wpB9/8KQff/CkHz/wZB9/8GPfP/Bj3z/wY98/8GPe//Ajnv/wI57/8COev/Ajnr/wI16/7+Nev+/jXn/vox5/76MeP+/i3j/vot4/72L"
+    "d/++i3j/vYp3/72Kd/+9iXb/vIp2/7yJdv+8iXX/vIl1/7uIdf+7iHX/u4h0/7qHc/+6h3P/uoZz/7mGcv+6hXL/uYVy/7iFcf+5hXH/uYVx/7iEcP+4g2//"
+    "t4Nw/7eDb/+3g27/t4Ju/7eBbf+1gW7/toFt/7aBbP+0gGz/tIBr/7R/a/+0f2r/s35r/7N+af+zfmn/sn5p/7J9aP+yfGj/snxn/7F8Z/+xe2f/sXtm/7B6"
+    "Zv+wemb/sHll/695Zf+veWT/rnhk/654Y/+ueGL/rXdi/613Yv+tdmL/rXVh/612Yf+rdWH/q3Vf/6t0YP+qdF//qnRe/6pzXv+pc13/qnJd/6lyXf+pcl3/"
+    "qXFc/6hwW/+ocFv/p3Bb/6dvWv+nb1n/pm5Z/6ZtWP+lbln/pm1Y/6VsV/+lbFf/pGxW/6NqVf+jaVT/omlU/6JoVP+haFP/oWhT/6FoU/+haFP/oWhT/6Fo"
+    "Uv+gaFL/oGdS/6BmUf+gZlH/n2VQ/6BlUP+fZU//n2RP/55kTv+dY07/nWNN/4pSPP/U2NneysjL/7a0tP+mpaT/fn19/+Dg4fX6+fr/8vLy//Pz8v/W1Nb4"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pS"
+    "PP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/ilI8/4pSPP+KUjz/"
+    "ilI8/4pSPP+KUjz/ilI8/4pSPP/IysrgwsPC/7S0sv+lpaX/fn5+/+Dg4fX6+fr/8/Lz//Ty8//s6+v/1dbV+cPFxfjHyMj4ycrL+MjKyvjJysz4yczN+MnM"
+    "zfjJzM34y83N+cvNzvjLzc/4zM7O+MzNzvjMzc74zM7Q+MzP0fjNz9H4zs/S+M3P0vjN0NH4z9HS+M/R0vjO0NH4z9HS+M/Q0vjOz9H4zdDR+M7R0vjP0dP4"
+    "z9HT+M/R0/jQ0tT40NLT+NDR0/jP0NP40NHT+NDS0/jR09T40tTU+NPU1PjT1NT40tPU+NHT0/jQ0tL4z9HT+M/Q1PjQ0dP4z9HR+M7R0PjNz8/4zs7O+M/O"
+    "zvjOz874zM/O+MvNzvjKy834ysvN+MrMzfjKy8z4ysvL+MnLy/jIy8z4yMrM+MjJzPjHy8r4xsvK+MbKy/jHycr4x8nK+MbIyvjFyMn4xcjJ+MbHyPjGxsj4"
+    "xMbH+MPGxvjCxMX4wsPF+MHFxfjAxMP4wMPB+MDDwfi/wsL4vsHC+L/Awfi+wMD4vMDA+LvAwPi6wMD4ur+/+Lq9vfi5vLz4uLy7+Le8vPi4u7v4uLq5+Le6"
+    "uPi1ubf4tLe3+LS2t/i0trf4tLa2+LS0tPi0s7T4s7O0+LK1tfiwtLT4sLKx+K+wsPivsLD4rrCw+K2vsPitr674rK6t+KyurPisrqz4q66t+Kysrfirqaz4"
+    "qKmr+Kepqvinqar4p6ip+Kenqfinp6n4paan+KOmpviipqX4oqWk+KGlo/+hpaL4oaWi+KCiovifoqH4nqGg+J2fn/icnZ74nqCg+KGgovivr7H+u7u6/7S0"
+    "tP+oqKf/f39+/+Dh4fX6+vn/8/L0//Py9P/08/P/8fHx/+/v8f/y8vL/8/T0//P09P/z9PT/9PX1//P19v/z9fb/9PX2//T19f/09fX/9PX1//X09v/19Pb/"
+    "9PT2//T19v/09fb/9vX3//b19//29ff/9vX3//X19//19ff/9vX3//b19//19ff/9fX3//X19//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX3//b1"
+    "9//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX3//b19//29ff/9vX2//b19v/09fb/9fX2//b19v/19PX/9PT1//T09f/z8/P/8/Pz//Pz8//z8vP/"
+    "8/Hz//Lx8v/x8fH/8PHx/+/x8f/v8fH/7/Dx/+/v8f/u7u//7u7t/+3t7f/s7O3/7Ozt/+zr7P/q6uz/6ers/+nq6//o6ur/6Oro/+jr6P/n6uj/5+jo/+bn"
+    "5//l5ub/5ebm/+Tl5//j5Of/4+Tl/+Pk5P/j5OT/4uTk/+Di4v/g4eH/4ODg/97h4f/d4OD/3d/f/93d3v/d3N7/3Nvd/9vb2//Z29v/2Nva/9ra2P/a2Nj/"
+    "2djZ/9fX2f/V19j/1dbX/9XU1//U1NX/0tXT/9LU0//R0tP/z9DT/8/Q0f/Q0ND/0NDQ/8/Qz//Ozs//zc3O/83Mzf/Ly83/ysrM/8nKzP/Jysr/yMrJ/8fK"
+    "yf/GyMn/xMfH/8PExP/Cw8P/wsPD/8LCw//Dw8P/wMHA/7/Av/+9vb7/uru8/7m4uv+3t7n/t7i5/7S1t/+tq67/f3+A/+Dg4fX7+/v/9PL0//Tz9P/z8vT/"
+    "8/L0//Py9P/z8vT/8/L0//Py9P/z8vP/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py"
+    "9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/"
+    "8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/z8vT/8/L0//Py9P/y8vL/8vLy//Lx8v/y8fL/8vHx//Hw8P/w8PD/8PDw//Dw7//w7+//8O7v/+/u"
+    "7v/u7uz/7u7s/+3t7P/s7Oz/7Ovr/+vq6v/q6ur/6urq/+rq6v/p6en/6enp/+jo6P/n6Of/5+jn/+fn6P/m5uf/5eXm/+Tk5f/j5OT/4+Tk/+Tj4//j4uL/"
+    "4uLi/+Hh4v/h4eH/4eHh/+Dg4f/f4OD/39/f/9/e3v/e3t7/3d7d/9vc3P/b3Nv/29zb/9vb2//b29v/29va/9ra2f/Y2Nn/2NjY/9jX1//X19b/1tbV/9XV"
+    "1f/V1dX/1NTV/9PT1P/T0tP/0tLS/9HS0f/R0ND/0M/P/9DPz//Pz8//zc3N/8zNzP/Lzcz/y8vL/8vKyv/Kysr/ycjJ/8fHx//Gxsb/xsbG/8bGxv/ExcT/"
+    "w8PD/8HBwv++vr//vb29/7u8vP+6urv/t7i6/7OztP+rq6z/goOD/+Tl5f/19fb/+vr6//n3+f/49/b/9/f2//f3+P/49vf/9/f4//f1+P/39/f/+Pj4//j2"
+    "+P/49vj/+Pf3//j4+P/5+fn/+vr5//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/"
+    "+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+vr6//r6+v/6+vr/+fn5//n5+f/5+vr/+vr6//r5"
+    "+f/59/j/+ff4//j4+P/29/f/9vb2//f29v/29vb/9fb2//T19f/09PT/9PP0//Tz9P/08/P/9PPz//Py8v/x8fD/8fHw//Hx8f/v8PH/7/Dw//Dw7//w7/D/"
+    "7+/v/+7v7v/u7u//7u7v/+7u7v/t7e3/7e3t/+zs7f/r6+3/6+vs/+vr6//q6+r/6uvq/+rp6v/p6Or/6ejp/+np6P/o6ej/6Ono/+jo5//o5+b/5+bm/+bm"
+    "5v/l5uX/5Obk/+Tk4//k4+P/5OPj/+Pj4//i4+P/4eLi/+Dg4f/g4N//3+Df/9/f3v/f3d7/3t3d/93c3P/d3Nz/3Nvc/9va2//a2tv/2drb/9jZ2v/Y2Nj/"
+    "2NjX/9jX1v/X1tb/1dXV/9TV1P/T1dT/09PU/9PS1P/T0dT/0dLS/9DS0f/P0dH/z9HR/8/P0P/Ozs//zMvM/8rKyf/HyMf/xMPE/8HBwv++vr7/t7e4/7S0"
+    "tP+foKD/kpKS//Hx8XPm5uf14OHh9eDf4PXf3t713t7d9d7f3vXg39313t/f9d7f3/Xe39/13t7g9d/f3/Xf39/139/e9uDf3/Xg39/14OHf9eHh4PXh4OH1"
+    "4eHh9eHh4PXg4OD139/g9d/g4fXf4eH13+Dg9eDg4PXh4OD14eHh9eHh4fXh4eH14eHg9eHh4PXh4eD14eHg9eHh3/Xh4d/14eHh9eHh4fXh4eD14eHh9eHg"
+    "4fXg3+H14d/h9eHg4fXh4eH14eHg9eHh4PXh4eH14eHg9eHh4PXg4OD139/f9d/f3/Xf4OD13+Dg9d/g3/Xf3t713t7e9d3e3vXd3t313d7d9d3d3fXd3d31"
+    "3N3d9dzd3fXd3Nz13dvc9dzb3PXc29v13Nvb9dvb2/Xa2tn12trZ9drZ2vXZ2Nr119jY9dfY1/XY19f12NfX9dbW1vXV1tX11dbV9dTU1PXT09P10tLS9dHR"
+    "0fXQ0dD1z8/P9c7OzvXNzs31y8zL9cnKyvXIycj1x8jH9cbHxvXFxsX1xcXE9cTEwvXExMH1w8PB9cLCwfXBwsH1wcLB9cHCwPXBwsD1wcLA9cHCwPXBwsD1"
+    "wcLA9cHBwPXBwcD1wMG/9cDBv/XAwb/1wMG/9cDBv/XAwb/1wMC/9b/Av/W/wL/1v8C/9b+/vvW/v771v8C+9b+/vfW/v731vr++9b6/vvW+v731vr+99b6+"
+    "vfW+vr31vr+89b2/vP+9vr31vb699b2+vPW8vbz1vL279bu8u/W6u7n1ubm49be4tvW1trT1srKx9aurqvWqq6r12NfY9Q==";
+
+
+// Authentic Windows 7 Display applet icon (user-supplied original),
+// embedded as PNG-in-ICO resource payloads (RT_ICON ids 161/162 and the
+// replacement RT_GROUP_ICON ordinal 1) so the Control Panel item shows
+// the classic glyph instead of the Windows 10 one from the 1511 payload.
+static const char kClassicIcon48Base64[] =
+    "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAATVElEQVR4nK2aa4xd13Xff2vv87jnvubOizMckaKo6mGJqiNbSu0m"
+    "gkgZStMPbWDHJhu1ARQDhp0WKdwPjvMhRUVCQO1WcIDa/uIPRuy4QpohaqNpURQtYsmvuqidqrYjybJlURNRM8N53bnv89h7r36Y"
+    "OzQp0pEFdwELc+65B+eu/3r8915rj/ALyOrqql1cXJTDz2fOnNGLFy9y9uzZACAi+ou8/+cRufbD6uqqPXfunP8PTz/93uWVlX+Z"
+    "58MXy0pfL0v9cZ6XV8rSXOn1xv1nnvn++p//+VND4G80UFUNIM8++6zATwE+//zzev78ef3/AfA6AM8880z0yCOPuNU//dN/dd/b"
+    "//aFl1++TKuV0plJiGODoJRlqSA7lWOrrNyrRalreLmUV37onLy6259srb18+fKFC3/Ug5eLNwEoUxtkCpQzZ84oB45RePMoRje7"
+    "mdZqx4aDYfinf9irev3YLi8LR+YTc2TByJH5ICtLLN6yZBZXjs6cWpxPme3UyGoW8FRVRfi7t/Uf+0fv3nEu/PWkcK87pxtVxf4o"
+    "dz/KR8Xm5ubgtW9+8//uiUifN4miiBBCsBcvXuTcuXP+hu/f4BEjIuG//7f/8j8kmn30H36w6/NJyyIKzoJakFhxO1CuqVl6QNuN"
+    "UmdnLAtzcGS2MLefiMzJowW33jrPLUcbzM8mtJqGWgLGBJxzTCZl6Z3uuhDWy5Je5fRyCGyWZXipKNzG7mC49vyPXtr9w3/xb/bf"
+    "LIrXAhARUVU13/rGX/zV2np8zz/+Z/vB1hpGREAsYiyYOppfRt0Ibb6DUJUQDHgDKkjNoVvf1OjIO7Vej7XVEO10AvMdx7ElkWPL"
+    "mBO3JHJsJWPlaMb8jGG2k9BqJNj4ICGKSY4q+z5E3aIMPYK/9BfPPPP1s2fP/rupoVejdjWFVBUR4bd/+3cXGvV05fJGCaWI1CAE"
+    "OYAagEjQaoyYGoInigIigChiIpppTl4lks00xYdAbwS7ffjRpQTnQUNAJGgUjchqI201gs51VJfnleNHLbesWHPyWN0cX8k6t65E"
+    "nbvuWAa4P4qi9z311FPf+fjHP/6tQ7K5DsD58+cF0PvuO7WUJFF77fIAgkFEQQ8BT699DvEsqKI6TWIFMIxHYwgRKgZjHIkR0mQa"
+    "alEEQdVKUAhBpD+AvX344U/AOUU1EEUjdeMBv/X+Sv/9p+tc2cpdr9ezwJE3ptBVAKdOnRKAlSOLtzUaTVlb3/OI2J/W2PSvOtAS"
+    "sdk0JFzzvVAVIxJbAwQN0/uiqEyJRUCmAbUGrDEkiSAc3BQM1opsBeXOk3Wx1jAajeKqqiSO43WAixcv3gjgcEFqzKTHMTFXdkSx"
+    "1zh/aiBagQYwNaYWgh6kkUjAuyHUMlBF8IhViBQiARMdWH/4Oh/ABfAQgkEx16Szsrwo+MppVZVSluVkOBxuAtx7771XrTJvDEmr"
+    "kd49HivdbqC5kKIhTFNn+oCfgBgwMeARcRjjEeMQ60AnYDMwJVJz0BCoNSFZRBp1TDvBtFOklSCtFJopZBaJAiIeOEhLa2FxPqaq"
+    "PJPxmBBCr1ar7QCcP3/+RgBnzpwJALU0vnOnW9IbIMtHMmwkUxABjEIYgYkRAWMcEikSKyY1SKpAhaQJkgU0bUO6SHz3DrVf+89E"
+    "x3pIM8W0DaZlkabFNCOkmUI9RiLFSMAHSFOh0xbK0mue54QQNj/2sY+N4XoWujYCCpg0tcvrmwXDCbSaEc2GRQmIDRirECaITTCR"
+    "IjEHhmcR0kgwdUVsANMhRB2Se7apn/tj4g/8W9yDf4Q8+DS23UBmDKZtD0A0DFI30IihnkCkhBCo15RmVlGUTif5BGPMtojoE088"
+    "cV3WRNOcExHRRx/9cDuO7PFLayO8C8bawEw7pjco0dKi1gITTDKDpILYCJIYkwiSxPhegeYJtXfs0HrPf8Te/pdUrkc1zpHiDszg"
+    "NHQUTIw6oAyEXAhWEQHVCNFAyB3tlmGmZSgKp2WRU1XVT65xergOwCGFPvzwPcvWmvZfvz7BGEMIjnpDSMRi7ugRtQv6X/fY2QYm"
+    "s0hikChCXYaIpX7fj1h4/H9Sf/cWrhiQDyyFjzC992DXPgTlUWR2gIQIXEALwB6ymxC8QXyMF898R2nWDZO8pCxLoijamKY6Fy5c"
+    "uD4ChxR64pYjx2u1LFnfGoU4FuM1YBMhi2qc+Ocv0Hxbl2+8exnTamBqQnAZYqHx9pdoP/xN0rt+SKCk2BGcicms420/eRfl+m8y"
+    "SAN5e4cqaeNMggZBJwGGJSIF4kukrA52KgJHFiGNYTCopCzLqxF49tlnryOdCH5KoVktvs2rZWO7CnEam4DiSkvnbSW3nvbUFifM"
+    "/UaPwfeWidoFMw/8kM6j/4v0rh8TfEW5H1NNIJgu+f/uMPvVEyTlkHrzM8zGgo8zyqRJns6SJ4vk8RFyWaDUDlXcQNMMguAjx9LC"
+    "+GDv5L1UVYWIrE+drTcAOJQ40WOjcWBr1xOnNbwo1cTSfs8OreUCE2b4W7874NWv/IDb3vs8zXvW6Fcjiv0EN4nwYQ9XKeUL/wT3"
+    "7XeyNu7ycr6NrO9h8h2iaptYLxPJD4jsgCgukViIkxQTz+DNPNijxKMFlmZ/BdVbtCpLM5lMqqIoXgd4/vnnbwSwvb2tAGkS3bmz"
+    "V9EdQGPG4lRw1jH7yDoWKIuIlfs8K7/0dQocV/Y8bhKhLsfrLsX67ZR/9UF0/x7qb69Is5OYIPg84IcF1f6EqttntNfF7e8QBlto"
+    "7wrGXcHqNtaskaYvEI/3mG/cgteTlGWB934I7E7rVW+ogbNnzypAFMvK5e2SUWFkJhWq3GJO7DF3/wBfJXhXksZ1epPAlVEPLR2V"
+    "jhmNHOXz70Mv/SbWxJhOH7D4arpviCHqWKJ2m/pKG62Oo7kSRh43KHC9Ca43wPW7jMe75H6LRuNWNBTqnBfv/ZXnnntuH25scKIp"
+    "hQbuPZvEsTnx+pbHqRWJoBwIi7+6TtZQqoEDr4yKEdv5DvjARCfUXjO0n3s/+/3T5A2PSyO8nQEjGBMwGsA5tPIQKoJX1CnqFYxi"
+    "MkhsRtLMYH4RHVWkcxVLS0pVOZ3mf/fixYv+kO5vWgO/f/bhBUEWrnQFrIgGg6+PmX94G7zFe09wFd2iT3CB8bBP57s1fumF20j1"
+    "xxTmRcZ5k6HtMIznGNYWmGQLlLVZqloDn2ZoJWjkwVZAiYYKrQKqAfUBfKByjnpWMjcTU5ZOnStxzl0CuHjxogGu68qiw5t3H2+v"
+    "WJu0Xt92amKVKrdkD77Gwl0V1TBFK2VYTBjlE7QMBM3ZfDFj97/GZIs7NJKKLH2NNC5IxZEqeEmobIMymaXIFimyo5TpMlW0iKeD"
+    "TzJULaqK+hJ8hWNMuy00G1BWgRACIYQfTAv4ug4SIDq8aalOBGKu7IVgY7HOKbP3b+DtmCA5NlVK30dtjg8BqzUm79pg47l/gO40"
+    "odrFlH1i7ZLIPknUJbE9IrNDZF7ESoEQEImIbB2JO5AsIclRfHIMNSsgi1ShxfxsSi1xFKVKVVWEEF68GYUCRIcrWxJxbFwYLl9R"
+    "BQtZxfZX3kb320vEi0OSIwN0TvBtRep9NHLUlvZpPvoN+Mvfg2SF4Ay+cOSjgvFohOR9oqpLGG6j5RZGd4hMl8j2icwa1ryE4EAE"
+    "I+kBqFGTI3f/faLo1xmOhnY0GlFV1Ws3o9DrakBE7ugPJjRqE1r1FBcM5U4bvzV30GhYxcYek5ZQnyDNEdLZRb0B6YMHYy2maYlb"
+    "TaBNFB1ntplgXKDo55S9IcV+l7K/Sz6+gubbGN3Bmj0i2yNlghQv0q7dj2LVey9lWY6AzZtRKEB0uAY4r7dMhnv82jvXgYRhkdDP"
+    "a+xNDnS/SBlUCXlI0DKD7hKmdzfWKibJETEgB72DqjlYUdVRlIE0jkhmaySzdZp+ieDATzzVqKTsjyj7+5TDXYpyl8lojUbjPoxU"
+    "6nwQ7/3ud7/73e7UyW8MANFhc1zkxUlvLJGJjPcFmRmSphVLNZA5i9eIiU8ZVDX2y4xuVacfGgxDg1LreElQ7HRKpUg4aCGDOpxX"
+    "1IN6OdiFBgEVTGbJ0g61+VnUnURcYGcz55YTJcHlOOcRkfzee+/9maOVCODDH/5wfVKU81lN3J0rqXrNxGNlnDt2un16/RHj8ZAi"
+    "HxOCY9bA/LQrc1HGhAYjbdHXDkM6TOhQmCZOa5SSoiKAn/bTAUI4uPSgTlCn4EFUiFI4sihULqhzFVVVvXbhwoXwxBNPmAsXLoSb"
+    "Arjt6NFjSRQdV4AKRs11rAizbskfu3tJrY1N5ZHRpJTNrT3WN3fZ7w3Z7/YYjzfwrsTgaRqhHSVgMyrbJDezFNEiVXyE0izipIOn"
+    "gZKiCKhH1UFwEAKhUmIbmG0GyuqwE+TSlIFuzJ9DALvD4euI/JaJ4weM2Aesb5yKbLTk8baYlNTrEbGBhXZNl+Zu9afuOEpZVmY0"
+    "KWR3ry+vb26zuz9iZ6/Hzl6PYX8HVxWIOoyBKIrI4gyN2vhonio6grPLOLNMkEWCtiHUKJ1lvlHRboyonAneO1uW5ctw8zXgKoBP"
+    "fepTI+DPpspHH/9op320fWetkbzdjs2DSb//QJIkd6Zp2qllWSQieOeJRJltJmH+ruNBjIgipqy8XNnusrW7z063z+bWPts7Xfa7"
+    "fYpiE/UVsYU4jojiGnHURO0cIVrClUt0Zu4kie/AOc94PMZ7v/az8v8qADgYrU9RhgsXLuwD35nq5wEef/zx5WPHjt3VSJL74zT9"
+    "5SSO7zfG3B7Hcd0YY1SVsigI3rOyOMOtR+cwxiDGUrjAOK/oDydc3tjllbV11jeu0O/3mPT20LBJEr8IVU772C9j5PfVuVLzPHeq"
+    "ujZNoZsOga8CuHbyq6oybTPNqVOn9OzZs0FENjng469PH0v+4KMfXUnq9RNJHN9n4/jBWpr+vSSOV5xXLatSVANGDGktZeVIh7tu"
+    "P85Df6dGUBhNCobjMeube1xa2+DS2jov/+QVlo7eShQZzQuvzrl+CGF7mkI3BXDTvLqZqKqcO3fOPPTQQ9He3p6/cOGCA3jqqadO"
+    "tNvte+M4flhE3r+9tXVnURRazzKxIkRxRBwnpGlKVq9P1wtIkpgoimg2G6Rpig/KeJIDhiS2rigKd/ny5c3vfe977/70pz995WY7"
+    "0esi8GYiIrq6usq5c+cKIPrc5z73eJqmv2OMOV2v1wUgz3NmOh22trZkp9s9oEw9KOJamjIzM0Or1SLLMrwLiAT6gxF+f0CaJiRJ"
+    "jAhVCKGsqiqOomiwsbHRFZGbLmJvCcDhRPgLX/jCw81m81O1Wu1B7z2TyYSiKHwIQZ1zNkkSWVlZYTQakec5w+GQfr/PxuYmZVkS"
+    "RxHz8/PMz8+zsLDAwsI8rVYTORicSqPRiCeTSdw5cMTqxYsXy8OTo5s69ucx/vDg40tf+tJj8/Pzf5KmaVQUhTPGiDkQueZZvPc4"
+    "58jznDzPGY/HjMdj9vf36Xa7DEcjOp0OnZkZarUaR44shtnZOdnf3/vc8uLSa3Ga/vpoPL70xS9+8fe2trbyr33ta8rBLOitp9Dq"
+    "6qoVEf/5z3/+XbOzs0+LCHme+yiKImMMh2qtJYoijDkYnIUQqKoK5xxlWZLnOctLS4wnEwaDAYPBgHq9Tq1WYzLJBbqCmN943wc+"
+    "8I7RaPSvAXuN+mucfR2IG4a7b5SrU+tG4/FWqyWq6qIoslEUcahJklCr1ciy7KqmaUqSJMRxTJZltNttZufmmJub4+jRoxw/fpxa"
+    "rcZ05iN5nrt2q7XyiU984g9WV1ftQw89NAckU8MN1xwGvqUIXJ1YpOnxEIJaa4219jqvx3F81VhrLQDOOUQEVcUYg/eeoiiI45jR"
+    "aESSHDDTaDRiMplQVZVUVRWstfPnzp2LT548aabePzyxlDd6/y1FAHg1TVMRkfBGANeqtfY6NcaQJAmzs7OICHEc0+l0EBGyLGNm"
+    "ZoZOp0MURWqtNdvb2y8Csff+0OuH8oaTlp8TwOHYfWtr64/zPHdZlsUhBHdo/KGRN6M5EblaI4fGjkYj0jRlcXGREMIhqGp5eTnq"
+    "9/sbX/7yl7/SaDTqe3t7FQeFe6hXz47fEgARCapqPvKRj/yfV1555XeAanFxMRIRr6oe0Gt5WlXR6bHOIYDD60ajQZIk7O7uYozR"
+    "hYUFb4wJc3NzcVmW6y+99NL7v//9778SRVExHA5zoAIcB0V8UxZ6UwCHIFZXV+2HPvShp7/61a8+cuXKlW/NzMzYxcVFm2WZTEG6"
+    "EIIPIQTvfXDOqfdeVTU450JRFEFEfL1edyKio9FIms2mTdPUbGxs/Nmzzz77K5/85Ce/ffr0aXq9Xh+YAMUUwA19wFXbfh4Ah3LN"
+    "8aZ85jOfee9tt932wbm5ufccO3asUa/Xr0bBOUdVVVcVoNFo4L0nz3O2trbY3t7e7na7/+nVV1/9wpNPPvktgJ/VtPyNzn0rDx/+"
+    "yJNPPhnCQbPB6dOnjz322GP3tVqtX7XWvqPVap3IsqwZx7EFxDkX8jx3g8FgbzAYXPLef2dvb+/bn/3sZ1+4fPnyHhwslOfPn+et"
+    "Gv+LiKyurtrpf6O8UQxQB1pAG2gC2c1eoqp2dXXV/iKG/D8TI0nKKZwtXgAAAABJRU5ErkJggg==";
+static const char kClassicIcon32Base64[] =
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAKSElEQVR4nI2XX2wc13XGf+fO393lkrtL7nJFUrIoyY5kKrDjNHFS"
+    "AY2AoE4LN3HyIBVJG8FCXRRoaxQtXKQPbUmiT3ENFEYAP8htgQJFgZqCEMBAEaAI4gJpnIdAjmWzkRVFsiSKpHa5f2dmd2dn7tw+"
+    "iLQl1396gHkYzNy533z3fOecTwCMMSIi5uWXX67UauVjk5Ny48KFjeb3vvdnMZ8QxhgFyO4FYNbW1lhfXzcrKytGRMzHrReAV155"
+    "xTp9+rS+cGHtqUq59v1Gs90ul9z2VNHb8Txp2o510zLxNc+z300z1R4mbF++3GycPn26A3zsBsYYAfZAAmQiku09twGq1aoAzNfc"
+    "AxcvW3xnWVUWFvOVmWnvSG1GmJsOmV+Ypl5zqEwaCrmYw4cPda/84uKW47Ll2NKybG7YYl9PdPJur5M02kHavPCTX+2ISATojwJo"
+    "33vj5fxDWw2h38wl/5MoiwRDJhA1DcUqOEbwRGoVUbXiVmn/4oOl+bp9bF8VFvYp5mYVlSnI+wm1Wjb6qzPzrb/74807Oc/aiMfu"
+    "VjgwGz/60Q9/cOrUqZ8tLy+r1dXVzAY4efKkAXAs/9DGtkFso1w/U9oHMSPIuUjBxmQajUe3NzKt7ZR3NjOTJKEhUwYMlm3I50Wm"
+    "ikbNlMWfr6fzB/dn83M1/7GvPWFx/FNFgiD6JnB8ZWXFrK6u3mVAKaUBklQeuLGRYpSRLDNkCCaNkcxBtIAxiAVZMpR83sObFCED"
+    "USkgGANZZugHQqsj5u0r2hjTR++0TGmyoh96YKyiaDjczRsBsPcU8N3v/mVxOFb7mq0UXCQzBsRANgLl7a7RiGiMHmBcF0OMUSlI"
+    "EclpxNKoDNxE445TIVOilMXAhyOLvomi2NY63QBYW1tTgLZZWRHAnPi1E3O9wEwPx1CYcmUwTFGuxmQjxJlAqTEiGvE1OhmBXQCr"
+    "iFVJsY5cIesswGgSk2lMbDCDFKIxSayxLGFqAvr9EK31BsD6+roAqLWlJQEoltyFXmBZ0cBk1RkXYzJIDCIJyrVRuQw1ZaOKHtnQ"
+    "RUoF/C+/gX/275Gn/hz72M+xKkXsqmBVLFTZRaY8MmUo5DLyuZRuLyDNklu7eXdXBXsSVGIvtjqK4TDNZmZyyi9kyEyf+DrYJR/c"
+    "HJgC1tSI8tcvM/nbr6L3XWbYteHq32LxO6gDBuIJVDAGNcYYhe4rylMpEznkZiMk1foGwGuvvfYBGRo53GwLmRhIFfs+l/HAX7/O"
+    "f3/jYXQ2g1cJmDzxYya++FNU9QaDfhv3rRxHr3yBOJ1mMPUGw/w0cb7M2M+RWAU0GWl7zHS1j+ekKggjxsPhBsDS0pK5D8AoTg/e"
+    "vpOgXCEeC3Nf6bN43HDzDztk0c+pfuPHpFMbxMGAQVMzvPh14v84wC+D21jpf6LGHZAQHI3te+CWsK0aKpyhXjlmLPWQDKIoiaJo"
+    "azcH7gI4efKkBgij9MCN7THKdkUXR5S/tEmqJ3jkD7YIZZ2dXkjQSxnd2kfy5rdQnc/gfilFG8O4n5L2QvROG926Q9bZgPAWlr6F"
+    "7v4X5d94EuRhRqNR98aNGzsA79UBETHLy8tuNJK5rY6GNCfu0hbFgwOS0GKUJjR6MXo4YPLto5jLT4O9D11P0ZaHIwYrb+OWHaQ+"
+    "RRYdxISPk/Y1EsQMrnWo1DE6DWQ81u21tbU+gIi8nwO/eWL/zEZH6t0IjKVl+svbWAhBNGZn0GM46FP+9zKHryqyqX8kdjwid4Yo"
+    "N8vQrzNyqsRSIrV8MkdhbA2ORnzBmvRYmMPEcUKik5t3+5NRew1pLwfmwtjxe31Mrh7IxPFt0jhj5PSIpY3lBVwlz9tvPUTO3SKn"
+    "d/C5iEMbURHigJcrYPtVUm+e1N5PygKprmHbPjNlMak2GG3WdxWggPcBJAkLza6iNyQjzFs//YvP4dUC7FoHU5lGTe1gP9TAfmwf"
+    "cfRZhjpGD2NUHJLLOpjgNlnnJoxuobIrWKqP5WhwPCa8OUqFv2E4dEjT8bUP7YY7HeuArxo8+YWOifUEnXCS7ruzBFcOMsIhdQTJ"
+    "pyhLUN4QxxIo+ig1QXnqEJZ5nCTSJGFM0uuR9JvE4SZpcJ1Jq03OR8JoSJaltwCazaa5D0CrFx4seKSff3CYjsehCkbXJBykEsaK"
+    "MPEJ9QShKRNJmYEUiZkgyRySzCKKNQ4poFE58NwSbrmCGR9j0M+YLo7I51Jp7XQB2h/KwGgYH63lJ+1a3bZRHgzKxJnOwmiQNRo7"
+    "tNsbKggHEgzGMkwtYvKM7QqxXcOkc2ROjZQSic6hxxZmbJB0zDBOmX4gMZ5jVD+IxmEY3r63BrwPYDD4zmay/X2tks8LPOpbuSPV"
+    "6vTUoYWaMp9aJAgj2p0em9uNrNMNaLe7avvOJXr9gDAaMUwUWhXAqyH+POLuRzlzpKMqlaKPZVkkWt+5dOnSnXtrALw/p90Xzz33"
+    "XD2Xyy1N5POPerb7Wdu1H1MihxzHdpQIqdbE45TBMKYXDml3AzrdLhu3N7nTaBCEIUkqdPrC09/+Zvbcn3xNXXzjrdfPnPn2r++1"
+    "//sYWF5eVoBaWloyp3/3tH7hhRe2gW3gh3svPvHEE5UTj5/44kQx/3tKySmMsSbyrsyUizz26QcpTpVIUkM4GNHrh2xu77D+i8vm"
+    "00erWTQYSpKMN3c/JdwzyNoAq6ur2Z4u4e4ku7a2ptbX12V1dTV96aWXPlMoFL5ljDmByGIUhlaz2ZRMa5QIjVaHSqVCqTRFIZ+j"
+    "OjPP0tGDPPXkSYmigdXvR6KU2vlgDXgPwIfFqVOnsvX1dev8+fMvOo7zp77vqyRJiOMY3/OYmJig3+/T7XZptna49u51PNdlfmGB"
+    "ffW6qc3WpNcPNzzP8zOtS1rrf4P7JfiRObBXKs+fP/8vc3NzZ4IgyJRSmW3byrIssW1bjDGMx2NGwyFhFNHpdGg0GiRJwuTkZDYz"
+    "M6OMMW9vbW09Xa/X9dmzZy9x1x/cx/b/YWB5eVmJSHbu3LlF13XPBEGgdze1HcfB931c1wVgNBrhOA65fJ5SqcTs7Cz9fp8gCFS3"
+    "29Vzc3PHReTRs2fP/tMjjzxSevPNN+8dSM2HAtgLx3GMZVnGtm0sy8J1XTzPI5fL4bouxhiMMWRZRqFQoN/v4zgOAK7r0u/3M621"
+    "FUWRVa1WJ1qt1r3u6P93BK+++uo/Ly4unu12u8ZxHO26rvI8TxzHEYA4jhkOh5TLZVqtlhkMBsZxnGxnZ0cKhYJ18+bNi88///xX"
+    "Nzc34yAIYiAGUu5RgfoIAowxRlZWVv7o+vXr/+A4jq5Wq3apVFK+74tSCmNMxq7PM8aYSqUilmWpfD5vF4tFq9FovHL16tXfeued"
+    "dzZnZ2dDYPjBzT+SgQ/Giy+++PDhw4d/v16vn7Rt+5jruiXP89BaE8cxaZoyGAyiwWDwy2az+ZNWq/Wvzz777Ou7fyIf55A/CYDs"
+    "Hsd75vKZZ55ZWFpaOlKpVCpKKdsYoxuNRv/KlSvXzp0796t7KFTAJ9rz/wWnN0qYS7covQAAAABJRU5ErkJggg==";
+static const char kClassicIconGroupBase64[] =
+    "AAABAAIAMDAAAAEAIACNEwAAoQAgIAAAAQAgAIEKAACiAA==";
+
+static int Base64Digit(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static bool DecodeEmbeddedBase64(const char* encoded, std::vector<BYTE>& output) {
+    output.clear();
+    if (!encoded) return false;
+    const size_t length = strlen(encoded);
+    if (!length || (length & 3) != 0) return false;
+    output.reserve((length / 4) * 3);
+
+    for (size_t i = 0; i < length; i += 4) {
+        const int a = Base64Digit(static_cast<unsigned char>(encoded[i]));
+        const int b = Base64Digit(static_cast<unsigned char>(encoded[i + 1]));
+        const bool pad2 = encoded[i + 2] == '=';
+        const bool pad3 = encoded[i + 3] == '=';
+        const int c = pad2 ? 0 : Base64Digit(static_cast<unsigned char>(encoded[i + 2]));
+        const int d = pad3 ? 0 : Base64Digit(static_cast<unsigned char>(encoded[i + 3]));
+        if (a < 0 || b < 0 || c < 0 || d < 0 || (pad2 && !pad3) ||
+            ((pad2 || pad3) && i + 4 != length)) {
+            output.clear();
+            return false;
+        }
+        const DWORD value = (static_cast<DWORD>(a) << 18) |
+                            (static_cast<DWORD>(b) << 12) |
+                            (static_cast<DWORD>(c) << 6) |
+                            static_cast<DWORD>(d);
+        output.push_back(static_cast<BYTE>((value >> 16) & 0xFF));
+        if (!pad2) output.push_back(static_cast<BYTE>((value >> 8) & 0xFF));
+        if (!pad3) output.push_back(static_cast<BYTE>(value & 0xFF));
+    }
+    return true;
+}
+
+static bool IsExpectedWin7PreviewDib(const std::vector<BYTE>& bytes) {
+    if (bytes.size() < sizeof(BITMAPINFOHEADER)) return false;
+    BITMAPINFOHEADER header = {};
+    memcpy(&header, bytes.data(), sizeof(header));
+    if (header.biSize != sizeof(BITMAPINFOHEADER) || header.biPlanes != 1 ||
+        header.biBitCount != 32 || header.biCompression != BI_RGB ||
+        header.biWidth <= 0 || header.biHeight <= 0) {
+        return false;
+    }
+    const DWORD expected =
+        sizeof(BITMAPINFOHEADER) +
+        static_cast<DWORD>(header.biWidth) *
+            static_cast<DWORD>(header.biHeight) * 4;
+    return bytes.size() >= expected;
+}
+
+static bool AddEmbeddedWin7PreviewBitmaps(HANDLE update) {
+    struct PreviewResource {
+        WORD id;
+        const char* base64;
+    };
+    static const PreviewResource previews[] = {
+        {20, kWin7PreviewBitmap20Base64},
+        {21, kWin7PreviewBitmap21Base64},
+        {22, kWin7PreviewBitmap22Base64},
+    };
+
+    std::vector<BYTE> bytes;
+    for (const PreviewResource& preview : previews) {
+        if (!DecodeEmbeddedBase64(preview.base64, bytes) ||
+            !IsExpectedWin7PreviewDib(bytes)) {
+            Wh_Log(L"Embedded Windows 7 preview bitmap %u failed validation",
+                   preview.id);
+            return false;
+        }
+        // Match the language carried by the original Microsoft image resource.
+        // Graphics are language-neutral in content and Windows resource fallback
+        // finds this en-US copy for every supported page language.
+        if (!UpdateResourceW(update, RT_BITMAP, MAKEINTRESOURCEW(preview.id),
+                             MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+                             bytes.data(), static_cast<DWORD>(bytes.size()))) {
+            Wh_Log(L"Adding Windows 7 preview bitmap %u failed: %u",
+                   preview.id, GetLastError());
+            return false;
+        }
+    }
+    return true;
+}
+
+// The pinned Windows page definition names the two pages through indirect
+// strings ("@Display.dll,-1" and "@Display.dll,-300"). On current systems the
+// bare module name resolves to a resource-less Display.dll stub, which leaves
+// both the final breadcrumb segment and its drop-down item blank.
+//
+// Replace only those two displayname attributes with literal authenticated text
+// in the selected language. SHLoadIndirectString explicitly preserves literal
+// input unchanged, so this avoids every module-name/MUI-cache ambiguity without
+// changing canonical page names, layouts, icons, navigation or provider code.
+// The edit is performed only in the private DATA/RESOURCE copy and is validated
+// against the two exact occurrences in each pinned XMLFILE resource.
+static std::wstring EscapePageDefinitionAttribute(
+    const std::wstring& value) {
+    std::wstring escaped;
+    escaped.reserve(value.size());
+    for (wchar_t c : value) {
+        switch (c) {
+            case L'&': escaped += L"&amp;"; break;
+            case L'<': escaped += L"&lt;"; break;
+            case L'>': escaped += L"&gt;"; break;
+            case L'"': escaped += L"&quot;"; break;
+            case L'\'': escaped += L"&apos;"; break;
+            default: escaped += c; break;
+        }
+    }
+    return escaped;
+}
+
+static bool WideStringToUtf8(const std::wstring& value,
+                             std::string& output) {
+    output.clear();
+    if (value.empty()) return true;
+    if (value.size() > static_cast<size_t>(INT_MAX)) return false;
+    const int chars = static_cast<int>(value.size());
+    const int bytes = WideCharToMultiByte(
+        CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), chars,
+        nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0) return false;
+    output.resize(static_cast<size_t>(bytes));
+    return WideCharToMultiByte(
+               CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), chars,
+               &output[0], bytes, nullptr, nullptr) == bytes;
+}
+
+static size_t ReplaceAllPageDefinitionTokens(std::string& value,
+                                              const std::string& token,
+                                              const std::string& replacement) {
+    if (token.empty()) return 0;
+    size_t count = 0;
+    size_t position = 0;
+    while ((position = value.find(token, position)) != std::string::npos) {
+        value.replace(position, token.size(), replacement);
+        position += replacement.size();
+        ++count;
+    }
+    return count;
+}
+
+static bool AddLocalizedPageDefinitionTitles(
+    HMODULE sourceModule, HANDLE update, MuiLanguage language) {
+    if (!sourceModule || !update) return false;
+
+    const wchar_t* hubTitle = GetMuiString(1, language);
+    const wchar_t* settingsTitle = GetMuiString(300, language);
+    if (!hubTitle || !*hubTitle || !settingsTitle || !*settingsTitle) {
+        Wh_Log(L"Display page-title patch: localized titles are unavailable");
+        return false;
+    }
+
+    std::string hubText;
+    std::string settingsText;
+    if (!WideStringToUtf8(EscapePageDefinitionAttribute(hubTitle), hubText) ||
+        !WideStringToUtf8(EscapePageDefinitionAttribute(settingsTitle),
+                          settingsText)) {
+        Wh_Log(L"Display page-title patch: localized titles are not valid UTF-8");
+        return false;
+    }
+
+    const std::string hubReplacement =
+        "displayname=\"" + hubText + "\"";
+    const std::string settingsReplacement =
+        "displayname=\"" + settingsText + "\"";
+    constexpr WORD kPageDefinitionLanguage =
+        MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
+
+    for (WORD resourceId : {static_cast<WORD>(100),
+                            static_cast<WORD>(101)}) {
+        HRSRC resource = FindResourceExW(
+            sourceModule, L"XMLFILE", MAKEINTRESOURCEW(resourceId),
+            kPageDefinitionLanguage);
+        if (!resource) {
+            Wh_Log(L"Display page-title patch: XMLFILE/%u is unavailable",
+                   static_cast<unsigned int>(resourceId));
+            return false;
+        }
+        const DWORD size = SizeofResource(sourceModule, resource);
+        HGLOBAL loaded = LoadResource(sourceModule, resource);
+        const void* data = loaded ? LockResource(loaded) : nullptr;
+        if (!data || size == 0) {
+            Wh_Log(L"Display page-title patch: XMLFILE/%u could not be read",
+                   static_cast<unsigned int>(resourceId));
+            return false;
+        }
+
+        const char* first = static_cast<const char*>(data);
+        std::string xml(first, first + size);
+        const size_t hubCount = ReplaceAllPageDefinitionTokens(
+            xml, "displayname=\"@Display.dll,-1\"", hubReplacement);
+        const size_t settingsCount = ReplaceAllPageDefinitionTokens(
+            xml, "displayname=\"@Display.dll,-300\"",
+            settingsReplacement);
+        if (hubCount != 1 || settingsCount != 1 ||
+            xml.size() > static_cast<size_t>(MAXDWORD)) {
+            Wh_Log(L"Display page-title patch: XMLFILE/%u did not match the "
+                   L"pinned page-definition contract (hub=%u settings=%u)",
+                   static_cast<unsigned int>(resourceId),
+                   static_cast<unsigned int>(hubCount),
+                   static_cast<unsigned int>(settingsCount));
+            return false;
+        }
+
+        if (!UpdateResourceW(
+                update, L"XMLFILE", MAKEINTRESOURCEW(resourceId),
+                kPageDefinitionLanguage, &xml[0],
+                static_cast<DWORD>(xml.size()))) {
+            Wh_Log(L"Display page-title patch: updating XMLFILE/%u failed: %u",
+                   static_cast<unsigned int>(resourceId), GetLastError());
+            return false;
+        }
+    }
+
+    Wh_Log(L"Display page-title patch: literal localized Display and Screen "
+           L"Resolution titles embedded (language=%u)",
+           static_cast<unsigned int>(language));
+    return true;
+}
+
+// Replaces the applet icon of an already-committed private resource module
+// with the classic Windows 7/8-style monitor glyph, in its own update
+// transaction. The pinned 1511 payload carries the Windows 10 icon, which
+// the user asked not to use. PNG-compressed RT_ICON entries are supported by
+// every shell this mod targets (Vista and later). This is a strictly
+// cosmetic second pass: any failure only leaves the stock glyph in place and
+// can never abort or corrupt the string/module build that already committed.
+static void TryEmbedClassicIcon(const std::wstring& path) {
+    std::vector<BYTE> png48;
+    std::vector<BYTE> png32;
+    std::vector<BYTE> group;
+    if (!DecodeEmbeddedBase64(kClassicIcon48Base64, png48) ||
+        !DecodeEmbeddedBase64(kClassicIcon32Base64, png32) ||
+        !DecodeEmbeddedBase64(kClassicIconGroupBase64, group)) {
+        Wh_Log(L"Classic icon decoding failed; keeping the stock icon");
+        return;
+    }
+
+    ResourceUpdateTransaction update(path);
+    if (!update.IsValid()) {
+        Wh_Log(L"Classic icon pass skipped (update open failed): %u",
+               GetLastError());
+        return;
+    }
+
+    static const WORD languages[] = {
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
+        MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+    };
+    for (const WORD language : languages) {
+        if (!UpdateResourceW(update.Get(), RT_ICON, MAKEINTRESOURCEW(161),
+                             language, png48.data(),
+                             static_cast<DWORD>(png48.size())) ||
+            !UpdateResourceW(update.Get(), RT_ICON, MAKEINTRESOURCEW(162),
+                             language, png32.data(),
+                             static_cast<DWORD>(png32.size())) ||
+            !UpdateResourceW(update.Get(), RT_GROUP_ICON,
+                             MAKEINTRESOURCEW(1), language, group.data(),
+                             static_cast<DWORD>(group.size()))) {
+            Wh_Log(L"Classic icon embedding failed (lang %04X): %u; keeping "
+                   L"the stock icon",
+                   language, GetLastError());
+            return;
+        }
+    }
+    if (!update.Commit()) {
+        Wh_Log(L"Classic icon commit failed: %u; keeping the stock icon",
+               GetLastError());
+        return;
+    }
+    Wh_Log(L"Classic Windows 7/8-style Display icon embedded");
+}
+
+static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
+                                         const std::wstring& directory) {
+    g_localizedResourcePath.clear();
+    if (sourceDll.empty()) return false;
+
+    const std::wstring destination =
+        directory + L"\\" + LocalizedResourceModuleFileName();
+
+    // Reuse an existing valid module for this exact configuration: the bytes
+    // are deterministic, so a file built earlier (by this process, a previous
+    // session, or control.exe) is byte-identical to a fresh build. Skipping
+    // the rebuild avoids the ~650 KB copy + PE patch + resource rewrite on
+    // every process load. If the file is valid it has not been modified in
+    // place (it was built by this mod from a pinned-verified source), so
+    // loading it is safe.
+    if (GetFileAttributesW(destination.c_str()) != INVALID_FILE_ATTRIBUTES &&
+        VerifyDownloadedDllLooksValid(destination)) {
+        g_localizedResourcePath = destination;
+        g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
+        g_lastBuiltForcedLanguage = g_forcedLanguage.load();
+        g_lastBuiltEffectiveLanguage =
+            static_cast<int>(GetCurrentEmbeddedLanguage());
+        g_lastBuiltValid = true;
+        Wh_Log(L"Reusing existing private resource module: %s",
+               destination.c_str());
+        TryEmbedClassicIcon(destination);
+        return true;
+    }
+    // Invalid leftover from an interrupted build: remove it and rebuild.
+    DeleteFileW(destination.c_str());
+
+    // Unique per-process temp file: the destination name is now shared across
+    // processes, so a bare ".tmp" suffix would collide with a concurrent build
+    // in control.exe or another explorer.exe.
+    wchar_t tmpSuffix[32] = {};
+    swprintf_s(tmpSuffix, ARRAYSIZE(tmpSuffix), L".tmp-%lu",
+               GetCurrentProcessId());
+    const std::wstring temporary = destination + tmpSuffix;
+    ScopedTemporaryFile temporaryGuard(temporary);
+
+    DeleteFileW(temporary.c_str());
+    if (!CopyFileW(sourceDll.c_str(), temporary.c_str(), FALSE)) {
+        Wh_Log(L"Copying private resource module failed: %u", GetLastError());
+        return false;
+    }
+
+    if (!DisableMuiConfigInPrivateCopy(temporary)) {
+        Wh_Log(L"Could not neutralize RC Config in private copy");
+        return false;
+    }
+
+    ResourceUpdateTransaction update(temporary);
+    if (!update.IsValid()) {
+        Wh_Log(L"BeginUpdateResource failed: %u", GetLastError());
+        return false;
+    }
+
+    static const MuiLanguage languages[] = {
+        MuiLanguage::EN_US, MuiLanguage::IT_IT, MuiLanguage::ES_ES,
+        MuiLanguage::FR_FR, MuiLanguage::TR_TR, MuiLanguage::RU_RU,
+        MuiLanguage::ZH_CN, MuiLanguage::DE_DE, MuiLanguage::PT_BR,
+        MuiLanguage::PL_PL,
+    };
+
+    UINT maxStringId = 0;
+    for (const MuiStringTable* table :
+         {kMuiStrings, kProviderCompatibilityStrings}) {
+        for (const MuiStringTable* row = table; row->en; ++row) {
+            if (row->id > maxStringId) maxStringId = row->id;
+        }
+    }
+    for (const NavLabelAlias* alias = kNavLinkLabelAliases;
+         alias->navId != 0; ++alias) {
+        if (alias->navId > maxStringId) maxStringId = alias->navId;
+    }
+    const UINT maxBlockId = maxStringId / 16 + 1;
+
+    std::vector<BYTE> block;
+    for (MuiLanguage resourceLanguage : languages) {
+        const MuiLanguage textLanguage =
+            g_languageAutomatic.load() ? resourceLanguage
+                                       : static_cast<MuiLanguage>(g_forcedLanguage.load());
+        for (UINT blockId = 1; blockId <= maxBlockId; ++blockId) {
+            const WORD resourceLanguageId =
+                GetEmbeddedLanguageId(resourceLanguage);
+            if (!BuildEmbeddedStringBlock(g_hDisplayDll.load(), blockId,
+                                          textLanguage, resourceLanguageId,
+                                          block)) {
+                continue;
+            }
+            if (!UpdateResourceW(update.Get(), RT_STRING, MAKEINTRESOURCEW(blockId),
+                                 resourceLanguageId,
+                                 block.data(), static_cast<DWORD>(block.size()))) {
+                Wh_Log(L"UpdateResource failed: lang=%04X block=%u err=%u",
+                       GetEmbeddedLanguageId(resourceLanguage), blockId,
+                       GetLastError());
+                return false;
+            }
+        }
+    }
+
+    if (!AddEmbeddedWin7PreviewBitmaps(update.Get())) {
+        return false;
+    }
+
+    if (!AddLocalizedPageDefinitionTitles(
+            g_hDisplayDll.load(std::memory_order_acquire), update.Get(),
+            GetCurrentEmbeddedLanguage())) {
+        return false;
+    }
+
+    if (!update.Commit()) {
+        Wh_Log(L"EndUpdateResource failed: %u", GetLastError());
+        return false;
+    }
+
+    DeleteFileW(destination.c_str());
+    if (!MoveFileExW(temporary.c_str(), destination.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        // Another process may have just built (or mapped) the same
+        // deterministic file; if the destination is already valid, use it.
+        if (VerifyDownloadedDllLooksValid(destination)) {
+            // Keep the losing temporary file under RAII cleanup. Commit() is
+            // only for a temp file that was successfully moved into place.
+            g_localizedResourcePath = destination;
+            g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
+            g_lastBuiltForcedLanguage = g_forcedLanguage.load();
+            g_lastBuiltEffectiveLanguage =
+                static_cast<int>(GetCurrentEmbeddedLanguage());
+            g_lastBuiltValid = true;
+            Wh_Log(L"Private resource module already present (built by another "
+                   L"process): %s",
+                   destination.c_str());
+            TryEmbedClassicIcon(destination);
+            return true;
+        }
+        Wh_Log(L"Activating private resource module failed: %u", GetLastError());
+        return false;
+    }
+    temporaryGuard.Commit();
+
+    if (!VerifyDownloadedDllLooksValid(destination)) {
+        DeleteFileW(destination.c_str());
+        Wh_Log(L"Private resource module failed PE validation");
+        return false;
+    }
+
+    g_localizedResourcePath = destination;
+    g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
+    g_lastBuiltForcedLanguage = g_forcedLanguage.load();
+    g_lastBuiltEffectiveLanguage =
+        static_cast<int>(GetCurrentEmbeddedLanguage());
+    g_lastBuiltValid = true;
+    Wh_Log(L"Private resource module ready with Display strings in 10 languages: %s",
+           destination.c_str());
+    // Cosmetic second pass, strictly best-effort: the string module above is
+    // already committed and valid regardless of this outcome.
+    TryEmbedClassicIcon(destination);
+    return true;
+}
+
+// True when the cached build already matches the current translation inputs,
+// so callers can skip ReleaseLocalizedResourceModuleLocked()+BuildLocalizedResourceModule()
+// entirely. Assumes g_localizedResourceMutex is already held.
+static bool LocalizedResourceModuleUpToDateLocked() {
+    return g_lastBuiltValid &&
+           !g_localizedResourcePath.empty() &&
+           g_lastBuiltLanguageAutomatic == g_languageAutomatic.load() &&
+           g_lastBuiltEffectiveLanguage ==
+               static_cast<int>(GetCurrentEmbeddedLanguage()) &&
+           (g_lastBuiltLanguageAutomatic ||
+            g_lastBuiltForcedLanguage == g_forcedLanguage.load());
+}
+
+static HMODULE EnsureLocalizedResourceModuleLoaded() {
+    std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+    if (HMODULE h = g_hLocalizedResources.load()) return h;
+    if (g_localizedResourcePath.empty()) return nullptr;
+
+    HMODULE h = LoadLibraryExW(g_localizedResourcePath.c_str(), nullptr,
+                               LOAD_LIBRARY_AS_DATAFILE |
+                                   LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    g_hLocalizedResources.store(h);
+    if (!h) {
+        Wh_Log(L"Loading private resource module failed: %u", GetLastError());
+    }
+    return h;
+}
+
+// Assumes g_localizedResourceMutex is already held.
+// Note: We deliberately never call FreeLibrary or DeleteFileW here (nor on
+// teardown), because DirectUI::XResourceProvider::Create caches this HINSTANCE
+// and loads resources from it lazily. Unloading or deleting the file while a
+// page is open can crash explorer.exe. Dropping the handle and clearing the path
+// only means the next page that opens will use a freshly built module; pages
+// already open keep using the old (still-mapped) module, and RemoveOwnFiles
+// cleans up whichever copies are no longer mapped on a later unload.
+static void ReleaseLocalizedResourceModuleLocked() {
+    g_hLocalizedResources.store(nullptr);
+    g_localizedResourcePath.clear();
+}
+
+static void ReleaseLocalizedResourceModule() {
+    std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+    ReleaseLocalizedResourceModuleLocked();
+}
+
+// The storage directory is scoped to this mod only. Windhawk resolves it for
+// both installed and portable deployments, so do not construct a ProgramData path.
+static std::wstring StoreDir() {
+    // Windows extended-length paths may contain up to 32,767 characters.
+    wchar_t path[32768] = {};
+    const size_t pathLength = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+    if (pathLength == 0 || pathLength >= ARRAYSIZE(path)) {
+        Wh_Log(L"Could not retrieve the mod storage path");
+        return {};
+    }
+    return path;
+}
+
+using DllGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, REFIID, LPVOID*);
+
+// ISO C++ doesn't define a direct object/function-pointer conversion, while
+// GetProcAddress necessarily returns FARPROC. Copying the representation avoids
+// compiler-specific cast diagnostics without changing the Windows ABI contract.
+template <typename FunctionPointer>
+static FunctionPointer FunctionPointerFromFarProc(FARPROC procedure)   {
+    static_assert(sizeof(FunctionPointer) == sizeof(procedure));
+    FunctionPointer result = nullptr;
+    std::memcpy(&result, &procedure, sizeof(result));
+    return result;
+}
+
+static DllGetClassObject_t ResolveDllGetClassObject(HMODULE module) {
+    return module ? FunctionPointerFromFarProc<DllGetClassObject_t>(
+                        GetProcAddress(module, "DllGetClassObject"))
+                  : nullptr;
+}
+
+// Validate the loaded image, not just the file on disk. The pinned SHA-256
+// proves which Microsoft DLL was downloaded; these checks additionally prove
+// that the current Windows loader can resolve it, that all resources needed by
+// the restored pages are visible, and that its provider COM class can actually
+// supply a factory on this host.
+static bool VerifyLoadedDisplayCompatibility(HMODULE module) {
+    if (!module) return false;
+
+    struct RequiredResource {
+        LPCWSTR type;
+        WORD id;
+    };
+    static const RequiredResource required[] = {
+        {L"XMLFILE", 100}, {L"XMLFILE", 101},
+        {L"UIFILE", 201}, {L"UIFILE", 202},
+    };
+    for (const auto& resource : required) {
+        if (!FindResourceW(module, MAKEINTRESOURCEW(resource.id), resource.type)) {
+            Wh_Log(L"Display DLL compatibility check failed: resource %s/%u is "
+                   L"not available (error %u)",
+                   resource.type, resource.id, GetLastError());
+            return false;
+        }
+    }
+
+    DllGetClassObject_t getClassObject = ResolveDllGetClassObject(module);
+    if (!getClassObject) {
+        Wh_Log(L"Display DLL compatibility check failed: DllGetClassObject is "
+               L"not exported");
+        return false;
+    }
+
+    IClassFactory* factory = nullptr;
+    const HRESULT hr = getClassObject(kProviderGuid, IID_IClassFactory_GUID,
+                                      reinterpret_cast<LPVOID*>(&factory));
+    if (FAILED(hr) || !factory) {
+        Wh_Log(L"Display DLL compatibility check failed: provider class factory "
+               L"returned 0x%08X", static_cast<unsigned int>(hr));
+        if (factory) factory->Release();
+        return false;
+    }
+    factory->Release();
+    Wh_Log(L"Display DLL compatibility check passed: resources 100/101/201/202 "
+           L"and provider class factory are available");
+    return true;
+}
+
+static void NotifyControlPanelContractReady() {
+    // Deliberately conservative: no SHChangeNotify / WM_SETTINGCHANGE
+    // broadcast is forced. The virtual registry hooks go live immediately,
+    // so the Control Panel picks the applet up the next time it enumerates;
+    // forcing a shell refresh would disturb the user's session for no gain.
+    Wh_Log(L"Display Control Panel registration is ready (no forced refresh)");
+}
+
+// The provider-specific SetSite hook is installed only after the exact pinned
+// image has passed its runtime compatibility checks. Its implementation lives
+// with the native-navigation code below.
+static void InstallPinnedDisplayProviderHooks(HMODULE module);
+
+// -----------------------------------------------------------------------------
+// Async setup - runs on a worker thread so explorer.exe startup is never blocked.
+// -----------------------------------------------------------------------------
+static bool WaitForSetupStopOrTimeout(DWORD timeoutMs)   {
+    if (g_stopEvent) {
+        const DWORD wait = WaitForSingleObject(g_stopEvent, timeoutMs);
+        if (wait == WAIT_OBJECT_0) return true;
+        if (wait == WAIT_TIMEOUT) return false;
+        // A failed wait falls through to the sliced atomic check instead of
+        // turning the retry loop into an unthrottled spin.
+    }
+
+    // Event creation (or waiting on it) can fail under extreme resource
+    // pressure. Keep the fallback sleep cancellable in short slices so disabling
+    // the mod never has to wait for a full retry interval.
+    DWORD remaining = timeoutMs;
+    while (remaining &&
+           !g_shuttingDown.load(std::memory_order_acquire)) {
+        const DWORD slice = remaining > 250 ? 250 : remaining;
+        Sleep(slice);
+        remaining -= slice;
+    }
+    return g_shuttingDown.load(std::memory_order_acquire);
+}
+
+static void RunSetup() {
+    Wh_Log(L"Display background setup started...");
+    // Compile-time defense in case the architecture metadata is changed later.
+    if (!IsRunningAsAmd64()) {
+        Wh_Log(L"Display setup aborted: system architecture is not AMD64 (x64)");
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        return;
+    }
+
+    // Serialize with other processes (other explorer.exe instances, control.exe)
+    // that may be performing the same setup at the same time.
+    struct SetupMutexGuard {
+        HANDLE handle = nullptr;
+        bool owned = false;
+        void Close()   {
+            if (!handle) return;
+            if (owned) ReleaseMutex(handle);
+            CloseHandle(handle);
+            handle = nullptr;
+            owned = false;
+        }
+        ~SetupMutexGuard()   { Close(); }
+    } setupMutexGuard{
+        CreateMutexW(nullptr, FALSE,
+                     L"Windhawk.DisplayControlPanelRestorer.Setup")};
+    HANDLE setupMutex = setupMutexGuard.handle;
+
+    if (setupMutex) {
+        HANDLE handles[] = {setupMutex, g_stopEvent};
+        DWORD numHandles = g_stopEvent ? 2 : 1;
+        DWORD wait = WaitForMultipleObjects(numHandles, handles, FALSE, 60000);
+        if (wait == WAIT_OBJECT_0 + 1) {
+            return;
+        }
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) {
+            setupMutexGuard.owned = true;
+        } else {
+            // Could not get the lock in time. Proceed anyway; the
+            // temp-file + atomic-move pattern keeps a partial file invisible.
+        }
+    }
+
+    std::wstring dir = StoreDir();
+    if (dir.empty()) {
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        Wh_Log(L"Display is unavailable: Windhawk did not provide a mod storage path");
+        return;
+    }
+
+    // Remove private resource modules left behind by other configurations,
+    // sessions or processes (and by older per-process naming). Runs only at
+    // startup, before this process has loaded any resource module, so nothing
+    // referenced by this process can be deleted. The current configuration's
+    // file - if any - is kept, and files still mapped elsewhere are skipped
+    // and retried on a later sweep/unload.
+    SweepStaleResourceModules(dir);
+
+    std::wstring outPath;
+    UniqueWinHandle pinnedDll;
+    bool ok = false;
+
+    // A bounded batch with backoff covers transient network failures. A
+    // persisted valid file is reused without network access. If the first batch
+    // fails (for example because networking isn't ready at Explorer startup),
+    // release the cross-process mutex and retry later in the same process: the
+    // user must not have to restart Explorer or toggle the mod.
+    auto trySetupBatch = [&]() {
+        for (int attempt = 1; attempt <= kMaxDownloadAttempts; ++attempt) {
+            if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+            if (DownloadDllToPath(dir, outPath, pinnedDll)) return true;
+            if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+            if (attempt < kMaxDownloadAttempts) {
+                Wh_Log(L"Download attempt %d/%d failed; retrying in a few seconds",
+                       attempt, kMaxDownloadAttempts);
+                if (WaitForSetupStopOrTimeout(kRetryDelayMs)) return false;
+            }
+        }
+        return false;
+    };
+
+    ok = trySetupBatch();
+
+    setupMutexGuard.Close();
+
+    while (!ok && !g_shuttingDown.load(std::memory_order_acquire)) {
+        Wh_Log(L"Display provider is not ready; retrying automatically in 60 seconds");
+        if (WaitForSetupStopOrTimeout(kRetryCycleDelayMs)) break;
+        ok = trySetupBatch();
+    }
+
+    if (ok && !outPath.empty()) {
+        // Take one reference on the DLL. It is deliberately kept mapped during
+        // teardown because live COM objects may still own provider vtables.
+        // `pinnedDll` is still held here (write sharing denied), so the bytes
+        // mapped as executable code are the bytes that passed verification.
+        constexpr DWORD safeLoadFlags =
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32;
+        HMODULE h = LoadLibraryExW(outPath.c_str(), nullptr, safeLoadFlags);
+        if (!h) {
+            const DWORD safeLoadError = GetLastError();
+            Wh_Log(L"Display DLL safe load failed (error %u); retrying with the "
+                   L"legacy loader for host compatibility", safeLoadError);
+            h = LoadLibraryExW(outPath.c_str(), nullptr, 0);
+        }
+        if (!h) {
+            g_dllVerifiedOk.store(false, std::memory_order_release);
+            Wh_Log(L"Display is unavailable: verified display.dll could not be "
+                   L"loaded (error %u)", GetLastError());
+            return;
+        }
+
+        if (!VerifyLoadedDisplayCompatibility(h)) {
+            FreeLibrary(h);
+            g_dllVerifiedOk.store(false, std::memory_order_release);
+            Wh_Log(L"Display is unavailable: the loaded DLL failed its runtime "
+                   L"compatibility check");
+            return;
+        }
+
+        std::wstring* pathPtr = nullptr;
+        try {
+            pathPtr = new std::wstring(outPath);
+        } catch (...) {
+        }
+        if (!pathPtr) {
+            FreeLibrary(h);
+            g_dllVerifiedOk.store(false, std::memory_order_release);
+            Wh_Log(L"Display is unavailable: path allocation failed");
+            return;
+        }
+
+        g_dllPath.store(pathPtr, std::memory_order_release);
+        g_hDisplayDll.store(h, std::memory_order_release);
+
+        // The hook target is an RVA in this exact SHA-256-pinned provider. Apply
+        // it before publishing the virtual Control Panel contract, so the first
+        // page can receive a native task list without an Explorer restart.
+        InstallPinnedDisplayProviderHooks(h);
+
+        bool localizedResourcesReady = false;
+        try {
+            {
+                std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+                localizedResourcesReady =
+                    BuildLocalizedResourceModule(outPath, dir);
+            }
+            // Map the completed file before publishing the virtual registry
+            // contract. The layout folder can then reuse this exact resource
+            // mapping when ResourceDLL points to it, keeping the existing
+            // DirectUI identity checks and compatibility patches intact.
+            if (localizedResourcesReady &&
+                !EnsureLocalizedResourceModuleLoaded()) {
+                std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+                ReleaseLocalizedResourceModuleLocked();
+                localizedResourcesReady = false;
+                Wh_Log(L"Display localization resource mapping failed; using "
+                       L"the verified provider fallback");
+            }
+        } catch (...) {
+            // Localization is optional for activation. Keep the pinned base provider
+            // available rather than aborting setup on a resource-copy allocation
+            // failure. Cleanup is best-effort too: no second exception may escape
+            // this recovery path.
+            try {
+                std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+                ReleaseLocalizedResourceModuleLocked();
+            } catch (...) {
+            }
+            Wh_Log(L"Display localization resource setup failed; using provider "
+                   L"fallback resources");
+        }
+
+        // Never revive the unsafe CHubPage::InitializePage/+0x18 inspection.
+        // Navigation is repaired only through the per-layout property bag and
+        // provider-native ownership rules established below.
+        g_dllVerifiedOk.store(true, std::memory_order_release);
+        NotifyControlPanelContractReady();
+        Wh_Log(L"Display setup complete: Microsoft Windows 10 1511 "
+               L"compatibility provider 10.0.10586.0 is ready; native "
+               L"navigation repair is active");
+    } else {
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        if (!g_shuttingDown.load(std::memory_order_acquire)) {
+            Wh_Log(L"Display is unavailable: the required display.dll could not "
+                   L"be downloaded or verified; automatic retry remains active");
+        }
+    }
+}
+
+// std::thread invokes std::terminate if an exception escapes its entry point.
+// Setup performs allocations, hashing and file/resource construction, so keep
+// a final fail-closed boundary here even though the individual helpers normally
+// report failures through return values. Explorer must never be terminated by a
+// background setup failure.
+static void RunSetupNoexcept()   {
+    try {
+        RunSetup();
+    } catch (...) {
+        g_dllVerifiedOk.store(false, std::memory_order_release);
+        Wh_Log(L"Display is unavailable: unexpected failure in background setup; "
+               L"Explorer was kept running");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Language selection
+// -----------------------------------------------------------------------------
+static MuiLanguage GetCurrentEmbeddedLanguage() {
+    if (!g_languageAutomatic.load())
+        return static_cast<MuiLanguage>(g_forcedLanguage.load());
+    LANGID languageId = GetThreadUILanguage();
+    if (!languageId) languageId = GetUserDefaultUILanguage();
+
+    switch (PRIMARYLANGID(languageId)) {
+        case LANG_ITALIAN: return MuiLanguage::IT_IT;
+        case LANG_SPANISH: return MuiLanguage::ES_ES;
+        case LANG_FRENCH: return MuiLanguage::FR_FR;
+        case LANG_TURKISH: return MuiLanguage::TR_TR;
+        case LANG_RUSSIAN: return MuiLanguage::RU_RU;
+        case LANG_GERMAN: return MuiLanguage::DE_DE;
+        case LANG_POLISH: return MuiLanguage::PL_PL;
+        // Only Simplified Chinese (zh-CN) is embedded. Traditional Chinese
+        // (zh-TW/zh-HK/zh-MO) falls back to English rather than showing the
+        // wrong (Simplified) variant.
+        case LANG_CHINESE:
+            return (SUBLANGID(languageId) == SUBLANG_CHINESE_SIMPLIFIED ||
+                    SUBLANGID(languageId) == SUBLANG_CHINESE_SINGAPORE)
+                       ? MuiLanguage::ZH_CN
+                       : MuiLanguage::EN_US;
+        // Only Brazilian Portuguese is embedded; European Portuguese falls back
+        // to English rather than showing the wrong variant.
+        case LANG_PORTUGUESE:
+            return SUBLANGID(languageId) == SUBLANG_PORTUGUESE_BRAZILIAN
+                       ? MuiLanguage::PT_BR
+                       : MuiLanguage::EN_US;
+        default: break;
+    }
+
+    // Locale fallback for unusual/custom UI-language configurations.
+    wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
+    if (GetUserDefaultLocaleName(locale, ARRAYSIZE(locale))) {
+        return DetectMuiLanguage(locale);
+    }
+    return MuiLanguage::EN_US;
+}
+
+
+static void LoadLanguageSetting() {
+    g_languageAutomatic.store(true);
+    g_forcedLanguage.store(static_cast<int>(MuiLanguage::EN_US));
+
+    // WindhawkUtils::StringSetting frees the underlying pointer automatically.
+    auto raw = WindhawkUtils::StringSetting::make(L"language");
+    PCWSTR r = raw.get();
+    std::wstring value = (r && *r) ? r : L"auto";
+    for (auto& character : value) character = towlower(character);
+
+    if (value.empty() || value == L"auto" || value == L"system") return;
+    g_languageAutomatic.store(false);
+    if (value == L"it" || value == L"it-it")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::IT_IT));
+    else if (value == L"es" || value == L"es-es")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::ES_ES));
+    else if (value == L"fr" || value == L"fr-fr")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::FR_FR));
+    else if (value == L"tr" || value == L"tr-tr")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::TR_TR));
+    else if (value == L"ru" || value == L"ru-ru")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::RU_RU));
+    else if (value == L"zh" || value == L"zh-cn")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::ZH_CN));
+    else if (value == L"de" || value == L"de-de")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::DE_DE));
+    else if (value == L"pt" || value == L"pt-br")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::PT_BR));
+    else if (value == L"pl" || value == L"pl-pl")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::PL_PL));
+    else if (value == L"en" || value == L"en-us")
+        g_forcedLanguage.store(static_cast<int>(MuiLanguage::EN_US));
+    else {
+        g_languageAutomatic.store(true);
+        Wh_Log(L"Unknown language setting '%s'; using Automatic", value.c_str());
+    }
+}
+
+// Loads the functional feature toggles. Each flag is an atomic read at its
+// decision point, so a settings change applies live (next sidebar
+// publication, next resolution-page parse, next classic launch) without an
+// Explorer restart or a mod reload.
+static void LoadFeatureSettings() {
+    g_showSidebarLinks.store(Wh_GetIntSetting(L"showSidebarLinks") != 0,
+                             std::memory_order_release);
+    g_resolutionPageCompatibility.store(
+        Wh_GetIntSetting(L"resolutionPageCompatibility") != 0,
+        std::memory_order_release);
+    g_redirectClassicLaunch.store(
+        Wh_GetIntSetting(L"redirectClassicLaunch") != 0,
+        std::memory_order_release);
+    g_redirectDisplaySettingsUri.store(
+        Wh_GetIntSetting(L"redirectDisplaySettingsUri") != 0,
+        std::memory_order_release);
+    g_enableDpiPresets.store(Wh_GetIntSetting(L"enableDpiPresets") != 0,
+                             std::memory_order_release);
+    g_showOrientationPanel.store(
+        Wh_GetIntSetting(L"showOrientationPanel") != 0,
+        std::memory_order_release);
+    Wh_Log(L"Feature settings loaded: sidebarLinks=%d resolutionPage=%d "
+           L"classicRouting=%d displaySettingsUri=%d dpiPresets=%d "
+           L"orientation=%d",
+           static_cast<int>(g_showSidebarLinks.load()),
+           static_cast<int>(g_resolutionPageCompatibility.load()),
+           static_cast<int>(g_redirectClassicLaunch.load()),
+           static_cast<int>(g_redirectDisplaySettingsUri.load()),
+           static_cast<int>(g_enableDpiPresets.load()),
+           static_cast<int>(g_showOrientationPanel.load()));
+}
+
+
+static const wchar_t* GetEmbeddedTranslation(UINT id) {
+    return GetMuiString(id, GetCurrentEmbeddedLanguage());
+}
+
+std::wstring GetLocalizedDisplayName() {
+    const wchar_t* text = GetMuiString(1, GetCurrentEmbeddedLanguage());
+    return text ? std::wstring(text) : std::wstring(kAppletDisplayNameEN);
+}
+
+static std::wstring GetLocalizedInfoTip() {
+    const wchar_t* text = GetEmbeddedTranslation(2);
+    return text
+               ? std::wstring(text)
+               : std::wstring(L"Make text and other items larger or smaller.");
+}
+
+// -----------------------------------------------------------------------------
+// Registry virtualization
+// -----------------------------------------------------------------------------
+std::wstring g_clsidLower, g_clsidSuffix, g_defaultIconSuffix, g_inprocSuffix,
+    g_shellFolderSuffix, g_instanceSuffix, g_initPropBagSuffix, g_namespaceSuffix;
+std::wstring g_providerClsidLower, g_providerSuffix, g_providerInprocSuffix,
+    g_namespaceHkcuPath;
+
+void InitClsidStrings() {
+    g_clsidLower = kAppletClsidEnglish;
+    g_clsidSuffix = L"clsid\\" + g_clsidLower;
+    g_defaultIconSuffix = g_clsidSuffix + L"\\defaulticon";
+    g_inprocSuffix = g_clsidSuffix + L"\\inprocserver32";
+    g_shellFolderSuffix = g_clsidSuffix + L"\\shellfolder";
+    g_instanceSuffix = g_clsidSuffix + L"\\instance";
+    g_initPropBagSuffix = g_instanceSuffix + L"\\initpropertybag";
+    g_namespaceSuffix = L"controlpanel\\namespace\\" + g_clsidLower;
+    g_providerClsidLower = kProviderClsid;
+    g_providerSuffix = L"clsid\\" + g_providerClsidLower;
+    g_providerInprocSuffix = g_providerSuffix + L"\\inprocserver32";
+    g_namespaceHkcuPath =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\" +
+        g_clsidLower;
+}
+
+// KeyTracker maps HKEY handles to registry paths and tracks the fake handles the
+// virtualization layer hands out. Reads use a shared lock (so concurrent
+// registry reads are not serialized against each other), writes use an
+// exclusive lock.
+class KeyTracker {
+public:
+    std::wstring GetPath(HKEY k) const {
+        if (const wchar_t* s = SpecialRootPath(k)) return s;
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        auto it = paths_.find(k);
+        return it != paths_.end() ? it->second : std::wstring();
+    }
+    bool IsFakeAndGetPath(HKEY k, std::wstring& o) const {
+        if (const wchar_t* s = SpecialRootPath(k)) {
+            o = s;
+            return false;
+        }
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        bool f = fakeOwners_.count(k) != 0;
+        auto it = paths_.find(k);
+        o = it != paths_.end() ? it->second : std::wstring();
+        return f;
+    }
+    bool IsFake(HKEY k) const {
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        return fakeOwners_.count(k) != 0;
+    }
+    // True if hk is either a fake (virtualized) key, or a real key whose path
+    // is already tracked (i.e. its path contained one of our keywords) - the
+    // two cases where a subkey open could still land inside the virtualized
+    // tree even if the subkey name itself doesn't contain a keyword (e.g.
+    // opening "CLSID" is tracked because "clsid" matches; opening the GUID
+    // subkey underneath it doesn't repeat that keyword but still needs the
+    // combined-path check). No string copy - just a presence check.
+    bool IsTrackedOrFake(HKEY k) const {
+        if (SpecialRootPath(k)) return false;
+        std::shared_lock<std::shared_mutex> l(mutex_);
+        return fakeOwners_.count(k) != 0 || paths_.count(k) != 0;
+    }
+    // Mutation is bookkeeping only. A low-memory failure must never escape a
+    // process-wide registry hook after the underlying Windows API has already
+    // succeeded, so these operations deliberately degrade to "not tracked".
+    void Track(HKEY k, const std::wstring& p)   {
+        try {
+            if (!k || IsSpecialRoot(k)) return;
+            if (!ContainsRelevantKeywordCheap(p.c_str())) return;
+            std::unique_lock<std::shared_mutex> l(mutex_);
+            paths_[k] = p;
+        } catch (...) {
+        }
+    }
+    void Untrack(HKEY k)   {
+        try {
+            if (!k || IsSpecialRoot(k)) return;
+            std::unique_lock<std::shared_mutex> l(mutex_);
+            paths_.erase(k);
+        } catch (...) {
+        }
+    }
+    HKEY CreateFake(const std::wstring& p)   {
+        HKEY f = nullptr;
+        try {
+            std::unique_ptr<int> o(new (std::nothrow) int(1));
+            if (!o) return nullptr;
+            f = reinterpret_cast<HKEY>(o.get());
+            std::unique_lock<std::shared_mutex> l(mutex_);
+            // Publish ownership first. If the path insertion then fails, even a
+            // failed cleanup attempt leaves the backing address reserved rather
+            // than leaving a dangling tracked pointer.
+            fakeOwners_[f] = std::move(o);
+            paths_[f] = p;
+            return f;
+        } catch (...) {
+            // Remove any partial bookkeeping created before an allocation failed.
+            if (f) {
+                try {
+                    std::unique_lock<std::shared_mutex> l(mutex_);
+                    paths_.erase(f);
+                    fakeOwners_.erase(f);
+                } catch (...) {
+                }
+            }
+            return nullptr;
+        }
+    }
+    void FreeFake(HKEY k)   {
+        try {
+            std::unique_lock<std::shared_mutex> l(mutex_);
+            paths_.erase(k);
+            fakeOwners_.erase(k);
+        } catch (...) {
+            // Keeping the backing allocation alive is safer than permitting an
+            // exception to cross RegCloseKey's ABI boundary.
+        }
+    }
+    // On unload we deliberately abandon (leak) the backing int of each
+    // outstanding fake key. This keeps the addresses reserved so they can never
+    // be handed back by a subsequent allocation and mistaken for a valid OS
+    // handle. This is intentional, not a leak bug.
+    void ClearWithoutFreeing() {
+        std::unique_lock<std::shared_mutex> l(mutex_);
+        paths_.clear();
+        for (auto& kv : fakeOwners_) {
+            [[maybe_unused]] int* abandoned = kv.second.release();
+        }
+        fakeOwners_.clear();
+    }
+
+private:
+    static bool IsSpecialRoot(HKEY k) {
+        // The Win64 SDK represents predefined HKEYs as sign-extended pointer
+        // values. Normalize to their documented low 32 bits before comparing.
+        DWORD value = static_cast<DWORD>(reinterpret_cast<uintptr_t>(k));
+        return value >= 0x80000000u && value <= 0x80000004u;
+    }
+    // Returns an interned literal (no heap allocation) instead of a fresh
+    // std::wstring. Every registry hook in the process (RegOpenKeyExW,
+    // RegQueryValueExW, RegGetValueW, ...) calls this on every invocation via
+    // GetPath()/IsFakeAndGetPath(), and names like L"HKEY_LOCAL_MACHINE" are
+    // past the small-string-optimization limit, so returning by value used to
+    // cost a heap allocation on every single registry read/open in explorer.exe.
+    static const wchar_t* SpecialRootPath(HKEY k) {
+        switch (static_cast<DWORD>(reinterpret_cast<uintptr_t>(k))) {
+            case 0x80000000u: return L"HKEY_CLASSES_ROOT";
+            case 0x80000001u: return L"HKEY_CURRENT_USER";
+            case 0x80000002u: return L"HKEY_LOCAL_MACHINE";
+            case 0x80000003u: return L"HKEY_USERS";
+            case 0x80000004u: return L"HKEY_CURRENT_CONFIG";
+            default: return nullptr;
+        }
+    }
+    mutable std::shared_mutex mutex_;
+    std::unordered_map<HKEY, std::wstring> paths_;
+    std::unordered_map<HKEY, std::unique_ptr<int>> fakeOwners_;
+};
+
+static KeyTracker g_keyTracker;
+static std::mutex g_injectedMutex;
+static std::unordered_map<HKEY, bool> g_injectedForHandle;
+static std::atomic<bool> g_namespaceInjectionLogged{false};
+
+// Inject the namespace entry once per enumeration pass. Resetting when a new
+// pass starts (idx==0) means a caller that enumerates twice on the same handle
+// (e.g. once to size buffers) still sees the entry on each pass.
+static bool ShouldInjectNow(HKEY k, DWORD idx) {
+    std::lock_guard<std::mutex> l(g_injectedMutex);
+    if (idx == 0) g_injectedForHandle[k] = false;
+    bool& a = g_injectedForHandle[k];
+    if (a) return false;
+    a = true;
+    return true;
+}
+void ClearInjectedState(HKEY k)   {
+    try {
+        std::lock_guard<std::mutex> l(g_injectedMutex);
+        g_injectedForHandle.erase(k);
+    } catch (...) {
+    }
+}
+
+enum class VNode {
+    None, ClsidRoot, DefaultIcon, InProcServer32, ShellFolder, Instance,
+    InitPropertyBag, NamespaceEntry, ProviderRoot, ProviderInProc
+};
+
+VNode ClassifyPath(const std::wstring& p) {
+    if (!ContainsRelevantKeywordCheap(p.c_str())) return VNode::None;
+    std::wstring l = ToLower(p);
+    if (EndsWith(l, g_namespaceSuffix)) return VNode::NamespaceEntry;
+    if (EndsWith(l, g_initPropBagSuffix)) return VNode::InitPropertyBag;
+    if (EndsWith(l, g_instanceSuffix)) return VNode::Instance;
+    if (EndsWith(l, g_shellFolderSuffix)) return VNode::ShellFolder;
+    if (EndsWith(l, g_inprocSuffix)) return VNode::InProcServer32;
+    if (EndsWith(l, g_defaultIconSuffix)) return VNode::DefaultIcon;
+    if (EndsWith(l, g_clsidSuffix)) return VNode::ClsidRoot;
+    if (EndsWith(l, g_providerInprocSuffix)) return VNode::ProviderInProc;
+    if (EndsWith(l, g_providerSuffix)) return VNode::ProviderRoot;
+    return VNode::None;
+}
+
+bool IsApprovedKey(const std::wstring& p) {
+    return EndsWith(ToLower(p), L"shell extensions\\approved");
+}
+bool IsTargetKey(const std::wstring& p) { return ClassifyPath(p) != VNode::None; }
+bool IsNamespaceParentKey(const std::wstring& p) {
+    return EndsWith(ToLower(p), L"controlpanel\\namespace");
+}
+
+LSTATUS ProvideStringValue(LPBYTE d, LPDWORD cb, const std::wstring& s) {
+    if (!cb) return ERROR_INVALID_PARAMETER;
+    DWORD need = static_cast<DWORD>((s.length() + 1) * sizeof(wchar_t));
+    if (!d) {
+        *cb = need;
+        return ERROR_SUCCESS;
+    }
+    if (*cb < need) {
+        *cb = need;
+        return ERROR_MORE_DATA;
+    }
+    *cb = need;
+    memcpy(d, s.c_str(), need);
+    return ERROR_SUCCESS;
+}
+
+LSTATUS ProvideDwordValue(LPBYTE d, LPDWORD cb, DWORD v) {
+    if (!cb) return ERROR_INVALID_PARAMETER;
+    if (!d) {
+        *cb = sizeof(DWORD);
+        return ERROR_SUCCESS;
+    }
+    if (*cb < sizeof(DWORD)) {
+        *cb = sizeof(DWORD);
+        return ERROR_MORE_DATA;
+    }
+    *cb = sizeof(DWORD);
+    *reinterpret_cast<DWORD*>(d) = v;
+    return ERROR_SUCCESS;
+}
+
+std::wstring GetShdocvwPath() {
+    wchar_t b[MAX_PATH]{};
+    GetSystemDirectoryW(b, MAX_PATH);
+    return std::wstring(b) + L"\\shdocvw.dll";
+}
+
+// Compute the virtual value for (path, valueName). Shared by the Unicode value
+// query hook, value enumerator, and key-information sizing so they agree.
+static bool TryProvideValueData(const std::wstring& path, const std::wstring& vn,
+                                DWORD* type, std::wstring& strOut,
+                                DWORD& dwordOut, bool& isStr, LSTATUS& status) {
+    const std::wstring* dllPath = CurrentDllPath();
+    if (!g_dllVerifiedOk.load() || !dllPath || dllPath->empty()) return false;
+
+    // Registry value names are case-insensitive, just like key names.
+    const auto valueIs = [&vn](const wchar_t* expected) {
+        return _wcsicmp(vn.c_str(), expected) == 0;
+    };
+
+    if (IsApprovedKey(path)) {
+        std::wstring low = ToLower(vn);
+        if (low == g_clsidLower || low == g_providerClsidLower) {
+            if (type) *type = REG_SZ;
+            strOut.clear();
+            isStr = true;
+            status = ERROR_SUCCESS;
+            return true;
+        }
+        return false;
+    }
+
+    VNode node = ClassifyPath(path);
+    if (node == VNode::None) return false;
+    switch (node) {
+        case VNode::NamespaceEntry:
+            if (vn.empty()) {
+                if (type) *type = REG_SZ;
+                strOut = GetLocalizedDisplayName();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ClsidRoot:
+            if (vn.empty()) {
+                if (type) *type = REG_SZ;
+                strOut = GetLocalizedDisplayName();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"System.ApplicationName")) {
+                if (type) *type = REG_SZ;
+                strOut = L"Microsoft.Display";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"System.Software.TasksFileUrl")) {
+                if (type) *type = REG_SZ;
+                strOut = L"Internal";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"System.ControlPanel.EnableInSafeMode")) {
+                if (type) *type = REG_DWORD;
+                dwordOut = 3;
+                isStr = false;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"System.ControlPanel.Category")) {
+                if (type) *type = REG_SZ;
+                strOut = L"1,2";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"LocalizedString")) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = L"@" + *dllPath + L",-1";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"InfoTip")) {
+                if (type) *type = REG_SZ;
+                strOut = GetLocalizedInfoTip();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"{305CA226-D286-468e-B848-2B2E8E697B74} 2")) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = L"1";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::InProcServer32:
+            if (vn.empty()) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = GetShdocvwPath();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"ThreadingModel")) {
+                if (type) *type = REG_SZ;
+                strOut = L"Apartment";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ShellFolder:
+            if (valueIs(L"Attributes")) {
+                if (type) *type = REG_DWORD;
+                dwordOut = kShellFolderAttributes;
+                isStr = false;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"WantsParseDisplayName")) {
+                if (type) *type = REG_SZ;
+                strOut.clear();
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::Instance:
+            if (valueIs(L"CLSID")) {
+                if (type) *type = REG_SZ;
+                strOut = kLayoutFolderClsid;
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::InitPropertyBag:
+            if (valueIs(L"OverrideResourceID")) {
+                if (type) *type = REG_DWORD;
+                dwordOut = kOverrideResourceId;
+                isStr = false;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"ResourceDLL")) {
+                if (type) *type = REG_EXPAND_SZ;
+                // XMLFILE 100/101 in the private data/resource copy contains
+                // literal localized Display and Screen Resolution titles. This
+                // avoids resolving the bare "Display.dll" name to the
+                // resource-less modern system stub.
+                // If localization could not be built, retain the verified
+                // provider path and all existing fail-open behavior.
+                std::wstring resourcePath;
+                {
+                    std::lock_guard<std::mutex> resourceLock(
+                        g_localizedResourceMutex);
+                    resourcePath = g_localizedResourcePath;
+                }
+                strOut = resourcePath.empty() ? *dllPath : resourcePath;
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"ResourceID")) {
+                if (type) *type = REG_DWORD;
+                dwordOut = kInitResourceId;
+                isStr = false;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::DefaultIcon:
+            if (vn.empty()) {
+                if (type) *type = REG_EXPAND_SZ;
+                // Prefer the private resource module: it carries the classic
+                // Windows 7/8-style monitor glyph instead of the Windows 10
+                // icon embedded in the pinned 1511 payload. Fall back to the
+                // provider path until the private module exists.
+                std::wstring iconPath;
+                {
+                    std::lock_guard<std::mutex> iconLock(
+                        g_localizedResourceMutex);
+                    iconPath = g_localizedResourcePath;
+                }
+                strOut = (iconPath.empty() ? *dllPath : iconPath) + L",-1";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ProviderRoot:
+            if (vn.empty()) {
+                if (type) *type = REG_SZ;
+                strOut = L"Display Control Panel";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        case VNode::ProviderInProc:
+            if (vn.empty()) {
+                if (type) *type = REG_EXPAND_SZ;
+                strOut = *dllPath;
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            } else if (valueIs(L"ThreadingModel")) {
+                if (type) *type = REG_SZ;
+                strOut = L"Apartment";
+                isStr = true;
+                status = ERROR_SUCCESS;
+                return true;
+            }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+static bool TryProvideValue(const std::wstring& path, const std::wstring& vn,
+                            LPDWORD tp, LPBYTE d, LPDWORD cb, LSTATUS& out) {
+    DWORD vtype = 0;
+    std::wstring strOut;
+    DWORD dwOut = 0;
+    bool isStr = true;
+    if (!TryProvideValueData(path, vn, &vtype, strOut, dwOut, isStr, out))
+        return false;
+    if (tp) *tp = vtype;
+    if (isStr) {
+        out = ProvideStringValue(d, cb, strOut);
+        return true;
+    }
+    out = ProvideDwordValue(d, cb, dwOut);
+    return true;
+}
+
+bool GetVirtualSubKeyName(VNode n, DWORD idx, std::wstring& o) {
+    switch (n) {
+        case VNode::ClsidRoot:
+            if (idx == 0) { o = L"DefaultIcon"; return true; }
+            if (idx == 1) { o = L"InProcServer32"; return true; }
+            if (idx == 2) { o = L"ShellFolder"; return true; }
+            if (idx == 3) { o = L"Instance"; return true; }
+            return false;
+        case VNode::Instance:
+            if (idx == 0) { o = L"InitPropertyBag"; return true; }
+            return false;
+        case VNode::ProviderRoot:
+            if (idx == 0) { o = L"InProcServer32"; return true; }
+            return false;
+        default: return false;
+    }
+}
+
+DWORD GetVirtualSubKeyCount(VNode n) {
+    switch (n) {
+        case VNode::ClsidRoot: return 4;
+        case VNode::Instance: return 1;
+        case VNode::ProviderRoot: return 1;
+        default: return 0;
+    }
+}
+
+bool GetVirtualValueName(VNode n, DWORD idx, const wchar_t*& out) {
+    static const wchar_t* const clsidRoot[] = {
+        L"", L"System.Software.TasksFileUrl", L"InfoTip", L"LocalizedString",
+        L"System.ControlPanel.EnableInSafeMode", L"System.ApplicationName",
+        L"System.ControlPanel.Category", L"{305CA226-D286-468e-B848-2B2E8E697B74} 2",
+    };
+    static const wchar_t* const inProc[] = {L"", L"ThreadingModel"};
+    static const wchar_t* const shellFolder[] = {L"Attributes", L"WantsParseDisplayName"};
+    static const wchar_t* const instance[] = {L"CLSID"};
+    static const wchar_t* const initPropertyBag[] = {
+        L"OverrideResourceID", L"ResourceDLL", L"ResourceID",
+    };
+    static const wchar_t* const defaultOnly[] = {L""};
+
+    const wchar_t* const* values = nullptr;
+    size_t count = 0;
+    switch (n) {
+        case VNode::NamespaceEntry:
+        case VNode::DefaultIcon:
+        case VNode::ProviderRoot:
+            values = defaultOnly;
+            count = ARRAYSIZE(defaultOnly);
+            break;
+        case VNode::ClsidRoot:
+            values = clsidRoot;
+            count = ARRAYSIZE(clsidRoot);
+            break;
+        case VNode::InProcServer32:
+        case VNode::ProviderInProc:
+            values = inProc;
+            count = ARRAYSIZE(inProc);
+            break;
+        case VNode::ShellFolder:
+            values = shellFolder;
+            count = ARRAYSIZE(shellFolder);
+            break;
+        case VNode::Instance:
+            values = instance;
+            count = ARRAYSIZE(instance);
+            break;
+        case VNode::InitPropertyBag:
+            values = initPropertyBag;
+            count = ARRAYSIZE(initPropertyBag);
+            break;
+        default:
+            return false;
+    }
+    if (idx >= count) return false;
+    out = values[idx];
+    return true;
+}
+
+DWORD GetVirtualValueCount(VNode n) {
+    DWORD count = 0;
+    const wchar_t* ignored = nullptr;
+    while (GetVirtualValueName(n, count, ignored)) ++count;
+    return count;
+}
+
+// -----------------------------------------------------------------------------
+// Conservative Registry Virtualization (Unicode *W only)
+// -----------------------------------------------------------------------------
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegOpenKeyW_t = decltype(&RegOpenKeyW);
+using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
+using RegCloseKey_t = decltype(&RegCloseKey);
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+using RegEnumKeyW_t = decltype(&RegEnumKeyW);
+using RegEnumValueW_t = decltype(&RegEnumValueW);
+using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
+
+RegOpenKeyExW_t RegOpenKeyExWOriginal = nullptr;
+RegOpenKeyW_t RegOpenKeyWOriginal = nullptr;
+RegCreateKeyExW_t RegCreateKeyExWOriginal = nullptr;
+RegCloseKey_t RegCloseKeyOriginal = nullptr;
+RegQueryValueExW_t RegQueryValueExWOriginal = nullptr;
+RegGetValueW_t RegGetValueWOriginal = nullptr;
+RegEnumKeyExW_t RegEnumKeyExWOriginal = nullptr;
+RegEnumKeyW_t RegEnumKeyWOriginal = nullptr;
+RegEnumValueW_t RegEnumValueWOriginal = nullptr;
+RegQueryInfoKeyW_t RegQueryInfoKeyWOriginal = nullptr;
+static std::atomic<bool> g_regEnumValueHookAvailable{false};
+
+static bool IsWriteAccess(REGSAM sam) {
+    return (sam & (KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK)) != 0;
+}
+
+// Shared "open" logic used by the W open hooks (and the create hooks, to
+// refuse persisting writes to the virtualized tree). Never returns a fake
+// handle to a caller that asked for write/create access, which keeps synthetic
+// handles out of write paths. Preserves caller's opt parameter (e.g. REG_OPTION_OPEN_LINK).
+static LSTATUS RegOpenKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
+                                 DWORD opt, REGSAM sam, PHKEY out) {
+    std::wstring full;
+    const bool fakeParent = g_keyTracker.IsFakeAndGetPath(hk, full);
+    if (fakeParent) {
+        if (hasSub) {
+            if (!full.empty()) full += L"\\";
+            full += sub;
+        }
+        if (IsTargetKey(full)) {
+            if (!out) return ERROR_INVALID_PARAMETER;
+            if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
+            HKEY f = g_keyTracker.CreateFake(full);
+            if (!f) return ERROR_OUTOFMEMORY;
+            if (out) *out = f;
+            return ERROR_SUCCESS;
+        }
+        return ERROR_FILE_NOT_FOUND;
+    }
+
+    // Build the combined path before calling the real API. Once a real handle
+    // has been returned successfully, no throwing allocation may cause the hook
+    // to lose that result or retry the open.
+    std::wstring fp = full;
+    if (hasSub) {
+        if (!fp.empty()) fp += L"\\";
+        fp += sub;
+    }
+
+    LSTATUS st = RegOpenKeyExWOriginal(hk, hasSub ? sub.c_str() : nullptr, opt, sam, out);
+    if (st == ERROR_SUCCESS && out && *out) {
+        g_keyTracker.Track(*out, fp);
+    } else if (st == ERROR_FILE_NOT_FOUND && out) {
+        if (IsTargetKey(fp)) {
+            if (IsWriteAccess(sam)) return ERROR_ACCESS_DENIED;
+            HKEY f = g_keyTracker.CreateFake(fp);
+            if (!f) return ERROR_OUTOFMEMORY;
+            if (out) *out = f;
+            return ERROR_SUCCESS;
+        }
+    }
+    return st;
+}
+
+// Fast pre-check shared by both open hooks: these run on every RegOpenKeyExW/
+// RegOpenKeyW in the process, so avoid constructing/copying std::wstring at
+// all for the overwhelming majority of calls that can't possibly touch the
+// virtualized tree - i.e. hk isn't one of our fake keys and sub doesn't even
+// contain one of our cheap keywords. g_keyTracker.IsFake() is a shared-lock
+// map lookup with no allocation, matching what RegOpenKeyVirtual would have
+// concluded anyway.
+static bool MightNeedVirtualization(HKEY hk, LPCWSTR sub) {
+    return g_keyTracker.IsTrackedOrFake(hk) || ContainsRelevantKeywordCheap(sub);
+}
+
+LSTATUS WINAPI RegOpenKeyExWHook(HKEY hk, LPCWSTR sub, DWORD opt, REGSAM sam,
+                                 PHKEY out) {
+    try {
+        if (!MightNeedVirtualization(hk, sub)) {
+            return RegOpenKeyExWOriginal(hk, sub, opt, sam, out);
+        }
+        std::wstring s = sub ? sub : L"";
+        return RegOpenKeyVirtual(hk, s, sub && *sub, opt, sam, out);
+    } catch (...) {
+        return RegOpenKeyExWOriginal(hk, sub, opt, sam, out);
+    }
+}
+
+LSTATUS WINAPI RegOpenKeyWHook(HKEY hk, LPCWSTR sub, PHKEY out) {
+    try {
+        // RegOpenKey uses MAXIMUM_ALLOWED as default access mask in modern Windows.
+        if (!MightNeedVirtualization(hk, sub)) {
+            return RegOpenKeyWOriginal(hk, sub, out);
+        }
+        std::wstring s = sub ? sub : L"";
+        return RegOpenKeyVirtual(hk, s, sub && *sub, 0, MAXIMUM_ALLOWED, out);
+    } catch (...) {
+        return RegOpenKeyWOriginal(hk, sub, out);
+    }
+}
+
+// RegCreateKeyEx: creating/opening the virtualized tree for write would persist
+// to the real registry, which the mod must never do. Refuse writes there.
+template <typename CreateFn>
+static LSTATUS CreateKeyVirtual(HKEY hk, const std::wstring& sub, bool hasSub,
+                                PHKEY out, CreateFn original) {
+    std::wstring full;
+    const bool fakeParent = g_keyTracker.IsFakeAndGetPath(hk, full);
+    if (fakeParent) {
+        if (hasSub) {
+            if (!full.empty()) full += L"\\";
+            full += sub;
+        }
+        if (IsTargetKey(full)) {
+            if (out) *out = nullptr;
+            return ERROR_ACCESS_DENIED;
+        }
+        return ERROR_FILE_NOT_FOUND;
+    }
+    if (hasSub) {
+        if (!full.empty()) full += L"\\";
+        full += sub;
+    }
+    if (IsTargetKey(full)) {
+        if (out) *out = nullptr;
+        return ERROR_ACCESS_DENIED;
+    }
+
+    // A create call can also open/create an intermediate real parent such as
+    // HKCU\Software\Classes\CLSID. Track the returned handle exactly like an
+    // open call; otherwise a later relative create of only the target GUID would
+    // bypass the full-path write denial because that GUID has no cheap keyword.
+    const LSTATUS status = original();
+    if (status == ERROR_SUCCESS && out && *out) {
+        g_keyTracker.Track(*out, full);
+    }
+    return status;
+}
+
+LSTATUS WINAPI RegCreateKeyExWHook(HKEY hk, LPCWSTR sub, DWORD reserved,
+                                   LPWSTR cls, DWORD opt, REGSAM sam,
+                                   LPSECURITY_ATTRIBUTES sa, PHKEY out,
+                                   LPDWORD disposition) {
+    try {
+        if (!MightNeedVirtualization(hk, sub)) {
+            return RegCreateKeyExWOriginal(hk, sub, reserved, cls, opt, sam, sa,
+                                           out, disposition);
+        }
+        std::wstring s = sub ? sub : L"";
+        return CreateKeyVirtual(
+            hk, s, sub && *sub, out,
+            [&]() {
+                return RegCreateKeyExWOriginal(hk, sub, reserved, cls, opt, sam,
+                                               sa, out, disposition);
+            });
+    } catch (...) {
+        return RegCreateKeyExWOriginal(hk, sub, reserved, cls, opt, sam, sa, out,
+                                       disposition);
+    }
+}
+
+LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
+    bool isFake = false;
+    try {
+        isFake = g_keyTracker.IsFake(k);
+    } catch (...) {
+        return RegCloseKeyOriginal(k);
+    }
+    if (isFake) {
+        g_keyTracker.FreeFake(k);
+        return ERROR_SUCCESS;
+    }
+    const LSTATUS status = RegCloseKeyOriginal(k);
+    g_keyTracker.Untrack(k);
+    ClearInjectedState(k);
+    return status;
+}
+
+LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
+                                    LPBYTE d, LPDWORD cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(k);
+        if (!p.empty()) {
+            std::wstring v = vn ? vn : L"";
+            LSTATUS o;
+            if (TryProvideValue(p, v, t, d, cb, o)) return o;
+        }
+        if (g_keyTracker.IsFake(k)) return ERROR_FILE_NOT_FOUND;
+        return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
+    } catch (...) {
+        return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
+    }
+}
+
+LSTATUS WINAPI RegGetValueWHook(HKEY hk, LPCWSTR sub, LPCWSTR val, DWORD fl,
+                                LPDWORD tp, PVOID d, LPDWORD cb) {
+    try {
+        std::wstring p = g_keyTracker.GetPath(hk);
+        if (sub && *sub) {
+            if (!p.empty()) p += L"\\";
+            p += sub;
+        }
+        if (!p.empty()) {
+            std::wstring v = val ? val : L"";
+            LSTATUS o;
+            if (TryProvideValue(p, v, tp, static_cast<LPBYTE>(d), cb, o)) return o;
+        }
+        if (g_keyTracker.IsFake(hk)) return ERROR_FILE_NOT_FOUND;
+        return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
+    } catch (...) {
+        return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
+    }
+}
+
+LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
+                                 LPDWORD r, LPWSTR cls, LPDWORD lpcCls,
+                                 PFILETIME ft) {
+    try {
+        if (g_keyTracker.IsFake(k)) {
+            std::wstring p = g_keyTracker.GetPath(k);
+            VNode n = ClassifyPath(p);
+            std::wstring s;
+            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
+            if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
+            if (*lpcch < s.size() + 1) {
+                *lpcch = static_cast<DWORD>(s.size() + 1);
+                return ERROR_MORE_DATA;
+            }
+            wcscpy_s(name, *lpcch, s.c_str());
+            *lpcch = static_cast<DWORD>(s.size());
+            if (ft) GetSystemTimeAsFileTime(ft);
+            return ERROR_SUCCESS;
+        }
+        const std::wstring path = g_keyTracker.GetPath(k);
+        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+            return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+        // A new pass starts at index zero even when the real parent has
+        // subkeys, so reset before delegating instead of waiting for EOF.
+        if (idx == 0) ClearInjectedState(k);
+        const LSTATUS st = RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+        if (st != ERROR_NO_MORE_ITEMS) return st;
+        {
+            HKEY hTest = nullptr;
+            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) ==
+                ERROR_SUCCESS) {
+                RegCloseKeyOriginal(hTest);
+                return ERROR_NO_MORE_ITEMS;
+            }
+        }
+        // Validate the output buffer BEFORE latching the one-shot injection
+        // state: a rejected attempt (ERROR_MORE_DATA / ERROR_INVALID_PARAMETER)
+        // must not consume the injection, or the caller's retry at the same
+        // index would hit the latched flag and silently lose the applet entry.
+        if (!lpcch || !name) return ERROR_INVALID_PARAMETER;
+        if (*lpcch < g_clsidLower.size() + 1) {
+            *lpcch = static_cast<DWORD>(g_clsidLower.size() + 1);
+            return ERROR_MORE_DATA;
+        }
+        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        wcscpy_s(name, *lpcch, g_clsidLower.c_str());
+        *lpcch = static_cast<DWORD>(g_clsidLower.size());
+        if (ft) GetSystemTimeAsFileTime(ft);
+        if (!g_namespaceInjectionLogged.exchange(true)) {
+            Wh_Log(L"Display applet namespace entry injected for Control Panel");
+        }
+        return ERROR_SUCCESS;
+    } catch (...) {
+        return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
+    }
+}
+
+LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
+    try {
+        if (g_keyTracker.IsFake(k)) {
+            std::wstring p = g_keyTracker.GetPath(k);
+            VNode n = ClassifyPath(p);
+            std::wstring s;
+            if (!GetVirtualSubKeyName(n, idx, s)) return ERROR_NO_MORE_ITEMS;
+            if (!name) return ERROR_INVALID_PARAMETER;
+            if (cch <= s.size()) return ERROR_MORE_DATA;
+            wcscpy_s(name, cch, s.c_str());
+            return ERROR_SUCCESS;
+        }
+        const std::wstring path = g_keyTracker.GetPath(k);
+        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+            return RegEnumKeyWOriginal(k, idx, name, cch);
+        if (idx == 0) ClearInjectedState(k);
+        const LSTATUS st = RegEnumKeyWOriginal(k, idx, name, cch);
+        if (st != ERROR_NO_MORE_ITEMS) return st;
+        {
+            HKEY hTest = nullptr;
+            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) ==
+                ERROR_SUCCESS) {
+                RegCloseKeyOriginal(hTest);
+                return ERROR_NO_MORE_ITEMS;
+            }
+        }
+        // Same ordering as RegEnumKeyExWHook: validate the buffer before
+        // latching the injection state so a retry after ERROR_MORE_DATA still
+        // sees the injected entry.
+        if (!name) return ERROR_INVALID_PARAMETER;
+        if (cch <= g_clsidLower.size()) return ERROR_MORE_DATA;
+        if (!ShouldInjectNow(k, idx)) return ERROR_NO_MORE_ITEMS;
+        wcscpy_s(name, cch, g_clsidLower.c_str());
+        if (!g_namespaceInjectionLogged.exchange(true)) {
+            Wh_Log(L"Display applet namespace entry injected for Control Panel");
+        }
+        return ERROR_SUCCESS;
+    } catch (...) {
+        return RegEnumKeyWOriginal(k, idx, name, cch);
+    }
+}
+
+LSTATUS WINAPI RegEnumValueWHook(HKEY k, DWORD idx, LPWSTR valueName,
+                                 LPDWORD lpcchValueName, LPDWORD reserved,
+                                 LPDWORD type, LPBYTE data, LPDWORD cbData) {
+    try {
+        if (!g_keyTracker.IsFake(k)) {
+            return RegEnumValueWOriginal(k, idx, valueName, lpcchValueName,
+                                         reserved, type, data, cbData);
+        }
+        if (reserved || !lpcchValueName || !valueName || (data && !cbData))
+            return ERROR_INVALID_PARAMETER;
+
+        const std::wstring path = g_keyTracker.GetPath(k);
+        const wchar_t* listedName = nullptr;
+        if (!GetVirtualValueName(ClassifyPath(path), idx, listedName))
+            return ERROR_NO_MORE_ITEMS;
+        const size_t nameLength = wcslen(listedName);
+        if (*lpcchValueName < nameLength + 1) {
+            *lpcchValueName = static_cast<DWORD>(nameLength + 1);
+            return ERROR_MORE_DATA;
+        }
+
+        wcscpy_s(valueName, *lpcchValueName, listedName);
+        *lpcchValueName = static_cast<DWORD>(nameLength);
+
+        DWORD ignoredSize = 0;
+        LPDWORD size = cbData ? cbData : &ignoredSize;
+        LSTATUS status = ERROR_FILE_NOT_FOUND;
+        if (!TryProvideValue(path, listedName, type, data, size, status))
+            return ERROR_FILE_NOT_FOUND;
+        return status;
+    } catch (...) {
+        try {
+            if (g_keyTracker.IsFake(k)) return ERROR_INVALID_DATA;
+        } catch (...) {
+        }
+        return RegEnumValueWOriginal(k, idx, valueName, lpcchValueName,
+                                     reserved, type, data, cbData);
+    }
+}
+
+LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD r,
+                                    LPDWORD cSubKeys, LPDWORD lpcMaxSub,
+                                    LPDWORD lpcMaxCls, LPDWORD cValues,
+                                    LPDWORD lpcMaxValName, LPDWORD lpcMaxValData,
+                                    LPDWORD sec, PFILETIME ft) {
+    try {
+    if (g_keyTracker.IsFake(k)) {
+        const std::wstring path = g_keyTracker.GetPath(k);
+        const VNode node = ClassifyPath(path);
+        const DWORD subKeyCount = GetVirtualSubKeyCount(node);
+        const DWORD valueCount = g_regEnumValueHookAvailable.load()
+                                     ? GetVirtualValueCount(node)
+                                     : 0;
+        DWORD maxSubKeyName = 0;
+        DWORD maxValueName = 0;
+        DWORD maxValueData = 0;
+
+        for (DWORD i = 0; i < subKeyCount; ++i) {
+            std::wstring name;
+            if (GetVirtualSubKeyName(node, i, name) && name.size() > maxSubKeyName)
+                maxSubKeyName = static_cast<DWORD>(name.size());
+        }
+        for (DWORD i = 0; i < valueCount; ++i) {
+            const wchar_t* name = nullptr;
+            if (!GetVirtualValueName(node, i, name)) continue;
+            const size_t nameLength = wcslen(name);
+            if (nameLength > maxValueName)
+                maxValueName = static_cast<DWORD>(nameLength);
+
+            DWORD type = REG_NONE;
+            std::wstring stringValue;
+            DWORD dwordValue = 0;
+            bool isString = false;
+            LSTATUS status = ERROR_FILE_NOT_FOUND;
+            if (TryProvideValueData(path, name, &type, stringValue, dwordValue,
+                                    isString, status)) {
+                const size_t bytes = isString
+                                         ? (stringValue.size() + 1) * sizeof(wchar_t)
+                                         : sizeof(DWORD);
+                if (bytes > maxValueData)
+                    maxValueData = static_cast<DWORD>(bytes);
+            }
+        }
+
+        if (cSubKeys) *cSubKeys = subKeyCount;
+        if (cValues) *cValues = valueCount;
+        if (lpcMaxSub) *lpcMaxSub = maxSubKeyName;
+        if (lpcMaxCls) *lpcMaxCls = 0;
+        if (lpcMaxValName) *lpcMaxValName = maxValueName;
+        if (lpcMaxValData) *lpcMaxValData = maxValueData;
+        if (sec) *sec = 0;
+        if (cls && lpcCls) {
+            if (*lpcCls > 0) cls[0] = 0;
+            *lpcCls = 0;
+        }
+        if (ft) GetSystemTimeAsFileTime(ft);
+        return ERROR_SUCCESS;
+    }
+    std::wstring path = g_keyTracker.GetPath(k);
+    if (IsNamespaceParentKey(path) && g_dllVerifiedOk.load()) {
+        LSTATUS st =
+            RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
+                                     lpcMaxCls, cValues, lpcMaxValName, lpcMaxValData,
+                                     sec, ft);
+        if (st == ERROR_SUCCESS && cSubKeys) {
+            HKEY hTest = nullptr;
+            if (RegOpenKeyExWOriginal(k, g_clsidLower.c_str(), 0, KEY_READ, &hTest) !=
+                ERROR_SUCCESS) {
+                (*cSubKeys)++;
+                if (lpcMaxSub) {
+                    DWORD need = static_cast<DWORD>(g_clsidLower.size() + 1);
+                    if (*lpcMaxSub < need) *lpcMaxSub = need;
+                }
+            } else {
+                RegCloseKeyOriginal(hTest);
+            }
+        }
+        return st;
+    }
+    return RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub, lpcMaxCls,
+                                    cValues, lpcMaxValName, lpcMaxValData, sec, ft);
+    } catch (...) {
+        try {
+            if (g_keyTracker.IsFake(k)) return ERROR_INVALID_DATA;
+        } catch (...) {
+        }
+        return RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
+                                        lpcMaxCls, cValues, lpcMaxValName,
+                                        lpcMaxValData, sec, ft);
+    }
+}
+
+void* GetRegFunc(const char* n) {
+    HMODULE h = GetModuleHandleW(L"kernelbase.dll");
+    if (h) {
+        void* p = reinterpret_cast<void*>(GetProcAddress(h, n));
+        if (p) return p;
+    }
+    HMODULE a = GetModuleHandleW(L"advapi32.dll");
+    if (!a) a = LoadLibraryW(L"advapi32.dll");
+    if (a) {
+        void* p = reinterpret_cast<void*>(GetProcAddress(a, n));
+        if (p) return p;
+    }
+    return nullptr;
+}
+
+// -----------------------------------------------------------------------------
+// Translation hooks (LoadStringW/A + DirectUI XResourceProvider)
+// -----------------------------------------------------------------------------
+using LoadStringW_t = int(WINAPI*)(HINSTANCE, UINT, LPWSTR, int);
+using LoadStringA_t = int(WINAPI*)(HINSTANCE, UINT, LPSTR, int);
+LoadStringW_t LoadStringWOriginal = nullptr;
+LoadStringA_t LoadStringAOriginal = nullptr;
+
+// The Display module handle is resolved once and we compare pointers only,
+// which avoids a per-call GetModuleFileNameW on the hot path.
+static bool IsDisplayResourceModule(HINSTANCE instance) {
+    if (!instance) return false;
+    const auto normalize = [](HMODULE value) {
+        const ULONG_PTR raw = reinterpret_cast<ULONG_PTR>(value);
+        return reinterpret_cast<HMODULE>(
+            raw & ~static_cast<ULONG_PTR>(3));
+    };
+    HMODULE module = normalize(reinterpret_cast<HMODULE>(instance));
+    HMODULE h = g_hDisplayDll.load();
+    if (h && module == normalize(h)) return true;
+    HMODULE lr = g_hLocalizedResources.load();
+    if (lr && module == normalize(lr)) return true;
+    // Slow path for resource mappings created by the Control Panel frame. It
+    // can map ResourceDLL independently, so its handle isn't guaranteed to be
+    // bit-identical to the one cached above. Accept only either the exact
+    // private resource path published by this mod or the system display.dll
+    // fallback used by the original page definition. The pointer compares
+    // above remain the allocation-free hot path.
+    static thread_local HMODULE lastChecked = nullptr;
+    static thread_local bool lastWasDisplay = false;
+    if (module == lastChecked) return lastWasDisplay;
+    bool result = false;
+    bool privatePathChecked = false;
+    wchar_t path[MAX_PATH + 1] = {};
+    const DWORD length = GetModuleFileNameW(module, path, MAX_PATH);
+    if (length != 0 && length <= MAX_PATH) {
+        // Never block a shell string-load path behind a resource rebuild. If
+        // the lock is temporarily busy, don't cache a negative answer: a later
+        // call for the same mapping must be allowed to check the published path.
+        std::unique_lock<std::mutex> resourceLock(
+            g_localizedResourceMutex, std::try_to_lock);
+        if (resourceLock.owns_lock()) {
+            privatePathChecked = true;
+            if (!g_localizedResourcePath.empty() &&
+                _wcsicmp(path, g_localizedResourcePath.c_str()) == 0) {
+                result = true;
+            }
+        }
+
+        if (!result) {
+            const wchar_t* base = path;
+            for (wchar_t* cursor = path; *cursor; ++cursor) {
+                if (*cursor == L'\\' || *cursor == L'/') base = cursor + 1;
+            }
+            result = _wcsicmp(base, L"display.dll") == 0 ||
+                     _wcsicmp(base, L"display.dll.mui") == 0;
+        }
+    }
+    if (result || privatePathChecked) {
+        lastChecked = module;
+        lastWasDisplay = result;
+    }
+    return result;
+}
+
+static int CopyEmbeddedStringW(const wchar_t* text, LPWSTR buffer, int bufferChars) {
+    if (!text) return 0;
+    const int length = static_cast<int>(wcslen(text));
+    // Note: the cchBufferMax == 0 (return-a-pointer) form of LoadStringW is
+    // deliberately not emulated here - see LoadStringWHook. Callers of this
+    // function always pass bufferChars > 0.
+    if (!buffer || bufferChars < 1) return 0;
+    const int copied = length < bufferChars - 1 ? length : bufferChars - 1;
+    if (copied > 0)
+        memcpy(buffer, text, static_cast<size_t>(copied) * sizeof(wchar_t));
+    buffer[copied] = L'\0';
+    return copied;
+}
+
+// Stable wide copies handed out by the pointer form of LoadStringWHook when
+// the private localized resource module is not (yet) available. The strings
+// are reconstructed by hand from the authenticated catalog, converted once
+// and intentionally leaked (bounded by the catalog size) so the returned
+// PCWSTR can never dangle, mirroring the never-unload policy.
+static std::mutex g_widePointerStringMutex;
+static std::unordered_map<UINT, const wchar_t*> g_widePointerStrings;
+
+static const wchar_t* GetWidePointerString(UINT id) {
+    std::lock_guard<std::mutex> lock(g_widePointerStringMutex);
+    const auto existing = g_widePointerStrings.find(id);
+    if (existing != g_widePointerStrings.end()) return existing->second;
+    const wchar_t* text = GetEmbeddedTranslation(id);
+    if (!text) return nullptr;
+    const size_t chars = wcslen(text) + 1;
+    wchar_t* copy = static_cast<wchar_t*>(
+        malloc(chars * sizeof(wchar_t)));
+    if (!copy) return nullptr;
+    memcpy(copy, text, chars * sizeof(wchar_t));
+    g_widePointerStrings.emplace(id, copy);
+    return copy;
+}
+
+
+int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
+                           int bufferChars) {
+    // The cchBufferMax == 0 form of LoadStringW returns a pointer into the
+    // string's home resource module. DirectUI's resstr resolution uses
+    // exactly that form, so without support for it every catalog-only ID
+    // (most legacy labels) would render empty. The returned pointer must
+    // stay valid for the caller's lifetime: the private localized resource
+    // module is mapped with LOAD_LIBRARY_AS_IMAGE_RESOURCE and is
+    // deliberately never unloaded (conservative never-unload policy), so a
+    // pointer into it is both correct and safe. Handing out pointers to the
+    // mod's own embedded strings would dangle once the mod is unloaded, so
+    // that source is used only for the buffered form above. When the
+    // localized module does not contain the ID, fall through to the
+    // original instance so provider-private strings keep resolving exactly
+    // as before.
+    try {
+        if (IsDisplayResourceModule(instance)) {
+            if (bufferChars != 0) {
+                if (const wchar_t* text = GetEmbeddedTranslation(id)) {
+                    return CopyEmbeddedStringW(text, buffer, bufferChars);
+                }
+            } else if (HMODULE localized =
+                           EnsureLocalizedResourceModuleLoaded()) {
+                const int length = LoadStringWOriginal(
+                    reinterpret_cast<HINSTANCE>(localized), id, buffer, 0);
+                if (length > 0 && buffer) {
+                    wchar_t* raw = *reinterpret_cast<wchar_t**>(buffer);
+                    if (raw && (wcsstr(raw, L"displaysettings") ||
+                                wcsstr(raw, L"Display settings") ||
+                                wcsstr(raw, L"Impostazioni schermo"))) {
+                        const wchar_t* cleaned = GetWidePointerString(id);
+                        if (cleaned) {
+                            *reinterpret_cast<wchar_t**>(buffer) =
+                                const_cast<wchar_t*>(cleaned);
+                            return static_cast<int>(wcslen(cleaned));
+                        }
+                    }
+                    return length;
+                }
+            }
+            // Last-resort hand-reconstructed string: guarantees the page
+            // never renders empty labels even if the private module could
+            // not be built. The pointer is stable by the leaked-copy policy.
+            if (const wchar_t* pointer = GetWidePointerString(id)) {
+                *reinterpret_cast<wchar_t**>(buffer) =
+                    const_cast<wchar_t*>(pointer);
+                return static_cast<int>(wcslen(pointer));
+            }
+        }
+    } catch (...) {
+    }
+    return LoadStringWOriginal(instance, id, buffer, bufferChars);
+}
+
+// Stable ANSI copies handed out by the pointer form of LoadStringAHook.
+// The pinned provider carries no string table of its own (its strings live
+// in the .mui, which the private copy deliberately lacks), so GDI-style
+// callers using the pointer form would receive nothing. Each requested ID is
+// converted once and intentionally leaked (bounded by the catalog size, a
+// few KB total) so the returned PCSTR can never dangle, mirroring the
+// never-unload policy of the localized resource module.
+static std::mutex g_ansiPointerStringMutex;
+static std::unordered_map<UINT, const char*> g_ansiPointerStrings;
+
+static const char* GetAnsiPointerString(UINT id) {
+    std::lock_guard<std::mutex> lock(g_ansiPointerStringMutex);
+    const auto existing = g_ansiPointerStrings.find(id);
+    if (existing != g_ansiPointerStrings.end()) return existing->second;
+    const wchar_t* text = GetEmbeddedTranslation(id);
+    if (!text) return nullptr;
+    const int wideLength = static_cast<int>(wcslen(text));
+    const int byteLength = WideCharToMultiByte(CP_ACP, 0, text, wideLength,
+                                               nullptr, 0, nullptr, nullptr);
+    if (byteLength <= 0) return nullptr;
+    char* converted = static_cast<char*>(
+        malloc(static_cast<size_t>(byteLength) + 1));
+    if (!converted) return nullptr;
+    WideCharToMultiByte(CP_ACP, 0, text, wideLength, converted, byteLength,
+                        nullptr, nullptr);
+    converted[byteLength] = '\0';
+    g_ansiPointerStrings.emplace(id, converted);
+    return converted;
+}
+
+int WINAPI LoadStringAHook(HINSTANCE instance, UINT id, LPSTR buffer,
+                           int bufferChars) {
+    // The pointer-returning form is served from the stable ANSI cache above;
+    // the pinned provider has no string table, so the original could never
+    // resolve catalog IDs in that form.
+    try {
+        if (bufferChars == 0 && buffer &&
+            IsDisplayResourceModule(instance)) {
+            if (const char* pointer = GetAnsiPointerString(id)) {
+                *reinterpret_cast<char**>(buffer) =
+                    const_cast<char*>(pointer);
+                return static_cast<int>(strlen(pointer));
+            }
+        }
+        if (bufferChars > 0 && IsDisplayResourceModule(instance)) {
+            if (const wchar_t* text = GetEmbeddedTranslation(id)) {
+                if (!buffer || bufferChars < 1) return 0;
+                const int wideLength = static_cast<int>(wcslen(text));
+                // Note: converting to CP_ACP is lossy for non-ANSI characters on a
+                // mismatched codepage; unavoidable for the A variant.
+                int byteLength = WideCharToMultiByte(CP_ACP, 0, text, wideLength,
+                                                     nullptr, 0, nullptr, nullptr);
+                if (byteLength <= 0) return 0;
+                std::string converted(static_cast<size_t>(byteLength), '\0');
+                if (byteLength > 0)
+                    WideCharToMultiByte(CP_ACP, 0, text, wideLength, &converted[0],
+                                        byteLength, nullptr, nullptr);
+                const int copied =
+                    byteLength < bufferChars - 1 ? byteLength : bufferChars - 1;
+                if (copied > 0)
+                    memcpy(buffer, converted.data(), static_cast<size_t>(copied));
+                buffer[copied] = '\0';
+                return copied;
+            }
+        }
+    } catch (...) {
+    }
+    return LoadStringAOriginal(instance, id, buffer, bufferChars);
+}
+
+using XResourceProviderCreate_t = HRESULT(*)(HINSTANCE, LPCWSTR, LPCWSTR, LPCWSTR,
+                                             void**);
+static XResourceProviderCreate_t XResourceProviderCreateOriginal = nullptr;
+
+HRESULT XResourceProviderCreateHook(HINSTANCE instance, LPCWSTR resourceName,
+                                    LPCWSTR resourceType, LPCWSTR stylesheetName,
+                                    void** provider) {
+    HINSTANCE resourceInstance = instance;
+    try {
+        if (IsDisplayResourceModule(instance)) {
+            if (HMODULE localized = EnsureLocalizedResourceModuleLoaded()) {
+                resourceInstance = reinterpret_cast<HINSTANCE>(localized);
+            }
+        }
+    } catch (...) {
+        resourceInstance = instance;
+    }
+    return XResourceProviderCreateOriginal(resourceInstance, resourceName,
+                                           resourceType, stylesheetName, provider);
+}
+
+
+// -----------------------------------------------------------------------------
+// Focused DirectUI compatibility patch, in memory only
+// -----------------------------------------------------------------------------
+#ifdef _WIN64
+#define PERF_DUI_THISCALL __cdecl
+#else
+#define PERF_DUI_THISCALL __thiscall
+#endif
+
+using DUISetXML_t = HRESULT(PERF_DUI_THISCALL*)(void*, const WCHAR*, HINSTANCE,
+                                                HINSTANCE);
+using DUISetXMLFromResource_t = HRESULT(PERF_DUI_THISCALL*)(
+    void*, PCWSTR, PCWSTR, HMODULE, HINSTANCE, HINSTANCE);
+
+static DUISetXML_t DUISetXML = nullptr;
+static DUISetXMLFromResource_t DUISetXMLFromResourceOriginal = nullptr;
+static thread_local int g_inDisplayXmlPatch = 0;
+
+// Hub controls are repaired at the pinned provider methods that initialize
+// them, not by timing the later creation of hosted Win32 ComboBox windows.
+// This keeps the fix page-specific and preserves the provider's own event model.
+
+static std::wstring LoadUifileXml(HMODULE module, PCWSTR resourceName,
+                                  PCWSTR resourceType) {
+    HRSRC resource = FindResourceW(module, resourceName, resourceType);
+    if (!resource) return {};
+
+    HGLOBAL loaded = LoadResource(module, resource);
+    if (!loaded) return {};
+
+    const DWORD size = SizeofResource(module, resource);
+    const char* data = static_cast<const char*>(LockResource(loaded));
+    if (!data || !size) return {};
+
+    UINT codePage = CP_UTF8;
+    int wideLength = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, data,
+                                         static_cast<int>(size), nullptr, 0);
+    if (wideLength <= 0) {
+        codePage = CP_ACP;
+        wideLength = MultiByteToWideChar(codePage, 0, data,
+                                         static_cast<int>(size), nullptr, 0);
+    }
+    if (wideLength <= 0) return {};
+
+    std::wstring xml(static_cast<size_t>(wideLength), L'\0');
+    MultiByteToWideChar(codePage, 0, data, static_cast<int>(size), &xml[0],
+                        wideLength);
+    while (!xml.empty() &&
+           (xml.back() == L'\0' || xml.back() == L'\r' || xml.back() == L'\n')) {
+        xml.pop_back();
+    }
+    return xml;
+}
+
+static bool IsDisplayPageXml(const std::wstring& xml) {
+    return xml.find(L"atom(Hub)") != std::wstring::npos ||
+           xml.find(L"atom(DisplaySettings)") != std::wstring::npos ||
+           xml.find(L"atom(SingleDisplayTitle)") != std::wstring::npos;
+}
+
+static bool ReplaceAllXmlToken(std::wstring& text, const wchar_t* token,
+                               const std::wstring& replacement) {
+    bool replaced = false;
+    const size_t tokenLength = wcslen(token);
+    for (size_t position = text.find(token); position != std::wstring::npos;
+         position = text.find(token, position + replacement.size())) {
+        text.replace(position, tokenLength, replacement);
+        replaced = true;
+    }
+    return replaced;
+}
+
+// Finds the close tag belonging to one uppercase DirectUI <Element>. UIFILE is
+// trusted Microsoft markup; this deliberately small scanner only needs to
+// distinguish nested <Element>, self-closing <Element/>, and </Element> tags.
+static bool FindMatchingElementClose(const std::wstring& xml, size_t opening,
+                                     size_t& closing) {
+    size_t position = opening;
+    int depth = 0;
+    while (position < xml.size()) {
+        const size_t nextOpen = xml.find(L"<Element", position);
+        const size_t nextClose = xml.find(L"</Element>", position);
+        if (nextOpen == std::wstring::npos && nextClose == std::wstring::npos) {
+            return false;
+        }
+        if (nextClose != std::wstring::npos &&
+            (nextOpen == std::wstring::npos || nextClose < nextOpen)) {
+            if (--depth == 0) {
+                closing = nextClose;
+                return true;
+            }
+            if (depth < 0) return false;
+            position = nextClose + wcslen(L"</Element>");
+            continue;
+        }
+
+        const size_t tagEnd = xml.find(L'>', nextOpen);
+        if (tagEnd == std::wstring::npos) return false;
+        size_t last = tagEnd;
+        while (last > nextOpen && iswspace(xml[last - 1])) --last;
+        if (last == nextOpen || xml[last - 1] != L'/') ++depth;
+        position = tagEnd + 1;
+    }
+    return false;
+}
+
+static UINT GetPrimarySystemDpiForPreview() {
+    using GetDpiForSystem_t = UINT(WINAPI*)();
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        if (FARPROC proc = GetProcAddress(user32, "GetDpiForSystem")) {
+            const auto getDpi = FunctionPointerFromFarProc<GetDpiForSystem_t>(proc);
+            const UINT dpi = getDpi();
+            if (dpi >= 48 && dpi <= 768) return dpi;
+        }
+        if (FARPROC proc = GetProcAddress(user32, "GetDpiForWindow")) {
+            const auto getDpi = FunctionPointerFromFarProc<GetDpiForWindow_t>(proc);
+            const UINT dpi = getDpi(GetDesktopWindow());
+            if (dpi >= 48 && dpi <= 768) return dpi;
+        }
+    }
+    return 96;
+}
+
+static UINT SelectWin81PreviewBitmap() {
+    const UINT dpi = GetPrimarySystemDpiForPreview();
+    static const struct {
+        UINT dpi;
+        UINT bitmapId;
+    } choices[] = {{96, 20}, {120, 21}, {144, 22}, {192, 22}};
+
+    UINT bestId = choices[0].bitmapId;
+    UINT bestDistance = dpi > choices[0].dpi ? dpi - choices[0].dpi
+                                             : choices[0].dpi - dpi;
+    for (size_t i = 1; i < ARRAYSIZE(choices); ++i) {
+        const UINT distance = dpi > choices[i].dpi ? dpi - choices[i].dpi
+                                                   : choices[i].dpi - dpi;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestId = choices[i].bitmapId;
+        }
+    }
+    return bestId;
+}
+
+// Reconstruct the removed Windows 8.1 Hub hierarchy without reviving any of
+// its deleted CHubPage handlers. The four radio controls and all-displays box
+// are selectable like Windows 7 when enableDpiPresets is on. The provider's one retained
+// actionLinks element carries the official custom text size (DPI) command; any leftover Display settings hyperlink is stripped at LoadString. Desktop text controls and
+// Apply retain their exact 1511 IDs and therefore remain provider-owned.
+static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
+    if (xml.find(L"atom(Hub)") == std::wstring::npos ||
+        xml.find(L"atom(ClassicDpiReference)") != std::wstring::npos) {
+        return false;
+    }
+
+    static const wchar_t* kStartLinks = L"<Element id=\"atom(startLinks)\"";
+    const size_t start = xml.find(kStartLinks);
+    if (start == std::wstring::npos) return false;
+    const size_t openingEnd = xml.find(L'>', start);
+    if (openingEnd == std::wstring::npos) return false;
+    size_t closing = std::wstring::npos;
+    if (!FindMatchingElementClose(xml, start, closing) || closing <= openingEnd) {
+        return false;
+    }
+
+    std::wstring body = LR"HUB(
+<macro id="atom(GroupPolicyMessage)" expand="GroupPolicyControl" layoutpos="none">
+<bind connect="Link_GroupPolicyText" accname="resstr(IDS_GRUPOLICY_ACC)" content="resstr(303)"/>
+</macro>
+<Element layoutpos="top" layout="flowlayout()">
+<Element class="cp_content_instruction" content="resstr(542)"/>
+</Element>
+<Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,8rp)" content="resstr(373)" accname="resstr(373)"/>
+<Element id="atom(ClassicDpiReference)" layoutpos="top" layout="borderlayout()" padding="rect(18rp,10rp,0rp,0rp)">
+<SelectorNoDefault id="atom(ClassicDpiSelector)" layoutpos="left" layout="borderlayout()" sheet="displaycplstyles" %%DPIENA%% padding="rect(0rp,0rp,20rp,0rp)">
+<CCRadioButton id="atom(ClassicScale100)" class="dpi_radiobutton" content="resstr(543)" %%DPIENA%%%%SEL20%%/>
+<CCRadioButton id="atom(ClassicScale125)" class="dpi_radiobutton" content="resstr(544)" %%DPIENA%%%%SEL21%%/>
+<CCRadioButton id="atom(ClassicScale150)" class="dpi_radiobutton" content="resstr(545)" %%DPIENA%%%%SEL22%%/>
+<CCRadioButton id="atom(ClassicScale200)" class="dpi_radiobutton" content="resstr(602)" %%DPIENA%%%%SEL23%%/>
+</SelectorNoDefault>
+<Element layoutpos="right" layout="ninegridlayout()" width="300rp">
+<Button layoutpos="ninetop" content="graphic(%%PREVIEW%%,0)" contentalign="middlecenter" active="inactive" accrole="graphic" accname="resstr(14)"/>
+</Element>
+</Element>
+<CCSysLink id="atom(actionLinks)" sheet="displaycplstyles" class="cp_content_help_text" layoutpos="top" padding="rect(0rp,4rp,0rp,6rp)" content="resstr(372)"/>
+<CCCheckBox id="atom(ClassicManageDpiReference)" class="display_checkbox" layoutpos="top" content="resstr(451)" accname="resstr(451)" selected="false" %%DPIENA%% padding="rect(0rp,3rp,0rp,0rp)"/>
+<Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,4rp)" content="resstr(601)" accname="resstr(601)"/>
+<Element layoutpos="top" layout="flowlayout()" margin="rect(0rp,14rp,0rp,0rp)">
+<Element class="cp_content_instruction" content="resstr(548)"/>
+</Element>
+<Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,8rp)" content="resstr(420)" accname="resstr(420)"/>
+<Element id="atom(DesktopElementsSection)" layout="rowlayout(1,0,2)" layoutpos="top" sheet="displaycplstyles" padding="rect(0rp,6rp,0rp,6rp)">
+<ComboBox id="atom(DesktopElementCombobox)" accname="resstr(549)"/>
+<ComboBox id="atom(FontSizeCombobox)" accname="resstr(550)">
+<Button content="6"/>
+<Button content="7"/>
+<Button content="8"/>
+<Button content="9"/>
+<Button content="10"/>
+<Button content="11"/>
+<Button content="12"/>
+<Button content="14"/>
+<Button content="16"/>
+<Button content="18"/>
+<Button content="20"/>
+<Button content="22"/>
+<Button content="24"/>
+</ComboBox>
+<CCCheckBox id="atom(FontBoldCheckbox)" class="display_checkbox" layoutpos="auto" content="resstr(551)" accname="resstr(552)"/>
+</Element>
+<Element layoutpos="top" layout="borderlayout()" margin="rect(0rp,18rp,0rp,0rp)">
+<Element layoutpos="top" class="cp_content_divider_line"/>
+<Element layoutpos="top" layout="borderlayout()" class="cp_command_button_box">
+<Element layoutpos="right" layout="flowlayout(0,0,1,0)">
+<CCPushButton layoutpos="right" id="atom(ApplyButton)" shortcut="auto" content="resstr(553)" selected="true" accessible="true" accdefaction="resstr(554)"/>
+</Element>
+<Element id="atom(WarningGroup)" layoutpos="client" layout="flowlayout(0,0,0,0)">
+<Element class="cp_nav_h_spacer" layoutpos="left"/>
+<Button layoutpos="left" content="icon(84,sysmetric(49),sysmetric(50),library(imageres.dll))" accrole="graphic" accname="resstr(15)" margin="rect(0rp,0rp,6rp,0rp)" width="sysmetric(49)" active="inactive"/>
+<Element layoutpos="left" layout="verticalflowlayout(0,0,0,0)">
+<Element id="atom(WarningApplyNoLogout)" layoutpos="left" class="cp_content_text" content="resstr(443)" margin="rect(0rp,0rp,15rp,5rp)"/>
+</Element>
+</Element>
+</Element>
+</Element>
+)HUB";
+
+    const UINT previewId = SelectWin81PreviewBitmap();
+    ReplaceAllXmlToken(body, L"%%PREVIEW%%", std::to_wstring(previewId));
+    for (UINT id = 20; id <= 23; ++id) {
+        wchar_t token[16] = {};
+        swprintf_s(token, ARRAYSIZE(token), L"%%%%SEL%u%%%%", id);
+        ReplaceAllXmlToken(body, token,
+                           id == previewId ? L" selected=\"true\"" : L"");
+    }
+    // The classic DPI radios are disabled unless the user explicitly opts in
+    // (matching the original Windows 7 page); the token collapses to the
+    // exact attribute or nothing.
+    ReplaceAllXmlToken(
+        body, L"%%DPIENA%%",
+        g_enableDpiPresets.load(std::memory_order_acquire)
+            ? L""
+            : L"enabled=\"false\"");
+
+    // DesktopElementCombobox intentionally matches the provider's original
+    // self-closing control. The pinned provider hook below calls its own
+    // _InitializeElements routine when modern metrics initialization skips it.
+
+    xml.replace(openingEnd + 1, closing - openingEnd - 1, body);
+    return true;
+}
+
+// UIFILE 202 is byte-identical in Windows 8.1 and Windows 10 1511 and expects
+// ResolutionControl to behave as a composite accessible control. On modern
+// dui70.dll the two child buttons can otherwise be composed as siblings. Add
+// a plain generic inner container so the buttons keep a composing parent.
+// The wrapper deliberately carries NO id/acc attributes: the unique
+// atom(ResolutionControl) must remain bound to the outer composite element
+// that the provider's page code looks up to populate modes and orientation
+// (a duplicate atom would make the lookup resolve to the generic wrapper and
+// leave the resolution dropdown empty). The transformation is structural and
+// idempotent; it touches no labels, styling, navigation or stock resources.
+static bool PatchResolutionControlCompatibilityXml(std::wstring& xml) {
+    static const wchar_t* kOuter =
+        L"<ResolutionControl sheet=\"displaycplstyles\"";
+    static const wchar_t* kInner =
+        L"<element sheet=\"displaycplstyles\" layout=\"borderlayout()\" "
+        L"padding=\"rect(0,0,0,0)\">";
+    static const wchar_t* kAction = L"<Button id=\"atom(ActionButton)\"";
+    static const wchar_t* kSplit = L"<Button id=\"atom(SplitMenuButton)\"";
+
+    const size_t outer = xml.find(kOuter);
+    if (outer == std::wstring::npos) return false;
+    const size_t outerTagEnd = xml.find(L'>', outer);
+    if (outerTagEnd == std::wstring::npos) return false;
+    const size_t outerClose = xml.find(L"</ResolutionControl>", outerTagEnd + 1);
+    if (outerClose == std::wstring::npos) return false;
+
+    const size_t action = xml.find(kAction, outerTagEnd + 1);
+    if (action == std::wstring::npos || action >= outerClose) return false;
+    const size_t existingInner = xml.find(kInner, outerTagEnd + 1);
+    if (existingInner != std::wstring::npos && existingInner < action) {
+        return false;
+    }
+
+    const size_t split = xml.find(kSplit, action);
+    if (split == std::wstring::npos || split >= outerClose) return false;
+    size_t splitEnd = xml.find(L"/>", split);
+    if (splitEnd == std::wstring::npos || splitEnd >= outerClose) return false;
+    splitEnd += 2;
+
+    const wchar_t* newline =
+        xml.find(L"\r\n", outerTagEnd) == std::wstring::npos ? L"\n" : L"\r\n";
+    xml.insert(splitEnd, std::wstring(newline) + L"</element>");
+    xml.insert(action, std::wstring(kInner) + newline);
+
+    // Best-effort text pre-fill: the composite control shows the current
+    // resolution formatted from the authenticated catalog ("%d x %d" /
+    // "%d x %d (recommended)"), so the field is never left blank even when
+    // the provider's runtime population cannot format it. If the provider
+    // does populate the control, its SetContent simply overrides this value.
+    DEVMODEW current{};
+    current.dmSize = sizeof(current);
+    DEVMODEW raw{};
+    raw.dmSize = sizeof(raw);
+    const bool haveCurrent =
+        EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current) !=
+        FALSE;
+    const bool haveRaw =
+        EnumDisplaySettingsW(nullptr, EDS_RAWMODE, &raw) != FALSE;
+    if (haveCurrent && current.dmPelsWidth > 0 &&
+        current.dmPelsHeight > 0) {
+        const bool isRecommended =
+            haveRaw && raw.dmPelsWidth == current.dmPelsWidth &&
+            raw.dmPelsHeight == current.dmPelsHeight;
+        const wchar_t* fmt =
+            GetEmbeddedTranslation(isRecommended ? 565 : 564);
+        if (fmt) {
+            wchar_t resolutionText[80] = {};
+            swprintf_s(resolutionText, ARRAYSIZE(resolutionText), fmt,
+                       static_cast<int>(current.dmPelsWidth),
+                       static_cast<int>(current.dmPelsHeight));
+            if (resolutionText[0]) {
+                std::wstring escaped;
+                for (const wchar_t* c = resolutionText; *c; ++c) {
+                    switch (*c) {
+                        case L'&': escaped += L"&amp;"; break;
+                        case L'<': escaped += L"&lt;"; break;
+                        case L'>': escaped += L"&gt;"; break;
+                        case L'"': escaped += L"&quot;"; break;
+                        default: escaped += *c; break;
+                    }
+                }
+                const size_t act2 = xml.find(kAction);
+                if (act2 != std::wstring::npos) {
+                    const size_t actEnd = xml.find(L"/>", act2);
+                    if (actEnd != std::wstring::npos) {
+                        xml.insert(actEnd, L" content=\"" + escaped + L"\"");
+                    }
+                }
+            }
+        }
+    }
+
+    // Optional classic Orientation row restore (opt-in): the 1511 provider
+    // hides its own OrientationPanel when the adapter does not advertise
+    // rotation (which is why it is missing on VMs and generic monitors);
+    // this adds the Windows 7-style row back with the localized orientation
+    // names as a visual restore. Leave OFF on rotation-capable displays,
+    // where the native row already appears.
+    if (g_showOrientationPanel.load(std::memory_order_acquire)) {
+        const size_t rowEnd = xml.find(L"</Element>", outerClose);
+        if (rowEnd != std::wstring::npos) {
+            const size_t insertAt = rowEnd + wcslen(L"</Element>");
+            static const wchar_t kOrientationRow[] =
+                L"<Element layout=\"rowlayout(1, 0, 2)\" layoutpos=\"top\" "
+                L"padding=\"rect(0rp,6rp,0rp,6rp)\">"
+                L"<Element class=\"cp_content_text\" content=\"resstr(518)\" "
+                L"padding=\"rect(0rp,0,12rp,0)\" accessible=\"true\" "
+                L"accrole=\"statictext\"/>"
+                L"<ComboBox layoutpos=\"left\" width=\"300rp\" "
+                L"accname=\"resstr(519)\">"
+                L"<Button content=\"resstr(312)\"/>"
+                L"<Button content=\"resstr(311)\"/>"
+                L"<Button content=\"resstr(314)\"/>"
+                L"<Button content=\"resstr(313)\"/>"
+                L"</ComboBox></Element>";
+            xml.insert(insertAt,
+                       std::wstring(newline) + kOrientationRow + newline);
+        }
+    }
+    return true;
+}
+
+static bool IsDisplayUifileResource(PCWSTR resourceName, PCWSTR resourceType) {
+    if (!resourceType || IS_INTRESOURCE(resourceType) ||
+        _wcsicmp(resourceType, L"UIFILE") != 0 ||
+        !IS_INTRESOURCE(resourceName)) {
+        return false;
+    }
+    const UINT id = static_cast<UINT>(reinterpret_cast<UINT_PTR>(resourceName));
+    return id == 201 || id == 202;
+}
+
+static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
+    void* parser, PCWSTR resourceName, PCWSTR resourceType,
+    HMODULE resourceModule, HINSTANCE hInstance1, HINSTANCE hInstance2) {
+    if (!DUISetXMLFromResourceOriginal) return E_FAIL;
+    if (!DUISetXML || g_inDisplayXmlPatch ||
+        !IsDisplayUifileResource(resourceName, resourceType) ||
+        !g_dllVerifiedOk.load() ||
+        !IsDisplayResourceModule(
+            reinterpret_cast<HINSTANCE>(resourceModule))) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                             resourceModule, hInstance1,
+                                             hInstance2);
+    }
+
+    try {
+        std::wstring xml = LoadUifileXml(resourceModule, resourceName, resourceType);
+        const UINT resourceId =
+            static_cast<UINT>(reinterpret_cast<UINT_PTR>(resourceName));
+        bool patched = false;
+        const wchar_t* patchDescription = L"";
+        if (!xml.empty() && IsDisplayPageXml(xml)) {
+            if (resourceId == 201) {
+                patched = PatchDisplayHubCompatibilityXml(xml);
+                patchDescription = L"Windows 8.1-style Hub reconstruction";
+            } else if (resourceId == 202) {
+                if (g_resolutionPageCompatibility.load(
+                        std::memory_order_acquire)) {
+                    patched = PatchResolutionControlCompatibilityXml(xml);
+                    patchDescription =
+                        L"ResolutionControl compatibility wrapper";
+                } else {
+                    Wh_Log(L"Display UIFILE 202: ResolutionControl adaptation "
+                           L"disabled by setting; using provider markup");
+                }
+            }
+        }
+        if (patched) {
+            Wh_Log(L"Display UIFILE %u: applied %s", resourceId,
+                   patchDescription);
+
+            // Keep the recursion guard balanced even if a foreign DirectUI
+            // implementation unexpectedly propagates a C++ exception.
+            struct RecursionGuard {
+                RecursionGuard()   { ++g_inDisplayXmlPatch; }
+                ~RecursionGuard()   { --g_inDisplayXmlPatch; }
+            } guard;
+
+            return DUISetXML(
+                parser, xml.c_str(),
+                reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
+        }
+    } catch (...) {
+    }
+
+    // Any allocation/parser failure is fail-open for DirectUI: render the stock
+    // authenticated resource instead of allowing an exception across the hook.
+    return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
+                                         resourceModule, hInstance1, hInstance2);
+}
+
+static void InstallDisplayXmlPatchHook() {
+    HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
+    if (!dui70) {
+        dui70 = LoadLibraryExW(L"dui70.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!dui70) {
+        Wh_Log(L"Display XML compatibility hook: dui70.dll could not be loaded");
+        return;
+    }
+
+    for (const char* name : {
+#ifdef _WIN64
+             "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z",
+#endif
+             "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z"}) {
+        if (FARPROC proc = GetProcAddress(dui70, name)) {
+            DUISetXML = FunctionPointerFromFarProc<DUISetXML_t>(proc);
+            break;
+        }
+    }
+    if (!DUISetXML) {
+        Wh_Log(L"Display XML compatibility hook: DUIXmlParser::SetXML not found");
+        return;
+    }
+
+    for (const char* name : {
+#ifdef _WIN64
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z",
+#endif
+             "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z"}) {
+        if (FARPROC proc = GetProcAddress(dui70, name)) {
+            WindhawkUtils::SetFunctionHook(
+                FunctionPointerFromFarProc<DUISetXMLFromResource_t>(proc),
+                DUISetXMLFromResourceHook, &DUISetXMLFromResourceOriginal);
+            break;
+        }
+    }
+    if (!DUISetXMLFromResourceOriginal) {
+        Wh_Log(L"Display XML compatibility hook: _SetXMLFromResource hook failed");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Indirect string resolution for the page/breadcrumb title
+// -----------------------------------------------------------------------------
+// The Control Panel frame resolves the page title through the indirect-string
+// form "@%SystemRoot%\system32\display.dll,-300" (Screen Resolution) and
+// "@...,-1" (Display). SHLoadIndirectString does NOT route through LoadStringW:
+// shlwapi maps the module and reads its string table directly. On modern
+// Windows the system display.dll is a resource-less stub, so the call returned
+// an empty string and the breadcrumb showed "Schermo > " with nothing after it,
+// and the page title was blank. Serve exactly those references from the
+// authenticated catalog; every other indirect string is passed through.
+using SHLoadIndirectString_t = HRESULT(WINAPI*)(PCWSTR, PWSTR, UINT, void**);
+static SHLoadIndirectString_t SHLoadIndirectStringOriginal = nullptr;
+
+// Accepts "@<path>display.dll,-<id>" (optionally quoted, with environment
+// variables still unexpanded) and reports the resource id.
+static bool ParseDisplayIndirectString(PCWSTR source, UINT& id) {
+    if (!source || *source != L'@') return false;
+
+    const wchar_t* comma = nullptr;
+    for (const wchar_t* p = source; *p; ++p) {
+        if (*p == L',') comma = p;
+    }
+    if (!comma) return false;
+
+    // The module part must name display.dll.
+    const wchar_t* moduleEnd = comma;
+    const wchar_t* base = source + 1;
+    for (const wchar_t* p = source + 1; p < moduleEnd; ++p) {
+        if (*p == L'\\' || *p == L'/') base = p + 1;
+    }
+    size_t nameLength = static_cast<size_t>(moduleEnd - base);
+    while (nameLength > 0 &&
+           (base[nameLength - 1] == L' ' || base[nameLength - 1] == L'"')) {
+        --nameLength;
+    }
+    if (nameLength != 11) return false;  // strlen("display.dll")
+    if (_wcsnicmp(base, L"display.dll", 11) != 0) return false;
+
+    // The resource part must be a negative id.
+    const wchar_t* cursor = comma + 1;
+    while (*cursor == L' ') ++cursor;
+    if (*cursor != L'-') return false;
+    ++cursor;
+    if (*cursor < L'0' || *cursor > L'9') return false;
+
+    unsigned long value = 0;
+    for (; *cursor >= L'0' && *cursor <= L'9'; ++cursor) {
+        value = value * 10 + static_cast<unsigned long>(*cursor - L'0');
+        if (value > 0xFFFF) return false;
+    }
+    while (*cursor == L' ' || *cursor == L'"') ++cursor;
+    if (*cursor != L'\0') return false;
+
+    id = static_cast<UINT>(value);
+    return true;
+}
+
+static HRESULT WINAPI SHLoadIndirectStringHook(PCWSTR source, PWSTR outBuffer,
+                                               UINT outBufferChars,
+                                               void** reserved) {
+    try {
+        UINT id = 0;
+        const bool parsed = ParseDisplayIndirectString(source, id);
+        if (parsed) {
+            const wchar_t* text = GetEmbeddedTranslation(id);
+            Wh_Log(L"Display title: SHLoadIndirectString ref id=%u text=%s", id,
+                   text ? text : L"<null>");
+            if (outBuffer && outBufferChars != 0 && text) {
+                const size_t length = wcslen(text);
+                if (length + 1 <= outBufferChars) {
+                    memcpy(outBuffer, text, (length + 1) * sizeof(wchar_t));
+                    return S_OK;
+                }
+                memcpy(outBuffer, text, (outBufferChars - 1) * sizeof(wchar_t));
+                outBuffer[outBufferChars - 1] = L'\0';
+                return S_OK;
+            }
+            if (text) return S_OK;
+        }
+    } catch (...) {
+    }
+    if (!SHLoadIndirectStringOriginal) return E_FAIL;
+    return SHLoadIndirectStringOriginal(source, outBuffer, outBufferChars,
+                                        reserved);
+}
+
+static void InstallIndirectStringHook() {
+    HMODULE shlwapi = GetModuleHandleW(L"shlwapi.dll");
+    if (!shlwapi) {
+        shlwapi = LoadLibraryExW(L"shlwapi.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    void* target =
+        shlwapi ? reinterpret_cast<void*>(
+                      GetProcAddress(shlwapi, "SHLoadIndirectString"))
+                : nullptr;
+    if (!target) {
+        Wh_Log(L"Display title: SHLoadIndirectString unavailable");
+        return;
+    }
+    if (WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<SHLoadIndirectString_t>(target),
+            SHLoadIndirectStringHook, &SHLoadIndirectStringOriginal)) {
+        Wh_Log(L"Display title: indirect string hook scheduled");
+    }
+}
+
+
+void InstallTranslationHook() {
+    // The page/breadcrumb title comes from SHLoadIndirectString, not LoadStringW.
+    InstallIndirectStringHook();
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        user32 = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* loadStringW =
+        user32 ? reinterpret_cast<void*>(GetProcAddress(user32, "LoadStringW")) : nullptr;
+    void* loadStringA =
+        user32 ? reinterpret_cast<void*>(GetProcAddress(user32, "LoadStringA")) : nullptr;
+    if (loadStringW)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadStringW_t>(loadStringW),
+                                       LoadStringWHook, &LoadStringWOriginal);
+    if (loadStringA)
+        WindhawkUtils::SetFunctionHook(reinterpret_cast<LoadStringA_t>(loadStringA),
+                                       LoadStringAHook, &LoadStringAOriginal);
+
+    // dui70.dll is not a KnownDLL, so restrict the search to System32.
+    HMODULE dui70 = GetModuleHandleW(L"dui70.dll");
+    if (!dui70)
+        dui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* xResourceProviderCreate =
+        dui70 ? reinterpret_cast<void*>(
+                    GetProcAddress(
+                        dui70,
+                        "?Create@XResourceProvider@DirectUI@@SAJPEAUHINSTANCE__@@PEBG11PEAPEAV12@@Z"))
+              : nullptr;
+    if (xResourceProviderCreate)
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<XResourceProviderCreate_t>(xResourceProviderCreate),
+            XResourceProviderCreateHook, &XResourceProviderCreateOriginal);
+
+    InstallDisplayXmlPatchHook();
+}
+
+// -----------------------------------------------------------------------------
+// Provider-owned Control Panel navigation pane
+// -----------------------------------------------------------------------------
+// CHubPage::InitializePage in the pinned Microsoft provider calls its own
+// _InitNavPane (RVA 0x197C4). That routine obtains SID_PerLayoutPropertyBag and
+// publishes the provider-owned CControlPanelNavLinks object under
+// "ControlPanelNavLinks", including the genuine Screen Resolution target
+// shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\pageSettings.
+// -----------------------------------------------------------------------------
+// Provider-native Control Panel task-pane repair
+// -----------------------------------------------------------------------------
+//
+// Windows 10 21H2 can create the Windows-owned Control Panel navigation pane
+// while the 1511 Display provider leaves ControlPanelNavLinks absent or empty.
+// An earlier unsafe workaround inspected CHubPage's private +0x18 site after
+// InitializePage and could repeatedly terminate Explorer. Nothing below revives
+// that path. Publication is intercepted at the public per-layout property bag,
+// and the fallback receives the site directly from the exact provider method.
+//
+// These RVAs are valid only for the SHA-256-pinned Microsoft display.dll
+// 10.0.10586.0 used by this mod. CControlPanelNavLinks is allocated with the
+// provider allocator, initialized with its own vtable, populated only through
+// its AddLink methods, and released through its own IUnknown ABI. No 0x58-byte
+// link field is fabricated or edited by the mod.
+static constexpr ULONG_PTR kDisplayProviderAllocateRva = 0x1888;
+static constexpr ULONG_PTR kDisplayProviderAllocationTagRva = 0x4FA28;
+static constexpr ULONG_PTR kDisplayProviderInstanceRva = 0x60B18;
+static constexpr ULONG_PTR kDisplayNavListVtableRva = 0x53900;
+static constexpr ULONG_PTR kDisplayAddLinkControlPanelRva = 0x4B194;
+static constexpr ULONG_PTR kDisplayAddLinkShellExRva = 0x4B24C;
+static constexpr ULONG_PTR kDisplayGetNavLinkConditionsRva = 0x1ADDC;
+static constexpr ULONG_PTR kDisplayElementWithSiteSetSiteRva = 0x365B0;
+// CHubPage::_InitializeElements and _LoadSystemFontsAndMetrics in the exact
+// SHA-256-pinned provider. The latter can return before calling the former on
+// modern systems, leaving DesktopElementCombobox empty.
+static constexpr ULONG_PTR kDisplayHubInitializeElementsRva = 0x19B10;
+static constexpr ULONG_PTR kDisplayHubLoadSystemFontsAndMetricsRva = 0x1A160;
+static constexpr ULONG_PTR kDisplayHubLinkNotifyRva = 0x30C50;
+
+static const GUID kSidPerLayoutPropertyBag = {
+    0xa46e5c25, 0xc09c, 0x4ca8,
+    {0x9a, 0x53, 0x49, 0xcf, 0x7f, 0x86, 0x55, 0x25}};
+
+struct NativeDisplayNavList {
+    void** vtable;
+    void* links;
+    volatile LONG references;
+    DWORD padding;
+};
+static_assert(sizeof(NativeDisplayNavList) == 0x18,
+              "Pinned Display navigation-list ABI changed");
+
+using DisplayProviderAllocate_t = void*(__cdecl*)(size_t, const void*);
+using DisplayGetNavLinkConditions_t = unsigned int(__cdecl*)();
+using DisplayAddLinkControlPanel_t = HRESULT(__cdecl*)(
+    NativeDisplayNavList*, int, HINSTANCE, UINT, LPCWSTR, LPCWSTR, void**);
+using DisplayAddLinkShellEx_t = HRESULT(__cdecl*)(
+    NativeDisplayNavList*, int, HINSTANCE, UINT, LPCWSTR, LPCWSTR, void**);
+
+using PSPropertyBag_WriteUnknown_t = HRESULT(WINAPI*)(
+    IPropertyBag*, PCWSTR, IUnknown*);
+using PSPropertyBag_ReadUnknown_t = HRESULT(WINAPI*)(
+    IPropertyBag*, PCWSTR, REFIID, void**);
+
+static PSPropertyBag_WriteUnknown_t PSPropertyBag_WriteUnknownEntry = nullptr;
+static PSPropertyBag_WriteUnknown_t PSPropertyBag_WriteUnknownOriginal = nullptr;
+static PSPropertyBag_ReadUnknown_t PSPropertyBag_ReadUnknownEntry = nullptr;
+static bool g_propertyBagWriteHookScheduled = false;
+
+// Keep the bag pointer reference-held while it is used as a per-UI-thread
+// de-duplication key. Releasing the previous key prevents stale pointer reuse,
+// and the thread-local destructor drops the final key when the UI thread exits.
+struct PublishedNavigationBag {
+    IPropertyBag* value = nullptr;
+    ~PublishedNavigationBag() {
+        if (value) value->Release();
+    }
+    void Remember(IPropertyBag* bag) {
+        if (bag == value) return;
+        if (bag) bag->AddRef();
+        IPropertyBag* previous = value;
+        value = bag;
+        if (previous) previous->Release();
+    }
+};
+static thread_local PublishedNavigationBag g_publishedNavigationBag;
+
+static void ReleaseNativeDisplayNavList(NativeDisplayNavList* list)   {
+    if (!list || !list->vtable || !list->vtable[2]) return;
+    using Release_t = ULONG(__cdecl*)(NativeDisplayNavList*);
+    reinterpret_cast<Release_t>(list->vtable[2])(list);
+}
+
+static NativeDisplayNavList* CreateProviderNativeDisplayNavigation()   {
+    HMODULE module = g_hDisplayDll.load(std::memory_order_acquire);
+    if (!module) return nullptr;
+
+    const ULONG_PTR base = reinterpret_cast<ULONG_PTR>(module);
+    auto allocate = reinterpret_cast<DisplayProviderAllocate_t>(
+        base + kDisplayProviderAllocateRva);
+    auto getConditions = reinterpret_cast<DisplayGetNavLinkConditions_t>(
+        base + kDisplayGetNavLinkConditionsRva);
+    auto addControlPanel = reinterpret_cast<DisplayAddLinkControlPanel_t>(
+        base + kDisplayAddLinkControlPanelRva);
+    auto addShell = reinterpret_cast<DisplayAddLinkShellEx_t>(
+        base + kDisplayAddLinkShellExRva);
+    HINSTANCE providerInstance = *reinterpret_cast<HINSTANCE*>(
+        base + kDisplayProviderInstanceRva);
+
+    auto* list = static_cast<NativeDisplayNavList*>(allocate(
+        sizeof(NativeDisplayNavList),
+        reinterpret_cast<const void*>(base + kDisplayProviderAllocationTagRva)));
+    if (!list) return nullptr;
+
+    list->vtable = reinterpret_cast<void**>(base + kDisplayNavListVtableRva);
+    list->links = nullptr;
+    list->references = 1;
+    list->padding = 0;
+
+    const unsigned int conditions = getConditions();
+    unsigned int linkCount = 0;
+
+    auto addCp = [&](int group, UINT label, LPCWSTR canonicalName,
+                     LPCWSTR page)   -> bool {
+        const HRESULT hr = addControlPanel(
+            list, group, providerInstance, label, canonicalName, page,
+            nullptr);
+        if (SUCCEEDED(hr)) ++linkCount;
+        return SUCCEEDED(hr);
+    };
+    auto addExe = [&](int group, UINT label, LPCWSTR command,
+                      LPCWSTR arguments)   -> bool {
+        const HRESULT hr = addShell(
+            list, group, providerInstance, label, command, arguments,
+            nullptr);
+        if (SUCCEEDED(hr)) ++linkCount;
+        return SUCCEEDED(hr);
+    };
+    auto fail = [&]()   -> NativeDisplayNavList* {
+        ReleaseNativeDisplayNavList(list);
+        return nullptr;
+    };
+
+    // Sidebar labels use the mod-private alias range (see
+    // kNavLinkLabelAliases) so each link shows the authentic Windows 8.1
+    // wording. The legacy IDs must not be passed to the provider's AddLink
+    // methods directly: several of them are remapped to unrelated 1511
+    // DPI-page strings by the translation hook, which would mislabel the
+    // links.
+    constexpr UINT kLabelAdjustResolution = 610;
+    constexpr UINT kLabelAdjustBrightness = 611;
+    constexpr UINT kLabelDesktopBackground = 612;
+    constexpr UINT kLabelWindowColors = 613;
+    constexpr UINT kLabelScreenSaver = 614;
+    constexpr UINT kLabelCalibrateColor = 615;
+    constexpr UINT kLabelChangeDisplaySettings = 616;
+    constexpr UINT kLabelProjectSecondScreen = 617;
+    constexpr UINT kLabelClearType = 618;
+    constexpr UINT kLabelPersonalization = 619;
+    constexpr UINT kLabelDevicesAndPrinters = 620;
+
+    // The link set below is a 1:1 mirror of the pinned provider's own
+    // _InitNavPane (RVA 0x197C4), recovered by disassembling the exact
+    // SHA-256-pinned display.dll 10.0.10586.0 payload: same order, same
+    // condition gates, same list groups (0 = Tasks, 1 = See also), same
+    // canonical names, page tokens, commands and arguments. Only the label
+    // IDs differ (mod-private alias range, see kNavLinkLabelAliases) so the
+    // translation hook renders the authentic Windows 8.1 wording instead of
+    // the 1511 remapped strings.
+    if (!addExe(0, kLabelAdjustResolution, kRestoredResolutionPageTarget,
+                nullptr))
+        return fail();
+
+    if ((conditions & 0x22u) == 0x22u &&
+        !addCp(0, kLabelAdjustBrightness, L"Microsoft.PowerOptions",
+               nullptr)) {
+        return fail();
+    }
+
+    if ((conditions & 0x01u) == 0) {
+        // Classic Control Panel personalization routes (the Personalization
+        // canonical name plus its wallpaper/colorization child pages) instead
+        // of ms-settings:*, so the links never leave the classic shell.
+        if ((conditions & 0x40u) != 0 &&
+            !addExe(0, kLabelDesktopBackground, L"control.exe",
+                     L"/name Microsoft.Personalization /page pageWallpaper")) {
+            return fail();
+        }
+        if (!addExe(0, kLabelWindowColors, L"control.exe",
+                     L"/name Microsoft.Personalization /page pageColorization")) {
+            return fail();
+        }
+        if (!addExe(0, kLabelScreenSaver,
+                     L"shell32.dll,Control_RunDLL "
+                     L"desk.cpl,ScreenSaver,@ScreenSaver",
+                     L"%windir%\\system32\\rundll32.exe")) {
+            return fail();
+        }
+    }
+
+    if ((conditions & 0x10u) != 0 && (conditions & 0x08u) == 0 &&
+        !addExe(0, kLabelCalibrateColor, L"%windir%\\system32\\dccw.exe",
+                 nullptr)) {
+        return fail();
+    }
+
+    if (!addCp(0, kLabelChangeDisplaySettings, L"Microsoft.Display",
+               nullptr))
+        return fail();
+
+    if ((conditions & 0x06u) == 0x06u &&
+        !addExe(0, kLabelProjectSecondScreen,
+                 L"%windir%\\system32\\displayswitch.exe", L"/sticky")) {
+        return fail();
+    }
+
+    if (!addExe(0, kLabelClearType, L"%windir%\\system32\\cttune.exe",
+                 nullptr)) {
+        return fail();
+    }
+
+    if ((conditions & 0x01u) != 0 &&
+        !addCp(1, kLabelPersonalization, L"Microsoft.Personalization",
+               nullptr)) {
+        return fail();
+    }
+
+    if (!addCp(1, kLabelDevicesAndPrinters,
+               L"Microsoft.DevicesAndPrinters", nullptr))
+        return fail();
+
+    // A complete list always contains Adjust resolution, Display, ClearType,
+    // and Devices and Printers, regardless of optional policy/session links.
+    if (linkCount < 4) return fail();
+    return list;
+}
+
+// -----------------------------------------------------------------------------
+// Fabricated native navigation list (Windows-Update-Restorer-style fallback)
+// -----------------------------------------------------------------------------
+// Some modern Explorer builds create the Windows-owned task pane but never
+// give the pinned provider a chance to publish (or consume) its own
+// CControlPanelNavLinks object, leaving the sidebar empty. For that case this
+// mod can publish a self-contained list in the exact style the Windows Update
+// Control Panel Restorer uses for wucltux: the list header reuses the pinned
+// provider's native vtable, while each link is a plain literal-string record
+// (CPNAVTYPE_ShellExec) so no provider AddLink/LoadString machinery and no
+// embedded-catalog resolution is involved at publication time. The link
+// record layout below was derived from the pinned provider's own
+// AddLinkControlPanel/AddLinkShellEx code (label loaded with the buffered
+// LoadStringW form and duplicated to +0x08, execType written at +0x20, the
+// See-also flag byte at +0x39, command strings at +0x28/+0x30), matching the
+// documented 0x58-byte record size.
+struct FabricatedDisplayNavLink {
+    int list;                    // 0 = Tasks, 1 = See also
+    DWORD reserved0;
+    PWSTR name;                  // +0x08, CoTaskMem-allocated literal
+    PWSTR auxiliaryArguments;    // +0x10
+    HICON icon;                  // +0x18
+    int execType;                // +0x20, 1 = CPNAVTYPE_ShellExec
+    DWORD reserved1;
+    PWSTR command;               // +0x28
+    PWSTR arguments;             // +0x30
+    BYTE privateState[0x20];     // +0x38..; +0x39 = See-also flag byte
+};
+static_assert(offsetof(FabricatedDisplayNavLink, name) == 0x08,
+              "Pinned Display nav link ABI changed (name)");
+static_assert(offsetof(FabricatedDisplayNavLink, execType) == 0x20,
+              "Pinned Display nav link ABI changed (execType)");
+static_assert(offsetof(FabricatedDisplayNavLink, command) == 0x28,
+              "Pinned Display nav link ABI changed (command)");
+static_assert(offsetof(FabricatedDisplayNavLink, arguments) == 0x30,
+              "Pinned Display nav link ABI changed (arguments)");
+static_assert(sizeof(FabricatedDisplayNavLink) == 0x58,
+              "Pinned Display nav link size changed");
+
+// Deliberately high reference count: the shell frame may Release the list,
+// but the object (and its DPA) intentionally lives until process exit, so a
+// cross-CRT deleting destructor can never run (same policy as the Windows
+// Update Restorer's fabricated list).
+static constexpr LONG kFabricatedNavLinksReferenceCount = 0x10000000;
+
+using DpaCreate_t = void*(WINAPI*)(int);
+using DpaInsertPtr_t = int(WINAPI*)(void*, int, void*);
+using DpaDestroyCallback_t = void(WINAPI*)(void*, void*, void*);
+
+struct DpaFunctions {
+    DpaCreate_t create = nullptr;
+    DpaInsertPtr_t insert = nullptr;
+    DpaDestroyCallback_t destroy = nullptr;
+};
+
+static DpaFunctions ResolveDpaFunctions() {
+    DpaFunctions f;
+    HMODULE comctl32 = GetModuleHandleW(L"comctl32.dll");
+    if (!comctl32) {
+        comctl32 = LoadLibraryExW(L"comctl32.dll", nullptr,
+                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!comctl32) return f;
+    f.create = FunctionPointerFromFarProc<DpaCreate_t>(
+        GetProcAddress(comctl32, "DPA_Create"));
+    f.insert = FunctionPointerFromFarProc<DpaInsertPtr_t>(
+        GetProcAddress(comctl32, "DPA_InsertPtr"));
+    f.destroy = FunctionPointerFromFarProc<DpaDestroyCallback_t>(
+        GetProcAddress(comctl32, "DPA_DestroyCallback"));
+    return f;
+}
+
+static PWSTR DuplicateNavString(PCWSTR source) {
+    if (!source) return nullptr;
+    const size_t chars = wcslen(source) + 1;
+    auto* copy = static_cast<PWSTR>(CoTaskMemAlloc(chars * sizeof(wchar_t)));
+    if (!copy) return nullptr;
+    memcpy(copy, source, chars * sizeof(wchar_t));
+    return copy;
+}
+
+static int CALLBACK DestroyFabricatedNavLink(void* item, void*) {
+    auto* link = static_cast<FabricatedDisplayNavLink*>(item);
+    if (link) {
+        CoTaskMemFree(link->name);
+        CoTaskMemFree(link->auxiliaryArguments);
+        CoTaskMemFree(link->command);
+        CoTaskMemFree(link->arguments);
+        CoTaskMemFree(link);
+    }
+    return 1;
+}
+
+static void DestroyFabricatedNavigationList(NativeDisplayNavList* list) {
+    if (!list) return;
+    if (list->links) {
+        DpaFunctions f = ResolveDpaFunctions();
+        if (f.destroy) {
+            f.destroy(list->links,
+                      reinterpret_cast<void*>(&DestroyFabricatedNavLink),
+                      nullptr);
+        }
+    }
+    CoTaskMemFree(list);
+}
+
+// RAII owner of a CoTaskMem-allocated string: freed on every exit path until
+// release() transfers ownership to the link record.
+class CoTaskMemStringGuard {
+   public:
+    CoTaskMemStringGuard() = default;
+    explicit CoTaskMemStringGuard(PWSTR value) : value_(value) {}
+    ~CoTaskMemStringGuard() {
+        if (value_) CoTaskMemFree(value_);
+    }
+    CoTaskMemStringGuard(const CoTaskMemStringGuard&) = delete;
+    CoTaskMemStringGuard& operator=(const CoTaskMemStringGuard&) = delete;
+    CoTaskMemStringGuard(CoTaskMemStringGuard&& other) noexcept
+        : value_(other.value_) {
+        other.value_ = nullptr;
+    }
+    PWSTR get() const { return value_; }
+    PWSTR release() {
+        PWSTR value = value_;
+        value_ = nullptr;
+        return value;
+    }
+
+   private:
+    PWSTR value_ = nullptr;
+};
+
+// RAII owner of a fabricated link record: frees the raw record (whose string
+// fields are still owned by their own guards until release()) on every exit
+// path until the record has been inserted into the DPA.
+class FabricatedLinkGuard {
+   public:
+    explicit FabricatedLinkGuard(FabricatedDisplayNavLink* link)
+        : link_(link) {}
+    ~FabricatedLinkGuard() {
+        if (link_) CoTaskMemFree(link_);
+    }
+    FabricatedLinkGuard(const FabricatedLinkGuard&) = delete;
+    FabricatedLinkGuard& operator=(const FabricatedLinkGuard&) = delete;
+    FabricatedDisplayNavLink* get() const { return link_; }
+    void release() { link_ = nullptr; }
+
+   private:
+    FabricatedDisplayNavLink* link_;
+};
+
+static NativeDisplayNavList* CreateFabricatedDisplayNavigation() {
+    HMODULE module = g_hDisplayDll.load(std::memory_order_acquire);
+    if (!module) return nullptr;
+    const ULONG_PTR base = reinterpret_cast<ULONG_PTR>(module);
+
+    DpaFunctions dpa = ResolveDpaFunctions();
+    if (!dpa.create || !dpa.insert) return nullptr;
+
+    // The header is tiny; CoTaskMemAlloc is the right tool (same reasoning as
+    // the Windows Update Restorer), and the pinned vtable only ever reads the
+    // {vtable, links, refcount} header layout.
+    auto* list = static_cast<NativeDisplayNavList*>(
+        CoTaskMemAlloc(sizeof(NativeDisplayNavList)));
+    if (!list) return nullptr;
+    memset(list, 0, sizeof(*list));
+    list->vtable = reinterpret_cast<void**>(base + kDisplayNavListVtableRva);
+    list->links = dpa.create(8);
+    list->references = kFabricatedNavLinksReferenceCount;
+    if (!list->links) {
+        CoTaskMemFree(list);
+        return nullptr;
+    }
+
+    // Same 1:1 mirror of the provider's _InitNavPane link set used by the
+    // provider-built path, expressed as literal ShellExec records. The
+    // \Settings navigation links become explorer.exe shell::: launches of
+    // the identical routes.
+    // Every entry is a ShellExec record (execType 1), the dispatch path the
+    // shell frame honors unconditionally. The Display destinations launch
+    // explorer.exe with the applet's shell routes (bare folder = hub,
+    // \pageSettings = the Screen Resolution page); the related applets use
+    // the rock-solid "control.exe /name <canonical>" classic form, so
+    // Personalization opens the classic CLSID page, never the modern app.
+    struct Definition {
+        UINT labelId;
+        int list;
+        bool navigate;  // true = CPNAVTYPE_Navigate (canonical + page token)
+        const wchar_t* command;
+        const wchar_t* arguments;
+    };
+    // Applet pages use in-frame canonical navigation (the mechanism proven
+    // by the resolution-page screenshot): Microsoft.Display + "Settings"
+    // opens the Screen Resolution page in place, Microsoft.Personalization
+    // resolves to the real classic CLSID {ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}
+    // page, never the modern Settings app. Everything else is ShellExec.
+    static const Definition definitions[] = {
+        {610, 0, false, kRestoredResolutionPageTarget, L""},
+        {611, 0, true, L"Microsoft.PowerOptions", L""},
+        {612, 0, false, L"control.exe",
+         L"/name Microsoft.Personalization /page pageWallpaper"},
+        {613, 0, false, L"control.exe",
+         L"/name Microsoft.Personalization /page pageColorization"},
+        {614, 0, false,
+         L"shell32.dll,Control_RunDLL desk.cpl,ScreenSaver,@ScreenSaver",
+         L"%windir%\\system32\\rundll32.exe"},
+        {615, 0, false, L"%windir%\\system32\\dccw.exe", L""},
+        {616, 0, true, L"Microsoft.Display", L""},
+        {617, 0, false, L"%windir%\\system32\\displayswitch.exe",
+         L"/sticky"},
+        {618, 0, false, L"%windir%\\system32\\cttune.exe", L""},
+        {619, 1, true, L"Microsoft.Personalization", L""},
+        {620, 1, true, L"Microsoft.DevicesAndPrinters", L""},
+    };
+    // Condition gates copied from the provider's _InitNavPane disassembly.
+    struct Gate {
+        unsigned int mask;
+        unsigned int expected;
+        bool enabledWhenEqual;
+    };
+    static const Gate gates[] = {
+        {0, 0, true},        // 610: always
+        {0x22u, 0x22u, true},   // 611
+        {0x01u, 0, true},       // 612 (also requires 0x40, folded below)
+        {0x01u, 0, true},       // 613
+        {0x01u, 0, true},       // 614
+        {0x18u, 0x10u, true},   // 615: (c & 0x10) && !(c & 0x08)
+        {0, 0, true},        // 616: always
+        {0x06u, 0x06u, true},   // 617
+        {0, 0, true},        // 618: always
+        {0x01u, 0x01u, true},   // 619
+        {0, 0, true},        // 620: always
+    };
+
+    const unsigned int conditions =
+        reinterpret_cast<DisplayGetNavLinkConditions_t>(
+            base + kDisplayGetNavLinkConditionsRva)();
+
+    unsigned int linkCount = 0;
+    for (size_t i = 0; i < ARRAYSIZE(definitions); ++i) {
+        const auto& definition = definitions[i];
+        const auto& gate = gates[i];
+        bool enabled;
+        if (definition.labelId == 612) {
+            enabled = (conditions & 0x01u) == 0 &&
+                      (conditions & 0x40u) != 0;
+        } else if (definition.labelId == 613 ||
+                   definition.labelId == 614) {
+            enabled = (conditions & 0x01u) == 0;
+        } else {
+            const unsigned int value = conditions & gate.mask;
+            enabled = gate.enabledWhenEqual
+                          ? (gate.mask == 0 || value == gate.expected)
+                          : value != gate.expected;
+        }
+        if (!enabled) continue;
+
+        const wchar_t* label = GetEmbeddedTranslation(definition.labelId);
+
+        const wchar_t* command = definition.command;
+        const wchar_t* arguments = definition.arguments;
+
+        // Every allocation is RAII-owned until the record is inserted into
+        // the DPA; any failure path releases the strings and the raw record
+        // exactly once, with no manual cleanup chains.
+        CoTaskMemStringGuard name(
+            DuplicateNavString(label ? label : L"Display"));
+        CoTaskMemStringGuard auxiliary(DuplicateNavString(L""));
+        CoTaskMemStringGuard commandCopy(DuplicateNavString(command));
+        CoTaskMemStringGuard argumentsCopy(DuplicateNavString(arguments));
+        FabricatedLinkGuard linkGuard(static_cast<FabricatedDisplayNavLink*>(
+            CoTaskMemAlloc(sizeof(FabricatedDisplayNavLink))));
+        if (!name.get() || !auxiliary.get() || !commandCopy.get() ||
+            !argumentsCopy.get() || !linkGuard.get()) {
+            break;
+        }
+
+        auto* link = linkGuard.get();
+        memset(link, 0, sizeof(*link));
+        link->list = definition.list;
+        // 1 = CPNAVTYPE_ShellExec, the dispatch path the shell frame honors
+        // unconditionally (same field value the provider's AddLinkShellEx
+        // writes).
+        link->execType = definition.navigate ? 2 : 1;
+        link->name = name.get();
+        link->auxiliaryArguments = auxiliary.get();
+        link->command = commandCopy.get();
+        link->arguments = argumentsCopy.get();
+        if (definition.list == 1) {
+            // Mirrors what the provider's AddLink writes for See-also entries.
+            link->privateState[1] = 1;
+        }
+        if (dpa.insert(list->links, 0x7fffffff, link) == -1) break;
+
+        // Insertion succeeded: ownership of the strings and the record moves
+        // to the list (released only by the pinned-refcount policy).
+        name.release();
+        auxiliary.release();
+        commandCopy.release();
+        argumentsCopy.release();
+        linkGuard.release();
+        ++linkCount;
+    }
+
+    // A usable list always contains at least Adjust resolution, Change
+    // display settings, ClearType and Devices and Printers.
+    if (linkCount < 4) {
+        DestroyFabricatedNavigationList(list);
+        return nullptr;
+    }
+    return list;
+}
+
+static bool IsPinnedProviderNavigationObject(IUnknown* value)   {
+    if (!value) return false;
+    HMODULE module = g_hDisplayDll.load(std::memory_order_acquire);
+    if (!module) return false;
+    void* expected = reinterpret_cast<void*>(
+        reinterpret_cast<ULONG_PTR>(module) + kDisplayNavListVtableRva);
+    return *reinterpret_cast<void**>(value) == expected;
+}
+
+static HRESULT WriteNativeNavigationToBag(IPropertyBag* bag)   {
+    if (!bag) return E_INVALIDARG;
+
+    PSPropertyBag_WriteUnknown_t write = PSPropertyBag_WriteUnknownOriginal;
+    if (!write && !g_propertyBagWriteHookScheduled) {
+        write = PSPropertyBag_WriteUnknownEntry;
+    }
+    if (!write) return E_NOTIMPL;
+
+    NativeDisplayNavList* replacement =
+        CreateProviderNativeDisplayNavigation();
+    bool fabricated = false;
+    if (!replacement) {
+        // The provider-owned builder could not run; publish the literal
+        // ShellExec list instead so the sidebar is never left empty.
+        replacement = CreateFabricatedDisplayNavigation();
+        fabricated = true;
+    }
+    if (!replacement) return E_OUTOFMEMORY;
+
+    const HRESULT hr = write(bag, L"ControlPanelNavLinks",
+                             reinterpret_cast<IUnknown*>(replacement));
+    if (fabricated) {
+        // The bag now owns the reference; the fabricated list is deliberately
+        // never freed (pinned refcount policy), except when publication
+        // failed and no one else holds it.
+        if (FAILED(hr)) DestroyFabricatedNavigationList(replacement);
+    } else {
+        ReleaseNativeDisplayNavList(replacement);
+    }
+    if (SUCCEEDED(hr)) g_publishedNavigationBag.Remember(bag);
+    return hr;
+}
+
+// Body of the property-bag write hook (C++ objects only, guarded by the
+// wrapper below).
+static HRESULT PSPropertyBag_WriteUnknownHookBody(
+    IPropertyBag* bag, PCWSTR propertyName, IUnknown* value) {
+    if (!PSPropertyBag_WriteUnknownOriginal) return E_UNEXPECTED;
+
+    // With "Show sidebar task links" disabled the provider's authentic
+    // publication passes through untouched, exactly as if the repair were
+    // not present.
+    if (!bag || !propertyName || !value ||
+        !g_showSidebarLinks.load(std::memory_order_acquire) ||
+        _wcsicmp(propertyName, L"ControlPanelNavLinks") != 0 ||
+        !IsPinnedProviderNavigationObject(value)) {
+        return PSPropertyBag_WriteUnknownOriginal(bag, propertyName, value);
+    }
+
+    NativeDisplayNavList* replacement =
+        CreateProviderNativeDisplayNavigation();
+    bool fabricated = false;
+    if (!replacement) {
+        replacement = CreateFabricatedDisplayNavigation();
+        fabricated = true;
+    }
+    if (!replacement) {
+        // Fail open to the provider's authentic list. Its caller still owns and
+        // releases that object exactly as it did before the hook.
+        return PSPropertyBag_WriteUnknownOriginal(bag, propertyName, value);
+    }
+
+    const HRESULT hr = PSPropertyBag_WriteUnknownOriginal(
+        bag, propertyName, reinterpret_cast<IUnknown*>(replacement));
+    if (fabricated) {
+        if (FAILED(hr)) DestroyFabricatedNavigationList(replacement);
+    } else {
+        ReleaseNativeDisplayNavList(replacement);
+    }
+    if (SUCCEEDED(hr)) {
+        g_publishedNavigationBag.Remember(bag);
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true)) {
+            Wh_Log(L"Display native task pane: replaced provider publication "
+                   L"with complete %s links",
+                   fabricated ? L"fabricated" : L"provider-owned");
+        }
+    }
+    return hr;
+}
+
+static HRESULT WINAPI PSPropertyBag_WriteUnknownHook(
+    IPropertyBag* bag, PCWSTR propertyName, IUnknown* value) {
+    try {
+        return PSPropertyBag_WriteUnknownHookBody(bag, propertyName, value);
+    } catch (...) {
+        // Fail open: let the provider's own publication through untouched.
+        if (PSPropertyBag_WriteUnknownOriginal)
+            return PSPropertyBag_WriteUnknownOriginal(bag, propertyName, value);
+        return E_UNEXPECTED;
+    }
+}
+
+static void InstallNativeControlPanelNavLinksHook() {
+    HMODULE propsys = GetModuleHandleW(L"propsys.dll");
+    if (!propsys) {
+        propsys = LoadLibraryExW(L"propsys.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!propsys) {
+        Wh_Log(L"Display native task pane: propsys.dll is unavailable");
+        return;
+    }
+
+    PSPropertyBag_WriteUnknownEntry = FunctionPointerFromFarProc<
+        PSPropertyBag_WriteUnknown_t>(
+            GetProcAddress(propsys, "PSPropertyBag_WriteUnknown"));
+    PSPropertyBag_ReadUnknownEntry = FunctionPointerFromFarProc<
+        PSPropertyBag_ReadUnknown_t>(
+            GetProcAddress(propsys, "PSPropertyBag_ReadUnknown"));
+    if (!PSPropertyBag_WriteUnknownEntry) {
+        Wh_Log(L"Display native task pane: PSPropertyBag_WriteUnknown not found");
+        return;
+    }
+
+    g_propertyBagWriteHookScheduled = WindhawkUtils::SetFunctionHook(
+        PSPropertyBag_WriteUnknownEntry, PSPropertyBag_WriteUnknownHook,
+        &PSPropertyBag_WriteUnknownOriginal);
+    if (!g_propertyBagWriteHookScheduled) {
+        Wh_Log(L"Display native task pane: property-bag hook scheduling failed");
+    }
+}
+
+static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
+    try {
+        if (!site) return E_INVALIDARG;
+        // Setting disabled: never publish a replacement list and never
+        // remember the bag, so re-enabling takes effect on the next page that
+        // receives a site.
+        if (!g_showSidebarLinks.load(std::memory_order_acquire)) return S_FALSE;
+
+        IServiceProvider* services = nullptr;
+    HRESULT hr = site->QueryInterface(IID_PPV_ARGS(&services));
+    if (FAILED(hr) || !services) return FAILED(hr) ? hr : E_NOINTERFACE;
+
+    IPropertyBag* bag = nullptr;
+    hr = services->QueryService(kSidPerLayoutPropertyBag,
+                                IID_PPV_ARGS(&bag));
+    services->Release();
+    if (FAILED(hr) || !bag) return FAILED(hr) ? hr : E_NOINTERFACE;
+
+    if (g_publishedNavigationBag.value == bag) {
+        bag->Release();
+        return S_FALSE;
+    }
+
+    // If the provider published during SetSite, preserve that publication. The
+    // property-bag hook has already rebuilt it with the complete native list.
+    if (PSPropertyBag_ReadUnknownEntry) {
+        IUnknown* existing = nullptr;
+        hr = PSPropertyBag_ReadUnknownEntry(
+            bag, L"ControlPanelNavLinks", IID_IUnknown,
+            reinterpret_cast<void**>(&existing));
+        if (SUCCEEDED(hr) && existing) {
+            existing->Release();
+            g_publishedNavigationBag.Remember(bag);
+            bag->Release();
+            return S_FALSE;
+        }
+    }
+
+    hr = WriteNativeNavigationToBag(bag);
+    bag->Release();
+    if (SUCCEEDED(hr)) {
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true)) {
+            Wh_Log(L"Display native task pane: SetSite fallback published "
+                   L"complete provider-owned links");
+        }
+    }
+    return hr;
+    } catch (...) {
+        // Never let the provider's navigation publication path crash the shell.
+        return E_FAIL;
+    }
+}
+
+using DisplayElementWithSiteSetSite_t = HRESULT(__cdecl*)(void*, IUnknown*);
+static DisplayElementWithSiteSetSite_t DisplayElementWithSiteSetSiteOriginal =
+    nullptr;
+
+static HRESULT __cdecl DisplayElementWithSiteSetSiteHook(
+    void* self, IUnknown* site)   {
+    if (!DisplayElementWithSiteSetSiteOriginal) return E_UNEXPECTED;
+    const HRESULT hr = DisplayElementWithSiteSetSiteOriginal(self, site);
+    if (SUCCEEDED(hr) && site) {
+        // Best effort only. Never replace the provider's SetSite result or let a
+        // task-pane failure prevent the Display page from rendering. Also never
+        // let a C++ exception from the publication path crash the shell.
+        try {
+            (void)PublishNativeNavigationLinks(site);
+        } catch (...) {
+        }
+    }
+    return hr;
+}
+
+// The provider normally calls _InitializeElements from
+// _LoadSystemFontsAndMetrics. On modern builds a down-level metrics query can
+// fail first, so the call is skipped and the desktop-element ComboBox remains
+// empty. Observe the native call and invoke the same native initializer only
+// when it was skipped. No DirectUI object layout is inspected or fabricated.
+using DisplayHubVoidMethod_t = void(__cdecl*)(void*);
+using DisplayHubLinkNotify_t = int(__cdecl*)(
+    unsigned int, unsigned long long, long long, long long*, void*);
+static DisplayHubVoidMethod_t DisplayHubInitializeElementsOriginal = nullptr;
+static DisplayHubVoidMethod_t DisplayHubLoadSystemFontsOriginal = nullptr;
+static DisplayHubLinkNotify_t DisplayHubLinkNotifyOriginal = nullptr;
+static thread_local bool g_insideDisplayHubFontLoad = false;
+static thread_local bool g_displayHubElementsObserved = false;
+
+static bool LaunchSystemCustomDpiPage(HWND owner);
+
+static void __cdecl DisplayHubInitializeElementsHook(void* self) {
+    if (!DisplayHubInitializeElementsOriginal) return;
+    if (g_insideDisplayHubFontLoad) g_displayHubElementsObserved = true;
+    DisplayHubInitializeElementsOriginal(self);
+}
+
+static void __cdecl DisplayHubLoadSystemFontsHook(void* self) {
+    if (!DisplayHubLoadSystemFontsOriginal) return;
+
+    // The provider doesn't recurse here, but preserve correct behavior if a
+    // future system callback re-enters the method unexpectedly.
+    if (g_insideDisplayHubFontLoad) {
+        DisplayHubLoadSystemFontsOriginal(self);
+        return;
+    }
+
+    g_insideDisplayHubFontLoad = true;
+    g_displayHubElementsObserved = false;
+    DisplayHubLoadSystemFontsOriginal(self);
+    const bool initializerWasSkipped = !g_displayHubElementsObserved;
+    g_insideDisplayHubFontLoad = false;
+
+    if (initializerWasSkipped && self && DisplayHubInitializeElementsOriginal) {
+        // Call the provider's own routine through the trampoline. It resolves
+        // DesktopElementCombobox by atom, adds the authentic six entries and
+        // wires selection to the provider's existing font-size/bold handlers.
+        DisplayHubInitializeElementsOriginal(self);
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true)) {
+            Wh_Log(L"Display hub: provider Desktop element ComboBox initializer "
+                   L"restored after the down-level metrics path skipped it");
+        }
+    }
+}
+
+// Exact callback ABI and NMLINK layout recovered from the pinned provider.
+// This is the primary custom-DPI route; the hosted SysLink subclass below is a
+// second fallback for hosts that stop the notification before this callback.
+static int __cdecl DisplayHubLinkNotifyHook(
+    unsigned int message, unsigned long long wParam, long long lParam,
+    long long* result, void* context) {
+    if (!DisplayHubLinkNotifyOriginal) return 0;
+    try {
+        if (message == WM_NOTIFY && lParam) {
+            const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
+            if (header->code == NM_CLICK || header->code == NM_RETURN) {
+                const BYTE* notification =
+                    reinterpret_cast<const BYTE*>(lParam);
+                // NMLINK = NMHDR (0x18) + LITEM; szUrl starts at +0x88 on x64.
+                const wchar_t* url =
+                    reinterpret_cast<const wchar_t*>(notification + 0x88);
+                static const wchar_t kCommand[] = L"customscaledialog";
+                if (_wcsnicmp(url, kCommand, ARRAYSIZE(kCommand) - 1) == 0 &&
+                    url[ARRAYSIZE(kCommand) - 1] == L'\0' &&
+                    LaunchSystemCustomDpiPage(
+                        GetAncestor(header->hwndFrom, GA_ROOT))) {
+                    if (result) *result = 0;
+                    return 0;
+                }
+            }
+        }
+    } catch (...) {
+    }
+    return DisplayHubLinkNotifyOriginal(message, wParam, lParam, result,
+                                        context);
+}
+
+static void InstallPinnedDisplayProviderHooks(HMODULE module) {
+    static std::atomic<bool> attempted{false};
+    if (!module || attempted.exchange(true)) return;
+
+    const ULONG_PTR base = reinterpret_cast<ULONG_PTR>(module);
+    auto setSiteTarget = reinterpret_cast<DisplayElementWithSiteSetSite_t>(
+        base + kDisplayElementWithSiteSetSiteRva);
+    auto initializeElementsTarget = reinterpret_cast<DisplayHubVoidMethod_t>(
+        base + kDisplayHubInitializeElementsRva);
+    auto loadSystemFontsTarget = reinterpret_cast<DisplayHubVoidMethod_t>(
+        base + kDisplayHubLoadSystemFontsAndMetricsRva);
+    auto linkNotifyTarget = reinterpret_cast<DisplayHubLinkNotify_t>(
+        base + kDisplayHubLinkNotifyRva);
+
+    const bool setSiteHook = WindhawkUtils::SetFunctionHook(
+        setSiteTarget, DisplayElementWithSiteSetSiteHook,
+        &DisplayElementWithSiteSetSiteOriginal);
+    if (!setSiteHook) {
+        Wh_Log(L"Display native task pane: pinned SetSite hook scheduling failed");
+    }
+
+    const bool initializeElementsHook = WindhawkUtils::SetFunctionHook(
+        initializeElementsTarget, DisplayHubInitializeElementsHook,
+        &DisplayHubInitializeElementsOriginal);
+    bool loadSystemFontsHook = false;
+    if (initializeElementsHook) {
+        // Never hook the outer method without the observation hook: otherwise a
+        // successful native initialization could be repeated and duplicate items.
+        loadSystemFontsHook = WindhawkUtils::SetFunctionHook(
+            loadSystemFontsTarget, DisplayHubLoadSystemFontsHook,
+            &DisplayHubLoadSystemFontsOriginal);
+    }
+    if (!initializeElementsHook || !loadSystemFontsHook) {
+        Wh_Log(L"Display hub: provider ComboBox repair hook scheduling "
+               L"incomplete (elements=%d metrics=%d)",
+               initializeElementsHook, loadSystemFontsHook);
+    }
+
+    const bool linkNotifyHook = WindhawkUtils::SetFunctionHook(
+        linkNotifyTarget, DisplayHubLinkNotifyHook,
+        &DisplayHubLinkNotifyOriginal);
+    if (!linkNotifyHook) {
+        Wh_Log(L"Display hub: custom DPI provider callback hook scheduling failed");
+    }
+
+    if (!setSiteHook && !initializeElementsHook && !linkNotifyHook) return;
+    if (!Wh_ApplyHookOperations()) {
+        Wh_Log(L"Display provider: pinned hook application failed");
+        return;
+    }
+    Wh_Log(L"Display provider hooks active: SetSite=%d hubElements=%d "
+           L"hubMetrics=%d customDpi=%d",
+           setSiteHook, initializeElementsHook, loadSystemFontsHook,
+           linkNotifyHook);
+}
+
+// -----------------------------------------------------------------------------
+// Resolution slider label micro-patch (Windows 7 style)
+// -----------------------------------------------------------------------------
+// The pinned provider hosts the classic "ResolutionControlClass" Win32 window
+// for the resolution slider; on modern builds its per-tick resolution strings
+// render empty. This micro-patch subclasses that hosted window and, after the
+// provider's own paint, draws the same labels Windows 7 drew (first, last,
+// recommended and current modes, formatted from the authenticated catalog)
+// beside the slider. Pure GDI overlay on a provider-owned window: no markup
+// injection into the interface, no provider internals touched, fail-open.
+// Some toolchain headers predate the per-monitor DPI messages; the overlay only
+// needs their numeric values to know when to re-lay-out.
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+#ifndef WM_DPICHANGED_AFTERPARENT
+#define WM_DPICHANGED_AFTERPARENT 0x02E3
+#endif
+
+static const wchar_t kResCtlOrigProcProp[] = L"DisplayRestorerResCtlOrigProc";
+static const wchar_t kResCtlPaintingProp[] = L"DisplayRestorerResCtlPainting";
+
+using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int,
+                                        int, int, int, HWND, HMENU, HINSTANCE,
+                                        LPVOID);
+static CreateWindowExW_t CreateWindowExWOriginal = nullptr;
+
+struct DisplayModePair {
+    int w;
+    int h;
+};
+
+static std::wstring GetDisplayDeviceNameForWindow(HWND hwnd) {
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    if (monitor && GetMonitorInfoW(monitor, &info))
+        return info.szDevice;
+    return {};
+}
+
+// Ask the display driver to validate a mode without applying it. This is the
+// same safety gate used by the native display control panel (CDS_TEST): it
+// avoids presenting legacy modes that EnumDisplaySettings may expose but the
+// active monitor cannot actually accept.
+static bool IsDisplayModeAcceptedByDriver(LPCWSTR deviceName, const DEVMODEW& mode) {
+    // Windows 10 and later no longer expose 640x480 in the normal Display
+    // settings list. Keep this version gate limited to the presentation list;
+    // the native mode application path remains untouched. Windows 7/8.1 keep
+    // the legacy mode for compatibility.
+    if (IsWindows10OrGreater() &&
+        mode.dmPelsWidth == 640 && mode.dmPelsHeight == 480) {
+        return false;
+    }
+
+    DEVMODEW test = mode;
+    test.dmSize = sizeof(test);
+    test.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL |
+                    DM_DISPLAYFREQUENCY | DM_DISPLAYORIENTATION;
+    return ChangeDisplaySettingsExW(deviceName, &test, nullptr, CDS_TEST, nullptr) == DISP_CHANGE_SUCCESSFUL;
+}
+
+// Enumerate only the modes advertised by the monitor/adapter hosting this
+// ResolutionControl. EnumDisplaySettings(nullptr, ...) enumerates the primary
+// display and was the reason labels could be shifted or unrelated on a second
+// monitor. Keep one entry per visible resolution and reject modes that fail the
+// driver's native non-destructive test.
+static void EnumerateSystemDisplayModes(HWND hwnd,
+                                        std::vector<DisplayModePair>& modes) {
+    const std::wstring device = GetDisplayDeviceNameForWindow(hwnd);
+    LPCWSTR deviceName = device.empty() ? nullptr : device.c_str();
+    DEVMODEW dm{};
+    dm.dmSize = sizeof(dm);
+    for (DWORD i = 0; i < 4096 &&
+         EnumDisplaySettingsExW(deviceName, i, &dm, 0) != FALSE; ++i) {
+        if (!(dm.dmFields & DM_PELSWIDTH) || !(dm.dmFields & DM_PELSHEIGHT))
+            continue;
+        const int w = static_cast<int>(dm.dmPelsWidth);
+        const int h = static_cast<int>(dm.dmPelsHeight);
+        if (w <= 0 || h <= 0) continue;
+        if (!IsDisplayModeAcceptedByDriver(deviceName, dm)) continue;
+        bool duplicate = false;
+        for (const DisplayModePair& m : modes) {
+            if (m.w == w && m.h == h) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) modes.push_back({w, h});
+    }
+
+    // Native Windows 7 ordering: largest horizontal mode first, then largest
+    // vertical mode. Stable insertion order is retained for exact ties.
+    for (size_t i = 1; i < modes.size(); ++i) {
+        DisplayModePair value = modes[i];
+        size_t j = i;
+        while (j > 0 &&
+               (modes[j - 1].w < value.w ||
+                (modes[j - 1].w == value.w && modes[j - 1].h < value.h))) {
+            modes[j] = modes[j - 1];
+            --j;
+        }
+        modes[j] = value;
+    }
+}
+
+// The provider's own trackbar is the single source of truth for geometry.
+static HWND FindResolutionTrackbar(HWND hwnd) {
+    HWND child = nullptr;
+    while ((child = FindWindowExW(hwnd, child, nullptr, nullptr)) != nullptr) {
+        wchar_t cls[64]{};
+        if (GetClassNameW(child, cls, ARRAYSIZE(cls)) &&
+            _wcsicmp(cls, L"msctls_trackbar32") == 0) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+// Geometry is queried from the provider's trackbar instead of being guessed
+// from the client rectangle. TBM_GETCHANNELRECT reports the exact channel used
+// for tick placement and TBM_GETTHUMBLENGTH the thumb size, so tick i sits on
+// the same pixel Windows 7 used. This removes the drift that made every label
+// float between two ticks.
+struct SliderGeometry {
+    int firstTickY;
+    int lastTickY;
+    int ticks;
+    int labelLeft;
+    int trackbarLeft;
+    // Outer extent of the trackbar window: the High/Low captions are anchored
+    // outside these edges, not to the endpoint ticks.
+    int sliderTop;
+    int sliderBottom;
+    bool valid;
+};
+
+static SliderGeometry QueryResolutionSliderGeometry(HWND hwnd, HWND trackbar) {
+    SliderGeometry g{};
+    if (!trackbar) return g;
+
+    const int rangeMin =
+        static_cast<int>(SendMessageW(trackbar, TBM_GETRANGEMIN, 0, 0));
+    const int rangeMax =
+        static_cast<int>(SendMessageW(trackbar, TBM_GETRANGEMAX, 0, 0));
+    const int ticks = rangeMax - rangeMin + 1;
+    if (ticks < 2) return g;
+
+    RECT channel{};
+    SendMessageW(trackbar, TBM_GETCHANNELRECT, 0,
+                 reinterpret_cast<LPARAM>(&channel));
+    int thumb = static_cast<int>(SendMessageW(trackbar, TBM_GETTHUMBLENGTH, 0, 0));
+    if (thumb <= 0) thumb = 20;
+
+    RECT tb{};
+    GetWindowRect(trackbar, &tb);
+    MapWindowPoints(HWND_DESKTOP, hwnd, reinterpret_cast<LPPOINT>(&tb), 2);
+
+    // TBM_GETCHANNELRECT is in trackbar client coordinates; for a vertical
+    // trackbar the channel is the travel axis. The thumb centre for position p
+    // is channel.top + thumb/2 + travel * (p - min).
+    const int channelTop = static_cast<int>(tb.top + channel.top);
+    const int channelBottom = static_cast<int>(tb.top + channel.bottom);
+    int usable = (channelBottom - channelTop) - thumb;
+    if (usable <= 0) {
+        usable = std::max(0, static_cast<int>(tb.bottom - tb.top) - thumb);
+        g.firstTickY = static_cast<int>(tb.top) + thumb / 2;
+    } else {
+        g.firstTickY = channelTop + thumb / 2;
+    }
+    g.lastTickY = g.firstTickY + usable;
+    g.ticks = ticks;
+    g.trackbarLeft = static_cast<int>(tb.left);
+    g.sliderTop = static_cast<int>(tb.top);
+    g.sliderBottom = static_cast<int>(tb.bottom);
+    g.labelLeft = static_cast<int>(tb.right) +
+                  std::max(6, static_cast<int>(tb.right - tb.left) / 4);
+    g.valid = usable > 0;
+    return g;
+}
+
+// EnumDisplaySettingsEx + one CDS_TEST per mode is far too expensive to run on
+// every WM_PAINT: dragging the thumb repainted the control continuously and the
+// driver round-trips made the list visibly stutter and re-appear. The set of
+// modes only changes on WM_DISPLAYCHANGE or when the selected monitor changes,
+// so it is enumerated once per (window, device) and cached until invalidated.
+struct ResolutionModeCache {
+    std::wstring device;
+    std::vector<DisplayModePair> modes;
+    DEVMODEW raw{};
+    bool haveRaw = false;
+    bool valid = false;
+};
+
+static std::mutex g_resModeCacheMutex;
+static std::unordered_map<HWND, ResolutionModeCache> g_resModeCache;
+
+static void InvalidateResolutionModeCache(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_resModeCacheMutex);
+    if (hwnd)
+        g_resModeCache.erase(hwnd);
+    else
+        g_resModeCache.clear();
+}
+
+static bool GetCachedResolutionModes(HWND hwnd,
+                                     std::vector<DisplayModePair>& modes,
+                                     DEVMODEW& raw, bool& haveRaw) {
+    const std::wstring device = GetDisplayDeviceNameForWindow(hwnd);
+
+    std::lock_guard<std::mutex> lock(g_resModeCacheMutex);
+    ResolutionModeCache& entry = g_resModeCache[hwnd];
+    if (!entry.valid || entry.device != device) {
+        entry.device = device;
+        entry.modes.clear();
+        EnumerateSystemDisplayModes(hwnd, entry.modes);
+        LPCWSTR deviceName = device.empty() ? nullptr : device.c_str();
+        entry.raw = DEVMODEW{};
+        entry.raw.dmSize = sizeof(entry.raw);
+        entry.haveRaw =
+            EnumDisplaySettingsExW(deviceName, EDS_RAWMODE, &entry.raw, 0) != FALSE;
+        entry.valid = true;
+    }
+    modes = entry.modes;
+    raw = entry.raw;
+    haveRaw = entry.haveRaw;
+    return !modes.empty();
+}
+
+static void DrawResolutionSliderLabels(HWND hwnd, HDC targetDc) {
+    try {
+    // The pinned provider remains authoritative for applying the mode. This
+    // compatibility overlay only mirrors its public monitor/driver mode source
+    // for the labels; it never changes the provider list or selection logic.
+    HWND trackbar = FindResolutionTrackbar(hwnd);
+
+    std::vector<DisplayModePair> modes;
+    DEVMODEW raw{};
+    bool haveRaw = false;
+    GetCachedResolutionModes(hwnd, modes, raw, haveRaw);
+    const int n = static_cast<int>(modes.size());
+    if (n < 2) return;
+
+    SliderGeometry geom = QueryResolutionSliderGeometry(hwnd, trackbar);
+
+    RECT client{};
+    GetClientRect(hwnd, &client);
+
+    if (!geom.valid) {
+        // No trackbar reachable (rare): keep a conservative layout rather than
+        // drawing nothing at all.
+        geom.ticks = n;
+        geom.firstTickY = static_cast<int>(client.top) + 10;
+        geom.lastTickY = std::max(geom.firstTickY, static_cast<int>(client.bottom) - 10);
+        geom.labelLeft = static_cast<int>(client.left) +
+                         static_cast<int>(client.right - client.left) * 3 / 10;
+        geom.trackbarLeft = static_cast<int>(client.left) + 2;
+        geom.sliderTop = geom.firstTickY;
+        geom.sliderBottom = geom.lastTickY;
+        geom.valid = true;
+    }
+
+    // The provider sizes its trackbar range from its own mode list. When the
+    // two lists disagree (hidden duplicate refresh rates, a mode rejected by
+    // CDS_TEST) the labels must follow the ticks, never the other way round:
+    // draw exactly geom.ticks rows, sampling the enumerated list.
+    const int rows = geom.ticks;
+
+    HDC hdc = targetDc ? targetDc : GetDC(hwnd);
+    if (!hdc) return;
+    const bool ownDc = (targetDc == nullptr);
+
+    // Font selection. Earlier revisions only built a font when WM_GETFONT
+    // returned null, which is why every requested size change had no visible
+    // effect: on this provider the hosted control DOES answer WM_GETFONT, so
+    // the branch that computes the size was dead code and the control's own
+    // (larger) font was used unchanged. The overlay now always creates its own
+    // font and uses WM_GETFONT purely as a source for the typeface.
+    UINT dpi = 96;
+    {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        auto getDpi = user32 ? reinterpret_cast<GetDpiForWindow_t>(
+                                   GetProcAddress(user32, "GetDpiForWindow"))
+                             : nullptr;
+        if (getDpi) {
+            const UINT v = getDpi(hwnd);
+            if (v >= 96) dpi = v;
+        }
+    }
+
+    LOGFONTW lf{};
+    bool haveFace = false;
+
+    // 1. Preferred face source: the font the control itself is using.
+    HFONT controlFont = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
+    if (controlFont &&
+        GetObjectW(controlFont, sizeof(lf), &lf) == sizeof(lf)) {
+        haveFace = true;
+    }
+
+    // 2. Otherwise the shell message font.
+    if (!haveFace) {
+        NONCLIENTMETRICSW ncm{};
+        ncm.cbSize = sizeof(ncm);
+        if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0)) {
+            lf = ncm.lfMessageFont;
+            haveFace = true;
+        }
+    }
+
+    // 3. Last resort: the shell UI face by name.
+    if (!haveFace) {
+        lf = LOGFONTW{};
+        lf.lfCharSet = DEFAULT_CHARSET;
+        wcscpy_s(lf.lfFaceName,
+                 IsWindowsVistaOrGreater() ? L"Segoe UI" : L"Tahoma");
+    }
+
+    // Override the metrics unconditionally: only the typeface is inherited.
+    // Size is expressed in tenths of a point so it stays meaningful at 96 DPI,
+    // where a whole point is barely more than one pixel.
+    const int kTenthsOfPoint = 80;  // 8.0 pt
+    int pxHeight = MulDiv(kTenthsOfPoint, static_cast<int>(dpi), 720);
+    if (pxHeight < 1) pxHeight = 1;
+    lf.lfHeight = -pxHeight;
+    lf.lfWidth = 0;
+    lf.lfEscapement = 0;
+    lf.lfOrientation = 0;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfItalic = FALSE;
+    lf.lfUnderline = FALSE;
+    lf.lfStrikeOut = FALSE;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = CLEARTYPE_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+
+    HFONT createdFont = CreateFontIndirectW(&lf);
+    HFONT font = createdFont;
+    if (!font) font = controlFont;
+    if (!font) font = reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+
+    HFONT oldFont = reinterpret_cast<HFONT>(SelectObject(hdc, font));
+    COLORREF oldColor = SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+    int oldBk = SetBkMode(hdc, TRANSPARENT);
+
+    TEXTMETRICW tm{};
+    GetTextMetricsW(hdc, &tm);
+    const int lineHeight =
+        std::max(9, static_cast<int>(tm.tmHeight) +
+                         static_cast<int>(tm.tmExternalLeading));
+
+    const int labelLeft =
+        std::min(geom.labelLeft, static_cast<int>(client.right) - 8);
+    const int labelRight = static_cast<int>(client.right) - 2;
+    const int span = std::max(0, geom.lastTickY - geom.firstTickY);
+    const wchar_t* plain = GetEmbeddedTranslation(564);
+    const wchar_t* recommended = GetEmbeddedTranslation(565);
+    wchar_t text[96]{};
+
+    // The label column MUST be cleared before every redraw. The overlay runs
+    // after the provider's own WM_PAINT, which erases only the region it knows
+    // about; our strings live outside it, so without an explicit clear each
+    // repaint composited fresh antialiased glyphs on top of the previous ones.
+    // Every ClearType edge pixel then got darker, and after a dozen resolution
+    // changes the whole list looked progressively bolder and smeared.
+    //
+    // The earlier DWM gate is gone: skipping the fill while composition was
+    // enabled (the normal case) is exactly what let the glyphs accumulate. The
+    // fill is safe for OpenGlass and similar mods because it is confined to the
+    // narrow label column this overlay owns and never touches the whole client
+    // or the trackbar area those mods compose through.
+    RECT column{static_cast<LONG>(labelLeft - 2), client.top, client.right,
+                client.bottom};
+    if (HBRUSH bg = GetSysColorBrush(COLOR_WINDOW))
+        FillRect(hdc, &column, bg);
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+
+    for (int i = 0; i < rows; ++i) {
+        // Tick 0 is the top of the slider = highest resolution, which is the
+        // order EnumerateSystemDisplayModes already produces.
+        const int modeIndex =
+            (rows == n) ? i
+                        : std::min(n - 1, MulDiv(i, n - 1, std::max(1, rows - 1)));
+        const DisplayModePair& mode = modes[modeIndex];
+        const bool isRecommended = haveRaw &&
+            static_cast<DWORD>(mode.w) == raw.dmPelsWidth &&
+            static_cast<DWORD>(mode.h) == raw.dmPelsHeight;
+        const wchar_t* format = isRecommended && recommended ? recommended : plain;
+        if (!format) continue;
+        swprintf_s(text, ARRAYSIZE(text), format, mode.w, mode.h);
+        // Windows 7 separates the two figures with the multiplication sign
+        // U+00D7 surrounded by spaces ("1400 \u00d7 1050"), not with the ASCII
+        // letter "x" the catalog format strings carry. Substitute the glyph on
+        // the formatted result so every localized format benefits and the
+        // authenticated catalog itself stays untouched.
+        for (wchar_t* p = text; *p; ++p) {
+            if ((*p == L'x' || *p == L'X') && p != text && *(p + 1) &&
+                *(p - 1) == L' ' && *(p + 1) == L' ') {
+                *p = L'\u00d7';
+                break;
+            }
+        }
+        const int y =
+            geom.firstTickY + (rows == 1 ? 0 : MulDiv(span, i, rows - 1));
+        RECT row{static_cast<LONG>(labelLeft),
+                 static_cast<LONG>(y - lineHeight / 2),
+                 static_cast<LONG>(labelRight),
+                 static_cast<LONG>(y + (lineHeight + 1) / 2)};
+        if (row.bottom <= client.top || row.top >= client.bottom) continue;
+        DrawTextExW(hdc, text, -1, &row,
+                    DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS,
+                    nullptr);
+    }
+
+    // In the genuine control "High" and "Low" are not level with the first and
+    // last tick: they sit ABOVE the top of the slider and BELOW its bottom,
+    // left-aligned with the trackbar column. Drawing them level with the
+    // endpoint ticks placed them on the same rows as the topmost and bottommost
+    // resolutions, which is why they appeared overwritten by the labels.
+    const wchar_t* high = GetEmbeddedTranslation(621);
+    const wchar_t* low = GetEmbeddedTranslation(622);
+    const int captionLeft = geom.trackbarLeft;
+    const int captionRight = std::max(labelRight, captionLeft + 8);
+    const int captionGap = std::max(2, lineHeight / 4);
+    // The two caption rows sit outside the label column cleared above, so they
+    // need their own erase or they accumulate the same way.
+    if (HBRUSH capBg = GetSysColorBrush(COLOR_WINDOW)) {
+        RECT top{static_cast<LONG>(captionLeft),
+                 static_cast<LONG>(geom.sliderTop - captionGap - lineHeight),
+                 static_cast<LONG>(captionRight),
+                 static_cast<LONG>(geom.sliderTop - captionGap)};
+        RECT bot{static_cast<LONG>(captionLeft),
+                 static_cast<LONG>(geom.sliderBottom + captionGap),
+                 static_cast<LONG>(captionRight),
+                 static_cast<LONG>(geom.sliderBottom + captionGap + lineHeight)};
+        FillRect(hdc, &top, capBg);
+        FillRect(hdc, &bot, capBg);
+    }
+
+    RECT caption{static_cast<LONG>(captionLeft),
+                 static_cast<LONG>(geom.sliderTop - captionGap - lineHeight),
+                 static_cast<LONG>(captionRight),
+                 static_cast<LONG>(geom.sliderTop - captionGap)};
+    if (caption.top < client.top) {
+        caption.top = client.top;
+        caption.bottom = client.top + lineHeight;
+    }
+    if (caption.bottom > client.bottom) caption.bottom = client.bottom;
+    // The endpoint captions are rendered in the dimmed shell text colour, not
+    // in the same near-black used for the resolutions.
+    const COLORREF captionColor = GetSysColor(COLOR_GRAYTEXT);
+    SetTextColor(hdc, captionColor);
+    if (high) DrawTextExW(hdc, const_cast<LPWSTR>(high), -1, &caption,
+                          DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_NOCLIP,
+                          nullptr);
+    caption.top = static_cast<LONG>(geom.sliderBottom + captionGap);
+    caption.bottom = static_cast<LONG>(geom.sliderBottom + captionGap + lineHeight);
+    if (caption.bottom > client.bottom) {
+        caption.bottom = client.bottom;
+        caption.top = client.bottom - lineHeight;
+    }
+    if (caption.top < client.top) caption.top = client.top;
+    if (low) DrawTextExW(hdc, const_cast<LPWSTR>(low), -1, &caption,
+                         DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_NOCLIP,
+                         nullptr);
+
+    SetBkMode(hdc, oldBk);
+    SetTextColor(hdc, oldColor);
+    SelectObject(hdc, oldFont);
+    if (createdFont) DeleteObject(createdFont);
+    if (ownDc) ReleaseDC(hwnd, hdc);
+    } catch (...) {
+        // Swallow any C++ exception so the overlay can never crash the shell.
+    }
+}
+
+// C++ body of the ResolutionControl subclass window proc. Kept separate from
+// the guard wrapper below so C++ objects (std::wstring, RAII guards) are used
+// here while the wrapper owns the try/catch containment. The body itself is
+// also wrapped in its own try/catch as a second line of defence.
+static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
+                                                 WPARAM wParam,
+                                                 LPARAM lParam) {
+    try {
+        const WNDPROC orig =
+            reinterpret_cast<WNDPROC>(GetPropW(hwnd, kResCtlOrigProcProp));
+        if (!orig) return DefWindowProcW(hwnd, msg, wParam, lParam);
+        // Compatibility with composition mods (OpenGlass and similar):
+        // hijacking WM_PAINT with our own BeginPaint/EndPaint and a synthesised
+        // WM_PRINTCLIENT changed the painting contract of a window those mods
+        // subclass and redirect too, which is what made the control render
+        // with a foreign background. The provider keeps full ownership of its
+        // WM_PAINT; the overlay is drawn afterwards, into a plain DC.
+        if (msg == WM_PAINT) {
+            if (GetPropW(hwnd, kResCtlPaintingProp))
+                return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+            SetPropW(hwnd, kResCtlPaintingProp, reinterpret_cast<HANDLE>(1));
+            const LRESULT painted =
+                CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+            RemovePropW(hwnd, kResCtlPaintingProp);
+            DrawResolutionSliderLabels(hwnd, nullptr);
+            return painted;
+        }
+
+        const LRESULT result =
+            CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+        switch (msg) {
+            // Re-lay out whenever geometry, DPI, fonts or the mode list can
+            // have changed; otherwise the strings stay at stale positions.
+            case WM_DISPLAYCHANGE:
+                // Only a real mode change can alter the list itself.
+                InvalidateResolutionModeCache(hwnd);
+                InvalidateRect(hwnd, nullptr, TRUE);
+                break;
+            case WM_SIZE:
+            case WM_DPICHANGED:
+            case WM_DPICHANGED_AFTERPARENT:
+            case WM_SETTINGCHANGE:
+            case WM_THEMECHANGED:
+                InvalidateRect(hwnd, nullptr, TRUE);
+                break;
+            case WM_HSCROLL:
+            case WM_VSCROLL:
+                InvalidateRect(hwnd, nullptr, FALSE);
+                break;
+            case WM_NCDESTROY:
+                InvalidateResolutionModeCache(hwnd);
+                RemovePropW(hwnd, kResCtlOrigProcProp);
+                RemovePropW(hwnd, kResCtlPaintingProp);
+                break;
+            default:
+                break;
+        }
+        return result;
+    } catch (...) {
+        // Never let a C++ exception escape a window proc; forward the message
+        // to the original proc and keep Explorer alive.
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+}
+
+static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
+                                                      WPARAM wParam,
+                                                      LPARAM lParam) {
+    // Guard wrapper: the WNDPROC runs on the shell's UI thread, so a C++
+    // exception escaping here would otherwise take down the whole
+    // explorer.exe. If the body throws, forward to the original proc instead.
+    try {
+        return ResolutionControlSubclassProcBody(hwnd, msg, wParam, lParam);
+    } catch (...) {
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+}
+
+// The pinned provider's DirectUI link normally handles "customscaledialog"
+// itself. On modern shell hosts the hosted SysLink notification can stop before
+// reaching that down-level callback, making a visibly valid link do nothing.
+// Detect only the SysLink whose markup contains that exact command, subclass its
+// immediate parent, and route NM_CLICK/NM_RETURN to Microsoft's documented
+// DpiScaling.exe entry point. If the executable can't be launched, fail open to
+// the provider's original notification path.
+static const wchar_t kCustomDpiParentOrigProcProp[] =
+    L"DisplayRestorerCustomDpiParentOrigProc";
+static const wchar_t kCustomDpiLinkProp[] =
+    L"DisplayRestorerCustomDpiLink";
+
+static bool LaunchSystemCustomDpiPage(HWND owner) {
+    wchar_t systemDirectory[MAX_PATH + 1] = {};
+    const UINT length = GetSystemDirectoryW(systemDirectory, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return false;
+
+    wchar_t executable[MAX_PATH + 1] = {};
+    if (swprintf_s(executable, ARRAYSIZE(executable), L"%s\\DpiScaling.exe",
+                   systemDirectory) <= 0 ||
+        GetFileAttributesW(executable) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+
+    SHELLEXECUTEINFOW execute{};
+    execute.cbSize = sizeof(execute);
+    execute.fMask = SEE_MASK_FLAG_NO_UI;
+    execute.hwnd = owner;
+    execute.lpVerb = L"open";
+    execute.lpFile = executable;
+    execute.lpDirectory = systemDirectory;
+    execute.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&execute)) return false;
+
+    Wh_Log(L"Display hub: custom text size link opened %s", executable);
+    return true;
+}
+
+static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    const WNDPROC original = reinterpret_cast<WNDPROC>(
+        GetPropW(hwnd, kCustomDpiParentOrigProcProp));
+    if (!original) return DefWindowProcW(hwnd, msg, wParam, lParam);
+
+    try {
+        if (msg == WM_NOTIFY && lParam) {
+            const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
+            const HWND customLink = reinterpret_cast<HWND>(
+                GetPropW(hwnd, kCustomDpiLinkProp));
+            if (customLink && header->hwndFrom == customLink &&
+                (header->code == NM_CLICK || header->code == NM_RETURN) &&
+                LaunchSystemCustomDpiPage(GetAncestor(hwnd, GA_ROOT))) {
+                return TRUE;
+            }
+        }
+
+        const LRESULT result =
+            CallWindowProcW(original, hwnd, msg, wParam, lParam);
+        if (msg == WM_NCDESTROY) {
+            RemovePropW(hwnd, kCustomDpiLinkProp);
+            RemovePropW(hwnd, kCustomDpiParentOrigProcProp);
+        }
+        return result;
+    } catch (...) {
+        return CallWindowProcW(original, hwnd, msg, wParam, lParam);
+    }
+}
+
+static void AttachCustomDpiLinkFallback(HWND link) {
+    if (!link || !IsWindow(link)) return;
+    HWND parent = GetParent(link);
+    if (!parent || !IsWindow(parent)) return;
+
+    if (!GetPropW(parent, kCustomDpiParentOrigProcProp)) {
+        const WNDPROC original = reinterpret_cast<WNDPROC>(
+            GetWindowLongPtrW(parent, GWLP_WNDPROC));
+        if (!original ||
+            !SetPropW(parent, kCustomDpiParentOrigProcProp,
+                      reinterpret_cast<HANDLE>(original))) {
+            return;
+        }
+        SetLastError(ERROR_SUCCESS);
+        const LONG_PTR previous = SetWindowLongPtrW(
+            parent, GWLP_WNDPROC,
+            reinterpret_cast<LONG_PTR>(CustomDpiLinkParentSubclassProc));
+        if (previous == 0 && GetLastError() != ERROR_SUCCESS) {
+            RemovePropW(parent, kCustomDpiParentOrigProcProp);
+            return;
+        }
+    }
+
+    if (SetPropW(parent, kCustomDpiLinkProp,
+                 reinterpret_cast<HANDLE>(link))) {
+        Wh_Log(L"Display hub: custom text size SysLink fallback attached");
+    }
+}
+
+static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                       LPCWSTR lpWindowName, DWORD dwStyle,
+                                       int x, int y, int width, int height,
+                                       HWND hWndParent, HMENU hMenu,
+                                       HINSTANCE hInstance, LPVOID lpParam) {
+    if (!CreateWindowExWOriginal) return nullptr;
+    HWND hwnd = CreateWindowExWOriginal(dwExStyle, lpClassName, lpWindowName,
+                                        dwStyle, x, y, width, height,
+                                        hWndParent, hMenu, hInstance, lpParam);
+    try {
+        if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
+            _wcsicmp(lpClassName, L"SysLink") == 0) {
+            bool isCustomDpiLink =
+                lpWindowName &&
+                wcsstr(lpWindowName, L"customscaledialog") != nullptr;
+            if (!isCustomDpiLink) {
+                wchar_t text[512] = {};
+                if (GetWindowTextW(hwnd, text, ARRAYSIZE(text)) > 0) {
+                    isCustomDpiLink =
+                        wcsstr(text, L"customscaledialog") != nullptr;
+                }
+            }
+            if (isCustomDpiLink) AttachCustomDpiLinkFallback(hwnd);
+        }
+
+        if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
+            g_resolutionPageCompatibility.load(std::memory_order_acquire) &&
+            _wcsicmp(lpClassName, L"ResolutionControlClass") == 0 &&
+            !GetPropW(hwnd, kResCtlOrigProcProp)) {
+            const WNDPROC orig = reinterpret_cast<WNDPROC>(
+                GetWindowLongPtrW(hwnd, GWLP_WNDPROC));
+            if (orig &&
+                SetPropW(hwnd, kResCtlOrigProcProp,
+                         reinterpret_cast<HANDLE>(orig))) {
+                SetWindowLongPtrW(
+                    hwnd, GWLP_WNDPROC,
+                    reinterpret_cast<LONG_PTR>(
+                        ResolutionControlSubclassProc));
+                Wh_Log(L"Resolution slider label micro-patch attached");
+            }
+        }
+    } catch (...) {
+    }
+    return hwnd;
+}
+
+static void InstallHostedDisplayControlPatches() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        user32 = LoadLibraryExW(L"user32.dll", nullptr,
+                                LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* target =
+        user32 ? reinterpret_cast<void*>(
+                     GetProcAddress(user32, "CreateWindowExW"))
+               : nullptr;
+    if (!target) {
+        Wh_Log(L"Hosted Display control patches unavailable");
+        return;
+    }
+    if (WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<CreateWindowExW_t>(target), CreateWindowExWHook,
+            &CreateWindowExWOriginal)) {
+        Wh_Log(L"Hosted Display control patches scheduled");
+    }
+}
+
+// desk.cpl and /name Microsoft.Display forms open the restored Display hub,
+// while desk.cpl,,2 opens the restored Screen Resolution page.
+enum class ClassicDisplayLaunchKind {
+    None,
+    RundllBareDeskCpl,
+    ControlCanonicalDisplay,
+    RundllDeskCplResolution,
+    ControlDeskCplResolution,
+};
+
+static ClassicDisplayLaunchKind g_classicDisplayLaunchKind =
+    ClassicDisplayLaunchKind::None;
+static std::atomic<bool> g_classicDisplayRouteConsumed{false};
+
+static bool IsResolutionLaunchKind(ClassicDisplayLaunchKind kind)   {
+    return kind == ClassicDisplayLaunchKind::RundllDeskCplResolution ||
+           kind == ClassicDisplayLaunchKind::ControlDeskCplResolution;
+}
+
+// Standalone launches (desktop context menu, desk.cpl,,2) open the restored
+// Display hub: the Screen Resolution child page is then reached in-place
+// through the sidebar "Adjust resolution" link, exactly like Windows 7.
+// Direct out-of-process child-page URIs (shell:::{CLSID}\\page) degrade to
+// Documents on builds where the applet has no system registration, so they
+// are deliberately not used.
+static const wchar_t* RestoredLaunchCommand(ClassicDisplayLaunchKind kind)   {
+    return IsResolutionLaunchKind(kind) ? kRestoredResolutionPageTarget
+                                        : L"explorer.exe";
+}
+
+static const wchar_t* RestoredLaunchArguments(ClassicDisplayLaunchKind kind)   {
+    return IsResolutionLaunchKind(kind) ? nullptr : kRestoredDisplayHubTarget;
+}
+
+static bool WideRangeEqualsInsensitive(const wchar_t* value, size_t length,
+                                       const wchar_t* expected)   {
+    if (!value || !expected) return false;
+    const size_t expectedLength = wcslen(expected);
+    if (length != expectedLength) return false;
+    for (size_t i = 0; i < length; ++i) {
+        if (towlower(value[i]) != towlower(expected[i])) return false;
+    }
+    return true;
+}
+
+static bool AnsiRangeEqualsInsensitive(const char* value, size_t length,
+                                       const char* expected)   {
+    if (!value || !expected) return false;
+    const size_t expectedLength = strlen(expected);
+    if (length != expectedLength) return false;
+    for (size_t i = 0; i < length; ++i) {
+        unsigned char left = static_cast<unsigned char>(value[i]);
+        unsigned char right = static_cast<unsigned char>(expected[i]);
+        if (tolower(left) != tolower(right)) return false;
+    }
+    return true;
+}
+
+static bool IsBlankWideArgument(PCWSTR value)   {
+    if (!value) return true;
+    while (*value && iswspace(*value)) ++value;
+    return *value == L'\0';
+}
+
+static bool IsBareDeskCplWide(PCWSTR value)   {
+    if (!value) return false;
+    while (*value && iswspace(*value)) ++value;
+    const wchar_t* end = value + wcslen(value);
+    while (end > value && iswspace(end[-1])) --end;
+    if (end - value >= 2 && value[0] == L'"' && end[-1] == L'"') {
+        ++value;
+        --end;
+    }
+    const wchar_t* base = value;
+    for (const wchar_t* cursor = value; cursor < end; ++cursor) {
+        if (*cursor == L'\\' || *cursor == L'/') base = cursor + 1;
+    }
+    return WideRangeEqualsInsensitive(
+        base, static_cast<size_t>(end - base), L"desk.cpl");
+}
+
+static bool IsBareDeskCplAnsi(PCSTR value)   {
+    if (!value) return false;
+    while (*value && isspace(static_cast<unsigned char>(*value))) ++value;
+    const char* end = value + strlen(value);
+    while (end > value && isspace(static_cast<unsigned char>(end[-1]))) --end;
+    if (end - value >= 2 && value[0] == '"' && end[-1] == '"') {
+        ++value;
+        --end;
+    }
+    const char* base = value;
+    for (const char* cursor = value; cursor < end; ++cursor) {
+        if (*cursor == '\\' || *cursor == '/') base = cursor + 1;
+    }
+    return AnsiRangeEqualsInsensitive(
+        base, static_cast<size_t>(end - base), "desk.cpl");
+}
+
+// Matches the classic Screen Resolution invocation "desk.cpl,,2" (the ",2"
+// shorthand is accepted too). Anything else - including the Screen Saver form
+// desk.cpl,,1 - is never a match.
+static bool IsDeskCplResolutionWide(PCWSTR value)   {
+    if (!value) return false;
+    while (*value && iswspace(*value)) ++value;
+    const wchar_t* end = value + wcslen(value);
+    while (end > value && iswspace(end[-1])) --end;
+    if (end - value >= 2 && value[0] == L'"' && end[-1] == L'"') {
+        ++value;
+        --end;
+    }
+    const wchar_t* base = value;
+    for (const wchar_t* cursor = value; cursor < end; ++cursor) {
+        if (*cursor == L'\\' || *cursor == L'/') base = cursor + 1;
+    }
+    const size_t baseLength = static_cast<size_t>(end - base);
+    constexpr size_t nameLength = 8;  // wcslen(L"desk.cpl")
+    if (baseLength <= nameLength) return false;
+    if (!WideRangeEqualsInsensitive(base, nameLength, L"desk.cpl"))
+        return false;
+    const wchar_t* suffix = base + nameLength;
+    const size_t suffixLength = baseLength - nameLength;
+    return WideRangeEqualsInsensitive(suffix, suffixLength, L",,2") ||
+           WideRangeEqualsInsensitive(suffix, suffixLength, L",2");
+}
+
+static bool IsDeskCplResolutionAnsi(PCSTR value)   {
+    if (!value) return false;
+    while (*value && isspace(static_cast<unsigned char>(*value))) ++value;
+    const char* end = value + strlen(value);
+    while (end > value && isspace(static_cast<unsigned char>(end[-1]))) --end;
+    if (end - value >= 2 && value[0] == '"' && end[-1] == '"') {
+        ++value;
+        --end;
+    }
+    const char* base = value;
+    for (const char* cursor = value; cursor < end; ++cursor) {
+        if (*cursor == '\\' || *cursor == '/') base = cursor + 1;
+    }
+    const size_t baseLength = static_cast<size_t>(end - base);
+    constexpr size_t nameLength = 8;  // strlen("desk.cpl")
+    if (baseLength <= nameLength) return false;
+    if (!AnsiRangeEqualsInsensitive(base, nameLength, "desk.cpl"))
+        return false;
+    const char* suffix = base + nameLength;
+    const size_t suffixLength = baseLength - nameLength;
+    return AnsiRangeEqualsInsensitive(suffix, suffixLength, ",,2") ||
+           AnsiRangeEqualsInsensitive(suffix, suffixLength, ",2");
+}
+
+static bool WideFileNameEquals(PCWSTR path, PCWSTR expected)   {
+    if (!path || !expected) return false;
+    while (*path && iswspace(*path)) ++path;
+    const wchar_t* end = path + wcslen(path);
+    while (end > path && iswspace(end[-1])) --end;
+    if (end - path >= 2 && path[0] == L'"' && end[-1] == L'"') {
+        ++path;
+        --end;
+    }
+    const wchar_t* base = path;
+    for (const wchar_t* cursor = path; cursor < end; ++cursor) {
+        if (*cursor == L'\\' || *cursor == L'/') base = cursor + 1;
+    }
+    return WideRangeEqualsInsensitive(
+        base, static_cast<size_t>(end - base), expected);
+}
+
+static bool StartsWithInsensitive(PCWSTR value, PCWSTR prefix)   {
+    if (!value || !prefix) return false;
+    while (*value && iswspace(*value)) ++value;
+    if (*value == L'"') ++value;
+    for (; *prefix; ++prefix, ++value) {
+        if (!*value || towlower(*value) != towlower(*prefix)) return false;
+    }
+    return true;
+}
+
+static bool ContainsInsensitive(PCWSTR value, PCWSTR needle)   {
+    if (!value || !needle || !*needle) return false;
+    const size_t needleLength = wcslen(needle);
+    for (const wchar_t* start = value; *start; ++start) {
+        size_t i = 0;
+        while (i < needleLength && start[i] &&
+               towlower(start[i]) == towlower(needle[i])) {
+            ++i;
+        }
+        if (i == needleLength) return true;
+    }
+    return false;
+}
+
+static ClassicDisplayLaunchKind DetectClassicDisplayLaunch()   {
+    const CommandLineArgvGuard argv;
+    LPWSTR* arguments = argv.Get();
+    const int argumentCount = argv.Count();
+    if (!arguments || argumentCount <= 0) {
+        return ClassicDisplayLaunchKind::None;
+    }
+
+    ClassicDisplayLaunchKind result = ClassicDisplayLaunchKind::None;
+    if (WideFileNameEquals(arguments[0], L"rundll32.exe") &&
+        argumentCount == 3 &&
+        _wcsicmp(arguments[1], L"shell32.dll,Control_RunDLL") == 0 &&
+        IsBareDeskCplWide(arguments[2])) {
+        result = ClassicDisplayLaunchKind::RundllBareDeskCpl;
+    } else if (WideFileNameEquals(arguments[0], L"control.exe") &&
+               argumentCount == 3 &&
+               _wcsicmp(arguments[1], L"/name") == 0 &&
+               _wcsicmp(arguments[2], L"Microsoft.Display") == 0) {
+        result = ClassicDisplayLaunchKind::ControlCanonicalDisplay;
+    } else if (WideFileNameEquals(arguments[0], L"rundll32.exe") &&
+               argumentCount == 3 &&
+               _wcsicmp(arguments[1], L"shell32.dll,Control_RunDLL") == 0 &&
+               IsDeskCplResolutionWide(arguments[2])) {
+        result = ClassicDisplayLaunchKind::RundllDeskCplResolution;
+    } else if (WideFileNameEquals(arguments[0], L"control.exe") &&
+               argumentCount == 2 &&
+               IsDeskCplResolutionWide(arguments[1])) {
+        result = ClassicDisplayLaunchKind::ControlDeskCplResolution;
+    }
+
+    return result;
+}
+
+using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
+using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR,
+                                           LPCWSTR, INT);
+using ControlRunDllRaw_t = void(CALLBACK*)(HWND, HINSTANCE, void*, int);
+
+static ShellExecuteExW_t ShellExecuteExWOriginalClassicDisplay = nullptr;
+static ShellExecuteW_t ShellExecuteWOriginalClassicDisplay = nullptr;
+static ControlRunDllRaw_t ControlRunDllOriginalClassicDisplay = nullptr;
+static ControlRunDllRaw_t ControlRunDllAOriginalClassicDisplay = nullptr;
+static ControlRunDllRaw_t ControlRunDllWOriginalClassicDisplay = nullptr;
+
+static bool IsClassicDisplayRedirectCandidate(PCWSTR file,
+                                              PCWSTR parameters)   {
+    if (!file) return false;
+
+    // The process itself has already been matched to one exact Display command.
+    // Within that process, consume only the known modern-settings handoff (or a
+    // bare desk.cpl handoff); never redirect a Screen Saver parameter string.
+    if (StartsWithInsensitive(file, L"ms-settings:")) return true;
+    if (WideFileNameEquals(file, L"SystemSettings.exe")) return true;
+    if (IsBareDeskCplWide(file) && IsBlankWideArgument(parameters)) return true;
+    if ((WideFileNameEquals(file, L"explorer.exe") ||
+         WideFileNameEquals(file, L"rundll32.exe")) &&
+        ContainsInsensitive(parameters, L"ms-settings:")) {
+        return true;
+    }
+    return false;
+}
+
+static bool TryBeginClassicDisplayRedirect()   {
+    bool expected = false;
+    return g_classicDisplayRouteConsumed.compare_exchange_strong(
+        expected, true, std::memory_order_acq_rel);
+}
+
+static bool LaunchRestoredDisplayPage(HWND owner, int showCommand,
+                                      const wchar_t* command,
+                                      const wchar_t* arguments)   {
+    if (!command) return false;
+    SHELLEXECUTEINFOW execute{};
+    execute.cbSize = sizeof(execute);
+    execute.fMask = SEE_MASK_FLAG_NO_UI;
+    execute.hwnd = owner;
+    execute.lpVerb = L"open";
+    execute.lpFile = command;
+    execute.lpParameters = arguments;
+    execute.nShow = showCommand;
+
+    if (ShellExecuteExWOriginalClassicDisplay) {
+        return !!ShellExecuteExWOriginalClassicDisplay(&execute);
+    }
+    return !!ShellExecuteExW(&execute);
+}
+
+// -----------------------------------------------------------------------------
+// "What display settings should I choose?" advisory
+// -----------------------------------------------------------------------------
+// Windows 7 wired this link to a Help and Support topic (mshelp://windows/?id=...
+// resolved by helppane.exe). On Windows 10/11 the Help engine no longer resolves
+// the legacy Display topics, so the provider's command handler ran but nothing
+// appeared: the link looked dead. The mod answers it with one small, generic
+// advisory dialog carrying the same practical guidance the original topic gave.
+// Nothing about the provider's own command routing is altered; only the dead
+// Help hand-off is replaced.
+
+static std::atomic<bool> g_displayTipDialogOpen{false};
+
+struct DisplayTipDialogParams {
+    HWND owner;
+};
+
+static DWORD WINAPI DisplayTipDialogThread(LPVOID parameter) {
+    std::unique_ptr<DisplayTipDialogParams> params(
+        static_cast<DisplayTipDialogParams*>(parameter));
+
+    const wchar_t* caption = GetEmbeddedTranslation(630);
+    const wchar_t* body = GetEmbeddedTranslation(631);
+    if (!caption) caption = L"Screen resolution";
+
+    if (body) {
+        // MB_OK + MB_ICONINFORMATION is exactly the small generic advisory the
+        // shell itself uses for this class of guidance. The dialog is shown on
+        // its own thread so the Control Panel page stays responsive and the
+        // provider's command handler returns immediately.
+        MessageBoxW(nullptr, body, caption,
+                    MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND |
+                        MB_TOPMOST);
+    }
+
+    g_displayTipDialogOpen.store(false, std::memory_order_release);
+    return 0;
+}
+
+static void ShowDisplaySettingsAdvisory(HWND owner) {
+    bool expected = false;
+    if (!g_displayTipDialogOpen.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        // Already on screen: do not stack duplicates on repeated clicks.
+        return;
+    }
+
+    auto* params = new (std::nothrow) DisplayTipDialogParams{owner};
+    if (!params) {
+        g_displayTipDialogOpen.store(false, std::memory_order_release);
+        return;
+    }
+
+    HANDLE thread = CreateThread(nullptr, 0, DisplayTipDialogThread, params, 0,
+                                 nullptr);
+    if (!thread) {
+        delete params;
+        g_displayTipDialogOpen.store(false, std::memory_order_release);
+        return;
+    }
+    CloseHandle(thread);
+    Wh_Log(L"Display settings advisory shown");
+}
+
+// The link is a Help hand-off, so it surfaces as a ShellExecute of an
+// mshelp:/ms-help: URI or of helppane.exe. Recognise exactly those forms and
+// nothing else: every other ShellExecute from the page keeps its native route.
+static bool IsDisplayHelpTopicLaunch(PCWSTR file, PCWSTR parameters) {
+    if (!file) return false;
+    if (StartsWithInsensitive(file, L"mshelp:") ||
+        StartsWithInsensitive(file, L"ms-help:")) {
+        return true;
+    }
+    if (WideFileNameEquals(file, L"helppane.exe")) return true;
+    if (parameters && (ContainsInsensitive(parameters, L"mshelp:") ||
+                       ContainsInsensitive(parameters, L"ms-help:"))) {
+        return true;
+    }
+    return false;
+}
+
+static BOOL WINAPI ShellExecuteExWClassicDisplayHook(
+    SHELLEXECUTEINFOW* info)   {
+    if (!ShellExecuteExWOriginalClassicDisplay) return FALSE;
+    // Dead legacy Help topic -> generic advisory dialog.
+    if (info && IsDisplayHelpTopicLaunch(info->lpFile, info->lpParameters)) {
+        ShowDisplaySettingsAdvisory(info->hwnd);
+        info->hInstApp = reinterpret_cast<HINSTANCE>(33);
+        return TRUE;
+    }
+    if (!info ||
+        !g_redirectClassicLaunch.load(std::memory_order_acquire) ||
+        !IsClassicDisplayRedirectCandidate(info->lpFile, info->lpParameters) ||
+        !TryBeginClassicDisplayRedirect()) {
+        return ShellExecuteExWOriginalClassicDisplay(info);
+    }
+
+    SHELLEXECUTEINFOW redirected = *info;
+    redirected.fMask &= ~(SEE_MASK_CLASSNAME | SEE_MASK_CLASSKEY |
+                          SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST);
+    redirected.lpVerb = L"open";
+    redirected.lpFile =
+        RestoredLaunchCommand(g_classicDisplayLaunchKind);
+    redirected.lpParameters =
+        RestoredLaunchArguments(g_classicDisplayLaunchKind);
+    redirected.lpIDList = nullptr;
+    redirected.lpClass = nullptr;
+    redirected.hkeyClass = nullptr;
+    redirected.hProcess = nullptr;
+
+    const BOOL result = ShellExecuteExWOriginalClassicDisplay(&redirected);
+    if (result) {
+        info->hInstApp = redirected.hInstApp;
+        info->hProcess = redirected.hProcess;
+        Wh_Log(L"Classic Display launch redirected to the restored page "
+               L"(resolution=%d)",
+               static_cast<int>(
+                   IsResolutionLaunchKind(g_classicDisplayLaunchKind)));
+        return TRUE;
+    }
+
+    g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
+    Wh_Log(L"Classic Display launch redirection failed; preserving the original "
+           L"Windows handoff");
+    return ShellExecuteExWOriginalClassicDisplay(info);
+}
+
+static HINSTANCE WINAPI ShellExecuteWClassicDisplayHook(
+    HWND hwnd, LPCWSTR operation, LPCWSTR file, LPCWSTR parameters,
+    LPCWSTR directory, INT showCommand)   {
+    if (!ShellExecuteWOriginalClassicDisplay) {
+        return reinterpret_cast<HINSTANCE>(SE_ERR_ACCESSDENIED);
+    }
+    // Dead legacy Help topic -> generic advisory dialog.
+    if (IsDisplayHelpTopicLaunch(file, parameters)) {
+        ShowDisplaySettingsAdvisory(hwnd);
+        return reinterpret_cast<HINSTANCE>(33);
+    }
+    if (!g_redirectClassicLaunch.load(std::memory_order_acquire) ||
+        !IsClassicDisplayRedirectCandidate(file, parameters) ||
+        !TryBeginClassicDisplayRedirect()) {
+        return ShellExecuteWOriginalClassicDisplay(
+            hwnd, operation, file, parameters, directory, showCommand);
+    }
+
+    if (LaunchRestoredDisplayPage(
+            hwnd, showCommand,
+            RestoredLaunchCommand(g_classicDisplayLaunchKind),
+            RestoredLaunchArguments(g_classicDisplayLaunchKind))) {
+        Wh_Log(L"Classic Display launch redirected to the restored page "
+               L"(resolution=%d)",
+               static_cast<int>(
+                   IsResolutionLaunchKind(g_classicDisplayLaunchKind)));
+        return reinterpret_cast<HINSTANCE>(33);
+    }
+
+    g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
+    Wh_Log(L"Classic Display launch redirection failed; preserving the original "
+           L"Windows handoff");
+    return ShellExecuteWOriginalClassicDisplay(
+        hwnd, operation, file, parameters, directory, showCommand);
+}
+
+static void HandleControlRunDllClassicDisplay(
+    HWND hwnd, HINSTANCE instance, void* commandLine, int showCommand,
+    bool commandLineIsWide, ControlRunDllRaw_t original)   {
+    if (!original) return;
+    if (!g_redirectClassicLaunch.load(std::memory_order_acquire)) {
+        original(hwnd, instance, commandLine, showCommand);
+        return;
+    }
+    const bool bareDeskCpl = commandLineIsWide
+        ? IsBareDeskCplWide(static_cast<PCWSTR>(commandLine))
+        : IsBareDeskCplAnsi(static_cast<PCSTR>(commandLine));
+    const bool deskCplResolution = commandLineIsWide
+        ? IsDeskCplResolutionWide(static_cast<PCWSTR>(commandLine))
+        : IsDeskCplResolutionAnsi(static_cast<PCSTR>(commandLine));
+    // A resolution redirect is only consumed inside a process that was
+    // itself launched through the desk.cpl,,2 route; a bare-desk.cpl host
+    // keeps opening the hub for both forms.
+    if (!bareDeskCpl &&
+        !(deskCplResolution &&
+          IsResolutionLaunchKind(g_classicDisplayLaunchKind))) {
+        original(hwnd, instance, commandLine, showCommand);
+        return;
+    }
+    if (!TryBeginClassicDisplayRedirect()) {
+        original(hwnd, instance, commandLine, showCommand);
+        return;
+    }
+
+    // The target follows the detected launch kind, exactly like the
+    // ShellExecute paths: a desk.cpl,,2 host restores the Screen Resolution
+    // page even if the internal handoff dropped the ",,2" suffix.
+    const bool resolution =
+        IsResolutionLaunchKind(g_classicDisplayLaunchKind);
+    if (LaunchRestoredDisplayPage(
+            hwnd, showCommand,
+            RestoredLaunchCommand(g_classicDisplayLaunchKind),
+            RestoredLaunchArguments(g_classicDisplayLaunchKind))) {
+        if (resolution) {
+            Wh_Log(L"desk.cpl,,2 redirected to the restored Screen "
+                   L"Resolution page");
+        } else {
+            Wh_Log(L"Bare desk.cpl redirected to the restored Display hub");
+        }
+        return;
+    }
+
+    g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
+    if (resolution) {
+        Wh_Log(L"desk.cpl,,2 redirection failed; preserving Control_RunDLL");
+    } else {
+        Wh_Log(L"Bare desk.cpl redirection failed; preserving Control_RunDLL");
+    }
+    original(hwnd, instance, commandLine, showCommand);
+}
+
+static void CALLBACK ControlRunDllClassicDisplayHook(
+    HWND hwnd, HINSTANCE instance, void* commandLine, int showCommand)   {
+    HandleControlRunDllClassicDisplay(
+        hwnd, instance, commandLine, showCommand, false,
+        ControlRunDllOriginalClassicDisplay);
+}
+
+static void CALLBACK ControlRunDllAClassicDisplayHook(
+    HWND hwnd, HINSTANCE instance, void* commandLine, int showCommand)   {
+    HandleControlRunDllClassicDisplay(
+        hwnd, instance, commandLine, showCommand, false,
+        ControlRunDllAOriginalClassicDisplay);
+}
+
+static void CALLBACK ControlRunDllWClassicDisplayHook(
+    HWND hwnd, HINSTANCE instance, void* commandLine, int showCommand)   {
+    HandleControlRunDllClassicDisplay(
+        hwnd, instance, commandLine, showCommand, true,
+        ControlRunDllWOriginalClassicDisplay);
+}
+
+static void InstallClassicDisplayLaunchRouting()   {
+    g_classicDisplayLaunchKind = DetectClassicDisplayLaunch();
+    if (g_classicDisplayLaunchKind == ClassicDisplayLaunchKind::None) return;
+
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32) {
+        shell32 = LoadLibraryExW(L"shell32.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!shell32) {
+        Wh_Log(L"Classic Display routing unavailable: shell32.dll not found");
+        return;
+    }
+
+    bool shellExecuteExHook = false;
+    bool shellExecuteHook = false;
+    bool controlRunDllHook = false;
+    bool controlRunDllAHook = false;
+    bool controlRunDllWHook = false;
+
+    void* shellExecuteEx = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "ShellExecuteExW"));
+    if (shellExecuteEx) {
+        shellExecuteExHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ShellExecuteExW_t>(shellExecuteEx),
+            ShellExecuteExWClassicDisplayHook,
+            &ShellExecuteExWOriginalClassicDisplay);
+    }
+
+    void* shellExecute = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "ShellExecuteW"));
+    if (shellExecute) {
+        shellExecuteHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ShellExecuteW_t>(shellExecute),
+            ShellExecuteWClassicDisplayHook,
+            &ShellExecuteWOriginalClassicDisplay);
+    }
+
+    void* controlRunDll = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "Control_RunDLL"));
+    if (controlRunDll) {
+        controlRunDllHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ControlRunDllRaw_t>(controlRunDll),
+            ControlRunDllClassicDisplayHook,
+            &ControlRunDllOriginalClassicDisplay);
+    }
+
+    void* controlRunDllA = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "Control_RunDLLA"));
+    if (controlRunDllA && controlRunDllA != controlRunDll) {
+        controlRunDllAHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ControlRunDllRaw_t>(controlRunDllA),
+            ControlRunDllAClassicDisplayHook,
+            &ControlRunDllAOriginalClassicDisplay);
+    }
+
+    void* controlRunDllW = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "Control_RunDLLW"));
+    if (controlRunDllW && controlRunDllW != controlRunDll &&
+        controlRunDllW != controlRunDllA) {
+        controlRunDllWHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ControlRunDllRaw_t>(controlRunDllW),
+            ControlRunDllWClassicDisplayHook,
+            &ControlRunDllWOriginalClassicDisplay);
+    }
+
+    Wh_Log(L"Classic Display routing scheduled: kind=%u shellEx=%d shell=%d "
+           L"Control_RunDLL=%d A=%d W=%d",
+           static_cast<unsigned int>(g_classicDisplayLaunchKind),
+           shellExecuteExHook, shellExecuteHook, controlRunDllHook,
+           controlRunDllAHook, controlRunDllWHook);
+}
+
+// -----------------------------------------------------------------------------
+// Desktop "Display settings" handoff redirect (Explorer only)
+// -----------------------------------------------------------------------------
+// On modern Windows the desktop context-menu entry ("Display settings" /
+// "Impostazioni schermo") and several other shell surfaces open
+// ms-settings:display, which lands in the modern Settings app. Windows 7's
+// desktop menu opened the classic Screen Resolution page instead. When this
+// mod runs inside explorer.exe, the exact ms-settings:display handoff is
+// redirected to the restored page. The match is deliberately limited to that
+// one URI (optionally followed by a query string); every other ms-settings:
+// target and every other verb passes through untouched.
+static bool IsDisplaySettingsUri(PCWSTR file)   {
+    if (!file) return false;
+    while (*file && iswspace(*file)) ++file;
+    if (*file == L'"') ++file;
+    static const wchar_t kPrefix[] = L"ms-settings:display";
+    const size_t prefixLength = ARRAYSIZE(kPrefix) - 1;
+    for (size_t i = 0; i < prefixLength; ++i) {
+        if (!file[i] || towlower(file[i]) != towlower(kPrefix[i]))
+            return false;
+    }
+    const wchar_t terminator = file[prefixLength];
+    return terminator == L'\0' || terminator == L'?' || terminator == L'"';
+}
+
+static bool IsCurrentProcessExplorer()   {
+    wchar_t path[MAX_PATH + 1] = {};
+    const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (length == 0 || length > MAX_PATH) return false;
+    return WideFileNameEquals(path, L"explorer.exe");
+}
+
+// The ShellExecuteExW_t / ShellExecuteW_t aliases are shared with the classic
+// launch routing section above.
+static ShellExecuteExW_t ShellExecuteExWOriginalDisplaySettings = nullptr;
+static ShellExecuteW_t ShellExecuteWOriginalDisplaySettings = nullptr;
+
+static BOOL WINAPI ShellExecuteExWDisplaySettingsHook(
+    SHELLEXECUTEINFOW* info)   {
+    if (!ShellExecuteExWOriginalDisplaySettings) return FALSE;
+    if (!info ||
+        !g_redirectDisplaySettingsUri.load(std::memory_order_acquire) ||
+        !IsDisplaySettingsUri(info->lpFile)) {
+        return ShellExecuteExWOriginalDisplaySettings(info);
+    }
+
+    SHELLEXECUTEINFOW redirected = *info;
+    redirected.fMask &= ~(SEE_MASK_CLASSNAME | SEE_MASK_CLASSKEY |
+                          SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST);
+    redirected.lpVerb = L"open";
+    redirected.lpFile = kRestoredResolutionPageTarget;
+    redirected.lpParameters = nullptr;
+    redirected.lpIDList = nullptr;
+    redirected.lpClass = nullptr;
+    redirected.hkeyClass = nullptr;
+    redirected.hProcess = nullptr;
+
+    const BOOL result = ShellExecuteExWOriginalDisplaySettings(&redirected);
+    if (result) {
+        info->hInstApp = redirected.hInstApp;
+        info->hProcess = redirected.hProcess;
+        Wh_Log(L"ms-settings:display redirected to the restored Screen "
+               L"Resolution page");
+        return TRUE;
+    }
+    Wh_Log(L"ms-settings:display redirection failed; preserving the modern "
+           L"Settings handoff");
+    return ShellExecuteExWOriginalDisplaySettings(info);
+}
+
+static HINSTANCE WINAPI ShellExecuteWDisplaySettingsHook(
+    HWND hwnd, LPCWSTR operation, LPCWSTR file, LPCWSTR parameters,
+    LPCWSTR directory, INT showCommand)   {
+    if (!ShellExecuteWOriginalDisplaySettings) {
+        return reinterpret_cast<HINSTANCE>(SE_ERR_ACCESSDENIED);
+    }
+    if (!g_redirectDisplaySettingsUri.load(std::memory_order_acquire) ||
+        !IsDisplaySettingsUri(file)) {
+        return ShellExecuteWOriginalDisplaySettings(
+            hwnd, operation, file, parameters, directory, showCommand);
+    }
+
+    const HINSTANCE result = ShellExecuteWOriginalDisplaySettings(
+        hwnd, L"open", kRestoredResolutionPageTarget, nullptr,
+        directory, showCommand);
+    if (reinterpret_cast<ULONG_PTR>(result) > 32) {
+        Wh_Log(L"ms-settings:display redirected to the restored Screen "
+               L"Resolution page");
+        return result;
+    }
+    Wh_Log(L"ms-settings:display redirection failed; preserving the modern "
+           L"Settings handoff");
+    return ShellExecuteWOriginalDisplaySettings(
+        hwnd, operation, file, parameters, directory, showCommand);
+}
+
+static void InstallDisplaySettingsRedirect()   {
+    if (!IsCurrentProcessExplorer()) return;
+
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32) {
+        shell32 = LoadLibraryExW(L"shell32.dll", nullptr,
+                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!shell32) {
+        Wh_Log(L"Display settings redirect unavailable: shell32.dll not found");
+        return;
+    }
+
+    bool exHook = false;
+    bool wHook = false;
+    void* shellExecuteEx = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "ShellExecuteExW"));
+    if (shellExecuteEx) {
+        exHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ShellExecuteExW_t>(shellExecuteEx),
+            ShellExecuteExWDisplaySettingsHook,
+            &ShellExecuteExWOriginalDisplaySettings);
+    }
+    void* shellExecute = reinterpret_cast<void*>(
+        GetProcAddress(shell32, "ShellExecuteW"));
+    if (shellExecute) {
+        wHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<ShellExecuteW_t>(shellExecute),
+            ShellExecuteWDisplaySettingsHook,
+            &ShellExecuteWOriginalDisplaySettings);
+    }
+    Wh_Log(L"Display settings redirect scheduled in Explorer: ex=%d w=%d",
+           exHook, wHook);
+}
+
+// -----------------------------------------------------------------------------
+// COM hooks
+// -----------------------------------------------------------------------------
+using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID,
+                                            LPVOID*);
+CoCreateInstance_t CoCreateInstanceOriginalCombase = nullptr;
+CoCreateInstance_t CoCreateInstanceOriginalOle32 = nullptr;
+
+static HRESULT HandleCoCreateInstance(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                      DWORD dwClsCtx, REFIID riid, LPVOID* ppv,
+                                      CoCreateInstance_t original) {
+    if (ppv) *ppv = nullptr;
+    const bool isProvider = IsEqualGUID(rclsid, kProviderGuid);
+    const bool isFolder = IsEqualGUID(rclsid, kAppletFolderGuid);
+    if (isProvider || isFolder) {
+        Wh_Log(L"Display COM activation requested (%s)",
+               isProvider ? L"provider" : L"folder");
+        if (!g_dllVerifiedOk.load()) {
+            Wh_Log(L"Display COM activation deferred: DLL setup is not ready");
+            return REGDB_E_CLASSNOTREG;
+        }
+        HMODULE h = nullptr;
+        if (isProvider) {
+            // Reuse the reference the setup thread took; do not add another one.
+            h = g_hDisplayDll.load();
+        } else {
+            // The applet's shell folder comes from shdocvw.dll. Resolve it
+            // without creating new references when it is already mapped.
+            h = GetModuleHandleW(L"shdocvw.dll");
+            if (!h)
+                h = LoadLibraryExW(L"shdocvw.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
+        if (!h) {
+            Wh_Log(L"Display COM activation failed: module is unavailable");
+            return REGDB_E_CLASSNOTREG;
+        }
+        DllGetClassObject_t getClassObject = ResolveDllGetClassObject(h);
+        if (!getClassObject) {
+            Wh_Log(L"Display COM activation failed: DllGetClassObject is missing");
+            return REGDB_E_CLASSNOTREG;
+        }
+        IClassFactory* cf = nullptr;
+        HRESULT hr = getClassObject(rclsid, IID_IClassFactory_GUID,
+                                    reinterpret_cast<LPVOID*>(&cf));
+        if (FAILED(hr) || !cf) {
+            Wh_Log(L"Display COM activation failed: class factory returned 0x%08X",
+                   static_cast<unsigned int>(hr));
+            if (cf) cf->Release();
+            return FAILED(hr) ? hr : E_NOINTERFACE;
+        }
+        hr = cf->CreateInstance(pUnkOuter, riid, ppv);
+        cf->Release();
+        if (FAILED(hr)) {
+            Wh_Log(L"Display COM activation failed: CreateInstance returned 0x%08X",
+                   static_cast<unsigned int>(hr));
+        }
+        return hr;
+    }
+    return original(rclsid, pUnkOuter, dwClsCtx, riid, ppv);
+}
+
+// Guard wrappers: CoCreateInstance is a shell-hot API and a C++ exception
+// while we handle a Display COM activation would otherwise restart
+// explorer.exe. On exception we fail open to the original implementation.
+static HRESULT CoCreateInstanceHookBody(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                        DWORD dwClsCtx, REFIID riid, LPVOID* ppv,
+                                        CoCreateInstance_t original) {
+    try {
+        return HandleCoCreateInstance(rclsid, pUnkOuter, dwClsCtx, riid, ppv,
+                                      original);
+    } catch (...) {
+        if (ppv) *ppv = nullptr;
+        if (original) return original(rclsid, pUnkOuter, dwClsCtx, riid, ppv);
+        return E_UNEXPECTED;
+    }
+}
+
+HRESULT WINAPI CoCreateInstanceHookCombase(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                           DWORD dwClsCtx, REFIID riid, LPVOID* ppv) {
+    return CoCreateInstanceHookBody(rclsid, pUnkOuter, dwClsCtx, riid, ppv,
+                                    CoCreateInstanceOriginalCombase);
+}
+
+HRESULT WINAPI CoCreateInstanceHookOle32(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+                                         DWORD dwClsCtx, REFIID riid, LPVOID* ppv) {
+    return CoCreateInstanceHookBody(rclsid, pUnkOuter, dwClsCtx, riid, ppv,
+                                    CoCreateInstanceOriginalOle32);
+}
+
+void InstallComHook() {
+    HMODULE combase = GetModuleHandleW(L"combase.dll");
+    if (!combase)
+        combase = LoadLibraryExW(L"combase.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
+    if (!ole32)
+        ole32 = LoadLibraryExW(L"ole32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    void* pCombase =
+        combase ? reinterpret_cast<void*>(GetProcAddress(combase, "CoCreateInstance"))
+                : nullptr;
+    void* pOle32 =
+        ole32 ? reinterpret_cast<void*>(GetProcAddress(ole32, "CoCreateInstance"))
+              : nullptr;
+
+    // Hook the real implementation (combase). Each target gets its own hook
+    // function and original pointer so calls never cross between them.
+    bool combaseHook = false;
+    bool ole32Hook = false;
+    if (pCombase) {
+        combaseHook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<CoCreateInstance_t>(pCombase),
+            CoCreateInstanceHookCombase, &CoCreateInstanceOriginalCombase);
+    }
+    if (pOle32 && pOle32 != pCombase) {
+        ole32Hook = WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<CoCreateInstance_t>(pOle32),
+            CoCreateInstanceHookOle32, &CoCreateInstanceOriginalOle32);
+    }
+    Wh_Log(L"Display Restorer COM hooks: combase=%d ole32-distinct=%d",
+           combaseHook, ole32Hook);
+}
+
+// -----------------------------------------------------------------------------
+// Windhawk entry points
+// -----------------------------------------------------------------------------
+BOOL Wh_ModInit(void) {
+    // This must be the first operation so even an architecture, settings, API
+    // resolution, or hook-installation failure leaves an actionable log entry.
+    Wh_Log(L"Display Restorer 1.0.0: Wh_ModInit entered (PID %u)",
+           GetCurrentProcessId());
+    try {
+        if (!IsRunningAsAmd64()) {
+            Wh_Log(L"Display Restorer startup failed: this build is not AMD64");
+            return FALSE;
+        }
+        Wh_Log(L"Display Restorer startup phase 1/4: architecture accepted");
+
+        InitClsidStrings();
+        g_namespaceInjectionLogged.store(false);
+        g_regEnumValueHookAvailable.store(false);
+        LoadLanguageSetting();
+        LoadFeatureSettings();
+        Wh_Log(L"Display Restorer startup phase 2/4: settings loaded");
+
+        // This schedules hooks only in the two exact legacy command hosts. The
+        // Screen Saver form desk.cpl,,1 and ordinary Control Panel launches are
+        // deliberately outside the command-line match.
+        InstallClassicDisplayLaunchRouting();
+
+        // Explorer-only: lets the desktop context menu's "Display settings"
+        // open the restored Screen Resolution page. No-ops in other processes.
+        InstallDisplaySettingsRedirect();
+
+        // --- Install conservative registry hooks (Unicode *W only: 10 hooks) ---
+        void* pOpen = GetRegFunc("RegOpenKeyExW");
+        void* pOpenOldW = GetRegFunc("RegOpenKeyW");
+        void* pCreateW = GetRegFunc("RegCreateKeyExW");
+        void* pClose = GetRegFunc("RegCloseKey");
+        void* pQV = GetRegFunc("RegQueryValueExW");
+        void* pGV = GetRegFunc("RegGetValueW");
+        void* pEnumEx = GetRegFunc("RegEnumKeyExW");
+        void* pEnum = GetRegFunc("RegEnumKeyW");
+        void* pEnumValue = GetRegFunc("RegEnumValueW");
+        void* pQInfo = GetRegFunc("RegQueryInfoKeyW");
+
+        if (!pOpen || !pClose || !pQV || !pGV || !pEnumEx || !pEnum || !pQInfo) {
+            Wh_Log(L"Display Restorer startup failed: required registry APIs "
+                   L"could not be resolved (open=%d close=%d query=%d get=%d "
+                   L"enumEx=%d enum=%d info=%d)",
+                   pOpen != nullptr, pClose != nullptr, pQV != nullptr,
+                   pGV != nullptr, pEnumEx != nullptr, pEnum != nullptr,
+                   pQInfo != nullptr);
+            return FALSE;
+        }
+
+        bool coreHooksOk = true;
+        auto recordHook = [&coreHooksOk](bool ok, const wchar_t* name,
+                                         bool required) {
+            if (!ok) {
+                Wh_Log(L"Display Restorer: hook installation failed for %s%s",
+                       name, required ? L" (required)" : L" (optional)");
+                if (required) coreHooksOk = false;
+            }
+            return ok;
+        };
+
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegOpenKeyExW_t>(pOpen), RegOpenKeyExWHook,
+                &RegOpenKeyExWOriginal),
+            L"RegOpenKeyExW", true);
+        if (pOpenOldW) {
+            recordHook(
+                WindhawkUtils::SetFunctionHook(
+                    reinterpret_cast<RegOpenKeyW_t>(pOpenOldW), RegOpenKeyWHook,
+                    &RegOpenKeyWOriginal),
+                L"RegOpenKeyW", false);
+        } else {
+            Wh_Log(L"Display Restorer: RegOpenKeyW is unavailable; continuing");
+        }
+        if (pCreateW) {
+            recordHook(
+                WindhawkUtils::SetFunctionHook(
+                    reinterpret_cast<RegCreateKeyExW_t>(pCreateW),
+                    RegCreateKeyExWHook, &RegCreateKeyExWOriginal),
+                L"RegCreateKeyExW", false);
+        } else {
+            Wh_Log(L"Display Restorer: RegCreateKeyExW is unavailable; continuing");
+        }
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegCloseKey_t>(pClose), RegCloseKeyHook,
+                &RegCloseKeyOriginal),
+            L"RegCloseKey", true);
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegQueryValueExW_t>(pQV), RegQueryValueExWHook,
+                &RegQueryValueExWOriginal),
+            L"RegQueryValueExW", true);
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegGetValueW_t>(pGV), RegGetValueWHook,
+                &RegGetValueWOriginal),
+            L"RegGetValueW", true);
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegEnumKeyExW_t>(pEnumEx), RegEnumKeyExWHook,
+                &RegEnumKeyExWOriginal),
+            L"RegEnumKeyExW", true);
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegEnumKeyW_t>(pEnum), RegEnumKeyWHook,
+                &RegEnumKeyWOriginal),
+            L"RegEnumKeyW", true);
+
+        bool enumValueHookOk = false;
+        if (pEnumValue) {
+            enumValueHookOk = recordHook(
+                WindhawkUtils::SetFunctionHook(
+                    reinterpret_cast<RegEnumValueW_t>(pEnumValue),
+                    RegEnumValueWHook, &RegEnumValueWOriginal),
+                L"RegEnumValueW", false);
+        } else {
+            Wh_Log(L"Display Restorer: RegEnumValueW is unavailable; synthetic "
+                   L"values remain queryable but won't be advertised for enumeration");
+        }
+        g_regEnumValueHookAvailable.store(enumValueHookOk);
+
+        recordHook(
+            WindhawkUtils::SetFunctionHook(
+                reinterpret_cast<RegQueryInfoKeyW_t>(pQInfo),
+                RegQueryInfoKeyWHook, &RegQueryInfoKeyWOriginal),
+            L"RegQueryInfoKeyW", true);
+        if (!coreHooksOk) {
+            Wh_Log(L"Display Restorer startup failed: one or more required "
+                   L"registry hooks could not be installed");
+            return FALSE;
+        }
+        Wh_Log(L"Display Restorer startup phase 3/4: registry hooks scheduled");
+
+        InstallComHook();
+        InstallTranslationHook();
+        InstallNativeControlPanelNavLinksHook();
+        InstallHostedDisplayControlPatches();
+        Wh_Log(L"Display Restorer startup phase 4/4: COM/DirectUI/native-navigation "
+               L"hooks processed");
+
+        if (!g_stopEvent) {
+            g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!g_stopEvent) {
+                Wh_Log(L"Display Restorer: stop event creation failed (error %u); "
+                       L"setup remains available without cancellable waits",
+                       GetLastError());
+            }
+        } else {
+            ResetEvent(g_stopEvent);
+        }
+        g_shuttingDown.store(false, std::memory_order_release);
+
+        // The setup worker starts in Wh_ModAfterInit so a cached provider cannot
+        // become visible before Windhawk commits the hooks scheduled above.
+        Wh_Log(L"Display Restorer initialization completed; setup worker queued");
+        return TRUE;
+    } catch (...) {
+        Wh_Log(L"Display Restorer startup failed: unhandled C++ exception in "
+               L"Wh_ModInit");
+        return FALSE;
+    }
+}
+
+void Wh_ModAfterInit(void) {
+    // Dynamic hook application is legal now. Starting here also guarantees that
+    // the provider contract cannot become visible before Windhawk has committed
+    // the hooks scheduled during Wh_ModInit.
+    try {
+        if (!g_setupThread &&
+            !g_shuttingDown.load(std::memory_order_acquire)) {
+            g_setupThread.emplace(RunSetupNoexcept);
+            Wh_Log(L"Display compatibility hooks are active; pinned provider "
+                   L"setup continues in the background");
+        }
+    } catch (...) {
+        Wh_Log(L"Display Restorer: setup worker could not be created; the "
+               L"provider will be retried the next time the mod starts");
+    }
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    try {
+        LoadLanguageSetting();
+        LoadFeatureSettings();
+        const std::wstring* dll = CurrentDllPath();
+        bool localizedResourcesRebuilt = false;
+        if (dll && !dll->empty()) {
+            {
+                std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+                if (!LocalizedResourceModuleUpToDateLocked()) {
+                    ReleaseLocalizedResourceModuleLocked();
+                    localizedResourcesRebuilt =
+                        BuildLocalizedResourceModule(*dll, StoreDir());
+                }
+            }
+            if (localizedResourcesRebuilt &&
+                !EnsureLocalizedResourceModuleLoaded()) {
+                std::lock_guard<std::mutex> lock(g_localizedResourceMutex);
+                ReleaseLocalizedResourceModuleLocked();
+                Wh_Log(L"Display localization resource remap after a settings "
+                       L"change failed; using the verified provider fallback");
+            }
+        }
+        if (reload) *reload = FALSE;
+        return TRUE;
+    } catch (...) {
+        if (reload) *reload = TRUE;
+        return TRUE;
+    }
+}
+
+
+void Wh_ModUninit(void) {
+    try {
+        // Ask the background setup (and any in-flight download) to stop, then
+        // wait for it to finish before tearing anything down. The download loop
+        // checks this flag and the WinInet timeouts bound each blocking read, so
+        // the join returns promptly instead of hanging on a stuck connection.
+        g_shuttingDown.store(true, std::memory_order_release);
+        if (g_stopEvent) {
+            SetEvent(g_stopEvent);
+        }
+        // InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile are not
+        // interruptible and only bound each individual call to
+        // kDownloadTimeoutMs (20s), across up to kMaxDownloadAttempts retries -
+        // g_shuttingDown is only checked between calls, so a stuck/captive-
+        // portal connection could otherwise stall this join for a long time.
+        // Closing the handles from here makes any currently-blocked WinInet
+        // call fail immediately instead of waiting out its timeout.
+        CancelInFlightDownload();
+        if (g_setupThread && g_setupThread->joinable()) {
+            g_setupThread->join();
+        }
+        g_setupThread.reset();
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+
+        // Do not force-unload g_hDisplayDll or g_hLocalizedResources on teardown,
+        // because live COM objects or DirectUI::XResourceProvider may still reference
+        // their vtables and resources.
+        ReleaseLocalizedResourceModule();
+        g_hDisplayDll.store(nullptr);
+        g_dllVerifiedOk.store(false);
+        // Readers take this immutable path through an atomic raw pointer. A
+        // registry hook that was already in flight when teardown began may still
+        // be copying it, so reclaiming the tiny allocation here would create a
+        // use-after-free window. Exchange it out, but intentionally retain the
+        // allocation until process exit; this mirrors the mapped-provider and
+        // fake-HKEY fail-safe lifetime policy above.
+        (void)g_dllPath.exchange(nullptr, std::memory_order_acq_rel);
+
+        if (Wh_GetIntSetting(L"keepFilesOnDisable") == 0) {
+            std::wstring dir = StoreDir();
+            if (!dir.empty()) RemoveOwnFiles(dir, false);
+            Wh_Log(L"Mod disabled: mod-owned files removed (files still mapped "
+                   L"are retried on a later unload)");
+        } else {
+            std::wstring dir = StoreDir();
+            if (!dir.empty()) RemoveOwnFiles(dir, true);
+            Wh_Log(L"Mod disabled: base files kept; private resource module and "
+                   L"stale copies removed (files still mapped are retried on a "
+                   L"later unload)");
+        }
+        g_keyTracker.ClearWithoutFreeing();
+    } catch (...) {
+    }
+}
