@@ -9,7 +9,7 @@
 // @include         control.exe
 // @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lwininet -ladvapi32 -lshlwapi -lole32 -loleaut32 -loleacc -luser32 -lshell32 -luuid -lwinpthread -lgdi32
+// @compilerOptions -lwininet -ladvapi32 -lshlwapi -lole32 -loleaut32 -loleacc -luser32 -lshell32 -luuid -lwinpthread -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -82,7 +82,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 
 ## Credits
 
-- **Cips** — testing on Windows 11 25H2
+- **Cips** — testing on Windows 11 25H2.
 
 ---
 
@@ -139,7 +139,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 // ==/WindhawkModSettings==
 #include <windows.h>
 #include <VersionHelpers.h>
-#include <commctrl.h>  // TBM_* message constants only; comctl32 stays dynamic
+#include <commctrl.h>  // TBM_* messages; SetWindowSubclass / DefSubclassProc
 #include <wininet.h>
 #include <wincrypt.h>
 #include <combaseapi.h>
@@ -206,7 +206,7 @@ static const MuiStringTable kMuiStrings[] = {
     {1, L"Display", L"Schermo", L"Pantalla", L"Affichage", L"Görüntü", L"Экран", L"显示", L"Anzeige", L"Vídeo", L"Ekran"},
     {2, L"Change your display settings and make it easier to read what's on the desktop.", L"Modifica le impostazioni di visualizzazione e rendi più leggibile il contenuto del desktop.", L"Cambie la configuración de pantalla para facilitar la lectura de los elementos en el escritorio.", L"Modifiez vos paramètres d’affichage et améliorez la lisibilité sur le Bureau.", L"Görüntü ayarlarınızı değiştirin ve masaüstünüzdekileri okumayı kolaylaştırın.", L"Изменение параметров дисплея для облегчения чтения содержимого на рабочем столе.", L"更改显示器设置，使桌面上的内容更易于阅读。", L"Ändern Sie Ihre Anzeigeeinstellungen, und verbessern Sie die Lesbarkeit auf dem Desktop.", L"Altere as configurações de vídeo e facilite a leitura dos itens na área de trabalho.", L"Zmień ustawienia ekranu i popraw czytelność pulpitu."},
     {3, L"Microsoft Display DPI Settings", L"Impostazioni DPI video Microsoft", L"Configuración de PPP de pantalla de Microsoft", L"Paramètres d’affichage haute résolution Microsoft", L"Microsoft Görüntü DPI Ayarları", L"Масштаб экрана Майкрософт", L"Microsoft 显示 DPI 设置", L"DPI-Einstellungen der Microsoft-Anzeige", L"Configurações de DPI de Vídeo da Microsoft", L"Ustawienia DPI ekranu Microsoft"},
-    {4, L"S&creen resolution", L"Risoluzione dello sc&hermo", L"Resol&ución de pantalla", L"Résol&ution d’écran", L"Ekran çöz&ünürlüğü", L"Разре&шение экрана", L"屏幕分辨率(&C)", L"&Bildschirmauflösung", L"Resolução da &tela", L"Ro&zdzielczość ekranu"},
+    {4, L"S&creen resolution", L"Risoluzione dello sc&hermo", L"Resol&ución de pantalla", L"Résol&ution d’écran", L"Ekran çöz&ünürlüğü", L"Разре&шение экрана", L"屏幕分辨率(&C)", L"&Bildschirmauflösung", L"Resolução da &tela", L"Ro&zdzielczość ekranu"},
     {8, L"This program is blocked by group policy. For more information, contact your system administrator.", L"Questo programma è bloccato da Criteri di gruppo. Per ulteriori informazioni, contattare l'amministratore di sistema.", L"La directiva de grupo bloquea a este programa. Para obtener más información, póngase en contacto con el administrador de sistema.", L"Ce programme est bloqué par une stratégie de groupe. Pour plus d’informations, contactez votre administrateur système.", L"Bu program grup ilkesi tarafından engellendi. Daha fazla bilgi için sistem yöneticinize danışın.", L"Эта программа заблокирована групповой политикой. За дополнительными сведениями обращайтесь к системному администратору.", L"此程序被组策略阻止。有关详细信息，请与系统管理员联系。", L"Dieses Programm wurde durch eine Gruppenrichtlinie blockiert. Weitere Informationen erhalten Sie vom Systemadministrator.", L"Este programa está bloqueado pela política de grupo. Para obter mais informações, contate o administrador do sistema.", L"Ten program jest blokowany przez zasady grupy. Aby uzyskać więcej informacji, skontaktuj się z administratorem systemu."},
     {9, L"Display Control Panel", L"Pannello di controllo Schermo", L"Panel de control de Pantalla", L"Panneau de configuration d’affichage", L"Görüntü Denetim Masası", L"Панель управления экраном", L"显示控制面板", L"Systemsteuerungsoption \"Bildschirm\"", L"Painel de Controle de Vídeo", L"Panel sterowania ekranu"},
     {11, L"Personalization Related Tasks Pane", L"Riquadro attività correlate alla personalizzazione", L"Panel de tareas relacionadas con la personalización", L"Volet des tâches liées à la personnalisation", L"Kişiselleştirmeyle İlgili Görevler Bölmesi", L"Панель задач, связанных с персонализацией", L"与个性化相关的任务窗格", L"Verwandte Aufgaben zur Anpassung", L"Painel de Tarefas relacionadas a Personalização", L"Okienko zadań dotyczących personalizacji"},
@@ -222,19 +222,19 @@ static const MuiStringTable kMuiStrings[] = {
     {24, L"Personalization", L"Personalizzazione", L"Personalización", L"Personnalisation", L"Kişiselleştirme", L"Персонализация", L"个性化", L"Anpassung", L"Personalização", L"Personalizacja"},
     {25, L"Devices and Printers", L"Dispositivi e stampanti", L"Dispositivos e impresoras", L"Périphériques et imprimantes", L"Aygıtlar ve Yazıcılar", L"Устройства и принтеры", L"设备和打印机", L"Geräte und Drucker", L"Dispositivos e Impressoras", L"Urządzenia i drukarki"},
     {26, L"Adjust brightness", L"Regola luminosità", L"Ajustar brillo", L"Ajuster la luminosité", L"Parlaklığı ayarla", L"Настройка яркости", L"调整亮度", L"Helligkeit anpassen", L"Ajustar brilho", L"Dopasuj jasność"},
-    {27, L"&Smaller - 100% (default)", L"Picc&olo - 100% (impostazione predefinita)", L"Más pe&queño: 100% (predeterminado)", L"P&etite - 100 % (par défaut)", L"Da&ha Küçük - %100 (varsayılan)", L"&Мелкий — 100% (по умолчанию)", L"较小(&S) - 100% (默认)", L"&Kleiner - 100 % (Standard)", L"&Menor - 100% (padrão)", L"&Mniejsze — 100% (domyślnie)"},
-    {28, L"&Medium - 125% (default)", L"&Medio - 125% (impostazione predefinita)", L"M&ediano: 125% (predeterminado)", L"&Moyenne - 125 % (par défaut)", L"&Orta - %125 (varsayılan)", L"&Средний — 125% (по умолчанию)", L"中等(&M) - 125% (默认)", L"&Mittel - 125 % (Standard)", L"Mé&dio - 125% (padrão)", L"Ś&rednie — 125% (domyślnie)"},
-    {29, L"&Larger - 150% (default)", L"&Grande - 150% (impostazione predefinita)", L"Má&s grande: 150% (predeterminado)", L"&Grande - 150 % (par défaut)", L"Daha &Büyük - %150 (varsayılan)", L"&Крупный — 150% (по умолчанию)", L"较大(&L) - 150% (默认)", L"&Größer - 150 % (Standard)", L"Mai&or - 150% (padrão)", L"&Większe — 150% (domyślnie)"},
-    {30, L"&Extra Large - 200% (default)", L"Molto grand&e - 200% (predefinito)", L"&Muy grande: 200% (predeterminado)", L"Très grand&e - 200 % (par défaut)", L"Ç&ok Büyük - %200 (varsayılan)", L"&Огромный — 200% (по умолчанию)", L"特大 - 200% (默认值)(&E)", L"&Extra groß - 200 % (Standard)", L"&Extra Grande - 200% (padrão)", L"&Bardzo duże — 200% (domyślnie)"},
+    {27, L"&Smaller - 100% (default)", L"Picc&olo - 100% (impostazione predefinita)", L"Más pe&queño: 100% (predeterminado)", L"P&etite - 100 % (par défaut)", L"Da&ha Küçük - %100 (varsayılan)", L"&Мелкий — 100% (по умолчанию)", L"较小(&S) - 100% (默认)", L"&Kleiner - 100 % (Standard)", L"&Menor - 100% (padrão)", L"&Mniejsze — 100% (domyślnie)"},
+    {28, L"&Medium - 125% (default)", L"&Medio - 125% (impostazione predefinita)", L"M&ediano: 125% (predeterminado)", L"&Moyenne - 125 % (par défaut)", L"&Orta - %125 (varsayılan)", L"&Средний — 125% (по умолчанию)", L"中等(&M) - 125% (默认)", L"&Mittel - 125 % (Standard)", L"Mé&dio - 125% (padrão)", L"Ś&rednie — 125% (domyślnie)"},
+    {29, L"&Larger - 150% (default)", L"&Grande - 150% (impostazione predefinita)", L"Má&s grande: 150% (predeterminado)", L"&Grande - 150 % (par défaut)", L"Daha &Büyük - %150 (varsayılan)", L"&Крупный — 150% (по умолчанию)", L"较大(&L) - 150% (默认)", L"&Größer - 150 % (Standard)", L"Mai&or - 150% (padrão)", L"&Większe — 150% (domyślnie)"},
+    {30, L"&Extra Large - 200% (default)", L"Molto grand&e - 200% (predefinito)", L"&Muy grande: 200% (predeterminado)", L"Très grand&e - 200 % (par défaut)", L"Ç&ok Büyük - %200 (varsayılan)", L"&Огромный — 200% (по умолчанию)", L"特大 - 200% (默认值)(&E)", L"&Extra groß - 200 % (Standard)", L"&Extra Grande - 200% (padrão)", L"&Bardzo duże — 200% (domyślnie)"},
     {31, L"Calibrate color", L"Esegui calibrazione colore", L"Calibrar color", L"Étalonner les couleurs", L"Rengi ayarla", L"Калибровка цветов", L"校准颜色", L"Farbe kalibrieren", L"Calibrar cor", L"Kalibruj kolor"},
     {32, L"Adjust ClearType text", L"Modifica testo ClearType", L"Ajustar texto ClearType", L"Ajuster le texte ClearType", L"ClearType metnini ayarla", L"Настройка текста ClearType", L"调整 ClearType 文本", L"ClearType-Text anpassen", L"Ajustar texto ClearType", L"Dopasuj tekst ClearType"},
-    {48, L"&Extra Extra Large - 250% (default)", L"&Grandissimo - 250% (predefinito)", L"&Extra Extra grande: 250% (predeterminado)", L"&Très très grand - 250 % (par défaut)", L"&Ekstra Ekstra Büyük - %250 (varsayılan)", L"&Гигантский - 250% (по умолчанию)", L"超特大 - 250% (默认值)(&E)", L"&Extra, extra groß - 250% (Standard)", L"&Extra Extra Grande - 250% (padrão)", L"&Bardzo, bardzo duże — 250% (domyślnie)"},
+    {48, L"&Extra Extra Large - 250% (default)", L"&Grandissimo - 250% (predefinito)", L"&Extra Extra grande: 250% (predeterminado)", L"&Très très grand - 250 % (par défaut)", L"&Ekstra Ekstra Büyük - %250 (varsayılan)", L"&Гигантский - 250% (по умолчанию)", L"超特大 - 250% (默认值)(&E)", L"&Extra, extra groß - 250% (Standard)", L"&Extra Extra Grande - 250% (padrão)", L"&Bardzo, bardzo duże — 250% (domyślnie)"},
     {200, L"Change DPI Setting", L"Cambiamento impostazione DPI", L"Cambiar configuración de PPP", L"Modifier le paramètre PPP", L"DPI Ayarını değiştir", L"Изменение масштабного коэффициента", L"更改 DPI 设置", L"DPI-Einstellung ändern", L"Alterar Configuração de DPI", L"Zmień ustawienie DPI"},
     {201, L"Windows Setup has not changed the requested settings.  You may not have the required Administrative privilege to install or uninstall new files or drivers.  Please contact your Administrator.", L"Le impostazioni richieste non sono state modificate. Probabilmente non si dispone dei privilegi amministrativi necessari per installare o disinstallare nuovi file o driver. Contattare l'amministratore.", L"El programa de instalación de Windows no cambió la configuración solicitada. Es posible que no tenga los privilegios administrativos necesarios para instalar o desinstalar nuevos archivos o controladores. Póngase en contacto con el  administrador.", L"Le programme d’installation de Windows n’a pas modifié les paramètres demandés. Vous ne disposez peut-être pas des privilèges requis pour installer ou désinstaller de nouveaux fichiers ou pilotes. Contactez votre administrateur.", L"Windows Kurulumu, istenen ayarları değiştirmedi. Yeni dosya ya da sürücü yüklemek ya da kaldırmak için gerekli Yönetici ayrıcalığınız olmayabilir. Lütfen Yöneticinize başvurun.", L"Программа установки Windows не изменила запрашиваемые параметры.  Вы не имеете достаточных прав администрирования для установки или удаления новых файлов или драйверов.  Обратитесь к системному администратору.", L"Windows 安装程序没有更改请求的设置。你可能没有安装或卸载新文件或驱动程序所必需的管理员权限。请与管理员联系。", L"Windows Setup hat die gewünschten Einstellungen nicht geändert. Sie besitzen möglicherweise nicht die erforderlichen Administratorenrechte, um neue Dateien oder Treiber zu installieren bzw. zu entfernen. Wenden Sie sich an den Administrator.", L"O Programa de Instalação do Windows não alterou as configurações solicitadas. Você pode não possuir o privilégio administrativo necessário para instalar ou desinstalar novos arquivos ou drivers. Entre em contato com o administrador.", L"Instalator systemu Windows nie zmienił żądanych ustawień. Być może nie masz uprawnień administracyjnych wymaganych do zainstalowania lub odinstalowania nowych plików lub sterowników. Skontaktuj się z administratorem."},
-    {202, L"&Custom - %1!d!%%", L"&Personalizzato -%1!d!%%", L"&Personalizado: %1!d!%%", L"P&ersonnalisée - %1!d!%%", L"&Özel - %%%1!d!", L"По&льзовательский — %1!d!%%", L"自定义(&C) - %1!d!%%", L"Ben&utzerdefiniert - %1!d!%%", L"&Personalizado - %1!d!%%", L"&Niestandardowy — %1!d!%%"},
+    {202, L"&Custom - %1!d!%%", L"&Personalizzato -%1!d!%%", L"&Personalizado: %1!d!%%", L"P&ersonnalisée - %1!d!%%", L"&Özel - %%%1!d!", L"По&льзовательский — %1!d!%%", L"自定义(&C) - %1!d!%%", L"Ben&utzerdefiniert - %1!d!%%", L"&Personalizado - %1!d!%%", L"&Niestandardowy — %1!d!%%"},
     {203, L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Segoe UI", L"Microsoft YaHei UI", L"Segoe UI", L"Segoe UI", L"Segoe UI"},
     {204, L"9 point %s.", L"9 punti %s.", L"%s de 9 puntos.", L"9 points %s.", L"9 nokta %s.", L"%s, 9 пт.", L"9 点 %s。", L"9-Punkt %s", L"%s de 9 pontos.", L"9-punktowa czcionka %s."},
-    {210, L"Do you want to keep these display settings?", L"Mantenere le impostazioni dello schermo correnti?", L"¿Desea conservar esta configuración de pantalla?", L"Voulez-vous conserver ces paramètres d’affichage ?", L"Bu görüntü ayarlarını korumak istiyor musunuz?", L"Вы хотите сохранить эти параметры экрана?", L"是否要保留这些显示设置?", L"Möchten Sie diese Anzeigeeinstellungen beibehalten?", L"Deseja manter essas configurações de vídeo?", L"Czy chcesz zachować te ustawienia ekranu?"},
+    {210, L"Do you want to keep these display settings?", L"Mantenere le impostazioni dello schermo correnti?", L"¿Desea conservar esta configuración de pantalla?", L"Voulez-vous conserver ces paramètres d’affichage ?", L"Bu görüntü ayarlarını korumak istiyor musunuz?", L"Вы хотите сохранить эти параметры экрана?", L"是否要保留这些显示设置?", L"Möchten Sie diese Anzeigeeinstellungen beibehalten?", L"Deseja manter essas configurações de vídeo?", L"Czy chcesz zachować te ustawienia ekranu?"},
     {211, L"Reverting to previous display settings in %d seconds.", L"Tra %d secondi verranno ripristinate le impostazioni dello schermo precedenti.", L"Se revertirá a la configuración anterior de pantalla en %d segundos.", L"Rétablissement des paramètres d’affichage précédents dans %d secondes.", L"%d saniye içinde önceki görüntü ayarlarına dönülecek.", L"Возврат к прежним параметрам экрана через %d сек.", L"%d 秒钟后转换为以前的显示设置。", L"In %d Sekunden auf vorherige Anzeigeeinstellungen zurücksetzen", L"Revertendo para configurações de vídeo anteriores em %d segundos.", L"Powrót do poprzednich ustawień ekranu w ciągu %d sekund."},
     {252, L"<unavailable>", L"<non disponibile>", L"<no disponible>", L"<non disponible>", L"<yok>", L"<недоступно>", L"<无法使用>", L"<nicht verfügbar>", L"<não disponível>", L"<niedostępne>"},
     {253, L"The display settings being saved are invalid.  Please try a different combination of display settings.", L"Le impostazioni dello schermo salvate non sono valide. Provare con una combinazione di impostazioni diversa.", L"La configuración de pantalla que se está guardando no es válida. Pruebe otra combinación para la configuración de pantalla.", L"Les paramètres d’affichage enregistrés ne sont pas valides. Essayez une autre combinaison des paramètres d’affichage.", L"Kaydedilmekte olan görüntü seçenekleri geçersiz. Farklı bir görüntü ayarı bileşimi deneyin.", L"Сохраняемые параметры дисплея недопустимы. Попробуйте задать другое сочетание параметров дисплея.", L"保存的显示设置无效。请尝试其他显示设置组合。", L"Die zu speichernden Anzeigeeinstellungen sind ungültig. Versuchen Sie es mit einer anderen Kombination von Anzeigeeinstellungen.", L"As configurações de vídeo que estão sendo salvas são inválidas.  Tente uma combinação diferente de configurações de vídeo.", L"Zapisywane ustawienia ekranu są nieprawidłowe. Spróbuj zastosować inną kombinację ustawień ekranu."},
@@ -242,11 +242,11 @@ static const MuiStringTable kMuiStrings[] = {
     {255, L"%s and %s", L"%s e %s", L"%s y %s", L"%s et %s", L"%s ve %s", L"%s и %s", L"%s 和 %s", L"%s und %s", L"%s e %s", L"%s i %s"},
     {256, L"Applications that are running may be preventing you from changing modes. Please close them and try again.", L"Le applicazioni in esecuzione potrebbero impedire di cambiare modalità. Chiuderle e riprovare.", L"Es posible que las aplicaciones que se están ejecutando le impidan cambiar de modo. Ciérrelas e inténtelo de nuevo.", L"Des applications en cours d’exécution peuvent vous empêcher de changer de modes. Fermez-les et réessayez.", L"Çalışan uygulamalar mod değiştirmenize engel oluyor olabilir. Bu uygulamaları kapatıp yeniden deneyin.", L"Возможно, выполняемые приложения препятствуют смене режима. Закройте эти приложения и попробуйте еще раз.", L"正在运行的应用程序可能会阻止你更改模式。请关闭这些应用程序，然后再试一次。", L"Anwendungen, die momentan ausgeführt werden, verhindern eventuell ein Ändern der Modi. Schließen Sie diese Anwendungen, und wiederholen Sie den Vorgang.", L"Aplicativos em execução podem estar impedindo a mudança de modo. Feche-os e tente de novo.", L"Uruchomione w tle aplikacje mogą przeszkadzać w zmianie trybów. Zamknij je i spróbuj ponownie."},
     {257, L"The display control panel is unable to change the display settings.  You may not have appropriate administrative rights to change these settings.", L"Impossibile modificare le impostazioni dello schermo. È possibile che non si disponga dei diritti di amministrazione necessari per modificare tali impostazioni.", L"El panel de control de pantalla no puede cambiar la configuración de pantalla. Puede que no disponga de los derechos administrativos adecuados para cambiar esta configuración.", L"Le panneau de configuration de l’affichage ne permet pas de modifier les paramètres d’affichage. Vous ne disposez peut-être pas des droits d’administration appropriés pour modifier ces paramètres.", L"Görüntü denetim masası görüntü ayarlarını değiştiremiyor. Bu ayarları değiştirmek için uygun yönetici haklarına sahip olmayabilirsiniz.", L"Не удалось изменить параметры дисплея в панели управления. Возможно, у вас нет прав администратора для изменения этих параметров.", L"显示控制面板无法更改显示设置。你可能没有更改这些设置的相应管理权限。", L"\"Anzeige\" aus der Systemsteuerung konnte die Anzeigeeinstellungen nicht ändern. Sie haben möglicherweise nicht die erforderlichen Rechte, um diese Einstellungen zu ändern.", L"O painel de controle de vídeo não pode alterar as configurações de vídeo.  Talvez você não tenha os direitos administrativos apropriados para alterar essas configurações.", L"Nie można zmienić ustawień ekranu za pomocą apletu Ekran w Panelu sterowania. Być może nie masz odpowiednich praw administracyjnych wymaganych do zmiany tych ustawień."},
-    {300, L"Screen Resolution", L"Risoluzione dello schermo", L"Resolución de pantalla", L"Résolution d’écran", L"Ekran Çözünürlüğü", L"Разрешение экрана", L"屏幕分辨率", L"Bildschirmauflösung", L"Resolução de Tela", L"Rozdzielczość ekranu"},
+    {300, L"Screen Resolution", L"Risoluzione dello schermo", L"Resolución de pantalla", L"Résolution d’écran", L"Ekran Çözünürlüğü", L"Разрешение экрана", L"屏幕分辨率", L"Bildschirmauflösung", L"Resolução de Tela", L"Rozdzielczość ekranu"},
     {301, L"Unknown Monitor", L"Monitor sconosciuto", L"Monitor desconocido", L"Moniteur inconnu", L"Bilinmeyen Monitör", L"Неизвестный монитор", L"未知监视器", L"Unbekannter Monitor", L"Monitor Desconhecido", L"Nieznany monitor"},
     {302, L"Multiple Monitors", L"Più monitor", L"Varios monitores", L"Moniteurs multiples", L"Birden Çok Monitör", L"Несколько мониторов", L"多个显示器", L"Mehrere Monitore", L"Vários Monitores", L"Kilka monitorów"},
-    {303, L"Some settings are managed by your system administrator. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Why can't I change some settings?</a>", L"Alcune impostazioni sono gestite dall'amministratore di sistema. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Perché non è possibile modificare alcune impostazioni</a>", L"El administrador del sistema administra algunas de las configuraciones. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">¿Por qué no puedo cambiar algunas configuraciones?</a>", L"Certains paramètres sont gérés par votre administrateur système. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Pourquoi certains paramètres ne sont-ils pas modifiables ?</a>", L"Bazı ayarlar sistem yöneticiniz tarafından yönetilir. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Neden bazı ayarları değiştiremiyorum?</a>", L"Некоторыми параметрами управляет системный администратор. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Почему я не могу изменить некоторые параметры?</a>", L"某些设置由系统管理员进行管理。\n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">为什么我无法更改某些设置?</a>", L"Einige Einstellungen werden vom Systemadministrator verwaltet. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Warum kann ich einige Einstellungen nicht ändern?</a>", L"Algumas configurações são gerenciadas pelo administrador do sistema. \n <a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Por que não posso alterar algumas configurações?</a>", L"Niektóre ustawienia są zarządzane przez administratora systemu. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Dlaczego nie mogę zmienić niektórych ustawień?</a>"},
-    {304, L"Some settings are managed by your system administrator. Why can't I change some settings?", L"Alcune impostazioni sono gestite dall'amministratore del sistema. Ragioni che impediscono la modifica di alcune impostazioni", L"El administrador del sistema administra algunas de las configuraciones. ¿Por qué no puedo cambiar algunas configuraciones?", L"Certains paramètres sont gérés par votre administrateur système. Pourquoi est-il impossible de changer certains paramètres ?", L"Bazı ayarlar sistem yöneticiniz tarafından yönetilir. Neden bazı ayarları değiştiremiyorum?", L"Некоторыми параметрами управляет системный администратор. Почему я не могу изменить некоторые параметры?", L"某些设置由系统管理员进行管理。为什么我无法更改某些设置?", L"Einige Einstellungen werden vom Systemadministrator verwaltet. Warum kann ich einige Einstellungen nicht ändern?", L"Algumas configurações são gerenciadas pelo administrador do sistema. Por que não posso alterar algumas configurações?", L"Niektórymi ustawieniami zarządza administrator systemu. Dlaczego nie mogę zmienić niektórych ustawień?"},
+    {303, L"Some settings are managed by your system administrator. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Why can't I change some settings?</a>", L"Alcune impostazioni sono gestite dall'amministratore di sistema. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Perché non è possibile modificare alcune impostazioni</a>", L"El administrador del sistema administra algunas de las configuraciones. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">¿Por qué no puedo cambiar algunas configuraciones?</a>", L"Certains paramètres sont gérés par votre administrateur système. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Pourquoi certains paramètres ne sont-ils pas modifiables ?</a>", L"Bazı ayarlar sistem yöneticiniz tarafından yönetilir. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Neden bazı ayarları değiştiremiyorum?</a>", L"Некоторыми параметрами управляет системный администратор. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Почему я не могу изменить некоторые параметры?</a>", L"某些设置由系统管理员进行管理。\n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">为什么我无法更改某些设置?</a>", L"Einige Einstellungen werden vom Systemadministrator verwaltet. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Warum kann ich einige Einstellungen nicht ändern?</a>", L"Algumas configurações são gerenciadas pelo administrador do sistema. \n <a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Por que não posso alterar algumas configurações?</a>", L"Niektóre ustawienia są zarządzane przez administratora systemu. \n<a href=\"mshelp://windows/?id=ca607790-adf6-41a7-abd8-0a1f2feb70b1\">Dlaczego nie mogę zmienić niektórych ustawień?</a>"},
+    {304, L"Some settings are managed by your system administrator. Why can't I change some settings?", L"Alcune impostazioni sono gestite dall'amministratore del sistema. Ragioni che impediscono la modifica di alcune impostazioni", L"El administrador del sistema administra algunas de las configuraciones. ¿Por qué no puedo cambiar algunas configuraciones?", L"Certains paramètres sont gérés par votre administrateur système. Pourquoi est-il impossible de changer certains paramètres ?", L"Bazı ayarlar sistem yöneticiniz tarafından yönetilir. Neden bazı ayarları değiştiremiyorum?", L"Некоторыми параметрами управляет системный администратор. Почему я не могу изменить некоторые параметры?", L"某些设置由系统管理员进行管理。为什么我无法更改某些设置?", L"Einige Einstellungen werden vom Systemadministrator verwaltet. Warum kann ich einige Einstellungen nicht ändern?", L"Algumas configurações são gerenciadas pelo administrador do sistema. Por que não posso alterar algumas configurações?", L"Niektórymi ustawieniami zarządza administrator systemu. Dlaczego nie mogę zmienić niektórych ustawień?"},
     {305, L"The display settings can't be changed from a remote session.", L"Impossibile modificare le impostazioni di visualizzazione da una sessione remota.", L"No se puede cambiar la configuración de pantalla desde una sesión remota.", L"Les paramètres d’affichage ne sont pas modifiables depuis une session distante.", L"Görüntü ayarları uzak oturumdan değiştirilemez.", L"Параметры дисплея невозможно изменить во время удаленного сеанса.", L"无法从远程会话更改显示设置。", L"Die Anzeigeeinstellungen können nicht über eine Remotesitzung geändert werden.", L"As configurações de vídeo não podem ser alteradas de uma sessão remota.", L"Ustawień ekranu nie można zmienić z sesji zdalnej."},
     {306, L"Another display\nnot detected", L"Altro schermo\nnon rilevato", L"No se detectó\notra pantalla", L"Autre affichage\nnon détecté", L"Başka ekran\nalgılanmadı", L"Другой дисплей\nне обнаружен", L"未检测到\n其他显示器", L"Andere Anzeige\nnicht erkannt.", L"Outro vídeo\nnão detectado", L"Nie wykryto\ninnego ekranu"},
     {307, L"Landscape", L"Orizzontale", L"Horizontal", L"Paysage", L"Yatay", L"Альбомная", L"横向", L"Querformat", L"Paisagem", L"Pozioma"},
@@ -266,12 +266,12 @@ static const MuiStringTable kMuiStrings[] = {
     {321, L"Disconnect this display", L"Disconnetti lo schermo", L"Desconectar esta pantalla", L"Déconnecter cet affichage", L"Bu ekranın bağlantısını kes", L"Отключить этот монитор", L"断开此显示器的连接", L"Diesen Bildschirm trennen", L"Desconectar este vídeo", L"Odłącz ten wyświetlacz"},
     {322, L"Disconnected", L"Disconnesso", L"Desconectado", L"Déconnecté", L"Bağlantı kesildi", L"Отключено", L"已断开", L"Getrennt", L"Desconectado", L"Odłączono"},
     {323, L"Show desktop only on %d", L"Mostra desktop solo per %d", L"Mostrar escritorio solo en %d", L"Afficher le Bureau uniquement sur %d", L"Masaüstünü yalnızca %d üzerinde göster", L"Отобразить рабочий стол только на %d", L"只在 %d 上显示桌面", L"Desktop nur auf %d anzeigen", L"Mostrar área de trabalho somente em %d", L"Pokazuj pulpit tylko na %d"},
-    {324, L"Try to connect anyway on: %s", L"Tenta la connessione per %s comunque", L"Intentar conectarse de todos modos en: %s", L"Essayez de vous connecter quand même sur : %s", L"Her durumda bağlanmayı dene: %s", L"Попытаться в любом случае подключиться к: %s", L"仍然尝试在以下对象上进行连接: %s", L"Dennoch versuchen, auf %s eine Verbindung herzustellen", L"Tentar conectar de qualquer maneira em: %s", L"Mimo to spróbuj podłączyć na: %s"},
+    {324, L"Try to connect anyway on: %s", L"Tenta la connessione per %s comunque", L"Intentar conectarse de todos modos en: %s", L"Essayez de vous connecter quand même sur : %s", L"Her durumda bağlanmayı dene: %s", L"Попытаться в любом случае подключиться к: %s", L"仍然尝试在以下对象上进行连接: %s", L"Dennoch versuchen, auf %s eine Verbindung herzustellen", L"Tentar conectar de qualquer maneira em: %s", L"Mimo to spróbuj podłączyć na: %s"},
     {325, L"Multiple displays", L"Più schermi", L"Varias pantallas", L"Plusieurs affichages", L"Birden çok ekran", L"Несколько экранов", L"多显示器", L"Mehrere Anzeigen", L"Múltiplos vídeos", L"Wiele ekranów"},
     {326, L"Extend these displays", L"Estendi questi schermi", L"Extender estas pantallas", L"Étendre ces affichages", L"Bu ekranları genişlet", L"Расширить эти экраны", L"扩展这些显示", L"Diese Anzeigen erweitern", L"Estender estes vídeos", L"Rozszerz te ekrany"},
     {327, L"Remove this display", L"Rimuovi questo schermo", L"Quitar esta pantalla", L"Supprimer cet affichage", L"Bu ekranı kaldır", L"Удалить этот монитор", L"删除此显示", L"Diesen Bildschirm entfernen", L"Remover este vídeo", L"Usuń ten wyświetlacz"},
-    {330, L"Available display output on: %1", L"Output schermo disponibile per: %1", L"Salida de pantalla disponible en: %1", L"Sortie d’affichage disponible sur : %1", L"Kullanılabilir çıktı kaynağı: %1", L"Доступен выход экрана на: %1", L"以下对象上的可用显示输出: %1", L"Verfügbare Anzeigeausgabe auf: %1", L"Saída de vídeo disponível em: %1", L"Dostępne wyjście ekranowe na: %1"},
-    {331, L"Available display output on: default adapter", L"Output schermo disponibile per: scheda predefinita", L"Salida de pantalla disponible en: adaptador predeterminado", L"Sortie d’affichage disponible sur : carte par défaut", L"Kullanılabilir çıktı kaynağı: varsayılan bağdaştırıcı", L"Доступен выход экрана на: адаптер по умолчанию", L"以下对象上的可用显示输出: 默认适配器", L"Verfügbare Anzeigeausgabe auf: Standardadapter", L"Saída de vídeo disponível em: adaptador padrão", L"Dostępne wyjście ekranowe na: adapter domyślny"},
+    {330, L"Available display output on: %1", L"Output schermo disponibile per: %1", L"Salida de pantalla disponible en: %1", L"Sortie d’affichage disponible sur : %1", L"Kullanılabilir çıktı kaynağı: %1", L"Доступен выход экрана на: %1", L"以下对象上的可用显示输出: %1", L"Verfügbare Anzeigeausgabe auf: %1", L"Saída de vídeo disponível em: %1", L"Dostępne wyjście ekranowe na: %1"},
+    {331, L"Available display output on: default adapter", L"Output schermo disponibile per: scheda predefinita", L"Salida de pantalla disponible en: adaptador predeterminado", L"Sortie d’affichage disponible sur : carte par défaut", L"Kullanılabilir çıktı kaynağı: varsayılan bağdaştırıcı", L"Доступен выход экрана на: адаптер по умолчанию", L"以下对象上的可用显示输出: 默认适配器", L"Verfügbare Anzeigeausgabe auf: Standardadapter", L"Saída de vídeo disponível em: adaptador padrão", L"Dostępne wyjście ekranowe na: adapter domyślny"},
     {337, L"%1. Display device on: %2", L"%1. Dispositivo di visualizzazione per %2", L"%1. Mostrar dispositivo en: %2", L"%1. Périphérique d’affichage sur %2", L"%1. Görüntü aygıtının yeri: %2", L"%1. Устройство отображения на: %2", L"%1. 在 %2 上显示设备", L"%1. Anzeigegerät auf: %2", L"%1. Dispositivo de vídeo em: %2", L"%1. Urządzenie wyświetlające na: %2"},
     {338, L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2", L"%1. %2"},
     {339, L"Other", L"Altro", L"Otros", L"Autre", L"Diğer", L"Другие", L"其他", L"Anderer", L"Outros", L"Inne"},
@@ -311,7 +311,7 @@ static const MuiStringTable kMuiStrings[] = {
     {375, L"Resolution Slider Pane", L"Riquadro dispositivo di scorrimento risoluzione", L"Panel del control deslizante de resolución", L"Volet Curseur de résolution", L"Çözünürlük Kaydırıcısı Bölmesi", L"Панель ползунка управления разрешением", L"分辨率滑块窗格", L"Bereich des Schiebereglers für die Auflösung", L"Painel do Controle Deslizante de Resolução", L"Okienko suwaka rozdzielczości"},
     {376, L"%1!d! by %2!d!", L"%1!d! per %2!d!", L"%1!d! por %2!d!", L"%1!d! par %2!d!", L"%1!d! / %2!d!", L"%1!d! на %2!d!", L"%1!d! x %2!d!", L"%1!d! mal %2!d!", L"%1!d! por %2!d!", L"%1!d! na %2!d!"},
     {377, L"%1!d! by %2!d! (Recommended)", L"%1!d! per %2!d! (scelta consigliata)", L"%1!d! por %2!d! (recomendada)", L"%1!d! par %2!d! (recommandé)", L"%1!d! x %2!d! (Önerilen)", L"%1!d! на %2!d! (рекомендуется)", L"%1!d! × %2!d! (推荐)", L"%1!d! mal %2!d! (empfohlen)", L"%1!d! por %2!d! (Recomendado)", L"%1!d! na %2!d! (zalecana)"},
-    {378, L"You must restart to apply these changes. Do you want to continue?", L"Per rendere effettive le modifiche è necessario riavviare il computer. Continuare?", L"Debe reiniciar el equipo para aplicar los cambios. ¿Desea continuar?", L"Vous devez redémarrer pour appliquer ces modifications. Voulez-vous continuer ?", L"Değişiklikleri uygulamak için yeniden başlatmalısınız. Devam etmek istiyor musunuz?", L"Чтобы изменения вступили в силу, необходимо перезагрузить компьютер. Вы хотите продолжить?", L"必须重新启动才能应用这些更改。你想继续吗?", L"Sie müssen einen Neustart vornehmen, damit diese Änderungen wirksam werden. Soll der Vorgang fortgesetzt werden?", L"Você deve reiniciar o computador para aplicar estas alterações. Deseja continuar?", L"Musisz ponownie uruchomić komputer, aby zastosować te zmiany. Czy chcesz kontynuować?"},
+    {378, L"You must restart to apply these changes. Do you want to continue?", L"Per rendere effettive le modifiche è necessario riavviare il computer. Continuare?", L"Debe reiniciar el equipo para aplicar los cambios. ¿Desea continuar?", L"Vous devez redémarrer pour appliquer ces modifications. Voulez-vous continuer ?", L"Değişiklikleri uygulamak için yeniden başlatmalısınız. Devam etmek istiyor musunuz?", L"Чтобы изменения вступили в силу, необходимо перезагрузить компьютер. Вы хотите продолжить?", L"必须重新启动才能应用这些更改。你想继续吗?", L"Sie müssen einen Neustart vornehmen, damit diese Änderungen wirksam werden. Soll der Vorgang fortgesetzt werden?", L"Você deve reiniciar o computador para aplicar estas alterações. Deseja continuar?", L"Musisz ponownie uruchomić komputer, aby zastosować te zmiany. Czy chcesz kontynuować?"},
     {379, L"%1!d!, %2!d!", L"%1!d!,%2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!", L"%1!d!,%2!d!", L"%1!d!、%2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!", L"%1!d!, %2!d!"},
     {380, L"Your resolution is lower than %d x %d. Some items might not fit and apps might not open.", L"Se la risoluzione è inferiore a %d x %d, potrebbe non essere disponibile spazio sufficiente per alcuni elementi e le app potrebbero non aprirsi.", L"Su resolución es inferior a %d x %d. Es posible que algunos elementos no quepan y que no se abran las aplicaciones.", L"Votre résolution est inférieure à %d x %d. Il est possible que certains éléments ne tiennent pas sur l’écran et que des applications ne s’ouvrent pas.", L"Çözünürlüğünüz %d x %d değerinden düşük. Bazı öğeler ekrana sığmayabilir ve uygulamalar açılmayabilir.", L"Установлено разрешение ниже %d x %d. Некоторые элементы могут не поместиться на экран, а приложения — не открыться.", L"你的分辨率低于 %d x %d。某些项目可能无法正常显示，某些应用可能无法打开。", L"Die Auflösung ist niedriger als %d x %d. Einige Elemente sind möglicherweise zu groß, und Apps werden möglicherweise nicht geöffnet.", L"Sua resolução está abaixo de %d x %d. Alguns itens podem não se ajustar e os aplicativos podem não abrir.", L"Jeśli rozdzielczość jest mniejsza niż %d x %d, niektóre elementy mogą się nie mieścić na ekranie, a aplikacje mogą się nie otwierać."},
     {381, L"Your resolution is lower than %d x %d. Some items might not fit on your screen.", L"La risoluzione dello schermo corrente è inferiore a %d x %d. È possibile che alcuni elementi non vengano visualizzati.", L"Su resolución es inferior a %d x %d. Es posible que algunos elementos no quepan en la pantalla.", L"Votre résolution est inférieure à %d x %d. Il est possible que certains éléments ne tiennent pas sur l’écran.", L"Çözünürlüğünüz %d x %d değerinden düşük. Bazı öğeler ekranınıza sığmayabilir.", L"Установлено разрешение ниже %d x %d. Некоторые элементы могут не поместиться на экране.", L"你的分辨率低于 %d x %d。某些项目可能无法在屏幕上显示。", L"Die Auflösung ist niedriger als %d x %d. Einige Elemente sind möglicherweise zu groß, und können nicht auf dem Bildschirm angezeigt werden.", L"Sua resolução está abaixo de %d x %d. Alguns itens podem não se ajustar à tela.", L"Jeśli rozdzielczość jest mniejsza niż %d x %d, niektóre elementy mogą się nie mieścić na ekranie."},
@@ -349,9 +349,9 @@ static const MuiStringTable kMuiStrings[] = {
     {504, L"click", L"clic", L"haga clic en", L"clic", L"tıklatın", L"щелкните", L"单击", L"klicken", L"clicar", L"kliknij"},
     {505, L"&Identify", L"Identi&fica", L"&Identificar", L"&Identifier", L"&Tanımla", L"Опр&еделить", L"识别(&I)", L"&Identifizieren", L"&Identificar", L"&Identyfikuj"},
     {506, L"Monitor layout", L"Layout del monitor", L"Diseño del monitor", L"Disposition du moniteur", L"Monitör düzeni", L"Расположение мониторов", L"监视器布局", L"Monitorlayout", L"Layout do monitor", L"Układ monitorów"},
-    {507, L"Di&splay:", L"&Schermo:", L"&Pantalla:", L"A&ffichage :", L"&Ekran:", L"Д&исплей:", L"显示器(&S):", L"An&zeige:", L"&Vídeo:", L"&Ekran:"},
+    {507, L"Di&splay:", L"&Schermo:", L"&Pantalla:", L"A&ffichage :", L"&Ekran:", L"Д&исплей:", L"显示器(&S):", L"An&zeige:", L"&Vídeo:", L"&Ekran:"},
     {508, L"Display", L"Schermo", L"Pantalla", L"Affichage", L"Ekran", L"Дисплей", L"显示器", L"Anzeige", L"Vídeo", L"Ekran"},
-    {509, L"&Resolution:", L"&Risoluzione:", L"&Resolución:", L"&Résolution :", L"Çö&zünürlük:", L"&Разрешение:", L"分辨率(&R):", L"Auf&lösung:", L"&Resolução:", L"&Rozdzielczość:"},
+    {509, L"&Resolution:", L"&Risoluzione:", L"&Resolución:", L"&Résolution :", L"Çö&zünürlük:", L"&Разрешение:", L"分辨率(&R):", L"Auf&lösung:", L"&Resolução:", L"&Rozdzielczość:"},
     {510, L"Resolution", L"Risoluzione", L"Resolución", L"Résolution", L"Çözünürlük", L"Разрешение", L"分辨率", L"Auflösung", L"Resolução", L"Rozdzielczość"},
     {511, L"Choose resolution.", L"Scegliere la risoluzione.", L"Elegir resolución.", L"Choisissez une résolution.", L"Çözünürlüğü seçin.", L"Выберите разрешение.", L"选择分辨率。", L"Wählen Sie eine Auflösung aus.", L"Escolha a resolução.", L"Wybierz rozdzielczość."},
     {512, L"Click", L"Clic", L"Hacer clic en", L"Clic", L"Tıklatın", L"Щелчок", L"单击", L"Klicken", L"Clique", L"Kliknij"},
@@ -359,9 +359,9 @@ static const MuiStringTable kMuiStrings[] = {
     {514, L"Open", L"Apri", L"Abrir", L"Ouvrir", L"Aç", L"Открыть", L"打开", L"Öffnen", L"Abrir", L"Otwórz"},
     {515, L"More options", L"Altre opzioni", L"Más opciones", L"Plus d’options", L"Diğer seçenekler", L"Дополнительно", L"更多选项", L"Weitere Optionen", L"Mais opções", L"Więcej opcji"},
     {516, L"Click", L"Clic", L"Hacer clic en", L"Clic", L"Tıklatın", L"Щелчок", L"单击", L"Klicken", L"Clique", L"Kliknij"},
-    {518, L"&Orientation:", L"&Orientamento:", L"&Orientación:", L"&Orientation :", L"&Yön:", L"&Ориентация:", L"方向(&O):", L"A&usrichtung:", L"&Orientação:", L"&Orientacja:"},
+    {518, L"&Orientation:", L"&Orientamento:", L"&Orientación:", L"&Orientation :", L"&Yön:", L"&Ориентация:", L"方向(&O):", L"A&usrichtung:", L"&Orientação:", L"&Orientacja:"},
     {519, L"Orientation", L"Orientamento", L"Orientación", L"Orientation", L"Yön", L"Ориентация", L"方向", L"Ausrichtung", L"Orientação", L"Orientacja"},
-    {520, L"&Multiple displays:", L"Più scher&mi:", L"&Varias pantallas:", L"Affichages &multiples :", L"&Birden çok ekran:", L"Несколько д&исплеев:", L"多显示器(&M):", L"&Mehrere Anzeigen:", L"&Múltiplos vídeos:", L"Wiele e&kranów:"},
+    {520, L"&Multiple displays:", L"Più scher&mi:", L"&Varias pantallas:", L"Affichages &multiples :", L"&Birden çok ekran:", L"Несколько д&исплеев:", L"多显示器(&M):", L"&Mehrere Anzeigen:", L"&Múltiplos vídeos:", L"Wiele e&kranów:"},
     {521, L"Multiple displays", L"Più schermi", L"Varias pantallas", L"Plusieurs affichages", L"Birden çok ekran", L"Несколько дисплеев", L"多显示器", L"Mehrere Anzeigen", L"Múltiplos vídeos", L"Wiele ekranów"},
     {522, L"You must select Apply before making additional changes.", L"Prima di eseguire ulteriori modifiche, è necessario scegliere Applica.", L"Debe seleccionar Aplicar antes de realizar más cambios.", L"Vous devez sélectionner Appliquer avant d’effectuer d’autres modifications.", L"Başka değişiklikler yapmadan önce Uygula'yı seçmelisiniz.", L"Перед внесением дополнительных изменений нажмите \"Применить\".", L"你必须在进行其他更改之前选择“应用”。", L"Sie müssen auf \"Übernehmen\" klicken, bevor Sie weitere Änderungen vornehmen.", L"Selecione Aplicar antes de fazer mais alterações.", L"Przed wprowadzeniem dodatkowych zmian musisz wybrać opcję Zastosuj."},
     {523, L"If you try to connect, other display changes you have made won't be saved.", L"Se si tenta di connettersi, le altre modifiche apportate alla visualizzazione non verranno salvate.", L"Si intenta conectarse, no se guardarán los otros cambios de pantalla que haya realizado.", L"Si vous essayez de vous connecter, les autres modifications d’affichage que vous avez effectuées ne seront pas enregistrées.", L"Bağlanmayı denerseniz, yaptığınız diğer ekran değişiklikleri kaydedilmez.", L"При попытке подключения другие изменения, которые вы внесли в параметры дисплея, сохранены не будут.", L"如果你尝试连接，则不会保存你已进行的其他显示器更改。", L"Wenn Sie versuchen, eine Verbindung herzustellen, werden weitere Änderungen an den Anzeigeeinstellungen nicht gespeichert.", L"Se você tentar conectar, outras alterações de vídeo feitas não serão salvas.", L"Jeśli próbujesz się połączyć, inne wprowadzone zmiany dotyczące ekranu nie zostaną zapisane."},
@@ -370,14 +370,14 @@ static const MuiStringTable kMuiStrings[] = {
     {526, L"Ma&ke this my main display", L"&Imposta come schermo principale", L"&Convertir esta pantalla en la principal", L"F&aire de cet affichage l’affichage principal", L"Bu&nu, ana ekranım yap", L"Сде&лать основным дисплеем", L"使它成为我的主显示器(&K)", L"Diese Anzeige als Hauptanzeige &verwenden", L"&Tornar este meu vídeo principal", L"&Ustaw ten wyświetlacz jako główny"},
     {527, L"A&llow the screen to auto-rotate", L"C&onsenti rotazione automatica dello schermo", L"Permitir el &giro automático de la pantalla", L"Autoriser &la rotation automatique de l’écran", L"Ekranın &otomatik döndürülmesine izin ver", L"Р&азрешить автоматический поворот экрана", L"允许屏幕自动旋转(&L)", L"&Automatisches Drehen des Bildschirms zulassen", L"&Permitir à tela girar automaticamente", L"Zezw&alaj na automatyczne obracanie ekranu"},
     {528, L"Auto-rotation is not supported for multiple displays.", L"Rotazione automatica non supportata per più schermi.", L"El giro automático no es compatible con el uso de varias pantallas.", L"La rotation automatique n’est pas prise en charge pour plusieurs affichages.", L"Birden fazla ekran için otomatik döndürme desteklenmiyor.", L"Автоматический поворот не поддерживается при использовании нескольких дисплеев.", L"多显示器不支持自动旋转。", L"Die automatische Drehung wird bei Verwendung mehrerer Anzeigen nicht unterstützt.", L"Não há suporte ao giro automático para múltiplos vídeos.", L"Funkcja automatycznego obracania nie jest obsługiwana dla wielu ekranów."},
-    {529, L"Enable Stereoscopic 3D settings for all supported displays", L"Abilita le impostazioni della modalità 3D stereoscopico per tutti gli schermi supportati", L"Permitir la configuración de 3D estereoscópico para todas las pantallas compatibles", L"Activer les paramètres 3D stéréoscopiques pour tous les affichages pris en charge", L"Desteklenen tüm ekranlar için Stereoskopik 3B ayarlarını etkinleştir", L"Включить параметры трехмерного стереоскопического режима для всех поддерживаемых дисплеев", L"为所有支持的显示器启用 3D 设置", L"Einstellungen für stereoskopisches 3D für alle unterstützten Anzeigen aktivieren", L"Habilitar configurações 3D Estereoscópicas para todos os monitores com suporte", L"Włącz ustawienia stereoskopowe 3W dla wszystkich obsługiwanych ekranów"},
+    {529, L"Enable Stereoscopic 3D settings for all supported displays", L"Abilita le impostazioni della modalità 3D stereoscopico per tutti gli schermi supportati", L"Permitir la configuración de 3D estereoscópico para todas las pantallas compatibles", L"Activer les paramètres 3D stéréoscopiques pour tous les affichages pris en charge", L"Desteklenen tüm ekranlar için Stereoskopik 3B ayarlarını etkinleştir", L"Включить параметры трехмерного стереоскопического режима для всех поддерживаемых дисплеев", L"为所有支持的显示器启用 3D 设置", L"Einstellungen für stereoskopisches 3D für alle unterstützten Anzeigen aktivieren", L"Habilitar configurações 3D Estereoscópicas para todos os monitores com suporte", L"Włącz ustawienia stereoskopowe 3W dla wszystkich obsługiwanych ekranów"},
     {530, L"You need to change the resolution on one or more of your displays to view Stereoscopic 3D video.", L"Per visualizzare video con la modalità 3D stereoscopico, è necessario cambiare la risoluzione di uno o più schermi.", L"Debe cambiar la resolución de una o varias de las pantallas para ver vídeo 3D estereoscópico.", L"Vous devez modifier la résolution d’un ou de plusieurs de vos affichages pour afficher une vidéo 3D stéréoscopique.", L"Stereoskopik 3B video izlemek için ekranlarınızdan birinin veya birden fazlasının çözünürlüğünü değiştirmeniz gerekiyor.", L"Для просмотра трехмерного стереоскопического видео необходимо изменить разрешение на одном или нескольких дисплеях.", L"你需要更改一个或多个显示器的分辨率才能观看 3D 视频。", L"Zum Anzeigen von stereoskopischem 3D-Video muss die Auflösung mindestens einer Anzeige geändert werden.", L"É necessário alterar a resolução de um ou mais monitores para exibir vídeo 3D Estereoscópico.", L"Aby wyświetlać obraz wideo w trybie stereoskopowym 3W, należy zmienić rozdzielczość co najmniej jednego ekranu."},
     {531, L"Project to a second screen", L"Proietta su un altro schermo", L"Proyectar en una segunda pantalla", L"Projeter sur un deuxième écran", L"İkinci ekrana yansıt", L"Вывод изображения на второй экран", L"投影到第二屏幕", L"An ein zweites Anzeigegerät weiterleiten", L"Projetar em uma segunda tela", L"Użyj drugiego ekranu"},
     {532, L" (or press the Windows logo key", L" (o premere il tasto logo Windows", L" (o presione la tecla del logotipo de Windows", L" (ou appuyez sur la touche du logo Windows", L" (veya Windows logosu tuşuna", L" (или нажмите клавишу с логотипом Windows", L" (或按下 Windows 徽标键", L" (oder drücken Sie die Windows-Logo-Taste", L" (ou pressione a tecla do logotipo do Windows", L" (lub naciśnij klawisz logo systemu Windows"},
     {533, L"Windows logo key", L"Tasto logo Windows", L"Tecla del logotipo de Windows", L"Touche du logo Windows", L"Windows logosu tuşu", L"Клавиша с логотипом Windows", L"Windows 徽标键", L"Windows-Logo-Taste", L"Tecla do logotipo do Windows", L"Klawisz logo systemu Windows"},
-    {534, L"+ P)", L"+ P)", L"+ P)", L"+ P)", L"ve P'ye basın)", L"и P)", L"+ P)", L"+ P)", L"+ P)", L"+ P)"},
+    {534, L"+ P)", L"+ P)", L"+ P)", L"+ P)", L"ve P'ye basın)", L"и P)", L"+ P)", L"+ P)", L"+ P)", L"+ P)"},
     {535, L"Make text and other items larger or smaller", L"Ingrandisci o riduci dimensioni di testo e altri elementi", L"Aumentar o reducir el tamaño del texto y de otros elementos", L"Rendre le texte et d’autres éléments plus petits ou plus grands", L"Metni ve diğer öğeleri daha büyük veya daha küçük yapın", L"Изменение размеров текста и других элементов", L"放大或缩小文本和其他项目", L"Text und weitere Elemente vergrößern oder verkleinern", L"Ampliar ou reduzir texto e outros itens", L"Zmień wielkość tekstu i innych elementów"},
-    {536, L"What display settings should I choose?", L"Quali impostazioni dello schermo è consigliabile scegliere?", L"¿Qué configuración de pantalla debo elegir?", L"Quels paramètres d’affichage choisir ?", L"Hangi ekran ayarlarını seçmeliyim?", L"Какие параметры монитора следует выбрать?", L"我应该选择什么显示器设置?", L"Welche Anzeigeeinstellungen soll ich auswählen?", L"Quais configurações de vídeo devo escolher?", L"Które ustawienia ekranu należy wybrać?"},
+    {536, L"What display settings should I choose?", L"Quali impostazioni dello schermo è consigliabile scegliere?", L"¿Qué configuración de pantalla debo elegir?", L"Quels paramètres d’affichage choisir ?", L"Hangi ekran ayarlarını seçmeliyim?", L"Какие параметры монитора следует выбрать?", L"我应该选择什么显示器设置?", L"Welche Anzeigeeinstellungen soll ich auswählen?", L"Quais configurações de vídeo devo escolher?", L"Które ustawienia ekranu należy wybrać?"},
     {537, L"OK", L"OK", L"Aceptar", L"OK", L"Tamam", L"ОК", L"确定", L"OK", L"OK", L"OK"},
     {538, L"Cancel", L"Annulla", L"Cancelar", L"Annuler", L"İptal", L"Отмена", L"取消", L"Abbrechen", L"Cancelar", L"Anuluj"},
     {539, L"&Apply", L"&Applica", L"Apli&car", L"&Appliquer", L"&Uygula", L"&Применить", L"应用(&A)", L"Ü&bernehmen", L"Ap&licar", L"&Zastosuj"},
@@ -397,9 +397,9 @@ static const MuiStringTable kMuiStrings[] = {
     {553, L"&Apply", L"&Applica", L"&Aplicar", L"&Appliquer", L"&Uygula", L"П&рименить", L"应用(&A)", L"Ü&bernehmen", L"&Aplicar", L"&Zastosuj"},
     {554, L"click", L"clic", L"haga clic en", L"clic", L"tıklatın", L"щелкните", L"单击", L"klicken", L"clicar", L"kliknij"},
     {557, L"ManageDpi", L"ManageDpi", L"Administrar PPP", L"GérerPPP", L"ManageDpi", L"Управление DPI", L"ManageDpi", L"DPI verwalten", L"ManageDpi", L"ManageDpi"},
-    {558, L"&Extra Large - 200%", L"Molto grand&e - 200%", L"&Muy grande - 200%", L"Très grand&e - 200 %", L"Ç&ok Büyük - %200", L"&Огромный — 200%", L"特大 - 200%(&E)", L"&Extra groß - 200 %", L"&Extra Grande - 200%", L"&Bardzo duże — 200%"},
+    {558, L"&Extra Large - 200%", L"Molto grand&e - 200%", L"&Muy grande - 200%", L"Très grand&e - 200 %", L"Ç&ok Büyük - %200", L"&Огромный — 200%", L"特大 - 200%(&E)", L"&Extra groß - 200 %", L"&Extra Grande - 200%", L"&Bardzo duże — 200%"},
     {561, L"Adjust the DPI Scaling of your displays.", L"Regola il ridimensionamento DPI per gli schermi.", L"Defina el ajuste de PPP de sus pantallas.", L"Ajuster la mise à l’échelle PPP de vos affichages.", L"Ekranlarınız için DPI Ölçekleme'yi ayarlayın.", L"Настройка масштабирования для экранов.", L"调整显示器的 DPI 缩放。", L"Passen Sie die DPI-Skalierung Ihrer Anzeigen an.", L"Ajustar DPI de seus monitores.", L"Dostosuj wartość skalowania DPI ekranów."},
-    {576, L"&Extra Extra Large - 250%", L"&Grandissimo - 250%", L"&Extra Extra grande: 250%", L"&Très très grand - 250 %", L"&Ekstra Ekstra Büyük - %250", L"&Гигантский - 250%", L"超特大 - 250%(&E)", L"&Extra, extra groß - 250%", L"&Extra Extra Grande - 250%", L"&Bardzo, bardzo duże — 250%"},
+    {576, L"&Extra Extra Large - 250%", L"&Grandissimo - 250%", L"&Extra Extra grande: 250%", L"&Très très grand - 250 %", L"&Ekstra Ekstra Büyük - %250", L"&Гигантский - 250%", L"超特大 - 250%(&E)", L"&Extra, extra groß - 250%", L"&Extra Extra Grande - 250%", L"&Bardzo, bardzo duże — 250%"},
     {}
 };
 
@@ -470,7 +470,7 @@ static const MuiStringTable kProviderCompatibilityStrings[] = {
      L"Um eine nicht aufgeführte Größe zu verwenden, klicken Sie auf Benutzerdefinierte Textgröße festlegen (DPI).",
      L"Para usar um tamanho que não está na lista, clique em Definir tamanho de texto personalizado (DPI).",
      L"Aby użyć rozmiaru spoza listy, kliknij Ustaw niestandardowy rozmiar tekstu (DPI)."},
-    {602, L"&Extra Large - 200%", L"Molto grand&e - 200%", L"&Muy grande - 200%", L"Très grand&e - 200 %", L"Ç&ok Büyük - %200", L"&Огромный — 200%", L"特大 - 200%(&E)", L"&Extra groß - 200 %", L"&Extra Grande - 200%", L"&Bardzo duże — 200%"},
+    {602, L"&Extra Large - 200%", L"Molto grand&e - 200%", L"&Muy grande - 200%", L"Très grand&e - 200 %", L"Ç&ok Büyük - %200", L"&Огромный — 200%", L"特大 - 200%(&E)", L"&Extra groß - 200 %", L"&Extra Grande - 200%", L"&Bardzo duże — 200%"},
     {621, L"High", L"Alta", L"Alta", L"Haute", L"Y\u00fcksek", L"\u0412\u044b\u0441\u043e\u043a\u0430\u044f", L"\u9ad8", L"Hoch", L"Alta", L"Wysoka"},
     {622, L"Low", L"Bassa", L"Baja", L"Basse", L"D\u00fc\u015f\u00fck", L"\u041d\u0438\u0437\u043a\u0430\u044f", L"\u4f4e", L"Niedrig", L"Baixa", L"Niska"},
     // Mod-private range 630-631: the generic advisory shown by the
@@ -7876,6 +7876,60 @@ static void InstallPinnedDisplayProviderHooks(HMODULE module) {
 
 static const wchar_t kResCtlOrigProcProp[] = L"DisplayRestorerResCtlOrigProc";
 static const wchar_t kResCtlPaintingProp[] = L"DisplayRestorerResCtlPainting";
+static const wchar_t kCustomDpiParentOrigProcProp[] =
+    L"DisplayRestorerCustomDpiParentOrigProc";
+static const wchar_t kCustomDpiLinkProp[] =
+    L"DisplayRestorerCustomDpiLink";
+
+// Hosted-window subclasses use WindhawkUtils::SetWindowSubclassFromAnyThread
+// so they compose with other mods and can be removed cleanly on unload.
+static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
+                                                      WPARAM wParam,
+                                                      LPARAM lParam,
+                                                      DWORD_PTR refData);
+static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(HWND hwnd, UINT msg,
+                                                        WPARAM wParam,
+                                                        LPARAM lParam,
+                                                        DWORD_PTR refData);
+
+static std::mutex g_hostedSubclassMutex;
+static std::vector<HWND> g_hostedSubclassedWindows;
+
+static void RememberHostedSubclass(HWND hwnd) {
+    if (!hwnd) return;
+    std::lock_guard<std::mutex> lock(g_hostedSubclassMutex);
+    if (std::find(g_hostedSubclassedWindows.begin(),
+                  g_hostedSubclassedWindows.end(),
+                  hwnd) == g_hostedSubclassedWindows.end()) {
+        g_hostedSubclassedWindows.push_back(hwnd);
+    }
+}
+
+static void ForgetHostedSubclass(HWND hwnd) {
+    std::lock_guard<std::mutex> lock(g_hostedSubclassMutex);
+    auto& windows = g_hostedSubclassedWindows;
+    windows.erase(std::remove(windows.begin(), windows.end(), hwnd),
+                  windows.end());
+}
+
+static void RemoveAllHostedSubclasses() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_hostedSubclassMutex);
+        windows.swap(g_hostedSubclassedWindows);
+    }
+    for (HWND hwnd : windows) {
+        if (!hwnd || !IsWindow(hwnd)) continue;
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ResolutionControlSubclassProc);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, CustomDpiLinkParentSubclassProc);
+        RemovePropW(hwnd, kResCtlOrigProcProp);
+        RemovePropW(hwnd, kResCtlPaintingProp);
+        RemovePropW(hwnd, kCustomDpiParentOrigProcProp);
+        RemovePropW(hwnd, kCustomDpiLinkProp);
+    }
+}
 
 using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int,
                                         int, int, int, HWND, HMENU, HINSTANCE,
@@ -8335,17 +8389,13 @@ static void DrawResolutionSliderLabels(HWND hwnd, HDC targetDc) {
     }
 }
 
-// C++ body of the ResolutionControl subclass window proc. Kept separate from
-// the guard wrapper below so C++ objects (std::wstring, RAII guards) are used
-// here while the wrapper owns the try/catch containment. The body itself is
-// also wrapped in its own try/catch as a second line of defence.
+// C++ body of the ResolutionControl subclass. Kept separate from the
+// WindhawkUtils callback wrapper below so C++ objects (std::wstring, RAII
+// guards) are used here while the wrapper owns the try/catch containment.
 static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
                                                  WPARAM wParam,
                                                  LPARAM lParam) {
     try {
-        const WNDPROC orig =
-            reinterpret_cast<WNDPROC>(GetPropW(hwnd, kResCtlOrigProcProp));
-        if (!orig) return DefWindowProcW(hwnd, msg, wParam, lParam);
         // Compatibility with composition mods (OpenGlass and similar):
         // hijacking WM_PAINT with our own BeginPaint/EndPaint and a synthesised
         // WM_PRINTCLIENT changed the painting contract of a window those mods
@@ -8354,17 +8404,16 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
         // WM_PAINT; the overlay is drawn afterwards, into a plain DC.
         if (msg == WM_PAINT) {
             if (GetPropW(hwnd, kResCtlPaintingProp))
-                return CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+                return DefSubclassProc(hwnd, msg, wParam, lParam);
             SetPropW(hwnd, kResCtlPaintingProp, reinterpret_cast<HANDLE>(1));
             const LRESULT painted =
-                CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+                DefSubclassProc(hwnd, msg, wParam, lParam);
             RemovePropW(hwnd, kResCtlPaintingProp);
             DrawResolutionSliderLabels(hwnd, nullptr);
             return painted;
         }
 
-        const LRESULT result =
-            CallWindowProcW(orig, hwnd, msg, wParam, lParam);
+        const LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
         switch (msg) {
             // Re-lay out whenever geometry, DPI, fonts or the mode list can
             // have changed; otherwise the strings stay at stale positions.
@@ -8388,28 +8437,32 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
                 InvalidateResolutionModeCache(hwnd);
                 RemovePropW(hwnd, kResCtlOrigProcProp);
                 RemovePropW(hwnd, kResCtlPaintingProp);
+                ForgetHostedSubclass(hwnd);
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                    hwnd, ResolutionControlSubclassProc);
                 break;
             default:
                 break;
         }
         return result;
     } catch (...) {
-        // Never let a C++ exception escape a window proc; forward the message
-        // to the original proc and keep Explorer alive.
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
+        // Never let a C++ exception escape a subclass proc; forward the
+        // message and keep Explorer alive.
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 }
 
 static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
                                                       WPARAM wParam,
-                                                      LPARAM lParam) {
-    // Guard wrapper: the WNDPROC runs on the shell's UI thread, so a C++
+                                                      LPARAM lParam,
+                                                      DWORD_PTR /*refData*/) {
+    // Guard wrapper: the callback runs on the shell's UI thread, so a C++
     // exception escaping here would otherwise take down the whole
-    // explorer.exe. If the body throws, forward to the original proc instead.
+    // explorer.exe. If the body throws, forward to the next subclass.
     try {
         return ResolutionControlSubclassProcBody(hwnd, msg, wParam, lParam);
     } catch (...) {
-        return DefWindowProcW(hwnd, msg, wParam, lParam);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 }
 
@@ -8420,11 +8473,6 @@ static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
 // immediate parent, and route NM_CLICK/NM_RETURN to Microsoft's documented
 // DpiScaling.exe entry point. If the executable can't be launched, fail open to
 // the provider's original notification path.
-static const wchar_t kCustomDpiParentOrigProcProp[] =
-    L"DisplayRestorerCustomDpiParentOrigProc";
-static const wchar_t kCustomDpiLinkProp[] =
-    L"DisplayRestorerCustomDpiLink";
-
 static bool LaunchSystemCustomDpiPage(HWND owner) {
     wchar_t systemDirectory[MAX_PATH + 1] = {};
     const UINT length = GetSystemDirectoryW(systemDirectory, MAX_PATH);
@@ -8452,11 +8500,7 @@ static bool LaunchSystemCustomDpiPage(HWND owner) {
 }
 
 static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    const WNDPROC original = reinterpret_cast<WNDPROC>(
-        GetPropW(hwnd, kCustomDpiParentOrigProcProp));
-    if (!original) return DefWindowProcW(hwnd, msg, wParam, lParam);
-
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR /*refData*/) {
     try {
         if (msg == WM_NOTIFY && lParam) {
             const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
@@ -8469,15 +8513,17 @@ static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(
             }
         }
 
-        const LRESULT result =
-            CallWindowProcW(original, hwnd, msg, wParam, lParam);
+        const LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
         if (msg == WM_NCDESTROY) {
             RemovePropW(hwnd, kCustomDpiLinkProp);
             RemovePropW(hwnd, kCustomDpiParentOrigProcProp);
+            ForgetHostedSubclass(hwnd);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, CustomDpiLinkParentSubclassProc);
         }
         return result;
     } catch (...) {
-        return CallWindowProcW(original, hwnd, msg, wParam, lParam);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 }
 
@@ -8487,21 +8533,17 @@ static void AttachCustomDpiLinkFallback(HWND link) {
     if (!parent || !IsWindow(parent)) return;
 
     if (!GetPropW(parent, kCustomDpiParentOrigProcProp)) {
-        const WNDPROC original = reinterpret_cast<WNDPROC>(
-            GetWindowLongPtrW(parent, GWLP_WNDPROC));
-        if (!original ||
-            !SetPropW(parent, kCustomDpiParentOrigProcProp,
-                      reinterpret_cast<HANDLE>(original))) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                parent, CustomDpiLinkParentSubclassProc, 0)) {
             return;
         }
-        SetLastError(ERROR_SUCCESS);
-        const LONG_PTR previous = SetWindowLongPtrW(
-            parent, GWLP_WNDPROC,
-            reinterpret_cast<LONG_PTR>(CustomDpiLinkParentSubclassProc));
-        if (previous == 0 && GetLastError() != ERROR_SUCCESS) {
-            RemovePropW(parent, kCustomDpiParentOrigProcProp);
+        if (!SetPropW(parent, kCustomDpiParentOrigProcProp,
+                      reinterpret_cast<HANDLE>(1))) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                parent, CustomDpiLinkParentSubclassProc);
             return;
         }
+        RememberHostedSubclass(parent);
     }
 
     if (SetPropW(parent, kCustomDpiLinkProp,
@@ -8539,15 +8581,11 @@ static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
             g_resolutionPageCompatibility.load(std::memory_order_acquire) &&
             _wcsicmp(lpClassName, L"ResolutionControlClass") == 0 &&
             !GetPropW(hwnd, kResCtlOrigProcProp)) {
-            const WNDPROC orig = reinterpret_cast<WNDPROC>(
-                GetWindowLongPtrW(hwnd, GWLP_WNDPROC));
-            if (orig &&
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                    hwnd, ResolutionControlSubclassProc, 0) &&
                 SetPropW(hwnd, kResCtlOrigProcProp,
-                         reinterpret_cast<HANDLE>(orig))) {
-                SetWindowLongPtrW(
-                    hwnd, GWLP_WNDPROC,
-                    reinterpret_cast<LONG_PTR>(
-                        ResolutionControlSubclassProc));
+                         reinterpret_cast<HANDLE>(1))) {
+                RememberHostedSubclass(hwnd);
                 Wh_Log(L"Resolution slider label micro-patch attached");
             }
         }
@@ -9657,6 +9695,9 @@ void Wh_ModUninit(void) {
             g_setupThread->join();
         }
         g_setupThread.reset();
+        // Drop hosted-window subclasses before the mod image is unmapped so a
+        // still-open Display page cannot call into unloaded code.
+        RemoveAllHostedSubclasses();
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
