@@ -2,9 +2,10 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         0.5.22
+// @version         0.5.32
 // @author          meteoni
 // @github          https://github.com/Meteony
+// @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi
@@ -23,7 +24,9 @@ Another mod offers similar functionality, but this implementation takes a differ
 
 This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.
 
-Note: The mod creates pinned shortcuts targeting the Windows `systray.exe` stub and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.
+Native taskbar extent-offset resolution is derived from m417z's [Taskbar height and icon size](https://windhawk.net/mods/taskbar-icon-size), published under GPLv3.
+
+Note: The mod creates pinned shortcuts targeting the Windows `systray.exe` stub (with a hidden, immediately exiting `cmd.exe` fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.
 
 Windows 11 only.
 */
@@ -35,6 +38,7 @@ Windows 11 only.
   $name: Separator Identifier Prefix
   $description: >-
     Customizable part of separator identities. A fixed unique suffix is always appended.
+    Change this if naming collision occurs (very rare!). Changing this while the mod isn't fully unloaded may cause troubles with cleanup, so be careful.
 - maxWidthCompatibilityMode: false
   $name: Taskbar Icon Size Compatibility Mode
   $description: >-
@@ -52,10 +56,10 @@ Windows 11 only.
         $name: Normal Width
         $description: Width for normal taskbar icon mode. 
       - widthSmall: 10
-        $name: Small width
+        $name: Small Width
         $description: Width for small taskbar icon mode. 
   $name: Separators
-  $description: Each new entry correspond to a new separator being created.
+  $description: Each new entry corresponds to a new separator being created.
 */
 // ==/WindhawkModSettings==
 
@@ -81,6 +85,7 @@ Windows 11 only.
 #include <atomic>
 #include <cwctype>
 #include <iterator>
+#include <list>
 #include <mutex>
 #include <optional>
 #include <regex>
@@ -177,6 +182,7 @@ struct Settings {
 
 static Settings g_settings;
 static SeparatorSetting g_refreshPulseSetting;
+static std::vector<SeparatorSetting> g_storedSeparatorSettings;
 static std::wstring g_storagePath;
 static std::wstring g_iconPath;
 
@@ -426,6 +432,83 @@ static bool DeleteFileIfPresent(const std::wstring& path) {
     return false;
 }
 
+// The private mod storage directory is the durable ownership record. Every
+// shortcut in it was created by this mod, including shortcuts from an older
+// settings snapshot or an interrupted refresh pulse.
+static std::vector<std::wstring> EnumerateSeparatorShortcuts() {
+    std::vector<std::wstring> paths;
+    WIN32_FIND_DATAW findData = {};
+    HANDLE find = FindFirstFileW(
+        JoinPath(g_storagePath, L"*.lnk").c_str(),
+        &findData);
+
+    if (find == INVALID_HANDLE_VALUE) {
+        return paths;
+    }
+
+    do {
+        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            paths.push_back(
+                JoinPath(g_storagePath, findData.cFileName));
+        }
+    } while (FindNextFileW(find, &findData));
+
+    FindClose(find);
+    std::sort(paths.begin(), paths.end());
+    return paths;
+}
+
+static std::wstring GetShortcutIdentity(const std::wstring& path) {
+    size_t fileNameStart = path.find_last_of(L"\\/");
+    fileNameStart = fileNameStart == std::wstring::npos
+                        ? 0
+                        : fileNameStart + 1;
+
+    size_t extension = path.find_last_of(L'.');
+    if (extension == std::wstring::npos || extension < fileNameStart) {
+        extension = path.size();
+    }
+
+    return path.substr(fileNameStart, extension - fileNameStart);
+}
+
+static bool IsCurrentSeparatorIdentity(std::wstring_view identity) {
+    return std::any_of(
+        g_settings.separators.begin(),
+        g_settings.separators.end(),
+        [identity](const SeparatorSetting& separator) {
+            return identity == std::wstring_view(separator.identity);
+        });
+}
+
+static void LoadStoredSeparatorSettings() {
+    g_storedSeparatorSettings.clear();
+
+    const double width = g_settings.separators.empty()
+                             ? 20.0
+                             : g_settings.separators.front().width;
+    const double widthSmall = g_settings.separators.empty()
+                                  ? 10.0
+                                  : g_settings.separators.front().widthSmall;
+
+    for (const auto& path : EnumerateSeparatorShortcuts()) {
+        std::wstring identity = GetShortcutIdentity(path);
+        if (identity.empty() ||
+            IsCurrentSeparatorIdentity(identity) ||
+            identity == g_refreshPulseSetting.identity) {
+            continue;
+        }
+
+        g_storedSeparatorSettings.push_back({
+            .ordinal = 0,
+            .targetIndex = 0,
+            .width = width,
+            .widthSmall = widthSmall,
+            .identity = std::move(identity),
+        });
+    }
+}
+
 static bool WriteBinaryFile(
     const std::wstring& path,
     const void* data,
@@ -433,7 +516,7 @@ static bool WriteBinaryFile(
     HANDLE file = CreateFileW(
         path.c_str(),
         GENERIC_WRITE,
-        0,
+        FILE_SHARE_READ,
         nullptr,
         CREATE_ALWAYS,
         FILE_ATTRIBUTE_NORMAL,
@@ -472,7 +555,7 @@ static bool WriteBinaryFile(
     return true;
 }
 
-static bool LoadSettings() {
+static void LoadSettings() {
     g_settings = {};
 
     g_settings.identifierPrefix = SanitizeIdentifierPrefix(
@@ -539,8 +622,6 @@ static bool LoadSettings() {
         g_settings.maxWidthCompatibilityMode
             ? L"MaxWidthCompatibility"
             : L"NativeExtent");
-
-    return true;
 }
 
 static bool InitializeStoragePath() {
@@ -573,6 +654,8 @@ static bool InitializeStoragePath() {
         JoinPath(
             g_storagePath,
             L"separator.ico");
+
+    LoadStoredSeparatorSettings();
 
     return true;
 }
@@ -788,7 +871,22 @@ static const SeparatorSetting* FindSeparatorByAutomationName(
         return nullptr;
     }
 
+    // Almost every TaskListButton is unrelated to this mod. Reject it with a
+    // single search before comparing complete identities from the settings or
+    // durable storage snapshots.
+    static const std::wstring identityMarker =
+        std::wstring(L".") + kSeparatorIdentitySuffix + L".";
+    if (name.find(identityMarker) == std::wstring_view::npos) {
+        return nullptr;
+    }
+
     for (const auto& separator : g_settings.separators) {
+        if (ContainsIdentityToken(name, separator.identity)) {
+            return &separator;
+        }
+    }
+
+    for (const auto& separator : g_storedSeparatorSettings) {
         if (ContainsIdentityToken(name, separator.identity)) {
             return &separator;
         }
@@ -1032,6 +1130,7 @@ static void RefreshTaskListButtonLayout(void* pThis) {
 struct SeparatorVisualState {
     winrt::weak_ref<FrameworkElement> element;
     void* taskListButton;
+    bool restoring = false;
 
     bool mediumExtentCaptured = false;
     double originalMediumExtent = 0;
@@ -1068,18 +1167,14 @@ struct SeparatorVisualState {
     bool originalIsDraggable = false;
 };
 
-static thread_local std::vector<SeparatorVisualState>
+static thread_local std::list<SeparatorVisualState>
     g_separatorVisualStates;
 
 static void PruneExpiredSeparatorVisualStates() {
-    g_separatorVisualStates.erase(
-        std::remove_if(
-            g_separatorVisualStates.begin(),
-            g_separatorVisualStates.end(),
-            [](const SeparatorVisualState& state) {
-                return !state.element.get();
-            }),
-        g_separatorVisualStates.end());
+    g_separatorVisualStates.remove_if(
+        [](const SeparatorVisualState& state) {
+            return !state.element.get();
+        });
 }
 
 static auto FindSeparatorVisualState(void* taskListButton) {
@@ -1173,8 +1268,8 @@ static void ApplySeparatorMaxWidthOverride(
 
 static void CenterSeparatorIcon(
     SeparatorVisualState& state,
-    const FrameworkElement& taskListButton) {
-    if (!taskListButton) {
+    const FrameworkElement& iconPanel) {
+    if (!iconPanel) {
         return;
     }
 
@@ -1183,15 +1278,6 @@ static void CenterSeparatorIcon(
         // stock template can effectively left-anchor the icon content. Center
         // both the slot and the actual Icon child instead of using a magic
         // pixel translation, so the correction adapts to icon-size mods/DPI.
-        auto iconPanel =
-            FindChildByName(
-                taskListButton,
-                L"IconPanel");
-
-        if (!iconPanel) {
-            return;
-        }
-
         auto trackedIconPanel = state.iconPanel.get();
         if (!trackedIconPanel ||
             winrt::get_abi(trackedIconPanel) != winrt::get_abi(iconPanel)) {
@@ -1234,7 +1320,8 @@ static void CenterSeparatorIcon(
 
 static void SuppressSeparatorHoverChrome(
     SeparatorVisualState& state,
-    const FrameworkElement& taskListButton) {
+    const FrameworkElement& taskListButton,
+    const FrameworkElement& iconPanel) {
     if (!taskListButton) {
         return;
     }
@@ -1244,11 +1331,6 @@ static void SuppressSeparatorHoverChrome(
         // Its Border#BackgroundElement is the rounded hover/press surface.
         // Keep it in the tree (so layout is unaffected) and make only that
         // surface invisible for separator buttons.
-        auto iconPanel =
-            FindChildByName(
-                taskListButton,
-                L"IconPanel");
-
         if (iconPanel) {
             if (auto backgroundElement =
                     FindChildByName(
@@ -1355,8 +1437,16 @@ static void RestoreDependencyPropertyLocalValue(
 }
 
 static void RestoreSeparatorVisualState(
-    std::vector<SeparatorVisualState>::iterator stateIt) {
+    std::list<SeparatorVisualState>::iterator stateIt) {
     SeparatorVisualState& state = *stateIt;
+
+    // RefreshTaskListButtonLayout can synchronously re-enter
+    // UpdateVisualStates. Let the outer restore retain ownership of this node.
+    if (state.restoring) {
+        return;
+    }
+    state.restoring = true;
+
     auto element = state.element.get();
 
     // The FrameworkElement weak reference is the lifetime authority for the
@@ -1545,15 +1635,14 @@ static bool RunFromWindowThread(
         parameter,
         false,
     };
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(
+    // Keep the stack-backed parameter alive until the target thread has
+    // finished processing the hook callback. UnhookWindowsHookEx doesn't wait
+    // for a callback that was already entered.
+    SendMessageW(
         window,
         message,
         0,
-        reinterpret_cast<LPARAM>(&parameters),
-        SMTO_ABORTIFHUNG,
-        2000,
-        &result);
+        reinterpret_cast<LPARAM>(&parameters));
     UnhookWindowsHookEx(hook);
     return parameters.executed;
 }
@@ -1721,6 +1810,11 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         return;
     }
 
+    if (stateIt != g_separatorVisualStates.end() &&
+        stateIt->restoring) {
+        return;
+    }
+
     if (stateIt == g_separatorVisualStates.end()) {
         g_separatorVisualStates.push_back({
             .element = winrt::make_weak(element),
@@ -1751,8 +1845,10 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         }
     }
 
-    CenterSeparatorIcon(state, element);
-    SuppressSeparatorHoverChrome(state, element);
+    FrameworkElement iconPanel =
+        FindChildByName(element, L"IconPanel");
+    CenterSeparatorIcon(state, iconPanel);
+    SuppressSeparatorHoverChrome(state, element, iconPanel);
     DisableSeparatorDragging(state, element);
 }
 
@@ -2109,6 +2205,12 @@ static bool IsSeparatorTaskGroup(void* taskGroup) {
         }
     }
 
+    for (const auto& separator : g_storedSeparatorSettings) {
+        if (appIdView == std::wstring_view(separator.identity)) {
+            return true;
+        }
+    }
+
     return appIdView ==
         std::wstring_view(g_refreshPulseSetting.identity);
 }
@@ -2332,10 +2434,25 @@ static HRESULT CreateSeparatorShortcut(
 
     std::wstring target =
         JoinPath(systemDirectory, L"systray.exe");
+    bool useCmdFallback = !FileExists(target);
+
+    if (useCmdFallback) {
+        target = JoinPath(systemDirectory, L"cmd.exe");
+        if (!FileExists(target)) {
+            shellLink->Release();
+            return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+        }
+    }
 
     // systray.exe is an inert Windows stub, so a stranded shortcut doesn't
-    // launch a console or perform an action if it is clicked.
+    // launch a console or perform an action if it is clicked. It isn't a
+    // documented Windows 11 contract, so retain a hidden, immediately exiting
+    // command processor as a compatibility fallback.
     hr = shellLink->SetPath(target.c_str());
+
+    if (SUCCEEDED(hr) && useCmdFallback) {
+        hr = shellLink->SetArguments(L"/d /c exit");
+    }
 
     if (SUCCEEDED(hr)) {
         hr = shellLink->SetShowCmd(SW_HIDE);
@@ -2437,6 +2554,99 @@ static HRESULT CreatePinManager(
     }
 
     return hr;
+}
+
+static bool IsBackendStopRequested();
+
+static bool UnpinAndDeleteShortcut(
+    IPinManagerInterop3* pinManager,
+    const std::wstring& shortcutPath,
+    const wchar_t* logCategory) {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    HRESULT hr = GetPidlForPath(shortcutPath, &pidl);
+
+    if (FAILED(hr) || !pidl) {
+        Wh_Log(
+            L"[%s] Can't resolve owned shortcut '%s'; keeping it",
+            logCategory,
+            shortcutPath.c_str());
+        return false;
+    }
+
+    HRESULT unpinHr =
+        pinManager->UnpinTaskbarItem(
+            pidl,
+            PMC_JUMPVIEWBROKER);
+
+    // A shortcut can exist even if Explorer died before the matching pin.
+    // Establish a known pinned state, then remove it, so such backing files
+    // don't become permanent false failures in future cleanup passes.
+    HRESULT pinHr = S_OK;
+    if (FAILED(unpinHr)) {
+        pinHr =
+            pinManager->PinItemFromTrustedCaller(
+                pidl,
+                PMC_TASKBANDPIN);
+        if (SUCCEEDED(pinHr)) {
+            unpinHr =
+                pinManager->UnpinTaskbarItem(
+                    pidl,
+                    PMC_JUMPVIEWBROKER);
+        }
+    }
+
+    CoTaskMemFree(pidl);
+
+    if (FAILED(unpinHr)) {
+        Wh_Log(
+            L"[%s] Failed to remove owned shortcut '%s' "
+            L"pinHr=0x%08X unpinHr=0x%08X",
+            logCategory,
+            shortcutPath.c_str(),
+            static_cast<unsigned int>(pinHr),
+            static_cast<unsigned int>(unpinHr));
+        return false;
+    }
+
+    return DeleteFileIfPresent(shortcutPath);
+}
+
+static bool CleanupStaleSeparatorShortcuts(
+    IPinManagerInterop3* pinManager) {
+    std::vector<std::wstring> stalePaths;
+
+    for (const auto& path : EnumerateSeparatorShortcuts()) {
+        if (!IsCurrentSeparatorIdentity(
+                GetShortcutIdentity(path))) {
+            stalePaths.push_back(path);
+        }
+    }
+
+    if (stalePaths.empty()) {
+        return true;
+    }
+
+    Wh_Log(
+        L"[CLEANUP] Removing %zu shortcut(s) from an older settings snapshot",
+        stalePaths.size());
+
+    bool success = true;
+    for (auto it = stalePaths.rbegin();
+         it != stalePaths.rend();
+         ++it) {
+        if (IsBackendStopRequested()) {
+            return false;
+        }
+
+        if (!UnpinAndDeleteShortcut(
+                pinManager,
+                *it,
+                L"CLEANUP")) {
+            success = false;
+        }
+    }
+
+    return success;
 }
 
 // -----------------------------------------------------------------------------
@@ -2680,11 +2890,9 @@ static bool PulseTaskbarPinList(IPinManagerInterop3* pinManager) {
 }
 
 static bool CreateAndPinSeparators() {
-    if (!PrepareSeparatorFiles()) {
-        return false;
-    }
-
-    if (g_settings.separators.empty()) {
+    if (g_settings.separators.empty() &&
+        EnumerateSeparatorShortcuts().empty()) {
+        DeleteFileIfPresent(g_iconPath);
         return true;
     }
 
@@ -2692,6 +2900,8 @@ static bool CreateAndPinSeparators() {
     constexpr DWORD kInitialStartupRetryDelay = 250;
     constexpr DWORD kStartupRetryBackoff = 2;
     DWORD retryDelay = kInitialStartupRetryDelay;
+    bool staleCleanupComplete = false;
+    bool filesPrepared = false;
 
     for (int attempt = 1;
          attempt <= kStartupAttempts;
@@ -2709,28 +2919,53 @@ static bool CreateAndPinSeparators() {
         IPinManagerInterop3* pinManager = nullptr;
         HRESULT hr = CreatePinManager(&pinManager);
 
+        bool staleShortcutsRemoved = staleCleanupComplete;
+        bool filesReady = filesPrepared;
         bool pinsReady = false;
         bool positioned = false;
         bool refreshed = false;
 
         if (SUCCEEDED(hr) && pinManager) {
-            pinsReady = PinSeparators(pinManager);
+            // Storage, rather than the current settings snapshot, is the
+            // durable list of shortcuts this mod owns. Remove old identities
+            // before creating any paths for the new snapshot.
+            if (!staleCleanupComplete) {
+                staleCleanupComplete =
+                    CleanupStaleSeparatorShortcuts(pinManager);
+                staleShortcutsRemoved = staleCleanupComplete;
+            }
 
-            if (pinsReady) {
-                positioned = PositionSeparators(pinManager);
+            if (staleShortcutsRemoved && !filesPrepared) {
+                filesPrepared = PrepareSeparatorFiles();
+                filesReady = filesPrepared;
+            }
 
-                if (positioned) {
-                    refreshed = PulseTaskbarPinList(pinManager);
+            if (staleShortcutsRemoved && filesReady &&
+                g_settings.separators.empty()) {
+                DeleteFileIfPresent(g_iconPath);
+                pinsReady = true;
+                positioned = true;
+                refreshed = true;
+            } else if (staleShortcutsRemoved && filesReady) {
+                pinsReady = PinSeparators(pinManager);
+
+                if (pinsReady) {
+                    positioned = PositionSeparators(pinManager);
+
+                    if (positioned) {
+                        refreshed = PulseTaskbarPinList(pinManager);
+                    }
+                } else {
+                    Wh_Log(
+                        L"[INIT] Pin pass incomplete; skipping move pass");
                 }
-            } else {
-                Wh_Log(
-                    L"[INIT] Pin pass incomplete; skipping move pass");
             }
 
             pinManager->Release();
         }
 
-        if (pinsReady && positioned && refreshed) {
+        if (staleShortcutsRemoved && filesReady &&
+            pinsReady && positioned && refreshed) {
             Wh_Log(
                 L"[INIT] Separator startup converged on attempt %d",
                 attempt);
@@ -2768,26 +3003,14 @@ static bool CreateAndPinSeparators() {
 // -----------------------------------------------------------------------------
 
 static bool SeparatorShortcutArtifactsExist() {
-    if (FileExists(
-            GetSeparatorShortcutPath(g_refreshPulseSetting))) {
-        return true;
-    }
-
-    return std::any_of(
-        g_settings.separators.begin(),
-        g_settings.separators.end(),
-        [](const SeparatorSetting& separator) {
-            return FileExists(
-                GetSeparatorShortcutPath(separator));
-        });
+    return !EnumerateSeparatorShortcuts().empty();
 }
 
 static bool UnpinAndDeleteSeparators() {
-    std::wstring refreshShortcutPath =
-        GetSeparatorShortcutPath(g_refreshPulseSetting);
+    std::vector<std::wstring> shortcutPaths =
+        EnumerateSeparatorShortcuts();
 
-    if (g_settings.separators.empty() &&
-        !FileExists(refreshShortcutPath)) {
+    if (shortcutPaths.empty()) {
         DeleteFileIfPresent(g_iconPath);
         return true;
     }
@@ -2805,93 +3028,15 @@ static bool UnpinAndDeleteSeparators() {
 
     bool allUnpinned = true;
 
-    // Recover a transient refresh helper left pinned by a failed pulse, mod
-    // reload, or Explorer termination between its pin and unpin operations.
-    if (FileExists(refreshShortcutPath)) {
-        PIDLIST_ABSOLUTE refreshPidl = nullptr;
-        hr = GetPidlForPath(refreshShortcutPath, &refreshPidl);
-
-        if (SUCCEEDED(hr) && refreshPidl) {
-            // File existence alone doesn't prove whether an earlier pulse got
-            // as far as pinning. First ensure the stable helper identity is
-            // pinned, then unpin it from a known state.
-            HRESULT pinHr =
-                pinManager->PinItemFromTrustedCaller(
-                    refreshPidl,
-                    PMC_TASKBANDPIN);
-
-            HRESULT unpinHr = E_FAIL;
-            if (SUCCEEDED(pinHr)) {
-                unpinHr =
-                    pinManager->UnpinTaskbarItem(
-                        refreshPidl,
-                        PMC_JUMPVIEWBROKER);
-            }
-
-            CoTaskMemFree(refreshPidl);
-
-            if (SUCCEEDED(pinHr) && SUCCEEDED(unpinHr)) {
-                if (!DeleteFileIfPresent(refreshShortcutPath)) {
-                    allUnpinned = false;
-                }
-            } else {
-                Wh_Log(
-                    L"[CLEANUP] Failed to remove transient refresh item "
-                    L"pinHr=0x%08X unpinHr=0x%08X",
-                    static_cast<unsigned int>(pinHr),
-                    static_cast<unsigned int>(unpinHr));
-                allUnpinned = false;
-            }
-        } else {
-            Wh_Log(
-                L"[CLEANUP] Can't resolve transient refresh item; "
-                L"keeping its shortcut");
-            allUnpinned = false;
-        }
-    }
-
-    // Reverse order isn't required because unpinning is PIDL-based, but it
-    // minimizes visual/index churn while several separators disappear.
-    for (auto it = g_settings.separators.rbegin();
-         it != g_settings.separators.rend();
+    // Storage is authoritative: remove current separators, stale settings
+    // identities, and a refresh helper left by an interrupted pulse alike.
+    for (auto it = shortcutPaths.rbegin();
+         it != shortcutPaths.rend();
          ++it) {
-        const auto& separator = *it;
-
-        std::wstring shortcutPath =
-            GetSeparatorShortcutPath(separator);
-
-        PIDLIST_ABSOLUTE pidl = nullptr;
-
-        hr = GetPidlForPath(
-            shortcutPath,
-            &pidl);
-
-        if (FAILED(hr) || !pidl) {
-            Wh_Log(
-                L"[CLEANUP] Can't resolve separator #%d; "
-                L"keeping its shortcut",
-                separator.ordinal);
-            allUnpinned = false;
-            continue;
-        }
-
-        // 11 is the exact caller value observed during the native modern
-        // Notepad unpin trace on this build, and was already tested with
-        // UnpinTaskbarItem successfully.
-        HRESULT unpinHr =
-            pinManager->UnpinTaskbarItem(
-                pidl,
-                PMC_JUMPVIEWBROKER);
-
-        CoTaskMemFree(pidl);
-
-        if (SUCCEEDED(unpinHr)) {
-            DeleteFileIfPresent(shortcutPath);
-        } else {
-            Wh_Log(
-                L"[CLEANUP] Failed to unpin separator #%d hr=0x%08X",
-                separator.ordinal,
-                static_cast<unsigned int>(unpinHr));
+        if (!UnpinAndDeleteShortcut(
+                pinManager,
+                *it,
+                L"CLEANUP")) {
             allUnpinned = false;
         }
     }
@@ -2925,11 +3070,27 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
     if (!FindCurrentProcessTaskbarWnd()) {
         Wh_Log(L"[INIT] Waiting for the taskbar window");
 
-        while (!FindCurrentProcessTaskbarWnd()) {
-            if (WaitForBackendStop(250)) {
+        constexpr int kTaskbarWaitPolls = 240;
+        constexpr DWORD kTaskbarWaitInterval = 250;
+        bool taskbarFound = false;
+
+        for (int poll = 0; poll < kTaskbarWaitPolls; ++poll) {
+            if (WaitForBackendStop(kTaskbarWaitInterval)) {
                 Wh_Log(L"[INIT] Separator startup cancelled");
                 return 0;
             }
+
+            if (FindCurrentProcessTaskbarWnd()) {
+                taskbarFound = true;
+                break;
+            }
+        }
+
+        if (!taskbarFound) {
+            Wh_Log(
+                L"[INIT] Taskbar window did not appear within 60 seconds; "
+                L"backend worker stopping");
+            return 0;
         }
     }
 
@@ -3031,6 +3192,14 @@ static void TryStartBackendWorker() {
         return;
     }
 
+    // The backend creates real pinned taskbar items. Don't create them until
+    // the core styling hook can guarantee separator sizing and presentation.
+    // Interaction and tooltip hooks remain optional backend-independent
+    // hardening.
+    if (!g_taskbarViewDllHooked) {
+        return;
+    }
+
     if (!StartBackendWorkerLocked()) {
         Wh_Log(L"[INIT] Failed to start separator backend worker");
     }
@@ -3076,12 +3245,14 @@ static bool IsMainExplorerProcess() {
         GetWindowThreadProcessId(
             shellWindow,
             &shellProcessId);
-        return shellProcessId == GetCurrentProcessId();
+        if (shellProcessId == GetCurrentProcessId()) {
+            return true;
+        }
     }
 
-    // During early shell startup GetShellWindow can still be null. Exclude
-    // known folder-process command lines while allowing the future shell host
-    // to install its late-load watcher.
+    // During an Explorer restart, GetShellWindow can be null or can still
+    // refer to the previous, dying shell. Exclude known folder-process command
+    // lines while allowing the replacement shell to wait for its own taskbar.
     std::wstring commandLine = GetCommandLineW();
     std::transform(
         commandLine.begin(),
@@ -3096,15 +3267,6 @@ static bool IsMainExplorerProcess() {
 
 BOOL Wh_ModInit() {
     if (!IsMainExplorerProcess()) {
-        return FALSE;
-    }
-
-    // A completed taskbar with neither Windows 11 taskbar module is an
-    // unsupported shell (not an early Windows 11 startup). Don't retain a
-    // loader hook there for the process lifetime.
-    if (FindCurrentProcessTaskbarWnd() &&
-        !GetTaskbarViewModuleHandle() &&
-        !GetModuleHandleW(L"taskbar.dll")) {
         return FALSE;
     }
 
