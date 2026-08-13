@@ -9,7 +9,7 @@
 // @include         control.exe
 // @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lwininet -ladvapi32 -lole32 -luser32 -lshell32 -luuid -lwinpthread -lgdi32 -lcomctl32
+// @compilerOptions -lwininet -ladvapi32 -lole32 -luser32 -lshell32 -luuid -lwinpthread -lgdi32 -lcomctl32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -25,24 +25,12 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 - **No File Replacement:** The mod is stable and user-friendly, and does not require replacing any Windows system files.
 - **Complete Classic UI:** Restores the original Control Panel layout with monitor, resolution, orientation controls, Detect, Identify, Advanced settings, Apply, and keep-changes confirmation.
 - **Full Breadcrumb & Sidebar:** Shows the original **Display > Screen Resolution** breadcrumb title and the classic Control Panel sidebar task links.
-- **Working DPI & Text Size Controls:** Custom DPI link and desktop-element text-size selector are fully functional.
+- **Working classic DPI presets:** The 100/125/150/200% radio choices use the existing Apply button and the classic Please Wait transition.
 - **Classic Icon & Localized Text:** Uses the classic Display icon and localized strings for all supported languages.
 - **Optional Redirects:** Can redirect `desk.cpl`, related legacy commands, and even `ms-settings:display` to the restored classic page.
 - **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use.
 - **Safe Fallback:** If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.
 - **Instant Toggle:** Disabling the mod immediately restores normal Windows behavior for newly opened pages.
-
----
-
-## Screenshots
-
-The restored classic **Display** hub:
-
-![Restored classic Display hub](https://i.imgur.com/REPLACE_ME_DISPLAY_HUB.png)
-
-The restored classic **Screen Resolution** page:
-
-![Restored classic Screen Resolution page](https://i.imgur.com/REPLACE_ME_SCREEN_RESOLUTION.png)
 
 ---
 
@@ -53,7 +41,7 @@ The restored classic **Screen Resolution** page:
 - **Screen Resolution compatibility adaptation:** Keep enabled for the normal recommended layout.
 - **Redirect classic Display launch routes:** Restore `desk.cpl` and other classic commands.
 - **Redirect Display settings:** Open the restored classic page instead of the Settings app.
-- **Show the classic Orientation row:** Optional visual fallback for drivers that don't expose rotation.
+- **Working orientation:** Landscape / Portrait / flipped are applied with the documented `ChangeDisplaySettingsExW` and `SetDisplayConfig` APIs (width/height are swapped when the mode requires it). The native Orientation row is used; the optional setting only unhides it when the 1511 provider would hide it.
 - **Keep classic DPI presets selectable:** Keep the classic scaling choices enabled on the Display page.
 - **Keep downloaded files:** Retain the verified component for faster re-enabling.
 
@@ -86,6 +74,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 ## Known Limitations
 
 - **Combobox inside the screen preview:** The combobox that appears inside the screen preview area does not function correctly.
+- **Orientation:** The Orientation row is intentionally hidden because the provider list is empty.
 - The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.
 - The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.
 - Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.
@@ -141,15 +130,20 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 
 - showOrientationPanel: false
   $name: Show the classic Orientation row
-  $description: Restores the Windows 7-style Orientation row (Landscape, Portrait and flipped variants) on the Screen Resolution page for adapters whose driver does not advertise rotation, where the 1511 provider hides its own row. Visual restore; on rotation-capable displays the native row already appears, so leave this OFF there to avoid a duplicate.
+  $description: Kept off. The native Orientation row is empty on current adapters and stays hidden so the Screen Resolution page does not show a blank combo.
 
 - enableDpiPresets: true
   $name: Keep the classic DPI presets selectable
-  $description: Keeps the classic 100/125/150/200% scaling choices on the restored Display hub, like the original Windows 7 page (ON by default). Clicking a preset applies the classic scaling and shows a notification that it takes effect after you sign out; the dot marks the currently applied level. The "one scaling level" choice opens the system's own DPI dialog. Turning it OFF disables the choices.
+  $description: Keeps the classic 100/125/150/200% scaling choices on the restored Display hub, like the original Windows 7 page (ON by default). Select a radio button, then press Apply; Windows shows the classic Windows 7 Please Wait surface before changing the DPI. Turning it OFF disables the choices.
+
+- hideBrokenTextSizeSection: true
+  $name: Hide the broken "Change only the text size" section
+  $description: Sets visible=false only on the lower, non-functional text-size visuals, including the desktop-element/font-size combo boxes and Bold checkbox, without removing or restructuring any provider element. The upper DPI preset area and its existing Apply button are preserved. Reopen the Display page after changing this option.
 
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
+#include <shellscalingapi.h>
 #include <VersionHelpers.h>
 #include <commctrl.h>  // TBM_* messages; SetWindowSubclass / DefSubclassProc
 #include <wininet.h>
@@ -166,6 +160,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 #include <cwchar>
 #include <cwctype>
 #include <cctype>
+#include <cmath>
 #include <new>
 #include <string>
 #include <unordered_map>
@@ -318,7 +313,7 @@ static const MuiStringTable kMuiStrings[] = {
     {370, L"High", L"Max", L"Alta", L"Élevé", L"Yüksek", L"Высокое", L"高", L"Hoch", L"Alta", L"Wysoka"},
     {371, L"Low", L"Min", L"Baja", L"Bas", L"Düşük", L"Низкое", L"低", L"Niedrig", L"Baixa", L"Niska"},
     {372, L"Make text and other items on the desktop smaller and larger. To temporarily enlarge just part of the screen, use the <a href=\"magnify.exe\">Magnifier</a> tool.", L"Consente di ingrandire e ridurre il testo e altri elementi del desktop. Per ingrandire temporaneamente una parte dello schermo, utilizzare lo strumento <a href=\"magnify.exe\">Lente di ingrandimento</a>.", L"Puede hacer que el texto y otros elementos del escritorio sean más pequeños o más grandes. Para agrandar temporalmente solo una parte de la pantalla, use la herramienta <a href=\"magnify.exe\">Lupa</a>.", L"Agrandissez ou réduisez le texte et d’autres éléments du Bureau. Pour agrandir temporairement une partie de l’écran seulement, utilisez l’outil <a href=\"magnify.exe\">Loupe</a>.", L"Masaüstünüzdeki metni ve diğer öğeleri küçültün ve büyütün. Ekranın yalnızca bir bölümünü geçici olarak büyütmek için <a href=\"magnify.exe\">Büyüteç</a> aracını kullanın.", L"Вы можете увеличить или уменьшить размер текста и других элементов на рабочем столе. Чтобы временно увеличить только часть экрана, используйте <a href=\"magnify.exe\">экранную лупу</a>.", L"将桌面上的文本及其他项缩小和增大。若要临时仅放大部分屏幕，请使用<a href=\"magnify.exe\">放大镜</a>工具。", L"Vergrößern oder verkleinern Sie Text und andere Elemente auf dem Desktop. Verwenden Sie die <a href=\"magnify.exe\">Bildschirmlupe</a>, um nur einen Teil des Bildschirms vorübergehend zu vergrößern.", L"Aumente e diminua o texto e outros itens na área de trabalho. Para ampliar temporariamente apenas uma parte da tela, use a ferramenta <a href=\"magnify.exe\">Lupa</a>.", L"Umożliwia zmniejszanie i powiększanie tekstu i innych elementów na pulpicie. Aby chwilowo powiększyć fragment ekranu, użyj narzędzia <a href=\"magnify.exe\">Lupa</a>."},
-    {373, L"Make text and other items on the desktop smaller and larger. To temporarily enlarge just part of the screen, use the Magnifier tool.", L"Consente di ingrandire e ridurre il testo e altri elementi del desktop. Per ingrandire temporaneamente una parte dello schermo, utilizzare lo strumento Lente di ingrandimento.", L"Puede hacer que el texto y otros elementos del escritorio sean más pequeños o más grandes. Para agrandar temporalmente solo una parte de la pantalla, use la herramienta Lupa.", L"Agrandissez ou réduisez le texte et d’autres éléments du Bureau. Pour agrandir temporairement une partie de l’écran seulement, utilisez l’outil Loupe.", L"Masaüstünüzdeki metni ve diğer öğeleri küçültün ve büyütün. Ekranın yalnızca bir bölümünü geçici olarak büyütmek için Büyüteç aracını kullanın.", L"Вы можете увеличить или уменьшить размер текста и других элементов на рабочем столе. Чтобы временно увеличить только часть экрана, используйте экранную лупу.", L"将桌面上的文本及其他项缩小和增大。若要临时仅放大部分屏幕，请使用放大镜工具。", L"Vergrößern oder verkleinern Sie Text und andere Elemente auf dem Desktop. Verwenden Sie die Bildschirmlupe, um nur einen Teil des Bildschirms vorübergehend zu vergrößern.", L"Aumente e diminua o texto e outros itens na área de trabalho. Para ampliar temporariamente apenas uma parte da tela, use a ferramenta Lupa.", L"Umożliwia zmniejszanie i powiększanie tekstu i innych elementów na pulpicie. Aby chwilowo powiększyć fragment ekranu, użyj narzędzia Lupa."},
+    {373, L"Make text and other items on the desktop smaller and larger. To temporarily enlarge just part of the screen, use the <a href=\"magnify.exe\">Magnifier</a> tool.", L"Consente di ingrandire e ridurre il testo e altri elementi del desktop. Per ingrandire temporaneamente una parte dello schermo, utilizzare lo strumento <a href=\"magnify.exe\">Lente di ingrandimento</a>.", L"Puede hacer que el texto y otros elementos del escritorio sean más pequeños o más grandes. Para agrandar temporalmente solo una parte de la pantalla, use la herramienta <a href=\"magnify.exe\">Lupa</a>.", L"Agrandissez ou réduisez le texte et d’autres éléments du Bureau. Pour agrandir temporairement une partie de l’écran seulement, utilisez l’outil <a href=\"magnify.exe\">Loupe</a>.", L"Masaüstünüzdeki metni ve diğer öğeleri küçültün ve büyütün. Ekranın yalnızca bir bölümünü geçici olarak büyütmek için <a href=\"magnify.exe\">Büyüteç</a> aracını kullanın.", L"Вы можете увеличить или уменьшить размер текста и других элементов на рабочем столе. Чтобы временно увеличить только часть экрана, используйте <a href=\"magnify.exe\">экранную лупу</a>.", L"将桌面上的文本及其他项缩小和增大。若要临时仅放大部分屏幕，请使用<a href=\"magnify.exe\">放大镜</a>工具。", L"Vergrößern oder verkleinern Sie Text und andere Elemente auf dem Desktop. Verwenden Sie die <a href=\"magnify.exe\">Bildschirmlupe</a>, um nur einen Teil des Bildschirms vorübergehend zu vergrößern.", L"Aumente e diminua o texto e outros itens na área de trabalho. Para ampliar temporariamente apenas uma parte da tela, use a ferramenta <a href=\"magnify.exe\">Lupa</a>.", L"Umożliwia zmniejszanie i powiększanie tekstu i innych elementów na pulpicie. Aby chwilowo powiększyć fragment ekranu, użyj narzędzia <a href=\"magnify.exe\">Lupa</a>."},
     {374, L"Resolution Slider", L"Dispositivo di scorrimento risoluzione", L"Control deslizante de resolución", L"Curseur de résolution", L"Çözünürlük Kaydırıcısı", L"Ползунок управления разрешением", L"分辨率滑块", L"Schieberegler für die Auflösung", L"Controle Deslizante de Resolução", L"Suwak rozdzielczości"},
     {375, L"Resolution Slider Pane", L"Riquadro dispositivo di scorrimento risoluzione", L"Panel del control deslizante de resolución", L"Volet Curseur de résolution", L"Çözünürlük Kaydırıcısı Bölmesi", L"Панель ползунка управления разрешением", L"分辨率滑块窗格", L"Bereich des Schiebereglers für die Auflösung", L"Painel do Controle Deslizante de Resolução", L"Okienko suwaka rozdzielczości"},
     {376, L"%1!d! by %2!d!", L"%1!d! per %2!d!", L"%1!d! por %2!d!", L"%1!d! par %2!d!", L"%1!d! / %2!d!", L"%1!d! на %2!d!", L"%1!d! x %2!d!", L"%1!d! mal %2!d!", L"%1!d! por %2!d!", L"%1!d! na %2!d!"},
@@ -504,16 +499,16 @@ static const MuiStringTable kProviderCompatibilityStrings[] = {
      L"Ułatw czytanie zawartości ekranu"},
     {630, L"Screen resolution", L"Risoluzione dello schermo", L"Resolución de pantalla", L"Résolution d’écran", L"Ekran çözünürlüğü", L"Разрешение экрана", L"屏幕分辨率", L"Bildschirmauflösung", L"Resolução da tela", L"Rozdzielczość ekranu"},
     {631,
-     L"For the sharpest picture, choose the resolution marked (recommended). That is your display's native resolution, the one it was built for.\n\nLower resolutions make text and icons bigger, but the image looks softer because the screen has to stretch it.\n\nIf text is too small at the recommended resolution, keep that resolution and use \"Make text and other items larger or smaller\" instead. This keeps the picture sharp while enlarging what is on screen.",
-     L"Per ottenere l'immagine più nitida, scegliere la risoluzione contrassegnata come (consigliata). È la risoluzione nativa dello schermo, quella per cui è stato progettato.\n\nLe risoluzioni inferiori ingrandiscono testo e icone, ma l'immagine risulta meno definita perché lo schermo deve adattarla.\n\nSe alla risoluzione consigliata il testo è troppo piccolo, mantenere tale risoluzione e usare \"Ingrandisci o riduci dimensioni di testo e altri elementi\". In questo modo l'immagine resta nitida e il contenuto viene ingrandito.",
-     L"Para obtener la imagen más nítida, elija la resolución marcada como (recomendado). Es la resolución nativa de la pantalla, aquella para la que se diseñó.\n\nLas resoluciones más bajas agrandan el texto y los iconos, pero la imagen se ve menos definida porque la pantalla debe estirarla.\n\nSi el texto es demasiado pequeño en la resolución recomendada, mantenga esa resolución y use \"Cambiar el tamaño del texto y de otros elementos\". Así la imagen sigue nítida y el contenido se agranda.",
-     L"Pour obtenir l'image la plus nette, choisissez la résolution marquée (recommandé). Il s'agit de la résolution native de votre écran, celle pour laquelle il a été conçu.\n\nLes résolutions inférieures agrandissent le texte et les icônes, mais l'image paraît moins nette car l'écran doit l'étirer.\n\nSi le texte est trop petit à la résolution recommandée, conservez cette résolution et utilisez « Modifier la taille du texte et d'autres éléments ». L'image reste ainsi nette tout en agrandissant le contenu.",
-     L"En keskin görüntü için (önerilen) olarak işaretlenmiş çözünürlüğü seçin. Bu, ekranınızın üretildiği yerel çözünürlüktür.\n\nDaha düşük çözünürlükler metni ve simgeleri büyütür, ancak ekran görüntüyü esnetmek zorunda kaldığı için görüntü daha bulanık görünür.\n\nÖnerilen çözünürlükte metin çok küçükse, bu çözünürlüğü koruyun ve bunun yerine \"Metin ve diğer öğeleri büyüt veya küçült\" seçeneğini kullanın. Böylece görüntü keskin kalırken ekrandakiler büyür.",
-     L"Для наиболее четкого изображения выберите разрешение с пометкой (рекомендуется). Это собственное разрешение вашего экрана, для которого он создан.\n\nПри более низких разрешениях текст и значки становятся крупнее, но изображение выглядит менее четким, так как экрану приходится его растягивать.\n\nЕсли при рекомендуемом разрешении текст слишком мелкий, оставьте это разрешение и воспользуйтесь параметром \"Изменение размера текста и других элементов\". Изображение останется четким, а содержимое станет крупнее.",
-     L"若要获得最清晰的画面，请选择标有(推荐)的分辨率。这是显示器的原生分辨率，也是其设计使用的分辨率。\n\n较低的分辨率会使文本和图标变大，但由于屏幕需要拉伸图像，画面会显得比较模糊。\n\n如果在推荐分辨率下文本太小，请保留该分辨率并改用“放大或缩小文本和其他项目”。这样既能保持画面清晰，又能放大屏幕上的内容。",
-     L"Für das schärfste Bild wählen Sie die mit (empfohlen) gekennzeichnete Auflösung. Dies ist die native Auflösung Ihres Bildschirms, für die er gebaut wurde.\n\nNiedrigere Auflösungen vergrößern Text und Symbole, das Bild wirkt jedoch unschärfer, da der Bildschirm es strecken muss.\n\nIst der Text bei der empfohlenen Auflösung zu klein, behalten Sie diese Auflösung bei und verwenden Sie stattdessen \"Text und weitere Elemente vergrößern oder verkleinern\". So bleibt das Bild scharf und der Inhalt wird größer.",
-     L"Para obter a imagem mais nítida, escolha a resolução marcada como (recomendado). Essa é a resolução nativa da tela, aquela para a qual ela foi construída.\n\nResoluções menores aumentam o texto e os ícones, mas a imagem fica menos definida porque a tela precisa esticá-la.\n\nSe o texto estiver muito pequeno na resolução recomendada, mantenha essa resolução e use \"Facilitar a leitura do texto e de outros itens\". Assim a imagem continua nítida e o conteúdo fica maior.",
-     L"Aby uzyskać najostrzejszy obraz, wybierz rozdzielczość oznaczoną jako (zalecane). Jest to rozdzielczość natywna ekranu, czyli ta, dla której został zbudowany.\n\nNiższe rozdzielczości powiększają tekst i ikony, ale obraz wygląda na mniej wyraźny, ponieważ ekran musi go rozciągnąć.\n\nJeśli przy zalecanej rozdzielczości tekst jest za mały, zachowaj tę rozdzielczość i użyj opcji \"Powiększ lub pomniejsz tekst i inne elementy\". Dzięki temu obraz pozostanie ostry, a zawartość zostanie powiększona."},
+     L"Choose the resolution marked (recommended). That is the native resolution of your display and gives the sharpest picture.\n\nIf text and icons look too small, keep that resolution and make text and other items larger. A lower resolution makes things bigger but the image looks softer.\n\nIf you use more than one display, use Multiple displays to extend or duplicate the desktop. Press Apply, then keep the settings if the picture looks correct.",
+     L"Scegliere la risoluzione contrassegnata come (consigliata). È la risoluzione nativa dello schermo e offre l'immagine più nitida.\n\nSe testo e icone sono troppo piccoli, mantenere quella risoluzione e ingrandire testo e altri elementi. Una risoluzione inferiore ingrandisce tutto ma rende l'immagine meno definita.\n\nCon più schermi, usare Più schermi per estendere o duplicare il desktop. Scegliere Applica e mantenere le impostazioni se l'immagine è corretta.",
+     L"Elija la resolución marcada como (recomendada). Es la resolución nativa de la pantalla y ofrece la imagen más nítida.\n\nSi el texto y los iconos se ven demasiado pequeños, conserve esa resolución y aumente el texto y otros elementos. Una resolución inferior agranda todo, pero la imagen se ve menos definida.\n\nSi usa varias pantallas, use Varias pantallas para extender o duplicar el escritorio. Pulse Aplicar y conserve la configuración si la imagen se ve bien.",
+     L"Choisissez la résolution marquée (recommandé). C’est la résolution native de l’écran et elle donne l’image la plus nette.\n\nSi le texte et les icônes paraissent trop petits, conservez cette résolution et agrandissez le texte et les autres éléments. Une résolution inférieure agrandit tout mais l’image est moins nette.\n\nSi vous avez plusieurs écrans, utilisez Affichages multiples pour étendre ou dupliquer le Bureau. Cliquez sur Appliquer, puis conservez les paramètres si l’image est correcte.",
+     L" (Önerilen) olarak işaretlenmiş çözünürlüğü seçin. Bu, ekranınızın yerel çözünürlüğüdür ve en net görüntüyü verir.\n\nMetin ve simgeler çok küçükse bu çözünürlüğü koruyun ve metni ile diğer öğeleri büyütün. Daha düşük bir çözünürlük öğeleri büyütür ama görüntü daha yumuşak olur.\n\nBirden çok ekran kullanıyorsanız masaüstünü genişletmek veya yinelemek için Birden çok ekran’ı kullanın. Uygula’yı seçin ve görüntü doğruysa ayarları koruyun.",
+     L"Выберите разрешение с пометкой (рекомендуется). Это собственное разрешение экрана, оно даёт самое чёткое изображение.\n\nЕсли текст и значки слишком мелкие, оставьте это разрешение и увеличьте текст и другие элементы. Более низкое разрешение делает объекты крупнее, но изображение становится менее чётким.\n\nЕсли экранов несколько, используйте «Несколько дисплеев», чтобы расширить или дублировать рабочий стол. Нажмите «Применить» и сохраните параметры, если изображение выглядит правильно.",
+     L"请选择标有（推荐）的分辨率。这是显示器的原生分辨率，画面最清晰。\n\n如果文字和图标太小，请保持该分辨率，并改用放大文本和其他项目。较低的分辨率会让内容变大，但画面会变模糊。\n\n如果有多台显示器，请使用“多显示器”扩展或复制桌面。点击“应用”，如果画面正常请保留这些设置。",
+     L"Wählen Sie die mit (empfohlen) gekennzeichnete Auflösung. Das ist die native Auflösung Ihres Bildschirms und liefert das schärfste Bild.\n\nWenn Text und Symbole zu klein wirken, behalten Sie diese Auflösung bei und vergrößern Sie Text und andere Elemente. Eine niedrigere Auflösung macht alles größer, das Bild wird jedoch unschärfer.\n\nBei mehreren Bildschirmen verwenden Sie „Mehrere Anzeigen“, um den Desktop zu erweitern oder zu duplizieren. Klicken Sie auf „Übernehmen“ und behalten Sie die Einstellungen bei, wenn das Bild stimmt.",
+     L"Escolha a resolução marcada como (recomendado). Essa é a resolução nativa da tela e oferece a imagem mais nítida.\n\nSe o texto e os ícones estiverem pequenos demais, mantenha essa resolução e aumente o texto e outros itens. Uma resolução menor deixa tudo maior, mas a imagem fica menos nítida.\n\nSe houver várias telas, use Múltiplos vídeos para estender ou duplicar a área de trabalho. Clique em Aplicar e mantenha as configurações se a imagem estiver correta.",
+     L"Wybierz rozdzielczość oznaczoną jako (zalecana). To natywna rozdzielczość ekranu i daje najostrzejszy obraz.\n\nJeśli tekst i ikony są za małe, zachowaj tę rozdzielczość i powiększ tekst oraz inne elementy. Niższa rozdzielczość powiększa zawartość, ale obraz jest mniej wyraźny.\n\nPrzy wielu ekranach użyj opcji Wiele ekranów, aby rozszerzyć lub powielić pulpit. Wybierz Zastosuj i zachowaj ustawienia, jeśli obraz wygląda poprawnie."},
     {}
 };
 
@@ -687,6 +682,7 @@ std::atomic<bool> g_resolutionPageCompatibility{true};
 std::atomic<bool> g_redirectClassicLaunch{true};
 std::atomic<bool> g_redirectDisplaySettingsUri{true};
 std::atomic<bool> g_enableDpiPresets{true};
+std::atomic<bool> g_hideBrokenTextSizeSection{true};
 std::atomic<bool> g_showOrientationPanel{false};
 
 // Manual-reset stop event set by Wh_ModUninit so that setup waits and retry
@@ -705,6 +701,8 @@ static const DWORD kDownloadTimeoutMs = 20000;
 static const int kMaxDownloadAttempts = 3;
 static const DWORD kRetryDelayMs = 3000;
 static const DWORD kRetryCycleDelayMs = 60000;
+static const DWORD kMaxRetryCycleDelayMs = 5 * 60 * 1000;
+static const int kMaxSetupRetryCycles = 3;
 
 // The private DirectUI resource module is built once and loaded lazily; it is
 // guarded by a mutex because both the setup thread and settings changes can
@@ -727,7 +725,7 @@ static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 // content is fully determined by the translation inputs plus the mod's
 // embedded string catalog, so bumping this invalidates files built by older
 // versions of the mod whenever the catalog changes.
-static constexpr DWORD kLocalizedResourceFormatVersion = 16;
+static constexpr DWORD kLocalizedResourceFormatVersion = 18;
 
 // Setup is performed on a background worker thread that is joined on unload.
 // Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
@@ -737,6 +735,15 @@ static constexpr DWORD kLocalizedResourceFormatVersion = 16;
 [[clang::no_destroy]]
 #endif
 static std::optional<std::thread> g_setupThread;
+
+#if defined(__clang__)
+[[clang::no_destroy]]
+#endif
+static std::optional<std::thread> g_dpiApplyThread;
+static HANDLE g_dpiApplyWakeEvent = nullptr;
+static std::atomic<UINT> g_pendingClassicDpiPercent{0};
+static std::atomic<ULONGLONG> g_dpiApplyGeneration{0};
+static constexpr DWORD kClassicDpiApplyDelayMs = 2500;
 
 const std::wstring* CurrentDllPath() {
     return g_dllPath.load(std::memory_order_acquire);
@@ -786,10 +793,50 @@ static bool AsciiCaseInsensitiveContains(const wchar_t* s, const char* needle) {
     return false;
 }
 
+static bool AsciiCaseInsensitiveEquals(const wchar_t* value,
+                                       const wchar_t* expected) {
+    if (!value || !expected) return false;
+    while (*value && *expected) {
+        wchar_t left = *value++;
+        wchar_t right = *expected++;
+        if (left >= L'a' && left <= L'z') left -= L'a' - L'A';
+        if (right >= L'a' && right <= L'z') right -= L'a' - L'A';
+        if (left != right) return false;
+    }
+    return *value == L'\0' && *expected == L'\0';
+}
+
+static bool AsciiCaseInsensitiveEndsWith(const wchar_t* value,
+                                         const wchar_t* suffix) {
+    if (!value || !suffix) return false;
+    const size_t valueLength = wcslen(value);
+    const size_t suffixLength = wcslen(suffix);
+    return valueLength >= suffixLength &&
+           AsciiCaseInsensitiveEquals(value + valueLength - suffixLength,
+                                      suffix);
+}
+
 static bool ContainsRelevantKeywordCheap(const wchar_t* s) {
-    return s && (AsciiCaseInsensitiveContains(s, "clsid") ||
-                 AsciiCaseInsensitiveContains(s, "controlpanel") ||
-                 AsciiCaseInsensitiveContains(s, "shell extensions"));
+    if (!s || !*s) return false;
+
+    // Exact applet/provider GUIDs are the only CLSID children synthesized by
+    // this mod.  Parent keys are matched only as complete suffixes, so ordinary
+    // COM activations no longer enter the allocation/locking slow path.
+    if (AsciiCaseInsensitiveContains(
+            s, "{c555438b-3c23-4769-a71f-b6d3d9b6053a}") ||
+        AsciiCaseInsensitiveContains(
+            s, "{2b6da137-316e-458b-a0ab-be48c8ec39b9}")) {
+        return true;
+    }
+
+    return AsciiCaseInsensitiveEquals(s, L"CLSID") ||
+           AsciiCaseInsensitiveEndsWith(s, L"\\CLSID") ||
+           AsciiCaseInsensitiveEquals(s, L"ControlPanel\\NameSpace") ||
+           AsciiCaseInsensitiveEndsWith(
+               s, L"\\ControlPanel\\NameSpace") ||
+           AsciiCaseInsensitiveEquals(s, L"Shell Extensions\\Approved") ||
+           AsciiCaseInsensitiveEndsWith(
+               s, L"\\Shell Extensions\\Approved");
 }
 
 class UniqueWinHandle {
@@ -2182,9 +2229,7 @@ static const char kWin7PreviewBitmap20Base64[] =
     "6P/p6en/6eno/+jo6P/o6Oj/5+fo/+jo5//o5+f/5+fn/+fn5v/i4uL/2tnZ/87Nzf9lX1z/3NfV//n6+f/Euan/x7ut/8i7rf/Hu63/yLut/8i7rf/Hu63/"
     "x7ut/8e8rf/Iu63/x7yt/8i7rv/Iu63/yLut/8i7rf/IvK3/x7ut/8i7rf/Hu67/yLyt/8i8rf/Iu67/x7uu/8i7rf/Iu67/yLyt/8i7rf/Iu67/yLut/8e8"
     "rv/Iu63/x7yt/8e7rf/Iu63/vrGl//T19P/09fT/9PT0//T08//z9PP/8vLy//Ly8f/y8vH/8fHx//Hx8P/x8fD/8PHv//Dw8P/v8O//7/Dv/8C1p//Dtaj/"
-    "wbOm/7SjlP/u7u3/7e7t/7iqov9YNCX/bkMz/3tKOf+GUT3/j1ZB/5RZQ/+WWkP/lVlE/5ZZQ/+WWUL/lVhC/5VYQv+UWEH/k1dB/4pSPP/S1dTeysvK/7Oz"
-    "sf+foKD/e3t7/97e3/X39/j/6uvq/+Lk4v+nrar4ilI8/8CNef+/jHn/v415/7+Mef+/i3j/v4t4/76Md/+9i3j/vYt3/72Kd/+9inb/vYp2/7yJdv+9iXX/"
-    "vIl1/7uIdf+7iHT/u4h0/7qHdP+6h3P/uody/7qGc/+2g3D/r39r/6V3Zf9lX1z/3tnY//Dx8P/w8O//7/Dv/+/v7//u7+//7+7u/+7u7v/u7+7/7u7t/+7u"
+    "wbOm/7SjlP/u7u3/7e7t/7iqov9YNCX/bkMz/3tKOf+GUT3/j1ZB/5RZQ/+WWkP/lVlE/5ZZQ/+WWUL/lVhC/5VYQv+UWEH/k1dB/4pSPP/S1dTeysvK/7O//Dx8P/w8O//7/Dv/+/v7//u7+//7+7u/+7u7v/u7+7/7u7t/+7u"
     "7f/t7u3/7e3t/+3t7P/t7ez/7Ozs/+zs6//s7Ov/6+zs/+zr6//r6+v/6+vq/+rr6//q6ur/6urq/+rq6f/q6un/6enp/+np6P/p6ej/6Onp/+jo6P/o6Of/"
     "5+jn/+fn5//i4uL/2tvZ/87Ozf9lX1z/3NfV//n6+f/Fuar/yb2u/8i8rv/JvK7/ybyu/8i8rv/IvK7/ybyu/8i8rv/IvK7/yLyv/8i8rv/JvK7/yLyv/8i9"
     "rv/IvK7/yLyu/8i8rv/JvK7/yLyu/8i8rv/Iva//yLyu/8i8rv/IvK7/yLyu/8i8rv/JvK7/ybyu/8i8rv/JvK7/ybyu/8i8r//IvK//v7Km//X19P/19fT/"
@@ -4839,10 +4884,24 @@ static void RunSetup() {
 
     setupMutexGuard.Close();
 
-    while (!ok && !g_shuttingDown.load(std::memory_order_acquire)) {
-        Wh_Log(L"Display provider is not ready; retrying automatically in 60 seconds");
-        if (WaitForSetupStopOrTimeout(kRetryCycleDelayMs)) break;
+    DWORD retryDelayMs = kRetryCycleDelayMs;
+    for (int cycle = 0;
+         !ok && cycle < kMaxSetupRetryCycles &&
+         !g_shuttingDown.load(std::memory_order_acquire);
+         ++cycle) {
+        Wh_Log(L"Display provider is not ready; retry cycle %d/%d in %u ms",
+               cycle + 1, kMaxSetupRetryCycles, retryDelayMs);
+        if (WaitForSetupStopOrTimeout(retryDelayMs)) break;
         ok = trySetupBatch();
+        if (retryDelayMs < kMaxRetryCycleDelayMs) {
+            retryDelayMs = std::min(kMaxRetryCycleDelayMs,
+                                    retryDelayMs * 2);
+        }
+    }
+    if (!ok && !g_shuttingDown.load(std::memory_order_acquire)) {
+        Wh_Log(L"Display provider setup stopped after %d retry cycles; "
+               L"reload the mod to try again",
+               kMaxSetupRetryCycles);
     }
 
     if (ok && !outPath.empty()) {
@@ -5076,17 +5135,21 @@ static void LoadFeatureSettings() {
         std::memory_order_release);
     g_enableDpiPresets.store(Wh_GetIntSetting(L"enableDpiPresets") != 0,
                              std::memory_order_release);
+    g_hideBrokenTextSizeSection.store(
+        Wh_GetIntSetting(L"hideBrokenTextSizeSection") != 0,
+        std::memory_order_release);
     g_showOrientationPanel.store(
         Wh_GetIntSetting(L"showOrientationPanel") != 0,
         std::memory_order_release);
     Wh_Log(L"Feature settings loaded: sidebarLinks=%d resolutionPage=%d "
            L"classicRouting=%d displaySettingsUri=%d dpiPresets=%d "
-           L"orientation=%d",
+           L"hideTextSize=%d orientation=%d",
            static_cast<int>(g_showSidebarLinks.load()),
            static_cast<int>(g_resolutionPageCompatibility.load()),
            static_cast<int>(g_redirectClassicLaunch.load()),
            static_cast<int>(g_redirectDisplaySettingsUri.load()),
            static_cast<int>(g_enableDpiPresets.load()),
+           static_cast<int>(g_hideBrokenTextSizeSection.load()),
            static_cast<int>(g_showOrientationPanel.load()));
 }
 
@@ -5225,20 +5288,16 @@ public:
             // exception to cross RegCloseKey's ABI boundary.
         }
     }
-    // On unload every outstanding fake key is closed. The volatile backing key
-    // is in-memory only and disappears when its last handle is closed, so there
-    // is nothing left to leak - unlike the old heap-pointer scheme, which had
-    // to abandon its backing allocations on purpose.
-    void CloseAllFakes() {
-        std::vector<HKEY> keys;
+    // The handles belong to shell/COM callers.  On unload only forget our
+    // metadata; the caller's later unhooked RegCloseKey closes the genuine
+    // volatile HKEY safely and removes its backing key.
+    void ForgetAllWithoutClosing() {
         try {
             std::unique_lock<std::shared_mutex> l(mutex_);
-            for (const HKEY k : fakeKeys_) keys.push_back(k);
             fakeKeys_.clear();
             paths_.clear();
         } catch (...) {
         }
-        for (HKEY k : keys) CloseVolatileRegistryKey(k);
     }
 
 private:
@@ -6198,7 +6257,10 @@ LoadStringA_t LoadStringAOriginal = nullptr;
 // The Display module handle is resolved once and we compare pointers only,
 // which avoids a per-call GetModuleFileNameW on the hot path.
 static bool IsDisplayResourceModule(HINSTANCE instance) {
-    if (!instance) return false;
+    if (!instance ||
+        !g_dllVerifiedOk.load(std::memory_order_acquire)) {
+        return false;
+    }
     const auto normalize = [](HMODULE value) {
         const ULONG_PTR raw = reinterpret_cast<ULONG_PTR>(value);
         return reinterpret_cast<HMODULE>(
@@ -6223,7 +6285,8 @@ static bool IsDisplayResourceModule(HINSTANCE instance) {
         HMODULE module;
         bool result;
     };
-    static thread_local ModuleCheckCacheEntry cache[2] = {};
+    static thread_local ModuleCheckCacheEntry cache[16] = {};
+    static thread_local unsigned int nextCacheEntry = 0;
     for (const ModuleCheckCacheEntry& entry : cache) {
         if (entry.module == module) return entry.result;
     }
@@ -6255,8 +6318,8 @@ static bool IsDisplayResourceModule(HINSTANCE instance) {
         }
     }
     if (result || privatePathChecked) {
-        cache[1] = cache[0];
-        cache[0] = {module, result};
+        cache[nextCacheEntry] = {module, result};
+        nextCacheEntry = (nextCacheEntry + 1) % ARRAYSIZE(cache);
     }
     return result;
 }
@@ -6551,7 +6614,7 @@ static bool FindMatchingElementClose(const std::wstring& xml, size_t opening,
     return false;
 }
 
-static UINT GetPrimarySystemDpiForPreview() {
+static UINT GetPrimarySystemDpiForWin7Preview() {
     using GetDpiForSystem_t = UINT(WINAPI*)();
     using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
@@ -6569,8 +6632,8 @@ static UINT GetPrimarySystemDpiForPreview() {
     return 96;
 }
 
-static UINT SelectWin81PreviewBitmap() {
-    const UINT dpi = GetPrimarySystemDpiForPreview();
+static UINT SelectWin7PreviewBitmap() {
+    const UINT dpi = GetPrimarySystemDpiForWin7Preview();
     static const struct {
         UINT dpi;
         UINT bitmapId;
@@ -6590,64 +6653,78 @@ static UINT SelectWin81PreviewBitmap() {
     return bestId;
 }
 
-// Reads the classic logical-DPI override currently applied on the system and
+// Reads the primary monitor's effective DPI through GetDpiForMonitor and
 // maps it to the matching classic preset (100/125/150/200%), or 0 when the
-// system is not running a classic preset. Reads go straight to kernelbase so
-// the query never re-enters this mod's own registry hooks.
-static UINT GetCurrentClassicDpiPreset() {
-    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-    auto regOpen = kernelbase
-                       ? reinterpret_cast<decltype(&RegOpenKeyExW)>(
-                             GetProcAddress(kernelbase, "RegOpenKeyExW"))
-                       : nullptr;
-    auto regQuery = kernelbase
-                        ? reinterpret_cast<decltype(&RegQueryValueExW)>(
-                              GetProcAddress(kernelbase, "RegQueryValueExW"))
-                        : nullptr;
-    auto regClose = kernelbase
-                        ? reinterpret_cast<decltype(&RegCloseKey)>(
-                              GetProcAddress(kernelbase, "RegCloseKey"))
-                        : nullptr;
-    if (!regOpen || !regQuery || !regClose) return 0;
+// current DPI doesn't exactly match one of those presets.
+static UINT GetCurrentClassicDpiPreset(HMONITOR monitor = nullptr) {
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(
+        HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
 
-    HKEY desktop = nullptr;
-    if (regOpen(HKEY_CURRENT_USER, L"Control Panel\\Desktop", 0, KEY_READ,
-                &desktop) != ERROR_SUCCESS ||
-        !desktop) {
+    static GetDpiForMonitor_t getDpiForMonitor = []() {
+        HMODULE shcore = GetModuleHandleW(L"shcore.dll");
+        if (!shcore) {
+            shcore = LoadLibraryExW(L"shcore.dll", nullptr,
+                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
+        return shcore
+                   ? FunctionPointerFromFarProc<GetDpiForMonitor_t>(
+                         GetProcAddress(shcore, "GetDpiForMonitor"))
+                   : nullptr;
+    }();
+
+    if (!getDpiForMonitor) {
+        Wh_Log(L"Display hub: GetDpiForMonitor is unavailable");
         return 0;
     }
-    UniqueWinHandle desktopGuard(desktop);
 
-    DWORD logPixels = 0;
-    DWORD type = 0;
-    DWORD size = sizeof(logPixels);
-    if (regQuery(desktop, L"LogPixels", nullptr, &type,
-                 reinterpret_cast<LPBYTE>(&logPixels), &size) != ERROR_SUCCESS ||
-        type != REG_DWORD) {
+    if (!monitor) {
+        const POINT primaryPoint{0, 0};
+        monitor = MonitorFromPoint(primaryPoint, MONITOR_DEFAULTTOPRIMARY);
+    }
+    if (!monitor) {
+        Wh_Log(L"Display hub: monitor lookup failed");
         return 0;
     }
-    switch (logPixels) {
-        case 96: return 100;
-        case 120: return 125;
-        case 144: return 150;
-        case 192: return 200;
-        default: return 0;
+
+    UINT dpiX = 0;
+    UINT dpiY = 0;
+    const HRESULT hr =
+        getDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    if (FAILED(hr)) {
+        Wh_Log(L"Display hub: GetDpiForMonitor failed (0x%08X)",
+               static_cast<unsigned int>(hr));
+        return 0;
     }
+
+    UINT preset = 0;
+    if (dpiX == dpiY) {
+        switch (dpiX) {
+            case 96: preset = 100; break;
+            case 120: preset = 125; break;
+            case 144: preset = 150; break;
+            case 192: preset = 200; break;
+            default: break;
+        }
+    }
+
+    Wh_Log(L"Display hub: current effective DPI=%ux%u, classic preset=%u%%",
+           dpiX, dpiY, preset);
+    return preset;
 }
 
-// Reconstruct the removed Windows 8.1 Hub hierarchy without reviving any of
-// its deleted CHubPage handlers. The four classic DPI preset radios and the
-// all-displays box are restored as the original Windows 8.1 markup. The radios
+// Reconstruct the Windows 7-style Display Hub without reviving deleted
+// CHubPage handlers. The four classic DPI preset radios and the all-displays
+// box keep the pinned provider's compatible layout contract. The radios
 // are natively selectable (DirectUI updates the dot on click); applying the
-// preset is done by the hosted-window hit-test in TryApplyClassicDpiPresetAt,
-// which maps the click to a preset row and writes the classic logical-DPI
-// override (LogPixels/Win8DpiScaling, effective at the next sign-in exactly
-// like the original Windows 7 page). When enableDpiPresets is off they are
-// disabled. The
+// preset is done by the DirectUI selected-property hook, which receives the
+// actual existing radio element and requests the monitor DPI through
+// DisplayConfigSetDeviceInfo. When enableDpiPresets is off they are disabled. The
 // provider's one retained actionLinks element carries the official custom
 // text size (DPI) command; any leftover Display settings hyperlink is
 // stripped at LoadString. Desktop text controls and Apply retain their exact
 // 1511 IDs and therefore remain provider-owned.
+static bool ClassicDpiChangeNeedsSignOutMessage();
+
 static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
     if (xml.find(L"atom(Hub)") == std::wstring::npos ||
         xml.find(L"atom(ClassicDpiReference)") != std::wstring::npos) {
@@ -6683,18 +6760,17 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
 <Button layoutpos="ninetop" content="graphic(%%PREVIEW%%,0)" contentalign="middlecenter" active="inactive" accrole="graphic" accname="resstr(14)"/>
 </Element>
 </Element>
-<CCSysLink id="atom(actionLinks)" sheet="displaycplstyles" class="cp_content_help_text" layoutpos="top" padding="rect(0rp,4rp,0rp,6rp)" content="resstr(372)"/>
-<CCCheckBox id="atom(ClassicManageDpiReference)" class="display_checkbox" layoutpos="top" content="resstr(451)" accname="resstr(451)" selected="false" %%DPIENA%% padding="rect(0rp,3rp,0rp,0rp)"/>
-<Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,4rp)" content="resstr(601)" accname="resstr(601)"/>
-<Element layoutpos="top" layout="flowlayout()" margin="rect(0rp,14rp,0rp,0rp)">
+<CCSysLink id="atom(actionLinks)" sheet="displaycplstyles" class="cp_content_help_text" layoutpos="none" width="0rp" height="0rp" visible="false" margin="rect(0rp,0rp,0rp,0rp)" padding="rect(0rp,0rp,0rp,0rp)" content=""/>
+<CCCheckBox id="atom(ClassicManageDpiReference)" class="display_checkbox" layoutpos="none" content="resstr(451)" accname="resstr(451)" selected="false" enabled="false" active="inactive" visible="false" width="0rp" height="0rp" margin="rect(0rp,0rp,0rp,0rp)" padding="rect(0rp,0rp,0rp,0rp)"/>
+<Element layoutpos="%%TEXTLAYOUT%%" layout="flowlayout()" margin="%%TEXTTITLEMARGIN%%" %%TEXTVIS%%>
 <Element class="cp_content_instruction" content="resstr(548)"/>
 </Element>
-<Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,8rp)" content="resstr(420)" accname="resstr(420)"/>
-<Element id="atom(DesktopElementsSection)" layout="rowlayout(1,0,2)" layoutpos="top" sheet="displaycplstyles" padding="rect(0rp,6rp,0rp,6rp)">
-<ComboBox id="atom(DesktopElementCombobox)" accname="resstr(549)">
+<Element class="cp_content_text" layoutpos="%%TEXTLAYOUT%%" padding="%%TEXTDESCPADDING%%" content="resstr(420)" accname="resstr(420)" %%TEXTVIS%%/>
+<Element id="atom(DesktopElementsSection)" layout="rowlayout(1,0,2)" layoutpos="%%TEXTLAYOUT%%" sheet="displaycplstyles" padding="%%TEXTROWPADDING%%" %%TEXTVIS%%>
+<ComboBox id="atom(DesktopElementCombobox)" accname="resstr(549)" %%TEXTVIS%%>
 %%DESKTOPELEMENTS%%
 </ComboBox>
-<ComboBox id="atom(FontSizeCombobox)" accname="resstr(550)">
+<ComboBox id="atom(FontSizeCombobox)" accname="resstr(550)" %%TEXTVIS%%>
 <Button content="6"/>
 <Button content="7"/>
 <Button content="8"/>
@@ -6709,15 +6785,15 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
 <Button content="22"/>
 <Button content="24"/>
 </ComboBox>
-<CCCheckBox id="atom(FontBoldCheckbox)" class="display_checkbox" layoutpos="auto" content="resstr(551)" accname="resstr(552)"/>
+<CCCheckBox id="atom(FontBoldCheckbox)" class="display_checkbox" layoutpos="auto" content="resstr(551)" accname="resstr(552)" %%TEXTVIS%%/>
 </Element>
-<Element layoutpos="top" layout="borderlayout()" margin="rect(0rp,18rp,0rp,0rp)">
+<Element layoutpos="top" layout="borderlayout()" %%COMMANDMARGIN%%>
 <Element layoutpos="top" class="cp_content_divider_line"/>
 <Element layoutpos="top" layout="borderlayout()" class="cp_command_button_box">
 <Element layoutpos="right" layout="flowlayout(0,0,1,0)">
-<CCPushButton layoutpos="right" id="atom(ApplyButton)" shortcut="auto" content="resstr(553)" selected="true" accessible="true" accdefaction="resstr(554)"/>
+<CCPushButton layoutpos="right" id="atom(ApplyButton)" shortcut="auto" content="resstr(553)" selected="true" enabled="false" accessible="true" accdefaction="resstr(554)"/>
 </Element>
-<Element id="atom(WarningGroup)" layoutpos="client" layout="flowlayout(0,0,0,0)">
+<Element id="atom(WarningGroup)" layoutpos="%%WARNINGLAYOUT%%" layout="flowlayout(0,0,0,0)" %%WARNINGVIS%%>
 <Element class="cp_nav_h_spacer" layoutpos="left"/>
 <Button layoutpos="left" content="icon(84,sysmetric(49),sysmetric(50),library(imageres.dll))" accrole="graphic" accname="resstr(15)" margin="rect(0rp,0rp,6rp,0rp)" width="sysmetric(49)" active="inactive"/>
 <Element layoutpos="left" layout="verticalflowlayout(0,0,0,0)">
@@ -6728,23 +6804,64 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
 </Element>
 )HUB";
 
-    const UINT previewId = SelectWin81PreviewBitmap();
+    const UINT previewId = SelectWin7PreviewBitmap();
     ReplaceAllXmlToken(body, L"%%PREVIEW%%", std::to_wstring(previewId));
+    const bool hideBrokenTextSize =
+        g_hideBrokenTextSizeSection.load(std::memory_order_acquire);
+    ReplaceAllXmlToken(
+        body, L"%%TEXTVIS%%",
+        hideBrokenTextSize ? L"visible=\"false\"" : L"");
+    ReplaceAllXmlToken(
+        body, L"%%TEXTLAYOUT%%",
+        hideBrokenTextSize ? L"none" : L"top");
+    ReplaceAllXmlToken(
+        body, L"%%TEXTTITLEMARGIN%%",
+        hideBrokenTextSize ? L"rect(0rp,0rp,0rp,0rp)"
+                           : L"rect(0rp,14rp,0rp,0rp)");
+    ReplaceAllXmlToken(
+        body, L"%%TEXTDESCPADDING%%",
+        hideBrokenTextSize ? L"rect(0rp,0rp,0rp,0rp)"
+                           : L"rect(0rp,5rp,0rp,8rp)");
+    ReplaceAllXmlToken(
+        body, L"%%TEXTROWPADDING%%",
+        hideBrokenTextSize ? L"rect(0rp,0rp,0rp,0rp)"
+                           : L"rect(0rp,6rp,0rp,6rp)");
+    ReplaceAllXmlToken(
+        body, L"%%COMMANDMARGIN%%",
+        hideBrokenTextSize
+            ? L"margin=\"rect(0rp,0rp,0rp,0rp)\""
+            : L"margin=\"rect(0rp,18rp,0rp,0rp)\"");
+
+    const bool showLegacySignOutWarning =
+        ClassicDpiChangeNeedsSignOutMessage();
+    ReplaceAllXmlToken(
+        body, L"%%WARNINGLAYOUT%%",
+        showLegacySignOutWarning ? L"client" : L"none");
+    ReplaceAllXmlToken(
+        body, L"%%WARNINGVIS%%",
+        showLegacySignOutWarning ? L"" : L"visible=\"false\"");
+
+    if (hideBrokenTextSize) {
+        Wh_Log(L"Display UIFILE 201: hid six Win7 text-size visuals and "
+               L"removed their layout space; element tree unchanged");
+    }
+    if (!showLegacySignOutWarning) {
+        Wh_Log(L"Display UIFILE 201: hid obsolete sign-out warning on "
+               L"live-DPI Windows build");
+    }
     // The classic DPI presets are disabled unless the user explicitly opts in
     // (matching the original Windows 7 page); the token collapses to the
     // exact attribute or nothing. The radio dot marks the preset currently
-    // applied on the system (LogPixels) and doubles as the status indicator.
+    // reported by GetDpiForMonitor and doubles as the status indicator.
     ReplaceAllXmlToken(
         body, L"%%DPIENA%%",
         g_enableDpiPresets.load(std::memory_order_acquire)
             ? L""
             : L"enabled=\"false\"");
 
-    // The classic radios are DirectUI-selectable (the dot follows the click
-    // natively); the selected state marks the preset currently applied on the
-    // system. Applying the preset itself is done by the hosted-window hit-test
-    // (see TryApplyClassicDpiPresetAt), because the provider's own
-    // selection-change handler was deleted in the 1511 build.
+    // DirectUI owns the radio dot and group behavior. On page creation the dot
+    // marks the current system DPI; after a click it represents a pending
+    // Windows 7-style choice until the existing Apply button is pressed.
     const UINT currentPreset = GetCurrentClassicDpiPreset();
     for (UINT id = 20; id <= 23; ++id) {
         wchar_t token[16] = {};
@@ -6755,12 +6872,8 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
                            preset == currentPreset ? L" selected=\"true\"" : L"");
     }
 
-    // The two text-size combos are filled with literal localized markup - the
-    // same mechanism as the Font size combo's numeric items, which render
-    // reliably on every build. The fill is pure markup injection: the mod must
-    // never touch windows it does not own (OpenGlass and other shell mods may
-    // host their own controls inside the same top-level window), so no runtime
-    // window enumeration or CB_ADDSTRING is used.
+    // Keep the hidden provider controls fully populated; only visibility is
+    // changed, never their identity, type, children or initialization data.
     std::wstring desktopElementItems;
     for (UINT id = 430; id <= 435; ++id) {
         const wchar_t* label = GetEmbeddedTranslation(id);
@@ -6775,12 +6888,228 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
                 default: escaped += *c; break;
             }
         }
-        desktopElementItems += L"<Button content=\"" + escaped + L"\"/>";
+        desktopElementItems +=
+            L"<Button content=\"" + escaped + L"\"/>";
     }
-    ReplaceAllXmlToken(body, L"%%DESKTOPELEMENTS%%", desktopElementItems);
+    ReplaceAllXmlToken(body, L"%%DESKTOPELEMENTS%%",
+                       desktopElementItems);
 
     xml.replace(openingEnd + 1, closing - openingEnd - 1, body);
     return true;
+}
+
+// DirectUI event hook for the four existing classic DPI radio buttons and the
+// existing ApplyButton. A radio changes only pending state and enables Apply;
+// only Apply starts the classic wait surface and commits DisplayConfig.
+using DirectUiStrToId_t = unsigned short(__cdecl*)(const unsigned short*);
+using DirectUiElementGetId_t = unsigned short(__cdecl*)(void*);
+using DirectUiElementGetSelected_t = bool(__cdecl*)(void*);
+using DirectUiElementGetParent_t = void*(__cdecl*)(void*);
+using DirectUiElementFindDescendent_t = void*(__cdecl*)(void*, unsigned short);
+using DirectUiElementSetEnabled_t = long(__cdecl*)(void*, bool);
+using DirectUiPushButtonSelectedChanged_t = void(__cdecl*)(void*);
+
+static DirectUiStrToId_t DirectUiStrToId = nullptr;
+static DirectUiElementGetId_t DirectUiElementGetId = nullptr;
+static DirectUiElementGetSelected_t DirectUiElementGetSelected = nullptr;
+static DirectUiElementGetParent_t DirectUiElementGetParent = nullptr;
+static DirectUiElementFindDescendent_t DirectUiElementFindDescendent = nullptr;
+static DirectUiElementSetEnabled_t DirectUiElementSetEnabled = nullptr;
+static DirectUiPushButtonSelectedChanged_t
+    DirectUiPushButtonSelectedChangedOriginal = nullptr;
+static std::atomic<bool> g_directDpiRadioHookActive{false};
+static thread_local void* g_dpiRadioGroup = nullptr;
+static thread_local void* g_dpiApplyButtonElement = nullptr;
+static thread_local bool g_dpiApplyButtonInitialized = false;
+static thread_local bool g_dpiApplyCommitIssued = false;
+
+static bool ApplyClassicDpiPreset(UINT percent,
+                                  HMONITOR monitor = nullptr);
+static void SetPendingClassicDpiSelection(UINT percent);
+static void ScheduleClassicDpiApply(UINT percent);
+static void CancelScheduledClassicDpiApply();
+
+static bool ApplyDisplayOrientation(DWORD orientation,
+                                    const wchar_t* deviceName);
+static void SetPendingDisplayOrientation(DWORD orientation,
+                                         void* contextElement);
+static int OrientationFromComboItem(void* element);
+static void HandleOrientationUiEvent(void* element);
+static void InstallOrientationHooks(HMODULE dui70);
+static void ShowDisplaySettingsAdvisory(HWND owner);
+static bool TryHandleDisplayHelpLink(void* element);
+
+static UINT GetClassicDpiPercentForElement(void* element) {
+    if (!element || !DirectUiElementGetId || !DirectUiStrToId) return 0;
+    const unsigned short id = DirectUiElementGetId(element);
+    struct Entry {
+        const wchar_t* atomName;
+        UINT percent;
+    };
+    static constexpr Entry entries[] = {
+        {L"ClassicScale100", 100},
+        {L"ClassicScale125", 125},
+        {L"ClassicScale150", 150},
+        {L"ClassicScale200", 200},
+    };
+    for (const Entry& entry : entries) {
+        const auto* name = reinterpret_cast<const unsigned short*>(
+            entry.atomName);
+        if (id == DirectUiStrToId(name)) return entry.percent;
+    }
+    return 0;
+}
+
+static void* FindDpiApplyButton(void* element) {
+    if (!element || !DirectUiElementGetParent ||
+        !DirectUiElementFindDescendent || !DirectUiStrToId) {
+        return nullptr;
+    }
+    void* root = element;
+    for (int depth = 0; depth < 64; ++depth) {
+        void* parent = DirectUiElementGetParent(root);
+        if (!parent) break;
+        root = parent;
+    }
+    const auto* applyName = reinterpret_cast<const unsigned short*>(
+        L"ApplyButton");
+    return DirectUiElementFindDescendent(
+        root, DirectUiStrToId(applyName));
+}
+
+static void SetDpiApplyButtonEnabled(void* context, bool enabled) {
+    if (!DirectUiElementSetEnabled) return;
+    if (!g_dpiApplyButtonElement) {
+        g_dpiApplyButtonElement = FindDpiApplyButton(context);
+    }
+    if (g_dpiApplyButtonElement) {
+        DirectUiElementSetEnabled(g_dpiApplyButtonElement, enabled);
+        g_dpiApplyButtonInitialized = true;
+        Wh_Log(L"Display hub: ApplyButton %s for pending DPI",
+               enabled ? L"enabled" : L"disabled");
+    }
+}
+
+static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
+    if (!DirectUiPushButtonSelectedChangedOriginal) return;
+    DirectUiPushButtonSelectedChangedOriginal(element);
+
+    if (g_shuttingDown.load(std::memory_order_acquire) ||
+        !DirectUiElementGetSelected || !DirectUiElementGetParent ||
+        !DirectUiElementGetId || !DirectUiStrToId) {
+        return;
+    }
+
+    try {
+        HandleOrientationUiEvent(element);
+
+        if (!g_enableDpiPresets.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        const unsigned short id = DirectUiElementGetId(element);
+        const auto* applyName = reinterpret_cast<const unsigned short*>(
+            L"ApplyButton");
+        if (id == DirectUiStrToId(applyName)) {
+            if (g_dpiApplyButtonElement != element) {
+                g_dpiApplyButtonElement = element;
+                g_dpiApplyButtonInitialized = false;
+                g_dpiApplyCommitIssued = false;
+            }
+            const UINT pending = g_pendingClassicDpiPercent.load(
+                std::memory_order_acquire);
+
+            // The markup initializes ApplyButton with selected=true, which
+            // produces the same DirectUI callback as a user activation. The
+            // first callback for each concrete element only establishes its
+            // disabled/enabled visual state and must never commit DPI.
+            if (!g_dpiApplyButtonInitialized) {
+                // selected=true in the existing markup always emits one setup
+                // callback. Never mutate DirectUI from that construction pass.
+                g_dpiApplyButtonInitialized = true;
+                return;
+            }
+
+            if (pending != 0 && !g_dpiApplyCommitIssued) {
+                g_dpiApplyCommitIssued = true;
+                SetDpiApplyButtonEnabled(element, false);
+                Wh_Log(L"Display hub: ApplyButton committed pending DPI %u%%",
+                       pending);
+                ScheduleClassicDpiApply(pending);
+            }
+            // With no pending DPI, enabled=false in the markup is already the
+            // authoritative state. Never mutate the button from extra setup
+            // callbacks emitted while DirectUI is constructing the page.
+            return;
+        }
+
+        const UINT percent = GetClassicDpiPercentForElement(element);
+        if (!percent || !DirectUiElementGetSelected(element)) return;
+
+        void* group = DirectUiElementGetParent(element);
+        if (group != g_dpiRadioGroup) {
+            g_dpiRadioGroup = group;
+            g_dpiApplyButtonElement = nullptr;
+            g_dpiApplyButtonInitialized = false;
+            g_dpiApplyCommitIssued = false;
+        }
+
+        Wh_Log(L"Display hub: DirectUI classic DPI radio %u%% selected "
+               L"(pending only)", percent);
+        const UINT current = GetCurrentClassicDpiPreset();
+        if (current == percent) {
+            const UINT previousPending = g_pendingClassicDpiPercent.load(
+                std::memory_order_acquire);
+            CancelScheduledClassicDpiApply();
+            // During page construction previousPending is zero and XML already
+            // keeps Apply gray, so no sibling is touched. If the user returns
+            // from a different pending preset to the applied one, the page is
+            // stable and Apply must be disabled again.
+            if (previousPending != 0) {
+                SetDpiApplyButtonEnabled(element, false);
+            }
+            return;
+        }
+
+        g_dpiApplyCommitIssued = false;
+        SetPendingClassicDpiSelection(percent);
+        SetDpiApplyButtonEnabled(element, true);
+    } catch (...) {
+        Wh_Log(L"Display hub: exception contained in DPI/Apply hook");
+    }
+}
+
+static bool InstallClassicDpiRadioHooks(HMODULE dui70) {
+    if (!dui70) return false;
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{L"StrToID"},
+         reinterpret_cast<void**>(&DirectUiStrToId)},
+        {{L"public: unsigned short __cdecl DirectUI::Element::GetID(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetId)},
+        {{L"public: bool __cdecl DirectUI::Element::GetSelected(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetSelected)},
+        {{L"public: class DirectUI::Element * __cdecl "
+           L"DirectUI::Element::GetParent(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetParent)},
+        {{L"public: class DirectUI::Element * __cdecl "
+           L"DirectUI::Element::FindDescendent(unsigned short)"},
+         reinterpret_cast<void**>(&DirectUiElementFindDescendent)},
+        {{L"public: long __cdecl DirectUI::Element::SetEnabled(bool)"},
+         reinterpret_cast<void**>(&DirectUiElementSetEnabled)},
+        {{L"public: virtual void __cdecl "
+           L"DirectUI::CCPushButton::OnSelectedPropertyChanged(void)"},
+         reinterpret_cast<void**>(
+             &DirectUiPushButtonSelectedChangedOriginal),
+         reinterpret_cast<void*>(
+             DirectUiPushButtonSelectedChangedHook)},
+    };
+    const bool installed =
+        WindhawkUtils::HookSymbols(dui70, hooks, ARRAYSIZE(hooks));
+    g_directDpiRadioHookActive.store(installed,
+                                     std::memory_order_release);
+    Wh_Log(L"Display hub: DirectUI DPI radio hook %s",
+           installed ? L"scheduled" : L"failed");
+    return installed;
 }
 
 // UIFILE 202 is byte-identical in Windows 8.1 and Windows 10 1511 and expects
@@ -6875,35 +7204,44 @@ static bool PatchResolutionControlCompatibilityXml(std::wstring& xml) {
         }
     }
 
-    // Optional classic Orientation row restore (opt-in): the 1511 provider
-    // hides its own OrientationPanel when the adapter does not advertise
-    // rotation (which is why it is missing on VMs and generic monitors);
-    // this adds the Windows 7-style row back with the localized orientation
-    // names as a visual restore. Leave OFF on rotation-capable displays,
-    // where the native row already appears.
-    if (g_showOrientationPanel.load(std::memory_order_acquire)) {
-        const size_t rowEnd = xml.find(L"</Element>", outerClose);
-        if (rowEnd != std::wstring::npos) {
-            const size_t insertAt = rowEnd + wcslen(L"</Element>");
-            static const wchar_t kOrientationRow[] =
-                L"<Element layout=\"rowlayout(1, 0, 2)\" layoutpos=\"top\" "
-                L"padding=\"rect(0rp,6rp,0rp,6rp)\">"
-                L"<Element class=\"cp_content_text\" content=\"resstr(518)\" "
-                L"padding=\"rect(0rp,0,12rp,0)\" accessible=\"true\" "
-                L"accrole=\"statictext\"/>"
-                L"<ComboBox layoutpos=\"left\" width=\"300rp\" "
-                L"accname=\"resstr(519)\">"
-                L"<Button content=\"resstr(312)\"/>"
-                L"<Button content=\"resstr(311)\"/>"
-                L"<Button content=\"resstr(314)\"/>"
-                L"<Button content=\"resstr(313)\"/>"
-                L"</ComboBox></Element>";
-            xml.insert(insertAt,
-                       std::wstring(newline) + kOrientationRow + newline);
-        }
-    }
     return true;
 }
+
+// The native Orientation row is empty on current adapters. Always leave
+// OrientationPanel out of layout so the page never shows a blank combo.
+static bool HideEmptyOrientationPanelXml(std::wstring& xml) {
+    const size_t panelId = xml.find(L"id=\"atom(OrientationPanel)\"");
+    if (panelId == std::wstring::npos) return false;
+    const size_t panelStart = xml.rfind(L'<', panelId);
+    const size_t panelEnd = xml.find(L'>', panelId);
+    if (panelStart == std::wstring::npos || panelEnd == std::wstring::npos) {
+        return false;
+    }
+    std::wstring tag = xml.substr(panelStart, panelEnd - panelStart);
+    bool changed = false;
+    const size_t none = tag.find(L"layoutpos=\"none\"");
+    if (none == std::wstring::npos) {
+        const size_t top = tag.find(L"layoutpos=\"top\"");
+        if (top != std::wstring::npos) {
+            tag.replace(top, wcslen(L"layoutpos=\"top\""),
+                        L"layoutpos=\"none\"");
+            changed = true;
+        } else {
+            tag += L" layoutpos=\"none\"";
+            changed = true;
+        }
+    }
+    if (tag.find(L"visible=") == std::wstring::npos) {
+        tag += L" visible=\"false\"";
+        changed = true;
+    }
+    if (changed) {
+        xml.replace(panelStart, panelEnd - panelStart, tag);
+        Wh_Log(L"Display orientation: OrientationPanel left hidden");
+    }
+    return changed;
+}
+
 
 static bool IsDisplayUifileResource(PCWSTR resourceName, PCWSTR resourceType) {
     if (!resourceType || IS_INTRESOURCE(resourceType) ||
@@ -6938,16 +7276,22 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
         if (!xml.empty() && IsDisplayPageXml(xml)) {
             if (resourceId == 201) {
                 patched = PatchDisplayHubCompatibilityXml(xml);
-                patchDescription = L"Windows 8.1-style Hub reconstruction";
+                patchDescription = L"Windows 7-style Display Hub reconstruction";
             } else if (resourceId == 202) {
                 if (g_resolutionPageCompatibility.load(
                         std::memory_order_acquire)) {
                     patched = PatchResolutionControlCompatibilityXml(xml);
                     patchDescription =
-                        L"ResolutionControl compatibility wrapper";
+                        L"Windows 7-style ResolutionControl wrapper";
                 } else {
                     Wh_Log(L"Display UIFILE 202: ResolutionControl adaptation "
                            L"disabled by setting; using provider markup");
+                }
+                if (HideEmptyOrientationPanelXml(xml)) {
+                    patched = true;
+                    if (!*patchDescription) {
+                        patchDescription = L"Orientation row kept hidden";
+                    }
                 }
             }
         }
@@ -6962,9 +7306,23 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
                 ~RecursionGuard()   { --g_inDisplayXmlPatch; }
             } guard;
 
-            return DUISetXML(
+            const HRESULT patchedResult = DUISetXML(
                 parser, xml.c_str(),
                 reinterpret_cast<HINSTANCE>(resourceModule), hInstance1);
+            // This DirectUI parser legitimately returns S_FALSE for UIFILE 202
+            // after consuming the compatible wrapper. The provider handled
+            // that result correctly before the diagnostic fallback was added,
+            // so preserve every successful HRESULT and fall back only on a
+            // real parse failure.
+            if (SUCCEEDED(patchedResult)) return patchedResult;
+
+            Wh_Log(L"Display UIFILE %u: patched SetXML failed with 0x%08X; "
+                   L"falling back to provider markup",
+                   resourceId,
+                   static_cast<unsigned int>(patchedResult));
+            return DUISetXMLFromResourceOriginal(
+                parser, resourceName, resourceType, resourceModule,
+                hInstance1, hInstance2);
         }
     } catch (...) {
     }
@@ -7160,6 +7518,8 @@ void InstallTranslationHook() {
             reinterpret_cast<XResourceProviderCreate_t>(xResourceProviderCreate),
             XResourceProviderCreateHook, &XResourceProviderCreateOriginal);
 
+    InstallClassicDpiRadioHooks(dui70);
+    InstallOrientationHooks(dui70);
     InstallDisplayXmlPatchHook();
 }
 
@@ -7195,12 +7555,8 @@ static constexpr ULONG_PTR kDisplayAddLinkControlPanelRva = 0x4B194;
 static constexpr ULONG_PTR kDisplayAddLinkShellExRva = 0x4B24C;
 static constexpr ULONG_PTR kDisplayGetNavLinkConditionsRva = 0x1ADDC;
 static constexpr ULONG_PTR kDisplayElementWithSiteSetSiteRva = 0x365B0;
-// CHubPage::_InitializeElements and _LoadSystemFontsAndMetrics in the exact
-// SHA-256-pinned provider. The latter can return before calling the former on
-// modern systems, leaving DesktopElementCombobox empty.
+// CHubPage::_InitializeElements in the exact SHA-256-pinned provider.
 static constexpr ULONG_PTR kDisplayHubInitializeElementsRva = 0x19B10;
-static constexpr ULONG_PTR kDisplayHubLoadSystemFontsAndMetricsRva = 0x1A160;
-static constexpr ULONG_PTR kDisplayHubLinkNotifyRva = 0x30C50;
 
 static const GUID kSidPerLayoutPropertyBag = {
     0xa46e5c25, 0xc09c, 0x4ca8,
@@ -7901,19 +8257,10 @@ static HRESULT __cdecl DisplayElementWithSiteSetSiteHook(
 // empty. Observe the native call and invoke the same native initializer only
 // when it was skipped. No DirectUI object layout is inspected or fabricated.
 using DisplayHubVoidMethod_t = void(__cdecl*)(void*);
-using DisplayHubLinkNotify_t = int(__cdecl*)(
-    unsigned int, unsigned long long, long long, long long*, void*);
 static DisplayHubVoidMethod_t DisplayHubInitializeElementsOriginal = nullptr;
-static DisplayHubVoidMethod_t DisplayHubLoadSystemFontsOriginal = nullptr;
-static DisplayHubLinkNotify_t DisplayHubLinkNotifyOriginal = nullptr;
-static thread_local bool g_insideDisplayHubFontLoad = false;
-static thread_local bool g_displayHubElementsObserved = false;
 
-static bool LaunchSystemCustomDpiPage(HWND owner);
-
-static void __cdecl DisplayHubInitializeElementsHook(void* self) {
+static void __cdecl DisplayHubInitializeElementsHook(void* /*self*/) {
     if (!DisplayHubInitializeElementsOriginal) return;
-    if (g_insideDisplayHubFontLoad) g_displayHubElementsObserved = true;
     // The Desktop element combo is populated statically by the patched
     // markup, so the provider's runtime initializer is deliberately not run:
     // on hosts where its string loading fails it removes the static items
@@ -7921,21 +8268,7 @@ static void __cdecl DisplayHubInitializeElementsHook(void* self) {
     // static items intact. Font-size selection wiring is provider-owned.
 }
 
-static void __cdecl DisplayHubLoadSystemFontsHook(void* self) {
-    if (!DisplayHubLoadSystemFontsOriginal) return;
 
-    // The provider doesn't recurse here, but preserve correct behavior if a
-    // future system callback re-enters the method unexpectedly.
-    if (g_insideDisplayHubFontLoad) {
-        DisplayHubLoadSystemFontsOriginal(self);
-        return;
-    }
-
-    g_insideDisplayHubFontLoad = true;
-    g_displayHubElementsObserved = false;
-    DisplayHubLoadSystemFontsOriginal(self);
-    g_insideDisplayHubFontLoad = false;
-}
 
 // Sign-out notification shown after a classic DPI preset is applied. Runs in a
 // tracked thread so the Control Panel page stays responsive, and the handle is
@@ -7943,6 +8276,7 @@ static void __cdecl DisplayHubLoadSystemFontsHook(void* self) {
 // unmapped (a still-open MessageBox would otherwise crash Explorer).
 static std::atomic<bool> g_dpiNotifyOpen{false};
 static std::atomic<HANDLE> g_dpiNotifyThread{nullptr};
+static std::mutex g_modalDialogThreadMutex;
 
 struct DpiNotifyParams {
     std::wstring body;
@@ -7958,11 +8292,39 @@ static DWORD WINAPI DpiNotifyDialogThread(LPVOID parameter) {
     return 0;
 }
 
+static DWORD GetRealWindowsBuildNumber() {
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    const auto rtlGetVersion = ntdll
+        ? FunctionPointerFromFarProc<RtlGetVersion_t>(
+              GetProcAddress(ntdll, "RtlGetVersion"))
+        : nullptr;
+    OSVERSIONINFOW version{};
+    version.dwOSVersionInfoSize = sizeof(version);
+    return rtlGetVersion && rtlGetVersion(&version) >= 0
+               ? version.dwBuildNumber
+               : 0;
+}
+
+static bool ClassicDpiChangeNeedsSignOutMessage() {
+    // Dynamic DPI refresh arrived in Windows 10 build 17083 (RS4
+    // development). Released 1803/17134, every later Windows 10 build, and
+    // Windows 11 use the live path and must not show the obsolete sign-out box.
+    constexpr DWORD kLiveDpiRefreshBuild = 17083;
+    const DWORD build = GetRealWindowsBuildNumber();
+    return build != 0 && build < kLiveDpiRefreshBuild;
+}
+
 static void ShowSignOutNotification() {
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+
+    std::lock_guard<std::mutex> threadLock(g_modalDialogThreadMutex);
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+
     bool expected = false;
     if (!g_dpiNotifyOpen.compare_exchange_strong(expected, true,
                                                  std::memory_order_acq_rel)) {
-        return;  // Already on screen: do not stack duplicates.
+        return;
     }
     const wchar_t* body = GetEmbeddedTranslation(458);
     const wchar_t* caption = GetEmbeddedTranslation(390);
@@ -7973,11 +8335,11 @@ static void ShowSignOutNotification() {
         g_dpiNotifyOpen.store(false, std::memory_order_release);
         return;
     }
-    // Reap the handle of a previously finished dialog before storing the new
-    // one, so repeated changes never leak handles.
+
     HANDLE stale =
         g_dpiNotifyThread.exchange(nullptr, std::memory_order_acq_rel);
     if (stale) CloseHandle(stale);
+
     HANDLE thread = CreateThread(nullptr, 0, DpiNotifyDialogThread, params, 0,
                                  nullptr);
     if (!thread) {
@@ -7989,140 +8351,1317 @@ static void ShowSignOutNotification() {
     Wh_Log(L"Display hub: sign-out notification shown for the classic DPI change");
 }
 
-// Apply a classic DPI preset the way the Windows 7/8 Display page radios did.
-// The classic presets map to the fixed logical-DPI values 96/120/144/192 and
-// are persisted exactly like DpiScaling.exe persists them - under
-// HKCU\Control Panel\Desktop\LogPixels plus Win8DpiScaling=1 (one scaling
-// level for all displays) - then broadcast so Explorer re-reads its metrics.
-// The scale change itself takes effect at the next sign-in, which is the same
-// contract the original page presented. Only those two values are written and
-// nothing else is touched. The APIs are resolved straight from kernelbase so
-// the call never re-enters this mod's own registry hooks.
-static bool ApplyClassicDpiPreset(UINT percent) {
-    DWORD logicalDpi = 0;
+// Apply a classic DPI preset through DisplayConfigSetDeviceInfo. Microsoft
+// doesn't publish SetDpiForMonitor; Windows Settings uses private DisplayConfig
+// DPI packets, which are range/size validated below and fail closed.
+static bool ApplyClassicDpiPreset(UINT percent,
+                                  HMONITOR monitor) {
+    // The public DisplayConfig API is used with the DPI request packets used by
+    // Windows Settings (-3 query, -4 set).  The packet kinds are private, so
+    // every size/range is checked and any unexpected result fails closed.
+    struct DisplayConfigSourceDpiScaleGet {
+        DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+        std::int32_t minScaleRel;
+        std::int32_t curScaleRel;
+        std::int32_t maxScaleRel;
+    };
+    struct DisplayConfigSourceDpiScaleSet {
+        DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+        std::int32_t scaleRel;
+    };
+    static_assert(sizeof(DisplayConfigSourceDpiScaleGet) == 0x20,
+                  "Unexpected DPI query packet size");
+    static_assert(sizeof(DisplayConfigSourceDpiScaleSet) == 0x18,
+                  "Unexpected DPI set packet size");
+
+    static constexpr UINT kDpiValues[] = {
+        100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500};
+
+    UINT logicalDpi = 0;
+    int requestedIndex = -1;
     switch (percent) {
-        case 100: logicalDpi = 96; break;
-        case 125: logicalDpi = 120; break;
-        case 150: logicalDpi = 144; break;
-        case 200: logicalDpi = 192; break;
-        default: return false;
+        case 100: logicalDpi = 96; requestedIndex = 0; break;
+        case 125: logicalDpi = 120; requestedIndex = 1; break;
+        case 150: logicalDpi = 144; requestedIndex = 2; break;
+        case 200: logicalDpi = 192; requestedIndex = 4; break;
+        default:
+            Wh_Log(L"Display hub: rejected unsupported classic DPI preset %u%%",
+                   percent);
+            return false;
     }
 
-    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-    auto regCreate =
-        kernelbase ? reinterpret_cast<decltype(&RegCreateKeyExW)>(
-                         GetProcAddress(kernelbase, "RegCreateKeyExW"))
-                   : nullptr;
-    auto regSet =
-        kernelbase ? reinterpret_cast<decltype(&RegSetValueExW)>(
-                         GetProcAddress(kernelbase, "RegSetValueExW"))
-                   : nullptr;
-    auto regClose =
-        kernelbase ? reinterpret_cast<decltype(&RegCloseKey)>(
-                         GetProcAddress(kernelbase, "RegCloseKey"))
-                   : nullptr;
-    if (!regCreate || !regSet || !regClose) return false;
-
-    HKEY desktop = nullptr;
-    if (regCreate(HKEY_CURRENT_USER, L"Control Panel\\Desktop", 0, nullptr,
-                  0, KEY_SET_VALUE, nullptr, &desktop, nullptr) !=
-            ERROR_SUCCESS ||
-        !desktop) {
+    if (!monitor) {
+        const POINT primaryPoint{0, 0};
+        monitor = MonitorFromPoint(primaryPoint, MONITOR_DEFAULTTOPRIMARY);
+    }
+    if (!monitor) {
+        Wh_Log(L"Display hub: target monitor lookup failed");
         return false;
     }
-    // RAII: the handle is closed on every exit path, including the unlikely
-    // case of an exception while writing the values.
-    UniqueWinHandle desktopGuard(desktop);
 
-    bool ok = regSet(desktop, L"LogPixels", 0, REG_DWORD,
-                     reinterpret_cast<const BYTE*>(&logicalDpi),
-                     sizeof(DWORD)) == ERROR_SUCCESS;
-    const DWORD win8DpiScaling = 1;
-    ok = regSet(desktop, L"Win8DpiScaling", 0, REG_DWORD,
-                reinterpret_cast<const BYTE*>(&win8DpiScaling),
-                sizeof(DWORD)) == ERROR_SUCCESS &&
-         ok;
-    if (ok) {
-        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                            reinterpret_cast<LPARAM>(L"Windows"),
-                            SMTO_ABORTIFHUNG, 1000, nullptr);
-        Wh_Log(L"Display hub: classic DPI preset %u%% applied (effective at "
-               L"next sign-in)",
-               percent);
-        ShowSignOutNotification();
+    MONITORINFOEXW monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+        Wh_Log(L"Display hub: GetMonitorInfoW failed (error %u)",
+               GetLastError());
+        return false;
     }
-    return ok;
+
+    Wh_Log(L"Display hub: classic DPI preset %u%% clicked "
+           L"(target DPI=%u, monitor=%s)",
+           percent, logicalDpi, monitorInfo.szDevice);
+
+    // QueryDisplayConfig can race with hot-plug/topology changes.  Retry only
+    // the documented ERROR_INSUFFICIENT_BUFFER case and never apply against a
+    // stale or partial path list.
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    LONG queryStatus = ERROR_GEN_FAILURE;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        UINT32 pathCount = 0;
+        UINT32 modeCount = 0;
+        queryStatus = GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount);
+        if (queryStatus != ERROR_SUCCESS) break;
+
+        paths.assign(pathCount, DISPLAYCONFIG_PATH_INFO{});
+        modes.assign(modeCount, DISPLAYCONFIG_MODE_INFO{});
+        queryStatus = QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS, &pathCount,
+            paths.empty() ? nullptr : paths.data(), &modeCount,
+            modes.empty() ? nullptr : modes.data(), nullptr);
+        if (queryStatus == ERROR_INSUFFICIENT_BUFFER) continue;
+        if (queryStatus == ERROR_SUCCESS) {
+            paths.resize(pathCount);
+            modes.resize(modeCount);
+        }
+        break;
+    }
+    if (queryStatus != ERROR_SUCCESS) {
+        Wh_Log(L"Display hub: QueryDisplayConfig failed (error %ld)",
+               queryStatus);
+        return false;
+    }
+
+    LUID sourceAdapter{};
+    UINT32 sourceId = 0;
+    bool sourceFound = false;
+    for (const DISPLAYCONFIG_PATH_INFO& path : paths) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
+        sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        sourceName.header.size = sizeof(sourceName);
+        sourceName.header.adapterId = path.sourceInfo.adapterId;
+        sourceName.header.id = path.sourceInfo.id;
+
+        const LONG nameStatus =
+            DisplayConfigGetDeviceInfo(&sourceName.header);
+        if (nameStatus == ERROR_SUCCESS &&
+            _wcsicmp(sourceName.viewGdiDeviceName,
+                     monitorInfo.szDevice) == 0) {
+            sourceAdapter = path.sourceInfo.adapterId;
+            sourceId = path.sourceInfo.id;
+            sourceFound = true;
+            break;
+        }
+    }
+    if (!sourceFound) {
+        Wh_Log(L"Display hub: no active DisplayConfig source for %s",
+               monitorInfo.szDevice);
+        return false;
+    }
+
+    DisplayConfigSourceDpiScaleGet dpiInfo{};
+    dpiInfo.header.type = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(-3);
+    dpiInfo.header.size = sizeof(dpiInfo);
+    dpiInfo.header.adapterId = sourceAdapter;
+    dpiInfo.header.id = sourceId;
+
+    const LONG getStatus = DisplayConfigGetDeviceInfo(&dpiInfo.header);
+    if (getStatus != ERROR_SUCCESS) {
+        Wh_Log(L"Display hub: DisplayConfig DPI query failed (error %ld)",
+               getStatus);
+        return false;
+    }
+
+    if (dpiInfo.minScaleRel > 0 ||
+        dpiInfo.maxScaleRel < dpiInfo.minScaleRel) {
+        Wh_Log(L"Display hub: invalid DisplayConfig DPI range (%d..%d)",
+               dpiInfo.minScaleRel, dpiInfo.maxScaleRel);
+        return false;
+    }
+
+    const int recommendedIndex = -dpiInfo.minScaleRel;
+    if (recommendedIndex < 0 ||
+        recommendedIndex >= static_cast<int>(ARRAYSIZE(kDpiValues)) ||
+        requestedIndex < 0 ||
+        requestedIndex >= static_cast<int>(ARRAYSIZE(kDpiValues))) {
+        Wh_Log(L"Display hub: unsupported DisplayConfig DPI plateau "
+               L"(minRel=%d requestedIndex=%d)",
+               dpiInfo.minScaleRel, requestedIndex);
+        return false;
+    }
+
+    const int relativeIndex = requestedIndex - recommendedIndex;
+    if (relativeIndex < dpiInfo.minScaleRel ||
+        relativeIndex > dpiInfo.maxScaleRel) {
+        Wh_Log(L"Display hub: %u%% is not supported by %s "
+               L"(relative=%d, range=%d..%d)",
+               percent, monitorInfo.szDevice, relativeIndex,
+               dpiInfo.minScaleRel, dpiInfo.maxScaleRel);
+        return false;
+    }
+
+    // Already at the requested value: treat it as success but don't generate a
+    // duplicate setting change or sign-out notification.
+    if (dpiInfo.curScaleRel == relativeIndex) {
+        Wh_Log(L"Display hub: DisplayConfig DPI is already %u%%", percent);
+        return true;
+    }
+
+    DisplayConfigSourceDpiScaleSet setPacket{};
+    setPacket.header.type = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(-4);
+    setPacket.header.size = sizeof(setPacket);
+    setPacket.header.adapterId = sourceAdapter;
+    setPacket.header.id = sourceId;
+    setPacket.scaleRel = relativeIndex;
+
+    const LONG setStatus = DisplayConfigSetDeviceInfo(&setPacket.header);
+    if (setStatus != ERROR_SUCCESS) {
+        Wh_Log(L"Display hub: DisplayConfigSetDeviceInfo failed "
+               L"(error %ld, target=%u DPI)",
+               setStatus, logicalDpi);
+        return false;
+    }
+
+    Wh_Log(L"Display hub: DisplayConfigSetDeviceInfo returned ERROR_SUCCESS "
+           L"(target=%u DPI, relativeIndex=%d)",
+           logicalDpi, relativeIndex);
+
+    // Do not use SPI_SETLOGICALDPIOVERRIDE/SPIF_SENDCHANGE here, and do not
+    // broadcast WM_SETTINGCHANGE to HWND_BROADCAST either: any system-wide
+    // "WindowMetrics" broadcast is what intermittently reset OpenGlass (and
+    // similar composition mods), momentarily cancelling their glass effect.
+    // DisplayConfigSetDeviceInfo already causes the OS to deliver
+    // WM_DPICHANGED natively to the windows that actually need to rescale,
+    // so no manual broadcast is needed here.
+    if (ClassicDpiChangeNeedsSignOutMessage()) {
+        ShowSignOutNotification();
+    } else {
+        Wh_Log(L"Display hub: live DPI-capable Windows build; sign-out "
+               L"notification suppressed");
+    }
+    return true;
+}
+
+// Full-screen classic Windows 7/8.1 "Please wait" surface.  The rendering
+// follows win7-please-wait-restorer: capture the native desktop once, build one
+// desaturated copy, progressively blend it, and paint the genuine compact
+// blue-rimmed/white-centre wait box over the primary monitor.
+static const wchar_t* GetClassicDpiWaitText() {
+    switch (GetCurrentEmbeddedLanguage()) {
+        case MuiLanguage::IT_IT: return L"Attendere";
+        case MuiLanguage::ES_ES: return L"Espere";
+        case MuiLanguage::FR_FR: return L"Veuillez patienter";
+        case MuiLanguage::TR_TR: return L"Lütfen bekleyin";
+        case MuiLanguage::RU_RU: return L"Подождите";
+        case MuiLanguage::ZH_CN: return L"请稍候";
+        case MuiLanguage::DE_DE: return L"Bitte warten";
+        case MuiLanguage::PT_BR: return L"Aguarde";
+        case MuiLanguage::PL_PL: return L"Proszę czekać";
+        default: return L"Please wait";
+    }
+}
+
+class ClassicDpiScreenDc {
+public:
+    ClassicDpiScreenDc() : dc_(GetDC(nullptr)) {}
+    ~ClassicDpiScreenDc() {
+        if (dc_) ReleaseDC(nullptr, dc_);
+    }
+    ClassicDpiScreenDc(const ClassicDpiScreenDc&) = delete;
+    ClassicDpiScreenDc& operator=(const ClassicDpiScreenDc&) = delete;
+    HDC get() const { return dc_; }
+    explicit operator bool() const { return dc_ != nullptr; }
+
+private:
+    HDC dc_ = nullptr;
+};
+
+class ClassicDpiGdiObject {
+public:
+    explicit ClassicDpiGdiObject(HGDIOBJ object = nullptr)
+        : object_(object) {}
+    ~ClassicDpiGdiObject() {
+        if (object_) DeleteObject(object_);
+    }
+    ClassicDpiGdiObject(const ClassicDpiGdiObject&) = delete;
+    ClassicDpiGdiObject& operator=(const ClassicDpiGdiObject&) = delete;
+    HGDIOBJ get() const { return object_; }
+    explicit operator bool() const { return object_ != nullptr; }
+
+private:
+    HGDIOBJ object_ = nullptr;
+};
+
+struct ClassicDpiWaitSurface {
+    HBITMAP rawBitmap = nullptr;
+    HBITMAP grayBitmap = nullptr;
+    HBITMAP compositionBitmap = nullptr;
+    HDC rawDc = nullptr;
+    HDC grayDc = nullptr;
+    HDC compositionDc = nullptr;
+    HGDIOBJ oldRaw = nullptr;
+    HGDIOBJ oldGray = nullptr;
+    HGDIOBJ oldComposition = nullptr;
+    int virtualX = 0;
+    int virtualY = 0;
+    int width = 0;
+    int height = 0;
+    RECT primaryMonitor{};
+    UINT dpi = 96;
+    ULONGLONG startTime = 0;
+
+    ~ClassicDpiWaitSurface() {
+        if (rawDc && oldRaw && oldRaw != HGDI_ERROR)
+            SelectObject(rawDc, oldRaw);
+        if (grayDc && oldGray && oldGray != HGDI_ERROR)
+            SelectObject(grayDc, oldGray);
+        if (compositionDc && oldComposition &&
+            oldComposition != HGDI_ERROR) {
+            SelectObject(compositionDc, oldComposition);
+        }
+        if (rawDc) DeleteDC(rawDc);
+        if (grayDc) DeleteDC(grayDc);
+        if (compositionDc) DeleteDC(compositionDc);
+        if (rawBitmap) DeleteObject(rawBitmap);
+        if (grayBitmap) DeleteObject(grayBitmap);
+        if (compositionBitmap) DeleteObject(compositionBitmap);
+    }
+
+    ClassicDpiWaitSurface() = default;
+    ClassicDpiWaitSurface(const ClassicDpiWaitSurface&) = delete;
+    ClassicDpiWaitSurface& operator=(const ClassicDpiWaitSurface&) = delete;
+};
+
+static void DestroyClassicDpiWaitSurface(ClassicDpiWaitSurface* surface) {
+    delete surface;
+}
+
+static HBITMAP CreateClassicDpiWaitDib(HDC reference, int width, int height,
+                                       void** pixels) {
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    return CreateDIBSection(reference, &info, DIB_RGB_COLORS, pixels,
+                            nullptr, 0);
+}
+
+static ClassicDpiWaitSurface* BuildClassicDpiWaitSurface() {
+    std::unique_ptr<ClassicDpiWaitSurface> surface(
+        new (std::nothrow) ClassicDpiWaitSurface{});
+    if (!surface) return nullptr;
+
+    surface->virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    surface->virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    surface->width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    surface->height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (surface->width <= 0 || surface->height <= 0) {
+        return nullptr;
+    }
+
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    const POINT primaryPoint{0, 0};
+    HMONITOR primary = MonitorFromPoint(primaryPoint,
+                                        MONITOR_DEFAULTTOPRIMARY);
+    if (primary && GetMonitorInfoW(primary, &monitorInfo)) {
+        surface->primaryMonitor = {
+            monitorInfo.rcMonitor.left - surface->virtualX,
+            monitorInfo.rcMonitor.top - surface->virtualY,
+            monitorInfo.rcMonitor.right - surface->virtualX,
+            monitorInfo.rcMonitor.bottom - surface->virtualY};
+    } else {
+        surface->primaryMonitor = {0, 0, surface->width, surface->height};
+    }
+    surface->dpi = GetPrimarySystemDpiForWin7Preview();
+
+    ClassicDpiScreenDc screenDc;
+    if (!screenDc) return nullptr;
+
+    void* rawPixels = nullptr;
+    void* grayPixels = nullptr;
+    void* compositionPixels = nullptr;
+    surface->rawBitmap = CreateClassicDpiWaitDib(
+        screenDc.get(), surface->width, surface->height, &rawPixels);
+    surface->grayBitmap = CreateClassicDpiWaitDib(
+        screenDc.get(), surface->width, surface->height, &grayPixels);
+    surface->compositionBitmap = CreateClassicDpiWaitDib(
+        screenDc.get(), surface->width, surface->height, &compositionPixels);
+    surface->rawDc = CreateCompatibleDC(screenDc.get());
+    surface->grayDc = CreateCompatibleDC(screenDc.get());
+    surface->compositionDc = CreateCompatibleDC(screenDc.get());
+
+    bool ready = surface->rawBitmap && surface->grayBitmap &&
+                 surface->compositionBitmap && surface->rawDc &&
+                 surface->grayDc && surface->compositionDc;
+    if (ready) {
+        surface->oldRaw = SelectObject(surface->rawDc,
+                                       surface->rawBitmap);
+        surface->oldGray = SelectObject(surface->grayDc,
+                                        surface->grayBitmap);
+        surface->oldComposition = SelectObject(
+            surface->compositionDc, surface->compositionBitmap);
+        ready = surface->oldRaw && surface->oldRaw != HGDI_ERROR &&
+                surface->oldGray && surface->oldGray != HGDI_ERROR &&
+                surface->oldComposition &&
+                surface->oldComposition != HGDI_ERROR;
+    }
+    if (ready) {
+        ready = BitBlt(surface->rawDc, 0, 0, surface->width,
+                       surface->height, screenDc.get(), surface->virtualX,
+                       surface->virtualY, SRCCOPY | CAPTUREBLT) != FALSE;
+    }
+    if (!ready) return nullptr;
+
+    BitBlt(surface->grayDc, 0, 0, surface->width, surface->height,
+           surface->rawDc, 0, 0, SRCCOPY);
+    GdiFlush();
+    if (grayPixels) {
+        auto* pixels = static_cast<BYTE*>(grayPixels);
+        const size_t count = static_cast<size_t>(surface->width) *
+                             static_cast<size_t>(surface->height);
+        for (size_t index = 0; index < count; ++index) {
+            BYTE* color = pixels + index * 4;
+            const BYTE luminance = static_cast<BYTE>(
+                color[2] * 0.299f + color[1] * 0.587f +
+                color[0] * 0.114f);
+            color[0] = luminance;
+            color[1] = luminance;
+            color[2] = luminance;
+        }
+    }
+    surface->startTime = GetTickCount64();
+    return surface.release();
+}
+
+static int ScaleClassicDpiWaitValue(int value, UINT dpi) {
+    return MulDiv(value, dpi ? static_cast<int>(dpi) : 96, 96);
+}
+
+static void DrawClassicDpiWaitBox(ClassicDpiWaitSurface* surface, HDC dc) {
+    if (!surface || !dc) return;
+    const UINT dpi = surface->dpi ? surface->dpi : 96;
+    const int boxWidth = ScaleClassicDpiWaitValue(221, dpi);
+    const int boxHeight = ScaleClassicDpiWaitValue(78, dpi);
+    const int rim = std::max(1, ScaleClassicDpiWaitValue(5, dpi));
+    const int border = std::max(1, ScaleClassicDpiWaitValue(1, dpi));
+
+    const RECT area = surface->primaryMonitor;
+    RECT outer{
+        area.left + ((area.right - area.left) - boxWidth) / 2,
+        area.top + ((area.bottom - area.top) - boxHeight) / 2,
+        0, 0};
+    outer.right = outer.left + boxWidth;
+    outer.bottom = outer.top + boxHeight;
+    RECT darkBorder = outer;
+    InflateRect(&darkBorder, -rim, -rim);
+    RECT content = darkBorder;
+    InflateRect(&content, -border, -border);
+
+    ClassicDpiGdiObject outerBrush(
+        CreateSolidBrush(RGB(197, 218, 231)));
+    ClassicDpiGdiObject borderBrush(
+        CreateSolidBrush(RGB(118, 131, 139)));
+    ClassicDpiGdiObject contentBrush(
+        CreateSolidBrush(RGB(255, 255, 255)));
+    ClassicDpiGdiObject topStreakBrush(
+        CreateSolidBrush(RGB(231, 241, 247)));
+    ClassicDpiGdiObject bottomStreakBrush(
+        CreateSolidBrush(RGB(177, 208, 225)));
+    if (outerBrush && borderBrush && contentBrush) {
+        FillRect(dc, &outer,
+                 reinterpret_cast<HBRUSH>(outerBrush.get()));
+        const int inset = std::max(1, ScaleClassicDpiWaitValue(1, dpi));
+        const int streak = std::max(1, ScaleClassicDpiWaitValue(1, dpi));
+        if (topStreakBrush && bottomStreakBrush && rim > streak) {
+            RECT top{outer.left + inset, outer.top + inset,
+                     outer.right - inset, outer.top + inset + streak};
+            RECT bottom{outer.left + inset, outer.bottom - inset - streak,
+                        outer.right - inset, outer.bottom - inset};
+            FillRect(dc, &top,
+                     reinterpret_cast<HBRUSH>(topStreakBrush.get()));
+            FillRect(dc, &bottom,
+                     reinterpret_cast<HBRUSH>(bottomStreakBrush.get()));
+        }
+        FillRect(dc, &darkBorder,
+                 reinterpret_cast<HBRUSH>(borderBrush.get()));
+        FillRect(dc, &content,
+                 reinterpret_cast<HBRUSH>(contentBrush.get()));
+    }
+
+    NONCLIENTMETRICSW metrics{};
+    metrics.cbSize = sizeof(metrics);
+    LOGFONTW fontDescription{};
+    if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS,
+                                   sizeof(metrics), &metrics, 0, dpi)) {
+        fontDescription = metrics.lfMessageFont;
+    } else if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS,
+                                      sizeof(metrics), &metrics, 0)) {
+        fontDescription = metrics.lfMessageFont;
+    } else {
+        fontDescription.lfHeight = -ScaleClassicDpiWaitValue(12, dpi);
+        wcscpy_s(fontDescription.lfFaceName, L"Segoe UI");
+    }
+    fontDescription.lfHeight = MulDiv(fontDescription.lfHeight, 115, 100);
+    fontDescription.lfWeight = FW_BOLD;
+    ClassicDpiGdiObject font(CreateFontIndirectW(&fontDescription));
+    const int saved = SaveDC(dc);
+    if (font) SelectObject(dc, font.get());
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(0, 0, 0));
+    RECT textRect = content;
+    DrawTextW(dc, GetClassicDpiWaitText(), -1, &textRect,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE |
+                  DT_END_ELLIPSIS | DT_NOPREFIX);
+    RestoreDC(dc, saved);
+}
+
+static void PaintClassicDpiWaitSurface(HWND window,
+                                       ClassicDpiWaitSurface* surface,
+                                       HDC target) {
+    if (!surface || !target || !surface->compositionDc) return;
+    BitBlt(surface->compositionDc, 0, 0, surface->width, surface->height,
+           surface->rawDc, 0, 0, SRCCOPY);
+
+    constexpr float kDesaturationTarget = 0.65f;
+    constexpr ULONGLONG kRampMs = 500;
+    const ULONGLONG elapsed = GetTickCount64() - surface->startTime;
+    double t = elapsed >= kRampMs ? 1.0
+                                  : static_cast<double>(elapsed) /
+                                        static_cast<double>(kRampMs);
+    t = t * t * (3.0 - 2.0 * t);
+    const BYTE alpha = static_cast<BYTE>(
+        std::lround(kDesaturationTarget * t * 255.0));
+    if (alpha != 0) {
+        const BLENDFUNCTION blend{AC_SRC_OVER, 0, alpha, 0};
+        AlphaBlend(surface->compositionDc, 0, 0, surface->width,
+                   surface->height, surface->grayDc, 0, 0,
+                   surface->width, surface->height, blend);
+    }
+    DrawClassicDpiWaitBox(surface, surface->compositionDc);
+    BitBlt(target, 0, 0, surface->width, surface->height,
+           surface->compositionDc, 0, 0, SRCCOPY);
+    if (elapsed < kRampMs) InvalidateRect(window, nullptr, FALSE);
+}
+
+static LRESULT CALLBACK ClassicDpiWaitWindowProc(HWND window, UINT message,
+                                                  WPARAM wParam,
+                                                  LPARAM lParam) {
+    auto* surface = reinterpret_cast<ClassicDpiWaitSurface*>(
+        GetWindowLongPtrW(window, GWLP_USERDATA));
+    switch (message) {
+        case WM_NCCREATE: {
+            const auto* create =
+                reinterpret_cast<const CREATESTRUCTW*>(lParam);
+            surface = static_cast<ClassicDpiWaitSurface*>(
+                create ? create->lpCreateParams : nullptr);
+            SetWindowLongPtrW(window, GWLP_USERDATA,
+                              reinterpret_cast<LONG_PTR>(surface));
+            return TRUE;
+        }
+        case WM_ERASEBKGND:
+            return TRUE;
+        case WM_PAINT: {
+            PAINTSTRUCT paint{};
+            HDC dc = BeginPaint(window, &paint);
+            PaintClassicDpiWaitSurface(window, surface, dc);
+            EndPaint(window, &paint);
+            return 0;
+        }
+        case WM_NCDESTROY:
+            SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+            DestroyClassicDpiWaitSurface(surface);
+            return DefWindowProcW(window, message, wParam, lParam);
+        default:
+            return DefWindowProcW(window, message, wParam, lParam);
+    }
+}
+
+static HWND CreateClassicDpiWaitWindow(UINT /*percent*/) {
+    static const wchar_t kWaitClass[] =
+        L"WindhawkDisplayRestorerClassicPleaseWait";
+    const HINSTANCE instance = GetModuleHandleW(nullptr);
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = ClassicDpiWaitWindowProc;
+    windowClass.hInstance = instance;
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_WAIT);
+    windowClass.lpszClassName = kWaitClass;
+    if (!RegisterClassExW(&windowClass) &&
+        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        return nullptr;
+    }
+
+    ClassicDpiWaitSurface* surface = BuildClassicDpiWaitSurface();
+    if (!surface) return nullptr;
+    HWND window = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kWaitClass, L"", WS_POPUP,
+        surface->virtualX, surface->virtualY,
+        surface->width, surface->height,
+        nullptr, nullptr, instance, surface);
+    if (!window) {
+        DestroyClassicDpiWaitSurface(surface);
+        return nullptr;
+    }
+    SetWindowPos(window, HWND_TOPMOST, surface->virtualX, surface->virtualY,
+                 surface->width, surface->height,
+                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    UpdateWindow(window);
+    Wh_Log(L"Display hub: native-style Windows 7 please-wait surface shown");
+    return window;
+}
+
+static void PumpClassicDpiWaitMessages() {
+    MSG message{};
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+}
+
+static void ClassicDpiApplyWorker() {
+    HANDLE handles[] = {g_stopEvent, g_dpiApplyWakeEvent};
+    while (!g_shuttingDown.load(std::memory_order_acquire)) {
+        const DWORD wait = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
+                                                  FALSE, INFINITE);
+        if (wait == WAIT_OBJECT_0 ||
+            g_shuttingDown.load(std::memory_order_acquire)) {
+            return;
+        }
+        if (wait != WAIT_OBJECT_0 + 1) return;
+
+        UINT percent = g_pendingClassicDpiPercent.load(
+            std::memory_order_acquire);
+        if (!percent) continue;
+        ULONGLONG generation = g_dpiApplyGeneration.load(
+            std::memory_order_acquire);
+        HWND waitWindow = CreateClassicDpiWaitWindow(percent);
+        ULONGLONG deadline = GetTickCount64() + kClassicDpiApplyDelayMs;
+        bool cancelled = false;
+
+        for (;;) {
+            const ULONGLONG now = GetTickCount64();
+            const DWORD timeout = now >= deadline
+                                      ? 0
+                                      : static_cast<DWORD>(deadline - now);
+            const DWORD state = MsgWaitForMultipleObjects(
+                ARRAYSIZE(handles), handles, FALSE, timeout, QS_ALLINPUT);
+            if (state == WAIT_OBJECT_0 ||
+                g_shuttingDown.load(std::memory_order_acquire)) {
+                cancelled = true;
+                break;
+            }
+            if (state == WAIT_OBJECT_0 + 1) {
+                percent = g_pendingClassicDpiPercent.load(
+                    std::memory_order_acquire);
+                generation = g_dpiApplyGeneration.load(
+                    std::memory_order_acquire);
+                if (!percent) {
+                    cancelled = true;
+                    break;
+                }
+                // A new radio choice or Apply click restarts the stability
+                // interval; the last request wins.
+                deadline = GetTickCount64() + kClassicDpiApplyDelayMs;
+                continue;
+            }
+            if (state == WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
+                PumpClassicDpiWaitMessages();
+                continue;
+            }
+            if (state == WAIT_TIMEOUT) break;
+            cancelled = true;
+            break;
+        }
+
+        if (waitWindow) DestroyWindow(waitWindow);
+        PumpClassicDpiWaitMessages();
+        if (cancelled ||
+            g_shuttingDown.load(std::memory_order_acquire)) {
+            continue;
+        }
+
+        // Close the final race between the timeout and a newer selection.
+        if (generation != g_dpiApplyGeneration.load(
+                              std::memory_order_acquire) ||
+            percent != g_pendingClassicDpiPercent.load(
+                           std::memory_order_acquire)) {
+            SetEvent(g_dpiApplyWakeEvent);
+            continue;
+        }
+
+        const bool applied = ApplyClassicDpiPreset(percent, nullptr);
+        if (applied) {
+            UINT expected = percent;
+            g_pendingClassicDpiPercent.compare_exchange_strong(
+                expected, 0, std::memory_order_acq_rel);
+        }
+    }
+}
+
+static void ClassicDpiApplyWorkerNoexcept() {
+    try {
+        ClassicDpiApplyWorker();
+    } catch (...) {
+        Wh_Log(L"Display hub: delayed DPI worker stopped after an exception");
+    }
+}
+
+static void SetPendingClassicDpiSelection(UINT percent) {
+    if (percent != 100 && percent != 125 &&
+        percent != 150 && percent != 200) {
+        return;
+    }
+    g_pendingClassicDpiPercent.store(percent, std::memory_order_release);
+    g_dpiApplyGeneration.fetch_add(1, std::memory_order_acq_rel);
+    Wh_Log(L"Display hub: pending DPI set to %u%%; waiting for Apply",
+           percent);
+}
+
+static void ScheduleClassicDpiApply(UINT percent) {
+    if (percent != 100 && percent != 125 &&
+        percent != 150 && percent != 200) {
+        return;
+    }
+    if (g_shuttingDown.load(std::memory_order_acquire) ||
+        !g_dpiApplyWakeEvent) {
+        Wh_Log(L"Display hub: delayed DPI apply unavailable");
+        return;
+    }
+    g_pendingClassicDpiPercent.store(percent, std::memory_order_release);
+    g_dpiApplyGeneration.fetch_add(1, std::memory_order_acq_rel);
+    SetEvent(g_dpiApplyWakeEvent);
+    Wh_Log(L"Display hub: queued %u%% DPI; applying after %u ms",
+           percent, kClassicDpiApplyDelayMs);
+}
+
+static void CancelScheduledClassicDpiApply() {
+    g_pendingClassicDpiPercent.store(0, std::memory_order_release);
+    g_dpiApplyGeneration.fetch_add(1, std::memory_order_acq_rel);
+    if (g_dpiApplyWakeEvent) SetEvent(g_dpiApplyWakeEvent);
+}
+
+
+// -----------------------------------------------------------------------------
+// Screen Resolution orientation: documented Win32 / CCD apply path
+// -----------------------------------------------------------------------------
+// The 1511 provider owns OrientationPanel / OrientationCombobox but hides the
+// row when the driver does not advertise rotation, and on modern Windows its
+// own apply path often does nothing. The combo is wired here to
+// ChangeDisplaySettingsExW (DEVMODE.dmDisplayOrientation) with SetDisplayConfig
+// as the documented CCD fallback. Width and height are swapped when moving
+// between landscape and portrait, as required by those APIs.
+
+static DirectUiPushButtonSelectedChanged_t
+    DirectUiButtonSelectedChangedOriginal = nullptr;
+static DirectUiElementSetEnabled_t DirectUiElementSetVisibleOriginal = nullptr;
+using DirectUiElementSetLayoutPos_t = long(__cdecl*)(void*, int);
+static DirectUiElementSetLayoutPos_t DirectUiElementSetLayoutPosOriginal =
+    nullptr;
+using DirectUiSelectorOnSelectionChange_t =
+    void(__cdecl*)(void*, void*, void*);
+static DirectUiSelectorOnSelectionChange_t
+    DirectUiSelectorOnSelectionChangeOriginal = nullptr;
+using DirectUiSelectorGetSelection_t = void*(__cdecl*)(void*);
+static DirectUiSelectorGetSelection_t DirectUiSelectorGetSelection = nullptr;
+using DirectUiElementGetFirstChild_t = void*(__cdecl*)(void*);
+static DirectUiElementGetFirstChild_t DirectUiElementGetFirstChild = nullptr;
+using DirectUiElementGetNextSibling_t = void*(__cdecl*)(void*);
+static DirectUiElementGetNextSibling_t DirectUiElementGetNextSibling = nullptr;
+
+static std::mutex g_orientationMutex;
+static std::wstring g_pendingOrientationDevice;
+static std::atomic<int> g_pendingOrientation{ -1 };
+static thread_local void* g_resolutionApplyButtonElement = nullptr;
+static thread_local bool g_resolutionApplyButtonInitialized = false;
+
+static bool ElementIdEquals(void* element, const wchar_t* atomName) {
+    if (!element || !atomName || !DirectUiElementGetId || !DirectUiStrToId) {
+        return false;
+    }
+    return DirectUiElementGetId(element) ==
+           DirectUiStrToId(reinterpret_cast<const unsigned short*>(atomName));
+}
+
+static void* FindAncestorWithId(void* element, const wchar_t* atomName) {
+    if (!DirectUiElementGetParent) return nullptr;
+    void* current = element;
+    for (int depth = 0; depth < 48 && current; ++depth) {
+        if (ElementIdEquals(current, atomName)) return current;
+        current = DirectUiElementGetParent(current);
+    }
+    return nullptr;
+}
+
+static void* FindPageRoot(void* element) {
+    if (!element || !DirectUiElementGetParent) return element;
+    void* root = element;
+    for (int depth = 0; depth < 64; ++depth) {
+        void* parent = DirectUiElementGetParent(root);
+        if (!parent) break;
+        root = parent;
+    }
+    return root;
+}
+
+static void* FindDescendentByAtom(void* context, const wchar_t* atomName) {
+    if (!context || !atomName || !DirectUiElementFindDescendent ||
+        !DirectUiStrToId) {
+        return nullptr;
+    }
+    return DirectUiElementFindDescendent(
+        FindPageRoot(context),
+        DirectUiStrToId(reinterpret_cast<const unsigned short*>(atomName)));
+}
+
+static std::wstring GetPrimaryGdiDeviceName() {
+    DISPLAY_DEVICEW device{};
+    device.cb = sizeof(device);
+    for (DWORD index = 0; EnumDisplayDevicesW(nullptr, index, &device, 0);
+         ++index) {
+        if (device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) {
+            return device.DeviceName;
+        }
+        device.cb = sizeof(device);
+    }
+    return L"\\\\.\\DISPLAY1";
+}
+
+static std::wstring GetActiveGdiDeviceNameByIndex(int index) {
+    if (index < 0) return {};
+    DISPLAY_DEVICEW device{};
+    device.cb = sizeof(device);
+    int active = 0;
+    for (DWORD i = 0; EnumDisplayDevicesW(nullptr, i, &device, 0); ++i) {
+        if (device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) {
+            if (active == index) return device.DeviceName;
+            ++active;
+        }
+        device.cb = sizeof(device);
+    }
+    return {};
+}
+
+static std::wstring CurrentOrientationDeviceName() {
+    std::lock_guard<std::mutex> lock(g_orientationMutex);
+    if (!g_pendingOrientationDevice.empty()) return g_pendingOrientationDevice;
+    return GetPrimaryGdiDeviceName();
+}
+
+static DWORD QueryDisplayOrientation(const wchar_t* deviceName) {
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (!EnumDisplaySettingsExW(deviceName, ENUM_CURRENT_SETTINGS, &mode, 0)) {
+        return DMDO_DEFAULT;
+    }
+    return (mode.dmFields & DM_DISPLAYORIENTATION) ? mode.dmDisplayOrientation
+                                                   : DMDO_DEFAULT;
+}
+
+static bool IsPortraitOrientation(DWORD orientation) {
+    return orientation == DMDO_90 || orientation == DMDO_270;
+}
+
+static DISPLAYCONFIG_ROTATION DisplayConfigRotationFromDmdo(DWORD orientation) {
+    switch (orientation) {
+        case DMDO_90:
+            return DISPLAYCONFIG_ROTATION_ROTATE90;
+        case DMDO_180:
+            return DISPLAYCONFIG_ROTATION_ROTATE180;
+        case DMDO_270:
+            return DISPLAYCONFIG_ROTATION_ROTATE270;
+        default:
+            return DISPLAYCONFIG_ROTATION_IDENTITY;
+    }
+}
+
+static bool ApplyOrientationViaChangeDisplaySettings(
+    const wchar_t* deviceName,
+    DWORD orientation,
+    DEVMODEW* previousOut) {
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
+    if (!EnumDisplaySettingsExW(deviceName, ENUM_CURRENT_SETTINGS, &mode, 0)) {
+        Wh_Log(L"Display orientation: EnumDisplaySettingsExW failed for %s "
+               L"(error %u)",
+               deviceName ? deviceName : L"(primary)", GetLastError());
+        return false;
+    }
+    if (previousOut) *previousOut = mode;
+
+    const DWORD current =
+        (mode.dmFields & DM_DISPLAYORIENTATION) ? mode.dmDisplayOrientation
+                                                : DMDO_DEFAULT;
+    if (current == orientation) return true;
+
+    if (IsPortraitOrientation(current) != IsPortraitOrientation(orientation)) {
+        const DWORD width = mode.dmPelsWidth;
+        mode.dmPelsWidth = mode.dmPelsHeight;
+        mode.dmPelsHeight = width;
+    }
+    mode.dmDisplayOrientation = orientation;
+    mode.dmFields |= DM_DISPLAYORIENTATION | DM_PELSWIDTH | DM_PELSHEIGHT;
+
+    const LONG test = ChangeDisplaySettingsExW(
+        deviceName, &mode, nullptr, CDS_TEST, nullptr);
+    if (test != DISP_CHANGE_SUCCESSFUL) {
+        Wh_Log(L"Display orientation: ChangeDisplaySettingsExW(CDS_TEST) "
+               L"returned %ld for DMDO=%u; trying apply anyway",
+               test, static_cast<unsigned int>(orientation));
+    }
+
+    const LONG applied = ChangeDisplaySettingsExW(
+        deviceName, &mode, nullptr, CDS_UPDATEREGISTRY, nullptr);
+    if (applied != DISP_CHANGE_SUCCESSFUL) {
+        Wh_Log(L"Display orientation: ChangeDisplaySettingsExW returned %ld "
+               L"for DMDO=%u",
+               applied, static_cast<unsigned int>(orientation));
+        return false;
+    }
+    Wh_Log(L"Display orientation: ChangeDisplaySettingsExW applied DMDO=%u "
+           L"on %s (%ux%u)",
+           static_cast<unsigned int>(orientation),
+           deviceName ? deviceName : L"(primary)",
+           static_cast<unsigned int>(mode.dmPelsWidth),
+           static_cast<unsigned int>(mode.dmPelsHeight));
+    return true;
+}
+
+static bool ApplyOrientationViaSetDisplayConfig(const wchar_t* deviceName,
+                                                DWORD orientation) {
+    if (!deviceName || !*deviceName) return false;
+
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    LONG queryStatus = ERROR_GEN_FAILURE;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        UINT32 pathCount = 0;
+        UINT32 modeCount = 0;
+        queryStatus = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,
+                                                  &pathCount, &modeCount);
+        if (queryStatus != ERROR_SUCCESS) break;
+        paths.assign(pathCount, DISPLAYCONFIG_PATH_INFO{});
+        modes.assign(modeCount, DISPLAYCONFIG_MODE_INFO{});
+        queryStatus = QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS, &pathCount,
+            paths.empty() ? nullptr : paths.data(), &modeCount,
+            modes.empty() ? nullptr : modes.data(), nullptr);
+        if (queryStatus == ERROR_INSUFFICIENT_BUFFER) continue;
+        if (queryStatus == ERROR_SUCCESS) {
+            paths.resize(pathCount);
+            modes.resize(modeCount);
+        }
+        break;
+    }
+    if (queryStatus != ERROR_SUCCESS) {
+        Wh_Log(L"Display orientation: QueryDisplayConfig failed (%ld)",
+               queryStatus);
+        return false;
+    }
+
+    const DISPLAYCONFIG_ROTATION rotation =
+        DisplayConfigRotationFromDmdo(orientation);
+    bool matched = false;
+    for (DISPLAYCONFIG_PATH_INFO& path : paths) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
+        sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        sourceName.header.size = sizeof(sourceName);
+        sourceName.header.adapterId = path.sourceInfo.adapterId;
+        sourceName.header.id = path.sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS ||
+            _wcsicmp(sourceName.viewGdiDeviceName, deviceName) != 0) {
+            continue;
+        }
+
+        const DISPLAYCONFIG_ROTATION previous = path.targetInfo.rotation;
+        path.targetInfo.rotation = rotation;
+        const bool previousPortrait =
+            previous == DISPLAYCONFIG_ROTATION_ROTATE90 ||
+            previous == DISPLAYCONFIG_ROTATION_ROTATE270;
+        const bool nextPortrait =
+            rotation == DISPLAYCONFIG_ROTATION_ROTATE90 ||
+            rotation == DISPLAYCONFIG_ROTATION_ROTATE270;
+        if (previousPortrait != nextPortrait &&
+            path.sourceInfo.modeInfoIdx !=
+                DISPLAYCONFIG_PATH_MODE_IDX_INVALID &&
+            path.sourceInfo.modeInfoIdx < modes.size()) {
+            DISPLAYCONFIG_MODE_INFO& mode = modes[path.sourceInfo.modeInfoIdx];
+            if (mode.infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE) {
+                const UINT32 width = mode.sourceMode.width;
+                mode.sourceMode.width = mode.sourceMode.height;
+                mode.sourceMode.height = width;
+            }
+        }
+        matched = true;
+        break;
+    }
+    if (!matched) {
+        Wh_Log(L"Display orientation: no CCD path for %s", deviceName);
+        return false;
+    }
+
+    const LONG status = SetDisplayConfig(
+        static_cast<UINT32>(paths.size()), paths.data(),
+        static_cast<UINT32>(modes.size()), modes.data(),
+        SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_ALLOW_CHANGES |
+            SDC_SAVE_TO_DATABASE);
+    if (status != ERROR_SUCCESS) {
+        Wh_Log(L"Display orientation: SetDisplayConfig failed (%ld) for DMDO=%u",
+               status, static_cast<unsigned int>(orientation));
+        return false;
+    }
+    Wh_Log(L"Display orientation: SetDisplayConfig applied DMDO=%u on %s",
+           static_cast<unsigned int>(orientation), deviceName);
+    return true;
+}
+
+static void ConfirmOrRevertDisplayOrientation(const wchar_t* deviceName,
+                                              const DEVMODEW& previous,
+                                              bool hadPrevious) {
+    if (!hadPrevious || !deviceName) return;
+    const wchar_t* body = GetEmbeddedTranslation(210);
+    const wchar_t* caption = GetEmbeddedTranslation(390);
+    const int answer = MessageBoxW(
+        nullptr,
+        body ? body : L"Do you want to keep these display settings?",
+        caption ? caption : L"Display Settings",
+        MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND | MB_TOPMOST);
+    if (answer == IDYES) return;
+
+    DEVMODEW revert = previous;
+    revert.dmSize = sizeof(revert);
+    revert.dmFields |= DM_DISPLAYORIENTATION | DM_PELSWIDTH | DM_PELSHEIGHT |
+                       DM_BITSPERPEL | DM_DISPLAYFREQUENCY;
+    const LONG status = ChangeDisplaySettingsExW(
+        deviceName, &revert, nullptr, CDS_UPDATEREGISTRY, nullptr);
+    Wh_Log(L"Display orientation: revert ChangeDisplaySettingsExW returned %ld",
+           status);
+}
+
+static bool ApplyDisplayOrientation(DWORD orientation,
+                                    const wchar_t* deviceName) {
+    std::wstring device;
+    if (deviceName && *deviceName) {
+        device = deviceName;
+    } else {
+        device = CurrentOrientationDeviceName();
+    }
+    if (device.empty()) {
+        Wh_Log(L"Display orientation: no GDI device name");
+        return false;
+    }
+
+    const DWORD current = QueryDisplayOrientation(device.c_str());
+    if (current == orientation) {
+        Wh_Log(L"Display orientation: already DMDO=%u on %s",
+               static_cast<unsigned int>(orientation), device.c_str());
+        return true;
+    }
+
+    DEVMODEW previous{};
+    const bool viaGdi = ApplyOrientationViaChangeDisplaySettings(
+        device.c_str(), orientation, &previous);
+    if (viaGdi) {
+        ConfirmOrRevertDisplayOrientation(device.c_str(), previous, true);
+        return QueryDisplayOrientation(device.c_str()) == orientation;
+    }
+    if (ApplyOrientationViaSetDisplayConfig(device.c_str(), orientation)) {
+        ConfirmOrRevertDisplayOrientation(device.c_str(), previous, true);
+        return QueryDisplayOrientation(device.c_str()) == orientation;
+    }
+    return false;
+}
+
+static int ChildIndexOf(void* parent, void* child) {
+    if (!parent || !child || !DirectUiElementGetFirstChild) return -1;
+    int index = 0;
+    void* cursor = DirectUiElementGetFirstChild(parent);
+    while (cursor) {
+        if (cursor == child) return index;
+        ++index;
+        cursor = DirectUiElementGetNextSibling
+                     ? DirectUiElementGetNextSibling(cursor)
+                     : nullptr;
+        if (!DirectUiElementGetNextSibling) break;
+    }
+    return -1;
+}
+
+static int OrientationFromComboItem(void* element) {
+    if (!element) return -1;
+    if (ElementIdEquals(element, L"RestoredOrientation0")) return DMDO_DEFAULT;
+    if (ElementIdEquals(element, L"RestoredOrientation90")) return DMDO_90;
+    if (ElementIdEquals(element, L"RestoredOrientation180")) return DMDO_180;
+    if (ElementIdEquals(element, L"RestoredOrientation270")) return DMDO_270;
+
+    void* combo = FindAncestorWithId(element, L"OrientationCombobox");
+    if (!combo) return -1;
+    const int index = ChildIndexOf(combo, element);
+    if (index >= 0 && index <= 3) return index;
+    return -1;
+}
+
+static void RememberDisplayComboSelection(void* element) {
+    void* combo = FindAncestorWithId(element, L"DisplayCombobox");
+    if (!combo) return;
+    const int index = ChildIndexOf(combo, element);
+    std::wstring device = GetActiveGdiDeviceNameByIndex(index);
+    if (device.empty()) device = GetPrimaryGdiDeviceName();
+    std::lock_guard<std::mutex> lock(g_orientationMutex);
+    g_pendingOrientationDevice = std::move(device);
+    Wh_Log(L"Display orientation: target device set to %s (combo index %d)",
+           g_pendingOrientationDevice.c_str(), index);
+}
+
+static void SetResolutionApplyEnabled(void* context, bool enabled) {
+    if (!DirectUiElementSetEnabled) return;
+    void* button = FindDescendentByAtom(context, L"bttnApply");
+    if (button) {
+        DirectUiElementSetEnabled(button, enabled);
+    }
+}
+
+static void SetPendingDisplayOrientation(DWORD orientation,
+                                         void* contextElement) {
+    g_pendingOrientation.store(static_cast<int>(orientation),
+                               std::memory_order_release);
+    SetResolutionApplyEnabled(contextElement, true);
+    Wh_Log(L"Display orientation: pending DMDO=%u",
+           static_cast<unsigned int>(orientation));
+}
+
+static int ReadOrientationComboSelection(void* context) {
+    void* combo = FindDescendentByAtom(context, L"OrientationCombobox");
+    if (!combo) return -1;
+    if (DirectUiSelectorGetSelection) {
+        void* selected = DirectUiSelectorGetSelection(combo);
+        const int fromSelection = OrientationFromComboItem(selected);
+        if (fromSelection >= 0) return fromSelection;
+    }
+    if (!DirectUiElementGetFirstChild || !DirectUiElementGetSelected) return -1;
+    for (void* child = DirectUiElementGetFirstChild(combo); child;
+         child = DirectUiElementGetNextSibling
+                     ? DirectUiElementGetNextSibling(child)
+                     : nullptr) {
+        if (DirectUiElementGetSelected(child)) {
+            return OrientationFromComboItem(child);
+        }
+        if (!DirectUiElementGetNextSibling) break;
+    }
+    return -1;
+}
+
+static thread_local bool g_orientationSelectionPrimed = false;
+static thread_local int g_lastHandledOrientation = -2;
+static thread_local ULONGLONG g_lastHandledOrientationTick = 0;
+
+static bool ShouldSkipDuplicateOrientationEvent(int orientation) {
+    const ULONGLONG now = GetTickCount64();
+    if (orientation == g_lastHandledOrientation &&
+        now - g_lastHandledOrientationTick < 750) {
+        return true;
+    }
+    g_lastHandledOrientation = orientation;
+    g_lastHandledOrientationTick = now;
+    return false;
+}
+
+static void HandleOrientationUiEvent(void* element) {
+    if (!element) return;
+    if (TryHandleDisplayHelpLink(element)) return;
+
+    if (ElementIdEquals(element, L"bttnApply") ||
+        ElementIdEquals(element, L"bttnOk")) {
+        if (g_resolutionApplyButtonElement != element) {
+            g_resolutionApplyButtonElement = element;
+            g_resolutionApplyButtonInitialized = false;
+        }
+        if (!g_resolutionApplyButtonInitialized) {
+            g_resolutionApplyButtonInitialized = true;
+            return;
+        }
+        int pending = g_pendingOrientation.load(std::memory_order_acquire);
+        if (pending < 0) {
+            pending = ReadOrientationComboSelection(element);
+        }
+        if (pending >= 0 && !ShouldSkipDuplicateOrientationEvent(pending)) {
+            ApplyDisplayOrientation(static_cast<DWORD>(pending), nullptr);
+            g_pendingOrientation.store(-1, std::memory_order_release);
+        }
+        return;
+    }
+
+    RememberDisplayComboSelection(element);
+
+    if (DirectUiElementGetSelected && !DirectUiElementGetSelected(element)) {
+        return;
+    }
+    if (!FindAncestorWithId(element, L"OrientationCombobox") &&
+        OrientationFromComboItem(element) < 0) {
+        return;
+    }
+
+    const int orientation = OrientationFromComboItem(element);
+    if (orientation < 0) return;
+
+    const std::wstring device = CurrentOrientationDeviceName();
+    const DWORD current = QueryDisplayOrientation(
+        device.empty() ? nullptr : device.c_str());
+    if (static_cast<DWORD>(orientation) == current) {
+        g_pendingOrientation.store(-1, std::memory_order_release);
+        g_orientationSelectionPrimed = true;
+        return;
+    }
+
+    SetPendingDisplayOrientation(static_cast<DWORD>(orientation), element);
+
+    // The first callback is page construction (selected=true in markup).
+    // Only a later user choice applies immediately; Apply/OK still commit.
+    if (!g_orientationSelectionPrimed) {
+        g_orientationSelectionPrimed = true;
+        return;
+    }
+    if (ShouldSkipDuplicateOrientationEvent(orientation)) return;
+
+    ApplyDisplayOrientation(static_cast<DWORD>(orientation),
+                            device.empty() ? nullptr : device.c_str());
+    g_pendingOrientation.store(-1, std::memory_order_release);
+}
+
+static bool TryHandleDisplayHelpLink(void* element) {
+    if (!element || !ElementIdEquals(element, L"projectionOptionsLink")) {
+        return false;
+    }
+    if (DirectUiElementGetSelected && !DirectUiElementGetSelected(element)) {
+        return true;  // swallow construction; never let the provider open Help
+    }
+    ShowDisplaySettingsAdvisory(nullptr);
+    return true;
+}
+
+static void __cdecl DirectUiButtonSelectedChangedHook(void* element) {
+    // Intercept before the provider so mshelp / support URLs are never opened.
+    if (!g_shuttingDown.load(std::memory_order_acquire)) {
+        try {
+            if (TryHandleDisplayHelpLink(element)) return;
+        } catch (...) {
+            Wh_Log(L"Display help link: exception contained in Button hook");
+        }
+    }
+    if (DirectUiButtonSelectedChangedOriginal) {
+        DirectUiButtonSelectedChangedOriginal(element);
+    }
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+    try {
+        HandleOrientationUiEvent(element);
+    } catch (...) {
+        Wh_Log(L"Display orientation: exception contained in Button hook");
+    }
+}
+
+static void __cdecl DirectUiSelectorOnSelectionChangeHook(void* self,
+                                                         void* oldElement,
+                                                         void* newElement) {
+    if (DirectUiSelectorOnSelectionChangeOriginal) {
+        DirectUiSelectorOnSelectionChangeOriginal(self, oldElement, newElement);
+    }
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+    try {
+        if (ElementIdEquals(self, L"OrientationCombobox") ||
+            ElementIdEquals(self, L"DisplayCombobox")) {
+            HandleOrientationUiEvent(newElement ? newElement : self);
+        }
+    } catch (...) {
+        Wh_Log(L"Display orientation: exception contained in Selector hook");
+    }
+}
+
+static long __cdecl DirectUiElementSetVisibleHook(void* element, bool visible) {
+    if (!DirectUiElementSetVisibleOriginal) return E_UNEXPECTED;
+    // OrientationPanel stays hidden: the combo is empty on current adapters.
+    (void)element;
+    return DirectUiElementSetVisibleOriginal(element, visible);
+}
+
+static long __cdecl DirectUiElementSetLayoutPosHook(void* element, int pos) {
+    if (!DirectUiElementSetLayoutPosOriginal) return E_UNEXPECTED;
+    // DirectUI LP_None / LP_Auto / LP_Absolute are negative. The provider
+    // uses LP_None to take OrientationPanel out of layout when rotation is
+    // not advertised.
+    (void)element;
+    (void)pos;
+    return DirectUiElementSetLayoutPosOriginal(element, pos);
+}
+
+static void InstallOrientationHooks(HMODULE dui70) {
+    if (!dui70) return;
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{L"public: virtual void __cdecl "
+          L"DirectUI::Button::OnSelectedPropertyChanged(void)"},
+         reinterpret_cast<void**>(&DirectUiButtonSelectedChangedOriginal),
+         reinterpret_cast<void*>(DirectUiButtonSelectedChangedHook), true},
+        {{L"public: virtual void __cdecl "
+          L"DirectUI::Selector::OnSelectionChange(class DirectUI::Element *,"
+          L"class DirectUI::Element *)"},
+         reinterpret_cast<void**>(&DirectUiSelectorOnSelectionChangeOriginal),
+         reinterpret_cast<void*>(DirectUiSelectorOnSelectionChangeHook), true},
+        {{L"public: class DirectUI::Element * __cdecl "
+          L"DirectUI::Selector::GetSelection(void)"},
+         reinterpret_cast<void**>(&DirectUiSelectorGetSelection), nullptr,
+         true},
+        {{L"public: long __cdecl DirectUI::Element::SetVisible(bool)"},
+         reinterpret_cast<void**>(&DirectUiElementSetVisibleOriginal),
+         reinterpret_cast<void*>(DirectUiElementSetVisibleHook), true},
+        {{L"public: long __cdecl DirectUI::Element::SetLayoutPos(int)"},
+         reinterpret_cast<void**>(&DirectUiElementSetLayoutPosOriginal),
+         reinterpret_cast<void*>(DirectUiElementSetLayoutPosHook), true},
+        {{L"public: class DirectUI::Element * __cdecl "
+          L"DirectUI::Element::GetFirstChild(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetFirstChild), nullptr,
+         true},
+        {{L"public: class DirectUI::Element * __cdecl "
+          L"DirectUI::Element::GetNextSibling(void)",
+          L"public: class DirectUI::Element * __cdecl "
+          L"DirectUI::Element::GetNext(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetNextSibling), nullptr,
+         true},
+    };
+    const bool installed =
+        WindhawkUtils::HookSymbols(dui70, hooks, ARRAYSIZE(hooks));
+    Wh_Log(L"Display orientation: DirectUI hooks %s "
+           L"(button=%d selector=%d getSel=%d visible=%d layout=%d "
+           L"child=%d sibling=%d)",
+           installed ? L"scheduled" : L"failed",
+           DirectUiButtonSelectedChangedOriginal != nullptr,
+           DirectUiSelectorOnSelectionChangeOriginal != nullptr,
+           DirectUiSelectorGetSelection != nullptr,
+           DirectUiElementSetVisibleOriginal != nullptr,
+           DirectUiElementSetLayoutPosOriginal != nullptr,
+           DirectUiElementGetFirstChild != nullptr,
+           DirectUiElementGetNextSibling != nullptr);
 }
 
 // Shared routing for the native SysLinks the mod adds to the restored hub.
 // Returns true when the command was recognized and handled; unrecognized URLs
 // fall through so the provider (or the shell) keeps its normal behavior.
-static bool HandleDisplayHubLinkCommand(const wchar_t* url, HWND owner) {
-    if (!url || !*url) return false;
 
-    static const wchar_t kCustomDpi[] = L"customscaledialog";
-    if (_wcsnicmp(url, kCustomDpi, ARRAYSIZE(kCustomDpi) - 1) == 0 &&
-        url[ARRAYSIZE(kCustomDpi) - 1] == L'\0') {
-        return LaunchSystemCustomDpiPage(owner);
-    }
 
-    static const wchar_t kPresetPrefix[] = L"classicscale";
-    if (_wcsnicmp(url, kPresetPrefix, ARRAYSIZE(kPresetPrefix) - 1) == 0) {
-        const wchar_t* p = url + (ARRAYSIZE(kPresetPrefix) - 1);
-        unsigned long percent = 0;
-        bool anyDigit = false;
-        for (; *p >= L'0' && *p <= L'9'; ++p) {
-            anyDigit = true;
-            percent = percent * 10 + static_cast<unsigned long>(*p - L'0');
-            if (percent > 500) return false;
-        }
-        if (!anyDigit || *p != L'\0') return false;
-        return ApplyClassicDpiPreset(static_cast<UINT>(percent));
-    }
-    return false;
-}
 
-// Exact callback ABI and NMLINK layout recovered from the pinned provider.
-// This is the primary custom-DPI route; the hosted SysLink subclass below is a
-// second fallback for hosts that stop the notification before this callback.
-static int __cdecl DisplayHubLinkNotifyHook(
-    unsigned int message, unsigned long long wParam, long long lParam,
-    long long* result, void* context) {
-    if (!DisplayHubLinkNotifyOriginal) return 0;
-    try {
-        if (message == WM_NOTIFY && lParam) {
-            const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
-            if (header->code == NM_CLICK || header->code == NM_RETURN) {
-                // NM_CLICK/NM_RETURN are not SysLink-specific: a list view
-                // sends them with NMITEMACTIVATE (0x50 bytes), a toolbar with
-                // NMMOUSE (0x30), a status bar with a bare NMHDR (0x18).
-                // Reading a wchar_t* at +0x88 out of any of those is an
-                // out-of-bounds read. Only touch the NMLINK offset when the
-                // sender really is a SysLink.
-                wchar_t cls[16] = {};
-                const bool isSysLink =
-                    header->hwndFrom &&
-                    GetClassNameW(header->hwndFrom, cls, ARRAYSIZE(cls)) &&
-                    _wcsicmp(cls, WC_LINK) == 0;
-                if (isSysLink) {
-                    const BYTE* notification =
-                        reinterpret_cast<const BYTE*>(lParam);
-                    // NMLINK = NMHDR (0x18) + LITEM; szUrl starts at +0x88 on x64.
-                    const wchar_t* url =
-                        reinterpret_cast<const wchar_t*>(notification + 0x88);
-                    if (HandleDisplayHubLinkCommand(
-                            url, GetAncestor(header->hwndFrom, GA_ROOT))) {
-                        if (result) *result = 0;
-                        return 0;
-                    }
-                }
-            }
-        }
-    } catch (...) {
-    }
-    return DisplayHubLinkNotifyOriginal(message, wParam, lParam, result,
-                                        context);
-}
 
 static void InstallPinnedDisplayProviderHooks(HMODULE module) {
     static std::atomic<bool> attempted{false};
@@ -8133,10 +9672,6 @@ static void InstallPinnedDisplayProviderHooks(HMODULE module) {
         base + kDisplayElementWithSiteSetSiteRva);
     auto initializeElementsTarget = reinterpret_cast<DisplayHubVoidMethod_t>(
         base + kDisplayHubInitializeElementsRva);
-    auto loadSystemFontsTarget = reinterpret_cast<DisplayHubVoidMethod_t>(
-        base + kDisplayHubLoadSystemFontsAndMetricsRva);
-    auto linkNotifyTarget = reinterpret_cast<DisplayHubLinkNotify_t>(
-        base + kDisplayHubLinkNotifyRva);
 
     const bool setSiteHook = WindhawkUtils::SetFunctionHook(
         setSiteTarget, DisplayElementWithSiteSetSiteHook,
@@ -8148,36 +9683,17 @@ static void InstallPinnedDisplayProviderHooks(HMODULE module) {
     const bool initializeElementsHook = WindhawkUtils::SetFunctionHook(
         initializeElementsTarget, DisplayHubInitializeElementsHook,
         &DisplayHubInitializeElementsOriginal);
-    bool loadSystemFontsHook = false;
-    if (initializeElementsHook) {
-        // Never hook the outer method without the observation hook: otherwise a
-        // successful native initialization could be repeated and duplicate items.
-        loadSystemFontsHook = WindhawkUtils::SetFunctionHook(
-            loadSystemFontsTarget, DisplayHubLoadSystemFontsHook,
-            &DisplayHubLoadSystemFontsOriginal);
-    }
-    if (!initializeElementsHook || !loadSystemFontsHook) {
-        Wh_Log(L"Display hub: provider ComboBox repair hook scheduling "
-               L"incomplete (elements=%d metrics=%d)",
-               initializeElementsHook, loadSystemFontsHook);
+    if (!initializeElementsHook) {
+        Wh_Log(L"Display hub: provider ComboBox repair hook scheduling failed");
     }
 
-    const bool linkNotifyHook = WindhawkUtils::SetFunctionHook(
-        linkNotifyTarget, DisplayHubLinkNotifyHook,
-        &DisplayHubLinkNotifyOriginal);
-    if (!linkNotifyHook) {
-        Wh_Log(L"Display hub: custom DPI provider callback hook scheduling failed");
-    }
-
-    if (!setSiteHook && !initializeElementsHook && !linkNotifyHook) return;
+    if (!setSiteHook && !initializeElementsHook) return;
     if (!Wh_ApplyHookOperations()) {
         Wh_Log(L"Display provider: pinned hook application failed");
         return;
     }
-    Wh_Log(L"Display provider hooks active: SetSite=%d hubElements=%d "
-           L"hubMetrics=%d customDpi=%d",
-           setSiteHook, initializeElementsHook, loadSystemFontsHook,
-           linkNotifyHook);
+    Wh_Log(L"Display provider hooks active: SetSite=%d hubElements=%d",
+           setSiteHook, initializeElementsHook);
 }
 
 // -----------------------------------------------------------------------------
@@ -8201,10 +9717,6 @@ static void InstallPinnedDisplayProviderHooks(HMODULE module) {
 
 static const wchar_t kResCtlOrigProcProp[] = L"DisplayRestorerResCtlOrigProc";
 static const wchar_t kResCtlPaintingProp[] = L"DisplayRestorerResCtlPainting";
-static const wchar_t kCustomDpiParentOrigProcProp[] =
-    L"DisplayRestorerCustomDpiParentOrigProc";
-static const wchar_t kCustomDpiLinkProp[] =
-    L"DisplayRestorerCustomDpiLink";
 
 // Hosted-window subclasses use WindhawkUtils::SetWindowSubclassFromAnyThread
 // so they compose with other mods and can be removed cleanly on unload.
@@ -8212,10 +9724,6 @@ static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
                                                       WPARAM wParam,
                                                       LPARAM lParam,
                                                       DWORD_PTR refData);
-static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(HWND hwnd, UINT msg,
-                                                        WPARAM wParam,
-                                                        LPARAM lParam,
-                                                        DWORD_PTR refData);
 
 static std::mutex g_hostedSubclassMutex;
 static std::vector<HWND> g_hostedSubclassedWindows;
@@ -8247,12 +9755,8 @@ static void RemoveAllHostedSubclasses() {
         if (!hwnd || !IsWindow(hwnd)) continue;
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, ResolutionControlSubclassProc);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            hwnd, CustomDpiLinkParentSubclassProc);
         RemovePropW(hwnd, kResCtlOrigProcProp);
         RemovePropW(hwnd, kResCtlPaintingProp);
-        RemovePropW(hwnd, kCustomDpiParentOrigProcProp);
-        RemovePropW(hwnd, kCustomDpiLinkProp);
     }
 }
 
@@ -8897,199 +10401,6 @@ static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
     }
 }
 
-// The pinned provider's DirectUI link normally handles "customscaledialog"
-// itself. On modern shell hosts the hosted SysLink notification can stop before
-// reaching that down-level callback, making a visibly valid link do nothing.
-// Detect only the SysLink whose markup contains that exact command, subclass its
-// immediate parent, and route NM_CLICK/NM_RETURN to Microsoft's documented
-// DpiScaling.exe entry point. If the executable can't be launched, fail open to
-// the provider's original notification path.
-static bool LaunchSystemCustomDpiPage(HWND owner) {
-    wchar_t systemDirectory[MAX_PATH + 1] = {};
-    const UINT length = GetSystemDirectoryW(systemDirectory, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) return false;
-
-    wchar_t executable[MAX_PATH + 1] = {};
-    if (swprintf_s(executable, ARRAYSIZE(executable), L"%s\\DpiScaling.exe",
-                   systemDirectory) <= 0 ||
-        GetFileAttributesW(executable) == INVALID_FILE_ATTRIBUTES) {
-        return false;
-    }
-
-    SHELLEXECUTEINFOW execute{};
-    execute.cbSize = sizeof(execute);
-    execute.fMask = SEE_MASK_FLAG_NO_UI;
-    execute.hwnd = owner;
-    execute.lpVerb = L"open";
-    execute.lpFile = executable;
-    execute.lpDirectory = systemDirectory;
-    execute.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&execute)) return false;
-
-    Wh_Log(L"Display hub: custom text size link opened %s", executable);
-    return true;
-}
-
-// The restored hub renders its classic DPI presets as windowless DirectUI
-// radio buttons, whose clicks arrive as plain mouse input on the hosting
-// DirectUI window (the provider's own selection-change handler was deleted in
-// the 1511 build, so no native notification is produced). This maps a click to
-// one of the four preset rows using the native "custom text size" SysLink
-// directly below the preset block as a fixed anchor, then applies the preset.
-// The click is never swallowed: the original message still reaches DirectUI,
-// so the radio's selection dot updates normally. The geometry derives from the
-// pinned page layout (preview graphic 150x116 rp, ClassicDpiReference top
-// padding 10 rp, actionLinks top padding 4 rp); if the window or the anchor is
-// missing, the function simply does nothing.
-static void TryApplyClassicDpiPresetAt(HWND host, int x, int y) {
-    if (!host || !IsWindow(host)) return;
-    HWND anchor = reinterpret_cast<HWND>(GetPropW(host, kCustomDpiLinkProp));
-    if (!anchor || !IsWindow(anchor)) return;
-
-    RECT anchorRect{};
-    if (!GetWindowRect(anchor, &anchorRect)) return;
-    POINT anchorTop{anchorRect.left, anchorRect.top};
-    if (!ScreenToClient(host, &anchorTop)) return;
-
-    // Physical DPI scale, so the logical (96-dpi) rp offsets below map to the
-    // real pixel positions on this display.
-    UINT dpi = 96;
-    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-        auto getDpi = reinterpret_cast<GetDpiForWindow_t>(
-            GetProcAddress(user32, "GetDpiForWindow"));
-        if (getDpi) {
-            const UINT v = getDpi(host);
-            if (v >= 96) dpi = v;
-        }
-    }
-    const double scale = static_cast<double>(dpi) / 96.0;
-
-    // Row height from the anchor's own font, so it tracks the shell font size.
-    int rowHeight = static_cast<int>(17 * scale);
-    if (HFONT font = reinterpret_cast<HFONT>(
-            SendMessageW(anchor, WM_GETFONT, 0, 0))) {
-        HDC dc = GetDC(anchor);
-        if (dc) {
-            HGDIOBJ previous = SelectObject(dc, font);
-            TEXTMETRICW metrics{};
-            if (GetTextMetricsW(dc, &metrics)) {
-                rowHeight = static_cast<int>(metrics.tmHeight + 2 * scale);
-                if (rowHeight < 12)
-                    rowHeight = static_cast<int>(17 * scale);
-            }
-            SelectObject(dc, previous);
-            ReleaseDC(anchor, dc);
-        }
-    }
-
-    // Logical geometry (96 dpi), from the pinned page layout:
-    //   actionLinks.top = ClassicDpiReference.bottom + 4rp
-    //   ClassicDpiReference height = preview (116rp) + 10rp top padding
-    //   preset row 0 top = ClassicDpiReference.top + 10rp
-    //                    = actionLinks.top - 120rp
-    const int preset0Top = anchorTop.y - static_cast<int>(120 * scale);
-    const int preset0Bottom = preset0Top + 4 * rowHeight;
-
-    const int columnLeft = static_cast<int>(8 * scale);
-    const int columnRight = static_cast<int>(300 * scale);
-    if (x < columnLeft || x > columnRight) return;
-    if (y < preset0Top || y > preset0Bottom) return;
-
-    const int index = (y - preset0Top) / rowHeight;
-    if (index < 0 || index >= 4) return;
-
-    static const UINT kPresetPercents[] = {100, 125, 150, 200};
-    const UINT preset = kPresetPercents[index];
-
-    // Skip re-applying the already-selected preset (avoids a spurious sign-out
-    // notification when the user clicks the currently applied level).
-    if (preset == GetCurrentClassicDpiPreset()) return;
-
-    static std::atomic<bool> logged{false};
-    if (!logged.exchange(true)) {
-        Wh_Log(L"Display hub: classic DPI preset hit-test armed "
-               L"(anchorTop=%d rowH=%d dpi=%u)",
-               anchorTop.y, rowHeight, dpi);
-    }
-    Wh_Log(L"Display hub: classic DPI preset row %d (%u%%) clicked", index,
-           preset);
-    (void)ApplyClassicDpiPreset(preset);
-}
-
-static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(
-    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR /*refData*/) {
-    try {
-        // Restored classic DPI radios are windowless: map a host click to a
-        // preset row and apply it (see TryApplyClassicDpiPresetAt). The message
-        // is passed through unchanged so the radio dot updates too.
-        if (msg == WM_LBUTTONUP &&
-            g_enableDpiPresets.load(std::memory_order_acquire)) {
-            TryApplyClassicDpiPresetAt(hwnd,
-                static_cast<short>(LOWORD(lParam)),
-                static_cast<short>(HIWORD(lParam)));
-        }
-
-        if (msg == WM_NOTIFY && lParam) {
-            const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
-            if (header->code == NM_CLICK || header->code == NM_RETURN) {
-                wchar_t cls[16] = {};
-                if (header->hwndFrom &&
-                    GetClassNameW(header->hwndFrom, cls, ARRAYSIZE(cls)) &&
-                    _wcsicmp(cls, WC_LINK) == 0) {
-                    // Read the SysLink URL and route it through the shared
-                    // handler; unrecognized commands fall through unchanged.
-                    const BYTE* notification =
-                        reinterpret_cast<const BYTE*>(lParam);
-                    const wchar_t* url =
-                        reinterpret_cast<const wchar_t*>(notification + 0x88);
-                    if (HandleDisplayHubLinkCommand(
-                            url, GetAncestor(hwnd, GA_ROOT))) {
-                        return TRUE;
-                    }
-                }
-            }
-        }
-
-        const LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
-        if (msg == WM_NCDESTROY) {
-            RemovePropW(hwnd, kCustomDpiLinkProp);
-            RemovePropW(hwnd, kCustomDpiParentOrigProcProp);
-            ForgetHostedSubclass(hwnd);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                hwnd, CustomDpiLinkParentSubclassProc);
-        }
-        return result;
-    } catch (...) {
-        return DefSubclassProc(hwnd, msg, wParam, lParam);
-    }
-}
-
-static void AttachCustomDpiLinkFallback(HWND link) {
-    if (!link || !IsWindow(link)) return;
-    HWND parent = GetParent(link);
-    if (!parent || !IsWindow(parent)) return;
-
-    if (!GetPropW(parent, kCustomDpiParentOrigProcProp)) {
-        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-                parent, CustomDpiLinkParentSubclassProc, 0)) {
-            return;
-        }
-        if (!SetPropW(parent, kCustomDpiParentOrigProcProp,
-                      reinterpret_cast<HANDLE>(1))) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                parent, CustomDpiLinkParentSubclassProc);
-            return;
-        }
-        RememberHostedSubclass(parent);
-    }
-
-    if (SetPropW(parent, kCustomDpiLinkProp,
-                 reinterpret_cast<HANDLE>(link))) {
-        Wh_Log(L"Display hub: custom text size SysLink fallback attached");
-    }
-}
-
 static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
                                        LPCWSTR lpWindowName, DWORD dwStyle,
                                        int x, int y, int width, int height,
@@ -9100,22 +10411,7 @@ static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
                                         dwStyle, x, y, width, height,
                                         hWndParent, hMenu, hInstance, lpParam);
     try {
-        if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
-            _wcsicmp(lpClassName, L"SysLink") == 0) {
-            const auto isModCommandLink = [](const wchar_t* text) {
-                return text != nullptr &&
-                       (wcsstr(text, L"customscaledialog") != nullptr ||
-                        wcsstr(text, L"classicscale") != nullptr);
-            };
-            bool isCustomDpiLink = isModCommandLink(lpWindowName);
-            if (!isCustomDpiLink) {
-                wchar_t text[512] = {};
-                if (GetWindowTextW(hwnd, text, ARRAYSIZE(text)) > 0) {
-                    isCustomDpiLink = isModCommandLink(text);
-                }
-            }
-            if (isCustomDpiLink) AttachCustomDpiLinkFallback(hwnd);
-        }
+
 
         if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
             g_resolutionPageCompatibility.load(std::memory_order_acquire) &&
@@ -9463,9 +10759,9 @@ static DWORD WINAPI DisplayTipDialogThread(LPVOID parameter) {
     std::unique_ptr<DisplayTipDialogParams> params(
         static_cast<DisplayTipDialogParams*>(parameter));
 
-    const wchar_t* caption = GetEmbeddedTranslation(630);
+    const wchar_t* caption = GetEmbeddedTranslation(536);
     const wchar_t* body = GetEmbeddedTranslation(631);
-    if (!caption) caption = L"Screen resolution";
+    if (!caption) caption = L"What display settings should I choose?";
 
     if (body) {
         // MB_OK + MB_ICONINFORMATION is exactly the small generic advisory the
@@ -9482,10 +10778,14 @@ static DWORD WINAPI DisplayTipDialogThread(LPVOID parameter) {
 }
 
 static void ShowDisplaySettingsAdvisory(HWND owner) {
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+
+    std::lock_guard<std::mutex> threadLock(g_modalDialogThreadMutex);
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+
     bool expected = false;
     if (!g_displayTipDialogOpen.compare_exchange_strong(
             expected, true, std::memory_order_acq_rel)) {
-        // Already on screen: do not stack duplicates on repeated clicks.
         return;
     }
 
@@ -9495,10 +10795,6 @@ static void ShowDisplaySettingsAdvisory(HWND owner) {
         return;
     }
 
-    // Reap the handle of a previously finished dialog before storing the new
-    // one, so repeated open/close cycles never leak handles. The previous
-    // thread has already exited (g_displayTipDialogOpen was false), so closing
-    // its handle only drops our reference - it does not terminate the thread.
     HANDLE stale = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
     if (stale) CloseHandle(stale);
 
@@ -9516,15 +10812,32 @@ static void ShowDisplaySettingsAdvisory(HWND owner) {
 // The link is a Help hand-off, so it surfaces as a ShellExecute of an
 // mshelp:/ms-help: URI or of helppane.exe. Recognise exactly those forms and
 // nothing else: every other ShellExecute from the page keeps its native route.
+static bool ContainsDisplayHelpTopicId(PCWSTR value) {
+    if (!value) return false;
+    // 1511 provider help entries for this page (Help and Support topic IDs).
+    return ContainsInsensitive(
+               value, L"617624ee-08f3-4aff-9713-5e84a9674a26") ||
+           ContainsInsensitive(
+               value, L"454f5078-2b51-4cda-b4c0-6391e870c41d") ||
+           ContainsInsensitive(value, L"HELP_ENTRY_ID_DISPLAY_IMPROVE_CLARITY");
+}
+
 static bool IsDisplayHelpTopicLaunch(PCWSTR file, PCWSTR parameters) {
-    if (!file) return false;
-    if (StartsWithInsensitive(file, L"mshelp:") ||
-        StartsWithInsensitive(file, L"ms-help:")) {
-        return true;
+    if (file) {
+        if (StartsWithInsensitive(file, L"mshelp:") ||
+            StartsWithInsensitive(file, L"ms-help:")) {
+            return true;
+        }
+        if (WideFileNameEquals(file, L"helppane.exe") ||
+            WideFileNameEquals(file, L"hh.exe")) {
+            return true;
+        }
+        if (ContainsDisplayHelpTopicId(file)) return true;
     }
-    if (WideFileNameEquals(file, L"helppane.exe")) return true;
-    if (parameters && (ContainsInsensitive(parameters, L"mshelp:") ||
-                       ContainsInsensitive(parameters, L"ms-help:"))) {
+    if (parameters &&
+        (ContainsInsensitive(parameters, L"mshelp:") ||
+         ContainsInsensitive(parameters, L"ms-help:") ||
+         ContainsDisplayHelpTopicId(parameters))) {
         return true;
     }
     return false;
@@ -9786,12 +11099,6 @@ static bool IsDisplaySettingsUri(PCWSTR file)   {
     return terminator == L'\0' || terminator == L'?' || terminator == L'"';
 }
 
-static bool IsCurrentProcessExplorer()   {
-    wchar_t path[MAX_PATH + 1] = {};
-    const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
-    if (length == 0 || length > MAX_PATH) return false;
-    return WideFileNameEquals(path, L"explorer.exe");
-}
 
 static bool IsCurrentProcessRundll32()   {
     wchar_t path[MAX_PATH + 1] = {};
@@ -9808,6 +11115,11 @@ static ShellExecuteW_t ShellExecuteWOriginalDisplaySettings = nullptr;
 static BOOL WINAPI ShellExecuteExWDisplaySettingsHook(
     SHELLEXECUTEINFOW* info)   {
     if (!ShellExecuteExWOriginalDisplaySettings) return FALSE;
+    if (info && IsDisplayHelpTopicLaunch(info->lpFile, info->lpParameters)) {
+        ShowDisplaySettingsAdvisory(info->hwnd);
+        info->hInstApp = reinterpret_cast<HINSTANCE>(33);
+        return TRUE;
+    }
     if (!info ||
         !g_redirectDisplaySettingsUri.load(std::memory_order_acquire) ||
         !IsDisplaySettingsUri(info->lpFile)) {
@@ -9844,6 +11156,10 @@ static HINSTANCE WINAPI ShellExecuteWDisplaySettingsHook(
     if (!ShellExecuteWOriginalDisplaySettings) {
         return reinterpret_cast<HINSTANCE>(SE_ERR_ACCESSDENIED);
     }
+    if (IsDisplayHelpTopicLaunch(file, parameters)) {
+        ShowDisplaySettingsAdvisory(hwnd);
+        return reinterpret_cast<HINSTANCE>(33);
+    }
     if (!g_redirectDisplaySettingsUri.load(std::memory_order_acquire) ||
         !IsDisplaySettingsUri(file)) {
         return ShellExecuteWOriginalDisplaySettings(
@@ -9865,7 +11181,9 @@ static HINSTANCE WINAPI ShellExecuteWDisplaySettingsHook(
 }
 
 static void InstallDisplaySettingsRedirect()   {
-    if (!IsCurrentProcessExplorer()) return;
+    // Explorer hosts the restored page; control.exe can too. rundll32 only
+    // forwards the launch and is handled by the classic-routing hooks.
+    if (IsCurrentProcessRundll32()) return;
 
     HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
     if (!shell32) {
@@ -10194,6 +11512,18 @@ BOOL Wh_ModInit(void) {
         } else {
             ResetEvent(g_stopEvent);
         }
+        if (!g_dpiApplyWakeEvent) {
+            g_dpiApplyWakeEvent =
+                CreateEventW(nullptr, FALSE, FALSE, nullptr);
+            if (!g_dpiApplyWakeEvent) {
+                Wh_Log(L"Display Restorer: delayed DPI wake event creation "
+                       L"failed (error %u)", GetLastError());
+            }
+        } else {
+            ResetEvent(g_dpiApplyWakeEvent);
+        }
+        g_pendingClassicDpiPercent.store(0, std::memory_order_release);
+        g_dpiApplyGeneration.store(0, std::memory_order_release);
         g_shuttingDown.store(false, std::memory_order_release);
 
         // The setup worker starts in Wh_ModAfterInit so a cached provider cannot
@@ -10215,6 +11545,12 @@ void Wh_ModAfterInit(void) {
         if (!g_runSetupWorker.load(std::memory_order_acquire)) {
             Wh_Log(L"Display Restorer: setup worker skipped in this process");
             return;
+        }
+        if (!g_dpiApplyThread && g_stopEvent &&
+            g_dpiApplyWakeEvent &&
+            !g_shuttingDown.load(std::memory_order_acquire)) {
+            g_dpiApplyThread.emplace(ClassicDpiApplyWorkerNoexcept);
+            Wh_Log(L"Display hub: delayed DPI apply worker started");
         }
         if (!g_setupThread &&
             !g_shuttingDown.load(std::memory_order_acquire)) {
@@ -10268,31 +11604,40 @@ void Wh_ModUninit(void) {
         if (g_stopEvent) {
             SetEvent(g_stopEvent);
         }
-        // Dismiss any advisory dialog and wait for its thread to exit before
-        // the mod image can be unmapped. The dialog runs in a MessageBoxW on a
-        // mod thread; unloading the image while that thread's instruction
-        // pointer and return address are inside it would crash Explorer.
-        HANDLE tip = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
-        if (tip) {
-            EnumThreadWindows(GetThreadId(tip), [](HWND h, LPARAM) -> BOOL {
-                PostMessageW(h, WM_CLOSE, 0, 0);
-                return TRUE;
-            }, 0);
-            WaitForSingleObject(tip, INFINITE);
-            CloseHandle(tip);
+        // Serialize against dialog creation, collect both worker handles, then
+        // repeatedly re-drive WM_CLOSE until each thread exits.  This covers the
+        // race where CreateThread returned but MessageBoxW has not created its
+        // window yet; a one-shot EnumThreadWindows followed by INFINITE wait can
+        // otherwise hang Windhawk unload.
+        HANDLE tip = nullptr;
+        HANDLE dpiNotify = nullptr;
+        {
+            std::lock_guard<std::mutex> threadLock(
+                g_modalDialogThreadMutex);
+            tip = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
+            dpiNotify = g_dpiNotifyThread.exchange(
+                nullptr, std::memory_order_acq_rel);
         }
-        // Same teardown for the classic DPI sign-out notification.
-        HANDLE dpiNotify =
-            g_dpiNotifyThread.exchange(nullptr, std::memory_order_acq_rel);
-        if (dpiNotify) {
-            EnumThreadWindows(GetThreadId(dpiNotify),
-                              [](HWND h, LPARAM) -> BOOL {
-                                  PostMessageW(h, WM_CLOSE, 0, 0);
-                                  return TRUE;
-                              }, 0);
-            WaitForSingleObject(dpiNotify, INFINITE);
-            CloseHandle(dpiNotify);
-        }
+        const auto closeAndJoinDialogThread = [](HANDLE thread) {
+            if (!thread) return;
+            const DWORD threadId = GetThreadId(thread);
+            for (;;) {
+                if (threadId) {
+                    EnumThreadWindows(
+                        threadId,
+                        [](HWND window, LPARAM) -> BOOL {
+                            PostMessageW(window, WM_CLOSE, 0, 0);
+                            return TRUE;
+                        },
+                        0);
+                }
+                const DWORD wait = WaitForSingleObject(thread, 200);
+                if (wait != WAIT_TIMEOUT) break;
+            }
+            CloseHandle(thread);
+        };
+        closeAndJoinDialogThread(tip);
+        closeAndJoinDialogThread(dpiNotify);
 
         // InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile are not
         // interruptible and only bound each individual call to
@@ -10302,6 +11647,10 @@ void Wh_ModUninit(void) {
         // Closing the handles from here makes any currently-blocked WinInet
         // call fail immediately instead of waiting out its timeout.
         CancelInFlightDownload();
+        if (g_dpiApplyThread && g_dpiApplyThread->joinable()) {
+            g_dpiApplyThread->join();
+        }
+        g_dpiApplyThread.reset();
         if (g_setupThread && g_setupThread->joinable()) {
             g_setupThread->join();
         }
@@ -10309,6 +11658,10 @@ void Wh_ModUninit(void) {
         // Drop hosted-window subclasses before the mod image is unmapped so a
         // still-open Display page cannot call into unloaded code.
         RemoveAllHostedSubclasses();
+        if (g_dpiApplyWakeEvent) {
+            CloseHandle(g_dpiApplyWakeEvent);
+            g_dpiApplyWakeEvent = nullptr;
+        }
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
@@ -10338,7 +11691,7 @@ void Wh_ModUninit(void) {
                    L"stale copies removed (files still mapped are retried on a "
                    L"later unload)");
         }
-        g_keyTracker.CloseAllFakes();
+        g_keyTracker.ForgetAllWithoutClosing();
     } catch (...) {
     }
 }
