@@ -7,7 +7,6 @@
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
 // @include         *
-// @include         WerFault.exe
 // @compilerOptions -lcomdlg32 -lole32 -luuid -luser32 -lgdi32 -lgdiplus -ldwmapi
 // ==/WindhawkMod==
 
@@ -101,6 +100,7 @@ and any thread that is already in an MTA apartment.
 /*
 - modernizeMessageBox: true
   $name: Modernize MessageBox
+- renderer: custom
   $name: Dialog style
   $options:
   - custom: WinUI-style dialog drawn by the mod (rounded, accent default button)
