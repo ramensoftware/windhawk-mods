@@ -49,15 +49,15 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 
 ## How It Works
 
-The mod hooks into `explorer.exe`, `control.exe`, and `rundll32.exe` to intercept requests for the modern Display and Screen Resolution pages, and instead loads the classic Control Panel versions. The first run downloads one specific Microsoft Display component, which is verified using a pinned SHA‑256 hash before it is used. All subsequent runs use the cached copy, so an internet connection is normally needed only once.
+The mod hooks into `explorer.exe`, `control.exe`, and `rundll32.exe` to intercept requests for the modern Display and Screen Resolution pages, and instead loads the classic Control Panel versions. The first run downloads one specific Microsoft Display component (the Windows 10 1511 DLL which is the last version to have the classic page in the Control Panel) and it is also verified using a pinned SHA‑256 hash before it is used. All subsequent runs use the cached copy, so an internet connection is normally needed only once.
 
-The mod has been tested on **Windows 10 21H2** and **Windows 11 25H2**, and works with the native 64‑bit Control Panel environment.
+The mod has been tested on **Windows 10 21H2**, **Windows 11 23H2** and **Windows 11 25H2**, and works with the native 64‑bit Control Panel environment.
 
 ---
 
 ## Supported Languages
 
-English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German, Brazilian Portuguese, and Polish. The page content and the complete breadcrumb follow the selected language.
+The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German, Brazilian Portuguese, and Polish. The page content and the complete breadcrumb follow the selected language.
 
 ---
 
@@ -68,7 +68,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 - After changing a setting or language, close any already open Display page and reopen it.
 - If the page does not appear, check the Windhawk log for download or hash verification errors.
 - Keep **Screen Resolution compatibility adaptation** enabled for the normal recommended configuration.
-- **Overlap with other mods:** the **Redirect Display settings** option hooks ShellExecuteW/ShellExecuteExW in explorer.exe to intercept ms-settings:display - the same API and URI that the separate **settings-to-control-panel** mod (and similar redirectors) also hook. With both enabled, the result depends on Windhawk hook ordering and one redirect wins. Enable only one of them for ms-settings:display, or disable **Redirect Display settings** here and let a general settings-to-Control-Panel mod handle it. (restore-classic-cpls uses the same registry-virtualization technique this mod uses to publish its applet, so the two do not conflict.)
+- **Overlap with other mods:** the **Redirect Display settings** option tries to intercept ms-settings:display which is the same API and URI that the separate **settings-to-control-panel** mod (and similar redirectors) also hook. With both enabled, the result depends on Windhawk hook ordering and one redirect wins. Enable only one of them for ms-settings:display, or disable **Redirect Display settings** here and let a general settings-to-Control-Panel mod handle it.
 
 ---
 
@@ -79,7 +79,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 - The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.
 - The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.
 - Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.
-- **ARM64 (x64-only):** the mod targets x64. On an ARM64 device IsRunningAsAmd64() is false, so Wh_ModInit declines to activate and the mod has no effect (a clean no-op, not a crash). No ARM64 build is provided; use it on an x64 (Intel/AMD) installation.
+- **ARM64 (x64-only):** The mod targets x64. On an ARM64 device IsRunningAsAmd64() is false, so Wh_ModInit declines to activate and the mod has no effect (a clean no-op, not a crash). No ARM64 build is provided; use it on an x64 (Intel/AMD) installation.
 
 ---
 
