@@ -23,7 +23,7 @@
 //   * Makes the stock Start icon transparent.
 //   * Inserts two layered Windows.UI.Xaml.Controls.Image elements.
 //   * Supports PNG/JPG/GIF.
-//   * Supports local absolute paths and HTTP/HTTPS URLs.
+//   * Supports local absolute paths and paths with environment variables.
 //   * Supports animated GIF playback.
 //   * Supports crossfading normal, hover and pressed images.
 //   * Supports hover/press scale, rotation and opacity effects.
@@ -36,7 +36,7 @@ Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or
 GIF image. Animated GIF playback and hover/pressed effects are optional
 features.
 
-![preview-gifs](https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/preview-1.gif)
+![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/preview-1.gif)
 
 Only the icon is replaced. Windows continues to handle clicking, keyboard
 navigation, accessibility and Start menu activation.
@@ -50,10 +50,6 @@ Local files:
 Environment variables are supported:
 
     %USERPROFILE%\Pictures\start.jpg
-
-HTTP/HTTPS URLs are also supported:
-
-    https://example.com/start.gif
 
 ## Animated GIF playback
 
@@ -91,101 +87,105 @@ from the source image resolution.
 */
 // ==/WindhawkModReadme==
 
-
 // ==WindhawkModSettings==
 /*
-- imageSource: ""
-  $name: Image source
-  $description: >-
-    Absolute local path, path containing environment variables, or HTTP/HTTPS
-    URL. Supports PNG, JPG and animated GIF. This is always the normal image and
-    is also the fallback for other states.
+- images:
+  - imageSource: ""
+    $name: Image source
+    $description: >-
+      Absolute local path or path containing environment variables. Supports
+      PNG, JPG and animated GIF. This is the normal image and the final fallback
+      for every other state.
+  - hoverImageSource: ""
+    $name: Hover image source
+    $description: >-
+      Image shown while the pointer is over the Start button. Leave blank to use
+      the normal image.
+  - pressedImageSource: ""
+    $name: Pressed image source
+    $description: >-
+      Image shown while the Start button is pressed. Leave blank to use the
+      normal image.
+  - activatedImageSource: ""
+    $name: Activated image source
+    $description: >-
+      Image shown while the Start menu is open. If blank or unavailable, the
+      pressed image is used, followed by the hover image and normal image.
+  - iconSize: 34
+    $name: Icon size
+    $description: Displayed size in device-independent pixels, from 8 to 128.
+  $name: Images
+  $description: Configure the replacement images and their displayed size.
 
-- hoverImageSource: ""
-  $name: Hover image source
-  $description: >-
-    Image shown while hovering. Leave blank to use the normal image.
+- imageAnimation:
+  - gifPlayback: hover
+    $name: GIF playback
+    $description: Choose when the currently displayed animated GIF plays.
+    $options:
+    - always: Always
+    - hover: Only while hovering
+    - pressed: Only while pressed
+    - stopped: Never / first frame
+  - hoverFadeDuration: 120
+    $name: Hover crossfade duration
+    $description: >-
+      Crossfade duration in milliseconds when entering or leaving the hover
+      state. Set to 0 to switch images instantly.
+  - pressedFadeDuration: 80
+    $name: Pressed and activated crossfade duration
+    $description: >-
+      Crossfade duration in milliseconds when entering or leaving the pressed
+      or activated state. Set to 0 to switch images instantly.
+  $name: Image animation
+  $description: Configure animated GIF playback and crossfades between images.
 
-- pressedImageSource: ""
-  $name: Pressed image source
-  $description: >-
-    Image shown while pressed. Leave blank to use the normal image.
+- hoverEffects:
+  - hoverScale: 115
+    $name: Scale
+    $description: Icon scale as a percentage while hovering. 100 keeps its size.
+  - hoverRotation: 4
+    $name: Rotation
+    $description: Rotation in degrees while hovering. 0 disables rotation.
+  - hoverOpacity: 100
+    $name: Opacity
+    $description: Icon opacity as a percentage while hovering.
+  - hoverDuration: 120
+    $name: Transition duration
+    $description: Effect transition duration in milliseconds.
+  $name: Hover effects
+  $description: Configure the visual effect applied while hovering.
 
-- activatedImageSource: ""
-  $name: Activated image source
-  $description: >-
-    Image shown while the Start menu is open. If blank or unavailable, uses the
-    pressed image, then the hover image, then the normal image.
+- pressedEffects:
+  - pressedScale: 95
+    $name: Scale
+    $description: Icon scale as a percentage while pressed. 100 keeps its size.
+  - pressedRotation: -4
+    $name: Rotation
+    $description: Rotation in degrees while pressed. 0 disables rotation.
+  - pressedOpacity: 100
+    $name: Opacity
+    $description: Icon opacity as a percentage while pressed.
+  - pressedDuration: 80
+    $name: Transition duration
+    $description: Effect transition duration in milliseconds.
+  $name: Pressed effects
+  $description: Configure the visual effect applied while pressing the button.
 
-- hoverFadeDuration: 120
-  $name: Hover crossfade duration
-  $description: >-
-    Fade duration in milliseconds when entering or leaving the hover state. Set
-    to 0 to switch instantly.
-
-- pressedFadeDuration: 80
-  $name: Pressed crossfade duration
-  $description: >-
-    Fade duration in milliseconds when entering or leaving the pressed or
-    activated state. Set to 0 to switch instantly.
-
-- iconSize: 24
-  $name: Icon size
-  $description: Displayed icon size in device-independent pixels.
-
-- gifPlayback: always
-  $name: GIF playback
-  $description: Controls when an animated GIF is playing.
-  $options:
-  - always: Always
-  - hover: Only while hovering
-  - pressed: Only while pressed
-  - stopped: Never / first frame
-
-- hoverScale: 115
-  $name: Hover scale
-  $description: Scale percentage while the mouse is over the Start button.
-
-- hoverRotation: 4
-  $name: Hover rotation
-  $description: Rotation in degrees while hovering.
-
-- hoverOpacity: 100
-  $name: Hover opacity
-  $description: Opacity percentage while hovering.
-
-- hoverDuration: 120
-  $name: Hover animation duration
-  $description: Duration in milliseconds.
-
-- pressedScale: 88
-  $name: Pressed scale
-  $description: Scale percentage while the Start button is pressed.
-
-- pressedRotation: -4
-  $name: Pressed rotation
-  $description: Rotation in degrees while pressed.
-
-- pressedOpacity: 90
-  $name: Pressed opacity
-  $description: Opacity percentage while pressed.
-
-- pressedDuration: 80
-  $name: Pressed animation duration
-  $description: Duration in milliseconds.
-
-- releaseDuration: 140
-  $name: Release animation duration
-  $description: Duration used when returning from pressed/hover state.
-
-- respectSystemAnimations: true
-  $name: Respect Windows animation setting
-  $description: >-
-    Stop GIF playback and make transitions instant when Windows animation
-    effects are disabled.
+- animationBehavior:
+  - releaseDuration: 140
+    $name: Release duration
+    $description: >-
+      Effect transition duration in milliseconds when the pointer leaves or the
+      button is released.
+  - respectSystemAnimations: true
+    $name: Respect Windows animation setting
+    $description: >-
+      Stop GIF playback and make all transitions instant when animation effects
+      are disabled in Windows.
+  $name: Animation behavior
+  $description: Configure shared animation and accessibility behavior.
 */
 // ==/WindhawkModSettings==
-
 
 #include <windhawk_utils.h>
 
@@ -196,6 +196,8 @@ from the source image resolution.
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -203,57 +205,46 @@ from the source image resolution.
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Composition.h>
-#include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
+namespace wf = winrt::Windows::Foundation;
 
-namespace wf =
-    winrt::Windows::Foundation;
+namespace wss = winrt::Windows::Storage::Streams;
 
-namespace wss =
-    winrt::Windows::Storage::Streams;
+namespace wuc = winrt::Windows::UI::Composition;
 
-namespace wuc =
-    winrt::Windows::UI::Composition;
+namespace wuic = winrt::Windows::UI::Core;
 
-namespace wuv =
-    winrt::Windows::UI::ViewManagement;
+namespace wux = winrt::Windows::UI::Xaml;
 
-namespace wux =
-    winrt::Windows::UI::Xaml;
+namespace wuxa = winrt::Windows::UI::Xaml::Automation;
 
-namespace wuxa =
-    winrt::Windows::UI::Xaml::Automation;
+namespace wuxap = winrt::Windows::UI::Xaml::Automation::Peers;
 
-namespace wuxc =
-    winrt::Windows::UI::Xaml::Controls;
+namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 
-namespace wuxcp =
-    winrt::Windows::UI::Xaml::Controls::Primitives;
+namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
 
-namespace wuxh =
-    winrt::Windows::UI::Xaml::Hosting;
+namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
 
-namespace wuxi =
-    winrt::Windows::UI::Xaml::Input;
+namespace wuxi = winrt::Windows::UI::Xaml::Input;
 
-namespace wuxm =
-    winrt::Windows::UI::Xaml::Media;
+namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
-namespace wuxmi =
-    winrt::Windows::UI::Xaml::Media::Imaging;
-
+namespace wuxmi = winrt::Windows::UI::Xaml::Media::Imaging;
 
 // -----------------------------------------------------------------------------
 // Settings
@@ -282,8 +273,7 @@ enum class IconState : size_t {
     Count,
 };
 
-constexpr size_t kIconStateCount =
-    static_cast<size_t>(IconState::Count);
+constexpr size_t kIconStateCount = static_cast<size_t>(IconState::Count);
 
 struct ModSettings {
     std::wstring imageSource;
@@ -297,17 +287,16 @@ struct ModSettings {
 
     int iconSize = 24;
 
-    GifPlaybackMode gifPlayback =
-        GifPlaybackMode::Always;
+    GifPlaybackMode gifPlayback = GifPlaybackMode::Always;
 
-    double hoverScale = 1.15;
-    double hoverRotation = 4.0;
+    double hoverScale = 1.0;
+    double hoverRotation = 0.0;
     double hoverOpacity = 1.0;
     int hoverDuration = 120;
 
-    double pressedScale = 0.88;
-    double pressedRotation = -4.0;
-    double pressedOpacity = 0.90;
+    double pressedScale = 1.0;
+    double pressedRotation = 0.0;
+    double pressedOpacity = 1.0;
     int pressedDuration = 80;
 
     int releaseDuration = 140;
@@ -316,9 +305,9 @@ struct ModSettings {
 };
 
 ModSettings g_settings;
+std::mutex g_settingsMutex;
 
 std::atomic<bool> g_unloading = false;
-
 
 // -----------------------------------------------------------------------------
 // Start icon instance
@@ -327,8 +316,8 @@ std::atomic<bool> g_unloading = false;
 struct ImageResource {
     wuxmi::BitmapImage bitmap{nullptr};
 
-    // Keep local file streams alive while their bitmaps exist.
-    wss::IRandomAccessStream localStream{nullptr};
+    // The source file is copied to memory so the file itself isn't kept open.
+    wss::IRandomAccessStream memoryStream{nullptr};
     wf::IAsyncAction loadAction{nullptr};
 
     winrt::event_token imageOpenedToken{};
@@ -336,11 +325,14 @@ struct ImageResource {
 
     bool imageOpenedAttached = false;
     bool imageFailedAttached = false;
+    bool opened = false;
     bool failed = false;
 };
 
 struct StartIconInstance {
     DWORD threadId = 0;
+    wuic::CoreDispatcher dispatcher{nullptr};
+    ModSettings settings;
 
     winrt::weak_ref<wux::FrameworkElement> startButton;
     winrt::weak_ref<wux::FrameworkElement> stockIcon;
@@ -351,13 +343,11 @@ struct StartIconInstance {
 
     double originalStockOpacity = 1.0;
 
-    std::array<ImageResource, kIconStateCount>
-        imageResources;
+    std::array<ImageResource, kIconStateCount> imageResources;
 
     // Multiple logical states can share one decoded image resource when their
     // configured sources are identical.
-    std::array<size_t, kIconStateCount>
-        imageResourceIndexByState{0, 1, 2, 3};
+    std::array<size_t, kIconStateCount> imageResourceIndexByState{0, 1, 2, 3};
 
     size_t activeImageIndex = 0;
     bool activeImageSet = false;
@@ -367,10 +357,8 @@ struct StartIconInstance {
     IconState displayedState = IconState::Normal;
     bool displayedStateSet = false;
 
-    GifAnimationStatus loggedGifStatus =
-        GifAnimationStatus::Unknown;
-    GifPlaybackMode loggedGifMode =
-        GifPlaybackMode::Always;
+    GifAnimationStatus loggedGifStatus = GifAnimationStatus::Unknown;
+    GifPlaybackMode loggedGifMode = GifPlaybackMode::Always;
     IconState loggedGifState = IconState::Normal;
     size_t loggedGifResourceIndex = 0;
     bool gifStatusLogged = false;
@@ -393,433 +381,277 @@ struct StartIconInstance {
     wf::IInspectable pointerCaptureLostHandler{nullptr};
 
     bool pointerEventsAttached = false;
+    bool detached = false;
 };
 
-std::vector<std::shared_ptr<StartIconInstance>> g_instances;
+std::mutex g_instancesMutex;
 
+[[clang::no_destroy]] std::optional<
+    std::vector<std::shared_ptr<StartIconInstance>>>
+    g_instances{std::in_place};
+
+// If an owning XAML dispatcher is already unavailable during a controlled
+// unload, releasing the instance from Windhawk's engine thread would violate
+// XAML thread affinity. Intentionally leak such exceptional instances instead.
+[[clang::no_destroy]] std::optional<
+    std::vector<std::shared_ptr<StartIconInstance>>>
+    g_abandonedInstances{std::in_place};
 
 // -----------------------------------------------------------------------------
 // Utility
 // -----------------------------------------------------------------------------
 
 std::wstring GetStringSetting(const wchar_t* name) {
-    PCWSTR value = Wh_GetStringSetting(name);
+    auto value = WindhawkUtils::StringSetting::make(name);
 
-    std::wstring result =
-        value ? value : L"";
-
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
-
-    return result;
+    return value.get() ? value.get() : L"";
 }
 
-bool EqualsIgnoreCase(
-    const std::wstring& a,
-    const wchar_t* b)
-{
+bool EqualsIgnoreCase(const std::wstring& a, const wchar_t* b) {
     return _wcsicmp(a.c_str(), b) == 0;
 }
 
-bool StartsWithIgnoreCase(
-    const std::wstring& value,
-    const wchar_t* prefix)
-{
-    size_t prefixLength = wcslen(prefix);
-
-    if (value.length() < prefixLength) {
-        return false;
-    }
-
-    return _wcsnicmp(
-               value.c_str(),
-               prefix,
-               prefixLength) == 0;
+bool IsBlank(const std::wstring& value) {
+    return value.find_first_not_of(L" \t\r\n") == std::wstring::npos;
 }
 
-bool IsHttpUrl(const std::wstring& source) {
-    return StartsWithIgnoreCase(
-               source,
-               L"http://") ||
-           StartsWithIgnoreCase(
-               source,
-               L"https://");
-}
-
-std::wstring ExpandPath(
-    const std::wstring& source)
-{
+std::wstring ExpandPath(const std::wstring& source) {
     if (source.empty()) {
         return source;
     }
 
-    DWORD required =
-        ExpandEnvironmentStringsW(
-            source.c_str(),
-            nullptr,
-            0);
+    DWORD required = ExpandEnvironmentStringsW(source.c_str(), nullptr, 0);
 
     if (!required) {
         return source;
     }
 
-    std::wstring result(
-        required,
-        L'\0');
+    std::wstring result(required, L'\0');
 
     DWORD written =
-        ExpandEnvironmentStringsW(
-            source.c_str(),
-            result.data(),
-            required);
+        ExpandEnvironmentStringsW(source.c_str(), result.data(), required);
 
-    if (!written ||
-        written > required)
-    {
+    if (!written || written > required) {
         return source;
     }
 
-    if (!result.empty() &&
-        result.back() == L'\0')
-    {
+    if (!result.empty() && result.back() == L'\0') {
         result.pop_back();
     }
 
     return result;
 }
 
-void LoadSettings() {
-    g_settings.imageSource =
-        GetStringSetting(L"imageSource");
+ModSettings LoadSettings() {
+    ModSettings settings;
 
-    g_settings.hoverImageSource =
-        GetStringSetting(
-            L"hoverImageSource");
+    settings.imageSource = GetStringSetting(L"images.imageSource");
 
-    g_settings.pressedImageSource =
-        GetStringSetting(
-            L"pressedImageSource");
+    settings.hoverImageSource =
+        GetStringSetting(L"images.hoverImageSource");
 
-    g_settings.activatedImageSource =
-        GetStringSetting(
-            L"activatedImageSource");
+    settings.pressedImageSource =
+        GetStringSetting(L"images.pressedImageSource");
 
-    g_settings.hoverFadeDuration =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"hoverFadeDuration"),
-            0,
-            5000);
+    settings.activatedImageSource =
+        GetStringSetting(L"images.activatedImageSource");
 
-    g_settings.pressedFadeDuration =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"pressedFadeDuration"),
-            0,
-            5000);
+    settings.hoverFadeDuration =
+        std::clamp(Wh_GetIntSetting(L"imageAnimation.hoverFadeDuration"), 0,
+                   5000);
 
-    g_settings.iconSize =
-        std::clamp(
-            Wh_GetIntSetting(L"iconSize"),
-            8,
-            128);
+    settings.pressedFadeDuration =
+        std::clamp(Wh_GetIntSetting(L"imageAnimation.pressedFadeDuration"), 0,
+                   5000);
+
+    settings.iconSize =
+        std::clamp(Wh_GetIntSetting(L"images.iconSize"), 8, 128);
 
     std::wstring playback =
-        GetStringSetting(L"gifPlayback");
+        GetStringSetting(L"imageAnimation.gifPlayback");
 
-    if (EqualsIgnoreCase(
-            playback,
-            L"hover"))
-    {
-        g_settings.gifPlayback =
-            GifPlaybackMode::Hover;
-    }
-    else if (EqualsIgnoreCase(
-                 playback,
-                 L"pressed"))
-    {
-        g_settings.gifPlayback =
-            GifPlaybackMode::Pressed;
-    }
-    else if (EqualsIgnoreCase(
-                 playback,
-                 L"stopped"))
-    {
-        g_settings.gifPlayback =
-            GifPlaybackMode::Stopped;
-    }
-    else
-    {
-        g_settings.gifPlayback =
-            GifPlaybackMode::Always;
+    if (EqualsIgnoreCase(playback, L"hover")) {
+        settings.gifPlayback = GifPlaybackMode::Hover;
+    } else if (EqualsIgnoreCase(playback, L"pressed")) {
+        settings.gifPlayback = GifPlaybackMode::Pressed;
+    } else if (EqualsIgnoreCase(playback, L"stopped")) {
+        settings.gifPlayback = GifPlaybackMode::Stopped;
+    } else {
+        settings.gifPlayback = GifPlaybackMode::Always;
     }
 
-    g_settings.hoverScale =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"hoverScale"),
-            10,
-            500) /
+    settings.hoverScale =
+        std::clamp(Wh_GetIntSetting(L"hoverEffects.hoverScale"), 10, 500) /
         100.0;
 
-    g_settings.hoverRotation =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"hoverRotation"),
-            -360,
-            360);
+    settings.hoverRotation =
+        std::clamp(Wh_GetIntSetting(L"hoverEffects.hoverRotation"), -360,
+                   360);
 
-    g_settings.hoverOpacity =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"hoverOpacity"),
-            0,
-            100) /
+    settings.hoverOpacity =
+        std::clamp(Wh_GetIntSetting(L"hoverEffects.hoverOpacity"), 0, 100) /
         100.0;
 
-    g_settings.hoverDuration =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"hoverDuration"),
-            0,
-            5000);
+    settings.hoverDuration =
+        std::clamp(Wh_GetIntSetting(L"hoverEffects.hoverDuration"), 0, 5000);
 
-    g_settings.pressedScale =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"pressedScale"),
-            10,
-            500) /
+    settings.pressedScale =
+        std::clamp(Wh_GetIntSetting(L"pressedEffects.pressedScale"), 10, 500) /
         100.0;
 
-    g_settings.pressedRotation =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"pressedRotation"),
-            -360,
-            360);
+    settings.pressedRotation =
+        std::clamp(Wh_GetIntSetting(L"pressedEffects.pressedRotation"), -360,
+                   360);
 
-    g_settings.pressedOpacity =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"pressedOpacity"),
-            0,
-            100) /
+    settings.pressedOpacity =
+        std::clamp(Wh_GetIntSetting(L"pressedEffects.pressedOpacity"), 0,
+                   100) /
         100.0;
 
-    g_settings.pressedDuration =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"pressedDuration"),
-            0,
-            5000);
+    settings.pressedDuration =
+        std::clamp(Wh_GetIntSetting(L"pressedEffects.pressedDuration"), 0,
+                   5000);
 
-    g_settings.releaseDuration =
-        std::clamp(
-            Wh_GetIntSetting(
-                L"releaseDuration"),
-            0,
-            5000);
+    settings.releaseDuration =
+        std::clamp(Wh_GetIntSetting(L"animationBehavior.releaseDuration"), 0,
+                   5000);
 
-    g_settings.respectSystemAnimations =
-        Wh_GetIntSetting(
-            L"respectSystemAnimations") != 0;
+    settings.respectSystemAnimations =
+        Wh_GetIntSetting(L"animationBehavior.respectSystemAnimations") != 0;
+
+    return settings;
 }
 
+void StoreSettings(ModSettings settings) {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+
+    g_settings = std::move(settings);
+}
+
+ModSettings GetSettingsSnapshot() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+
+    return g_settings;
+}
 
 // -----------------------------------------------------------------------------
 // Windows animation accessibility setting
 // -----------------------------------------------------------------------------
 
-bool MotionAllowed() {
-    if (!g_settings.respectSystemAnimations) {
+bool MotionAllowed(const ModSettings& settings) {
+    if (!settings.respectSystemAnimations) {
         return true;
     }
 
-    try {
-        wuv::UISettings uiSettings;
+    BOOL animationsEnabled = TRUE;
 
-        return uiSettings.AnimationsEnabled();
-    }
-    catch (...) {
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0,
+                               &animationsEnabled, 0)) {
         return true;
     }
+
+    return animationsEnabled != FALSE;
 }
-
 
 // -----------------------------------------------------------------------------
 // Composition effects
 // -----------------------------------------------------------------------------
 
-void SetVisualImmediately(
-    const wuc::Visual& visual,
-    float scale,
-    float rotation,
-    float opacity)
-{
+void SetVisualImmediately(const wuc::Visual& visual,
+                          float scale,
+                          float rotation,
+                          float opacity) {
     visual.StopAnimation(L"Scale");
-    visual.StopAnimation(
-        L"RotationAngleInDegrees");
+    visual.StopAnimation(L"RotationAngleInDegrees");
     visual.StopAnimation(L"Opacity");
 
-    visual.Scale({
-        scale,
-        scale,
-        1.0f
-    });
+    visual.Scale({scale, scale, 1.0f});
 
-    visual.RotationAngleInDegrees(
-        rotation);
+    visual.RotationAngleInDegrees(rotation);
 
     visual.Opacity(opacity);
 }
 
-void AnimateVisual(
-    const wux::FrameworkElement& element,
-    float scale,
-    float rotation,
-    float opacity,
-    int durationMs)
-{
+void AnimateVisual(const wux::FrameworkElement& element,
+                   const ModSettings& settings,
+                   float scale,
+                   float rotation,
+                   float opacity,
+                   int durationMs) {
     if (!element) {
         return;
     }
 
     try {
         auto visual =
-            wuxh::ElementCompositionPreview::
-                GetElementVisual(element);
+            wuxh::ElementCompositionPreview::GetElementVisual(element);
 
         if (!visual) {
             return;
         }
 
-        float width =
-            static_cast<float>(
-                element.ActualWidth());
+        float width = static_cast<float>(element.ActualWidth());
 
-        float height =
-            static_cast<float>(
-                element.ActualHeight());
+        float height = static_cast<float>(element.ActualHeight());
 
         if (width <= 0) {
-            width =
-                static_cast<float>(
-                    g_settings.iconSize);
+            width = static_cast<float>(settings.iconSize);
         }
 
         if (height <= 0) {
-            height =
-                static_cast<float>(
-                    g_settings.iconSize);
+            height = static_cast<float>(settings.iconSize);
         }
 
-        visual.CenterPoint({
-            width / 2.0f,
-            height / 2.0f,
-            0.0f
-        });
+        visual.CenterPoint({width / 2.0f, height / 2.0f, 0.0f});
 
-        if (!MotionAllowed() ||
-            durationMs <= 0)
-        {
-            SetVisualImmediately(
-                visual,
-                scale,
-                rotation,
-                opacity);
+        if (!MotionAllowed(settings) || durationMs <= 0) {
+            SetVisualImmediately(visual, scale, rotation, opacity);
 
             return;
         }
 
-        auto compositor =
-            visual.Compositor();
+        auto compositor = visual.Compositor();
 
-        auto easing =
-            compositor
-                .CreateCubicBezierEasingFunction(
-                    {
-                        0.20f,
-                        0.00f
-                    },
-                    {
-                        0.00f,
-                        1.00f
-                    });
+        auto easing = compositor.CreateCubicBezierEasingFunction(
+            {0.20f, 0.00f}, {0.00f, 1.00f});
 
         // Scale.
         {
-            auto animation =
-                compositor
-                    .CreateVector3KeyFrameAnimation();
+            auto animation = compositor.CreateVector3KeyFrameAnimation();
 
-            animation.InsertKeyFrame(
-                1.0f,
-                {
-                    scale,
-                    scale,
-                    1.0f
-                },
-                easing);
+            animation.InsertKeyFrame(1.0f, {scale, scale, 1.0f}, easing);
 
-            animation.Duration(
-                std::chrono::milliseconds(
-                    durationMs));
+            animation.Duration(std::chrono::milliseconds(durationMs));
 
-            visual.StartAnimation(
-                L"Scale",
-                animation);
+            visual.StartAnimation(L"Scale", animation);
         }
 
         // Rotation.
         {
-            auto animation =
-                compositor
-                    .CreateScalarKeyFrameAnimation();
+            auto animation = compositor.CreateScalarKeyFrameAnimation();
 
-            animation.InsertKeyFrame(
-                1.0f,
-                rotation,
-                easing);
+            animation.InsertKeyFrame(1.0f, rotation, easing);
 
-            animation.Duration(
-                std::chrono::milliseconds(
-                    durationMs));
+            animation.Duration(std::chrono::milliseconds(durationMs));
 
-            visual.StartAnimation(
-                L"RotationAngleInDegrees",
-                animation);
+            visual.StartAnimation(L"RotationAngleInDegrees", animation);
         }
 
         // Opacity.
         {
-            auto animation =
-                compositor
-                    .CreateScalarKeyFrameAnimation();
+            auto animation = compositor.CreateScalarKeyFrameAnimation();
 
-            animation.InsertKeyFrame(
-                1.0f,
-                opacity,
-                easing);
+            animation.InsertKeyFrame(1.0f, opacity, easing);
 
-            animation.Duration(
-                std::chrono::milliseconds(
-                    durationMs));
+            animation.Duration(std::chrono::milliseconds(durationMs));
 
-            visual.StartAnimation(
-                L"Opacity",
-                animation);
+            visual.StartAnimation(L"Opacity", animation);
         }
-    }
-    catch (const winrt::hresult_error& e) {
-        Wh_Log(
-            L"AnimateVisual failed: 0x%08X %s",
-            e.code().value,
-            e.message().c_str());
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"AnimateVisual failed: 0x%08X %s", e.code().value,
+               e.message().c_str());
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // GIF playback
@@ -849,9 +681,7 @@ const wchar_t* IconStateName(IconState state) {
 }
 
 IconState GetCurrentIconState(
-    const std::shared_ptr<
-        StartIconInstance>& instance)
-{
+    const std::shared_ptr<StartIconInstance>& instance) {
     if (instance && instance->pressed) {
         return IconState::Pressed;
     }
@@ -867,53 +697,42 @@ IconState GetCurrentIconState(
     return IconState::Normal;
 }
 
-std::wstring GetImageSourceForState(
-    IconState state)
-{
+std::wstring GetImageSourceForState(const ModSettings& settings,
+                                    IconState state) {
     if (state == IconState::Normal) {
-        return g_settings.imageSource;
+        return settings.imageSource;
     }
 
     switch (state) {
         case IconState::Hover:
-            return g_settings.hoverImageSource;
+            return settings.hoverImageSource;
 
         case IconState::Pressed:
-            return g_settings.pressedImageSource;
+            return settings.pressedImageSource;
 
         case IconState::Activated:
-            return g_settings.activatedImageSource;
+            return settings.activatedImageSource;
 
         default:
             return L"";
     }
 }
 
-bool ImageResourceAvailable(
-    const ImageResource& resource)
-{
-    return resource.bitmap &&
-        !resource.failed;
+bool ImageResourceAvailable(const ImageResource& resource) {
+    return resource.bitmap && resource.opened && !resource.failed;
 }
 
-wuxc::Image GetImageLayer(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    size_t layerIndex)
-{
+wuxc::Image GetImageLayer(const std::shared_ptr<StartIconInstance>& instance,
+                          size_t layerIndex) {
     if (!instance) {
         return nullptr;
     }
 
-    return layerIndex == 0
-        ? instance->customImage.get()
-        : instance->transitionImage.get();
+    return layerIndex == 0 ? instance->customImage.get()
+                           : instance->transitionImage.get();
 }
 
-bool ImageSourcesEqual(
-    const std::wstring& first,
-    const std::wstring& second)
-{
+bool ImageSourcesEqual(const std::wstring& first, const std::wstring& second) {
     if (first.empty() || second.empty()) {
         return false;
     }
@@ -922,36 +741,19 @@ bool ImageSourcesEqual(
         return true;
     }
 
-    // URL paths can be case-sensitive. Local Windows paths are not, and
-    // environment variables should be compared after expansion.
-    if (IsHttpUrl(first) ||
-        IsHttpUrl(second))
-    {
-        return false;
-    }
+    std::wstring expandedFirst = ExpandPath(first);
+    std::wstring expandedSecond = ExpandPath(second);
 
-    std::wstring expandedFirst =
-        ExpandPath(first);
-    std::wstring expandedSecond =
-        ExpandPath(second);
-
-    return _wcsicmp(
-               expandedFirst.c_str(),
-               expandedSecond.c_str()) == 0;
+    return _wcsicmp(expandedFirst.c_str(), expandedSecond.c_str()) == 0;
 }
 
-void SetImageLayerOpacity(
-    const wuxc::Image& image,
-    float opacity)
-{
+void SetImageLayerOpacity(const wuxc::Image& image, float opacity) {
     if (!image) {
         return;
     }
 
     try {
-        auto visual =
-            wuxh::ElementCompositionPreview::
-                GetElementVisual(image);
+        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(image);
 
         if (!visual) {
             return;
@@ -959,14 +761,11 @@ void SetImageLayerOpacity(
 
         visual.StopAnimation(L"Opacity");
         visual.Opacity(opacity);
-    }
-    catch (...) {
+    } catch (...) {
     }
 }
 
-const wchar_t* GifPlaybackModeName(
-    GifPlaybackMode mode)
-{
+const wchar_t* GifPlaybackModeName(GifPlaybackMode mode) {
     switch (mode) {
         case GifPlaybackMode::Always:
             return L"always";
@@ -985,9 +784,7 @@ const wchar_t* GifPlaybackModeName(
     }
 }
 
-const wchar_t* GifAnimationStatusName(
-    GifAnimationStatus status)
-{
+const wchar_t* GifAnimationStatusName(GifAnimationStatus status) {
     switch (status) {
         case GifAnimationStatus::NotAnimated:
             return L"not-animated";
@@ -998,8 +795,7 @@ const wchar_t* GifAnimationStatusName(
         case GifAnimationStatus::Stopped:
             return L"stopped";
 
-        case GifAnimationStatus::
-                 SystemAnimationsDisabled:
+        case GifAnimationStatus::SystemAnimationsDisabled:
             return L"stopped-system-animations-disabled";
 
         default:
@@ -1007,29 +803,22 @@ const wchar_t* GifAnimationStatusName(
     }
 }
 
-void AnimateImageLayerOpacity(
-    const wuxc::Image& image,
-    float fromOpacity,
-    float toOpacity,
-    int durationMs)
-{
+void AnimateImageLayerOpacity(const wuxc::Image& image,
+                              const ModSettings& settings,
+                              float fromOpacity,
+                              float toOpacity,
+                              int durationMs) {
     if (!image) {
         return;
     }
 
-    if (!MotionAllowed() ||
-        durationMs <= 0)
-    {
-        SetImageLayerOpacity(
-            image,
-            toOpacity);
+    if (!MotionAllowed(settings) || durationMs <= 0) {
+        SetImageLayerOpacity(image, toOpacity);
         return;
     }
 
     try {
-        auto visual =
-            wuxh::ElementCompositionPreview::
-                GetElementVisual(image);
+        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(image);
 
         if (!visual) {
             return;
@@ -1038,214 +827,134 @@ void AnimateImageLayerOpacity(
         visual.StopAnimation(L"Opacity");
         visual.Opacity(fromOpacity);
 
-        auto compositor =
-            visual.Compositor();
+        auto compositor = visual.Compositor();
 
-        auto easing =
-            compositor
-                .CreateCubicBezierEasingFunction(
-                    {0.20f, 0.00f},
-                    {0.00f, 1.00f});
+        auto easing = compositor.CreateCubicBezierEasingFunction(
+            {0.20f, 0.00f}, {0.00f, 1.00f});
 
-        auto animation =
-            compositor
-                .CreateScalarKeyFrameAnimation();
+        auto animation = compositor.CreateScalarKeyFrameAnimation();
 
-        animation.InsertKeyFrame(
-            0.0f,
-            fromOpacity);
+        animation.InsertKeyFrame(0.0f, fromOpacity);
 
-        animation.InsertKeyFrame(
-            1.0f,
-            toOpacity,
-            easing);
+        animation.InsertKeyFrame(1.0f, toOpacity, easing);
 
-        animation.Duration(
-            std::chrono::milliseconds(
-                durationMs));
+        animation.Duration(std::chrono::milliseconds(durationMs));
 
-        visual.StartAnimation(
-            L"Opacity",
-            animation);
-    }
-    catch (...) {
-        SetImageLayerOpacity(
-            image,
-            toOpacity);
+        visual.StartAnimation(L"Opacity", animation);
+    } catch (...) {
+        SetImageLayerOpacity(image, toOpacity);
     }
 }
 
 int GetStateCrossfadeDuration(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    IconState nextState)
-{
+    const std::shared_ptr<StartIconInstance>& instance,
+    IconState nextState) {
     if (!instance) {
         return 0;
     }
 
-    if (nextState == IconState::Pressed ||
-        nextState == IconState::Activated ||
+    if (nextState == IconState::Pressed || nextState == IconState::Activated ||
         (instance->displayedStateSet &&
-         (instance->displayedState ==
-              IconState::Pressed ||
-          instance->displayedState ==
-              IconState::Activated)))
-    {
-        return g_settings.pressedFadeDuration;
+         (instance->displayedState == IconState::Pressed ||
+          instance->displayedState == IconState::Activated))) {
+        return instance->settings.pressedFadeDuration;
     }
 
-    return g_settings.hoverFadeDuration;
+    return instance->settings.hoverFadeDuration;
 }
 
-bool UpdateDisplayedImage(
-    const std::shared_ptr<
-        StartIconInstance>& instance)
-{
+bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
     if (!instance) {
         return false;
     }
 
-    auto firstLayer =
-        GetImageLayer(instance, 0);
-    auto secondLayer =
-        GetImageLayer(instance, 1);
+    auto firstLayer = GetImageLayer(instance, 0);
+    auto secondLayer = GetImageLayer(instance, 1);
 
     if (!firstLayer || !secondLayer) {
         return false;
     }
 
-    auto setStockOpacity =
-        [&](double opacity)
-        {
-            auto stockIcon =
-                instance->stockIcon.get();
+    auto setStockOpacity = [&](double opacity) {
+        auto stockIcon = instance->stockIcon.get();
 
-            if (stockIcon) {
-                try {
-                    stockIcon.Opacity(opacity);
-                }
-                catch (...) {
-                }
+        if (stockIcon) {
+            try {
+                stockIcon.Opacity(opacity);
+            } catch (...) {
             }
-        };
+        }
+    };
 
-    IconState desiredState =
-        GetCurrentIconState(instance);
+    IconState desiredState = GetCurrentIconState(instance);
 
-    size_t normalIndex =
-        IconStateIndex(
-            IconState::Normal);
+    size_t normalIndex = IconStateIndex(IconState::Normal);
 
     size_t selectedIndex = normalIndex;
-    IconState selectedState =
-        IconState::Normal;
+    IconState selectedState = IconState::Normal;
 
-    auto selectIfAvailable =
-        [&](IconState state)
-        {
-            size_t stateIndex =
-                instance
-                    ->imageResourceIndexByState[
-                        IconStateIndex(state)];
+    auto selectIfAvailable = [&](IconState state) {
+        size_t stateIndex =
+            instance->imageResourceIndexByState[IconStateIndex(state)];
 
-            if (!ImageResourceAvailable(
-                    instance
-                        ->imageResources[stateIndex]))
-            {
-                return false;
-            }
-
-            selectedIndex = stateIndex;
-            selectedState = state;
-            return true;
-        };
-
-    if (desiredState ==
-        IconState::Activated)
-    {
-        if (!selectIfAvailable(
-                IconState::Activated) &&
-            !selectIfAvailable(
-                IconState::Pressed) &&
-            !selectIfAvailable(
-                IconState::Hover))
-        {
-            selectIfAvailable(
-                IconState::Normal);
+        if (!ImageResourceAvailable(instance->imageResources[stateIndex])) {
+            return false;
         }
+
+        selectedIndex = stateIndex;
+        selectedState = state;
+        return true;
+    };
+
+    if (desiredState == IconState::Activated) {
+        if (!selectIfAvailable(IconState::Activated) &&
+            !selectIfAvailable(IconState::Pressed) &&
+            !selectIfAvailable(IconState::Hover)) {
+            selectIfAvailable(IconState::Normal);
+        }
+    } else if (!selectIfAvailable(desiredState)) {
+        selectIfAvailable(IconState::Normal);
     }
-    else if (!selectIfAvailable(
-                 desiredState))
-    {
-        selectIfAvailable(
-            IconState::Normal);
-    }
 
-    auto& selectedResource =
-        instance
-            ->imageResources[selectedIndex];
+    auto& selectedResource = instance->imageResources[selectedIndex];
 
-    bool selectionChanged =
-        !instance->requestedStateSet ||
-        instance->requestedState !=
-            desiredState ||
-        !instance->displayedStateSet ||
-        instance->displayedState !=
-            selectedState;
+    bool selectionChanged = !instance->requestedStateSet ||
+                            instance->requestedState != desiredState ||
+                            !instance->displayedStateSet ||
+                            instance->displayedState != selectedState;
 
-    instance->requestedState =
-        desiredState;
+    instance->requestedState = desiredState;
     instance->requestedStateSet = true;
 
     if (selectionChanged) {
-        Wh_Log(
-            L"Start icon state: requested=%s selected=%s",
-            IconStateName(desiredState),
-            IconStateName(selectedState));
+        Wh_Log(L"Start icon state: requested=%s selected=%s",
+               IconStateName(desiredState), IconStateName(selectedState));
     }
 
-    if (!ImageResourceAvailable(
-            selectedResource))
-    {
-        for (size_t layerIndex = 0;
-             layerIndex < 2;
-             layerIndex++)
-        {
-            auto layer =
-                GetImageLayer(
-                    instance,
-                    layerIndex);
+    if (!ImageResourceAvailable(selectedResource)) {
+        for (size_t layerIndex = 0; layerIndex < 2; layerIndex++) {
+            auto layer = GetImageLayer(instance, layerIndex);
 
             try {
-                layer.Source(
-                    wuxm::ImageSource{nullptr});
-            }
-            catch (...) {
+                layer.Source(wuxm::ImageSource{nullptr});
+            } catch (...) {
             }
 
-            SetImageLayerOpacity(
-                layer,
-                0.0f);
+            SetImageLayerOpacity(layer, 0.0f);
         }
 
         instance->activeImageSet = false;
-        instance->displayedState =
-            IconState::Normal;
+        instance->displayedState = IconState::Normal;
         instance->displayedStateSet = true;
 
-        setStockOpacity(
-            instance->originalStockOpacity);
+        setStockOpacity(instance->originalStockOpacity);
 
         return false;
     }
 
     if (instance->activeImageSet &&
-        instance->activeImageIndex ==
-            selectedIndex)
-    {
-        instance->displayedState =
-            selectedState;
+        instance->activeImageIndex == selectedIndex) {
+        instance->displayedState = selectedState;
         instance->displayedStateSet = true;
         setStockOpacity(0.0);
         return true;
@@ -1253,164 +962,104 @@ bool UpdateDisplayedImage(
 
     try {
         if (!instance->activeImageSet) {
-            firstLayer.Source(
-                selectedResource.bitmap);
+            firstLayer.Source(selectedResource.bitmap);
 
-            SetImageLayerOpacity(
-                firstLayer,
-                1.0f);
-            SetImageLayerOpacity(
-                secondLayer,
-                0.0f);
+            SetImageLayerOpacity(firstLayer, 1.0f);
+            SetImageLayerOpacity(secondLayer, 0.0f);
 
             instance->activeLayerIndex = 0;
-        }
-        else {
-            size_t outgoingLayerIndex =
-                instance->activeLayerIndex;
-            size_t incomingLayerIndex =
-                1 - outgoingLayerIndex;
+        } else {
+            size_t outgoingLayerIndex = instance->activeLayerIndex;
+            size_t incomingLayerIndex = 1 - outgoingLayerIndex;
 
-            auto outgoingLayer =
-                GetImageLayer(
-                    instance,
-                    outgoingLayerIndex);
-            auto incomingLayer =
-                GetImageLayer(
-                    instance,
-                    incomingLayerIndex);
+            auto outgoingLayer = GetImageLayer(instance, outgoingLayerIndex);
+            auto incomingLayer = GetImageLayer(instance, incomingLayerIndex);
 
-            incomingLayer.Source(
-                selectedResource.bitmap);
+            incomingLayer.Source(selectedResource.bitmap);
 
             int fadeDuration =
-                GetStateCrossfadeDuration(
-                    instance,
-                    selectedState);
+                GetStateCrossfadeDuration(instance, selectedState);
 
-            AnimateImageLayerOpacity(
-                outgoingLayer,
-                1.0f,
-                0.0f,
-                fadeDuration);
+            AnimateImageLayerOpacity(outgoingLayer, instance->settings, 1.0f,
+                                     0.0f, fadeDuration);
 
-            AnimateImageLayerOpacity(
-                incomingLayer,
-                0.0f,
-                1.0f,
-                fadeDuration);
+            AnimateImageLayerOpacity(incomingLayer, instance->settings, 0.0f,
+                                     1.0f, fadeDuration);
 
-            instance->activeLayerIndex =
-                incomingLayerIndex;
+            instance->activeLayerIndex = incomingLayerIndex;
         }
 
-        instance->activeImageIndex =
-            selectedIndex;
+        instance->activeImageIndex = selectedIndex;
         instance->activeImageSet = true;
-        instance->displayedState =
-            selectedState;
+        instance->displayedState = selectedState;
         instance->displayedStateSet = true;
 
         setStockOpacity(0.0);
 
         return true;
-    }
-    catch (const winrt::hresult_error& e) {
-        Wh_Log(
-            L"Switching Start image failed: 0x%08X %s",
-            e.code().value,
-            e.message().c_str());
-    }
-    catch (...) {
-        Wh_Log(
-            L"Switching Start image failed");
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Switching Start image failed: 0x%08X %s", e.code().value,
+               e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Switching Start image failed");
     }
 
     instance->activeImageSet = false;
-    setStockOpacity(
-        instance->originalStockOpacity);
+    setStockOpacity(instance->originalStockOpacity);
 
     return false;
 }
 
-void LogGifAnimationStatus(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    GifAnimationStatus status)
-{
-    if (!instance ||
-        !instance->activeImageSet)
-    {
+void LogGifAnimationStatus(const std::shared_ptr<StartIconInstance>& instance,
+                           GifAnimationStatus status) {
+    if (!instance || !instance->activeImageSet) {
         return;
     }
 
-    IconState state =
-        instance->displayedStateSet
-            ? instance->displayedState
-            : GetCurrentIconState(instance);
+    IconState state = instance->displayedStateSet
+                          ? instance->displayedState
+                          : GetCurrentIconState(instance);
 
-    if (instance->gifStatusLogged &&
-        instance->loggedGifStatus == status &&
-        instance->loggedGifMode ==
-            g_settings.gifPlayback &&
+    if (instance->gifStatusLogged && instance->loggedGifStatus == status &&
+        instance->loggedGifMode == instance->settings.gifPlayback &&
         instance->loggedGifState == state &&
-        instance->loggedGifResourceIndex ==
-            instance->activeImageIndex)
-    {
+        instance->loggedGifResourceIndex == instance->activeImageIndex) {
         return;
     }
 
     instance->loggedGifStatus = status;
-    instance->loggedGifMode =
-        g_settings.gifPlayback;
+    instance->loggedGifMode = instance->settings.gifPlayback;
     instance->loggedGifState = state;
-    instance->loggedGifResourceIndex =
-        instance->activeImageIndex;
+    instance->loggedGifResourceIndex = instance->activeImageIndex;
     instance->gifStatusLogged = true;
 
     IconState resourceState =
-        instance->activeImageIndex <
-            kIconStateCount
-            ? static_cast<IconState>(
-                  instance->activeImageIndex)
+        instance->activeImageIndex < kIconStateCount
+            ? static_cast<IconState>(instance->activeImageIndex)
             : IconState::Normal;
 
-    Wh_Log(
-        L"Icon Status: state=%s resource=%s mode=%s status=%s",
-        IconStateName(state),
-        IconStateName(resourceState),
-        GifPlaybackModeName(
-            g_settings.gifPlayback),
-        GifAnimationStatusName(status));
+    Wh_Log(L"Icon Status: state=%s resource=%s mode=%s status=%s",
+           IconStateName(state), IconStateName(resourceState),
+           GifPlaybackModeName(instance->settings.gifPlayback),
+           GifAnimationStatusName(status));
 }
 
-void UpdateGifPlayback(
-    const std::shared_ptr<
-        StartIconInstance>& instance)
-{
-    if (!instance)
-    {
+void UpdateGifPlayback(const std::shared_ptr<StartIconInstance>& instance) {
+    if (!instance) {
         return;
     }
 
-    for (size_t i = 0;
-         i < kIconStateCount;
-         i++)
-    {
-        auto& resource =
-            instance->imageResources[i];
+    for (size_t i = 0; i < kIconStateCount; i++) {
+        auto& resource = instance->imageResources[i];
 
         if (!resource.bitmap ||
-            (instance->activeImageSet &&
-             instance->activeImageIndex == i))
-        {
+            (instance->activeImageSet && instance->activeImageIndex == i)) {
             continue;
         }
 
         try {
             resource.bitmap.Stop();
-        }
-        catch (...) {
+        } catch (...) {
         }
     }
 
@@ -1418,54 +1067,39 @@ void UpdateGifPlayback(
         return;
     }
 
-    auto& activeResource =
-        instance->imageResources[
-            instance->activeImageIndex];
+    auto& activeResource = instance->imageResources[instance->activeImageIndex];
 
-    if (!ImageResourceAvailable(
-            activeResource))
-    {
+    if (!ImageResourceAvailable(activeResource)) {
         return;
     }
 
     try {
-        if (!activeResource
-                 .bitmap
-                 .IsAnimatedBitmap())
-        {
-            LogGifAnimationStatus(
-                instance,
-                GifAnimationStatus::NotAnimated);
+        if (!activeResource.bitmap.IsAnimatedBitmap()) {
+            LogGifAnimationStatus(instance, GifAnimationStatus::NotAnimated);
             return;
         }
 
-        if (!MotionAllowed()) {
+        if (!MotionAllowed(instance->settings)) {
             activeResource.bitmap.Stop();
 
-            LogGifAnimationStatus(
-                instance,
-                GifAnimationStatus::
-                    SystemAnimationsDisabled);
+            LogGifAnimationStatus(instance,
+                                  GifAnimationStatus::SystemAnimationsDisabled);
             return;
         }
 
         bool play = false;
 
-        switch (
-            g_settings.gifPlayback)
-        {
+        switch (instance->settings.gifPlayback) {
             case GifPlaybackMode::Always:
                 play = true;
                 break;
 
             case GifPlaybackMode::Hover:
-                play =
-                    instance->hovering;
+                play = instance->hovering;
                 break;
 
             case GifPlaybackMode::Pressed:
-                play =
-                    instance->pressed;
+                play = instance->pressed;
                 break;
 
             case GifPlaybackMode::Stopped:
@@ -1476,101 +1110,66 @@ void UpdateGifPlayback(
         if (play) {
             activeResource.bitmap.Play();
 
-            LogGifAnimationStatus(
-                instance,
-                GifAnimationStatus::Playing);
-        }
-        else {
+            LogGifAnimationStatus(instance, GifAnimationStatus::Playing);
+        } else {
             activeResource.bitmap.Stop();
 
-            LogGifAnimationStatus(
-                instance,
-                GifAnimationStatus::Stopped);
+            LogGifAnimationStatus(instance, GifAnimationStatus::Stopped);
         }
-    }
-    catch (...) {
+    } catch (...) {
         // Non-animated images or images that
         // haven't finished loading yet can
         // simply ignore playback control.
     }
 }
 
-
 // -----------------------------------------------------------------------------
 // Visual states
 // -----------------------------------------------------------------------------
 
-void ApplyNormalState(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    int duration)
-{
-    auto imageHost =
-        instance->customImageHost.get();
+void ApplyNormalState(const std::shared_ptr<StartIconInstance>& instance,
+                      int duration) {
+    auto imageHost = instance->customImageHost.get();
 
     if (!imageHost) {
         return;
     }
 
-    AnimateVisual(
-        imageHost,
-        1.0f,
-        0.0f,
-        1.0f,
-        duration);
+    AnimateVisual(imageHost, instance->settings, 1.0f, 0.0f, 1.0f, duration);
 }
 
-void ApplyHoverState(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    int duration)
-{
-    auto imageHost =
-        instance->customImageHost.get();
+void ApplyHoverState(const std::shared_ptr<StartIconInstance>& instance,
+                     int duration) {
+    auto imageHost = instance->customImageHost.get();
 
     if (!imageHost) {
         return;
     }
 
-    AnimateVisual(
-        imageHost,
-        static_cast<float>(
-            g_settings.hoverScale),
-        static_cast<float>(
-            g_settings.hoverRotation),
-        static_cast<float>(
-            g_settings.hoverOpacity),
-        duration);
+    AnimateVisual(imageHost, instance->settings,
+                  static_cast<float>(instance->settings.hoverScale),
+                  static_cast<float>(instance->settings.hoverRotation),
+                  static_cast<float>(instance->settings.hoverOpacity),
+                  duration);
 }
 
-void ApplyPressedState(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    int duration)
-{
-    auto imageHost =
-        instance->customImageHost.get();
+void ApplyPressedState(const std::shared_ptr<StartIconInstance>& instance,
+                       int duration) {
+    auto imageHost = instance->customImageHost.get();
 
     if (!imageHost) {
         return;
     }
 
-    AnimateVisual(
-        imageHost,
-        static_cast<float>(
-            g_settings.pressedScale),
-        static_cast<float>(
-            g_settings.pressedRotation),
-        static_cast<float>(
-            g_settings.pressedOpacity),
-        duration);
+    AnimateVisual(imageHost, instance->settings,
+                  static_cast<float>(instance->settings.pressedScale),
+                  static_cast<float>(instance->settings.pressedRotation),
+                  static_cast<float>(instance->settings.pressedOpacity),
+                  duration);
 }
 
-void ApplyCurrentState(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    int duration)
-{
+void ApplyCurrentState(const std::shared_ptr<StartIconInstance>& instance,
+                       int duration) {
     if (!instance) {
         return;
     }
@@ -1580,75 +1179,47 @@ void ApplyCurrentState(
     }
 
     if (instance->pressed) {
-        ApplyPressedState(
-            instance,
-            duration);
-    }
-    else if (instance->hovering) {
-        ApplyHoverState(
-            instance,
-            duration);
-    }
-    else {
-        ApplyNormalState(
-            instance,
-            duration);
+        ApplyPressedState(instance, duration);
+    } else if (instance->hovering) {
+        ApplyHoverState(instance, duration);
+    } else {
+        ApplyNormalState(instance, duration);
     }
 
     UpdateGifPlayback(instance);
 }
 
-void SetPressedState(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    bool pressed)
-{
-    if (!instance ||
-        instance->pressed == pressed)
-    {
+void SetPressedState(const std::shared_ptr<StartIconInstance>& instance,
+                     bool pressed) {
+    if (!instance || g_unloading || instance->pressed == pressed) {
         return;
     }
 
     instance->pressed = pressed;
 
     if (pressed) {
-        Wh_Log(
-            L"Start button: PRESSED");
-    }
-    else {
-        Wh_Log(
-            L"Start button: RELEASED");
+        Wh_Log(L"Start button: PRESSED");
+    } else {
+        Wh_Log(L"Start button: RELEASED");
     }
 
-    ApplyCurrentState(
-        instance,
-        pressed
-            ? g_settings.pressedDuration
-            : g_settings.releaseDuration);
+    ApplyCurrentState(instance, pressed ? instance->settings.pressedDuration
+                                        : instance->settings.releaseDuration);
 }
 
-bool IsToggleButtonChecked(
-    const wuxcp::ToggleButton& toggleButton)
-{
+bool IsToggleButtonChecked(const wuxcp::ToggleButton& toggleButton) {
     if (!toggleButton) {
         return false;
     }
 
-    auto isChecked =
-        toggleButton.IsChecked();
+    auto isChecked = toggleButton.IsChecked();
 
-    return isChecked &&
-        isChecked.Value();
+    return isChecked && isChecked.Value();
 }
 
-void SetActivatedState(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    bool activated)
-{
-    if (!instance ||
-        instance->activated == activated)
-    {
+void SetActivatedState(const std::shared_ptr<StartIconInstance>& instance,
+                       bool activated) {
+    if (!instance || g_unloading || instance->activated == activated) {
         return;
     }
 
@@ -1656,8 +1227,7 @@ void SetActivatedState(
 
     if (activated) {
         Wh_Log(L"Start menu: SHOWN");
-    }
-    else {
+    } else {
         Wh_Log(L"Start menu: HIDDEN");
     }
 
@@ -1665,18 +1235,13 @@ void SetActivatedState(
     UpdateGifPlayback(instance);
 }
 
-
 // -----------------------------------------------------------------------------
 // XAML tree search
 // -----------------------------------------------------------------------------
 
 wux::FrameworkElement FindElementRecursive(
     const wux::DependencyObject& root,
-    const std::function<
-        bool(
-            const wux::FrameworkElement&)>&
-        callback)
-{
+    const std::function<bool(const wux::FrameworkElement&)>& callback) {
     if (!root) {
         return nullptr;
     }
@@ -1684,30 +1249,17 @@ wux::FrameworkElement FindElementRecursive(
     int childrenCount = 0;
 
     try {
-        childrenCount =
-            wuxm::VisualTreeHelper::
-                GetChildrenCount(root);
-    }
-    catch (...) {
+        childrenCount = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    } catch (...) {
         return nullptr;
     }
 
-    for (int i = 0;
-         i < childrenCount;
-         i++)
-    {
-        wux::DependencyObject child{
-            nullptr
-        };
+    for (int i = 0; i < childrenCount; i++) {
+        wux::DependencyObject child{nullptr};
 
         try {
-            child =
-                wuxm::VisualTreeHelper::
-                    GetChild(
-                        root,
-                        i);
-        }
-        catch (...) {
+            child = wuxm::VisualTreeHelper::GetChild(root, i);
+        } catch (...) {
             continue;
         }
 
@@ -1715,26 +1267,18 @@ wux::FrameworkElement FindElementRecursive(
             continue;
         }
 
-        auto frameworkElement =
-            child.try_as<
-                wux::FrameworkElement>();
+        auto frameworkElement = child.try_as<wux::FrameworkElement>();
 
         if (frameworkElement) {
             try {
-                if (callback(
-                        frameworkElement))
-                {
+                if (callback(frameworkElement)) {
                     return frameworkElement;
                 }
-            }
-            catch (...) {
+            } catch (...) {
             }
         }
 
-        auto recursiveResult =
-            FindElementRecursive(
-                child,
-                callback);
+        auto recursiveResult = FindElementRecursive(child, callback);
 
         if (recursiveResult) {
             return recursiveResult;
@@ -1744,106 +1288,62 @@ wux::FrameworkElement FindElementRecursive(
     return nullptr;
 }
 
-wux::FrameworkElement FindStartButton(
-    const wux::FrameworkElement& root)
-{
-    return FindElementRecursive(
-        root,
-        [](const wux::FrameworkElement&
-               element)
-        {
-            try {
-                auto automationId =
-                    wuxa::AutomationProperties::
-                        GetAutomationId(
-                            element);
+wux::FrameworkElement FindStartButton(const wux::FrameworkElement& root) {
+    return FindElementRecursive(root, [](const wux::FrameworkElement& element) {
+        try {
+            auto automationId =
+                wuxa::AutomationProperties::GetAutomationId(element);
 
-                if (automationId ==
-                    L"StartButton")
-                {
-                    return true;
-                }
+            if (automationId == L"StartButton") {
+                return true;
             }
-            catch (...) {
-            }
+        } catch (...) {
+        }
 
-            return false;
-        });
+        return false;
+    });
 }
 
 wux::FrameworkElement FindStockStartIcon(
-    const wux::FrameworkElement&
-        startButton)
-{
+    const wux::FrameworkElement& startButton) {
     // Preferred match:
     //
     // Microsoft.UI.Xaml.Controls
     //     .AnimatedVisualPlayer#Icon
 
-    auto exact =
-        FindElementRecursive(
-            startButton,
-            [](const wux::FrameworkElement&
-                   element)
-            {
-                try {
-                    if (element.Name() !=
-                        L"Icon")
-                    {
-                        return false;
-                    }
-
-                    std::wstring className =
-                        winrt::get_class_name(
-                            element)
-                            .c_str();
-
-                    return className.find(
-                               L"AnimatedVisualPlayer") !=
-                           std::wstring::npos;
-                }
-                catch (...) {
+    auto exact = FindElementRecursive(
+        startButton, [](const wux::FrameworkElement& element) {
+            try {
+                if (element.Name() != L"Icon") {
                     return false;
                 }
-            });
+
+                std::wstring className = winrt::get_class_name(element).c_str();
+
+                return className.find(L"AnimatedVisualPlayer") !=
+                       std::wstring::npos;
+            } catch (...) {
+                return false;
+            }
+        });
 
     if (exact) {
         return exact;
     }
 
-    // Fallback for future Windows builds:
-    // accept a descendant named Icon.
-    return FindElementRecursive(
-        startButton,
-        [](const wux::FrameworkElement&
-               element)
-        {
-            try {
-                return element.Name() ==
-                       L"Icon";
-            }
-            catch (...) {
-                return false;
-            }
-        });
+    // Fail closed on unknown Windows layouts. Hiding an arbitrary descendant
+    // named "Icon" can make the Start button unusable after a Windows update.
+    return nullptr;
 }
 
-wuxc::Panel FindHostPanel(
-    const wux::FrameworkElement&
-        stockIcon,
-    const wux::FrameworkElement&
-        startButton)
-{
-    wux::DependencyObject current =
-        stockIcon;
+wuxc::Panel FindHostPanel(const wux::FrameworkElement& stockIcon,
+                          const wux::FrameworkElement& startButton) {
+    wux::DependencyObject current = stockIcon;
 
     while (current) {
         try {
-            current =
-                wuxm::VisualTreeHelper::
-                    GetParent(current);
-        }
-        catch (...) {
+            current = wuxm::VisualTreeHelper::GetParent(current);
+        } catch (...) {
             return nullptr;
         }
 
@@ -1851,21 +1351,15 @@ wuxc::Panel FindHostPanel(
             return nullptr;
         }
 
-        auto panel =
-            current.try_as<wuxc::Panel>();
+        auto panel = current.try_as<wuxc::Panel>();
 
         if (panel) {
             return panel;
         }
 
-        auto frameworkElement =
-            current.try_as<
-                wux::FrameworkElement>();
+        auto frameworkElement = current.try_as<wux::FrameworkElement>();
 
-        if (frameworkElement &&
-            frameworkElement ==
-                startButton)
-        {
+        if (frameworkElement && frameworkElement == startButton) {
             break;
         }
     }
@@ -1873,48 +1367,64 @@ wuxc::Panel FindHostPanel(
     return nullptr;
 }
 
-
 // -----------------------------------------------------------------------------
 // Instance management
 // -----------------------------------------------------------------------------
 
-void PruneDeadInstances() {
-    g_instances.erase(
-        std::remove_if(
-            g_instances.begin(),
-            g_instances.end(),
-            [](const auto& instance)
-            {
-                if (!instance) {
-                    return true;
-                }
+void DetachInstance(const std::shared_ptr<StartIconInstance>& instance);
 
-                return
-                    !instance
-                         ->startButton
-                         .get();
-            }),
-        g_instances.end());
+void PruneDeadInstancesForCurrentThread() {
+    DWORD threadId = GetCurrentThreadId();
+    std::vector<std::shared_ptr<StartIconInstance>> deadInstances;
+
+    {
+        std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+        if (!g_instances) {
+            return;
+        }
+
+        for (auto it = g_instances->begin(); it != g_instances->end();) {
+            auto instance = *it;
+
+            if (!instance) {
+                it = g_instances->erase(it);
+                continue;
+            }
+
+            if (instance->threadId == threadId &&
+                !instance->startButton.get()) {
+                deadInstances.push_back(instance);
+                it = g_instances->erase(it);
+                continue;
+            }
+
+            ++it;
+        }
+    }
+
+    for (const auto& instance : deadInstances) {
+        DetachInstance(instance);
+    }
 }
 
-bool AlreadyAttached(
-    const wux::FrameworkElement&
-        startButton)
-{
-    PruneDeadInstances();
+bool AlreadyAttached(const wux::FrameworkElement& startButton) {
+    PruneDeadInstancesForCurrentThread();
 
-    for (const auto& instance :
-         g_instances)
-    {
-        auto existingButton =
-            instance
-                ->startButton
-                .get();
+    std::lock_guard<std::mutex> lock(g_instancesMutex);
 
-        if (existingButton &&
-            existingButton ==
-                startButton)
-        {
+    if (!g_instances) {
+        return false;
+    }
+
+    for (const auto& instance : *g_instances) {
+        if (!instance || instance->threadId != GetCurrentThreadId()) {
+            continue;
+        }
+
+        auto existingButton = instance->startButton.get();
+
+        if (existingButton && existingButton == startButton) {
             return true;
         }
     }
@@ -1922,194 +1432,183 @@ bool AlreadyAttached(
     return false;
 }
 
-void RemoveCustomImage(
-    const std::shared_ptr<
-        StartIconInstance>& instance)
-{
-    auto panel =
-        instance->hostPanel.get();
+bool RegisterInstance(const std::shared_ptr<StartIconInstance>& instance) {
+    std::lock_guard<std::mutex> lock(g_instancesMutex);
 
-    auto imageHost =
-        instance->customImageHost.get();
+    if (g_unloading || !g_instances) {
+        return false;
+    }
 
-    if (!panel ||
-        !imageHost)
+    g_instances->push_back(instance);
+    return true;
+}
+
+void UnregisterInstance(const std::shared_ptr<StartIconInstance>& instance) {
+    std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+    if (!g_instances) {
+        return;
+    }
+
+    g_instances->erase(
+        std::remove(g_instances->begin(), g_instances->end(), instance),
+        g_instances->end());
+}
+
+void DetachInstanceForStartButton(
+    const wux::FrameworkElement& startButton) {
+    std::vector<std::shared_ptr<StartIconInstance>> instances;
+
     {
+        std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+        if (!g_instances) {
+            return;
+        }
+
+        for (auto it = g_instances->begin(); it != g_instances->end();) {
+            auto instance = *it;
+
+            if (!instance || instance->threadId != GetCurrentThreadId()) {
+                ++it;
+                continue;
+            }
+
+            auto existingButton = instance->startButton.get();
+
+            if (existingButton && existingButton == startButton) {
+                instances.push_back(instance);
+                it = g_instances->erase(it);
+                continue;
+            }
+
+            ++it;
+        }
+    }
+
+    for (const auto& instance : instances) {
+        DetachInstance(instance);
+    }
+}
+
+void RemoveCustomImage(const std::shared_ptr<StartIconInstance>& instance) {
+    auto panel = instance->hostPanel.get();
+
+    auto imageHost = instance->customImageHost.get();
+
+    if (!panel || !imageHost) {
         return;
     }
 
     try {
-        auto children =
-            panel.Children();
+        auto children = panel.Children();
 
-        for (uint32_t i = 0;
-             i < children.Size();
-             i++)
-        {
-            auto child =
-                children.GetAt(i);
+        for (uint32_t i = 0; i < children.Size(); i++) {
+            auto child = children.GetAt(i);
 
             if (child == imageHost) {
                 children.RemoveAt(i);
                 break;
             }
         }
-    }
-    catch (...) {
+    } catch (...) {
     }
 }
 
-void DetachInstance(
-    const std::shared_ptr<
-        StartIconInstance>& instance)
-{
-    if (!instance) {
+void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
+    if (!instance || instance->detached) {
         return;
     }
 
-    auto startButton =
-        instance->startButton.get();
+    instance->detached = true;
 
-    if (startButton &&
-        instance->pressedStateCallbackRegistered)
-    {
+    auto startButton = instance->startButton.get();
+
+    if (startButton && instance->pressedStateCallbackRegistered) {
         try {
-            auto buttonBase =
-                startButton.try_as<
-                    wuxcp::ButtonBase>();
+            auto buttonBase = startButton.try_as<wuxcp::ButtonBase>();
 
             if (buttonBase) {
-                buttonBase
-                    .UnregisterPropertyChangedCallback(
-                        wuxcp::ButtonBase::
-                            IsPressedProperty(),
-                        instance
-                            ->pressedStateCallbackToken);
+                buttonBase.UnregisterPropertyChangedCallback(
+                    wuxcp::ButtonBase::IsPressedProperty(),
+                    instance->pressedStateCallbackToken);
             }
-        }
-        catch (const winrt::hresult_error& e) {
-            Wh_Log(
-                L"Removing pressed-state callback failed: 0x%08X %s",
-                e.code().value,
-                e.message().c_str());
-        }
-        catch (...) {
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Removing pressed-state callback failed: 0x%08X %s",
+                   e.code().value, e.message().c_str());
+        } catch (...) {
         }
 
         instance->pressedStateCallbackToken = 0;
         instance->pressedStateCallbackRegistered = false;
-    }
-    else if (!startButton) {
+    } else if (!startButton) {
         instance->pressedStateCallbackToken = 0;
         instance->pressedStateCallbackRegistered = false;
     }
 
-    if (startButton &&
-        instance->activatedStateCallbackRegistered)
-    {
+    if (startButton && instance->activatedStateCallbackRegistered) {
         try {
-            auto toggleButton =
-                startButton.try_as<
-                    wuxcp::ToggleButton>();
+            auto toggleButton = startButton.try_as<wuxcp::ToggleButton>();
 
             if (toggleButton) {
-                toggleButton
-                    .UnregisterPropertyChangedCallback(
-                        wuxcp::ToggleButton::
-                            IsCheckedProperty(),
-                        instance
-                            ->activatedStateCallbackToken);
+                toggleButton.UnregisterPropertyChangedCallback(
+                    wuxcp::ToggleButton::IsCheckedProperty(),
+                    instance->activatedStateCallbackToken);
             }
-        }
-        catch (const winrt::hresult_error& e) {
-            Wh_Log(
-                L"Removing activated-state callback failed: 0x%08X %s",
-                e.code().value,
-                e.message().c_str());
-        }
-        catch (...) {
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Removing activated-state callback failed: 0x%08X %s",
+                   e.code().value, e.message().c_str());
+        } catch (...) {
         }
 
         instance->activatedStateCallbackToken = 0;
         instance->activatedStateCallbackRegistered = false;
-    }
-    else if (!startButton) {
+    } else if (!startButton) {
         instance->activatedStateCallbackToken = 0;
         instance->activatedStateCallbackRegistered = false;
     }
 
-    if (startButton &&
-    instance->pointerEventsAttached)
-    {
-        auto removeHandler =
-            [&](const wux::RoutedEvent& routedEvent,
-                wf::IInspectable& handler,
-                const wchar_t* eventName)
-            {
-                if (!handler) {
-                    return;
-                }
+    if (startButton && instance->pointerEventsAttached) {
+        auto removeHandler = [&](const wux::RoutedEvent& routedEvent,
+                                 wf::IInspectable& handler,
+                                 const wchar_t* eventName) {
+            if (!handler) {
+                return;
+            }
 
-                try {
-                    startButton.RemoveHandler(
-                        routedEvent,
-                        handler);
-                }
-                catch (const winrt::hresult_error& e) {
-                    Wh_Log(
-                        L"Removing %s handler failed: 0x%08X %s",
-                        eventName,
-                        e.code().value,
-                        e.message().c_str());
-                }
-                catch (...) {
-                    Wh_Log(
-                        L"Removing %s handler failed",
-                        eventName);
-                }
+            try {
+                startButton.RemoveHandler(routedEvent, handler);
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"Removing %s handler failed: 0x%08X %s", eventName,
+                       e.code().value, e.message().c_str());
+            } catch (...) {
+                Wh_Log(L"Removing %s handler failed", eventName);
+            }
 
-                handler = nullptr;
-            };
+            handler = nullptr;
+        };
 
-        removeHandler(
-            wux::UIElement::
-                PointerEnteredEvent(),
-            instance->pointerEnteredHandler,
-            L"PointerEntered");
+        removeHandler(wux::UIElement::PointerEnteredEvent(),
+                      instance->pointerEnteredHandler, L"PointerEntered");
 
-        removeHandler(
-            wux::UIElement::
-                PointerExitedEvent(),
-            instance->pointerExitedHandler,
-            L"PointerExited");
+        removeHandler(wux::UIElement::PointerExitedEvent(),
+                      instance->pointerExitedHandler, L"PointerExited");
 
-        removeHandler(
-            wux::UIElement::
-                PointerPressedEvent(),
-            instance->pointerPressedHandler,
-            L"PointerPressed");
+        removeHandler(wux::UIElement::PointerPressedEvent(),
+                      instance->pointerPressedHandler, L"PointerPressed");
 
-        removeHandler(
-            wux::UIElement::
-                PointerReleasedEvent(),
-            instance->pointerReleasedHandler,
-            L"PointerReleased");
+        removeHandler(wux::UIElement::PointerReleasedEvent(),
+                      instance->pointerReleasedHandler, L"PointerReleased");
 
-        removeHandler(
-            wux::UIElement::
-                PointerCanceledEvent(),
-            instance->pointerCanceledHandler,
-            L"PointerCanceled");
+        removeHandler(wux::UIElement::PointerCanceledEvent(),
+                      instance->pointerCanceledHandler, L"PointerCanceled");
 
-        removeHandler(
-            wux::UIElement::
-                PointerCaptureLostEvent(),
-            instance->pointerCaptureLostHandler,
-            L"PointerCaptureLost");
+        removeHandler(wux::UIElement::PointerCaptureLostEvent(),
+                      instance->pointerCaptureLostHandler,
+                      L"PointerCaptureLost");
 
         instance->pointerEventsAttached = false;
-    }
-    else if (!startButton) {
+    } else if (!startButton) {
         instance->pointerEnteredHandler = nullptr;
         instance->pointerExitedHandler = nullptr;
         instance->pointerPressedHandler = nullptr;
@@ -2119,58 +1618,34 @@ void DetachInstance(
         instance->pointerEventsAttached = false;
     }
 
-    for (size_t i = 0;
-         i < kIconStateCount;
-         i++)
-    {
-        auto& resource =
-            instance->imageResources[i];
+    for (size_t i = 0; i < kIconStateCount; i++) {
+        auto& resource = instance->imageResources[i];
 
-        if (resource.bitmap &&
-            resource.imageOpenedAttached)
-        {
+        if (resource.bitmap && resource.imageOpenedAttached) {
             try {
-                resource.bitmap.ImageOpened(
-                    resource.imageOpenedToken);
-            }
-            catch (const winrt::hresult_error& e) {
-                Wh_Log(
-                    L"Removing %s ImageOpened handler failed: 0x%08X %s",
-                    IconStateName(
-                        static_cast<IconState>(i)),
-                    e.code().value,
-                    e.message().c_str());
-            }
-            catch (...) {
-                Wh_Log(
-                    L"Removing %s ImageOpened handler failed",
-                    IconStateName(
-                        static_cast<IconState>(i)));
+                resource.bitmap.ImageOpened(resource.imageOpenedToken);
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"Removing %s ImageOpened handler failed: 0x%08X %s",
+                       IconStateName(static_cast<IconState>(i)), e.code().value,
+                       e.message().c_str());
+            } catch (...) {
+                Wh_Log(L"Removing %s ImageOpened handler failed",
+                       IconStateName(static_cast<IconState>(i)));
             }
 
             resource.imageOpenedAttached = false;
         }
 
-        if (resource.bitmap &&
-            resource.imageFailedAttached)
-        {
+        if (resource.bitmap && resource.imageFailedAttached) {
             try {
-                resource.bitmap.ImageFailed(
-                    resource.imageFailedToken);
-            }
-            catch (const winrt::hresult_error& e) {
-                Wh_Log(
-                    L"Removing %s ImageFailed handler failed: 0x%08X %s",
-                    IconStateName(
-                        static_cast<IconState>(i)),
-                    e.code().value,
-                    e.message().c_str());
-            }
-            catch (...) {
-                Wh_Log(
-                    L"Removing %s ImageFailed handler failed",
-                    IconStateName(
-                        static_cast<IconState>(i)));
+                resource.bitmap.ImageFailed(resource.imageFailedToken);
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"Removing %s ImageFailed handler failed: 0x%08X %s",
+                       IconStateName(static_cast<IconState>(i)), e.code().value,
+                       e.message().c_str());
+            } catch (...) {
+                Wh_Log(L"Removing %s ImageFailed handler failed",
+                       IconStateName(static_cast<IconState>(i)));
             }
 
             resource.imageFailedAttached = false;
@@ -2180,13 +1655,13 @@ void DetachInstance(
             if (resource.bitmap) {
                 resource.bitmap.Stop();
             }
-        }
-        catch (...) {
+        } catch (...) {
         }
 
         resource.loadAction = nullptr;
-        resource.localStream = nullptr;
+        resource.memoryStream = nullptr;
         resource.bitmap = nullptr;
+        resource.opened = false;
         resource.failed = false;
     }
 
@@ -2195,38 +1670,26 @@ void DetachInstance(
     instance->displayedStateSet = false;
     instance->gifStatusLogged = false;
 
-    auto imageHost =
-        instance->customImageHost.get();
+    auto imageHost = instance->customImageHost.get();
 
     if (imageHost) {
         try {
             auto visual =
-                wuxh::ElementCompositionPreview::
-                    GetElementVisual(imageHost);
+                wuxh::ElementCompositionPreview::GetElementVisual(imageHost);
 
             if (visual) {
-                visual.StopAnimation(
-                    L"Scale");
+                visual.StopAnimation(L"Scale");
 
-                visual.StopAnimation(
-                    L"RotationAngleInDegrees");
+                visual.StopAnimation(L"RotationAngleInDegrees");
 
-                visual.StopAnimation(
-                    L"Opacity");
+                visual.StopAnimation(L"Opacity");
             }
-        }
-        catch (...) {
+        } catch (...) {
         }
     }
 
-    for (size_t layerIndex = 0;
-         layerIndex < 2;
-         layerIndex++)
-    {
-        auto layer =
-            GetImageLayer(
-                instance,
-                layerIndex);
+    for (size_t layerIndex = 0; layerIndex < 2; layerIndex++) {
+        auto layer = GetImageLayer(instance, layerIndex);
 
         if (!layer) {
             continue;
@@ -2234,89 +1697,274 @@ void DetachInstance(
 
         try {
             auto visual =
-                wuxh::ElementCompositionPreview::
-                    GetElementVisual(layer);
+                wuxh::ElementCompositionPreview::GetElementVisual(layer);
 
             if (visual) {
-                visual.StopAnimation(
-                    L"Opacity");
+                visual.StopAnimation(L"Opacity");
             }
-        }
-        catch (...) {
+        } catch (...) {
         }
     }
 
     RemoveCustomImage(instance);
 
-    auto stockIcon =
-        instance->stockIcon.get();
+    auto stockIcon = instance->stockIcon.get();
 
     if (stockIcon) {
         try {
-            stockIcon.Opacity(
-                instance
-                    ->originalStockOpacity);
-        }
-        catch (...) {
+            stockIcon.Opacity(instance->originalStockOpacity);
+        } catch (...) {
         }
     }
 
+    instance->startButton = {};
+    instance->stockIcon = {};
+    instance->hostPanel = {};
+    instance->customImageHost = {};
+    instance->customImage = {};
+    instance->transitionImage = {};
+    instance->dispatcher = nullptr;
 }
 
 void DetachAllForCurrentThread() {
-    DWORD threadId =
-        GetCurrentThreadId();
+    DWORD threadId = GetCurrentThreadId();
+    std::vector<std::shared_ptr<StartIconInstance>> instances;
 
-    for (auto it =
-             g_instances.begin();
-         it != g_instances.end();)
     {
-        auto instance = *it;
+        std::lock_guard<std::mutex> lock(g_instancesMutex);
 
-        if (!instance ||
-            instance->threadId ==
-                threadId ||
-            !instance
-                 ->startButton
-                 .get())
-        {
-            if (instance &&
-                instance->threadId ==
-                    threadId)
-            {
-                DetachInstance(
-                    instance);
+        if (!g_instances) {
+            return;
+        }
+
+        for (auto it = g_instances->begin(); it != g_instances->end();) {
+            auto instance = *it;
+
+            if (!instance) {
+                it = g_instances->erase(it);
+                continue;
             }
 
-            it =
-                g_instances.erase(it);
-        }
-        else {
+            if (instance->threadId == threadId) {
+                instances.push_back(instance);
+                it = g_instances->erase(it);
+                continue;
+            }
+
             ++it;
         }
     }
+
+    for (const auto& instance : instances) {
+        DetachInstance(instance);
+    }
 }
 
+std::vector<std::shared_ptr<StartIconInstance>> TakeAllInstancesForShutdown() {
+    std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+    g_unloading = true;
+
+    std::vector<std::shared_ptr<StartIconInstance>> instances;
+
+    if (g_instances) {
+        instances = std::move(*g_instances);
+        g_instances.reset();
+    }
+
+    return instances;
+}
+
+void AbandonInstances(
+    const std::vector<std::shared_ptr<StartIconInstance>>& instances) {
+    if (instances.empty()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+    if (g_abandonedInstances) {
+        g_abandonedInstances->insert(g_abandonedInstances->end(),
+                                     instances.begin(), instances.end());
+    }
+}
+
+void DetachInstancesOnOwningThreads(
+    std::vector<std::shared_ptr<StartIconInstance>>& instances) {
+    if (instances.empty()) {
+        return;
+    }
+
+    std::shared_ptr<void> cleanupFinished(
+        CreateEventW(nullptr, TRUE, FALSE, nullptr), [](HANDLE eventHandle) {
+            if (eventHandle) {
+                CloseHandle(eventHandle);
+            }
+        });
+
+    if (!cleanupFinished) {
+        Wh_Log(L"Creating the XAML cleanup event failed: 0x%08X",
+               GetLastError());
+        AbandonInstances(instances);
+        return;
+    }
+
+    auto pending = std::make_shared<std::atomic<size_t>>(0);
+    std::vector<std::shared_ptr<StartIconInstance>> failedInstances;
+    std::mutex failedInstancesMutex;
+
+    auto recordFailure =
+        [&failedInstances, &failedInstancesMutex](
+            const std::shared_ptr<StartIconInstance>& instance) {
+            std::lock_guard<std::mutex> lock(failedInstancesMutex);
+            failedInstances.push_back(instance);
+        };
+
+    auto signalCompletion = [pending, cleanupFinished]() {
+        if (pending->fetch_sub(1) == 1) {
+            SetEvent(cleanupFinished.get());
+        }
+    };
+
+    for (const auto& instance : instances) {
+        if (!instance || instance->detached) {
+            continue;
+        }
+
+        auto dispatcher = instance->dispatcher;
+
+        if (!dispatcher) {
+            recordFailure(instance);
+            continue;
+        }
+
+        try {
+            if (dispatcher.HasThreadAccess()) {
+                DetachInstance(instance);
+                continue;
+            }
+
+            if (pending->fetch_add(1) == 0) {
+                ResetEvent(cleanupFinished.get());
+            }
+
+            try {
+                dispatcher.RunAsync(
+                    wuic::CoreDispatcherPriority::High,
+                    [instance, signalCompletion, recordFailure]() {
+                        try {
+                            DetachInstance(instance);
+                        } catch (...) {
+                            Wh_Log(
+                                L"Unexpected exception while detaching a Start "
+                                L"icon instance");
+                            recordFailure(instance);
+                        }
+
+                        signalCompletion();
+                    });
+            } catch (...) {
+                signalCompletion();
+                throw;
+            }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Dispatching Start icon cleanup failed: 0x%08X %s",
+                   e.code().value, e.message().c_str());
+            recordFailure(instance);
+        } catch (...) {
+            Wh_Log(L"Dispatching Start icon cleanup failed");
+            recordFailure(instance);
+        }
+    }
+
+    if (pending->load() > 0) {
+        WaitForSingleObject(cleanupFinished.get(), INFINITE);
+    }
+
+    AbandonInstances(failedInstances);
+}
 
 // -----------------------------------------------------------------------------
 // Bitmap/image loading
 // -----------------------------------------------------------------------------
 
-bool LoadImageResource(
-    const std::shared_ptr<
-        StartIconInstance>& instance,
-    IconState state,
-    const std::wstring& source)
-{
+HRESULT CreateMemoryBackedStreamFromFile(
+    const std::wstring& path,
+    wss::IRandomAccessStream& randomAccessStream) {
+    HANDLE file =
+        CreateFileW(path.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    nullptr, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+
+    if (file == INVALID_HANDLE_VALUE) {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    std::unique_ptr<void, decltype(&CloseHandle)> fileOwner(file, CloseHandle);
+
+    winrt::com_ptr<IStream> memoryStream;
+    HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, memoryStream.put());
+
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    std::array<BYTE, 64 * 1024> buffer;
+
+    while (true) {
+        DWORD bytesRead = 0;
+
+        if (!ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()),
+                      &bytesRead, nullptr)) {
+            return HRESULT_FROM_WIN32(GetLastError());
+        }
+
+        if (bytesRead == 0) {
+            break;
+        }
+
+        ULONG bytesWritten = 0;
+        hr = memoryStream->Write(buffer.data(), bytesRead, &bytesWritten);
+
+        if (FAILED(hr)) {
+            return hr;
+        }
+
+        if (bytesWritten != bytesRead) {
+            return STG_E_MEDIUMFULL;
+        }
+    }
+
+    // Close the source file before XAML starts decoding. The user can replace
+    // or delete it while the mod remains enabled.
+    fileOwner.reset();
+
+    LARGE_INTEGER beginning{};
+    hr = memoryStream->Seek(beginning, STREAM_SEEK_SET, nullptr);
+
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    winrt::guid streamGuid = winrt::guid_of<wss::IRandomAccessStream>();
+
+    return CreateRandomAccessStreamOverStream(
+        memoryStream.get(), BSOS_DEFAULT,
+        reinterpret_cast<const IID&>(streamGuid),
+        reinterpret_cast<void**>(winrt::put_abi(randomAccessStream)));
+}
+
+bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
+                       IconState state,
+                       const std::wstring& source) {
     if (!instance || source.empty()) {
         return false;
     }
 
-    size_t stateIndex =
-        IconStateIndex(state);
+    size_t stateIndex = IconStateIndex(state);
 
-    auto& resource =
-        instance->imageResources[stateIndex];
+    auto& resource = instance->imageResources[stateIndex];
 
     try {
         wuxmi::BitmapImage bitmap;
@@ -2326,190 +1974,128 @@ bool LoadImageResource(
         bitmap.AutoPlay(false);
 
         resource.bitmap = bitmap;
+        resource.opened = false;
         resource.failed = false;
 
-        std::weak_ptr<StartIconInstance>
-            weakInstance = instance;
+        std::weak_ptr<StartIconInstance> weakInstance = instance;
 
-        resource.imageOpenedToken =
-            bitmap.ImageOpened(
-                [weakInstance, stateIndex](
-                    const wf::IInspectable&,
-                    const wux::RoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+        resource.imageOpenedToken = bitmap.ImageOpened(
+            [weakInstance, stateIndex](const wf::IInspectable&,
+                                       const wux::RoutedEventArgs&) {
+                auto instance = weakInstance.lock();
 
-                    if (!instance) {
-                        return;
-                    }
+                if (!instance) {
+                    return;
+                }
 
-                    auto state =
-                        static_cast<IconState>(
-                            stateIndex);
+                auto& resource = instance->imageResources[stateIndex];
 
-                    Wh_Log(
-                        L"Custom Start %s image loaded",
-                        IconStateName(state));
+                resource.opened = true;
+                resource.failed = false;
+                resource.loadAction = nullptr;
+                resource.memoryStream = nullptr;
 
-                    UpdateDisplayedImage(instance);
-                    UpdateGifPlayback(instance);
-                });
+                auto state = static_cast<IconState>(stateIndex);
+
+                Wh_Log(L"Custom Start %s image loaded", IconStateName(state));
+
+                UpdateDisplayedImage(instance);
+                UpdateGifPlayback(instance);
+            });
 
         resource.imageOpenedAttached = true;
 
         resource.imageFailedToken =
-            bitmap.ImageFailed(
-                [weakInstance, stateIndex](
-                    const wf::IInspectable&,
-                    const wux::ExceptionRoutedEventArgs&
-                        args)
-                {
-                    auto instance =
-                        weakInstance.lock();
+            bitmap.ImageFailed([weakInstance, stateIndex](
+                                   const wf::IInspectable&,
+                                   const wux::ExceptionRoutedEventArgs& args) {
+                auto instance = weakInstance.lock();
 
-                    if (!instance) {
-                        return;
-                    }
+                if (!instance) {
+                    return;
+                }
 
-                    auto& resource =
-                        instance
-                            ->imageResources[stateIndex];
+                auto& resource = instance->imageResources[stateIndex];
 
-                    resource.failed = true;
+                resource.opened = false;
+                resource.failed = true;
+                resource.loadAction = nullptr;
+                resource.memoryStream = nullptr;
 
-                    auto state =
-                        static_cast<IconState>(
-                            stateIndex);
+                auto state = static_cast<IconState>(stateIndex);
 
-                    Wh_Log(
-                        L"Custom Start %s image failed: %s",
-                        IconStateName(state),
-                        args
-                            .ErrorMessage()
-                            .c_str());
+                Wh_Log(L"Custom Start %s image failed: %s",
+                       IconStateName(state), args.ErrorMessage().c_str());
 
-                    UpdateDisplayedImage(instance);
-                    UpdateGifPlayback(instance);
-                });
+                UpdateDisplayedImage(instance);
+                UpdateGifPlayback(instance);
+            });
 
         resource.imageFailedAttached = true;
 
-        if (IsHttpUrl(source)) {
-            bitmap.UriSource(
-                wf::Uri(source));
-
-            return true;
-        }
-
-        std::wstring path =
-            ExpandPath(source);
+        std::wstring path = ExpandPath(source);
 
         if (path.empty()) {
             resource.failed = true;
             return false;
         }
 
-        wss::IRandomAccessStream stream{
-            nullptr
-        };
+        wss::IRandomAccessStream stream{nullptr};
 
-        winrt::guid streamGuid =
-            winrt::guid_of<
-                wss::IRandomAccessStream>();
-
-        HRESULT hr =
-            CreateRandomAccessStreamOnFile(
-                path.c_str(),
-                GENERIC_READ,
-                reinterpret_cast<
-                    const IID&>(
-                    streamGuid),
-                reinterpret_cast<
-                    void**>(
-                    winrt::put_abi(
-                        stream)));
+        HRESULT hr = CreateMemoryBackedStreamFromFile(path, stream);
 
         if (FAILED(hr) || !stream) {
             resource.failed = true;
 
-            Wh_Log(
-                L"Opening %s image \"%s\" failed: 0x%08X",
-                IconStateName(state),
-                path.c_str(),
-                hr);
+            Wh_Log(L"Reading %s image \"%s\" failed: 0x%08X",
+                   IconStateName(state), path.c_str(), hr);
 
             return false;
         }
 
-        resource.localStream = stream;
+        resource.memoryStream = stream;
 
         // Asynchronous decoding prevents larger animated GIFs from blocking
         // Explorer's taskbar UI thread.
-        resource.loadAction =
-            bitmap.SetSourceAsync(stream);
+        resource.loadAction = bitmap.SetSourceAsync(stream);
 
         return true;
-    }
-    catch (const winrt::hresult_error& e) {
+    } catch (const winrt::hresult_error& e) {
         resource.failed = true;
 
-        Wh_Log(
-            L"Loading %s image failed: 0x%08X %s",
-            IconStateName(state),
-            e.code().value,
-            e.message().c_str());
-    }
-    catch (...) {
+        Wh_Log(L"Loading %s image failed: 0x%08X %s", IconStateName(state),
+               e.code().value, e.message().c_str());
+    } catch (...) {
         resource.failed = true;
 
-        Wh_Log(
-            L"Loading %s image failed with unknown exception",
-            IconStateName(state));
+        Wh_Log(L"Loading %s image failed with unknown exception",
+               IconStateName(state));
     }
 
     return false;
 }
 
-bool LoadImages(
-    const std::shared_ptr<
-        StartIconInstance>& instance)
-{
+bool LoadImages(const std::shared_ptr<StartIconInstance>& instance) {
     if (!instance) {
         return false;
     }
 
-    std::array<std::wstring, kIconStateCount>
-        sources;
+    std::array<std::wstring, kIconStateCount> sources;
 
-    for (size_t i = 0;
-         i < kIconStateCount;
-         i++)
-    {
-        instance
-            ->imageResourceIndexByState[i] = i;
+    for (size_t i = 0; i < kIconStateCount; i++) {
+        instance->imageResourceIndexByState[i] = i;
 
-        sources[i] =
-            GetImageSourceForState(
-                static_cast<IconState>(i));
+        sources[i] = GetImageSourceForState(instance->settings,
+                                            static_cast<IconState>(i));
     }
 
-    if (!LoadImageResource(
-            instance,
-            IconState::Normal,
-            sources[IconStateIndex(
-                IconState::Normal)]))
-    {
+    if (!LoadImageResource(instance, IconState::Normal,
+                           sources[IconStateIndex(IconState::Normal)])) {
         return false;
     }
 
-    for (size_t stateIndex = 1;
-         stateIndex < kIconStateCount;
-         stateIndex++)
-    {
-        IconState state =
-            static_cast<IconState>(
-                stateIndex);
+    for (size_t stateIndex = 1; stateIndex < kIconStateCount; stateIndex++) {
+        IconState state = static_cast<IconState>(stateIndex);
 
         if (sources[stateIndex].empty()) {
             continue;
@@ -2517,29 +2103,19 @@ bool LoadImages(
 
         bool reusedResource = false;
 
-        for (size_t previousIndex = 0;
-             previousIndex < stateIndex;
-             previousIndex++)
-        {
-            if (!ImageSourcesEqual(
-                    sources[stateIndex],
-                    sources[previousIndex]))
-            {
+        for (size_t previousIndex = 0; previousIndex < stateIndex;
+             previousIndex++) {
+            if (!ImageSourcesEqual(sources[stateIndex],
+                                   sources[previousIndex])) {
                 continue;
             }
 
-            instance
-                ->imageResourceIndexByState[stateIndex] =
-                instance
-                    ->imageResourceIndexByState[
-                        previousIndex];
+            instance->imageResourceIndexByState[stateIndex] =
+                instance->imageResourceIndexByState[previousIndex];
 
-            Wh_Log(
-                L"The %s image reuses the %s image resource",
-                IconStateName(state),
-                IconStateName(
-                    static_cast<IconState>(
-                        previousIndex)));
+            Wh_Log(L"The %s image reuses the %s image resource",
+                   IconStateName(state),
+                   IconStateName(static_cast<IconState>(previousIndex)));
 
             reusedResource = true;
             break;
@@ -2549,31 +2125,22 @@ bool LoadImages(
             continue;
         }
 
-        if (!LoadImageResource(
-                instance,
-                state,
-                sources[stateIndex]))
-        {
-            Wh_Log(
-                L"The %s image is unavailable; using its fallback",
-                IconStateName(state));
+        if (!LoadImageResource(instance, state, sources[stateIndex])) {
+            Wh_Log(L"The %s image is unavailable; using its fallback",
+                   IconStateName(state));
         }
     }
 
     return true;
 }
 
-
 // -----------------------------------------------------------------------------
 // Interaction state setup
 // -----------------------------------------------------------------------------
 
-void AttachPointerEvents(
-    const std::shared_ptr<StartIconInstance>& instance,
-    const wux::FrameworkElement& startButton)
-{
-    std::weak_ptr<StartIconInstance>
-        weakInstance = instance;
+void AttachPointerEvents(const std::shared_ptr<StartIconInstance>& instance,
+                         const wux::FrameworkElement& startButton) {
+    std::weak_ptr<StartIconInstance> weakInstance = instance;
 
     // Mark cleanup as necessary before the first registration so a failure in
     // the middle of this function can still remove every handler added so far.
@@ -2582,188 +2149,130 @@ void AttachPointerEvents(
     //
     // POINTER ENTERED
     //
-    instance->pointerEnteredHandler =
-        winrt::box_value(
-            wuxi::PointerEventHandler(
-                [weakInstance](
-                    const wf::IInspectable&,
-                    const wuxi::PointerRoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+    instance->pointerEnteredHandler = winrt::box_value(
+        wuxi::PointerEventHandler([weakInstance](
+                                      const wf::IInspectable&,
+                                      const wuxi::PointerRoutedEventArgs&) {
+            auto instance = weakInstance.lock();
 
-                    if (!instance) {
-                        return;
-                    }
+            if (!instance) {
+                return;
+            }
 
-                    instance->hovering = true;
+            instance->hovering = true;
 
-                    ApplyCurrentState(
-                        instance,
-                        instance->pressed
-                            ? g_settings
-                                  .pressedDuration
-                            : g_settings
-                                  .hoverDuration);
-                }));
+            ApplyCurrentState(instance, instance->pressed
+                                            ? instance->settings.pressedDuration
+                                            : instance->settings.hoverDuration);
+        }));
 
-    startButton.AddHandler(
-        wux::UIElement::PointerEnteredEvent(),
-        instance->pointerEnteredHandler,
-        true);
-
+    startButton.AddHandler(wux::UIElement::PointerEnteredEvent(),
+                           instance->pointerEnteredHandler, true);
 
     //
     // POINTER EXITED
     //
-    instance->pointerExitedHandler =
-        winrt::box_value(
-            wuxi::PointerEventHandler(
-                [weakInstance](
-                    const wf::IInspectable&,
-                    const wuxi::PointerRoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+    instance->pointerExitedHandler = winrt::box_value(wuxi::PointerEventHandler(
+        [weakInstance](const wf::IInspectable&,
+                       const wuxi::PointerRoutedEventArgs&) {
+            auto instance = weakInstance.lock();
 
-                    if (!instance) {
-                        return;
-                    }
+            if (!instance) {
+                return;
+            }
 
-                    instance->hovering = false;
+            instance->hovering = false;
 
-                    // PointerPressed and PointerReleased aren't guaranteed to
-                    // occur in pairs. ButtonBase tracks this itself; the raw
-                    // fallback must treat PointerExited as an end condition.
-                    if (!instance
-                             ->pressedStateCallbackRegistered)
-                    {
-                        instance->pressed = false;
-                    }
+            // PointerPressed and PointerReleased aren't guaranteed to
+            // occur in pairs. ButtonBase tracks this itself; the raw
+            // fallback must treat PointerExited as an end condition.
+            if (!instance->pressedStateCallbackRegistered) {
+                instance->pressed = false;
+            }
 
-                    ApplyCurrentState(
-                        instance,
-                        g_settings.releaseDuration);
-                }));
+            ApplyCurrentState(instance, instance->settings.releaseDuration);
+        }));
 
-    startButton.AddHandler(
-        wux::UIElement::PointerExitedEvent(),
-        instance->pointerExitedHandler,
-        true);
+    startButton.AddHandler(wux::UIElement::PointerExitedEvent(),
+                           instance->pointerExitedHandler, true);
 
     // The Start control is a ButtonBase on supported Windows 11 builds.
     // Observe its own pressed state instead of reconstructing that state from
     // routed pointer events which the control class handles internally.
     try {
-        auto buttonBase =
-            startButton.try_as<
-                wuxcp::ButtonBase>();
+        auto buttonBase = startButton.try_as<wuxcp::ButtonBase>();
 
         if (buttonBase) {
             instance->pressedStateCallbackToken =
-                buttonBase
-                    .RegisterPropertyChangedCallback(
-                        wuxcp::ButtonBase::
-                            IsPressedProperty(),
-                        wux::DependencyPropertyChangedCallback(
-                            [weakInstance](
-                                const wux::DependencyObject& sender,
-                                const wux::DependencyProperty&)
-                            {
-                                auto instance =
-                                    weakInstance.lock();
+                buttonBase.RegisterPropertyChangedCallback(
+                    wuxcp::ButtonBase::IsPressedProperty(),
+                    wux::DependencyPropertyChangedCallback(
+                        [weakInstance](const wux::DependencyObject& sender,
+                                       const wux::DependencyProperty&) {
+                            auto instance = weakInstance.lock();
 
-                                auto buttonBase =
-                                    sender.try_as<
-                                        wuxcp::ButtonBase>();
+                            auto buttonBase =
+                                sender.try_as<wuxcp::ButtonBase>();
 
-                                if (!instance ||
-                                    !buttonBase)
-                                {
-                                    return;
-                                }
+                            if (!instance || !buttonBase) {
+                                return;
+                            }
 
-                                SetPressedState(
-                                    instance,
-                                    buttonBase.IsPressed());
-                            }));
+                            SetPressedState(instance, buttonBase.IsPressed());
+                        }));
 
-            instance->pressedStateCallbackRegistered =
-                true;
+            instance->pressedStateCallbackRegistered = true;
 
-            instance->pressed =
-                buttonBase.IsPressed();
+            instance->pressed = buttonBase.IsPressed();
 
             Wh_Log(
                 L"Start button pressed state is tracked "
                 L"through ButtonBase::IsPressed");
         }
-    }
-    catch (const winrt::hresult_error& e) {
-        Wh_Log(
-            L"Registering ButtonBase::IsPressed callback failed: 0x%08X %s",
-            e.code().value,
-            e.message().c_str());
-    }
-    catch (...) {
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Registering ButtonBase::IsPressed callback failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
     }
 
     // Taskbar.ExperienceToggleButton derives from ToggleButton. Its checked
     // state follows whether the Start menu is currently shown.
     try {
-        auto toggleButton =
-            startButton.try_as<
-                wuxcp::ToggleButton>();
+        auto toggleButton = startButton.try_as<wuxcp::ToggleButton>();
 
         if (toggleButton) {
             instance->activatedStateCallbackToken =
-                toggleButton
-                    .RegisterPropertyChangedCallback(
-                        wuxcp::ToggleButton::
-                            IsCheckedProperty(),
-                        wux::DependencyPropertyChangedCallback(
-                            [weakInstance](
-                                const wux::DependencyObject& sender,
-                                const wux::DependencyProperty&)
-                            {
-                                auto instance =
-                                    weakInstance.lock();
+                toggleButton.RegisterPropertyChangedCallback(
+                    wuxcp::ToggleButton::IsCheckedProperty(),
+                    wux::DependencyPropertyChangedCallback(
+                        [weakInstance](const wux::DependencyObject& sender,
+                                       const wux::DependencyProperty&) {
+                            auto instance = weakInstance.lock();
 
-                                auto toggleButton =
-                                    sender.try_as<
-                                        wuxcp::ToggleButton>();
+                            auto toggleButton =
+                                sender.try_as<wuxcp::ToggleButton>();
 
-                                if (!instance ||
-                                    !toggleButton)
-                                {
-                                    return;
-                                }
+                            if (!instance || !toggleButton) {
+                                return;
+                            }
 
-                                SetActivatedState(
-                                    instance,
-                                    IsToggleButtonChecked(
-                                        toggleButton));
-                            }));
+                            SetActivatedState(
+                                instance, IsToggleButtonChecked(toggleButton));
+                        }));
 
-            instance->activatedStateCallbackRegistered =
-                true;
+            instance->activatedStateCallbackRegistered = true;
 
-            instance->activated =
-                IsToggleButtonChecked(
-                    toggleButton);
+            instance->activated = IsToggleButtonChecked(toggleButton);
 
             Wh_Log(
                 L"Start menu visibility is tracked through "
                 L"ToggleButton::IsChecked");
         }
-    }
-    catch (const winrt::hresult_error& e) {
+    } catch (const winrt::hresult_error& e) {
         Wh_Log(
             L"Registering ToggleButton::IsChecked callback failed: 0x%08X %s",
-            e.code().value,
-            e.message().c_str());
-    }
-    catch (...) {
+            e.code().value, e.message().c_str());
+    } catch (...) {
     }
 
     if (!instance->pressedStateCallbackRegistered) {
@@ -2771,27 +2280,20 @@ void AttachPointerEvents(
             L"ButtonBase pressed-state callback is unavailable; "
             L"using routed-pointer fallback");
 
-
-    //
-    // POINTER PRESSED
-    //
-    instance->pointerPressedHandler =
-        winrt::box_value(
-            wuxi::PointerEventHandler(
-                [weakInstance](
-                    const wf::IInspectable&,
-                    const wuxi::PointerRoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+        //
+        // POINTER PRESSED
+        //
+        instance->pointerPressedHandler =
+            winrt::box_value(wuxi::PointerEventHandler(
+                [weakInstance](const wf::IInspectable&,
+                               const wuxi::PointerRoutedEventArgs&) {
+                    auto instance = weakInstance.lock();
 
                     if (!instance) {
                         return;
                     }
 
-                    SetPressedState(
-                        instance,
-                        true);
+                    SetPressedState(instance, true);
 
                     //
                     // IMPORTANT:
@@ -2802,132 +2304,115 @@ void AttachPointerEvents(
                     //
                 }));
 
-    //
-    // The third argument is critical.
-    //
-    // ButtonBase normally marks PointerPressed
-    // as handled. true means our handler still
-    // receives the routed event.
-    //
-    startButton.AddHandler(
-        wux::UIElement::PointerPressedEvent(),
-        instance->pointerPressedHandler,
-        true);
+        //
+        // The third argument is critical.
+        //
+        // ButtonBase normally marks PointerPressed
+        // as handled. true means our handler still
+        // receives the routed event.
+        //
+        startButton.AddHandler(wux::UIElement::PointerPressedEvent(),
+                               instance->pointerPressedHandler, true);
 
-
-    //
-    // POINTER RELEASED
-    //
-    instance->pointerReleasedHandler =
-        winrt::box_value(
-            wuxi::PointerEventHandler(
-                [weakInstance](
-                    const wf::IInspectable&,
-                    const wuxi::PointerRoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+        //
+        // POINTER RELEASED
+        //
+        instance->pointerReleasedHandler =
+            winrt::box_value(wuxi::PointerEventHandler(
+                [weakInstance](const wf::IInspectable&,
+                               const wuxi::PointerRoutedEventArgs&) {
+                    auto instance = weakInstance.lock();
 
                     if (!instance) {
                         return;
                     }
 
-                    SetPressedState(
-                        instance,
-                        false);
+                    SetPressedState(instance, false);
                 }));
 
-    startButton.AddHandler(
-        wux::UIElement::PointerReleasedEvent(),
-        instance->pointerReleasedHandler,
-        true);
+        startButton.AddHandler(wux::UIElement::PointerReleasedEvent(),
+                               instance->pointerReleasedHandler, true);
 
-
-    //
-    // POINTER CANCELED
-    //
-    instance->pointerCanceledHandler =
-        winrt::box_value(
-            wuxi::PointerEventHandler(
-                [weakInstance](
-                    const wf::IInspectable&,
-                    const wuxi::PointerRoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+        //
+        // POINTER CANCELED
+        //
+        instance->pointerCanceledHandler =
+            winrt::box_value(wuxi::PointerEventHandler(
+                [weakInstance](const wf::IInspectable&,
+                               const wuxi::PointerRoutedEventArgs&) {
+                    auto instance = weakInstance.lock();
 
                     if (!instance) {
                         return;
                     }
 
-                    Wh_Log(
-                        L"Start button: CANCELED");
+                    Wh_Log(L"Start button: CANCELED");
 
-                    SetPressedState(
-                        instance,
-                        false);
+                    SetPressedState(instance, false);
                 }));
 
-    startButton.AddHandler(
-        wux::UIElement::PointerCanceledEvent(),
-        instance->pointerCanceledHandler,
-        true);
+        startButton.AddHandler(wux::UIElement::PointerCanceledEvent(),
+                               instance->pointerCanceledHandler, true);
 
-
-    //
-    // POINTER CAPTURE LOST
-    //
-    instance->pointerCaptureLostHandler =
-        winrt::box_value(
-            wuxi::PointerEventHandler(
-                [weakInstance](
-                    const wf::IInspectable&,
-                    const wuxi::PointerRoutedEventArgs&)
-                {
-                    auto instance =
-                        weakInstance.lock();
+        //
+        // POINTER CAPTURE LOST
+        //
+        instance->pointerCaptureLostHandler =
+            winrt::box_value(wuxi::PointerEventHandler(
+                [weakInstance](const wf::IInspectable&,
+                               const wuxi::PointerRoutedEventArgs&) {
+                    auto instance = weakInstance.lock();
 
                     if (!instance) {
                         return;
                     }
 
-                    Wh_Log(
-                        L"Start button: CAPTURE LOST");
+                    Wh_Log(L"Start button: CAPTURE LOST");
 
-                    SetPressedState(
-                        instance,
-                        false);
+                    SetPressedState(instance, false);
                 }));
 
-    startButton.AddHandler(
-        wux::UIElement::PointerCaptureLostEvent(),
-        instance->pointerCaptureLostHandler,
-        true);
-
+        startButton.AddHandler(wux::UIElement::PointerCaptureLostEvent(),
+                               instance->pointerCaptureLostHandler, true);
     }
 
-    Wh_Log(
-        L"Start button pointer handlers attached");
+    Wh_Log(L"Start button pointer handlers attached");
 }
 
 // -----------------------------------------------------------------------------
 // Install replacement into a Start button
 // -----------------------------------------------------------------------------
 
-bool AttachToStartButton(
-    const wux::FrameworkElement&
-        startButton)
-{
-    if (!startButton) {
+bool AttachToStartButton(const wux::FrameworkElement& startButton) {
+    if (!startButton || g_unloading) {
         return false;
     }
 
-    if (GetImageSourceForState(
-            IconState::Normal)
-            .empty())
-    {
-        Wh_Log(
-            L"Image source is empty; leaving stock Start icon unchanged");
+    ModSettings settings = GetSettingsSnapshot();
+
+    if (IsBlank(GetImageSourceForState(settings, IconState::Normal))) {
+        // An earlier build or an interrupted hot reload might have left the
+        // stock element transparent. Remove any tracked replacement first,
+        // then explicitly make the vanilla icon visible.
+        DetachInstanceForStartButton(startButton);
+
+        auto stockIcon = FindStockStartIcon(startButton);
+
+        if (!stockIcon) {
+            Wh_Log(L"Image source is empty, but the stock Start icon wasn't "
+                   L"found");
+            return false;
+        }
+
+        try {
+            stockIcon.Opacity(1.0);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Restoring the stock Start icon failed: 0x%08X %s",
+                   e.code().value, e.message().c_str());
+            return false;
+        }
+
+        Wh_Log(L"Image source is empty; using the stock Start icon");
 
         return true;
     }
@@ -2936,227 +2421,170 @@ bool AttachToStartButton(
         return true;
     }
 
-    auto stockIcon =
-        FindStockStartIcon(
-            startButton);
+    auto stockIcon = FindStockStartIcon(startButton);
 
     if (!stockIcon) {
-        Wh_Log(
-            L"Couldn't find Start AnimatedVisualPlayer#Icon");
+        Wh_Log(L"Couldn't find Start AnimatedVisualPlayer#Icon");
 
         return false;
     }
 
-    auto hostPanel =
-        FindHostPanel(
-            stockIcon,
-            startButton);
+    auto hostPanel = FindHostPanel(stockIcon, startButton);
 
     if (!hostPanel) {
-        Wh_Log(
-            L"Couldn't find a panel which can host the custom Start image");
+        Wh_Log(L"Couldn't find a panel which can host the custom Start image");
 
         return false;
     }
 
-    std::shared_ptr<StartIconInstance>
-        instance;
+    std::shared_ptr<StartIconInstance> instance;
 
     try {
-        double originalStockOpacity =
-            stockIcon.Opacity();
+        double originalStockOpacity = stockIcon.Opacity();
 
-        instance =
-            std::make_shared<
-                StartIconInstance>();
+        instance = std::make_shared<StartIconInstance>();
 
-        instance->threadId =
-            GetCurrentThreadId();
+        instance->threadId = GetCurrentThreadId();
 
-        instance->startButton =
-            winrt::make_weak(
-                startButton);
+        instance->dispatcher = startButton.Dispatcher();
 
-        instance->stockIcon =
-            winrt::make_weak(
-                stockIcon);
+        instance->settings = std::move(settings);
 
-        instance->hostPanel =
-            winrt::make_weak(
-                hostPanel);
+        instance->startButton = winrt::make_weak(startButton);
 
-        instance->originalStockOpacity =
-            originalStockOpacity;
+        instance->stockIcon = winrt::make_weak(stockIcon);
+
+        instance->hostPanel = winrt::make_weak(hostPanel);
+
+        instance->originalStockOpacity = originalStockOpacity;
+
+        // Register before adding XAML elements or callbacks. If unload starts
+        // concurrently, its dispatcher barrier will run after this UI-thread
+        // callback and will see everything that needs to be detached.
+        if (!RegisterInstance(instance)) {
+            return false;
+        }
 
         wuxc::Grid imageHost;
 
-        imageHost.Width(
-            g_settings.iconSize);
+        imageHost.Width(instance->settings.iconSize);
 
-        imageHost.Height(
-            g_settings.iconSize);
+        imageHost.Height(instance->settings.iconSize);
 
-        imageHost.HorizontalAlignment(
-            wux::HorizontalAlignment::
-                Center);
+        imageHost.HorizontalAlignment(wux::HorizontalAlignment::Center);
 
-        imageHost.VerticalAlignment(
-            wux::VerticalAlignment::
-                Center);
+        imageHost.VerticalAlignment(wux::VerticalAlignment::Center);
 
-        imageHost.IsHitTestVisible(
-            false);
+        imageHost.IsHitTestVisible(false);
+
+        wuxa::AutomationProperties::SetAccessibilityView(
+            imageHost, wuxap::AccessibilityView::Raw);
 
         wuxc::Image customImage;
         wuxc::Image transitionImage;
 
-        auto configureImageLayer =
-            [](const wuxc::Image& image)
-            {
-                image.HorizontalAlignment(
-                    wux::HorizontalAlignment::
-                        Stretch);
+        auto configureImageLayer = [](const wuxc::Image& image) {
+            image.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
 
-                image.VerticalAlignment(
-                    wux::VerticalAlignment::
-                        Stretch);
+            image.VerticalAlignment(wux::VerticalAlignment::Stretch);
 
-                image.Stretch(
-                    wuxm::Stretch::Uniform);
+            image.Stretch(wuxm::Stretch::Uniform);
 
-                image.IsHitTestVisible(false);
-            };
+            image.IsHitTestVisible(false);
+
+            wuxa::AutomationProperties::SetAccessibilityView(
+                image, wuxap::AccessibilityView::Raw);
+        };
 
         configureImageLayer(customImage);
         configureImageLayer(transitionImage);
 
-        imageHost.Children().Append(
-            customImage);
+        imageHost.Children().Append(customImage);
 
-        imageHost.Children().Append(
-            transitionImage);
+        imageHost.Children().Append(transitionImage);
 
         // Put the image above the stock
         // AnimatedVisualPlayer.
-        wuxc::Canvas::SetZIndex(
-            imageHost,
-            10000);
+        wuxc::Canvas::SetZIndex(imageHost, 10000);
 
-        instance->customImageHost =
-            winrt::make_weak(
-                imageHost);
+        instance->customImageHost = winrt::make_weak(imageHost);
 
-        instance->customImage =
-            winrt::make_weak(
-                customImage);
+        instance->customImage = winrt::make_weak(customImage);
 
-        instance->transitionImage =
-            winrt::make_weak(
-                transitionImage);
+        instance->transitionImage = winrt::make_weak(transitionImage);
 
-        hostPanel
-            .Children()
-            .Append(imageHost);
+        hostPanel.Children().Append(imageHost);
 
-        AttachPointerEvents(
-            instance,
-            startButton);
+        AttachPointerEvents(instance, startButton);
 
-        if (!LoadImages(instance))
-        {
+        if (!LoadImages(instance)) {
+            UnregisterInstance(instance);
             DetachInstance(instance);
 
-            Wh_Log(
-                L"Failed to load custom image; keeping stock icon");
+            Wh_Log(L"Failed to load custom image; keeping stock icon");
 
             return false;
         }
 
-        // Preserve the original icon in layout,
-        // but don't render it.
-        stockIcon.Opacity(0.0);
+        // UpdateDisplayedImage keeps the stock icon visible until ImageOpened
+        // confirms that the normal replacement decoded successfully.
+        ApplyCurrentState(instance, 0);
 
-        ApplyCurrentState(
-            instance,
-            0);
-
-        g_instances.push_back(
-            instance);
-
-        Wh_Log(
-            L"Custom Start icon attached");
+        Wh_Log(L"Custom Start icon attached");
 
         return true;
-    }
-    catch (const winrt::hresult_error& e) {
+    } catch (const winrt::hresult_error& e) {
+        UnregisterInstance(instance);
         DetachInstance(instance);
 
-        Wh_Log(
-            L"AttachToStartButton failed: 0x%08X %s",
-            e.code().value,
-            e.message().c_str());
+        Wh_Log(L"AttachToStartButton failed: 0x%08X %s", e.code().value,
+               e.message().c_str());
 
         return false;
-    }
-    catch (...) {
+    } catch (...) {
+        UnregisterInstance(instance);
         DetachInstance(instance);
 
-        Wh_Log(
-            L"AttachToStartButton failed with an unknown exception");
+        Wh_Log(L"AttachToStartButton failed with an unknown exception");
 
         return false;
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // Apply to XamlRoot
 // -----------------------------------------------------------------------------
 
-bool ApplyToXamlRoot(
-    const wux::XamlRoot& xamlRoot)
-{
+bool ApplyToXamlRoot(const wux::XamlRoot& xamlRoot) {
     if (!xamlRoot) {
         return false;
     }
 
     try {
-        auto content =
-            xamlRoot
-                .Content()
-                .try_as<
-                    wux::FrameworkElement>();
+        auto content = xamlRoot.Content().try_as<wux::FrameworkElement>();
 
         if (!content) {
-            Wh_Log(
-                L"XamlRoot content isn't a FrameworkElement");
+            Wh_Log(L"XamlRoot content isn't a FrameworkElement");
 
             return false;
         }
 
-        auto startButton =
-            FindStartButton(content);
+        auto startButton = FindStartButton(content);
 
         if (!startButton) {
-            Wh_Log(
-                L"Couldn't find AutomationId=StartButton");
+            Wh_Log(L"Couldn't find AutomationId=StartButton");
 
             return false;
         }
 
-        return AttachToStartButton(
-            startButton);
-    }
-    catch (const winrt::hresult_error& e) {
-        Wh_Log(
-            L"ApplyToXamlRoot failed: 0x%08X %s",
-            e.code().value,
-            e.message().c_str());
+        return AttachToStartButton(startButton);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"ApplyToXamlRoot failed: 0x%08X %s", e.code().value,
+               e.message().c_str());
 
         return false;
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // taskbar.dll internals
@@ -3165,59 +2593,44 @@ bool ApplyToXamlRoot(
 // Windhawk Windows 11 taskbar mods.
 // -----------------------------------------------------------------------------
 
-void*
-    CTaskBand_ITaskListWndSite_vftable;
+void* CTaskBand_ITaskListWndSite_vftable;
 
-void*
-    CSecondaryTaskBand_ITaskListWndSite_vftable;
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 
-using CTaskBand_GetTaskbarHost_t =
-    void* (WINAPI*)(
-        void* pThis,
-        void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
 
-CTaskBand_GetTaskbarHost_t
-    CTaskBand_GetTaskbarHost_Original;
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                           void** result);
 
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
 
-using CSecondaryTaskBand_GetTaskbarHost_t =
-    void* (WINAPI*)(
-        void* pThis,
-        void** result);
+void* TaskbarHost_FrameHeight_Original;
 
-CSecondaryTaskBand_GetTaskbarHost_t
-    CSecondaryTaskBand_GetTaskbarHost_Original;
+using RefCountDecref_t = void(WINAPI*)(void* pThis);
 
-
-void*
-    TaskbarHost_FrameHeight_Original;
-
-
-using RefCountDecref_t =
-    void (WINAPI*)(
-        void* pThis);
-
-RefCountDecref_t
-    RefCountDecref_Original;
-
+RefCountDecref_t RefCountDecref_Original;
 
 // -----------------------------------------------------------------------------
 // Extract XamlRoot from TaskbarHost
 // -----------------------------------------------------------------------------
 
-wux::XamlRoot
-XamlRootFromTaskbarHostSharedPtr(
-    void* sharedPtr[2])
-{
-    if (!sharedPtr[0] &&
-        !sharedPtr[1])
-    {
+wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
+    auto releaseSharedPtr = [sharedPtr]() {
+        if (sharedPtr[1] && RefCountDecref_Original) {
+            RefCountDecref_Original(sharedPtr[1]);
+
+            sharedPtr[1] = nullptr;
+        }
+    };
+
+    if (!sharedPtr[0]) {
+        releaseSharedPtr();
         return nullptr;
     }
 
-    size_t taskbarElementOffset =
-        0x48;
+    size_t taskbarElementOffset = 0x48;
 
 #if defined(_M_X64)
 
@@ -3228,24 +2641,19 @@ XamlRootFromTaskbarHostSharedPtr(
     // the function rather than hard-coding it
     // whenever possible.
     const BYTE* code =
-        reinterpret_cast<const BYTE*>(
-            TaskbarHost_FrameHeight_Original);
+        reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
 
-    if (code &&
-        code[0] == 0x48 &&
-        code[1] == 0x83 &&
-        code[2] == 0xEC &&
-        code[4] == 0x48 &&
-        code[5] == 0x83 &&
-        code[6] == 0xC1 &&
-        code[7] <= 0x7F)
-    {
-        taskbarElementOffset =
-            code[7];
-    }
-    else {
+    if (code && code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[7] <= 0x7F) {
+        taskbarElementOffset = code[7];
+    } else {
         Wh_Log(
-            L"Unrecognized TaskbarHost::FrameHeight; using fallback offset 0x48");
+            L"Unrecognized TaskbarHost::FrameHeight; refusing an unsafe "
+            L"TaskbarHost layout fallback");
+
+        releaseSharedPtr();
+        return nullptr;
     }
 
 #elif defined(_M_ARM64)
@@ -3258,87 +2666,56 @@ XamlRootFromTaskbarHostSharedPtr(
 #error Unsupported architecture.
 #endif
 
-    auto* taskbarElementIUnknown =
-        *reinterpret_cast<IUnknown**>(
-            reinterpret_cast<BYTE*>(
-                sharedPtr[0]) +
-            taskbarElementOffset);
+    auto* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
+        reinterpret_cast<BYTE*>(sharedPtr[0]) + taskbarElementOffset);
 
-    wux::FrameworkElement
-        taskbarElement{nullptr};
+    wux::FrameworkElement taskbarElement{nullptr};
 
     if (taskbarElementIUnknown) {
-        taskbarElementIUnknown
-            ->QueryInterface(
-                winrt::guid_of<
-                    wux::FrameworkElement>(),
-                winrt::put_abi(
-                    taskbarElement));
+        taskbarElementIUnknown->QueryInterface(
+            winrt::guid_of<wux::FrameworkElement>(),
+            winrt::put_abi(taskbarElement));
     }
 
     wux::XamlRoot result{nullptr};
 
     if (taskbarElement) {
-        result =
-            taskbarElement.XamlRoot();
+        result = taskbarElement.XamlRoot();
     }
 
-    if (sharedPtr[1] &&
-        RefCountDecref_Original)
-    {
-        RefCountDecref_Original(
-            sharedPtr[1]);
-    }
+    releaseSharedPtr();
 
     return result;
 }
-
 
 // -----------------------------------------------------------------------------
 // Primary taskbar XamlRoot
 // -----------------------------------------------------------------------------
 
-wux::XamlRoot GetTaskbarXamlRoot(
-    HWND taskbarWnd)
-{
+wux::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
     HWND taskSwitchWnd =
-        reinterpret_cast<HWND>(
-            GetProp(
-                taskbarWnd,
-                L"TaskbandHWND"));
+        reinterpret_cast<HWND>(GetProp(taskbarWnd, L"TaskbandHWND"));
 
     if (!taskSwitchWnd) {
         return nullptr;
     }
 
     void* taskBand =
-        reinterpret_cast<void*>(
-            GetWindowLongPtr(
-                taskSwitchWnd,
-                0));
+        reinterpret_cast<void*>(GetWindowLongPtr(taskSwitchWnd, 0));
 
     if (!taskBand) {
         return nullptr;
     }
 
-    void* interfacePointer =
-        taskBand;
+    void* interfacePointer = taskBand;
 
-    for (int i = 0;
-         i < 20;
-         i++)
-    {
-        if (*reinterpret_cast<void**>(
-                interfacePointer) ==
-            CTaskBand_ITaskListWndSite_vftable)
-        {
+    for (int i = 0; i < 20; i++) {
+        if (*reinterpret_cast<void**>(interfacePointer) ==
+            CTaskBand_ITaskListWndSite_vftable) {
             break;
         }
 
-        interfacePointer =
-            reinterpret_cast<void**>(
-                interfacePointer) +
-            1;
+        interfacePointer = reinterpret_cast<void**>(interfacePointer) + 1;
 
         if (i == 19) {
             return nullptr;
@@ -3347,63 +2724,39 @@ wux::XamlRoot GetTaskbarXamlRoot(
 
     void* sharedPtr[2]{};
 
-    CTaskBand_GetTaskbarHost_Original(
-        interfacePointer,
-        sharedPtr);
+    CTaskBand_GetTaskbarHost_Original(interfacePointer, sharedPtr);
 
-    return
-        XamlRootFromTaskbarHostSharedPtr(
-            sharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(sharedPtr);
 }
-
 
 // -----------------------------------------------------------------------------
 // Secondary taskbar XamlRoot
 // -----------------------------------------------------------------------------
 
-wux::XamlRoot
-GetSecondaryTaskbarXamlRoot(
-    HWND secondaryTaskbarWnd)
-{
+wux::XamlRoot GetSecondaryTaskbarXamlRoot(HWND secondaryTaskbarWnd) {
     HWND taskSwitchWnd =
-        FindWindowEx(
-            secondaryTaskbarWnd,
-            nullptr,
-            L"WorkerW",
-            nullptr);
+        FindWindowEx(secondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
 
     if (!taskSwitchWnd) {
         return nullptr;
     }
 
     void* taskBand =
-        reinterpret_cast<void*>(
-            GetWindowLongPtr(
-                taskSwitchWnd,
-                0));
+        reinterpret_cast<void*>(GetWindowLongPtr(taskSwitchWnd, 0));
 
     if (!taskBand) {
         return nullptr;
     }
 
-    void* interfacePointer =
-        taskBand;
+    void* interfacePointer = taskBand;
 
-    for (int i = 0;
-         i < 20;
-         i++)
-    {
-        if (*reinterpret_cast<void**>(
-                interfacePointer) ==
-            CSecondaryTaskBand_ITaskListWndSite_vftable)
-        {
+    for (int i = 0; i < 20; i++) {
+        if (*reinterpret_cast<void**>(interfacePointer) ==
+            CSecondaryTaskBand_ITaskListWndSite_vftable) {
             break;
         }
 
-        interfacePointer =
-            reinterpret_cast<void**>(
-                interfacePointer) +
-            1;
+        interfacePointer = reinterpret_cast<void**>(interfacePointer) + 1;
 
         if (i == 19) {
             return nullptr;
@@ -3412,239 +2765,175 @@ GetSecondaryTaskbarXamlRoot(
 
     void* sharedPtr[2]{};
 
-    CSecondaryTaskBand_GetTaskbarHost_Original(
-        interfacePointer,
-        sharedPtr);
+    CSecondaryTaskBand_GetTaskbarHost_Original(interfacePointer, sharedPtr);
 
-    return
-        XamlRootFromTaskbarHostSharedPtr(
-            sharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(sharedPtr);
 }
-
 
 // -----------------------------------------------------------------------------
 // Run code on taskbar UI thread
 // -----------------------------------------------------------------------------
 
-using RunFromWindowThreadProc_t =
-    void (WINAPI*)(void* parameter);
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
-bool RunFromWindowThread(
-    HWND window,
-    RunFromWindowThreadProc_t proc,
-    void* procParam)
-{
-    static const UINT
-        registeredMessage =
-            RegisterWindowMessage(
-                L"Windhawk_RunFromWindowThread_"
-                WH_MOD_ID);
+bool RunFromWindowThread(HWND window,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT registeredMessage =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     struct RunParam {
         RunFromWindowThreadProc_t proc;
         void* param;
     };
 
-    DWORD threadId =
-        GetWindowThreadProcessId(
-            window,
-            nullptr);
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
 
     if (!threadId) {
         return false;
     }
 
-    if (threadId ==
-        GetCurrentThreadId())
-    {
+    if (threadId == GetCurrentThreadId()) {
         proc(procParam);
         return true;
     }
 
-    HHOOK hook =
-        SetWindowsHookEx(
-            WH_CALLWNDPROC,
-            [](int code,
-               WPARAM wParam,
-               LPARAM lParam)
-                -> LRESULT
-            {
-                if (code ==
-                    HC_ACTION)
-                {
-                    const CWPSTRUCT* cwp =
-                        reinterpret_cast<
-                            const CWPSTRUCT*>(
-                            lParam);
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                const CWPSTRUCT* cwp =
+                    reinterpret_cast<const CWPSTRUCT*>(lParam);
 
-                    if (cwp->message ==
-                        registeredMessage)
-                    {
-                        auto* parameter =
-                            reinterpret_cast<
-                                RunParam*>(
-                                cwp->lParam);
+                if (cwp->message == registeredMessage) {
+                    auto* parameter = reinterpret_cast<RunParam*>(cwp->lParam);
 
-                        parameter->proc(
-                            parameter
-                                ->param);
-                    }
+                    parameter->proc(parameter->param);
                 }
+            }
 
-                return CallNextHookEx(
-                    nullptr,
-                    code,
-                    wParam,
-                    lParam);
-            },
-            nullptr,
-            threadId);
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
 
     if (!hook) {
         return false;
     }
 
-    RunParam parameter{
-        proc,
-        procParam
-    };
+    RunParam parameter{proc, procParam};
 
-    SendMessage(
-        window,
-        registeredMessage,
-        0,
-        reinterpret_cast<LPARAM>(
-            &parameter));
+    SendMessage(window, registeredMessage, 0,
+                reinterpret_cast<LPARAM>(&parameter));
 
     UnhookWindowsHookEx(hook);
 
     return true;
 }
 
-
 // -----------------------------------------------------------------------------
 // Taskbar discovery
 // -----------------------------------------------------------------------------
 
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND result = nullptr;
+std::vector<HWND> FindCurrentProcessTaskbarWindows() {
+    std::vector<HWND> result;
 
     EnumWindows(
-        [](HWND window,
-           LPARAM param)
-            -> BOOL
-        {
+        [](HWND window, LPARAM param) -> BOOL {
             DWORD processId = 0;
 
-            GetWindowThreadProcessId(
-                window,
-                &processId);
+            GetWindowThreadProcessId(window, &processId);
 
-            if (processId !=
-                GetCurrentProcessId())
-            {
+            if (processId != GetCurrentProcessId()) {
                 return TRUE;
             }
 
             wchar_t className[64]{};
 
-            if (!GetClassNameW(
-                    window,
-                    className,
-                    ARRAYSIZE(className)))
-            {
+            if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
                 return TRUE;
             }
 
-            if (_wcsicmp(
-                    className,
-                    L"Shell_TrayWnd") ==
-                0)
-            {
-                *reinterpret_cast<HWND*>(
-                    param) =
-                    window;
-
-                return FALSE;
+            if (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+                _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+                reinterpret_cast<std::vector<HWND>*>(param)->push_back(window);
             }
 
             return TRUE;
         },
-        reinterpret_cast<LPARAM>(
-            &result));
+        reinterpret_cast<LPARAM>(&result));
 
     return result;
 }
 
+bool RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, void* procParam) {
+    auto taskbarWindows = FindCurrentProcessTaskbarWindows();
+
+    std::vector<DWORD> processedThreadIds;
+    bool allSucceeded = true;
+
+    for (HWND taskbarWindow : taskbarWindows) {
+        DWORD threadId = GetWindowThreadProcessId(taskbarWindow, nullptr);
+
+        if (!threadId ||
+            std::find(processedThreadIds.begin(), processedThreadIds.end(),
+                      threadId) != processedThreadIds.end()) {
+            continue;
+        }
+
+        processedThreadIds.push_back(threadId);
+
+        if (!RunFromWindowThread(taskbarWindow, proc, procParam)) {
+            Wh_Log(L"Running code on taskbar thread %lu failed", threadId);
+            allSucceeded = false;
+        }
+    }
+
+    if (processedThreadIds.empty()) {
+        Wh_Log(L"No taskbar windows were found in explorer.exe");
+        return false;
+    }
+
+    return allSucceeded;
+}
 
 // -----------------------------------------------------------------------------
 // Apply/remove on taskbar thread
 // -----------------------------------------------------------------------------
 
-void ApplyFromTaskbarThread(
-    bool mainTaskbarOnly = false)
-{
+void ApplyFromTaskbarThread(bool mainTaskbarOnly = false) {
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND window,
-           LPARAM param)
-            -> BOOL
-        {
-            bool mainOnly =
-                param != 0;
+        [](HWND window, LPARAM param) -> BOOL {
+            bool mainOnly = param != 0;
 
             wchar_t className[64]{};
 
-            if (!GetClassNameW(
-                    window,
-                    className,
-                    ARRAYSIZE(className)))
-            {
+            if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
                 return TRUE;
             }
 
-            wux::XamlRoot xamlRoot{
-                nullptr
-            };
+            wux::XamlRoot xamlRoot{nullptr};
 
-            if (_wcsicmp(
-                    className,
-                    L"Shell_TrayWnd") ==
-                0)
-            {
-                xamlRoot =
-                    GetTaskbarXamlRoot(
-                        window);
-            }
-            else if (
-                !mainOnly &&
-                _wcsicmp(
-                    className,
-                    L"Shell_SecondaryTrayWnd") ==
-                    0)
-            {
-                xamlRoot =
-                    GetSecondaryTaskbarXamlRoot(
-                        window);
-            }
-            else {
+            if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                xamlRoot = GetTaskbarXamlRoot(window);
+            } else if (!mainOnly &&
+                       _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+                xamlRoot = GetSecondaryTaskbarXamlRoot(window);
+            } else {
                 return TRUE;
             }
 
             if (!xamlRoot) {
-                Wh_Log(
-                    L"Couldn't obtain taskbar XamlRoot");
+                Wh_Log(L"Couldn't obtain taskbar XamlRoot");
 
                 return TRUE;
             }
 
-            ApplyToXamlRoot(
-                xamlRoot);
+            ApplyToXamlRoot(xamlRoot);
 
             return TRUE;
         },
-        static_cast<LPARAM>(
-            mainTaskbarOnly));
+        static_cast<LPARAM>(mainTaskbarOnly));
 }
 
 void RebuildFromTaskbarThread() {
@@ -3655,100 +2944,167 @@ void RebuildFromTaskbarThread() {
     }
 }
 
-void ApplyFromAnyThread(
-    HWND taskbarWnd)
-{
-    RunFromWindowThread(
-        taskbarWnd,
-        [](void*)
-        {
-            ApplyFromTaskbarThread();
-        },
-        nullptr);
+void WINAPI ApplyAllTaskbarsProc(void*) {
+    ApplyFromTaskbarThread();
 }
 
-void RebuildFromAnyThread(
-    HWND taskbarWnd)
-{
-    RunFromWindowThread(
-        taskbarWnd,
-        [](void*)
-        {
-            RebuildFromTaskbarThread();
-        },
-        nullptr);
+void WINAPI RebuildAllTaskbarsProc(void*) {
+    RebuildFromTaskbarThread();
 }
-
 
 // -----------------------------------------------------------------------------
 // Taskbar creation hooks
 // -----------------------------------------------------------------------------
 
-using TrayUI_StartTaskbar_t =
-    void (WINAPI*)(void* pThis);
+using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
 
-TrayUI_StartTaskbar_t
-    TrayUI_StartTaskbar_Original;
+TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original;
 
-void WINAPI TrayUI_StartTaskbar_Hook(
-    void* pThis)
-{
-    TrayUI_StartTaskbar_Original(
-        pThis);
+void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
+    TrayUI_StartTaskbar_Original(pThis);
 
     if (!g_unloading) {
-        ApplyFromTaskbarThread(
-            true);
+        ApplyFromTaskbarThread(true);
     }
 }
 
+using CSecondaryTray_GetTrayWindow_t = HWND(WINAPI*)(void* pThis);
 
-using CSecondaryTray_GetTrayWindow_t =
-    HWND (WINAPI*)(void* pThis);
+CSecondaryTray_GetTrayWindow_t CSecondaryTray_GetTrayWindow_Original;
 
-CSecondaryTray_GetTrayWindow_t
-    CSecondaryTray_GetTrayWindow_Original;
+using CSecondaryTray_InitModelAndHost_t = void(WINAPI*)(void* pThis,
+                                                        void* taskbarModel);
 
+CSecondaryTray_InitModelAndHost_t CSecondaryTray_InitModelAndHost_Original;
 
-using CSecondaryTray_InitModelAndHost_t =
-    void (WINAPI*)(
-        void* pThis,
-        void* taskbarModel);
-
-CSecondaryTray_InitModelAndHost_t
-    CSecondaryTray_InitModelAndHost_Original;
-
-void WINAPI
-CSecondaryTray_InitModelAndHost_Hook(
-    void* pThis,
-    void* taskbarModel)
-{
-    CSecondaryTray_InitModelAndHost_Original(
-        pThis,
-        taskbarModel);
+void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
+                                                 void* taskbarModel) {
+    CSecondaryTray_InitModelAndHost_Original(pThis, taskbarModel);
 
     if (g_unloading) {
         return;
     }
 
-    HWND taskbarWnd =
-        CSecondaryTray_GetTrayWindow_Original(
-            pThis);
+    HWND taskbarWnd = CSecondaryTray_GetTrayWindow_Original(pThis);
 
     if (!taskbarWnd) {
         return;
     }
 
-    auto xamlRoot =
-        GetSecondaryTaskbarXamlRoot(
-            taskbarWnd);
+    auto xamlRoot = GetSecondaryTaskbarXamlRoot(taskbarWnd);
 
     if (xamlRoot) {
-        ApplyToXamlRoot(
-            xamlRoot);
+        ApplyToXamlRoot(xamlRoot);
     }
 }
 
+// -----------------------------------------------------------------------------
+// Start button recreation hook
+// -----------------------------------------------------------------------------
+
+using ExperienceToggleButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
+
+ExperienceToggleButton_UpdateButtonPadding_t
+    ExperienceToggleButton_UpdateButtonPadding_Original;
+
+void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
+    ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
+
+    if (g_unloading || !pThis) {
+        return;
+    }
+
+    try {
+        IUnknown* inspectable = reinterpret_cast<IUnknown**>(pThis)[1];
+
+        if (!inspectable) {
+            return;
+        }
+
+        wux::FrameworkElement element{nullptr};
+
+        inspectable->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
+                                    winrt::put_abi(element));
+
+        if (!element ||
+            winrt::get_class_name(element) !=
+                L"Taskbar.ExperienceToggleButton" ||
+            wuxa::AutomationProperties::GetAutomationId(element) !=
+                L"StartButton") {
+            return;
+        }
+
+        AttachToStartButton(element);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Handling a recreated Start button failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Handling a recreated Start button failed");
+    }
+}
+
+std::atomic<bool> g_taskbarViewDllLoaded = false;
+
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
+            &ExperienceToggleButton_UpdateButtonPadding_Original,
+            ExperienceToggleButton_UpdateButtonPadding_Hook,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"Failed to resolve Taskbar.View.dll symbols");
+        return false;
+    }
+
+    return true;
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
+
+    if (!module) {
+        module = GetModuleHandleW(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedTaskbarViewModule(HMODULE module) {
+    if (g_unloading || !module || GetTaskbarViewModuleHandle() != module) {
+        return;
+    }
+
+    bool expected = false;
+
+    if (!g_taskbarViewDllLoaded.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
+    Wh_Log(L"Taskbar view module loaded");
+
+    if (!HookTaskbarViewDllSymbols(module)) {
+        g_taskbarViewDllLoaded = false;
+        return;
+    }
+
+    Wh_ApplyHookOperations();
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+
+LoadLibraryExW_t LoadLibraryExW_Original;
+
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
+
+    HandleLoadedTaskbarViewModule(module);
+
+    return module;
+}
 
 // -----------------------------------------------------------------------------
 // Symbol hooks
@@ -3756,94 +3112,67 @@ CSecondaryTray_InitModelAndHost_Hook(
 
 bool HookTaskbarDllSymbols() {
     HMODULE taskbarDll =
-        LoadLibraryExW(
-            L"taskbar.dll",
-            nullptr,
-            LOAD_LIBRARY_SEARCH_SYSTEM32);
+        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!taskbarDll) {
-        Wh_Log(
-            L"Failed to load taskbar.dll");
+        Wh_Log(L"Failed to load taskbar.dll");
 
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK
-        hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
 
         {
-            {
-                LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"
-            },
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
         },
 
         {
-            {
-                LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"
-            },
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CSecondaryTaskBand_ITaskListWndSite_vftable,
         },
 
         {
-            {
-                LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"
-            },
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
         },
 
         {
-            {
-                LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"
-            },
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
             &TaskbarHost_FrameHeight_Original,
         },
 
         {
-            {
-                LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"
-            },
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
             &CSecondaryTaskBand_GetTaskbarHost_Original,
         },
 
         {
-            {
-                LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"
-            },
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
             &RefCountDecref_Original,
         },
 
         {
-            {
-                LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"
-            },
+            {LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
             &TrayUI_StartTaskbar_Original,
             TrayUI_StartTaskbar_Hook,
         },
 
         {
-            {
-                LR"(public: virtual struct HWND__ * __cdecl CSecondaryTray::GetTrayWindow(void))"
-            },
+            {LR"(public: virtual struct HWND__ * __cdecl CSecondaryTray::GetTrayWindow(void))"},
             &CSecondaryTray_GetTrayWindow_Original,
         },
 
         {
-            {
-                LR"(public: virtual void __cdecl CSecondaryTray::InitModelAndHost(struct winrt::WindowsUdk::UI::Shell::TaskbarModel))"
-            },
+            {LR"(public: virtual void __cdecl CSecondaryTray::InitModelAndHost(struct winrt::WindowsUdk::UI::Shell::TaskbarModel))"},
             &CSecondaryTray_InitModelAndHost_Original,
             CSecondaryTray_InitModelAndHost_Hook,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(
-            taskbarDll,
-            hooks,
-            ARRAYSIZE(hooks)))
-    {
-        Wh_Log(
-            L"Failed to resolve taskbar.dll symbols");
+    if (!WindhawkUtils::HookSymbols(taskbarDll, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"Failed to resolve taskbar.dll symbols");
 
         return false;
     }
@@ -3851,70 +3180,79 @@ bool HookTaskbarDllSymbols() {
     return true;
 }
 
-
 // -----------------------------------------------------------------------------
 // Windhawk lifecycle
 // -----------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(
-        L"Start Button Replacer initializing");
+    Wh_Log(L"Start Button Replacer initializing");
 
     g_unloading = false;
 
-    LoadSettings();
+    StoreSettings(LoadSettings());
 
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
+    }
+
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            return FALSE;
+        }
+    } else {
+        HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
+
+        if (!kernelBaseModule) {
+            Wh_Log(L"Failed to get kernelbase.dll");
+            return FALSE;
+        }
+
+        auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+            GetProcAddress(kernelBaseModule, "LoadLibraryExW"));
+
+        if (!loadLibraryExW) {
+            Wh_Log(L"Failed to find LoadLibraryExW");
+            return FALSE;
+        }
+
+        if (!WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                            &LoadLibraryExW_Original)) {
+            Wh_Log(L"Hooking LoadLibraryExW failed");
+            return FALSE;
+        }
     }
 
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(
-        L"Start Button Replacer applying");
+    Wh_Log(L"Start Button Replacer applying");
 
-    HWND taskbarWnd =
-        FindCurrentProcessTaskbarWnd();
-
-    if (taskbarWnd) {
-        ApplyFromAnyThread(
-            taskbarWnd);
+    if (!g_taskbarViewDllLoaded) {
+        HandleLoadedTaskbarViewModule(GetTaskbarViewModuleHandle());
     }
+
+    RunOnAllTaskbarThreads(ApplyAllTaskbarsProc, nullptr);
 }
 
 void Wh_ModBeforeUninit() {
-    Wh_Log(
-        L"Start Button Replacer restoring stock icon");
+    Wh_Log(L"Start Button Replacer restoring stock icon");
 
-    g_unloading = true;
+    auto instances = TakeAllInstancesForShutdown();
 
-    HWND taskbarWnd =
-        FindCurrentProcessTaskbarWnd();
-
-    if (taskbarWnd) {
-        RebuildFromAnyThread(
-            taskbarWnd);
-    }
+    DetachInstancesOnOwningThreads(instances);
 }
 
 void Wh_ModUninit() {
-    Wh_Log(
-        L"Start Button Replacer unloaded");
+    Wh_Log(L"Start Button Replacer unloaded");
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(
-        L"Start Button Replacer settings changed");
+    Wh_Log(L"Start Button Replacer settings changed");
 
-    LoadSettings();
+    StoreSettings(LoadSettings());
 
-    HWND taskbarWnd =
-        FindCurrentProcessTaskbarWnd();
-
-    if (taskbarWnd) {
-        RebuildFromAnyThread(
-            taskbarWnd);
-    }
+    RunOnAllTaskbarThreads(RebuildAllTaskbarsProc, nullptr);
 }
