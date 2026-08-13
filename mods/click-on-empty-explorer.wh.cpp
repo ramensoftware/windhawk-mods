@@ -351,6 +351,9 @@ require Windows 11 for tabbed Explorer support.
 #include <comutil.h>
 #include <winrt/base.h>
 
+#include <cstdio>
+#include <cstdlib>
+#include <cwchar>
 #include <cwctype>
 #include <memory>
 #include <mutex>
@@ -622,6 +625,9 @@ static bool StrContainsNorm(PCWSTR haystack, PCWSTR needle) {
     if (!haystack || !needle || !*needle) return false;
     std::wstring h = NormalizeForMatch(haystack);
     std::wstring n = NormalizeForMatch(needle);
+    // A match string that normalizes to empty (e.g. a stray space, "&", or a tab)
+    // would otherwise make StrStrIW succeed for the first entry it walks — don't.
+    if (n.empty()) return false;
     return StrStrIW(h.c_str(), n.c_str()) != NULL;
 }
 
@@ -998,7 +1004,7 @@ public:
 
     // ---- External program launchers (via browser — works for virtual folders too) ----
 
-    void OpenInVSCode(PCWSTR match = nullptr) {
+    void OpenInVSCode(PCWSTR match) {
         // "Code" is a loose substring match — entries like "Encode with HandBrake"
         // also contain "code" and may be invoked instead. Route through the generic
         // path so a per-trigger Context Menu Match can override the default; see the
@@ -1215,9 +1221,9 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     // Uses nullptr callback (TIMERPROC lives in mod image, unsafe across unload).
     if (uMsg == WM_TIMER) {
         switch (wParam) {
-        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); return 0;
-        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
-        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, 0); return 0;
+        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, 0); return 0;
+        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, 0); return 0;
         }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);  // let Explorer handle its own timers
     }
@@ -1394,9 +1400,9 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     // WM_TIMER: handles deferred middle-click, double-click, and duplicate-tab timers.
     if (uMsg == WM_TIMER) {
         switch (wParam) {
-        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, dwRefData); return 0;
-        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
-        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, dwRefData); return 0;
+        case 0x4D43: NavigateNewTabProc(hWnd, uMsg, wParam, 0); return 0;
+        case 0x4D44: MidClickTimerProc(hWnd, uMsg, wParam, 0); return 0;
+        case 0x4D45: DblClickTimerProc(hWnd, uMsg, wParam, 0); return 0;
         }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);  // let Explorer handle its own timers
     }
