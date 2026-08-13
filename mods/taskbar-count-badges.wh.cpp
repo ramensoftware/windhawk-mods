@@ -1687,7 +1687,7 @@ bool HookTaskbarView(HMODULE module) {
     if (g_taskbarViewHooked.exchange(true)) {
         return true;
     }
-
+// Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
