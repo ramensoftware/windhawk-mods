@@ -87,11 +87,13 @@ Each trigger has its own independent custom hotkey field.
 
 When you choose **Open Context Menu Item** for a trigger, this text field tells the mod which
 right-click background menu entry to invoke. The mod opens the folder's actual right-click
-context menu programmatically and clicks the first entry that matches your input.
+context menu programmatically and invokes the entry that matches your input.
 
 ### Matching Rules
 
-Matching is **case-insensitive** and ignores **spaces** and `&` accelerator markers:
+Matching is **case-insensitive** and ignores **spaces** and `&` accelerator markers. An
+**exact** match on the normalized text or verb takes priority over a substring match, and
+top-level entries are checked before submenu entries, in menu order:
 
 | Menu item text              | Verb              | You can type any of                      |
 |-----------------------------|-------------------|------------------------------------------|
@@ -629,15 +631,29 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
                                  HWND hwnd, PCWSTR matchText, int idCmdFirst,
                                  std::vector<std::wstring>* dumpLines = nullptr,
                                  int depth = 0) {
+    std::wstring normMatch = NormalizeForMatch(matchText);
+    if (normMatch.empty()) return false;
+
     int count = GetMenuItemCount(hMenu);
+
+    // Collect this level's leaf items and submenus (in menu order) and build the
+    // diagnostic dump. Matching runs afterwards in three passes so that:
+    //   1) an exact (normalized text/verb) hit beats a substring hit — typing the
+    //      full entry name is immune to "Encode"/"Decode"-style misfires;
+    //   2) top-level entries are tested before nested ones, as the README promises
+    //      ("first one in menu order"), which also avoids expanding submenus when a
+    //      top-level entry already matches.
+    struct LeafItem { UINT offset; std::wstring text, verb, normText, normVerb; };
+    struct SubmenuItem { int index; HMENU hSubMenu; };
+    std::vector<LeafItem> leaves;
+    std::vector<SubmenuItem> submenus;
+
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = { sizeof(mii) };
         mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
 
         if (mii.hSubMenu != NULL) {
-            if (pcm2)
-                pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)mii.hSubMenu, MAKELPARAM(i, 0));
             if (dumpLines) {
                 wchar_t stext[MAX_PATH] = {};
                 MENUITEMINFOW miiT = { sizeof(miiT), MIIM_STRING };
@@ -650,9 +666,7 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
                     stext[0] ? stext : L"(no text)", mii.wID);
                 dumpLines->push_back(buf);
             }
-            if (EnumContextMenuMatch(mii.hSubMenu, pcm, pcm2, hwnd, matchText, idCmdFirst,
-                                     dumpLines, depth + 2))
-                return true;
+            submenus.push_back({ i, mii.hSubMenu });
             continue;
         }
 
@@ -673,27 +687,50 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
         miiT.dwTypeData = text; miiT.cch = MAX_PATH;
         GetMenuItemInfoW(hMenu, i, TRUE, &miiT);
 
+        leaves.push_back({ offset, text, verb,
+                           NormalizeForMatch(text), NormalizeForMatch(verb) });
+
         if (dumpLines) {
-            std::wstring normText = NormalizeForMatch(text);
-            std::wstring normVerb = NormalizeForMatch(verb);
             wchar_t buf[640];
             _snwprintf_s(buf, _countof(buf), _TRUNCATE,
                 L"CMENU%s[%s] wID=%u offset=%u verb=[%s]  → match: \"%s\" or \"%s\"",
                 std::wstring(depth, L' ').c_str(),
                 text[0] ? text : L"(no text)", mii.wID, offset,
                 verb[0] ? verb : L"(none)",
-                normText.c_str(), normVerb[0] ? normVerb.c_str() : L"<no verb>");
+                leaves.back().normText.c_str(),
+                leaves.back().normVerb[0] ? leaves.back().normVerb.c_str() : L"<no verb>");
             dumpLines->push_back(buf);
         }
+    }
 
-        if (StrContainsNorm(text, matchText) || StrContainsNorm(verb, matchText)) {
-            CMINVOKECOMMANDINFO ci = { sizeof(ci) };
-            ci.hwnd = hwnd;
-            ci.lpVerb = MAKEINTRESOURCEA(offset);
-            ci.nShow = SW_SHOWNORMAL;
-            if (SUCCEEDED(pcm->InvokeCommand(&ci)))
-                return true;
+    auto invokeLeaf = [&](const LeafItem& it) -> bool {
+        CMINVOKECOMMANDINFO ci = { sizeof(ci) };
+        ci.hwnd = hwnd;
+        ci.lpVerb = MAKEINTRESOURCEA(it.offset);
+        ci.nShow = SW_SHOWNORMAL;
+        return SUCCEEDED(pcm->InvokeCommand(&ci));
+    };
+
+    // Pass 1: exact match on the normalized text or verb.
+    for (const auto& it : leaves) {
+        if (it.normText == normMatch || it.normVerb == normMatch) {
+            if (invokeLeaf(it)) return true;
         }
+    }
+    // Pass 2: substring match.
+    for (const auto& it : leaves) {
+        if (StrContainsNorm(it.text.c_str(), matchText) ||
+            StrContainsNorm(it.verb.c_str(), matchText)) {
+            if (invokeLeaf(it)) return true;
+        }
+    }
+    // Pass 3: descend into submenus in menu order.
+    for (const auto& sm : submenus) {
+        if (pcm2)
+            pcm2->HandleMenuMsg(WM_INITMENUPOPUP, (WPARAM)sm.hSubMenu, MAKELPARAM(sm.index, 0));
+        if (EnumContextMenuMatch(sm.hSubMenu, pcm, pcm2, hwnd, matchText, idCmdFirst,
+                                 dumpLines, depth + 2))
+            return true;
     }
     return false;
 }
@@ -1402,10 +1439,6 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     if (LOWORD(wParam) != WM_LBUTTONDOWN && LOWORD(wParam) != WM_MBUTTONDOWN)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-    auto pUIA = GetUIAutomation();
-    if (!pUIA)
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-
     SettingsSnapshot s = CopySettings();
 
     // Middle click — timer-based double-click detection
@@ -1413,6 +1446,12 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         bool singleOn = wcscmp(s.middleClick.c_str(), L"none") != 0;
         bool doubleOn = wcscmp(s.doubleMiddleClick.c_str(), L"none") != 0;
         if (!singleOn && !doubleOn)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+        // Create the per-thread UIAutomation object lazily, only once an action is
+        // configured and we actually need to hit-test the click point.
+        auto pUIA = GetUIAutomation();
+        if (!pUIA)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         POINT mousePos;
@@ -1457,6 +1496,12 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         bool shiftOn  = (wcscmp(s.shiftClick.c_str(), L"none") != 0);
 
         if (!dblOn && !tripleOn && !ctrlOn && !altOn && !shiftOn)
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+        // Create the per-thread UIAutomation object lazily, only once an action is
+        // configured and we actually need to hit-test the click point.
+        auto pUIA = GetUIAutomation();
+        if (!pUIA)
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
         POINT mousePos;
