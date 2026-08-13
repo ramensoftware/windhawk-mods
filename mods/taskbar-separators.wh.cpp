@@ -53,9 +53,12 @@ preview](https://raw.githubusercontent.com/digart11/taskbar-separators/master/im
   - Ring
   - Square
   - Diamond
-- Adjustable physical divider gap, thickness, length, opacity, color, and effect settings
-- Physical divider gaps create real layout space between neighboring taskbar buttons
-- Existing taskbar button margins are preserved and the divider gap is added on top of them
+- Adjustable physical divider gap, thickness, length, opacity, color, and effect
+settings
+- Physical divider gaps create real layout space between neighboring taskbar
+buttons
+- Existing taskbar button margins are preserved and the divider gap is added on
+top of them
 - Improved positioning after taskbar button drag/reorder
 - Pixel-aligned divider positioning for more consistent rendering
 - Automatic horizontal and vertical taskbar orientation
@@ -68,7 +71,8 @@ preview](https://raw.githubusercontent.com/digart11/taskbar-separators/master/im
 2. Add separator positions to the **Separators** list.
 3. A position of `3` places a separator after the third application button.
 4. Select a style and adjust its appearance.
-5. Use **Divider Gap** to reserve additional physical space around configured separators.
+5. Use **Divider gap** to reserve additional physical space around configured
+separators.
 
 ## Position behavior
 
@@ -90,16 +94,16 @@ which icons appear beside a configured separator.
 
 ## Divider gap
 
-The **Divider Gap** setting reserves additional physical space at each configured
-separator position.
+The **Divider gap** setting reserves additional physical space at each
+configured separator position.
 
 The gap is applied only where separators exist. It does not globally increase
 the spacing between all taskbar buttons.
 
-Existing taskbar button margins are preserved, allowing the gap to work alongside
-normal Windows layout values and compatible taskbar styling mods.
+Existing taskbar button margins are preserved, allowing the gap to work
+alongside normal Windows layout values and compatible taskbar styling mods.
 
-Set **Divider Gap** to `0` to use the original overlay-only behavior.
+Set **Divider gap** to `0` to use the original overlay-only behavior.
 
 ## Settings
 
@@ -157,7 +161,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
   - square: Square
   - diamond: Diamond
 - separatorGap: 0
-  $name: Divider Gap
+  $name: Divider gap
   $description: Extra physical space reserved at each divider position, from 0 to 32 pixels. Set to 0 for the original overlay-only behavior.
 - color: "#FFFF00"
   $name: Color
@@ -310,6 +314,7 @@ struct AnimationDividerCache {
     winrt::weak_ref<FrameworkElement> nextIcon;
     TaskbarOrientation orientation = TaskbarOrientation::horizontal;
     bool beforeFirst = false;
+    double primaryOffset = 0;
     bool hasLastPosition = false;
     double lastLeft = 0;
     double lastTop = 0;
@@ -341,6 +346,7 @@ struct TrackedButtonMarginState {
     winrt::weak_ref<FrameworkElement> button;
     Thickness baseMargin{};
     Thickness lastAppliedMargin{};
+    bool baseMarginWasLocal = false;
     bool hasAppliedMargin = false;
 };
 
@@ -529,16 +535,14 @@ void LoadSettings() {
     settings.height = std::clamp(Wh_GetIntSetting(L"height"), 4, 48);
     settings.opacityPercent = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
 
-    PCWSTR colorText = Wh_GetStringSetting(L"color");
-    if (!ParseColor(colorText, &settings.color)) {
+    auto colorText = WindhawkUtils::StringSetting::make(L"color");
+    if (!ParseColor(colorText.get(), &settings.color)) {
         Wh_Log(L"Invalid color; using #FFFF00");
         settings.color = winrt::Windows::UI::Color{255, 255, 255, 0};
     }
-    Wh_FreeStringSetting(colorText);
 
-    PCWSTR styleText = Wh_GetStringSetting(L"style");
-    settings.style = ParseDividerStyle(styleText);
-    Wh_FreeStringSetting(styleText);
+    auto styleText = WindhawkUtils::StringSetting::make(L"style");
+    settings.style = ParseDividerStyle(styleText.get());
     settings.cornerRadius =
         std::clamp(Wh_GetIntSetting(L"cornerRadius"), 0, 12);
     settings.fadeAmount = std::clamp(Wh_GetIntSetting(L"fadeAmount"), 0, 100);
@@ -550,19 +554,17 @@ void LoadSettings() {
     settings.separatorGap =
         std::clamp(Wh_GetIntSetting(L"separatorGap"), 0, 32);
 
-    PCWSTR orientationText = Wh_GetStringSetting(L"orientation");
-    if (wcscmp(orientationText, L"horizontal") == 0) {
+    auto orientationText = WindhawkUtils::StringSetting::make(L"orientation");
+    if (wcscmp(orientationText.get(), L"horizontal") == 0) {
         settings.orientation = OrientationSetting::horizontal;
-    } else if (wcscmp(orientationText, L"vertical") == 0) {
+    } else if (wcscmp(orientationText.get(), L"vertical") == 0) {
         settings.orientation = OrientationSetting::vertical;
     }
-    Wh_FreeStringSetting(orientationText);
 
-    PCWSTR animationCompatibilityText =
-        Wh_GetStringSetting(L"animationCompatibility");
+    auto animationCompatibilityText =
+        WindhawkUtils::StringSetting::make(L"animationCompatibility");
     settings.animationCompatibility =
-        wcscmp(animationCompatibilityText, L"on") == 0;
-    Wh_FreeStringSetting(animationCompatibilityText);
+        wcscmp(animationCompatibilityText.get(), L"on") == 0;
     settings.separatorBeforeFirstApp =
         Wh_GetIntSetting(L"separatorBeforeFirstApp") != 0;
 
@@ -1070,6 +1072,37 @@ void SnapDividerGeometryToPhysicalPixels(
     geometry->top = SnapToPhysicalPixel(geometry->top, scale);
 }
 
+double GetBoundaryDividerPrimaryOffset(DividerGeometry const& geometry,
+                                       TaskbarOrientation orientation,
+                                       bool beforeFirst,
+                                       bool afterLast,
+                                       double separatorGap) {
+    if ((!beforeFirst && !afterLast) || separatorGap <= 0) {
+        return 0;
+    }
+
+    double direction = PrimaryCenter(geometry.nextBounds, orientation) -
+                       PrimaryCenter(geometry.targetBounds, orientation);
+    if (!std::isfinite(direction) || std::fabs(direction) <= 0.1) {
+        return 0;
+    }
+
+    double signedHalfGap = std::copysign(separatorGap / 2.0, direction);
+    return beforeFirst ? -signedHalfGap : signedHalfGap;
+}
+
+void ApplyDividerPrimaryOffset(FrameworkElement const& referenceElement,
+                               TaskbarOrientation orientation,
+                               double primaryOffset,
+                               DividerGeometry* geometry) {
+    if (orientation == TaskbarOrientation::horizontal) {
+        geometry->left += primaryOffset;
+    } else {
+        geometry->top += primaryOffset;
+    }
+    SnapDividerGeometryToPhysicalPixels(referenceElement, geometry);
+}
+
 bool TryCalculateDividerPosition(double primaryCenter,
                                  double crossOrigin,
                                  TaskbarOrientation orientation,
@@ -1402,6 +1435,9 @@ bool RefreshCachedDividerGeometry(TrackedTaskbarState& taskbar,
             return false;
         }
 
+        ApplyDividerPrimaryOffset(overlayCanvas, cache.orientation,
+                                  cache.primaryOffset, &geometry);
+
         constexpr double kWriteEpsilon = 0.01;
         double currentLeft = Controls::Canvas::GetLeft(host);
         double currentTop = Controls::Canvas::GetTop(host);
@@ -1455,9 +1491,15 @@ void OnAnimationRendering(size_t taskbarId,
                 // final order before we reassign gaps and divider geometry.
                 // Don't keep a TrackedTaskbarState reference across this call:
                 // reconciliation can prune/reallocate the tracked-taskbar list.
-                ReconcileTaskbarRepeater(repeater, true);
+                ReconcileTaskbarRepeater(repeater, false);
             }
         } catch (...) {
+        }
+
+        auto* refreshed = FindTrackedTaskbarById(taskbarId);
+        if (refreshed && !refreshed->nativeSettlingActive &&
+            refreshed->animationLastActivity == AnimationClock::time_point{}) {
+            StopAllGeometryTracking(*refreshed);
         }
         return;
     }
@@ -1602,10 +1644,9 @@ void OnAnimationPointerExited(size_t taskbarId,
     taskbar.animationLastActivity = AnimationClock::now();
 }
 
-void OnReorderPointerReleased(
-    size_t taskbarId,
-    winrt::Windows::Foundation::IInspectable const&,
-    Input::PointerRoutedEventArgs const&) {
+void OnReorderPointerReleased(size_t taskbarId,
+                              winrt::Windows::Foundation::IInspectable const&,
+                              Input::PointerRoutedEventArgs const&) {
     auto* taskbarState = FindTrackedTaskbarById(taskbarId);
     if (!taskbarState || g_unloading.load(std::memory_order_acquire)) {
         return;
@@ -1620,9 +1661,8 @@ void DetachReorderPointerHandler(TrackedTaskbarState& taskbar) {
         if (auto source = taskbar.reorderPointerSource.get()) {
             if (taskbar.reorderPointerReleasedHandler) {
                 try {
-                    source.RemoveHandler(
-                        UIElement::PointerReleasedEvent(),
-                        taskbar.reorderPointerReleasedHandler);
+                    source.RemoveHandler(UIElement::PointerReleasedEvent(),
+                                         taskbar.reorderPointerReleasedHandler);
                 } catch (...) {
                     // The root can disappear while Explorer rebuilds.
                 }
@@ -1901,9 +1941,12 @@ void RestoreTrackedButtonMargin(TrackedButtonMarginState& tracked) {
         // element. If Windows or another mod changed Margin afterwards, that
         // newer value belongs to them and must not be overwritten.
         Thickness current = button.Margin();
-        if (ThicknessApproximatelyEqual(current, tracked.lastAppliedMargin) &&
-            !ThicknessApproximatelyEqual(current, tracked.baseMargin)) {
-            button.Margin(tracked.baseMargin);
+        if (ThicknessApproximatelyEqual(current, tracked.lastAppliedMargin)) {
+            if (tracked.baseMarginWasLocal) {
+                button.Margin(tracked.baseMargin);
+            } else {
+                button.ClearValue(FrameworkElement::MarginProperty());
+            }
         }
     } catch (...) {
     }
@@ -1949,22 +1992,36 @@ void SynchronizeTrackedButtonMargins(
         if (!found) {
             tracked.button = winrt::make_weak(button);
             tracked.baseMargin = current;
+            auto buttonDo = button.as<DependencyObject>();
+            tracked.baseMarginWasLocal =
+                buttonDo.ReadLocalValue(FrameworkElement::MarginProperty()) !=
+                DependencyProperty::UnsetValue();
             tracked.lastAppliedMargin = current;
             tracked.hasAppliedMargin = false;
         } else {
             tracked.button = winrt::make_weak(button);
 
             if (tracked.hasAppliedMargin) {
-                if (!ThicknessApproximatelyEqual(
-                        current, tracked.lastAppliedMargin)) {
+                if (!ThicknessApproximatelyEqual(current,
+                                                 tracked.lastAppliedMargin)) {
                     // Something else changed Margin after our last write.
                     // Treat that as the new base and layer our gap on top.
                     tracked.baseMargin = current;
+                    auto buttonDo = button.as<DependencyObject>();
+                    tracked.baseMarginWasLocal =
+                        buttonDo.ReadLocalValue(
+                            FrameworkElement::MarginProperty()) !=
+                        DependencyProperty::UnsetValue();
                     tracked.lastAppliedMargin = current;
                     tracked.hasAppliedMargin = false;
                 }
             } else {
                 tracked.baseMargin = current;
+                auto buttonDo = button.as<DependencyObject>();
+                tracked.baseMarginWasLocal =
+                    buttonDo.ReadLocalValue(
+                        FrameworkElement::MarginProperty()) !=
+                    DependencyProperty::UnsetValue();
                 tracked.lastAppliedMargin = current;
             }
         }
@@ -2442,7 +2499,8 @@ void ConfigureStyleHost(Controls::Canvas const& host,
         SetSolidFill(main, settings.color);
 
         if (settings.style == DividerStyle::diamond) {
-            auto rotate = main.RenderTransform().try_as<Media::RotateTransform>();
+            auto rotate =
+                main.RenderTransform().try_as<Media::RotateTransform>();
             if (!rotate) {
                 rotate = Media::RotateTransform();
                 main.RenderTransform(rotate);
@@ -2634,46 +2692,46 @@ void ApplyTrackedButtonGapMargins(
     std::vector<FrameworkElement> const& appButtons,
     std::vector<ButtonGapContribution> const& contributions,
     TaskbarReconciliationSnapshot* snapshot) {
-    if (taskbar.buttonMargins.size() != appButtons.size() ||
-        contributions.size() != appButtons.size()) {
+    if (contributions.size() != appButtons.size()) {
         return;
     }
 
     for (size_t index = 0; index < appButtons.size(); index++) {
         auto const& button = appButtons[index];
-        if (!button) {
+        if (!button || index >= taskbar.buttonMargins.size()) {
             continue;
         }
 
         auto& tracked = taskbar.buttonMargins[index];
         auto const& gap = contributions[index];
-        Thickness desired = tracked.baseMargin;
-        desired.Left += gap.left;
-        desired.Top += gap.top;
-        desired.Right += gap.right;
-        desired.Bottom += gap.bottom;
+        bool hasGap =
+            std::fabs(gap.left) > 0.001 || std::fabs(gap.top) > 0.001 ||
+            std::fabs(gap.right) > 0.001 || std::fabs(gap.bottom) > 0.001;
+        if (hasGap) {
+            Thickness desired = tracked.baseMargin;
+            desired.Left += gap.left;
+            desired.Top += gap.top;
+            desired.Right += gap.right;
+            desired.Bottom += gap.bottom;
 
-        Thickness current = button.Margin();
-        if (!ThicknessApproximatelyEqual(current, desired)) {
-            button.Margin(desired);
+            Thickness current = button.Margin();
+            if (!ThicknessApproximatelyEqual(current, desired)) {
+                button.Margin(desired);
+            }
+            tracked.lastAppliedMargin = desired;
+            tracked.hasAppliedMargin = true;
+        } else if (tracked.hasAppliedMargin) {
+            RestoreTrackedButtonMargin(tracked);
         }
 
-        bool hasGap = std::fabs(gap.left) > 0.001 ||
-                      std::fabs(gap.top) > 0.001 ||
-                      std::fabs(gap.right) > 0.001 ||
-                      std::fabs(gap.bottom) > 0.001;
-        tracked.lastAppliedMargin = desired;
-        tracked.hasAppliedMargin = hasGap;
-
         // The reconciliation signature must describe the value we just
-        // applied, otherwise our own margin write looks like an external
-        // layout change on the next UpdateVisualStates call.
+        // applied or restored, otherwise our own margin write looks like an
+        // external layout change on the next UpdateVisualStates call.
         if (snapshot && index < snapshot->buttons.size()) {
-            snapshot->buttons[index].margin = desired;
+            snapshot->buttons[index].margin = button.Margin();
         }
     }
 }
-
 
 bool IsFiniteThickness(Thickness const& thickness) {
     return std::isfinite(thickness.Left) && std::isfinite(thickness.Top) &&
@@ -3221,7 +3279,8 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                     if (activeSeparator.beforeFirst) {
                         // Before-first geometry needs two app icons, so only
                         // reserve space when that divider can actually exist.
-                        if (appButtons.size() >= 2) {
+                        if (appIcons.size() >= 2 && appIcons[0] &&
+                            appIcons[1]) {
                             if (taskbarOrientation ==
                                 TaskbarOrientation::horizontal) {
                                 gapContributions[0].left += fullGap;
@@ -3292,6 +3351,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 FrameworkElement previousIcon = nullptr;
                 FrameworkElement targetIcon = nullptr;
                 FrameworkElement nextIcon = nullptr;
+                size_t buttonIndex = 0;
                 if (activeSeparator.beforeFirst) {
                     if (!appIcons.empty()) {
                         targetIcon = appIcons[0];
@@ -3300,8 +3360,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                         }
                     }
                 } else {
-                    size_t buttonIndex =
-                        static_cast<size_t>(separator.position - 1);
+                    buttonIndex = static_cast<size_t>(separator.position - 1);
                     if (buttonIndex < appIcons.size()) {
                         targetIcon = appIcons[buttonIndex];
                         if (buttonIndex > 0) {
@@ -3323,7 +3382,11 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                         : targetIcon && (nextIcon || previousIcon);
                 DividerGeometry geometry;
                 bool geometryValid = false;
-                if (orientationValid && targetIcon) {
+                bool beforeFirstHasReliablePitch =
+                    !activeSeparator.beforeFirst ||
+                    settings.separatorGap == 0 || nextIcon;
+                if (orientationValid && targetIcon &&
+                    beforeFirstHasReliablePitch) {
                     geometryValid =
                         activeSeparator.beforeFirst
                             ? TryGetBeforeFirstDividerGeometry(
@@ -3354,6 +3417,14 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                     }
                     continue;
                 }
+
+                bool afterLast = !activeSeparator.beforeFirst &&
+                                 buttonIndex + 1 >= appButtons.size();
+                double primaryOffset = GetBoundaryDividerPrimaryOffset(
+                    geometry, taskbarOrientation, activeSeparator.beforeFirst,
+                    afterLast, static_cast<double>(settings.separatorGap));
+                ApplyDividerPrimaryOffset(overlayCanvas, taskbarOrientation,
+                                          primaryOffset, &geometry);
 
                 auto host = existingHosts[activeIndex];
                 if (!host) {
@@ -3417,6 +3488,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 }
                 cache.orientation = taskbarOrientation;
                 cache.beforeFirst = activeSeparator.beforeFirst;
+                cache.primaryOffset = primaryOffset;
                 animationDividers.push_back(std::move(cache));
                 activeDividerCount++;
             }
