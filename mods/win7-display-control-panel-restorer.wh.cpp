@@ -9,7 +9,7 @@
 // @include         control.exe
 // @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lwininet -ladvapi32 -lshlwapi -lole32 -loleaut32 -loleacc -luser32 -lshell32 -luuid -lwinpthread -lgdi32 -lcomctl32
+// @compilerOptions -lwininet -ladvapi32 -lole32 -luser32 -lshell32 -luuid -lwinpthread -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -31,6 +31,18 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 - **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use.
 - **Safe Fallback:** If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.
 - **Instant Toggle:** Disabling the mod immediately restores normal Windows behavior for newly opened pages.
+
+---
+
+## Screenshots
+
+The restored classic **Display** hub:
+
+![Restored classic Display hub](https://i.imgur.com/REPLACE_ME_DISPLAY_HUB.png)
+
+The restored classic **Screen Resolution** page:
+
+![Restored classic Screen Resolution page](https://i.imgur.com/REPLACE_ME_SCREEN_RESOLUTION.png)
 
 ---
 
@@ -73,9 +85,9 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 
 ## Known Limitations
 
-- **Incomplete resolution list:** In some configurations, not all available resolutions are shown in the resolution dropdown.
 - **Combobox inside the screen preview:** The combobox that appears inside the screen preview area does not function correctly.
-- The mod does not replace or modify any Windows system file; all registration is virtual and exists only while the mod is active.
+- The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.
+- The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.
 - Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.
 
 ---
@@ -132,8 +144,8 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
   $description: Restores the Windows 7-style Orientation row (Landscape, Portrait and flipped variants) on the Screen Resolution page for adapters whose driver does not advertise rotation, where the 1511 provider hides its own row. Visual restore; on rotation-capable displays the native row already appears, so leave this OFF there to avoid a duplicate.
 
 - enableDpiPresets: true
-  $name: Keep the classic DPI preset radios selectable
-  $description: Keeps the classic 100/125/150/200% radios and the scaling checkbox on the restored Display hub selectable, like the original Windows 7 page (ON by default). Turning it OFF shows them as a static preview. Changing the scale is done through "Custom sizing options" or Display settings.
+  $name: Keep the classic DPI presets selectable
+  $description: Keeps the classic 100/125/150/200% scaling choices on the restored Display hub, like the original Windows 7 page (ON by default). Clicking a preset applies the classic scaling and shows a notification that it takes effect after you sign out; the dot marks the currently applied level. The "one scaling level" choice opens the system's own DPI dialog. Turning it OFF disables the choices.
 
 */
 // ==/WindhawkModSettings==
@@ -147,7 +159,6 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 #include <shlobj.h>
 #include <servprov.h>
 #include <oaidl.h>
-#include <oleacc.h>
 #include <cstdint>
 #include <climits>
 #include <cstdlib>
@@ -158,6 +169,7 @@ English, Italian, Spanish, French, Turkish, Russian, Simplified Chinese, German,
 #include <new>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -684,6 +696,11 @@ static HANDLE g_stopEvent = nullptr;
 // Set by Wh_ModUninit so the background setup (and any in-flight download) can
 // abort promptly instead of blocking shutdown.
 std::atomic<bool> g_shuttingDown{false};
+// Whether the background setup worker may run in this process. Disabled
+// for rundll32.exe launch hosts, which only ever need the classic launch
+// routing: a redirected launch hands off to the shell URI and the restored
+// page renders in explorer.exe, never in rundll32.
+std::atomic<bool> g_runSetupWorker{true};
 static const DWORD kDownloadTimeoutMs = 20000;
 static const int kMaxDownloadAttempts = 3;
 static const DWORD kRetryDelayMs = 3000;
@@ -710,7 +727,7 @@ static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 // content is fully determined by the translation inputs plus the mod's
 // embedded string catalog, so bumping this invalidates files built by older
 // versions of the mod whenever the catalog changes.
-static constexpr DWORD kLocalizedResourceFormatVersion = 15;
+static constexpr DWORD kLocalizedResourceFormatVersion = 16;
 
 // Setup is performed on a background worker thread that is joined on unload.
 // Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
@@ -942,6 +959,39 @@ static bool FileSha256Matches(const std::wstring& path, const wchar_t* expectedH
         }
     }
     return true;
+}
+
+static std::wstring ComputeFileSha256Hex(const std::wstring& path) {
+    BYTE digest[32];
+    if (!ComputeFileSha256(path, digest)) return {};
+    wchar_t hex[65] = {};
+    for (int i = 0; i < 32; ++i) {
+        hex[i * 2] = HexUpper(digest[i] >> 4);
+        hex[i * 2 + 1] = HexUpper(digest[i] & 0xF);
+    }
+    return hex;
+}
+
+// The private resource module's UIFILE/XMLFILE resources are the page
+// markup, so a reused file must be more than "an MZ/PE header >= 64 KB": its
+// content is fully deterministic, so its SHA-256 is recorded at build time and
+// re-checked before any existing file is adopted again. One hash per reuse
+// closes the gap between the weak structural check and trusting cached bytes.
+static const wchar_t* kResourceModuleShaSetting = L"resourceModuleSha256";
+
+static bool PrivateResourceModuleHashMatches(const std::wstring& path) {
+    wchar_t stored[128] = {};
+    Wh_GetStringValue(kResourceModuleShaSetting, stored, ARRAYSIZE(stored));
+    if (!stored[0]) return false;
+    const std::wstring hex = ComputeFileSha256Hex(path);
+    if (hex.empty()) return false;
+    return _wcsicmp(hex.c_str(), stored) == 0;
+}
+
+static void RememberPrivateResourceModuleHash(const std::wstring& path) {
+    const std::wstring hex = ComputeFileSha256Hex(path);
+    if (!hex.empty())
+        Wh_SetStringValue(kResourceModuleShaSetting, hex.c_str());
 }
 
 // -----------------------------------------------------------------------------
@@ -2440,7 +2490,6 @@ static const char kWin7PreviewBitmap20Base64[] =
     "0fXQ0dD1z8/P9c7OzvXNzs31y8zL9cnKyvXIycj1x8jH9cbHxvXFxsX1xcXE9cTEwvXExMH1w8PB9cLCwfXBwsH1wcLB9cHCwPXBwsD1wcLA9cHCwPXBwsD1"
     "wcLA9cHBwPXBwcD1wMG/9cDBv/XAwb/1wMG/9cDBv/XAwb/1wMC/9b/Av/W/wL/1v8C/9b+/vvW/v771v8C+9b+/vfW/v731vr++9b6/vvW+v731vr+99b6+"
     "vfW+vr31vr+89b2/vP+9vr31vb699b2+vPW8vbz1vL279bu8u/W6u7n1ubm49be4tvW1trT1srKx9aurqvWqq6r12NfY9Q==";
-
 static const char kWin7PreviewBitmap21Base64[] =
     "KAAAAJYAAAB0AAAAAQAgAAAAAADgDwEAxA4AAMQOAAAAAAAAAAAAANbX2J2hoKH/iYiI/3+Af/96fHz/e319/3p8ff96fH3/ent7/3p7e/96e3v/ent7/3t7"
     "fP97e3z/e3x9/3t8ff97fH3/e3x9/3t8ff97fX3/fH59/3x+fv98fn7/fH1+/3x+fv99fn7/fn5+/35+fv9+f3//f4GB/4CCgv+AgoL/gYOE/4KEhf+DhYX/"
@@ -3216,7 +3265,6 @@ static const char kWin7PreviewBitmap21Base64[] =
     "0fXQ0dD1z8/P9c7OzvXNzs31y8zL9cnKyvXIycj1x8jH9cbHxvXFxsX1xcXE9cTEwvXExMH1w8PB9cLCwfXBwsH1wcLB9cHCwPXBwsD1wcLA9cHCwPXBwsD1"
     "wcLA9cHBwPXBwcD1wMG/9cDBv/XAwb/1wMG/9cDBv/XAwb/1wMC/9b/Av/W/wL/1v8C/9b+/vvW/v771v8C+9b+/vfW/v731vr++9b6/vvW+v731vr+99b6+"
     "vfW+vr31vr+89b2/vP+9vr31vb699b2+vPW8vbz1vL279bu8u/W6u7n1ubm49be4tvW1trT1srKx9aurqvWqq6r12NfY9Q==";
-
 static const char kWin7PreviewBitmap22Base64[] =
     "KAAAAJYAAAB0AAAAAQAgAAAAAADgDwEAxA4AAMQOAAAAAAAAAAAAANbX2J2hoKH/iYiI/3+Af/96fHz/e319/3p8ff96fH3/ent7/3p7e/96e3v/ent7/3t7"
     "fP97e3z/e3x9/3t8ff97fH3/e3x9/3t8ff97fX3/fH59/3x+fv98fn7/fH1+/3x+fv99fn7/fn5+/35+fv9+f3//f4GB/4CCgv+AgoL/gYOE/4KEhf+DhYX/"
@@ -3992,12 +4040,6 @@ static const char kWin7PreviewBitmap22Base64[] =
     "0fXQ0dD1z8/P9c7OzvXNzs31y8zL9cnKyvXIycj1x8jH9cbHxvXFxsX1xcXE9cTEwvXExMH1w8PB9cLCwfXBwsH1wcLB9cHCwPXBwsD1wcLA9cHCwPXBwsD1"
     "wcLA9cHBwPXBwcD1wMG/9cDBv/XAwb/1wMG/9cDBv/XAwb/1wMC/9b/Av/W/wL/1v8C/9b+/vvW/v771v8C+9b+/vfW/v731vr++9b6/vvW+v731vr+99b6+"
     "vfW+vr31vr+89b2/vP+9vr31vb699b2+vPW8vbz1vL279bu8u/W6u7n1ubm49be4tvW1trT1srKx9aurqvWqq6r12NfY9Q==";
-
-
-// Authentic Windows 7 Display applet icon (user-supplied original),
-// embedded as PNG-in-ICO resource payloads (RT_ICON ids 161/162 and the
-// replacement RT_GROUP_ICON ordinal 1) so the Control Panel item shows
-// the classic glyph instead of the Windows 10 one from the 1511 payload.
 static const char kClassicIcon48Base64[] =
     "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAATVElEQVR4nK2aa4xd13Xff2vv87jnvubOizMckaKo6mGJqiNbSu0m"
     "gkgZStMPbWDHJhu1ARQDhp0WKdwPjvMhRUVCQO1WcIDa/uIPRuy4QpohaqNpURQtYsmvuqidqrYjybJlURNRM8N53bnv89h7r36Y"
@@ -4396,11 +4438,11 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     // are deterministic, so a file built earlier (by this process, a previous
     // session, or control.exe) is byte-identical to a fresh build. Skipping
     // the rebuild avoids the ~650 KB copy + PE patch + resource rewrite on
-    // every process load. If the file is valid it has not been modified in
-    // place (it was built by this mod from a pinned-verified source), so
-    // loading it is safe.
+    // every process load. The recorded SHA-256 (checked below) proves the file
+    // is the deterministic build, not a tampered stand-in.
     if (GetFileAttributesW(destination.c_str()) != INVALID_FILE_ATTRIBUTES &&
-        VerifyDownloadedDllLooksValid(destination)) {
+        VerifyDownloadedDllLooksValid(destination) &&
+        PrivateResourceModuleHashMatches(destination)) {
         g_localizedResourcePath = destination;
         g_lastBuiltLanguageAutomatic = g_languageAutomatic.load();
         g_lastBuiltForcedLanguage = g_forcedLanguage.load();
@@ -4410,6 +4452,8 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
         Wh_Log(L"Reusing existing private resource module: %s",
                destination.c_str());
         TryEmbedClassicIcon(destination);
+        // The icon pass rewrites the file; keep the recorded hash in sync.
+        RememberPrivateResourceModuleHash(destination);
         return true;
     }
     // Invalid leftover from an interrupted build: remove it and rebuild.
@@ -4505,7 +4549,8 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         // Another process may have just built (or mapped) the same
         // deterministic file; if the destination is already valid, use it.
-        if (VerifyDownloadedDllLooksValid(destination)) {
+        if (VerifyDownloadedDllLooksValid(destination) &&
+            PrivateResourceModuleHashMatches(destination)) {
             // Keep the losing temporary file under RAII cleanup. Commit() is
             // only for a temp file that was successfully moved into place.
             g_localizedResourcePath = destination;
@@ -4518,6 +4563,7 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
                    L"process): %s",
                    destination.c_str());
             TryEmbedClassicIcon(destination);
+            RememberPrivateResourceModuleHash(destination);
             return true;
         }
         Wh_Log(L"Activating private resource module failed: %u", GetLastError());
@@ -4542,6 +4588,7 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     // Cosmetic second pass, strictly best-effort: the string module above is
     // already committed and valid regardless of this outcome.
     TryEmbedClassicIcon(destination);
+    RememberPrivateResourceModuleHash(destination);
     return true;
 }
 
@@ -4799,18 +4846,31 @@ static void RunSetup() {
     }
 
     if (ok && !outPath.empty()) {
-        // Take one reference on the DLL. It is deliberately kept mapped during
-        // teardown because live COM objects may still own provider vtables.
-        // `pinnedDll` is still held here (write sharing denied), so the bytes
-        // mapped as executable code are the bytes that passed verification.
-        constexpr DWORD safeLoadFlags =
-            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32;
-        HMODULE h = LoadLibraryExW(outPath.c_str(), nullptr, safeLoadFlags);
+        // Take one reference on the DLL - unless it is already mapped in this
+        // process (a re-enable after disable, since the DLL is deliberately
+        // never freed). GetModuleHandleW first keeps the "exactly one reference,
+        // never freed" policy true across enable/disable cycles. The DLL is kept
+        // mapped during teardown because live COM objects may still own provider
+        // vtables. `pinnedDll` is still held here (write sharing denied), so the
+        // bytes mapped as executable code are the bytes that passed verification.
+        constexpr DWORD safeLoadFlags = LOAD_LIBRARY_SEARCH_SYSTEM32;
+        HMODULE h = GetModuleHandleW(kDllRelativeName);
+        bool tookNewReference = false;
         if (!h) {
-            const DWORD safeLoadError = GetLastError();
-            Wh_Log(L"Display DLL safe load failed (error %u); retrying with the "
-                   L"legacy loader for host compatibility", safeLoadError);
-            h = LoadLibraryExW(outPath.c_str(), nullptr, 0);
+            // The absolute path still loads the file itself from that path; the
+            // flags below only constrain dependency resolution. The pinned
+            // provider imports only system DLLs, so System32 alone is both
+            // sufficient and correct - never the mod storage folder, where any
+            // writer could plant a DLL for code execution in explorer.exe.
+            h = LoadLibraryExW(outPath.c_str(), nullptr, safeLoadFlags);
+            tookNewReference = true;
+            if (!h) {
+                const DWORD safeLoadError = GetLastError();
+                Wh_Log(L"Display DLL constrained load failed (error %u); "
+                       L"retrying with the same constrained search",
+                       safeLoadError);
+                h = LoadLibraryExW(outPath.c_str(), nullptr, safeLoadFlags);
+            }
         }
         if (!h) {
             g_dllVerifiedOk.store(false, std::memory_order_release);
@@ -4820,26 +4880,31 @@ static void RunSetup() {
         }
 
         if (!VerifyLoadedDisplayCompatibility(h)) {
-            FreeLibrary(h);
+            if (tookNewReference) FreeLibrary(h);
             g_dllVerifiedOk.store(false, std::memory_order_release);
             Wh_Log(L"Display is unavailable: the loaded DLL failed its runtime "
                    L"compatibility check");
             return;
         }
 
-        std::wstring* pathPtr = nullptr;
-        try {
-            pathPtr = new std::wstring(outPath);
-        } catch (...) {
+        // Reuse the immutable path allocation across enable/disable cycles: it
+        // is intentionally never freed (see Wh_ModUninit), so a re-enable must
+        // not allocate a second std::wstring for the same path.
+        const std::wstring* existingPath = CurrentDllPath();
+        if (!existingPath || *existingPath != outPath) {
+            std::wstring* pathPtr = nullptr;
+            try {
+                pathPtr = new std::wstring(outPath);
+            } catch (...) {
+            }
+            if (!pathPtr) {
+                if (tookNewReference) FreeLibrary(h);
+                g_dllVerifiedOk.store(false, std::memory_order_release);
+                Wh_Log(L"Display is unavailable: path allocation failed");
+                return;
+            }
+            g_dllPath.store(pathPtr, std::memory_order_release);
         }
-        if (!pathPtr) {
-            FreeLibrary(h);
-            g_dllVerifiedOk.store(false, std::memory_order_release);
-            Wh_Log(L"Display is unavailable: path allocation failed");
-            return;
-        }
-
-        g_dllPath.store(pathPtr, std::memory_order_release);
         g_hDisplayDll.store(h, std::memory_order_release);
 
         // The hook target is an RVA in this exact SHA-256-pinned provider. Apply
@@ -5085,14 +5150,14 @@ public:
             return false;
         }
         std::shared_lock<std::shared_mutex> l(mutex_);
-        bool f = fakeOwners_.count(k) != 0;
+        bool f = fakeKeys_.count(k) != 0;
         auto it = paths_.find(k);
         o = it != paths_.end() ? it->second : std::wstring();
         return f;
     }
     bool IsFake(HKEY k) const {
         std::shared_lock<std::shared_mutex> l(mutex_);
-        return fakeOwners_.count(k) != 0;
+        return fakeKeys_.count(k) != 0;
     }
     // True if hk is either a fake (virtualized) key, or a real key whose path
     // is already tracked (i.e. its path contained one of our keywords) - the
@@ -5104,7 +5169,7 @@ public:
     bool IsTrackedOrFake(HKEY k) const {
         if (SpecialRootPath(k)) return false;
         std::shared_lock<std::shared_mutex> l(mutex_);
-        return fakeOwners_.count(k) != 0 || paths_.count(k) != 0;
+        return fakeKeys_.count(k) != 0 || paths_.count(k) != 0;
     }
     // Mutation is bookkeeping only. A low-memory failure must never escape a
     // process-wide registry hook after the underlying Windows API has already
@@ -5126,53 +5191,54 @@ public:
         } catch (...) {
         }
     }
+    // Each virtual key is backed by a real, empty, in-memory-only
+    // (REG_OPTION_VOLATILE) key opened for read. Every API the mod does not
+    // intercept - the whole *A family, RegSetValueExW, RegDeleteKeyW,
+    // RegNotifyChangeKeyValue, RegQueryMultipleValuesW, RegLoadMUIStringW,
+    // RegQueryValueW, CloseHandle - then sees a genuine handle to an empty key
+    // instead of a heap pointer, which the kernel would reject or treat as a
+    // valid handle to unrelated memory. KEY_READ only, so unhooked write paths
+    // fail with ERROR_ACCESS_DENIED instead of persisting anything.
     HKEY CreateFake(const std::wstring& p)   {
-        HKEY f = nullptr;
+        HKEY real = CreateVolatileRegistryKey();
+        if (!real) return nullptr;
         try {
-            std::unique_ptr<int> o(new (std::nothrow) int(1));
-            if (!o) return nullptr;
-            f = reinterpret_cast<HKEY>(o.get());
             std::unique_lock<std::shared_mutex> l(mutex_);
-            // Publish ownership first. If the path insertion then fails, even a
-            // failed cleanup attempt leaves the backing address reserved rather
-            // than leaving a dangling tracked pointer.
-            fakeOwners_[f] = std::move(o);
-            paths_[f] = p;
-            return f;
+            fakeKeys_.insert(real);
+            paths_[real] = p;
+            return real;
         } catch (...) {
-            // Remove any partial bookkeeping created before an allocation failed.
-            if (f) {
-                try {
-                    std::unique_lock<std::shared_mutex> l(mutex_);
-                    paths_.erase(f);
-                    fakeOwners_.erase(f);
-                } catch (...) {
-                }
-            }
+            CloseVolatileRegistryKey(real);
             return nullptr;
         }
     }
     void FreeFake(HKEY k)   {
         try {
-            std::unique_lock<std::shared_mutex> l(mutex_);
-            paths_.erase(k);
-            fakeOwners_.erase(k);
+            {
+                std::unique_lock<std::shared_mutex> l(mutex_);
+                paths_.erase(k);
+                fakeKeys_.erase(k);
+            }
+            CloseVolatileRegistryKey(k);
         } catch (...) {
-            // Keeping the backing allocation alive is safer than permitting an
+            // Keeping the backing key open is safer than permitting an
             // exception to cross RegCloseKey's ABI boundary.
         }
     }
-    // On unload we deliberately abandon (leak) the backing int of each
-    // outstanding fake key. This keeps the addresses reserved so they can never
-    // be handed back by a subsequent allocation and mistaken for a valid OS
-    // handle. This is intentional, not a leak bug.
-    void ClearWithoutFreeing() {
-        std::unique_lock<std::shared_mutex> l(mutex_);
-        paths_.clear();
-        for (auto& kv : fakeOwners_) {
-            [[maybe_unused]] int* abandoned = kv.second.release();
+    // On unload every outstanding fake key is closed. The volatile backing key
+    // is in-memory only and disappears when its last handle is closed, so there
+    // is nothing left to leak - unlike the old heap-pointer scheme, which had
+    // to abandon its backing allocations on purpose.
+    void CloseAllFakes() {
+        std::vector<HKEY> keys;
+        try {
+            std::unique_lock<std::shared_mutex> l(mutex_);
+            for (const HKEY k : fakeKeys_) keys.push_back(k);
+            fakeKeys_.clear();
+            paths_.clear();
+        } catch (...) {
         }
-        fakeOwners_.clear();
+        for (HKEY k : keys) CloseVolatileRegistryKey(k);
     }
 
 private:
@@ -5198,9 +5264,40 @@ private:
             default: return nullptr;
         }
     }
+    // Create a fresh, empty volatile (in-memory only) key directly under
+    // HKEY_CURRENT_USER and return a KEY_READ handle to it. Nothing is ever
+    // written to disk; the key exists only while the mod keeps the handle.
+    // Resolve the APIs directly instead of going through the mod's own hooks.
+    static HKEY CreateVolatileRegistryKey() {
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        auto create = kernelbase
+                          ? reinterpret_cast<decltype(&RegCreateKeyExW)>(
+                                GetProcAddress(kernelbase, "RegCreateKeyExW"))
+                          : nullptr;
+        if (!create) return nullptr;
+        static std::atomic<ULONGLONG> counter{0};
+        wchar_t name[64] = {};
+        swprintf_s(name, ARRAYSIZE(name), L"WindhawkDisplayRestorer_%lu_%llu",
+                   static_cast<unsigned long>(GetCurrentProcessId()),
+                   counter.fetch_add(1, std::memory_order_relaxed));
+        HKEY h = nullptr;
+        const LSTATUS status =
+            create(HKEY_CURRENT_USER, name, 0, nullptr, REG_OPTION_VOLATILE,
+                   KEY_READ, nullptr, &h, nullptr);
+        return status == ERROR_SUCCESS ? h : nullptr;
+    }
+    static void CloseVolatileRegistryKey(HKEY k) {
+        if (!k) return;
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        auto close = kernelbase
+                         ? reinterpret_cast<decltype(&RegCloseKey)>(
+                               GetProcAddress(kernelbase, "RegCloseKey"))
+                         : nullptr;
+        if (close) close(k);
+    }
     mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
-    std::unordered_map<HKEY, std::unique_ptr<int>> fakeOwners_;
+    std::unordered_set<HKEY> fakeKeys_;
 };
 
 static KeyTracker g_keyTracker;
@@ -5798,6 +5895,12 @@ LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
 LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
                                     LPBYTE d, LPDWORD cb) {
     try {
+        // Cheap gate matching the open hooks: this runs on every registry read
+        // in the process, so avoid GetPath's std::wstring construction (and its
+        // heap allocation for interned roots) for the overwhelming majority of
+        // calls that can't touch the virtualized tree.
+        if (!g_keyTracker.IsTrackedOrFake(k) && !ContainsRelevantKeywordCheap(vn))
+            return RegQueryValueExWOriginal(k, vn, r, t, d, cb);
         std::wstring p = g_keyTracker.GetPath(k);
         if (!p.empty()) {
             std::wstring v = vn ? vn : L"";
@@ -5814,6 +5917,11 @@ LSTATUS WINAPI RegQueryValueExWHook(HKEY k, LPCWSTR vn, LPDWORD r, LPDWORD t,
 LSTATUS WINAPI RegGetValueWHook(HKEY hk, LPCWSTR sub, LPCWSTR val, DWORD fl,
                                 LPDWORD tp, PVOID d, LPDWORD cb) {
     try {
+        // Same cheap gate as RegQueryValueExWHook.
+        if (!g_keyTracker.IsTrackedOrFake(hk) &&
+            !ContainsRelevantKeywordCheap(sub) &&
+            !ContainsRelevantKeywordCheap(val))
+            return RegGetValueWOriginal(hk, sub, val, fl, tp, d, cb);
         std::wstring p = g_keyTracker.GetPath(hk);
         if (sub && *sub) {
             if (!p.empty()) p += L"\\";
@@ -6069,7 +6177,9 @@ void* GetRegFunc(const char* n) {
         if (p) return p;
     }
     HMODULE a = GetModuleHandleW(L"advapi32.dll");
-    if (!a) a = LoadLibraryW(L"advapi32.dll");
+    if (!a)
+        a = LoadLibraryExW(L"advapi32.dll", nullptr,
+                           LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (a) {
         void* p = reinterpret_cast<void*>(GetProcAddress(a, n));
         if (p) return p;
@@ -6105,9 +6215,18 @@ static bool IsDisplayResourceModule(HINSTANCE instance) {
     // private resource path published by this mod or the system display.dll
     // fallback used by the original page definition. The pointer compares
     // above remain the allocation-free hot path.
-    static thread_local HMODULE lastChecked = nullptr;
-    static thread_local bool lastWasDisplay = false;
-    if (module == lastChecked) return lastWasDisplay;
+    // Small fixed-size cache for the slow path. Plain PODs only (no
+    // container, no destructor): a thread_local std::unordered_map would
+    // register a destructor in the mod image, which must never run after
+    // unload.
+    struct ModuleCheckCacheEntry {
+        HMODULE module;
+        bool result;
+    };
+    static thread_local ModuleCheckCacheEntry cache[2] = {};
+    for (const ModuleCheckCacheEntry& entry : cache) {
+        if (entry.module == module) return entry.result;
+    }
     bool result = false;
     bool privatePathChecked = false;
     wchar_t path[MAX_PATH + 1] = {};
@@ -6136,8 +6255,8 @@ static bool IsDisplayResourceModule(HINSTANCE instance) {
         }
     }
     if (result || privatePathChecked) {
-        lastChecked = module;
-        lastWasDisplay = result;
+        cache[1] = cache[0];
+        cache[0] = {module, result};
     }
     return result;
 }
@@ -6471,11 +6590,64 @@ static UINT SelectWin81PreviewBitmap() {
     return bestId;
 }
 
+// Reads the classic logical-DPI override currently applied on the system and
+// maps it to the matching classic preset (100/125/150/200%), or 0 when the
+// system is not running a classic preset. Reads go straight to kernelbase so
+// the query never re-enters this mod's own registry hooks.
+static UINT GetCurrentClassicDpiPreset() {
+    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+    auto regOpen = kernelbase
+                       ? reinterpret_cast<decltype(&RegOpenKeyExW)>(
+                             GetProcAddress(kernelbase, "RegOpenKeyExW"))
+                       : nullptr;
+    auto regQuery = kernelbase
+                        ? reinterpret_cast<decltype(&RegQueryValueExW)>(
+                              GetProcAddress(kernelbase, "RegQueryValueExW"))
+                        : nullptr;
+    auto regClose = kernelbase
+                        ? reinterpret_cast<decltype(&RegCloseKey)>(
+                              GetProcAddress(kernelbase, "RegCloseKey"))
+                        : nullptr;
+    if (!regOpen || !regQuery || !regClose) return 0;
+
+    HKEY desktop = nullptr;
+    if (regOpen(HKEY_CURRENT_USER, L"Control Panel\\Desktop", 0, KEY_READ,
+                &desktop) != ERROR_SUCCESS ||
+        !desktop) {
+        return 0;
+    }
+    UniqueWinHandle desktopGuard(desktop);
+
+    DWORD logPixels = 0;
+    DWORD type = 0;
+    DWORD size = sizeof(logPixels);
+    if (regQuery(desktop, L"LogPixels", nullptr, &type,
+                 reinterpret_cast<LPBYTE>(&logPixels), &size) != ERROR_SUCCESS ||
+        type != REG_DWORD) {
+        return 0;
+    }
+    switch (logPixels) {
+        case 96: return 100;
+        case 120: return 125;
+        case 144: return 150;
+        case 192: return 200;
+        default: return 0;
+    }
+}
+
 // Reconstruct the removed Windows 8.1 Hub hierarchy without reviving any of
-// its deleted CHubPage handlers. The four radio controls and all-displays box
-// are selectable like Windows 7 when enableDpiPresets is on. The provider's one retained
-// actionLinks element carries the official custom text size (DPI) command; any leftover Display settings hyperlink is stripped at LoadString. Desktop text controls and
-// Apply retain their exact 1511 IDs and therefore remain provider-owned.
+// its deleted CHubPage handlers. The four classic DPI preset radios and the
+// all-displays box are restored as the original Windows 8.1 markup. The radios
+// are natively selectable (DirectUI updates the dot on click); applying the
+// preset is done by the hosted-window hit-test in TryApplyClassicDpiPresetAt,
+// which maps the click to a preset row and writes the classic logical-DPI
+// override (LogPixels/Win8DpiScaling, effective at the next sign-in exactly
+// like the original Windows 7 page). When enableDpiPresets is off they are
+// disabled. The
+// provider's one retained actionLinks element carries the official custom
+// text size (DPI) command; any leftover Display settings hyperlink is
+// stripped at LoadString. Desktop text controls and Apply retain their exact
+// 1511 IDs and therefore remain provider-owned.
 static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
     if (xml.find(L"atom(Hub)") == std::wstring::npos ||
         xml.find(L"atom(ClassicDpiReference)") != std::wstring::npos) {
@@ -6519,7 +6691,9 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
 </Element>
 <Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,8rp)" content="resstr(420)" accname="resstr(420)"/>
 <Element id="atom(DesktopElementsSection)" layout="rowlayout(1,0,2)" layoutpos="top" sheet="displaycplstyles" padding="rect(0rp,6rp,0rp,6rp)">
-<ComboBox id="atom(DesktopElementCombobox)" accname="resstr(549)"/>
+<ComboBox id="atom(DesktopElementCombobox)" accname="resstr(549)">
+%%DESKTOPELEMENTS%%
+</ComboBox>
 <ComboBox id="atom(FontSizeCombobox)" accname="resstr(550)">
 <Button content="6"/>
 <Button content="7"/>
@@ -6556,24 +6730,54 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
 
     const UINT previewId = SelectWin81PreviewBitmap();
     ReplaceAllXmlToken(body, L"%%PREVIEW%%", std::to_wstring(previewId));
-    for (UINT id = 20; id <= 23; ++id) {
-        wchar_t token[16] = {};
-        swprintf_s(token, ARRAYSIZE(token), L"%%%%SEL%u%%%%", id);
-        ReplaceAllXmlToken(body, token,
-                           id == previewId ? L" selected=\"true\"" : L"");
-    }
-    // The classic DPI radios are disabled unless the user explicitly opts in
+    // The classic DPI presets are disabled unless the user explicitly opts in
     // (matching the original Windows 7 page); the token collapses to the
-    // exact attribute or nothing.
+    // exact attribute or nothing. The radio dot marks the preset currently
+    // applied on the system (LogPixels) and doubles as the status indicator.
     ReplaceAllXmlToken(
         body, L"%%DPIENA%%",
         g_enableDpiPresets.load(std::memory_order_acquire)
             ? L""
             : L"enabled=\"false\"");
 
-    // DesktopElementCombobox intentionally matches the provider's original
-    // self-closing control. The pinned provider hook below calls its own
-    // _InitializeElements routine when modern metrics initialization skips it.
+    // The classic radios are DirectUI-selectable (the dot follows the click
+    // natively); the selected state marks the preset currently applied on the
+    // system. Applying the preset itself is done by the hosted-window hit-test
+    // (see TryApplyClassicDpiPresetAt), because the provider's own
+    // selection-change handler was deleted in the 1511 build.
+    const UINT currentPreset = GetCurrentClassicDpiPreset();
+    for (UINT id = 20; id <= 23; ++id) {
+        wchar_t token[16] = {};
+        swprintf_s(token, ARRAYSIZE(token), L"%%%%SEL%u%%%%", id);
+        const UINT preset =
+            id == 20 ? 100 : id == 21 ? 125 : id == 22 ? 150 : 200;
+        ReplaceAllXmlToken(body, token,
+                           preset == currentPreset ? L" selected=\"true\"" : L"");
+    }
+
+    // The two text-size combos are filled with literal localized markup - the
+    // same mechanism as the Font size combo's numeric items, which render
+    // reliably on every build. The fill is pure markup injection: the mod must
+    // never touch windows it does not own (OpenGlass and other shell mods may
+    // host their own controls inside the same top-level window), so no runtime
+    // window enumeration or CB_ADDSTRING is used.
+    std::wstring desktopElementItems;
+    for (UINT id = 430; id <= 435; ++id) {
+        const wchar_t* label = GetEmbeddedTranslation(id);
+        if (!label || !*label) continue;
+        std::wstring escaped;
+        for (const wchar_t* c = label; *c; ++c) {
+            switch (*c) {
+                case L'&': escaped += L"&amp;"; break;
+                case L'<': escaped += L"&lt;"; break;
+                case L'>': escaped += L"&gt;"; break;
+                case L'"': escaped += L"&quot;"; break;
+                default: escaped += *c; break;
+            }
+        }
+        desktopElementItems += L"<Button content=\"" + escaped + L"\"/>";
+    }
+    ReplaceAllXmlToken(body, L"%%DESKTOPELEMENTS%%", desktopElementItems);
 
     xml.replace(openingEnd + 1, closing - openingEnd - 1, body);
     return true;
@@ -7027,24 +7231,6 @@ static PSPropertyBag_WriteUnknown_t PSPropertyBag_WriteUnknownEntry = nullptr;
 static PSPropertyBag_WriteUnknown_t PSPropertyBag_WriteUnknownOriginal = nullptr;
 static PSPropertyBag_ReadUnknown_t PSPropertyBag_ReadUnknownEntry = nullptr;
 static bool g_propertyBagWriteHookScheduled = false;
-
-// Keep the bag pointer reference-held while it is used as a per-UI-thread
-// de-duplication key. Releasing the previous key prevents stale pointer reuse,
-// and the thread-local destructor drops the final key when the UI thread exits.
-struct PublishedNavigationBag {
-    IPropertyBag* value = nullptr;
-    ~PublishedNavigationBag() {
-        if (value) value->Release();
-    }
-    void Remember(IPropertyBag* bag) {
-        if (bag == value) return;
-        if (bag) bag->AddRef();
-        IPropertyBag* previous = value;
-        value = bag;
-        if (previous) previous->Release();
-    }
-};
-static thread_local PublishedNavigationBag g_publishedNavigationBag;
 
 static void ReleaseNativeDisplayNavList(NativeDisplayNavList* list)   {
     if (!list || !list->vtable || !list->vtable[2]) return;
@@ -7548,7 +7734,6 @@ static HRESULT WriteNativeNavigationToBag(IPropertyBag* bag)   {
     } else {
         ReleaseNativeDisplayNavList(replacement);
     }
-    if (SUCCEEDED(hr)) g_publishedNavigationBag.Remember(bag);
     return hr;
 }
 
@@ -7589,7 +7774,6 @@ static HRESULT PSPropertyBag_WriteUnknownHookBody(
         ReleaseNativeDisplayNavList(replacement);
     }
     if (SUCCEEDED(hr)) {
-        g_publishedNavigationBag.Remember(bag);
         static std::atomic<bool> logged{false};
         if (!logged.exchange(true)) {
             Wh_Log(L"Display native task pane: replaced provider publication "
@@ -7645,9 +7829,8 @@ static void InstallNativeControlPanelNavLinksHook() {
 static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
     try {
         if (!site) return E_INVALIDARG;
-        // Setting disabled: never publish a replacement list and never
-        // remember the bag, so re-enabling takes effect on the next page that
-        // receives a site.
+        // Setting disabled: never publish a replacement list, so re-enabling
+        // takes effect on the next page that receives a site.
         if (!g_showSidebarLinks.load(std::memory_order_acquire)) return S_FALSE;
 
         IServiceProvider* services = nullptr;
@@ -7660,13 +7843,10 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
     services->Release();
     if (FAILED(hr) || !bag) return FAILED(hr) ? hr : E_NOINTERFACE;
 
-    if (g_publishedNavigationBag.value == bag) {
-        bag->Release();
-        return S_FALSE;
-    }
-
-    // If the provider published during SetSite, preserve that publication. The
-    // property-bag hook has already rebuilt it with the complete native list.
+    // If the provider published during SetSite (or this fallback already ran)
+    // the bag already carries "ControlPanelNavLinks": the property-bag hook has
+    // rebuilt it with the complete native list. Reading it back is the same
+    // de-duplication without holding a reference across the UI thread's life.
     if (PSPropertyBag_ReadUnknownEntry) {
         IUnknown* existing = nullptr;
         hr = PSPropertyBag_ReadUnknownEntry(
@@ -7674,7 +7854,6 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
             reinterpret_cast<void**>(&existing));
         if (SUCCEEDED(hr) && existing) {
             existing->Release();
-            g_publishedNavigationBag.Remember(bag);
             bag->Release();
             return S_FALSE;
         }
@@ -7735,7 +7914,11 @@ static bool LaunchSystemCustomDpiPage(HWND owner);
 static void __cdecl DisplayHubInitializeElementsHook(void* self) {
     if (!DisplayHubInitializeElementsOriginal) return;
     if (g_insideDisplayHubFontLoad) g_displayHubElementsObserved = true;
-    DisplayHubInitializeElementsOriginal(self);
+    // The Desktop element combo is populated statically by the patched
+    // markup, so the provider's runtime initializer is deliberately not run:
+    // on hosts where its string loading fails it removes the static items
+    // and leaves the combo empty (or adds duplicates). Skipping it keeps the
+    // static items intact. Font-size selection wiring is provider-owned.
 }
 
 static void __cdecl DisplayHubLoadSystemFontsHook(void* self) {
@@ -7751,20 +7934,152 @@ static void __cdecl DisplayHubLoadSystemFontsHook(void* self) {
     g_insideDisplayHubFontLoad = true;
     g_displayHubElementsObserved = false;
     DisplayHubLoadSystemFontsOriginal(self);
-    const bool initializerWasSkipped = !g_displayHubElementsObserved;
     g_insideDisplayHubFontLoad = false;
+}
 
-    if (initializerWasSkipped && self && DisplayHubInitializeElementsOriginal) {
-        // Call the provider's own routine through the trampoline. It resolves
-        // DesktopElementCombobox by atom, adds the authentic six entries and
-        // wires selection to the provider's existing font-size/bold handlers.
-        DisplayHubInitializeElementsOriginal(self);
-        static std::atomic<bool> logged{false};
-        if (!logged.exchange(true)) {
-            Wh_Log(L"Display hub: provider Desktop element ComboBox initializer "
-                   L"restored after the down-level metrics path skipped it");
-        }
+// Sign-out notification shown after a classic DPI preset is applied. Runs in a
+// tracked thread so the Control Panel page stays responsive, and the handle is
+// kept so Wh_ModUninit can dismiss and join the thread before the mod image is
+// unmapped (a still-open MessageBox would otherwise crash Explorer).
+static std::atomic<bool> g_dpiNotifyOpen{false};
+static std::atomic<HANDLE> g_dpiNotifyThread{nullptr};
+
+struct DpiNotifyParams {
+    std::wstring body;
+    std::wstring caption;
+};
+
+static DWORD WINAPI DpiNotifyDialogThread(LPVOID parameter) {
+    std::unique_ptr<DpiNotifyParams> params(
+        static_cast<DpiNotifyParams*>(parameter));
+    MessageBoxW(nullptr, params->body.c_str(), params->caption.c_str(),
+                MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
+    g_dpiNotifyOpen.store(false, std::memory_order_release);
+    return 0;
+}
+
+static void ShowSignOutNotification() {
+    bool expected = false;
+    if (!g_dpiNotifyOpen.compare_exchange_strong(expected, true,
+                                                 std::memory_order_acq_rel)) {
+        return;  // Already on screen: do not stack duplicates.
     }
+    const wchar_t* body = GetEmbeddedTranslation(458);
+    const wchar_t* caption = GetEmbeddedTranslation(390);
+    auto* params = new (std::nothrow) DpiNotifyParams{
+        body ? body : L"You'll see this change the next time you sign in.",
+        caption ? caption : L"Display Settings"};
+    if (!params) {
+        g_dpiNotifyOpen.store(false, std::memory_order_release);
+        return;
+    }
+    // Reap the handle of a previously finished dialog before storing the new
+    // one, so repeated changes never leak handles.
+    HANDLE stale =
+        g_dpiNotifyThread.exchange(nullptr, std::memory_order_acq_rel);
+    if (stale) CloseHandle(stale);
+    HANDLE thread = CreateThread(nullptr, 0, DpiNotifyDialogThread, params, 0,
+                                 nullptr);
+    if (!thread) {
+        delete params;
+        g_dpiNotifyOpen.store(false, std::memory_order_release);
+        return;
+    }
+    g_dpiNotifyThread.store(thread, std::memory_order_release);
+    Wh_Log(L"Display hub: sign-out notification shown for the classic DPI change");
+}
+
+// Apply a classic DPI preset the way the Windows 7/8 Display page radios did.
+// The classic presets map to the fixed logical-DPI values 96/120/144/192 and
+// are persisted exactly like DpiScaling.exe persists them - under
+// HKCU\Control Panel\Desktop\LogPixels plus Win8DpiScaling=1 (one scaling
+// level for all displays) - then broadcast so Explorer re-reads its metrics.
+// The scale change itself takes effect at the next sign-in, which is the same
+// contract the original page presented. Only those two values are written and
+// nothing else is touched. The APIs are resolved straight from kernelbase so
+// the call never re-enters this mod's own registry hooks.
+static bool ApplyClassicDpiPreset(UINT percent) {
+    DWORD logicalDpi = 0;
+    switch (percent) {
+        case 100: logicalDpi = 96; break;
+        case 125: logicalDpi = 120; break;
+        case 150: logicalDpi = 144; break;
+        case 200: logicalDpi = 192; break;
+        default: return false;
+    }
+
+    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+    auto regCreate =
+        kernelbase ? reinterpret_cast<decltype(&RegCreateKeyExW)>(
+                         GetProcAddress(kernelbase, "RegCreateKeyExW"))
+                   : nullptr;
+    auto regSet =
+        kernelbase ? reinterpret_cast<decltype(&RegSetValueExW)>(
+                         GetProcAddress(kernelbase, "RegSetValueExW"))
+                   : nullptr;
+    auto regClose =
+        kernelbase ? reinterpret_cast<decltype(&RegCloseKey)>(
+                         GetProcAddress(kernelbase, "RegCloseKey"))
+                   : nullptr;
+    if (!regCreate || !regSet || !regClose) return false;
+
+    HKEY desktop = nullptr;
+    if (regCreate(HKEY_CURRENT_USER, L"Control Panel\\Desktop", 0, nullptr,
+                  0, KEY_SET_VALUE, nullptr, &desktop, nullptr) !=
+            ERROR_SUCCESS ||
+        !desktop) {
+        return false;
+    }
+    // RAII: the handle is closed on every exit path, including the unlikely
+    // case of an exception while writing the values.
+    UniqueWinHandle desktopGuard(desktop);
+
+    bool ok = regSet(desktop, L"LogPixels", 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&logicalDpi),
+                     sizeof(DWORD)) == ERROR_SUCCESS;
+    const DWORD win8DpiScaling = 1;
+    ok = regSet(desktop, L"Win8DpiScaling", 0, REG_DWORD,
+                reinterpret_cast<const BYTE*>(&win8DpiScaling),
+                sizeof(DWORD)) == ERROR_SUCCESS &&
+         ok;
+    if (ok) {
+        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                            reinterpret_cast<LPARAM>(L"Windows"),
+                            SMTO_ABORTIFHUNG, 1000, nullptr);
+        Wh_Log(L"Display hub: classic DPI preset %u%% applied (effective at "
+               L"next sign-in)",
+               percent);
+        ShowSignOutNotification();
+    }
+    return ok;
+}
+
+// Shared routing for the native SysLinks the mod adds to the restored hub.
+// Returns true when the command was recognized and handled; unrecognized URLs
+// fall through so the provider (or the shell) keeps its normal behavior.
+static bool HandleDisplayHubLinkCommand(const wchar_t* url, HWND owner) {
+    if (!url || !*url) return false;
+
+    static const wchar_t kCustomDpi[] = L"customscaledialog";
+    if (_wcsnicmp(url, kCustomDpi, ARRAYSIZE(kCustomDpi) - 1) == 0 &&
+        url[ARRAYSIZE(kCustomDpi) - 1] == L'\0') {
+        return LaunchSystemCustomDpiPage(owner);
+    }
+
+    static const wchar_t kPresetPrefix[] = L"classicscale";
+    if (_wcsnicmp(url, kPresetPrefix, ARRAYSIZE(kPresetPrefix) - 1) == 0) {
+        const wchar_t* p = url + (ARRAYSIZE(kPresetPrefix) - 1);
+        unsigned long percent = 0;
+        bool anyDigit = false;
+        for (; *p >= L'0' && *p <= L'9'; ++p) {
+            anyDigit = true;
+            percent = percent * 10 + static_cast<unsigned long>(*p - L'0');
+            if (percent > 500) return false;
+        }
+        if (!anyDigit || *p != L'\0') return false;
+        return ApplyClassicDpiPreset(static_cast<UINT>(percent));
+    }
+    return false;
 }
 
 // Exact callback ABI and NMLINK layout recovered from the pinned provider.
@@ -7778,18 +8093,28 @@ static int __cdecl DisplayHubLinkNotifyHook(
         if (message == WM_NOTIFY && lParam) {
             const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
             if (header->code == NM_CLICK || header->code == NM_RETURN) {
-                const BYTE* notification =
-                    reinterpret_cast<const BYTE*>(lParam);
-                // NMLINK = NMHDR (0x18) + LITEM; szUrl starts at +0x88 on x64.
-                const wchar_t* url =
-                    reinterpret_cast<const wchar_t*>(notification + 0x88);
-                static const wchar_t kCommand[] = L"customscaledialog";
-                if (_wcsnicmp(url, kCommand, ARRAYSIZE(kCommand) - 1) == 0 &&
-                    url[ARRAYSIZE(kCommand) - 1] == L'\0' &&
-                    LaunchSystemCustomDpiPage(
-                        GetAncestor(header->hwndFrom, GA_ROOT))) {
-                    if (result) *result = 0;
-                    return 0;
+                // NM_CLICK/NM_RETURN are not SysLink-specific: a list view
+                // sends them with NMITEMACTIVATE (0x50 bytes), a toolbar with
+                // NMMOUSE (0x30), a status bar with a bare NMHDR (0x18).
+                // Reading a wchar_t* at +0x88 out of any of those is an
+                // out-of-bounds read. Only touch the NMLINK offset when the
+                // sender really is a SysLink.
+                wchar_t cls[16] = {};
+                const bool isSysLink =
+                    header->hwndFrom &&
+                    GetClassNameW(header->hwndFrom, cls, ARRAYSIZE(cls)) &&
+                    _wcsicmp(cls, WC_LINK) == 0;
+                if (isSysLink) {
+                    const BYTE* notification =
+                        reinterpret_cast<const BYTE*>(lParam);
+                    // NMLINK = NMHDR (0x18) + LITEM; szUrl starts at +0x88 on x64.
+                    const wchar_t* url =
+                        reinterpret_cast<const wchar_t*>(notification + 0x88);
+                    if (HandleDisplayHubLinkCommand(
+                            url, GetAncestor(header->hwndFrom, GA_ROOT))) {
+                        if (result) *result = 0;
+                        return 0;
+                    }
                 }
             }
         }
@@ -7950,11 +8275,13 @@ static std::wstring GetDisplayDeviceNameForWindow(HWND hwnd) {
     return {};
 }
 
-// Ask the display driver to validate a mode without applying it. This is the
-// same safety gate used by the native display control panel (CDS_TEST): it
-// avoids presenting legacy modes that EnumDisplaySettings may expose but the
-// active monitor cannot actually accept.
-static bool IsDisplayModeAcceptedByDriver(LPCWSTR deviceName, const DEVMODEW& mode) {
+// Presentational filter for the label list only. The pinned provider is
+// authoritative for applying the mode, and these labels are cosmetic, so there
+// is deliberately no ChangeDisplaySettingsExW(CDS_TEST) driver round-trip here:
+// that test ran on Explorer's UI thread once per enumerated mode (inside the
+// first WM_PAINT and again after every WM_DISPLAYCHANGE) and could also drop
+// modes the provider itself still offered, leaving ticks without labels.
+static bool IsModeShownInLabelList(const DEVMODEW& mode) {
     // Windows 10 and later no longer expose 640x480 in the normal Display
     // settings list. Keep this version gate limited to the presentation list;
     // the native mode application path remains untouched. Windows 7/8.1 keep
@@ -7963,19 +8290,14 @@ static bool IsDisplayModeAcceptedByDriver(LPCWSTR deviceName, const DEVMODEW& mo
         mode.dmPelsWidth == 640 && mode.dmPelsHeight == 480) {
         return false;
     }
-
-    DEVMODEW test = mode;
-    test.dmSize = sizeof(test);
-    test.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL |
-                    DM_DISPLAYFREQUENCY | DM_DISPLAYORIENTATION;
-    return ChangeDisplaySettingsExW(deviceName, &test, nullptr, CDS_TEST, nullptr) == DISP_CHANGE_SUCCESSFUL;
+    return true;
 }
 
 // Enumerate only the modes advertised by the monitor/adapter hosting this
 // ResolutionControl. EnumDisplaySettings(nullptr, ...) enumerates the primary
 // display and was the reason labels could be shifted or unrelated on a second
-// monitor. Keep one entry per visible resolution and reject modes that fail the
-// driver's native non-destructive test.
+// monitor. Keep one entry per visible resolution; this is a cheap mode-table
+// read with no driver round-trip (see IsModeShownInLabelList).
 static void EnumerateSystemDisplayModes(HWND hwnd,
                                         std::vector<DisplayModePair>& modes) {
     const std::wstring device = GetDisplayDeviceNameForWindow(hwnd);
@@ -7989,7 +8311,7 @@ static void EnumerateSystemDisplayModes(HWND hwnd,
         const int w = static_cast<int>(dm.dmPelsWidth);
         const int h = static_cast<int>(dm.dmPelsHeight);
         if (w <= 0 || h <= 0) continue;
-        if (!IsDisplayModeAcceptedByDriver(deviceName, dm)) continue;
+        if (!IsModeShownInLabelList(dm)) continue;
         bool duplicate = false;
         for (const DisplayModePair& m : modes) {
             if (m.w == w && m.h == h) {
@@ -8138,6 +8460,113 @@ static bool GetCachedResolutionModes(HWND hwnd,
     return !modes.empty();
 }
 
+// -----------------------------------------------------------------------------
+// RAII owners for the GDI state the resolution-label overlay mutates. The
+// overlay runs after the provider's own WM_PAINT on Explorer's UI thread, so an
+// exception (or an early exit) that skipped the manual restore would leak GDI
+// objects and could leave the hosted control drawing with a foreign font, text
+// colors, or an unreleased DC. Each guard restores exactly the state it changed,
+// in reverse construction order, on destruction.
+// -----------------------------------------------------------------------------
+class SelectObjectGuard {
+   public:
+    SelectObjectGuard(HDC dc, HGDIOBJ object)
+        : dc_(dc), previous_(SelectObject(dc, object)) {}
+    ~SelectObjectGuard() {
+        if (dc_ && previous_) SelectObject(dc_, previous_);
+    }
+    SelectObjectGuard(const SelectObjectGuard&) = delete;
+    SelectObjectGuard& operator=(const SelectObjectGuard&) = delete;
+
+   private:
+    HDC dc_ = nullptr;
+    HGDIOBJ previous_ = nullptr;
+};
+
+class TextColorGuard {
+   public:
+    TextColorGuard(HDC dc, COLORREF color)
+        : dc_(dc), previous_(SetTextColor(dc, color)) {}
+    ~TextColorGuard() {
+        if (dc_) SetTextColor(dc_, previous_);
+    }
+    TextColorGuard(const TextColorGuard&) = delete;
+    TextColorGuard& operator=(const TextColorGuard&) = delete;
+
+   private:
+    HDC dc_ = nullptr;
+    COLORREF previous_ = CLR_INVALID;
+};
+
+class BkModeGuard {
+   public:
+    BkModeGuard(HDC dc, int mode)
+        : dc_(dc), previous_(SetBkMode(dc, mode)) {}
+    ~BkModeGuard() {
+        if (dc_) SetBkMode(dc_, previous_);
+    }
+    BkModeGuard(const BkModeGuard&) = delete;
+    BkModeGuard& operator=(const BkModeGuard&) = delete;
+
+   private:
+    HDC dc_ = nullptr;
+    int previous_ = 0;
+};
+
+class CreatedFontGuard {
+   public:
+    explicit CreatedFontGuard(HFONT font) : font_(font) {}
+    ~CreatedFontGuard() {
+        if (font_) DeleteObject(font_);
+    }
+    CreatedFontGuard(const CreatedFontGuard&) = delete;
+    CreatedFontGuard& operator=(const CreatedFontGuard&) = delete;
+
+   private:
+    HFONT font_ = nullptr;
+};
+
+class WindowDcGuard {
+   public:
+    WindowDcGuard(HWND hwnd, HDC dc, bool owned)
+        : hwnd_(hwnd), dc_(dc), owned_(owned) {}
+    ~WindowDcGuard() {
+        if (owned_ && dc_) ReleaseDC(hwnd_, dc_);
+    }
+    WindowDcGuard(const WindowDcGuard&) = delete;
+    WindowDcGuard& operator=(const WindowDcGuard&) = delete;
+
+   private:
+    HWND hwnd_ = nullptr;
+    HDC dc_ = nullptr;
+    bool owned_ = false;
+};
+
+// RAII owner of a window property used as a flag (e.g. the WM_PAINT
+// re-entrancy marker). Guarantees RemovePropW on destruction even when the
+// owning scope is left via an exception.
+class WindowPropGuard {
+   public:
+    WindowPropGuard() = default;
+    ~WindowPropGuard() {
+        if (owns_ && hwnd_ && name_) RemovePropW(hwnd_, name_);
+    }
+    WindowPropGuard(const WindowPropGuard&) = delete;
+    WindowPropGuard& operator=(const WindowPropGuard&) = delete;
+    bool Set(HWND hwnd, LPCWSTR name, HANDLE value) {
+        if (!hwnd || !name || !SetPropW(hwnd, name, value)) return false;
+        hwnd_ = hwnd;
+        name_ = name;
+        owns_ = true;
+        return true;
+    }
+
+   private:
+    HWND hwnd_ = nullptr;
+    LPCWSTR name_ = nullptr;
+    bool owns_ = false;
+};
+
 static void DrawResolutionSliderLabels(HWND hwnd, HDC targetDc) {
     try {
     // The pinned provider remains authoritative for applying the mode. This
@@ -8172,14 +8601,14 @@ static void DrawResolutionSliderLabels(HWND hwnd, HDC targetDc) {
     }
 
     // The provider sizes its trackbar range from its own mode list. When the
-    // two lists disagree (hidden duplicate refresh rates, a mode rejected by
-    // CDS_TEST) the labels must follow the ticks, never the other way round:
-    // draw exactly geom.ticks rows, sampling the enumerated list.
+    // two lists disagree (hidden duplicate refresh rates) the labels must
+    // follow the ticks, never the other way round: draw exactly geom.ticks
+    // rows, sampling the enumerated list.
     const int rows = geom.ticks;
 
     HDC hdc = targetDc ? targetDc : GetDC(hwnd);
     if (!hdc) return;
-    const bool ownDc = (targetDc == nullptr);
+    WindowDcGuard dcGuard(hwnd, hdc, targetDc == nullptr);
 
     // Font selection. Earlier revisions only built a font when WM_GETFONT
     // returned null, which is why every requested size change had no visible
@@ -8248,13 +8677,14 @@ static void DrawResolutionSliderLabels(HWND hwnd, HDC targetDc) {
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
 
     HFONT createdFont = CreateFontIndirectW(&lf);
+    CreatedFontGuard createdFontGuard(createdFont);
     HFONT font = createdFont;
     if (!font) font = controlFont;
     if (!font) font = reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
 
-    HFONT oldFont = reinterpret_cast<HFONT>(SelectObject(hdc, font));
-    COLORREF oldColor = SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
-    int oldBk = SetBkMode(hdc, TRANSPARENT);
+    SelectObjectGuard fontSelection(hdc, font);
+    TextColorGuard textColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+    BkModeGuard backgroundMode(hdc, TRANSPARENT);
 
     TEXTMETRICW tm{};
     GetTextMetricsW(hdc, &tm);
@@ -8379,11 +8809,6 @@ static void DrawResolutionSliderLabels(HWND hwnd, HDC targetDc) {
                          DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_NOCLIP,
                          nullptr);
 
-    SetBkMode(hdc, oldBk);
-    SetTextColor(hdc, oldColor);
-    SelectObject(hdc, oldFont);
-    if (createdFont) DeleteObject(createdFont);
-    if (ownDc) ReleaseDC(hwnd, hdc);
     } catch (...) {
         // Swallow any C++ exception so the overlay can never crash the shell.
     }
@@ -8405,10 +8830,16 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
         if (msg == WM_PAINT) {
             if (GetPropW(hwnd, kResCtlPaintingProp))
                 return DefSubclassProc(hwnd, msg, wParam, lParam);
-            SetPropW(hwnd, kResCtlPaintingProp, reinterpret_cast<HANDLE>(1));
+            // RAII: the guard removes the re-entrancy marker on every exit
+            // path - including an exception during the provider's paint or our
+            // overlay - so a single failed paint can never leave the control
+            // permanently marked as painting (which would stop every later
+            // WM_PAINT from drawing anything).
+            WindowPropGuard paintingGuard;
+            paintingGuard.Set(hwnd, kResCtlPaintingProp,
+                              reinterpret_cast<HANDLE>(1));
             const LRESULT painted =
                 DefSubclassProc(hwnd, msg, wParam, lParam);
-            RemovePropW(hwnd, kResCtlPaintingProp);
             DrawResolutionSliderLabels(hwnd, nullptr);
             return painted;
         }
@@ -8499,17 +8930,124 @@ static bool LaunchSystemCustomDpiPage(HWND owner) {
     return true;
 }
 
+// The restored hub renders its classic DPI presets as windowless DirectUI
+// radio buttons, whose clicks arrive as plain mouse input on the hosting
+// DirectUI window (the provider's own selection-change handler was deleted in
+// the 1511 build, so no native notification is produced). This maps a click to
+// one of the four preset rows using the native "custom text size" SysLink
+// directly below the preset block as a fixed anchor, then applies the preset.
+// The click is never swallowed: the original message still reaches DirectUI,
+// so the radio's selection dot updates normally. The geometry derives from the
+// pinned page layout (preview graphic 150x116 rp, ClassicDpiReference top
+// padding 10 rp, actionLinks top padding 4 rp); if the window or the anchor is
+// missing, the function simply does nothing.
+static void TryApplyClassicDpiPresetAt(HWND host, int x, int y) {
+    if (!host || !IsWindow(host)) return;
+    HWND anchor = reinterpret_cast<HWND>(GetPropW(host, kCustomDpiLinkProp));
+    if (!anchor || !IsWindow(anchor)) return;
+
+    RECT anchorRect{};
+    if (!GetWindowRect(anchor, &anchorRect)) return;
+    POINT anchorTop{anchorRect.left, anchorRect.top};
+    if (!ScreenToClient(host, &anchorTop)) return;
+
+    // Physical DPI scale, so the logical (96-dpi) rp offsets below map to the
+    // real pixel positions on this display.
+    UINT dpi = 96;
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        auto getDpi = reinterpret_cast<GetDpiForWindow_t>(
+            GetProcAddress(user32, "GetDpiForWindow"));
+        if (getDpi) {
+            const UINT v = getDpi(host);
+            if (v >= 96) dpi = v;
+        }
+    }
+    const double scale = static_cast<double>(dpi) / 96.0;
+
+    // Row height from the anchor's own font, so it tracks the shell font size.
+    int rowHeight = static_cast<int>(17 * scale);
+    if (HFONT font = reinterpret_cast<HFONT>(
+            SendMessageW(anchor, WM_GETFONT, 0, 0))) {
+        HDC dc = GetDC(anchor);
+        if (dc) {
+            HGDIOBJ previous = SelectObject(dc, font);
+            TEXTMETRICW metrics{};
+            if (GetTextMetricsW(dc, &metrics)) {
+                rowHeight = static_cast<int>(metrics.tmHeight + 2 * scale);
+                if (rowHeight < 12)
+                    rowHeight = static_cast<int>(17 * scale);
+            }
+            SelectObject(dc, previous);
+            ReleaseDC(anchor, dc);
+        }
+    }
+
+    // Logical geometry (96 dpi), from the pinned page layout:
+    //   actionLinks.top = ClassicDpiReference.bottom + 4rp
+    //   ClassicDpiReference height = preview (116rp) + 10rp top padding
+    //   preset row 0 top = ClassicDpiReference.top + 10rp
+    //                    = actionLinks.top - 120rp
+    const int preset0Top = anchorTop.y - static_cast<int>(120 * scale);
+    const int preset0Bottom = preset0Top + 4 * rowHeight;
+
+    const int columnLeft = static_cast<int>(8 * scale);
+    const int columnRight = static_cast<int>(300 * scale);
+    if (x < columnLeft || x > columnRight) return;
+    if (y < preset0Top || y > preset0Bottom) return;
+
+    const int index = (y - preset0Top) / rowHeight;
+    if (index < 0 || index >= 4) return;
+
+    static const UINT kPresetPercents[] = {100, 125, 150, 200};
+    const UINT preset = kPresetPercents[index];
+
+    // Skip re-applying the already-selected preset (avoids a spurious sign-out
+    // notification when the user clicks the currently applied level).
+    if (preset == GetCurrentClassicDpiPreset()) return;
+
+    static std::atomic<bool> logged{false};
+    if (!logged.exchange(true)) {
+        Wh_Log(L"Display hub: classic DPI preset hit-test armed "
+               L"(anchorTop=%d rowH=%d dpi=%u)",
+               anchorTop.y, rowHeight, dpi);
+    }
+    Wh_Log(L"Display hub: classic DPI preset row %d (%u%%) clicked", index,
+           preset);
+    (void)ApplyClassicDpiPreset(preset);
+}
+
 static LRESULT CALLBACK CustomDpiLinkParentSubclassProc(
     HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR /*refData*/) {
     try {
+        // Restored classic DPI radios are windowless: map a host click to a
+        // preset row and apply it (see TryApplyClassicDpiPresetAt). The message
+        // is passed through unchanged so the radio dot updates too.
+        if (msg == WM_LBUTTONUP &&
+            g_enableDpiPresets.load(std::memory_order_acquire)) {
+            TryApplyClassicDpiPresetAt(hwnd,
+                static_cast<short>(LOWORD(lParam)),
+                static_cast<short>(HIWORD(lParam)));
+        }
+
         if (msg == WM_NOTIFY && lParam) {
             const NMHDR* header = reinterpret_cast<const NMHDR*>(lParam);
-            const HWND customLink = reinterpret_cast<HWND>(
-                GetPropW(hwnd, kCustomDpiLinkProp));
-            if (customLink && header->hwndFrom == customLink &&
-                (header->code == NM_CLICK || header->code == NM_RETURN) &&
-                LaunchSystemCustomDpiPage(GetAncestor(hwnd, GA_ROOT))) {
-                return TRUE;
+            if (header->code == NM_CLICK || header->code == NM_RETURN) {
+                wchar_t cls[16] = {};
+                if (header->hwndFrom &&
+                    GetClassNameW(header->hwndFrom, cls, ARRAYSIZE(cls)) &&
+                    _wcsicmp(cls, WC_LINK) == 0) {
+                    // Read the SysLink URL and route it through the shared
+                    // handler; unrecognized commands fall through unchanged.
+                    const BYTE* notification =
+                        reinterpret_cast<const BYTE*>(lParam);
+                    const wchar_t* url =
+                        reinterpret_cast<const wchar_t*>(notification + 0x88);
+                    if (HandleDisplayHubLinkCommand(
+                            url, GetAncestor(hwnd, GA_ROOT))) {
+                        return TRUE;
+                    }
+                }
             }
         }
 
@@ -8564,14 +9102,16 @@ static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
     try {
         if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
             _wcsicmp(lpClassName, L"SysLink") == 0) {
-            bool isCustomDpiLink =
-                lpWindowName &&
-                wcsstr(lpWindowName, L"customscaledialog") != nullptr;
+            const auto isModCommandLink = [](const wchar_t* text) {
+                return text != nullptr &&
+                       (wcsstr(text, L"customscaledialog") != nullptr ||
+                        wcsstr(text, L"classicscale") != nullptr);
+            };
+            bool isCustomDpiLink = isModCommandLink(lpWindowName);
             if (!isCustomDpiLink) {
                 wchar_t text[512] = {};
                 if (GetWindowTextW(hwnd, text, ARRAYSIZE(text)) > 0) {
-                    isCustomDpiLink =
-                        wcsstr(text, L"customscaledialog") != nullptr;
+                    isCustomDpiLink = isModCommandLink(text);
                 }
             }
             if (isCustomDpiLink) AttachCustomDpiLinkFallback(hwnd);
@@ -8586,6 +9126,14 @@ static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
                 SetPropW(hwnd, kResCtlOrigProcProp,
                          reinterpret_cast<HANDLE>(1))) {
                 RememberHostedSubclass(hwnd);
+                // Warm the mode cache at creation so the first WM_PAINT never
+                // runs the enumeration inside the paint pass. The cache is
+                // still validated against the device name on every read, so a
+                // monitor association that settles later re-enumerates.
+                std::vector<DisplayModePair> modes;
+                DEVMODEW raw{};
+                bool haveRaw = false;
+                GetCachedResolutionModes(hwnd, modes, raw, haveRaw);
                 Wh_Log(L"Resolution slider label micro-patch attached");
             }
         }
@@ -8903,6 +9451,9 @@ static bool LaunchRestoredDisplayPage(HWND owner, int showCommand,
 // Help hand-off is replaced.
 
 static std::atomic<bool> g_displayTipDialogOpen{false};
+// Handle of the advisory dialog thread, kept so Wh_ModUninit can dismiss
+// the dialog and wait for the thread before the mod image is unmapped.
+static std::atomic<HANDLE> g_tipThread{nullptr};
 
 struct DisplayTipDialogParams {
     HWND owner;
@@ -8944,6 +9495,13 @@ static void ShowDisplaySettingsAdvisory(HWND owner) {
         return;
     }
 
+    // Reap the handle of a previously finished dialog before storing the new
+    // one, so repeated open/close cycles never leak handles. The previous
+    // thread has already exited (g_displayTipDialogOpen was false), so closing
+    // its handle only drops our reference - it does not terminate the thread.
+    HANDLE stale = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
+    if (stale) CloseHandle(stale);
+
     HANDLE thread = CreateThread(nullptr, 0, DisplayTipDialogThread, params, 0,
                                  nullptr);
     if (!thread) {
@@ -8951,7 +9509,7 @@ static void ShowDisplaySettingsAdvisory(HWND owner) {
         g_displayTipDialogOpen.store(false, std::memory_order_release);
         return;
     }
-    CloseHandle(thread);
+    g_tipThread.store(thread, std::memory_order_release);
     Wh_Log(L"Display settings advisory shown");
 }
 
@@ -9235,6 +9793,13 @@ static bool IsCurrentProcessExplorer()   {
     return WideFileNameEquals(path, L"explorer.exe");
 }
 
+static bool IsCurrentProcessRundll32()   {
+    wchar_t path[MAX_PATH + 1] = {};
+    const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (length == 0 || length > MAX_PATH) return false;
+    return WideFileNameEquals(path, L"rundll32.exe");
+}
+
 // The ShellExecuteExW_t / ShellExecuteW_t aliases are shared with the classic
 // launch routing section above.
 static ShellExecuteExW_t ShellExecuteExWOriginalDisplaySettings = nullptr;
@@ -9483,6 +10048,24 @@ BOOL Wh_ModInit(void) {
         // deliberately outside the command-line match.
         InstallClassicDisplayLaunchRouting();
 
+        // rundll32.exe never renders the restored page itself: a redirected
+        // launch hands off to the shell URI and the page opens in Explorer. An
+        // unrelated rundll32 instance (shell extensions, printer UI, screensaver
+        // config, .cpl hosts, ...) needs nothing from this mod, so bail out
+        // before installing any registry/COM/DirectUI hook or the setup worker.
+        // A matching classic Display launch keeps only the routing above.
+        if (IsCurrentProcessRundll32()) {
+            if (g_classicDisplayLaunchKind == ClassicDisplayLaunchKind::None) {
+                Wh_Log(L"Display Restorer: unrelated rundll32.exe instance; no "
+                       L"hooks installed");
+                return FALSE;
+            }
+            g_runSetupWorker.store(false, std::memory_order_release);
+            Wh_Log(L"Display Restorer: rundll32.exe classic Display launch host; "
+                   L"routing only");
+            return TRUE;
+        }
+
         // Explorer-only: lets the desktop context menu's "Display settings"
         // open the restored Screen Resolution page. No-ops in other processes.
         InstallDisplaySettingsRedirect();
@@ -9629,6 +10212,10 @@ void Wh_ModAfterInit(void) {
     // the provider contract cannot become visible before Windhawk has committed
     // the hooks scheduled during Wh_ModInit.
     try {
+        if (!g_runSetupWorker.load(std::memory_order_acquire)) {
+            Wh_Log(L"Display Restorer: setup worker skipped in this process");
+            return;
+        }
         if (!g_setupThread &&
             !g_shuttingDown.load(std::memory_order_acquire)) {
             g_setupThread.emplace(RunSetupNoexcept);
@@ -9641,7 +10228,7 @@ void Wh_ModAfterInit(void) {
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
+void Wh_ModSettingsChanged(void) {
     try {
         LoadLanguageSetting();
         LoadFeatureSettings();
@@ -9664,11 +10251,9 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
                        L"change failed; using the verified provider fallback");
             }
         }
-        if (reload) *reload = FALSE;
-        return TRUE;
     } catch (...) {
-        if (reload) *reload = TRUE;
-        return TRUE;
+        // Reloading would just re-run the same code with the same inputs, so
+        // there is no case where a reload helps; the void form is equivalent.
     }
 }
 
@@ -9683,6 +10268,32 @@ void Wh_ModUninit(void) {
         if (g_stopEvent) {
             SetEvent(g_stopEvent);
         }
+        // Dismiss any advisory dialog and wait for its thread to exit before
+        // the mod image can be unmapped. The dialog runs in a MessageBoxW on a
+        // mod thread; unloading the image while that thread's instruction
+        // pointer and return address are inside it would crash Explorer.
+        HANDLE tip = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
+        if (tip) {
+            EnumThreadWindows(GetThreadId(tip), [](HWND h, LPARAM) -> BOOL {
+                PostMessageW(h, WM_CLOSE, 0, 0);
+                return TRUE;
+            }, 0);
+            WaitForSingleObject(tip, INFINITE);
+            CloseHandle(tip);
+        }
+        // Same teardown for the classic DPI sign-out notification.
+        HANDLE dpiNotify =
+            g_dpiNotifyThread.exchange(nullptr, std::memory_order_acq_rel);
+        if (dpiNotify) {
+            EnumThreadWindows(GetThreadId(dpiNotify),
+                              [](HWND h, LPARAM) -> BOOL {
+                                  PostMessageW(h, WM_CLOSE, 0, 0);
+                                  return TRUE;
+                              }, 0);
+            WaitForSingleObject(dpiNotify, INFINITE);
+            CloseHandle(dpiNotify);
+        }
+
         // InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile are not
         // interruptible and only bound each individual call to
         // kDownloadTimeoutMs (20s), across up to kMaxDownloadAttempts retries -
@@ -9709,13 +10320,11 @@ void Wh_ModUninit(void) {
         ReleaseLocalizedResourceModule();
         g_hDisplayDll.store(nullptr);
         g_dllVerifiedOk.store(false);
-        // Readers take this immutable path through an atomic raw pointer. A
-        // registry hook that was already in flight when teardown began may still
-        // be copying it, so reclaiming the tiny allocation here would create a
-        // use-after-free window. Exchange it out, but intentionally retain the
-        // allocation until process exit; this mirrors the mapped-provider and
-        // fake-HKEY fail-safe lifetime policy above.
-        (void)g_dllPath.exchange(nullptr, std::memory_order_acq_rel);
+        // g_dllPath points at an immutable, intentionally-leaked allocation: the
+        // string is never freed and never mutated, so it stays valid for any
+        // in-flight reader for the life of the process, exactly like the mapped
+        // provider. It is deliberately NOT reset here, so a re-enable reuses the
+        // same allocation instead of leaking one std::wstring per enable cycle.
 
         if (Wh_GetIntSetting(L"keepFilesOnDisable") == 0) {
             std::wstring dir = StoreDir();
@@ -9729,7 +10338,7 @@ void Wh_ModUninit(void) {
                    L"stale copies removed (files still mapped are retried on a "
                    L"later unload)");
         }
-        g_keyTracker.ClearWithoutFreeing();
+        g_keyTracker.CloseAllFakes();
     } catch (...) {
     }
 }
