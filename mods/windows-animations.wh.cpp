@@ -414,6 +414,10 @@ namespace AnimConstants {
     constexpr int UiaNegativeCacheMs = 10000;
     constexpr int UiaColdNegativeCacheMs = 500;
     constexpr int UiaPositiveFallbackCacheMs = 10000;
+    // UIPI can prevent Explorer from attaching the lifetime property to an
+    // elevated HWND. PID/TID/monitor is a useful but weaker identity, so cache
+    // it only briefly before requiring another UIA confirmation.
+    constexpr int UiaWeakIdentityCacheMs = 1500;
     constexpr int UiaMinAcceptScore = 400;
     constexpr int TaskbarExpandWaitMs = 250;
     constexpr int Win10MinRestoreMs = 280;
@@ -465,6 +469,7 @@ struct TaskbarDockWindowIdentity {
 struct TaskbarDockCacheValue {
     int x = 0;
     TaskbarDockWindowIdentity identity;
+    DWORD observedTick = 0;
 };
 struct ProcessNameCacheValue {
     DWORD processId = 0;
@@ -912,7 +917,22 @@ static bool TaskbarDockIdentityMatches(
     const TaskbarDockWindowIdentity& rhs) {
     return lhs.processId && lhs.processId == rhs.processId &&
            lhs.threadId == rhs.threadId && lhs.monitor == rhs.monitor &&
-           lhs.windowToken && lhs.windowToken == rhs.windowToken;
+           lhs.windowToken == rhs.windowToken;
+}
+static bool IsTaskbarDockCacheValueUsable(
+    const TaskbarDockCacheValue& value,
+    const TaskbarDockWindowIdentity& currentIdentity, HMONITOR monitor,
+    DWORD now) {
+    if (value.identity.monitor != monitor ||
+        !TaskbarDockIdentityMatches(value.identity, currentIdentity)) {
+        return false;
+    }
+    // A property-backed identity lasts for the HWND lifetime. A tokenless
+    // identity can be reused by another HWND on the same UI thread, so it is
+    // deliberately useful only for a short burst of repeated operations.
+    return value.identity.windowToken ||
+           static_cast<DWORD>(now - value.observedTick) <
+               static_cast<DWORD>(AnimConstants::UiaWeakIdentityCacheMs);
 }
 static bool IsTaskbarDockWindowIdentityCurrent(
     HWND hWnd, const TaskbarDockWindowIdentity& expected) {
@@ -927,10 +947,9 @@ static bool IsTaskbarDockWindowIdentityCurrent(
             expected.monitor) {
         return false;
     }
-    return !expected.windowToken ||
-           reinterpret_cast<ULONG_PTR>(
+    return reinterpret_cast<ULONG_PTR>(
                GetPropW(hWnd, kPropTaskbarDockIdentity)) ==
-               expected.windowToken;
+           expected.windowToken;
 }
 static bool GetAnimWantRising(HWND hWnd, bool* wantRisingOut) {
     std::lock_guard<std::mutex> lock(g_StateMutex);
@@ -1300,11 +1319,14 @@ static void SweepStaleData() {
         else ++it;
     }
 }
-static bool ShouldUseBitBlt(HWND hWnd, bool isClosing) {
-    if (!isClosing) return false;
-    if (GetForegroundWindow() == hWnd) return true;
+static bool RequiresScreenCapture(HWND hWnd) {
     const auto cls = GetClassNameStr(hWnd);
-    return cls.find(L"CASCADIA") != std::wstring::npos || cls.find(L"ConsoleWindowClass") != std::wstring::npos;
+    return cls.find(L"CASCADIA") != std::wstring::npos ||
+           cls.find(L"ConsoleWindowClass") != std::wstring::npos;
+}
+static bool ShouldUseBitBlt(HWND hWnd, bool isClosing) {
+    return isClosing &&
+           (GetForegroundWindow() == hWnd || RequiresScreenCapture(hWnd));
 }
 struct ScreenCaptureEligibility {
     bool taskbarAboveAndOverlapping = false;
@@ -1795,7 +1817,7 @@ std::wstring GetProcessNameCached(HWND hWnd) {
         auto it = g_ProcessNameCache.find(hWnd);
         if (it != g_ProcessNameCache.end() &&
             it->second.processId == ownerPid &&
-            it->second.threadId == ownerTid && windowToken &&
+            it->second.threadId == ownerTid &&
             it->second.windowToken == windowToken) {
             return it->second.name;
         }
@@ -2331,16 +2353,18 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
             if (targetIdentityCurrent &&
                 generationIt != g_TaskbarDockLookupGenerations.end() &&
                 generationIt->second == t->generation) {
-                if (t->identity.windowToken) {
-                    const TaskbarDockCacheValue value{targetX, t->identity};
-                    g_TaskbarDockXs[t->hWndApp] = value;
-                    g_TaskbarDockFallbackXs[t->hWndApp] = value;
-                }
+                const TaskbarDockCacheValue value{
+                    targetX, t->identity, GetTickCount()};
+                g_TaskbarDockXs[t->hWndApp] = value;
+                g_TaskbarDockFallbackXs[t->hWndApp] = value;
                 if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
                 g_TaskbarDockLookupStartedTicks.erase(t->hWndApp);
                 g_TaskbarDockNegativeUntilTicks.erase(t->hWndApp);
                 g_TaskbarDockPositiveUntilTicks[t->hWndApp] =
-                    GetTickCount() + AnimConstants::UiaPositiveFallbackCacheMs;
+                    GetTickCount() +
+                    (t->identity.windowToken
+                         ? AnimConstants::UiaPositiveFallbackCacheMs
+                         : AnimConstants::UiaWeakIdentityCacheMs);
                 if (pending) {
                     pending->targetX = targetX;
                     pending->found = true;
@@ -2361,7 +2385,7 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
                 g_TaskbarDockPositiveUntilTicks.erase(t->hWndApp);
                 g_TaskbarDockNegativeUntilTicks[t->hWndApp] =
                     GetTickCount() +
-                    (t->hasLearnedFallback
+                    (t->identity.windowToken && t->hasLearnedFallback
                          ? AnimConstants::UiaNegativeCacheMs
                          : AnimConstants::UiaColdNegativeCacheMs);
             }
@@ -2412,17 +2436,15 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
         }
         auto it = g_TaskbarDockXs.find(hWndApp);
         if (it != g_TaskbarDockXs.end() &&
-            it->second.identity.monitor == hMon &&
-            TaskbarDockIdentityMatches(it->second.identity,
-                                       currentIdentity)) {
+            IsTaskbarDockCacheValueUsable(it->second, currentIdentity, hMon,
+                                          now)) {
             hwndCachedX = it->second.x;
             haveHwndCache = true;
         }
         auto fallbackIt = g_TaskbarDockFallbackXs.find(hWndApp);
         if (fallbackIt != g_TaskbarDockFallbackXs.end() &&
-            fallbackIt->second.identity.monitor == hMon &&
-            TaskbarDockIdentityMatches(fallbackIt->second.identity,
-                                       currentIdentity)) {
+            IsTaskbarDockCacheValueUsable(fallbackIt->second,
+                                          currentIdentity, hMon, now)) {
             hwndFallbackX = fallbackIt->second.x;
             haveHwndFallback = true;
         }
@@ -2449,8 +2471,10 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     const bool layoutEpochStillCurrent = !sharedLayoutTracking ||
                                          GetSharedTaskbarLayoutEpoch() ==
                                              layoutEpochAtRead;
+    const bool strongWindowIdentity = currentIdentity.windowToken != 0;
     if (haveHwndCache && layoutEpochStillCurrent &&
-        (sharedLayoutTracking || positiveFallbackCacheActive)) {
+        ((strongWindowIdentity && sharedLayoutTracking) ||
+         positiveFallbackCacheActive)) {
         return hwndCachedX;
     }
     if (!layoutEpochStillCurrent) {
@@ -2468,9 +2492,8 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
             std::lock_guard<std::mutex> lock(g_StateMutex);
             auto fallbackIt = g_TaskbarDockFallbackXs.find(hWndApp);
             if (fallbackIt != g_TaskbarDockFallbackXs.end() &&
-                fallbackIt->second.identity.monitor == hMon &&
-                TaskbarDockIdentityMatches(fallbackIt->second.identity,
-                                           currentIdentity)) {
+                IsTaskbarDockCacheValueUsable(fallbackIt->second,
+                                              currentIdentity, hMon, now)) {
                 hwndFallbackX = fallbackIt->second.x;
                 haveHwndFallback = true;
             }
@@ -2511,8 +2534,9 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
             g_TaskbarDockLookupStartedTicks.erase(hWndApp);
             g_TaskbarDockNegativeUntilTicks[hWndApp] =
                 GetTickCount() +
-                (hasLearnedFallback ? AnimConstants::UiaNegativeCacheMs
-                                    : AnimConstants::UiaColdNegativeCacheMs);
+                (currentIdentity.windowToken && hasLearnedFallback
+                     ? AnimConstants::UiaNegativeCacheMs
+                     : AnimConstants::UiaColdNegativeCacheMs);
         }
     };
     auto* pending = new (std::nothrow) UiaPending{};
@@ -3729,7 +3753,18 @@ public:
         UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
         if (firstFramePending) {
             ShowGhostNoActivate();
-            if (data->deferredMinimize && IsWindow(data->hRealWnd)) {
+            const bool cloakTopmostUnderTaskbarGhost =
+                !data->isClosing && !data->isRising &&
+                keepGhostBelowTaskbar &&
+                (data->originalExStyle & WS_EX_TOPMOST);
+            if ((data->deferredMinimize ||
+                 cloakTopmostUnderTaskbarGhost) &&
+                IsWindow(data->hRealWnd)) {
+                // A topmost Genie/Win10 source can otherwise remain above the
+                // ghost (which is deliberately just below the taskbar) until
+                // the hook submits the native minimize. Cloaking it here,
+                // before the first-frame event is signaled, preserves topmost
+                // state and reuses the normal reversal/teardown cleanup.
                 SetWindowCloak(data->hRealWnd, TRUE);
                 data->hiddenByCloak = TRUE;
             }
@@ -5080,6 +5115,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         delete data;
         return false;
     }
+    const bool screenOnlyCapture = isClosing && RequiresScreenCapture(hWnd);
     const bool preferScreenCapture = ShouldUseBitBlt(hWnd, isClosing);
     auto CopySnapshot = [&](void* sourceBits, int sourceWidth,
                             int sourceHeight, bool makeOpaque) -> bool {
@@ -5162,19 +5198,28 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
             capturedTaskbarRect = beforeCapture.taskbarRect;
             return TRUE;
         };
-        bool capturedFromScreen = preferScreenCapture;
+        bool capturedFromScreen = false;
+        bool screenCaptureAttempted = false;
         BOOL captured = FALSE;
-        if (capturedFromScreen) {
+        if (preferScreenCapture) {
+            screenCaptureAttempted = true;
             captured = CaptureScreen();
-        } else if (onTargetThread) {
+            capturedFromScreen = captured != FALSE;
+        }
+        if (!captured && onTargetThread && !screenOnlyCapture) {
             // PrintWindow is synchronous. It is safe only when this hook is
-            // already running on the target window's UI thread.
+            // already running on the target window's UI thread. Clear a
+            // rejected screen attempt first so partial PrintWindow output
+            // can't retain pixels from the composed desktop.
+            GdiFlush();
+            memset(tempBits, 0, (size_t)rawW * rawH * sizeof(DWORD));
             captured = PrintWindow(hWnd, tempDC, PW_RENDERFULLCONTENT);
         }
-        if (!captured && allowScreenFallback && IsWindowVisible(hWnd) &&
-            !IsIconic(hWnd)) {
-            capturedFromScreen = true;
+        if (!captured && !screenCaptureAttempted && allowScreenFallback &&
+            IsWindowVisible(hWnd) && !IsIconic(hWnd)) {
+            screenCaptureAttempted = true;
             captured = CaptureScreen();
+            capturedFromScreen = captured != FALSE;
         }
         if (captured && capturedFromScreen) {
             GdiFlush();
