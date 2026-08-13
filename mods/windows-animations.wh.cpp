@@ -401,12 +401,18 @@ namespace AnimConstants {
     constexpr int WaitTimeoutMs = 2500;
     constexpr int WaitSlackMs = 500;
     constexpr int NativeStateWaitMs = 2500;
+    constexpr int EndpointAsyncSettleMs = 50;
     constexpr int MaximizedRestoreGuardMs = 3000;
     constexpr int AltTabPollMs = 16;
     constexpr int AltTabSessionMs = 500;
-    constexpr int UiaLookupWaitMs = 150;
+    // A cold lookup follows a taskbar layout invalidation. Win11's XAML UIA
+    // tree can take longer than 150 ms while reflowing; returning earlier is
+    // what caused the first post-reflow animation to aim at center/old X.
+    // Valid hot HWND cache hits return before this wait.
+    constexpr int UiaLookupWaitMs = 400;
     constexpr int UiaLookupInFlightMs = 3000;
     constexpr int UiaNegativeCacheMs = 10000;
+    constexpr int UiaColdNegativeCacheMs = 500;
     constexpr int UiaPositiveFallbackCacheMs = 10000;
     constexpr int UiaMinAcceptScore = 400;
     constexpr int TaskbarExpandWaitMs = 250;
@@ -442,17 +448,41 @@ static constexpr PCWSTR kPropSnapshotCache =
     L"windows-animations.SnapshotCacheV1";
 static constexpr PCWSTR kPropLaunchAnimation =
     L"windows-animations.LaunchAnimationV1";
+static constexpr PCWSTR kPropTaskbarDockIdentity =
+    L"windows-animations.TaskbarDockIdentityV1";
 // The HWND properties bridge taskbar-side Explorer hooks and the target app's
 // hooks. The pair token's low nibble stores style+1; the remaining bits are a
 // nonce so an old worker can't clear a newer pair.
 std::atomic<ULONG_PTR> g_NextMinRestorePairToken{0};
 std::atomic<ULONG_PTR> g_NextSnapshotCacheToken{0};
+std::atomic<ULONG_PTR> g_NextTaskbarDockIdentityToken{0};
+struct TaskbarDockWindowIdentity {
+    DWORD processId = 0;
+    DWORD threadId = 0;
+    HMONITOR monitor = nullptr;
+    ULONG_PTR windowToken = 0;
+};
+struct TaskbarDockCacheValue {
+    int x = 0;
+    TaskbarDockWindowIdentity identity;
+};
+struct ProcessNameCacheValue {
+    DWORD processId = 0;
+    DWORD threadId = 0;
+    ULONG_PTR windowToken = 0;
+    std::wstring name;
+};
 std::unordered_map<HWND, SnapCache> g_WndSnapshots;
 size_t g_WndSnapshotBytes = 0;
 uint64_t g_NextSnapshotCacheSerial = 0;
-std::unordered_map<HWND, int> g_TaskbarDockXs;
+std::unordered_map<HWND, TaskbarDockCacheValue> g_TaskbarDockXs;
+// Last successfully observed X for the same HWND. Layout invalidation keeps
+// this only as a timeout fallback; it is never trusted as a current hot value.
+std::unordered_map<HWND, TaskbarDockCacheValue> g_TaskbarDockFallbackXs;
 std::unordered_map<std::wstring, int> g_ProcessDockXs;
 std::unordered_map<HWND, uint64_t> g_TaskbarDockLookupGenerations;
+std::unordered_map<HWND, TaskbarDockWindowIdentity>
+    g_TaskbarDockLookupIdentities;
 std::unordered_map<HWND, DWORD> g_TaskbarDockLookupStartedTicks;
 std::unordered_map<HWND, DWORD> g_TaskbarDockNegativeUntilTicks;
 std::unordered_map<HWND, DWORD> g_TaskbarDockPositiveUntilTicks;
@@ -461,7 +491,7 @@ uint64_t g_TaskbarWindowSetSignature = 0;
 bool g_TaskbarWindowSetSignatureInitialized = false;
 LONG g_seenTaskbarLayoutEpoch = 0;
 DWORD g_seenTaskbarExplorerPid = 0;
-std::unordered_map<HWND, std::wstring> g_ProcessNameCache;
+std::unordered_map<HWND, ProcessNameCacheValue> g_ProcessNameCache;
 std::unordered_set<HWND> g_LaunchSeen;
 std::unordered_set<HWND> g_AnimActive;
 std::unordered_map<HWND, bool> g_AnimWantRising;
@@ -842,6 +872,66 @@ static bool IsAnimating(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_StateMutex);
     return g_AnimActive.count(hWnd) != 0;
 }
+static ULONG_PTR GetOrCreateTaskbarDockIdentityToken(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return 0;
+    ULONG_PTR token = reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropTaskbarDockIdentity));
+    if (token) return token;
+    ULONG_PTR serial = g_NextTaskbarDockIdentityToken.fetch_add(
+                           1, std::memory_order_relaxed) +
+                       1;
+    token = serial ^
+            (static_cast<ULONG_PTR>(GetCurrentProcessId()) *
+             static_cast<ULONG_PTR>(0x9E3779B1u)) ^
+            static_cast<ULONG_PTR>(GetTickCount());
+    if (!token) token = 1;
+    if (!SetPropW(hWnd, kPropTaskbarDockIdentity,
+                  reinterpret_cast<HANDLE>(token))) {
+        return 0;
+    }
+    // Another injected process can race to establish the shared lifetime
+    // token. Use whichever value is actually attached to the HWND.
+    return reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropTaskbarDockIdentity));
+}
+static TaskbarDockWindowIdentity CaptureTaskbarDockWindowIdentity(
+    HWND hWnd, bool createToken) {
+    TaskbarDockWindowIdentity identity;
+    identity.threadId = GetWindowThreadProcessId(hWnd, &identity.processId);
+    if (!identity.threadId || !identity.processId) return {};
+    identity.monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    identity.windowToken = reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropTaskbarDockIdentity));
+    if (!identity.windowToken && createToken) {
+        identity.windowToken = GetOrCreateTaskbarDockIdentityToken(hWnd);
+    }
+    return identity;
+}
+static bool TaskbarDockIdentityMatches(
+    const TaskbarDockWindowIdentity& lhs,
+    const TaskbarDockWindowIdentity& rhs) {
+    return lhs.processId && lhs.processId == rhs.processId &&
+           lhs.threadId == rhs.threadId && lhs.monitor == rhs.monitor &&
+           lhs.windowToken && lhs.windowToken == rhs.windowToken;
+}
+static bool IsTaskbarDockWindowIdentityCurrent(
+    HWND hWnd, const TaskbarDockWindowIdentity& expected) {
+    if (!hWnd || !IsWindow(hWnd) || !expected.processId ||
+        !expected.threadId || !expected.monitor) {
+        return false;
+    }
+    DWORD processId = 0;
+    const DWORD threadId = GetWindowThreadProcessId(hWnd, &processId);
+    if (processId != expected.processId || threadId != expected.threadId ||
+        MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) !=
+            expected.monitor) {
+        return false;
+    }
+    return !expected.windowToken ||
+           reinterpret_cast<ULONG_PTR>(
+               GetPropW(hWnd, kPropTaskbarDockIdentity)) ==
+               expected.windowToken;
+}
 static bool GetAnimWantRising(HWND hWnd, bool* wantRisingOut) {
     std::lock_guard<std::mutex> lock(g_StateMutex);
     auto it = g_AnimWantRising.find(hWnd);
@@ -904,6 +994,16 @@ static void RestoreWindowUnderGhost(HWND hWnd, LONG_PTR originalExStyle,
     if (IsIconic(hWnd)) ShowWindow_Original(hWnd, SW_SHOWNOACTIVATE);
     if (IsIconic(hWnd)) ShowWindow_Original(hWnd, SW_RESTORE);
     RestoreZOrderAfterGhost(hWnd, originalExStyle);
+}
+static void RestoreWindowUnderGhostAsync(HWND hWnd, LONG_PTR originalExStyle,
+                                         BOOL restoreMaximized) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    // Always enqueue the final state. During rapid reversals an earlier async
+    // minimize can still be ahead of us even when the sampled state currently
+    // looks restored; the idempotent command makes the newest intent win.
+    ShowWindowAsync_Original(hWnd,
+                             StableRestoreShowCmd(restoreMaximized));
+    RestoreZOrderAfterGhostAsync(hWnd, originalExStyle);
 }
 
 static ULONG_PTR CreateMinRestorePairToken(int effectStyle) {
@@ -1115,7 +1215,9 @@ static void CleanupWindowData(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_StateMutex);
     EraseSnapshotLocked(hWnd);
     g_TaskbarDockXs.erase(hWnd);
+    g_TaskbarDockFallbackXs.erase(hWnd);
     g_TaskbarDockLookupGenerations.erase(hWnd);
+    g_TaskbarDockLookupIdentities.erase(hWnd);
     g_TaskbarDockLookupStartedTicks.erase(hWnd);
     g_TaskbarDockNegativeUntilTicks.erase(hWnd);
     g_TaskbarDockPositiveUntilTicks.erase(hWnd);
@@ -1141,9 +1243,19 @@ static void SweepStaleData() {
         if (!IsWindow(it->first)) it = g_TaskbarDockXs.erase(it);
         else ++it;
     }
+    for (auto it = g_TaskbarDockFallbackXs.begin();
+         it != g_TaskbarDockFallbackXs.end();) {
+        if (!IsWindow(it->first)) it = g_TaskbarDockFallbackXs.erase(it);
+        else ++it;
+    }
     for (auto it = g_TaskbarDockLookupGenerations.begin();
          it != g_TaskbarDockLookupGenerations.end();) {
         if (!IsWindow(it->first)) it = g_TaskbarDockLookupGenerations.erase(it);
+        else ++it;
+    }
+    for (auto it = g_TaskbarDockLookupIdentities.begin();
+         it != g_TaskbarDockLookupIdentities.end();) {
+        if (!IsWindow(it->first)) it = g_TaskbarDockLookupIdentities.erase(it);
         else ++it;
     }
     for (auto it = g_TaskbarDockLookupStartedTicks.begin();
@@ -1193,6 +1305,83 @@ static bool ShouldUseBitBlt(HWND hWnd, bool isClosing) {
     if (GetForegroundWindow() == hWnd) return true;
     const auto cls = GetClassNameStr(hWnd);
     return cls.find(L"CASCADIA") != std::wstring::npos || cls.find(L"ConsoleWindowClass") != std::wstring::npos;
+}
+struct ScreenCaptureEligibility {
+    bool taskbarAboveAndOverlapping = false;
+    RECT taskbarRect{};
+};
+
+static bool CanCaptureWindowFromScreen(
+    HWND hWnd, const RECT& captureRect, HWND hTaskbar,
+    ScreenCaptureEligibility* eligibilityOut = nullptr) {
+    ScreenCaptureEligibility eligibility;
+    if (!hWnd || !IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
+    BOOL targetCloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &targetCloaked,
+                                        sizeof(targetCloaked))) &&
+        targetCloaked) {
+        return false;
+    }
+
+    // Walk only windows above the target instead of sweeping the desktop. A
+    // finite bound keeps a concurrently mutating Z-order from trapping the
+    // shell hook; hitting the bound conservatively rejects the capture.
+    HWND candidate = GetWindow(hWnd, GW_HWNDPREV);
+    for (int remaining = 512; candidate && remaining > 0; --remaining) {
+        const HWND next = GetWindow(candidate, GW_HWNDPREV);
+        if (IsWindowVisible(candidate)) {
+            BOOL cloaked = FALSE;
+            const bool isCloaked =
+                SUCCEEDED(DwmGetWindowAttribute(candidate, DWMWA_CLOAKED,
+                                                &cloaked,
+                                                sizeof(cloaked))) &&
+                cloaked;
+            bool fullyTransparent = false;
+            if (!isCloaked &&
+                (GetWindowLongPtrW(candidate, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+                COLORREF colorKey = 0;
+                BYTE alpha = 255;
+                DWORD flags = 0;
+                // GetLayeredWindowAttributes fails for per-pixel-alpha windows
+                // created with UpdateLayeredWindow; those remain occluders.
+                fullyTransparent =
+                    GetLayeredWindowAttributes(candidate, &colorKey, &alpha,
+                                               &flags) &&
+                    (flags & LWA_ALPHA) && alpha == 0;
+            }
+            RECT candidateRect{};
+            RECT overlap{};
+            if (!isCloaked && !fullyTransparent) {
+                if (candidate == hTaskbar) {
+                    if (GetWindowRect(candidate, &candidateRect) &&
+                        IntersectRect(&overlap, &captureRect,
+                                      &candidateRect)) {
+                        eligibility.taskbarAboveAndOverlapping = true;
+                        eligibility.taskbarRect = candidateRect;
+                    }
+                } else {
+                    if (FAILED(DwmGetWindowAttribute(
+                            candidate, DWMWA_EXTENDED_FRAME_BOUNDS,
+                            &candidateRect, sizeof(candidateRect))) ||
+                        !PhysicalRectToAnimationSpace(hWnd,
+                                                      &candidateRect)) {
+                        if (!GetWindowRect(candidate, &candidateRect)) {
+                            candidate = next;
+                            continue;
+                        }
+                    }
+                    if (IntersectRect(&overlap, &captureRect,
+                                      &candidateRect)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        candidate = next;
+    }
+    if (candidate) return false;
+    if (eligibilityOut) *eligibilityOut = eligibility;
+    return true;
 }
 static PSECURITY_DESCRIPTOR BuildSharedStateSd() {
     HANDLE hToken = NULL;
@@ -1350,8 +1539,9 @@ static void UpdateDwmTransitions(HWND hWnd, BOOL enable) {
 static void SetWindowCloak(HWND hWnd, BOOL cloak) {
     DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
 }
-static void RefreshDwmChromeAfterUncloak(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd)) return;
+static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
+                                         bool nonBlocking = false) {
+    if (!hWnd || !IsWindow(hWnd)) return false;
     WCHAR cls[64]{};
     const bool explorerFrame =
         GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
@@ -1361,7 +1551,7 @@ static void RefreshDwmChromeAfterUncloak(HWND hWnd) {
     const bool explicitBackdrop =
         SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop))) &&
         backdrop >= 2;
-    if (!explorerFrame && !explicitBackdrop) return;
+    if (!explorerFrame && !explicitBackdrop) return false;
     if (explicitBackdrop) {
         DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
     }
@@ -1369,12 +1559,22 @@ static void RefreshDwmChromeAfterUncloak(HWND hWnd) {
         MARGINS margins = {-1, -1, -1, -1};
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
-    SetWindowPos_Original(hWnd, nullptr, 0, 0, 0, 0,
-                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                              SWP_FRAMECHANGED);
-    RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
-    SendMessageTimeoutW(hWnd, WM_DWMCOMPOSITIONCHANGED, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 50,
-                        nullptr);
+    SetWindowPos_Original(
+        hWnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+            SWP_FRAMECHANGED | (nonBlocking ? SWP_ASYNCWINDOWPOS : 0));
+    if (nonBlocking) {
+        // RedrawWindow can synchronously marshal to the owner. Let the queued
+        // frame change and composition notification repaint a foreign window.
+        PostMessageW(hWnd, WM_DWMCOMPOSITIONCHANGED, 0, 0);
+    } else {
+        RedrawWindow(hWnd, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
+                         RDW_ALLCHILDREN);
+        SendMessageTimeoutW(hWnd, WM_DWMCOMPOSITIONCHANGED, 0, 0,
+                            SMTO_ABORTIFHUNG | SMTO_NORMAL, 50, nullptr);
+    }
+    return true;
 }
 static void RestoreLayeredOpacity(HWND hWnd, LONG_PTR originalExStyle) {
     SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
@@ -1586,14 +1786,22 @@ static bool IsShowCmdForWinEvent(int cmd) {
            cmd == SW_SHOWNA || cmd == SW_SHOWNOACTIVATE;
 }
 std::wstring GetProcessNameCached(HWND hWnd) {
+    DWORD ownerPid = 0;
+    const DWORD ownerTid = GetWindowThreadProcessId(hWnd, &ownerPid);
+    const ULONG_PTR windowToken = reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropTaskbarDockIdentity));
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         auto it = g_ProcessNameCache.find(hWnd);
-        if (it != g_ProcessNameCache.end()) return it->second;
+        if (it != g_ProcessNameCache.end() &&
+            it->second.processId == ownerPid &&
+            it->second.threadId == ownerTid && windowToken &&
+            it->second.windowToken == windowToken) {
+            return it->second.name;
+        }
+        if (it != g_ProcessNameCache.end()) g_ProcessNameCache.erase(it);
     }
     std::wstring procNameLower = L"";
-    DWORD ownerPid = 0;
-    GetWindowThreadProcessId(hWnd, &ownerPid);
     if (ownerPid) {
         HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, ownerPid);
         if (hProc) {
@@ -1613,7 +1821,15 @@ std::wstring GetProcessNameCached(HWND hWnd) {
     }
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
-        g_ProcessNameCache[hWnd] = procNameLower;
+        // A transient OpenProcess/QueryFullProcessImageName failure must not
+        // permanently remove the process-name hint for this HWND. In
+        // particular, "explorer" is often the only stable UIA match for a
+        // File Explorer taskbar button whose caption is the current folder.
+        if (!procNameLower.empty()) {
+            g_ProcessNameCache[hWnd] =
+                ProcessNameCacheValue{ownerPid, ownerTid, windowToken,
+                                      procNameLower};
+        }
     }
     return procNameLower;
 }
@@ -1826,7 +2042,9 @@ struct UiaTask {
     std::wstring procHintLower;
     std::wstring processKey;
     HMONITOR hMon;
+    TaskbarDockWindowIdentity identity;
     int fallbackX;
+    bool hasLearnedFallback;
     uint64_t generation;
     UiaPending* pending = nullptr;
 };
@@ -1857,8 +2075,12 @@ struct TaskbarWindowSetSignatureContext {
 static void InvalidateTaskbarDockCachesLocked(
     bool preserveProcessFallback = false) {
     g_TaskbarDockXs.clear();
-    if (!preserveProcessFallback) g_ProcessDockXs.clear();
+    if (!preserveProcessFallback) {
+        g_TaskbarDockFallbackXs.clear();
+        g_ProcessDockXs.clear();
+    }
     g_TaskbarDockLookupGenerations.clear();
+    g_TaskbarDockLookupIdentities.clear();
     g_TaskbarDockLookupStartedTicks.clear();
     g_TaskbarDockNegativeUntilTicks.clear();
     g_TaskbarDockPositiveUntilTicks.clear();
@@ -1906,7 +2128,11 @@ static bool SyncTaskbarLayoutEpoch() {
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         if (epoch != g_seenTaskbarLayoutEpoch) {
-            InvalidateTaskbarDockCachesLocked();
+            // The HWND result is stale after a reflow, but the process-level
+            // value remains a much better timeout fallback than monitor
+            // center. It is never hot-returned as a current result.
+            InvalidateTaskbarDockCachesLocked(
+                /*preserveProcessFallback=*/true);
             g_seenTaskbarLayoutEpoch = epoch;
         }
     }
@@ -2095,14 +2321,21 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         return 0;
     }
     SyncTaskbarLayoutEpoch();
+    const bool targetIdentityCurrent =
+        IsTaskbarDockWindowIdentityCurrent(t->hWndApp, t->identity);
     if (uiaFound) {
         bool accepted = false;
         {
             std::lock_guard<std::mutex> lock(g_StateMutex);
             auto generationIt = g_TaskbarDockLookupGenerations.find(t->hWndApp);
-            if (generationIt != g_TaskbarDockLookupGenerations.end() &&
+            if (targetIdentityCurrent &&
+                generationIt != g_TaskbarDockLookupGenerations.end() &&
                 generationIt->second == t->generation) {
-                g_TaskbarDockXs[t->hWndApp] = targetX;
+                if (t->identity.windowToken) {
+                    const TaskbarDockCacheValue value{targetX, t->identity};
+                    g_TaskbarDockXs[t->hWndApp] = value;
+                    g_TaskbarDockFallbackXs[t->hWndApp] = value;
+                }
                 if (!t->processKey.empty()) g_ProcessDockXs[t->processKey] = targetX;
                 g_TaskbarDockLookupStartedTicks.erase(t->hWndApp);
                 g_TaskbarDockNegativeUntilTicks.erase(t->hWndApp);
@@ -2120,13 +2353,17 @@ DWORD WINAPI UiaWorkerThread(LPVOID lpParam) {
         {
             std::lock_guard<std::mutex> lock(g_StateMutex);
             auto generationIt = g_TaskbarDockLookupGenerations.find(t->hWndApp);
-            if (generationIt != g_TaskbarDockLookupGenerations.end() &&
+            if (targetIdentityCurrent &&
+                generationIt != g_TaskbarDockLookupGenerations.end() &&
                 generationIt->second == t->generation) {
                 g_TaskbarDockLookupStartedTicks.erase(t->hWndApp);
                 g_TaskbarDockXs.erase(t->hWndApp);
                 g_TaskbarDockPositiveUntilTicks.erase(t->hWndApp);
                 g_TaskbarDockNegativeUntilTicks[t->hWndApp] =
-                    GetTickCount() + AnimConstants::UiaNegativeCacheMs;
+                    GetTickCount() +
+                    (t->hasLearnedFallback
+                         ? AnimConstants::UiaNegativeCacheMs
+                         : AnimConstants::UiaColdNegativeCacheMs);
             }
         }
         Wh_Log(L"UIA dock miss hwnd=%p fallback=%d", t->hWndApp, t->fallbackX);
@@ -2141,11 +2378,15 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     // trusting a hot per-window position. This intentionally runs on every
     // Genie/Windows 10 lookup so the first animation after a close is correct.
     RefreshTaskbarWindowSetSignature();
+    const TaskbarDockWindowIdentity currentIdentity =
+        CaptureTaskbarDockWindowIdentity(hWndApp, /*createToken=*/true);
     std::wstring procNameLower = GetProcessNameCached(hWndApp);
     std::wstring processKey = MakeProcessDockKey(procNameLower, hMon);
     int hwndCachedX = 0;
+    int hwndFallbackX = 0;
     int processCachedX = 0;
     bool haveHwndCache = false;
+    bool haveHwndFallback = false;
     bool haveProcessCache = false;
     bool lookupInFlight = false;
     bool negativeCacheActive = false;
@@ -2155,10 +2396,35 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     const DWORD now = GetTickCount();
     {
         std::lock_guard<std::mutex> lock(g_StateMutex);
+        auto lookupIdentityIt = g_TaskbarDockLookupIdentities.find(hWndApp);
+        const bool transientIdentityCurrent =
+            lookupIdentityIt != g_TaskbarDockLookupIdentities.end() &&
+            lookupIdentityIt->second.monitor == hMon &&
+            TaskbarDockIdentityMatches(lookupIdentityIt->second,
+                                       currentIdentity);
+        if (!transientIdentityCurrent) {
+            g_TaskbarDockLookupGenerations.erase(hWndApp);
+            g_TaskbarDockLookupIdentities.erase(hWndApp);
+            g_TaskbarDockLookupStartedTicks.erase(hWndApp);
+            g_TaskbarDockNegativeUntilTicks.erase(hWndApp);
+            g_TaskbarDockPositiveUntilTicks.erase(hWndApp);
+            g_TaskbarDockXs.erase(hWndApp);
+        }
         auto it = g_TaskbarDockXs.find(hWndApp);
-        if (it != g_TaskbarDockXs.end()) {
-            hwndCachedX = it->second;
+        if (it != g_TaskbarDockXs.end() &&
+            it->second.identity.monitor == hMon &&
+            TaskbarDockIdentityMatches(it->second.identity,
+                                       currentIdentity)) {
+            hwndCachedX = it->second.x;
             haveHwndCache = true;
+        }
+        auto fallbackIt = g_TaskbarDockFallbackXs.find(hWndApp);
+        if (fallbackIt != g_TaskbarDockFallbackXs.end() &&
+            fallbackIt->second.identity.monitor == hMon &&
+            TaskbarDockIdentityMatches(fallbackIt->second.identity,
+                                       currentIdentity)) {
+            hwndFallbackX = fallbackIt->second.x;
+            haveHwndFallback = true;
         }
         if (!processKey.empty()) {
             auto pit = g_ProcessDockXs.find(processKey);
@@ -2190,14 +2456,39 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     if (!layoutEpochStillCurrent) {
         SyncTaskbarLayoutEpoch();
         haveHwndCache = false;
-        haveProcessCache = false;
         lookupInFlight = false;
         negativeCacheActive = false;
         positiveFallbackCacheActive = false;
+        // Sync may have preserved the process fallback for a same-Explorer
+        // reflow, or cleared all fallbacks for an Explorer restart. Reload the
+        // actual post-sync state instead of retaining stale local copies.
+        haveHwndFallback = false;
+        haveProcessCache = false;
+        {
+            std::lock_guard<std::mutex> lock(g_StateMutex);
+            auto fallbackIt = g_TaskbarDockFallbackXs.find(hWndApp);
+            if (fallbackIt != g_TaskbarDockFallbackXs.end() &&
+                fallbackIt->second.identity.monitor == hMon &&
+                TaskbarDockIdentityMatches(fallbackIt->second.identity,
+                                           currentIdentity)) {
+                hwndFallbackX = fallbackIt->second.x;
+                haveHwndFallback = true;
+            }
+            if (!processKey.empty()) {
+                auto processIt = g_ProcessDockXs.find(processKey);
+                if (processIt != g_ProcessDockXs.end()) {
+                    processCachedX = processIt->second;
+                    haveProcessCache = true;
+                }
+            }
+        }
     }
     const int softFallback = haveHwndCache ? hwndCachedX
+                           : haveHwndFallback ? hwndFallbackX
                            : haveProcessCache ? processCachedX
                                               : fallbackX;
+    const bool hasLearnedFallback =
+        haveHwndCache || haveHwndFallback || haveProcessCache;
     if (lookupInFlight || negativeCacheActive) return softFallback;
 
     {
@@ -2205,6 +2496,7 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
         generation = ++g_NextTaskbarDockLookupGeneration;
         if (!generation) generation = ++g_NextTaskbarDockLookupGeneration;
         g_TaskbarDockLookupGenerations[hWndApp] = generation;
+        g_TaskbarDockLookupIdentities[hWndApp] = currentIdentity;
         g_TaskbarDockLookupStartedTicks[hWndApp] = now;
         g_TaskbarDockNegativeUntilTicks.erase(hWndApp);
     }
@@ -2218,7 +2510,9 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
             generationIt->second == generation) {
             g_TaskbarDockLookupStartedTicks.erase(hWndApp);
             g_TaskbarDockNegativeUntilTicks[hWndApp] =
-                GetTickCount() + AnimConstants::UiaNegativeCacheMs;
+                GetTickCount() +
+                (hasLearnedFallback ? AnimConstants::UiaNegativeCacheMs
+                                    : AnimConstants::UiaColdNegativeCacheMs);
         }
     };
     auto* pending = new (std::nothrow) UiaPending{};
@@ -2236,10 +2530,10 @@ int GetTaskbarButtonX_Async(HWND hWndApp, const WCHAR* windowTitle, int fallback
     }
     UiaTask* task = nullptr;
     try {
-        task = new (std::nothrow) UiaTask{hWndApp, std::move(titleLower),
-                                         std::move(procNameLower), procHintLower,
-                                         std::move(processKey), hMon, softFallback,
-                                         generation, pending};
+        task = new (std::nothrow) UiaTask{
+            hWndApp, std::move(titleLower), std::move(procNameLower),
+            procHintLower, std::move(processKey), hMon, currentIdentity,
+            softFallback, hasLearnedFallback, generation, pending};
     } catch (const std::exception&) {
         task = nullptr;
     }
@@ -2539,7 +2833,10 @@ void CALLBACK TaskbarLayoutEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, H
 
     IncrementSharedTaskbarLayoutEpoch();
     std::lock_guard<std::mutex> lock(g_StateMutex);
-    InvalidateTaskbarDockCachesLocked();
+    // Force a fresh HWND/UIA result while retaining a non-authoritative
+    // process fallback in case Explorer is still reflowing and the bounded
+    // lookup doesn't finish in time.
+    InvalidateTaskbarDockCachesLocked(/*preserveProcessFallback=*/true);
 }
 
 DWORD WINAPI WinEventHookThread(LPVOID lpParam) {
@@ -3330,10 +3627,31 @@ public:
         } else if (minRestoreEffect == 7) {
             const int pad =
                 std::max(1, static_cast<int>(ceilf(8.0f * taskbarDpiScale)));
-            boundLeft = std::max(monLeft, std::min(origLeft, dockX) - pad);
-            const int boundRight = std::min(monRight, std::max(origLeft + W, dockX) + pad);
-            boundTop = std::max(monTop, std::min(origTop, (int)dockY) - pad);
-            const int boundBottom = std::min(monBottom, std::max(origTop + H, (int)dockY + pad));
+            // RenderWin10MinRestore finishes at a 1.6x taskbar-button box, not
+            // at the button's center point. Include that complete endpoint in
+            // the ghost canvas so the last frames aren't clipped on any edge.
+            const float buttonW = 48.0f * taskbarDpiScale;
+            const float buttonH = 40.0f * taskbarDpiScale;
+            const float targetHalfW = buttonW * 0.8f;
+            const float targetHalfH = buttonH * 0.8f;
+            const float targetCenterY =
+                dockY + 2.0f * taskbarDpiScale + buttonH * 0.5f;
+            const int targetLeft =
+                static_cast<int>(floorf(dockXf - targetHalfW));
+            const int targetRight =
+                static_cast<int>(ceilf(dockXf + targetHalfW));
+            const int targetTop =
+                static_cast<int>(floorf(targetCenterY - targetHalfH));
+            const int targetBottom =
+                static_cast<int>(ceilf(targetCenterY + targetHalfH));
+            boundLeft =
+                std::max(monLeft, std::min(origLeft, targetLeft) - pad);
+            const int boundRight = std::min(
+                monRight, std::max(origLeft + W, targetRight) + pad);
+            boundTop =
+                std::max(monTop, std::min(origTop, targetTop) - pad);
+            const int boundBottom = std::min(
+                monBottom, std::max(origTop + H, targetBottom) + pad);
             boundW = boundRight - boundLeft;
             boundH = boundBottom - boundTop;
         } else {
@@ -3895,18 +4213,24 @@ public:
                         data->nativeAsyncMinimizeObserved = TRUE;
                     }
                     if (!data->nativeStateTimedOut) {
-                        RestoreWindowUnderGhost(hWnd, data->originalExStyle,
-                                                data->restoreMaximized);
+                        RestoreWindowUnderGhostAsync(
+                            hWnd, data->originalExStyle,
+                            data->restoreMaximized);
                     }
                 }
                 data->hiddenByCloak = TRUE;
             }
             data->isRising = TRUE;
         } else {
-            if (IsWindow(hWnd) && !IsIconic(hWnd)) {
-                UpdateDwmTransitions(hWnd, FALSE);
-                SetWindowCloak(hWnd, TRUE);
-                data->hiddenByCloak = TRUE;
+            if (IsWindow(hWnd)) {
+                if (!IsIconic(hWnd)) {
+                    UpdateDwmTransitions(hWnd, FALSE);
+                    SetWindowCloak(hWnd, TRUE);
+                    data->hiddenByCloak = TRUE;
+                }
+                // Queue a final minimize even if the window still looks
+                // iconic: an earlier async restore may not have been consumed
+                // by the target thread yet.
                 data->deferredMinimize = TRUE;
                 if (data->deferredShowCmd != SW_SHOWMINNOACTIVE &&
                     data->deferredShowCmd != SW_SHOWMINIMIZED &&
@@ -3924,6 +4248,39 @@ public:
         bool wantRising = false;
         if (!GetAnimWantRising(data->hRealWnd, &wantRising)) return false;
         return ApplyDirectionState(wantRising);
+    }
+    bool WaitForEndpointShowState(bool rising) {
+        const bool reachedAtSubmission = HasReachedNativeShowState(
+            data->hRealWnd, rising, data->restoreMaximized);
+        bool sawOppositeState = !reachedAtSubmission;
+        const DWORD settleDeadline =
+            GetTickCount() + AnimConstants::EndpointAsyncSettleMs;
+        const DWORD deadline =
+            GetTickCount() + AnimConstants::NativeStateWaitMs;
+        while (IsWindow(data->hRealWnd) &&
+               !g_unloading.load(std::memory_order_relaxed) &&
+               (LONG)(GetTickCount() - deadline) < 0) {
+            bool wantRising = rising;
+            if (GetAnimWantRising(data->hRealWnd, &wantRising) &&
+                wantRising != rising) {
+                return false;
+            }
+            const bool reached = HasReachedNativeShowState(
+                data->hRealWnd, rising, data->restoreMaximized);
+            if (!reached) {
+                sawOppositeState = true;
+            } else if (sawOppositeState ||
+                       (LONG)(GetTickCount() - settleDeadline) >= 0) {
+                return true;
+            }
+            Sleep(10);
+        }
+        if (IsWindow(data->hRealWnd) &&
+            !HasReachedNativeShowState(data->hRealWnd, rising,
+                                       data->restoreMaximized)) {
+            data->nativeStateTimedOut = TRUE;
+        }
+        return true;
     }
     bool TryReverseToWantedDirection(const LARGE_INTEGER& qpcFreq, LARGE_INTEGER& qpcStart) {
         LARGE_INTEGER qpcNow;
@@ -3994,32 +4351,56 @@ public:
             FlushDwmOrYield();
         }
     }
-    void FinishRising() {
-        if (data->isClosing || !data->isRising) return;
-        for (int attempt = 0; attempt < 4 && IsIconic(data->hRealWnd); ++attempt) {
-            RestoreWindowUnderGhost(data->hRealWnd, data->originalExStyle,
-                                    data->restoreMaximized);
-            if (IsIconic(data->hRealWnd)) Sleep(5);
+    bool FinishRising() {
+        if (data->isClosing || !data->isRising) return true;
+        if (!data->launchAnimationToken) {
+            RestoreWindowUnderGhostAsync(data->hRealWnd,
+                                         data->originalExStyle,
+                                         data->restoreMaximized);
+            if (!WaitForEndpointShowState(true)) return false;
         }
-        if (data->restoreMaximized && IsWindow(data->hRealWnd) &&
-            !IsZoomed(data->hRealWnd)) {
-            RestoreWindowUnderGhost(data->hRealWnd, data->originalExStyle,
-                                    TRUE);
-        }
+        bool chromeRefreshQueued = false;
         if (data->hiddenByCloak) {
             SetWindowCloak(data->hRealWnd, FALSE);
             UpdateDwmTransitions(data->hRealWnd, TRUE);
-            RestoreZOrderAfterGhost(data->hRealWnd, data->originalExStyle);
-            RefreshDwmChromeAfterUncloak(data->hRealWnd);
+            RestoreZOrderAfterGhostAsync(data->hRealWnd,
+                                         data->originalExStyle);
+            chromeRefreshQueued = RefreshDwmChromeAfterUncloak(
+                data->hRealWnd, /*nonBlocking=*/true);
         } else {
             RestoreLayeredOpacity(data->hRealWnd, data->originalExStyle);
             UpdateDwmTransitions(data->hRealWnd, TRUE);
-            RestoreZOrderAfterGhost(data->hRealWnd, data->originalExStyle);
+            RestoreZOrderAfterGhostAsync(data->hRealWnd,
+                                         data->originalExStyle);
         }
         FlushDwmOrYield();
+        if (chromeRefreshQueued) {
+            // Explorer and Mica-backed windows rebuild their client surface in
+            // response to the queued frame/composition refresh. Keep the
+            // completed snapshot over the real window for a short bounded
+            // handoff; otherwise the client body can flash while DWM's title
+            // bar remains intact. A live reversal leaves the ghost visible and
+            // returns to rendering immediately.
+            const DWORD deadline =
+                GetTickCount() + AnimConstants::EndpointAsyncSettleMs;
+            while (IsWindow(data->hRealWnd) &&
+                   !g_unloading.load(std::memory_order_relaxed) &&
+                   (LONG)(GetTickCount() - deadline) < 0) {
+                bool wantRising = true;
+                if (GetAnimWantRising(data->hRealWnd, &wantRising) &&
+                    !wantRising) {
+                    return false;
+                }
+                Sleep(5);
+            }
+            FlushDwmOrYield();
+        }
+        if (hGhost) ShowWindow_Original(hGhost, SW_HIDE);
+        return true;
     }
     void FinishTimedOutNativeState() {
         if (!IsWindow(data->hRealWnd)) return;
+        if (hGhost) ShowWindow_Original(hGhost, SW_HIDE);
         if (data->hiddenByCloak) {
             SetWindowCloak(data->hRealWnd, FALSE);
         } else {
@@ -4078,13 +4459,21 @@ public:
                 return false;
             }
         }
-        if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
-            if (data->deferredShowCmd == SW_SHOWMINNOACTIVE ||
-                data->deferredShowCmd == SW_SHOWMINIMIZED ||
-                data->deferredShowCmd == SW_MINIMIZE) {
-                ShowWindow_Original(data->hRealWnd, data->deferredShowCmd);
-            } else {
-                ShowWindow_Original(data->hRealWnd, SW_MINIMIZE);
+        if (!g_unloading.load(std::memory_order_relaxed) &&
+            IsWindow(data->hRealWnd)) {
+            const int showCmd =
+                data->deferredShowCmd == SW_SHOWMINNOACTIVE ||
+                        data->deferredShowCmd == SW_SHOWMINIMIZED ||
+                        data->deferredShowCmd == SW_MINIMIZE
+                    ? data->deferredShowCmd
+                    : SW_MINIMIZE;
+            const BOOL submitted =
+                ShowWindowAsync_Original(data->hRealWnd, showCmd);
+            if (submitted && !WaitForEndpointShowState(false)) {
+                return false;
+            }
+            if (!submitted) {
+                data->nativeStateTimedOut = TRUE;
             }
         }
         {
@@ -4093,11 +4482,13 @@ public:
                 return false;
             }
         }
+        if (hGhost) ShowWindow_Original(hGhost, SW_HIDE);
         data->deferredMinimize = FALSE;
         if (IsWindow(data->hRealWnd)) {
             SetWindowCloak(data->hRealWnd, FALSE);
             UpdateDwmTransitions(data->hRealWnd, TRUE);
-            RestoreZOrderAfterGhost(data->hRealWnd, data->originalExStyle);
+            RestoreZOrderAfterGhostAsync(data->hRealWnd,
+                                         data->originalExStyle);
         }
         return true;
     }
@@ -4168,17 +4559,23 @@ public:
                 // The stable handoff below queues the latest intent asynchronously.
                 FinishTimedOutNativeState();
             } else if (data->isRising) {
-                FinishRising();
+                if (!FinishRising()) {
+                    if (hGhost) ShowGhostNoActivate();
+                    continue;
+                }
             } else {
-                if (!FinishDeferredMinimize()) continue;
+                if (!FinishDeferredMinimize()) {
+                    continue;
+                }
+                if (hGhost) ShowWindow_Original(hGhost, SW_HIDE);
                 if (IsWindow(data->hRealWnd)) {
                     SetWindowCloak(data->hRealWnd, FALSE);
                     UpdateDwmTransitions(data->hRealWnd, TRUE);
-                    RestoreZOrderAfterGhost(data->hRealWnd, data->originalExStyle);
+                    RestoreZOrderAfterGhostAsync(data->hRealWnd,
+                                                 data->originalExStyle);
                 }
             }
             bool directionChanged = false;
-            if (hGhost) ShowWindow_Original(hGhost, SW_HIDE);
             {
                 std::lock_guard<std::mutex> lock(g_StateMutex);
                 auto it = g_AnimWantRising.find(data->hRealWnd);
@@ -4330,7 +4727,8 @@ public:
         if (!data->isClosing && !ownershipReleased && !data->isRising && !data->deferredMinimize) {
             SetWindowCloak(data->hRealWnd, FALSE);
             UpdateDwmTransitions(data->hRealWnd, TRUE);
-            RestoreZOrderAfterGhost(data->hRealWnd, data->originalExStyle);
+            RestoreZOrderAfterGhostAsync(data->hRealWnd,
+                                         data->originalExStyle);
         }
         ReleaseGdiResources();
         if (!data->isClosing && !ownershipReleased && !FinishDeferredMinimize()) {
@@ -4467,17 +4865,18 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden, /*skipDwmIfOwned=*/true);
         return false;
     }
+    const DWORD targetThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    const bool onTargetThread =
+        targetThreadId && targetThreadId == GetCurrentThreadId();
     LONG_PTR storedExStyle = originalExStyle;
     if (!isClosing) {
         const LONG_PTR currentExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
         storedExStyle = (originalExStyle & ~WS_EX_TOPMOST) |
                         (currentExStyle & WS_EX_TOPMOST);
-        if (currentExStyle & WS_EX_TOPMOST) {
-            // Let the animation ghost cover the real window temporarily. Keep
-            // the bit in storedExStyle so endpoint/failure cleanup promotes it
-            // back into the topmost band.
-            RestoreZOrderAfterGhost(hWnd, 0);
-        }
+        // The ghost is itself inserted into the topmost band, above existing
+        // topmost windows (or directly below the topmost taskbar). Leaving the
+        // real window in its band avoids an asynchronous demote/promote race
+        // with a rapid follow-up animation.
     }
     // A long guard is needed only while an accepted minimize/restore session
     // can receive a duplicate taskbar restore in another injected process.
@@ -4572,9 +4971,6 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         FALSE,
         nativeBarrierOwner.release()
     };
-    const DWORD targetThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    const bool onTargetThread =
-        targetThreadId && targetThreadId == GetCurrentThreadId();
     bool pairTokenPublished = false;
     const bool initiatingHookWillSubmitMinimize =
         !rising && suppressNativeMinimizeOnFailure != nullptr;
@@ -4735,11 +5131,41 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
             return false;
         }
         HBITMAP oldBmp = (HBITMAP)SelectObject(tempDC, tempBmp);
+        const HWND hCaptureTaskbar = FindTaskbarForMonitor(hMon);
+        bool capturedTaskbarAbove = false;
+        RECT capturedTaskbarRect{};
+        auto CaptureScreen = [&]() -> BOOL {
+            // A screen DC contains the fully composed desktop, not just hWnd.
+            // Refuse the fallback when another top-level window contributes
+            // pixels above the target. Checking the z-order also catches our
+            // hit-test-transparent ghosts during batched shell minimizes.
+            ScreenCaptureEligibility beforeCapture;
+            if (!CanCaptureWindowFromScreen(hWnd, rect, hCaptureTaskbar,
+                                            &beforeCapture)) {
+                return FALSE;
+            }
+            const BOOL result = BitBlt(tempDC, 0, 0, rawW, rawH, hScreenDC,
+                                       winRect.left, winRect.top, SRCCOPY);
+            ScreenCaptureEligibility afterCapture;
+            if (!result ||
+                !CanCaptureWindowFromScreen(hWnd, rect, hCaptureTaskbar,
+                                            &afterCapture) ||
+                beforeCapture.taskbarAboveAndOverlapping !=
+                    afterCapture.taskbarAboveAndOverlapping ||
+                (beforeCapture.taskbarAboveAndOverlapping &&
+                 !EqualRect(&beforeCapture.taskbarRect,
+                            &afterCapture.taskbarRect))) {
+                return FALSE;
+            }
+            capturedTaskbarAbove =
+                beforeCapture.taskbarAboveAndOverlapping;
+            capturedTaskbarRect = beforeCapture.taskbarRect;
+            return TRUE;
+        };
         bool capturedFromScreen = preferScreenCapture;
         BOOL captured = FALSE;
         if (capturedFromScreen) {
-            captured = BitBlt(tempDC, 0, 0, rawW, rawH, hScreenDC,
-                              winRect.left, winRect.top, SRCCOPY);
+            captured = CaptureScreen();
         } else if (onTargetThread) {
             // PrintWindow is synchronous. It is safe only when this hook is
             // already running on the target window's UI thread.
@@ -4748,52 +5174,50 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         if (!captured && allowScreenFallback && IsWindowVisible(hWnd) &&
             !IsIconic(hWnd)) {
             capturedFromScreen = true;
-            captured = BitBlt(tempDC, 0, 0, rawW, rawH, hScreenDC,
-                              winRect.left, winRect.top, SRCCOPY);
-            if (captured) {
-                GdiFlush();
-                HWND hTray = FindTaskbarForMonitor(hMon);
-                RECT trayRect{};
-                RECT overlap{};
-                if (hTray && GetWindowRect(hTray, &trayRect) &&
-                    IntersectRect(&overlap, &winRect, &trayRect)) {
-                    const int left = Clamp(
-                        static_cast<int>(overlap.left - winRect.left), 0, rawW);
-                    const int right = Clamp(
-                        static_cast<int>(overlap.right - winRect.left), 0, rawW);
-                    const int top = Clamp(
-                        static_cast<int>(overlap.top - winRect.top), 0, rawH);
-                    const int bottom = Clamp(
-                        static_cast<int>(overlap.bottom - winRect.top), 0, rawH);
-                    auto* pixels = static_cast<DWORD*>(tempBits);
-                    const bool horizontal =
-                        (trayRect.right - trayRect.left) >=
-                        (trayRect.bottom - trayRect.top);
-                    const bool trailingEdge = horizontal
-                                                  ? trayRect.top >=
-                                                        (mi.rcMonitor.top +
-                                                         mi.rcMonitor.bottom) / 2
-                                                  : trayRect.left >=
-                                                        (mi.rcMonitor.left +
-                                                         mi.rcMonitor.right) / 2;
-                    if (left < right && top < bottom) {
-                        if (horizontal) {
-                            const int sourceY = trailingEdge
-                                                    ? std::max(0, top - 1)
-                                                    : std::min(rawH - 1, bottom);
-                            for (int y = top; y < bottom; ++y) {
-                                memcpy(pixels + (size_t)y * rawW + left,
-                                       pixels + (size_t)sourceY * rawW + left,
-                                       (size_t)(right - left) * sizeof(DWORD));
-                            }
-                        } else {
-                            const int sourceX = trailingEdge
-                                                    ? std::max(0, left - 1)
-                                                    : std::min(rawW - 1, right);
-                            for (int y = top; y < bottom; ++y) {
-                                DWORD* row = pixels + (size_t)y * rawW;
-                                std::fill(row + left, row + right, row[sourceX]);
-                            }
+            captured = CaptureScreen();
+        }
+        if (captured && capturedFromScreen) {
+            GdiFlush();
+            RECT overlap{};
+            if (capturedTaskbarAbove &&
+                IntersectRect(&overlap, &winRect,
+                              &capturedTaskbarRect)) {
+                const int left = Clamp(
+                    static_cast<int>(overlap.left - winRect.left), 0, rawW);
+                const int right = Clamp(
+                    static_cast<int>(overlap.right - winRect.left), 0, rawW);
+                const int top = Clamp(
+                    static_cast<int>(overlap.top - winRect.top), 0, rawH);
+                const int bottom = Clamp(
+                    static_cast<int>(overlap.bottom - winRect.top), 0, rawH);
+                auto* pixels = static_cast<DWORD*>(tempBits);
+                const bool horizontal =
+                    (capturedTaskbarRect.right - capturedTaskbarRect.left) >=
+                    (capturedTaskbarRect.bottom - capturedTaskbarRect.top);
+                const bool trailingEdge = horizontal
+                                              ? capturedTaskbarRect.top >=
+                                                    (mi.rcMonitor.top +
+                                                     mi.rcMonitor.bottom) / 2
+                                              : capturedTaskbarRect.left >=
+                                                    (mi.rcMonitor.left +
+                                                     mi.rcMonitor.right) / 2;
+                if (left < right && top < bottom) {
+                    if (horizontal) {
+                        const int sourceY = trailingEdge
+                                                ? std::max(0, top - 1)
+                                                : std::min(rawH - 1, bottom);
+                        for (int y = top; y < bottom; ++y) {
+                            memcpy(pixels + (size_t)y * rawW + left,
+                                   pixels + (size_t)sourceY * rawW + left,
+                                   (size_t)(right - left) * sizeof(DWORD));
+                        }
+                    } else {
+                        const int sourceX = trailingEdge
+                                                ? std::max(0, left - 1)
+                                                : std::min(rawW - 1, right);
+                        for (int y = top; y < bottom; ++y) {
+                            DWORD* row = pixels + (size_t)y * rawW;
+                            std::fill(row + left, row + right, row[sourceX]);
                         }
                     }
                 }
@@ -5845,8 +6269,11 @@ void Wh_ModUninit() {
             EraseSnapshotLocked(g_WndSnapshots.begin());
         }
         g_WndSnapshotBytes = 0;
-        g_TaskbarDockXs.clear(); g_ProcessDockXs.clear();
+        g_TaskbarDockXs.clear();
+        g_TaskbarDockFallbackXs.clear();
+        g_ProcessDockXs.clear();
         g_TaskbarDockLookupGenerations.clear();
+        g_TaskbarDockLookupIdentities.clear();
         g_TaskbarDockLookupStartedTicks.clear();
         g_TaskbarDockNegativeUntilTicks.clear();
         g_TaskbarDockPositiveUntilTicks.clear();
