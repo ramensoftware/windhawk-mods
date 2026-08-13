@@ -65,7 +65,7 @@ no file or folder is located) and performs the action you've configured.
 - **Custom Hotkey** — Send a custom key combination, configured per trigger (see below)
 - **Go to Desktop** — Navigate to the Desktop
 - **Go to Home** — Navigate to Quick Access / Home
-- **Open in VS Code** — Invoke "Open with Code" from the context menu (matches English "Code"; for non-English Windows use "Open Context Menu Item" instead)
+- **Open in VS Code** — Invoke "Open with Code" from the context menu. Matches English "Code" as a loose substring, so entries like "Encode with HandBrake" may match first; if the wrong entry fires (or on non-English Windows where "Code" won't match), set that trigger's **Context Menu Match** override to a more specific text/verb, or use **Open Context Menu Item**
 - **Open in Terminal** — Launch Windows Terminal (`wt.exe -d <folder>`) directly in the current folder. Works regardless of Windows language; requires Windows Terminal to be installed. If Windows Terminal is not installed, or the current location is a virtual folder (This PC, Recycle Bin), nothing happens and the reason is written to the Windhawk debug log.
 - **Open Context Menu Item** — Invoke any right-click background context menu entry by matching its text/verb (configured via "Context Menu Match" setting). Use this for Cursor, Git Bash, PowerShell, or any program that registered an entry.
 - **None** — Do nothing
@@ -115,6 +115,18 @@ CMENU[Open Git Ba&sh here] wID=92 verb=[git_shell]  → match: "opengitbashhere"
 The `→ match:` part shows the normalized form of each entry's text and verb.
 **Type any part of either normalized string** to match that entry. For example,
 `"gitbash"`, `"git"`, `"bash"`, `"shell"`, or `"git_shell"` would all match this entry.
+
+### Per-trigger overrides
+
+Each trigger also has its own **Context Menu Match** override next to its action
+setting (e.g. *Double-click Context Menu Match*, *Middle-click Context Menu
+Match*). Leave one empty to fall back to the global **Context Menu Match** above
+— this is the recommended way to use several context-menu triggers with
+different entries at once.
+
+Matching is a loose substring test, so keep match text specific: a short string
+like `code` also matches `Encode`, `Decode`, or `Open with Code Insiders`. If
+the wrong entry fires, use a longer or more specific match, or the entry's verb.
 
 ### Tips
 
@@ -329,8 +341,6 @@ require Windows 11 for tabbed Explorer support.
 #include <initguid.h>
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <windowsx.h>
-#include <shdeprecated.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -486,41 +496,32 @@ static bool TryCustomHotkey(PCWSTR action, const std::wstring& combo) {
 
 // ---- Custom hotkey parsing ----
 
-static int StrICmp(const wchar_t* a, const wchar_t* b) {
-    for (; *a && *b; a++, b++) {
-        wchar_t ca = (a[0] >= L'a' && a[0] <= L'z') ? a[0] - L'a' + L'A' : a[0];
-        wchar_t cb = (b[0] >= L'a' && b[0] <= L'z') ? b[0] - L'a' + L'A' : b[0];
-        if (ca != cb) return ca - cb;
-    }
-    return *a - *b;
-}
-
 static WORD ParseHotkeyToken(const wchar_t* token) {
     if (!token || !token[0]) return 0;
-    if (StrICmp(token, L"Ctrl") == 0 || StrICmp(token, L"Control") == 0) return VK_CONTROL;
-    if (StrICmp(token, L"Shift") == 0)                         return VK_SHIFT;
-    if (StrICmp(token, L"Alt") == 0 || StrICmp(token, L"Menu") == 0) return VK_MENU;
-    if (StrICmp(token, L"Win") == 0 || StrICmp(token, L"Windows") == 0) return VK_LWIN;
+    if (_wcsicmp(token, L"Ctrl") == 0 || _wcsicmp(token, L"Control") == 0) return VK_CONTROL;
+    if (_wcsicmp(token, L"Shift") == 0)                         return VK_SHIFT;
+    if (_wcsicmp(token, L"Alt") == 0 || _wcsicmp(token, L"Menu") == 0) return VK_MENU;
+    if (_wcsicmp(token, L"Win") == 0 || _wcsicmp(token, L"Windows") == 0) return VK_LWIN;
     if (wcslen(token) == 1) {
         if (token[0] >= L'A' && token[0] <= L'Z') return (WORD)token[0];
         if (token[0] >= L'a' && token[0] <= L'z') return (WORD)(token[0] - L'a' + L'A');
         if (token[0] >= L'0' && token[0] <= L'9') return (WORD)token[0];
     }
-    if (StrICmp(token, L"Tab") == 0)        return VK_TAB;
-    if (StrICmp(token, L"Enter") == 0 || StrICmp(token, L"Return") == 0) return VK_RETURN;
-    if (StrICmp(token, L"Space") == 0)      return VK_SPACE;
-    if (StrICmp(token, L"Backspace") == 0)  return VK_BACK;
-    if (StrICmp(token, L"Delete") == 0 || StrICmp(token, L"Del") == 0) return VK_DELETE;
-    if (StrICmp(token, L"Escape") == 0 || StrICmp(token, L"Esc") == 0) return VK_ESCAPE;
-    if (StrICmp(token, L"Left") == 0)       return VK_LEFT;
-    if (StrICmp(token, L"Right") == 0)      return VK_RIGHT;
-    if (StrICmp(token, L"Up") == 0)         return VK_UP;
-    if (StrICmp(token, L"Down") == 0)       return VK_DOWN;
-    if (StrICmp(token, L"Home") == 0)       return VK_HOME;
-    if (StrICmp(token, L"End") == 0)        return VK_END;
-    if (StrICmp(token, L"PageUp") == 0)     return VK_PRIOR;
-    if (StrICmp(token, L"PageDown") == 0)   return VK_NEXT;
-    if (StrICmp(token, L"Insert") == 0 || StrICmp(token, L"Ins") == 0) return VK_INSERT;
+    if (_wcsicmp(token, L"Tab") == 0)        return VK_TAB;
+    if (_wcsicmp(token, L"Enter") == 0 || _wcsicmp(token, L"Return") == 0) return VK_RETURN;
+    if (_wcsicmp(token, L"Space") == 0)      return VK_SPACE;
+    if (_wcsicmp(token, L"Backspace") == 0)  return VK_BACK;
+    if (_wcsicmp(token, L"Delete") == 0 || _wcsicmp(token, L"Del") == 0) return VK_DELETE;
+    if (_wcsicmp(token, L"Escape") == 0 || _wcsicmp(token, L"Esc") == 0) return VK_ESCAPE;
+    if (_wcsicmp(token, L"Left") == 0)       return VK_LEFT;
+    if (_wcsicmp(token, L"Right") == 0)      return VK_RIGHT;
+    if (_wcsicmp(token, L"Up") == 0)         return VK_UP;
+    if (_wcsicmp(token, L"Down") == 0)       return VK_DOWN;
+    if (_wcsicmp(token, L"Home") == 0)       return VK_HOME;
+    if (_wcsicmp(token, L"End") == 0)        return VK_END;
+    if (_wcsicmp(token, L"PageUp") == 0)     return VK_PRIOR;
+    if (_wcsicmp(token, L"PageDown") == 0)   return VK_NEXT;
+    if (_wcsicmp(token, L"Insert") == 0 || _wcsicmp(token, L"Ins") == 0) return VK_INSERT;
     // F1-F24
     if ((token[0] == L'F' || token[0] == L'f') && token[1]) {
         int n = (int)wcstol(token + 1, NULL, 10);
@@ -894,7 +895,7 @@ public:
     HWND hShellTab = NULL;
     HWND m_timerHwnd = NULL;  // subclassed HWND for timer messages
 
-    ExplorerWrapper(HWND shellTab, IShellBrowser* hShellBrowser, HWND timerHwnd = NULL) {
+    ExplorerWrapper(HWND shellTab, IShellBrowser* hShellBrowser, HWND timerHwnd) {
         hShellTab = shellTab;
         hBrowser.copy_from(hShellBrowser);
         m_timerHwnd = timerHwnd;
@@ -997,9 +998,12 @@ public:
 
     // ---- External program launchers (via browser — works for virtual folders too) ----
 
-    void OpenInVSCode() {
-        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, L"Code"))
-            Wh_Log(L"OpenInVSCode: no matching context menu entry found");
+    void OpenInVSCode(PCWSTR match = nullptr) {
+        // "Code" is a loose substring match — entries like "Encode with HandBrake"
+        // also contain "code" and may be invoked instead. Route through the generic
+        // path so a per-trigger Context Menu Match can override the default; see the
+        // README note under "Open in VS Code".
+        OpenWithContextMenu(match && *match ? match : L"Code");
     }
 
     void OpenInTerminal() {
@@ -1062,7 +1066,7 @@ public:
         else if (wcscmp(action, L"newFolder") == 0)   NewFolder();
         else if (wcscmp(action, L"copyPath") == 0)    CopyPath();
         else if (wcscmp(action, L"paste") == 0)       Paste();
-        else if (wcscmp(action, L"openInVSCode") == 0)  OpenInVSCode();
+        else if (wcscmp(action, L"openInVSCode") == 0)  OpenInVSCode(match);
         else if (wcscmp(action, L"openInTerminal") == 0) OpenInTerminal();
         else if (wcscmp(action, L"openWithContextMenu") == 0) OpenWithContextMenu(match);
         // "none" or unknown — do nothing
@@ -1193,17 +1197,19 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
-
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
-    // wParam owns a PendingAction object; the unique_ptr frees it on scope exit.
+    // Handled before the init guard so a posted PendingAction that arrives after
+    // the mod was disabled is still freed (the unique_ptr below owns it). The
+    // dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
         std::unique_ptr<PendingAction> p((PendingAction*)wParam);
         HWND target = (HWND)lParam;
-        if (p && target && !p->action.empty())
+        if (g_initialized && p && target && !p->action.empty())
             FindShellTabAndDoAction(target, p->action.c_str(), p->match.c_str());
         return 0;
     }
+
+    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
 
     // WM_TIMER: handles deferred middle-click, double-click, and duplicate-tab timers.
     // Uses nullptr callback (TIMERPROC lives in mod image, unsafe across unload).
@@ -1342,7 +1348,6 @@ struct ClickHelper {
     HWND hWnd = NULL;
 };
 
-static thread_local ClickHelper g_currentClick;
 static thread_local ClickHelper g_lastClick;
 
 LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -1372,17 +1377,19 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
-
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
-    // wParam owns a PendingAction object; the unique_ptr frees it on scope exit.
+    // Handled before the init guard so a posted PendingAction that arrives after
+    // the mod was disabled is still freed (the unique_ptr below owns it). The
+    // dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
         std::unique_ptr<PendingAction> p((PendingAction*)wParam);
         HWND target = (HWND)lParam;
-        if (p && target && !p->action.empty())
+        if (g_initialized && p && target && !p->action.empty())
             FindShellTabAndDoAction(target, p->action.c_str(), p->match.c_str());
         return 0;
     }
+
+    CHECK_INIT_OR_DEFER(hWnd, uMsg, wParam, lParam);
 
     // WM_TIMER: handles deferred middle-click, double-click, and duplicate-tab timers.
     if (uMsg == WM_TIMER) {
@@ -1485,12 +1492,9 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 
         // 2. Double-click detection
         DWORD now = GetTickCount();
-        g_currentClick.time = now;
-        g_currentClick.hWnd = hWnd;
-        g_currentClick.className = cn;
 
         DWORD delta = now - g_lastClick.time;
-        if (g_currentClick.hWnd == g_lastClick.hWnd &&
+        if (hWnd == g_lastClick.hWnd &&
             ((wcscmp(cn, L"UIGroupItem") == 0 &&
               g_lastClick.className == L"UIGroupItem") ||
              (wcscmp(cn, L"UIItemsView") == 0 &&
