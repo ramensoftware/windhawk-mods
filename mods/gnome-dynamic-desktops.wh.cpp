@@ -2,7 +2,7 @@
 // @id              gnome-dynamic-desktops
 // @name            GNOME-like dynamic virtual desktops
 // @description     Makes the Windows 11 virtual desktop system behave like the GNOME desktop environment
-// @version         1.3
+// @version         1.4
 // @author          Giggig
 // @github          https://github.com/Giggigx
 // @include         windhawk.exe
@@ -25,6 +25,8 @@ In the GNOME desktop environment (popular on Linux), virtual workspaces are mana
 This mod implements this exact logic on Windows 11. It's perfect for laptops with trackpad gestures, allowing for endless, seamless switching between workspaces without ever having to manually create or close a desktop again.
 
 ![GNOME mod demo](https://i.imgur.com/wih0nm0.gif)
+
+**⚠️ Warning:** When this mod runs, your existing virtual desktops and their custom names are dynamically managed and reset to match GNOME's behavior. Disabling the mod does not automatically restore your previous desktop layout.
 
 Works with Windows 11 build 26100+
 
@@ -125,6 +127,21 @@ bool InitializeCOM() {
     return true;
 }
 
+bool IsShellClass(HWND hwnd) {
+    static const wchar_t* kShellClasses[] = {
+        L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd",
+        L"Windows.UI.Core.CoreWindow", L"XamlExplorerHostIslandWindow",
+        L"MultitaskingViewFrame", L"NotifyIconOverflowWindow",
+        L"Windows.UI.Composition.DesktopWindowContentBridge",
+    };
+    WCHAR className[64];
+    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) return false;
+    for (const wchar_t* name : kShellClasses) {
+        if (_wcsicmp(className, name) == 0) return true;
+    }
+    return false;
+}
+
 bool IsValidAppWindow(HWND hwnd, const GUID& currentDesktopId) {
     if (!IsWindowVisible(hwnd)) return false;
     
@@ -133,13 +150,7 @@ bool IsValidAppWindow(HWND hwnd, const GUID& currentDesktopId) {
     if (GetWindow(hwnd, GW_OWNER) != NULL) return false;
 
     if (hwnd == GetShellWindow()) return false;
-
-    WCHAR className[64];
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
-        if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
-            return false;
-        }
-    }
+    if (IsShellClass(hwnd)) return false;
 
     int cloaked = 0;
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
@@ -147,7 +158,6 @@ bool IsValidAppWindow(HWND hwnd, const GUID& currentDesktopId) {
         if (cloaked & 1) return false;
         
         // 2 = DWM_CLOAKED_SHELL 
-        // Ensures suspended UWP apps don't falsely populate desktops
         if (cloaked & 2) {
             GUID winDesktopId = {0};
             if (g_pPublicDesktopManager && SUCCEEDED(g_pPublicDesktopManager->GetWindowDesktopId(hwnd, &winDesktopId))) {
@@ -196,14 +206,11 @@ void EvaluateDesktops() {
     IObjectArray* pDesktops = nullptr;
     HRESULT hr = g_pDesktopManager->GetDesktops(&pDesktops);
     
-    if (FAILED(hr)) {
-        Wh_Log(L"COM call failed (0x%08X). Explorer might have restarted. Reinitializing and skipping this cycle...", hr);
+    if (FAILED(hr) || !pDesktops) {
+        Wh_Log(L"COM GetDesktops failed (0x%08X). Skipping this cycle.", hr);
         CleanupCOM();
-        InitializeCOM();
         return;
     }
-
-    if (!pDesktops) return;
 
     UINT totalDesktops = 0;
     pDesktops->GetCount(&totalDesktops);
@@ -213,11 +220,22 @@ void EvaluateDesktops() {
     }
 
     IVirtualDesktop* pCurrentDesktop = nullptr;
-    g_pDesktopManager->GetCurrentDesktop(&pCurrentDesktop);
     GUID currentDesktopId = {0};
-    if (pCurrentDesktop) {
-        pCurrentDesktop->GetId(&currentDesktopId);
-        pCurrentDesktop->Release();
+    HRESULT hrCur = g_pDesktopManager->GetCurrentDesktop(&pCurrentDesktop);
+    
+    if (FAILED(hrCur) || !pCurrentDesktop) {
+        Wh_Log(L"GetCurrentDesktop failed. Skipping cycle to prevent blind deletion.");
+        pDesktops->Release();
+        return;
+    }
+    
+    hrCur = pCurrentDesktop->GetId(&currentDesktopId);
+    pCurrentDesktop->Release();
+    
+    if (FAILED(hrCur)) {
+        Wh_Log(L"GetId on current desktop failed. Skipping cycle.");
+        pDesktops->Release();
+        return;
     }
 
     bool triggeredBySwitch = false;
@@ -231,7 +249,6 @@ void EvaluateDesktops() {
     ctx.currentDesktopId = currentDesktopId;
     EnumWindows(CollectWindowDesktops, (LPARAM)&ctx);
 
-    // Safeguard against complete temporary COM failure mapping to prevent unintended deletions
     if (ctx.candidates > 0 && ctx.windowDesktops.empty()) {
         Wh_Log(L"Could not map any window to a desktop, skipping evaluation to prevent data loss.");
         pDesktops->Release();
@@ -273,14 +290,12 @@ void EvaluateDesktops() {
         }
     }
 
-    // Determine the desired total number of desktops (GNOME behavior)
     int desiredTotal = lastPopulatedIndex + 2;
     if (lastPopulatedIndex == -1) {
-        // If ZERO windows are open in the entire system, we strictly enforce EXACTLY ONE desktop.
         desiredTotal = 1;
     }
 
-    // Handle Trailing Desktops (Excess or Missing at the end)
+    // Trailing Desktops
     if (totalDesktops < (UINT)desiredTotal) {
         Wh_Log(L"Creating a new empty desktop on the right.");
         IVirtualDesktop* newDesktop = nullptr;
@@ -290,8 +305,6 @@ void EvaluateDesktops() {
         for (int i = totalDesktops - 1; i >= desiredTotal; --i) {
             bool isCurrent = (memcmp(&desktopIds[i], &currentDesktopId, sizeof(GUID)) == 0);
             
-            // Only respect delayedDeletion if the system IS NOT completely empty. 
-            // If the system is completely empty (lastPopulatedIndex == -1), ruthlessly destroy down to 1.
             if (lastPopulatedIndex != -1 && g_settings.delayedDeletion && isCurrent) {
                 Wh_Log(L"Skipping deletion of in-use trailing desktop.");
                 break; 
@@ -302,9 +315,8 @@ void EvaluateDesktops() {
         }
     }
 
-    // Handle Middle Desktops
+    // Middle Desktops
     if (lastPopulatedIndex != -1) {
-        // Safe fallback guaranteed to survive (the last populated desktop)
         IVirtualDesktop* pFallback = desktops[lastPopulatedIndex];
         for (int i = 0; i < lastPopulatedIndex; ++i) {
             if (windowCounts[i] == 0) {
@@ -338,7 +350,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, 
     if (idObject != OBJID_WINDOW || hwnd == NULL) return;
     
     if (g_debounceTimer) KillTimer(NULL, g_debounceTimer);
-    g_debounceTimer = SetTimer(NULL, 1, 150, TimerProc);
+    g_debounceTimer = SetTimer(NULL, 150, 150, TimerProc);
 }
 
 DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
@@ -353,10 +365,11 @@ DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
 
     Wh_Log(L"Listening background thread started");
     
-    EvaluateDesktops();
+    LoadSettings();
 
     while (GetMessage(&msg, NULL, 0, 0)) {
         if (!msg.hwnd && msg.message == WM_APP) {
+            LoadSettings(); 
             EvaluateDesktops();
             continue;
         }
@@ -379,7 +392,6 @@ DWORD WINAPI BackgroundEventThread(LPVOID lpParam) {
 // -------------------------------------------------------------------------
 BOOL WhTool_ModInit() {
     Wh_Log(L"=== INITIALIZATION ===");
-    LoadSettings();
     
     g_hReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hReadyEvent) {
@@ -407,7 +419,12 @@ void WhTool_ModUninit() {
     Wh_Log(L"=== UNLOADING ===");
     if (g_threadId && g_hThread) {
         PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hThread, INFINITE);
+        
+        DWORD waitResult = WaitForSingleObject(g_hThread, 5000);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"Background thread didn't exit in 5s. Exiting anyway to prevent hang.");
+        }
+        
         CloseHandle(g_hThread);
         g_hThread = nullptr;
         g_threadId = 0;
@@ -416,7 +433,6 @@ void WhTool_ModUninit() {
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"=== SETTING CHANGED ===");
-    LoadSettings();
     if (g_threadId) {
         PostThreadMessage(g_threadId, WM_APP, 0, 0);
     }
