@@ -245,6 +245,7 @@ ordering, or application behavior.
 #include <cwctype>
 #include <limits>
 #include <list>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -352,7 +353,15 @@ struct TrackedButton {
     uint64_t lastSettingsGeneration = 0;
 };
 
-std::list<TrackedButton> g_trackedButtons;
+// TrackedButton contains a strong XAML event-handler reference. Prevent the
+// container destructor from releasing thread-affine XAML objects during
+// Explorer process shutdown, where Wh_ModUninit isn't guaranteed to run.
+[[clang::no_destroy]] std::optional<std::list<TrackedButton>> g_trackedButtons{
+    std::in_place};
+
+std::list<TrackedButton>& TrackedButtons() {
+    return *g_trackedButtons;
+}
 
 using DotAnimationClock = std::chrono::steady_clock;
 constexpr auto kDotAnimationTrackingTimeout = std::chrono::seconds(3);
@@ -1077,7 +1086,7 @@ void RemoveBadgeFromCurrentParent(Controls::Border badge) {
 }
 
 bool HasActiveDotTracking() {
-    return std::any_of(g_trackedButtons.begin(), g_trackedButtons.end(),
+    return std::any_of(TrackedButtons().begin(), TrackedButtons().end(),
                        [](TrackedButton const& item) {
                            return item.dotLayoutUpdatedAttached ||
                                   item.dotPointerMovedAttached;
@@ -1131,8 +1140,8 @@ void OnDotGeometryRendering(
     };
 
     std::vector<DotGeometrySnapshot> snapshot;
-    snapshot.reserve(g_trackedButtons.size());
-    for (auto const& item : g_trackedButtons) {
+    snapshot.reserve(TrackedButtons().size());
+    for (auto const& item : TrackedButtons()) {
         if (!item.dotLayoutUpdatedAttached &&
             !item.dotPointerMovedAttached) {
             continue;
@@ -1219,6 +1228,20 @@ void DetachDotTrackingHandlers(TrackedButton& tracked) {
     }
 }
 
+template <typename T, typename U>
+bool IsSameWinrtObject(T const& first, U const& second) {
+    if (!first || !second) {
+        return false;
+    }
+
+    auto firstUnknown =
+        first.template try_as<winrt::Windows::Foundation::IUnknown>();
+    auto secondUnknown =
+        second.template try_as<winrt::Windows::Foundation::IUnknown>();
+    return firstUnknown && secondUnknown &&
+           winrt::get_abi(firstUnknown) == winrt::get_abi(secondUnknown);
+}
+
 void AttachDotTrackingHandlers(TrackedButton& tracked,
                                FrameworkElement taskListButton,
                                FrameworkElement icon,
@@ -1229,10 +1252,9 @@ void AttachDotTrackingHandlers(TrackedButton& tracked,
     if (tracked.dotLayoutUpdatedAttached &&
         tracked.dotPointerMovedAttached && existingIcon && existingHost &&
         existingPointerSource &&
-        winrt::get_abi(existingIcon) == winrt::get_abi(icon) &&
-        winrt::get_abi(existingHost) == winrt::get_abi(dotHost) &&
-        winrt::get_abi(existingPointerSource) ==
-            winrt::get_abi(taskListButton)) {
+        IsSameWinrtObject(existingIcon, icon) &&
+        IsSameWinrtObject(existingHost, dotHost) &&
+        IsSameWinrtObject(existingPointerSource, taskListButton)) {
         StartDotGeometryTracking();
         return;
     }
@@ -1323,6 +1345,29 @@ Controls::Border CreateCountBadge(Controls::Panel parent) {
     return badge;
 }
 
+bool IsTrackedBadge(Controls::Border const& badge) {
+    for (auto const& item : TrackedButtons()) {
+        auto trackedBadge = item.badge.get();
+        if (trackedBadge && IsSameWinrtObject(trackedBadge, badge)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void RemoveOrphanDotBadges(Controls::Grid const& dotHost) {
+    auto children = dotHost.Children();
+    for (uint32_t i = children.Size(); i > 0; --i) {
+        auto badge = children.GetAt(i - 1).try_as<Controls::Border>();
+        if (!badge || badge.Name() != L"WindhawkCountBadge" ||
+            IsTrackedBadge(badge)) {
+            continue;
+        }
+
+        children.RemoveAt(i - 1);
+    }
+}
+
 bool UpdateCountBadge(TrackedButton& tracked,
                       FrameworkElement taskListButton,
                       unsigned int count) {
@@ -1395,6 +1440,12 @@ bool UpdateCountBadge(TrackedButton& tracked,
             return false;
         }
         desiredParent = dotHost;
+
+        // RootGrid is shared by taskbar buttons. Remove only Count Badges
+        // visuals that aren't owned by any current tracked button, allowing a
+        // new instance to recover from an interrupted prior cleanup without
+        // touching live badges for other buttons.
+        RemoveOrphanDotBadges(dotHost);
     }
 
     if (badge) {
@@ -1438,13 +1489,13 @@ bool UpdateCountBadge(TrackedButton& tracked,
 // -----------------------------------------------------------------------------
 
 void PruneDeadTrackedButtons() {
-    for (auto it = g_trackedButtons.begin(); it != g_trackedButtons.end();) {
+    for (auto it = TrackedButtons().begin(); it != TrackedButtons().end();) {
         if (!it->element.get()) {
             DetachDotTrackingHandlers(*it);
             if (auto badge = it->badge.get()) {
                 RemoveBadgeFromCurrentParent(badge);
             }
-            it = g_trackedButtons.erase(it);
+            it = TrackedButtons().erase(it);
         } else {
             ++it;
         }
@@ -1456,12 +1507,12 @@ TrackedButton* TrackTaskbarButton(FrameworkElement element) {
     void* identity = winrt::get_abi(unknown);
 
     auto existing =
-        std::find_if(g_trackedButtons.begin(), g_trackedButtons.end(),
+        std::find_if(TrackedButtons().begin(), TrackedButtons().end(),
                      [identity](const TrackedButton& item) {
                          return item.identity == identity;
                      });
 
-    if (existing != g_trackedButtons.end()) {
+    if (existing != TrackedButtons().end()) {
         // The taskbar recycles button containers. If the previous element at
         // this identity is already gone, treat this as a fresh button and
         // reset the cached visual state.
@@ -1480,12 +1531,12 @@ TrackedButton* TrackTaskbarButton(FrameworkElement element) {
         return &*existing;
     }
 
-    g_trackedButtons.push_back({
+    TrackedButtons().push_back({
         .identity = identity,
         .element = winrt::make_weak(element),
     });
 
-    return &g_trackedButtons.back();
+    return &TrackedButtons().back();
 }
 
 bool GetTaskbarButtonViewModelCount(FrameworkElement element,
@@ -1566,8 +1617,8 @@ void RefreshAllTrackedButtons() {
     PruneDeadTrackedButtons();
 
     std::vector<winrt::weak_ref<FrameworkElement>> buttonSnapshot;
-    buttonSnapshot.reserve(g_trackedButtons.size());
-    for (auto const& item : g_trackedButtons) {
+    buttonSnapshot.reserve(TrackedButtons().size());
+    for (auto const& item : TrackedButtons()) {
         buttonSnapshot.push_back(item.element);
     }
 
@@ -1870,22 +1921,17 @@ bool EnsureDeferredCountRefreshSubclass() {
         return false;
     }
 
-    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!taskbarWnd) {
-        return false;
-    }
-
+    // WM_NCDESTROY clears the cached handle, so a non-null value means the
+    // subclass is still live. Avoid a desktop-wide EnumWindows sweep on every
+    // TaskListButton::UpdateVisualStates call.
     HWND existingWindow = g_taskbarSubclassWindow.load();
-    if (existingWindow == taskbarWnd) {
-        g_taskbarThreadId =
-            GetWindowThreadProcessId(taskbarWnd, nullptr);
+    if (existingWindow) {
         return true;
     }
 
-    if (existingWindow) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            existingWindow, TaskbarWindowSubclassProc);
-        g_taskbarSubclassWindow = nullptr;
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd) {
+        return false;
     }
 
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -2084,7 +2130,7 @@ void CleanupOnTaskbarThread() {
     StopDotGeometryTracking();
     PruneDeadTrackedButtons();
 
-    for (auto& item : g_trackedButtons) {
+    for (auto& item : TrackedButtons()) {
         DetachDotTrackingHandlers(item);
         auto element = item.element.get();
         auto badge = item.badge.get();
@@ -2125,9 +2171,10 @@ void WINAPI CleanupOnTaskbarThreadProc(void*) {
         Wh_Log(L"Cleanup failed");
     }
 
-    // Always drop weak references, even if part of the XAML tree was already
-    // closed while Explorer was rebuilding/shutting down.
-    g_trackedButtons.clear();
+    // All strong XAML handlers were detached above on the taskbar UI thread.
+    // Destroy the tracked container explicitly here instead of allowing its
+    // automatic destructor to run during process shutdown.
+    g_trackedButtons.reset();
 }
 
 // -----------------------------------------------------------------------------
@@ -2274,7 +2321,11 @@ BOOL Wh_ModInit() {
     if (!g_deferredCountRefreshMessage) {
         return FALSE;
     }
-    g_trackedButtons.clear();
+    if (!g_trackedButtons) {
+        g_trackedButtons.emplace();
+    } else {
+        TrackedButtons().clear();
+    }
 
     LoadSettings();
     Wh_Log(L"Init PID=%lu", GetCurrentProcessId());
@@ -2353,34 +2404,50 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"Before uninit");
     g_unloading = true;
     g_settingsReloadPending = false;
+
+    // Capture the subclass window before removing the subclass. It's the best
+    // cleanup target because it is known to belong to the taskbar UI thread.
+    HWND subclassWindow = g_taskbarSubclassWindow.load();
+    DWORD taskbarThreadId = g_taskbarThreadId.load();
     StopDeferredCountRefreshSubclass();
 
-    DWORD taskbarThreadId = g_taskbarThreadId.load();
-    HWND cleanupWnd = nullptr;
+    auto tryCleanup = [](HWND hWnd) -> bool {
+        return hWnd &&
+               RunOnTaskbarThread(hWnd, CleanupOnTaskbarThreadProc, nullptr);
+    };
 
-    // Prefer Shell_TrayWnd while it still exists, with another window on the
-    // same taskbar UI thread as a cleanup-only fallback.
-    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (taskbarWnd) {
-        DWORD windowThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
-        if (!taskbarThreadId || windowThreadId == taskbarThreadId) {
-            cleanupWnd = taskbarWnd;
+    bool cleanedUp = tryCleanup(subclassWindow);
+
+    if (!cleanedUp) {
+        HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+        if (taskbarWnd && taskbarWnd != subclassWindow) {
+            DWORD windowThreadId =
+                GetWindowThreadProcessId(taskbarWnd, nullptr);
+            if (!taskbarThreadId || windowThreadId == taskbarThreadId) {
+                cleanedUp = tryCleanup(taskbarWnd);
+            }
         }
     }
 
-    if (!cleanupWnd && taskbarThreadId) {
-        cleanupWnd = FindWindowOnThread(taskbarThreadId);
+    if (!cleanedUp && taskbarThreadId) {
+        HWND fallbackWnd = FindWindowOnThread(taskbarThreadId);
+        if (fallbackWnd && fallbackWnd != subclassWindow) {
+            cleanedUp = tryCleanup(fallbackWnd);
+        }
     }
 
-    if (!cleanupWnd) {
-        // The subclass is already removed, so pending posted refresh messages
-        // are harmless. With no taskbar-thread window, XAML is unreachable.
-        g_trackedButtons.clear();
-        return;
-    }
-
-    if (!RunOnTaskbarThread(cleanupWnd, CleanupOnTaskbarThreadProc, nullptr)) {
-        Wh_Log(L"Cleanup taskbar-thread execution failed");
+    if (!cleanedUp) {
+        // Don't clear/reset the tracked container here: it owns the strong
+        // PointerMoved handler objects, and dropping them off the taskbar UI
+        // thread is unsafe. Best-effort removal of the static Rendering event
+        // avoids leaving its callback registered if the taskbar thread is
+        // already unreachable. The no_destroy container intentionally remains
+        // alive until process termination in this exceptional path.
+        try {
+            StopDotGeometryTracking();
+        } catch (...) {
+        }
+        Wh_Log(L"Couldn't execute taskbar-thread cleanup");
     }
 }
 
@@ -2389,9 +2456,10 @@ void Wh_ModUninit() {
         StopDeferredCountRefreshSubclass();
     }
 
-    // Tracked buttons contain weak WinRT references only; releasing them here
-    // is safe even if Explorer is already tearing the taskbar down.
-    g_trackedButtons.clear();
+    // Normal unload resets g_trackedButtons in CleanupOnTaskbarThreadProc after
+    // all XAML handlers are detached on the taskbar thread. If cleanup couldn't
+    // be marshalled, leave the no_destroy container intact rather than releasing
+    // thread-affine XAML handler references from this arbitrary thread.
     g_taskbarThreadId = 0;
     Wh_Log(L"Uninit");
 }
