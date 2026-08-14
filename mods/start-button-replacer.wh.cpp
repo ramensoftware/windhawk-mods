@@ -209,7 +209,6 @@ from the source image resolution.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Composition.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -225,8 +224,6 @@ namespace wf = winrt::Windows::Foundation;
 namespace wss = winrt::Windows::Storage::Streams;
 
 namespace wuc = winrt::Windows::UI::Composition;
-
-namespace wuic = winrt::Windows::UI::Core;
 
 namespace wux = winrt::Windows::UI::Xaml;
 
@@ -331,7 +328,6 @@ struct ImageResource {
 
 struct StartIconInstance {
     DWORD threadId = 0;
-    wuic::CoreDispatcher dispatcher{nullptr};
     ModSettings settings;
 
     winrt::weak_ref<wux::FrameworkElement> startButton;
@@ -386,16 +382,12 @@ struct StartIconInstance {
 
 std::mutex g_instancesMutex;
 
+// StartIconInstance owns XAML images and callback delegates. Suppress automatic
+// destruction during Explorer process shutdown; controlled unload removes the
+// callbacks and releases every instance synchronously on its taskbar UI thread.
 [[clang::no_destroy]] std::optional<
     std::vector<std::shared_ptr<StartIconInstance>>>
     g_instances{std::in_place};
-
-// If an owning XAML dispatcher is already unavailable during a controlled
-// unload, releasing the instance from Windhawk's engine thread would violate
-// XAML thread affinity. Intentionally leak such exceptional instances instead.
-[[clang::no_destroy]] std::optional<
-    std::vector<std::shared_ptr<StartIconInstance>>>
-    g_abandonedInstances{std::in_place};
 
 // -----------------------------------------------------------------------------
 // Utility
@@ -1723,7 +1715,6 @@ void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
     instance->customImageHost = {};
     instance->customImage = {};
     instance->transitionImage = {};
-    instance->dispatcher = nullptr;
 }
 
 void DetachAllForCurrentThread() {
@@ -1753,6 +1744,14 @@ void DetachAllForCurrentThread() {
 
             ++it;
         }
+
+        // During controlled unload, the last taskbar UI thread to remove its
+        // instances also destroys the now-empty container. Instance objects
+        // themselves remain in the local vector below until DetachInstance has
+        // released all XAML references and callbacks on this owning thread.
+        if (g_unloading && g_instances->empty()) {
+            g_instances.reset();
+        }
     }
 
     for (const auto& instance : instances) {
@@ -1760,128 +1759,20 @@ void DetachAllForCurrentThread() {
     }
 }
 
-std::vector<std::shared_ptr<StartIconInstance>> TakeAllInstancesForShutdown() {
+void BeginInstanceShutdown() {
     std::lock_guard<std::mutex> lock(g_instancesMutex);
 
     g_unloading = true;
 
-    std::vector<std::shared_ptr<StartIconInstance>> instances;
-
-    if (g_instances) {
-        instances = std::move(*g_instances);
+    if (g_instances && g_instances->empty()) {
         g_instances.reset();
     }
-
-    return instances;
 }
 
-void AbandonInstances(
-    const std::vector<std::shared_ptr<StartIconInstance>>& instances) {
-    if (instances.empty()) {
-        return;
-    }
-
+size_t GetTrackedInstanceCount() {
     std::lock_guard<std::mutex> lock(g_instancesMutex);
 
-    if (g_abandonedInstances) {
-        g_abandonedInstances->insert(g_abandonedInstances->end(),
-                                     instances.begin(), instances.end());
-    }
-}
-
-void DetachInstancesOnOwningThreads(
-    std::vector<std::shared_ptr<StartIconInstance>>& instances) {
-    if (instances.empty()) {
-        return;
-    }
-
-    std::shared_ptr<void> cleanupFinished(
-        CreateEventW(nullptr, TRUE, FALSE, nullptr), [](HANDLE eventHandle) {
-            if (eventHandle) {
-                CloseHandle(eventHandle);
-            }
-        });
-
-    if (!cleanupFinished) {
-        Wh_Log(L"Creating the XAML cleanup event failed: 0x%08X",
-               GetLastError());
-        AbandonInstances(instances);
-        return;
-    }
-
-    auto pending = std::make_shared<std::atomic<size_t>>(0);
-    std::vector<std::shared_ptr<StartIconInstance>> failedInstances;
-    std::mutex failedInstancesMutex;
-
-    auto recordFailure =
-        [&failedInstances, &failedInstancesMutex](
-            const std::shared_ptr<StartIconInstance>& instance) {
-            std::lock_guard<std::mutex> lock(failedInstancesMutex);
-            failedInstances.push_back(instance);
-        };
-
-    auto signalCompletion = [pending, cleanupFinished]() {
-        if (pending->fetch_sub(1) == 1) {
-            SetEvent(cleanupFinished.get());
-        }
-    };
-
-    for (const auto& instance : instances) {
-        if (!instance || instance->detached) {
-            continue;
-        }
-
-        auto dispatcher = instance->dispatcher;
-
-        if (!dispatcher) {
-            recordFailure(instance);
-            continue;
-        }
-
-        try {
-            if (dispatcher.HasThreadAccess()) {
-                DetachInstance(instance);
-                continue;
-            }
-
-            if (pending->fetch_add(1) == 0) {
-                ResetEvent(cleanupFinished.get());
-            }
-
-            try {
-                dispatcher.RunAsync(
-                    wuic::CoreDispatcherPriority::High,
-                    [instance, signalCompletion, recordFailure]() {
-                        try {
-                            DetachInstance(instance);
-                        } catch (...) {
-                            Wh_Log(
-                                L"Unexpected exception while detaching a Start "
-                                L"icon instance");
-                            recordFailure(instance);
-                        }
-
-                        signalCompletion();
-                    });
-            } catch (...) {
-                signalCompletion();
-                throw;
-            }
-        } catch (const winrt::hresult_error& e) {
-            Wh_Log(L"Dispatching Start icon cleanup failed: 0x%08X %s",
-                   e.code().value, e.message().c_str());
-            recordFailure(instance);
-        } catch (...) {
-            Wh_Log(L"Dispatching Start icon cleanup failed");
-            recordFailure(instance);
-        }
-    }
-
-    if (pending->load() > 0) {
-        WaitForSingleObject(cleanupFinished.get(), INFINITE);
-    }
-
-    AbandonInstances(failedInstances);
+    return g_instances ? g_instances->size() : 0;
 }
 
 // -----------------------------------------------------------------------------
@@ -2446,8 +2337,6 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
 
         instance->threadId = GetCurrentThreadId();
 
-        instance->dispatcher = startButton.Dispatcher();
-
         instance->settings = std::move(settings);
 
         instance->startButton = winrt::make_weak(startButton);
@@ -2459,8 +2348,8 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
         instance->originalStockOpacity = originalStockOpacity;
 
         // Register before adding XAML elements or callbacks. If unload starts
-        // concurrently, its dispatcher barrier will run after this UI-thread
-        // callback and will see everything that needs to be detached.
+        // concurrently, its synchronous taskbar-thread callback runs after
+        // this UI-thread work and sees everything that needs to be detached.
         if (!RegisterInstance(instance)) {
             return false;
         }
@@ -2630,7 +2519,7 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
         return nullptr;
     }
 
-    size_t taskbarElementOffset = 0x48;
+    size_t taskbarElementOffset = 0x10;
 
 #if defined(_M_X64)
 
@@ -2658,9 +2547,26 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
 
 #elif defined(_M_ARM64)
 
-    // The x64 instruction pattern above doesn't apply to ARM64. Use the
-    // established TaskbarHost layout fallback used by Windhawk's current
-    // Windows 11 taskbar mods.
+    // 7f2303d5 pacibsp
+    // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+    // fd030091 mov     fp, sp
+    // 080c41f8 ldr     x8, [x0, #0x10]!
+    const DWORD* code =
+        reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+
+    if (code && code[0] == 0xD503237F &&
+        (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        code[2] == 0x910003FD &&
+        (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        taskbarElementOffset = (code[3] >> 12) & 0xFF;
+    } else {
+        Wh_Log(
+            L"Unrecognized TaskbarHost::FrameHeight; refusing an unsafe "
+            L"TaskbarHost layout fallback");
+
+        releaseSharedPtr();
+        return nullptr;
+    }
 
 #else
 #error Unsupported architecture.
@@ -2785,6 +2691,7 @@ bool RunFromWindowThread(HWND window,
     struct RunParam {
         RunFromWindowThreadProc_t proc;
         void* param;
+        std::atomic<bool> invoked{false};
     };
 
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
@@ -2809,6 +2716,7 @@ bool RunFromWindowThread(HWND window,
                     auto* parameter = reinterpret_cast<RunParam*>(cwp->lParam);
 
                     parameter->proc(parameter->param);
+                    parameter->invoked.store(true);
                 }
             }
 
@@ -2827,7 +2735,7 @@ bool RunFromWindowThread(HWND window,
 
     UnhookWindowsHookEx(hook);
 
-    return true;
+    return parameter.invoked.load();
 }
 
 // -----------------------------------------------------------------------------
@@ -2950,6 +2858,10 @@ void WINAPI ApplyAllTaskbarsProc(void*) {
 
 void WINAPI RebuildAllTaskbarsProc(void*) {
     RebuildFromTaskbarThread();
+}
+
+void WINAPI DetachAllTaskbarsProc(void*) {
+    DetachAllForCurrentThread();
 }
 
 // -----------------------------------------------------------------------------
@@ -3240,9 +3152,30 @@ void Wh_ModAfterInit() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L"Start Button Replacer restoring stock icon");
 
-    auto instances = TakeAllInstancesForShutdown();
+    BeginInstanceShutdown();
 
-    DetachInstancesOnOwningThreads(instances);
+    // Run synchronously on each owning taskbar UI thread. Unlike a queued
+    // CoreDispatcher callback, this has completed before RunFromWindowThread
+    // returns, so no handler implemented by this DLL remains queued or
+    // registered when controlled unload continues.
+    RunOnAllTaskbarThreads(DetachAllTaskbarsProc, nullptr);
+
+    // A taskbar window can be recreated while windows are being enumerated.
+    // Retry once if the first pass didn't visit every tracked UI thread.
+    size_t remainingInstances = GetTrackedInstanceCount();
+
+    if (remainingInstances != 0) {
+        Wh_Log(L"%zu Start icon instance(s) remained after cleanup; retrying",
+               remainingInstances);
+
+        RunOnAllTaskbarThreads(DetachAllTaskbarsProc, nullptr);
+        remainingInstances = GetTrackedInstanceCount();
+    }
+
+    if (remainingInstances != 0) {
+        Wh_Log(L"Critical: %zu Start icon instance(s) couldn't be detached",
+               remainingInstances);
+    }
 }
 
 void Wh_ModUninit() {
