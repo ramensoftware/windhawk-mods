@@ -9455,20 +9455,20 @@
           8
         ],
         "ratingUsers": 8,
-        "updated": 1780671974000,
+        "updated": 1786700860000,
         "users": 545
       },
       "metadata": {
         "author": "aimagist",
         "compilerOptions": "-lole32 -loleaut32 -luuid -lshlwapi -lshell32 -lgdi32",
-        "description": "Adds an Explorer classic context menu entry to open an elevated terminal in the current or selected folder.",
+        "description": "Adds Explorer classic context menu entries to open a terminal (elevated or not) in the current or selected folder, and to run script files.",
         "github": "https://github.com/aimagist",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
         "name": "Open in Admin Terminal",
-        "version": "1.16"
+        "version": "1.17.1"
       }
     },
     "osu-tray-profile": {
