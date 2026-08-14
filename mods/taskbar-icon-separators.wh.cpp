@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         0.5.35
+// @version         0.5.38
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -1156,7 +1156,6 @@ static void RefreshTaskListButtonLayout(void* pThis) {
 struct SeparatorVisualState {
     winrt::weak_ref<FrameworkElement> element;
     void* taskListButton;
-    bool restoring = false;
 
     bool mediumExtentCaptured = false;
     double originalMediumExtent = 0;
@@ -1199,6 +1198,13 @@ struct SeparatorVisualState {
 
 static thread_local std::list<SeparatorVisualState>
     g_separatorVisualStates;
+static thread_local bool g_updatingSeparatorVisualStates;
+
+struct SeparatorVisualStateUpdateGuard {
+    ~SeparatorVisualStateUpdateGuard() {
+        g_updatingSeparatorVisualStates = false;
+    }
+};
 
 static void PruneExpiredSeparatorVisualStates() {
     g_separatorVisualStates.remove_if(
@@ -1481,13 +1487,6 @@ static void RestoreSeparatorVisualState(
     std::list<SeparatorVisualState>::iterator stateIt) {
     SeparatorVisualState& state = *stateIt;
 
-    // RefreshTaskListButtonLayout can synchronously re-enter
-    // UpdateVisualStates. Let the outer restore retain ownership of this node.
-    if (state.restoring) {
-        return;
-    }
-    state.restoring = true;
-
     auto element = state.element.get();
 
     // The FrameworkElement weak reference is the lifetime authority for the
@@ -1689,6 +1688,8 @@ static bool RunFromWindowThread(
 }
 
 static void WINAPI RestoreSeparatorVisualStatesOnCurrentThread(void*) {
+    g_updatingSeparatorVisualStates = true;
+    SeparatorVisualStateUpdateGuard updateGuard;
     PruneExpiredSeparatorVisualStates();
 
     while (!g_separatorVisualStates.empty()) {
@@ -1834,6 +1835,15 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     // including Taskbar height and icon size, finish first.
     g_taskListButtonUpdateVisualStatesOriginal(pThis);
 
+    // Layout/property updates below can synchronously re-enter this hook. The
+    // nested frame has already run the original function; only suppress our
+    // own registry mutations until the outer frame completes.
+    if (g_updatingSeparatorVisualStates) {
+        return;
+    }
+    g_updatingSeparatorVisualStates = true;
+    SeparatorVisualStateUpdateGuard updateGuard;
+
     FrameworkElement element =
         GetTaskListButtonElement(pThis);
     const SeparatorSetting* separator =
@@ -1851,11 +1861,6 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         return;
     }
 
-    if (stateIt != g_separatorVisualStates.end() &&
-        stateIt->restoring) {
-        return;
-    }
-
     if (stateIt == g_separatorVisualStates.end()) {
         g_separatorVisualStates.push_back({
             .element = winrt::make_weak(element),
@@ -1864,42 +1869,34 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         stateIt = std::prev(g_separatorVisualStates.end());
     }
 
+    SeparatorVisualState& state = *stateIt;
+
     if (g_settings.maxWidthCompatibilityMode) {
         // Compatibility path: native/TIS extents remain untouched.
         ApplySeparatorMaxWidthOverride(
-            *stateIt,
+            state,
             element,
             *separator);
     } else {
         // Default path: original per-instance medium/small extent override.
         if (!ApplySeparatorWidthOverride(
-                *stateIt,
+                state,
                 *separator)) {
             // A future build can retain the symbol while changing the object
             // layout. Keep the separator usable with the public XAML fallback.
             ApplySeparatorMaxWidthOverride(
-                *stateIt,
+                state,
                 element,
                 *separator);
         }
     }
 
-    // Native layout refresh can synchronously re-enter UpdateVisualStates. A
-    // nested frame that observes unload can restore and erase this entry, so
-    // don't retain its iterator or reference across width application.
-    stateIt = FindSeparatorVisualState(pThis);
-    if (stateIt == g_separatorVisualStates.end()) {
-        return;
-    }
+    // If unload began while width was being applied, undo this button instead
+    // of applying the remaining separator-only properties.
     if (g_unloading) {
         RestoreSeparatorVisualState(stateIt);
         return;
     }
-    if (stateIt->restoring) {
-        return;
-    }
-
-    SeparatorVisualState& state = *stateIt;
 
     FrameworkElement iconPanel =
         FindChildByName(element, L"IconPanel");
