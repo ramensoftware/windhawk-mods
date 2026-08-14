@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.4.0
+// @version         3.5.1
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -3294,6 +3294,29 @@ HANDLE g_uiFinished = nullptr;
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
 
+// The UI thread, kept so Wh_ModUninit can join it before the module is
+// unmapped.
+HANDLE g_uiThread = nullptr;
+bool g_windowShown = false;
+
+// Runs the window on its own thread, with its own COM apartment, and signals
+// MMC's waiting thread when it is finished.
+DWORD WINAPI WindowThread(LPVOID) {
+    HRESULT comInit =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    g_windowShown = diskui::Run();
+
+    if (SUCCEEDED(comInit)) {
+        CoUninitialize();
+    }
+
+    // Released last: MMC's thread resumes as soon as this is set, and this
+    // thread must be done touching the module by then.
+    SetEvent(g_uiFinished);
+    return 0;
+}
+
 HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
                                  PCWSTR windowName, DWORD style, int x, int y,
                                  int width, int height, HWND parent,
@@ -3312,11 +3335,25 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
     }
     g_tookOver = true;
 
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    bool shown = diskui::Run();
-    CoUninitialize();
+    // The window runs on its own thread, not here. Building windows and
+    // pumping messages inside user32's own CreateWindowExW - with MMC's window
+    // creation still on the stack - is reentrancy user32 does not expect, and
+    // it crashes.
+    //
+    // MMC's thread simply waits here instead. That is the same "stop the
+    // console loading" effect as suspending it, but at a point this mod chose,
+    // with no locks held, rather than wherever SuspendThread happened to catch
+    // it.
+    g_uiThread = CreateThread(nullptr, 0, WindowThread, nullptr, 0, nullptr);
+    if (!g_uiThread) {
+        Wh_Log(L"could not start the window thread; falling back to the console");
+        g_tookOver = false;
+        return passThrough();
+    }
 
-    if (!shown) {
+    WaitForSingleObject(g_uiFinished, INFINITE);
+
+    if (!g_windowShown) {
         // Nothing was displayed, so let MMC build its own console rather than
         // leaving the user with no Disk Management at all.
         Wh_Log(L"could not create the window; falling back to the console");
@@ -3324,18 +3361,16 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
         return passThrough();
     }
 
-    // The window has been closed. Tell Wh_ModUninit that this thread is done
-    // with the module before doing anything else, then end the process - MMC
-    // has nothing left to show.
-    if (g_uiFinished) {
-        SetEvent(g_uiFinished);
-    }
     if (g_modUnloading) {
-        // Unloading rather than a user close: return to MMC and let the real
-        // console load, instead of killing the process out from under it.
+        // Unloading rather than a user close: let the real console load instead
+        // of taking the process down with us.
         return passThrough();
     }
-    ExitProcess(0);
+
+    // Fail the frame window. MMC has nothing left to display, so it unwinds
+    // and exits on its own - no ExitProcess needed from inside a hook.
+    SetLastError(ERROR_CANCELLED);
+    return nullptr;
 }
 
 // True when the process already owns a top-level window, which means it was
@@ -3393,12 +3428,15 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     g_modUnloading = true;
 
-    if (g_tookOver && g_uiFinished) {
+    if (g_uiThread) {
         if (HWND hwnd = diskui::WindowHandle()) {
             // Async, so this never deadlocks against the UI thread.
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            WaitForSingleObject(g_uiFinished, 10000);
         }
+        // Join, so no mod code is still running when the module is unmapped.
+        WaitForSingleObject(g_uiThread, 10000);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
     }
     if (g_uiFinished) {
         CloseHandle(g_uiFinished);
