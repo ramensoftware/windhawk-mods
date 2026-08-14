@@ -5,8 +5,7 @@
 // @version         1.0.0
 // @author          Vitaliy
 // @github          https://github.com/vicitacal
-// @include         explorer.exe
-// @compilerOptions -luser32
+// @include         windhawk.exe
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -24,6 +23,22 @@ edge is converted to a normalized 0-1 value on the monitor you leave, and
 applied to the monitor you enter. The bottom of the small monitor now maps to
 the bottom of the big one, the top to the top, the middle to the middle.
 
+```
+      leaving 1920x1080 at y = 1000        entering 2560x1440
+      (1000 / 1079 = 0.93 of the height)   (0.93 * 1439 = y 1334)
+
+      +--------------------+ 0.00          +--------------------+ 0.00
+      |                    |               |                    |
+      |                    |               |                    |
+      |                    |               |                    |
+      |                    |               |   without the mod  |
+      |                    |               | ->  y stays 1000   | 0.69
+      |                    |               |                    |
+      | ->  y = 1000       | 0.93          | ->  y = 1334       | 0.93
+      +--------------------+ 1.00          |                    |
+                                           +--------------------+ 1.00
+```
+
 It works for left/right transitions (the Y coordinate is normalized) and for
 top/bottom transitions (the X coordinate is normalized).
 
@@ -35,12 +50,18 @@ proportional spot on the monitor in that direction.
 
 ## Notes
 
-* The mod installs a global low-level mouse hook, therefore it runs in a single
-  process - `explorer.exe`. Nothing else is patched.
-* Injected cursor movement (remote desktop tools, automation, `SetCursorPos`
-  from other apps) is left untouched.
+* The mod needs neither injection nor function hooks, so it runs as a tool mod
+  in a dedicated `windhawk.exe` process. Its low-level mouse hook therefore
+  can't stall the shell, and Windhawk guarantees a single instance.
+* Cursor movement reported as injected (`LLMHF_INJECTED`) is left untouched -
+  it can't be told apart from the mod's own `SetCursorPos`. Some setups report
+  regular movement that way, RDP sessions, VM guest tools and a few tablets and
+  precision touchpads among them; on those the mod stays inactive.
 * While an application confines the cursor with `ClipCursor` (most full-screen
   games do) the mod stays out of the way.
+* When a window of an elevated process is in the foreground, low-level hooks
+  from a non-elevated process don't receive input. That's a UIPI restriction,
+  not something the mod can work around.
 */
 // ==/WindhawkModReadme==
 
@@ -65,14 +86,14 @@ proportional spot on the monitor in that direction.
 - unstickAtEdge: true
   $name: Unstick the cursor at the edge
   $description: >-
-    Fallback for the case above, used when the system reports the already
+    Fallback for the option above, used when the system reports the already
     clamped cursor position. If the cursor stays pinned to the very same edge
-    pixel while you keep pushing towards a monitor, it is released.
-- verboseLog: false
-  $name: Verbose logging
-  $description: Write every performed transition to the Windhawk log.
+    pixel while you keep pushing towards a monitor, it is released. Has no
+    effect unless "Cross gaps between monitors" is enabled.
 */
 // ==/WindhawkModSettings==
+
+#include <shellapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -84,22 +105,19 @@ struct {
     std::atomic<bool> normalizeHorizontal;
     std::atomic<bool> crossGaps;
     std::atomic<bool> unstickAtEdge;
-    std::atomic<bool> verboseLog;
 } g_settings;
 
 // All of the state below is touched only by the hook thread.
 std::vector<RECT> g_monitors;
-bool g_monitorsValid;
 POINT g_lastPoint;
 bool g_lastPointValid;
 POINT g_lastDelta;
 int g_stuckCount;
 
-HANDLE g_thread;
-DWORD g_threadId;
-HHOOK g_mouseHook;
-HANDLE g_quitEvent;
+HANDLE g_hookThread;
+DWORD g_hookThreadId;
 HANDLE g_queueReadyEvent;
+HHOOK g_mouseHook;
 
 constexpr int kStuckEventsToUnstick = 3;
 
@@ -117,7 +135,6 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM) {
 void RefreshMonitors() {
     g_monitors.clear();
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, 0);
-    g_monitorsValid = true;
 }
 
 int RectWidth(const RECT& r) {
@@ -153,13 +170,6 @@ int IntervalDistance(int aStart, int aEnd, int bStart, int bEnd) {
     return 0;
 }
 
-int Clamp(int value, int low, int high) {
-    if (high < low) {
-        return low;
-    }
-    return value < low ? low : (value > high ? high : value);
-}
-
 // Maps a coordinate from one monitor edge to another keeping the 0-1 position.
 int MapProportional(int value,
                     int fromStart,
@@ -177,12 +187,15 @@ int MapProportional(int value,
 
 enum Direction { kLeft, kRight, kUp, kDown };
 
-// Picks the closest monitor in the given direction, ignoring `from`.
+// Picks the best monitor in the given direction, ignoring `from`. A monitor
+// whose perpendicular span overlaps the source one wins over a closer one that
+// is offset to the side, so that the obvious neighbour is always preferred.
 int FindMonitorInDirection(int from, Direction dir) {
     const RECT& src = g_monitors[from];
 
     int best = -1;
-    int bestScore = 0;
+    int bestGap = 0;
+    int bestOffAxis = 0;
 
     for (size_t i = 0; i < g_monitors.size(); i++) {
         if ((int)i == from) {
@@ -199,16 +212,16 @@ int FindMonitorInDirection(int from, Direction dir) {
                     continue;
                 }
                 gap = cand.left - src.right;
-                offAxis =
-                    IntervalDistance(src.top, src.bottom, cand.top, cand.bottom);
+                offAxis = IntervalDistance(src.top, src.bottom, cand.top,
+                                           cand.bottom);
                 break;
             case kLeft:
                 if (cand.right > src.left) {
                     continue;
                 }
                 gap = src.left - cand.right;
-                offAxis =
-                    IntervalDistance(src.top, src.bottom, cand.top, cand.bottom);
+                offAxis = IntervalDistance(src.top, src.bottom, cand.top,
+                                           cand.bottom);
                 break;
             case kDown:
                 if (cand.top < src.bottom) {
@@ -228,10 +241,21 @@ int FindMonitorInDirection(int from, Direction dir) {
                 break;
         }
 
-        int score = gap + offAxis;
-        if (best < 0 || score < bestScore) {
+        bool better;
+        if (best < 0) {
+            better = true;
+        } else if ((offAxis == 0) != (bestOffAxis == 0)) {
+            better = offAxis == 0;
+        } else if (gap != bestGap) {
+            better = gap < bestGap;
+        } else {
+            better = offAxis < bestOffAxis;
+        }
+
+        if (better) {
             best = (int)i;
-            bestScore = score;
+            bestGap = gap;
+            bestOffAxis = offAxis;
         }
     }
 
@@ -251,9 +275,9 @@ bool ComputeTarget(int from,
     if (to == from) {
         to = -1;
     }
-    bool throughGap = to < 0;
 
-    if (throughGap) {
+    if (to < 0) {
+        // The cursor is heading into a part of the edge with no neighbour.
         if (!g_settings.crossGaps) {
             return false;
         }
@@ -267,29 +291,29 @@ bool ComputeTarget(int from,
     POINT target;
 
     if (dir == kLeft || dir == kRight) {
-        int y = Clamp(desired.y, src.top, src.bottom - 1);
+        LONG y = std::clamp(desired.y, src.top, src.bottom - 1);
         if (g_settings.normalizeVertical) {
             target.y = MapProportional(y, src.top, RectHeight(src), dst.top,
                                        RectHeight(dst));
         } else {
-            target.y = Clamp(y, dst.top, dst.bottom - 1);
+            target.y = std::clamp(y, dst.top, dst.bottom - 1);
         }
-        int inset = Clamp(overshoot - 1, 0, RectWidth(dst) - 1);
+        int inset = std::clamp(overshoot - 1, 0, RectWidth(dst) - 1);
         target.x = (dir == kRight) ? dst.left + inset : dst.right - 1 - inset;
     } else {
-        int x = Clamp(desired.x, src.left, src.right - 1);
+        LONG x = std::clamp(desired.x, src.left, src.right - 1);
         if (g_settings.normalizeHorizontal) {
             target.x = MapProportional(x, src.left, RectWidth(src), dst.left,
                                        RectWidth(dst));
         } else {
-            target.x = Clamp(x, dst.left, dst.right - 1);
+            target.x = std::clamp(x, dst.left, dst.right - 1);
         }
-        int inset = Clamp(overshoot - 1, 0, RectHeight(dst) - 1);
+        int inset = std::clamp(overshoot - 1, 0, RectHeight(dst) - 1);
         target.y = (dir == kDown) ? dst.top + inset : dst.bottom - 1 - inset;
     }
 
-    target.x = Clamp(target.x, dst.left, dst.right - 1);
-    target.y = Clamp(target.y, dst.top, dst.bottom - 1);
+    target.x = std::clamp(target.x, dst.left, dst.right - 1);
+    target.y = std::clamp(target.y, dst.top, dst.bottom - 1);
 
     if (target.x == desired.x && target.y == desired.y) {
         return false;  // Nothing to correct.
@@ -306,29 +330,50 @@ bool CursorIsClipped() {
         return false;
     }
 
-    RECT desktop = {0, 0, 0, 0};
-    for (size_t i = 0; i < g_monitors.size(); i++) {
-        const RECT& r = g_monitors[i];
-        if (i == 0) {
-            desktop = r;
-            continue;
+    int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int right = left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int bottom = top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    return clip.left > left || clip.top > top || clip.right < right ||
+           clip.bottom < bottom;
+}
+
+// The cursor sits still at an edge of its monitor while the last movement was
+// heading out through that very edge - the system clamped it for us. Returns
+// the direction the user is pushing towards.
+bool GetStuckDirection(const RECT& src, POINT at, Direction* dir) {
+    // Check the axis the last movement was dominated by first, so that a
+    // diagonal movement into a corner doesn't pick the wrong edge.
+    bool preferX = abs(g_lastDelta.x) >= abs(g_lastDelta.y);
+
+    for (int pass = 0; pass < 2; pass++) {
+        if ((pass == 0) == preferX) {
+            if (at.x == src.right - 1 && g_lastDelta.x > 0) {
+                *dir = kRight;
+                return true;
+            }
+            if (at.x == src.left && g_lastDelta.x < 0) {
+                *dir = kLeft;
+                return true;
+            }
+        } else {
+            if (at.y == src.bottom - 1 && g_lastDelta.y > 0) {
+                *dir = kDown;
+                return true;
+            }
+            if (at.y == src.top && g_lastDelta.y < 0) {
+                *dir = kUp;
+                return true;
+            }
         }
-        desktop.left = std::min(desktop.left, r.left);
-        desktop.top = std::min(desktop.top, r.top);
-        desktop.right = std::max(desktop.right, r.right);
-        desktop.bottom = std::max(desktop.bottom, r.bottom);
     }
 
-    return clip.left > desktop.left || clip.top > desktop.top ||
-           clip.right < desktop.right || clip.bottom < desktop.bottom;
+    return false;
 }
 
 // Returns true and fills `result` if the cursor has to be repositioned.
 bool HandleMove(POINT desired, POINT* result) {
-    if (!g_monitorsValid) {
-        RefreshMonitors();
-    }
-
     if (g_monitors.size() < 2) {
         return false;
     }
@@ -344,8 +389,8 @@ bool HandleMove(POINT desired, POINT* result) {
 
     int from = MonitorAt(last);
     if (from < 0) {
-        // The previous position is not on any monitor (the display layout
-        // changed behind our back), just resync.
+        // The previous position is not on any monitor - the display layout
+        // changed behind our back, resync.
         RefreshMonitors();
         return false;
     }
@@ -367,39 +412,30 @@ bool HandleMove(POINT desired, POINT* result) {
     }
 
     if (overshootX == 0 && overshootY == 0) {
-        // Still on the same monitor. Detect the "pinned to the edge" case: the
-        // system already clamped the position for us, so we never see a point
-        // outside of the monitor.
-        bool sameSpot = delta.x == 0 && delta.y == 0;
-        if (sameSpot && g_settings.unstickAtEdge && g_settings.crossGaps) {
-            Direction dir = kRight;
-            bool atEdge = true;
-            if (desired.x == src.right - 1 && g_lastDelta.x > 0) {
-                dir = kRight;
-            } else if (desired.x == src.left && g_lastDelta.x < 0) {
-                dir = kLeft;
-            } else if (desired.y == src.bottom - 1 && g_lastDelta.y > 0) {
-                dir = kDown;
-            } else if (desired.y == src.top && g_lastDelta.y < 0) {
-                dir = kUp;
-            } else {
-                atEdge = false;
-            }
-
-            if (atEdge && ++g_stuckCount >= kStuckEventsToUnstick) {
-                g_stuckCount = 0;
-                if (ComputeTarget(from, dir, desired, 1, result)) {
-                    return true;
-                }
-            }
-        } else {
+        // Still on the same monitor.
+        if (delta.x != 0 || delta.y != 0) {
+            g_lastDelta = delta;
             g_stuckCount = 0;
-            if (!sameSpot) {
-                g_lastDelta = delta;
-            }
+            return false;
         }
 
-        return false;
+        if (!g_settings.unstickAtEdge || !g_settings.crossGaps) {
+            g_stuckCount = 0;
+            return false;
+        }
+
+        Direction dir;
+        if (!GetStuckDirection(src, desired, &dir)) {
+            g_stuckCount = 0;
+            return false;
+        }
+
+        if (++g_stuckCount < kStuckEventsToUnstick) {
+            return false;
+        }
+
+        g_stuckCount = 0;
+        return ComputeTarget(from, dir, desired, 1, result);
     }
 
     g_stuckCount = 0;
@@ -437,10 +473,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     POINT target;
     if (HandleMove(desired, &target) && !CursorIsClipped()) {
-        if (g_settings.verboseLog) {
-            Wh_Log(L"(%ld, %ld) -> (%ld, %ld)", desired.x, desired.y, target.x,
-                   target.y);
-        }
+        Wh_Log(L"(%ld, %ld) -> (%ld, %ld)", desired.x, desired.y, target.x,
+               target.y);
 
         g_lastPoint = target;
         g_lastPointValid = true;
@@ -460,9 +494,11 @@ LRESULT CALLBACK NotifyWndProc(HWND hWnd,
                                UINT uMsg,
                                WPARAM wParam,
                                LPARAM lParam) {
-    if (uMsg == WM_DISPLAYCHANGE || uMsg == WM_SETTINGCHANGE ||
-        uMsg == WM_DPICHANGED) {
-        g_monitorsValid = false;
+    // Runs on the hook thread, same as LowLevelMouseProc, so the monitor list
+    // can be rebuilt right here instead of on the input path.
+    if (uMsg == WM_DISPLAYCHANGE) {
+        Wh_Log(L"Display change");
+        RefreshMonitors();
         g_lastPointValid = false;
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -491,40 +527,16 @@ void MakeThreadDpiAware() {
     }
 }
 
-// A global hook must be installed exactly once. `explorer.exe` may run as
-// several processes (e.g. when folder windows are launched separately), so only
-// the instance that owns the shell takes the job.
-bool IsShellProcess() {
-    for (int i = 0; i < 120; i++) {
-        HWND shellWnd = GetShellWindow();
-        if (shellWnd) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(shellWnd, &pid);
-            return pid == GetCurrentProcessId();
-        }
-
-        // The shell window isn't up yet, we were injected very early.
-        if (WaitForSingleObject(g_quitEvent, 500) == WAIT_OBJECT_0) {
-            return false;
-        }
-    }
-
-    return true;  // Gave up waiting, assume we're the one.
-}
-
 DWORD WINAPI HookThreadProc(LPVOID) {
     MakeThreadDpiAware();
 
-    // Force the message queue to be created, so that Wh_ModUninit can post to
-    // this thread at any point from now on.
+    // Force the message queue to be created, and only then let WhTool_ModUninit
+    // post to this thread.
     MSG msg;
-    PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
+    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     SetEvent(g_queueReadyEvent);
 
-    if (!IsShellProcess()) {
-        Wh_Log(L"Not the shell process, the hook is not installed here");
-        return 0;
-    }
+    RefreshMonitors();
 
     HMODULE module = GetCurrentModule();
 
@@ -532,13 +544,23 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     wc.lpfnWndProc = NotifyWndProc;
     wc.hInstance = module;
     wc.lpszClassName = L"WindhawkProportionalCursorNotify";
-    RegisterClass(&wc);
 
-    // Not a message-only window on purpose: those don't receive the broadcast
-    // WM_DISPLAYCHANGE notification.
-    HWND notifyWnd =
-        CreateWindowEx(WS_EX_TOOLWINDOW, wc.lpszClassName, L"", WS_POPUP, 0, 0,
-                       0, 0, nullptr, nullptr, module, nullptr);
+    // Never reuse a class a previous instance left behind: its window procedure
+    // would point into an unmapped image.
+    ATOM classAtom = RegisterClass(&wc);
+    HWND notifyWnd = nullptr;
+    if (classAtom) {
+        // Not a message-only window on purpose: those don't receive the
+        // broadcast WM_DISPLAYCHANGE notification.
+        notifyWnd = CreateWindowEx(WS_EX_TOOLWINDOW, wc.lpszClassName, L"",
+                                   WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
+                                   module, nullptr);
+        if (!notifyWnd) {
+            Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        }
+    } else {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+    }
 
     g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, module, 0);
     if (!g_mouseHook) {
@@ -558,7 +580,10 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     if (notifyWnd) {
         DestroyWindow(notifyWnd);
     }
-    UnregisterClass(wc.lpszClassName, module);
+
+    if (classAtom) {
+        UnregisterClass(wc.lpszClassName, module);
+    }
 
     return 0;
 }
@@ -571,52 +596,232 @@ void LoadSettings() {
     g_settings.normalizeHorizontal = Wh_GetIntSetting(L"normalizeHorizontal");
     g_settings.crossGaps = Wh_GetIntSetting(L"crossGaps");
     g_settings.unstickAtEdge = Wh_GetIntSetting(L"unstickAtEdge");
-    g_settings.verboseLog = Wh_GetIntSetting(L"verboseLog");
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
+
     LoadSettings();
+
+    g_queueReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_queueReadyEvent) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
+        return FALSE;
+    }
+
+    g_hookThread =
+        CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
+    if (!g_hookThread) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        CloseHandle(g_queueReadyEvent);
+        g_queueReadyEvent = nullptr;
+        return FALSE;
+    }
+
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    g_quitEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    g_queueReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_quitEvent || !g_queueReadyEvent) {
-        Wh_Log(L"CreateEvent failed: %u", GetLastError());
-        return;
-    }
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"SettingsChanged");
 
-    g_thread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_threadId);
-    if (!g_thread) {
-        Wh_Log(L"CreateThread failed: %u", GetLastError());
-    }
+    LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
 
-    if (g_thread) {
-        SetEvent(g_quitEvent);
-        WaitForSingleObject(g_queueReadyEvent, 2000);
-        PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 10000);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
+    if (g_hookThread) {
+        // The queue is ready by now, so WM_QUIT can't be lost and the wait
+        // below is guaranteed to return.
+        WaitForSingleObject(g_queueReadyEvent, INFINITE);
+        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        g_hookThreadId = 0;
     }
 
-    if (g_quitEvent) {
-        CloseHandle(g_quitEvent);
-        g_quitEvent = nullptr;
-    }
     if (g_queueReadyEvent) {
         CloseHandle(g_queueReadyEvent);
         g_queueReadyEvent = nullptr;
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
-    LoadSettings();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
