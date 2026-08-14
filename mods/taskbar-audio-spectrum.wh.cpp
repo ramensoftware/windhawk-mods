@@ -482,7 +482,6 @@ struct SearchLayout {
     bool valid = false;
 };
 DWORD GetSearchMode();
-bool IsSearchBoxMode(DWORD mode, SearchHostKind hostKind);
 bool IsSearchBoxMode(DWORD mode);
 int ScaleForDpi(int value, UINT dpi);
 RECT CalculateSpectrumBounds(const SearchLayout& layout,
@@ -2417,34 +2416,6 @@ SearchHostKind DetectSearchHostKind(PCWSTR executablePath) {
     return SearchHostKind::Unknown;
 }
 
-namespace {
-
-SearchHostKind DetectOperatingSystemSearchHostKind() {
-    using RtlGetVersionFunction = LONG(WINAPI*)(OSVERSIONINFOW*);
-    static const SearchHostKind hostKind = [] {
-        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-        const auto rtlGetVersion = ntdll
-            ? reinterpret_cast<RtlGetVersionFunction>(
-                  GetProcAddress(ntdll, "RtlGetVersion"))
-            : nullptr;
-        OSVERSIONINFOW version{};
-        version.dwOSVersionInfoSize = sizeof(version);
-        if (!rtlGetVersion || rtlGetVersion(&version) < 0) {
-            return SearchHostKind::Unknown;
-        }
-        if (version.dwMajorVersion > 10 ||
-            (version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000)) {
-            return SearchHostKind::Windows11;
-        }
-        return version.dwMajorVersion == 10
-            ? SearchHostKind::Windows10
-            : SearchHostKind::Unknown;
-    }();
-    return hostKind;
-}
-
-}  // namespace
-
 bool IsSearchExecutableName(PCWSTR executablePath) {
     return DetectSearchHostKind(executablePath) != SearchHostKind::Unknown;
 }
@@ -2505,15 +2476,10 @@ DWORD GetSearchMode() {
     return status == ERROR_SUCCESS ? mode : 0;
 }
 
-bool IsSearchBoxMode(DWORD mode, SearchHostKind hostKind) {
-    if (hostKind == SearchHostKind::Windows10) return mode == 2;
-    if (hostKind == SearchHostKind::Windows11) return mode == 3;
-    // Mode 3 only represents a full search box on current Windows versions.
-    return mode == 3;
-}
-
 bool IsSearchBoxMode(DWORD mode) {
-    return IsSearchBoxMode(mode, DetectOperatingSystemSearchHostKind());
+    // SearchboxTaskbarMode uses 2 for the full box and 3 for the narrower
+    // search icon-and-label button on both Windows 10 and Windows 11.
+    return mode == 2;
 }
 
 int ScaleForDpi(int value, UINT dpi) {
