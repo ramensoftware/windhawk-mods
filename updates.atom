@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-14T09:53:17.000Z</updated>
+    <updated>2026-08-14T11:34:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Separators 0.5.38]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-separators#b895e6b2cf4ae9140dcb70b1200634ad4ceb13c4</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
+        <updated>2026-08-14T11:34:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbariconseparators">Taskbar Icon Separators</h1>
+<p>Create tracked icon separators with configurable padding on the taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP.png" alt="Screenshot" />
+<em>Example for creating separators on the taskbar</em></p>
+<p>Another mod offers similar functionality, but this implementation takes a different approach.</p>
+<p>This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.</p>
+<p>Native taskbar extent-offset resolution is derived from m417z's <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon size</a>, published under GPLv3.</p>
+<p>Note: The mod creates pinned shortcuts targeting the Windows <code>systray.exe</code> stub (with a hidden, immediately exiting <code>cmd.exe</code> fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.</p>
+<p>Windows 11 only.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Animations 1.2.0]]></title>
         <id>https://windhawk.net/mods/windows-animations#3d753806f59713ff1824c20cb24b6414e006ce03</id>
@@ -725,22 +744,6 @@ mods by Michael Maltsev (m417z).</p>]]></content>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Details View Columns 1.4]]></title>
-        <id>https://windhawk.net/mods/explorer-force-details-columns#da5a7e59605f811c25d98fb3e8c399b34906272f</id>
-        <link href="https://windhawk.net/mods/explorer-force-details-columns"/>
-        <updated>2026-08-05T16:55:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed normal folders sometimes being treated as virtual folders and left unchanged, which also affected their subfolders.</li>
-<li>Added a note about a known issue of Windows 11 using an unreasonable minimum column width when a non-custom scaling is set for the display instead of a custom scaling.</li>
-<li>Columns without "Force Width" now keep their current width instead of being reset when the set of columns changes.</li>
-<li>Forced widths are now also applied as the column's default and ideal width, so auto-sizing doesn't override them.</li>
-</ul>]]></content>
-        <author>
-            <name>ernisn</name>
-            <uri>https://github.com/ernisn</uri>
         </author>
     </entry>
 </feed>

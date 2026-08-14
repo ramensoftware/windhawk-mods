@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-08-14T09:37:14.000Z</updated>
+    <updated>2026-08-14T11:34:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Separators 0.5.38]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-separators#b895e6b2cf4ae9140dcb70b1200634ad4ceb13c4</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
+        <updated>2026-08-14T11:34:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbariconseparators">Taskbar Icon Separators</h1>
+<p>Create tracked icon separators with configurable padding on the taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP.png" alt="Screenshot" />
+<em>Example for creating separators on the taskbar</em></p>
+<p>Another mod offers similar functionality, but this implementation takes a different approach.</p>
+<p>This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.</p>
+<p>Native taskbar extent-offset resolution is derived from m417z's <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon size</a>, published under GPLv3.</p>
+<p>Note: The mod creates pinned shortcuts targeting the Windows <code>systray.exe</code> stub (with a hidden, immediately exiting <code>cmd.exe</code> fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.</p>
+<p>Windows 11 only.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteony</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Photoshop Dark Menus 1.0.0]]></title>
         <id>https://windhawk.net/mods/photoshop-dark-menus#748c093a5182546cdc5b8e14145898d1d3d321f8</id>
@@ -993,26 +1012,6 @@ a new tab or navigating to another folder makes them appear.</p>]]></content>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Open Real File Location 1.0.0]]></title>
-        <id>https://windhawk.net/mods/start-menu-open-real-file-location#6394be02922caab897a87b5dee236bfca2a4947f</id>
-        <link href="https://windhawk.net/mods/start-menu-open-real-file-location"/>
-        <updated>2026-07-31T10:16:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startmenuopenrealfilelocation">Start Menu Open Real File Location</h1>
-<p>Changes <code>Open file location</code> for traditional desktop programs in the Start menu and Windows Search. Instead of opening the Start Menu Programs directory and selecting the program's <code>.lnk</code> file, Explorer opens the shortcut target's directory and selects the target.</p>
-<p>The mod reads only the target stored in the shortcut. It doesn't search for a moved target or display link-resolution dialogs.</p>
-<h2 id="currentlimitationsandtodos">Current Limitations and TODOs</h2>
-<ul>
-<li>Packaged Microsoft Store apps don't normally have a conventional shortcut target and are left unchanged for now.</li>
-<li>If the target can't be read, Windows retains its original behavior and opens the shortcut's location.</li>
-<li>The direct shortcut target is selected. For wrapper shortcuts, this can be a launcher, script host, or another intermediate executable.</li>
-<li>There is currently no program blacklist, so shortcuts that point to common wrappers or launchers will be resolved there.</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>

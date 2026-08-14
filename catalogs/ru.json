@@ -12489,6 +12489,38 @@
         "version": "1.0"
       }
     },
+    "taskbar-icon-separators": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786707280000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786707280000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "meteoni",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lpropsys -lshlwapi",
+        "description": "Create tracked icon separators with configurable padding on the taskbar.",
+        "github": "https://github.com/Meteony",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Icon Separators",
+        "version": "0.5.38"
+      }
+    },
     "taskbar-icon-size": {
       "details": {
         "defaultSorting": 2952320,
