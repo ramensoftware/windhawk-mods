@@ -2,13 +2,13 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         4.4.0
+// @version         4.4.1
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lcomctl32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32
+// @compilerOptions -ladvapi32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -70,19 +70,21 @@ the zones you want on it. A zone you do not list does nothing.
 
 **Tray icon**, next to the clock:
 
-- **Left-click** — turn the hot corners on or off.
-- **Right-click** — a quick menu: suspend for a while, skip while an app is
-  fullscreen, skip while dragging.
+- **Left-click** — turn the hot corners on or off. The icon dims when they are off.
+- **Right-click** — suspend for a while, or reset the enable state.
 - **Right-click → Zones & settings...** — the dashboard: a tab per display,
   a picture of that screen with each zone showing what it does, and the timings
   actually in effect for whichever zone you point at.
 
 ### Upgrading from 4.1.x
 
-Earlier versions had no settings page and stored the layout themselves. That
-layout keeps running untouched, so nothing breaks on upgrade — the log says so
-at startup. Re-enter it on the settings page when you are ready; the moment one
-display is listed there, the old layout is ignored.
+Earlier versions had no settings page and stored the layout themselves. Your
+zones keep running untouched, so nothing breaks on upgrade — everything else on
+the settings page is live immediately. Re-enter the zones there when you are
+ready; the moment one display is listed, the old layout is ignored.
+
+The startup log names any globals you had customised in the old version, since
+those now come from the settings page and need setting again there.
 
 This is deliberate. Twelve zones on each of up to eight displays, each with a
 forty-entry action list and six timing overrides, is not something a settings
@@ -271,6 +273,44 @@ Hot corners are disabled when any excluded process is the foreground window.
 **Example:** `photoshop.exe;premiere.exe;blender.exe`
 
 # Changelog
+
+## What's New in v4.4.1
+
+Two places where a value you changed still had no effect, and two where the
+window could tell you something untrue.
+
+- **Every setting on the page is live immediately after upgrading.** The globals
+  used to be applied only once you had listed a display there, so anyone coming
+  from 4.1.x had a page full of fields that did nothing — change *Cooldown* from
+  300 to 800, see nothing happen. The page owns them all now; only the zone list
+  still falls back to a stored layout. The startup log names any globals you had
+  customised in the old version so you know what to set again.
+- **The tray's "skip while fullscreen" and "skip while dragging" toggles are
+  gone.** They wrote a key that only the upgrade path read, so toggling one
+  worked until the next reload put it back. They are settings, and a mod cannot
+  write its own settings, so the tray copy could only ever drift. They live on
+  the settings page alone. Enable and suspend stay — those have no page
+  equivalent.
+- **Left-click on the tray icon toggles the hot corners**, which is what the
+  readme always said it did; it had been opening the dashboard. The icon dims
+  when they are off, and the dashboard is still the menu's first item.
+- **A zone whose arguments cannot be read is marked, not drawn as working.** A
+  key combination that does not parse, or an Alternate action missing its `|`,
+  used to appear on the preview like any other configured zone while never
+  firing.
+- **The tray menu anchors to the icon even when Windows refuses the GUID
+  registration**, which is the one case the anchoring was added for.
+- **Show Desktop uses the documented `IShellDispatch4::ToggleDesktop`** instead
+  of an undocumented private message to a window the mod does not own. The old
+  route stays as a fallback.
+- **Moving or auto-hiding a taskbar on a secondary display rebuilds the zones.**
+  The polled check only ever saw the primary display's work area, so with
+  *Keep zones out of the taskbar* on, that display's zones stayed put.
+- Dropped the comctl32 dependency — nothing used it after the 4.3.0 rewrite.
+- Clearing one display's name on the settings page no longer drops every
+  display listed after it.
+- Clicking the tray icon immediately after closing the dashboard reopens it
+  rather than doing nothing.
 
 ## What's New in v4.4.0
 
@@ -703,8 +743,7 @@ listing, but it only takes one link, so the rest live here.
 
 <!-- Plain links rather than badge images on purpose: this repository only allows
      images from i.imgur.com and raw.githubusercontent.com, so a shields.io badge
-     would not render. To add a platform, add a bullet.
-     Pending accounts: OnlyChai, BuyMeChai — drop the URLs in when they exist. -->
+     would not render. To add a platform, add a bullet. -->
 */
 // ==/WindhawkModReadme==
 
@@ -889,19 +928,18 @@ listing, but it only takes one link, so the rest live here.
 
 #include <windows.h>
 
-#include <commctrl.h>
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 #include <initializer_list>
 #include <powrprof.h>
 #include <shellapi.h>
+#include <shldisp.h>   // IShellDispatch4 / CLSID_Shell, for Show Desktop
 #include <windhawk_api.h>
 
 #include <algorithm>
 #include <atomic>
-// swprintf_s / _wtoi / memcmp are used directly; they only reached this file
+// swprintf_s and memcmp are used directly; they only reached this file
 // through <windows.h> before.
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
@@ -1794,27 +1832,7 @@ static bool IsForegroundAppExcluded(const std::vector<std::wstring> &excluded)
     if (hFg != cachedHwnd)
     {
         cachedHwnd = hFg;
-        cachedName.clear();
-
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hFg, &pid);
-        if (pid == 0)
-            return false;
-
-        HANDLE hProc =
-            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (!hProc)
-            return false;
-
-        WCHAR exePath[MAX_PATH];
-        DWORD pathLen = MAX_PATH;
-        BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath, &pathLen);
-        CloseHandle(hProc);
-        if (!ok)
-            return false;
-
-        const wchar_t *fileName = wcsrchr(exePath, L'\\');
-        cachedName = fileName ? fileName + 1 : exePath;
+        cachedName = ProcessNameOfWindow(hFg);
     }
 
     if (cachedName.empty())
@@ -1949,6 +1967,29 @@ static void SendKeys(std::initializer_list<WORD> vks)
 
 static void ActionShowDesktop()
 {
+    // IShellDispatch::ToggleDesktop is the documented way to do this. The old
+    // route - WM_COMMAND 407 to Shell_TrayWnd - is an undocumented private
+    // message sent to a window this mod does not own, and the value is only
+    // whatever that class happens to use today. The worker thread has a COM
+    // apartment, so this is available where it is called from.
+    // ToggleDesktop is on IShellDispatch4, not on the base interface.
+    IShellDispatch4 *shell = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&shell));
+    if (SUCCEEDED(hr) && shell)
+    {
+        hr = shell->ToggleDesktop();
+        shell->Release();
+        if (SUCCEEDED(hr))
+            return;
+    }
+
+    // Kept as a fallback rather than deleted: ToggleDesktop needs an apartment,
+    // and the private message is what worked before it.
+    Wh_Log(L"Show Desktop: IShellDispatch unavailable (0x%08X), using the "
+           L"shell message instead",
+           hr);
+
     // Re-found when the handle goes stale, so this survives explorer restarts.
     static HWND hTray = nullptr;
     if (!hTray || !IsWindow(hTray))
@@ -3003,6 +3044,13 @@ static DWORD DetectTick()
         (now - g_lastAnyFireTick) < kMinFireIntervalMs)
         return next;
 
+    // The cooldowns are stamped here, before the fullscreen and excluded-app
+    // gates run on the worker, so a suppressed trigger still consumes them.
+    // That is deliberate: those gates call SHQueryUserNotificationState and
+    // OpenProcess, and putting either on the 16 ms sampling path to save a
+    // cooldown the user cannot perceive would be the wrong trade. Rolling the
+    // stamps back from the worker is not an option either - this vector
+    // belongs to the detection thread.
     g_firedThisEntry = true;
     g_lastAnyFireTick = now;
     if (idx < (int)g_lastFireTick.size())
@@ -3025,6 +3073,17 @@ static LRESULT CALLBACK DetectWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             Wh_Log(L"WM_DISPLAYCHANGE — rebuilding zones");
         else
             Wh_Log(L"Settings changed — rebuilding zones");
+        RebuildZones();
+        return 0;
+    }
+    // The polled topology check reads SPI_GETWORKAREA, which only ever reports
+    // the primary display - so with "keep zones out of the taskbar" on, a
+    // taskbar moved or auto-hidden on a secondary display left that display's
+    // zones at coordinates that no longer matched. This broadcast arrives
+    // whichever display changed.
+    if (uMsg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA)
+    {
+        Wh_Log(L"Work area changed — rebuilding zones");
         RebuildZones();
         return 0;
     }
@@ -3108,9 +3167,9 @@ done:
 // closes, so hosting it on the detection thread would freeze every zone for
 // as long as the menu is open.
 //
-// The icon is also the only way in: this mod has no Windhawk settings page, so
-// left-click toggles, right-click is the quick menu, and the menu's first item
-// opens the dashboard where everything else lives.
+// Left-click toggles the hot corners, right-click is the quick menu, and the
+// menu's first item opens the dashboard. Everything configurable lives on the
+// Windhawk settings page; the icon carries only runtime state.
 
 static HANDLE g_hTrayThread = nullptr;
 static DWORD g_dwTrayThreadId = 0;
@@ -3130,7 +3189,9 @@ static const GUID kTrayIconGuid = {
 // Set once NIM_ADD succeeds. NIF_GUID also validates the registering
 // executable's path, so if it is ever rejected we fall back to plain uID
 // identity rather than losing the icon entirely.
-static bool g_trayUseGuid = true;
+// Written by UpdateTrayIcon, which runs on the tray thread, on Windhawk's
+// thread via WhTool_ModSettingsChanged, and at startup.
+static std::atomic<bool> g_trayUseGuid{true};
 
 // NOTIFYICON_VERSION_4 changes what the shell sends:
 //   left-click  -> NIN_SELECT      (rather than WM_LBUTTONUP)
@@ -3159,8 +3220,6 @@ enum TrayCommand
     IDM_SUSPEND_30,
     IDM_SUSPEND_60,
     IDM_RESUME,
-    IDM_FULLSCREEN,
-    IDM_DRAG,
     IDM_CLEAR_OVERRIDES,
     IDM_ABOUT,
 };
@@ -3168,10 +3227,10 @@ enum TrayCommand
 // Defined further down with the dashboard; the tray menu needs it earlier.
 static void OpenDashboard();
 
-// -1 means "no override, use the Windhawk setting"
+// Whether the hot corners are on. Runtime state rather than a setting - it has
+// no equivalent on the settings page, which is why the tray still owns it.
+// -1 means "never written", which reads as on.
 static const wchar_t *kOvrEnabled = L"ovr_enabled";
-static const wchar_t *kOvrFullscreen = L"ovr_fullscreen";
-static const wchar_t *kOvrDrag = L"ovr_drag";
 
 // A screen outline with the top-left corner lit and the other three marked,
 // which is the mod in one glyph. Drawn rather than shipped as a resource:
@@ -3329,15 +3388,16 @@ static void UpdateTrayIcon(bool add)
 }
 
 // =====================================================================
-// Dashboard persistence
+// Reading a pre-4.2 layout
 // =====================================================================
 //
-// This is the whole of the mod's persistence. There is no Windhawk settings
-// page to fall back on, so what is written here is what the mod runs with, and
-// a key that has never been written falls back to the default ReloadConfig set.
+// Nothing writes any of this any more - the settings page is the only store.
+// It is read once per reload, and only when the settings page has no displays
+// on it, so that upgrading from a version that had no settings page does not
+// silently discard a zone layout that took effort to enter.
 //
-// One key per field rather than a packed string: wordy, but it survives partial
-// writes and is readable if anything ever needs debugging by hand.
+// One key per field rather than a packed string, which is what those versions
+// wrote: wordy, but readable if it ever needs debugging by hand.
 
 static constexpr int kMaxGuiConfigs = 8;
 
@@ -3444,11 +3504,14 @@ static std::vector<MonitorZoneConfig> ReadSettingsZones()
 {
     std::vector<MonitorZoneConfig> configs;
 
-    for (int i = 0;; i++)
+    // Scanned to a fixed bound rather than stopping at the first blank, so
+    // clearing one display's name does not silently drop every entry after it.
+    // Reading past the end of a Windhawk array just returns empty strings.
+    for (int i = 0; i < 64; i++)
     {
         std::wstring id = TrimStr(GetSettingStr(L"displays[%d].monitor", i));
         if (id.empty())
-            break;
+            continue;
 
         MonitorZoneConfig cfg;
         cfg.monitorId = id;
@@ -3640,11 +3703,10 @@ static std::vector<MonitorZoneConfig> ReadDashboardZones()
 // zones are active". Four of the six callers run on a thread other than the
 // one that starts the mod, so that window was reachable.
 //
-// Keys still carry the historical "ovr_" prefix - back when there was a
-// Windhawk settings page these were overrides on top of it. They are the
-// configuration itself now; the prefix stays so an existing setup is not
-// orphaned. An unset key reads back as -1, which fails every range test below,
-// so a value the user has never touched simply keeps its default.
+// The settings page owns every global. The value store is read only for the
+// enable flag and, on the upgrade path, for a zone layout saved before the
+// settings page came back - never for anything a page field also controls,
+// because the two would then disagree with nothing on screen saying which won.
 static void ReloadConfig()
 {
     EnterCriticalSection(&g_reloadLock);
@@ -3656,78 +3718,57 @@ static void ReloadConfig()
 
     s.monitorConfigs = ReadSettingsZones();
     const bool fromSettings = !s.monitorConfigs.empty();
+
+    // The settings page always owns the globals. Applying them only on the
+    // settings path meant that anyone upgrading had a page full of fields that
+    // did nothing and no way to tell: change Cooldown from 300 to 800, see
+    // nothing happen. Only the zone list falls back to the stored layout.
+    ApplySettingsGlobals(s);
+
     bool legacy = false;
+    std::wstring dropped;
 
-    if (fromSettings)
+    if (!fromSettings && Wh_GetIntValue(L"gui_active", 0) != 0)
     {
-        ApplySettingsGlobals(s);
-    }
-    else if (Wh_GetIntValue(L"gui_active", 0) != 0)
-    {
-        // A layout from before the settings page existed. Reproduce the old
-        // behaviour exactly - defaults, then the stored "ovr_" overrides -
-        // so upgrading does not quietly change how anything behaves.
         legacy = true;
-
-        v = Wh_GetIntValue(kOvrFullscreen, -1);
-        if (v >= 0)
-            s.disableOnFullscreen = (v != 0);
-
-        v = Wh_GetIntValue(kOvrDrag, -1);
-        if (v >= 0)
-            s.disableDuringDrag = (v != 0);
-
-        auto pull = [](const wchar_t *k, int &dst, int lo, int hi)
-        {
-            int x = Wh_GetIntValue(k, -1);
-            if (x >= lo && x <= hi)
-                dst = x;
-        };
-        pull(L"ovr_corner", s.cornerSize, 1, 500);
-        pull(L"ovr_edge", s.edgeSize, 1, 500);
-        pull(L"ovr_delay", s.activationDelay, 0, 10000);
-        pull(L"ovr_settle", s.settleMs, 0, 10000);
-        pull(L"ovr_knock", s.knockWindowMs, 0, 10000);
-        pull(L"ovr_cooldown", s.cooldownMs, 0, 60000);
-        pull(L"ovr_centre", s.centerZonePercent, 1, 90);
-        pull(L"ovr_modifier", s.requireModifier, 0, 4);
-
-        int x = Wh_GetIntValue(L"ovr_taskbar", -1);
-        if (x >= 0)
-            s.avoidTaskbar = (x != 0);
-
-        // Via a local: pull takes int&, and these two globals are atomic
-        // because other threads read them while this runs.
-        int lockBlank = 1200;
-        pull(L"ovr_lockblank", lockBlank, 0, 10000);
-        g_lockBlankDelayMs = lockBlank;
-        x = Wh_GetIntValue(L"ovr_monnames", -1);
-        g_showMonitorNames = (x < 0) ? true : (x != 0);
-
-        std::wstring rest = GetStrValue(L"ovr_excluded");
-        while (!rest.empty())
-        {
-            auto semi = rest.find(L';');
-            std::wstring tok;
-            if (semi != std::wstring::npos)
-            {
-                tok = TrimStr(rest.substr(0, semi));
-                rest = rest.substr(semi + 1);
-            }
-            else
-            {
-                tok = TrimStr(rest);
-                rest.clear();
-            }
-            if (!tok.empty())
-                s.excludedProcesses.push_back(ToLowerStr(tok));
-        }
-
         s.monitorConfigs = ReadDashboardZones();
-    }
-    else
-    {
-        ApplySettingsGlobals(s);
+
+        // The stored globals are no longer applied, so name the ones that were
+        // customised. Reverting them silently would look like the mod losing a
+        // setting; naming them says exactly what to re-enter and where.
+        static const struct
+        {
+            const wchar_t *key;
+            const wchar_t *name;
+        } kOldGlobals[] = {
+            {L"ovr_corner", L"Corner size"},
+            {L"ovr_edge", L"Edge thickness"},
+            {L"ovr_centre", L"Edge centre width"},
+            {L"ovr_delay", L"Activation delay"},
+            {L"ovr_settle", L"Pass-through guard"},
+            {L"ovr_knock", L"Knock window"},
+            {L"ovr_cooldown", L"Cooldown"},
+            {L"ovr_modifier", L"Required modifier"},
+            {L"ovr_taskbar", L"Keep zones out of the taskbar"},
+            {L"ovr_lockblank", L"Lock-then-blank delay"},
+            {L"ovr_monnames", L"List display names in the log"},
+            {L"ovr_fullscreen", L"Skip while fullscreen"},
+            {L"ovr_drag", L"Skip while dragging"},
+        };
+        for (const auto &o : kOldGlobals)
+        {
+            if (Wh_GetIntValue(o.key, -1) < 0)
+                continue;
+            if (!dropped.empty())
+                dropped += L", ";
+            dropped += o.name;
+        }
+        if (!GetStrValue(L"ovr_excluded").empty())
+        {
+            if (!dropped.empty())
+                dropped += L", ";
+            dropped += L"Excluded applications";
+        }
     }
 
     // Copied out before the move, so the summary can be logged after the lock
@@ -3745,10 +3786,16 @@ static void ReloadConfig()
 
     if (legacy)
     {
-        Wh_Log(L"Using a layout saved by an older version (%d configuration%s). "
-               L"Re-enter it on this mod's Settings page to take it over - "
-               L"as soon as one display is listed there, this one is ignored.",
+        Wh_Log(L"Zones are coming from a layout saved by an older version (%d "
+               L"configuration%s). Everything else on this mod's Settings page "
+               L"is live. Re-enter the zones there to take them over - as soon "
+               L"as one display is listed, this layout is ignored.",
                zoneCount, zoneCount == 1 ? L"" : L"s");
+        if (!dropped.empty())
+            Wh_Log(L"These were customised in the old version and are now taken "
+                   L"from the Settings page instead, so set them again there if "
+                   L"you still want them: %s.",
+                   dropped.c_str());
     }
     else if (zoneCount)
     {
@@ -3796,21 +3843,14 @@ static void ShowTrayMenu(POINT pt)
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSuspend,
                 suspended ? L"Suspended..." : L"Suspend for");
 
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-
-    EnterCriticalSection(&g_settingsLock);
-    bool fs = g_settings.disableOnFullscreen;
-    bool drag = g_settings.disableDuringDrag;
-    LeaveCriticalSection(&g_settingsLock);
-
-    AppendMenuW(hMenu, MF_STRING | (fs ? MF_CHECKED : 0), IDM_FULLSCREEN,
-                L"Skip while an app is fullscreen");
-    AppendMenuW(hMenu, MF_STRING | (drag ? MF_CHECKED : 0), IDM_DRAG,
-                L"Skip while dragging the mouse");
-
+    // "Skip while fullscreen" and "Skip while dragging" used to live here. They
+    // are settings, not runtime state, and a mod cannot write its own settings,
+    // so the tray copy could only ever diverge - toggling one worked until the
+    // next reload put it back. They belong to the settings page alone now;
+    // enable and suspend stay because neither has a page equivalent.
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_CLEAR_OVERRIDES,
-                L"Reset these toggles");
+                L"Reset enable and suspend");
     AppendMenuW(hMenu, MF_STRING | MF_DISABLED, IDM_ABOUT,
                 L"Win-X Hot Corners " WH_MOD_VERSION);
 
@@ -3819,10 +3859,15 @@ static void ShowTrayMenu(POINT pt)
     // time; anchoring puts it in the one spot muscle memory expects, which is
     // what every other tray menu does.
     UINT align = TPM_RIGHTBUTTON;
+    // Mirror however the icon was actually registered. Passing the GUID after
+    // UpdateTrayIcon has fallen back to plain uID identity makes the lookup
+    // fail, and the menu quietly stops anchoring - the one case this exists for.
     NOTIFYICONIDENTIFIER nii = {sizeof(nii)};
     nii.hWnd = g_hTrayWnd;
-    nii.uID = (UINT)kTrayIconId;
-    nii.guidItem = kTrayIconGuid;
+    if (g_trayUseGuid)
+        nii.guidItem = kTrayIconGuid;
+    else
+        nii.uID = (UINT)kTrayIconId;
     RECT icon = {};
     if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &icon)))
     {
@@ -3908,47 +3953,17 @@ static void HandleTrayCommand(UINT id)
         Wh_Log(L"Tray: resumed");
         break;
 
-    // These two mutate the live configuration and write the key behind it, so
-    // they take g_reloadLock for the same reason a save does: a reload landing
-    // between the two halves would either lose the toggle or read it twice.
-    case IDM_FULLSCREEN:
-    {
-        EnterCriticalSection(&g_reloadLock);
-        EnterCriticalSection(&g_settingsLock);
-        g_settings.disableOnFullscreen = !g_settings.disableOnFullscreen;
-        int v = g_settings.disableOnFullscreen ? 1 : 0;
-        LeaveCriticalSection(&g_settingsLock);
-        Wh_SetIntValue(kOvrFullscreen, v);
-        LeaveCriticalSection(&g_reloadLock);
-        break;
-    }
-
-    case IDM_DRAG:
-    {
-        EnterCriticalSection(&g_reloadLock);
-        EnterCriticalSection(&g_settingsLock);
-        g_settings.disableDuringDrag = !g_settings.disableDuringDrag;
-        int v = g_settings.disableDuringDrag ? 1 : 0;
-        LeaveCriticalSection(&g_settingsLock);
-        Wh_SetIntValue(kOvrDrag, v);
-        LeaveCriticalSection(&g_reloadLock);
-        RequestRebuild();
-        break;
-    }
-
-    // Only the three toggles in this menu, and the suspend timer. Wiping the
-    // zone layout from a menu item with no confirmation would be a trap; the
-    // dashboard's Reset button does that, behind a prompt.
+    // Only what this menu owns: the enable flag and the suspend timer. Wiping
+    // the zone layout from a menu item with no confirmation would be a trap,
+    // and everything else now lives on the settings page.
     case IDM_CLEAR_OVERRIDES:
         EnterCriticalSection(&g_reloadLock);
         Wh_SetIntValue(kOvrEnabled, -1);
-        Wh_SetIntValue(kOvrFullscreen, -1);
-        Wh_SetIntValue(kOvrDrag, -1);
         g_suspendUntil = 0;
         ReloadConfig();
         LeaveCriticalSection(&g_reloadLock);
         RequestRebuild();
-        Wh_Log(L"Tray: toggles reset to defaults");
+        Wh_Log(L"Tray: enable and suspend reset to defaults");
         break;
 
     default:
@@ -4035,6 +4050,7 @@ struct ZoneView
     std::wstring args;
     ZoneTuning tuning;          // -1 in a field means "inherited"
     bool fromWildcard = false;
+    bool invalid = false;       // configured, but its arguments do not parse
 };
 
 struct DisplayView
@@ -4203,8 +4219,7 @@ static bool ZoneIsVertical(Zone z)
 // subIdList is nullptr for "keep the default part list", which is what naming
 // a theme (DarkMode_CFD) wants. Disabling theming outright is the exception:
 // SetWindowTheme only stops theming a control when *both* strings are empty,
-// and a still-themed control ignores colour messages such as
-// TTM_SETTIPBKCOLOR — which is why the tooltip stayed light.
+// and a still-themed control ignores colour messages entirely.
 // Resolved once: theming runs about forty times while the dashboard is built,
 // and the LoadLibraryEx fallback used to take a reference every time without
 // ever releasing it.
@@ -4430,6 +4445,12 @@ static void DashFillZones(DisplayView &dv,
         dv.zones[z].args = hit->args;
         dv.zones[z].tuning = hit->tuning;
         dv.zones[z].fromWildcard = wild;
+        // BuildZoneSet also requires an executor, and MakeExecutor returns null
+        // when the arguments do not parse - an unparseable key combination, or
+        // an Alternate action missing its "|". Drawing those as ordinary
+        // configured zones would make the picture disagree with what fires,
+        // which is the one thing this window must not do. Shown, but marked.
+        dv.zones[z].invalid = !hit->executor;
         dv.configured++;
     }
 }
@@ -4652,13 +4673,17 @@ static void DashPaintDiagram(DashState *s, HDC hdc)
     HBRUSH unset = CreateSolidBrush(g_pal.border);
     HBRUSH hot = CreateSolidBrush(g_lightTheme ? RGB(0, 70, 140)
                                                : RGB(120, 215, 255));
+    // A zone that is configured but cannot fire needs to look wrong at a
+    // glance, not merely be explained in the panel below.
+    HBRUSH broken = CreateSolidBrush(g_lightTheme ? RGB(176, 60, 40)
+                                                  : RGB(220, 110, 90));
 
     for (int z = 0; z < ZONE_COUNT; z++)
     {
         const ZoneView &zv = dv.zones[z];
         bool on = zv.action != CornerAction::Nothing;
         bool live = (z == s->hoverZone || z == s->selZone);
-        HBRUSH b = live ? hot : (on ? set : unset);
+        HBRUSH b = live ? hot : (zv.invalid ? broken : (on ? set : unset));
 
         RECT widest = ZoneRectInDiagram((Zone)z, dg);
         if (widest.right <= widest.left || widest.bottom <= widest.top)
@@ -4713,6 +4738,7 @@ static void DashPaintDiagram(DashState *s, HDC hdc)
     DeleteObject(set);
     DeleteObject(unset);
     DeleteObject(hot);
+    DeleteObject(broken);
 
     // Caption under the box.
     SelectObject(hdc, s->hFontSmall);
@@ -4815,7 +4841,16 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
     DrawTextW(hdc, line, -1, &r, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     y += Sc(18, d);
 
-    if (zv.fromWildcard)
+    if (zv.invalid)
+    {
+        SetTextColor(hdc, g_lightTheme ? RGB(176, 60, 40) : RGB(220, 110, 90));
+        r = {left, y, right, y + Sc(16, d)};
+        DrawTextW(hdc,
+                  L"This zone will not fire - its arguments could not be read.",
+                  -1, &r, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+        SetTextColor(hdc, g_pal.dim);
+    }
+    else if (zv.fromWildcard)
     {
         r = {left, y, right, y + Sc(16, d)};
         DrawTextW(hdc, L"Inherited from the \"All displays\" configuration", -1,
@@ -5165,10 +5200,6 @@ static DWORD WINAPI DashThread(LPVOID)
 {
     PinThreadDpiPerMonitorV2();
 
-    // TOOLTIPS_CLASS lives in comctl32 and needs the library initialised.
-    INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_WIN95_CLASSES};
-    InitCommonControlsEx(&icc);
-
     const wchar_t *kClass = L"WindhawkHotCornersDash";
     HINSTANCE hInst = GetModuleHandle(nullptr);
 
@@ -5222,6 +5253,27 @@ static DWORD WINAPI DashThread(LPVOID)
 
     AllowDarkModeForControl(hWnd, !g_lightTheme);
 
+    // The frame above was sized from the system DPI, but the layout inside is
+    // computed from the window's own. They agree on the usual setup and can
+    // disagree if the primary display's scaling changed without a sign-out, so
+    // resize to whatever the window actually landed on.
+    {
+        HMODULE u = GetModuleHandleW(L"user32.dll");
+        using Fn = UINT(WINAPI *)(HWND);
+        UINT real = dpi;
+        if (auto fn = (Fn)GetProcAddress(u, "GetDpiForWindow"))
+            if (UINT v = fn(hWnd))
+                real = v;
+        if (real != dpi)
+        {
+            RECT want = {0, 0, Sc(Lay::ClientW, real), Sc(Lay::ClientH, real)};
+            AdjustWindowRectEx(&want, style, FALSE, 0);
+            SetWindowPos(hWnd, nullptr, 0, 0, want.right - want.left,
+                         want.bottom - want.top,
+                         SWP_NOZORDER | SWP_NOMOVE | SWP_NOACTIVATE);
+        }
+    }
+
     g_hDashWnd = hWnd;
     ShowWindow(hWnd, SW_SHOW);
     SetForegroundWindow(hWnd);
@@ -5257,8 +5309,17 @@ static void OpenDashboard()
         // Recycle the handle only once the previous thread has actually gone.
         // Closing it while that thread still runs throws away the only way to
         // wait for it during uninit, and starts a second dashboard besides.
-        if (WaitForSingleObject(g_hDashThread, 0) != WAIT_OBJECT_0)
+        //
+        // Waited on briefly rather than abandoned: the window has just been
+        // closed and the thread is already unwinding, so this returns almost
+        // at once. Returning immediately meant that clicking the tray icon
+        // right after closing the dashboard silently did nothing.
+        if (WaitForSingleObject(g_hDashThread, 500) != WAIT_OBJECT_0)
+        {
+            Wh_Log(L"The previous dashboard window is still closing; try again "
+                   L"in a moment.");
             return;
+        }
         CloseHandle(g_hDashThread);
         g_hDashThread = nullptr;
     }
@@ -5284,7 +5345,11 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         }
         else if (ev == NIN_SELECT || ev == NIN_KEYSELECT || ev == WM_LBUTTONUP)
         {
-            OpenDashboard();
+            // Toggle rather than open the dashboard. The icon already shows
+            // enabled state, so the feedback is immediate, and the dashboard
+            // is the menu's default item - which leaves the one-click action
+            // for the thing you actually do repeatedly.
+            HandleTrayCommand(IDM_ENABLED);
         }
         return 0;
     }
@@ -5513,21 +5578,26 @@ void WhTool_ModUninit()
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
-void WINAPI EntryPoint_Hook()
-{
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
-BOOL Wh_ModInit()
-{
+BOOL Wh_ModInit() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0)
-    {
+        sessionId == 0) {
         return FALSE;
     }
 
@@ -5535,31 +5605,25 @@ BOOL Wh_ModInit()
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv)
-    {
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
-    for (int i = 1; i < argc; i++)
-    {
+    for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0)
-        {
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
         }
     }
 
-    for (int i = 1; i < argc - 1; i++)
-    {
-        if (wcscmp(argv[i], L"-tool-mod") == 0)
-        {
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0)
-            {
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
             break;
@@ -5568,46 +5632,40 @@ BOOL Wh_ModInit()
 
     LocalFree(argv);
 
-    if (isExcluded)
-    {
+    if (isExcluded) {
         return FALSE;
     }
 
-    if (isCurrentToolModProcess)
-    {
+    if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex)
-        {
+        if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
-        if (GetLastError() == ERROR_ALREADY_EXISTS)
-        {
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            CloseHandle(g_toolModProcessMutex);
             ExitProcess(1);
         }
 
-        if (!WhTool_ModInit())
-        {
+        if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER *dosHeader =
-            (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS *ntHeaders =
-            (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess)
-    {
+    if (isToolModProcess) {
         return FALSE;
     }
 
@@ -5615,83 +5673,77 @@ BOOL Wh_ModInit()
     return TRUE;
 }
 
-void Wh_ModAfterInit()
-{
-    if (!g_isToolModProcessLauncher)
-    {
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    DWORD length = GetModuleFileName(nullptr, currentProcessPath,
-                                     ARRAYSIZE(currentProcessPath));
-    if (length == 0 || length == ARRAYSIZE(currentProcessPath))
-    {
-        Wh_Log(L"GetModuleFileName failed");
-        return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    WCHAR commandLine[MAX_PATH * 2];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule)
-    {
+    if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
-    }
-    if (!kernelModule)
-    {
-        Wh_Log(L"GetModuleHandle failed");
-        return;
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
     }
 
-    using CreateProcessInternalW_t = BOOL(WINAPI *)(
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation, PHANDLE hNewToken);
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
-    if (!pCreateProcessInternalW)
-    {
-        Wh_Log(L"GetProcAddress failed");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFO si = {sizeof(si)};
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi = {0};
-    if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                nullptr, nullptr, &si, &pi, nullptr))
-    {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
     }
-    else
-    {
-        Wh_Log(L"CreateProcessInternalW failed");
-    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
-void Wh_ModSettingsChanged()
-{
-    if (g_isToolModProcessLauncher)
-    {
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
     WhTool_ModSettingsChanged();
 }
 
-void Wh_ModUninit()
-{
-    if (g_isToolModProcessLauncher)
-    {
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
