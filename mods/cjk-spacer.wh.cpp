@@ -98,17 +98,13 @@ so another diagnostics-based customization tool, including Windows 11 Taskbar
 Styler or Windows 11 File Explorer Styler, can prevent this path from
 initializing. The mod waits for a recognized Windows.UI.Xaml or
 Microsoft.UI.Xaml host window before requesting the corresponding diagnostics
-connection. Window-creation hooks only signal a managed worker; an
-Explorer-process window scan covers hosts that already exist when the mod is
-enabled. There is no timed polling. Host notifications received during a
-connection attempt are coalesced into one follow-up attempt. Exhausting the
-connection-name walk with `ERROR_NOT_FOUND` means that the XAML endpoint isn't
-registered yet and doesn't consume the three-attempt hard-failure budget.
-Connections blocked by another diagnostics consumer aren't retried
-automatically. When an established connection is disconnected, that flavor is
-re-armed and waits for the next matching host window before reconnecting. All
-connection work runs outside the window-creation hooks and is stopped before
-the mod unloads.
+connection, and framework module loads provide a fallback signal when a host
+appears first. Connection work runs on a managed worker outside those hooks,
+and repeated unavailable endpoints or hard failures are bounded. Connections
+blocked by another diagnostics consumer aren't retried automatically. An
+established connection is re-armed after its XAML host disappears, and all
+connection work stops before the mod unloads. If the modern path's required
+hooks aren't available, enabled classic menus and tooltips remain active.
 When Taskbar Styler is configured to alert on competing XAML Diagnostics
 consumers, an intercepted connection attempt can show a confirmation dialog;
 if the tool blocks it by returning success, the walk stops and this mod marks
@@ -209,6 +205,7 @@ enum class CharacterKind {
 std::atomic_bool g_classicMenus{true};
 std::atomic_bool g_classicTooltips{true};
 std::atomic_bool g_modernUiText{false};
+std::atomic_bool g_modernUiActive{false};
 std::atomic_bool g_unicodeLettersAndDigits{true};
 
 bool IsHighSurrogate(wchar_t value) {
@@ -1873,6 +1870,7 @@ enum class XamlDiagnosticsFlavor {
 // core. Its diagnostics endpoint can still be registered slightly later.
 constexpr int kXamlDiagnosticsConnectionLimit = 10000;
 constexpr unsigned int kXamlDiagnosticsMaxAttempts = 3;
+constexpr unsigned int kXamlDiagnosticsMaxEmptyWalks = 5;
 
 struct XamlDiagnosticsConnectionState {
     std::atomic_bool connected{false};
@@ -1880,7 +1878,18 @@ struct XamlDiagnosticsConnectionState {
     std::atomic_uint requestGeneration{0};
     std::atomic_uint processedGeneration{0};
     std::atomic_uint failureCount{0};
+    std::atomic_uint emptyWalkCount{0};
 };
+
+bool CanAttemptXamlDiagnosticsConnection(
+    const XamlDiagnosticsConnectionState& state) {
+    return !state.connected.load(std::memory_order_acquire) &&
+           !state.blocked.load(std::memory_order_acquire) &&
+           state.failureCount.load(std::memory_order_acquire) <
+               kXamlDiagnosticsMaxAttempts &&
+           state.emptyWalkCount.load(std::memory_order_acquire) <
+               kXamlDiagnosticsMaxEmptyWalks;
+}
 
 bool RequestModernXamlDiagnosticsInitialization(
     XamlDiagnosticsFlavor flavor);
@@ -2389,10 +2398,7 @@ void EnsureXamlDiagnosticsConnection(
     LPCWSTR displayName,
     XamlDiagnosticsFlavor flavor) {
     if (g_stoppingModernUi.load(std::memory_order_acquire) ||
-        state.connected.load(std::memory_order_acquire) ||
-        state.blocked.load(std::memory_order_acquire) ||
-        state.failureCount.load(std::memory_order_acquire) >=
-            kXamlDiagnosticsMaxAttempts) {
+        !CanAttemptXamlDiagnosticsConnection(state)) {
         return;
     }
 
@@ -2414,6 +2420,7 @@ void EnsureXamlDiagnosticsConnection(
                 std::memory_order_acquire) > watcherGeneration) {
             state.connected.store(true, std::memory_order_release);
             state.failureCount.store(0, std::memory_order_release);
+            state.emptyWalkCount.store(0, std::memory_order_release);
             Wh_Log(L"Connected to %s diagnostics", displayName);
         } else {
             // A competing diagnostics hook can return success without
@@ -2426,10 +2433,21 @@ void EnsureXamlDiagnosticsConnection(
                    displayName);
         }
     } else if (result == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-        // The module exists, but no XAML core has registered a diagnostics
-        // endpoint yet. A later host notification will request another walk;
-        // don't spend the hard-failure budget on this startup state.
-        Wh_Log(L"%s diagnostics endpoint isn't registered yet", displayName);
+        const unsigned int emptyWalkCount =
+            state.emptyWalkCount.fetch_add(
+                1, std::memory_order_acq_rel) +
+            1;
+        if (emptyWalkCount >= kXamlDiagnosticsMaxEmptyWalks) {
+            Wh_Log(L"%s diagnostics endpoint remained unavailable after "
+                   L"%u full connection-name walks; stopping automatic "
+                   L"attempts",
+                   displayName, emptyWalkCount);
+        } else {
+            Wh_Log(L"%s diagnostics endpoint isn't registered yet "
+                   L"(empty walk %u/%u)",
+                   displayName, emptyWalkCount,
+                   kXamlDiagnosticsMaxEmptyWalks);
+        }
     } else if (result != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
         const unsigned int failureCount =
             state.failureCount.fetch_add(
@@ -2515,27 +2533,8 @@ DWORD WINAPI XamlDiagnosticsWorkerProc(LPVOID parameter) {
                 microsoftGeneration, std::memory_order_release);
         }
 
-        // A matching host created during the walk advances its generation.
-        // It is already represented by at least one SetEvent call, but signal
-        // again after publishing the processed snapshots to make the handoff
-        // explicit and coalesce the whole burst into one follow-up attempt.
-        const bool requestAdvanced =
-            g_windowsUiXamlDiagnostics.requestGeneration.load(
-                std::memory_order_acquire) !=
-                g_windowsUiXamlDiagnostics.processedGeneration.load(
-                    std::memory_order_acquire) ||
-            g_microsoftUiXamlDiagnostics.requestGeneration.load(
-                std::memory_order_acquire) !=
-                g_microsoftUiXamlDiagnostics.processedGeneration.load(
-                    std::memory_order_acquire);
-        if (requestAdvanced) {
-            std::lock_guard<std::mutex> guard(
-                g_xamlDiagnosticsWorkerMutex);
-            if (!g_stoppingModernUi.load(std::memory_order_acquire) &&
-                g_xamlDiagnosticsWorkerWakeEvent) {
-                SetEvent(g_xamlDiagnosticsWorkerWakeEvent);
-            }
-        }
+        // A request that arrived after the snapshot already left the
+        // auto-reset event signaled, so the next wait handles its generation.
     }
 
     if (SUCCEEDED(initializeResult)) {
@@ -2565,6 +2564,7 @@ void RearmXamlDiagnosticsConnection(
 
     state->blocked.store(false, std::memory_order_release);
     state->failureCount.store(0, std::memory_order_release);
+    state->emptyWalkCount.store(0, std::memory_order_release);
     state->processedGeneration.store(
         state->requestGeneration.load(std::memory_order_acquire),
         std::memory_order_release);
@@ -2585,10 +2585,7 @@ bool RequestModernXamlDiagnosticsInitialization(
         return false;
     }
 
-    if (state->connected.load(std::memory_order_acquire) ||
-        state->blocked.load(std::memory_order_acquire) ||
-        state->failureCount.load(std::memory_order_acquire) >=
-            kXamlDiagnosticsMaxAttempts) {
+    if (!CanAttemptXamlDiagnosticsConnection(*state)) {
         return false;
     }
 
@@ -2596,10 +2593,7 @@ bool RequestModernXamlDiagnosticsInitialization(
         g_xamlDiagnosticsWorkerMutex);
     if (g_stoppingModernUi.load(std::memory_order_acquire) ||
         !g_xamlDiagnosticsWorkerWakeEvent ||
-        state->connected.load(std::memory_order_acquire) ||
-        state->blocked.load(std::memory_order_acquire) ||
-        state->failureCount.load(std::memory_order_acquire) >=
-            kXamlDiagnosticsMaxAttempts) {
+        !CanAttemptXamlDiagnosticsConnection(*state)) {
         return false;
     }
 
@@ -2610,8 +2604,6 @@ bool RequestModernXamlDiagnosticsInitialization(
         previousGeneration ==
         state->processedGeneration.load(std::memory_order_acquire);
     if (!SetEvent(g_xamlDiagnosticsWorkerWakeEvent)) {
-        state->requestGeneration.fetch_sub(
-            1, std::memory_order_acq_rel);
         Wh_Log(L"Couldn't signal the XAML diagnostics worker: %u",
                GetLastError());
         return false;
@@ -2714,10 +2706,7 @@ XamlDiagnosticsFlavor GetModernXamlHostFlavor(
 
 bool NeedsXamlDiagnosticsHostNotification(
     const XamlDiagnosticsConnectionState& state) {
-    return !state.connected.load(std::memory_order_acquire) &&
-           !state.blocked.load(std::memory_order_acquire) &&
-           state.failureCount.load(std::memory_order_acquire) <
-               kXamlDiagnosticsMaxAttempts;
+    return CanAttemptXamlDiagnosticsConnection(state);
 }
 
 bool NeedsAnyXamlDiagnosticsHostNotification() {
@@ -2728,7 +2717,8 @@ bool NeedsAnyXamlDiagnosticsHostNotification() {
 }
 
 void NotifyModernXamlHost(HWND window, LPCWSTR className = nullptr) {
-    if (!NeedsAnyXamlDiagnosticsHostNotification()) {
+    if (!g_modernUiActive.load(std::memory_order_acquire) ||
+        !NeedsAnyXamlDiagnosticsHostNotification()) {
         return;
     }
 
@@ -2787,6 +2777,64 @@ BOOL CALLBACK EnumExistingModernXamlTopLevelWindow(HWND window, LPARAM) {
 
 void DiscoverExistingModernXamlHosts() {
     EnumWindows(EnumExistingModernXamlTopLevelWindow, 0);
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t g_originalLoadLibraryExW;
+
+PCWSTR GetModuleFileNamePart(LPCWSTR path) {
+    if (!path) {
+        return nullptr;
+    }
+
+    PCWSTR fileName = wcsrchr(path, L'\\');
+    const PCWSTR forwardSlash = wcsrchr(path, L'/');
+    if (!fileName || (forwardSlash && forwardSlash > fileName)) {
+        fileName = forwardSlash;
+    }
+    return fileName ? fileName + 1 : path;
+}
+
+XamlDiagnosticsFlavor GetXamlDiagnosticsModuleFlavor(LPCWSTR path) {
+    const PCWSTR fileName = GetModuleFileNamePart(path);
+    if (!fileName) {
+        return XamlDiagnosticsFlavor::None;
+    }
+    if (_wcsicmp(fileName, L"Windows.UI.Xaml.dll") == 0) {
+        return XamlDiagnosticsFlavor::Windows;
+    }
+    if (_wcsicmp(fileName,
+                 L"Microsoft.Internal.FrameworkUdk.dll") == 0) {
+        return XamlDiagnosticsFlavor::Microsoft;
+    }
+    return XamlDiagnosticsFlavor::None;
+}
+
+bool IsModuleAlreadyLoaded(LPCWSTR path) {
+    const PCWSTR fileName = GetModuleFileNamePart(path);
+    return fileName && GetModuleHandleW(fileName) != nullptr;
+}
+
+HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName,
+                                  HANDLE file,
+                                  DWORD flags) {
+    const XamlDiagnosticsFlavor flavor =
+        GetXamlDiagnosticsModuleFlavor(fileName);
+    const bool wasLoaded =
+        flavor != XamlDiagnosticsFlavor::None &&
+        IsModuleAlreadyLoaded(fileName);
+    HMODULE module = g_originalLoadLibraryExW(fileName, file, flags);
+    if (module && !wasLoaded &&
+        flavor != XamlDiagnosticsFlavor::None &&
+        g_modernUiActive.load(std::memory_order_acquire)) {
+        // Only wake the worker here. Diagnostics initialization must not run
+        // from a library-loading call stack.
+        if (RequestModernXamlDiagnosticsInitialization(flavor)) {
+            Wh_Log(L"Loaded XAML diagnostics module: %s",
+                   GetModuleFileNamePart(fileName));
+        }
+    }
+    return module;
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -2979,6 +3027,7 @@ bool InitializeModernUi() {
         state->requestGeneration.store(0, std::memory_order_release);
         state->processedGeneration.store(0, std::memory_order_release);
         state->failureCount.store(0, std::memory_order_release);
+        state->emptyWalkCount.store(0, std::memory_order_release);
     }
     g_visualTreeWatcherGeneration.store(
         0, std::memory_order_release);
@@ -3087,6 +3136,23 @@ bool InstallHook(Function target,
     return true;
 }
 
+bool HookXamlDiagnosticsModuleLoads() {
+    HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
+    const auto loadLibraryExW =
+        kernelBaseModule
+            ? reinterpret_cast<LoadLibraryExW_t>(
+                  GetProcAddress(kernelBaseModule, "LoadLibraryExW"))
+            : nullptr;
+    if (!loadLibraryExW) {
+        Wh_Log(L"Couldn't find kernelbase!LoadLibraryExW");
+        return false;
+    }
+
+    return InstallHook(
+        loadLibraryExW, LoadLibraryExWHook,
+        &g_originalLoadLibraryExW, L"kernelbase!LoadLibraryExW");
+}
+
 bool HookModernXamlHostCreation() {
     if (!InstallHook(
             CreateWindowExW, CreateWindowExWHook,
@@ -3097,28 +3163,29 @@ bool HookModernXamlHostCreation() {
     HMODULE user32Module = GetModuleHandleW(L"user32.dll");
     if (!user32Module) {
         Wh_Log(L"Couldn't find linked user32.dll");
-        return false;
+        return true;
     }
 
     const auto createWindowInBand =
         reinterpret_cast<CreateWindowInBand_t>(
             GetProcAddress(user32Module, "CreateWindowInBand"));
-    if (createWindowInBand &&
-        !InstallHook(
+    if (createWindowInBand) {
+        InstallHook(
             createWindowInBand, CreateWindowInBandHook,
             &g_originalCreateWindowInBand,
-            L"CreateWindowInBand")) {
-        return false;
+            L"CreateWindowInBand");
     }
 
     const auto createWindowInBandEx =
         reinterpret_cast<CreateWindowInBandEx_t>(
             GetProcAddress(user32Module, "CreateWindowInBandEx"));
-    return !createWindowInBandEx ||
-           InstallHook(
-               createWindowInBandEx, CreateWindowInBandExHook,
-               &g_originalCreateWindowInBandEx,
-               L"CreateWindowInBandEx");
+    if (createWindowInBandEx) {
+        InstallHook(
+            createWindowInBandEx, CreateWindowInBandExHook,
+            &g_originalCreateWindowInBandEx,
+            L"CreateWindowInBandEx");
+    }
+    return true;
 }
 
 bool HookClassicMenus() {
@@ -3245,6 +3312,7 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    g_modernUiActive.store(false, std::memory_order_release);
 
     const bool classicMenusEnabled =
         g_classicMenus.load(std::memory_order_relaxed);
@@ -3269,18 +3337,25 @@ BOOL Wh_ModInit() {
     }
 
     if (modernUiTextEnabled) {
-        if (!HookModernXamlHostCreation()) {
-            return FALSE;
-        }
-        if (!InitializeModernUi()) {
-            return FALSE;
+        const bool modernUiReady =
+            HookModernXamlHostCreation() &&
+            HookXamlDiagnosticsModuleLoads() &&
+            InitializeModernUi();
+        if (!modernUiReady) {
+            if (!classicMenusEnabled && !classicTooltipsEnabled) {
+                return FALSE;
+            }
+            Wh_Log(L"Modern XAML support couldn't be initialized; "
+                   L"continuing with enabled classic targets");
+        } else {
+            g_modernUiActive.store(true, std::memory_order_release);
         }
     }
 
     Wh_Log(L"Initialized (classicMenus=%d, "
            L"classicTooltips=%d, modern=%d, unicode=%d)",
            g_classicMenus.load(), g_classicTooltips.load(),
-           g_modernUiText.load(),
+           g_modernUiActive.load(),
            g_unicodeLettersAndDigits.load());
     return TRUE;
 }
@@ -3290,13 +3365,13 @@ void Wh_ModAfterInit() {
         DiscoverExistingClassicTooltipThemes();
     }
 
-    if (g_modernUiText.load(std::memory_order_relaxed)) {
+    if (g_modernUiActive.load(std::memory_order_acquire)) {
         DiscoverExistingModernXamlHosts();
     }
 }
 
 void Wh_ModBeforeUninit() {
-    if (g_modernUiText.load(std::memory_order_relaxed)) {
+    if (g_modernUiActive.load(std::memory_order_acquire)) {
         // Stop new COM callbacks and wait for the diagnostics worker before
         // Windhawk begins removing hooks. UninitializeModernUi performs the
         // owning-thread restoration after hook removal.
@@ -3311,8 +3386,9 @@ void Wh_ModUninit() {
     ClearCreatedClassicPopupMenus();
     CloseDiscoveredClassicTooltipThemes();
     ClearTrackedClassicTooltipThemes();
-    if (g_modernUiText.load(std::memory_order_relaxed)) {
+    if (g_modernUiActive.load(std::memory_order_acquire)) {
         UninitializeModernUi();
+        g_modernUiActive.store(false, std::memory_order_release);
     }
     Wh_Log(L"Uninitialized");
 }
