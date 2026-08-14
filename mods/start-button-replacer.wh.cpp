@@ -83,7 +83,9 @@ the pressed duration. Set a duration to `0` to switch instantly.
 
 For crisp results, use a square image with transparency. Keep animated GIFs
 reasonably small, such as 64x64 or 128x128. The displayed size is independent
-from the source image resolution.
+from the source image resolution. Image files must be no larger than 8 MiB and
+must be stored on a fixed local drive. Network, mapped, removable and optical
+drives aren't read from Explorer's taskbar UI thread.
 */
 // ==/WindhawkModReadme==
 
@@ -91,11 +93,11 @@ from the source image resolution.
 /*
 - images:
   - imageSource: ""
-    $name: Image source
+    $name: Image source (necessary)
     $description: >-
-      Absolute local path or path containing environment variables. Supports
-      PNG, JPG and animated GIF. This is the normal image and the final fallback
-      for every other state.
+      Absolute path on a fixed local drive, or a path containing environment
+      variables. Supports PNG, JPG and animated GIF files up to 8 MiB. This is
+      the normal image and the final fallback for every other state.
   - hoverImageSource: ""
     $name: Hover image source
     $description: >-
@@ -113,9 +115,13 @@ from the source image resolution.
       pressed image is used, followed by the hover image and normal image.
   - iconSize: 34
     $name: Icon size
-    $description: Displayed size in device-independent pixels, from 8 to 128.
+    $description: >-
+      Displayed size in device-independent pixels, from 8 to 128. The default is
+      34.
   $name: Images
-  $description: Configure the replacement images and their displayed size.
+  $description: >-
+    Configure the replacement images and their displayed size. Image files on
+    network, mapped, removable and optical drives aren't supported.
 
 - imageAnimation:
   - gifPlayback: hover
@@ -130,44 +136,55 @@ from the source image resolution.
     $name: Hover crossfade duration
     $description: >-
       Crossfade duration in milliseconds when entering or leaving the hover
-      state. Set to 0 to switch images instantly.
+      state. Set to 0 to switch images instantly. The default is 120.
   - pressedFadeDuration: 80
     $name: Pressed and activated crossfade duration
     $description: >-
       Crossfade duration in milliseconds when entering or leaving the pressed
-      or activated state. Set to 0 to switch images instantly.
+      or activated state. Set to 0 to switch images instantly. The default is
+      80.
   $name: Image animation
   $description: Configure animated GIF playback and crossfades between images.
 
 - hoverEffects:
   - hoverScale: 115
     $name: Scale
-    $description: Icon scale as a percentage while hovering. 100 keeps its size.
+    $description: >-
+      Icon scale as a percentage while hovering. 100 keeps its size. The default
+      is 115.
   - hoverRotation: 4
     $name: Rotation
-    $description: Rotation in degrees while hovering. 0 disables rotation.
+    $description: >-
+      Rotation in degrees while hovering. 0 disables rotation. The default is 4.
   - hoverOpacity: 100
     $name: Opacity
-    $description: Icon opacity as a percentage while hovering.
+    $description: >-
+      Icon opacity as a percentage while hovering. The default is 100.
   - hoverDuration: 120
     $name: Transition duration
-    $description: Effect transition duration in milliseconds.
+    $description: >-
+      Effect transition duration in milliseconds. The default is 120.
   $name: Hover effects
   $description: Configure the visual effect applied while hovering.
 
 - pressedEffects:
   - pressedScale: 95
     $name: Scale
-    $description: Icon scale as a percentage while pressed. 100 keeps its size.
+    $description: >-
+      Icon scale as a percentage while pressed. 100 keeps its size. The default
+      is 95.
   - pressedRotation: -4
     $name: Rotation
-    $description: Rotation in degrees while pressed. 0 disables rotation.
+    $description: >-
+      Rotation in degrees while pressed. 0 disables rotation. The default is -4.
   - pressedOpacity: 100
     $name: Opacity
-    $description: Icon opacity as a percentage while pressed.
+    $description: >-
+      Icon opacity as a percentage while pressed. The default is 100.
   - pressedDuration: 80
     $name: Transition duration
-    $description: Effect transition duration in milliseconds.
+    $description: >-
+      Effect transition duration in milliseconds. The default is 80.
   $name: Pressed effects
   $description: Configure the visual effect applied while pressing the button.
 
@@ -176,7 +193,7 @@ from the source image resolution.
     $name: Release duration
     $description: >-
       Effect transition duration in milliseconds when the pointer leaves or the
-      button is released.
+      button is released. The default is 140.
   - respectSystemAnimations: true
     $name: Respect Windows animation setting
     $description: >-
@@ -271,6 +288,7 @@ enum class IconState : size_t {
 };
 
 constexpr size_t kIconStateCount = static_cast<size_t>(IconState::Count);
+constexpr uint64_t kMaximumImageFileSize = 8ULL * 1024 * 1024;
 
 struct ModSettings {
     std::wstring imageSource;
@@ -1779,9 +1797,43 @@ size_t GetTrackedInstanceCount() {
 // Bitmap/image loading
 // -----------------------------------------------------------------------------
 
+bool IsFixedLocalImagePath(const std::wstring& path) {
+    // Accept ordinary drive-letter paths and their extended-length form. UNC,
+    // device, relative and volume-GUID paths are intentionally rejected before
+    // CreateFileW can block Explorer's taskbar UI thread on external storage.
+    size_t driveOffset = 0;
+
+    if (path.compare(0, 4, L"\\\\?\\") == 0) {
+        driveOffset = 4;
+    }
+
+    if (path.size() < driveOffset + 3) {
+        return false;
+    }
+
+    wchar_t driveLetter = path[driveOffset];
+    bool isDriveLetter =
+        (driveLetter >= L'A' && driveLetter <= L'Z') ||
+        (driveLetter >= L'a' && driveLetter <= L'z');
+
+    if (!isDriveLetter || path[driveOffset + 1] != L':' ||
+        (path[driveOffset + 2] != L'\\' &&
+         path[driveOffset + 2] != L'/')) {
+        return false;
+    }
+
+    wchar_t driveRoot[] = {driveLetter, L':', L'\\', L'\0'};
+
+    return GetDriveTypeW(driveRoot) == DRIVE_FIXED;
+}
+
 HRESULT CreateMemoryBackedStreamFromFile(
     const std::wstring& path,
     wss::IRandomAccessStream& randomAccessStream) {
+    if (!IsFixedLocalImagePath(path)) {
+        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    }
+
     HANDLE file =
         CreateFileW(path.c_str(), GENERIC_READ,
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -1794,6 +1846,17 @@ HRESULT CreateMemoryBackedStreamFromFile(
 
     std::unique_ptr<void, decltype(&CloseHandle)> fileOwner(file, CloseHandle);
 
+    LARGE_INTEGER fileSize{};
+
+    if (!GetFileSizeEx(file, &fileSize)) {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    if (fileSize.QuadPart < 0 ||
+        static_cast<uint64_t>(fileSize.QuadPart) > kMaximumImageFileSize) {
+        return HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE);
+    }
+
     winrt::com_ptr<IStream> memoryStream;
     HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, memoryStream.put());
 
@@ -1802,6 +1865,7 @@ HRESULT CreateMemoryBackedStreamFromFile(
     }
 
     std::array<BYTE, 64 * 1024> buffer;
+    uint64_t totalBytesRead = 0;
 
     while (true) {
         DWORD bytesRead = 0;
@@ -1814,6 +1878,12 @@ HRESULT CreateMemoryBackedStreamFromFile(
         if (bytesRead == 0) {
             break;
         }
+
+        if (totalBytesRead > kMaximumImageFileSize - bytesRead) {
+            return HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE);
+        }
+
+        totalBytesRead += bytesRead;
 
         ULONG bytesWritten = 0;
         hr = memoryStream->Write(buffer.data(), bytesRead, &bytesWritten);
@@ -1931,6 +2001,16 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
             return false;
         }
 
+        if (!IsFixedLocalImagePath(path)) {
+            resource.failed = true;
+
+            Wh_Log(L"Reading %s image \"%s\" was refused: the source must "
+                   L"be on a fixed local drive",
+                   IconStateName(state), path.c_str());
+
+            return false;
+        }
+
         wss::IRandomAccessStream stream{nullptr};
 
         HRESULT hr = CreateMemoryBackedStreamFromFile(path, stream);
@@ -1938,16 +2018,22 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
         if (FAILED(hr) || !stream) {
             resource.failed = true;
 
-            Wh_Log(L"Reading %s image \"%s\" failed: 0x%08X",
-                   IconStateName(state), path.c_str(), hr);
+            if (hr == HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE)) {
+                Wh_Log(L"Reading %s image \"%s\" was refused: the file "
+                       L"exceeds the 8 MiB limit",
+                       IconStateName(state), path.c_str());
+            } else {
+                Wh_Log(L"Reading %s image \"%s\" failed: 0x%08X",
+                       IconStateName(state), path.c_str(), hr);
+            }
 
             return false;
         }
 
         resource.memoryStream = stream;
 
-        // Asynchronous decoding prevents larger animated GIFs from blocking
-        // Explorer's taskbar UI thread.
+        // SetSourceAsync decodes the bounded in-memory copy asynchronously. The
+        // source file itself was read synchronously above.
         resource.loadAction = bitmap.SetSourceAsync(stream);
 
         return true;
@@ -3102,6 +3188,13 @@ BOOL Wh_ModInit() {
     g_unloading = false;
 
     StoreSettings(LoadSettings());
+
+    if (IsBlank(GetSettingsSnapshot().imageSource)) {
+        Wh_Log(L"No image source is configured; leaving the stock Start icon "
+               L"unchanged");
+
+        return FALSE;
+    }
 
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
