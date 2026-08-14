@@ -8,7 +8,7 @@
 // @twitter         https://twitter.com/NoobieNoodle89
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -83,9 +83,9 @@ the pressed duration. Set a duration to `0` to switch instantly.
 
 For crisp results, use a square image with transparency. Keep animated GIFs
 reasonably small, such as 64x64 or 128x128. The displayed size is independent
-from the source image resolution. Image files must be no larger than 8 MiB and
-must be stored on a fixed local drive. Network, mapped, removable and optical
-drives aren't read from Explorer's taskbar UI thread.
+from the source image resolution. XAML loads and decodes image sources
+asynchronously. XAML also caches images by source URI, so after replacing a file
+at the same path, reload the mod if the previous image remains visible.
 */
 // ==/WindhawkModReadme==
 
@@ -95,9 +95,9 @@ drives aren't read from Explorer's taskbar UI thread.
   - imageSource: ""
     $name: Image source (necessary)
     $description: >-
-      Absolute path on a fixed local drive, or a path containing environment
-      variables. Supports PNG, JPG and animated GIF files up to 8 MiB. This is
-      the normal image and the final fallback for every other state.
+      Absolute file path, or a path containing environment variables. Supports
+      PNG, JPG and animated GIF. This is the normal image and the final fallback
+      for every other state.
   - hoverImageSource: ""
     $name: Hover image source
     $description: >-
@@ -119,9 +119,7 @@ drives aren't read from Explorer's taskbar UI thread.
       Displayed size in device-independent pixels, from 8 to 128. The default is
       34.
   $name: Images
-  $description: >-
-    Configure the replacement images and their displayed size. Image files on
-    network, mapped, removable and optical drives aren't supported.
+  $description: Configure the replacement images and their displayed size.
 
 - imageAnimation:
   - gifPlayback: hover
@@ -218,13 +216,10 @@ drives aren't read from Explorer's taskbar UI thread.
 #include <string>
 #include <vector>
 
-#include <shcore.h>
-
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
@@ -237,8 +232,6 @@ drives aren't read from Explorer's taskbar UI thread.
 #include <winrt/Windows.UI.Xaml.h>
 
 namespace wf = winrt::Windows::Foundation;
-
-namespace wss = winrt::Windows::Storage::Streams;
 
 namespace wuc = winrt::Windows::UI::Composition;
 
@@ -288,7 +281,6 @@ enum class IconState : size_t {
 };
 
 constexpr size_t kIconStateCount = static_cast<size_t>(IconState::Count);
-constexpr uint64_t kMaximumImageFileSize = 8ULL * 1024 * 1024;
 
 struct ModSettings {
     std::wstring imageSource;
@@ -331,9 +323,10 @@ std::atomic<bool> g_unloading = false;
 struct ImageResource {
     wuxmi::BitmapImage bitmap{nullptr};
 
-    // The source file is copied to memory so the file itself isn't kept open.
-    wss::IRandomAccessStream memoryStream{nullptr};
-    wf::IAsyncAction loadAction{nullptr};
+    // Assigning the bitmap to an Image connected to the XAML tree starts URI
+    // retrieval. The visible layers aren't assigned until ImageOpened so the
+    // stock icon remains visible while loading.
+    wuxc::Image loadTarget{nullptr};
 
     winrt::event_token imageOpenedToken{};
     winrt::event_token imageFailedToken{};
@@ -1666,8 +1659,14 @@ void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
         } catch (...) {
         }
 
-        resource.loadAction = nullptr;
-        resource.memoryStream = nullptr;
+        try {
+            if (resource.loadTarget) {
+                resource.loadTarget.Source(wuxm::ImageSource{nullptr});
+            }
+        } catch (...) {
+        }
+
+        resource.loadTarget = nullptr;
         resource.bitmap = nullptr;
         resource.opened = false;
         resource.failed = false;
@@ -1816,125 +1815,6 @@ std::vector<DWORD> GetTrackedInstanceThreadIds() {
 // Bitmap/image loading
 // -----------------------------------------------------------------------------
 
-bool IsFixedLocalImagePath(const std::wstring& path) {
-    // Accept ordinary drive-letter paths and their extended-length form. UNC,
-    // device, relative and volume-GUID paths are intentionally rejected before
-    // CreateFileW can block Explorer's taskbar UI thread on external storage.
-    size_t driveOffset = 0;
-
-    if (path.compare(0, 4, L"\\\\?\\") == 0) {
-        driveOffset = 4;
-    }
-
-    if (path.size() < driveOffset + 3) {
-        return false;
-    }
-
-    wchar_t driveLetter = path[driveOffset];
-    bool isDriveLetter =
-        (driveLetter >= L'A' && driveLetter <= L'Z') ||
-        (driveLetter >= L'a' && driveLetter <= L'z');
-
-    if (!isDriveLetter || path[driveOffset + 1] != L':' ||
-        (path[driveOffset + 2] != L'\\' &&
-         path[driveOffset + 2] != L'/')) {
-        return false;
-    }
-
-    wchar_t driveRoot[] = {driveLetter, L':', L'\\', L'\0'};
-
-    return GetDriveTypeW(driveRoot) == DRIVE_FIXED;
-}
-
-HRESULT CreateMemoryBackedStreamFromFile(
-    const std::wstring& path,
-    wss::IRandomAccessStream& randomAccessStream) {
-    if (!IsFixedLocalImagePath(path)) {
-        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
-    }
-
-    HANDLE file =
-        CreateFileW(path.c_str(), GENERIC_READ,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                    nullptr, OPEN_EXISTING,
-                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-
-    if (file == INVALID_HANDLE_VALUE) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    std::unique_ptr<void, decltype(&CloseHandle)> fileOwner(file, CloseHandle);
-
-    LARGE_INTEGER fileSize{};
-
-    if (!GetFileSizeEx(file, &fileSize)) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    if (fileSize.QuadPart < 0 ||
-        static_cast<uint64_t>(fileSize.QuadPart) > kMaximumImageFileSize) {
-        return HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE);
-    }
-
-    winrt::com_ptr<IStream> memoryStream;
-    HRESULT hr = CreateStreamOnHGlobal(nullptr, TRUE, memoryStream.put());
-
-    if (FAILED(hr)) {
-        return hr;
-    }
-
-    std::array<BYTE, 64 * 1024> buffer;
-    uint64_t totalBytesRead = 0;
-
-    while (true) {
-        DWORD bytesRead = 0;
-
-        if (!ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()),
-                      &bytesRead, nullptr)) {
-            return HRESULT_FROM_WIN32(GetLastError());
-        }
-
-        if (bytesRead == 0) {
-            break;
-        }
-
-        if (totalBytesRead > kMaximumImageFileSize - bytesRead) {
-            return HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE);
-        }
-
-        totalBytesRead += bytesRead;
-
-        ULONG bytesWritten = 0;
-        hr = memoryStream->Write(buffer.data(), bytesRead, &bytesWritten);
-
-        if (FAILED(hr)) {
-            return hr;
-        }
-
-        if (bytesWritten != bytesRead) {
-            return STG_E_MEDIUMFULL;
-        }
-    }
-
-    // Close the source file before XAML starts decoding. The user can replace
-    // or delete it while the mod remains enabled.
-    fileOwner.reset();
-
-    LARGE_INTEGER beginning{};
-    hr = memoryStream->Seek(beginning, STREAM_SEEK_SET, nullptr);
-
-    if (FAILED(hr)) {
-        return hr;
-    }
-
-    winrt::guid streamGuid = winrt::guid_of<wss::IRandomAccessStream>();
-
-    return CreateRandomAccessStreamOverStream(
-        memoryStream.get(), BSOS_DEFAULT,
-        reinterpret_cast<const IID&>(streamGuid),
-        reinterpret_cast<void**>(winrt::put_abi(randomAccessStream)));
-}
-
 bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
                        IconState state,
                        const std::wstring& source) {
@@ -1972,8 +1852,6 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
                 resource.opened = true;
                 resource.failed = false;
-                resource.loadAction = nullptr;
-                resource.memoryStream = nullptr;
 
                 auto state = static_cast<IconState>(stateIndex);
 
@@ -2000,8 +1878,6 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
                 resource.opened = false;
                 resource.failed = true;
-                resource.loadAction = nullptr;
-                resource.memoryStream = nullptr;
 
                 auto state = static_cast<IconState>(stateIndex);
 
@@ -2021,40 +1897,32 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
             return false;
         }
 
-        if (!IsFixedLocalImagePath(path)) {
+        // UriSource lets XAML retrieve and decode the image asynchronously.
+        // ImageOpened and ImageFailed above report completion.
+        bitmap.UriSource(wf::Uri(path));
+
+        auto imageHost = instance->customImageHost.get();
+
+        if (!imageHost) {
             resource.failed = true;
-
-            Wh_Log(L"Reading %s image \"%s\" was refused: the source must "
-                   L"be on a fixed local drive",
-                   IconStateName(state), path.c_str());
-
             return false;
         }
 
-        wss::IRandomAccessStream stream{nullptr};
+        wuxc::Image loadTarget;
 
-        HRESULT hr = CreateMemoryBackedStreamFromFile(path, stream);
+        loadTarget.Opacity(0.0);
+        loadTarget.IsHitTestVisible(false);
 
-        if (FAILED(hr) || !stream) {
-            resource.failed = true;
+        wuxa::AutomationProperties::SetAccessibilityView(
+            loadTarget, wuxap::AccessibilityView::Raw);
 
-            if (hr == HRESULT_FROM_WIN32(ERROR_FILE_TOO_LARGE)) {
-                Wh_Log(L"Reading %s image \"%s\" was refused: the file "
-                       L"exceeds the 8 MiB limit",
-                       IconStateName(state), path.c_str());
-            } else {
-                Wh_Log(L"Reading %s image \"%s\" failed: 0x%08X",
-                       IconStateName(state), path.c_str(), hr);
-            }
+        resource.loadTarget = loadTarget;
 
-            return false;
-        }
-
-        resource.memoryStream = stream;
-
-        // SetSourceAsync decodes the bounded in-memory copy asynchronously. The
-        // source file itself was read synchronously above.
-        resource.loadAction = bitmap.SetSourceAsync(stream);
+        // Keep the target in the live tree for the lifetime of the resource.
+        // It stays fully transparent; only customImage and transitionImage are
+        // used to render the selected state.
+        imageHost.Children().Append(loadTarget);
+        loadTarget.Source(bitmap);
 
         return true;
     } catch (const winrt::hresult_error& e) {
