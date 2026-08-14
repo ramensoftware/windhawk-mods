@@ -2,7 +2,7 @@
 // @id              fullscreen-in-a-window
 // @name            Fullscreen in a Window
 // @description     Run an app's own fullscreen inside a normal movable, resizable window. An outer frame is created and the app is told the screen is only that window's size, so its NATIVE fullscreen (or windowed) mode plays out inside the frame - the app's own window is never restyled.
-// @version         1.2.0
+// @version         1.2.1
 // @author          thebdr
 // @github          https://github.com/thebdr
 // @homepage        https://github.com/thebdr/fullscreen-in-a-window
@@ -432,7 +432,6 @@ AppParams ResolveParams() {
 bool g_cliAdmitted = false;         // this process was let in by the CLI
 AppParams g_cliParams;              // per-app params with CLI overlays applied
 std::atomic<bool> g_autoEnclosePending{false};
-std::atomic<bool> g_autoEncloseArmed{false};
 
 bool ReadAndConsumeCliRequest(const std::wstring& selfExe, AppParams& inout) {
     WCHAR path[MAX_PATH];
@@ -1882,23 +1881,51 @@ LRESULT CALLBACK AppSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 // DLL can unload (the borderless-fullscreen.wh.cpp pattern).
 std::atomic<int> g_pendingSettle{0};
 
-// CLI auto-enclose: once a suitable window shows up in a CLI-admitted
-// process, give the app a moment to settle (splash screens, initial layout -
-// the settle idea is borrowed from borderless-fullscreen.wh.cpp), then route
-// through the normal toggle path. If the candidate died meanwhile (it was a
-// splash), re-arm for the next one.
-DWORD WINAPI AutoEncloseThread(LPVOID param) {
-    Sleep(800);
-    HWND hWnd = (HWND)param;
-    if (!g_teardown.load() && g_autoEnclosePending.load()) {
-        if (IsWindow(hWnd) && IsWindowVisible(hWnd) &&
-            IsEnclosableTopLevel(hWnd)) {
+void SubclassIfCandidate(HWND hWnd);  // fwd
+
+// The largest currently-visible enclosable top-level window of THIS process -
+// so we grab the real main window, not a splash or a hidden helper.
+BOOL CALLBACK FindBestWindowProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId() || IsContainer(hWnd)) {
+        return TRUE;
+    }
+    if (!IsWindowVisible(hWnd) || !IsEnclosableTopLevel(hWnd)) {
+        return TRUE;
+    }
+    RECT rc;
+    if (!GetWindowRect(hWnd, &rc)) {
+        return TRUE;
+    }
+    long area = (long)(rc.right - rc.left) * (rc.bottom - rc.top);
+    auto* best = reinterpret_cast<std::pair<HWND, long>*>(lParam);
+    if (area > best->second) {
+        best->second = area;
+        best->first = hWnd;
+    }
+    return TRUE;
+}
+
+// CLI auto-enclose: a process admitted by enclose.exe polls for its main
+// window (handling splash-first startups and windows shown after a delay),
+// then routes it through the normal toggle path. Runs once per CLI process.
+DWORD WINAPI AutoEncloseThread(LPVOID) {
+    for (int i = 0; i < 16 && !g_teardown.load() && g_autoEnclosePending.load();
+         i++) {
+        Sleep(400);
+        if (g_teardown.load()) {
+            break;
+        }
+        std::pair<HWND, long> best{nullptr, 0};
+        EnumWindows(FindBestWindowProc, reinterpret_cast<LPARAM>(&best));
+        if (best.first) {
             g_autoEnclosePending = false;
+            SubclassIfCandidate(best.first);  // so it hears the toggle message
             if (g_toggleMsg) {
-                PostMessageW(hWnd, g_toggleMsg, 0, 0);
+                PostMessageW(best.first, g_toggleMsg, 0, 0);
             }
-        } else {
-            g_autoEncloseArmed = false;  // next candidate re-arms
+            break;
         }
     }
     g_pendingSettle--;
@@ -1915,18 +1942,6 @@ void SubclassIfCandidate(HWND hWnd) {
         return;
     }
     WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, AppSubclassProc, 0);
-
-    if (g_autoEnclosePending.load() && !g_autoEncloseArmed.exchange(true)) {
-        g_pendingSettle++;
-        HANDLE t = CreateThread(nullptr, 0, AutoEncloseThread, (LPVOID)hWnd, 0,
-                                nullptr);
-        if (t) {
-            CloseHandle(t);
-        } else {
-            g_pendingSettle--;
-            g_autoEncloseArmed = false;
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2514,6 +2529,18 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     if (g_isTarget) {
         EnumWindows(EnumExistingProc, 0);
+    }
+    if (g_autoEnclosePending.load()) {
+        // CLI-admitted: start the finder that will enclose the main window
+        // once it appears (drained at teardown via g_pendingSettle).
+        g_pendingSettle++;
+        HANDLE t = CreateThread(nullptr, 0, AutoEncloseThread, nullptr, 0,
+                                nullptr);
+        if (t) {
+            CloseHandle(t);
+        } else {
+            g_pendingSettle--;
+        }
     }
     if (g_isExplorer && g_cfgHotkey.load()) {
         StartHotkeyThread();
