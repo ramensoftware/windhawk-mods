@@ -82,7 +82,9 @@ proportional spot on the monitor in that direction.
   $description: >-
     Allow the cursor to leave through a part of the edge that has no neighbour
     monitor. It lands on the proportional spot of the nearest monitor in that
-    direction instead of being blocked.
+    direction instead of being blocked. Such an edge no longer stops the
+    cursor, so an auto-hide taskbar sitting on it can't be revealed by pushing
+    into it any more.
 - unstickAtEdge: true
   $name: Unstick the cursor at the edge
   $description: >-
@@ -109,6 +111,7 @@ struct {
 
 // All of the state below is touched only by the hook thread.
 std::vector<RECT> g_monitors;
+bool g_monitorsResyncDone;
 POINT g_lastPoint;
 bool g_lastPointValid;
 POINT g_lastDelta;
@@ -159,13 +162,26 @@ int MonitorAt(POINT p) {
     return -1;
 }
 
-// Distance between two 1-D intervals, 0 if they overlap.
+// Distance between two half-open 1-D intervals, 0 only when they really
+// overlap. Intervals that merely touch - two monitors sharing nothing but a
+// corner - come out one apart rather than zero.
 int IntervalDistance(int aStart, int aEnd, int bStart, int bEnd) {
     if (bStart >= aEnd) {
-        return bStart - aEnd;
+        return bStart - aEnd + 1;
     }
     if (aStart >= bEnd) {
-        return aStart - bEnd;
+        return aStart - bEnd + 1;
+    }
+    return 0;
+}
+
+// Distance from a coordinate to a half-open span, 0 if it falls inside.
+int DistanceToSpan(LONG value, LONG spanStart, LONG spanEnd) {
+    if (value < spanStart) {
+        return spanStart - value;
+    }
+    if (value >= spanEnd) {
+        return value - spanEnd + 1;
     }
     return 0;
 }
@@ -190,12 +206,15 @@ enum Direction { kLeft, kRight, kUp, kDown };
 // Picks the best monitor in the given direction, ignoring `from`. A monitor
 // whose perpendicular span overlaps the source one wins over a closer one that
 // is offset to the side, so that the obvious neighbour is always preferred.
-int FindMonitorInDirection(int from, Direction dir) {
+// `cross` is the position along the edge the cursor is leaving through, used to
+// break ties instead of leaving them to the enumeration order.
+int FindMonitorInDirection(int from, Direction dir, LONG cross) {
     const RECT& src = g_monitors[from];
 
     int best = -1;
     int bestGap = 0;
     int bestOffAxis = 0;
+    int bestCrossDist = 0;
 
     for (size_t i = 0; i < g_monitors.size(); i++) {
         if ((int)i == from) {
@@ -205,6 +224,7 @@ int FindMonitorInDirection(int from, Direction dir) {
         const RECT& cand = g_monitors[i];
         int gap;
         int offAxis;
+        int crossDist;
 
         switch (dir) {
             case kRight:
@@ -214,6 +234,7 @@ int FindMonitorInDirection(int from, Direction dir) {
                 gap = cand.left - src.right;
                 offAxis = IntervalDistance(src.top, src.bottom, cand.top,
                                            cand.bottom);
+                crossDist = DistanceToSpan(cross, cand.top, cand.bottom);
                 break;
             case kLeft:
                 if (cand.right > src.left) {
@@ -222,6 +243,7 @@ int FindMonitorInDirection(int from, Direction dir) {
                 gap = src.left - cand.right;
                 offAxis = IntervalDistance(src.top, src.bottom, cand.top,
                                            cand.bottom);
+                crossDist = DistanceToSpan(cross, cand.top, cand.bottom);
                 break;
             case kDown:
                 if (cand.top < src.bottom) {
@@ -230,6 +252,7 @@ int FindMonitorInDirection(int from, Direction dir) {
                 gap = cand.top - src.bottom;
                 offAxis = IntervalDistance(src.left, src.right, cand.left,
                                            cand.right);
+                crossDist = DistanceToSpan(cross, cand.left, cand.right);
                 break;
             default:  // kUp
                 if (cand.bottom > src.top) {
@@ -238,6 +261,7 @@ int FindMonitorInDirection(int from, Direction dir) {
                 gap = src.top - cand.bottom;
                 offAxis = IntervalDistance(src.left, src.right, cand.left,
                                            cand.right);
+                crossDist = DistanceToSpan(cross, cand.left, cand.right);
                 break;
         }
 
@@ -248,14 +272,17 @@ int FindMonitorInDirection(int from, Direction dir) {
             better = offAxis == 0;
         } else if (gap != bestGap) {
             better = gap < bestGap;
-        } else {
+        } else if (offAxis != bestOffAxis) {
             better = offAxis < bestOffAxis;
+        } else {
+            better = crossDist < bestCrossDist;
         }
 
         if (better) {
             best = (int)i;
             bestGap = gap;
             bestOffAxis = offAxis;
+            bestCrossDist = crossDist;
         }
     }
 
@@ -270,6 +297,11 @@ bool ComputeTarget(int from,
                    int overshoot,
                    POINT* result) {
     const RECT& src = g_monitors[from];
+    bool horizontal = dir == kLeft || dir == kRight;
+
+    // Position along the edge the cursor is leaving through.
+    LONG cross = horizontal ? std::clamp(desired.y, src.top, src.bottom - 1)
+                            : std::clamp(desired.x, src.left, src.right - 1);
 
     int to = MonitorAt(desired);
     if (to == from) {
@@ -281,7 +313,7 @@ bool ComputeTarget(int from,
         if (!g_settings.crossGaps) {
             return false;
         }
-        to = FindMonitorInDirection(from, dir);
+        to = FindMonitorInDirection(from, dir, cross);
         if (to < 0) {
             return false;
         }
@@ -290,26 +322,40 @@ bool ComputeTarget(int from,
     const RECT& dst = g_monitors[to];
     POINT target;
 
-    if (dir == kLeft || dir == kRight) {
-        LONG y = std::clamp(desired.y, src.top, src.bottom - 1);
+    if (horizontal) {
         if (g_settings.normalizeVertical) {
-            target.y = MapProportional(y, src.top, RectHeight(src), dst.top,
+            target.y = MapProportional(cross, src.top, RectHeight(src), dst.top,
                                        RectHeight(dst));
         } else {
-            target.y = std::clamp(y, dst.top, dst.bottom - 1);
+            target.y = std::clamp(cross, dst.top, dst.bottom - 1);
         }
-        int inset = std::clamp(overshoot - 1, 0, RectWidth(dst) - 1);
-        target.x = (dir == kRight) ? dst.left + inset : dst.right - 1 - inset;
-    } else {
-        LONG x = std::clamp(desired.x, src.left, src.right - 1);
-        if (g_settings.normalizeHorizontal) {
-            target.x = MapProportional(x, src.left, RectWidth(src), dst.left,
-                                       RectWidth(dst));
+
+        // `overshoot` is measured from the edge of the source monitor, so it
+        // only reconstructs the reported position when the two monitors touch
+        // along this axis. Whenever the reported position is already valid on
+        // the destination monitor - a fast flick across an intermediate
+        // monitor, or a gap between the two - keep it as is.
+        if (desired.x >= dst.left && desired.x < dst.right) {
+            target.x = desired.x;
         } else {
-            target.x = std::clamp(x, dst.left, dst.right - 1);
+            int inset = std::clamp(overshoot - 1, 0, RectWidth(dst) - 1);
+            target.x =
+                (dir == kRight) ? dst.left + inset : dst.right - 1 - inset;
         }
-        int inset = std::clamp(overshoot - 1, 0, RectHeight(dst) - 1);
-        target.y = (dir == kDown) ? dst.top + inset : dst.bottom - 1 - inset;
+    } else {
+        if (g_settings.normalizeHorizontal) {
+            target.x = MapProportional(cross, src.left, RectWidth(src),
+                                       dst.left, RectWidth(dst));
+        } else {
+            target.x = std::clamp(cross, dst.left, dst.right - 1);
+        }
+
+        if (desired.y >= dst.top && desired.y < dst.bottom) {
+            target.y = desired.y;
+        } else {
+            int inset = std::clamp(overshoot - 1, 0, RectHeight(dst) - 1);
+            target.y = (dir == kDown) ? dst.top + inset : dst.bottom - 1 - inset;
+        }
     }
 
     target.x = std::clamp(target.x, dst.left, dst.right - 1);
@@ -372,6 +418,18 @@ bool GetStuckDirection(const RECT& src, POINT at, Direction* dir) {
     return false;
 }
 
+// The cursor can only move along one axis while it is pinned against an edge,
+// so the two axes are remembered independently. Replacing the whole delta would
+// let a 1 px wobble at the edge erase the direction the user is pushing in.
+void UpdateLastDelta(POINT delta) {
+    if (delta.x != 0) {
+        g_lastDelta.x = delta.x;
+    }
+    if (delta.y != 0) {
+        g_lastDelta.y = delta.y;
+    }
+}
+
 // Returns true and fills `result` if the cursor has to be repositioned.
 bool HandleMove(POINT desired, POINT* result) {
     if (g_monitors.size() < 2) {
@@ -390,10 +448,16 @@ bool HandleMove(POINT desired, POINT* result) {
     int from = MonitorAt(last);
     if (from < 0) {
         // The previous position is not on any monitor - the display layout
-        // changed behind our back, resync.
-        RefreshMonitors();
+        // changed behind our back. Resync once; if the point stays off every
+        // monitor, don't re-enumerate on every further mouse event.
+        if (!g_monitorsResyncDone) {
+            g_monitorsResyncDone = true;
+            RefreshMonitors();
+        }
         return false;
     }
+
+    g_monitorsResyncDone = false;
 
     const RECT& src = g_monitors[from];
 
@@ -414,7 +478,7 @@ bool HandleMove(POINT desired, POINT* result) {
     if (overshootX == 0 && overshootY == 0) {
         // Still on the same monitor.
         if (delta.x != 0 || delta.y != 0) {
-            g_lastDelta = delta;
+            UpdateLastDelta(delta);
             g_stuckCount = 0;
             return false;
         }
@@ -439,7 +503,7 @@ bool HandleMove(POINT desired, POINT* result) {
     }
 
     g_stuckCount = 0;
-    g_lastDelta = delta;
+    UpdateLastDelta(delta);
 
     Direction dir;
     int overshoot;
@@ -464,9 +528,11 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     if (info->flags & LLMHF_INJECTED) {
         // Our own SetCursorPos or someone else's - never process it, but keep
-        // the reference point up to date.
+        // the reference point up to date. The cursor was moved for reasons of
+        // its own, so the movement history no longer describes anything.
         g_lastPoint = desired;
         g_lastPointValid = true;
+        g_lastDelta = {};
         g_stuckCount = 0;
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
@@ -499,7 +565,11 @@ LRESULT CALLBACK NotifyWndProc(HWND hWnd,
     if (uMsg == WM_DISPLAYCHANGE) {
         Wh_Log(L"Display change");
         RefreshMonitors();
+        g_monitorsResyncDone = false;
+        // Nothing collected under the previous layout still applies.
         g_lastPointValid = false;
+        g_lastDelta = {};
+        g_stuckCount = 0;
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
