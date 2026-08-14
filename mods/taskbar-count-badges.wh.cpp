@@ -566,6 +566,8 @@ Media::SolidColorBrush CreateBrush(const std::wstring& value,
 // Position helpers
 // -----------------------------------------------------------------------------
 
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name);
+
 void ApplyNumberBadgePosition(Controls::Border badge) {
     HorizontalAlignment horizontal = HorizontalAlignment::Right;
 
@@ -623,30 +625,53 @@ void ApplyNumberBadgePosition(Controls::Border badge) {
 
 void ApplyDotPosition(Controls::Border badge) {
     badge.VerticalAlignment(VerticalAlignment::Center);
-
     badge.Margin(Thickness{});
-
-    if (g_settings.dotPosition == DotPosition::Left) {
-        badge.HorizontalAlignment(HorizontalAlignment::Left);
-    } else {
-        badge.HorizontalAlignment(HorizontalAlignment::Right);
-    }
 
     auto transform =
         badge.RenderTransform().try_as<Media::TranslateTransform>();
-
     if (!transform) {
         transform = Media::TranslateTransform();
-
         badge.RenderTransform(transform);
     }
 
-    // IMPORTANT:
-    // Keep dots inside IconPanel.
-    // Moving them outside causes the taskbar XAML to clip them.
-    //
-    // 2 px gives a little separation from the panel edge.
-    transform.X(g_settings.dotPosition == DotPosition::Left ? 2.0 : -2.0);
+    // Anchor the dots to the actual app icon instead of to IconPanel's edge.
+    // IconPanel has side padding in the stock taskbar, but its geometry can be
+    // changed by taskbar layout/styling mods. Using the Icon child keeps the
+    // dots beside the icon rather than on top of it.
+    auto iconPanelElement = badge.Parent().try_as<FrameworkElement>();
+    auto icon = iconPanelElement
+                    ? FindChildByName(iconPanelElement, L"Icon")
+                    : nullptr;
+
+    if (icon && icon.ActualWidth() > 0) {
+        auto iconTransform = icon.TransformToVisual(iconPanelElement);
+        auto iconTopLeft = iconTransform.TransformPoint(
+            winrt::Windows::Foundation::Point{0, 0});
+        constexpr double kDotGap = 2.0;
+
+        if (g_settings.dotPosition == DotPosition::Left) {
+            // Anchor the badge's RIGHT edge to the icon's left edge. Don't
+            // assume the badge width equals dotSize: XAML layout/DPI rounding
+            // can make the realized width differ slightly.
+            badge.HorizontalAlignment(HorizontalAlignment::Right);
+            transform.X(iconTopLeft.X - iconPanelElement.ActualWidth() -
+                        kDotGap);
+        } else {
+            // Anchor the badge's LEFT edge to the icon's right edge.
+            badge.HorizontalAlignment(HorizontalAlignment::Left);
+            transform.X(iconTopLeft.X + icon.ActualWidth() + kDotGap);
+        }
+    } else {
+        // Fallback for unexpected taskbar templates where the Icon element
+        // can't be resolved. Keep the indicator inside IconPanel.
+        if (g_settings.dotPosition == DotPosition::Left) {
+            badge.HorizontalAlignment(HorizontalAlignment::Left);
+            transform.X(2.0);
+        } else {
+            badge.HorizontalAlignment(HorizontalAlignment::Right);
+            transform.X(-2.0);
+        }
+    }
 
     transform.Y(0.0);
 }
@@ -996,13 +1021,10 @@ void ApplyBadgeVisualStyle(Controls::Border badge, unsigned int count) {
 // -----------------------------------------------------------------------------
 
 void RemoveBadgeFromPanel(Controls::Panel iconPanel, Controls::Border badge) {
+    uint32_t index = 0;
     auto children = iconPanel.Children();
-
-    for (uint32_t i = 0; i < children.Size(); i++) {
-        if (children.GetAt(i) == badge) {
-            children.RemoveAt(i);
-            return;
-        }
+    if (children.IndexOf(badge, index)) {
+        children.RemoveAt(index);
     }
 }
 
@@ -1432,9 +1454,8 @@ bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void* parameter) {
         return true;
     }
 
-    static UINT message = RegisterWindowMessageW(
-        L"Windhawk_TaskbarCountBadges_"
-        L"RunOnTaskbarThread");
+    static UINT message =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     if (!message) {
         return false;
@@ -1478,6 +1499,27 @@ bool RunOnTaskbarThread(HWND hWnd, TaskbarThreadProc proc, void* parameter) {
     UnhookWindowsHookEx(hook);
 
     return true;
+}
+
+HWND FindWindowOnThread(DWORD threadId) {
+    if (!threadId) {
+        return nullptr;
+    }
+
+    struct Context {
+        HWND hWnd = nullptr;
+    } context;
+
+    EnumThreadWindows(
+        threadId,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* context = reinterpret_cast<Context*>(lParam);
+            context->hWnd = hWnd;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    return context.hWnd;
 }
 
 // -----------------------------------------------------------------------------
@@ -1531,7 +1573,7 @@ bool EnsureDeferredCountRefreshHookOnTaskbarThread() {
 
     if (!g_deferredCountRefreshMessage) {
         g_deferredCountRefreshMessage = RegisterWindowMessageW(
-            L"Windhawk_TaskbarCountBadges_DeferredCountRefresh");
+            L"Windhawk_DeferredCountRefresh_" WH_MOD_ID);
         if (!g_deferredCountRefreshMessage) {
             return false;
         }
@@ -1655,9 +1697,7 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
 
     try {
-        if (!EnsureDeferredCountRefreshHookOnTaskbarThread()) {
-            g_taskbarThreadId = GetCurrentThreadId();
-        }
+        EnsureDeferredCountRefreshHookOnTaskbarThread();
         void* taskListButtonIUnknownPtr = reinterpret_cast<void**>(pThis) + 3;
 
         winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
@@ -1992,21 +2032,50 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
     g_settingsReloadPending = false;
 
+    DWORD taskbarThreadId = g_taskbarThreadId.load();
+    HWND cleanupWnd = nullptr;
+
+    // Prefer Shell_TrayWnd while it still exists, but cleanup must not depend
+    // on it: the deferred WH_GETMESSAGE hook belongs to the taskbar UI thread
+    // and can outlive the visible taskbar window during Explorer teardown.
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!taskbarWnd) {
-        // The taskbar UI is already gone, so there are no visible badges to
-        // remove.
+    if (taskbarWnd) {
+        DWORD windowThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
+        if (!taskbarThreadId || windowThreadId == taskbarThreadId) {
+            cleanupWnd = taskbarWnd;
+        }
+    }
+
+    if (!cleanupWnd && taskbarThreadId) {
+        cleanupWnd = FindWindowOnThread(taskbarThreadId);
+    }
+
+    if (!cleanupWnd) {
+        // If no deferred hook was ever installed, there is no callback that can
+        // survive the mod. Any XAML tree that has already lost all of its
+        // windows is no longer reachable for visual cleanup either.
+        if (!g_taskbarGetMessageHook.load()) {
+            g_trackedButtons.clear();
+            return;
+        }
+
+        Wh_Log(L"Couldn't find a window on the taskbar thread for cleanup");
         return;
     }
 
-    if (!RunOnTaskbarThread(taskbarWnd, CleanupOnTaskbarThreadProc, nullptr)) {
+    if (!RunOnTaskbarThread(cleanupWnd, CleanupOnTaskbarThreadProc, nullptr)) {
         Wh_Log(L"Cleanup taskbar-thread execution failed");
     }
 }
 
 void Wh_ModUninit() {
-    StopDeferredCountRefreshHook();
-    g_deferredCountRefreshQueued = false;
+    // Normal teardown removes the long-lived hook synchronously from its own
+    // taskbar thread in CleanupOnTaskbarThreadProc. This is only a last-resort
+    // fallback for a teardown path where taskbar-thread marshalling was no
+    // longer possible.
+    if (g_taskbarGetMessageHook.load()) {
+        StopDeferredCountRefreshHook();
+    }
 
     // Tracked buttons contain weak WinRT references only; releasing them here
     // is safe even if Explorer is already tearing the taskbar down.
