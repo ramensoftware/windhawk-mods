@@ -6561,6 +6561,34 @@
         "version": "1.0.0"
       }
     },
+    "gnome-dynamic-desktops": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786709679000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786709679000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Giggig",
+        "compilerOptions": "-lole32 -luuid -luser32 -ldwmapi",
+        "description": "Makes the Windows 11 virtual desktop system behave like the GNOME desktop environment",
+        "github": "https://github.com/Giggigx",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "GNOME-like dynamic virtual desktops",
+        "version": "1.4"
+      }
+    },
     "hide-action-center-icon": {
       "details": {
         "defaultSorting": 1130,

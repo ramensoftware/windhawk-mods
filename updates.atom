@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-14T11:34:40.000Z</updated>
+    <updated>2026-08-14T12:14:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[GNOME-like dynamic virtual desktops 1.4]]></title>
+        <id>https://windhawk.net/mods/gnome-dynamic-desktops#c1f498cfa9d567959de6f1e662cb8156108212fc</id>
+        <link href="https://windhawk.net/mods/gnome-dynamic-desktops"/>
+        <updated>2026-08-14T12:14:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="gnomelikedynamicvirtualdesktops">GNOME-Like dynamic virtual desktops</h1>
+<p>Makes Windows' virtual desktops behave like the GNOME desktop environment. </p>
+<h3 id="whatisgnomebehavior">What is "GNOME behavior"?</h3>
+<p>In the GNOME desktop environment (popular on Linux), virtual workspaces are managed dynamically:</p>
+<ul>
+<li>There is always exactly <em>one</em> empty desktop at the end of your workspace list.</li>
+<li>If you move or open a window in that last empty desktop, a new empty desktop is immediately created to its right.</li>
+<li>If a desktop in the middle of your workspaces becomes completely empty, it is automatically deleted, shifting the others over.</li>
+<li>When absolutely no windows are open, the system cleanly reduces itself to a single empty desktop.</li>
+</ul>
+<p>This mod implements this exact logic on Windows 11. It's perfect for laptops with trackpad gestures, allowing for endless, seamless switching between workspaces without ever having to manually create or close a desktop again.</p>
+<p><img src="https://i.imgur.com/wih0nm0.gif" alt="GNOME mod demo" /></p>
+<p><strong>⚠️ Warning:</strong> When this mod runs, your existing virtual desktops and their custom names are dynamically managed and reset to match GNOME's behavior. Disabling the mod does not automatically restore your previous desktop layout.</p>
+<p>Works with Windows 11 build 26100+</p>
+<p><strong>Settings</strong></p>
+<ul>
+<li><strong>Don't delete empty desktop immediately</strong>: If you're in an empty virtual desktop it waits for you to switch into another virtual desktop before deleting it. If disabled the desktop will be deleted as soon as it becomes empty.</li>
+</ul>
+<p>Special thanks to <a href="https://github.com/FuPeiJiang/VD.ahk">VD.ahk</a> for providing the correct GUIDs to interface with the virtual desktops system.</p>]]></content>
+        <author>
+            <name>Giggig</name>
+            <uri>https://github.com/Giggigx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Icon Separators 0.5.38]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-separators#b895e6b2cf4ae9140dcb70b1200634ad4ceb13c4</id>
@@ -664,86 +693,6 @@ doesn't change delays configured by other systems, such as Task Scheduler.</p>]]
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Separators 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-separators#8a97b5eccb4fbe75e04fdfb62be173b619bcd528</id>
-        <link href="https://windhawk.net/mods/taskbar-separators"/>
-        <updated>2026-08-05T18:23:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarseparators">Taskbar Separators</h1>
-<p>Add clean, customizable visual separators between application buttons on the
-Windows 11 taskbar.</p>
-<p>Unlike placeholder applications or pinned shortcuts, these separators are
-visual, non-clickable elements. They do not launch programs or occupy normal
-application slots.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-preview.jpg" alt="Taskbar Separators
-preview" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Add multiple separators at configurable taskbar positions</li>
-<li>Optional separator before the first application button</li>
-<li>Live position and appearance updates</li>
-<li>Five configurable visual styles:</li>
-<li>Fade</li>
-<li>Solid</li>
-<li>Double</li>
-<li>Rounded</li>
-<li>Glow</li>
-<li>Adjustable thickness, length, opacity, color, and effect settings</li>
-<li>Automatic horizontal and vertical taskbar orientation</li>
-<li>Optional animation compatibility mode</li>
-<li>Clean removal when the mod is disabled</li>
-<li>No changes to taskbar button margins, padding, or application behavior</li>
-</ul>
-<h2 id="gettingstarted">Getting started</h2>
-<ol>
-<li>Open the mod's <strong>Settings</strong> tab.</li>
-<li>Add separator positions to the <strong>Separators</strong> list.</li>
-<li>A position of <code>3</code> places a separator after the third application button.</li>
-<li>Select a style and adjust its appearance.</li>
-</ol>
-<h2 id="positionbehavior">Position behavior</h2>
-<p>Numbered positions place separators after application buttons:</p>
-<ul>
-<li>Position <code>1</code> places a separator after the first application button</li>
-<li>Position <code>2</code> places a separator after the second application button</li>
-<li>Position <code>3</code> places a separator after the third application button</li>
-</ul>
-<p>Enable <strong>Separator before first app</strong> to place a separator before the first
-application button.</p>
-<p>Start, Search, Widgets, Task View, and other system buttons are not counted as
-application buttons.</p>
-<p>Positions follow the current visual order of taskbar application buttons.
-Opening, closing, pinning, unpinning, or rearranging applications can change
-which icons appear beside a configured separator.</p>
-<h2 id="settings">Settings</h2>
-<p><img src="https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-settings.jpg" alt="Taskbar Separators
-settings" /></p>
-<h2 id="alternatesetups">Alternate setups</h2>
-<p><img src="https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-alt.jpg" alt="Taskbar Separators alternate
-setups" /></p>
-<h2 id="animationcompatibility">Animation compatibility</h2>
-<p>Static taskbars are fully supported.</p>
-<p>The mod can follow icons animated by other taskbar mods, but very fast animation
-may not remain perfectly synchronized because both mods update their visual
-elements independently.</p>
-<p>This affects animation appearance only and does not affect normal static
-separator positioning.</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11 horizontal taskbars</li>
-<li>Vertical taskbars via Vertical Taskbar for Windows 11</li>
-<li>Compatible with Windows 11 Taskbar Styler in normal configurations</li>
-</ul>
-<h2 id="licenseandattribution">License and attribution</h2>
-<p>Licensed under the GNU General Public License v3.0.</p>
-<p>Taskbar hook and UI-thread infrastructure includes code adapted from Windhawk
-mods by Michael Maltsev (m417z).</p>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>
