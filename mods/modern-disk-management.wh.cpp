@@ -2,12 +2,12 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.7.3
+// @version         3.8.0
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
 // @include         mmc.exe
-// @compilerOptions -lcfgmgr32 -ldwmapi -lgdiplus -lgdi32 -lmsimg32 -lole32 -loleaut32 -lsetupapi -lshell32 -lshlwapi -luser32
+// @compilerOptions -lcfgmgr32 -ldwmapi -lgdi32 -lmsimg32 -lole32 -loleaut32 -lsetupapi -lshell32 -lshlwapi -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -50,12 +50,25 @@ refusal is only reported when nothing worked at all.
 There is deliberately no partition editing here. Writing a partition editor is
 how data gets lost, and Windows already ships tools that do it properly - run
 `diskpart`, or Settings' Disks & volumes, for changing letters, extending,
-shrinking or converting. Turn off **Replace the Disk Management console** in
-the mod's settings to get the original back for good, or set
-`WH_DISKMGMT_CLASSIC=1` for a single launch.
+shrinking or converting. The **Classic console** button in the action bar
+starts the original console for exactly that, and turning off **Replace the
+Disk Management console** in the mod's settings gets it back for good.
 
-Double-click a volume, or press Enter, for its properties; the arrow keys move
-the selection, F5 re-reads the disks and Esc closes the window.
+Double-click a volume, or press Enter, for its properties; right-click for the
+same actions as a menu. The arrow keys move the selection, Tab moves through
+the action bar, F5 re-reads the disks and Esc closes the window.
+
+## What it does not know
+
+Status, Layout and Type are only as good as what the partition table and the
+volume queries answer, and this mod reads no health data at all - no SMART, no
+dynamic-disk database. So `Healthy` is only printed for a volume that answered
+its queries; one that did not is `Unreadable`, an unformatted one is `RAW`, and
+a disk that will not report its geometry is `Not ready` rather than `Online`. A
+volume on more than one disk extent is `Multi-disk`, because telling spanned
+from striped from mirrored needs the dynamic-disk metadata this does not read.
+If you need real health, that is what the manufacturer's tool and `chkdsk` are
+for.
 
 ![Volume properties](https://raw.githubusercontent.com/emirerkul991-1yssssss/windhawk-mods/main/635723532-93cd6027-c238-4e34-8701-7d28f52a8ea9.png)
 
@@ -92,15 +105,22 @@ would be drawing a lie about where the space on the disk went.
 
 // ==WindhawkModSettings==
 /*
-- wallpaperTint: true
-  $name: Tint the window with the wallpaper
-  $description: Mixes the desktop wallpaper's dominant colour into the background, the way Mica does.
+- accentTint: true
+  $name: Tint the window with the accent colour
+  $description: Mixes the colour DWM tints window frames with into the background, the way Mica does. With "automatically pick an accent colour from my background" on, that is the wallpaper's colour.
 - showEmptyVolumes: true
   $name: Show volumes without a drive letter
   $description: EFI system partitions, recovery partitions and similar.
 - takeOver: true
   $name: Replace the Disk Management console
   $description: Turn this off to get the original diskmgmt.msc console back while leaving the mod installed. WH_DISKMGMT_CLASSIC=1 still does the same thing for a single launch.
+- theme: dark
+  $name: Colour theme
+  $description: Dark by default. "Follow the system" reads the same light/dark setting Windows applies to its own apps.
+  $options:
+  - dark: Dark
+  - light: Light
+  - system: Follow the system
 */
 // ==/WindhawkModSettings==
 
@@ -108,7 +128,6 @@ would be drawing a lie about where the space on the disk went.
 
 #include <dwmapi.h>
 #include <commoncontrols.h>
-#include <gdiplus.h>
 #include <shellapi.h>
 #include <shldisp.h>
 #include <shlobj.h>
@@ -123,6 +142,7 @@ would be drawing a lie about where the space on the disk went.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <mutex>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -134,10 +154,13 @@ would be drawing a lie about where the space on the disk went.
 // Windhawk calls Wh_ModSettingsChanged on its own thread, so these are written
 // while the UI thread is reading them - possibly in the middle of a paint.
 // Atomics make that defined instead of merely unlikely to matter.
+enum class ThemeChoice { System, Dark, Light };
+
 struct Settings {
-    std::atomic<bool> wallpaperTint = true;
+    std::atomic<bool> accentTint = true;
     std::atomic<bool> showEmptyVolumes = true;
     std::atomic<bool> takeOver = true;
+    std::atomic<ThemeChoice> theme = ThemeChoice::Dark;
 };
 
 Settings g_settings;
@@ -148,22 +171,85 @@ Settings g_settings;
 
 namespace ui {
 
-constexpr COLORREF kWindow = RGB(26, 26, 28);
-constexpr COLORREF kCard = RGB(39, 39, 42);
-constexpr COLORREF kCardBorder = RGB(55, 55, 59);
-constexpr COLORREF kTextPrimary = RGB(255, 255, 255);
-constexpr COLORREF kTextSecondary = RGB(158, 158, 165);
-constexpr COLORREF kTextTertiary = RGB(120, 120, 126);
-constexpr COLORREF kTextDisabled = RGB(108, 108, 114);
-constexpr COLORREF kBarTrack = RGB(58, 58, 62);
+// The palette. Variables rather than constants, because the window follows the
+// system's light/dark setting: ApplyTheme swaps every value below, and the two
+// hundred-odd places that draw with them do not have to know.
+//
+// Dark is what they start as - it is what the mod is for, and it is what a
+// window that fails to read the setting should look like.
+COLORREF kWindow = RGB(26, 26, 28);
+COLORREF kCard = RGB(39, 39, 42);
+COLORREF kCardBorder = RGB(55, 55, 59);
+COLORREF kTextPrimary = RGB(255, 255, 255);
+COLORREF kTextSecondary = RGB(158, 158, 165);
+COLORREF kTextTertiary = RGB(120, 120, 126);
+COLORREF kTextDisabled = RGB(108, 108, 114);
+COLORREF kBarTrack = RGB(58, 58, 62);
 // Blue and grey only. The boot volume takes the system accent, data volumes a
 // muted steel blue, and everything the system keeps to itself is grey - so the
 // hierarchy is carried by how saturated a colour is rather than by hue.
-constexpr COLORREF kBarSystem = RGB(124, 126, 134);   // EFI, reserved, recovery
-constexpr COLORREF kBarData = RGB(116, 146, 184);     // data volumes
-constexpr COLORREF kUnallocated = RGB(72, 72, 78);
-constexpr COLORREF kHealthy = RGB(130, 170, 215);
-constexpr COLORREF kCloseHover = RGB(196, 43, 28);
+COLORREF kBarSystem = RGB(124, 126, 134);   // EFI, reserved, recovery
+COLORREF kBarData = RGB(116, 146, 184);     // data volumes
+COLORREF kUnallocated = RGB(72, 72, 78);
+COLORREF kHealthy = RGB(130, 170, 215);
+COLORREF kCloseHover = RGB(196, 43, 28);
+
+// True while the light palette is in force, for the handful of decisions that
+// are not a colour lookup - the title bar's dark-mode attribute, and how far a
+// hover state should move a surface.
+bool g_light = false;
+
+// Windows' own switch: HKCU, so it is this user's setting even though the
+// process is elevated - elevation raises integrity, it does not change user.
+bool SystemUsesLightTheme() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
+                     L"Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value,
+                     &size) != ERROR_SUCCESS) {
+        return false;
+    }
+    return value != 0;
+}
+
+void ApplyTheme(bool light) {
+    g_light = light;
+    if (!light) {
+        kWindow = RGB(26, 26, 28);
+        kCard = RGB(39, 39, 42);
+        kCardBorder = RGB(55, 55, 59);
+        kTextPrimary = RGB(255, 255, 255);
+        kTextSecondary = RGB(158, 158, 165);
+        kTextTertiary = RGB(120, 120, 126);
+        kTextDisabled = RGB(108, 108, 114);
+        kBarTrack = RGB(58, 58, 62);
+        kBarSystem = RGB(124, 126, 134);
+        kBarData = RGB(116, 146, 184);
+        kUnallocated = RGB(72, 72, 78);
+        kHealthy = RGB(130, 170, 215);
+        kCloseHover = RGB(196, 43, 28);
+        return;
+    }
+
+    // Light. Not the dark values inverted - the greys are pulled off the
+    // Windows 11 light surfaces, and the bar colours are darkened rather than
+    // lightened so they still read against a white card.
+    kWindow = RGB(243, 243, 243);
+    kCard = RGB(255, 255, 255);
+    kCardBorder = RGB(222, 222, 226);
+    kTextPrimary = RGB(26, 26, 28);
+    kTextSecondary = RGB(96, 96, 102);
+    kTextTertiary = RGB(130, 130, 136);
+    kTextDisabled = RGB(160, 160, 166);
+    kBarTrack = RGB(226, 226, 230);
+    kBarSystem = RGB(150, 152, 160);
+    kBarData = RGB(92, 128, 172);
+    kUnallocated = RGB(214, 214, 219);
+    kHealthy = RGB(76, 134, 190);
+    kCloseHover = RGB(196, 43, 28);
+}
 
 constexpr int kWindowWidth = 1180;
 constexpr int kWindowHeight = 800;
@@ -210,6 +296,20 @@ void FillRoundRect(HDC dc, const RECT& rect, int radius, COLORREF color) {
     DeleteObject(pen);
 }
 
+// The same shape as an outline: a hollow brush leaves whatever is underneath
+// showing through, which is what a focus ring wants.
+void StrokeRoundRect(HDC dc, const RECT& rect, int radius, int thickness,
+                     COLORREF color) {
+    HPEN pen = CreatePen(PS_SOLID, thickness, color);
+    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+    HGDIOBJ oldPen = SelectObject(dc, pen);
+    RoundRect(dc, rect.left, rect.top, rect.right, rect.bottom, radius * 2,
+              radius * 2);
+    SelectObject(dc, oldBrush);
+    SelectObject(dc, oldPen);
+    DeleteObject(pen);
+}
+
 COLORREF MixColors(COLORREF base, COLORREF tint, int tintPercent) {
     auto mix = [&](int b, int t) {
         return (b * (100 - tintPercent) + t * tintPercent) / 100;
@@ -224,61 +324,35 @@ constexpr DWORD kDwmUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmWindowCornerPreference = 33;
 constexpr DWORD kDwmCornerRound = 2;
 
-// The wallpaper's dominant colour, cached. Decoding a 4K wallpaper to average
-// it is not something to do twice at startup - the window and card tints are
-// two mixes of the same colour.
-bool WallpaperAverage(COLORREF* out) {
-    static bool computed = false;
-    static bool valid = false;
-    static COLORREF cached = 0;
-
-    if (computed) {
-        *out = cached;
-        return valid;
-    }
-    computed = true;
-
-    WCHAR path[MAX_PATH] = L"";
-    if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0) ||
-        !path[0]) {
+// The colour DWM tints window frames with - which is the colour Windows itself
+// derives from the wallpaper when "automatically pick an accent colour from my
+// background" is on.
+//
+// This used to be the wallpaper's own average: read SPI_GETDESKWALLPAPER, hand
+// the path to GDI+, decode, scale to 1x1. It was a better tint and it was the
+// wrong thing to do here. This window runs inside mmc.exe, elevated, while the
+// wallpaper is a per-user setting naming a per-user file - so both the path and
+// the bytes at it are fully controlled by anything running as the user at
+// medium integrity, and feeding those to an image decoder at high integrity is
+// an elevation-of-privilege surface opened to work out a background shade. DWM
+// has already done that decoding, in a process whose job it is.
+bool SystemTint(COLORREF* out) {
+    DWORD color = 0;
+    BOOL opaque = FALSE;
+    if (FAILED(DwmGetColorizationColor(&color, &opaque))) {
         return false;
     }
-
-    ULONG_PTR token = 0;
-    Gdiplus::GdiplusStartupInput input;
-    if (Gdiplus::GdiplusStartup(&token, &input, nullptr) != Gdiplus::Ok) {
-        return false;
-    }
-
-    {
-        Gdiplus::Bitmap wallpaper(path);
-        if (wallpaper.GetLastStatus() == Gdiplus::Ok) {
-            Gdiplus::Bitmap average(1, 1, PixelFormat32bppARGB);
-            Gdiplus::Graphics graphics(&average);
-            graphics.SetInterpolationMode(
-                Gdiplus::InterpolationModeHighQualityBilinear);
-            if (graphics.DrawImage(&wallpaper, 0, 0, 1, 1) == Gdiplus::Ok) {
-                Gdiplus::Color color;
-                if (average.GetPixel(0, 0, &color) == Gdiplus::Ok) {
-                    cached = RGB(color.GetR(), color.GetG(), color.GetB());
-                    valid = true;
-                }
-            }
-        }
-    }
-    Gdiplus::GdiplusShutdown(token);
-
-    *out = cached;
-    return valid;
+    *out = RGB((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+    return true;
 }
 
-// Mixes the cached wallpaper colour into a base.
-COLORREF WallpaperTinted(COLORREF base, int percent) {
-    COLORREF average = 0;
-    if (!WallpaperAverage(&average)) {
+// Mixes the system colour into a base.
+COLORREF AccentTinted(COLORREF base, int percent) {
+    COLORREF tint = 0;
+    if (!SystemTint(&tint)) {
         return base;
     }
-    return MixColors(base, average, percent);
+    return MixColors(base, tint, percent);
 }
 
 // Decimal units, the way drive manufacturers and Settings' Disks & volumes
@@ -330,6 +404,17 @@ struct ThreadDpiAwareness {
 
 }  // namespace ui
 
+// Resolves the theme setting against the system, and returns whether the light
+// palette is now in force. Called before the window is built and again on a
+// settings change, since the palette is global to the module.
+bool ApplyThemeSetting() {
+    ThemeChoice choice = g_settings.theme;
+    bool light = choice == ThemeChoice::Light ||
+                 (choice == ThemeChoice::System && ui::SystemUsesLightTheme());
+    ui::ApplyTheme(light);
+    return light;
+}
+
 // -----------------------------------------------------------------------------
 // Enumeration
 // -----------------------------------------------------------------------------
@@ -344,6 +429,8 @@ struct VolumeInfo {
     ULONGLONG freeSpace = 0;
     ULONGLONG offset = 0;  // start on the physical disk
     int diskNumber = -1;
+    int extents = 0;        // disk extents backing it; more than one is not simple
+    bool queried = false;   // GetVolumeInformationW answered, so the row is fact
     bool isBoot = false;
     bool isSystem = false;  // EFI / reserved / recovery, not user storage
     HBITMAP image = nullptr;
@@ -361,6 +448,17 @@ const GUID kPartitionBasicData = {
 const GUID kPartitionMsftRecovery = {
     0xDE94BBA4, 0x06D1, 0x4D40, {0xA1, 0x6A, 0xBF, 0xD5, 0x01, 0x79, 0xD6, 0xAC}};
 
+// LDM - the metadata a dynamic disk keeps about itself, and the data
+// partition it wraps everything else in. Finding either is what makes a disk
+// dynamic rather than basic.
+const GUID kPartitionLdmMetadata = {
+    0x5808C8AA, 0x7E8F, 0x42E0, {0x85, 0xD2, 0xE1, 0xE9, 0x04, 0x34, 0xCF, 0xB3}};
+const GUID kPartitionLdmData = {
+    0xAF9B60A0, 0x1431, 0x4F62, {0xBC, 0x68, 0x33, 0x11, 0x71, 0x4A, 0x69, 0xAD}};
+
+// The MBR partition type that marks a disk as dynamic.
+constexpr BYTE kMbrLdmType = 0x42;
+
 struct PartitionMeta {
     ULONGLONG offset = 0;
     ULONGLONG length = 0;
@@ -371,7 +469,8 @@ struct PartitionMeta {
 // What each partition on a disk actually is, straight from the partition
 // table - the only way to tell an EFI system partition from a data volume when
 // neither has a label or a drive letter.
-std::vector<PartitionMeta> QueryPartitions(int diskNumber, std::wstring* style) {
+std::vector<PartitionMeta> QueryPartitions(int diskNumber, std::wstring* style,
+                                           bool* dynamic) {
     std::vector<PartitionMeta> partitions;
 
     WCHAR path[64];
@@ -403,6 +502,10 @@ std::vector<PartitionMeta> QueryPartitions(int diskNumber, std::wstring* style) 
                 meta.length =
                     static_cast<ULONGLONG>(entry.PartitionLength.QuadPart);
                 const GUID& type = entry.Gpt.PartitionType;
+                if (dynamic && (IsEqualGUID(type, kPartitionLdmMetadata) ||
+                                IsEqualGUID(type, kPartitionLdmData))) {
+                    *dynamic = true;
+                }
                 if (IsEqualGUID(type, kPartitionSystem)) {
                     meta.role = L"EFI system partition";
                     meta.isSystem = true;
@@ -434,6 +537,9 @@ std::vector<PartitionMeta> QueryPartitions(int diskNumber, std::wstring* style) 
                 }
                 // An MBR layout always comes back with four entries, whether or
                 // not they describe anything.
+                if (dynamic && entry.Mbr.PartitionType == kMbrLdmType) {
+                    *dynamic = true;
+                }
                 if (entry.Mbr.PartitionType == PARTITION_ENTRY_UNUSED ||
                     entry.PartitionLength.QuadPart == 0) {
                     continue;
@@ -494,6 +600,8 @@ struct DiskInfo {
     HBITMAP image = nullptr;
     HICON icon = nullptr;
     bool removable = false;
+    bool ready = false;    // the disk answered its geometry
+    bool dynamic = false;  // LDM metadata found, so its volumes are not basic
 };
 
 // Icons come from the shell so a drive with a custom icon shows it, and the
@@ -737,7 +845,7 @@ DiskFacts QueryDiskFacts(int diskNumber) {
 
 // Which physical disk a volume lives on, and where it starts.
 bool QueryVolumePlacement(const std::wstring& guidPath, int* diskNumber,
-                          ULONGLONG* offset) {
+                          ULONGLONG* offset, int* extents) {
     // The device path must not carry its trailing backslash.
     std::wstring devicePath = guidPath;
     if (!devicePath.empty() && devicePath.back() == L'\\') {
@@ -756,11 +864,17 @@ bool QueryVolumePlacement(const std::wstring& guidPath, int* diskNumber,
     bool ok = false;
     if (DeviceIoControl(volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, nullptr, 0,
                         buffer, sizeof(buffer), &returned, nullptr)) {
-        auto* extents = reinterpret_cast<VOLUME_DISK_EXTENTS*>(buffer);
-        if (extents->NumberOfDiskExtents > 0) {
-            *diskNumber = static_cast<int>(extents->Extents[0].DiskNumber);
+        auto* layout = reinterpret_cast<VOLUME_DISK_EXTENTS*>(buffer);
+        if (layout->NumberOfDiskExtents > 0) {
+            *diskNumber = static_cast<int>(layout->Extents[0].DiskNumber);
             *offset =
-                static_cast<ULONGLONG>(extents->Extents[0].StartingOffset.QuadPart);
+                static_cast<ULONGLONG>(layout->Extents[0].StartingOffset.QuadPart);
+
+            // More than one extent means the volume is spanned, striped or
+            // mirrored across disks - whatever else it is, it is not simple.
+            if (extents) {
+                *extents = static_cast<int>(layout->NumberOfDiskExtents);
+            }
             ok = true;
         }
     }
@@ -839,6 +953,7 @@ std::vector<DiskInfo> EnumerateDisks() {
                                       ARRAYSIZE(fileSystem))) {
                 volume.label = label;
                 volume.fileSystem = fileSystem;
+                volume.queried = true;
             }
 
             ULARGE_INTEGER available{}, total{}, free{};
@@ -860,7 +975,7 @@ std::vector<DiskInfo> EnumerateDisks() {
             }
 
             QueryVolumePlacement(volume.guidPath, &volume.diskNumber,
-                                 &volume.offset);
+                                 &volume.offset, &volume.extents);
 
             WCHAR windowsDir[MAX_PATH] = L"";
             if (GetWindowsDirectoryW(windowsDir, ARRAYSIZE(windowsDir)) &&
@@ -892,6 +1007,7 @@ std::vector<DiskInfo> EnumerateDisks() {
         disk.model = facts.model.empty() ? L"Disk " + std::to_wstring(number)
                                          : facts.model;
         disk.size = facts.size;
+        disk.ready = facts.size != 0;  // the geometry call answered
         disk.removable = facts.removable;
         disks.push_back(std::move(disk));
     }
@@ -915,6 +1031,7 @@ std::vector<DiskInfo> EnumerateDisks() {
                          ? L"Disk " + std::to_wstring(disk.number)
                          : facts.model;
         disk.size = facts.size;
+        disk.ready = facts.size != 0;  // the geometry call answered
         disk.removable = facts.removable;
         disk.volumes.push_back(volume);
         disks.push_back(std::move(disk));
@@ -943,7 +1060,7 @@ std::vector<DiskInfo> EnumerateDisks() {
         // Attach each volume to its partition table entry, matched by where it
         // starts on the disk.
         std::vector<PartitionMeta> partitions =
-            QueryPartitions(disk.number, &disk.style);
+            QueryPartitions(disk.number, &disk.style, &disk.dynamic);
         for (auto& volume : disk.volumes) {
             for (const auto& partition : partitions) {
                 if (partition.offset == volume.offset) {
@@ -1427,6 +1544,40 @@ bool EjectVolume(HWND owner, const VolumeInfo& volume) {
 
     MessageBoxW(owner, L"The drive can now be safely removed.", L"Eject",
                 MB_OK | MB_ICONINFORMATION);
+    return true;
+}
+
+// Starts the real Disk Management console, with the escape-hatch variable set
+// in its environment so this mod's own hook waves it through. The child
+// inherits this process's environment, so setting the variable here is enough -
+// and it is put back afterwards so nothing else launched from this process
+// inherits it.
+bool LaunchClassicConsole() {
+    WCHAR system[MAX_PATH]{};
+    if (!GetSystemDirectoryW(system, ARRAYSIZE(system))) {
+        return false;
+    }
+
+    std::wstring executable = std::wstring(system) + L"\\mmc.exe";
+    std::wstring commandLine =
+        L"\"" + executable + L"\" \"" + system + L"\\diskmgmt.msc\"";
+
+    if (!SetEnvironmentVariableW(L"WH_DISKMGMT_CLASSIC", L"1")) {
+        return false;
+    }
+
+    STARTUPINFOW startup{sizeof(startup)};
+    PROCESS_INFORMATION process{};
+    BOOL started = CreateProcessW(executable.c_str(), commandLine.data(),
+                                  nullptr, nullptr, FALSE, 0, nullptr, nullptr,
+                                  &startup, &process);
+    SetEnvironmentVariableW(L"WH_DISKMGMT_CLASSIC", nullptr);
+
+    if (!started) {
+        return false;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
     return true;
 }
 
@@ -1967,7 +2118,7 @@ void Show(HWND parent, HINSTANCE instance, DiskInfo disk, VolumeInfo volume,
     state.fontBody = MakeFont(state.dpi, 10, true);
     state.fontSmall = MakeFont(state.dpi, 9, true);
 
-    BOOL dark = TRUE;
+    BOOL dark = ui::g_light ? FALSE : TRUE;
     DwmSetWindowAttribute(state.hwnd, ui::kDwmUseImmersiveDarkMode, &dark, sizeof(dark));
     DWORD corner = ui::kDwmCornerRound;
     DwmSetWindowAttribute(state.hwnd, ui::kDwmWindowCornerPreference, &corner, sizeof(corner));
@@ -2028,7 +2179,15 @@ namespace diskui {
 constexpr PCWSTR kClassName = L"WindhawkModernDiskManagement";
 constexpr UINT_PTR kScrollTimer = 1;
 
-enum class ButtonKind { Properties, Format, Explorer, Eject, Refresh, Close };
+enum class ButtonKind {
+    Properties,
+    Format,
+    Explorer,
+    Eject,
+    Refresh,
+    Classic,
+    Close
+};
 
 struct Button {
     RECT rect{};
@@ -2083,6 +2242,13 @@ struct State {
     std::vector<Button> buttons;  // rebuilt on every paint
     std::vector<Target> targets;  // rebuilt on every paint
     int hoveredButton = -1;
+
+    // Tab focus, held as which button rather than as an index into the list.
+    // The list is rebuilt on every paint and the Eject button comes and goes
+    // with the selection, so an index quietly slides onto a different action -
+    // and the action it would have slid onto is Format.
+    bool buttonFocused = false;
+    ButtonKind focusedKind = ButtonKind::Refresh;
     POINT mouse{-1, -1};
     int selectedDisk = -1;
     int selectedVolume = -1;
@@ -2155,7 +2321,19 @@ COLORREF Lighten(State* state, int percent) {
 
 // The console's own vocabulary, kept deliberately: this is the same
 // information, not a different tool with different words for it.
+// The console's own wording, but only where it is earned. This mod reads no
+// health data - no SMART, no VDS, no dynamic-disk state - so the one thing it
+// can honestly say is whether the volume answered the queries this row is
+// built from. Printing "Healthy" regardless would be worse than printing
+// nothing: someone whose disk is failing opens this window precisely to find
+// that out, and would be told everything is fine.
 std::wstring StatusText(const VolumeInfo& volume) {
+    if (!volume.queried) {
+        return L"Unreadable";
+    }
+    if (volume.fileSystem.empty()) {
+        return L"RAW (unformatted)";
+    }
     if (volume.isBoot) {
         return L"Healthy (Boot, Page File, Crash Dump)";
     }
@@ -2239,6 +2417,17 @@ void DrawButton(State* state, HDC dc, const Button& button, int index) {
         text = ui::kTextPrimary;
     }
     ui::FillRoundRect(dc, button.rect, ui::Scale(5, state->dpi), fill);
+
+    // Keyboard focus, drawn as a ring rather than a fill so it reads as focus
+    // and not as another hover state.
+    if (state->buttonFocused && button.kind == state->focusedKind &&
+        button.enabled) {
+        RECT ring = button.rect;
+        InflateRect(&ring, ui::Scale(2, state->dpi), ui::Scale(2, state->dpi));
+        ui::StrokeRoundRect(dc, ring, ui::Scale(7, state->dpi),
+                            ui::Scale(2, state->dpi), ui::kTextPrimary);
+    }
+
     DrawLabel(dc, state->fontButton, text, button.label, button.rect,
               DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
 }
@@ -2391,10 +2580,20 @@ int PaintVolumeTable(State* state, HDC dc, int top, int left, int right) {
             target.volumeIndex = static_cast<int>(volumeIndex);
             state->targets.push_back(target);
 
+            // Layout and type, as far as they can be known from the partition
+            // table alone: one disk extent is a simple volume, several is not,
+            // and LDM metadata on the disk is what makes it dynamic. Telling
+            // spanned from striped from mirrored needs the dynamic-disk
+            // database this mod does not read, so it does not claim to.
+            const DiskInfo& owner = state->disks[diskIndex];
+            std::wstring layout = volume.extents > 1    ? L"Multi-disk"
+                                  : volume.extents == 1 ? L"Simple"
+                                                        : L"\x2014";
+
             std::wstring cells[kColumnCount] = {
                 VolumeDisplayName(volume),
-                L"Simple",
-                L"Basic",
+                layout,
+                owner.dynamic ? L"Dynamic" : L"Basic",
                 volume.fileSystem.empty() ? L"RAW" : volume.fileSystem,
                 StatusText(volume),
                 ui::FormatSize(volume.size),
@@ -2714,12 +2913,14 @@ int PaintDiskMap(State* state, HDC dc, const DiskInfo& disk, int diskIndex,
                tileLeft + tileWidth, tileTop + ui::Scale(62, state->dpi)};
     DrawLabel(dc, state->fontSmall, ui::kTextTertiary, disk.model, model);
 
+    // "Online" only when the disk actually answered. A disk that is present
+    // but cannot report its geometry is not something to label as fine.
     int dot = ui::Scale(7, state->dpi);
     DrawDot(dc, tileLeft, model.bottom + ui::Scale(6, state->dpi), dot,
-            ui::kHealthy);
+            disk.ready ? ui::kHealthy : ui::kUnallocated);
     RECT online{tileLeft + dot + ui::Scale(7, state->dpi), model.bottom,
                 tileLeft + tileWidth, model.bottom + ui::Scale(18, state->dpi)};
-    std::wstring line = L"Online";
+    std::wstring line = disk.ready ? L"Online" : L"Not ready";
     if (!disk.style.empty()) {
         line += L"  \x2022  " + disk.style;
     }
@@ -2811,6 +3012,11 @@ void PaintActionBar(State* state, HDC dc, const RECT& client) {
         {L"Format", ButtonKind::Format, 76, false},
         {L"Open", ButtonKind::Explorer, 68, false},
         {L"Refresh", ButtonKind::Refresh, 82, false},
+        // The way out. Everything this window deliberately does not do -
+        // shrink, extend, convert, change a letter - lives in the console it
+        // replaced, and the only way back used to be a trip through Windhawk's
+        // settings. It belongs here, where the user is when they need it.
+        {L"Classic console", ButtonKind::Classic, 122, false},
     };
 
     for (const auto& action : actions) {
@@ -2829,6 +3035,7 @@ void PaintActionBar(State* state, HDC dc, const RECT& client) {
         bool enabled = true;
         switch (action.kind) {
             case ButtonKind::Refresh:
+            case ButtonKind::Classic:
                 break;
             case ButtonKind::Properties:
                 enabled = volume != nullptr;
@@ -3153,6 +3360,17 @@ void Invoke(State* state, const Button& button) {
         case ButtonKind::Refresh:
             Refresh(state);
             return;
+        case ButtonKind::Classic:
+            if (LaunchClassicConsole()) {
+                // The console is what the user asked for; two Disk Managements
+                // on screen is not.
+                DestroyWindow(state->hwnd);
+            } else {
+                MessageBoxW(state->hwnd,
+                            L"The Disk Management console could not be started.",
+                            L"Classic console", MB_OK | MB_ICONWARNING);
+            }
+            return;
         default:
             break;
     }
@@ -3184,6 +3402,136 @@ void Invoke(State* state, const Button& button) {
         default:
             break;
     }
+}
+
+// The right-click menu for the selected volume. It offers exactly what the
+// action bar offers - the same handlers, the same rules about what is possible
+// - because a menu that promises more than the buttons do is a menu of things
+// that do not work.
+void ShowContextMenu(State* state, POINT clientPoint) {
+    const VolumeInfo* volume = Selected(state);
+    if (!volume) {
+        return;
+    }
+
+    bool removable =
+        state->selectedDisk >= 0 &&
+        state->selectedDisk < static_cast<int>(state->disks.size()) &&
+        state->disks[state->selectedDisk].removable;
+    bool hasLetter = !volume->letter.empty();
+
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return;
+    }
+
+    enum : UINT { kOpen = 1, kFormat, kEject, kProperties, kRefresh };
+    AppendMenuW(menu, MF_STRING | (hasLetter ? MF_ENABLED : MF_GRAYED), kOpen,
+                L"Open");
+    AppendMenuW(menu,
+                MF_STRING | (hasLetter && !volume->isBoot ? MF_ENABLED
+                                                          : MF_GRAYED),
+                kFormat, L"Format...");
+    if (removable) {
+        AppendMenuW(menu, MF_STRING | (hasLetter ? MF_ENABLED : MF_GRAYED),
+                    kEject, L"Eject");
+    }
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kRefresh, L"Refresh\tF5");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kProperties, L"Properties\tEnter");
+    SetMenuDefaultItem(menu, kProperties, FALSE);
+
+    POINT screenPoint = clientPoint;
+    ClientToScreen(state->hwnd, &screenPoint);
+
+    // TPM_RETURNCMD keeps the dispatch here rather than through WM_COMMAND,
+    // which this window has no other use for.
+    UINT chosen = TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
+        screenPoint.x, screenPoint.y, 0, state->hwnd, nullptr);
+    DestroyMenu(menu);
+
+    Button action;
+    switch (chosen) {
+        case kOpen:
+            action.kind = ButtonKind::Explorer;
+            break;
+        case kFormat:
+            action.kind = ButtonKind::Format;
+            break;
+        case kEject:
+            action.kind = ButtonKind::Eject;
+            break;
+        case kRefresh:
+            action.kind = ButtonKind::Refresh;
+            break;
+        case kProperties:
+            action.kind = ButtonKind::Properties;
+            break;
+        default:
+            return;
+    }
+    Invoke(state, action);
+}
+
+// Tab order over the action bar. The buttons are rebuilt on every paint, so
+// focus is an index into that list and only enabled buttons take it; -1 means
+// focus is back on the volume list, which is where Tab starts and returns to.
+void MoveButtonFocus(State* state, int delta) {
+    std::vector<ButtonKind> reachable;
+    for (const auto& button : state->buttons) {
+        // The title bar's close button is reachable by Esc and by Alt+F4; it
+        // does not need a place in the Tab order.
+        if (button.enabled && button.kind != ButtonKind::Close) {
+            reachable.push_back(button.kind);
+        }
+    }
+    if (reachable.empty()) {
+        state->buttonFocused = false;
+        InvalidateRect(state->hwnd, nullptr, FALSE);
+        return;
+    }
+
+    // The buttons are built right to left, so walking the list backwards walks
+    // the bar left to right - which is the direction Tab is expected to go.
+    std::reverse(reachable.begin(), reachable.end());
+
+    auto found = state->buttonFocused
+                     ? std::find(reachable.begin(), reachable.end(),
+                                 state->focusedKind)
+                     : reachable.end();
+    if (found == reachable.end()) {
+        state->buttonFocused = true;
+        state->focusedKind = delta > 0 ? reachable.front() : reachable.back();
+    } else {
+        size_t position = static_cast<size_t>(found - reachable.begin());
+        size_t next = delta > 0 ? position + 1 : position;
+        if (delta > 0 ? next < reachable.size() : position > 0) {
+            state->focusedKind = reachable[delta > 0 ? next : position - 1];
+        } else {
+            // Off the end of the bar: focus goes back to the volume list.
+            state->buttonFocused = false;
+        }
+    }
+    InvalidateRect(state->hwnd, nullptr, FALSE);
+}
+
+// Presses the focused button, if there is one. Returns whether it did.
+bool InvokeFocusedButton(State* state) {
+    if (!state->buttonFocused) {
+        return false;
+    }
+
+    // By value: invoking rebuilds the button list under us.
+    for (const Button& candidate : state->buttons) {
+        if (candidate.kind == state->focusedKind && candidate.enabled) {
+            Button button = candidate;
+            Invoke(state, button);
+            return true;
+        }
+    }
+    return false;
 }
 
 // Moves the selection up or down the volume list, so the whole window can be
@@ -3437,6 +3785,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
+        // The console is almost entirely right-click driven, and anyone coming
+        // from it reaches for the right button first.
+        case WM_RBUTTONUP: {
+            POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            SetFocus(hwnd);
+            if (!SelectAt(state, point) && !Selected(state)) {
+                return 0;
+            }
+            ShowContextMenu(state, point);
+            return 0;
+        }
+
         case WM_LBUTTONUP: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             // A copy: invoking can re-enumerate and rebuild the button list.
@@ -3507,8 +3867,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case VK_UP:
                     MoveSelection(state, -1);
                     break;
+                case VK_TAB:
+                    // Round the enabled buttons and back to the list, so
+                    // everything the mouse can reach the keyboard can too.
+                    // Shift+Tab goes the other way.
+                    MoveButtonFocus(state, GetKeyState(VK_SHIFT) < 0 ? -1 : 1);
+                    break;
+                case VK_SPACE:
+                    InvokeFocusedButton(state);
+                    break;
                 case VK_RETURN:
-                    ShowProperties(state);
+                    // Enter presses the focused button when there is one, and
+                    // opens properties otherwise - which is what it did before
+                    // there were any.
+                    if (!InvokeFocusedButton(state)) {
+                        ShowProperties(state);
+                    }
                     break;
             }
             return 0;
@@ -3567,18 +3941,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
-        case kMsgSettingsChanged:
-            // The tint is mixed once at creation, so without this a settings
-            // change did nothing until the window was reopened.
-            state->windowColor = g_settings.wallpaperTint
-                                     ? ui::WallpaperTinted(ui::kWindow, 14)
+        case kMsgSettingsChanged: {
+            // The palette and the tint are both resolved once at creation, so
+            // without this a settings change did nothing until the window was
+            // reopened.
+            BOOL dark = ApplyThemeSetting() ? FALSE : TRUE;
+            DwmSetWindowAttribute(hwnd, ui::kDwmUseImmersiveDarkMode, &dark,
+                                  sizeof(dark));
+
+            state->windowColor = g_settings.accentTint
+                                     ? ui::AccentTinted(ui::kWindow, 14)
                                      : ui::kWindow;
-            state->cardColor = g_settings.wallpaperTint
-                                   ? ui::WallpaperTinted(ui::kCard, 12)
+            state->cardColor = g_settings.accentTint
+                                   ? ui::AccentTinted(ui::kCard, 12)
                                    : ui::kCard;
             state->accentColor = ui::AccentColor();
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
+        }
 
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -3629,6 +4009,10 @@ bool Run() {
     // Before the window exists, and undone when this returns.
     ui::ThreadDpiAwareness dpiAwareness;
 
+    // Before the state is built: its colour members default to the palette, so
+    // the palette has to be the right one first.
+    ApplyThemeSetting();
+
     if (!EnsureClass()) {
         return false;
     }
@@ -3638,7 +4022,8 @@ bool Run() {
 
     state.hwnd = CreateWindowExW(
         0, kClassName, L"Disk Management",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MAXIMIZEBOX,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME |
+            WS_MAXIMIZEBOX | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 100, 100, nullptr, nullptr,
         ModuleInstance(), nullptr);
     if (!state.hwnd) {
@@ -3655,12 +4040,12 @@ bool Run() {
     state.fontButton = MakeFont(state.dpi, 9, false);
     state.accentColor = ui::AccentColor();
 
-    if (g_settings.wallpaperTint) {
-        state.windowColor = ui::WallpaperTinted(ui::kWindow, 14);
-        state.cardColor = ui::WallpaperTinted(ui::kCard, 12);
+    if (g_settings.accentTint) {
+        state.windowColor = ui::AccentTinted(ui::kWindow, 14);
+        state.cardColor = ui::AccentTinted(ui::kCard, 12);
     }
 
-    BOOL dark = TRUE;
+    BOOL dark = ui::g_light ? FALSE : TRUE;
     DwmSetWindowAttribute(state.hwnd, ui::kDwmUseImmersiveDarkMode, &dark, sizeof(dark));
     DWORD corner = ui::kDwmCornerRound;
     DwmSetWindowAttribute(state.hwnd, ui::kDwmWindowCornerPreference, &corner, sizeof(corner));
@@ -3772,9 +4157,20 @@ bool LaunchedForDiskManagement() {
 }
 
 void LoadSettings() {
-    g_settings.wallpaperTint = Wh_GetIntSetting(L"wallpaperTint") != 0;
+    g_settings.accentTint = Wh_GetIntSetting(L"accentTint") != 0;
     g_settings.showEmptyVolumes = Wh_GetIntSetting(L"showEmptyVolumes") != 0;
     g_settings.takeOver = Wh_GetIntSetting(L"takeOver") != 0;
+
+    ThemeChoice theme = ThemeChoice::Dark;
+    if (WindhawkUtils::StringSetting choice =
+            WindhawkUtils::StringSetting::make(L"theme")) {
+        if (wcscmp(choice.get(), L"system") == 0) {
+            theme = ThemeChoice::System;
+        } else if (wcscmp(choice.get(), L"light") == 0) {
+            theme = ThemeChoice::Light;
+        }
+    }
+    g_settings.theme = theme;
 }
 
 // -----------------------------------------------------------------------------
@@ -3826,6 +4222,14 @@ HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 std::atomic<bool> g_windowShown = false;
 
+// Guards the handoff: the decision to take over, and the teardown that has to
+// know whether one happened. Atomics alone are not enough - MMC's thread can
+// read g_modUnloading as false and then be descheduled before it publishes
+// g_uiThread, and in that window the whole of Wh_ModUninit can run and return,
+// leaving that thread about to start a thread on an entry point in an image
+// that has just been unmapped.
+std::mutex g_takeoverMutex;
+
 // Runs the window on its own thread, with its own COM apartment, and signals
 // MMC's waiting thread when it is finished.
 DWORD WINAPI WindowThread(LPVOID) {
@@ -3855,30 +4259,55 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
                                         instance, param);
     };
 
-    // Class names can be atoms rather than pointers; ignore those.
-    if (g_tookOver || g_modUnloading || IS_INTRESOURCE(className) ||
-        _wcsicmp(className, kMmcFrameClass) != 0) {
-        return passThrough();
-    }
-    g_tookOver = true;
+    // Deciding to take over and publishing the thread that does it are one
+    // step as far as unloading is concerned, so they happen under the lock.
+    {
+        std::lock_guard<std::mutex> guard(g_takeoverMutex);
 
-    // The window runs on its own thread, not here. Building windows and
-    // pumping messages inside user32's own CreateWindowExW - with MMC's window
-    // creation still on the stack - is reentrancy user32 does not expect, and
-    // it crashes.
+        // Class names can be atoms rather than pointers; ignore those.
+        if (g_tookOver || g_modUnloading || IS_INTRESOURCE(className) ||
+            _wcsicmp(className, kMmcFrameClass) != 0) {
+            return passThrough();
+        }
+        g_tookOver = true;
+
+        // The window runs on its own thread, not here. Building windows and
+        // pumping messages inside user32's own CreateWindowExW - with MMC's
+        // window creation still on the stack - is reentrancy user32 does not
+        // expect, and it crashes.
+        //
+        // MMC's thread simply waits here instead. That is the same "stop the
+        // console loading" effect as suspending it, but at a point this mod
+        // chose, with no locks held, rather than wherever SuspendThread
+        // happened to catch it.
+        g_uiThread =
+            CreateThread(nullptr, 0, WindowThread, nullptr, 0, &g_uiThreadId);
+        if (!g_uiThread) {
+            Wh_Log(
+                L"could not start the window thread; falling back to the "
+                L"console");
+            g_tookOver = false;
+            return passThrough();
+        }
+    }
+
+    // Parked, but not deaf. A plain WaitForSingleObject here stops this thread
+    // dispatching anything for as long as the window is open, and this is
+    // mmc.exe's main thread: an initialised STA that owns the process's hidden
+    // OLE windows. Every SendMessage(HWND_BROADCAST, ...) in the session - a
+    // theme change, a settings change - would then stall on this process until
+    // the hung-app timeout, and cross-apartment COM calls into it would block
+    // outright. CoWaitForMultipleHandles blocks on the handle while keeping the
+    // apartment serviced, which is exactly what a parked STA thread needs.
     //
-    // MMC's thread simply waits here instead. That is the same "stop the
-    // console loading" effect as suspending it, but at a point this mod chose,
-    // with no locks held, rather than wherever SuspendThread happened to catch
-    // it.
-    g_uiThread = CreateThread(nullptr, 0, WindowThread, nullptr, 0, &g_uiThreadId);
-    if (!g_uiThread) {
-        Wh_Log(L"could not start the window thread; falling back to the console");
-        g_tookOver = false;
-        return passThrough();
+    // It dispatches COM calls and sent messages, not queued input, so it does
+    // not resume MMC's own console loading - that is still stopped dead by this
+    // wait.
+    DWORD signalled = 0;
+    if (FAILED(CoWaitForMultipleHandles(COWAIT_DEFAULT, INFINITE, 1,
+                                        &g_uiFinished, &signalled))) {
+        WaitForSingleObject(g_uiFinished, INFINITE);
     }
-
-    WaitForSingleObject(g_uiFinished, INFINITE);
 
     HWND result = nullptr;
     if (g_modUnloading) {
@@ -4007,19 +4436,38 @@ BOOL CALLBACK CloseUiThreadWindow(HWND hwnd, LPARAM) {
 // running mod code by then. Two threads are in this module while the window is
 // up: the UI thread, and MMC's main thread parked inside the hook above.
 void Wh_ModUninit() {
-    g_modUnloading = true;
+    // Under the lock, so this either happens before MMC's thread decides to
+    // take over - in which case it sees g_modUnloading and passes through - or
+    // after it has published g_uiThread, in which case the join below is
+    // waiting on the right thing. There is no interleaving where the takeover
+    // is in flight and invisible here.
+    HANDLE uiThread = nullptr;
+    DWORD uiThreadId = 0;
+    {
+        std::lock_guard<std::mutex> guard(g_takeoverMutex);
+        g_modUnloading = true;
+        uiThread = g_uiThread;
+        uiThreadId = g_uiThreadId;
+    }
 
-    if (g_uiThread) {
-        if (g_uiThreadId) {
-            EnumThreadWindows(g_uiThreadId, CloseUiThreadWindow, 0);
-        }
+    if (uiThread) {
+        // Swept repeatedly, not once. A single pass misses any window that
+        // appears after it, and misses one that refuses to close when asked:
+        // SHFormatDrive's dialog disables closing while a format is running, so
+        // one WM_CLOSE at the wrong moment is simply dropped and this wait
+        // would never end.
+        //
+        // INFINITE rather than a timeout, though. A timeout that expires would
+        // unmap the image with the UI thread still running code in it, and
+        // leave a registered window class whose lpfnWndProc points into freed
+        // memory - a certain crash, where waiting is at worst a wait.
+        do {
+            if (uiThreadId) {
+                EnumThreadWindows(uiThreadId, CloseUiThreadWindow, 0);
+            }
+        } while (WaitForSingleObject(uiThread, 500) == WAIT_TIMEOUT);
 
-        // INFINITE rather than a timeout. A timeout that expires would unmap
-        // the image with the UI thread still running code in it, and leave a
-        // registered window class whose lpfnWndProc points into freed memory -
-        // a certain crash, where waiting is at worst a hang.
-        WaitForSingleObject(g_uiThread, INFINITE);
-        CloseHandle(g_uiThread);
+        CloseHandle(uiThread);
         g_uiThread = nullptr;
         g_uiThreadId = 0;
 
