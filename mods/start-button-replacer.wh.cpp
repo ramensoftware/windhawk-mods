@@ -300,17 +300,17 @@ struct ModSettings {
     int hoverFadeDuration = 120;
     int pressedFadeDuration = 80;
 
-    int iconSize = 24;
+    int iconSize = 34;
 
-    GifPlaybackMode gifPlayback = GifPlaybackMode::Always;
+    GifPlaybackMode gifPlayback = GifPlaybackMode::Hover;
 
-    double hoverScale = 1.0;
-    double hoverRotation = 0.0;
+    double hoverScale = 1.15;
+    double hoverRotation = 4.0;
     double hoverOpacity = 1.0;
     int hoverDuration = 120;
 
-    double pressedScale = 1.0;
-    double pressedRotation = 0.0;
+    double pressedScale = 0.95;
+    double pressedRotation = -4.0;
     double pressedOpacity = 1.0;
     int pressedDuration = 80;
 
@@ -445,9 +445,7 @@ std::wstring ExpandPath(const std::wstring& source) {
         return source;
     }
 
-    if (!result.empty() && result.back() == L'\0') {
-        result.pop_back();
-    }
+    result.resize(written - 1);
 
     return result;
 }
@@ -1793,6 +1791,27 @@ size_t GetTrackedInstanceCount() {
     return g_instances ? g_instances->size() : 0;
 }
 
+std::vector<DWORD> GetTrackedInstanceThreadIds() {
+    std::lock_guard<std::mutex> lock(g_instancesMutex);
+    std::vector<DWORD> threadIds;
+
+    if (!g_instances) {
+        return threadIds;
+    }
+
+    for (const auto& instance : *g_instances) {
+        if (!instance || !instance->threadId ||
+            std::find(threadIds.begin(), threadIds.end(),
+                      instance->threadId) != threadIds.end()) {
+            continue;
+        }
+
+        threadIds.push_back(instance->threadId);
+    }
+
+    return threadIds;
+}
+
 // -----------------------------------------------------------------------------
 // Bitmap/image loading
 // -----------------------------------------------------------------------------
@@ -1960,8 +1979,9 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
                 Wh_Log(L"Custom Start %s image loaded", IconStateName(state));
 
-                UpdateDisplayedImage(instance);
-                UpdateGifPlayback(instance);
+                // Apply both the image and the current transform. The pointer
+                // might already be hovering or pressed when decoding finishes.
+                ApplyCurrentState(instance, 0);
             });
 
         resource.imageOpenedAttached = true;
@@ -2558,6 +2578,10 @@ bool ApplyToXamlRoot(const wux::XamlRoot& xamlRoot) {
                e.message().c_str());
 
         return false;
+    } catch (...) {
+        Wh_Log(L"ApplyToXamlRoot failed with an unknown exception");
+
+        return false;
     }
 }
 
@@ -2592,16 +2616,18 @@ RefCountDecref_t RefCountDecref_Original;
 // -----------------------------------------------------------------------------
 
 wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
-    auto releaseSharedPtr = [sharedPtr]() {
-        if (sharedPtr[1] && RefCountDecref_Original) {
-            RefCountDecref_Original(sharedPtr[1]);
+    struct SharedPtrReleaseGuard {
+        void** sharedPtr;
 
-            sharedPtr[1] = nullptr;
+        ~SharedPtrReleaseGuard() noexcept {
+            if (sharedPtr[1] && RefCountDecref_Original) {
+                RefCountDecref_Original(sharedPtr[1]);
+                sharedPtr[1] = nullptr;
+            }
         }
-    };
+    } releaseGuard{sharedPtr};
 
     if (!sharedPtr[0]) {
-        releaseSharedPtr();
         return nullptr;
     }
 
@@ -2627,7 +2653,6 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
             L"Unrecognized TaskbarHost::FrameHeight; refusing an unsafe "
             L"TaskbarHost layout fallback");
 
-        releaseSharedPtr();
         return nullptr;
     }
 
@@ -2650,7 +2675,6 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
             L"Unrecognized TaskbarHost::FrameHeight; refusing an unsafe "
             L"TaskbarHost layout fallback");
 
-        releaseSharedPtr();
         return nullptr;
     }
 
@@ -2674,8 +2698,6 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* sharedPtr[2]) {
     if (taskbarElement) {
         result = taskbarElement.XamlRoot();
     }
-
-    releaseSharedPtr();
 
     return result;
 }
@@ -2778,6 +2800,7 @@ bool RunFromWindowThread(HWND window,
         RunFromWindowThreadProc_t proc;
         void* param;
         std::atomic<bool> invoked{false};
+        std::atomic<bool> succeeded{false};
     };
 
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
@@ -2787,8 +2810,17 @@ bool RunFromWindowThread(HWND window,
     }
 
     if (threadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
+        try {
+            proc(procParam);
+            return true;
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Taskbar-thread callback failed: 0x%08X %s",
+                   e.code().value, e.message().c_str());
+        } catch (...) {
+            Wh_Log(L"Taskbar-thread callback failed with an unknown exception");
+        }
+
+        return false;
     }
 
     HHOOK hook = SetWindowsHookEx(
@@ -2801,7 +2833,17 @@ bool RunFromWindowThread(HWND window,
                 if (cwp->message == registeredMessage) {
                     auto* parameter = reinterpret_cast<RunParam*>(cwp->lParam);
 
-                    parameter->proc(parameter->param);
+                    try {
+                        parameter->proc(parameter->param);
+                        parameter->succeeded.store(true);
+                    } catch (const winrt::hresult_error& e) {
+                        Wh_Log(L"Taskbar-thread callback failed: 0x%08X %s",
+                               e.code().value, e.message().c_str());
+                    } catch (...) {
+                        Wh_Log(L"Taskbar-thread callback failed with an "
+                               L"unknown exception");
+                    }
+
                     parameter->invoked.store(true);
                 }
             }
@@ -2821,7 +2863,7 @@ bool RunFromWindowThread(HWND window,
 
     UnhookWindowsHookEx(hook);
 
-    return parameter.invoked.load();
+    return parameter.invoked.load() && parameter.succeeded.load();
 }
 
 // -----------------------------------------------------------------------------
@@ -2890,6 +2932,45 @@ bool RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, void* procParam) {
     return allSucceeded;
 }
 
+HWND FindAnyWindowOnThread(DWORD threadId) {
+    HWND result = nullptr;
+
+    EnumThreadWindows(
+        threadId,
+        [](HWND window, LPARAM param) -> BOOL {
+            *reinterpret_cast<HWND*>(param) = window;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+
+    return result;
+}
+
+bool RunOnTrackedInstanceThreads(RunFromWindowThreadProc_t proc,
+                                 void* procParam) {
+    auto threadIds = GetTrackedInstanceThreadIds();
+    bool allSucceeded = true;
+
+    for (DWORD threadId : threadIds) {
+        HWND window = FindAnyWindowOnThread(threadId);
+
+        if (!window) {
+            Wh_Log(L"No window was found on tracked taskbar thread %lu",
+                   threadId);
+            allSucceeded = false;
+            continue;
+        }
+
+        if (!RunFromWindowThread(window, proc, procParam)) {
+            Wh_Log(L"Running code on tracked taskbar thread %lu failed",
+                   threadId);
+            allSucceeded = false;
+        }
+    }
+
+    return allSucceeded;
+}
+
 // -----------------------------------------------------------------------------
 // Apply/remove on taskbar thread
 // -----------------------------------------------------------------------------
@@ -2898,32 +2979,41 @@ void ApplyFromTaskbarThread(bool mainTaskbarOnly = false) {
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND window, LPARAM param) -> BOOL {
-            bool mainOnly = param != 0;
+            try {
+                bool mainOnly = param != 0;
 
-            wchar_t className[64]{};
+                wchar_t className[64]{};
 
-            if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
-                return TRUE;
+                if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
+                    return TRUE;
+                }
+
+                wux::XamlRoot xamlRoot{nullptr};
+
+                if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                    xamlRoot = GetTaskbarXamlRoot(window);
+                } else if (!mainOnly &&
+                           _wcsicmp(className,
+                                    L"Shell_SecondaryTrayWnd") == 0) {
+                    xamlRoot = GetSecondaryTaskbarXamlRoot(window);
+                } else {
+                    return TRUE;
+                }
+
+                if (!xamlRoot) {
+                    Wh_Log(L"Couldn't obtain taskbar XamlRoot");
+
+                    return TRUE;
+                }
+
+                ApplyToXamlRoot(xamlRoot);
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"Applying a taskbar window failed: 0x%08X %s",
+                       e.code().value, e.message().c_str());
+            } catch (...) {
+                Wh_Log(L"Applying a taskbar window failed with an unknown "
+                       L"exception");
             }
-
-            wux::XamlRoot xamlRoot{nullptr};
-
-            if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                xamlRoot = GetTaskbarXamlRoot(window);
-            } else if (!mainOnly &&
-                       _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-                xamlRoot = GetSecondaryTaskbarXamlRoot(window);
-            } else {
-                return TRUE;
-            }
-
-            if (!xamlRoot) {
-                Wh_Log(L"Couldn't obtain taskbar XamlRoot");
-
-                return TRUE;
-            }
-
-            ApplyToXamlRoot(xamlRoot);
 
             return TRUE;
         },
@@ -2983,16 +3073,24 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
         return;
     }
 
-    HWND taskbarWnd = CSecondaryTray_GetTrayWindow_Original(pThis);
+    try {
+        HWND taskbarWnd = CSecondaryTray_GetTrayWindow_Original(pThis);
 
-    if (!taskbarWnd) {
-        return;
-    }
+        if (!taskbarWnd) {
+            return;
+        }
 
-    auto xamlRoot = GetSecondaryTaskbarXamlRoot(taskbarWnd);
+        auto xamlRoot = GetSecondaryTaskbarXamlRoot(taskbarWnd);
 
-    if (xamlRoot) {
-        ApplyToXamlRoot(xamlRoot);
+        if (xamlRoot) {
+            ApplyToXamlRoot(xamlRoot);
+        }
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Handling a secondary taskbar failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Handling a secondary taskbar failed with an unknown "
+               L"exception");
     }
 }
 
@@ -3044,7 +3142,7 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
@@ -3054,7 +3152,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     };
 
     if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
-        Wh_Log(L"Failed to resolve Taskbar.View.dll symbols");
+        Wh_Log(L"Failed to resolve taskbar view module symbols");
         return false;
     }
 
@@ -3072,7 +3170,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 void HandleLoadedTaskbarViewModule(HMODULE module) {
-    if (g_unloading || !module || GetTaskbarViewModuleHandle() != module) {
+    if (g_unloading || g_taskbarViewDllLoaded.load() || !module ||
+        GetTaskbarViewModuleHandle() != module) {
         return;
     }
 
@@ -3247,21 +3346,20 @@ void Wh_ModBeforeUninit() {
 
     BeginInstanceShutdown();
 
-    // Run synchronously on each owning taskbar UI thread. Unlike a queued
-    // CoreDispatcher callback, this has completed before RunFromWindowThread
-    // returns, so no handler implemented by this DLL remains queued or
-    // registered when controlled unload continues.
-    RunOnAllTaskbarThreads(DetachAllTaskbarsProc, nullptr);
+    // Drive cleanup from the instances themselves instead of rediscovering
+    // taskbar window classes. RunFromWindowThread is synchronous, so every
+    // callback and XAML reference is gone before controlled unload continues.
+    RunOnTrackedInstanceThreads(DetachAllTaskbarsProc, nullptr);
 
-    // A taskbar window can be recreated while windows are being enumerated.
-    // Retry once if the first pass didn't visit every tracked UI thread.
+    // A thread window can be recreated while it's being enumerated. Retry once
+    // if the first pass didn't visit every tracked owner thread.
     size_t remainingInstances = GetTrackedInstanceCount();
 
     if (remainingInstances != 0) {
         Wh_Log(L"%zu Start icon instance(s) remained after cleanup; retrying",
                remainingInstances);
 
-        RunOnAllTaskbarThreads(DetachAllTaskbarsProc, nullptr);
+        RunOnTrackedInstanceThreads(DetachAllTaskbarsProc, nullptr);
         remainingInstances = GetTrackedInstanceCount();
     }
 
