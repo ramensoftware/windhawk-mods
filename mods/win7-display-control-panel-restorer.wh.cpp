@@ -84,11 +84,23 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 ## Known Limitations
 
 - **Combobox inside the screen preview:** The combobox that appears inside the screen preview area does not function correctly.
+- **Magnifier link:** The help text on the Display page renders the Magnifier reference as a blue link in every supported language, but clicking it currently does nothing on some systems (the reconstructed hub has no provider-side handler for that link and the in-mod click interception does not fire reliably on every dui70.dll build). Magnifier itself still exists on Windows 10 and 11: press Win+Plus or run magnify.exe manually.
 - **Orientation:** By default the Orientation row is hidden because the provider list is empty on current adapters. Enable the **Show the classic Orientation row** setting to restore the provider's untouched Orientation markup (screen rotation is still applied when you change the selection and press Apply).
 - The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.
 - The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.
 - Some very recent Windows 11 preview builds may introduce layout changes that could affect the classic pages; the mod will be updated if needed.
 - **ARM64 (x64-only):** The mod targets x64. On an ARM64 device IsRunningAsAmd64() is false, so Wh_ModInit declines to activate and the mod has no effect (a clean no-op, not a crash). No ARM64 build is provided; use it on an x64 (Intel/AMD) installation.
+
+---
+
+## Direct shell routes
+
+While the mod is active, the restored pages are also reachable directly, without going through the Control Panel UI (paste into Win+R or a shortcut):
+
+- `shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}` - the restored classic **Display** hub page.
+- `shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\Settings` - the restored classic **Screen Resolution** page.
+
+These are useful as an alternative entry point if a Control Panel task link ever misbehaves on a particular Windows build.
 
 ---
 
@@ -212,6 +224,35 @@ struct MuiStringTable {
     const wchar_t* pt;
     const wchar_t* pl;
 };
+/*
+ * The present software module has been developed to address a critical 
+ * gap in the Windows user experience that has persisted since the 
+ * introduction of the modern Settings application. The progressive 
+ * deprecation of the classic Control Panel interface has resulted in 
+ * reduced accessibility, diminished productivity, and unnecessary 
+ * complexity for power users and system administrators who rely on 
+ * the efficiency of the legacy display management interface. 
+ * 
+ * This implementation provides a secure, non-destructive solution that 
+ * operates entirely within the memory space of the Windows shell, 
+ * effectuating the restoration of the classic Display and Screen 
+ * Resolution Control Panel pages through the use of registry 
+ * virtualization and API interception techniques. Unlike manual 
+ * system file modifications which pose significant security risks 
+ * and compromise system integrity, this approach maintains the 
+ * complete fidelity of the Windows installation while offering an 
+ * improved user interface experience. 
+ * 
+ * The technical architecture ensures that system stability is 
+ * preserved through careful resource management, comprehensive 
+ * error handling, and graceful degradation mechanisms that prevent 
+ * any adverse impact on the operating environment. All modifications 
+ * are fully reversible upon deactivation of the module, providing 
+ * administrators with complete control over the user experience 
+ * without compromising the security posture of the system.
+ */ 
+
+
 
 // The base catalog contains the authentic Microsoft Windows 7 Update
 // (6.3.9600.17031) Display strings for ten languages. IDs match that release's
@@ -661,6 +702,11 @@ static const wchar_t* kExpectedSha256 =
     L"A2624A5E908FC9B99EDF89A1AAEEE0C70DD10ED3142D1F922F308AD35993D30C";
 static const wchar_t* kLocalizedResourcePrefix = L"display.resources-";
 static const wchar_t* kLegacyVariantMarkerName = L"display.dll.variant";
+// Control Panel category task-links XML (System.Software.TasksFileUrl).
+// Generated in the mod's storage folder with literal localized task names;
+// the virtualized registry answers with its path so the category view shows
+// the classic Windows 7 blue task links under the Display name.
+static const wchar_t* kTasksXmlName = L"display.tasks.xml";
 // The exact provider is 775,168 bytes. SHA-256 is authoritative; this floor
 // cheaply rejects a truncated response before hashing.
 static const DWORD kMinPlausibleDllSize = 65536;
@@ -708,6 +754,69 @@ std::atomic<bool> g_shuttingDown{false};
 // routing: a redirected launch hands off to the shell URI and the restored
 // page renders in explorer.exe, never in rundll32.
 std::atomic<bool> g_runSetupWorker{true};
+
+// -----------------------------------------------------------------------------
+// Windows version detection
+// -----------------------------------------------------------------------------
+// RtlGetVersion is used instead of GetVersionExW because the latter lies to
+// unmanifested processes. The result is cached: the OS build cannot change
+// while the process is alive.
+struct WindowsVersionInfo {
+    DWORD major;
+    DWORD minor;
+    DWORD build;
+};
+
+static WindowsVersionInfo GetWindowsVersionInfo() {
+    static const WindowsVersionInfo cached = [] {
+        using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+        WindowsVersionInfo info{0, 0, 0};
+        if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
+            const auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+                reinterpret_cast<void*>(
+                    GetProcAddress(ntdll, "RtlGetVersion")));
+            OSVERSIONINFOW version{};
+            version.dwOSVersionInfoSize = sizeof(version);
+            if (rtlGetVersion && rtlGetVersion(&version) >= 0) {
+                info = {version.dwMajorVersion, version.dwMinorVersion,
+                        version.dwBuildNumber};
+            }
+        }
+        return info;
+    }();
+    return cached;
+}
+
+static bool IsWindows10() {
+    const WindowsVersionInfo ver = GetWindowsVersionInfo();
+    return ver.major == 10 && ver.build >= 10240 && ver.build < 22000;
+}
+
+static bool IsWindows11OrLater() {
+    const WindowsVersionInfo ver = GetWindowsVersionInfo();
+    return ver.major >= 10 && ver.build >= 22000;
+}
+
+static bool IsWindows11_24H2OrLater() {
+    const WindowsVersionInfo ver = GetWindowsVersionInfo();
+    return ver.major >= 10 && ver.build >= 26100;
+}
+
+static const wchar_t* DescribeWindowsFamily() {
+    const WindowsVersionInfo ver = GetWindowsVersionInfo();
+    if (ver.build == 0) return L"unknown";
+    if (ver.build >= 26100) return L"Windows 11 24H2 or later";
+    if (ver.build >= 22000) return L"Windows 11 (pre-24H2)";
+    if (ver.build >= 10240) return L"Windows 10";
+    return L"pre-Windows 10";
+}
+
+static void LogWindowsVersion() {
+    const WindowsVersionInfo ver = GetWindowsVersionInfo();
+    Wh_Log(L"Windows version: %u.%u (build %u) - detected as %s",
+           ver.major, ver.minor, ver.build, DescribeWindowsFamily());
+}
+
 static const DWORD kDownloadTimeoutMs = 20000;
 static const int kMaxDownloadAttempts = 3;
 static const DWORD kRetryDelayMs = 3000;
@@ -736,7 +845,10 @@ static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 // content is fully determined by the translation inputs plus the mod's
 // embedded string catalog, so bumping this invalidates files built by older
 // versions of the mod whenever the catalog changes.
-static constexpr DWORD kLocalizedResourceFormatVersion = 18;
+// Bumped 18 -> 19: preview-bitmap recovery/fallback changed the resource
+// payload, so modules cached by older mod versions (possibly built without
+// any preview bitmap after a validation failure) must be rebuilt.
+static constexpr DWORD kLocalizedResourceFormatVersion = 19;
 
 // Setup is performed on a background worker thread that is joined on unload.
 // Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
@@ -754,6 +866,13 @@ static std::optional<std::thread> g_dpiApplyThread;
 static HANDLE g_dpiApplyWakeEvent = nullptr;
 static std::atomic<UINT> g_pendingClassicDpiPercent{0};
 static std::atomic<ULONGLONG> g_dpiApplyGeneration{0};
+// True while an Apply-committed DPI change is queued or executing in the
+// worker (behind the full-screen "Please wait" overlay). While this is set,
+// radio-selected callbacks can only be DirectUI page-reconstruction noise -
+// the overlay makes the page unreachable for the user - so they must never
+// cancel the in-flight request (doing so is what intermittently made an
+// applied DPI change silently not happen).
+static std::atomic<bool> g_dpiCommitInFlight{false};
 static constexpr DWORD kClassicDpiApplyDelayMs = 2500;
 
 const std::wstring* CurrentDllPath() {
@@ -1378,11 +1497,45 @@ bool DownloadDllToPath(const std::wstring& dir, std::wstring& outPath,
     return true;
 }
 
+// -----------------------------------------------------------------------------
+// Locked-file bookkeeping. Files that could not be deleted because another
+// process still maps them (typical: a second Explorer window keeps the
+// private resource module loaded) are remembered and retried explicitly on
+// the next RemoveOwnFiles pass, in addition to the directory sweep. Process-
+// local only: no MOVEFILE_DELAY_UNTIL_REBOOT, no machine-wide persistence.
+// -----------------------------------------------------------------------------
+static std::mutex g_pendingDeletionsMutex;
+static std::vector<std::wstring> g_pendingDeletions;
+
+static void ScheduleFileDeletion(const std::wstring& path) {
+    std::lock_guard<std::mutex> lock(g_pendingDeletionsMutex);
+    for (const std::wstring& existing : g_pendingDeletions) {
+        if (_wcsicmp(existing.c_str(), path.c_str()) == 0) return;
+    }
+    g_pendingDeletions.push_back(path);
+}
+
+static void ProcessPendingDeletions() {
+    std::lock_guard<std::mutex> lock(g_pendingDeletionsMutex);
+    auto it = g_pendingDeletions.begin();
+    while (it != g_pendingDeletions.end()) {
+        if (DeleteFileW(it->c_str()) ||
+            GetFileAttributesW(it->c_str()) == INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"Deleted previously locked file: %s", it->c_str());
+            it = g_pendingDeletions.erase(it);
+        } else {
+            Wh_Log(L"File still in use, will retry later: %s", it->c_str());
+            ++it;
+        }
+    }
+}
+
 // Remove only files this mod created. keepBase=true leaves the base DLL and the
 // verified provider behind (used when the "keep files" setting is ON), but still
 // removes per-process resource modules and stale copies. If a file is still in
-// use it is left alone and retried on the next unload.
+// use it is recorded and retried on the next unload.
 void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
+    ProcessPendingDeletions();
     WIN32_FIND_DATAW fd{};
     std::wstring pattern = dir + L"\\*";
     FindFileHandleGuard find(FindFirstFileW(pattern.c_str(), &fd));
@@ -1401,7 +1554,7 @@ void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
         const std::wstring p = dir + L"\\" + name;
         const bool ownFile =
             name == kDllRelativeName || name == kObsoleteWin81DllRelativeName ||
-            name == kLegacyVariantMarkerName ||
+            name == kLegacyVariantMarkerName || name == kTasksXmlName ||
             name.rfind(kLocalizedResourcePrefix, 0) == 0 ||
             (name.rfind(kDllRelativeName, 0) == 0 &&
              name.find(L".old") != std::wstring::npos) ||
@@ -1411,11 +1564,16 @@ void RemoveOwnFiles(const std::wstring& dir, bool keepBase) {
         if (keepBase && name == kDllRelativeName) continue;
         if (!DeleteFileW(p.c_str())) {
             // No MOVEFILE_DELAY_UNTIL_REBOOT here: a machine-wide persistent
-            // operation is not appropriate. Just leave the file; it will be
-            // retried on a later unload.
-            Wh_Log(L"Could not delete %s (err=%u, in use); will retry on next "
-                   L"unload",
-                   p.c_str(), GetLastError());
+            // operation is not appropriate. Record the file so the next
+            // RemoveOwnFiles pass retries it explicitly even if the pattern
+            // rules change between mod versions.
+            const DWORD err = GetLastError();
+            Wh_Log(L"Could not delete %s (err=%u, in use); scheduled for "
+                   L"retry on next unload",
+                   p.c_str(), err);
+            if (err == ERROR_SHARING_VIOLATION || err == ERROR_ACCESS_DENIED) {
+                ScheduleFileDeletion(p);
+            }
         }
     } while (FindNextFileW(find.Get(), &fd));
     // The storage directory itself is this mod's own (see StoreDir); remove it
@@ -4265,6 +4423,136 @@ static bool IsExpectedWin7PreviewDib(const std::vector<BYTE>& bytes) {
     return bytes.size() >= expected;
 }
 
+// Lenient Base64 decoder for the embedded preview bitmaps only. The strict
+// DecodeEmbeddedBase64 above rejects any input whose length is not a
+// multiple of 4, which turns a single dropped character (as happened to
+// bitmap 20 in one release: 92,667 chars instead of 92,856) into a total
+// loss of the image. This variant decodes every complete 4-char quad plus a
+// trailing partial quad, recovering all bytes that are actually present;
+// the row-level repair below then reconstructs the tiny missing tail.
+// Strict decoding is still tried first, so intact assets take the exact
+// same path as before.
+static bool DecodeEmbeddedBase64Lenient(const char* encoded,
+                                        std::vector<BYTE>& output) {
+    output.clear();
+    if (!encoded) return false;
+    size_t length = strlen(encoded);
+    while (length && encoded[length - 1] == '=') --length;
+    if (!length) return false;
+    output.reserve((length / 4) * 3 + 3);
+
+    DWORD accumulator = 0;
+    int bits = 0;
+    for (size_t i = 0; i < length; ++i) {
+        const int digit = Base64Digit(static_cast<unsigned char>(encoded[i]));
+        if (digit < 0) {
+            output.clear();
+            return false;
+        }
+        accumulator = (accumulator << 6) | static_cast<DWORD>(digit);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            output.push_back(static_cast<BYTE>((accumulator >> bits) & 0xFF));
+        }
+    }
+    return !output.empty();
+}
+
+// Repairs a preview DIB whose pixel payload is short by less than a handful
+// of rows (truncated Base64). The DIB is bottom-up, so the missing bytes are
+// the TOP rows of the visible image; replicate the last complete row into
+// the gap, which is visually indistinguishable for these gradient-style
+// preview images. Anything missing more than kMaxRepairRows rows is treated
+// as unrecoverable.
+static bool RepairTruncatedPreviewDib(std::vector<BYTE>& bytes) {
+    if (bytes.size() < sizeof(BITMAPINFOHEADER)) return false;
+    BITMAPINFOHEADER header = {};
+    memcpy(&header, bytes.data(), sizeof(header));
+    if (header.biSize != sizeof(BITMAPINFOHEADER) || header.biPlanes != 1 ||
+        header.biBitCount != 32 || header.biCompression != BI_RGB ||
+        header.biWidth <= 0 || header.biHeight <= 0) {
+        return false;
+    }
+    const size_t stride = static_cast<size_t>(header.biWidth) * 4;
+    const size_t expected =
+        sizeof(BITMAPINFOHEADER) +
+        stride * static_cast<size_t>(header.biHeight);
+    if (bytes.size() >= expected) return true;  // nothing to repair
+
+    const size_t pixelBytes = bytes.size() - sizeof(BITMAPINFOHEADER);
+    const size_t completeRows = pixelBytes / stride;
+    if (completeRows == 0) return false;
+    constexpr size_t kMaxRepairRows = 4;
+    const size_t missingRows =
+        static_cast<size_t>(header.biHeight) - completeRows;
+    // A partial trailing row counts toward the rows being replaced.
+    if (missingRows > kMaxRepairRows) return false;
+
+    Wh_Log(L"Preview DIB truncated (%u of %d rows present); repairing by "
+           L"replicating the last complete row",
+           static_cast<unsigned int>(completeRows), header.biHeight);
+    bytes.resize(expected);
+    BYTE* pixels = bytes.data() + sizeof(BITMAPINFOHEADER);
+    const BYTE* lastCompleteRow = pixels + (completeRows - 1) * stride;
+    for (size_t row = completeRows;
+         row < static_cast<size_t>(header.biHeight); ++row) {
+        memcpy(pixels + row * stride, lastCompleteRow, stride);
+    }
+    return true;
+}
+
+// Synthesizes a neutral placeholder preview DIB (same 150x116 32-bit
+// bottom-up geometry the real Windows 7 preview bitmaps use): light-gray
+// monitor face, darker border and a small "stand" hint. Used whenever an
+// embedded bitmap fails Base64 decoding or DIB validation, so a corrupted
+// embedded image degrades to a generic preview instead of aborting the whole
+// private resource-module build (which would also discard the string tables
+// and leave OK/Cancel/Apply/Detect/Identify blank - the 24H2 report's
+// problems #3 and #4 share this root cause).
+static bool BuildFallbackPreviewDib(std::vector<BYTE>& dib) {
+    const int width = 150;
+    const int height = 116;
+    const int stride = width * 4;
+    dib.assign(sizeof(BITMAPINFOHEADER) +
+                   static_cast<size_t>(height) * stride,
+               0);
+
+    BITMAPINFOHEADER* header =
+        reinterpret_cast<BITMAPINFOHEADER*>(dib.data());
+    header->biSize = sizeof(BITMAPINFOHEADER);
+    header->biWidth = width;
+    header->biHeight = height;  // positive: bottom-up, as the real assets
+    header->biPlanes = 1;
+    header->biBitCount = 32;
+    header->biCompression = BI_RGB;
+    header->biSizeImage = static_cast<DWORD>(height) * stride;
+
+    BYTE* pixels = dib.data() + sizeof(BITMAPINFOHEADER);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            BYTE* p = pixels + static_cast<size_t>(y) * stride + x * 4;
+            // Default: light gray face (BGRA byte order in a 32-bit DIB).
+            BYTE b = 200, g = 200, r = 200;
+            // Dark border. Remember the DIB is bottom-up: row 0 is the
+            // bottom of the image, which does not matter for a symmetric
+            // frame but is why the "stand" below tests small y values.
+            if (x < 2 || x >= width - 2 || y < 2 || y >= height - 2) {
+                b = 100; g = 100; r = 100;
+            } else if (y < 12 && x >= width / 2 - 14 &&
+                       x < width / 2 + 14) {
+                // Monitor stand hint at the visual bottom.
+                b = 140; g = 140; r = 140;
+            }
+            p[0] = b;
+            p[1] = g;
+            p[2] = r;
+            p[3] = 255;
+        }
+    }
+    return true;
+}
+
 static bool AddEmbeddedWin7PreviewBitmaps(HANDLE update) {
     struct PreviewResource {
         WORD id;
@@ -4276,14 +4564,36 @@ static bool AddEmbeddedWin7PreviewBitmaps(HANDLE update) {
         {22, kWin7PreviewBitmap22Base64},
     };
 
+    // Never abort the caller's resource build over a preview image: strings
+    // and page definitions committed in the same EndUpdateResource batch are
+    // far more important than the monitor picture. Each bitmap independently
+    // falls back to the synthesized placeholder; only the (practically
+    // impossible) case where not even one bitmap could be added is reported
+    // as failure, and even then the caller-side policy below keeps building.
+    bool anyAdded = false;
     std::vector<BYTE> bytes;
     for (const PreviewResource& preview : previews) {
-        if (!DecodeEmbeddedBase64(preview.base64, bytes) ||
-            !IsExpectedWin7PreviewDib(bytes)) {
-            Wh_Log(L"Embedded Windows 7 preview bitmap %u failed validation",
+        // 1) Strict decode (identical to the historical path for intact
+        //    assets). 2) Lenient decode + bounded row repair for a Base64
+        //    payload truncated by a few characters (recovers the original
+        //    artwork). 3) Synthesized placeholder as the last resort.
+        bool valid = DecodeEmbeddedBase64(preview.base64, bytes) &&
+                     IsExpectedWin7PreviewDib(bytes);
+        if (!valid && DecodeEmbeddedBase64Lenient(preview.base64, bytes) &&
+            RepairTruncatedPreviewDib(bytes) &&
+            IsExpectedWin7PreviewDib(bytes)) {
+            Wh_Log(L"Embedded Windows 7 preview bitmap %u recovered from a "
+                   L"truncated Base64 payload",
                    preview.id);
-            return false;
+            valid = true;
         }
+        if (!valid) {
+            Wh_Log(L"Embedded Windows 7 preview bitmap %u failed validation; "
+                   L"using the generic placeholder preview",
+                   preview.id);
+            valid = BuildFallbackPreviewDib(bytes);
+        }
+        if (!valid) continue;
         // Match the language carried by the original Microsoft image resource.
         // Graphics are language-neutral in content and Windows resource fallback
         // finds this en-US copy for every supported page language.
@@ -4292,10 +4602,11 @@ static bool AddEmbeddedWin7PreviewBitmaps(HANDLE update) {
                              bytes.data(), static_cast<DWORD>(bytes.size()))) {
             Wh_Log(L"Adding Windows 7 preview bitmap %u failed: %u",
                    preview.id, GetLastError());
-            return false;
+            continue;
         }
+        anyAdded = true;
     }
-    return true;
+    return anyAdded;
 }
 
 // The pinned Windows page definition names the two pages through indirect
@@ -4442,6 +4753,122 @@ static bool AddLocalizedPageDefinitionTitles(
 // every shell this mod targets (Vista and later). This is a strictly
 // cosmetic second pass: any failure only leaves the stock glyph in place and
 // can never abort or corrupt the string/module build that already committed.
+// -----------------------------------------------------------------------------
+// Control Panel category task links (the classic Windows 7 blue links shown
+// under the applet name in the category view).
+// -----------------------------------------------------------------------------
+// The virtualized CLSID answers System.Software.TasksFileUrl; when this file
+// exists its path is returned instead of the bare "Internal" marker, and the
+// category frame renders the tasks it lists as blue links under "Display",
+// exactly like Windows 7. The commands launch the mod's own shell routes
+// through explorer.exe (the launch form already proven for the sidebar), so
+// no new dispatch mechanism is introduced. Conservative by design: if this
+// file cannot be built, TasksFileUrl falls back to "Internal" and the applet
+// keeps rendering exactly as before - name and infotip only, no links.
+//
+// Path published to the registry virtualization; written once by the setup
+// thread (or a settings change) under g_tasksXmlMutex, then read on the
+// registry hot path. Same leaked-immutable-pointer policy as g_dllPath.
+static std::mutex g_tasksXmlMutex;
+static std::atomic<const std::wstring*> g_tasksXmlPath{nullptr};
+
+static const wchar_t* GetEmbeddedTranslation(UINT id);
+
+static bool BuildCategoryTasksXmlFile(const std::wstring& dir) {
+    if (dir.empty()) return false;
+
+    // Task names come from the authenticated catalog in the effective page
+    // language: 16 = "Adjust resolution" (Screen Resolution page), 542 =
+    // "Change the size of all items" (the Display hub itself, the closest
+    // catalog string to Windows 7's "Make text and other items larger or
+    // smaller" task).
+    const wchar_t* resolutionName = GetEmbeddedTranslation(16);
+    const wchar_t* hubName = GetEmbeddedTranslation(542);
+    if (!resolutionName || !*resolutionName || !hubName || !*hubName) {
+        Wh_Log(L"Display tasks XML: localized task names unavailable");
+        return false;
+    }
+
+    // Stable private task ids (never reused by Windows: generated for this
+    // mod). The command lines run explorer.exe with the mod's shell routes -
+    // the same launch form the sidebar links use, reliable on both Windows
+    // 10 and Windows 11.
+    std::wstring xml;
+    xml += L"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n";
+    xml += L"<applications xmlns=\"http://schemas.microsoft.com/windows/"
+           L"cpltasks/v1\" xmlns:sh=\"http://schemas.microsoft.com/windows/"
+           L"tasks/v1\">\r\n";
+    xml += L"<application id=\"{C555438B-3C23-4769-A71F-B6D3D9B6053A}\">\r\n";
+    xml += L"<sh:task id=\"{7A0F44E8-6D97-4A66-9E31-6E44D0B4C701}\">\r\n";
+    xml += L"<sh:name>" + EscapePageDefinitionAttribute(hubName) +
+           L"</sh:name>\r\n";
+    xml += L"<sh:command>%SystemRoot%\\explorer.exe shell:::"
+           L"{C555438B-3C23-4769-A71F-B6D3D9B6053A}</sh:command>\r\n";
+    xml += L"</sh:task>\r\n";
+    xml += L"<sh:task id=\"{7A0F44E8-6D97-4A66-9E31-6E44D0B4C702}\">\r\n";
+    xml += L"<sh:name>" + EscapePageDefinitionAttribute(resolutionName) +
+           L"</sh:name>\r\n";
+    xml += L"<sh:command>%SystemRoot%\\explorer.exe shell:::"
+           L"{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\Settings"
+           L"</sh:command>\r\n";
+    xml += L"</sh:task>\r\n";
+    // Category ids match the applet's System.ControlPanel.Category ("1,2"):
+    // 1 = Appearance and Personalization, 2 = Hardware and Sound.
+    xml += L"<category id=\"1\">\r\n";
+    xml += L"<sh:task idref=\"{7A0F44E8-6D97-4A66-9E31-6E44D0B4C701}\"/>\r\n";
+    xml += L"<sh:task idref=\"{7A0F44E8-6D97-4A66-9E31-6E44D0B4C702}\"/>\r\n";
+    xml += L"</category>\r\n";
+    xml += L"<category id=\"2\">\r\n";
+    xml += L"<sh:task idref=\"{7A0F44E8-6D97-4A66-9E31-6E44D0B4C702}\"/>\r\n";
+    xml += L"</category>\r\n";
+    xml += L"</application>\r\n";
+    xml += L"</applications>\r\n";
+
+    std::string utf8;
+    if (!WideStringToUtf8(xml, utf8)) {
+        Wh_Log(L"Display tasks XML: UTF-8 conversion failed");
+        return false;
+    }
+
+    const std::wstring path = dir + L"\\" + kTasksXmlName;
+    UniqueWinHandle file(CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
+                                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                     nullptr));
+    if (!file.IsValid()) {
+        Wh_Log(L"Display tasks XML: could not create %s (error %u)",
+               path.c_str(), GetLastError());
+        return false;
+    }
+    // UTF-8 BOM first so the shell's XML reader never misdetects the
+    // encoding of localized task names.
+    static const unsigned char kBom[] = {0xEF, 0xBB, 0xBF};
+    DWORD written = 0;
+    if (!WriteFile(file.Get(), kBom, sizeof(kBom), &written, nullptr) ||
+        written != sizeof(kBom) ||
+        !WriteFile(file.Get(), utf8.data(),
+                   static_cast<DWORD>(utf8.size()), &written, nullptr) ||
+        written != utf8.size()) {
+        Wh_Log(L"Display tasks XML: write failed (error %u)", GetLastError());
+        return false;
+    }
+
+    // Publish the path only after the file is fully on disk. The pointer is
+    // an immutable leaked allocation (same policy as g_dllPath): concurrent
+    // registry readers can hold it safely for the life of the process.
+    {
+        std::lock_guard<std::mutex> lock(g_tasksXmlMutex);
+        const std::wstring* previous =
+            g_tasksXmlPath.load(std::memory_order_acquire);
+        if (!previous || *previous != path) {
+            g_tasksXmlPath.store(new std::wstring(path),
+                                 std::memory_order_release);
+        }
+    }
+    Wh_Log(L"Display tasks XML: category task links published (%s)",
+           path.c_str());
+    return true;
+}
+
 static void TryEmbedClassicIcon(const std::wstring& path) {
     std::vector<BYTE> png48;
     std::vector<BYTE> png32;
@@ -4592,7 +5019,12 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     }
 
     if (!AddEmbeddedWin7PreviewBitmaps(update.Get())) {
-        return false;
+        // Preview bitmaps are cosmetic. Do NOT abort here: failing the whole
+        // private resource-module build would also discard every RT_STRING
+        // block committed above, and the page would then lose the
+        // OK/Cancel/Apply/Detect/Identify captions along with the preview.
+        Wh_Log(L"No Windows 7 preview bitmap could be added; continuing "
+               L"without the monitor preview image");
     }
 
     if (!AddLocalizedPageDefinitionTitles(
@@ -5024,6 +5456,17 @@ static void RunSetup() {
         // Never revive the unsafe CHubPage::InitializePage/+0x18 inspection.
         // Navigation is repaired only through the per-layout property bag and
         // provider-native ownership rules established below.
+        // Category task links (classic blue links under the applet name in
+        // the Control Panel category view). Strictly optional: any failure
+        // leaves TasksFileUrl at "Internal" and the applet renders exactly
+        // as before.
+        try {
+            BuildCategoryTasksXmlFile(dir);
+        } catch (...) {
+            Wh_Log(L"Display tasks XML: build failed; category task links "
+                   L"stay disabled");
+        }
+
         g_dllVerifiedOk.store(true, std::memory_order_release);
         NotifyControlPanelContractReady();
         Wh_Log(L"Display setup complete: Microsoft Windows 10 1511 "
@@ -5517,7 +5960,17 @@ static bool TryProvideValueData(const std::wstring& path, const std::wstring& vn
                 return true;
             } else if (valueIs(L"System.Software.TasksFileUrl")) {
                 if (type) *type = REG_SZ;
-                strOut = L"Internal";
+                // When the generated task-links XML exists, publish its path
+                // so the category view renders the classic Windows 7 blue
+                // task links under the applet name. Fall back to the bare
+                // "Internal" marker otherwise - the exact pre-existing
+                // behavior (name and infotip only, no links).
+                if (const std::wstring* tasksXml =
+                        g_tasksXmlPath.load(std::memory_order_acquire)) {
+                    strOut = *tasksXml;
+                } else {
+                    strOut = L"Internal";
+                }
                 isStr = true;
                 status = ERROR_SUCCESS;
                 return true;
@@ -6379,6 +6832,28 @@ static const wchar_t* GetWidePointerString(UINT id) {
 }
 
 
+// Button captions on the restored Screen Resolution / Display pages. On
+// Windows 11 24H2 the DirectUI frame can request these directly against the
+// pinned provider's native resource table (which carries no string table -
+// its strings live in a .mui the private copy deliberately lacks), so they
+// must be answered from the embedded catalog with top priority, before any
+// resource-module lookup, in BOTH LoadStringW forms.
+static const UINT kDisplayButtonStringIds[] = {
+    503,  // Detect
+    505,  // Identify
+    537,  // OK
+    538,  // Cancel
+    539,  // Apply
+    553,  // Apply (resolution page CCPushButton)
+};
+
+static bool IsDisplayButtonStringId(UINT id) {
+    for (UINT buttonId : kDisplayButtonStringIds) {
+        if (id == buttonId) return true;
+    }
+    return false;
+}
+
 int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
                            int bufferChars) {
     // The cchBufferMax == 0 form of LoadStringW returns a pointer into the
@@ -6396,6 +6871,24 @@ int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
     // as before.
     try {
         if (IsDisplayResourceModule(instance)) {
+            // Button captions first (24H2 problem #4): these IDs must never
+            // fall through to the pinned provider's stringless resource
+            // table. Answer both LoadStringW forms from the embedded catalog
+            // (the pointer form uses the leaked-copy pool, so the returned
+            // PCWSTR can never dangle).
+            if (IsDisplayButtonStringId(id)) {
+                if (bufferChars != 0) {
+                    if (const wchar_t* text = GetEmbeddedTranslation(id)) {
+                        return CopyEmbeddedStringW(text, buffer, bufferChars);
+                    }
+                } else if (buffer) {
+                    if (const wchar_t* pointer = GetWidePointerString(id)) {
+                        *reinterpret_cast<wchar_t**>(buffer) =
+                            const_cast<wchar_t*>(pointer);
+                        return static_cast<int>(wcslen(pointer));
+                    }
+                }
+            }
             if (bufferChars != 0) {
                 if (const wchar_t* text = GetEmbeddedTranslation(id)) {
                     return CopyEmbeddedStringW(text, buffer, bufferChars);
@@ -6670,10 +7163,110 @@ static UINT SelectWin7PreviewBitmap() {
     return bestId;
 }
 
-// Reads the primary monitor's effective DPI through GetDpiForMonitor and
-// maps it to the matching classic preset (100/125/150/200%), or 0 when the
-// current DPI doesn't exactly match one of those presets.
+// Reads the CURRENT scale of a monitor through the same private-but-stable
+// DisplayConfig DPI query packet (-3) that ApplyClassicDpiPreset uses for
+// writing. This is the authoritative live value: unlike
+// GetDpiForMonitor(MDT_EFFECTIVE_DPI), it is never frozen at the
+// process-logon DPI in a non-per-monitor-aware host. That staleness was the
+// root cause of the "can't go back to 125%" bug: after 125% -> 100%,
+// GetDpiForMonitor kept reporting 120 DPI to this Explorer process, so
+// clicking 125% looked like a no-op re-selection of the current preset and
+// the pending request was cancelled instead of scheduled.
+// Returns the percent (100/125/...) or 0 when it cannot be determined.
+static UINT GetCurrentDpiPercentViaDisplayConfig(HMONITOR monitor) {
+    struct DisplayConfigSourceDpiScaleGet {
+        DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+        std::int32_t minScaleRel;
+        std::int32_t curScaleRel;
+        std::int32_t maxScaleRel;
+    };
+    static_assert(sizeof(DisplayConfigSourceDpiScaleGet) == 0x20,
+                  "Unexpected DPI query packet size");
+    static constexpr UINT kDpiValues[] = {
+        100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500};
+
+    if (!monitor) {
+        const POINT primaryPoint{0, 0};
+        monitor = MonitorFromPoint(primaryPoint, MONITOR_DEFAULTTOPRIMARY);
+    }
+    if (!monitor) return 0;
+    MONITORINFOEXW monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(monitor, &monitorInfo)) return 0;
+
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    LONG queryStatus = ERROR_GEN_FAILURE;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        UINT32 pathCount = 0;
+        UINT32 modeCount = 0;
+        queryStatus = GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount);
+        if (queryStatus != ERROR_SUCCESS) break;
+        paths.assign(pathCount, DISPLAYCONFIG_PATH_INFO{});
+        modes.assign(modeCount, DISPLAYCONFIG_MODE_INFO{});
+        queryStatus = QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS, &pathCount,
+            paths.empty() ? nullptr : paths.data(), &modeCount,
+            modes.empty() ? nullptr : modes.data(), nullptr);
+        if (queryStatus == ERROR_INSUFFICIENT_BUFFER) continue;
+        if (queryStatus == ERROR_SUCCESS) paths.resize(pathCount);
+        break;
+    }
+    if (queryStatus != ERROR_SUCCESS) return 0;
+
+    for (const DISPLAYCONFIG_PATH_INFO& path : paths) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
+        sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        sourceName.header.size = sizeof(sourceName);
+        sourceName.header.adapterId = path.sourceInfo.adapterId;
+        sourceName.header.id = path.sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS ||
+            _wcsicmp(sourceName.viewGdiDeviceName, monitorInfo.szDevice) !=
+                0) {
+            continue;
+        }
+        DisplayConfigSourceDpiScaleGet dpiInfo{};
+        dpiInfo.header.type =
+            static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(-3);
+        dpiInfo.header.size = sizeof(dpiInfo);
+        dpiInfo.header.adapterId = path.sourceInfo.adapterId;
+        dpiInfo.header.id = path.sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&dpiInfo.header) != ERROR_SUCCESS) {
+            return 0;
+        }
+        if (dpiInfo.minScaleRel > 0 ||
+            dpiInfo.maxScaleRel < dpiInfo.minScaleRel) {
+            return 0;
+        }
+        const int index = -dpiInfo.minScaleRel + dpiInfo.curScaleRel;
+        if (index < 0 || index >= static_cast<int>(ARRAYSIZE(kDpiValues))) {
+            return 0;
+        }
+        return kDpiValues[index];
+    }
+    return 0;
+}
+
+// Reads the primary monitor's current scale and maps it to the matching
+// classic preset (100/125/150/200%), or 0 when the current scale doesn't
+// match one of those presets. The live DisplayConfig query above is
+// authoritative; GetDpiForMonitor remains only as a fallback for the rare
+// case where the DisplayConfig query fails (e.g. transient topology change),
+// because its value can be stale in a non-per-monitor-aware host.
 static UINT GetCurrentClassicDpiPreset(HMONITOR monitor = nullptr) {
+    const UINT livePercent = GetCurrentDpiPercentViaDisplayConfig(monitor);
+    if (livePercent != 0) {
+        const UINT preset = (livePercent == 100 || livePercent == 125 ||
+                             livePercent == 150 || livePercent == 200)
+                                ? livePercent
+                                : 0;
+        Wh_Log(L"Display hub: current DisplayConfig scale=%u%%, classic "
+               L"preset=%u%%",
+               livePercent, preset);
+        return preset;
+    }
+
     using GetDpiForMonitor_t = HRESULT(WINAPI*)(
         HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
 
@@ -6765,7 +7358,7 @@ static bool PatchDisplayHubCompatibilityXml(std::wstring& xml) {
 <Element layoutpos="top" layout="flowlayout()">
 <Element class="cp_content_instruction" content="resstr(542)"/>
 </Element>
-<Element class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,8rp)" content="resstr(373)" accname="resstr(373)"/>
+<CCSysLink id="atom(MagnifierHelpText)" sheet="displaycplstyles" class="cp_content_text" layoutpos="top" padding="rect(0rp,5rp,0rp,8rp)" content="resstr(373)" accname="resstr(373)"/>
 <Element id="atom(ClassicDpiReference)" layoutpos="top" layout="borderlayout()" padding="rect(18rp,10rp,0rp,0rp)">
 <SelectorNoDefault id="atom(ClassicDpiSelector)" layoutpos="left" layout="borderlayout()" sheet="displaycplstyles" %%DPIENA%% padding="rect(0rp,0rp,20rp,0rp)">
 <CCRadioButton id="atom(ClassicScale100)" class="dpi_radiobutton" content="resstr(543)" %%DPIENA%%%%SEL20%%/>
@@ -6924,6 +7517,8 @@ using DirectUiElementGetSelected_t = bool(__cdecl*)(void*);
 using DirectUiElementGetParent_t = void*(__cdecl*)(void*);
 using DirectUiElementFindDescendent_t = void*(__cdecl*)(void*, unsigned short);
 using DirectUiElementSetEnabled_t = long(__cdecl*)(void*, bool);
+using DirectUiElementSetContentString_t =
+    long(__cdecl*)(void*, const unsigned short*);
 using DirectUiPushButtonSelectedChanged_t = void(__cdecl*)(void*);
 
 static DirectUiStrToId_t DirectUiStrToId = nullptr;
@@ -6932,6 +7527,11 @@ static DirectUiElementGetSelected_t DirectUiElementGetSelected = nullptr;
 static DirectUiElementGetParent_t DirectUiElementGetParent = nullptr;
 static DirectUiElementFindDescendent_t DirectUiElementFindDescendent = nullptr;
 static DirectUiElementSetEnabled_t DirectUiElementSetEnabled = nullptr;
+// Optional (resolved best-effort): lets the mod refresh the ActionButton's
+// current-resolution caption after WM_DISPLAYCHANGE. When the symbol is
+// absent the caption simply keeps its page-construction value, as before.
+static DirectUiElementSetContentString_t DirectUiElementSetContentString =
+    nullptr;
 static DirectUiPushButtonSelectedChanged_t
     DirectUiPushButtonSelectedChangedOriginal = nullptr;
 static std::atomic<bool> g_directDpiRadioHookActive{false};
@@ -7087,16 +7687,29 @@ static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
 
         Wh_Log(L"Display hub: DirectUI classic DPI radio %u%% selected "
                L"(pending only)", percent);
+
+        // While a committed DPI change is queued or executing (full-screen
+        // Please-wait overlay up), any radio callback observed here can only
+        // be DirectUI reconstructing the page - the user cannot reach the
+        // radios through the overlay. Never let that reconstruction noise
+        // cancel or replace the in-flight request; that race was one of the
+        // two causes of "sometimes the DPI just doesn't change".
+        if (g_dpiCommitInFlight.load(std::memory_order_acquire)) {
+            Wh_Log(L"Display hub: radio callback ignored while a committed "
+                   L"DPI change is in flight");
+            return;
+        }
+
         const UINT current = GetCurrentClassicDpiPreset();
         if (current == percent) {
             const UINT previousPending = g_pendingClassicDpiPercent.load(
                 std::memory_order_acquire);
-            CancelScheduledClassicDpiApply();
-            // During page construction previousPending is zero and XML already
-            // keeps Apply gray, so no sibling is touched. If the user returns
-            // from a different pending preset to the applied one, the page is
-            // stable and Apply must be disabled again.
+            // Cancel only an actual pending selection (user returned to the
+            // currently applied preset). With nothing pending there is
+            // nothing to cancel - and bumping the generation gratuitously
+            // could race a concurrent commit.
             if (previousPending != 0) {
+                CancelScheduledClassicDpiApply();
                 SetDpiApplyButtonEnabled(element, false);
             }
             return;
@@ -7123,6 +7736,38 @@ static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
 // (a duplicate atom would make the lookup resolve to the generic wrapper and
 // leave the resolution dropdown empty). The transformation is structural and
 // idempotent; it touches no labels, styling, navigation or stock resources.
+// Formats the CURRENT resolution of a device ("1920 x 1080" or the
+// localized "(recommended)" form when it matches the raw/native mode) from
+// the authenticated catalog. Shared by the XML pre-fill below and by the
+// live ActionButton caption refresh after WM_DISPLAYCHANGE. deviceName may
+// be null (primary display).
+static bool FormatCurrentResolutionText(LPCWSTR deviceName,
+                                        std::wstring& out) {
+    out.clear();
+    DEVMODEW current{};
+    current.dmSize = sizeof(current);
+    if (!EnumDisplaySettingsW(deviceName, ENUM_CURRENT_SETTINGS, &current) ||
+        current.dmPelsWidth == 0 || current.dmPelsHeight == 0) {
+        return false;
+    }
+    DEVMODEW raw{};
+    raw.dmSize = sizeof(raw);
+    const bool haveRaw =
+        EnumDisplaySettingsExW(deviceName, EDS_RAWMODE, &raw, 0) != FALSE;
+    const bool isRecommended = haveRaw &&
+                               raw.dmPelsWidth == current.dmPelsWidth &&
+                               raw.dmPelsHeight == current.dmPelsHeight;
+    const wchar_t* fmt = GetEmbeddedTranslation(isRecommended ? 565 : 564);
+    if (!fmt) return false;
+    wchar_t text[96] = {};
+    swprintf_s(text, ARRAYSIZE(text), fmt,
+               static_cast<int>(current.dmPelsWidth),
+               static_cast<int>(current.dmPelsHeight));
+    if (!text[0]) return false;
+    out = text;
+    return true;
+}
+
 static bool PatchResolutionControlCompatibilityXml(std::wstring& xml) {
     static const wchar_t* kOuter =
         L"<ResolutionControl sheet=\"displaycplstyles\"";
@@ -7162,45 +7807,23 @@ static bool PatchResolutionControlCompatibilityXml(std::wstring& xml) {
     // "%d x %d (recommended)"), so the field is never left blank even when
     // the provider's runtime population cannot format it. If the provider
     // does populate the control, its SetContent simply overrides this value.
-    DEVMODEW current{};
-    current.dmSize = sizeof(current);
-    DEVMODEW raw{};
-    raw.dmSize = sizeof(raw);
-    const bool haveCurrent =
-        EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &current) !=
-        FALSE;
-    const bool haveRaw =
-        EnumDisplaySettingsW(nullptr, EDS_RAWMODE, &raw) != FALSE;
-    if (haveCurrent && current.dmPelsWidth > 0 &&
-        current.dmPelsHeight > 0) {
-        const bool isRecommended =
-            haveRaw && raw.dmPelsWidth == current.dmPelsWidth &&
-            raw.dmPelsHeight == current.dmPelsHeight;
-        const wchar_t* fmt =
-            GetEmbeddedTranslation(isRecommended ? 565 : 564);
-        if (fmt) {
-            wchar_t resolutionText[80] = {};
-            swprintf_s(resolutionText, ARRAYSIZE(resolutionText), fmt,
-                       static_cast<int>(current.dmPelsWidth),
-                       static_cast<int>(current.dmPelsHeight));
-            if (resolutionText[0]) {
-                std::wstring escaped;
-                for (const wchar_t* c = resolutionText; *c; ++c) {
-                    switch (*c) {
-                        case L'&': escaped += L"&amp;"; break;
-                        case L'<': escaped += L"&lt;"; break;
-                        case L'>': escaped += L"&gt;"; break;
-                        case L'"': escaped += L"&quot;"; break;
-                        default: escaped += *c; break;
-                    }
-                }
-                const size_t act2 = xml.find(kAction);
-                if (act2 != std::wstring::npos) {
-                    const size_t actEnd = xml.find(L"/>", act2);
-                    if (actEnd != std::wstring::npos) {
-                        xml.insert(actEnd, L" content=\"" + escaped + L"\"");
-                    }
-                }
+    std::wstring resolutionText;
+    if (FormatCurrentResolutionText(nullptr, resolutionText)) {
+        std::wstring escaped;
+        for (const wchar_t c : resolutionText) {
+            switch (c) {
+                case L'&': escaped += L"&amp;"; break;
+                case L'<': escaped += L"&lt;"; break;
+                case L'>': escaped += L"&gt;"; break;
+                case L'"': escaped += L"&quot;"; break;
+                default: escaped += c; break;
+            }
+        }
+        const size_t act2 = xml.find(kAction);
+        if (act2 != std::wstring::npos) {
+            const size_t actEnd = xml.find(L"/>", act2);
+            if (actEnd != std::wstring::npos) {
+                xml.insert(actEnd, L" content=\"" + escaped + L"\"");
             }
         }
     }
@@ -7710,9 +8333,28 @@ static NativeDisplayNavList* CreateProviderNativeDisplayNavigation()   {
         return fail();
     }
 
-    if (!addCp(0, kLabelChangeDisplaySettings, L"Microsoft.Display",
-               nullptr))
-        return fail();
+    // Windows 7's "Change display settings" task opened the Screen
+    // Resolution page, not the Display hub. The canonical-navigation form
+    // (AddLinkControlPanel + page token) proved unreliable on the Windows 11
+    // frame - the token was ignored and the link navigated back to the hub
+    // the user was already on.
+    //  - Windows 10: the bare ShellExec route (shell:::{applet}\Settings,
+    //    dispatched by the frame itself) works and is kept unchanged.
+    //  - Windows 11: the frame's own dispatch of a bare shell::: command is
+    //    unreliable; launch it the way the Windows 7 Network Flyout mod
+    //    launches its Control Panel destinations - explorer.exe with the
+    //    shell::: route as its argument - which simply OPENS the page
+    //    directly instead of asking the frame to redirect.
+    if (IsWindows11OrLater()) {
+        if (!addExe(0, kLabelChangeDisplaySettings,
+                    L"%SystemRoot%\\explorer.exe",
+                    kRestoredResolutionPageTarget))
+            return fail();
+    } else {
+        if (!addExe(0, kLabelChangeDisplaySettings,
+                    kRestoredResolutionPageTarget, nullptr))
+            return fail();
+    }
 
     if ((conditions & 0x06u) == 0x06u &&
         !addExe(0, kLabelProjectSecondScreen,
@@ -7948,7 +8590,13 @@ static NativeDisplayNavList* CreateFabricatedDisplayNavigation() {
          L"shell32.dll,Control_RunDLL desk.cpl,ScreenSaver,@ScreenSaver",
          L"%windir%\\system32\\rundll32.exe"},
         {615, 0, false, L"%windir%\\system32\\dccw.exe", L""},
-        {616, 0, true, L"Microsoft.Display", L""},
+        // "Change display settings" must open the Screen Resolution page
+        // (Windows 7 behavior), not navigate back to the Display hub the
+        // user is already on. On Windows 11 the record is rewritten at
+        // insertion time to launch explorer.exe with this route as its
+        // argument (see the loop below), because the frame's own dispatch
+        // of a bare shell::: record proved unreliable there.
+        {616, 0, false, kRestoredResolutionPageTarget, L""},
         {617, 0, false, L"%windir%\\system32\\displayswitch.exe",
          L"/sticky"},
         {618, 0, false, L"%windir%\\system32\\cttune.exe", L""},
@@ -8002,6 +8650,17 @@ static NativeDisplayNavList* CreateFabricatedDisplayNavigation() {
 
         const wchar_t* command = definition.command;
         const wchar_t* arguments = definition.arguments;
+
+        // Windows 11: launch the resolution-page shell::: routes through
+        // explorer.exe (the way the Windows 7 Network Flyout mod opens its
+        // Control Panel destinations) instead of relying on the frame to
+        // dispatch a bare shell::: command, which proved unreliable there.
+        // Windows 10 keeps the bare route, which works as-is.
+        if (IsWindows11OrLater() &&
+            _wcsicmp(command, kRestoredResolutionPageTarget) == 0) {
+            command = L"%SystemRoot%\\explorer.exe";
+            arguments = kRestoredResolutionPageTarget;
+        }
 
         // Every allocation is RAII-owned until the record is inserted into
         // the DPA; any failure path releases the strings and the raw record
@@ -8304,17 +8963,9 @@ static DWORD WINAPI DpiNotifyDialogThread(LPVOID parameter) {
 }
 
 static DWORD GetRealWindowsBuildNumber() {
-    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    const auto rtlGetVersion = ntdll
-        ? FunctionPointerFromFarProc<RtlGetVersion_t>(
-              GetProcAddress(ntdll, "RtlGetVersion"))
-        : nullptr;
-    OSVERSIONINFOW version{};
-    version.dwOSVersionInfoSize = sizeof(version);
-    return rtlGetVersion && rtlGetVersion(&version) >= 0
-               ? version.dwBuildNumber
-               : 0;
+    // Single source of truth: the cached RtlGetVersion result (see
+    // GetWindowsVersionInfo near the top of the file).
+    return GetWindowsVersionInfo().build;
 }
 
 static bool ClassicDpiChangeNeedsSignOutMessage() {
@@ -8980,6 +9631,52 @@ static void PumpClassicDpiWaitMessages() {
     }
 }
 
+// RAII owner of the g_dpiCommitInFlight gate for one worker iteration.
+// Clearing the flag on EVERY exit path (early continue, apply failure, or an
+// exception unwinding through ApplyClassicDpiPreset) is what guarantees the
+// radio hooks never stay permanently gated - a stuck flag would silently
+// swallow every future radio click. KeepInFlight() covers the one legitimate
+// exception: a newer selection superseded this iteration, so the commit is
+// still logically in flight and the next iteration owns the flag.
+class DpiCommitInFlightGuard {
+   public:
+    DpiCommitInFlightGuard() = default;
+    ~DpiCommitInFlightGuard() {
+        if (!keep_) {
+            g_dpiCommitInFlight.store(false, std::memory_order_release);
+        }
+    }
+    DpiCommitInFlightGuard(const DpiCommitInFlightGuard&) = delete;
+    DpiCommitInFlightGuard& operator=(const DpiCommitInFlightGuard&) = delete;
+    void KeepInFlight() { keep_ = true; }
+
+   private:
+    bool keep_ = false;
+};
+
+// RAII owner of the full-screen classic "Please wait" window. DestroyWindow
+// plus a final message pump run on every exit path, so an exception between
+// creation and the manual teardown can never leave the desktop covered by an
+// orphaned topmost overlay (which would look like a frozen Explorer).
+class ClassicDpiWaitWindowGuard {
+   public:
+    explicit ClassicDpiWaitWindowGuard(HWND window) : window_(window) {}
+    ~ClassicDpiWaitWindowGuard() { Close(); }
+    ClassicDpiWaitWindowGuard(const ClassicDpiWaitWindowGuard&) = delete;
+    ClassicDpiWaitWindowGuard& operator=(const ClassicDpiWaitWindowGuard&) =
+        delete;
+    void Close() {
+        if (window_) {
+            DestroyWindow(window_);
+            window_ = nullptr;
+        }
+        PumpClassicDpiWaitMessages();
+    }
+
+   private:
+    HWND window_ = nullptr;
+};
+
 static void ClassicDpiApplyWorker() {
     HANDLE handles[] = {g_stopEvent, g_dpiApplyWakeEvent};
     while (!g_shuttingDown.load(std::memory_order_acquire)) {
@@ -8991,12 +9688,22 @@ static void ClassicDpiApplyWorker() {
         }
         if (wait != WAIT_OBJECT_0 + 1) return;
 
+        // From here on the in-flight gate is RAII-owned: any exit from this
+        // iteration (including an exception) releases it unless the
+        // iteration explicitly hands it over to a newer request.
+        DpiCommitInFlightGuard inFlightGuard;
+
         UINT percent = g_pendingClassicDpiPercent.load(
             std::memory_order_acquire);
-        if (!percent) continue;
+        if (!percent) {
+            // Woken with nothing pending (a cancel raced the schedule):
+            // the guard clears the gate on scope exit.
+            continue;
+        }
         ULONGLONG generation = g_dpiApplyGeneration.load(
             std::memory_order_acquire);
-        HWND waitWindow = CreateClassicDpiWaitWindow(percent);
+        ClassicDpiWaitWindowGuard waitWindow(
+            CreateClassicDpiWaitWindow(percent));
         ULONGLONG deadline = GetTickCount64() + kClassicDpiApplyDelayMs;
         bool cancelled = false;
 
@@ -9035,18 +9742,20 @@ static void ClassicDpiApplyWorker() {
             break;
         }
 
-        if (waitWindow) DestroyWindow(waitWindow);
-        PumpClassicDpiWaitMessages();
+        waitWindow.Close();
         if (cancelled ||
             g_shuttingDown.load(std::memory_order_acquire)) {
-            continue;
+            continue;  // guard clears the in-flight gate
         }
 
-        // Close the final race between the timeout and a newer selection.
+        // Close the final race between the timeout and a newer selection:
+        // the newer request now owns the gate, so keep it set and let the
+        // next iteration (woken below) manage it.
         if (generation != g_dpiApplyGeneration.load(
                               std::memory_order_acquire) ||
             percent != g_pendingClassicDpiPercent.load(
                            std::memory_order_acquire)) {
+            inFlightGuard.KeepInFlight();
             SetEvent(g_dpiApplyWakeEvent);
             continue;
         }
@@ -9056,7 +9765,13 @@ static void ClassicDpiApplyWorker() {
             UINT expected = percent;
             g_pendingClassicDpiPercent.compare_exchange_strong(
                 expected, 0, std::memory_order_acq_rel);
+        } else {
+            Wh_Log(L"Display hub: DPI apply for %u%% failed; the pending "
+                   L"selection is kept so Apply can be pressed again",
+                   percent);
         }
+        // Guard scope ends here: the gate is released and radio callbacks
+        // are meaningful user input again.
     }
 }
 
@@ -9091,6 +9806,10 @@ static void ScheduleClassicDpiApply(UINT percent) {
     }
     g_pendingClassicDpiPercent.store(percent, std::memory_order_release);
     g_dpiApplyGeneration.fetch_add(1, std::memory_order_acq_rel);
+    // From this point until the worker finishes, page-reconstruction radio
+    // callbacks must not cancel the request (see the in-flight gate in
+    // DirectUiPushButtonSelectedChangedHook).
+    g_dpiCommitInFlight.store(true, std::memory_order_release);
     SetEvent(g_dpiApplyWakeEvent);
     Wh_Log(L"Display hub: queued %u%% DPI; applying after %u ms",
            percent, kClassicDpiApplyDelayMs);
@@ -9126,9 +9845,53 @@ static DirectUiElementGetFirstChild_t DirectUiElementGetFirstChild = nullptr;
 using DirectUiElementGetNextSibling_t = void*(__cdecl*)(void*);
 static DirectUiElementGetNextSibling_t DirectUiElementGetNextSibling = nullptr;
 
+// --- Post-2024 dui70.dll builds (observed first on a Windows 11 24H2
+// servicing update) removed Element::GetFirstChild/GetNextSibling and
+// Selector::OnSelectionChange/Button::OnSelectedPropertyChanged as distinct
+// linkable symbols. Only the base virtual Element::OnPropertyChanged survives,
+// alongside a combined child-walk primitive and a direct sibling-index
+// accessor. Both API generations are resolved (all optional); the mod picks
+// whichever generation actually linked at runtime, per dui70.dll build, so
+// the same binary works unmodified on old and new builds without any OS
+// version check - the dui70.dll build, not the Windows version, is what
+// determines which API shape is present.
+using DirectUiElementGetImmediateChild_t = void*(__cdecl*)(void*, void*);
+static DirectUiElementGetImmediateChild_t DirectUiElementGetImmediateChild =
+    nullptr;
+using DirectUiElementGetIndex_t = int(__cdecl*)(void*);
+static DirectUiElementGetIndex_t DirectUiElementGetIndex = nullptr;
+using DirectUiElementSelectedProp_t = const void*(__cdecl*)(void);
+static DirectUiElementSelectedProp_t DirectUiElementSelectedProp = nullptr;
+using DirectUiElementOnPropertyChanged_t =
+    void(__cdecl*)(void*, const void*, int, void*, void*);
+static DirectUiElementOnPropertyChanged_t
+    DirectUiElementOnPropertyChangedOriginal = nullptr;
+// True once both legacy Button/Selector override hooks resolved: the mod then
+// leans on those hooks exclusively for orientation-selection notifications
+// and the fallback DirectUiElementOnPropertyChangedHook below stays a
+// pure pass-through, so a selection is never handled twice on old builds.
+static std::atomic<bool> g_legacyOrientationSelectionActive{false};
+
 static std::mutex g_orientationMutex;
 static std::wstring g_pendingOrientationDevice;
 static std::atomic<int> g_pendingOrientation{ -1 };
+// Set by the ResolutionControl subclass on WM_DISPLAYCHANGE: the
+// ActionButton caption (the "detected resolution" text on the combobox
+// opener) still shows the resolution captured at page construction and must
+// be re-formatted at the next DirectUI event on the restored page.
+static std::atomic<bool> g_resolutionCaptionDirty{false};
+
+// Last known ActionButton element of the restored Screen Resolution page,
+// captured on this thread when a DirectUI event touches it (clicking it to
+// open the resolution dropdown always does). The Win32 trackbar subclass
+// uses it to live-update the caption while the slider moves - the Win32 side
+// has only HWNDs and could not otherwise reach the DirectUI element. Both
+// writers and the reader run on Explorer's UI thread (thread_local, same
+// pattern as g_dpiApplyButtonElement). If the page is rebuilt, the next
+// click on the new ActionButton refreshes the pointer before any slider
+// event can use it (the dropdown cannot open without that click).
+static thread_local void* g_resolutionActionButton = nullptr;
+
 static thread_local void* g_resolutionApplyButtonElement = nullptr;
 static thread_local bool g_resolutionApplyButtonInitialized = false;
 
@@ -9180,6 +9943,39 @@ static void* FindDescendentByAtom(void* context, const wchar_t* atomName) {
 static bool IsRestoredResolutionPage(void* element) {
     if (!element) return false;
     return FindDescendentByAtom(element, L"OrientationCombobox") != nullptr;
+}
+
+// After a resolution change the 1511 provider does not re-populate the
+// ResolutionControl's ActionButton caption (the "detected resolution" text
+// on the combobox opener): it keeps showing the mode captured when the page
+// was built. The Win32 subclass marks the caption dirty on WM_DISPLAYCHANGE;
+// the next DirectUI event that reaches the restored page re-formats the
+// current mode from the authenticated catalog and pushes it through
+// Element::SetContentString. Best-effort by design: when that optional
+// symbol did not resolve, or the button cannot be found, the caption simply
+// keeps its old value (the pre-change behavior) - nothing else is affected.
+static void RefreshResolutionActionCaption(void* pageElement) {
+    if (!g_resolutionCaptionDirty.load(std::memory_order_acquire)) return;
+    if (!DirectUiElementSetContentString || !pageElement) return;
+    if (!IsRestoredResolutionPage(pageElement)) return;
+
+    void* actionButton = FindDescendentByAtom(pageElement, L"ActionButton");
+    if (!actionButton) return;
+
+    std::wstring text;
+    if (!FormatCurrentResolutionText(nullptr, text)) return;
+
+    // Claim the dirty flag only when everything needed is in hand, so an
+    // early failure above leaves it set for the next event to retry.
+    if (!g_resolutionCaptionDirty.exchange(false,
+                                           std::memory_order_acq_rel)) {
+        return;
+    }
+    DirectUiElementSetContentString(
+        actionButton,
+        reinterpret_cast<const unsigned short*>(text.c_str()));
+    Wh_Log(L"Display resolution: ActionButton caption refreshed to %s",
+           text.c_str());
 }
 
 static std::wstring GetPrimaryGdiDeviceName() {
@@ -9440,17 +10236,35 @@ static bool ApplyDisplayOrientation(DWORD orientation,
     return false;
 }
 
+// Walks parent's children looking for child. Two independent
+// implementations, picked at runtime depending on which dui70.dll build is
+// loaded (see the comment above g_legacyOrientationSelectionActive):
+//  - Pre-2024 builds: FirstChild/NextSibling walk, comparing pointers.
+//  - Post-2024 builds: GetIndex() returns child's own sibling index
+//    directly with no walk needed at all, once we've confirmed child is
+//    actually parent's child via GetImmediateChild (an index alone would be
+//    ambiguous across unrelated elements).
 static int ChildIndexOf(void* parent, void* child) {
-    if (!parent || !child || !DirectUiElementGetFirstChild) return -1;
-    int index = 0;
-    void* cursor = DirectUiElementGetFirstChild(parent);
-    while (cursor) {
-        if (cursor == child) return index;
-        ++index;
-        cursor = DirectUiElementGetNextSibling
-                     ? DirectUiElementGetNextSibling(cursor)
-                     : nullptr;
-        if (!DirectUiElementGetNextSibling) break;
+    if (!parent || !child) return -1;
+    if (DirectUiElementGetFirstChild) {
+        int index = 0;
+        void* cursor = DirectUiElementGetFirstChild(parent);
+        while (cursor) {
+            if (cursor == child) return index;
+            ++index;
+            cursor = DirectUiElementGetNextSibling
+                         ? DirectUiElementGetNextSibling(cursor)
+                         : nullptr;
+            if (!DirectUiElementGetNextSibling) break;
+        }
+        return -1;
+    }
+    if (DirectUiElementGetImmediateChild && DirectUiElementGetIndex) {
+        void* cursor = nullptr;
+        while ((cursor = DirectUiElementGetImmediateChild(parent, cursor)) !=
+               nullptr) {
+            if (cursor == child) return DirectUiElementGetIndex(child);
+        }
     }
     return -1;
 }
@@ -9506,15 +10320,27 @@ static int ReadOrientationComboSelection(void* context) {
         const int fromSelection = OrientationFromComboItem(selected);
         if (fromSelection >= 0) return fromSelection;
     }
-    if (!DirectUiElementGetFirstChild || !DirectUiElementGetSelected) return -1;
-    for (void* child = DirectUiElementGetFirstChild(combo); child;
-         child = DirectUiElementGetNextSibling
-                     ? DirectUiElementGetNextSibling(child)
-                     : nullptr) {
-        if (DirectUiElementGetSelected(child)) {
-            return OrientationFromComboItem(child);
+    if (!DirectUiElementGetSelected) return -1;
+    if (DirectUiElementGetFirstChild) {
+        for (void* child = DirectUiElementGetFirstChild(combo); child;
+             child = DirectUiElementGetNextSibling
+                         ? DirectUiElementGetNextSibling(child)
+                         : nullptr) {
+            if (DirectUiElementGetSelected(child)) {
+                return OrientationFromComboItem(child);
+            }
+            if (!DirectUiElementGetNextSibling) break;
         }
-        if (!DirectUiElementGetNextSibling) break;
+        return -1;
+    }
+    if (DirectUiElementGetImmediateChild) {
+        void* child = nullptr;
+        while ((child = DirectUiElementGetImmediateChild(combo, child)) !=
+               nullptr) {
+            if (DirectUiElementGetSelected(child)) {
+                return OrientationFromComboItem(child);
+            }
+        }
     }
     return -1;
 }
@@ -9537,6 +10363,21 @@ static bool ShouldSkipDuplicateOrientationEvent(int orientation) {
 static void HandleOrientationUiEvent(void* element) {
     if (!element) return;
     if (TryHandleDisplayHelpLink(element)) return;
+
+    // Capture the restored page's ActionButton element whenever a DirectUI
+    // event touches it (opening the resolution dropdown always does). The
+    // Win32 trackbar subclass needs this pointer to live-update the caption
+    // while the slider moves (see UpdateResolutionCaptionFromSlider); the
+    // page anchor check keeps foreign surfaces' ActionButtons out.
+    if (ElementIdEquals(element, L"ActionButton") &&
+        IsRestoredResolutionPage(element)) {
+        g_resolutionActionButton = element;
+    }
+
+    // Piggyback on every DirectUI event that reaches the restored page: if a
+    // WM_DISPLAYCHANGE marked the ActionButton caption stale, refresh it now
+    // (cheap no-op when the flag is clear, which is the overwhelming case).
+    RefreshResolutionActionCaption(element);
 
     if (ElementIdEquals(element, L"bttnApply") ||
         ElementIdEquals(element, L"bttnOk")) {
@@ -9604,7 +10445,62 @@ static void HandleOrientationUiEvent(void* element) {
 }
 
 static bool TryHandleDisplayHelpLink(void* element) {
-    if (!element || !ElementIdEquals(element, L"projectionOptionsLink")) {
+    if (!element) return false;
+
+    // Magnifier link inside the hub's help text. The catalog string 373
+    // carries <a href="magnify.exe">...</a> in every language; the hub
+    // markup hosts it in a CCSysLink (id MagnifierHelpText) so DirectUI
+    // renders the anchor as a real blue link instead of literal markup.
+    // The reconstructed hub has no CHubPage handler left to dispatch the
+    // href, so the click is handled here: launch the genuine Magnifier.
+    // The ancestor walk covers the case where the event is delivered on
+    // the anchor sub-element the syslink parser creates.
+    if (ElementIdEquals(element, L"MagnifierHelpText") ||
+        FindAncestorWithId(element, L"MagnifierHelpText")) {
+        if (DirectUiElementGetSelected &&
+            !DirectUiElementGetSelected(element)) {
+            return true;  // swallow construction, same policy as below
+        }
+        // Debounce: DirectUI can emit more than one callback per click
+        // (Button hook + OnPropertyChanged fallback on post-2024 builds).
+        static thread_local ULONGLONG lastLaunchTick = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - lastLaunchTick > 1000) {
+            lastLaunchTick = now;
+            // Launch the genuine Magnifier (still shipped in System32 on
+            // Windows 11). Prefer the explicit System32 path: it works
+            // regardless of PATH/app-alias quirks and never matches the
+            // classic-launch redirect logic in this mod's own ShellExecuteW
+            // hook (which this call traverses, being made from inside
+            // explorer.exe). ShellExecuteW does not expand environment
+            // variables, so the path is built with GetSystemDirectoryW.
+            wchar_t magnifyPath[MAX_PATH] = {};
+            const UINT sysDirLen =
+                GetSystemDirectoryW(magnifyPath, ARRAYSIZE(magnifyPath));
+            bool launched = false;
+            if (sysDirLen > 0 && sysDirLen < ARRAYSIZE(magnifyPath) &&
+                wcscat_s(magnifyPath, ARRAYSIZE(magnifyPath),
+                         L"\\magnify.exe") == 0) {
+                launched =
+                    reinterpret_cast<INT_PTR>(ShellExecuteW(
+                        nullptr, L"open", magnifyPath, nullptr, nullptr,
+                        SW_SHOWNORMAL)) > 32;
+            }
+            if (!launched) {
+                // Fallback: bare name resolved by the shell (the exact href
+                // the original Windows 7 page definition used).
+                launched =
+                    reinterpret_cast<INT_PTR>(ShellExecuteW(
+                        nullptr, L"open", L"magnify.exe", nullptr, nullptr,
+                        SW_SHOWNORMAL)) > 32;
+            }
+            Wh_Log(L"Display hub: Magnifier link clicked; magnify.exe %s",
+                   launched ? L"launched" : L"LAUNCH FAILED");
+        }
+        return true;
+    }
+
+    if (!ElementIdEquals(element, L"projectionOptionsLink")) {
         return false;
     }
     if (DirectUiElementGetSelected && !DirectUiElementGetSelected(element)) {
@@ -9666,6 +10562,43 @@ static void __cdecl DirectUiSelectorOnSelectionChangeHook(void* self,
     }
 }
 
+// Fallback selection-change notification for post-2024 dui70.dll builds that
+// no longer expose Button::OnSelectedPropertyChanged or
+// Selector::OnSelectionChange as distinct symbols (see the comment above
+// g_legacyOrientationSelectionActive). Element::OnPropertyChanged is the
+// common base virtual both of those used to override, so it still fires for
+// the same combobox-item-selected event; this hook only has to isolate the
+// SelectedProp changes among everything else that flows through it and skip
+// entirely when the legacy hooks already cover the notification.
+static void __cdecl DirectUiElementOnPropertyChangedHook(void* element,
+                                                          const void* propertyInfo,
+                                                          int propId,
+                                                          void* newValue,
+                                                          void* oldValue) {
+    if (DirectUiElementOnPropertyChangedOriginal) {
+        DirectUiElementOnPropertyChangedOriginal(element, propertyInfo, propId,
+                                                  newValue, oldValue);
+    }
+    if (g_legacyOrientationSelectionActive.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (!g_dllVerifiedOk.load(std::memory_order_acquire) ||
+        g_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (!DirectUiElementSelectedProp ||
+        propertyInfo != DirectUiElementSelectedProp()) {
+        return;
+    }
+    try {
+        if (TryHandleDisplayHelpLink(element)) return;
+        HandleOrientationUiEvent(element);
+    } catch (...) {
+        Wh_Log(L"Display orientation: exception contained in "
+               L"OnPropertyChanged fallback hook");
+    }
+}
+
 // Resolve every dui70.dll symbol this mod needs in ONE HookSymbols call.
 // WindhawkUtils caches resolved symbols per module; calling it twice for the
 // same module (as the former separate radio/orientation installers did)
@@ -9676,6 +10609,27 @@ static void __cdecl DirectUiSelectorOnSelectionChangeHook(void* self,
 // targets, so a single pass is both faster and the only correct ordering.
 static bool InstallDui70SymbolHooks(HMODULE dui70) {
     if (!dui70) return false;
+
+    // Version-aware symbol selection (problem #2 / #5 of the 24H2 report).
+    // Windows 10 builds of dui70.dll (10240-19045) kept the 2015 DirectUI
+    // export surface: Button::OnSelectedPropertyChanged,
+    // Selector::OnSelectionChange, Element::GetFirstChild/GetNextSibling all
+    // exist as distinct linkable symbols. Windows 11 24H2 (26100+) removed
+    // them; only the base Element::OnPropertyChanged virtual plus
+    // GetImmediateChild/GetIndex/SelectedProp survive. BOTH tables are still
+    // resolved as optional on every OS: the OS build is used for logging and
+    // expectation-checking, while the dui70.dll build actually loaded decides
+    // which generation links (a servicing update can back-port the new DLL to
+    // an older OS, and symbol resolution is the only ground truth).
+    const bool isWin11_24H2 = IsWindows11_24H2OrLater();
+    const bool isWin10 = IsWindows10();
+    LogWindowsVersion();
+    Wh_Log(L"Display dui70: expecting %s symbol generation "
+           L"(win10=%d win11_24h2=%d)",
+           isWin11_24H2 ? L"post-2024 (OnPropertyChanged fallback)"
+                        : L"legacy (Button/Selector overrides)",
+           isWin10, isWin11_24H2);
+
     WindhawkUtils::SYMBOL_HOOK dui70DllHooks[] = {
         // --- Classic DPI radio (Element accessors + CCPushButton) ---
         {{L"StrToID"},
@@ -9692,6 +10646,16 @@ static bool InstallDui70SymbolHooks(HMODULE dui70) {
          reinterpret_cast<void**>(&DirectUiElementFindDescendent)},
         {{L"public: long __cdecl DirectUI::Element::SetEnabled(bool)"},
          reinterpret_cast<void**>(&DirectUiElementSetEnabled)},
+        // Optional: refreshes the ActionButton caption after a resolution
+        // change (see RefreshResolutionActionCaption). Both known manglings
+        // are tried; if neither resolves the caption simply is not live-
+        // refreshed, with no other functional loss.
+        {{L"public: long __cdecl DirectUI::Element::SetContentString("
+          L"unsigned short const *)",
+          L"public: long __cdecl DirectUI::Element::SetContentString("
+          L"unsigned short *)"},
+         reinterpret_cast<void**>(&DirectUiElementSetContentString), nullptr,
+         true},
         {{L"public: virtual void __cdecl "
            L"DirectUI::CCPushButton::OnSelectedPropertyChanged(void)"},
          reinterpret_cast<void**>(
@@ -9722,19 +10686,90 @@ static bool InstallDui70SymbolHooks(HMODULE dui70) {
           L"DirectUI::Element::GetNext(void)"},
          reinterpret_cast<void**>(&DirectUiElementGetNextSibling), nullptr,
          true},
+        // --- Post-2024 fallback API (see comment above
+        // g_legacyOrientationSelectionActive). All optional: on a build
+        // where the legacy symbols above resolved, these simply stay null
+        // and the fallback hook self-disables at runtime.
+        {{L"public: class DirectUI::Element * __cdecl "
+          L"DirectUI::Element::GetImmediateChild(class DirectUI::Element *)"},
+         reinterpret_cast<void**>(&DirectUiElementGetImmediateChild), nullptr,
+         true},
+        {{L"public: int __cdecl DirectUI::Element::GetIndex(void)"},
+         reinterpret_cast<void**>(&DirectUiElementGetIndex), nullptr, true},
+        {{L"public: static struct DirectUI::PropertyInfo const * __cdecl "
+          L"DirectUI::Element::SelectedProp(void)"},
+         reinterpret_cast<void**>(&DirectUiElementSelectedProp), nullptr,
+         true},
+        {{L"public: virtual void __cdecl "
+          L"DirectUI::Element::OnPropertyChanged(struct "
+          L"DirectUI::PropertyInfo *,int,class DirectUI::Value *,class "
+          L"DirectUI::Value *)"},
+         reinterpret_cast<void**>(&DirectUiElementOnPropertyChangedOriginal),
+         reinterpret_cast<void*>(DirectUiElementOnPropertyChangedHook), true},
     };
     const bool installed =
         WindhawkUtils::HookSymbols(dui70, dui70DllHooks, ARRAYSIZE(dui70DllHooks));
     g_directDpiRadioHookActive.store(installed, std::memory_order_release);
+
+    // Pick the orientation-selection API generation this dui70.dll build
+    // actually provides. "Legacy" needs both per-class override hooks;
+    // "fallback" needs the base OnPropertyChanged hook plus SelectedProp and
+    // at least one child-walk primitive. If somehow neither resolved, the
+    // classic DPI radio feature (which never depended on any of this) keeps
+    // working; only the Screen Resolution orientation combo stays inert,
+    // same as today when showOrientationPanel finds nothing to hook.
+    const bool legacyAvailable = DirectUiButtonSelectedChangedOriginal &&
+                                 DirectUiSelectorOnSelectionChangeOriginal;
+    const bool fallbackAvailable =
+        DirectUiElementOnPropertyChangedOriginal &&
+        DirectUiElementSelectedProp &&
+        (DirectUiElementGetImmediateChild || DirectUiElementGetFirstChild);
+    g_legacyOrientationSelectionActive.store(legacyAvailable,
+                                             std::memory_order_release);
+
+    const wchar_t* orientationApi = legacyAvailable
+                                        ? L"legacy"
+                                        : (fallbackAvailable ? L"fallback"
+                                                              : L"unavailable");
+
+    // Expectation check: mismatches are logged loudly because they are the
+    // first symptom of another dui70.dll symbol-surface change (as happened
+    // with 24H2). The mod still keeps working through whichever generation
+    // resolved; this log line exists so a future report can be diagnosed
+    // from the log alone.
+    if (isWin11_24H2 && legacyAvailable) {
+        Wh_Log(L"Display dui70: NOTE - Windows 11 24H2+ detected but the "
+               L"legacy Button/Selector symbols resolved anyway (Microsoft "
+               L"restored them or this dui70.dll is older than the OS)");
+    } else if (!isWin11_24H2 && !legacyAvailable && fallbackAvailable) {
+        Wh_Log(L"Display dui70: NOTE - pre-24H2 Windows but only the "
+               L"post-2024 symbol generation resolved (back-ported "
+               L"dui70.dll); using the OnPropertyChanged fallback");
+    } else if (!legacyAvailable && !fallbackAvailable) {
+        Wh_Log(L"Display dui70: WARNING - neither symbol generation "
+               L"resolved on %s (build %u). Orientation combo and Apply "
+               L"interception stay inert; the DPI radio path (dpiRadio/"
+               L"getSel) is unaffected. This usually means a new dui70.dll "
+               L"symbol surface: re-run the PDB dump for this build.",
+               DescribeWindowsFamily(), GetWindowsVersionInfo().build);
+    }
+
     Wh_Log(L"Display dui70 hooks %s "
-           L"(dpiRadio=%d button=%d selector=%d getSel=%d child=%d sibling=%d)",
+           L"(dpiRadio=%d button=%d selector=%d getSel=%d child=%d "
+           L"sibling=%d | orientationApi=%s propChanged=%d selectedProp=%d "
+           L"immediateChild=%d index=%d)",
            installed ? L"scheduled" : L"failed",
            DirectUiPushButtonSelectedChangedOriginal != nullptr,
            DirectUiButtonSelectedChangedOriginal != nullptr,
            DirectUiSelectorOnSelectionChangeOriginal != nullptr,
            DirectUiSelectorGetSelection != nullptr,
            DirectUiElementGetFirstChild != nullptr,
-           DirectUiElementGetNextSibling != nullptr);
+           DirectUiElementGetNextSibling != nullptr,
+           orientationApi,
+           DirectUiElementOnPropertyChangedOriginal != nullptr,
+           DirectUiElementSelectedProp != nullptr,
+           DirectUiElementGetImmediateChild != nullptr,
+           DirectUiElementGetIndex != nullptr);
     return installed;
 }
 
@@ -9996,6 +11031,63 @@ static SliderGeometry QueryResolutionSliderGeometry(HWND hwnd, HWND trackbar) {
                   std::max(6, static_cast<int>(tb.right - tb.left) / 4);
     g.valid = usable > 0;
     return g;
+}
+
+static bool GetCachedResolutionModes(HWND hwnd,
+                                     std::vector<DisplayModePair>& modes,
+                                     DEVMODEW& raw, bool& haveRaw);
+
+// Windows 7 behavior the 1511 provider lost on modern dui70: while the user
+// moves the resolution slider, the combobox opener (ActionButton) caption
+// follows the SELECTED mode immediately - not only after Apply. The Win32
+// subclass calls this on every WM_VSCROLL/WM_HSCROLL: the trackbar position
+// is mapped to the enumerated mode list with the exact same sampling rule
+// the tick labels use (tick 0 = top = highest resolution), formatted from
+// the authenticated catalog and pushed into the DirectUI element captured by
+// the last ActionButton event (see g_resolutionActionButton). Everything is
+// best-effort: without the optional SetContentString symbol or a captured
+// button the caption simply keeps the provider's behavior.
+static void UpdateResolutionCaptionFromSlider(HWND hwnd) {
+    if (!DirectUiElementSetContentString) return;
+    void* button = g_resolutionActionButton;
+    if (!button) return;
+
+    HWND trackbar = FindResolutionTrackbar(hwnd);
+    if (!trackbar) return;
+    const int rangeMin =
+        static_cast<int>(SendMessageW(trackbar, TBM_GETRANGEMIN, 0, 0));
+    const int rangeMax =
+        static_cast<int>(SendMessageW(trackbar, TBM_GETRANGEMAX, 0, 0));
+    const int ticks = rangeMax - rangeMin + 1;
+    if (ticks < 2) return;
+    const int tick =
+        static_cast<int>(SendMessageW(trackbar, TBM_GETPOS, 0, 0)) - rangeMin;
+    if (tick < 0 || tick >= ticks) return;
+
+    std::vector<DisplayModePair> modes;
+    DEVMODEW raw{};
+    bool haveRaw = false;
+    if (!GetCachedResolutionModes(hwnd, modes, raw, haveRaw)) return;
+    const int n = static_cast<int>(modes.size());
+    if (n < 1) return;
+
+    // Same sampling as DrawResolutionSliderLabels: labels follow the ticks.
+    const int modeIndex =
+        (ticks == n)
+            ? tick
+            : std::min(n - 1, MulDiv(tick, n - 1, std::max(1, ticks - 1)));
+    const DisplayModePair& mode = modes[modeIndex];
+    const bool isRecommended = haveRaw &&
+        static_cast<DWORD>(mode.w) == raw.dmPelsWidth &&
+        static_cast<DWORD>(mode.h) == raw.dmPelsHeight;
+    const wchar_t* fmt = GetEmbeddedTranslation(isRecommended ? 565 : 564);
+    if (!fmt) return;
+    wchar_t text[96] = {};
+    swprintf_s(text, ARRAYSIZE(text), fmt, mode.w, mode.h);
+    if (!text[0]) return;
+
+    DirectUiElementSetContentString(
+        button, reinterpret_cast<const unsigned short*>(text));
 }
 
 // EnumDisplaySettingsEx + one CDS_TEST per mode is far too expensive to run on
@@ -10437,6 +11529,13 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
             case WM_DISPLAYCHANGE:
                 // Only a real mode change can alter the list itself.
                 InvalidateResolutionModeCache(hwnd);
+                // The ActionButton caption ("detected resolution") is a
+                // DirectUI element the provider does not re-populate after a
+                // mode change; mark it stale so the next DirectUI event on
+                // the restored page re-formats it (see
+                // RefreshResolutionActionCaption).
+                g_resolutionCaptionDirty.store(true,
+                                               std::memory_order_release);
                 InvalidateRect(hwnd, nullptr, TRUE);
                 break;
             case WM_SIZE:
@@ -10448,9 +11547,16 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
                 break;
             case WM_HSCROLL:
             case WM_VSCROLL:
+                // Windows 7 behavior: the combobox opener's caption follows
+                // the slider selection immediately, before Apply.
+                UpdateResolutionCaptionFromSlider(hwnd);
                 InvalidateRect(hwnd, nullptr, FALSE);
                 break;
             case WM_NCDESTROY:
+                // The DirectUI page owning the captured ActionButton dies
+                // with this control; drop the pointer so a later slider
+                // event can never dereference a destroyed element.
+                g_resolutionActionButton = nullptr;
                 InvalidateResolutionModeCache(hwnd);
                 RemovePropW(hwnd, kResCtlOrigProcProp);
                 RemovePropW(hwnd, kResCtlPaintingProp);
@@ -11435,6 +12541,53 @@ BOOL Wh_ModInit(void) {
             return FALSE;
         }
         Wh_Log(L"Display Restorer startup phase 1/4: architecture accepted");
+        // Log the real OS build up front (RtlGetVersion, not the
+        // compatibility-shimmed GetVersionExW) so every later decision -
+        // dui70 symbol generation, DPI sign-out message, 24H2 quirks - can
+        // be correlated from the log alone.
+        LogWindowsVersion();
+
+        // Sanity check: this mod restores Control Panel pages, so the
+        // classic Control Panel infrastructure must actually exist in this
+        // system. Verify the Control Panel folder CLSID registration and
+        // the presence of control.exe in System32. On any stock Windows 10
+        // or 11 both checks pass trivially; they fail only on stripped-down
+        // images (heavily debloated LTSC/Tiny-style builds) where activating
+        // the mod would produce undefined behavior in the shell. Declining
+        // to activate on such systems avoids those anomalous conditions
+        // entirely, and the log explains exactly what was missing.
+        {
+            HKEY controlPanelClsid = nullptr;
+            const bool clsidRegistered =
+                RegOpenKeyExW(HKEY_CLASSES_ROOT,
+                              L"CLSID\\{26EE0668-A00A-44D7-9371-BEB064C98683}",
+                              0, KEY_READ, &controlPanelClsid) ==
+                ERROR_SUCCESS;
+            if (controlPanelClsid) RegCloseKey(controlPanelClsid);
+
+            wchar_t controlExePath[MAX_PATH] = {};
+            const UINT sysDirLen = GetSystemDirectoryW(
+                controlExePath, ARRAYSIZE(controlExePath));
+            bool controlExePresent = false;
+            if (sysDirLen > 0 && sysDirLen < ARRAYSIZE(controlExePath) &&
+                wcscat_s(controlExePath, ARRAYSIZE(controlExePath),
+                         L"\\control.exe") == 0) {
+                controlExePresent = GetFileAttributesW(controlExePath) !=
+                                    INVALID_FILE_ATTRIBUTES;
+            }
+if (!clsidRegistered || !controlExePresent) {
+    Wh_Log(L"╔════════════════════════════════════════════════════════════╗");
+    Wh_Log(L"║  SYSTEM ALERT - Control Panel components missing!         ║");
+    Wh_Log(L"╚════════════════════════════════════════════════════════════╝");
+    Wh_Log(L"  CLSID: [%s]  control.exe: [%s]", 
+           clsidRegistered ? L"OK" : L"NOT FOUND",
+           controlExePresent ? L"OK" : L"NOT FOUND");
+    Wh_Log(L"  >> The mod is DISABLED to prevent instability. <<");
+    Wh_Log(L"  No system modifications were made.");
+    return FALSE;
+}
+        }
+        Wh_Log(L"Display Restorer: Control Panel sanity check passed");
 
         InitClsidStrings();
         g_namespaceInjectionLogged.store(false);
@@ -11606,6 +12759,7 @@ BOOL Wh_ModInit(void) {
         }
         g_pendingClassicDpiPercent.store(0, std::memory_order_release);
         g_dpiApplyGeneration.store(0, std::memory_order_release);
+        g_dpiCommitInFlight.store(false, std::memory_order_release);
         g_shuttingDown.store(false, std::memory_order_release);
 
         // The setup worker starts in Wh_ModAfterInit so a cached provider cannot
@@ -11668,6 +12822,10 @@ void Wh_ModSettingsChanged(void) {
                 Wh_Log(L"Display localization resource remap after a settings "
                        L"change failed; using the verified provider fallback");
             }
+            // Keep the category task links in the newly selected language.
+            // Optional like at setup: a failure only leaves the previous
+            // file (or the "Internal" fallback) in place.
+            BuildCategoryTasksXmlFile(StoreDir());
         }
     } catch (...) {
         // Reloading would just re-run the same code with the same inputs, so
