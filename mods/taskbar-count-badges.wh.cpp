@@ -8,7 +8,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lcomctl32
 // ==/WindhawkMod==
 // Copyright (C) 2026 digART
 //
@@ -229,6 +229,7 @@ ordering, or application behavior.
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
@@ -238,11 +239,14 @@ ordering, or application behavior.
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cwctype>
 #include <limits>
 #include <list>
 #include <string>
+#include <vector>
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -330,17 +334,35 @@ std::atomic<bool> g_deferredCountRefreshQueued = false;
 std::atomic<DWORD> g_taskbarThreadId = 0;
 uint64_t g_settingsGeneration = 0;
 
-std::atomic<HHOOK> g_taskbarGetMessageHook = nullptr;
+std::atomic<HWND> g_taskbarSubclassWindow = nullptr;
 UINT g_deferredCountRefreshMessage = 0;
 
 struct TrackedButton {
     void* identity = nullptr;
     winrt::weak_ref<FrameworkElement> element;
+    winrt::weak_ref<Controls::Border> badge;
+    winrt::weak_ref<FrameworkElement> dotIcon;
+    winrt::weak_ref<Controls::Grid> dotHost;
+    winrt::weak_ref<UIElement> dotPointerSource;
+    winrt::event_token dotLayoutUpdatedToken{};
+    winrt::Windows::Foundation::IInspectable dotPointerMovedHandler{nullptr};
+    bool dotLayoutUpdatedAttached = false;
+    bool dotPointerMovedAttached = false;
     unsigned int lastAppliedCount = std::numeric_limits<unsigned int>::max();
     uint64_t lastSettingsGeneration = 0;
 };
 
 std::list<TrackedButton> g_trackedButtons;
+
+using DotAnimationClock = std::chrono::steady_clock;
+constexpr auto kDotAnimationTrackingTimeout = std::chrono::seconds(3);
+constexpr int kDotGeometryStableFrameThreshold = 12;
+
+winrt::event_token g_dotRenderingToken{};
+bool g_dotRenderingSubscribed = false;
+bool g_dotRenderingCallbackActive = false;
+int g_dotGeometryStableFrames = 0;
+DotAnimationClock::time_point g_dotAnimationLastActivity{};
 
 // -----------------------------------------------------------------------------
 // Taskbar.View symbols used for direct group counts
@@ -567,6 +589,7 @@ Media::SolidColorBrush CreateBrush(const std::wstring& value,
 // -----------------------------------------------------------------------------
 
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name);
+unsigned int GetVisibleDotCount(unsigned int count);
 
 void ApplyNumberBadgePosition(Controls::Border badge) {
     HorizontalAlignment horizontal = HorizontalAlignment::Right;
@@ -623,10 +646,10 @@ void ApplyNumberBadgePosition(Controls::Border badge) {
     transform.Y(static_cast<double>(g_settings.badgeOffsetY));
 }
 
-void ApplyDotPosition(Controls::Border badge) {
-    badge.VerticalAlignment(VerticalAlignment::Center);
-    badge.Margin(Thickness{});
-
+bool RefreshDotPosition(Controls::Border badge,
+                        FrameworkElement icon,
+                        Controls::Grid dotHost,
+                        unsigned int count) {
     auto transform =
         badge.RenderTransform().try_as<Media::TranslateTransform>();
     if (!transform) {
@@ -634,46 +657,43 @@ void ApplyDotPosition(Controls::Border badge) {
         badge.RenderTransform(transform);
     }
 
-    // Anchor the dots to the actual app icon instead of to IconPanel's edge.
-    // IconPanel has side padding in the stock taskbar, but its geometry can be
-    // changed by taskbar layout/styling mods. Using the Icon child keeps the
-    // dots beside the icon rather than on top of it.
-    auto iconPanelElement = badge.Parent().try_as<FrameworkElement>();
-    auto icon = iconPanelElement
-                    ? FindChildByName(iconPanelElement, L"Icon")
-                    : nullptr;
+    double iconWidth = icon.ActualWidth();
+    double iconHeight = icon.ActualHeight();
+    auto iconBounds = icon.TransformToVisual(dotHost).TransformBounds(
+        winrt::Windows::Foundation::Rect{0, 0,
+                                         static_cast<float>(iconWidth),
+                                         static_cast<float>(iconHeight)});
 
-    if (icon && icon.ActualWidth() > 0) {
-        auto iconTransform = icon.TransformToVisual(iconPanelElement);
-        auto iconTopLeft = iconTransform.TransformPoint(
-            winrt::Windows::Foundation::Point{0, 0});
-        constexpr double kDotGap = 2.0;
-
-        if (g_settings.dotPosition == DotPosition::Left) {
-            // Anchor the badge's RIGHT edge to the icon's left edge. Don't
-            // assume the badge width equals dotSize: XAML layout/DPI rounding
-            // can make the realized width differ slightly.
-            badge.HorizontalAlignment(HorizontalAlignment::Right);
-            transform.X(iconTopLeft.X - iconPanelElement.ActualWidth() -
-                        kDotGap);
-        } else {
-            // Anchor the badge's LEFT edge to the icon's right edge.
-            badge.HorizontalAlignment(HorizontalAlignment::Left);
-            transform.X(iconTopLeft.X + icon.ActualWidth() + kDotGap);
-        }
-    } else {
-        // Fallback for unexpected taskbar templates where the Icon element
-        // can't be resolved. Keep the indicator inside IconPanel.
-        if (g_settings.dotPosition == DotPosition::Left) {
-            badge.HorizontalAlignment(HorizontalAlignment::Left);
-            transform.X(2.0);
-        } else {
-            badge.HorizontalAlignment(HorizontalAlignment::Right);
-            transform.X(-2.0);
-        }
+    constexpr double kDotGap = 2.0;
+    constexpr double kDotSpacing = 2.0;
+    double dotSize = static_cast<double>(g_settings.dotSize);
+    unsigned int dotCount = GetVisibleDotCount(count);
+    double dotStackHeight = dotCount * dotSize;
+    if (dotCount > 1) {
+        dotStackHeight += (dotCount - 1) * kDotSpacing;
     }
 
-    transform.Y(0.0);
+    double left = g_settings.dotPosition == DotPosition::Left
+                      ? iconBounds.X - kDotGap - dotSize
+                      : iconBounds.X + iconBounds.Width + kDotGap;
+    double top = iconBounds.Y + (iconBounds.Height - dotStackHeight) / 2.0;
+    bool changed = std::abs(transform.X() - left) > 0.01 ||
+                   std::abs(transform.Y() - top) > 0.01;
+    if (changed) {
+        transform.X(left);
+        transform.Y(top);
+    }
+    return changed;
+}
+
+void ApplyDotPosition(Controls::Border badge,
+                      FrameworkElement icon,
+                      Controls::Grid dotHost,
+                      unsigned int count) {
+    badge.HorizontalAlignment(HorizontalAlignment::Left);
+    badge.VerticalAlignment(VerticalAlignment::Top);
+    badge.Margin(Thickness{});
+    RefreshDotPosition(badge, icon, dotHost, count);
 }
 
 // -----------------------------------------------------------------------------
@@ -782,6 +802,26 @@ FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     return nullptr;
 }
 
+Controls::Grid FindDotHostGrid(FrameworkElement taskListButton,
+                               FrameworkElement iconPanel) {
+    FrameworkElement current = taskListButton;
+    for (int depth = 0; current && depth < 20; depth++) {
+        if (current.Name() == L"RootGrid") {
+            auto rootGrid = current.try_as<Controls::Grid>();
+            if (rootGrid && !rootGrid.Clip() &&
+                rootGrid.ActualWidth() > iconPanel.ActualWidth()) {
+                return rootGrid;
+            }
+            return nullptr;
+        }
+
+        auto parent = Media::VisualTreeHelper::GetParent(current);
+        current = parent ? parent.try_as<FrameworkElement>() : nullptr;
+    }
+
+    return nullptr;
+}
+
 // -----------------------------------------------------------------------------
 // Badge text / dot content
 // -----------------------------------------------------------------------------
@@ -842,7 +882,10 @@ void RebuildDots(Controls::StackPanel dotStack, unsigned int count) {
 // Apply visual style
 // -----------------------------------------------------------------------------
 
-void ApplyBadgeVisualStyle(Controls::Border badge, unsigned int count) {
+void ApplyBadgeVisualStyle(Controls::Border badge,
+                           unsigned int count,
+                           FrameworkElement icon = nullptr,
+                           Controls::Grid dotHost = nullptr) {
     auto circleVisual = FindChildByName(badge, L"WindhawkCircleVisual")
                             .try_as<Shapes::Ellipse>();
 
@@ -988,8 +1031,6 @@ void ApplyBadgeVisualStyle(Controls::Border badge, unsigned int count) {
     // VERTICAL DOTS
     // ---------------------------------------------------------------------
 
-    ApplyDotPosition(badge);
-
     circleVisual.Visibility(Visibility::Collapsed);
 
     badgeVisual.Visibility(Visibility::Collapsed);
@@ -1015,20 +1056,221 @@ void ApplyBadgeVisualStyle(Controls::Border badge, unsigned int count) {
     dotStack.VerticalAlignment(VerticalAlignment::Center);
 
     RebuildDots(dotStack, count);
+    ApplyDotPosition(badge, icon, dotHost, count);
 }
 // -----------------------------------------------------------------------------
 // Badge
 // -----------------------------------------------------------------------------
 
-void RemoveBadgeFromPanel(Controls::Panel iconPanel, Controls::Border badge) {
+void RemoveBadgeFromPanel(Controls::Panel panel, Controls::Border badge) {
     uint32_t index = 0;
-    auto children = iconPanel.Children();
+    auto children = panel.Children();
     if (children.IndexOf(badge, index)) {
         children.RemoveAt(index);
     }
 }
 
-Controls::Border CreateCountBadge(Controls::Panel iconPanel) {
+void RemoveBadgeFromCurrentParent(Controls::Border badge) {
+    if (auto parent = badge.Parent().try_as<Controls::Panel>()) {
+        RemoveBadgeFromPanel(parent, badge);
+    }
+}
+
+bool HasActiveDotTracking() {
+    return std::any_of(g_trackedButtons.begin(), g_trackedButtons.end(),
+                       [](TrackedButton const& item) {
+                           return item.dotLayoutUpdatedAttached ||
+                                  item.dotPointerMovedAttached;
+                       });
+}
+
+void StopDotGeometryTracking() {
+    if (g_dotRenderingSubscribed) {
+        try {
+            Media::CompositionTarget::Rendering(g_dotRenderingToken);
+        } catch (...) {
+        }
+        g_dotRenderingToken = {};
+        g_dotRenderingSubscribed = false;
+    }
+    g_dotGeometryStableFrames = 0;
+    g_dotAnimationLastActivity = {};
+}
+
+void OnDotGeometryRendering(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    if (g_dotRenderingCallbackActive) {
+        return;
+    }
+    g_dotRenderingCallbackActive = true;
+    struct CallbackGuard {
+        ~CallbackGuard() {
+            g_dotRenderingCallbackActive = false;
+        }
+    } callbackGuard;
+
+    if (g_unloading || g_settings.displayStyle != DisplayStyle::Dots ||
+        !HasActiveDotTracking()) {
+        StopDotGeometryTracking();
+        return;
+    }
+
+    auto now = DotAnimationClock::now();
+    if (g_dotAnimationLastActivity != DotAnimationClock::time_point{} &&
+        now - g_dotAnimationLastActivity >= kDotAnimationTrackingTimeout) {
+        StopDotGeometryTracking();
+        return;
+    }
+
+    struct DotGeometrySnapshot {
+        winrt::weak_ref<Controls::Border> badge;
+        winrt::weak_ref<FrameworkElement> icon;
+        winrt::weak_ref<Controls::Grid> host;
+        unsigned int count;
+    };
+
+    std::vector<DotGeometrySnapshot> snapshot;
+    snapshot.reserve(g_trackedButtons.size());
+    for (auto const& item : g_trackedButtons) {
+        if (!item.dotLayoutUpdatedAttached &&
+            !item.dotPointerMovedAttached) {
+            continue;
+        }
+        snapshot.push_back({item.badge, item.dotIcon, item.dotHost,
+                            item.lastAppliedCount});
+    }
+
+    bool anyValidGeometry = false;
+    bool anyPositionChanged = false;
+    for (auto const& item : snapshot) {
+        auto badge = item.badge.get();
+        auto icon = item.icon.get();
+        auto host = item.host.get();
+        if (!badge || !icon || !host ||
+            item.count == std::numeric_limits<unsigned int>::max()) {
+            continue;
+        }
+
+        try {
+            anyPositionChanged |=
+                RefreshDotPosition(badge, icon, host, item.count);
+            anyValidGeometry = true;
+        } catch (...) {
+        }
+    }
+
+    if (!anyValidGeometry) {
+        StopDotGeometryTracking();
+        return;
+    }
+
+    g_dotGeometryStableFrames =
+        anyPositionChanged ? 0 : g_dotGeometryStableFrames + 1;
+    if (g_dotGeometryStableFrames >= kDotGeometryStableFrameThreshold) {
+        StopDotGeometryTracking();
+    }
+}
+
+void StartDotGeometryTracking() {
+    if (g_unloading || g_settings.displayStyle != DisplayStyle::Dots ||
+        !HasActiveDotTracking()) {
+        return;
+    }
+
+    g_dotAnimationLastActivity = DotAnimationClock::now();
+    g_dotGeometryStableFrames = 0;
+    if (!g_dotRenderingSubscribed) {
+        g_dotRenderingToken = Media::CompositionTarget::Rendering(
+            OnDotGeometryRendering);
+        g_dotRenderingSubscribed = true;
+    }
+}
+
+void DetachDotTrackingHandlers(TrackedButton& tracked) {
+    if (tracked.dotLayoutUpdatedAttached) {
+        if (auto icon = tracked.dotIcon.get()) {
+            try {
+                icon.LayoutUpdated(tracked.dotLayoutUpdatedToken);
+            } catch (...) {
+            }
+        }
+    }
+    if (tracked.dotPointerMovedAttached) {
+        if (auto source = tracked.dotPointerSource.get()) {
+            try {
+                source.RemoveHandler(UIElement::PointerMovedEvent(),
+                                     tracked.dotPointerMovedHandler);
+            } catch (...) {
+            }
+        }
+    }
+
+    tracked.dotIcon = {};
+    tracked.dotHost = {};
+    tracked.dotPointerSource = {};
+    tracked.dotLayoutUpdatedToken = {};
+    tracked.dotPointerMovedHandler = nullptr;
+    tracked.dotLayoutUpdatedAttached = false;
+    tracked.dotPointerMovedAttached = false;
+
+    if (!HasActiveDotTracking()) {
+        StopDotGeometryTracking();
+    }
+}
+
+void AttachDotTrackingHandlers(TrackedButton& tracked,
+                               FrameworkElement taskListButton,
+                               FrameworkElement icon,
+                               Controls::Grid dotHost) {
+    auto existingIcon = tracked.dotIcon.get();
+    auto existingHost = tracked.dotHost.get();
+    auto existingPointerSource = tracked.dotPointerSource.get();
+    if (tracked.dotLayoutUpdatedAttached &&
+        tracked.dotPointerMovedAttached && existingIcon && existingHost &&
+        existingPointerSource &&
+        winrt::get_abi(existingIcon) == winrt::get_abi(icon) &&
+        winrt::get_abi(existingHost) == winrt::get_abi(dotHost) &&
+        winrt::get_abi(existingPointerSource) ==
+            winrt::get_abi(taskListButton)) {
+        StartDotGeometryTracking();
+        return;
+    }
+
+    DetachDotTrackingHandlers(tracked);
+
+    auto pointerSource = taskListButton.try_as<UIElement>();
+    if (!pointerSource) {
+        return;
+    }
+
+    try {
+        tracked.dotIcon = winrt::make_weak(icon);
+        tracked.dotHost = winrt::make_weak(dotHost);
+        tracked.dotPointerSource = winrt::make_weak(pointerSource);
+        tracked.dotLayoutUpdatedToken = icon.LayoutUpdated(
+            [](winrt::Windows::Foundation::IInspectable const&,
+               winrt::Windows::Foundation::IInspectable const&) {
+                StartDotGeometryTracking();
+            });
+        tracked.dotLayoutUpdatedAttached = true;
+
+        tracked.dotPointerMovedHandler =
+            winrt::box_value(Input::PointerEventHandler{
+                [](winrt::Windows::Foundation::IInspectable const&,
+                   Input::PointerRoutedEventArgs const&) {
+                    StartDotGeometryTracking();
+                }});
+        pointerSource.AddHandler(UIElement::PointerMovedEvent(),
+                                 tracked.dotPointerMovedHandler, true);
+        tracked.dotPointerMovedAttached = true;
+        StartDotGeometryTracking();
+    } catch (...) {
+        DetachDotTrackingHandlers(tracked);
+    }
+}
+
+Controls::Border CreateCountBadge(Controls::Panel parent) {
     PCWSTR xaml =
         LR"(
 <Border
@@ -1076,14 +1318,20 @@ Controls::Border CreateCountBadge(Controls::Panel iconPanel) {
 
     Controls::Canvas::SetZIndex(badge, 100);
 
-    iconPanel.Children().Append(badge);
+    parent.Children().Append(badge);
 
     return badge;
 }
 
-bool UpdateCountBadge(FrameworkElement taskListButton, unsigned int count) {
+bool UpdateCountBadge(TrackedButton& tracked,
+                      FrameworkElement taskListButton,
+                      unsigned int count) {
     if (g_unloading) {
         return false;
+    }
+
+    if (g_settings.displayStyle != DisplayStyle::Dots) {
+        DetachDotTrackingHandlers(tracked);
     }
 
     auto iconPanelElement = FindChildByName(taskListButton, L"IconPanel");
@@ -1098,8 +1346,21 @@ bool UpdateCountBadge(FrameworkElement taskListButton, unsigned int count) {
         return false;
     }
 
-    auto badge = FindChildByName(iconPanelElement, L"WindhawkCountBadge")
-                     .try_as<Controls::Border>();
+    auto badge = tracked.badge.get();
+    if (badge && badge.Name() != L"WindhawkCountBadge") {
+        badge = nullptr;
+        tracked.badge = {};
+    }
+
+    auto iconPanelBadge =
+        FindChildByName(iconPanelElement, L"WindhawkCountBadge")
+            .try_as<Controls::Border>();
+    if (!badge) {
+        badge = iconPanelBadge;
+    } else if (iconPanelBadge &&
+               winrt::get_abi(iconPanelBadge) != winrt::get_abi(badge)) {
+        RemoveBadgeFromPanel(iconPanel, iconPanelBadge);
+    }
 
     // Rebuild badges created by older visual-layout versions.
     if (badge) {
@@ -1112,13 +1373,44 @@ bool UpdateCountBadge(FrameworkElement taskListButton, unsigned int count) {
         auto dotStack = FindChildByName(badge, L"WindhawkDotStack");
 
         if (!circleVisual || !badgeVisual || !countText || !dotStack) {
-            RemoveBadgeFromPanel(iconPanel, badge);
+            RemoveBadgeFromCurrentParent(badge);
 
             badge = nullptr;
+            tracked.badge = {};
         }
     }
 
+    FrameworkElement icon = nullptr;
+    Controls::Grid dotHost = nullptr;
+    Controls::Panel desiredParent = iconPanel;
+    if (g_settings.displayStyle == DisplayStyle::Dots) {
+        icon = FindChildByName(iconPanelElement, L"Icon");
+        dotHost = FindDotHostGrid(taskListButton, iconPanelElement);
+        if (!icon || icon.ActualWidth() <= 0 || icon.ActualHeight() <= 0 ||
+            !dotHost) {
+            DetachDotTrackingHandlers(tracked);
+            if (badge) {
+                badge.Visibility(Visibility::Collapsed);
+            }
+            return false;
+        }
+        desiredParent = dotHost;
+    }
+
+    if (badge) {
+        auto currentParent = badge.Parent().try_as<Controls::Panel>();
+        if (!currentParent ||
+            winrt::get_abi(currentParent) != winrt::get_abi(desiredParent)) {
+            if (currentParent) {
+                RemoveBadgeFromPanel(currentParent, badge);
+            }
+            desiredParent.Children().Append(badge);
+        }
+        tracked.badge = winrt::make_weak(badge);
+    }
+
     if (count < static_cast<unsigned int>(g_settings.minimumCount)) {
+        DetachDotTrackingHandlers(tracked);
         if (badge) {
             badge.Visibility(Visibility::Collapsed);
         }
@@ -1127,10 +1419,15 @@ bool UpdateCountBadge(FrameworkElement taskListButton, unsigned int count) {
     }
 
     if (!badge) {
-        badge = CreateCountBadge(iconPanel);
+        badge = CreateCountBadge(desiredParent);
+        tracked.badge = winrt::make_weak(badge);
     }
 
-    ApplyBadgeVisualStyle(badge, count);
+    ApplyBadgeVisualStyle(badge, count, icon, dotHost);
+
+    if (g_settings.displayStyle == DisplayStyle::Dots) {
+        AttachDotTrackingHandlers(tracked, taskListButton, icon, dotHost);
+    }
 
     badge.Visibility(Visibility::Visible);
 
@@ -1143,6 +1440,10 @@ bool UpdateCountBadge(FrameworkElement taskListButton, unsigned int count) {
 void PruneDeadTrackedButtons() {
     for (auto it = g_trackedButtons.begin(); it != g_trackedButtons.end();) {
         if (!it->element.get()) {
+            DetachDotTrackingHandlers(*it);
+            if (auto badge = it->badge.get()) {
+                RemoveBadgeFromCurrentParent(badge);
+            }
             it = g_trackedButtons.erase(it);
         } else {
             ++it;
@@ -1165,7 +1466,12 @@ TrackedButton* TrackTaskbarButton(FrameworkElement element) {
         // this identity is already gone, treat this as a fresh button and
         // reset the cached visual state.
         if (!existing->element.get()) {
+            DetachDotTrackingHandlers(*existing);
+            if (auto badge = existing->badge.get()) {
+                RemoveBadgeFromCurrentParent(badge);
+            }
             existing->element = winrt::make_weak(element);
+            existing->badge = {};
             existing->lastAppliedCount =
                 std::numeric_limits<unsigned int>::max();
             existing->lastSettingsGeneration = 0;
@@ -1230,7 +1536,7 @@ void ApplyCountToTrackedButton(TrackedButton& item, unsigned int count) {
     item.lastSettingsGeneration = settingsGeneration;
 
     try {
-        if (!UpdateCountBadge(element, count)) {
+        if (!UpdateCountBadge(item, element, count)) {
             item.lastAppliedCount = previousCount;
             item.lastSettingsGeneration = previousGeneration;
         }
@@ -1257,19 +1563,23 @@ void ApplyCountToButton(FrameworkElement element) {
 }
 
 void RefreshAllTrackedButtons() {
-    // Prune before walking. TrackTaskbarButton doesn't prune, so XAML re-entry
-    // during this loop can't erase the element currently being visited.
     PruneDeadTrackedButtons();
 
-    for (auto& item : g_trackedButtons) {
-        auto element = item.element.get();
+    std::vector<winrt::weak_ref<FrameworkElement>> buttonSnapshot;
+    buttonSnapshot.reserve(g_trackedButtons.size());
+    for (auto const& item : g_trackedButtons) {
+        buttonSnapshot.push_back(item.element);
+    }
+
+    // Refresh through the element identity instead of retaining a list
+    // iterator/reference across XAML mutations. A nested refresh can prune or
+    // otherwise update the tracked list without invalidating this snapshot.
+    for (auto const& weakElement : buttonSnapshot) {
+        auto element = weakElement.get();
         if (!element) {
             continue;
         }
-
-        unsigned int count = 0;
-        bool haveCount = GetTaskbarButtonViewModelCount(element, &count);
-        ApplyCountToTrackedButton(item, haveCount ? count : 0);
+        ApplyCountToButton(element);
     }
 }
 
@@ -1526,82 +1836,84 @@ HWND FindWindowOnThread(DWORD threadId) {
 // Deferred count refresh
 // -----------------------------------------------------------------------------
 
-LRESULT CALLBACK TaskbarGetMessageHookProc(int code,
+LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd,
+                                           UINT message,
                                            WPARAM wParam,
-                                           LPARAM lParam) {
-    if (code >= 0 && wParam == PM_REMOVE && lParam) {
-        auto* message = reinterpret_cast<MSG*>(lParam);
-        if (g_deferredCountRefreshMessage &&
-            message->message == g_deferredCountRefreshMessage) {
-            // Consume the private thread message. The refresh now runs from the
-            // taskbar message loop, after the ViewModel getter/layout stack has
-            // returned, so XAML isn't mutated from inside the property getter.
-            message->message = WM_NULL;
-
-            if (!g_unloading) {
-                try {
-                    RefreshAllTrackedButtons();
-                } catch (...) {
-                    Wh_Log(L"Deferred count refresh failed");
-                }
+                                           LPARAM lParam,
+                                           DWORD_PTR) {
+    if (message == g_deferredCountRefreshMessage) {
+        if (!g_unloading) {
+            try {
+                RefreshAllTrackedButtons();
+            } catch (...) {
+                Wh_Log(L"Deferred count refresh failed");
             }
-
-            // Keep the refresh marked as queued until all XAML work finishes.
-            // Any ViewModelCount reads caused by that work are collapsed into
-            // this refresh instead of scheduling a feedback-loop refresh.
-            g_deferredCountRefreshQueued = false;
         }
+
+        // Keep the refresh marked as queued until all XAML work finishes.
+        // Getter notifications caused by that work collapse into this refresh.
+        g_deferredCountRefreshQueued = false;
+        return 0;
     }
 
-    return CallNextHookEx(g_taskbarGetMessageHook.load(), code, wParam, lParam);
+    if (message == WM_NCDESTROY &&
+        g_taskbarSubclassWindow.load() == hWnd) {
+        g_taskbarSubclassWindow = nullptr;
+        g_deferredCountRefreshQueued = false;
+    }
+
+    return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
-bool EnsureDeferredCountRefreshHookOnTaskbarThread() {
-    DWORD threadId = GetCurrentThreadId();
-    HHOOK existingHook = g_taskbarGetMessageHook.load();
+bool EnsureDeferredCountRefreshSubclass() {
+    if (g_unloading) {
+        return false;
+    }
 
-    if (existingHook && g_taskbarThreadId.load() == threadId) {
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd) {
+        return false;
+    }
+
+    HWND existingWindow = g_taskbarSubclassWindow.load();
+    if (existingWindow == taskbarWnd) {
+        g_taskbarThreadId =
+            GetWindowThreadProcessId(taskbarWnd, nullptr);
         return true;
     }
 
-    if (existingHook) {
-        UnhookWindowsHookEx(existingHook);
-        g_taskbarGetMessageHook = nullptr;
+    if (existingWindow) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            existingWindow, TaskbarWindowSubclassProc);
+        g_taskbarSubclassWindow = nullptr;
     }
 
-    g_taskbarThreadId = threadId;
-
-    if (!g_deferredCountRefreshMessage) {
-        g_deferredCountRefreshMessage = RegisterWindowMessageW(
-            L"Windhawk_DeferredCountRefresh_" WH_MOD_ID);
-        if (!g_deferredCountRefreshMessage) {
-            return false;
-        }
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            taskbarWnd, TaskbarWindowSubclassProc, 0)) {
+        return false;
     }
 
-    HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, TaskbarGetMessageHookProc,
-                                   nullptr, threadId);
-    g_taskbarGetMessageHook = hook;
-    return hook != nullptr;
+    g_taskbarThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
+    g_taskbarSubclassWindow = taskbarWnd;
+    return true;
 }
 
-void StopDeferredCountRefreshHook() {
-    HHOOK hook = g_taskbarGetMessageHook.exchange(nullptr);
-    if (hook) {
-        UnhookWindowsHookEx(hook);
-    }
-
+void StopDeferredCountRefreshSubclass() {
+    HWND taskbarWnd = g_taskbarSubclassWindow.exchange(nullptr);
     g_deferredCountRefreshQueued = false;
+    if (taskbarWnd) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            taskbarWnd, TaskbarWindowSubclassProc);
+    }
 }
 
 void QueueDeferredCountRefresh() {
-    if (g_unloading || !g_taskbarGetMessageHook.load() ||
-        !g_deferredCountRefreshMessage) {
+    if (g_unloading || !g_deferredCountRefreshMessage) {
         return;
     }
 
-    DWORD threadId = g_taskbarThreadId.load();
-    if (!threadId || threadId != GetCurrentThreadId()) {
+    HWND taskbarWnd = g_taskbarSubclassWindow.load();
+    if (!taskbarWnd) {
         return;
     }
 
@@ -1609,7 +1921,7 @@ void QueueDeferredCountRefresh() {
         return;
     }
 
-    if (!PostThreadMessageW(threadId, g_deferredCountRefreshMessage, 0, 0)) {
+    if (!PostMessageW(taskbarWnd, g_deferredCountRefreshMessage, 0, 0)) {
         g_deferredCountRefreshQueued = false;
         Wh_Log(L"Failed to queue deferred count refresh");
     }
@@ -1625,8 +1937,8 @@ struct ExistingButtonsInitContext {
 };
 
 void WINAPI InitializeExistingButtonsOnTaskbarThread(void*) {
-    if (!EnsureDeferredCountRefreshHookOnTaskbarThread()) {
-        Wh_Log(L"Failed to install deferred count refresh hook");
+    if (!EnsureDeferredCountRefreshSubclass()) {
+        Wh_Log(L"Failed to install deferred count refresh subclass");
     }
 
     ExistingButtonsInitContext context;
@@ -1697,7 +2009,7 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
 
     try {
-        EnsureDeferredCountRefreshHookOnTaskbarThread();
+        EnsureDeferredCountRefreshSubclass();
         void* taskListButtonIUnknownPtr = reinterpret_cast<void**>(pThis) + 3;
 
         winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
@@ -1717,6 +2029,9 @@ void __cdecl TaskListButton_UpdateVisualStates_Hook(void* pThis) {
         }
 
         ApplyCountToButton(element);
+        if (g_settings.displayStyle == DisplayStyle::Dots) {
+            StartDotGeometryTracking();
+        }
     } catch (...) {
         Wh_Log(L"TaskListButton update failed");
     }
@@ -1766,14 +2081,21 @@ void WINAPI ApplySettingsOnTaskbarThread(void*) {
 // -----------------------------------------------------------------------------
 
 void CleanupOnTaskbarThread() {
+    StopDotGeometryTracking();
     PruneDeadTrackedButtons();
 
     for (auto& item : g_trackedButtons) {
+        DetachDotTrackingHandlers(item);
         auto element = item.element.get();
+        auto badge = item.badge.get();
+        if (badge) {
+            RemoveBadgeFromCurrentParent(badge);
+            item.badge = {};
+        }
+
         if (!element) {
             continue;
         }
-
         auto iconPanelElement = FindChildByName(element, L"IconPanel");
         if (!iconPanelElement) {
             continue;
@@ -1784,20 +2106,16 @@ void CleanupOnTaskbarThread() {
             continue;
         }
 
-        auto badge = FindChildByName(iconPanelElement, L"WindhawkCountBadge")
-                         .try_as<Controls::Border>();
-        if (badge) {
-            RemoveBadgeFromPanel(iconPanel, badge);
+        auto iconPanelBadge =
+            FindChildByName(iconPanelElement, L"WindhawkCountBadge")
+                .try_as<Controls::Border>();
+        if (iconPanelBadge) {
+            RemoveBadgeFromPanel(iconPanel, iconPanelBadge);
         }
     }
 }
 
 void WINAPI CleanupOnTaskbarThreadProc(void*) {
-    // The WH_GETMESSAGE hook belongs to this taskbar UI thread. Remove it here
-    // synchronously so no hook callback can still be executing when the mod is
-    // unloaded.
-    StopDeferredCountRefreshHook();
-
     try {
         CleanupOnTaskbarThread();
         Wh_Log(L"Cleanup complete");
@@ -1950,8 +2268,12 @@ BOOL Wh_ModInit() {
     g_settingsReloadPending = false;
     g_deferredCountRefreshQueued = false;
     g_taskbarThreadId = 0;
-    g_taskbarGetMessageHook = nullptr;
-    g_deferredCountRefreshMessage = 0;
+    g_taskbarSubclassWindow = nullptr;
+    g_deferredCountRefreshMessage = RegisterWindowMessageW(
+        L"Windhawk_DeferredCountRefresh_" WH_MOD_ID);
+    if (!g_deferredCountRefreshMessage) {
+        return FALSE;
+    }
     g_trackedButtons.clear();
 
     LoadSettings();
@@ -2031,13 +2353,13 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"Before uninit");
     g_unloading = true;
     g_settingsReloadPending = false;
+    StopDeferredCountRefreshSubclass();
 
     DWORD taskbarThreadId = g_taskbarThreadId.load();
     HWND cleanupWnd = nullptr;
 
-    // Prefer Shell_TrayWnd while it still exists, but cleanup must not depend
-    // on it: the deferred WH_GETMESSAGE hook belongs to the taskbar UI thread
-    // and can outlive the visible taskbar window during Explorer teardown.
+    // Prefer Shell_TrayWnd while it still exists, with another window on the
+    // same taskbar UI thread as a cleanup-only fallback.
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (taskbarWnd) {
         DWORD windowThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
@@ -2051,15 +2373,9 @@ void Wh_ModBeforeUninit() {
     }
 
     if (!cleanupWnd) {
-        // If no deferred hook was ever installed, there is no callback that can
-        // survive the mod. Any XAML tree that has already lost all of its
-        // windows is no longer reachable for visual cleanup either.
-        if (!g_taskbarGetMessageHook.load()) {
-            g_trackedButtons.clear();
-            return;
-        }
-
-        Wh_Log(L"Couldn't find a window on the taskbar thread for cleanup");
+        // The subclass is already removed, so pending posted refresh messages
+        // are harmless. With no taskbar-thread window, XAML is unreachable.
+        g_trackedButtons.clear();
         return;
     }
 
@@ -2069,12 +2385,8 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    // Normal teardown removes the long-lived hook synchronously from its own
-    // taskbar thread in CleanupOnTaskbarThreadProc. This is only a last-resort
-    // fallback for a teardown path where taskbar-thread marshalling was no
-    // longer possible.
-    if (g_taskbarGetMessageHook.load()) {
-        StopDeferredCountRefreshHook();
+    if (g_taskbarSubclassWindow.load()) {
+        StopDeferredCountRefreshSubclass();
     }
 
     // Tracked buttons contain weak WinRT references only; releasing them here
