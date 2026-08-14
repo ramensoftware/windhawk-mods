@@ -2,7 +2,7 @@
 // @id              taskbar-separators
 // @name            Taskbar Separators
 // @description     Add customizable visual separators between Windows 11 taskbar application buttons.
-// @version         1.1.0
+// @version         1.2.0
 // @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
@@ -24,6 +24,7 @@
 
 // ==WindhawkModReadme==
 /*
+
 # Taskbar Separators
 
 Add clean, customizable visual separators between application buttons on the
@@ -33,10 +34,12 @@ Unlike placeholder applications or pinned shortcuts, these separators are
 visual, non-clickable elements. They do not launch programs or occupy normal
 application slots.
 
-## Preview
+Current release: **1.2.0**.
 
+## Preview
 ![Taskbar Separators
 preview](https://raw.githubusercontent.com/digart11/taskbar-separators/master/images/taskbar-separators-preview.jpg)
+
 
 ## Features
 
@@ -53,17 +56,23 @@ preview](https://raw.githubusercontent.com/digart11/taskbar-separators/master/im
   - Ring
   - Square
   - Diamond
-- Adjustable physical divider gap, thickness, length, opacity, color, and effect
-settings
-- Physical divider gaps create real layout space between neighboring taskbar
-buttons
-- Existing taskbar button margins are preserved and the divider gap is added on
-top of them
-- Improved positioning after taskbar button drag/reorder
-- Pixel-aligned divider positioning for more consistent rendering
-- Automatic horizontal and vertical taskbar orientation
-- Optional animation compatibility mode
-- Clean removal of divider visuals and added spacing when the mod is disabled
+- Correct separator positioning for taskbar labels and uncombined or otherwise
+variable-width buttons
+- Supports mixed multi-monitor layouts, such as labels on one taskbar and
+icon-only buttons on another
+
+## What's new in 1.2.0
+
+- Added support for Windows taskbar labels and uncombined application buttons
+- Added accurate separator positioning for variable-width taskbar buttons
+- Added support for mixed layouts across multiple monitors, such as labels on
+one taskbar and icon-only buttons on another
+- Improved taskbar initialization and multi-monitor reconciliation
+- Improved handling of separator settings containing empty or zero-valued
+entries
+- Improved before-first separator handling when there is not enough layout
+information for reliable placement
+- Refined internal margin tracking and cleanup
 
 ## Getting started
 
@@ -103,7 +112,8 @@ the spacing between all taskbar buttons.
 Existing taskbar button margins are preserved, allowing the gap to work
 alongside normal Windows layout values and compatible taskbar styling mods.
 
-Set **Divider gap** to `0` to use the original overlay-only behavior.
+Set **Divider gap** to `0` to use overlay-only separator positioning without
+adding physical spacing.
 
 ## Settings
 
@@ -131,6 +141,8 @@ separator positioning.
 - Windows 11 horizontal taskbars
 - Vertical taskbars via Vertical Taskbar for Windows 11
 - Compatible with Windows 11 Taskbar Styler in normal configurations
+- Taskbar labels and uncombined or otherwise variable-width taskbar buttons
+- Mixed multi-monitor layouts with different button modes on each taskbar
 - Physical divider gaps are layered on top of existing taskbar button margins
 
 ## License and attribution
@@ -140,6 +152,7 @@ Licensed under the GNU General Public License v3.0.
 Taskbar hook and UI-thread infrastructure includes code and patterns adapted
 from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
 Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
+
 */
 // ==/WindhawkModReadme==
 
@@ -237,6 +250,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -256,6 +270,11 @@ enum class ReconcileResult {
 enum class TaskbarOrientation {
     horizontal,
     vertical,
+};
+
+enum class DividerGeometryMode {
+    iconCenters,
+    buttonBoundaries,
 };
 
 enum class OrientationSetting {
@@ -312,7 +331,11 @@ struct AnimationDividerCache {
     winrt::weak_ref<FrameworkElement> previousIcon;
     winrt::weak_ref<FrameworkElement> targetIcon;
     winrt::weak_ref<FrameworkElement> nextIcon;
+    winrt::weak_ref<FrameworkElement> previousButton;
+    winrt::weak_ref<FrameworkElement> targetButton;
+    winrt::weak_ref<FrameworkElement> nextButton;
     TaskbarOrientation orientation = TaskbarOrientation::horizontal;
+    DividerGeometryMode geometryMode = DividerGeometryMode::iconCenters;
     bool beforeFirst = false;
     double primaryOffset = 0;
     bool hasLastPosition = false;
@@ -577,8 +600,8 @@ void LoadSettings() {
 
     for (int index = 0; index < 128; index++) {
         int position = Wh_GetIntSetting(L"separators[%d]", index);
-        if (position == 0) {
-            break;
+        if (position <= 0) {
+            continue;
         }
         appendSeparator(static_cast<size_t>(index), position);
     }
@@ -667,13 +690,6 @@ HWND GetTaskbarDispatchWindow(HWND taskbarWnd) {
         taskbarWnd, nullptr,
         L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
     return taskbarUiWnd ? taskbarUiWnd : taskbarWnd;
-}
-
-HWND GetTaskbarUiWnd() {
-    auto taskbarWindows = EnumerateCurrentProcessTaskbarWindows();
-    return taskbarWindows.empty()
-               ? nullptr
-               : GetTaskbarDispatchWindow(taskbarWindows.front());
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -989,22 +1005,22 @@ struct DividerGeometry {
     double top = 0;
 };
 
-bool TryGetIconBounds(Controls::Canvas const& overlayCanvas,
-                      FrameworkElement const& icon,
-                      winrt::Windows::Foundation::Rect* bounds) {
-    if (!overlayCanvas || !icon || !bounds) {
+bool TryGetElementBounds(Controls::Canvas const& overlayCanvas,
+                         FrameworkElement const& element,
+                         winrt::Windows::Foundation::Rect* bounds) {
+    if (!overlayCanvas || !element || !bounds) {
         return false;
     }
 
-    double width = icon.ActualWidth();
-    double height = icon.ActualHeight();
+    double width = element.ActualWidth();
+    double height = element.ActualHeight();
     if (!std::isfinite(width) || width <= 0 || !std::isfinite(height) ||
         height <= 0) {
         return false;
     }
 
     auto transformedBounds =
-        icon.TransformToVisual(overlayCanvas)
+        element.TransformToVisual(overlayCanvas)
             .TransformBounds(winrt::Windows::Foundation::Rect{
                 0, 0, static_cast<float>(width), static_cast<float>(height)});
     if (!std::isfinite(transformedBounds.X) ||
@@ -1017,6 +1033,12 @@ bool TryGetIconBounds(Controls::Canvas const& overlayCanvas,
 
     *bounds = transformedBounds;
     return true;
+}
+
+bool TryGetIconBounds(Controls::Canvas const& overlayCanvas,
+                      FrameworkElement const& icon,
+                      winrt::Windows::Foundation::Rect* bounds) {
+    return TryGetElementBounds(overlayCanvas, icon, bounds);
 }
 
 double PrimaryStart(winrt::Windows::Foundation::Rect const& bounds,
@@ -1041,6 +1063,117 @@ double CrossCenter(winrt::Windows::Foundation::Rect const& bounds,
     return orientation == TaskbarOrientation::horizontal
                ? bounds.Y + bounds.Height / 2.0
                : bounds.X + bounds.Width / 2.0;
+}
+
+double ElementPrimarySize(FrameworkElement const& element,
+                          TaskbarOrientation orientation) {
+    return orientation == TaskbarOrientation::horizontal
+               ? element.ActualWidth()
+               : element.ActualHeight();
+}
+
+double ElementCrossSize(FrameworkElement const& element,
+                        TaskbarOrientation orientation) {
+    return orientation == TaskbarOrientation::horizontal
+               ? element.ActualHeight()
+               : element.ActualWidth();
+}
+
+DividerGeometryMode DetectDividerGeometryMode(
+    std::vector<FrameworkElement> const& buttons,
+    std::vector<FrameworkElement> const& icons,
+    TaskbarOrientation orientation) {
+    double minimumButtonPrimarySize = std::numeric_limits<double>::max();
+    double maximumButtonPrimarySize = 0;
+    size_t validButtonCount = 0;
+    bool hasLabelLikePrimaryExpansion = false;
+
+    for (size_t index = 0; index < buttons.size(); index++) {
+        auto const& button = buttons[index];
+        if (!button || button.Visibility() != Visibility::Visible) {
+            continue;
+        }
+
+        double buttonPrimarySize = ElementPrimarySize(button, orientation);
+        double buttonCrossSize = ElementCrossSize(button, orientation);
+        if (!std::isfinite(buttonPrimarySize) || buttonPrimarySize <= 0 ||
+            !std::isfinite(buttonCrossSize) || buttonCrossSize <= 0) {
+            continue;
+        }
+
+        minimumButtonPrimarySize =
+            std::min(minimumButtonPrimarySize, buttonPrimarySize);
+        maximumButtonPrimarySize =
+            std::max(maximumButtonPrimarySize, buttonPrimarySize);
+        validButtonCount++;
+
+        auto icon = index < icons.size() ? icons[index] : nullptr;
+        if (!icon) {
+            continue;
+        }
+
+        double iconPrimarySize = ElementPrimarySize(icon, orientation);
+        double iconCrossSize = ElementCrossSize(icon, orientation);
+        if (!std::isfinite(iconPrimarySize) || iconPrimarySize <= 0 ||
+            !std::isfinite(iconCrossSize) || iconCrossSize <= 0) {
+            continue;
+        }
+
+        double primaryChrome = buttonPrimarySize - iconPrimarySize;
+        double crossChrome = buttonCrossSize - iconCrossSize;
+        double materialExpansion = std::max(8.0, buttonCrossSize * 0.15);
+        if (primaryChrome - crossChrome > materialExpansion) {
+            hasLabelLikePrimaryExpansion = true;
+        }
+    }
+
+    bool hasVariableButtonSizes = false;
+    if (validButtonCount >= 2) {
+        double materialVariation =
+            std::max(2.0, minimumButtonPrimarySize * 0.05);
+        hasVariableButtonSizes =
+            maximumButtonPrimarySize - minimumButtonPrimarySize >
+            materialVariation;
+    }
+
+    return hasVariableButtonSizes || hasLabelLikePrimaryExpansion
+               ? DividerGeometryMode::buttonBoundaries
+               : DividerGeometryMode::iconCenters;
+}
+
+bool TryGetPrimaryOrderingDirection(
+    Controls::Canvas const& overlayCanvas,
+    std::vector<FrameworkElement> const& elements,
+    TaskbarOrientation orientation,
+    double* direction) {
+    if (!direction) {
+        return false;
+    }
+
+    for (size_t index = 1; index < elements.size(); index++) {
+        winrt::Windows::Foundation::Rect previousBounds{};
+        winrt::Windows::Foundation::Rect currentBounds{};
+        if (!elements[index - 1] || !elements[index] ||
+            !TryGetElementBounds(overlayCanvas, elements[index - 1],
+                                 &previousBounds) ||
+            !TryGetElementBounds(overlayCanvas, elements[index],
+                                 &currentBounds)) {
+            continue;
+        }
+
+        double primaryMovement = PrimaryCenter(currentBounds, orientation) -
+                                 PrimaryCenter(previousBounds, orientation);
+        double crossMovement = CrossCenter(currentBounds, orientation) -
+                               CrossCenter(previousBounds, orientation);
+        if (std::isfinite(primaryMovement) && std::isfinite(crossMovement) &&
+            std::fabs(primaryMovement) > 0.1 &&
+            std::fabs(primaryMovement) > std::fabs(crossMovement)) {
+            *direction = primaryMovement;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 double GetRasterizationScale(FrameworkElement const& element) {
@@ -1119,6 +1252,150 @@ bool TryCalculateDividerPosition(double primaryCenter,
     }
     return std::isfinite(primaryCenter) && std::isfinite(*left) &&
            std::isfinite(*top);
+}
+
+double GetDirectionalButtonMargin(FrameworkElement const& button,
+                                  TaskbarOrientation orientation,
+                                  double direction,
+                                  bool leading) {
+    auto margin = button.Margin();
+    if (orientation == TaskbarOrientation::horizontal) {
+        if (leading) {
+            return direction > 0 ? margin.Left : margin.Right;
+        }
+        return direction > 0 ? margin.Right : margin.Left;
+    }
+
+    if (leading) {
+        return direction > 0 ? margin.Top : margin.Bottom;
+    }
+    return direction > 0 ? margin.Bottom : margin.Top;
+}
+
+void AddDirectionalButtonGap(ButtonGapContribution* contribution,
+                             TaskbarOrientation orientation,
+                             double direction,
+                             bool leading,
+                             double amount) {
+    bool usePrimaryStart = leading == (direction > 0);
+    if (orientation == TaskbarOrientation::horizontal) {
+        (usePrimaryStart ? contribution->left : contribution->right) += amount;
+    } else {
+        (usePrimaryStart ? contribution->top : contribution->bottom) += amount;
+    }
+}
+
+bool TryGetButtonBoundaryDividerGeometry(Controls::Canvas const& overlayCanvas,
+                                         FrameworkElement const& previousButton,
+                                         FrameworkElement const& targetButton,
+                                         FrameworkElement const& nextButton,
+                                         bool beforeFirst,
+                                         bool animatedCrossAxis,
+                                         TaskbarOrientation orientation,
+                                         double taskbarWidth,
+                                         double taskbarHeight,
+                                         double rectangleWidth,
+                                         double rectangleHeight,
+                                         DividerGeometry* geometry) {
+    if (!overlayCanvas || !targetButton || !geometry ||
+        !std::isfinite(rectangleWidth) || rectangleWidth <= 0 ||
+        !std::isfinite(rectangleHeight) || rectangleHeight <= 0 ||
+        !std::isfinite(taskbarWidth) || taskbarWidth <= 0 ||
+        !std::isfinite(taskbarHeight) || taskbarHeight <= 0) {
+        return false;
+    }
+
+    winrt::Windows::Foundation::Rect previousBounds{};
+    winrt::Windows::Foundation::Rect targetBounds{};
+    winrt::Windows::Foundation::Rect nextBounds{};
+    if (!TryGetElementBounds(overlayCanvas, targetButton, &targetBounds) ||
+        (previousButton && !TryGetElementBounds(overlayCanvas, previousButton,
+                                                &previousBounds)) ||
+        (nextButton &&
+         !TryGetElementBounds(overlayCanvas, nextButton, &nextBounds))) {
+        return false;
+    }
+
+    double direction = 0;
+    double crossDirection = 0;
+    winrt::Windows::Foundation::Rect adjacentBounds{};
+    if (nextButton) {
+        direction = PrimaryCenter(nextBounds, orientation) -
+                    PrimaryCenter(targetBounds, orientation);
+        crossDirection = CrossCenter(nextBounds, orientation) -
+                         CrossCenter(targetBounds, orientation);
+        adjacentBounds = nextBounds;
+    } else if (previousButton && !beforeFirst) {
+        direction = PrimaryCenter(targetBounds, orientation) -
+                    PrimaryCenter(previousBounds, orientation);
+        crossDirection = CrossCenter(targetBounds, orientation) -
+                         CrossCenter(previousBounds, orientation);
+        adjacentBounds = previousBounds;
+    } else {
+        return false;
+    }
+
+    if (!std::isfinite(direction) || !std::isfinite(crossDirection) ||
+        std::fabs(direction) <= 0.1 ||
+        std::fabs(direction) <= std::fabs(crossDirection)) {
+        return false;
+    }
+
+    double targetStart = PrimaryStart(targetBounds, orientation);
+    double targetEnd = targetStart + PrimarySize(targetBounds, orientation);
+    double center = 0;
+    if (beforeFirst) {
+        double leadingEdge = direction > 0 ? targetStart : targetEnd;
+        double availableSpacing = GetDirectionalButtonMargin(
+            targetButton, orientation, direction, true);
+        if (!std::isfinite(availableSpacing) || availableSpacing < -0.1) {
+            return false;
+        }
+        center =
+            leadingEdge -
+            std::copysign(std::max(0.0, availableSpacing) / 2.0, direction);
+    } else if (nextButton) {
+        double nextStart = PrimaryStart(nextBounds, orientation);
+        double nextEnd = nextStart + PrimarySize(nextBounds, orientation);
+        double targetTrailingEdge = direction > 0 ? targetEnd : targetStart;
+        double nextLeadingEdge = direction > 0 ? nextStart : nextEnd;
+        center = (targetTrailingEdge + nextLeadingEdge) / 2.0;
+    } else {
+        double trailingEdge = direction > 0 ? targetEnd : targetStart;
+        double availableSpacing = GetDirectionalButtonMargin(
+            targetButton, orientation, direction, false);
+        if (!std::isfinite(availableSpacing) || availableSpacing < -0.1) {
+            return false;
+        }
+        center =
+            trailingEdge +
+            std::copysign(std::max(0.0, availableSpacing) / 2.0, direction);
+    }
+
+    double crossCenter =
+        animatedCrossAxis ? (CrossCenter(targetBounds, orientation) +
+                             CrossCenter(adjacentBounds, orientation)) /
+                                2.0
+        : orientation == TaskbarOrientation::horizontal ? taskbarHeight / 2.0
+                                                        : taskbarWidth / 2.0;
+    double crossOrigin = orientation == TaskbarOrientation::horizontal
+                             ? crossCenter - rectangleHeight / 2.0
+                             : crossCenter - rectangleWidth / 2.0;
+    double left = 0;
+    double top = 0;
+    if (!TryCalculateDividerPosition(center, crossOrigin, orientation,
+                                     rectangleWidth, rectangleHeight, &left,
+                                     &top)) {
+        return false;
+    }
+
+    geometry->targetBounds = targetBounds;
+    geometry->nextBounds = adjacentBounds;
+    geometry->center = center;
+    geometry->left = left;
+    geometry->top = top;
+    SnapDividerGeometryToPhysicalPixels(overlayCanvas, geometry);
+    return true;
 }
 
 bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
@@ -1223,7 +1500,7 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
                                       double rectangleWidth,
                                       double rectangleHeight,
                                       DividerGeometry* geometry) {
-    if (!overlayCanvas || !firstIcon || !geometry ||
+    if (!overlayCanvas || !firstIcon || !secondIcon || !geometry ||
         !std::isfinite(rectangleWidth) || rectangleWidth <= 0 ||
         !std::isfinite(rectangleHeight) || rectangleHeight <= 0) {
         return false;
@@ -1237,22 +1514,17 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
 
     double firstCenter = PrimaryCenter(firstBounds, orientation);
     double firstCrossCenter = CrossCenter(firstBounds, orientation);
-    double pitch = PrimarySize(firstBounds, orientation);
-    double crossPitch = 0;
-    if (secondIcon) {
-        if (!TryGetIconBounds(overlayCanvas, secondIcon, &secondBounds)) {
-            return false;
-        }
+    if (!TryGetIconBounds(overlayCanvas, secondIcon, &secondBounds)) {
+        return false;
+    }
 
-        double secondCenter = PrimaryCenter(secondBounds, orientation);
-        pitch = secondCenter - firstCenter;
-        double secondCrossCenter = CrossCenter(secondBounds, orientation);
-        crossPitch = secondCrossCenter - firstCrossCenter;
-        if (!std::isfinite(pitch) || !std::isfinite(crossPitch) ||
-            std::fabs(pitch) <= 0.1 ||
-            std::fabs(pitch) <= std::fabs(crossPitch)) {
-            return false;
-        }
+    double secondCenter = PrimaryCenter(secondBounds, orientation);
+    double pitch = secondCenter - firstCenter;
+    double secondCrossCenter = CrossCenter(secondBounds, orientation);
+    double crossPitch = secondCrossCenter - firstCrossCenter;
+    if (!std::isfinite(pitch) || !std::isfinite(crossPitch) ||
+        std::fabs(pitch) <= 0.1 || std::fabs(pitch) <= std::fabs(crossPitch)) {
+        return false;
     }
 
     double virtualPreviousCenter = firstCenter - pitch;
@@ -1271,7 +1543,7 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
     }
 
     geometry->targetBounds = firstBounds;
-    geometry->nextBounds = secondIcon ? secondBounds : firstBounds;
+    geometry->nextBounds = secondBounds;
     geometry->center = center;
     geometry->left = left;
     geometry->top = top;
@@ -1409,28 +1681,45 @@ bool RefreshCachedDividerGeometry(TrackedTaskbarState& taskbar,
         auto previousIcon = cache.previousIcon.get();
         auto targetIcon = cache.targetIcon.get();
         auto nextIcon = cache.nextIcon.get();
-        if (!host || !targetIcon ||
-            (!cache.beforeFirst && !nextIcon && !previousIcon)) {
+        auto previousButton = cache.previousButton.get();
+        auto targetButton = cache.targetButton.get();
+        auto nextButton = cache.nextButton.get();
+        bool requiredElementsAvailable =
+            cache.geometryMode == DividerGeometryMode::buttonBoundaries
+                ? targetButton &&
+                      (nextButton || (!cache.beforeFirst && previousButton))
+                : targetIcon &&
+                      (nextIcon || (!cache.beforeFirst && previousIcon));
+        if (!host || !requiredElementsAvailable) {
             return false;
         }
 
         DividerGeometry geometry;
-        bool geometryValid =
-            cache.beforeFirst
-                ? TryGetBeforeFirstDividerGeometry(
-                      overlayCanvas, targetIcon, nextIcon, cache.orientation,
-                      host.Width(), host.Height(), &geometry)
-            : animatedCrossAxis
-                ? TryGetAnimatedDividerGeometry(
-                      overlayCanvas, previousIcon, targetIcon, nextIcon,
-                      cache.orientation, taskbar.reconciledRootWidth,
-                      taskbar.reconciledRootHeight, host.Width(), host.Height(),
-                      &geometry)
-                : TryGetDividerGeometry(overlayCanvas, previousIcon, targetIcon,
-                                        nextIcon, cache.orientation,
-                                        taskbar.reconciledRootWidth,
-                                        taskbar.reconciledRootHeight,
-                                        host.Width(), host.Height(), &geometry);
+        bool geometryValid = false;
+        if (cache.geometryMode == DividerGeometryMode::buttonBoundaries) {
+            geometryValid = TryGetButtonBoundaryDividerGeometry(
+                overlayCanvas, previousButton, targetButton, nextButton,
+                cache.beforeFirst, animatedCrossAxis, cache.orientation,
+                taskbar.reconciledRootWidth, taskbar.reconciledRootHeight,
+                host.Width(), host.Height(), &geometry);
+        } else {
+            geometryValid =
+                cache.beforeFirst ? TryGetBeforeFirstDividerGeometry(
+                                        overlayCanvas, targetIcon, nextIcon,
+                                        cache.orientation, host.Width(),
+                                        host.Height(), &geometry)
+                : animatedCrossAxis
+                    ? TryGetAnimatedDividerGeometry(
+                          overlayCanvas, previousIcon, targetIcon, nextIcon,
+                          cache.orientation, taskbar.reconciledRootWidth,
+                          taskbar.reconciledRootHeight, host.Width(),
+                          host.Height(), &geometry)
+                    : TryGetDividerGeometry(
+                          overlayCanvas, previousIcon, targetIcon, nextIcon,
+                          cache.orientation, taskbar.reconciledRootWidth,
+                          taskbar.reconciledRootHeight, host.Width(),
+                          host.Height(), &geometry);
+        }
         if (!geometryValid) {
             return false;
         }
@@ -1961,6 +2250,18 @@ void RestoreTrackedButtonMargins(TrackedTaskbarState& taskbar) {
     taskbar.buttonMargins.clear();
 }
 
+void CaptureBaseMargin(TrackedButtonMarginState& tracked,
+                       FrameworkElement const& button,
+                       Thickness const& margin) {
+    tracked.baseMargin = margin;
+    auto buttonDo = button.as<DependencyObject>();
+    tracked.baseMarginWasLocal =
+        buttonDo.ReadLocalValue(FrameworkElement::MarginProperty()) !=
+        DependencyProperty::UnsetValue();
+    tracked.lastAppliedMargin = margin;
+    tracked.hasAppliedMargin = false;
+}
+
 void SynchronizeTrackedButtonMargins(
     TrackedTaskbarState& taskbar,
     std::vector<FrameworkElement> const& appButtons) {
@@ -1991,13 +2292,7 @@ void SynchronizeTrackedButtonMargins(
 
         if (!found) {
             tracked.button = winrt::make_weak(button);
-            tracked.baseMargin = current;
-            auto buttonDo = button.as<DependencyObject>();
-            tracked.baseMarginWasLocal =
-                buttonDo.ReadLocalValue(FrameworkElement::MarginProperty()) !=
-                DependencyProperty::UnsetValue();
-            tracked.lastAppliedMargin = current;
-            tracked.hasAppliedMargin = false;
+            CaptureBaseMargin(tracked, button, current);
         } else {
             tracked.button = winrt::make_weak(button);
 
@@ -2006,23 +2301,10 @@ void SynchronizeTrackedButtonMargins(
                                                  tracked.lastAppliedMargin)) {
                     // Something else changed Margin after our last write.
                     // Treat that as the new base and layer our gap on top.
-                    tracked.baseMargin = current;
-                    auto buttonDo = button.as<DependencyObject>();
-                    tracked.baseMarginWasLocal =
-                        buttonDo.ReadLocalValue(
-                            FrameworkElement::MarginProperty()) !=
-                        DependencyProperty::UnsetValue();
-                    tracked.lastAppliedMargin = current;
-                    tracked.hasAppliedMargin = false;
+                    CaptureBaseMargin(tracked, button, current);
                 }
             } else {
-                tracked.baseMargin = current;
-                auto buttonDo = button.as<DependencyObject>();
-                tracked.baseMarginWasLocal =
-                    buttonDo.ReadLocalValue(
-                        FrameworkElement::MarginProperty()) !=
-                    DependencyProperty::UnsetValue();
-                tracked.lastAppliedMargin = current;
+                CaptureBaseMargin(tracked, button, current);
             }
         }
 
@@ -2885,11 +3167,18 @@ bool CachedSeparatorVisualsAreValid(TrackedTaskbarState& taskbar,
         }
 
         for (auto const& animationDivider : taskbar.animationDividers) {
-            if (!animationDivider.host.get() ||
-                !animationDivider.targetIcon.get() ||
-                (!animationDivider.beforeFirst &&
-                 !animationDivider.previousIcon.get() &&
-                 !animationDivider.nextIcon.get())) {
+            bool requiredElementsAvailable =
+                animationDivider.geometryMode ==
+                        DividerGeometryMode::buttonBoundaries
+                    ? animationDivider.targetButton.get() &&
+                          (animationDivider.nextButton.get() ||
+                           (!animationDivider.beforeFirst &&
+                            animationDivider.previousButton.get()))
+                    : animationDivider.targetIcon.get() &&
+                          (animationDivider.nextIcon.get() ||
+                           (!animationDivider.beforeFirst &&
+                            animationDivider.previousIcon.get()));
+            if (!animationDivider.host.get() || !requiredElementsAvailable) {
                 return false;
             }
         }
@@ -3263,6 +3552,16 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 TryGetTaskbarOrientation(
                     settings.orientation, overlayCanvas, snapshot.rootWidth,
                     snapshot.rootHeight, appIcons, &taskbarOrientation);
+            DividerGeometryMode geometryMode =
+                orientationValid ? DetectDividerGeometryMode(
+                                       appButtons, appIcons, taskbarOrientation)
+                                 : DividerGeometryMode::iconCenters;
+            double primaryOrderingDirection = 0;
+            bool primaryOrderingValid =
+                orientationValid &&
+                TryGetPrimaryOrderingDirection(overlayCanvas, appButtons,
+                                               taskbarOrientation,
+                                               &primaryOrderingDirection);
 
             // Keep a stable base margin for each realized TaskListButton. Any
             // physical divider gap is then added as our own delta on top of
@@ -3271,22 +3570,26 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
             std::vector<ButtonGapContribution> gapContributions(
                 appButtons.size());
 
-            if (orientationValid && settings.separatorGap > 0) {
+            if (orientationValid && primaryOrderingValid &&
+                settings.separatorGap > 0) {
                 double fullGap = static_cast<double>(settings.separatorGap);
                 double halfGap = fullGap / 2.0;
 
                 for (auto const& activeSeparator : activeSeparators) {
                     if (activeSeparator.beforeFirst) {
-                        // Before-first geometry needs two app icons, so only
-                        // reserve space when that divider can actually exist.
-                        if (appIcons.size() >= 2 && appIcons[0] &&
-                            appIcons[1]) {
-                            if (taskbarOrientation ==
-                                TaskbarOrientation::horizontal) {
-                                gapContributions[0].left += fullGap;
-                            } else {
-                                gapContributions[0].top += fullGap;
-                            }
+                        // Both geometry paths need a neighboring realized
+                        // button to establish signed application ordering.
+                        bool canPlaceBeforeFirst =
+                            geometryMode ==
+                                    DividerGeometryMode::buttonBoundaries
+                                ? appButtons.size() >= 2 && appButtons[0] &&
+                                      appButtons[1]
+                                : appIcons.size() >= 2 && appIcons[0] &&
+                                      appIcons[1];
+                        if (canPlaceBeforeFirst) {
+                            AddDirectionalButtonGap(
+                                &gapContributions[0], taskbarOrientation,
+                                primaryOrderingDirection, true, fullGap);
                         }
                         continue;
                     }
@@ -3307,22 +3610,18 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                         // Interior divider: split the requested space across
                         // the two neighboring buttons so the overlay stays
                         // centered in the new physical gap.
-                        if (taskbarOrientation ==
-                            TaskbarOrientation::horizontal) {
-                            gapContributions[buttonIndex].right += halfGap;
-                            gapContributions[buttonIndex + 1].left += halfGap;
-                        } else {
-                            gapContributions[buttonIndex].bottom += halfGap;
-                            gapContributions[buttonIndex + 1].top += halfGap;
-                        }
+                        AddDirectionalButtonGap(
+                            &gapContributions[buttonIndex], taskbarOrientation,
+                            primaryOrderingDirection, false, halfGap);
+                        AddDirectionalButtonGap(
+                            &gapContributions[buttonIndex + 1],
+                            taskbarOrientation, primaryOrderingDirection, true,
+                            halfGap);
                     } else {
                         // Divider after the final realized app button.
-                        if (taskbarOrientation ==
-                            TaskbarOrientation::horizontal) {
-                            gapContributions[buttonIndex].right += fullGap;
-                        } else {
-                            gapContributions[buttonIndex].bottom += fullGap;
-                        }
+                        AddDirectionalButtonGap(
+                            &gapContributions[buttonIndex], taskbarOrientation,
+                            primaryOrderingDirection, false, fullGap);
                     }
                 }
             }
@@ -3332,7 +3631,8 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
             // If orientation is temporarily unavailable while a non-zero gap
             // is configured, keep the current margin until the next valid
             // reconciliation rather than guessing an axis.
-            if (orientationValid || settings.separatorGap == 0 ||
+            if (settings.separatorGap == 0 ||
+                (orientationValid && primaryOrderingValid) ||
                 activeSeparators.empty()) {
                 ApplyTrackedButtonGapMargins(taskbar, appButtons,
                                              gapContributions, &snapshot);
@@ -3351,8 +3651,17 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 FrameworkElement previousIcon = nullptr;
                 FrameworkElement targetIcon = nullptr;
                 FrameworkElement nextIcon = nullptr;
+                FrameworkElement previousButton = nullptr;
+                FrameworkElement targetButton = nullptr;
+                FrameworkElement nextButton = nullptr;
                 size_t buttonIndex = 0;
                 if (activeSeparator.beforeFirst) {
+                    if (!appButtons.empty()) {
+                        targetButton = appButtons[0];
+                        if (appButtons.size() >= 2) {
+                            nextButton = appButtons[1];
+                        }
+                    }
                     if (!appIcons.empty()) {
                         targetIcon = appIcons[0];
                         if (appIcons.size() >= 2) {
@@ -3361,6 +3670,15 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                     }
                 } else {
                     buttonIndex = static_cast<size_t>(separator.position - 1);
+                    if (buttonIndex < appButtons.size()) {
+                        targetButton = appButtons[buttonIndex];
+                        if (buttonIndex > 0) {
+                            previousButton = appButtons[buttonIndex - 1];
+                        }
+                        if (buttonIndex + 1 < appButtons.size()) {
+                            nextButton = appButtons[buttonIndex + 1];
+                        }
+                    }
                     if (buttonIndex < appIcons.size()) {
                         targetIcon = appIcons[buttonIndex];
                         if (buttonIndex > 0) {
@@ -3377,16 +3695,26 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 GetStyleHostSize(settings, taskbarOrientation, &hostWidth,
                                  &hostHeight);
                 bool geometryExpectedFromCurrentButtons =
-                    activeSeparator.beforeFirst
+                    geometryMode == DividerGeometryMode::buttonBoundaries
+                        ? targetButton &&
+                              (nextButton ||
+                               (!activeSeparator.beforeFirst && previousButton))
+                    : activeSeparator.beforeFirst
                         ? targetIcon && nextIcon
                         : targetIcon && (nextIcon || previousIcon);
                 DividerGeometry geometry;
                 bool geometryValid = false;
                 bool beforeFirstHasReliablePitch =
-                    !activeSeparator.beforeFirst ||
-                    settings.separatorGap == 0 || nextIcon;
-                if (orientationValid && targetIcon &&
-                    beforeFirstHasReliablePitch) {
+                    !activeSeparator.beforeFirst || nextIcon;
+                if (orientationValid &&
+                    geometryMode == DividerGeometryMode::buttonBoundaries) {
+                    geometryValid = TryGetButtonBoundaryDividerGeometry(
+                        overlayCanvas, previousButton, targetButton, nextButton,
+                        activeSeparator.beforeFirst, false, taskbarOrientation,
+                        snapshot.rootWidth, snapshot.rootHeight, hostWidth,
+                        hostHeight, &geometry);
+                } else if (orientationValid && targetIcon &&
+                           beforeFirstHasReliablePitch) {
                     geometryValid =
                         activeSeparator.beforeFirst
                             ? TryGetBeforeFirstDividerGeometry(
@@ -3402,9 +3730,9 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 }
                 if (!geometryValid) {
                     if (geometryExpectedFromCurrentButtons) {
-                        // The required realized icons exist, so a failed
-                        // orientation/transform indicates a rebuilding or
-                        // otherwise transient visual tree.
+                        // The required realized geometry elements exist, so
+                        // a failed orientation/transform indicates a
+                        // rebuilding or otherwise transient visual tree.
                         geometryFailureWasTransient = true;
                     }
                     auto staleHost = existingHosts[activeIndex];
@@ -3420,9 +3748,13 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
 
                 bool afterLast = !activeSeparator.beforeFirst &&
                                  buttonIndex + 1 >= appButtons.size();
-                double primaryOffset = GetBoundaryDividerPrimaryOffset(
-                    geometry, taskbarOrientation, activeSeparator.beforeFirst,
-                    afterLast, static_cast<double>(settings.separatorGap));
+                double primaryOffset =
+                    geometryMode == DividerGeometryMode::iconCenters
+                        ? GetBoundaryDividerPrimaryOffset(
+                              geometry, taskbarOrientation,
+                              activeSeparator.beforeFirst, afterLast,
+                              static_cast<double>(settings.separatorGap))
+                        : 0;
                 ApplyDividerPrimaryOffset(overlayCanvas, taskbarOrientation,
                                           primaryOffset, &geometry);
 
@@ -3482,11 +3814,23 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 if (previousIcon) {
                     cache.previousIcon = winrt::make_weak(previousIcon);
                 }
-                cache.targetIcon = winrt::make_weak(targetIcon);
+                if (targetIcon) {
+                    cache.targetIcon = winrt::make_weak(targetIcon);
+                }
                 if (nextIcon) {
                     cache.nextIcon = winrt::make_weak(nextIcon);
                 }
+                if (previousButton) {
+                    cache.previousButton = winrt::make_weak(previousButton);
+                }
+                if (targetButton) {
+                    cache.targetButton = winrt::make_weak(targetButton);
+                }
+                if (nextButton) {
+                    cache.nextButton = winrt::make_weak(nextButton);
+                }
                 cache.orientation = taskbarOrientation;
+                cache.geometryMode = geometryMode;
                 cache.beforeFirst = activeSeparator.beforeFirst;
                 cache.primaryOffset = primaryOffset;
                 animationDividers.push_back(std::move(cache));
@@ -3845,20 +4189,14 @@ bool RunReconcileOnTaskbarThread(bool enabled) {
     };
 
     std::vector<HWND> taskbarUiWindows;
-    if (enabled) {
-        if (HWND taskbarUiWnd = GetTaskbarUiWnd()) {
+    for (HWND taskbarWnd : EnumerateCurrentProcessTaskbarWindows()) {
+        HWND taskbarUiWnd = GetTaskbarDispatchWindow(taskbarWnd);
+        DWORD processId = 0;
+        DWORD threadId =
+            taskbarUiWnd ? GetWindowThreadProcessId(taskbarUiWnd, &processId)
+                         : 0;
+        if (threadId != 0 && processId == GetCurrentProcessId()) {
             taskbarUiWindows.push_back(taskbarUiWnd);
-        }
-    } else {
-        for (HWND taskbarWnd : EnumerateCurrentProcessTaskbarWindows()) {
-            HWND taskbarUiWnd = GetTaskbarDispatchWindow(taskbarWnd);
-            DWORD processId = 0;
-            DWORD threadId = taskbarUiWnd ? GetWindowThreadProcessId(
-                                                taskbarUiWnd, &processId)
-                                          : 0;
-            if (threadId != 0 && processId == GetCurrentProcessId()) {
-                taskbarUiWindows.push_back(taskbarUiWnd);
-            }
         }
     }
 
@@ -4064,8 +4402,6 @@ void Wh_ModBeforeUninit() {
         }
     }
 }
-
-void Wh_ModUninit() {}
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
