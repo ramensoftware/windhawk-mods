@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.7.0
+// @version         3.7.3
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -40,12 +40,12 @@ handed to Windows rather than reimplemented:
 | Open | Explorer, at the drive's own root |
 | Eject | lock, dismount, then eject the media or remove the device |
 
-Eject follows what the drive actually is. An optical drive or a card reader
-gets `IOCTL_STORAGE_EJECT_MEDIA`, which ejects the disc and leaves the drive;
-a USB disk gets `CM_Request_Device_Eject` on its removable device node, which
-is what Safely Remove Hardware calls and what actually tells the hub to let go
-of the device. If something still holds the drive, the name Windows gives is
-shown rather than a bare failure.
+Eject locks the volume, dismounts it and ejects the media - the sequence that
+makes the drive safe to unplug. On a USB disk it then also asks PnP to remove
+the device node, which is the part that powers the port down, the way Safely
+Remove Hardware does. That request is PnP's to refuse, so it is a bonus rather
+than the verdict: the eject counts as done when the media went, and the
+refusal is only reported when nothing worked at all.
 
 There is deliberately no partition editing here. Writing a partition editor is
 how data gets lost, and Windows already ships tools that do it properly - run
@@ -1215,24 +1215,82 @@ DEVINST FindRemovableDevInst(int diskNumber) {
     return 0;
 }
 
-// Safely removes a volume: locks it, dismounts it, and then either ejects the
-// media or removes the device. Windows' own "Safely Remove Hardware" does the
-// same sequence; the lock is what makes it safe, since it fails rather than
-// pulling the rug out from under open handles.
-bool EjectVolume(HWND owner, const VolumeInfo& volume) {
-    if (volume.letter.empty()) {
-        return false;
-    }
+// Waits for a worker while still dispatching messages. A flat wait on the UI
+// thread blocks anything the worker's work makes the system ask this window,
+// which for a device eject is the whole ballgame - see EjectVolume.
+void JoinThreadPumping(HANDLE thread) {
+    for (;;) {
+        DWORD wait = MsgWaitForMultipleObjectsEx(1, &thread, INFINITE,
+                                                 QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (wait != WAIT_OBJECT_0 + 1) {
+            return;
+        }
 
+        MSG message;
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (message.message == WM_QUIT) {
+                // Not ours to swallow: put it back for the loop that owns it,
+                // and stop pumping. The join still has to finish.
+                PostQuitMessage(static_cast<int>(message.wParam));
+                WaitForSingleObject(thread, INFINITE);
+                return;
+            }
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+}
+
+// PnP answers a refused eject with a type and a name, and the name is only
+// worth repeating for some of the types. An application or a service is
+// something the user can go and close; a device instance path - which is what
+// a busy volume reports - is not, it is just the drive they are holding.
+std::wstring VetoDescription(PNP_VETO_TYPE veto, const std::wstring& name) {
+    switch (veto) {
+        case PNP_VetoWindowsApp:
+        case PNP_VetoWindowsService:
+        case PNP_VetoPendingClose:
+            return name.empty() ? L"A program is still using it."
+                                : L"It is still in use by: " + name;
+        case PNP_VetoOutstandingOpen:
+            return L"Something still has files open on the drive. Close any "
+                   L"windows or programs using it and try again.";
+        case PNP_VetoDevice:
+        case PNP_VetoDriver:
+        case PNP_VetoLegacyDevice:
+        case PNP_VetoLegacyDriver:
+            return L"The drive reported that it is still busy. It is safe to "
+                   L"try again in a moment.";
+        case PNP_VetoInsufficientRights:
+            return L"Windows refused the request for lack of rights.";
+        case PNP_VetoNonDisableable:
+            return L"Windows does not allow this device to be removed.";
+        default:
+            return L"";
+    }
+}
+
+// What the eject worker is given and what it reports back. It never touches a
+// window: every message box belongs to the UI thread that started it.
+struct EjectRequest {
+    std::wstring letter;
+    int diskNumber = -1;
+
+    enum class Failure { None, Open, Lock, Eject };
+    Failure failure = Failure::None;
+    PNP_VETO_TYPE veto = PNP_VetoTypeUnknown;
+    std::wstring vetoName;
+};
+
+void RunEject(EjectRequest* request) {
     // "\\.\C:" - the device path for the volume, with no trailing separator.
-    std::wstring devicePath = L"\\\\.\\" + volume.letter;
+    std::wstring devicePath = L"\\\\.\\" + request->letter;
     HANDLE device = CreateFileW(devicePath.c_str(), GENERIC_READ | GENERIC_WRITE,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                 OPEN_EXISTING, 0, nullptr);
     if (device == INVALID_HANDLE_VALUE) {
-        MessageBoxW(owner, L"The volume could not be opened for ejecting.",
-                    L"Eject", MB_OK | MB_ICONWARNING);
-        return false;
+        request->failure = EjectRequest::Failure::Open;
+        return;
     }
 
     DWORD returned = 0;
@@ -1246,11 +1304,8 @@ bool EjectVolume(HWND owner, const VolumeInfo& volume) {
     }
     if (!locked) {
         CloseHandle(device);
-        MessageBoxW(owner,
-                    L"The volume is in use and could not be locked. Close any "
-                    L"programs using it and try again.",
-                    L"Eject", MB_OK | MB_ICONWARNING);
-        return false;
+        request->failure = EjectRequest::Failure::Lock;
+        return;
     }
 
     DeviceIoControl(device, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0,
@@ -1261,48 +1316,115 @@ bool EjectVolume(HWND owner, const VolumeInfo& volume) {
     DeviceIoControl(device, IOCTL_STORAGE_MEDIA_REMOVAL, &allow, sizeof(allow),
                     nullptr, 0, &returned, nullptr);
 
-    // IOCTL_STORAGE_EJECT_MEDIA ejects *media*, which is the right thing for an
-    // optical drive or a card reader - the drive stays, the disc comes out. A
-    // USB stick is not media in a reader, it is the device, and it keeps drawing
-    // power until the hub is told to let it go. That is what
-    // CM_Request_Device_Eject does, and it is what "Safely Remove Hardware"
-    // calls.
-    DiskFacts facts = QueryDiskFacts(volume.diskNumber);
-    DEVINST node = facts.usb ? FindRemovableDevInst(volume.diskNumber) : 0;
+    // Asked while the disk is still here: once the media is gone, there is no
+    // disk to answer what bus it is on.
+    DiskFacts facts = QueryDiskFacts(request->diskNumber);
+    DEVINST node = facts.usb ? FindRemovableDevInst(request->diskNumber) : 0;
 
-    bool ejected = false;
-    std::wstring blockedBy;
+    // Media eject decides whether this worked. It is the call that has always
+    // done the job here: a stick that reports removable media takes it, the
+    // letter goes, and the drive is safe to pull. An optical drive or card
+    // reader takes it too - that is what it is for.
+    bool mediaEjected = DeviceIoControl(device, IOCTL_STORAGE_EJECT_MEDIA,
+                                        nullptr, 0, nullptr, 0, &returned,
+                                        nullptr) != FALSE;
+
+    // Ours is an open handle on the volume like any other, and PnP counts it
+    // when it asks whether the device may go.
+    CloseHandle(device);
+
+    // Then the device removal, as a bonus rather than the verdict. This is the
+    // part that actually powers the port down - what Safely Remove Hardware
+    // does - but PnP is free to refuse it, and it refuses over things the user
+    // cannot see or act on. Refusing to call the eject a success because of
+    // that is how a working button turns into a broken one.
+    bool deviceRemoved = false;
     if (node) {
-        // The locked handle has to go first, or the request is vetoed by the
-        // very lock that was taken to make this safe.
-        CloseHandle(device);
-        device = INVALID_HANDLE_VALUE;
-
-        PNP_VETO_TYPE veto = PNP_VetoTypeUnknown;
         WCHAR vetoName[MAX_PATH]{};
-        CONFIGRET result = CM_Request_Device_EjectW(node, &veto, vetoName,
-                                                    ARRAYSIZE(vetoName), 0);
-        ejected = result == CR_SUCCESS && veto == PNP_VetoTypeUnknown;
-        if (!ejected && vetoName[0]) {
-            blockedBy = vetoName;
+        for (int attempt = 0; attempt < 3 && !deviceRemoved; attempt++) {
+            if (attempt) {
+                Sleep(300);
+            }
+            request->veto = PNP_VetoTypeUnknown;
+            vetoName[0] = L'\0';
+            deviceRemoved =
+                CM_Request_Device_EjectW(node, &request->veto, vetoName,
+                                         ARRAYSIZE(vetoName), 0) == CR_SUCCESS &&
+                request->veto == PNP_VetoTypeUnknown;
         }
-    } else {
-        ejected = DeviceIoControl(device, IOCTL_STORAGE_EJECT_MEDIA, nullptr, 0,
-                                  nullptr, 0, &returned, nullptr) != FALSE;
+        request->vetoName = vetoName;
     }
 
-    if (device != INVALID_HANDLE_VALUE) {
-        CloseHandle(device);
+    if (!mediaEjected && !deviceRemoved) {
+        request->failure = EjectRequest::Failure::Eject;
     }
+}
 
-    if (!ejected) {
-        std::wstring message = L"Windows could not eject this drive.";
-        if (!blockedBy.empty()) {
-            message += L"\n\nIt is being held by: " + blockedBy;
-        }
-        MessageBoxW(owner, message.c_str(), L"Eject", MB_OK | MB_ICONWARNING);
+DWORD WINAPI EjectThread(LPVOID param) {
+    RunEject(static_cast<EjectRequest*>(param));
+    return 0;
+}
+
+// Safely removes a volume: locks it, dismounts it, and then either ejects the
+// media or removes the device. Windows' own "Safely Remove Hardware" does the
+// same sequence; the lock is what makes it safe, since it fails rather than
+// pulling the rug out from under open handles.
+bool EjectVolume(HWND owner, const VolumeInfo& volume) {
+    if (volume.letter.empty()) {
         return false;
     }
+
+    EjectRequest request;
+    request.letter = volume.letter;
+    request.diskNumber = volume.diskNumber;
+
+    // Off the UI thread, and this is not an optimisation. Asking PnP to remove
+    // a device makes it broadcast a query to every top-level window in the
+    // session and wait for the answers - and this window is one of them. Doing
+    // the call on the UI thread means the window cannot answer the question it
+    // is itself waiting on, so the query times out and the removal is refused;
+    // ejecting a second time then works, because by then the volume is already
+    // dismounted and quiet. The window has to stay pumping for this to work at
+    // the first attempt.
+    HANDLE thread = CreateThread(nullptr, 0, EjectThread, &request, 0, nullptr);
+    if (!thread) {
+        RunEject(&request);  // no thread to be had; the old blocking behaviour
+    } else {
+        // Disabled, not hidden: it keeps handling PnP and paint messages, it
+        // just does not take clicks - so Eject cannot be pressed twice while
+        // the first one is still going.
+        EnableWindow(owner, FALSE);
+        JoinThreadPumping(thread);
+        EnableWindow(owner, TRUE);
+        CloseHandle(thread);
+    }
+
+    switch (request.failure) {
+        case EjectRequest::Failure::Open:
+            MessageBoxW(owner, L"The volume could not be opened for ejecting.",
+                        L"Eject", MB_OK | MB_ICONWARNING);
+            return false;
+        case EjectRequest::Failure::Lock:
+            MessageBoxW(owner,
+                        L"The volume is in use and could not be locked. Close "
+                        L"any programs using it and try again.",
+                        L"Eject", MB_OK | MB_ICONWARNING);
+            return false;
+        case EjectRequest::Failure::Eject: {
+            std::wstring message = L"Windows could not eject this drive.";
+            std::wstring reason =
+                VetoDescription(request.veto, request.vetoName);
+            if (!reason.empty()) {
+                message += L"\n\n" + reason;
+            }
+            MessageBoxW(owner, message.c_str(), L"Eject",
+                        MB_OK | MB_ICONWARNING);
+            return false;
+        }
+        case EjectRequest::Failure::None:
+            break;
+    }
+
     MessageBoxW(owner, L"The drive can now be safely removed.", L"Eject",
                 MB_OK | MB_ICONINFORMATION);
     return true;
@@ -3584,17 +3706,7 @@ bool Run() {
     // the shell for icons, and a cross-apartment call back into this thread
     // would deadlock against a wait that dispatches nothing.
     if (state.scanThread) {
-        for (bool joined = false; !joined;) {
-            DWORD wait = MsgWaitForMultipleObjectsEx(
-                1, &state.scanThread, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-            joined = wait != WAIT_OBJECT_0 + 1;
-
-            MSG pending;
-            while (!joined && PeekMessageW(&pending, nullptr, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&pending);
-                DispatchMessageW(&pending);
-            }
-        }
+        JoinThreadPumping(state.scanThread);
         CloseHandle(state.scanThread);
         state.scanThread = nullptr;
         ReleaseDiskIcons(state.scanResult);
