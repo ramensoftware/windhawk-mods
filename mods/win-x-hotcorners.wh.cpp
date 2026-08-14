@@ -8,7 +8,7 @@
 // @donateUrl       https://ko-fi.com/losthusky_
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32
+// @compilerOptions -ladvapi32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
