@@ -239,6 +239,7 @@ ordering, or application behavior.
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cwctype>
 #include <limits>
 #include <list>
 #include <string>
@@ -329,7 +330,7 @@ std::atomic<bool> g_deferredCountRefreshQueued = false;
 std::atomic<DWORD> g_taskbarThreadId = 0;
 uint64_t g_settingsGeneration = 0;
 
-HHOOK g_taskbarGetMessageHook = nullptr;
+std::atomic<HHOOK> g_taskbarGetMessageHook = nullptr;
 UINT g_deferredCountRefreshMessage = 0;
 
 struct TrackedButton {
@@ -1138,6 +1139,16 @@ TrackedButton* TrackTaskbarButton(FrameworkElement element) {
                      });
 
     if (existing != g_trackedButtons.end()) {
+        // The taskbar recycles button containers. If the previous element at
+        // this identity is already gone, treat this as a fresh button and
+        // reset the cached visual state.
+        if (!existing->element.get()) {
+            existing->element = winrt::make_weak(element);
+            existing->lastAppliedCount =
+                std::numeric_limits<unsigned int>::max();
+            existing->lastSettingsGeneration = 0;
+        }
+
         return &*existing;
     }
 
@@ -1484,7 +1495,6 @@ LRESULT CALLBACK TaskbarGetMessageHookProc(int code,
             // taskbar message loop, after the ViewModel getter/layout stack has
             // returned, so XAML isn't mutated from inside the property getter.
             message->message = WM_NULL;
-            g_deferredCountRefreshQueued = false;
 
             if (!g_unloading) {
                 try {
@@ -1493,21 +1503,27 @@ LRESULT CALLBACK TaskbarGetMessageHookProc(int code,
                     Wh_Log(L"Deferred count refresh failed");
                 }
             }
+
+            // Keep the refresh marked as queued until all XAML work finishes.
+            // Any ViewModelCount reads caused by that work are collapsed into
+            // this refresh instead of scheduling a feedback-loop refresh.
+            g_deferredCountRefreshQueued = false;
         }
     }
 
-    return CallNextHookEx(g_taskbarGetMessageHook, code, wParam, lParam);
+    return CallNextHookEx(g_taskbarGetMessageHook.load(), code, wParam, lParam);
 }
 
 bool EnsureDeferredCountRefreshHookOnTaskbarThread() {
     DWORD threadId = GetCurrentThreadId();
+    HHOOK existingHook = g_taskbarGetMessageHook.load();
 
-    if (g_taskbarGetMessageHook && g_taskbarThreadId.load() == threadId) {
+    if (existingHook && g_taskbarThreadId.load() == threadId) {
         return true;
     }
 
-    if (g_taskbarGetMessageHook) {
-        UnhookWindowsHookEx(g_taskbarGetMessageHook);
+    if (existingHook) {
+        UnhookWindowsHookEx(existingHook);
         g_taskbarGetMessageHook = nullptr;
     }
 
@@ -1521,22 +1537,23 @@ bool EnsureDeferredCountRefreshHookOnTaskbarThread() {
         }
     }
 
-    g_taskbarGetMessageHook = SetWindowsHookExW(
-        WH_GETMESSAGE, TaskbarGetMessageHookProc, nullptr, threadId);
-    return g_taskbarGetMessageHook != nullptr;
+    HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, TaskbarGetMessageHookProc,
+                                   nullptr, threadId);
+    g_taskbarGetMessageHook = hook;
+    return hook != nullptr;
 }
 
 void StopDeferredCountRefreshHook() {
-    if (g_taskbarGetMessageHook) {
-        UnhookWindowsHookEx(g_taskbarGetMessageHook);
-        g_taskbarGetMessageHook = nullptr;
+    HHOOK hook = g_taskbarGetMessageHook.exchange(nullptr);
+    if (hook) {
+        UnhookWindowsHookEx(hook);
     }
 
     g_deferredCountRefreshQueued = false;
 }
 
 void QueueDeferredCountRefresh() {
-    if (g_unloading || !g_taskbarGetMessageHook ||
+    if (g_unloading || !g_taskbarGetMessageHook.load() ||
         !g_deferredCountRefreshMessage) {
         return;
     }
@@ -1736,6 +1753,11 @@ void CleanupOnTaskbarThread() {
 }
 
 void WINAPI CleanupOnTaskbarThreadProc(void*) {
+    // The WH_GETMESSAGE hook belongs to this taskbar UI thread. Remove it here
+    // synchronously so no hook callback can still be executing when the mod is
+    // unloaded.
+    StopDeferredCountRefreshHook();
+
     try {
         CleanupOnTaskbarThread();
         Wh_Log(L"Cleanup complete");
@@ -1969,7 +1991,6 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"Before uninit");
     g_unloading = true;
     g_settingsReloadPending = false;
-    StopDeferredCountRefreshHook();
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!taskbarWnd) {
