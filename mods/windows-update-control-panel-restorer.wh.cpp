@@ -62,7 +62,7 @@ Windows Update backend/status layer, without replacing system files or writing
 real Control Panel registration keys.
 
 This is a reimplementation, not the original Windows Update client. Some buttons
-and small visual details are limited due to modern Windows versions' architecutre, and more details may be
+and small visual details are limited due to modern Windows versions' architecture, and more details may be
 improved in future versions.
 
 The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
@@ -81,6 +81,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
 - Read-only view of classic update settings; changes must be made via the modern Settings app.
 - **Multilingual UI**: English, Italian, Spanish, French, Turkish, Russian, Portuguese, Chinese, Polish, Dutch, or auto-detect.
 - **"Check for updates" feature**: click the sidebar link to run a REAL online search against Windows Update/Microsoft Update in a small window with a progress bar. The main page remains stable; results appear automatically upon completion.
+  The result is deliberately conservative and matches what the Settings app would offer: definition (antimalware) updates, optional/browse-only items, preview and beta packages and non-installable entries are filtered out, and an update that cannot be positively identified as offered is not counted. If Windows says your PC is up to date, so does this page.
 - **"Updates FAQ" link**: opens a compact window with ten common questions and answers about Windows updates.
 - **Native sidebar**: preserves the original Windows Control Panel sidebar without adding or modifying external elements.
 
@@ -110,6 +111,10 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
   installed to or replaced in the operating system. The Microsoft Symbol Server
   URL is tied to this exact historical build; if Microsoft removes that file,
   first-time setup will no longer work unless the verified payload was cached.
+  This is therefore a hard dependency on a single remote file, not a
+  convenience: the mod is not self-contained. Only the localization is - the
+  matching MUI satellite files are never downloaded, because every string the
+  restored page needs is embedded in the mod's own source.
 
 ## **Stability and safety design**
 
@@ -129,21 +134,23 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
   that is size-, PE-machine- and SHA-256-checked against a pinned digest before
   it is atomically moved into place and loaded from outside System32.
 - **Clean teardown.** Disabling the mod hides the entry immediately, stops the
-  workers, and removes the files it created. A file still mapped by another
+  workers, unloads the private payload and the generated resource modules it
+  mapped, and then removes the files it created. A file still mapped by another
   process is left alone and retried on a later load or unload - never
-  force-deleted and never scheduled machine-wide.
-
+  force-deleted and never scheduled machine-wide. In the rare case where a
+  generated file is still locked when the mod unloads (for example because a
+  Control Panel page created from it is still alive), the file is left on disk
+  and deleted by the cleanup pass of a later load or unload.
 ## **Known Limitations**
 
 - **Update installation**: The mod provides a read‑only view of Windows Update status. Installing updates still needs to be done through the modern Settings app, as adding this functionality would require extensive reverse engineering of the original Windows Update client.
 - **Visual differences**: The restored interface may not be 100% identical to the original Windows 7/8.1 Control Panel page in the first versions. Visual improvements will come in future updates.
 - **Classic Settings page**: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible and it's currently a decorative page. However, if proper documentation to improve it is found, a better implementation will be done.
-- **Best-Effort reimplementation**: This mod is a best-effort reimplementation. This means that, given the complexity of the Windows Update service, it is difficult for the single author to completely replicate the original Windows 7/8.1 functionality.
 ## **Credits**
 
-- **Yvor** - Testing on Windows 10 21H2
-- **Cips** - Testing on Windows 11 25H2
-- **Allison** - Suggestions for the implementation of the native Control Panel navigation links
+- **Yvor** - Testing on Windows 10 21H2.
+- **Cips** - Testing on Windows 11 25H2.
+- **Allison** - Suggestions for the implementation of the native Control Panel navigation links.
 
 If any issues are encountered, please report them to the author of the mod.
 */
@@ -551,6 +558,12 @@ static HANDLE g_stopEvent = nullptr;
 static std::mutex g_resourceMutex;
 static std::wstring g_resourcePath;
 static std::atomic<HMODULE> g_resourceModule{nullptr};
+// Generated resource modules replaced by a later language rebuild. They are not
+// freed at rebuild time (a Control Panel page built from one can still hold a
+// live reference into it), but they are no longer forgotten either: Wh_ModUninit
+// frees them once every page and worker is gone, so the files they map can be
+// deleted instead of counted as locked. Guarded by g_resourceMutex.
+static std::vector<HMODULE> g_supersededResourceModules;
 [[clang::no_destroy]] static std::optional<std::thread> g_setupThread;
 
 static std::mutex g_rebuildMutex;
@@ -571,6 +584,26 @@ static HANDLE g_rebuildAbortEvent = nullptr;
 // detach()ing it (a detached thread would keep running mod code after the
 // image is unmapped - see the join in Wh_ModUninit).
 static HANDLE g_wuSearchAbortEvent = nullptr;
+// How often the search thread re-checks ISearchJob::get_IsCompleted while
+// waiting. The completion callback remains the fast path; this poll is the
+// safety net for the case where WUA never delivers it (callback marshalling
+// blocked by policy, the Windows Update service restarted mid-search, ...),
+// which otherwise left the search waiting forever and the feature permanently
+// broken for the rest of the process's life.
+static constexpr DWORD kWuSearchPollIntervalMs = 500;
+
+// Absolute ceiling for one search, so a job that neither signals nor ever
+// reports completion still releases the thread. Comfortably above the check
+// window's own kWuCheckMaxDurationMs so the UI decides the outcome first in
+// every normal case.
+static constexpr ULONGLONG kWuSearchMaxDurationMs = 90000;
+
+// Upper bound on how long the search thread waits for WUA to acknowledge a
+// RequestAbort() before it tears down anyway. Wh_ModUninit join()s that
+// thread, so this wait must never be INFINITE: a stopped or wedged Windows
+// Update service would otherwise deadlock the unload and hang Explorer.
+static constexpr DWORD kWuSearchAbortWaitMs = 10000;
+
 // Guards g_activeSearchJob, which Wh_ModUninit uses to call RequestAbort()
 // immediately rather than waiting for the search thread to notice
 // g_wuSearchAbortEvent on its own.
@@ -1593,8 +1626,12 @@ static bool DisableMuiConfigInPrivateCopy(const std::wstring& path) {
 
 
 // -----------------------------------------------------------------------------
-// Embedded MUI strings. The matching MUI file is not downloaded: the classic
-// page receives its strings from this table, keeping the mod self-contained.
+// Embedded MUI strings. Only the wucltux.dll payload itself is fetched (see
+// kDownloadUrl above); its matching MUI satellite file is NOT downloaded. The
+// classic page receives every string from this table instead, so the mod needs
+// exactly one remote file rather than one per language. Note that this makes
+// the localization self-contained, not the mod: the payload remains a hard
+// remote dependency for first-time setup.
 // -----------------------------------------------------------------------------
 using LoadStringW_t = int(WINAPI*)(HINSTANCE, UINT, LPWSTR, int);
 static LoadStringW_t LoadStringWOriginal = nullptr;
@@ -1671,6 +1708,221 @@ static int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer, in
 }
 
 
+// -----------------------------------------------------------------------------
+// Literal localized page-definition titles (Windows Update > Change settings)
+// -----------------------------------------------------------------------------
+// The Control Panel frame does not take the page/breadcrumb title of the applet
+// and of its child pages from the DirectUI document: it reads the XMLFILE page
+// definition of the module named by InitPropertyBag\ResourceDLL and resolves the
+// `displayname` attributes it finds there. Those attributes are indirect string
+// references of the form "@wucltux.dll,-<id>", which SHLoadIndirectString
+// resolves by mapping wucltux.dll and reading its string table directly. On
+// modern Windows there is no wucltux.dll to map, so the settings child page had
+// no title at all and the breadcrumb ended at "Windows Update >".
+//
+// Same approach as the classic Display Control Panel restorer: replace those two
+// attributes with literal, already-localized text in the mod's own private copy
+// of the module. SHLoadIndirectString explicitly passes literal input through
+// unchanged, so this removes every module-name/MUI-cache ambiguity without
+// touching canonical page names, layouts, icons, navigation or provider code.
+// The verified, SHA-256-pinned payload itself is never modified - only the
+// generated private resource module is - and the whole pass is best effort: any
+// failure simply leaves the stock (empty) titles in place and never aborts the
+// resource build.
+static std::string WucltuxWideToUtf8(const std::wstring& value) {
+    if (value.empty() || value.size() > static_cast<size_t>(INT_MAX)) return {};
+    const int chars = static_cast<int>(value.size());
+    const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+                                          chars, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0) return {};
+    std::string output(static_cast<size_t>(bytes), '\0');
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), chars,
+                            &output[0], bytes, nullptr, nullptr) != bytes) {
+        return {};
+    }
+    return output;
+}
+
+// XML attribute escaping for the literal titles written into the page
+// definition. Kept separate from XmlEscape() above because that one works on
+// the wide DirectUI documents, while this one feeds the UTF-8 resource bytes.
+static std::string EscapePageDefinitionAttributeUtf8(const std::wstring& value) {
+    std::wstring escaped;
+    escaped.reserve(value.size());
+    for (wchar_t c : value) {
+        switch (c) {
+            case L'&': escaped += L"&amp;"; break;
+            case L'<': escaped += L"&lt;"; break;
+            case L'>': escaped += L"&gt;"; break;
+            case L'"': escaped += L"&quot;"; break;
+            case L'\'': escaped += L"&apos;"; break;
+            default: escaped += c; break;
+        }
+    }
+    return WucltuxWideToUtf8(escaped);
+}
+
+// True when `text` at `position` is an indirect reference to wucltux.dll, i.e.
+// the part between '@' and the ',' names wucltux.dll (with or without a path,
+// with or without unexpanded environment variables). Reports the id after the
+// comma and the total length of the reference.
+static bool ParsePageDefinitionIndirectReference(const std::string& text,
+                                                 size_t position, UINT& id,
+                                                 size_t& length) {
+    // Expected shape: @<optional path>wucltux.dll,-<id>"
+    if (position >= text.size() || text[position] != '@') return false;
+    const size_t comma = text.find(',', position);
+    const size_t quote = text.find('"', position);
+    if (comma == std::string::npos || quote == std::string::npos || comma > quote)
+        return false;
+
+    size_t nameStart = position + 1;
+    for (size_t i = position + 1; i < comma; ++i) {
+        if (text[i] == '\\' || text[i] == '/') nameStart = i + 1;
+    }
+    static const char kModuleName[] = "wucltux.dll";
+    const size_t nameLength = comma - nameStart;
+    if (nameLength != sizeof(kModuleName) - 1) return false;
+    if (_strnicmp(text.c_str() + nameStart, kModuleName, nameLength) != 0) return false;
+
+    size_t cursor = comma + 1;
+    if (cursor < quote && text[cursor] == '-') ++cursor;
+    if (cursor >= quote) return false;
+    unsigned long value = 0;
+    for (size_t i = cursor; i < quote; ++i) {
+        if (text[i] < '0' || text[i] > '9') return false;
+        value = value * 10 + static_cast<unsigned long>(text[i] - '0');
+        if (value > 0xFFFF) return false;
+    }
+    if (value == 0) return false;
+    id = static_cast<UINT>(value);
+    length = quote - position;
+    return true;
+}
+
+// Rewrites every displayname="@wucltux.dll,-<id>" in one page-definition
+// document to the literal localized text for <id>. Returns how many attributes
+// were replaced (0 means the document had none, which is not an error).
+static size_t ReplacePageDefinitionDisplayNames(std::string& xml) {
+    static const std::string kAttribute = "displayname=\"";
+    size_t replaced = 0;
+    size_t position = 0;
+    while ((position = xml.find(kAttribute, position)) != std::string::npos) {
+        const size_t valueStart = position + kAttribute.size();
+        UINT id = 0;
+        size_t referenceLength = 0;
+        if (!ParsePageDefinitionIndirectReference(xml, valueStart, id,
+                                                  referenceLength)) {
+            position = valueStart;
+            continue;
+        }
+        const wchar_t* text = EmbeddedMuiString(id);
+        if (!text || !*text) {
+            // No translation for this id: leave the original reference alone
+            // rather than blanking a title that might still resolve.
+            position = valueStart + referenceLength;
+            continue;
+        }
+        const std::string literal = EscapePageDefinitionAttributeUtf8(text);
+        if (literal.empty()) {
+            position = valueStart + referenceLength;
+            continue;
+        }
+        xml.replace(valueStart, referenceLength, literal);
+        position = valueStart + literal.size();
+        ++replaced;
+    }
+    return replaced;
+}
+
+// Callback state for the EnumResourceNamesW pass below.
+struct PageDefinitionPatchContext {
+    HMODULE sourceModule = nullptr;
+    HANDLE update = nullptr;
+    WORD language = 0;
+    size_t documentsPatched = 0;
+    size_t attributesPatched = 0;
+};
+
+static BOOL CALLBACK PatchOnePageDefinitionResource(HMODULE module, LPCWSTR type,
+                                                    LPWSTR name, LONG_PTR param) {
+    auto* context = reinterpret_cast<PageDefinitionPatchContext*>(param);
+    if (!context) return FALSE;
+
+    HRSRC resource = FindResourceExW(module, type, name, context->language);
+    if (!resource) resource = FindResourceW(module, name, type);
+    if (!resource) return TRUE;  // keep enumerating
+    const DWORD size = SizeofResource(module, resource);
+    HGLOBAL loaded = LoadResource(module, resource);
+    const void* data = loaded ? LockResource(loaded) : nullptr;
+    if (!data || size == 0 || size > (16u << 20)) return TRUE;
+
+    const char* first = static_cast<const char*>(data);
+    std::string xml(first, first + size);
+    const size_t replaced = ReplacePageDefinitionDisplayNames(xml);
+    if (replaced == 0) return TRUE;
+    if (xml.size() > static_cast<size_t>(MAXDWORD)) return TRUE;
+
+    if (!UpdateResourceW(context->update, const_cast<LPWSTR>(type), name,
+                         context->language, &xml[0],
+                         static_cast<DWORD>(xml.size()))) {
+        Wh_Log(L"Windows Update Restorer: page-title patch: updating an XMLFILE resource failed (%u)",
+               GetLastError());
+        return TRUE;
+    }
+    ++context->documentsPatched;
+    context->attributesPatched += replaced;
+    return TRUE;
+}
+
+// Enumerates the language of the module's XMLFILE resources so the patched
+// documents are written back under the same language id they were read from.
+static BOOL CALLBACK RecordPageDefinitionLanguage(HMODULE, LPCWSTR, LPCWSTR,
+                                                  WORD language, LONG_PTR param) {
+    *reinterpret_cast<WORD*>(param) = language;
+    return FALSE;  // first one is enough
+}
+
+static bool AddLocalizedPageDefinitionTitles(HMODULE sourceModule, HANDLE update) {
+    if (!sourceModule || !update) return false;
+
+    WORD language = MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL);
+    EnumResourceLanguagesW(sourceModule, L"XMLFILE", MAKEINTRESOURCEW(kInitResourceId),
+                           RecordPageDefinitionLanguage,
+                           reinterpret_cast<LONG_PTR>(&language));
+
+    PageDefinitionPatchContext context;
+    context.sourceModule = sourceModule;
+    context.update = update;
+    context.language = language;
+    // Do not hard-code resource ids: different legacy builds number their page
+    // definitions differently, and the applet's child pages can live in their
+    // own XMLFILE documents.
+    if (!EnumResourceNamesW(sourceModule, L"XMLFILE", PatchOnePageDefinitionResource,
+                            reinterpret_cast<LONG_PTR>(&context))) {
+        const DWORD error = GetLastError();
+        if (error != ERROR_RESOURCE_TYPE_NOT_FOUND &&
+            error != ERROR_RESOURCE_DATA_NOT_FOUND) {
+            Wh_Log(L"Windows Update Restorer: page-title patch: enumerating XMLFILE resources failed (%u)",
+                   error);
+        }
+        return false;
+    }
+
+    if (context.documentsPatched == 0) {
+        Wh_Log(L"Windows Update Restorer: page-title patch: no page-definition title reference was found");
+        return false;
+    }
+    Wh_Log(L"Windows Update Restorer: page-title patch: %u literal localized title(s) embedded in %u document(s) (language=%s)",
+           static_cast<unsigned>(context.attributesPatched),
+           static_cast<unsigned>(context.documentsPatched), LanguageCode());
+    return true;
+}
+
+// Set once the generated private module actually carries the patched titles;
+// only then is it worth naming it as the page definition's ResourceDLL.
+static std::atomic<bool> g_resourceModuleHasPageTitles{false};
+
 // Build an RT_STRING payload block (16 consecutive string IDs).
 static bool BuildWucltuxStringBlock(UINT blockId, std::vector<BYTE>& output) {
     output.clear();
@@ -1713,15 +1965,64 @@ static HMODULE ValidateEmbeddedMuiResourceModule(const std::wstring& path) {
     return module;
 }
 
+// Reports whether a generated resource module already carries the literal
+// localized titles, i.e. whether its page definitions still contain an
+// unresolved "@wucltux.dll,-<id>" displayname reference. Used when an earlier
+// generation's file is reused instead of rebuilt.
+static BOOL CALLBACK CheckOnePageDefinitionPatched(HMODULE module, LPCWSTR type,
+                                                   LPWSTR name, LONG_PTR param) {
+    auto* patched = reinterpret_cast<bool*>(param);
+    HRSRC resource = FindResourceW(module, name, type);
+    if (!resource) return TRUE;
+    const DWORD size = SizeofResource(module, resource);
+    HGLOBAL loaded = LoadResource(module, resource);
+    const void* data = loaded ? LockResource(loaded) : nullptr;
+    if (!data || size == 0 || size > (16u << 20)) return TRUE;
+    const char* first = static_cast<const char*>(data);
+    std::string xml(first, first + size);
+    size_t position = 0;
+    static const std::string kAttribute = "displayname=\"";
+    while ((position = xml.find(kAttribute, position)) != std::string::npos) {
+        const size_t valueStart = position + kAttribute.size();
+        UINT id = 0;
+        size_t referenceLength = 0;
+        if (ParsePageDefinitionIndirectReference(xml, valueStart, id,
+                                                 referenceLength)) {
+            *patched = false;  // an unresolved reference is still present
+            return FALSE;
+        }
+        position = valueStart;
+    }
+    return TRUE;
+}
+
+static bool GeneratedModuleHasPageTitles(HMODULE module) {
+    if (!module) return false;
+    bool patched = true;
+    if (!EnumResourceNamesW(module, L"XMLFILE", CheckOnePageDefinitionPatched,
+                            reinterpret_cast<LONG_PTR>(&patched))) {
+        // FALSE is also how the callback stops the enumeration early after
+        // finding an unresolved reference, so only a genuine enumeration
+        // failure (no XMLFILE at all) is treated as "not patched".
+        if (GetLastError() == ERROR_RESOURCE_TYPE_NOT_FOUND ||
+            GetLastError() == ERROR_RESOURCE_DATA_NOT_FOUND) {
+            return false;
+        }
+    }
+    return patched;
+}
+
 // Scans the storage directory for an already-built, still-valid embedded-mui
 // module from an earlier generation in this same process and reuses it
-// instead of building a new one. This matters because we deliberately never
-// FreeLibrary the modules we load (a Control Panel page can keep a live
-// reference into one), so every rebuild leaves the previous file locked in
-// memory forever - repeatedly creating fresh files on every mod
+// instead of building a new one. This matters because a module is never
+// FreeLibrary'd at rebuild time (a Control Panel page can keep a live
+// reference into one), so every rebuild leaves the previous file mapped until
+// the mod unloads - and repeatedly creating fresh files on every mod
 // enable/disable cycle is exactly the kind of rapid file churn that trips
 // ransomware-protection heuristics in AV/EDR products. Reusing a known-good
-// existing file avoids that churn entirely.
+// existing file avoids that churn entirely. Superseded modules are recorded in
+// g_supersededResourceModules and released by Wh_ModUninit, so nothing stays
+// mapped once the mod is gone.
 static bool ReuseExistingEmbeddedMuiResourceModule(const std::wstring& sourceDir) {
     // Only reuse files built for the current language. The filename embeds the
     // language code so a module built for one language is never mistaken for
@@ -1740,6 +2041,8 @@ static bool ReuseExistingEmbeddedMuiResourceModule(const std::wstring& sourceDir
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
         const std::wstring candidate = sourceDir + L"\\" + findData.cFileName;
         if (HMODULE module = ValidateEmbeddedMuiResourceModule(candidate)) {
+            g_resourceModuleHasPageTitles.store(
+                GeneratedModuleHasPageTitles(module), std::memory_order_release);
             std::lock_guard<std::mutex> lock(g_resourceMutex);
             g_resourcePath = candidate;
             g_resourceModule.store(module);
@@ -1831,6 +2134,22 @@ static bool BuildEmbeddedMuiResourceModule(const std::wstring& sourcePath) {
         Wh_Log(L"Windows Update Restorer: embedded MUI build had %d failed block writes (continuing with %d successful)",
                blocksFailed, blocksWritten);
     }
+    // Second, strictly cosmetic pass in the same transaction: embed literal
+    // localized page/breadcrumb titles into the page-definition documents, so
+    // the settings child page gets a title even where the shell resolves it
+    // without going through SHLoadIndirectString. A failure here must never
+    // discard the string blocks committed above, so it only clears the flag.
+    HMODULE titleSource = LoadLibraryExW(temporary.c_str(), nullptr,
+                                         LOAD_LIBRARY_AS_DATAFILE |
+                                             LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    bool titlesEmbedded = false;
+    if (titleSource) {
+        titlesEmbedded = AddLocalizedPageDefinitionTitles(titleSource, update.Get());
+        FreeLibrary(titleSource);
+    } else {
+        Wh_Log(L"Windows Update Restorer: page-title patch: the private copy could not be opened for reading (%u)",
+               GetLastError());
+    }
     if (!update.Commit()) {
         Wh_Log(L"Windows Update Restorer: EndUpdateResource failed (%u)", GetLastError());
         return false;
@@ -1887,6 +2206,7 @@ static bool BuildEmbeddedMuiResourceModule(const std::wstring& sourcePath) {
         std::lock_guard<std::mutex> lock(g_resourceMutex);
         g_resourcePath = destination;
     }
+    g_resourceModuleHasPageTitles.store(titlesEmbedded, std::memory_order_release);
     Wh_Log(L"Windows Update Restorer: embedded MUI resource module ready (%d blocks): %s",
            blocksWritten, destination.c_str());
     return true;
@@ -1920,12 +2240,20 @@ static void RebuildEmbeddedMuiForLanguage() {
         Wh_Log(L"Windows Update Restorer: language rebuild of embedded MUI module failed");
         return;
     }
-    // Point the cached module handle at the newly built file. We deliberately
-    // never FreeLibrary the old module (a page may still reference it); it is
-    // simply replaced as the source for future lookups.
+    // Point the cached module handle at the newly built file. The old module is
+    // deliberately not FreeLibrary'd here - a page may still reference it - but
+    // it is remembered so Wh_ModUninit can release it once every page is gone,
+    // instead of leaving it mapped for the rest of the session.
     {
         std::lock_guard<std::mutex> rl(g_resourceMutex);
-        g_resourceModule.store(nullptr);
+        if (HMODULE previous = g_resourceModule.exchange(nullptr)) {
+            try {
+                g_supersededResourceModules.push_back(previous);
+            } catch (...) {
+                // Worst case it is reclaimed at process exit, as before.
+                Wh_Log(L"Windows Update Restorer: could not record the superseded MUI module for teardown");
+            }
+        }
     }
     EmbeddedMuiResourceModule();
     Wh_Log(L"Windows Update Restorer: embedded MUI module rebuilt for language %s", LanguageCode());
@@ -4897,8 +5225,21 @@ static void DestroySettingsComboboxImpl(bool currentThreadOnly) {
             continue;
         // Ask the owner thread to stop its timer, then remove the wrapper with
         // Windhawk's cross-thread-safe helper.
-        SendMessageTimeoutW(hwnd, g_wmUiTeardown, 0, 0,
-                            SMTO_ABORTIFHUNG, 5000, nullptr);
+        //
+        // The bounded send can come back without the handler having run at all
+        // (SMTO_ABORTIFHUNG returns immediately for a hung UI thread, and the
+        // timeout can expire on a busy one), which would leave a timer firing
+        // into this image. Check the result and fall back to a blocking send in
+        // that case: RemoveWindowSubclassFromAnyThread below is itself a
+        // blocking SendMessage, so this adds no new class of wait.
+        DWORD_PTR teardownResult = 0;
+        if (!SendMessageTimeoutW(hwnd, g_wmUiTeardown, 0, 0, SMTO_ABORTIFHUNG,
+                                 5000, &teardownResult) &&
+            IsWindow(hwnd)) {
+            Wh_Log(L"Windows Update Restorer: the settings combobox teardown "
+                   L"message timed out; retrying with a blocking send");
+            SendMessageW(hwnd, g_wmUiTeardown, 0, 0);
+        }
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, SettingsDirectUiSubclassProc);
     }
@@ -5098,6 +5439,20 @@ static HWND FindSettingsDirectUiHwnd() {
     return ctx.verified;
 }
 
+// Distinctive, process-unique timer identifier for the settings-combobox poll.
+// The timer has to live on a window the mod does not own, so the id must not
+// collide with the ones that window already uses for itself.
+static UINT_PTR WuSettingsComboTimerId() {
+    static const UINT_PTR id = [] {
+        const UINT atom = RegisterWindowMessageW(L"WindhawkWuRestorerSettingsComboPoll");
+        // RegisterWindowMessageW returns a value in the 0xC000-0xFFFF range,
+        // which is both nonzero and far away from the small ordinals a window
+        // typically uses for its own timers.
+        return atom ? static_cast<UINT_PTR>(atom) : static_cast<UINT_PTR>(0xFD01);
+    }();
+    return id;
+}
+
 static void InitializeNativeSettingsCombobox(HWND hwndParent) {
     g_isSettingsPageActive = true;
     if (!hwndParent || !IsSettingsDirectUiWindow(hwndParent))
@@ -5115,7 +5470,20 @@ static void InitializeNativeSettingsCombobox(HWND hwndParent) {
                 g_settingsSubclassWindows.push_back(hwndParent);
             }
         }
-        g_settingsComboTimerId = SetTimer(hwndParent, 0, 200, nullptr);
+        // The auto-generated-ID behaviour of SetTimer only applies when hWnd
+        // is NULL. On a real window nIDEvent must be a nonzero identifier, so
+        // passing 0 either got honoured as ID 0 (SetTimer then returns 0, our
+        // own !id check treated it as failure, the WM_TIMER guard never
+        // matched so the combobox was never populated - and the timer was
+        // never killed on a shell-owned DirectUIHWND), or got substituted with
+        // ID 1, which on a foreign window is very likely to collide with and
+        // silently replace that window's own timer.
+        //
+        // Use a distinctive mod-specific ID instead. It is derived from a
+        // RegisterWindowMessageW atom, which is unique process-wide, so it
+        // cannot collide with the identifiers the shell uses on its own
+        // windows.
+        g_settingsComboTimerId = SetTimer(hwndParent, WuSettingsComboTimerId(), 200, nullptr);
         if (!g_settingsComboTimerId) {
             Wh_Log(L"Windows Update Restorer: SetTimer for the settings combobox poll failed (%u)",
                    GetLastError());
@@ -5222,42 +5590,53 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
     // Once teardown has begun, stop handling our private protocol: the handlers
     // create windows/dialogs whose procedures live in this image.
     if (!g_stopping.load() && info && info->lpFile &&
-        wcsncmp(info->lpFile, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
+        _wcsnicmp(info->lpFile, kWuRestorerProtocol,
+                  wcslen(kWuRestorerProtocol)) == 0) {
+        // Case-insensitive: the shell is free to normalize the scheme of a
+        // command it round-trips (and does, on some builds), and a
+        // case-sensitive compare here silently fell through to the original
+        // ShellExecuteExW, which fails with "no app associated" for a scheme
+        // no one has registered - i.e. the sidebar link did nothing at all.
         const wchar_t* p = info->lpFile + wcslen(kWuRestorerProtocol);
-        if (wcscmp(p, L"opensettings") == 0) {
+        Wh_Log(L"Windows Update Restorer: private command received: %s", p);
+        if (_wcsicmp(p, L"opensettings") == 0) {
             // Open the classic settings dialog as an ADDITIONAL window on top
             // of the settings page (which stays open - we do not navigate away).
             ShowWuSettingsDialog(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"check") == 0) {
+        } else if (_wcsicmp(p, L"check") == 0) {
             // "Check for updates" micro-feature (see StartWuUpdateCheck): opens
             // a small Win32 dialog with a native progress bar that runs a
             // real online Windows Update search; the page itself is left untouched.
             StartWuUpdateCheck(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"faq") == 0) {
+        } else if (_wcsicmp(p, L"faq") == 0) {
             ShowWuFaqDialog(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"history") == 0) {
+        } else if (_wcsicmp(p, L"history") == 0) {
             OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::History);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"hidden") == 0) {
+        } else if (_wcsicmp(p, L"hidden") == 0) {
             OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::HiddenUpdates);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"installed") == 0) {
+        } else if (_wcsicmp(p, L"installed") == 0) {
             OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::UninstallUpdates);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
-        } else if (wcscmp(p, L"security") == 0) {
+        } else if (_wcsicmp(p, L"security") == 0) {
             OpenSecurityAndMaintenance(info->hwnd);
             info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
             return TRUE;
         }
+        // An unrecognized private verb must be visible: falling through to the
+        // real ShellExecuteExW would just produce a generic "no app associated"
+        // error with nothing pointing back at this mod.
+        Wh_Log(L"Windows Update Restorer: UNHANDLED private command: %s", p);
         info->hInstApp = reinterpret_cast<HINSTANCE>(SE_ERR_FNF);
         SetLastError(ERROR_FILE_NOT_FOUND);
         return FALSE;
@@ -5267,25 +5646,65 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
 
 using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
 static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
+// ANSI entry points. Only ShellExecuteExW/ShellExecuteW were hooked, so a
+// caller that reached the ANSI export instead - which the Control Panel task
+// dispatcher can do for a CPNAVTYPE_ShellExec command - bypassed the private
+// protocol entirely and the sidebar link silently did nothing. These thin
+// wrappers widen the command and reuse the same handler.
+using ShellExecuteExA_t = BOOL(WINAPI*)(SHELLEXECUTEINFOA*);
+static ShellExecuteExA_t ShellExecuteExAOriginal = nullptr;
+
+static bool IsWuRestorerAnsiCommand(LPCSTR file, std::wstring& wide) {
+    if (!file) return false;
+    const int chars = MultiByteToWideChar(CP_ACP, 0, file, -1, nullptr, 0);
+    if (chars <= 0) return false;
+    wide.assign(static_cast<size_t>(chars), L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, file, -1, &wide[0], chars) <= 0) return false;
+    if (!wide.empty() && wide.back() == L'\0') wide.pop_back();
+    return _wcsnicmp(wide.c_str(), kWuRestorerProtocol,
+                     wcslen(kWuRestorerProtocol)) == 0;
+}
+
+static BOOL WINAPI ShellExecuteExAHook(SHELLEXECUTEINFOA* info) {
+    std::wstring wide;
+    if (!g_stopping.load() && info && IsWuRestorerAnsiCommand(info->lpFile, wide)) {
+        Wh_Log(L"Windows Update Restorer: private command received (ANSI): %s",
+               wide.c_str());
+        SHELLEXECUTEINFOW wideInfo{};
+        wideInfo.cbSize = sizeof(wideInfo);
+        wideInfo.fMask = info->fMask;
+        wideInfo.hwnd = info->hwnd;
+        wideInfo.lpFile = wide.c_str();
+        wideInfo.nShow = info->nShow;
+        if (ShellExecuteExWHook(&wideInfo)) {
+            info->hInstApp = wideInfo.hInstApp;
+            return TRUE;
+        }
+    }
+    if (!ShellExecuteExAOriginal) return FALSE;
+    return ShellExecuteExAOriginal(info);
+}
+
 static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR file,
                                           LPCWSTR parameters, LPCWSTR directory, INT show) {
     if (!g_stopping.load() && file &&
-        wcsncmp(file, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
+        _wcsnicmp(file, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
         const wchar_t* p = file + wcslen(kWuRestorerProtocol);
+        Wh_Log(L"Windows Update Restorer: private command received (ShellExecuteW): %s", p);
         bool handled = true;
-        if (wcscmp(p, L"opensettings") == 0) {
+        if (_wcsicmp(p, L"opensettings") == 0) {
             ShowWuSettingsDialog(hwnd);
-        } else if (wcscmp(p, L"check") == 0) {
+        } else if (_wcsicmp(p, L"check") == 0) {
             StartWuUpdateCheck(hwnd);
-        } else if (wcscmp(p, L"faq") == 0) {
+        } else if (_wcsicmp(p, L"faq") == 0) {
             ShowWuFaqDialog(hwnd);
-        } else if (wcscmp(p, L"history") == 0) {
+        } else if (_wcsicmp(p, L"history") == 0) {
             OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::History);
-        } else if (wcscmp(p, L"hidden") == 0) {
+        } else if (_wcsicmp(p, L"hidden") == 0) {
             OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::HiddenUpdates);
-        } else if (wcscmp(p, L"installed") == 0) {
+        } else if (_wcsicmp(p, L"installed") == 0) {
             OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::UninstallUpdates);
-        } else if (wcscmp(p, L"security") == 0) {
+        } else if (_wcsicmp(p, L"security") == 0) {
             OpenSecurityAndMaintenance(hwnd);
         } else {
             handled = false;
@@ -5471,9 +5890,10 @@ static unsigned RedirectNativeControlPanelNavLinks(IUnknown* unknown) {
         }
     }
 
-    // Append the mod's own "Updates: frequently asked questions" link below
-    // "Restore hidden updates" when wucltux built the task list itself (the
-    // rebuilt list already contains it, see CreateNativeControlPanelNavLinks).
+    // Intentionally does not add the mod's own "Updates: frequently asked
+    // questions" link to a list wucltux allocated - see the note on
+    // AppendFaqNavLinkIfMissing. The fabricated list built by
+    // CreateNativeControlPanelNavLinks already carries that entry.
     AppendFaqNavLinkIfMissing(navLinks);
     return patched;
 }
@@ -5535,26 +5955,35 @@ static void DestroyUnpublishedNativeNavLinks(NativeControlPanelNavLinks* links) 
     CoTaskMemFree(links);
 }
 
+// Deliberately does nothing on a list the mod did not allocate.
+//
+// This used to CoTaskMemAlloc a link and DPA_InsertPtr it into the DPA of the
+// *wucltux-owned* CControlPanelNavLinks object handed to
+// PSPropertyBag_WriteUnknownHook. That object is not the fabricated one with
+// kPinnedNavLinksReferenceCount: it has a real refcount, so when the page's
+// property bag goes away wucltux runs its own destructor and frees every
+// element of that DPA with its own allocator - freeing a block this mod
+// allocated. That is exactly the cross-allocator hazard the pinned refcount on
+// the fabricated object exists to avoid, and whether it is survivable depends
+// on an unverified assumption about CControlPanelNavLink's destructor using
+// CoTaskMemFree for the struct itself and not just for its strings.
+//
+// The FAQ entry is not lost: the fabricated-list path
+// (CreateNativeControlPanelNavLinks) already includes it, and that list is
+// wholly owned - and freed - by this mod. On the redirect path the wucltux list
+// is left at its original size, which is the conservative choice.
 static void AppendFaqNavLinkIfMissing(NativeControlPanelNavLinks* navLinks) {
-    if (!navLinks || !navLinks->links) return;
-
-    // The same list can be published more than once; never insert a duplicate.
-    const int count = DPA_GetPtrCount(navLinks->links);
-    for (int index = 0; index < count; ++index) {
-        auto* link = reinterpret_cast<NativeControlPanelNavLink*>(
-            DPA_GetPtr(navLinks->links, index));
-        if (link && link->command.execType == 1 && link->command.appletOrCommand &&
-            _wcsicmp(link->command.appletOrCommand, L"wurestorer:faq") == 0)
-            return;
-    }
-
-    const wchar_t* label = EmbeddedMuiString(20024);
-    auto* faqLink = CreateNativeNavLink(
-        0, label ? label : L"Updates: frequently asked questions",
-        L"wurestorer:faq", L"");
-    if (faqLink && DPA_InsertPtr(navLinks->links, 0x7fffffff, faqLink) == -1)
-        DestroyUnpublishedNativeNavLink(faqLink, nullptr);
+    (void)navLinks;
 }
+
+// Every fabricated list this mod hands to Explorer, so teardown can reclaim
+// them. The pinned refcount means Explorer can never free one of these objects
+// itself, and a fresh one is allocated per per-layout bag, so without this
+// registry the allocations would grow monotonically for the whole Explorer
+// session as the user navigates in and out of the page - and survive the
+// unload. Publication and Wh_ModUninit are the only writers.
+static std::mutex g_publishedNavLinksMutex;
+static std::vector<NativeControlPanelNavLinks*> g_publishedNavLinks;
 
 // NOTE: earlier revisions of this mod tried to cache and reuse a single
 // fabricated object across every page navigation to bound the per-navigation
@@ -5766,9 +6195,21 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
         if (lastPublishedBag) lastPublishedBag->Release();
         bag->AddRef();
         lastPublishedBag = bag;
+        // Remember it so Wh_ModUninit can free it. The object still outlives
+        // every page that uses it (the pinned refcount guarantees Explorer's
+        // own teardown can never destroy it early, which is the property the
+        // "fresh allocation per navigation" design relies on), but it is no
+        // longer leaked for the lifetime of the process: teardown reclaims the
+        // whole set once the pages are gone.
+        try {
+            std::lock_guard<std::mutex> lock(g_publishedNavLinksMutex);
+            g_publishedNavLinks.push_back(links);
+        } catch (...) {
+            // Failing to record it only means it is reclaimed at process exit
+            // instead of at unload - never a reason to fail the publication.
+            Wh_Log(L"WUR: could not record the published navigation list for teardown");
+        }
         Wh_Log(L"WUR: complete native ControlPanelNavLinks list published");
-        // The list intentionally remains process-lifetime. Its vtable belongs to
-        // the payload, which this mod already keeps mapped after page creation.
     } else {
         DestroyUnpublishedNativeNavLinks(links);
         Wh_Log(L"WUR: native ControlPanelNavLinks publication failed (hr=0x%08X)",
@@ -5776,6 +6217,25 @@ static HRESULT PublishNativeNavigationLinks(IUnknown* site) {
     }
     bag->Release();
     return hr;
+}
+
+// Frees every fabricated navigation list this mod published. Called from
+// Wh_ModUninit only, and only after every window that could still be rendering
+// one of them has been closed and every worker joined - at that point nothing
+// can dereference the objects any more, so releasing them here is what makes
+// the mod's navigation state actually reversible.
+static void DestroyPublishedNativeNavigationLinks() {
+    std::vector<NativeControlPanelNavLinks*> published;
+    {
+        std::lock_guard<std::mutex> lock(g_publishedNavLinksMutex);
+        published.swap(g_publishedNavLinks);
+    }
+    for (NativeControlPanelNavLinks* links : published)
+        DestroyUnpublishedNativeNavLinks(links);
+    if (!published.empty()) {
+        Wh_Log(L"WUR: released %u published navigation list(s)",
+               static_cast<unsigned>(published.size()));
+    }
 }
 
 using CElementWithSiteSetSite_t = HRESULT(WINAPI*)(void*, IUnknown*);
@@ -5917,10 +6377,53 @@ static void ReleaseWuSettingsDialogReservation() {
     g_wuSettingsDlgPending = false;
 }
 
+// Closes one of the mod's dialogs from an arbitrary thread and reports whether
+// the window is actually gone afterwards.
+//
+// This must be verified, not assumed. Every one of these dialog procs lives in
+// this image, and Windhawk unloads the image as soon as Wh_ModUninit returns,
+// so a window that survives teardown means the next message delivered to it
+// jumps into unmapped memory. SendMessageTimeoutW alone is not enough for that
+// guarantee: SMTO_ABORTIFHUNG returns immediately when the target Explorer UI
+// thread is considered hung, and the timeout can also expire on a merely busy
+// thread - in both cases the dialog is still alive and still registered.
+//
+// So: retry the bounded send a few times, and if the window still refuses to
+// die, fall back to a plain blocking SendMessageW. That one cannot time out, so
+// it either destroys the window or blocks - which is the correct trade here,
+// because returning with mod code still registered is the strictly worse
+// outcome. The result is logged either way, so a failure is visible rather than
+// silent.
+static bool CloseModDialogAndVerify(HWND hwnd, const wchar_t* what) {
+    if (!IsWindow(hwnd)) return true;
+
+    static constexpr int kBoundedAttempts = 3;
+    static constexpr UINT kBoundedTimeoutMs = 5000;
+    for (int attempt = 0; attempt < kBoundedAttempts; ++attempt) {
+        DWORD_PTR unused = 0;
+        SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG,
+                            kBoundedTimeoutMs, &unused);
+        if (!IsWindow(hwnd)) return true;
+    }
+
+    Wh_Log(L"Windows Update Restorer: %s did not close within the bounded "
+           L"timeout; falling back to a blocking close so no mod code stays "
+           L"registered after unload",
+           what ? what : L"a dialog");
+    SendMessageW(hwnd, WM_CLOSE, 0, 0);
+    if (IsWindow(hwnd)) {
+        Wh_Log(L"Windows Update Restorer: %s could NOT be destroyed; its window "
+               L"procedure still points into this image",
+               what ? what : L"a dialog");
+        return false;
+    }
+    return true;
+}
+
 // Closes every live settings dialog. Wh_ModUninit runs on an arbitrary
-// Windhawk thread while the dialogs belong to Explorer UI threads, so use
-// SendMessageTimeoutW (bounded, cross-thread safe) and never send while
-// holding the lock.
+// Windhawk thread while the dialogs belong to Explorer UI threads, so the close
+// is sent cross-thread (never while holding the lock) and its outcome is
+// verified - see CloseModDialogAndVerify.
 static void CloseAllWuSettingsDialogs() {
     std::vector<HWND> dialogs;
     {
@@ -5928,9 +6431,7 @@ static void CloseAllWuSettingsDialogs() {
         dialogs.swap(g_wuSettingsDlgs);
     }
     for (HWND hwnd : dialogs)
-        if (IsWindow(hwnd))
-            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 5000,
-                                nullptr);
+        CloseModDialogAndVerify(hwnd, L"the classic settings dialog");
 }
 
 // True when the ShellExecute target is our applet's settings child page
@@ -6474,9 +6975,7 @@ static void CloseAllWuFaqDialogs() {
         dialogs.swap(g_wuFaqDlgs);
     }
     for (HWND hwnd : dialogs)
-        if (IsWindow(hwnd))
-            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 5000,
-                                nullptr);
+        CloseModDialogAndVerify(hwnd, L"the updates FAQ window");
 }
 
 static HWND g_wuFaqParent = nullptr;
@@ -7054,9 +7553,7 @@ static void CloseAllWuCheckDialogs() {
         dialogs.swap(g_wuCheckDlgs);
     }
     for (HWND hwnd : dialogs)
-        if (IsWindow(hwnd))
-            SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 5000,
-                                nullptr);
+        CloseModDialogAndVerify(hwnd, L"the update-check window");
 }
 
 // Translated completion messages for the result window. The first sentence
@@ -7886,10 +8383,33 @@ static void ShowWuCheckResultDialog() {
 // from IUnknown and keep Invoke as the next vtable slot so the layout
 // matches the official interface (QI / AddRef / Release / Invoke). WUA
 // QueryInterfaces this object for kIidSearchCompletedCallback.
-class WuSearchCompletedCallback : public IUnknown {
+//
+// Two details are load-bearing for that layout and must not be "tidied up":
+//
+//   * Invoke MUST be declared `virtual`. IUnknown does not declare it, so
+//     without the keyword it is an ordinary non-virtual member that never
+//     reaches the vtable at all - WUA would then call through slot 3 into
+//     whatever the compiler put there and the completion event would never
+//     be signalled (the search would appear to hang until the check window's
+//     own timeout).
+//   * There MUST NOT be a virtual destructor. A virtual destructor would
+//     occupy slot 3 (and, with the Itanium/GCC ABI used by Windhawk's
+//     toolchain, two slots), pushing Invoke out of the position the real
+//     ISearchCompletedCallback vtable puts it in. Lifetime is already managed
+//     by the COM refcount, so the destructor is private and non-virtual and
+//     `delete this` in Release() is the only way the object is ever freed.
+//
+// The class is `final` for exactly that reason. Without it clang warns
+// (-Wdelete-non-abstract-non-virtual-dtor) that `delete this` in Release()
+// hits a class with virtual functions but no virtual destructor - normally a
+// real bug, because deleting through a base pointer would then skip the
+// derived destructor. `final` states what makes it safe here: nothing can
+// derive from this class, so `delete this` always runs the one and only
+// destructor. It fixes the warning without adding a vtable slot, which is
+// what a virtual destructor would have done.
+class WuSearchCompletedCallback final : public IUnknown {
 public:
     explicit WuSearchCompletedCallback(HANDLE completedEvent) : completedEvent_(completedEvent) {}
-    virtual ~WuSearchCompletedCallback() = default;
 
     HRESULT __stdcall QueryInterface(REFIID riid, void** ppv) override {
         if (!ppv) return E_POINTER;
@@ -7907,15 +8427,148 @@ public:
         if (r == 0) delete this;
         return static_cast<ULONG>(r);
     }
-    HRESULT __stdcall Invoke(IUnknown* /*searchJob*/, IUnknown* /*callbackArgs*/) {
+    // Vtable slot 3: ISearchCompletedCallback::Invoke. See the note above -
+    // the `virtual` keyword here is what actually puts it in the vtable.
+    virtual HRESULT __stdcall Invoke(IUnknown* /*searchJob*/, IUnknown* /*callbackArgs*/) {
+        // Deliberately logged: this line is the proof that WUA can reach the
+        // callback through the vtable at all. If a search ever stops
+        // completing, its absence localizes the problem to the vtable layout.
+        Wh_Log(L"Windows Update Restorer: search completed callback invoked");
         if (completedEvent_) SetEvent(completedEvent_);
         return S_OK;
     }
 
 private:
+    // Non-virtual and private on purpose: it must not occupy a vtable slot,
+    // and only Release() may destroy the object.
+    ~WuSearchCompletedCallback() = default;
+
     LONG refCount_ = 1;
     HANDLE completedEvent_ = nullptr;
 };
+
+// -----------------------------------------------------------------------------
+// Conservative filtering of what the WUA search returns
+// -----------------------------------------------------------------------------
+// The plain criteria string "IsInstalled=0 and IsHidden=0 and Type='Software'"
+// answers "what does the catalog still have for this machine?", which is NOT
+// the question the classic page asks ("are there updates waiting for me?").
+// That wider set is why the check window reported updates on machines whose
+// Settings page says "You're up to date" - it also contains:
+//
+//   * Defender / antimalware DEFINITION updates, republished several times a
+//     day and installed silently by the platform, so a fully up-to-date PC
+//     almost always has one outstanding. This alone accounts for most of the
+//     phantom "new updates were found" results.
+//   * Optional and browse-only items (extra drivers, preview / "get the latest
+//     updates as soon as they're available" packages) that Windows never
+//     installs unless the user explicitly asks for them.
+//   * Beta/Insider packages, and entries whose deployment action is not an
+//     installation at all (detection-only or uninstall entries).
+//
+// Both halves of the fix are applied: the criteria string asks the service to
+// exclude them, and every returned update is then re-tested locally, because
+// a service that does not implement one of the clauses just answers with the
+// wider set instead of failing.
+//
+// The local test is deliberately fail-closed: any property query that fails
+// leaves the update UNCOUNTED. If we cannot prove an update is really offered
+// we do not report it - a missed notification is far less damaging than the
+// page insisting on updates the Settings app then refuses to show.
+
+// Asked of the service first. BrowseOnly=0 drops optional items, IsAssigned=1
+// keeps only updates actually targeted at this machine, and
+// DeploymentAction='Installation' drops detection/uninstall entries.
+static constexpr wchar_t kWuStrictSearchCriteria[] =
+    L"IsInstalled=0 and IsHidden=0 and Type='Software' and BrowseOnly=0 and "
+    L"IsAssigned=1 and DeploymentAction='Installation'";
+// Used only if the service rejects the strict string (WU_E_INVALID_CRITERIA on
+// older or policy-restricted WUA builds). Safe, because WuUpdateIsOffered()
+// below re-applies every one of those restrictions locally.
+static constexpr wchar_t kWuFallbackSearchCriteria[] =
+    L"IsInstalled=0 and IsHidden=0 and Type='Software'";
+
+// WSUS classification GUID of "Definition Updates".
+static constexpr wchar_t kWuDefinitionUpdatesCategoryId[] =
+    L"E0789628-CE08-4437-BE74-2495B842F43B";
+
+// Category IDs come back either bare or wrapped in braces depending on the
+// WUA version, so compare case-insensitively with the braces stripped.
+static bool WuCategoryIdEquals(BSTR id, const wchar_t* guid) {
+    if (!id || !guid) return false;
+    const wchar_t* text = id;
+    size_t len = SysStringLen(id);
+    if (len >= 2 && text[0] == L'{' && text[len - 1] == L'}') {
+        ++text;
+        len -= 2;
+    }
+    const size_t guidLen = wcslen(guid);
+    return len == guidLen && _wcsnicmp(text, guid, guidLen) == 0;
+}
+
+static bool WuUpdateIsDefinitionUpdate(IUpdate* update) {
+    ICategoryCollection* categories = nullptr;
+    if (FAILED(update->get_Categories(&categories)) || !categories) return false;
+    bool isDefinition = false;
+    LONG count = 0;
+    if (SUCCEEDED(categories->get_Count(&count))) {
+        for (LONG i = 0; i < count && !isDefinition; ++i) {
+            ICategory* category = nullptr;
+            if (SUCCEEDED(categories->get_Item(i, &category)) && category) {
+                BSTR categoryId = nullptr;
+                if (SUCCEEDED(category->get_CategoryID(&categoryId)) && categoryId) {
+                    isDefinition =
+                        WuCategoryIdEquals(categoryId, kWuDefinitionUpdatesCategoryId);
+                    SysFreeString(categoryId);
+                }
+                category->Release();
+            }
+        }
+    }
+    categories->Release();
+    return isDefinition;
+}
+
+// True only for updates Windows Update would itself offer and install on this
+// machine. Everything else is ignored (see the fail-closed note above).
+static bool WuUpdateIsOffered(IUpdate* update) {
+    if (!update) return false;
+
+    // Re-check what the criteria string already asked for: with the fallback
+    // criteria the service never applied those clauses at all.
+    VARIANT_BOOL flag = VARIANT_FALSE;
+    if (FAILED(update->get_IsInstalled(&flag)) || flag == VARIANT_TRUE) return false;
+    flag = VARIANT_FALSE;
+    if (FAILED(update->get_IsHidden(&flag)) || flag == VARIANT_TRUE) return false;
+
+    UpdateType type = utDriver;
+    if (FAILED(update->get_Type(&type)) || type != utSoftware) return false;
+
+    DeploymentAction action = daNone;
+    if (FAILED(update->get_DeploymentAction(&action)) || action != daInstallation)
+        return false;
+
+    flag = VARIANT_FALSE;
+    if (SUCCEEDED(update->get_IsBeta(&flag)) && flag == VARIANT_TRUE) return false;
+
+    // Silently serviced, several times a day - never a reason to tell the user
+    // that updates are waiting.
+    if (WuUpdateIsDefinitionUpdate(update)) return false;
+
+    // The decisive test. Windows only installs, unprompted, what it
+    // auto-selects (or what is mandatory); optional and browse-only items -
+    // precisely the ones that produced the phantom results - are
+    // AutoSelectOnWebSites = FALSE. IUpdate::get_BrowseOnly is not declared by
+    // Windhawk's bundled wuapi.h, so this pair of properties (plus the
+    // BrowseOnly=0 clause in the criteria) is what stands in for it.
+    VARIANT_BOOL autoSelect = VARIANT_FALSE;
+    VARIANT_BOOL mandatory = VARIANT_FALSE;
+    const bool haveAutoSelect = SUCCEEDED(update->get_AutoSelectOnWebSites(&autoSelect));
+    const bool haveMandatory = SUCCEEDED(update->get_IsMandatory(&mandatory));
+    if (!haveAutoSelect && !haveMandatory) return false;
+    return (haveAutoSelect && autoSelect == VARIANT_TRUE) ||
+           (haveMandatory && mandatory == VARIANT_TRUE);
+}
 
 // Performs a REAL online search against Windows Update / Microsoft Update
 // using the same Windows Update Agent COM API the modern Settings app and
@@ -7926,6 +8579,12 @@ private:
 // long stale or empty on a system that has updates pending. put_Online is
 // forced to TRUE so the search always reaches Microsoft's servers rather
 // than answering from a local cache.
+//
+// What the search returns is then narrowed to what Windows would actually
+// offer and install by itself - see kWuStrictSearchCriteria and
+// WuUpdateIsOffered() above. Counting the raw result set instead is what made
+// the check window announce updates on machines the Settings app reports as
+// up to date.
 //
 // The search itself uses the asynchronous BeginSearch/EndSearch pair rather
 // than the synchronous Search() call: Search() has no way to be interrupted
@@ -7971,8 +8630,10 @@ static void RunRealWindowsUpdateSearch() {
     }
     if (SUCCEEDED(hr) && searcher) {
         searcher->put_Online(VARIANT_TRUE);
-        BSTR criteria = SysAllocString(
-            L"IsInstalled=0 and IsHidden=0 and Type='Software'");
+        // Ask the service for the strict set first (see
+        // kWuStrictSearchCriteria); the fallback below is only used if it
+        // rejects the criteria string outright.
+        BSTR criteria = SysAllocString(kWuStrictSearchCriteria);
         if (!criteria) {
             hr = E_OUTOFMEMORY;
         } else {
@@ -7987,6 +8648,38 @@ static void RunRealWindowsUpdateSearch() {
                     VARIANT state{};
                     VariantInit(&state);
                     hr = searcher->BeginSearch(criteria, callback, state, &job);
+                    if (FAILED(hr)) {
+                        // Not every WUA build accepts every clause (older
+                        // agents and some managed configurations reject
+                        // BrowseOnly / IsAssigned / DeploymentAction with
+                        // WU_E_INVALID_CRITERIA). Retry once with the plain
+                        // criteria - the per-update filter re-applies all of
+                        // those restrictions locally anyway, so a phantom
+                        // result cannot slip through this path.
+                        Wh_Log(L"Windows Update Restorer: strict BeginSearch failed "
+                               L"(hr=0x%08X); retrying with the basic criteria",
+                               static_cast<unsigned>(hr));
+                        job = nullptr;
+                        BSTR fallbackCriteria = SysAllocString(kWuFallbackSearchCriteria);
+                        if (!fallbackCriteria) {
+                            hr = E_OUTOFMEMORY;
+                        } else {
+                            VARIANT fallbackState{};
+                            VariantInit(&fallbackState);
+                            hr = searcher->BeginSearch(fallbackCriteria, callback,
+                                                       fallbackState, &job);
+                            SysFreeString(fallbackCriteria);
+                        }
+                    }
+                    if (FAILED(hr)) {
+                        // Previously this failed silently and the UI just
+                        // reported "search failed" 45 seconds later with no
+                        // clue why. Marshalling the callback is the most
+                        // likely culprit (WU_E_* / RPC_E_* show up here), so
+                        // record the actual HRESULT.
+                        Wh_Log(L"Windows Update Restorer: BeginSearch failed (hr=0x%08X)",
+                               static_cast<unsigned>(hr));
+                    }
                     if (SUCCEEDED(hr) && job) {
                         // Published so Wh_ModUninit can RequestAbort() this
                         // exact job immediately, without waiting for this
@@ -7995,10 +8688,70 @@ static void RunRealWindowsUpdateSearch() {
                             std::lock_guard<std::mutex> lock(g_searchJobMutex);
                             g_activeSearchJob = job;
                         }
+                        // Wait for the search to finish, for unload, or for
+                        // the job to report completion by itself.
+                        //
+                        // The completion callback is NOT a reliable wake-up on
+                        // its own. WUA invokes ISearchCompletedCallback through
+                        // COM, and that call can simply never arrive: the
+                        // callback has to be marshalled back into this thread's
+                        // MTA, and on locked-down or policy-managed machines
+                        // (and whenever the Windows Update service is restarted
+                        // mid-search) the notification is dropped. When that
+                        // happened there was nothing else to wake this thread,
+                        // so it sat in an INFINITE wait, the check window
+                        // animated for the full 45 s and then always reported
+                        // "search failed", and every later check was refused
+                        // with "a search is still running in the background" -
+                        // i.e. "Check for updates" never worked again for the
+                        // life of the process.
+                        //
+                        // So the wait is now bounded and ISearchJob::get_IsCompleted
+                        // is polled as the authoritative source: the callback
+                        // stays as the fast path (it ends the wait immediately),
+                        // while the poll guarantees the search always completes
+                        // even if the callback never fires.
                         HANDLE waitHandles[2] = {completedEvent, g_wuSearchAbortEvent};
                         const DWORD waitCount = g_wuSearchAbortEvent ? 2 : 1;
-                        DWORD waitResult =
-                            WaitForMultipleObjects(waitCount, waitHandles, FALSE, INFINITE);
+                        DWORD waitResult = WAIT_TIMEOUT;
+                        bool callbackFired = false;
+                        bool pollObservedCompletion = false;
+                        const ULONGLONG searchStartedTick = GetTickCount64();
+                        for (;;) {
+                            waitResult = WaitForMultipleObjects(waitCount, waitHandles, FALSE,
+                                                                kWuSearchPollIntervalMs);
+                            if (waitResult == WAIT_OBJECT_0) {
+                                callbackFired = true;
+                                break;
+                            }
+                            if (waitCount == 2 && waitResult == WAIT_OBJECT_0 + 1) break;
+                            if (waitResult == WAIT_FAILED) {
+                                Wh_Log(L"Windows Update Restorer: waiting on the search failed (%u)",
+                                       GetLastError());
+                                break;
+                            }
+                            // WAIT_TIMEOUT: ask the job itself whether it is done.
+                            VARIANT_BOOL isCompleted = VARIANT_FALSE;
+                            if (SUCCEEDED(job->get_IsCompleted(&isCompleted)) &&
+                                isCompleted == VARIANT_TRUE) {
+                                pollObservedCompletion = true;
+                                Wh_Log(L"Windows Update Restorer: the search reported completion by "
+                                       L"polling; the completion callback was never delivered");
+                                break;
+                            }
+                            if (g_stopping.load(std::memory_order_acquire)) break;
+                            // Absolute ceiling, so a job that never reports
+                            // completion at all still releases this thread.
+                            if (GetTickCount64() - searchStartedTick >= kWuSearchMaxDurationMs) {
+                                Wh_Log(L"Windows Update Restorer: the update search exceeded %ums; giving up",
+                                       static_cast<unsigned>(kWuSearchMaxDurationMs));
+                                break;
+                            }
+                        }
+                        if (callbackFired) {
+                            Wh_Log(L"Windows Update Restorer: the search completed through the callback");
+                        }
+                        (void)pollObservedCompletion;
                         {
                             std::lock_guard<std::mutex> lock(g_searchJobMutex);
                             g_activeSearchJob = nullptr;
@@ -8009,9 +8762,27 @@ static void RunRealWindowsUpdateSearch() {
                             // event WUA still signals once it has actually
                             // unwound, rather than tearing down COM state out
                             // from under it.
+                            // Bounded on purpose. Wh_ModUninit joins this
+                            // thread while holding g_wuSearchThreadMutex, so
+                            // an unbounded wait here would turn a wedged or
+                            // stopped Windows Update service into a shell
+                            // hang on disable/update/uninstall. If WUA has
+                            // not delivered the completion notification by
+                            // then, continue with the cleanup below anyway -
+                            // EndSearch/CleanUp on an aborted job is safe and
+                            // the thread always reaches its exit, so join()
+                            // always returns.
                             aborted = true;
                             job->RequestAbort();
-                            WaitForSingleObject(completedEvent, INFINITE);
+                            const DWORD abortWait =
+                                WaitForSingleObject(completedEvent, kWuSearchAbortWaitMs);
+                            if (abortWait != WAIT_OBJECT_0) {
+                                Wh_Log(L"Windows Update Restorer: the update search did not "
+                                       L"acknowledge the abort within %ums (wait=%u); "
+                                       L"continuing teardown",
+                                       static_cast<unsigned>(kWuSearchAbortWaitMs),
+                                       static_cast<unsigned>(abortWait));
+                            }
                         }
                         HRESULT endHr = searcher->EndSearch(job, &result);
                         job->CleanUp();
@@ -8037,30 +8808,45 @@ static void RunRealWindowsUpdateSearch() {
             if (SUCCEEDED(result->get_Updates(&updates)) && updates) {
                 LONG count = 0;
                 updates->get_Count(&count);
-                updateCount = static_cast<int>(count);
 
-                // Distinguish "already downloaded, waiting to
-                // install" from "still needs to be downloaded"
-                // for diagnostics - both are still correctly
-                // reported as "updates found" to the user, since
-                // IsInstalled=0 already covers every state
-                // before install (queued, mid-download, or fully
-                // staged), unlike the old registry heuristic.
+                // Do NOT report get_Count() as the number of updates. That
+                // count is "everything the catalog still has for this
+                // machine" - definition updates, optional/browse-only items,
+                // preview packages - and reporting it is what made the check
+                // window claim updates existed on a PC the Settings app
+                // considers up to date. Only updates that pass
+                // WuUpdateIsOffered() (fail-closed) are counted.
+                //
+                // The downloaded/staged split is kept for diagnostics; both
+                // states are correctly reported as "updates found", since
+                // IsInstalled=0 covers every state before install (queued,
+                // mid-download, or fully staged).
+                int offeredCount = 0;
                 int downloadedCount = 0;
+                int skippedCount = 0;
                 for (LONG i = 0; i < count; ++i) {
                     IUpdate* update = nullptr;
                     if (SUCCEEDED(updates->get_Item(i, &update)) && update) {
-                        VARIANT_BOOL isDownloaded = VARIANT_FALSE;
-                        if (SUCCEEDED(update->get_IsDownloaded(&isDownloaded)) &&
-                            isDownloaded == VARIANT_TRUE) {
-                            ++downloadedCount;
+                        if (WuUpdateIsOffered(update)) {
+                            ++offeredCount;
+                            VARIANT_BOOL isDownloaded = VARIANT_FALSE;
+                            if (SUCCEEDED(update->get_IsDownloaded(&isDownloaded)) &&
+                                isDownloaded == VARIANT_TRUE) {
+                                ++downloadedCount;
+                            }
+                        } else {
+                            ++skippedCount;
                         }
                         update->Release();
                     }
                 }
-                Wh_Log(L"Windows Update Restorer: %d update(s) not installed, "
-                       L"%d already downloaded and staged, %d still to download",
-                       updateCount, downloadedCount, updateCount - downloadedCount);
+                updateCount = offeredCount;
+                Wh_Log(L"Windows Update Restorer: the search returned %d item(s); "
+                       L"%d actually offered (%d already downloaded and staged, "
+                       L"%d still to download), %d filtered out as definition, "
+                       L"optional or non-installable",
+                       static_cast<int>(count), offeredCount, downloadedCount,
+                       offeredCount - downloadedCount, skippedCount);
                 updates->Release();
             }
         } else {
@@ -8108,7 +8894,12 @@ static void StartWuUpdateCheck(HWND host) {
     bool expected = false;
     if (!g_checkingForUpdates.compare_exchange_strong(expected, true)) return;
     g_checkStartedTick.store(GetTickCount64());
-    g_realCheckDone.store(false, std::memory_order_release);
+    // NOTE: g_realCheckDone must NOT be cleared here. The "is a previous search
+    // still running?" test below reads exactly this flag, so clearing it first
+    // made that test always observe "not done" and refuse the check with
+    // "a search is still running in the background" - even on the very first
+    // click, where no search thread had ever run. It is cleared further down,
+    // after that test, immediately before the new worker is started.
 
     // Launch the real online search in the background. WuCheckDlgProc's
     // WM_TIMER waits for it to finish before showing a result, so the
@@ -8134,6 +8925,15 @@ static void StartWuUpdateCheck(HWND host) {
             g_wuSearchThread->join();
         }
         g_wuSearchThread.reset();
+        // Cleared only now: after the "still running" test above has read it,
+        // and while g_wuSearchThreadMutex guarantees no worker is in flight.
+        // WuCheckDlgProc's WM_TIMER keys off this flag, so it must be false
+        // before the worker starts, otherwise the window could observe a
+        // stale "done" from the previous check and report its result.
+        g_realCheckDone.store(false, std::memory_order_release);
+        g_realCheckHr.store(static_cast<long>(S_OK), std::memory_order_release);
+        g_realCheckUpdateCount.store(0, std::memory_order_release);
+        g_realCheckPendingReboot.store(false, std::memory_order_release);
         g_wuSearchThread.emplace([] {
         try {
             RunRealWindowsUpdateSearch();
@@ -8794,11 +9594,54 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
 // DirectUI hooks, but both hooks call it.
 static std::wstring PatchModernWuPageXml(const std::wstring& input) noexcept;
 
+// Allocation-free pre-filter for DUISetXMLHook.
+//
+// DUIXmlParser::SetXML runs for EVERY DirectUI document parsed in
+// explorer.exe - folder views, shell dialogs, the taskbar, everything - so
+// the hook must be able to reject a foreign document without building a
+// single std::wstring. This scans the caller's buffer in place for the same
+// markers IsWindowsUpdatePageXml/PatchModernWuPageXmlImpl key off; only a
+// document that contains at least one of them can possibly be patched, so
+// anything else takes the fast path straight to the original.
+//
+// This must stay a superset of those markers: a marker added there and not
+// here would silently stop being patched.
+static bool MightBeWindowsUpdatePageXmlRaw(const WCHAR* xml) {
+    if (!xml) return false;
+    static constexpr const wchar_t* kMarkers[] = {
+        L"atom(pageSettings)",
+        L"actionCheckForUpdates",
+        L"actionViewInstalledUpdates",
+        L"resstr(1100)",
+        L"resstr(1149)",
+        L"resstr(1150)",
+        L"resstr(1153)",
+    };
+    for (const wchar_t* marker : kMarkers) {
+        if (wcsstr(xml, marker)) return true;
+    }
+    return false;
+}
+
 static HRESULT WU_DUI_THISCALL DUISetXMLHook(void* parser, const WCHAR* xml,
                                               HINSTANCE resourceModule,
                                               HINSTANCE hInstance) {
     if (!DUISetXMLOriginal) return E_FAIL;
     if (g_inWuXmlPatch || !xml) {
+        return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
+    }
+    // Cheap gate first: reject foreign documents without copying them. Without
+    // this, every DirectUI document in the shell paid for two full copies of
+    // itself (one built for PatchModernWuPageXml's parameter, one returned by
+    // PatchModernWuPageXmlImpl) plus several find() scans, just to discover it
+    // was not ours.
+    if (!MightBeWindowsUpdatePageXmlRaw(xml)) {
+        // Preserve the one side effect the old unconditional
+        // PatchModernWuPageXmlImpl call had on foreign documents: a thread
+        // that was showing the settings page and has now parsed something
+        // else must drop its combobox. The thread-local flag makes this free
+        // on every thread that never showed the page.
+        if (g_isSettingsPageActive) DestroySettingsComboboxOnThisThread();
         return DUISetXMLOriginal(parser, xml, resourceModule, hInstance);
     }
     std::wstring patched = PatchModernWuPageXml(xml);
@@ -8837,6 +9680,19 @@ static HRESULT WU_DUI_THISCALL DUISetXMLFromResourceHook(
     HINSTANCE hInstance1, HINSTANCE hInstance2) {
     if (!DUISetXMLFromResourceOriginal) return E_FAIL;
     if (!DUISetXMLOriginal || g_inWuXmlPatch) {
+        return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType, resourceModule,
+                                             hInstance1, hInstance2);
+    }
+    // Cheap gate first. The restored page's XML always comes out of either the
+    // private wucltux.dll payload or the generated resource module built from
+    // it, so any other source module can be rejected before doing any work at
+    // all. This matters because the alternative is loading the resource and
+    // MultiByteToWideChar-ing the whole document for every DirectUI resource
+    // in explorer.exe only to reject it afterwards.
+    const HMODULE payloadModule = g_module.load(std::memory_order_acquire);
+    const HMODULE generatedModule = g_resourceModule.load(std::memory_order_acquire);
+    if (resourceModule != payloadModule && resourceModule != generatedModule) {
+        if (g_isSettingsPageActive) DestroySettingsComboboxOnThisThread();
         return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType, resourceModule,
                                              hInstance1, hInstance2);
     }
@@ -9094,6 +9950,14 @@ static void InstallShellPresentationHooks() {
             WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteW_t>(p),
                                            ShellExecuteWHook,
                                            &ShellExecuteWOriginal);
+        }
+        // The ANSI export is a separate function, not a wrapper around the wide
+        // one, so it needs its own hook or the private protocol is invisible to
+        // any caller that uses it.
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteExA"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteExA_t>(p),
+                                           ShellExecuteExAHook,
+                                           &ShellExecuteExAOriginal);
         }
     }
 
@@ -9710,6 +10574,23 @@ static bool ProvideValue(const std::wstring& path, const std::wstring& name,
         case Node::Bag:
             if (name == L"ResourceDLL") {
                 if (!payloadReady) return false;
+                // Prefer the generated private resource module when it carries
+                // the literal localized page-definition titles: the Control
+                // Panel frame reads the page/breadcrumb title out of the module
+                // named here, and the pinned payload only has unresolvable
+                // "@wucltux.dll,-<id>" references, which left the settings child
+                // page untitled. The module is a byte-for-byte copy of the
+                // verified payload with resources added, so every other page
+                // definition, icon and layout it exposes is unchanged. If the
+                // title pass did not run, fall back to the payload exactly as
+                // before.
+                if (g_resourceModuleHasPageTitles.load(std::memory_order_acquire)) {
+                    std::lock_guard<std::mutex> lock(g_resourceMutex);
+                    if (!g_resourcePath.empty()) {
+                        value = g_resourcePath;
+                        break;
+                    }
+                }
                 value = *payload;
             } else if (name == L"ResourceID") {
                 isDword = true;
@@ -9963,8 +10844,18 @@ static LSTATUS WINAPI RegEnumKeyExWHook(
     // unhooked API. Resolve its native name only at enumeration exhaustion, so
     // ordinary RegEnumKeyExW calls retain the allocation-free fast path.
     if (!known) {
+        // Share RegQueryInfoKeyWHook's negative cache. Without it, every key
+        // enumeration in the process that runs to ERROR_NO_MORE_ITEMS paid for
+        // two NtQueryKey round trips plus an allocation of up to 64 KB, on
+        // every pass, for keys already known not to be the NameSpace parent.
+        // The cache is evicted in RegCloseKeyHook, so a recycled HKEY value
+        // can never produce a stale hit.
+        if (IsKnownNonNamespaceKey(key)) return status;
         keyPath = QueryNativeRegistryPath(key);
-        if (!IsNamespaceParent(keyPath)) return status;
+        if (!IsNamespaceParent(keyPath)) {
+            RememberNonNamespaceKey(key);
+            return status;
+        }
         g_keys.Track(key, keyPath);
     } else if (!IsNamespaceParent(keyPath)) {
         return status;
@@ -10173,8 +11064,14 @@ static DWORD WINAPI PayloadNoticeThreadProc(LPVOID param) {
             ShellExecuteW(nullptr, L"open", L"ms-settings:windowsupdate", nullptr,
                           nullptr, SW_SHOWNORMAL);
         }
-        g_payloadNoticeOpen.store(false, std::memory_order_release);
     }
+    // Cleared only after the params above have been destroyed. Clearing it
+    // while this thread was still running mod code let a COM activation pass
+    // the compare_exchange in ShowPayloadUnavailableNotice, start a second
+    // notice thread and close this thread's handle - the only handle
+    // WaitForPayloadNoticeThread could have waited on - so teardown could
+    // unmap the image while this thread was still executing its epilogue.
+    g_payloadNoticeOpen.store(false, std::memory_order_release);
     // No self-reference, no FreeLibraryAndExitThread: Wh_ModUninit joins this
     // thread (closing the modal box if needed) before the image is unmapped.
     return 0;
@@ -10207,7 +11104,21 @@ static void ShowPayloadUnavailableNotice() {
     PayloadNoticeParams* threadOwnedParams = params.release();
     (void)threadOwnedParams;
     std::lock_guard<std::mutex> lock(g_noticeThreadMutex);
-    if (g_noticeThread) CloseHandle(g_noticeThread);  // one notice at a time
+    if (g_noticeThread) {
+        // One notice at a time. A previous thread can still be finishing its
+        // epilogue inside this image (it clears g_payloadNoticeOpen just
+        // before returning), so wait for it to actually exit before dropping
+        // its handle - simply closing the handle here would leave teardown
+        // with no way to wait for it. By this point it is guaranteed to be
+        // exiting, so the wait is short; it is bounded anyway so a wedged
+        // thread can never block the caller forever.
+        HANDLE previous = g_noticeThread;
+        if (WaitForSingleObject(previous, 5000) == WAIT_TIMEOUT) {
+            Wh_Log(L"Windows Update Restorer: the previous payload notice thread "
+                   L"did not exit in time; its handle is released anyway");
+        }
+        CloseHandle(previous);
+    }
     g_noticeThread = thread;
 }
 
@@ -11039,12 +11950,43 @@ void Wh_ModUninit() {
     if (g_wuSearchAbortEvent) { CloseHandle(g_wuSearchAbortEvent); g_wuSearchAbortEvent = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_rebuildAbortEvent) { CloseHandle(g_rebuildAbortEvent); g_rebuildAbortEvent = nullptr; }
+    // Release the fabricated navigation lists. Safe here and not earlier: every
+    // window of the mod's has been closed and every worker joined above, so
+    // nothing can still be rendering one of them.
+    DestroyPublishedNativeNavigationLinks();
+
     delete g_dllPath.exchange(nullptr);
-    // Deliberately do not unload the datafile while a Control Panel page can cache it.
-    g_module.store(nullptr);
+
+    // Drop the module references this mod took, so a disabled mod does not
+    // leave a Windows 8.1 UI DLL (and a full copy of it per language rebuild)
+    // mapped in explorer.exe for the rest of the session. Every enable/disable
+    // cycle used to add one more LoadLibraryExW reference that was never
+    // dropped, and because the generated .mres files stayed mapped the cleanup
+    // pass below could not delete them either - which is exactly what made the
+    // teardown irreversible.
+    //
+    // This runs after CloseAllWu*Dialogs and all the joins above: at this point
+    // no page, worker or window procedure of the mod's can still be using them.
+    // The private wucltux.dll is unloaded last, because the generated modules
+    // are copies of it and the navigation lists released just above borrowed
+    // their vtable from it.
     {
         std::lock_guard<std::mutex> lock(g_resourceMutex);
+        if (HMODULE resourceModule = g_resourceModule.exchange(nullptr)) {
+            FreeLibrary(resourceModule);
+        }
+        for (HMODULE superseded : g_supersededResourceModules) FreeLibrary(superseded);
+        g_supersededResourceModules.clear();
+        g_resourceModuleHasPageTitles.store(false, std::memory_order_release);
+        g_resourcePath.clear();
+        // Now that nothing of the mod's keeps them mapped, the generated files
+        // can actually be deleted rather than counted as locked. Anything a
+        // *different* process still holds is skipped and retried on a later
+        // load or unload, exactly as before.
         CleanupGeneratedResourceModuleFiles(true);
+    }
+    if (HMODULE payloadModule = g_module.exchange(nullptr)) {
+        FreeLibrary(payloadModule);
     }
     CleanupAppletLogoIconFiles();
     CleanupControlPanelTasksXmlFile();
