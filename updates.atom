@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-11T22:24:10.000Z</updated>
+    <updated>2026-08-14T09:21:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-action-center-recreation#6f1803eb78a36c6578c05d1fc6c35d68473f8cfc</id>
+        <link href="https://windhawk.net/mods/win7-action-center-recreation"/>
+        <updated>2026-08-14T09:21:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an icon inaccuracy</li>
+<li>Simplified the code</li>
+<li>Added a Turkish translation (credits to cips_35)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Window Corner Radius 1.3]]></title>
         <id>https://windhawk.net/mods/custom-corner-radius#16834cd873954cf8b2e19612c4841dc905f6e148</id>
@@ -705,125 +720,6 @@ mods by Michael Maltsev (m417z).</p>]]></content>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CJK Spacer 0.1.27]]></title>
-        <id>https://windhawk.net/mods/cjk-spacer#d021d038b75876dc7345cfe32cd13b079be697a7</id>
-        <link href="https://windhawk.net/mods/cjk-spacer"/>
-        <updated>2026-08-05T12:58:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cjkspacer">CJK Spacer</h1>
-<p>Adds a normal ASCII space at a direct boundary between a CJK character and a
-letter or digit in UI text hosted by <code>explorer.exe</code>.</p>
-<p>On Windows 11, the primary Explorer and desktop context menus are modern XAML
-menus. The <code>modernUiText</code> setting is disabled by default because each named
-XAML Diagnostics connection permits only one consumer, and tools such as
-Taskbar Styler or File Explorer Styler may already use or block those
-connections. Enable it explicitly if you want those menus and pointer
-tooltips processed. <code>classicMenus</code> still covers the Win32 menu opened through
-"Show more options". The modern path is intentionally retained as an opt-in,
-best-effort implementation because it covers the primary Windows 11 menu; the
-connection conflict is left visible to the user rather than silently dropping
-that coverage.</p>
-<p>Examples:</p>
-<ul>
-<li><code>使用VS Code打开</code> becomes <code>使用 VS Code 打开</code></li>
-<li><code>压缩为ZIP文件</code> becomes <code>压缩为 ZIP 文件</code></li>
-<li><code>使用 VS Code 打开</code> is unchanged</li>
-<li><code>打开(&amp;O)</code> is unchanged</li>
-</ul>
-<h2 id="screenshot">Screenshot</h2>
-<p>Before:</p>
-<p><img src="https://raw.githubusercontent.com/aenerv7/Dox/main/Windhawk/CJKSpacer/Before.png" alt="Before enabling CJK Spacer" /></p>
-<p>After:</p>
-<p><img src="https://raw.githubusercontent.com/aenerv7/Dox/main/Windhawk/CJKSpacer/After.png" alt="After enabling CJK Spacer" /></p>
-<p>The transformation is idempotent. Punctuation and existing whitespace break a
-boundary and are preserved. Win32 <code>&amp;</code> mnemonic markers and tab-separated
-keyboard shortcut text are also preserved.
-Hiragana, fullwidth Katakana, and halfwidth Katakana letters are all
-classified as CJK characters for boundary detection; kana punctuation remains
-excluded.</p>
-<h2 id="supportedui">Supported UI</h2>
-<ul>
-<li>Classic Win32 popup menus are rewritten through public <code>HMENU</code> APIs. Menus
-created through <code>CreatePopupMenu</code> are handled while they are constructed,
-then associated with their <code>TrackPopupMenu</code> call and restored when the popup
-closes. Existing popup handles are also scanned immediately before display.
-It covers File Explorer, desktop, taskbar, and jump-list context menus that
-Explorer itself hosts.
-Context menus shown by third-party notification-area icon processes are
-outside the injected <code>explorer.exe</code> process and aren't covered.
-Construction-time hooks also see menu-bar dropdowns created with
-<code>CreatePopupMenu</code>, even when user32 displays them without <code>TrackPopupMenu*</code>.
-Such pending changes are restored when the menu is destroyed, the mod
-unloads, or the record expires during later popup activity. Window system
-menus that aren't built through the hooked popup APIs remain outside scope.</li>
-<li>Classic Win32 tooltips, including legacy notification-area icon tooltips, are
-rewritten only through theme handles opened for the <code>TOOLTIP</code> class, covering
-both text measurement and drawing without touching unrelated GDI text.
-Shared theme handles retain a reference for every Tooltip window that opened
-them. A DC mapped to another window is rejected, while buffered DCs that do
-not map to a window are accepted.
-Existing tooltip controls are discovered when the mod is enabled in a
-running Explorer. Basic or classic-theme tooltips drawn directly with
-<code>DrawTextW</code> aren't covered.</li>
-<li>Windows 11 XAML context menus and pointer tooltips are handled at the XAML
-source-element level. Only plain local string values in the <code>Text</code> source of
-XAML menu items and <code>ToolTip.Content</code> are changed; bindings, styles,
-presenter <code>TextBlock</code> values and ordinary XAML text are untouched. Taskbar
-thumbnail preview content is normally not a plain local string and therefore
-is not changed. A source is changed when XAML Diagnostics reports
-that it was added and restored when it is removed or the mod unloads. This
-path is disabled by default; enable <code>modernUiText</code> to opt in.</li>
-</ul>
-<p>The modern path supports both Windows.UI.Xaml and Microsoft.UI.Xaml content
-hosted by Explorer. Each named XAML Diagnostics connection allows one consumer,
-so another diagnostics-based customization tool, including Windows 11 Taskbar
-Styler or Windows 11 File Explorer Styler, can prevent this path from
-initializing. Connection attempts are scheduled outside the Windows loader
-  path; one managed worker retains requests that arrive while it is running,
-  tracks the Windows.UI.Xaml and Microsoft.UI.Xaml connections independently,
-  and retries only the connection that was lost. It doesn't add a module
-  reference: the worker is signaled to stop and joined before Windhawk removes
-  hooks. Asynchronous visual-tree watcher setup threads are tracked by handle
-  and joined at the same point, so the engine's single module reference remains
-  sufficient.
-  <code>Wh_ModAfterInit</code> covers XAML modules that are already loaded, while the
-  <code>LoadLibraryExW</code> hook covers modules loaded later, including the
-  <code>CoreMessagingXP.dll</code> static-import path used by
-  <code>Microsoft.Internal.FrameworkUdk.dll</code>.
-  If a connection attempt is denied or otherwise fails, a newly loaded XAML
-  module or an established connection being disconnected provides the next
-  retry opportunity.
-When Taskbar Styler is configured to alert on competing XAML Diagnostics
-consumers, enabling this path can show its confirmation dialog.
-The mod is injected only into <code>explorer.exe</code>. Start, Search, and some shell
-flyouts hosted by <code>StartMenuExperienceHost.exe</code>, <code>SearchHost.exe</code>, or
-<code>ShellExperienceHost.exe</code> are outside its scope.</p>
-<p>The mod doesn't edit system files, registry values, or file names. A file name
-shown in a classic menu can nevertheless be displayed with inserted spaces.
-The modern path temporarily changes target source values on their XAML UI
-threads and restores them when the source leaves the visual tree or the mod
-unloads. The classic path updates
-strings stored in active <code>HMENU</code> objects, so menu text read through
-accessibility APIs also contains the inserted spaces until the corresponding
-record is restored.
-Other menu-cleanup mods that match items by their displayed text, such as
-Remove Context Menu Items, may therefore need rules that account for the
-temporary spaces while the popup is open.
-Text Replace targets the same classic menu APIs but performs literal
-substitutions, so it cannot express this CJK/non-CJK boundary rule; when both
-mods are enabled, their hook order can affect which temporary text each sees.
-Rewritten strings are recorded and restored when the popup closes. If multiple
-items have identical rewritten text, text-based fallback restoration can select
-the first match; the idempotent transformation does not compound spaces.
-If a displayed popup item is changed dynamically, Windows may not remeasure it;
-the added spaces can clip on uncommon paths. Tooltip measurement and drawing
-also need compatible DC targets to keep sizing consistent; disable
-<code>classicTooltips</code> if a specific control clips after spacing.</p>]]></content>
-        <author>
-            <name>aenerv7</name>
-            <uri>https://github.com/aenerv7</uri>
         </author>
     </entry>
 </feed>

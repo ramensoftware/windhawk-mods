@@ -1,3 +1,9 @@
+## 2.1.0 ([Aug 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6f1803eb78a36c6578c05d1fc6c35d68473f8cfc/mods/win7-action-center-recreation.wh.cpp))
+
+- Fixed an icon inaccuracy
+- Simplified the code
+- Added a Turkish translation (credits to cips_35)
+
 ## 2.0.0 ([Aug 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4f710981ae49bf9530bf615bfc85012888d2a95f/mods/win7-action-center-recreation.wh.cpp))
 
 - Added support for the high contrast theme

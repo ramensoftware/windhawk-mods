@@ -15432,7 +15432,7 @@
           4
         ],
         "ratingUsers": 4,
-        "updated": 1785794938000,
+        "updated": 1786699307000,
         "users": 225
       },
       "metadata": {
@@ -15448,7 +15448,7 @@
           "control.exe"
         ],
         "name": "Windows 7/8.1 Action Center Recreation",
-        "version": "2.0.0"
+        "version": "2.1.0"
       }
     },
     "win7-alttab-loader": {
