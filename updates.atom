@@ -2,12 +2,77 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-14T09:21:47.000Z</updated>
+    <updated>2026-08-14T09:37:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Photoshop Dark Menus 1.0.0]]></title>
+        <id>https://windhawk.net/mods/photoshop-dark-menus#748c093a5182546cdc5b8e14145898d1d3d321f8</id>
+        <link href="https://windhawk.net/mods/photoshop-dark-menus"/>
+        <updated>2026-08-14T09:37:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="photoshopdarkmenus">Photoshop Dark Menus</h1>
+<p>This Windhawk mod enables dark menus (top-bar dropdowns and context menus) in
+Adobe Photoshop on Windows, with fully customizable colors.</p>
+<p>Everything happens inside the Photoshop process. No system colors are changed,
+no other application is affected, and nothing has to be restored on exit.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/photoshop-dark-menus/main/images/photoshop-dark-menu-screenshot-1.png" alt="Top Bar Menu Dropdown" /></p>
+<p><img src="https://raw.githubusercontent.com/sabergraphics/photoshop-dark-menus/main/images/photoshop-dark-menu-screenshot-2.png" alt="Context Menu" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>Photoshop's menus look like classic unthemed Win32 menus, but they are not:
+Photoshop <strong>owner-draws every menu item itself</strong> through <code>AdobeOwl.dll</code>, using
+plain GDI, inside its own process. Instrumenting a live Photoshop shows the
+menu popups going up via <code>TrackPopupMenuEx</code> and every item being painted with:</p>
+<ul>
+<li><code>FillRect(hdc, &amp;rc, (HBRUSH)(COLOR_MENU + 1))</code> for the item background, and
+<code>(HBRUSH)(COLOR_HIGHLIGHT + 1)</code> for the hovered item. These <strong>system color
+pseudo-handles</strong> are resolved inside <code>user32</code> from shared memory, so they
+bypass <code>GetSysColor</code> and <code>GetSysColorBrush</code> hooks entirely - which is why
+earlier per-process attempts appeared to do nothing.</li>
+<li><code>GetSysColor(COLOR_MENUTEXT / COLOR_GRAYTEXT / COLOR_HIGHLIGHTTEXT)</code> for text.</li>
+<li>Its own 1px <code>FillRect</code> for separator lines.</li>
+</ul>
+<p>So every pixel of a menu item is reachable from inside the process:</p>
+<ul>
+<li><code>FillRect</code> / <code>PatBlt</code> are hooked and, while a menu is up, sys-color
+pseudo-handles are re-resolved through this mod's own color table, and 1px
+fills inside a menu DC are recolored to the separator color.</li>
+<li><code>GetSysColor</code> / <code>GetSysColorBrush</code> are hooked for the menu color indices, but
+<strong>only while a menu is open</strong>, so Photoshop's dialogs, panels and lists keep
+the system colors.</li>
+<li><code>MENUINFO::hbrBack</code> is stamped on each popup (and its submenus) at
+<code>WM_INITMENUPOPUP</code>, covering the popup background that the system paints
+around the owner-drawn items.</li>
+<li>The popup's non-client frame is the one part drawn kernel-side, from the 3D
+colors, where no user-mode hook can reach it - so the popup is subclassed at
+creation and the frame is repainted with the border color after it. Set
+<strong>Border Color</strong> empty to leave the system frame alone.</li>
+</ul>
+<h2 id="options">Options</h2>
+<ul>
+<li><strong>Menu Background Color</strong>: Background color for all menu popups (Default: <code>#2D2D2D</code>).</li>
+<li><strong>Menu Text Color</strong>: Text color for active items (Default: <code>#DCDCDC</code>).</li>
+<li><strong>Highlight Background Color</strong>: Color when hovering over an item (Default: <code>#505050</code>).</li>
+<li><strong>Highlight Text Color</strong>: Text color when hovering over an item (Default: <code>#FFFFFF</code>).</li>
+<li><strong>Separator Line Color</strong>: Color for separator lines. Set to match the background color to hide them completely (Default: <code>#383838</code>).</li>
+<li><strong>Disabled Text Color</strong>: Text color for disabled menu items (Default: <code>#808080</code>).</li>
+<li><strong>Border Color</strong>: Color of the popup frame. Leave empty to keep the system frame (Default: <code>#2D2D2D</code>).</li>
+</ul>
+<h2 id="scope">Scope</h2>
+<p>The menu bar itself (File, Edit, Image, …) is drawn by Photoshop's own UI
+framework and already follows Photoshop's interface theme; this mod covers the
+dropdown popups and context menus.</p>
+<p>Menus that Windows pops up through its own internal paths, without going through
+the exported <code>TrackPopupMenu</code> / <code>TrackPopupMenuEx</code> - a window's system menu, for
+example - are outside the reach of an in-process hook and keep the system colors.</p>]]></content>
+        <author>
+            <name>Saber Naeemi</name>
+            <uri>https://github.com/sabergraphics</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Action Center Recreation 2.1.0]]></title>
         <id>https://windhawk.net/mods/win7-action-center-recreation#6f1803eb78a36c6578c05d1fc6c35d68473f8cfc</id>
@@ -702,24 +767,6 @@ mods by Michael Maltsev (m417z).</p>]]></content>
         <author>
             <name>Fred</name>
             <uri>https://github.com/fjdiazt</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Command Bar 1.1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-command-bar#81a25073317418e4daedb4eba756326a9587dffc</id>
-        <link href="https://windhawk.net/mods/explorer-command-bar"/>
-        <updated>2026-08-05T16:37:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add the New+ feature from PowerToys to Explorer Command Bar, with possibility to replace the default explorer's New.</li>
-<li>Add an optional command bar button for the selected item’s or current folder’s shell context menu, including shell extensions, nested menus, extended verbs, and Nilesoft Shell support.</li>
-<li>Add nested custom menus, improved icon handling, configurable button spacing, and more reliable command bar refreshes.</li>
-<li>Prevent crashes when unloading the mod by revoking XAML event handlers and safely cleaning up menus, timers, hooks, and other per-thread resources.</li>
-<li>Add Windhawk 2.0 settings compatibility for toolbar items without subitems.</li>
-<li>Bug fixes.</li>
-</ul>]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
         </author>
     </entry>
 </feed>

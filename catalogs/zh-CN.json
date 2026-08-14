@@ -9756,6 +9756,36 @@
         "version": "1.0.3"
       }
     },
+    "photoshop-dark-menus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1786700234000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1786700234000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Saber Naeemi",
+        "compilerOptions": "-lUser32 -lGdi32 -lComctl32",
+        "description": "Enables dark mode and custom colors for all menus in Adobe Photoshop.",
+        "github": "https://github.com/sabergraphics",
+        "homepage": "https://www.sabernaeemi.com",
+        "include": [
+          "Photoshop.exe"
+        ],
+        "name": "Photoshop Dark Menus",
+        "twitter": "https://x.com/SaberNaeemi",
+        "version": "1.0.0"
+      }
+    },
     "pinned-items-double-click": {
       "details": {
         "defaultSorting": 7911,
