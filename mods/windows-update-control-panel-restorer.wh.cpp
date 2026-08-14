@@ -132,16 +132,18 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 24H2 and
   workers, and removes the files it created. A file still mapped by another
   process is left alone and retried on a later load or unload - never
   force-deleted and never scheduled machine-wide.
+
 ## **Known Limitations**
 
 - **Update installation**: The mod provides a read‑only view of Windows Update status. Installing updates still needs to be done through the modern Settings app, as adding this functionality would require extensive reverse engineering of the original Windows Update client.
 - **Visual differences**: The restored interface may not be 100% identical to the original Windows 7/8.1 Control Panel page in the first versions. Visual improvements will come in future updates.
 - **Classic Settings page**: The classic Windows Update settings page (the one with the "Important updates" dropdown) is rendered from the Windows 8.1 DLL. On modern Windows, some of its internal logic no longer works, so the dropdown is recreated where possible and it's currently a decorative page. However, if proper documentation to improve it is found, a better implementation will be done.
+- **Best-Effort reimplementation**: This mod is a best-effort reimplementation. This means that, given the complexity of the Windows Update service, it is difficult for the single author to completely replicate the original Windows 7/8.1 functionality.
 ## **Credits**
 
-- **Yvor** - Testing on Windows 10 21H2.
-- **Cips** - Testing on Windows 11 25H2.
-- **Allison** - Suggestions for the implementation of the native Control Panel navigation links.
+- **Yvor** - Testing on Windows 10 21H2
+- **Cips** - Testing on Windows 11 25H2
+- **Allison** - Suggestions for the implementation of the native Control Panel navigation links
 
 If any issues are encountered, please report them to the author of the mod.
 */
