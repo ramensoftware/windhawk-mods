@@ -2,7 +2,7 @@
 // @id              fullscreen-in-a-window
 // @name            Fullscreen in a Window
 // @description     Run an app's own fullscreen inside a normal movable, resizable window. An outer frame is created and the app is told the screen is only that window's size, so its NATIVE fullscreen (or windowed) mode plays out inside the frame - the app's own window is never restyled.
-// @version         1.0.1
+// @version         1.0.2
 // @author          thebdr
 // @github          https://github.com/thebdr
 // @include         *
@@ -693,8 +693,13 @@ void EdgeResistanceTick(HWND container) {
     }
 
     // Clipped: keep the clip tracking the app area, and watch for the cursor
-    // pressing against the boundary.
-    ClipCursor(&inner);
+    // pressing against the boundary. Re-assert only when it drifted - a
+    // constant re-clip can interfere with apps that manage the cursor
+    // themselves.
+    RECT cur;
+    if (!GetClipCursor(&cur) || !EqualRect(&cur, &inner)) {
+        ClipCursor(&inner);
+    }
     const int e = 2;
     bool atEdge = pt.x <= inner.left + e || pt.x >= inner.right - 1 - e ||
                   pt.y <= inner.top + e || pt.y >= inner.bottom - 1 - e;
@@ -1361,6 +1366,12 @@ void EncloseWindow(HWND app) {
     // The container was created at the top of the z-order - above the app it
     // now owns. Raise the app back over it, or the frame's dark client covers
     // the app until the next activation ("black interior until clicked").
+    // Also drop any topmost state the app carried in - contained surfaces
+    // must never sit above the taskbar.
+    if (GetWindowLongPtrW(app, GWL_EXSTYLE) & WS_EX_TOPMOST) {
+        SelfSetWindowPos(app, HWND_NOTOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
     SelfSetWindowPos(app, HWND_TOP, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     SetForegroundWindow(app);
@@ -1847,12 +1858,47 @@ bool NetOnPlacement(HWND hWnd, int& x, int& y, int& cx, int& cy, UINT* uFlags) {
     return true;
 }
 
+// A contained surface must never sit in the topmost band: it would cover the
+// auto-hidden taskbar's reveal (seen as "taskbar never shows" or "shows under
+// the window"). Demote topmost assertions by the enclosed app or by any
+// window covering most of the enclosure - but leave small popups (menus,
+// tooltips, IMEs) alone.
+bool ShouldDemoteTopmost(HWND hWnd) {
+    if (t_selfOp || !SpoofActive()) {
+        return false;
+    }
+    if (GetAncestor(hWnd, GA_ROOT) != hWnd || IsContainer(hWnd)) {
+        return false;
+    }
+    if (IsEnclosedApp(hWnd)) {
+        return true;
+    }
+    if (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) {
+        return false;
+    }
+    RECT fake, wr, ix;
+    if (!ActiveFakeRect(fake) || !GetWindowRect(hWnd, &wr) ||
+        !IntersectRect(&ix, &fake, &wr)) {
+        return false;
+    }
+    long cover = (long)(ix.right - ix.left) * (ix.bottom - ix.top);
+    long total = (long)(fake.right - fake.left) * (fake.bottom - fake.top);
+    return total > 0 && cover * 10 >= total * 8;  // covers >= 80% of it
+}
+
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
                               int cx, int cy, UINT uFlags) {
-    if (NetOnPlacement(hWnd, X, Y, cx, cy, &uFlags)) {
-        if (hWndInsertAfter == HWND_TOPMOST) {
-            hWndInsertAfter = HWND_NOTOPMOST;
-        }
+    bool redirected = NetOnPlacement(hWnd, X, Y, cx, cy, &uFlags);
+    if (hWndInsertAfter == HWND_TOPMOST && !(uFlags & SWP_NOZORDER) &&
+        ShouldDemoteTopmost(hWnd)) {
+        hWndInsertAfter = HWND_NOTOPMOST;
+        Wh_Log(L"Demoted topmost assertion of %p", hWnd);
+    }
+    if (redirected &&
+        (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+        // Pulled into the enclosure while already topmost: drop that too.
+        hWndInsertAfter = HWND_NOTOPMOST;
+        uFlags &= ~(UINT)SWP_NOZORDER;
     }
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
@@ -1870,10 +1916,10 @@ DeferWindowPos_t DeferWindowPos_Original;
 HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd,
                                 HWND hWndInsertAfter, int x, int y, int cx,
                                 int cy, UINT uFlags) {
-    if (NetOnPlacement(hWnd, x, y, cx, cy, &uFlags)) {
-        if (hWndInsertAfter == HWND_TOPMOST) {
-            hWndInsertAfter = HWND_NOTOPMOST;
-        }
+    NetOnPlacement(hWnd, x, y, cx, cy, &uFlags);
+    if (hWndInsertAfter == HWND_TOPMOST && !(uFlags & SWP_NOZORDER) &&
+        ShouldDemoteTopmost(hWnd)) {
+        hWndInsertAfter = HWND_NOTOPMOST;
     }
     return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx,
                                    cy, uFlags);
