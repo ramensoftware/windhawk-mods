@@ -481,19 +481,18 @@ struct SearchLayout {
     uint64_t generation = 0;
     bool valid = false;
 };
-DWORD GetSearchMode();
-bool IsSearchBoxMode(DWORD mode);
 int ScaleForDpi(int value, UINT dpi);
 RECT CalculateSpectrumBounds(const SearchLayout& layout,
                              const Settings& settings);
+bool HasUsableSearchBoxGeometry(const SearchLayout& layout,
+                                const Settings& settings);
 bool RectEquals(const RECT& first, const RECT& second);
 bool IsSearchExecutableName(PCWSTR executablePath);
 SearchHostKind DetectSearchHostKind(PCWSTR executablePath);
 bool IsSearchProcessWindow(HWND window);
 bool IsSearchInterfaceOpen();
 bool IsFullscreenForeground(const SearchLayout& layout);
-bool ShouldShowOverlay(const SearchLayout& layout, DWORD searchMode,
-                       bool searchInterfaceOpen,
+bool ShouldShowOverlay(const SearchLayout& layout, bool searchInterfaceOpen,
                        bool fullscreenForeground);
 DWORD WINAPI SearchLocatorThreadProc(void*);
 }  // namespace tas
@@ -2182,6 +2181,17 @@ HRESULT CreateAutomationClient(IUIAutomation2** automation) {
     return hr;
 }
 
+bool TryGetSearchMode(DWORD* mode) {
+    if (!mode) return false;
+    *mode = 0;
+    DWORD size = sizeof(*mode);
+    return RegGetValueW(
+               HKEY_CURRENT_USER,
+               L"Software\\Microsoft\\Windows\\CurrentVersion\\Search",
+               L"SearchboxTaskbarMode", RRF_RT_REG_DWORD, nullptr, mode,
+               &size) == ERROR_SUCCESS;
+}
+
 DWORD WINAPI SearchLocatorWorkerProc(void* parameter) {
     const std::unique_ptr<LocatorTarget> targetParameter(
         static_cast<LocatorTarget*>(parameter));
@@ -2228,90 +2238,117 @@ DWORD WINAPI SearchLocatorWorkerProc(void* parameter) {
     }
     ScopedHandle explorerProcess(OpenProcess(
         SYNCHRONIZE, FALSE, target.explorerProcessId));
-    DWORD searchMode = GetSearchMode();
+    DWORD searchMode = 0;
+    bool searchModeKnown = TryGetSearchMode(&searchMode);
     ULONGLONG rapidRefreshUntil = 0;
     SearchLayout previousLayout;
     bool hasPreviousLayout = false;
     IUIAutomationElement* cachedSearch = nullptr;
     int consecutiveFailures = 0;
     bool fallbackLogged = false;
+    bool geometryRejectionLogged = false;
     while (WaitForSingleObject(context.stopEvent.get(), 0) != WAIT_OBJECT_0) {
-        const bool searchBoxMode = IsSearchBoxMode(searchMode);
-        if (!searchBoxMode) {
-            PublishLayout(context, {});
-            consecutiveFailures = 0;
-        } else {
-            const HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-            DWORD explorerProcessId = 0;
-            if (taskbar) {
-                GetWindowThreadProcessId(taskbar, &explorerProcessId);
-            }
-            if (taskbar != target.taskbar ||
-                explorerProcessId != target.explorerProcessId) {
-                Wh_Log(L"UI Automation worker retiring after shell change: old=%lu new=%lu",
-                    target.explorerProcessId, explorerProcessId);
-                break;
-            }
+        bool searchBoxGeometry = false;
+        const HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        DWORD explorerProcessId = 0;
+        if (taskbar) {
+            GetWindowThreadProcessId(taskbar, &explorerProcessId);
+        }
+        if (taskbar != target.taskbar ||
+            explorerProcessId != target.explorerProcessId) {
+            Wh_Log(L"UI Automation worker retiring after shell change: old=%lu new=%lu",
+                target.explorerProcessId, explorerProcessId);
+            break;
+        }
 
-            SearchLayout layout;
-            IUIAutomationElement* previousSearch = cachedSearch;
-            if (previousSearch) previousSearch->AddRef();
-            const bool queried = QuerySearchLayout(
-                automation, taskbar, &cachedSearch, &layout);
-            if (previousSearch != cachedSearch) {
-                if (propertyHandlerRegistered && previousSearch) {
-                    automation->RemovePropertyChangedEventHandler(
-                        previousSearch, propertyHandler);
-                    propertyHandlerRegistered = false;
-                }
-                if (cachedSearch && propertyHandler &&
-                    propertyHandler->changedEvent()) {
-                    PROPERTYID properties[] = {
-                        UIA_BoundingRectanglePropertyId};
-                    propertyHandlerRegistered = SUCCEEDED(
-                        automation->AddPropertyChangedEventHandlerNativeArray(
-                            cachedSearch, TreeScope_Element, nullptr,
-                            propertyHandler, properties,
-                            static_cast<int>(ARRAYSIZE(properties))));
-                }
+        SearchLayout layout;
+        IUIAutomationElement* previousSearch = cachedSearch;
+        if (previousSearch) previousSearch->AddRef();
+        const bool queried = QuerySearchLayout(
+            automation, taskbar, &cachedSearch, &layout);
+        if (previousSearch != cachedSearch) {
+            if (propertyHandlerRegistered && previousSearch) {
+                automation->RemovePropertyChangedEventHandler(
+                    previousSearch, propertyHandler);
+                propertyHandlerRegistered = false;
             }
-            SafeRelease(previousSearch);
-            if (queried) {
-                const bool layoutChanged = hasPreviousLayout &&
-                    !LayoutContentEquals(previousLayout, layout);
-                previousLayout = layout;
-                hasPreviousLayout = true;
-                if (context.settings.autoPosition && layoutChanged) {
-                    rapidRefreshUntil = std::max(
-                        rapidRefreshUntil,
-                        GetTickCount64() + kRapidLayoutRefreshDurationMs);
-                }
-                consecutiveFailures = 0;
-                fallbackLogged = false;
+            if (cachedSearch && propertyHandler &&
+                propertyHandler->changedEvent()) {
+                PROPERTYID properties[] = {
+                    UIA_BoundingRectanglePropertyId};
+                propertyHandlerRegistered = SUCCEEDED(
+                    automation->AddPropertyChangedEventHandlerNativeArray(
+                        cachedSearch, TreeScope_Element, nullptr,
+                        propertyHandler, properties,
+                        static_cast<int>(ARRAYSIZE(properties))));
+            }
+        }
+        SafeRelease(previousSearch);
+        if (queried) {
+            const bool layoutChanged = hasPreviousLayout &&
+                !LayoutContentEquals(previousLayout, layout);
+            previousLayout = layout;
+            hasPreviousLayout = true;
+            if (context.settings.autoPosition && layoutChanged) {
+                rapidRefreshUntil = std::max(
+                    rapidRefreshUntil,
+                    GetTickCount64() + kRapidLayoutRefreshDurationMs);
+            }
+            consecutiveFailures = 0;
+            fallbackLogged = false;
+            if (HasUsableSearchBoxGeometry(layout, context.settings)) {
+                searchBoxGeometry = true;
+                geometryRejectionLogged = false;
                 RememberLayout(context, layout);
                 PublishLayout(context, layout);
-            } else if (BuildLayoutFromTemplate(
-                           context, taskbar, explorerProcessId, &layout)) {
-                consecutiveFailures = 0;
-                PublishLayout(context, layout);
-                if (!fallbackLogged) {
-                    Wh_Log(L"Using cached search-box geometry for explorer=%lu",
-                        explorerProcessId);
-                    fallbackLogged = true;
+            } else {
+                PublishLayout(context, {});
+                if (!geometryRejectionLogged) {
+                    const RECT bounds = CalculateSpectrumBounds(
+                        layout, context.settings);
+                    const LONG drawableWidth = bounds.right - bounds.left;
+                    const LONG drawableHeight = bounds.bottom - bounds.top;
+                    if (searchModeKnown) {
+                        Wh_Log(L"Taskbar search control rejected: mode=%lu width=%ld height=%ld drawable=%ldx%ld; overlay idle",
+                            searchMode, layout.rect.right - layout.rect.left,
+                            layout.rect.bottom - layout.rect.top,
+                            drawableWidth, drawableHeight);
+                    } else {
+                        Wh_Log(L"Taskbar search control rejected: mode=unavailable width=%ld height=%ld drawable=%ldx%ld; overlay idle",
+                            layout.rect.right - layout.rect.left,
+                            layout.rect.bottom - layout.rect.top,
+                            drawableWidth, drawableHeight);
+                    }
+                    geometryRejectionLogged = true;
                 }
+            }
+        } else if (searchModeKnown && searchMode == 2 &&
+                   BuildLayoutFromTemplate(
+                       context, taskbar, explorerProcessId, &layout)) {
+            searchBoxGeometry = true;
+            consecutiveFailures = 0;
+            PublishLayout(context, layout);
+            if (!fallbackLogged) {
+                Wh_Log(L"Using cached search-box geometry for explorer=%lu",
+                    explorerProcessId);
+                fallbackLogged = true;
+            }
+        } else {
+            PublishLayout(context, {});
+            if (searchModeKnown && searchMode != 2) {
+                consecutiveFailures = 0;
             } else if (++consecutiveFailures >= 3) {
                 Wh_Log(L"UI Automation worker retiring after repeated query failures");
                 break;
             }
         }
 
-        const bool rapidRefresh = searchBoxMode &&
+        const bool rapidRefresh = searchBoxGeometry &&
             context.settings.autoPosition &&
             GetTickCount64() < rapidRefreshUntil;
-        const DWORD refreshDelay = !searchBoxMode && searchModeWatcher.changedEvent()
-            ? INFINITE
-            : (rapidRefresh ? kRapidLayoutRefreshMs
-                            : kNormalLayoutRefreshMs);
+        const DWORD refreshDelay = rapidRefresh
+            ? kRapidLayoutRefreshMs
+            : kNormalLayoutRefreshMs;
         HANDLE waits[5] = {context.stopEvent.get()};
         DWORD waitCount = 1;
         DWORD explorerWaitIndex = MAXDWORD;
@@ -2358,17 +2395,21 @@ DWORD WINAPI SearchLocatorWorkerProc(void* parameter) {
                 Wh_Log(L"Search mode change watcher could not be rearmed");
                 searchModeWatcher.Stop();
             }
-            searchMode = GetSearchMode();
+            searchModeKnown = TryGetSearchMode(&searchMode);
             rapidRefreshUntil =
                 GetTickCount64() + kRapidLayoutRefreshDurationMs;
-            Wh_Log(L"Search mode changed: %lu", searchMode);
+            if (searchModeKnown) {
+                Wh_Log(L"Search mode changed: %lu", searchMode);
+            } else {
+                Wh_Log(L"Search mode changed: value unavailable");
+            }
         } else if (propertyWaitIndex != MAXDWORD &&
                    waitResult == WAIT_OBJECT_0 + propertyWaitIndex) {
             rapidRefreshUntil =
                 GetTickCount64() + kRapidLayoutRefreshDurationMs;
         } else if (waitResult == WAIT_TIMEOUT) {
             if (!searchModeWatcher.changedEvent()) {
-                searchMode = GetSearchMode();
+                searchModeKnown = TryGetSearchMode(&searchMode);
             }
         } else {
             Wh_Log(L"UI Automation refresh wait failed: %u", GetLastError());
@@ -2466,22 +2507,6 @@ bool IsSearchInterfaceOpen() {
     return IsSearchProcessWindow(foreground);
 }
 
-DWORD GetSearchMode() {
-    DWORD mode = 0;
-    DWORD size = sizeof(mode);
-    const LSTATUS status = RegGetValueW(
-        HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Search",
-        L"SearchboxTaskbarMode", RRF_RT_REG_DWORD, nullptr, &mode, &size);
-    return status == ERROR_SUCCESS ? mode : 0;
-}
-
-bool IsSearchBoxMode(DWORD mode) {
-    // SearchboxTaskbarMode uses 2 for the full box and 3 for the narrower
-    // search icon-and-label button on both Windows 10 and Windows 11.
-    return mode == 2;
-}
-
 int ScaleForDpi(int value, UINT dpi) {
     return MulDiv(value, static_cast<int>(dpi ? dpi : 96), 96);
 }
@@ -2505,6 +2530,17 @@ RECT CalculateSpectrumBounds(const SearchLayout& layout,
         height - ScaleForDpi(settings.bottomPadding, layout.dpi),
         top, clampedHeight);
     return {left, top, right, bottom};
+}
+
+bool HasUsableSearchBoxGeometry(const SearchLayout& layout,
+                                const Settings& settings) {
+    if (!layout.valid || IsRectEmpty(&layout.rect)) return false;
+    const LONG width = layout.rect.right - layout.rect.left;
+    const LONG height = layout.rect.bottom - layout.rect.top;
+    if (width < height * 3) return false;
+    const RECT bounds = CalculateSpectrumBounds(layout, settings);
+    return bounds.right - bounds.left >= ScaleForDpi(64, layout.dpi) &&
+           bounds.bottom > bounds.top;
 }
 
 bool RectEquals(const RECT& first, const RECT& second) {
@@ -2543,13 +2579,12 @@ bool IsFullscreenForeground(const SearchLayout& layout) {
            foregroundRect.bottom >= monitorInfo.rcMonitor.bottom - tolerance;
 }
 
-bool ShouldShowOverlay(const SearchLayout& layout, DWORD searchMode,
-                       bool searchInterfaceOpen,
+bool ShouldShowOverlay(const SearchLayout& layout, bool searchInterfaceOpen,
                        bool fullscreenForeground) {
     if (!layout.valid || !layout.taskbar || !IsWindow(layout.taskbar) ||
         !IsWindowVisible(layout.taskbar) ||
-        !IsSearchBoxMode(searchMode) || IsRectEmpty(&layout.rect) ||
-        searchInterfaceOpen || fullscreenForeground) {
+        IsRectEmpty(&layout.rect) || searchInterfaceOpen ||
+        fullscreenForeground) {
         return false;
     }
     DWORD currentProcessId = 0;
@@ -2687,7 +2722,6 @@ struct WindowState {
     UINT frameInterval = 0;
     HWND ownerTaskbar = nullptr;
     HWINEVENTHOOK locationHook = nullptr;
-    DWORD searchMode = 0;
     bool searchInterfaceOpen = false;
     bool searchInterfaceWasOpen = false;
     ULONGLONG lastZOrderLog = 0;
@@ -3154,16 +3188,12 @@ bool DrawSpectrum(HWND window, WindowState* state) {
 }
 
 void RefreshOverlayState(HWND window, WindowState* state,
-                         bool refreshSearchMode,
                          bool refreshSearchInterface) {
     if (!state) return;
     if (state->context->settings.opacity == 0) {
         state->eligible = false;
         HideOverlay(window, state);
         return;
-    }
-    if (refreshSearchMode) {
-        state->searchMode = GetSearchMode();
     }
     if (refreshSearchInterface) {
         state->searchInterfaceOpen = IsSearchInterfaceOpen();
@@ -3186,8 +3216,7 @@ void RefreshOverlayState(HWND window, WindowState* state,
         return;
     }
     const bool fullscreenForeground = IsFullscreenForeground(latest);
-    if (!ShouldShowOverlay(latest, state->searchMode,
-                           state->searchInterfaceOpen,
+    if (!ShouldShowOverlay(latest, state->searchInterfaceOpen,
                            fullscreenForeground)) {
         state->eligible = false;
         HideOverlay(window, state);
@@ -3252,11 +3281,11 @@ LRESULT CALLBACK OverlayWindowProc(HWND window, UINT message,
             if (pendingChanges & kPendingForegroundChange) {
                 KillTimer(window, kShellStateDebounceTimer);
                 UpdateForegroundLocationHook(state);
-                RefreshOverlayState(window, state, false, true);
+                RefreshOverlayState(window, state, true);
             } else if (pendingChanges & kPendingLocationChange) {
                 if (!SetTimer(window, kShellStateDebounceTimer,
                               kShellStateDebounceMs, nullptr)) {
-                    RefreshOverlayState(window, state, false, false);
+                    RefreshOverlayState(window, state, false);
                 }
             }
             return 0;
@@ -3264,10 +3293,10 @@ LRESULT CALLBACK OverlayWindowProc(HWND window, UINT message,
         case WM_TIMER:
             if (!state) return 0;
             if (wParam == kStateSafetyTimer) {
-                RefreshOverlayState(window, state, true, true);
+                RefreshOverlayState(window, state, true);
             } else if (wParam == kShellStateDebounceTimer) {
                 KillTimer(window, kShellStateDebounceTimer);
-                RefreshOverlayState(window, state, false, false);
+                RefreshOverlayState(window, state, false);
             } else if (wParam == kFrameTimer && state->positioned &&
                        state->eligible) {
                 if (!DrawSpectrum(window, state)) {
@@ -3318,12 +3347,6 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
         static_cast<UINT>((1000 + context.settings.fps / 2) /
                           context.settings.fps),
         USER_TIMER_MINIMUM, 1000);
-    RegistryChangeWatcher searchModeWatcher;
-    if (searchModeWatcher.Start(kSearchSettingsRegistryPath)) {
-        Wh_Log(L"Overlay search mode watcher started");
-    } else {
-        Wh_Log(L"Overlay search mode watcher unavailable; using safety refresh");
-    }
     bool rendererStarted = false;
     while (WaitForSingleObject(context.stopEvent.get(), 0) != WAIT_OBJECT_0) {
         WindowState state;
@@ -3368,19 +3391,14 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
         }
         rendererStarted = true;
 
-        RefreshOverlayState(window, &state, true, true);
+        RefreshOverlayState(window, &state, true);
         bool messageLoopFailed = false;
         bool ownerReplaced = false;
         while (!ownerReplaced) {
-            HANDLE waits[4] = {context.stopEvent.get(),
+            HANDLE waits[3] = {context.stopEvent.get(),
                                context.layoutChangedEvent.get(),
                                context.bandActivityEvent.get()};
-            DWORD waitCount = 3;
-            DWORD searchModeWaitIndex = MAXDWORD;
-            if (searchModeWatcher.changedEvent()) {
-                searchModeWaitIndex = waitCount;
-                waits[waitCount++] = searchModeWatcher.changedEvent();
-            }
+            constexpr DWORD waitCount = ARRAYSIZE(waits);
             const DWORD waitResult = MsgWaitForMultipleObjectsEx(
                 waitCount, waits, INFINITE, QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE);
@@ -3391,22 +3409,13 @@ DWORD WINAPI OverlayThreadProc(void* parameter) {
             }
             if (waitResult == WAIT_OBJECT_0) break;
             if (waitResult == WAIT_OBJECT_0 + 1) {
-                RefreshOverlayState(window, &state, false, false);
+                RefreshOverlayState(window, &state, false);
                 continue;
             }
             if (waitResult == WAIT_OBJECT_0 + 2) {
                 if (state.positioned && state.eligible) {
                     StartFrameTimer(window, &state);
                 }
-                continue;
-            }
-            if (searchModeWaitIndex != MAXDWORD &&
-                waitResult == WAIT_OBJECT_0 + searchModeWaitIndex) {
-                if (!searchModeWatcher.Arm()) {
-                    Wh_Log(L"Overlay search mode watcher could not be rearmed");
-                    searchModeWatcher.Stop();
-                }
-                RefreshOverlayState(window, &state, true, false);
                 continue;
             }
             if (waitResult != WAIT_OBJECT_0 + waitCount) {
