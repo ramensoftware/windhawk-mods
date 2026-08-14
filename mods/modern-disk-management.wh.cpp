@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.8.0
+// @version         3.9.1
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -39,6 +39,8 @@ handed to Windows rather than reimplemented:
 | Format | `SHFormatDrive`, the standard Format dialog |
 | Open | Explorer, at the drive's own root |
 | Eject | lock, dismount, then eject the media or remove the device |
+| Change Drive Letter and Paths | the Disk Management console |
+| Extend, Shrink, Delete Volume | the Disk Management console |
 
 Eject locks the volume, dismounts it and ejects the media - the sequence that
 makes the drive safe to unplug. On a USB disk it then also asks PnP to remove
@@ -48,15 +50,20 @@ than the verdict: the eject counts as done when the media went, and the
 refusal is only reported when nothing worked at all.
 
 There is deliberately no partition editing here. Writing a partition editor is
-how data gets lost, and Windows already ships tools that do it properly - run
-`diskpart`, or Settings' Disks & volumes, for changing letters, extending,
-shrinking or converting. The **Classic console** button in the action bar
-starts the original console for exactly that, and turning off **Replace the
-Disk Management console** in the mod's settings gets it back for good.
+how data gets lost, and the dialogs that do it properly already exist in the
+console this replaces. So the four items that rewrite a partition table hand
+over to it - they say `Console` in the menu's right-hand column, and choosing
+one starts the original console rather than pretending to do the work here.
+Turning off **Replace the Disk Management console** in the mod's settings gets
+it back for good.
 
-Double-click a volume, or press Enter, for its properties; right-click for the
-same actions as a menu. The arrow keys move the selection, Tab moves through
-the action bar, F5 re-reads the disks and Esc closes the window.
+Everything is on the right-click menu, and nowhere else: no toolbar, no button
+bar, the same way the console works. Right-click a volume in either view, or
+press the menu key. The volume actions are on the volume: right-clicking the
+background offers only Refresh and the console, because a menu that offers to
+delete a volume the user did not click on is offering to act on a selection
+they cannot see. Double-click, or press Enter, for properties; the arrow keys
+move the selection, F5 re-reads the disks and Esc closes the window.
 
 ## What it does not know
 
@@ -113,7 +120,7 @@ would be drawing a lie about where the space on the disk went.
   $description: EFI system partitions, recovery partitions and similar.
 - takeOver: true
   $name: Replace the Disk Management console
-  $description: Turn this off to get the original diskmgmt.msc console back while leaving the mod installed. WH_DISKMGMT_CLASSIC=1 still does the same thing for a single launch.
+  $description: Turn this off to get the original diskmgmt.msc console back while leaving the mod installed. The Classic console item on the right-click menu does the same thing for a single launch, as does WH_DISKMGMT_CLASSIC=1.
 - theme: dark
   $name: Colour theme
   $description: Dark by default. "Follow the system" reads the same light/dark setting Windows applies to its own apps.
@@ -257,11 +264,11 @@ constexpr int kTitleHeight = 44;
 constexpr int kCloseWidth = 46;
 constexpr int kPadding = 22;
 constexpr int kCardRadius = 8;
-constexpr int kActionBarHeight = 62;
 constexpr int kDiskTileWidth = 176;
 constexpr int kMapHeight = 104;
-constexpr int kButtonHeight = 32;
 constexpr int kScrollBarWidth = 4;
+constexpr int kMenuItemHeight = 28;
+constexpr int kMenuGutter = 30;  // the empty column a console menu keeps free
 
 // The system accent, used for the boot volume so the disk the system runs from
 // is identifiable at a glance.
@@ -293,20 +300,6 @@ void FillRoundRect(HDC dc, const RECT& rect, int radius, COLORREF color) {
     SelectObject(dc, oldBrush);
     SelectObject(dc, oldPen);
     DeleteObject(brush);
-    DeleteObject(pen);
-}
-
-// The same shape as an outline: a hollow brush leaves whatever is underneath
-// showing through, which is what a focus ring wants.
-void StrokeRoundRect(HDC dc, const RECT& rect, int radius, int thickness,
-                     COLORREF color) {
-    HPEN pen = CreatePen(PS_SOLID, thickness, color);
-    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
-    HGDIOBJ oldPen = SelectObject(dc, pen);
-    RoundRect(dc, rect.left, rect.top, rect.right, rect.bottom, radius * 2,
-              radius * 2);
-    SelectObject(dc, oldBrush);
-    SelectObject(dc, oldPen);
     DeleteObject(pen);
 }
 
@@ -2179,22 +2172,28 @@ namespace diskui {
 constexpr PCWSTR kClassName = L"WindhawkModernDiskManagement";
 constexpr UINT_PTR kScrollTimer = 1;
 
-enum class ButtonKind {
+// Everything the window can be asked to do. The four in the middle are not done
+// here - see HandOffToConsole.
+enum class ActionKind {
     Properties,
     Format,
     Explorer,
     Eject,
+    ChangeLetter,
+    Extend,
+    Shrink,
+    Delete,
     Refresh,
     Classic,
     Close
 };
 
+// The only thing left that is clicked rather than chosen from a menu: the close
+// button in the title bar.
 struct Button {
     RECT rect{};
-    ButtonKind kind = ButtonKind::Properties;
+    ActionKind kind = ActionKind::Close;
     std::wstring label;
-    bool accent = false;
-    bool enabled = true;
 };
 
 // A clickable volume - the same volume is a row in the table and a box on the
@@ -2219,7 +2218,6 @@ struct State {
     HFONT fontName = nullptr;
     HFONT fontRow = nullptr;
     HFONT fontSmall = nullptr;
-    HFONT fontButton = nullptr;
     UINT dpi = 96;
     COLORREF windowColor = ui::kWindow;
     COLORREF cardColor = ui::kCard;
@@ -2242,13 +2240,6 @@ struct State {
     std::vector<Button> buttons;  // rebuilt on every paint
     std::vector<Target> targets;  // rebuilt on every paint
     int hoveredButton = -1;
-
-    // Tab focus, held as which button rather than as an index into the list.
-    // The list is rebuilt on every paint and the Eject button comes and goes
-    // with the selection, so an index quietly slides onto a different action -
-    // and the action it would have slid onto is Format.
-    bool buttonFocused = false;
-    ButtonKind focusedKind = ButtonKind::Refresh;
     POINT mouse{-1, -1};
     int selectedDisk = -1;
     int selectedVolume = -1;
@@ -2398,52 +2389,98 @@ COLORREF SegmentColor(State* state, const DiskInfo& disk,
 }
 
 // -----------------------------------------------------------------------------
-// Buttons
+// The menu
 // -----------------------------------------------------------------------------
 
-void DrawButton(State* state, HDC dc, const Button& button, int index) {
-    bool hovered = index == state->hoveredButton && button.enabled;
-    COLORREF fill;
-    COLORREF text;
-    if (!button.enabled) {
-        fill = Lighten(state, 4);
-        text = ui::kTextDisabled;
-    } else if (button.accent) {
-        fill = hovered ? ui::MixColors(state->accentColor, RGB(255, 255, 255), 12)
-                       : state->accentColor;
-        text = ui::kTextPrimary;
-    } else {
-        fill = Lighten(state, hovered ? 17 : 10);
-        text = ui::kTextPrimary;
-    }
-    ui::FillRoundRect(dc, button.rect, ui::Scale(5, state->dpi), fill);
+// One line of the right-click menu. It hangs off the menu item's dwItemData, so
+// the owner-draw handlers get everything they need to draw a line without
+// looking anything up.
+struct MenuEntry {
+    std::wstring text;
+    // The right-hand column. A menu shows accelerators there; this one also
+    // uses it to say when an action is done somewhere else, because opening a
+    // different program should not be a surprise.
+    std::wstring hint;
+    ActionKind kind = ActionKind::Properties;
+    bool enabled = true;
+    bool separator = false;
+    bool isDefault = false;
+};
 
-    // Keyboard focus, drawn as a ring rather than a fill so it reads as focus
-    // and not as another hover state.
-    if (state->buttonFocused && button.kind == state->focusedKind &&
-        button.enabled) {
-        RECT ring = button.rect;
-        InflateRect(&ring, ui::Scale(2, state->dpi), ui::Scale(2, state->dpi));
-        ui::StrokeRoundRect(dc, ring, ui::Scale(7, state->dpi),
-                            ui::Scale(2, state->dpi), ui::kTextPrimary);
-    }
-
-    DrawLabel(dc, state->fontButton, text, button.label, button.rect,
-              DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+// Windows draws menus in the system's own colours whatever the window looks
+// like, so a dark window sprouts a white menu. There is no supported way to ask
+// for a dark one: the items have to be drawn by hand, and the menu's background
+// brush replaced so the margins around them match.
+COLORREF MenuBackColor(State* state) {
+    return ui::MixColors(state->cardColor, RGB(255, 255, 255), 4);
 }
 
-int AddButton(State* state, HDC dc, RECT rect, ButtonKind kind, PCWSTR label,
-              bool accent, bool enabled) {
-    Button button;
-    button.rect = rect;
-    button.kind = kind;
-    button.label = label;
-    button.accent = accent;
-    button.enabled = enabled;
-    state->buttons.push_back(std::move(button));
-    int index = static_cast<int>(state->buttons.size()) - 1;
-    DrawButton(state, dc, state->buttons.back(), index);
-    return index;
+void MeasureMenuEntry(State* state, const MenuEntry& entry,
+                      MEASUREITEMSTRUCT* measure) {
+    if (entry.separator) {
+        measure->itemWidth = 0;
+        measure->itemHeight = ui::Scale(7, state->dpi);
+        return;
+    }
+
+    HDC dc = GetDC(state->hwnd);
+    HGDIOBJ oldFont = SelectObject(dc, state->fontRow);
+    SIZE text{};
+    GetTextExtentPoint32W(dc, entry.text.c_str(),
+                          static_cast<int>(entry.text.size()), &text);
+    SIZE hint{};
+    if (!entry.hint.empty()) {
+        SelectObject(dc, state->fontSmall);
+        GetTextExtentPoint32W(dc, entry.hint.c_str(),
+                              static_cast<int>(entry.hint.size()), &hint);
+    }
+    SelectObject(dc, oldFont);
+    ReleaseDC(state->hwnd, dc);
+
+    int gap = hint.cx ? ui::Scale(28, state->dpi) : 0;
+    measure->itemWidth = ui::Scale(ui::kMenuGutter + 18, state->dpi) + text.cx +
+                         gap + hint.cx;
+    measure->itemHeight = static_cast<UINT>(std::max(
+        ui::Scale(ui::kMenuItemHeight, state->dpi),
+        static_cast<int>(text.cy) + ui::Scale(8, state->dpi)));
+}
+
+void DrawMenuEntry(State* state, const MenuEntry& entry,
+                   const DRAWITEMSTRUCT* draw) {
+    HDC dc = draw->hDC;
+    RECT rect = draw->rcItem;
+    COLORREF back = MenuBackColor(state);
+
+    if (entry.separator) {
+        FillPlain(dc, rect, back);
+        int middle = (rect.top + rect.bottom) / 2;
+        RECT line{rect.left + ui::Scale(ui::kMenuGutter, state->dpi), middle,
+                  rect.right - ui::Scale(8, state->dpi),
+                  middle + ui::Scale(1, state->dpi)};
+        FillPlain(dc, line, ui::MixColors(back, RGB(255, 255, 255), 14));
+        return;
+    }
+
+    bool selected = (draw->itemState & ODS_SELECTED) != 0;
+    bool disabled = (draw->itemState & (ODS_DISABLED | ODS_GRAYED)) != 0;
+
+    // A disabled item still highlights as the keyboard walks over it in a real
+    // menu, but filling it makes it look pressable. Only live items light up.
+    FillPlain(dc, rect,
+              selected && !disabled ? ui::MixColors(back, RGB(255, 255, 255), 13)
+                                    : back);
+
+    SetBkMode(dc, TRANSPARENT);
+    RECT text{rect.left + ui::Scale(ui::kMenuGutter, state->dpi), rect.top,
+              rect.right - ui::Scale(10, state->dpi), rect.bottom};
+    DrawLabel(dc, entry.isDefault ? state->fontName : state->fontRow,
+              disabled ? ui::kTextDisabled : ui::kTextPrimary, entry.text, text);
+
+    if (!entry.hint.empty()) {
+        DrawLabel(dc, state->fontSmall,
+                  disabled ? ui::kTextDisabled : ui::kTextTertiary, entry.hint,
+                  text, kTextRight);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -2980,109 +3017,6 @@ const VolumeInfo* Selected(State* state) {
     return &disk.volumes[state->selectedVolume];
 }
 
-// The bar along the bottom: what is selected, and what can be done to it.
-// Actions live here rather than on every row, so the window is a list of facts
-// with one place to act from - which is how the console reads too.
-void PaintActionBar(State* state, HDC dc, const RECT& client) {
-    int pad = ui::Scale(ui::kPadding, state->dpi);
-    int height = ui::Scale(ui::kActionBarHeight, state->dpi);
-    RECT bar{0, client.bottom - height, client.right, client.bottom};
-
-    FillPlain(dc, bar, ui::MixColors(state->windowColor, RGB(0, 0, 0), 22));
-    RECT rule{0, bar.top, client.right, bar.top + ui::Scale(1, state->dpi)};
-    FillPlain(dc, rule, ui::kCardBorder);
-
-    const VolumeInfo* volume = Selected(state);
-
-    int buttonHeight = ui::Scale(ui::kButtonHeight, state->dpi);
-    int buttonTop = bar.top + ((bar.bottom - bar.top) - buttonHeight) / 2;
-    int right = client.right - pad;
-    int spacing = ui::Scale(8, state->dpi);
-
-    struct Action {
-        PCWSTR label;
-        ButtonKind kind;
-        int width;
-        bool accent;
-    };
-    // Built right to left, so the list reads in reverse of how it appears.
-    const Action actions[] = {
-        {L"Properties", ButtonKind::Properties, 96, true},
-        {L"Eject", ButtonKind::Eject, 68, false},
-        {L"Format", ButtonKind::Format, 76, false},
-        {L"Open", ButtonKind::Explorer, 68, false},
-        {L"Refresh", ButtonKind::Refresh, 82, false},
-        // The way out. Everything this window deliberately does not do -
-        // shrink, extend, convert, change a letter - lives in the console it
-        // replaced, and the only way back used to be a trip through Windhawk's
-        // settings. It belongs here, where the user is when they need it.
-        {L"Classic console", ButtonKind::Classic, 122, false},
-    };
-
-    for (const auto& action : actions) {
-        // Eject is meaningless on a disk that cannot be removed, so it is not
-        // shown at all rather than shown greyed for ever.
-        if (action.kind == ButtonKind::Eject) {
-            bool removable =
-                state->selectedDisk >= 0 &&
-                state->selectedDisk < static_cast<int>(state->disks.size()) &&
-                state->disks[state->selectedDisk].removable;
-            if (!removable) {
-                continue;
-            }
-        }
-
-        bool enabled = true;
-        switch (action.kind) {
-            case ButtonKind::Refresh:
-            case ButtonKind::Classic:
-                break;
-            case ButtonKind::Properties:
-                enabled = volume != nullptr;
-                break;
-            case ButtonKind::Explorer:
-            case ButtonKind::Eject:
-                enabled = volume && !volume->letter.empty();
-                break;
-            case ButtonKind::Format:
-                // Windows cannot format the volume it is running from.
-                enabled = volume && !volume->letter.empty() && !volume->isBoot;
-                break;
-            default:
-                break;
-        }
-
-        int width = ui::Scale(action.width, state->dpi);
-        RECT rect{right - width, buttonTop, right, buttonTop + buttonHeight};
-        AddButton(state, dc, rect, action.kind, action.label, action.accent,
-                  enabled);
-        right -= width + spacing;
-    }
-
-    // What is selected, on the left.
-    RECT label{pad, bar.top, right - pad, bar.bottom};
-    if (volume) {
-        RECT name{label.left, bar.top + ui::Scale(11, state->dpi), label.right,
-                  bar.top + ui::Scale(30, state->dpi)};
-        DrawLabel(dc, state->fontName, ui::kTextPrimary,
-                  VolumeDisplayName(*volume), name);
-
-        std::wstring detail = ui::FormatSize(volume->size);
-        if (!volume->fileSystem.empty()) {
-            detail += L"  \x2022  " + volume->fileSystem;
-        }
-        if (!volume->letter.empty()) {
-            detail += L"  \x2022  " + ui::FormatSize(volume->freeSpace) + L" free";
-        }
-        RECT sub{label.left, name.bottom, label.right,
-                 name.bottom + ui::Scale(17, state->dpi)};
-        DrawLabel(dc, state->fontSmall, ui::kTextSecondary, detail, sub);
-    } else {
-        DrawLabel(dc, state->fontRow, ui::kTextTertiary,
-                  L"Select a volume to act on it", label);
-    }
-}
-
 // The key to the colours in the map.
 void PaintLegend(State* state, HDC dc, int top, int left, int right) {
     struct Entry {
@@ -3137,7 +3071,7 @@ void Paint(State* state, HDC dc, const RECT& client) {
                    client.right, titleHeight};
         Button button;
         button.rect = close;
-        button.kind = ButtonKind::Close;
+        button.kind = ActionKind::Close;
         button.label = L"\x2715";
         state->buttons.push_back(std::move(button));
         bool hovered =
@@ -3151,8 +3085,7 @@ void Paint(State* state, HDC dc, const RECT& client) {
     }
 
     state->contentTop = titleHeight;
-    state->contentBottom =
-        client.bottom - ui::Scale(ui::kActionBarHeight, state->dpi);
+    state->contentBottom = client.bottom;
 
     int saved = SaveDC(dc);
     IntersectClipRect(dc, 0, state->contentTop, client.right,
@@ -3245,8 +3178,6 @@ void Paint(State* state, HDC dc, const RECT& client) {
         ui::FillRoundRect(dc, thumb, trackWidth / 2,
                           ui::MixColors(state->windowColor, RGB(255, 255, 255), 28));
     }
-
-    PaintActionBar(state, dc, client);
 }
 
 // Takes the result the scan produced - however it was produced - and makes it
@@ -3261,7 +3192,8 @@ void AdoptScan(State* state) {
         state->selectedVolume = -1;
 
         // Fall back to the boot volume: it is the one the window is usually
-        // opened to look at, and it means the action bar is never empty.
+        // opened to look at, and a menu with nothing selected can do almost
+        // nothing.
         for (size_t d = 0; d < state->disks.size() && state->selectedDisk < 0;
              d++) {
             for (size_t v = 0; v < state->disks[d].volumes.size(); v++) {
@@ -3348,28 +3280,45 @@ void ShowProperties(State* state) {
     InvalidateRect(state->hwnd, nullptr, FALSE);
 }
 
-void Invoke(State* state, const Button& button) {
-    if (!button.enabled) {
+// The four things this window will not do itself. Changing a drive letter,
+// extending, shrinking and deleting all rewrite the partition table, and the
+// dialogs that do it properly already exist in the console this replaces - so
+// these hand over to it rather than reimplementing a partition editor. The menu
+// says so in its right-hand column before anything is clicked.
+void HandOffToConsole(State* state, PCWSTR what) {
+    if (LaunchClassicConsole()) {
+        // The console is what the user is going to use now; two Disk
+        // Managements on screen is not helpful.
+        DestroyWindow(state->hwnd);
         return;
     }
+    std::wstring message = L"The Disk Management console could not be started, ";
+    message += L"and this window does not do that itself.";
+    MessageBoxW(state->hwnd, message.c_str(), what, MB_OK | MB_ICONWARNING);
+}
 
-    switch (button.kind) {
-        case ButtonKind::Close:
+void Invoke(State* state, ActionKind kind) {
+    switch (kind) {
+        case ActionKind::Close:
             DestroyWindow(state->hwnd);
             return;
-        case ButtonKind::Refresh:
+        case ActionKind::Refresh:
             Refresh(state);
             return;
-        case ButtonKind::Classic:
-            if (LaunchClassicConsole()) {
-                // The console is what the user asked for; two Disk Managements
-                // on screen is not.
-                DestroyWindow(state->hwnd);
-            } else {
-                MessageBoxW(state->hwnd,
-                            L"The Disk Management console could not be started.",
-                            L"Classic console", MB_OK | MB_ICONWARNING);
-            }
+        case ActionKind::Classic:
+            HandOffToConsole(state, L"Classic console");
+            return;
+        case ActionKind::ChangeLetter:
+            HandOffToConsole(state, L"Change Drive Letter and Paths");
+            return;
+        case ActionKind::Extend:
+            HandOffToConsole(state, L"Extend Volume");
+            return;
+        case ActionKind::Shrink:
+            HandOffToConsole(state, L"Shrink Volume");
+            return;
+        case ActionKind::Delete:
+            HandOffToConsole(state, L"Delete Volume");
             return;
         default:
             break;
@@ -3381,18 +3330,18 @@ void Invoke(State* state, const Button& button) {
     }
     VolumeInfo volume = *selected;  // the list is rebuilt under some of these
 
-    switch (button.kind) {
-        case ButtonKind::Properties:
+    switch (kind) {
+        case ActionKind::Properties:
             ShowProperties(state);
             break;
-        case ButtonKind::Format:
+        case ActionKind::Format:
             FormatVolume(state->hwnd, volume);
             Refresh(state);
             break;
-        case ButtonKind::Explorer:
+        case ActionKind::Explorer:
             OpenInExplorer(state->hwnd, volume);
             break;
-        case ButtonKind::Eject:
+        case ActionKind::Eject:
             if (EjectVolume(state->hwnd, volume)) {
                 state->selectedDisk = -1;
                 state->selectedVolume = -1;
@@ -3404,43 +3353,97 @@ void Invoke(State* state, const Button& button) {
     }
 }
 
-// The right-click menu for the selected volume. It offers exactly what the
-// action bar offers - the same handlers, the same rules about what is possible
-// - because a menu that promises more than the buttons do is a menu of things
-// that do not work.
-void ShowContextMenu(State* state, POINT clientPoint) {
-    const VolumeInfo* volume = Selected(state);
-    if (!volume) {
-        return;
-    }
-
+// The menu is the whole action surface of this window - there is no toolbar and
+// no button bar, the same way the console has neither.
+//
+// It comes in two shapes. On a volume - a row in the table, a box on the map -
+// it is the full menu, with whatever does not apply to that volume greyed
+// rather than missing, so it is the same menu every time. On the background it
+// is only the two things that are not about a volume at all: offering to change
+// the drive letter of something the user did not click on is offering to act on
+// a selection they cannot see.
+void ShowContextMenu(State* state, POINT clientPoint, bool onVolume) {
+    const VolumeInfo* volume = onVolume ? Selected(state) : nullptr;
+    bool hasLetter = volume && !volume->letter.empty();
+    bool boot = volume && volume->isBoot;
     bool removable =
-        state->selectedDisk >= 0 &&
+        volume && state->selectedDisk >= 0 &&
         state->selectedDisk < static_cast<int>(state->disks.size()) &&
         state->disks[state->selectedDisk].removable;
-    bool hasLetter = !volume->letter.empty();
+
+    // Fully built first: the menu items point into this, so it must not grow
+    // again once the pointers are taken.
+    std::vector<MenuEntry> entries;
+    auto add = [&entries](PCWSTR text, ActionKind kind, bool enabled,
+                          PCWSTR hint = L"") {
+        MenuEntry entry;
+        entry.text = text;
+        entry.hint = hint;
+        entry.kind = kind;
+        entry.enabled = enabled;
+        entries.push_back(std::move(entry));
+    };
+    auto separator = [&entries]() {
+        MenuEntry entry;
+        entry.separator = true;
+        entries.push_back(std::move(entry));
+    };
+
+    if (volume) {
+        add(L"Open", ActionKind::Explorer, hasLetter);
+        if (removable) {
+            add(L"Eject", ActionKind::Eject, hasLetter);
+        }
+        separator();
+        add(L"Change Drive Letter and Paths\x2026", ActionKind::ChangeLetter,
+            true, L"Console");
+        // Windows cannot format the volume it is running from.
+        add(L"Format\x2026", ActionKind::Format, hasLetter && !boot);
+        separator();
+        add(L"Extend Volume\x2026", ActionKind::Extend, true, L"Console");
+        add(L"Shrink Volume\x2026", ActionKind::Shrink, true, L"Console");
+        add(L"Delete Volume\x2026", ActionKind::Delete, !boot, L"Console");
+        separator();
+    }
+
+    // The two that are about the window rather than about a volume, so they are
+    // on both menus - and on the background menu they are all there is.
+    add(L"Refresh", ActionKind::Refresh, true, L"F5");
+    add(L"Classic console", ActionKind::Classic, true);
+
+    if (volume) {
+        separator();
+        add(L"Properties", ActionKind::Properties, true, L"Enter");
+        entries.back().isDefault = true;
+    }
 
     HMENU menu = CreatePopupMenu();
     if (!menu) {
         return;
     }
 
-    enum : UINT { kOpen = 1, kFormat, kEject, kProperties, kRefresh };
-    AppendMenuW(menu, MF_STRING | (hasLetter ? MF_ENABLED : MF_GRAYED), kOpen,
-                L"Open");
-    AppendMenuW(menu,
-                MF_STRING | (hasLetter && !volume->isBoot ? MF_ENABLED
-                                                          : MF_GRAYED),
-                kFormat, L"Format...");
-    if (removable) {
-        AppendMenuW(menu, MF_STRING | (hasLetter ? MF_ENABLED : MF_GRAYED),
-                    kEject, L"Eject");
+    // The brush covers the strip around the items, which the items themselves
+    // never get to draw. Without it a dark menu keeps a white frame.
+    HBRUSH back = CreateSolidBrush(MenuBackColor(state));
+    MENUINFO info{sizeof(info)};
+    info.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+    info.hbrBack = back;
+    SetMenuInfo(menu, &info);
+
+    for (size_t i = 0; i < entries.size(); i++) {
+        const MenuEntry& entry = entries[i];
+        MENUITEMINFOW item{sizeof(item)};
+        item.fMask = MIIM_FTYPE | MIIM_STATE | MIIM_ID | MIIM_DATA;
+        item.fType = MFT_OWNERDRAW | (entry.separator ? MFT_SEPARATOR : 0);
+        item.fState = entry.separator || entry.enabled ? MFS_ENABLED
+                                                       : MFS_DISABLED | MFS_GRAYED;
+        if (entry.isDefault) {
+            item.fState |= MFS_DEFAULT;
+        }
+        item.wID = static_cast<UINT>(i) + 1;
+        item.dwItemData = reinterpret_cast<ULONG_PTR>(&entries[i]);
+        InsertMenuItemW(menu, static_cast<UINT>(i), TRUE, &item);
     }
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kRefresh, L"Refresh\tF5");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kProperties, L"Properties\tEnter");
-    SetMenuDefaultItem(menu, kProperties, FALSE);
 
     POINT screenPoint = clientPoint;
     ClientToScreen(state->hwnd, &screenPoint);
@@ -3451,87 +3454,32 @@ void ShowContextMenu(State* state, POINT clientPoint) {
         menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
         screenPoint.x, screenPoint.y, 0, state->hwnd, nullptr);
     DestroyMenu(menu);
+    DeleteObject(back);
 
-    Button action;
-    switch (chosen) {
-        case kOpen:
-            action.kind = ButtonKind::Explorer;
-            break;
-        case kFormat:
-            action.kind = ButtonKind::Format;
-            break;
-        case kEject:
-            action.kind = ButtonKind::Eject;
-            break;
-        case kRefresh:
-            action.kind = ButtonKind::Refresh;
-            break;
-        case kProperties:
-            action.kind = ButtonKind::Properties;
-            break;
-        default:
-            return;
+    if (chosen >= 1 && chosen <= entries.size()) {
+        const MenuEntry& entry = entries[chosen - 1];
+        if (entry.enabled && !entry.separator) {
+            Invoke(state, entry.kind);
+        }
     }
-    Invoke(state, action);
 }
 
-// Tab order over the action bar. The buttons are rebuilt on every paint, so
-// focus is an index into that list and only enabled buttons take it; -1 means
-// focus is back on the volume list, which is where Tab starts and returns to.
-void MoveButtonFocus(State* state, int delta) {
-    std::vector<ButtonKind> reachable;
-    for (const auto& button : state->buttons) {
-        // The title bar's close button is reachable by Esc and by Alt+F4; it
-        // does not need a place in the Tab order.
-        if (button.enabled && button.kind != ButtonKind::Close) {
-            reachable.push_back(button.kind);
+// Opens the menu from the keyboard, on the selected row rather than at the
+// mouse - which is where the selection the menu acts on actually is.
+void ShowContextMenuForSelection(State* state) {
+    POINT point{ui::Scale(ui::kPadding + 40, state->dpi),
+                state->contentTop + ui::Scale(40, state->dpi)};
+    bool onVolume = false;
+    for (const auto& target : state->targets) {
+        if (target.diskIndex == state->selectedDisk &&
+            target.volumeIndex == state->selectedVolume) {
+            point = {target.rect.left + ui::Scale(40, state->dpi),
+                     target.rect.bottom};
+            onVolume = Selected(state) != nullptr;
+            break;
         }
     }
-    if (reachable.empty()) {
-        state->buttonFocused = false;
-        InvalidateRect(state->hwnd, nullptr, FALSE);
-        return;
-    }
-
-    // The buttons are built right to left, so walking the list backwards walks
-    // the bar left to right - which is the direction Tab is expected to go.
-    std::reverse(reachable.begin(), reachable.end());
-
-    auto found = state->buttonFocused
-                     ? std::find(reachable.begin(), reachable.end(),
-                                 state->focusedKind)
-                     : reachable.end();
-    if (found == reachable.end()) {
-        state->buttonFocused = true;
-        state->focusedKind = delta > 0 ? reachable.front() : reachable.back();
-    } else {
-        size_t position = static_cast<size_t>(found - reachable.begin());
-        size_t next = delta > 0 ? position + 1 : position;
-        if (delta > 0 ? next < reachable.size() : position > 0) {
-            state->focusedKind = reachable[delta > 0 ? next : position - 1];
-        } else {
-            // Off the end of the bar: focus goes back to the volume list.
-            state->buttonFocused = false;
-        }
-    }
-    InvalidateRect(state->hwnd, nullptr, FALSE);
-}
-
-// Presses the focused button, if there is one. Returns whether it did.
-bool InvokeFocusedButton(State* state) {
-    if (!state->buttonFocused) {
-        return false;
-    }
-
-    // By value: invoking rebuilds the button list under us.
-    for (const Button& candidate : state->buttons) {
-        if (candidate.kind == state->focusedKind && candidate.enabled) {
-            Button button = candidate;
-            Invoke(state, button);
-            return true;
-        }
-    }
-    return false;
+    ShowContextMenu(state, point, onVolume);
 }
 
 // Moves the selection up or down the volume list, so the whole window can be
@@ -3651,6 +3599,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_ERASEBKGND:
             return 1;
 
+        // The menu is owner-drawn, so its size and its pixels both come from
+        // here. dwItemData carries the line being asked about, which is why
+        // neither of these has to look anything up.
+        case WM_MEASUREITEM: {
+            auto* measure = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
+            if (measure->CtlType != ODT_MENU || !measure->itemData) {
+                break;
+            }
+            MeasureMenuEntry(
+                state, *reinterpret_cast<const MenuEntry*>(measure->itemData),
+                measure);
+            return TRUE;
+        }
+
+        case WM_DRAWITEM: {
+            auto* draw = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+            if (draw->CtlType != ODT_MENU || !draw->itemData) {
+                break;
+            }
+            DrawMenuEntry(state,
+                          *reinterpret_cast<const MenuEntry*>(draw->itemData),
+                          draw);
+            return TRUE;
+        }
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC dc = BeginPaint(hwnd, &ps);
@@ -3678,26 +3651,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             DeleteDC(memory);
             EndPaint(hwnd, &ps);
             return 0;
-        }
-
-        case WM_SETCURSOR: {
-            // A hand over anything that can be clicked.
-            POINT point;
-            GetCursorPos(&point);
-            ScreenToClient(hwnd, &point);
-            bool overTarget = false;
-            for (const auto& button : state->buttons) {
-                if (button.enabled && button.kind != ButtonKind::Close &&
-                    PtInRect(&button.rect, point)) {
-                    overTarget = true;
-                    break;
-                }
-            }
-            if (LOWORD(lParam) == HTCLIENT && overTarget) {
-                SetCursor(LoadCursorW(nullptr, IDC_HAND));
-                return TRUE;
-            }
-            break;
         }
 
         case WM_MOUSEMOVE: {
@@ -3790,20 +3743,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_RBUTTONUP: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             SetFocus(hwnd);
-            if (!SelectAt(state, point) && !Selected(state)) {
-                return 0;
-            }
-            ShowContextMenu(state, point);
+            // Right-clicking a volume selects it first, the way the console
+            // does, and gets the menu for that volume. The background gets the
+            // short menu: acting on a selection somewhere else on screen is not
+            // what a click on nothing asked for.
+            bool onVolume = SelectAt(state, point);
+            ShowContextMenu(state, point, onVolume);
             return 0;
         }
 
         case WM_LBUTTONUP: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            // A copy: invoking can re-enumerate and rebuild the button list.
-            for (size_t i = 0; i < state->buttons.size(); i++) {
-                if (PtInRect(&state->buttons[i].rect, point)) {
-                    Button button = state->buttons[i];
-                    Invoke(state, button);
+            // By value: invoking rebuilds the button list underneath this.
+            for (const Button& candidate : state->buttons) {
+                if (PtInRect(&candidate.rect, point)) {
+                    ActionKind kind = candidate.kind;
+                    Invoke(state, kind);
                     break;
                 }
             }
@@ -3857,33 +3812,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             switch (wParam) {
                 case VK_ESCAPE:
                     DestroyWindow(hwnd);
-                    break;
+                    return 0;
                 case VK_F5:
                     Refresh(state);
-                    break;
+                    return 0;
                 case VK_DOWN:
                     MoveSelection(state, 1);
-                    break;
+                    return 0;
                 case VK_UP:
                     MoveSelection(state, -1);
-                    break;
-                case VK_TAB:
-                    // Round the enabled buttons and back to the list, so
-                    // everything the mouse can reach the keyboard can too.
-                    // Shift+Tab goes the other way.
-                    MoveButtonFocus(state, GetKeyState(VK_SHIFT) < 0 ? -1 : 1);
-                    break;
-                case VK_SPACE:
-                    InvokeFocusedButton(state);
-                    break;
+                    return 0;
                 case VK_RETURN:
-                    // Enter presses the focused button when there is one, and
-                    // opens properties otherwise - which is what it did before
-                    // there were any.
-                    if (!InvokeFocusedButton(state)) {
-                        ShowProperties(state);
-                    }
-                    break;
+                    ShowProperties(state);
+                    return 0;
+            }
+            // Everything else is DefWindowProc's - which is how the menu key
+            // and Shift+F10 become WM_CONTEXTMENU below. Swallowing every key
+            // here is what would stop them arriving at all.
+            break;
+
+        case WM_CONTEXTMENU:
+            // Keyboard only: lParam is -1 then. The mouse never reaches this,
+            // because WM_RBUTTONUP is handled above and never passed on. Left
+            // unhandled, this is the message that opens the window's grey
+            // system menu, which is not what the menu key should do here.
+            if (lParam == -1) {
+                ShowContextMenuForSelection(state);
             }
             return 0;
 
@@ -3898,14 +3852,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (state->fontName) DeleteObject(state->fontName);
             if (state->fontRow) DeleteObject(state->fontRow);
             if (state->fontSmall) DeleteObject(state->fontSmall);
-            if (state->fontButton) DeleteObject(state->fontButton);
 
             state->fontCaption = MakeFontRegular(state->dpi, 10);
             state->fontSection = MakeFont(state->dpi, 13, true);
             state->fontName = MakeFont(state->dpi, 10, false);
             state->fontRow = MakeFontRegular(state->dpi, 10);
             state->fontSmall = MakeFontRegular(state->dpi, 9);
-            state->fontButton = MakeFont(state->dpi, 9, false);
 
             // Icons were rendered for the old scale; re-read them at the new
             // one. The old ones keep being drawn until the scan lands, which
@@ -4037,7 +3989,6 @@ bool Run() {
     state.fontName = MakeFont(state.dpi, 10, false);
     state.fontRow = MakeFontRegular(state.dpi, 10);
     state.fontSmall = MakeFontRegular(state.dpi, 9);
-    state.fontButton = MakeFont(state.dpi, 9, false);
     state.accentColor = ui::AccentColor();
 
     if (g_settings.accentTint) {
@@ -4102,7 +4053,6 @@ bool Run() {
     if (state.fontName) DeleteObject(state.fontName);
     if (state.fontRow) DeleteObject(state.fontRow);
     if (state.fontSmall) DeleteObject(state.fontSmall);
-    if (state.fontButton) DeleteObject(state.fontButton);
 
     // One shell bitmap or icon per volume, plus one per disk. mmc.exe usually
     // exits moments later and takes them with it, but not on the unload path -
