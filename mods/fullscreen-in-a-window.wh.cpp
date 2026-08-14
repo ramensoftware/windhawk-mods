@@ -20,6 +20,8 @@ minimize - **without changing the app itself**. Pick a window, choose
 **Enclose**, and from then on the app believes that window is its whole
 screen.
 
+![A VMware guest's fullscreen contained in a movable Windows window](https://raw.githubusercontent.com/thebdr/fullscreen-in-a-window/main/screenshot.png)
+
 ## Which apps
 
 Only the executables in the **Applications** setting are touched (plus
