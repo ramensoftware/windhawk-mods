@@ -16177,7 +16177,7 @@
           94
         ],
         "ratingUsers": 105,
-        "updated": 1786103620000,
+        "updated": 1786701197000,
         "users": 1784
       },
       "metadata": {
@@ -16197,7 +16197,7 @@
         ],
         "license": "MIT",
         "name": "Windows Animations",
-        "version": "1.1.7"
+        "version": "1.2.0"
       }
     },
     "winui-context-menu-animation": {
