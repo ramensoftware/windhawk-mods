@@ -2,7 +2,7 @@
 // @id              fullscreen-in-a-window
 // @name            Fullscreen in a Window
 // @description     Run an app's own fullscreen inside a normal movable, resizable window. An outer frame is created and the app is told the screen is only that window's size, so its NATIVE fullscreen (or windowed) mode plays out inside the frame - the app's own window is never restyled.
-// @version         1.0.0
+// @version         1.0.1
 // @author          thebdr
 // @github          https://github.com/thebdr
 // @include         *
@@ -83,6 +83,10 @@ reaches processes that were skipped before.
 - While a window is enclosed, that process sees a single display the size of
   the container. Other processes are unaffected.
 - The container and the app are two taskbar entries; that's normal.
+- **Maximized**, the side/bottom strips collapse to zero (nothing to resize)
+  and only the top-padding strip remains, so the app gets nearly the whole
+  screen - and an auto-hidden Windows taskbar stays reachable (the maximize
+  rect leaves it a couple of pixels on its edge).
 */
 // ==/WindhawkModReadme==
 
@@ -145,6 +149,7 @@ reaches processes that were skipped before.
 #include <windhawk_utils.h>
 
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <windowsx.h>
 
 #include <atomic>
@@ -157,7 +162,7 @@ reaches processes that were skipped before.
 constexpr UINT_PTR IDM_ENCLOSE = 0xB000;  // custom system-menu command id
 constexpr WCHAR kContainerClass[] = L"WH_Enclose_Container";
 constexpr WCHAR kHotkeyClass[] = L"WH_Enclose_Hotkey";
-constexpr int kMargin = 6;  // frame strip around the app, also the resize grab zone
+constexpr int kMargin = 4;  // frame strip around the app, also the resize grab zone
 
 // Not in every mingw-w64 dwmapi.h vintage; the values are stable.
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -429,13 +434,19 @@ RECT ContainerClientScreenRect(HWND container) {
 
 // The app area inside a container: the client rect inset by the frame strip,
 // with extra padding at the top so hover zones at the app's top edge (VMware's
-// fullscreen toolbar) don't sit flush against the title bar.
+// fullscreen toolbar) don't sit flush against the title bar. Maximized, the
+// side/bottom strips serve no purpose (nothing to resize), so they collapse
+// and only the top-padding strip remains.
 RECT ContainerInnerRect(HWND container) {
     RECT rc = ContainerClientScreenRect(container);
-    rc.left += kMargin;
-    rc.top += kMargin + g_cfgTopPad.load();
-    rc.right -= kMargin;
-    rc.bottom -= kMargin;
+    if (IsZoomed(container)) {
+        rc.top += g_cfgTopPad.load();
+    } else {
+        rc.left += kMargin;
+        rc.top += kMargin + g_cfgTopPad.load();
+        rc.right -= kMargin;
+        rc.bottom -= kMargin;
+    }
     if (rc.right < rc.left + 50) rc.right = rc.left + 50;
     if (rc.bottom < rc.top + 50) rc.bottom = rc.top + 50;
     return rc;
@@ -956,6 +967,15 @@ LRESULT CALLBACK ContainerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
             if (ht == HTCLIENT) {
                 POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 RECT cl = ContainerClientScreenRect(hWnd);
+                if (IsZoomed(hWnd)) {
+                    // No resize handles on a maximized frame; the top strip
+                    // drags (restore-drag) and hosts the bar reveal.
+                    if (g_cfgAutoHide.load() &&
+                        pt.y < cl.top + g_cfgTopPad.load()) {
+                        return HTCAPTION;
+                    }
+                    return ht;
+                }
                 const int m = kMargin + 2;
                 bool l = pt.x < cl.left + m;
                 bool r = pt.x >= cl.right - m;
@@ -1047,6 +1067,44 @@ LRESULT CALLBACK ContainerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                 mmi->ptMaxPosition.y = mi.rcWork.top - mi.rcMonitor.top;
                 mmi->ptMaxSize.x = mi.rcWork.right - mi.rcWork.left;
                 mmi->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
+
+                // With an AUTO-HIDDEN taskbar the work area equals the whole
+                // monitor, and a window covering every pixel is treated as
+                // fullscreen by the shell, which then refuses to reveal the
+                // taskbar on hover. Leave it a sliver on its edge.
+                APPBARDATA abd{};
+                abd.cbSize = sizeof(abd);
+                if (SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) {
+                    const UINT edges[4] = {ABE_BOTTOM, ABE_TOP, ABE_LEFT,
+                                           ABE_RIGHT};
+                    for (UINT edge : edges) {
+                        APPBARDATA q{};
+                        q.cbSize = sizeof(q);
+                        q.uEdge = edge;
+                        q.rc = mi.rcMonitor;
+                        if (!SHAppBarMessage(ABM_GETAUTOHIDEBAREX, &q)) {
+                            continue;
+                        }
+                        const int sliver = 2;
+                        switch (edge) {
+                            case ABE_BOTTOM:
+                                mmi->ptMaxSize.y -= sliver;
+                                break;
+                            case ABE_TOP:
+                                mmi->ptMaxPosition.y += sliver;
+                                mmi->ptMaxSize.y -= sliver;
+                                break;
+                            case ABE_LEFT:
+                                mmi->ptMaxPosition.x += sliver;
+                                mmi->ptMaxSize.x -= sliver;
+                                break;
+                            case ABE_RIGHT:
+                                mmi->ptMaxSize.x -= sliver;
+                                break;
+                        }
+                        break;
+                    }
+                }
             }
             return r;
         }
