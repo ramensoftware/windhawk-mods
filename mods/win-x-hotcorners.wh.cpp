@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         4.4.2
+// @version         4.4.4
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -75,16 +75,6 @@ the zones you want on it. A zone you do not list does nothing.
 - **Right-click → Zones & settings...** — the dashboard: a tab per display,
   a picture of that screen with each zone showing what it does, and the timings
   actually in effect for whichever zone you point at.
-
-### Upgrading from 4.1.x
-
-Earlier versions had no settings page and stored the layout themselves. Your
-zones keep running untouched, so nothing breaks on upgrade — everything else on
-the settings page is live immediately. Re-enter the zones there when you are
-ready; the moment one display is listed, the old layout is ignored.
-
-The startup log names any globals you had customised in the old version, since
-those now come from the settings page and need setting again there.
 
 If the tray icon is hidden, it is in the overflow area — drag it onto the
 taskbar to keep it there.
@@ -273,489 +263,10 @@ Hot corners are disabled when any excluded process is the foreground window.
 
 # Changelog
 
-## What's New in v4.4.2
+## 4.4.4
 
-- **The tray icon stops saying "paused" when a suspension ends.** The corners
-  came back on their own, and the menu was right, but the icon stayed dimmed
-  for the rest of the session — the one piece of feedback you actually look at.
-- **New action: Disabled here.** Setting a zone to this on a named display
-  excludes that screen from a shared `*` zone. Leaving a zone unset still means
-  "not configured" and still falls through to `*`; there was previously no way
-  to say the other thing.
-- **The dashboard no longer marks a zone broken when the wildcard rescues it.**
-  A display-specific zone with unparseable arguments is skipped in favour of
-  the `*` entry, and the preview now follows that same order instead of
-  reporting a zone as dead when it fires perfectly well.
-- **Clearing the last zone on the settings page no longer resurrects a pre-4.2
-  layout.** The handover is one-way once the settings page has owned the
-  configuration.
-- Display changes and taskbar moves queue a rebuild rather than doing it inside
-  the broadcast handler, so the sender is not blocked and a burst of work-area
-  messages collapses into one rebuild instead of resetting every cooldown
-  several times.
-- The dashboard's tab strip no longer runs off the window edge with several
-  displays; labels ellipsise and every tab stays clickable.
-- Readme: removed a paragraph that still argued against having a settings page,
-  and corrected the monitor-list sample and the references to a "selector" the
-  dashboard no longer has.
-
-## What's New in v4.4.1
-
-Two places where a value you changed still had no effect, and two where the
-window could tell you something untrue.
-
-- **Every setting on the page is live immediately after upgrading.** The globals
-  used to be applied only once you had listed a display there, so anyone coming
-  from 4.1.x had a page full of fields that did nothing — change *Cooldown* from
-  300 to 800, see nothing happen. The page owns them all now; only the zone list
-  still falls back to a stored layout. The startup log names any globals you had
-  customised in the old version so you know what to set again.
-- **The tray's "skip while fullscreen" and "skip while dragging" toggles are
-  gone.** They wrote a key that only the upgrade path read, so toggling one
-  worked until the next reload put it back. They are settings, and a mod cannot
-  write its own settings, so the tray copy could only ever drift. They live on
-  the settings page alone. Enable and suspend stay — those have no page
-  equivalent.
-- **Left-click on the tray icon toggles the hot corners**, which is what the
-  readme always said it did; it had been opening the dashboard. The icon dims
-  when they are off, and the dashboard is still the menu's first item.
-- **A zone whose arguments cannot be read is marked, not drawn as working.** A
-  key combination that does not parse, or an Alternate action missing its `|`,
-  used to appear on the preview like any other configured zone while never
-  firing.
-- **The tray menu anchors to the icon even when Windows refuses the GUID
-  registration**, which is the one case the anchoring was added for.
-- **Show Desktop uses the documented `IShellDispatch4::ToggleDesktop`** instead
-  of an undocumented private message to a window the mod does not own. The old
-  route stays as a fallback.
-- **Moving or auto-hiding a taskbar on a secondary display rebuilds the zones.**
-  The polled check only ever saw the primary display's work area, so with
-  *Keep zones out of the taskbar* on, that display's zones stayed put.
-- Dropped the comctl32 dependency — nothing used it after the 4.3.0 rewrite.
-- Clearing one display's name on the settings page no longer drops every
-  display listed after it.
-- Clicking the tray icon immediately after closing the dashboard reopens it
-  rather than doing nothing.
-
-## What's New in v4.4.0
-
-- **Every edge is now three separate zones** — start, middle and end. The two
-  outer stretches used to share one configuration, so `ABC` was impossible.
-- **Neighbouring segments with the same action merge back into one.** That is
-  what makes `AAA`, `AAB`, `ABB` and `ABC` all expressible without a mode
-  switch, and it is not just tidiness: three adjacent zones sharing an action
-  would each re-arm as the pointer crossed a seam, firing repeatedly as you
-  slid along the edge. Segments merge only when they are identical — same
-  action, arguments and overrides.
-- **Your existing layout still works.** A stored edge fills both outer
-  segments, and the middle too when no centre was configured, which reproduces
-  the old geometry exactly — the three identical segments coalesce straight
-  back into the single edge-wide zone you had.
-- **Knock works on corners.** It always did — it is a per-zone setting — but
-  nothing said so. There is a section about it in the readme now.
-- **The tray menu opens at the tray icon** instead of wherever the pointer
-  happened to be, and follows the taskbar to whichever edge it is docked on.
-- **New icon**, and the dashboard window has one again — it lost its icon in
-  4.3.0 when the window was rewritten.
-
-## What's New in v4.3.0
-
-The dashboard is now a picture of your configuration rather than a form.
-
-- **A tab per display**, labelled with its name and carrying a count of how many
-  zones you have set up on it, so "did I configure anything on that screen?" is
-  answerable at a glance. A display that is not plugged in keeps its tab, marked
-  with a dot — its configuration is still real.
-- **The screen is drawn at its real aspect ratio**, so a portrait or ultrawide
-  display looks like one.
-- **Each zone shows what it does.** Side strips read vertically, which is the
-  only way a name like "Notification Centre" fits inside one.
-- **Point at a zone and the panel below shows every timing in effect for it** —
-  size, delay, pass-through guard, knock, cooldown and modifier — with each one
-  marked *global* or *this zone*. A zone inherits five numbers it never used to
-  show, so "why did this one fire late?" was unanswerable without reading the
-  configuration by hand. Click to pin a zone, click again to release it.
-- **Zones taken from the "All displays" configuration say so**, instead of
-  looking like they belong to the display you are viewing.
-- The editing controls are gone. Everything is configured on the settings page,
-  and the window follows it live — change a setting in Windhawk and the picture
-  updates without reopening.
-
-## What's New in v4.2.1
-
-**The settings page is back.** It went away in 4.1.0 because forty settings in
-one flat list was unusable. Windhawk v2 renders them as collapsible groups, so
-that reason is gone.
-
-- **Zones, timings and everything else are configured in Settings.** Add a
-  display, then add only the zones you want on it — no more scrolling past
-  twelve entries to reach the one you use.
-- **Nothing breaks on upgrade.** A layout saved by 4.1.x keeps running exactly
-  as it did, globals included, and the log says so at startup. It is ignored
-  only once you list a display on the settings page.
-- **The dashboard no longer saves.** It was a second surface writing the same
-  store, which is what caused the configuration-swapping bug in 4.1.4. It now
-  tells you to edit in Settings rather than reporting a save that did nothing.
-
-## What's New in v4.1.4
-
-Review fixes, the first of which could lose a display's configuration.
-
-- **The editor bound each configuration to a list position instead of to a
-  display.** Detection has always matched zones by display name, but the
-  dashboard read and wrote whichever stored group sat at the same index as the
-  entry in its dropdown. That list is ordered primary first, then left to right,
-  so making another display primary or unplugging one renumbered it — and the
-  editor would then show one display's zones under another's name, and overwrite
-  them there on save. Each entry is now matched to its stored group by name, a
-  display configured for the first time takes the lowest free group, and a
-  display that is not currently plugged in keeps the group it owns.
-- **Custom Command could silently fail for URLs, shortcuts and folders.** Those
-  go through shell extensions that need COM, and the worker thread running them
-  had no apartment. It initialises one now, and both `ShellExecuteEx` calls ask
-  the shell not to return before it is finished, since that thread has no
-  message loop.
-- **A cooldown consumed the visit.** Walking into a zone shortly after anything
-  else fired and then parking there never fired at all — you had to leave and
-  come back. A cooldown is now a wait rather than a refusal, so staying put
-  outlasts it.
-- **Lock and blank the display no longer blocks unload** for up to ten seconds
-  while it waits out the blanking delay.
-- Argument fields stop input at the length the mod can actually store, rather
-  than truncating past it in silence.
-- The readme no longer claims a 16 ms sample rate without qualification: the
-  wait expires on a system timer tick, so it is 16-31 ms in practice.
-- Dropped an unused header, a brush that was created and destroyed but never
-  used, and a monitor-matching branch that could never be reached.
-
-## What's New in v4.1.3
-
-- **Fixed a crash on unload.** Every thread is given three seconds to stop
-  before the mod frees the locks they share, and a thread that misses that
-  deadline makes the mod leak them instead — freeing something a live thread is
-  still using is undefined behaviour inside Windhawk's own process. The tray
-  thread was the one exception: its timeout was logged and then ignored, so a
-  tray thread that had not finished could have its locks deleted underneath it.
-  It now counts like the others. Waits also treat a failed wait as "still
-  running" rather than as success.
-- **The tray's on/off toggle is serialised with the rest.** It wrote its key
-  outside the reload lock, so a reload running at that moment could put the old
-  value back and leave the switch disagreeing with what was stored.
-
-## What's New in v4.1.2
-
-Two more review fixes, both about threads.
-
-- **Two reloads could finish out of order.** Reloading builds the whole
-  configuration off to the side and swaps it in at the end — which is what keeps
-  the settings lock held briefly, but meant two reloads started close together
-  could publish in the wrong order, leaving the live configuration stale against
-  what was actually saved. Saving from the dashboard, resetting, and the tray's
-  own toggles now hold one lock across both the write and the reload that reads
-  it back, so a reload always sees a settled store.
-- **A failed cursor read slowed detection to the idle rate.** `GetCursorPos`
-  failing is transient, and the zones are still armed while it does — so the
-  right answer is to try again on the next 16 ms tick, not to wait 100 ms. Only
-  the states where nothing can fire at all use the idle rate, which is what the
-  documentation already claimed.
-
-## What's New in v4.1.1
-
-Review fixes on top of v4.1.0, one of them a real race.
-
-- **Fixed: a reload could briefly publish an empty zone set.** Loading the
-  configuration was two steps — write the defaults, then lay the stored values
-  over them — each taking the settings lock separately. In the gap the mod held
-  a complete, plausible, *wrong* configuration with no zones in it. Four of the
-  six things that trigger a reload run on a different thread from the detection
-  loop, and that loop re-checks the display layout twice a second, so a rebuild
-  landing in the gap would arm nothing and log "No zones are active". Loading is
-  now one transaction: the whole configuration is built off to the side and
-  swapped in under a single lock.
-- **That lock is also held for far less time.** It used to cover several hundred
-  value-store reads, an action built per zone, and two log writes — while the
-  detection thread, the action worker and the tray menu all waited on it.
-- **The adaptive poll rate is gone.** v4.1.0 eased the sampling interval off
-  while the cursor was far from every zone. Whichever way that decision is
-  made, it is made from a sample taken *before* the user starts moving, so a
-  flick could cross a zone entirely between two samples. On the outer perimeter
-  that costs a late trigger, because the pointer stops against the screen edge —
-  but a corner shared with a second monitor has no edge to stop against, and
-  there it was a lost one. Detection is back to a flat 16 ms whenever a zone
-  could fire; it still idles at 100 ms when the mod is switched off, suspended,
-  or has no zones armed, where nothing can be missed because nothing can fire.
-- **The dashboard's Reset button said "Reset to Windhawk settings".** There is
-  no Windhawk settings page to go back to. It now says what it does.
-- **The monitor list in the log** still told you to copy a name into the
-  "Monitor" setting, which no longer exists.
-
-## What's New in v4.1.0
-
-**The Settings page is gone. Everything is in the tray icon now.**
-
-- **One place to configure this mod, not two.** The Windhawk Settings page has
-  been removed entirely. Twelve zones per display, each with a forty-entry
-  action list and six timing overrides, had grown into a tree that was faster
-  to give up on than to navigate — and because a mod cannot write its own
-  settings from code, anything you changed in the dashboard could never be
-  written back to it. The two disagreed the moment you touched either one. The
-  dashboard won: right-click the tray icon → **Zones & settings...**
-- **If you configured this mod on the Settings page, set it up again from the
-  dashboard.** Configurations already saved from the dashboard are untouched.
-- **Reset actually resets.** The dashboard's Reset button left the numeric
-  options — sizes, delays, cooldown — behind in storage: still applied, no
-  longer shown anywhere. It now clears everything it can write.
-- **Fixed: per-display zones could be attributed to the wrong display.** The
-  editor matched a stored configuration to the monitor selector by list
-  position rather than by monitor, so a configuration written for one display
-  could appear under **All monitors** — and saving it then fired it on every
-  display.
-- **Verbose logging is gone as a setting.** Every log it gated was once per
-  trigger, never on the polling path, so there was nothing to gate. Suppressed
-  triggers now log once per run instead of once per cooldown, which is what the
-  setting was really protecting you from.
-- **The tray menu's reset** now says what it does — it clears the three toggles
-  above it, and nothing else. Wiping your zones is the dashboard's Reset
-  button, which asks first.
-- **The options are grouped.** Fourteen fields in one flat column, in no
-  particular order, is a wall. They now sit under four headings — how big the
-  zones are, when a zone fires, when to stay out of the way, everything else —
-  and every field still explains itself on hover.
-
-**Behaviour**
-
-- **A fullscreen app now only silences the display it is on.** Launching a game
-  on one monitor used to disable the hot corners on *every* monitor, which is
-  the opposite of why anyone owns a second screen. When Windows will not say
-  which display is involved, the old behaviour still applies and all displays
-  are suppressed.
-- **A split edge alternates as one edge.** With a centre action assigned, an
-  edge becomes two strips either side of the centre — but it is still one edge,
-  and **Alternate Key Press** / **Alternate Command** kept a separate A/B
-  position for each half. Walking into the left strip and then the right gave
-  you A twice. They now share one position.
-- **The detection thread idles when nothing can fire.** It sampled the cursor
-  every 16 ms even with the mod switched off, suspended, or with no zones
-  armed. Those three cases now tick at 100 ms. *(v4.1.0 also eased off while
-  the cursor was merely far away; v4.1.1 removed that — see below.)*
-
-## What's New in v4.0.5
-
-- **Fixed: "Turn Off Monitors", "Start Screen Saver" and "Lock and Turn Off
-  Monitors" could stall every other action behind them.** They ask every
-  window on the desktop to act, and the old call waited up to half a second
-  for *each* one — so a single slow application could tie up the action
-  thread for seconds while the mod appeared to have stopped responding. The
-  request is now sent without waiting.
-- Added a note on which smaller mods overlap with this one, so it is easier to
-  tell which is the right tool.
-- Internal tidying: dropped snapshot fields nothing read, the theme helper
-  resolves its entry point once instead of on every control, and the tray
-  icon's mask is explicitly zeroed rather than left undefined.
-
-## What's New in v4.0.4
-
-- **Fixed: disabling or reloading the mod with the settings window open could
-  crash Windhawk.** Shutdown stopped every thread except the one running that
-  window, then freed the locks it was still using. It now closes the window
-  and waits for it, and if it will not close, leaves the locks alone rather
-  than pulling them out from under it.
-- **Fixed: a failed key injection could leave a modifier stuck down.** If the
-  key presses went through but the releases did not, the key stayed logically
-  held for the rest of the session — a stuck Win or Ctrl that nothing on
-  screen explains. The releases are now replayed after a partial send.
-- **Fixed: opening the settings window leaked an icon every time.**
-- Saving a configuration for a display beyond the eighth now says so in the
-  log instead of appearing to work and losing the edit on the next reload.
-- A Custom Command of just `uac;` with nothing after it no longer tries to
-  relaunch Windhawk itself with elevation.
-- Settings shared between the tray, the settings window and the detection
-  loop are read and written atomically.
-
-## What's New in v4.0.3
-
-- **Fixed: the mod would not load at all.** "Require a modifier key" offered a
-  dropdown whose values were numbers, and Windhawk only accepts text values for
-  a dropdown — it refused to parse the settings before any of the mod ran. The
-  choices are now stored by name (`none`, `ctrl`, `alt`, `shift`, `win`); a
-  configuration saved by an earlier version keeps working.
-
-## What's New in v4.0.2
-
-- **Fixed: zones could stop matching after a display change.** Windows reports
-  a layout that changed while it was being read as a buffer error, and that is
-  precisely when this runs — a layout change is what calls it. The mod treated
-  that as fatal and dropped every display name for the rebuild, leaving zones
-  bound to a name unmatched until the next display change. It now re-reads
-  instead.
-- Documentation corrections: two identical displays are the one case where
-  changing the primary display can move a configuration, because the ` #2`
-  suffix follows listed order rather than the display itself. That is now
-  stated instead of implied otherwise.
-
-## What's New in v4.0.1
-
-- **Fixed: stray text showing through the per-zone settings panel.** The
-  preview's hover card was drawn into the same strip of the window that the
-  per-zone fields occupy, so it was never readable and its lines leaked out
-  through the gaps between the fields. The card is gone — the panel below the
-  preview already shows those values for the selected zone, and clicking a
-  zone in the preview selects it.
-- **Fixed: tooltips were unreadable dark-on-dark.** A themed tooltip silently
-  ignores the colour messages that were meant to restyle it, so it kept the
-  system colours while the rest of the dashboard followed the palette.
-  Tooltips now use the dashboard's own background, text colour and font, in
-  both light and dark themes.
-- The dashboard window now clips its children, so nothing painted by the
-  window can leave residue underneath a control.
-- **Fixed a crash risk when opening the dashboard.** It listed your monitors
-  by reading the detection thread's own monitor table, which that thread
-  clears and rebuilds whenever the display layout is re-checked — freeing the
-  name strings mid-read. The names now travel inside the same immutable
-  snapshot the detection loop already uses.
-
-## What's New in v4.0.0
-
-- **Per-zone settings.** Size, delay, pass-through guard, knock window,
-  cooldown and required modifier can each be overridden for a single zone.
-  Blank means inherit, so existing configurations behave exactly as before.
-- The dashboard follows the system light/dark theme instead of being fixed
-  dark, which made it near-unreadable on a light desktop.
-- Preview fixes: edges are split around their centre blocks, so hovering a
-  centre no longer highlights the whole edge.
-
-## What's New in v3.9.0
-
-- **Settings dashboard**, opened from the tray icon: all twelve zones per
-  monitor, the global options, and a clickable preview of your screen.
-  Windhawk's own settings page stays available and can be restored at any
-  time with *Reset to Windhawk settings*.
-
-## What's New in v3.8.0
-
-- **Tray icon** with enable/suspend controls and quick access to the log.
-
-## What's New in v3.7.0
-
-- **Alternating actions** — one zone that runs two different actions on
-  successive triggers, written as `first|second` in the argument field.
-- **Keep zones off the taskbar**, so an edge zone stops at the work area
-  instead of fighting the taskbar's peek-at-desktop strip.
-
-## What's New in v3.6.0
-
-- **Knock to activate** — require entering a zone twice in quick succession.
-- **Modifier gating** — zones stay inert unless a chosen key is held.
-- **Edge-centre zones**, plus four new actions.
-- v3.6.1: the display actually blanks after *Lock and Turn Off Monitors*.
-  `WM_SYSCOMMAND` was posted to the foreground window, which is null once
-  `LockWorkStation` has switched desktop; it is now broadcast.
-
-## What's New in v3.5.0
-
-- First public release.
-
-## What's New in v3.4.0
-
-- **16 new actions**, so common shortcuts no longer need a Virtual Key Press:
-  Switch to Last Window (Alt+Tab), Task Switcher (Ctrl+Alt+Tab), Minimize,
-  Maximize, Snap Left/Right, Close Window, File Explorer, Settings, Search,
-  Clipboard History, Screenshot, Project, and Virtual Desktop Next/Previous/New.
-
-## What's New in v3.3.0
-
-- **Extended keys are now flagged correctly.** Arrow keys, Home/End/PgUp/PgDn,
-  Insert/Delete, the Win keys, right Ctrl/Alt and the media keys sit on the
-  E0-prefixed part of the keyboard. Injected without `KEYEVENTF_EXTENDEDKEY`
-  they resolve to their numpad twins, so a Virtual Key Press using
-  `Win+Right` (snap) or any arrow/navigation key silently did the wrong thing.
-- **Unquoted paths containing spaces now launch.** `C:\Program Files\Tool\t.exe -x`
-  was split into `C:\Program` plus arguments and failed with file-not-found.
-  The executable is now rebuilt token by token until it names a real file.
-  Bare commands (`notepad.exe`) are untouched so the shell still resolves them
-  via PATH, and quoted paths behave exactly as before.
-- **Windows 11 shell surfaces hosted outside explorer.exe** — Start
-  (`StartMenuExperienceHost.exe`), Search (`SearchHost.exe`), Action Center —
-  are no longer mistaken for fullscreen apps. Matched by exact process name,
-  not a `*Host.exe` suffix rule, which would also match ordinary applications.
-
-## What's New in v3.2.0 — stability
-
-Spamming the zones could make the whole desktop stagger. Four causes, all fixed:
-
-- **Stuck modifier keys.** Key injection used to release any modifier you were
-  physically holding and re-press it afterwards. If you let go in between, that
-  re-press had no matching release and the modifier stayed logically held down
-  for the rest of the session — a stuck Win or Ctrl key breaks every app at
-  once. Removed: every key the mod presses is now released in the same batch.
-- **Burst injection.** A sweep across several zones queued a burst of shell
-  commands that the worker replayed back-to-back — four Win+Tab injections in
-  40 ms in one report. There is now a hard 250 ms floor between any two
-  actions, and the queue holds 2 instead of 8 so a backlog is dropped rather
-  than replayed late.
-- **Logging on the hot path.** Every trigger wrote to `OutputDebugString`,
-  which takes a machine-wide lock — that stalls *other* Windhawk mods, not
-  just this one. Per-trigger logging is now off by default (**Verbose
-  logging**). Errors and startup info are still always logged.
-- **Unsafe teardown.** If a thread was still busy (e.g. blocked on a UAC
-  prompt) the mod freed the locks it was using. It now leaks them instead —
-  the process exits immediately after, so a leak is free and a use-after-free
-  is not.
-
-Also: the display-layout poll ran 5 system calls every 16 ms; it now runs
-twice a second, leaving the tick to one cursor read plus a few comparisons.
-
-## What's New in v3.1.0
-
-- **Fixed: zones stopped working while Task View / Start / Search was open.**
-  Those are shell surfaces that exactly match the monitor size, so the
-  fullscreen-app guard classified them as fullscreen games and suppressed
-  every trigger until they closed. v2.x was immune only by accident — it ran
-  inside explorer.exe and skipped windows belonging to its own process, and
-  Task View *is* explorer.exe. Moving to a dedicated process silently
-  invalidated that test. The guard now compares against the shell's process,
-  which is what was always meant.
-- Removed a 150 ms diagnostic delay per action that could back up the queue.
-- Zone sizes are clamped per monitor so the eight zones can never overlap:
-  a corner larger than half the screen, or an edge thicker than the corner
-  box, previously made one zone shadow another (only the first was reachable).
-
-## What's New in v3.0.2
-
-- **Zones no longer fire when you just pass through them.** A corner cannot be
-  reached without crossing the edge strip beside it, so moving into a corner
-  fired the edge action ~30 ms before the corner one. With a toggle bound to
-  both (Task View, Show Desktop) that opened and instantly re-closed — looking
-  exactly like the mod did nothing. The new **Pass-through guard** setting
-  (80 ms) requires the cursor to settle, so only the zone you stop in fires.
-- `SendInput` failures are now logged instead of silently discarded.
-- Each trigger logs the foreground window before and after, so a cancelled
-  toggle is visible in the log rather than looking like success.
-
-## What's New in v3.0.1
-
-- Fixed the mod never loading. v3.0.0 kept the `@architecture x86-64` line
-  from v2.x, but `windhawk.exe` is a 32-bit process — so the mod was only ever
-  built as a 64-bit DLL and Windhawk had nothing to inject. No logs, no zones,
-  no sign of life. Tool mods must not restrict architecture.
-
-## What's New in v3.0.0
-
-- **Runs as a dedicated process** instead of injecting into explorer.exe.
-  Detection no longer shares a thread with the taskbar — that shared thread
-  was why zones fired seconds late or not at all.
-- **Polled detection replaces the low-level mouse hook.** The old hook was
-  installed on explorer's taskbar thread; whenever that thread was busy,
-  Windows skipped the callback and could silently remove the hook. Polling is
-  immune to that, to UIPI, and to elevated foreground apps — and it stops
-  routing every mouse event on the system through explorer.
-- **Monitors identified by friendly name**, not by position in a sorted list.
-- **Per-monitor DPI awareness pinned explicitly**, fixing zones landing at
-  the wrong coordinates on mixed-scaling multi-monitor setups.
-- **Actions run on a worker thread**, so a slow launch can never delay
-  detection.
-- Display-layout changes are picked up even when Windows doesn't send
-  `WM_DISPLAYCHANGE` (docking, monitor wake, RDP reconnect).
+First release. Earlier version numbers exist only in the development
+repository and were never published, so there is nothing to upgrade from.
 
 ## Support
 
@@ -853,6 +364,8 @@ listing, but it only takes one link, so the rest live here.
           $name: Size override (px)
           $description: >-
             Corner square, or edge strip thickness. -1 keeps the global value.
+            An edge is one strip, so its three segments share a thickness: the
+            first segment that sets one decides it for the whole edge.
         - delay: -1
           $name: Activation delay override (ms)
           $description: -1 keeps the global value.
@@ -889,8 +402,8 @@ listing, but it only takes one link, so the rest live here.
         cooldowns stay separate.
   $name: Displays
   $description: >-
-    Leave this empty to keep using a layout saved by an older version of the
-    mod. As soon as you add a display here, this list takes over completely.
+    Add one entry per display you want to configure, or a single entry with
+    *  as the name to cover every display at once.
 
 - cornerSize: 6
   $name: Corner size (px)
@@ -2441,7 +1954,7 @@ static std::function<void()> MakeExecutor(CornerAction action,
     //
     // Deliberately built as two extra action types rather than by giving every
     // zone a second action + args. That would have doubled a settings block
-    // that is already twelve zones long, for a feature most zones will never
+    // that is already sixteen zones long, for a feature most zones will never
     // use. Here the two halves live in the existing Args field, split on "|",
     // so nothing about the zone structure, the hit test or the detection loop
     // changes at all.
@@ -2687,10 +2200,15 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
             if (zc->action == CornerAction::AlternateKeypress ||
                 zc->action == CornerAction::AlternateCommand)
             {
-                // zc->executor is deliberately not used for these two: each
-                // copy carries its own flip flag, and the segments of one edge
-                // have to share one. The stored executor still earns its keep
-                // as the dashboard's "do the arguments parse?" test.
+                // zc->executor is deliberately not used for these two: every
+                // MakeExecutor call builds a fresh flip flag, so reusing the
+                // stored one would restart the alternation on each rebuild.
+                // Keyed per zone, which is what the readme promises - each zone
+                // alternates independently. Identical neighbouring segments
+                // have already coalesced into one zone before they reach here,
+                // so a merged edge alternates as a unit for free. The stored
+                // executor still earns its keep as the dashboard's
+                // "do the arguments parse?" test.
                 if (!altExec[z])
                     altExec[z] = MakeExecutor(zc->action, zc->args);
                 hz.exec = altExec[z];
@@ -2797,11 +2315,53 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
     return set;
 }
 
+// True when two zone sets would behave identically. Only what the detection
+// loop and the actions actually read - the executors are rebuilt every time
+// and never compare equal, so comparing them would make this always false.
+static bool SameZoneSet(const ZoneSet *a, const ZoneSet *b)
+{
+    if (!a || !b || a->zones.size() != b->zones.size() ||
+        a->disableDuringDrag != b->disableDuringDrag)
+        return false;
+    for (size_t i = 0; i < a->zones.size(); i++)
+    {
+        const HitZone &x = a->zones[i], &y = b->zones[i];
+        if (memcmp(&x.rect, &y.rect, sizeof(RECT)) != 0 || x.zone != y.zone ||
+            x.monitor != y.monitor || x.delay != y.delay ||
+            x.settle != y.settle || x.knock != y.knock ||
+            x.cooldown != y.cooldown || x.modifier != y.modifier ||
+            x.label != y.label)
+            return false;
+    }
+    return true;
+}
+
 // Detection thread only.
 static void RebuildZones()
 {
     RefreshMonitors();
     auto set = BuildZoneSet();
+
+    // Recorded before the early return below. TopologyChanged compares against
+    // these, so leaving them stale after a no-op rebuild would make it report a
+    // change on every poll and rebuild forever.
+    g_topoCount = GetSystemMetrics(SM_CMONITORS);
+    g_topoVirtual = {GetSystemMetrics(SM_XVIRTUALSCREEN),
+                     GetSystemMetrics(SM_YVIRTUALSCREEN),
+                     GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                     GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &g_topoWorkArea, 0);
+
+    // Appbar registrations and taskbar changes broadcast SPI_SETWORKAREA
+    // several times in a row, and a rebuild resets every cooldown and
+    // alternation position and re-logs the whole zone list. When the result is
+    // identical there is nothing to publish, so skip the swap and the reset.
+    std::shared_ptr<const ZoneSet> current;
+    EnterCriticalSection(&g_zonesLock);
+    current = g_zones;
+    LeaveCriticalSection(&g_zonesLock);
+    if (SameZoneSet(current.get(), set.get()))
+        return;
 
     EnterCriticalSection(&g_zonesLock);
     g_zones = set;
@@ -2814,12 +2374,33 @@ static void RebuildZones()
     g_lastExitTick.assign(set->zones.size(), 0);
     g_knockSatisfied = true;
 
-    g_topoCount = GetSystemMetrics(SM_CMONITORS);
-    g_topoVirtual = {GetSystemMetrics(SM_XVIRTUALSCREEN),
-                     GetSystemMetrics(SM_YVIRTUALSCREEN),
-                     GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                     GetSystemMetrics(SM_CYVIRTUALSCREEN)};
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &g_topoWorkArea, 0);
+    // A rebuild is not a gesture. With the state above cleared, a pointer that
+    // has not moved looks to the next tick like a fresh entry - and with every
+    // cooldown zeroed too, nothing stops it firing once the dwell elapses. That
+    // made the action run on mod enable, on any settings change, and on every
+    // WM_DISPLAYCHANGE or work-area broadcast, which includes a monitor waking
+    // up. Parking the pointer in a corner after using it is the normal way to
+    // use hot corners, so this was easy to hit, and a corner bound to Lock or
+    // Sleep would do that thing unprompted.
+    //
+    // Adopting the zone the cursor is already in, with the visit already spent,
+    // means only leaving and coming back can arm it.
+    POINT pt;
+    if (GetCursorPos(&pt))
+    {
+        for (size_t i = 0; i < set->zones.size(); i++)
+        {
+            const RECT &r = set->zones[i].rect;
+            if (pt.x >= r.left && pt.x < r.right && pt.y >= r.top &&
+                pt.y < r.bottom)
+            {
+                g_activeZone = (int)i;
+                g_enterTick = GetTickCount64();
+                g_firedThisEntry = true;
+                break;
+            }
+        }
+    }
 }
 
 // WM_DISPLAYCHANGE is not delivered for every layout change that matters —
@@ -2980,9 +2561,21 @@ static DWORD DetectTick()
     if (!zones || zones->zones.empty())
         return kIdleTickMs;
 
+    // GetCursorPos fails for a process on the default desktop once the input
+    // desktop is the secure one, so a locked machine used to spin this thread
+    // at the full rate all night with no possible way for a zone to be hit.
+    // A single failure is still treated as transient - it is usually a desktop
+    // switch in progress - but a run of them backs off to the idle rate, and
+    // the first success restores it.
+    static int consecutiveFailures = 0;
     POINT pt;
     if (!GetCursorPos(&pt))
-        return kTickMs;   // transient, and zones are armed - do not slow down
+    {
+        if (consecutiveFailures < 10)
+            consecutiveFailures++;
+        return consecutiveFailures >= 10 ? kIdleTickMs : kTickMs;
+    }
+    consecutiveFailures = 0;
 
     int idx = -1;
     for (size_t i = 0; i < zones->zones.size(); i++)
@@ -3120,9 +2713,11 @@ static LRESULT CALLBACK DetectWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     if (uMsg == WM_DISPLAYCHANGE ||
         (uMsg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA))
     {
-        Wh_Log(uMsg == WM_DISPLAYCHANGE
-                   ? L"WM_DISPLAYCHANGE — queueing a zone rebuild"
-                   : L"Work area changed — queueing a zone rebuild");
+        // Wh_Log concatenates its first argument onto a string literal, so it
+        // has to be one - a ternary here is a syntax error in a real build.
+        Wh_Log(L"%s — queueing a zone rebuild",
+               uMsg == WM_DISPLAYCHANGE ? L"WM_DISPLAYCHANGE"
+                                        : L"Work area changed");
         PostMessage(hWnd, WM_APP_REBUILD, 0, 0);
         return 0;
     }
@@ -3431,42 +3026,6 @@ static void UpdateTrayIcon(bool add)
         DestroyIcon(nid.hIcon);
 }
 
-// =====================================================================
-// Reading a pre-4.2 layout
-// =====================================================================
-//
-// Nothing writes any of this any more - the settings page is the only store.
-// It is read once per reload, and only when the settings page has no displays
-// on it, so that upgrading from a version that had no settings page does not
-// silently discard a zone layout that took effort to enter.
-//
-// One key per field rather than a packed string, which is what those versions
-// wrote: wordy, but readable if it ever needs debugging by hand.
-
-static constexpr int kMaxGuiConfigs = 8;
-
-static std::wstring GetStrValue(const wchar_t *name)
-{
-    WCHAR buf[512] = {};
-    if (Wh_GetStringValue(name, buf, ARRAYSIZE(buf)) == 0)
-        return L"";
-    return buf;
-}
-
-static std::wstring GuiKey(int cfg, int zone, const wchar_t *what)
-{
-    wchar_t k[64];
-    if (zone < 0)
-        _snwprintf_s(k, _countof(k), _TRUNCATE, L"g%d.%s", cfg, what);
-    else
-        _snwprintf_s(k, _countof(k), _TRUNCATE, L"g%d.z%d.%s", cfg, zone, what);
-    return k;
-}
-
-// The saved zone layout, or an empty vector if there is not one yet. Returns it
-// rather than assigning g_settings.monitorConfigs: this reads several hundred
-// value-store keys and builds a std::function per zone, and holding
-// g_settingsLock across all of that would stall the detection thread, the
 // action worker and the tray menu.
 // =====================================================================
 // Windhawk settings page
@@ -3539,7 +3098,7 @@ static std::wstring GetSettingStr(const wchar_t *fmt, int a, int b = -1)
 {
     PCWSTR raw = (b < 0) ? Wh_GetStringSetting(fmt, a)
                          : Wh_GetStringSetting(fmt, a, b);
-    std::wstring out = raw ? raw : L"";
+    std::wstring out = raw;   // Wh_GetStringSetting returns L"", never NULL
     Wh_FreeStringSetting(raw);
     return out;
 }
@@ -3549,7 +3108,7 @@ static std::wstring GetSettingStr(const wchar_t *fmt, int a, int b = -1)
 static std::wstring GetSettingStr(const wchar_t *name)
 {
     PCWSTR raw = Wh_GetStringSetting(name);
-    std::wstring out = raw ? raw : L"";
+    std::wstring out = raw;   // Wh_GetStringSetting returns L"", never NULL
     Wh_FreeStringSetting(raw);
     return out;
 }
@@ -3662,86 +3221,6 @@ static void ApplySettingsGlobals(ModSettings &s)
     }
 }
 
-static std::vector<MonitorZoneConfig> ReadDashboardZones()
-{
-    std::vector<MonitorZoneConfig> configs;
-    if (Wh_GetIntValue(L"gui_active", 0) == 0)
-        return configs;
-
-    for (int i = 0; i < kMaxGuiConfigs; i++)
-    {
-        std::wstring id = GetStrValue(GuiKey(i, -1, L"id").c_str());
-        if (id.empty())
-            continue;
-
-        MonitorZoneConfig cfg;
-        cfg.monitorId = id;
-
-        // The store predates the edge split, so its twelve slots have to be
-        // spread across sixteen. A stored edge fills both outer segments; it
-        // also fills the middle when nothing was stored for the centre, which
-        // is what reproduces the old geometry exactly - back then an edge with
-        // no centre configured was one rectangle spanning the whole edge, and
-        // three identical segments coalesce back into exactly that.
-        static const struct
-        {
-            int edge;                 // legacy slot 4-7
-            int centre;               // legacy slot 8-11
-            Zone start, middle, end;
-        } kSpread[] = {
-            {4, 8, ZONE_TOP_START, ZONE_TOP_MIDDLE, ZONE_TOP_END},
-            {5, 9, ZONE_BOTTOM_START, ZONE_BOTTOM_MIDDLE, ZONE_BOTTOM_END},
-            {6, 10, ZONE_LEFT_START, ZONE_LEFT_MIDDLE, ZONE_LEFT_END},
-            {7, 11, ZONE_RIGHT_START, ZONE_RIGHT_MIDDLE, ZONE_RIGHT_END},
-        };
-
-        auto readSlot = [&](int z, ZoneConfig &dst)
-        {
-            std::wstring a = GetStrValue(GuiKey(i, z, L"a").c_str());
-            std::wstring g = GetStrValue(GuiKey(i, z, L"g").c_str());
-            CornerAction act = ParseActionType(a);
-            dst.action = act;
-            dst.args = g;
-            dst.executor = MakeExecutor(act, g);
-            dst.tuning.size = Wh_GetIntValue(GuiKey(i, z, L"sz").c_str(), -1);
-            dst.tuning.delay = Wh_GetIntValue(GuiKey(i, z, L"dl").c_str(), -1);
-            dst.tuning.settle = Wh_GetIntValue(GuiKey(i, z, L"gd").c_str(), -1);
-            dst.tuning.knock = Wh_GetIntValue(GuiKey(i, z, L"kn").c_str(), -1);
-            dst.tuning.cooldown = Wh_GetIntValue(GuiKey(i, z, L"cd").c_str(), -1);
-            dst.tuning.modifier = Wh_GetIntValue(GuiKey(i, z, L"md").c_str(), -1);
-            return act != CornerAction::Nothing;
-        };
-
-        bool any = false;
-        for (int z = ZONE_TOP_LEFT; z <= ZONE_BOTTOM_RIGHT; z++)
-            any |= readSlot(z, cfg.zones[z]);
-
-        for (const auto &sp : kSpread)
-        {
-            ZoneConfig edge, centre;
-            bool hasEdge = readSlot(sp.edge, edge);
-            bool hasCentre = readSlot(sp.centre, centre);
-
-            if (hasEdge)
-            {
-                cfg.zones[sp.start] = edge;
-                cfg.zones[sp.end] = edge;
-                if (!hasCentre)
-                    cfg.zones[sp.middle] = edge;
-                any = true;
-            }
-            if (hasCentre)
-            {
-                cfg.zones[sp.middle] = centre;
-                any = true;
-            }
-        }
-
-        if (any)
-            configs.push_back(std::move(cfg));
-    }
-    return configs;
-}
 
 // The whole of this mod's configuration, read and applied as one transaction.
 //
@@ -3771,67 +3250,7 @@ static void ReloadConfig()
     g_trayEnabled = (v < 0) ? true : (v != 0);
 
     s.monitorConfigs = ReadSettingsZones();
-    const bool fromSettings = !s.monitorConfigs.empty();
-
-    // The settings page always owns the globals. Applying them only on the
-    // settings path meant that anyone upgrading had a page full of fields that
-    // did nothing and no way to tell: change Cooldown from 300 to 800, see
-    // nothing happen. Only the zone list falls back to the stored layout.
     ApplySettingsGlobals(s);
-
-    // The handover is one-way. Without this, a user who lists a display and
-    // later sets its zones back to Nothing drops out of fromSettings and the
-    // pre-4.2 layout comes back from the dead, which is not what clearing a
-    // zone asks for.
-    if (fromSettings && Wh_GetIntValue(L"settings_owner", 0) == 0)
-        Wh_SetIntValue(L"settings_owner", 1);
-
-    bool legacy = false;
-    std::wstring dropped;
-
-    if (!fromSettings && Wh_GetIntValue(L"settings_owner", 0) == 0 &&
-        Wh_GetIntValue(L"gui_active", 0) != 0)
-    {
-        legacy = true;
-        s.monitorConfigs = ReadDashboardZones();
-
-        // The stored globals are no longer applied, so name the ones that were
-        // customised. Reverting them silently would look like the mod losing a
-        // setting; naming them says exactly what to re-enter and where.
-        static const struct
-        {
-            const wchar_t *key;
-            const wchar_t *name;
-        } kOldGlobals[] = {
-            {L"ovr_corner", L"Corner size"},
-            {L"ovr_edge", L"Edge thickness"},
-            {L"ovr_centre", L"Edge centre width"},
-            {L"ovr_delay", L"Activation delay"},
-            {L"ovr_settle", L"Pass-through guard"},
-            {L"ovr_knock", L"Knock window"},
-            {L"ovr_cooldown", L"Cooldown"},
-            {L"ovr_modifier", L"Required modifier"},
-            {L"ovr_taskbar", L"Keep zones out of the taskbar"},
-            {L"ovr_lockblank", L"Lock-then-blank delay"},
-            {L"ovr_monnames", L"List display names in the log"},
-            {L"ovr_fullscreen", L"Skip while fullscreen"},
-            {L"ovr_drag", L"Skip while dragging"},
-        };
-        for (const auto &o : kOldGlobals)
-        {
-            if (Wh_GetIntValue(o.key, -1) < 0)
-                continue;
-            if (!dropped.empty())
-                dropped += L", ";
-            dropped += o.name;
-        }
-        if (!GetStrValue(L"ovr_excluded").empty())
-        {
-            if (!dropped.empty())
-                dropped += L", ";
-            dropped += L"Excluded applications";
-        }
-    }
 
     // Copied out before the move, so the summary can be logged after the lock
     // is released - Wh_Log goes through OutputDebugString and takes a
@@ -3846,23 +3265,10 @@ static void ReloadConfig()
     g_settings = std::move(s);
     LeaveCriticalSection(&g_settingsLock);
 
-    if (legacy)
+    if (zoneCount)
     {
-        Wh_Log(L"Zones are coming from a layout saved by an older version (%d "
-               L"configuration%s). Everything else on this mod's Settings page "
-               L"is live. Re-enter the zones there to take them over - as soon "
-               L"as one display is listed, this layout is ignored.",
-               zoneCount, zoneCount == 1 ? L"" : L"s");
-        if (!dropped.empty())
-            Wh_Log(L"These were customised in the old version and are now taken "
-                   L"from the Settings page instead, so set them again there if "
-                   L"you still want them: %s.",
-                   dropped.c_str());
-    }
-    else if (zoneCount)
-    {
-        Wh_Log(L"Using the Settings page (%d display%s configured)",
-               zoneCount, zoneCount == 1 ? L"" : L"s");
+        Wh_Log(L"%d display%s configured", zoneCount,
+               zoneCount == 1 ? L"" : L"s");
     }
     else
     {
@@ -4073,7 +3479,7 @@ static HWND g_hDashWnd = nullptr;
 // change it.
 struct Palette
 {
-    COLORREF bg, panel, text, dim, field, fieldText, border, accent, accentText;
+    COLORREF bg, text, dim, field, border, accent, accentText;
 };
 static Palette g_pal;
 static bool g_lightTheme = false;
@@ -4101,15 +3507,23 @@ static void BuildPalette()
     g_lightTheme = SystemUsesLightTheme();
     if (g_lightTheme)
     {
-        g_pal = {RGB(243, 243, 243), RGB(251, 251, 251), RGB(26, 26, 26),
-                 RGB(95, 95, 95),    RGB(255, 255, 255), RGB(26, 26, 26),
-                 RGB(214, 214, 214), RGB(0, 95, 184),    RGB(255, 255, 255)};
+        g_pal = {/* bg     */ RGB(243, 243, 243),
+                 /* text   */ RGB(26, 26, 26),
+                 /* dim    */ RGB(95, 95, 95),
+                 /* field  */ RGB(255, 255, 255),
+                 /* border */ RGB(214, 214, 214),
+                 /* accent */ RGB(0, 95, 184),
+                 /* on-acc */ RGB(255, 255, 255)};
     }
     else
     {
-        g_pal = {RGB(32, 32, 32),    RGB(43, 43, 43),   RGB(255, 255, 255),
-                 RGB(170, 170, 170), RGB(45, 45, 45),   RGB(255, 255, 255),
-                 RGB(70, 70, 70),    RGB(76, 194, 255), RGB(0, 0, 0)};
+        g_pal = {/* bg     */ RGB(32, 32, 32),
+                 /* text   */ RGB(255, 255, 255),
+                 /* dim    */ RGB(170, 170, 170),
+                 /* field  */ RGB(45, 45, 45),
+                 /* border */ RGB(70, 70, 70),
+                 /* accent */ RGB(76, 194, 255),
+                 /* on-acc */ RGB(0, 0, 0)};
     }
 }
 
@@ -4156,7 +3570,6 @@ struct DashState
 
     std::vector<DisplayView> displays;
     ModSettings globals;         // what an inherited value resolves to
-    bool legacy = false;         // running a layout saved before 4.2
 
     int activeTab = 0;
     int hoverZone = -1;
@@ -4286,6 +3699,34 @@ static RECT ZoneRectInDiagram(Zone z, const RECT &d)
 }
 
 static bool ZoneIsCorner(Zone z) { return z <= ZONE_BOTTOM_RIGHT; }
+
+// The three segments of the edge a zone belongs to, or false for a corner.
+// An edge is one strip, so its thickness is a property of the trio rather than
+// of whichever segment you happen to be looking at.
+static bool EdgeTrio(Zone z, Zone out[3])
+{
+    struct Run
+    {
+        Zone lo, mid, hi;
+    };
+    static const Run kRuns[] = {
+        {ZONE_TOP_START, ZONE_TOP_MIDDLE, ZONE_TOP_END},
+        {ZONE_BOTTOM_START, ZONE_BOTTOM_MIDDLE, ZONE_BOTTOM_END},
+        {ZONE_LEFT_START, ZONE_LEFT_MIDDLE, ZONE_LEFT_END},
+        {ZONE_RIGHT_START, ZONE_RIGHT_MIDDLE, ZONE_RIGHT_END},
+    };
+    for (const Run &r : kRuns)
+    {
+        if (z >= r.lo && z <= r.hi)
+        {
+            out[0] = r.lo;
+            out[1] = r.mid;
+            out[2] = r.hi;
+            return true;
+        }
+    }
+    return false;
+}
 
 // The left and right strips are tall and narrow. Rotating the text is the only
 // way a label such as "Notification Centre" fits inside one.
@@ -5032,6 +4473,40 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
         int own = TuningField(zv.tuning, i);
         bool overridden = own >= 0;
         int value = overridden ? own : GlobalField(s->globals, i, (Zone)zone);
+        std::wstring from = overridden ? L"this zone" : L"global";
+
+        // Size on an edge belongs to the strip, not the segment: all three get
+        // the same thickness, taken from the first that asks for one. Reporting
+        // this segment's own override made the panel claim 10 px while the
+        // picture and the pointer both used the 20 px its neighbour asked for.
+        Zone trio[3];
+        if (i == 0 && EdgeTrio((Zone)zone, trio))
+        {
+            int owner = -1;
+            for (Zone t : trio)
+            {
+                if (dv.zones[t].tuning.size > 0)
+                {
+                    owner = (int)t;
+                    break;
+                }
+            }
+            if (owner < 0)
+            {
+                overridden = false;
+                value = s->globals.edgeSize;
+                from = L"global";
+            }
+            else
+            {
+                overridden = true;
+                value = dv.zones[owner].tuning.size;
+                from = (owner == zone) ? L"this zone"
+                                       : std::wstring(L"whole edge, set on ") +
+                                             ZoneToString((Zone)owner);
+            }
+        }
+
         std::wstring text = FormatTuning(i, value);
 
         SetTextColor(hdc, g_pal.dim);
@@ -5044,8 +4519,8 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
 
         SetTextColor(hdc, overridden ? g_pal.accent : g_pal.dim);
         r = {cFrom, y, right, y + Sc(Lay::DetRowH, d)};
-        DrawTextW(hdc, overridden ? L"this zone" : L"global", -1, &r,
-                  DT_LEFT | DT_SINGLELINE);
+        DrawTextW(hdc, from.c_str(), -1, &r,
+                  DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
 
         y += Sc(Lay::DetRowH, d);
     }
@@ -5080,7 +4555,7 @@ static int DashHitTab(DashState *s, POINT pt)
 }
 
 // Posted when the configuration changes underneath an open window.
-#define WM_APP_DASH_REFRESH (WM_APP + 21)
+static constexpr UINT WM_APP_DASH_REFRESH = WM_APP + 21;
 
 static void DashMakeFonts(DashState *s)
 {
