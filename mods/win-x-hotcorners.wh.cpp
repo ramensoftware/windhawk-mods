@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         4.4.1
+// @version         4.4.2
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -85,13 +85,6 @@ ready; the moment one display is listed, the old layout is ignored.
 
 The startup log names any globals you had customised in the old version, since
 those now come from the settings page and need setting again there.
-
-This is deliberate. Twelve zones on each of up to eight displays, each with a
-forty-entry action list and six timing overrides, is not something a settings
-form can present without becoming a tree nobody can navigate — and a Windhawk
-mod cannot write its own settings from code, so any change made in the mod's
-own UI could not be written back. Two places to configure one thing, disagreeing
-the moment you touched either. Now there is one.
 
 If the tray icon is hidden, it is in the overflow area — drag it onto the
 taskbar to keep it there.
@@ -200,8 +193,13 @@ display layout changes, which is the place to copy an exact name from when you
 are filling in the settings page:
 
 ```
-Monitor 1 [PRIMARY] id='Dell U2720Q' device=\\.\DISPLAY1 (0,0)-(3840,2160)
-Monitor 2           id='BOE0998'     device=\\.\DISPLAY2 (3840,0)-(5760,1080)
++-- Your monitors ---------------------------------------
+|  Copy a name into the "Display" field on this mod's settings page.
+|  Use  *  there to apply one configuration to every monitor.
+|
+|   1. "Dell U2720Q"   [primary]   3840 x 2160  at (0, 0)
+|   2. "BOE0998"                   1920 x 1080  at (3840, 0)
++--------------------------------------------------------
 ```
 
 Copy the text inside the quotes. If you own two identical displays they get a
@@ -211,12 +209,13 @@ names themselves they are not fixed: making the other twin primary swaps which
 one is ` #2`, and swaps the configuration with it. Check the log after such a
 change.
 
-The selector's first entry, **All monitors** (`*`), applies one configuration
-to every display.
+Putting `*` in the **Display** field applies one configuration to every screen.
 
 Resolution is **per zone**: a name-matched entry wins over `*` for the zones
 it defines, and `*` supplies the rest. So you can put a shared config on `*`
-and override just one corner on one display.
+and override just one corner on one display. To exclude a screen from a shared
+zone rather than replace it, set that zone to **Disabled here** — leaving it
+unset means "not configured", which falls through to `*`.
 
 ## A note on inner corners
 
@@ -273,6 +272,32 @@ Hot corners are disabled when any excluded process is the foreground window.
 **Example:** `photoshop.exe;premiere.exe;blender.exe`
 
 # Changelog
+
+## What's New in v4.4.2
+
+- **The tray icon stops saying "paused" when a suspension ends.** The corners
+  came back on their own, and the menu was right, but the icon stayed dimmed
+  for the rest of the session — the one piece of feedback you actually look at.
+- **New action: Disabled here.** Setting a zone to this on a named display
+  excludes that screen from a shared `*` zone. Leaving a zone unset still means
+  "not configured" and still falls through to `*`; there was previously no way
+  to say the other thing.
+- **The dashboard no longer marks a zone broken when the wildcard rescues it.**
+  A display-specific zone with unparseable arguments is skipped in favour of
+  the `*` entry, and the preview now follows that same order instead of
+  reporting a zone as dead when it fires perfectly well.
+- **Clearing the last zone on the settings page no longer resurrects a pre-4.2
+  layout.** The handover is one-way once the settings page has owned the
+  configuration.
+- Display changes and taskbar moves queue a rebuild rather than doing it inside
+  the broadcast handler, so the sender is not blocked and a burst of work-area
+  messages collapses into one rebuild instead of resetting every cooldown
+  several times.
+- The dashboard's tab strip no longer runs off the window edge with several
+  displays; labels ellipsise and every tab stays clickable.
+- Readme: removed a paragraph that still argued against having a settings page,
+  and corrected the monitor-list sample and the references to a "selector" the
+  dashboard no longer has.
 
 ## What's New in v4.4.1
 
@@ -780,6 +805,7 @@ listing, but it only takes one link, so the rest live here.
           $name: Action
           $options:
           - ACTION_NOTHING: Nothing
+          - ACTION_DISABLED_HERE: "Disabled here (ignore the * entry)"
           - ACTION_SHOW_DESKTOP: Show desktop
           - ACTION_TASK_VIEW: Task View
           - ACTION_SCREENSAVER: Start screensaver
@@ -960,6 +986,10 @@ listing, but it only takes one link, so the rest live here.
 enum class CornerAction
 {
     Nothing,
+    // Explicitly off on this display, as opposed to "not configured". Only the
+    // second falls through to the "*" entry, so this is what lets one screen
+    // opt out of a shared zone without abandoning the wildcard everywhere.
+    DisabledHere,
     ShowDesktop,
     TaskView,
     ScreenSaver,
@@ -1181,8 +1211,8 @@ static DWORD g_dwDetectThreadId = 0;
 static HWND g_hDetectWnd = nullptr;
 static HANDLE g_hStopEvent = nullptr;
 
-// Prints the monitor list at load and on display changes, so names can be
-// copied into the monitor selector instead of guessed. Cheap - once per event.
+// Prints the monitor list at load and on display changes, so a name can be
+// copied into the settings page instead of guessed. Cheap - once per event.
 static std::atomic<bool> g_showMonitorNames{true};
 
 // Master switch and temporary suspend, both driven from the tray icon.
@@ -1651,12 +1681,13 @@ static void RefreshMonitors()
     if (!g_showMonitorNames)
         return;
 
-    // Printed so the name can be copied straight into the Monitor setting,
-    // rather than guessed. Once per load and per display change only.
+    // Printed so the name can be copied straight into the settings page rather
+    // than guessed. Once per load and per display change only.
     Wh_Log(L" ");
     Wh_Log(L"+-- Your monitors ---------------------------------------");
-    Wh_Log(L"|  These are the displays in the dashboard's monitor selector.");
-    Wh_Log(L"|  Use  *  to apply one configuration to every monitor.");
+    Wh_Log(L"|  Copy a name into the \"Display\" field on this mod's settings "
+           L"page.");
+    Wh_Log(L"|  Use  *  there to apply one configuration to every monitor.");
     Wh_Log(L"|");
     for (const auto &m : g_monitors)
     {
@@ -1674,13 +1705,6 @@ static void RefreshMonitors()
 // Fullscreen / Exclusion Gates (worker thread only)
 // =====================================================================
 
-// Task View, the Start menu, Search, Action Center and the desktop are shell
-// surfaces that are legitimately monitor-sized, so the bounds test below
-// mistakes them for fullscreen apps and blocks every trigger while they are
-// open. v2.x excluded them with `fgPid == GetCurrentProcessId()` because it
-// ran inside explorer.exe; once the mod moved to its own process that test
-// silently stopped matching anything. Compare against the *shell's* pid
-// instead, which is what was actually meant.
 // Lowercase exe name of the window's owning process, or empty on failure.
 static std::wstring ProcessNameOfWindow(HWND hwnd)
 {
@@ -2248,6 +2272,7 @@ static CornerAction ParseActionType(const std::wstring &raw)
 {
     static const std::unordered_map<std::wstring, CornerAction> map = {
         {L"ACTION_NOTHING", CornerAction::Nothing},
+        {L"ACTION_DISABLED_HERE", CornerAction::DisabledHere},
         {L"ACTION_SHOW_DESKTOP", CornerAction::ShowDesktop},
         {L"ACTION_TASK_VIEW", CornerAction::TaskView},
         {L"ACTION_SCREENSAVER", CornerAction::ScreenSaver},
@@ -2295,6 +2320,7 @@ static const wchar_t *ActionToString(CornerAction a)
     switch (a)
     {
     case CornerAction::Nothing: return L"Nothing";
+    case CornerAction::DisabledHere: return L"Disabled here";
     case CornerAction::ShowDesktop: return L"Show Desktop";
     case CornerAction::TaskView: return L"Task View";
     case CornerAction::ScreenSaver: return L"Screen Saver";
@@ -2378,6 +2404,7 @@ static std::function<void()> MakeExecutor(CornerAction action,
     switch (action)
     {
     case CornerAction::Nothing: return nullptr;
+    case CornerAction::DisabledHere: return nullptr;
     case CornerAction::ShowDesktop: return ActionShowDesktop;
     case CornerAction::TaskView: return ActionTaskView;
     case CornerAction::ScreenSaver: return ActionScreenSaver;
@@ -2529,6 +2556,10 @@ static const ZoneConfig *ResolveZone(const MonitorInfo &mon, Zone zone)
         if (_wcsicmp(cfg.monitorId.c_str(), mon.id.c_str()) != 0)
             continue;
         const auto &zc = cfg.zones[zone];
+        // An explicit opt-out stops here rather than falling through, which is
+        // the whole difference between it and leaving the zone unset.
+        if (zc.action == CornerAction::DisabledHere)
+            return nullptr;
         if (zc.action != CornerAction::Nothing && zc.executor)
             return &zc;
     }
@@ -2656,6 +2687,10 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
             if (zc->action == CornerAction::AlternateKeypress ||
                 zc->action == CornerAction::AlternateCommand)
             {
+                // zc->executor is deliberately not used for these two: each
+                // copy carries its own flip flag, and the segments of one edge
+                // have to share one. The stored executor still earns its keep
+                // as the dashboard's "do the arguments parse?" test.
                 if (!altExec[z])
                     altExec[z] = MakeExecutor(zc->action, zc->args);
                 hz.exec = altExec[z];
@@ -3067,24 +3102,28 @@ static DWORD DetectTick()
 static LRESULT CALLBACK DetectWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                       LPARAM lParam)
 {
-    if (uMsg == WM_DISPLAYCHANGE || uMsg == WM_APP_REBUILD)
+    if (uMsg == WM_APP_REBUILD)
     {
-        if (uMsg == WM_DISPLAYCHANGE)
-            Wh_Log(L"WM_DISPLAYCHANGE — rebuilding zones");
-        else
-            Wh_Log(L"Settings changed — rebuilding zones");
         RebuildZones();
         return 0;
     }
-    // The polled topology check reads SPI_GETWORKAREA, which only ever reports
-    // the primary display - so with "keep zones out of the taskbar" on, a
-    // taskbar moved or auto-hidden on a secondary display left that display's
-    // zones at coordinates that no longer matched. This broadcast arrives
-    // whichever display changed.
-    if (uMsg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA)
+    // Both of these arrive as a SendMessage broadcast, so rebuilding inline
+    // blocks the sender for a QueryDisplayConfig, an EnumDisplayMonitors and
+    // the whole monitor log dump. SPI_SETWORKAREA also arrives several times
+    // in a row when a taskbar moves, and every rebuild resets each zone's
+    // cooldown and alternation position. Posting returns at once and coalesces
+    // naturally, because the loop drains its queue before the next tick.
+    //
+    // The work-area case is here at all because the polled topology check
+    // reads SPI_GETWORKAREA, which only ever reports the primary display - a
+    // taskbar moved on a secondary one was invisible to it.
+    if (uMsg == WM_DISPLAYCHANGE ||
+        (uMsg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA))
     {
-        Wh_Log(L"Work area changed — rebuilding zones");
-        RebuildZones();
+        Wh_Log(uMsg == WM_DISPLAYCHANGE
+                   ? L"WM_DISPLAYCHANGE — queueing a zone rebuild"
+                   : L"Work area changed — queueing a zone rebuild");
+        PostMessage(hWnd, WM_APP_REBUILD, 0, 0);
         return 0;
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -3177,6 +3216,11 @@ static HWND g_hTrayWnd = nullptr;
 static UINT g_taskbarCreatedMsg = 0;
 static constexpr UINT WM_APP_TRAY = WM_APP + 10;
 static constexpr UINT_PTR kTrayIconId = 1;
+// Fires once when a suspension expires, purely so the icon stops saying
+// "paused". Detection needs no timer - it re-reads the deadline every tick.
+static constexpr UINT_PTR kSuspendTimerId = 2;
+
+static void CancelSuspendTimer();
 
 // A stable GUID gives the icon an identity of its own. Without one it is keyed
 // on the host executable, which for a Windhawk tool mod is windhawk.exe and is
@@ -3500,6 +3544,16 @@ static std::wstring GetSettingStr(const wchar_t *fmt, int a, int b = -1)
     return out;
 }
 
+// For the settings that are not inside an array, where passing an index into a
+// format string with no %d in it just read like a bug.
+static std::wstring GetSettingStr(const wchar_t *name)
+{
+    PCWSTR raw = Wh_GetStringSetting(name);
+    std::wstring out = raw ? raw : L"";
+    Wh_FreeStringSetting(raw);
+    return out;
+}
+
 static std::vector<MonitorZoneConfig> ReadSettingsZones()
 {
     std::vector<MonitorZoneConfig> configs;
@@ -3579,7 +3633,7 @@ static void ApplySettingsGlobals(ModSettings &s)
     s.settleMs = clamp(Wh_GetIntSetting(L"settle"), 0, 10000);
     s.knockWindowMs = clamp(Wh_GetIntSetting(L"knock"), 0, 10000);
     s.cooldownMs = clamp(Wh_GetIntSetting(L"cooldown"), 0, 60000);
-    int mod = ParseModifierName(GetSettingStr(L"requireModifier", 0));
+    int mod = ParseModifierName(GetSettingStr(L"requireModifier"));
     s.requireModifier = (mod < 0) ? 0 : mod;
     s.disableOnFullscreen = Wh_GetIntSetting(L"disableOnFullscreen") != 0;
     s.disableDuringDrag = Wh_GetIntSetting(L"disableDuringDrag") != 0;
@@ -3588,7 +3642,7 @@ static void ApplySettingsGlobals(ModSettings &s)
     g_lockBlankDelayMs = clamp(Wh_GetIntSetting(L"lockBlankDelay"), 0, 10000);
     g_showMonitorNames = Wh_GetIntSetting(L"showMonitorNames") != 0;
 
-    std::wstring rest = GetSettingStr(L"excluded", 0);
+    std::wstring rest = GetSettingStr(L"excluded");
     while (!rest.empty())
     {
         auto semi = rest.find(L';');
@@ -3725,10 +3779,18 @@ static void ReloadConfig()
     // nothing happen. Only the zone list falls back to the stored layout.
     ApplySettingsGlobals(s);
 
+    // The handover is one-way. Without this, a user who lists a display and
+    // later sets its zones back to Nothing drops out of fromSettings and the
+    // pre-4.2 layout comes back from the dead, which is not what clearing a
+    // zone asks for.
+    if (fromSettings && Wh_GetIntValue(L"settings_owner", 0) == 0)
+        Wh_SetIntValue(L"settings_owner", 1);
+
     bool legacy = false;
     std::wstring dropped;
 
-    if (!fromSettings && Wh_GetIntValue(L"gui_active", 0) != 0)
+    if (!fromSettings && Wh_GetIntValue(L"settings_owner", 0) == 0 &&
+        Wh_GetIntValue(L"gui_active", 0) != 0)
     {
         legacy = true;
         s.monitorConfigs = ReadDashboardZones();
@@ -3918,6 +3980,12 @@ static void RequestRebuild()
         PostMessage(g_hDetectWnd, WM_APP_REBUILD, 0, 0);
 }
 
+static void CancelSuspendTimer()
+{
+    if (g_hTrayWnd)
+        KillTimer(g_hTrayWnd, kSuspendTimerId);
+}
+
 static void HandleTrayCommand(UINT id)
 {
     switch (id)
@@ -3935,6 +4003,7 @@ static void HandleTrayCommand(UINT id)
         Wh_SetIntValue(kOvrEnabled, g_trayEnabled ? 1 : 0);
         LeaveCriticalSection(&g_reloadLock);
         g_suspendUntil = 0;
+        CancelSuspendTimer();
         Wh_Log(L"Tray: hot corners %s", g_trayEnabled ? L"enabled" : L"disabled");
         break;
 
@@ -3944,12 +4013,20 @@ static void HandleTrayCommand(UINT id)
     {
         int mins = (id == IDM_SUSPEND_15) ? 15 : (id == IDM_SUSPEND_30) ? 30 : 60;
         g_suspendUntil = GetTickCount64() + (ULONGLONG)mins * 60 * 1000;
+        // Detection re-reads the deadline every tick, so the corners come back
+        // on their own - but nothing redrew the icon, which stayed dimmed and
+        // still said "paused" for the rest of the session. Suspension is
+        // exactly when the icon is the thing being looked at.
+        if (g_hTrayWnd)
+            SetTimer(g_hTrayWnd, kSuspendTimerId,
+                     (UINT)mins * 60 * 1000 + 1000, nullptr);
         Wh_Log(L"Tray: suspended for %d minutes", mins);
         break;
     }
 
     case IDM_RESUME:
         g_suspendUntil = 0;
+        CancelSuspendTimer();
         Wh_Log(L"Tray: resumed");
         break;
 
@@ -3960,6 +4037,7 @@ static void HandleTrayCommand(UINT id)
         EnterCriticalSection(&g_reloadLock);
         Wh_SetIntValue(kOvrEnabled, -1);
         g_suspendUntil = 0;
+        CancelSuspendTimer();
         ReloadConfig();
         LeaveCriticalSection(&g_reloadLock);
         RequestRebuild();
@@ -4405,7 +4483,15 @@ static void DashFillZones(DisplayView &dv,
     for (int z = 0; z < ZONE_COUNT; z++)
     {
         const ZoneConfig *hit = nullptr;
+        // An entry that names an action but produced no executor - an
+        // unparseable key combination, or an Alternate action missing its "|".
+        // ResolveZone skips those and keeps looking, so this has to as well:
+        // marking the zone broken when the wildcard actually rescues it would
+        // be the picture disagreeing with what fires, in the one direction
+        // that matters most.
+        const ZoneConfig *broken = nullptr;
         bool wild = false;
+        bool disabled = false;
 
         if (!dv.wildcard)
         {
@@ -4415,42 +4501,66 @@ static void DashFillZones(DisplayView &dv,
                     continue;
                 if (_wcsicmp(cfg.monitorId.c_str(), dv.id.c_str()) != 0)
                     continue;
-                if (cfg.zones[z].action != CornerAction::Nothing)
+                const ZoneConfig &zc = cfg.zones[z];
+                if (zc.action == CornerAction::DisabledHere)
                 {
-                    hit = &cfg.zones[z];
+                    disabled = true;
                     break;
                 }
+                if (zc.action == CornerAction::Nothing)
+                    continue;
+                if (zc.executor)
+                {
+                    hit = &zc;
+                    break;
+                }
+                if (!broken)
+                    broken = &zc;
             }
         }
 
-        if (!hit)
+        if (!hit && !disabled)
         {
             for (const auto &cfg : cfgs)
             {
                 if (cfg.monitorId != L"*")
                     continue;
-                if (cfg.zones[z].action != CornerAction::Nothing)
+                const ZoneConfig &zc = cfg.zones[z];
+                if (zc.action == CornerAction::Nothing ||
+                    zc.action == CornerAction::DisabledHere)
+                    continue;
+                if (zc.executor)
                 {
-                    hit = &cfg.zones[z];
+                    hit = &zc;
                     wild = !dv.wildcard;
                     break;
                 }
+                if (!broken)
+                    broken = &zc;
             }
         }
 
-        if (!hit)
+        if (disabled)
+        {
+            dv.zones[z].action = CornerAction::DisabledHere;
+            dv.configured++;
             continue;
+        }
+
+        // Nothing resolved, so the unparseable entry really is what the user
+        // gets - nothing at all. That is worth saying out loud.
+        if (!hit)
+        {
+            if (!broken)
+                continue;
+            hit = broken;
+            dv.zones[z].invalid = true;
+        }
 
         dv.zones[z].action = hit->action;
         dv.zones[z].args = hit->args;
         dv.zones[z].tuning = hit->tuning;
         dv.zones[z].fromWildcard = wild;
-        // BuildZoneSet also requires an executor, and MakeExecutor returns null
-        // when the arguments do not parse - an unparseable key combination, or
-        // an Alternate action missing its "|". Drawing those as ordinary
-        // configured zones would make the picture disagree with what fires,
-        // which is the one thing this window must not do. Shown, but marked.
-        dv.zones[z].invalid = !hit->executor;
         dv.configured++;
     }
 }
@@ -4553,11 +4663,40 @@ static void DashPaintTabs(DashState *s, HDC hdc, const RECT &client)
     int x = Sc(Lay::Pad, d);
     int top = Sc(Lay::Pad, d);
     int h = Sc(Lay::TabH, d);
+    const int strip = client.right - Sc(Lay::Pad, d) * 2;
+    const int n = (int)s->displays.size();
 
     HFONT old = (HFONT)SelectObject(hdc, s->hFont);
     SetBkMode(hdc, TRANSPARENT);
 
-    for (int i = 0; i < (int)s->displays.size(); i++)
+    // Natural widths first. Laid out unbounded, four or five displays - or two
+    // long EDID names plus the wildcard tab - ran off the right edge, and the
+    // tabs past it were drawn outside the window and unreachable by mouse.
+    // Nothing here scrolls, so instead every tab is capped at an equal share
+    // and its label ellipsised; the badge and the dot always survive.
+    std::vector<int> width((size_t)n, 0);
+    int total = 0;
+    for (int i = 0; i < n; i++)
+    {
+        const DisplayView &dv = s->displays[i];
+        wchar_t count[16];
+        _snwprintf_s(count, _countof(count), _TRUNCATE, L"%d", dv.configured);
+
+        SIZE ts = {}, cs = {};
+        SelectObject(hdc, i == s->activeTab ? s->hFontBold : s->hFont);
+        GetTextExtentPoint32W(hdc, dv.id.c_str(), (int)dv.id.size(), &ts);
+        SelectObject(hdc, s->hFontSmall);
+        GetTextExtentPoint32W(hdc, count, (int)wcslen(count), &cs);
+
+        int dot = dv.present ? 0 : Sc(14, d);
+        width[(size_t)i] =
+            Sc(12, d) + dot + ts.cx + Sc(8, d) + cs.cx + Sc(12, d) + Sc(12, d);
+        total += width[(size_t)i];
+    }
+
+    const int cap = (n > 0 && total > strip) ? strip / n : 0;
+
+    for (int i = 0; i < n; i++)
     {
         const DisplayView &dv = s->displays[i];
         bool active = (i == s->activeTab);
@@ -4573,7 +4712,9 @@ static void DashPaintTabs(DashState *s, HDC hdc, const RECT &client)
 
         int dot = dv.present ? 0 : Sc(14, d);
         int badge = cs.cx + Sc(12, d);
-        int wTab = Sc(12, d) + dot + ts.cx + Sc(8, d) + badge + Sc(12, d);
+        int wTab = width[(size_t)i];
+        if (cap > 0 && wTab > cap)
+            wTab = cap;
 
         RECT tr = {x, top, x + wTab, top + h};
         s->tabRects.push_back(tr);
@@ -4593,12 +4734,17 @@ static void DashPaintTabs(DashState *s, HDC hdc, const RECT &client)
             tx += dot;
         }
 
+        // The badge is reserved out of the label's space rather than pushed
+        // off the end, so a truncated tab still shows its count.
+        int labelRight = tr.right - Sc(12, d) - badge - Sc(8, d);
+        if (labelRight < tx)
+            labelRight = tx;
         SelectObject(hdc, active ? s->hFontBold : s->hFont);
         SetTextColor(hdc, active ? g_pal.text : g_pal.dim);
-        RECT lr = {tx, tr.top, tr.right, tr.bottom};
+        RECT lr = {tx, tr.top, labelRight, tr.bottom};
         DrawTextW(hdc, dv.id.c_str(), -1, &lr,
-                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-        tx += ts.cx + Sc(8, d);
+                  DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        tx = labelRight + Sc(8, d);
 
         // Configured-zone count, so "have I set anything up on that screen?"
         // is answerable without clicking through.
@@ -5358,6 +5504,13 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         HandleTrayCommand(LOWORD(wParam));
         return 0;
     }
+    // The suspension has run out; repaint the icon so it stops saying "paused".
+    if (uMsg == WM_TIMER && wParam == kSuspendTimerId)
+    {
+        KillTimer(hWnd, kSuspendTimerId);
+        UpdateTrayIcon(false);
+        return 0;
+    }
     // Explorer restarted and threw away every tray icon; put ours back.
     if (g_taskbarCreatedMsg && uMsg == g_taskbarCreatedMsg)
     {
@@ -5405,6 +5558,7 @@ static DWORD WINAPI TrayThread(LPVOID)
     FillTrayIconData(nid);
     Shell_NotifyIconW(NIM_DELETE, &nid);
 
+    CancelSuspendTimer();
     DestroyWindow(g_hTrayWnd);
     g_hTrayWnd = nullptr;
     UnregisterClass(kClass, hInst);
