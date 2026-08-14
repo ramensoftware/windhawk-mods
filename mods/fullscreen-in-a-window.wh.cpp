@@ -2,9 +2,10 @@
 // @id              fullscreen-in-a-window
 // @name            Fullscreen in a Window
 // @description     Run an app's own fullscreen inside a normal movable, resizable window. An outer frame is created and the app is told the screen is only that window's size, so its NATIVE fullscreen (or windowed) mode plays out inside the frame - the app's own window is never restyled.
-// @version         1.0.2
+// @version         1.2.0
 // @author          thebdr
 // @github          https://github.com/thebdr
+// @homepage        https://github.com/thebdr/fullscreen-in-a-window
 // @include         *
 // @compilerOptions -lcomctl32 -lgdi32 -ldwmapi
 // ==/WindhawkMod==
@@ -61,9 +62,10 @@ reaches processes that were skipped before.
   draggable), move it by its title bar. The app follows. Maximizing the app
   itself maximizes it into the container.
 - The container's title bar follows the Windows light/dark app theme, live.
-- **Top padding** leaves a buffer strip between the title bar and the app, so
-  edge-hover UI at the app's top (like VMware's fullscreen toolbar) doesn't
-  fight the title bar. Tune it in the settings.
+- **Padding** is configurable per side globally (and per app): the top strip
+  keeps edge-hover UI at the app's top (like VMware's fullscreen toolbar) away
+  from the title bar; sides and bottom collapse automatically while maximized
+  unless set explicitly per app.
 - **Auto-hide title bar** (optional): the container has no title bar at all;
   hovering the top edge shows a small **floating bar** (like Remote Desktop's
   connection bar) with a drag grip and minimize / maximize / release buttons.
@@ -87,6 +89,15 @@ reaches processes that were skipped before.
   and only the top-padding strip remains, so the app gets nearly the whole
   screen - and an auto-hidden Windows taskbar stays reachable (the maximize
   rect leaves it a couple of pixels on its edge).
+- **Per-app parameters**: each entry in the *Per-app parameters* setting can
+  override the padding on each side, enable the virtual border per side, and
+  set the container size - matched by executable name. Anything left at its
+  sentinel (-1 / "use global" / 0) falls back to the global settings.
+- **CLI companion** (optional, not part of this mod file): a small
+  `enclose.exe` can launch a program containerized even if it is not in the
+  Applications list, passing any of these parameters per launch. It works by
+  leaving a one-shot request file for this mod at
+  `%APPDATA%\fullscreen-in-a-window\cli-request.ini`.
 */
 // ==/WindhawkModReadme==
 
@@ -102,22 +113,99 @@ reaches processes that were skipped before.
     Executable names (no path) the mod is allowed to work in. All other
     processes refuse the mod at load. After changing the list, disable and
     re-enable the mod (or restart the app).
-- targetWidth: 0
+- padLeft: 4
+  $name: Padding left
+  $description: >-
+    Frame strip left of the app, in pixels. Collapses to 0 while maximized.
+- padTop: 16
+  $name: Padding top
+  $description: >-
+    Strip between the title bar / frame top and the app, in pixels. Hover
+    zones at the app's top edge (e.g. VMware's fullscreen toolbar) live here.
+    Kept while maximized.
+- padRight: 4
+  $name: Padding right
+  $description: >-
+    Frame strip right of the app, in pixels. Collapses to 0 while maximized.
+- padBottom: 4
+  $name: Padding bottom
+  $description: >-
+    Frame strip below the app, in pixels. Collapses to 0 while maximized.
+- borderLeft: true
+  $name: Virtual border left
+  $description: Edge resistance stops the cursor at the app's left edge.
+- borderTop: true
+  $name: Virtual border top
+  $description: Edge resistance stops the cursor at the app's top edge.
+- borderRight: true
+  $name: Virtual border right
+  $description: Edge resistance stops the cursor at the app's right edge.
+- borderBottom: true
+  $name: Virtual border bottom
+  $description: Edge resistance stops the cursor at the app's bottom edge.
+- width: 0
   $name: Container width
   $description: >-
     Inner width in pixels for a new container. 0 = wrap the app at its current
     size.
-- targetHeight: 0
+- height: 0
   $name: Container height
   $description: >-
     Inner height in pixels for a new container. 0 = wrap the app at its current
     size.
-- topPadding: 12
-  $name: Top padding
+- apps:
+  - - exe: ""
+      $name: Executable name
+      $description: e.g. vmware.exe. Empty entries are ignored.
+    - padLeft: -1
+      $name: Padding left
+      $description: Pixels; -1 = use the global setting.
+    - padTop: -1
+      $name: Padding top
+      $description: Pixels; -1 = use the global setting.
+    - padRight: -1
+      $name: Padding right
+      $description: Pixels; -1 = use the global setting.
+    - padBottom: -1
+      $name: Padding bottom
+      $description: Pixels; -1 = use the global setting.
+    - borderLeft: global
+      $name: Virtual border left
+      $description: Edge resistance at the app's left edge.
+      $options:
+      - global: Use the global setting
+      - on: On
+      - off: Off
+    - borderTop: global
+      $name: Virtual border top
+      $options:
+      - global: Use the global setting
+      - on: On
+      - off: Off
+    - borderRight: global
+      $name: Virtual border right
+      $options:
+      - global: Use the global setting
+      - on: On
+      - off: Off
+    - borderBottom: global
+      $name: Virtual border bottom
+      $options:
+      - global: Use the global setting
+      - on: On
+      - off: Off
+    - width: 0
+      $name: Container width
+      $description: Inner width in pixels; 0 = use the global setting.
+    - height: 0
+      $name: Container height
+      $description: Inner height in pixels; 0 = use the global setting.
+  $name: Per-app parameters
   $description: >-
-    Extra pixels between the container's title bar and the app, so hover zones
-    at the app's top edge (e.g. VMware's fullscreen toolbar) have room to
-    breathe.
+    Optional overrides per application, matched by executable name. Every
+    field mirrors a global setting above; values left at their sentinel
+    (-1 / global / 0) fall back to it. An explicit per-app padding applies in
+    every window state, including maximized.
 - autoHideTitle: false
   $name: Auto-hide the container title bar
   $description: >-
@@ -154,6 +242,8 @@ reaches processes that were skipped before.
 
 #include <atomic>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -201,11 +291,26 @@ thread_local bool t_creatingContainer = false;
 // Settings
 // ---------------------------------------------------------------------------
 
+// One parameter set, used at two levels that mirror each other: the GLOBAL
+// settings hold concrete values (pads >= 0, borders 0/1), and each per-app /
+// per-CLI-launch record holds overrides where sentinels (-1 pads/borders,
+// 0 sizes) mean "use the global". Resolution happens at USE time so the same
+// record stays valid windowed and maximized.
+struct AppParams {
+    int padL = -1, padT = -1, padR = -1, padB = -1;
+    int borderL = -1, borderT = -1, borderR = -1, borderB = -1;
+    int width = 0, height = 0;
+};
+
 std::mutex g_settingsMutex;
 std::vector<std::wstring> g_targetApps;
-std::atomic<int> g_cfgWidth{0};
-std::atomic<int> g_cfgHeight{0};
-std::atomic<int> g_cfgTopPad{12};
+std::vector<std::pair<std::wstring, AppParams>> g_appParams;
+AppParams g_globalParams;  // concrete values; under g_settingsMutex
+
+AppParams GlobalParams() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_globalParams;
+}
 std::atomic<int> g_cfgEdgeHold{300};
 std::atomic<bool> g_cfgAutoHide{false};
 std::atomic<bool> g_cfgSpoof{true};
@@ -224,14 +329,60 @@ void LoadSettings() {
             break;
         }
     }
+    // Per-app border dropdowns are string-valued: global / on / off.
+    auto triState = [](PCWSTR fmt, int i) {
+        PCWSTR v = Wh_GetStringSetting(fmt, i);
+        int r = -1;
+        if (v && !_wcsicmp(v, L"on")) r = 1;
+        else if (v && !_wcsicmp(v, L"off")) r = 0;
+        Wh_FreeStringSetting(v);
+        return r;
+    };
+
+    std::vector<std::pair<std::wstring, AppParams>> perApp;
+    for (int i = 0;; i++) {
+        PCWSTR exe = Wh_GetStringSetting(L"apps[%d].exe", i);
+        bool empty = !exe || !exe[0];
+        if (!empty) {
+            AppParams p;
+            p.padL = Wh_GetIntSetting(L"apps[%d].padLeft", i);
+            p.padT = Wh_GetIntSetting(L"apps[%d].padTop", i);
+            p.padR = Wh_GetIntSetting(L"apps[%d].padRight", i);
+            p.padB = Wh_GetIntSetting(L"apps[%d].padBottom", i);
+            p.borderL = triState(L"apps[%d].borderLeft", i);
+            p.borderT = triState(L"apps[%d].borderTop", i);
+            p.borderR = triState(L"apps[%d].borderRight", i);
+            p.borderB = triState(L"apps[%d].borderBottom", i);
+            p.width = Wh_GetIntSetting(L"apps[%d].width", i);
+            p.height = Wh_GetIntSetting(L"apps[%d].height", i);
+            perApp.push_back({exe, p});
+        }
+        Wh_FreeStringSetting(exe);
+        if (empty) {
+            break;
+        }
+    }
+
+    // The mirrored global section: concrete values, clamped sane.
+    auto clampPad = [](int v) { return v < 0 ? 0 : (v > 200 ? 200 : v); };
+    AppParams globals;
+    globals.padL = clampPad(Wh_GetIntSetting(L"padLeft"));
+    globals.padT = clampPad(Wh_GetIntSetting(L"padTop"));
+    globals.padR = clampPad(Wh_GetIntSetting(L"padRight"));
+    globals.padB = clampPad(Wh_GetIntSetting(L"padBottom"));
+    globals.borderL = Wh_GetIntSetting(L"borderLeft") != 0 ? 1 : 0;
+    globals.borderT = Wh_GetIntSetting(L"borderTop") != 0 ? 1 : 0;
+    globals.borderR = Wh_GetIntSetting(L"borderRight") != 0 ? 1 : 0;
+    globals.borderB = Wh_GetIntSetting(L"borderBottom") != 0 ? 1 : 0;
+    globals.width = Wh_GetIntSetting(L"width");
+    globals.height = Wh_GetIntSetting(L"height");
+
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         g_targetApps = std::move(apps);
+        g_appParams = std::move(perApp);
+        g_globalParams = globals;
     }
-    g_cfgWidth = Wh_GetIntSetting(L"targetWidth");
-    g_cfgHeight = Wh_GetIntSetting(L"targetHeight");
-    int pad = Wh_GetIntSetting(L"topPadding");
-    g_cfgTopPad = pad < 0 ? 0 : (pad > 200 ? 200 : pad);
     g_cfgAutoHide = Wh_GetIntSetting(L"autoHideTitle") != 0;
     int holdMs = Wh_GetIntSetting(L"edgeHoldMs");
     g_cfgEdgeHold = holdMs < 0 ? 0 : (holdMs > 5000 ? 5000 : holdMs);
@@ -259,6 +410,109 @@ bool ProcessIsTarget() {
     return false;
 }
 
+// The settings entry for this process's executable, or defaults.
+AppParams ResolveParams() {
+    std::wstring self = ProcessBaseName();
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    for (const auto& [exe, p] : g_appParams) {
+        if (_wcsicmp(exe.c_str(), self.c_str()) == 0) {
+            return p;
+        }
+    }
+    return AppParams{};
+}
+
+// ---------------------------------------------------------------------------
+// CLI one-shot request: enclose.exe writes a flat key=value file, launches
+// the target, and this reads + consumes it at mod init. A fresh matching
+// request admits a process that is NOT in the Applications list and asks for
+// its first suitable window to be auto-enclosed with the given parameters.
+// ---------------------------------------------------------------------------
+
+bool g_cliAdmitted = false;         // this process was let in by the CLI
+AppParams g_cliParams;              // per-app params with CLI overlays applied
+std::atomic<bool> g_autoEnclosePending{false};
+std::atomic<bool> g_autoEncloseArmed{false};
+
+bool ReadAndConsumeCliRequest(const std::wstring& selfExe, AppParams& inout) {
+    WCHAR path[MAX_PATH];
+    if (!ExpandEnvironmentStringsW(
+            L"%APPDATA%\\fullscreen-in-a-window\\cli-request.ini", path,
+            ARRAYSIZE(path))) {
+        return false;
+    }
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, 0, nullptr);
+    if (f == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    char buf[2048];
+    DWORD got = 0;
+    BOOL ok = ReadFile(f, buf, sizeof(buf) - 1, &got, nullptr);
+    CloseHandle(f);
+    if (!ok || !got) {
+        return false;
+    }
+    buf[got] = 0;
+
+    // Parse the flat key=value lines (ASCII; exe names are matched
+    // case-insensitively after a widening copy).
+    std::wstring exe;
+    long long stamp = 0;
+    AppParams p = inout;
+    char* ctx = nullptr;
+    for (char* line = strtok_s(buf, "\r\n", &ctx); line;
+         line = strtok_s(nullptr, "\r\n", &ctx)) {
+        char* eq = strchr(line, '=');
+        if (!eq) {
+            continue;
+        }
+        *eq = 0;
+        const char* key = line;
+        const char* val = eq + 1;
+        if (!strcmp(key, "exe")) {
+            for (const char* c = val; *c; c++) {
+                exe.push_back((wchar_t)(unsigned char)*c);
+            }
+        } else if (!strcmp(key, "stamp")) {
+            stamp = _atoi64(val);
+        } else if (!strcmp(key, "width")) {
+            p.width = atoi(val);
+        } else if (!strcmp(key, "height")) {
+            p.height = atoi(val);
+        } else if (!strcmp(key, "padLeft")) {
+            p.padL = atoi(val);
+        } else if (!strcmp(key, "padTop")) {
+            p.padT = atoi(val);
+        } else if (!strcmp(key, "padRight")) {
+            p.padR = atoi(val);
+        } else if (!strcmp(key, "padBottom")) {
+            p.padB = atoi(val);
+        } else if (!strcmp(key, "borderLeft")) {
+            p.borderL = atoi(val) != 0;
+        } else if (!strcmp(key, "borderTop")) {
+            p.borderT = atoi(val) != 0;
+        } else if (!strcmp(key, "borderRight")) {
+            p.borderR = atoi(val) != 0;
+        } else if (!strcmp(key, "borderBottom")) {
+            p.borderB = atoi(val) != 0;
+        }
+    }
+
+    if (_wcsicmp(exe.c_str(), selfExe.c_str()) != 0) {
+        return false;
+    }
+    __int64 now = _time64(nullptr);
+    if (stamp <= 0 || now - stamp > 60) {
+        DeleteFileW(path);  // stale leftover - clean it up
+        return false;
+    }
+
+    DeleteFileW(path);  // one-shot: consumed
+    inout = p;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Enclosed-window state
 // ---------------------------------------------------------------------------
@@ -270,6 +524,9 @@ struct Enclosed {
     LONG_PTR savedOwner;  // the app's original GWLP_HWNDPARENT (owner)
     RECT inner;           // app area inside the container (screen) = fake screen
     HMONITOR monitor;     // real monitor the container sits on
+    AppParams params;     // per-app / per-launch parameter set
+    bool fromCli;         // params carry CLI overrides: don't overwrite them
+                          // when the settings change
 };
 
 std::mutex g_mutex;
@@ -432,21 +689,60 @@ RECT ContainerClientScreenRect(HWND container) {
     return RECT{tl.x, tl.y, tl.x + rc.right, tl.y + rc.bottom};
 }
 
-// The app area inside a container: the client rect inset by the frame strip,
-// with extra padding at the top so hover zones at the app's top edge (VMware's
-// fullscreen toolbar) don't sit flush against the title bar. Maximized, the
-// side/bottom strips serve no purpose (nothing to resize), so they collapse
-// and only the top-padding strip remains.
+// Parameter set of the enclosure a container belongs to (defaults if none).
+AppParams ParamsForContainer(HWND container) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto it = g_containerToApp.find(container);
+    if (it != g_containerToApp.end()) {
+        auto ai = g_byApp.find(it->second);
+        if (ai != g_byApp.end()) {
+            return ai->second.params;
+        }
+    }
+    return AppParams{};
+}
+
+// Effective per-side pads: an explicit per-app value (>= 0) wins in every
+// window state; otherwise the mirrored global values apply - with sides and
+// bottom collapsing to 0 while maximized (nothing to resize there), the top
+// keeping its value (hover zones live in it).
+void EffectivePads(const AppParams& p, bool zoomed, int& l, int& t, int& r,
+                   int& b) {
+    AppParams g = GlobalParams();
+    l = p.padL >= 0 ? p.padL : (zoomed ? 0 : g.padL);
+    t = p.padT >= 0 ? p.padT : g.padT;
+    r = p.padR >= 0 ? p.padR : (zoomed ? 0 : g.padR);
+    b = p.padB >= 0 ? p.padB : (zoomed ? 0 : g.padB);
+}
+
+// Effective per-side virtual border: per-app tri-state over the global.
+void EffectiveBorders(const AppParams& p, bool& l, bool& t, bool& r, bool& b) {
+    AppParams g = GlobalParams();
+    l = (p.borderL >= 0 ? p.borderL : g.borderL) != 0;
+    t = (p.borderT >= 0 ? p.borderT : g.borderT) != 0;
+    r = (p.borderR >= 0 ? p.borderR : g.borderR) != 0;
+    b = (p.borderB >= 0 ? p.borderB : g.borderB) != 0;
+}
+
+int EffTopPad(HWND container) {
+    AppParams p = ParamsForContainer(container);
+    int l, t, r, b;
+    EffectivePads(p, IsZoomed(container), l, t, r, b);
+    return t;
+}
+
+// The app area inside a container: the client rect inset by the effective
+// per-side pads. The top pad keeps hover zones at the app's top edge (VMware's
+// fullscreen toolbar) away from the title bar / frame.
 RECT ContainerInnerRect(HWND container) {
     RECT rc = ContainerClientScreenRect(container);
-    if (IsZoomed(container)) {
-        rc.top += g_cfgTopPad.load();
-    } else {
-        rc.left += kMargin;
-        rc.top += kMargin + g_cfgTopPad.load();
-        rc.right -= kMargin;
-        rc.bottom -= kMargin;
-    }
+    AppParams p = ParamsForContainer(container);
+    int l, t, r, b;
+    EffectivePads(p, IsZoomed(container), l, t, r, b);
+    rc.left += l;
+    rc.top += t;
+    rc.right -= r;
+    rc.bottom -= b;
     if (rc.right < rc.left + 50) rc.right = rc.left + 50;
     if (rc.bottom < rc.top + 50) rc.bottom = rc.top + 50;
     return rc;
@@ -532,7 +828,7 @@ RECT RevealBand(HWND container) {
     RECT wr{};
     GetWindowRect(container, &wr);
     RECT cl = ContainerClientScreenRect(container);
-    wr.bottom = cl.top + kMargin + g_cfgTopPad.load();
+    wr.bottom = cl.top + EffTopPad(container);
     return wr;
 }
 
@@ -664,6 +960,13 @@ void EdgeResistanceTick(HWND container) {
         EdgeResistanceOff();
         return;
     }
+    AppParams p = ParamsForContainer(container);
+    bool bL, bT, bR, bB;
+    EffectiveBorders(p, bL, bT, bR, bB);
+    if (!bL && !bT && !bR && !bB) {
+        EdgeResistanceOff();  // all sides open for this app
+        return;
+    }
     HWND fg = GetForegroundWindow();
     bool ours = fg == app || fg == container ||
                 (fg && GetAncestor(fg, GA_ROOTOWNER) == container);
@@ -685,24 +988,46 @@ void EdgeResistanceTick(HWND container) {
 
     if (!g_clipActive) {
         if (PtInRect(&inner, pt)) {
-            ClipCursor(&inner);
             g_clipActive = true;
             g_edgePressStart = 0;
         }
         return;
     }
 
-    // Clipped: keep the clip tracking the app area, and watch for the cursor
-    // pressing against the boundary. Re-assert only when it drifted - a
-    // constant re-clip can interfere with apps that manage the cursor
-    // themselves.
+    // The cursor stops only at ENABLED sides: the clip rect follows the app
+    // area on those and opens to the virtual screen on the rest.
+    RECT clip = inner;
+    if (!bL) clip.left = RealGetSystemMetrics(SM_XVIRTUALSCREEN);
+    if (!bT) clip.top = RealGetSystemMetrics(SM_YVIRTUALSCREEN);
+    if (!bR) {
+        clip.right = RealGetSystemMetrics(SM_XVIRTUALSCREEN) +
+                     RealGetSystemMetrics(SM_CXVIRTUALSCREEN);
+    }
+    if (!bB) {
+        clip.bottom = RealGetSystemMetrics(SM_YVIRTUALSCREEN) +
+                      RealGetSystemMetrics(SM_CYVIRTUALSCREEN);
+    }
+
+    // Left the app area through an open side (or the container moved away):
+    // stand down until the cursor comes back inside.
+    if (!PtInRect(&inner, pt)) {
+        ClipCursor(nullptr);
+        g_clipActive = false;
+        g_edgePressStart = 0;
+        return;
+    }
+
+    // Re-assert only when the clip drifted - a constant re-clip can interfere
+    // with apps that manage the cursor themselves.
     RECT cur;
-    if (!GetClipCursor(&cur) || !EqualRect(&cur, &inner)) {
-        ClipCursor(&inner);
+    if (!GetClipCursor(&cur) || !EqualRect(&cur, &clip)) {
+        ClipCursor(&clip);
     }
     const int e = 2;
-    bool atEdge = pt.x <= inner.left + e || pt.x >= inner.right - 1 - e ||
-                  pt.y <= inner.top + e || pt.y >= inner.bottom - 1 - e;
+    bool atEdge = (bL && pt.x <= inner.left + e) ||
+                  (bR && pt.x >= inner.right - 1 - e) ||
+                  (bT && pt.y <= inner.top + e) ||
+                  (bB && pt.y >= inner.bottom - 1 - e);
     if (!atEdge) {
         g_edgePressStart = 0;
         return;
@@ -976,16 +1301,23 @@ LRESULT CALLBACK ContainerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                     // No resize handles on a maximized frame; the top strip
                     // drags (restore-drag) and hosts the bar reveal.
                     if (g_cfgAutoHide.load() &&
-                        pt.y < cl.top + g_cfgTopPad.load()) {
+                        pt.y < cl.top + EffTopPad(hWnd)) {
                         return HTCAPTION;
                     }
                     return ht;
                 }
+                // The whole configurable strip must resize, not just the
+                // first few pixels of it - a wider pad would otherwise leave
+                // a dead band. The top zone stays slim: the strip below it is
+                // the drag handle.
+                int spL, spT, spR, spB;
+                EffectivePads(ParamsForContainer(hWnd), false, spL, spT, spR,
+                              spB);
                 const int m = kMargin + 2;
-                bool l = pt.x < cl.left + m;
-                bool r = pt.x >= cl.right - m;
+                bool l = pt.x < cl.left + (spL > m ? spL : m);
+                bool r = pt.x >= cl.right - (spR > m ? spR : m);
                 bool t = pt.y < cl.top + m;
-                bool b = pt.y >= cl.bottom - m;
+                bool b = pt.y >= cl.bottom - (spB > m ? spB : m);
                 if (t && l) return HTTOPLEFT;
                 if (t && r) return HTTOPRIGHT;
                 if (b && l) return HTBOTTOMLEFT;
@@ -998,7 +1330,7 @@ LRESULT CALLBACK ContainerWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                 // handle (and right-click menu source) while the title bar
                 // is tucked away.
                 if (g_cfgAutoHide.load() &&
-                    pt.y < cl.top + kMargin + g_cfgTopPad.load()) {
+                    pt.y < cl.top + EffTopPad(hWnd)) {
                     return HTCAPTION;
                 }
             }
@@ -1267,21 +1599,33 @@ void EncloseWindow(HWND app) {
         work = mi.rcWork;
     }
 
-    // Desired inner size: configured, else wrap the app as-is.
-    int innerW = g_cfgWidth.load();
-    int innerH = g_cfgHeight.load();
+    // Per-app parameters (settings entry for this exe), with the one-shot CLI
+    // overlay when this process was launched by enclose.exe.
+    info.params = g_cliAdmitted ? g_cliParams : ResolveParams();
+    info.fromCli = g_cliAdmitted;
+
+    // Desired inner size: per-app, else global, else wrap the app as-is.
+    AppParams globals = GlobalParams();
+    int innerW = info.params.width > 0 ? info.params.width : globals.width;
+    int innerH = info.params.height > 0 ? info.params.height : globals.height;
     if (innerW <= 0 || innerH <= 0) {
         innerW = info.savedRect.right - info.savedRect.left;
         innerH = info.savedRect.bottom - info.savedRect.top;
     }
-    int maxW = (work.right - work.left) * 95 / 100;
-    int maxH = (work.bottom - work.top) * 90 / 100;
+    // The clamp must account for the (now configurable) pads, or the
+    // container's outer rect can be born larger than the work area.
+    int padL, padT, padR, padB;
+    EffectivePads(info.params, false, padL, padT, padR, padB);
+    int maxW = (work.right - work.left) * 95 / 100 - (padL + padR);
+    int maxH = (work.bottom - work.top) * 90 / 100 - (padT + padB);
+    if (maxW < 50) maxW = 50;
+    if (maxH < 50) maxH = 50;
     if (innerW > maxW) innerW = maxW;
     if (innerH > maxH) innerH = maxH;
 
-    // Outer rect that yields client = inner + frame strip, anchored where the
-    // app already is (minimal jump). With auto-hide on, the container starts
-    // without its title bar (hover the strip to reveal it).
+    // Outer rect that yields client = inner + effective pads, anchored where
+    // the app already is (minimal jump). With auto-hide on, the container
+    // starts without its title bar (hover the strip to reveal it).
     DWORD contStyle = WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS;
     bool autoHide = g_cfgAutoHide.load();
     if (autoHide) {
@@ -1289,10 +1633,9 @@ void EncloseWindow(HWND app) {
     }
     g_captionShown = !autoHide;
     const DWORD contExStyle = WS_EX_APPWINDOW;
-    int topPad = kMargin + g_cfgTopPad.load();
-    RECT outer{info.savedRect.left - kMargin, info.savedRect.top - topPad,
-               info.savedRect.left + innerW + kMargin,
-               info.savedRect.top + innerH + kMargin};
+    RECT outer{info.savedRect.left - padL, info.savedRect.top - padT,
+               info.savedRect.left + innerW + padR,
+               info.savedRect.top + innerH + padB};
     AdjustWindowRectEx(&outer, contStyle, FALSE, contExStyle);
     int outerW = outer.right - outer.left;
     int outerH = outer.bottom - outer.top;
@@ -1535,6 +1878,33 @@ LRESULT CALLBACK AppSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// In-flight settle threads; Wh_ModBeforeUninit drains this to 0 before the
+// DLL can unload (the borderless-fullscreen.wh.cpp pattern).
+std::atomic<int> g_pendingSettle{0};
+
+// CLI auto-enclose: once a suitable window shows up in a CLI-admitted
+// process, give the app a moment to settle (splash screens, initial layout -
+// the settle idea is borrowed from borderless-fullscreen.wh.cpp), then route
+// through the normal toggle path. If the candidate died meanwhile (it was a
+// splash), re-arm for the next one.
+DWORD WINAPI AutoEncloseThread(LPVOID param) {
+    Sleep(800);
+    HWND hWnd = (HWND)param;
+    if (!g_teardown.load() && g_autoEnclosePending.load()) {
+        if (IsWindow(hWnd) && IsWindowVisible(hWnd) &&
+            IsEnclosableTopLevel(hWnd)) {
+            g_autoEnclosePending = false;
+            if (g_toggleMsg) {
+                PostMessageW(hWnd, g_toggleMsg, 0, 0);
+            }
+        } else {
+            g_autoEncloseArmed = false;  // next candidate re-arms
+        }
+    }
+    g_pendingSettle--;
+    return 0;
+}
+
 void SubclassIfCandidate(HWND hWnd) {
     if (g_teardown.load() || GetAncestor(hWnd, GA_ROOT) != hWnd) {
         return;
@@ -1545,6 +1915,18 @@ void SubclassIfCandidate(HWND hWnd) {
         return;
     }
     WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, AppSubclassProc, 0);
+
+    if (g_autoEnclosePending.load() && !g_autoEncloseArmed.exchange(true)) {
+        g_pendingSettle++;
+        HANDLE t = CreateThread(nullptr, 0, AutoEncloseThread, (LPVOID)hWnd, 0,
+                                nullptr);
+        if (t) {
+            CloseHandle(t);
+        } else {
+            g_pendingSettle--;
+            g_autoEncloseArmed = false;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2056,6 +2438,18 @@ BOOL Wh_ModInit() {
     g_isExplorer = _wcsicmp(self.c_str(), L"explorer.exe") == 0;
     g_isTarget = ProcessIsTarget();
 
+    if (!g_isTarget) {
+        // A fresh one-shot request from enclose.exe admits a process that is
+        // not in the Applications list, with per-launch parameters.
+        AppParams p = ResolveParams();
+        if (ReadAndConsumeCliRequest(self, p)) {
+            g_cliAdmitted = true;
+            g_cliParams = p;
+            g_autoEnclosePending = true;
+            g_isTarget = true;  // full functionality in this process
+            Wh_Log(L"CLI-admitted %s", self.c_str());
+        }
+    }
     if (!g_isTarget && !g_isExplorer) {
         return FALSE;  // stay out of everything not on the list
     }
@@ -2136,11 +2530,16 @@ void Wh_ModSettingsChanged() {
         }
     }
     if (g_isTarget) {
-        // Apply changed top padding / auto-hide to live enclosures.
+        // Apply changed parameters / auto-hide to live enclosures. CLI-
+        // parameterized enclosures keep their per-launch values.
         std::vector<std::pair<HWND, HWND>> pairs;
+        AppParams fresh = ResolveParams();
         {
             std::lock_guard<std::mutex> lock(g_mutex);
-            for (const auto& [app, info] : g_byApp) {
+            for (auto& [app, info] : g_byApp) {
+                if (!info.fromCli) {
+                    info.params = fresh;
+                }
                 pairs.push_back({app, info.container});
             }
         }
@@ -2164,6 +2563,12 @@ void Wh_ModSettingsChanged() {
 // trampolines (releasing enclosures) must happen here, not in Wh_ModUninit.
 void Wh_ModBeforeUninit() {
     g_teardown = true;
+
+    // Let any in-flight auto-enclose settle thread notice teardown and exit
+    // before the DLL unloads (max ~2s; the thread sleeps 800ms then returns).
+    for (int i = 0; i < 40 && g_pendingSettle.load() > 0; i++) {
+        Sleep(50);
+    }
 
     StopHotkeyThread();
 
