@@ -165,7 +165,7 @@ These are useful as an alternative entry point if a Control Panel task link ever
 
 - regenerateResourcesOnEnable: false
   $name: Regenerate cached resources on re-enable
-  $description: When the mod is disabled, delete all cached localized resource modules (preview bitmaps, string tables, icons) and clear their verification hashes. The next time the mod is enabled, fresh resources are built from scratch. Enable this only if preview images or UI text appear corrupted and a normal disable/re-enable cycle does not fix it. Enabling this causes a brief blank/empty Display page on re-enable while resources are rebuilt.
+  $description: When the mod is enabled, discard and rebuild the cached localized resource module for the active language configuration when it is not still in use. A still-mapped module is verified and safely reused, and stale modules are cleaned during startup. Nothing is deleted at disable time, so pages that are already open keep their resources. Enable this only if preview images or UI text appear corrupted and a normal disable/re-enable cycle does not fix it.
 
 */
 // ==/WindhawkModSettings==
@@ -851,10 +851,11 @@ static std::atomic<HMODULE> g_hLocalizedResources{nullptr};
 // content is fully determined by the translation inputs plus the mod's
 // embedded string catalog, so bumping this invalidates files built by older
 // versions of the mod whenever the catalog changes.
-// Bumped 18 -> 19: preview-bitmap recovery/fallback changed the resource
-// payload, so modules cached by older mod versions (possibly built without
-// any preview bitmap after a validation failure) must be rebuilt.
-static constexpr DWORD kLocalizedResourceFormatVersion = 22;
+// Bumped 22 -> 23: verification hashes are now keyed per module file. A new
+// cache name avoids colliding during a hot mod update with a v22 file that the
+// previous version deliberately left mapped and recorded under the legacy
+// single shared hash setting.
+static constexpr DWORD kLocalizedResourceFormatVersion = 23;
 
 // Setup is performed on a background worker thread that is joined on unload.
 // Wrapped in std::optional with [[clang::no_destroy]] so that on process shutdown
@@ -876,6 +877,20 @@ static HANDLE g_dpiApplyWakeEvent = nullptr;
 // iteration can unwind without the request being lost: the event stays
 // signaled until the worker explicitly consumes it.
 static HANDLE g_orientationApplyWakeEvent = nullptr;
+// Manual-reset wake event for closable information dialogs. The Display help
+// advisory and the legacy DPI notice are queued to the same worker as DPI and
+// orientation work; no ad-hoc thread can retain a return address into the mod
+// after Wh_ModUninit joins that worker.
+static HANDLE g_notificationWakeEvent = nullptr;
+static constexpr DWORD kDisplayAdvisoryNotification = 0x1;
+static constexpr DWORD kDpiSignOutNotification = 0x2;
+static std::atomic<DWORD> g_pendingNotificationBits{0};
+static std::atomic<bool> g_notificationWorkerReady{false};
+// Each gate covers both the queued and visible states, coalescing repeated
+// clicks while a notification is pending or open.
+static std::atomic<bool> g_displayTipDialogOpen{false};
+static std::atomic<bool> g_dpiNotifyOpen{false};
+static std::atomic<HWND> g_informationNotificationWindow{nullptr};
 static std::atomic<UINT> g_pendingClassicDpiPercent{0};
 static std::atomic<ULONGLONG> g_dpiApplyGeneration{0};
 // True while an Apply-committed DPI change is queued or executing in the
@@ -1172,13 +1187,20 @@ static std::wstring ComputeFileSha256Hex(const std::wstring& path) {
 // The private resource module's UIFILE/XMLFILE resources are the page
 // markup, so a reused file must be more than "an MZ/PE header >= 64 KB": its
 // content is fully deterministic, so its SHA-256 is recorded at build time and
-// re-checked before any existing file is adopted again. One hash per reuse
-// closes the gap between the weak structural check and trusting cached bytes.
-static const wchar_t* kResourceModuleShaSetting = L"resourceModuleSha256";
+// re-checked before any existing file is adopted again. Each language/mode file
+// has its own setting; changing languages must never overwrite the digest that
+// a still-mapped earlier module needs when that language is selected again.
+static std::wstring ResourceModuleShaSettingName(const std::wstring& path) {
+    const size_t separator = path.find_last_of(L"\\/");
+    const std::wstring fileName =
+        separator == std::wstring::npos ? path : path.substr(separator + 1);
+    return L"resourceModuleSha256." + fileName;
+}
 
 static bool PrivateResourceModuleHashMatches(const std::wstring& path) {
     wchar_t stored[128] = {};
-    Wh_GetStringValue(kResourceModuleShaSetting, stored, ARRAYSIZE(stored));
+    const std::wstring settingName = ResourceModuleShaSettingName(path);
+    Wh_GetStringValue(settingName.c_str(), stored, ARRAYSIZE(stored));
     if (!stored[0]) return false;
     const std::wstring hex = ComputeFileSha256Hex(path);
     if (hex.empty()) return false;
@@ -1187,8 +1209,15 @@ static bool PrivateResourceModuleHashMatches(const std::wstring& path) {
 
 static void RememberPrivateResourceModuleHash(const std::wstring& path) {
     const std::wstring hex = ComputeFileSha256Hex(path);
-    if (!hex.empty())
-        Wh_SetStringValue(kResourceModuleShaSetting, hex.c_str());
+    if (!hex.empty()) {
+        const std::wstring settingName = ResourceModuleShaSettingName(path);
+        Wh_SetStringValue(settingName.c_str(), hex.c_str());
+    }
+}
+
+static void ForgetPrivateResourceModuleHash(const std::wstring& path) {
+    const std::wstring settingName = ResourceModuleShaSettingName(path);
+    Wh_SetStringValue(settingName.c_str(), L"");
 }
 
 // -----------------------------------------------------------------------------
@@ -6156,7 +6185,9 @@ static bool BuildLocalizedResourceModule(const std::wstring& sourceDll,
     // session, or control.exe) is byte-identical to a fresh build. Skipping
     // the rebuild avoids the ~650 KB copy + PE patch + resource rewrite on
     // every process load. The recorded SHA-256 (checked below) proves the file
-    // is the deterministic build, not a tampered stand-in.
+    // is the deterministic build, not a tampered stand-in. This check happens
+    // before any delete/replace attempt, so a valid file that an earlier page
+    // still maps is adopted directly instead of entering a locked-file loop.
     if (GetFileAttributesW(destination.c_str()) != INVALID_FILE_ATTRIBUTES &&
         VerifyDownloadedDllLooksValid(destination) &&
         PrivateResourceModuleHashMatches(destination)) {
@@ -6526,27 +6557,34 @@ static void RunSetup() {
         return;
     }
 
-    // When regenerateResourcesOnEnable is ON, force-delete the current
-    // resource module and clear its verification hash BEFORE rebuilding.
-    // This guarantees a fresh build every time the mod starts, without the
-    // risk of an empty/broken page caused by deleting resources on disable.
+    // When regenerateResourcesOnEnable is ON, delete the current resource
+    // module and clear that file's verification hash BEFORE rebuilding. This
+    // happens on enable, not disable, so an already-open page never loses its
+    // resources. If DirectUI still maps the old file, retain its per-file hash:
+    // BuildLocalizedResourceModule can then safely adopt the verified existing
+    // bytes instead of repeatedly failing delete and replace operations.
     if (Wh_GetIntSetting(L"regenerateResourcesOnEnable") != 0) {
-        std::wstring currentModule =
+        const std::wstring currentModule =
             dir + L"\\" + LocalizedResourceModuleFileName();
+        bool canRebuild = true;
         if (GetFileAttributesW(currentModule.c_str()) !=
             INVALID_FILE_ATTRIBUTES) {
             if (DeleteFileW(currentModule.c_str())) {
                 Wh_Log(L"Regenerate-on-enable: deleted cached resource "
                        L"module: %s", currentModule.c_str());
             } else {
-                Wh_Log(L"Regenerate-on-enable: could not delete %s "
-                       L"(err=%u); will attempt fresh build anyway",
+                canRebuild = false;
+                Wh_Log(L"Regenerate-on-enable: %s is still mapped "
+                       L"(err=%u); keeping its per-file hash so the verified "
+                       L"module can be reused safely",
                        currentModule.c_str(), GetLastError());
             }
         }
-        Wh_SetStringValue(kResourceModuleShaSetting, L"");
-        Wh_Log(L"Regenerate-on-enable: resource hash cleared, "
-               L"forcing fresh build");
+        if (canRebuild) {
+            ForgetPrivateResourceModuleHash(currentModule);
+            Wh_Log(L"Regenerate-on-enable: resource hash cleared, "
+                   L"forcing a fresh build");
+        }
     }
 
     // Remove private resource modules left behind by other configurations,
@@ -7034,10 +7072,12 @@ private:
             default: return nullptr;
         }
     }
-    // Create a fresh, empty volatile (in-memory only) key directly under
-    // HKEY_CURRENT_USER and return a KEY_READ handle to it. Nothing is ever
-    // written to disk; the key exists only while the mod keeps the handle.
-    // Resolve the APIs directly instead of going through the mod's own hooks.
+    // Create a fresh, empty volatile (in-memory only) key under the mod's own
+    // HKCU subtree and return a KEY_READ handle to it. Nothing is ever written
+    // to disk; the leaf exists only while a caller keeps its handle. Keeping the
+    // fakes below Software\Windhawk avoids adding top-level keys beside the
+    // user's normal HKCU roots. Resolve the APIs directly instead of going
+    // through the mod's own hooks.
     static HKEY CreateVolatileRegistryKey() {
         HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
         auto create = kernelbase
@@ -7046,10 +7086,12 @@ private:
                           : nullptr;
         if (!create) return nullptr;
         static std::atomic<ULONGLONG> counter{0};
-        wchar_t name[64] = {};
-        swprintf_s(name, ARRAYSIZE(name), L"WindhawkDisplayRestorer_%lu_%llu",
-                   static_cast<unsigned long>(GetCurrentProcessId()),
-                   counter.fetch_add(1, std::memory_order_relaxed));
+        wchar_t name[160] = {};
+        swprintf_s(
+            name, ARRAYSIZE(name),
+            L"Software\\Windhawk\\DisplayControlPanelRestorer\\%lu_%llu",
+            static_cast<unsigned long>(GetCurrentProcessId()),
+            counter.fetch_add(1, std::memory_order_relaxed));
         HKEY h = nullptr;
         const LSTATUS status =
             create(HKEY_CURRENT_USER, name, 0, nullptr, REG_OPTION_VOLATILE,
@@ -8820,6 +8862,9 @@ static void RevertDisplayOrientation(const wchar_t* deviceName,
                                      const DEVMODEW& previous);
 static int ShowOrientationConfirmDialog(const wchar_t* body,
                                         const wchar_t* caption);
+static void ShowWorkerInformationDialog(const wchar_t* body,
+                                        const wchar_t* caption);
+static void ScanForHostedDisplayControls();
 static void ScheduleOrientationApply(DWORD orientation,
                                      const wchar_t* deviceName);
 static void SetPendingDisplayOrientation(DWORD orientation,
@@ -10232,26 +10277,28 @@ static void __cdecl DisplayHubInitializeElementsHook(void* /*self*/) {
 
 
 
-// Sign-out notification shown after a classic DPI preset is applied. Runs in a
-// tracked thread so the Control Panel page stays responsive, and the handle is
-// kept so Wh_ModUninit can dismiss and join the thread before the mod image is
-// unmapped (a still-open MessageBox would otherwise crash Explorer).
-static std::atomic<bool> g_dpiNotifyOpen{false};
-static std::atomic<HANDLE> g_dpiNotifyThread{nullptr};
-static std::mutex g_modalDialogThreadMutex;
-
-struct DpiNotifyParams {
-    std::wstring body;
-    std::wstring caption;
-};
-
-static DWORD WINAPI DpiNotifyDialogThread(LPVOID parameter) {
-    std::unique_ptr<DpiNotifyParams> params(
-        static_cast<DpiNotifyParams*>(parameter));
-    MessageBoxW(nullptr, params->body.c_str(), params->caption.c_str(),
-                MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
-    g_dpiNotifyOpen.store(false, std::memory_order_release);
-    return 0;
+// Queue a closable information dialog to the DPI/orientation worker. The gate
+// is set before the request is published, so repeated clicks coalesce. The
+// worker clears it only after its modeless dialog has closed.
+static void QueueWorkerInformationNotification(
+    DWORD notificationBit, std::atomic<bool>& openGate) {
+    if (g_shuttingDown.load(std::memory_order_acquire) ||
+        !g_notificationWorkerReady.load(std::memory_order_acquire) ||
+        !g_notificationWakeEvent) {
+        return;
+    }
+    bool expected = false;
+    if (!openGate.compare_exchange_strong(expected, true,
+                                           std::memory_order_acq_rel)) {
+        return;
+    }
+    g_pendingNotificationBits.fetch_or(notificationBit,
+                                       std::memory_order_acq_rel);
+    if (!SetEvent(g_notificationWakeEvent)) {
+        g_pendingNotificationBits.fetch_and(~notificationBit,
+                                            std::memory_order_acq_rel);
+        openGate.store(false, std::memory_order_release);
+    }
 }
 
 static DWORD GetRealWindowsBuildNumber() {
@@ -10270,39 +10317,8 @@ static bool ClassicDpiChangeNeedsSignOutMessage() {
 }
 
 static void ShowSignOutNotification() {
-    if (g_shuttingDown.load(std::memory_order_acquire)) return;
-
-    std::lock_guard<std::mutex> threadLock(g_modalDialogThreadMutex);
-    if (g_shuttingDown.load(std::memory_order_acquire)) return;
-
-    bool expected = false;
-    if (!g_dpiNotifyOpen.compare_exchange_strong(expected, true,
-                                                 std::memory_order_acq_rel)) {
-        return;
-    }
-    const wchar_t* body = GetEmbeddedTranslation(458);
-    const wchar_t* caption = GetEmbeddedTranslation(390);
-    auto* params = new (std::nothrow) DpiNotifyParams{
-        body ? body : L"You'll see this change the next time you sign in.",
-        caption ? caption : L"Display Settings"};
-    if (!params) {
-        g_dpiNotifyOpen.store(false, std::memory_order_release);
-        return;
-    }
-
-    HANDLE stale =
-        g_dpiNotifyThread.exchange(nullptr, std::memory_order_acq_rel);
-    if (stale) CloseHandle(stale);
-
-    HANDLE thread = CreateThread(nullptr, 0, DpiNotifyDialogThread, params, 0,
-                                 nullptr);
-    if (!thread) {
-        delete params;
-        g_dpiNotifyOpen.store(false, std::memory_order_release);
-        return;
-    }
-    g_dpiNotifyThread.store(thread, std::memory_order_release);
-    Wh_Log(L"Display hub: sign-out notification shown for the classic DPI change");
+    QueueWorkerInformationNotification(kDpiSignOutNotification,
+                                       g_dpiNotifyOpen);
 }
 
 // Apply a classic DPI preset through DisplayConfigSetDeviceInfo. Microsoft
@@ -10971,13 +10987,70 @@ class ClassicDpiWaitWindowGuard {
 
 static void ClassicDpiApplyWorker() {
     HANDLE handles[] = {g_stopEvent, g_dpiApplyWakeEvent,
-                        g_orientationApplyWakeEvent};
+                        g_orientationApplyWakeEvent,
+                        g_notificationWakeEvent};
+    constexpr DWORD kApplyWaitHandleCount = 3;  // exclude notifications
     while (!g_shuttingDown.load(std::memory_order_acquire)) {
         const DWORD wait = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
-                                                  FALSE, INFINITE);
+                                                  FALSE, 1000);
+        if (wait == WAIT_TIMEOUT) {
+            // Discover ResolutionControlClass without a process-wide
+            // CreateWindowExW detour. OpenGlass and similar frame renderers
+            // commonly own that API, and replacing their detour at mod enable
+            // makes every glass frame turn opaque until they reload settings.
+            if (g_dllVerifiedOk.load(std::memory_order_acquire) &&
+                g_resolutionPageCompatibility.load(
+                    std::memory_order_acquire)) {
+                ScanForHostedDisplayControls();
+            }
+            continue;
+        }
         if (wait == WAIT_OBJECT_0 ||
             g_shuttingDown.load(std::memory_order_acquire)) {
             return;
+        }
+        if (wait == WAIT_OBJECT_0 + 3) {
+            // Both information notices run on this joined worker as custom,
+            // closable modeless dialogs. Reset before consuming the atomic bit
+            // set: a request racing after the reset either appears in this
+            // exchange or leaves the event signaled for the next iteration.
+            ResetEvent(g_notificationWakeEvent);
+            const DWORD pending = g_pendingNotificationBits.exchange(
+                0, std::memory_order_acq_rel);
+            if (pending & kDisplayAdvisoryNotification) {
+                try {
+                    if (!g_shuttingDown.load(std::memory_order_acquire)) {
+                        const wchar_t* body = GetEmbeddedTranslation(631);
+                        const wchar_t* caption = GetEmbeddedTranslation(536);
+                        if (body) {
+                            ShowWorkerInformationDialog(
+                                body,
+                                caption ? caption
+                                        : L"What display settings should I choose?");
+                        }
+                    }
+                } catch (...) {
+                    Wh_Log(L"Display settings advisory failed");
+                }
+                g_displayTipDialogOpen.store(false,
+                                             std::memory_order_release);
+            }
+            if (pending & kDpiSignOutNotification) {
+                try {
+                    if (!g_shuttingDown.load(std::memory_order_acquire)) {
+                        const wchar_t* body = GetEmbeddedTranslation(458);
+                        const wchar_t* caption = GetEmbeddedTranslation(390);
+                        ShowWorkerInformationDialog(
+                            body ? body
+                                 : L"You'll see this change the next time you sign in.",
+                            caption ? caption : L"Display Settings");
+                    }
+                } catch (...) {
+                    Wh_Log(L"Display hub: sign-out notification failed");
+                }
+                g_dpiNotifyOpen.store(false, std::memory_order_release);
+            }
+            continue;
         }
         if (wait == WAIT_OBJECT_0 + 2) {
             // Orientation request: apply and confirm on THIS worker thread
@@ -11052,8 +11125,11 @@ static void ClassicDpiApplyWorker() {
             const DWORD timeout = now >= deadline
                                       ? 0
                                       : static_cast<DWORD>(deadline - now);
+            // A help notification can wait for this short stability interval;
+            // excluding its manual-reset event avoids cancelling a committed
+            // DPI change merely because an unrelated help link was clicked.
             const DWORD state = MsgWaitForMultipleObjects(
-                ARRAYSIZE(handles), handles, FALSE, timeout, QS_ALLINPUT);
+                kApplyWaitHandleCount, handles, FALSE, timeout, QS_ALLINPUT);
             if (state == WAIT_OBJECT_0 ||
                 g_shuttingDown.load(std::memory_order_acquire)) {
                 cancelled = true;
@@ -11080,7 +11156,7 @@ static void ClassicDpiApplyWorker() {
                 cancelled = true;
                 break;
             }
-            if (state == WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
+            if (state == WAIT_OBJECT_0 + kApplyWaitHandleCount) {
                 PumpClassicDpiWaitMessages();
                 continue;
             }
@@ -11123,11 +11199,13 @@ static void ClassicDpiApplyWorker() {
 }
 
 static void ClassicDpiApplyWorkerNoexcept() {
+    g_notificationWorkerReady.store(true, std::memory_order_release);
     try {
         ClassicDpiApplyWorker();
     } catch (...) {
         Wh_Log(L"Display hub: delayed DPI worker stopped after an exception");
     }
+    g_notificationWorkerReady.store(false, std::memory_order_release);
 }
 
 static void SetPendingClassicDpiSelection(UINT percent) {
@@ -11571,26 +11649,31 @@ static INT_PTR CALLBACK OrientationConfirmDlgProc(HWND window, UINT message,
     return FALSE;
 }
 
-// OS-localized standard message box button captions. user32.dll's string table
-// carries them at the same IDs MessageBoxW uses internally (IDYES=6 -> 805
-// "&Yes", IDNO=7 -> 806 "&No"), so the buttons read exactly like the old
-// MB_YESNO box in every Windows UI language.
-static void GetConfirmButtonText(int controlId, wchar_t* buffer,
-                                 size_t bufferChars) {
+// OS-localized standard message-box button captions. user32.dll's string table
+// carries them at the same IDs MessageBoxW uses internally (IDOK -> 800,
+// IDYES -> 805, IDNO -> 806), so the custom closable dialogs retain native
+// button text in every Windows UI language.
+static void GetStandardButtonText(int controlId, wchar_t* buffer,
+                                  size_t bufferChars) {
     buffer[0] = L'\0';
     UINT stringId = 0;
+    const wchar_t* fallback = L"&OK";
     switch (controlId) {
+        case IDOK:
+            stringId = 800;
+            break;
         case IDYES:
             stringId = 805;
+            fallback = L"&Yes";
             break;
         case IDNO:
             stringId = 806;
+            fallback = L"&No";
             break;
         default:
             return;
     }
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    const wchar_t* fallback = controlId == IDYES ? L"&Yes" : L"&No";
     if (!user32 ||
         !LoadStringW(user32, stringId, buffer, static_cast<int>(bufferChars))) {
         wcscpy_s(buffer, bufferChars, fallback);
@@ -11697,6 +11780,136 @@ static void BuildOrientationConfirmTemplate(DialogTemplateBuilder& builder,
     builder.AppendWord(0);
 }
 
+static INT_PTR CALLBACK InformationNotificationDlgProc(
+    HWND window, UINT message, WPARAM wParam, LPARAM /*lParam*/) {
+    switch (message) {
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+                DestroyWindow(window);
+                return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(window);
+            return TRUE;
+        default:
+            break;
+    }
+    return FALSE;
+}
+
+static void BuildInformationNotificationTemplate(
+    DialogTemplateBuilder& builder, const wchar_t* body,
+    const wchar_t* caption, const wchar_t* okText) {
+    const bool expanded = body &&
+        (wcslen(body) > 160 || wcschr(body, L'\n') != nullptr);
+    const WORD width = expanded ? 330 : 240;
+    const WORD height = expanded ? 184 : 74;
+    const WORD textWidth = expanded ? 306 : 216;
+    const WORD textHeight = expanded ? 140 : 36;
+    const WORD buttonX = static_cast<WORD>((width - 60) / 2);
+    const WORD buttonY = expanded ? 158 : 52;
+
+    builder.AlignDword();
+    builder.AppendDword(WS_CAPTION | WS_SYSMENU | WS_POPUP | DS_MODALFRAME |
+                        DS_CENTER | DS_SETFONT);
+    builder.AppendDword(WS_EX_TOPMOST);
+    builder.AppendWord(2);  // cdit
+    builder.AppendWord(0);
+    builder.AppendWord(0);
+    builder.AppendWord(width);
+    builder.AppendWord(height);
+    builder.AppendWord(0);  // no menu
+    builder.AppendWord(0);  // default dialog class
+    builder.AppendString(caption);
+    builder.AppendWord(8);
+    builder.AppendWord(FW_NORMAL);
+    builder.AppendByte(0);
+    builder.AppendByte(DEFAULT_CHARSET);
+    builder.AppendString(L"MS Shell Dlg");
+
+    builder.AlignDword();
+    builder.AppendDword(WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX);
+    builder.AppendDword(0);
+    builder.AppendWord(12);
+    builder.AppendWord(9);
+    builder.AppendWord(textWidth);
+    builder.AppendWord(textHeight);
+    builder.AppendWord(0xFFFF);  // id unused
+    builder.AppendWord(0xFFFF);
+    builder.AppendWord(0x0082);  // STATIC
+    builder.AppendString(body);
+    builder.AppendWord(0);
+
+    builder.AlignDword();
+    builder.AppendDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                        BS_DEFPUSHBUTTON);
+    builder.AppendDword(0);
+    builder.AppendWord(buttonX);
+    builder.AppendWord(buttonY);
+    builder.AppendWord(60);
+    builder.AppendWord(14);
+    builder.AppendWord(static_cast<WORD>(IDOK));
+    builder.AppendWord(0xFFFF);
+    builder.AppendWord(0x0080);  // BUTTON
+    builder.AppendString(okText);
+    builder.AppendWord(0);
+}
+
+// Runs only on the joined DPI/orientation worker. Unlike MessageBoxW, this
+// modeless dialog has a WM_CLOSE path and a message pump that also waits on the
+// teardown event, so setting g_stopEvent is sufficient to make an unconditional
+// worker join complete.
+static void ShowWorkerInformationDialog(const wchar_t* body,
+                                        const wchar_t* caption) {
+    if (!body || !*body) return;
+
+    wchar_t okText[64] = {};
+    GetStandardButtonText(IDOK, okText, ARRAYSIZE(okText));
+    DialogTemplateBuilder builder;
+    BuildInformationNotificationTemplate(
+        builder, body, caption ? caption : L"Display Settings", okText);
+
+    const HINSTANCE instance = ClassicDpiWaitModInstance();
+    HWND dialog = nullptr;
+    if (instance) {
+        dialog = CreateDialogIndirectParamW(
+            instance, reinterpret_cast<const DLGTEMPLATE*>(builder.data()),
+            nullptr, InformationNotificationDlgProc, 0);
+    }
+    if (!dialog) {
+        Wh_Log(L"Display Restorer: information dialog creation failed (%u)",
+               GetLastError());
+        return;
+    }
+
+    g_informationNotificationWindow.store(dialog, std::memory_order_release);
+    ShowWindow(dialog, SW_SHOWNORMAL);
+    SetForegroundWindow(dialog);
+
+    HANDLE stop = g_stopEvent;
+    for (;;) {
+        const DWORD result = stop
+            ? MsgWaitForMultipleObjects(1, &stop, FALSE, INFINITE, QS_ALLINPUT)
+            : MsgWaitForMultipleObjects(0, nullptr, FALSE, INFINITE,
+                                        QS_ALLINPUT);
+        if ((stop && result == WAIT_OBJECT_0) ||
+            g_shuttingDown.load(std::memory_order_acquire)) {
+            if (IsWindow(dialog)) DestroyWindow(dialog);
+        }
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (!IsWindow(dialog)) break;
+            if (!IsDialogMessageW(dialog, &message)) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        if (!IsWindow(dialog)) break;
+    }
+    g_informationNotificationWindow.store(nullptr, std::memory_order_release);
+}
+
 // Runs on the orientation/DPI worker thread. Shows the closable keep/revert
 // dialog and returns IDYES or IDNO. Never blocks unload: the loop below
 // watches g_stopEvent (set first by Wh_ModUninit) and the dialog answers
@@ -11707,8 +11920,8 @@ static int ShowOrientationConfirmDialog(const wchar_t* body,
 
     wchar_t yesText[64] = {};
     wchar_t noText[64] = {};
-    GetConfirmButtonText(IDYES, yesText, ARRAYSIZE(yesText));
-    GetConfirmButtonText(IDNO, noText, ARRAYSIZE(noText));
+    GetStandardButtonText(IDYES, yesText, ARRAYSIZE(yesText));
+    GetStandardButtonText(IDNO, noText, ARRAYSIZE(noText));
 
     DialogTemplateBuilder builder;
     BuildOrientationConfirmTemplate(builder, body, caption, yesText, noText);
@@ -12445,11 +12658,6 @@ static void RemoveAllHostedSubclasses() {
     }
 }
 
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int,
-                                        int, int, int, HWND, HMENU, HINSTANCE,
-                                        LPVOID);
-static CreateWindowExW_t CreateWindowExWOriginal = nullptr;
-
 struct DisplayModePair {
     int w;
     int h;
@@ -13157,61 +13365,91 @@ static LRESULT CALLBACK ResolutionControlSubclassProc(HWND hwnd, UINT msg,
     }
 }
 
-static HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName,
-                                       LPCWSTR lpWindowName, DWORD dwStyle,
-                                       int x, int y, int width, int height,
-                                       HWND hWndParent, HMENU hMenu,
-                                       HINSTANCE hInstance, LPVOID lpParam) {
-    if (!CreateWindowExWOriginal) return nullptr;
-    HWND hwnd = CreateWindowExWOriginal(dwExStyle, lpClassName, lpWindowName,
-                                        dwStyle, x, y, width, height,
-                                        hWndParent, hMenu, hInstance, lpParam);
+// Attach the cosmetic resolution-label subclass only to the exact provider
+// control. Discovery is performed by the joined worker below, not by detouring
+// CreateWindowExW process-wide. OpenGlass also hooks window creation in
+// explorer.exe; competing detours were why enabling this mod disabled glass on
+// every frame until OpenGlass reloaded its settings.
+static void TryAttachResolutionControlSubclass(HWND hwnd) {
+    bool subclassInstalled = false;
+    bool tracked = false;
     try {
-
-
-        if (hwnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
-            g_resolutionPageCompatibility.load(std::memory_order_acquire) &&
-            _wcsicmp(lpClassName, L"ResolutionControlClass") == 0 &&
-            !GetPropW(hwnd, kResCtlOrigProcProp)) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-                    hwnd, ResolutionControlSubclassProc, 0) &&
-                SetPropW(hwnd, kResCtlOrigProcProp,
-                         reinterpret_cast<HANDLE>(1))) {
-                RememberHostedSubclass(hwnd);
-                // Warm the mode cache at creation so the first WM_PAINT never
-                // runs the enumeration inside the paint pass. The cache is
-                // still validated against the device name on every read, so a
-                // monitor association that settles later re-enumerates.
-                std::vector<DisplayModePair> modes;
-                DEVMODEW raw{};
-                bool haveRaw = false;
-                GetCachedResolutionModes(hwnd, modes, raw, haveRaw);
-                Wh_Log(L"Resolution slider label micro-patch attached");
-            }
+        if (!hwnd || !IsWindow(hwnd) ||
+            !g_resolutionPageCompatibility.load(std::memory_order_acquire) ||
+            GetPropW(hwnd, kResCtlOrigProcProp)) {
+            return;
         }
+
+        wchar_t className[64] = {};
+        if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
+            _wcsicmp(className, L"ResolutionControlClass") != 0) {
+            return;
+        }
+
+        DWORD processId = 0;
+        GetWindowThreadProcessId(hwnd, &processId);
+        if (processId != GetCurrentProcessId()) return;
+
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, ResolutionControlSubclassProc, 0)) {
+            return;
+        }
+        subclassInstalled = true;
+        if (!SetPropW(hwnd, kResCtlOrigProcProp,
+                      reinterpret_cast<HANDLE>(1))) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, ResolutionControlSubclassProc);
+            return;
+        }
+
+        RememberHostedSubclass(hwnd);
+        tracked = true;
+        // Warm the mode cache outside WM_PAINT. The cache validates its monitor
+        // device name on every read, so attaching shortly after creation remains
+        // safe even if the final monitor association settles a moment later.
+        std::vector<DisplayModePair> modes;
+        DEVMODEW raw{};
+        bool haveRaw = false;
+        GetCachedResolutionModes(hwnd, modes, raw, haveRaw);
+        InvalidateRect(hwnd, nullptr, TRUE);
+        Wh_Log(L"Resolution slider label micro-patch attached without a "
+               L"CreateWindowExW hook");
+    } catch (...) {
+        // A subclass not yet entered in the teardown list must not survive this
+        // callback. Once tracked, leave it installed: Wh_ModUninit owns removal.
+        if (subclassInstalled && !tracked) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, ResolutionControlSubclassProc);
+            RemovePropW(hwnd, kResCtlOrigProcProp);
+        }
+    }
+}
+static BOOL CALLBACK ScanHostedDisplayChild(HWND hwnd, LPARAM /*parameter*/) {
+    try {
+        TryAttachResolutionControlSubclass(hwnd);
     } catch (...) {
     }
-    return hwnd;
+    return TRUE;
 }
 
-static void InstallHostedDisplayControlPatches() {
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32)
-        user32 = LoadLibraryExW(L"user32.dll", nullptr,
-                                LOAD_LIBRARY_SEARCH_SYSTEM32);
-    void* target =
-        user32 ? reinterpret_cast<void*>(
-                     GetProcAddress(user32, "CreateWindowExW"))
-               : nullptr;
-    if (!target) {
-        Wh_Log(L"Hosted Display control patches unavailable");
-        return;
+static BOOL CALLBACK ScanHostedDisplayTopLevel(HWND hwnd, LPARAM /*parameter*/) {
+    try {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(hwnd, &processId);
+        if (processId != GetCurrentProcessId()) return TRUE;
+        TryAttachResolutionControlSubclass(hwnd);
+        EnumChildWindows(hwnd, ScanHostedDisplayChild, 0);
+    } catch (...) {
     }
-    if (WindhawkUtils::SetFunctionHook(
-            reinterpret_cast<CreateWindowExW_t>(target), CreateWindowExWHook,
-            &CreateWindowExWOriginal)) {
-        Wh_Log(L"Hosted Display control patches scheduled");
-    }
+    return TRUE;
+}
+
+// Runs at most once per second on the existing joined DPI/orientation worker.
+// EnumWindows is filtered to this PID before descending, and the exact class
+// check makes the normal no-page path cheap and side-effect free.
+static void ScanForHostedDisplayControls() {
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+    EnumWindows(ScanHostedDisplayTopLevel, 0);
 }
 
 // desk.cpl and /name Microsoft.Display forms open the restored Display hub,
@@ -13516,72 +13754,16 @@ static bool LaunchRestoredDisplayPage(HWND owner, int showCommand,
 // Nothing about the provider's own command routing is altered; only the dead
 // Help hand-off is replaced.
 
-static std::atomic<bool> g_displayTipDialogOpen{false};
-// Handle of the advisory dialog thread, kept so Wh_ModUninit can dismiss
-// the dialog and wait for the thread before the mod image is unmapped.
-static std::atomic<HANDLE> g_tipThread{nullptr};
-
-struct DisplayTipDialogParams {
-    HWND owner;
-};
-
-static DWORD WINAPI DisplayTipDialogThread(LPVOID parameter) {
-    std::unique_ptr<DisplayTipDialogParams> params(
-        static_cast<DisplayTipDialogParams*>(parameter));
-
-    const wchar_t* caption = GetEmbeddedTranslation(536);
-    const wchar_t* body = GetEmbeddedTranslation(631);
-    if (!caption) caption = L"What display settings should I choose?";
-
-    if (body) {
-        // MB_OK + MB_ICONINFORMATION is exactly the small generic advisory the
-        // shell itself uses for this class of guidance. The dialog is shown on
-        // its own thread so the Control Panel page stays responsive and the
-        // provider's command handler returns immediately.
-        MessageBoxW(nullptr, body, caption,
-                    MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND |
-                        MB_TOPMOST);
-    }
-
-    g_displayTipDialogOpen.store(false, std::memory_order_release);
-    return 0;
+static void ShowDisplaySettingsAdvisory(HWND /*owner*/) {
+    QueueWorkerInformationNotification(kDisplayAdvisoryNotification,
+                                       g_displayTipDialogOpen);
+    Wh_Log(L"Display settings advisory queued");
 }
 
-static void ShowDisplaySettingsAdvisory(HWND owner) {
-    if (g_shuttingDown.load(std::memory_order_acquire)) return;
-
-    std::lock_guard<std::mutex> threadLock(g_modalDialogThreadMutex);
-    if (g_shuttingDown.load(std::memory_order_acquire)) return;
-
-    bool expected = false;
-    if (!g_displayTipDialogOpen.compare_exchange_strong(
-            expected, true, std::memory_order_acq_rel)) {
-        return;
-    }
-
-    auto* params = new (std::nothrow) DisplayTipDialogParams{owner};
-    if (!params) {
-        g_displayTipDialogOpen.store(false, std::memory_order_release);
-        return;
-    }
-
-    HANDLE stale = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
-    if (stale) CloseHandle(stale);
-
-    HANDLE thread = CreateThread(nullptr, 0, DisplayTipDialogThread, params, 0,
-                                 nullptr);
-    if (!thread) {
-        delete params;
-        g_displayTipDialogOpen.store(false, std::memory_order_release);
-        return;
-    }
-    g_tipThread.store(thread, std::memory_order_release);
-    Wh_Log(L"Display settings advisory shown");
-}
-
-// The link is a Help hand-off, so it surfaces as a ShellExecute of an
-// mshelp:/ms-help: URI or of helppane.exe. Recognise exactly those forms and
-// nothing else: every other ShellExecute from the page keeps its native route.
+// The provider's Help hand-off may put its topic ID in either the executable/
+// URI field or the parameter field. Match only the provider's enumerated
+// Display IDs; the surrounding mshelp, helppane.exe, or hh.exe form is not
+// specific enough to intercept process-wide.
 static bool ContainsDisplayHelpTopicId(PCWSTR value) {
     if (!value) return false;
     // 1511 provider help entries for this page (Help and Support topic IDs).
@@ -13593,24 +13775,16 @@ static bool ContainsDisplayHelpTopicId(PCWSTR value) {
 }
 
 static bool IsDisplayHelpTopicLaunch(PCWSTR file, PCWSTR parameters) {
-    if (file) {
-        if (StartsWithInsensitive(file, L"mshelp:") ||
-            StartsWithInsensitive(file, L"ms-help:")) {
-            return true;
-        }
-        if (WideFileNameEquals(file, L"helppane.exe") ||
-            WideFileNameEquals(file, L"hh.exe")) {
-            return true;
-        }
-        if (ContainsDisplayHelpTopicId(file)) return true;
+    if (g_shuttingDown.load(std::memory_order_acquire) ||
+        !g_dllVerifiedOk.load(std::memory_order_acquire) ||
+        !g_notificationWorkerReady.load(std::memory_order_acquire)) {
+        return false;
     }
-    if (parameters &&
-        (ContainsInsensitive(parameters, L"mshelp:") ||
-         ContainsInsensitive(parameters, L"ms-help:") ||
-         ContainsDisplayHelpTopicId(parameters))) {
-        return true;
-    }
-    return false;
+    // Only the 1511 provider's own Display topic IDs are intercepted. A bare
+    // hh.exe / helppane.exe / mshelp: launch may legitimately come from any
+    // shell component (or any other program hosted in this process).
+    return ContainsDisplayHelpTopicId(file) ||
+           ContainsDisplayHelpTopicId(parameters);
 }
 
 static bool IsCurrentProcessRundll32();
@@ -14289,9 +14463,12 @@ if (!clsidRegistered || !controlExePresent) {
         InstallComHook();
         InstallTranslationHook();
         InstallNativeControlPanelNavLinksHook();
-        InstallHostedDisplayControlPatches();
+        // ResolutionControlClass is discovered by the joined worker. Avoid a
+        // process-wide CreateWindowExW hook: it overwrites OpenGlass's window-
+        // creation detour and makes all glass frames opaque until OpenGlass is
+        // reconfigured.
         Wh_Log(L"Display Restorer startup phase 4/4: COM/DirectUI/native-navigation "
-               L"hooks processed");
+               L"hooks processed; hosted controls use non-invasive discovery");
 
         if (!g_stopEvent) {
             g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -14324,6 +14501,18 @@ if (!clsidRegistered || !controlExePresent) {
         } else {
             ResetEvent(g_orientationApplyWakeEvent);
         }
+        if (!g_notificationWakeEvent) {
+            // Manual-reset so a notification queued while another worker task
+            // is running remains visible until the worker consumes its bit.
+            g_notificationWakeEvent =
+                CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!g_notificationWakeEvent) {
+                Wh_Log(L"Display Restorer: notification wake event creation "
+                       L"failed (error %u)", GetLastError());
+            }
+        } else {
+            ResetEvent(g_notificationWakeEvent);
+        }
         {
             std::lock_guard<std::mutex> lock(g_orientationRequestMutex);
             g_orientationRequestOrientation = -1;
@@ -14332,6 +14521,12 @@ if (!clsidRegistered || !controlExePresent) {
         g_pendingClassicDpiPercent.store(0, std::memory_order_release);
         g_dpiApplyGeneration.store(0, std::memory_order_release);
         g_dpiCommitInFlight.store(false, std::memory_order_release);
+        g_pendingNotificationBits.store(0, std::memory_order_release);
+        g_notificationWorkerReady.store(false, std::memory_order_release);
+        g_displayTipDialogOpen.store(false, std::memory_order_release);
+        g_dpiNotifyOpen.store(false, std::memory_order_release);
+        g_informationNotificationWindow.store(nullptr,
+                                              std::memory_order_release);
         g_shuttingDown.store(false, std::memory_order_release);
 
         // The setup worker starts in Wh_ModAfterInit so a cached provider cannot
@@ -14356,6 +14551,7 @@ void Wh_ModAfterInit(void) {
         }
         if (!g_dpiApplyThread && g_stopEvent &&
             g_dpiApplyWakeEvent && g_orientationApplyWakeEvent &&
+            g_notificationWakeEvent &&
             !g_shuttingDown.load(std::memory_order_acquire)) {
             g_dpiApplyThread.emplace(ClassicDpiApplyWorkerNoexcept);
             Wh_Log(L"Display hub: delayed DPI/orientation apply worker started");
@@ -14413,66 +14609,13 @@ void Wh_ModUninit(void) {
         // checks this flag and the WinInet timeouts bound each blocking read, so
         // the join returns promptly instead of hanging on a stuck connection.
         g_shuttingDown.store(true, std::memory_order_release);
+        g_notificationWorkerReady.store(false, std::memory_order_release);
         if (g_stopEvent) {
             SetEvent(g_stopEvent);
         }
-        // Serialize against dialog creation, collect both worker handles, then
-        // repeatedly re-drive WM_CLOSE until each thread exits. This covers the
-        // race where CreateThread returned but MessageBoxW has not created its
-        // window yet. The re-drive loop is bounded; it gives up on the join
-        // only after the thread's window is confirmed gone (a thread still
-        // blocked inside MessageBoxW is never abandoned - that would crash
-        // Explorer on unload).
-        HANDLE tip = nullptr;
-        HANDLE dpiNotify = nullptr;
-        {
-            std::lock_guard<std::mutex> threadLock(
-                g_modalDialogThreadMutex);
-            tip = g_tipThread.exchange(nullptr, std::memory_order_acq_rel);
-            dpiNotify = g_dpiNotifyThread.exchange(
-                nullptr, std::memory_order_acq_rel);
-        }
-        constexpr int kDialogCloseMaxAttempts = 50;  // 50 x 200 ms = 10 s
-        const auto closeAndJoinDialogThread = [](HANDLE thread) {
-            if (!thread) return;
-            const DWORD threadId = GetThreadId(thread);
-            bool warnedAboutStuckWindow = false;
-            for (int attempt = 0;; ++attempt) {
-                bool sawWindow = false;
-                if (threadId) {
-                    EnumThreadWindows(
-                        threadId,
-                        [](HWND window, LPARAM lp) -> BOOL {
-                            *reinterpret_cast<bool*>(lp) = true;
-                            PostMessageW(window, WM_CLOSE, 0, 0);
-                            return TRUE;
-                        },
-                        reinterpret_cast<LPARAM>(&sawWindow));
-                }
-                if (WaitForSingleObject(thread, 200) != WAIT_TIMEOUT) break;
-                if (attempt >= kDialogCloseMaxAttempts) {
-                    if (!sawWindow) {
-                        // The dialog window is gone but the thread has not
-                        // exited: it is unwinding on its own. Abandoning the
-                        // join is safe here and prevents an unload hang.
-                        Wh_Log(L"Display Restorer: dialog thread %u has no "
-                               L"window left and did not exit; abandoning the "
-                               L"join so unload does not hang", threadId);
-                        break;
-                    }
-                    if (!warnedAboutStuckWindow) {
-                        warnedAboutStuckWindow = true;
-                        Wh_Log(L"Display Restorer: dialog thread %u is not "
-                               L"closing; continuing to re-drive WM_CLOSE to "
-                               L"avoid crashing Explorer", threadId);
-                    }
-                }
-            }
-            CloseHandle(thread);
-        };
-        closeAndJoinDialogThread(tip);
-        closeAndJoinDialogThread(dpiNotify);
-
+        // Information and orientation dialogs run on the single joined worker.
+        // Their modeless pumps watch g_stopEvent, so there are no independent
+        // dialog threads to discover, close, time out, or abandon here.
         // InternetOpenUrlW/InternetQueryDataAvailable/InternetReadFile are not
         // interruptible and only bound each individual call to
         // kDownloadTimeoutMs (20s), across up to kMaxDownloadAttempts retries -
@@ -14481,18 +14624,23 @@ void Wh_ModUninit(void) {
         // Closing the handles from here makes any currently-blocked WinInet
         // call fail immediately instead of waiting out its timeout.
         CancelInFlightDownload();
-        // The orientation keep/revert dialog (if open) runs on the apply
-        // worker thread and its message loop already watches g_stopEvent (set
-        // above), so it closes by itself. Post WM_CLOSE too, as a second line
-        // of defense against a race where the loop just missed the event.
+        // The worker-owned dialogs watch g_stopEvent and close by themselves.
+        // Post WM_CLOSE too as a second line of defense, then unconditionally
+        // join the worker before Windhawk is allowed to unmap this mod image.
         if (HWND confirm = g_orientationConfirmWindow.load(
                 std::memory_order_acquire)) {
             PostMessageW(confirm, WM_CLOSE, 0, 0);
         }
-        if (g_dpiApplyThread && g_dpiApplyThread->joinable()) {
-            g_dpiApplyThread->join();
+        if (HWND information = g_informationNotificationWindow.load(
+                std::memory_order_acquire)) {
+            PostMessageW(information, WM_CLOSE, 0, 0);
         }
-        g_dpiApplyThread.reset();
+        if (g_dpiApplyThread) {
+            // An engaged optional always owns the worker created in
+            // Wh_ModAfterInit; it is never detached or moved.
+            g_dpiApplyThread->join();
+            g_dpiApplyThread.reset();
+        }
         if (g_setupThread && g_setupThread->joinable()) {
             g_setupThread->join();
         }
@@ -14514,6 +14662,13 @@ void Wh_ModUninit(void) {
             CloseHandle(g_orientationApplyWakeEvent);
             g_orientationApplyWakeEvent = nullptr;
         }
+        if (g_notificationWakeEvent) {
+            CloseHandle(g_notificationWakeEvent);
+            g_notificationWakeEvent = nullptr;
+        }
+        g_pendingNotificationBits.store(0, std::memory_order_release);
+        g_displayTipDialogOpen.store(false, std::memory_order_release);
+        g_dpiNotifyOpen.store(false, std::memory_order_release);
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
