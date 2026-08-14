@@ -62,6 +62,8 @@ proportional spot on the monitor in that direction.
 * When a window of an elevated process is in the foreground, low-level hooks
   from a non-elevated process don't receive input. That's a UIPI restriction,
   not something the mod can work around.
+  
+Contact with me: vicitacal11@ya.ru
 */
 // ==/WindhawkModReadme==
 
