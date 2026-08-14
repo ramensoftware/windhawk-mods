@@ -751,7 +751,38 @@ void ReleaseDiskIcons(std::vector<DiskInfo>& disks) {
     }
 }
 
+// Probes \\.\PhysicalDriveN so disks with nothing mounted still show up. A
+// brand-new or uninitialised disk reports no volumes at all, and building the
+// list from volumes alone made exactly the disk you opened this window to look
+// at invisible.
+std::vector<int> EnumeratePhysicalDisks() {
+    std::vector<int> numbers;
+    // 64 is well past any consumer machine, and each miss is a cheap failed
+    // CreateFile rather than an enumeration.
+    for (int number = 0; number < 64; number++) {
+        WCHAR path[64];
+        _snwprintf(path, ARRAYSIZE(path) - 1, L"\\\\.\\PhysicalDrive%d", number);
+        path[ARRAYSIZE(path) - 1] = L'\0';
+
+        HANDLE device =
+            CreateFileW(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                        OPEN_EXISTING, 0, nullptr);
+        if (device == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+        CloseHandle(device);
+        numbers.push_back(number);
+    }
+    return numbers;
+}
+
 std::vector<DiskInfo> EnumerateDisks() {
+    // Volume queries hit the hardware, and an empty card reader or optical
+    // drive answers with a hard error - which Windows turns into a modal "There
+    // is no disk in the drive" box, from a window opened to look at drives.
+    DWORD previousErrorMode = 0;
+    SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previousErrorMode);
+
     std::vector<VolumeInfo> volumes;
 
     WCHAR volumeName[MAX_PATH];
@@ -813,8 +844,21 @@ std::vector<DiskInfo> EnumerateDisks() {
         FindVolumeClose(find);
     }
 
-    // Group by physical disk.
+    // Start from the physical disks, then hang the volumes off them. Doing it
+    // the other way round hides any disk with nothing mounted.
     std::vector<DiskInfo> disks;
+    for (int number : EnumeratePhysicalDisks()) {
+        DiskInfo disk;
+        disk.number = number;
+        disk.model = QueryDiskModel(number);
+        if (disk.model.empty()) {
+            disk.model = L"Disk " + std::to_wstring(number);
+        }
+        disk.size = QueryDiskSize(number);
+        disk.removable = IsRemovableDisk(number);
+        disks.push_back(std::move(disk));
+    }
+
     for (const auto& volume : volumes) {
         if (volume.diskNumber < 0) {
             continue;
@@ -822,21 +866,27 @@ std::vector<DiskInfo> EnumerateDisks() {
         auto existing = std::find_if(
             disks.begin(), disks.end(),
             [&](const DiskInfo& disk) { return disk.number == volume.diskNumber; });
-        if (existing == disks.end()) {
-            DiskInfo disk;
-            disk.number = volume.diskNumber;
-            disk.model = QueryDiskModel(disk.number);
-            if (disk.model.empty()) {
-                disk.model = L"Disk " + std::to_wstring(disk.number);
-            }
-            disk.size = QueryDiskSize(disk.number);
-            disk.removable = IsRemovableDisk(disk.number);
-            disk.volumes.push_back(volume);
-            disks.push_back(std::move(disk));
-        } else {
+        if (existing != disks.end()) {
             existing->volumes.push_back(volume);
+            continue;
         }
+        // A volume on a disk the probe missed - keep it rather than drop it.
+        DiskInfo disk;
+        disk.number = volume.diskNumber;
+        disk.model = QueryDiskModel(disk.number);
+        if (disk.model.empty()) {
+            disk.model = L"Disk " + std::to_wstring(disk.number);
+        }
+        disk.size = QueryDiskSize(disk.number);
+        disk.removable = IsRemovableDisk(disk.number);
+        disk.volumes.push_back(volume);
+        disks.push_back(std::move(disk));
     }
+
+    std::sort(disks.begin(), disks.end(),
+              [](const DiskInfo& a, const DiskInfo& b) {
+                  return a.number < b.number;
+              });
 
     for (auto& disk : disks) {
         for (const auto& volume : disk.volumes) {
@@ -938,6 +988,8 @@ std::vector<DiskInfo> EnumerateDisks() {
               [](const DiskInfo& a, const DiskInfo& b) {
                   return a.number < b.number;
               });
+
+    SetThreadErrorMode(previousErrorMode, nullptr);
 
     if (g_settings.verboseLog) {
         Wh_Log(L"enumerated %zu disks", disks.size());
@@ -1604,19 +1656,12 @@ bool EnsureClass(HINSTANCE instance) {
         g_classRegistered = true;
         return true;
     }
-    if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-        UnregisterClassW(kClassName, instance);
-        if (RegisterClassExW(&wc)) {
-            g_classRegistered = true;
-            return true;
-        }
-    }
     return false;
 }
 
+// As in diskui: only clear the flag when the class was really unregistered.
 void UnregisterWindowClassIfNeeded(HINSTANCE instance) {
-    if (g_classRegistered) {
-        UnregisterClassW(kClassName, instance);
+    if (g_classRegistered && UnregisterClassW(kClassName, instance)) {
         g_classRegistered = false;
     }
 }
@@ -3010,9 +3055,41 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             return 0;
 
-        case WM_DPICHANGED:
+        case WM_DPICHANGED: {
+            // Storing the new DPI alone leaves every font and icon sized for
+            // the old monitor. Rebuild them, then take the rectangle Windows
+            // suggests - it accounts for the scale change.
             state->dpi = HIWORD(wParam);
+
+            if (state->fontCaption) DeleteObject(state->fontCaption);
+            if (state->fontSection) DeleteObject(state->fontSection);
+            if (state->fontName) DeleteObject(state->fontName);
+            if (state->fontRow) DeleteObject(state->fontRow);
+            if (state->fontSmall) DeleteObject(state->fontSmall);
+            if (state->fontButton) DeleteObject(state->fontButton);
+
+            state->fontCaption = MakeFontRegular(state->dpi, 10);
+            state->fontSection = MakeFont(state->dpi, 13, true);
+            state->fontName = MakeFont(state->dpi, 10, false);
+            state->fontRow = MakeFontRegular(state->dpi, 10);
+            state->fontSmall = MakeFontRegular(state->dpi, 9);
+            state->fontButton = MakeFont(state->dpi, 9, false);
+
+            // Icons were rendered for the old scale; drop them and re-read at
+            // the new one.
+            g_iconDpi = state->dpi;
+            ReleaseDiskIcons(state->disks);
+            state->disks = EnumerateDisks();
+
+            if (auto* suggested = reinterpret_cast<const RECT*>(lParam)) {
+                SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                             suggested->right - suggested->left,
+                             suggested->bottom - suggested->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
+        }
 
         case WM_DESTROY:
             state->done = true;
@@ -3026,9 +3103,11 @@ bool g_classRegistered;
 
 // The class outlives the DLL unless it is taken down explicitly, and its window
 // procedure would then point at unloaded code.
+// Only clear the flag when the class really went away. UnregisterClassW fails
+// while a window of the class still exists, and clearing it regardless would
+// leave a registered class whose lpfnWndProc points into an unmapped module.
 void UnregisterWindowClassIfNeeded() {
-    if (g_classRegistered) {
-        UnregisterClassW(kClassName, ModuleInstance());
+    if (g_classRegistered && UnregisterClassW(kClassName, ModuleInstance())) {
         g_classRegistered = false;
     }
 }
@@ -3048,14 +3127,12 @@ bool EnsureClass() {
         g_classRegistered = true;
         return true;
     }
-    if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-        UnregisterClassW(kClassName, ModuleInstance());
-        if (RegisterClassExW(&wc)) {
-            g_classRegistered = true;
-            return true;
-        }
-    }
     return false;
+}
+
+// The live window, for Wh_ModUninit to close on unload.
+HWND WindowHandle() {
+    return g_state ? g_state->hwnd : nullptr;
 }
 
 // Shows the window and runs it to completion. This owns the process: mmc.exe
@@ -3187,55 +3264,121 @@ void LoadSettings() {
     g_settings.verboseLog = Wh_GetIntSetting(L"verboseLog") != 0;
 }
 
-// mmc's main thread, parked by the window thread below. Wh_ModInit runs on
-// this thread, so it cannot suspend itself - the earlier attempt skipped the
-// current thread and let the console load anyway.
-DWORD g_mainThreadId;
+// -----------------------------------------------------------------------------
+// Taking over the console
+//
+// MMC is intercepted where it creates its frame window, on its own main thread.
+// An earlier version suspended that thread from a worker instead, which is a
+// deadlock waiting to happen: the thread is stopped at whatever point it has
+// reached, quite possibly holding the loader lock or a CRT lock, and this mod
+// then calls CoInitializeEx, GDI+ and the shell for icons. Hooking
+// CreateWindowExW is deterministic and needs no suspension at all.
+//
+// "MMCMainFrame" is MMC's frame window class, confirmed by enumerating the
+// windows of a running mmc.exe.
+// -----------------------------------------------------------------------------
 
-// Parks the thread that would otherwise go on to load the console. It is never
-// resumed: the process exits when the window closes.
-void ParkMainThread() {
-    if (!g_mainThreadId) {
-        return;
-    }
-    HANDLE thread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, g_mainThreadId);
-    if (thread) {
-        SuspendThread(thread);
-        CloseHandle(thread);
-    }
-}
+constexpr PCWSTR kMmcFrameClass = L"MMCMainFrame";
 
-DWORD WINAPI WindowThread(LPVOID) {
-    // First thing, before anything slow: stop the console from loading.
-    ParkMainThread();
+// Set once the takeover has happened, so a second frame window - or a reentrant
+// call - does not try to show a second copy of the window.
+bool g_tookOver = false;
+
+// Set by Wh_ModUninit. The UI runs on MMC's main thread inside the hook below,
+// so unloading has to get that thread out of this module before returning.
+volatile bool g_modUnloading = false;
+
+// Signalled by the hook once it has finished with everything in this module.
+HANDLE g_uiFinished = nullptr;
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+
+HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, PCWSTR className,
+                                 PCWSTR windowName, DWORD style, int x, int y,
+                                 int width, int height, HWND parent,
+                                 HMENU menu, HINSTANCE instance,
+                                 LPVOID param) {
+    auto passThrough = [&] {
+        return CreateWindowExW_Original(exStyle, className, windowName, style, x,
+                                        y, width, height, parent, menu,
+                                        instance, param);
+    };
+
+    // Class names can be atoms rather than pointers; ignore those.
+    if (g_tookOver || g_modUnloading || IS_INTRESOURCE(className) ||
+        _wcsicmp(className, kMmcFrameClass) != 0) {
+        return passThrough();
+    }
+    g_tookOver = true;
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     bool shown = diskui::Run();
     CoUninitialize();
 
-    if (shown) {
-        // The window is closed and this process has nothing left to do.
-        ExitProcess(0);
+    if (!shown) {
+        // Nothing was displayed, so let MMC build its own console rather than
+        // leaving the user with no Disk Management at all.
+        Wh_Log(L"could not create the window; falling back to the console");
+        g_tookOver = false;
+        return passThrough();
     }
-    Wh_Log(L"could not create the window; nothing is shown");
+
+    // The window has been closed. Tell Wh_ModUninit that this thread is done
+    // with the module before doing anything else, then end the process - MMC
+    // has nothing left to show.
+    if (g_uiFinished) {
+        SetEvent(g_uiFinished);
+    }
+    if (g_modUnloading) {
+        // Unloading rather than a user close: return to MMC and let the real
+        // console load, instead of killing the process out from under it.
+        return passThrough();
+    }
     ExitProcess(0);
-    return 0;
+}
+
+// True when the process already owns a top-level window, which means it was
+// running before this mod was loaded. Windhawk runs the mod's callbacks on its
+// own engine thread in that case, and taking over then would show a second,
+// redundant window over a console the user already has open.
+BOOL CALLBACK HasOwnWindow(HWND hwnd, LPARAM param) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        *reinterpret_cast<bool*>(param) = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+bool ProcessAlreadyRunning() {
+    bool found = false;
+    EnumWindows(HasOwnWindow, reinterpret_cast<LPARAM>(&found));
+    return found;
 }
 
 BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!LaunchedForDiskManagement()) {
-        return TRUE;  // some other snap-in; leave MMC alone
+        // Not this snap-in. Returning FALSE unloads the mod from processes it
+        // has nothing to do in; Windhawk reloads it after a settings change,
+        // so this is not permanent.
+        return FALSE;
     }
 
-    // The window runs on its own thread rather than inside this function.
-    // Blocking here keeps Wh_ModInit from returning, and Windhawk reports the
-    // mod as "Initializing..." for as long as the window is open.
-    g_mainThreadId = GetCurrentThreadId();
-    HANDLE thread = CreateThread(nullptr, 0, WindowThread, nullptr, 0, nullptr);
-    if (thread) {
-        CloseHandle(thread);
+    if (ProcessAlreadyRunning()) {
+        Wh_Log(L"mmc.exe was already running; leaving it alone");
+        return FALSE;
+    }
+
+    g_uiFinished = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
+        Wh_Log(L"could not hook CreateWindowExW");
+        return FALSE;
     }
     return TRUE;
 }
@@ -3244,7 +3387,24 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
+// Windhawk unmaps the module as soon as this returns, so no thread may still be
+// running mod code by then. The UI runs on MMC's main thread inside the hook
+// above, so close its window and wait for that thread to leave.
 void Wh_ModUninit() {
+    g_modUnloading = true;
+
+    if (g_tookOver && g_uiFinished) {
+        if (HWND hwnd = diskui::WindowHandle()) {
+            // Async, so this never deadlocks against the UI thread.
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            WaitForSingleObject(g_uiFinished, 10000);
+        }
+    }
+    if (g_uiFinished) {
+        CloseHandle(g_uiFinished);
+        g_uiFinished = nullptr;
+    }
+
     diskui::UnregisterWindowClassIfNeeded();
     props::UnregisterWindowClassIfNeeded(ModuleInstance());
 }
