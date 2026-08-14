@@ -84,7 +84,7 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 ## Known Limitations
 
 - **Combobox inside the screen preview:** The combobox that appears inside the screen preview area does not function correctly.
-- **Magnifier link:** The help text on the Display page renders the Magnifier reference as a blue link in every supported language. Clicking it launches the Windows Magnifier (magnify.exe) from System32.
+- **Magnifier link:** The help text on the Display page renders the Magnifier reference as a blue link in every supported language. The link is kept for its original text and appearance only; clicking it does nothing.
 - **Orientation:** By default the Orientation row is hidden because the provider list is empty on current adapters. Enable the **Show the classic Orientation row** setting to restore the provider's untouched Orientation markup (screen rotation is still applied when you change the selection and press Apply).
 - The mod does not replace or modify any Windows system file; the Control Panel registration it serves exists only in memory while the mod is active.
 - The restored pages run one exact Microsoft Display provider build (Windows 10 1511, version 10.0.10586.0), SHA-256-pinned and loaded from the mod's own folder. The mod's RVA offsets are constants for that build, so moving to a different Microsoft build is a real rebuild, not a URL change.
@@ -870,6 +870,12 @@ static std::optional<std::thread> g_setupThread;
 #endif
 static std::optional<std::thread> g_dpiApplyThread;
 static HANDLE g_dpiApplyWakeEvent = nullptr;
+// Manual-reset wake event for the orientation request handled on the same
+// worker thread. Manual-reset (not auto-reset) so that if an orientation
+// request arrives while the worker is inside the DPI stability wait, the DPI
+// iteration can unwind without the request being lost: the event stays
+// signaled until the worker explicitly consumes it.
+static HANDLE g_orientationApplyWakeEvent = nullptr;
 static std::atomic<UINT> g_pendingClassicDpiPercent{0};
 static std::atomic<ULONGLONG> g_dpiApplyGeneration{0};
 // True while an Apply-committed DPI change is queued or executing in the
@@ -880,6 +886,14 @@ static std::atomic<ULONGLONG> g_dpiApplyGeneration{0};
 // applied DPI change silently not happen).
 static std::atomic<bool> g_dpiCommitInFlight{false};
 static constexpr DWORD kClassicDpiApplyDelayMs = 2500;
+
+// Pending orientation request consumed by the DPI/orientation worker thread.
+// The Screen Resolution hooks only post the request here (never apply on the
+// UI thread); the worker applies and shows the keep/revert confirmation on a
+// thread that unload can always close and join.
+static std::mutex g_orientationRequestMutex;
+static int g_orientationRequestOrientation = -1;  // DMDO value, -1 = none
+static std::wstring g_orientationRequestDevice;
 
 const std::wstring* CurrentDllPath() {
     return g_dllPath.load(std::memory_order_acquire);
@@ -1311,9 +1325,13 @@ static void CancelInFlightDownload() {
 
 // Download a file to `dest` using WinInet. Unlike URLDownloadToFileW this gives
 // us real control over timeouts and lets us abort on shutdown. connect/send/
-// receive are each bounded to kDownloadTimeoutMs at the WinInet level, and we
-// additionally enforce an overall deadline so a stuck/captive-portal connection
-// can never block for minutes. Returns true only when the full file was written.
+// receive are each bounded to kDownloadTimeoutMs at the WinInet level. The whole
+// transfer is NOT put on that same 20 s clock (a 775 KB body on a slow link
+// would otherwise fail every attempt at the same point): the stall deadline
+// below only trips when no bytes arrive for kDownloadTimeoutMs, so a slow-but-
+// alive connection is allowed as long as it keeps making progress, while a
+// genuinely stuck/captive-portal connection still aborts promptly. Returns
+// true only when the full file was written.
 static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& dest) {
     HINTERNET hNet = InternetOpenW(L"Windhawk Display Restorer",
                                    INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr,
@@ -1378,13 +1396,23 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
                                    nullptr);
         if (hFile == INVALID_HANDLE_VALUE) break;
 
-        const ULONGLONG start = GetTickCount64();
+        ULONGLONG lastProgress = GetTickCount64();
         BYTE buf[65536];
         bool readOk = true;
         DWORD rd = 0;
         for (;;) {
             if (g_shuttingDown.load(std::memory_order_relaxed)) {
                 readOk = false;
+                break;
+            }
+            // Stall detection, not an overall transfer deadline: the clock
+            // resets on every chunk that actually lands (see below), so a
+            // slow-but-alive link is allowed to take as long as it needs,
+            // and only a genuinely dead/captive-portal connection aborts.
+            if (GetTickCount64() - lastProgress > kDownloadTimeoutMs) {
+                readOk = false;
+                Wh_Log(L"Download stalled: no data for %u ms; aborting",
+                       kDownloadTimeoutMs);
                 break;
             }
             DWORD avail = 0;
@@ -1403,10 +1431,7 @@ static bool DownloadWithTimeout(const std::wstring& url, const std::wstring& des
                 readOk = false;
                 break;
             }
-            if (GetTickCount64() - start > kDownloadTimeoutMs) {
-                readOk = false;  // overall deadline exceeded
-                break;
-            }
+            lastProgress = GetTickCount64();
         }
         CloseHandle(hFile);
         ok = readOk;
@@ -8040,11 +8065,21 @@ static int CopyEmbeddedStringW(const wchar_t* text, LPWSTR buffer, int bufferCha
 // and intentionally leaked (bounded by the catalog size) so the returned
 // PCWSTR can never dangle, mirroring the never-unload policy.
 static std::mutex g_widePointerStringMutex;
-static std::unordered_map<UINT, const wchar_t*> g_widePointerStrings;
+// Keyed by (language, id) instead of just id: a page-language change must
+// hand out captions in the new language, not the one cached at first use.
+// Old entries stay in the map forever (deliberately leaked, as before), so a
+// pointer handed out under the previous language never dangles; the new
+// language simply gets its own entries.
+static std::unordered_map<uint64_t, const wchar_t*> g_widePointerStrings;
+
+static uint64_t PointerStringKey(UINT id, MuiLanguage language) {
+    return (static_cast<uint64_t>(language) << 32) | id;
+}
 
 static const wchar_t* GetWidePointerString(UINT id) {
+    const uint64_t key = PointerStringKey(id, GetCurrentEmbeddedLanguage());
     std::lock_guard<std::mutex> lock(g_widePointerStringMutex);
-    const auto existing = g_widePointerStrings.find(id);
+    const auto existing = g_widePointerStrings.find(key);
     if (existing != g_widePointerStrings.end()) return existing->second;
     const wchar_t* text = GetEmbeddedTranslation(id);
     if (!text) return nullptr;
@@ -8053,7 +8088,7 @@ static const wchar_t* GetWidePointerString(UINT id) {
         malloc(chars * sizeof(wchar_t)));
     if (!copy) return nullptr;
     memcpy(copy, text, chars * sizeof(wchar_t));
-    g_widePointerStrings.emplace(id, copy);
+    g_widePointerStrings.emplace(key, copy);
     return copy;
 }
 
@@ -8160,11 +8195,14 @@ int WINAPI LoadStringWHook(HINSTANCE instance, UINT id, LPWSTR buffer,
 // few KB total) so the returned PCSTR can never dangle, mirroring the
 // never-unload policy of the localized resource module.
 static std::mutex g_ansiPointerStringMutex;
-static std::unordered_map<UINT, const char*> g_ansiPointerStrings;
+// Keyed by (language, id) instead of just id, for the same reason as the
+// wide cache: a page-language change must not keep serving stale captions.
+static std::unordered_map<uint64_t, const char*> g_ansiPointerStrings;
 
 static const char* GetAnsiPointerString(UINT id) {
+    const uint64_t key = PointerStringKey(id, GetCurrentEmbeddedLanguage());
     std::lock_guard<std::mutex> lock(g_ansiPointerStringMutex);
-    const auto existing = g_ansiPointerStrings.find(id);
+    const auto existing = g_ansiPointerStrings.find(key);
     if (existing != g_ansiPointerStrings.end()) return existing->second;
     const wchar_t* text = GetEmbeddedTranslation(id);
     if (!text) return nullptr;
@@ -8178,7 +8216,7 @@ static const char* GetAnsiPointerString(UINT id) {
     WideCharToMultiByte(CP_ACP, 0, text, wideLength, converted, byteLength,
                         nullptr, nullptr);
     converted[byteLength] = '\0';
-    g_ansiPointerStrings.emplace(id, converted);
+    g_ansiPointerStrings.emplace(key, converted);
     return converted;
 }
 
@@ -8773,11 +8811,22 @@ static void ScheduleClassicDpiApply(UINT percent);
 static void CancelScheduledClassicDpiApply();
 
 static bool ApplyDisplayOrientation(DWORD orientation,
-                                    const wchar_t* deviceName);
+                                    const wchar_t* deviceName,
+                                    std::wstring* deviceOut,
+                                    bool* confirmOut,
+                                    DEVMODEW* previousOut,
+                                    bool* hadPreviousOut);
+static void RevertDisplayOrientation(const wchar_t* deviceName,
+                                     const DEVMODEW& previous);
+static int ShowOrientationConfirmDialog(const wchar_t* body,
+                                        const wchar_t* caption);
+static void ScheduleOrientationApply(DWORD orientation,
+                                     const wchar_t* deviceName);
 static void SetPendingDisplayOrientation(DWORD orientation,
                                          void* contextElement);
 static int OrientationFromComboItem(void* element);
 static void HandleOrientationUiEvent(void* element);
+static void* FindDescendentByAtom(void* context, const wchar_t* atomName);
 // All dui70.dll symbol hooks (classic DPI radio + Screen Resolution
 // orientation) are resolved in a single HookSymbols call; see the definition
 // later in the file. Splitting them across two HookSymbols calls for the same
@@ -8839,8 +8888,17 @@ static void SetDpiApplyButtonEnabled(void* context, bool enabled) {
 }
 
 static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
-    if (!DirectUiPushButtonSelectedChangedOriginal) return;
-    DirectUiPushButtonSelectedChangedOriginal(element);
+    // This hook runs for every DirectUI push-button event process-wide. Until
+    // the provider is verified the restored page cannot exist, so short-circuit
+    // to a plain pass-through and skip every atom lookup - the same discipline
+    // the Button and Selector hooks below apply.
+    if (!g_dllVerifiedOk.load(std::memory_order_acquire)) {
+        if (DirectUiPushButtonSelectedChangedOriginal)
+            DirectUiPushButtonSelectedChangedOriginal(element);
+        return;
+    }
+    if (DirectUiPushButtonSelectedChangedOriginal)
+        DirectUiPushButtonSelectedChangedOriginal(element);
 
     if (g_shuttingDown.load(std::memory_order_acquire) ||
         !DirectUiElementGetSelected || !DirectUiElementGetParent ||
@@ -8859,6 +8917,14 @@ static void __cdecl DirectUiPushButtonSelectedChangedHook(void* element) {
         const auto* applyName = reinterpret_cast<const unsigned short*>(
             L"ApplyButton");
         if (id == DirectUiStrToId(applyName)) {
+            // ApplyButton is a generic DirectUI id reused across every dui70
+            // shell surface, not a mod-private atom: anchor on the restored
+            // Display hub (the only surface that carries the ClassicScale100
+            // radio) before touching the button, exactly like the orientation
+            // path anchors on IsRestoredResolutionPage. Without this, the mod
+            // would grey out a foreign surface's Apply button on its first
+            // callback.
+            if (!FindDescendentByAtom(element, L"ClassicScale100")) return;
             if (g_dpiApplyButtonElement != element) {
                 g_dpiApplyButtonElement = element;
                 g_dpiApplyButtonInitialized = false;
@@ -10904,13 +10970,61 @@ class ClassicDpiWaitWindowGuard {
 };
 
 static void ClassicDpiApplyWorker() {
-    HANDLE handles[] = {g_stopEvent, g_dpiApplyWakeEvent};
+    HANDLE handles[] = {g_stopEvent, g_dpiApplyWakeEvent,
+                        g_orientationApplyWakeEvent};
     while (!g_shuttingDown.load(std::memory_order_acquire)) {
         const DWORD wait = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
                                                   FALSE, INFINITE);
         if (wait == WAIT_OBJECT_0 ||
             g_shuttingDown.load(std::memory_order_acquire)) {
             return;
+        }
+        if (wait == WAIT_OBJECT_0 + 2) {
+            // Orientation request: apply and confirm on THIS worker thread
+            // (never on Explorer's UI thread), so the keep/revert dialog is
+            // owned by a thread Wh_ModUninit joins. Reset the manual-reset
+            // event BEFORE reading the slot so a request that arrives during
+            // the read is never lost (its SetEvent re-signals after the
+            // reset, and the slot read still observes it).
+            ResetEvent(g_orientationApplyWakeEvent);
+            int orientation = -1;
+            std::wstring device;
+            {
+                std::lock_guard<std::mutex> lock(g_orientationRequestMutex);
+                orientation = g_orientationRequestOrientation;
+                device = g_orientationRequestDevice;
+                g_orientationRequestOrientation = -1;
+                g_orientationRequestDevice.clear();
+            }
+            if (orientation < 0) continue;
+            try {
+                std::wstring appliedDevice;
+                bool confirm = false;
+                DEVMODEW previous{};
+                bool hadPrevious = false;
+                ApplyDisplayOrientation(
+                    static_cast<DWORD>(orientation),
+                    device.empty() ? nullptr : device.c_str(), &appliedDevice,
+                    &confirm, &previous, &hadPrevious);
+                if (confirm && hadPrevious &&
+                    !g_shuttingDown.load(std::memory_order_acquire)) {
+                    const wchar_t* body = GetEmbeddedTranslation(210);
+                    const wchar_t* caption = GetEmbeddedTranslation(390);
+                    const int answer = ShowOrientationConfirmDialog(
+                        body ? body : L"Do you want to keep these display "
+                                       L"settings?",
+                        caption ? caption : L"Display Settings");
+                    if (answer != IDYES &&
+                        !g_shuttingDown.load(std::memory_order_acquire)) {
+                        RevertDisplayOrientation(appliedDevice.c_str(),
+                                                 previous);
+                    }
+                }
+            } catch (...) {
+                Wh_Log(L"Display orientation: exception contained in the "
+                       L"apply worker");
+            }
+            continue;
         }
         if (wait != WAIT_OBJECT_0 + 1) return;
 
@@ -10958,6 +11072,13 @@ static void ClassicDpiApplyWorker() {
                 // interval; the last request wins.
                 deadline = GetTickCount64() + kClassicDpiApplyDelayMs;
                 continue;
+            }
+            if (state == WAIT_OBJECT_0 + 2) {
+                // An orientation request preempts the stability wait. The
+                // manual-reset event stays signaled, so the outer loop picks
+                // the request up right after this iteration unwinds.
+                cancelled = true;
+                break;
             }
             if (state == WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
                 PumpClassicDpiWaitMessages();
@@ -11405,19 +11526,238 @@ static bool ApplyOrientationViaSetDisplayConfig(const wchar_t* deviceName,
     return true;
 }
 
-static void ConfirmOrRevertDisplayOrientation(const wchar_t* deviceName,
-                                              const DEVMODEW& previous,
-                                              bool hadPrevious) {
-    if (!hadPrevious || !deviceName) return;
-    const wchar_t* body = GetEmbeddedTranslation(210);
-    const wchar_t* caption = GetEmbeddedTranslation(390);
-    const int answer = MessageBoxW(
-        nullptr,
-        body ? body : L"Do you want to keep these display settings?",
-        caption ? caption : L"Display Settings",
-        MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND | MB_TOPMOST);
-    if (answer == IDYES) return;
+// The "keep these display settings?" confirmation used to be a modal
+// MessageBoxW(MB_YESNO) shown synchronously from inside a DirectUI hook, i.e.
+// on Explorer's UI thread. If the mod was disabled or updated while that box
+// was open, Wh_ModUninit returned, Windhawk unmapped the mod image, and the
+// blocked UI thread still had return addresses into it -> Explorer crash.
+// MB_YESNO also disables the close button and ignores WM_CLOSE, so it could
+// not be dismissed programmatically even if it were tracked. The confirm now
+// runs on the mod's own orientation/DPI worker thread (the one joined on
+// unload) as a custom closable dialog: its HWND is published, it answers
+// WM_CLOSE with "No", and the worker's message loop also watches g_stopEvent,
+// so unload can always end it. The dialog uses the standard dialog class, so
+// nothing needs to be registered/unregistered around it.
+static std::atomic<HWND> g_orientationConfirmWindow{nullptr};
+static std::atomic<int> g_orientationConfirmAnswer{IDNO};
 
+static INT_PTR CALLBACK OrientationConfirmDlgProc(HWND window, UINT message,
+                                                   WPARAM wParam,
+                                                   LPARAM lParam) {
+    switch (message) {
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDYES || LOWORD(wParam) == IDNO) {
+                g_orientationConfirmAnswer.store(
+                    static_cast<int>(LOWORD(wParam)),
+                    std::memory_order_release);
+                DestroyWindow(window);
+                return TRUE;
+            }
+            if (LOWORD(wParam) == IDCANCEL) {
+                // Esc: swallow it, exactly like the old MB_YESNO box (which
+                // has no cancel button and ignores Esc).
+                return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            // Closing the dialog (the X button, or a WM_CLOSE posted while
+            // unloading) means "No".
+            g_orientationConfirmAnswer.store(IDNO, std::memory_order_release);
+            DestroyWindow(window);
+            return TRUE;
+        default:
+            break;
+    }
+    return FALSE;
+}
+
+// OS-localized standard message box button captions. user32.dll's string table
+// carries them at the same IDs MessageBoxW uses internally (IDYES=6 -> 805
+// "&Yes", IDNO=7 -> 806 "&No"), so the buttons read exactly like the old
+// MB_YESNO box in every Windows UI language.
+static void GetConfirmButtonText(int controlId, wchar_t* buffer,
+                                 size_t bufferChars) {
+    buffer[0] = L'\0';
+    UINT stringId = 0;
+    switch (controlId) {
+        case IDYES:
+            stringId = 805;
+            break;
+        case IDNO:
+            stringId = 806;
+            break;
+        default:
+            return;
+    }
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    const wchar_t* fallback = controlId == IDYES ? L"&Yes" : L"&No";
+    if (!user32 ||
+        !LoadStringW(user32, stringId, buffer, static_cast<int>(bufferChars))) {
+        wcscpy_s(buffer, bufferChars, fallback);
+    }
+}
+
+// Minimal packed builder for an in-memory DLGTEMPLATE (used once, on the
+// worker thread, so no lifetime management is needed beyond the call).
+class DialogTemplateBuilder {
+   public:
+    void AlignDword() {
+        while (buffer_.size() % 4 != 0) buffer_.push_back(0);
+    }
+    void AppendByte(BYTE value) { AppendBytes(&value, sizeof(value)); }
+    void AppendWord(WORD value) { AppendBytes(&value, sizeof(value)); }
+    void AppendDword(DWORD value) { AppendBytes(&value, sizeof(value)); }
+    void AppendString(const wchar_t* value) {
+        if (!value) {
+            AppendWord(0);
+            return;
+        }
+        const size_t bytes = (wcslen(value) + 1) * sizeof(wchar_t);
+        const BYTE* begin =
+            reinterpret_cast<const BYTE*>(static_cast<const void*>(value));
+        buffer_.insert(buffer_.end(), begin, begin + bytes);
+    }
+    const BYTE* data() const { return buffer_.data(); }
+    size_t size() const { return buffer_.size(); }
+
+   private:
+    void AppendBytes(const void* data, size_t size) {
+        const BYTE* begin = static_cast<const BYTE*>(data);
+        buffer_.insert(buffer_.end(), begin, begin + size);
+    }
+    std::vector<BYTE> buffer_;
+};
+
+static void BuildOrientationConfirmTemplate(DialogTemplateBuilder& builder,
+                                            const wchar_t* body,
+                                            const wchar_t* caption,
+                                            const wchar_t* yesText,
+                                            const wchar_t* noText) {
+    // DLGTEMPLATE header.
+    builder.AlignDword();
+    builder.AppendDword(WS_CAPTION | WS_SYSMENU | WS_POPUP | DS_MODALFRAME |
+                        DS_CENTER | DS_SETFONT);
+    builder.AppendDword(WS_EX_TOPMOST);
+    builder.AppendWord(3);    // cdit
+    builder.AppendWord(0);    // x
+    builder.AppendWord(0);    // y
+    builder.AppendWord(240);  // cx (dialog units)
+    builder.AppendWord(74);   // cy
+    builder.AppendWord(0);    // no menu
+    builder.AppendWord(0);    // default dialog class
+    builder.AppendString(caption);
+    // DS_SETFONT font array: point size, weight, italic, charset, typeface.
+    builder.AppendWord(8);           // point size
+    builder.AppendWord(FW_NORMAL);   // weight
+    builder.AppendByte(0);           // italic
+    builder.AppendByte(DEFAULT_CHARSET);
+    builder.AppendString(L"MS Shell Dlg");
+
+    // Item 1: body text (SS_NOPREFIX so '&' in a translation is literal).
+    builder.AlignDword();
+    builder.AppendDword(WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX);
+    builder.AppendDword(0);
+    builder.AppendWord(12);
+    builder.AppendWord(9);
+    builder.AppendWord(216);
+    builder.AppendWord(36);
+    builder.AppendWord(0xFFFF);  // id (unused)
+    builder.AppendWord(0xFFFF);  // class ordinal follows
+    builder.AppendWord(0x0082);  // STATIC
+    builder.AppendString(body);
+    builder.AppendWord(0);  // no creation data
+
+    // Item 2: Yes (default button).
+    builder.AlignDword();
+    builder.AppendDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                        BS_DEFPUSHBUTTON);
+    builder.AppendDword(0);
+    builder.AppendWord(84);
+    builder.AppendWord(52);
+    builder.AppendWord(60);
+    builder.AppendWord(14);
+    builder.AppendWord(static_cast<WORD>(IDYES));
+    builder.AppendWord(0xFFFF);
+    builder.AppendWord(0x0080);  // BUTTON
+    builder.AppendString(yesText);
+    builder.AppendWord(0);
+
+    // Item 3: No.
+    builder.AlignDword();
+    builder.AppendDword(WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON);
+    builder.AppendDword(0);
+    builder.AppendWord(154);
+    builder.AppendWord(52);
+    builder.AppendWord(60);
+    builder.AppendWord(14);
+    builder.AppendWord(static_cast<WORD>(IDNO));
+    builder.AppendWord(0xFFFF);
+    builder.AppendWord(0x0080);  // BUTTON
+    builder.AppendString(noText);
+    builder.AppendWord(0);
+}
+
+// Runs on the orientation/DPI worker thread. Shows the closable keep/revert
+// dialog and returns IDYES or IDNO. Never blocks unload: the loop below
+// watches g_stopEvent (set first by Wh_ModUninit) and the dialog answers
+// WM_CLOSE with "No".
+static int ShowOrientationConfirmDialog(const wchar_t* body,
+                                        const wchar_t* caption) {
+    g_orientationConfirmAnswer.store(IDNO, std::memory_order_release);
+
+    wchar_t yesText[64] = {};
+    wchar_t noText[64] = {};
+    GetConfirmButtonText(IDYES, yesText, ARRAYSIZE(yesText));
+    GetConfirmButtonText(IDNO, noText, ARRAYSIZE(noText));
+
+    DialogTemplateBuilder builder;
+    BuildOrientationConfirmTemplate(builder, body, caption, yesText, noText);
+
+    const HINSTANCE instance = ClassicDpiWaitModInstance();
+    HWND dialog = nullptr;
+    if (instance) {
+        dialog = CreateDialogIndirectParamW(
+            instance, reinterpret_cast<const DLGTEMPLATE*>(builder.data()),
+            nullptr, OrientationConfirmDlgProc, 0);
+    }
+    if (!dialog) {
+        // Fail open: never revert a change the user never got to confirm.
+        Wh_Log(L"Display orientation: confirm dialog creation failed; keeping "
+               L"the applied settings");
+        return IDYES;
+    }
+    g_orientationConfirmWindow.store(dialog, std::memory_order_release);
+    ShowWindow(dialog, SW_SHOWNORMAL);
+    SetForegroundWindow(dialog);
+
+    HANDLE stop = g_stopEvent;
+    for (;;) {
+        const DWORD result = stop
+            ? MsgWaitForMultipleObjects(1, &stop, FALSE, INFINITE, QS_ALLINPUT)
+            : MsgWaitForMultipleObjects(0, nullptr, FALSE, INFINITE,
+                                        QS_ALLINPUT);
+        if ((stop && result == WAIT_OBJECT_0) ||
+            g_shuttingDown.load(std::memory_order_acquire)) {
+            g_orientationConfirmAnswer.store(IDNO, std::memory_order_release);
+            DestroyWindow(dialog);
+        }
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (!IsWindow(dialog)) break;
+            if (!IsDialogMessageW(dialog, &message)) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        if (!IsWindow(dialog)) break;
+    }
+    g_orientationConfirmWindow.store(nullptr, std::memory_order_release);
+    return g_orientationConfirmAnswer.load(std::memory_order_acquire);
+}
+
+static void RevertDisplayOrientation(const wchar_t* deviceName,
+                                     const DEVMODEW& previous) {
+    if (!deviceName) return;
     DEVMODEW revert = previous;
     revert.dmSize = sizeof(revert);
     revert.dmFields |= DM_DISPLAYORIENTATION | DM_PELSWIDTH | DM_PELSHEIGHT |
@@ -11428,8 +11768,21 @@ static void ConfirmOrRevertDisplayOrientation(const wchar_t* deviceName,
            status);
 }
 
+// Applies the requested rotation via ChangeDisplaySettingsExW, falling back to
+// SetDisplayConfig. Does NOT show the confirmation itself; the caller (the
+// worker thread) does that after this returns. On success *confirmOut is set
+// true and *previousOut / *hadPreviousOut describe the pre-change mode the
+// confirmation can revert to. Returns true when the final orientation matches
+// the request.
 static bool ApplyDisplayOrientation(DWORD orientation,
-                                    const wchar_t* deviceName) {
+                                    const wchar_t* deviceName,
+                                    std::wstring* deviceOut,
+                                    bool* confirmOut,
+                                    DEVMODEW* previousOut,
+                                    bool* hadPreviousOut) {
+    if (confirmOut) *confirmOut = false;
+    if (hadPreviousOut) *hadPreviousOut = false;
+
     std::wstring device;
     if (deviceName && *deviceName) {
         device = deviceName;
@@ -11440,6 +11793,7 @@ static bool ApplyDisplayOrientation(DWORD orientation,
         Wh_Log(L"Display orientation: no GDI device name");
         return false;
     }
+    if (deviceOut) *deviceOut = device;
 
     const DWORD current = QueryDisplayOrientation(device.c_str());
     if (current == orientation) {
@@ -11451,12 +11805,14 @@ static bool ApplyDisplayOrientation(DWORD orientation,
     DEVMODEW previous{};
     const bool viaGdi = ApplyOrientationViaChangeDisplaySettings(
         device.c_str(), orientation, &previous);
+    if (previousOut) *previousOut = previous;
+    if (hadPreviousOut) *hadPreviousOut = true;
     if (viaGdi) {
-        ConfirmOrRevertDisplayOrientation(device.c_str(), previous, true);
+        if (confirmOut) *confirmOut = true;
         return QueryDisplayOrientation(device.c_str()) == orientation;
     }
     if (ApplyOrientationViaSetDisplayConfig(device.c_str(), orientation)) {
-        ConfirmOrRevertDisplayOrientation(device.c_str(), previous, true);
+        if (confirmOut) *confirmOut = true;
         return QueryDisplayOrientation(device.c_str()) == orientation;
     }
     return false;
@@ -11627,7 +11983,10 @@ static void HandleOrientationUiEvent(void* element) {
             pending = ReadOrientationComboSelection(element);
         }
         if (pending >= 0 && !ShouldSkipDuplicateOrientationEvent(pending)) {
-            ApplyDisplayOrientation(static_cast<DWORD>(pending), nullptr);
+            // Never apply (or show the keep/revert confirm) on the UI thread:
+            // hand the request to the worker, which owns the dialog and is
+            // joined on unload.
+            ScheduleOrientationApply(static_cast<DWORD>(pending), nullptr);
             g_pendingOrientation.store(-1, std::memory_order_release);
         }
         return;
@@ -11665,65 +12024,47 @@ static void HandleOrientationUiEvent(void* element) {
     }
     if (ShouldSkipDuplicateOrientationEvent(orientation)) return;
 
-    ApplyDisplayOrientation(static_cast<DWORD>(orientation),
-                            device.empty() ? nullptr : device.c_str());
+    ScheduleOrientationApply(static_cast<DWORD>(orientation),
+                             device.empty() ? nullptr : device.c_str());
     g_pendingOrientation.store(-1, std::memory_order_release);
+}
+
+// Posts the rotation request to the orientation/DPI worker thread (the same
+// one that applies classic DPI presets and is joined in Wh_ModUninit). The
+// worker applies, shows the keep/revert confirmation, and reverts if needed -
+// all off the Explorer UI thread, so a modal dialog can never block the shell
+// or outlive the mod image.
+static void ScheduleOrientationApply(DWORD orientation,
+                                     const wchar_t* deviceName) {
+    {
+        std::lock_guard<std::mutex> lock(g_orientationRequestMutex);
+        g_orientationRequestOrientation = static_cast<int>(orientation);
+        g_orientationRequestDevice = deviceName ? deviceName : L"";
+    }
+    if (g_orientationApplyWakeEvent) SetEvent(g_orientationApplyWakeEvent);
+    Wh_Log(L"Display orientation: queued DMDO=%u for the apply worker",
+           static_cast<unsigned int>(orientation));
 }
 
 static bool TryHandleDisplayHelpLink(void* element) {
     if (!element) return false;
 
-    // Magnifier link inside the hub's help text. The catalog string 373
-    // carries <a href="magnify.exe">...</a> in every language; the hub
-    // markup hosts it in a CCSysLink (id MagnifierHelpText) so DirectUI
-    // renders the anchor as a real blue link instead of literal markup.
-    // The reconstructed hub has no CHubPage handler left to dispatch the
-    // href, so the click is handled here: launch the genuine Magnifier.
-    // The ancestor walk covers the case where the event is delivered on
-    // the anchor sub-element the syslink parser creates.
+    // Magnifier link inside the hub's help text. The catalog strings 372/373
+    // carry <a href="magnify.exe">...</a> in every language; the hub markup
+    // hosts it in a CCSysLink (id MagnifierHelpText) so DirectUI renders the
+    // anchor as a real blue link instead of literal markup. The link is kept
+    // for its text and appearance only: clicking it deliberately does nothing
+    // (no magnify.exe is launched), and the event is swallowed so the
+    // provider cannot dispatch the href either. The ancestor walk covers the
+    // case where the event is delivered on the anchor sub-element the syslink
+    // parser creates.
     if (ElementIdEquals(element, L"MagnifierHelpText") ||
         FindAncestorWithId(element, L"MagnifierHelpText")) {
         // CCSysLink fires OnSelectedPropertyChanged with selected=false on
         // click (it is a link, not a toggle button). Do NOT filter on
         // GetSelected here — the button hook's construction-event filter
-        // would swallow every real click. Instead, skip the construction
-        // check entirely for this SysLink element.
-        // Debounce: DirectUI can emit more than one callback per click
-        // (Button hook + OnPropertyChanged fallback on post-2024 builds).
-        static thread_local ULONGLONG lastLaunchTick = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - lastLaunchTick > 1000) {
-            lastLaunchTick = now;
-            // Launch the genuine Magnifier (still shipped in System32 on
-            // Windows 11). Prefer the explicit System32 path: it works
-            // regardless of PATH/app-alias quirks and never matches the
-            // classic-launch redirect logic in this mod's own ShellExecuteW
-            // hook (which this call traverses, being made from inside
-            // explorer.exe). ShellExecuteW does not expand environment
-            // variables, so the path is built with GetSystemDirectoryW.
-            wchar_t magnifyPath[MAX_PATH] = {};
-            const UINT sysDirLen =
-                GetSystemDirectoryW(magnifyPath, ARRAYSIZE(magnifyPath));
-            bool launched = false;
-            if (sysDirLen > 0 && sysDirLen < ARRAYSIZE(magnifyPath) &&
-                wcscat_s(magnifyPath, ARRAYSIZE(magnifyPath),
-                         L"\\magnify.exe") == 0) {
-                launched =
-                    reinterpret_cast<INT_PTR>(ShellExecuteW(
-                        nullptr, L"open", magnifyPath, nullptr, nullptr,
-                        SW_SHOWNORMAL)) > 32;
-            }
-            if (!launched) {
-                // Fallback: bare name resolved by the shell (the exact href
-                // the original Windows 7 page definition used).
-                launched =
-                    reinterpret_cast<INT_PTR>(ShellExecuteW(
-                        nullptr, L"open", L"magnify.exe", nullptr, nullptr,
-                        SW_SHOWNORMAL)) > 32;
-            }
-            Wh_Log(L"Display hub: Magnifier link clicked; magnify.exe %s",
-                   launched ? L"launched" : L"LAUNCH FAILED");
-        }
+        // would swallow every real click. Swallow the click so nothing opens;
+        // the provider must never get a chance to dispatch the href.
         return true;
     }
 
@@ -13101,11 +13442,25 @@ using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR,
                                            LPCWSTR, INT);
 using ControlRunDllRaw_t = void(CALLBACK*)(HWND, HINSTANCE, void*, int);
 
-static ShellExecuteExW_t ShellExecuteExWOriginalClassicDisplay = nullptr;
-static ShellExecuteW_t ShellExecuteWOriginalClassicDisplay = nullptr;
+// Single original-pointer pair for the ONE ShellExecuteExW / ShellExecuteW
+// hook installed per process (see ShellExecuteExWDisplayHook below). Hooking
+// the same target twice from one mod is not supported by Windhawk - one
+// registration silently wins and the other hook (and its original pointer)
+// is never installed - so the classic-launch and ms-settings:display redirects
+// share a single hook with help-topic -> classic-launch -> ms-settings order.
+static ShellExecuteExW_t ShellExecuteExWOriginalDisplay = nullptr;
+static ShellExecuteW_t ShellExecuteWOriginalDisplay = nullptr;
 static ControlRunDllRaw_t ControlRunDllOriginalClassicDisplay = nullptr;
 static ControlRunDllRaw_t ControlRunDllAOriginalClassicDisplay = nullptr;
 static ControlRunDllRaw_t ControlRunDllWOriginalClassicDisplay = nullptr;
+
+// The classic-launch branch of the merged hook is only meaningful inside a
+// host that DetectClassicDisplayLaunch() actually matched. Explorer (and any
+// ordinary control.exe) has g_classicDisplayLaunchKind == None, and must keep
+// using the ms-settings:display branch instead of the classic one.
+static bool IsClassicDisplayRoutingActive()   {
+    return g_classicDisplayLaunchKind != ClassicDisplayLaunchKind::None;
+}
 
 static bool IsClassicDisplayRedirectCandidate(PCWSTR file,
                                               PCWSTR parameters)   {
@@ -13144,8 +13499,8 @@ static bool LaunchRestoredDisplayPage(HWND owner, int showCommand,
     execute.lpParameters = arguments;
     execute.nShow = showCommand;
 
-    if (ShellExecuteExWOriginalClassicDisplay) {
-        return !!ShellExecuteExWOriginalClassicDisplay(&execute);
+    if (ShellExecuteExWOriginalDisplay) {
+        return !!ShellExecuteExWOriginalDisplay(&execute);
     }
     return !!ShellExecuteExW(&execute);
 }
@@ -13258,56 +13613,94 @@ static bool IsDisplayHelpTopicLaunch(PCWSTR file, PCWSTR parameters) {
     return false;
 }
 
-static BOOL WINAPI ShellExecuteExWClassicDisplayHook(
-    SHELLEXECUTEINFOW* info)   {
-    if (!ShellExecuteExWOriginalClassicDisplay) return FALSE;
+static bool IsCurrentProcessRundll32();
+static bool IsDisplaySettingsUri(PCWSTR file);
+
+// The single ShellExecuteExW hook for this process. It merges the former
+// classic-launch and ms-settings:display hooks into one registration, because
+// hooking the same target twice from one mod is not a supported operation
+// (one registration silently wins and the loser's original pointer stays null).
+// Checks run in order: help-topic advisory -> classic-launch redirect ->
+// ms-settings:display redirect, and anything that doesn't match falls through
+// to the original implementation.
+static BOOL WINAPI ShellExecuteExWDisplayHook(SHELLEXECUTEINFOW* info)   {
+    if (!ShellExecuteExWOriginalDisplay) return FALSE;
     // Dead legacy Help topic -> generic advisory dialog.
     if (info && IsDisplayHelpTopicLaunch(info->lpFile, info->lpParameters)) {
         ShowDisplaySettingsAdvisory(info->hwnd);
         info->hInstApp = reinterpret_cast<HINSTANCE>(33);
         return TRUE;
     }
-    if (!info ||
-        !g_redirectClassicLaunch.load(std::memory_order_acquire) ||
-        !IsClassicDisplayRedirectCandidate(info->lpFile, info->lpParameters) ||
-        !TryBeginClassicDisplayRedirect()) {
-        return ShellExecuteExWOriginalClassicDisplay(info);
+    // Classic Display launch redirect: only in a host matched by
+    // DetectClassicDisplayLaunch (rundll32 / control.exe legacy commands).
+    if (info && IsClassicDisplayRoutingActive() &&
+        g_redirectClassicLaunch.load(std::memory_order_acquire) &&
+        IsClassicDisplayRedirectCandidate(info->lpFile, info->lpParameters) &&
+        TryBeginClassicDisplayRedirect()) {
+        SHELLEXECUTEINFOW redirected = *info;
+        redirected.fMask &= ~(SEE_MASK_CLASSNAME | SEE_MASK_CLASSKEY |
+                              SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST);
+        redirected.lpVerb = L"open";
+        redirected.lpFile =
+            RestoredLaunchCommand(g_classicDisplayLaunchKind);
+        redirected.lpParameters =
+            RestoredLaunchArguments(g_classicDisplayLaunchKind);
+        redirected.lpIDList = nullptr;
+        redirected.lpClass = nullptr;
+        redirected.hkeyClass = nullptr;
+        redirected.hProcess = nullptr;
+
+        const BOOL result = ShellExecuteExWOriginalDisplay(&redirected);
+        if (result) {
+            info->hInstApp = redirected.hInstApp;
+            info->hProcess = redirected.hProcess;
+            Wh_Log(L"Classic Display launch redirected to the restored page "
+                   L"(resolution=%d)",
+                   static_cast<int>(
+                       IsResolutionLaunchKind(g_classicDisplayLaunchKind)));
+            return TRUE;
+        }
+
+        g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
+        Wh_Log(L"Classic Display launch redirection failed; preserving the "
+               L"original Windows handoff");
+        return ShellExecuteExWOriginalDisplay(info);
     }
+    // ms-settings:display redirect (Explorer / control.exe hosts; never in
+    // rundll32, which only forwards the classic launch).
+    if (info && !IsCurrentProcessRundll32() &&
+        g_redirectDisplaySettingsUri.load(std::memory_order_acquire) &&
+        IsDisplaySettingsUri(info->lpFile)) {
+        SHELLEXECUTEINFOW redirected = *info;
+        redirected.fMask &= ~(SEE_MASK_CLASSNAME | SEE_MASK_CLASSKEY |
+                              SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST);
+        redirected.lpVerb = L"open";
+        redirected.lpFile = kRestoredResolutionPageTarget;
+        redirected.lpParameters = nullptr;
+        redirected.lpIDList = nullptr;
+        redirected.lpClass = nullptr;
+        redirected.hkeyClass = nullptr;
+        redirected.hProcess = nullptr;
 
-    SHELLEXECUTEINFOW redirected = *info;
-    redirected.fMask &= ~(SEE_MASK_CLASSNAME | SEE_MASK_CLASSKEY |
-                          SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST);
-    redirected.lpVerb = L"open";
-    redirected.lpFile =
-        RestoredLaunchCommand(g_classicDisplayLaunchKind);
-    redirected.lpParameters =
-        RestoredLaunchArguments(g_classicDisplayLaunchKind);
-    redirected.lpIDList = nullptr;
-    redirected.lpClass = nullptr;
-    redirected.hkeyClass = nullptr;
-    redirected.hProcess = nullptr;
-
-    const BOOL result = ShellExecuteExWOriginalClassicDisplay(&redirected);
-    if (result) {
-        info->hInstApp = redirected.hInstApp;
-        info->hProcess = redirected.hProcess;
-        Wh_Log(L"Classic Display launch redirected to the restored page "
-               L"(resolution=%d)",
-               static_cast<int>(
-                   IsResolutionLaunchKind(g_classicDisplayLaunchKind)));
-        return TRUE;
+        const BOOL result = ShellExecuteExWOriginalDisplay(&redirected);
+        if (result) {
+            info->hInstApp = redirected.hInstApp;
+            info->hProcess = redirected.hProcess;
+            Wh_Log(L"ms-settings:display redirected to the restored Screen "
+                   L"Resolution page");
+            return TRUE;
+        }
+        Wh_Log(L"ms-settings:display redirection failed; preserving the modern "
+               L"Settings handoff");
+        return ShellExecuteExWOriginalDisplay(info);
     }
-
-    g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
-    Wh_Log(L"Classic Display launch redirection failed; preserving the original "
-           L"Windows handoff");
-    return ShellExecuteExWOriginalClassicDisplay(info);
+    return ShellExecuteExWOriginalDisplay(info);
 }
 
-static HINSTANCE WINAPI ShellExecuteWClassicDisplayHook(
+static HINSTANCE WINAPI ShellExecuteWDisplayHook(
     HWND hwnd, LPCWSTR operation, LPCWSTR file, LPCWSTR parameters,
     LPCWSTR directory, INT showCommand)   {
-    if (!ShellExecuteWOriginalClassicDisplay) {
+    if (!ShellExecuteWOriginalDisplay) {
         return reinterpret_cast<HINSTANCE>(SE_ERR_ACCESSDENIED);
     }
     // Dead legacy Help topic -> generic advisory dialog.
@@ -13315,28 +13708,48 @@ static HINSTANCE WINAPI ShellExecuteWClassicDisplayHook(
         ShowDisplaySettingsAdvisory(hwnd);
         return reinterpret_cast<HINSTANCE>(33);
     }
-    if (!g_redirectClassicLaunch.load(std::memory_order_acquire) ||
-        !IsClassicDisplayRedirectCandidate(file, parameters) ||
-        !TryBeginClassicDisplayRedirect()) {
-        return ShellExecuteWOriginalClassicDisplay(
+    // Classic Display launch redirect: only in a host matched by
+    // DetectClassicDisplayLaunch.
+    if (IsClassicDisplayRoutingActive() &&
+        g_redirectClassicLaunch.load(std::memory_order_acquire) &&
+        IsClassicDisplayRedirectCandidate(file, parameters) &&
+        TryBeginClassicDisplayRedirect()) {
+        if (LaunchRestoredDisplayPage(
+                hwnd, showCommand,
+                RestoredLaunchCommand(g_classicDisplayLaunchKind),
+                RestoredLaunchArguments(g_classicDisplayLaunchKind))) {
+            Wh_Log(L"Classic Display launch redirected to the restored page "
+                   L"(resolution=%d)",
+                   static_cast<int>(
+                       IsResolutionLaunchKind(g_classicDisplayLaunchKind)));
+            return reinterpret_cast<HINSTANCE>(33);
+        }
+
+        g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
+        Wh_Log(L"Classic Display launch redirection failed; preserving the "
+               L"original Windows handoff");
+        return ShellExecuteWOriginalDisplay(
             hwnd, operation, file, parameters, directory, showCommand);
     }
-
-    if (LaunchRestoredDisplayPage(
-            hwnd, showCommand,
-            RestoredLaunchCommand(g_classicDisplayLaunchKind),
-            RestoredLaunchArguments(g_classicDisplayLaunchKind))) {
-        Wh_Log(L"Classic Display launch redirected to the restored page "
-               L"(resolution=%d)",
-               static_cast<int>(
-                   IsResolutionLaunchKind(g_classicDisplayLaunchKind)));
-        return reinterpret_cast<HINSTANCE>(33);
+    // ms-settings:display redirect (Explorer / control.exe hosts; never in
+    // rundll32, which only forwards the classic launch).
+    if (!IsCurrentProcessRundll32() &&
+        g_redirectDisplaySettingsUri.load(std::memory_order_acquire) &&
+        IsDisplaySettingsUri(file)) {
+        const HINSTANCE result = ShellExecuteWOriginalDisplay(
+            hwnd, L"open", kRestoredResolutionPageTarget, nullptr,
+            directory, showCommand);
+        if (reinterpret_cast<ULONG_PTR>(result) > 32) {
+            Wh_Log(L"ms-settings:display redirected to the restored Screen "
+                   L"Resolution page");
+            return result;
+        }
+        Wh_Log(L"ms-settings:display redirection failed; preserving the modern "
+               L"Settings handoff");
+        return ShellExecuteWOriginalDisplay(
+            hwnd, operation, file, parameters, directory, showCommand);
     }
-
-    g_classicDisplayRouteConsumed.store(false, std::memory_order_release);
-    Wh_Log(L"Classic Display launch redirection failed; preserving the original "
-           L"Windows handoff");
-    return ShellExecuteWOriginalClassicDisplay(
+    return ShellExecuteWOriginalDisplay(
         hwnd, operation, file, parameters, directory, showCommand);
 }
 
@@ -13420,6 +13833,10 @@ static void InstallClassicDisplayLaunchRouting()   {
     g_classicDisplayLaunchKind = DetectClassicDisplayLaunch();
     if (g_classicDisplayLaunchKind == ClassicDisplayLaunchKind::None) return;
 
+    // The ShellExecuteExW / ShellExecuteW redirects are installed separately
+    // (see InstallShellExecuteRedirect) so each process registers them exactly
+    // once; this function only wires the Control_RunDLL entry points that are
+    // specific to the matched legacy command host.
     HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
     if (!shell32) {
         shell32 = LoadLibraryExW(L"shell32.dll", nullptr,
@@ -13430,29 +13847,9 @@ static void InstallClassicDisplayLaunchRouting()   {
         return;
     }
 
-    bool shellExecuteExHook = false;
-    bool shellExecuteHook = false;
     bool controlRunDllHook = false;
     bool controlRunDllAHook = false;
     bool controlRunDllWHook = false;
-
-    void* shellExecuteEx = reinterpret_cast<void*>(
-        GetProcAddress(shell32, "ShellExecuteExW"));
-    if (shellExecuteEx) {
-        shellExecuteExHook = WindhawkUtils::SetFunctionHook(
-            reinterpret_cast<ShellExecuteExW_t>(shellExecuteEx),
-            ShellExecuteExWClassicDisplayHook,
-            &ShellExecuteExWOriginalClassicDisplay);
-    }
-
-    void* shellExecute = reinterpret_cast<void*>(
-        GetProcAddress(shell32, "ShellExecuteW"));
-    if (shellExecute) {
-        shellExecuteHook = WindhawkUtils::SetFunctionHook(
-            reinterpret_cast<ShellExecuteW_t>(shellExecute),
-            ShellExecuteWClassicDisplayHook,
-            &ShellExecuteWOriginalClassicDisplay);
-    }
 
     void* controlRunDll = reinterpret_cast<void*>(
         GetProcAddress(shell32, "Control_RunDLL"));
@@ -13482,24 +13879,24 @@ static void InstallClassicDisplayLaunchRouting()   {
             &ControlRunDllWOriginalClassicDisplay);
     }
 
-    Wh_Log(L"Classic Display routing scheduled: kind=%u shellEx=%d shell=%d "
-           L"Control_RunDLL=%d A=%d W=%d",
+    Wh_Log(L"Classic Display routing scheduled: kind=%u Control_RunDLL=%d "
+           L"A=%d W=%d",
            static_cast<unsigned int>(g_classicDisplayLaunchKind),
-           shellExecuteExHook, shellExecuteHook, controlRunDllHook,
-           controlRunDllAHook, controlRunDllWHook);
+           controlRunDllHook, controlRunDllAHook, controlRunDllWHook);
 }
 
 // -----------------------------------------------------------------------------
-// Desktop "Display settings" handoff redirect (Explorer only)
+// Desktop "Display settings" handoff redirect (Explorer / control hosts)
 // -----------------------------------------------------------------------------
 // On modern Windows the desktop context-menu entry ("Display settings" /
 // "Impostazioni schermo") and several other shell surfaces open
 // ms-settings:display, which lands in the modern Settings app. Windows 7's
-// desktop menu opened the classic Screen Resolution page instead. When this
-// mod runs inside explorer.exe, the exact ms-settings:display handoff is
-// redirected to the restored page. The match is deliberately limited to that
-// one URI (optionally followed by a query string); every other ms-settings:
-// target and every other verb passes through untouched.
+// desktop menu opened the classic Screen Resolution page instead. The exact
+// ms-settings:display handoff is redirected to the restored page inside the
+// merged ShellExecuteExWDisplayHook / ShellExecuteWDisplayHook above. The
+// match is deliberately limited to that one URI (optionally followed by a
+// query string); every other ms-settings: target and every other verb passes
+// through untouched.
 static bool IsDisplaySettingsUri(PCWSTR file)   {
     if (!file) return false;
     while (*file && iswspace(*file)) ++file;
@@ -13522,91 +13919,19 @@ static bool IsCurrentProcessRundll32()   {
     return WideFileNameEquals(path, L"rundll32.exe");
 }
 
-// The ShellExecuteExW_t / ShellExecuteW_t aliases are shared with the classic
-// launch routing section above.
-static ShellExecuteExW_t ShellExecuteExWOriginalDisplaySettings = nullptr;
-static ShellExecuteW_t ShellExecuteWOriginalDisplaySettings = nullptr;
-
-static BOOL WINAPI ShellExecuteExWDisplaySettingsHook(
-    SHELLEXECUTEINFOW* info)   {
-    if (!ShellExecuteExWOriginalDisplaySettings) return FALSE;
-    if (info && IsDisplayHelpTopicLaunch(info->lpFile, info->lpParameters)) {
-        ShowDisplaySettingsAdvisory(info->hwnd);
-        info->hInstApp = reinterpret_cast<HINSTANCE>(33);
-        return TRUE;
-    }
-    if (!info ||
-        !g_redirectDisplaySettingsUri.load(std::memory_order_acquire) ||
-        !IsDisplaySettingsUri(info->lpFile)) {
-        return ShellExecuteExWOriginalDisplaySettings(info);
-    }
-
-    SHELLEXECUTEINFOW redirected = *info;
-    redirected.fMask &= ~(SEE_MASK_CLASSNAME | SEE_MASK_CLASSKEY |
-                          SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST);
-    redirected.lpVerb = L"open";
-    redirected.lpFile = kRestoredResolutionPageTarget;
-    redirected.lpParameters = nullptr;
-    redirected.lpIDList = nullptr;
-    redirected.lpClass = nullptr;
-    redirected.hkeyClass = nullptr;
-    redirected.hProcess = nullptr;
-
-    const BOOL result = ShellExecuteExWOriginalDisplaySettings(&redirected);
-    if (result) {
-        info->hInstApp = redirected.hInstApp;
-        info->hProcess = redirected.hProcess;
-        Wh_Log(L"ms-settings:display redirected to the restored Screen "
-               L"Resolution page");
-        return TRUE;
-    }
-    Wh_Log(L"ms-settings:display redirection failed; preserving the modern "
-           L"Settings handoff");
-    return ShellExecuteExWOriginalDisplaySettings(info);
-}
-
-static HINSTANCE WINAPI ShellExecuteWDisplaySettingsHook(
-    HWND hwnd, LPCWSTR operation, LPCWSTR file, LPCWSTR parameters,
-    LPCWSTR directory, INT showCommand)   {
-    if (!ShellExecuteWOriginalDisplaySettings) {
-        return reinterpret_cast<HINSTANCE>(SE_ERR_ACCESSDENIED);
-    }
-    if (IsDisplayHelpTopicLaunch(file, parameters)) {
-        ShowDisplaySettingsAdvisory(hwnd);
-        return reinterpret_cast<HINSTANCE>(33);
-    }
-    if (!g_redirectDisplaySettingsUri.load(std::memory_order_acquire) ||
-        !IsDisplaySettingsUri(file)) {
-        return ShellExecuteWOriginalDisplaySettings(
-            hwnd, operation, file, parameters, directory, showCommand);
-    }
-
-    const HINSTANCE result = ShellExecuteWOriginalDisplaySettings(
-        hwnd, L"open", kRestoredResolutionPageTarget, nullptr,
-        directory, showCommand);
-    if (reinterpret_cast<ULONG_PTR>(result) > 32) {
-        Wh_Log(L"ms-settings:display redirected to the restored Screen "
-               L"Resolution page");
-        return result;
-    }
-    Wh_Log(L"ms-settings:display redirection failed; preserving the modern "
-           L"Settings handoff");
-    return ShellExecuteWOriginalDisplaySettings(
-        hwnd, operation, file, parameters, directory, showCommand);
-}
-
-static void InstallDisplaySettingsRedirect()   {
-    // Explorer hosts the restored page; control.exe can too. rundll32 only
-    // forwards the launch and is handled by the classic-routing hooks.
-    if (IsCurrentProcessRundll32()) return;
-
+// Installs the single merged ShellExecuteExW / ShellExecuteW hook pair.
+// Called exactly once per process, either by Wh_ModInit (Explorer / control
+// hosts) or by the classic-launch-only path for a rundll32 host. The hook
+// bodies gate each redirect on the relevant setting and process kind, so the
+// same pair serves every host without ever double-registering a target.
+static void InstallShellExecuteRedirect()   {
     HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
     if (!shell32) {
         shell32 = LoadLibraryExW(L"shell32.dll", nullptr,
                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (!shell32) {
-        Wh_Log(L"Display settings redirect unavailable: shell32.dll not found");
+        Wh_Log(L"ShellExecute redirect unavailable: shell32.dll not found");
         return;
     }
 
@@ -13617,18 +13942,18 @@ static void InstallDisplaySettingsRedirect()   {
     if (shellExecuteEx) {
         exHook = WindhawkUtils::SetFunctionHook(
             reinterpret_cast<ShellExecuteExW_t>(shellExecuteEx),
-            ShellExecuteExWDisplaySettingsHook,
-            &ShellExecuteExWOriginalDisplaySettings);
+            ShellExecuteExWDisplayHook,
+            &ShellExecuteExWOriginalDisplay);
     }
     void* shellExecute = reinterpret_cast<void*>(
         GetProcAddress(shell32, "ShellExecuteW"));
     if (shellExecute) {
         wHook = WindhawkUtils::SetFunctionHook(
             reinterpret_cast<ShellExecuteW_t>(shellExecute),
-            ShellExecuteWDisplaySettingsHook,
-            &ShellExecuteWOriginalDisplaySettings);
+            ShellExecuteWDisplayHook,
+            &ShellExecuteWOriginalDisplay);
     }
-    Wh_Log(L"Display settings redirect scheduled in Explorer: ex=%d w=%d",
+    Wh_Log(L"ShellExecute redirect scheduled: ex=%d w=%d",
            exHook, wHook);
 }
 
@@ -13833,22 +14158,26 @@ if (!clsidRegistered || !controlExePresent) {
         // unrelated rundll32 instance (shell extensions, printer UI, screensaver
         // config, .cpl hosts, ...) needs nothing from this mod, so bail out
         // before installing any registry/COM/DirectUI hook or the setup worker.
-        // A matching classic Display launch keeps only the routing above.
+        // A matching classic Display launch keeps only the routing above, plus
+        // the ShellExecute redirect its handoff depends on.
         if (IsCurrentProcessRundll32()) {
             if (g_classicDisplayLaunchKind == ClassicDisplayLaunchKind::None) {
                 Wh_Log(L"Display Restorer: unrelated rundll32.exe instance; no "
                        L"hooks installed");
                 return FALSE;
             }
+            InstallShellExecuteRedirect();
             g_runSetupWorker.store(false, std::memory_order_release);
             Wh_Log(L"Display Restorer: rundll32.exe classic Display launch host; "
                    L"routing only");
             return TRUE;
         }
 
-        // Explorer-only: lets the desktop context menu's "Display settings"
-        // open the restored Screen Resolution page. No-ops in other processes.
-        InstallDisplaySettingsRedirect();
+        // Lets the desktop context menu's "Display settings" open the restored
+        // Screen Resolution page (Explorer) and covers the classic-launch
+        // redirect for control.exe hosts. The merged hook no-ops the branches
+        // that don't apply to the current process kind.
+        InstallShellExecuteRedirect();
 
         // --- Install conservative registry hooks (Unicode *W only: 10 hooks) ---
         void* pOpen = GetRegFunc("RegOpenKeyExW");
@@ -13984,6 +14313,22 @@ if (!clsidRegistered || !controlExePresent) {
         } else {
             ResetEvent(g_dpiApplyWakeEvent);
         }
+        if (!g_orientationApplyWakeEvent) {
+            // Manual-reset on purpose: see the comment at its declaration.
+            g_orientationApplyWakeEvent =
+                CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!g_orientationApplyWakeEvent) {
+                Wh_Log(L"Display Restorer: orientation wake event creation "
+                       L"failed (error %u)", GetLastError());
+            }
+        } else {
+            ResetEvent(g_orientationApplyWakeEvent);
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_orientationRequestMutex);
+            g_orientationRequestOrientation = -1;
+            g_orientationRequestDevice.clear();
+        }
         g_pendingClassicDpiPercent.store(0, std::memory_order_release);
         g_dpiApplyGeneration.store(0, std::memory_order_release);
         g_dpiCommitInFlight.store(false, std::memory_order_release);
@@ -14010,10 +14355,10 @@ void Wh_ModAfterInit(void) {
             return;
         }
         if (!g_dpiApplyThread && g_stopEvent &&
-            g_dpiApplyWakeEvent &&
+            g_dpiApplyWakeEvent && g_orientationApplyWakeEvent &&
             !g_shuttingDown.load(std::memory_order_acquire)) {
             g_dpiApplyThread.emplace(ClassicDpiApplyWorkerNoexcept);
-            Wh_Log(L"Display hub: delayed DPI apply worker started");
+            Wh_Log(L"Display hub: delayed DPI/orientation apply worker started");
         }
         if (!g_setupThread &&
             !g_shuttingDown.load(std::memory_order_acquire)) {
@@ -14072,10 +14417,12 @@ void Wh_ModUninit(void) {
             SetEvent(g_stopEvent);
         }
         // Serialize against dialog creation, collect both worker handles, then
-        // repeatedly re-drive WM_CLOSE until each thread exits.  This covers the
+        // repeatedly re-drive WM_CLOSE until each thread exits. This covers the
         // race where CreateThread returned but MessageBoxW has not created its
-        // window yet; a one-shot EnumThreadWindows followed by INFINITE wait can
-        // otherwise hang Windhawk unload.
+        // window yet. The re-drive loop is bounded; it gives up on the join
+        // only after the thread's window is confirmed gone (a thread still
+        // blocked inside MessageBoxW is never abandoned - that would crash
+        // Explorer on unload).
         HANDLE tip = nullptr;
         HANDLE dpiNotify = nullptr;
         {
@@ -14085,21 +14432,41 @@ void Wh_ModUninit(void) {
             dpiNotify = g_dpiNotifyThread.exchange(
                 nullptr, std::memory_order_acq_rel);
         }
+        constexpr int kDialogCloseMaxAttempts = 50;  // 50 x 200 ms = 10 s
         const auto closeAndJoinDialogThread = [](HANDLE thread) {
             if (!thread) return;
             const DWORD threadId = GetThreadId(thread);
-            for (;;) {
+            bool warnedAboutStuckWindow = false;
+            for (int attempt = 0;; ++attempt) {
+                bool sawWindow = false;
                 if (threadId) {
                     EnumThreadWindows(
                         threadId,
-                        [](HWND window, LPARAM) -> BOOL {
+                        [](HWND window, LPARAM lp) -> BOOL {
+                            *reinterpret_cast<bool*>(lp) = true;
                             PostMessageW(window, WM_CLOSE, 0, 0);
                             return TRUE;
                         },
-                        0);
+                        reinterpret_cast<LPARAM>(&sawWindow));
                 }
-                const DWORD wait = WaitForSingleObject(thread, 200);
-                if (wait != WAIT_TIMEOUT) break;
+                if (WaitForSingleObject(thread, 200) != WAIT_TIMEOUT) break;
+                if (attempt >= kDialogCloseMaxAttempts) {
+                    if (!sawWindow) {
+                        // The dialog window is gone but the thread has not
+                        // exited: it is unwinding on its own. Abandoning the
+                        // join is safe here and prevents an unload hang.
+                        Wh_Log(L"Display Restorer: dialog thread %u has no "
+                               L"window left and did not exit; abandoning the "
+                               L"join so unload does not hang", threadId);
+                        break;
+                    }
+                    if (!warnedAboutStuckWindow) {
+                        warnedAboutStuckWindow = true;
+                        Wh_Log(L"Display Restorer: dialog thread %u is not "
+                               L"closing; continuing to re-drive WM_CLOSE to "
+                               L"avoid crashing Explorer", threadId);
+                    }
+                }
             }
             CloseHandle(thread);
         };
@@ -14114,6 +14481,14 @@ void Wh_ModUninit(void) {
         // Closing the handles from here makes any currently-blocked WinInet
         // call fail immediately instead of waiting out its timeout.
         CancelInFlightDownload();
+        // The orientation keep/revert dialog (if open) runs on the apply
+        // worker thread and its message loop already watches g_stopEvent (set
+        // above), so it closes by itself. Post WM_CLOSE too, as a second line
+        // of defense against a race where the loop just missed the event.
+        if (HWND confirm = g_orientationConfirmWindow.load(
+                std::memory_order_acquire)) {
+            PostMessageW(confirm, WM_CLOSE, 0, 0);
+        }
         if (g_dpiApplyThread && g_dpiApplyThread->joinable()) {
             g_dpiApplyThread->join();
         }
@@ -14134,6 +14509,10 @@ void Wh_ModUninit(void) {
         if (g_dpiApplyWakeEvent) {
             CloseHandle(g_dpiApplyWakeEvent);
             g_dpiApplyWakeEvent = nullptr;
+        }
+        if (g_orientationApplyWakeEvent) {
+            CloseHandle(g_orientationApplyWakeEvent);
+            g_orientationApplyWakeEvent = nullptr;
         }
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
