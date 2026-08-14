@@ -146,9 +146,10 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
             // SEE_MASK_ASYNCOK hints that the shell may offload slow work (e.g. UAC) to
             // another thread, but the documentation notes this is not guaranteed in all
-            // cases.  The join in Wh_ModUninit is still required and may block briefly
-            // if the shell decides to execute synchronously.
-            sei.fMask = SEE_MASK_ASYNCOK;
+            // cases. SEE_MASK_FLAG_NO_UI ensures the shell fails silently and returns
+            // immediately if the target is invalid, rather than hanging the worker thread
+            // with a modal error dialog which would block Wh_ModUninit indefinitely.
+            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
             sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
