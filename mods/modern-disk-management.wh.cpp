@@ -2,7 +2,7 @@
 // @id              modern-disk-management
 // @name            Modern Disk Management
 // @description     Replaces diskmgmt.msc with a modern dark disk manager
-// @version         3.5.1
+// @version         3.6.0
 // @author          emirerkul991-1yssssss
 // @github          https://github.com/emirerkul991-1yssssss
 // @license         MIT
@@ -85,11 +85,12 @@ succeeds; nothing here needs rights the original did not.
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <windowsx.h>
-#include <tlhelp32.h>
+
 #include <winioctl.h>
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -182,22 +183,37 @@ COLORREF MixColors(COLORREF base, COLORREF tint, int tintPercent) {
                mix(GetBValue(base), GetBValue(tint)));
 }
 
-// The wallpaper's dominant colour, mixed into a base - the same trick the Run
-// dialog uses, since DWM will not draw Mica on a window like this.
-COLORREF WallpaperTinted(COLORREF base, int percent) {
+// Not in mingw's dwmapi.h at the time of writing.
+constexpr DWORD kDwmUseImmersiveDarkMode = 20;
+constexpr DWORD kDwmWindowCornerPreference = 33;
+constexpr DWORD kDwmCornerRound = 2;
+
+// The wallpaper's dominant colour, cached. Decoding a 4K wallpaper to average
+// it is not something to do twice at startup - the window and card tints are
+// two mixes of the same colour.
+bool WallpaperAverage(COLORREF* out) {
+    static bool computed = false;
+    static bool valid = false;
+    static COLORREF cached = 0;
+
+    if (computed) {
+        *out = cached;
+        return valid;
+    }
+    computed = true;
+
     WCHAR path[MAX_PATH] = L"";
     if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0) ||
         !path[0]) {
-        return base;
+        return false;
     }
 
     ULONG_PTR token = 0;
     Gdiplus::GdiplusStartupInput input;
     if (Gdiplus::GdiplusStartup(&token, &input, nullptr) != Gdiplus::Ok) {
-        return base;
+        return false;
     }
 
-    COLORREF result = base;
     {
         Gdiplus::Bitmap wallpaper(path);
         if (wallpaper.GetLastStatus() == Gdiplus::Ok) {
@@ -208,15 +224,25 @@ COLORREF WallpaperTinted(COLORREF base, int percent) {
             if (graphics.DrawImage(&wallpaper, 0, 0, 1, 1) == Gdiplus::Ok) {
                 Gdiplus::Color color;
                 if (average.GetPixel(0, 0, &color) == Gdiplus::Ok) {
-                    result = MixColors(
-                        base, RGB(color.GetR(), color.GetG(), color.GetB()),
-                        percent);
+                    cached = RGB(color.GetR(), color.GetG(), color.GetB());
+                    valid = true;
                 }
             }
         }
     }
     Gdiplus::GdiplusShutdown(token);
-    return result;
+
+    *out = cached;
+    return valid;
+}
+
+// Mixes the cached wallpaper colour into a base.
+COLORREF WallpaperTinted(COLORREF base, int percent) {
+    COLORREF average = 0;
+    if (!WallpaperAverage(&average)) {
+        return base;
+    }
+    return MixColors(base, average, percent);
 }
 
 // Decimal units, the way drive manufacturers and Settings' Disks & volumes
@@ -550,15 +576,6 @@ HICON IconFromSystemIndex(int index, int drawnSize) {
     images->GetIcon(index, ILD_TRANSPARENT, &icon);
     images->Release();
     return icon;
-}
-
-HICON ShellIcon(const std::wstring& path, int drawnSize) {
-    SHFILEINFOW info{};
-    if (!SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &info, sizeof(info),
-                        SHGFI_SYSICONINDEX)) {
-        return nullptr;
-    }
-    return IconFromSystemIndex(info.iIcon, drawnSize);
 }
 
 HICON StockDriveIcon(SHSTOCKICONID id, int drawnSize) {
@@ -1193,19 +1210,6 @@ void OpenInExplorer(HWND owner, const VolumeInfo& volume) {
                   SW_SHOWNORMAL);
 }
 
-void ShowProperties(HWND owner, const VolumeInfo& volume) {
-    std::wstring target =
-        volume.letter.empty() ? volume.guidPath : volume.letter + L"\\";
-    SHELLEXECUTEINFOW info{};
-    info.cbSize = sizeof(info);
-    info.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC;
-    info.hwnd = owner;
-    info.lpVerb = L"properties";
-    info.lpFile = target.c_str();
-    info.nShow = SW_SHOWNORMAL;
-    ShellExecuteExW(&info);
-}
-
 // The shell's own Format dialog, with its own warnings.
 void FormatVolume(HWND owner, const VolumeInfo& volume) {
     // Defence in depth: the button is not drawn for the boot volume, but the
@@ -1360,12 +1364,19 @@ void DrawDoughnut(PropState* state, HDC dc, const RECT& box, ULONGLONG used,
         int centreX = (box.left + box.right) / 2;
         int centreY = (box.top + box.bottom) / 2;
         int radius = (box.right - box.left) / 2;
-        double angle = -3.14159265358979 / 2 + fraction * 2 * 3.14159265358979;
+        double angle = -std::numbers::pi / 2 + fraction * 2 * std::numbers::pi;
 
         HBRUSH usedBrush = CreateSolidBrush(state->accentColor);
         HPEN usedPen = CreatePen(PS_SOLID, 1, state->accentColor);
         oldBrush = SelectObject(dc, usedBrush);
         oldPen = SelectObject(dc, usedPen);
+
+        // GDI defaults to AD_COUNTERCLOCKWISE, which fills everything *except*
+        // the wedge between the two points - so a 33% full disk drew a 67%
+        // ring. Measured with pie-direction-probe.cpp. The percentage caption
+        // is computed separately and was always right, which is what hid this.
+        int previousDirection = SetArcDirection(dc, AD_CLOCKWISE);
+
         if (fraction >= 0.999) {
             Ellipse(dc, box.left, box.top, box.right, box.bottom);
         } else {
@@ -1373,6 +1384,10 @@ void DrawDoughnut(PropState* state, HDC dc, const RECT& box, ULONGLONG used,
                 box.top,  // start at 12 o'clock
                 centreX + static_cast<int>(radius * cos(angle)),
                 centreY + static_cast<int>(radius * sin(angle)));
+        }
+
+        if (previousDirection) {
+            SetArcDirection(dc, previousDirection);
         }
         SelectObject(dc, oldPen);
         SelectObject(dc, oldBrush);
@@ -1696,9 +1711,9 @@ void Show(HWND parent, HINSTANCE instance, const DiskInfo& disk,
     state.fontSmall = MakeFont(state.dpi, 9, true);
 
     BOOL dark = TRUE;
-    DwmSetWindowAttribute(state.hwnd, 20, &dark, sizeof(dark));
-    DWORD corner = 2;
-    DwmSetWindowAttribute(state.hwnd, 33, &corner, sizeof(corner));
+    DwmSetWindowAttribute(state.hwnd, ui::kDwmUseImmersiveDarkMode, &dark, sizeof(dark));
+    DWORD corner = ui::kDwmCornerRound;
+    DwmSetWindowAttribute(state.hwnd, ui::kDwmWindowCornerPreference, &corner, sizeof(corner));
 
     int width = ui::Scale(540, state.dpi);
     int height = ui::Scale(540, state.dpi);
@@ -1784,7 +1799,6 @@ struct State {
     int contentTop = 0;
     int contentBottom = 0;
     int contentHeight = 0;
-    bool done = false;
 };
 
 State* g_state;
@@ -2739,7 +2753,6 @@ void Invoke(State* state, const Button& button) {
 
     switch (button.kind) {
         case ButtonKind::Close:
-            state->done = true;
             DestroyWindow(state->hwnd);
             return;
         case ButtonKind::Refresh:
@@ -3031,7 +3044,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_KEYDOWN:
             switch (wParam) {
                 case VK_ESCAPE:
-                    state->done = true;
                     DestroyWindow(hwnd);
                     break;
                 case VK_F5:
@@ -3092,7 +3104,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_DESTROY:
-            state->done = true;
             PostQuitMessage(0);
             return 0;
     }
@@ -3169,9 +3180,9 @@ bool Run() {
     }
 
     BOOL dark = TRUE;
-    DwmSetWindowAttribute(state.hwnd, 20, &dark, sizeof(dark));
-    DWORD corner = 2;
-    DwmSetWindowAttribute(state.hwnd, 33, &corner, sizeof(corner));
+    DwmSetWindowAttribute(state.hwnd, ui::kDwmUseImmersiveDarkMode, &dark, sizeof(dark));
+    DWORD corner = ui::kDwmCornerRound;
+    DwmSetWindowAttribute(state.hwnd, ui::kDwmWindowCornerPreference, &corner, sizeof(corner));
 
     int width = ui::Scale(ui::kWindowWidth, state.dpi);
     int height = ui::Scale(ui::kWindowHeight, state.dpi);
