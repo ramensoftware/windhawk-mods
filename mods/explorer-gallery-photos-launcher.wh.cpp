@@ -50,12 +50,11 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 #include <shellapi.h>
 #include <windhawk_utils.h>
 #include <atomic>
-#include <mutex>
 
 static std::atomic<PIDLIST_ABSOLUTE> g_targetPidl{nullptr};
+static std::atomic<bool> g_targetPidlFailed{false};
 static std::atomic<bool> g_explorerFrameHooked{false};
 static std::atomic<bool> g_unloading{false};
-static HMODULE g_explorerFrameRef = nullptr;
 
 // ---- BrowseObject Original & Hook ----
 typedef HRESULT(STDMETHODCALLTYPE *BrowseObject_t)(void *pThis,
@@ -69,11 +68,17 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
         return pidl;
     }
 
+    // Don't retry if a previous attempt already failed
+    if (g_targetPidlFailed.load(std::memory_order_acquire)) {
+        return nullptr;
+    }
+
     constexpr WCHAR kGalleryParsingName[] = L"::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}";
     PIDLIST_ABSOLUTE newPidl = nullptr;
     HRESULT hr = SHParseDisplayName(kGalleryParsingName, nullptr, &newPidl, 0, nullptr);
     if (FAILED(hr) || !newPidl) {
         Wh_Log(L"SHParseDisplayName failed: 0x%08X", (unsigned)hr);
+        g_targetPidlFailed.store(true, std::memory_order_release);
         return nullptr;
     }
 
@@ -87,11 +92,12 @@ static PIDLIST_ABSOLUTE EnsureTargetPidl() {
     return newPidl;
 }
 
-// Asynchronous launch parameters
+// Asynchronous launch parameters — created once in Wh_ModInit,
+// so CleanupResources (on the Windhawk engine thread) never races
+// with a half-initialized state from the hook's UI thread.
 static HANDLE g_launchEvent = NULL;
 static HANDLE g_stopEvent = NULL;
 static HANDLE g_workerThread = NULL;
-static std::once_flag g_workerInitOnce;
 
 static void CleanupResources() {
     if (g_stopEvent) {
@@ -109,10 +115,6 @@ static void CleanupResources() {
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = NULL;
-    }
-    if (g_explorerFrameRef) {
-        FreeLibrary(g_explorerFrameRef);
-        g_explorerFrameRef = nullptr;
     }
 }
 
@@ -142,9 +144,11 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
             Wh_Log(L"Launching app asynchronously: %s %s", target, targetArgs ? targetArgs : L"");
             
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            // SEE_MASK_ASYNCOK allows shell interactions (like UAC prompts) to offload to a background 
-            // thread without blocking our worker, ensuring Wh_ModUninit can always complete a clean join.
-            sei.fMask = SEE_MASK_ASYNCOK | SEE_MASK_FLAG_NO_UI;
+            // SEE_MASK_ASYNCOK hints that the shell may offload slow work (e.g. UAC) to
+            // another thread, but the documentation notes this is not guaranteed in all
+            // cases.  The join in Wh_ModUninit is still required and may block briefly
+            // if the shell decides to execute synchronously.
+            sei.fMask = SEE_MASK_ASYNCOK;
             sei.lpVerb = nullptr; // Default verb is used for maximum compatibility
             sei.lpFile = target;
             sei.lpParameters = targetArgs;
@@ -170,47 +174,43 @@ static DWORD WINAPI LaunchWorkerProc(LPVOID) {
     return 0;
 }
 
-static void EnsureWorkerThread() {
-    std::call_once(g_workerInitOnce, [] {
-        g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
-        g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
-        
-        if (g_launchEvent && g_stopEvent) {
-            g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
-            if (!g_workerThread) {
-                Wh_Log(L"Failed to create worker thread.");
-            }
-        } else {
-            Wh_Log(L"Failed to create thread synchronization events.");
-        }
-    });
+static bool StartWorkerThread() {
+    g_launchEvent = CreateEventW(NULL, FALSE, FALSE, NULL); // auto-reset
+    g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);    // manual-reset
+
+    if (!g_launchEvent || !g_stopEvent) {
+        Wh_Log(L"Failed to create thread synchronization events.");
+        return false;
+    }
+
+    g_workerThread = CreateThread(NULL, 0, LaunchWorkerProc, NULL, 0, NULL);
+    if (!g_workerThread) {
+        Wh_Log(L"Failed to create worker thread.");
+        return false;
+    }
+
+    return true;
 }
 
 // Hook on BrowseObject
 static HRESULT STDMETHODCALLTYPE BrowseObject_Hook(void *pThis,
                                                    PCUIDLIST_RELATIVE pidl,
                                                    UINT wFlags) {
-    // Ignore relative or navigation-history PIDLs
-    if (wFlags & (SBSP_RELATIVE | SBSP_PARENT | SBSP_NAVIGATEBACK | SBSP_NAVIGATEFORWARD)) {
+    // Ignore relative, navigation-history, or NULL PIDLs early
+    if (!pidl || (wFlags & (SBSP_RELATIVE | SBSP_PARENT | SBSP_NAVIGATEBACK | SBSP_NAVIGATEFORWARD))) {
         return g_BrowseObject_Original(pThis, pidl, wFlags);
     }
 
-    // Lazy load the PIDL on the UI thread to guarantee COM readiness
+    // Lazy load the Gallery PIDL on the UI thread to guarantee COM readiness
     PIDLIST_ABSOLUTE target = EnsureTargetPidl();
 
-    if (target && pidl) {
-        if (ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target)) {
-            
-            Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
-            
-            EnsureWorkerThread();
-            if (g_launchEvent) {
-                SetEvent(g_launchEvent);
-            }
+    if (target && ILIsEqual(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl), target)) {
+        
+        Wh_Log(L"Intercepted Gallery navigation! Triggering async launch.");
+        SetEvent(g_launchEvent);
 
-            // Block original navigation without tricking the address bar into switching state
-            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
-        }
+        // Block original navigation without tricking the address bar into switching state
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
     }
 
     return g_BrowseObject_Original(pThis, pidl, wFlags);
@@ -225,11 +225,6 @@ static bool HookExplorerFrame(HMODULE hEF, bool applyNow) {
     // Fast path: bail if we already successfully hooked or attempted to hook.
     if (!g_explorerFrameHooked.compare_exchange_strong(expected, true)) {
         return true;
-    }
-    
-    // Hold a reference so the module is not unloaded out from under the hook
-    if (!GetModuleHandleExW(0, L"explorerframe.dll", &g_explorerFrameRef)) {
-        Wh_Log(L"Failed to retain reference to explorerframe.dll: %u", GetLastError());
     }
 
     WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
@@ -281,6 +276,14 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing mod v" WH_MOD_VERSION);
+
+    // Create the worker thread up front so that BrowseObject_Hook never
+    // touches these globals — CleanupResources on the engine thread is
+    // then race-free.  One idle waiting thread is cheap.
+    if (!StartWorkerThread()) {
+        CleanupResources();
+        return FALSE;
+    }
 
     bool delayLoadingNeeded = true;
     
