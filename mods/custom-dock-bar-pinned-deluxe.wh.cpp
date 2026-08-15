@@ -4,7 +4,7 @@
 // @description     A draggable, customizable desktop dock with pinned apps, running applications, themes, labels, effects, clock, and diagonal layouts.
 // @version         2.2.0
 // @author          Alaricholt677
-// @github          https://github.com/Alaricholt677
+// @github          Alaricholt677
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lole32 -lshell32 -lpsapi
 // @license         MIT
