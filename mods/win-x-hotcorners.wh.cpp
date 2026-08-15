@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         4.4.4
+// @version         4.4.5
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -263,7 +263,7 @@ Hot corners are disabled when any excluded process is the foreground window.
 
 # Changelog
 
-## 4.4.4
+## 4.4.5
 
 First release. Earlier version numbers exist only in the development
 repository and were never published, so there is nothing to upgrade from.
@@ -621,6 +621,13 @@ struct HitZone
     RECT rect;
     std::function<void()> exec;
     std::wstring label;  // "Dell U2720Q Top-left corner -> Task View"
+
+    // Carried only so SameZoneSet can tell two sets apart. The label holds the
+    // action's *name* but not its arguments, so without these, changing a
+    // custom command or a key combination produced a set that compared equal -
+    // the rebuild was skipped and the old executor stayed live.
+    CornerAction action = CornerAction::Nothing;
+    std::wstring args;
 
     // Resolved once at build time - zone override if set, otherwise the
     // global. The detection loop therefore never has to know that per-zone
@@ -2228,6 +2235,8 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
             hz.modifier =
                 tn.modifier >= 0 ? tn.modifier : g_settings.requireModifier;
 
+            hz.action = zc->action;
+            hz.args = zc->args;
             hz.label = mon.id + L" " + ZoneToString(z) + L" -> " +
                        ActionToString(zc->action);
             set->zones.push_back(std::move(hz));
@@ -2321,16 +2330,28 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
 static bool SameZoneSet(const ZoneSet *a, const ZoneSet *b)
 {
     if (!a || !b || a->zones.size() != b->zones.size() ||
+        a->monitors.size() != b->monitors.size() ||
         a->disableDuringDrag != b->disableDuringDrag)
         return false;
+
+    // The dashboard reads the monitor summaries, so a display renamed or
+    // resized has to publish even when no zone rectangle moved.
+    for (size_t i = 0; i < a->monitors.size(); i++)
+    {
+        const auto &x = a->monitors[i], &y = b->monitors[i];
+        if (x.id != y.id || x.width != y.width || x.height != y.height ||
+            x.primary != y.primary)
+            return false;
+    }
+
     for (size_t i = 0; i < a->zones.size(); i++)
     {
         const HitZone &x = a->zones[i], &y = b->zones[i];
         if (memcmp(&x.rect, &y.rect, sizeof(RECT)) != 0 || x.zone != y.zone ||
-            x.monitor != y.monitor || x.delay != y.delay ||
-            x.settle != y.settle || x.knock != y.knock ||
-            x.cooldown != y.cooldown || x.modifier != y.modifier ||
-            x.label != y.label)
+            x.monitor != y.monitor || x.action != y.action ||
+            x.args != y.args || x.delay != y.delay || x.settle != y.settle ||
+            x.knock != y.knock || x.cooldown != y.cooldown ||
+            x.modifier != y.modifier || x.label != y.label)
             return false;
     }
     return true;
@@ -4780,6 +4801,11 @@ static LRESULT CALLBACK DashWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         if (lParam && wcscmp((const wchar_t *)lParam, L"ImmersiveColorSet") == 0)
         {
             BuildPalette();
+            // The palette alone does not reach the Close button: it keeps the
+            // theme it was given at creation, so switching light to dark left a
+            // light button on a dark window.
+            SetProcessDarkMode(!g_lightTheme);
+            ApplyControlTheme(s->hClose, L"BUTTON");
             if (s->hBg)
                 DeleteObject(s->hBg);
             s->hBg = CreateSolidBrush(g_pal.bg);
