@@ -2,10 +2,11 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.3
+// @version         0.3.4
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32
 // ==/WindhawkMod==
 
@@ -39,7 +40,7 @@ Transition Animation**.
 
 ### Notes
 
-Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
+Designed for Windows 11 22H2 and newer. This mod relies on undocumented Windows
 shell interfaces, so future Windows updates may require adjustments.
 */
 // ==/WindhawkModReadme==
@@ -54,9 +55,7 @@ shell interfaces, so future Windows updates may require adjustments.
 #include <cstdint>
 
 // -----------------------------------------------------------------------------
-// Explicit COM IDs.
-// Keep these literal so the Windhawk Clang/MinGW toolchain doesn't need
-// __declspec(uuid), __uuidof, IID_PPV_ARGS, or uuid.lib.
+// Explicit COM IDs used by the minimal interface declarations below.
 // -----------------------------------------------------------------------------
 
 static const CLSID kClsidImmersiveShell = {
@@ -100,9 +99,15 @@ static const IID kIidVirtualDesktopNotificationService = {
 };
 
 // Windows 11 24H2+ IVirtualDesktopManagerInternal / Internal2 IID.
-static const IID kIidVirtualDesktopManagerInternal = {
+static const IID kIidVirtualDesktopManagerInternal24H2 = {
     0x53F5CA0B, 0x158F, 0x4124,
     {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}
+};
+
+// Windows 11 22H2/23H2 IVirtualDesktopManagerInternal IID.
+static const IID kIidVirtualDesktopManagerInternal22H2 = {
+    0xA3175F2D, 0x239C, 0x4BD2,
+    {0x8A, 0xA0, 0xEE, 0xBA, 0x8B, 0x0B, 0x13, 0x8E}
 };
 
 static const IID kIidApplicationViewCollection = {
@@ -295,31 +300,50 @@ static bool IsRescueCandidate(HWND hwnd) {
     return true;
 }
 
+static DWORD GetWindowProcessIdForLog(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return pid;
+}
+
+static DWORD GetWindowThreadIdForLog(HWND hwnd) {
+    DWORD pid = 0;
+    return GetWindowThreadProcessId(hwnd, &pid);
+}
+
+static const wchar_t* GetWindowClassForLog(HWND hwnd) {
+    static thread_local wchar_t className[256];
+    className[0] = L'\0';
+    GetClassNameW(hwnd, className, ARRAYSIZE(className));
+    return className[0] ? className : L"?";
+}
+
+static const wchar_t* GetWindowTitleForLog(HWND hwnd) {
+    static thread_local wchar_t title[512];
+    title[0] = L'\0';
+    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    return title;
+}
+
 static void LogWindow(const wchar_t* label, HWND hwnd) {
     if (!hwnd) {
-        Wh_Log(L"[VDREDIRECT] %s hwnd=null", label);
+        Wh_Log(L"%s hwnd=null", label);
         return;
     }
 
-    DWORD pid = 0;
-    DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
-
-    wchar_t cls[256] = {};
-    wchar_t title[512] = {};
-    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    GetWindowTextW(hwnd, title, ARRAYSIZE(title));
-
+    // Wh_Log evaluates its arguments only when logging is enabled, so all
+    // window inspection stays behind the logging gate.
     Wh_Log(
-        L"[VDREDIRECT] %s hwnd=%p pid=%lu tid=%lu class=%s "
+        L"%s hwnd=%p pid=%lu tid=%lu class=%s "
         L"zoomed=%d iconic=%d title=\"%s\"",
         label,
         hwnd,
-        pid,
-        tid,
-        cls[0] ? cls : L"?",
+        GetWindowProcessIdForLog(hwnd),
+        GetWindowThreadIdForLog(hwnd),
+        GetWindowClassForLog(hwnd),
         IsZoomed(hwnd),
         IsIconic(hwnd),
-        title);
+        GetWindowTitleForLog(hwnd));
 }
 
 // -----------------------------------------------------------------------------
@@ -358,7 +382,7 @@ static HRESULT CycleInDirection_Hook(
     ++g_hotkeyCycleDepth;
 
     Wh_Log(
-        L"[VDREDIRECT] HOTKEY-CYCLE begin direction=%d depth=%d",
+        L"HOTKEY-CYCLE begin direction=%d depth=%d",
         direction,
         g_hotkeyCycleDepth);
 
@@ -366,7 +390,7 @@ static HRESULT CycleInDirection_Hook(
         g_cycleInDirectionOriginal(pThis, direction);
 
     Wh_Log(
-        L"[VDREDIRECT] HOTKEY-CYCLE end direction=%d hr=0x%08X depth=%d",
+        L"HOTKEY-CYCLE end direction=%d hr=0x%08X depth=%d",
         direction,
         static_cast<unsigned int>(hr),
         g_hotkeyCycleDepth);
@@ -481,13 +505,13 @@ public:
             GuidToString(newId, newText, ARRAYSIZE(newText));
 
             Wh_Log(
-                L"[VDREDIRECT] Current desktop cache updated old=%s new=%s",
+                L"Current desktop cache updated old=%s new=%s",
                 SUCCEEDED(oldHr) ? oldText : L"<unknown>",
                 newText);
         } else {
             ClearCurrentDesktopId();
             Wh_Log(
-                L"[VDREDIRECT] Current desktop cache invalidated: "
+                L"Current desktop cache invalidated: "
                 L"desktopNew->GetId failed hr=0x%08X",
                 static_cast<unsigned int>(newHr));
         }
@@ -521,7 +545,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 
     if (FAILED(coHr) && coHr != RPC_E_CHANGED_MODE) {
         Wh_Log(
-            L"[VDREDIRECT] Notification CoInitializeEx failed hr=0x%08X",
+            L"Notification CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(coHr));
         SetEvent(g_notificationReadyEvent);
         return 0;
@@ -547,8 +571,16 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     if (SUCCEEDED(hr) && serviceProvider) {
         hr = serviceProvider->QueryService(
             kClsidVirtualDesktopManagerInternal,
-            kIidVirtualDesktopManagerInternal,
+            kIidVirtualDesktopManagerInternal24H2,
             reinterpret_cast<void**>(&managerInternal));
+
+        if (FAILED(hr) || !managerInternal) {
+            managerInternal = nullptr;
+            hr = serviceProvider->QueryService(
+                kClsidVirtualDesktopManagerInternal,
+                kIidVirtualDesktopManagerInternal22H2,
+                reinterpret_cast<void**>(&managerInternal));
+        }
     }
 
     if (SUCCEEDED(hr) && managerInternal) {
@@ -594,7 +626,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     }
 
     Wh_Log(
-        L"[VDREDIRECT] Notification/cache init hr=0x%08X cookie=%lu ready=%d",
+        L"Notification/cache init hr=0x%08X cookie=%lu ready=%d",
         static_cast<unsigned int>(hr),
         cookie,
         g_notificationReady.load());
@@ -635,7 +667,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         CoUninitialize();
     }
 
-    Wh_Log(L"[VDREDIRECT] Notification thread exiting");
+    Wh_Log(L"Notification thread exiting");
     return 0;
 }
 
@@ -645,7 +677,7 @@ static bool StartNotificationCache() {
 
     if (!g_notificationReadyEvent) {
         Wh_Log(
-            L"[VDREDIRECT] Create notification-ready event failed error=%lu",
+            L"Create notification-ready event failed error=%lu",
             GetLastError());
         return false;
     }
@@ -661,7 +693,7 @@ static bool StartNotificationCache() {
 
     if (!g_notificationThread) {
         Wh_Log(
-            L"[VDREDIRECT] Notification CreateThread failed error=%lu",
+            L"Notification CreateThread failed error=%lu",
             GetLastError());
         return false;
     }
@@ -672,7 +704,7 @@ static bool StartNotificationCache() {
     if (waitResult != WAIT_OBJECT_0 ||
         !g_notificationReady.load()) {
         Wh_Log(
-            L"[VDREDIRECT] Notification/current-desktop cache unavailable "
+            L"Notification/current-desktop cache unavailable "
             L"(waitResult=%lu)",
             waitResult);
         return false;
@@ -776,7 +808,7 @@ static bool InitializeWorkerComState(WorkerComState* state) {
 
     if (FAILED(hr) || !state->serviceProvider) {
         Wh_Log(
-            L"[VDREDIRECT] Worker: CoCreateInstance(ImmersiveShell) failed "
+            L"Worker: CoCreateInstance(ImmersiveShell) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
         return false;
@@ -784,12 +816,20 @@ static bool InitializeWorkerComState(WorkerComState* state) {
 
     hr = state->serviceProvider->QueryService(
         kClsidVirtualDesktopManagerInternal,
-        kIidVirtualDesktopManagerInternal,
+        kIidVirtualDesktopManagerInternal24H2,
         reinterpret_cast<void**>(&state->managerInternal));
 
     if (FAILED(hr) || !state->managerInternal) {
+        state->managerInternal = nullptr;
+        hr = state->serviceProvider->QueryService(
+            kClsidVirtualDesktopManagerInternal,
+            kIidVirtualDesktopManagerInternal22H2,
+            reinterpret_cast<void**>(&state->managerInternal));
+    }
+
+    if (FAILED(hr) || !state->managerInternal) {
         Wh_Log(
-            L"[VDREDIRECT] Worker: QueryService(managerInternal) failed "
+            L"Worker: QueryService(managerInternal) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
         return false;
@@ -802,7 +842,7 @@ static bool InitializeWorkerComState(WorkerComState* state) {
 
     if (FAILED(hr) || !state->viewCollection) {
         Wh_Log(
-            L"[VDREDIRECT] Worker: QueryService(viewCollection) failed "
+            L"Worker: QueryService(viewCollection) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
         return false;
@@ -817,7 +857,7 @@ static bool InitializeWorkerComState(WorkerComState* state) {
 
     if (FAILED(hr) || !state->publicManager) {
         Wh_Log(
-            L"[VDREDIRECT] Worker: CoCreateInstance(public manager) failed "
+            L"Worker: CoCreateInstance(public manager) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
         return false;
@@ -826,7 +866,9 @@ static bool InitializeWorkerComState(WorkerComState* state) {
     return true;
 }
 
-// 24H2+ vtable slots, matching Virtual Desktop Helper.
+// These slots and signatures are shared by the version-gating IIDs above.
+// Older monitor-aware interface versions aren't queried because their method
+// signatures differ.
 static constexpr int kVtableMoveViewToDesktop = 4;
 static constexpr int kVtableGetCurrentDesktop = 6;
 
@@ -893,14 +935,14 @@ static void ProcessRescueRequest(
         ARRAYSIZE(requestedText));
 
     Wh_Log(
-        L"[VDREDIRECT #%llu] Rescue begin hwnd=%p requested=%s",
+        L"[#%llu] Rescue begin hwnd=%p requested=%s",
         static_cast<unsigned long long>(request.sequence),
         request.hwnd,
         requestedText);
 
     if (!IsRescueCandidate(request.hwnd)) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: HWND no longer eligible",
+            L"[#%llu] Abort: HWND no longer eligible",
             static_cast<unsigned long long>(request.sequence));
         return;
     }
@@ -912,7 +954,7 @@ static void ProcessRescueRequest(
     if (currentPid != request.pid ||
         currentTid != request.tid) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: HWND identity changed "
+            L"[#%llu] Abort: HWND identity changed "
             L"(expected pid=%lu tid=%lu, got pid=%lu tid=%lu)",
             static_cast<unsigned long long>(request.sequence),
             request.pid,
@@ -930,7 +972,7 @@ static void ProcessRescueRequest(
 
     if (FAILED(hr) || !currentDesktop) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: GetCurrentDesktop failed "
+            L"[#%llu] Abort: GetCurrentDesktop failed "
             L"hr=0x%08X",
             static_cast<unsigned long long>(request.sequence),
             static_cast<unsigned int>(hr));
@@ -942,7 +984,7 @@ static void ProcessRescueRequest(
 
     if (FAILED(hr)) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: currentDesktop->GetId failed "
+            L"[#%llu] Abort: currentDesktop->GetId failed "
             L"hr=0x%08X",
             static_cast<unsigned long long>(request.sequence),
             static_cast<unsigned int>(hr));
@@ -963,7 +1005,7 @@ static void ProcessRescueRequest(
             ARRAYSIZE(actualSourceText));
 
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: current desktop changed before rescue "
+            L"[#%llu] Abort: current desktop changed before rescue "
             L"(source=%s now=%s)",
             static_cast<unsigned long long>(request.sequence),
             expectedSourceText,
@@ -981,7 +1023,7 @@ static void ProcessRescueRequest(
 
     if (SUCCEEDED(onCurrentHr) && onCurrentDesktop) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Nothing to do: window is already visible "
+            L"[#%llu] Nothing to do: window is already visible "
             L"on the current desktop (moved/pinned meanwhile)",
             static_cast<unsigned long long>(request.sequence));
         currentDesktop->Release();
@@ -999,7 +1041,7 @@ static void ProcessRescueRequest(
 
     if (FAILED(hr)) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: GetWindowDesktopId failed "
+            L"[#%llu] Abort: GetWindowDesktopId failed "
             L"hr=0x%08X",
             static_cast<unsigned long long>(request.sequence),
             static_cast<unsigned int>(hr));
@@ -1009,7 +1051,7 @@ static void ProcessRescueRequest(
 
     if (GuidEqual(windowDesktopId, actualCurrentId)) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Nothing to do: window is already on "
+            L"[#%llu] Nothing to do: window is already on "
             L"current desktop",
             static_cast<unsigned long long>(request.sequence));
         currentDesktop->Release();
@@ -1027,7 +1069,7 @@ static void ProcessRescueRequest(
             ARRAYSIZE(windowText));
 
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: foreground window desktop "
+            L"[#%llu] Abort: foreground window desktop "
             L"doesn't match requested switch target "
             L"(window=%s requested=%s)",
             static_cast<unsigned long long>(request.sequence),
@@ -1045,7 +1087,7 @@ static void ProcessRescueRequest(
 
     if (FAILED(hr) || !view) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: GetViewForHwnd failed "
+            L"[#%llu] Abort: GetViewForHwnd failed "
             L"hr=0x%08X",
             static_cast<unsigned long long>(request.sequence),
             static_cast<unsigned int>(hr));
@@ -1067,7 +1109,7 @@ static void ProcessRescueRequest(
         !GuidEqual(commitDesktopId, request.sourceDesktopId)) {
 
         Wh_Log(
-            L"[VDREDIRECT #%llu] Abort: current desktop changed during rescue",
+            L"[#%llu] Abort: current desktop changed during rescue",
             static_cast<unsigned long long>(request.sequence));
 
         if (commitDesktop) {
@@ -1091,7 +1133,7 @@ static void ProcessRescueRequest(
 
     if (FAILED(hr)) {
         Wh_Log(
-            L"[VDREDIRECT #%llu] MoveViewToDesktop failed "
+            L"[#%llu] MoveViewToDesktop failed "
             L"hr=0x%08X",
             static_cast<unsigned long long>(request.sequence),
             static_cast<unsigned int>(hr));
@@ -1099,7 +1141,7 @@ static void ProcessRescueRequest(
     }
 
     Wh_Log(
-        L"[VDREDIRECT #%llu] Teleported hwnd=%p to current desktop",
+        L"[#%llu] Teleported hwnd=%p to current desktop",
         static_cast<unsigned long long>(request.sequence),
         request.hwnd);
 
@@ -1121,7 +1163,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
     if (FAILED(coHr) &&
         coHr != RPC_E_CHANGED_MODE) {
         Wh_Log(
-            L"[VDREDIRECT] Worker: CoInitializeEx failed hr=0x%08X",
+            L"Worker: CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(coHr));
 
         SetEvent(g_workerReadyEvent);
@@ -1144,7 +1186,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
     g_workerReady.store(true);
     SetEvent(g_workerReadyEvent);
 
-    Wh_Log(L"[VDREDIRECT] Worker ready");
+    Wh_Log(L"Worker ready");
 
     HANDLE waits[] = {
         g_stopEvent,
@@ -1184,7 +1226,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
         CoUninitialize();
     }
 
-    Wh_Log(L"[VDREDIRECT] Worker exiting");
+    Wh_Log(L"Worker exiting");
     return 0;
 }
 
@@ -1222,7 +1264,7 @@ static bool QueueRescue(
         SetEvent(g_requestEvent);
     } else {
         Wh_Log(
-            L"[VDREDIRECT] Rescue queue full; failing open");
+            L"Rescue queue full; failing open");
     }
 
     return queued;
@@ -1252,7 +1294,7 @@ static HRESULT SwitchDesktopInternal_Hook(
     // converted into a teleport.
     if (IsExplicitHotkeySwitchContext()) {
         Wh_Log(
-            L"[VDREDIRECT] ALLOW SwitchDesktopInternal: "
+            L"ALLOW SwitchDesktopInternal: "
             L"explicit HOTKEY-CYCLE context depth=%d",
             g_hotkeyCycleDepth);
 
@@ -1265,7 +1307,7 @@ static HRESULT SwitchDesktopInternal_Hook(
     if (!g_notificationReady.load() ||
         !LoadCurrentDesktopId(&sourceDesktopId)) {
         Wh_Log(
-            L"[VDREDIRECT] SwitchDesktopInternal allowed: "
+            L"SwitchDesktopInternal allowed: "
             L"current-desktop cache unavailable");
 
         return g_switchDesktopInternalOriginal(
@@ -1279,7 +1321,7 @@ static HRESULT SwitchDesktopInternal_Hook(
     // an unknown internal switch path.
     if (!IsRescueCandidate(foreground)) {
         Wh_Log(
-            L"[VDREDIRECT] SwitchDesktopInternal allowed: "
+            L"SwitchDesktopInternal allowed: "
             L"no eligible foreground rescue candidate");
 
         return g_switchDesktopInternalOriginal(
@@ -1293,7 +1335,7 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     if (FAILED(requestedIdHr)) {
         Wh_Log(
-            L"[VDREDIRECT] SwitchDesktopInternal allowed: "
+            L"SwitchDesktopInternal allowed: "
             L"requestedDesktop->GetId failed hr=0x%08X",
             static_cast<unsigned int>(requestedIdHr));
 
@@ -1304,7 +1346,7 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     if (GuidEqual(sourceDesktopId, requestedId)) {
         Wh_Log(
-            L"[VDREDIRECT] SwitchDesktopInternal allowed: "
+            L"SwitchDesktopInternal allowed: "
             L"requested desktop is already current");
 
         return g_switchDesktopInternalOriginal(
@@ -1318,7 +1360,7 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     if (!candidatePid || !candidateTid) {
         Wh_Log(
-            L"[VDREDIRECT] SwitchDesktopInternal allowed: "
+            L"SwitchDesktopInternal allowed: "
             L"failed to capture candidate HWND identity");
 
         return g_switchDesktopInternalOriginal(
@@ -1338,7 +1380,7 @@ static HRESULT SwitchDesktopInternal_Hook(
         ARRAYSIZE(requestedText));
 
     Wh_Log(
-        L"[VDREDIRECT] Candidate SwitchDesktopInternal "
+        L"Candidate SwitchDesktopInternal "
         L"source=%s requested=%s foreground=%p",
         sourceText,
         requestedText,
@@ -1358,7 +1400,7 @@ static HRESULT SwitchDesktopInternal_Hook(
     }
 
     Wh_Log(
-        L"[VDREDIRECT] BLOCK SwitchDesktopInternal: rescue queued");
+        L"BLOCK SwitchDesktopInternal: rescue queued");
 
     // Pretend the internal switch succeeded only after the rescue has been
     // safely queued. Every failure before this point fails open.
@@ -1395,7 +1437,7 @@ static bool StartWorker() {
         !g_stopEvent ||
         !g_workerReadyEvent) {
         Wh_Log(
-            L"[VDREDIRECT] Failed to create worker events");
+            L"Failed to create worker events");
         return false;
     }
 
@@ -1410,7 +1452,7 @@ static bool StartWorker() {
 
     if (!g_workerThread) {
         Wh_Log(
-            L"[VDREDIRECT] CreateThread failed error=%lu",
+            L"CreateThread failed error=%lu",
             GetLastError());
         return false;
     }
@@ -1423,7 +1465,7 @@ static bool StartWorker() {
     if (waitResult != WAIT_OBJECT_0 ||
         !g_workerReady.load()) {
         Wh_Log(
-            L"[VDREDIRECT] Worker initialization failed "
+            L"Worker initialization failed "
             L"(waitResult=%lu)",
             waitResult);
         return false;
@@ -1537,12 +1579,14 @@ static bool InstallVirtualDesktopHooks() {
         return true;
     }
 
-    HMODULE twinui =
-        LoadLibraryW(L"twinui.pcshell.dll");
+    HMODULE twinui = LoadLibraryExW(
+        L"twinui.pcshell.dll",
+        nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!twinui) {
         Wh_Log(
-            L"[VDREDIRECT] Shell host: "
+            L"Shell host: "
             L"LoadLibrary(twinui.pcshell.dll) failed error=%lu",
             GetLastError());
         return false;
@@ -1578,8 +1622,8 @@ static bool InstallVirtualDesktopHooks() {
             twinui,
             twinuiPcshellHooks,
             ARRAYSIZE(twinuiPcshellHooks))) {
-                  Wh_Log(
-            L"[VDREDIRECT] Shell host: failed to resolve/install "
+        Wh_Log(
+            L"Shell host: failed to resolve/install "
             L"virtual-desktop symbols");
         return false;
     }
@@ -1593,14 +1637,14 @@ static bool InstallVirtualDesktopHooks() {
         std::memory_order_release);
 
     Wh_Log(
-        L"[VDREDIRECT] Shell host: virtual-desktop hooks installed");
+        L"Shell host: virtual-desktop hooks installed");
 
     return true;
 }
 
 static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
-        L"[VDREDIRECT] Shell-host initialization begin");
+        L"Shell-host initialization begin");
 
     if (g_unloading.load(std::memory_order_acquire)) {
         g_runtimeState.store(0, std::memory_order_release);
@@ -1611,7 +1655,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         g_runtimeState.store(0, std::memory_order_release);
 
         Wh_Log(
-            L"[VDREDIRECT] Shell-host initialization failed: "
+            L"Shell-host initialization failed: "
             L"VD hooks unavailable; remaining fail-open");
         return 0;
     }
@@ -1626,7 +1670,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         g_runtimeState.store(0, std::memory_order_release);
 
         Wh_Log(
-            L"[VDREDIRECT] Shell-host initialization failed: "
+            L"Shell-host initialization failed: "
             L"worker unavailable; remaining fail-open");
         return 0;
     }
@@ -1643,7 +1687,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         g_runtimeState.store(0, std::memory_order_release);
 
         Wh_Log(
-            L"[VDREDIRECT] Shell-host initialization failed: "
+            L"Shell-host initialization failed: "
             L"desktop cache unavailable; remaining fail-open");
         return 0;
     }
@@ -1658,7 +1702,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
     g_runtimeState.store(2, std::memory_order_release);
 
     Wh_Log(
-        L"[VDREDIRECT] Runtime ready: primary shell Explorer confirmed, "
+        L"Runtime ready: primary shell Explorer confirmed, "
         L"source-desktop cache active, bounded rescue queue active");
 
     return 0;
@@ -1705,7 +1749,7 @@ static void PromoteCurrentProcessToShellHost(
     g_runtimeState.store(1, std::memory_order_release);
 
     Wh_Log(
-        L"[VDREDIRECT] Primary Shell_TrayWnd confirmed; "
+        L"Primary Shell_TrayWnd confirmed; "
         L"promoting this Explorer process reason=%s",
         reason ? reason : L"<unknown>");
 
@@ -1720,7 +1764,7 @@ static void PromoteCurrentProcessToShellHost(
 
     if (!g_runtimeInitThread) {
         Wh_Log(
-            L"[VDREDIRECT] Shell-host init CreateThread failed error=%lu",
+            L"Shell-host init CreateThread failed error=%lu",
             GetLastError());
         g_runtimeState.store(0, std::memory_order_release);
     }
@@ -1844,19 +1888,18 @@ static void StopRuntime() {
 
 BOOL Wh_ModInit() {
     Wh_Log(
-        L"[VDREDIRECT] Init: installing lightweight "
+        L"Init: installing lightweight "
         L"primary-taskbar observer");
 
     // Deliberately don't load twinui.pcshell.dll or taskbar.dll here. This code
     // executes in every explorer.exe matched by @include. Non-shell Explorer
     // processes should remain as inert as possible.
-    if (!Wh_SetFunctionHook(
-            reinterpret_cast<void*>(CreateWindowExW),
-            reinterpret_cast<void*>(CreateWindowExW_Hook),
-            reinterpret_cast<void**>(
-                &g_createWindowExWOriginal))) {
+    if (!WindhawkUtils::SetFunctionHook(
+            CreateWindowExW,
+            CreateWindowExW_Hook,
+            &g_createWindowExWOriginal)) {
         Wh_Log(
-            L"[VDREDIRECT] Failed to hook CreateWindowExW");
+            L"Failed to hook CreateWindowExW");
         return FALSE;
     }
 
@@ -1871,7 +1914,7 @@ void Wh_ModAfterInit() {
 
     if (primaryTaskbar) {
         Wh_Log(
-            L"[VDREDIRECT] Existing primary Shell_TrayWnd=%p "
+            L"Existing primary Shell_TrayWnd=%p "
             L"belongs to this Explorer process",
             primaryTaskbar);
 
@@ -1879,7 +1922,7 @@ void Wh_ModAfterInit() {
             L"existing primary Shell_TrayWnd");
     } else {
         Wh_Log(
-            L"[VDREDIRECT] No primary Shell_TrayWnd owned by this PID; "
+            L"No primary Shell_TrayWnd owned by this PID; "
             L"remaining inert unless one is created");
     }
 }
@@ -1889,6 +1932,6 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"[VDREDIRECT] Uninit");
+    Wh_Log(L"Uninit");
     StopRuntime();
 }
