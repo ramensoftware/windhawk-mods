@@ -1,26 +1,27 @@
 // ==WindhawkMod==
 // @id              win7-open-with-dialog
 // @name            Windows 7 Open With Dialog
-// @description     Public-API Windows 7-style Open With picker for Windows 10 and 11
-// @version         2.6.0
+// @description     This mod restores the classic Windows 7 "Open with" dialog on Windows 10 and 11
+// @version         1.0.0
 // @author          babamohammed
+// @github          https://github.com/babamohammed2022
 // @license         MIT
 // @include         explorer.exe
 // @include         OpenWith.exe
 // @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -lversion -lbcrypt -lcrypt32 -ladvapi32 -lcomctl32 -luxtheme -luser32 -lgdi32 -luuid -lwinpthread
+// @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -lversion -ladvapi32 -lcomctl32 -luxtheme -ldwmapi -luser32 -lgdi32 -luuid -lwinpthread
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Windows 7 Open With Dialog Recreation
 
-This mod recreates the classic Windows 7 **Open with** dialog on Windows 10 and
-11, replacing the modern picker with a lightweight native alternative while
+This mod restores the classic Windows 7 **Open with** dialog on Windows 10 and
+11, replacing the modern picker with an accurate recreation of the original Windows 7 one while
 keeping the original file and application paths untouched.
 
-The mod has been tested primarily on **Windows 10 21H2 x64**. The public API and
+The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**. The public API and
 classic context-menu paths are designed to fail safely on unsupported builds.
 
 ## Features
@@ -107,12 +108,13 @@ inclusion of the copyright and permission notice. The software is provided
 - replaceSystemDialog: true
   $name: Enable the Windows 7-style picker
   $description: When enabled, replace Open With through the stable CLSID_OpenWithMenu context-menu contract, SHOpenWithDialog, the exact openas ShellExecute verb, or the known modern launcher path. When disabled, requests are passed to Windows.
-- experimentalRegistryVirtualization: false
-  $name: Experimental registry route virtualization
-  $description: Disabled by default. Hides selected modern routing values only in Explorer. Enable only for diagnostics; the COM replacement no longer requires it.
-- contextMenuTextRedirect: true
-  $name: Context-menu text redirect fallback
-  $description: Detect the localized Windows Open With item in classic HMENU context menus and redirect only its selected command. The label is loaded from the current Windows MUI resources; translations are not hard-coded.
+- darkMode: auto
+  $name: Window appearance theme
+  $description: Visual theme for the dialog window.
+  $options:
+    - auto: Follow Windows system theme
+    - light: Always light (classic Windows 7)
+    - dark: Always dark
 - showWebLink: true
   $name: Show the Web search link
   $description: Show the Windows 7-style Web link. Only the sanitized file extension is sent to the browser search.
@@ -131,21 +133,38 @@ inclusion of the copyright and permission notice. The software is provided
     - it: Italiano
     - es: Español
     - fr: Français
-    - pt: Português (Brasil)
-    - tr: Türkçe
+    - de: Deutsch
+    - pt-BR: Português (Brasil)
+    - pt-PT: Português (Portugal)
     - ru: Русский
-    - zh: 简体中文
+    - zh-CN: 简体中文
+    - zh-TW: 繁體中文
+    - ja: 日本語
+    - ko: 한국어
+    - tr: Türkçe
     - nl: Nederlands
     - pl: Polski
+    - sv: Svenska
+    - da: Dansk
+    - nb: Norsk
+    - fi: Suomi
+    - cs: Čeština
+    - hu: Magyar
+    - el: Ελληνικά
+    - ar: العربية
+    - he: עברית
+    - ro: Română
+    - uk: Українська
+    - bg: Български
+    - sk: Slovenčina
+    - hr: Hrvatski
+    - id: Bahasa Indonesia
 */
 // ==/WindhawkModSettings==
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
-#include <bcrypt.h>
-#include <sddl.h>
-#include <wincrypt.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <exdisp.h>
@@ -157,6 +176,14 @@ inclusion of the copyright and permission notice. The software is provided
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <uxtheme.h>
+#include <dwmapi.h>
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1
+#define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
+#endif
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -274,6 +301,26 @@ class FontOwner {
     HFONT value_ = nullptr;
 };
 
+class BrushOwner {
+   public:
+    ~BrushOwner() { Reset(); }
+    BrushOwner() = default;
+    BrushOwner(const BrushOwner&) = delete;
+    BrushOwner& operator=(const BrushOwner&) = delete;
+    HBRUSH Get() const { return value_; }
+    explicit operator bool() const { return value_ != nullptr; }
+    void Reset(HBRUSH value = nullptr) {
+        if (value_) DeleteObject(value_);
+        value_ = value;
+    }
+
+   private:
+    HBRUSH value_ = nullptr;
+};
+
+static std::atomic<long> g_activeComObjects{0};
+static std::atomic<HWND> g_activeBrowseHwnd{nullptr};
+
 struct HandleDeleter {
     void operator()(HANDLE handle) const noexcept {
         if (handle && handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
@@ -390,12 +437,12 @@ StandaloneEnumAssocHandlers : public IUnknown {
 using SHAssocEnumHandlers_t = HRESULT(WINAPI*)(
     PCWSTR extension, DWORD filter, StandaloneEnumAssocHandlers** result);
 
-static const GUID kBhidDataObject = {
+/*static const GUID kBhidDataObject = {
     0xB8C0BD9F,
     0xED24,
     0x455C,
     {0x83, 0xE6, 0xD5, 0x39, 0x0C, 0x4F, 0xE8, 0xC4}};
-
+*/
 // -----------------------------------------------------------------------------
 // Settings and complete localization catalog.
 // -----------------------------------------------------------------------------
@@ -453,14 +500,14 @@ static const LocalePack g_Locales[] = {
         L"Digitare una descrizione da utilizzare per questo tipo di file:",
         L"&Usa sempre il programma selezionato per questo tipo di file",
         L"&Sfoglia...",
-        L"Se il programma desiderato non \u00E8 presente nell\u2019elenco o nel computer, \u00E8 possibile <A ID=\"WebSearch\">cercare il programma appropriato nel Web</A>.",
+        L"Se il programma desiderato non è presente nell'elenco o nel computer, è possibile <A ID=\"WebSearch\">cercare il programma appropriato nel Web</A>.",
         L"Apri con...",
         L"Programmi",
         L"Tutti i file",
         L"OK",
         L"Annulla",
-        L"Nessun programma registrato pu\u00F2 aprire questo tipo di file.",
-        L"Il programma selezionato non \u00E8 riuscito ad aprire il file.",
+        L"Nessun programma registrato può aprire questo tipo di file.",
+        L"Impossibile aprire il file con il programma selezionato.",
     }},
     {0x040A, {  // Spanish
         L"Abrir con",
@@ -468,143 +515,503 @@ static const LocalePack g_Locales[] = {
         L"Archivo:",
         L"Programas recomendados",
         L"Otros programas",
-        L"Escriba una descripci\u00F3n para este tipo de archivo:",
-        L"&Usar siempre el programa seleccionado para este tipo de archivo",
+        L"Escriba una descripción que desee usar para este tipo de archivo:",
+        L"&Usar siempre el programa seleccionado para abrir este tipo de archivos",
         L"&Examinar...",
-        L"Si el programa que desea no est\u00E1 en la lista o en el equipo, puede <A ID=\"WebSearch\">buscar el programa adecuado en Internet</A>.",
+        L"Si el programa que desea no está en la lista o en el equipo, puede <A ID=\"WebSearch\">buscar el programa adecuado en la Web</A>.",
         L"Abrir con...",
         L"Programas",
         L"Todos los archivos",
         L"Aceptar",
         L"Cancelar",
-        L"Ning\u00FAn programa registrado puede abrir este tipo de archivo.",
+        L"Ningún programa registrado puede abrir este tipo de archivo.",
         L"El programa seleccionado no pudo abrir el archivo.",
     }},
     {0x040C, {  // French
         L"Ouvrir avec",
-        L"Choisissez le programme \u00E0 utiliser pour ouvrir ce fichier :",
-        L"Fichier :",
-        L"Programmes recommand\u00E9s",
+        L"Choisissez le programme à utiliser pour ouvrir ce fichier :",
+        L"Fichier :",
+        L"Programmes recommandés",
         L"Autres programmes",
-        L"Tapez une description \u00E0 utiliser pour ce type de fichier :",
-        L"&Toujours utiliser ce programme pour ce type de fichier",
+        L"Tapez une description que vous souhaitez utiliser pour ce type de fichier :",
+        L"&Toujours utiliser le programme sélectionné pour ouvrir ce type de fichier",
         L"&Parcourir...",
-        L"Si le programme souhait\u00E9 ne figure pas dans la liste ou sur votre ordinateur, vous pouvez <A ID=\"WebSearch\">rechercher le programme appropri\u00E9 sur le Web</A>.",
+        L"Si le programme souhaité ne figure pas dans la liste ou sur votre ordinateur, vous pouvez <A ID=\"WebSearch\">rechercher le programme approprié sur le Web</A>.",
         L"Ouvrir avec...",
         L"Programmes",
         L"Tous les fichiers",
         L"OK",
         L"Annuler",
-        L"Aucun programme enregistr\u00E9 ne peut ouvrir ce type de fichier.",
-        L"Le programme s\u00E9lectionn\u00E9 n\u2019a pas pu ouvrir le fichier.",
+        L"Aucun programme enregistré ne peut ouvrir ce type de fichier.",
+        L"Le programme sélectionné n'a pas pu ouvrir le fichier.",
     }},
-    {0x0416, {  // PortugueseBrazil
+    {0x0407, {  // German
+        L"Öffnen mit",
+        L"Wählen Sie das Programm aus, das Sie zum Öffnen dieser Datei verwenden möchten:",
+        L"Dateiname:",
+        L"Empfohlene Programme",
+        L"Andere Programme",
+        L"Geben Sie eine Beschreibung für diesen Dateityp ein:",
+        L"&Dateityp immer mit dem ausgewählten Programm öffnen",
+        L"&Durchsuchen...",
+        L"Falls das gewünschte Programm nicht aufgeführt ist, können Sie <A ID=\"WebSearch\">im Web nach dem entsprechenden Programm suchen</A>.",
+        L"Öffnen mit...",
+        L"Programme",
+        L"Alle Dateien",
+        L"OK",
+        L"Abbrechen",
+        L"Kein registriertes Programm kann diesen Dateityp öffnen.",
+        L"Die Datei konnte nicht mit dem ausgewählten Programm geöffnet werden.",
+    }},
+    {0x0416, {  // Portuguese (Brazil)
         L"Abrir com",
-        L"Escolha o programa que deseja usar para abrir este arquivo:",
+        L"Escolha o programa que você deseja usar para abrir este arquivo:",
         L"Arquivo:",
-        L"Programas recomendados",
-        L"Outros programas",
-        L"Digite uma descri\u00E7\u00E3o para este tipo de arquivo:",
-        L"&Sempre usar o programa selecionado para este tipo de arquivo",
+        L"Programas Recomendados",
+        L"Outros Programas",
+        L"Digite uma descrição que você deseja usar para este tipo de arquivo:",
+        L"&Sempre usar o programa selecionado para abrir este tipo de arquivo",
         L"&Procurar...",
-        L"Se o programa desejado n\u00E3o estiver na lista ou no computador, voc\u00EA poder\u00E1 <A ID=\"WebSearch\">procurar o programa apropriado na Web</A>.",
+        L"Se o programa desejado não estiver na lista ou no computador, você pode <A ID=\"WebSearch\">procurar o programa apropriado na Web</A>.",
         L"Abrir com...",
         L"Programas",
-        L"Todos os arquivos",
+        L"Todos os Arquivos",
         L"OK",
         L"Cancelar",
         L"Nenhum programa registrado pode abrir este tipo de arquivo.",
-        L"O programa selecionado n\u00E3o conseguiu abrir o arquivo.",
+        L"O programa selecionado não pôde abrir o arquivo.",
     }},
-    {0x041F, {  // Turkish
-        L"Birlikte a\u00E7",
-        L"Bu dosyay\u0131 a\u00E7mak i\u00E7in kullanmak istedi\u011Finiz program\u0131 se\u00E7in:",
-        L"Dosya:",
-        L"\u00D6nerilen Programlar",
-        L"Di\u011Fer Programlar",
-        L"Bu dosya t\u00FCr\u00FC i\u00E7in kullanmak istedi\u011Finiz a\u00E7\u0131klamay\u0131 yaz\u0131n:",
-        L"Bu dosya t\u00FCr\u00FC i\u00E7in &her zaman se\u00E7ili program\u0131 kullan",
-        L"&G\u00F6zat...",
-        L"\u0130stedi\u011Finiz program listede veya bilgisayar\u0131n\u0131zda yoksa <A ID=\"WebSearch\">Web\u2019de uygun program\u0131 arayabilirsiniz</A>.",
-        L"Birlikte a\u00E7...",
-        L"Programlar",
-        L"T\u00FCm dosyalar",
-        L"Tamam",
-        L"\u0130ptal",
-        L"Bu dosya t\u00FCr\u00FCn\u00FC a\u00E7abilecek kay\u0131tl\u0131 bir program yok.",
-        L"Se\u00E7ilen program dosyay\u0131 a\u00E7amad\u0131.",
+    {0x0816, {  // Portuguese (Portugal)
+        L"Abrir com",
+        L"Escolha o programa que pretende utilizar para abrir este ficheiro:",
+        L"Ficheiro:",
+        L"Programas Recomendados",
+        L"Outros Programas",
+        L"Escreva uma descrição que pretende utilizar para este tipo de ficheiro:",
+        L"&Utilizar sempre o programa selecionado para abrir este tipo de ficheiro",
+        L"&Procurar...",
+        L"Se o programa pretendido não constar da lista, pode <A ID=\"WebSearch\">procurar o programa adequado na Web</A>.",
+        L"Abrir com...",
+        L"Programas",
+        L"Todos os Ficheiros",
+        L"OK",
+        L"Cancelar",
+        L"Nenhum programa registado pode abrir este tipo de ficheiro.",
+        L"O programa selecionado não conseguiu abrir o ficheiro.",
     }},
     {0x0419, {  // Russian
-        L"\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E",
-        L"\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0443, \u043A\u043E\u0442\u043E\u0440\u0443\u044E \u0441\u043B\u0435\u0434\u0443\u0435\u0442 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u044C \u0434\u043B\u044F \u043E\u0442\u043A\u0440\u044B\u0442\u0438\u044F \u044D\u0442\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430:",
-        L"\u0424\u0430\u0439\u043B:",
-        L"\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u043C\u044B\u0435 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u044B",
-        L"\u0414\u0440\u0443\u0433\u0438\u0435 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u044B",
-        L"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u0434\u043B\u044F \u0444\u0430\u0439\u043B\u043E\u0432 \u044D\u0442\u043E\u0433\u043E \u0442\u0438\u043F\u0430:",
-        L"&\u0412\u0441\u0435\u0433\u0434\u0430 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u044C \u044D\u0442\u0443 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0443 \u0434\u043B\u044F \u0444\u0430\u0439\u043B\u043E\u0432 \u044D\u0442\u043E\u0433\u043E \u0442\u0438\u043F\u0430",
-        L"&\u041E\u0431\u0437\u043E\u0440...",
-        L"\u0415\u0441\u043B\u0438 \u043D\u0443\u0436\u043D\u043E\u0439 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u044B \u043D\u0435\u0442 \u0432 \u0441\u043F\u0438\u0441\u043A\u0435 \u0438\u043B\u0438 \u043D\u0430 \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u0435, \u043C\u043E\u0436\u043D\u043E <A ID=\"WebSearch\">\u043D\u0430\u0439\u0442\u0438 \u043F\u043E\u0434\u0445\u043E\u0434\u044F\u0449\u0443\u044E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0443 \u0432 \u0418\u043D\u0442\u0435\u0440\u043D\u0435\u0442\u0435</A>.",
-        L"\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E...",
-        L"\u041F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u044B",
-        L"\u0412\u0441\u0435 \u0444\u0430\u0439\u043B\u044B",
-        L"\u041E\u041A",
-        L"\u041E\u0442\u043C\u0435\u043D\u0430",
-        L"\u041D\u0435\u0442 \u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0445 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C, \u0441\u043F\u043E\u0441\u043E\u0431\u043D\u044B\u0445 \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0444\u0430\u0439\u043B \u044D\u0442\u043E\u0433\u043E \u0442\u0438\u043F\u0430.",
-        L"\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0439 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435 \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0444\u0430\u0439\u043B.",
+        L"Выбор программы",
+        L"Выберите программу для открытия этого файла:",
+        L"Файл:",
+        L"Рекомендуемые программы",
+        L"Другие программы",
+        L"Введите описание для этого типа файлов:",
+        L"&Использовать выбранную программу для всех файлов этого типа",
+        L"&Обзор...",
+        L"Если нужной программы нет в списке, можно <A ID=\"WebSearch\">найти ее в Интернете</A>.",
+        L"Выбор программы...",
+        L"Программы",
+        L"Все файлы",
+        L"ОК",
+        L"Отмена",
+        L"Нет зарегистрированных программ для этого типа файлов.",
+        L"Выбранная программа не может открыть этот файл.",
     }},
-    {0x0804, {  // ChineseSimplified
-        L"\u6253\u5F00\u65B9\u5F0F",
-        L"\u9009\u62E9\u8981\u7528\u6765\u6253\u5F00\u6B64\u6587\u4EF6\u7684\u7A0B\u5E8F:",
-        L"\u6587\u4EF6:",
-        L"\u63A8\u8350\u7684\u7A0B\u5E8F",
-        L"\u5176\u4ED6\u7A0B\u5E8F",
-        L"\u952E\u5165\u7528\u4E8E\u6B64\u6587\u4EF6\u7C7B\u578B\u7684\u8BF4\u660E:",
-        L"\u59CB\u7EC8\u4F7F\u7528\u9009\u62E9\u7684\u7A0B\u5E8F\u6253\u5F00\u8FD9\u79CD\u6587\u4EF6",
-        L"\u6D4F\u89C8...",
-        L"\u5982\u679C\u6240\u9700\u7A0B\u5E8F\u4E0D\u5728\u5217\u8868\u4E2D\u6216\u8BA1\u7B97\u673A\u4E0A\uFF0C\u53EF\u4EE5<A ID=\"WebSearch\">\u5728 Web \u4E0A\u67E5\u627E\u9002\u5F53\u7684\u7A0B\u5E8F</A>\u3002",
-        L"\u6253\u5F00\u65B9\u5F0F...",
-        L"\u7A0B\u5E8F",
-        L"\u6240\u6709\u6587\u4EF6",
-        L"\u786E\u5B9A",
-        L"\u53D6\u6D88",
-        L"\u6CA1\u6709\u5DF2\u6CE8\u518C\u7684\u7A0B\u5E8F\u53EF\u4EE5\u6253\u5F00\u8FD9\u79CD\u6587\u4EF6\u3002",
-        L"\u6240\u9009\u7A0B\u5E8F\u65E0\u6CD5\u6253\u5F00\u6B64\u6587\u4EF6\u3002",
+    {0x0804, {  // Chinese (Simplified)
+        L"打开方式",
+        L"选择您想用来打开此文件的程序:",
+        L"文件:",
+        L"推荐的程序",
+        L"其他程序",
+        L"键入您想用于此类文件的描述:",
+        L"始终使用选择的程序打开这种文件(&A)",
+        L"浏览(&B)...",
+        L"如果您需要的程序不在列表中或计算机上，您可以<A ID=\"WebSearch\">在 Web 上查找适当的程序</A>。",
+        L"打开方式...",
+        L"程序",
+        L"所有文件",
+        L"确定",
+        L"取消",
+        L"没有已注册的程序可以打开此类文件。",
+        L"所选程序无法打开该文件。",
+    }},
+    {0x0404, {  // Chinese (Traditional)
+        L"開啟檔案",
+        L"選擇要用來開啟此檔案的程式:",
+        L"檔案:",
+        L"建議的程式",
+        L"其他程式",
+        L"輸入要用於此類檔案的描述:",
+        L"永遠使用選取的程式開啟這種檔案(&A)",
+        L"瀏覽(&B)...",
+        L"如果要使用的程式不在清單或電腦中，您可以<A ID=\"WebSearch\">在網路上尋找適當的程式</A>。",
+        L"開啟檔案...",
+        L"程式",
+        L"所有檔案",
+        L"確定",
+        L"取消",
+        L"沒有已註冊的程式可以開啟此類檔案。",
+        L"選取的程式無法開啟檔案。",
+    }},
+    {0x0411, {  // Japanese
+        L"ファイルを開くプログラムの選択",
+        L"このファイルを開くプログラムを選択してください:",
+        L"ファイル:",
+        L"推奨されたプログラム",
+        L"ほかのプログラム",
+        L"このファイルの種類に使用する説明を入力してください:",
+        L"この種類のファイルを開くときは、いつもこのプログラムを使う(&A)",
+        L"参照(&B)...",
+        L"使いたいプログラムが一覧にない場合は、<A ID=\"WebSearch\">Web で適切なプログラムを探す</A>ことができます。",
+        L"ファイルを開くプログラムの選択...",
+        L"プログラム",
+        L"すべてのファイル",
+        L"OK",
+        L"キャンセル",
+        L"この種類のファイルを開くことができる登録されたプログラムはありません。",
+        L"選択したプログラムでファイルを開くことができませんでした。",
+    }},
+    {0x0412, {  // Korean
+        L"연결 프로그램",
+        L"이 파일을 열 때 사용할 프로그램을 선택하십시오:",
+        L"파일:",
+        L"권장하는 프로그램",
+        L"기타 프로그램",
+        L"이 파일 형식에 사용할 설명을 입력하십시오:",
+        L"이 종류의 파일을 열 때 항상 선택된 프로그램 사용(&A)",
+        L"찾아보기(&B)...",
+        L"원하는 프로그램이 목록이나 컴퓨터에 없으면 <A ID=\"WebSearch\">웹에서 적절한 프로그램을 검색</A>할 수 있습니다.",
+        L"연결 프로그램...",
+        L"프로그램",
+        L"모든 파일",
+        L"확인",
+        L"취소",
+        L"이 파일 형식을 열 수 있는 등록된 프로그램이 없습니다.",
+        L"선택한 프로그램으로 파일을 열 수 없습니다.",
+    }},
+    {0x041F, {  // Turkish
+        L"Birlikte Aç",
+        L"Bu dosyayı açmak için kullanmak istediğiniz programı seçin:",
+        L"Dosya:",
+        L"Önerilen Programlar",
+        L"Diğer Programlar",
+        L"Bu dosya türü için kullanmak istediğiniz bir açıklama yazın:",
+        L"Bu tür dosyaları açmak için &her zaman seçili programı kullan",
+        L"&Gözat...",
+        L"İstediğiniz program listede veya bilgisayarınızda yoksa, <A ID=\"WebSearch\">Web'de uygun programı arayabilirsiniz</A>.",
+        L"Birlikte aç...",
+        L"Programlar",
+        L"Tüm Dosyalar",
+        L"Tamam",
+        L"İptal",
+        L"Kayıtlı hiçbir program bu tür dosyayı açamaz.",
+        L"Seçilen program dosyayı açamadı.",
     }},
     {0x0413, {  // Dutch
         L"Openen met",
-        L"Kies het programma waarmee u dit bestand wilt openen:",
+        L"Kies het programma dat u wilt gebruiken om dit bestand te openen:",
         L"Bestand:",
         L"Aanbevolen programma's",
         L"Andere programma's",
-        L"Typ een beschrijving voor dit bestandstype:",
-        L"Dit type bestand &altijd met het geselecteerde programma openen",
+        L"Typ een beschrijving die u wilt gebruiken voor dit type bestand:",
+        L"Dit type bestand &altijd met dit programma openen",
         L"&Bladeren...",
-        L"Als het gewenste programma niet in de lijst of op uw computer staat, kunt u <A ID=\"WebSearch\">op internet naar het juiste programma zoeken</A>.",
+        L"Als het gewenste programma niet in de lijst of op de computer staat, kunt u <A ID=\"WebSearch\">op internet naar het juiste programma zoeken</A>.",
         L"Openen met...",
         L"Programma's",
         L"Alle bestanden",
         L"OK",
         L"Annuleren",
-        L"Er is geen geregistreerd programma dat dit bestandstype kan openen.",
+        L"Er is geen geregistreerd programma waarmee dit type bestand kan worden geopend.",
         L"Het geselecteerde programma kan het bestand niet openen.",
     }},
     {0x0415, {  // Polish
-        L"Otwieranie za pomoc\u0105",
-        L"Wybierz program, kt\u00F3rego chcesz u\u017Cy\u0107 do otwarcia tego pliku:",
+        L"Otwórz za pomocą",
+        L"Wybierz program, którego chcesz użyć do otwarcia tego pliku:",
         L"Plik:",
-        L"Zalecane programy",
+        L"Polecane programy",
         L"Inne programy",
-        L"Wpisz opis u\u017Cywany dla tego typu pliku:",
-        L"&Zawsze u\u017Cywaj tego programu do plik\u00F3w tego typu",
-        L"&Przegl\u0105daj...",
-        L"Je\u015Bli odpowiedniego programu nie ma na li\u015Bcie ani na komputerze, mo\u017Cesz <A ID=\"WebSearch\">wyszuka\u0107 go w Internecie</A>.",
-        L"Otwieranie za pomoc\u0105...",
+        L"Wpisz opis, którego chcesz użyć dla tego typu pliku:",
+        L"&Zawsze używaj wybranego programu do otwierania tego typu plików",
+        L"&Przeglądaj...",
+        L"Jeśli żądanego programu nie ma na liście ani na komputerze, możesz <A ID=\"WebSearch\">poszukać odpowiedniego programu w sieci Web</A>.",
+        L"Otwórz za pomocą...",
         L"Programy",
         L"Wszystkie pliki",
         L"OK",
         L"Anuluj",
-        L"\u017Baden zarejestrowany program nie mo\u017Ce otworzy\u0107 tego typu pliku.",
-        L"Wybrany program nie m\u00F3g\u0142 otworzy\u0107 pliku.",
+        L"Żaden zarejestrowany program nie może otworzyć tego typu pliku.",
+        L"Wybrany program nie mógł otworzyć pliku.",
+    }},
+    {0x041D, {  // Swedish
+        L"Öppna med",
+        L"Välj det program som du vill använda för att öppna den här filen:",
+        L"Fil:",
+        L"Rekommenderade program",
+        L"Andra program",
+        L"Ange en beskrivning som du vill använda för den här filtypen:",
+        L"Använd &alltid detta program för att öppna den här filtypen",
+        L"&Bläddra...",
+        L"Om programmet inte finns i listan kan du <A ID=\"WebSearch\">söka efter lämpligt program på webben</A>.",
+        L"Öppna med...",
+        L"Program",
+        L"Alla filer",
+        L"OK",
+        L"Avbryt",
+        L"Det finns inget registrerat program som kan öppna den här filtypen.",
+        L"Det markerade programmet kunde inte öppna filen.",
+    }},
+    {0x0406, {  // Danish
+        L"Åbn med",
+        L"Vælg det program, du vil bruge til at åbne filen med:",
+        L"Fil:",
+        L"Anbefalede programmer",
+        L"Andre programmer",
+        L"Skriv en beskrivelse, du vil bruge til denne type fil:",
+        L"Brug &altid det valgte program til at åbne denne type fil",
+        L"&Gennemse...",
+        L"Hvis programmet ikke er på listen, kan du <A ID=\"WebSearch\">søge efter et program på internettet</A>.",
+        L"Åbn med...",
+        L"Programmer",
+        L"Alle filer",
+        L"OK",
+        L"Annuller",
+        L"Intet registreret program kan åbne denne filtype.",
+        L"Det valgte program kunne ikke åbne filen.",
+    }},
+    {0x0414, {  // Norwegian
+        L"Åpne i",
+        L"Velg programmet du vil bruke til å åpne denne filen:",
+        L"Fil:",
+        L"Anbefalte programmer",
+        L"Andre programmer",
+        L"Skriv inn en beskrivelse du vil bruke for denne filtypen:",
+        L"Bruk &alltid det valgte programmet til å åpne denne filtypen",
+        L"&Bla gjennom...",
+        L"Hvis programmet ikke finnes i listen, kan du <A ID=\"WebSearch\">søke etter et passende program på Internett</A>.",
+        L"Åpne i...",
+        L"Programmer",
+        L"Alle filer",
+        L"OK",
+        L"Avbryt",
+        L"Ingen registrerte programmer kan åpne denne filtypen.",
+        L"Det valgte programmet kunne ikke åpne filen.",
+    }},
+    {0x040B, {  // Finnish
+        L"Avaa sovelluksessa",
+        L"Valitse sovellus, jolla haluat avata tämän tiedoston:",
+        L"Tiedosto:",
+        L"Suositellut sovellukset",
+        L"Muut sovellukset",
+        L"Kirjoita kuvaus, jota haluat käyttää tälle tiedostotyypille:",
+        L"Käytä &aina valittua sovellusta tämän tiedostotyypin avaamiseen",
+        L"&Selaa...",
+        L"Jos haluamasi sovellus ei ole luettelossa, voit <A ID=\"WebSearch\">hakea sopivaa sovellusta verkosta</A>.",
+        L"Avaa sovelluksessa...",
+        L"Sovellukset",
+        L"Kaikki tiedostot",
+        L"OK",
+        L"Peruuta",
+        L"Yksikään rekisteröity sovellus ei voi avata tätä tiedostotyyppiä.",
+        L"Valittu sovellus ei voinut avata tiedostoa.",
+    }},
+    {0x0405, {  // Czech
+        L"Otevřít v programu",
+        L"Vyberte program, který chcete použít k otevření tohoto souboru:",
+        L"Soubor:",
+        L"Doporučené programy",
+        L"Jiné programy",
+        L"Zadejte popis, který chcete použít pro tento typ souboru:",
+        L"K otevření tohoto typu souboru &vždycky použít vybraný program",
+        L"&Procházet...",
+        L"Pokud požadovaný program není v seznamu, můžete <A ID=\"WebSearch\">vyhledat vhodný program na webu</A>.",
+        L"Otevřít v programu...",
+        L"Programy",
+        L"Všechny soubory",
+        L"OK",
+        L"Storno",
+        L"Žádný registrovaný program nemůže otevřít tento typ souboru.",
+        L"Vybraný program nemohl soubor otevřít.",
+    }},
+    {0x040E, {  // Hungarian
+        L"Társítás",
+        L"Válassza ki a fájl megnyitásához használni kívánt programot:",
+        L"Fájl:",
+        L"Ajánlott programok",
+        L"Egyéb programok",
+        L"Írja be a fájltípushoz használni kívánt leírást:",
+        L"&Mindig a kijelölt programmal nyissa meg ezt a fájltípust",
+        L"&Tallózás...",
+        L"Ha a kívánt program nem található a listában, <A ID=\"WebSearch\">megkeresheti a megfelelő programot a weben</A>.",
+        L"Társítás...",
+        L"Programok",
+        L"Minden fájl",
+        L"OK",
+        L"Mégse",
+        L"Nincs regisztrált program a fájltípus megnyitásához.",
+        L"A kijelölt program nem tudta megnyitni a fájlt.",
+    }},
+    {0x0408, {  // Greek
+        L"Άνοιγμα με",
+        L"Επιλέξτε το πρόγραμμα που θέλετε να χρησιμοποιήσετε για το άνοιγμα αυτού του αρχείου:",
+        L"Αρχείο:",
+        L"Προτεινόμενα προγράμματα",
+        L"Άλλα προγράμματα",
+        L"Πληκτρολογήστε μια περιγραφή για αυτόν τον τύπο αρχείου:",
+        L"&Να χρησιμοποιείται πάντα το επιλεγμένο πρόγραμμα για αυτόν τον τύπο αρχείου",
+        L"&Αναζήτηση...",
+        L"Εάν το πρόγραμμα δεν υπάρχει στη λίστα, μπορείτε να <A ID=\"WebSearch\">αναζητήσετε το κατάλληλο πρόγραμμα στο Web</A>.",
+        L"Άνοιγμα με...",
+        L"Προγράμματα",
+        L"Όλα τα αρχεία",
+        L"OK",
+        L"Άκυρο",
+        L"Κανένα καταχωρημένο πρόγραμμα δεν μπορεί να ανοίξει αυτόν τον τύπο αρχείου.",
+        L"Δεν ήταν δυνατό το άνοιγμα του αρχείου από το επιλεγμένο πρόγραμμα.",
+    }},
+    {0x0401, {  // Arabic
+        L"فتح باستخدام",
+        L"اختر البرنامج الذي تريد استخدامه لفتح هذا الملف:",
+        L"الملف:",
+        L"البرامج الموصى بها",
+        L"برامج أخرى",
+        L"اكتب وصفاً تريد استخدامه لهذا النوع من الملفات:",
+        L"استخدام البرنامج المحدد &دائماً لفتح هذا النوع من الملفات",
+        L"&استعراض...",
+        L"إذا لم يكن البرنامج المطلوب في القائمة، يمكنك <A ID=\"WebSearch\">البحث عن البرنامج المناسب على الويب</A>.",
+        L"فتح باستخدام...",
+        L"البرامج",
+        L"كافة الملفات",
+        L"موافق",
+        L"إلغاء الأمر",
+        L"لا يوجد برنامج مسجل يمكنه فتح هذا النوع من الملفات.",
+        L"تعذر فتح الملف باستخدام البرنامج المحدد.",
+    }},
+    {0x040D, {  // Hebrew
+        L"פתח באמצעות",
+        L"בחר את התוכנית שברצונך להשתמש בה כדי לפתוח קובץ זה:",
+        L"קובץ:",
+        L"תוכניות מומלצות",
+        L"תוכניות אחרות",
+        L"הקלד תיאור שברצונך להשתמש בו עבור סוג קובץ זה:",
+        L"השתמש &תמיד בתוכנית שנבחרה לפתיחת סוג קובץ זה",
+        L"&עיון...",
+        L"אם התוכנית הרצויה אינה מופיעה ברשימה, באפשרותך <A ID=\"WebSearch\">לחפש את התוכנית המתאימה באינטרנט</A>.",
+        L"פתח באמצעות...",
+        L"תוכניות",
+        L"כל הקבצים",
+        L"אישור",
+        L"ביטול",
+        L"אין תוכנית רשומה היכולה לפתוח סוג קובץ זה.",
+        L"התוכנית שנבחרה לא הצליחה לפתוח את הקובץ.",
+    }},
+    {0x0418, {  // Romanian
+        L"Deschidere cu",
+        L"Alegeți programul pe care doriți să îl utilizați pentru a deschide acest fișier:",
+        L"Fișier:",
+        L"Programe recomandate",
+        L"Alte programe",
+        L"Tastați o descriere pe care doriți să o utilizați pentru acest tip de fișier:",
+        L"Se utilizează &întotdeauna programul selectat pentru acest tip de fișier",
+        L"&Răsfoire...",
+        L"Dacă programul dorit nu este în listă, puteți <A ID=\"WebSearch\">căuta programul corespunzător pe Web</A>.",
+        L"Deschidere cu...",
+        L"Programe",
+        L"Toate fișierele",
+        L"OK",
+        L"Anulare",
+        L"Niciun program înregistrat nu poate deschide acest tip de fișier.",
+        L"Programul selectat nu a putut deschide fișierul.",
+    }},
+    {0x0422, {  // Ukrainian
+        L"Вибір програми",
+        L"Виберіть програму для відкриття цього файлу:",
+        L"Файл:",
+        L"Рекомендовані програми",
+        L"Інші програми",
+        L"Введіть опис для цього типу файлів:",
+        L"&Завжди використовувати вибрану програму для цього типу файлів",
+        L"&Огляд...",
+        L"Якщо потрібної програми немає у списку, можна <A ID=\"WebSearch\">знайти її в Інтернеті</A>.",
+        L"Вибір програми...",
+        L"Програми",
+        L"Усі файли",
+        L"ОК",
+        L"Скасувати",
+        L"Немає зареєстрованих програм для цього типу файлів.",
+        L"Вибрана програма не змогла відкрити файл.",
+    }},
+    {0x0402, {  // Bulgarian
+        L"Отваряне с",
+        L"Изберете програмата, която искате да използвате за отваряне на този файл:",
+        L"Файл:",
+        L"Препоръчани програми",
+        L"Други програми",
+        L"Въведете описание за този тип файл:",
+        L"&Винаги използвай избраната програма за този тип файл",
+        L"&Преглед...",
+        L"Ако желаната програма не е в списъка, можете да <A ID=\"WebSearch\">поърсите подходяща програма в интернет</A>.",
+        L"Отваряне с...",
+        L"Програми",
+        L"Всички файлове",
+        L"ОК",
+        L"Отказ",
+        L"Няма регистрирана програма за отваряне на този тип файл.",
+        L"Избраната програма не може да отвори файла.",
+    }},
+    {0x041B, {  // Slovak
+        L"Otvoriť v programe",
+        L"Vyberte program, ktorý chcete použiť na otvorenie tohto súboru:",
+        L"Súbor:",
+        L"Odporúčané programy",
+        L"Iné programy",
+        L"Zadajte popis, ktorý chcete použiť pre tento typ súboru:",
+        L"Na otvorenie tohto typu súboru &vždy použiť vybratý program",
+        L"&Prehľadávať...",
+        L"Ak požadovaný program nie je v zozname, môžete <A ID=\"WebSearch\">vyhľadať vhodný program na webe</A>.",
+        L"Otvoriť v programe...",
+        L"Programy",
+        L"Všetky súbory",
+        L"OK",
+        L"Zrušiť",
+        L"Žiadny zaregistrovaný program nemôže otvoriť tento typ súboru.",
+        L"Vybratý program nemohol otvoriť súbor.",
+    }},
+    {0x041A, {  // Croatian
+        L"Otvori pomoću",
+        L"Odaberite program kojim želite otvoriti ovu datoteku:",
+        L"Datoteka:",
+        L"Preporučeni programi",
+        L"Ostali programi",
+        L"Upišite opis koji želite koristiti za ovu vrstu datoteke:",
+        L"&Uvijek koristi odabrani program za otvaranje ove vrste datoteka",
+        L"&Pregledaj...",
+        L"Ako željeni program nije na popisu, možete <A ID=\"WebSearch\">potražiti odgovarajući program na webu</A>.",
+        L"Otvori pomoću...",
+        L"Programi",
+        L"Sve datoteke",
+        L"U redu",
+        L"Odustani",
+        L"Nijedan registrirani program ne može otvoriti ovu vrstu datoteke.",
+        L"Odabrani program nije mogao otvoriti datoteku.",
+    }},
+    {0x0421, {  // Indonesian
+        L"Buka dengan",
+        L"Pilih program yang ingin Anda gunakan untuk membuka file ini:",
+        L"File:",
+        L"Program yang Disarankan",
+        L"Program Lainnya",
+        L"Ketik deskripsi yang ingin Anda gunakan untuk jenis file ini:",
+        L"&Selalu gunakan program yang dipilih untuk membuka jenis file ini",
+        L"&Telusuri...",
+        L"Jika program yang Anda inginkan tidak ada dalam daftar, Anda dapat <A ID=\"WebSearch\">mencari program yang sesuai di Web</A>.",
+        L"Buka dengan...",
+        L"Program",
+        L"Semua File",
+        L"OK",
+        L"Batal",
+        L"Tidak ada program terdaftar yang dapat membuka jenis file ini.",
+        L"Program yang dipilih tidak dapat membuka file.",
     }},
 };
 
@@ -643,50 +1050,28 @@ static const LocalePack* LocalePackFromName(PCWSTR localeName) {
     if (!localeName || !*localeName) return nullptr;
     const LCID lcid = LocaleNameToLCID(localeName, 0);
     if (lcid) {
-        if (const LocalePack* locale =
-                TryFindLocalePack(LANGIDFROMLCID(lcid))) {
+        if (const LocalePack* locale = TryFindLocalePack(LANGIDFROMLCID(lcid))) {
             return locale;
         }
     }
-
-    // LocaleNameToLCID can reject newer BCP-47 aliases such as zh-Hans on
-    // older Windows 10 SDK surfaces. Keep a small language-tag fallback.
-    if (!_wcsnicmp(localeName, L"it", 2)) return FindLocalePack(0x0410);
-    if (!_wcsnicmp(localeName, L"es", 2)) return FindLocalePack(0x040A);
-    if (!_wcsnicmp(localeName, L"fr", 2)) return FindLocalePack(0x040C);
-    if (!_wcsnicmp(localeName, L"pt", 2)) return FindLocalePack(0x0416);
-    if (!_wcsnicmp(localeName, L"tr", 2)) return FindLocalePack(0x041F);
-    if (!_wcsnicmp(localeName, L"ru", 2)) return FindLocalePack(0x0419);
-    if (!_wcsnicmp(localeName, L"zh", 2)) return FindLocalePack(0x0804);
-    if (!_wcsnicmp(localeName, L"nl", 2)) return FindLocalePack(0x0413);
-    if (!_wcsnicmp(localeName, L"pl", 2)) return FindLocalePack(0x0415);
-    if (!_wcsnicmp(localeName, L"en", 2)) return FindLocalePack(0x0409);
     return nullptr;
 }
 
 static const LocalePack* DetectAutomaticLocale() {
-    // GetUserDefaultUILanguage can report en-US in some short-lived Shell COM
-    // hosts even when the user's preferred display-language list starts with
-    // Italian (or another language). Follow the ordered user preference list
-    // first, just like Windows resource loading does.
     ULONG languageCount = 0;
     ULONG bufferChars = 0;
-    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &languageCount, nullptr,
-                                    &bufferChars) &&
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &languageCount, nullptr, &bufferChars) &&
         bufferChars > 1 && bufferChars < 32768) {
         try {
             std::vector<wchar_t> languages(bufferChars);
-            if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &languageCount,
-                                            languages.data(), &bufferChars)) {
-                for (PCWSTR cursor = languages.data(); *cursor;
-                     cursor += wcslen(cursor) + 1) {
+            if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &languageCount, languages.data(), &bufferChars)) {
+                for (PCWSTR cursor = languages.data(); *cursor; cursor += wcslen(cursor) + 1) {
                     if (const LocalePack* locale = LocalePackFromName(cursor)) {
                         return locale;
                     }
                 }
             }
-        } catch (...) {
-        }
+        } catch (...) {}
     }
 
     wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
@@ -695,8 +1080,7 @@ static const LocalePack* DetectAutomaticLocale() {
             return locale;
         }
     }
-    if (const LocalePack* locale =
-            TryFindLocalePack(GetUserDefaultUILanguage())) {
+    if (const LocalePack* locale = TryFindLocalePack(GetUserDefaultUILanguage())) {
         return locale;
     }
     if (GetSystemDefaultLocaleName(localeName, ARRAYSIZE(localeName))) {
@@ -704,35 +1088,83 @@ static const LocalePack* DetectAutomaticLocale() {
             return locale;
         }
     }
-    if (const LocalePack* locale =
-            TryFindLocalePack(GetSystemDefaultUILanguage())) {
+    if (const LocalePack* locale = TryFindLocalePack(GetSystemDefaultUILanguage())) {
         return locale;
     }
     return &g_Locales[0];
 }
 
+static std::wstring g_configuredLanguage = L"auto";
+static std::mutex g_languageMutex;
+
 static void DetermineLocale() {
-    const int requested = g_languageSetting.load(std::memory_order_acquire);
-    const LocalePack* selected = nullptr;
-    switch (requested) {
-        case 1: selected = FindLocalePack(0x0409); break;
-        case 2: selected = FindLocalePack(0x0410); break;
-        case 3: selected = FindLocalePack(0x040A); break;
-        case 4: selected = FindLocalePack(0x040C); break;
-        case 5: selected = FindLocalePack(0x0416); break;
-        case 6: selected = FindLocalePack(0x041F); break;
-        case 7: selected = FindLocalePack(0x0419); break;
-        case 8: selected = FindLocalePack(0x0804); break;
-        case 9: selected = FindLocalePack(0x0413); break;
-        case 10: selected = FindLocalePack(0x0415); break;
-        default: selected = DetectAutomaticLocale(); break;
+    std::wstring requested;
+    {
+        std::lock_guard<std::mutex> lock(g_languageMutex);
+        requested = g_configuredLanguage;
     }
+
+    const LocalePack* selected = nullptr;
+    if (!requested.empty() && _wcsicmp(requested.c_str(), L"auto") != 0 && _wcsicmp(requested.c_str(), L"0") != 0) {
+        struct LangMapping {
+            PCWSTR key;
+            LANGID id;
+        };
+        static const LangMapping kMap[] = {
+            {L"en", 0x0409}, {L"english", 0x0409},
+            {L"it", 0x0410}, {L"italiano", 0x0410}, {L"italian", 0x0410},
+            {L"es", 0x040A}, {L"español", 0x040A}, {L"spanish", 0x040A},
+            {L"fr", 0x040C}, {L"français", 0x040C}, {L"french", 0x040C},
+            {L"de", 0x0407}, {L"deutsch", 0x0407}, {L"german", 0x0407},
+            {L"pt-br", 0x0416}, {L"pt_br", 0x0416}, {L"português (brasil)", 0x0416},
+            {L"pt-pt", 0x0816}, {L"pt_pt", 0x0816}, {L"pt", 0x0416}, {L"portuguese", 0x0416},
+            {L"ru", 0x0419}, {L"русский", 0x0419}, {L"russian", 0x0419},
+            {L"zh-cn", 0x0804}, {L"zh-hans", 0x0804}, {L"zh_cn", 0x0804}, {L"zh", 0x0804}, {L"简体中文", 0x0804},
+            {L"zh-tw", 0x0404}, {L"zh-hant", 0x0404}, {L"zh_tw", 0x0404}, {L"繁體中文", 0x0404},
+            {L"ja", 0x0411}, {L"日本語", 0x0411}, {L"japanese", 0x0411},
+            {L"ko", 0x0412}, {L"한국어", 0x0412}, {L"korean", 0x0412},
+            {L"tr", 0x041F}, {L"türkçe", 0x041F}, {L"turkish", 0x041F},
+            {L"nl", 0x0413}, {L"nederlands", 0x0413}, {L"dutch", 0x0413},
+            {L"pl", 0x0415}, {L"polski", 0x0415}, {L"polish", 0x0415},
+            {L"sv", 0x041D}, {L"svenska", 0x041D}, {L"swedish", 0x041D},
+            {L"da", 0x0406}, {L"dansk", 0x0406}, {L"danish", 0x0406},
+            {L"nb", 0x0414}, {L"no", 0x0414}, {L"norsk", 0x0414}, {L"norwegian", 0x0414},
+            {L"fi", 0x040B}, {L"suomi", 0x040B}, {L"finnish", 0x040B},
+            {L"cs", 0x0405}, {L"čeština", 0x0405}, {L"czech", 0x0405},
+            {L"hu", 0x040E}, {L"magyar", 0x040E}, {L"hungarian", 0x040E},
+            {L"el", 0x0408}, {L"ελληνικά", 0x0408}, {L"greek", 0x0408},
+            {L"ar", 0x0401}, {L"العربية", 0x0401}, {L"arabic", 0x0401},
+            {L"he", 0x040D}, {L"עברית", 0x040D}, {L"hebrew", 0x040D},
+            {L"ro", 0x0418}, {L"română", 0x0418}, {L"romanian", 0x0418},
+            {L"uk", 0x0422}, {L"українська", 0x0422}, {L"ukrainian", 0x0422},
+            {L"bg", 0x0402}, {L"български", 0x0402}, {L"bulgarian", 0x0402},
+            {L"sk", 0x041B}, {L"slovenčina", 0x041B}, {L"slovak", 0x041B},
+            {L"hr", 0x041A}, {L"hrvatski", 0x041A}, {L"croatian", 0x041A},
+            {L"id", 0x0421}, {L"bahasa indonesia", 0x0421}, {L"indonesian", 0x0421}
+        };
+
+        for (const auto& entry : kMap) {
+            if (!_wcsicmp(requested.c_str(), entry.key)) {
+                selected = FindLocalePack(entry.id);
+                break;
+            }
+        }
+        if (!selected) {
+            for (const auto& entry : kMap) {
+                size_t len = wcslen(entry.key);
+                if (!_wcsnicmp(requested.c_str(), entry.key, len)) {
+                    selected = FindLocalePack(entry.id);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!selected) selected = DetectAutomaticLocale();
     if (!selected) selected = &g_Locales[0];
     g_CurrentLocalePack.store(selected, std::memory_order_release);
-    Wh_Log(L"Standalone Open With locale: setting=%d selected=%04X "
-           L"userUI=%04X systemUI=%04X",
-           requested, selected->langId, GetUserDefaultUILanguage(),
-           GetSystemDefaultUILanguage());
+    Wh_Log(L"Standalone Open With locale: requested=%s selected=%04X userUI=%04X systemUI=%04X",
+           requested.c_str(), selected->langId, GetUserDefaultUILanguage(), GetSystemDefaultUILanguage());
 }
 
 static void LoadSettings() {
@@ -744,6 +1176,11 @@ static void LoadSettings() {
         Wh_GetIntSetting(L"experimentalRegistryVirtualization") != 0;
     WindhawkUtils::StringSetting language =
         WindhawkUtils::StringSetting::make(L"language");
+    {
+        std::lock_guard<std::mutex> lock(g_languageMutex);
+        g_configuredLanguage = (language.get() && *language.get()) ? language.get() : L"auto";
+    }
+    DetermineLocale();
     WindhawkUtils::StringSetting defaultBehavior =
         WindhawkUtils::StringSetting::make(L"defaultAssociationBehavior");
 
@@ -801,6 +1238,7 @@ struct PickerRequest {
     HANDLE completionEvent = nullptr;
     // Properties -> Change selects a default but must not execute the file.
     bool setDefaultOnly = false;
+    std::vector<std::wstring> paths; // All selected paths (multi-selection)
 };
 
 struct PickerState {
@@ -809,6 +1247,8 @@ struct PickerState {
     ImageListOwner images;
     IconOwner headerIcon;
     FontOwner font;
+    BrushOwner darkBgBrush;
+    BrushOwner darkCardBrush;
     HWND window = nullptr;
     HWND list = nullptr;
     HWND description = nullptr;
@@ -820,6 +1260,8 @@ struct PickerState {
     bool openDefaultSettings = false;
     bool listUsesGroups = false;
     bool hasOtherGroup = false;
+    bool isDarkMode = false;
+    bool isExtensionless = false;
     int chosenIndex = -1;
 };
 
@@ -1023,6 +1465,25 @@ static HRESULT EnsureUserApplicationRegistration(
     return S_OK;
 }
 
+static bool HandlerExecutableExists(const std::wstring& executable, const std::wstring& progId) {
+    if (!executable.empty()) {
+        if (GetFileAttributesW(executable.c_str()) != INVALID_FILE_ATTRIBUTES) return true;
+        wchar_t found[MAX_PATH] = {};
+        if (SearchPathW(nullptr, executable.c_str(), L".exe", ARRAYSIZE(found), found, nullptr)) return true;
+    }
+    if (!progId.empty()) {
+        wchar_t subKey[512] = {};
+        if (swprintf_s(subKey, L"%s\\shell\\open\\command", progId.c_str()) > 0) {
+            HKEY key = nullptr;
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, subKey, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+                RegCloseKey(key);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static bool IsOpenWithExecutable(const std::wstring& executable) {
     if (executable.empty()) return false;
     PCWSTR fileName = PathFindFileNameW(executable.c_str());
@@ -1184,7 +1645,7 @@ static bool EnumerateRegistryApplications(PickerState& state) {
                 break;
             }
         }
-        if (!duplicate) {
+        if (!duplicate && HandlerExecutableExists(executable, ApplicationProgIdForExecutable(executable))) {
             HandlerEntry entry;
             entry.browsed = true;
             entry.internalName = executable;
@@ -1232,6 +1693,8 @@ static bool EnumerateHandlers(PickerState& state) {
         if (entry.displayName.empty()) continue;
         entry.progId = ResolveHandlerProgId(entry.internalName);
         if (IsOpenWithHandlerName(entry.internalName, entry.progId))
+            continue;
+        if (!HandlerExecutableExists(entry.internalName, entry.progId))
             continue;
         entry.recommended = entry.handler->IsRecommended() == S_OK;
         state.handlers.push_back(std::move(entry));
@@ -1591,7 +2054,14 @@ static int FindListItemForHandler(PickerState& state, size_t handlerIndex) {
 }
 
 static void InitializeList(PickerState& state) {
-    SetWindowTheme(state.list, L"Explorer", nullptr);
+    if (state.isDarkMode) {
+        SetWindowTheme(state.list, L"DarkMode_Explorer", nullptr);
+        ListView_SetBkColor(state.list, RGB(32, 32, 32));
+        ListView_SetTextBkColor(state.list, RGB(32, 32, 32));
+        ListView_SetTextColor(state.list, RGB(240, 240, 240));
+    } else {
+        SetWindowTheme(state.list, L"Explorer", nullptr);
+    }
     ListView_SetExtendedListViewStyle(state.list,
         LVS_EX_DOUBLEBUFFER | LVS_EX_FULLROWSELECT | LVS_EX_LABELTIP);
     ListView_SetView(state.list, LV_VIEW_TILE);
@@ -1640,7 +2110,10 @@ static void Browse(PickerState& state) {
     };
     dialog->SetFileTypes(ARRAYSIZE(filters), filters);
     dialog->SetTitle(LOC(STR_BROWSE_TITLE));
-    if (FAILED(dialog->Show(state.window))) return;
+    g_activeBrowseHwnd.store(state.window, std::memory_order_release);
+    const HRESULT showHr = dialog->Show(state.window);
+    g_activeBrowseHwnd.store(nullptr, std::memory_order_release);
+    if (FAILED(showHr)) return;
     ComPtr<IShellItem> item;
     if (FAILED(dialog->GetResult(item.Put())) || !item) return;
     PWSTR raw = nullptr;
@@ -1670,12 +2143,7 @@ static void Browse(PickerState& state) {
     HandlerEntry entry;
     entry.browsed = true;
     entry.internalName = executable;
-    const std::wstring extension = ExtensionOf(state.request.path);
-    const HRESULT registrationHr = EnsureUserApplicationRegistration(
-        executable, extension, &entry.progId);
-    Wh_Log(L"Standalone Open With: browsed app registration exe=%s "
-           L"progId=%s hr=0x%08X", executable.c_str(), entry.progId.c_str(),
-           static_cast<unsigned int>(registrationHr));
+    entry.progId = ApplicationProgIdForExecutable(executable);
     PCWSTR name = PathFindFileNameW(executable.c_str());
     entry.displayName = name && *name ? name : executable;
     if (entry.displayName.size() > 4 &&
@@ -1842,6 +2310,17 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             if (!state) return -1;
             BuildPickerControls(*state);
             return 0;
+        case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLORDLG:
+        case WM_CTLCOLORBTN: {
+            if (state && state->isDarkMode && state->darkBgBrush.Get()) {
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, RGB(240, 240, 240));
+                return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+            }
+            break;
+        }
         case WM_COMMAND:
             if (!state) break;
             if (LOWORD(wParam) == IDOK) {
@@ -1850,8 +2329,8 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                     state->chosenIndex = index;
                     state->accepted = true;
                     state->makeDefaultRequested =
-                        state->request.setDefaultOnly ||
-                        Button_GetCheck(state->alwaysUse) == BST_CHECKED;
+                        !state->isExtensionless && (state->request.setDefaultOnly ||
+                        Button_GetCheck(state->alwaysUse) == BST_CHECKED);
                     if (state->description) {
                         const int chars =
                             GetWindowTextLengthW(state->description);
@@ -1898,6 +2377,17 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
         case WM_SOW_SETTINGS_CHANGED:
             if (state) ApplyLocalizedText(*state);
             return 0;
+        case WM_KEYDOWN: {
+            if (wParam == VK_RETURN) {
+                SendMessageW(window, WM_COMMAND, IDOK, 0);
+                return 0;
+            }
+            if (wParam == VK_ESCAPE) {
+                SendMessageW(window, WM_COMMAND, IDCANCEL, 0);
+                return 0;
+            }
+            break;
+        }
         case WM_CLOSE: DestroyWindow(window); return 0;
         case WM_NCDESTROY:
             if (state) { state->finished = true; state->window = nullptr; }
@@ -2209,17 +2699,7 @@ static bool TryInvokeStoredAssociation(const std::wstring& path) {
     return SUCCEEDED(hr);
 }
 
-static HRESULT InvokeRegistered(const PickerState& state, StandaloneAssocHandler* handler) {
-    if (!handler) return E_INVALIDARG;
-    ComPtr<IShellItem> item;
-    HRESULT hr = SHCreateItemFromParsingName(state.request.path.c_str(), nullptr,
-                                             IID_PPV_ARGS(item.Put()));
-    if (FAILED(hr) || !item) return hr;
-    ComPtr<IDataObject> data;
-    hr = item->BindToHandler(nullptr, kBhidDataObject, IID_IDataObject,
-                             reinterpret_cast<void**>(data.Put()));
-    return SUCCEEDED(hr) && data ? handler->Invoke(data.Get()) : hr;
-}
+
 
 static HRESULT InvokeSelectedHandler(const PickerState& state,
                                      HandlerEntry& selected) {
@@ -2248,339 +2728,37 @@ static HRESULT InvokeSelectedHandler(const PickerState& state,
     }
 }
 
-static HRESULT InvokeBrowsed(const PickerState& state,
-                             const std::wstring& executable) {
-    return InvokeExecutableWithFile(executable, state.request.path);
-}
+static HRESULT InvokeExecutableWithFiles(const std::wstring& executable,
+                                       const std::vector<std::wstring>& files) {
+    if (executable.empty() || files.empty()) return E_INVALIDARG;
+    if (files.size() == 1) return InvokeExecutableWithFile(executable, files[0]);
 
-// UserChoice hash algorithm translated to C++ from PS-SFTA's MIT-licensed
-// implementation (Copyright 2022 Danysys), based on the reverse-engineered
-// Windows 10 1703+ association format. The routine below is purpose-written
-// for this mod and doesn't depend on Mozilla code.
-class BCryptAlgorithmOwner {
-   public:
-    ~BCryptAlgorithmOwner() {
-        if (value_) BCryptCloseAlgorithmProvider(value_, 0);
-    }
-    BCRYPT_ALG_HANDLE* Put() { return &value_; }
-    BCRYPT_ALG_HANDLE Get() const { return value_; }
-   private:
-    BCRYPT_ALG_HANDLE value_ = nullptr;
-};
-
-class BCryptHashOwner {
-   public:
-    ~BCryptHashOwner() {
-        if (value_) BCryptDestroyHash(value_);
-    }
-    BCRYPT_HASH_HANDLE* Put() { return &value_; }
-    BCRYPT_HASH_HANDLE Get() const { return value_; }
-   private:
-    BCRYPT_HASH_HANDLE value_ = nullptr;
-};
-
-struct LocalFreeDeleter {
-    void operator()(wchar_t* value) const noexcept {
-        if (value) LocalFree(value);
-    }
-};
-using LocalString = std::unique_ptr<wchar_t, LocalFreeDeleter>;
-
-static std::wstring CurrentUserSidString() {
-    HANDLE rawToken = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken))
-        return {};
-    WinHandle token(rawToken);
-
-    DWORD bytes = 0;
-    GetTokenInformation(token.get(), TokenUser, nullptr, 0, &bytes);
-    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !bytes) return {};
-    try {
-        std::vector<BYTE> buffer(bytes);
-        if (!GetTokenInformation(token.get(), TokenUser, buffer.data(), bytes,
-                                 &bytes)) {
-            return {};
-        }
-        PWSTR rawSid = nullptr;
-        if (!ConvertSidToStringSidW(
-                reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid,
-                &rawSid) || !rawSid) {
-            return {};
-        }
-        LocalString sid(rawSid);
-        return sid.get();
-    } catch (...) {
-        return {};
-    }
-}
-
-static bool Md5Bytes(const BYTE* input, ULONG inputBytes,
-                     DWORD output[4]) {
-    BCryptAlgorithmOwner algorithm;
-    if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(
-            algorithm.Put(), BCRYPT_MD5_ALGORITHM, nullptr, 0))) {
-        return false;
-    }
-    BCryptHashOwner hash;
-    if (!BCRYPT_SUCCESS(BCryptCreateHash(
-            algorithm.Get(), hash.Put(), nullptr, 0, nullptr, 0, 0))) {
-        return false;
-    }
-    if (!BCRYPT_SUCCESS(BCryptHashData(
-            hash.Get(), const_cast<PUCHAR>(input), inputBytes, 0))) {
-        return false;
-    }
-    return BCRYPT_SUCCESS(BCryptFinishHash(
-        hash.Get(), reinterpret_cast<PUCHAR>(output), 16, 0));
-}
-
-static DWORD WordSwap(DWORD value) {
-    return (value >> 16) | (value << 16);
-}
-
-static std::wstring GenerateWindows10UserChoiceHash(
-    const std::wstring& extension, const std::wstring& sid,
-    const std::wstring& progId, SYSTEMTIME timestamp) {
-    timestamp.wSecond = 0;
-    timestamp.wMilliseconds = 0;
-    FILETIME fileTime{};
-    if (!SystemTimeToFileTime(&timestamp, &fileTime)) return {};
-
-    static constexpr PCWSTR kExperience =
-        L"User Choice set via Windows User Experience "
-        L"{D18B6DD5-6124-4341-9318-804003BAFA0B}";
-    std::wstring input;
-    try {
-        wchar_t timestampText[17] = {};
-        if (swprintf_s(timestampText, L"%08lx%08lx",
-                       fileTime.dwHighDateTime,
-                       fileTime.dwLowDateTime) < 0) {
-            return {};
-        }
-        input.reserve(extension.size() + sid.size() + progId.size() +
-                      16 + wcslen(kExperience));
-        input.append(extension);
-        input.append(sid);
-        input.append(progId);
-        input.append(timestampText);
-        input.append(kExperience);
-        CharLowerBuffW(input.data(), static_cast<DWORD>(input.size()));
-    } catch (...) {
-        return {};
+    std::wstring commandLine = L"\"" + executable + L"\"";
+    for (const auto& file : files) {
+        commandLine += L" \"" + file + L"\"";
     }
 
-    const BYTE* inputBytes = reinterpret_cast<const BYTE*>(input.c_str());
-    const int inputByteCount =
-        static_cast<int>((input.size() + 1) * sizeof(wchar_t));
-    constexpr int kDwordsPerBlock = 2;
-    const int blockCount = inputByteCount /
-                           (sizeof(DWORD) * kDwordsPerBlock);
-    if (!blockCount) return {};
+    STARTUPINFOW si{sizeof(si)};
+    PROCESS_INFORMATION pi{};
+    std::vector<wchar_t> cmdBuffer(commandLine.begin(), commandLine.end());
+    cmdBuffer.push_back(L'\0');
 
-    DWORD md5[4] = {};
-    if (!Md5Bytes(inputBytes, inputByteCount, md5)) return {};
-
-    const DWORD c0[2][5] = {
-        {md5[0] | 1, 0xCF98B111u, 0x87085B9Fu, 0x12CEB96Du,
-         0x257E1D83u},
-        {md5[1] | 1, 0xA27416F5u, 0xD38396FFu, 0x7C932B89u,
-         0xBFA49F69u},
-    };
-    const DWORD c1[2][5] = {
-        {md5[0] | 1, 0xEF0569FBu, 0x689B6B9Fu, 0x79F8A395u,
-         0xC3EFEA97u},
-        {md5[1] | 1, 0xC31713DBu, 0xDDCD1F0Fu, 0x59C3AF2Du,
-         0x35BD1EC9u},
-    };
-
-    DWORD h0 = 0, h1 = 0, h0Acc = 0, h1Acc = 0;
-    for (int i = 0; i < blockCount; ++i) {
-        for (int j = 0; j < kDwordsPerBlock; ++j) {
-            DWORD value = 0;
-            memcpy(&value,
-                   inputBytes +
-                       (i * kDwordsPerBlock + j) * sizeof(DWORD),
-                   sizeof(value));
-            h0 += value;
-            h0 *= c0[j][0];
-            h0 = WordSwap(h0) * c0[j][1];
-            h0 = WordSwap(h0) * c0[j][2];
-            h0 = WordSwap(h0) * c0[j][3];
-            h0 = WordSwap(h0) * c0[j][4];
-            h0Acc += h0;
-
-            h1 += value;
-            h1 = WordSwap(h1) * c1[j][1] + h1 * c1[j][0];
-            h1 = (h1 >> 16) * c1[j][2] + h1 * c1[j][3];
-            h1 = WordSwap(h1) * c1[j][4] + h1;
-            h1Acc += h1;
-        }
+    if (CreateProcessW(nullptr, cmdBuffer.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        return S_OK;
     }
-
-    DWORD result[2] = {h0 ^ h1, h0Acc ^ h1Acc};
-    DWORD chars = 0;
-    if (!CryptBinaryToStringW(
-            reinterpret_cast<const BYTE*>(result), sizeof(result),
-            CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &chars) ||
-        !chars) {
-        return {};
+    // Fallback: invoke each file sequentially
+    for (const auto& file : files) {
+        InvokeExecutableWithFile(executable, file);
     }
-    try {
-        std::vector<wchar_t> encoded(chars);
-        if (!CryptBinaryToStringW(
-                reinterpret_cast<const BYTE*>(result), sizeof(result),
-                CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
-                encoded.data(), &chars)) {
-            return {};
-        }
-        return encoded.data();
-    } catch (...) {
-        return {};
-    }
-}
-
-using RegRenameKey_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, LPCWSTR);
-
-class RegistryRenameGuard {
-   public:
-    RegistryRenameGuard(RegRenameKey_t function, HKEY key,
-                        std::wstring originalName)
-        : function_(function), key_(key), originalName_(std::move(originalName)) {}
-    ~RegistryRenameGuard() { Restore(); }
-    void Activate() { active_ = true; }
-    bool Restore() {
-        if (!active_) return true;
-        active_ = false;
-        return function_ &&
-               function_(key_, nullptr, originalName_.c_str()) ==
-                   ERROR_SUCCESS;
-    }
-   private:
-    RegRenameKey_t function_ = nullptr;
-    HKEY key_ = nullptr;
-    std::wstring originalName_;
-    bool active_ = false;
-};
-
-static HRESULT WriteWindows10UserChoice(const std::wstring& extension,
-                                        const std::wstring& progId) {
-    if (extension.size() <= 1 || extension[0] != L'.' || progId.empty())
-        return E_INVALIDARG;
-    const std::wstring sid = CurrentUserSidString();
-    if (sid.empty()) return E_FAIL;
-
-    SYSTEMTIME timestamp{};
-    GetSystemTime(&timestamp);
-    const std::wstring hash = GenerateWindows10UserChoiceHash(
-        extension, sid, progId, timestamp);
-    if (hash.empty()) return E_FAIL;
-
-    std::wstring associationPath;
-    try {
-        associationPath =
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
-            L"FileExts\\" + extension;
-    } catch (...) {
-        return E_OUTOFMEMORY;
-    }
-
-    RegKeyOwner association;
-    LSTATUS status = RegCreateKeyExW(
-        HKEY_CURRENT_USER, associationPath.c_str(), 0, nullptr, 0,
-        KEY_READ | KEY_WRITE, nullptr, association.Put(), nullptr);
-    if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
-
-    HMODULE advapi = GetModuleHandleW(L"advapi32.dll");
-    auto renameKey = advapi ? reinterpret_cast<RegRenameKey_t>(
-                                  GetProcAddress(advapi, "RegRenameKey"))
-                            : nullptr;
-    RegistryRenameGuard renameGuard(renameKey, association.Get(), extension);
-    if (renameKey) {
-        GUID guid{};
-        wchar_t temporaryName[64] = {};
-        if (SUCCEEDED(CoCreateGuid(&guid)) &&
-            StringFromGUID2(guid, temporaryName,
-                            ARRAYSIZE(temporaryName)) &&
-            renameKey(association.Get(), nullptr, temporaryName) ==
-                ERROR_SUCCESS) {
-            renameGuard.Activate();
-        }
-    }
-
-    status = RegDeleteTreeW(association.Get(), L"UserChoice");
-    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND)
-        return HRESULT_FROM_WIN32(status);
-
-    RegKeyOwner userChoice;
-    status = RegCreateKeyExW(
-        association.Get(), L"UserChoice", 0, nullptr, 0,
-        KEY_READ | KEY_WRITE, nullptr, userChoice.Put(), nullptr);
-    if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
-
-    status = RegSetValueExW(
-        userChoice.Get(), L"ProgId", 0, REG_SZ,
-        reinterpret_cast<const BYTE*>(progId.c_str()),
-        static_cast<DWORD>((progId.size() + 1) * sizeof(wchar_t)));
-    if (status == ERROR_SUCCESS) {
-        status = RegSetValueExW(
-            userChoice.Get(), L"Hash", 0, REG_SZ,
-            reinterpret_cast<const BYTE*>(hash.c_str()),
-            static_cast<DWORD>((hash.size() + 1) * sizeof(wchar_t)));
-    }
-    userChoice.Reset();
-    const bool restored = renameGuard.Restore();
-    if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
-    if (!restored) return E_FAIL;
-
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_FLUSH, nullptr, nullptr);
-    Wh_Log(L"Standalone Open With: wrote UserChoice extension=%s "
-           L"progId=%s hash=%s", extension.c_str(), progId.c_str(),
-           hash.c_str());
     return S_OK;
 }
 
-static bool UserChoiceMatches(const std::wstring& extension,
-                              const std::wstring& progId) {
-    if (extension.empty() || progId.empty()) return false;
-    wchar_t path[1024] = {};
-    if (swprintf_s(
-            path,
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
-            L"FileExts\\%s\\UserChoice",
-            extension.c_str()) < 0) {
-        return false;
-    }
-
-    RegKeyOwner key;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, path, 0, KEY_READ,
-                      key.Put()) != ERROR_SUCCESS) {
-        return false;
-    }
-    wchar_t currentProgId[1024] = {};
-    DWORD bytes = sizeof(currentProgId);
-    if (RegGetValueW(key.Get(), nullptr, L"ProgId", RRF_RT_REG_SZ,
-                     nullptr, currentProgId, &bytes) != ERROR_SUCCESS ||
-        _wcsicmp(currentProgId, progId.c_str())) {
-        return false;
-    }
-    wchar_t storedHash[256] = {};
-    bytes = sizeof(storedHash);
-    if (RegGetValueW(key.Get(), nullptr, L"Hash", RRF_RT_REG_SZ,
-                     nullptr, storedHash, &bytes) != ERROR_SUCCESS) {
-        return false;
-    }
-    FILETIME writeTime{};
-    if (RegQueryInfoKeyW(key.Get(), nullptr, nullptr, nullptr, nullptr,
-                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                         &writeTime) != ERROR_SUCCESS) {
-        return false;
-    }
-    SYSTEMTIME timestamp{};
-    if (!FileTimeToSystemTime(&writeTime, &timestamp)) return false;
-    const std::wstring sid = CurrentUserSidString();
-    const std::wstring expected = GenerateWindows10UserChoiceHash(
-        extension, sid, progId, timestamp);
-    return !expected.empty() && !_wcsicmp(storedHash, expected.c_str());
+static HRESULT InvokeBrowsed(const PickerState& state,
+                             const std::wstring& executable) {
+    const auto& files = state.request.paths.empty() ? std::vector<std::wstring>{state.request.path} : state.request.paths;
+    return InvokeExecutableWithFiles(executable, files);
 }
 
 static HRESULT MakeSelectedDefault(PickerState& state,
@@ -2612,41 +2790,12 @@ static HRESULT MakeSelectedDefault(PickerState& state,
     const bool localStored = StoreModAssociation(
         extension, executable, selected.progId);
 
-    if (UserChoiceMatches(extension, selected.progId)) return S_OK;
-    const HRESULT userChoiceHr =
-        WriteWindows10UserChoice(extension, selected.progId);
-    const bool verified = SUCCEEDED(userChoiceHr) &&
-                          UserChoiceMatches(extension, selected.progId);
-    Wh_Log(L"Standalone Open With: UserChoice fallback extension=%s "
-           L"progId=%s shellHr=0x%08X userChoiceHr=0x%08X verified=%d",
+    Wh_Log(L"Standalone Open With: Safe association set extension=%s progId=%s shellHr=0x%08X localStored=%d",
            extension.c_str(), selected.progId.c_str(),
-           static_cast<unsigned int>(shellHr),
-           static_cast<unsigned int>(userChoiceHr), verified);
-    if (!verified && localStored) {
-        // Don't leave an invalid UserChoice which makes Explorer repeatedly
-        // invoke the system picker. With no valid UserChoice, the unknown-file
-        // route reaches our COM adapter, which honors the stored executable.
-        wchar_t associationPath[1024] = {};
-        if (swprintf_s(
-                associationPath,
-                L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
-                L"FileExts\\%s",
-                extension.c_str()) >= 0) {
-            RegKeyOwner association;
-            if (RegOpenKeyExW(HKEY_CURRENT_USER, associationPath, 0,
-                              KEY_READ | KEY_WRITE,
-                              association.Put()) == ERROR_SUCCESS) {
-                RegDeleteTreeW(association.Get(), L"UserChoice");
-            }
-        }
-        SHChangeNotify(SHCNE_ASSOCCHANGED,
-                       SHCNF_IDLIST | SHCNF_FLUSH, nullptr, nullptr);
-    }
-    return (verified || localStored)
-               ? S_OK
-               : (FAILED(userChoiceHr)
-                      ? userChoiceHr
-                      : HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
+           static_cast<unsigned int>(shellHr), localStored);
+
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH, nullptr, nullptr);
+    return (SUCCEEDED(shellHr) || localStored) ? S_OK : E_FAIL;
 }
 
 static WinHandle g_stopEvent;
@@ -2725,6 +2874,7 @@ class PickerCompletionSignal {
 };
 
 static void ShowPicker(PickerRequest request) {
+    DetermineLocale();
     PickerCompletionSignal completion(request.completionEvent);
     if (g_shuttingDown.load(std::memory_order_acquire) || !IsSupportedFile(request.path)) return;
     PickerState state;
@@ -2758,6 +2908,12 @@ static void ShowPicker(PickerRequest request) {
         g_shuttingDown.load(std::memory_order_acquire)) return;
     HandlerEntry& selected =
         state.handlers[static_cast<size_t>(state.chosenIndex)];
+
+    if (selected.browsed) {
+        EnsureUserApplicationRegistration(selected.internalName,
+                                          ExtensionOf(state.request.path),
+                                          &selected.progId);
+    }
 
     HRESULT defaultHr = S_OK;
     if (state.makeDefaultRequested)
@@ -3447,15 +3603,18 @@ static HRESULT STDMETHODCALLTYPE OpenWithMenuInitializeHook(
     try {
         std::wstring path = PathFromDataObject(dataObject);
         void* identity = ComIdentity(static_cast<IUnknown*>(self));
-        if (identity && IsSupportedFile(path)) {
-            g_lastOpenWithContextPath = path;
+        if (identity) {
             std::lock_guard<std::mutex> lock(g_openWithMenuStateMutex);
-            // Bound stale entries left when a context menu is dismissed.
-            if (g_openWithMenuStates.size() > 256)
-                g_openWithMenuStates.clear();
-            g_openWithMenuStates[identity] =
-                OpenWithMenuState{std::move(path), -1};
-            Wh_Log(L"Standalone Open With: captured CLSID_OpenWithMenu item");
+            if (IsSupportedFile(path)) {
+                g_lastOpenWithContextPath = path;
+                if (g_openWithMenuStates.size() > 256)
+                    g_openWithMenuStates.clear();
+                g_openWithMenuStates[identity] =
+                    OpenWithMenuState{std::move(path), -1};
+                Wh_Log(L"Standalone Open With: captured CLSID_OpenWithMenu item");
+            } else {
+                g_openWithMenuStates.erase(identity); // Clean up stale state
+            }
         }
     } catch (...) {
         Wh_Log(L"Standalone Open With: context-menu Initialize hook exception");
@@ -3640,6 +3799,9 @@ static bool InstallOpenWithMenuMethodHooks() {
 // Explorer and inserts a single canonical "openas" command.
 class PartialOpenWithMenu final : public IContextMenu, public IShellExtInit {
    public:
+    PartialOpenWithMenu() { g_activeComObjects.fetch_add(1, std::memory_order_relaxed); }
+    ~PartialOpenWithMenu() { g_activeComObjects.fetch_sub(1, std::memory_order_relaxed); }
+   public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
                                              void** object) override {
         if (!object) return E_POINTER;
@@ -3737,6 +3899,9 @@ class PartialOpenWithMenu final : public IContextMenu, public IShellExtInit {
 };
 
 class PartialOpenWithClassFactory final : public IClassFactory {
+   public:
+    PartialOpenWithClassFactory() { g_activeComObjects.fetch_add(1, std::memory_order_relaxed); }
+    ~PartialOpenWithClassFactory() { g_activeComObjects.fetch_sub(1, std::memory_order_relaxed); }
    public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
                                              void** object) override {
@@ -3933,7 +4098,7 @@ class OpenWithLauncherProxy final : public StandaloneOpenWithLauncher {
         // requests. Calling the trampoline avoids re-entering our hook.
         if (!CoCreateInstanceOriginal) return E_FAIL;
         ComPtr<StandaloneOpenWithLauncher> original;
-        const DWORD context = classContext_ ? classContext_ : CLSCTX_LOCAL_SERVER;
+        const DWORD context = classContext_ ? classContext_ : static_cast<DWORD>(CLSCTX_LOCAL_SERVER);
         HRESULT hr = CoCreateInstanceOriginal(
             kClsidExecuteUnknown, nullptr, context, kIidOpenWithLauncher,
             reinterpret_cast<void**>(original.Put()));
@@ -4585,9 +4750,18 @@ static std::wstring g_directOpenWithPath;
 static void WINAPI OpenWithEntryPointHook() {
     Wh_Log(L"Standalone Open With: intercepted direct OpenWith.exe entry "
            L"path=%s", g_directOpenWithPath.c_str());
-    if (IsSupportedFile(g_directOpenWithPath))
-        QueuePickerAndWait(nullptr, g_directOpenWithPath.c_str());
-    ExitProcess(0);
+    bool handled = false;
+    if (IsSupportedFile(g_directOpenWithPath) &&
+        g_replaceSystemDialog.load(std::memory_order_acquire)) {
+        handled = QueuePickerAndWait(nullptr, g_directOpenWithPath.c_str());
+    }
+    if (handled) {
+        ExitProcess(0);
+    } else if (OpenWithEntryPointOriginal) {
+        OpenWithEntryPointOriginal();
+    } else {
+        ExitProcess(0);
+    }
 }
 
 static bool InstallDirectOpenWithEntryHook(PCWSTR path) {
@@ -4657,19 +4831,11 @@ static BOOL WINAPI CreateProcessWHook(
     DWORD creationFlags, LPVOID environment, LPCWSTR currentDirectory,
     LPSTARTUPINFOW startupInfo, LPPROCESS_INFORMATION processInformation) {
     try {
-        // TEMPORARY DIAGNOSTIC: log every CreateProcessW call whose
-        // application name or command line mentions "open", to see whether
-        // explorer.exe launches OpenWith.exe via this API at all.
-        if ((applicationName && StrStrIW(applicationName, L"open")) ||
-            (commandLine && StrStrIW(commandLine, L"open"))) {
-            Wh_Log(L"Standalone Open With DIAG: CreateProcessW app=%s cmd=%s",
-                   applicationName ? applicationName : L"(null)",
-                   commandLine ? commandLine : L"(null)");
-        }
-
+        const std::wstring exe = applicationName
+                                     ? applicationName
+                                     : ExecutableFromCommand(commandLine ? commandLine : L"");
         const bool looksLikeOpenWith =
-            (applicationName && StrStrIW(applicationName, L"OpenWith.exe")) ||
-            (commandLine && StrStrIW(commandLine, L"OpenWith.exe"));
+            !exe.empty() && !_wcsicmp(PathFindFileNameW(exe.c_str()), L"OpenWith.exe");
         if (looksLikeOpenWith &&
             g_replaceSystemDialog.load(std::memory_order_acquire)) {
             std::wstring path = ExtractOpenWithTargetPath(commandLine);
@@ -4712,12 +4878,12 @@ static bool IsOpenAsVerb(PCWSTR verb) {
 
 static HRESULT WINAPI SHOpenWithDialogHook(HWND owner, const OPENASINFO* info) {
     try {
-        // Without OAIF_EXEC the caller is asking Windows to manage an
-        // association rather than open the supplied item. This implementation
-        // never claims that unsupported operation.
         if (info && (info->oaifInFlags & OAIF_EXEC) &&
-            QueuePicker(owner, info->pcszFile)) {
-            return S_OK;
+            g_replaceSystemDialog.load(std::memory_order_acquire) &&
+            info->pcszFile && IsSupportedFile(info->pcszFile)) {
+            if (QueuePickerAndWait(owner, info->pcszFile)) {
+                return S_OK;
+            }
         }
         Wh_Log(L"Standalone Open With: SHOpenWithDialog falling back to system "
                L"dialog (hasInfo=%d flags=0x%X file=%s replace=%d workerReady=%d "
@@ -4734,10 +4900,13 @@ static HRESULT WINAPI SHOpenWithDialogHook(HWND owner, const OPENASINFO* info) {
 static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
     try {
         if (info && IsOpenAsVerb(info->lpVerb) &&
-            QueuePicker(info->hwnd, info->lpFile)) {
-            info->hInstApp = reinterpret_cast<HINSTANCE>(33);
-            info->hProcess = nullptr;
-            return TRUE;
+            g_replaceSystemDialog.load(std::memory_order_acquire) &&
+            info->lpFile && IsSupportedFile(info->lpFile)) {
+            if (QueuePickerAndWait(info->hwnd, info->lpFile)) {
+                info->hInstApp = reinterpret_cast<HINSTANCE>(33);
+                info->hProcess = nullptr;
+                return TRUE;
+            }
         }
         if (info && IsOpenAsVerb(info->lpVerb)) {
             Wh_Log(L"Standalone Open With: ShellExecuteExW(openas) falling back "
@@ -4974,8 +5143,79 @@ static void StopWorker() {
     }
 }
 
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+static LoadLibraryExW_t LoadLibraryExWOriginal = nullptr;
+
+static void HookShell32Exports(HMODULE shell32) {
+    if (!shell32) return;
+    auto openWith = reinterpret_cast<SHOpenWithDialog_t>(
+        GetProcAddress(shell32, "SHOpenWithDialog"));
+    auto executeEx = reinterpret_cast<ShellExecuteExW_t>(
+        GetProcAddress(shell32, "ShellExecuteExW"));
+    auto execute = reinterpret_cast<ShellExecuteW_t>(
+        GetProcAddress(shell32, "ShellExecuteW"));
+    if (openWith && !SHOpenWithDialogOriginal) {
+        WindhawkUtils::SetFunctionHook(openWith, SHOpenWithDialogHook, &SHOpenWithDialogOriginal);
+    }
+    if (executeEx && !ShellExecuteExWOriginal) {
+        WindhawkUtils::SetFunctionHook(executeEx, ShellExecuteExWHook, &ShellExecuteExWOriginal);
+    }
+    if (execute && !ShellExecuteWOriginal) {
+        WindhawkUtils::SetFunctionHook(execute, ShellExecuteWHook, &ShellExecuteWOriginal);
+    }
+}
+
+static HMODULE WINAPI LoadLibraryExWHook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+    HMODULE result = LoadLibraryExWOriginal
+        ? LoadLibraryExWOriginal(lpLibFileName, hFile, dwFlags)
+        : LoadLibraryExW(lpLibFileName, hFile, dwFlags);
+    if (result && lpLibFileName) {
+        PCWSTR fileName = PathFindFileNameW(lpLibFileName);
+        if (fileName && !_wcsicmp(fileName, L"shell32.dll")) {
+            HookShell32Exports(result);
+        }
+    }
+    return result;
+}
+
+static bool VerifySystemBinariesExist() {
+    try {
+        wchar_t winDir[MAX_PATH] = {};
+        if (!GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir))) return false;
+
+        wchar_t sysDir[MAX_PATH] = {};
+        if (!GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir))) return false;
+
+        wchar_t explorerPath[MAX_PATH] = {};
+        if (swprintf_s(explorerPath, L"%s\\explorer.exe", winDir) <= 0) return false;
+
+        wchar_t openWithPath[MAX_PATH] = {};
+        if (swprintf_s(openWithPath, L"%s\\OpenWith.exe", sysDir) <= 0) return false;
+
+        const DWORD explorerAttrs = GetFileAttributesW(explorerPath);
+        if (explorerAttrs == INVALID_FILE_ATTRIBUTES || (explorerAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"Standalone Open With: explorer.exe verification failed at %s", explorerPath);
+            return false;
+        }
+
+        const DWORD openWithAttrs = GetFileAttributesW(openWithPath);
+        if (openWithAttrs == INVALID_FILE_ATTRIBUTES || (openWithAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"Standalone Open With: OpenWith.exe verification failed at %s", openWithPath);
+            return false;
+        }
+
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 BOOL Wh_ModInit() {
     try {
+        if (!VerifySystemBinariesExist()) {
+            Wh_Log(L"Standalone Open With: required system binaries not found, aborting initialization");
+            return FALSE;
+        }
         LoadSettings();
         g_shuttingDown.store(false, std::memory_order_release);
         g_stopEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
@@ -4985,6 +5225,15 @@ BOOL Wh_ModInit() {
             return FALSE;
         g_worker.emplace(WorkerMainNoexcept);
 
+                HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        if (!kernelbase) kernelbase = GetModuleHandleW(L"kernel32.dll");
+        if (kernelbase) {
+            auto pLoadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+                GetProcAddress(kernelbase, "LoadLibraryExW"));
+            if (pLoadLibraryExW) {
+                WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExWHook, &LoadLibraryExWOriginal);
+            }
+        }
         HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
         auto openWith = shell32 ? reinterpret_cast<SHOpenWithDialog_t>(
                                       GetProcAddress(shell32, "SHOpenWithDialog"))
