@@ -3493,9 +3493,10 @@ bool HookWindowsUiFileExplorerIfLoaded(bool applyHooks) {
         return true;
     }
 
-    // Windows.UI.FileExplorer.dll. Navigation is optional; the cards retain
-    // their ShellExecute fallback if this symbol changes on another build.
-    WindhawkUtils::SYMBOL_HOOK windowsUiFileExplorerDllHooks[] = {
+    // Navigation is optional; the cards retain their ShellExecute fallback
+    // if this symbol changes on another build.
+    // Windows.UI.FileExplorer.dll
+    WindhawkUtils::SYMBOL_HOOK windowsUiFileExplorerHooks[] = {
         {
             {
                 LR"(public: virtual long __cdecl winrt::WindowsUdk::UI::Shell::implementation::FileExplorerNavigationController::SetNavigationState(unsigned long))",
@@ -3507,8 +3508,8 @@ bool HookWindowsUiFileExplorerIfLoaded(bool applyHooks) {
     };
 
     if (!WindhawkUtils::HookSymbols(
-            module, windowsUiFileExplorerDllHooks,
-            ARRAYSIZE(windowsUiFileExplorerDllHooks))) {
+            module, windowsUiFileExplorerHooks,
+            ARRAYSIZE(windowsUiFileExplorerHooks))) {
         g_navigationSymbolsHooked.store(false);
         Wh_Log(L"Failed to resolve Windows.UI.FileExplorer.dll symbols; "
                L"current-tab navigation is unavailable");
