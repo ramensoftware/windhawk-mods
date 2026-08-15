@@ -1,3 +1,15 @@
+## 1.7 ([Aug 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0bf0b09ddd979fe8a604b1f3099c2ac1e8dfafde/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added the following themes: OnlySearch (Minimal), LiquidGlass, FrostyGlass.
+  * The previous LiquidGlass theme is now discontinued. It was renamed to "LiquidGlass (Legacy)".
+* Updated the following themes: SideBySide, SideBySide2, SideBySideMinimal, Down Aero, Windows10, Windows11_Metro10, Oversimplified&Accentuated, Command Center.
+* Several target controls can now be specified for the same styles by separating them
+with commas, for example: `ParentClass > Class#Name1, ParentClass >
+Class#Name2`.
+* Added string literals support for substitution expressions, for example: `` Text={{var == `a` ? `b` : `c`}} ``.
+* Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.
+* Improved handling for remote images.
+
 ## 1.6 ([Jun 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f03c2a238bb19ba9f0a9481d7697b8ddf14e4be8/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added the new side by side layout for the redesigned Start menu which allows having pinned apps on one side and all apps on the other side. Both can be scrolled independently.

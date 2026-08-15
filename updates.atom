@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-14T12:14:39.000Z</updated>
+    <updated>2026-08-15T17:16:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.7]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#0bf0b09ddd979fe8a604b1f3099c2ac1e8dfafde</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2026-08-15T17:16:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the following themes: OnlySearch (Minimal), LiquidGlass, FrostyGlass.</li>
+<li>The previous LiquidGlass theme is now discontinued. It was renamed to "LiquidGlass (Legacy)".</li>
+<li>Updated the following themes: SideBySide, SideBySide2, SideBySideMinimal, Down Aero, Windows10, Windows11_Metro10, Oversimplified&amp;Accentuated, Command Center.</li>
+<li>Several target controls can now be specified for the same styles by separating them
+with commas, for example: <code>ParentClass &gt; Class#Name1, ParentClass &gt;
+Class#Name2</code>.</li>
+<li>Added string literals support for substitution expressions, for example: <code>Text={{var == `a` ? `b` : `c`}}</code>.</li>
+<li>Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.</li>
+<li>Improved handling for remote images.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[GNOME-like dynamic virtual desktops 1.4]]></title>
         <id>https://windhawk.net/mods/gnome-dynamic-desktops#c1f498cfa9d567959de6f1e662cb8156108212fc</id>
@@ -669,30 +690,6 @@ For specific setups (such as unsupported language), it is recommended to apply t
         <author>
             <name>ReDrag</name>
             <uri>https://github.com/redrag2105</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Startup App Delay Fix 1.4]]></title>
-        <id>https://windhawk.net/mods/startup-app-delay-fix#bc4c75fe4152fde646d366530f5b560e2bbdabd2</id>
-        <link href="https://windhawk.net/mods/startup-app-delay-fix"/>
-        <updated>2026-08-06T07:59:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Windows intentionally delays startup applications after sign-in to reduce
-system load, which can cause apps to open minutes after startup.</p>
-<p>Common fix (which the mod intends to emulate): 
-<img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png" alt="Common Fix" /></p>
-<p>This mod redirects Explorer's startup-serialization key to a dedicated,
-volatile key where both <code>WaitforIdleState</code> and <code>StartupDelayInMSec</code> are zero.
-It never creates, modifies, or deletes the user's real <code>Serialize</code> key.</p>
-<p>The redirect key is in-memory only. The mod deletes it on a normal disable,
-and Windows discards it when the user registry hive unloads at sign-out or
-shutdown if Explorer exits unexpectedly.</p>
-<p>Windows reads the startup-delay values when Explorer starts, so enabling or
-disabling the mod takes effect after the next sign-in or Explorer restart.</p>
-<p>This only affects the delay Explorer applies to startup-item processing. It
-doesn't change delays configured by other systems, such as Task Scheduler.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>
