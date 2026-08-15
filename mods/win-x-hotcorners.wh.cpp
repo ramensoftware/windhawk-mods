@@ -2,13 +2,13 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.0.0
+// @version         1.0.1
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32 -luuid
+// @compilerOptions -ladvapi32 -lgdi32 -lole32 -lpowrprof -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,6 +21,13 @@ multi-monitor support**.
 Instantly trigger configurable actions when your cursor reaches any screen
 corner or edge. Configure different actions for each zone on each monitor
 independently.
+
+![Throwing the pointer into the top-left corner opens Task View](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/hot-corners.gif)
+
+The tray icon's **Zones & settings** window shows what each zone does on each
+display, and the timings actually in effect for whichever one you point at:
+
+![The Zones and settings window](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/dashboard.png)
 
 Inspired by [WinXCorners](https://github.com/vhanla/winxcorners), rebuilt as a
 Windhawk mod.
@@ -518,7 +525,6 @@ listing, but it only takes one link, so the rest live here.
 #include <initializer_list>
 #include <powrprof.h>
 #include <shellapi.h>
-#include <shldisp.h>   // IShellDispatch4 / CLSID_Shell, for Show Desktop
 #include <windhawk_api.h>
 
 #include <algorithm>
@@ -535,9 +541,6 @@ listing, but it only takes one link, so the rest live here.
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-// Undocumented Shell command ID for IShellDispatch::ToggleDesktop
-#define SHELL_TRAY_TOGGLE_DESKTOP 407
 
 // =====================================================================
 // Enums & Types
@@ -1556,45 +1559,15 @@ static void SendKeys(std::initializer_list<WORD> vks)
     SendKeys(v);
 }
 
-static void ActionShowDesktop()
-{
-    // IShellDispatch::ToggleDesktop is the documented way to do this. The old
-    // route - WM_COMMAND 407 to Shell_TrayWnd - is an undocumented private
-    // message sent to a window this mod does not own, and the value is only
-    // whatever that class happens to use today. The worker thread has a COM
-    // apartment, so this is available where it is called from.
-    // ToggleDesktop is on IShellDispatch4, not on the base interface.
-    IShellDispatch4 *shell = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&shell));
-    if (SUCCEEDED(hr) && shell)
-    {
-        hr = shell->ToggleDesktop();
-        shell->Release();
-        if (SUCCEEDED(hr))
-            return;
-    }
-
-    // Kept as a fallback rather than deleted: ToggleDesktop needs an apartment,
-    // and the private message is what worked before it.
-    Wh_Log(L"Show Desktop: IShellDispatch unavailable (0x%08X), using the "
-           L"shell message instead",
-           hr);
-
-    // Re-found when the handle goes stale, so this survives explorer restarts.
-    static HWND hTray = nullptr;
-    if (!hTray || !IsWindow(hTray))
-        hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!hTray)
-    {
-        Wh_Log(L"Show Desktop: Shell_TrayWnd not found");
-        return;
-    }
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(hTray, WM_COMMAND,
-                        MAKELONG(SHELL_TRAY_TOGGLE_DESKTOP, 0), 0,
-                        SMTO_ABORTIFHUNG, 2000, &result);
-}
+// Win+D, through the same SendKeys path as every other shortcut action.
+//
+// Two other routes were tried and both are worse. WM_COMMAND 407 to
+// Shell_TrayWnd is an undocumented private message sent to a window this mod
+// does not own. IShellDispatch4::ToggleDesktop is documented, but on Windows 11
+// build 26300 it returns S_OK and does nothing at all - which is the worst
+// possible failure, because there is no error to fall back on. Win+D is a
+// documented user-facing shortcut that the shell implements itself.
+static void ActionShowDesktop() { SendKeys({VK_LWIN, 'D'}); }
 
 static void ActionTaskView() { SendKeys({VK_LWIN, VK_TAB}); }
 
