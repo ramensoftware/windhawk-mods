@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              snap-sentry
 // @name            SnapSentry
-// @description     Copy saved screenshots, delete them automatically, or choose what to do from a notification.
-// @version         0.16.0
+// @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
+// @version         0.17.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -17,11 +17,12 @@
 /*
 # SnapSentry
 
-Watches your Windows **Screenshots** folder, wherever it is, and handles new
-screenshots as they are saved. Copy the image, delete the file after a delay, or
-choose what to do from a notification.
+Watches your Windows **Screenshots** folder, wherever it is, or any other folder
+you point it at, and handles new screenshots as they are saved. Copy the image,
+rename the file, delete it after a delay, or choose what to do from a
+notification.
 
-![The SnapSentry notification](https://raw.githubusercontent.com/mario0318/SnapSentry/32558d49a40d02fb03661abad0c2d9d313ae00e9/assets/notification.png)
+![The SnapSentry notification](https://raw.githubusercontent.com/mario0318/SnapSentry/9f28c82bb5b901c399d6773ea8a2e09195bc3f1a/assets/notification-rename.png)
 
 ## Clipboard modes
 
@@ -37,6 +38,14 @@ choose what to do from a notification.
 You can have SnapSentry rename each new screenshot from the window that was in
 front when it was taken, together with a timestamp, so a file ends up named for
 what it shows instead of Screenshot (1). The file stays in the same folder.
+
+## Which folder it watches
+
+By default this is your Windows Screenshots folder, wherever Windows keeps it. In
+the settings you can type the full path to any folder instead, and shortcuts like
+%USERPROFILE% are filled in for you. Everything that arrives in the folder you
+choose is treated the same way, so pick one where screenshots land rather than one
+that collects downloads.
 
 ## The notification
 
@@ -73,7 +82,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
   - none: Leave the clipboard alone
 - pathFormat: plain
   $name: How to write the location
-  $description: Only used when the copy is set to the file's location. Plain is the bare path, Quoted wraps it in quotes, File link is a clickable link, and Markdown is an image tag for pasting into notes.
+  $description: Only used when copying the file's location. File link is clickable, and Markdown shows the picture when pasted into notes or a bug report.
   $options:
   - plain: Plain path
   - quoted: Quoted path
@@ -83,28 +92,28 @@ stored in clipboard history, cloud sync, backups, or other programs.
 # ---- Deleting the screenshot ----
 - deleteFile: false
   $name: Delete the screenshot after copying
-  $description: Off by default, because deleting is the part you cannot undo. Turn it on to have the file removed once it has been copied. This only applies when copying the picture or nothing; copying the file or its location never deletes.
+  $description: Off by default, since deleting is the part you cannot undo. Removes the file once the copy has succeeded. Only applies when copying the picture or nothing, because copying the file or its location has to leave it in place.
 - recycle: true
   $name: Delete to the Recycle Bin
-  $description: When deletion is on, the file goes to the Recycle Bin so it can be restored. Turn this off to delete for good.
+  $description: The file goes to the Recycle Bin so you can get it back. Turn this off to delete for good.
 
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Off by default. When on, each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if notifications are turned off. It is the only setting that leaves anything outside the mod, namely a Start Menu entry and a small registration so the buttons work, both removed when you turn it off again or disable the mod. Left off, SnapSentry just copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if notifications are unavailable. This is the only setting that leaves anything outside the mod, namely a Start Menu entry so the buttons work, removed again when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
-  $description: With the popup on, this is the countdown before the automatic action runs; set it to 0 to wait for you to click instead (it still gives up after 10 minutes so it cannot wait forever). With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
+  $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
 
 # ---- Renaming ----
 - renameFromWindow: false
   $name: Rename screenshots after the active window
-  $description: Renames each new screenshot to the title of the window that was in front, plus a timestamp, so they are easier to find later. The file stays in the same folder.
+  $description: Names each screenshot after the window that was in front when you took it, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
 
 # ---- Advanced ----
 - folder: ""
-  $name: Folder to watch (empty means Screenshots)
-  $description: Empty watches your Windows Screenshots folder, wherever it is. You can point this at a different folder, and things like %USERPROFILE% are filled in. Anything that lands in the folder you choose is handled the same way, so with deletion on, other images saved there are deleted too.
+  $name: Folder to watch (leave empty for Screenshots)
+  $description: Empty watches your Windows Screenshots folder, wherever it is. To watch somewhere else, paste the full path to that folder here, for example C:\Users\You\Pictures\Captures or %USERPROFILE%\Desktop. Anything arriving in the folder you choose is handled the same way, so with deletion on, other images saved there are deleted too.
 - logDetails: false
   $name: Verbose logging (may include file paths)
   $description: Off keeps file paths out of the log. Turn this on only while troubleshooting.
