@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         4.4.5
+// @version         1.0.0
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -261,12 +261,59 @@ Hot corners are disabled when any excluded process is the foreground window.
 
 **Example:** `photoshop.exe;premiere.exe;blender.exe`
 
-# Changelog
+# Why it works this way
 
-## 4.4.5
+Not a changelog — this is the first release. These are the decisions that are
+easy to second-guess later, and the reason each one went the way it did.
 
-First release. Earlier version numbers exist only in the development
-repository and were never published, so there is nothing to upgrade from.
+**Polling, not a mouse hook.** A `WH_MOUSE_LL` hook sits directly on the system
+input path: every mouse event in every process waits for it, and if it is slow
+even once Windows silently unhooks it (`LowLevelHooksTimeout`). A dedicated
+thread sampling the cursor costs a `GetCursorPos` per tick and cannot make your
+mouse stutter. The tick asks for 16 ms and gets 16–31 ms, because that is the
+system timer resolution.
+
+**Its own process, not injected into Explorer.** The mod does nothing to other
+processes, so there is no reason to be inside one. An Explorer crash cannot take
+it down, and it cannot take Explorer down.
+
+**Displays are bound by name, not by position.** Enumeration order changes
+whenever you rearrange screens or make a different one primary. Friendly names
+come from the display's EDID and survive that, so your corners stay on the
+screen you set them on. Two identical models are the exception — they get a
+` #2` suffix handed out in enumeration order, so that pair *can* swap.
+
+**The settings page is the only place anything is stored.** A Windhawk mod can
+read its settings but cannot write them, so a mod that also edits its own
+configuration in its own window will always end up with two copies that
+disagree. The dashboard is a picture of what the settings produced, and nothing
+else. It reads the resolved configuration rather than the stored one, which is
+what stops it from ever disagreeing with what actually fires.
+
+**Each edge is three segments that merge back together.** Three separate zones
+carrying the same action would each re-arm as the pointer crossed a seam, so
+sliding along an edge would fire it repeatedly. Segments that resolve
+identically are coalesced into one zone before detection ever sees them, which
+is what makes "all three the same" genuinely one edge-wide zone.
+
+**Zones can never overlap.** Each edge's thickness is clamped to the smaller of
+the two corners it runs between. That one rule is what keeps all sixteen zones
+disjoint no matter which sizes you pick, without any special cases.
+
+**A cooldown is a wait, not a refusal.** Landing in a corner while a cooldown is
+running does not spend the visit — the dwell simply outlasts it and the zone
+fires. Marking the visit spent meant parking in a corner did nothing at all and
+you had to leave and come back.
+
+**A rebuild is not a gesture.** Enabling the mod, changing a setting or waking a
+monitor rebuilds the zones, and the pointer may already be sitting in one. The
+rebuild adopts that zone with the visit already spent, so a corner bound to
+*Lock* cannot lock the machine because a display woke up.
+
+**The fullscreen and excluded-app checks run on the worker thread**, not on the
+sampling thread, so a slow `OpenProcess` can never delay cursor sampling. The
+cost is that a suppressed trigger still consumes its cooldown — a wait nobody
+can perceive, traded for a sampling path that never stalls.
 
 ## Support
 
@@ -3053,9 +3100,10 @@ static void UpdateTrayIcon(bool add)
 // =====================================================================
 //
 // The settings page is the configuration surface; the dashboard only shows
-// what it produced. Two surfaces writing the same store is what produced the
-// 4.1.3 and 4.1.4 bugs, where the dashboard addressed configurations by list
-// position and overwrote the wrong one.
+// what it produced. A mod can read its settings but not write them, so a
+// second surface that also edits the configuration can only ever diverge from
+// this one - during development that showed up as an editor addressing stored
+// configurations by list position and overwriting the wrong display.
 //
 // Precedence, decided once per reload:
 //
@@ -3879,10 +3927,10 @@ static void ApplyModernFrame(HWND hWnd)
 // Reading the live configuration
 // =====================================================================
 //
-// The dashboard reads what ReloadConfig already resolved, not the value store.
-// That is what makes it correct for a settings-page layout and a pre-4.2 one
-// without knowing which is in use, and it is why it can no longer drift from
-// what actually fires.
+// The dashboard reads what ReloadConfig already resolved, rather than reading
+// the settings itself. Resolving twice is how a picture starts disagreeing
+// with what actually fires; reading the resolved result makes that impossible
+// by construction.
 
 static const wchar_t *kTuningNames[] = {
     L"Size", L"Activation delay", L"Pass-through guard",
