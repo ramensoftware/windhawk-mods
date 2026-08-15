@@ -2132,10 +2132,10 @@ bool HookTaskbarDllSymbols() {
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // All marked optional so HookSymbols doesn't abort the whole batch on
     // the first miss - we want a per-symbol report while bringing this mod
-    // up on a new Windows build, not just a single opaque FAILED.
-    //
-    // Taskbar.View.dll, ExplorerExtensions.dll (see GetTaskbarViewModuleHandle
-    // - which of the two is actually loaded depends on the Windows build)
+    // up on a new Windows build, not just a single opaque FAILED. Which of
+    // the two modules below is actually loaded depends on the Windows
+    // build - see GetTaskbarViewModuleHandle.
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
