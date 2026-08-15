@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.1.3
+// @version         1.1.4
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -429,10 +429,6 @@ like buying me a coffee:
 - [Ko-fi](https://ko-fi.com/losthusky_)
 - [Buy Me a Coffee](https://www.buymeacoffee.com/losthusky_)
 - [Playto](https://www.playto.so/losthusky_)
-
-<!-- Plain links rather than badge images on purpose: this repository only allows
-     images from i.imgur.com and raw.githubusercontent.com, so a shields.io badge
-     would not render. To add a platform, add a bullet. -->
 */
 // ==/WindhawkModReadme==
 
@@ -5800,5 +5796,6 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
 
 
