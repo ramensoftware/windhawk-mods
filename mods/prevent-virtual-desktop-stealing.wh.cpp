@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.4
+// @version         0.3.5
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -1642,6 +1642,20 @@ static bool InstallVirtualDesktopHooks() {
     return true;
 }
 
+static bool WaitForShellHostRetryDelay() {
+    // Keep unload latency short while allowing the shell's COM services time
+    // to register after a fresh Explorer start.
+    for (int i = 0; i < 10; ++i) {
+        if (g_unloading.load(std::memory_order_acquire)) {
+            return false;
+        }
+
+        Sleep(50);
+    }
+
+    return !g_unloading.load(std::memory_order_acquire);
+}
+
 static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
         L"Shell-host initialization begin");
@@ -1660,51 +1674,54 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         return 0;
     }
 
-    if (g_unloading.load(std::memory_order_acquire)) {
-        g_runtimeState.store(0, std::memory_order_release);
-        return 0;
-    }
+    constexpr int kMaxRuntimeStartAttempts = 30;
 
-    if (!StartWorker()) {
-        StopWorker();
-        g_runtimeState.store(0, std::memory_order_release);
+    for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
+        bool workerStarted = StartWorker();
+        bool cacheStarted = false;
 
-        Wh_Log(
-            L"Shell-host initialization failed: "
-            L"worker unavailable; remaining fail-open");
-        return 0;
-    }
+        if (workerStarted &&
+            !g_unloading.load(std::memory_order_acquire)) {
+            cacheStarted = StartNotificationCache();
+        }
 
-    if (g_unloading.load(std::memory_order_acquire)) {
-        StopWorker();
-        g_runtimeState.store(0, std::memory_order_release);
-        return 0;
-    }
+        if (workerStarted && cacheStarted &&
+            !g_unloading.load(std::memory_order_acquire)) {
+            g_runtimeState.store(2, std::memory_order_release);
 
-    if (!StartNotificationCache()) {
+            Wh_Log(
+                L"Runtime ready after attempt %d: primary shell Explorer "
+                L"confirmed, source-desktop cache active, bounded rescue "
+                L"queue active",
+                attempt);
+            return 0;
+        }
+
         StopNotificationCache();
         StopWorker();
-        g_runtimeState.store(0, std::memory_order_release);
 
-        Wh_Log(
-            L"Shell-host initialization failed: "
-            L"desktop cache unavailable; remaining fail-open");
-        return 0;
+        if (g_unloading.load(std::memory_order_acquire)) {
+            g_runtimeState.store(0, std::memory_order_release);
+            return 0;
+        }
+
+        if (attempt < kMaxRuntimeStartAttempts) {
+            Wh_Log(
+                L"Shell-host runtime unavailable on attempt %d; retrying",
+                attempt);
+
+            if (!WaitForShellHostRetryDelay()) {
+                g_runtimeState.store(0, std::memory_order_release);
+                return 0;
+            }
+        }
     }
 
-    if (g_unloading.load(std::memory_order_acquire)) {
-        StopNotificationCache();
-        StopWorker();
-        g_runtimeState.store(0, std::memory_order_release);
-        return 0;
-    }
-
-    g_runtimeState.store(2, std::memory_order_release);
-
+    g_runtimeState.store(0, std::memory_order_release);
     Wh_Log(
-        L"Runtime ready: primary shell Explorer confirmed, "
-        L"source-desktop cache active, bounded rescue queue active");
-
+        L"Shell-host initialization failed after %d attempts; "
+        L"remaining fail-open",
+        kMaxRuntimeStartAttempts);
     return 0;
 }
 
