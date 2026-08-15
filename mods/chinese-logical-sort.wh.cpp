@@ -724,6 +724,7 @@ static BOOL SetHookT(T targetFunction, T hookFunction, T* originalFunction) {
 bool g_hookCompareString = true;
 bool g_onlyChineseLocale = true;
 bool g_userLocaleIsChinese = false;
+bool g_systemLocaleIsChinese = false;
 
 DWORD g_tlsDepth = TLS_OUT_OF_INDEXES;
 
@@ -746,19 +747,17 @@ static void GuardLeave() {
 }
 
 static bool IsChineseLocaleName(LPCWSTR name) {
-    if (!name) return false;
-    if (name[0] == 0) return false;
+    if (!name || name[0] == 0) return false;
+    if ((name[0] == L'z' || name[0] == L'Z') &&
+        (name[1] == L'h' || name[1] == L'H') &&
+        (name[2] == 0 || name[2] == L'-')) {
+        return true;
+    }
     if (CompareStringOrdinal(name, -1, LOCALE_NAME_SYSTEM_DEFAULT, -1, TRUE) ==
         CSTR_EQUAL) {
-        return g_userLocaleIsChinese;
+        return g_systemLocaleIsChinese;
     }
-    if (CompareStringOrdinal(name, -1, LOCALE_NAME_USER_DEFAULT, -1, TRUE) ==
-        CSTR_EQUAL) {
-        return g_userLocaleIsChinese;
-    }
-    return (name[0] == L'z' || name[0] == L'Z') &&
-           (name[1] == L'h' || name[1] == L'H') &&
-           (name[2] == 0 || name[2] == L'-');
+    return false;
 }
 
 static bool TakeoverAllowedEx(LPCWSTR localeName) {
@@ -934,6 +933,14 @@ BOOL Wh_ModInit() {
     }
     Wh_Log(L"user locale=%s chinese=%d", userLocale, (int)g_userLocaleIsChinese);
 
+    wchar_t sysLocale[LOCALE_NAME_MAX_LENGTH] = {0};
+    if (GetSystemDefaultLocaleName(sysLocale, LOCALE_NAME_MAX_LENGTH) > 0) {
+        g_systemLocaleIsChinese = (sysLocale[0] == L'z' || sysLocale[0] == L'Z') &&
+                                  (sysLocale[1] == L'h' || sysLocale[1] == L'H') &&
+                                  (sysLocale[2] == 0 || sysLocale[2] == L'-');
+    }
+    Wh_Log(L"system locale=%s chinese=%d", sysLocale, (int)g_systemLocaleIsChinese);
+
     g_tlsDepth = TlsAlloc();
     if (g_tlsDepth == TLS_OUT_OF_INDEXES) {
         Wh_Log(L"TlsAlloc failed, running without reentrancy guard");
@@ -993,5 +1000,9 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    if (g_tlsDepth != TLS_OUT_OF_INDEXES) {
+        TlsFree(g_tlsDepth);
+        g_tlsDepth = TLS_OUT_OF_INDEXES;
+    }
     Wh_Log(L"Unloading Chinese Logical Sort mod");
 }
