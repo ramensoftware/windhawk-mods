@@ -682,6 +682,8 @@ static bool StartNotificationCache() {
 }
 
 static void StopNotificationCache() {
+    g_notificationReady.store(false, std::memory_order_release);
+
     if (g_notificationThread) {
         if (g_notificationThreadId) {
             PostThreadMessageW(
@@ -702,7 +704,6 @@ static void StopNotificationCache() {
         g_notificationReadyEvent = nullptr;
     }
 
-    g_notificationReady.store(false);
     ClearCurrentDesktopId();
 }
 
@@ -1432,6 +1433,8 @@ static bool StartWorker() {
 }
 
 static void StopWorker() {
+    g_workerReady.store(false, std::memory_order_release);
+
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
@@ -1460,7 +1463,6 @@ static void StopWorker() {
         g_requestEvent = nullptr;
     }
 
-    g_workerReady.store(false);
 }
 
 // -----------------------------------------------------------------------------
