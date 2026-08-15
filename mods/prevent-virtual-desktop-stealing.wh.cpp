@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.9
+// @version         0.3.10
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -1968,46 +1968,24 @@ static std::atomic<int> g_runtimeState{0};
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_shellHostConfirmed{false};
 static std::atomic<bool> g_virtualDesktopHooksInstalled{false};
+static std::atomic<bool> g_taskbarObserverInstalled{false};
 
 static SRWLOCK g_runtimeInitLock = SRWLOCK_INIT;
 static HANDLE g_runtimeInitThread = nullptr;
 
-static BOOL CALLBACK FindCurrentProcessPrimaryTaskbarEnumProc(
-    HWND hwnd,
-    LPARAM lParam) {
+static HWND FindCurrentProcessShellWindow() {
+    HWND shellWindow = GetShellWindow();
+    if (!shellWindow) {
+        return nullptr;
+    }
 
     DWORD pid = 0;
-    if (!GetWindowThreadProcessId(hwnd, &pid) ||
+    if (!GetWindowThreadProcessId(shellWindow, &pid) ||
         pid != GetCurrentProcessId()) {
-        return TRUE;
+        return nullptr;
     }
 
-    wchar_t className[32] = {};
-    if (!GetClassNameW(
-            hwnd,
-            className,
-            ARRAYSIZE(className))) {
-        return TRUE;
-    }
-
-    // Deliberately accept only the primary taskbar. Secondary taskbars are
-    // Shell_SecondaryTrayWnd and are not shell-process identity markers.
-    if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-        *reinterpret_cast<HWND*>(lParam) = hwnd;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-static HWND FindCurrentProcessPrimaryTaskbar() {
-    HWND result = nullptr;
-
-    EnumWindows(
-        FindCurrentProcessPrimaryTaskbarEnumProc,
-        reinterpret_cast<LPARAM>(&result));
-
-    return result;
+    return shellWindow;
 }
 
 static bool InstallVirtualDesktopHooks() {
@@ -2115,6 +2093,26 @@ static bool WaitForShellHostRetryDelay() {
     return !g_unloading.load(std::memory_order_acquire);
 }
 
+static void RemoveTaskbarObserver() {
+    if (!g_taskbarObserverInstalled.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!Wh_RemoveFunctionHook(
+            reinterpret_cast<void*>(CreateWindowExW))) {
+        Wh_Log(L"Failed to register taskbar-observer hook removal");
+        return;
+    }
+
+    if (!Wh_ApplyHookOperations()) {
+        Wh_Log(L"Failed to apply taskbar-observer hook removal");
+        return;
+    }
+
+    g_taskbarObserverInstalled.store(false, std::memory_order_release);
+    Wh_Log(L"Taskbar observer removed after successful shell promotion");
+}
+
 static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
         L"Shell-host initialization begin");
@@ -2153,6 +2151,8 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
                 L"confirmed, source-desktop cache active, bounded rescue "
                 L"queue active",
                 attempt);
+
+            RemoveTaskbarObserver();
             return 0;
         }
 
@@ -2379,26 +2379,26 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    g_taskbarObserverInstalled.store(true, std::memory_order_release);
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // Manual enable/reload: the shell Explorer may already have created its
-    // primary taskbar before our CreateWindowExW observer was installed.
-    HWND primaryTaskbar =
-        FindCurrentProcessPrimaryTaskbar();
+    // Manual enable/reload: the shell window may already identify this process
+    // before our CreateWindowExW observer sees the primary taskbar creation.
+    HWND shellWindow = FindCurrentProcessShellWindow();
 
-    if (primaryTaskbar) {
+    if (shellWindow) {
         Wh_Log(
-            L"Existing primary Shell_TrayWnd=%p "
-            L"belongs to this Explorer process",
-            primaryTaskbar);
+            L"Existing shell window=%p belongs to this Explorer process",
+            shellWindow);
 
         PromoteCurrentProcessToShellHost(
-            L"existing primary Shell_TrayWnd");
+            L"existing shell window");
     } else {
         Wh_Log(
-            L"No primary Shell_TrayWnd owned by this PID; "
+            L"No shell window owned by this PID; "
             L"remaining inert unless one is created");
     }
 }
