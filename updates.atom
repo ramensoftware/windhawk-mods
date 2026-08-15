@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-08-15T17:16:35.000Z</updated>
+    <updated>2026-08-15T21:50:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Settings Styler 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-settings-styler#8be5d442cd3d958f58b91428d3cf9039536924bd</id>
+        <link href="https://windhawk.net/mods/windows-11-settings-styler"/>
+        <updated>2026-08-15T21:50:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the following themes: Translucent Settings11, WindowGlass, OLED (Modirinth Green), OLED (System Ascent).</li>
+<li>Updated the StoreFrame11 theme.</li>
+<li>Several target controls can now be specified for the same styles by separating them
+with commas, for example: <code>ParentClass &gt; Class#Name1, ParentClass &gt;
+Class#Name2</code>.</li>
+<li>Added string literals support for substitution expressions, for example: <code>Text={{var == `a` ? `b` : `c`}}</code>.</li>
+<li>Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.</li>
+<li>Improved handling for remote images.</li>
+<li>Fixed crashes that could occur in some cases during navigation.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.7]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#0bf0b09ddd979fe8a604b1f3099c2ac1e8dfafde</id>
@@ -672,24 +693,6 @@ For specific setups (such as unsupported language), it is recommended to apply t
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Animations 1.1.7]]></title>
-        <id>https://windhawk.net/mods/windows-animations#9c9fb82e9c7935004d0325e723d0f14dae3f631e</id>
-        <link href="https://windhawk.net/mods/windows-animations"/>
-        <updated>2026-08-07T11:53:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Enhanced minimize and restore animations with five new fluid effects: Scorch, Splinter, Mirage, Stipple, and Swell.</li>
-<li>Updated Cyber Glitch animation for a more visually appealing and realistic effect.</li>
-<li>Added two new close animations: Retro TV Off and Pixel Melt, expanding the cinematic effects available.</li>
-<li>Updated compiler options for improved compatibility.</li>
-<li>Updated Readme and Settings</li>
-<li>Modified handling of deferred window show commands in animation logic for improved behavior.</li>
-</ul>]]></content>
-        <author>
-            <name>ReDrag</name>
-            <uri>https://github.com/redrag2105</uri>
         </author>
     </entry>
 </feed>
