@@ -305,9 +305,12 @@ HRESULT WINAPI XamlSnapAssistViewHost_Show_Hook(void* pThis,
         Wh_Log(L"Show on rect (%d,%d)-(%d,%d)", rect->left, rect->top,
                rect->right, rect->bottom);
 
-        // Only trust this monitor if nothing armed us already: the rectangle is
-        // where Snap Assist is being drawn, which is the display we want.
-        if (!g_snapMonitor.load()) {
+        // Take the monitor from the rectangle Snap Assist is being drawn on,
+        // unless one of the trigger hooks already supplied a better one for this
+        // same session. Testing whether the filter is still armed matters: a
+        // monitor left over from a previous snap would otherwise be reused here
+        // and silently filter against the wrong display.
+        if (!ShouldFilterNow() || !g_snapMonitor.load()) {
             g_snapMonitor = MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
         }
     } else {
