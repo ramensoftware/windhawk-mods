@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.17.1
+// @version         0.17.2
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -43,24 +43,25 @@ what it shows instead of Screenshot (1). The file stays in the same folder.
 
 By default this is your Windows Screenshots folder, wherever Windows keeps it. In
 the settings you can type the full path to any folder instead, and shortcuts like
-%USERPROFILE% are filled in for you. Everything that arrives in the folder you
+%USERPROFILE% are filled in for you. Every new image that arrives in the folder you
 choose is treated the same way, so pick one where screenshots land rather than one
 that collects downloads.
 
 ## The notification
 
 The popup is a real Windows notification, so it matches your light or dark theme.
-While the popup is turned on, SnapSentry registers itself with Windows so the
-notification buttons work, and turning the popup off or disabling the mod removes
-that registration again. If the notification can't be shown, SnapSentry falls back
+While the popup is turned on, SnapSentry leaves two things on your machine so the
+notification buttons work, a SnapSentry shortcut in your Start Menu programs
+folder and one registry entry. Turning the popup off or disabling the mod removes
+both again. If the notification can't be shown, SnapSentry falls back
 to a standard dialog. If you have turned its notifications off, it takes that as a
 cue to stay quiet: it still copies to the clipboard but shows no dialog and never
 auto deletes.
 
 ## Privacy
 
-SnapSentry treats any supported image written into the watched folder within the
-last few seconds as a new screenshot. Files that were already there, and copies of
+SnapSentry treats any supported image written into the watched folder in about the
+last half minute as a new screenshot. Files that were already there, and copies of
 older images dragged in or synced from another device, are left alone. A brand new
 file saved or downloaded straight into the folder cannot be told apart from a
 capture, so avoid pointing the folder at a place where downloads land. By default a
@@ -95,12 +96,12 @@ stored in clipboard history, cloud sync, backups, or other programs.
   $description: Off by default, since deleting is the part you cannot undo. Removes the file once the copy has succeeded. Only applies when copying the picture or nothing, because copying the file or its location has to leave it in place.
 - recycle: true
   $name: Delete to the Recycle Bin
-  $description: The file goes to the Recycle Bin so you can get it back. Turn this off to delete for good.
+  $description: When something is deleted, whether automatically or from the popup buttons, the file goes to the Recycle Bin so you can get it back. Turn this off to delete for good.
 
 # ---- The popup ----
 - showActionPopup: false
   $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if notifications are unavailable. This is the only setting that leaves anything outside the mod, namely a Start Menu entry so the buttons work, removed again when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
+  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons, or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. This is the only setting that leaves anything outside the mod, namely a Start Menu entry and a registry entry so the buttons work, both removed when you turn it off or disable the mod. Left off, SnapSentry copies and leaves nothing behind.
 - delaySeconds: 5
   $name: Seconds to wait before the automatic action
   $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. Screenshots are handled one at a time, so a long wait holds up the next one. Maximum 3600.
@@ -113,7 +114,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
 # ---- Advanced ----
 - folder: ""
   $name: Folder to watch (leave empty for Screenshots)
-  $description: Empty watches your Windows Screenshots folder, wherever it is. To watch somewhere else, paste the full path to that folder here, for example C:\Users\You\Pictures\Captures or %USERPROFILE%\Desktop. Anything arriving in the folder you choose is handled the same way, so with deletion on, other images saved there are deleted too.
+  $description: Empty watches your Windows Screenshots folder, wherever it is. To watch somewhere else, paste the full path to that folder here, for example C:\Users\You\Pictures\Captures or %USERPROFILE%\Pictures\ShareX. Anything arriving in the folder you choose is handled the same way, so with deletion on, other images saved there are deleted too.
 - logDetails: false
   $name: Verbose logging (may include file paths)
   $description: Off keeps file paths out of the log. Turn this on only while troubleshooting.
