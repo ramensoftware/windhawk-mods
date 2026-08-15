@@ -96,7 +96,7 @@ at the same path, reload the mod if the previous image remains visible.
 // ==WindhawkModSettings==
 /*
 - images:
-  - imageSource: ""
+  - imageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/gecko/normal-hover.gif"
     $name: Image source (necessary)
     $description: >-
       Absolute file path, path containing environment variables, or HTTP/HTTPS
@@ -107,12 +107,12 @@ at the same path, reload the mod if the previous image remains visible.
     $description: >-
       Image shown while the pointer is over the Start button. Leave blank to use
       the normal image.
-  - pressedImageSource: ""
+  - pressedImageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/gecko/pressed.png"
     $name: Pressed image source
     $description: >-
       Image shown while the Start button is pressed. Leave blank to use the
       normal image.
-  - activatedImageSource: ""
+  - activatedImageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/main/windhawk-mods/start-button-replacer/gecko/activated.png"
     $name: Activated image source
     $description: >-
       Image shown while the Start menu is open. If blank or unavailable, the
