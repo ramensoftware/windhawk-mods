@@ -2136,7 +2136,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     // the two modules below is actually loaded depends on the Windows
     // build - see GetTaskbarViewModuleHandle.
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
             &TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original,
@@ -2175,7 +2175,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    bool ok = HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
+    bool ok = HookSymbols(module, hooks, ARRAYSIZE(hooks));
     Wh_Log(L"HookTaskbarViewDllSymbols: %s", ok ? L"OK" : L"FAILED");
     Wh_Log(L"  ArrangeOverride: %s",
            TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original ? L"resolved"
