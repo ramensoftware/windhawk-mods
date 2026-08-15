@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.10
+// @version         0.3.11
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -48,6 +48,7 @@ shell interfaces, so future Windows updates may require adjustments.
 #include <windows.h>
 #include <objbase.h>
 #include <servprov.h>
+#include <shobjidl.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
@@ -66,21 +67,6 @@ static const CLSID kClsidImmersiveShell = {
 static const CLSID kClsidVirtualDesktopManagerInternal = {
     0xC5E0CDCA, 0x7B6E, 0x41B2,
     {0x9F, 0xC4, 0xD9, 0x39, 0x75, 0xCC, 0x46, 0x7B}
-};
-
-static const CLSID kClsidVirtualDesktopManager = {
-    0xAA509086, 0x5CA9, 0x4C25,
-    {0x8F, 0x95, 0x58, 0x9D, 0x3C, 0x07, 0xB4, 0x8A}
-};
-
-static const IID kIidIServiceProvider = {
-    0x6D5140C1, 0x7436, 0x11CE,
-    {0x80, 0x34, 0x00, 0xAA, 0x00, 0x60, 0x09, 0xFA}
-};
-
-static const IID kIidIUnknown = {
-    0x00000000, 0x0000, 0x0000,
-    {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}
 };
 
 static const GUID kServiceVirtualDesktopNotification = {
@@ -115,11 +101,6 @@ static const IID kIidApplicationViewCollection = {
     {0xAF, 0x41, 0x87, 0x47, 0x53, 0x8F, 0x10, 0xE5}
 };
 
-static const IID kIidVirtualDesktopManager = {
-    0xA5CD92FF, 0x29BE, 0x454C,
-    {0x8D, 0x04, 0xD8, 0x28, 0x79, 0xFB, 0x3F, 0x1B}
-};
-
 // -----------------------------------------------------------------------------
 // Minimal undocumented/public interface declarations.
 // -----------------------------------------------------------------------------
@@ -152,20 +133,6 @@ struct IApplicationViewCollection : IUnknown {
 };
 
 struct IVirtualDesktopManagerInternal : IUnknown {};
-
-struct IVirtualDesktopManagerPublic : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE IsWindowOnCurrentVirtualDesktop(
-        HWND topLevelWindow,
-        BOOL* onCurrentDesktop) = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE GetWindowDesktopId(
-        HWND topLevelWindow,
-        GUID* desktopId) = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE MoveWindowToDesktop(
-        HWND topLevelWindow,
-        REFGUID desktopId) = 0;
-};
 
 struct IVirtualDesktopNotification : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(
@@ -387,6 +354,18 @@ static bool IsExplicitHotkeySwitchContext() {
     return g_hotkeyCycleDepth > 0;
 }
 
+static const wchar_t* GuidToStringForLog(const GUID& guid) {
+    // A ring keeps multiple GUID arguments in one Wh_Log call distinct. Since
+    // this helper is called only from Wh_Log arguments, formatting is skipped
+    // entirely when logging is disabled.
+    static thread_local wchar_t buffers[8][64];
+    static thread_local size_t nextBuffer = 0;
+
+    wchar_t* buffer = buffers[nextBuffer++ % ARRAYSIZE(buffers)];
+    GuidToString(guid, buffer, ARRAYSIZE(buffers[0]));
+    return buffer[0] ? buffer : L"<invalid>";
+}
+
 static bool ExplicitSwitchExpired(
     const ExplicitSwitchTransaction& transaction,
     ULONGLONG now) {
@@ -449,18 +428,13 @@ static uint64_t BeginExplicitSwitchTransaction(
     g_explicitSwitch.startedAt = GetTickCount64();
     ReleaseSRWLockExclusive(&g_explicitSwitchLock);
 
-    wchar_t sourceText[64] = {};
-    wchar_t targetText[64] = {};
-    GuidToString(sourceId, sourceText, ARRAYSIZE(sourceText));
-    GuidToString(targetId, targetText, ARRAYSIZE(targetText));
-
     Wh_Log(
         L"Explicit switch transaction #%llu begin route=%s "
         L"source=%s target=%s",
         static_cast<unsigned long long>(sequence),
         route ? route : L"<unknown>",
-        sourceText,
-        targetText);
+        GuidToStringForLog(sourceId),
+        GuidToStringForLog(targetId));
 
     return sequence;
 }
@@ -622,14 +596,6 @@ static void FinishExplicitSwitchTransaction(
         return;
     }
 
-    wchar_t switchedText[64] = {};
-    wchar_t targetText[64] = {};
-    GuidToString(switchedId, switchedText, ARRAYSIZE(switchedText));
-    GuidToString(
-        transaction.targetDesktopId,
-        targetText,
-        ARRAYSIZE(targetText));
-
     if (expired) {
         Wh_Log(
             L"Explicit switch transaction #%llu expired on completion",
@@ -638,14 +604,14 @@ static void FinishExplicitSwitchTransaction(
         Wh_Log(
             L"Explicit switch transaction #%llu complete switched=%s",
             static_cast<unsigned long long>(transaction.sequence),
-            switchedText);
+            GuidToStringForLog(switchedId));
     } else if (ignored) {
         Wh_Log(
             L"Explicit switch transaction #%llu ignored stale completion "
             L"switched=%s target=%s targetChangeObserved=%d",
             static_cast<unsigned long long>(transaction.sequence),
-            switchedText,
-            targetText,
+            GuidToStringForLog(switchedId),
+            GuidToStringForLog(transaction.targetDesktopId),
             transaction.targetChangeObserved);
     }
 }
@@ -779,7 +745,7 @@ public:
 
         *object = nullptr;
 
-        if (IsEqualIID(riid, kIidIUnknown) ||
+        if (IsEqualIID(riid, __uuidof(IUnknown)) ||
             IsEqualIID(riid, kIidVirtualDesktopNotification)) {
             *object = static_cast<IVirtualDesktopNotification*>(this);
             AddRef();
@@ -856,17 +822,12 @@ public:
             StoreCurrentDesktopId(newId);
             ObserveExplicitSwitchDesktopChange(newId);
 
-            wchar_t oldText[64] = {};
-            wchar_t newText[64] = {};
-            if (SUCCEEDED(oldHr)) {
-                GuidToString(oldId, oldText, ARRAYSIZE(oldText));
-            }
-            GuidToString(newId, newText, ARRAYSIZE(newText));
-
             Wh_Log(
                 L"Current desktop cache updated old=%s new=%s",
-                SUCCEEDED(oldHr) ? oldText : L"<unknown>",
-                newText);
+                SUCCEEDED(oldHr)
+                    ? GuidToStringForLog(oldId)
+                    : L"<unknown>",
+                GuidToStringForLog(newId));
         } else {
             ClearCurrentDesktopId();
             Wh_Log(
@@ -926,7 +887,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         kClsidImmersiveShell,
         nullptr,
         CLSCTX_LOCAL_SERVER,
-        kIidIServiceProvider,
+        __uuidof(IServiceProvider),
         reinterpret_cast<void**>(&serviceProvider));
 
     if (SUCCEEDED(hr) && serviceProvider) {
@@ -1135,7 +1096,7 @@ struct WorkerComState {
     IServiceProvider* serviceProvider = nullptr;
     IVirtualDesktopManagerInternal* managerInternal = nullptr;
     IApplicationViewCollection* viewCollection = nullptr;
-    IVirtualDesktopManagerPublic* publicManager = nullptr;
+    IVirtualDesktopManager* publicManager = nullptr;
 };
 
 static void ReleaseWorkerComState(WorkerComState* state) {
@@ -1169,7 +1130,7 @@ static bool InitializeWorkerComState(WorkerComState* state) {
         kClsidImmersiveShell,
         nullptr,
         CLSCTX_LOCAL_SERVER,
-        kIidIServiceProvider,
+        __uuidof(IServiceProvider),
         reinterpret_cast<void**>(&state->serviceProvider));
 
     if (FAILED(hr) || !state->serviceProvider) {
@@ -1215,11 +1176,10 @@ static bool InitializeWorkerComState(WorkerComState* state) {
     }
 
     hr = CoCreateInstance(
-        kClsidVirtualDesktopManager,
+        __uuidof(VirtualDesktopManager),
         nullptr,
         CLSCTX_INPROC_SERVER,
-        kIidVirtualDesktopManager,
-        reinterpret_cast<void**>(&state->publicManager));
+        IID_PPV_ARGS(&state->publicManager));
 
     if (FAILED(hr) || !state->publicManager) {
         Wh_Log(
@@ -1300,17 +1260,11 @@ static void ProcessRescueRequest(
     // shell hooks from this worker apartment. Keep every abort fail-stationary
     // and logged rather than manufacturing a stale cross-thread switch.
 
-    wchar_t requestedText[64] = {};
-    GuidToString(
-        request.requestedDesktopId,
-        requestedText,
-        ARRAYSIZE(requestedText));
-
     Wh_Log(
         L"[#%llu] Rescue begin hwnd=%p requested=%s",
         static_cast<unsigned long long>(request.sequence),
         request.hwnd,
-        requestedText);
+        GuidToStringForLog(request.requestedDesktopId));
 
     if (!IsRescueCandidate(request.hwnd)) {
         Wh_Log(
@@ -1365,23 +1319,12 @@ static void ProcessRescueRequest(
     }
 
     if (!GuidEqual(actualCurrentId, request.sourceDesktopId)) {
-        wchar_t expectedSourceText[64] = {};
-        wchar_t actualSourceText[64] = {};
-        GuidToString(
-            request.sourceDesktopId,
-            expectedSourceText,
-            ARRAYSIZE(expectedSourceText));
-        GuidToString(
-            actualCurrentId,
-            actualSourceText,
-            ARRAYSIZE(actualSourceText));
-
         Wh_Log(
             L"[#%llu] Abort: current desktop changed before rescue "
             L"(source=%s now=%s)",
             static_cast<unsigned long long>(request.sequence),
-            expectedSourceText,
-            actualSourceText);
+            GuidToStringForLog(request.sourceDesktopId),
+            GuidToStringForLog(actualCurrentId));
 
         currentDesktop->Release();
         return;
@@ -1399,7 +1342,6 @@ static void ProcessRescueRequest(
             L"on the current desktop (moved/pinned meanwhile)",
             static_cast<unsigned long long>(request.sequence));
         currentDesktop->Release();
-        SetForegroundWindow(request.hwnd);
         return;
     }
 
@@ -1427,26 +1369,19 @@ static void ProcessRescueRequest(
             L"current desktop",
             static_cast<unsigned long long>(request.sequence));
         currentDesktop->Release();
-        SetForegroundWindow(request.hwnd);
         return;
     }
 
     if (!GuidEqual(
             windowDesktopId,
             request.requestedDesktopId)) {
-        wchar_t windowText[64] = {};
-        GuidToString(
-            windowDesktopId,
-            windowText,
-            ARRAYSIZE(windowText));
-
         Wh_Log(
             L"[#%llu] Abort: foreground window desktop "
             L"doesn't match requested switch target "
             L"(window=%s requested=%s)",
             static_cast<unsigned long long>(request.sequence),
-            windowText,
-            requestedText);
+            GuidToStringForLog(windowDesktopId),
+            GuidToStringForLog(request.requestedDesktopId));
 
         currentDesktop->Release();
         return;
@@ -1726,18 +1661,12 @@ static HRESULT SwitchDesktopInternal_Hook(
     if (explicitDisposition ==
         ExplicitInternalSwitchDisposition::SuppressStaleSource) {
 
-        wchar_t targetText[64] = {};
-        GuidToString(
-            explicitSnapshot.targetDesktopId,
-            targetText,
-            ARRAYSIZE(targetText));
-
         Wh_Log(
             L"SUPPRESS SwitchDesktopInternal: stale source rebound "
             L"during explicit transaction #%llu target=%s",
             static_cast<unsigned long long>(
                 explicitSnapshot.sequence),
-            targetText);
+            GuidToStringForLog(explicitSnapshot.targetDesktopId));
 
         return S_OK;
     }
@@ -1792,22 +1721,11 @@ static HRESULT SwitchDesktopInternal_Hook(
             requestedDesktop);
     }
 
-    wchar_t sourceText[64] = {};
-    wchar_t requestedText[64] = {};
-    GuidToString(
-        sourceDesktopId,
-        sourceText,
-        ARRAYSIZE(sourceText));
-    GuidToString(
-        requestedId,
-        requestedText,
-        ARRAYSIZE(requestedText));
-
     Wh_Log(
         L"Candidate SwitchDesktopInternal "
         L"source=%s requested=%s foreground=%p",
-        sourceText,
-        requestedText,
+        GuidToStringForLog(sourceDesktopId),
+        GuidToStringForLog(requestedId),
         foreground);
 
     LogWindow(L"candidate", foreground);
