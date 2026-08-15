@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.0.1
+// @version         1.1.3
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -61,10 +61,10 @@ If all you want is one specific behaviour, a smaller mod may suit you better:
   and an end, configured separately. Give neighbouring parts the same action and
   they merge back into one, so you get whichever of `ABC`, `AAB`, `ABB` or `AAA`
   you want without a mode switch. See *Dividing an edge*.
-- **Knock to trigger** — set a knock window on any zone, corners included, and a
-  single arrival does nothing: you have to leave and come back within the window.
-  Handy on a corner you brush past often.
-- **Configurable zone size**, optional dwell delay, and a cooldown timer.
+- **Five ways to trigger** — on arrival, after a dwell, on a double knock, only
+  while a modifier is held, or press-and-hold to peek. They combine freely, and
+  any of them works on any zone. See *Ways to trigger a zone*.
+- **Configurable zone size** and a cooldown timer.
 - **Fullscreen protection** — auto-detects games, presentations, and D3D
   fullscreen apps.
 - **Drag protection** — zones don't fire while a mouse button is held.
@@ -85,6 +85,97 @@ the zones you want on it. A zone you do not list does nothing.
 
 If the tray icon is hidden, it is in the overflow area — drag it onto the
 taskbar to keep it there.
+
+## Ways to trigger a zone
+
+A zone does not have to fire the instant you touch it. There are five trigger
+styles, every one of them works on every zone — corners and edge segments alike —
+and they combine: a corner can require a knock *and* a held modifier *and* a
+dwell before it does anything.
+
+### Arrival
+
+The default. Reach the zone, the action runs.
+
+![Task View opening as the pointer reaches the top-left corner](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/trigger-arrival.gif)
+
+A short **pass-through guard** (80 ms out of the box) keeps a zone quiet when you
+were only travelling across it on the way somewhere else. If actions still fire
+while you are just moving around, raise it before you reach for anything else.
+
+### Dwell
+
+Set **Activation delay** and the pointer has to rest in the zone that long before
+it fires. Leave early and nothing happens.
+
+![Quick Settings appearing after the pointer rests on the top edge](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/trigger-dwell.gif)
+
+Use this on a zone you pass through constantly. 300–500 ms is deliberate without
+feeling sluggish; past about a second it stops feeling like a hot corner.
+
+### Knock
+
+Set **Knock window** and a single arrival never fires. The zone arms only when
+you leave and come straight back within that many milliseconds — a double-knock.
+
+![Leaving and re-entering the bottom-right corner to switch windows](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/trigger-knock.gif)
+
+This is the one to reach for on a corner you brush past often but want to keep
+for something disruptive. 400 ms is a comfortable knock; below about 200 ms it
+starts to demand real intent. `0` turns it off.
+
+Knock and dwell answer the same question differently: dwell asks you to wait,
+knock asks you to be deliberate without waiting at all.
+
+### Hold to peek
+
+Older Windows had a thin Show Desktop button past the clock — rest the pointer on
+it and the desktop peeked through, move away and every window came back. Windows
+11 dropped it. Any zone here can work that way.
+
+Set **Hold — action when the pointer leaves** and the zone stops being fire-once.
+The action runs on arrival, and the release action runs when the pointer leaves.
+For anything that toggles — Show Desktop, Mute, Keep Awake — pick **The same
+action again**:
+
+| Setting | Value |
+| --- | --- |
+| Zone | `Top-right corner` |
+| Action | `Show desktop` |
+| Hold — action when the pointer leaves | `The same action again` |
+
+![Resting in the top-right corner to peek at the desktop, windows returning on leaving](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/trigger-hold.gif)
+
+The two halves are independent, so a release does not have to undo the entry —
+open Quick Settings on arrival and mute on departure if that is useful to you.
+
+A hold only ever releases what it actually engaged, so a pointer that clips the
+corner without staying long enough to fire leaves nothing behind. Disabling the
+mod, suspending it, or a display waking up all release a held zone first — a
+peeked desktop can never be left stuck.
+
+### With a modifier held
+
+Set **Required modifier**, globally or on one zone, and that zone only fires
+while Ctrl, Alt, Shift or Win is down. Every other time you hit the corner it is
+inert.
+
+![Snapping a window left with Ctrl held while touching the left edge](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/trigger-modifier.gif)
+
+The key is checked continuously rather than only on arrival, so you can park the
+pointer in the corner first and press the key afterwards — the zone fires the
+moment the key goes down. Either order works.
+
+### Not a trigger, but often confused with one
+
+**Alternate key press** and **Alternate command** change *what* a zone does
+rather than *when* it fires — the same corner runs the left action, then the
+right one, then the left again. Combine either with any trigger above.
+
+![One edge maximising a window, then restoring it on the next visit](https://raw.githubusercontent.com/DhakadG/my-windhawk-mods/main/docs/media/trigger-alternate.gif)
+
+Above, the right edge is set to `Win+Up | Win+Down`: the first visit maximises
+the window and the next one puts it back.
 
 ## Available Actions
 
@@ -170,16 +261,6 @@ cooldowns stay separate, because a merged zone could only carry one cooldown.
 Merging is not cosmetic. Three separate zones all running Task View would each
 re-arm as the pointer crossed a seam, so sliding along the edge would fire it
 repeatedly; one merged zone fires once.
-
-## Knock to trigger
-
-Set **Knock window** on a zone — globally, or per zone — and a single arrival
-never fires it. The zone arms only when you leave and come back within that many
-milliseconds. `0` turns it off.
-
-This works on every zone, corners included, so a corner you keep brushing past
-on the way to something else can be made deliberate. 400 ms is a comfortable
-double-knock; below about 200 ms it starts to need intent.
 
 ## Identifying your monitors
 
@@ -268,10 +349,11 @@ Hot corners are disabled when any excluded process is the foreground window.
 
 **Example:** `photoshop.exe;premiere.exe;blender.exe`
 
-# Why it works this way
+## Why it works this way
 
-Not a changelog — this is the first release. These are the decisions that are
-easy to second-guess later, and the reason each one went the way it did.
+If you have wondered why a setting behaves the way it does, or you are weighing
+this against another hot-corners tool, here is the reasoning behind the choices
+that are easiest to second-guess.
 
 **Polling, not a mouse hook.** A `WH_MOUSE_LL` hook sits directly on the system
 input path: every mouse event in every process waits for it, and if it is slow
@@ -317,15 +399,32 @@ monitor rebuilds the zones, and the pointer may already be sitting in one. The
 rebuild adopts that zone with the visit already spent, so a corner bound to
 *Lock* cannot lock the machine because a display woke up.
 
+**A held modifier is released before a key action, and never re-pressed.**
+Windows merges whatever you are physically holding into an injected shortcut, so
+without this a Ctrl-guarded zone bound to *Snap left* would send Ctrl+Win+Left
+and switch virtual desktop instead — or, on a single desktop, do nothing at all.
+Restoring the key afterwards sounds tidier and is a trap: if you let go in
+between, a key-down goes out with no matching key-up and the modifier is stuck
+down for the rest of the session. A stray key-up cannot cause that, so this
+releases and stops there.
+
 **The fullscreen and excluded-app checks run on the worker thread**, not on the
 sampling thread, so a slow `OpenProcess` can never delay cursor sampling. The
 cost is that a suppressed trigger still consumes its cooldown — a wait nobody
 can perceive, traded for a sampling path that never stalls.
 
-## Support
+## Bugs and requests
 
-Windhawk renders the `@donateUrl` in the metadata block as a Donate button in the mod
-listing, but it only takes one link, so the rest live here.
+Please open an issue at
+[github.com/DhakadG/my-windhawk-mods](https://github.com/DhakadG/my-windhawk-mods/issues).
+If a zone is not firing, this mod's log (Windhawk → this mod → **Advanced** →
+**Mod log**) says which zone the pointer entered and why nothing happened, and
+pasting that in saves a round trip.
+
+## Support the mod
+
+This is free and always will be. If it earned you back some clicks and you feel
+like buying me a coffee:
 
 - [Ko-fi](https://ko-fi.com/losthusky_)
 - [Buy Me a Coffee](https://www.buymeacoffee.com/losthusky_)
@@ -414,6 +513,40 @@ listing, but it only takes one link, so the rest live here.
             as  Ctrl+Shift+Esc . Custom command takes an executable, path or
             URL. The two Alternate actions take both halves separated by a
             vertical bar, for example  Alt+S | Alt+H .
+        - releaseAction: ACTION_NOTHING
+          $name: Hold - action when the pointer leaves
+          $description: >-
+            Leave this as Nothing for a normal zone, which fires once on
+            arrival. Set anything else and the zone becomes a hold zone: the
+            action above runs when the pointer arrives, and this one runs when
+            it leaves again. That is what the old Show Desktop button did -
+            peek while the pointer rests on it, put everything back when it
+            moves away.
+
+            "The same action again" is what you want for a toggle such as Show
+            Desktop, Mute or Keep Awake, and it stays in step if you change the
+            action above later.
+          $options:
+          - ACTION_NOTHING: "Nothing (fire once on arrival)"
+          - ACTION_SAME: The same action again
+          - ACTION_SHOW_DESKTOP: Show desktop
+          - ACTION_TASK_VIEW: Task View
+          - ACTION_QUICK_SETTINGS: Quick Settings
+          - ACTION_NOTIFICATION_CENTER: Notification Centre
+          - ACTION_START_MENU: Start menu
+          - ACTION_MUTE: Mute
+          - ACTION_MINIMIZE: Minimise window
+          - ACTION_MAXIMIZE: Maximise window
+          - ACTION_KEEP_AWAKE_ON: Keep awake on
+          - ACTION_KEEP_AWAKE_OFF: Keep awake off
+          - ACTION_SEND_KEYPRESS: Send key press
+          - ACTION_START_PROCESS: Custom command
+        - releaseArgs: ""
+          $name: Hold - release arguments
+          $description: >-
+            Only used when the release action is Send key press or Custom
+            command. Ignored by "The same action again", which reuses the
+            arguments above.
         - size: -1
           $name: Size override (px)
           $description: >-
@@ -553,6 +686,11 @@ enum class CornerAction
     // second falls through to the "*" entry, so this is what lets one screen
     // opt out of a shared zone without abandoning the wildcard everywhere.
     DisabledHere,
+    // Release-action only: repeat whatever the zone does on entry. Every
+    // toggle - Show Desktop, Mute, Keep Awake - wants exactly this, so it
+    // saves picking the same entry twice and keeps the pair in step if the
+    // entry action is later changed.
+    SameAsEntry,
     ShowDesktop,
     TaskView,
     ScreenSaver,
@@ -645,6 +783,15 @@ struct ZoneConfig
     std::wstring args;
     std::function<void()> executor;
     ZoneTuning tuning;
+
+    // Hold: a second action fired when the pointer leaves the zone again.
+    // Anything other than Nothing here turns the zone into a hold zone, which
+    // is what the old Show Desktop button did - peek while the pointer is on
+    // it, put everything back when it leaves. Setting this to "the same action"
+    // covers every toggle, which is the common case.
+    CornerAction releaseAction = CornerAction::Nothing;
+    std::wstring releaseArgs;
+    std::function<void()> releaseExecutor;
 };
 
 struct MonitorZoneConfig
@@ -678,6 +825,18 @@ struct HitZone
     // the rebuild was skipped and the old executor stayed live.
     CornerAction action = CornerAction::Nothing;
     std::wstring args;
+
+    // Set only on a hold zone. The detection loop queues this when the pointer
+    // leaves, if the zone had already fired on the way in.
+    std::function<void()> releaseExec;
+    CornerAction releaseAction = CornerAction::Nothing;
+    std::wstring releaseArgs;
+
+    // Queue bookkeeping, set per job rather than per zone. The detection thread
+    // decides that a release is *owed*; only the worker knows whether the entry
+    // it would undo actually ran, because the gates live there.
+    bool engagesHold = false;
+    bool isRelease = false;
 
     // Resolved once at build time - zone override if set, otherwise the
     // global. The detection loop therefore never has to know that per-zone
@@ -819,6 +978,11 @@ static int g_activeZone = -1;
 static ULONGLONG g_enterTick = 0;
 static bool g_firedThisEntry = false;
 static bool g_knockSatisfied = true;
+// A hold zone has engaged and owes its release. Kept apart from
+// g_firedThisEntry because the two answer different questions: that one is
+// "has this visit been spent", which stays true after a release so the zone
+// cannot re-fire without leaving first.
+static bool g_holdEngaged = false;
 static std::vector<ULONGLONG> g_lastFireTick;
 // When each zone was last left, for knock detection.
 static std::vector<ULONGLONG> g_lastExitTick;
@@ -1449,15 +1613,18 @@ static bool IsForegroundAppExcluded(const std::vector<std::wstring> &excluded)
 // Sends key-down for all VKs in order, then key-up in reverse order, as one
 // atomic SendInput batch.
 //
-// Earlier versions also released any modifier the user was physically holding
-// and re-pressed it afterwards. That was removed deliberately: re-pressing is
-// only correct if the key is still held when the restore runs. If the user let
-// go in between — or the restore SendInput failed, or the thread was torn down
-// between the two calls — a key-down was injected with no matching key-up and
-// the modifier stayed logically stuck down for the whole session. A stuck Win
-// or Ctrl key breaks every application at once, which is far worse than the
-// problem it solved (a held Shift leaking into the injected combo).
-// Every key this function presses, it releases in the same batch.
+// Any modifier the user is physically holding is released first, so it cannot
+// leak into the injected combination. It is never re-pressed afterwards, and
+// that asymmetry is the whole point: an earlier version restored the key and
+// could leave it logically stuck down for the rest of the session, because a
+// re-press is only correct if the key is still held when the restore runs. If
+// the user let go in between — or the restore SendInput failed, or the thread
+// was torn down between the two calls — a key-down went out with no matching
+// key-up. A stuck Win or Ctrl breaks every application at once.
+//
+// A key-up carries no such risk in either direction, so releasing is kept and
+// restoring is not. Every key this function presses, it releases in the same
+// batch.
 // Keys that live on the E0-prefixed part of the keyboard. Injected without
 // KEYEVENTF_EXTENDEDKEY they resolve to their numpad twins, so Win+Right
 // (snap) or a custom combo using arrows/Home/End would do nothing or move the
@@ -1503,14 +1670,44 @@ static void SendKeys(const std::vector<WORD> &vks)
     if (vks.empty())
         return;
 
+    // A modifier the user is physically holding cannot be masked by SendInput:
+    // Windows merges it into whatever this batch presses. A zone with a
+    // required modifier guarantees that happens on every trigger, and it
+    // silently changes the action rather than failing — Snap left (Win+Left)
+    // fired from a Ctrl zone arrives as Ctrl+Win+Left, which switches virtual
+    // desktop, or does nothing whatsoever when there is only one desktop.
+    //
+    // Injecting a release first is safe in the way the old release-then-
+    // re-press pair described above was not. An extra key-up can never leave a
+    // key logically stuck, and the user's own release still delivers its
+    // key-up afterwards. Nothing is re-pressed here, deliberately.
+    static const WORD kMods[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU,
+                                 VK_LSHIFT,   VK_RSHIFT,   VK_LWIN,  VK_RWIN};
+    std::vector<INPUT> inputs;
+    for (WORD mod : kMods)
+    {
+        if (!(GetAsyncKeyState(mod) & 0x8000))
+            continue;
+        // Part of the batch already: it presses and releases this one itself.
+        if (std::find(vks.begin(), vks.end(), mod) != vks.end())
+            continue;
+        INPUT up = {};
+        up.type = INPUT_KEYBOARD;
+        up.ki.wVk = mod;
+        up.ki.dwFlags =
+            (IsExtendedKey(mod) ? KEYEVENTF_EXTENDEDKEY : 0) | KEYEVENTF_KEYUP;
+        inputs.push_back(up);
+    }
+    const size_t pre = inputs.size();
+
     size_t n = vks.size();
-    std::vector<INPUT> inputs(n * 2);
+    inputs.resize(pre + n * 2);
 
     for (size_t i = 0; i < n; i++)
     {
-        inputs[i].type = INPUT_KEYBOARD;
-        inputs[i].ki.wVk = vks[i];
-        inputs[i].ki.dwFlags =
+        inputs[pre + i].type = INPUT_KEYBOARD;
+        inputs[pre + i].ki.wVk = vks[i];
+        inputs[pre + i].ki.dwFlags =
             IsExtendedKey(vks[i]) ? KEYEVENTF_EXTENDEDKEY : 0;
     }
     for (size_t i = 0; i < n; i++)
@@ -1519,9 +1716,9 @@ static void SendKeys(const std::vector<WORD> &vks)
         // not from vks[i] — the release order is reversed, so using the wrong
         // index would tag the extended bit onto the wrong key.
         WORD vk = vks[n - 1 - i];
-        inputs[n + i].type = INPUT_KEYBOARD;
-        inputs[n + i].ki.wVk = vk;
-        inputs[n + i].ki.dwFlags =
+        inputs[pre + n + i].type = INPUT_KEYBOARD;
+        inputs[pre + n + i].ki.wVk = vk;
+        inputs[pre + n + i].ki.dwFlags =
             (IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0) | KEYEVENTF_KEYUP;
     }
 
@@ -1543,7 +1740,7 @@ static void SendKeys(const std::vector<WORD> &vks)
         // and releasing a key that is already up does nothing, so replay all
         // of them. Nothing was pressed if nothing was sent.
         if (sent > 0)
-            SendInput((UINT)n, inputs.data() + n, sizeof(INPUT));
+            SendInput((UINT)n, inputs.data() + pre + n, sizeof(INPUT));
     }
     else
     {
@@ -1813,6 +2010,7 @@ static CornerAction ParseActionType(const std::wstring &raw)
     static const std::unordered_map<std::wstring, CornerAction> map = {
         {L"ACTION_NOTHING", CornerAction::Nothing},
         {L"ACTION_DISABLED_HERE", CornerAction::DisabledHere},
+        {L"ACTION_SAME", CornerAction::SameAsEntry},
         {L"ACTION_SHOW_DESKTOP", CornerAction::ShowDesktop},
         {L"ACTION_TASK_VIEW", CornerAction::TaskView},
         {L"ACTION_SCREENSAVER", CornerAction::ScreenSaver},
@@ -1861,6 +2059,7 @@ static const wchar_t *ActionToString(CornerAction a)
     {
     case CornerAction::Nothing: return L"Nothing";
     case CornerAction::DisabledHere: return L"Disabled here";
+    case CornerAction::SameAsEntry: return L"the same action again";
     case CornerAction::ShowDesktop: return L"Show Desktop";
     case CornerAction::TaskView: return L"Task View";
     case CornerAction::ScreenSaver: return L"Screen Saver";
@@ -1945,6 +2144,7 @@ static std::function<void()> MakeExecutor(CornerAction action,
     {
     case CornerAction::Nothing: return nullptr;
     case CornerAction::DisabledHere: return nullptr;
+    case CornerAction::SameAsEntry: return nullptr;   // resolved by the caller
     case CornerAction::ShowDesktop: return ActionShowDesktop;
     case CornerAction::TaskView: return ActionTaskView;
     case CornerAction::ScreenSaver: return ActionScreenSaver;
@@ -2077,7 +2277,9 @@ static bool SameZoneConfig(const ZoneConfig *a, const ZoneConfig *b)
         return true;
     if (!a || !b)
         return false;
-    if (a->action != b->action || a->args != b->args)
+    if (a->action != b->action || a->args != b->args ||
+        a->releaseAction != b->releaseAction ||
+        a->releaseArgs != b->releaseArgs)
         return false;
     const ZoneTuning &x = a->tuning, &y = b->tuning;
     return x.size == y.size && x.delay == y.delay && x.settle == y.settle &&
@@ -2257,6 +2459,9 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
 
             hz.action = zc->action;
             hz.args = zc->args;
+            hz.releaseAction = zc->releaseAction;
+            hz.releaseArgs = zc->releaseArgs;
+            hz.releaseExec = zc->releaseExecutor;
             hz.label = mon.id + L" " + ZoneToString(z) + L" -> " +
                        ActionToString(zc->action);
             set->zones.push_back(std::move(hz));
@@ -2344,6 +2549,10 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
     return set;
 }
 
+// Defined with the detection loop, which owns the state it touches; a rebuild
+// has to let go of a held zone before it forgets which one that was.
+static void ReleaseHeldZone(const std::shared_ptr<const ZoneSet> &zones);
+
 // True when two zone sets would behave identically. Only what the detection
 // loop and the actions actually read - the executors are rebuilt every time
 // and never compare equal, so comparing them would make this always false.
@@ -2369,7 +2578,9 @@ static bool SameZoneSet(const ZoneSet *a, const ZoneSet *b)
         const HitZone &x = a->zones[i], &y = b->zones[i];
         if (memcmp(&x.rect, &y.rect, sizeof(RECT)) != 0 || x.zone != y.zone ||
             x.monitor != y.monitor || x.action != y.action ||
-            x.args != y.args || x.delay != y.delay || x.settle != y.settle ||
+            x.args != y.args || x.releaseAction != y.releaseAction ||
+            x.releaseArgs != y.releaseArgs ||
+            x.delay != y.delay || x.settle != y.settle ||
             x.knock != y.knock || x.cooldown != y.cooldown ||
             x.modifier != y.modifier || x.label != y.label)
             return false;
@@ -2404,6 +2615,10 @@ static void RebuildZones()
     if (SameZoneSet(current.get(), set.get()))
         return;
 
+    // The state reset below forgets which zone was held, so let go first while
+    // the old set is still the one those indices refer to.
+    ReleaseHeldZone(current);
+
     EnterCriticalSection(&g_zonesLock);
     g_zones = set;
     LeaveCriticalSection(&g_zonesLock);
@@ -2414,6 +2629,9 @@ static void RebuildZones()
     g_lastFireTick.assign(set->zones.size(), 0);
     g_lastExitTick.assign(set->zones.size(), 0);
     g_knockSatisfied = true;
+    // ReleaseHeldZone above already let go against the old set; this only
+    // makes sure nothing carries into the new one.
+    g_holdEngaged = false;
 
     // A rebuild is not a gesture. With the state above cleared, a pointer that
     // has not moved looks to the next tick like a fresh entry - and with every
@@ -2468,10 +2686,27 @@ static bool TopologyChanged()
 static void EnqueueAction(const HitZone &hz)
 {
     EnterCriticalSection(&g_queueLock);
-    if (g_queue.size() < kMaxQueue)
+    // A release is never dropped. The cap is there to bound a runaway burst of
+    // new work, but discarding the half that undoes something already done is
+    // how a peeked desktop gets stuck with no way back.
+    if (g_queue.size() < kMaxQueue || hz.isRelease)
         g_queue.push_back(hz);
     LeaveCriticalSection(&g_queueLock);
     SetEvent(g_hWorkEvent);
+}
+
+// A hold zone's second half, queued when the pointer leaves. The copy carries
+// the release executor in exec, so the worker needs no special case for it.
+static void EnqueueRelease(const HitZone &hz)
+{
+    if (!hz.releaseExec)
+        return;
+    HitZone rel = hz;
+    rel.exec = hz.releaseExec;
+    rel.label = hz.label + L"  (released)";
+    rel.engagesHold = false;
+    rel.isRelease = true;
+    EnqueueAction(rel);
 }
 
 static DWORD WINAPI ActionWorkerThread(LPVOID)
@@ -2524,23 +2759,48 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
             // fullscreen game has focus re-queues the job every cooldown.
             // Report the first skip of a run, then stay quiet until something
             // actually fires. Only this thread touches the flag.
+            // Whether the entry half of a hold actually ran. Only this thread
+            // touches it, and the queue is FIFO, so the entry job is always
+            // seen before the release it pairs with - no synchronisation and no
+            // race with the detection thread's own view of the hold.
+            static bool holdActive = false;
+
             static bool skipLogged = false;
-            HMONITOR fsMon = checkFullscreen ? FullScreenMonitor() : nullptr;
-            if (fsMon && (fsMon == kAllMonitors || fsMon == job.monitor))
+            if (job.isRelease)
             {
-                if (!skipLogged)
-                    Wh_Log(L"SKIP (fullscreen): %s", job.label.c_str());
-                skipLogged = true;
-                continue;
+                // Deliberately not gated. The gates decide whether to *start*
+                // something; refusing to undo something already done would
+                // leave the desktop peeked with no way back - a fullscreen app
+                // appearing while the pointer rests in the corner is exactly
+                // when that would happen.
+                if (!holdActive)
+                {
+                    // The entry was suppressed or never made it onto the queue,
+                    // so there is nothing to undo. Releasing anyway is how a
+                    // hold zone ends up *hiding* your windows on the way out.
+                    Wh_Log(L"SKIP (nothing engaged): %s", job.label.c_str());
+                    continue;
+                }
             }
-            if (IsForegroundAppExcluded(excluded))
+            else
             {
-                if (!skipLogged)
-                    Wh_Log(L"SKIP (excluded app): %s", job.label.c_str());
-                skipLogged = true;
-                continue;
+                HMONITOR fsMon = checkFullscreen ? FullScreenMonitor() : nullptr;
+                if (fsMon && (fsMon == kAllMonitors || fsMon == job.monitor))
+                {
+                    if (!skipLogged)
+                        Wh_Log(L"SKIP (fullscreen): %s", job.label.c_str());
+                    skipLogged = true;
+                    continue;
+                }
+                if (IsForegroundAppExcluded(excluded))
+                {
+                    if (!skipLogged)
+                        Wh_Log(L"SKIP (excluded app): %s", job.label.c_str());
+                    skipLogged = true;
+                    continue;
+                }
+                skipLogged = false;
             }
-            skipLogged = false;
 
             {
                 WCHAR fgClass[64] = L"?";
@@ -2555,6 +2815,13 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
             // working with no indication why.
             if (job.exec)
                 job.exec();
+
+            // Recorded only now, past the gates and the execution, so a hold is
+            // owed a release exactly when its entry half really happened.
+            if (job.isRelease)
+                holdActive = false;
+            else if (job.engagesHold)
+                holdActive = true;
         }
     }
     CoUninitialize();
@@ -2588,19 +2855,43 @@ static bool AnyMouseButtonDown()
            (GetAsyncKeyState(VK_XBUTTON2) & 0x8000);
 }
 
+// Anything that stops detection has to let go of a held zone first, or the
+// hold's second half never runs and whatever it engaged stays engaged - a
+// peeked desktop that will not come back is a far worse failure than a missed
+// trigger. Safe to call when nothing is held.
+static void ReleaseHeldZone(const std::shared_ptr<const ZoneSet> &zones)
+{
+    if (!g_holdEngaged)
+        return;
+    g_holdEngaged = false;
+    if (zones && g_activeZone >= 0 && g_activeZone < (int)zones->zones.size())
+        EnqueueRelease(zones->zones[g_activeZone]);
+    // g_activeZone is deliberately left alone, and the visit stays spent.
+    // Clearing it would make the next tick read a pointer that has not moved
+    // as a fresh entry, so re-enabling the mod while it rests in a corner
+    // would fire that corner - the same trap a rebuild used to fall into.
+    g_firedThisEntry = true;
+}
+
 // Returns how long the caller should wait before ticking again.
 static DWORD DetectTick()
 {
-    if (!g_trayEnabled.load() || GetTickCount64() < g_suspendUntil.load())
-        return kIdleTickMs;
-
     std::shared_ptr<const ZoneSet> zones;
     EnterCriticalSection(&g_zonesLock);
     zones = g_zones;
     LeaveCriticalSection(&g_zonesLock);
 
-    if (!zones || zones->zones.empty())
+    if (!g_trayEnabled.load() || GetTickCount64() < g_suspendUntil.load())
+    {
+        ReleaseHeldZone(zones);
         return kIdleTickMs;
+    }
+
+    if (!zones || zones->zones.empty())
+    {
+        ReleaseHeldZone(zones);
+        return kIdleTickMs;
+    }
 
     // GetCursorPos fails for a process on the default desktop once the input
     // desktop is the secure one, so a locked machine used to spin this thread
@@ -2650,6 +2941,9 @@ static DWORD DetectTick()
         // be recognised as the second half of a knock.
         if (g_activeZone >= 0 && g_activeZone < (int)g_lastExitTick.size())
             g_lastExitTick[g_activeZone] = now;
+
+        // A hold zone's second half, for the zone being left.
+        ReleaseHeldZone(zones);
 
         g_activeZone = idx;
         g_enterTick = now;
@@ -2725,7 +3019,16 @@ static DWORD DetectTick()
     if (idx < (int)g_lastFireTick.size())
         g_lastFireTick[idx] = now;
 
-    EnqueueAction(zones->zones[idx]);
+    // Only a zone that actually engaged owes a release, so this is set here
+    // rather than at entry - a pass-through that never fired leaves nothing
+    // behind to undo. This tracks that a release has been *queued*; whether it
+    // runs is the worker's call, since the gates it would be suppressed by live
+    // there and this thread must not wait on them.
+    g_holdEngaged = (bool)zones->zones[idx].releaseExec;
+
+    HitZone job = zones->zones[idx];
+    job.engagesHold = (bool)job.releaseExec;
+    EnqueueAction(job);
     return next;
 }
 
@@ -3197,6 +3500,21 @@ static std::vector<MonitorZoneConfig> ReadSettingsZones()
             cfg.zones[zi].action = act;
             cfg.zones[zi].args = args;
             cfg.zones[zi].executor = MakeExecutor(act, args);
+
+            // Hold: "the same action again" is resolved here rather than in
+            // MakeExecutor, which has no way to know what the entry action was.
+            // An Alternate entry gets its own flip flag for the release half,
+            // which is right - the pair alternates as one.
+            CornerAction rel = ParseActionType(
+                GetSettingStr(L"displays[%d].zones[%d].releaseAction", i, z));
+            std::wstring relArgs =
+                GetSettingStr(L"displays[%d].zones[%d].releaseArgs", i, z);
+            cfg.zones[zi].releaseAction = rel;
+            cfg.zones[zi].releaseArgs = relArgs;
+            if (rel == CornerAction::SameAsEntry)
+                cfg.zones[zi].releaseExecutor = MakeExecutor(act, args);
+            else if (rel != CornerAction::Nothing)
+                cfg.zones[zi].releaseExecutor = MakeExecutor(rel, relArgs);
             cfg.zones[zi].tuning.size =
                 Wh_GetIntSetting(L"displays[%d].zones[%d].size", i, z);
             cfg.zones[zi].tuning.delay =
@@ -3585,6 +3903,8 @@ struct ZoneView
     ZoneTuning tuning;          // -1 in a field means "inherited"
     bool fromWildcard = false;
     bool invalid = false;       // configured, but its arguments do not parse
+    CornerAction releaseAction = CornerAction::Nothing;   // hold zone if set
+    std::wstring releaseArgs;
 };
 
 struct DisplayView
@@ -4044,6 +4364,8 @@ static void DashFillZones(DisplayView &dv,
         dv.zones[z].args = hit->args;
         dv.zones[z].tuning = hit->tuning;
         dv.zones[z].fromWildcard = wild;
+        dv.zones[z].releaseAction = hit->releaseAction;
+        dv.zones[z].releaseArgs = hit->releaseArgs;
         dv.configured++;
     }
 }
@@ -4124,6 +4446,36 @@ static void DashBuildSnapshot(DashState *s)
 // =====================================================================
 // Painting
 // =====================================================================
+
+// Trims a label to fit `maxPx` along the baseline, ending in an ellipsis.
+// Returns false when not even the ellipsis fits, so the caller can skip the
+// label rather than draw a fragment of one.
+static bool FitLabel(HDC hdc, std::wstring &s, int maxPx)
+{
+    SIZE sz = {};
+    GetTextExtentPoint32W(hdc, s.c_str(), (int)s.size(), &sz);
+    if (sz.cx <= maxPx)
+        return true;
+
+    static const wchar_t kEllipsis[] = L"…";
+    SIZE es = {};
+    GetTextExtentPoint32W(hdc, kEllipsis, 1, &es);
+    if (es.cx > maxPx)
+        return false;
+
+    while (!s.empty())
+    {
+        s.pop_back();
+        std::wstring t = s + kEllipsis;
+        GetTextExtentPoint32W(hdc, t.c_str(), (int)t.size(), &sz);
+        if (sz.cx <= maxPx)
+        {
+            s = t;
+            return true;
+        }
+    }
+    return false;
+}
 
 static HFONT DashMakeFont(UINT dpi, int pt, bool bold, int escapement)
 {
@@ -4331,23 +4683,33 @@ static void DashPaintDiagram(DashState *s, HDC hdc)
         if (ZoneIsVertical((Zone)z))
         {
             // A rotated font draws from a baseline rather than into a rect, so
-            // the text is measured and placed by hand. DT_* alignment does not
-            // apply to escapement.
+            // the text is measured and placed by hand - DT_END_ELLIPSIS does
+            // not apply to a font with escapement, and clipping the overflow
+            // instead left half a glyph hard against the next segment's half
+            // glyph, which read as two labels overlapping.
             SelectObject(hdc, s->hFontVert);
-            SIZE ts = {};
-            GetTextExtentPoint32W(hdc, name, (int)wcslen(name), &ts);
-            int bh = widest.bottom - widest.top;
-            int cx = (widest.left + widest.right) / 2;
-            int cy = (widest.top + widest.bottom) / 2;
-            // Clip to the strip so a long name cannot escape the screen box.
-            IntersectClipRect(hdc, widest.left, widest.top, widest.right,
-                              widest.bottom);
-            // At 90 degrees the advance runs up the screen and the glyphs hang
-            // to the left of the baseline, so the baseline sits at the right of
-            // the band and the run starts at its bottom.
-            int y = cy + (ts.cx > bh ? bh / 2 : ts.cx / 2);
-            TextOutW(hdc, cx + ts.cy / 2, y, name, (int)wcslen(name));
-            SelectClipRgn(hdc, nullptr);
+            int pad = Sc(6, d);
+            int room = (widest.bottom - widest.top) - pad * 2;
+            std::wstring lab = name;
+            if (room > 0 && FitLabel(hdc, lab, room))
+            {
+                SIZE ts = {};
+                GetTextExtentPoint32W(hdc, lab.c_str(), (int)lab.size(), &ts);
+                int cx = (widest.left + widest.right) / 2;
+                int cy = (widest.top + widest.bottom) / 2;
+                IntersectClipRect(hdc, widest.left, widest.top, widest.right,
+                                  widest.bottom);
+                // At 90 degrees the advance runs up the screen and the glyphs
+                // hang to the *right* of the baseline, so the baseline sits at
+                // the left of the band and the run starts at its bottom.
+                // Getting this backwards puts the whole label outside its own
+                // strip, where the clip rect shears it in half and it reads as
+                // two labels colliding. Rendered rather than reasoned about:
+                // scripts/probe-vtext.cpp draws all three candidates.
+                TextOutW(hdc, cx - ts.cy / 2, cy + ts.cx / 2, lab.c_str(),
+                         (int)lab.size());
+                SelectClipRgn(hdc, nullptr);
+            }
         }
         else
         {
@@ -4478,6 +4840,18 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
                   L"This zone will not fire - its arguments could not be read.",
                   -1, &r, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
         SetTextColor(hdc, g_pal.dim);
+    }
+    else if (zv.releaseAction != CornerAction::Nothing)
+    {
+        wchar_t hold[256];
+        _snwprintf_s(hold, _countof(hold), _TRUNCATE,
+                     L"Held: runs %s again when the pointer leaves",
+                     zv.releaseAction == CornerAction::SameAsEntry
+                         ? ActionToString(zv.action)
+                         : ActionToString(zv.releaseAction));
+        r = {left, y, right, y + Sc(16, d)};
+        DrawTextW(hdc, hold, -1, &r,
+                  DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
     else if (zv.fromWildcard)
     {
@@ -5426,3 +5800,5 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
+
