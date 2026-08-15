@@ -361,11 +361,6 @@ static ExplicitSwitchTransaction g_explicitSwitch = {};
 static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
 
 // IVirtualDesktopManagerInternal slots for the 24H2 IID above.
-// Keep the two calls as named, version-gated vtable accesses rather than
-// declaring a full C++ interface: the undocumented methods between IUnknown
-// and these slots have signatures that vary across shell versions. Placeholder
-// declarations would suggest ABI guarantees that the mod neither needs nor
-// has verified. The 24H2 IID is the layout gate for both indices.
 static constexpr int kVtableMoveViewToDesktop = 4;
 static constexpr int kVtableGetCurrentDesktop = 6;
 
@@ -798,9 +793,8 @@ static HRESULT ForegroundViewChanged_Hook(
 // -----------------------------------------------------------------------------
 
 static HANDLE g_notificationThread = nullptr;
+static DWORD g_notificationThreadId = 0;
 static HANDLE g_notificationReadyEvent = nullptr;
-static HANDLE g_notificationStopEvent = nullptr;
-static HANDLE g_unloadEvent = nullptr;
 static std::atomic<bool> g_notificationReady = false;
 
 class VirtualDesktopNotificationListener final
@@ -1020,37 +1014,9 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     SetEvent(g_notificationReadyEvent);
 
     if (g_notificationReady.load()) {
-        while (true) {
-            DWORD waitResult =
-                MsgWaitForMultipleObjects(
-                    1,
-                    &g_notificationStopEvent,
-                    FALSE,
-                    INFINITE,
-                    QS_ALLINPUT);
-
-            if (waitResult == WAIT_OBJECT_0) {
-                break;
-            }
-
-            if (waitResult != WAIT_OBJECT_0 + 1) {
-                Wh_Log(
-                    L"Notification message wait failed result=%lu "
-                    L"error=%lu",
-                    waitResult,
-                    GetLastError());
-                break;
-            }
-
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                if (msg.message == WM_QUIT) {
-                    SetEvent(g_notificationStopEvent);
-                    break;
-                }
-
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
     }
 
@@ -1093,13 +1059,9 @@ static bool StartNotificationCache() {
     g_notificationReadyEvent =
         CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    g_notificationStopEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-    if (!g_notificationReadyEvent ||
-        !g_notificationStopEvent) {
+    if (!g_notificationReadyEvent) {
         Wh_Log(
-            L"Create notification events failed error=%lu",
+            L"Create notification-ready event failed error=%lu",
             GetLastError());
         return false;
     }
@@ -1111,7 +1073,7 @@ static bool StartNotificationCache() {
             NotificationThreadProc,
             nullptr,
             0,
-            nullptr);
+            &g_notificationThreadId);
 
     if (!g_notificationThread) {
         Wh_Log(
@@ -1120,17 +1082,8 @@ static bool StartNotificationCache() {
         return false;
     }
 
-    HANDLE waits[] = {
-        g_notificationReadyEvent,
-        g_unloadEvent,
-    };
-
     DWORD waitResult =
-        WaitForMultipleObjects(
-            ARRAYSIZE(waits),
-            waits,
-            FALSE,
-            5000);
+        WaitForSingleObject(g_notificationReadyEvent, 5000);
 
     if (waitResult != WAIT_OBJECT_0 ||
         !g_notificationReady.load()) {
@@ -1148,24 +1101,24 @@ static void StopNotificationCache() {
     g_notificationReady.store(false, std::memory_order_release);
     ClearExplicitSwitchTransaction(L"notification cache stopping");
 
-    if (g_notificationStopEvent) {
-        SetEvent(g_notificationStopEvent);
-    }
-
     if (g_notificationThread) {
+        if (g_notificationThreadId) {
+            PostThreadMessageW(
+                g_notificationThreadId,
+                WM_QUIT,
+                0,
+                0);
+        }
+
         WaitForSingleObject(g_notificationThread, INFINITE);
         CloseHandle(g_notificationThread);
         g_notificationThread = nullptr;
+        g_notificationThreadId = 0;
     }
 
     if (g_notificationReadyEvent) {
         CloseHandle(g_notificationReadyEvent);
         g_notificationReadyEvent = nullptr;
-    }
-
-    if (g_notificationStopEvent) {
-        CloseHandle(g_notificationStopEvent);
-        g_notificationStopEvent = nullptr;
     }
 
     ClearCurrentDesktopId();
@@ -1906,16 +1859,9 @@ static bool StartWorker() {
         return false;
     }
 
-    HANDLE waits[] = {
-        g_workerReadyEvent,
-        g_unloadEvent,
-    };
-
     DWORD waitResult =
-        WaitForMultipleObjects(
-            ARRAYSIZE(waits),
-            waits,
-            FALSE,
+        WaitForSingleObject(
+            g_workerReadyEvent,
             5000);
 
     if (waitResult != WAIT_OBJECT_0 ||
@@ -2001,6 +1947,24 @@ static std::atomic<bool> g_virtualDesktopHooksInstalled{false};
 
 static SRWLOCK g_runtimeInitLock = SRWLOCK_INIT;
 static HANDLE g_runtimeInitThread = nullptr;
+
+static HWND FindCurrentProcessPrimaryTaskbar() {
+    HWND taskbar = FindWindowW(
+        L"Shell_TrayWnd",
+        nullptr);
+
+    if (!taskbar) {
+        return nullptr;
+    }
+
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(taskbar, &pid) ||
+        pid != GetCurrentProcessId()) {
+        return nullptr;
+    }
+
+    return taskbar;
+}
 
 static HWND FindCurrentProcessShellWindow() {
     HWND shellWindow = GetShellWindow();
@@ -2111,8 +2075,9 @@ static bool InstallVirtualDesktopHooks() {
 }
 
 static bool WaitForShellHostRetryDelay() {
-    // Keep unload latency short while allowing the shell's COM services time
-    // to register after a fresh Explorer start.
+    // Fresh Explorer startup can expose Shell_TrayWnd before the immersive-shell
+    // virtual-desktop COM services are fully ready. Keep the retry interval
+    // fixed and bounded, but give those services a generous startup window.
     for (int i = 0; i < 10; ++i) {
         if (g_unloading.load(std::memory_order_acquire)) {
             return false;
@@ -2142,10 +2107,6 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         return 0;
     }
 
-    // Explorer's virtual-desktop COM services can become available well after
-    // the primary taskbar appears during a shell restart. Preserve the broad
-    // retry window; the ready waits and this delay all observe unloading, so
-    // the larger budget doesn't increase mod-disable latency.
     constexpr int kMaxRuntimeStartAttempts = 30;
 
     for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
@@ -2362,10 +2323,6 @@ static HWND WINAPI CreateWindowExW_Hook(
 static void StopRuntimeBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
 
-    if (g_unloadEvent) {
-        SetEvent(g_unloadEvent);
-    }
-
     HANDLE initThread = nullptr;
 
     AcquireSRWLockExclusive(&g_runtimeInitLock);
@@ -2392,16 +2349,6 @@ BOOL Wh_ModInit() {
         L"Init: installing lightweight "
         L"primary-taskbar observer");
 
-    g_unloadEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-    if (!g_unloadEvent) {
-        Wh_Log(
-            L"Failed to create unload event error=%lu",
-            GetLastError());
-        return FALSE;
-    }
-
     // Deliberately don't load twinui.pcshell.dll or taskbar.dll here. This code
     // executes in every explorer.exe matched by @include. Non-shell Explorer
     // processes should remain as inert as possible.
@@ -2411,8 +2358,6 @@ BOOL Wh_ModInit() {
             &g_createWindowExWOriginal)) {
         Wh_Log(
             L"Failed to hook CreateWindowExW");
-        CloseHandle(g_unloadEvent);
-        g_unloadEvent = nullptr;
         return FALSE;
     }
 
@@ -2420,9 +2365,25 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // Manual enable/reload: the shell window may already identify this process
-    // before our CreateWindowExW observer sees the primary taskbar creation.
-    HWND shellWindow = FindCurrentProcessShellWindow();
+    // Injection/reload can happen after the primary taskbar was already created,
+    // so don't rely solely on observing CreateWindowExW. Detect Shell_TrayWnd
+    // directly first; GetShellWindow is retained as an additional shell-host
+    // signal for manual reloads and unusual startup ordering.
+    HWND primaryTaskbar =
+        FindCurrentProcessPrimaryTaskbar();
+
+    if (primaryTaskbar) {
+        Wh_Log(
+            L"Existing primary taskbar=%p belongs to this Explorer process",
+            primaryTaskbar);
+
+        PromoteCurrentProcessToShellHost(
+            L"existing primary Shell_TrayWnd");
+        return;
+    }
+
+    HWND shellWindow =
+        FindCurrentProcessShellWindow();
 
     if (shellWindow) {
         Wh_Log(
@@ -2433,8 +2394,8 @@ void Wh_ModAfterInit() {
             L"existing shell window");
     } else {
         Wh_Log(
-            L"No shell window owned by this PID; "
-            L"remaining inert unless one is created");
+            L"No primary taskbar or shell window owned by this PID; "
+            L"remaining inert unless Shell_TrayWnd is created");
     }
 }
 
@@ -2445,9 +2406,4 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
     StopRuntime();
-
-    if (g_unloadEvent) {
-        CloseHandle(g_unloadEvent);
-        g_unloadEvent = nullptr;
-    }
 }
