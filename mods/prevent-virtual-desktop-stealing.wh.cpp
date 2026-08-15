@@ -1249,22 +1249,26 @@ static bool QueueRescue(
 
     AcquireSRWLockExclusive(&g_requestLock);
 
-    if (g_rescueQueueCount < kRescueQueueCapacity) {
+    if (g_workerReady.load(std::memory_order_acquire) &&
+        g_requestEvent &&
+        g_rescueQueueCount < kRescueQueueCapacity) {
         size_t index =
             (g_rescueQueueHead + g_rescueQueueCount) %
             kRescueQueueCapacity;
         g_rescueQueue[index] = request;
         ++g_rescueQueueCount;
-        queued = true;
+        if (SetEvent(g_requestEvent)) {
+            queued = true;
+        } else {
+            --g_rescueQueueCount;
+        }
     }
 
     ReleaseSRWLockExclusive(&g_requestLock);
 
-    if (queued) {
-        SetEvent(g_requestEvent);
-    } else {
+    if (!queued) {
         Wh_Log(
-            L"Rescue queue full; failing open");
+            L"Rescue queue unavailable or full; failing open");
     }
 
     return queued;
@@ -1475,7 +1479,11 @@ static bool StartWorker() {
 }
 
 static void StopWorker() {
+    AcquireSRWLockExclusive(&g_requestLock);
     g_workerReady.store(false, std::memory_order_release);
+    g_rescueQueueHead = 0;
+    g_rescueQueueCount = 0;
+    ReleaseSRWLockExclusive(&g_requestLock);
 
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
@@ -1500,10 +1508,12 @@ static void StopWorker() {
         g_stopEvent = nullptr;
     }
 
+    AcquireSRWLockExclusive(&g_requestLock);
     if (g_requestEvent) {
         CloseHandle(g_requestEvent);
         g_requestEvent = nullptr;
     }
+    ReleaseSRWLockExclusive(&g_requestLock);
 
 }
 
