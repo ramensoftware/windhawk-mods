@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.7
+// @version         0.3.8
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -370,8 +370,11 @@ struct ExplicitSwitchTransaction {
     GUID sourceDesktopId = {};
     GUID targetDesktopId = {};
     uint64_t sequence = 0;
+    bool targetChangeObserved = false;
+    ULONGLONG startedAt = 0;
 };
 
+static constexpr ULONGLONG kExplicitSwitchExpiryMs = 2000;
 static SRWLOCK g_explicitSwitchLock = SRWLOCK_INIT;
 static ExplicitSwitchTransaction g_explicitSwitch = {};
 static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
@@ -382,6 +385,32 @@ static thread_local int g_explicitSwitchEntryDepth = 0;
 
 static bool IsExplicitHotkeySwitchContext() {
     return g_hotkeyCycleDepth > 0;
+}
+
+static bool ExplicitSwitchExpired(
+    const ExplicitSwitchTransaction& transaction,
+    ULONGLONG now) {
+
+    return transaction.active &&
+        now - transaction.startedAt > kExplicitSwitchExpiryMs;
+}
+
+static void ClearExplicitSwitchTransaction(const wchar_t* reason) {
+    ExplicitSwitchTransaction cleared = {};
+
+    AcquireSRWLockExclusive(&g_explicitSwitchLock);
+    if (g_explicitSwitch.active) {
+        cleared = g_explicitSwitch;
+        g_explicitSwitch = {};
+    }
+    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
+
+    if (cleared.active) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu cleared: %s",
+            static_cast<unsigned long long>(cleared.sequence),
+            reason ? reason : L"<unknown>");
+    }
 }
 
 static uint64_t BeginExplicitSwitchTransaction(
@@ -402,6 +431,10 @@ static uint64_t BeginExplicitSwitchTransaction(
         return 0;
     }
 
+    if (GuidEqual(sourceId, targetId)) {
+        return 0;
+    }
+
     const uint64_t sequence =
         g_nextExplicitSwitchSequence.fetch_add(
             1,
@@ -412,6 +445,8 @@ static uint64_t BeginExplicitSwitchTransaction(
     g_explicitSwitch.sourceDesktopId = sourceId;
     g_explicitSwitch.targetDesktopId = targetId;
     g_explicitSwitch.sequence = sequence;
+    g_explicitSwitch.targetChangeObserved = false;
+    g_explicitSwitch.startedAt = GetTickCount64();
     ReleaseSRWLockExclusive(&g_explicitSwitchLock);
 
     wchar_t sourceText[64] = {};
@@ -469,9 +504,22 @@ ClassifyInternalSwitchAgainstExplicitTransaction(
 
     ExplicitSwitchTransaction current = {};
 
-    AcquireSRWLockShared(&g_explicitSwitchLock);
+    bool expired = false;
+
+    AcquireSRWLockExclusive(&g_explicitSwitchLock);
     current = g_explicitSwitch;
-    ReleaseSRWLockShared(&g_explicitSwitchLock);
+    if (ExplicitSwitchExpired(current, GetTickCount64())) {
+        g_explicitSwitch = {};
+        expired = true;
+    }
+    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
+
+    if (expired) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu expired",
+            static_cast<unsigned long long>(current.sequence));
+        current = {};
+    }
 
     if (snapshot) {
         *snapshot = current;
@@ -495,6 +543,48 @@ ClassifyInternalSwitchAgainstExplicitTransaction(
     return ExplicitInternalSwitchDisposition::None;
 }
 
+static void ObserveExplicitSwitchDesktopChange(const GUID& newDesktopId) {
+    ExplicitSwitchTransaction transaction = {};
+    bool expired = false;
+    bool targetObserved = false;
+    bool unexpected = false;
+
+    AcquireSRWLockExclusive(&g_explicitSwitchLock);
+    transaction = g_explicitSwitch;
+
+    if (ExplicitSwitchExpired(transaction, GetTickCount64())) {
+        g_explicitSwitch = {};
+        expired = true;
+    } else if (transaction.active &&
+               GuidEqual(newDesktopId, transaction.targetDesktopId)) {
+        g_explicitSwitch.targetChangeObserved = true;
+        targetObserved = true;
+    } else if (transaction.active &&
+               !GuidEqual(newDesktopId, transaction.sourceDesktopId)) {
+        // A change to neither endpoint can't be attributed to this
+        // transaction. Disarm it rather than retaining ambiguous suppression.
+        g_explicitSwitch = {};
+        unexpected = true;
+    }
+
+    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
+
+    if (expired) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu expired on desktop change",
+            static_cast<unsigned long long>(transaction.sequence));
+    } else if (targetObserved) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu observed target change",
+            static_cast<unsigned long long>(transaction.sequence));
+    } else if (unexpected) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu cleared by unexpected "
+            L"desktop change",
+            static_cast<unsigned long long>(transaction.sequence));
+    }
+}
+
 static void FinishExplicitSwitchTransaction(
     IVirtualDesktop* switchedDesktop) {
 
@@ -507,26 +597,28 @@ static void FinishExplicitSwitchTransaction(
         return;
     }
 
-    ExplicitSwitchTransaction finished = {};
-    bool hadTransaction = false;
-    bool reachedTarget = false;
+    ExplicitSwitchTransaction transaction = {};
+    bool expired = false;
+    bool completed = false;
+    bool ignored = false;
 
     AcquireSRWLockExclusive(&g_explicitSwitchLock);
-    if (g_explicitSwitch.active) {
-        finished = g_explicitSwitch;
-        hadTransaction = true;
-        reachedTarget =
-            GuidEqual(
-                switchedId,
-                g_explicitSwitch.targetDesktopId);
-        // Any completed desktop-switch notification ends the current
-        // transaction. A non-target completion means it was superseded or the
-        // shell chose another route; don't leave stale suppression armed.
+    transaction = g_explicitSwitch;
+
+    if (ExplicitSwitchExpired(transaction, GetTickCount64())) {
         g_explicitSwitch = {};
+        expired = true;
+    } else if (transaction.active &&
+               transaction.targetChangeObserved &&
+               GuidEqual(switchedId, transaction.targetDesktopId)) {
+        g_explicitSwitch = {};
+        completed = true;
+    } else if (transaction.active) {
+        ignored = true;
     }
     ReleaseSRWLockExclusive(&g_explicitSwitchLock);
 
-    if (!hadTransaction) {
+    if (!transaction.active) {
         return;
     }
 
@@ -534,17 +626,28 @@ static void FinishExplicitSwitchTransaction(
     wchar_t targetText[64] = {};
     GuidToString(switchedId, switchedText, ARRAYSIZE(switchedText));
     GuidToString(
-        finished.targetDesktopId,
+        transaction.targetDesktopId,
         targetText,
         ARRAYSIZE(targetText));
 
-    Wh_Log(
-        L"Explicit switch transaction #%llu %s "
-        L"switched=%s target=%s",
-        static_cast<unsigned long long>(finished.sequence),
-        reachedTarget ? L"complete" : L"ended on unexpected desktop",
-        switchedText,
-        targetText);
+    if (expired) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu expired on completion",
+            static_cast<unsigned long long>(transaction.sequence));
+    } else if (completed) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu complete switched=%s",
+            static_cast<unsigned long long>(transaction.sequence),
+            switchedText);
+    } else if (ignored) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu ignored stale completion "
+            L"switched=%s target=%s targetChangeObserved=%d",
+            static_cast<unsigned long long>(transaction.sequence),
+            switchedText,
+            targetText,
+            transaction.targetChangeObserved);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -751,6 +854,7 @@ public:
 
         if (SUCCEEDED(newHr)) {
             StoreCurrentDesktopId(newId);
+            ObserveExplicitSwitchDesktopChange(newId);
 
             wchar_t oldText[64] = {};
             wchar_t newText[64] = {};
@@ -972,6 +1076,7 @@ static bool StartNotificationCache() {
 
 static void StopNotificationCache() {
     g_notificationReady.store(false, std::memory_order_release);
+    ClearExplicitSwitchTransaction(L"notification cache stopping");
 
     if (g_notificationThread) {
         if (g_notificationThreadId) {
