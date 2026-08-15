@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.8
+// @version         0.3.9
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -1033,6 +1033,10 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 }
 
 static bool StartNotificationCache() {
+    // Each start attempt owns its readiness result. Don't inherit a true value
+    // from a previous notification thread that exited during startup retry.
+    g_notificationReady.store(false, std::memory_order_release);
+
     g_notificationReadyEvent =
         CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
@@ -1290,6 +1294,12 @@ static void ProcessRescueRequest(
     WorkerComState* state,
     const RescueRequest& request) {
 
+    // Abort paths below intentionally don't replay the suppressed switch.
+    // By the time this worker runs, a newer user navigation may have superseded
+    // the request; switching here would override it and would re-enter the
+    // shell hooks from this worker apartment. Keep every abort fail-stationary
+    // and logged rather than manufacturing a stale cross-thread switch.
+
     wchar_t requestedText[64] = {};
     GuidToString(
         request.requestedDesktopId,
@@ -1516,18 +1526,20 @@ static void ProcessRescueRequest(
 }
 
 static DWORD WINAPI WorkerThreadProc(void*) {
+    g_workerReady.store(false, std::memory_order_release);
+
     HRESULT coHr =
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     const bool shouldUninitialize =
         SUCCEEDED(coHr);
 
-    if (FAILED(coHr) &&
-        coHr != RPC_E_CHANGED_MODE) {
+    if (FAILED(coHr)) {
         Wh_Log(
             L"Worker: CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(coHr));
 
+        g_workerReady.store(false, std::memory_order_release);
         SetEvent(g_workerReadyEvent);
         return 0;
     }
@@ -1541,6 +1553,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             CoUninitialize();
         }
 
+        g_workerReady.store(false, std::memory_order_release);
         SetEvent(g_workerReadyEvent);
         return 0;
     }
@@ -1582,6 +1595,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
         }
     }
 
+    g_workerReady.store(false, std::memory_order_release);
     ReleaseWorkerComState(&state);
 
     if (shouldUninitialize) {
@@ -1813,7 +1827,10 @@ static HRESULT SwitchDesktopInternal_Hook(
         L"BLOCK SwitchDesktopInternal: rescue queued");
 
     // Pretend the internal switch succeeded only after the rescue has been
-    // safely queued. Every failure before this point fails open.
+    // safely queued. Every failure before this point fails open. If the worker
+    // later aborts, it deliberately doesn't replay this request: the desktop
+    // may have changed meanwhile, and replay from the worker apartment would
+    // risk overriding newer navigation and re-entering this hook.
     return S_OK;
 }
 
@@ -1822,6 +1839,10 @@ static HRESULT SwitchDesktopInternal_Hook(
 // -----------------------------------------------------------------------------
 
 static bool StartWorker() {
+    // Each start attempt owns its readiness result. A slow previous worker can
+    // otherwise publish true after StopWorker already cleared the flag.
+    g_workerReady.store(false, std::memory_order_release);
+
     g_requestEvent =
         CreateEventW(
             nullptr,
