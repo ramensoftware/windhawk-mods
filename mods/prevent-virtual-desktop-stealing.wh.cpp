@@ -2110,11 +2110,10 @@ static bool InstallVirtualDesktopHooks() {
     return true;
 }
 
-static bool WaitForShellHostRetryDelay(int attempt) {
+static bool WaitForShellHostRetryDelay() {
     // Keep unload latency short while allowing the shell's COM services time
     // to register after a fresh Explorer start.
-    // Back off from 500 ms to 2 seconds across the bounded retry budget.
-    for (int i = 0; i < attempt * 10; ++i) {
+    for (int i = 0; i < 10; ++i) {
         if (g_unloading.load(std::memory_order_acquire)) {
             return false;
         }
@@ -2143,7 +2142,11 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         return 0;
     }
 
-    constexpr int kMaxRuntimeStartAttempts = 4;
+    // Explorer's virtual-desktop COM services can become available well after
+    // the primary taskbar appears during a shell restart. Preserve the broad
+    // retry window; the ready waits and this delay all observe unloading, so
+    // the larger budget doesn't increase mod-disable latency.
+    constexpr int kMaxRuntimeStartAttempts = 30;
 
     for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
         bool workerStarted = StartWorker();
@@ -2182,7 +2185,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
                 L"Shell-host runtime unavailable on attempt %d; retrying",
                 attempt);
 
-            if (!WaitForShellHostRetryDelay(attempt)) {
+            if (!WaitForShellHostRetryDelay()) {
                 g_runtimeState.store(
                     RuntimeState::Stopped,
                     std::memory_order_release);
