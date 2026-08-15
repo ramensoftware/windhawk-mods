@@ -1546,7 +1546,8 @@ static bool InstallVirtualDesktopHooks() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
         {
             {
                 L"public: virtual long __cdecl "
@@ -1573,9 +1574,9 @@ static bool InstallVirtualDesktopHooks() {
 
     if (!WindhawkUtils::HookSymbols(
             twinui,
-            twinuiPcshellDllHooks,
-            ARRAYSIZE(twinuiPcshellDllHooks))) {
-        Wh_Log(
+            twinuiPcshellHooks,
+            ARRAYSIZE(twinuiPcshellHooks))) {
+                  Wh_Log(
             L"[VDREDIRECT] Shell host: failed to resolve/install "
             L"virtual-desktop symbols");
         return false;
