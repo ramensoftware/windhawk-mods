@@ -55,6 +55,7 @@ Windows updates may require adjustments.
 
 #include <atomic>
 #include <cstdint>
+#include <wchar.h>
 
 // -----------------------------------------------------------------------------
 // Explicit COM IDs used by the minimal interface declarations below.
@@ -89,12 +90,6 @@ static const IID kIidVirtualDesktopNotificationService = {
 static const IID kIidVirtualDesktopManagerInternal24H2 = {
     0x53F5CA0B, 0x158F, 0x4124,
     {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}
-};
-
-// Windows 11 22H2/23H2 IVirtualDesktopManagerInternal IID.
-static const IID kIidVirtualDesktopManagerInternal22H2 = {
-    0xA3175F2D, 0x239C, 0x4BD2,
-    {0x8A, 0xA0, 0xEE, 0xBA, 0x8B, 0x0B, 0x13, 0x8E}
 };
 
 static const IID kIidApplicationViewCollection = {
@@ -364,6 +359,10 @@ static constexpr ULONGLONG kExplicitSwitchExpiryMs = 2000;
 static SRWLOCK g_explicitSwitchLock = SRWLOCK_INIT;
 static ExplicitSwitchTransaction g_explicitSwitch = {};
 static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
+
+// IVirtualDesktopManagerInternal slots for the 24H2 IID above.
+static constexpr int kVtableMoveViewToDesktop = 4;
+static constexpr int kVtableGetCurrentDesktop = 6;
 
 // SwitchDesktopWithAnimation synchronously calls SwitchDesktop on current
 // builds. Only the outermost public switch entry should create a transaction.
@@ -962,13 +961,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
             kIidVirtualDesktopManagerInternal24H2,
             reinterpret_cast<void**>(&managerInternal));
 
-        if (FAILED(hr) || !managerInternal) {
-            managerInternal = nullptr;
-            hr = serviceProvider->QueryService(
-                kClsidVirtualDesktopManagerInternal,
-                kIidVirtualDesktopManagerInternal22H2,
-                reinterpret_cast<void**>(&managerInternal));
-        }
     }
 
     if (SUCCEEDED(hr) && managerInternal) {
@@ -977,7 +969,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
                 void*,
                 IVirtualDesktop**)>(
             managerInternal,
-            6);
+            kVtableGetCurrentDesktop);
 
         IVirtualDesktop* currentDesktop = nullptr;
         HRESULT currentHr =
@@ -1213,14 +1205,6 @@ static bool InitializeWorkerComState(WorkerComState* state) {
         reinterpret_cast<void**>(&state->managerInternal));
 
     if (FAILED(hr) || !state->managerInternal) {
-        state->managerInternal = nullptr;
-        hr = state->serviceProvider->QueryService(
-            kClsidVirtualDesktopManagerInternal,
-            kIidVirtualDesktopManagerInternal22H2,
-            reinterpret_cast<void**>(&state->managerInternal));
-    }
-
-    if (FAILED(hr) || !state->managerInternal) {
         Wh_Log(
             L"Worker: QueryService(managerInternal) failed "
             L"hr=0x%08X",
@@ -1258,12 +1242,8 @@ static bool InitializeWorkerComState(WorkerComState* state) {
     return true;
 }
 
-// These slots and signatures are shared by the version-gating IIDs above.
 // Older monitor-aware interface versions aren't queried because their method
-// signatures differ.
-static constexpr int kVtableMoveViewToDesktop = 4;
-static constexpr int kVtableGetCurrentDesktop = 6;
-
+// signatures differ from the 24H2 interface used here.
 static HRESULT WorkerGetCurrentDesktop(
     WorkerComState* state,
     IVirtualDesktop** desktop) {
@@ -1953,13 +1933,17 @@ static void StopWorker() {
 // exactly once. Non-shell explorer.exe processes never load twinui.pcshell.dll
 // for this mod and never start the virtual-desktop worker/cache.
 
-static std::atomic<int> g_runtimeState{0};
-// 0 = dormant/stopped, 1 = shell-host initialization in progress, 2 = ready
+enum class RuntimeState {
+    Stopped,
+    Initializing,
+    Ready,
+};
+
+static std::atomic<RuntimeState> g_runtimeState{RuntimeState::Stopped};
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_shellHostConfirmed{false};
 static std::atomic<bool> g_virtualDesktopHooksInstalled{false};
-static std::atomic<bool> g_taskbarObserverInstalled{false};
 
 static SRWLOCK g_runtimeInitLock = SRWLOCK_INIT;
 static HANDLE g_runtimeInitThread = nullptr;
@@ -2072,10 +2056,11 @@ static bool InstallVirtualDesktopHooks() {
     return true;
 }
 
-static bool WaitForShellHostRetryDelay() {
+static bool WaitForShellHostRetryDelay(int attempt) {
     // Keep unload latency short while allowing the shell's COM services time
     // to register after a fresh Explorer start.
-    for (int i = 0; i < 10; ++i) {
+    // Back off from 500 ms to 2 seconds across the bounded retry budget.
+    for (int i = 0; i < attempt * 10; ++i) {
         if (g_unloading.load(std::memory_order_acquire)) {
             return false;
         }
@@ -2086,37 +2071,17 @@ static bool WaitForShellHostRetryDelay() {
     return !g_unloading.load(std::memory_order_acquire);
 }
 
-static void RemoveTaskbarObserver() {
-    if (!g_taskbarObserverInstalled.load(std::memory_order_acquire)) {
-        return;
-    }
-
-    if (!Wh_RemoveFunctionHook(
-            reinterpret_cast<void*>(CreateWindowExW))) {
-        Wh_Log(L"Failed to register taskbar-observer hook removal");
-        return;
-    }
-
-    if (!Wh_ApplyHookOperations()) {
-        Wh_Log(L"Failed to apply taskbar-observer hook removal");
-        return;
-    }
-
-    g_taskbarObserverInstalled.store(false, std::memory_order_release);
-    Wh_Log(L"Taskbar observer removed after successful shell promotion");
-}
-
 static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
         L"Shell-host initialization begin");
 
     if (g_unloading.load(std::memory_order_acquire)) {
-        g_runtimeState.store(0, std::memory_order_release);
+        g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
         return 0;
     }
 
     if (!InstallVirtualDesktopHooks()) {
-        g_runtimeState.store(0, std::memory_order_release);
+        g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
 
         Wh_Log(
             L"Shell-host initialization failed: "
@@ -2124,7 +2089,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         return 0;
     }
 
-    constexpr int kMaxRuntimeStartAttempts = 30;
+    constexpr int kMaxRuntimeStartAttempts = 4;
 
     for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
         bool workerStarted = StartWorker();
@@ -2137,7 +2102,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
 
         if (workerStarted && cacheStarted &&
             !g_unloading.load(std::memory_order_acquire)) {
-            g_runtimeState.store(2, std::memory_order_release);
+            g_runtimeState.store(RuntimeState::Ready, std::memory_order_release);
 
             Wh_Log(
                 L"Runtime ready after attempt %d: primary shell Explorer "
@@ -2145,7 +2110,6 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
                 L"queue active",
                 attempt);
 
-            RemoveTaskbarObserver();
             return 0;
         }
 
@@ -2153,7 +2117,9 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         StopWorker();
 
         if (g_unloading.load(std::memory_order_acquire)) {
-            g_runtimeState.store(0, std::memory_order_release);
+            g_runtimeState.store(
+                RuntimeState::Stopped,
+                std::memory_order_release);
             return 0;
         }
 
@@ -2162,14 +2128,16 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
                 L"Shell-host runtime unavailable on attempt %d; retrying",
                 attempt);
 
-            if (!WaitForShellHostRetryDelay()) {
-                g_runtimeState.store(0, std::memory_order_release);
+            if (!WaitForShellHostRetryDelay(attempt)) {
+                g_runtimeState.store(
+                    RuntimeState::Stopped,
+                    std::memory_order_release);
                 return 0;
             }
         }
     }
 
-    g_runtimeState.store(0, std::memory_order_release);
+    g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
     Wh_Log(
         L"Shell-host initialization failed after %d attempts; "
         L"remaining fail-open",
@@ -2188,14 +2156,16 @@ static void PromoteCurrentProcessToShellHost(
         true,
         std::memory_order_release);
 
-    if (g_runtimeState.load(std::memory_order_acquire) == 2) {
+    if (g_runtimeState.load(std::memory_order_acquire) ==
+        RuntimeState::Ready) {
         return;
     }
 
     AcquireSRWLockExclusive(&g_runtimeInitLock);
 
     if (g_unloading.load(std::memory_order_relaxed) ||
-        g_runtimeState.load(std::memory_order_relaxed) != 0) {
+        g_runtimeState.load(std::memory_order_relaxed) !=
+            RuntimeState::Stopped) {
         ReleaseSRWLockExclusive(&g_runtimeInitLock);
         return;
     }
@@ -2215,7 +2185,7 @@ static void PromoteCurrentProcessToShellHost(
         }
     }
 
-    g_runtimeState.store(1, std::memory_order_release);
+    g_runtimeState.store(RuntimeState::Initializing, std::memory_order_release);
 
     Wh_Log(
         L"Primary Shell_TrayWnd confirmed; "
@@ -2235,7 +2205,7 @@ static void PromoteCurrentProcessToShellHost(
         Wh_Log(
             L"Shell-host init CreateThread failed error=%lu",
             GetLastError());
-        g_runtimeState.store(0, std::memory_order_release);
+        g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
     }
 
     ReleaseSRWLockExclusive(&g_runtimeInitLock);
@@ -2282,7 +2252,8 @@ static HWND WINAPI CreateWindowExW_Hook(
     // If initialization failed, keep watching for a recreated primary taskbar
     // so the same Explorer process gets a natural retry opportunity.
     if (g_shellHostConfirmed.load(std::memory_order_acquire) &&
-        g_runtimeState.load(std::memory_order_acquire) == 2) {
+        g_runtimeState.load(std::memory_order_acquire) ==
+            RuntimeState::Ready) {
         return hwnd;
     }
 
@@ -2352,7 +2323,7 @@ static void StopRuntimeBeforeUninit() {
 static void StopRuntime() {
     StopNotificationCache();
     StopWorker();
-    g_runtimeState.store(0, std::memory_order_release);
+    g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
 }
 
 BOOL Wh_ModInit() {
@@ -2371,8 +2342,6 @@ BOOL Wh_ModInit() {
             L"Failed to hook CreateWindowExW");
         return FALSE;
     }
-
-    g_taskbarObserverInstalled.store(true, std::memory_order_release);
 
     return TRUE;
 }
