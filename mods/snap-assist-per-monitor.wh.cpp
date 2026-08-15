@@ -350,7 +350,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         // The shared window filter. Also used by Alt+Tab, Win+Tab and the
         // taskbar, which is why filtering is scoped by thread and time.
         {
@@ -405,8 +406,8 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                     ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+    if (!HookSymbols(twinuiPcshellModule, symbolHooks,
+                     ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
         return FALSE;
     }
