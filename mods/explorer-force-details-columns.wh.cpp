@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              explorer-force-details-columns
 // @name            Explorer Details View Columns
-// @description     Forces a fixed set of columns in File Explorer Details view. Columns and their order are configurable. Has no effect on other view modes.
-// @version         1.0
+// @description     Forces a fixed set of columns, and optionally sorting, in File Explorer Details view. Columns and their order are configurable. Has no effect on other view modes.
+// @version         1.4
 // @author          ernisn
 // @github          https://github.com/ernisn
 // @include         explorer.exe
-// @compilerOptions -lole32 -lshlwapi -lpropsys
+// @compilerOptions -lole32 -lshell32 -lpropsys -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,10 +14,9 @@
 /*
 # Explorer Details View Columns
 
-Forces a specific set of columns whenever a File Explorer folder is in _Details_
-view. **Other view modes (_Icons_, _Tiles_, _List_, etc.) are not affected.**
+Forces a specific set of columns whenever a File Explorer folder is in _Details_ view. **Other view modes (_Icons_, _Tiles_, _List_, etc.) are not affected.**
 
-Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width in pixels.
+Configure which columns to show and in what order in Settings. Each entry takes a Shell property name and a width **(if _Force Width_ enabled)** in logical pixels at 100% DPI scaling (for consistent widths in case of multiple monitors with different DPI settings). A sort column and direction can optionally be enforced as well.
 
 Common property names:
 - `System.ItemNameDisplay` - Name
@@ -31,14 +30,17 @@ Common property names:
 - `System.Media.Duration` - Length
 - `System.Image.Dimensions` - Dimensions
 
-For a full list of available Shell property names, see:
-https://learn.microsoft.com/en-us/windows/win32/properties/props
+For a full list of available Shell property names, see: https://learn.microsoft.com/en-us/windows/win32/properties/props
 
 **Note:**
-- Any property name not recognised by Windows will be skipped.
-- There is a minimum value for column widths; lower values will be raised automatically.
-- You can still change the columns manually but it will be temporary.
-- Changes might take effect after re-opening a folder.
+- Any property name not recognised by Windows will be skipped. Duplicate property entries will only take the first occurrence.
+- To allow a column to be freely resized, turn off "Force Width". To auto-size the column to its content, set Width to -1  (optional).
+- If "Sort By" is set, manual sorting changes stay temporary, e.g. manual width changes of forced-width columns.
+- By default, virtual folders that have their own specialized columns (such as the Recycle Bin with _Original Location_ and _Date Deleted_) are not affected. Turn off "Exclude virtual folders" to force the columns there as well.
+
+**Issues Related to Minimum Width:**
+- Columns other than _Name_ can't go below Windows' own minimum width. On Windows 11, there is an unreasonable minimum column width limit when a non-custom scaling is set for the display instead of a custom scaling (under "Advanced Scaling Settings"). This is a known issue and smaller widths set here will be ignored by Explorer.
+
 */
 // ==/WindhawkModReadme==
 
@@ -46,15 +48,33 @@ https://learn.microsoft.com/en-us/windows/win32/properties/props
 /*
 - columns:
   - - property: System.ItemNameDisplay
-    - width: 300
+      $name: Column Property Name
+    - force_width: true
+      $name: Force Width
+      $description: If enabled, the column width will always use the value below, regardless of manual changes, which will stay temporary and be reverted after re-opening the folder.
+    - width: 270
+      $name: Width
+      $description: Width in logical pixels at 100% DPI scaling, or -1 to auto-size to content. Only takes effect if Force Width is turned on.
   - - property: System.Size
-    - width: 80
+    - force_width: false
+    - width: 30
   - - property: System.DateModified
-    - width: 105
+    - force_width: true
+    - width: 110
   - - property: System.ItemTypeText
-    - width: 130
+    - force_width: false
+    - width: 60
   $name: Columns
-  $description: "Columns to show in order in Details view. Leave blank or 0 for default width."
+  $description: "Columns to show in order in Details view. Width is in logical pixels at 100% DPI scaling."
+- sort_property: ""
+  $name: Sort By
+  $description: Shell property name to sort by, e.g. System.DateModified. Leave empty to not enforce sorting.
+- sort_descending: false
+  $name: Sort Descending
+  $description: Only takes effect if Sort By is set.
+- exclude_virtual: true
+  $name: Exclude virtual folders
+  $description: Do not force columns in virtual folders that have their own specialized columns, such as the Recycle Bin, This PC and search results.
 */
 // ==/WindhawkModSettings==
 
@@ -62,8 +82,27 @@ https://learn.microsoft.com/en-us/windows/win32/properties/props
 #include <shobjidl.h>
 #include <propkey.h>
 #include <propsys.h>
+#include <exdisp.h>
+#include <shlguid.h>
+#include <servprov.h>
+#include <commctrl.h>
+#include <wrl/client.h>
+#include <algorithm>
+#include <cstdlib>
+#include <mutex>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 #include <windhawk_utils.h>
+
+using Microsoft::WRL::ComPtr;
+
+// Not declared with the default WINVER
+WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
+WINUSERAPI UINT WINAPI GetDpiForSystem(VOID);
+#ifndef WM_DPICHANGED_AFTERPARENT
+#define WM_DPICHANGED_AFTERPARENT 0x02E3
+#endif
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -71,107 +110,281 @@ https://learn.microsoft.com/en-us/windows/win32/properties/props
 
 struct ColumnEntry {
     PROPERTYKEY key;
-    int         width; // pixels; 0 = do not set (keep Explorer default)
+    int         width;  // logical px at 96 DPI; 0 = free resize, -1 = auto-size
 };
 
 static std::vector<ColumnEntry> g_columns;
+static PROPERTYKEY              g_sortKey;
+static bool                     g_sortEnabled;
+static bool                     g_sortDescending;
+static bool                     g_excludeVirtualFolders;
+
+static std::mutex               g_subclassedMutex;
+static std::unordered_set<HWND> g_subclassed;
 
 static void LoadSettings() {
     g_columns.clear();
 
-    for (int i = 0; ; i++) {
-        PCWSTR rawProp = Wh_GetStringSetting(L"columns[%d].property", i);
-        if (!rawProp || rawProp[0] == L'\0') {
-            Wh_FreeStringSetting(rawProp);
+    g_excludeVirtualFolders = Wh_GetIntSetting(L"exclude_virtual");
+    g_sortDescending = Wh_GetIntSetting(L"sort_descending");
+
+    PCWSTR sortProp = Wh_GetStringSetting(L"sort_property");
+    g_sortEnabled =
+        *sortProp && SUCCEEDED(PSGetPropertyKeyFromName(sortProp, &g_sortKey));
+    if (*sortProp && !g_sortEnabled)
+        Wh_Log(L"Sort property %s not recognised", sortProp);
+    Wh_FreeStringSetting(sortProp);
+
+    for (int i = 0;; i++) {
+        PCWSTR prop = Wh_GetStringSetting(L"columns[%d].property", i);
+        if (!*prop) {
+            Wh_FreeStringSetting(prop);
             break;
         }
 
         PROPERTYKEY key;
-        if (SUCCEEDED(PSGetPropertyKeyFromName(rawProp, &key))) {
-            int width = Wh_GetIntSetting(L"columns[%d].width", i);
-            g_columns.push_back({ key, width });
-            Wh_Log(L"Column[%d]: %s width=%d -> OK", i, rawProp, width);
+        if (FAILED(PSGetPropertyKeyFromName(prop, &key))) {
+            Wh_Log(L"Column[%d]: %s not recognised, skipped", i, prop);
+        } else if (std::any_of(g_columns.begin(), g_columns.end(),
+                               [&key](const auto& c) { return c.key == key; })) {
+            Wh_Log(L"Column[%d]: %s duplicate, skipped", i, prop);
         } else {
-            Wh_Log(L"Column[%d]: %s -> not recognised, skipped", i, rawProp);
+            int width = Wh_GetIntSetting(L"columns[%d].force_width", i)
+                            ? Wh_GetIntSetting(L"columns[%d].width", i)
+                            : 0;
+            g_columns.push_back({key, width});
         }
-
-        Wh_FreeStringSetting(rawProp);
+        Wh_FreeStringSetting(prop);
     }
 
-    // Fallback defaults (pixels)
-    if (g_columns.empty()) {
-        Wh_Log(L"No valid columns configured, using defaults");
-        g_columns.push_back({ PKEY_ItemNameDisplay, 300 });
-        g_columns.push_back({ PKEY_Size,             80 });
-        g_columns.push_back({ PKEY_DateModified,    105 });
-        g_columns.push_back({ PKEY_ItemTypeText,    130 });
-    }
+    Wh_Log(L"Loaded %zu columns", g_columns.size());
 }
 
 // ---------------------------------------------------------------------------
 // Column enforcement
 // ---------------------------------------------------------------------------
 
-static void ApplyForcedColumns(void* pThis) {
-    auto* pShellView = reinterpret_cast<IShellView*>(pThis);
+static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi);
 
-    IFolderView2* pFV2 = nullptr;
-    if (FAILED(pShellView->QueryInterface(IID_IFolderView2,
-                                          reinterpret_cast<void**>(&pFV2))) || !pFV2)
-        return;
+// Re-applies widths when the view moves to a monitor with a different DPI
+static LRESULT CALLBACK ViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
+                                         LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg == WM_DPICHANGED_AFTERPARENT) {
+        ApplyForcedColumns((IUnknown*)dwRefData, false);
+    } else if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        g_subclassed.erase(hWnd);
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Virtual folders (Recycle Bin, This PC, search results, etc.) aren't part of the file system + with specialized columns
+static bool IsVirtualFolder(IFolderView2* folderView) {
+    PIDLIST_ABSOLUTE pidl;
+    if (FAILED(SHGetIDListFromObject(folderView, &pidl)))
+        return false;
+
+    ComPtr<IShellItem> item;
+    SFGAOF attributes = 0;
+    HRESULT hr = SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item));
+    if (SUCCEEDED(hr))
+        hr = item->GetAttributes(SFGAO_FILESYSTEM, &attributes);
+    CoTaskMemFree(pidl);
+
+    return SUCCEEDED(hr) && !(attributes & SFGAO_FILESYSTEM);
+}
+
+// Returns true if anything actually changed. subclassForDpi is set only when view can be retained
+static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
+    if (g_columns.empty())
+        return false;
+
+    ComPtr<IShellView> shellView;
+    ComPtr<IFolderView2> folderView;
+    ComPtr<IColumnManager> columnManager;
+    if (FAILED(view->QueryInterface(IID_PPV_ARGS(&shellView))) ||
+        FAILED(view->QueryInterface(IID_PPV_ARGS(&folderView))) ||
+        FAILED(view->QueryInterface(IID_PPV_ARGS(&columnManager))))
+        return false;
 
     FOLDERVIEWMODE viewMode = FVM_AUTO;
-    int iconSize = 0;
-    HRESULT hr = pFV2->GetViewModeAndIconSize(&viewMode, &iconSize);
-    pFV2->Release();
+    int iconSize;
+    if (FAILED(folderView->GetViewModeAndIconSize(&viewMode, &iconSize)) ||
+        viewMode != FVM_DETAILS)
+        return false;
 
-    if (FAILED(hr) || viewMode != FVM_DETAILS)
-        return;
-
-    IColumnManager* pCM = nullptr;
-    if (FAILED(pShellView->QueryInterface(IID_IColumnManager,
-                                          reinterpret_cast<void**>(&pCM))) || !pCM)
-        return;
-
-    // Build key array for SetColumns.
-    std::vector<PROPERTYKEY> keys;
-    keys.reserve(g_columns.size());
-    for (const auto& col : g_columns)
-        keys.push_back(col.key);
-
-    // SetColumns clears all column state.
-    pCM->SetColumns(keys.data(), static_cast<UINT>(keys.size()));
-
-    // Set widths in pixels. CM_MASK_WIDTH targets the current display width.
-    for (const auto& col : g_columns) {
-        if (col.width <= 0)
-            continue;
-
-        CM_COLUMNINFO ci = {};
-        ci.cbSize  = sizeof(ci);
-        ci.dwMask  = CM_MASK_WIDTH;
-        ci.uWidth  = static_cast<UINT>(col.width);
-        pCM->SetColumnInfo(col.key, &ci);
+    if (g_excludeVirtualFolders && IsVirtualFolder(folderView.Get())) {
+        Wh_Log(L"Skipping virtual folder");
+        return false;
     }
 
-    pCM->Release();
+    bool changed = false;
+
+    // Column set and order
+    UINT count = 0;
+    bool setColumns =
+        FAILED(columnManager->GetColumnCount(CM_ENUM_VISIBLE, &count)) ||
+        count != g_columns.size();
+    if (!setColumns) {
+        std::vector<PROPERTYKEY> current(count);
+        setColumns = FAILED(
+            columnManager->GetColumns(CM_ENUM_VISIBLE, current.data(), count));
+        for (UINT i = 0; !setColumns && i < count; i++)
+            setColumns = !(current[i] == g_columns[i].key);
+    }
+    if (setColumns) {
+        // SetColumns resets widths to the defaults, which Explorer won't let the user drag back down, so widths that aren't forced are kept
+        std::vector<PROPERTYKEY> keys;
+        std::vector<std::pair<PROPERTYKEY, UINT>> keptWidths;
+        for (const auto& col : g_columns) {
+            keys.push_back(col.key);
+
+            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+            if (!col.width &&
+                SUCCEEDED(columnManager->GetColumnInfo(col.key, &ci)) &&
+                ci.uWidth)
+                keptWidths.push_back({col.key, ci.uWidth});
+        }
+
+        changed |= SUCCEEDED(
+            columnManager->SetColumns(keys.data(), (UINT)keys.size()));
+
+        for (const auto& [key, width] : keptWidths) {
+            CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+            ci.uWidth = width;
+            columnManager->SetColumnInfo(key, &ci);
+        }
+    }
+
+    // Widths
+    HWND hwnd = nullptr;
+    shellView->GetWindow(&hwnd);
+    UINT dpi = hwnd ? GetDpiForWindow(hwnd) : GetDpiForSystem();
+
+    for (const auto& col : g_columns) {
+        if (!col.width)
+            continue;
+
+        CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+        if (FAILED(columnManager->GetColumnInfo(col.key, &ci)))
+            continue;
+
+        UINT width =
+            col.width < 0 ? CM_WIDTH_AUTOSIZE : MulDiv(col.width, dpi, 96);
+        // ±1px tolerance avoids update loops from DPI rounding
+        if (col.width < 0 || std::abs((int)ci.uWidth - (int)width) > 1) {
+            ci.uWidth = width;
+            if (col.width > 0) {
+                // Used when the column is resized or auto-sized
+                ci.dwMask |= CM_MASK_DEFAULTWIDTH | CM_MASK_IDEALWIDTH;
+                ci.uDefaultWidth = ci.uIdealWidth = width;
+            }
+            changed |= SUCCEEDED(columnManager->SetColumnInfo(col.key, &ci));
+        }
+    }
+
+    // Sorting
+    if (g_sortEnabled) {
+        SORTCOLUMN sort = {g_sortKey,
+                           g_sortDescending ? SORT_DESCENDING : SORT_ASCENDING};
+        SORTCOLUMN current;
+        int sortCount = 0;
+        folderView->GetSortColumnCount(&sortCount);
+        if (sortCount != 1 || FAILED(folderView->GetSortColumns(&current, 1)) ||
+            !(current.propkey == sort.propkey) ||
+            current.direction != sort.direction) {
+            changed |= SUCCEEDED(folderView->SetSortColumns(&sort, 1));
+        }
+    }
+
+    if (subclassForDpi && hwnd) {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        if (g_subclassed.insert(hwnd).second)
+            WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hwnd, ViewSubclassProc, (DWORD_PTR)view);
+    }
+
+    return changed;
 }
 
 // ---------------------------------------------------------------------------
-// Hook: CDefView::UIActivate  (shell32.dll)
+// Apply to all currently open Explorer windows
 // ---------------------------------------------------------------------------
 
-using CDefView_UIActivate_t = HRESULT(__thiscall*)(void* pThis, UINT uState);
+static void ApplyToAllOpenWindows() {
+    HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    {
+        ComPtr<IShellWindows> shellWindows;
+        long count = 0;
+        if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr,
+                                    CLSCTX_LOCAL_SERVER,
+                                    IID_PPV_ARGS(&shellWindows))) ||
+            FAILED(shellWindows->get_Count(&count))) {
+            Wh_Log(L"Can't enumerate shell windows");
+            count = 0;
+        }
 
-CDefView_UIActivate_t CDefView_UIActivate_orig = nullptr;
+        DWORD processId = GetCurrentProcessId();
+
+        for (long i = 0; i < count; i++) {
+            VARIANT index;
+            index.vt = VT_I4;
+            index.lVal = i;
+
+            ComPtr<IDispatch> dispatch;
+            ComPtr<IWebBrowserApp> browser;
+            if (FAILED(shellWindows->Item(index, &dispatch)) || !dispatch ||
+                FAILED(dispatch.As(&browser)))
+                continue;
+
+            SHANDLE_PTR hwndValue = 0;
+            browser->get_HWND(&hwndValue);
+            DWORD windowProcessId = 0;
+            GetWindowThreadProcessId((HWND)hwndValue, &windowProcessId);
+            if (windowProcessId != processId)
+                continue;
+
+            ComPtr<IServiceProvider> services;
+            ComPtr<IShellBrowser> shellBrowser;
+            ComPtr<IShellView> shellView;
+            if (SUCCEEDED(browser.As(&services)) &&
+                SUCCEEDED(services->QueryService(SID_STopLevelBrowser,
+                                                 IID_PPV_ARGS(&shellBrowser))) &&
+                SUCCEEDED(shellBrowser->QueryActiveShellView(&shellView)) &&
+                // shellView may be a proxy, don't retain it for the subclass
+                ApplyForcedColumns(shellView.Get(), false)) {
+                shellView->Refresh();
+            }
+        }
+    }
+    if (SUCCEEDED(hrInit))
+        CoUninitialize();
+}
+
+// ---------------------------------------------------------------------------
+// Hooks: CDefView (shell32.dll)
+// ---------------------------------------------------------------------------
+
+using CDefView_UIActivate_t = HRESULT(__thiscall*)(void*, UINT);
+CDefView_UIActivate_t CDefView_UIActivate_orig;
 
 HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
     HRESULT hr = CDefView_UIActivate_orig(pThis, uState);
-
     if (SUCCEEDED(hr) &&
-        (uState == SVUIA_ACTIVATE_FOCUS || uState == SVUIA_ACTIVATE_NOFOCUS)) {
-        ApplyForcedColumns(pThis);
-    }
+        (uState == SVUIA_ACTIVATE_FOCUS || uState == SVUIA_ACTIVATE_NOFOCUS))
+        ApplyForcedColumns((IUnknown*)pThis, true);
+    return hr;
+}
+
+using CDefView_SetCurrentViewMode_t = HRESULT(__thiscall*)(void*, UINT);
+CDefView_SetCurrentViewMode_t CDefView_SetCurrentViewMode_orig;
+
+// Catches switching an already open folder to Details view
+HRESULT __thiscall CDefView_SetCurrentViewMode_hook(void* pThis,
+                                                    UINT viewMode) {
+    HRESULT hr = CDefView_SetCurrentViewMode_orig(pThis, viewMode);
+    if (SUCCEEDED(hr) && viewMode == FVM_DETAILS)
+        ApplyForcedColumns((IUnknown*)pThis, true);
     return hr;
 }
 
@@ -184,8 +397,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32) {
+    HMODULE shell32 = LoadLibraryW(L"shell32.dll");
+    if (!shell32) {
         Wh_Log(L"Failed to load shell32.dll");
         return FALSE;
     }
@@ -200,24 +413,46 @@ BOOL Wh_ModInit() {
             },
             &CDefView_UIActivate_orig,
             CDefView_UIActivate_hook,
-            false
+        },
+        {
+            {
+                L"public: virtual long __cdecl CDefView::SetCurrentViewMode(unsigned int)",
+                L"long __cdecl CDefView::SetCurrentViewMode(unsigned int)",
+                L"public: virtual long __thiscall CDefView::SetCurrentViewMode(unsigned int)",
+                L"long __thiscall CDefView::SetCurrentViewMode(unsigned int)",
+            },
+            &CDefView_SetCurrentViewMode_orig,
+            CDefView_SetCurrentViewMode_hook,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
-        Wh_Log(L"ERROR: Could not resolve CDefView::UIActivate - mod will have no effect");
+    if (!WindhawkUtils::HookSymbols(shell32, shell32DllHooks,
+                                    ARRAYSIZE(shell32DllHooks))) {
+        Wh_Log(L"Failed to hook CDefView symbols");
         return FALSE;
     }
-
-    Wh_Log(L"CDefView::UIActivate hooked successfully");
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    ApplyToAllOpenWindows();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+
+    std::unordered_set<HWND> subclassed;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        subclassed.swap(g_subclassed);
+    }
+    for (HWND hwnd : subclassed)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd,
+                                                         ViewSubclassProc);
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     LoadSettings();
+    ApplyToAllOpenWindows();
 }

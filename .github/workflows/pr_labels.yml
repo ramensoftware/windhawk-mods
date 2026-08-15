@@ -1,0 +1,54 @@
+name: PR flow labels
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - converted_to_draft
+      - closed
+    branches:
+      - main
+
+# Everything is done with the windhawk-reviewer app token, so the workflow token
+# only needs to check out the base branch. Nothing from the pull request itself
+# is checked out or run.
+permissions:
+  contents: read
+
+# One run at a time per pull request, so that two events don't act on the same
+# labels at once. Runs aren't cancelled, so that one isn't stopped between adding
+# the new label and removing the old one.
+concurrency:
+  group: pr-flow-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Only the flow script is needed, so the mod sources are skipped.
+          sparse-checkout: .github
+
+      - name: Generate an app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          # The windhawk-reviewer app.
+          app-id: '4425681'
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Update the flow label
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          # A transient 5xx would otherwise fail the run halfway through a label
+          # change. 4xx codes stay exempt, so removeLabels still sees its 404.
+          retries: 3
+          script: |
+            const flow = require('${{ github.workspace }}/.github/pr_flow.cjs');
+            await flow.handlePullRequestEvent({ github, context, core });

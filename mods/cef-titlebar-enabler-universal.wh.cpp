@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.7
+// @version         1.8
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -34,13 +34,17 @@
 * Block automatic updates
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 144
+* Supported CEF versions: 90.4 to 146
     * This mod won't work with versions before 90.4
-    * Newer versions may work, but are not tested. Some features, such as the JS API, are disabled on untested versions by default to prevent possible crashes, and transparent rendering may not work properly as well
+    * Newer versions may work, but they have not been tested.
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.85 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.88
+    * Newer versions may work, especially when the CEF version is within the supported versions above.
+    * If some features, such as transparency or the theme JavaScript integration, don't work on a newly released Spotify version, it's because the CEF version has been updated to a version not yet supported by this mod,
+    and thus those features have been disabled for stability and safety. You can try enabling the `Use unsafe methods on untested CEF versions` switch in the mod settings page to disable the safety feature,
+    but this may cause crashes and instabilities. Your mileage may vary.
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -256,7 +260,8 @@
 140: 1.2.75-1.2.77
 142: 1.2.78-1.2.79
 143: 1.2.80-1.2.82
-144: 1.2.83-1.2.85
+144: 1.2.83-1.2.87
+146: 1.2.88
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -286,7 +291,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 144
+#define LAST_TESTED_CEF_VERSION 146
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
