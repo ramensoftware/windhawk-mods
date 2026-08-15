@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.0.2
+// @version         1.0.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -137,31 +137,32 @@ struct {
     bool useWorkArea;
 } g_settings;
 
-bool CurrentThreadHasConfirmatorName() {
-    bool match = false;
+// Explorer moves windows constantly, so this has to be nearly free once the
+// answer is known. A thread that has already named itself something else will
+// never become the indicator's, so that answer is kept for good. Only a thread
+// with no name yet stays undecided, since it may still be on its way to naming
+// itself, and pinning that would send the first indicator to Windows' position.
+bool IsCurrentThreadConfirmatorThread() {
+    static thread_local int cached = -1;  // -1 unknown, 0 no, 1 yes.
+
+    if (cached >= 0) {
+        return cached == 1;
+    }
 
     PWSTR threadDescription;
-    if (SUCCEEDED(GetThreadDescription(GetCurrentThread(),
-                                       &threadDescription))) {
-        match = wcscmp(threadDescription, kConfirmatorThreadName) == 0;
-        LocalFree(threadDescription);
+    if (FAILED(GetThreadDescription(GetCurrentThread(), &threadDescription))) {
+        return false;
+    }
+
+    bool match = wcscmp(threadDescription, kConfirmatorThreadName) == 0;
+    bool named = *threadDescription != L'\0';
+    LocalFree(threadDescription);
+
+    if (match || named) {
+        cached = match ? 1 : 0;
     }
 
     return match;
-}
-
-// Only a positive is cached. Caching a negative risks pinning the answer for a
-// thread that simply hadn't named itself yet, which would send the first
-// indicator to Windows' position instead of the configured one.
-bool IsCurrentThreadConfirmatorThread() {
-    static thread_local bool isConfirmator = false;
-
-    if (isConfirmator) {
-        return true;
-    }
-
-    isConfirmator = CurrentThreadHasConfirmatorName();
-    return isConfirmator;
 }
 
 bool IsIndicatorWindow(HWND hWnd) {
@@ -276,7 +277,8 @@ void CalculatePosition(HMONITOR monitor,
     *y += MulDiv(g_settings.offsetY, dpiY, 96);
 
     // An offset large enough to push the indicator off screen would just make
-    // it invisible with no way to tell why, so keep it within the monitor.
+    // it invisible with no way to tell why, so keep it within the area above,
+    // which is the work area unless the taskbar setting says otherwise.
     if (*x < area.left) {
         *x = area.left;
     } else if (*x > area.right - width) {
@@ -290,17 +292,39 @@ void CalculatePosition(HMONITOR monitor,
     }
 }
 
-bool AdjustIndicatorPos(int width, int height, int* x, int* y) {
+// `width` and `height` are in and out: sending the indicator to a monitor with
+// different scaling means it has to be resized to match, or it arrives at the
+// size the source monitor implied and every anchor except top left is off by
+// the difference once the window rescales itself. `canResize` is false when the
+// caller isn't setting a size, in which case the window is left to handle the
+// DPI change on its own.
+bool AdjustIndicatorPos(int* width, int* height, int* x, int* y, bool canResize) {
     RECT targetRect{
         .left = *x,
         .top = *y,
-        .right = *x + width,
-        .bottom = *y + height,
+        .right = *x + *width,
+        .bottom = *y + *height,
     };
 
     HMONITOR monitor = PickMonitor(targetRect);
     if (!monitor) {
         return false;
+    }
+
+    if (canResize) {
+        HMONITOR sourceMonitor =
+            MonitorFromRect(&targetRect, MONITOR_DEFAULTTONEAREST);
+        UINT sourceDpiX = 96, sourceDpiY = 96;
+        UINT targetDpiX = 96, targetDpiY = 96;
+        if (sourceMonitor && sourceMonitor != monitor &&
+            SUCCEEDED(GetDpiForMonitor(sourceMonitor, MDT_DEFAULT, &sourceDpiX,
+                                       &sourceDpiY)) &&
+            SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &targetDpiX,
+                                       &targetDpiY)) &&
+            sourceDpiX && sourceDpiY) {
+            *width = MulDiv(*width, targetDpiX, sourceDpiX);
+            *height = MulDiv(*height, targetDpiY, sourceDpiY);
+        }
     }
 
     MONITORINFO monitorInfo{
@@ -313,11 +337,11 @@ bool AdjustIndicatorPos(int width, int height, int* x, int* y) {
     const RECT& area =
         g_settings.useWorkArea ? monitorInfo.rcWork : monitorInfo.rcMonitor;
 
-    if (area.right - area.left < width || area.bottom - area.top < height) {
+    if (area.right - area.left < *width || area.bottom - area.top < *height) {
         return false;
     }
 
-    CalculatePosition(monitor, area, width, height, x, y);
+    CalculatePosition(monitor, area, *width, *height, x, y);
     return true;
 }
 
@@ -382,13 +406,16 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
     int x = (uFlags & SWP_NOMOVE) ? rc.left : X;
     int y = (uFlags & SWP_NOMOVE) ? rc.top : Y;
 
-    if (!AdjustIndicatorPos(width, height, &x, &y)) {
+    bool canResize = !(uFlags & SWP_NOSIZE);
+    if (!AdjustIndicatorPos(&width, &height, &x, &y, canResize)) {
         return original();
     }
 
     LogMove(hWnd, x, y, width, height);
 
-    return SetWindowPos_Original(hWnd, hWndInsertAfter, x, y, cx, cy,
+    return SetWindowPos_Original(hWnd, hWndInsertAfter, x, y,
+                                 canResize ? width : cx,
+                                 canResize ? height : cy,
                                  uFlags & ~SWP_NOMOVE);
 }
 
@@ -409,19 +436,26 @@ BOOL WINAPI MoveWindow_Hook(HWND hWnd,
         return original();
     }
 
+    // Same guard SetWindowPos_Hook has: a real sizing call follows.
+    if (nWidth <= 0 || nHeight <= 0) {
+        return original();
+    }
+
     if (!IsIndicatorWindow(hWnd)) {
         return original();
     }
 
     int x = X;
     int y = Y;
-    if (!AdjustIndicatorPos(nWidth, nHeight, &x, &y)) {
+    int width = nWidth;
+    int height = nHeight;
+    if (!AdjustIndicatorPos(&width, &height, &x, &y, true)) {
         return original();
     }
 
-    LogMove(hWnd, x, y, nWidth, nHeight);
+    LogMove(hWnd, x, y, width, height);
 
-    return MoveWindow_Original(hWnd, x, y, nWidth, nHeight, bRepaint);
+    return MoveWindow_Original(hWnd, x, y, width, height, bRepaint);
 }
 
 Position PositionFromString(PCWSTR value) {
