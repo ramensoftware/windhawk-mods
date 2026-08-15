@@ -1600,6 +1600,11 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
         L"[VDREDIRECT] Shell-host initialization begin");
 
+    if (g_unloading.load(std::memory_order_acquire)) {
+        g_runtimeState.store(0, std::memory_order_release);
+        return 0;
+    }
+
     if (!InstallVirtualDesktopHooks()) {
         g_runtimeState.store(0, std::memory_order_release);
 
@@ -1811,34 +1816,28 @@ static HWND WINAPI CreateWindowExW_Hook(
     return hwnd;
 }
 
-static void StopRuntime() {
+static void StopRuntimeBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
 
     HANDLE initThread = nullptr;
 
-    AcquireSRWLockShared(&g_runtimeInitLock);
+    AcquireSRWLockExclusive(&g_runtimeInitLock);
     initThread = g_runtimeInitThread;
-    ReleaseSRWLockShared(&g_runtimeInitLock);
+    g_runtimeInitThread = nullptr;
+    ReleaseSRWLockExclusive(&g_runtimeInitLock);
 
     if (initThread) {
         WaitForSingleObject(
             initThread,
             INFINITE);
+        CloseHandle(initThread);
     }
+}
 
+static void StopRuntime() {
     StopNotificationCache();
     StopWorker();
-
-    AcquireSRWLockExclusive(&g_runtimeInitLock);
-
-    if (g_runtimeInitThread) {
-        CloseHandle(g_runtimeInitThread);
-        g_runtimeInitThread = nullptr;
-    }
-
     g_runtimeState.store(0, std::memory_order_release);
-
-    ReleaseSRWLockExclusive(&g_runtimeInitLock);
 }
 
 BOOL Wh_ModInit() {
@@ -1881,6 +1880,10 @@ void Wh_ModAfterInit() {
             L"[VDREDIRECT] No primary Shell_TrayWnd owned by this PID; "
             L"remaining inert unless one is created");
     }
+}
+
+void Wh_ModBeforeUninit() {
+    StopRuntimeBeforeUninit();
 }
 
 void Wh_ModUninit() {
