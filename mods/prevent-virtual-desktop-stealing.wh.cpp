@@ -361,6 +361,11 @@ static ExplicitSwitchTransaction g_explicitSwitch = {};
 static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
 
 // IVirtualDesktopManagerInternal slots for the 24H2 IID above.
+// Keep the two calls as named, version-gated vtable accesses rather than
+// declaring a full C++ interface: the undocumented methods between IUnknown
+// and these slots have signatures that vary across shell versions. Placeholder
+// declarations would suggest ABI guarantees that the mod neither needs nor
+// has verified. The 24H2 IID is the layout gate for both indices.
 static constexpr int kVtableMoveViewToDesktop = 4;
 static constexpr int kVtableGetCurrentDesktop = 6;
 
