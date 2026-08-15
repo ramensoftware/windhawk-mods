@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         0.5.38
+// @version         0.5.39
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -24,7 +24,6 @@ Another mod offers similar functionality, but this implementation takes a differ
 
 This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.
 
-Native taskbar extent-offset resolution is derived from m417z's [Taskbar height and icon size](https://windhawk.net/mods/taskbar-icon-size), published under GPLv3.
 
 Note: The mod creates pinned shortcuts targeting the Windows `systray.exe` stub (with a hidden, immediately exiting `cmd.exe` fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.
 
@@ -40,25 +39,13 @@ Windows 11 only.
     Customizable part of separator identities. A fixed unique suffix is always appended.
     
     Change this only if a naming collision occurs (very rare).
-- maxWidthCompatibilityMode: false
-  $name: Taskbar Icon Size Compatibility Mode
-  $description: >-
-    Only normal icon sizes take effect with this option enabled. 
-
-    Compatibility mode for Taskbar height and icon size. 
-    Sets MaxWidth property while keeping native taskbar icon sizes untouched to avoid collision. 
-    
-    Enable this if you observe crashes when used with that mod. 
 - separators:
     - - index: 1
         $name: Final Position
         $description: 1 = first pinned taskbar position. Right after Search / Taskview. 
       - width: 20
-        $name: Normal Width
-        $description: Width for normal taskbar icon mode. 
-      - widthSmall: 10
-        $name: Small Width
-        $description: Width for small taskbar icon mode. 
+        $name: Width
+        $description: Width of the separator slot. 
   $name: Separators
   $description: Each new entry corresponds to a new separator being created.
 */
@@ -88,8 +75,6 @@ Windows 11 only.
 #include <iterator>
 #include <list>
 #include <mutex>
-#include <optional>
-#include <regex>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -170,14 +155,12 @@ struct IPinManagerInterop3 : IPinManagerInterop2 {
 struct SeparatorSetting {
     int ordinal;       // Stable within this loaded settings snapshot: 1, 2, ...
     int targetIndex;   // Zero-based value passed to MoveTaskbarPin.
-    double width;      // Normal width; also used as MaxWidth in compatibility mode.
-    double widthSmall; // Small icon mode width in native-extent mode.
+    double width;      // FrameworkElement::MaxWidth for the separator slot.
     std::wstring identity;
 };
 
 struct Settings {
     std::wstring identifierPrefix;
-    bool maxWidthCompatibilityMode;
     std::vector<SeparatorSetting> separators;
 };
 
@@ -188,12 +171,13 @@ static std::wstring g_storagePath;
 static std::wstring g_iconPath;
 
 static std::atomic<bool> g_taskbarViewDllHooked = false;
+static std::atomic<bool> g_taskbarLifecycleHookInstalled = false;
 static std::atomic<bool> g_taskbarInteractionHooksInstalled = false;
 static std::atomic<bool> g_loadLibraryWatcherInstalled = false;
 static std::atomic<bool> g_unloading = false;
-static std::atomic<bool> g_afterInit = false;
 static std::mutex g_lifecycleMutex;
 static bool g_taskbarViewHookInstallationAttempted = false;
+static bool g_taskbarLifecycleHookInstallationAttempted = false;
 static bool g_taskbarInteractionHookInstallationAttempted = false;
 static bool g_backendStopped = false;
 static HANDLE g_backendThread = nullptr;
@@ -488,9 +472,6 @@ static void LoadStoredSeparatorSettings() {
     const double width = g_settings.separators.empty()
                              ? 20.0
                              : g_settings.separators.front().width;
-    const double widthSmall = g_settings.separators.empty()
-                                  ? 10.0
-                                  : g_settings.separators.front().widthSmall;
 
     for (const auto& path : EnumerateSeparatorShortcuts()) {
         std::wstring identity = GetShortcutIdentity(path);
@@ -504,7 +485,6 @@ static void LoadStoredSeparatorSettings() {
             .ordinal = 0,
             .targetIndex = 0,
             .width = width,
-            .widthSmall = widthSmall,
             .identity = std::move(identity),
         });
     }
@@ -563,9 +543,6 @@ static void LoadSettings() {
         WindhawkUtils::StringSetting::make(
             L"identifierPrefix").get());
 
-    g_settings.maxWidthCompatibilityMode =
-        Wh_GetIntSetting(L"maxWidthCompatibilityMode") != 0;
-
     // Wh_GetIntSetting returns 0 for a missing setting.
     // Positions are therefore deliberately user-facing 1-based values.
     constexpr int kMaxSeparators = 256;
@@ -590,14 +567,8 @@ static void LoadSettings() {
 
         int configuredWidth =
             Wh_GetIntSetting(L"separators[%d].width", i);
-        int configuredWidthSmall =
-            Wh_GetIntSetting(L"separators[%d].widthSmall", i);
         int width = std::clamp(
             configuredWidth,
-            kMinWidth,
-            kMaxWidth);
-        int widthSmall = std::clamp(
-            configuredWidthSmall,
             kMinWidth,
             kMaxWidth);
 
@@ -608,19 +579,10 @@ static void LoadSettings() {
                 configuredWidth,
                 width);
         }
-        if (widthSmall != configuredWidthSmall) {
-            Wh_Log(
-                L"[SETTINGS] Clamped separator %d small width from %d to %d",
-                i + 1,
-                configuredWidthSmall,
-                widthSmall);
-        }
-
         g_settings.separators.push_back({
             .ordinal = i + 1,
             .targetIndex = position - 1,
             .width = static_cast<double>(width),
-            .widthSmall = static_cast<double>(widthSmall),
             .identity = BuildSeparatorIdentity(
                 g_settings.identifierPrefix,
                 i + 1),
@@ -633,21 +595,15 @@ static void LoadSettings() {
         .width = g_settings.separators.empty()
                      ? 20.0
                      : g_settings.separators.front().width,
-        .widthSmall = g_settings.separators.empty()
-                          ? 10.0
-                          : g_settings.separators.front().widthSmall,
         .identity = BuildSeparatorIdentity(
             g_settings.identifierPrefix,
             kRefreshPulseOrdinal),
     };
 
     Wh_Log(
-        L"[SETTINGS] prefix='%s' separators=%zu widthMode=%s",
+        L"[SETTINGS] prefix='%s' separators=%zu",
         g_settings.identifierPrefix.c_str(),
-        g_settings.separators.size(),
-        g_settings.maxWidthCompatibilityMode
-            ? L"MaxWidthCompatibility"
-            : L"NativeExtent");
+        g_settings.separators.size());
 }
 
 static bool InitializeStoragePath() {
@@ -690,29 +646,10 @@ static bool InitializeStoragePath() {
 // -----------------------------------------------------------------------------
 // TaskListButton separator width styling.
 //
-// Native-extent mode (default):
-// - restore the original separator width mechanism;
-// - let Windows and all downstream UpdateVisualStates hooks finish first;
-// - then write only this separator instance's medium/small taskbar extents;
-// - re-run the real padding/column entry points so other installed hooks can
-//   still participate.
-//
-// MaxWidth compatibility mode:
-// - never writes the private medium/small taskbar extent fields;
-// - after UpdateVisualStates finishes, constrains only FrameworkElement::MaxWidth;
-// - intended as a fallback if Taskbar height and icon size / TaskbarIconSize
-//   compatibility causes Explorer/taskbar crashes;
-// - deliberately uses 'width' in both icon modes, so widthSmall is unavailable.
-//
-// Settings changes always request a full mod reload, so changing width mode
-// destroys/recreates the separator buttons instead of hot-swapping ownership on
-// live TaskListButtons.
+// Separator width is owned through the XAML FrameworkElement::MaxWidth
+// property only. No private TaskListButton extent fields or private layout
+// entry points are modified.
 // -----------------------------------------------------------------------------
-
-static void* g_taskListButtonUpdateButtonPaddingAddress;
-static void* g_taskListButtonUpdateIconColumnDefinitionAddress;
-static void* g_taskbarConfigurationGetIconHeightInViewPixelsAddress;
-static bool g_hasDynamicIconScaling;
 
 // Native TaskListButton IsDraggable XAML binding helpers, resolved from
 // Taskbar.View.dll. The isolated runtime probe verified that setting this
@@ -734,65 +671,6 @@ static TaskListButton_SetIsDraggable_t
     g_taskListButtonSetIsDraggable;
 
 static thread_local bool g_settingSeparatorIsDraggable;
-
-static std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
-    enum FEATURE_ENABLED_STATE {
-        FEATURE_ENABLED_STATE_DEFAULT = 0,
-        FEATURE_ENABLED_STATE_DISABLED = 1,
-        FEATURE_ENABLED_STATE_ENABLED = 2,
-    };
-
-#pragma pack(push, 1)
-    struct RTL_FEATURE_CONFIGURATION {
-        unsigned int featureId;
-        unsigned __int32 group : 4;
-        FEATURE_ENABLED_STATE enabledState : 2;
-        unsigned __int32 enabledStateOptions : 1;
-        unsigned __int32 unused1 : 1;
-        unsigned __int32 variant : 6;
-        unsigned __int32 variantPayloadKind : 2;
-        unsigned __int32 unused2 : 16;
-        unsigned int payload;
-    };
-#pragma pack(pop)
-
-    using RtlQueryFeatureConfiguration_t =
-        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
-
-    static RtlQueryFeatureConfiguration_t queryFeatureConfiguration = [] {
-        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-        return ntdll
-                   ? reinterpret_cast<RtlQueryFeatureConfiguration_t>(
-                         GetProcAddress(ntdll, "RtlQueryFeatureConfiguration"))
-                   : nullptr;
-    }();
-
-    if (!queryFeatureConfiguration) {
-        return std::nullopt;
-    }
-
-    RTL_FEATURE_CONFIGURATION feature = {};
-    INT64 changeStamp = 0;
-
-    HRESULT hr = queryFeatureConfiguration(
-        featureId,
-        1,
-        &changeStamp,
-        &feature);
-
-    if (FAILED(hr)) {
-        return std::nullopt;
-    }
-
-    switch (feature.enabledState) {
-        case FEATURE_ENABLED_STATE_DISABLED:
-            return false;
-        case FEATURE_ENABLED_STATE_ENABLED:
-            return true;
-        default:
-            return std::nullopt;
-    }
-}
 
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 static TaskListButton_UpdateVisualStates_t
@@ -965,206 +843,9 @@ static const SeparatorSetting* GetSeparatorForTaskListButton(
     return separator;
 }
 
-static LONG GetMediumTaskbarButtonExtentOffset() {
-    static LONG offset = []() -> LONG {
-        if (!g_taskListButtonUpdateIconColumnDefinitionAddress) {
-            Wh_Log(
-                L"[STYLE] UpdateIconColumnDefinition address unavailable");
-            return 0;
-        }
-
-#if defined(_M_X64)
-        // x64 logic from the upstream Taskbar height and icon size mod.
-        // Search for a movsd that loads the per-instance medium extent,
-        // followed by a subsd using the loaded value.
-        const BYTE* start =
-            reinterpret_cast<const BYTE*>(
-                g_taskListButtonUpdateIconColumnDefinitionAddress);
-        const BYTE* end = start + 0x200;
-
-        LONG offsetCandidate = 0;
-        LONG foundOffset = 0;
-
-        for (const BYTE* p = start; p != end; p++) {
-            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
-                (p[3] & 0xC0) == 0x80) {
-                offsetCandidate =
-                    *reinterpret_cast<const LONG*>(p + 4);
-            }
-
-            if (p[0] == 0xF2 && p[1] == 0x44 &&
-                p[2] == 0x0F && p[3] == 0x10 &&
-                (p[4] & 0xC0) == 0x80) {
-                offsetCandidate =
-                    *reinterpret_cast<const LONG*>(p + 5);
-            }
-
-            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x5C &&
-                (p[3] & 0xC0) == 0x80) {
-                foundOffset = offsetCandidate;
-                break;
-            }
-
-            if (p[0] == 0xF2 && p[1] == 0x44 &&
-                p[2] == 0x0F && p[3] == 0x5C &&
-                (p[4] & 0xC0) == 0x80) {
-                foundOffset = offsetCandidate;
-                break;
-            }
-        }
-
-        return (foundOffset < 0 || foundOffset > 0xFFFF)
-                   ? 0
-                   : foundOffset;
-#elif defined(_M_ARM64)
-        // ARM64 logic from the upstream Taskbar height and icon size mod.
-        // Find two double loads from the same object which feed an fsub; the
-        // first load is the per-instance medium extent.
-        const DWORD* start =
-            reinterpret_cast<const DWORD*>(
-                g_taskListButtonUpdateIconColumnDefinitionAddress);
-        const DWORD* end = start + 0x80;
-
-        std::regex loadWithOffset(
-            R"(ldr\s+(d\d+), \[(x\d+), #0x([0-9a-f]+)\])");
-        std::regex otherLoad(R"(ldr\s+(d\d+),.*)");
-        std::regex subtract(
-            R"(fsub\s+d\d+, (d\d+), (d\d+))");
-
-        struct LoadInstruction {
-            std::string destinationRegister;
-            std::string sourceRegister;
-            LONG offset;
-        } loads[32];
-        size_t loadCount = 0;
-
-        for (const DWORD* instruction = start;
-             instruction != end;
-             instruction++) {
-            WH_DISASM_RESULT result;
-            if (!Wh_Disasm(
-                    const_cast<DWORD*>(instruction),
-                    &result)) {
-                break;
-            }
-
-            std::string_view text = result.text;
-            if (text == "ret") {
-                break;
-            }
-
-            if (loadCount == ARRAYSIZE(loads)) {
-                break;
-            }
-
-            std::match_results<std::string_view::const_iterator> match;
-            if (std::regex_match(
-                    text.begin(),
-                    text.end(),
-                    match,
-                    loadWithOffset)) {
-                loads[loadCount++] = {
-                    .destinationRegister = match[1].str(),
-                    .sourceRegister = match[2].str(),
-                    .offset = static_cast<LONG>(
-                        std::stoul(match[3].str(), nullptr, 16)),
-                };
-                continue;
-            }
-
-            if (std::regex_match(
-                    text.begin(),
-                    text.end(),
-                    match,
-                    otherLoad)) {
-                loads[loadCount++] = {
-                    .destinationRegister = match[1].str(),
-                    .sourceRegister = {},
-                    .offset = 0,
-                };
-                continue;
-            }
-
-            if (!std::regex_match(
-                    text.begin(),
-                    text.end(),
-                    match,
-                    subtract)) {
-                continue;
-            }
-
-            const std::string firstInput = match[1].str();
-            const std::string secondInput = match[2].str();
-            const LoadInstruction* firstLoad = nullptr;
-            const LoadInstruction* secondLoad = nullptr;
-
-            for (size_t i = loadCount; i > 0; i--) {
-                const LoadInstruction& load = loads[i - 1];
-                if (!firstLoad &&
-                    load.destinationRegister == firstInput) {
-                    firstLoad = &load;
-                }
-                if (!secondLoad &&
-                    load.destinationRegister == secondInput) {
-                    secondLoad = &load;
-                }
-            }
-
-            if (firstLoad && secondLoad &&
-                !firstLoad->sourceRegister.empty() &&
-                firstLoad->sourceRegister == secondLoad->sourceRegister) {
-                LONG foundOffset = firstLoad->offset;
-                return (foundOffset < 0 || foundOffset > 0xFFFF)
-                           ? 0
-                           : foundOffset;
-            }
-        }
-
-        return 0;
-#else
-#error "Unsupported architecture"
-#endif
-    }();
-
-    return offset;
-}
-
-static void RefreshTaskListButtonLayout(void* pThis) {
-    // Call real function entry points, not our own trampolines.
-    //
-    // UpdateButtonPadding is intentionally invoked through its target address:
-    // if Taskbar height and icon size hooks it, that hook participates.
-    if (g_taskListButtonUpdateButtonPaddingAddress) {
-        auto updateButtonPadding =
-            reinterpret_cast<void(WINAPI*)(void*)>(
-                g_taskListButtonUpdateButtonPaddingAddress);
-
-        updateButtonPadding(pThis);
-    }
-
-    // Our width write occurs after UpdateVisualStates has already returned.
-    // Re-run the column update explicitly so XAML consumes the new extent.
-    if (g_taskListButtonUpdateIconColumnDefinitionAddress) {
-        auto updateIconColumnDefinition =
-            reinterpret_cast<void(WINAPI*)(void*)>(
-                g_taskListButtonUpdateIconColumnDefinitionAddress);
-
-        updateIconColumnDefinition(pThis);
-    }
-}
-
 struct SeparatorVisualState {
     winrt::weak_ref<FrameworkElement> element;
     void* taskListButton;
-
-    bool mediumExtentCaptured = false;
-    double originalMediumExtent = 0;
-    bool mediumExtentApplied = false;
-    double lastAppliedMediumExtent = 0;
-    bool smallExtentCaptured = false;
-    double originalSmallExtent = 0;
-    bool smallExtentApplied = false;
-    double lastAppliedSmallExtent = 0;
 
     bool maxWidthCaptured = false;
     winrt::Windows::Foundation::IInspectable originalMaxWidthLocalValue{
@@ -1220,73 +901,6 @@ static auto FindSeparatorVisualState(void* taskListButton) {
         [taskListButton](const SeparatorVisualState& state) {
             return state.taskListButton == taskListButton;
         });
-}
-
-static bool ApplySeparatorWidthOverride(
-    SeparatorVisualState& state,
-    const SeparatorSetting& separator) {
-    if (!g_taskListButtonUpdateIconColumnDefinitionAddress) {
-        return false;
-    }
-
-    LONG mediumOffset = GetMediumTaskbarButtonExtentOffset();
-    if (!mediumOffset) {
-        return false;
-    }
-
-    auto* mediumExtent =
-        reinterpret_cast<double*>(
-            reinterpret_cast<BYTE*>(state.taskListButton) + mediumOffset);
-    bool changed = false;
-
-    if (*mediumExtent < 1 || *mediumExtent >= 10000) {
-        return false;
-    }
-
-    // UpdateVisualStates runs after Windows and downstream hooks. If their
-    // latest extent differs from the value this mod previously enforced,
-    // treat it as the new stock value to restore later.
-    if (!state.mediumExtentCaptured ||
-        !state.mediumExtentApplied ||
-        *mediumExtent != state.lastAppliedMediumExtent) {
-        state.originalMediumExtent = *mediumExtent;
-        state.mediumExtentCaptured = true;
-    }
-
-    if (*mediumExtent != separator.width) {
-        *mediumExtent = separator.width;
-        changed = true;
-    }
-    state.lastAppliedMediumExtent = separator.width;
-    state.mediumExtentApplied = true;
-
-    // On DynamicIconScaling builds the small extent immediately precedes
-    // the medium extent. Don't assume that layout on older taskbars.
-    if (g_hasDynamicIconScaling) {
-        double* smallExtent = mediumExtent - 1;
-
-        if (*smallExtent >= 1 && *smallExtent < 10000) {
-            if (!state.smallExtentCaptured ||
-                !state.smallExtentApplied ||
-                *smallExtent != state.lastAppliedSmallExtent) {
-                state.originalSmallExtent = *smallExtent;
-                state.smallExtentCaptured = true;
-            }
-
-            if (*smallExtent != separator.widthSmall) {
-                *smallExtent = separator.widthSmall;
-                changed = true;
-            }
-            state.lastAppliedSmallExtent = separator.widthSmall;
-            state.smallExtentApplied = true;
-        }
-    }
-
-    if (changed) {
-        RefreshTaskListButtonLayout(state.taskListButton);
-    }
-
-    return true;
 }
 
 static void ApplySeparatorMaxWidthOverride(
@@ -1496,33 +1110,6 @@ static void RestoreSeparatorVisualState(
         return;
     }
 
-    bool extentChanged = false;
-
-    LONG mediumOffset =
-        (state.taskListButton &&
-         (state.mediumExtentCaptured || state.smallExtentCaptured))
-            ? GetMediumTaskbarButtonExtentOffset()
-            : 0;
-    if (mediumOffset) {
-        auto* mediumExtent =
-            reinterpret_cast<double*>(
-                reinterpret_cast<BYTE*>(state.taskListButton) + mediumOffset);
-
-        if (state.mediumExtentCaptured &&
-            *mediumExtent != state.originalMediumExtent) {
-            *mediumExtent = state.originalMediumExtent;
-            extentChanged = true;
-        }
-
-        if (state.smallExtentCaptured) {
-            double* smallExtent = mediumExtent - 1;
-            if (*smallExtent != state.originalSmallExtent) {
-                *smallExtent = state.originalSmallExtent;
-                extentChanged = true;
-            }
-        }
-    }
-
     try {
         if (state.maxWidthCaptured) {
             RestoreDependencyPropertyLocalValue(
@@ -1601,10 +1188,6 @@ static void RestoreSeparatorVisualState(
             }
         } catch (...) {
         }
-    }
-
-    if (extentChanged) {
-        RefreshTaskListButtonLayout(state.taskListButton);
     }
 
     g_separatorVisualStates.erase(stateIt);
@@ -1871,25 +1454,10 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
 
     SeparatorVisualState& state = *stateIt;
 
-    if (g_settings.maxWidthCompatibilityMode) {
-        // Compatibility path: native/TIS extents remain untouched.
-        ApplySeparatorMaxWidthOverride(
-            state,
-            element,
-            *separator);
-    } else {
-        // Default path: original per-instance medium/small extent override.
-        if (!ApplySeparatorWidthOverride(
-                state,
-                *separator)) {
-            // A future build can retain the symbol while changing the object
-            // layout. Keep the separator usable with the public XAML fallback.
-            ApplySeparatorMaxWidthOverride(
-                state,
-                element,
-                *separator);
-        }
-    }
+    ApplySeparatorMaxWidthOverride(
+        state,
+        element,
+        *separator);
 
     // If unload began while width was being applied, undo this button instead
     // of applying the remaining separator-only properties.
@@ -1918,22 +1486,6 @@ static HMODULE GetTaskbarViewModuleHandle() {
 static bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
-        {
-            {
-                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"
-            },
-            &g_taskListButtonUpdateButtonPaddingAddress,
-            nullptr,
-            true, // Used only by native-extent mode.
-        },
-        {
-            {
-                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateIconColumnDefinition(void))"
-            },
-            &g_taskListButtonUpdateIconColumnDefinitionAddress,
-            nullptr,
-            true, // Used only by native-extent mode.
-        },
         {
             {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"
@@ -1977,14 +1529,6 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             TaskbarResources_OnTaskListButtonContextRequested_Hook,
             true,
         },
-        {
-            {
-                LR"(public: double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetIconHeightInViewPixels(void))"
-            },
-            &g_taskbarConfigurationGetIconHeightInViewPixelsAddress,
-            nullptr,
-            true, // DynamicIconScaling-era builds; native-extent mode only.
-        },
     };
 
     if (!WindhawkUtils::HookSymbols(
@@ -1995,31 +1539,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
 
-    constexpr UINT kDynamicIconScaling = 29785184;
-
-    g_hasDynamicIconScaling =
-        g_taskbarConfigurationGetIconHeightInViewPixelsAddress &&
-        IsOsFeatureEnabled(kDynamicIconScaling).value_or(true);
-
-    if (!g_settings.maxWidthCompatibilityMode) {
-        // Native object layout is private and can change independently of the
-        // symbols. Fall back to MaxWidth instead of aborting or pinning an
-        // unstyled full-width button.
-        if (!g_taskListButtonUpdateButtonPaddingAddress ||
-            !g_taskListButtonUpdateIconColumnDefinitionAddress ||
-            !GetMediumTaskbarButtonExtentOffset()) {
-            Wh_Log(
-                L"[STYLE] Native-extent resolution unavailable; "
-                L"using MaxWidth fallback");
-            g_settings.maxWidthCompatibilityMode = true;
-        }
-    }
-
-    Wh_Log(
-        L"[STYLE] Taskbar view hooks installed; widthMode=%s",
-        g_settings.maxWidthCompatibilityMode
-            ? L"MaxWidthCompatibility"
-            : L"NativeExtent");
+    Wh_Log(L"[STYLE] Taskbar view hooks installed; widthMode=MaxWidth");
 
     return true;
 }
@@ -2027,8 +1547,10 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t g_loadLibraryExWOriginal;
 
+static bool HookTaskbarLifecycleSymbols(HMODULE taskbarDll);
 static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll);
-static void TryStartBackendWorker();
+static HWND FindCurrentProcessTaskbarWnd();
+static void StartBackendWorker();
 
 static bool InstallTaskbarViewHooks(
     HMODULE module,
@@ -2058,6 +1580,37 @@ static bool InstallTaskbarViewHooks(
     }
 
     g_taskbarViewDllHooked = true;
+    return true;
+}
+
+static bool InstallTaskbarLifecycleHook(
+    HMODULE module,
+    bool applyOperations) {
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+
+    if (g_unloading) {
+        return false;
+    }
+
+    if (g_taskbarLifecycleHookInstalled) {
+        return true;
+    }
+
+    if (g_taskbarLifecycleHookInstallationAttempted) {
+        return false;
+    }
+
+    g_taskbarLifecycleHookInstallationAttempted = true;
+    if (!HookTaskbarLifecycleSymbols(module)) {
+        return false;
+    }
+
+    if (applyOperations && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"[LIFECYCLE] Wh_ApplyHookOperations failed");
+        return false;
+    }
+
+    g_taskbarLifecycleHookInstalled = true;
     return true;
 }
 
@@ -2112,17 +1665,25 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
             L"[STYLE] Taskbar view module loaded: %s",
             lpLibFileName ? lpLibFileName : L"<unknown>");
 
-        if (InstallTaskbarViewHooks(module, true)) {
-            TryStartBackendWorker();
-        }
+        InstallTaskbarViewHooks(module, true);
     }
 
-    if (!g_taskbarInteractionHooksInstalled &&
-        GetModuleHandleW(L"taskbar.dll") == module) {
-        Wh_Log(L"[INPUT] taskbar.dll loaded; installing interaction hooks");
+    if (GetModuleHandleW(L"taskbar.dll") == module) {
+        if (!g_taskbarLifecycleHookInstalled) {
+            Wh_Log(
+                L"[LIFECYCLE] taskbar.dll loaded; installing startup hook");
+            InstallTaskbarLifecycleHook(module, true);
+        }
 
-        if (InstallTaskbarInteractionHooks(module, true)) {
-            TryStartBackendWorker();
+        if (!g_taskbarInteractionHooksInstalled) {
+            Wh_Log(L"[INPUT] taskbar.dll loaded; installing interaction hooks");
+            InstallTaskbarInteractionHooks(module, true);
+        }
+
+        // Close the late-load race if the taskbar was created before the
+        // TrayUI::StartTaskbar hook became active.
+        if (FindCurrentProcessTaskbarWnd()) {
+            StartBackendWorker();
         }
     }
 
@@ -2352,6 +1913,46 @@ static HRESULT WINAPI TaskGroup_GetToolTipText_Hook(
         taskItem,
         text,
         cchText);
+}
+
+using TrayUI_StartTaskbar_t =
+    void(WINAPI*)(void* pThis);
+
+static TrayUI_StartTaskbar_t
+    g_trayUIStartTaskbarOriginal;
+
+static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
+    g_trayUIStartTaskbarOriginal(pThis);
+
+    if (g_unloading) {
+        return;
+    }
+
+    Wh_Log(L"[LIFECYCLE] TrayUI::StartTaskbar completed");
+    StartBackendWorker();
+}
+
+static bool HookTaskbarLifecycleSymbols(HMODULE taskbarDll) {
+    WindhawkUtils::SYMBOL_HOOK taskbarLifecycleHooks[] = {
+        {
+            {
+                LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"
+            },
+            &g_trayUIStartTaskbarOriginal,
+            TrayUI_StartTaskbar_Hook,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(
+            taskbarDll,
+            taskbarLifecycleHooks,
+            ARRAYSIZE(taskbarLifecycleHooks))) {
+        Wh_Log(L"[LIFECYCLE] HookSymbols(TrayUI::StartTaskbar) failed");
+        return false;
+    }
+
+    Wh_Log(L"[LIFECYCLE] Taskbar startup hook installed");
+    return true;
 }
 
 static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
@@ -2765,6 +2366,17 @@ static bool PrepareSeparatorFiles() {
     return true;
 }
 
+static bool InitializeTaskbarLifecycleHook() {
+    if (HMODULE taskbarDll = GetModuleHandleW(L"taskbar.dll")) {
+        return InstallTaskbarLifecycleHook(taskbarDll, false);
+    }
+
+    Wh_Log(
+        L"[LIFECYCLE] taskbar.dll isn't loaded yet; "
+        L"installing LoadLibraryExW watcher");
+    return InstallLoadLibraryWatcher();
+}
+
 static bool InitializeTaskbarInteractionHooks() {
     if (HMODULE taskbarDll = GetModuleHandleW(L"taskbar.dll")) {
         return InstallTaskbarInteractionHooks(taskbarDll, false);
@@ -3131,33 +2743,6 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
 
     Wh_Log(L"[INIT] Separator backend worker starting");
 
-    if (!FindCurrentProcessTaskbarWnd()) {
-        Wh_Log(L"[INIT] Waiting for the taskbar window");
-
-        constexpr int kTaskbarWaitPolls = 240;
-        constexpr DWORD kTaskbarWaitInterval = 250;
-        bool taskbarFound = false;
-
-        for (int poll = 0; poll < kTaskbarWaitPolls; ++poll) {
-            if (WaitForBackendStop(kTaskbarWaitInterval)) {
-                Wh_Log(L"[INIT] Separator startup cancelled");
-                return 0;
-            }
-
-            if (FindCurrentProcessTaskbarWnd()) {
-                taskbarFound = true;
-                break;
-            }
-        }
-
-        if (!taskbarFound) {
-            Wh_Log(
-                L"[INIT] Taskbar window did not appear within 60 seconds; "
-                L"backend worker stopping");
-            return 0;
-        }
-    }
-
     HRESULT hrInit =
         CoInitializeEx(
             nullptr,
@@ -3282,18 +2867,10 @@ static bool StartBackendWorkerLocked() {
     return true;
 }
 
-static void TryStartBackendWorker() {
+static void StartBackendWorker() {
     std::lock_guard<std::mutex> lock(g_lifecycleMutex);
 
-    if (!g_afterInit || g_unloading || g_backendStopped) {
-        return;
-    }
-
-    // The backend creates real pinned taskbar items. Don't create them until
-    // the core styling hook can guarantee separator sizing and presentation.
-    // Interaction and tooltip hooks remain optional backend-independent
-    // hardening.
-    if (!g_taskbarViewDllHooked) {
+    if (g_unloading || g_backendStopped) {
         return;
     }
 
@@ -3380,6 +2957,11 @@ BOOL Wh_ModInit() {
             L"[INIT] TaskListButton styling hooks unavailable");
     }
 
+    if (!InitializeTaskbarLifecycleHook()) {
+        Wh_Log(
+            L"[INIT] Taskbar startup hook unavailable");
+    }
+
     if (!InitializeTaskbarInteractionHooks()) {
         Wh_Log(
             L"[INIT] Taskbar interaction hooks unavailable");
@@ -3392,8 +2974,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    g_afterInit = true;
-
     // Close the small race where the module wasn't present in Wh_ModInit but
     // appeared before/around Wh_ModAfterInit.
     if (!g_taskbarViewDllHooked) {
@@ -3402,16 +2982,26 @@ void Wh_ModAfterInit() {
         }
     }
 
-    // Do the equivalent late-attach check for taskbar.dll. It might have
-    // loaded between Wh_ModInit and hook activation, before the watcher could
-    // observe its LoadLibraryExW call.
-    if (!g_taskbarInteractionHooksInstalled) {
-        if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
+    // Lifecycle and interaction hooks are independent. A symbol change in one
+    // family must not gate the other or the PinManager backend.
+    if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
+        if (!g_taskbarLifecycleHookInstalled) {
+            InstallTaskbarLifecycleHook(module, true);
+        }
+
+        if (!g_taskbarInteractionHooksInstalled) {
             InstallTaskbarInteractionHooks(module, true);
         }
     }
 
-    TryStartBackendWorker();
+    // If the mod is enabled after Explorer already created the taskbar,
+    // TrayUI::StartTaskbar has already returned and won't fire for us.
+    if (FindCurrentProcessTaskbarWnd()) {
+        Wh_Log(L"[LIFECYCLE] Existing taskbar window found; starting backend");
+        StartBackendWorker();
+    } else {
+        Wh_Log(L"[LIFECYCLE] Waiting for TrayUI::StartTaskbar");
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -3443,11 +3033,9 @@ void Wh_ModUninit() {
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    // Keep the old loaded settings intact. The old instance must unpin/delete
-    // exactly the separator identities it created; the reloaded instance then
-    // reads the new settings and recreates fresh buttons. This is also how the
-    // native-extent <-> MaxWidth compatibility mode switch stays clean: width
-    // ownership is never hot-swapped on an existing TaskListButton.
+    // Phase A keeps the reviewed full-reload settings behavior. Live
+    // reconciliation is a separate follow-up once persistent identities are
+    // available.
     *bReload = TRUE;
     return TRUE;
 }
