@@ -798,8 +798,9 @@ static HRESULT ForegroundViewChanged_Hook(
 // -----------------------------------------------------------------------------
 
 static HANDLE g_notificationThread = nullptr;
-static DWORD g_notificationThreadId = 0;
 static HANDLE g_notificationReadyEvent = nullptr;
+static HANDLE g_notificationStopEvent = nullptr;
+static HANDLE g_unloadEvent = nullptr;
 static std::atomic<bool> g_notificationReady = false;
 
 class VirtualDesktopNotificationListener final
@@ -1019,9 +1020,37 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     SetEvent(g_notificationReadyEvent);
 
     if (g_notificationReady.load()) {
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+        while (true) {
+            DWORD waitResult =
+                MsgWaitForMultipleObjects(
+                    1,
+                    &g_notificationStopEvent,
+                    FALSE,
+                    INFINITE,
+                    QS_ALLINPUT);
+
+            if (waitResult == WAIT_OBJECT_0) {
+                break;
+            }
+
+            if (waitResult != WAIT_OBJECT_0 + 1) {
+                Wh_Log(
+                    L"Notification message wait failed result=%lu "
+                    L"error=%lu",
+                    waitResult,
+                    GetLastError());
+                break;
+            }
+
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) {
+                    SetEvent(g_notificationStopEvent);
+                    break;
+                }
+
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
         }
     }
 
@@ -1064,9 +1093,13 @@ static bool StartNotificationCache() {
     g_notificationReadyEvent =
         CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    if (!g_notificationReadyEvent) {
+    g_notificationStopEvent =
+        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+    if (!g_notificationReadyEvent ||
+        !g_notificationStopEvent) {
         Wh_Log(
-            L"Create notification-ready event failed error=%lu",
+            L"Create notification events failed error=%lu",
             GetLastError());
         return false;
     }
@@ -1078,7 +1111,7 @@ static bool StartNotificationCache() {
             NotificationThreadProc,
             nullptr,
             0,
-            &g_notificationThreadId);
+            nullptr);
 
     if (!g_notificationThread) {
         Wh_Log(
@@ -1087,8 +1120,17 @@ static bool StartNotificationCache() {
         return false;
     }
 
+    HANDLE waits[] = {
+        g_notificationReadyEvent,
+        g_unloadEvent,
+    };
+
     DWORD waitResult =
-        WaitForSingleObject(g_notificationReadyEvent, 5000);
+        WaitForMultipleObjects(
+            ARRAYSIZE(waits),
+            waits,
+            FALSE,
+            5000);
 
     if (waitResult != WAIT_OBJECT_0 ||
         !g_notificationReady.load()) {
@@ -1106,24 +1148,24 @@ static void StopNotificationCache() {
     g_notificationReady.store(false, std::memory_order_release);
     ClearExplicitSwitchTransaction(L"notification cache stopping");
 
-    if (g_notificationThread) {
-        if (g_notificationThreadId) {
-            PostThreadMessageW(
-                g_notificationThreadId,
-                WM_QUIT,
-                0,
-                0);
-        }
+    if (g_notificationStopEvent) {
+        SetEvent(g_notificationStopEvent);
+    }
 
+    if (g_notificationThread) {
         WaitForSingleObject(g_notificationThread, INFINITE);
         CloseHandle(g_notificationThread);
         g_notificationThread = nullptr;
-        g_notificationThreadId = 0;
     }
 
     if (g_notificationReadyEvent) {
         CloseHandle(g_notificationReadyEvent);
         g_notificationReadyEvent = nullptr;
+    }
+
+    if (g_notificationStopEvent) {
+        CloseHandle(g_notificationStopEvent);
+        g_notificationStopEvent = nullptr;
     }
 
     ClearCurrentDesktopId();
@@ -1864,9 +1906,16 @@ static bool StartWorker() {
         return false;
     }
 
+    HANDLE waits[] = {
+        g_workerReadyEvent,
+        g_unloadEvent,
+    };
+
     DWORD waitResult =
-        WaitForSingleObject(
-            g_workerReadyEvent,
+        WaitForMultipleObjects(
+            ARRAYSIZE(waits),
+            waits,
+            FALSE,
             5000);
 
     if (waitResult != WAIT_OBJECT_0 ||
@@ -2310,6 +2359,10 @@ static HWND WINAPI CreateWindowExW_Hook(
 static void StopRuntimeBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
 
+    if (g_unloadEvent) {
+        SetEvent(g_unloadEvent);
+    }
+
     HANDLE initThread = nullptr;
 
     AcquireSRWLockExclusive(&g_runtimeInitLock);
@@ -2336,6 +2389,16 @@ BOOL Wh_ModInit() {
         L"Init: installing lightweight "
         L"primary-taskbar observer");
 
+    g_unloadEvent =
+        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+    if (!g_unloadEvent) {
+        Wh_Log(
+            L"Failed to create unload event error=%lu",
+            GetLastError());
+        return FALSE;
+    }
+
     // Deliberately don't load twinui.pcshell.dll or taskbar.dll here. This code
     // executes in every explorer.exe matched by @include. Non-shell Explorer
     // processes should remain as inert as possible.
@@ -2345,6 +2408,8 @@ BOOL Wh_ModInit() {
             &g_createWindowExWOriginal)) {
         Wh_Log(
             L"Failed to hook CreateWindowExW");
+        CloseHandle(g_unloadEvent);
+        g_unloadEvent = nullptr;
         return FALSE;
     }
 
@@ -2377,4 +2442,9 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
     StopRuntime();
+
+    if (g_unloadEvent) {
+        CloseHandle(g_unloadEvent);
+        g_unloadEvent = nullptr;
+    }
 }
