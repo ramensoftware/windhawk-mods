@@ -11,7 +11,7 @@
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -lcomctl32 -lwindowscodecs -luuid
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -lcomctl32 -lwindowscodecs -luuid -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -133,6 +133,7 @@ que necesitan ese recurso para sí mismos.
 #include <list>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -150,7 +151,12 @@ que necesitan ese recurso para sí mismos.
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Text.h>
-#include <winrt/Microsoft.UI.Dispatching.h>
+// Not spelled out directly in this file, but required transitively: the
+// pointer-tracking code (UpdateDriveMarqueeSelection and friends) calls
+// Properties()/PointerId()/Position() on a Microsoft::UI::Input::PointerPoint
+// obtained from PointerRoutedEventArgs::GetCurrentPoint(), and those methods'
+// deduced return types don't resolve without this header's definitions
+// visible, even though the type itself is never named explicitly.
 #include <winrt/Microsoft.UI.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -197,6 +203,7 @@ std::atomic<bool> g_fileExplorerExtensionsSymbolsHooked{false};
 std::atomic<bool> g_navigationSymbolsHooked{false};
 std::atomic<int> g_openContextMenuCount{0};
 std::atomic<int> g_pendingCommandInvocations{0};
+std::atomic<int> g_pendingShellUiCalls{0};
 std::atomic<int> g_pendingDragPreparations{0};
 std::mutex g_dragPreparationMutex;
 std::condition_variable g_dragPreparationCondition;
@@ -308,7 +315,18 @@ struct DriveCardEventState {
 // would shift every element after an erased one, invalidating those
 // pointers; a list only invalidates the iterator/pointer of the erased
 // element itself.
-thread_local std::list<DriveCardEventState> g_driveCardEventStates;
+//
+// Wrapped in [[clang::no_destroy]] std::optional for the same reason as
+// g_refreshWorker: Windhawk doesn't call Wh_ModUninit during process
+// shutdown, but the CRT still runs thread_local destructors on
+// DLL_PROCESS_DETACH. DriveCardEventState holds strong XAML references
+// (TextBlock/TextBox/UIElement/CheckBox), and releasing those after the
+// XAML core has already torn down is a use-after-free, not a leak.
+// ClearDriveCardEventHandlersForCurrentThread() empties the list explicitly
+// on its owning thread during normal unload; an empty list keeps no heap
+// buffer, so suppressing the destructor elsewhere leaks nothing per thread.
+[[clang::no_destroy]] thread_local std::optional<std::list<DriveCardEventState>>
+    g_driveCardEventStates{std::in_place};
 
 struct DevicesHeaderEventState {
     winrt::weak_ref<muxc::Button> button;
@@ -681,47 +699,72 @@ class UniqueIcon {
     HICON icon_;
 };
 
+class UniqueBitmap {
+  public:
+    explicit UniqueBitmap(HBITMAP bitmap = nullptr) : bitmap_(bitmap) {}
+    ~UniqueBitmap() {
+        if (bitmap_) {
+            DeleteObject(bitmap_);
+        }
+    }
+
+    UniqueBitmap(UniqueBitmap const&) = delete;
+    UniqueBitmap& operator=(UniqueBitmap const&) = delete;
+
+    HBITMAP get() const {
+        return bitmap_;
+    }
+
+  private:
+    HBITMAP bitmap_;
+};
+
+// The card renders the icon at 48 effective (DIP) pixels; 96 covers up to
+// 200% display scaling crisply without the memory cost of a full 256x256
+// jumbo bitmap for every drive. IShellItemImageFactory::GetImage scales
+// proportionally to whatever is actually available, so unlike the system
+// image list's fixed-size slots (SHIL_JUMBO included), a drive whose icon
+// has no 256px variant is never padded into an empty canvas at this size.
+constexpr int kDriveIconTargetSize = 96;
+
 bool PopulateDriveIcon(DriveInfo& drive, IShellItem* shellItem,
-                       IImageList* systemImageList,
                        IWICImagingFactory* imagingFactory) {
-    if (!shellItem || !systemImageList || !imagingFactory) {
+    if (!shellItem || !imagingFactory) {
         return false;
     }
 
-    PIDLIST_ABSOLUTE absolutePidl = nullptr;
-    HRESULT result = SHGetIDListFromObject(shellItem, &absolutePidl);
-    if (FAILED(result) || !absolutePidl) {
+    winrt::com_ptr<IShellItemImageFactory> imageFactory;
+    HRESULT result =
+        shellItem->QueryInterface(IID_PPV_ARGS(imageFactory.put()));
+    if (FAILED(result) || !imageFactory) {
         return false;
     }
 
-    SHFILEINFOW shellFileInfo{};
-    if (!SHGetFileInfoW(
-            reinterpret_cast<PCWSTR>(absolutePidl), 0, &shellFileInfo,
-            sizeof(shellFileInfo),
-            SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_ADDOVERLAYS |
-                SHGFI_OVERLAYINDEX)) {
-        CoTaskMemFree(absolutePidl);
+    // SIIGBF_ICONONLY: an icon, never a thumbnail (matches what This PC
+    // shows for drives). SIIGBF_BIGGERSIZEOK: don't force the Shell's own
+    // GDI stretch blit when only a bigger cached image is on hand; the
+    // pixels are read back at their actual returned size below, and WinUI
+    // scales that down to the card's 48x48 slot itself.
+    SIZE requestedSize{kDriveIconTargetSize, kDriveIconTargetSize};
+    HBITMAP rawBitmap = nullptr;
+    result = imageFactory->GetImage(
+        requestedSize,
+        static_cast<SIIGBF>(SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK),
+        &rawBitmap);
+    if (FAILED(result) || !rawBitmap) {
         return false;
     }
-    CoTaskMemFree(absolutePidl);
+    UniqueBitmap bitmap{rawBitmap};
 
-    UINT combinedIndex = static_cast<UINT>(shellFileInfo.iIcon);
-    int imageIndex = static_cast<int>(combinedIndex & 0x00FFFFFF);
-    int overlayIndex = static_cast<int>((combinedIndex >> 24) & 0xFF);
-    UINT imageFlags = ILD_TRANSPARENT;
-    if (overlayIndex) {
-        imageFlags |= INDEXTOOVERLAYMASK(overlayIndex);
-    }
-
-    HICON rawIcon = nullptr;
-    result = systemImageList->GetIcon(imageIndex, imageFlags, &rawIcon);
-    if (FAILED(result) || !rawIcon) {
-        return false;
-    }
-    UniqueIcon icon{rawIcon};
-
+    // GetImage's returned HBITMAP carries straight (non-premultiplied)
+    // alpha, not premultiplied: telling WIC it was already premultiplied
+    // skipped the multiply step the format converter below would otherwise
+    // do, leaving edge pixels at full color intensity instead of fading
+    // toward transparent, which showed up as a dark fringe/halo around
+    // icons.
     winrt::com_ptr<IWICBitmap> source;
-    result = imagingFactory->CreateBitmapFromHICON(icon.get(), source.put());
+    result = imagingFactory->CreateBitmapFromHBITMAP(
+        bitmap.get(), nullptr, WICBitmapUseAlpha, source.put());
     if (FAILED(result)) {
         return false;
     }
@@ -791,8 +834,7 @@ void UpdateDriveSpaceInformation(DriveInfo& drive) {
         FormatByteSize(totalBytes.QuadPart);
 }
 
-DriveSnapshot EnumerateDrives(IImageList* systemImageList,
-                              IWICImagingFactory* imagingFactory) {
+DriveSnapshot EnumerateDrives(IWICImagingFactory* imagingFactory) {
     DriveSnapshot drives;
     auto shellDrives = EnumerateThisPcDevices();
     for (auto const& shellDrive : shellDrives) {
@@ -824,8 +866,7 @@ DriveSnapshot EnumerateDrives(IImageList* systemImageList,
                 drive.canAcceptDrop = (attributes & SFGAO_DROPTARGET) != 0;
             }
         }
-        PopulateDriveIcon(drive, shellItem.get(), systemImageList,
-                          imagingFactory);
+        PopulateDriveIcon(drive, shellItem.get(), imagingFactory);
         UpdateDriveSpaceInformation(drive);
 
         drives.push_back(std::move(drive));
@@ -921,29 +962,10 @@ void DriveRefreshWorkerProc() {
     uint64_t completedGeneration = 0;
 
     {
-        winrt::com_ptr<IImageList> systemImageList;
         winrt::com_ptr<IWICImagingFactory> imagingFactory;
-        bool imageListFailureLogged = false;
         bool imagingFailureLogged = false;
 
         auto ensureImageResources = [&] {
-            if (!systemImageList) {
-                // Jumbo (256x256), not extra-large (48x48): the card renders
-                // the icon at 48 effective pixels, so on a scaled display an
-                // extra-large source would be upscaled and look soft.
-                // PopulateDriveIcon's own width/height <= 256 bound already
-                // anticipates this size.
-                HRESULT result = SHGetImageList(
-                    SHIL_JUMBO,
-                    IID_PPV_ARGS(systemImageList.put()));
-                if (FAILED(result) && !imageListFailureLogged) {
-                    imageListFailureLogged = true;
-                    Wh_Log(L"Couldn't access the Shell drive image list: "
-                           L"%08X",
-                           result);
-                }
-            }
-
             if (!imagingFactory) {
                 HRESULT result = CoCreateInstance(
                     CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
@@ -970,8 +992,8 @@ void DriveRefreshWorkerProc() {
             }
 
             ensureImageResources();
-            return std::make_shared<const DriveSnapshot>(EnumerateDrives(
-                systemImageList.get(), imagingFactory.get()));
+            return std::make_shared<const DriveSnapshot>(
+                EnumerateDrives(imagingFactory.get()));
         };
 
         auto applySnapshot = [&](std::shared_ptr<const DriveSnapshot> snapshot,
@@ -1208,21 +1230,6 @@ GetNavigationControllerForCurrentThread() {
     return it->second;
 }
 
-void ReleaseNavigationControllers() {
-    std::unordered_map<DWORD, IFileExplorerNavigationControllerAbi*> controllers;
-    {
-        std::lock_guard lock(g_navigationControllersMutex);
-        controllers.swap(g_navigationControllersByThread);
-    }
-
-    for (auto const& [threadId, controller] : controllers) {
-        (void)threadId;
-        if (controller) {
-            controller->Release();
-        }
-    }
-}
-
 void ReleaseNavigationControllerForCurrentThread() {
     IFileExplorerNavigationControllerAbi* controller = nullptr;
     {
@@ -1282,6 +1289,22 @@ class CommandInvocationScope {
 
     ~CommandInvocationScope() {
         g_pendingCommandInvocations.fetch_sub(1);
+    }
+};
+
+// Same shape as CommandInvocationScope: IShellFolder::SetNameOf on a volume
+// needs elevation, so it can show a modal UAC/error dialog, and
+// ShellExecuteExW's fallback path can too. Both pump messages, so unload
+// waits this out instead of letting the mod be unmapped while the call is
+// still on the UI thread's stack.
+class ShellUiCallScope {
+   public:
+    ShellUiCallScope() {
+        g_pendingShellUiCalls.fetch_add(1);
+    }
+
+    ~ShellUiCallScope() {
+        g_pendingShellUiCalls.fetch_sub(1);
     }
 };
 
@@ -1353,6 +1376,7 @@ std::wstring GetDriveEditingName(std::wstring const& rootPath) {
 
 HRESULT RenameDriveWithShell(HWND owner, std::wstring const& rootPath,
                              std::wstring const& newName) {
+    ShellUiCallScope shellUiScope;
     PIDLIST_ABSOLUTE absolutePidl = nullptr;
     winrt::com_ptr<IShellFolder> parentFolder;
     PCUITEMID_CHILD childPidl = nullptr;
@@ -1400,6 +1424,12 @@ bool ShowDriveContextMenu(HWND owner,
     if (!owner || rootPaths.empty() || g_unloading.load()) {
         return false;
     }
+
+    // Covers the whole function, not just TrackPopupMenuEx/InvokeCommand
+    // (which additionally get their own narrower scopes below):
+    // GetUIObjectOf/QueryContextMenu run third-party shell extensions that
+    // can also pump before either of those points is reached.
+    ShellUiCallScope shellUiScope;
 
     std::vector<UniqueAbsolutePidl> absolutePidls;
     std::vector<PCUITEMID_CHILD> childPidls;
@@ -1514,6 +1544,12 @@ bool ShowDriveContextMenu(HWND owner,
     DestroyMenu(menu);
     if (commandToInvoke.empty()) {
         PostMessageW(owner, WM_NULL, 0, 0);
+    } else if (!command) {
+        // An explicitly requested verb that isn't in the menu was never
+        // invoked, so this isn't a success the caller should act on (e.g.
+        // InvokeFocusedDriveProperties falling through to normal Alt+Enter
+        // handling instead of reporting that Properties was shown).
+        return false;
     }
 
     if (command && !g_unloading.load()) {
@@ -1617,6 +1653,7 @@ POINT GetDriveKeyboardMenuPoint(muxc::GridViewItem const& item,
 }
 
 bool ExecuteShellParsingName(std::wstring const& parsingName) {
+    ShellUiCallScope shellUiScope;
     PIDLIST_ABSOLUTE absolutePidl = nullptr;
     HRESULT result = SHParseDisplayName(parsingName.c_str(), nullptr,
                                         &absolutePidl, 0, nullptr);
@@ -1649,7 +1686,7 @@ void OpenDriveCard(muxc::GridViewItem const& item) {
     try {
         auto rootPath = winrt::unbox_value<winrt::hstring>(item.Tag());
         winrt::com_ptr<IFileExplorerNavigationControllerAbi> controller;
-        for (auto const& state : g_driveCardEventStates) {
+        for (auto const& state : *g_driveCardEventStates) {
             if (state.item.get() == item && state.navigationController) {
                 controller.copy_from(state.navigationController);
                 break;
@@ -1685,7 +1722,7 @@ void OpenDriveCard(muxc::GridViewItem const& item) {
 
 DriveCardEventState* FindDriveCardState(
     muxc::GridViewItem const& item) {
-    for (auto& state : g_driveCardEventStates) {
+    for (auto& state : *g_driveCardEventStates) {
         if (state.item.get() == item) {
             return &state;
         }
@@ -1745,7 +1782,7 @@ void DriveSelectionCheckBox_Click(
     winrt::Windows::Foundation::IInspectable const& sender,
     mux::RoutedEventArgs const&) {
     auto checkBox = sender.as<muxc::CheckBox>();
-    for (auto& state : g_driveCardEventStates) {
+    for (auto& state : *g_driveCardEventStates) {
         if (state.selectionCheckBox != checkBox) {
             continue;
         }
@@ -1760,16 +1797,26 @@ void DriveSelectionCheckBox_Click(
 
 void UpdateDriveSelectionCheckBoxesForCurrentThread() {
     bool enabled = IsAutoCheckSelectEnabled();
-    for (auto& state : g_driveCardEventStates) {
+    for (auto& state : *g_driveCardEventStates) {
         state.selectionCheckBoxesEnabled = enabled;
         UpdateDriveSelectionCheckBox(state);
     }
 }
 
 DriveCardEventState* FindDriveRenameState(muxc::TextBox const& renameBox) {
-    for (auto& state : g_driveCardEventStates) {
+    for (auto& state : *g_driveCardEventStates) {
         if (state.renameBox == renameBox) {
             return &state;
+        }
+    }
+    return nullptr;
+}
+
+muxc::GridViewItem FindFocusedDriveCard() {
+    for (auto const& state : *g_driveCardEventStates) {
+        auto item = state.item.get();
+        if (item && item.FocusState() != mux::FocusState::Unfocused) {
+            return item;
         }
     }
     return nullptr;
@@ -1810,12 +1857,13 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
         }
     }
 
+    HWND owner = GetExplorerWindowForCurrentThread();
     bool renameSubmitted =
         commit && item && newName != originalName && !g_unloading.load();
     if (renameSubmitted) {
         auto rootPath = winrt::unbox_value<winrt::hstring>(item.Tag());
-        HRESULT result = RenameDriveWithShell(
-            GetExplorerWindowForCurrentThread(), rootPath.c_str(), newName);
+        HRESULT result =
+            RenameDriveWithShell(owner, rootPath.c_str(), newName);
         if (SUCCEEDED(result)) {
             RequestDriveRefresh();
         } else {
@@ -1824,19 +1872,26 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
         }
     }
 
-    state->renaming = false;
+    // Re-resolve rather than reuse the pointer from before the Shell call:
+    // RenameDriveWithShell can pump messages, and a reentrant path unrelated
+    // to the renaming-guarded grid refresh (e.g. unload tearing the list
+    // down) could have erased this node while it was in flight.
+    state = FindDriveRenameState(renameBox);
+    if (state) {
+        state->renaming = false;
+    }
 
     // A grid refresh arriving while this card was renaming was deferred (see
     // RefreshDevicesGridPreservingState) so it wouldn't destroy the editor.
     // Catch it up now that renaming is over, whether committed or cancelled.
-    if (HWND owner = GetExplorerWindowForCurrentThread()) {
+    if (owner) {
         PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
     }
 }
 
 void CompleteOtherDriveRenames(muxc::GridViewItem const& activeItem) {
     std::vector<muxc::TextBox> renameBoxes;
-    for (auto const& state : g_driveCardEventStates) {
+    for (auto const& state : *g_driveCardEventStates) {
         auto item = state.item.get();
         if (state.renaming && item && item != activeItem && state.renameBox) {
             renameBoxes.push_back(state.renameBox);
@@ -1849,7 +1904,7 @@ void CompleteOtherDriveRenames(muxc::GridViewItem const& activeItem) {
 }
 
 void FocusPendingDriveRenameForCurrentThread() {
-    for (auto& state : g_driveCardEventStates) {
+    for (auto& state : *g_driveCardEventStates) {
         if (!state.renameFocusPending) {
             continue;
         }
@@ -2031,19 +2086,13 @@ bool InvokeFocusedDriveProperties(HWND owner) {
     }
 
     try {
-        for (auto const& state : g_driveCardEventStates) {
-            auto item = state.item.get();
-            if (!item || item.FocusState() == mux::FocusState::Unfocused) {
-                continue;
-            }
-
+        if (auto item = FindFocusedDriveCard()) {
             SelectDriveCard(item);
             auto rootPaths = GetSelectedDriveRootPaths(item);
             POINT screenPoint = GetDriveKeyboardMenuPoint(item, owner);
             bool renameRequested = false;
-            ShowDriveContextMenu(owner, rootPaths, screenPoint,
-                                 &renameRequested, L"properties");
-            return true;
+            return ShowDriveContextMenu(owner, rootPaths, screenPoint,
+                                        &renameRequested, L"properties");
         }
     } catch (...) {
         Wh_Log(L"Couldn't invoke drive properties from Alt+Enter: %08X",
@@ -2478,23 +2527,23 @@ void ClearDriveCardEventHandlers(DriveCardEventState const& state) {
 }
 
 void ClearDriveCardEventHandlersForCurrentThread() {
-    for (auto const& state : g_driveCardEventStates) {
+    for (auto const& state : *g_driveCardEventStates) {
         ClearDriveCardEventHandlers(state);
     }
 
-    g_driveCardEventStates.clear();
+    g_driveCardEventStates->clear();
 }
 
 void PruneExpiredDriveCardEventHandlersForCurrentThread() {
-    for (auto it = g_driveCardEventStates.begin();
-         it != g_driveCardEventStates.end();) {
+    for (auto it = g_driveCardEventStates->begin();
+         it != g_driveCardEventStates->end();) {
         if (it->item.get()) {
             ++it;
             continue;
         }
 
         ClearDriveCardEventHandlers(*it);
-        it = g_driveCardEventStates.erase(it);
+        it = g_driveCardEventStates->erase(it);
     }
 }
 
@@ -2687,7 +2736,7 @@ muxc::GridViewItem CreateDriveCard(
     if (navigationController) {
         navigationController->AddRef();
     }
-    g_driveCardEventStates.push_back({
+    g_driveCardEventStates->push_back({
         winrt::make_weak(card),
         title,
         renameBox,
@@ -2712,7 +2761,7 @@ muxc::GridViewItem CreateDriveCard(
         selectionCheckBoxesEnabled,
         false,
     });
-    UpdateDriveSelectionCheckBox(g_driveCardEventStates.back());
+    UpdateDriveSelectionCheckBox(g_driveCardEventStates->back());
 
     return card;
 }
@@ -2750,7 +2799,7 @@ void PopulateDevicesGrid(muxc::GridView const& grid,
 }
 
 bool IsDriveCardRenamingInGrid(muxc::GridView const& grid) {
-    for (auto const& state : g_driveCardEventStates) {
+    for (auto const& state : *g_driveCardEventStates) {
         if (!state.renaming) {
             continue;
         }
@@ -2765,13 +2814,13 @@ bool IsDriveCardRenamingInGrid(muxc::GridView const& grid) {
 }
 
 void ClearDriveCardEventHandlersForGrid(muxc::GridView const& grid) {
-    for (auto it = g_driveCardEventStates.begin();
-         it != g_driveCardEventStates.end();) {
+    for (auto it = g_driveCardEventStates->begin();
+         it != g_driveCardEventStates->end();) {
         auto item = it->item.get();
         if (item &&
             muxc::ItemsControl::ItemsControlFromItemContainer(item) == grid) {
             ClearDriveCardEventHandlers(*it);
-            it = g_driveCardEventStates.erase(it);
+            it = g_driveCardEventStates->erase(it);
         } else {
             ++it;
         }
@@ -2888,7 +2937,7 @@ bool IsTrackedDriveSource(mux::DependencyObject source,
                           muxc::Grid const& surface) {
     while (source && source != surface) {
         if (auto item = source.try_as<muxc::GridViewItem>()) {
-            for (auto const& state : g_driveCardEventStates) {
+            for (auto const& state : *g_driveCardEventStates) {
                 if (state.item.get() == item) {
                     return true;
                 }
@@ -2914,7 +2963,7 @@ bool IsSourceWithinElement(mux::DependencyObject source,
 void CompleteDriveRenamesOutsideSource(mux::DependencyObject const& source,
                                        muxc::Grid const& surface) {
     std::vector<muxc::TextBox> renameBoxes;
-    for (auto const& state : g_driveCardEventStates) {
+    for (auto const& state : *g_driveCardEventStates) {
         if (state.renaming && state.renameBox &&
             !IsSourceWithinElement(source, state.renameBox, surface)) {
             renameBoxes.push_back(state.renameBox);
@@ -2969,7 +3018,7 @@ void UpdateDriveMarqueeSelection(
     float right = std::max(state.start.X, current.X);
     float bottom = std::max(state.start.Y, current.Y);
 
-    for (auto const& cardState : g_driveCardEventStates) {
+    for (auto const& cardState : *g_driveCardEventStates) {
         auto item = cardState.item.get();
         if (!item || item.Visibility() != mux::Visibility::Visible ||
             muxc::ItemsControl::ItemsControlFromItemContainer(item) != grid) {
@@ -3706,7 +3755,9 @@ bool HookWindowsUiFileExplorerIfLoaded(bool applyHooks) {
     if (!WindhawkUtils::HookSymbols(
             module, windowsUiFileExplorerHooks,
             ARRAYSIZE(windowsUiFileExplorerHooks))) {
-        g_navigationSymbolsHooked.store(false);
+        // Left true (not reset): this is a definitive resolution failure
+        // against the loaded module, not a "not loaded yet" case, so a later
+        // LoadLibraryExW of the same DLL would only repeat the same failure.
         Wh_Log(L"Failed to resolve Windows.UI.FileExplorer.dll symbols; "
                L"current-tab navigation is unavailable");
         return true;
@@ -3907,16 +3958,6 @@ bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
     return relevant;
 }
 
-bool HasFocusedDriveCard() {
-    for (auto const& state : g_driveCardEventStates) {
-        auto item = state.item.get();
-        if (item && item.FocusState() != mux::FocusState::Unfocused) {
-            return true;
-        }
-    }
-    return false;
-}
-
 LRESULT CALLBACK DriveKeyboardGetMessageHookProc(int code,
                                                   WPARAM wParam,
                                                   LPARAM lParam) {
@@ -3928,7 +3969,7 @@ LRESULT CALLBACK DriveKeyboardGetMessageHookProc(int code,
             message->wParam == VK_RETURN &&
             (message->lParam & kAltContextBit) &&
             !(message->lParam & kPreviousStateBit) &&
-            !(GetKeyState(VK_CONTROL) & 0x8000) && HasFocusedDriveCard()) {
+            !(GetKeyState(VK_CONTROL) & 0x8000) && FindFocusedDriveCard()) {
             HWND owner = GetExplorerWindowForCurrentThread();
             if (owner &&
                 PostMessageW(owner, GetInvokeDrivePropertiesMessage(), 0, 0)) {
@@ -4176,6 +4217,20 @@ void DismissOpenContextMenus() {
                    g_pendingCommandInvocations.load());
         }
     }
+
+    // Same reasoning for RenameDriveWithShell's SetNameOf (elevation can put
+    // up a UAC/error dialog) and the ExecuteShellParsingName fallback.
+    // CompleteDriveRename already checks !g_unloading before starting a
+    // rename, so no new one can start after this point; the wait is bounded
+    // by whichever single call was already in flight.
+    unsigned shellUiLogIterations = 0;
+    while (g_pendingShellUiCalls.load() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (++shellUiLogIterations % 25 == 0) {
+            Wh_Log(L"Waiting for %d drive Shell UI call(s) to finish",
+                   g_pendingShellUiCalls.load());
+        }
+    }
 }
 
 void WINAPI RemoveDevicesSectionsForCurrentThreadProc(void*) {
@@ -4268,9 +4323,9 @@ void Wh_ModUninit() {
         }
     }
 
-    // Fallback only: releases a navigation controller whose owning thread
-    // couldn't be reached above (e.g. its window is already gone). Every
-    // controller reachable through the loop was already released on its own
-    // thread by RemoveDevicesSectionsForCurrentThreadProc.
-    ReleaseNavigationControllers();
+    // A navigation controller whose owning thread couldn't be reached above
+    // (e.g. its window is already gone) is deliberately left alive rather
+    // than released here: per the thread-affine ownership wiki, if no UI
+    // thread can be found to release from, it's better to leak a COM ref
+    // than to release one from the wrong thread.
 }
