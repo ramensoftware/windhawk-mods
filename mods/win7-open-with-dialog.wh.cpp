@@ -10,7 +10,7 @@
 // @include         OpenWith.exe
 // @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -lversion -ladvapi32 -lcomctl32 -luxtheme -ldwmapi -luser32 -lgdi32 -luuid -lwinpthread
+// @compilerOptions -lole32 -lshell32 -lshlwapi -lversion -ladvapi32 -lcomctl32 -luxtheme -ldwmapi -luser32 -lgdi32 -luuid -lwinpthread
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,25 +18,27 @@
 # Windows 7 Open With Dialog Recreation
 
 This mod restores the classic Windows 7 **Open with** dialog on Windows 10 and
-11, replacing the modern picker with an accurate recreation of the original Windows 7 one while
+11, replacing (when the mod is active) the modern picker with an accurate recreation of the original Windows 7 one while
 keeping the original file and application paths untouched.
 
 The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**. The public API and
 classic context-menu paths are designed to fail safely on unsupported builds.
+## Screenshot 
+
+![openwith](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/openwith.PNG)
 
 ## Features
 
 - **Windows 7-style dialog**: Recreates the classic layout with recommended and
   other-program groups, Browse, Web search and the Always use checkbox.
-- **Unknown-file double click**: Intercepts the `DelegateExecute`/
-  `IExecuteCommand` path used when a file type has no valid association.
-- **Open with context menu**: Redirects the canonical `openas` command without a
-  hard-coded translation table; the localized caption is loaded from Windows.
-- **Properties → Change**: Supports association-only requests without opening
-  the selected file.
-- **Persistent defaults**: Tries `IAssocHandler::MakeDefault`, verifies the
-  Windows 10 `UserChoice` value and hash, and keeps a mod-local executable/
-  ProgID fallback when Windows rejects the system association.
+- **Open with context menu**: Redirects the canonical `openas` command through
+  the stable `CLSID_OpenWithMenu` context-menu contract.
+- **Unknown-file double click**: Hooks the real OpenWith.exe COM server methods
+  without substituting mod-owned COM objects.
+- **Properties → Change**: Recognizes association-only launcher requests and
+  selects a default without opening the file.
+- **Persistent defaults**: Uses `IAssocHandler::MakeDefault` and can open
+  Windows Default Apps if the protected system association rejects the change.
 - **Direct selected-program launch**: Uses the selected ProgID/class key or the
   selected executable directly, avoiding recursive re-entry into Open With.
 - **Browse application registration**: Programs selected through Browse are
@@ -53,8 +55,8 @@ classic context-menu paths are designed to fail safely on unsupported builds.
   transparent 32×32 BGRA Base64.
 - **DPI aware**: Scales the window and controls for the owner monitor.
 - **Defensive lifetime management**: Uses RAII for COM pointers, registry keys,
-  handles, windows, icons, image lists, fonts, BCrypt objects and temporary
-  registry renames, with exception containment around hook boundaries.
+  handles, windows, icons, image lists, fonts and worker-owned dialogs, with
+  exception containment around hook boundaries.
 
 ## Requirements
 
@@ -65,13 +67,9 @@ classic context-menu paths are designed to fail safely on unsupported builds.
 
 ## Note
 
-The experimental registry-route virtualization option is disabled by default.
-The normal implementation uses COM, Shell APIs and context-menu interception and
-does not require permanent spoofing of `DelegateExecute` values.
-
-When the user explicitly selects **Always use** or invokes **Properties →
-Change**, the mod is expected to persist an association. All other Open With
-selections open the file once without changing the default.
+When the user explicitly selects **Always use**, the mod attempts to persist an
+association. All other Open With selections open the file once without changing
+the default.
 
 ## Known limitations
 
@@ -83,23 +81,14 @@ selections open the file once without changing the default.
 - **Store/UWP handlers**: Some AppX handlers don't expose a filesystem
   executable. They rely on their registered ProgID and may fail open if the
   registration is incomplete.
-- **UserChoice protections**: Future Windows builds can change or lock the hash
-  format. If system persistence fails, the mod-local mapping still prevents a
-  repeated picker while the mod is enabled.
-- **Experimental virtualization**: Enable it only for diagnostics on builds
-  where the normal COM path can't be intercepted.
+- **Protected associations**: Windows can reject changes to a protected
+  association; use Windows Default Apps when that happens.
 
 ## Credits
 
 - **ReactOS** — Inspiration
 - **aubymori** - Inspiration
 - **Image supplied by the user** — document-and-magnifier dialog icon.
-
-The PS-SFTA-derived hash portion is used under the MIT License: permission is
-hereby granted, free of charge, to any person obtaining a copy to use, copy,
-modify, merge, publish, distribute, sublicense, and/or sell copies, subject to
-inclusion of the copyright and permission notice. The software is provided
-“AS IS”, without warranty of any kind.
 */
 // ==/WindhawkModReadme==
 
@@ -107,14 +96,11 @@ inclusion of the copyright and permission notice. The software is provided
 /*
 - replaceSystemDialog: true
   $name: Enable the Windows 7-style picker
-  $description: When enabled, replace Open With through the stable CLSID_OpenWithMenu context-menu contract, SHOpenWithDialog, the exact openas ShellExecute verb, or the known modern launcher path. When disabled, requests are passed to Windows.
-- darkMode: auto
-  $name: Window appearance theme
-  $description: Visual theme for the dialog window.
-  $options:
-    - auto: Follow Windows system theme
-    - light: Always light (classic Windows 7)
-    - dark: Always dark
+  $description: When enabled, replace Open With through the stable CLSID_OpenWithMenu context-menu contract, SHOpenWithDialog, the exact openas ShellExecute verb, or detours on the real OpenWith.exe server. When disabled, requests are passed to Windows.
+# NOTE: the "darkMode" appearance setting has been temporarily removed.
+# The dark-theme implementation is still in the source, kept commented
+# out so it can be restored later without digging through git history
+# (see the long note above the DarkModeActivation block).
 - showWebLink: true
   $name: Show the Web search link
   $description: Show the Windows 7-style Web link. Only the sanitized file extension is sent to the browser search.
@@ -122,7 +108,7 @@ inclusion of the copyright and permission notice. The software is provided
   $name: Always use checkbox behavior
   $description: The checkbox now uses IAssocHandler::MakeDefault. This setting controls only the fallback used when Windows rejects the association request.
   $options:
-    - disabled: Show an error only
+    - disabled: Don't open Settings on failure
     - openSettings: Open Windows Default Apps on failure
 - language: auto
   $name: Language
@@ -167,10 +153,9 @@ inclusion of the copyright and permission notice. The software is provided
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
-#include <exdisp.h>
-#include <shldisp.h>
 #include <objidl.h>
 #include <ocidl.h>
+#include <oleidl.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -178,12 +163,53 @@ inclusion of the copyright and permission notice. The software is provided
 #include <uxtheme.h>
 #include <dwmapi.h>
 
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1
-#define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
-#endif
+// -----------------------------------------------------------------------------
+// DARK THEME - TEMPORARILY DISABLED (SETTING REMOVED, CODE KEPT FOR FUTURE USE)
+// -----------------------------------------------------------------------------
+// The "darkMode" Windhawk setting has been removed for now, but the entire
+// dark-theme implementation is intentionally KEPT in this file, commented
+// out, instead of being deleted. Why?
+//
+// 1) Deleting it would be a waste of time. The feature is already written
+//    and working: throwing it away means that whoever re-adds it in the
+//    future has to re-write, re-understand and re-debug the same logic
+//    from scratch. Keeping it commented costs nothing and preserves all
+//    the decisions that went into it (colors, theming calls, control
+//    styles, checkbox/button handling).
+//
+// 2) Git history is not a substitute for the code itself. This project
+//    has many commits, and recovering the exact revision that contained
+//    the dark theme would mean digging through dozens of diffs and stale
+//    branches, then manually re-assembling the scattered pieces. Here the
+//    code stays in context, next to the very functions it belongs to, so
+//    restoring it is a matter of uncommenting blocks, not archaeology.
+//
+// 3) Commented code is still reviewable code. Anyone reading the source
+//    can see how the dark theme was implemented and can already suggest
+//    improvements (better contrast, cleaner owner-draw handling,
+//    different activation APIs) without having to hunt for an old commit
+//    first.
+//
+// Re-enabling the dark theme later requires:
+//   a) restoring the "darkMode" option in the ==WindhawkModSettings==
+//      block,
+//   b) uncommenting every block marked "DISABLED DARK THEME" below
+//      (the DWM defines, DarkModeActivation, ThemeMode/AppsUseDarkTheme,
+//      the dark branches in RefreshPickerThemeResources/ApplyPickerTheme,
+//      the EnsureAlwaysUseLabel/UpdateButtonHover helpers, the WM_DRAWITEM
+//      and hover handlers, and the WM_CTLCOLOR dark branches),
+//   c) restoring the original ResolveDarkMode() implementation (it
+//      currently returns false and keeps the dialog on the light theme at
+//      all times).
+//
+// Nothing was removed: every dark-mode line is preserved verbatim below.
+// -----------------------------------------------------------------------------
+// #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+// #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+// #endif
+// #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1
+// #define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
+// #endif
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -198,8 +224,69 @@ inclusion of the copyright and permission notice. The software is provided
 #include <type_traits>
 #include <utility>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
+
+// -----------------------------------------------------------------------------
+// Undocumented dark-mode activation APIs.
+//
+// SetWindowTheme(hwnd, L"DarkMode_Explorer", ...) alone only recolors a
+// handful of surfaces. Without also calling into these ordinal-only uxtheme
+// exports, comctl32 keeps drawing ListView group headers, selection
+// highlight, WS_EX_CLIENTEDGE borders and scrollbars using their light-theme
+// colors, which is why those pieces stay light/illegible even though the
+// rest of the dialog is dark.
+// -----------------------------------------------------------------------------
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+// namespace DarkModeActivation {
+// enum class AppMode { Default, AllowDark, ForceDark, ForceLight, Max };
+// using SetPreferredAppMode_t = AppMode(WINAPI*)(AppMode);
+// using FlushMenuThemes_t = void(WINAPI*)();
+// using AllowDarkModeForWindow_t = bool(WINAPI*)(HWND, bool);
+
+// static HMODULE g_hUxtheme = nullptr;
+// static SetPreferredAppMode_t pSetPreferredAppMode = nullptr;
+// static FlushMenuThemes_t pFlushMenuThemes = nullptr;
+// static AllowDarkModeForWindow_t pAllowDarkModeForWindow = nullptr;
+// static bool g_resolved = false;
+
+// static void Resolve() {
+//     if (g_resolved) return;
+//     g_resolved = true;
+//     g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr,
+//                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
+//     if (!g_hUxtheme) return;
+//     pSetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_t>(
+//         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135)));
+//     pFlushMenuThemes = reinterpret_cast<FlushMenuThemes_t>(
+//         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136)));
+//     pAllowDarkModeForWindow = reinterpret_cast<AllowDarkModeForWindow_t>(
+//         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(133)));
+// }
+
+// Recursively opts a window and every descendant into (or out of) dark
+// rendering, then asks it to re-pull its theme. Safe to call repeatedly;
+// harmless if the ordinals weren't resolved (e.g. older/locked-down builds).
+// static void Apply(HWND window, bool dark) {
+//     Resolve();
+//     if (!window) return;
+//     if (pSetPreferredAppMode)
+//         pSetPreferredAppMode(dark ? AppMode::AllowDark : AppMode::Default);
+//     if (pAllowDarkModeForWindow) {
+//         pAllowDarkModeForWindow(window, dark);
+//         for (HWND child = GetWindow(window, GW_CHILD); child;
+//              child = GetWindow(child, GW_HWNDNEXT)) {
+//             pAllowDarkModeForWindow(child, dark);
+//         }
+//     }
+//     SendMessageW(window, WM_THEMECHANGED, 0, 0);
+//     for (HWND child = GetWindow(window, GW_CHILD); child;
+//          child = GetWindow(child, GW_HWNDNEXT)) {
+//         SendMessageW(child, WM_THEMECHANGED, 0, 0);
+//     }
+//     if (pFlushMenuThemes) pFlushMenuThemes();
+// }
+// }  // namespace DarkModeActivation
 
 // -----------------------------------------------------------------------------
 // Move-only owners.
@@ -318,8 +405,8 @@ class BrushOwner {
     HBRUSH value_ = nullptr;
 };
 
-static std::atomic<long> g_activeComObjects{0};
 static std::atomic<HWND> g_activeBrowseHwnd{nullptr};
+static std::atomic<bool> g_shuttingDown{false};
 
 struct HandleDeleter {
     void operator()(HANDLE handle) const noexcept {
@@ -359,20 +446,6 @@ class RegKeyOwner {
 
    private:
     HKEY value_ = nullptr;
-};
-
-class BoolFlagGuard {
-   public:
-    explicit BoolFlagGuard(bool& flag) : flag_(flag), old_(flag) {
-        flag_ = true;
-    }
-    ~BoolFlagGuard() { flag_ = old_; }
-    BoolFlagGuard(const BoolFlagGuard&) = delete;
-    BoolFlagGuard& operator=(const BoolFlagGuard&) = delete;
-
-   private:
-    bool& flag_;
-    bool old_;
 };
 
 class WindowOwner {
@@ -529,11 +602,11 @@ static const LocalePack g_Locales[] = {
     }},
     {0x040C, {  // French
         L"Ouvrir avec",
-        L"Choisissez le programme à utiliser pour ouvrir ce fichier :",
-        L"Fichier :",
+        L"Choisissez le programme à utiliser pour ouvrir ce fichier :",
+        L"Fichier :",
         L"Programmes recommandés",
         L"Autres programmes",
-        L"Tapez une description que vous souhaitez utiliser pour ce type de fichier :",
+        L"Tapez une description que vous souhaitez utiliser pour ce type de fichier :",
         L"&Toujours utiliser le programme sélectionné pour ouvrir ce type de fichier",
         L"&Parcourir...",
         L"Si le programme souhaité ne figure pas dans la liste ou sur votre ordinateur, vous pouvez <A ID=\"WebSearch\">rechercher le programme approprié sur le Web</A>.",
@@ -1023,11 +1096,17 @@ enum class DefaultBehavior {
     OpenSettings,
 };
 
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+// enum class ThemeMode {
+//     Auto,
+//     Light,
+//     Dark,
+// };
+
 static std::atomic<bool> g_replaceSystemDialog{true};
 static std::atomic<bool> g_showWebLink{true};
-static std::atomic<bool> g_contextMenuTextRedirect{true};
-static std::atomic<bool> g_virtualizeLegacyOpenWithRegistry{false};
-static std::atomic<int> g_languageSetting{0};  // 0 = automatic
+// DISABLED DARK THEME: static std::atomic<ThemeMode> g_themeMode{ThemeMode::Auto};
 static std::atomic<DefaultBehavior> g_defaultBehavior{DefaultBehavior::Disabled};
 
 static const LocalePack* TryFindLocalePack(LANGID langId) {
@@ -1167,52 +1246,68 @@ static void DetermineLocale() {
            requested.c_str(), selected->langId, GetUserDefaultUILanguage(), GetSystemDefaultUILanguage());
 }
 
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+// static bool AppsUseDarkTheme() {
+//     DWORD appsUseLightTheme = 1;
+//     DWORD bytes = sizeof(appsUseLightTheme);
+//     const LSTATUS status = RegGetValueW(
+//         HKEY_CURRENT_USER,
+//         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+//         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr,
+//         &appsUseLightTheme, &bytes);
+//     return status == ERROR_SUCCESS && appsUseLightTheme == 0;
+// }
+
+// DISABLED DARK THEME - stub that keeps the dialog on the light theme.
+// The original implementation is preserved below, kept for future use.
+static bool ResolveDarkMode() {
+    return false;
+    // switch (g_themeMode.load(std::memory_order_acquire)) {
+    //     case ThemeMode::Dark:
+    //         return true;
+    //     case ThemeMode::Light:
+    //         return false;
+    //     case ThemeMode::Auto:
+    //     default:
+    //         return AppsUseDarkTheme();
+    // }
+}
+
 static void LoadSettings() {
     const bool replace = Wh_GetIntSetting(L"replaceSystemDialog") != 0;
     const bool web = Wh_GetIntSetting(L"showWebLink") != 0;
-    const bool contextMenuTextRedirect =
-        Wh_GetIntSetting(L"contextMenuTextRedirect") != 0;
-    const bool virtualizeLegacyOpenWithRegistry =
-        Wh_GetIntSetting(L"experimentalRegistryVirtualization") != 0;
+
     WindhawkUtils::StringSetting language =
         WindhawkUtils::StringSetting::make(L"language");
     {
         std::lock_guard<std::mutex> lock(g_languageMutex);
-        g_configuredLanguage = (language.get() && *language.get()) ? language.get() : L"auto";
+        g_configuredLanguage =
+            (language.get() && *language.get()) ? language.get() : L"auto";
     }
-    DetermineLocale();
+
+    // DISABLED DARK THEME - the "darkMode" option was removed from the
+    // settings; this block is kept commented for future use:
+    // WindhawkUtils::StringSetting darkMode =
+    //     WindhawkUtils::StringSetting::make(L"darkMode");
+    // ThemeMode theme = ThemeMode::Auto;
+    // if (darkMode.get() && !_wcsicmp(darkMode.get(), L"dark")) {
+    //     theme = ThemeMode::Dark;
+    // } else if (darkMode.get() && !_wcsicmp(darkMode.get(), L"light")) {
+    //     theme = ThemeMode::Light;
+    // }
+
     WindhawkUtils::StringSetting defaultBehavior =
         WindhawkUtils::StringSetting::make(L"defaultAssociationBehavior");
-
-    int languageIndex = 0;
-    PCWSTR languageValue = language.get();
-    if (languageValue) {
-        if (!_wcsicmp(languageValue, L"en")) languageIndex = 1;
-        else if (!_wcsicmp(languageValue, L"it")) languageIndex = 2;
-        else if (!_wcsicmp(languageValue, L"es")) languageIndex = 3;
-        else if (!_wcsicmp(languageValue, L"fr")) languageIndex = 4;
-        else if (!_wcsicmp(languageValue, L"pt") ||
-                 !_wcsicmp(languageValue, L"pt-BR")) languageIndex = 5;
-        else if (!_wcsicmp(languageValue, L"tr")) languageIndex = 6;
-        else if (!_wcsicmp(languageValue, L"ru")) languageIndex = 7;
-        else if (!_wcsicmp(languageValue, L"zh") ||
-                 !_wcsicmp(languageValue, L"zh-CN")) languageIndex = 8;
-        else if (!_wcsicmp(languageValue, L"nl")) languageIndex = 9;
-        else if (!_wcsicmp(languageValue, L"pl")) languageIndex = 10;
-    }
     const DefaultBehavior behavior =
         defaultBehavior.get() &&
         !_wcsicmp(defaultBehavior.get(), L"openSettings")
             ? DefaultBehavior::OpenSettings
             : DefaultBehavior::Disabled;
 
-    g_languageSetting.store(languageIndex, std::memory_order_release);
     g_defaultBehavior.store(behavior, std::memory_order_release);
+    // g_themeMode.store(theme, std::memory_order_release);  // DISABLED DARK THEME
     g_showWebLink.store(web, std::memory_order_release);
-    g_contextMenuTextRedirect.store(contextMenuTextRedirect,
-                                    std::memory_order_release);
-    g_virtualizeLegacyOpenWithRegistry.store(
-        virtualizeLegacyOpenWithRegistry, std::memory_order_release);
     g_replaceSystemDialog.store(replace, std::memory_order_release);
     DetermineLocale();
 }
@@ -1238,7 +1333,6 @@ struct PickerRequest {
     HANDLE completionEvent = nullptr;
     // Properties -> Change selects a default but must not execute the file.
     bool setDefaultOnly = false;
-    std::vector<std::wstring> paths; // All selected paths (multi-selection)
 };
 
 struct PickerState {
@@ -1247,12 +1341,17 @@ struct PickerState {
     ImageListOwner images;
     IconOwner headerIcon;
     FontOwner font;
-    BrushOwner darkBgBrush;
-    BrushOwner darkCardBrush;
+    // Dark background brushes (DISABLED DARK THEME - kept for future use):
+    // BrushOwner darkBgBrush;
+    // BrushOwner darkCardBrush;
     HWND window = nullptr;
     HWND list = nullptr;
     HWND description = nullptr;
     HWND alwaysUse = nullptr;
+    // Dark-mode checkbox label companion and owner-draw hover tracking
+    // (DISABLED DARK THEME - kept for future use):
+    // HWND alwaysUseLabel = nullptr;
+    // int hoverButton = 0;
     bool finished = false;
     bool accepted = false;
     bool makeDefaultRequested = false;
@@ -1260,8 +1359,8 @@ struct PickerState {
     bool openDefaultSettings = false;
     bool listUsesGroups = false;
     bool hasOtherGroup = false;
+    // Always false while the dark theme is disabled (see ResolveDarkMode).
     bool isDarkMode = false;
-    bool isExtensionless = false;
     int chosenIndex = -1;
 };
 
@@ -1909,6 +2008,7 @@ enum : int {
     IDC_SOW_ALWAYS_USE,
     IDC_SOW_BROWSE,
     IDC_SOW_WEB,
+    // IDC_SOW_ALWAYS_USE_LABEL,  // DISABLED DARK THEME (checkbox label companion)
 };
 
 enum : int { GROUP_RECOMMENDED = 1, GROUP_OTHER = 2 };
@@ -1961,6 +2061,137 @@ static HWND Child(HWND parent, DWORD exStyle, PCWSTR cls, PCWSTR text,
     return window;
 }
 
+// DISABLED DARK THEME - the checkbox label helper is kept commented
+// below, together with its forward declaration:
+// static void EnsureAlwaysUseLabel(PickerState& state);
+
+static void RefreshPickerThemeResources(PickerState& state) {
+    // ResolveDarkMode() always returns false while the dark theme is
+    // disabled (see its stub above); the dark brushes are kept commented
+    // for future use.
+    state.isDarkMode = ResolveDarkMode();
+    // if (state.isDarkMode) {
+    //     if (!state.darkBgBrush)
+    //         state.darkBgBrush.Reset(CreateSolidBrush(RGB(32, 32, 32)));
+    //     if (!state.darkCardBrush)
+    //         state.darkCardBrush.Reset(CreateSolidBrush(RGB(45, 45, 45)));
+    // } else {
+    //     state.darkBgBrush.Reset();
+    //     state.darkCardBrush.Reset();
+    // }
+}
+
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+// static void SetImmersiveDarkTitleBar(HWND window, bool enabled) {
+//     if (!window) return;
+//     BOOL useDark = enabled ? TRUE : FALSE;
+//     HRESULT hr = DwmSetWindowAttribute(
+//         window, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+//     if (FAILED(hr) &&
+//         DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 !=
+//             DWMWA_USE_IMMERSIVE_DARK_MODE) {
+//         DwmSetWindowAttribute(
+//             window, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1,
+//             &useDark, sizeof(useDark));
+//     }
+// }
+
+static void ApplyPickerTheme(PickerState& state) {
+    RefreshPickerThemeResources(state);
+
+    // DISABLED DARK THEME - the dark reconfiguration below is kept
+    // commented for future use (see the long note above):
+    // SetImmersiveDarkTitleBar(state.window, state.isDarkMode);
+    // DarkModeActivation::Apply(state.window, state.isDarkMode);
+    // (the activation call used to run before the per-control theme calls
+    // so comctl32 switched its group-header/selection/client-edge/scrollbar
+    // palettes to the dark variants)
+
+    if (state.list) {
+        // Dark variant (DISABLED DARK THEME - kept for future use):
+        // if (state.isDarkMode) {
+        //     SetWindowTheme(state.list, L"DarkMode_Explorer", nullptr);
+        //     ListView_SetBkColor(state.list, RGB(32, 32, 32));
+        //     ListView_SetTextBkColor(state.list, RGB(32, 32, 32));
+        //     ListView_SetTextColor(state.list, RGB(240, 240, 240));
+        // } else {
+        SetWindowTheme(state.list, L"Explorer", nullptr);
+        ListView_SetBkColor(state.list, RGB(255, 255, 255));
+        ListView_SetTextBkColor(state.list, RGB(255, 255, 255));
+        ListView_SetTextColor(state.list, RGB(0, 0, 0));
+        // }
+    }
+
+    // DISABLED DARK THEME - the dark-only parts below are kept commented
+    // for future use:
+    //   - the "Always use" checkbox label was emptied and moved to a
+    //     companion static (IDC_SOW_ALWAYS_USE_LABEL) so the checkbox glyph
+    //     could take the DarkMode_Explorer theme while the label text stayed
+    //     light through WM_CTLCOLORSTATIC (network flyout approach);
+    //   - the three buttons became BS_OWNERDRAW and were painted by
+    //     WM_DRAWITEM with the network flyout dark palette;
+    //   - the description edit dropped its WS_EX_CLIENTEDGE border.
+    // Original code:
+    // const bool dark = state.isDarkMode;
+    // if (state.alwaysUse) {
+    //     SetWindowTextW(state.alwaysUse, dark ? L"" : LOC(STR_ALWAYS_USE));
+    //     SetWindowTheme(state.alwaysUse,
+    //                    dark ? L"DarkMode_Explorer" : nullptr, nullptr);
+    // }
+    // if (dark) EnsureAlwaysUseLabel(state);
+    // if (state.alwaysUseLabel) {
+    //     SetWindowTextW(state.alwaysUseLabel, LOC(STR_ALWAYS_USE));
+    //     ShowWindow(state.alwaysUseLabel, dark ? SW_SHOW : SW_HIDE);
+    //     EnableWindow(state.alwaysUseLabel,
+    //                  state.alwaysUse ? IsWindowEnabled(state.alwaysUse)
+    //                                  : TRUE);
+    // }
+    // static const int kOwnerDrawButtons[] = {IDOK, IDCANCEL, IDC_SOW_BROWSE};
+    // for (const int id : kOwnerDrawButtons) {
+    //     HWND button = GetDlgItem(state.window, id);
+    //     if (!button) continue;
+    //     LONG_PTR style = GetWindowLongPtrW(button, GWL_STYLE);
+    //     if (dark) {
+    //         style |= BS_OWNERDRAW;
+    //         SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
+    //     } else {
+    //         style &= ~BS_OWNERDRAW;
+    //         SetWindowTheme(button, nullptr, nullptr);
+    //     }
+    //     SetWindowLongPtrW(button, GWL_STYLE, style);
+    //     SetWindowPos(button, nullptr, 0, 0, 0, 0,
+    //                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+    //                      SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    // }
+    // if (state.description) {
+    //     LONG_PTR exStyle = GetWindowLongPtrW(state.description, GWL_EXSTYLE);
+    //     if (dark)
+    //         exStyle &= ~WS_EX_CLIENTEDGE;
+    //     else
+    //         exStyle |= WS_EX_CLIENTEDGE;
+    //     SetWindowLongPtrW(state.description, GWL_EXSTYLE, exStyle);
+    //     SetWindowPos(state.description, nullptr, 0, 0, 0, 0,
+    //                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+    //                      SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    // }
+
+    for (HWND child = state.window ? GetWindow(state.window, GW_CHILD) : nullptr;
+         child; child = GetWindow(child, GW_HWNDNEXT)) {
+        // Dark mode gave every non-list child the DarkMode_Explorer theme,
+        // except the statics and the checkbox/label pair (DISABLED DARK
+        // THEME - kept for future use). Light mode leaves them unthemed.
+        if (child != state.list) {
+            SetWindowTheme(child, nullptr, nullptr);
+        }
+    }
+    if (state.window) {
+        RedrawWindow(state.window, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME |
+                         RDW_ALLCHILDREN);
+    }
+}
+
 static int SelectedIndex(PickerState& state) {
     const int item = state.list ? ListView_GetNextItem(state.list, -1, LVNI_SELECTED) : -1;
     if (item < 0) return -1;
@@ -1990,10 +2221,15 @@ static void UpdateSelectionUi(PickerState& state) {
     if (state.request.setDefaultOnly) {
         EnableWindow(state.alwaysUse, FALSE);
         Button_SetCheck(state.alwaysUse, BST_CHECKED);
+        // DISABLED DARK THEME - label companion enable sync:
+        // if (state.alwaysUseLabel)
+        //     EnableWindow(state.alwaysUseLabel, FALSE);
     } else {
         const bool enableAssociation =
             handlerCanBeDefault && hasAssociableExtension;
         EnableWindow(state.alwaysUse, enableAssociation);
+        // if (state.alwaysUseLabel)
+        //     EnableWindow(state.alwaysUseLabel, enableAssociation);
         if (!enableAssociation)
             Button_SetCheck(state.alwaysUse, BST_UNCHECKED);
     }
@@ -2054,14 +2290,7 @@ static int FindListItemForHandler(PickerState& state, size_t handlerIndex) {
 }
 
 static void InitializeList(PickerState& state) {
-    if (state.isDarkMode) {
-        SetWindowTheme(state.list, L"DarkMode_Explorer", nullptr);
-        ListView_SetBkColor(state.list, RGB(32, 32, 32));
-        ListView_SetTextBkColor(state.list, RGB(32, 32, 32));
-        ListView_SetTextColor(state.list, RGB(240, 240, 240));
-    } else {
-        SetWindowTheme(state.list, L"Explorer", nullptr);
-    }
+    ApplyPickerTheme(state);
     ListView_SetExtendedListViewStyle(state.list,
         LVS_EX_DOUBLEBUFFER | LVS_EX_FULLROWSELECT | LVS_EX_LABELTIP);
     ListView_SetView(state.list, LV_VIEW_TILE);
@@ -2096,6 +2325,88 @@ static void InitializeList(PickerState& state) {
     UpdateSelectionUi(state);
 }
 
+class BrowseDialogEvents final : public IFileDialogEvents {
+   public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (!IsEqualIID(iid, IID_IUnknown) &&
+            !IsEqualIID(iid, IID_IFileDialogEvents)) {
+            return E_NOINTERFACE;
+        }
+        *object = static_cast<IFileDialogEvents*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG value =
+            references_.fetch_sub(1, std::memory_order_acq_rel) - 1;
+        if (!value) delete this;
+        return value;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnFileOk(IFileDialog* dialog) override {
+        CaptureWindow(dialog);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnFolderChanging(IFileDialog* dialog,
+                                                IShellItem*) override {
+        CaptureWindow(dialog);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnFolderChange(IFileDialog* dialog) override {
+        CaptureWindow(dialog);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnSelectionChange(IFileDialog* dialog) override {
+        CaptureWindow(dialog);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnShareViolation(
+        IFileDialog* dialog, IShellItem*,
+        FDE_SHAREVIOLATION_RESPONSE* response) override {
+        CaptureWindow(dialog);
+        if (response) *response = FDESVR_DEFAULT;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnTypeChange(IFileDialog* dialog) override {
+        CaptureWindow(dialog);
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnOverwrite(
+        IFileDialog* dialog, IShellItem*,
+        FDE_OVERWRITE_RESPONSE* response) override {
+        CaptureWindow(dialog);
+        if (response) *response = FDEOR_DEFAULT;
+        return S_OK;
+    }
+
+   private:
+    void CaptureWindow(IFileDialog* dialog) {
+        if (!dialog) return;
+        ComPtr<IOleWindow> oleWindow;
+        if (FAILED(dialog->QueryInterface(
+                IID_IOleWindow,
+                reinterpret_cast<void**>(oleWindow.Put()))) ||
+            !oleWindow) {
+            return;
+        }
+        HWND window = nullptr;
+        if (SUCCEEDED(oleWindow->GetWindow(&window)) && window) {
+            g_activeBrowseHwnd.store(window, std::memory_order_release);
+            if (g_shuttingDown.load(std::memory_order_acquire))
+                PostMessageW(window, WM_CLOSE, 0, 0);
+        }
+    }
+
+    std::atomic<ULONG> references_{1};
+};
+
 static void Browse(PickerState& state) {
     ComPtr<IFileOpenDialog> dialog;
     if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
@@ -2110,10 +2421,27 @@ static void Browse(PickerState& state) {
     };
     dialog->SetFileTypes(ARRAYSIZE(filters), filters);
     dialog->SetTitle(LOC(STR_BROWSE_TITLE));
-    g_activeBrowseHwnd.store(state.window, std::memory_order_release);
+
+    BrowseDialogEvents* rawEvents = nullptr;
+    try {
+        rawEvents = new BrowseDialogEvents();
+    } catch (...) {
+        return;
+    }
+    ComPtr<IFileDialogEvents> events(rawEvents);
+    DWORD eventsCookie = 0;
+    const bool advised = SUCCEEDED(dialog->Advise(events.Get(), &eventsCookie));
+    if (g_shuttingDown.load(std::memory_order_acquire)) {
+        if (advised) dialog->Unadvise(eventsCookie);
+        return;
+    }
     const HRESULT showHr = dialog->Show(state.window);
+    if (advised) dialog->Unadvise(eventsCookie);
     g_activeBrowseHwnd.store(nullptr, std::memory_order_release);
-    if (FAILED(showHr)) return;
+    if (FAILED(showHr) ||
+        g_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
     ComPtr<IShellItem> item;
     if (FAILED(dialog->GetResult(item.Put())) || !item) return;
     PWSTR raw = nullptr;
@@ -2121,8 +2449,9 @@ static void Browse(PickerState& state) {
     const std::wstring executable = TakeTaskString(raw);
     if (executable.empty()) return;
     if (IsOpenWithExecutable(executable)) {
-        MessageBoxW(state.window, LOC(STR_OPEN_FAILED), LOC(STR_TITLE),
-                    MB_OK | MB_ICONWARNING);
+        SetWindowTextW(GetDlgItem(state.window, IDC_SOW_INSTRUCTION),
+                       LOC(STR_OPEN_FAILED));
+        MessageBeep(MB_ICONWARNING);
         return;
     }
     for (size_t i = 0; i < state.handlers.size(); ++i) {
@@ -2211,6 +2540,12 @@ static void ApplyLocalizedText(PickerState& state) {
                    LOC(STR_DESCRIPTION));
     SetWindowTextW(GetDlgItem(state.window, IDC_SOW_ALWAYS_USE),
                    LOC(STR_ALWAYS_USE));
+    // DISABLED DARK THEME - dark mode emptied the checkbox text and
+    // moved it to the companion static (kept for future use):
+    // SetWindowTextW(GetDlgItem(state.window, IDC_SOW_ALWAYS_USE),
+    //                state.isDarkMode ? L"" : LOC(STR_ALWAYS_USE));
+    // if (state.alwaysUseLabel && IsWindow(state.alwaysUseLabel))
+    //     SetWindowTextW(state.alwaysUseLabel, LOC(STR_ALWAYS_USE));
     SetWindowTextW(GetDlgItem(state.window, IDC_SOW_BROWSE), LOC(STR_BROWSE));
     HWND web = GetDlgItem(state.window, IDC_SOW_WEB);
     SetWindowTextW(web, LOC(STR_WEB_LINK));
@@ -2222,12 +2557,58 @@ static void ApplyLocalizedText(PickerState& state) {
     SetGroupTitle(state.list, GROUP_OTHER, LOC(STR_OTHER));
 }
 
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+// static void EnsureAlwaysUseLabel(PickerState& state) {
+//     if (state.alwaysUseLabel && IsWindow(state.alwaysUseLabel)) return;
+//     const UINT dpi = WindowDpi(state.window);
+//     HFONT font = state.font ? state.font.Get()
+//                             : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    // Dark-mode-only companion of the "Always use" checkbox: the
+    // checkbox itself keeps an empty label (network flyout trick) so its
+    // glyph can use the DarkMode_Explorer theme, while this static draws
+    // the label text through WM_CTLCOLORSTATIC, which does honor our
+    // light text color.
+//     state.alwaysUseLabel =
+//         Child(state.window, 0, WC_STATICW, LOC(STR_ALWAYS_USE),
+//               SS_LEFT | SS_NOTIFY | SS_CENTERIMAGE, 35, 354, 380, 22,
+//               IDC_SOW_ALWAYS_USE_LABEL, dpi, font);
+// }
+
+// static void UpdateButtonHover(PickerState& state, POINT screenPoint) {
+//     int target = 0;
+//     static const int kOwnerDrawButtons[] = {IDOK, IDCANCEL, IDC_SOW_BROWSE};
+//     for (const int id : kOwnerDrawButtons) {
+//         HWND button = GetDlgItem(state.window, id);
+//         if (!button) continue;
+//         RECT rect{};
+//         if (GetWindowRect(button, &rect) && PtInRect(&rect, screenPoint)) {
+//             target = id;
+//             break;
+//         }
+//     }
+//     if (target == state.hoverButton) return;
+//     HWND previous =
+//         state.hoverButton ? GetDlgItem(state.window, state.hoverButton) : nullptr;
+//     state.hoverButton = target;
+//     if (previous) InvalidateRect(previous, nullptr, FALSE);
+//     if (target) InvalidateRect(GetDlgItem(state.window, target), nullptr, FALSE);
+//     TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.window, 0};
+//     TrackMouseEvent(&tme);
+// }
+
 static void BuildPickerControls(PickerState& state) {
     const UINT dpi = WindowDpi(state.window);
     NONCLIENTMETRICSW metrics{sizeof(metrics)};
     if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
         state.font.Reset(CreateFontIndirectW(&metrics.lfMessageFont));
     HFONT font = state.font ? state.font.Get() : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+
+    // DISABLED DARK THEME - dark mode resolved its theme here before
+    // creating the controls so it could use owner-draw buttons and the
+    // checkbox label companion (kept for future use):
+    // state.isDarkMode = ResolveDarkMode();
+    // const bool dark = state.isDarkMode;
 
     HWND icon = Child(state.window, 0, WC_STATICW, L"", SS_ICON | SS_REALSIZECONTROL,
                       14, 14, 34, 34, IDC_SOW_ICON, dpi, font);
@@ -2247,12 +2628,25 @@ static void BuildPickerControls(PickerState& state) {
           14, 65, 532, 225, IDC_SOW_PROGRAMS, dpi, font);
     Child(state.window, 0, WC_STATICW, LOC(STR_DESCRIPTION), SS_LEFT,
           14, 300, 532, 18, IDC_SOW_DESCRIPTION_LABEL, dpi, font);
+    // DISABLED DARK THEME - dark mode dropped WS_EX_CLIENTEDGE here
+    // (kept for future use). Light mode keeps the classic client edge.
     state.description = Child(state.window, WS_EX_CLIENTEDGE, WC_EDITW, L"",
           WS_TABSTOP | ES_LEFT | ES_AUTOHSCROLL,
           14, 320, 520, 24, IDC_SOW_DESCRIPTION, dpi, font);
+    // DISABLED DARK THEME - dark mode created the checkbox with an
+    // empty label plus a companion static for the text (kept for
+    // future use):
+    // state.alwaysUse = Child(state.window, 0, WC_BUTTONW,
+    //       dark ? L"" : LOC(STR_ALWAYS_USE),
+    //       WS_TABSTOP | BS_AUTOCHECKBOX, 14, 354, 405, 22,
+    //       IDC_SOW_ALWAYS_USE, dpi, font);
+    // if (dark) EnsureAlwaysUseLabel(state);
     state.alwaysUse = Child(state.window, 0, WC_BUTTONW, LOC(STR_ALWAYS_USE),
           WS_TABSTOP | BS_AUTOCHECKBOX, 14, 354, 405, 22,
           IDC_SOW_ALWAYS_USE, dpi, font);
+    // DISABLED DARK THEME - dark mode made the buttons below owner-draw
+    // (BS_OWNERDRAW) and painted them in WM_DRAWITEM with the network
+    // flyout palette (kept for future use).
     Child(state.window, 0, WC_BUTTONW, LOC(STR_BROWSE),
           WS_TABSTOP | BS_PUSHBUTTON, 452, 350, 94, 27,
           IDC_SOW_BROWSE, dpi, font);
@@ -2310,17 +2704,202 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             if (!state) return -1;
             BuildPickerControls(*state);
             return 0;
-        case WM_CTLCOLORSTATIC:
-        case WM_CTLCOLORDLG:
-        case WM_CTLCOLORBTN: {
-            if (state && state->isDarkMode && state->darkBgBrush.Get()) {
-                HDC hdc = reinterpret_cast<HDC>(wParam);
-                SetBkMode(hdc, TRANSPARENT);
-                SetTextColor(hdc, RGB(240, 240, 240));
-                return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
-            }
+        case WM_ERASEBKGND: {
+            RECT client{};
+            GetClientRect(window, &client);
+            // DISABLED DARK THEME - dark mode filled the background with
+            // a RGB(32, 32, 32) brush (kept for future use):
+            // HBRUSH brush = state && state->isDarkMode && state->darkBgBrush
+            //                    ? state->darkBgBrush.Get()
+            //                    : GetSysColorBrush(COLOR_3DFACE);
+            HBRUSH brush = GetSysColorBrush(COLOR_3DFACE);
+            FillRect(reinterpret_cast<HDC>(wParam), &client, brush);
+            return 1;
+        }
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+//         case WM_DRAWITEM: {
+//             if (!state || !state->isDarkMode) break;
+//             auto item = reinterpret_cast<LPDRAWITEMSTRUCT>(lParam);
+//             if (!item) break;
+//             if (item->CtlID != IDOK && item->CtlID != IDCANCEL &&
+//                 item->CtlID != IDC_SOW_BROWSE) {
+//                 break;
+//             }
+            // Same dark button painting as the network flyout mod.
+//             const bool pressed = (item->itemState & ODS_SELECTED) != 0;
+//             const bool disabled = (item->itemState & ODS_DISABLED) != 0;
+//             const bool focused = (item->itemState & ODS_FOCUS) != 0;
+//             const bool hovering =
+//                 state->hoverButton == static_cast<int>(item->CtlID) &&
+//                 !pressed && !disabled;
+//             HDC hdcReal = item->hDC;
+//             RECT rc = item->rcItem;
+//             const int w = rc.right - rc.left;
+//             const int h = rc.bottom - rc.top;
+//             if (w <= 0 || h <= 0) break;
+//             WCHAR text[128];
+//             const int textLen =
+//                 GetWindowTextW(item->hwndItem, text, ARRAYSIZE(text));
+//             COLORREF bgColor = disabled   ? RGB(50, 50, 58)
+//                                : pressed  ? RGB(35, 35, 45)
+//                                : hovering ? RGB(70, 70, 85)
+//                                           : RGB(60, 60, 72);
+//             COLORREF lightColor =
+//                 pressed ? RGB(25, 25, 32)
+//                         : (hovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
+//             COLORREF darkColor =
+//                 pressed ? RGB(60, 60, 72)
+//                         : (hovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
+//             COLORREF textColor =
+//                 disabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
+//             COLORREF hoverBorder = hovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
+//             HDC hdcMem = CreateCompatibleDC(hdcReal);
+//             HBITMAP bitmapMem = CreateCompatibleBitmap(hdcReal, w, h);
+//             HBITMAP oldBitmapMem =
+//                 static_cast<HBITMAP>(SelectObject(hdcMem, bitmapMem));
+//             RECT rcLocal{0, 0, w, h};
+//             HBRUSH bgBrush = CreateSolidBrush(bgColor);
+//             FillRect(hdcMem, &rcLocal, bgBrush);
+//             DeleteObject(bgBrush);
+//             HPEN penLight = CreatePen(PS_SOLID, 1, lightColor);
+//             HPEN penDark = CreatePen(PS_SOLID, 1, darkColor);
+//             HPEN penHover =
+//                 hovering ? CreatePen(PS_SOLID, 1, hoverBorder) : nullptr;
+//             HPEN oldPen = static_cast<HPEN>(SelectObject(hdcMem, penLight));
+//             MoveToEx(hdcMem, 0, h - 1, nullptr);
+//             LineTo(hdcMem, 0, 0);
+//             LineTo(hdcMem, w - 1, 0);
+//             SelectObject(hdcMem, penDark);
+//             MoveToEx(hdcMem, w - 1, 0, nullptr);
+//             LineTo(hdcMem, w - 1, h - 1);
+//             LineTo(hdcMem, 0, h - 1);
+//             if (hovering && penHover) {
+//                 SelectObject(hdcMem, penHover);
+//                 MoveToEx(hdcMem, 1, 1, nullptr);
+//                 LineTo(hdcMem, w - 2, 1);
+//                 LineTo(hdcMem, w - 2, h - 2);
+//                 LineTo(hdcMem, 1, h - 2);
+//                 LineTo(hdcMem, 1, 1);
+//                 DeleteObject(penHover);
+//             }
+//             SelectObject(hdcMem, oldPen);
+//             DeleteObject(penLight);
+//             DeleteObject(penDark);
+//             if (focused) {
+//                 RECT rcFocus = rcLocal;
+//                 InflateRect(&rcFocus, -3, -3);
+//                 HGDIOBJ oldBrush =
+//                     SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+//                 SetTextColor(hdcMem, RGB(150, 150, 165));
+//                 DrawFocusRect(hdcMem, &rcFocus);
+//                 SelectObject(hdcMem, oldBrush);
+//             }
+//             SetBkMode(hdcMem, TRANSPARENT);
+//             SetTextColor(hdcMem, textColor);
+//             HFONT oldFont = static_cast<HFONT>(SelectObject(
+//                 hdcMem,
+//                 reinterpret_cast<HFONT>(SendMessageW(item->hwndItem, WM_GETFONT, 0, 0))));
+//             RECT rcText = rcLocal;
+//             if (pressed) {
+//                 rcText.left += 1;
+//                 rcText.top += 1;
+//             }
+//             DrawTextW(hdcMem, text, textLen, &rcText,
+//                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+//             SelectObject(hdcMem, oldFont);
+//             BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
+//             SelectObject(hdcMem, oldBitmapMem);
+//             DeleteObject(bitmapMem);
+//             DeleteDC(hdcMem);
+//             return TRUE;
+//         }
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+//         case WM_MOUSEMOVE: {
+//             if (!state || !state->isDarkMode) break;
+//             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+//             ClientToScreen(window, &pt);
+//             UpdateButtonHover(*state, pt);
+//             break;
+//         }
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+//         case WM_SETCURSOR: {
+            // Children that don't set their own cursor (the owner-draw
+            // buttons) bubble WM_SETCURSOR up to the dialog, so hover
+            // tracking keeps working while the pointer is over them.
+//             if (!state || !state->isDarkMode) break;
+//             POINT pt{};
+//             GetCursorPos(&pt);
+//             UpdateButtonHover(*state, pt);
+//             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+//             return TRUE;
+//         }
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+//         case WM_MOUSELEAVE: {
+//             if (!state || !state->isDarkMode) break;
+//             if (state->hoverButton != 0) {
+//                 HWND button = GetDlgItem(window, state->hoverButton);
+//                 state->hoverButton = 0;
+//                 if (button) InvalidateRect(button, nullptr, FALSE);
+//             }
+//             break;
+//         }
+        case WM_CTLCOLOREDIT:
+        case WM_CTLCOLORLISTBOX: {
+            // DISABLED DARK THEME - dark mode recolored the edit/listbox
+            // background to RGB(45, 45, 45) with light text (kept for
+            // future use):
+            // if (state && state->isDarkMode && state->darkCardBrush) {
+            //     HDC hdc = reinterpret_cast<HDC>(wParam);
+            //     SetBkMode(hdc, OPAQUE);
+            //     SetBkColor(hdc, RGB(45, 45, 45));
+            //     SetTextColor(hdc, RGB(240, 240, 240));
+            //     return reinterpret_cast<LRESULT>(state->darkCardBrush.Get());
+            // }
             break;
         }
+        case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLORDLG: {
+            // DISABLED DARK THEME - dark mode drew statics with light
+            // text RGB(240, 240, 240) (kept for future use):
+            // if (state && state->isDarkMode && state->darkBgBrush) {
+            //     HDC hdc = reinterpret_cast<HDC>(wParam);
+            //     HWND control = reinterpret_cast<HWND>(lParam);
+            //     SetBkMode(hdc, TRANSPARENT);
+            //     const bool disabled =
+            //         control && !IsWindowEnabled(control);
+            //     SetTextColor(hdc, disabled ? RGB(140, 140, 140)
+            //                                 : RGB(240, 240, 240));
+            //     return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+            // }
+            break;
+        }
+// DISABLED DARK THEME - kept commented for future use (see the long
+// note above the DarkModeActivation block).
+//         case WM_CTLCOLORBTN: {
+//             if (state && state->isDarkMode && state->darkBgBrush) {
+//                 HDC hdc = reinterpret_cast<HDC>(wParam);
+//                 HWND control = reinterpret_cast<HWND>(lParam);
+                // The themed DarkMode_Explorer checkbox glyph needs an
+                // opaque background matching the dialog (network flyout
+                // approach), otherwise it sits on a light patch.
+//                 if (control == state->alwaysUse) {
+//                     SetBkMode(hdc, OPAQUE);
+//                     SetBkColor(hdc, RGB(32, 32, 32));
+//                     return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+//                 }
+//                 SetBkMode(hdc, TRANSPARENT);
+//                 const bool disabled =
+//                     control && !IsWindowEnabled(control);
+//                 SetTextColor(hdc, disabled ? RGB(140, 140, 140)
+//                                             : RGB(240, 240, 240));
+//                 return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+//             }
+//             break;
+//         }
         case WM_COMMAND:
             if (!state) break;
             if (LOWORD(wParam) == IDOK) {
@@ -2328,9 +2907,12 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                 if (index >= 0 && static_cast<size_t>(index) < state->handlers.size()) {
                     state->chosenIndex = index;
                     state->accepted = true;
+                    const std::wstring extension =
+                        ExtensionOf(state->request.path);
                     state->makeDefaultRequested =
-                        !state->isExtensionless && (state->request.setDefaultOnly ||
-                        Button_GetCheck(state->alwaysUse) == BST_CHECKED);
+                        extension.size() > 1 && extension[0] == L'.' &&
+                        (state->request.setDefaultOnly ||
+                         Button_GetCheck(state->alwaysUse) == BST_CHECKED);
                     if (state->description) {
                         const int chars =
                             GetWindowTextLengthW(state->description);
@@ -2354,6 +2936,15 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             }
             if (LOWORD(wParam) == IDCANCEL) { DestroyWindow(window); return 0; }
             if (LOWORD(wParam) == IDC_SOW_BROWSE) { Browse(*state); return 0; }
+            // DISABLED DARK THEME - clicking the checkbox label static
+            // used to toggle the companion checkbox (kept for future use):
+            // if (LOWORD(wParam) == IDC_SOW_ALWAYS_USE_LABEL) {
+            //     const bool checked =
+            //         Button_GetCheck(state->alwaysUse) == BST_CHECKED;
+            //     Button_SetCheck(state->alwaysUse,
+            //                     checked ? BST_UNCHECKED : BST_CHECKED);
+            //     return 0;
+            // }
             break;
         case WM_NOTIFY: {
             if (!state) break;
@@ -2369,13 +2960,29 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                 WebSearch(state->request.path);
                 return 0;
             }
+            if (header && header->idFrom == IDC_SOW_WEB &&
+                header->code == NM_CUSTOMDRAW) {
+                auto customDraw = reinterpret_cast<NMCUSTOMDRAW*>(lParam);
+                if (customDraw->dwDrawStage == CDDS_PREPAINT) {
+                    // SysLink doesn't route through WM_CTLCOLORSTATIC, so its
+                    // plain (non-hyperlink) text keeps the default color and
+                    // must be set explicitly. DISABLED DARK THEME - dark mode
+                    // used RGB(240, 240, 240) here (kept for future use).
+                    SetTextColor(customDraw->hdc, RGB(0, 0, 0));
+                    return CDRF_DODEFAULT;
+                }
+                break;
+            }
             break;
         }
         case WM_SOW_ACTIVATE:
             ActivatePickerWindow(window);
             return 0;
         case WM_SOW_SETTINGS_CHANGED:
-            if (state) ApplyLocalizedText(*state);
+            if (state) {
+                ApplyPickerTheme(*state);
+                ApplyLocalizedText(*state);
+            }
             return 0;
         case WM_KEYDOWN: {
             if (wParam == VK_RETURN) {
@@ -2410,26 +3017,6 @@ static LRESULT CALLBACK PickerWndProc(HWND window, UINT message, WPARAM wParam, 
 // -----------------------------------------------------------------------------
 // Invocation and modeless worker-owned picker loop.
 // -----------------------------------------------------------------------------
-
-static std::wstring AssociationStorageName(const std::wstring& extension) {
-    std::wstring name = L"userAssociation.";
-    try {
-        for (wchar_t value : extension) {
-            if ((value >= L'a' && value <= L'z') ||
-                (value >= L'A' && value <= L'Z') ||
-                (value >= L'0' && value <= L'9')) {
-                name.push_back(static_cast<wchar_t>(towlower(value)));
-            } else {
-                wchar_t encoded[8] = {};
-                swprintf_s(encoded, L"_%04x", static_cast<unsigned>(value));
-                name.append(encoded);
-            }
-        }
-    } catch (...) {
-        return {};
-    }
-    return name;
-}
 
 static std::wstring ExecutableForProgId(const std::wstring& progId) {
     if (progId.empty()) return {};
@@ -2489,62 +3076,6 @@ static std::wstring ExecutableForHandler(const HandlerEntry& handler) {
         }
     }
     return {};
-}
-
-struct StoredModAssociation {
-    std::wstring executable;
-    std::wstring progId;
-};
-
-static bool StoreModAssociation(const std::wstring& extension,
-                                const std::wstring& executable,
-                                const std::wstring& progId) {
-    if (extension.size() <= 1 || extension[0] != L'.' ||
-        !IsSupportedFile(executable)) {
-        return false;
-    }
-    const std::wstring name = AssociationStorageName(extension);
-    if (name.empty()) return false;
-    std::wstring progIdName = name + L".progId";
-    const bool executableStored =
-        Wh_SetStringValue(name.c_str(), executable.c_str());
-    const bool progIdStored = progId.empty() ||
-        Wh_SetStringValue(progIdName.c_str(), progId.c_str());
-    const bool stored = executableStored && progIdStored;
-    Wh_Log(L"Standalone Open With: local association store extension=%s "
-           L"exe=%s progId=%s stored=%d", extension.c_str(),
-           executable.c_str(), progId.c_str(), stored);
-    return stored;
-}
-
-static StoredModAssociation LoadModAssociation(const std::wstring& path) {
-    StoredModAssociation result;
-    const std::wstring extension = ExtensionOf(path);
-    if (extension.size() <= 1) return result;
-    const std::wstring name = AssociationStorageName(extension);
-    if (name.empty()) return result;
-    try {
-        std::vector<wchar_t> buffer(32768);
-        const size_t chars = Wh_GetStringValue(name.c_str(), buffer.data(),
-                                               buffer.size());
-        if (!chars || chars >= buffer.size()) return result;
-        result.executable.assign(buffer.data(), chars);
-        if (!IsSupportedFile(result.executable)) {
-            Wh_SetStringValue(name.c_str(), L"");
-            result.executable.clear();
-            return result;
-        }
-
-        const std::wstring progIdName = name + L".progId";
-        std::fill(buffer.begin(), buffer.end(), L'\0');
-        const size_t progIdChars = Wh_GetStringValue(
-            progIdName.c_str(), buffer.data(), buffer.size());
-        if (progIdChars && progIdChars < buffer.size())
-            result.progId.assign(buffer.data(), progIdChars);
-        return result;
-    } catch (...) {
-        return {};
-    }
 }
 
 static std::wstring QuoteCommandLineArgument(const std::wstring& value) {
@@ -2671,56 +3202,34 @@ static HRESULT InvokeExecutableWithFile(const std::wstring& executable,
     return hr;
 }
 
-static HRESULT InvokeStoredAssociation(const StoredModAssociation& association,
-                                       const std::wstring& path) {
-    if (!association.progId.empty()) {
-        const std::wstring commandTemplate =
-            CommandTemplateForProgId(association.progId);
-        if (!commandTemplate.empty()) {
-            const HRESULT commandHr =
-                InvokeCommandTemplate(commandTemplate, path);
-            if (SUCCEEDED(commandHr)) return commandHr;
-            Wh_Log(L"Standalone Open With: ProgID command failed progId=%s "
-                   L"hr=0x%08X", association.progId.c_str(),
-                   static_cast<unsigned int>(commandHr));
-        }
-    }
-    return InvokeExecutableWithFile(association.executable, path);
-}
-
-static bool TryInvokeStoredAssociation(const std::wstring& path) {
-    const StoredModAssociation association = LoadModAssociation(path);
-    if (association.executable.empty()) return false;
-    const HRESULT hr = InvokeStoredAssociation(association, path);
-    Wh_Log(L"Standalone Open With: local association invoke extension=%s "
-           L"progId=%s exe=%s hr=0x%08X", ExtensionOf(path).c_str(),
-           association.progId.c_str(), association.executable.c_str(),
-           static_cast<unsigned int>(hr));
-    return SUCCEEDED(hr);
-}
-
-
-
 static HRESULT InvokeSelectedHandler(const PickerState& state,
                                      HandlerEntry& selected) {
     try {
-        StoredModAssociation association;
-        association.progId = selected.progId;
-        association.executable = ExecutableForHandler(selected);
-        if (IsOpenWithExecutable(association.executable) ||
-            IsOpenWithHandlerName(selected.internalName,
-                                  association.progId)) {
+        const std::wstring executable = ExecutableForHandler(selected);
+        if (IsOpenWithExecutable(executable) ||
+            IsOpenWithHandlerName(selected.internalName, selected.progId)) {
             return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
         }
 
         // Never pass a user-selected Win32 program back through generic Shell
         // association resolution: on an unknown type that can re-enter
         // OpenWith. Resolve and launch the command template directly instead.
-        const HRESULT directHr =
-            InvokeStoredAssociation(association, state.request.path);
+        HRESULT directHr = E_FAIL;
+        if (!selected.progId.empty()) {
+            const std::wstring commandTemplate =
+                CommandTemplateForProgId(selected.progId);
+            if (!commandTemplate.empty()) {
+                directHr = InvokeCommandTemplate(commandTemplate,
+                                                 state.request.path);
+            }
+        }
+        if (FAILED(directHr)) {
+            directHr = InvokeExecutableWithFile(executable,
+                                                state.request.path);
+        }
         Wh_Log(L"Standalone Open With: selected handler direct result "
                L"progId=%s exe=%s hr=0x%08X",
-               association.progId.c_str(), association.executable.c_str(),
+               selected.progId.c_str(), executable.c_str(),
                static_cast<unsigned int>(directHr));
         return directHr;
     } catch (...) {
@@ -2728,37 +3237,9 @@ static HRESULT InvokeSelectedHandler(const PickerState& state,
     }
 }
 
-static HRESULT InvokeExecutableWithFiles(const std::wstring& executable,
-                                       const std::vector<std::wstring>& files) {
-    if (executable.empty() || files.empty()) return E_INVALIDARG;
-    if (files.size() == 1) return InvokeExecutableWithFile(executable, files[0]);
-
-    std::wstring commandLine = L"\"" + executable + L"\"";
-    for (const auto& file : files) {
-        commandLine += L" \"" + file + L"\"";
-    }
-
-    STARTUPINFOW si{sizeof(si)};
-    PROCESS_INFORMATION pi{};
-    std::vector<wchar_t> cmdBuffer(commandLine.begin(), commandLine.end());
-    cmdBuffer.push_back(L'\0');
-
-    if (CreateProcessW(nullptr, cmdBuffer.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-        return S_OK;
-    }
-    // Fallback: invoke each file sequentially
-    for (const auto& file : files) {
-        InvokeExecutableWithFile(executable, file);
-    }
-    return S_OK;
-}
-
 static HRESULT InvokeBrowsed(const PickerState& state,
                              const std::wstring& executable) {
-    const auto& files = state.request.paths.empty() ? std::vector<std::wstring>{state.request.path} : state.request.paths;
-    return InvokeExecutableWithFiles(executable, files);
+    return InvokeExecutableWithFile(executable, state.request.path);
 }
 
 static HRESULT MakeSelectedDefault(PickerState& state,
@@ -2786,22 +3267,19 @@ static HRESULT MakeSelectedDefault(PickerState& state,
                static_cast<unsigned int>(shellHr));
     }
 
-    const std::wstring executable = ExecutableForHandler(selected);
-    const bool localStored = StoreModAssociation(
-        extension, executable, selected.progId);
-
-    Wh_Log(L"Standalone Open With: Safe association set extension=%s progId=%s shellHr=0x%08X localStored=%d",
+    Wh_Log(L"Standalone Open With: association result extension=%s "
+           L"progId=%s shellHr=0x%08X",
            extension.c_str(), selected.progId.c_str(),
-           static_cast<unsigned int>(shellHr), localStored);
+           static_cast<unsigned int>(shellHr));
 
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH, nullptr, nullptr);
-    return (SUCCEEDED(shellHr) || localStored) ? S_OK : E_FAIL;
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH,
+                   nullptr, nullptr);
+    return shellHr;
 }
 
 static WinHandle g_stopEvent;
 static WinHandle g_requestEvent;
 static WinHandle g_workerReadyEvent;
-static std::atomic<bool> g_shuttingDown{false};
 static std::atomic<bool> g_workerReady{false};
 static std::mutex g_requestMutex;
 static std::optional<PickerRequest> g_pendingRequest;
@@ -2819,7 +3297,7 @@ static bool RegisterPickerClass() {
     // picker state; the class itself owns no icon handle.
     wc.hIcon = nullptr;
     wc.hIconSm = nullptr;
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_3DFACE + 1);
+    wc.hbrBackground = nullptr;
     wc.lpszClassName = kWindowClass;
     return RegisterClassExW(&wc) != 0;
 }
@@ -2879,6 +3357,7 @@ static void ShowPicker(PickerRequest request) {
     if (g_shuttingDown.load(std::memory_order_acquire) || !IsSupportedFile(request.path)) return;
     PickerState state;
     state.request = std::move(request);
+    RefreshPickerThemeResources(state);
     EnumerateHandlers(state);
     HWND window = CreatePickerWindow(state);
     if (!window) return;
@@ -2932,8 +3411,11 @@ static void ShowPicker(PickerRequest request) {
         state.openDefaultSettings = true;
     }
     if (FAILED(defaultHr) || FAILED(invokeHr)) {
-        MessageBoxW(nullptr, LOC(STR_OPEN_FAILED), LOC(STR_TITLE),
-                    MB_OK | MB_ICONERROR);
+        Wh_Log(L"Standalone Open With: request failed default=0x%08X "
+               L"invoke=0x%08X",
+               static_cast<unsigned int>(defaultHr),
+               static_cast<unsigned int>(invokeHr));
+        MessageBeep(MB_ICONERROR);
     }
 
     if (state.openDefaultSettings) {
@@ -3030,17 +3512,17 @@ static bool QueuePicker(HWND owner, PCWSTR path,
     }
 
     if (HWND current = g_currentWindow.load(std::memory_order_acquire)) {
-        if (PostMessageW(current, WM_SOW_ACTIVATE, 0, 0)) return true;
+        PostMessageW(current, WM_SOW_ACTIVATE, 0, 0);
+        return false;
     }
 
     std::lock_guard<std::mutex> lock(g_requestMutex);
     if (g_pendingRequest) {
-        // Coalesce while the worker is between wake-up and window creation.
-        // Explorer returns immediately and the first request remains authoritative.
-        return true;
+        return false;
     }
     if (HWND current = g_currentWindow.load(std::memory_order_acquire)) {
-        if (PostMessageW(current, WM_SOW_ACTIVATE, 0, 0)) return true;
+        PostMessageW(current, WM_SOW_ACTIVATE, 0, 0);
+        return false;
     }
     try {
         g_pendingRequest.emplace(
@@ -3103,366 +3585,6 @@ static bool QueuePickerAndWait(HWND owner, PCWSTR path,
 }
 
 // -----------------------------------------------------------------------------
-// Last-resort classic HMENU redirect. This deliberately works at the visible
-// menu boundary, but it doesn't contain a translation table: the localized
-// Open With caption is loaded from Windows' current MUI resource.
-// -----------------------------------------------------------------------------
-
-// The Open-With context-menu COM handler and TrackPopupMenu run on the same
-// Explorer UI thread. The COM hook fills this before the visible menu is shown.
-static thread_local std::wstring g_lastOpenWithContextPath;
-
-static std::wstring NormalizeMenuCaption(PCWSTR text) {
-    std::wstring result;
-    if (!text) return result;
-    try {
-        for (PCWSTR cursor = text; *cursor && *cursor != L'\t'; ++cursor) {
-            wchar_t value = *cursor;
-            if (value == L'&' || value == L'.' || value == L'\u2026' ||
-                iswspace(value)) {
-                continue;
-            }
-            result.push_back(static_cast<wchar_t>(towlower(value)));
-        }
-    } catch (...) {
-        result.clear();
-    }
-    return result;
-}
-
-static void AddLocalizedCaption(std::vector<std::wstring>& captions,
-                                PCWSTR value) {
-    std::wstring normalized = NormalizeMenuCaption(value);
-    if (normalized.empty()) return;
-    if (std::find(captions.begin(), captions.end(), normalized) ==
-        captions.end()) {
-        captions.push_back(std::move(normalized));
-    }
-}
-
-static std::vector<std::wstring> LoadLocalizedOpenWithCaptions() {
-    std::vector<std::wstring> captions;
-    wchar_t registryValue[512] = {};
-    DWORD type = 0;
-    DWORD bytes = sizeof(registryValue);
-    if (RegGetValueW(HKEY_CLASSES_ROOT, L"Unknown\\shell\\openas", nullptr,
-                     RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, &type,
-                     registryValue, &bytes) == ERROR_SUCCESS) {
-        wchar_t resolved[512] = {};
-        if (registryValue[0] == L'@' &&
-            SUCCEEDED(SHLoadIndirectString(registryValue, resolved,
-                                           ARRAYSIZE(resolved), nullptr))) {
-            AddLocalizedCaption(captions, resolved);
-        } else {
-            AddLocalizedCaption(captions, registryValue);
-        }
-    }
-
-    // This is the resource referenced by the stock Unknown\\shell\\openas key.
-    // SHLoadIndirectString selects the installed Windows display language.
-    wchar_t resolved[512] = {};
-    if (SUCCEEDED(SHLoadIndirectString(
-            L"@%SystemRoot%\\System32\\shell32.dll,-5376", resolved,
-            ARRAYSIZE(resolved), nullptr))) {
-        AddLocalizedCaption(captions, resolved);
-    }
-
-    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-    wchar_t direct[512] = {};
-    if (shell32 && LoadStringW(shell32, 5376, direct, ARRAYSIZE(direct)))
-        AddLocalizedCaption(captions, direct);
-
-    for (const std::wstring& caption : captions)
-        Wh_Log(L"Standalone Open With: localized HMENU key='%s'",
-               caption.c_str());
-    return captions;
-}
-
-static bool CaptionMatchesOpenWith(
-    PCWSTR caption, const std::vector<std::wstring>& localizedCaptions) {
-    const std::wstring normalized = NormalizeMenuCaption(caption);
-    if (normalized.empty()) return false;
-    return std::find(localizedCaptions.begin(), localizedCaptions.end(),
-                     normalized) != localizedCaptions.end();
-}
-
-struct OpenWithMenuCommandScan {
-    bool foundLocalizedContainer = false;
-    std::unordered_set<UINT> commandIds;
-};
-
-static void AddLastActionableSubmenuCommand(
-    HMENU submenu, OpenWithMenuCommandScan& scan) {
-    if (!submenu) return;
-    const int count = GetMenuItemCount(submenu);
-    for (int position = count - 1; position >= 0; --position) {
-        MENUITEMINFOW item{sizeof(item)};
-        item.fMask = MIIM_ID | MIIM_FTYPE | MIIM_STATE | MIIM_SUBMENU;
-        if (!GetMenuItemInfoW(submenu, position, TRUE, &item)) continue;
-        if ((item.fType & MFT_SEPARATOR) ||
-            (item.fState & (MFS_DISABLED | MFS_GRAYED))) {
-            continue;
-        }
-        if (item.hSubMenu) {
-            AddLastActionableSubmenuCommand(item.hSubMenu, scan);
-            if (!scan.commandIds.empty()) return;
-            continue;
-        }
-        if (item.wID != static_cast<UINT>(-1) && item.wID != 0)
-            scan.commandIds.insert(item.wID);
-        return;
-    }
-}
-
-static void ScanMenuForOpenWith(
-    HMENU menu, const std::vector<std::wstring>& localizedCaptions,
-    OpenWithMenuCommandScan& scan) {
-    if (!menu) return;
-    const int count = GetMenuItemCount(menu);
-    for (int position = 0; position < count; ++position) {
-        MENUITEMINFOW query{sizeof(query)};
-        query.fMask = MIIM_ID | MIIM_FTYPE | MIIM_STATE | MIIM_SUBMENU |
-                      MIIM_STRING;
-        if (!GetMenuItemInfoW(menu, position, TRUE, &query)) continue;
-
-        std::wstring text;
-        if (query.cch) {
-            try {
-                text.resize(query.cch + 1);
-                query.dwTypeData = text.data();
-                query.cch = static_cast<UINT>(text.size());
-                if (GetMenuItemInfoW(menu, position, TRUE, &query))
-                    text.resize(wcslen(text.c_str()));
-                else
-                    text.clear();
-            } catch (...) {
-                text.clear();
-            }
-        }
-
-        if (!(query.fType & MFT_SEPARATOR) &&
-            CaptionMatchesOpenWith(text.c_str(), localizedCaptions)) {
-            scan.foundLocalizedContainer = true;
-            if (query.hSubMenu) {
-                // The language-independent choice inside an Open With submenu
-                // is its final actionable command (normally “Choose another
-                // app”). Rescan after TrackPopupMenu too, because Windows can
-                // populate this submenu lazily on WM_INITMENUPOPUP.
-                AddLastActionableSubmenuCommand(query.hSubMenu, scan);
-            } else if (query.wID != static_cast<UINT>(-1) && query.wID != 0) {
-                scan.commandIds.insert(query.wID);
-            }
-        }
-
-        if (query.hSubMenu)
-            ScanMenuForOpenWith(query.hSubMenu, localizedCaptions, scan);
-    }
-}
-
-static std::wstring SelectedFileFromExplorerAutomation(HWND menuOwner) {
-    ComPtr<IShellWindows> shellWindows;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
-                                IID_IShellWindows,
-                                reinterpret_cast<void**>(shellWindows.Put()))) ||
-        !shellWindows) {
-        return {};
-    }
-
-    HWND wantedRoot = menuOwner ? GetAncestor(menuOwner, GA_ROOT) : nullptr;
-    if (!wantedRoot) {
-        POINT cursor{};
-        if (GetCursorPos(&cursor))
-            wantedRoot = GetAncestor(WindowFromPoint(cursor), GA_ROOT);
-    }
-
-    long count = 0;
-    if (FAILED(shellWindows->get_Count(&count))) return {};
-    for (long index = 0; index < count; ++index) {
-        VARIANT itemIndex;
-        VariantInit(&itemIndex);
-        itemIndex.vt = VT_I4;
-        itemIndex.lVal = index;
-
-        ComPtr<IDispatch> dispatch;
-        if (FAILED(shellWindows->Item(itemIndex, dispatch.Put())) || !dispatch)
-            continue;
-        ComPtr<IWebBrowserApp> browser;
-        if (FAILED(dispatch->QueryInterface(
-                IID_IWebBrowserApp,
-                reinterpret_cast<void**>(browser.Put()))) || !browser) {
-            continue;
-        }
-
-        SHANDLE_PTR browserHandle = 0;
-        browser->get_HWND(&browserHandle);
-        HWND browserWindow = reinterpret_cast<HWND>(browserHandle);
-        if (wantedRoot && browserWindow != wantedRoot) continue;
-
-        ComPtr<IDispatch> document;
-        if (FAILED(browser->get_Document(document.Put())) || !document) continue;
-        ComPtr<IShellFolderViewDual> folderView;
-        if (FAILED(document->QueryInterface(
-                IID_IShellFolderViewDual,
-                reinterpret_cast<void**>(folderView.Put()))) || !folderView) {
-            continue;
-        }
-
-        ComPtr<FolderItems> selected;
-        if (FAILED(folderView->SelectedItems(selected.Put())) || !selected)
-            continue;
-        long selectedCount = 0;
-        if (FAILED(selected->get_Count(&selectedCount)) || selectedCount != 1)
-            continue;
-
-        VARIANT selectedIndex;
-        VariantInit(&selectedIndex);
-        selectedIndex.vt = VT_I4;
-        selectedIndex.lVal = 0;
-        ComPtr<FolderItem> selectedItem;
-        if (FAILED(selected->Item(selectedIndex, selectedItem.Put())) ||
-            !selectedItem) {
-            continue;
-        }
-
-        BSTR rawPath = nullptr;
-        if (SUCCEEDED(selectedItem->get_Path(&rawPath)) && rawPath) {
-            std::wstring path;
-            try {
-                path.assign(rawPath, SysStringLen(rawPath));
-            } catch (...) {
-            }
-            SysFreeString(rawPath);
-            if (IsSupportedFile(path)) return path;
-        } else if (rawPath) {
-            SysFreeString(rawPath);
-        }
-    }
-    return {};
-}
-
-using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
-using TrackPopupMenu_t = decltype(&TrackPopupMenu);
-static TrackPopupMenuEx_t TrackPopupMenuExOriginal = nullptr;
-static TrackPopupMenu_t TrackPopupMenuOriginal = nullptr;
-static thread_local bool g_insideTrackPopupHook = false;
-
-static BOOL FinishTrackedMenuCommand(UINT selectedCommand, UINT originalFlags,
-                                     HWND owner,
-                                     const std::wstring& selectedPath,
-                                     const OpenWithMenuCommandScan& scan) {
-    const bool selectedOpenWith =
-        selectedCommand &&
-        scan.commandIds.find(selectedCommand) != scan.commandIds.end();
-    if (selectedOpenWith && IsSupportedFile(selectedPath) &&
-        QueuePicker(owner, selectedPath.c_str())) {
-        Wh_Log(L"Standalone Open With: redirected visible HMENU command id=%u "
-               L"path=%s", selectedCommand, selectedPath.c_str());
-        g_lastOpenWithContextPath.clear();
-        // Tell a TPM_RETURNCMD caller that the menu was cancelled, so it doesn't
-        // invoke Windows' original command. For normal TrackPopupMenu callers,
-        // report that a command was handled.
-        return (originalFlags & TPM_RETURNCMD) ? 0 : TRUE;
-    }
-
-    if (originalFlags & TPM_RETURNCMD)
-        return static_cast<BOOL>(selectedCommand);
-    if (selectedCommand && owner)
-        SendMessageW(owner, WM_COMMAND, MAKEWPARAM(selectedCommand, 0), 0);
-    return selectedCommand ? TRUE : FALSE;
-}
-
-static BOOL WINAPI TrackPopupMenuExHook(HMENU menu, UINT flags, int x, int y,
-                                        HWND owner, LPTPMPARAMS parameters) {
-    if (!TrackPopupMenuExOriginal || g_insideTrackPopupHook ||
-        !g_contextMenuTextRedirect.load(std::memory_order_acquire)) {
-        return TrackPopupMenuExOriginal
-                   ? TrackPopupMenuExOriginal(menu, flags, x, y, owner,
-                                              parameters)
-                   : FALSE;
-    }
-
-    const std::vector<std::wstring> captions =
-        LoadLocalizedOpenWithCaptions();
-    OpenWithMenuCommandScan before;
-    ScanMenuForOpenWith(menu, captions, before);
-    if (!before.foundLocalizedContainer) {
-        return TrackPopupMenuExOriginal(menu, flags, x, y, owner, parameters);
-    }
-
-    HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const bool uninitialize = SUCCEEDED(com);
-    std::wstring selectedPath = SelectedFileFromExplorerAutomation(owner);
-    if (uninitialize) CoUninitialize();
-    if (!IsSupportedFile(selectedPath) &&
-        IsSupportedFile(g_lastOpenWithContextPath)) {
-        selectedPath = g_lastOpenWithContextPath;
-        Wh_Log(L"Standalone Open With: using path captured by "
-               L"IShellExtInit for localized HMENU");
-    }
-    if (!IsSupportedFile(selectedPath)) {
-        Wh_Log(L"Standalone Open With: localized HMENU found but no single "
-               L"Explorer file was resolved");
-        return TrackPopupMenuExOriginal(menu, flags, x, y, owner, parameters);
-    }
-
-    UINT command = 0;
-    {
-        BoolFlagGuard guard(g_insideTrackPopupHook);
-        command = static_cast<UINT>(TrackPopupMenuExOriginal(
-            menu, flags | TPM_RETURNCMD, x, y, owner, parameters));
-    }
-
-    OpenWithMenuCommandScan after = before;
-    ScanMenuForOpenWith(menu, captions, after);
-    return FinishTrackedMenuCommand(command, flags, owner, selectedPath, after);
-}
-
-static BOOL WINAPI TrackPopupMenuHook(HMENU menu, UINT flags, int x, int y,
-                                      int reserved, HWND owner,
-                                      const RECT* exclude) {
-    if (!TrackPopupMenuOriginal || g_insideTrackPopupHook ||
-        !g_contextMenuTextRedirect.load(std::memory_order_acquire)) {
-        return TrackPopupMenuOriginal
-                   ? TrackPopupMenuOriginal(menu, flags, x, y, reserved, owner,
-                                            exclude)
-                   : FALSE;
-    }
-
-    const std::vector<std::wstring> captions =
-        LoadLocalizedOpenWithCaptions();
-    OpenWithMenuCommandScan before;
-    ScanMenuForOpenWith(menu, captions, before);
-    if (!before.foundLocalizedContainer)
-        return TrackPopupMenuOriginal(menu, flags, x, y, reserved, owner,
-                                      exclude);
-
-    HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    const bool uninitialize = SUCCEEDED(com);
-    std::wstring selectedPath = SelectedFileFromExplorerAutomation(owner);
-    if (uninitialize) CoUninitialize();
-    if (!IsSupportedFile(selectedPath) &&
-        IsSupportedFile(g_lastOpenWithContextPath)) {
-        selectedPath = g_lastOpenWithContextPath;
-        Wh_Log(L"Standalone Open With: using path captured by "
-               L"IShellExtInit for localized HMENU");
-    }
-    if (!IsSupportedFile(selectedPath))
-        return TrackPopupMenuOriginal(menu, flags, x, y, reserved, owner,
-                                      exclude);
-
-    UINT command = 0;
-    {
-        BoolFlagGuard guard(g_insideTrackPopupHook);
-        command = static_cast<UINT>(TrackPopupMenuOriginal(
-            menu, flags | TPM_RETURNCMD, x, y, reserved, owner, exclude));
-    }
-
-    OpenWithMenuCommandScan after = before;
-    ScanMenuForOpenWith(menu, captions, after);
-    return FinishTrackedMenuCommand(command, flags, owner, selectedPath, after);
-}
-
-// -----------------------------------------------------------------------------
 // Stable Open-With context-menu boundary (ReactOS-inspired).
 // -----------------------------------------------------------------------------
 
@@ -3483,7 +3605,6 @@ struct OpenWithMenuState {
 
 static std::mutex g_openWithMenuStateMutex;
 static std::unordered_map<void*, OpenWithMenuState> g_openWithMenuStates;
-static std::atomic<bool> g_usePartialOpenWithMenuFactory{false};
 
 static void* ComIdentity(IUnknown* object) {
     if (!object) return nullptr;
@@ -3606,7 +3727,6 @@ static HRESULT STDMETHODCALLTYPE OpenWithMenuInitializeHook(
         if (identity) {
             std::lock_guard<std::mutex> lock(g_openWithMenuStateMutex);
             if (IsSupportedFile(path)) {
-                g_lastOpenWithContextPath = path;
                 if (g_openWithMenuStates.size() > 256)
                     g_openWithMenuStates.clear();
                 g_openWithMenuStates[identity] =
@@ -3711,7 +3831,6 @@ static HRESULT STDMETHODCALLTYPE OpenWithMenuInvokeCommandHook(
                static_cast<unsigned long long>(invokedOffset), openAsOffset);
         if (openAs && !path.empty() &&
             QueuePicker(info ? info->hwnd : nullptr, path.c_str())) {
-            g_lastOpenWithContextPath.clear();
             std::lock_guard<std::mutex> lock(g_openWithMenuStateMutex);
             g_openWithMenuStates.erase(identity);
             return S_OK;
@@ -3794,192 +3913,13 @@ static bool InstallOpenWithMenuMethodHooks() {
     return result;
 }
 
-// Minimal independent implementation used only if the system context-menu COM
-// object cannot be probed. It implements the stable public interfaces needed by
-// Explorer and inserts a single canonical "openas" command.
-class PartialOpenWithMenu final : public IContextMenu, public IShellExtInit {
-   public:
-    PartialOpenWithMenu() { g_activeComObjects.fetch_add(1, std::memory_order_relaxed); }
-    ~PartialOpenWithMenu() { g_activeComObjects.fetch_sub(1, std::memory_order_relaxed); }
-   public:
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
-                                             void** object) override {
-        if (!object) return E_POINTER;
-        *object = nullptr;
-        if (IsEqualIID(iid, IID_IUnknown) ||
-            IsEqualIID(iid, IID_IContextMenu)) {
-            *object = static_cast<IContextMenu*>(this);
-        } else if (IsEqualIID(iid, IID_IShellExtInit)) {
-            *object = static_cast<IShellExtInit*>(this);
-        } else {
-            return E_NOINTERFACE;
-        }
-        AddRef();
-        return S_OK;
-    }
-
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-
-    ULONG STDMETHODCALLTYPE Release() override {
-        const ULONG value =
-            references_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-        if (!value) delete this;
-        return value;
-    }
-
-    HRESULT STDMETHODCALLTYPE Initialize(PCIDLIST_ABSOLUTE,
-                                         IDataObject* dataObject,
-                                         HKEY) override {
-        try {
-            path_ = PathFromDataObject(dataObject);
-        } catch (...) {
-            path_.clear();
-        }
-        return IsSupportedFile(path_) ? S_OK : E_INVALIDARG;
-    }
-
-    HRESULT STDMETHODCALLTYPE QueryContextMenu(HMENU menu, UINT index,
-                                               UINT first, UINT, UINT flags) override {
-        if (!menu || path_.empty()) return E_FAIL;
-        if (flags & (CMF_DEFAULTONLY | CMF_NOVERBS))
-            return MAKE_HRESULT(SEVERITY_SUCCESS, 0, 0);
-
-        MENUITEMINFOW item{sizeof(item)};
-        item.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
-        item.wID = first;
-        item.fState = MFS_ENABLED;
-        item.dwTypeData = const_cast<PWSTR>(LOC(STR_TITLE));
-        if (!InsertMenuItemW(menu, index, TRUE, &item))
-            return HRESULT_FROM_WIN32(GetLastError());
-        return MAKE_HRESULT(SEVERITY_SUCCESS, 0, 1);
-    }
-
-    HRESULT STDMETHODCALLTYPE InvokeCommand(
-        LPCMINVOKECOMMANDINFO info) override {
-        if (!info || path_.empty()) return E_INVALIDARG;
-        const bool ours = IS_INTRESOURCE(info->lpVerb)
-                              ? LOWORD(reinterpret_cast<ULONG_PTR>(
-                                    info->lpVerb)) == 0
-                              : info->lpVerb &&
-                                    !_stricmp(info->lpVerb, "openas");
-        return ours && QueuePicker(info->hwnd, path_.c_str()) ? S_OK : E_FAIL;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetCommandString(UINT_PTR command, UINT type,
-                                               UINT*, LPSTR output,
-                                               UINT chars) override {
-        if (command != 0) return E_INVALIDARG;
-        if (type == GCS_VALIDATEA || type == GCS_VALIDATEW) return S_OK;
-        if (!output || !chars) return E_POINTER;
-        if (type == GCS_VERBW) {
-            lstrcpynW(reinterpret_cast<PWSTR>(output), L"openas", chars);
-            return S_OK;
-        }
-        if (type == GCS_VERBA) {
-            lstrcpynA(output, "openas", chars);
-            return S_OK;
-        }
-        if (type == GCS_HELPTEXTW) {
-            lstrcpynW(reinterpret_cast<PWSTR>(output), LOC(STR_INSTRUCTION),
-                      chars);
-            return S_OK;
-        }
-        if (type == GCS_HELPTEXTA) {
-            lstrcpynA(output, "Choose a program to open this file", chars);
-            return S_OK;
-        }
-        return E_NOTIMPL;
-    }
-
-   private:
-    std::atomic<ULONG> references_{1};
-    std::wstring path_;
-};
-
-class PartialOpenWithClassFactory final : public IClassFactory {
-   public:
-    PartialOpenWithClassFactory() { g_activeComObjects.fetch_add(1, std::memory_order_relaxed); }
-    ~PartialOpenWithClassFactory() { g_activeComObjects.fetch_sub(1, std::memory_order_relaxed); }
-   public:
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
-                                             void** object) override {
-        if (!object) return E_POINTER;
-        *object = nullptr;
-        if (!IsEqualIID(iid, IID_IUnknown) &&
-            !IsEqualIID(iid, IID_IClassFactory))
-            return E_NOINTERFACE;
-        *object = static_cast<IClassFactory*>(this);
-        AddRef();
-        return S_OK;
-    }
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-    ULONG STDMETHODCALLTYPE Release() override {
-        const ULONG value =
-            references_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-        if (!value) delete this;
-        return value;
-    }
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* outer, REFIID iid,
-                                             void** object) override {
-        if (outer) return CLASS_E_NOAGGREGATION;
-        if (!object) return E_POINTER;
-        *object = nullptr;
-        PartialOpenWithMenu* menu = nullptr;
-        try {
-            menu = new PartialOpenWithMenu();
-        } catch (...) {
-            return E_OUTOFMEMORY;
-        }
-        const HRESULT hr = menu->QueryInterface(iid, object);
-        menu->Release();
-        return hr;
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) override { return S_OK; }
-
-   private:
-    std::atomic<ULONG> references_{1};
-};
-
-using DllGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, REFIID, LPVOID*);
-static DllGetClassObject_t Shell32DllGetClassObjectOriginal = nullptr;
-
-static HRESULT WINAPI Shell32DllGetClassObjectHook(REFCLSID clsid,
-                                                    REFIID iid,
-                                                    LPVOID* object) {
-    try {
-        if (object &&
-            g_usePartialOpenWithMenuFactory.load(std::memory_order_acquire) &&
-            IsEqualCLSID(clsid, kClsidOpenWithMenu) &&
-            (IsEqualIID(iid, IID_IClassFactory) ||
-             IsEqualIID(iid, IID_IUnknown))) {
-            *object = nullptr;
-            PartialOpenWithClassFactory* factory = nullptr;
-            try {
-                factory = new PartialOpenWithClassFactory();
-            } catch (...) {
-                return E_OUTOFMEMORY;
-            }
-            const HRESULT hr = factory->QueryInterface(iid, object);
-            factory->Release();
-            Wh_Log(L"Standalone Open With: supplied partial "
-                   L"CLSID_OpenWithMenu class factory hr=0x%08X",
-                   static_cast<unsigned int>(hr));
-            return hr;
-        }
-    } catch (...) {
-    }
-    return Shell32DllGetClassObjectOriginal
-               ? Shell32DllGetClassObjectOriginal(clsid, iid, object)
-               : CLASS_E_CLASSNOTAVAILABLE;
-}
-
 // -----------------------------------------------------------------------------
-// Public API and modern COM activation hooks. Every non-exact or unsupported
-// request fails open.
+// OpenWith.exe COM-server method detours.
+//
+// Unknown-file double click and Properties -> Change arrive at the local COM
+// server without crossing an exported Shell function in Explorer. Hook the real
+// class factory and the real object's methods; never return a mod-owned COM
+// object, so no external reference can outlive the mod image.
 // -----------------------------------------------------------------------------
 
 static constexpr DWORD kImmersiveOpenWithDoNotExec = 0x00000004;
@@ -3993,8 +3933,6 @@ static bool ClassNameEquals(HWND window, PCWSTR expected) {
 
 static bool IsFilePropertiesOwner(HWND owner) {
     if (!owner) return false;
-    // A property sheet is a #32770 root containing SysTabControl32. Checking
-    // only #32770 would also classify unrelated Shell dialogs as Properties.
     HWND root = GetAncestor(owner, GA_ROOT);
     if (!root) root = owner;
     if (!ClassNameEquals(root, L"#32770")) return false;
@@ -4002,25 +3940,13 @@ static bool IsFilePropertiesOwner(HWND owner) {
 }
 
 static bool ShouldSetDefaultOnly(HWND owner, DWORD flags) {
-    wchar_t ownerClass[128] = L"(none)";
-    wchar_t rootClass[128] = L"(none)";
-    HWND root = owner ? GetAncestor(owner, GA_ROOT) : nullptr;
-    if (owner) GetClassNameW(owner, ownerClass, ARRAYSIZE(ownerClass));
-    if (root) GetClassNameW(root, rootClass, ARRAYSIZE(rootClass));
     const bool properties =
         (flags & kImmersiveOpenWithDoNotExec) && IsFilePropertiesOwner(owner);
-    Wh_Log(L"Standalone Open With: classify Launch flags=0x%08X "
-           L"ownerClass=%s rootClass=%s intent=%s",
-           flags, ownerClass, rootClass,
-           properties ? L"set-default" : L"open-file");
+    Wh_Log(L"Standalone Open With: launcher intent flags=0x%08X owner=%p "
+           L"setDefaultOnly=%d", flags, owner, properties);
     return properties;
 }
 
-// Windows 10/11 normally doesn't launch OpenWith.exe directly from Explorer.
-// Explorer activates CLSID_ExecuteUnknown; DCOM's svchost.exe then starts
-// "OpenWith.exe -Embedding", and the target path is passed later through this
-// private interface (not on the command line). Returning this small in-process
-// proxy prevents the DCOM server from being launched for supported requests.
 MIDL_INTERFACE("6A283FE2-ECFA-4599-91C4-E80957137B26")
 StandaloneOpenWithLauncher : public IUnknown {
    public:
@@ -4039,510 +3965,55 @@ static const IID kIidOpenWithLauncher = {
     0x4599,
     {0x91, 0xC4, 0xE8, 0x09, 0x57, 0x13, 0x7B, 0x26}};
 
-using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD,
-                                            REFIID, LPVOID*);
-static CoCreateInstance_t CoCreateInstanceOriginal = nullptr;
-
-class OpenWithLauncherProxy final : public StandaloneOpenWithLauncher {
-   public:
-    explicit OpenWithLauncherProxy(DWORD classContext)
-        : classContext_(classContext) {}
-
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
-                                             void** object) override {
-        if (!object) return E_POINTER;
-        *object = nullptr;
-        if (IsEqualIID(iid, IID_IUnknown) ||
-            IsEqualIID(iid, kIidOpenWithLauncher)) {
-            *object = static_cast<StandaloneOpenWithLauncher*>(this);
-            AddRef();
-            return S_OK;
-        }
-        return E_NOINTERFACE;
-    }
-
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-
-    ULONG STDMETHODCALLTYPE Release() override {
-        const ULONG value =
-            references_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-        if (!value) delete this;
-        return value;
-    }
-
-    HRESULT STDMETHODCALLTYPE Launch(HWND owner, PCWSTR path,
-                                     DWORD flags) override {
-        try {
-            Wh_Log(L"Standalone Open With: IOpenWithLauncher::Launch "
-                   L"owner=%p flags=0x%08X path=%s",
-                   owner, flags, path ? path : L"(null)");
-
-            // On Windows 10 21H2, bit 0x4 is observed both on association
-            // management and on some automatic unknown-file paths. Classify by
-            // the owning window instead of discarding every 0x4 request.
-            const bool setDefaultOnly = ShouldSetDefaultOnly(owner, flags);
-            if (!setDefaultOnly && path &&
-                TryInvokeStoredAssociation(path)) {
-                return S_OK;
-            }
-            if (QueuePicker(owner, path, setDefaultOnly)) return S_OK;
-            if (path && IsSupportedFile(path)) return E_FAIL;
-        } catch (...) {
-            Wh_Log(L"Standalone Open With: launcher proxy exception; "
-                   L"falling back to the system COM server");
-        }
-
-        // Preserve Windows behavior for disabled, unsupported or failed
-        // requests. Calling the trampoline avoids re-entering our hook.
-        if (!CoCreateInstanceOriginal) return E_FAIL;
-        ComPtr<StandaloneOpenWithLauncher> original;
-        const DWORD context = classContext_ ? classContext_ : static_cast<DWORD>(CLSCTX_LOCAL_SERVER);
-        HRESULT hr = CoCreateInstanceOriginal(
-            kClsidExecuteUnknown, nullptr, context, kIidOpenWithLauncher,
-            reinterpret_cast<void**>(original.Put()));
-        return SUCCEEDED(hr) && original
-                   ? original->Launch(owner, path, flags)
-                   : hr;
-    }
-
-   private:
-    std::atomic<ULONG> references_{1};
-    DWORD classContext_;
+struct ServerOpenWithState {
+    std::wstring selectionPath;
+    std::wstring parameterPath;
+    HWND owner = nullptr;
 };
 
-static HRESULT WINAPI CoCreateInstanceHook(
-    REFCLSID clsid, LPUNKNOWN outer, DWORD classContext, REFIID iid,
-    LPVOID* object) {
-    try {
-        if (!outer && object &&
-            g_usePartialOpenWithMenuFactory.load(std::memory_order_acquire) &&
-            IsEqualCLSID(clsid, kClsidOpenWithMenu) &&
-            (IsEqualIID(iid, IID_IUnknown) ||
-             IsEqualIID(iid, IID_IContextMenu) ||
-             IsEqualIID(iid, IID_IShellExtInit))) {
-            *object = nullptr;
-            PartialOpenWithMenu* menu = nullptr;
-            try {
-                menu = new PartialOpenWithMenu();
-            } catch (...) {
-                return E_OUTOFMEMORY;
-            }
-            const HRESULT hr = menu->QueryInterface(iid, object);
-            menu->Release();
-            if (SUCCEEDED(hr)) {
-                Wh_Log(L"Standalone Open With: supplied partial "
-                       L"CLSID_OpenWithMenu object through CoCreateInstance");
-                return hr;
-            }
-        }
-
-        if (!outer && object &&
-            g_replaceSystemDialog.load(std::memory_order_acquire) &&
-            IsEqualCLSID(clsid, kClsidExecuteUnknown) &&
-            (IsEqualIID(iid, IID_IUnknown) ||
-             IsEqualIID(iid, kIidOpenWithLauncher))) {
-            *object = nullptr;
-            OpenWithLauncherProxy* proxy = nullptr;
-            try {
-                proxy = new OpenWithLauncherProxy(classContext);
-            } catch (...) {
-                return E_OUTOFMEMORY;
-            }
-            const HRESULT hr = proxy->QueryInterface(iid, object);
-            proxy->Release();
-            if (SUCCEEDED(hr)) {
-                Wh_Log(L"Standalone Open With: intercepted "
-                       L"CLSID_ExecuteUnknown activation (iid=%s)",
-                       IsEqualIID(iid, IID_IUnknown)
-                           ? L"IUnknown"
-                           : L"IOpenWithLauncher");
-                return hr;
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: CoCreateInstance hook exception; "
-               L"falling back to original");
-    }
-
-    return CoCreateInstanceOriginal
-               ? CoCreateInstanceOriginal(clsid, outer, classContext, iid,
-                                          object)
-               : E_FAIL;
-}
-
-using CoCreateInstanceEx_t = HRESULT(WINAPI*)(
-    REFCLSID, IUnknown*, DWORD, COSERVERINFO*, DWORD, MULTI_QI*);
-static CoCreateInstanceEx_t CoCreateInstanceExOriginal = nullptr;
-
-static bool MultiQiSupportsPartialOpenWithMenu(DWORD count,
-                                                MULTI_QI* results) {
-    if (!count || !results) return false;
-    for (DWORD i = 0; i < count; ++i) {
-        if (!results[i].pIID ||
-            (!IsEqualIID(*results[i].pIID, IID_IUnknown) &&
-             !IsEqualIID(*results[i].pIID, IID_IContextMenu) &&
-             !IsEqualIID(*results[i].pIID, IID_IShellExtInit))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool MultiQiSupportsOpenWithLauncher(DWORD count,
-                                             MULTI_QI* results) {
-    if (!count || !results) return false;
-    for (DWORD i = 0; i < count; ++i) {
-        if (!results[i].pIID ||
-            (!IsEqualIID(*results[i].pIID, IID_IUnknown) &&
-             !IsEqualIID(*results[i].pIID, kIidOpenWithLauncher))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-template <typename Object>
-static HRESULT FillMultiQi(Object* object, DWORD count, MULTI_QI* results) {
-    if (!object || !count || !results) return E_INVALIDARG;
-    HRESULT overall = S_OK;
-    for (DWORD i = 0; i < count; ++i) {
-        results[i].pItf = nullptr;
-        results[i].hr = results[i].pIID
-                            ? object->QueryInterface(*results[i].pIID,
-                                                     reinterpret_cast<void**>(
-                                                         &results[i].pItf))
-                            : E_NOINTERFACE;
-        if (FAILED(results[i].hr)) overall = CO_S_NOTALLINTERFACES;
-    }
-    return overall;
-}
-
-static void LogRequestedMultiQi(PCWSTR label, DWORD count,
-                                MULTI_QI* results) {
-    if (!results) return;
-    for (DWORD i = 0; i < count; ++i) {
-        wchar_t iid[64] = L"(null)";
-        if (results[i].pIID)
-            StringFromGUID2(*results[i].pIID, iid, ARRAYSIZE(iid));
-        Wh_Log(L"Standalone Open With: %s CoCreateInstanceEx IID[%u]=%s",
-               label, i, iid);
-    }
-}
-
-static HRESULT WINAPI CoCreateInstanceExHook(
-    REFCLSID clsid, IUnknown* outer, DWORD classContext,
-    COSERVERINFO* serverInfo, DWORD count, MULTI_QI* results) {
-    try {
-        if (!outer && !serverInfo &&
-            g_usePartialOpenWithMenuFactory.load(std::memory_order_acquire) &&
-            IsEqualCLSID(clsid, kClsidOpenWithMenu)) {
-            LogRequestedMultiQi(L"CLSID_OpenWithMenu", count, results);
-            if (MultiQiSupportsPartialOpenWithMenu(count, results)) {
-                PartialOpenWithMenu* menu = nullptr;
-                try {
-                    menu = new PartialOpenWithMenu();
-                } catch (...) {
-                    return E_OUTOFMEMORY;
-                }
-                const HRESULT hr = FillMultiQi(menu, count, results);
-                menu->Release();
-                return hr;
-            }
-        }
-
-        if (!outer && !serverInfo &&
-            g_replaceSystemDialog.load(std::memory_order_acquire) &&
-            IsEqualCLSID(clsid, kClsidExecuteUnknown)) {
-            LogRequestedMultiQi(L"CLSID_ExecuteUnknown", count, results);
-            if (MultiQiSupportsOpenWithLauncher(count, results)) {
-                OpenWithLauncherProxy* launcher = nullptr;
-                try {
-                    launcher = new OpenWithLauncherProxy(classContext);
-                } catch (...) {
-                    return E_OUTOFMEMORY;
-                }
-                const HRESULT hr = FillMultiQi(launcher, count, results);
-                launcher->Release();
-                Wh_Log(L"Standalone Open With: intercepted "
-                       L"CLSID_ExecuteUnknown through CoCreateInstanceEx");
-                return hr;
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: CoCreateInstanceEx hook exception; "
-               L"falling back to original");
-    }
-
-    return CoCreateInstanceExOriginal
-               ? CoCreateInstanceExOriginal(clsid, outer, classContext,
-                                            serverInfo, count, results)
-               : E_FAIL;
-}
-
-// -----------------------------------------------------------------------------
-// OpenWith.exe-side COM server interception.
-//
-// Automatic unknown-file activation can bypass every exported Shell function
-// in Explorer. The invariant boundary is the local COM server itself:
-// OpenWith.exe registers CLSID_ExecuteUnknown with CoRegisterClassObject, its
-// class factory creates IOpenWithLauncher, and Launch receives the real path.
-// Discover and hook both vtable targets at runtime, without symbols/offsets.
-// -----------------------------------------------------------------------------
+static std::mutex g_serverHookMutex;
+static std::mutex g_serverStateMutex;
+static std::unordered_map<void*, ServerOpenWithState> g_serverStates;
+static bool g_serverFactoryHookInstalled = false;
 
 using CoRegisterClassObject_t = HRESULT(WINAPI*)(
     REFCLSID, IUnknown*, DWORD, DWORD, LPDWORD);
 using ServerFactoryCreateInstance_t = HRESULT(STDMETHODCALLTYPE*)(
     IClassFactory*, IUnknown*, REFIID, void**);
+using ServerLauncherLaunch_t = HRESULT(STDMETHODCALLTYPE*)(
+    StandaloneOpenWithLauncher*, HWND, PCWSTR, DWORD);
+using ServerExecute_t = HRESULT(STDMETHODCALLTYPE*)(IExecuteCommand*);
+using ServerSetParameters_t = HRESULT(STDMETHODCALLTYPE*)(
+    IExecuteCommand*, PCWSTR);
+using ServerSetSelection_t = HRESULT(STDMETHODCALLTYPE*)(
+    IObjectWithSelection*, IShellItemArray*);
+using ServerSetSite_t = HRESULT(STDMETHODCALLTYPE*)(IObjectWithSite*, IUnknown*);
+
 static CoRegisterClassObject_t CoRegisterClassObjectOriginal = nullptr;
 static ServerFactoryCreateInstance_t ServerFactoryCreateInstanceOriginal =
     nullptr;
-static std::mutex g_serverHookMutex;
-static bool g_serverFactoryHookInstalled = false;
+static ServerLauncherLaunch_t ServerLauncherLaunchOriginal = nullptr;
+static ServerExecute_t ServerExecuteOriginal = nullptr;
+static ServerSetParameters_t ServerSetParametersOriginal = nullptr;
+static ServerSetSelection_t ServerSetSelectionOriginal = nullptr;
+static ServerSetSite_t ServerSetSiteOriginal = nullptr;
 
-// Replacement COM object returned by OpenWith.exe's real class factory hook.
-// Unlike detouring the original Launch implementation, this also catches RPC
-// dispatch paths which obtain IID_IUnknown first and only QI the launcher after
-// the class-factory call has returned.
-static std::atomic<unsigned int> g_unsupportedReplacementQiLogs{0};
+static std::wstring PathFromShellItemArray(IShellItemArray* selection) {
+    if (!selection) return {};
+    DWORD count = 0;
+    if (FAILED(selection->GetCount(&count)) || count != 1) return {};
+    ComPtr<IShellItem> item;
+    if (FAILED(selection->GetItemAt(0, item.Put())) || !item) return {};
+    PWSTR raw = nullptr;
+    if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &raw)) || !raw)
+        return {};
+    return TakeTaskString(raw);
+}
 
-class ServerOpenWithLauncherReplacement final
-    : public StandaloneOpenWithLauncher,
-      public IExecuteCommand,
-      public IObjectWithSelection,
-      public IObjectWithSite,
-      public IInitializeCommand {
-   public:
-    explicit ServerOpenWithLauncherReplacement(IClassFactory* originalFactory)
-        : originalFactory_(originalFactory) {
-        if (originalFactory_) {
-            originalFactory_->AddRef();
-            // Keep OpenWith.exe's normal server lifetime accounting balanced
-            // while our replacement object is exposed through COM.
-            originalFactory_->LockServer(TRUE);
-        }
-    }
-
-    ~ServerOpenWithLauncherReplacement() {
-        if (originalFactory_) {
-            originalFactory_->LockServer(FALSE);
-            originalFactory_->Release();
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
-                                             void** object) override {
-        try {
-            if (!object) return E_POINTER;
-            *object = nullptr;
-            if (IsEqualIID(iid, IID_IUnknown) ||
-                IsEqualIID(iid, kIidOpenWithLauncher)) {
-                *object = static_cast<StandaloneOpenWithLauncher*>(this);
-            } else if (IsEqualIID(iid, IID_IExecuteCommand)) {
-                *object = static_cast<IExecuteCommand*>(this);
-            } else if (IsEqualIID(iid, IID_IObjectWithSelection)) {
-                *object = static_cast<IObjectWithSelection*>(this);
-            } else if (IsEqualIID(iid, IID_IObjectWithSite)) {
-                *object = static_cast<IObjectWithSite*>(this);
-            } else if (IsEqualIID(iid, IID_IInitializeCommand)) {
-                *object = static_cast<IInitializeCommand*>(this);
-            } else {
-                const unsigned int logIndex =
-                    g_unsupportedReplacementQiLogs.fetch_add(
-                        1, std::memory_order_relaxed);
-                if (logIndex < 12) {
-                    wchar_t iidText[64] = {};
-                    StringFromGUID2(iid, iidText, ARRAYSIZE(iidText));
-                    Wh_Log(L"Standalone Open With: replacement QI unsupported "
-                           L"iid=%s", iidText);
-                } else if (logIndex == 12) {
-                    Wh_Log(L"Standalone Open With: further unsupported QI "
-                           L"diagnostics suppressed");
-                }
-                return E_NOINTERFACE;
-            }
-            AddRef();
-            return S_OK;
-        } catch (...) {
-            return E_FAIL;
-        }
-    }
-
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
-    }
-
-    ULONG STDMETHODCALLTYPE Release() override {
-        const ULONG value =
-            references_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-        if (!value) delete this;
-        return value;
-    }
-
-    // IOpenWithLauncher: used by Properties/Change and some direct callers.
-    HRESULT STDMETHODCALLTYPE Launch(HWND owner, PCWSTR path,
-                                     DWORD flags) override {
-        try {
-            Wh_Log(L"Standalone Open With: replacement COM Launch "
-                   L"flags=0x%08X path=%s", flags,
-                   path ? path : L"(null)");
-            if (path &&
-                g_replaceSystemDialog.load(std::memory_order_acquire)) {
-                std::wstring copy;
-                try {
-                    copy.assign(path);
-                } catch (...) {
-                    return E_OUTOFMEMORY;
-                }
-                const bool setDefaultOnly =
-                    ShouldSetDefaultOnly(owner, flags);
-                if (!setDefaultOnly &&
-                    TryInvokeStoredAssociation(copy)) {
-                    return S_OK;
-                }
-                if (IsSupportedFile(copy)) {
-                    if (QueuePickerAndWait(owner, copy.c_str(),
-                                           setDefaultOnly)) {
-                        return S_OK;
-                    }
-                    // A valid file handled by this replacement must never fall
-                    // through to the modern picker merely because the worker
-                    // was busy or shutting down.
-                    return HRESULT_FROM_WIN32(ERROR_CANCELLED);
-                }
-            }
-        } catch (...) {
-            Wh_Log(L"Standalone Open With: replacement COM Launch exception");
-        }
-        return LaunchOriginal(owner, path, flags);
-    }
-
-    // IExecuteCommand: used by the Unknown/DelegateExecute double-click path.
-    HRESULT STDMETHODCALLTYPE SetKeyState(DWORD keyState) override {
-        keyState_ = keyState;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE SetParameters(PCWSTR parameters) override {
-        try {
-            parameters_ = parameters ? parameters : L"";
-            return S_OK;
-        } catch (...) {
-            return E_OUTOFMEMORY;
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE SetPosition(POINT position) override {
-        position_ = position;
-        hasPosition_ = true;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE SetShowWindow(int show) override {
-        show_ = show;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE SetNoShowUI(BOOL noShowUi) override {
-        noShowUi_ = noShowUi;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE SetDirectory(PCWSTR directory) override {
-        try {
-            directory_ = directory ? directory : L"";
-            return S_OK;
-        } catch (...) {
-            return E_OUTOFMEMORY;
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE Execute() override {
-        try {
-            const std::wstring path = SelectedPath();
-            const HWND owner = SiteWindow();
-            Wh_Log(L"Standalone Open With: replacement IExecuteCommand::Execute "
-                   L"path=%s owner=%p", path.empty() ? L"(empty)" : path.c_str(),
-                   owner);
-            if (IsSupportedFile(path) &&
-                g_replaceSystemDialog.load(std::memory_order_acquire)) {
-                if (TryInvokeStoredAssociation(path)) return S_OK;
-                if (QueuePickerAndWait(owner, path.c_str(), false))
-                    return S_OK;
-                return HRESULT_FROM_WIN32(ERROR_CANCELLED);
-            }
-        } catch (...) {
-            Wh_Log(L"Standalone Open With: replacement Execute exception");
-        }
-        return ExecuteOriginal();
-    }
-
-    // IObjectWithSelection supplies the file for DelegateExecute.
-    HRESULT STDMETHODCALLTYPE SetSelection(IShellItemArray* selection) override {
-        try {
-            if (selection) selection->AddRef();
-            selection_.Reset(selection);
-            return S_OK;
-        } catch (...) {
-            return E_FAIL;
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSelection(REFIID iid, void** object) override {
-        if (!object) return E_POINTER;
-        *object = nullptr;
-        return selection_ ? selection_->QueryInterface(iid, object) : E_FAIL;
-    }
-
-    // IObjectWithSite supplies the Explorer/property-sheet owner.
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override {
-        try {
-            if (site) site->AddRef();
-            site_.Reset(site);
-            return S_OK;
-        } catch (...) {
-            return E_FAIL;
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID iid, void** object) override {
-        if (!object) return E_POINTER;
-        *object = nullptr;
-        return site_ ? site_->QueryInterface(iid, object) : E_FAIL;
-    }
-
-    // IInitializeCommand carries the canonical verb/property bag.
-    HRESULT STDMETHODCALLTYPE Initialize(PCWSTR commandName,
-                                         IPropertyBag* propertyBag) override {
-        try {
-            commandName_ = commandName ? commandName : L"";
-            if (propertyBag) propertyBag->AddRef();
-            propertyBag_.Reset(propertyBag);
-            return S_OK;
-        } catch (...) {
-            return E_OUTOFMEMORY;
-        }
-    }
-
-   private:
-    std::wstring SelectedPath() const {
-        if (selection_) {
-            DWORD count = 0;
-            if (SUCCEEDED(selection_->GetCount(&count)) && count == 1) {
-                ComPtr<IShellItem> item;
-                if (SUCCEEDED(selection_->GetItemAt(0, item.Put())) && item) {
-                    PWSTR raw = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,
-                                                       &raw)) && raw) {
-                        return TakeTaskString(raw);
-                    }
-                    if (raw) CoTaskMemFree(raw);
-                }
-            }
-        }
-
-        std::wstring candidate = parameters_;
+static std::wstring PathFromExecuteParameters(PCWSTR parameters) {
+    if (!parameters || !*parameters) return {};
+    try {
+        std::wstring candidate = parameters;
         const size_t first = candidate.find_first_not_of(L" \t\r\n");
         if (first == std::wstring::npos) return {};
         const size_t last = candidate.find_last_not_of(L" \t\r\n");
@@ -4551,142 +4022,236 @@ class ServerOpenWithLauncherReplacement final
             candidate.back() == L'"') {
             candidate = candidate.substr(1, candidate.size() - 2);
         }
-        return IsSupportedFile(candidate) ? candidate : std::wstring{};
+        if (IsSupportedFile(candidate)) return candidate;
+
+        int argc = 0;
+        LPWSTR* argv = CommandLineToArgvW(parameters, &argc);
+        if (!argv) return {};
+        std::wstring result;
+        if (argc == 1 && IsSupportedFile(argv[0])) result = argv[0];
+        LocalFree(argv);
+        return result;
+    } catch (...) {
+        return {};
+    }
+}
+
+static HWND WindowFromSite(IUnknown* site) {
+    if (!site) return nullptr;
+    ComPtr<IOleWindow> oleWindow;
+    if (FAILED(site->QueryInterface(
+            IID_IOleWindow,
+            reinterpret_cast<void**>(oleWindow.Put()))) || !oleWindow) {
+        return nullptr;
+    }
+    HWND window = nullptr;
+    return SUCCEEDED(oleWindow->GetWindow(&window)) ? window : nullptr;
+}
+
+template <typename Interface>
+static void* ServerIdentity(Interface* object) {
+    return object ? ComIdentity(static_cast<IUnknown*>(object)) : nullptr;
+}
+
+static void UpdateServerSelectionPath(void* identity, std::wstring path) {
+    if (!identity) return;
+    std::lock_guard<std::mutex> lock(g_serverStateMutex);
+    if (g_serverStates.size() > 256) g_serverStates.clear();
+    g_serverStates[identity].selectionPath =
+        IsSupportedFile(path) ? std::move(path) : std::wstring{};
+}
+
+static void UpdateServerParameterPath(void* identity, std::wstring path) {
+    if (!identity) return;
+    std::lock_guard<std::mutex> lock(g_serverStateMutex);
+    if (g_serverStates.size() > 256) g_serverStates.clear();
+    g_serverStates[identity].parameterPath =
+        IsSupportedFile(path) ? std::move(path) : std::wstring{};
+}
+
+static void UpdateServerOwner(void* identity, HWND owner) {
+    if (!identity) return;
+    std::lock_guard<std::mutex> lock(g_serverStateMutex);
+    if (g_serverStates.size() > 256) g_serverStates.clear();
+    g_serverStates[identity].owner = owner;
+}
+
+static ServerOpenWithState TakeServerState(void* identity) {
+    ServerOpenWithState state;
+    if (!identity) return state;
+    std::lock_guard<std::mutex> lock(g_serverStateMutex);
+    auto found = g_serverStates.find(identity);
+    if (found != g_serverStates.end()) {
+        state = std::move(found->second);
+        g_serverStates.erase(found);
+    }
+    return state;
+}
+
+static HRESULT STDMETHODCALLTYPE ServerSetSelectionHook(
+    IObjectWithSelection* self, IShellItemArray* selection) {
+    const HRESULT hr = ServerSetSelectionOriginal
+                           ? ServerSetSelectionOriginal(self, selection)
+                           : E_FAIL;
+    if (SUCCEEDED(hr)) {
+        try {
+            UpdateServerSelectionPath(ServerIdentity(self),
+                                      PathFromShellItemArray(selection));
+        } catch (...) {
+        }
+    }
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE ServerSetParametersHook(
+    IExecuteCommand* self, PCWSTR parameters) {
+    const HRESULT hr = ServerSetParametersOriginal
+                           ? ServerSetParametersOriginal(self, parameters)
+                           : E_FAIL;
+    if (SUCCEEDED(hr)) {
+        try {
+            UpdateServerParameterPath(
+                ServerIdentity(self), PathFromExecuteParameters(parameters));
+        } catch (...) {
+        }
+    }
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE ServerSetSiteHook(IObjectWithSite* self,
+                                                    IUnknown* site) {
+    const HRESULT hr = ServerSetSiteOriginal
+                           ? ServerSetSiteOriginal(self, site)
+                           : E_FAIL;
+    if (SUCCEEDED(hr)) {
+        try {
+            UpdateServerOwner(ServerIdentity(self), WindowFromSite(site));
+        } catch (...) {
+        }
+    }
+    return hr;
+}
+
+static HRESULT STDMETHODCALLTYPE ServerExecuteHook(IExecuteCommand* self) {
+    try {
+        ServerOpenWithState state = TakeServerState(ServerIdentity(self));
+        if (!state.owner) state.owner = GetForegroundWindow();
+        const std::wstring& path = IsSupportedFile(state.selectionPath)
+                                       ? state.selectionPath
+                                       : state.parameterPath;
+        Wh_Log(L"Standalone Open With: server Execute path=%s owner=%p",
+               path.empty() ? L"(empty)" : path.c_str(), state.owner);
+        if (g_replaceSystemDialog.load(std::memory_order_acquire) &&
+            IsSupportedFile(path) &&
+            QueuePickerAndWait(state.owner, path.c_str())) {
+            return S_OK;
+        }
+    } catch (...) {
+        Wh_Log(L"Standalone Open With: server Execute hook exception");
+    }
+    return ServerExecuteOriginal ? ServerExecuteOriginal(self) : E_FAIL;
+}
+
+static HRESULT STDMETHODCALLTYPE ServerLauncherLaunchHook(
+    StandaloneOpenWithLauncher* self, HWND owner, PCWSTR path, DWORD flags) {
+    try {
+        const bool setDefaultOnly = ShouldSetDefaultOnly(owner, flags);
+        Wh_Log(L"Standalone Open With: server Launch path=%s owner=%p "
+               L"flags=0x%08X", path ? path : L"(null)", owner, flags);
+        if (g_replaceSystemDialog.load(std::memory_order_acquire) && path &&
+            IsSupportedFile(path) &&
+            QueuePickerAndWait(owner, path, setDefaultOnly)) {
+            return S_OK;
+        }
+    } catch (...) {
+        Wh_Log(L"Standalone Open With: server Launch hook exception");
+    }
+    return ServerLauncherLaunchOriginal
+               ? ServerLauncherLaunchOriginal(self, owner, path, flags)
+               : E_FAIL;
+}
+
+static bool InstallServerObjectMethodHooks(IUnknown* object) {
+    if (!object || g_shuttingDown.load(std::memory_order_acquire)) return false;
+
+    ComPtr<StandaloneOpenWithLauncher> launcher;
+    object->QueryInterface(kIidOpenWithLauncher,
+                           reinterpret_cast<void**>(launcher.Put()));
+    ComPtr<IExecuteCommand> execute;
+    object->QueryInterface(IID_IExecuteCommand,
+                           reinterpret_cast<void**>(execute.Put()));
+    ComPtr<IObjectWithSelection> selection;
+    object->QueryInterface(IID_IObjectWithSelection,
+                           reinterpret_cast<void**>(selection.Put()));
+    ComPtr<IObjectWithSite> site;
+    object->QueryInterface(IID_IObjectWithSite,
+                           reinterpret_cast<void**>(site.Put()));
+
+    std::lock_guard<std::mutex> lock(g_serverHookMutex);
+    bool registered = false;
+    if (launcher && !ServerLauncherLaunchOriginal) {
+        auto method = reinterpret_cast<ServerLauncherLaunch_t>(
+            InterfaceMethod(launcher.Get(), 3));
+        registered |= method && WindhawkUtils::SetFunctionHook(
+            method, ServerLauncherLaunchHook, &ServerLauncherLaunchOriginal);
+    }
+    if (execute) {
+        if (!ServerSetParametersOriginal) {
+            auto method = reinterpret_cast<ServerSetParameters_t>(
+                InterfaceMethod(execute.Get(), 4));
+            registered |= method && WindhawkUtils::SetFunctionHook(
+                method, ServerSetParametersHook,
+                &ServerSetParametersOriginal);
+        }
+        if (!ServerExecuteOriginal) {
+            auto method = reinterpret_cast<ServerExecute_t>(
+                InterfaceMethod(execute.Get(), 9));
+            registered |= method && WindhawkUtils::SetFunctionHook(
+                method, ServerExecuteHook, &ServerExecuteOriginal);
+        }
+    }
+    if (selection && !ServerSetSelectionOriginal) {
+        auto method = reinterpret_cast<ServerSetSelection_t>(
+            InterfaceMethod(selection.Get(), 3));
+        registered |= method && WindhawkUtils::SetFunctionHook(
+            method, ServerSetSelectionHook, &ServerSetSelectionOriginal);
+    }
+    if (site && !ServerSetSiteOriginal) {
+        auto method = reinterpret_cast<ServerSetSite_t>(
+            InterfaceMethod(site.Get(), 3));
+        registered |= method && WindhawkUtils::SetFunctionHook(
+            method, ServerSetSiteHook, &ServerSetSiteOriginal);
     }
 
-    HWND SiteWindow() const {
-        if (site_) {
-            ComPtr<IOleWindow> oleWindow;
-            if (SUCCEEDED(site_->QueryInterface(
-                    IID_IOleWindow,
-                    reinterpret_cast<void**>(oleWindow.Put()))) &&
-                oleWindow) {
-                HWND window = nullptr;
-                if (SUCCEEDED(oleWindow->GetWindow(&window)) && window)
-                    return window;
-            }
-        }
-        return GetForegroundWindow();
+    if (registered && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"Standalone Open With: failed to apply server object hooks");
+        return false;
     }
-
-    HRESULT LaunchOriginal(HWND owner, PCWSTR path, DWORD flags) {
-        if (!originalFactory_ || !ServerFactoryCreateInstanceOriginal)
-            return E_FAIL;
-        ComPtr<StandaloneOpenWithLauncher> original;
-        HRESULT hr = ServerFactoryCreateInstanceOriginal(
-            originalFactory_, nullptr, kIidOpenWithLauncher,
-            reinterpret_cast<void**>(original.Put()));
-        if (FAILED(hr) || !original) return hr;
-        return original->Launch(owner, path, flags);
-    }
-
-    HRESULT ExecuteOriginal() {
-        if (!originalFactory_ || !ServerFactoryCreateInstanceOriginal)
-            return E_FAIL;
-        ComPtr<IExecuteCommand> original;
-        HRESULT hr = ServerFactoryCreateInstanceOriginal(
-            originalFactory_, nullptr, IID_IExecuteCommand,
-            reinterpret_cast<void**>(original.Put()));
-        if (FAILED(hr) || !original) return hr;
-
-        if (!commandName_.empty() || propertyBag_) {
-            ComPtr<IInitializeCommand> initialize;
-            if (SUCCEEDED(original->QueryInterface(
-                    IID_IInitializeCommand,
-                    reinterpret_cast<void**>(initialize.Put()))) &&
-                initialize) {
-                initialize->Initialize(
-                    commandName_.empty() ? nullptr : commandName_.c_str(),
-                    propertyBag_.Get());
-            }
-        }
-        if (selection_) {
-            ComPtr<IObjectWithSelection> withSelection;
-            if (SUCCEEDED(original->QueryInterface(
-                    IID_IObjectWithSelection,
-                    reinterpret_cast<void**>(withSelection.Put()))) &&
-                withSelection) {
-                withSelection->SetSelection(selection_.Get());
-            }
-        }
-        if (site_) {
-            ComPtr<IObjectWithSite> withSite;
-            if (SUCCEEDED(original->QueryInterface(
-                    IID_IObjectWithSite,
-                    reinterpret_cast<void**>(withSite.Put()))) &&
-                withSite) {
-                withSite->SetSite(site_.Get());
-            }
-        }
-        original->SetKeyState(keyState_);
-        if (!parameters_.empty()) original->SetParameters(parameters_.c_str());
-        if (hasPosition_) original->SetPosition(position_);
-        original->SetShowWindow(show_);
-        original->SetNoShowUI(noShowUi_);
-        if (!directory_.empty()) original->SetDirectory(directory_.c_str());
-        return original->Execute();
-    }
-
-    std::atomic<ULONG> references_{1};
-    IClassFactory* originalFactory_ = nullptr;
-    ComPtr<IShellItemArray> selection_;
-    ComPtr<IUnknown> site_;
-    ComPtr<IPropertyBag> propertyBag_;
-    std::wstring commandName_;
-    std::wstring parameters_;
-    std::wstring directory_;
-    DWORD keyState_ = 0;
-    POINT position_{};
-    bool hasPosition_ = false;
-    int show_ = SW_SHOWNORMAL;
-    BOOL noShowUi_ = FALSE;
-};
+    Wh_Log(L"Standalone Open With: server object methods launch=%d "
+           L"parameters=%d execute=%d selection=%d site=%d",
+           ServerLauncherLaunchOriginal != nullptr,
+           ServerSetParametersOriginal != nullptr,
+           ServerExecuteOriginal != nullptr,
+           ServerSetSelectionOriginal != nullptr,
+           ServerSetSiteOriginal != nullptr);
+    return registered || ServerLauncherLaunchOriginal || ServerExecuteOriginal;
+}
 
 static HRESULT STDMETHODCALLTYPE ServerFactoryCreateInstanceHook(
     IClassFactory* self, IUnknown* outer, REFIID iid, void** object) {
-    try {
-        wchar_t iidText[64] = {};
-        StringFromGUID2(iid, iidText, ARRAYSIZE(iidText));
-
-        if (!outer && object &&
-            g_replaceSystemDialog.load(std::memory_order_acquire) &&
-            (IsEqualIID(iid, IID_IUnknown) ||
-             IsEqualIID(iid, kIidOpenWithLauncher) ||
-             IsEqualIID(iid, IID_IExecuteCommand) ||
-             IsEqualIID(iid, IID_IObjectWithSelection) ||
-             IsEqualIID(iid, IID_IObjectWithSite) ||
-             IsEqualIID(iid, IID_IInitializeCommand))) {
-            *object = nullptr;
-            ServerOpenWithLauncherReplacement* replacement = nullptr;
-            try {
-                replacement =
-                    new ServerOpenWithLauncherReplacement(self);
-            } catch (...) {
-                return E_OUTOFMEMORY;
-            }
-            const HRESULT hr = replacement->QueryInterface(iid, object);
-            replacement->Release();
-            Wh_Log(L"Standalone Open With: server factory replaced object "
-                   L"iid=%s hr=0x%08X object=%p", iidText,
-                   static_cast<unsigned int>(hr),
-                   object ? *object : nullptr);
-            return hr;
+    const HRESULT hr = ServerFactoryCreateInstanceOriginal
+                           ? ServerFactoryCreateInstanceOriginal(
+                                 self, outer, iid, object)
+                           : E_FAIL;
+    if (SUCCEEDED(hr) && !outer && object && *object) {
+        try {
+            InstallServerObjectMethodHooks(
+                reinterpret_cast<IUnknown*>(*object));
+        } catch (...) {
+            Wh_Log(L"Standalone Open With: server object probe exception");
         }
-
-        const HRESULT hr = ServerFactoryCreateInstanceOriginal
-            ? ServerFactoryCreateInstanceOriginal(self, outer, iid, object)
-            : E_FAIL;
-        Wh_Log(L"Standalone Open With: server factory passed through "
-               L"iid=%s hr=0x%08X object=%p", iidText,
-               static_cast<unsigned int>(hr),
-               object ? *object : nullptr);
-        return hr;
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: server factory hook exception");
-        return ServerFactoryCreateInstanceOriginal
-            ? ServerFactoryCreateInstanceOriginal(self, outer, iid, object)
-            : E_FAIL;
     }
+    return hr;
 }
 
 static bool InstallServerFactoryHook(IUnknown* classObject) {
@@ -4702,12 +4267,10 @@ static bool InstallServerFactoryHook(IUnknown* classObject) {
     if (g_serverFactoryHookInstalled) return true;
     auto createInstance = reinterpret_cast<ServerFactoryCreateInstance_t>(
         InterfaceMethod(factory.Get(), 3));
-    if (!createInstance || !Wh_SetFunctionHook(
-                               reinterpret_cast<void*>(createInstance),
-                               reinterpret_cast<void*>(
-                                   ServerFactoryCreateInstanceHook),
-                               reinterpret_cast<void**>(
-                                   &ServerFactoryCreateInstanceOriginal))) {
+    if (!createInstance || !WindhawkUtils::SetFunctionHook(
+                               createInstance,
+                               ServerFactoryCreateInstanceHook,
+                               &ServerFactoryCreateInstanceOriginal)) {
         Wh_Log(L"Standalone Open With: failed to register server factory hook");
         return false;
     }
@@ -4716,8 +4279,8 @@ static bool InstallServerFactoryHook(IUnknown* classObject) {
         return false;
     }
     g_serverFactoryHookInstalled = true;
-    Wh_Log(L"Standalone Open With: OpenWith.exe class-factory vtable hooked "
-           L"at %p", reinterpret_cast<void*>(createInstance));
+    Wh_Log(L"Standalone Open With: server class factory hooked at %p",
+           reinterpret_cast<void*>(createInstance));
     return true;
 }
 
@@ -4725,20 +4288,22 @@ static HRESULT WINAPI CoRegisterClassObjectHook(
     REFCLSID clsid, IUnknown* classObject, DWORD context, DWORD flags,
     LPDWORD registration) {
     try {
-        wchar_t text[64] = {};
-        StringFromGUID2(clsid, text, ARRAYSIZE(text));
-        Wh_Log(L"Standalone Open With: CoRegisterClassObject clsid=%s "
-               L"context=0x%X flags=0x%X", text, context, flags);
-        if (IsEqualCLSID(clsid, kClsidExecuteUnknown))
+        if (IsEqualCLSID(clsid, kClsidExecuteUnknown)) {
+            Wh_Log(L"Standalone Open With: ExecuteUnknown class registered");
             InstallServerFactoryHook(classObject);
+        }
     } catch (...) {
-        Wh_Log(L"Standalone Open With: CoRegisterClassObject hook exception");
+        Wh_Log(L"Standalone Open With: class registration hook exception");
     }
     return CoRegisterClassObjectOriginal
                ? CoRegisterClassObjectOriginal(clsid, classObject, context,
                                                flags, registration)
                : E_FAIL;
 }
+
+// -----------------------------------------------------------------------------
+// Direct OpenWith.exe command-line interception.
+// -----------------------------------------------------------------------------
 
 // Direct OpenWith.exe command lines (drag/drop or explicit launch) don't use
 // the COM server. If a real file is present in argv, replace the executable's
@@ -4848,8 +4413,6 @@ static BOOL WINAPI CreateProcessWHook(
                 SetLastError(ERROR_CANCELLED);
                 return FALSE;
             }
-            Wh_Log(L"Standalone Open With DIAG: matched OpenWith.exe but did "
-                   L"not block (pathEmpty=%d)", path.empty());
         }
     } catch (...) {
         Wh_Log(L"Standalone Open With: CreateProcessW hook exception, "
@@ -4943,211 +4506,35 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND owner, LPCWSTR verb, LPCWSTR file
 }
 
 // -----------------------------------------------------------------------------
-// Process-local registry virtualization for legacy Open With routing.
-//
-// No registry values are written. Explorer sees selected modern routing values
-// as absent, while every other key/value is forwarded unchanged. Disabling or
-// unloading the mod restores the real view immediately.
-// -----------------------------------------------------------------------------
-
-using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-using RegOpenKeyW_t = decltype(&RegOpenKeyW);
-using RegQueryValueExW_t = decltype(&RegQueryValueExW);
-using RegGetValueW_t = decltype(&RegGetValueW);
-using RegCloseKey_t = decltype(&RegCloseKey);
-
-static RegOpenKeyExW_t RegOpenKeyExWOriginal = nullptr;
-static RegOpenKeyW_t RegOpenKeyWOriginal = nullptr;
-static RegQueryValueExW_t RegQueryValueExWOriginal = nullptr;
-static RegGetValueW_t RegGetValueWOriginal = nullptr;
-static RegCloseKey_t RegCloseKeyOriginal = nullptr;
-static std::mutex g_virtualRegistryMutex;
-static std::unordered_map<HKEY, std::wstring> g_virtualRegistryPaths;
-
-static std::wstring NormalizeRegistryPath(PCWSTR path) {
-    std::wstring value = path ? path : L"";
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
-    while (!value.empty() && value.back() == L'\\') value.pop_back();
-    return value;
-}
-
-static std::wstring PredefinedRegistryPath(HKEY key) {
-    if (key == HKEY_CLASSES_ROOT) return L"hkcr";
-    if (key == HKEY_CURRENT_USER) return L"hkcu";
-    if (key == HKEY_LOCAL_MACHINE) return L"hklm";
-    if (key == HKEY_USERS) return L"hku";
-    return {};
-}
-
-static std::wstring TrackedRegistryPath(HKEY key) {
-    if (std::wstring predefined = PredefinedRegistryPath(key);
-        !predefined.empty()) {
-        return predefined;
-    }
-    std::lock_guard<std::mutex> lock(g_virtualRegistryMutex);
-    auto found = g_virtualRegistryPaths.find(key);
-    return found != g_virtualRegistryPaths.end() ? found->second
-                                                  : std::wstring{};
-}
-
-static bool EndsWithRegistryPath(const std::wstring& path, PCWSTR suffix) {
-    const std::wstring normalizedSuffix = NormalizeRegistryPath(suffix);
-    return path.size() >= normalizedSuffix.size() &&
-           !_wcsicmp(path.c_str() + path.size() - normalizedSuffix.size(),
-                     normalizedSuffix.c_str());
-}
-
-static bool ShouldHideVirtualRegistryValue(const std::wstring& keyPath,
-                                           PCWSTR valueName) {
-    if (!g_virtualizeLegacyOpenWithRegistry.load(
-            std::memory_order_acquire) || keyPath.empty() || !valueName) {
-        return false;
-    }
-
-    if (!_wcsicmp(valueName, L"DelegateExecute")) {
-        static const PCWSTR commands[] = {
-            L"unknown\\shell\\openas\\command",
-            L"unknown\\shell\\open\\command",
-            L"unknown\\shell\\invokedefaultverbinotherprocess\\command",
-            L"unknown\\shell\\openwithsetdefaulton\\command",
-            L"undecided\\shell\\open\\command",
-        };
-        for (PCWSTR command : commands) {
-            if (EndsWithRegistryPath(keyPath, command)) return true;
-        }
-    }
-
-    return !_wcsicmp(valueName, L"OpenWithLauncher") &&
-           EndsWithRegistryPath(
-               keyPath,
-               L"software\\microsoft\\windows\\currentversion\\openwith");
-}
-
-static void TrackVirtualRegistryKey(HKEY parentKey, PCWSTR subKey,
-                                    HKEY openedKey) {
-    if (!openedKey) return;
-    std::wstring parent = TrackedRegistryPath(parentKey);
-    if (parent.empty()) return;
-    std::wstring full = parent;
-    if (subKey && *subKey) {
-        full.push_back(L'\\');
-        full.append(subKey);
-    }
-    std::lock_guard<std::mutex> lock(g_virtualRegistryMutex);
-    g_virtualRegistryPaths[openedKey] =
-        NormalizeRegistryPath(full.c_str());
-}
-
-static LSTATUS WINAPI RegOpenKeyWHook(HKEY key, LPCWSTR subKey,
-                                      PHKEY result) {
-    try {
-        const LSTATUS status = RegOpenKeyWOriginal
-            ? RegOpenKeyWOriginal(key, subKey, result)
-            : ERROR_PROC_NOT_FOUND;
-        if (status == ERROR_SUCCESS && result)
-            TrackVirtualRegistryKey(key, subKey, *result);
-        return status;
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: RegOpenKeyW virtualization exception");
-        return RegOpenKeyWOriginal
-            ? RegOpenKeyWOriginal(key, subKey, result)
-            : ERROR_PROC_NOT_FOUND;
-    }
-}
-
-static LSTATUS WINAPI RegOpenKeyExWHook(HKEY key, LPCWSTR subKey,
-                                        DWORD options, REGSAM access,
-                                        PHKEY result) {
-    try {
-        const LSTATUS status = RegOpenKeyExWOriginal
-            ? RegOpenKeyExWOriginal(key, subKey, options, access, result)
-            : ERROR_PROC_NOT_FOUND;
-        if (status == ERROR_SUCCESS && result)
-            TrackVirtualRegistryKey(key, subKey, *result);
-        return status;
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: RegOpenKeyExW virtualization exception");
-        return RegOpenKeyExWOriginal
-            ? RegOpenKeyExWOriginal(key, subKey, options, access, result)
-            : ERROR_PROC_NOT_FOUND;
-    }
-}
-
-static LSTATUS WINAPI RegQueryValueExWHook(HKEY key, LPCWSTR valueName,
-                                           LPDWORD reserved, LPDWORD type,
-                                           LPBYTE data, LPDWORD bytes) {
-    try {
-        const std::wstring path = TrackedRegistryPath(key);
-        if (ShouldHideVirtualRegistryValue(path, valueName)) {
-            Wh_Log(L"Standalone Open With: virtual registry hides %s\\%s",
-                   path.c_str(), valueName);
-            return ERROR_FILE_NOT_FOUND;
-        }
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: RegQueryValueExW virtualization exception");
-    }
-    return RegQueryValueExWOriginal
-        ? RegQueryValueExWOriginal(key, valueName, reserved, type, data, bytes)
-        : ERROR_PROC_NOT_FOUND;
-}
-
-static LSTATUS WINAPI RegGetValueWHook(HKEY key, LPCWSTR subKey,
-                                       LPCWSTR valueName, DWORD flags,
-                                       LPDWORD type, PVOID data,
-                                       LPDWORD bytes) {
-    try {
-        std::wstring path = TrackedRegistryPath(key);
-        if (!path.empty() && subKey && *subKey) {
-            path.push_back(L'\\');
-            path.append(subKey);
-            path = NormalizeRegistryPath(path.c_str());
-        }
-        if (ShouldHideVirtualRegistryValue(path, valueName)) {
-            Wh_Log(L"Standalone Open With: virtual RegGetValue hides %s\\%s",
-                   path.c_str(), valueName);
-            return ERROR_FILE_NOT_FOUND;
-        }
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: RegGetValueW virtualization exception");
-    }
-    return RegGetValueWOriginal
-        ? RegGetValueWOriginal(key, subKey, valueName, flags, type, data, bytes)
-        : ERROR_PROC_NOT_FOUND;
-}
-
-static LSTATUS WINAPI RegCloseKeyHook(HKEY key) {
-    try {
-        {
-            std::lock_guard<std::mutex> lock(g_virtualRegistryMutex);
-            g_virtualRegistryPaths.erase(key);
-        }
-    } catch (...) {
-    }
-    return RegCloseKeyOriginal ? RegCloseKeyOriginal(key)
-                               : ERROR_PROC_NOT_FOUND;
-}
-
-// -----------------------------------------------------------------------------
 // Windhawk lifecycle.
 // -----------------------------------------------------------------------------
+
+static std::atomic<bool> g_isExplorerProcess{false};
 
 static void StopWorker() {
     g_shuttingDown.store(true, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent.get());
+    if (HWND browse = g_activeBrowseHwnd.load(std::memory_order_acquire))
+        PostMessageW(browse, WM_CLOSE, 0, 0);
     if (HWND window = g_currentWindow.load(std::memory_order_acquire))
         PostMessageW(window, WM_CLOSE, 0, 0);
     if (g_worker) {
         g_worker->join();
         g_worker.reset();
     }
+    g_activeBrowseHwnd.store(nullptr, std::memory_order_release);
 }
 
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 static LoadLibraryExW_t LoadLibraryExWOriginal = nullptr;
+static std::mutex g_shell32HookMutex;
 
-static void HookShell32Exports(HMODULE shell32) {
-    if (!shell32) return;
+static bool HookShell32Exports(HMODULE shell32) {
+    if (!shell32 || g_shuttingDown.load(std::memory_order_acquire))
+        return false;
+
+    std::lock_guard<std::mutex> lock(g_shell32HookMutex);
+    bool registered = false;
     auto openWith = reinterpret_cast<SHOpenWithDialog_t>(
         GetProcAddress(shell32, "SHOpenWithDialog"));
     auto executeEx = reinterpret_cast<ShellExecuteExW_t>(
@@ -5155,25 +4542,32 @@ static void HookShell32Exports(HMODULE shell32) {
     auto execute = reinterpret_cast<ShellExecuteW_t>(
         GetProcAddress(shell32, "ShellExecuteW"));
     if (openWith && !SHOpenWithDialogOriginal) {
-        WindhawkUtils::SetFunctionHook(openWith, SHOpenWithDialogHook, &SHOpenWithDialogOriginal);
+        registered |= WindhawkUtils::SetFunctionHook(
+            openWith, SHOpenWithDialogHook, &SHOpenWithDialogOriginal);
     }
     if (executeEx && !ShellExecuteExWOriginal) {
-        WindhawkUtils::SetFunctionHook(executeEx, ShellExecuteExWHook, &ShellExecuteExWOriginal);
+        registered |= WindhawkUtils::SetFunctionHook(
+            executeEx, ShellExecuteExWHook, &ShellExecuteExWOriginal);
     }
     if (execute && !ShellExecuteWOriginal) {
-        WindhawkUtils::SetFunctionHook(execute, ShellExecuteWHook, &ShellExecuteWOriginal);
+        registered |= WindhawkUtils::SetFunctionHook(
+            execute, ShellExecuteWHook, &ShellExecuteWOriginal);
     }
+    return registered;
 }
 
-static HMODULE WINAPI LoadLibraryExWHook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
+static HMODULE WINAPI LoadLibraryExWHook(LPCWSTR name, HANDLE file,
+                                         DWORD flags) {
     HMODULE result = LoadLibraryExWOriginal
-        ? LoadLibraryExWOriginal(lpLibFileName, hFile, dwFlags)
-        : LoadLibraryExW(lpLibFileName, hFile, dwFlags);
-    if (result && lpLibFileName) {
-        PCWSTR fileName = PathFindFileNameW(lpLibFileName);
-        if (fileName && !_wcsicmp(fileName, L"shell32.dll")) {
-            HookShell32Exports(result);
-        }
+                         ? LoadLibraryExWOriginal(name, file, flags)
+                         : nullptr;
+    constexpr DWORD kDataOnly =
+        LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+        LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    if (result && name && !(flags & kDataOnly) &&
+        !_wcsicmp(PathFindFileNameW(name), L"shell32.dll") &&
+        HookShell32Exports(result) && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"Standalone Open With: failed to apply late shell32 hooks");
     }
     return result;
 }
@@ -5187,20 +4581,26 @@ static bool VerifySystemBinariesExist() {
         if (!GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir))) return false;
 
         wchar_t explorerPath[MAX_PATH] = {};
-        if (swprintf_s(explorerPath, L"%s\\explorer.exe", winDir) <= 0) return false;
+        if (swprintf_s(explorerPath, L"%s\\explorer.exe", winDir) <= 0)
+            return false;
 
         wchar_t openWithPath[MAX_PATH] = {};
-        if (swprintf_s(openWithPath, L"%s\\OpenWith.exe", sysDir) <= 0) return false;
+        if (swprintf_s(openWithPath, L"%s\\OpenWith.exe", sysDir) <= 0)
+            return false;
 
         const DWORD explorerAttrs = GetFileAttributesW(explorerPath);
-        if (explorerAttrs == INVALID_FILE_ATTRIBUTES || (explorerAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
-            Wh_Log(L"Standalone Open With: explorer.exe verification failed at %s", explorerPath);
+        if (explorerAttrs == INVALID_FILE_ATTRIBUTES ||
+            (explorerAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"Standalone Open With: explorer.exe verification failed "
+                   L"at %s", explorerPath);
             return false;
         }
 
         const DWORD openWithAttrs = GetFileAttributesW(openWithPath);
-        if (openWithAttrs == INVALID_FILE_ATTRIBUTES || (openWithAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
-            Wh_Log(L"Standalone Open With: OpenWith.exe verification failed at %s", openWithPath);
+        if (openWithAttrs == INVALID_FILE_ATTRIBUTES ||
+            (openWithAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"Standalone Open With: OpenWith.exe verification failed "
+                   L"at %s", openWithPath);
             return false;
         }
 
@@ -5213,9 +4613,26 @@ static bool VerifySystemBinariesExist() {
 BOOL Wh_ModInit() {
     try {
         if (!VerifySystemBinariesExist()) {
-            Wh_Log(L"Standalone Open With: required system binaries not found, aborting initialization");
+            Wh_Log(L"Standalone Open With: required system binaries not found, "
+                   L"aborting initialization");
             return FALSE;
         }
+
+        wchar_t moduleName[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, moduleName, ARRAYSIZE(moduleName));
+        const PCWSTR processFileName = PathFindFileNameW(moduleName);
+        const bool isExplorer = processFileName &&
+            !_wcsicmp(processFileName, L"explorer.exe");
+        const bool isOpenWith = processFileName &&
+            !_wcsicmp(processFileName, L"OpenWith.exe");
+        g_isExplorerProcess.store(isExplorer, std::memory_order_release);
+
+        std::wstring directOpenWithPath;
+        if (isOpenWith) {
+            directOpenWithPath =
+                ExtractOpenWithTargetPath(GetCommandLineW());
+        }
+
         LoadSettings();
         g_shuttingDown.store(false, std::memory_order_release);
         g_stopEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
@@ -5225,80 +4642,29 @@ BOOL Wh_ModInit() {
             return FALSE;
         g_worker.emplace(WorkerMainNoexcept);
 
-                HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        bool hookedLoadLibrary = false;
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
         if (!kernelbase) kernelbase = GetModuleHandleW(L"kernel32.dll");
         if (kernelbase) {
-            auto pLoadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+            auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
                 GetProcAddress(kernelbase, "LoadLibraryExW"));
-            if (pLoadLibraryExW) {
-                WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExWHook, &LoadLibraryExWOriginal);
+            if (loadLibraryExW) {
+                hookedLoadLibrary = WindhawkUtils::SetFunctionHook(
+                    loadLibraryExW, LoadLibraryExWHook,
+                    &LoadLibraryExWOriginal);
             }
         }
+
         HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-        auto openWith = shell32 ? reinterpret_cast<SHOpenWithDialog_t>(
-                                      GetProcAddress(shell32, "SHOpenWithDialog"))
-                                : nullptr;
-        auto executeEx = shell32 ? reinterpret_cast<ShellExecuteExW_t>(
-                                      GetProcAddress(shell32, "ShellExecuteExW"))
-                                 : nullptr;
-        auto execute = shell32 ? reinterpret_cast<ShellExecuteW_t>(
-                                    GetProcAddress(shell32, "ShellExecuteW"))
-                               : nullptr;
-        wchar_t moduleName[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, moduleName, ARRAYSIZE(moduleName));
-        const PCWSTR processFileName = PathFindFileNameW(moduleName);
-        const bool isExplorer = processFileName &&
-            !_wcsicmp(processFileName, L"explorer.exe");
-        const bool isOpenWithServer = processFileName &&
-            !_wcsicmp(processFileName, L"OpenWith.exe");
-        Wh_Log(L"Standalone Open With: init in process=%s pid=%u shell32=%p "
-               L"openWithAddr=%p executeExAddr=%p executeAddr=%p cmd=%s",
-               moduleName, GetCurrentProcessId(), shell32,
-               reinterpret_cast<void*>(openWith),
-               reinterpret_cast<void*>(executeEx),
-               reinterpret_cast<void*>(execute), GetCommandLineW());
-        bool anyHook = false;
-        bool hookedOpenWith = false, hookedExecuteEx = false, hookedExecute = false;
-        if (openWith) hookedOpenWith = WindhawkUtils::SetFunctionHook(
-            openWith, SHOpenWithDialogHook, &SHOpenWithDialogOriginal);
-        if (executeEx) hookedExecuteEx = WindhawkUtils::SetFunctionHook(
-            executeEx, ShellExecuteExWHook, &ShellExecuteExWOriginal);
-        if (execute) hookedExecute = WindhawkUtils::SetFunctionHook(
-            execute, ShellExecuteWHook, &ShellExecuteWOriginal);
-
-        bool hookedTrackPopupMenuEx = WindhawkUtils::SetFunctionHook(
-            TrackPopupMenuEx, TrackPopupMenuExHook,
-            &TrackPopupMenuExOriginal);
-        bool hookedTrackPopupMenu = WindhawkUtils::SetFunctionHook(
-            TrackPopupMenu, TrackPopupMenuHook,
-            &TrackPopupMenuOriginal);
-
-        bool hookedRegistryVirtualization = false;
-        if (isExplorer &&
-            g_virtualizeLegacyOpenWithRegistry.load(
-                std::memory_order_acquire)) {
-            const bool openExHook = WindhawkUtils::SetFunctionHook(
-                RegOpenKeyExW, RegOpenKeyExWHook, &RegOpenKeyExWOriginal);
-            const bool openHook = WindhawkUtils::SetFunctionHook(
-                RegOpenKeyW, RegOpenKeyWHook, &RegOpenKeyWOriginal);
-            const bool queryHook = WindhawkUtils::SetFunctionHook(
-                RegQueryValueExW, RegQueryValueExWHook,
-                &RegQueryValueExWOriginal);
-            const bool getHook = WindhawkUtils::SetFunctionHook(
-                RegGetValueW, RegGetValueWHook, &RegGetValueWOriginal);
-            const bool closeHook = WindhawkUtils::SetFunctionHook(
-                RegCloseKey, RegCloseKeyHook, &RegCloseKeyOriginal);
-            hookedRegistryVirtualization =
-                openExHook && openHook && queryHook && getHook && closeHook;
-        }
+        const bool hookedShellExports = HookShell32Exports(shell32);
 
         bool hookedServerRegistration = false;
-        bool hookedDirectOpenWithEntry = false;
-        if (isOpenWithServer) {
-            HMODULE combaseModule = GetModuleHandleW(L"combase.dll");
-            auto registerClassObject = combaseModule
+        bool hookedDirectEntry = false;
+        if (isOpenWith) {
+            HMODULE combase = GetModuleHandleW(L"combase.dll");
+            auto registerClassObject = combase
                 ? reinterpret_cast<CoRegisterClassObject_t>(
-                      GetProcAddress(combaseModule, "CoRegisterClassObject"))
+                      GetProcAddress(combase, "CoRegisterClassObject"))
                 : nullptr;
             if (!registerClassObject) {
                 HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
@@ -5312,119 +4678,67 @@ BOOL Wh_ModInit() {
                     registerClassObject, CoRegisterClassObjectHook,
                     &CoRegisterClassObjectOriginal);
             }
-
-            const std::wstring directPath =
-                ExtractOpenWithTargetPath(GetCommandLineW());
-            if (IsSupportedFile(directPath)) {
-                hookedDirectOpenWithEntry =
-                    InstallDirectOpenWithEntryHook(directPath.c_str());
+            if (IsSupportedFile(directOpenWithPath)) {
+                hookedDirectEntry = InstallDirectOpenWithEntryHook(
+                    directOpenWithPath.c_str());
             }
         }
 
-        // Probe the stable CLSID_OpenWithMenu interfaces and hook their current
-        // vtable targets. No symbols, offsets or private Windows interfaces are
-        // used; the addresses are rediscovered on every Explorer start.
-        const bool hookedOpenWithMenu = InstallOpenWithMenuMethodHooks();
-        g_usePartialOpenWithMenuFactory.store(
-            !hookedOpenWithMenu, std::memory_order_release);
-
-        bool hookedOpenWithFactory = false;
-        auto shellDllGetClassObject = shell32
-            ? reinterpret_cast<DllGetClassObject_t>(
-                  GetProcAddress(shell32, "DllGetClassObject"))
-            : nullptr;
-        if (shellDllGetClassObject) {
-            hookedOpenWithFactory = WindhawkUtils::SetFunctionHook(
-                shellDllGetClassObject, Shell32DllGetClassObjectHook,
-                &Shell32DllGetClassObjectOriginal);
-        }
-
-        bool hookedComActivation = false;
-        auto coCreateInstance = reinterpret_cast<CoCreateInstance_t>(
-            GetProcAddress(GetModuleHandleW(L"combase.dll"),
-                           "CoCreateInstance"));
-        if (!coCreateInstance) {
-            HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
-            coCreateInstance = ole32
-                ? reinterpret_cast<CoCreateInstance_t>(
-                      GetProcAddress(ole32, "CoCreateInstance"))
+        bool hookedCreateProcess = false;
+        if (isExplorer) {
+            HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+            auto createProcessW = kernel32
+                ? reinterpret_cast<CreateProcessW_t>(
+                      GetProcAddress(kernel32, "CreateProcessW"))
                 : nullptr;
-        }
-        if (coCreateInstance) {
-            hookedComActivation = WindhawkUtils::SetFunctionHook(
-                coCreateInstance, CoCreateInstanceHook,
-                &CoCreateInstanceOriginal);
-        }
-
-        bool hookedComActivationEx = false;
-        HMODULE combase = GetModuleHandleW(L"combase.dll");
-        auto coCreateInstanceEx = combase
-            ? reinterpret_cast<CoCreateInstanceEx_t>(
-                  GetProcAddress(combase, "CoCreateInstanceEx"))
-            : nullptr;
-        if (!coCreateInstanceEx) {
-            HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
-            coCreateInstanceEx = ole32
-                ? reinterpret_cast<CoCreateInstanceEx_t>(
-                      GetProcAddress(ole32, "CoCreateInstanceEx"))
-                : nullptr;
-        }
-        if (coCreateInstanceEx) {
-            hookedComActivationEx = WindhawkUtils::SetFunctionHook(
-                coCreateInstanceEx, CoCreateInstanceExHook,
-                &CoCreateInstanceExOriginal);
-        }
-
-        anyHook = hookedOpenWith || hookedExecuteEx || hookedExecute ||
-                  hookedTrackPopupMenuEx || hookedTrackPopupMenu ||
-                  hookedRegistryVirtualization ||
-                  hookedServerRegistration || hookedDirectOpenWithEntry ||
-                  hookedOpenWithMenu || hookedOpenWithFactory ||
-                  hookedComActivation || hookedComActivationEx;
-        Wh_Log(L"Standalone Open With: hook results pid=%u openWith=%d "
-               L"executeEx=%d execute=%d trackPopup=%d/%d regVirtual=%d "
-               L"serverReg=%d directEntry=%d menuMethods=%d menuFactory=%d "
-               L"partialFactory=%d comActivation=%d comActivationEx=%d",
-               GetCurrentProcessId(), hookedOpenWith, hookedExecuteEx,
-               hookedExecute, hookedTrackPopupMenuEx, hookedTrackPopupMenu,
-               hookedRegistryVirtualization, hookedServerRegistration,
-               hookedDirectOpenWithEntry,
-               hookedOpenWithMenu, hookedOpenWithFactory,
-               g_usePartialOpenWithMenuFactory.load(std::memory_order_acquire),
-               hookedComActivation, hookedComActivationEx);
-
-        // Supplementary legacy/direct-launch diagnostic. The normal modern
-        // route is DCOM and is handled by the CoCreateInstance hook below;
-        // Explorer usually does not call CreateProcessW for OpenWith.exe.
-        try {
-            wchar_t selfName[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, selfName, ARRAYSIZE(selfName));
-            if (isExplorer) {
-                HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-                auto createProcessW =
-                    kernel32 ? reinterpret_cast<CreateProcessW_t>(
-                                   GetProcAddress(kernel32, "CreateProcessW"))
-                             : nullptr;
-                bool hookedCreateProcess = false;
-                if (createProcessW) {
-                    hookedCreateProcess = WindhawkUtils::SetFunctionHook(
-                        createProcessW, CreateProcessWHook,
-                        &CreateProcessWOriginal);
-                }
-                Wh_Log(L"Standalone Open With: CreateProcessW hook=%d",
-                       hookedCreateProcess);
+            if (createProcessW) {
+                hookedCreateProcess = WindhawkUtils::SetFunctionHook(
+                    createProcessW, CreateProcessWHook,
+                    &CreateProcessWOriginal);
             }
-        } catch (...) {
-            Wh_Log(L"Standalone Open With: CreateProcessW hook install "
-                   L"failed with exception");
         }
 
-        if (!anyHook) { StopWorker(); return FALSE; }
-        Wh_Log(L"Standalone Open With initialized with API/COM hooks");
+        // The stable context-menu vtable probe is intentionally deferred to
+        // Wh_ModAfterInit so Explorer's main thread is not forced to activate a
+        // shell extension during process initialization.
+        const bool anyHook = hookedLoadLibrary || hookedShellExports ||
+                             hookedServerRegistration || hookedDirectEntry ||
+                             hookedCreateProcess || isExplorer;
+        Wh_Log(L"Standalone Open With: init process=%s pid=%u shell32=%p "
+               L"loadLibrary=%d shellExports=%d serverRegistration=%d "
+               L"directEntry=%d createProcess=%d deferredMenuProbe=%d",
+               moduleName, GetCurrentProcessId(), shell32,
+               hookedLoadLibrary, hookedShellExports,
+               hookedServerRegistration, hookedDirectEntry,
+               hookedCreateProcess, isExplorer);
+        if (!anyHook) {
+            Wh_Log(L"An error has been found! The mod will disable itself for security.\n");
+            StopWorker();
+            return FALSE;
+        }
         return TRUE;
     } catch (...) {
         StopWorker();
         return FALSE;
+    }
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isExplorerProcess.load(std::memory_order_acquire) ||
+        g_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
+    try {
+        const bool hooked = InstallOpenWithMenuMethodHooks();
+        if (!Wh_ApplyHookOperations()) {
+            Wh_Log(L"Standalone Open With: failed to apply deferred "
+                   L"CLSID_OpenWithMenu hooks");
+        } else if (!hooked) {
+            Wh_Log(L"Standalone Open With: deferred context-menu hooks "
+                   L"weren't available");
+        }
+    } catch (...) {
+        Wh_Log(L"Standalone Open With: deferred context-menu probe failed");
     }
 }
 
@@ -5450,8 +4764,8 @@ void Wh_ModUninit() {
         g_openWithMenuStates.clear();
     }
     {
-        std::lock_guard<std::mutex> lock(g_virtualRegistryMutex);
-        g_virtualRegistryPaths.clear();
+        std::lock_guard<std::mutex> lock(g_serverStateMutex);
+        g_serverStates.clear();
     }
     g_workerReadyEvent.reset();
     g_requestEvent.reset();
