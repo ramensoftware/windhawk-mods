@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.0.1
+// @version         1.0.2
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -28,6 +28,10 @@ center.
 This mod replaces that with a full nine-point grid — any corner, any edge
 center, or dead center of the screen — plus a pixel offset for fine-tuning and a
 choice of which monitor it appears on.
+
+The brightness indicator moved to the middle of the right edge:
+
+![Indicator at middle right](https://raw.githubusercontent.com/mario0318/windhawk-mods/3685cdf56c55ba8cb3398b1cf9e35b5e95e68eb1/on-screen-indicator-position/middle-right.jpg)
 
 ## Positions
 
