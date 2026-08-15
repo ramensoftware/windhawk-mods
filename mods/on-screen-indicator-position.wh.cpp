@@ -2,12 +2,11 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.0.3
+// @version         1.1.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -25,9 +24,8 @@ changes. Under **Settings > System > Notifications > On-screen indicators**,
 Windows lets you put it in one of three places: top left, top center, or bottom
 center.
 
-This mod replaces that with a full nine-point grid — any corner, any edge
-center, or dead center of the screen — plus a pixel offset for fine-tuning and a
-choice of which monitor it appears on.
+This mod replaces that with a full nine-point grid, any corner, any edge center,
+or dead center, plus a pixel offset for fine-tuning.
 
 The brightness indicator moved to the middle of the right edge:
 
@@ -41,9 +39,17 @@ The brightness indicator moved to the middle of the right edge:
  Bottom left     Bottom center     Bottom right
 ```
 
-By default the indicator is placed inside the work area, so it won't sit
-underneath the taskbar. Turn off "Keep clear of the taskbar" to use the whole
-screen instead.
+The indicator is kept inside the area Windows lays it out in, so an offset that
+would push it past an edge stops at the edge instead of moving off screen. You
+can also leave the position on **Windows default** and use the offsets alone to
+nudge one of the built-in positions.
+
+## Choosing a monitor
+
+This mod only changes where the indicator sits on a screen, not which screen it
+appears on. For that, use [Volume control open
+location](https://windhawk.net/mods/volume-control-open-location), which selects
+a monitor by number or by interface name. The two work together.
 
 ## Notes
 
@@ -51,10 +57,7 @@ screen instead.
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
   like, then let this mod do the actual placement.
-* The indicator is drawn by Explorer, so the mod targets `explorer.exe`. If
-  Explorer restarts, the mod keeps working.
-* Tested on Windows 11 build 26200 (25H2) x64. Other builds are untested, and
-  older ones draw this indicator differently.
+* Tested on Windows 11 build 26200 (25H2) x64.
 */
 // ==/WindhawkModReadme==
 
@@ -64,7 +67,7 @@ screen instead.
   $name: Position
   $description: Where on the screen the indicator appears
   $options:
-  - windowsDefault: Windows default (don't move it)
+  - windowsDefault: Windows default (only apply the offsets)
   - topLeft: Top left
   - topCenter: Top center
   - topRight: Top right
@@ -78,36 +81,18 @@ screen instead.
   $name: Horizontal offset
   $description: >-
     Pixels to nudge the indicator by. Positive moves right, negative moves left.
-    Scaled with the monitor's DPI.
+    The indicator is kept on screen, so an offset that would push it past the
+    edge is ignored.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
     Pixels to nudge the indicator by. Positive moves down, negative moves up.
-    Scaled with the monitor's DPI.
-- monitor: windowsDefault
-  $name: Monitor
-  $description: Which monitor the indicator appears on
-  $options:
-  - windowsDefault: Windows default (don't change it)
-  - primary: Primary monitor
-  - cursor: Monitor with the mouse cursor
-  - foreground: Monitor with the active window
-- useWorkArea: true
-  $name: Keep clear of the taskbar
-  $description: >-
-    Position within the work area rather than the full screen, so the indicator
-    isn't hidden behind the taskbar.
+    The indicator is kept on screen, so an offset that would push it past the
+    edge is ignored.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-
-#include <shellscalingapi.h>
-
-// The Explorer thread that owns the indicator window names itself. This is an
-// exact match, so the mod doesn't have to guess at window class names that
-// change between builds.
-constexpr PCWSTR kConfirmatorThreadName = L"HardwareConfirmator UI Thread";
 
 enum class Position {
     windowsDefault,
@@ -122,340 +107,115 @@ enum class Position {
     bottomRight,
 };
 
-enum class MonitorChoice {
-    windowsDefault,
-    primary,
-    cursor,
-    foreground,
-};
-
 struct {
     Position position;
     int offsetX;
     int offsetY;
-    MonitorChoice monitor;
-    bool useWorkArea;
 } g_settings;
 
-// Explorer moves windows constantly, so this has to be nearly free once the
-// answer is known. A thread that has already named itself something else will
-// never become the indicator's, so that answer is kept for good. Only a thread
-// with no name yet stays undecided, since it may still be on its way to naming
-// itself, and pinning that would send the first indicator to Windows' position.
-bool IsCurrentThreadConfirmatorThread() {
-    static thread_local int cached = -1;  // -1 unknown, 0 no, 1 yes.
+HMODULE g_hardwareConfirmatorModule;
 
-    if (cached >= 0) {
-        return cached == 1;
-    }
+// winrt::Windows::Foundation::Rect
+struct WinrtRect {
+    float X;
+    float Y;
+    float Width;
+    float Height;
+};
 
-    PWSTR threadDescription;
-    if (FAILED(GetThreadDescription(GetCurrentThread(), &threadDescription))) {
-        return false;
-    }
+// `area` is the region the indicator is laid out in, already shifted to 0,0.
+// `rect` comes back from the original function holding the size Windows chose
+// and the position it picked from the built-in setting; only the position is
+// replaced.
+void PlaceInArea(const WinrtRect& area, WinrtRect* rect) {
+    float left = 0;
+    float centerX = (area.Width - rect->Width) / 2;
+    float right = area.Width - rect->Width;
 
-    bool match = wcscmp(threadDescription, kConfirmatorThreadName) == 0;
-    bool named = *threadDescription != L'\0';
-    LocalFree(threadDescription);
-
-    if (match || named) {
-        cached = match ? 1 : 0;
-    }
-
-    return match;
-}
-
-bool IsIndicatorWindow(HWND hWnd) {
-    if (!hWnd) {
-        return false;
-    }
-
-    // The indicator is moved by the thread that owns it, so anything else is
-    // ruled out before the more expensive thread-name lookup runs.
-    DWORD processId = 0;
-    DWORD threadId = GetWindowThreadProcessId(hWnd, &processId);
-    if (threadId != GetCurrentThreadId() ||
-        processId != GetCurrentProcessId()) {
-        return false;
-    }
-
-    // Only top-level windows are placed on screen.
-    if (GetAncestor(hWnd, GA_PARENT) != GetDesktopWindow()) {
-        return false;
-    }
-
-    return IsCurrentThreadConfirmatorThread();
-}
-
-// `targetRect` is where the indicator is about to go, not where it is. The
-// window's current rect is the previous placement, and since the mod pins the
-// window, using it would feed each decision back into the next one and lock the
-// indicator onto whichever monitor it first landed on.
-HMONITOR PickMonitor(const RECT& targetRect) {
-    switch (g_settings.monitor) {
-        case MonitorChoice::primary:
-            return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
-
-        case MonitorChoice::cursor: {
-            POINT pt;
-            if (GetCursorPos(&pt)) {
-                return MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            }
-            break;
-        }
-
-        case MonitorChoice::foreground: {
-            HWND foregroundWnd = GetForegroundWindow();
-            if (foregroundWnd) {
-                return MonitorFromWindow(foregroundWnd,
-                                         MONITOR_DEFAULTTONEAREST);
-            }
-            break;
-        }
-
-        case MonitorChoice::windowsDefault:
-            break;
-    }
-
-    return MonitorFromRect(&targetRect, MONITOR_DEFAULTTONEAREST);
-}
-
-// Places a window of the given size within `area` according to the configured
-// position, applies the DPI-scaled offsets, and clamps the result so the window
-// stays inside the monitor.
-void CalculatePosition(HMONITOR monitor,
-                       const RECT& area,
-                       int width,
-                       int height,
-                       int* x,
-                       int* y) {
-    int left = area.left;
-    int centerX = area.left + (area.right - area.left - width) / 2;
-    int right = area.right - width;
-
-    int top = area.top;
-    int middleY = area.top + (area.bottom - area.top - height) / 2;
-    int bottom = area.bottom - height;
+    float top = 0;
+    float middleY = (area.Height - rect->Height) / 2;
+    float bottom = area.Height - rect->Height;
 
     switch (g_settings.position) {
         case Position::topLeft:
-            *x = left, *y = top;
+            rect->X = left, rect->Y = top;
             break;
         case Position::topCenter:
-            *x = centerX, *y = top;
+            rect->X = centerX, rect->Y = top;
             break;
         case Position::topRight:
-            *x = right, *y = top;
+            rect->X = right, rect->Y = top;
             break;
         case Position::middleLeft:
-            *x = left, *y = middleY;
+            rect->X = left, rect->Y = middleY;
             break;
         case Position::center:
-            *x = centerX, *y = middleY;
+            rect->X = centerX, rect->Y = middleY;
             break;
         case Position::middleRight:
-            *x = right, *y = middleY;
+            rect->X = right, rect->Y = middleY;
             break;
         case Position::bottomLeft:
-            *x = left, *y = bottom;
+            rect->X = left, rect->Y = bottom;
             break;
         case Position::bottomCenter:
-            *x = centerX, *y = bottom;
+            rect->X = centerX, rect->Y = bottom;
             break;
         case Position::bottomRight:
-            *x = right, *y = bottom;
+            rect->X = right, rect->Y = bottom;
             break;
         case Position::windowsDefault:
-            return;
+            // Keep the position Windows picked and only apply the offsets.
+            break;
     }
 
-    UINT dpiX = 96;
-    UINT dpiY = 96;
-    GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY);
-
-    *x += MulDiv(g_settings.offsetX, dpiX, 96);
-    *y += MulDiv(g_settings.offsetY, dpiY, 96);
+    rect->X += g_settings.offsetX;
+    rect->Y += g_settings.offsetY;
 
     // An offset large enough to push the indicator off screen would just make
-    // it invisible with no way to tell why, so keep it within the area above,
-    // which is the work area unless the taskbar setting says otherwise.
-    if (*x < area.left) {
-        *x = area.left;
-    } else if (*x > area.right - width) {
-        *x = area.right - width;
+    // it invisible with no way to tell why, so keep it within the area.
+    if (rect->X < 0) {
+        rect->X = 0;
+    } else if (rect->X > right) {
+        rect->X = right > 0 ? right : 0;
     }
 
-    if (*y < area.top) {
-        *y = area.top;
-    } else if (*y > area.bottom - height) {
-        *y = area.bottom - height;
+    if (rect->Y < 0) {
+        rect->Y = 0;
+    } else if (rect->Y > bottom) {
+        rect->Y = bottom > 0 ? bottom : 0;
     }
 }
 
-// `width` and `height` are in and out: sending the indicator to a monitor with
-// different scaling means it has to be resized to match, or it arrives at the
-// size the source monitor implied and every anchor except top left is off by
-// the difference once the window rescales itself. `canResize` is false when the
-// caller isn't setting a size, in which case the window is left to handle the
-// DPI change on its own.
-bool AdjustIndicatorPos(int* width, int* height, int* x, int* y, bool canResize) {
-    RECT targetRect{
-        .left = *x,
-        .top = *y,
-        .right = *x + *width,
-        .bottom = *y + *height,
-    };
+using HardwareConfirmatorHost_GetPositionRect_t =
+    WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
+HardwareConfirmatorHost_GetPositionRect_t
+    HardwareConfirmatorHost_GetPositionRect_Original;
+WinrtRect* WINAPI
+HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
+                                             WinrtRect* retval,
+                                             const WinrtRect* rect) {
+    Wh_Log(L">");
 
-    HMONITOR monitor = PickMonitor(targetRect);
-    if (!monitor) {
-        return false;
+    // Shift the input rect to 0,0 since the original function assumes that.
+    WinrtRect shiftedRect = *rect;
+    float offsetX = shiftedRect.X;
+    float offsetY = shiftedRect.Y;
+    shiftedRect.X = 0;
+    shiftedRect.Y = 0;
+
+    WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
+        pThis, retval, &shiftedRect);
+
+    if (result) {
+        PlaceInArea(shiftedRect, result);
+
+        // Shift the result back.
+        result->X += offsetX;
+        result->Y += offsetY;
     }
 
-    if (canResize) {
-        HMONITOR sourceMonitor =
-            MonitorFromRect(&targetRect, MONITOR_DEFAULTTONEAREST);
-        UINT sourceDpiX = 96, sourceDpiY = 96;
-        UINT targetDpiX = 96, targetDpiY = 96;
-        if (sourceMonitor && sourceMonitor != monitor &&
-            SUCCEEDED(GetDpiForMonitor(sourceMonitor, MDT_DEFAULT, &sourceDpiX,
-                                       &sourceDpiY)) &&
-            SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &targetDpiX,
-                                       &targetDpiY)) &&
-            sourceDpiX && sourceDpiY) {
-            *width = MulDiv(*width, targetDpiX, sourceDpiX);
-            *height = MulDiv(*height, targetDpiY, sourceDpiY);
-        }
-    }
-
-    MONITORINFO monitorInfo{
-        .cbSize = sizeof(MONITORINFO),
-    };
-    if (!GetMonitorInfo(monitor, &monitorInfo)) {
-        return false;
-    }
-
-    const RECT& area =
-        g_settings.useWorkArea ? monitorInfo.rcWork : monitorInfo.rcMonitor;
-
-    if (area.right - area.left < *width || area.bottom - area.top < *height) {
-        return false;
-    }
-
-    CalculatePosition(monitor, area, *width, *height, x, y);
-    return true;
-}
-
-// The class name isn't used to identify the window, since it's undocumented and
-// free to change between builds. Logging it means that if the thread-name match
-// ever starts catching the wrong window, a user's log says which one.
-void LogMove(HWND hWnd, int x, int y, int width, int height) {
-    WCHAR className[64];
-    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
-        className[0] = L'\0';
-    }
-
-    Wh_Log(L"Moving indicator (class %s) to %dx%d (%dx%d)", className, x, y,
-           width, height);
-}
-
-// On build 26200 the indicator is placed with MoveWindow and this hook never
-// fires. It's kept deliberately, as a fallback for builds that go through
-// SetWindowPos instead.
-using SetWindowPos_t = decltype(&SetWindowPos);
-SetWindowPos_t SetWindowPos_Original;
-
-BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
-                              HWND hWndInsertAfter,
-                              int X,
-                              int Y,
-                              int cx,
-                              int cy,
-                              UINT uFlags) {
-    auto original = [=]() {
-        return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy,
-                                     uFlags);
-    };
-
-    if (g_settings.position == Position::windowsDefault) {
-        return original();
-    }
-
-    if ((uFlags & (SWP_NOSIZE | SWP_NOMOVE)) == (SWP_NOSIZE | SWP_NOMOVE)) {
-        return original();
-    }
-
-    // A real sizing call follows, so there's nothing to place yet.
-    if (!(uFlags & SWP_NOSIZE) && (cx <= 0 || cy <= 0)) {
-        return original();
-    }
-
-    if (!IsIndicatorWindow(hWnd)) {
-        return original();
-    }
-
-    RECT rc{};
-    if (!GetWindowRect(hWnd, &rc)) {
-        return original();
-    }
-
-    int width = (uFlags & SWP_NOSIZE) ? rc.right - rc.left : cx;
-    int height = (uFlags & SWP_NOSIZE) ? rc.bottom - rc.top : cy;
-
-    // The window is sized and moved in separate calls. Move it on the sizing
-    // call too, otherwise it lands in the right place only every other time.
-    int x = (uFlags & SWP_NOMOVE) ? rc.left : X;
-    int y = (uFlags & SWP_NOMOVE) ? rc.top : Y;
-
-    bool canResize = !(uFlags & SWP_NOSIZE);
-    if (!AdjustIndicatorPos(&width, &height, &x, &y, canResize)) {
-        return original();
-    }
-
-    LogMove(hWnd, x, y, width, height);
-
-    return SetWindowPos_Original(hWnd, hWndInsertAfter, x, y,
-                                 canResize ? width : cx,
-                                 canResize ? height : cy,
-                                 uFlags & ~SWP_NOMOVE);
-}
-
-using MoveWindow_t = decltype(&MoveWindow);
-MoveWindow_t MoveWindow_Original;
-
-BOOL WINAPI MoveWindow_Hook(HWND hWnd,
-                            int X,
-                            int Y,
-                            int nWidth,
-                            int nHeight,
-                            BOOL bRepaint) {
-    auto original = [=]() {
-        return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
-    };
-
-    if (g_settings.position == Position::windowsDefault) {
-        return original();
-    }
-
-    // Same guard SetWindowPos_Hook has: a real sizing call follows.
-    if (nWidth <= 0 || nHeight <= 0) {
-        return original();
-    }
-
-    if (!IsIndicatorWindow(hWnd)) {
-        return original();
-    }
-
-    int x = X;
-    int y = Y;
-    int width = nWidth;
-    int height = nHeight;
-    if (!AdjustIndicatorPos(&width, &height, &x, &y, true)) {
-        return original();
-    }
-
-    LogMove(hWnd, x, y, width, height);
-
-    return MoveWindow_Original(hWnd, x, y, width, height, bRepaint);
+    return result;
 }
 
 Position PositionFromString(PCWSTR value) {
@@ -482,18 +242,6 @@ Position PositionFromString(PCWSTR value) {
     return Position::windowsDefault;
 }
 
-MonitorChoice MonitorChoiceFromString(PCWSTR value) {
-    if (wcscmp(value, L"primary") == 0) {
-        return MonitorChoice::primary;
-    } else if (wcscmp(value, L"cursor") == 0) {
-        return MonitorChoice::cursor;
-    } else if (wcscmp(value, L"foreground") == 0) {
-        return MonitorChoice::foreground;
-    }
-
-    return MonitorChoice::windowsDefault;
-}
-
 void LoadSettings() {
     WindhawkUtils::StringSetting position =
         WindhawkUtils::StringSetting::make(L"position");
@@ -501,12 +249,6 @@ void LoadSettings() {
 
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
-
-    WindhawkUtils::StringSetting monitor =
-        WindhawkUtils::StringSetting::make(L"monitor");
-    g_settings.monitor = MonitorChoiceFromString(monitor.get());
-
-    g_settings.useWorkArea = Wh_GetIntSetting(L"useWorkArea");
 }
 
 BOOL Wh_ModInit() {
@@ -514,17 +256,28 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // Nothing to do, so don't hook at all. Windhawk loads the mod again after a
-    // settings change, which is when a real position can arrive.
-    if (g_settings.position == Position::windowsDefault) {
-        Wh_Log(L"No position configured, not loading");
+    g_hardwareConfirmatorModule =
+        LoadLibraryEx(L"Windows.Internal.HardwareConfirmator.dll", nullptr,
+                      LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!g_hardwareConfirmatorModule) {
+        Wh_Log(L"Couldn't load Windows.Internal.HardwareConfirmator.dll");
         return FALSE;
     }
 
-    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
-                                   &SetWindowPos_Original);
-    WindhawkUtils::SetFunctionHook(MoveWindow, MoveWindow_Hook,
-                                   &MoveWindow_Original);
+    // Windows.Internal.HardwareConfirmator.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: struct winrt::Windows::Foundation::Rect __cdecl winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost::GetPositionRect(struct winrt::Windows::Foundation::Rect const &))"},
+            &HardwareConfirmatorHost_GetPositionRect_Original,
+            HardwareConfirmatorHost_GetPositionRect_Hook,
+        },
+    };
+
+    if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
+                     ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return FALSE;
+    }
 
     return TRUE;
 }
