@@ -15,10 +15,15 @@
 # Replace Shell Format Dialog
 A simple mod that allows you to replace the File Explorer disk format dialog with a custom one.
 
+## Note
+This will replace the format dialog in all apps that use the Shell Format dialog, not just File Explorer. You can manually
+set the exclusion list in this mod's **Advanced** tab.
+
 ## More details about the Format Arguments option
 If you enable the **Format Arguments** option in the mod settings, the mod will automatically replace the first instance of %s in your
 argument string with the drive letter of the drive the app is attempting to format. This drive letter does not include the `:` suffix
 (e.g, it will say `C` instead of `C:`).
+
 */
 // ==/WindhawkModReadme==
 
@@ -28,7 +33,7 @@ argument string with the drive letter of the drive the app is attempting to form
 # to configure. Metadata values such as $name and $description are optional.
 # Check out the documentation for more information:
 # https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod#settings
-- path: "C:\\Path\\To\\EXE"
+- path: ""
   $name: Path
   $description: The path to the app to launch instead of the format dialog.
 - args: ""
@@ -75,44 +80,25 @@ void FreeSettings() {
     }
 }
 
-int int_to_letter(int index, wchar_t *buffer, size_t buffer_size)
+DWORD WINAPI SHFormatDrive_Hook(HWND hwnd, UINT drive, UINT fmtID, UINT options)
 {
-    if (buffer == NULL || buffer_size < 2 || index < 0 || index > 25)
-        return 0;  // Failure
-
-    buffer[0] = L'A' + index;
-    buffer[1] = L'\0';
-
-    return 1;  // Success
-}
-
-DWORD SHFormatDrive_Hook(HWND hwnd, UINT drive, UINT fmtID, UINT options)
-{
-    if (*settings.path == '\0')
+    if (*settings.path == '\0' || drive > 25)
         return SHFormatDrive_Original(hwnd, drive, fmtID, options);
 
-    int len = wcslen(settings.args) + 1;
-    LPWSTR args = new WCHAR[len];
+    std::wstring args = settings.args;
 
-    if (settings.formatArgs && std::wcsstr(settings.args, L"%s") != nullptr)
-    {
-        WCHAR szLetter[4] = L"";
-        int_to_letter(drive, szLetter, 4);
-
-        swprintf_s(args, len, settings.args, szLetter);
-    }
-    else {
-        wcscpy_s(args, len, settings.args);
+    if (settings.formatArgs) {
+        size_t pos = args.find(L"%s");
+        if (pos != std::wstring::npos) {
+            WCHAR letter[2] = {(WCHAR)(L'A' + drive), L'\0'};
+            args.replace(pos, 2, letter);
+        }
     }
 
-    DWORD dwResult = SHFMT_ID_DEFAULT;
+    if ((INT_PTR)ShellExecuteW(hwnd, NULL, settings.path, args.c_str(), NULL, SW_SHOW) <= 32)
+        return SHFormatDrive_Original(hwnd, drive, fmtID, options);
 
-    if ((INT_PTR)ShellExecuteW(hwnd, NULL, settings.path, args, NULL, SW_SHOW) <= 32)
-        dwResult = SHFMT_ERROR;
-
-    delete[] args;
-
-    return dwResult;
+    return SHFMT_CANCEL;
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
