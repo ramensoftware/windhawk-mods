@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.11
+// @version         0.3.12
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -40,7 +40,7 @@ Transition Animation**.
 
 ### Notes
 
-Designed for Windows 11 22H2 and newer. This mod relies on undocumented Windows
+Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
 shell interfaces, so future Windows updates may require adjustments.
 */
 // ==/WindhawkModReadme==
@@ -115,6 +115,9 @@ struct IVirtualDesktop : IUnknown {
 };
 
 struct IApplicationView : IUnknown {};
+
+struct IVirtualDesktopManagerPrivate;
+struct IVirtualDesktopSwitchAnimator;
 
 struct IApplicationViewCollection : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetViews(
@@ -317,12 +320,16 @@ static void LogWindow(const wchar_t* label, HWND hwnd) {
 // Explicit user-switch attribution.
 // -----------------------------------------------------------------------------
 
-// Disable Virtual Desktop Transition Animation causes the native
-// Win+Ctrl+Left/Right path to call SwitchDesktopInternal synchronously.
-// The probe confirmed that the call occurs while _CycleInDirection is still
-// active, so a thread-local nesting depth is sufficient; no timing grace
-// period or physical-key heuristic is used.
-static thread_local int g_hotkeyCycleDepth = 0;
+// Cross-desktop activation switches were probed to originate synchronously
+// inside CVirtualDesktopForegroundPolicy::ForegroundViewChanged. Deliberate
+// low-level switches (including Win+Ctrl+Left/Right when Disable Virtual
+// Desktop Transition Animation is installed) enter SwitchDesktopInternal with
+// this depth at zero.
+//
+// This is the primary blast-radius guard: unknown SwitchDesktopInternal callers
+// are always allowed. Only a positively attributed foreground-policy switch is
+// eligible for redirect.
+static thread_local int g_foregroundPolicyDepth = 0;
 
 // Task View and direct shell/API desktop switches are asynchronous: their public
 // SwitchDesktop* entry point can return before CurrentVirtualDesktopChanged is
@@ -349,10 +356,6 @@ static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
 // SwitchDesktopWithAnimation synchronously calls SwitchDesktop on current
 // builds. Only the outermost public switch entry should create a transaction.
 static thread_local int g_explicitSwitchEntryDepth = 0;
-
-static bool IsExplicitHotkeySwitchContext() {
-    return g_hotkeyCycleDepth > 0;
-}
 
 static const wchar_t* GuidToStringForLog(const GUID& guid) {
     // A ring keeps multiple GUID arguments in one Wh_Log call distinct. Since
@@ -636,10 +639,15 @@ using SwitchDesktopWithAnimation_t =
 static SwitchDesktopWithAnimation_t
     g_switchDesktopWithAnimationOriginal = nullptr;
 
-using CycleInDirection_t =
-    HRESULT (*)(void* pThis, int direction);
+using ForegroundViewChanged_t =
+    HRESULT (*)(
+        void* pThis,
+        IVirtualDesktopManagerPrivate* manager,
+        IVirtualDesktopSwitchAnimator* animator,
+        IApplicationView* view);
 
-static CycleInDirection_t g_cycleInDirectionOriginal = nullptr;
+static ForegroundViewChanged_t
+    g_foregroundViewChangedOriginal = nullptr;
 
 static HRESULT SwitchDesktop_Hook(
     void* pThis,
@@ -699,27 +707,22 @@ static HRESULT SwitchDesktopWithAnimation_Hook(
     return hr;
 }
 
-static HRESULT CycleInDirection_Hook(
+static HRESULT ForegroundViewChanged_Hook(
     void* pThis,
-    int direction) {
+    IVirtualDesktopManagerPrivate* manager,
+    IVirtualDesktopSwitchAnimator* animator,
+    IApplicationView* view) {
 
-    ++g_hotkeyCycleDepth;
-
-    Wh_Log(
-        L"HOTKEY-CYCLE begin direction=%d depth=%d",
-        direction,
-        g_hotkeyCycleDepth);
+    ++g_foregroundPolicyDepth;
 
     HRESULT hr =
-        g_cycleInDirectionOriginal(pThis, direction);
+        g_foregroundViewChangedOriginal(
+            pThis,
+            manager,
+            animator,
+            view);
 
-    Wh_Log(
-        L"HOTKEY-CYCLE end direction=%d hr=0x%08X depth=%d",
-        direction,
-        static_cast<unsigned int>(hr),
-        g_hotkeyCycleDepth);
-
-    --g_hotkeyCycleDepth;
+    --g_foregroundPolicyDepth;
     return hr;
 }
 
@@ -1593,26 +1596,23 @@ static HRESULT SwitchDesktopInternal_Hook(
     void* pThis,
     IVirtualDesktop* requestedDesktop) {
 
-    if (!g_workerReady.load() ||
-        !pThis ||
-        !requestedDesktop) {
+    if (!pThis || !requestedDesktop) {
         return g_switchDesktopInternalOriginal(
             pThis,
             requestedDesktop);
     }
 
-    // Critical compatibility path:
-    // When Disable Virtual Desktop Transition Animation is enabled, the native
-    // Win+Ctrl+Left/Right handler can select SwitchDesktopInternal as its
-    // no-animation path. Since we're inside (or immediately after) the actual
-    // _CycleInDirection user action, this is intentional and must not be
-    // converted into a teleport.
-    if (IsExplicitHotkeySwitchContext()) {
-        Wh_Log(
-            L"ALLOW SwitchDesktopInternal: "
-            L"explicit HOTKEY-CYCLE context depth=%d",
-            g_hotkeyCycleDepth);
+    // Hard blast-radius boundary: if the foreground policy didn't synchronously
+    // cause this switch, don't inspect or classify it at all.
+    if (g_foregroundPolicyDepth <= 0) {
+        return g_switchDesktopInternalOriginal(
+            pThis,
+            requestedDesktop);
+    }
 
+    // From here down, the switch is positively attributed to
+    // CVirtualDesktopForegroundPolicy::ForegroundViewChanged.
+    if (!g_workerReady.load()) {
         return g_switchDesktopInternalOriginal(
             pThis,
             requestedDesktop);
@@ -1661,12 +1661,17 @@ static HRESULT SwitchDesktopInternal_Hook(
     if (explicitDisposition ==
         ExplicitInternalSwitchDisposition::SuppressStaleSource) {
 
+        // Rapid Task View switching can make foreground policy try to restore
+        // the view from the desktop we just left. Suppress that exact rebound,
+        // but don't queue a rescue/teleport.
         Wh_Log(
             L"SUPPRESS SwitchDesktopInternal: stale source rebound "
-            L"during explicit transaction #%llu target=%s",
+            L"during explicit transaction #%llu target=%s "
+            L"foregroundPolicyDepth=%d",
             static_cast<unsigned long long>(
                 explicitSnapshot.sequence),
-            GuidToStringForLog(explicitSnapshot.targetDesktopId));
+            GuidToStringForLog(explicitSnapshot.targetDesktopId),
+            g_foregroundPolicyDepth);
 
         return S_OK;
     }
@@ -1685,8 +1690,8 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     HWND foreground = GetForegroundWindow();
 
-    // If there isn't a plausible app window to rescue, don't interfere with
-    // an unknown internal switch path.
+    // Even inside the positively attributed activation path, fail open unless
+    // there is a plausible top-level app window to rescue.
     if (!IsRescueCandidate(foreground)) {
         Wh_Log(
             L"SwitchDesktopInternal allowed: "
@@ -1722,11 +1727,13 @@ static HRESULT SwitchDesktopInternal_Hook(
     }
 
     Wh_Log(
-        L"Candidate SwitchDesktopInternal "
-        L"source=%s requested=%s foreground=%p",
+        L"Candidate activation-driven SwitchDesktopInternal "
+        L"source=%s requested=%s foreground=%p "
+        L"foregroundPolicyDepth=%d",
         GuidToStringForLog(sourceDesktopId),
         GuidToStringForLog(requestedId),
-        foreground);
+        foreground,
+        g_foregroundPolicyDepth);
 
     LogWindow(L"candidate", foreground);
 
@@ -1962,14 +1969,16 @@ static bool InstallVirtualDesktopHooks() {
         },
         {
             {
-                L"private: long __cdecl "
-                L"CVirtualDesktopHotkeyHandler::_CycleInDirection("
-                L"enum VirtualDesktopSwitchDirection)"
+                L"public: virtual long __cdecl "
+                L"CVirtualDesktopForegroundPolicy::ForegroundViewChanged("
+                L"struct IVirtualDesktopManagerPrivate *,"
+                L"struct IVirtualDesktopSwitchAnimator *,"
+                L"struct IApplicationView *)"
             },
             reinterpret_cast<void**>(
-                &g_cycleInDirectionOriginal),
+                &g_foregroundViewChangedOriginal),
             reinterpret_cast<void*>(
-                CycleInDirection_Hook)
+                ForegroundViewChanged_Hook)
         },
     };
 
