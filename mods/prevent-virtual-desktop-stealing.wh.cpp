@@ -4,6 +4,7 @@
 // @description     Redirect cross-desktop window activation to the current desktop.
 // @version         0.3.3
 // @author          meteoni
+// @github          https://github.com/Meteony
 // @include         explorer.exe
 // @compilerOptions -lole32
 // ==/WindhawkMod==
@@ -1545,7 +1546,7 @@ static bool InstallVirtualDesktopHooks() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {
             {
                 L"public: virtual long __cdecl "
@@ -1572,8 +1573,8 @@ static bool InstallVirtualDesktopHooks() {
 
     if (!WindhawkUtils::HookSymbols(
             twinui,
-            hooks,
-            ARRAYSIZE(hooks))) {
+            twinuiPcshellDllHooks,
+            ARRAYSIZE(twinuiPcshellDllHooks))) {
         Wh_Log(
             L"[VDREDIRECT] Shell host: failed to resolve/install "
             L"virtual-desktop symbols");
