@@ -143,7 +143,6 @@ Windows 原生不支援中文序號的「自然邏輯排序」。在簡體中文
 #include <windhawk_utils.h>
 
 namespace cls {
-
 typedef long long i64;
 
 bool g_num = true;
@@ -161,7 +160,7 @@ enum Kind {
     K_TG = 3,
     K_DZ = 4,
     K_SZX = 5,
-    K_TEXT = 6  
+    K_TEXT = 6
 };
 
 static bool IsWordChar(wchar_t c) {
@@ -188,7 +187,8 @@ static int CnDigit(wchar_t c) {
     switch (c) {
         case L'〇': case L'零': return 0;
         case L'一': case L'壹': return 1;
-        case L'二': case L'贰': case L'貳': case L'貮': return 2;
+        case L'二': case L'贰': case L'貳':
+        case L'貮': return 2;
         case L'三': case L'叁': return 3;
         case L'四': case L'肆': return 4;
         case L'五': case L'伍': return 5;
@@ -436,6 +436,7 @@ static bool NumGate(const wchar_t* s, int len, int i, int runLen) {
     if (IsStrongUnit(a)) return true;
     if (IsWeakUnit(a)) {
         if (runLen >= 2) return true;
+
         int k = after;
         int steps = 0;
         while (k < len && steps < 2 && IsUnit(s[k])) { k++; steps++; }
@@ -591,6 +592,66 @@ static int Tokenize(const wchar_t* s, int len, Token* out, int maxTokens) {
     return n;
 }
 
+const int SKEL_MAX = 640;
+
+static wchar_t RepFor(int kind) {
+    switch (kind) {
+        case K_NUM:
+            return L'一';
+        case K_GANZHI:
+            return L'甲';
+        case K_TG:
+            return L'甲';
+        case K_DZ:
+            return L'子';
+        case K_SZX:
+            return L'上';
+        default:
+            return L'?';
+    }
+}
+
+struct Key {
+    const wchar_t* skel;
+    int skelLen;
+    int nvals;
+    int kinds[MAX_TOKENS];
+    i64 vals[MAX_TOKENS];
+};
+
+static void BuildKey(const wchar_t* s, int len, wchar_t* buf, int bufCap, Key* k) {
+    k->skel = s;
+    k->skelLen = len;
+    k->nvals = 0;
+
+    if (len <= 0 || len > bufCap) return;
+    if (!HasCandidate(s, len)) return;
+
+    Token t[MAX_TOKENS];
+    int n = Tokenize(s, len, t, MAX_TOKENS);
+    if (n <= 0) return;
+    if (t[n - 1].off + t[n - 1].len != len) return;
+
+    int m = 0;
+    int nv = 0;
+    for (int i = 0; i < n; i++) {
+        if (t[i].kind == K_TEXT) {
+            memcpy(buf + m, s + t[i].off, (size_t)t[i].len * sizeof(wchar_t));
+            m += t[i].len;
+        } else {
+            buf[m++] = RepFor(t[i].kind);
+            k->kinds[nv] = t[i].kind;
+            k->vals[nv] = t[i].val;
+            nv++;
+        }
+    }
+    if (nv == 0) return;
+
+    k->skel = buf;
+    k->skelLen = m;
+    k->nvals = nv;
+}
+
 static int Compare(const wchar_t* a, int alen, const wchar_t* b, int blen,
                    NativeSegCmp segCmp, void* ctx, bool* handled) {
     *handled = false;
@@ -598,34 +659,34 @@ static int Compare(const wchar_t* a, int alen, const wchar_t* b, int blen,
 
     if (!HasCandidate(a, alen) && !HasCandidate(b, blen)) return 0;
 
-    Token ta[MAX_TOKENS], tb[MAX_TOKENS];
-    int na = Tokenize(a, alen, ta, MAX_TOKENS);
-    int nb = Tokenize(b, blen, tb, MAX_TOKENS);
+    wchar_t bufA[SKEL_MAX], bufB[SKEL_MAX];
+    Key ka, kb;
+    BuildKey(a, alen, bufA, SKEL_MAX, &ka);
+    BuildKey(b, blen, bufB, SKEL_MAX, &kb);
 
-    int n = na < nb ? na : nb;
-    for (int k = 0; k < n; k++) {
-        if (ta[k].kind != tb[k].kind) {
-            *handled = true;
-            return ta[k].kind < tb[k].kind ? -1 : 1;
-        }
-        if (ta[k].kind != K_TEXT) {
-            if (ta[k].val != tb[k].val) {
-                *handled = true;
-                return ta[k].val < tb[k].val ? -1 : 1;
-            }
-            continue;
-        }
-        int r = segCmp(ctx, a + ta[k].off, ta[k].len, b + tb[k].off, tb[k].len);
-        if (r == -2) return 0;
-        if (r != 0) {
-            *handled = true;
-            return r < 0 ? -1 : 1;
-        }
+    if (ka.nvals == 0 && kb.nvals == 0) return 0;
+
+    int r = segCmp(ctx, ka.skel, ka.skelLen, kb.skel, kb.skelLen);
+    if (r == -2) return 0;
+    if (r != 0) {
+        *handled = true;
+        return r < 0 ? -1 : 1;
     }
 
-    if (na != nb) {
+    int n = ka.nvals < kb.nvals ? ka.nvals : kb.nvals;
+    for (int i = 0; i < n; i++) {
+        if (ka.kinds[i] != kb.kinds[i]) {
+            *handled = true;
+            return ka.kinds[i] < kb.kinds[i] ? -1 : 1;
+        }
+        if (ka.vals[i] != kb.vals[i]) {
+            *handled = true;
+            return ka.vals[i] < kb.vals[i] ? -1 : 1;
+        }
+    }
+    if (ka.nvals != kb.nvals) {
         *handled = true;
-        return na < nb ? -1 : 1;
+        return ka.nvals < kb.nvals ? -1 : 1;
     }
 
     return 0;
