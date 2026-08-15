@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Place the volume/brightness/camera on-screen indicator anywhere on the screen, not just the three positions Windows offers
-// @version         1.0.0
+// @version         1.0.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -49,8 +49,8 @@ screen instead.
   like, then let this mod do the actual placement.
 * The indicator is drawn by Explorer, so the mod targets `explorer.exe`. If
   Explorer restarts, the mod keeps working.
-* Tested on Windows 11 24H2/25H2. Older builds draw this indicator differently
-  and are not supported.
+* Tested on Windows 11 build 26200 (25H2) x64. Other builds are untested, and
+  older ones draw this indicator differently.
 */
 // ==/WindhawkModReadme==
 
@@ -146,34 +146,27 @@ bool CurrentThreadHasConfirmatorName() {
     return match;
 }
 
-// Explorer calls SetWindowPos constantly, so the check has to be nearly free in
-// the common case. The indicator is always moved by the thread that owns it, so
-// it's enough to ask whether this thread is the indicator's, and that answer is
-// cached per thread. A negative is only cached briefly, because a thread names
-// itself shortly after it starts and may not have done so on the first call.
+// Only a positive is cached. Caching a negative risks pinning the answer for a
+// thread that simply hadn't named itself yet, which would send the first
+// indicator to Windows' position instead of the configured one.
 bool IsCurrentThreadConfirmatorThread() {
     static thread_local bool isConfirmator = false;
-    static thread_local ULONGLONG lastCheckTick = 0;
 
     if (isConfirmator) {
         return true;
     }
 
-    ULONGLONG tick = GetTickCount64();
-    if (lastCheckTick && tick - lastCheckTick < 2000) {
-        return false;
-    }
-
-    lastCheckTick = tick;
     isConfirmator = CurrentThreadHasConfirmatorName();
     return isConfirmator;
 }
 
 bool IsIndicatorWindow(HWND hWnd) {
-    if (!hWnd || !IsCurrentThreadConfirmatorThread()) {
+    if (!hWnd) {
         return false;
     }
 
+    // The indicator is moved by the thread that owns it, so anything else is
+    // ruled out before the more expensive thread-name lookup runs.
     DWORD processId = 0;
     DWORD threadId = GetWindowThreadProcessId(hWnd, &processId);
     if (threadId != GetCurrentThreadId() ||
@@ -182,10 +175,18 @@ bool IsIndicatorWindow(HWND hWnd) {
     }
 
     // Only top-level windows are placed on screen.
-    return GetAncestor(hWnd, GA_PARENT) == GetDesktopWindow();
+    if (GetAncestor(hWnd, GA_PARENT) != GetDesktopWindow()) {
+        return false;
+    }
+
+    return IsCurrentThreadConfirmatorThread();
 }
 
-HMONITOR PickMonitor(HWND hWnd) {
+// `targetRect` is where the indicator is about to go, not where it is. The
+// window's current rect is the previous placement, and since the mod pins the
+// window, using it would feed each decision back into the next one and lock the
+// indicator onto whichever monitor it first landed on.
+HMONITOR PickMonitor(const RECT& targetRect) {
     switch (g_settings.monitor) {
         case MonitorChoice::primary:
             return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -211,7 +212,7 @@ HMONITOR PickMonitor(HWND hWnd) {
             break;
     }
 
-    return MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    return MonitorFromRect(&targetRect, MONITOR_DEFAULTTONEAREST);
 }
 
 // Places a window of the given size within `area` according to the configured
@@ -285,8 +286,15 @@ void CalculatePosition(HMONITOR monitor,
     }
 }
 
-bool AdjustIndicatorPos(HWND hWnd, int width, int height, int* x, int* y) {
-    HMONITOR monitor = PickMonitor(hWnd);
+bool AdjustIndicatorPos(int width, int height, int* x, int* y) {
+    RECT targetRect{
+        .left = *x,
+        .top = *y,
+        .right = *x + width,
+        .bottom = *y + height,
+    };
+
+    HMONITOR monitor = PickMonitor(targetRect);
     if (!monitor) {
         return false;
     }
@@ -309,6 +317,22 @@ bool AdjustIndicatorPos(HWND hWnd, int width, int height, int* x, int* y) {
     return true;
 }
 
+// The class name isn't used to identify the window, since it's undocumented and
+// free to change between builds. Logging it means that if the thread-name match
+// ever starts catching the wrong window, a user's log says which one.
+void LogMove(HWND hWnd, int x, int y, int width, int height) {
+    WCHAR className[64];
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+        className[0] = L'\0';
+    }
+
+    Wh_Log(L"Moving indicator (class %s) to %dx%d (%dx%d)", className, x, y,
+           width, height);
+}
+
+// On build 26200 the indicator is placed with MoveWindow and this hook never
+// fires. It's kept deliberately, as a fallback for builds that go through
+// SetWindowPos instead.
 using SetWindowPos_t = decltype(&SetWindowPos);
 SetWindowPos_t SetWindowPos_Original;
 
@@ -332,6 +356,11 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         return original();
     }
 
+    // A real sizing call follows, so there's nothing to place yet.
+    if (!(uFlags & SWP_NOSIZE) && (cx <= 0 || cy <= 0)) {
+        return original();
+    }
+
     if (!IsIndicatorWindow(hWnd)) {
         return original();
     }
@@ -349,11 +378,11 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
     int x = (uFlags & SWP_NOMOVE) ? rc.left : X;
     int y = (uFlags & SWP_NOMOVE) ? rc.top : Y;
 
-    if (!AdjustIndicatorPos(hWnd, width, height, &x, &y)) {
+    if (!AdjustIndicatorPos(width, height, &x, &y)) {
         return original();
     }
 
-    Wh_Log(L"Moving indicator to %dx%d (%dx%d)", x, y, width, height);
+    LogMove(hWnd, x, y, width, height);
 
     return SetWindowPos_Original(hWnd, hWndInsertAfter, x, y, cx, cy,
                                  uFlags & ~SWP_NOMOVE);
@@ -382,11 +411,11 @@ BOOL WINAPI MoveWindow_Hook(HWND hWnd,
 
     int x = X;
     int y = Y;
-    if (!AdjustIndicatorPos(hWnd, nWidth, nHeight, &x, &y)) {
+    if (!AdjustIndicatorPos(nWidth, nHeight, &x, &y)) {
         return original();
     }
 
-    Wh_Log(L"Moving indicator to %dx%d (%dx%d)", x, y, nWidth, nHeight);
+    LogMove(hWnd, x, y, nWidth, nHeight);
 
     return MoveWindow_Original(hWnd, x, y, nWidth, nHeight, bRepaint);
 }
@@ -447,6 +476,13 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    // Nothing to do, so don't hook at all. Windhawk loads the mod again after a
+    // settings change, which is when a real position can arrive.
+    if (g_settings.position == Position::windowsDefault) {
+        Wh_Log(L"No position configured, not loading");
+        return FALSE;
+    }
+
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
     WindhawkUtils::SetFunctionHook(MoveWindow, MoveWindow_Hook,
@@ -459,10 +495,8 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     LoadSettings();
-
-    return TRUE;
 }
