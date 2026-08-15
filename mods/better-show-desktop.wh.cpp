@@ -2801,7 +2801,7 @@ BOOL Wh_ModInit() {
         }
 
         WindhawkUtils::
-            Wh_SetFunctionHookT(
+            SetFunctionHook(
                 loadLibraryExW,
                 LoadLibraryExW_Hook,
                 &LoadLibraryExW_Original);
