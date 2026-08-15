@@ -1,0 +1,4030 @@
+// ==WindhawkMod==
+// @id              explorer-home-devices
+// @name            Devices and drives in Explorer Home
+// @name:pt         Dispositivos e unidades na Página Inicial do Explorador
+// @name:es         Dispositivos y unidades en Inicio del Explorador
+// @description     Adds a native WinUI section for devices and drives after Quick access on the Windows 11 File Explorer Home page.
+// @description:pt  Adiciona uma seção WinUI nativa de dispositivos e unidades depois de Acesso rápido na Página Inicial do Explorador do Windows 11.
+// @description:es  Agrega una sección WinUI nativa de dispositivos y unidades después de Acceso rápido en la página Inicio del Explorador de Windows 11.
+// @version         1.0
+// @author          crazyboyybs
+// @github          https://github.com/crazyboyybs
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -lcomctl32 -lwindowscodecs -luuid
+// @license         MIT
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Devices and drives in the File Explorer Home folder
+
+![Devices and drives in Explorer Home](https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Dispositivos%20e%20unidades.png)
+
+The This PC folder in Windows File Explorer shows your drives, this mod
+brings that to the Home folder. It adds a native **Devices and drives**
+section right after **Quick access**, built with the same WinUI the rest of
+the Home page already uses.
+
+**What you get:**
+- Drive cards with the real name, icon, type and free-space bar, taken
+  straight from the Shell, the same info you'd see in "This PC".
+- Double-click a card to open the drive in the current tab; drag one out to
+  create a shortcut, or drag files onto it to copy or move them there.
+- Right-click a card (or use your keyboard's context-menu shortcut) for the
+  real Windows context menu, Eject, Properties, Rename and everything else
+  you're used to, including with multiple drives selected.
+- Rename works inline, just like a normal folder.
+- The section header can collapse the whole grid if you want it out of the
+  way.
+- The grid keeps itself up to date automatically whenever a drive is plugged
+  in, removed, or its free space changes.
+
+**A quick technical note:** the mod reads Explorer's own WinUI page and
+inserts the section directly into it, without relying on XAML Diagnostics,
+so it plays nicely alongside other Explorer styling mods that need that
+facility for themselves.
+
+---
+
+# Dispositivos e unidades na pasta Início do Explorador de Arquivos
+
+A pasta Este Computador do Explorador de Arquivos do Windows mostra suas
+unidades, esse mod traz isso para a pasta Início. Ele adiciona uma seção
+nativa de **Dispositivos e unidades** logo depois do **Acesso rápido**,
+construída com o mesmo WinUI que o resto da Página Inicial já usa.
+
+**O que você ganha:**
+- Cards de unidade com nome, ícone, tipo e barra de espaço livre reais,
+  vindos direto do Shell, a mesma informação que você veria em "Este
+  Computador".
+- Dê duplo clique num card pra abrir a unidade na aba atual; arraste um card
+  pra fora pra criar um atalho, ou arraste arquivos pra dentro dele pra
+  copiar ou mover.
+- Clique com o botão direito (ou use o atalho de menu de contexto do seu
+  teclado) pra ver o menu de contexto de verdade do Windows, Ejetar,
+  Propriedades, Renomear e tudo mais que você já conhece, inclusive com
+  várias unidades selecionadas.
+- Renomear funciona direto ali, igual numa pasta comum.
+- O cabeçalho da seção pode recolher a grade inteira se você quiser tirá-la
+  do caminho.
+- A grade se atualiza sozinha sempre que uma unidade é conectada, removida,
+  ou o espaço livre muda.
+
+**Um detalhe técnico rápido:** o mod lê a própria página WinUI do Explorador
+e insere a seção diretamente nela, sem depender do XAML Diagnostics, então
+ele convive bem com outros mods de estilo do Explorador que precisam desse
+recurso pra si.
+
+---
+
+# Dispositivos y unidades en la carpeta Inicio del Explorador de archivos
+
+La carpeta Este equipo del Explorador de archivos de Windows muestra tus
+unidades, este mod trae eso a la carpeta Inicio. Agrega una sección nativa
+de **Dispositivos y unidades** justo después de **Acceso rápido**,
+construida con el mismo WinUI que ya usa el resto de la página de Inicio.
+
+**Qué obtienes:**
+- Tarjetas de unidad con el nombre, ícono, tipo y barra de espacio libre
+  reales, tomados directamente del Shell, la misma información que verías
+  en "Equipo".
+- Haz doble clic en una tarjeta para abrir la unidad en la pestaña actual;
+  arrastra una hacia afuera para crear un acceso directo, o arrastra
+  archivos sobre ella para copiarlos o moverlos.
+- Haz clic derecho (o usa el atajo de menú contextual de tu teclado) para
+  ver el menú contextual real de Windows, Expulsar, Propiedades, Cambiar
+  nombre y todo lo demás de siempre, incluso con varias unidades
+  seleccionadas.
+- Cambiar el nombre funciona en línea, igual que en una carpeta normal.
+- El encabezado de la sección puede contraer toda la cuadrícula si quieres
+  quitarla de en medio.
+- La cuadrícula se actualiza sola cada vez que se conecta o quita una
+  unidad, o cambia el espacio libre.
+
+**Un detalle técnico rápido:** el mod lee la propia página WinUI del
+Explorador e inserta la sección directamente en ella, sin depender de XAML
+Diagnostics, así que convive bien con otros mods de estilo del Explorador
+que necesitan ese recurso para sí mismos.
+*/
+// ==/WindhawkModReadme==
+
+#include <windows.h>
+
+#include <commctrl.h>
+#include <commoncontrols.h>
+#include <dbt.h>
+#include <inspectable.h>
+#include <robuffer.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+#include <propkey.h>
+#include <wincodec.h>
+
+#include <windhawk_utils.h>
+
+#include <atomic>
+#include <algorithm>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+// Conflicts with a WinRT method of the same name.
+#undef GetCurrentTime
+
+#include <winrt/base.h>
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Microsoft.UI.Input.h>
+#include <winrt/Microsoft.UI.Xaml.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Microsoft.UI.Xaml.Input.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
+
+namespace mux = winrt::Microsoft::UI::Xaml;
+namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
+namespace muxcp = winrt::Microsoft::UI::Xaml::Controls::Primitives;
+namespace muxi = winrt::Microsoft::UI::Xaml::Input;
+namespace muxm = winrt::Microsoft::UI::Xaml::Media;
+namespace muxmi = winrt::Microsoft::UI::Xaml::Media::Imaging;
+namespace wut = winrt::Windows::UI::Text;
+
+namespace {
+
+constexpr wchar_t kPrimaryContentPresenterName[] =
+    L"PrimaryGroupContentPresenter";
+constexpr wchar_t kDevicesSectionName[] = L"WindhawkDevicesSection";
+constexpr wchar_t kDevicesGridName[] = L"WindhawkDevicesGrid";
+constexpr UINT_PTR kExplorerWindowSubclassId = 0x48444D45;
+
+constexpr LONG kShellDriveEvents =
+    SHCNE_DRIVEADD | SHCNE_DRIVEREMOVED | SHCNE_MEDIAINSERTED |
+    SHCNE_MEDIAREMOVED | SHCNE_FREESPACE | SHCNE_CREATE | SHCNE_DELETE |
+    SHCNE_MKDIR | SHCNE_RMDIR | SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER |
+    SHCNE_UPDATEITEM | SHCNE_UPDATEDIR;
+
+std::atomic<bool> g_unloading{false};
+std::atomic<bool> g_fileExplorerExtensionsSymbolsHooked{false};
+std::atomic<bool> g_navigationSymbolsHooked{false};
+std::atomic<int> g_openContextMenuCount{0};
+std::atomic<int> g_pendingDragPreparations{0};
+std::mutex g_dragPreparationMutex;
+std::condition_variable g_dragPreparationCondition;
+std::atomic<int> g_pendingDropOperations{0};
+std::mutex g_dropOperationMutex;
+std::condition_variable g_dropOperationCondition;
+
+struct IFileExplorerNavigationControllerAbi : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE StartNavigation(IInspectable* target) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SubmitAddressBarText(HSTRING target) = 0;
+};
+
+constexpr IID kIidFileExplorerNavigationController = {
+    0x47319F7F,
+    0x354A,
+    0x5591,
+    {0x9E, 0x6C, 0x43, 0xCF, 0x87, 0x97, 0x37, 0xD6}};
+
+struct DriveInfo {
+    // This is an absolute Shell parsing name. For file-system drives it is
+    // normally C:\; namespace devices can use a ::{CLSID}\... form instead.
+    std::wstring rootPath;
+    std::wstring fileSystemPath;
+    std::wstring displayName;
+    std::wstring typeName;
+    std::wstring spaceDescription;
+    UINT driveType = DRIVE_UNKNOWN;
+    // Owned BGRA pixels let the worker transfer Shell icons without sharing
+    // thread-affine WinUI or WIC objects with the Explorer UI thread.
+    UINT iconWidth = 0;
+    UINT iconHeight = 0;
+    std::vector<uint8_t> iconPixels;
+    double percentUsed = 0;
+    bool hasSpaceInformation = false;
+    bool canStartWinUiDrag = false;
+    bool canAcceptDrop = true;
+};
+
+using DriveSnapshot = std::vector<DriveInfo>;
+
+constexpr uint32_t kDriveRefreshTopology = 1 << 0;
+constexpr uint32_t kDriveRefreshCapacity = 1 << 1;
+
+std::mutex g_refreshMutex;
+std::condition_variable g_refreshCondition;
+uint64_t g_requestedRefreshGeneration = 0;
+uint32_t g_requestedRefreshKinds = 0;
+bool g_refreshWorkerStopping = false;
+// Windhawk doesn't call Wh_ModUninit during process shutdown. A pointer avoids
+// std::thread's global destructor aborting Explorer while remaining leak-free
+// during normal mod unload.
+std::thread* g_refreshWorker = nullptr;
+std::shared_ptr<const DriveSnapshot> g_latestDriveSnapshot;
+
+std::mutex g_registeredWindowsMutex;
+std::vector<HWND> g_registeredWindows;
+
+std::mutex g_navigationControllersMutex;
+std::unordered_map<DWORD, IFileExplorerNavigationControllerAbi*>
+    g_navigationControllersByThread;
+
+// XAML objects are only accessed by the UI thread which owns them.
+struct HomePanelState {
+    winrt::weak_ref<muxc::StackPanel> panel;
+    IFileExplorerNavigationControllerAbi* navigationController = nullptr;
+};
+
+thread_local std::vector<HomePanelState> g_homePanels;
+// A zero registration ID means that the window subclass is active and
+// WM_DEVICECHANGE remains available as a fallback.
+thread_local std::unordered_map<HWND, ULONG>
+    g_windowNotificationRegistrations;
+thread_local HHOOK g_driveKeyboardMessageHook = nullptr;
+thread_local IContextMenu2* g_trackedContextMenu2 = nullptr;
+thread_local IContextMenu3* g_trackedContextMenu3 = nullptr;
+
+struct DriveCardEventState {
+    winrt::weak_ref<muxc::GridViewItem> item;
+    muxc::TextBlock title{nullptr};
+    muxc::TextBox renameBox{nullptr};
+    mux::UIElement driveIcon{nullptr};
+    muxc::CheckBox selectionCheckBox{nullptr};
+    winrt::event_token doubleTappedToken;
+    winrt::Windows::Foundation::IInspectable keyDownHandler{nullptr};
+    winrt::event_token rightTappedToken;
+    winrt::event_token dragStartingToken;
+    winrt::event_token dragEnterToken;
+    winrt::event_token dragOverToken;
+    winrt::event_token dropToken;
+    winrt::event_token pointerEnteredToken;
+    winrt::event_token pointerExitedToken;
+    winrt::event_token selectionCheckBoxClickToken;
+    int64_t selectedChangedToken = 0;
+    winrt::event_token renameKeyDownToken;
+    winrt::event_token renameLostFocusToken;
+    IFileExplorerNavigationControllerAbi* navigationController = nullptr;
+    bool renaming = false;
+    bool renameFocusPending = false;
+    bool selectionCheckBoxesEnabled = false;
+    bool pointerOver = false;
+};
+
+thread_local std::vector<DriveCardEventState> g_driveCardEventStates;
+
+struct DevicesHeaderEventState {
+    winrt::weak_ref<muxc::Button> button;
+    winrt::weak_ref<muxc::GridView> grid;
+    winrt::event_token clickToken;
+    bool expanded = true;
+};
+
+thread_local std::vector<DevicesHeaderEventState>
+    g_devicesHeaderEventStates;
+
+struct HomeSelectionEventState {
+    winrt::weak_ref<muxc::Grid> surface;
+    winrt::weak_ref<muxc::StackPanel> panel;
+    winrt::Windows::Foundation::IInspectable pressedHandler{nullptr};
+    winrt::Windows::Foundation::IInspectable movedHandler{nullptr};
+    winrt::Windows::Foundation::IInspectable releasedHandler{nullptr};
+    winrt::Windows::Foundation::Point start{};
+    uint32_t pointerId = 0;
+    bool tracking = false;
+    bool moved = false;
+    bool additive = false;
+    std::vector<winrt::weak_ref<muxc::GridViewItem>> initialSelection;
+};
+
+thread_local std::vector<HomeSelectionEventState>
+    g_homeSelectionEventStates;
+
+void RequestDriveRefresh(uint32_t refreshKinds = kDriveRefreshTopology);
+void RequestInitialDriveSnapshot();
+bool RefreshDevicesSectionsForCurrentThread();
+void EnsureShellNotificationsForCurrentThread();
+std::vector<HWND> GetFileExplorerWindows();
+void ClearDriveCardEventHandlersForCurrentThread();
+void ClearDevicesHeaderEventHandlersForCurrentThread();
+void ClearHomeSelectionEventHandlersForCurrentThread();
+
+muxm::Brush TryGetBrush(std::wstring_view key) {
+    try {
+        auto application = mux::Application::Current();
+        if (!application) {
+            return nullptr;
+        }
+
+        auto resources = application.Resources();
+        auto boxedKey = winrt::box_value(winrt::hstring{key});
+        if (!resources.HasKey(boxedKey)) {
+            return nullptr;
+        }
+
+        return resources.Lookup(boxedKey).try_as<muxm::Brush>();
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+template <typename T>
+void ApplyBrushIfAvailable(T const& element, std::wstring_view resourceKey) {
+    if (auto brush = TryGetBrush(resourceKey)) {
+        element.Foreground(brush);
+    }
+}
+
+std::wstring LoadShellString(PCWSTR reference, std::wstring_view fallback) {
+    wchar_t buffer[256]{};
+    if (SUCCEEDED(SHLoadIndirectString(reference, buffer, ARRAYSIZE(buffer),
+                                       nullptr)) &&
+        buffer[0]) {
+        return buffer;
+    }
+
+    return std::wstring{fallback};
+}
+
+struct ShellStrings {
+    std::wstring devicesAndDrives = LoadShellString(
+        L"@shell32.dll,-9339", L"Devices and drives");
+    std::wstring freeSpace =
+        LoadShellString(L"@shell32.dll,-9307", L"Free space");
+    std::wstring removableDisk =
+        LoadShellString(L"@shell32.dll,-9309", L"Removable Disk");
+    std::wstring dvdDrive =
+        LoadShellString(L"@shell32.dll,-9316", L"DVD Drive");
+    std::wstring networkDrive =
+        LoadShellString(L"@shell32.dll,-9319", L"Network Drive");
+};
+
+const ShellStrings& GetShellStrings() {
+    static const ShellStrings strings;
+    return strings;
+}
+
+bool IsAutoCheckSelectEnabled() {
+    SHELLSTATE shellState{};
+    SHGetSetSettings(&shellState, SSF_AUTOCHECKSELECT, FALSE);
+    return shellState.fAutoCheckSelect;
+}
+
+std::wstring FormatByteSize(uint64_t byteCount) {
+    wchar_t buffer[64]{};
+    if (StrFormatByteSizeW(static_cast<LONGLONG>(byteCount), buffer,
+                           ARRAYSIZE(buffer))) {
+        return buffer;
+    }
+
+    return std::to_wstring(byteCount);
+}
+
+std::wstring GetDriveDisplayName(IShellItem* shellItem,
+                                 std::wstring const& rootPath) {
+    if (shellItem) {
+        PWSTR displayName = nullptr;
+        if (SUCCEEDED(shellItem->GetDisplayName(SIGDN_NORMALDISPLAY,
+                                                &displayName)) &&
+            displayName) {
+            std::wstring result{displayName};
+            CoTaskMemFree(displayName);
+            if (!result.empty()) {
+                return result;
+            }
+        }
+    }
+
+    return rootPath;
+}
+
+std::wstring GetShellItemTypeName(IShellItem2* shellItem) {
+    if (!shellItem) {
+        return {};
+    }
+
+    PWSTR typeName = nullptr;
+    HRESULT result = shellItem->GetString(PKEY_ItemTypeText, &typeName);
+    if (FAILED(result) || !typeName) {
+        return {};
+    }
+
+    std::wstring value{typeName};
+    CoTaskMemFree(typeName);
+    return value;
+}
+
+std::wstring GetDriveTypeName(UINT driveType) {
+    auto const& strings = GetShellStrings();
+    switch (driveType) {
+        case DRIVE_REMOVABLE:
+            return strings.removableDisk;
+        case DRIVE_CDROM:
+            return strings.dvdDrive;
+        case DRIVE_REMOTE:
+            return strings.networkDrive;
+        default:
+            return {};
+    }
+}
+
+struct ShellDriveIdentity {
+    std::wstring parsingName;
+    std::wstring fileSystemPath;
+    DWORD categoryId = static_cast<DWORD>(-1);
+};
+
+std::vector<ShellDriveIdentity> EnumerateThisPcDevices() {
+    std::vector<ShellDriveIdentity> candidates;
+
+    PIDLIST_ABSOLUTE computerPidl = nullptr;
+    HRESULT result = SHGetKnownFolderIDList(
+        FOLDERID_ComputerFolder, KF_FLAG_DEFAULT, nullptr, &computerPidl);
+    if (FAILED(result) || !computerPidl) {
+        Wh_Log(L"Couldn't resolve the This PC PIDL: %08X", result);
+        return candidates;
+    }
+
+    winrt::com_ptr<IShellFolder> desktopFolder;
+    result = SHGetDesktopFolder(desktopFolder.put());
+    if (FAILED(result)) {
+        CoTaskMemFree(computerPidl);
+        Wh_Log(L"Couldn't get the Desktop Shell folder: %08X", result);
+        return candidates;
+    }
+
+    winrt::com_ptr<IShellFolder> computerFolder;
+    result = desktopFolder->BindToObject(
+        computerPidl, nullptr, IID_PPV_ARGS(computerFolder.put()));
+    if (FAILED(result)) {
+        CoTaskMemFree(computerPidl);
+        Wh_Log(L"Couldn't bind to the This PC Shell folder: %08X", result);
+        return candidates;
+    }
+
+    winrt::com_ptr<ICategoryProvider> categoryProvider;
+    result = computerFolder->CreateViewObject(
+        nullptr, IID_ICategoryProvider,
+        reinterpret_cast<void**>(categoryProvider.put()));
+
+    winrt::com_ptr<ICategorizer> categorizer;
+    if (SUCCEEDED(result) && categoryProvider) {
+        GUID unusedGuid{};
+        SHCOLUMNID defaultColumn{};
+        result = categoryProvider->GetDefaultCategory(&unusedGuid,
+                                                      &defaultColumn);
+        GUID categorizerGuid{};
+        if (SUCCEEDED(result)) {
+            result = categoryProvider->GetCategoryForSCID(&defaultColumn,
+                                                          &categorizerGuid);
+        }
+        if (SUCCEEDED(result)) {
+            result = categoryProvider->CreateCategory(
+                &categorizerGuid, IID_ICategorizer,
+                reinterpret_cast<void**>(categorizer.put()));
+        }
+    }
+    if (!categorizer) {
+        Wh_Log(L"Couldn't create the native This PC categorizer: %08X; "
+               L"using file-system roots only",
+               result);
+    }
+
+    winrt::com_ptr<IEnumIDList> items;
+    result = computerFolder->EnumObjects(
+        nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, items.put());
+    if (FAILED(result)) {
+        CoTaskMemFree(computerPidl);
+        Wh_Log(L"Couldn't enumerate the This PC Shell folder: %08X", result);
+        return candidates;
+    }
+
+    wchar_t systemRoot[MAX_PATH]{};
+    if (GetWindowsDirectoryW(systemRoot, ARRAYSIZE(systemRoot))) {
+        PathStripToRootW(systemRoot);
+    }
+    DWORD driveCategoryId = static_cast<DWORD>(-1);
+    DWORD fallbackDriveCategoryId = static_cast<DWORD>(-1);
+
+    while (true) {
+        PITEMID_CHILD childPidl = nullptr;
+        ULONG fetched = 0;
+        result = items->Next(1, &childPidl, &fetched);
+        if (result != S_OK || fetched != 1 || !childPidl) {
+            break;
+        }
+
+        DWORD categoryId = static_cast<DWORD>(-1);
+        if (categorizer) {
+            PCUITEMID_CHILD childPidls[] = {childPidl};
+            if (FAILED(categorizer->GetCategory(1, childPidls,
+                                                &categoryId))) {
+                categoryId = static_cast<DWORD>(-1);
+            }
+        }
+
+        PIDLIST_ABSOLUTE absolutePidl = ILCombine(computerPidl, childPidl);
+        CoTaskMemFree(childPidl);
+        if (!absolutePidl) {
+            continue;
+        }
+
+        ShellDriveIdentity candidate;
+        candidate.categoryId = categoryId;
+        wchar_t path[MAX_PATH]{};
+        if (SHGetPathFromIDListW(absolutePidl, path) && PathIsRootW(path)) {
+            candidate.fileSystemPath = path;
+            if (categoryId != static_cast<DWORD>(-1)) {
+                if (fallbackDriveCategoryId == static_cast<DWORD>(-1)) {
+                    fallbackDriveCategoryId = categoryId;
+                }
+                if (systemRoot[0] && _wcsicmp(path, systemRoot) == 0) {
+                    driveCategoryId = categoryId;
+                }
+            }
+        }
+
+        PWSTR parsingName = nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(
+                absolutePidl, SIGDN_DESKTOPABSOLUTEPARSING, &parsingName)) &&
+            parsingName) {
+            candidate.parsingName = parsingName;
+            CoTaskMemFree(parsingName);
+        } else {
+            candidate.parsingName = candidate.fileSystemPath;
+        }
+
+        if (!candidate.parsingName.empty()) {
+            candidates.push_back(std::move(candidate));
+        }
+        CoTaskMemFree(absolutePidl);
+    }
+
+    CoTaskMemFree(computerPidl);
+
+    if (driveCategoryId == static_cast<DWORD>(-1)) {
+        driveCategoryId = fallbackDriveCategoryId;
+    }
+
+    if (categorizer && driveCategoryId != static_cast<DWORD>(-1)) {
+        std::erase_if(candidates, [&](ShellDriveIdentity const& candidate) {
+            return candidate.categoryId != driveCategoryId;
+        });
+    } else {
+        std::erase_if(candidates, [](ShellDriveIdentity const& candidate) {
+            return candidate.fileSystemPath.empty();
+        });
+    }
+
+    return candidates;
+}
+
+class UniqueIcon {
+  public:
+    explicit UniqueIcon(HICON icon = nullptr) : icon_(icon) {}
+    ~UniqueIcon() {
+        if (icon_) {
+            DestroyIcon(icon_);
+        }
+    }
+
+    UniqueIcon(UniqueIcon const&) = delete;
+    UniqueIcon& operator=(UniqueIcon const&) = delete;
+
+    HICON get() const {
+        return icon_;
+    }
+
+  private:
+    HICON icon_;
+};
+
+bool PopulateDriveIcon(DriveInfo& drive, IShellItem* shellItem,
+                       IImageList* systemImageList,
+                       IWICImagingFactory* imagingFactory) {
+    if (!shellItem || !systemImageList || !imagingFactory) {
+        return false;
+    }
+
+    PIDLIST_ABSOLUTE absolutePidl = nullptr;
+    HRESULT result = SHGetIDListFromObject(shellItem, &absolutePidl);
+    if (FAILED(result) || !absolutePidl) {
+        return false;
+    }
+
+    SHFILEINFOW shellFileInfo{};
+    if (!SHGetFileInfoW(
+            reinterpret_cast<PCWSTR>(absolutePidl), 0, &shellFileInfo,
+            sizeof(shellFileInfo),
+            SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_ADDOVERLAYS |
+                SHGFI_OVERLAYINDEX)) {
+        CoTaskMemFree(absolutePidl);
+        return false;
+    }
+    CoTaskMemFree(absolutePidl);
+
+    UINT combinedIndex = static_cast<UINT>(shellFileInfo.iIcon);
+    int imageIndex = static_cast<int>(combinedIndex & 0x00FFFFFF);
+    int overlayIndex = static_cast<int>((combinedIndex >> 24) & 0xFF);
+    UINT imageFlags = ILD_TRANSPARENT;
+    if (overlayIndex) {
+        imageFlags |= INDEXTOOVERLAYMASK(overlayIndex);
+    }
+
+    HICON rawIcon = nullptr;
+    result = systemImageList->GetIcon(imageIndex, imageFlags, &rawIcon);
+    if (FAILED(result) || !rawIcon) {
+        return false;
+    }
+    UniqueIcon icon{rawIcon};
+
+    winrt::com_ptr<IWICBitmap> source;
+    result = imagingFactory->CreateBitmapFromHICON(icon.get(), source.put());
+    if (FAILED(result)) {
+        return false;
+    }
+
+    winrt::com_ptr<IWICFormatConverter> converter;
+    result = imagingFactory->CreateFormatConverter(converter.put());
+    if (FAILED(result)) {
+        return false;
+    }
+    result = converter->Initialize(
+        source.get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone,
+        nullptr, 0, WICBitmapPaletteTypeCustom);
+    if (FAILED(result)) {
+        return false;
+    }
+
+    UINT width = 0;
+    UINT height = 0;
+    result = converter->GetSize(&width, &height);
+    if (FAILED(result) || !width || !height || width > 256 || height > 256) {
+        return false;
+    }
+
+    UINT stride = width * 4;
+    UINT bufferSize = stride * height;
+    std::vector<uint8_t> pixels(bufferSize);
+    result = converter->CopyPixels(nullptr, stride, bufferSize, pixels.data());
+    if (FAILED(result)) {
+        return false;
+    }
+
+    drive.iconWidth = width;
+    drive.iconHeight = height;
+    drive.iconPixels = std::move(pixels);
+    return true;
+}
+
+void UpdateDriveSpaceInformation(DriveInfo& drive) {
+    drive.hasSpaceInformation = false;
+    drive.percentUsed = 0;
+    drive.spaceDescription.clear();
+    if (drive.fileSystemPath.empty()) {
+        return;
+    }
+
+    ULARGE_INTEGER availableToCaller{};
+    ULARGE_INTEGER totalBytes{};
+    ULARGE_INTEGER totalFreeBytes{};
+    if (!GetDiskFreeSpaceExW(drive.fileSystemPath.c_str(),
+                             &availableToCaller, &totalBytes,
+                             &totalFreeBytes) ||
+        !totalBytes.QuadPart) {
+        return;
+    }
+
+    drive.hasSpaceInformation = true;
+    drive.percentUsed =
+        100.0 - static_cast<double>(totalFreeBytes.QuadPart) * 100.0 /
+                    static_cast<double>(totalBytes.QuadPart);
+    drive.percentUsed = std::clamp(drive.percentUsed, 0.0, 100.0);
+    drive.spaceDescription =
+        GetShellStrings().freeSpace + L": " +
+        FormatByteSize(totalFreeBytes.QuadPart) + L" / " +
+        FormatByteSize(totalBytes.QuadPart);
+}
+
+DriveSnapshot EnumerateDrives(IImageList* systemImageList,
+                              IWICImagingFactory* imagingFactory) {
+    DriveSnapshot drives;
+    auto shellDrives = EnumerateThisPcDevices();
+    for (auto const& shellDrive : shellDrives) {
+        DriveInfo drive;
+        drive.rootPath = shellDrive.parsingName;
+        drive.fileSystemPath = shellDrive.fileSystemPath;
+        drive.driveType = drive.fileSystemPath.empty()
+                              ? DRIVE_UNKNOWN
+                              : GetDriveTypeW(drive.fileSystemPath.c_str());
+
+        winrt::com_ptr<IShellItem> shellItem;
+        SHCreateItemFromParsingName(drive.rootPath.c_str(), nullptr,
+                                    IID_PPV_ARGS(shellItem.put()));
+        winrt::com_ptr<IShellItem2> shellItem2;
+        if (shellItem) {
+            shellItem->QueryInterface(IID_PPV_ARGS(shellItem2.put()));
+        }
+        drive.displayName = GetDriveDisplayName(shellItem.get(),
+                                                drive.rootPath);
+        drive.typeName = drive.fileSystemPath.empty()
+                             ? GetShellItemTypeName(shellItem2.get())
+                             : GetDriveTypeName(drive.driveType);
+        drive.canStartWinUiDrag = !drive.fileSystemPath.empty();
+
+        if (shellItem) {
+            SFGAOF attributes = 0;
+            if (SUCCEEDED(shellItem->GetAttributes(SFGAO_DROPTARGET,
+                                                   &attributes))) {
+                drive.canAcceptDrop = (attributes & SFGAO_DROPTARGET) != 0;
+            }
+        }
+        PopulateDriveIcon(drive, shellItem.get(), systemImageList,
+                          imagingFactory);
+        UpdateDriveSpaceInformation(drive);
+
+        drives.push_back(std::move(drive));
+    }
+
+    std::sort(drives.begin(), drives.end(),
+              [](DriveInfo const& left, DriveInfo const& right) {
+                  if (left.fileSystemPath.empty() !=
+                      right.fileSystemPath.empty()) {
+                      return !left.fileSystemPath.empty();
+                  }
+
+                  // Lettered volumes follow their Shell roots so labels don't
+                  // move a newly connected E:\ drive ahead of C:\ and D:\.
+                  if (!left.fileSystemPath.empty()) {
+                      return StrCmpLogicalW(left.fileSystemPath.c_str(),
+                                            right.fileSystemPath.c_str()) < 0;
+                  }
+
+                  return StrCmpLogicalW(left.displayName.c_str(),
+                                        right.displayName.c_str()) < 0;
+              });
+    return drives;
+}
+
+bool DriveSnapshotsEqual(DriveSnapshot const& left,
+                         DriveSnapshot const& right) {
+    if (left.size() != right.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < left.size(); ++i) {
+        auto const& a = left[i];
+        auto const& b = right[i];
+        if (a.rootPath != b.rootPath ||
+            a.fileSystemPath != b.fileSystemPath ||
+            a.displayName != b.displayName ||
+            a.typeName != b.typeName ||
+            a.spaceDescription != b.spaceDescription ||
+            a.driveType != b.driveType ||
+            a.iconWidth != b.iconWidth || a.iconHeight != b.iconHeight ||
+            a.iconPixels != b.iconPixels ||
+            a.hasSpaceInformation != b.hasSpaceInformation ||
+            a.canStartWinUiDrag != b.canStartWinUiDrag ||
+            a.canAcceptDrop != b.canAcceptDrop ||
+            a.percentUsed != b.percentUsed) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::shared_ptr<const DriveSnapshot> GetLatestDriveSnapshot() {
+    std::lock_guard lock(g_refreshMutex);
+    return g_latestDriveSnapshot;
+}
+
+void AddRegisteredWindow(HWND window) {
+    std::lock_guard lock(g_registeredWindowsMutex);
+    if (std::find(g_registeredWindows.begin(), g_registeredWindows.end(),
+                  window) == g_registeredWindows.end()) {
+        g_registeredWindows.push_back(window);
+    }
+}
+
+void RemoveRegisteredWindow(HWND window) {
+    std::lock_guard lock(g_registeredWindowsMutex);
+    std::erase(g_registeredWindows, window);
+}
+
+UINT GetApplyDriveSnapshotMessage() {
+    static const UINT message = RegisterWindowMessageW(
+        L"Windhawk_ApplyDriveSnapshot_" WH_MOD_ID);
+    return message;
+}
+
+UINT GetFocusDriveRenameMessage() {
+    static const UINT message = RegisterWindowMessageW(
+        L"Windhawk_FocusDriveRename_" WH_MOD_ID);
+    return message;
+}
+
+UINT GetInvokeDrivePropertiesMessage() {
+    static const UINT message = RegisterWindowMessageW(
+        L"Windhawk_InvokeDriveProperties_" WH_MOD_ID);
+    return message;
+}
+
+void DriveRefreshWorkerProc() {
+    HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool uninitializeCom = SUCCEEDED(comResult);
+    uint64_t completedGeneration = 0;
+
+    {
+        winrt::com_ptr<IImageList> systemImageList;
+        winrt::com_ptr<IWICImagingFactory> imagingFactory;
+        bool imageListFailureLogged = false;
+        bool imagingFailureLogged = false;
+
+        auto ensureImageResources = [&] {
+            if (!systemImageList) {
+                HRESULT result = SHGetImageList(
+                    SHIL_EXTRALARGE,
+                    IID_PPV_ARGS(systemImageList.put()));
+                if (FAILED(result) && !imageListFailureLogged) {
+                    imageListFailureLogged = true;
+                    Wh_Log(L"Couldn't access the Shell drive image list: "
+                           L"%08X",
+                           result);
+                }
+            }
+
+            if (!imagingFactory) {
+                HRESULT result = CoCreateInstance(
+                    CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                    IID_PPV_ARGS(imagingFactory.put()));
+                if (FAILED(result) && !imagingFailureLogged) {
+                    imagingFailureLogged = true;
+                    Wh_Log(L"Couldn't create the WIC imaging factory: %08X",
+                           result);
+                }
+            }
+        };
+
+        auto createSnapshot = [&](uint32_t refreshKinds, bool forceFull) {
+            if (!forceFull &&
+                !(refreshKinds & kDriveRefreshTopology)) {
+                if (auto previous = GetLatestDriveSnapshot()) {
+                    DriveSnapshot drives = *previous;
+                    for (auto& drive : drives) {
+                        UpdateDriveSpaceInformation(drive);
+                    }
+                    return std::make_shared<const DriveSnapshot>(
+                        std::move(drives));
+                }
+            }
+
+            ensureImageResources();
+            return std::make_shared<const DriveSnapshot>(EnumerateDrives(
+                systemImageList.get(), imagingFactory.get()));
+        };
+
+        auto applySnapshot = [&](std::shared_ptr<const DriveSnapshot> snapshot,
+                                 uint64_t targetGeneration,
+                                 bool completeRequest) {
+            bool snapshotIsCurrent = false;
+            bool snapshotChanged = false;
+            {
+                std::lock_guard lock(g_refreshMutex);
+                if (completeRequest) {
+                    completedGeneration = targetGeneration;
+                }
+                if (!g_refreshWorkerStopping &&
+                    targetGeneration == g_requestedRefreshGeneration) {
+                    snapshotIsCurrent = true;
+                    if (completeRequest) {
+                        g_requestedRefreshKinds = 0;
+                    }
+                    snapshotChanged =
+                        !g_latestDriveSnapshot ||
+                        !DriveSnapshotsEqual(*g_latestDriveSnapshot,
+                                             *snapshot);
+                    if (snapshotChanged) {
+                        g_latestDriveSnapshot = std::move(snapshot);
+                    }
+                }
+            }
+
+            if (!snapshotChanged || g_unloading.load()) {
+                return snapshotIsCurrent;
+            }
+
+            std::vector<HWND> windows;
+            {
+                std::lock_guard lock(g_registeredWindowsMutex);
+                windows = g_registeredWindows;
+            }
+            for (HWND window : windows) {
+                if (IsWindow(window)) {
+                    PostMessageW(window, GetApplyDriveSnapshotMessage(), 0,
+                                 0);
+                }
+            }
+            return snapshotIsCurrent;
+        };
+
+        while (true) {
+            uint64_t targetGeneration = 0;
+            uint32_t refreshKinds = 0;
+            {
+                std::unique_lock lock(g_refreshMutex);
+                g_refreshCondition.wait(lock, [&] {
+                    return g_refreshWorkerStopping ||
+                           g_requestedRefreshGeneration >
+                               completedGeneration;
+                });
+                if (g_refreshWorkerStopping) {
+                    break;
+                }
+
+                targetGeneration = g_requestedRefreshGeneration;
+                while (g_refreshCondition.wait_for(
+                    lock, std::chrono::milliseconds(200), [&] {
+                        return g_refreshWorkerStopping ||
+                               g_requestedRefreshGeneration !=
+                                   targetGeneration;
+                    })) {
+                    if (g_refreshWorkerStopping) {
+                        break;
+                    }
+                    targetGeneration = g_requestedRefreshGeneration;
+                }
+                if (g_refreshWorkerStopping) {
+                    break;
+                }
+                refreshKinds = g_requestedRefreshKinds;
+            }
+
+            if (!applySnapshot(createSnapshot(refreshKinds, false),
+                               targetGeneration, true)) {
+                continue;
+            }
+
+            if (!(refreshKinds & kDriveRefreshTopology)) {
+                continue;
+            }
+
+            // The Shell namespace can lag behind a device removal event. A
+            // single quiet-period confirmation prevents stale device cards.
+            {
+                std::unique_lock lock(g_refreshMutex);
+                if (g_refreshCondition.wait_for(
+                        lock, std::chrono::milliseconds(800), [&] {
+                            return g_refreshWorkerStopping ||
+                                   g_requestedRefreshGeneration !=
+                                       targetGeneration;
+                        })) {
+                    if (g_refreshWorkerStopping) {
+                        break;
+                    }
+                    continue;
+                }
+            }
+
+            applySnapshot(createSnapshot(kDriveRefreshTopology, true),
+                          targetGeneration, false);
+        }
+    }
+
+    if (uninitializeCom) {
+        CoUninitialize();
+    }
+}
+
+bool StartDriveRefreshWorker() {
+    try {
+        std::lock_guard lock(g_refreshMutex);
+        if (g_refreshWorker) {
+            return true;
+        }
+        g_refreshWorkerStopping = false;
+        g_requestedRefreshGeneration = 0;
+        g_requestedRefreshKinds = 0;
+        g_latestDriveSnapshot.reset();
+        g_refreshWorker = new std::thread(DriveRefreshWorkerProc);
+        return true;
+    } catch (...) {
+        Wh_Log(L"Failed to start the drive refresh worker");
+        return false;
+    }
+}
+
+void StopDriveRefreshWorker() {
+    std::thread* worker = nullptr;
+    {
+        std::lock_guard lock(g_refreshMutex);
+        if (!g_refreshWorker) {
+            return;
+        }
+        g_refreshWorkerStopping = true;
+        worker = g_refreshWorker;
+        g_refreshWorker = nullptr;
+    }
+    g_refreshCondition.notify_all();
+
+    if (worker->joinable()) {
+        worker->join();
+    }
+    delete worker;
+}
+
+void RequestDriveRefresh(uint32_t refreshKinds) {
+    if (!refreshKinds) {
+        return;
+    }
+
+    if (g_unloading.load()) {
+        return;
+    }
+
+    {
+        std::lock_guard lock(g_refreshMutex);
+        if (g_refreshWorkerStopping) {
+            return;
+        }
+        g_requestedRefreshKinds |= refreshKinds;
+        ++g_requestedRefreshGeneration;
+    }
+    g_refreshCondition.notify_one();
+}
+
+void RequestInitialDriveSnapshot() {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    bool notify = false;
+    {
+        std::lock_guard lock(g_refreshMutex);
+        if (!g_refreshWorkerStopping && !g_latestDriveSnapshot &&
+            g_requestedRefreshGeneration == 0) {
+            g_requestedRefreshKinds |= kDriveRefreshTopology;
+            ++g_requestedRefreshGeneration;
+            notify = true;
+        }
+    }
+
+    if (notify) {
+        g_refreshCondition.notify_one();
+    }
+}
+
+void RememberNavigationControllerForCurrentThread(void* implementation) {
+    if (!implementation || g_unloading.load()) {
+        return;
+    }
+
+    IFileExplorerNavigationControllerAbi* controller = nullptr;
+    HRESULT result = reinterpret_cast<IUnknown*>(implementation)->QueryInterface(
+        kIidFileExplorerNavigationController,
+        reinterpret_cast<void**>(&controller));
+    if (FAILED(result) || !controller) {
+        Wh_Log(L"Couldn't capture the tab navigation controller: %08X",
+               result);
+        return;
+    }
+
+    IFileExplorerNavigationControllerAbi* previous = nullptr;
+    {
+        std::lock_guard lock(g_navigationControllersMutex);
+        auto& entry = g_navigationControllersByThread[GetCurrentThreadId()];
+        previous = entry;
+        if (previous == controller) {
+            controller->Release();
+            return;
+        }
+        entry = controller;
+    }
+
+    if (previous) {
+        previous->Release();
+    }
+
+}
+
+IFileExplorerNavigationControllerAbi*
+GetNavigationControllerForCurrentThread() {
+    std::lock_guard lock(g_navigationControllersMutex);
+    auto it = g_navigationControllersByThread.find(GetCurrentThreadId());
+    if (it == g_navigationControllersByThread.end() || !it->second) {
+        return nullptr;
+    }
+
+    it->second->AddRef();
+    return it->second;
+}
+
+void ReleaseNavigationControllers() {
+    std::unordered_map<DWORD, IFileExplorerNavigationControllerAbi*> controllers;
+    {
+        std::lock_guard lock(g_navigationControllersMutex);
+        controllers.swap(g_navigationControllersByThread);
+    }
+
+    for (auto const& [threadId, controller] : controllers) {
+        (void)threadId;
+        if (controller) {
+            controller->Release();
+        }
+    }
+}
+
+void ReleaseNavigationControllerForCurrentThread() {
+    IFileExplorerNavigationControllerAbi* controller = nullptr;
+    {
+        std::lock_guard lock(g_navigationControllersMutex);
+        auto it = g_navigationControllersByThread.find(GetCurrentThreadId());
+        if (it == g_navigationControllersByThread.end()) {
+            return;
+        }
+        controller = it->second;
+        g_navigationControllersByThread.erase(it);
+    }
+
+    if (controller) {
+        controller->Release();
+    }
+}
+
+HWND GetExplorerWindowForCurrentThread() {
+    for (auto const& [window, registrationId] :
+         g_windowNotificationRegistrations) {
+        (void)registrationId;
+        if (IsWindow(window)) {
+            return window;
+        }
+    }
+
+    DWORD currentThreadId = GetCurrentThreadId();
+    for (HWND window : GetFileExplorerWindows()) {
+        if (GetWindowThreadProcessId(window, nullptr) == currentThreadId) {
+            return window;
+        }
+    }
+
+    return nullptr;
+}
+
+class OpenContextMenuScope {
+   public:
+    OpenContextMenuScope() {
+        g_openContextMenuCount.fetch_add(1);
+    }
+
+    ~OpenContextMenuScope() {
+        g_openContextMenuCount.fetch_sub(1);
+    }
+};
+
+std::wstring GetFileSystemRootPath(std::wstring const& parsingName) {
+    PIDLIST_ABSOLUTE absolutePidl = nullptr;
+    HRESULT result = SHParseDisplayName(parsingName.c_str(), nullptr,
+                                        &absolutePidl, 0, nullptr);
+    if (FAILED(result) || !absolutePidl) {
+        return {};
+    }
+
+    wchar_t path[MAX_PATH]{};
+    bool isRoot = SHGetPathFromIDListW(absolutePidl, path) &&
+                  PathIsRootW(path);
+    CoTaskMemFree(absolutePidl);
+    return isRoot ? std::wstring{path} : std::wstring{};
+}
+
+bool BindDriveToParent(std::wstring const& rootPath,
+                       PIDLIST_ABSOLUTE* absolutePidl,
+                       winrt::com_ptr<IShellFolder>& parentFolder,
+                       PCUITEMID_CHILD* childPidl) {
+    *absolutePidl = nullptr;
+    *childPidl = nullptr;
+
+    HRESULT result = SHParseDisplayName(rootPath.c_str(), nullptr,
+                                        absolutePidl, 0, nullptr);
+    if (FAILED(result) || !*absolutePidl) {
+        Wh_Log(L"Couldn't resolve the drive PIDL: %08X", result);
+        return false;
+    }
+
+    result = SHBindToParent(*absolutePidl, IID_PPV_ARGS(parentFolder.put()),
+                            childPidl);
+    if (FAILED(result) || !parentFolder || !*childPidl) {
+        CoTaskMemFree(*absolutePidl);
+        *absolutePidl = nullptr;
+        Wh_Log(L"Couldn't bind the drive parent: %08X", result);
+        return false;
+    }
+
+    return true;
+}
+
+std::wstring GetDriveEditingName(std::wstring const& rootPath) {
+    PIDLIST_ABSOLUTE absolutePidl = nullptr;
+    winrt::com_ptr<IShellFolder> parentFolder;
+    PCUITEMID_CHILD childPidl = nullptr;
+    if (!BindDriveToParent(rootPath, &absolutePidl, parentFolder,
+                           &childPidl)) {
+        return {};
+    }
+
+    STRRET name{};
+    auto flags = static_cast<SHGDNF>(SHGDN_INFOLDER | SHGDN_FOREDITING);
+    HRESULT result = parentFolder->GetDisplayNameOf(childPidl, flags, &name);
+    wchar_t buffer[256]{};
+    if (SUCCEEDED(result)) {
+        result = StrRetToBufW(&name, childPidl, buffer, ARRAYSIZE(buffer));
+    }
+    CoTaskMemFree(absolutePidl);
+
+    if (FAILED(result)) {
+        Wh_Log(L"Couldn't get the drive editing name: %08X", result);
+        return {};
+    }
+    return buffer;
+}
+
+HRESULT RenameDriveWithShell(HWND owner, std::wstring const& rootPath,
+                             std::wstring const& newName) {
+    PIDLIST_ABSOLUTE absolutePidl = nullptr;
+    winrt::com_ptr<IShellFolder> parentFolder;
+    PCUITEMID_CHILD childPidl = nullptr;
+    if (!BindDriveToParent(rootPath, &absolutePidl, parentFolder,
+                           &childPidl)) {
+        return E_FAIL;
+    }
+
+    SFGAOF attributes = SFGAO_CANRENAME;
+    HRESULT result = parentFolder->GetAttributesOf(1, &childPidl, &attributes);
+    if (SUCCEEDED(result) && !(attributes & SFGAO_CANRENAME)) {
+        result = HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    }
+
+    PITEMID_CHILD renamedPidl = nullptr;
+    if (SUCCEEDED(result)) {
+        auto flags =
+            static_cast<SHGDNF>(SHGDN_INFOLDER | SHGDN_FOREDITING);
+        result = parentFolder->SetNameOf(owner, childPidl, newName.c_str(),
+                                         flags, &renamedPidl);
+    }
+
+    if (renamedPidl) {
+        CoTaskMemFree(renamedPidl);
+    }
+    CoTaskMemFree(absolutePidl);
+    return result;
+}
+
+struct CoTaskMemPidlDeleter {
+    void operator()(ITEMIDLIST* pidl) const {
+        CoTaskMemFree(pidl);
+    }
+};
+
+using UniqueAbsolutePidl =
+    std::unique_ptr<ITEMIDLIST, CoTaskMemPidlDeleter>;
+
+bool ShowDriveContextMenu(HWND owner,
+                          std::vector<std::wstring> const& rootPaths,
+                          POINT screenPoint,
+                          bool* renameRequested,
+                          std::wstring_view commandToInvoke = {}) {
+    OpenContextMenuScope openMenuScope;
+    *renameRequested = false;
+    if (!owner || rootPaths.empty() || g_unloading.load()) {
+        return false;
+    }
+
+    std::vector<UniqueAbsolutePidl> absolutePidls;
+    std::vector<PCUITEMID_CHILD> childPidls;
+    winrt::com_ptr<IShellFolder> parentFolder;
+    for (auto const& rootPath : rootPaths) {
+        PIDLIST_ABSOLUTE rawPidl = nullptr;
+        HRESULT result = SHParseDisplayName(rootPath.c_str(), nullptr,
+                                            &rawPidl, 0, nullptr);
+        if (FAILED(result) || !rawPidl) {
+            Wh_Log(L"Couldn't resolve the drive context-menu PIDL: %08X",
+                   result);
+            return false;
+        }
+
+        UniqueAbsolutePidl absolutePidl{rawPidl};
+        PCUITEMID_CHILD childPidl = nullptr;
+        if (!parentFolder) {
+            result = SHBindToParent(
+                absolutePidl.get(), IID_PPV_ARGS(parentFolder.put()),
+                &childPidl);
+        } else {
+            childPidl = ILFindLastID(absolutePidl.get());
+        }
+        if (FAILED(result) || !parentFolder || !childPidl) {
+            Wh_Log(L"Couldn't bind the drive context-menu parent: %08X",
+                   result);
+            return false;
+        }
+
+        childPidls.push_back(childPidl);
+        absolutePidls.push_back(std::move(absolutePidl));
+    }
+
+    winrt::com_ptr<IContextMenu> contextMenu;
+    HRESULT result = parentFolder->GetUIObjectOf(
+        owner, static_cast<UINT>(childPidls.size()), childPidls.data(),
+        IID_IContextMenu, nullptr,
+        reinterpret_cast<void**>(contextMenu.put()));
+    if (FAILED(result) || !contextMenu) {
+        Wh_Log(L"Couldn't create the drive context menu: %08X", result);
+        return false;
+    }
+
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return false;
+    }
+
+    constexpr UINT kFirstCommandId = 1;
+    constexpr UINT kLastCommandId = 0x7FFF;
+    bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    UINT queryFlags = CMF_NORMAL | CMF_EXPLORE;
+    if (rootPaths.size() == 1) {
+        queryFlags |= CMF_CANRENAME;
+    }
+    if (shiftDown) {
+        queryFlags |= CMF_EXTENDEDVERBS;
+    }
+
+    result = contextMenu->QueryContextMenu(menu, 0, kFirstCommandId,
+                                            kLastCommandId, queryFlags);
+    if (FAILED(result)) {
+        DestroyMenu(menu);
+        Wh_Log(L"Couldn't populate the drive context menu: %08X", result);
+        return false;
+    }
+
+    UINT command = 0;
+    if (commandToInvoke.empty()) {
+        winrt::com_ptr<IContextMenu2> contextMenu2;
+        winrt::com_ptr<IContextMenu3> contextMenu3;
+        contextMenu->QueryInterface(IID_PPV_ARGS(contextMenu2.put()));
+        contextMenu->QueryInterface(IID_PPV_ARGS(contextMenu3.put()));
+        g_trackedContextMenu2 = contextMenu2.get();
+        g_trackedContextMenu3 = contextMenu3.get();
+
+        SetForegroundWindow(owner);
+        command = TrackPopupMenuEx(
+            menu,
+            TPM_RETURNCMD | TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_RIGHTBUTTON,
+            screenPoint.x, screenPoint.y, owner, nullptr);
+
+        g_trackedContextMenu3 = nullptr;
+        g_trackedContextMenu2 = nullptr;
+    } else {
+        std::wstring commandVerb{commandToInvoke};
+        UINT commandCount = HRESULT_CODE(result);
+        for (UINT offset = 0; offset < commandCount; ++offset) {
+            wchar_t canonicalVerb[128]{};
+            HRESULT verbResult = contextMenu->GetCommandString(
+                offset, GCS_VERBW, nullptr,
+                reinterpret_cast<LPSTR>(canonicalVerb),
+                ARRAYSIZE(canonicalVerb));
+            if (SUCCEEDED(verbResult) &&
+                _wcsicmp(canonicalVerb, commandVerb.c_str()) == 0) {
+                command = kFirstCommandId + offset;
+                break;
+            }
+        }
+        if (!command) {
+            Wh_Log(L"Drive context-menu verb wasn't found: %.*s",
+                   static_cast<int>(commandToInvoke.size()),
+                   commandToInvoke.data());
+        }
+    }
+
+    DestroyMenu(menu);
+    if (commandToInvoke.empty()) {
+        PostMessageW(owner, WM_NULL, 0, 0);
+    }
+
+    if (command && !g_unloading.load()) {
+        wchar_t canonicalVerb[128]{};
+        HRESULT verbResult = contextMenu->GetCommandString(
+            command - kFirstCommandId, GCS_VERBW, nullptr,
+            reinterpret_cast<LPSTR>(canonicalVerb),
+            ARRAYSIZE(canonicalVerb));
+        if (SUCCEEDED(verbResult) &&
+            _wcsicmp(canonicalVerb, L"rename") == 0 &&
+            rootPaths.size() == 1) {
+            *renameRequested = true;
+            return true;
+        }
+
+        CMINVOKECOMMANDINFOEX invokeInfo{};
+        invokeInfo.cbSize = sizeof(invokeInfo);
+        invokeInfo.fMask = CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE;
+        if (shiftDown) {
+            invokeInfo.fMask |= CMIC_MASK_SHIFT_DOWN;
+        }
+        if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+            invokeInfo.fMask |= CMIC_MASK_CONTROL_DOWN;
+        }
+        invokeInfo.hwnd = owner;
+        invokeInfo.lpVerb = MAKEINTRESOURCEA(command - kFirstCommandId);
+        invokeInfo.lpVerbW = MAKEINTRESOURCEW(command - kFirstCommandId);
+        invokeInfo.nShow = SW_SHOWNORMAL;
+        invokeInfo.ptInvoke = screenPoint;
+        result = contextMenu->InvokeCommand(
+            reinterpret_cast<CMINVOKECOMMANDINFO*>(&invokeInfo));
+        if (FAILED(result)) {
+            Wh_Log(L"Drive context-menu command failed: %08X (verb=%s, "
+                   L"verbResult=%08X)",
+                   result, canonicalVerb[0] ? canonicalVerb : L"<unknown>",
+                   verbResult);
+        }
+    }
+
+    return true;
+}
+
+void SelectDriveCard(muxc::GridViewItem const& item) {
+    if (item.IsSelected()) {
+        return;
+    }
+
+    if (auto grid = muxc::ItemsControl::ItemsControlFromItemContainer(item)
+                        .try_as<muxc::GridView>()) {
+        grid.SelectedItems().Clear();
+    }
+    item.IsSelected(true);
+}
+
+std::vector<std::wstring> GetSelectedDriveRootPaths(
+    muxc::GridViewItem const& item) {
+    std::vector<std::wstring> rootPaths;
+    if (auto grid = muxc::ItemsControl::ItemsControlFromItemContainer(item)
+                        .try_as<muxc::GridView>()) {
+        for (auto const& selected : grid.SelectedItems()) {
+            if (auto selectedItem = selected.try_as<muxc::GridViewItem>()) {
+                rootPaths.emplace_back(winrt::unbox_value<winrt::hstring>(
+                    selectedItem.Tag()));
+            }
+        }
+    }
+
+    if (rootPaths.empty()) {
+        rootPaths.emplace_back(
+            winrt::unbox_value<winrt::hstring>(item.Tag()));
+    }
+    return rootPaths;
+}
+
+POINT GetDriveKeyboardMenuPoint(muxc::GridViewItem const& item,
+                                HWND owner) {
+    POINT screenPoint{};
+    try {
+        auto xamlRoot = item.XamlRoot();
+        auto rootContent = xamlRoot ? xamlRoot.Content() : nullptr;
+        if (rootContent) {
+            auto transform = item.TransformToVisual(rootContent);
+            auto center = transform.TransformPoint(
+                {static_cast<float>(item.ActualWidth() / 2),
+                 static_cast<float>(item.ActualHeight() / 2)});
+            double scale = xamlRoot.RasterizationScale();
+            screenPoint.x = static_cast<LONG>(center.X * scale);
+            screenPoint.y = static_cast<LONG>(center.Y * scale);
+            if (ClientToScreen(owner, &screenPoint)) {
+                return screenPoint;
+            }
+        }
+    } catch (...) {
+    }
+
+    GetCursorPos(&screenPoint);
+    return screenPoint;
+}
+
+bool ExecuteShellParsingName(std::wstring const& parsingName) {
+    PIDLIST_ABSOLUTE absolutePidl = nullptr;
+    HRESULT result = SHParseDisplayName(parsingName.c_str(), nullptr,
+                                        &absolutePidl, 0, nullptr);
+    if (FAILED(result) || !absolutePidl) {
+        Wh_Log(L"Couldn't resolve the Shell item for fallback navigation: "
+               L"%08X",
+               result);
+        return false;
+    }
+
+    SHELLEXECUTEINFOW executeInfo{};
+    executeInfo.cbSize = sizeof(executeInfo);
+    executeInfo.fMask = SEE_MASK_IDLIST;
+    executeInfo.lpIDList = absolutePidl;
+    executeInfo.nShow = SW_SHOWNORMAL;
+    bool succeeded = ShellExecuteExW(&executeInfo);
+    if (!succeeded) {
+        Wh_Log(L"Shell item fallback navigation failed: %08X",
+               GetLastError());
+    }
+    CoTaskMemFree(absolutePidl);
+    return succeeded;
+}
+
+void OpenDriveCard(muxc::GridViewItem const& item) {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    try {
+        auto rootPath = winrt::unbox_value<winrt::hstring>(item.Tag());
+        winrt::com_ptr<IFileExplorerNavigationControllerAbi> controller;
+        for (auto const& state : g_driveCardEventStates) {
+            if (state.item.get() == item && state.navigationController) {
+                controller.copy_from(state.navigationController);
+                break;
+            }
+        }
+
+        // The section can be created before the Explorer finishes binding its
+        // navigation controller. Resolve it again at invocation time so cards
+        // created during that interval still navigate in their owning tab.
+        if (!controller) {
+            controller.attach(GetNavigationControllerForCurrentThread());
+        }
+
+        if (controller) {
+            HRESULT result = controller->SubmitAddressBarText(
+                reinterpret_cast<HSTRING>(winrt::get_abi(rootPath)));
+            if (SUCCEEDED(result)) {
+                return;
+            }
+
+            Wh_Log(L"Current-tab drive navigation failed: %08X", result);
+        } else {
+            Wh_Log(L"No current-tab controller was available for %s",
+                   rootPath.c_str());
+        }
+
+        ExecuteShellParsingName(rootPath.c_str());
+    } catch (...) {
+        Wh_Log(L"Couldn't open the selected drive: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+DriveCardEventState* FindDriveCardState(
+    muxc::GridViewItem const& item) {
+    for (auto& state : g_driveCardEventStates) {
+        if (state.item.get() == item) {
+            return &state;
+        }
+    }
+    return nullptr;
+}
+
+void UpdateDriveSelectionCheckBox(DriveCardEventState& state) {
+    auto item = state.item.get();
+    auto driveIcon = state.driveIcon;
+    auto checkBox = state.selectionCheckBox;
+    if (!item || !driveIcon || !checkBox) {
+        return;
+    }
+
+    bool selected = item.IsSelected();
+    // Sharing the 48-pixel icon slot preserves text width while matching the
+    // Explorer convention of revealing selection controls on interaction.
+    bool showCheckBox = state.selectionCheckBoxesEnabled &&
+                        (state.pointerOver || selected);
+    checkBox.IsChecked(selected);
+    checkBox.Visibility(showCheckBox ? mux::Visibility::Visible
+                                     : mux::Visibility::Collapsed);
+    driveIcon.Visibility(showCheckBox ? mux::Visibility::Collapsed
+                                      : mux::Visibility::Visible);
+}
+
+void DriveCard_PointerEntered(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::PointerRoutedEventArgs const&) {
+    if (auto state =
+            FindDriveCardState(sender.as<muxc::GridViewItem>())) {
+        state->pointerOver = true;
+        UpdateDriveSelectionCheckBox(*state);
+    }
+}
+
+void DriveCard_PointerExited(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::PointerRoutedEventArgs const&) {
+    if (auto state =
+            FindDriveCardState(sender.as<muxc::GridViewItem>())) {
+        state->pointerOver = false;
+        UpdateDriveSelectionCheckBox(*state);
+    }
+}
+
+void DriveCard_IsSelectedChanged(mux::DependencyObject const& sender,
+                                 mux::DependencyProperty const&) {
+    if (auto state =
+            FindDriveCardState(sender.as<muxc::GridViewItem>())) {
+        UpdateDriveSelectionCheckBox(*state);
+    }
+}
+
+void DriveSelectionCheckBox_Click(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    mux::RoutedEventArgs const&) {
+    auto checkBox = sender.as<muxc::CheckBox>();
+    for (auto& state : g_driveCardEventStates) {
+        if (state.selectionCheckBox != checkBox) {
+            continue;
+        }
+
+        if (auto item = state.item.get()) {
+            auto isChecked = checkBox.IsChecked();
+            item.IsSelected(isChecked && isChecked.Value());
+        }
+        return;
+    }
+}
+
+void UpdateDriveSelectionCheckBoxesForCurrentThread() {
+    bool enabled = IsAutoCheckSelectEnabled();
+    for (auto& state : g_driveCardEventStates) {
+        state.selectionCheckBoxesEnabled = enabled;
+        UpdateDriveSelectionCheckBox(state);
+    }
+}
+
+DriveCardEventState* FindDriveRenameState(muxc::TextBox const& renameBox) {
+    for (auto& state : g_driveCardEventStates) {
+        if (state.renameBox == renameBox) {
+            return &state;
+        }
+    }
+    return nullptr;
+}
+
+void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
+                         bool restoreCardFocus = true) {
+    auto state = FindDriveRenameState(renameBox);
+    if (!state || !state->renaming) {
+        return;
+    }
+
+    state->renaming = false;
+    state->renameFocusPending = false;
+    auto item = state->item.get();
+    auto title = state->title;
+    bool editorHadFocus =
+        renameBox.FocusState() != mux::FocusState::Unfocused;
+    std::wstring newName{renameBox.Text()};
+    std::wstring originalName;
+    if (auto tag = renameBox.Tag()) {
+        originalName = winrt::unbox_value<winrt::hstring>(tag);
+    }
+
+    renameBox.Visibility(mux::Visibility::Collapsed);
+    if (title) {
+        title.Visibility(mux::Visibility::Visible);
+    }
+    if (item) {
+        auto parsingName = winrt::unbox_value<winrt::hstring>(item.Tag());
+        item.CanDrag(!GetFileSystemRootPath(parsingName.c_str()).empty());
+        if (restoreCardFocus && editorHadFocus) {
+            item.Focus(mux::FocusState::Programmatic);
+        }
+    }
+
+    bool renameSubmitted =
+        commit && item && newName != originalName && !g_unloading.load();
+    if (renameSubmitted) {
+        auto rootPath = winrt::unbox_value<winrt::hstring>(item.Tag());
+        HRESULT result = RenameDriveWithShell(
+            GetExplorerWindowForCurrentThread(), rootPath.c_str(), newName);
+        if (SUCCEEDED(result)) {
+            RequestDriveRefresh();
+        } else {
+            Wh_Log(L"Drive rename failed for %s: %08X", rootPath.c_str(),
+                   result);
+        }
+    }
+
+    // A grid refresh arriving while this card was renaming was deferred (see
+    // RefreshDevicesGridPreservingState) so it wouldn't destroy the editor.
+    // Catch it up now that renaming is over, whether committed or cancelled.
+    if (HWND owner = GetExplorerWindowForCurrentThread()) {
+        PostMessageW(owner, GetApplyDriveSnapshotMessage(), 0, 0);
+    }
+}
+
+void CompleteOtherDriveRenames(muxc::GridViewItem const& activeItem) {
+    std::vector<muxc::TextBox> renameBoxes;
+    for (auto const& state : g_driveCardEventStates) {
+        auto item = state.item.get();
+        if (state.renaming && item && item != activeItem && state.renameBox) {
+            renameBoxes.push_back(state.renameBox);
+        }
+    }
+
+    for (auto const& renameBox : renameBoxes) {
+        CompleteDriveRename(renameBox, true, false);
+    }
+}
+
+void FocusPendingDriveRenameForCurrentThread() {
+    for (auto& state : g_driveCardEventStates) {
+        if (!state.renameFocusPending) {
+            continue;
+        }
+
+        state.renameFocusPending = false;
+        auto renameBox = state.renameBox;
+        if (!state.renaming || !renameBox ||
+            renameBox.Visibility() != mux::Visibility::Visible) {
+            continue;
+        }
+
+        if (renameBox.Focus(mux::FocusState::Programmatic)) {
+            renameBox.SelectAll();
+        } else {
+            Wh_Log(L"Couldn't focus the inline drive rename editor");
+        }
+    }
+}
+
+void QueueDriveRenameFocus(DriveCardEventState& state) {
+    state.renameFocusPending = true;
+    HWND owner = GetExplorerWindowForCurrentThread();
+    if (owner && PostMessageW(owner, GetFocusDriveRenameMessage(), 0, 0)) {
+        return;
+    }
+
+    state.renameFocusPending = false;
+    if (state.renameBox.Focus(mux::FocusState::Programmatic)) {
+        state.renameBox.SelectAll();
+    } else {
+        Wh_Log(L"Couldn't queue focus for the drive rename editor");
+    }
+}
+
+void BeginDriveRename(muxc::GridViewItem const& item) {
+    auto state = FindDriveCardState(item);
+    if (!state) {
+        Wh_Log(L"Couldn't start drive rename: card state wasn't found");
+        return;
+    }
+    auto renameBox = state->renameBox;
+    auto title = state->title;
+    if (!renameBox || !title || g_unloading.load()) {
+        Wh_Log(L"Couldn't start drive rename: editor elements weren't "
+               L"available");
+        return;
+    }
+    if (state->renaming) {
+        QueueDriveRenameFocus(*state);
+        return;
+    }
+
+    CompleteOtherDriveRenames(item);
+
+    auto rootPath = winrt::unbox_value<winrt::hstring>(item.Tag());
+    auto editingName = GetDriveEditingName(rootPath.c_str());
+    renameBox.Text(editingName);
+    renameBox.Tag(winrt::box_value(winrt::hstring{editingName}));
+    state->renaming = true;
+    item.CanDrag(false);
+    title.Visibility(mux::Visibility::Collapsed);
+    renameBox.Visibility(mux::Visibility::Visible);
+    QueueDriveRenameFocus(*state);
+}
+
+void DriveRenameBox_KeyDown(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::KeyRoutedEventArgs const& args) {
+    if (args.Key() != winrt::Windows::System::VirtualKey::Enter &&
+        args.Key() != winrt::Windows::System::VirtualKey::Escape) {
+        return;
+    }
+
+    args.Handled(true);
+    CompleteDriveRename(sender.as<muxc::TextBox>(),
+                        args.Key() ==
+                            winrt::Windows::System::VirtualKey::Enter,
+                        true);
+}
+
+void DriveRenameBox_LostFocus(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    mux::RoutedEventArgs const&) {
+    CompleteDriveRename(sender.as<muxc::TextBox>(), true, false);
+}
+
+void DriveCard_DoubleTapped(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::DoubleTappedRoutedEventArgs const& args) {
+    args.Handled(true);
+    OpenDriveCard(sender.as<muxc::GridViewItem>());
+}
+
+void DriveCard_KeyDown(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::KeyRoutedEventArgs const& args) {
+    auto item = sender.as<muxc::GridViewItem>();
+    if (args.Key() == winrt::Windows::System::VirtualKey::F2) {
+        args.Handled(true);
+        BeginDriveRename(item);
+        return;
+    }
+
+    bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool altDown = args.KeyStatus().IsMenuKeyDown ||
+                   (GetKeyState(VK_MENU) & 0x8000) != 0;
+    bool contextMenuKey =
+        args.Key() == winrt::Windows::System::VirtualKey::Application ||
+        (args.Key() == winrt::Windows::System::VirtualKey::F10 &&
+         shiftDown);
+    bool propertiesKey =
+        args.Key() == winrt::Windows::System::VirtualKey::Enter && altDown;
+    if (contextMenuKey || propertiesKey) {
+        args.Handled(true);
+        SelectDriveCard(item);
+        HWND owner = GetExplorerWindowForCurrentThread();
+        if (!owner) {
+            Wh_Log(L"Couldn't locate the Explorer window for the drive menu");
+            return;
+        }
+
+        auto rootPaths = GetSelectedDriveRootPaths(item);
+        POINT screenPoint = GetDriveKeyboardMenuPoint(item, owner);
+        bool renameRequested = false;
+        ShowDriveContextMenu(owner, rootPaths, screenPoint,
+                             &renameRequested,
+                             propertiesKey ? L"properties" : L"");
+        if (renameRequested && !g_unloading.load()) {
+            BeginDriveRename(item);
+        }
+        return;
+    }
+
+    if (args.Key() != winrt::Windows::System::VirtualKey::Enter) {
+        return;
+    }
+
+    args.Handled(true);
+    OpenDriveCard(item);
+}
+
+void DriveCard_RightTapped(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::RightTappedRoutedEventArgs const& args) {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    try {
+        auto item = sender.as<muxc::GridViewItem>();
+        SelectDriveCard(item);
+        HWND owner = GetExplorerWindowForCurrentThread();
+        POINT screenPoint{};
+        if (!owner || !GetCursorPos(&screenPoint)) {
+            Wh_Log(L"Couldn't locate the Explorer window for the drive menu");
+            return;
+        }
+
+        args.Handled(true);
+        auto rootPaths = GetSelectedDriveRootPaths(item);
+        bool renameRequested = false;
+        ShowDriveContextMenu(owner, rootPaths, screenPoint,
+                             &renameRequested);
+        if (renameRequested && !g_unloading.load()) {
+            BeginDriveRename(item);
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't show the drive context menu: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+bool InvokeFocusedDriveProperties(HWND owner) {
+    if (!owner || g_unloading.load()) {
+        return false;
+    }
+
+    try {
+        for (auto const& state : g_driveCardEventStates) {
+            auto item = state.item.get();
+            if (!item || item.FocusState() == mux::FocusState::Unfocused) {
+                continue;
+            }
+
+            SelectDriveCard(item);
+            auto rootPaths = GetSelectedDriveRootPaths(item);
+            POINT screenPoint = GetDriveKeyboardMenuPoint(item, owner);
+            bool renameRequested = false;
+            ShowDriveContextMenu(owner, rootPaths, screenPoint,
+                                 &renameRequested, L"properties");
+            return true;
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't invoke drive properties from Alt+Enter: %08X",
+               winrt::to_hresult().value);
+    }
+
+    return false;
+}
+
+winrt::fire_and_forget PopulateDriveDragData(
+    mux::DragStartingEventArgs args,
+    std::vector<std::wstring> rootPaths) {
+    struct CompletionScope {
+        ~CompletionScope() {
+            if (g_pendingDragPreparations.fetch_sub(1) == 1) {
+                g_dragPreparationCondition.notify_all();
+            }
+        }
+    } completionScope;
+
+    mux::DragOperationDeferral deferral{nullptr};
+    try {
+        deferral = args.GetDeferral();
+        auto storageItems = winrt::single_threaded_vector<
+            winrt::Windows::Storage::IStorageItem>();
+        for (auto const& parsingName : rootPaths) {
+            try {
+                auto rootPath = GetFileSystemRootPath(parsingName);
+                if (rootPath.empty()) {
+                    continue;
+                }
+                auto folder = co_await
+                    winrt::Windows::Storage::StorageFolder::
+                        GetFolderFromPathAsync(rootPath);
+                if (folder) {
+                    storageItems.Append(folder);
+                }
+            } catch (...) {
+                Wh_Log(L"Couldn't resolve %s for WinUI drag: %08X",
+                       parsingName.c_str(), winrt::to_hresult().value);
+            }
+        }
+
+        if (g_unloading.load() || storageItems.Size() == 0) {
+            args.Cancel(true);
+        } else {
+            args.Data().SetStorageItems(storageItems);
+            args.AllowedOperations(
+                winrt::Windows::ApplicationModel::DataTransfer::
+                    DataPackageOperation::Link);
+        }
+    } catch (...) {
+        auto error = winrt::to_hresult().value;
+        try {
+            args.Cancel(true);
+        } catch (...) {
+        }
+        Wh_Log(L"Couldn't populate the WinUI drive drag data: %08X",
+               error);
+    }
+    if (deferral) {
+        deferral.Complete();
+    }
+}
+
+void DriveCard_DragStarting(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    mux::DragStartingEventArgs const& args) {
+    if (g_unloading.load()) {
+        args.Cancel(true);
+        return;
+    }
+
+    try {
+        auto item = sender.as<muxc::GridViewItem>();
+        SelectDriveCard(item);
+
+        std::vector<std::wstring> rootPaths;
+        if (auto grid = muxc::ItemsControl::ItemsControlFromItemContainer(item)
+                            .try_as<muxc::GridView>()) {
+            for (auto const& selected : grid.SelectedItems()) {
+                if (auto selectedItem = selected.try_as<muxc::GridViewItem>()) {
+                    rootPaths.emplace_back(
+                        winrt::unbox_value<winrt::hstring>(selectedItem.Tag()));
+                }
+            }
+        }
+        if (rootPaths.empty()) {
+            rootPaths.emplace_back(
+                winrt::unbox_value<winrt::hstring>(item.Tag()));
+        }
+        g_pendingDragPreparations.fetch_add(1);
+        try {
+            PopulateDriveDragData(args, std::move(rootPaths));
+        } catch (...) {
+            if (g_pendingDragPreparations.fetch_sub(1) == 1) {
+                g_dragPreparationCondition.notify_all();
+            }
+            throw;
+        }
+    } catch (...) {
+        args.Cancel(true);
+        Wh_Log(L"Couldn't start the WinUI drive drag: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation
+GetDriveDropOperation(
+    winrt::Windows::ApplicationModel::DataTransfer::DataPackageView const&
+        dataView) {
+    using winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation;
+
+    bool controlDown = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    if (shiftDown && !controlDown) {
+        return DataPackageOperation::Move;
+    }
+    if (controlDown) {
+        return DataPackageOperation::Copy;
+    }
+
+    auto requested = dataView.RequestedOperation();
+    return requested == DataPackageOperation::Move
+               ? DataPackageOperation::Move
+               : DataPackageOperation::Copy;
+}
+
+HRESULT TransferStorageItemsToDrive(
+    HWND owner,
+    winrt::Windows::Foundation::Collections::IVectorView<
+        winrt::Windows::Storage::IStorageItem> const& storageItems,
+    std::wstring const& targetRoot,
+    winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation
+        operation) {
+    winrt::com_ptr<IShellItem> targetFolder;
+    HRESULT result = SHCreateItemFromParsingName(
+        targetRoot.c_str(), nullptr, IID_PPV_ARGS(targetFolder.put()));
+    if (FAILED(result)) {
+        return result;
+    }
+
+    winrt::com_ptr<IFileOperation> fileOperation;
+    result = CoCreateInstance(CLSID_FileOperation, nullptr,
+                              CLSCTX_INPROC_SERVER,
+                              IID_PPV_ARGS(fileOperation.put()));
+    if (FAILED(result)) {
+        return result;
+    }
+
+    result = fileOperation->SetOwnerWindow(owner);
+    if (FAILED(result)) {
+        return result;
+    }
+    result = fileOperation->SetOperationFlags(
+        FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR | FOFX_SHOWELEVATIONPROMPT |
+        FOFX_ADDUNDORECORD);
+    if (FAILED(result)) {
+        return result;
+    }
+
+    UINT queuedItems = 0;
+    for (auto const& storageItem : storageItems) {
+        auto path = storageItem.Path();
+        if (path.empty()) {
+            continue;
+        }
+
+        winrt::com_ptr<IShellItem> sourceItem;
+        result = SHCreateItemFromParsingName(
+            path.c_str(), nullptr, IID_PPV_ARGS(sourceItem.put()));
+        if (FAILED(result)) {
+            Wh_Log(L"Couldn't resolve dropped item %s: %08X", path.c_str(),
+                   result);
+            continue;
+        }
+
+        if (operation == winrt::Windows::ApplicationModel::DataTransfer::
+                             DataPackageOperation::Move) {
+            result = fileOperation->MoveItem(sourceItem.get(),
+                                             targetFolder.get(), nullptr,
+                                             nullptr);
+        } else {
+            result = fileOperation->CopyItem(sourceItem.get(),
+                                             targetFolder.get(), nullptr,
+                                             nullptr);
+        }
+        if (FAILED(result)) {
+            return result;
+        }
+        ++queuedItems;
+    }
+
+    if (!queuedItems) {
+        return HRESULT_FROM_WIN32(ERROR_NO_MORE_ITEMS);
+    }
+
+    result = fileOperation->PerformOperations();
+    if (FAILED(result)) {
+        return result;
+    }
+
+    BOOL aborted = FALSE;
+    result = fileOperation->GetAnyOperationsAborted(&aborted);
+    if (FAILED(result)) {
+        return result;
+    }
+    return aborted ? HRESULT_FROM_WIN32(ERROR_CANCELLED) : S_OK;
+}
+
+void DriveCard_DragOver(
+    winrt::Windows::Foundation::IInspectable const&,
+    mux::DragEventArgs const& args) {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    try {
+        auto dataView = args.DataView();
+        if (!dataView.Contains(
+                winrt::Windows::ApplicationModel::DataTransfer::
+                    StandardDataFormats::StorageItems())) {
+            return;
+        }
+
+        args.AcceptedOperation(GetDriveDropOperation(dataView));
+        args.Handled(true);
+    } catch (...) {
+        Wh_Log(L"Couldn't accept the drive drop: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+winrt::fire_and_forget PerformDriveDrop(
+    mux::DragEventArgs args,
+    std::wstring targetRoot,
+    winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation
+        operation) {
+    struct CompletionScope {
+        ~CompletionScope() {
+            if (g_pendingDropOperations.fetch_sub(1) == 1) {
+                g_dropOperationCondition.notify_all();
+            }
+        }
+    } completionScope;
+
+    mux::DragOperationDeferral deferral{nullptr};
+    try {
+        deferral = args.GetDeferral();
+        auto storageItems = co_await args.DataView().GetStorageItemsAsync();
+        if (g_unloading.load()) {
+            args.AcceptedOperation(
+                winrt::Windows::ApplicationModel::DataTransfer::
+                    DataPackageOperation::None);
+        } else {
+            HRESULT result = TransferStorageItemsToDrive(
+                GetExplorerWindowForCurrentThread(), storageItems,
+                targetRoot, operation);
+            if (SUCCEEDED(result)) {
+                RequestDriveRefresh(kDriveRefreshCapacity);
+            } else if (result != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+                args.AcceptedOperation(
+                    winrt::Windows::ApplicationModel::DataTransfer::
+                        DataPackageOperation::None);
+                Wh_Log(L"Drive drop failed for %s: %08X",
+                       targetRoot.c_str(), result);
+            }
+        }
+    } catch (...) {
+        auto error = winrt::to_hresult().value;
+        try {
+            args.AcceptedOperation(
+                winrt::Windows::ApplicationModel::DataTransfer::
+                    DataPackageOperation::None);
+        } catch (...) {
+        }
+        Wh_Log(L"Couldn't complete the drive drop: %08X", error);
+    }
+    if (deferral) {
+        deferral.Complete();
+    }
+}
+
+void DriveCard_Drop(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    mux::DragEventArgs const& args) {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    try {
+        auto dataView = args.DataView();
+        if (!dataView.Contains(
+                winrt::Windows::ApplicationModel::DataTransfer::
+                    StandardDataFormats::StorageItems())) {
+            return;
+        }
+
+        auto item = sender.as<muxc::GridViewItem>();
+        auto targetRoot = winrt::unbox_value<winrt::hstring>(item.Tag());
+        auto operation = GetDriveDropOperation(dataView);
+        args.AcceptedOperation(operation);
+        args.Handled(true);
+
+        g_pendingDropOperations.fetch_add(1);
+        try {
+            PerformDriveDrop(args, targetRoot.c_str(), operation);
+        } catch (...) {
+            if (g_pendingDropOperations.fetch_sub(1) == 1) {
+                g_dropOperationCondition.notify_all();
+            }
+            throw;
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't start the drive drop: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+void WaitForDriveDragPreparations() {
+    std::unique_lock lock(g_dragPreparationMutex);
+    g_dragPreparationCondition.wait(lock, [] {
+        return g_pendingDragPreparations.load() == 0;
+    });
+}
+
+void WaitForDriveDropOperations() {
+    std::unique_lock lock(g_dropOperationMutex);
+    g_dropOperationCondition.wait(lock, [] {
+        return g_pendingDropOperations.load() == 0;
+    });
+}
+
+void ClearDriveCardEventHandlers(DriveCardEventState const& state) {
+    if (auto item = state.item.get()) {
+        try {
+            item.DoubleTapped(state.doubleTappedToken);
+            item.RemoveHandler(mux::UIElement::KeyDownEvent(),
+                               state.keyDownHandler);
+            item.RightTapped(state.rightTappedToken);
+            item.DragStarting(state.dragStartingToken);
+            item.DragEnter(state.dragEnterToken);
+            item.DragOver(state.dragOverToken);
+            item.Drop(state.dropToken);
+            item.PointerEntered(state.pointerEnteredToken);
+            item.PointerExited(state.pointerExitedToken);
+            item.UnregisterPropertyChangedCallback(
+                muxcp::SelectorItem::IsSelectedProperty(),
+                state.selectedChangedToken);
+        } catch (...) {
+            Wh_Log(L"Drive card event cleanup failed: %08X",
+                   winrt::to_hresult().value);
+        }
+    }
+
+    if (auto checkBox = state.selectionCheckBox) {
+        try {
+            checkBox.Click(state.selectionCheckBoxClickToken);
+        } catch (...) {
+            Wh_Log(L"Drive selection check box cleanup failed: %08X",
+                   winrt::to_hresult().value);
+        }
+    }
+
+    if (auto renameBox = state.renameBox) {
+        try {
+            renameBox.KeyDown(state.renameKeyDownToken);
+            renameBox.LostFocus(state.renameLostFocusToken);
+        } catch (...) {
+            Wh_Log(L"Drive rename event cleanup failed: %08X",
+                   winrt::to_hresult().value);
+        }
+    }
+
+    if (state.navigationController) {
+        state.navigationController->Release();
+    }
+}
+
+void ClearDriveCardEventHandlersForCurrentThread() {
+    for (auto const& state : g_driveCardEventStates) {
+        ClearDriveCardEventHandlers(state);
+    }
+
+    g_driveCardEventStates.clear();
+}
+
+void PruneExpiredDriveCardEventHandlersForCurrentThread() {
+    for (auto it = g_driveCardEventStates.begin();
+         it != g_driveCardEventStates.end();) {
+        if (it->item.get()) {
+            ++it;
+            continue;
+        }
+
+        ClearDriveCardEventHandlers(*it);
+        it = g_driveCardEventStates.erase(it);
+    }
+}
+
+muxm::ImageSource CreateDriveImageSource(DriveInfo const& drive) {
+    if (!drive.iconWidth || !drive.iconHeight || drive.iconPixels.empty()) {
+        return nullptr;
+    }
+
+    try {
+        muxmi::WriteableBitmap bitmap(
+            static_cast<int32_t>(drive.iconWidth),
+            static_cast<int32_t>(drive.iconHeight));
+        auto pixelBuffer = bitmap.PixelBuffer();
+        if (pixelBuffer.Capacity() < drive.iconPixels.size()) {
+            return nullptr;
+        }
+
+        BYTE* destination = nullptr;
+        winrt::check_hresult(
+            pixelBuffer
+                .as<::Windows::Storage::Streams::IBufferByteAccess>()
+                ->Buffer(&destination));
+        if (!destination) {
+            return nullptr;
+        }
+
+        std::memcpy(destination, drive.iconPixels.data(),
+                    drive.iconPixels.size());
+        bitmap.Invalidate();
+        return bitmap.as<muxm::ImageSource>();
+    } catch (...) {
+        Wh_Log(L"Couldn't create the WinUI drive image: %08X",
+               winrt::to_hresult().value);
+        return nullptr;
+    }
+}
+
+muxc::GridViewItem CreateDriveCard(
+    DriveInfo const& drive,
+    IFileExplorerNavigationControllerAbi* navigationController,
+    bool selectionCheckBoxesEnabled) {
+    muxc::GridViewItem card;
+    card.Width(264);
+    card.Height(82);
+    card.Margin(mux::Thickness{0, 0, 20, 3});
+    card.Padding(mux::Thickness{10, 8, 12, 8});
+    card.CornerRadius(mux::CornerRadius{8, 8, 8, 8});
+    card.HorizontalContentAlignment(mux::HorizontalAlignment::Stretch);
+    card.VerticalContentAlignment(mux::VerticalAlignment::Stretch);
+    card.Tag(winrt::box_value(winrt::hstring{drive.rootPath}));
+    card.CanDrag(drive.canStartWinUiDrag);
+    card.AllowDrop(drive.canAcceptDrop);
+
+    muxc::Grid layout;
+
+    muxc::ColumnDefinition iconColumn;
+    iconColumn.Width(mux::GridLength{48, mux::GridUnitType::Pixel});
+    muxc::ColumnDefinition textColumn;
+    textColumn.Width(mux::GridLength{1, mux::GridUnitType::Star});
+    layout.ColumnDefinitions().Append(iconColumn);
+    layout.ColumnDefinitions().Append(textColumn);
+
+    muxc::Grid iconHost;
+    iconHost.Width(48);
+    iconHost.Height(48);
+    iconHost.HorizontalAlignment(mux::HorizontalAlignment::Left);
+    iconHost.VerticalAlignment(mux::VerticalAlignment::Center);
+    muxc::Grid::SetColumn(iconHost, 0);
+
+    mux::UIElement driveIcon{nullptr};
+
+    if (auto imageSource = CreateDriveImageSource(drive)) {
+        muxc::Image image;
+        image.Width(48);
+        image.Height(48);
+        image.Stretch(muxm::Stretch::Uniform);
+        image.Source(imageSource);
+        driveIcon = image;
+        iconHost.Children().Append(image);
+    } else {
+        muxc::FontIcon fallbackIcon;
+        fallbackIcon.Glyph(L"\xEDA2");
+        fallbackIcon.FontFamily(muxm::FontFamily{L"Segoe Fluent Icons"});
+        fallbackIcon.FontSize(32);
+        fallbackIcon.HorizontalAlignment(mux::HorizontalAlignment::Center);
+        fallbackIcon.VerticalAlignment(mux::VerticalAlignment::Center);
+        ApplyBrushIfAvailable(fallbackIcon, L"TextFillColorPrimaryBrush");
+        driveIcon = fallbackIcon;
+        iconHost.Children().Append(fallbackIcon);
+    }
+
+    muxc::CheckBox selectionCheckBox;
+    selectionCheckBox.Width(20);
+    selectionCheckBox.Height(20);
+    selectionCheckBox.MinWidth(0);
+    selectionCheckBox.MinHeight(0);
+    selectionCheckBox.Padding({0, 0, 0, 0});
+    selectionCheckBox.HorizontalAlignment(mux::HorizontalAlignment::Center);
+    selectionCheckBox.VerticalAlignment(mux::VerticalAlignment::Center);
+    selectionCheckBox.IsTabStop(false);
+    selectionCheckBox.Visibility(mux::Visibility::Collapsed);
+    muxc::Grid::SetColumn(selectionCheckBox, 0);
+    muxc::Canvas::SetZIndex(selectionCheckBox, 1);
+
+    muxc::StackPanel details;
+    details.Margin(mux::Thickness{12, 0, 0, 0});
+    details.VerticalAlignment(mux::VerticalAlignment::Center);
+    muxc::Grid::SetColumn(details, 1);
+
+    muxc::Grid titleHost;
+
+    muxc::TextBlock title;
+    title.Text(drive.displayName);
+    title.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+    title.FontSize(14);
+    title.FontWeight(wut::FontWeights::SemiBold());
+    title.TextTrimming(mux::TextTrimming::CharacterEllipsis);
+    ApplyBrushIfAvailable(title, L"TextFillColorPrimaryBrush");
+
+    muxc::TextBox renameBox;
+    renameBox.Height(30);
+    renameBox.MaxLength(32);
+    renameBox.Padding(mux::Thickness{4, 0, 4, 0});
+    renameBox.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+    renameBox.FontSize(14);
+    renameBox.FontWeight(wut::FontWeights::SemiBold());
+    renameBox.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
+    renameBox.VerticalAlignment(mux::VerticalAlignment::Center);
+    renameBox.Visibility(mux::Visibility::Collapsed);
+
+    titleHost.Children().Append(title);
+    titleHost.Children().Append(renameBox);
+    details.Children().Append(titleHost);
+
+    if (!drive.typeName.empty()) {
+        muxc::TextBlock type;
+        type.Text(drive.typeName);
+        type.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+        type.FontSize(12);
+        type.Margin(mux::Thickness{0, 2, 0, 0});
+        type.TextTrimming(mux::TextTrimming::CharacterEllipsis);
+        ApplyBrushIfAvailable(type, L"TextFillColorSecondaryBrush");
+        details.Children().Append(type);
+    }
+
+    if (drive.hasSpaceInformation) {
+        muxc::ProgressBar progress;
+        progress.Minimum(0);
+        progress.Maximum(100);
+        progress.Value(drive.percentUsed);
+        progress.Height(4);
+        progress.Margin(mux::Thickness{0, 7, 0, 3});
+        if (drive.percentUsed >= 90) {
+            ApplyBrushIfAvailable(progress, L"SystemFillColorCriticalBrush");
+        }
+        details.Children().Append(progress);
+
+        muxc::TextBlock space;
+        space.Text(drive.spaceDescription);
+        space.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+        space.FontSize(12);
+        space.TextTrimming(mux::TextTrimming::CharacterEllipsis);
+        ApplyBrushIfAvailable(space, L"TextFillColorSecondaryBrush");
+        details.Children().Append(space);
+    }
+
+    layout.Children().Append(iconHost);
+    layout.Children().Append(selectionCheckBox);
+    layout.Children().Append(details);
+    card.Content(layout);
+    muxc::ToolTipService::SetToolTip(
+        card, winrt::box_value(winrt::hstring{
+                  drive.fileSystemPath.empty() ? drive.displayName
+                                               : drive.fileSystemPath}));
+
+    auto doubleTappedToken = card.DoubleTapped(DriveCard_DoubleTapped);
+    auto keyDownHandler = winrt::box_value(
+        muxi::KeyEventHandler{DriveCard_KeyDown});
+    card.AddHandler(mux::UIElement::KeyDownEvent(), keyDownHandler, true);
+    auto rightTappedToken = card.RightTapped(DriveCard_RightTapped);
+    auto dragStartingToken = card.DragStarting(DriveCard_DragStarting);
+    auto dragEnterToken = card.DragEnter(DriveCard_DragOver);
+    auto dragOverToken = card.DragOver(DriveCard_DragOver);
+    auto dropToken = card.Drop(DriveCard_Drop);
+    auto pointerEnteredToken = card.PointerEntered(DriveCard_PointerEntered);
+    auto pointerExitedToken = card.PointerExited(DriveCard_PointerExited);
+    auto selectionCheckBoxClickToken =
+        selectionCheckBox.Click(DriveSelectionCheckBox_Click);
+    auto selectedChangedToken = card.RegisterPropertyChangedCallback(
+        muxcp::SelectorItem::IsSelectedProperty(),
+        mux::DependencyPropertyChangedCallback{DriveCard_IsSelectedChanged});
+    auto renameKeyDownToken = renameBox.KeyDown(DriveRenameBox_KeyDown);
+    auto renameLostFocusToken = renameBox.LostFocus(DriveRenameBox_LostFocus);
+    if (navigationController) {
+        navigationController->AddRef();
+    }
+    g_driveCardEventStates.push_back({
+        winrt::make_weak(card),
+        title,
+        renameBox,
+        driveIcon,
+        selectionCheckBox,
+        doubleTappedToken,
+        keyDownHandler,
+        rightTappedToken,
+        dragStartingToken,
+        dragEnterToken,
+        dragOverToken,
+        dropToken,
+        pointerEnteredToken,
+        pointerExitedToken,
+        selectionCheckBoxClickToken,
+        selectedChangedToken,
+        renameKeyDownToken,
+        renameLostFocusToken,
+        navigationController,
+        false,
+        false,
+        selectionCheckBoxesEnabled,
+        false,
+    });
+    UpdateDriveSelectionCheckBox(g_driveCardEventStates.back());
+
+    return card;
+}
+
+muxc::GridView FindDevicesGrid(muxc::StackPanel const& panel) {
+    for (auto const& child : panel.Children()) {
+        auto section = child.try_as<muxc::StackPanel>();
+        if (!section || section.Name() != kDevicesSectionName) {
+            continue;
+        }
+
+        for (auto const& sectionChild : section.Children()) {
+            auto element =
+                sectionChild.try_as<mux::FrameworkElement>();
+            if (element && element.Name() == kDevicesGridName) {
+                return element.try_as<muxc::GridView>();
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void PopulateDevicesGrid(muxc::GridView const& grid,
+                          DriveSnapshot const& drives,
+                          IFileExplorerNavigationControllerAbi*
+                              navigationController) {
+    auto items = grid.Items();
+    items.Clear();
+    bool selectionCheckBoxesEnabled = IsAutoCheckSelectEnabled();
+    for (auto const& drive : drives) {
+        items.Append(CreateDriveCard(drive, navigationController,
+                                     selectionCheckBoxesEnabled));
+    }
+}
+
+bool IsDriveCardRenamingInGrid(muxc::GridView const& grid) {
+    for (auto const& state : g_driveCardEventStates) {
+        if (!state.renaming) {
+            continue;
+        }
+
+        auto item = state.item.get();
+        if (item &&
+            muxc::ItemsControl::ItemsControlFromItemContainer(item) == grid) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ClearDriveCardEventHandlersForGrid(muxc::GridView const& grid) {
+    for (auto it = g_driveCardEventStates.begin();
+         it != g_driveCardEventStates.end();) {
+        auto item = it->item.get();
+        if (item &&
+            muxc::ItemsControl::ItemsControlFromItemContainer(item) == grid) {
+            ClearDriveCardEventHandlers(*it);
+            it = g_driveCardEventStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Rebuilding the grid drops and recreates every GridViewItem, which would
+// silently discard an in-progress inline rename and the current selection.
+// Defer entirely while a card is being renamed (CompleteDriveRename() wakes
+// up a fresh refresh once it ends, committed or not), and restore selection
+// by root path across the rebuild otherwise.
+void RefreshDevicesGridPreservingState(
+    muxc::GridView const& grid,
+    DriveSnapshot const& drives,
+    IFileExplorerNavigationControllerAbi* navigationController) {
+    if (IsDriveCardRenamingInGrid(grid)) {
+        return;
+    }
+
+    std::vector<std::wstring> selectedRootPaths;
+    for (auto const& selected : grid.SelectedItems()) {
+        if (auto selectedItem = selected.try_as<muxc::GridViewItem>()) {
+            selectedRootPaths.emplace_back(
+                winrt::unbox_value<winrt::hstring>(selectedItem.Tag())
+                    .c_str());
+        }
+    }
+
+    ClearDriveCardEventHandlersForGrid(grid);
+    PopulateDevicesGrid(grid, drives, navigationController);
+
+    for (auto const& child : grid.Items()) {
+        auto gridViewItem = child.try_as<muxc::GridViewItem>();
+        if (!gridViewItem) {
+            continue;
+        }
+
+        auto rootPath = winrt::unbox_value<winrt::hstring>(gridViewItem.Tag());
+        if (std::find(selectedRootPaths.begin(), selectedRootPaths.end(),
+                      rootPath.c_str()) != selectedRootPaths.end()) {
+            gridViewItem.IsSelected(true);
+        }
+    }
+}
+
+void DevicesHeader_Click(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    mux::RoutedEventArgs const&) {
+    auto button = sender.as<muxc::Button>();
+
+    for (auto& state : g_devicesHeaderEventStates) {
+        if (state.button.get() == button) {
+            state.expanded = !state.expanded;
+            if (auto grid = state.grid.get()) {
+                grid.Visibility(state.expanded ? mux::Visibility::Visible
+                                               : mux::Visibility::Collapsed);
+            }
+            if (auto content = button.Content().try_as<muxc::Grid>()) {
+                for (auto const& child : content.Children()) {
+                    if (auto icon = child.try_as<muxc::FontIcon>()) {
+                        icon.Glyph(state.expanded ? L"\xE70D" : L"\xE76C");
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+    }
+}
+
+void ClearDevicesHeaderEventHandlersForCurrentThread() {
+    for (auto const& state : g_devicesHeaderEventStates) {
+        if (auto button = state.button.get()) {
+            try {
+                button.Click(state.clickToken);
+            } catch (...) {
+                Wh_Log(L"Devices header event cleanup failed: %08X",
+                       winrt::to_hresult().value);
+            }
+        }
+    }
+    g_devicesHeaderEventStates.clear();
+}
+
+// AddHandler projects routed-event delegates as Object. Keep the boxed object
+// so RemoveHandler receives the exact same instance during unload.
+winrt::Windows::Foundation::IInspectable RetainRoutedEventHandler(
+    muxi::PointerEventHandler const& handler) {
+    return winrt::box_value(handler);
+}
+
+bool IsTrackedDriveSource(mux::DependencyObject source,
+                          muxc::Grid const& surface) {
+    while (source && source != surface) {
+        if (auto item = source.try_as<muxc::GridViewItem>()) {
+            for (auto const& state : g_driveCardEventStates) {
+                if (state.item.get() == item) {
+                    return true;
+                }
+            }
+        }
+        source = muxm::VisualTreeHelper::GetParent(source);
+    }
+    return false;
+}
+
+bool IsSourceWithinElement(mux::DependencyObject source,
+                           mux::DependencyObject const& element,
+                           muxc::Grid const& surface) {
+    while (source && source != surface) {
+        if (source == element) {
+            return true;
+        }
+        source = muxm::VisualTreeHelper::GetParent(source);
+    }
+    return source == element;
+}
+
+void CompleteDriveRenamesOutsideSource(mux::DependencyObject const& source,
+                                       muxc::Grid const& surface) {
+    std::vector<muxc::TextBox> renameBoxes;
+    for (auto const& state : g_driveCardEventStates) {
+        if (state.renaming && state.renameBox &&
+            !IsSourceWithinElement(source, state.renameBox, surface)) {
+            renameBoxes.push_back(state.renameBox);
+        }
+    }
+
+    for (auto const& renameBox : renameBoxes) {
+        CompleteDriveRename(renameBox, true, false);
+    }
+}
+
+bool IsInteractiveHomeSource(mux::DependencyObject source,
+                             muxc::Grid const& surface) {
+    while (source && source != surface) {
+        if (auto control = source.try_as<muxc::Control>()) {
+            if (control.IsTabStop()) {
+                return true;
+            }
+        }
+        source = muxm::VisualTreeHelper::GetParent(source);
+    }
+    return false;
+}
+
+void ClearDriveSelection(muxc::StackPanel const& panel) {
+    if (auto grid = FindDevicesGrid(panel)) {
+        grid.SelectedItems().Clear();
+    }
+}
+
+HomeSelectionEventState* FindHomeSelectionState(muxc::Grid const& surface) {
+    for (auto& state : g_homeSelectionEventStates) {
+        if (state.surface.get() == surface) {
+            return &state;
+        }
+    }
+    return nullptr;
+}
+
+void UpdateDriveMarqueeSelection(
+    HomeSelectionEventState& state,
+    winrt::Windows::Foundation::Point const& current) {
+    auto surface = state.surface.get();
+    auto panel = state.panel.get();
+    auto grid = panel ? FindDevicesGrid(panel) : nullptr;
+    if (!surface || !grid) {
+        return;
+    }
+
+    float left = std::min(state.start.X, current.X);
+    float top = std::min(state.start.Y, current.Y);
+    float right = std::max(state.start.X, current.X);
+    float bottom = std::max(state.start.Y, current.Y);
+
+    for (auto const& cardState : g_driveCardEventStates) {
+        auto item = cardState.item.get();
+        if (!item || item.Visibility() != mux::Visibility::Visible ||
+            muxc::ItemsControl::ItemsControlFromItemContainer(item) != grid) {
+            continue;
+        }
+
+        auto transform = item.TransformToVisual(surface);
+        auto itemTopLeft = transform.TransformPoint({0, 0});
+        float itemRight = itemTopLeft.X +
+                          static_cast<float>(item.ActualWidth());
+        float itemBottom = itemTopLeft.Y +
+                           static_cast<float>(item.ActualHeight());
+        bool intersects = right >= itemTopLeft.X && left <= itemRight &&
+                          bottom >= itemTopLeft.Y && top <= itemBottom;
+
+        bool initiallySelected = false;
+        if (state.additive) {
+            for (auto const& initial : state.initialSelection) {
+                if (initial.get() == item) {
+                    initiallySelected = true;
+                    break;
+                }
+            }
+        }
+        item.IsSelected(intersects || initiallySelected);
+    }
+}
+
+void HomeSelection_PointerPressed(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::PointerRoutedEventArgs const& args) {
+    if (g_unloading.load()) {
+        return;
+    }
+
+    try {
+        auto surface = sender.as<muxc::Grid>();
+        auto source = args.OriginalSource().try_as<mux::DependencyObject>();
+        CompleteDriveRenamesOutsideSource(source, surface);
+
+        auto state = FindHomeSelectionState(surface);
+        auto point = args.GetCurrentPoint(surface);
+        if (!state || !point.Properties().IsLeftButtonPressed()) {
+            return;
+        }
+        if (IsTrackedDriveSource(source, surface)) {
+            return;
+        }
+
+        auto panel = state->panel.get();
+        if (!panel) {
+            return;
+        }
+        if (IsInteractiveHomeSource(source, surface)) {
+            ClearDriveSelection(panel);
+            return;
+        }
+
+        state->tracking = true;
+        state->moved = false;
+        state->pointerId = point.PointerId();
+        state->start = point.Position();
+        state->additive = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        state->initialSelection.clear();
+        if (state->additive) {
+            if (auto grid = FindDevicesGrid(panel)) {
+                for (auto const& selected : grid.SelectedItems()) {
+                    if (auto item = selected.try_as<muxc::GridViewItem>()) {
+                        state->initialSelection.push_back(
+                            winrt::make_weak(item));
+                    }
+                }
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Home selection press handling failed: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+void HomeSelection_PointerMoved(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::PointerRoutedEventArgs const& args) {
+    try {
+        auto surface = sender.as<muxc::Grid>();
+        auto state = FindHomeSelectionState(surface);
+        auto point = args.GetCurrentPoint(surface);
+        if (!state || !state->tracking ||
+            state->pointerId != point.PointerId()) {
+            return;
+        }
+        if (!point.Properties().IsLeftButtonPressed()) {
+            state->tracking = false;
+            state->initialSelection.clear();
+            return;
+        }
+
+        auto current = point.Position();
+        float deltaX = current.X - state->start.X;
+        float deltaY = current.Y - state->start.Y;
+        if (!state->moved && deltaX * deltaX + deltaY * deltaY < 16) {
+            return;
+        }
+
+        if (!state->moved) {
+            state->moved = true;
+            if (!state->additive) {
+                if (auto panel = state->panel.get()) {
+                    ClearDriveSelection(panel);
+                }
+            }
+        }
+        UpdateDriveMarqueeSelection(*state, current);
+    } catch (...) {
+        Wh_Log(L"Home marquee selection failed: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+void HomeSelection_PointerReleased(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    muxi::PointerRoutedEventArgs const& args) {
+    try {
+        auto surface = sender.as<muxc::Grid>();
+        auto state = FindHomeSelectionState(surface);
+        auto point = args.GetCurrentPoint(surface);
+        if (!state || !state->tracking ||
+            state->pointerId != point.PointerId()) {
+            return;
+        }
+
+        if (!state->moved) {
+            if (auto panel = state->panel.get()) {
+                ClearDriveSelection(panel);
+            }
+        }
+        state->tracking = false;
+        state->initialSelection.clear();
+    } catch (...) {
+        Wh_Log(L"Home selection release handling failed: %08X",
+               winrt::to_hresult().value);
+    }
+}
+
+void EnsureHomeSelectionHandlers(muxc::Grid const& surface,
+                                 muxc::StackPanel const& panel) {
+    for (auto it = g_homeSelectionEventStates.begin();
+         it != g_homeSelectionEventStates.end();) {
+        auto trackedSurface = it->surface.get();
+        if (!trackedSurface) {
+            it = g_homeSelectionEventStates.erase(it);
+            continue;
+        }
+        if (trackedSurface == surface) {
+            it->panel = winrt::make_weak(panel);
+            return;
+        }
+        ++it;
+    }
+
+    HomeSelectionEventState state;
+    state.surface = winrt::make_weak(surface);
+    state.panel = winrt::make_weak(panel);
+    state.pressedHandler = RetainRoutedEventHandler(
+        muxi::PointerEventHandler{HomeSelection_PointerPressed});
+    state.movedHandler = RetainRoutedEventHandler(
+        muxi::PointerEventHandler{HomeSelection_PointerMoved});
+    state.releasedHandler = RetainRoutedEventHandler(
+        muxi::PointerEventHandler{HomeSelection_PointerReleased});
+
+    bool pressedAdded = false;
+    bool movedAdded = false;
+    try {
+        surface.AddHandler(mux::UIElement::PointerPressedEvent(),
+                           state.pressedHandler, true);
+        pressedAdded = true;
+        surface.AddHandler(mux::UIElement::PointerMovedEvent(),
+                           state.movedHandler, true);
+        movedAdded = true;
+        surface.AddHandler(mux::UIElement::PointerReleasedEvent(),
+                           state.releasedHandler, true);
+    } catch (...) {
+        if (movedAdded) {
+            surface.RemoveHandler(mux::UIElement::PointerMovedEvent(),
+                                  state.movedHandler);
+        }
+        if (pressedAdded) {
+            surface.RemoveHandler(mux::UIElement::PointerPressedEvent(),
+                                  state.pressedHandler);
+        }
+        throw;
+    }
+    g_homeSelectionEventStates.push_back(std::move(state));
+}
+
+void ClearHomeSelectionEventHandlersForCurrentThread() {
+    for (auto const& state : g_homeSelectionEventStates) {
+        if (auto surface = state.surface.get()) {
+            try {
+                surface.RemoveHandler(mux::UIElement::PointerPressedEvent(),
+                                      state.pressedHandler);
+                surface.RemoveHandler(mux::UIElement::PointerMovedEvent(),
+                                      state.movedHandler);
+                surface.RemoveHandler(mux::UIElement::PointerReleasedEvent(),
+                                      state.releasedHandler);
+            } catch (...) {
+                Wh_Log(L"Home selection event cleanup failed: %08X",
+                       winrt::to_hresult().value);
+            }
+        }
+    }
+    g_homeSelectionEventStates.clear();
+}
+
+bool RefreshDevicesSectionsForCurrentThread() {
+    auto snapshot = GetLatestDriveSnapshot();
+    if (!snapshot || g_unloading.load()) {
+        return false;
+    }
+
+    PruneExpiredDriveCardEventHandlersForCurrentThread();
+    for (auto it = g_homePanels.begin(); it != g_homePanels.end();) {
+        auto panel = it->panel.get();
+        if (!panel) {
+            if (it->navigationController) {
+                it->navigationController->Release();
+            }
+            it = g_homePanels.erase(it);
+            continue;
+        }
+
+        try {
+            if (auto grid = FindDevicesGrid(panel)) {
+                RefreshDevicesGridPreservingState(grid, *snapshot,
+                                                  it->navigationController);
+            }
+        } catch (...) {
+            Wh_Log(L"Drive grid refresh failed: %08X",
+                   winrt::to_hresult().value);
+        }
+        ++it;
+    }
+
+    return true;
+}
+
+muxc::StackPanel CreateDevicesSection() {
+    for (auto it = g_devicesHeaderEventStates.begin();
+         it != g_devicesHeaderEventStates.end();) {
+        if (!it->button.get()) {
+            it = g_devicesHeaderEventStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    muxc::StackPanel section;
+    section.Name(kDevicesSectionName);
+    section.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
+
+    muxc::Button headerButton;
+    headerButton.Height(36);
+    headerButton.MinWidth(0);
+    headerButton.MinHeight(0);
+    headerButton.Margin(mux::Thickness{14, 8, 14, 0});
+    headerButton.Padding(mux::Thickness{0, 0, 0, 0});
+    headerButton.BorderThickness(mux::Thickness{0, 0, 0, 0});
+    headerButton.CornerRadius(mux::CornerRadius{4, 4, 4, 4});
+    headerButton.HorizontalAlignment(mux::HorizontalAlignment::Left);
+    headerButton.HorizontalContentAlignment(
+        mux::HorizontalAlignment::Left);
+    headerButton.VerticalContentAlignment(mux::VerticalAlignment::Center);
+    if (auto brush = TryGetBrush(L"SubtleFillColorTransparentBrush")) {
+        headerButton.Background(brush);
+    }
+
+    muxc::Grid headerContent;
+    muxc::ColumnDefinition toggleColumn;
+    toggleColumn.Width(mux::GridLength{36, mux::GridUnitType::Pixel});
+    muxc::ColumnDefinition textColumn;
+    textColumn.Width(mux::GridLength{1, mux::GridUnitType::Auto});
+    headerContent.ColumnDefinitions().Append(toggleColumn);
+    headerContent.ColumnDefinitions().Append(textColumn);
+
+    muxc::FontIcon headerIcon;
+    headerIcon.FontFamily(muxm::FontFamily{L"Segoe Fluent Icons"});
+    headerIcon.FontSize(16);
+    headerIcon.Glyph(L"\xE70D");
+    ApplyBrushIfAvailable(headerIcon, L"TextFillColorPrimaryBrush");
+    muxc::Grid::SetColumn(headerIcon, 0);
+
+    muxc::TextBlock headerText;
+    headerText.Text(GetShellStrings().devicesAndDrives);
+    headerText.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+    headerText.FontSize(14);
+    headerText.FontWeight(wut::FontWeights::SemiBold());
+    headerText.VerticalAlignment(mux::VerticalAlignment::Center);
+    headerText.Margin(mux::Thickness{8, 0, 12, 0});
+    ApplyBrushIfAvailable(headerText, L"TextFillColorPrimaryBrush");
+    muxc::Grid::SetColumn(headerText, 1);
+
+    headerContent.Children().Append(headerIcon);
+    headerContent.Children().Append(headerText);
+    headerButton.Content(headerContent);
+
+    muxc::GridView driveGrid;
+    driveGrid.Name(kDevicesGridName);
+    driveGrid.Margin(mux::Thickness{14, 4, 0, 0});
+    driveGrid.Padding(mux::Thickness{0, 0, 0, 0});
+    driveGrid.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
+    driveGrid.SelectionMode(muxc::ListViewSelectionMode::Extended);
+    driveGrid.IsMultiSelectCheckBoxEnabled(false);
+    driveGrid.IsItemClickEnabled(false);
+    driveGrid.IsTabStop(false);
+    muxc::ScrollViewer::SetVerticalScrollMode(
+        driveGrid, muxc::ScrollMode::Disabled);
+    muxc::ScrollViewer::SetVerticalScrollBarVisibility(
+        driveGrid, muxc::ScrollBarVisibility::Disabled);
+
+    section.Children().Append(headerButton);
+    section.Children().Append(driveGrid);
+
+    auto clickToken = headerButton.Click(DevicesHeader_Click);
+    g_devicesHeaderEventStates.push_back(
+        {winrt::make_weak(headerButton), winrt::make_weak(driveGrid),
+         clickToken, true});
+    return section;
+}
+
+void TrackHomePanel(muxc::StackPanel const& panel) {
+    auto navigationController = GetNavigationControllerForCurrentThread();
+
+    for (auto it = g_homePanels.begin(); it != g_homePanels.end();) {
+        auto tracked = it->panel.get();
+        if (!tracked) {
+            if (it->navigationController) {
+                it->navigationController->Release();
+            }
+            it = g_homePanels.erase(it);
+            continue;
+        }
+
+        if (tracked == panel) {
+            if (navigationController) {
+                if (navigationController == it->navigationController) {
+                    navigationController->Release();
+                } else {
+                    if (it->navigationController) {
+                        it->navigationController->Release();
+                    }
+                    it->navigationController = navigationController;
+                }
+            }
+            return;
+        }
+
+        ++it;
+    }
+
+    try {
+        g_homePanels.push_back(
+            {winrt::make_weak(panel), navigationController});
+    } catch (...) {
+        if (navigationController) {
+            navigationController->Release();
+        }
+        throw;
+    }
+}
+
+bool PopulateDevicesSectionIfEmpty(muxc::StackPanel const& panel) {
+    auto grid = FindDevicesGrid(panel);
+    if (!grid) {
+        return false;
+    }
+
+    if (grid.Items().Size() != 0) {
+        return true;
+    }
+
+    auto snapshot = GetLatestDriveSnapshot();
+    if (!snapshot || g_unloading.load()) {
+        return false;
+    }
+
+    IFileExplorerNavigationControllerAbi* navigationController = nullptr;
+    for (auto const& state : g_homePanels) {
+        if (state.panel.get() == panel) {
+            navigationController = state.navigationController;
+            break;
+        }
+    }
+
+    PruneExpiredDriveCardEventHandlersForCurrentThread();
+    PopulateDevicesGrid(grid, *snapshot, navigationController);
+    return true;
+}
+
+bool InsertDevicesSection(muxc::StackPanel const& panel) {
+    auto children = panel.Children();
+    uint32_t primaryContentIndex = UINT32_MAX;
+    uint32_t existingSectionIndex = UINT32_MAX;
+
+    for (uint32_t i = 0; i < children.Size(); ++i) {
+        auto element = children.GetAt(i).try_as<mux::FrameworkElement>();
+        if (!element) {
+            continue;
+        }
+
+        auto name = element.Name();
+        if (name == kPrimaryContentPresenterName) {
+            primaryContentIndex = i;
+        } else if (name == kDevicesSectionName) {
+            existingSectionIndex = i;
+        }
+    }
+
+    if (primaryContentIndex == UINT32_MAX) {
+        return false;
+    }
+
+    uint32_t desiredIndex = primaryContentIndex + 1;
+    if (existingSectionIndex == desiredIndex) {
+        TrackHomePanel(panel);
+        return true;
+    }
+
+    mux::UIElement section = nullptr;
+    if (existingSectionIndex != UINT32_MAX) {
+        section = children.GetAt(existingSectionIndex);
+        children.RemoveAt(existingSectionIndex);
+        if (existingSectionIndex < desiredIndex) {
+            --desiredIndex;
+        }
+    } else {
+        section = CreateDevicesSection();
+    }
+
+    children.InsertAt(desiredIndex, section);
+    TrackHomePanel(panel);
+    return true;
+}
+
+void TryInjectFromHomeScrollViewer(mux::FrameworkElement const& element) {
+    auto scrollViewer = element.try_as<muxc::ScrollViewer>();
+    if (!scrollViewer) {
+        return;
+    }
+
+    auto contentGrid = scrollViewer.Content().try_as<muxc::Grid>();
+    if (!contentGrid) {
+        Wh_Log(L"HomeScrollViewer content isn't a Grid");
+        return;
+    }
+
+    for (auto const& child : contentGrid.Children()) {
+        if (auto panel = child.try_as<muxc::StackPanel>()) {
+            if (!InsertDevicesSection(panel)) {
+                Wh_Log(L"The Home StackPanel has no PrimaryGroupContentPresenter");
+            } else {
+                EnsureHomeSelectionHandlers(contentGrid, panel);
+                EnsureShellNotificationsForCurrentThread();
+                if (!PopulateDevicesSectionIfEmpty(panel)) {
+                    RequestInitialDriveSnapshot();
+                }
+            }
+            return;
+        }
+    }
+
+    Wh_Log(L"No direct StackPanel child was found in HomeScrollViewer.Content");
+}
+
+muxc::ScrollViewer FindHomeScrollViewer(
+    mux::DependencyObject const& root) {
+    constexpr size_t kMaxVisitedElements = 4096;
+
+    std::vector<mux::DependencyObject> pending{root};
+    for (size_t index = 0;
+         index < pending.size() && index < kMaxVisitedElements; ++index) {
+        auto const& current = pending[index];
+        if (auto element = current.try_as<mux::FrameworkElement>()) {
+            if (element.Name() == L"HomeScrollViewer") {
+                return element.try_as<muxc::ScrollViewer>();
+            }
+        }
+
+        int childCount = muxm::VisualTreeHelper::GetChildrenCount(current);
+        for (int childIndex = 0;
+             childIndex < childCount && pending.size() < kMaxVisitedElements;
+             ++childIndex) {
+            if (auto child =
+                    muxm::VisualTreeHelper::GetChild(current, childIndex)) {
+                pending.push_back(child);
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void TryInjectFromXamlRoot(mux::XamlRoot const& xamlRoot) {
+    auto content = xamlRoot.Content();
+    if (!content) {
+        return;
+    }
+
+    auto root = content.try_as<mux::DependencyObject>();
+    auto scrollViewer = root ? FindHomeScrollViewer(root) : nullptr;
+    if (!scrollViewer) {
+        return;
+    }
+
+    TryInjectFromHomeScrollViewer(scrollViewer);
+}
+
+void ClearTrackedHomePanelsForCurrentThread() {
+    for (auto const& state : g_homePanels) {
+        if (state.navigationController) {
+            state.navigationController->Release();
+        }
+    }
+    g_homePanels.clear();
+}
+
+void RemoveDevicesSectionsForCurrentThread() {
+    ClearHomeSelectionEventHandlersForCurrentThread();
+    ClearDriveCardEventHandlersForCurrentThread();
+    ClearDevicesHeaderEventHandlersForCurrentThread();
+
+    for (auto const& state : g_homePanels) {
+        auto panel = state.panel.get();
+        if (!panel) {
+            continue;
+        }
+
+        try {
+            auto children = panel.Children();
+            for (uint32_t i = children.Size(); i > 0; --i) {
+                auto element =
+                    children.GetAt(i - 1).try_as<mux::FrameworkElement>();
+                if (element && element.Name() == kDevicesSectionName) {
+                    children.RemoveAt(i - 1);
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Section removal failed: %08X",
+                   winrt::to_hresult().value);
+        }
+    }
+
+    ClearTrackedHomePanelsForCurrentThread();
+}
+
+// OnXamlRootChanged returns fire_and_forget, so its hidden return buffer is the
+// second ABI parameter. The XamlRoot and event args are passed indirectly.
+using HomeViewControl_Wave2_OnXamlRootChanged_t = void*(WINAPI*)(
+    void* pThis,
+    void* returnValue,
+    void* xamlRoot,
+    void* args);
+HomeViewControl_Wave2_OnXamlRootChanged_t
+    HomeViewControl_Wave2_OnXamlRootChanged_Original;
+
+void* WINAPI HomeViewControl_Wave2_OnXamlRootChanged_Hook(
+    void* pThis,
+    void* returnValue,
+    void* xamlRoot,
+    void* args) {
+    mux::XamlRoot root{nullptr};
+
+    // The original consumes the by-value parameter. Keep our own reference
+    // before calling it so the projected object remains valid afterwards.
+    if (!g_unloading.load() && xamlRoot) {
+        try {
+            auto const& incomingRoot =
+                *reinterpret_cast<mux::XamlRoot const*>(xamlRoot);
+            if (incomingRoot) {
+                root = incomingRoot;
+            }
+        } catch (...) {
+            Wh_Log(L"Couldn't retain the Home XamlRoot: %08X",
+                   winrt::to_hresult().value);
+        }
+    }
+
+    void* result = HomeViewControl_Wave2_OnXamlRootChanged_Original(
+        pThis, returnValue, xamlRoot, args);
+
+    if (g_unloading.load() || !root) {
+        return result;
+    }
+
+    try {
+        TryInjectFromXamlRoot(root);
+    } catch (...) {
+        auto error = winrt::to_hresult();
+        if (error.value != E_INVALIDARG) {
+            Wh_Log(L"Home XamlRoot scan failed: %08X", error.value);
+        }
+    }
+
+    return result;
+}
+
+using FileExplorerNavigationController_SetNavigationState_t = HRESULT(WINAPI*)(
+    void* pThis,
+    unsigned long state);
+FileExplorerNavigationController_SetNavigationState_t
+    FileExplorerNavigationController_SetNavigationState_Original;
+
+HRESULT WINAPI FileExplorerNavigationController_SetNavigationState_Hook(
+    void* pThis,
+    unsigned long state) {
+    RememberNavigationControllerForCurrentThread(pThis);
+    return FileExplorerNavigationController_SetNavigationState_Original(pThis,
+                                                                         state);
+}
+
+enum class SymbolHookResult {
+    Success,
+    ResolutionFailed,
+    NoSymbolFound,
+};
+
+SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module) {
+    // FileExplorerExtensions.dll.
+    WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
+        {
+            {
+                LR"(private: struct winrt::fire_and_forget __cdecl winrt::FileExplorerExtensions::implementation::HomeViewControl_Wave2::OnXamlRootChanged(struct winrt::Microsoft::UI::Xaml::XamlRoot,struct winrt::Microsoft::UI::Xaml::XamlRootChangedEventArgs))",
+                LR"(private: struct winrt::fire_and_forget __cdecl winrt::FileExplorerExtensions::implementation::HomeViewControl_Wave2::OnXamlRootChanged(struct winrt::Microsoft::UI::Xaml::XamlRoot,struct winrt::Microsoft::UI::Xaml::XamlRootChangedEventArgs) __ptr64)",
+            },
+            &HomeViewControl_Wave2_OnXamlRootChanged_Original,
+            HomeViewControl_Wave2_OnXamlRootChanged_Hook,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, fileExplorerExtensionsDllHooks,
+                                    ARRAYSIZE(fileExplorerExtensionsDllHooks))) {
+        Wh_Log(L"Failed to resolve FileExplorerExtensions.dll symbols");
+        return SymbolHookResult::ResolutionFailed;
+    }
+
+    if (!HomeViewControl_Wave2_OnXamlRootChanged_Original) {
+        Wh_Log(L"OnXamlRootChanged symbol wasn't found");
+        return SymbolHookResult::NoSymbolFound;
+    }
+
+    return SymbolHookResult::Success;
+}
+
+bool HookFileExplorerExtensionsIfLoaded(bool applyHooks) {
+    if (g_fileExplorerExtensionsSymbolsHooked.load()) {
+        return true;
+    }
+
+    HMODULE module = GetModuleHandleW(L"FileExplorerExtensions.dll");
+    if (!module) {
+        return true;
+    }
+
+    if (g_fileExplorerExtensionsSymbolsHooked.exchange(true)) {
+        return true;
+    }
+
+    switch (HookFileExplorerExtensionsSymbols(module)) {
+        case SymbolHookResult::Success:
+            break;
+        case SymbolHookResult::ResolutionFailed:
+        case SymbolHookResult::NoSymbolFound:
+            g_fileExplorerExtensionsSymbolsHooked.store(false);
+            return false;
+    }
+
+    if (applyHooks && !g_unloading.load()) {
+        if (!Wh_ApplyHookOperations()) {
+            Wh_Log(L"Failed to apply deferred File Explorer hooks");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool HookWindowsUiFileExplorerIfLoaded(bool applyHooks) {
+    if (g_navigationSymbolsHooked.load()) {
+        return true;
+    }
+
+    HMODULE module = GetModuleHandleW(L"Windows.UI.FileExplorer.dll");
+    if (!module) {
+        return true;
+    }
+
+    if (g_navigationSymbolsHooked.exchange(true)) {
+        return true;
+    }
+
+    // Windows.UI.FileExplorer.dll. Navigation is optional; the cards retain
+    // their ShellExecute fallback if this symbol changes on another build.
+    WindhawkUtils::SYMBOL_HOOK windowsUiFileExplorerDllHooks[] = {
+        {
+            {
+                LR"(public: virtual long __cdecl winrt::WindowsUdk::UI::Shell::implementation::FileExplorerNavigationController::SetNavigationState(unsigned long))",
+            },
+            &FileExplorerNavigationController_SetNavigationState_Original,
+            FileExplorerNavigationController_SetNavigationState_Hook,
+            true,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(
+            module, windowsUiFileExplorerDllHooks,
+            ARRAYSIZE(windowsUiFileExplorerDllHooks))) {
+        g_navigationSymbolsHooked.store(false);
+        Wh_Log(L"Failed to resolve Windows.UI.FileExplorer.dll symbols; "
+               L"current-tab navigation is unavailable");
+        return true;
+    }
+
+    if (!FileExplorerNavigationController_SetNavigationState_Original) {
+        Wh_Log(L"SetNavigationState wasn't found; current-tab navigation is "
+               L"unavailable");
+        return true;
+    }
+
+    if (applyHooks && !g_unloading.load() && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"Failed to apply the deferred navigation hook");
+        return false;
+    }
+
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
+                                   HANDLE file,
+                                   DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
+    if (!module || !fileName || g_unloading.load()) {
+        return module;
+    }
+
+    PCWSTR baseName = fileName;
+    for (PCWSTR p = fileName; *p; ++p) {
+        if (*p == L'\\' || *p == L'/') {
+            baseName = p + 1;
+        }
+    }
+
+    if (_wcsicmp(baseName, L"FileExplorerExtensions.dll") == 0 ||
+        _wcsicmp(baseName, L"FileExplorerExtensions") == 0) {
+        HookFileExplorerExtensionsIfLoaded(true);
+    } else if (_wcsicmp(baseName, L"Windows.UI.FileExplorer.dll") == 0 ||
+               _wcsicmp(baseName, L"Windows.UI.FileExplorer") == 0) {
+        HookWindowsUiFileExplorerIfLoaded(true);
+    }
+
+    return module;
+}
+
+using RunFromWindowThreadProc = void(WINAPI*)(void* parameter);
+
+struct RunFromWindowThreadParameters {
+    RunFromWindowThreadProc procedure;
+    void* parameter;
+};
+
+UINT GetRunFromWindowThreadMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    return message;
+}
+
+LRESULT CALLBACK RunFromWindowThreadHookProc(int code,
+                                             WPARAM wParam,
+                                             LPARAM lParam) {
+    if (code == HC_ACTION) {
+        auto call = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (call->message == GetRunFromWindowThreadMessage()) {
+            auto parameters = reinterpret_cast<RunFromWindowThreadParameters*>(
+                call->lParam);
+            parameters->procedure(parameters->parameter);
+        }
+    }
+
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+bool RunFromWindowThread(HWND window,
+                         RunFromWindowThreadProc procedure,
+                         void* parameter) {
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) {
+        return false;
+    }
+
+    if (threadId == GetCurrentThreadId()) {
+        procedure(parameter);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunFromWindowThreadHookProc,
+                                   nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
+
+    RunFromWindowThreadParameters parameters{procedure, parameter};
+    SendMessageW(window, GetRunFromWindowThreadMessage(), 0,
+                 reinterpret_cast<LPARAM>(&parameters));
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+BOOL CALLBACK EnumFileExplorerWindowsProc(HWND window, LPARAM parameter) {
+    auto& windows = *reinterpret_cast<std::vector<HWND>*>(parameter);
+
+    DWORD processId = 0;
+    if (!GetWindowThreadProcessId(window, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return TRUE;
+    }
+
+    wchar_t className[64];
+    if (GetClassNameW(window, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"CabinetWClass") == 0) {
+        windows.push_back(window);
+    }
+
+    return TRUE;
+}
+
+std::vector<HWND> GetFileExplorerWindows() {
+    std::vector<HWND> windows;
+    EnumWindows(EnumFileExplorerWindowsProc,
+                reinterpret_cast<LPARAM>(&windows));
+    return windows;
+}
+
+UINT GetShellChangeMessage() {
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_ShellDriveChange_" WH_MOD_ID);
+    return message;
+}
+
+bool IsDriveRootPidl(PCIDLIST_ABSOLUTE pidl) {
+    if (!pidl) {
+        return false;
+    }
+
+    wchar_t path[MAX_PATH]{};
+    return SHGetPathFromIDListW(pidl, path) && PathIsRootW(path);
+}
+
+bool IsDirectChildOfComputerFolder(PCIDLIST_ABSOLUTE pidl,
+                                   PCIDLIST_ABSOLUTE computerPidl) {
+    if (!pidl || !computerPidl) {
+        return false;
+    }
+
+    // ILIsParent is reflexive, so equality must be rejected explicitly when
+    // testing for an immediate child of This PC.
+    return !ILIsEqual(computerPidl, pidl) &&
+           ILIsParent(computerPidl, pidl, TRUE);
+}
+
+bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
+                               LONG* eventIdResult) {
+    PIDLIST_ABSOLUTE* pidls = nullptr;
+    LONG eventId = 0;
+    HANDLE notificationLock = SHChangeNotification_Lock(
+        reinterpret_cast<HANDLE>(wParam), static_cast<DWORD>(lParam), &pidls,
+        &eventId);
+    if (!notificationLock) {
+        return false;
+    }
+
+    constexpr LONG directDriveEvents =
+        SHCNE_DRIVEADD | SHCNE_DRIVEREMOVED | SHCNE_MEDIAINSERTED |
+        SHCNE_MEDIAREMOVED | SHCNE_FREESPACE;
+    bool relevant = (eventId & directDriveEvents) != 0;
+    constexpr LONG computerChildEvents =
+        SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
+        SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER | SHCNE_UPDATEITEM |
+        SHCNE_UPDATEDIR;
+    if (!relevant && (eventId & computerChildEvents) && pidls) {
+        relevant = IsDriveRootPidl(pidls[0]) || IsDriveRootPidl(pidls[1]);
+        if (!relevant) {
+            PIDLIST_ABSOLUTE computerPidl = nullptr;
+            if (SUCCEEDED(SHGetKnownFolderIDList(
+                    FOLDERID_ComputerFolder, KF_FLAG_DEFAULT, nullptr,
+                    &computerPidl)) &&
+                computerPidl) {
+                relevant = IsDirectChildOfComputerFolder(pidls[0],
+                                                          computerPidl) ||
+                           IsDirectChildOfComputerFolder(pidls[1],
+                                                          computerPidl);
+                CoTaskMemFree(computerPidl);
+            }
+        }
+    }
+
+    SHChangeNotification_Unlock(notificationLock);
+    if (eventIdResult) {
+        *eventIdResult = eventId;
+    }
+    return relevant;
+}
+
+LRESULT CALLBACK DriveKeyboardGetMessageHookProc(int code,
+                                                  WPARAM wParam,
+                                                  LPARAM lParam) {
+    LRESULT nextResult = CallNextHookEx(nullptr, code, wParam, lParam);
+    if (code != HC_ACTION || wParam != PM_REMOVE || g_unloading.load()) {
+        return nextResult;
+    }
+
+    auto message = reinterpret_cast<MSG*>(lParam);
+    constexpr LPARAM kAltContextBit = static_cast<LPARAM>(1) << 29;
+    constexpr LPARAM kPreviousStateBit = static_cast<LPARAM>(1) << 30;
+    if (!message || message->message != WM_SYSKEYDOWN ||
+        message->wParam != VK_RETURN ||
+        !(message->lParam & kAltContextBit) ||
+        (message->lParam & kPreviousStateBit) ||
+        (GetKeyState(VK_CONTROL) & 0x8000)) {
+        return nextResult;
+    }
+
+    HWND owner = GetExplorerWindowForCurrentThread();
+    if (owner &&
+        PostMessageW(owner, GetInvokeDrivePropertiesMessage(), 0, 0)) {
+        // Alt+Enter is a system-key message and doesn't enter WinUI's routed
+        // KeyDown path. Replace it only after the deferred command is queued.
+        message->message = WM_NULL;
+        message->wParam = 0;
+        message->lParam = 0;
+    }
+    return nextResult;
+}
+
+bool EnsureDriveKeyboardMessageHookForCurrentThread() {
+    if (g_driveKeyboardMessageHook) {
+        return true;
+    }
+
+    g_driveKeyboardMessageHook = SetWindowsHookExW(
+        WH_GETMESSAGE, DriveKeyboardGetMessageHookProc, nullptr,
+        GetCurrentThreadId());
+    if (!g_driveKeyboardMessageHook) {
+        Wh_Log(L"Couldn't install the drive keyboard message hook: %08X",
+               GetLastError());
+        return false;
+    }
+    return true;
+}
+
+void RemoveDriveKeyboardMessageHookForCurrentThread() {
+    if (!g_driveKeyboardMessageHook) {
+        return;
+    }
+
+    UnhookWindowsHookEx(g_driveKeyboardMessageHook);
+    g_driveKeyboardMessageHook = nullptr;
+}
+
+LRESULT CALLBACK ExplorerWindowSubclassProc(HWND window, UINT message,
+                                             WPARAM wParam, LPARAM lParam,
+                                             UINT_PTR subclassId,
+                                             DWORD_PTR) {
+    if (g_trackedContextMenu3 &&
+        (message == WM_INITMENUPOPUP || message == WM_DRAWITEM ||
+         message == WM_MEASUREITEM || message == WM_MENUCHAR)) {
+        LRESULT menuResult = 0;
+        if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
+                message, wParam, lParam, &menuResult))) {
+            return menuResult;
+        }
+    } else if (g_trackedContextMenu2 &&
+               (message == WM_INITMENUPOPUP || message == WM_DRAWITEM ||
+                message == WM_MEASUREITEM)) {
+        if (SUCCEEDED(g_trackedContextMenu2->HandleMenuMsg(message, wParam,
+                                                           lParam))) {
+            return 0;
+        }
+    }
+
+    if (message == GetApplyDriveSnapshotMessage()) {
+        if (!g_unloading.load()) {
+            RefreshDevicesSectionsForCurrentThread();
+        }
+        return 0;
+    }
+
+    if (message == GetFocusDriveRenameMessage()) {
+        if (!g_unloading.load()) {
+            FocusPendingDriveRenameForCurrentThread();
+        }
+        return 0;
+    }
+
+    if (message == GetInvokeDrivePropertiesMessage()) {
+        if (!g_unloading.load()) {
+            InvokeFocusedDriveProperties(window);
+        }
+        return 0;
+    }
+
+    if (message == WM_SETTINGCHANGE && !g_unloading.load()) {
+        UpdateDriveSelectionCheckBoxesForCurrentThread();
+    }
+
+    if (message == GetShellChangeMessage()) {
+        LONG eventId = 0;
+        if (!g_unloading.load() &&
+            IsRelevantShellDriveEvent(wParam, lParam, &eventId)) {
+            RequestDriveRefresh(
+                (eventId & ~SHCNE_FREESPACE) ? kDriveRefreshTopology
+                                             : kDriveRefreshCapacity);
+        }
+        return 0;
+    }
+
+    if (message == WM_DEVICECHANGE && !g_unloading.load()) {
+        switch (wParam) {
+            case DBT_DEVICEARRIVAL:
+            case DBT_DEVICEREMOVECOMPLETE:
+            case DBT_DEVNODES_CHANGED:
+                RequestDriveRefresh();
+                break;
+        }
+    }
+
+    if (message == WM_NCDESTROY) {
+        auto registration = g_windowNotificationRegistrations.find(window);
+        if (registration != g_windowNotificationRegistrations.end()) {
+            if (registration->second) {
+                SHChangeNotifyDeregister(registration->second);
+            }
+            g_windowNotificationRegistrations.erase(registration);
+        }
+        RemoveRegisteredWindow(window);
+        if (g_windowNotificationRegistrations.empty()) {
+            RemoveDriveKeyboardMessageHookForCurrentThread();
+            ClearHomeSelectionEventHandlersForCurrentThread();
+            ClearDriveCardEventHandlersForCurrentThread();
+            ClearDevicesHeaderEventHandlersForCurrentThread();
+            ClearTrackedHomePanelsForCurrentThread();
+            ReleaseNavigationControllerForCurrentThread();
+        }
+        RemoveWindowSubclass(window, ExplorerWindowSubclassProc, subclassId);
+    }
+
+    return DefSubclassProc(window, message, wParam, lParam);
+}
+
+bool RegisterShellNotificationsForWindow(HWND window) {
+    if (g_windowNotificationRegistrations.contains(window)) {
+        return true;
+    }
+
+    if (!SetWindowSubclass(window, ExplorerWindowSubclassProc,
+                           kExplorerWindowSubclassId, 0)) {
+        Wh_Log(L"Couldn't subclass Explorer window %p", window);
+        return false;
+    }
+    EnsureDriveKeyboardMessageHookForCurrentThread();
+
+    PIDLIST_ABSOLUTE desktopPidl = nullptr;
+    if (FAILED(SHGetKnownFolderIDList(FOLDERID_Desktop, KF_FLAG_DEFAULT,
+                                      nullptr, &desktopPidl)) ||
+        !desktopPidl) {
+        g_windowNotificationRegistrations.emplace(window, 0);
+        AddRegisteredWindow(window);
+        Wh_Log(L"Couldn't resolve the Desktop PIDL; using WM_DEVICECHANGE");
+        return true;
+    }
+
+    SHChangeNotifyEntry entry{desktopPidl, TRUE};
+    ULONG registrationId = SHChangeNotifyRegister(
+        window,
+        SHCNRF_ShellLevel | SHCNRF_InterruptLevel |
+            SHCNRF_RecursiveInterrupt | SHCNRF_NewDelivery,
+        kShellDriveEvents, GetShellChangeMessage(), 1, &entry);
+    CoTaskMemFree(desktopPidl);
+
+    if (!registrationId) {
+        g_windowNotificationRegistrations.emplace(window, 0);
+        AddRegisteredWindow(window);
+        Wh_Log(L"Couldn't register Shell notifications; using WM_DEVICECHANGE");
+        return true;
+    }
+
+    g_windowNotificationRegistrations.emplace(window, registrationId);
+    AddRegisteredWindow(window);
+    return true;
+}
+
+void EnsureShellNotificationsForCurrentThread() {
+    DWORD currentThreadId = GetCurrentThreadId();
+    for (HWND window : GetFileExplorerWindows()) {
+        if (GetWindowThreadProcessId(window, nullptr) == currentThreadId) {
+            RegisterShellNotificationsForWindow(window);
+        }
+    }
+}
+
+void RemoveShellNotificationsForCurrentThread() {
+    auto registrations = std::move(g_windowNotificationRegistrations);
+    g_windowNotificationRegistrations.clear();
+
+    for (auto const& [window, registrationId] : registrations) {
+        if (registrationId) {
+            SHChangeNotifyDeregister(registrationId);
+        }
+        RemoveRegisteredWindow(window);
+        if (IsWindow(window)) {
+            RemoveWindowSubclass(window, ExplorerWindowSubclassProc,
+                                 kExplorerWindowSubclassId);
+        }
+    }
+    RemoveDriveKeyboardMessageHookForCurrentThread();
+}
+
+void DismissOpenContextMenus() {
+    unsigned waitIterations = 0;
+    while (g_openContextMenuCount.load() > 0) {
+        std::vector<HWND> windows;
+        {
+            std::lock_guard lock(g_registeredWindowsMutex);
+            windows = g_registeredWindows;
+        }
+
+        for (HWND window : windows) {
+            if (IsWindow(window)) {
+                PostMessageW(window, WM_CANCELMODE, 0, 0);
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (++waitIterations % 100 == 0) {
+            Wh_Log(L"Waiting for %d drive context menu(s) to close",
+                   g_openContextMenuCount.load());
+        }
+    }
+}
+
+void WINAPI RemoveDevicesSectionsForCurrentThreadProc(void*) {
+    RemoveShellNotificationsForCurrentThread();
+    RemoveDevicesSectionsForCurrentThread();
+}
+
+// Shared by Wh_ModBeforeUninit and Wh_ModUninit: Wh_ModBeforeUninit always
+// runs first in a normal unload, but every step here is idempotent, so
+// calling it from both is a harmless safety net rather than a real repeat.
+void DrainModStateForUnload() {
+    g_unloading.store(true);
+    DismissOpenContextMenus();
+    WaitForDriveDragPreparations();
+    WaitForDriveDropOperations();
+    StopDriveRefreshWorker();
+    ReleaseNavigationControllers();
+}
+
+}  // namespace
+
+BOOL Wh_ModInit() {
+    g_unloading.store(false);
+
+    bool needsLoadLibraryHook = false;
+    if (GetModuleHandleW(L"FileExplorerExtensions.dll")) {
+        if (!HookFileExplorerExtensionsIfLoaded(false)) {
+            return FALSE;
+        }
+    } else {
+        needsLoadLibraryHook = true;
+    }
+
+    if (GetModuleHandleW(L"Windows.UI.FileExplorer.dll")) {
+        if (!HookWindowsUiFileExplorerIfLoaded(false)) {
+            return FALSE;
+        }
+    } else {
+        needsLoadLibraryHook = true;
+    }
+
+    if (needsLoadLibraryHook) {
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        if (!kernelBase) {
+            Wh_Log(L"Failed to get kernelbase.dll");
+            return FALSE;
+        }
+
+        auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
+        if (!loadLibraryExW ||
+            !WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                            &LoadLibraryExW_Original)) {
+            Wh_Log(L"Failed to hook LoadLibraryExW");
+            return FALSE;
+        }
+    }
+
+    if (!StartDriveRefreshWorker()) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    HookFileExplorerExtensionsIfLoaded(true);
+    HookWindowsUiFileExplorerIfLoaded(true);
+    RequestInitialDriveSnapshot();
+}
+
+void Wh_ModBeforeUninit() {
+    DrainModStateForUnload();
+}
+
+void Wh_ModUninit() {
+    DrainModStateForUnload();
+
+    for (HWND window : GetFileExplorerWindows()) {
+        if (!RunFromWindowThread(
+                window, RemoveDevicesSectionsForCurrentThreadProc, nullptr)) {
+            Wh_Log(L"Couldn't clean Explorer window %08X",
+                   static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(window)));
+        }
+    }
+}
