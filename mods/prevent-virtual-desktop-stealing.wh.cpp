@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.5
+// @version         0.3.7
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -357,8 +357,194 @@ static void LogWindow(const wchar_t* label, HWND hwnd) {
 // period or physical-key heuristic is used.
 static thread_local int g_hotkeyCycleDepth = 0;
 
+// Task View and direct shell/API desktop switches are asynchronous: their public
+// SwitchDesktop* entry point can return before CurrentVirtualDesktopChanged is
+// delivered. Keep an event-driven transaction alive until the notification
+// service reports that the explicitly requested desktop finished switching.
+//
+// This state is process-global rather than thread_local because the public
+// switch call, SwitchDesktopInternal, and virtual-desktop notifications can run
+// on different Explorer threads.
+struct ExplicitSwitchTransaction {
+    bool active = false;
+    GUID sourceDesktopId = {};
+    GUID targetDesktopId = {};
+    uint64_t sequence = 0;
+};
+
+static SRWLOCK g_explicitSwitchLock = SRWLOCK_INIT;
+static ExplicitSwitchTransaction g_explicitSwitch = {};
+static std::atomic<uint64_t> g_nextExplicitSwitchSequence{1};
+
+// SwitchDesktopWithAnimation synchronously calls SwitchDesktop on current
+// builds. Only the outermost public switch entry should create a transaction.
+static thread_local int g_explicitSwitchEntryDepth = 0;
+
 static bool IsExplicitHotkeySwitchContext() {
     return g_hotkeyCycleDepth > 0;
+}
+
+static uint64_t BeginExplicitSwitchTransaction(
+    IVirtualDesktop* targetDesktop,
+    const wchar_t* route) {
+
+    if (!targetDesktop) {
+        return 0;
+    }
+
+    GUID targetId = {};
+    if (FAILED(targetDesktop->GetId(&targetId))) {
+        return 0;
+    }
+
+    GUID sourceId = {};
+    if (!LoadCurrentDesktopId(&sourceId)) {
+        return 0;
+    }
+
+    const uint64_t sequence =
+        g_nextExplicitSwitchSequence.fetch_add(
+            1,
+            std::memory_order_relaxed);
+
+    AcquireSRWLockExclusive(&g_explicitSwitchLock);
+    g_explicitSwitch.active = true;
+    g_explicitSwitch.sourceDesktopId = sourceId;
+    g_explicitSwitch.targetDesktopId = targetId;
+    g_explicitSwitch.sequence = sequence;
+    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
+
+    wchar_t sourceText[64] = {};
+    wchar_t targetText[64] = {};
+    GuidToString(sourceId, sourceText, ARRAYSIZE(sourceText));
+    GuidToString(targetId, targetText, ARRAYSIZE(targetText));
+
+    Wh_Log(
+        L"Explicit switch transaction #%llu begin route=%s "
+        L"source=%s target=%s",
+        static_cast<unsigned long long>(sequence),
+        route ? route : L"<unknown>",
+        sourceText,
+        targetText);
+
+    return sequence;
+}
+
+static void CancelExplicitSwitchTransaction(
+    uint64_t sequence,
+    const wchar_t* reason) {
+
+    if (!sequence) {
+        return;
+    }
+
+    bool cancelled = false;
+
+    AcquireSRWLockExclusive(&g_explicitSwitchLock);
+    if (g_explicitSwitch.active &&
+        g_explicitSwitch.sequence == sequence) {
+        g_explicitSwitch = {};
+        cancelled = true;
+    }
+    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
+
+    if (cancelled) {
+        Wh_Log(
+            L"Explicit switch transaction #%llu cancelled: %s",
+            static_cast<unsigned long long>(sequence),
+            reason ? reason : L"<unknown>");
+    }
+}
+
+enum class ExplicitInternalSwitchDisposition {
+    None,
+    AllowTarget,
+    SuppressStaleSource,
+};
+
+static ExplicitInternalSwitchDisposition
+ClassifyInternalSwitchAgainstExplicitTransaction(
+    const GUID& requestedId,
+    ExplicitSwitchTransaction* snapshot) {
+
+    ExplicitSwitchTransaction current = {};
+
+    AcquireSRWLockShared(&g_explicitSwitchLock);
+    current = g_explicitSwitch;
+    ReleaseSRWLockShared(&g_explicitSwitchLock);
+
+    if (snapshot) {
+        *snapshot = current;
+    }
+
+    if (!current.active) {
+        return ExplicitInternalSwitchDisposition::None;
+    }
+
+    if (GuidEqual(requestedId, current.targetDesktopId)) {
+        return ExplicitInternalSwitchDisposition::AllowTarget;
+    }
+
+    if (!GuidEqual(
+            current.sourceDesktopId,
+            current.targetDesktopId) &&
+        GuidEqual(requestedId, current.sourceDesktopId)) {
+        return ExplicitInternalSwitchDisposition::SuppressStaleSource;
+    }
+
+    return ExplicitInternalSwitchDisposition::None;
+}
+
+static void FinishExplicitSwitchTransaction(
+    IVirtualDesktop* switchedDesktop) {
+
+    if (!switchedDesktop) {
+        return;
+    }
+
+    GUID switchedId = {};
+    if (FAILED(switchedDesktop->GetId(&switchedId))) {
+        return;
+    }
+
+    ExplicitSwitchTransaction finished = {};
+    bool hadTransaction = false;
+    bool reachedTarget = false;
+
+    AcquireSRWLockExclusive(&g_explicitSwitchLock);
+    if (g_explicitSwitch.active) {
+        finished = g_explicitSwitch;
+        hadTransaction = true;
+        reachedTarget =
+            GuidEqual(
+                switchedId,
+                g_explicitSwitch.targetDesktopId);
+        // Any completed desktop-switch notification ends the current
+        // transaction. A non-target completion means it was superseded or the
+        // shell chose another route; don't leave stale suppression armed.
+        g_explicitSwitch = {};
+    }
+    ReleaseSRWLockExclusive(&g_explicitSwitchLock);
+
+    if (!hadTransaction) {
+        return;
+    }
+
+    wchar_t switchedText[64] = {};
+    wchar_t targetText[64] = {};
+    GuidToString(switchedId, switchedText, ARRAYSIZE(switchedText));
+    GuidToString(
+        finished.targetDesktopId,
+        targetText,
+        ARRAYSIZE(targetText));
+
+    Wh_Log(
+        L"Explicit switch transaction #%llu %s "
+        L"switched=%s target=%s",
+        static_cast<unsigned long long>(finished.sequence),
+        reachedTarget ? L"complete" : L"ended on unexpected desktop",
+        switchedText,
+        targetText);
 }
 
 // -----------------------------------------------------------------------------
@@ -370,10 +556,79 @@ using SwitchDesktopInternal_t =
 
 static SwitchDesktopInternal_t g_switchDesktopInternalOriginal = nullptr;
 
+using SwitchDesktop_t =
+    HRESULT (*)(void* pThis, IVirtualDesktop* desktop);
+
+static SwitchDesktop_t g_switchDesktopOriginal = nullptr;
+
+using SwitchDesktopWithAnimation_t =
+    HRESULT (*)(void* pThis, IVirtualDesktop* desktop);
+
+static SwitchDesktopWithAnimation_t
+    g_switchDesktopWithAnimationOriginal = nullptr;
+
 using CycleInDirection_t =
     HRESULT (*)(void* pThis, int direction);
 
 static CycleInDirection_t g_cycleInDirectionOriginal = nullptr;
+
+static HRESULT SwitchDesktop_Hook(
+    void* pThis,
+    IVirtualDesktop* desktop) {
+
+    ++g_explicitSwitchEntryDepth;
+
+    uint64_t sequence = 0;
+    if (g_explicitSwitchEntryDepth == 1) {
+        sequence =
+            BeginExplicitSwitchTransaction(
+                desktop,
+                L"SwitchDesktop");
+    }
+
+    HRESULT hr =
+        g_switchDesktopOriginal(
+            pThis,
+            desktop);
+
+    if (FAILED(hr) && sequence) {
+        CancelExplicitSwitchTransaction(
+            sequence,
+            L"SwitchDesktop failed");
+    }
+
+    --g_explicitSwitchEntryDepth;
+    return hr;
+}
+
+static HRESULT SwitchDesktopWithAnimation_Hook(
+    void* pThis,
+    IVirtualDesktop* desktop) {
+
+    ++g_explicitSwitchEntryDepth;
+
+    uint64_t sequence = 0;
+    if (g_explicitSwitchEntryDepth == 1) {
+        sequence =
+            BeginExplicitSwitchTransaction(
+                desktop,
+                L"SwitchDesktopWithAnimation");
+    }
+
+    HRESULT hr =
+        g_switchDesktopWithAnimationOriginal(
+            pThis,
+            desktop);
+
+    if (FAILED(hr) && sequence) {
+        CancelExplicitSwitchTransaction(
+            sequence,
+            L"SwitchDesktopWithAnimation failed");
+    }
+
+    --g_explicitSwitchEntryDepth;
+    return hr;
+}
 
 static HRESULT CycleInDirection_Hook(
     void* pThis,
@@ -526,7 +781,9 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE VirtualDesktopSwitched(
-        IVirtualDesktop*) override {
+        IVirtualDesktop* desktop) override {
+
+        FinishExplicitSwitchTransaction(desktop);
         return S_OK;
     }
 
@@ -1307,6 +1564,65 @@ static HRESULT SwitchDesktopInternal_Hook(
             requestedDesktop);
     }
 
+    GUID requestedId = {};
+    HRESULT requestedIdHr =
+        requestedDesktop->GetId(&requestedId);
+
+    if (FAILED(requestedIdHr)) {
+        Wh_Log(
+            L"SwitchDesktopInternal allowed: "
+            L"requestedDesktop->GetId failed hr=0x%08X",
+            static_cast<unsigned int>(requestedIdHr));
+
+        return g_switchDesktopInternalOriginal(
+            pThis,
+            requestedDesktop);
+    }
+
+    // Task View can briefly try to restore/reactivate the foreground window
+    // from the desktop we just left (especially a fullscreen app) after the
+    // explicit SwitchDesktop* entry point has already returned. During the
+    // event-bounded explicit transaction, suppress exactly that request back
+    // to the captured source desktop. This is shell transition cleanup, so do
+    // NOT queue a teleport.
+    ExplicitSwitchTransaction explicitSnapshot = {};
+    ExplicitInternalSwitchDisposition explicitDisposition =
+        ClassifyInternalSwitchAgainstExplicitTransaction(
+            requestedId,
+            &explicitSnapshot);
+
+    if (explicitDisposition ==
+        ExplicitInternalSwitchDisposition::AllowTarget) {
+        Wh_Log(
+            L"ALLOW SwitchDesktopInternal: "
+            L"explicit transaction #%llu target",
+            static_cast<unsigned long long>(
+                explicitSnapshot.sequence));
+
+        return g_switchDesktopInternalOriginal(
+            pThis,
+            requestedDesktop);
+    }
+
+    if (explicitDisposition ==
+        ExplicitInternalSwitchDisposition::SuppressStaleSource) {
+
+        wchar_t targetText[64] = {};
+        GuidToString(
+            explicitSnapshot.targetDesktopId,
+            targetText,
+            ARRAYSIZE(targetText));
+
+        Wh_Log(
+            L"SUPPRESS SwitchDesktopInternal: stale source rebound "
+            L"during explicit transaction #%llu target=%s",
+            static_cast<unsigned long long>(
+                explicitSnapshot.sequence),
+            targetText);
+
+        return S_OK;
+    }
+
     GUID sourceDesktopId = {};
     if (!g_notificationReady.load() ||
         !LoadCurrentDesktopId(&sourceDesktopId)) {
@@ -1327,21 +1643,6 @@ static HRESULT SwitchDesktopInternal_Hook(
         Wh_Log(
             L"SwitchDesktopInternal allowed: "
             L"no eligible foreground rescue candidate");
-
-        return g_switchDesktopInternalOriginal(
-            pThis,
-            requestedDesktop);
-    }
-
-    GUID requestedId = {};
-    HRESULT requestedIdHr =
-        requestedDesktop->GetId(&requestedId);
-
-    if (FAILED(requestedIdHr)) {
-        Wh_Log(
-            L"SwitchDesktopInternal allowed: "
-            L"requestedDesktop->GetId failed hr=0x%08X",
-            static_cast<unsigned int>(requestedIdHr));
 
         return g_switchDesktopInternalOriginal(
             pThis,
@@ -1614,6 +1915,28 @@ static bool InstallVirtualDesktopHooks() {
                 &g_switchDesktopInternalOriginal),
             reinterpret_cast<void*>(
                 SwitchDesktopInternal_Hook)
+        },
+        {
+            {
+                L"public: virtual long __cdecl "
+                L"CVirtualDesktopManager::SwitchDesktop("
+                L"struct IVirtualDesktop *)"
+            },
+            reinterpret_cast<void**>(
+                &g_switchDesktopOriginal),
+            reinterpret_cast<void*>(
+                SwitchDesktop_Hook)
+        },
+        {
+            {
+                L"public: virtual long __cdecl "
+                L"CVirtualDesktopManager::SwitchDesktopWithAnimation("
+                L"struct IVirtualDesktop *)"
+            },
+            reinterpret_cast<void**>(
+                &g_switchDesktopWithAnimationOriginal),
+            reinterpret_cast<void*>(
+                SwitchDesktopWithAnimation_Hook)
         },
         {
             {
