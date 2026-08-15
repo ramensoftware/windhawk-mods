@@ -130,6 +130,7 @@ que necesitan ese recurso para sí mismos.
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -174,16 +175,28 @@ constexpr wchar_t kDevicesSectionName[] = L"WindhawkDevicesSection";
 constexpr wchar_t kDevicesGridName[] = L"WindhawkDevicesGrid";
 constexpr UINT_PTR kExplorerWindowSubclassId = 0x48444D45;
 
-constexpr LONG kShellDriveEvents =
-    SHCNE_DRIVEADD | SHCNE_DRIVEREMOVED | SHCNE_MEDIAINSERTED |
-    SHCNE_MEDIAREMOVED | SHCNE_FREESPACE | SHCNE_CREATE | SHCNE_DELETE |
-    SHCNE_MKDIR | SHCNE_RMDIR | SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER |
-    SHCNE_UPDATEITEM | SHCNE_UPDATEDIR;
+// CREATE/DELETE/MKDIR/RMDIR cover drives and devices appearing/disappearing
+// under This PC; the direct drive events cover capacity/media changes;
+// RENAMEITEM/RENAMEFOLDER catch a drive renamed from outside this mod (e.g.
+// Explorer's own Properties dialog). UPDATEITEM/UPDATEDIR are deliberately
+// left out: per the SHChangeNotify docs they only ever fire for content
+// changes that are *not* a create/delete/rename (those instead use
+// CREATE/DELETE/RENAMEITEM/RENAMEFOLDER, all already covered above), so
+// they add delivery volume without covering anything this mod needs.
+// Portable/MTP device arrival is caught separately via WM_DEVICECHANGE (see
+// ExplorerWindowSubclassProc).
+constexpr LONG kShellDriveEvents = SHCNE_DRIVEADD | SHCNE_DRIVEREMOVED |
+                                    SHCNE_MEDIAINSERTED |
+                                    SHCNE_MEDIAREMOVED | SHCNE_FREESPACE |
+                                    SHCNE_CREATE | SHCNE_DELETE |
+                                    SHCNE_MKDIR | SHCNE_RMDIR |
+                                    SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER;
 
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_fileExplorerExtensionsSymbolsHooked{false};
 std::atomic<bool> g_navigationSymbolsHooked{false};
 std::atomic<int> g_openContextMenuCount{0};
+std::atomic<int> g_pendingCommandInvocations{0};
 std::atomic<int> g_pendingDragPreparations{0};
 std::mutex g_dragPreparationMutex;
 std::condition_variable g_dragPreparationCondition;
@@ -232,10 +245,12 @@ std::condition_variable g_refreshCondition;
 uint64_t g_requestedRefreshGeneration = 0;
 uint32_t g_requestedRefreshKinds = 0;
 bool g_refreshWorkerStopping = false;
-// Windhawk doesn't call Wh_ModUninit during process shutdown. A pointer avoids
-// std::thread's global destructor aborting Explorer while remaining leak-free
-// during normal mod unload.
-std::thread* g_refreshWorker = nullptr;
+// Windhawk doesn't call Wh_ModUninit during process shutdown, so a plain
+// std::thread would still be joinable when its destructor runs there,
+// calling std::terminate() and aborting Explorer. [[clang::no_destroy]]
+// suppresses that destructor on every path; StopDriveRefreshWorker() does
+// the real join()+reset() explicitly instead.
+[[clang::no_destroy]] std::optional<std::thread> g_refreshWorker;
 std::shared_ptr<const DriveSnapshot> g_latestDriveSnapshot;
 
 std::mutex g_registeredWindowsMutex;
@@ -286,7 +301,14 @@ struct DriveCardEventState {
     bool pointerOver = false;
 };
 
-thread_local std::vector<DriveCardEventState> g_driveCardEventStates;
+// A std::list, not a std::vector: FindDriveCardState()/FindDriveRenameState()
+// return pointers into this container that callers keep across Shell calls
+// (RenameDriveWithShell, context-menu invocation) which can pump messages
+// and reentrantly trigger a refresh that erases unrelated entries. A vector
+// would shift every element after an erased one, invalidating those
+// pointers; a list only invalidates the iterator/pointer of the erased
+// element itself.
+thread_local std::list<DriveCardEventState> g_driveCardEventStates;
 
 struct DevicesHeaderEventState {
     winrt::weak_ref<muxc::Button> button;
@@ -347,6 +369,51 @@ template <typename T>
 void ApplyBrushIfAvailable(T const& element, std::wstring_view resourceKey) {
     if (auto brush = TryGetBrush(resourceKey)) {
         element.Foreground(brush);
+    }
+}
+
+mux::Style TryGetStyle(std::wstring_view key) {
+    try {
+        auto application = mux::Application::Current();
+        if (!application) {
+            return nullptr;
+        }
+
+        auto resources = application.Resources();
+        auto boxedKey = winrt::box_value(winrt::hstring{key});
+        if (!resources.HasKey(boxedKey)) {
+            return nullptr;
+        }
+
+        return resources.Lookup(boxedKey).try_as<mux::Style>();
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// A local property value (a direct FontSize()/FontFamily() call) always
+// outranks a Style setter for the same property, so this only sets the
+// hard-coded literals as a fallback when the named style isn't found —
+// applying both would make the style's setters dead weight and keep text
+// from following the system text-size accessibility setting.
+template <typename T>
+void ApplyBodyStrongTextStyle(T const& element) {
+    if (auto style = TryGetStyle(L"BodyStrongTextBlockStyle")) {
+        element.Style(style);
+    } else {
+        element.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+        element.FontSize(14);
+        element.FontWeight(wut::FontWeights::SemiBold());
+    }
+}
+
+template <typename T>
+void ApplyCaptionTextStyle(T const& element) {
+    if (auto style = TryGetStyle(L"CaptionTextBlockStyle")) {
+        element.Style(style);
+    } else {
+        element.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
+        element.FontSize(12);
     }
 }
 
@@ -710,14 +777,17 @@ void UpdateDriveSpaceInformation(DriveInfo& drive) {
         return;
     }
 
+    // availableToCaller, not totalFreeBytes: matches what This PC's own
+    // space bar reflects, and differs from the whole-volume free space when
+    // a disk quota applies to the calling user.
     drive.hasSpaceInformation = true;
     drive.percentUsed =
-        100.0 - static_cast<double>(totalFreeBytes.QuadPart) * 100.0 /
+        100.0 - static_cast<double>(availableToCaller.QuadPart) * 100.0 /
                     static_cast<double>(totalBytes.QuadPart);
     drive.percentUsed = std::clamp(drive.percentUsed, 0.0, 100.0);
     drive.spaceDescription =
         GetShellStrings().freeSpace + L": " +
-        FormatByteSize(totalFreeBytes.QuadPart) + L" / " +
+        FormatByteSize(availableToCaller.QuadPart) + L" / " +
         FormatByteSize(totalBytes.QuadPart);
 }
 
@@ -858,8 +928,13 @@ void DriveRefreshWorkerProc() {
 
         auto ensureImageResources = [&] {
             if (!systemImageList) {
+                // Jumbo (256x256), not extra-large (48x48): the card renders
+                // the icon at 48 effective pixels, so on a scaled display an
+                // extra-large source would be upscaled and look soft.
+                // PopulateDriveIcon's own width/height <= 256 bound already
+                // anticipates this size.
                 HRESULT result = SHGetImageList(
-                    SHIL_EXTRALARGE,
+                    SHIL_JUMBO,
                     IID_PPV_ARGS(systemImageList.put()));
                 if (FAILED(result) && !imageListFailureLogged) {
                     imageListFailureLogged = true;
@@ -1021,7 +1096,7 @@ bool StartDriveRefreshWorker() {
         g_requestedRefreshGeneration = 0;
         g_requestedRefreshKinds = 0;
         g_latestDriveSnapshot.reset();
-        g_refreshWorker = new std::thread(DriveRefreshWorkerProc);
+        g_refreshWorker.emplace(DriveRefreshWorkerProc);
         return true;
     } catch (...) {
         Wh_Log(L"Failed to start the drive refresh worker");
@@ -1030,22 +1105,21 @@ bool StartDriveRefreshWorker() {
 }
 
 void StopDriveRefreshWorker() {
-    std::thread* worker = nullptr;
     {
         std::lock_guard lock(g_refreshMutex);
         if (!g_refreshWorker) {
             return;
         }
         g_refreshWorkerStopping = true;
-        worker = g_refreshWorker;
-        g_refreshWorker = nullptr;
     }
     g_refreshCondition.notify_all();
 
-    if (worker->joinable()) {
-        worker->join();
+    if (g_refreshWorker->joinable()) {
+        g_refreshWorker->join();
     }
-    delete worker;
+
+    std::lock_guard lock(g_refreshMutex);
+    g_refreshWorker.reset();
 }
 
 void RequestDriveRefresh(uint32_t refreshKinds) {
@@ -1196,6 +1270,21 @@ class OpenContextMenuScope {
     }
 };
 
+// Separate from OpenContextMenuScope: WM_CANCELMODE can dismiss a tracked
+// popup menu, but InvokeCommand can run modal Shell UI (Format, Properties,
+// Eject confirmations) that it cannot touch. Unload waits this phase out
+// instead of trying to cancel it.
+class CommandInvocationScope {
+   public:
+    CommandInvocationScope() {
+        g_pendingCommandInvocations.fetch_add(1);
+    }
+
+    ~CommandInvocationScope() {
+        g_pendingCommandInvocations.fetch_sub(1);
+    }
+};
+
 std::wstring GetFileSystemRootPath(std::wstring const& parsingName) {
     PIDLIST_ABSOLUTE absolutePidl = nullptr;
     HRESULT result = SHParseDisplayName(parsingName.c_str(), nullptr,
@@ -1307,7 +1396,6 @@ bool ShowDriveContextMenu(HWND owner,
                           POINT screenPoint,
                           bool* renameRequested,
                           std::wstring_view commandToInvoke = {}) {
-    OpenContextMenuScope openMenuScope;
     *renameRequested = false;
     if (!owner || rootPaths.empty() || g_unloading.load()) {
         return false;
@@ -1388,11 +1476,16 @@ bool ShowDriveContextMenu(HWND owner,
         g_trackedContextMenu2 = contextMenu2.get();
         g_trackedContextMenu3 = contextMenu3.get();
 
-        SetForegroundWindow(owner);
-        command = TrackPopupMenuEx(
-            menu,
-            TPM_RETURNCMD | TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_RIGHTBUTTON,
-            screenPoint.x, screenPoint.y, owner, nullptr);
+        {
+            // Scoped tightly around the tracked popup: this is the phase
+            // DismissOpenContextMenus's WM_CANCELMODE can actually dismiss.
+            OpenContextMenuScope openMenuScope;
+            command = TrackPopupMenuEx(
+                menu,
+                TPM_RETURNCMD | TPM_LEFTALIGN | TPM_LEFTBUTTON |
+                    TPM_RIGHTBUTTON,
+                screenPoint.x, screenPoint.y, owner, nullptr);
+        }
 
         g_trackedContextMenu3 = nullptr;
         g_trackedContextMenu2 = nullptr;
@@ -1450,8 +1543,11 @@ bool ShowDriveContextMenu(HWND owner,
         invokeInfo.lpVerbW = MAKEINTRESOURCEW(command - kFirstCommandId);
         invokeInfo.nShow = SW_SHOWNORMAL;
         invokeInfo.ptInvoke = screenPoint;
-        result = contextMenu->InvokeCommand(
-            reinterpret_cast<CMINVOKECOMMANDINFO*>(&invokeInfo));
+        {
+            CommandInvocationScope commandScope;
+            result = contextMenu->InvokeCommand(
+                reinterpret_cast<CMINVOKECOMMANDINFO*>(&invokeInfo));
+        }
         if (FAILED(result)) {
             Wh_Log(L"Drive context-menu command failed: %08X (verb=%s, "
                    L"verbResult=%08X)",
@@ -1686,7 +1782,11 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
         return;
     }
 
-    state->renaming = false;
+    // state->renaming is cleared further down, only after the Shell call
+    // below returns. RenameDriveWithShell can pump messages, and
+    // IsDriveCardRenamingInGrid() must keep reporting this card busy for
+    // that whole window so a reentrant refresh doesn't rebuild the grid
+    // while the call is in flight.
     state->renameFocusPending = false;
     auto item = state->item.get();
     auto title = state->title;
@@ -1723,6 +1823,8 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
                    result);
         }
     }
+
+    state->renaming = false;
 
     // A grid refresh arriving while this card was renaming was deferred (see
     // RefreshDevicesGridPreservingState) so it wouldn't destroy the editor.
@@ -1858,6 +1960,9 @@ void DriveCard_KeyDown(
         args.Key() == winrt::Windows::System::VirtualKey::Application ||
         (args.Key() == winrt::Windows::System::VirtualKey::F10 &&
          shiftDown);
+    // AltGr registers as right-Alt plus left-Ctrl, so
+    // DriveKeyboardGetMessageHookProc's Ctrl-excluding Alt+Enter check never
+    // matches it; this routed-input path is what catches that case.
     bool propertiesKey =
         args.Key() == winrt::Windows::System::VirtualKey::Enter && altDown;
     if (contextMenuKey || propertiesKey) {
@@ -1948,14 +2053,28 @@ bool InvokeFocusedDriveProperties(HWND owner) {
     return false;
 }
 
+// The decrement must happen under g_dragPreparationMutex, not just the
+// notify: WaitForDriveDragPreparations() checks the predicate and starts
+// waiting on the condition variable while holding that same mutex, so a
+// decrement that races the lock can drop the wakeup and leave it waiting
+// forever.
+void FinishDriveDragPreparation() {
+    bool finished;
+    {
+        std::lock_guard lock(g_dragPreparationMutex);
+        finished = g_pendingDragPreparations.fetch_sub(1) == 1;
+    }
+    if (finished) {
+        g_dragPreparationCondition.notify_all();
+    }
+}
+
 winrt::fire_and_forget PopulateDriveDragData(
     mux::DragStartingEventArgs args,
     std::vector<std::wstring> rootPaths) {
     struct CompletionScope {
         ~CompletionScope() {
-            if (g_pendingDragPreparations.fetch_sub(1) == 1) {
-                g_dragPreparationCondition.notify_all();
-            }
+            FinishDriveDragPreparation();
         }
     } completionScope;
 
@@ -1999,8 +2118,17 @@ winrt::fire_and_forget PopulateDriveDragData(
         Wh_Log(L"Couldn't populate the WinUI drive drag data: %08X",
                error);
     }
-    if (deferral) {
-        deferral.Complete();
+
+    // A fire_and_forget coroutine that lets an exception escape terminates
+    // Explorer (unhandled_exception() calls winrt::terminate()). Complete()
+    // can throw on a stale deferral, so it needs its own guard too.
+    try {
+        if (deferral) {
+            deferral.Complete();
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't complete the WinUI drive drag deferral: %08X",
+               winrt::to_hresult().value);
     }
 }
 
@@ -2034,9 +2162,7 @@ void DriveCard_DragStarting(
         try {
             PopulateDriveDragData(args, std::move(rootPaths));
         } catch (...) {
-            if (g_pendingDragPreparations.fetch_sub(1) == 1) {
-                g_dragPreparationCondition.notify_all();
-            }
+            FinishDriveDragPreparation();
             throw;
         }
     } catch (...) {
@@ -2172,6 +2298,20 @@ void DriveCard_DragOver(
     }
 }
 
+// Same reasoning as FinishDriveDragPreparation: decrement under
+// g_dropOperationMutex so the wakeup can't race
+// WaitForDriveDropOperations()'s wait registration and get lost.
+void FinishDriveDropOperation() {
+    bool finished;
+    {
+        std::lock_guard lock(g_dropOperationMutex);
+        finished = g_pendingDropOperations.fetch_sub(1) == 1;
+    }
+    if (finished) {
+        g_dropOperationCondition.notify_all();
+    }
+}
+
 winrt::fire_and_forget PerformDriveDrop(
     mux::DragEventArgs args,
     std::wstring targetRoot,
@@ -2179,9 +2319,7 @@ winrt::fire_and_forget PerformDriveDrop(
         operation) {
     struct CompletionScope {
         ~CompletionScope() {
-            if (g_pendingDropOperations.fetch_sub(1) == 1) {
-                g_dropOperationCondition.notify_all();
-            }
+            FinishDriveDropOperation();
         }
     } completionScope;
 
@@ -2217,8 +2355,17 @@ winrt::fire_and_forget PerformDriveDrop(
         }
         Wh_Log(L"Couldn't complete the drive drop: %08X", error);
     }
-    if (deferral) {
-        deferral.Complete();
+
+    // Same reasoning as PopulateDriveDragData: an exception escaping this
+    // fire_and_forget coroutine terminates Explorer, and Complete() itself
+    // can throw on a stale deferral.
+    try {
+        if (deferral) {
+            deferral.Complete();
+        }
+    } catch (...) {
+        Wh_Log(L"Couldn't complete the drive drop deferral: %08X",
+               winrt::to_hresult().value);
     }
 }
 
@@ -2247,9 +2394,7 @@ void DriveCard_Drop(
         try {
             PerformDriveDrop(args, targetRoot.c_str(), operation);
         } catch (...) {
-            if (g_pendingDropOperations.fetch_sub(1) == 1) {
-                g_dropOperationCondition.notify_all();
-            }
+            FinishDriveDropOperation();
             throw;
         }
     } catch (...) {
@@ -2260,16 +2405,30 @@ void DriveCard_Drop(
 
 void WaitForDriveDragPreparations() {
     std::unique_lock lock(g_dragPreparationMutex);
-    g_dragPreparationCondition.wait(lock, [] {
-        return g_pendingDragPreparations.load() == 0;
-    });
+    unsigned logIterations = 0;
+    while (!g_dragPreparationCondition.wait_for(
+        lock, std::chrono::milliseconds(200), [] {
+            return g_pendingDragPreparations.load() == 0;
+        })) {
+        if (++logIterations % 25 == 0) {
+            Wh_Log(L"Waiting for %d drive drag preparation(s) to finish",
+                   g_pendingDragPreparations.load());
+        }
+    }
 }
 
 void WaitForDriveDropOperations() {
     std::unique_lock lock(g_dropOperationMutex);
-    g_dropOperationCondition.wait(lock, [] {
-        return g_pendingDropOperations.load() == 0;
-    });
+    unsigned logIterations = 0;
+    while (!g_dropOperationCondition.wait_for(
+        lock, std::chrono::milliseconds(200), [] {
+            return g_pendingDropOperations.load() == 0;
+        })) {
+        if (++logIterations % 25 == 0) {
+            Wh_Log(L"Waiting for %d drive drop operation(s) to finish",
+                   g_pendingDropOperations.load());
+        }
+    }
 }
 
 void ClearDriveCardEventHandlers(DriveCardEventState const& state) {
@@ -2449,9 +2608,7 @@ muxc::GridViewItem CreateDriveCard(
 
     muxc::TextBlock title;
     title.Text(drive.displayName);
-    title.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
-    title.FontSize(14);
-    title.FontWeight(wut::FontWeights::SemiBold());
+    ApplyBodyStrongTextStyle(title);
     title.TextTrimming(mux::TextTrimming::CharacterEllipsis);
     ApplyBrushIfAvailable(title, L"TextFillColorPrimaryBrush");
 
@@ -2473,8 +2630,7 @@ muxc::GridViewItem CreateDriveCard(
     if (!drive.typeName.empty()) {
         muxc::TextBlock type;
         type.Text(drive.typeName);
-        type.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
-        type.FontSize(12);
+        ApplyCaptionTextStyle(type);
         type.Margin(mux::Thickness{0, 2, 0, 0});
         type.TextTrimming(mux::TextTrimming::CharacterEllipsis);
         ApplyBrushIfAvailable(type, L"TextFillColorSecondaryBrush");
@@ -2495,8 +2651,7 @@ muxc::GridViewItem CreateDriveCard(
 
         muxc::TextBlock space;
         space.Text(drive.spaceDescription);
-        space.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
-        space.FontSize(12);
+        ApplyCaptionTextStyle(space);
         space.TextTrimming(mux::TextTrimming::CharacterEllipsis);
         ApplyBrushIfAvailable(space, L"TextFillColorSecondaryBrush");
         details.Children().Append(space);
@@ -2636,12 +2791,27 @@ void RefreshDevicesGridPreservingState(
         return;
     }
 
+    // Rebuilding replaces every GridViewItem, so selection and keyboard
+    // focus (unlike hover and any open tooltip) are captured here and
+    // reapplied by matching root path afterward, rather than being lost.
     std::vector<std::wstring> selectedRootPaths;
-    for (auto const& selected : grid.SelectedItems()) {
-        if (auto selectedItem = selected.try_as<muxc::GridViewItem>()) {
+    std::wstring focusedRootPath;
+    for (auto const& child : grid.Items()) {
+        auto gridViewItem = child.try_as<muxc::GridViewItem>();
+        if (!gridViewItem) {
+            continue;
+        }
+
+        if (gridViewItem.IsSelected()) {
             selectedRootPaths.emplace_back(
-                winrt::unbox_value<winrt::hstring>(selectedItem.Tag())
+                winrt::unbox_value<winrt::hstring>(gridViewItem.Tag())
                     .c_str());
+        }
+        if (focusedRootPath.empty() &&
+            gridViewItem.FocusState() != mux::FocusState::Unfocused) {
+            focusedRootPath = winrt::unbox_value<winrt::hstring>(
+                                   gridViewItem.Tag())
+                                   .c_str();
         }
     }
 
@@ -2659,8 +2829,13 @@ void RefreshDevicesGridPreservingState(
                       rootPath.c_str()) != selectedRootPaths.end()) {
             gridViewItem.IsSelected(true);
         }
+        if (!focusedRootPath.empty() && rootPath == focusedRootPath.c_str()) {
+            gridViewItem.Focus(mux::FocusState::Programmatic);
+        }
     }
 }
+
+constexpr wchar_t kDevicesExpandedValueName[] = L"DevicesExpanded";
 
 void DevicesHeader_Click(
     winrt::Windows::Foundation::IInspectable const& sender,
@@ -2670,6 +2845,7 @@ void DevicesHeader_Click(
     for (auto& state : g_devicesHeaderEventStates) {
         if (state.button.get() == button) {
             state.expanded = !state.expanded;
+            Wh_SetIntValue(kDevicesExpandedValueName, state.expanded ? 1 : 0);
             if (auto grid = state.grid.get()) {
                 grid.Visibility(state.expanded ? mux::Visibility::Visible
                                                : mux::Visibility::Collapsed);
@@ -3050,6 +3226,8 @@ muxc::StackPanel CreateDevicesSection() {
         }
     }
 
+    bool expanded = Wh_GetIntValue(kDevicesExpandedValueName, 1) != 0;
+
     muxc::StackPanel section;
     section.Name(kDevicesSectionName);
     section.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
@@ -3081,15 +3259,13 @@ muxc::StackPanel CreateDevicesSection() {
     muxc::FontIcon headerIcon;
     headerIcon.FontFamily(muxm::FontFamily{L"Segoe Fluent Icons"});
     headerIcon.FontSize(16);
-    headerIcon.Glyph(L"\xE70D");
+    headerIcon.Glyph(expanded ? L"\xE70D" : L"\xE76C");
     ApplyBrushIfAvailable(headerIcon, L"TextFillColorPrimaryBrush");
     muxc::Grid::SetColumn(headerIcon, 0);
 
     muxc::TextBlock headerText;
     headerText.Text(GetShellStrings().devicesAndDrives);
-    headerText.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
-    headerText.FontSize(14);
-    headerText.FontWeight(wut::FontWeights::SemiBold());
+    ApplyBodyStrongTextStyle(headerText);
     headerText.VerticalAlignment(mux::VerticalAlignment::Center);
     headerText.Margin(mux::Thickness{8, 0, 12, 0});
     ApplyBrushIfAvailable(headerText, L"TextFillColorPrimaryBrush");
@@ -3108,6 +3284,8 @@ muxc::StackPanel CreateDevicesSection() {
     driveGrid.IsMultiSelectCheckBoxEnabled(false);
     driveGrid.IsItemClickEnabled(false);
     driveGrid.IsTabStop(false);
+    driveGrid.Visibility(expanded ? mux::Visibility::Visible
+                                  : mux::Visibility::Collapsed);
     muxc::ScrollViewer::SetVerticalScrollMode(
         driveGrid, muxc::ScrollMode::Disabled);
     muxc::ScrollViewer::SetVerticalScrollBarVisibility(
@@ -3119,7 +3297,7 @@ muxc::StackPanel CreateDevicesSection() {
     auto clickToken = headerButton.Click(DevicesHeader_Click);
     g_devicesHeaderEventStates.push_back(
         {winrt::make_weak(headerButton), winrt::make_weak(driveGrid),
-         clickToken, true});
+         clickToken, expanded});
     return section;
 }
 
@@ -3295,7 +3473,25 @@ muxc::ScrollViewer FindHomeScrollViewer(
     return nullptr;
 }
 
+// OnXamlRootChanged also fires for resize and DPI/visibility changes, not
+// just real navigation. If this XamlRoot's panel already carries a live
+// devices section, skip the visual-tree BFS and the EnumWindows pass inside
+// TryInjectFromHomeScrollViewer entirely instead of redoing them every time.
+bool XamlRootAlreadyHasDevicesSection(mux::XamlRoot const& xamlRoot) {
+    for (auto const& state : g_homePanels) {
+        auto panel = state.panel.get();
+        if (panel && panel.XamlRoot() == xamlRoot && FindDevicesGrid(panel)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TryInjectFromXamlRoot(mux::XamlRoot const& xamlRoot) {
+    if (XamlRootAlreadyHasDevicesSection(xamlRoot)) {
+        return;
+    }
+
     auto content = xamlRoot.Content();
     if (!content) {
         return;
@@ -3680,22 +3876,25 @@ bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
         SHCNE_DRIVEADD | SHCNE_DRIVEREMOVED | SHCNE_MEDIAINSERTED |
         SHCNE_MEDIAREMOVED | SHCNE_FREESPACE;
     bool relevant = (eventId & directDriveEvents) != 0;
-    constexpr LONG computerChildEvents =
-        SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
-        SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER | SHCNE_UPDATEITEM |
-        SHCNE_UPDATEDIR;
+    // Matches kShellDriveEvents: only the events the mod actually registers
+    // for can ever arrive here.
+    constexpr LONG computerChildEvents = SHCNE_CREATE | SHCNE_DELETE |
+                                         SHCNE_MKDIR | SHCNE_RMDIR |
+                                         SHCNE_RENAMEITEM |
+                                         SHCNE_RENAMEFOLDER;
     if (!relevant && (eventId & computerChildEvents) && pidls) {
-        relevant = IsDriveRootPidl(pidls[0]) || IsDriveRootPidl(pidls[1]);
+        bool isDriveRoot =
+            IsDriveRootPidl(pidls[0]) || IsDriveRootPidl(pidls[1]);
+        relevant = isDriveRoot;
         if (!relevant) {
             PIDLIST_ABSOLUTE computerPidl = nullptr;
-            if (SUCCEEDED(SHGetKnownFolderIDList(
-                    FOLDERID_ComputerFolder, KF_FLAG_DEFAULT, nullptr,
-                    &computerPidl)) &&
-                computerPidl) {
-                relevant = IsDirectChildOfComputerFolder(pidls[0],
-                                                          computerPidl) ||
-                           IsDirectChildOfComputerFolder(pidls[1],
-                                                          computerPidl);
+            HRESULT computerResult = SHGetKnownFolderIDList(
+                FOLDERID_ComputerFolder, KF_FLAG_DEFAULT, nullptr,
+                &computerPidl);
+            if (SUCCEEDED(computerResult) && computerPidl) {
+                relevant =
+                    IsDirectChildOfComputerFolder(pidls[0], computerPidl) ||
+                    IsDirectChildOfComputerFolder(pidls[1], computerPidl);
                 CoTaskMemFree(computerPidl);
             }
         }
@@ -3708,35 +3907,42 @@ bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
     return relevant;
 }
 
+bool HasFocusedDriveCard() {
+    for (auto const& state : g_driveCardEventStates) {
+        auto item = state.item.get();
+        if (item && item.FocusState() != mux::FocusState::Unfocused) {
+            return true;
+        }
+    }
+    return false;
+}
+
 LRESULT CALLBACK DriveKeyboardGetMessageHookProc(int code,
                                                   WPARAM wParam,
                                                   LPARAM lParam) {
-    LRESULT nextResult = CallNextHookEx(nullptr, code, wParam, lParam);
-    if (code != HC_ACTION || wParam != PM_REMOVE || g_unloading.load()) {
-        return nextResult;
+    if (code == HC_ACTION && wParam == PM_REMOVE && !g_unloading.load()) {
+        auto message = reinterpret_cast<MSG*>(lParam);
+        constexpr LPARAM kAltContextBit = static_cast<LPARAM>(1) << 29;
+        constexpr LPARAM kPreviousStateBit = static_cast<LPARAM>(1) << 30;
+        if (message && message->message == WM_SYSKEYDOWN &&
+            message->wParam == VK_RETURN &&
+            (message->lParam & kAltContextBit) &&
+            !(message->lParam & kPreviousStateBit) &&
+            !(GetKeyState(VK_CONTROL) & 0x8000) && HasFocusedDriveCard()) {
+            HWND owner = GetExplorerWindowForCurrentThread();
+            if (owner &&
+                PostMessageW(owner, GetInvokeDrivePropertiesMessage(), 0, 0)) {
+                // Alt+Enter is a system-key message and doesn't enter WinUI's
+                // routed KeyDown path. Replace it before chaining so
+                // downstream hooks observe the same replacement.
+                message->message = WM_NULL;
+                message->wParam = 0;
+                message->lParam = 0;
+            }
+        }
     }
 
-    auto message = reinterpret_cast<MSG*>(lParam);
-    constexpr LPARAM kAltContextBit = static_cast<LPARAM>(1) << 29;
-    constexpr LPARAM kPreviousStateBit = static_cast<LPARAM>(1) << 30;
-    if (!message || message->message != WM_SYSKEYDOWN ||
-        message->wParam != VK_RETURN ||
-        !(message->lParam & kAltContextBit) ||
-        (message->lParam & kPreviousStateBit) ||
-        (GetKeyState(VK_CONTROL) & 0x8000)) {
-        return nextResult;
-    }
-
-    HWND owner = GetExplorerWindowForCurrentThread();
-    if (owner &&
-        PostMessageW(owner, GetInvokeDrivePropertiesMessage(), 0, 0)) {
-        // Alt+Enter is a system-key message and doesn't enter WinUI's routed
-        // KeyDown path. Replace it only after the deferred command is queued.
-        message->message = WM_NULL;
-        message->wParam = 0;
-        message->lParam = 0;
-    }
-    return nextResult;
+    return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
 bool EnsureDriveKeyboardMessageHookForCurrentThread() {
@@ -3821,6 +4027,12 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND window, UINT message,
         return 0;
     }
 
+    // Unconditional, not gated on whether Shell notifications are also
+    // registered: a portable/MTP device's arrival can surface from the
+    // Shell only as a generic SHCNE_UPDATEDIR anchored at the Desktop root,
+    // which IsRelevantShellDriveEvent has no PIDL-based way to recognize as
+    // relevant. DBT_DEVICEARRIVAL is what actually catches that case, so it
+    // has to keep firing even when Shell registration also succeeded.
     if (message == WM_DEVICECHANGE && !g_unloading.load()) {
         switch (wParam) {
             case DBT_DEVICEARRIVAL:
@@ -3866,23 +4078,32 @@ bool RegisterShellNotificationsForWindow(HWND window) {
     }
     EnsureDriveKeyboardMessageHookForCurrentThread();
 
-    PIDLIST_ABSOLUTE desktopPidl = nullptr;
-    if (FAILED(SHGetKnownFolderIDList(FOLDERID_Desktop, KF_FLAG_DEFAULT,
-                                      nullptr, &desktopPidl)) ||
-        !desktopPidl) {
+    // Registered on FOLDERID_ComputerFolder (not Desktop), without
+    // SHCNRF_RecursiveInterrupt, to bound this to This PC's own subtree
+    // instead of the whole Desktop namespace: SHCNRF_RecursiveInterrupt only
+    // governs interrupt-level (raw file-system) recursion, and drive
+    // add/remove/rename are broadcast as shell-level notifications, which
+    // aren't gated by it. Portable/MTP device arrival is handled separately
+    // via WM_DEVICECHANGE since a connected device can surface here only as
+    // a generic SHCNE_UPDATEDIR anchored at the Desktop root, unreachable
+    // from a Computer-scoped registration either way.
+    PIDLIST_ABSOLUTE computerPidl = nullptr;
+    if (FAILED(SHGetKnownFolderIDList(FOLDERID_ComputerFolder,
+                                      KF_FLAG_DEFAULT, nullptr,
+                                      &computerPidl)) ||
+        !computerPidl) {
         g_windowNotificationRegistrations.emplace(window, 0);
         AddRegisteredWindow(window);
-        Wh_Log(L"Couldn't resolve the Desktop PIDL; using WM_DEVICECHANGE");
+        Wh_Log(L"Couldn't resolve the Computer PIDL; using WM_DEVICECHANGE");
         return true;
     }
 
-    SHChangeNotifyEntry entry{desktopPidl, TRUE};
+    SHChangeNotifyEntry entry{computerPidl, TRUE};
     ULONG registrationId = SHChangeNotifyRegister(
         window,
-        SHCNRF_ShellLevel | SHCNRF_InterruptLevel |
-            SHCNRF_RecursiveInterrupt | SHCNRF_NewDelivery,
+        SHCNRF_ShellLevel | SHCNRF_InterruptLevel | SHCNRF_NewDelivery,
         kShellDriveEvents, GetShellChangeMessage(), 1, &entry);
-    CoTaskMemFree(desktopPidl);
+    CoTaskMemFree(computerPidl);
 
     if (!registrationId) {
         g_windowNotificationRegistrations.emplace(window, 0);
@@ -3943,11 +4164,27 @@ void DismissOpenContextMenus() {
                    g_openContextMenuCount.load());
         }
     }
+
+    // InvokeCommand can be running modal Shell UI (Format, Properties, an
+    // Eject confirmation) that WM_CANCELMODE cannot dismiss. Just wait for
+    // it, without spinning a cancel attempt that can't succeed.
+    unsigned logIterations = 0;
+    while (g_pendingCommandInvocations.load() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (++logIterations % 25 == 0) {
+            Wh_Log(L"Waiting for %d drive command dialog(s) to close",
+                   g_pendingCommandInvocations.load());
+        }
+    }
 }
 
 void WINAPI RemoveDevicesSectionsForCurrentThreadProc(void*) {
     RemoveShellNotificationsForCurrentThread();
     RemoveDevicesSectionsForCurrentThread();
+    // Runs here (via RunFromWindowThread) so the release happens on the
+    // thread that created the controller, not on whichever Windhawk thread
+    // is running Wh_ModUninit.
+    ReleaseNavigationControllerForCurrentThread();
 }
 
 // Shared by Wh_ModBeforeUninit and Wh_ModUninit: Wh_ModBeforeUninit always
@@ -3959,7 +4196,6 @@ void DrainModStateForUnload() {
     WaitForDriveDragPreparations();
     WaitForDriveDropOperations();
     StopDriveRefreshWorker();
-    ReleaseNavigationControllers();
 }
 
 }  // namespace
@@ -4019,7 +4255,10 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    DrainModStateForUnload();
+    // Not DrainModStateForUnload() again: Wh_ModBeforeUninit always runs
+    // first and already did the real work in it, while hooks were still
+    // active.
+    g_unloading.store(true);
 
     for (HWND window : GetFileExplorerWindows()) {
         if (!RunFromWindowThread(
@@ -4028,4 +4267,10 @@ void Wh_ModUninit() {
                    static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(window)));
         }
     }
+
+    // Fallback only: releases a navigation controller whose owning thread
+    // couldn't be reached above (e.g. its window is already gone). Every
+    // controller reachable through the loop was already released on its own
+    // thread by RemoveDevicesSectionsForCurrentThreadProc.
+    ReleaseNavigationControllers();
 }
