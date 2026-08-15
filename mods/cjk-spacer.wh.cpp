@@ -2704,16 +2704,9 @@ XamlDiagnosticsFlavor GetModernXamlHostFlavor(
         className, parentClassNamePointer);
 }
 
-bool NeedsXamlDiagnosticsHostNotification(
-    const XamlDiagnosticsConnectionState& state) {
-    return CanAttemptXamlDiagnosticsConnection(state);
-}
-
 bool NeedsAnyXamlDiagnosticsHostNotification() {
-    return NeedsXamlDiagnosticsHostNotification(
-               g_windowsUiXamlDiagnostics) ||
-           NeedsXamlDiagnosticsHostNotification(
-               g_microsoftUiXamlDiagnostics);
+    return CanAttemptXamlDiagnosticsConnection(g_windowsUiXamlDiagnostics) ||
+           CanAttemptXamlDiagnosticsConnection(g_microsoftUiXamlDiagnostics);
 }
 
 void NotifyModernXamlHost(HWND window, LPCWSTR className = nullptr) {
@@ -2788,10 +2781,6 @@ PCWSTR GetModuleFileNamePart(LPCWSTR path) {
     }
 
     PCWSTR fileName = wcsrchr(path, L'\\');
-    const PCWSTR forwardSlash = wcsrchr(path, L'/');
-    if (!fileName || (forwardSlash && forwardSlash > fileName)) {
-        fileName = forwardSlash;
-    }
     return fileName ? fileName + 1 : path;
 }
 
@@ -2804,7 +2793,8 @@ XamlDiagnosticsFlavor GetXamlDiagnosticsModuleFlavor(LPCWSTR path) {
         return XamlDiagnosticsFlavor::Windows;
     }
     if (_wcsicmp(fileName,
-                 L"Microsoft.Internal.FrameworkUdk.dll") == 0) {
+                 L"Microsoft.Internal.FrameworkUdk.dll") == 0 ||
+        _wcsicmp(fileName, L"CoreMessagingXP.dll") == 0) {
         return XamlDiagnosticsFlavor::Microsoft;
     }
     return XamlDiagnosticsFlavor::None;
@@ -3337,10 +3327,14 @@ BOOL Wh_ModInit() {
     }
 
     if (modernUiTextEnabled) {
-        const bool modernUiReady =
-            HookModernXamlHostCreation() &&
-            HookXamlDiagnosticsModuleLoads() &&
-            InitializeModernUi();
+        bool modernUiReady = InitializeModernUi();
+        if (modernUiReady &&
+            (!HookXamlDiagnosticsModuleLoads() ||
+             !HookModernXamlHostCreation())) {
+            UninitializeModernUi();
+            modernUiReady = false;
+        }
+
         if (!modernUiReady) {
             if (!classicMenusEnabled && !classicTooltipsEnabled) {
                 return FALSE;
