@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.12
+// @version         0.3.13
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -41,7 +41,8 @@ Transition Animation**.
 ### Notes
 
 Designed for Windows 11 24H2 and newer. This mod relies on undocumented Windows
-shell interfaces, so future Windows updates may require adjustments.
+shell interfaces, including the private IApplicationView layout, so future
+Windows updates may require adjustments.
 */
 // ==/WindhawkModReadme==
 
@@ -330,6 +331,17 @@ static void LogWindow(const wchar_t* label, HWND hwnd) {
 // are always allowed. Only a positively attributed foreground-policy switch is
 // eligible for redirect.
 static thread_local int g_foregroundPolicyDepth = 0;
+
+// Exact window identity supplied by the active foreground-policy view.
+//
+// IApplicationView::GetThumbnailWindow is vtable slot 9 on the Windows 11
+// 24H2+ shell ABI used by this mod. Probing confirmed that calling this slot
+// synchronously from ForegroundViewChanged returns the HWND of the exact view
+// which is driving a cross-desktop activation.
+//
+// Keep only the plain HWND in TLS. Never carry the raw IApplicationView pointer
+// into the rescue worker apartment.
+static thread_local HWND g_foregroundPolicyHwnd = nullptr;
 
 // Task View and direct shell/API desktop switches are asynchronous: their public
 // SwitchDesktop* entry point can return before CurrentVirtualDesktopChanged is
@@ -707,13 +719,61 @@ static HRESULT SwitchDesktopWithAnimation_Hook(
     return hr;
 }
 
+static HWND GetForegroundPolicyViewHwnd(
+    IApplicationView* view) {
+
+    if (!view) {
+        return nullptr;
+    }
+
+    // IApplicationView::GetThumbnailWindow(HWND*) is slot 9 including the
+    // three IUnknown entries. Use the interface vtable so Win32/WinRT views
+    // dispatch to their own implementation.
+    using GetThumbnailWindow_t =
+        HRESULT (*)(IApplicationView*, HWND*);
+
+    auto getThumbnailWindow =
+        GetVTableFunction<GetThumbnailWindow_t>(
+            view,
+            9);
+
+    if (!getThumbnailWindow) {
+        return nullptr;
+    }
+
+    HWND hwnd = nullptr;
+    HRESULT hr =
+        getThumbnailWindow(
+            view,
+            &hwnd);
+
+    if (FAILED(hr)) {
+        Wh_Log(
+            L"ForegroundViewChanged: "
+            L"GetThumbnailWindow failed hr=0x%08X",
+            static_cast<unsigned int>(hr));
+        return nullptr;
+    }
+
+    return hwnd;
+}
+
 static HRESULT ForegroundViewChanged_Hook(
     void* pThis,
     IVirtualDesktopManagerPrivate* manager,
     IVirtualDesktopSwitchAnimator* animator,
     IApplicationView* view) {
 
+    HWND previousHwnd =
+        g_foregroundPolicyHwnd;
+
     ++g_foregroundPolicyDepth;
+
+    // Resolve the exact view synchronously, while the IApplicationView pointer
+    // is valid on this shell call stack. Only the HWND crosses into the nested
+    // SwitchDesktopInternal hook and, later, the worker queue.
+    g_foregroundPolicyHwnd =
+        GetForegroundPolicyViewHwnd(view);
 
     HRESULT hr =
         g_foregroundViewChangedOriginal(
@@ -721,6 +781,9 @@ static HRESULT ForegroundViewChanged_Hook(
             manager,
             animator,
             view);
+
+    g_foregroundPolicyHwnd =
+        previousHwnd;
 
     --g_foregroundPolicyDepth;
     return hr;
@@ -1688,14 +1751,17 @@ static HRESULT SwitchDesktopInternal_Hook(
             requestedDesktop);
     }
 
-    HWND foreground = GetForegroundWindow();
+    HWND candidate =
+        g_foregroundPolicyHwnd;
 
     // Even inside the positively attributed activation path, fail open unless
-    // there is a plausible top-level app window to rescue.
-    if (!IsRescueCandidate(foreground)) {
+    // the exact foreground-policy view resolved to a plausible top-level app
+    // window. Do not fall back to GetForegroundWindow(): doing so would throw
+    // away the precise view identity that ForegroundViewChanged supplied.
+    if (!IsRescueCandidate(candidate)) {
         Wh_Log(
             L"SwitchDesktopInternal allowed: "
-            L"no eligible foreground rescue candidate");
+            L"no eligible exact-view rescue candidate");
 
         return g_switchDesktopInternalOriginal(
             pThis,
@@ -1714,7 +1780,7 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     DWORD candidatePid = 0;
     DWORD candidateTid =
-        GetWindowThreadProcessId(foreground, &candidatePid);
+        GetWindowThreadProcessId(candidate, &candidatePid);
 
     if (!candidatePid || !candidateTid) {
         Wh_Log(
@@ -1728,17 +1794,17 @@ static HRESULT SwitchDesktopInternal_Hook(
 
     Wh_Log(
         L"Candidate activation-driven SwitchDesktopInternal "
-        L"source=%s requested=%s foreground=%p "
+        L"source=%s requested=%s exactViewHwnd=%p "
         L"foregroundPolicyDepth=%d",
         GuidToStringForLog(sourceDesktopId),
         GuidToStringForLog(requestedId),
-        foreground,
+        candidate,
         g_foregroundPolicyDepth);
 
-    LogWindow(L"candidate", foreground);
+    LogWindow(L"candidate", candidate);
 
     if (!QueueRescue(
-            foreground,
+            candidate,
             candidatePid,
             candidateTid,
             sourceDesktopId,
