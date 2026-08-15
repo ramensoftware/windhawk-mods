@@ -23,7 +23,7 @@
 //   * Makes the stock Start icon transparent.
 //   * Inserts two layered Windows.UI.Xaml.Controls.Image elements.
 //   * Supports PNG/JPG/GIF.
-//   * Supports local absolute paths and paths with environment variables.
+//   * Supports local absolute paths, environment variables and HTTP/HTTPS URLs.
 //   * Supports animated GIF playback.
 //   * Supports crossfading normal, hover and pressed images.
 //   * Supports hover/press scale, rotation and opacity effects.
@@ -50,6 +50,10 @@ Local files:
 Environment variables are supported:
 
     %USERPROFILE%\Pictures\start.jpg
+
+HTTP/HTTPS URLs are also supported:
+
+    https://example.com/start.gif
 
 ## Animated GIF playback
 
@@ -95,9 +99,9 @@ at the same path, reload the mod if the previous image remains visible.
   - imageSource: ""
     $name: Image source (necessary)
     $description: >-
-      Absolute file path, or a path containing environment variables. Supports
-      PNG, JPG and animated GIF. This is the normal image and the final fallback
-      for every other state.
+      Absolute file path, path containing environment variables, or HTTP/HTTPS
+      URL. Supports PNG, JPG and animated GIF. This is the normal image and the
+      final fallback for every other state.
   - hoverImageSource: ""
     $name: Hover image source
     $description: >-
@@ -416,6 +420,18 @@ bool EqualsIgnoreCase(const std::wstring& a, const wchar_t* b) {
 
 bool IsBlank(const std::wstring& value) {
     return value.find_first_not_of(L" \t\r\n") == std::wstring::npos;
+}
+
+bool StartsWithIgnoreCase(const std::wstring& value, const wchar_t* prefix) {
+    size_t prefixLength = wcslen(prefix);
+
+    return value.length() >= prefixLength &&
+           _wcsnicmp(value.c_str(), prefix, prefixLength) == 0;
+}
+
+bool IsHttpUrl(const std::wstring& source) {
+    return StartsWithIgnoreCase(source, L"http://") ||
+           StartsWithIgnoreCase(source, L"https://");
 }
 
 std::wstring ExpandPath(const std::wstring& source) {
@@ -740,6 +756,12 @@ bool ImageSourcesEqual(const std::wstring& first, const std::wstring& second) {
 
     if (first == second) {
         return true;
+    }
+
+    // URL paths can be case-sensitive. Only reuse URL resources when the
+    // configured strings match exactly.
+    if (IsHttpUrl(first) || IsHttpUrl(second)) {
+        return false;
     }
 
     std::wstring expandedFirst = ExpandPath(first);
@@ -1890,16 +1912,19 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
         resource.imageFailedAttached = true;
 
-        std::wstring path = ExpandPath(source);
+        // Preserve URLs exactly, including percent-encoded content. Environment
+        // variable expansion applies only to local file paths.
+        std::wstring resolvedSource =
+            IsHttpUrl(source) ? source : ExpandPath(source);
 
-        if (path.empty()) {
+        if (resolvedSource.empty()) {
             resource.failed = true;
             return false;
         }
 
         // UriSource lets XAML retrieve and decode the image asynchronously.
         // ImageOpened and ImageFailed above report completion.
-        bitmap.UriSource(wf::Uri(path));
+        bitmap.UriSource(wf::Uri(resolvedSource));
 
         auto imageHost = instance->customImageHost.get();
 
