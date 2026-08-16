@@ -133,7 +133,7 @@ the wrong entry fires, use a longer or more specific match, or the entry's verb.
 ### Tips
 
 - **Any program** — any program that registered a right-click entry on the folder background works, regardless of install path
-- **Multiple matches** — if more than one entry matches, the first one in menu order is used
+- **Multiple matches** — an exact match on the normalized text or verb wins over a substring match; within each kind, the first one in menu order is used
 - **Non-English menus** — type any substring from the display text in your system language (e.g., Japanese, Chinese, Korean all work)
 
 ## Windows version support
@@ -606,8 +606,13 @@ static std::wstring NormalizeForMatch(PCWSTR s) {
     out.reserve(wcslen(s) + 1);
     for (const wchar_t* p = s; *p; ++p) {
         if (iswspace((wint_t)*p) || *p == L'&') continue;
-        out.push_back((wchar_t)towlower((wint_t)*p));
+        out.push_back(*p);
     }
+    // Unicode-aware, locale-independent lowercasing so exact matches also work
+    // for Cyrillic/Greek/accented text (towlower only folds ASCII in the "C"
+    // locale, which would silently break the case-insensitive promise).
+    if (!out.empty())
+        CharLowerBuffW(&out[0], (DWORD)out.size());
     return out;
 }
 
@@ -676,11 +681,15 @@ static bool EnumContextMenuMatch(HMENU hMenu, IContextMenu* pcm, IContextMenu2* 
 
         UINT offset = mii.wID - idCmdFirst;
 
-        CHAR verbA[MAX_PATH] = {};
-        pcm->GetCommandString(offset, GCS_VERBA, NULL, verbA, MAX_PATH);
         wchar_t verb[MAX_PATH] = {};
-        if (verbA[0])
-            MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, MAX_PATH);
+        // Prefer the wide form; fall back to ANSI + CP_ACP only if the verb
+        // handler doesn't support GCS_VERBW. This avoids the wide-into-ANSI
+        // round trip that corrupts verbs containing non-ANSI characters.
+        if (FAILED(pcm->GetCommandString(offset, GCS_VERBW, NULL, (CHAR*)verb, MAX_PATH))) {
+            CHAR verbA[MAX_PATH] = {};
+            if (SUCCEEDED(pcm->GetCommandString(offset, GCS_VERBA, NULL, verbA, MAX_PATH)))
+                MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, MAX_PATH);
+        }
 
         wchar_t text[MAX_PATH] = {};
         MENUITEMINFOW miiT = { sizeof(miiT), MIIM_STRING };
@@ -815,8 +824,10 @@ static thread_local std::wstring g_pendingDblClickCtxMatch;
 
 // Private message: dequeues action dispatch from mouse handlers to avoid
 // blocking on COM activation inside WM_LBUTTONDOWN/WM_MBUTTONDOWN.
-// wParam = (WPARAM)std::unique_ptr<PendingAction>, lParam = 0 (the receiver
-// uses its own hWnd).
+// It carries NO pointer in wParam — the action data lives in a thread-local
+// queue (g_pendingActions) owned by the same thread that posts and dispatches
+// it, so a message from another process or a stale post can never make
+// explorer.exe free an arbitrary address.
 static UINT g_msgDoAction = 0;
 // Teardown message: handled on the window's own thread to kill pending timers
 // (timers must be killed on their creating thread) and release per-thread COM.
@@ -831,17 +842,23 @@ struct PendingAction {
     std::wstring match;
 };
 
+// Per-thread FIFO backing the deferred-action dispatch. The producer (mouse
+// handlers) and the consumer (the g_msgDoAction handler) always run on the
+// same Explorer UI thread, so a simple vector is sufficient and we never pass
+// an owning pointer through a globally-visible window message. Cleared by the
+// DLL's thread_local teardown on mod unload, so a disable/enable cycle cannot
+// leak or double-free an allocation from a previous instance.
+static thread_local std::vector<PendingAction> g_pendingActions;
+
 static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr);
 
 // Post an action to be handled asynchronously — avoids synchronously activating
 // context-menu handlers inside the mouse-down handler.
 static void PostDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
     if (!g_msgDoAction || !action || !*action) return;
-    auto p = std::make_unique<PendingAction>();
-    p->action = action;
-    p->match = (match && *match) ? match : L"";
-    if (PostMessage(hWnd, g_msgDoAction, (WPARAM)p.get(), 0))
-        p.release();
+    g_pendingActions.push_back({ action, (match && *match) ? match : L"" });
+    if (!PostMessage(hWnd, g_msgDoAction, 0, 0))
+        g_pendingActions.pop_back();
 }
 
 static VOID CALLBACK MidClickTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -1078,7 +1095,12 @@ public:
             return;
         }
         // Use browser directly — works for virtual folders too (This PC, Libraries, etc.)
-        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hShellTab, m.c_str()))
+        // Own any verb UI (Properties, extension dialogs) with the top-level Explorer
+        // frame rather than the ShellTabWindowClass child, so the dialog can't end up
+        // behind the frame.
+        HWND hwndOwner = GetAncestor(hShellTab, GA_ROOT);
+        if (!hwndOwner) hwndOwner = hShellTab;
+        if (!InvokeFolderContextMenuFromBrowser(hBrowser.get(), hwndOwner, m.c_str()))
             Wh_Log(L"OpenWithContextMenu: no context menu entry matching '%s'", m.c_str());
     }
 
@@ -1231,13 +1253,16 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     }
 
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
-    // Handled before the init guard so a posted PendingAction that arrives after
-    // the mod was disabled is still freed (the unique_ptr below owns it). The
-    // dispatch itself is gated on g_initialized.
+    // Handled before the init guard so a posted action that arrives after the
+    // mod was disabled is still drained (the per-thread queue below owns it).
+    // The dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
-        std::unique_ptr<PendingAction> p((PendingAction*)wParam);
-        if (g_initialized && p && !p->action.empty())
-            FindShellTabAndDoAction(hWnd, p->action.c_str(), p->match.c_str());
+        if (!g_pendingActions.empty()) {
+            PendingAction a = std::move(g_pendingActions.front());
+            g_pendingActions.erase(g_pendingActions.begin());
+            if (g_initialized && !a.action.empty())
+                FindShellTabAndDoAction(hWnd, a.action.c_str(), a.match.c_str());
+        }
         return 0;
     }
 
@@ -1410,13 +1435,16 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     }
 
     // Deferred action dispatch (posted from mouse handlers to avoid blocking).
-    // Handled before the init guard so a posted PendingAction that arrives after
-    // the mod was disabled is still freed (the unique_ptr below owns it). The
-    // dispatch itself is gated on g_initialized.
+    // Handled before the init guard so a posted action that arrives after the
+    // mod was disabled is still drained (the per-thread queue below owns it).
+    // The dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
-        std::unique_ptr<PendingAction> p((PendingAction*)wParam);
-        if (g_initialized && p && !p->action.empty())
-            FindShellTabAndDoAction(hWnd, p->action.c_str(), p->match.c_str());
+        if (!g_pendingActions.empty()) {
+            PendingAction a = std::move(g_pendingActions.front());
+            g_pendingActions.erase(g_pendingActions.begin());
+            if (g_initialized && !a.action.empty())
+                FindShellTabAndDoAction(hWnd, a.action.c_str(), a.match.c_str());
+        }
         return 0;
     }
 
@@ -1701,8 +1729,8 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Click on Empty Explorer Init");
 
-    g_msgDoAction = RegisterWindowMessage(L"ClickOnEmptyExplorer_DoAction");
-    g_msgTeardown = RegisterWindowMessage(L"ClickOnEmptyExplorer_Teardown");
+    g_msgDoAction = RegisterWindowMessage(L"ClickOnEmptyExplorer_DoAction_" WH_MOD_ID);
+    g_msgTeardown = RegisterWindowMessage(L"ClickOnEmptyExplorer_Teardown_" WH_MOD_ID);
     LoadSettings();
 
     g_hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
