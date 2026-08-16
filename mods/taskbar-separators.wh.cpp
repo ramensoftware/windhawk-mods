@@ -594,7 +594,7 @@ void LoadSettings() {
     auto appendSeparator = [&](size_t settingsIndex, int position) {
         SeparatorSettings separator;
         separator.settingsIndex = settingsIndex;
-        separator.position = std::max(position, 1);
+        separator.position = position;
         settings.separators.push_back(separator);
     };
 
@@ -1035,12 +1035,6 @@ bool TryGetElementBounds(Controls::Canvas const& overlayCanvas,
     return true;
 }
 
-bool TryGetIconBounds(Controls::Canvas const& overlayCanvas,
-                      FrameworkElement const& icon,
-                      winrt::Windows::Foundation::Rect* bounds) {
-    return TryGetElementBounds(overlayCanvas, icon, bounds);
-}
-
 double PrimaryStart(winrt::Windows::Foundation::Rect const& bounds,
                     TaskbarOrientation orientation) {
     return orientation == TaskbarOrientation::horizontal ? bounds.X : bounds.Y;
@@ -1079,6 +1073,17 @@ double ElementCrossSize(FrameworkElement const& element,
                : element.ActualWidth();
 }
 
+bool IsUsableApplicationButton(FrameworkElement const& button) {
+    if (!button || button.Visibility() != Visibility::Visible) {
+        return false;
+    }
+
+    double width = button.ActualWidth();
+    double height = button.ActualHeight();
+    return std::isfinite(width) && width > 0 && std::isfinite(height) &&
+           height > 0;
+}
+
 DividerGeometryMode DetectDividerGeometryMode(
     std::vector<FrameworkElement> const& buttons,
     std::vector<FrameworkElement> const& icons,
@@ -1090,16 +1095,12 @@ DividerGeometryMode DetectDividerGeometryMode(
 
     for (size_t index = 0; index < buttons.size(); index++) {
         auto const& button = buttons[index];
-        if (!button || button.Visibility() != Visibility::Visible) {
+        if (!IsUsableApplicationButton(button)) {
             continue;
         }
 
         double buttonPrimarySize = ElementPrimarySize(button, orientation);
         double buttonCrossSize = ElementCrossSize(button, orientation);
-        if (!std::isfinite(buttonPrimarySize) || buttonPrimarySize <= 0 ||
-            !std::isfinite(buttonCrossSize) || buttonCrossSize <= 0) {
-            continue;
-        }
 
         minimumButtonPrimarySize =
             std::min(minimumButtonPrimarySize, buttonPrimarySize);
@@ -1305,27 +1306,30 @@ bool TryGetButtonBoundaryDividerGeometry(Controls::Canvas const& overlayCanvas,
         return false;
     }
 
-    winrt::Windows::Foundation::Rect previousBounds{};
     winrt::Windows::Foundation::Rect targetBounds{};
-    winrt::Windows::Foundation::Rect nextBounds{};
-    if (!TryGetElementBounds(overlayCanvas, targetButton, &targetBounds) ||
-        (previousButton && !TryGetElementBounds(overlayCanvas, previousButton,
-                                                &previousBounds)) ||
-        (nextButton &&
-         !TryGetElementBounds(overlayCanvas, nextButton, &nextBounds))) {
+    if (!TryGetElementBounds(overlayCanvas, targetButton, &targetBounds)) {
         return false;
     }
 
     double direction = 0;
     double crossDirection = 0;
     winrt::Windows::Foundation::Rect adjacentBounds{};
+    winrt::Windows::Foundation::Rect nextBounds{};
     if (nextButton) {
+        if (!TryGetElementBounds(overlayCanvas, nextButton, &nextBounds)) {
+            return false;
+        }
         direction = PrimaryCenter(nextBounds, orientation) -
                     PrimaryCenter(targetBounds, orientation);
         crossDirection = CrossCenter(nextBounds, orientation) -
                          CrossCenter(targetBounds, orientation);
         adjacentBounds = nextBounds;
     } else if (previousButton && !beforeFirst) {
+        winrt::Windows::Foundation::Rect previousBounds{};
+        if (!TryGetElementBounds(overlayCanvas, previousButton,
+                                 &previousBounds)) {
+            return false;
+        }
         direction = PrimaryCenter(targetBounds, orientation) -
                     PrimaryCenter(previousBounds, orientation);
         crossDirection = CrossCenter(targetBounds, orientation) -
@@ -1416,18 +1420,18 @@ bool TryGetDividerGeometry(Controls::Canvas const& overlayCanvas,
 
     winrt::Windows::Foundation::Rect targetBounds{};
     winrt::Windows::Foundation::Rect nextBounds{};
-    if (!TryGetIconBounds(overlayCanvas, targetIcon, &targetBounds)) {
+    if (!TryGetElementBounds(overlayCanvas, targetIcon, &targetBounds)) {
         return false;
     }
 
     if (nextIcon) {
-        if (!TryGetIconBounds(overlayCanvas, nextIcon, &nextBounds)) {
+        if (!TryGetElementBounds(overlayCanvas, nextIcon, &nextBounds)) {
             return false;
         }
     } else {
         winrt::Windows::Foundation::Rect previousBounds{};
-        if (!previousIcon ||
-            !TryGetIconBounds(overlayCanvas, previousIcon, &previousBounds)) {
+        if (!previousIcon || !TryGetElementBounds(overlayCanvas, previousIcon,
+                                                  &previousBounds)) {
             return false;
         }
 
@@ -1508,13 +1512,13 @@ bool TryGetBeforeFirstDividerGeometry(Controls::Canvas const& overlayCanvas,
 
     winrt::Windows::Foundation::Rect firstBounds{};
     winrt::Windows::Foundation::Rect secondBounds{};
-    if (!TryGetIconBounds(overlayCanvas, firstIcon, &firstBounds)) {
+    if (!TryGetElementBounds(overlayCanvas, firstIcon, &firstBounds)) {
         return false;
     }
 
     double firstCenter = PrimaryCenter(firstBounds, orientation);
     double firstCrossCenter = CrossCenter(firstBounds, orientation);
-    if (!TryGetIconBounds(overlayCanvas, secondIcon, &secondBounds)) {
+    if (!TryGetElementBounds(overlayCanvas, secondIcon, &secondBounds)) {
         return false;
     }
 
@@ -2912,9 +2916,9 @@ bool TryGetTaskbarOrientation(OrientationSetting orientationSetting,
         winrt::Windows::Foundation::Rect previousBounds{};
         winrt::Windows::Foundation::Rect currentBounds{};
         if (!icons[index - 1] || !icons[index] ||
-            !TryGetIconBounds(overlayCanvas, icons[index - 1],
-                              &previousBounds) ||
-            !TryGetIconBounds(overlayCanvas, icons[index], &currentBounds)) {
+            !TryGetElementBounds(overlayCanvas, icons[index - 1],
+                                 &previousBounds) ||
+            !TryGetElementBounds(overlayCanvas, icons[index], &currentBounds)) {
             continue;
         }
 
@@ -3078,6 +3082,10 @@ TaskbarReconciliationSnapshot CaptureTaskbarReconciliationSnapshot(
             continue;
         }
 
+        if (!IsUsableApplicationButton(realized.element)) {
+            continue;
+        }
+
         RealizedButtonSnapshot button;
         button.itemIndex = realized.itemIndex;
         button.button = realized.element;
@@ -3085,9 +3093,7 @@ TaskbarReconciliationSnapshot CaptureTaskbarReconciliationSnapshot(
         button.actualHeight = realized.element.ActualHeight();
         button.margin = realized.element.Margin();
         button.visibility = realized.element.Visibility();
-        if (!std::isfinite(button.actualWidth) ||
-            !std::isfinite(button.actualHeight) || button.actualWidth < 0 ||
-            button.actualHeight < 0 || !IsFiniteThickness(button.margin)) {
+        if (!IsFiniteThickness(button.margin)) {
             buttonLayoutValid = false;
         }
         snapshot.buttons.push_back(std::move(button));
@@ -3626,13 +3632,25 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 }
             }
 
+            bool hasGapContributions =
+                std::any_of(gapContributions.begin(), gapContributions.end(),
+                            [](ButtonGapContribution const& gap) {
+                                return std::fabs(gap.left) > 0.001 ||
+                                       std::fabs(gap.top) > 0.001 ||
+                                       std::fabs(gap.right) > 0.001 ||
+                                       std::fabs(gap.bottom) > 0.001;
+                            });
+
             // A zero gap, removed divider, or now-invalid position naturally
             // produces a zero contribution and restores our previous delta.
             // If orientation is temporarily unavailable while a non-zero gap
             // is configured, keep the current margin until the next valid
-            // reconciliation rather than guessing an axis.
+            // reconciliation rather than guessing an axis. A lone usable
+            // button cannot establish ordering, but needs no direction to
+            // remove a previously tracked contribution.
             if (settings.separatorGap == 0 ||
                 (orientationValid && primaryOrderingValid) ||
+                (appButtons.size() < 2 && !hasGapContributions) ||
                 activeSeparators.empty()) {
                 ApplyTrackedButtonGapMargins(taskbar, appButtons,
                                              gapContributions, &snapshot);
@@ -3958,8 +3976,8 @@ TaskbarDiscoveryResult DiscoverCurrentThreadTaskbars() {
                 result.repeaters.push_back(repeater);
             }
         } catch (...) {
-            // A taskbar can be rebuilding while the bounded initial retry is
-            // running. Failure of one window must not skip the others.
+            // A taskbar can be rebuilding during discovery. Failure of one
+            // window must not skip the others.
         }
     }
 
