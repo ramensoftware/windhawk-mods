@@ -2182,6 +2182,8 @@ static HWND FindCurrentProcessShellWindow() {
     return shellWindow;
 }
 
+static bool WaitForShellHostRetryDelay();
+
 static bool InstallVirtualDesktopHooks() {
     if (g_virtualDesktopHooksInstalled.load(
             std::memory_order_acquire)) {
@@ -2287,13 +2289,41 @@ static bool InstallVirtualDesktopHooks() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(
-            twinui,
-            twinuiPcshellHooks,
-            ARRAYSIZE(twinuiPcshellHooks))) {
+    constexpr int kMaxSymbolResolutionAttempts = 3;
+    bool symbolsResolved = false;
+
+    for (int attempt = 1;
+         attempt <= kMaxSymbolResolutionAttempts;
+         ++attempt) {
+        if (WindhawkUtils::HookSymbols(
+                twinui,
+                twinuiPcshellHooks,
+                ARRAYSIZE(twinuiPcshellHooks))) {
+            symbolsResolved = true;
+            break;
+        }
+
+        if (RuntimeCancellationRequested()) {
+            return false;
+        }
+
+        if (attempt < kMaxSymbolResolutionAttempts) {
+            Wh_Log(
+                L"Shell host: symbol resolution failed on attempt %d; "
+                L"retrying",
+                attempt);
+
+            if (!WaitForShellHostRetryDelay()) {
+                return false;
+            }
+        }
+    }
+
+    if (!symbolsResolved) {
         Wh_Log(
-            L"Shell host: failed to resolve/install "
-            L"virtual-desktop symbols");
+            L"Shell host: failed to resolve/install virtual-desktop "
+            L"symbols after %d attempts",
+            kMaxSymbolResolutionAttempts);
         return false;
     }
 
@@ -2319,9 +2349,7 @@ static bool InstallVirtualDesktopHooks() {
 }
 
 static bool WaitForShellHostRetryDelay() {
-    // Fresh Explorer startup can expose Shell_TrayWnd before the immersive-shell
-    // virtual-desktop COM services are fully ready. Keep the retry interval
-    // fixed and bounded, but give those services a generous startup window.
+    // Keep shell-host startup retries cancellable, fixed, and bounded.
     DWORD waitResult =
         WaitForSingleObject(g_runtimeCancelEvent, 500);
 
@@ -2351,6 +2379,7 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
     constexpr int kMaxRuntimeStartAttempts = 30;
 
     for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
+        bool hookInstallFailed = false;
         bool started = StartWorker();
 
         if (started && !RuntimeCancellationRequested()) {
@@ -2368,13 +2397,22 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
             }
 
             if (!RuntimeCancellationRequested()) {
-                g_startUnsupported.store(true, std::memory_order_release);
                 g_startHr.store(E_FAIL, std::memory_order_relaxed);
+                hookInstallFailed = true;
             }
         }
 
         StopNotificationCache();
         StopWorker();
+
+        if (hookInstallFailed) {
+            g_runtimeState.store(
+                RuntimeState::Stopped,
+                std::memory_order_release);
+            Wh_Log(
+                L"Shell-host hook installation failed; remaining fail-open");
+            return 0;
+        }
 
         bool unsupported =
             g_startUnsupported.load(std::memory_order_acquire);
