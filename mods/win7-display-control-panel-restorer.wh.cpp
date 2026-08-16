@@ -935,7 +935,9 @@ static constexpr DWORD kClassicDpiApplyDelayMs = 2500;
 // restored Screen Resolution page is being constructed (the UIFILE 202 markup
 // parse in DUISetXMLFromResourceHook and the provider's SetSite), polls at a
 // short interval for a bounded window afterwards, and is disarmed as soon as
-// the subclass is attached (or when the control is destroyed).
+// the subclass is attached; it is re-armed, not disarmed, when the hosted
+// control is destroyed, since the provider recreates it as a fresh window on
+// every dropdown reopen, not only on a full page (re)construction.
 //
 // The armed state is published through a manual-reset event, not just an
 // atomic, so the worker can wait on it as one of its handles: in the idle
@@ -9516,7 +9518,11 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
             // The Screen Resolution page's markup is being parsed right now,
             // so ResolutionControlClass is about to be created: arm the
             // bounded discovery sweep instead of polling the whole window tree
-            // forever. It disarms itself on attach, on WM_NCDESTROY, or when
+            // forever. It disarms itself on attach or when the window
+            // elapses, and re-arms itself when the hosted control is
+            // destroyed (see the WM_NCDESTROY case in
+            // ResolutionControlSubclassProcBody), since the provider
+            // recreates the control on every dropdown reopen.
             // the window elapses.
             ArmHostedDisplayControlScan(L"UIFILE 202 parse");
         }
@@ -10157,7 +10163,25 @@ class FabricatedLinkGuard {
     FabricatedDisplayNavLink* link_;
 };
 
-static NativeDisplayNavList* CreateFabricatedDisplayNavigation() {
+// The fabricated list is only ever consumed as a read-only, pinned-refcount
+// object (the same policy documented on kFabricatedNavLinksReferenceCount),
+// so a single instance can be safely handed out to every caller on the
+// fallback path instead of allocating (and leaking) a fresh one per page
+// open. g_fabricatedNavList caches that instance; InvalidateFabricatedNavCache
+// drops it so a later call rebuilds against the current language/state
+// (wired into Wh_ModSettingsChanged below).
+static std::mutex g_fabricatedNavListMutex;
+static NativeDisplayNavList* g_fabricatedNavList = nullptr;
+
+static void InvalidateFabricatedNavCache() {
+    std::lock_guard<std::mutex> lock(g_fabricatedNavListMutex);
+    if (g_fabricatedNavList) {
+        DestroyFabricatedNavigationList(g_fabricatedNavList);
+        g_fabricatedNavList = nullptr;
+    }
+}
+
+static NativeDisplayNavList* CreateFabricatedDisplayNavigationImpl() {
     HMODULE module = g_hDisplayDll.load(std::memory_order_acquire);
     if (!module) return nullptr;
     const ULONG_PTR base = reinterpret_cast<ULONG_PTR>(module);
@@ -10336,6 +10360,20 @@ static NativeDisplayNavList* CreateFabricatedDisplayNavigation() {
     return list;
 }
 
+// Public entry point: returns the cached fabricated list, building it once
+// under g_fabricatedNavListMutex. Every fallback caller therefore shares the
+// same object instead of each page open allocating (and, since the list is
+// pinned, leaking) its own copy. On rebuild failure the stale cached
+// instance (if any) is left in place rather than being torn down, so a
+// transient failure never regresses an already-working sidebar back to
+// empty.
+static NativeDisplayNavList* CreateFabricatedDisplayNavigation() {
+    std::lock_guard<std::mutex> lock(g_fabricatedNavListMutex);
+    if (g_fabricatedNavList) return g_fabricatedNavList;
+    g_fabricatedNavList = CreateFabricatedDisplayNavigationImpl();
+    return g_fabricatedNavList;
+}
+
 static bool IsPinnedProviderNavigationObject(IUnknown* value)   {
     if (!value) return false;
     HMODULE module = g_hDisplayDll.load(std::memory_order_acquire);
@@ -10368,10 +10406,12 @@ static HRESULT WriteNativeNavigationToBag(IPropertyBag* bag)   {
     const HRESULT hr = write(bag, L"ControlPanelNavLinks",
                              reinterpret_cast<IUnknown*>(replacement));
     if (fabricated) {
-        // The bag now owns the reference; the fabricated list is deliberately
-        // never freed (pinned refcount policy), except when publication
-        // failed and no one else holds it.
-        if (FAILED(hr)) DestroyFabricatedNavigationList(replacement);
+        // The bag now owns a reference to the single cached fabricated
+        // instance (pinned refcount policy; see CreateFabricatedDisplayNavigation).
+        // If publication failed, the cache itself may be holding a bad
+        // instance, so drop it rather than freeing the pointer out from
+        // under any other holder.
+        if (FAILED(hr)) InvalidateFabricatedNavCache();
     } else {
         ReleaseNativeDisplayNavList(replacement);
     }
@@ -10410,7 +10450,8 @@ static HRESULT PSPropertyBag_WriteUnknownHookBody(
     const HRESULT hr = PSPropertyBag_WriteUnknownOriginal(
         bag, propertyName, reinterpret_cast<IUnknown*>(replacement));
     if (fabricated) {
-        if (FAILED(hr)) DestroyFabricatedNavigationList(replacement);
+        // Same cached-singleton policy as WriteNativeNavigationToBag above.
+        if (FAILED(hr)) InvalidateFabricatedNavCache();
     } else {
         ReleaseNativeDisplayNavList(replacement);
     }
@@ -13662,10 +13703,16 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
                 ForgetHostedSubclass(hwnd);
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                     hwnd, ResolutionControlSubclassProc);
-                // The page is gone; make sure no scan window survives it. The
-                // next restored page arms discovery again from its own
-                // construction hooks.
-                DisarmHostedDisplayControlScan();
+                // The provider recreates this control as a fresh window each
+                // time the resolution dropdown/flyout is reopened, not only
+                // when the whole page is (re)constructed - the page-load
+                // hooks (UIFILE 202 parse, SetSite) only fire once per page
+                // visit and would otherwise leave every reopen after the
+                // first uncaught. Re-arm here so a reopen shortly after this
+                // close is still inside a bounded discovery window; if the
+                // user waits longer than that, a fresh page-load hook (or
+                // the next reopen closing this way) re-arms it again.
+                ArmHostedDisplayControlScan(L"resolution control destroyed");
                 break;
             default:
                 break;
@@ -13776,8 +13823,9 @@ static BOOL CALLBACK ScanHostedDisplayTopLevel(HWND hwnd, LPARAM /*parameter*/) 
 
 // Runs on the existing joined DPI/orientation worker, and ONLY inside the
 // bounded window armed by the page-construction hooks (UIFILE 202 parse and the
-// provider SetSite). It is disarmed as soon as the subclass is attached or the
-// hosted control is destroyed, so the shell never pays for a permanent sweep.
+// provider SetSite) or by a previous hosted control's destruction (a dropdown
+// reopen). It is disarmed as soon as the subclass is attached or the window
+// elapses, so the shell never pays for a permanent sweep.
 // EnumWindows is filtered to this PID before descending, and the exact class
 // check makes the normal no-page path cheap and side-effect free.
 static void ScanForHostedDisplayControls() {
@@ -14931,6 +14979,10 @@ void Wh_ModSettingsChanged(void) {
     try {
         LoadLanguageSetting();
         LoadFeatureSettings();
+        // Drop the cached fabricated nav list so the next fallback build
+        // (if any) picks up the newly selected language instead of serving
+        // stale labels from before this settings change.
+        InvalidateFabricatedNavCache();
         const std::wstring* dll = CurrentDllPath();
         bool localizedResourcesRebuilt = false;
         if (dll && !dll->empty()) {
