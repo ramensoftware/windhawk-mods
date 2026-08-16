@@ -838,6 +838,7 @@ static UINT g_msgTeardown = 0;
 // wchar buffer) avoids the out-of-bounds read the previous layout had when
 // no match text was present.
 struct PendingAction {
+    HWND target;        // the window this action was posted for
     std::wstring action;
     std::wstring match;
 };
@@ -856,7 +857,7 @@ static bool FindShellTabAndDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nul
 // context-menu handlers inside the mouse-down handler.
 static void PostDoAction(HWND hWnd, PCWSTR action, PCWSTR match = nullptr) {
     if (!g_msgDoAction || !action || !*action) return;
-    g_pendingActions.push_back({ action, (match && *match) ? match : L"" });
+    g_pendingActions.push_back({ hWnd, action, (match && *match) ? match : L"" });
     if (!PostMessage(hWnd, g_msgDoAction, 0, 0))
         g_pendingActions.pop_back();
 }
@@ -1257,7 +1258,13 @@ LRESULT CALLBACK SysListViewSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     // mod was disabled is still drained (the per-thread queue below owns it).
     // The dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
-        if (!g_pendingActions.empty()) {
+        // Drop stale entries whose target window is gone (e.g. the tab was
+        // closed before its posted message was dispatched) so they can't be
+        // mis-dispatched to a different window on the same thread.
+        while (!g_pendingActions.empty() &&
+               !IsWindow(g_pendingActions.front().target))
+            g_pendingActions.erase(g_pendingActions.begin());
+        if (!g_pendingActions.empty() && g_pendingActions.front().target == hWnd) {
             PendingAction a = std::move(g_pendingActions.front());
             g_pendingActions.erase(g_pendingActions.begin());
             if (g_initialized && !a.action.empty())
@@ -1439,7 +1446,13 @@ LRESULT CALLBACK DUISubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     // mod was disabled is still drained (the per-thread queue below owns it).
     // The dispatch itself is gated on g_initialized.
     if (g_msgDoAction && uMsg == g_msgDoAction) {
-        if (!g_pendingActions.empty()) {
+        // Drop stale entries whose target window is gone (e.g. the tab was
+        // closed before its posted message was dispatched) so they can't be
+        // mis-dispatched to a different window on the same thread.
+        while (!g_pendingActions.empty() &&
+               !IsWindow(g_pendingActions.front().target))
+            g_pendingActions.erase(g_pendingActions.begin());
+        if (!g_pendingActions.empty() && g_pendingActions.front().target == hWnd) {
             PendingAction a = std::move(g_pendingActions.front());
             g_pendingActions.erase(g_pendingActions.begin());
             if (g_initialized && !a.action.empty())
