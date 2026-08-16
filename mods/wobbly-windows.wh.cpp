@@ -733,7 +733,8 @@ static void RestoreWindowAfterWobbly(HWND mainHwnd, LONG_PTR oldExStyle) {
     if (mainHwnd && IsWindow(mainHwnd)) {
         SetLayeredWindowAttributes(mainHwnd, 0, 255, LWA_ALPHA);
         if (!(oldExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(mainHwnd, GWL_EXSTYLE, oldExStyle);
+            LONG_PTR ex = GetWindowLongPtrW(mainHwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(mainHwnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
         }
     }
 }
@@ -745,7 +746,11 @@ static void FinishWobblyTracking() {
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_CLOSE) {
+    if (msg == g_wmDetach) {
+        KillTimer(hwnd, 1);
+        DestroyWindow(hwnd);
+        return 0;
+    } else if (msg == WM_CLOSE) {
         KillTimer(hwnd, 1);
         DestroyWindow(hwnd);
         return 0;
@@ -770,8 +775,9 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_mainHwnd = NULL;
                 return 0;
             }
-            if (!(GetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
-                SetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE, g_oldExStyle | WS_EX_LAYERED);
+            LONG_PTR curExStyle = GetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE);
+            if (!(curExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE, curExStyle | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(g_mainHwnd, 0, 1, LWA_ALPHA);
             }
             LARGE_INTEGER now;
@@ -812,7 +818,7 @@ static void InitializeWobbly(void) {
     oc.lpfnWndProc = OverlayProc; 
     oc.hInstance = g_hInstance;
     oc.lpszClassName = "WobblyOverlayWindow";
-    if (!RegisterClassA(&oc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassA(&oc)) {
         Wh_Log(L"RegisterClassA failed, error %u", GetLastError());
         return;
     }
@@ -854,10 +860,8 @@ static void OnEnterSizeMove(HWND hwnd) {
 
     if ((g_isMoving || g_isSettling) && g_mainHwnd != NULL && g_mainHwnd != hwnd) return;
 
-    if (!g_engineInitialized) {
+    if (!g_overlayHwnd) {
         InitializeWobbly();
-
-        g_engineInitialized = (g_overlayHwnd != NULL);
     }
 
     if (!g_overlayHwnd) return;
@@ -1053,7 +1057,7 @@ static BOOL CALLBACK AttachSubclassEnumProc(HWND hwnd, LPARAM lParam) {
 static BOOL CALLBACK DetachSubclassEnumProc(HWND hwnd, LPARAM lParam) {
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) == 0) {
-        SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 100, NULL);
+        SendMessageTimeoutW(hwnd, g_wmDetach, 0, 0, SMTO_NORMAL, 2000, NULL);
     }
     return TRUE;
 }
