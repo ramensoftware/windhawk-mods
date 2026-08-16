@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         0.5.39
+// @version         0.5.42-p43
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -22,10 +22,19 @@ _Example for creating separators on the taskbar_
 
 Another mod offers similar functionality, but this implementation takes a different approach.
 
-This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and disables all interaction events. Because each separator occupies a real pinned slot, it stays anchored between the same pinned items as running apps change.
+This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and keeps activation/tooltip behavior inert. Separators remain genuine pinned slots, can be reordered with the native taskbar drag behavior, and can also be created from the empty-taskbar context menu.
 
 
 Note: The mod creates pinned shortcuts targeting the Windows `systray.exe` stub (with a hidden, immediately exiting `cmd.exe` fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.
+
+Separator instances and their taskbar positions are stored by the mod itself
+inside its Windhawk mod-storage directory. Windhawk settings expose only the
+global separator width. Native Add, drag/reorder, and Unpin operations update
+that mod-owned state directly.
+
+Separator right-click is handled entirely inside explorer.exe with a small
+WinRT XAML MenuFlyout containing the mod-owned Unpin command. No companion
+ShellExperienceHost injection or cross-process coordination is required.
 
 Windows 11 only.
 */
@@ -33,21 +42,9 @@ Windows 11 only.
 
 // ==WindhawkModSettings==
 /*
-- identifierPrefix: WindhawkSeparator
-  $name: Separator Identifier Prefix
-  $description: >-
-    Customizable part of separator identities. A fixed unique suffix is always appended.
-    
-    Change this only if a naming collision occurs (very rare).
-- separators:
-    - - index: 1
-        $name: Final Position
-        $description: 1 = first pinned taskbar position. Right after Search / Taskview. 
-      - width: 20
-        $name: Width
-        $description: Width of the separator slot. 
-  $name: Separators
-  $description: Each new entry corresponds to a new separator being created.
+- width: 20
+  $name: Separator Width
+  $description: Width of every separator slot.
 */
 // ==/WindhawkModSettings==
 
@@ -57,11 +54,13 @@ Windows 11 only.
 
 #include <windows.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <shobjidl.h>
 #include <propkey.h>
 #include <propvarutil.h>
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -72,9 +71,14 @@ Windows 11 only.
 #include <algorithm>
 #include <atomic>
 #include <cwctype>
+#include <cwchar>
+#include <climits>
 #include <iterator>
 #include <list>
 #include <mutex>
+#include <shared_mutex>
+#include <new>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -153,38 +157,65 @@ struct IPinManagerInterop3 : IPinManagerInterop2 {
 // -----------------------------------------------------------------------------
 
 struct SeparatorSetting {
-    int ordinal;       // Stable within this loaded settings snapshot: 1, 2, ...
+    int ordinal;       // Current mod-state row, 1-based (logging only).
+    int sourceIndex;   // Current mod-state vector index, 0-based.
     int targetIndex;   // Zero-based value passed to MoveTaskbarPin.
     double width;      // FrameworkElement::MaxWidth for the separator slot.
-    std::wstring identity;
+    std::wstring stableId; // Persistent internal identity, independent of array order.
+    std::wstring identity; // AppUserModelID / shortcut stem derived from stableId.
 };
 
 struct Settings {
     std::wstring identifierPrefix;
+    double width = 20.0;
     std::vector<SeparatorSetting> separators;
 };
 
 static Settings g_settings;
+static Settings g_appliedSettings;
 static SeparatorSetting g_refreshPulseSetting;
 static std::vector<SeparatorSetting> g_storedSeparatorSettings;
+static std::shared_mutex g_settingsMutex;
+// Serializes native Add/drag/Unpin mutations with state-file writes and the
+// global Windhawk width-setting callback.
+static std::mutex g_settingsMutationMutex;
 static std::wstring g_storagePath;
 static std::wstring g_iconPath;
+static std::wstring g_separatorStatePath;
+
+// True after native reordering changes the in-memory taskbar layout and until
+// the drag-completion boundary persists the current separator state.
+static bool g_separatorStateDirty = false;  // guarded by g_settingsMutationMutex
 
 static std::atomic<bool> g_taskbarViewDllHooked = false;
 static std::atomic<bool> g_taskbarLifecycleHookInstalled = false;
 static std::atomic<bool> g_taskbarInteractionHooksInstalled = false;
 static std::atomic<bool> g_loadLibraryWatcherInstalled = false;
 static std::atomic<bool> g_unloading = false;
+// True only while this mod intentionally tears down its own pins. User-facing
+// Add/Unpin callbacks must not mutate desired state during that window.
+static std::atomic<bool> g_internalCleanupInProgress = false;
 static std::mutex g_lifecycleMutex;
 static bool g_taskbarViewHookInstallationAttempted = false;
 static bool g_taskbarLifecycleHookInstallationAttempted = false;
 static bool g_taskbarInteractionHookInstallationAttempted = false;
 static bool g_backendStopped = false;
+static std::atomic<bool> g_backendHasConverged = false;
 static HANDLE g_backendThread = nullptr;
 static HANDLE g_backendStopEvent = nullptr;
+static HANDLE g_backendWakeEvent = nullptr;
 static thread_local HANDLE g_currentBackendStopEvent = nullptr;
+static thread_local HANDLE g_currentBackendWakeEvent = nullptr;
 
 static constexpr wchar_t kSeparatorIdentitySuffix[] = L"8F31A7D2";
+static constexpr wchar_t kSeparatorIdentifierPrefix[] = L"WindhawkSeparator";
+static constexpr wchar_t kSeparatorStateFileName[] = L"separator-state-v1.txt";
+
+// Read-only compatibility key used only for the one-time migration from the
+// pre-p42 builds. New builds never write separator configuration to Windhawk
+// values/settings; the authoritative separator list lives in mod storage.
+static constexpr wchar_t kLegacyIdentityManifestValueName[] =
+    L"separatorIdentityManifestV1";
 
 // Reserved outside the supported separator range. The helper is briefly
 // pinned and unpinned after positioning to make Explorer process a concrete
@@ -353,38 +384,14 @@ static std::wstring JoinPath(
     return directory + L"\\" + fileName;
 }
 
-static std::wstring SanitizeIdentifierPrefix(std::wstring value) {
-    for (wchar_t& ch : value) {
-        const bool allowed =
-            (ch >= L'a' && ch <= L'z') ||
-            (ch >= L'A' && ch <= L'Z') ||
-            (ch >= L'0' && ch <= L'9') ||
-            ch == L'-' || ch == L'_';
-        if (!allowed) {
-            ch = L'_';
-        }
-    }
-
-    if (value.empty()) {
-        value = L"WindhawkSeparator";
-    }
-
-    constexpr size_t kMaxPrefixLength = 48;
-    if (value.size() > kMaxPrefixLength) {
-        value.resize(kMaxPrefixLength);
-    }
-
-    return value;
-}
-
 static std::wstring BuildSeparatorIdentity(
     std::wstring_view prefix,
-    int ordinal) {
+    std::wstring_view stableId) {
     return std::wstring(prefix) +
            L"." +
            kSeparatorIdentitySuffix +
            L"." +
-           std::to_wstring(ordinal);
+           std::wstring(stableId);
 }
 
 static std::wstring GetSeparatorShortcutPath(
@@ -457,36 +464,936 @@ static std::wstring GetShortcutIdentity(const std::wstring& path) {
     return path.substr(fileNameStart, extension - fileNameStart);
 }
 
-static bool IsCurrentSeparatorIdentity(std::wstring_view identity) {
+static bool IsIdentityInSettings(
+    const Settings& settings,
+    std::wstring_view identity) {
     return std::any_of(
-        g_settings.separators.begin(),
-        g_settings.separators.end(),
+        settings.separators.begin(),
+        settings.separators.end(),
         [identity](const SeparatorSetting& separator) {
             return identity == std::wstring_view(separator.identity);
         });
 }
 
-static void LoadStoredSeparatorSettings() {
-    g_storedSeparatorSettings.clear();
 
-    const double width = g_settings.separators.empty()
-                             ? 20.0
-                             : g_settings.separators.front().width;
+struct LegacySeparatorIdentitySeed {
+    std::wstring stableId;
+    int sourceIndex;
+    int targetIndex;
+};
+
+static bool IsValidStableId(std::wstring_view value) {
+    if (value.empty() || value.size() > 64) {
+        return false;
+    }
+
+    return std::all_of(
+        value.begin(),
+        value.end(),
+        [](wchar_t ch) {
+            return std::iswalnum(ch) ||
+                   ch == L'-' || ch == L'_';
+        });
+}
+
+static bool ParseWideInt(
+    std::wstring_view text,
+    int* valueOut) {
+    if (!valueOut || text.empty()) {
+        return false;
+    }
+
+    std::wstring copy(text);
+    wchar_t* end = nullptr;
+    long value = std::wcstol(
+        copy.c_str(),
+        &end,
+        10);
+
+    if (!end || *end != L'\0' ||
+        value < INT_MIN || value > INT_MAX) {
+        return false;
+    }
+
+    *valueOut = static_cast<int>(value);
+    return true;
+}
+
+static std::vector<LegacySeparatorIdentitySeed>
+LoadLegacyIdentityManifest() {
+    std::vector<wchar_t> buffer(65536);
+    size_t length = Wh_GetStringValue(
+        kLegacyIdentityManifestValueName,
+        buffer.data(),
+        buffer.size());
+
+    if (!length) {
+        return {};
+    }
+
+    std::vector<LegacySeparatorIdentitySeed> result;
+    std::wstring_view data(buffer.data(), length);
+    size_t lineStart = 0;
+
+    while (lineStart < data.size()) {
+        size_t lineEnd = data.find(L'\n', lineStart);
+        if (lineEnd == std::wstring_view::npos) {
+            lineEnd = data.size();
+        }
+
+        std::wstring_view line =
+            data.substr(lineStart, lineEnd - lineStart);
+        if (!line.empty() && line.back() == L'\r') {
+            line.remove_suffix(1);
+        }
+
+        // Legacy format:
+        // stableId<TAB>sourceIndex<TAB>targetIndex<TAB>width
+        std::wstring_view fields[4];
+        size_t fieldStart = 0;
+        bool valid = true;
+
+        for (int field = 0; field < 4; field++) {
+            size_t fieldEnd =
+                field == 3
+                    ? line.size()
+                    : line.find(L'\t', fieldStart);
+
+            if (fieldEnd == std::wstring_view::npos ||
+                fieldStart > line.size()) {
+                valid = false;
+                break;
+            }
+
+            fields[field] =
+                line.substr(fieldStart, fieldEnd - fieldStart);
+            fieldStart = fieldEnd + 1;
+        }
+
+        if (valid && IsValidStableId(fields[0])) {
+            int sourceIndex = 0;
+            int targetIndex = 0;
+            int ignoredWidth = 0;
+
+            if (ParseWideInt(fields[1], &sourceIndex) &&
+                ParseWideInt(fields[2], &targetIndex) &&
+                ParseWideInt(fields[3], &ignoredWidth) &&
+                sourceIndex >= -1 &&
+                targetIndex >= -1) {
+                result.push_back({
+                    .stableId = std::wstring(fields[0]),
+                    .sourceIndex = sourceIndex,
+                    .targetIndex = targetIndex,
+                });
+            }
+        }
+
+        lineStart = lineEnd + 1;
+    }
+
+    return result;
+}
+
+static void AppendHex(
+    std::wstring& output,
+    unsigned long long value,
+    int digits) {
+    static constexpr wchar_t kHexDigits[] =
+        L"0123456789abcdef";
+
+    for (int digit = digits - 1; digit >= 0; digit--) {
+        output.push_back(
+            kHexDigits[
+                (value >> (digit * 4)) & 0xF]);
+    }
+}
+
+static bool GenerateRandomBytes(
+    BYTE* buffer,
+    ULONG size) {
+    using BCryptGenRandom_t =
+        LONG(WINAPI*)(
+            void* algorithm,
+            BYTE* buffer,
+            ULONG size,
+            ULONG flags);
+
+    static BCryptGenRandom_t bcryptGenRandom = [] {
+        HMODULE bcrypt =
+            GetModuleHandleW(L"bcrypt.dll");
+        if (!bcrypt) {
+            bcrypt = LoadLibraryW(L"bcrypt.dll");
+        }
+
+        return bcrypt
+                   ? reinterpret_cast<BCryptGenRandom_t>(
+                         GetProcAddress(
+                             bcrypt,
+                             "BCryptGenRandom"))
+                   : nullptr;
+    }();
+
+    // BCRYPT_USE_SYSTEM_PREFERRED_RNG.
+    constexpr ULONG kUseSystemPreferredRng = 0x00000002;
+
+    return bcryptGenRandom &&
+        bcryptGenRandom(
+            nullptr,
+            buffer,
+            size,
+            kUseSystemPreferredRng) >= 0;
+}
+
+static std::wstring GenerateStableId() {
+    BYTE randomBytes[16] = {};
+
+    if (GenerateRandomBytes(
+            randomBytes,
+            ARRAYSIZE(randomBytes))) {
+        std::wstring result = L"g";
+        result.reserve(33);
+
+        for (BYTE byte : randomBytes) {
+            AppendHex(result, byte, 2);
+        }
+
+        return result;
+    }
+
+    // BCryptGenRandom should always be available on supported Windows
+    // versions. Retain a process-local fallback so a native Add action doesn't
+    // fail merely because random generation unexpectedly did.
+    static std::atomic<unsigned long long> counter{0};
+    LARGE_INTEGER performanceCounter = {};
+    QueryPerformanceCounter(&performanceCounter);
+
+    unsigned long long seed =
+        static_cast<unsigned long long>(
+            performanceCounter.QuadPart) ^
+        (GetTickCount64() << 17) ^
+        (static_cast<unsigned long long>(
+             GetCurrentProcessId()) << 32) ^
+        GetCurrentThreadId();
+
+    std::wstring result = L"g";
+    AppendHex(result, seed, 16);
+    AppendHex(
+        result,
+        counter.fetch_add(
+            1,
+            std::memory_order_relaxed),
+        16);
+    return result;
+}
+
+
+static bool ParseStateInt(
+    std::string_view text,
+    int* valueOut) {
+    if (!valueOut || text.empty()) {
+        return false;
+    }
+
+    std::string copy(text);
+    char* end = nullptr;
+    long value = std::strtol(
+        copy.c_str(),
+        &end,
+        10);
+
+    if (!end || *end != '\0' ||
+        value < INT_MIN || value > INT_MAX) {
+        return false;
+    }
+
+    *valueOut = static_cast<int>(value);
+    return true;
+}
+
+static bool ReadSeparatorStateFile(
+    double width,
+    Settings* settingsOut,
+    bool* existsOut) {
+    if (!settingsOut || !existsOut) {
+        return false;
+    }
+
+    *existsOut = false;
+    settingsOut->identifierPrefix = kSeparatorIdentifierPrefix;
+    settingsOut->width = width;
+    settingsOut->separators.clear();
+
+    DWORD attrs =
+        GetFileAttributesW(g_separatorStatePath.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES) {
+        if (GetLastError() == ERROR_FILE_NOT_FOUND ||
+            GetLastError() == ERROR_PATH_NOT_FOUND) {
+            return true;
+        }
+
+        Wh_Log(
+            L"[STATE] GetFileAttributesW('%s') failed error=%u",
+            g_separatorStatePath.c_str(),
+            GetLastError());
+        return false;
+    }
+
+    if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
+        Wh_Log(
+            L"[STATE] State path is unexpectedly a directory: '%s'",
+            g_separatorStatePath.c_str());
+        return false;
+    }
+
+    *existsOut = true;
+
+    HANDLE file =
+        CreateFileW(
+            g_separatorStatePath.c_str(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(
+            L"[STATE] CreateFileW('%s') for read failed error=%u",
+            g_separatorStatePath.c_str(),
+            GetLastError());
+        return false;
+    }
+
+    LARGE_INTEGER size = {};
+    if (!GetFileSizeEx(file, &size) ||
+        size.QuadPart < 0 ||
+        size.QuadPart > 1024 * 1024) {
+        DWORD error = GetLastError();
+        CloseHandle(file);
+        Wh_Log(
+            L"[STATE] Invalid state-file size error=%u size=%lld",
+            error,
+            static_cast<long long>(size.QuadPart));
+        return false;
+    }
+
+    std::string data(
+        static_cast<size_t>(size.QuadPart),
+        '\0');
+
+    DWORD bytesRead = 0;
+    BOOL readOk =
+        data.empty() ||
+        ReadFile(
+            file,
+            data.data(),
+            static_cast<DWORD>(data.size()),
+            &bytesRead,
+            nullptr);
+    DWORD readError = readOk ? ERROR_SUCCESS : GetLastError();
+    CloseHandle(file);
+
+    if (!readOk || bytesRead != data.size()) {
+        Wh_Log(
+            L"[STATE] ReadFile failed/incomplete error=%u read=%u expected=%zu",
+            readError,
+            bytesRead,
+            data.size());
+        return false;
+    }
+
+    size_t lineStart = 0;
+    bool headerSeen = false;
+    constexpr size_t kMaxSeparators = 256;
+
+    while (lineStart <= data.size()) {
+        size_t lineEnd = data.find('\n', lineStart);
+        if (lineEnd == std::string::npos) {
+            lineEnd = data.size();
+        }
+
+        std::string_view line(
+            data.data() + lineStart,
+            lineEnd - lineStart);
+        if (!line.empty() && line.back() == '\r') {
+            line.remove_suffix(1);
+        }
+
+        if (!headerSeen) {
+            if (line != "v1") {
+                Wh_Log(L"[STATE] Unsupported/corrupt separator state header");
+                return false;
+            }
+            headerSeen = true;
+        } else if (!line.empty()) {
+            size_t tab = line.find('\t');
+            if (tab == std::string_view::npos ||
+                tab == 0 ||
+                tab + 1 >= line.size()) {
+                Wh_Log(L"[STATE] Malformed separator state row");
+                return false;
+            }
+
+            std::string_view stableIdAscii =
+                line.substr(0, tab);
+            std::wstring stableId;
+            stableId.reserve(stableIdAscii.size());
+
+            bool asciiOnly = true;
+            for (unsigned char ch : stableIdAscii) {
+                if (ch >= 0x80) {
+                    asciiOnly = false;
+                    break;
+                }
+                stableId.push_back(
+                    static_cast<wchar_t>(ch));
+            }
+
+            int targetIndex = 0;
+            if (!asciiOnly ||
+                !IsValidStableId(stableId) ||
+                !ParseStateInt(
+                    line.substr(tab + 1),
+                    &targetIndex) ||
+                targetIndex < -1) {
+                Wh_Log(L"[STATE] Invalid separator state row");
+                return false;
+            }
+
+            if (settingsOut->separators.size() >=
+                kMaxSeparators) {
+                Wh_Log(
+                    L"[STATE] Too many separators in state file");
+                return false;
+            }
+
+            if (std::any_of(
+                    settingsOut->separators.begin(),
+                    settingsOut->separators.end(),
+                    [&stableId](const SeparatorSetting& existing) {
+                        return existing.stableId == stableId;
+                    })) {
+                Wh_Log(
+                    L"[STATE] Duplicate stable ID in state file: '%s'",
+                    stableId.c_str());
+                return false;
+            }
+
+            int sourceIndex =
+                static_cast<int>(
+                    settingsOut->separators.size());
+
+            settingsOut->separators.push_back({
+                .ordinal = sourceIndex + 1,
+                .sourceIndex = sourceIndex,
+                .targetIndex = targetIndex,
+                .width = width,
+                .stableId = stableId,
+                .identity = BuildSeparatorIdentity(
+                    settingsOut->identifierPrefix,
+                    stableId),
+            });
+        }
+
+        if (lineEnd == data.size()) {
+            break;
+        }
+        lineStart = lineEnd + 1;
+    }
+
+    if (!headerSeen) {
+        Wh_Log(L"[STATE] Empty/corrupt separator state file");
+        return false;
+    }
+
+    return true;
+}
+
+static bool SaveSeparatorStateFile(
+    const Settings& settings) {
+    std::string serialized = "v1\n";
+
+    for (const auto& separator : settings.separators) {
+        if (!IsValidStableId(separator.stableId) ||
+            separator.targetIndex < -1) {
+            Wh_Log(
+                L"[STATE] Refusing to persist invalid separator state");
+            return false;
+        }
+
+        for (wchar_t ch : separator.stableId) {
+            if (ch > 0x7F) {
+                Wh_Log(
+                    L"[STATE] Refusing to persist non-ASCII stable ID");
+                return false;
+            }
+            serialized.push_back(
+                static_cast<char>(ch));
+        }
+
+        serialized.push_back('\t');
+        serialized +=
+            std::to_string(separator.targetIndex);
+        serialized.push_back('\n');
+    }
+
+    std::wstring temporaryPath =
+        g_separatorStatePath + L".tmp";
+
+    HANDLE file =
+        CreateFileW(
+            temporaryPath.c_str(),
+            GENERIC_WRITE,
+            0,
+            nullptr,
+            CREATE_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(
+            L"[STATE] CreateFileW('%s') for write failed error=%u",
+            temporaryPath.c_str(),
+            GetLastError());
+        return false;
+    }
+
+    DWORD written = 0;
+    BOOL writeOk =
+        serialized.empty() ||
+        WriteFile(
+            file,
+            serialized.data(),
+            static_cast<DWORD>(serialized.size()),
+            &written,
+            nullptr);
+    DWORD writeError =
+        writeOk ? ERROR_SUCCESS : GetLastError();
+
+    BOOL flushOk =
+        writeOk && FlushFileBuffers(file);
+    DWORD flushError =
+        flushOk ? ERROR_SUCCESS : GetLastError();
+
+    CloseHandle(file);
+
+    if (!writeOk ||
+        written != serialized.size() ||
+        !flushOk) {
+        Wh_Log(
+            L"[STATE] State write failed error=%u flushError=%u written=%u expected=%zu",
+            writeError,
+            flushError,
+            written,
+            serialized.size());
+        DeleteFileW(temporaryPath.c_str());
+        return false;
+    }
+
+    if (!MoveFileExW(
+            temporaryPath.c_str(),
+            g_separatorStatePath.c_str(),
+            MOVEFILE_REPLACE_EXISTING |
+                MOVEFILE_WRITE_THROUGH)) {
+        Wh_Log(
+            L"[STATE] Atomic state replace failed error=%u",
+            GetLastError());
+        DeleteFileW(temporaryPath.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+static double LoadSeparatorWidthSetting() {
+    constexpr int kDefaultWidth = 20;
+    constexpr int kMinWidth = 1;
+    constexpr int kMaxWidth = 1000;
+
+    int configuredWidth =
+        Wh_GetIntSetting(L"width");
+
+    if (configuredWidth == 0) {
+        configuredWidth = kDefaultWidth;
+    }
+
+    int width =
+        std::clamp(
+            configuredWidth,
+            kMinWidth,
+            kMaxWidth);
+
+    if (width != configuredWidth) {
+        Wh_Log(
+            L"[SETTINGS] Clamped separator width from %d to %d",
+            configuredWidth,
+            width);
+    }
+
+    return static_cast<double>(width);
+}
+
+static bool MigrateLegacySeparatorState(
+    double width,
+    Settings* settingsOut) {
+    if (!settingsOut) {
+        return false;
+    }
+
+    Settings migrated;
+    migrated.identifierPrefix =
+        kSeparatorIdentifierPrefix;
+    migrated.width = width;
+
+    auto legacySeeds =
+        LoadLegacyIdentityManifest();
+
+    if (!legacySeeds.empty()) {
+        // The old manifest was already ordered in the mod's logical separator
+        // order. Keep every stable ID and target position, but ignore its old
+        // per-row width: p42 has one global width setting.
+        for (const auto& seed : legacySeeds) {
+            if (!IsValidStableId(seed.stableId) ||
+                seed.targetIndex < -1) {
+                continue;
+            }
+
+            if (std::any_of(
+                    migrated.separators.begin(),
+                    migrated.separators.end(),
+                    [&seed](const SeparatorSetting& existing) {
+                        return existing.stableId == seed.stableId;
+                    })) {
+                continue;
+            }
+
+            int sourceIndex =
+                static_cast<int>(
+                    migrated.separators.size());
+
+            migrated.separators.push_back({
+                .ordinal = sourceIndex + 1,
+                .sourceIndex = sourceIndex,
+                .targetIndex = seed.targetIndex,
+                .width = width,
+                .stableId = seed.stableId,
+                .identity = BuildSeparatorIdentity(
+                    migrated.identifierPrefix,
+                    seed.stableId),
+            });
+        }
+    } else {
+        // Older builds without an identity manifest: import the old visible
+        // separator rows once. Numeric IDs preserve the pre-stable-ID shortcut
+        // names for the ordinary migration case.
+        constexpr int kMaxSeparators = 256;
+
+        for (int i = 0; i < kMaxSeparators; i++) {
+            int position =
+                Wh_GetIntSetting(
+                    L"separators[%d].index",
+                    i);
+
+            if (position == 0) {
+                break;
+            }
+
+            int targetIndex = -1;
+            if (position == -1) {
+                targetIndex = -1;
+            } else if (position >= 1) {
+                targetIndex = position - 1;
+            } else {
+                continue;
+            }
+
+            std::wstring stableId =
+                std::to_wstring(i + 1);
+
+            migrated.separators.push_back({
+                .ordinal = i + 1,
+                .sourceIndex = i,
+                .targetIndex = targetIndex,
+                .width = width,
+                .stableId = stableId,
+                .identity = BuildSeparatorIdentity(
+                    migrated.identifierPrefix,
+                    stableId),
+            });
+        }
+    }
+
+    if (!SaveSeparatorStateFile(migrated)) {
+        Wh_Log(
+            L"[STATE] Failed to create p42 separator state during migration");
+        return false;
+    }
+
+    Wh_Log(
+        L"[STATE] Migrated %zu separator(s) into '%s'",
+        migrated.separators.size(),
+        g_separatorStatePath.c_str());
+
+    *settingsOut = std::move(migrated);
+    return true;
+}
+
+static bool LoadSettingsFromStorage(
+    Settings* settingsOut,
+    SeparatorSetting* refreshPulseOut) {
+    if (!settingsOut || !refreshPulseOut) {
+        return false;
+    }
+
+    double width =
+        LoadSeparatorWidthSetting();
+
+    bool stateExists = false;
+    Settings settings;
+
+    if (!ReadSeparatorStateFile(
+            width,
+            &settings,
+            &stateExists)) {
+        return false;
+    }
+
+    if (!stateExists &&
+        !MigrateLegacySeparatorState(
+            width,
+            &settings)) {
+        return false;
+    }
+
+    *refreshPulseOut = {
+        .ordinal = kRefreshPulseOrdinal,
+        .sourceIndex = -1,
+        .targetIndex = 0,
+        .width = width,
+        .stableId = std::to_wstring(
+            kRefreshPulseOrdinal),
+        .identity = BuildSeparatorIdentity(
+            settings.identifierPrefix,
+            std::to_wstring(
+                kRefreshPulseOrdinal)),
+    };
+
+    Wh_Log(
+        L"[STATE] Loaded %zu separator(s) from mod storage; width=%d",
+        settings.separators.size(),
+        static_cast<int>(width));
+
+    *settingsOut = std::move(settings);
+    return true;
+}
+
+static const SeparatorSetting* FindSeparatorByIdentity(
+    const Settings& settings,
+    std::wstring_view identity) {
+    auto it = std::find_if(
+        settings.separators.begin(),
+        settings.separators.end(),
+        [identity](const SeparatorSetting& separator) {
+            return separator.identity ==
+                std::wstring(identity);
+        });
+
+    return it == settings.separators.end()
+               ? nullptr
+               : &*it;
+}
+
+static void AppendStoredSeparatorCandidate(
+    std::vector<SeparatorSetting>& stored,
+    const SeparatorSetting& candidate,
+    const Settings& desiredSettings,
+    const SeparatorSetting& refreshPulse) {
+    if (candidate.identity.empty() ||
+        IsIdentityInSettings(
+            desiredSettings,
+            candidate.identity) ||
+        candidate.identity == refreshPulse.identity) {
+        return;
+    }
+
+    if (std::any_of(
+            stored.begin(),
+            stored.end(),
+            [&candidate](const SeparatorSetting& existing) {
+                return existing.identity == candidate.identity;
+            })) {
+        return;
+    }
+
+    SeparatorSetting copy = candidate;
+    copy.ordinal = 0;
+    stored.push_back(std::move(copy));
+}
+
+static std::vector<SeparatorSetting>
+BuildStoredSeparatorSettings(
+    const Settings& desiredSettings,
+    const SeparatorSetting& refreshPulse,
+    const Settings& appliedSettings,
+    const Settings* previousDesiredSettings = nullptr,
+    const SeparatorSetting* previousRefreshPulse = nullptr,
+    const std::vector<SeparatorSetting>* retainedStoredSettings = nullptr) {
+    std::vector<SeparatorSetting> stored;
+
+    // Keep identities from earlier transitions until a successful backend
+    // pass proves that their backing shortcuts are gone. This also covers a
+    // previous backend snapshot that was superseded before it created/pinned
+    // all of its files: if one such item appears late, it is still styled and
+    // inert rather than briefly becoming an ordinary taskbar button.
+    if (retainedStoredSettings) {
+        for (const auto& separator : *retainedStoredSettings) {
+            AppendStoredSeparatorCandidate(
+                stored,
+                separator,
+                desiredSettings,
+                refreshPulse);
+        }
+    }
+
+    if (previousDesiredSettings) {
+        for (const auto& separator :
+             previousDesiredSettings->separators) {
+            AppendStoredSeparatorCandidate(
+                stored,
+                separator,
+                desiredSettings,
+                refreshPulse);
+        }
+    }
+
+    if (previousRefreshPulse) {
+        AppendStoredSeparatorCandidate(
+            stored,
+            *previousRefreshPulse,
+            desiredSettings,
+            refreshPulse);
+    }
+
+    const double defaultWidth =
+        !appliedSettings.separators.empty()
+            ? appliedSettings.separators.front().width
+            : (!desiredSettings.separators.empty()
+                   ? desiredSettings.separators.front().width
+                   : 20.0);
 
     for (const auto& path : EnumerateSeparatorShortcuts()) {
-        std::wstring identity = GetShortcutIdentity(path);
+        std::wstring identity =
+            GetShortcutIdentity(path);
+
         if (identity.empty() ||
-            IsCurrentSeparatorIdentity(identity) ||
-            identity == g_refreshPulseSetting.identity) {
+            IsIdentityInSettings(
+                desiredSettings,
+                identity) ||
+            identity == refreshPulse.identity) {
             continue;
         }
 
-        g_storedSeparatorSettings.push_back({
-            .ordinal = 0,
-            .targetIndex = 0,
-            .width = width,
-            .identity = std::move(identity),
-        });
+        if (std::any_of(
+                stored.begin(),
+                stored.end(),
+                [&identity](const SeparatorSetting& existing) {
+                    return existing.identity == identity;
+                })) {
+            continue;
+        }
+
+        const SeparatorSetting* known =
+            FindSeparatorByIdentity(
+                appliedSettings,
+                identity);
+
+        if (!known && previousDesiredSettings) {
+            known = FindSeparatorByIdentity(
+                *previousDesiredSettings,
+                identity);
+        }
+
+        if (known) {
+            AppendStoredSeparatorCandidate(
+                stored,
+                *known,
+                desiredSettings,
+                refreshPulse);
+        } else {
+            stored.push_back({
+                .ordinal = 0,
+                .sourceIndex = -1,
+                .targetIndex = 0,
+                .width = defaultWidth,
+                .stableId = {},
+                .identity = std::move(identity),
+            });
+        }
+    }
+
+    return stored;
+}
+
+static bool SettingsRequireBackendReconcile(
+    const Settings& oldSettings,
+    const Settings& newSettings);
+
+static bool SettingsSnapshotsEqual(
+    const Settings& a,
+    const Settings& b) {
+    if (a.identifierPrefix != b.identifierPrefix ||
+        a.separators.size() != b.separators.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < a.separators.size(); i++) {
+        const auto& left = a.separators[i];
+        const auto& right = b.separators[i];
+
+        if (left.ordinal != right.ordinal ||
+            left.sourceIndex != right.sourceIndex ||
+            left.targetIndex != right.targetIndex ||
+            left.width != right.width ||
+            left.stableId != right.stableId ||
+            left.identity != right.identity) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void RefreshStoredSeparatorSettings() {
+    Settings desired;
+    Settings applied;
+    SeparatorSetting refreshPulse;
+
+    {
+        std::shared_lock lock(g_settingsMutex);
+        desired = g_settings;
+        applied = g_appliedSettings;
+        refreshPulse = g_refreshPulseSetting;
+    }
+
+    auto stored =
+        BuildStoredSeparatorSettings(
+            desired,
+            refreshPulse,
+            applied);
+
+    {
+        std::unique_lock lock(g_settingsMutex);
+
+        // The desired settings might have changed while the filesystem was
+        // enumerated. In that case the settings-change path will rebuild this
+        // snapshot again.
+        if (SettingsSnapshotsEqual(
+                desired,
+                g_settings)) {
+            g_storedSeparatorSettings =
+                std::move(stored);
+        }
     }
 }
 
@@ -536,74 +1443,71 @@ static bool WriteBinaryFile(
     return true;
 }
 
-static void LoadSettings() {
-    g_settings = {};
+static bool LoadSettings() {
+    Settings settings;
+    SeparatorSetting refreshPulse;
 
-    g_settings.identifierPrefix = SanitizeIdentifierPrefix(
-        WindhawkUtils::StringSetting::make(
-            L"identifierPrefix").get());
-
-    // Wh_GetIntSetting returns 0 for a missing setting.
-    // Positions are therefore deliberately user-facing 1-based values.
-    constexpr int kMaxSeparators = 256;
-    constexpr int kMinWidth = 1;
-    constexpr int kMaxWidth = 1000;
-
-    for (int i = 0; i < kMaxSeparators; i++) {
-        int position =
-            Wh_GetIntSetting(L"separators[%d].index", i);
-
-        if (position == 0) {
-            break;
-        }
-
-        if (position < 1) {
-            Wh_Log(
-                L"[SETTINGS] Ignoring separator %d: invalid position=%d",
-                i + 1,
-                position);
-            continue;
-        }
-
-        int configuredWidth =
-            Wh_GetIntSetting(L"separators[%d].width", i);
-        int width = std::clamp(
-            configuredWidth,
-            kMinWidth,
-            kMaxWidth);
-
-        if (width != configuredWidth) {
-            Wh_Log(
-                L"[SETTINGS] Clamped separator %d width from %d to %d",
-                i + 1,
-                configuredWidth,
-                width);
-        }
-        g_settings.separators.push_back({
-            .ordinal = i + 1,
-            .targetIndex = position - 1,
-            .width = static_cast<double>(width),
-            .identity = BuildSeparatorIdentity(
-                g_settings.identifierPrefix,
-                i + 1),
-        });
+    if (!LoadSettingsFromStorage(
+            &settings,
+            &refreshPulse)) {
+        Wh_Log(L"[STATE] Failed to load separator state");
+        return false;
     }
 
-    g_refreshPulseSetting = {
-        .ordinal = kRefreshPulseOrdinal,
-        .targetIndex = 0,
-        .width = g_settings.separators.empty()
-                     ? 20.0
-                     : g_settings.separators.front().width,
-        .identity = BuildSeparatorIdentity(
-            g_settings.identifierPrefix,
-            kRefreshPulseOrdinal),
-    };
+    std::unique_lock lock(g_settingsMutex);
+    g_settings = std::move(settings);
+    g_appliedSettings = {};
+    g_refreshPulseSetting =
+        std::move(refreshPulse);
+    g_storedSeparatorSettings.clear();
+    g_separatorStateDirty = false;
+    return true;
+}
 
-    Wh_Log(
-        L"[SETTINGS] prefix='%s' separators=%zu",
-        g_settings.identifierPrefix.c_str(),
-        g_settings.separators.size());
+static const SeparatorSetting* FindSeparatorByStableId(
+    const Settings& settings,
+    std::wstring_view stableId) {
+    auto it = std::find_if(
+        settings.separators.begin(),
+        settings.separators.end(),
+        [stableId](const SeparatorSetting& separator) {
+            return separator.stableId ==
+                std::wstring(stableId);
+        });
+
+    return it == settings.separators.end()
+               ? nullptr
+               : &*it;
+}
+
+static bool SettingsRequireBackendReconcile(
+    const Settings& oldSettings,
+    const Settings& newSettings) {
+    if (oldSettings.identifierPrefix !=
+        newSettings.identifierPrefix) {
+        return true;
+    }
+
+    if (oldSettings.separators.size() !=
+        newSettings.separators.size()) {
+        return true;
+    }
+
+    for (const auto& oldSeparator :
+         oldSettings.separators) {
+        const SeparatorSetting* newSeparator =
+            FindSeparatorByStableId(
+                newSettings,
+                oldSeparator.stableId);
+
+        if (!newSeparator ||
+            oldSeparator.identity != newSeparator->identity ||
+            oldSeparator.targetIndex != newSeparator->targetIndex) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static bool InitializeStoragePath() {
@@ -636,8 +1540,10 @@ static bool InitializeStoragePath() {
         JoinPath(
             g_storagePath,
             L"separator.ico");
-
-    LoadStoredSeparatorSettings();
+    g_separatorStatePath =
+        JoinPath(
+            g_storagePath,
+            kSeparatorStateFileName);
 
     return true;
 }
@@ -651,30 +1557,26 @@ static bool InitializeStoragePath() {
 // entry points are modified.
 // -----------------------------------------------------------------------------
 
-// Native TaskListButton IsDraggable XAML binding helpers, resolved from
-// Taskbar.View.dll. The isolated runtime probe verified that setting this
-// property to false prevents drag initiation without touching pointer input,
-// drag gesture handlers, or the taskbar model's reorder path.
-using TaskListButton_GetIsDraggable_t =
-    winrt::Windows::Foundation::IInspectable(*)(
-        winrt::Windows::Foundation::IInspectable const& target);
-
-static TaskListButton_GetIsDraggable_t
-    g_taskListButtonGetIsDraggable;
-
-using TaskListButton_SetIsDraggable_t =
-    void(*)(
-        winrt::Windows::Foundation::IInspectable const& target,
-        winrt::Windows::Foundation::IInspectable const& value);
-
-static TaskListButton_SetIsDraggable_t
-    g_taskListButtonSetIsDraggable;
-
-static thread_local bool g_settingSeparatorIsDraggable;
-
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 static TaskListButton_UpdateVisualStates_t
     g_taskListButtonUpdateVisualStatesOriginal;
+
+static void PersistPendingSeparatorState();
+
+using TaskListButton_OnDragCompletedGesture_t =
+    void(WINAPI*)(void* pThis);
+static TaskListButton_OnDragCompletedGesture_t
+    g_taskListButtonOnDragCompletedGestureOriginal;
+
+static void WINAPI TaskListButton_OnDragCompletedGesture_Hook(
+    void* pThis) {
+    g_taskListButtonOnDragCompletedGestureOriginal(
+        pThis);
+
+    if (!g_unloading) {
+        PersistPendingSeparatorState();
+    }
+}
 
 static FrameworkElement GetTaskListButtonElement(void* pThis) {
     FrameworkElement element = nullptr;
@@ -769,10 +1671,11 @@ static bool ContainsIdentityToken(
     return false;
 }
 
-static const SeparatorSetting* FindSeparatorByAutomationName(
-    std::wstring_view name) {
+static bool FindSeparatorByAutomationName(
+    std::wstring_view name,
+    SeparatorSetting* separatorOut = nullptr) {
     if (name.empty()) {
-        return nullptr;
+        return false;
     }
 
     // Almost every TaskListButton is unrelated to this mod. Reject it with a
@@ -781,32 +1684,45 @@ static const SeparatorSetting* FindSeparatorByAutomationName(
     static const std::wstring identityMarker =
         std::wstring(L".") + kSeparatorIdentitySuffix + L".";
     if (name.find(identityMarker) == std::wstring_view::npos) {
-        return nullptr;
+        return false;
     }
+
+    std::shared_lock lock(g_settingsMutex);
+
+    const auto copyMatch =
+        [separatorOut](const SeparatorSetting& separator) {
+            if (separatorOut) {
+                *separatorOut = separator;
+            }
+            return true;
+        };
 
     for (const auto& separator : g_settings.separators) {
         if (ContainsIdentityToken(name, separator.identity)) {
-            return &separator;
+            return copyMatch(separator);
         }
     }
 
     for (const auto& separator : g_storedSeparatorSettings) {
         if (ContainsIdentityToken(name, separator.identity)) {
-            return &separator;
+            return copyMatch(separator);
         }
     }
 
-    return ContainsIdentityToken(
-               name,
-               g_refreshPulseSetting.identity)
-               ? &g_refreshPulseSetting
-               : nullptr;
+    if (ContainsIdentityToken(
+            name,
+            g_refreshPulseSetting.identity)) {
+        return copyMatch(g_refreshPulseSetting);
+    }
+
+    return false;
 }
 
-static const SeparatorSetting* GetSeparatorForElement(
-    const FrameworkElement& element) {
+static bool GetSeparatorForElement(
+    const FrameworkElement& element,
+    SeparatorSetting* separatorOut = nullptr) {
     if (!element) {
-        return nullptr;
+        return false;
     }
 
     winrt::hstring automationName;
@@ -816,7 +1732,7 @@ static const SeparatorSetting* GetSeparatorForElement(
             winrt::Windows::UI::Xaml::Automation::
                 AutomationProperties::GetName(element);
     } catch (...) {
-        return nullptr;
+        return false;
     }
 
     std::wstring_view name{
@@ -824,23 +1740,29 @@ static const SeparatorSetting* GetSeparatorForElement(
         automationName.size()
     };
 
-    return FindSeparatorByAutomationName(name);
+    return FindSeparatorByAutomationName(
+        name,
+        separatorOut);
 }
 
-static const SeparatorSetting* GetSeparatorForTaskListButton(
+static bool GetSeparatorForTaskListButton(
     void* pThis,
-    FrameworkElement* elementOut = nullptr) {
+    FrameworkElement* elementOut = nullptr,
+    SeparatorSetting* separatorOut = nullptr) {
     FrameworkElement element =
         GetTaskListButtonElement(pThis);
 
-    const SeparatorSetting* separator =
-        GetSeparatorForElement(element);
+    if (!GetSeparatorForElement(
+            element,
+            separatorOut)) {
+        return false;
+    }
 
-    if (separator && elementOut) {
+    if (elementOut) {
         *elementOut = element;
     }
 
-    return separator;
+    return true;
 }
 
 struct SeparatorVisualState {
@@ -873,8 +1795,6 @@ struct SeparatorVisualState {
     winrt::Windows::Foundation::IInspectable
         originalTaskListButtonToolTipLocalValue{nullptr};
 
-    bool isDraggableCaptured = false;
-    bool originalIsDraggable = false;
 };
 
 static thread_local std::list<SeparatorVisualState>
@@ -1041,50 +1961,7 @@ static void SuppressSeparatorHoverChrome(
     }
 }
 
-static void DisableSeparatorDragging(
-    SeparatorVisualState& state,
-    const FrameworkElement& taskListButton) {
-    if (!taskListButton ||
-        g_settingSeparatorIsDraggable ||
-        !g_taskListButtonGetIsDraggable ||
-        !g_taskListButtonSetIsDraggable) {
-        return;
-    }
 
-    g_settingSeparatorIsDraggable = true;
-
-    try {
-        auto target =
-            taskListButton.as<
-                winrt::Windows::Foundation::IInspectable>();
-
-        auto beforeBox =
-            g_taskListButtonGetIsDraggable(target);
-
-        bool isDraggable =
-            winrt::unbox_value<bool>(beforeBox);
-
-        if (!state.isDraggableCaptured) {
-            state.originalIsDraggable = isDraggable;
-            state.isDraggableCaptured = true;
-        }
-
-        if (isDraggable) {
-            auto falseBox =
-                winrt::box_value(false);
-
-            g_taskListButtonSetIsDraggable(
-                target,
-                falseBox);
-        }
-    } catch (...) {
-        // Input hardening only. If a future Taskbar.View build changes the
-        // binding helper ABI, leave stock drag behavior rather than affecting
-        // unrelated taskbar buttons.
-    }
-
-    g_settingSeparatorIsDraggable = false;
-}
 
 static void RestoreDependencyPropertyLocalValue(
     const DependencyObject& object,
@@ -1129,22 +2006,6 @@ static void RestoreSeparatorVisualState(
                 state.originalTaskListButtonToolTipLocalValue);
         }
     } catch (...) {
-    }
-
-    try {
-        if (state.isDraggableCaptured &&
-            g_taskListButtonSetIsDraggable &&
-            !g_settingSeparatorIsDraggable) {
-            g_settingSeparatorIsDraggable = true;
-            auto target = element.as<
-                winrt::Windows::Foundation::IInspectable>();
-            g_taskListButtonSetIsDraggable(
-                target,
-                winrt::box_value(state.originalIsDraggable));
-            g_settingSeparatorIsDraggable = false;
-        }
-    } catch (...) {
-        g_settingSeparatorIsDraggable = false;
     }
 
     if (auto iconPanel = state.iconPanel.get()) {
@@ -1327,10 +2188,243 @@ static void RestoreTrackedSeparatorVisualStates() {
         reinterpret_cast<LPARAM>(&context));
 }
 
-// Modern WinUI taskbar context-menu paths.
+static void WINAPI RefreshSeparatorVisualStatesOnCurrentThread(void*) {
+    g_updatingSeparatorVisualStates = true;
+    SeparatorVisualStateUpdateGuard updateGuard;
+    PruneExpiredSeparatorVisualStates();
+
+    for (auto it = g_separatorVisualStates.begin();
+         it != g_separatorVisualStates.end();) {
+        auto current = it++;
+
+        SeparatorVisualState& state = *current;
+        auto element = state.element.get();
+
+        SeparatorSetting separator;
+        if (!element ||
+            g_unloading ||
+            !GetSeparatorForElement(
+                element,
+                &separator)) {
+            RestoreSeparatorVisualState(current);
+            continue;
+        }
+
+        ApplySeparatorMaxWidthOverride(
+            state,
+            element,
+            separator);
+
+        FrameworkElement iconPanel =
+            FindChildByName(element, L"IconPanel");
+        CenterSeparatorIcon(state, iconPanel);
+        SuppressSeparatorHoverChrome(
+            state,
+            element,
+            iconPanel);
+        }
+}
+
+static void RefreshTrackedSeparatorVisualStates() {
+    struct EnumContext {
+        std::vector<DWORD> processedThreadIds;
+    } context;
+
+    EnumWindows(
+        [](HWND window, LPARAM lParam) -> BOOL {
+            DWORD processId = 0;
+            DWORD threadId =
+                GetWindowThreadProcessId(window, &processId);
+            if (!threadId || processId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            wchar_t className[64] = {};
+            if (!GetClassNameW(
+                    window,
+                    className,
+                    ARRAYSIZE(className)) ||
+                (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+                 _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0)) {
+                return TRUE;
+            }
+
+            auto* context =
+                reinterpret_cast<EnumContext*>(lParam);
+            if (std::find(
+                    context->processedThreadIds.begin(),
+                    context->processedThreadIds.end(),
+                    threadId) !=
+                context->processedThreadIds.end()) {
+                return TRUE;
+            }
+
+            context->processedThreadIds.push_back(threadId);
+
+            if (!RunFromWindowThread(
+                    window,
+                    RefreshSeparatorVisualStatesOnCurrentThread,
+                    nullptr)) {
+                Wh_Log(
+                    L"[SETTINGS] Failed to refresh taskbar visuals on thread %u",
+                    threadId);
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+}
+
+// Native empty-taskbar context menu frontend.
 //
-// These hooks cover the context-request routes seen across Taskbar.View builds.
-// They are filtered independently and don't touch generic pointer input.
+// This follows the same Taskbar.View menu construction path used by
+// Taskbar Restart Explorer: mark
+// the ShowTaskbarSettingsContextMenu build scope, intercept the first
+// IVector<MenuFlyoutItemBase>::Append, and add one native MenuFlyoutItem.
+static void RequestBackendReconcile();
+static void AddSeparatorFromTaskbarMenu();
+
+static constexpr wchar_t kAddSeparatorMenuText[] = L"Add separator";
+static constexpr wchar_t kAddSeparatorMenuName[] = L"WindhawkAddSeparatorItem";
+static constexpr wchar_t kAddSeparatorMenuDividerName[] =
+    L"WindhawkAddSeparatorDivider";
+
+static thread_local int g_taskbarSettingsMenuDepth = 0;
+static thread_local bool g_taskbarSettingsMenuInjected = false;
+
+static bool IsNamedMenuItem(
+    winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const& item,
+    const wchar_t* name) {
+    try {
+        if (auto element = item.try_as<FrameworkElement>()) {
+            return std::wstring_view(element.Name().c_str()) == name;
+        }
+    } catch (...) {
+    }
+    return false;
+}
+
+static bool IsMenuSeparator(
+    winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const& item) {
+    try {
+        return !!item.try_as<
+            winrt::Windows::UI::Xaml::Controls::MenuFlyoutSeparator>();
+    } catch (...) {
+        return false;
+    }
+}
+
+static void OnAddSeparatorMenuClick(
+    winrt::Windows::Foundation::IInspectable const&,
+    RoutedEventArgs const&) {
+    AddSeparatorFromTaskbarMenu();
+}
+
+using MenuFlyoutItemBaseVector_Append_t =
+    void(__cdecl*)(
+        void* pThis,
+        winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const& item);
+static MenuFlyoutItemBaseVector_Append_t
+    g_menuFlyoutItemBaseVectorAppendOriginal;
+
+static void AppendAddSeparatorMenuItems(void* vectorThis) {
+    using namespace winrt::Windows::UI::Xaml::Controls;
+
+    MenuFlyoutItem item;
+    item.Name(kAddSeparatorMenuName);
+    item.Tag(winrt::box_value(winrt::hstring{kAddSeparatorMenuName}));
+    item.Text(kAddSeparatorMenuText);
+
+    FontIcon icon;
+    icon.FontFamily(
+        winrt::Windows::UI::Xaml::Media::FontFamily(
+            L"Segoe Fluent Icons"));
+    icon.Glyph(L"\xE710");
+    icon.FontSize(16);
+    item.Icon(icon);
+    item.Click(RoutedEventHandler{&OnAddSeparatorMenuClick});
+
+    MenuFlyoutSeparator divider;
+    divider.Name(kAddSeparatorMenuDividerName);
+    divider.Tag(
+        winrt::box_value(
+            winrt::hstring{kAddSeparatorMenuDividerName}));
+
+    g_menuFlyoutItemBaseVectorAppendOriginal(vectorThis, item);
+    g_menuFlyoutItemBaseVectorAppendOriginal(vectorThis, divider);
+
+    g_taskbarSettingsMenuInjected = true;
+    Wh_Log(L"[NATIVE-ADD] Injected Add separator into taskbar context menu");
+}
+
+static void __cdecl MenuFlyoutItemBaseVector_Append_Hook(
+    void* pThis,
+    winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const& item) {
+    if (!g_unloading &&
+        g_taskbarSettingsMenuDepth > 0 &&
+        !g_taskbarSettingsMenuInjected) {
+        try {
+            if (!IsMenuSeparator(item) &&
+                !IsNamedMenuItem(item, kAddSeparatorMenuName) &&
+                !IsNamedMenuItem(item, kAddSeparatorMenuDividerName)) {
+                AppendAddSeparatorMenuItems(pThis);
+            }
+        } catch (...) {
+            Wh_Log(L"[NATIVE-ADD] Menu append inspection failed; skipping injection");
+        }
+    }
+
+    g_menuFlyoutItemBaseVectorAppendOriginal(pThis, item);
+}
+
+struct ScopedTaskbarSettingsMenuBuild {
+    bool outer = false;
+
+    ScopedTaskbarSettingsMenuBuild() {
+        outer = g_taskbarSettingsMenuDepth++ == 0;
+        if (outer) {
+            g_taskbarSettingsMenuInjected = false;
+        }
+    }
+
+    ~ScopedTaskbarSettingsMenuBuild() {
+        if (outer && !g_taskbarSettingsMenuInjected && !g_unloading) {
+            Wh_Log(L"[NATIVE-ADD] No taskbar menu append observed; injection skipped");
+        }
+        g_taskbarSettingsMenuDepth--;
+    }
+};
+
+using ContextMenus_ShowTaskbarSettingsContextMenu_t =
+    void(__cdecl*)(
+        FrameworkElement const& target,
+        void* taskbarSettings,
+        winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args,
+        unsigned long long options);
+static ContextMenus_ShowTaskbarSettingsContextMenu_t
+    g_contextMenusShowTaskbarSettingsContextMenuOriginal;
+
+static void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
+    FrameworkElement const& target,
+    void* taskbarSettings,
+    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args,
+    unsigned long long options) {
+    ScopedTaskbarSettingsMenuBuild scopedBuild;
+    g_contextMenusShowTaskbarSettingsContextMenuOriginal(
+        target,
+        taskbarSettings,
+        args,
+        options);
+}
+
+// Modern per-item taskbar context-menu paths.
+//
+// Different Windows 11 builds route the request through slightly different
+// Taskbar.View entry points, so retain all three proven hooks. Every route feeds
+// the same tiny handler: identify our separator, suppress the stock JumpView,
+// and show a one-item explorer-hosted XAML MenuFlyout. The first route that
+// reaches the handler opens the flyout; the remaining callbacks for the same
+// request only suppress their native path.
 using TaskListButton_OnContextRequested_t =
     void(WINAPI*)(
         void* pThis,
@@ -1340,21 +2434,6 @@ using TaskListButton_OnContextRequested_t =
 static TaskListButton_OnContextRequested_t
     g_taskListButtonOnContextRequestedOriginal;
 
-static void WINAPI TaskListButton_OnContextRequested_Hook(
-    void* pThis,
-    winrt::Windows::UI::Xaml::UIElement const& sender,
-    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
-    if (!g_unloading &&
-        GetSeparatorForTaskListButton(pThis)) {
-        return;
-    }
-
-    g_taskListButtonOnContextRequestedOriginal(
-        pThis,
-        sender,
-        args);
-}
-
 using TaskListButtonHandlers_HandleContextRequested_t =
     void(WINAPI*)(
         winrt::Windows::UI::Xaml::UIElement const& sender,
@@ -1362,24 +2441,6 @@ using TaskListButtonHandlers_HandleContextRequested_t =
 
 static TaskListButtonHandlers_HandleContextRequested_t
     g_taskListButtonHandlersHandleContextRequestedOriginal;
-
-static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
-    winrt::Windows::UI::Xaml::UIElement const& sender,
-    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
-    if (!g_unloading) {
-        auto element =
-            sender.try_as<FrameworkElement>();
-
-        if (element &&
-            GetSeparatorForElement(element)) {
-            return;
-        }
-    }
-
-    g_taskListButtonHandlersHandleContextRequestedOriginal(
-        sender,
-        args);
-}
 
 using TaskbarResources_OnTaskListButtonContextRequested_t =
     void(WINAPI*)(
@@ -1390,20 +2451,178 @@ using TaskbarResources_OnTaskListButtonContextRequested_t =
 static TaskbarResources_OnTaskListButtonContextRequested_t
     g_taskbarResourcesOnTaskListButtonContextRequestedOriginal;
 
+static std::atomic<bool> g_separatorContextMenuOpen = false;
+
+static void RemoveSeparatorFromContextMenu(
+    std::wstring identity);
+
+static void OnSeparatorContextMenuClosed(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    g_separatorContextMenuOpen = false;
+}
+
+static void OnSeparatorUnpinMenuClick(
+    winrt::Windows::Foundation::IInspectable const& sender,
+    RoutedEventArgs const&) {
+    // The target TaskListButton may disappear before FlyoutBase::Closed is
+    // delivered. Release the de-duplication gate at command dispatch too.
+    g_separatorContextMenuOpen = false;
+
+    if (g_unloading ||
+        g_internalCleanupInProgress.load()) {
+        return;
+    }
+
+    try {
+        auto item =
+            sender.try_as<
+                winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem>();
+        if (!item) {
+            return;
+        }
+
+        auto tag = item.Tag();
+        if (!tag) {
+            return;
+        }
+
+        winrt::hstring identity =
+            winrt::unbox_value<winrt::hstring>(tag);
+        if (identity.empty()) {
+            return;
+        }
+
+        RemoveSeparatorFromContextMenu(
+            std::wstring(identity.c_str(), identity.size()));
+    } catch (...) {
+        Wh_Log(L"[CTX] Separator Unpin callback failed");
+    }
+}
+
+static void ShowSeparatorContextMenu(
+    const FrameworkElement& target,
+    const SeparatorSetting& separator) {
+    if (!target ||
+        separator.identity.empty() ||
+        g_unloading) {
+        return;
+    }
+
+    bool expected = false;
+    if (!g_separatorContextMenuOpen.compare_exchange_strong(
+            expected,
+            true)) {
+        return;
+    }
+
+    try {
+        using namespace winrt::Windows::UI::Xaml::Controls;
+        using namespace winrt::Windows::UI::Xaml::Controls::Primitives;
+
+        MenuFlyout menu;
+        menu.Placement(FlyoutPlacementMode::Top);
+
+        MenuFlyoutItem unpin;
+        unpin.Text(L"Unpin from taskbar");
+        unpin.Tag(
+            winrt::box_value(
+                winrt::hstring{separator.identity}));
+
+        FontIcon icon;
+        icon.FontFamily(
+            winrt::Windows::UI::Xaml::Media::FontFamily(
+                L"Segoe Fluent Icons"));
+        // Segoe Fluent Icons: Remove (minus sign).
+        icon.Glyph(L"\xE738");
+        icon.FontSize(16);
+        unpin.Icon(icon);
+        unpin.Click(
+            RoutedEventHandler{
+                &OnSeparatorUnpinMenuClick});
+
+        menu.Items().Append(unpin);
+        menu.Closed(
+            winrt::Windows::Foundation::
+                EventHandler<winrt::Windows::Foundation::IInspectable>{
+                    &OnSeparatorContextMenuClosed});
+
+        menu.ShowAt(target);
+        Wh_Log(
+            L"[CTX] Opened separator context menu identity='%s'",
+            separator.identity.c_str());
+    } catch (...) {
+        g_separatorContextMenuOpen = false;
+        Wh_Log(L"[CTX] Failed to show separator context menu");
+    }
+}
+
+static bool TryHandleSeparatorContextRequest(
+    const FrameworkElement& element,
+    const SeparatorSetting* knownSeparator = nullptr) {
+    if (g_unloading || !element) {
+        return false;
+    }
+
+    SeparatorSetting separator;
+    if (knownSeparator) {
+        separator = *knownSeparator;
+    } else if (!GetSeparatorForElement(
+                   element,
+                   &separator)) {
+        return false;
+    }
+
+    ShowSeparatorContextMenu(
+        element,
+        separator);
+    return true;
+}
+
+static void WINAPI TaskListButton_OnContextRequested_Hook(
+    void* pThis,
+    winrt::Windows::UI::Xaml::UIElement const& sender,
+    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
+    FrameworkElement element = nullptr;
+    SeparatorSetting separator;
+
+    if (!g_unloading &&
+        GetSeparatorForTaskListButton(
+            pThis,
+            &element,
+            &separator)) {
+        TryHandleSeparatorContextRequest(
+            element,
+            &separator);
+        return;
+    }
+
+    g_taskListButtonOnContextRequestedOriginal(
+        pThis,
+        sender,
+        args);
+}
+
+static void WINAPI TaskListButtonHandlers_HandleContextRequested_Hook(
+    winrt::Windows::UI::Xaml::UIElement const& sender,
+    winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
+    auto element = sender.try_as<FrameworkElement>();
+    if (TryHandleSeparatorContextRequest(element)) {
+        return;
+    }
+
+    g_taskListButtonHandlersHandleContextRequestedOriginal(
+        sender,
+        args);
+}
+
 static void WINAPI TaskbarResources_OnTaskListButtonContextRequested_Hook(
     void* pThis,
     winrt::Windows::UI::Xaml::UIElement const& sender,
     winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const& args) {
-    if (!g_unloading) {
-        auto element =
-            sender.try_as<FrameworkElement>();
-
-        if (element &&
-            GetSeparatorForElement(element)) {
-            // Don't set args.Handled here. That path is crash-prone on some
-            // Taskbar.View builds; skipping the handler is sufficient.
-            return;
-        }
+    auto element = sender.try_as<FrameworkElement>();
+    if (TryHandleSeparatorContextRequest(element)) {
+        return;
     }
 
     g_taskbarResourcesOnTaskListButtonContextRequestedOriginal(
@@ -1429,15 +2648,18 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
 
     FrameworkElement element =
         GetTaskListButtonElement(pThis);
-    const SeparatorSetting* separator =
-        GetSeparatorForElement(element);
+    SeparatorSetting separator;
+    bool isSeparator =
+        GetSeparatorForElement(
+            element,
+            &separator);
 
     PruneExpiredSeparatorVisualStates();
     auto stateIt = FindSeparatorVisualState(pThis);
 
     // ItemsRepeater recycles TaskListButton containers. Undo every property
     // owned by this mod as soon as a container stops representing a separator.
-    if (!separator || !element || g_unloading) {
+    if (!isSeparator || !element || g_unloading) {
         if (stateIt != g_separatorVisualStates.end()) {
             RestoreSeparatorVisualState(stateIt);
         }
@@ -1457,7 +2679,7 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
     ApplySeparatorMaxWidthOverride(
         state,
         element,
-        *separator);
+        separator);
 
     // If unload began while width was being applied, undo this button instead
     // of applying the remaining separator-only properties.
@@ -1470,7 +2692,6 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         FindChildByName(element, L"IconPanel");
     CenterSeparatorIcon(state, iconPanel);
     SuppressSeparatorHoverChrome(state, element, iconPanel);
-    DisableSeparatorDragging(state, element);
 }
 
 static HMODULE GetTaskbarViewModuleHandle() {
@@ -1488,6 +2709,22 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
+                LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))"
+            },
+            &g_contextMenusShowTaskbarSettingsContextMenuOriginal,
+            ContextMenus_ShowTaskbarSettingsContextMenu_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>,struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase>::Append(struct winrt::Windows::UI::Xaml::Controls::MenuFlyoutItemBase const &)const )"
+            },
+            &g_menuFlyoutItemBaseVectorAppendOriginal,
+            MenuFlyoutItemBaseVector_Append_Hook,
+            true,
+        },
+        {
+            {
                 LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"
             },
             &g_taskListButtonUpdateVisualStatesOriginal,
@@ -1495,17 +2732,11 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
         {
             {
-                LR"(struct winrt::Windows::Foundation::IInspectable __cdecl winrt::Taskbar::implementation::GetValueTypeMember_IsDraggable<struct winrt::Taskbar::TaskListButton,bool>(struct winrt::Windows::Foundation::IInspectable const &))"
+                LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnDragCompletedGesture(void))"
             },
-            &g_taskListButtonGetIsDraggable,
-            nullptr,
-        },
-        {
-            {
-                LR"(void __cdecl winrt::Taskbar::implementation::SetValueTypeMember_IsDraggable<struct winrt::Taskbar::TaskListButton,bool>(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Windows::Foundation::IInspectable const &))"
-            },
-            &g_taskListButtonSetIsDraggable,
-            nullptr,
+            &g_taskListButtonOnDragCompletedGestureOriginal,
+            TaskListButton_OnDragCompletedGesture_Hook,
+            true,
         },
         {
             {
@@ -1734,21 +2965,22 @@ static bool InitializeTaskbarStylingHooks() {
 // -----------------------------------------------------------------------------
 // Separator interaction suppression.
 //
-// Taskbar.View owns modern context requests and the native IsDraggable property;
+// Taskbar.View owns modern context requests and the drag-completion boundary;
 // those are handled above. taskbar.dll is used only for model-level semantic
 // actions that already expose the exact ITaskGroup:
 //
 // - CTaskListWnd::HandleClick:
 //     swallow activation for our separator groups.
 // - CTaskListWnd::OnContextMenu:
-//     swallow the legacy context-menu route.
+//     suppress the legacy separator context-menu route.
 // - CTaskBtnGroup::ShouldShowToolTip:
 //     legacy tooltip gate fallback.
 // - CTaskGroup::GetToolTipText:
 //     directly report no tooltip text for separator groups.
 //
-// No pointer press/move hooks, drag gesture hooks, TryMoveGroup hooks, or
-// jumplist-hover hooks are needed.
+// CTaskListWnd::TryMoveGroup is observed (never blocked) so successful native
+// pinned-item drags can be mirrored into the mod-owned state file. Separator
+// Unpin is a direct command from our Explorer-hosted MenuFlyout to desired state.
 // -----------------------------------------------------------------------------
 
 static void* g_taskGroupGetAppIdAddress;
@@ -1813,20 +3045,25 @@ static bool IsSeparatorTaskGroup(void* taskGroup) {
     }
 
     std::wstring_view appIdView(appId);
+    std::shared_lock lock(g_settingsMutex);
+
     for (const auto& separator : g_settings.separators) {
-        if (appIdView == std::wstring_view(separator.identity)) {
+        if (appIdView ==
+            std::wstring_view(separator.identity)) {
             return true;
         }
     }
 
     for (const auto& separator : g_storedSeparatorSettings) {
-        if (appIdView == std::wstring_view(separator.identity)) {
+        if (appIdView ==
+            std::wstring_view(separator.identity)) {
             return true;
         }
     }
 
     return appIdView ==
-        std::wstring_view(g_refreshPulseSetting.identity);
+        std::wstring_view(
+            g_refreshPulseSetting.identity);
 }
 
 static HRESULT WINAPI TaskListWnd_HandleClick_Hook(
@@ -1855,6 +3092,7 @@ static void WINAPI TaskListWnd_OnContextMenu_Hook(
     void* taskItem) {
     if (!g_unloading &&
         IsSeparatorTaskGroup(taskGroup)) {
+        Wh_Log(L"[CTX] Suppressed legacy separator context menu");
         return;
     }
 
@@ -1915,6 +3153,408 @@ static HRESULT WINAPI TaskGroup_GetToolTipText_Hook(
         cchText);
 }
 
+using TaskListWnd_IsPinned_t =
+    bool(WINAPI*)(void* pThis, void* taskGroup);
+static TaskListWnd_IsPinned_t
+    g_taskListWndIsPinned;
+
+using TaskListWnd_GetRelativeTaskOrder_t =
+    int(WINAPI*)(void* pThis, void* taskGroup);
+static TaskListWnd_GetRelativeTaskOrder_t
+    g_taskListWndGetRelativeTaskOrder;
+static TaskListWnd_GetRelativeTaskOrder_t
+    g_taskListWndMultiGetRelativeTaskOrder;
+
+using TaskListWnd_TryMoveGroup_t =
+    bool(WINAPI*)(void* pThis, void* taskGroup, unsigned int index);
+static TaskListWnd_TryMoveGroup_t
+    g_taskListWndTryMoveGroupOriginal;
+
+using TaskListWndMulti_IsPinned_t =
+    bool(WINAPI*)(void* pThis, void* taskGroup);
+static TaskListWndMulti_IsPinned_t
+    g_taskListWndMultiIsPinned;
+
+using TaskListWndMulti_TryMoveGroup_t =
+    bool(WINAPI*)(void* pThis, void* taskGroup, unsigned int index);
+static TaskListWndMulti_TryMoveGroup_t
+    g_taskListWndMultiTryMoveGroupOriginal;
+
+static thread_local int g_tryMoveGroupHookDepth = 0;
+
+static std::wstring CopyTaskGroupAppId(void* taskGroup) {
+    if (!taskGroup || !g_taskGroupGetAppIdAddress) {
+        return {};
+    }
+
+    using CTaskGroup_GetAppID_t =
+        const wchar_t*(WINAPI*)(void* pThis);
+    auto getAppId =
+        reinterpret_cast<CTaskGroup_GetAppID_t>(
+            g_taskGroupGetAppIdAddress);
+
+    const wchar_t* appId = getAppId(taskGroup);
+    return appId ? std::wstring(appId) : std::wstring();
+}
+
+static void ApplyPinnedMoveToSnapshot(
+    Settings& settings,
+    std::wstring_view movedAppId,
+    int oldIndex,
+    int newIndex) {
+    if (oldIndex == newIndex) {
+        return;
+    }
+
+    SeparatorSetting* movedSeparator = nullptr;
+    for (auto& separator : settings.separators) {
+        if (separator.identity == movedAppId) {
+            movedSeparator = &separator;
+            break;
+        }
+    }
+
+    for (auto& separator : settings.separators) {
+        if (&separator == movedSeparator || separator.targetIndex < 0) {
+            continue;
+        }
+
+        if (oldIndex < newIndex) {
+            if (separator.targetIndex > oldIndex &&
+                separator.targetIndex <= newIndex) {
+                separator.targetIndex--;
+            }
+        } else {
+            if (separator.targetIndex >= newIndex &&
+                separator.targetIndex < oldIndex) {
+                separator.targetIndex++;
+            }
+        }
+    }
+
+    if (movedSeparator) {
+        movedSeparator->targetIndex = newIndex;
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Native taskbar mutation persistence.
+//
+// Windhawk no longer owns separator position/list configuration. TryMoveGroup
+// mirrors native reorder operations into the in-memory separator state. The
+// Taskbar.View drag-completion hook persists that state exactly once when the
+// drag ends. Add and Unpin have their own discrete commit points and save the
+// same state file directly.
+// -----------------------------------------------------------------------------
+
+static void PersistPendingSeparatorState() {
+    std::lock_guard<std::mutex> mutationLock(
+        g_settingsMutationMutex);
+
+    if (!g_separatorStateDirty ||
+        g_unloading) {
+        return;
+    }
+
+    Settings snapshot;
+    {
+        std::shared_lock lock(g_settingsMutex);
+        snapshot = g_settings;
+    }
+
+    if (SaveSeparatorStateFile(snapshot)) {
+        g_separatorStateDirty = false;
+        Wh_Log(
+            L"[STATE] Persisted native taskbar reorder");
+    } else {
+        Wh_Log(
+            L"[STATE] Failed to persist native taskbar reorder; "
+            L"will retry on the next commit/unload");
+    }
+}
+
+static void RecordNativePinnedMove(
+    std::wstring_view movedAppId,
+    int oldIndex,
+    int newIndex) {
+    if (oldIndex < 0 ||
+        newIndex < 0 ||
+        oldIndex == newIndex) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> mutationLock(
+        g_settingsMutationMutex);
+
+    bool touchesSeparator = false;
+
+    {
+        std::unique_lock lock(g_settingsMutex);
+
+        Settings before = g_settings;
+
+        ApplyPinnedMoveToSnapshot(
+            g_settings,
+            movedAppId,
+            oldIndex,
+            newIndex);
+
+        touchesSeparator =
+            !SettingsSnapshotsEqual(
+                before,
+                g_settings);
+
+        if (!touchesSeparator) {
+            return;
+        }
+
+        // Windows already performed this move. Mirror it into the applied and
+        // stale-artifact snapshots immediately so the backend never "corrects"
+        // the user's native taskbar order while the drag is still in progress.
+        ApplyPinnedMoveToSnapshot(
+            g_appliedSettings,
+            movedAppId,
+            oldIndex,
+            newIndex);
+
+        for (auto& stored :
+             g_storedSeparatorSettings) {
+            if (stored.identity == movedAppId) {
+                stored.targetIndex = newIndex;
+                continue;
+            }
+
+            if (stored.targetIndex < 0) {
+                continue;
+            }
+
+            if (oldIndex < newIndex) {
+                if (stored.targetIndex > oldIndex &&
+                    stored.targetIndex <= newIndex) {
+                    stored.targetIndex--;
+                }
+            } else if (
+                stored.targetIndex >= newIndex &&
+                stored.targetIndex < oldIndex) {
+                stored.targetIndex++;
+            }
+        }
+
+        g_separatorStateDirty = true;
+    }
+
+    Wh_Log(
+        L"[NATIVE-MOVE] staged native pinned move appId='%s' %d -> %d",
+        std::wstring(movedAppId).c_str(),
+        oldIndex,
+        newIndex);
+}
+
+static bool RunTryMoveGroupObserver(
+    TaskListWnd_TryMoveGroup_t original,
+    TaskListWnd_IsPinned_t isPinnedFunction,
+    TaskListWnd_GetRelativeTaskOrder_t getRelativeTaskOrder,
+    const wchar_t* route,
+    void* pThis,
+    void* taskGroup,
+    unsigned int index) {
+    const bool outer =
+        g_tryMoveGroupHookDepth++ == 0;
+
+    int oldIndex = -1;
+    int newIndex = -1;
+    bool pinned = false;
+    std::wstring appId;
+
+    if (!g_unloading &&
+        outer &&
+        taskGroup &&
+        getRelativeTaskOrder &&
+        isPinnedFunction) {
+        oldIndex =
+            getRelativeTaskOrder(
+                pThis,
+                taskGroup);
+        pinned =
+            isPinnedFunction(
+                pThis,
+                taskGroup);
+        appId =
+            CopyTaskGroupAppId(taskGroup);
+    }
+
+    bool result =
+        original(
+            pThis,
+            taskGroup,
+            index);
+
+    if (!g_unloading &&
+        outer &&
+        taskGroup &&
+        getRelativeTaskOrder) {
+        newIndex =
+            getRelativeTaskOrder(
+                pThis,
+                taskGroup);
+    }
+
+    --g_tryMoveGroupHookDepth;
+
+    if (!g_unloading &&
+        outer &&
+        result &&
+        pinned &&
+        oldIndex >= 0 &&
+        newIndex >= 0 &&
+        oldIndex != newIndex) {
+        Wh_Log(
+            L"[NATIVE-MOVE] %s appId='%s' relative=%d -> %d argTarget=%u",
+            route,
+            appId.c_str(),
+            oldIndex,
+            newIndex,
+            index);
+
+        RecordNativePinnedMove(
+            appId,
+            oldIndex,
+            newIndex);
+    }
+
+    return result;
+}
+
+static bool WINAPI TaskListWnd_TryMoveGroup_Hook(
+    void* pThis,
+    void* taskGroup,
+    unsigned int index) {
+    return RunTryMoveGroupObserver(
+        g_taskListWndTryMoveGroupOriginal,
+        g_taskListWndIsPinned,
+        g_taskListWndGetRelativeTaskOrder,
+        L"CTaskListWnd::TryMoveGroup",
+        pThis,
+        taskGroup,
+        index);
+}
+
+static bool WINAPI TaskListWndMulti_TryMoveGroup_Hook(
+    void* pThis,
+    void* taskGroup,
+    unsigned int index) {
+    return RunTryMoveGroupObserver(
+        reinterpret_cast<TaskListWnd_TryMoveGroup_t>(
+            g_taskListWndMultiTryMoveGroupOriginal),
+        reinterpret_cast<TaskListWnd_IsPinned_t>(
+            g_taskListWndMultiIsPinned),
+        g_taskListWndMultiGetRelativeTaskOrder,
+        L"CTaskListWndMulti::TryMoveGroup",
+        pThis,
+        taskGroup,
+        index);
+}
+
+static void ShiftSeparatorTargetsAfterRemoval(
+    Settings& settings,
+    std::wstring_view removedIdentity,
+    int removedIndex) {
+    settings.separators.erase(
+        std::remove_if(
+            settings.separators.begin(),
+            settings.separators.end(),
+            [removedIdentity](const SeparatorSetting& separator) {
+                return separator.identity ==
+                    removedIdentity;
+            }),
+        settings.separators.end());
+
+    if (removedIndex >= 0) {
+        for (auto& separator :
+             settings.separators) {
+            if (separator.targetIndex >
+                removedIndex) {
+                separator.targetIndex--;
+            }
+        }
+    }
+
+    for (size_t i = 0;
+         i < settings.separators.size();
+         i++) {
+        settings.separators[i].sourceIndex =
+            static_cast<int>(i);
+        settings.separators[i].ordinal =
+            static_cast<int>(i) + 1;
+    }
+}
+
+
+static void RemoveSeparatorFromContextMenu(
+    std::wstring identity) {
+    if (identity.empty() ||
+        g_unloading ||
+        g_internalCleanupInProgress.load()) {
+        return;
+    }
+
+    Settings updated;
+    int removedIndex = -1;
+
+    {
+        std::lock_guard<std::mutex> mutationLock(
+            g_settingsMutationMutex);
+
+        {
+            std::shared_lock lock(g_settingsMutex);
+            updated = g_settings;
+
+            const SeparatorSetting* existing =
+                FindSeparatorByIdentity(
+                    g_settings,
+                    identity);
+            if (!existing) {
+                return;
+            }
+
+            removedIndex = existing->targetIndex;
+        }
+
+        ShiftSeparatorTargetsAfterRemoval(
+            updated,
+            identity,
+            removedIndex);
+
+        // State is authoritative. Persist the user's intent before touching the
+        // live pin list; a failed write leaves both desired and actual state
+        // unchanged.
+        if (!SaveSeparatorStateFile(updated)) {
+            Wh_Log(
+                L"[NATIVE-UNPIN] State write failed; separator kept identity='%s'",
+                identity.c_str());
+            return;
+        }
+
+        {
+            std::unique_lock lock(g_settingsMutex);
+            g_settings = updated;
+            g_backendHasConverged = false;
+            g_separatorStateDirty = false;
+        }
+    }
+
+    Wh_Log(
+        L"[NATIVE-UNPIN] Removed separator from desired state identity='%s' index=%d",
+        identity.c_str(),
+        removedIndex);
+
+    // Keep the old applied/stored snapshots until the backend has actually
+    // unpinned the shortcut. That keeps the still-visible button recognized,
+    // styled, and inert during the short convergence window.
+    RequestBackendReconcile();
+}
+
 using TrayUI_StartTaskbar_t =
     void(WINAPI*)(void* pThis);
 
@@ -1963,6 +3603,51 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             },
             &g_taskGroupGetAppIdAddress,
             nullptr,
+        },
+        {
+            {
+                LR"(public: virtual bool __cdecl CTaskListWnd::IsPinned(struct ITaskGroup *))"
+            },
+            &g_taskListWndIsPinned,
+            nullptr,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl CTaskListWnd::GetRelativeTaskOrder(struct ITaskGroup *))"
+            },
+            &g_taskListWndGetRelativeTaskOrder,
+            nullptr,
+        },
+        {
+            {
+                LR"(public: virtual bool __cdecl CTaskListWnd::TryMoveGroup(struct ITaskGroup *,unsigned int))"
+            },
+            &g_taskListWndTryMoveGroupOriginal,
+            TaskListWnd_TryMoveGroup_Hook,
+        },
+        {
+            {
+                LR"(public: virtual bool __cdecl CTaskListWndMulti::IsPinned(struct ITaskGroup *))"
+            },
+            &g_taskListWndMultiIsPinned,
+            nullptr,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl CTaskListWndMulti::GetRelativeTaskOrder(struct ITaskGroup *))"
+            },
+            &g_taskListWndMultiGetRelativeTaskOrder,
+            nullptr,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual bool __cdecl CTaskListWndMulti::TryMoveGroup(struct ITaskGroup *,unsigned int))"
+            },
+            &g_taskListWndMultiTryMoveGroupOriginal,
+            TaskListWndMulti_TryMoveGroup_Hook,
+            true,
         },
         {
             {
@@ -2211,6 +3896,7 @@ static HRESULT CreatePinManager(
 }
 
 static bool IsBackendStopRequested();
+static bool IsBackendPassSuperseded();
 
 static bool UnpinAndDeleteShortcut(
     IPinManagerInterop3* pinManager,
@@ -2276,11 +3962,13 @@ static bool UnpinAndDeleteShortcut(
 }
 
 static bool CleanupStaleSeparatorShortcuts(
-    IPinManagerInterop3* pinManager) {
+    IPinManagerInterop3* pinManager,
+    const Settings& settings) {
     std::vector<std::wstring> stalePaths;
 
     for (const auto& path : EnumerateSeparatorShortcuts()) {
-        if (!IsCurrentSeparatorIdentity(
+        if (!IsIdentityInSettings(
+                settings,
                 GetShortcutIdentity(path))) {
             stalePaths.push_back(path);
         }
@@ -2291,21 +3979,21 @@ static bool CleanupStaleSeparatorShortcuts(
     }
 
     Wh_Log(
-        L"[CLEANUP] Removing %zu shortcut(s) from an older settings snapshot",
+        L"[SYNC] Removing %zu shortcut(s) not present in desired settings",
         stalePaths.size());
 
     bool success = true;
     for (auto it = stalePaths.rbegin();
          it != stalePaths.rend();
          ++it) {
-        if (IsBackendStopRequested()) {
+        if (IsBackendPassSuperseded()) {
             return false;
         }
 
         if (!UnpinAndDeleteShortcut(
                 pinManager,
                 *it,
-                L"CLEANUP")) {
+                L"SYNC")) {
             success = false;
         }
     }
@@ -2317,43 +4005,90 @@ static bool CleanupStaleSeparatorShortcuts(
 // Creation / positioning.
 // -----------------------------------------------------------------------------
 
-static bool PrepareSeparatorFiles() {
-    if (g_settings.separators.empty()) {
+static bool PrepareSeparatorFiles(
+    const Settings& settings,
+    const Settings& appliedSettings,
+    const SeparatorSetting& refreshPulse,
+    std::vector<std::wstring>* identitiesToPin) {
+    if (IsBackendPassSuperseded()) {
+        return false;
+    }
+
+    identitiesToPin->clear();
+
+    if (settings.separators.empty()) {
         Wh_Log(L"[PIN] No separators configured");
         return true;
     }
 
-    if (!WriteBinaryFile(
+    // The icon file is shared by every separator shortcut. Rewriting it during
+    // a live settings change needlessly invalidates Explorer's icon-cache
+    // assumptions, so leave an existing file untouched.
+    if (!FileExists(g_iconPath) &&
+        !WriteBinaryFile(
             g_iconPath,
             kSeparatorIcon,
             static_cast<DWORD>(sizeof(kSeparatorIcon)))) {
         return false;
     }
 
-    // First create every backing shortcut, before mutating the taskbar.
-    for (const auto& separator : g_settings.separators) {
+    // Stable separator shortcuts are immutable while their identity survives.
+    // Overwriting a pinned .lnk in place can make Explorer keep the taskbar
+    // button while losing its cached glyph. Create only genuinely new/missing
+    // backing files; survivors keep the exact file Windows already knows.
+    for (const auto& separator : settings.separators) {
+        if (IsBackendPassSuperseded()) {
+            return false;
+        }
+
         std::wstring shortcutPath =
             GetSeparatorShortcutPath(separator);
+        bool shortcutCreated = false;
 
-        HRESULT hr =
-            CreateSeparatorShortcut(
-                separator,
-                shortcutPath);
+        if (!FileExists(shortcutPath)) {
+            HRESULT hr =
+                CreateSeparatorShortcut(
+                    separator,
+                    shortcutPath);
 
-        if (FAILED(hr)) {
-            Wh_Log(
-                L"[PIN] Failed to create separator #%d hr=0x%08X",
-                separator.ordinal,
-                static_cast<unsigned int>(hr));
-            return false;
+            if (FAILED(hr)) {
+                Wh_Log(
+                    L"[PIN] Failed to create separator #%d hr=0x%08X",
+                    separator.ordinal,
+                    static_cast<unsigned int>(hr));
+                return false;
+            }
+
+            shortcutCreated = true;
+        }
+
+        // Pin only identities that aren't part of the last converged snapshot,
+        // plus a survivor whose backing file had to be recovered. This keeps
+        // ordinary add/remove/reorder operations from re-asserting every
+        // already-correct pinned item.
+        const SeparatorSetting* appliedSeparator =
+            FindSeparatorByStableId(
+                appliedSettings,
+                separator.stableId);
+
+        if (shortcutCreated ||
+            !appliedSeparator ||
+            appliedSeparator->identity != separator.identity) {
+            identitiesToPin->push_back(
+                separator.identity);
         }
     }
 
+    if (IsBackendPassSuperseded()) {
+        return false;
+    }
+
+    // The refresh helper is intentionally transient, so recreating it is safe.
     std::wstring refreshShortcutPath =
-        GetSeparatorShortcutPath(g_refreshPulseSetting);
+        GetSeparatorShortcutPath(refreshPulse);
     HRESULT refreshHr =
         CreateSeparatorShortcut(
-            g_refreshPulseSetting,
+            refreshPulse,
             refreshShortcutPath);
 
     if (FAILED(refreshHr)) {
@@ -2395,20 +4130,71 @@ static bool IsBackendStopRequested() {
             0) == WAIT_OBJECT_0;
 }
 
-static bool WaitForBackendStop(DWORD timeout) {
-    return g_currentBackendStopEvent &&
+static bool IsBackendReconcileRequested() {
+    return g_currentBackendWakeEvent &&
         WaitForSingleObject(
-            g_currentBackendStopEvent,
-            timeout) == WAIT_OBJECT_0;
+            g_currentBackendWakeEvent,
+            0) == WAIT_OBJECT_0;
 }
 
-static bool PinSeparators(IPinManagerInterop3* pinManager) {
+static bool IsBackendPassSuperseded() {
+    return IsBackendStopRequested() ||
+        IsBackendReconcileRequested();
+}
+
+enum class BackendWaitResult {
+    Timeout,
+    Stop,
+    Reconcile,
+    Failed,
+};
+
+static BackendWaitResult WaitForBackendStopOrReconcile(
+    DWORD timeout) {
+    HANDLE events[] = {
+        g_currentBackendStopEvent,
+        g_currentBackendWakeEvent,
+    };
+
+    if (!events[0] || !events[1]) {
+        return BackendWaitResult::Failed;
+    }
+
+    DWORD result = WaitForMultipleObjects(
+        ARRAYSIZE(events),
+        events,
+        FALSE,
+        timeout);
+
+    switch (result) {
+        case WAIT_TIMEOUT:
+            return BackendWaitResult::Timeout;
+        case WAIT_OBJECT_0:
+            return BackendWaitResult::Stop;
+        case WAIT_OBJECT_0 + 1:
+            return BackendWaitResult::Reconcile;
+        default:
+            return BackendWaitResult::Failed;
+    }
+}
+
+static bool PinSeparators(
+    IPinManagerInterop3* pinManager,
+    const Settings& settings,
+    const std::vector<std::wstring>& identitiesToPin) {
     bool success = true;
 
-    // Complete the entire pin phase before positioning anything. Retrying this
-    // operation is safe because each shortcut has a stable path and AppUserModelID.
-    for (const auto& separator : g_settings.separators) {
-        if (IsBackendStopRequested()) {
+    // Only new/recovered identities need a pin mutation. Existing stable pins
+    // are left untouched and are handled solely by the positioning pass.
+    for (const auto& separator : settings.separators) {
+        if (std::find(
+                identitiesToPin.begin(),
+                identitiesToPin.end(),
+                separator.identity) == identitiesToPin.end()) {
+            continue;
+        }
+
+        if (IsBackendPassSuperseded()) {
             return false;
         }
 
@@ -2449,14 +4235,16 @@ static bool PinSeparators(IPinManagerInterop3* pinManager) {
     return success;
 }
 
-static bool PositionSeparators(IPinManagerInterop3* pinManager) {
+static bool PositionSeparators(
+    IPinManagerInterop3* pinManager,
+    const Settings& settings) {
     bool success = true;
 
     // Moving in ascending destination order makes multiple requested positions
     // deterministic as items are pulled forward from their initial appended
     // locations.
     std::vector<SeparatorSetting> moveOrder =
-        g_settings.separators;
+        settings.separators;
 
     std::stable_sort(
         moveOrder.begin(),
@@ -2466,8 +4254,18 @@ static bool PositionSeparators(IPinManagerInterop3* pinManager) {
         });
 
     for (const auto& separator : moveOrder) {
-        if (IsBackendStopRequested()) {
+        if (IsBackendPassSuperseded()) {
             return false;
+        }
+
+        // targetIndex=-1 is used by the native Add separator command. The
+        // PinManager append is already the desired final placement, so don't
+        // issue a MoveTaskbarPin until/unless the user later drags it.
+        if (separator.targetIndex < 0) {
+            Wh_Log(
+                L"[MOVE] Separator #%d left at native appended position",
+                separator.ordinal);
+            continue;
         }
 
         std::wstring shortcutPath =
@@ -2510,13 +4308,15 @@ static bool PositionSeparators(IPinManagerInterop3* pinManager) {
     return success;
 }
 
-static bool PulseTaskbarPinList(IPinManagerInterop3* pinManager) {
-    if (IsBackendStopRequested()) {
+static bool PulseTaskbarPinList(
+    IPinManagerInterop3* pinManager,
+    const SeparatorSetting& refreshPulse) {
+    if (IsBackendPassSuperseded()) {
         return false;
     }
 
     std::wstring shortcutPath =
-        GetSeparatorShortcutPath(g_refreshPulseSetting);
+        GetSeparatorShortcutPath(refreshPulse);
 
     PIDLIST_ABSOLUTE pidl = nullptr;
     HRESULT hr = GetPidlForPath(shortcutPath, &pidl);
@@ -2564,32 +4364,41 @@ static bool PulseTaskbarPinList(IPinManagerInterop3* pinManager) {
     return false;
 }
 
-static bool CreateAndPinSeparators() {
-    if (g_settings.separators.empty() &&
+static bool ConvergeSeparatorPins(
+    const Settings& settings,
+    const Settings& appliedSettings,
+    const SeparatorSetting& refreshPulse) {
+    if (settings.separators.empty() &&
         EnumerateSeparatorShortcuts().empty()) {
         DeleteFileIfPresent(g_iconPath);
         return true;
     }
 
-    constexpr int kStartupAttempts = 5;
-    constexpr DWORD kInitialStartupRetryDelay = 250;
-    constexpr DWORD kStartupRetryBackoff = 2;
-    DWORD retryDelay = kInitialStartupRetryDelay;
+    constexpr int kConvergeAttempts = 5;
+    constexpr DWORD kInitialRetryDelay = 250;
+    constexpr DWORD kRetryBackoff = 2;
+    DWORD retryDelay = kInitialRetryDelay;
     bool staleCleanupComplete = false;
     bool filesPrepared = false;
+    std::vector<std::wstring> identitiesToPin;
 
     for (int attempt = 1;
-         attempt <= kStartupAttempts;
+         attempt <= kConvergeAttempts;
          ++attempt) {
         if (IsBackendStopRequested()) {
-            Wh_Log(L"[INIT] Separator startup cancelled");
+            Wh_Log(L"[SYNC] Separator reconciliation cancelled");
+            return false;
+        }
+
+        if (IsBackendReconcileRequested()) {
+            Wh_Log(L"[SYNC] Reconciliation superseded by newer settings");
             return false;
         }
 
         Wh_Log(
-            L"[INIT] Separator startup attempt %d/%d",
+            L"[SYNC] Separator reconciliation attempt %d/%d",
             attempt,
-            kStartupAttempts);
+            kConvergeAttempts);
 
         IPinManagerInterop3* pinManager = nullptr;
         HRESULT hr = CreatePinManager(&pinManager);
@@ -2601,38 +4410,55 @@ static bool CreateAndPinSeparators() {
         bool refreshed = false;
 
         if (SUCCEEDED(hr) && pinManager) {
-            // Storage, rather than the current settings snapshot, is the
-            // durable list of shortcuts this mod owns. Remove old identities
-            // before creating any paths for the new snapshot.
+            // Storage is the durable list of shortcut artifacts this mod owns.
+            // Remove only identities not present in the desired snapshot;
+            // unchanged separators are never unpinned during live refresh.
             if (!staleCleanupComplete) {
                 staleCleanupComplete =
-                    CleanupStaleSeparatorShortcuts(pinManager);
+                    CleanupStaleSeparatorShortcuts(
+                        pinManager,
+                        settings);
                 staleShortcutsRemoved = staleCleanupComplete;
             }
 
             if (staleShortcutsRemoved && !filesPrepared) {
-                filesPrepared = PrepareSeparatorFiles();
+                filesPrepared =
+                    PrepareSeparatorFiles(
+                        settings,
+                        appliedSettings,
+                        refreshPulse,
+                        &identitiesToPin);
                 filesReady = filesPrepared;
             }
 
             if (staleShortcutsRemoved && filesReady &&
-                g_settings.separators.empty()) {
+                settings.separators.empty()) {
                 DeleteFileIfPresent(g_iconPath);
                 pinsReady = true;
                 positioned = true;
                 refreshed = true;
             } else if (staleShortcutsRemoved && filesReady) {
-                pinsReady = PinSeparators(pinManager);
+                pinsReady =
+                    PinSeparators(
+                        pinManager,
+                        settings,
+                        identitiesToPin);
 
                 if (pinsReady) {
-                    positioned = PositionSeparators(pinManager);
+                    positioned =
+                        PositionSeparators(
+                            pinManager,
+                            settings);
 
                     if (positioned) {
-                        refreshed = PulseTaskbarPinList(pinManager);
+                        refreshed =
+                            PulseTaskbarPinList(
+                                pinManager,
+                                refreshPulse);
                     }
                 } else {
                     Wh_Log(
-                        L"[INIT] Pin pass incomplete; skipping move pass");
+                        L"[SYNC] Pin pass incomplete; skipping move pass");
                 }
             }
 
@@ -2642,34 +4468,49 @@ static bool CreateAndPinSeparators() {
         if (staleShortcutsRemoved && filesReady &&
             pinsReady && positioned && refreshed) {
             Wh_Log(
-                L"[INIT] Separator startup converged on attempt %d",
+                L"[SYNC] Separator state converged on attempt %d",
                 attempt);
             return true;
         }
 
         if (IsBackendStopRequested()) {
-            Wh_Log(L"[INIT] Separator startup cancelled");
+            Wh_Log(L"[SYNC] Separator reconciliation cancelled");
             return false;
         }
 
-        if (attempt < kStartupAttempts) {
+        if (attempt < kConvergeAttempts) {
             Wh_Log(
-                L"[INIT] Separator startup attempt failed; "
+                L"[SYNC] Reconciliation attempt failed; "
                 L"retrying in %u ms",
                 retryDelay);
 
-            if (WaitForBackendStop(retryDelay)) {
-                Wh_Log(L"[INIT] Separator startup cancelled");
+            BackendWaitResult waitResult =
+                WaitForBackendStopOrReconcile(retryDelay);
+
+            if (waitResult == BackendWaitResult::Stop) {
+                Wh_Log(L"[SYNC] Separator reconciliation cancelled");
                 return false;
             }
 
-            retryDelay *= kStartupRetryBackoff;
+            if (waitResult == BackendWaitResult::Reconcile) {
+                Wh_Log(L"[SYNC] Reconciliation superseded by newer settings");
+                return false;
+            }
+
+            if (waitResult == BackendWaitResult::Failed) {
+                Wh_Log(
+                    L"[SYNC] Reconciliation retry wait failed error=%u",
+                    GetLastError());
+                return false;
+            }
+
+            retryDelay *= kRetryBackoff;
         }
     }
 
     Wh_Log(
-        L"[INIT] Separator startup did not converge after %d attempts",
-        kStartupAttempts);
+        L"[SYNC] Separator state did not converge after %d attempts",
+        kConvergeAttempts);
     return false;
 }
 
@@ -2737,9 +4578,20 @@ static bool UnpinAndDeleteSeparators(bool recoverMissingPins) {
 
 static HWND FindCurrentProcessTaskbarWnd();
 
+struct BackendThreadParameters {
+    HANDLE stopEvent;
+    HANDLE wakeEvent;
+};
+
 static DWORD WINAPI BackendThreadProc(void* parameter) {
-    g_currentBackendStopEvent =
-        static_cast<HANDLE>(parameter);
+    auto* parameters =
+        static_cast<BackendThreadParameters*>(parameter);
+    HANDLE stopEvent = parameters->stopEvent;
+    HANDLE wakeEvent = parameters->wakeEvent;
+    delete parameters;
+
+    g_currentBackendStopEvent = stopEvent;
+    g_currentBackendWakeEvent = wakeEvent;
 
     Wh_Log(L"[INIT] Separator backend worker starting");
 
@@ -2752,18 +4604,96 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
         Wh_Log(
             L"[INIT] Backend worker CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(hrInit));
+        g_currentBackendStopEvent = nullptr;
+        g_currentBackendWakeEvent = nullptr;
         return 0;
     }
 
-    bool success = CreateAndPinSeparators();
+    for (;;) {
+        // A settings notification that arrived before this iteration is
+        // already represented by the snapshot we are about to take.
+        ResetEvent(wakeEvent);
+
+        Settings settings;
+        Settings appliedSettings;
+        SeparatorSetting refreshPulse;
+
+        {
+            std::shared_lock lock(g_settingsMutex);
+            settings = g_settings;
+            appliedSettings = g_appliedSettings;
+            refreshPulse = g_refreshPulseSetting;
+        }
+
+        bool success =
+            ConvergeSeparatorPins(
+                settings,
+                appliedSettings,
+                refreshPulse);
+
+        if (success) {
+            {
+                std::unique_lock lock(g_settingsMutex);
+
+                // Record what the pin backend actually converged to. If only
+                // presentation/logging metadata changed while the backend was
+                // working, adopt the newer snapshot too because no additional
+                // PinManager work is required.
+                g_appliedSettings = settings;
+
+                if (!SettingsRequireBackendReconcile(
+                        settings,
+                        g_settings)) {
+                    g_appliedSettings = g_settings;
+                    g_backendHasConverged = true;
+                } else {
+                    g_backendHasConverged = false;
+                }
+            }
+
+            RefreshStoredSeparatorSettings();
+        } else if (!IsBackendStopRequested()) {
+            g_backendHasConverged = false;
+
+            if (!IsBackendReconcileRequested()) {
+                Wh_Log(
+                    L"[SYNC] One or more separator operations failed; "
+                    L"waiting for another settings/retry request");
+            }
+        }
+
+        if (IsBackendStopRequested()) {
+            break;
+        }
+
+        HANDLE events[] = {
+            stopEvent,
+            wakeEvent,
+        };
+
+        DWORD waitResult =
+            WaitForMultipleObjects(
+                ARRAYSIZE(events),
+                events,
+                FALSE,
+                INFINITE);
+
+        if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
+
+        if (waitResult != WAIT_OBJECT_0 + 1) {
+            Wh_Log(
+                L"[SYNC] Backend wait failed result=0x%08X error=%u",
+                waitResult,
+                GetLastError());
+            break;
+        }
+    }
 
     CoUninitialize();
-
-    if (!success && !IsBackendStopRequested()) {
-        Wh_Log(
-            L"[INIT] One or more separator operations failed; "
-            L"mod remains loaded so unload can still clean up");
-    }
+    g_currentBackendStopEvent = nullptr;
+    g_currentBackendWakeEvent = nullptr;
 
     Wh_Log(L"[INIT] Separator backend worker finished");
     return 0;
@@ -2828,8 +4758,42 @@ static bool CleanupSeparatorArtifacts(bool recoverMissingPins) {
 }
 
 static bool StartBackendWorkerLocked() {
-    if (g_backendStopped || g_backendThread) {
+    if (g_backendStopped) {
         return true;
+    }
+
+    if (g_backendThread) {
+        DWORD threadState =
+            WaitForSingleObject(
+                g_backendThread,
+                0);
+
+        if (threadState == WAIT_TIMEOUT) {
+            return true;
+        }
+
+        if (threadState == WAIT_FAILED) {
+            Wh_Log(
+                L"[INIT] Backend worker handle wait failed error=%u; "
+                L"recreating worker",
+                GetLastError());
+        }
+
+        // The long-lived worker should normally only exit during shutdown.
+        // If initialization/waiting failed, allow a later readiness/settings
+        // event to create a fresh worker.
+        CloseHandle(g_backendThread);
+        g_backendThread = nullptr;
+
+        if (g_backendWakeEvent) {
+            CloseHandle(g_backendWakeEvent);
+            g_backendWakeEvent = nullptr;
+        }
+
+        if (g_backendStopEvent) {
+            CloseHandle(g_backendStopEvent);
+            g_backendStopEvent = nullptr;
+        }
     }
 
     g_backendStopEvent =
@@ -2841,8 +4805,39 @@ static bool StartBackendWorkerLocked() {
 
     if (!g_backendStopEvent) {
         Wh_Log(
-            L"[INIT] CreateEvent for backend worker failed error=%u",
+            L"[INIT] CreateEvent for backend stop failed error=%u",
             GetLastError());
+        return false;
+    }
+
+    g_backendWakeEvent =
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr);
+
+    if (!g_backendWakeEvent) {
+        Wh_Log(
+            L"[INIT] CreateEvent for backend wake failed error=%u",
+            GetLastError());
+        CloseHandle(g_backendStopEvent);
+        g_backendStopEvent = nullptr;
+        return false;
+    }
+
+    auto* parameters =
+        new (std::nothrow) BackendThreadParameters{
+            .stopEvent = g_backendStopEvent,
+            .wakeEvent = g_backendWakeEvent,
+        };
+
+    if (!parameters) {
+        Wh_Log(L"[INIT] Failed to allocate backend worker parameters");
+        CloseHandle(g_backendWakeEvent);
+        CloseHandle(g_backendStopEvent);
+        g_backendWakeEvent = nullptr;
+        g_backendStopEvent = nullptr;
         return false;
     }
 
@@ -2851,7 +4846,7 @@ static bool StartBackendWorkerLocked() {
             nullptr,
             0,
             BackendThreadProc,
-            g_backendStopEvent,
+            parameters,
             0,
             nullptr);
 
@@ -2859,7 +4854,10 @@ static bool StartBackendWorkerLocked() {
         Wh_Log(
             L"[INIT] CreateThread for backend worker failed error=%u",
             GetLastError());
+        delete parameters;
+        CloseHandle(g_backendWakeEvent);
         CloseHandle(g_backendStopEvent);
+        g_backendWakeEvent = nullptr;
         g_backendStopEvent = nullptr;
         return false;
     }
@@ -2874,26 +4872,156 @@ static void StartBackendWorker() {
         return;
     }
 
+    bool workerWasRunning =
+        g_backendThread &&
+        WaitForSingleObject(
+            g_backendThread,
+            0) == WAIT_TIMEOUT;
+
     if (!StartBackendWorkerLocked()) {
         Wh_Log(L"[INIT] Failed to start separator backend worker");
+        return;
     }
+
+    // TrayUI::StartTaskbar can run again if Explorer reconstructs the taskbar
+    // in-process. A persistent worker already exists in that case, so wake it
+    // to re-assert the pin order and refresh pulse for the new presentation.
+    if (workerWasRunning && g_backendWakeEvent) {
+        SetEvent(g_backendWakeEvent);
+    }
+}
+
+static void RequestBackendReconcile() {
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+
+    if (g_unloading || g_backendStopped) {
+        return;
+    }
+
+    // Preserve the Stage A readiness policy: if the taskbar hasn't been
+    // created yet, TrayUI::StartTaskbar will start the worker later and it
+    // will consume the newest desired settings snapshot.
+    if (!g_backendThread &&
+        !FindCurrentProcessTaskbarWnd()) {
+        return;
+    }
+
+    // Always go through StartBackendWorkerLocked. Besides creating a missing
+    // worker, it notices a worker that exited unexpectedly and recreates it.
+    if (!StartBackendWorkerLocked()) {
+        Wh_Log(
+            L"[SYNC] Failed to start separator backend worker");
+        return;
+    }
+
+    if (g_backendWakeEvent) {
+        SetEvent(g_backendWakeEvent);
+    }
+}
+
+
+static void AddSeparatorFromTaskbarMenu() {
+    if (g_unloading ||
+        g_internalCleanupInProgress.load()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> mutationLock(
+        g_settingsMutationMutex);
+
+    Settings updated;
+    {
+        std::shared_lock lock(g_settingsMutex);
+        updated = g_settings;
+    }
+
+    std::wstring stableId;
+    const auto alreadyUsed =
+        [&updated](std::wstring_view candidate) {
+            return std::any_of(
+                updated.separators.begin(),
+                updated.separators.end(),
+                [candidate](const SeparatorSetting& separator) {
+                    return separator.stableId ==
+                        candidate;
+                });
+        };
+
+    do {
+        stableId = GenerateStableId();
+    } while (alreadyUsed(stableId));
+
+    int sourceIndex =
+        static_cast<int>(
+            updated.separators.size());
+
+    updated.separators.push_back({
+        .ordinal = sourceIndex + 1,
+        .sourceIndex = sourceIndex,
+        // Let Windows keep the freshly pinned item at its native appended
+        // position. The first native drag gives it an explicit index.
+        .targetIndex = -1,
+        .width = updated.width,
+        .stableId = stableId,
+        .identity = BuildSeparatorIdentity(
+            updated.identifierPrefix,
+            stableId),
+    });
+
+    // Persist before publishing the desired state. If storage fails, no pin is
+    // created and the taskbar remains unchanged.
+    if (!SaveSeparatorStateFile(updated)) {
+        Wh_Log(
+            L"[NATIVE-ADD] State write failed; separator not added");
+        return;
+    }
+
+    {
+        std::unique_lock lock(g_settingsMutex);
+        g_settings = updated;
+        g_backendHasConverged = false;
+        g_separatorStateDirty = false;
+    }
+
+    Wh_Log(
+        L"[NATIVE-ADD] Added separator identity='%s' at native end",
+        updated.separators.back().identity.c_str());
+
+    RefreshStoredSeparatorSettings();
+    RequestBackendReconcile();
 }
 
 static void StopBackendWorker() {
     HANDLE thread = nullptr;
     HANDLE stopEvent = nullptr;
+    HANDLE wakeEvent = nullptr;
 
     {
         std::lock_guard<std::mutex> lock(g_lifecycleMutex);
 
-        // Permanent latch: no loader-hook callback can create a worker after
-        // shutdown begins.
+        // Permanent latch: no loader-hook callback or settings callback can
+        // create/wake a worker after shutdown begins.
         g_backendStopped = true;
-        stopEvent = std::exchange(g_backendStopEvent, nullptr);
-        thread = std::exchange(g_backendThread, nullptr);
+        g_backendHasConverged = false;
+
+        stopEvent =
+            std::exchange(
+                g_backendStopEvent,
+                nullptr);
+        wakeEvent =
+            std::exchange(
+                g_backendWakeEvent,
+                nullptr);
+        thread =
+            std::exchange(
+                g_backendThread,
+                nullptr);
 
         if (stopEvent) {
             SetEvent(stopEvent);
+        }
+        if (wakeEvent) {
+            SetEvent(wakeEvent);
         }
     }
 
@@ -2905,6 +5033,10 @@ static void StopBackendWorker() {
 
         WaitForSingleObject(thread, INFINITE);
         CloseHandle(thread);
+    }
+
+    if (wakeEvent) {
+        CloseHandle(wakeEvent);
     }
 
     if (stopEvent) {
@@ -2939,18 +5071,22 @@ static bool IsMainExplorerProcess() {
            commandLine.find(L" -embedding") == std::wstring::npos;
 }
 
-BOOL Wh_ModInit() {
+BOOL ExplorerModInit() {
     if (!IsMainExplorerProcess()) {
         return FALSE;
     }
 
     Wh_Log(L"[INIT] Taskbar Icon Separators loading");
 
-    LoadSettings();
-
     if (!InitializeStoragePath()) {
         return FALSE;
     }
+
+    if (!LoadSettings()) {
+        return FALSE;
+    }
+
+    RefreshStoredSeparatorSettings();
 
     if (!InitializeTaskbarStylingHooks()) {
         Wh_Log(
@@ -2973,7 +5109,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+void ExplorerModAfterInit() {
     // Close the small race where the module wasn't present in Wh_ModInit but
     // appeared before/around Wh_ModAfterInit.
     if (!g_taskbarViewDllHooked) {
@@ -3004,22 +5140,32 @@ void Wh_ModAfterInit() {
     }
 }
 
-void Wh_ModBeforeUninit() {
+void ExplorerModBeforeUninit() {
+    // A completed native reorder should already have been persisted by
+    // OnDragCompletedGesture. This is a final no-timer fallback for a missed
+    // completion callback or a shutdown that lands mid-drag.
+    PersistPendingSeparatorState();
+
     // Join the worker first, then remove pins while the styling and input
     // hooks can still keep a transient recovery pin styled and inert.
     StopBackendWorker();
+    g_internalCleanupInProgress = true;
     CleanupSeparatorArtifacts(true);
 
-    // Stop applying separator state, then restore every tracked container on
-    // its owning taskbar UI thread before Windhawk removes the hooks.
+    // Stop applying separator state before releasing the cleanup guard.
     g_unloading = true;
+    g_internalCleanupInProgress = false;
+
+    // Restore every tracked container on its owning taskbar UI thread before
+    // Windhawk removes the hooks.
     RestoreTrackedSeparatorVisualStates();
 }
 
-void Wh_ModUninit() {
+void ExplorerModUninit() {
     Wh_Log(L"[UNINIT] Taskbar Icon Separators unloading");
 
     // Defensive in case an older Windhawk build skips Wh_ModBeforeUninit.
+    PersistPendingSeparatorState();
     g_unloading = true;
     StopBackendWorker();
 
@@ -3032,10 +5178,71 @@ void Wh_ModUninit() {
     Wh_Log(L"[UNINIT] Taskbar Icon Separators unloaded");
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    // Phase A keeps the reviewed full-reload settings behavior. Live
-    // reconciliation is a separate follow-up once persistent identities are
-    // available.
-    *bReload = TRUE;
+BOOL ExplorerModSettingsChanged(BOOL* bReload) {
+    if (bReload) {
+        *bReload = FALSE;
+    }
+
+    double newWidth =
+        LoadSeparatorWidthSetting();
+
+    {
+        std::lock_guard<std::mutex> mutationLock(
+            g_settingsMutationMutex);
+        std::unique_lock lock(g_settingsMutex);
+
+        g_settings.width = newWidth;
+        g_appliedSettings.width = newWidth;
+
+        for (auto& separator :
+             g_settings.separators) {
+            separator.width = newWidth;
+        }
+        for (auto& separator :
+             g_appliedSettings.separators) {
+            separator.width = newWidth;
+        }
+        for (auto& separator :
+             g_storedSeparatorSettings) {
+            separator.width = newWidth;
+        }
+
+        g_refreshPulseSetting.width =
+            newWidth;
+    }
+
+    Wh_Log(
+        L"[SETTINGS] Applied global separator width=%d",
+        static_cast<int>(newWidth));
+
+    // Width is presentation-only. Native separator positions and identities
+    // live in the mod-storage state file and never require PinManager work.
+    RefreshTrackedSeparatorVisualStates();
+
     return TRUE;
+}
+
+
+// -----------------------------------------------------------------------------
+// Windhawk entry points.
+// -----------------------------------------------------------------------------
+
+BOOL Wh_ModInit() {
+    return ExplorerModInit();
+}
+
+void Wh_ModAfterInit() {
+    ExplorerModAfterInit();
+}
+
+void Wh_ModBeforeUninit() {
+    ExplorerModBeforeUninit();
+}
+
+void Wh_ModUninit() {
+    ExplorerModUninit();
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    return ExplorerModSettingsChanged(bReload);
 }
