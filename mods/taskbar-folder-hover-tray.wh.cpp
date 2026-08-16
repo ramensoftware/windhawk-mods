@@ -74,9 +74,12 @@ XAML and takes no menu items from a mod like this. If you would rather it were
 one click away, a mod such as **explorer-context-menu-classic** makes the
 classic menu the default one.
 
-If you would rather the mod stayed entirely on the taskbar side, turn off
-**Explorer right-click menu** in the settings; with it off, Explorer and Desktop
-context menus are left completely untouched.
+If you would rather the mod stayed off the Explorer/Desktop menus, turn off
+**Explorer right-click menu** in the settings; with it off, Pin / Move / Copy
+disappear from that menu, leaving only **Manage folders...** — kept there on
+purpose, since it is the only remaining way to open the manager once nothing
+is pinned. The settings page also has an **Open the Taskbar Folders window**
+checkbox that opens it directly, since Windhawk settings have no button widget.
 
 ### The Taskbar Folders window
 
@@ -171,6 +174,12 @@ AppUserModelID, and that shortcut is pinned with the shell's ordinary
 - They collapse into the overflow button when the taskbar fills up.
 - Every animation is Windows' own.
 
+**Disabling or uninstalling the mod unpins every button it created**, deletes
+their Start Menu shortcuts and their jump lists — nothing it wrote to the
+shell is left behind. The folder list itself (names, paths, icons) stays in
+the mod's own settings, unpinned, so turning it back on does not mean
+re-adding every folder from scratch.
+
 Earlier versions drew an overlay instead, seated in a gap carved by widening a
 neighbouring icon's margin. It could never be exactly right: taskbar positions are
 driven by compositor-thread animations that no other window can sample mid-flight,
@@ -212,6 +221,14 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 // ==WindhawkModSettings==
 /*
 - behavior:
+  - openManager: false
+    $name: Open the Taskbar Folders window
+    $description: >-
+      There is no button widget on a Windhawk settings page, so this checkbox
+      is the closest thing to one: tick it to open the Taskbar Folders window
+      immediately. It does not save any state of its own and is left however
+      you leave it — untick and tick again to reopen the window.
+
   - openFolderOnClick: true
     $name: Click opens the folder
     $description: >-
@@ -226,10 +243,9 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
       context menus — the ones behind "Show more options" / Shift+F10, not the
       short Windows 11 menu, which is XAML and takes no items from a mod. Use it
       to pin a folder straight to the taskbar, or to move, copy or make a
-      shortcut into a folder that already has a button. Turn this off to keep
-      the mod entirely on the taskbar side — with it off, Explorer's own context
-      menus are left completely alone. Changing this setting reloads the mod,
-      because the menu hook can only be installed or removed at startup.
+      shortcut into a folder that already has a button. Turn this off to drop
+      Pin / Move / Copy from that submenu; "Manage folders..." stays either way,
+      since it is the only way to reach the manager when nothing is pinned yet.
 
   - hoverDelayMs: 0
     $name: Hover delay (ms)
@@ -585,11 +601,6 @@ Settings g_settings;
 std::mutex g_foldersMutex;
 
 std::atomic<bool> g_unloading{false};
-
-// Value of the explorerMenu setting this load was built around: the
-// TrackPopupMenuEx hook is installed (or not) once, in Wh_ModInit.
-// Wh_ModSettingsChanged compares against it to know when a reload is needed.
-bool g_explorerMenuHooked = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Small helpers
@@ -1431,6 +1442,23 @@ void WriteJumpList(const std::wstring& appId) {
     list->Release();
 }
 
+// Undoes WriteJumpList: drops the AppID's jump list from the shell's
+// CustomDestinations store entirely, rather than just emptying it.
+void DeleteJumpList(const std::wstring& appId) {
+    ICustomDestinationList* list = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_DestinationList, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_ICustomDestinationList, (void**)&list)) ||
+        !list) {
+        return;
+    }
+    HRESULT hr = list->DeleteList(appId.c_str());
+    if (FAILED(hr)) {
+        Wh_Log(L"Pins: DeleteList for %s failed: 0x%08X", appId.c_str(), hr);
+    }
+    list->Release();
+}
+
 // Invokes a shell verb on a path. Pinning and unpinning are both just verbs, so
 // neither needs the undocumented IPinnedList3.
 bool InvokeVerb(const std::wstring& path, PCSTR verb) {
@@ -1637,6 +1665,18 @@ void Reconcile() {
         return;
     }
 
+    // One read of the shell's pinned items, reused everywhere below that
+    // nothing has yet changed pin state — this is what previously cost four
+    // full ReadPinnedItems()/ReadPinnedAppIds() COM round-trips per pass.
+    // Re-read only after something that can actually change what is pinned
+    // (the unpin/pin loops further down).
+    std::vector<PinnedItem> initialPinnedItems = ReadPinnedItems();
+    std::vector<std::wstring> initialPinnedAppIds;
+    initialPinnedAppIds.reserve(initialPinnedItems.size());
+    for (const auto& item : initialPinnedItems) {
+        initialPinnedAppIds.push_back(item.appId);
+    }
+
     struct Desired {
         std::wstring appId;
         std::wstring lnkPath;
@@ -1675,7 +1715,7 @@ void Reconcile() {
             }
         }
 
-        std::vector<std::wstring> live = ReadPinnedAppIds();
+        const std::vector<std::wstring>& live = initialPinnedAppIds;
         // The reverse sync below is only as good as this list. If a native
         // unpin is not reflected here, the shell is flushing that folder later
         // than it changes the taskbar, and pin state has to be read from
@@ -1817,7 +1857,7 @@ void Reconcile() {
     // before asking for the re-pin is what a manual unpin-then-later-pin from
     // the real taskbar menu gets for free just by not being instantaneous.
     std::unordered_set<std::wstring> renamedAppIds;
-    for (const auto& item : ReadPinnedItems()) {
+    for (const auto& item : initialPinnedItems) {
         const Desired* match = nullptr;
         for (const auto& want : desired) {
             if (_wcsicmp(want.appId.c_str(), item.appId.c_str()) == 0) {
@@ -2009,7 +2049,12 @@ constexpr DWORD kPinWatchDebounceMs = 400;
 // renamed on disk. This is the safety net that catches that case: it bounds
 // how long a plain Explorer rename can sit unreflected on the taskbar without
 // needing an unrelated pin/unpin to shake a reconcile loose.
-constexpr DWORD kReconcilePollMs = 10000;
+// A rename showing up within a minute or two is fine — this is only a safety
+// net for a case the event-driven watches above (pinned-items copy, Taskband
+// key) do not cover, not something that needs sub-minute latency. Long enough
+// that a dozen-pin taskbar is not walked through COM every few seconds
+// forever for the rare case this actually catches anything.
+constexpr DWORD kReconcilePollMs = 120000;
 
 DWORD WINAPI ThreadProc(void*) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -6692,8 +6737,30 @@ void RebindPinButtons(TaskbarHost* host) {
     // pure identity check would then never rebind — the containers did not
     // change, only our knowledge of what they mean did.
     uint32_t labels = Pins::g_labelGeneration.load(std::memory_order_acquire);
-    if (identities == host->lastRealizedChildren &&
-        labels == host->lastLabelGeneration) {
+    bool identityUnchanged = identities == host->lastRealizedChildren &&
+                              labels == host->lastLabelGeneration;
+
+    // Neither of the above catches a drag-to-reorder: ItemsRepeater recycles
+    // TaskListButton containers in place, so the realized identity set can
+    // stay byte-for-byte the same while a container starts showing a
+    // different pinned item — and PublishLabels does not bump the generation
+    // either, since a reorder does not change the (leaf, pinId) map, only
+    // which container each leaf is realized on. Re-reading each already-bound
+    // button's live label is the only way to notice that; it is a handful of
+    // AutomationNameOf() calls on bound buttons only, not a rebuild of
+    // anything.
+    bool bindingsStale = false;
+    if (identityUnchanged) {
+        for (const auto& binding : host->pinBindings) {
+            if (!binding.button || FolderIndexForTaskListButton(
+                                        binding.button) != binding.folderIndex) {
+                bindingsStale = true;
+                break;
+            }
+        }
+    }
+
+    if (identityUnchanged && !bindingsStale) {
         return;
     }
     host->lastRealizedChildren = std::move(identities);
@@ -8009,23 +8076,29 @@ void RemoveSelected(HWND hWnd) {
     RefreshAfterStoreChange(hWnd);
 }
 
-// The mod deliberately leaves its taskbar buttons, source shortcuts and
-// per-AppID jump lists in place on unload/disable (nothing else cleans those
-// up, since they are also how a reload picks the state back up) — this is the
-// explicit escape hatch for a user who wants them gone for good.
-void RemoveAllFolderButtons(HWND hWnd) {
-    std::wstring prompt =
-        L"Remove all folder buttons from the taskbar?\n\nThis unpins every "
-        L"folder button this mod created, deletes their Start Menu "
-        L"shortcuts, and clears the folder list. This cannot be undone.";
-    if (MessageBoxW(hWnd, prompt.c_str(), L"Taskbar Folders",
-                    MB_OKCANCEL | MB_ICONWARNING) != IDOK ||
-        g_unloading) {
-        return;
-    }
+// Unpins every real taskbar button, deletes their Start Menu shortcuts and
+// their per-AppID jump lists — everything InvokeVerb's "taskbarpin" and
+// WriteJumpList put in place. Shared by the user-facing "Remove all folder
+// buttons" action (clearStore = true, wipes the folder list too) and the
+// automatic cleanup Wh_ModUninit runs on every disable/uninstall
+// (clearStore = false, folders survive as unpinned drafts so a later
+// re-enable can re-pin them without retyping anything).
+//
+// CoInitializeEx is refcounted per thread, so this is safe to call whether or
+// not the calling thread already has COM up (Wh_ModUninit's does not).
+void RemoveAllFolderButtonsCore(bool clearStore) {
+    struct ComInit {
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        ~ComInit() {
+            if (SUCCEEDED(hr)) {
+                CoUninitialize();
+            }
+        }
+    } com;
 
     for (const auto& item : Pins::ReadPinnedItems()) {
         Pins::InvokeVerb(item.path, "taskbarunpin");
+        Pins::DeleteJumpList(item.appId);
     }
 
     std::wstring dir = Pins::SourceDir();
@@ -8049,12 +8122,41 @@ void RemoveAllFolderButtons(HWND hWnd) {
         RemoveDirectoryW(dir.c_str());
     }
 
-    {
-        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+    std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+    if (clearStore) {
         FolderStore::Write({});
+    } else {
+        auto stored = FolderStore::Read();
+        for (auto& entry : stored) {
+            entry.pinned = false;
+        }
+        FolderStore::Write(stored);
+    }
+}
+
+void RemoveAllFolderButtons(HWND hWnd) {
+    std::wstring prompt =
+        L"Remove all folder buttons from the taskbar?\n\nThis unpins every "
+        L"folder button this mod created, deletes their Start Menu "
+        L"shortcuts, and clears the folder list. This cannot be undone.";
+    if (MessageBoxW(hWnd, prompt.c_str(), L"Taskbar Folders",
+                    MB_OKCANCEL | MB_ICONWARNING) != IDOK ||
+        g_unloading) {
+        return;
     }
 
+    RemoveAllFolderButtonsCore(/*clearStore=*/true);
     RefreshAfterStoreChange(hWnd);
+}
+
+// Windhawk's core principle is that disabling a mod puts the system back the
+// way it was. Called from Wh_ModUninit, which fires on every disable and
+// every uninstall alike (Windhawk does not distinguish the two) — so the
+// real taskbar pins, their Start Menu shortcuts and their jump lists never
+// outlive the mod being off. The folder list itself is kept, marked unpinned,
+// so turning the mod back on does not lose it.
+void UnpinAllForDisable() {
+    RemoveAllFolderButtonsCore(/*clearStore=*/false);
 }
 
 // A single-select listbox never lets go of its selection on its own — a click
@@ -9355,9 +9457,8 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     // any other caller in explorer.exe that happens to satisfy that (a shell
     // extension with its own menu, a future shell build, another mod) must be
     // left alone.
-    HWND defView = ((flags & TPM_RETURNCMD) && g_settings.explorerMenu)
-                       ? FindShellViewWindow(hwnd)
-                       : nullptr;
+    HWND defView =
+        (flags & TPM_RETURNCMD) ? FindShellViewWindow(hwnd) : nullptr;
     if (!defView) {
         return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
     }
@@ -9404,9 +9505,14 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
     UINT copyBase = moveBase + (UINT)n;
     UINT shortcutBase = copyBase + (UINT)n;
 
-    bool canPin = isDir && !IsPinnedTaskbarFolder(path);
-    bool showMoveCopy = !isDir && n > 0;
-    bool showShortcut = !isLnk && n > 0;
+    // "Manage folders..." below is always offered regardless of this setting —
+    // it is the only entrance to the manager when nothing is pinned yet. What
+    // the setting actually suppresses is everything that writes into Explorer:
+    // Pin / Move / Copy / Copy as shortcut.
+    bool menuEnabled = g_settings.explorerMenu;
+    bool canPin = menuEnabled && isDir && !IsPinnedTaskbarFolder(path);
+    bool showMoveCopy = menuEnabled && !isDir && n > 0;
+    bool showShortcut = menuEnabled && !isLnk && n > 0;
 
     auto buildDestinationSubmenu = [&](PCWSTR header, UINT idBase) {
         HMENU sub = CreatePopupMenu();
@@ -9665,22 +9771,15 @@ BOOL Wh_ModInit() {
 
     Pins::Start();
 
-    // Only when the Explorer integration is on: with it off, every context
-    // menu in the process stays entirely untouched by this mod, so nothing in
-    // the menu path can affect Explorer at all. Windhawk has no way to remove
-    // a function hook without reloading, so Wh_ModSettingsChanged asks for a
-    // reload when the setting stops matching what was installed here.
-    //
-    // Tracks the setting as of this load, not whether the hook took: a failed
-    // hook would not be fixed by reloading, and asking for one on every save
-    // would just churn.
-    g_explorerMenuHooked = g_settings.explorerMenu;
-    if (!g_settings.explorerMenu) {
-        Wh_Log(L"Explorer right-click integration is off; not hooking "
-               L"TrackPopupMenuEx");
-    } else if (!WindhawkUtils::SetFunctionHook(
-                   TrackPopupMenuEx, AddToTaskbar::TrackPopupMenuExHook,
-                   &AddToTaskbar::TrackPopupMenuEx_orig)) {
+    // Always hooked: TrackPopupMenuExHook reads g_settings.explorerMenu live
+    // on every call and uses it only to suppress the Pin / Move / Copy items,
+    // never the "Manage folders..." entry — that stays reachable even with
+    // the setting off, since it is the only way into the manager from a
+    // standing start. Hooking unconditionally also means the setting takes
+    // effect immediately, with no reload needed.
+    if (!WindhawkUtils::SetFunctionHook(
+            TrackPopupMenuEx, AddToTaskbar::TrackPopupMenuExHook,
+            &AddToTaskbar::TrackPopupMenuEx_orig)) {
         // Non-fatal: the rest of the mod works without the right-click
         // integration.
         Wh_Log(L"Failed to hook TrackPopupMenuEx; Explorer right-click "
@@ -9772,16 +9871,19 @@ void ReloadAndRefreshUI() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"SettingsChanged");
 
-    // The TrackPopupMenuEx hook can only be installed or removed at load time,
-    // so toggling the Explorer integration asks Windhawk for a reload instead
-    // of leaving the new value to take effect at some unrelated later point.
-    // The UI is rebuilt by the reload, so RequestReloadUI would be redundant.
-    bool reload = (Wh_GetIntSetting(L"behavior.explorerMenu") != 0) != g_explorerMenuHooked;
-    if (reload) {
-        *bReload = TRUE;
-    } else {
-        RequestReloadUI();
+    // A checkbox-as-link: openManager has no persisted meaning of its own, it
+    // is just the closest thing Windhawk's settings page has to a button.
+    // Every rising edge (false -> true, including a fresh unchecked ->
+    // checked as this reads it here) opens the manager; the box is left
+    // however the user leaves it.
+    static bool lastOpenManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
+    bool openManager = Wh_GetIntSetting(L"behavior.openManager") != 0;
+    if (openManager && !lastOpenManager) {
+        FolderManager::Open();
     }
+    lastOpenManager = openManager;
+
+    RequestReloadUI();
 
     return TRUE;
 }
@@ -9795,10 +9897,13 @@ void Wh_ModUninit() {
     FolderManager::CloseAndWait();
     StopRetryThread();
     StopScanThread();
-    // Joins its STA worker. Deliberately does not unpin anything: the pins are
-    // real taskbar items the user arranged, and disabling the mod for a moment
-    // must not throw that away. A reconcile on the next load fixes up whatever
-    // drifted meanwhile.
+    // Disabling (or uninstalling — Wh_ModUninit does not see a difference)
+    // must leave the system as it was: real taskbar pins, Start Menu
+    // shortcuts and jump lists this mod created do not get to outlive it.
+    // Runs before Pins::Stop() below, while its COM-using helpers are still
+    // safe to call.
+    FolderManager::UnpinAllForDisable();
+    // Joins its STA worker.
     Pins::Stop();
 
     // DestroyWindow / XAML teardown must run on the creating UI thread. Prefer
