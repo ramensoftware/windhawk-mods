@@ -3594,6 +3594,7 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 }
 
 static bool HookTaskbarLifecycleSymbols(HMODULE taskbarDll) {
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarLifecycleHooks[] = {
         {
             {
