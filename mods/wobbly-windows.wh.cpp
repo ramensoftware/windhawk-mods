@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id            wobbly-windows
 // @name          Wobbly Windows 
-// @description   wobbly wibbly windows
+// @description   Adds interactive wobbly physics when dragging or resizing windows
 // @version       1.0
 // @author        potassiumuncher
 // @github        https://github.com/Potassiumuncher
