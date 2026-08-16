@@ -831,51 +831,87 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
             break;
         }
     }
-    if (out->profile.empty()) {
-        for (const std::wstring& sep : g.slot2Seps) {
-            const size_t at = r1.rfind(sep);
-            if (at == std::wstring::npos || at == 0) continue;
-            const std::wstring cand = r1.substr(at + sep.size());
-            if (cand.empty() || cand.size() > 64) continue;
-            out->profile = cand;
-            r2 = r1.substr(0, at);
-            break;
+    // 4. page-count clause, and the generic profile - in the order that resolves
+    //    the ambiguity between them.
+    //
+    // These cannot be stripped in a fixed order. The generic profile rule is
+    // "whatever follows the last separator", and a page title containing that
+    // same separator is indistinguishable from a real profile. Edge only puts a
+    // profile in the title when more than one profile exists, so on a
+    // single-profile install
+    //
+    //     "Foo - Bar and 16 more pages - Microsoft Edge"
+    //
+    // was read as profile="Bar and 16 more pages", title="Foo", hasCount=false -
+    // losing the count and half the title on a string the mod believed it had
+    // parsed.
+    //
+    // Resolved in favour of the reading that finds a count: try the count clause
+    // against the whole remainder first, and strip a profile only on the branch
+    // where that failed. A plain swap would NOT be enough - after removing the
+    // count from "Foo - Bar and 16 more pages" the tail "Bar" would still be
+    // taken as a profile.
+    //
+    // Nothing is written to `out` until an attempt succeeds, so a failed attempt
+    // leaves no partial state behind.
+    const auto tryStripCount = [&g](const std::wstring& in, Fields* f,
+                                    std::wstring* rest) -> bool {
+        for (const CountForm& cf : g.countForms) {
+            if (!cf.fixed.empty()) {
+                if (!EndsWith(in, cf.fixed)) continue;
+                f->extra    = cf.fixedValue;
+                f->hasCount = true;
+                f->more     = TrimCopy(cf.fixed);
+                *rest       = in.substr(0, in.size() - cf.fixed.size());
+                return true;
+            }
+            if (!EndsWith(in, cf.post)) continue;
+            const size_t e = in.size() - cf.post.size();
+            size_t d = e;
+            int    value = 0, scale = 1;
+            // Bounded: without a cap, a title ending in a long digit run
+            // overflows `value` and `scale`, which is undefined behaviour. No
+            // real tab count needs more than nine digits.
+            constexpr int kMaxDigits = 9;
+            int digits = 0;
+            while (d > 0 && digits < kMaxDigits) {
+                const int dv = DigitValue(in[d - 1]);
+                if (dv < 0) break;
+                value += dv * scale;
+                scale *= 10;
+                --d;
+                ++digits;
+            }
+            if (d == e) continue;  // no digits present
+            const std::wstring head = in.substr(0, d);
+            if (!EndsWith(head, cf.pre)) continue;
+            f->extra    = value;
+            f->hasCount = true;
+            f->more     = TrimCopy(in.substr(head.size() - cf.pre.size()));
+            *rest       = head.substr(0, head.size() - cf.pre.size());
+            return true;
         }
-    }
-    if (TrimCopy(r2).empty()) return false;
+        return false;
+    };
 
-    // 4. page-count clause
     std::wstring r3 = r2;
-    for (const CountForm& f : g.countForms) {
-        if (!f.fixed.empty()) {
-            if (EndsWith(r2, f.fixed)) {
-                out->extra    = f.fixedValue;
-                out->hasCount = true;
-                out->more     = TrimCopy(f.fixed);
-                r3 = r2.substr(0, r2.size() - f.fixed.size());
+    if (!tryStripCount(r2, out, &r3)) {
+        // No count at this level. A trailing segment may therefore be a profile;
+        // strip one and try the count again behind it.
+        if (out->profile.empty()) {
+            for (const std::wstring& sep : g.slot2Seps) {
+                const size_t at = r2.rfind(sep);
+                if (at == std::wstring::npos || at == 0) continue;
+                const std::wstring cand = r2.substr(at + sep.size());
+                if (cand.empty() || cand.size() > 64) continue;
+                out->profile = cand;
+                r3 = r2.substr(0, at);
                 break;
             }
-            continue;
         }
-        if (!EndsWith(r2, f.post)) continue;
-        size_t e = r2.size() - f.post.size();
-        size_t d = e;
-        int    value = 0, scale = 1;
-        while (d > 0) {
-            const int dv = DigitValue(r2[d - 1]);
-            if (dv < 0) break;
-            value += dv * scale;
-            scale *= 10;
-            --d;
-        }
-        if (d == e) continue;  // no digits present
-        const std::wstring head = r2.substr(0, d);
-        if (!EndsWith(head, f.pre)) continue;
-        out->extra    = value;
-        out->hasCount = true;
-        out->more     = TrimCopy(r2.substr(head.size() - f.pre.size()));
-        r3 = head.substr(0, head.size() - f.pre.size());
-        break;
+        if (TrimCopy(r3).empty()) return false;
+        std::wstring r4 = r3;
+        if (tryStripCount(r3, out, &r4)) r3 = r4;
     }
 
     out->title = TrimCopy(r3);
@@ -1130,6 +1166,8 @@ Named IsNamedWindow(void* controller);
 void  CheckPredicateAgainstParsed(void* controller);
 void  RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
                          bool settled);
+HWND  HwndForController(void* controller);
+void  ForgetWindow(HWND hWnd);
 }  // namespace syms
 
 // Defined below the symbol layer, called from the title hook above it.
@@ -1187,11 +1225,20 @@ std::wstring ComposeFor(const std::wstring& source, void* controller) {
             if (total > 0) {
                 f.extra    = total - 1;
                 f.hasCount = true;
+            } else if (g_settings.verbose) {
+                // Only the failure speaks, and it reports the value already
+                // computed rather than asking again.
+                //
+                // What used to be here logged on EVERY composition with a
+                // controller, and called TabCountForNamed a second time to get
+                // the number - so on Edge, whose titles already carry a count
+                // and never reach the branch above, every single title write
+                // paid for a full symbol-chain resolution that existed only to
+                // produce a log line. A successful count is visible in the
+                // composed title on the next line anyway.
+                Wh_Log(L"symbol tab count unavailable for this window (%d)",
+                       total);
             }
-        }
-        if (g_settings.verbose && controller) {
-            Wh_Log(L"symbol tab count for this window: %d",
-                   syms::TabCountForNamed(controller));
         }
     } else {
         // Not a composed browser title. It is a named window, a PWA, a dialog or
@@ -1508,27 +1555,77 @@ HWND HwndForController(void* controller);
 // a Chromium object without reading a single struct offset.
 thread_local void* t_controller = nullptr;
 
+// ...and the title the getter produced for it, which is what makes the pairing
+// trustworthy.
+//
+// The controller alone was not enough. Chromium suppresses the native write when
+// the composed title has not changed, so a getter call often has no matching
+// SetWindowTextW - and every browser frame shares one UI thread, so the value
+// survived to be consumed by the NEXT window's write, which then stored another
+// window's controller permanently. That window would show a foreign tab count
+// and favicon: exactly the mispairing the correlation code works so hard to
+// avoid everywhere else.
+//
+// Requiring the incoming string to equal what the getter returned closes it. It
+// is not identity proof - two windows can carry the same title - so the consumer
+// also refuses when the controller is already mapped to a different window.
+thread_local std::wstring t_delegateTitle;
+thread_local bool         t_delegateValid = false;
+
 bool Usable() {
     return InterlockedCompareExchange(&g_enabled, 0, 0) != 0 &&
            InterlockedCompareExchange(&g_poisoned, 0, 0) == 0;
 }
 
-// A pointer we are about to hand to Chromium must at least be readable
-// user-space memory. This does not make a wrong pointer right - it only turns
-// the most likely garbage (null, small integers, freed regions) into a refusal
-// instead of a fault.
-bool PlausiblePointer(const void* p) {
-    if (!p || reinterpret_cast<uintptr_t>(p) < 0x10000) {
-        return false;
-    }
-    MEMORY_BASIC_INFORMATION mbi{};
-    if (!VirtualQuery(p, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT) {
-        return false;
-    }
+// Is [p, p+bytes) readable user-space memory?
+//
+// THE WHOLE RANGE, not just the first byte. Checking only the base is a real
+// bug and it bit this mod in three places: a pointer can sit one byte inside a
+// committed region while the member being read, or the string being copied out
+// of it, runs off the end. VirtualQuery reports the region containing `p`, so
+// the range is accepted only if it fits inside that region.
+//
+// This still does not make a wrong pointer right - it only turns the likeliest
+// garbage into a refusal instead of a fault.
+bool ReadableRange(const void* p, size_t bytes) {
+    if (!p || bytes == 0) return false;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    if (addr < 0x10000) return false;
+    if (addr + bytes < addr) return false;  // overflow
+    const uintptr_t end = addr + bytes;
+
     constexpr DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
                                PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
                                PAGE_EXECUTE_WRITECOPY;
-    return (mbi.Protect & readable) && !(mbi.Protect & PAGE_GUARD);
+
+    // Walk every region the span touches. A first version of this stopped at the
+    // first region and demanded the whole span fit inside it, which is not the
+    // same question - a perfectly valid buffer that happens to start near a
+    // region boundary was rejected. That over-conservatism broke reading the
+    // title getter's return buffer, which silently disabled correlation and,
+    // with it, the favicons. Being too strict here fails as visibly as being too
+    // loose, just less dangerously.
+    while (addr < end) {
+        MEMORY_BASIC_INFORMATION mbi{};
+        if (!VirtualQuery(reinterpret_cast<void*>(addr), &mbi, sizeof mbi)) {
+            return false;
+        }
+        if (mbi.State != MEM_COMMIT) return false;
+        if (!(mbi.Protect & readable) || (mbi.Protect & PAGE_GUARD)) return false;
+
+        const uintptr_t regionEnd =
+            reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+        if (regionEnd <= addr) return false;  // no forward progress; refuse
+        addr = regionEnd;
+    }
+    return true;
+}
+
+// Convenience for "this pointer is at least a readable object header". Callers
+// that go on to read at a known offset must use ReadableRange with that offset
+// instead - see StripForController.
+bool PlausiblePointer(const void* p) {
+    return ReadableRange(p, sizeof(void*));
 }
 
 struct ControllerSearch {
@@ -1614,53 +1711,109 @@ bool StripIsKnown(void* strip) {
 // internal linkage - no mangled name - and reaching it means resolving with
 // noUndecoratedSymbols off, measured at >14 min and 2.8 GB. See docs/.)
 
-void* StripForController(void* controller) {
+// The tab strip for a BrowserWindowInterface we already hold.
+//
+// Split out from StripForController because the correlation sweep is handed the
+// interface by Chromium's own iterator and then used to throw it away and look
+// it back up - re-walking the entire window list, from inside that iterator's
+// callback, twice per window. On a seventy-window session that was ~150 full
+// walks every three seconds on the browser UI thread, which starved the posted
+// icon refreshes badly enough to look like the favicon feature had broken.
+// It was also a nested iteration of the browser's own collection, which is an
+// assumption about that iterator nobody here can verify.
+void* StripForInterface(void* bwi) {
     if (InterlockedCompareExchange(&g_poisoned, 0, 0)) return nullptr;
     if (!g_toBrowser || !g_getTabStrip || !g_count_orig) return nullptr;
+    if (!PlausiblePointer(bwi)) return nullptr;
 
-    void* bwi = InterfaceForController(controller);
-    if (!PlausiblePointer(bwi)) {
-        if (g_settings.verbose) {
-            Wh_Log(L"  hop1 failed: no BrowserWindowInterface matched controller %p",
-                   controller);
-        }
-        return nullptr;
-    }
-
-    // Which pointer is the right `this` for Browser::GetTabStripModel is not
-    // obvious from the outside. GetBrowserForMigrationOnly is a pure arithmetic
-    // thunk (verified: Chrome `lea rax,[rcx-0x50]`, Edge `lea rax,[rcx-0x90]`)
-    // and GetTabStripModel is a plain member load (Chrome `mov rax,[rcx+0x138]`,
-    // Edge `mov rax,[rcx+0x250]`), so an incorrect `this` yields a wrong value
-    // rather than a fault - and not every BrowserWindowInterface implementer is
-    // necessarily a Browser.
+    // BOTH candidates, with the structural gate deciding between them.
     //
-    // So rather than reason about it, try both and let the structural gate
-    // decide: a candidate is accepted only if it produces a pointer the browser
-    // itself has used as a TabStripModel. That check is why probing is safe
-    // here; without it this would be guessing.
-    void* const candidates[] = {g_toBrowser(bwi), bwi};
-    void* strip = nullptr;
-    for (void* candidate : candidates) {
-        if (!PlausiblePointer(candidate)) continue;
-        void* s = g_getTabStrip(candidate);
+    // Review round 1 cut this to the adjusted candidate alone, on the argument
+    // that GetBrowserForMigrationOnly is provably the interface-to-complete-
+    // object thunk - verified by disassembly in both builds (Chrome
+    // `lea rax,[rcx-0x50]`, Edge `lea rax,[rcx-0x90]`) - so its result IS the
+    // Browser and a second guess can add nothing.
+    //
+    // The disassembly is right. The conclusion was wrong, and it cost the
+    // favicon feature entirely. Measured on a live session after that change:
+    // correlation succeeded for 0 of 76 windows in one process and 0 of 6 in
+    // another - a total symbol-layer failure - with the adjusted candidate
+    // yielding a plausible pointer that sat 17 MB from the nearest address the
+    // browser had ever actually used as a TabStripModel. The adjustment is real;
+    // the premise that it applies HERE is not. The pointer this iterator hands
+    // out is already the `this` GetTabStripModel wants, so applying the thunk
+    // over-adjusts and reads a member off the wrong object.
+    //
+    // That is precisely the case the gate exists to catch, and it caught it:
+    // nothing wrong was ever trusted, the layer just went silent. Which is the
+    // argument for probing rather than reasoning - `StripIsKnown` accepts only a
+    // pointer the browser ITSELF has used as a TabStripModel, so trying both and
+    // keeping what proves out is a proof, not a guess.
+    //
+    // What was legitimate in the review's concern is kept. GetTabStripModel is a
+    // plain member load (Chrome `mov rax,[rcx+0x138]`, Edge `mov rax,[rcx+0x250]`),
+    // so a wrong `this` reads hundreds of bytes past an address we only know is
+    // readable somewhere. Each candidate's whole span is therefore validated
+    // BEFORE the accessor touches it - the check the old two-candidate version
+    // genuinely lacked.
+    constexpr size_t kMaxMemberOffset = 0x400;
+    void* const      candidates[]     = {g_toBrowser(bwi), bwi};
+
+    void* strip       = nullptr;
+    void* produced[2] = {nullptr, nullptr};
+    for (size_t i = 0; i < ARRAYSIZE(candidates); ++i) {
+        if (!ReadableRange(candidates[i], kMaxMemberOffset)) continue;
+        void* const s = g_getTabStrip(candidates[i]);
+        produced[i]   = s;
         if (PlausiblePointer(s) && StripIsKnown(s)) {
             strip = s;
             break;
         }
     }
+
     if (!strip) {
+        // Rate limited to one line a minute. This is the single most frequent
+        // outcome on a session with many windows - every uncorrelated one
+        // produces it on every sweep - and unthrottled it wrote seven thousand
+        // identical lines in three minutes, which is not diagnostics, it is a
+        // denial of service against the log the user is being told to read.
+        //
+        // A second was the first attempt and is still far too generous: the line
+        // is identical every time, so sixty of them a minute carry exactly as
+        // much information as one and bury everything else. One a minute is
+        // enough to notice a layer that never comes up.
         if (g_settings.verbose) {
-            AcquireSRWLockShared(&g_stripLock);
-            const size_t seen = g_seenStrips.size();
-            ReleaseSRWLockShared(&g_stripLock);
-            Wh_Log(L"  no candidate yielded a known TabStripModel (bwi=%p, "
-                   L"adjusted=%p, %zu strips seen)",
-                   bwi, candidates[0], seen);
+            static volatile LONG lastLog = -1;
+            const LONG now = static_cast<LONG>(GetTickCount64() / 60000);
+            if (InterlockedExchange(&lastLog, now) != now) {
+                // The intermediate values, not just the verdict. "It did not
+                // match" cannot distinguish a wrong thunk from a wrong accessor
+                // from a genuinely unproved strip, and this mod has already lost
+                // days to trusting an outcome without looking at what produced
+                // it. Both candidates' results are shown, so a future failure
+                // says WHICH route was tried and what each returned.
+                AcquireSRWLockShared(&g_stripLock);
+                const size_t seen = g_seenStrips.size();
+                ReleaseSRWLockShared(&g_stripLock);
+                Wh_Log(L"  tab strip not recognized yet (%zu known): bwi=%p "
+                       L"adjusted=%p -> %p, raw -> %p",
+                       seen, bwi, candidates[0], produced[0], produced[1]);
+            }
         }
         return nullptr;
     }
     return strip;
+}
+
+void* StripForController(void* controller) {
+    void* const bwi = InterfaceForController(controller);
+    if (!bwi) {
+        if (g_settings.verbose) {
+            Wh_Log(L"  no browser window matched this controller");
+        }
+        return nullptr;
+    }
+    return StripForInterface(bwi);
 }
 
 int RawTabCount(void* controller) {
@@ -1735,12 +1888,11 @@ void PoisonName(const wchar_t* why) {
 // Ask the browser directly. Returns kUnknown for every gap, which the caller
 // treats as "leave the title alone". When `nameOut` is given and the window is
 // named, it receives the name - which is also what correlation matches on.
-Named QueryUserTitle(void* controller, std::wstring* nameOut = nullptr) {
+Named QueryUserTitleForStrip(void* strip, std::wstring* nameOut = nullptr) {
     if (InterlockedCompareExchange(&g_namePoisoned, 0, 0)) return Named::kUnknown;
     if (!g_getUserTitle || !g_findContext || !g_getActiveWc || !g_dtorString) {
         return Named::kUnknown;
     }
-    void* const strip = StripForController(controller);
     if (!strip) return Named::kUnknown;
 
     void* const wc = g_getActiveWc(strip);
@@ -1768,15 +1920,25 @@ Named QueryUserTitle(void* controller, std::wstring* nameOut = nullptr) {
         memcpy(&size, buf + 8, sizeof size);
         memcpy(&cap, buf + 16, sizeof cap);
         cap &= ~(uint64_t{1} << 63);  // top bit is the is_long flag
+        // The whole run of bytes, not the first one: this is a std::string, so
+        // `size` is bytes, and a string_view over it is built further down.
         plausible = ptr && size && size < 4096 && size <= cap &&
-                    PlausiblePointer(reinterpret_cast<void*>(ptr));
+                    ReadableRange(reinterpret_cast<void*>(ptr),
+                                  static_cast<size_t>(size));
         len = static_cast<size_t>(size);
     }
 
-    if (g_settings.verbose) {
+    if (g_settings.verbose && !plausible) {
         // Kept for release: if libc++'s string layout ever changes under us,
         // this line is what says so, and it is the difference between "the
         // feature stopped working" and knowing why.
+        //
+        // On the FAILURE path only. It used to log on every call, which is
+        // several times a second per window on a large session - the single
+        // largest source of noise in this mod's log - and every one of those
+        // lines said the layout was fine. The layout being fine is not news;
+        // the numbers are only worth reading when the assumption has broken,
+        // which is exactly when this now fires.
         Wh_Log(L"  user title: flagByte=%02X long=%d len=%zu plausible=%d", flag,
                isLong ? 1 : 0, len, plausible ? 1 : 0);
     }
@@ -1851,7 +2013,7 @@ void RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
         if (fresh) return;
     }
 
-    const Named v = QueryUserTitle(controller);
+    const Named v = QueryUserTitleForStrip(StripForController(controller));
 
     AcquireSRWLockExclusive(&g_verdictLock);
     if (g_verdicts.size() < 512 || g_verdicts.count(controller)) {
@@ -2031,11 +2193,6 @@ HICON BuildFaviconIcon(void* controller, int size) {
     alignas(16) unsigned char bitmap[256] = {};
     alignas(16) unsigned char scoped[64]  = {};
 
-    auto qword = [](const unsigned char* p, size_t off) -> uint64_t {
-        uint64_t v = 0;
-        memcpy(&v, p + off, sizeof v);
-        return v;
-    };
     auto dword = [](const unsigned char* p, size_t off) -> uint32_t {
         uint32_t v = 0;
         memcpy(&v, p + off, sizeof v);
@@ -2043,9 +2200,6 @@ HICON BuildFaviconIcon(void* controller, int size) {
     };
 
     g_getPageIcon(controller, image);
-    if (g_settings.verbose) {
-        Wh_Log(L"  image[0]=%016llX", qword(image, 0));
-    }
 
     // Prefer a representation whose scale matches the icon size being asked
     // for. Chromium's favicon is 16px at scale 1, so a 32px icon wants scale 2;
@@ -2066,10 +2220,6 @@ HICON BuildFaviconIcon(void* controller, int size) {
                 sourceBitmap = bmp;
                 if (g_repGetWidth) {
                     nativeWidth = g_repGetWidth(rep);
-                    if (g_settings.verbose) {
-                        Wh_Log(L"  rep scale=%.1f -> %dpx (want %dpx)", scale,
-                               nativeWidth, size);
-                    }
                 }
             }
         }
@@ -2098,14 +2248,19 @@ HICON BuildFaviconIcon(void* controller, int size) {
     // which is visibly softer than what Chromium's own tab strip shows from
     // the same bitmap. IconUtil resamples through Skia, so producing the
     // target size here replaces the shell's scaler with a better one.
-    if (g_settings.verbose && nativeWidth > 0 && nativeWidth != size) {
-        Wh_Log(L"  resampling %dpx -> %dpx via Skia", nativeWidth, size);
+    // Logged only if the source is bigger than the 16px the readme documents as
+    // the hard sharpness cap. Every routine build used to narrate its own scale,
+    // its source pointer and the resulting handle - four lines per icon, two
+    // icons per window, on a poll: hundreds of lines a minute all saying the
+    // pipeline worked exactly as designed. The one outcome here that would be
+    // genuine news is Chromium starting to supply something larger, so that is
+    // the only one that still speaks.
+    if (g_settings.verbose && nativeWidth > 16) {
+        Wh_Log(L"  source representation is %dpx - larger than the documented "
+               L"16px cap, so the readme's sharpness limit may be out of date",
+               nativeWidth);
     }
     g_createHicon(scoped, sourceBitmap, size, size);
-    if (g_settings.verbose) {
-        Wh_Log(L"  scoped[0]=%016llX scoped[8]=%016llX", qword(scoped, 0),
-               qword(scoped, 8));
-    }
 
     // Where the handle sits inside the returned ScopedGeneric is not knowable
     // from outside, and the obvious reading is wrong: the observed layout has a
@@ -2183,7 +2338,8 @@ uint64_t PageIconToken(void* controller) {
 // pointer chasing. wchar_t is 16-bit on Windows, so char16_t data is directly
 // assignable to a std::wstring.
 bool ReadU16String(const void* p, std::wstring* out) {
-    if (!p) return false;
+    // The 24-byte object itself has to be readable before byte 23 is touched.
+    if (!ReadableRange(p, 24)) return false;
     const auto* b = static_cast<const unsigned char*>(p);
     const unsigned char flag = b[23];
     const wchar_t* data = nullptr;
@@ -2194,7 +2350,12 @@ bool ReadU16String(const void* p, std::wstring* out) {
         memcpy(&ptr, b + 0, sizeof ptr);
         memcpy(&size, b + 8, sizeof size);
         if (!ptr || size == 0 || size > 4096) return false;
-        if (!PlausiblePointer(reinterpret_cast<const void*>(ptr))) return false;
+        // The WHOLE string, not its first byte: assign() below copies
+        // size * sizeof(char16_t) bytes and would happily run off the region.
+        if (!ReadableRange(reinterpret_cast<const void*>(ptr),
+                           static_cast<size_t>(size) * sizeof(wchar_t))) {
+            return false;
+        }
         data = reinterpret_cast<const wchar_t*>(ptr);
         len  = static_cast<size_t>(size);
     } else {
@@ -2260,6 +2421,63 @@ HWND HwndForStrip(void* strip) {
     HWND h = (it == g_stripHwnd.end()) ? nullptr : it->second;
     ReleaseSRWLockShared(&g_corrLock);
     return h;
+}
+
+// Forget everything learned about a window that has just been destroyed.
+//
+// Without this the maps only ever grow, and their caps are not harmless: a
+// session that opens and closes enough windows stops recording correlations
+// entirely, with no log line to say so. Worse, a stale entry is how a recycled
+// HWND inherits a dead window's controller - the per-window thread-id check
+// cannot catch that, because every browser frame lives on the same UI thread.
+//
+// Called from WM_NCDESTROY, i.e. while the window is going away for good.
+void ForgetWindow(HWND hWnd) {
+    if (!hWnd) return;
+
+    std::vector<void*> controllers, strips;
+    AcquireSRWLockExclusive(&g_corrLock);
+    for (auto it = g_ctrlHwnd.begin(); it != g_ctrlHwnd.end();) {
+        if (it->second == hWnd) {
+            controllers.push_back(it->first);
+            it = g_ctrlHwnd.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (void* c : controllers) g_corrTried.erase(c);
+    for (auto it = g_stripHwnd.begin(); it != g_stripHwnd.end();) {
+        if (it->second == hWnd) {
+            strips.push_back(it->first);
+            it = g_stripHwnd.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_corrLock);
+
+    // Each map under its own lock, and never two at once - taking g_corrLock and
+    // then another would introduce a lock order this mod does not otherwise have.
+    if (!controllers.empty()) {
+        AcquireSRWLockExclusive(&g_verdictLock);
+        for (void* c : controllers) g_verdicts.erase(c);
+        ReleaseSRWLockExclusive(&g_verdictLock);
+    }
+    if (!strips.empty()) {
+        AcquireSRWLockExclusive(&g_countLock);
+        for (void* s : strips) g_lastCount.erase(s);
+        ReleaseSRWLockExclusive(&g_countLock);
+
+        // Also drop the type proof for this window's strip. g_seenStrips is the
+        // evidence that an address really is a TabStripModel, and it only ever
+        // grew - so once the allocator reused a dead strip's address for
+        // something else, stale membership could turn a guess into "proved" and
+        // hand Chromium the wrong type. Forgetting is safe in the other
+        // direction: the worst case is re-earning the proof.
+        AcquireSRWLockExclusive(&g_stripLock);
+        for (void* s : strips) g_seenStrips.erase(s);
+        ReleaseSRWLockExclusive(&g_stripLock);
+    }
 }
 
 struct CorrSearch {
@@ -2420,12 +2638,10 @@ struct NamedSweep {
     int correlated = 0;
 };
 
-// The active tab's page title, read through a const reference. Returns false if
-// unavailable or implausible; never allocates and never destroys.
-bool ActivePageTitle(void* controller, std::wstring* out) {
-    if (!g_wcGetTitle) return false;
-    void* const strip = StripForController(controller);
-    if (!strip || !g_getActiveWc) return false;
+// The active tab's page title for a strip we already have, read through a const
+// reference. Never allocates and never destroys.
+bool ActivePageTitleForStrip(void* strip, std::wstring* out) {
+    if (!g_wcGetTitle || !g_getActiveWc || !strip) return false;
     void* const wc = g_getActiveWc(strip);
     if (!PlausiblePointer(wc)) return false;
     const void* const s = g_wcGetTitle(wc);
@@ -2442,9 +2658,16 @@ bool NamedSweepTrampoline(void* target, void* bwi) {
         return true;  // unusable, or already known
     }
 
+    // Resolve the strip ONCE, from the interface Chromium just handed us. The
+    // previous shape threw `bwi` away and looked it back up through
+    // InterfaceForController, which re-walked this very iterator's collection -
+    // twice per window, from inside its own callback.
+    void* const strip = StripForInterface(bwi);
+    if (!strip) return true;
+
     // A named window matches on its name, which is also its window text.
     std::wstring name;
-    if (QueryUserTitle(controller, &name) == Named::kYes && !name.empty()) {
+    if (QueryUserTitleForStrip(strip, &name) == Named::kYes && !name.empty()) {
         TryCorrelate(controller, name);
         if (HwndForController(controller)) ++sweep->correlated;
         return true;
@@ -2461,7 +2684,7 @@ bool NamedSweepTrampoline(void* target, void* bwi) {
     // and so does not change when tabs do - would never be correlated, and would
     // never receive a tab count or a refreshed favicon.
     std::wstring page;
-    if (!ActivePageTitle(controller, &page) || page.empty()) return true;
+    if (!ActivePageTitleForStrip(strip, &page) || page.empty()) return true;
     TryCorrelateByPageTitle(controller, page);
     if (HwndForController(controller)) ++sweep->correlated;
     return true;
@@ -2486,17 +2709,26 @@ void CorrelateAllNamedWindows() {
 }
 
 void* GetTitle_hook(void* pThis, void* sret, bool includeAppName) {
-    t_controller = pThis;
+    // Drop any pairing left by a previous attempt before doing anything, so a
+    // suppressed write can never leave one behind for the next window.
+    t_controller    = nullptr;
+    t_delegateValid = false;
+
     void* const r = g_getTitle_orig(pThis, sret, includeAppName);
+
+    std::wstring delegate;
+    const bool haveTitle = ReadU16String(sret, &delegate);
+    if (pThis && haveTitle) {
+        t_controller    = pThis;
+        t_delegateTitle = delegate;
+        t_delegateValid = true;
+    }
 
     // Correlate here rather than in the SetWindowTextW hook. This runs on every
     // update ATTEMPT, which is the only signal a window that never writes its
     // title again produces.
-    if (pThis && !HwndForController(pThis)) {
-        std::wstring delegate;
-        if (ReadU16String(sret, &delegate)) {
-            TryCorrelate(pThis, delegate);
-        }
+    if (pThis && haveTitle && !HwndForController(pThis)) {
+        TryCorrelate(pThis, delegate);
     }
     // ...and pick up the idle named windows that will never get here themselves.
     CorrelateAllNamedWindows();
@@ -2846,11 +3078,35 @@ void ApplyFavicon(HWND hWnd, void* controller) {
 
     const HICON small = syms::BuildFaviconIcon(controller, smallPx);
     const HICON big   = syms::BuildFaviconIcon(controller, bigPx);
-    if (g_settings.verbose) {
-        Wh_Log(L"favicon: built small=%p big=%p", (void*)small, (void*)big);
+    // Only a build that produced nothing is worth a line. The successful case
+    // fires once per icon per refreshed window on a poll, which on a large
+    // session is most of the log and says only that the expected thing happened.
+    if (g_settings.verbose && (!small || !big)) {
+        Wh_Log(L"favicon: build produced no icon (small=%p big=%p)", (void*)small,
+               (void*)big);
     }
     if (!small && !big) {
         return;  // no favicon yet; leave whatever the window already shows
+    }
+
+    // Read the browser's own icons BEFORE taking the lock. These are synchronous
+    // window messages, and sending one while holding a non-recursive SRW lock
+    // means any path that ever re-enters a hook needing that lock deadlocks the
+    // thread permanently. It works today only because the send stays on this
+    // thread; that is not a property worth depending on.
+    HICON origSmall = nullptr;
+    HICON origBig   = nullptr;
+    {
+        AcquireSRWLockShared(&g_lock);
+        const auto it = g_states.find(hWnd);
+        const bool needOriginals = it == g_states.end() || !it->second.iconSaved;
+        ReleaseSRWLockShared(&g_lock);
+        if (needOriginals) {
+            origSmall = reinterpret_cast<HICON>(
+                SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0));
+            origBig = reinterpret_cast<HICON>(
+                SendMessageW(hWnd, WM_GETICON, ICON_BIG, 0));
+        }
     }
 
     HICON oldSmall = nullptr;
@@ -2859,19 +3115,28 @@ void ApplyFavicon(HWND hWnd, void* controller) {
         AcquireSRWLockExclusive(&g_lock);
         WindowState& st = g_states[hWnd];
         if (!st.iconSaved) {
-            // Capture the browser's own icons once, before the first override,
-            // so uninstall can put them back.
-            st.originalSmall = reinterpret_cast<HICON>(
-                SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0));
-            st.originalBig = reinterpret_cast<HICON>(
-                SendMessageW(hWnd, WM_GETICON, ICON_BIG, 0));
-            st.iconSaved = true;
+            st.originalSmall = origSmall;
+            st.originalBig   = origBig;
+            st.iconSaved     = true;
         }
-        oldSmall = st.oursSmall;
-        oldBig   = st.oursBig;
-        if (small) st.oursSmall = small;
-        if (big)   st.oursBig   = big;
-        st.iconToken = token;
+        // Retire each size ONLY if it was actually replaced. This used to
+        // capture both old handles unconditionally and destroy both, so when
+        // one size failed to build - which the handle probe in BuildFaviconIcon
+        // can cause - its old handle was destroyed while still installed on the
+        // window and still recorded in state, and RestoreIcon then destroyed it
+        // a second time at uninstall.
+        if (small) {
+            oldSmall     = st.oursSmall;
+            st.oursSmall = small;
+        }
+        if (big) {
+            oldBig     = st.oursBig;
+            st.oursBig = big;
+        }
+        // Only claim this page icon as done when BOTH sizes are in place;
+        // otherwise the identity guard above would suppress every retry of the
+        // size that failed.
+        st.iconToken = (st.oursSmall && st.oursBig) ? token : 0;
         ReleaseSRWLockExclusive(&g_lock);
     }
 
@@ -2968,6 +3233,32 @@ void ApplyTitleNow(HWND hWnd) {
 LRESULT CALLBACK FrameSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                    LPARAM lParam,
                                    DWORD_PTR dwRefData) {
+    // A window going away for good. Let it finish first, then forget it -
+    // without this, per-window state accumulated for the life of the browser
+    // process, the fixed caps eventually stopped recording anything (silently,
+    // with no log line), and a recycled HWND could inherit a dead window's
+    // controller. The thread-id check elsewhere cannot catch that, because every
+    // browser frame lives on the same UI thread.
+    if (uMsg == WM_NCDESTROY) {
+        const LRESULT r = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        HICON ours[2] = {nullptr, nullptr};
+        {
+            AcquireSRWLockExclusive(&g_lock);
+            if (const auto it = g_states.find(hWnd); it != g_states.end()) {
+                // The window is being destroyed, so do NOT restore its icons -
+                // just release the ones we created for it.
+                ours[0] = it->second.oursSmall;
+                ours[1] = it->second.oursBig;
+                g_states.erase(it);
+            }
+            ReleaseSRWLockExclusive(&g_lock);
+        }
+        for (HICON h : ours) {
+            if (h) DestroyIcon(h);
+        }
+        syms::ForgetWindow(hWnd);
+        return r;
+    }
     if (g_correlateMsg && uMsg == g_correlateMsg) {
         syms::CorrelateAllNamedWindows();
         return 0;
@@ -3055,14 +3346,31 @@ void EnsureSubclassed(HWND hWnd) {
     if (!g_applyIconMsg && !g_applyTitleMsg) {
         return;
     }
+    // Refuse once teardown has begun. Hooks are still live during
+    // Wh_ModBeforeUninit, so without this a window can be subclassed again
+    // AFTER teardown removed its subclass - and a window still pointing at this
+    // image when it unmaps takes the browser down on its next message.
+    if (InterlockedCompareExchange(&g_passthrough, 0, 0)) return;
+
     AcquireSRWLockExclusive(&g_lock);
     WindowState& st = g_states[hWnd];
     const bool already = st.subclassed;
-    st.subclassed = true;
     ReleaseSRWLockExclusive(&g_lock);
-    if (!already) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, FrameSubclassProc, 0);
+    if (already) return;
+
+    // Record success, not intent. This used to set `subclassed = true` before
+    // calling, and ignore the result - so a single failure both suppressed
+    // every retry and left teardown believing there was a subclass to remove.
+    if (InterlockedCompareExchange(&g_passthrough, 0, 0)) return;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, FrameSubclassProc,
+                                                       0)) {
+        Wh_Log(L"could not subclass a browser window; its icon and named-window "
+               L"title will not refresh");
+        return;
     }
+    AcquireSRWLockExclusive(&g_lock);
+    g_states[hWnd].subclassed = true;
+    ReleaseSRWLockExclusive(&g_lock);
 }
 
 // Put a window's own icons back and release ours. Leaving a destroyed icon on a
@@ -3072,10 +3380,17 @@ void RestoreIcon(HWND hWnd, WindowState& st) {
         return;
     }
     if (IsWindow(hWnd)) {
-        SendMessageW(hWnd, WM_SETICON, ICON_SMALL,
-                     reinterpret_cast<LPARAM>(st.originalSmall));
-        SendMessageW(hWnd, WM_SETICON, ICON_BIG,
-                     reinterpret_cast<LPARAM>(st.originalBig));
+        // Bounded, like every other cross-thread send here. This runs from
+        // Wh_ModUninit on an arbitrary thread and reaches each browser UI
+        // thread; an unbounded SendMessageW means one busy window hangs the
+        // whole uninstall while the user watches a stuck disable.
+        DWORD_PTR unused = 0;
+        SendMessageTimeoutW(hWnd, WM_SETICON, ICON_SMALL,
+                            reinterpret_cast<LPARAM>(st.originalSmall),
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
+        SendMessageTimeoutW(hWnd, WM_SETICON, ICON_BIG,
+                            reinterpret_cast<LPARAM>(st.originalBig),
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
     }
     if (st.oursSmall) DestroyIcon(st.oursSmall);
     if (st.oursBig)   DestroyIcon(st.oursBig);
@@ -3084,15 +3399,42 @@ void RestoreIcon(HWND hWnd, WindowState& st) {
 
 
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
-    // Consume the correlation left by the title getter earlier in this same
-    // synchronous call stack, and clear it immediately: a later, unrelated
-    // SetWindowTextW on this thread must not inherit a stale object pointer.
-    void* const controller = syms::t_controller;
-    syms::t_controller = nullptr;
+    // Consume the pairing left by the title getter earlier in this same
+    // synchronous call stack, and clear it immediately either way.
+    void* const      pendingController = syms::t_controller;
+    const bool       pendingValid      = syms::t_delegateValid;
+    const std::wstring pendingTitle    = pendingValid ? syms::t_delegateTitle
+                                                      : std::wstring();
+    syms::t_controller    = nullptr;
+    syms::t_delegateValid = false;
 
     if (InterlockedCompareExchange(&g_passthrough, 0, 0) || t_inHook ||
         !lpString || !*lpString || !IsBrowserFrame(hWnd)) {
         return SetWindowTextW_Original(hWnd, lpString);
+    }
+
+    // Accept the pairing only if this really is the write that getter produced.
+    //
+    // Chromium suppresses the write when the composed title has not changed, so
+    // a getter call frequently has no matching SetWindowTextW - and all browser
+    // frames share one UI thread, so the value would otherwise be picked up by
+    // the NEXT window's write and stored permanently. Requiring the string to
+    // match is the first half of the check; the second is refusing a controller
+    // already known to belong to a different window, since two windows can
+    // legitimately carry the same title.
+    void* controller = nullptr;
+    if (pendingValid && pendingController && pendingTitle == lpString) {
+        const HWND known = syms::HwndForController(pendingController);
+        if (!known || known == hWnd) {
+            controller = pendingController;
+        } else if (g_settings.verbose) {
+            Wh_Log(L"pairing refused: that controller already belongs to "
+                   L"another window");
+        }
+    } else if (pendingController && g_settings.verbose) {
+        Wh_Log(L"pairing refused: valid=%d titleMatch=%d written='%s' getter='%s'",
+               pendingValid ? 1 : 0, (pendingTitle == lpString) ? 1 : 0,
+               lpString, pendingTitle.c_str());
     }
 
     // Decide whether this window carries a user title BEFORE composing, and do
@@ -3376,6 +3718,8 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         Wh_Log(L"resolving symbols (this can take a while on first run)...");
         if (syms::Install(chromium)) {
             InterlockedExchange(&syms::g_enabled, 1);
+        } else {
+            Wh_Log(L"symbol layer unavailable - continuing without it");
         }
     }
 
@@ -3400,6 +3744,17 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
     //
     // Posted to each window's own UI thread, never done here - this is the
     // discovery worker, and every Chromium object involved is UI-thread-only.
+    // One line, once, under verbose. It answers the first question a "the icons
+    // stopped working" report raises - did the worker reach this loop at all,
+    // and with which settings - and not being able to answer that is what sent
+    // an entire favicon investigation at the wrong subsystem three times over.
+    if (g_settings.verbose) {
+        Wh_Log(L"maintenance loop entered: useFavicon=%d iconMsg=%u symbols=%d",
+               g_settings.useFavicon ? 1 : 0, g_applyIconMsg,
+               static_cast<int>(
+                   InterlockedCompareExchange(&syms::g_enabled, 0, 0)));
+    }
+
     while (!StopRequested()) {
         // Responsive to teardown: many short waits rather than one long one, so
         // an uninstall never waits two seconds for this loop to notice.
@@ -3434,13 +3789,43 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         if (!g_settings.useFavicon || !g_applyIconMsg) continue;
 
         std::vector<HWND> managed;
+        size_t nStates = 0, nSubclassed = 0, nController = 0;
         {
             AcquireSRWLockShared(&g_lock);
             managed.reserve(g_states.size());
+            nStates = g_states.size();
             for (const auto& [hWnd, st] : g_states) {
+                if (st.subclassed) ++nSubclassed;
+                if (st.controller) ++nController;
                 if (st.subclassed && st.controller) managed.push_back(hWnd);
             }
             ReleaseSRWLockShared(&g_lock);
+        }
+        // DIAGNOSTIC: separates the three ways a window can fail to receive an
+        // icon refresh - no state at all, no subclass, or no controller.
+        //
+        // On every change, and otherwise at most once a minute. Both halves are
+        // deliberate, and each alone was tried and was wrong. Change-triggered
+        // alone is what hid the favicon fault: seeded with a sentinel, it fires
+        // once seconds after load and never again, so every capture opened later
+        // saw nothing and read as "this code never runs". Time-triggered alone
+        // is a line every ten seconds forever on an idle session - exactly the
+        // log noise this mod was fairly pulled up on. Transitions are the signal;
+        // the periodic line exists only so a late capture still learns the
+        // steady state.
+        //
+        // Worker-thread-only, so plain statics rather than interlocked.
+        if (g_settings.verbose) {
+            static size_t lastManaged = static_cast<size_t>(-1);
+            static LONG   lastMinute  = -1;
+            const LONG    minute = static_cast<LONG>(GetTickCount64() / 60000);
+            if (managed.size() != lastManaged || minute != lastMinute) {
+                lastManaged = managed.size();
+                lastMinute  = minute;
+                Wh_Log(L"icon refresh targets: %zu (of %zu known windows; "
+                       L"%zu subclassed, %zu with a controller)",
+                       managed.size(), nStates, nSubclassed, nController);
+            }
         }
         for (HWND h : managed) {
             if (StopRequested()) break;
@@ -3577,20 +3962,51 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
 void Wh_ModBeforeUninit() {
     // Hooks are still live here, so stop transforming before unwinding. This
-    // flag is also what makes the worker abandon an in-progress sweep, so it
-    // has to be set BEFORE the join or the join can time out.
+    // flag is also what makes the worker abandon an in-progress sweep, and what
+    // makes EnsureSubclassed refuse, so it has to be set first.
     InterlockedExchange(&g_passthrough, 1);
 
-    // Unsubclass by hand rather than with WindhawkUtils::RemoveAllWindowSubclasses(),
-    // which exists only on Windhawk 2.x. The catalog compiles every mod against
-    // 1.6.1 and 1.7.3 as well, and this mod failed both on exactly that call -
-    // the one API in it that was not portable. We know which windows we
-    // subclassed, so removing them individually costs nothing and works
-    // everywhere.
+    if (g_worker) {
+        // WAIT UNCONDITIONALLY. This used to give up after 10 s and leak the
+        // handle, which does not help: Windhawk unloads this DLL right after
+        // Wh_ModUninit returns, and what matters is the worker's instruction
+        // pointer, not its handle. A thread still executing mod code when the
+        // image unmaps faults the browser.
+        //
+        // The timeout was not hypothetical either. The worker's one long
+        // operation is HookSymbols over ~1.5-1.9M symbols, which takes no
+        // cancellation callback and cannot be interrupted, so disabling the mod
+        // mid-resolution blew straight past 10 s. The stop flag is checked
+        // before resolution starts, but that is a race, not a guarantee - so
+        // the join has to be the guarantee.
+        //
+        // The visible cost is that disabling the mod during a first-run symbol
+        // resolution waits for it. That is the correct trade against a
+        // use-after-unmap.
+        WaitForSingleObject(g_worker, INFINITE);
+        CloseHandle(g_worker);
+        g_worker = nullptr;
+    }
+
+    // Subclasses are NOT removed here. They are removed in Wh_ModUninit, after
+    // Windhawk has torn the hooks down - otherwise the still-live title getter
+    // can put one straight back through
+    // GetTitle_hook -> CorrelateAllNamedWindows -> OnControllerCorrelated ->
+    // EnsureSubclassed, and a window left pointing at this image when it
+    // unmaps crashes the browser on its next message.
+}
+
+void Wh_ModUninit() {
+    // FIRST, before anything else: drop the subclasses. Hooks and the worker are
+    // both gone by now, so nothing can reinstall one behind us.
     //
-    // The list is copied out under the lock and the removals done outside it:
-    // RemoveWindowSubclassFromAnyThread marshals to each window's own thread,
-    // and holding a lock across that is how a teardown deadlocks.
+    // Done by hand rather than with WindhawkUtils::RemoveAllWindowSubclasses(),
+    // which exists only on Windhawk 2.x - the catalog also compiles against
+    // 1.6.1 and 1.7.3, and that call was the one non-portable API in this mod.
+    //
+    // The list is copied out under the lock and the removals performed outside
+    // it: RemoveWindowSubclassFromAnyThread marshals to each window's own
+    // thread, and holding a lock across that is how a teardown deadlocks.
     {
         std::vector<HWND> subclassed;
         AcquireSRWLockShared(&g_lock);
@@ -3605,25 +4021,6 @@ void Wh_ModBeforeUninit() {
         }
     }
 
-    if (g_worker) {
-        // The worker checks the stop flag every window, so it should exit
-        // almost immediately; the generous budget only covers a single
-        // in-flight SendMessageTimeout. Joining matters: Windhawk unloads this
-        // DLL right after uninit, and a worker still running mod code at that
-        // moment faults the browser process.
-        if (WaitForSingleObject(g_worker, 10000) == WAIT_TIMEOUT) {
-            // Leak the handle rather than close it while the thread lives.
-            // Nothing good is available here, but a leaked handle in a process
-            // that is unloading the mod anyway beats a use-after-unload.
-            Wh_Log(L"WARNING: discovery thread did not exit; not closing handle");
-        } else {
-            CloseHandle(g_worker);
-        }
-        g_worker = nullptr;
-    }
-}
-
-void Wh_ModUninit() {
     // Hooks are removed by now, so these restoring writes are not intercepted.
     // Leaving rewritten titles behind after an uninstall would be unacceptable.
     std::unordered_map<HWND, WindowState> snapshot;
