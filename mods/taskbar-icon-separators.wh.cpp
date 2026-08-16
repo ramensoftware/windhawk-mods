@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.1
+// @version         1.0.2
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -2758,6 +2758,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_taskListButtonOnContextRequestedOriginal,
             TaskListButton_OnContextRequested_Hook,
+            true,
         },
         {
             {
@@ -2765,6 +2766,7 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_taskListButtonHandlersHandleContextRequestedOriginal,
             TaskListButtonHandlers_HandleContextRequested_Hook,
+            true,
         },
         {
             {
@@ -2781,6 +2783,22 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             taskbarViewHooks,
             ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"[STYLE] HookSymbols(Taskbar view) failed");
+        return false;
+    }
+
+    const bool hasContextRequestRoute =
+        g_taskListButtonOnContextRequestedOriginal ||
+        g_taskListButtonHandlersHandleContextRequestedOriginal ||
+        g_taskbarResourcesOnTaskListButtonContextRequestedOriginal;
+
+    Wh_Log(
+        L"[STYLE] Context routes: button=%d handlers=%d resources=%d",
+        g_taskListButtonOnContextRequestedOriginal ? 1 : 0,
+        g_taskListButtonHandlersHandleContextRequestedOriginal ? 1 : 0,
+        g_taskbarResourcesOnTaskListButtonContextRequestedOriginal ? 1 : 0);
+
+    if (!hasContextRequestRoute) {
+        Wh_Log(L"[STYLE] No supported Taskbar.View context-request route resolved");
         return false;
     }
 
@@ -2836,9 +2854,22 @@ private:
 };
 
 static void DrainHookInstallers() {
+    constexpr ULONGLONG kDrainTimeoutMs = 2000;
+    constexpr DWORD kDrainSleepMs = 5;
+
+    const ULONGLONG started = GetTickCount64();
     while (g_hookInstallersInFlight.load(
-               std::memory_order_acquire) != 0) {
-        SwitchToThread();
+               std::memory_order_acquire) != 0 &&
+           GetTickCount64() - started < kDrainTimeoutMs) {
+        Sleep(kDrainSleepMs);
+    }
+
+    const unsigned int remaining =
+        g_hookInstallersInFlight.load(std::memory_order_acquire);
+    if (remaining != 0) {
+        Wh_Log(
+            L"[HOOK] Timed out draining %u in-flight hook installer(s); proceeding with unload",
+            remaining);
     }
 }
 
@@ -2864,6 +2895,13 @@ static bool InstallTaskbarViewHooks(
 
     // No mod mutex is held while entering the Windhawk symbol/hook engine.
     if (!HookTaskbarViewDllSymbols(module)) {
+        return false;
+    }
+
+    // If unload started while symbol resolution was in progress, don't enter
+    // another engine operation from this late installer.
+    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
+        g_unloading) {
         return false;
     }
 
@@ -2899,6 +2937,11 @@ static bool InstallTaskbarDllHooks(
     // Resolve every taskbar.dll symbol in one HookSymbols call. Besides being
     // faster, this avoids invalidating WindhawkUtils' per-module symbol cache.
     if (!HookTaskbarDllSymbols(module)) {
+        return false;
+    }
+
+    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
+        g_unloading) {
         return false;
     }
 
@@ -3272,9 +3315,9 @@ static void ApplyPinnedMoveToSnapshot(
 //
 // Windhawk no longer owns separator position/list configuration. TryMoveGroup
 // mirrors native reorder operations into the in-memory separator state. The
-// Taskbar.View drag-completion hook persists that state exactly once when the
-// drag ends. Add and Unpin have their own discrete commit points and save the
-// same state file directly.
+// Taskbar.View drag-completion hook queues one backend persistence pass when
+// the drag ends. Add and Unpin have their own discrete commit points and queue
+// the same worker; live taskbar UI callbacks never perform synchronous disk I/O.
 // -----------------------------------------------------------------------------
 
 static void FlushPendingSeparatorStateSynchronously() {
@@ -4609,6 +4652,18 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
         return 0;
     }
 
+    // A failed state write is retried with bounded exponential backoff. After
+    // the final retry, stay asleep until a fresh explicit wake (Add/Remove/
+    // drag/settings/lifecycle) rather than hammering the storage path forever.
+    static constexpr DWORD kStateWriteRetryDelaysMs[] = {
+        250,
+        500,
+        1000,
+        2000,
+        4000,
+    };
+    size_t stateWriteFailureCount = 0;
+
     for (;;) {
         // A request that arrived before this iteration is represented by the
         // snapshot we are about to take. A newer request arriving afterwards
@@ -4638,6 +4693,8 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
             stateReady = SaveSeparatorStateFile(settings);
 
             if (stateReady) {
+                stateWriteFailureCount = 0;
+
                 bool snapshotStillCurrent = false;
                 {
                     std::lock_guard<std::mutex> mutationLock(
@@ -4661,10 +4718,14 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
 
                 Wh_Log(L"[STATE] Persisted separator state on backend worker");
             } else if (!IsBackendStopRequested()) {
+                stateWriteFailureCount++;
                 Wh_Log(
-                    L"[STATE] Failed to persist separator state; "
-                    L"PinManager convergence deferred");
+                    L"[STATE] Failed to persist separator state (failure %zu); "
+                    L"PinManager convergence deferred",
+                    stateWriteFailureCount);
             }
+        } else {
+            stateWriteFailureCount = 0;
         }
 
         if (IsBackendStopRequested()) {
@@ -4722,12 +4783,21 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
 
             if (!IsBackendReconcileRequested()) {
                 if (stateReady) {
-                    Wh_Log(L"[SYNC] One or more separator operations failed; "
-                          L"waiting for another settings/retry request");
+                    Wh_Log(
+                        L"[SYNC] One or more separator operations failed; "
+                        L"waiting for another settings/retry request");
+                } else if (
+                    stateWriteFailureCount <=
+                    ARRAYSIZE(kStateWriteRetryDelaysMs)) {
+                    Wh_Log(
+                        L"[STATE] Retrying state persistence in %u ms",
+                        kStateWriteRetryDelaysMs[
+                            stateWriteFailureCount - 1]);
                 } else {
-                    Wh_Log(L"[STATE] Waiting 1 second before retrying state persistence");
+                    Wh_Log(
+                        L"[STATE] State persistence retry limit reached; "
+                        L"waiting for the next explicit wake");
                 }
-            
             }
         }
 
@@ -4740,9 +4810,16 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
             wakeEvent,
         };
 
-        // Persistence failures get a bounded retry without spinning. Normal
-        // converged operation stays asleep until explicitly woken.
-        DWORD timeout = stateReady ? INFINITE : 1000;
+        DWORD timeout = INFINITE;
+        if (!stateReady &&
+            stateWriteFailureCount > 0 &&
+            stateWriteFailureCount <=
+                ARRAYSIZE(kStateWriteRetryDelaysMs)) {
+            timeout =
+                kStateWriteRetryDelaysMs[
+                    stateWriteFailureCount - 1];
+        }
+
         DWORD waitResult =
             WaitForMultipleObjects(
                 ARRAYSIZE(events),
@@ -4758,13 +4835,17 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
             continue;
         }
 
-        if (waitResult != WAIT_OBJECT_0 + 1) {
-            Wh_Log(
-                L"[SYNC] Backend wait failed result=0x%08X error=%u",
-                waitResult,
-                GetLastError());
-            break;
+        if (waitResult == WAIT_OBJECT_0 + 1) {
+            // A real user/settings/lifecycle request gets a fresh retry budget.
+            stateWriteFailureCount = 0;
+            continue;
         }
+
+        Wh_Log(
+            L"[SYNC] Backend wait failed result=0x%08X error=%u",
+            waitResult,
+            GetLastError());
+        break;
     }
 
     CoUninitialize();
@@ -5225,8 +5306,9 @@ void ExplorerModAfterInit() {
 
 void ExplorerModBeforeUninit() {
     // Hook APIs are legal only until this callback returns. Close every late
-    // installation path first, then wait only for installers that had already
-    // entered the Windhawk hook engine. No mod mutex participates in that path.
+    // installation path first, then give already-entered installers a short,
+    // bounded chance to leave the Windhawk hook engine. Never block unload
+    // indefinitely waiting on engine work from another thread.
     g_hookInstallationClosed.store(true, std::memory_order_release);
     DrainHookInstallers();
 
