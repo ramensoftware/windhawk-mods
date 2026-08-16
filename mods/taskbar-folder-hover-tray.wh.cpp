@@ -27,8 +27,8 @@ Windows 11 only.
 
 ## Features
 
-- Buttons are sized from a live taskbar button, so they match your app icons
-  exactly at any taskbar size and DPI.
+- Buttons are real taskbar items - pin, unpin, drag to reorder, and they collapse
+  into overflow like any other taskbar icon.
 - The hover grid opens with **zero delay** - folder contents and icons are scanned
   and cached on a background thread.
 - A "corridor" between the button and the grid keeps the grid open while you move
@@ -39,8 +39,10 @@ Windows 11 only.
 - Subfolders are listed first in every grid and carry a folder badge in the
   accent colour on the corner of their icon, so what cascades is obvious at a
   glance. Folder shortcuts (`.lnk` pointing at a folder) cascade the same way.
-- Set each button's icon to an **emoji**, an **`.ico` / `.png` file**, or an
-  **`app.exe,0`** icon resource. Leave it empty to use the folder's own icon.
+- Set each button's icon to an **`.ico` file** or an **`app.exe,0`** / `.dll,N`
+  icon resource - those are the specs Windows can turn into a real shortcut icon.
+  An emoji or a `.png` is accepted in the field but falls back to the standard
+  folder glyph on the button, same as leaving it empty.
 - Left click an item to open it, right click for the full Windows shell context menu.
 - Folder buttons are injected on the primary taskbar and every secondary-monitor taskbar.
 
@@ -90,15 +92,17 @@ is dark when the rest of Windows is. From there you can:
 | **Pin** / **Unpin** | Moves the selected folder between the two sections. Unpinning takes the button off the taskbar **without deleting anything** — the entry keeps its name and icon and can be pinned again any time |
 
 The list is not reorderable, and does not need to be: **button order is set by
-dragging the buttons on the taskbar**, like any other pinned app.
+dragging the buttons on the taskbar**, like any other pinned app. Renaming a
+pinned folder unpins and re-pins its button under the new name, so it jumps to
+the end of the taskbar and has to be dragged back into place.
 
 Each entry has three fields:
 
 | Field | Example | Notes |
 |-------|---------|-------|
-| Name  | `Apps` | Shown as the title at the top of the hover grid |
+| Name  | `Apps` | Shown as the title at the top of the hover grid. Avoid naming a folder the same as (or a prefix of) a pinned app's name — the mod matches taskbar buttons to folders by their visible label, and a same-named app button can be mistaken for the folder's, suppressing its tooltip and opening the folder grid on hover instead |
 | Folder | `%USERPROFILE%\Desktop` | Environment variables are expanded. `shell:` targets that map to a **filesystem folder** also work (e.g. `shell:Desktop`, `shell:Downloads`). Virtual namespaces such as Control Panel, Recycle Bin, or This PC are not supported — use [Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp) for those. |
-| Icon | an emoji, `C:\icons\apps.ico`, or `C:\Windows\explorer.exe,0` | Leave empty to use the folder's own icon |
+| Icon | `C:\icons\apps.ico` or `C:\Windows\explorer.exe,0` | Leave empty to use the folder's own icon. An emoji or `.png` is accepted here but shows as the standard folder glyph on the button |
 
 **Open** next to the folder box opens whatever path is currently typed, so a
 path can be checked before it is saved.
@@ -174,8 +178,9 @@ so an overlay is always at least a frame behind. That whole approach, and the
 ~2,000 lines that chased it, is gone.
 
 One thing to know: a button's **icon comes from the shortcut**, which means it has
-to be a real icon file. `.ico` files, `app.exe,0` resource specs and a folder's own
-custom icon all work. An **emoji icon falls back** to the standard folder glyph.
+to be a real icon resource. `.ico` files, `app.exe,0` / `.dll,N` resource specs and
+a folder's own custom icon all work. An **emoji or `.png` icon falls back** to the
+standard folder glyph - Windows shortcuts can't point their icon at either.
 
 ## If you already use Taskbar Folder Menus
 
@@ -189,10 +194,10 @@ not both.
 
 | | Taskbar Folder Hover Tray (this) | Taskbar Folder Menus |
 |---|---|---|
-| Placement | Carved gap inside the **app icon strip** (flush with pinned/running apps) | Next to the **system tray** / notification area |
+| Placement | Real taskbar buttons in the **app icon strip** (flush with pinned/running apps) | Next to the **system tray** / notification area |
 | Open | **Hover** opens immediately | **Click** opens |
 | UI | Custom-drawn **icon grid** popup | **Native Shell** cascading menus |
-| Buttons | Sized from live taskbar app buttons; emoji/custom icons optional | Compact tray buttons with emoji labels and extensive tray grid layout options |
+| Buttons | Native taskbar buttons; `.ico`/resource icons optional | Compact tray buttons with emoji labels and extensive tray grid layout options |
 
 Choose **Taskbar Folder Menus** for tray-side buttons and native Shell menus.
 Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
@@ -421,16 +426,12 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
-#include <winrt/Windows.UI.Xaml.Media.Animation.h>
-#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.h>
@@ -446,6 +447,7 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #ifndef SEE_MASK_ASYNCOK
@@ -461,7 +463,6 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
-using namespace winrt::Windows::UI::Xaml::Media::Animation;
 using namespace winrt::Windows::UI::Xaml::Hosting;
 
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
@@ -806,7 +807,7 @@ std::wstring FindRenamedSibling(const std::wstring& oldPath, uint64_t fileId) {
 std::wstring ReadFolderCustomIcon(const std::wstring& folderPath) {
     // GetPrivateProfileStringW opens the file, so an offline share blocks for
     // the network timeout — on the Explorer UI thread in the pin flow. An empty
-    // spec is a valid entry: MakeButtonContent falls back to the folder's own
+    // spec is a valid entry: ResolveIcon falls back to the folder's own
     // shell icon.
     if (IsLikelyRemotePath(folderPath)) {
         return L"";
@@ -855,10 +856,7 @@ constexpr int kMaxEntries = 200;
 // what LoadFolders takes; nothing may hold this one across ReloadAndRefreshUI,
 // since that reaches LoadFolders and would invert the order.
 //
-// no_destroy: Wh_ModUninit does not run when Explorer terminates, but CRT
-// destructors of globals do, on a shutdown thread — a mutex must not be
-// destroyed out from under a thread that could still be holding it.
-[[clang::no_destroy]] std::recursive_mutex g_mutex;
+std::recursive_mutex g_mutex;
 
 struct Entry {
     std::wstring path;
@@ -1166,7 +1164,7 @@ bool ParseIconSpec(const std::wstring& spec, std::wstring* file, int* index) {
 //
 // ponytail: emoji and .png icons fall back to the default folder glyph. Giving
 // them real buttons means rendering to an .ico next to the shortcut - the mod
-// already builds these images for the hover grid (MakeButtonContent), so the
+// already builds these images for the hover grid (HIconToBitmap), so the
 // missing piece is only an HICON -> .ico writer.
 void ResolveIcon(const FolderStore::Entry& entry,
                  const std::wstring& folderPath,
@@ -1217,9 +1215,24 @@ std::wstring ReadShortcutAppId(const std::wstring& lnkPath) {
     return appId;
 }
 
-// Writes (or rewrites) the shortcut behind one entry. Rewriting on every
-// reconcile is deliberate: it is how a renamed folder, a changed icon, or a
-// moved target reach an already-pinned button.
+// pinId -> signature of what was last written for it. Reconcile runs on a
+// single dedicated worker thread (see ThreadProc below), so this needs no
+// lock. Lets a reorder-drag reconcile (which touches every pinned entry, not
+// just the moved one) skip the .lnk rewrite and jump list COM round-trip for
+// every entry whose content did not actually change.
+std::unordered_map<std::wstring, std::wstring> g_shortcutSignatures;
+
+std::wstring ShortcutSignature(const FolderStore::Entry& entry,
+                               const std::wstring& folderPath,
+                               const std::wstring& lnkPath) {
+    return entry.name + L"\x1f" + folderPath + L"\x1f" + entry.icon + L"\x1f" +
+           lnkPath;
+}
+
+// Writes (or rewrites) the shortcut behind one entry. Callers gate this on
+// g_shortcutSignatures so it only actually runs when something changed, but
+// this function itself always writes - it is how a renamed folder, a changed
+// icon, or a moved target reach an already-pinned button.
 bool WriteShortcut(const FolderStore::Entry& entry,
                    const std::wstring& folderPath,
                    const std::wstring& lnkPath) {
@@ -1362,6 +1375,11 @@ IShellLinkW* MakeManageTask() {
 }
 
 // Publishes the jump list for one of our pinned items.
+// AppIDs whose jump list is already known to be on the shell's copy, so
+// Reconcile (see below) does not redo the ICustomDestinationList round-trip
+// for every pinned item on every pass.
+std::unordered_set<std::wstring> g_jumpListWritten;
+
 void WriteJumpList(const std::wstring& appId) {
     ICustomDestinationList* list = nullptr;
     if (FAILED(CoCreateInstance(CLSID_DestinationList, nullptr,
@@ -1524,9 +1542,8 @@ std::vector<std::wstring> ReadPinnedAppIds() {
 // during layout, and rebuilding it means opening every pinned shortcut through
 // COM — far too expensive to do on a layout pass. The generation counter lets
 // that thread notice a change without holding the lock to compare.
-[[clang::no_destroy]] std::mutex g_labelMutex;
-[[clang::no_destroy]] std::vector<std::pair<std::wstring, std::wstring>>
-    g_labelToPinId;
+std::mutex g_labelMutex;
+std::vector<std::pair<std::wstring, std::wstring>> g_labelToPinId;
 std::atomic<uint32_t> g_labelGeneration{0};
 
 void PublishLabels(const std::vector<PinnedItem>& items) {
@@ -1547,44 +1564,53 @@ void PublishLabels(const std::vector<PinnedItem>& items) {
 
 // A taskbar button's accessible name is the item's label plus whatever state
 // the shell wants to announce — "Games pinned", "Brave - 1 running window
-// pinned", "Cursor - 1 running window". So the label is a prefix, not the whole
-// string, and the remainder has to be one of those recognised annotations.
-//
-// Checking the remainder rather than just taking a prefix match matters: a
-// folder called "Games" must not claim a button for an app called
-// "Games Launcher".
+// pinned", "Cursor - 1 running window" in English, but the annotation itself
+// is locale text ("Games angeheftet" in German, etc). So rather than
+// whitelist annotation strings, the label is treated as a prefix full stop,
+// and PinIdForLabel below picks the exact/longest match among our own labels
+// to keep "Games" from claiming a button actually named "Games Launcher".
 bool LabelMatchesAccessibleName(const std::wstring& leaf,
                                 const std::wstring& name) {
     if (leaf.empty() || name.size() < leaf.size()) {
         return false;
     }
-    if (_wcsnicmp(name.c_str(), leaf.c_str(), leaf.size()) != 0) {
-        return false;
-    }
-    std::wstring rest = name.substr(leaf.size());
-    if (rest.empty()) {
-        return true;
-    }
-    // "<label> pinned"
-    if (_wcsicmp(rest.c_str(), L" pinned") == 0) {
-        return true;
-    }
-    // "<label> - 1 running window", with or without a trailing " pinned".
-    if (rest.size() > 3 && _wcsnicmp(rest.c_str(), L" - ", 3) == 0) {
-        return true;
-    }
-    return false;
+    return _wcsnicmp(name.c_str(), leaf.c_str(), leaf.size()) == 0;
 }
 
-// Empty when this label is not one of ours.
+// Empty when this label is not one of ours, or when it is ambiguous between
+// two of our own labels (e.g. folders named "Games" and "Games Launcher" both
+// prefix-match the same button) — in that case, skip rather than guess.
+//
+// ponytail: only disambiguates against our own labels, not every other
+// realized taskbar button's label. A folder literally named as a prefix of
+// some other app's title ("Games" vs. a real "Games Launcher" app) can still
+// mismatch. Add cross-button disambiguation (bridge XAML button -> AppID via
+// CTaskGroup::GetAppID) if that turns out to matter in practice.
 std::wstring PinIdForLabel(const std::wstring& accessibleName) {
     std::lock_guard<std::mutex> lock(g_labelMutex);
+    const std::wstring* bestLeaf = nullptr;
+    std::wstring bestPinId;
+    bool ambiguous = false;
     for (const auto& [leaf, pinId] : g_labelToPinId) {
-        if (LabelMatchesAccessibleName(leaf, accessibleName)) {
+        if (!LabelMatchesAccessibleName(leaf, accessibleName)) {
+            continue;
+        }
+        if (leaf.size() == accessibleName.size()) {
+            // Exact match wins outright.
             return pinId;
         }
+        if (!bestLeaf || leaf.size() > bestLeaf->size()) {
+            bestLeaf = &leaf;
+            bestPinId = pinId;
+            ambiguous = false;
+        } else if (leaf.size() == bestLeaf->size()) {
+            ambiguous = true;
+        }
     }
-    return L"";
+    if (!bestLeaf || ambiguous) {
+        return L"";
+    }
+    return bestPinId;
 }
 
 bool Contains(const std::vector<std::wstring>& list, const std::wstring& value) {
@@ -1624,6 +1650,7 @@ void Reconcile() {
 
     bool unpinnedByUser = false;
     bool generatedPinIds = false;
+    bool renamedOnDisk = false;
 
     {
         std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
@@ -1676,6 +1703,43 @@ void Reconcile() {
                 unpinnedByUser = true;
                 continue;
             }
+            // Follow an in-place rename done outside the mod (Explorer's own
+            // F2/right-click Rename on the folder itself, not the mod's Name
+            // field). BuildFolderEntry already does this, but only runs on
+            // Wh_ModInit / a settings reload — nothing previously watched the
+            // pinned folders themselves, so a plain Explorer rename never
+            // reached the taskbar button until something unrelated forced a
+            // reload. Reconcile already runs on every taskbar/pin change and
+            // periodically (see kReconcilePollMs below), so doing the same
+            // fileId lookup here catches it without waiting on that.
+            std::wstring expandedPath = ExpandEnv(entry.path);
+            if (!IsShellFolderPath(expandedPath) && entry.fileId != 0 &&
+                !IsLikelyRemotePath(expandedPath) &&
+                !DirectoryExists(ResolveFolderPath(expandedPath))) {
+                std::wstring renamed =
+                    FindRenamedSibling(expandedPath, entry.fileId);
+                if (!renamed.empty()) {
+                    size_t slash = expandedPath.find_last_of(L"\\/");
+                    std::wstring oldLeaf = slash == std::wstring::npos
+                                               ? expandedPath
+                                               : expandedPath.substr(slash + 1);
+                    bool nameWasLeaf = entry.name.empty() ||
+                                       _wcsicmp(entry.name.c_str(),
+                                                oldLeaf.c_str()) == 0;
+                    Wh_Log(L"Pins: '%s' was renamed to '%s' on disk, following",
+                           expandedPath.c_str(), renamed.c_str());
+                    entry.path = renamed;
+                    if (nameWasLeaf) {
+                        size_t newSlash = renamed.find_last_of(L"\\/");
+                        entry.name = newSlash == std::wstring::npos
+                                         ? renamed
+                                         : renamed.substr(newSlash + 1);
+                    }
+                    storeChanged = true;
+                    renamedOnDisk = true;
+                }
+            }
+
             // Only a copy of what the slow work below needs. Resolving a path
             // and writing a shortcut both touch the filesystem, and the folder
             // may be a network share that blocks for the share's timeout — the
@@ -1694,17 +1758,43 @@ void Reconcile() {
         if (folderPath.empty()) {
             folderPath = ExpandEnv(entry.path);
         }
-        // A folder that no longer exists would be pruned by the shell anyway;
-        // leave the entry alone so the user can fix the path rather than
-        // silently losing it.
-        if (GetFileAttributesW(folderPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-            Wh_Log(L"Pins: '%s' does not exist, not pinning", folderPath.c_str());
+        bool resolves =
+            GetFileAttributesW(folderPath.c_str()) != INVALID_FILE_ATTRIBUTES;
+
+        std::wstring lnkPath = LnkPathFor(entry, &takenLeaves);
+        if (lnkPath.empty()) {
             continue;
         }
 
-        std::wstring lnkPath = LnkPathFor(entry, &takenLeaves);
-        if (lnkPath.empty() || !WriteShortcut(entry, folderPath, lnkPath)) {
-            continue;
+        if (!resolves) {
+            // Offline share, unplugged drive, or a drive letter not yet
+            // remapped at logon: this is likely transient, not gone. Keep
+            // whatever shortcut was last written for it so the taskbar button
+            // is neither unpinned nor swept below - losing its position is
+            // worse than leaving a stale button up while the folder is
+            // unreachable. Only skip entirely when there is nothing to keep.
+            if (GetFileAttributesW(lnkPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                Wh_Log(L"Pins: '%s' does not exist and was never pinned, "
+                       L"skipping",
+                       folderPath.c_str());
+                continue;
+            }
+            Wh_Log(L"Pins: '%s' does not currently resolve, keeping existing "
+                   L"pin",
+                   folderPath.c_str());
+        } else {
+            std::wstring signature = ShortcutSignature(entry, folderPath, lnkPath);
+            auto cached = g_shortcutSignatures.find(entry.pinId);
+            bool unchanged = cached != g_shortcutSignatures.end() &&
+                             cached->second == signature &&
+                             GetFileAttributesW(lnkPath.c_str()) !=
+                                 INVALID_FILE_ATTRIBUTES;
+            if (!unchanged) {
+                if (!WriteShortcut(entry, folderPath, lnkPath)) {
+                    continue;
+                }
+                g_shortcutSignatures[entry.pinId] = signature;
+            }
         }
         keepFiles.push_back(lnkPath);
 
@@ -1717,6 +1807,16 @@ void Reconcile() {
     // the pinned item keeps whatever name it had when it was pinned — renaming
     // the source .lnk afterwards does not reach the taskbar, and the button
     // would sit there labelled with a name the mod no longer uses.
+    //
+    // renamedAppIds tracks which of our own appIds got unpinned here for a
+    // stale label. Explorer does not appear to treat "unpin AppID X, pin AppID
+    // X again" as two real operations when they land back to back on the same
+    // pass with no real elapsed time between them - the re-pin silently has no
+    // effect, even though both InvokeCommand calls return success. Waiting
+    // below for the unpin to actually drop off the shell's own pinned list
+    // before asking for the re-pin is what a manual unpin-then-later-pin from
+    // the real taskbar menu gets for free just by not being instantaneous.
+    std::unordered_set<std::wstring> renamedAppIds;
     for (const auto& item : ReadPinnedItems()) {
         const Desired* match = nullptr;
         for (const auto& want : desired) {
@@ -1739,17 +1839,48 @@ void Reconcile() {
                 Wh_Log(L"Pins: '%s' is now called '%s', re-pinning",
                        item.leaf.c_str(), match->leaf.c_str());
             }
+            renamedAppIds.insert(item.appId);
         }
+    }
+
+    // Give each rename's unpin real wall-clock time to actually drop off the
+    // shell's pinned list before the pin loop below runs - see the comment
+    // above. Bounded so a share/permission hiccup that leaves the unpin
+    // stuck cannot hang this worker thread indefinitely; the next debounced
+    // pass will just try again.
+    if (!renamedAppIds.empty()) {
+        Wh_Log(L"Pins: %zu renamed item(s) to wait on before re-pinning",
+               renamedAppIds.size());
+    }
+    for (const auto& appId : renamedAppIds) {
+        ULONGLONG start = GetTickCount64();
+        bool dropped = false;
+        for (int waited = 0; waited < 2000; waited += 25) {
+            if (!Contains(ReadPinnedAppIds(), appId)) {
+                dropped = true;
+                break;
+            }
+            Sleep(25);
+        }
+        Wh_Log(L"Pins: waited %llums for %s to drop from the pinned list: %s",
+               GetTickCount64() - start, appId.c_str(),
+               dropped ? L"dropped" : L"still there, giving up for now");
     }
 
     std::vector<std::wstring> live = ReadPinnedAppIds();
 
     for (const auto& item : desired) {
-        if (Contains(live, item.appId)) {
+        bool wasRenamed = renamedAppIds.count(item.appId) != 0;
+        if (Contains(live, item.appId) && !wasRenamed) {
             continue;
         }
+        Wh_Log(L"Pins: pinning %s (renamed=%d, still-live=%d)",
+               item.lnkPath.c_str(), wasRenamed, Contains(live, item.appId));
         if (InvokeVerb(item.lnkPath, "taskbarpin")) {
             Wh_Log(L"Pins: pinned %s", item.lnkPath.c_str());
+        } else {
+            Wh_Log(L"Pins: pin attempt for %s did not succeed",
+                   item.lnkPath.c_str());
         }
     }
 
@@ -1806,12 +1937,28 @@ void Reconcile() {
     // even when a pinned copy's name has drifted from the source shortcut.
     PublishLabels(finalItems);
 
-    // Put "Manage folders..." on each button's own right-click menu. Rewritten
-    // every reconcile rather than once: the jump list is stored per AppID by
-    // the shell, and an item that was unpinned and pinned again comes back
-    // without one.
-    for (const auto& item : finalItems) {
-        WriteJumpList(item.appId);
+    // Put "Manage folders..." on each button's own right-click menu. Needs
+    // rewriting after an item was unpinned and pinned again - the jump list
+    // is stored per AppID by the shell, and it does not come back on its own
+    // - so g_jumpListWritten is cleared for any AppID that drops off the
+    // taskbar, forcing the next reconcile that sees it again to redo it. An
+    // AppID that stayed pinned across this pass already has its jump list.
+    {
+        std::unordered_set<std::wstring> stillLive;
+        for (const auto& item : finalItems) {
+            stillLive.insert(item.appId);
+            if (g_jumpListWritten.insert(item.appId).second) {
+                WriteJumpList(item.appId);
+            }
+        }
+        for (auto it = g_jumpListWritten.begin();
+             it != g_jumpListWritten.end();) {
+            if (stillLive.count(*it)) {
+                ++it;
+            } else {
+                it = g_jumpListWritten.erase(it);
+            }
+        }
     }
 
     // Both of these mean the loaded folder list no longer matches the store.
@@ -1826,7 +1973,11 @@ void Reconcile() {
     // labels resolve, and nothing matches. Reloading re-reads the store now that
     // the ids are persisted; the next reconcile generates none, so this does not
     // recur.
-    if (unpinnedByUser || generatedPinIds) {
+    //
+    // renamedOnDisk: an Explorer rename updated the store's path/name under
+    // the entry, so g_settings.folders still points hover and the scan
+    // thread at the pre-rename path until this reloads it.
+    if (unpinnedByUser || generatedPinIds || renamedOnDisk) {
         RequestReloadUI();
     }
 }
@@ -1851,6 +2002,14 @@ HANDLE g_kickEvent = nullptr;  // auto-reset
 // folder (which is what ReadPinnedAppIds reads) and the Taskband key the shell
 // keeps the order in. Either firing is treated as "something changed, go look".
 constexpr DWORD kPinWatchDebounceMs = 400;
+
+// Nothing watches the pinned folders themselves - only the shell's own
+// pinned-items copy and the Taskband key are watched, both of which are about
+// pin *state*, not about the folder Explorer's F2/right-click Rename just
+// renamed on disk. This is the safety net that catches that case: it bounds
+// how long a plain Explorer rename can sit unreflected on the taskbar without
+// needing an unrelated pin/unpin to shake a reconcile loose.
+constexpr DWORD kReconcilePollMs = 10000;
 
 DWORD WINAPI ThreadProc(void*) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -1917,11 +2076,14 @@ DWORD WINAPI ThreadProc(void*) {
 
     bool stopping = false;
     while (!stopping) {
-        DWORD result = WaitForMultipleObjects(count, waits, FALSE, INFINITE);
+        DWORD result =
+            WaitForMultipleObjects(count, waits, FALSE, kReconcilePollMs);
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) {
             break;
         }
-        rearm(result - WAIT_OBJECT_0);
+        if (result != WAIT_TIMEOUT) {
+            rearm(result - WAIT_OBJECT_0);
+        }
 
         // Coalesce the burst. One pin or unpin rewrites several files and the
         // registry, and this mod's own reconcile writes to the same places, so
@@ -2131,6 +2293,14 @@ bool IsPinnedTaskbarFolder(const std::wstring& path) {
 // than becoming a second entry for the same folder. No-op (returns false) only
 // if the folder is already pinned.
 bool AddPinnedFolder(const std::wstring& path, const std::wstring& name) {
+    // Gathered before the lock: both do filesystem I/O (desktop.ini, a file
+    // handle for the id), and the rest of the code carefully keeps that kind
+    // of I/O off FolderStore::g_mutex (see the todo copy in Reconcile). Wasted
+    // if this turns out to be a re-pin of an existing entry, but that is
+    // cheaper than blocking every other store access on it.
+    std::wstring icon = ReadFolderCustomIcon(path);
+    uint64_t fileId = GetDirFileId(path);
+
     // Held across read-modify-write: the manager thread and the taskbar UI
     // thread mutate the same store.
     std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
@@ -2149,8 +2319,8 @@ bool AddPinnedFolder(const std::wstring& path, const std::wstring& name) {
     entry.name = name;
     // No icon field in the right-click pin flow, so this is the only chance to
     // pick up a custom folder icon.
-    entry.icon = ReadFolderCustomIcon(path);
-    entry.fileId = GetDirFileId(path);
+    entry.icon = std::move(icon);
+    entry.fileId = fileId;
     entry.pinned = true;
     stored.push_back(std::move(entry));
     FolderStore::Write(stored);
@@ -2479,9 +2649,9 @@ bool RunFromWindowThread(HWND hWnd,
                     // The hook is thread-wide, so a second in-flight call from
                     // another thread puts a second copy of this proc in the
                     // chain — and both copies match this one message and this
-                    // one param. Running the callback twice would make
-                    // ApplyButtonIconOnUiThread adopt an already-deleted
-                    // ButtonIconDelivery. Claim it instead: the param lives on
+                    // one param. Running the callback twice would double-run
+                    // the caller's proc against a param it may have already
+                    // torn down. Claim it instead: the param lives on
                     // the sender's stack and both copies run synchronously on
                     // this thread, so no lock is needed (and a lock held across
                     // SendMessage is the hazard the rest of the mod avoids).
@@ -2507,10 +2677,10 @@ bool RunFromWindowThread(HWND hWnd,
 
     // A window destroyed between GetWindowThreadProcessId and the send makes
     // SendMessage return without dispatching, so the hook never fires. Report
-    // that honestly: DeliverButtonIconToUi hands ownership over on a true and
-    // would leak the delivery, and Wh_ModUninit would skip its teardown and the
-    // warning that goes with it. Whichever hook copy ran the callback cleared
-    // param.proc, so this is already the answer.
+    // that honestly: a caller that hands ownership over on a true return would
+    // leak whatever it passed, and Wh_ModUninit's teardown call would skip its
+    // warning on a false negative. Whichever hook copy ran the callback
+    // cleared param.proc, so this is already the answer.
     return param.proc == nullptr;
 }
 
@@ -4059,13 +4229,10 @@ void StopScanThread() {
         std::swap(workEvent, g_scanWorkEvent);
     }
     if (thread && thread->joinable()) {
-        // Pump sent messages while waiting. The worker delivers button icons
-        // with a blocking SendMessage to the taskbar UI thread
-        // (DeliverButtonIconToUi -> RunFromWindowThread), and the taskbar
-        // right-click unpin reaches here from that very thread — a plain
-        // join() would leave both blocked forever and hang the taskbar. The
-        // g_scanThreadStop check before the delivery narrows that window but
-        // cannot close it. Same shape as StopRetryThread.
+        // Pump sent messages while waiting: this worker runs an STA apartment,
+        // and COM's cross-apartment marshaling reaches STA threads via sent
+        // messages, so a plain join() risks deadlocking whatever thread is
+        // blocked sending into it. Same shape as StopRetryThread.
         HANDLE handle = (HANDLE)thread->native_handle();
         DWORD result;
         do {
@@ -4265,6 +4432,7 @@ void OpenSubLevel(int parentDepth, int cell);
 void CloseLevelsFrom(int depth);
 void CloseChain();
 void HideItemTooltip();
+void DestroyItemTooltip();
 void StartRetryThread();
 bool EnsurePopupClasses();
 HWND EnsureMenuOwnerWindow();
@@ -5667,18 +5835,20 @@ void OnTick() {
 }
 
 // One shared standard tooltip control, tracked to the cursor, for grid item
-// labels the ellipsis cut off. Lazily created and never destroyed - it costs
-// nothing sitting hidden, and every popup window uses the same one.
+// labels the ellipsis cut off. Lazily created; DestroyItemTooltip below tears
+// it down on unload, since the HWND belongs to this DLL's image and a fresh
+// one would otherwise be created (and leaked) on every reload.
+HWND g_itemTooltip = nullptr;
+
 HWND EnsureItemTooltip() {
-    static HWND tooltip = nullptr;
-    if (tooltip) {
-        return tooltip;
+    if (g_itemTooltip) {
+        return g_itemTooltip;
     }
-    tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
-                              WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
-                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                              CW_USEDEFAULT, nullptr, nullptr,
-                              GetCurrentModuleHandle(), nullptr);
+    HWND tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
+                                   WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+                                   CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                                   CW_USEDEFAULT, nullptr, nullptr,
+                                   GetCurrentModuleHandle(), nullptr);
     if (!tooltip) {
         return nullptr;
     }
@@ -5688,18 +5858,30 @@ HWND EnsureItemTooltip() {
     info.uId = 1;
     info.lpszText = const_cast<LPWSTR>(L"");
     SendMessageW(tooltip, TTM_ADDTOOL, 0, (LPARAM)&info);
+    g_itemTooltip = tooltip;
     return tooltip;
 }
 
+// Must run on the tooltip's creating UI thread, like the rest of
+// teardownOnUiThread.
+void DestroyItemTooltip() {
+    if (g_itemTooltip) {
+        DestroyWindow(g_itemTooltip);
+        g_itemTooltip = nullptr;
+    }
+}
+
 void HideItemTooltip() {
-    HWND tooltip = EnsureItemTooltip();
-    if (!tooltip) {
+    // No-op rather than EnsureItemTooltip: nothing was ever shown, so there is
+    // nothing to hide, and creating one here just to hide it is wasted on
+    // every teardown.
+    if (!g_itemTooltip) {
         return;
     }
     TOOLINFOW info{sizeof(info)};
     info.hwnd = nullptr;
     info.uId = 1;
-    SendMessageW(tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&info);
+    SendMessageW(g_itemTooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&info);
 }
 
 // screenPt is where the cursor is; the tooltip is offset below-right of it so
@@ -6226,6 +6408,10 @@ struct PinBinding {
     int folderIndex = -1;
     winrt::event_token enterToken{};
     winrt::event_token exitToken{};
+    // The shell's tooltip, saved before we clear it, so unbinding can put it
+    // back rather than leaving the container tooltip-less for whatever the
+    // shell realizes there next.
+    winrt::Windows::Foundation::IInspectable savedTooltip{nullptr};
 };
 
 // One per taskbar window (primary + each secondary monitor).
@@ -6256,7 +6442,6 @@ std::vector<std::unique_ptr<TaskbarHost>>& TaskbarHosts() {
 }
 
 std::atomic<bool> g_injectionLive{false};
-std::atomic<uint32_t> g_buttonIconGeneration{1};
 
 // Lifetime retry worker: stays alive until StopRetryThread (settings/uninit).
 // StartRetryThread ensures the worker exists and SetEvent(kick) — never joins
@@ -6476,6 +6661,7 @@ void UnbindPinButtons(TaskbarHost* host) {
             if (binding.exitToken.value) {
                 binding.button.PointerExited(binding.exitToken);
             }
+            ToolTipService::SetToolTip(binding.button, binding.savedTooltip);
         } catch (...) {
             // The element can already be torn down; nothing to release then.
         }
@@ -6529,12 +6715,15 @@ void RebindPinButtons(TaskbarHost* host) {
 
         // Explorer's own tooltip echoes the pinned label, which fights the
         // grid we open on hover with a second, redundant popup naming the
-        // same folder. Suppress it for buttons we've claimed.
+        // same folder. Suppress it for buttons we've claimed, saving the
+        // shell's value so UnbindPinButtons can restore it later.
+        auto savedTooltip = ToolTipService::GetToolTip(child);
         ToolTipService::SetToolTip(child, nullptr);
 
         PinBinding binding;
         binding.button = child;
         binding.folderIndex = folderIndex;
+        binding.savedTooltip = savedTooltip;
         binding.enterToken = child.PointerEntered(
             [folderIndex, taskbarWnd](
                 winrt::Windows::Foundation::IInspectable const& sender,
@@ -6619,6 +6808,7 @@ constexpr int kIdRemove = 1004;
 constexpr int kIdTogglePin = 1005;
 constexpr int kIdClose = 1008;
 constexpr int kIdHint = 1009;
+constexpr int kIdRemoveAll = 1010;
 
 // Edit-dialog controls.
 constexpr int kIdEditName = 1101;
@@ -6660,7 +6850,7 @@ constexpr int kSectionHeader = 24;
 
 // 96-DPI client size of each window, before AdjustWindowRect.
 constexpr int kMainWidth = 476;
-constexpr int kMainHeight = 400;
+constexpr int kMainHeight = 434;
 constexpr int kEditWidth = 470;
 constexpr int kEditHeight = 306;
 
@@ -6707,6 +6897,7 @@ constexpr ChildRect kMainLayout[] = {
     {kIdEdit, 94, 324, 76, 26},       {kIdRemove, 176, 324, 76, 26},
     {kIdTogglePin, 258, 324, 76, 26}, {kIdClose, 388, 324, 76, 26},
     {kIdHint, 12, 360, 452, 32},
+    {kIdRemoveAll, 12, 396, 200, 26},
 };
 
 // The store as last read, in listbox order. Manager-thread only.
@@ -7818,6 +8009,54 @@ void RemoveSelected(HWND hWnd) {
     RefreshAfterStoreChange(hWnd);
 }
 
+// The mod deliberately leaves its taskbar buttons, source shortcuts and
+// per-AppID jump lists in place on unload/disable (nothing else cleans those
+// up, since they are also how a reload picks the state back up) — this is the
+// explicit escape hatch for a user who wants them gone for good.
+void RemoveAllFolderButtons(HWND hWnd) {
+    std::wstring prompt =
+        L"Remove all folder buttons from the taskbar?\n\nThis unpins every "
+        L"folder button this mod created, deletes their Start Menu "
+        L"shortcuts, and clears the folder list. This cannot be undone.";
+    if (MessageBoxW(hWnd, prompt.c_str(), L"Taskbar Folders",
+                    MB_OKCANCEL | MB_ICONWARNING) != IDOK ||
+        g_unloading) {
+        return;
+    }
+
+    for (const auto& item : Pins::ReadPinnedItems()) {
+        Pins::InvokeVerb(item.path, "taskbarunpin");
+    }
+
+    std::wstring dir = Pins::SourceDir();
+    if (!dir.empty()) {
+        WIN32_FIND_DATAW find{};
+        HANDLE handle = FindFirstFileW((dir + L"\\*.lnk").c_str(), &find);
+        if (handle != INVALID_HANDLE_VALUE) {
+            do {
+                if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                    continue;
+                }
+                std::wstring path = dir + L"\\" + find.cFileName;
+                DeleteFileW(path.c_str());
+                SHChangeNotify(SHCNE_DELETE, SHCNF_PATH | SHCNF_FLUSH,
+                              path.c_str(), nullptr);
+            } while (FindNextFileW(handle, &find));
+            FindClose(handle);
+        }
+        // Only removes it if it is now empty, which it is unless something
+        // else put a file there.
+        RemoveDirectoryW(dir.c_str());
+    }
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        FolderStore::Write({});
+    }
+
+    RefreshAfterStoreChange(hWnd);
+}
+
 // A single-select listbox never lets go of its selection on its own — a click
 // below the last row just does nothing, and there is no other way to clear
 // it. LB_ITEMFROMPOINT's high word flags a point outside every row's client
@@ -7861,7 +8100,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                           {kIdEdit, L"Edit..."},
                                           {kIdRemove, L"Remove"},
                                           {kIdTogglePin, L"Pin"},
-                                          {kIdClose, L"Close"}};
+                                          {kIdClose, L"Close"},
+                                          {kIdRemoveAll,
+                                           L"Remove all folder buttons..."}};
             for (const auto& b : buttons) {
                 CreateWindowExW(0, L"BUTTON", b.text,
                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -7974,6 +8215,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 TogglePinSelected(hWnd);
             } else if (id == kIdClose) {
                 DestroyWindow(hWnd);
+            } else if (id == kIdRemoveAll) {
+                RemoveAllFolderButtons(hWnd);
             } else if (id == kIdList && code == LBN_DBLCLK) {
                 EditSelected(hWnd);
             } else if (id == kIdList && code == LBN_SELCHANGE) {
@@ -8077,10 +8320,11 @@ void ThreadMain(POINT anchor) {
 //
 // no_destroy for the same reason as g_scanThread: destroying a joinable
 // std::thread calls std::terminate, and CRT teardown at Explorer exit must not
-// touch it. g_threadMutex guards the slot — Open() can be called from the
-// taskbar UI thread while Wh_ModUninit runs CloseAndWait on another.
+// touch it.
 [[clang::no_destroy]] std::optional<std::thread> g_thread;
-[[clang::no_destroy]] std::mutex g_threadMutex;
+// Guards the slot above — Open() can be called from the taskbar UI thread
+// while Wh_ModUninit runs CloseAndWait on another.
+std::mutex g_threadMutex;
 
 // Brings an already-open window forward instead of opening a second one.
 void Open() {
@@ -8204,35 +8448,6 @@ void CloseAndWait() {
 }
 
 }  // namespace FolderManager
-
-// Quick scale-down-and-back on the button content, matching the feedback the
-// Win11 taskbar gives its own pinned buttons when they are activated.
-constexpr int kPressBounceMs = 250;
-constexpr float kPressBounceScale = 0.86f;
-
-void PlayPressBounce(UIElement const& element) {
-    auto target = element.try_as<FrameworkElement>();
-    if (!target) {
-        return;
-    }
-    try {
-        auto visual = ElementCompositionPreview::GetElementVisual(target);
-        visual.CenterPoint({(float)target.ActualWidth() / 2.0f,
-                            (float)target.ActualHeight() / 2.0f, 0.0f});
-        auto compositor = visual.Compositor();
-        auto easing = compositor.CreateCubicBezierEasingFunction({0.3f, 0.0f},
-                                                                 {0.2f, 1.0f});
-        auto anim = compositor.CreateVector3KeyFrameAnimation();
-        anim.InsertKeyFrame(0.0f, {1.0f, 1.0f, 1.0f});
-        anim.InsertKeyFrame(0.35f,
-                            {kPressBounceScale, kPressBounceScale, 1.0f},
-                            easing);
-        anim.InsertKeyFrame(1.0f, {1.0f, 1.0f, 1.0f}, easing);
-        anim.Duration(std::chrono::milliseconds(kPressBounceMs));
-        visual.StartAnimation(L"Scale", anim);
-    } catch (...) {
-    }
-}
 
 TaskbarHost* FindTaskbarHost(HWND taskbarWnd) {
     if (!g_taskbarHosts) {
@@ -8408,9 +8623,9 @@ bool InjectHostGridsOnTaskbarThread() {
         // hover/open and RequestScan see filesystem paths (no CoInitializeEx).
         ResolvePendingFolderEntries();
 
-        // An empty folder list is not an early-out: BuildHostGrid stands in the
-        // "add a folder" placeholder button, the only route to the manager when
-        // there is no real button to right-click.
+        // An empty folder list is not an early-out: InjectHostGridForTaskbar
+        // still seats a host so a later settings reload that adds folders can
+        // bind buttons immediately, without waiting on the retry cycle.
         //
         // Drop hosts for taskbar HWNDs that no longer exist (unplugged monitors)
         // without tearing down every seated host on each retry.
@@ -9090,8 +9305,8 @@ std::atomic<bool> g_menuDark{true};
 // the hwnd handed to TrackPopupMenuEx, which belongs to the thread running that
 // menu, and EndMenu only cancels the calling thread's menu — so uninit needs
 // every owner, not whichever one entered last.
-[[clang::no_destroy]] std::mutex g_explorerMenuMutex;
-[[clang::no_destroy]] std::vector<HWND> g_explorerMenuOwners;
+std::mutex g_explorerMenuMutex;
+std::vector<HWND> g_explorerMenuOwners;
 
 bool ExplorerMenuOwnersSnapshot(std::vector<HWND>* out) {
     std::lock_guard<std::mutex> lock(g_explorerMenuMutex);
@@ -9107,6 +9322,13 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
                                  int y,
                                  HWND hwnd,
                                  LPTPMPARAMS params) {
+    // Teardown is already waiting on every registered owner in
+    // g_explorerMenuOwners (see Wh_ModUninit); injecting menu items this late
+    // would just add one more owner to wait out for no benefit.
+    if (g_unloading) {
+        return TrackPopupMenuEx_orig(hMenu, flags, x, y, hwnd, params);
+    }
+
     struct MenuActiveGuard {
         HWND owner;
         explicit MenuActiveGuard(HWND ownerWnd) : owner(ownerWnd) {
@@ -9418,11 +9640,11 @@ BOOL WINAPI CreateProcessW_Hook(LPCWSTR applicationName,
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    // Before LoadSettings: LoadFolders ends with Pins::RequestReconcile, and the
-    // worker has to exist for that kick to land. Start() only creates the thread
-    // and signals; the reconcile itself runs on that thread.
-    Pins::Start();
-
+    // LoadFolders ends with Pins::RequestReconcile, which is a no-op with no
+    // worker yet. Pins::Start() below kicks a reconcile itself once it starts
+    // the thread, so nothing depends on starting the worker this early -- and
+    // starting it late means a return FALSE below leaves no thread running in
+    // an image Windhawk is about to unmap.
     LoadSettings();
     ResetFolderData();
 
@@ -9441,6 +9663,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    Pins::Start();
+
     // Only when the Explorer integration is on: with it off, every context
     // menu in the process stays entirely untouched by this mod, so nothing in
     // the menu path can affect Explorer at all. Windhawk has no way to remove
@@ -9454,10 +9678,9 @@ BOOL Wh_ModInit() {
     if (!g_settings.explorerMenu) {
         Wh_Log(L"Explorer right-click integration is off; not hooking "
                L"TrackPopupMenuEx");
-    } else if (!Wh_SetFunctionHook(
-                   (void*)TrackPopupMenuEx,
-                   (void*)AddToTaskbar::TrackPopupMenuExHook,
-                   (void**)&AddToTaskbar::TrackPopupMenuEx_orig)) {
+    } else if (!WindhawkUtils::SetFunctionHook(
+                   TrackPopupMenuEx, AddToTaskbar::TrackPopupMenuExHook,
+                   &AddToTaskbar::TrackPopupMenuEx_orig)) {
         // Non-fatal: the rest of the mod works without the right-click
         // integration.
         Wh_Log(L"Failed to hook TrackPopupMenuEx; Explorer right-click "
@@ -9468,9 +9691,16 @@ BOOL Wh_ModInit() {
     // CreateProcessW, whatever the shell does above it, so this is the one
     // place that cannot be missed. Non-fatal: without it the task falls through
     // and opens an Explorer window instead of the manager.
-    if (!Wh_SetFunctionHook((void*)CreateProcessW,
-                            (void*)CreateProcessW_Hook,
-                            (void**)&CreateProcessW_Original)) {
+    //
+    // Resolved from kernelbase.dll rather than linked via kernel32's
+    // CreateProcessW: the implementation lives in kernelbase, and callers that
+    // bind through the API set (api-ms-win-core-processthreads-l1-*) reach it
+    // directly, bypassing the kernel32 export this hook would otherwise patch.
+    auto pCreateProcessW = (decltype(&CreateProcessW))GetProcAddress(
+        GetModuleHandleW(L"kernelbase.dll"), "CreateProcessW");
+    if (!pCreateProcessW || !WindhawkUtils::SetFunctionHook(
+                                 pCreateProcessW, CreateProcessW_Hook,
+                                 &CreateProcessW_Original)) {
         Wh_Log(L"Failed to hook CreateProcessW; the jump list's Manage "
                L"folders task will not open the manager");
     }
@@ -9546,7 +9776,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     // so toggling the Explorer integration asks Windhawk for a reload instead
     // of leaving the new value to take effect at some unrelated later point.
     // The UI is rebuilt by the reload, so RequestReloadUI would be redundant.
-    bool reload = (Wh_GetIntSetting(L"explorerMenu") != 0) != g_explorerMenuHooked;
+    bool reload = (Wh_GetIntSetting(L"behavior.explorerMenu") != 0) != g_explorerMenuHooked;
     if (reload) {
         *bReload = TRUE;
     } else {
@@ -9577,6 +9807,7 @@ void Wh_ModUninit() {
     auto teardownOnUiThread = [](void*) {
         ClearPendingShellCommand();
         CloseChain();
+        DestroyItemTooltip();
         RemoveAllHostGrids();
 
         for (HWND hWnd : g_levelWindows) {
@@ -9707,7 +9938,7 @@ void Wh_ModUninit() {
 
     if (threadWnd) {
         if (!RunFromWindowThread(threadWnd, teardownOnUiThread, nullptr)) {
-            Wh_Log(L"Uninidt: RunFromWindowThread failed (error %u); windows "
+            Wh_Log(L"Uninit: RunFromWindowThread failed (error %u); windows "
                    L"may leak and UnregisterClass may fail",
                    GetLastError());
         }
