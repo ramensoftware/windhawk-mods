@@ -87,7 +87,6 @@ default. All other selections open the file once without changing the system def
 - **ReactOS** — Inspiration
 - **aubymori** — Inspiration
 */
-*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
