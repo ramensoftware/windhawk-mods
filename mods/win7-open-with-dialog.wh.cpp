@@ -23,7 +23,7 @@ keeping the original file and application paths untouched.
 
 The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**. The public API and
 classic context-menu paths are designed to fail safely on unsupported builds.
-## Screenshot 
+## Screenshot
 
 ![openwith](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/openwith.PNG)
 
@@ -51,6 +51,9 @@ classic context-menu paths are designed to fail safely on unsupported builds.
   Dutch, Polish and 107 more), with automatic language detection.
 - **Short file display**: Shows `File: photo.png` instead of the full path. The
   full path is retained internally for execution.
+- **Optional description box**: The "Type a description to use for this kind of
+  file" label and edit can be hidden from the settings (off by default), which
+  also shrinks the dialog by the space they used.
 - **Custom icon**: Uses the supplied document-and-magnifier artwork, embedded as
   transparent 32×32 BGRA Base64.
 - **DPI aware**: Scales the window and controls for the owner monitor.
@@ -107,6 +110,9 @@ the default.
 - showWebLink: true
   $name: Show the Web search link
   $description: Show the Windows 7-style Web link. Only the sanitized file extension is sent to the browser search.
+- hideDescriptionField: false
+  $name: Hide the description box
+  $description: Hide the "Type a description to use for this kind of file" label and its text box, and shrink the dialog by the space they used. The file type keeps its existing description when this is enabled.
 - defaultAssociationBehavior: disabled
   $name: Always use checkbox behavior
   $description: The checkbox now uses IAssocHandler::MakeDefault. This setting controls only the fallback used when Windows rejects the association request.
@@ -254,6 +260,7 @@ the default.
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <uxtheme.h>
+#include <vssym32.h>
 #include <dwmapi.h>
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -266,6 +273,7 @@ the default.
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <cwctype>
 #include <memory>
@@ -291,14 +299,25 @@ the default.
 namespace DarkModeActivation {
 enum class AppMode { Default, AllowDark, ForceDark, ForceLight, Max };
 using SetPreferredAppMode_t = AppMode(WINAPI*)(AppMode);
-using FlushMenuThemes_t = void(WINAPI*)();
 using AllowDarkModeForWindow_t = bool(WINAPI*)(HWND, bool);
 
 static HMODULE g_hUxtheme = nullptr;
 static SetPreferredAppMode_t pSetPreferredAppMode = nullptr;
-static FlushMenuThemes_t pFlushMenuThemes = nullptr;
 static AllowDarkModeForWindow_t pAllowDarkModeForWindow = nullptr;
 static bool g_resolved = false;
+
+// SetPreferredAppMode is a PER-PROCESS setting and the picker's worker
+// thread lives inside explorer.exe, which sets AllowDark for itself at
+// startup. Passing Default here would turn Explorer's own dark rendering
+// off process-wide (shell context menus, controls, and any other mod that
+// had set AllowDark/ForceDark), and the change would outlive the mod.
+// So: capture the host's mode once, never pass Default as a "light"
+// request, and put the captured mode back when the picker closes and in
+// Wh_ModUninit. FlushMenuThemes is not called at all - it re-themes the
+// whole process and the picker has no menus.
+static AppMode g_initialAppMode = AppMode::Default;
+static bool g_initialAppModeCaptured = false;
+static bool g_appModeOverridden = false;
 
 static void Resolve() {
     if (g_resolved) return;
@@ -308,10 +327,27 @@ static void Resolve() {
     if (!g_hUxtheme) return;
     pSetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_t>(
         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135)));
-    pFlushMenuThemes = reinterpret_cast<FlushMenuThemes_t>(
-        GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136)));
     pAllowDarkModeForWindow = reinterpret_cast<AllowDarkModeForWindow_t>(
         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(133)));
+}
+
+// Reads the host process's current preferred app mode without changing
+// it: the ordinal returns the mode that was in effect, so calling it with
+// that same value both queries and leaves the process untouched.
+static void CaptureInitialAppMode() {
+    if (g_initialAppModeCaptured || !pSetPreferredAppMode) return;
+    g_initialAppMode = pSetPreferredAppMode(AppMode::Default);
+    pSetPreferredAppMode(g_initialAppMode);
+    g_initialAppModeCaptured = true;
+}
+
+// Restores the host's captured mode. Called when the picker closes and
+// from Wh_ModUninit, so nothing the mod did to the process survives it.
+static void RestoreAppMode() {
+    if (!g_appModeOverridden) return;
+    g_appModeOverridden = false;
+    if (pSetPreferredAppMode && g_initialAppModeCaptured)
+        pSetPreferredAppMode(g_initialAppMode);
 }
 
 // Recursively opts a window and every descendant into (or out of) dark
@@ -320,8 +356,23 @@ static void Resolve() {
 static void Apply(HWND window, bool dark) {
     Resolve();
     if (!window) return;
-    if (pSetPreferredAppMode)
-        pSetPreferredAppMode(dark ? AppMode::AllowDark : AppMode::Default);
+    if (pSetPreferredAppMode) {
+        CaptureInitialAppMode();
+        if (dark) {
+            // Only ever widen the process mode, and only while a dark
+            // picker actually needs it. Hosts already running AllowDark
+            // or ForceDark are left alone.
+            if (g_initialAppMode != AppMode::AllowDark &&
+                g_initialAppMode != AppMode::ForceDark) {
+                pSetPreferredAppMode(AppMode::AllowDark);
+                g_appModeOverridden = true;
+            }
+        } else {
+            // Light picker: put back whatever the host had. Never force
+            // Default, that would disable dark mode process-wide.
+            RestoreAppMode();
+        }
+    }
     if (pAllowDarkModeForWindow) {
         pAllowDarkModeForWindow(window, dark);
         for (HWND child = GetWindow(window, GW_CHILD); child;
@@ -334,7 +385,6 @@ static void Apply(HWND window, bool dark) {
          child = GetWindow(child, GW_HWNDNEXT)) {
         SendMessageW(child, WM_THEMECHANGED, 0, 0);
     }
-    if (pFlushMenuThemes) pFlushMenuThemes();
 }
 }  // namespace DarkModeActivation
 
@@ -442,6 +492,7 @@ class BrushOwner {
    public:
     ~BrushOwner() { Reset(); }
     BrushOwner() = default;
+    explicit BrushOwner(HBRUSH value) : value_(value) {}
     BrushOwner(const BrushOwner&) = delete;
     BrushOwner& operator=(const BrushOwner&) = delete;
     HBRUSH Get() const { return value_; }
@@ -453,6 +504,161 @@ class BrushOwner {
 
    private:
     HBRUSH value_ = nullptr;
+};
+
+class PenOwner {
+   public:
+    PenOwner() = default;
+    explicit PenOwner(HPEN value) : value_(value) {}
+    ~PenOwner() { Reset(); }
+    PenOwner(const PenOwner&) = delete;
+    PenOwner& operator=(const PenOwner&) = delete;
+    HPEN Get() const { return value_; }
+    explicit operator bool() const { return value_ != nullptr; }
+    void Reset(HPEN value = nullptr) {
+        if (value_) DeleteObject(value_);
+        value_ = value;
+    }
+
+   private:
+    HPEN value_ = nullptr;
+};
+
+class RegionOwner {
+   public:
+    RegionOwner() = default;
+    explicit RegionOwner(HRGN value) : value_(value) {}
+    ~RegionOwner() { Reset(); }
+    RegionOwner(const RegionOwner&) = delete;
+    RegionOwner& operator=(const RegionOwner&) = delete;
+    HRGN Get() const { return value_; }
+    explicit operator bool() const { return value_ != nullptr; }
+    void Reset(HRGN value = nullptr) {
+        if (value_) DeleteObject(value_);
+        value_ = value;
+    }
+
+   private:
+    HRGN value_ = nullptr;
+};
+
+class BitmapOwner {
+   public:
+    BitmapOwner() = default;
+    explicit BitmapOwner(HBITMAP value) : value_(value) {}
+    ~BitmapOwner() { Reset(); }
+    BitmapOwner(const BitmapOwner&) = delete;
+    BitmapOwner& operator=(const BitmapOwner&) = delete;
+    HBITMAP Get() const { return value_; }
+    explicit operator bool() const { return value_ != nullptr; }
+    HBITMAP Detach() {
+        HBITMAP value = value_;
+        value_ = nullptr;
+        return value;
+    }
+    void Reset(HBITMAP value = nullptr) {
+        if (value_) DeleteObject(value_);
+        value_ = value;
+    }
+
+   private:
+    HBITMAP value_ = nullptr;
+};
+
+// Window DC obtained with GetDC: released against the window it came
+// from, unlike a memory DC, which is deleted (see MemoryDcOwner).
+class WindowDcOwner {
+   public:
+    WindowDcOwner(HWND window, HDC dc) : window_(window), dc_(dc) {}
+    explicit WindowDcOwner(HWND window)
+        : window_(window), dc_(GetDC(window)) {}
+    ~WindowDcOwner() {
+        if (dc_) ReleaseDC(window_, dc_);
+    }
+    WindowDcOwner(const WindowDcOwner&) = delete;
+    WindowDcOwner& operator=(const WindowDcOwner&) = delete;
+    HDC Get() const { return dc_; }
+    explicit operator bool() const { return dc_ != nullptr; }
+
+   private:
+    HWND window_ = nullptr;
+    HDC dc_ = nullptr;
+};
+
+class MemoryDcOwner {
+   public:
+    MemoryDcOwner() = default;
+    explicit MemoryDcOwner(HDC dc) : dc_(dc) {}
+    ~MemoryDcOwner() {
+        if (dc_) DeleteDC(dc_);
+    }
+    MemoryDcOwner(const MemoryDcOwner&) = delete;
+    MemoryDcOwner& operator=(const MemoryDcOwner&) = delete;
+    HDC Get() const { return dc_; }
+    explicit operator bool() const { return dc_ != nullptr; }
+
+   private:
+    HDC dc_ = nullptr;
+};
+
+// Restores the object a SelectObject call displaced. Selecting into a DC
+// is a swap, so the previous object has to go back before the DC is
+// released or the replacement is destroyed.
+class SelectedObject {
+   public:
+    SelectedObject() = default;
+    SelectedObject(HDC dc, HGDIOBJ object)
+        : dc_(dc), previous_(object ? SelectObject(dc, object) : nullptr) {}
+    ~SelectedObject() {
+        if (dc_ && previous_) SelectObject(dc_, previous_);
+    }
+    SelectedObject(const SelectedObject&) = delete;
+    SelectedObject& operator=(const SelectedObject&) = delete;
+
+   private:
+    HDC dc_ = nullptr;
+    HGDIOBJ previous_ = nullptr;
+};
+
+class ThemeOwner {
+   public:
+    ThemeOwner() = default;
+    explicit ThemeOwner(HTHEME value) : value_(value) {}
+    ~ThemeOwner() { Reset(); }
+    ThemeOwner(const ThemeOwner&) = delete;
+    ThemeOwner& operator=(const ThemeOwner&) = delete;
+    HTHEME Get() const { return value_; }
+    explicit operator bool() const { return value_ != nullptr; }
+    void Reset(HTHEME value = nullptr) {
+        if (value_) CloseThemeData(value_);
+        value_ = value;
+    }
+
+   private:
+    HTHEME value_ = nullptr;
+};
+
+// CommandLineToArgvW returns a single LocalAlloc block holding both the
+// pointer array and the strings.
+class ArgvOwner {
+   public:
+    explicit ArgvOwner(LPCWSTR commandLine)
+        : value_(CommandLineToArgvW(commandLine, &count_)) {
+        if (!value_) count_ = 0;
+    }
+    ~ArgvOwner() {
+        if (value_) LocalFree(value_);
+    }
+    ArgvOwner(const ArgvOwner&) = delete;
+    ArgvOwner& operator=(const ArgvOwner&) = delete;
+    LPWSTR* Get() const { return value_; }
+    int Count() const { return count_; }
+    explicit operator bool() const { return value_ != nullptr; }
+    LPCWSTR operator[](int index) const { return value_[index]; }
+
+   private:
+    LPWSTR* value_ = nullptr;
+    int count_ = 0;
 };
 
 static std::atomic<HWND> g_activeBrowseHwnd{nullptr};
@@ -1366,21 +1572,21 @@ static const LocalePack g_Locales[] = {
     }},
     {0x048C, {  // Dari
         L"باز کردن با",
-        L"برنامه‌ای را که می‌خواهید برای باز کردن این فایل استفاده کنید انتخاب کنید:",
+        L"برنامه\u200cای را که می\u200cخواهید برای باز کردن این فایل استفاده کنید انتخاب کنید:",
         L"فایل:",
-        L"برنامه‌های پیشنهادشده",
-        L"برنامه‌های دیگر",
-        L"توضیحی را که می‌خواهید برای این نوع فایل استفاده کنید تایپ کنید:",
-        L"&همیشه از برنامه انتخاب‌شده برای باز کردن این نوع فایل استفاده کن",
+        L"برنامه\u200cهای پیشنهادشده",
+        L"برنامه\u200cهای دیگر",
+        L"توضیحی را که می\u200cخواهید برای این نوع فایل استفاده کنید تایپ کنید:",
+        L"&همیشه از برنامه انتخاب\u200cشده برای باز کردن این نوع فایل استفاده کن",
         L"&مرور...",
-        L"اگر برنامه‌ای که می‌خواهید در فهرست یا در رایانه شما نیست، می‌توانید <A ID=\"WebSearch\">برنامه مناسب را در وب جستجو کنید</A>.",
+        L"اگر برنامه\u200cای که می\u200cخواهید در فهرست یا در رایانه شما نیست، می\u200cتوانید <A ID=\"WebSearch\">برنامه مناسب را در وب جستجو کنید</A>.",
         L"باز کردن با...",
-        L"برنامه‌ها",
-        L"همه فایل‌ها",
+        L"برنامه\u200cها",
+        L"همه فایل\u200cها",
         L"تأیید",
         L"لغو",
-        L"هیچ برنامه ثبت‌شده‌ای نمی‌تواند این نوع فایل را باز کند.",
-        L"برنامه انتخاب‌شده نتوانست فایل را باز کند.",
+        L"هیچ برنامه ثبت\u200cشده\u200cای نمی\u200cتواند این نوع فایل را باز کند.",
+        L"برنامه انتخاب\u200cشده نتوانست فایل را باز کند.",
     }},
     {0x0465, {  // Divehi
         L"ހުޅުވާލުން",
@@ -1640,13 +1846,13 @@ static const LocalePack g_Locales[] = {
         L"ಫೈಲ್:",
         L"ಶಿಫಾರಸು ಮಾಡಲಾದ ಪ್ರೋಗ್ರಾಂಗಳು",
         L"ಇತರ ಪ್ರೋಗ್ರಾಂಗಳು",
-        L"ಈ ರೀತಿಯ ಫೈಲ್‌ಗಾಗಿ ನೀವು ಬಳಸಲು ಬಯಸುವ ವಿವರಣೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ:",
+        L"ಈ ರೀತಿಯ ಫೈಲ್\u200cಗಾಗಿ ನೀವು ಬಳಸಲು ಬಯಸುವ ವಿವರಣೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ:",
         L"&ಈ ರೀತಿಯ ಫೈಲ್ ತೆರೆಯಲು ಯಾವಾಗಲೂ ಆಯ್ಕೆಮಾಡಿದ ಪ್ರೋಗ್ರಾಂ ಬಳಸಿ",
         L"&ಬ್ರೌಸ್ ಮಾಡಿ...",
-        L"ನಿಮಗೆ ಬೇಕಾದ ಪ್ರೋಗ್ರಾಂ ಪಟ್ಟಿಯಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ಇಲ್ಲದಿದ್ದರೆ, ನೀವು <A ID=\"WebSearch\">ವೆಬ್‌ನಲ್ಲಿ ಸೂಕ್ತ ಪ್ರೋಗ್ರಾಂ ಹುಡುಕಬಹುದು</A>.",
+        L"ನಿಮಗೆ ಬೇಕಾದ ಪ್ರೋಗ್ರಾಂ ಪಟ್ಟಿಯಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್\u200cನಲ್ಲಿ ಇಲ್ಲದಿದ್ದರೆ, ನೀವು <A ID=\"WebSearch\">ವೆಬ್\u200cನಲ್ಲಿ ಸೂಕ್ತ ಪ್ರೋಗ್ರಾಂ ಹುಡುಕಬಹುದು</A>.",
         L"ಇದರೊಂದಿಗೆ ತೆರೆಯಿರಿ...",
         L"ಪ್ರೋಗ್ರಾಂಗಳು",
-        L"ಎಲ್ಲಾ ಫೈಲ್‌ಗಳು",
+        L"ಎಲ್ಲಾ ಫೈಲ್\u200cಗಳು",
         L"ಸರಿ",
         L"ರದ್ದುಮಾಡಿ",
         L"ಯಾವುದೇ ನೋಂದಾಯಿತ ಪ್ರೋಗ್ರಾಂ ಈ ರೀತಿಯ ಫೈಲ್ ತೆರೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ.",
@@ -2021,7 +2227,7 @@ static const LocalePack g_Locales[] = {
         L"ଏହି ପ୍ରକାରର ଫାଇଲ୍ ପାଇଁ ଆପଣ ବ୍ୟବହାର କରିବାକୁ ଚାହୁଁଥିବା ବର୍ଣ୍ଣନା ଟାଇପ୍ କରନ୍ତୁ:",
         L"&ଏହି ପ୍ରକାରର ଫାଇଲ୍ ଖୋଲିବା ପାଇଁ ସର୍ବଦା ବଛା ଯାଇଥିବା ପ୍ରୋଗ୍ରାମ୍ ବ୍ୟବହାର କରନ୍ତୁ",
         L"&ବ୍ରାଉଜ୍ କରନ୍ତୁ...",
-        L"ଆପଣ ଚାହୁଁଥିବା ପ୍ରୋଗ୍ରାମ୍ ତାଲିକାରେ କିମ୍ବା ଆପଣଙ୍କ କମ୍ପ୍ୟୁଟରରେ ନ ଥିଲେ, ଆପଣ <A ID=\"WebSearch\">ୱେବ୍‌ରେ ଉପଯୁକ୍ତ ପ୍ରୋଗ୍ରାମ୍ ଖୋଜି ପାରିବେ</A>।",
+        L"ଆପଣ ଚାହୁଁଥିବା ପ୍ରୋଗ୍ରାମ୍ ତାଲିକାରେ କିମ୍ବା ଆପଣଙ୍କ କମ୍ପ୍ୟୁଟରରେ ନ ଥିଲେ, ଆପଣ <A ID=\"WebSearch\">ୱେବ୍\u200cରେ ଉପଯୁକ୍ତ ପ୍ରୋଗ୍ରାମ୍ ଖୋଜି ପାରିବେ</A>।",
         L"ଏହାଦ୍ୱାରା ଖୋଲନ୍ତୁ...",
         L"ପ୍ରୋଗ୍ରାମ୍",
         L"ସମସ୍ତ ଫାଇଲ୍",
@@ -2050,21 +2256,21 @@ static const LocalePack g_Locales[] = {
     }},
     {0x0429, {  // Persian
         L"باز کردن با",
-        L"برنامه‌ای را که می‌خواهید برای باز کردن این فایل استفاده کنید انتخاب کنید:",
+        L"برنامه\u200cای را که می\u200cخواهید برای باز کردن این فایل استفاده کنید انتخاب کنید:",
         L"فایل:",
-        L"برنامه‌های پیشنهادی",
-        L"برنامه‌های دیگر",
-        L"توضیحی را که می‌خواهید برای این نوع فایل استفاده کنید تایپ کنید:",
-        L"&همیشه از برنامه انتخاب‌شده برای باز کردن این نوع فایل استفاده کن",
+        L"برنامه\u200cهای پیشنهادی",
+        L"برنامه\u200cهای دیگر",
+        L"توضیحی را که می\u200cخواهید برای این نوع فایل استفاده کنید تایپ کنید:",
+        L"&همیشه از برنامه انتخاب\u200cشده برای باز کردن این نوع فایل استفاده کن",
         L"&مرور...",
-        L"اگر برنامه مورد نظر در فهرست یا روی رایانه شما نیست، می‌توانید <A ID=\"WebSearch\">برنامه مناسب را در وب جستجو کنید</A>.",
+        L"اگر برنامه مورد نظر در فهرست یا روی رایانه شما نیست، می\u200cتوانید <A ID=\"WebSearch\">برنامه مناسب را در وب جستجو کنید</A>.",
         L"باز کردن با...",
-        L"برنامه‌ها",
-        L"همه فایل‌ها",
+        L"برنامه\u200cها",
+        L"همه فایل\u200cها",
         L"تأیید",
         L"لغو",
-        L"هیچ برنامه ثبت‌شده‌ای نمی‌تواند این نوع فایل را باز کند.",
-        L"برنامه انتخاب‌شده نتوانست فایل را باز کند.",
+        L"هیچ برنامه ثبت\u200cشده\u200cای نمی\u200cتواند این نوع فایل را باز کند.",
+        L"برنامه انتخاب\u200cشده نتوانست فایل را باز کند.",
     }},
     {0x0446, {  // Punjabi
         L"ਨਾਲ ਖੋਲ੍ਹੋ",
@@ -2194,14 +2400,14 @@ static const LocalePack g_Locales[] = {
     }},
     {0x045B, {  // Sinhala
         L"සමඟ විවෘත කරන්න",
-        L"මෙම ගොනුව විවෘත කිරීමට ඔබට භාවිතා කිරීමට අවශ්‍ය වැඩසටහන තෝරන්න:",
+        L"මෙම ගොනුව විවෘත කිරීමට ඔබට භාවිතා කිරීමට අවශ්\u200dය වැඩසටහන තෝරන්න:",
         L"ගොනුව:",
         L"නිර්දේශිත වැඩසටහන්",
         L"වෙනත් වැඩසටහන්",
-        L"මෙවැනි ගොනු සඳහා ඔබට භාවිතා කිරීමට අවශ්‍ය විස්තරය ටයිප් කරන්න:",
+        L"මෙවැනි ගොනු සඳහා ඔබට භාවිතා කිරීමට අවශ්\u200dය විස්තරය ටයිප් කරන්න:",
         L"&මෙවැනි ගොනු විවෘත කිරීමට සැමවිටම තෝරාගත් වැඩසටහන භාවිතා කරන්න",
-        L"&බ්‍රවුස් කරන්න...",
-        L"ඔබට අවශ්‍ය වැඩසටහන ලැයිස්තුවේ හෝ ඔබේ පරිගණකයේ නොමැති නම්, ඔබට <A ID=\"WebSearch\">වෙබයේ සුදුසු වැඩසටහන සෙවිය හැක</A>.",
+        L"&බ්\u200dරවුස් කරන්න...",
+        L"ඔබට අවශ්\u200dය වැඩසටහන ලැයිස්තුවේ හෝ ඔබේ පරිගණකයේ නොමැති නම්, ඔබට <A ID=\"WebSearch\">වෙබයේ සුදුසු වැඩසටහන සෙවිය හැක</A>.",
         L"සමඟ විවෘත කරන්න...",
         L"වැඩසටහන්",
         L"සියලුම ගොනු",
@@ -2284,21 +2490,21 @@ static const LocalePack g_Locales[] = {
     }},
     {0x044A, {  // Telugu
         L"దీనితో తెరవండి",
-        L"ఈ ఫైల్‌ను తెరవడానికి మీరు ఉపయోగించాలనుకుంటున్న ప్రోగ్రామ్‌ను ఎంచుకోండి:",
+        L"ఈ ఫైల్\u200cను తెరవడానికి మీరు ఉపయోగించాలనుకుంటున్న ప్రోగ్రామ్\u200cను ఎంచుకోండి:",
         L"ఫైల్:",
-        L"సిఫార్సు చేసిన ప్రోగ్రామ్‌లు",
-        L"ఇతర ప్రోగ్రామ్‌లు",
+        L"సిఫార్సు చేసిన ప్రోగ్రామ్\u200cలు",
+        L"ఇతర ప్రోగ్రామ్\u200cలు",
         L"ఈ రకమైన ఫైల్ కోసం మీరు ఉపయోగించాలనుకుంటున్న వివరణను టైప్ చేయండి:",
-        L"&ఈ రకమైన ఫైల్ తెరవడానికి ఎల్లప్పుడూ ఎంచుకున్న ప్రోగ్రామ్‌ను ఉపయోగించు",
+        L"&ఈ రకమైన ఫైల్ తెరవడానికి ఎల్లప్పుడూ ఎంచుకున్న ప్రోగ్రామ్\u200cను ఉపయోగించు",
         L"&బ్రౌజ్ చేయండి...",
-        L"మీకు కావలసిన ప్రోగ్రామ్ జాబితాలో లేదా మీ కంప్యూటర్‌లో లేకపోతే, మీరు <A ID=\"WebSearch\">వెబ్‌లో తగిన ప్రోగ్రామ్ కోసం వెతకవచ్చు</A>.",
+        L"మీకు కావలసిన ప్రోగ్రామ్ జాబితాలో లేదా మీ కంప్యూటర్\u200cలో లేకపోతే, మీరు <A ID=\"WebSearch\">వెబ్\u200cలో తగిన ప్రోగ్రామ్ కోసం వెతకవచ్చు</A>.",
         L"దీనితో తెరవండి...",
-        L"ప్రోగ్రామ్‌లు",
-        L"అన్ని ఫైల్‌లు",
+        L"ప్రోగ్రామ్\u200cలు",
+        L"అన్ని ఫైల్\u200cలు",
         L"సరే",
         L"రద్దు చేయి",
-        L"ఈ రకమైన ఫైల్‌ను తెరవగల నమోదిత ప్రోగ్రామ్ ఏదీ లేదు.",
-        L"ఎంచుకున్న ప్రోగ్రామ్ ఫైల్‌ను తెరవలేకపోయింది.",
+        L"ఈ రకమైన ఫైల్\u200cను తెరవగల నమోదిత ప్రోగ్రామ్ ఏదీ లేదు.",
+        L"ఎంచుకున్న ప్రోగ్రామ్ ఫైల్\u200cను తెరవలేకపోయింది.",
     }},
     {0x041E, {  // Thai
         L"เปิดด้วย",
@@ -2768,6 +2974,19 @@ enum class ThemeMode {
 
 static std::atomic<bool> g_replaceSystemDialog{true};
 static std::atomic<bool> g_showWebLink{true};
+static std::atomic<bool> g_hideDescriptionField{false};
+
+// Vertical space the description block occupies in the dialog layout, in
+// logical pixels: from the top of its label (y=300) to the top of the
+// "Always use" checkbox (y=354). When the block is hidden, the window
+// and every control below it shrink/move up by exactly this much.
+constexpr int kDescriptionBlockHeight = 54;
+
+static int DescriptionLayoutShift() {
+    return g_hideDescriptionField.load(std::memory_order_acquire)
+               ? kDescriptionBlockHeight
+               : 0;
+}
 static std::atomic<ThemeMode> g_themeMode{ThemeMode::Auto};
 static std::atomic<DefaultBehavior> g_defaultBehavior{DefaultBehavior::Disabled};
 
@@ -3024,6 +3243,8 @@ static bool ResolveDarkMode() {
 static void LoadSettings() {
     const bool replace = Wh_GetIntSetting(L"replaceSystemDialog") != 0;
     const bool web = Wh_GetIntSetting(L"showWebLink") != 0;
+    const bool hideDescription =
+        Wh_GetIntSetting(L"hideDescriptionField") != 0;
 
     WindhawkUtils::StringSetting language =
         WindhawkUtils::StringSetting::make(L"language");
@@ -3053,6 +3274,8 @@ static void LoadSettings() {
     g_defaultBehavior.store(behavior, std::memory_order_release);
     g_themeMode.store(theme, std::memory_order_release);
     g_showWebLink.store(web, std::memory_order_release);
+    g_hideDescriptionField.store(hideDescription,
+                                 std::memory_order_release);
     g_replaceSystemDialog.store(replace, std::memory_order_release);
     DetermineLocale();
 }
@@ -3079,6 +3302,12 @@ struct PickerRequest {
     HANDLE completionEvent = nullptr;
     // Properties -> Change selects a default but must not execute the file.
     bool setDefaultOnly = false;
+    // Optional caller-owned output flag: true when the user accepted a
+    // program, false when the dialog was cancelled. The API contract of
+    // SHOpenWithDialog / ShellExecuteExW distinguishes the two (Cancel is
+    // HRESULT_FROM_WIN32(ERROR_CANCELLED) / FALSE + ERROR_CANCELLED), so
+    // the waiting hooks need more than "the picker finished".
+    std::atomic<bool>* acceptedOut = nullptr;
 };
 
 struct PickerState {
@@ -3102,6 +3331,14 @@ struct PickerState {
     // Index of the list row under the pointer, for the Windows 7 flyout
     // style hover frame (dark theme only, -1 when nothing is hovered).
     int hoverRow = -1;
+    // Physical pixel size of the program icons in the list image list,
+    // resolved from the window DPI in InitializeList.
+    int listIconSize = 32;
+    // Logical pixels every control below the description box moves up by
+    // when the description box is hidden. Captured once in
+    // BuildPickerControls so a setting change mid-dialog cannot leave the
+    // window and its controls disagreeing about the layout.
+    int descriptionOffsetY = 0;
     bool finished = false;
     bool accepted = false;
     bool makeDefaultRequested = false;
@@ -3322,9 +3559,9 @@ static bool HandlerExecutableExists(const std::wstring& executable, const std::w
     if (!progId.empty()) {
         wchar_t subKey[512] = {};
         if (swprintf_s(subKey, L"%s\\shell\\open\\command", progId.c_str()) > 0) {
-            HKEY key = nullptr;
-            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, subKey, 0, KEY_READ, &key) == ERROR_SUCCESS) {
-                RegCloseKey(key);
+            RegKeyOwner key;
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, subKey, 0, KEY_READ,
+                              key.Put()) == ERROR_SUCCESS) {
                 return true;
             }
         }
@@ -3365,18 +3602,13 @@ static std::wstring ExecutableFromCommand(PCWSTR command) {
         return {};
     }
 
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(expanded.c_str(), &argc);
-    if (!argv || argc < 1) {
-        if (argv) LocalFree(argv);
-        return {};
-    }
+    ArgvOwner argv(expanded.c_str());
+    if (!argv || argv.Count() < 1) return {};
     std::wstring executable;
     try {
         executable.assign(argv[0]);
     } catch (...) {
     }
-    LocalFree(argv);
     if (executable.empty()) return {};
 
     if (GetFileAttributesW(executable.c_str()) == INVALID_FILE_ATTRIBUTES) {
@@ -3655,12 +3887,27 @@ entry.companyName = ExecutableCompanyName(entry.internalName);
     return !state.handlers.empty();
 }
 
-static HICON DefaultAppIcon() {
+static HICON DefaultAppIcon(int size = 0) {
+    if (size > 0) {
+        HICON scaled = static_cast<HICON>(
+            LoadImageW(nullptr, IDI_APPLICATION, IMAGE_ICON, size, size,
+                       LR_DEFAULTCOLOR));
+        if (scaled) return scaled;
+    }
     HICON shared = LoadIconW(nullptr, IDI_APPLICATION);
     return shared ? CopyIcon(shared) : nullptr;
 }
 
-static HICON EntryIcon(const HandlerEntry& entry) {
+// Loads a program icon at an explicit pixel size.
+//
+// ExtractIconExW and SHGFI_LARGEICON both hand back whatever the system
+// large-icon size happens to be (32 pixels at 96 DPI) and the image list
+// then stretch-blits that into its own cell. Asking the extractor for the
+// exact size instead lets it pick the right frame out of the executable's
+// icon group, which is what keeps the icons sharp once the list icons are
+// DPI-scaled past 32 pixels.
+static HICON EntryIcon(const HandlerEntry& entry, int iconSize) {
+    if (iconSize <= 0) iconSize = 32;
     if (entry.handler) {
         PWSTR raw = nullptr;
         int index = 0;
@@ -3668,6 +3915,13 @@ static HICON EntryIcon(const HandlerEntry& entry) {
             *raw && *raw != L'@') {
             const std::wstring location = TakeTaskString(raw);
             HICON icon = nullptr;
+            if (SUCCEEDED(SHDefExtractIconW(location.c_str(), index, 0, &icon,
+                                            nullptr,
+                                            static_cast<UINT>(iconSize))) &&
+                icon) {
+                return icon;
+            }
+            icon = nullptr;
             if (ExtractIconExW(location.c_str(), index, &icon, nullptr, 1) > 0 && icon)
                 return icon;
         } else if (raw) {
@@ -3675,6 +3929,13 @@ static HICON EntryIcon(const HandlerEntry& entry) {
         }
     }
     if (!entry.internalName.empty()) {
+        HICON icon = nullptr;
+        if (SUCCEEDED(SHDefExtractIconW(entry.internalName.c_str(), 0, 0,
+                                        &icon, nullptr,
+                                        static_cast<UINT>(iconSize))) &&
+            icon) {
+            return icon;
+        }
         SHFILEINFOW info{};
         UINT flags = SHGFI_ICON | SHGFI_LARGEICON;
         DWORD attributes = GetFileAttributesW(entry.internalName.c_str());
@@ -3686,7 +3947,7 @@ static HICON EntryIcon(const HandlerEntry& entry) {
                            sizeof(info), flags) && info.hIcon)
             return info.hIcon;
     }
-    return DefaultAppIcon();
+    return DefaultAppIcon(iconSize);
 }
 
 // 32x32 BGRA artwork derived from the user-supplied transparent PNG
@@ -3792,14 +4053,118 @@ static bool DecodeBase64(PCSTR encoded, std::vector<BYTE>& output) {
     return output.size() == 32u * 32u * 4u;
 }
 
-static HICON LoadStandaloneIcon() {
+// Bilinear resampler for the embedded 32x32 BGRA artwork.
+//
+// The header icon used to be handed to a 34x34 SS_REALSIZECONTROL static,
+// which made USER32 stretch a 32x32 icon by a fractional factor with
+// nearest-neighbour sampling - that is what made the artwork look squashed
+// and blurry, and it got dramatically worse at non-100% DPI. Producing the
+// icon at exactly the pixel size the control will use, with proper
+// filtering on premultiplied alpha, keeps every edge crisp instead.
+static bool ResampleIconPixels(const std::vector<BYTE>& source, int sourceSize,
+                               int targetSize, std::vector<BYTE>& target) {
+    if (sourceSize <= 0 || targetSize <= 0) return false;
+    if (source.size() !=
+        static_cast<size_t>(sourceSize) * sourceSize * 4u) {
+        return false;
+    }
+    try {
+        target.assign(static_cast<size_t>(targetSize) * targetSize * 4u, 0);
+    } catch (...) {
+        return false;
+    }
+    if (targetSize == sourceSize) {
+        target = source;
+        return true;
+    }
+
+    // Premultiply once up front: interpolating straight (non-premultiplied)
+    // BGRA bleeds the color of fully transparent pixels into the edges and
+    // leaves a dark halo around the artwork.
+    std::vector<float> premultiplied;
+    try {
+        premultiplied.assign(
+            static_cast<size_t>(sourceSize) * sourceSize * 4u, 0.0f);
+    } catch (...) {
+        return false;
+    }
+    for (size_t i = 0; i < premultiplied.size(); i += 4) {
+        const float alpha = source[i + 3] / 255.0f;
+        premultiplied[i + 0] = source[i + 0] * alpha;
+        premultiplied[i + 1] = source[i + 1] * alpha;
+        premultiplied[i + 2] = source[i + 2] * alpha;
+        premultiplied[i + 3] = source[i + 3];
+    }
+
+    const float scale = static_cast<float>(sourceSize) / targetSize;
+    for (int y = 0; y < targetSize; ++y) {
+        // Sample at pixel centers so the result stays centered rather than
+        // drifting half a pixel toward the top-left corner.
+        const float sourceY = (y + 0.5f) * scale - 0.5f;
+        int y0 = static_cast<int>(floorf(sourceY));
+        float weightY = sourceY - y0;
+        int y1 = y0 + 1;
+        y0 = std::clamp(y0, 0, sourceSize - 1);
+        y1 = std::clamp(y1, 0, sourceSize - 1);
+        for (int x = 0; x < targetSize; ++x) {
+            const float sourceX = (x + 0.5f) * scale - 0.5f;
+            int x0 = static_cast<int>(floorf(sourceX));
+            float weightX = sourceX - x0;
+            int x1 = x0 + 1;
+            x0 = std::clamp(x0, 0, sourceSize - 1);
+            x1 = std::clamp(x1, 0, sourceSize - 1);
+
+            const size_t i00 =
+                (static_cast<size_t>(y0) * sourceSize + x0) * 4u;
+            const size_t i01 =
+                (static_cast<size_t>(y0) * sourceSize + x1) * 4u;
+            const size_t i10 =
+                (static_cast<size_t>(y1) * sourceSize + x0) * 4u;
+            const size_t i11 =
+                (static_cast<size_t>(y1) * sourceSize + x1) * 4u;
+            const size_t out =
+                (static_cast<size_t>(y) * targetSize + x) * 4u;
+            for (int channel = 0; channel < 4; ++channel) {
+                const float top =
+                    premultiplied[i00 + channel] * (1.0f - weightX) +
+                    premultiplied[i01 + channel] * weightX;
+                const float bottom =
+                    premultiplied[i10 + channel] * (1.0f - weightX) +
+                    premultiplied[i11 + channel] * weightX;
+                const float value =
+                    top * (1.0f - weightY) + bottom * weightY;
+                target[out + channel] = static_cast<BYTE>(
+                    std::clamp(value + 0.5f, 0.0f, 255.0f));
+            }
+        }
+    }
+    return true;
+}
+
+// Builds the header icon at an exact pixel size. size <= 0 means "native
+// 32x32". The returned icon is 32-bit BGRA with a real alpha channel.
+static HICON LoadStandaloneIcon(int size = 0) {
     std::vector<BYTE> pixels;
-    if (!DecodeBase64(kStandaloneIconBase64, pixels)) return DefaultAppIcon();
+    if (!DecodeBase64(kStandaloneIconBase64, pixels))
+        return DefaultAppIcon(size);
+
+    constexpr int kNativeSize = 32;
+    int targetSize = size > 0 ? size : kNativeSize;
+    // Guard rail against a nonsensical DPI value producing a huge bitmap.
+    targetSize = std::clamp(targetSize, 8, 256);
+    if (targetSize != kNativeSize) {
+        std::vector<BYTE> scaled;
+        if (ResampleIconPixels(pixels, kNativeSize, targetSize, scaled)) {
+            pixels.swap(scaled);
+        } else {
+            targetSize = kNativeSize;
+        }
+    }
 
     BITMAPV5HEADER header{};
     header.bV5Size = sizeof(header);
-    header.bV5Width = 32;
-    header.bV5Height = -32;  // top-down, matching the embedded byte order
+    header.bV5Width = targetSize;
+    header.bV5Height = -targetSize;  // top-down, matching the byte order
     header.bV5Planes = 1;
     header.bV5BitCount = 32;
     header.bV5Compression = BI_BITFIELDS;
@@ -3809,32 +4174,39 @@ static HICON LoadStandaloneIcon() {
     header.bV5AlphaMask = 0xFF000000;
 
     void* colorBits = nullptr;
-    HDC screen = GetDC(nullptr);
-    HBITMAP color = screen
-        ? CreateDIBSection(screen, reinterpret_cast<BITMAPINFO*>(&header),
-                           DIB_RGB_COLORS, &colorBits, nullptr, 0)
-        : nullptr;
-    if (screen) ReleaseDC(nullptr, screen);
-    if (!color || !colorBits) {
-        if (color) DeleteObject(color);
-        return DefaultAppIcon();
+    BitmapOwner color;
+    {
+        WindowDcOwner screen(nullptr);
+        if (screen) {
+            color.Reset(CreateDIBSection(
+                screen.Get(), reinterpret_cast<BITMAPINFO*>(&header),
+                DIB_RGB_COLORS, &colorBits, nullptr, 0));
+        }
     }
+    if (!color || !colorBits) return DefaultAppIcon(targetSize);
     memcpy(colorBits, pixels.data(), pixels.size());
 
-    BYTE maskBits[32 * 4] = {};
-    HBITMAP mask = CreateBitmap(32, 32, 1, 1, maskBits);
-    if (!mask) {
-        DeleteObject(color);
-        return DefaultAppIcon();
+    // Mask scanlines are DWORD aligned; an all-zero mask means "take the
+    // alpha channel from the color bitmap".
+    const size_t maskStride = ((static_cast<size_t>(targetSize) + 31) / 32) * 4u;
+    std::vector<BYTE> maskBits;
+    try {
+        maskBits.assign(maskStride * targetSize, 0);
+    } catch (...) {
+        return DefaultAppIcon(targetSize);
     }
+    BitmapOwner mask(
+        CreateBitmap(targetSize, targetSize, 1, 1, maskBits.data()));
+    if (!mask) return DefaultAppIcon(targetSize);
+
+    // CreateIconIndirect copies both bitmaps, so the owners here still
+    // release the originals when they go out of scope.
     ICONINFO info{};
     info.fIcon = TRUE;
-    info.hbmColor = color;
-    info.hbmMask = mask;
+    info.hbmColor = color.Get();
+    info.hbmMask = mask.Get();
     HICON icon = CreateIconIndirect(&info);
-    DeleteObject(mask);
-    DeleteObject(color);
-    return icon ? icon : DefaultAppIcon();
+    return icon ? icon : DefaultAppIcon(targetSize);
 }
 
 // -----------------------------------------------------------------------------
@@ -3888,6 +4260,10 @@ static UINT WindowDpi(HWND owner) {
 }
 
 static int DpiScale(int value, UINT dpi) { return MulDiv(value, dpi, 96); }
+
+// Logical size of the program icons in the list. Windows 7 shows large
+// (32 pixel) shell icons here at 96 DPI; the value is DPI-scaled at use.
+static constexpr int kListIconSize = 32;
 
 static void ApplyFont(HWND window, HFONT font) {
     if (window && font) SendMessageW(window, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
@@ -4112,7 +4488,7 @@ static void SetListGroupCollapsed(HWND list, int groupId, bool collapsed) {
 static int AddListItem(PickerState& state, size_t index) {
     HandlerEntry& entry = state.handlers[index];
     if (state.images && entry.imageIndex < 0) {
-        IconOwner icon(EntryIcon(entry));
+        IconOwner icon(EntryIcon(entry, state.listIconSize));
         if (icon) entry.imageIndex = ImageList_AddIcon(state.images.Get(), icon.Get());
     }
     LVITEMW item{};
@@ -4154,7 +4530,16 @@ static void InitializeList(PickerState& state) {
     ListView_SetExtendedListViewStyle(state.list,
         LVS_EX_DOUBLEBUFFER | LVS_EX_FULLROWSELECT | LVS_EX_LABELTIP);
     ListView_SetView(state.list, LV_VIEW_TILE);
-    state.images.Reset(ImageList_Create(32, 32, ILC_COLOR32 | ILC_MASK, 8, 8));
+    // The image list used to be a hardcoded 32x32, which is the Windows 7
+    // size only at 96 DPI - on a scaled display the program icons stayed
+    // physically 32 pixels while everything around them grew, so they
+    // looked shrunken. Scale the icon size with the DPI instead, and let
+    // the tile height follow it.
+    const UINT listDpi = WindowDpi(state.window);
+    const int listIconSize = std::max(32, DpiScale(kListIconSize, listDpi));
+    state.listIconSize = listIconSize;
+    state.images.Reset(ImageList_Create(listIconSize, listIconSize,
+                                        ILC_COLOR32 | ILC_MASK, 8, 8));
     if (state.images) {
         ListView_SetImageList(state.list, state.images.Get(), LVSIL_NORMAL);
         ListView_SetImageList(state.list, state.images.Get(), LVSIL_SMALL);
@@ -4198,7 +4583,7 @@ static void InitializeList(PickerState& state) {
         // items are inserted above: those calls reset a tile size set
         // any earlier back to comctl32's auto-sizing default, the same
         // way they reset the custom colors re-applied below.
-        const UINT dpi = WindowDpi(state.window);
+        const UINT dpi = listDpi;
         RECT rcList{};
         GetClientRect(state.list, &rcList);
         const int available = (rcList.right - rcList.left) > 0
@@ -4206,7 +4591,28 @@ static void InitializeList(PickerState& state) {
                                    : DpiScale(532, dpi);
         const int gap = DpiScale(4, dpi);
         const int tileWidth = (available - gap) / 2;
-        const int tileHeight = DpiScale(48, dpi);
+
+        // Tile height is derived from what the row actually has to hold
+        // rather than from a fixed 48 logical pixels. A hardcoded height
+        // leaves slack that comctl32 distributes as vertical padding,
+        // which is what made the rows look too tall; sizing to
+        // max(icon, two text lines) plus a small margin gives the tight
+        // Windows 7 row instead, and it adapts to the user's font size
+        // and DPI on its own.
+        int textHeight = 0;
+        {
+            WindowDcOwner listDc(state.list);
+            if (listDc) {
+                HFONT listFont = reinterpret_cast<HFONT>(
+                    SendMessageW(state.list, WM_GETFONT, 0, 0));
+                SelectedObject fontSelection(listDc.Get(), listFont);
+                TEXTMETRICW metrics{};
+                if (GetTextMetricsW(listDc.Get(), &metrics))
+                    textHeight = metrics.tmHeight * 2;
+            }
+        }
+        const int contentHeight = std::max(listIconSize, textHeight);
+        const int tileHeight = contentHeight + DpiScale(6, dpi);
 
         LVTILEVIEWINFO tileInfo{};
         tileInfo.cbSize = sizeof(tileInfo);
@@ -4456,8 +4862,11 @@ static void ApplyLocalizedText(PickerState& state) {
                                           : LOC(STR_INSTRUCTION));
     SetWindowTextW(GetDlgItem(state.window, IDC_SOW_FILE_LABEL),
                    LOC(STR_FILE_LABEL));
-    SetWindowTextW(GetDlgItem(state.window, IDC_SOW_DESCRIPTION_LABEL),
-                   LOC(STR_DESCRIPTION));
+    // Absent when the description box is hidden by its setting.
+    HWND descriptionLabel = GetDlgItem(state.window,
+                                       IDC_SOW_DESCRIPTION_LABEL);
+    if (descriptionLabel)
+        SetWindowTextW(descriptionLabel, LOC(STR_DESCRIPTION));
     // Both themes keep the label on the checkbox itself: in dark mode
     // the owner-draw handler reads it back with GetWindowText and paints
     // it with the light text color.
@@ -4522,16 +4931,24 @@ static void EnsureAlwaysUseCheckbox(PickerState& state) {
     const UINT dpi = WindowDpi(state.window);
     HFONT font = state.font ? state.font.Get()
                             : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    // Same y offset BuildPickerControls used, so a checkbox recreated on
+    // a theme switch lands back where the rest of the layout expects it.
     state.alwaysUse = Child(state.window, 0, WC_BUTTONW, LOC(STR_ALWAYS_USE),
                             WS_TABSTOP | static_cast<DWORD>(wantedType),
-                            14, 354, 405, 22, IDC_SOW_ALWAYS_USE, dpi, font);
+                            14, 354 - state.descriptionOffsetY, 405, 22,
+                            IDC_SOW_ALWAYS_USE, dpi, font);
     if (!state.alwaysUse) return;
     SetWindowTheme(state.alwaysUse, nullptr, nullptr);
     // Keep the original tab order: a freshly created child lands at the
-    // end of the sibling chain, so move it right behind the description
-    // edit where it was created initially.
-    if (state.description && IsWindow(state.description)) {
-        SetWindowPos(state.alwaysUse, state.description, 0, 0, 0, 0,
+    // end of the sibling chain, so move it right behind the control it
+    // was created after - the description edit, or the list when the
+    // description box is hidden.
+    HWND tabPredecessor =
+        (state.description && IsWindow(state.description))
+            ? state.description
+            : ((state.list && IsWindow(state.list)) ? state.list : nullptr);
+    if (tabPredecessor) {
+        SetWindowPos(state.alwaysUse, tabPredecessor, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
     Button_SetCheck(state.alwaysUse,
@@ -4540,40 +4957,167 @@ static void EnsureAlwaysUseCheckbox(PickerState& state) {
     InvalidateRect(state.alwaysUse, nullptr, TRUE);
 }
 
-// Windows 7 network flyout row palette (dark theme). Same values the
-// flyout mod uses for its network rows, so both dialogs feel identical:
-// a soft rounded rectangle with a slightly brighter border.
-static constexpr COLORREF kWin7RowSelectedBg = RGB(40, 40, 50);
-static constexpr COLORREF kWin7RowSelectedBorder = RGB(60, 80, 120);
-static constexpr COLORREF kWin7RowHoverBg = RGB(35, 35, 45);
-static constexpr COLORREF kWin7RowHoverBorder = RGB(50, 70, 100);
+// Windows 7 row highlight palette. Selection and hover are the blue
+// gradient Explorer uses in Windows 7 (Aero "listview item" states): a
+// rounded rectangle with a vertical gradient fill and a saturated blue
+// border. The light values are the stock Windows 7 ones; the dark values
+// are the same hues pulled down to sit on the RGB(32,32,32) background
+// while still reading as blue.
+struct Win7RowColors {
+    COLORREF fillTop;
+    COLORREF fillBottom;
+    COLORREF border;
+};
 
-// Paints one list row the way the Windows 7 network flyout paints its
-// rows: RoundRect with a 3 pixel corner radius, filled with the hover or
-// selection background and outlined with the matching border color.
-static void PaintWin7RowBackground(HDC hdc, const RECT& rc, bool selected) {
-    if (!hdc) return;
-    HBRUSH background = CreateSolidBrush(selected ? kWin7RowSelectedBg
-                                                  : kWin7RowHoverBg);
-    HPEN border = CreatePen(PS_SOLID, 1,
-                            selected ? kWin7RowSelectedBorder
-                                     : kWin7RowHoverBorder);
-    if (background && border) {
-        HGDIOBJ oldBrush = SelectObject(hdc, background);
-        HGDIOBJ oldPen = SelectObject(hdc, border);
-        RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, 3, 3);
-        SelectObject(hdc, oldPen);
-        SelectObject(hdc, oldBrush);
-    }
-    if (background) DeleteObject(background);
-    if (border) DeleteObject(border);
+// Selection: the Windows 7 blue gradient (light values are the stock
+// Aero ones, dark values the same hues darkened to sit on RGB(32,32,32)).
+static constexpr Win7RowColors kWin7RowSelectedLight = {
+    RGB(220, 235, 252), RGB(193, 219, 252), RGB(125, 162, 206)};
+static constexpr Win7RowColors kWin7RowSelectedDark = {
+    RGB(38, 66, 104), RGB(28, 52, 86), RGB(74, 132, 198)};
+
+// Hover: the win7-network-flyout-recreation palette, so a row lights up
+// exactly the way that mod's rows do. Light mode uses the Aero hot-item
+// wash, which is the same shape of effect - a pale fill with a slightly
+// stronger border - just in the light key.
+static constexpr Win7RowColors kWin7RowHoverLight = {
+    RGB(252, 253, 254), RGB(241, 248, 253), RGB(184, 214, 251)};
+static constexpr Win7RowColors kWin7RowHoverDark = {
+    RGB(35, 35, 45), RGB(35, 35, 45), RGB(50, 70, 100)};
+
+static const Win7RowColors& Win7RowPalette(bool dark, bool selected) {
+    if (dark) return selected ? kWin7RowSelectedDark : kWin7RowHoverDark;
+    return selected ? kWin7RowSelectedLight : kWin7RowHoverLight;
 }
 
-// Draws a complete program row the Windows 7 network flyout way:
-// rounded hover/selection frame, then the application icon and its name
-// with the light text color. Used only in dark mode, through
-// CDRF_SKIPDEFAULT, so the light theme keeps the stock Explorer
-// rendering.
+// Native UxTheme draw for the row highlight.
+//
+// This is the primary path for the hover state: it asks the system for
+// its own list item states, so a hovered row lights up exactly like a
+// row in any other Explorer list on the running OS, in whichever theme
+// is active. Returns false when the themed draw could not be done (no
+// visual style loaded, or the list part not defined by the theme), so
+// the caller can fall back to the hand-drawn palette.
+static bool PaintThemedRowBackground(HWND list, HDC hdc, const RECT& rc,
+                                     bool selected, bool focusedList) {
+    if (!list || !hdc) return false;
+    if (!IsThemeActive()) return false;
+    // Plain "ListView" first, on purpose: ApplyPickerTheme has already
+    // put the list on "DarkMode_Explorer" or "Explorer" through
+    // SetWindowTheme, and the unqualified class honors that assignment,
+    // so dark mode gets the dark item states. Naming a class explicitly
+    // would override it and force the light Explorer artwork.
+    ThemeOwner theme(OpenThemeData(list, L"ListView"));
+    if (!theme) theme.Reset(OpenThemeData(list, L"Explorer::ListView"));
+    if (!theme) return false;
+
+    const int stateId = selected
+                            ? (focusedList ? LISS_SELECTED
+                                           : LISS_SELECTEDNOTFOCUS)
+                            : LISS_HOT;
+    if (!IsThemePartDefined(theme.Get(), LVP_LISTITEM, stateId)) return false;
+    RECT rcTheme = rc;
+    rcTheme.right += 1;
+    rcTheme.bottom += 1;
+    return SUCCEEDED(DrawThemeBackground(theme.Get(), hdc, LVP_LISTITEM,
+                                         stateId, &rcTheme, nullptr));
+}
+
+// Paints one list row highlight the way Windows 7 paints its list rows:
+// a rounded rectangle with a 3 pixel corner radius, a vertical gradient
+// fill and a matching border.
+//
+// The gradient is drawn as clipped scanlines rather than with GradientFill
+// so the mod keeps linking against nothing but uxtheme and dwmapi.
+static bool PaintWin7RowBackground(HDC hdc, const RECT& rc, bool dark,
+                                   bool selected) {
+    if (!hdc) return false;
+    // Callers pass an inclusive rectangle (right/bottom are the last
+    // painted pixel), so the region and the fill both run one past them.
+    const int width = rc.right - rc.left + 1;
+    const int height = rc.bottom - rc.top + 1;
+    if (width <= 0 || height <= 0) return false;
+
+    const Win7RowColors& colors = Win7RowPalette(dark, selected);
+    RegionOwner region(CreateRoundRectRgn(rc.left, rc.top, rc.right + 1,
+                                          rc.bottom + 1, 4, 4));
+    if (!region) return false;
+
+    const int savedDc = SaveDC(hdc);
+    if (savedDc) SelectClipRgn(hdc, region.Get());
+
+    for (int y = 0; y < height; ++y) {
+        // Integer interpolation between the two stops, rounded.
+        const int numerator = height > 1 ? y : 0;
+        const int denominator = height > 1 ? height - 1 : 1;
+        auto blend = [&](int from, int to) {
+            return from + (to - from) * numerator / denominator;
+        };
+        const COLORREF line =
+            RGB(blend(GetRValue(colors.fillTop), GetRValue(colors.fillBottom)),
+                blend(GetGValue(colors.fillTop), GetGValue(colors.fillBottom)),
+                blend(GetBValue(colors.fillTop), GetBValue(colors.fillBottom)));
+        BrushOwner brush(CreateSolidBrush(line));
+        if (!brush) break;
+        RECT rcLine{rc.left, rc.top + y, rc.right + 1, rc.top + y + 1};
+        FillRect(hdc, &rcLine, brush.Get());
+    }
+
+    if (savedDc) RestoreDC(hdc, savedDc);
+
+    BrushOwner borderBrush(CreateSolidBrush(colors.border));
+    if (borderBrush) FrameRgn(hdc, region.Get(), borderBrush.Get(), 1, 1);
+    return true;
+}
+
+// How a row highlight ended up being painted, so the caller knows which
+// text color goes on top of it.
+enum class RowHighlight { None, Custom, Themed, System };
+
+// Paints the hover/selection highlight for one row.
+//
+// The two states deliberately use opposite strategies:
+//
+// - Hover: the native UxTheme item state comes first, so a hovered row
+//   looks exactly like a hovered row in any other Explorer list on the
+//   running OS. The hand-drawn flyout palette is only the fallback, for
+//   when the theme cannot provide the part (classic theme, or a theme
+//   without LVP_LISTITEM).
+// - Selection: the hand-drawn Windows 7 blue gradient comes first,
+//   because that is the look this dialog is recreating and the modern
+//   system draw would be the flat Windows 10/11 grey rectangle.
+//
+// A flat COLOR_HIGHLIGHT fill closes the chain for selected rows when
+// neither draw is available, which is also the only case where the row
+// text has to switch to COLOR_HIGHLIGHTTEXT.
+static RowHighlight PaintRowHighlight(HWND list, HDC hdc, const RECT& rc,
+                                      bool dark, bool selected,
+                                      bool focusedList) {
+    if (!selected) {
+        if (PaintThemedRowBackground(list, hdc, rc, false, focusedList))
+            return RowHighlight::Themed;
+        if (PaintWin7RowBackground(hdc, rc, dark, false))
+            return RowHighlight::Custom;
+        return RowHighlight::None;
+    }
+
+    if (PaintWin7RowBackground(hdc, rc, dark, true))
+        return RowHighlight::Custom;
+    if (PaintThemedRowBackground(list, hdc, rc, true, focusedList))
+        return RowHighlight::Themed;
+    RECT rcFill = rc;
+    rcFill.right += 1;
+    rcFill.bottom += 1;
+    FillRect(hdc, &rcFill, GetSysColorBrush(COLOR_HIGHLIGHT));
+    return RowHighlight::System;
+}
+
+// Draws a complete program row the Windows 7 way: rounded blue
+// hover/selection frame, then the application icon and its two text
+// lines. Used in both themes through CDRF_SKIPDEFAULT - the light theme
+// needs it too, because the stock comctl32 highlight on a modern OS is
+// the flat Windows 10/11 grey rectangle rather than the Windows 7 blue
+// gradient this dialog is recreating.
 static void PaintWin7ListRow(PickerState& state,
                              const NMLVCUSTOMDRAW& listDraw) {
     HDC hdc = listDraw.nmcd.hdc;
@@ -4596,16 +5140,29 @@ static void PaintWin7ListRow(PickerState& state,
     const bool focused = (itemState & LVIS_FOCUSED) != 0;
     const bool hovered = row == state.hoverRow;
 
+    const bool dark = state.isDarkMode;
+
     // Plain rows are erased with the list background first, so a frame
     // left over from a previous hover never survives a partial repaint.
-    if (state.darkBgBrush) FillRect(hdc, &rcBounds, state.darkBgBrush.Get());
+    if (dark) {
+        if (state.darkBgBrush) FillRect(hdc, &rcBounds, state.darkBgBrush.Get());
+    } else {
+        COLORREF background = ListView_GetBkColor(list);
+        if (background == CLR_NONE || background == CLR_DEFAULT)
+            background = GetSysColor(COLOR_WINDOW);
+        BrushOwner light(CreateSolidBrush(background));
+        if (light) FillRect(hdc, &rcBounds, light.Get());
+    }
+    const bool listFocused = GetFocus() == list;
+    RowHighlight highlight = RowHighlight::None;
     if (selected || hovered) {
         RECT rcFrame = rcBounds;
         // One pixel of breathing room, so adjacent rounded frames never
-        // touch each other, exactly like the flyout rows.
+        // touch each other, exactly like the real dialog's rows.
         rcFrame.right -= 1;
         rcFrame.bottom -= 1;
-        PaintWin7RowBackground(hdc, rcFrame, selected);
+        highlight = PaintRowHighlight(list, hdc, rcFrame, dark, selected,
+                                      listFocused);
     }
 
     LVITEMW item{};
@@ -4625,110 +5182,208 @@ static void PaintWin7ListRow(PickerState& state,
         const bool hasSubtitle = subtitle[0] != L'\0';
 
         SetBkMode(hdc, TRANSPARENT);
-        HFONT oldFont = static_cast<HFONT>(SelectObject(
-            hdc, reinterpret_cast<HFONT>(
-                     SendMessageW(list, WM_GETFONT, 0, 0))));
+        SelectedObject fontSelection(
+            hdc, reinterpret_cast<HFONT>(SendMessageW(list, WM_GETFONT, 0, 0)));
 
         RECT rcText = rcLabel;
         rcText.left += 2;
 
+        // The two lines are stacked as one block of exactly the height
+        // the font needs, then that block is centered in the label rect.
+        //
+        // Splitting the label rect in half (the old approach) padded the
+        // program name and its publisher apart by whatever slack the tile
+        // had, which is what made the rows look airy and too tall. Using
+        // the real line height keeps them on consecutive baselines the
+        // way Windows 7 does, and it means an unsigned program - one with
+        // no publisher line - ends up genuinely centered against its
+        // icon instead of sitting in the top half of the tile.
+        TEXTMETRICW metrics{};
+        const int lineHeight = GetTextMetricsW(hdc, &metrics)
+                                   ? metrics.tmHeight
+                                   : (rcText.bottom - rcText.top) / 2;
+        const int labelHeight = rcText.bottom - rcText.top;
+        const int blockHeight = hasSubtitle ? lineHeight * 2 : lineHeight;
+        int lineTop = rcText.top + (labelHeight - blockHeight) / 2;
+        if (lineTop < rcText.top) lineTop = rcText.top;
+
+        // Only the flat system highlight forces its own text color; the
+        // Windows 7 and themed fills are pale enough to keep the normal
+        // one, exactly as the real dialog does.
+        const bool systemFill = highlight == RowHighlight::System;
         if (label[0]) {
-            SetTextColor(hdc, RGB(240, 240, 240));
-            RECT rcTitle = rcText;
-            if (hasSubtitle) {
-                // Two lines, title on top and publisher underneath,
-                // matching the real Windows 7 tile layout; a single
-                // label with no subtitle keeps the original vertically
-                // centered look.
-                rcTitle.bottom =
-                    rcTitle.top + (rcText.bottom - rcText.top) / 2;
-            }
+            SetTextColor(hdc, systemFill
+                                  ? GetSysColor(COLOR_HIGHLIGHTTEXT)
+                                  : (dark ? RGB(240, 240, 240)
+                                          : RGB(0, 0, 0)));
+            RECT rcTitle{rcText.left, lineTop, rcText.right,
+                         lineTop + lineHeight};
             DrawTextW(hdc, label, -1, &rcTitle,
-                      DT_LEFT | (hasSubtitle ? DT_TOP : DT_VCENTER) |
-                          DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                      DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS |
+                          DT_NOPREFIX);
         }
         if (hasSubtitle) {
-            RECT rcSubtitle = rcText;
-            rcSubtitle.top += (rcText.bottom - rcText.top) / 2;
-            SetTextColor(hdc, RGB(150, 150, 165));
+            RECT rcSubtitle{rcText.left, lineTop + lineHeight, rcText.right,
+                            lineTop + lineHeight * 2};
+            SetTextColor(hdc, systemFill
+                                  ? GetSysColor(COLOR_HIGHLIGHTTEXT)
+                                  : (dark ? RGB(150, 150, 165)
+                                          : RGB(112, 112, 112)));
             DrawTextW(hdc, subtitle, -1, &rcSubtitle,
                       DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS |
                           DT_NOPREFIX);
         }
-        if (oldFont) SelectObject(hdc, oldFont);
     }
 
     // Keyboard focus marker, same dotted rectangle the flyout uses for
     // its focused row.
-    if (focused && !selected && GetFocus() == list) {
+    if (focused && !selected && listFocused) {
         RECT rcFocus = rcBounds;
         rcFocus.right -= 1;
         rcFocus.bottom -= 1;
-        SetTextColor(hdc, RGB(150, 150, 165));
+        SetTextColor(hdc, dark ? RGB(150, 150, 165) : RGB(0, 0, 0));
         DrawFocusRect(hdc, &rcFocus);
     }
 }
 
 // The DarkMode_Explorer visual style paints group header labels itself
-// via UxTheme when the picker's group headers are drawn, and it ignores
-// NMLVCUSTOMDRAW::clrText entirely for that draw. The only way to give
-// just the "Other Programs" header a different color is to let the
-// native draw finish, then redraw its label text on top in the wanted
-// color, matching the native label's position closely enough that it
-// looks like a normal recolor rather than an overlay.
+// via UxTheme, and it ignores NMLVCUSTOMDRAW::clrText entirely for that
+// draw, so there is no way to simply recolor the "Other Programs"
+// header. Instead the native label is covered with the list background
+// and an identical string is redrawn on top in the accent color, which
+// reads as a recolor as long as the clone lands exactly where the
+// original was.
+//
+// Getting that alignment right means measuring with the same font the
+// theme used: group headers are drawn with the theme's own header font
+// (TMT_FONT on LVP_GROUPHEADER), which is usually larger than the
+// list's WM_GETFONT font. Measuring with the wrong one leaves an erase
+// rectangle too small for the native glyphs, and their edges survive
+// around the clone.
 static void RepaintOtherProgramsHeaderText(PickerState& state,
                                            const NMLVCUSTOMDRAW& listDraw) {
     HWND list = state.list;
     HDC hdc = listDraw.nmcd.hdc;
     if (!list || !hdc) return;
 
-    RECT rcHeader{};
-    rcHeader.top = LVGGR_HEADER;
+    // LVGGR_LABEL is the label's own rectangle, so the clone inherits
+    // the native indent and vertical placement instead of recomputing
+    // them. It is not supported on every comctl32 build; the wider
+    // LVGGR_HEADER band is the fallback.
+    bool haveLabelRect = true;
+    RECT rcLabel{};
+    rcLabel.top = LVGGR_LABEL;
     if (!SendMessageW(list, LVM_GETGROUPRECT, static_cast<WPARAM>(GROUP_OTHER),
-                      reinterpret_cast<LPARAM>(&rcHeader))) {
-        return;
+                      reinterpret_cast<LPARAM>(&rcLabel)) ||
+        IsRectEmpty(&rcLabel)) {
+        haveLabelRect = false;
+        rcLabel = {};
+        rcLabel.top = LVGGR_HEADER;
+        if (!SendMessageW(list, LVM_GETGROUPRECT,
+                          static_cast<WPARAM>(GROUP_OTHER),
+                          reinterpret_cast<LPARAM>(&rcLabel)) ||
+            IsRectEmpty(&rcLabel)) {
+            return;
+        }
     }
 
     wchar_t header[256] = {};
     LVGROUP group{};
     group.cbSize = sizeof(group);
-    group.mask = LVGF_HEADER;
+    group.mask = LVGF_HEADER | LVGF_STATE;
     group.pszHeader = header;
     group.cchHeader = ARRAYSIZE(header);
+    group.stateMask = LVGS_COLLAPSED;
     if (SendMessageW(list, LVM_GETGROUPINFO, static_cast<WPARAM>(GROUP_OTHER),
                      reinterpret_cast<LPARAM>(&group)) == -1 ||
         !header[0]) {
         return;
     }
+    const bool collapsed = (group.state & LVGS_COLLAPSED) != 0;
 
-    HFONT font =
-        reinterpret_cast<HFONT>(SendMessageW(list, WM_GETFONT, 0, 0));
-    HFONT oldFont =
-        font ? static_cast<HFONT>(SelectObject(hdc, font)) : nullptr;
+    // The font the theme used for the native label, falling back to the
+    // list font when the theme cannot supply one.
+    ThemeOwner theme(OpenThemeData(list, L"ListView"));
+    FontOwner themeFont;
+    if (theme) {
+        LOGFONTW logFont{};
+        if (SUCCEEDED(GetThemeFont(theme.Get(), hdc, LVP_GROUPHEADER,
+                                   collapsed ? LVGH_CLOSE : LVGH_OPEN,
+                                   TMT_FONT, &logFont))) {
+            themeFont.Reset(CreateFontIndirectW(&logFont));
+        }
+        theme.Reset();
+    }
+    HFONT font = themeFont
+                     ? themeFont.Get()
+                     : reinterpret_cast<HFONT>(
+                           SendMessageW(list, WM_GETFONT, 0, 0));
+    SelectedObject fontSelection(hdc, font);
 
+    const int length = static_cast<int>(wcslen(header));
     SIZE extent{};
-    GetTextExtentPoint32W(hdc, header, static_cast<int>(wcslen(header)),
-                          &extent);
+    GetTextExtentPoint32W(hdc, header, length, &extent);
 
-    // Same left indent the native header uses, vertically centered in
-    // the header band; a small margin keeps antialiased glyph edges from
-    // the native draw from bleeding through around the redrawn text.
-    RECT rcErase = rcHeader;
-    rcErase.left += 2;
-    rcErase.right = rcErase.left + extent.cx + 8;
-    const int centerY = (rcHeader.top + rcHeader.bottom) / 2;
-    rcErase.top = centerY - extent.cy / 2 - 2;
-    rcErase.bottom = centerY + extent.cy / 2 + 2;
+    RECT rcTextArea = rcLabel;
+    if (!haveLabelRect) {
+        // Header band fallback: reproduce the native label box inside it
+        // (same left indent, vertically centered).
+        rcTextArea.left += 2;
+        const int centerY = (rcLabel.top + rcLabel.bottom) / 2;
+        rcTextArea.top = centerY - extent.cy / 2;
+        rcTextArea.bottom = rcTextArea.top + extent.cy;
+    }
+    // The text area keeps the native rectangle so DT_VCENTER puts the
+    // clone on the same baseline the native label used, but the erase is
+    // sized from the glyph run itself, plus 2 pixels for antialiased
+    // edges. Erasing the whole label rectangle instead would also wipe
+    // whatever sits beside the text in the header band - the divider
+    // line the Explorer styles draw to the right of the label, and the
+    // collapse chevron.
+    const int centerY = (rcTextArea.top + rcTextArea.bottom) / 2;
+    RECT rcErase{rcTextArea.left, centerY - extent.cy / 2,
+                 rcTextArea.left + extent.cx, centerY + extent.cy / 2};
+    InflateRect(&rcErase, 2, 2);
+    if (rcErase.right > rcTextArea.right && !haveLabelRect)
+        rcErase.right = rcTextArea.right;
+    // Never paint outside the group's own header band.
+    RECT rcBand{};
+    rcBand.top = LVGGR_HEADER;
+    if (SendMessageW(list, LVM_GETGROUPRECT, static_cast<WPARAM>(GROUP_OTHER),
+                     reinterpret_cast<LPARAM>(&rcBand)) &&
+        !IsRectEmpty(&rcBand)) {
+        if (rcErase.top < rcBand.top) rcErase.top = rcBand.top;
+        if (rcErase.bottom > rcBand.bottom) rcErase.bottom = rcBand.bottom;
+        if (rcErase.right > rcBand.right) rcErase.right = rcBand.right;
+    }
 
-    if (state.darkBgBrush) FillRect(hdc, &rcErase, state.darkBgBrush.Get());
-    SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(0, 146, 214));  // Azzurro Napoli.
-    RECT rcText = rcErase;
-    rcText.left += 4;
-    DrawTextW(hdc, header, -1, &rcText,
-              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    // Erase with the list's own background rather than the dialog brush:
+    // it is the color the native label was actually drawn on, so the
+    // patch stays invisible even if the two ever diverge.
+    COLORREF background = ListView_GetBkColor(list);
+    if (background == CLR_NONE || background == CLR_DEFAULT)
+        background = GetSysColor(COLOR_WINDOW);
+    BrushOwner eraseBrush;
+    eraseBrush.Reset(CreateSolidBrush(background));
+    if (eraseBrush) {
+        FillRect(hdc, &rcErase, eraseBrush.Get());
+    } else if (state.darkBgBrush) {
+        FillRect(hdc, &rcErase, state.darkBgBrush.Get());
+    }
 
-    if (oldFont) SelectObject(hdc, oldFont);
+    const int savedBkMode = SetBkMode(hdc, TRANSPARENT);
+    const COLORREF savedColor =
+        SetTextColor(hdc, RGB(0, 146, 214));  // Azzurro Napoli.
+    // DT_NOCLIP: rcTextArea can be reported tight around the glyphs, and
+    // clipping to it would shave the antialiased edges the erase pass
+    // just cleared.
+    RECT rcText = rcTextArea;
+    DrawTextW(hdc, header, length, &rcText,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
+                  DT_NOCLIP);
+
+    SetTextColor(hdc, savedColor);
+    SetBkMode(hdc, savedBkMode);
 }
 
 // Dark mode only: paints a 1 pixel gray frame around the controls that
@@ -4737,10 +5392,10 @@ static void RepaintOtherProgramsHeaderText(PickerState& state,
 static void PaintDarkControlFrames(PickerState& state, HDC hdc) {
     if (!state.isDarkMode || !state.window || !hdc) return;
     HWND targets[] = {state.description};
-    HPEN pen = CreatePen(PS_SOLID, 1, RGB(110, 110, 120));
+    PenOwner pen(CreatePen(PS_SOLID, 1, RGB(110, 110, 120)));
     if (!pen) return;
-    HGDIOBJ oldPen = SelectObject(hdc, pen);
-    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    SelectedObject penSelection(hdc, pen.Get());
+    SelectedObject brushSelection(hdc, GetStockObject(NULL_BRUSH));
     for (HWND target : targets) {
         if (!target || !IsWindow(target) || !IsWindowVisible(target)) continue;
         RECT rc{};
@@ -4750,16 +5405,13 @@ static void PaintDarkControlFrames(PickerState& state, HDC hdc) {
         InflateRect(&rc, 1, 1);
         Rectangle(hdc, rc.left, rc.top, rc.right, rc.bottom);
     }
-    SelectObject(hdc, oldBrush);
-    SelectObject(hdc, oldPen);
-    DeleteObject(pen);
 }
 
 // Recomputes which list row is hovered and repaints the rows that
-// changed state. Dark theme only: the light theme keeps the standard
-// LVS_EX_TRACKSELECT-free Explorer behavior untouched.
+// changed state. Both themes need it now that the light theme also
+// paints its own Windows 7 blue hover frame.
 static void UpdateListHover(PickerState& state, POINT clientPoint) {
-    if (!state.isDarkMode || !state.list || !IsWindow(state.list)) return;
+    if (!state.list || !IsWindow(state.list)) return;
     LVHITTESTINFO hit{};
     hit.pt = clientPoint;
     const int row = ListView_HitTest(state.list, &hit);
@@ -4791,8 +5443,7 @@ static void ClearListHover(PickerState& state) {
 
 // Subclass of the program list: the hover frame needs mouse messages
 // that the list would otherwise consume without notifying the dialog.
-// The subclass is installed in both themes but does nothing outside of
-// dark mode, so light rendering is unaffected.
+// Active in both themes, since both now paint their own hover frame.
 static LRESULT CALLBACK PickerListSubclassProc(HWND window, UINT message,
                                                WPARAM wParam, LPARAM lParam,
                                                UINT_PTR idSubclass,
@@ -4800,14 +5451,14 @@ static LRESULT CALLBACK PickerListSubclassProc(HWND window, UINT message,
     auto state = reinterpret_cast<PickerState*>(referenceData);
     switch (message) {
         case WM_MOUSEMOVE:
-            if (state && state->isDarkMode) {
+            if (state) {
                 POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 UpdateListHover(*state, pt);
             }
             break;
         case WM_MOUSELEAVE:
         case WM_MOUSEWHEEL:
-            if (state && state->isDarkMode) ClearListHover(*state);
+            if (state) ClearListHover(*state);
             break;
         case WM_NCDESTROY:
             RemoveWindowSubclass(window, PickerListSubclassProc, idSubclass);
@@ -4854,18 +5505,23 @@ static void BuildPickerControls(PickerState& state) {
     state.isDarkMode = ResolveDarkMode();
     const bool dark = state.isDarkMode;
 
+    // Windows 7 shows a large header glyph next to the instruction text.
+    // kHeaderIconSize is logical pixels; the icon itself is rendered at the
+    // matching physical size below so nothing has to be stretched.
+    constexpr int kHeaderIconSize = 40;
     HWND icon = Child(state.window, 0, WC_STATICW, L"", SS_ICON | SS_REALSIZECONTROL,
-                      14, 14, 34, 34, IDC_SOW_ICON, dpi, font);
+                      12, 12, kHeaderIconSize, kHeaderIconSize, IDC_SOW_ICON,
+                      dpi, font);
     Child(state.window, 0, WC_STATICW, LOC(STR_INSTRUCTION), SS_LEFT,
-          58, 15, 480, 20, IDC_SOW_INSTRUCTION, dpi, font);
+          62, 15, 476, 20, IDC_SOW_INSTRUCTION, dpi, font);
     Child(state.window, 0, WC_STATICW, LOC(STR_FILE_LABEL), SS_LEFT,
-          58, 40, 40, 18, IDC_SOW_FILE_LABEL, dpi, font);
+          62, 40, 40, 18, IDC_SOW_FILE_LABEL, dpi, font);
     PCWSTR displayedFileName = PathFindFileNameW(state.request.path.c_str());
     if (!displayedFileName || !*displayedFileName)
         displayedFileName = state.request.path.c_str();
     Child(state.window, 0, WC_STATICW, displayedFileName,
           SS_LEFT | SS_PATHELLIPSIS | SS_NOPREFIX,
-          98, 40, 435, 18, IDC_SOW_FILE_NAME, dpi, font);
+          102, 40, 431, 18, IDC_SOW_FILE_NAME, dpi, font);
     state.list = Child(state.window, WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
           WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS |
               LVS_SHAREIMAGELISTS | LVS_NOCOLUMNHEADER,
@@ -4874,42 +5530,62 @@ static void BuildPickerControls(PickerState& state) {
         SetWindowSubclass(state.list, PickerListSubclassProc, 1,
                           reinterpret_cast<DWORD_PTR>(&state));
     }
-    Child(state.window, 0, WC_STATICW, LOC(STR_DESCRIPTION), SS_LEFT,
-          14, 300, 532, 18, IDC_SOW_DESCRIPTION_LABEL, dpi, font);
-    // Dark mode gets no 3D client edge: the dialog paints its own gray
-    // frame around this edit (see PaintDarkControlFrames).
-    state.description = Child(state.window,
-          static_cast<DWORD>(dark ? 0 : WS_EX_CLIENTEDGE), WC_EDITW, L"",
-          WS_TABSTOP | ES_LEFT | ES_AUTOHSCROLL,
-          14, 320, 520, 24, IDC_SOW_DESCRIPTION, dpi, font);
+    // Optional description box. When hidden, the label and the edit are
+    // not created at all (rather than created and hidden) so they stay
+    // out of the tab order, and everything below them slides up by the
+    // vertical space they occupied.
+    //
+    // The offset is read back from the state rather than from the
+    // setting: CreatePickerWindow already sized the window with it, and
+    // re-reading a setting that changed in between would leave the
+    // controls and the window disagreeing about the layout.
+    const int shift = state.descriptionOffsetY;
+    const bool hideDescription = shift != 0;
+
+    if (!hideDescription) {
+        Child(state.window, 0, WC_STATICW, LOC(STR_DESCRIPTION), SS_LEFT,
+              14, 300, 532, 18, IDC_SOW_DESCRIPTION_LABEL, dpi, font);
+        // Dark mode gets no 3D client edge: the dialog paints its own gray
+        // frame around this edit (see PaintDarkControlFrames).
+        state.description = Child(state.window,
+              static_cast<DWORD>(dark ? 0 : WS_EX_CLIENTEDGE), WC_EDITW, L"",
+              WS_TABSTOP | ES_LEFT | ES_AUTOHSCROLL,
+              14, 320, 520, 24, IDC_SOW_DESCRIPTION, dpi, font);
+    }
     // The checkbox is created directly with the type style the theme
     // needs: BS_OWNERDRAW in dark mode (custom square glyph plus its own
     // label text), plain BS_AUTOCHECKBOX in light mode.
     state.alwaysUse = Child(state.window, 0, WC_BUTTONW, LOC(STR_ALWAYS_USE),
           WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_AUTOCHECKBOX),
-          14, 354, 405, 22, IDC_SOW_ALWAYS_USE, dpi, font);
+          14, 354 - shift, 405, 22, IDC_SOW_ALWAYS_USE, dpi, font);
+    // Win7 dialog buttons are 23 logical pixels tall, not 27. The y values
+    // are nudged down by the 4 pixels the height loses so the bottom edges
+    // stay where the rest of the layout expects them.
     Child(state.window, 0, WC_BUTTONW, LOC(STR_BROWSE),
-          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_PUSHBUTTON), 452, 350, 94, 27,
-          IDC_SOW_BROWSE, dpi, font);
+          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_PUSHBUTTON),
+          452, 354 - shift, 94, 23, IDC_SOW_BROWSE, dpi, font);
     HWND web = Child(state.window, 0, WC_LINK, LOC(STR_WEB_LINK), WS_TABSTOP,
-                     14, 386, 532, 38, IDC_SOW_WEB, dpi, font);
+                     14, 386 - shift, 532, 38, IDC_SOW_WEB, dpi, font);
     ShowWindow(web, g_showWebLink.load(std::memory_order_acquire)
                         ? SW_SHOW : SW_HIDE);
     Child(state.window, 0, WC_BUTTONW, LOC(STR_OK),
           WS_TABSTOP | WS_DISABLED | (dark ? BS_OWNERDRAW : BS_DEFPUSHBUTTON),
-          392, 426, 74, 27, IDOK, dpi, font);
+          391, 430 - shift, 75, 23, IDOK, dpi, font);
     Child(state.window, 0, WC_BUTTONW, LOC(STR_CANCEL),
-          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_PUSHBUTTON), 472, 426, 74, 27,
-          IDCANCEL, dpi, font);
+          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_PUSHBUTTON),
+          471, 430 - shift, 75, 23, IDCANCEL, dpi, font);
 
-    state.headerIcon.Reset(LoadStandaloneIcon());
+    // Rendered at the control's physical size so SS_REALSIZECONTROL has
+    // nothing to stretch - a 32x32 icon forced into a DPI-scaled 40x40
+    // control is exactly what made the artwork look squashed.
+    state.headerIcon.Reset(LoadStandaloneIcon(DpiScale(kHeaderIconSize, dpi)));
     if (state.headerIcon) {
         SendMessageW(icon, STM_SETICON,
                      reinterpret_cast<WPARAM>(state.headerIcon.Get()), 0);
-        SendMessageW(state.window, WM_SETICON, ICON_SMALL,
-                     reinterpret_cast<LPARAM>(state.headerIcon.Get()));
-        SendMessageW(state.window, WM_SETICON, ICON_BIG,
-                     reinterpret_cast<LPARAM>(state.headerIcon.Get()));
+        // Deliberately no WM_SETICON: the real Windows 7 Open With dialog
+        // has a plain caption with no icon in it. WS_EX_DLGMODALFRAME
+        // suppresses the system menu icon, and leaving the window iconless
+        // keeps Alt+Tab/taskbar consistent with the host process.
     }
     InitializeList(state);
     ApplyLocalizedText(state);
@@ -5000,32 +5676,30 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                 // COLOR_BTNFACE before WM_DRAWITEM, which would leave a
                 // light patch behind the glyph and the text.
                 FillRect(item->hDC, &rc, state->darkBgBrush.Get());
-                HBRUSH glyphBrush = CreateSolidBrush(
+                BrushOwner glyphBrush(CreateSolidBrush(
                     disabled ? RGB(38, 38, 42)
-                             : (hovering ? RGB(48, 48, 58) : RGB(32, 32, 32)));
-                if (glyphBrush) {
-                    FillRect(item->hDC, &glyph, glyphBrush);
-                    DeleteObject(glyphBrush);
-                }
-                HGDIOBJ oldBrush = SelectObject(
-                    item->hDC, GetStockObject(NULL_BRUSH));
+                             : (hovering ? RGB(48, 48, 58)
+                                         : RGB(32, 32, 32))));
+                if (glyphBrush) FillRect(item->hDC, &glyph, glyphBrush.Get());
                 COLORREF borderColor = disabled   ? RGB(70, 70, 75)
                                        : hovering ? RGB(175, 175, 185)
                                                   : RGB(130, 130, 140);
-                HPEN borderPen = CreatePen(PS_SOLID, 1, borderColor);
-                HGDIOBJ oldPen = SelectObject(item->hDC, borderPen);
-                Rectangle(item->hDC, glyph.left, glyph.top, glyph.right,
-                          glyph.bottom);
-                SelectObject(item->hDC, oldPen);
-                DeleteObject(borderPen);
-                SelectObject(item->hDC, oldBrush);
+                PenOwner borderPen(CreatePen(PS_SOLID, 1, borderColor));
+                {
+                    SelectedObject brushSelection(item->hDC,
+                                                  GetStockObject(NULL_BRUSH));
+                    SelectedObject penSelection(item->hDC, borderPen.Get());
+                    Rectangle(item->hDC, glyph.left, glyph.top, glyph.right,
+                              glyph.bottom);
+                }
                 if (checked) {
                     COLORREF checkColor =
                         disabled ? RGB(90, 90, 100) : RGB(0, 168, 255);
                     const int scaled = DpiScale(2, dpi);
                     const int penWidth = scaled > 2 ? scaled : 2;
-                    HPEN checkPen = CreatePen(PS_SOLID, penWidth, checkColor);
-                    HGDIOBJ oldPen2 = SelectObject(item->hDC, checkPen);
+                    PenOwner checkPen(
+                        CreatePen(PS_SOLID, penWidth, checkColor));
+                    SelectedObject penSelection(item->hDC, checkPen.Get());
                     const int u = glyphSize;
                     MoveToEx(item->hDC, glyph.left + u * 3 / 14,
                              glyph.top + u * 7 / 14, nullptr);
@@ -5033,8 +5707,6 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                            glyph.top + u * 10 / 14);
                     LineTo(item->hDC, glyph.left + u * 11 / 14,
                            glyph.top + u * 4 / 14);
-                    SelectObject(item->hDC, oldPen2);
-                    DeleteObject(checkPen);
                 }
                 // Label text: always painted with the light color, in
                 // every state (normal, hover, focus, pressed), which is
@@ -5048,10 +5720,9 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                     SetBkMode(item->hDC, TRANSPARENT);
                     SetTextColor(item->hDC, disabled ? RGB(140, 140, 140)
                                                      : RGB(240, 240, 240));
-                    HFONT oldLabelFont = static_cast<HFONT>(SelectObject(
-                        item->hDC,
-                        reinterpret_cast<HFONT>(
-                            SendMessageW(item->hwndItem, WM_GETFONT, 0, 0))));
+                    SelectedObject labelFontSelection(
+                        item->hDC, reinterpret_cast<HFONT>(SendMessageW(
+                                       item->hwndItem, WM_GETFONT, 0, 0)));
                     DrawTextW(item->hDC, label, labelLen, &rcText,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                     if (focused) {
@@ -5066,7 +5737,6 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                         SetTextColor(item->hDC, RGB(150, 150, 165));
                         DrawFocusRect(item->hDC, &rcFocus);
                     }
-                    if (oldLabelFont) SelectObject(item->hDC, oldLabelFont);
                 }
                 return TRUE;
             }
@@ -5102,64 +5772,64 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             COLORREF textColor =
                 disabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
             COLORREF hoverBorder = hovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
-            HDC hdcMem = CreateCompatibleDC(hdcReal);
-            HBITMAP bitmapMem = CreateCompatibleBitmap(hdcReal, w, h);
-            HBITMAP oldBitmapMem =
-                static_cast<HBITMAP>(SelectObject(hdcMem, bitmapMem));
+            MemoryDcOwner memoryDc(CreateCompatibleDC(hdcReal));
+            if (!memoryDc) return TRUE;
+            HDC hdcMem = memoryDc.Get();
+            BitmapOwner bitmapMem(CreateCompatibleBitmap(hdcReal, w, h));
+            if (!bitmapMem) return TRUE;
+            SelectedObject bitmapSelection(hdcMem, bitmapMem.Get());
             RECT rcLocal{0, 0, w, h};
-            HBRUSH bgBrush = CreateSolidBrush(bgColor);
-            FillRect(hdcMem, &rcLocal, bgBrush);
-            DeleteObject(bgBrush);
-            HPEN penLight = CreatePen(PS_SOLID, 1, lightColor);
-            HPEN penDark = CreatePen(PS_SOLID, 1, darkColor);
-            HPEN penHover =
-                hovering ? CreatePen(PS_SOLID, 1, hoverBorder) : nullptr;
-            HPEN oldPen = static_cast<HPEN>(SelectObject(hdcMem, penLight));
-            MoveToEx(hdcMem, 0, h - 1, nullptr);
-            LineTo(hdcMem, 0, 0);
-            LineTo(hdcMem, w - 1, 0);
-            SelectObject(hdcMem, penDark);
-            MoveToEx(hdcMem, w - 1, 0, nullptr);
-            LineTo(hdcMem, w - 1, h - 1);
-            LineTo(hdcMem, 0, h - 1);
-            if (hovering && penHover) {
-                SelectObject(hdcMem, penHover);
-                MoveToEx(hdcMem, 1, 1, nullptr);
-                LineTo(hdcMem, w - 2, 1);
-                LineTo(hdcMem, w - 2, h - 2);
-                LineTo(hdcMem, 1, h - 2);
-                LineTo(hdcMem, 1, 1);
-                DeleteObject(penHover);
+            BrushOwner bgBrush(CreateSolidBrush(bgColor));
+            if (bgBrush) FillRect(hdcMem, &rcLocal, bgBrush.Get());
+            PenOwner penLight(CreatePen(PS_SOLID, 1, lightColor));
+            PenOwner penDark(CreatePen(PS_SOLID, 1, darkColor));
+            {
+                SelectedObject penSelection(hdcMem, penLight.Get());
+                MoveToEx(hdcMem, 0, h - 1, nullptr);
+                LineTo(hdcMem, 0, 0);
+                LineTo(hdcMem, w - 1, 0);
+                SelectObject(hdcMem, penDark.Get());
+                MoveToEx(hdcMem, w - 1, 0, nullptr);
+                LineTo(hdcMem, w - 1, h - 1);
+                LineTo(hdcMem, 0, h - 1);
+                if (hovering) {
+                    PenOwner penHover(CreatePen(PS_SOLID, 1, hoverBorder));
+                    if (penHover) {
+                        SelectObject(hdcMem, penHover.Get());
+                        MoveToEx(hdcMem, 1, 1, nullptr);
+                        LineTo(hdcMem, w - 2, 1);
+                        LineTo(hdcMem, w - 2, h - 2);
+                        LineTo(hdcMem, 1, h - 2);
+                        LineTo(hdcMem, 1, 1);
+                        // Deselect before penHover is destroyed: a pen
+                        // still selected into a DC cannot be deleted.
+                        SelectObject(hdcMem, penDark.Get());
+                    }
+                }
             }
-            SelectObject(hdcMem, oldPen);
-            DeleteObject(penLight);
-            DeleteObject(penDark);
             if (focused) {
                 RECT rcFocus = rcLocal;
                 InflateRect(&rcFocus, -3, -3);
-                HGDIOBJ oldBrush =
-                    SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+                SelectedObject brushSelection(hdcMem,
+                                              GetStockObject(NULL_BRUSH));
                 SetTextColor(hdcMem, RGB(150, 150, 165));
                 DrawFocusRect(hdcMem, &rcFocus);
-                SelectObject(hdcMem, oldBrush);
             }
             SetBkMode(hdcMem, TRANSPARENT);
             SetTextColor(hdcMem, textColor);
-            HFONT oldFont = static_cast<HFONT>(SelectObject(
-                hdcMem,
-                reinterpret_cast<HFONT>(SendMessageW(item->hwndItem, WM_GETFONT, 0, 0))));
-            RECT rcText = rcLocal;
-            if (pressed) {
-                rcText.left += 1;
-                rcText.top += 1;
+            {
+                SelectedObject fontSelection(
+                    hdcMem, reinterpret_cast<HFONT>(SendMessageW(
+                                item->hwndItem, WM_GETFONT, 0, 0)));
+                RECT rcText = rcLocal;
+                if (pressed) {
+                    rcText.left += 1;
+                    rcText.top += 1;
+                }
+                DrawTextW(hdcMem, text, textLen, &rcText,
+                          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             }
-            DrawTextW(hdcMem, text, textLen, &rcText,
-                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            SelectObject(hdcMem, oldFont);
             BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
-            SelectObject(hdcMem, oldBitmapMem);
-            DeleteObject(bitmapMem);
-            DeleteDC(hdcMem);
             return TRUE;
         }
         case WM_MOUSEMOVE: {
@@ -5299,15 +5969,16 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             auto header = reinterpret_cast<NMHDR*>(lParam);
             if (header && header->idFrom == IDC_SOW_PROGRAMS) {
                 if (header->code == NM_CUSTOMDRAW) {
-                    if (!state->isDarkMode) break;
-                    // Dark mode paints the rows like the Windows 7
-                    // network flyout: a rounded rectangle with a soft
-                    // fill and a brighter border for the hovered and the
-                    // selected row, instead of the DarkMode_Explorer
-                    // highlight. This also fixes the first entry being
-                    // shown with a white background right after the
-                    // dialog opens, since no themed highlight is drawn
-                    // anymore. Light mode never reaches this code.
+                    // Both themes paint their own rows: a rounded
+                    // rectangle with a blue gradient fill and a blue
+                    // border for the hovered and the selected row,
+                    // instead of the themed highlight. In dark mode that
+                    // replaces the DarkMode_Explorer highlight (and
+                    // fixes the first entry showing a white background
+                    // right after the dialog opens); in light mode it
+                    // replaces the host OS highlight, which on Windows
+                    // 10/11 is a flat grey rectangle rather than the
+                    // Windows 7 blue this dialog recreates.
                     auto listDraw = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
                     if (!listDraw) break;
                     if (listDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
@@ -5324,8 +5995,9 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                         // else, including the "Recommended" header, keeps
                         // the plain themed draw.
                         if (listDraw->dwItemType == LVCDI_GROUP) {
-                            if (static_cast<int>(listDraw->nmcd.dwItemSpec) ==
-                                GROUP_OTHER) {
+                            if (state->isDarkMode &&
+                                static_cast<int>(listDraw->nmcd.dwItemSpec) ==
+                                    GROUP_OTHER) {
                                 return CDRF_NOTIFYPOSTPAINT;
                             }
                             break;
@@ -5340,6 +6012,7 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                         return CDRF_SKIPDEFAULT;
                     }
                     if (listDraw->nmcd.dwDrawStage == CDDS_ITEMPOSTPAINT &&
+                        state->isDarkMode &&
                         listDraw->dwItemType == LVCDI_GROUP &&
                         static_cast<int>(listDraw->nmcd.dwItemSpec) ==
                             GROUP_OTHER) {
@@ -5734,6 +6407,10 @@ static std::optional<PickerRequest> g_pendingRequest;
 [[clang::no_destroy]]
 #endif
 static std::optional<std::thread> g_worker;
+// Set by the worker thread just before it returns, so a worker that
+// stopped (a failed startup, or a stop/start across a mod reload) can be
+// joined and replaced instead of blocking every future request.
+static std::atomic<bool> g_workerExited{false};
 
 static bool RegisterPickerClass() {
     WNDCLASSEXW wc{sizeof(wc)};
@@ -5746,7 +6423,29 @@ static bool RegisterPickerClass() {
     wc.hIconSm = nullptr;
     wc.hbrBackground = nullptr;
     wc.lpszClassName = kWindowClass;
-    return RegisterClassExW(&wc) != 0;
+    if (RegisterClassExW(&wc)) return true;
+
+    // Recompiling the mod unloads and reloads the DLL, but a window class
+    // is owned by USER32 and outlives the module that registered it. The
+    // stale registration still points lpfnWndProc at the previous image,
+    // so registration fails here with ERROR_CLASS_ALREADY_EXISTS and the
+    // worker used to give up - leaving every request to fall through to
+    // the system dialog until the host process restarted. Drop the stale
+    // class and register again.
+    if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
+    if (!UnregisterClassW(kWindowClass, ModInstance())) {
+        Wh_Log(L"Standalone Open With: stale window class still in use, "
+               L"cannot re-register (error %u)", GetLastError());
+        return false;
+    }
+    if (RegisterClassExW(&wc)) {
+        Wh_Log(L"Standalone Open With: re-registered picker class after "
+               L"a previous module instance");
+        return true;
+    }
+    Wh_Log(L"Standalone Open With: picker class registration failed "
+           L"(error %u)", GetLastError());
+    return false;
 }
 
 class PickerClassRegistration {
@@ -5769,7 +6468,12 @@ class PickerClassRegistration {
 
 static HWND CreatePickerWindow(PickerState& state) {
     const UINT dpi = WindowDpi(state.request.owner);
-    int width = DpiScale(560, dpi), height = DpiScale(465, dpi);
+    // Decided here, before CreateWindowExW dispatches WM_CREATE, so that
+    // BuildPickerControls lays the controls out against the same offset
+    // this window was sized with.
+    state.descriptionOffsetY = DescriptionLayoutShift();
+    int width = DpiScale(560, dpi),
+        height = DpiScale(465 - state.descriptionOffsetY, dpi);
     RECT rect{0, 0, width, height};
     AdjustWindowRectEx(&rect, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE,
                        WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT);
@@ -5785,22 +6489,49 @@ static HWND CreatePickerWindow(PickerState& state) {
         x, y, width, height, state.request.owner, nullptr, ModInstance(), &state);
 }
 
+// Puts the host process's preferred app mode back the way it was as soon
+// as the picker is gone, on every exit path out of ShowPicker.
+class AppModeRestorer {
+   public:
+    AppModeRestorer() = default;
+    ~AppModeRestorer() { DarkModeActivation::RestoreAppMode(); }
+    AppModeRestorer(const AppModeRestorer&) = delete;
+    AppModeRestorer& operator=(const AppModeRestorer&) = delete;
+};
+
+// Signals the waiting caller that the picker finished, and publishes
+// whether the user actually accepted a program (OK / double click) or
+// dismissed the dialog (Cancel, Escape, close box). The accepted flag is
+// written before the event is set, so a caller released by the event is
+// guaranteed to observe the final value.
 class PickerCompletionSignal {
    public:
-    explicit PickerCompletionSignal(HANDLE event) : event_(event) {}
+    PickerCompletionSignal(HANDLE event, std::atomic<bool>* acceptedOut)
+        : event_(event), acceptedOut_(acceptedOut) {}
     ~PickerCompletionSignal() {
+        if (acceptedOut_)
+            acceptedOut_->store(accepted_, std::memory_order_release);
         if (event_) SetEvent(event_);
     }
     PickerCompletionSignal(const PickerCompletionSignal&) = delete;
     PickerCompletionSignal& operator=(const PickerCompletionSignal&) = delete;
 
+    void SetAccepted(bool accepted) { accepted_ = accepted; }
+
    private:
     HANDLE event_;
+    std::atomic<bool>* acceptedOut_;
+    bool accepted_ = false;
 };
 
 static void ShowPicker(PickerRequest request) {
     DetermineLocale();
-    PickerCompletionSignal completion(request.completionEvent);
+    // Destruction order matters: the restorer is declared after the
+    // completion signal, so it runs FIRST and the host process's app mode
+    // is already back to normal by the time the waiting caller is released.
+    PickerCompletionSignal completion(request.completionEvent,
+                                      request.acceptedOut);
+    AppModeRestorer appModeRestorer;
     if (g_shuttingDown.load(std::memory_order_acquire) || !IsSupportedFile(request.path)) return;
     PickerState state;
     state.request = std::move(request);
@@ -5811,12 +6542,11 @@ static void ShowPicker(PickerRequest request) {
     WindowOwner windowOwner(window);
     ShowWindow(window, SW_SHOWNORMAL);
     ActivatePickerWindow(window);
-    // Dark mode only: give the list the focus so keyboard navigation
-    // starts on the pre-selected first entry, which is painted with the
-    // Windows 7 flyout selection frame. Light mode keeps its old
-    // behavior.
-    if (state.isDarkMode && state.list && IsWindow(state.list))
-        SetFocus(state.list);
+    // Give the list the focus so keyboard navigation starts on the
+    // pre-selected first entry, which is painted with the Windows 7 blue
+    // selection frame. Both themes do this now that both paint that
+    // frame themselves.
+    if (state.list && IsWindow(state.list)) SetFocus(state.list);
 
     HANDLE stopHandle = g_stopEvent.get();
     while (!state.finished) {
@@ -5835,6 +6565,11 @@ static void ShowPicker(PickerRequest request) {
         }
         if (!IsWindow(window)) state.finished = true;
     }
+    // The user pressed OK (or double clicked a program) rather than
+    // cancelling: report that to the waiting hook, which turns it into
+    // S_OK / TRUE instead of ERROR_CANCELLED.
+    completion.SetAccepted(state.accepted);
+
     if (!state.accepted || state.chosenIndex < 0 ||
         static_cast<size_t>(state.chosenIndex) >= state.handlers.size() ||
         g_shuttingDown.load(std::memory_order_acquire)) return;
@@ -5933,6 +6668,12 @@ static void WorkerMainNoexcept() {
         g_workerReady.store(false, std::memory_order_release);
         Wh_Log(L"Standalone Open With: worker exception contained");
     }
+    // Mark the thread as finished so StartWorkerIfNeeded can reap it and
+    // try again. Without this a worker that failed to start up (COM,
+    // common controls or the window class) would leave g_worker engaged
+    // but never ready, and every later request would fall through to the
+    // system dialog for the lifetime of the process.
+    g_workerExited.store(true, std::memory_order_release);
     // Also release a waiter if initialization failed before Ready was set.
     if (g_workerReadyEvent) SetEvent(g_workerReadyEvent.get());
 }
@@ -5951,18 +6692,36 @@ static bool WaitForPickerWorker(DWORD timeoutMilliseconds) {
 // shell32 Control_RunDLL and dozens of other hosts that never show an
 // Open With dialog - so those processes must not pay for the worker at
 // startup. The two QueuePicker entry points are the only users of the
-// worker, so the start lives here behind std::call_once.
-static std::once_flag g_workerStartOnce;
+// worker, so the start lives here.
+//
+// Deliberately a mutex and not std::call_once: a once_flag is consumed
+// for the lifetime of the loaded module, and a mod recompile reloads the
+// DLL into a host process that is still running. StopWorker joins and
+// clears g_worker on unload, but the spent once_flag meant the reloaded
+// module could never start a second worker, so every subsequent request
+// fell through to the system dialog. Keying the start off g_worker
+// itself makes it repeatable.
+static std::mutex g_workerStartMutex;
 static bool StartWorkerIfNeeded() {
-    std::call_once(g_workerStartOnce, [] {
-        if (!g_shuttingDown.load(std::memory_order_acquire)) {
+    {
+        std::lock_guard<std::mutex> lock(g_workerStartMutex);
+        // Reap a worker that already returned before deciding whether one
+        // has to be started.
+        if (g_worker && g_workerExited.load(std::memory_order_acquire)) {
+            if (g_worker->joinable()) g_worker->join();
+            g_worker.reset();
+        }
+        if (!g_worker && !g_shuttingDown.load(std::memory_order_acquire)) {
+            g_workerExited.store(false, std::memory_order_release);
+            g_workerReady.store(false, std::memory_order_release);
+            if (g_workerReadyEvent) ResetEvent(g_workerReadyEvent.get());
             try {
                 g_worker.emplace(WorkerMainNoexcept);
             } catch (...) {
                 Wh_Log(L"Standalone Open With: worker thread creation failed");
             }
         }
-    });
+    }
     return g_worker.has_value() && WaitForPickerWorker(3000);
 }
 
@@ -6005,8 +6764,8 @@ static bool QueuePicker(HWND owner, PCWSTR path,
         return false;
     }
     try {
-        g_pendingRequest.emplace(
-            PickerRequest{std::move(copy), owner, nullptr, setDefaultOnly});
+        g_pendingRequest.emplace(PickerRequest{std::move(copy), owner, nullptr,
+                                               setDefaultOnly, nullptr});
     } catch (...) {
         return false;
     }
@@ -6014,41 +6773,50 @@ static bool QueuePicker(HWND owner, PCWSTR path,
     return true;
 }
 
-static bool QueuePickerAndWait(HWND owner, PCWSTR path,
-                               bool setDefaultOnly = false) {
+// Outcome of a synchronous picker request. The three states are distinct
+// because the hooked APIs report them differently: only Accepted is a
+// success, Cancelled must surface as ERROR_CANCELLED, and NotHandled means
+// the mod declined the request and the original API has to run.
+enum class PickerOutcome { NotHandled, Cancelled, Accepted };
+
+static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
+                                        bool setDefaultOnly = false) {
     if (!path ||
         !g_replaceSystemDialog.load(std::memory_order_acquire) ||
         g_shuttingDown.load(std::memory_order_acquire) ||
         !StartWorkerIfNeeded()) {
-        return false;
+        return PickerOutcome::NotHandled;
     }
 
     std::wstring copy;
     try {
         copy = path;
     } catch (...) {
-        return false;
+        return PickerOutcome::NotHandled;
     }
-    if (!IsSupportedFile(copy)) return false;
+    if (!IsSupportedFile(copy)) return PickerOutcome::NotHandled;
 
     WinHandle completion(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-    if (!completion) return false;
+    if (!completion) return PickerOutcome::NotHandled;
+    // Lives on this frame for the whole wait below: the worker writes the
+    // OK/Cancel result into it just before signaling the completion event.
+    std::atomic<bool> accepted{false};
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
         if (g_pendingRequest ||
             g_currentWindow.load(std::memory_order_acquire)) {
-            return false;
+            return PickerOutcome::NotHandled;
         }
         try {
             g_pendingRequest.emplace(
                 PickerRequest{std::move(copy), owner, completion.get(),
-                              setDefaultOnly});
+                              setDefaultOnly, &accepted});
         } catch (...) {
-            return false;
+            return PickerOutcome::NotHandled;
         }
         if (!SetEvent(g_requestEvent.get())) {
             g_pendingRequest.reset();
-            return false;
+            return PickerOutcome::NotHandled;
         }
     }
 
@@ -6079,7 +6847,11 @@ static bool QueuePickerAndWait(HWND owner, PCWSTR path,
             }
         }
     }
-    return completedIndex == 0;
+    // completedIndex 1 is g_stopEvent: the mod is unloading, the picker
+    // never reached a decision, so let the original API handle it.
+    if (completedIndex != 0) return PickerOutcome::NotHandled;
+    return accepted.load(std::memory_order_acquire) ? PickerOutcome::Accepted
+                                                    : PickerOutcome::Cancelled;
 }
 
 // -----------------------------------------------------------------------------
@@ -6532,12 +7304,10 @@ static std::wstring PathFromExecuteParameters(PCWSTR parameters) {
         }
         if (IsSupportedFile(candidate)) return candidate;
 
-        int argc = 0;
-        LPWSTR* argv = CommandLineToArgvW(parameters, &argc);
+        ArgvOwner argv(parameters);
         if (!argv) return {};
         std::wstring result;
-        if (argc == 1 && IsSupportedFile(argv[0])) result = argv[0];
-        LocalFree(argv);
+        if (argv.Count() == 1 && IsSupportedFile(argv[0])) result = argv[0];
         return result;
     } catch (...) {
         return {};
@@ -6649,9 +7419,13 @@ static HRESULT STDMETHODCALLTYPE ServerExecuteHook(IExecuteCommand* self) {
                                        : state.parameterPath;
         Wh_Log(L"Standalone Open With: server Execute path=%s owner=%p",
                path.empty() ? L"(empty)" : path.c_str(), state.owner);
+        // IExecuteCommand::Execute has no "user cancelled" channel - the
+        // real server simply exits either way - so both Accepted and
+        // Cancelled count as handled and only NotHandled falls through.
         if (g_replaceSystemDialog.load(std::memory_order_acquire) &&
             IsSupportedFile(path) &&
-            QueuePickerAndWait(state.owner, path.c_str())) {
+            QueuePickerAndWait(state.owner, path.c_str()) !=
+                PickerOutcome::NotHandled) {
             return S_OK;
         }
     } catch (...) {
@@ -6668,7 +7442,8 @@ static HRESULT STDMETHODCALLTYPE ServerLauncherLaunchHook(
                L"flags=0x%08X", path ? path : L"(null)", owner, flags);
         if (g_replaceSystemDialog.load(std::memory_order_acquire) && path &&
             IsSupportedFile(path) &&
-            QueuePickerAndWait(owner, path, setDefaultOnly)) {
+            QueuePickerAndWait(owner, path, setDefaultOnly) !=
+                PickerOutcome::NotHandled) {
             return S_OK;
         }
     } catch (...) {
@@ -6826,7 +7601,11 @@ static void WINAPI OpenWithEntryPointHook() {
     bool handled = false;
     if (IsSupportedFile(g_directOpenWithPath) &&
         g_replaceSystemDialog.load(std::memory_order_acquire)) {
-        handled = QueuePickerAndWait(nullptr, g_directOpenWithPath.c_str());
+        // The process was launched purely to show this dialog, so a
+        // cancelled picker is still a completed run: exit rather than
+        // letting the real OpenWith.exe put a second dialog on screen.
+        handled = QueuePickerAndWait(nullptr, g_directOpenWithPath.c_str()) !=
+                  PickerOutcome::NotHandled;
     }
     if (handled) {
         ExitProcess(0);
@@ -6881,9 +7660,9 @@ static bool InstallDirectOpenWithEntryHook(PCWSTR path) {
 // command line. Returns an empty string if nothing usable is found.
 static std::wstring ExtractOpenWithTargetPath(LPCWSTR commandLine) {
     if (!commandLine || !*commandLine) return L"";
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(commandLine, &argc);
+    ArgvOwner argv(commandLine);
     if (!argv) return L"";
+    const int argc = argv.Count();
     std::wstring result;
     try {
         for (int i = 0; i < argc; ++i) {
@@ -6899,7 +7678,6 @@ static std::wstring ExtractOpenWithTargetPath(LPCWSTR commandLine) {
     } catch (...) {
         result.clear();
     }
-    LocalFree(argv);
     return result;
 }
 
@@ -6920,8 +7698,18 @@ static HRESULT WINAPI SHOpenWithDialogHook(HWND owner, const OPENASINFO* info) {
         if (info && (info->oaifInFlags & OAIF_EXEC) &&
             g_replaceSystemDialog.load(std::memory_order_acquire) &&
             info->pcszFile && IsSupportedFile(info->pcszFile)) {
-            if (QueuePickerAndWait(owner, info->pcszFile)) {
-                return S_OK;
+            // Windows returns HRESULT_FROM_WIN32(ERROR_CANCELLED) when the
+            // user dismisses the dialog. Callers branch on it - to retry,
+            // to fall back to another handler, or to delete a temp file
+            // they only keep when a program was actually chosen - so the
+            // Cancel path must not be reported as S_OK.
+            switch (QueuePickerAndWait(owner, info->pcszFile)) {
+                case PickerOutcome::Accepted:
+                    return S_OK;
+                case PickerOutcome::Cancelled:
+                    return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+                case PickerOutcome::NotHandled:
+                    break;
             }
         }
         Wh_Log(L"Standalone Open With: SHOpenWithDialog falling back to system "
@@ -6941,10 +7729,23 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
         if (info && IsOpenAsVerb(info->lpVerb) &&
             g_replaceSystemDialog.load(std::memory_order_acquire) &&
             info->lpFile && IsSupportedFile(info->lpFile)) {
-            if (QueuePickerAndWait(info->hwnd, info->lpFile)) {
-                info->hInstApp = reinterpret_cast<HINSTANCE>(33);
-                info->hProcess = nullptr;
-                return TRUE;
+            // Same contract as above: Windows fails the call with
+            // ERROR_CANCELLED when the picker is dismissed, so returning
+            // TRUE for a cancel would tell the caller a program was
+            // launched when none was.
+            switch (QueuePickerAndWait(info->hwnd, info->lpFile)) {
+                case PickerOutcome::Accepted:
+                    info->hInstApp = reinterpret_cast<HINSTANCE>(33);
+                    info->hProcess = nullptr;
+                    return TRUE;
+                case PickerOutcome::Cancelled:
+                    info->hInstApp =
+                        reinterpret_cast<HINSTANCE>(SE_ERR_NOASSOC);
+                    info->hProcess = nullptr;
+                    SetLastError(ERROR_CANCELLED);
+                    return FALSE;
+                case PickerOutcome::NotHandled:
+                    break;
             }
         }
         if (info && IsOpenAsVerb(info->lpVerb)) {
@@ -6964,8 +7765,25 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND owner, LPCWSTR verb, LPCWSTR file
                                           LPCWSTR parameters, LPCWSTR directory,
                                           INT show) {
     try {
-        if (IsOpenAsVerb(verb) && QueuePicker(owner, file))
-            return reinterpret_cast<HINSTANCE>(33);
+        // Waiting form, like the two sibling hooks: ShellExecuteW is
+        // synchronous for "openas" on Windows, so returning as soon as the
+        // request was queued told the caller the dialog was done while it
+        // was still on screen.
+        if (IsOpenAsVerb(verb) &&
+            g_replaceSystemDialog.load(std::memory_order_acquire) && file &&
+            IsSupportedFile(file)) {
+            switch (QueuePickerAndWait(owner, file)) {
+                case PickerOutcome::Accepted:
+                    return reinterpret_cast<HINSTANCE>(33);
+                case PickerOutcome::Cancelled:
+                    // ShellExecuteW reports failure through its return
+                    // value; the matching error code goes to GetLastError.
+                    SetLastError(ERROR_CANCELLED);
+                    return reinterpret_cast<HINSTANCE>(SE_ERR_NOASSOC);
+                case PickerOutcome::NotHandled:
+                    break;
+            }
+        }
         if (IsOpenAsVerb(verb)) {
             Wh_Log(L"Standalone Open With: ShellExecuteW(openas) falling back "
                    L"to system dialog (file=%s replace=%d workerReady=%d "
@@ -6994,9 +7812,13 @@ static void StopWorker() {
         PostMessageW(browse, WM_CLOSE, 0, 0);
     if (HWND window = g_currentWindow.load(std::memory_order_acquire))
         PostMessageW(window, WM_CLOSE, 0, 0);
-    if (g_worker) {
-        g_worker->join();
-        g_worker.reset();
+    {
+        std::lock_guard<std::mutex> lock(g_workerStartMutex);
+        if (g_worker) {
+            if (g_worker->joinable()) g_worker->join();
+            g_worker.reset();
+        }
+        g_workerExited.store(false, std::memory_order_release);
     }
     g_activeBrowseHwnd.store(nullptr, std::memory_order_release);
 }
@@ -7004,6 +7826,15 @@ static void StopWorker() {
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 static LoadLibraryExW_t LoadLibraryExWOriginal = nullptr;
 static std::mutex g_shell32HookMutex;
+
+// @include rundll32.exe matches EVERY rundll32 invocation on the system:
+// Control Panel applets, printer and device UI, shell32.dll,Control_RunDLL
+// and dozens more. Only shell32.dll,OpenAs_RunDLL can ever show an Open
+// With picker, and it needs nothing but SHOpenWithDialog. So hosts that
+// aren't Explorer or OpenWith.exe take the single narrow hook and skip
+// ShellExecuteW / ShellExecuteExW, two hot general-purpose APIs that would
+// otherwise be detoured in processes that can never show the dialog.
+static std::atomic<bool> g_hookGeneralShellExecute{false};
 
 static bool HookShell32Exports(HMODULE shell32) {
     if (!shell32 || g_shuttingDown.load(std::memory_order_acquire))
@@ -7013,14 +7844,17 @@ static bool HookShell32Exports(HMODULE shell32) {
     bool registered = false;
     auto openWith = reinterpret_cast<SHOpenWithDialog_t>(
         GetProcAddress(shell32, "SHOpenWithDialog"));
-    auto executeEx = reinterpret_cast<ShellExecuteExW_t>(
-        GetProcAddress(shell32, "ShellExecuteExW"));
-    auto execute = reinterpret_cast<ShellExecuteW_t>(
-        GetProcAddress(shell32, "ShellExecuteW"));
     if (openWith && !SHOpenWithDialogOriginal) {
         registered |= WindhawkUtils::SetFunctionHook(
             openWith, SHOpenWithDialogHook, &SHOpenWithDialogOriginal);
     }
+    if (!g_hookGeneralShellExecute.load(std::memory_order_acquire))
+        return registered;
+
+    auto executeEx = reinterpret_cast<ShellExecuteExW_t>(
+        GetProcAddress(shell32, "ShellExecuteExW"));
+    auto execute = reinterpret_cast<ShellExecuteW_t>(
+        GetProcAddress(shell32, "ShellExecuteW"));
     if (executeEx && !ShellExecuteExWOriginal) {
         registered |= WindhawkUtils::SetFunctionHook(
             executeEx, ShellExecuteExWHook, &ShellExecuteExWOriginal);
@@ -7091,6 +7925,12 @@ static bool VerifySystemBinariesExist() {
 // SHOpenWithDialog inside shell32.dll, so the SHOpenWithDialog export
 // hook installed by HookShell32Exports (including late loads via the
 // LoadLibraryExW hook) covers it without any rundll32-specific code.
+// Because that include also matches every unrelated rundll32 host,
+// those processes install SHOpenWithDialog and nothing else: the
+// ShellExecuteW/ShellExecuteExW detours are gated on Explorer or
+// OpenWith.exe (g_hookGeneralShellExecute), and the LoadLibraryExW
+// detour is skipped whenever shell32 is already loaded, which is the
+// normal case in rundll32.exe since it imports shell32 statically.
 // With @architecture x86-64 only the 64-bit rundll32 is covered: a
 // 64-bit caller's OpenAs_RunDLL uses the 64-bit rundll32, so that route
 // works; 32-bit callers fall outside this mod's architecture scope.
@@ -7127,20 +7967,37 @@ BOOL Wh_ModInit() {
         // The picker worker thread is started lazily on the first
         // request (see StartWorkerIfNeeded below).
 
+        // ShellExecuteW / ShellExecuteExW are only worth detouring where
+        // an Open With picker can actually originate. Explorer raises the
+        // context-menu "openas" verb and OpenWith.exe is the dialog host;
+        // every other @include rundll32.exe host (Control Panel applets,
+        // printer and device UI, Control_RunDLL, ...) gets SHOpenWithDialog
+        // alone, which is all shell32.dll,OpenAs_RunDLL needs.
+        g_hookGeneralShellExecute.store(isExplorer || isOpenWith,
+                                        std::memory_order_release);
+
+        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+
+        // The LoadLibraryExW detour exists only to catch a shell32 that
+        // gets loaded later. When shell32 is already in the process -
+        // which is the normal case in rundll32.exe, since it imports
+        // shell32 statically, and in Explorer - there is nothing left to
+        // catch, so don't detour a hot loader API for nothing.
         bool hookedLoadLibrary = false;
-        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-        if (!kernelbase) kernelbase = GetModuleHandleW(L"kernel32.dll");
-        if (kernelbase) {
-            auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
-                GetProcAddress(kernelbase, "LoadLibraryExW"));
-            if (loadLibraryExW) {
-                hookedLoadLibrary = WindhawkUtils::SetFunctionHook(
-                    loadLibraryExW, LoadLibraryExWHook,
-                    &LoadLibraryExWOriginal);
+        if (!shell32) {
+            HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+            if (!kernelbase) kernelbase = GetModuleHandleW(L"kernel32.dll");
+            if (kernelbase) {
+                auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+                    GetProcAddress(kernelbase, "LoadLibraryExW"));
+                if (loadLibraryExW) {
+                    hookedLoadLibrary = WindhawkUtils::SetFunctionHook(
+                        loadLibraryExW, LoadLibraryExWHook,
+                        &LoadLibraryExWOriginal);
+                }
             }
         }
 
-        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
         const bool hookedShellExports = HookShell32Exports(shell32);
 
         bool hookedServerRegistration = false;
@@ -7176,10 +8033,11 @@ BOOL Wh_ModInit() {
                              hookedServerRegistration || hookedDirectEntry ||
                              isExplorer;
         Wh_Log(L"Standalone Open With: init process=%s pid=%u shell32=%p "
-               L"loadLibrary=%d shellExports=%d serverRegistration=%d "
-               L"directEntry=%d deferredMenuProbe=%d",
+               L"loadLibrary=%d shellExports=%d generalShellExecute=%d "
+               L"serverRegistration=%d directEntry=%d deferredMenuProbe=%d",
                moduleName, GetCurrentProcessId(), shell32,
                hookedLoadLibrary, hookedShellExports,
+               g_hookGeneralShellExecute.load(std::memory_order_acquire),
                hookedServerRegistration, hookedDirectEntry,
                isExplorer);
         if (!anyHook) {
@@ -7225,6 +8083,10 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     StopWorker();
+    // Last resort: if the worker was torn down while a dark picker still
+    // held AllowDark, put the host process's preferred app mode back. The
+    // mod must not leave Explorer's theme state changed behind it.
+    DarkModeActivation::RestoreAppMode();
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
         g_pendingRequest.reset();
