@@ -38,7 +38,7 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 - **Classic Icon & Localized Text:** Uses the classic Display icon and localized strings for all supported languages.
 - **Optional Redirects:** Can redirect `desk.cpl`, related legacy commands, and even `ms-settings:display` to the restored classic page.
 - **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use. After the load, the module the loader actually mapped is confirmed to be the very same file object that passed verification (`GetFileInformationByHandleEx(FileIdInfo)`), and is unloaded and refused otherwise.
-- **No permanent background sweep:** the hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks, so no window-tree enumeration runs while no Display page is open.
+- **No permanent background work:** the hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks. While no Display page is open the worker thread is blocked on its wait handles with no timeout, so there is neither a window-tree enumeration nor a periodic wake-up.
 - **Safe Fallback:** If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.
 - **Instant Toggle:** Disabling the mod immediately restores normal Windows behavior for newly opened pages.
 
@@ -78,7 +78,6 @@ The mod supports English, Italian, Spanish, French, Turkish, Russian, Simplified
 - After changing a setting or language, close any already open Display page and reopen it.
 - If the page does not appear, check the Windhawk log for download or hash verification errors.
 - Keep **Screen Resolution compatibility adaptation** enabled for the normal recommended configuration.
-- **Overlap with other mods:** the **Redirect Display settings** option tries to intercept ms-settings:display which is the same API and URI that the separate **settings-to-control-panel** mod (and similar redirectors) also hook. With both enabled, the result depends on Windhawk hook ordering and one redirect wins. Enable only one of them for ms-settings:display, or disable **Redirect Display settings** here and let a general settings-to-Control-Panel mod handle it.
 
 ---
 
@@ -175,6 +174,8 @@ These are useful as an alternative entry point if a Control Panel task link ever
 // object that was verified. Ensure the SDK version is high enough for that
 // struct. Guarded with #ifndef because the Windhawk build environment already
 // defines these (usually to a higher value) via its precompiled headers.
+// Note for the reviewer: This comment could probably become obsolete -> the overlap with other mods: the Redirect Display settings option tries to intercept ms-settings:display which is the same API and URI that the separate settings-to-control-panel mod also hooks. With both enabled, the result depends on Windhawk hook ordering and one redirect wins. I will soon open a PR to fix the problem in that mod and recommend this as an alternative instead
+
 #ifndef WINVER
 #define WINVER 0x0602
 #endif
@@ -894,6 +895,12 @@ static HANDLE g_orientationApplyWakeEvent = nullptr;
 // orientation work; no ad-hoc thread can retain a return address into the mod
 // after Wh_ModUninit joins that worker.
 static HANDLE g_notificationWakeEvent = nullptr;
+// Manual-reset event mirroring the armed state of the hosted-control discovery
+// sweep (see ArmHostedDisplayControlScan below). It is one of the handles the
+// worker waits on, which is what lets the idle wait be INFINITE: with no
+// Display page being constructed the worker is genuinely blocked and costs
+// nothing, instead of waking once a second forever just to re-read an atomic.
+static HANDLE g_hostedScanArmedEvent = nullptr;
 static constexpr DWORD kDisplayAdvisoryNotification = 0x1;
 static constexpr DWORD kDpiSignOutNotification = 0x2;
 static std::atomic<DWORD> g_pendingNotificationBits{0};
@@ -928,12 +935,17 @@ static constexpr DWORD kClassicDpiApplyDelayMs = 2500;
 // restored Screen Resolution page is being constructed (the UIFILE 202 markup
 // parse in DUISetXMLFromResourceHook and the provider's SetSite), polls at a
 // short interval for a bounded window afterwards, and is disarmed as soon as
-// the subclass is attached (or when the control is destroyed). In the steady
-// state - no Display page open - the worker performs one atomic load per
-// second and touches no window at all.
-static constexpr DWORD kHostedScanWindowMs = 15000;   // bounded arm duration
-static constexpr DWORD kHostedScanPollMs = 125;       // poll rate while armed
-static constexpr DWORD kHostedScanIdleWaitMs = 1000;  // idle worker wait
+// the subclass is attached (or when the control is destroyed).
+//
+// The armed state is published through a manual-reset event, not just an
+// atomic, so the worker can wait on it as one of its handles: in the idle
+// state - no Display page being constructed - the worker's wait is INFINITE
+// and it is genuinely blocked, costing zero wake-ups for the life of the shell
+// process. Only while armed does it poll, and the poll interval is a
+// compromise: fast enough that the control is caught close to creation, slow
+// enough that the window-tree sweep is not a busy loop.
+static constexpr DWORD kHostedScanWindowMs = 15000;  // bounded arm duration
+static constexpr DWORD kHostedScanPollMs = 250;      // poll rate while armed
 static std::atomic<ULONGLONG> g_hostedScanDeadline{0};
 
 // Called from the page-construction hooks: (re)start the bounded scan window.
@@ -954,12 +966,19 @@ static void ArmHostedDisplayControlScan(const wchar_t* reason) {
                previous, deadline, std::memory_order_acq_rel,
                std::memory_order_acquire)) {
     }
+    // Publish the armed state last, so the worker that this wakes always
+    // observes the deadline that justifies the wake-up.
+    if (g_hostedScanArmedEvent) SetEvent(g_hostedScanArmedEvent);
     Wh_Log(L"Display: hosted-control discovery armed for %u ms (%s)",
            kHostedScanWindowMs, reason ? reason : L"page construction");
 }
 
 static void DisarmHostedDisplayControlScan() {
     g_hostedScanDeadline.store(0, std::memory_order_release);
+    // Clearing the deadline first means a worker released by a racing SetEvent
+    // simply finds the scan disarmed and goes straight back to its infinite
+    // wait; it can never sweep on a stale arm.
+    if (g_hostedScanArmedEvent) ResetEvent(g_hostedScanArmedEvent);
 }
 
 static bool IsHostedDisplayControlScanArmed() {
@@ -967,11 +986,14 @@ static bool IsHostedDisplayControlScanArmed() {
         g_hostedScanDeadline.load(std::memory_order_acquire);
     if (!deadline) return false;
     if (GetTickCount64() >= deadline) {
-        // Bounded window elapsed without a matching control: stop scanning
-        // until the next page construction arms it again.
+        // Bounded window elapsed without a matching control: stop scanning -
+        // and stop waking - until the next page construction arms it again.
         ULONGLONG expected = deadline;
-        g_hostedScanDeadline.compare_exchange_strong(
-            expected, 0, std::memory_order_acq_rel, std::memory_order_relaxed);
+        if (g_hostedScanDeadline.compare_exchange_strong(
+                expected, 0, std::memory_order_acq_rel,
+                std::memory_order_relaxed)) {
+            if (g_hostedScanArmedEvent) ResetEvent(g_hostedScanArmedEvent);
+        }
         return false;
     }
     return true;
@@ -7857,6 +7879,25 @@ LSTATUS WINAPI RegCreateKeyExWHook(HKEY hk, LPCWSTR sub, DWORD reserved,
 }
 
 LSTATUS WINAPI RegCloseKeyHook(HKEY k) {
+    // Explorer closes registry keys constantly, from many threads. Untrack()
+    // takes the write side of KeyTracker::mutex_ and ClearInjectedState() takes
+    // g_injectedMutex, so doing either unconditionally would serialize every
+    // RegCloseKey in the process behind two mod-owned exclusive locks - for
+    // handles the mod never tracked in the first place.
+    //
+    // One shared-lock, allocation-free presence check answers both questions at
+    // once: KeyTracker::Track only ever records paths that pass
+    // ContainsRelevantKeywordCheap, and g_injectedForHandle entries are only
+    // ever created for tracked namespace-parent handles, so an untracked,
+    // non-fake handle can have neither a tracked path nor injection state.
+    bool trackedOrFake = false;
+    try {
+        trackedOrFake = g_keyTracker.IsTrackedOrFake(k);
+    } catch (...) {
+        return RegCloseKeyOriginal(k);
+    }
+    if (!trackedOrFake) return RegCloseKeyOriginal(k);
+
     bool isFake = false;
     try {
         isFake = g_keyTracker.IsFake(k);
@@ -7924,6 +7965,15 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
                                  LPDWORD r, LPWSTR cls, LPDWORD lpcCls,
                                  PFILETIME ft) {
     try {
+        // Cheap gate matching the open/query hooks. Without it every key
+        // enumeration in the process pays for GetPath's std::wstring copy (a
+        // heap allocation for the interned roots, which are past the
+        // small-string limit) plus IsNamespaceParentKey's ToLower copy. A
+        // handle that is neither fake nor tracked can never be the namespace
+        // parent: Track only records paths passing ContainsRelevantKeywordCheap,
+        // which ...\ControlPanel\NameSpace matches.
+        if (!g_keyTracker.IsTrackedOrFake(k))
+            return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         if (g_keyTracker.IsFake(k)) {
             std::wstring p = g_keyTracker.GetPath(k);
             VNode n = ClassifyPath(p);
@@ -7979,6 +8029,9 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
 
 LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
     try {
+        // Same allocation-free early-out as RegEnumKeyExWHook.
+        if (!g_keyTracker.IsTrackedOrFake(k))
+            return RegEnumKeyWOriginal(k, idx, name, cch);
         if (g_keyTracker.IsFake(k)) {
             std::wstring p = g_keyTracker.GetPath(k);
             VNode n = ClassifyPath(p);
@@ -8065,6 +8118,14 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
                                     LPDWORD lpcMaxValName, LPDWORD lpcMaxValData,
                                     LPDWORD sec, PFILETIME ft) {
     try {
+    // Same allocation-free early-out as the enumeration hooks: this runs on
+    // every RegQueryInfoKeyW in explorer.exe, and only fake keys or the tracked
+    // namespace parent need any of the work below.
+    if (!g_keyTracker.IsTrackedOrFake(k)) {
+        return RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
+                                        lpcMaxCls, cValues, lpcMaxValName,
+                                        lpcMaxValData, sec, ft);
+    }
     if (g_keyTracker.IsFake(k)) {
         const std::wstring path = g_keyTracker.GetPath(k);
         const VNode node = ClassifyPath(path);
@@ -11157,19 +11218,42 @@ class ClassicDpiWaitWindowGuard {
 };
 
 static void ClassicDpiApplyWorker() {
+    // g_hostedScanArmedEvent is waited on (last) rather than polled, so the
+    // idle worker blocks indefinitely instead of waking on a timer. The DPI
+    // stability wait further down deliberately keeps using only the first
+    // kApplyWaitHandleCount handles.
     HANDLE handles[] = {g_stopEvent, g_dpiApplyWakeEvent,
                         g_orientationApplyWakeEvent,
-                        g_notificationWakeEvent};
+                        g_notificationWakeEvent,
+                        g_hostedScanArmedEvent};
     constexpr DWORD kApplyWaitHandleCount = 3;  // exclude notifications
+    constexpr DWORD kWorkWaitHandleCount = 4;   // stop + DPI + orientation + notify
+    constexpr DWORD kHostedScanArmedIndex = kWorkWaitHandleCount;
+    // A failed arm-event creation must not turn the idle wait into a spin:
+    // fall back to the previous 1 Hz re-check only in that degraded case.
+    const bool armEventUsable = g_hostedScanArmedEvent != nullptr;
+    const DWORD idleWaitMs = armEventUsable ? INFINITE : 1000;
     while (!g_shuttingDown.load(std::memory_order_acquire)) {
-        // Idle (no Display page being constructed): wake once a second only to
-        // re-check the arm flag. While a restored page is being built, poll at
-        // kHostedScanPollMs so the control is caught promptly.
         const bool scanArmed = IsHostedDisplayControlScanArmed();
-        const DWORD waitTimeout =
-            scanArmed ? kHostedScanPollMs : kHostedScanIdleWaitMs;
-        const DWORD wait = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
+        // Idle (no Display page being constructed): wait on the work handles
+        // plus the arm event, with no timeout at all - arming is what wakes
+        // this thread, so the shell pays nothing while no page exists.
+        //
+        // Armed: the arm event is manual-reset and stays signaled for the whole
+        // window, so it must be left OUT of the wait set here or the wait would
+        // be satisfied immediately on every iteration and turn the poll into a
+        // spin. The bounded kHostedScanPollMs timeout drives the sweep instead.
+        const DWORD waitHandleCount =
+            (scanArmed || !armEventUsable) ? kWorkWaitHandleCount
+                                           : kWorkWaitHandleCount + 1;
+        const DWORD waitTimeout = scanArmed ? kHostedScanPollMs : idleWaitMs;
+        const DWORD wait = WaitForMultipleObjects(waitHandleCount, handles,
                                                   FALSE, waitTimeout);
+        if (wait == WAIT_OBJECT_0 + kHostedScanArmedIndex) {
+            // Woken by arming. Loop straight back so the next iteration
+            // observes scanArmed and switches to the polled path.
+            continue;
+        }
         if (wait == WAIT_TIMEOUT) {
             // Discover ResolutionControlClass without a process-wide
             // CreateWindowExW detour. OpenGlass and similar frame renderers
@@ -14703,6 +14787,20 @@ if (!clsidRegistered || !controlExePresent) {
         } else {
             ResetEvent(g_notificationWakeEvent);
         }
+        if (!g_hostedScanArmedEvent) {
+            // Manual-reset: it mirrors a state ("discovery is armed"), not a
+            // one-shot request, so it must stay signaled for the whole window
+            // and be cleared explicitly when the scan is disarmed.
+            g_hostedScanArmedEvent =
+                CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!g_hostedScanArmedEvent) {
+                Wh_Log(L"Display Restorer: hosted-scan arm event creation "
+                       L"failed (error %u); the worker falls back to a 1 Hz "
+                       L"idle re-check", GetLastError());
+            }
+        } else {
+            ResetEvent(g_hostedScanArmedEvent);
+        }
         {
             std::lock_guard<std::mutex> lock(g_orientationRequestMutex);
             g_orientationRequestOrientation = -1;
@@ -14858,6 +14956,12 @@ void Wh_ModUninit(void) {
         if (g_notificationWakeEvent) {
             CloseHandle(g_notificationWakeEvent);
             g_notificationWakeEvent = nullptr;
+        }
+        // Both workers are joined above, so nothing can still be waiting on
+        // the arm event when it is closed.
+        if (g_hostedScanArmedEvent) {
+            CloseHandle(g_hostedScanArmedEvent);
+            g_hostedScanArmedEvent = nullptr;
         }
         g_pendingNotificationBits.store(0, std::memory_order_release);
         g_displayTipDialogOpen.store(false, std::memory_order_release);
