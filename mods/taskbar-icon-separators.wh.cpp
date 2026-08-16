@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.2
+// @version         1.0.13
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -29,10 +29,12 @@ Separators remain genuine, can be manually reordered, and can also be created fr
 Note: The mod creates pinned shortcuts targeting Windows `systray.exe` (with fallback) and reorders the persisted taskbar pin list. 
 Cleanup is best-effort; in the worst failure case, manual taskbar unpinning and reordering may be required.
 
-Separator properties are stored by the mod itself
-inside its Windhawk mod-storage directory. Windhawk settings expose only the
-global separator width. Native Add, drag/reorder, and Unpin operations update
- are persisted directly.
+Add separators from the taskbar context menu and drag them into place; positions
+are saved automatically. A newly added, unanchored separator keeps a small
+"Drag to anchor this separator" guide attached above it until it is moved once; the guide is attached directly to the live TaskListButton with Popup.PlacementTarget, so Windows keeps it aligned through dragging and taskbar relayouts.
+Right-click a separator to remove it. Windhawk settings expose only the global separator width.
+Win+1 through Win+0 taskbar shortcuts automatically skip anchored separator slots
+when selecting their numbered app.
 
 Windows 11 only.
 */
@@ -59,6 +61,8 @@ Windows 11 only.
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -76,6 +80,7 @@ Windows 11 only.
 #include <mutex>
 #include <shared_mutex>
 #include <new>
+#include <optional>
 #include <cstdlib>
 #include <string>
 #include <string_view>
@@ -497,6 +502,31 @@ static bool IsValidStableId(std::wstring_view value) {
                    ch == L'-' || ch == L'_';
         });
 }
+
+static std::optional<std::wstring> ExtractStableIdFromSeparatorIdentity(
+    std::wstring_view identity) {
+    static const std::wstring marker =
+        std::wstring(L".") +
+        kSeparatorIdentitySuffix +
+        L".";
+
+    size_t markerPosition =
+        identity.rfind(marker);
+    if (markerPosition == std::wstring_view::npos) {
+        return std::nullopt;
+    }
+
+    std::wstring_view stableId =
+        identity.substr(
+            markerPosition + marker.size());
+
+    if (!IsValidStableId(stableId)) {
+        return std::nullopt;
+    }
+
+    return std::wstring(stableId);
+}
+
 
 static bool ParseWideInt(
     std::wstring_view text,
@@ -1036,6 +1066,96 @@ static double LoadSeparatorWidthSetting() {
     return static_cast<double>(width);
 }
 
+static bool AdoptLegacySeparatorShortcuts(
+    Settings* settings) {
+    if (!settings) {
+        return false;
+    }
+
+    const auto shortcutPaths =
+        EnumerateSeparatorShortcuts();
+
+    if (shortcutPaths.empty()) {
+        return true;
+    }
+
+    const std::wstring refreshPulseStableId =
+        std::to_wstring(kRefreshPulseOrdinal);
+
+    bool sawUnrecognizedShortcut = false;
+    size_t adoptedCount = 0;
+
+    for (const auto& path : shortcutPaths) {
+        std::wstring identity =
+            GetShortcutIdentity(path);
+
+        auto stableId =
+            ExtractStableIdFromSeparatorIdentity(
+                identity);
+        if (!stableId) {
+            sawUnrecognizedShortcut = true;
+            Wh_Log(
+                L"[STATE] Legacy shortcut identity couldn't be parsed: '%s'",
+                identity.c_str());
+            continue;
+        }
+
+        // A refresh helper can survive an interrupted old backend pass. It is
+        // not a user separator and may be cleaned as stale after migration.
+        if (*stableId == refreshPulseStableId) {
+            continue;
+        }
+
+        if (std::any_of(
+                settings->separators.begin(),
+                settings->separators.end(),
+                [&stableId](const SeparatorSetting& separator) {
+                    return separator.stableId == *stableId;
+                })) {
+            continue;
+        }
+
+        const int sourceIndex =
+            static_cast<int>(
+                settings->separators.size());
+
+        settings->separators.push_back({
+            .ordinal = sourceIndex + 1,
+            .sourceIndex = sourceIndex,
+            // The old shortcut proves ownership but not its pin-list index.
+            // Keep it unanchored at Windows' native end until the user drags it;
+            // the ordinary TryMoveGroup path then records a durable position.
+            .targetIndex = -1,
+            .width = settings->width,
+            .stableId = *stableId,
+            // Preserve the exact old shortcut identity for this migration
+            // session. The new state format stores only stable IDs/positions.
+            .identity = std::move(identity),
+        });
+
+        adoptedCount++;
+    }
+
+    if (sawUnrecognizedShortcut) {
+        // No authoritative state file exists yet. Even a partially successful
+        // adoption must not authorize stale cleanup to delete an owned artifact
+        // that this migration couldn't identify.
+        Wh_Log(
+            L"[STATE] Refusing migration while unrecognized legacy "
+            L"shortcut artifacts exist");
+        return false;
+    }
+
+    if (adoptedCount > 0) {
+        Wh_Log(
+            L"[STATE] Adopted %zu legacy separator shortcut(s) from mod storage",
+            adoptedCount);
+    }
+
+    return true;
+}
+
+
 static bool MigrateLegacySeparatorState(
     double width,
     Settings* settingsOut) {
@@ -1124,6 +1244,16 @@ static bool MigrateLegacySeparatorState(
                     stableId),
             });
         }
+    }
+
+    // Published v0.5.38 could have live separator shortcuts even when its
+    // default settings row was never explicitly persisted. If the legacy
+    // settings sources found nothing, recover those owned shortcuts before
+    // creating the new authoritative state file.
+    if (migrated.separators.empty() &&
+        !AdoptLegacySeparatorShortcuts(
+            &migrated)) {
+        return false;
     }
 
     if (!SaveSeparatorStateFile(migrated)) {
@@ -1565,7 +1695,7 @@ static TaskListButton_UpdateVisualStates_t
 
 static void QueueBackendWork();
 static void FlushPendingSeparatorStateSynchronously();
-
+static void RefreshTrackedSeparatorVisualStates();
 using TaskListButton_OnDragCompletedGesture_t =
     void(WINAPI*)(void* pThis);
 static TaskListButton_OnDragCompletedGesture_t
@@ -1585,10 +1715,16 @@ static void WINAPI TaskListButton_OnDragCompletedGesture_Hook(
         }
 
         if (stateDirty) {
+            // Refresh presentation only after the native drag has completely
+            // unwound. This closes an unanchored separator's persistent guide
+            // as soon as TryMoveGroup has assigned its first concrete index.
+            RefreshTrackedSeparatorVisualStates();
+
             // The taskbar UI thread only signals work. The backend worker owns
             // the durable write so drag completion never blocks on disk I/O.
             QueueBackendWork();
         }
+
     }
 }
 
@@ -1809,6 +1945,15 @@ struct SeparatorVisualState {
     winrt::Windows::Foundation::IInspectable
         originalTaskListButtonToolTipLocalValue{nullptr};
 
+    // targetIndex == -1 presentation. The Popup is created asynchronously after
+    // TaskListButton::UpdateVisualStates has unwound, and is kept open until the
+    // first successful native drag assigns a concrete targetIndex.
+    winrt::Windows::UI::Xaml::Controls::Primitives::Popup
+        anchorHintPopup{nullptr};
+    winrt::Windows::Foundation::IAsyncAction
+        anchorHintAction{nullptr};
+    std::wstring anchorHintIdentity;
+    bool anchorHintQueued = false;
 };
 
 static thread_local std::list<SeparatorVisualState>
@@ -1821,11 +1966,43 @@ struct SeparatorVisualStateUpdateGuard {
     }
 };
 
+static void CloseSeparatorAnchorHint(
+    SeparatorVisualState& state) {
+    state.anchorHintQueued = false;
+    state.anchorHintIdentity.clear();
+
+    // RunAsync work is cancellable. This matters on mod unload: no queued
+    // dispatcher delegate may retain a callback into code after the mod is gone.
+    if (state.anchorHintAction) {
+        try {
+            state.anchorHintAction.Cancel();
+        } catch (...) {
+        }
+        state.anchorHintAction = nullptr;
+    }
+
+    if (!state.anchorHintPopup) {
+        return;
+    }
+
+    try {
+        state.anchorHintPopup.IsOpen(false);
+    } catch (...) {
+    }
+
+    state.anchorHintPopup = nullptr;
+}
+
 static void PruneExpiredSeparatorVisualStates() {
-    g_separatorVisualStates.remove_if(
-        [](const SeparatorVisualState& state) {
-            return !state.element.get();
-        });
+    for (auto it = g_separatorVisualStates.begin();
+         it != g_separatorVisualStates.end();) {
+        if (!it->element.get()) {
+            CloseSeparatorAnchorHint(*it);
+            it = g_separatorVisualStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 static auto FindSeparatorVisualState(void* taskListButton) {
@@ -1835,6 +2012,220 @@ static auto FindSeparatorVisualState(void* taskListButton) {
         [taskListButton](const SeparatorVisualState& state) {
             return state.taskListButton == taskListButton;
         });
+}
+
+static void ShowQueuedSeparatorAnchorHint(
+    void* taskListButton,
+    winrt::weak_ref<FrameworkElement> weakElement,
+    std::wstring identity) {
+    auto stateIt =
+        FindSeparatorVisualState(taskListButton);
+    if (stateIt == g_separatorVisualStates.end()) {
+        return;
+    }
+
+    SeparatorVisualState& state = *stateIt;
+
+    // A recycled TaskListButton can queue a second request before an older one
+    // runs. Only the request for the currently tracked identity owns this state.
+    if (state.anchorHintIdentity != identity) {
+        return;
+    }
+
+    state.anchorHintQueued = false;
+    state.anchorHintAction = nullptr;
+
+    if (g_unloading) {
+        CloseSeparatorAnchorHint(state);
+        return;
+    }
+
+    FrameworkElement element = weakElement.get();
+    FrameworkElement trackedElement = state.element.get();
+    if (!element ||
+        !trackedElement ||
+        winrt::get_abi(element) != winrt::get_abi(trackedElement)) {
+        CloseSeparatorAnchorHint(state);
+        return;
+    }
+
+    SeparatorSetting separator;
+    if (!GetSeparatorForElement(
+            element,
+            &separator) ||
+        separator.identity != identity ||
+        separator.targetIndex >= 0) {
+        CloseSeparatorAnchorHint(state);
+        return;
+    }
+
+    try {
+        using namespace winrt::Windows::UI;
+        using namespace winrt::Windows::UI::Xaml::Controls;
+        using namespace winrt::Windows::UI::Xaml::Controls::Primitives;
+        using namespace winrt::Windows::UI::Xaml::Media;
+
+        XamlRoot xamlRoot = element.XamlRoot();
+        if (!xamlRoot) {
+            return;
+        }
+
+        Popup popup;
+        popup.XamlRoot(xamlRoot);
+        popup.IsLightDismissEnabled(false);
+        popup.ShouldConstrainToRootBounds(false);
+        popup.IsHitTestVisible(false);
+
+        // A tiny self-contained callout rather than another taskbar tooltip.
+        // It deliberately owns no input and remains visible until we close it.
+        StackPanel callout;
+        callout.HorizontalAlignment(HorizontalAlignment::Center);
+        callout.IsHitTestVisible(false);
+
+        bool lightTheme =
+            element.ActualTheme() == ElementTheme::Light;
+
+        Color backgroundColor =
+            lightTheme
+                ? Color{0xF7, 0xF9, 0xF9, 0xF9}
+                : Color{0xF7, 0x2B, 0x2B, 0x2B};
+        Color foregroundColor =
+            lightTheme
+                ? Color{0xFF, 0x1B, 0x1B, 0x1B}
+                : Color{0xFF, 0xFF, 0xFF, 0xFF};
+        Color borderColor =
+            lightTheme
+                ? Color{0x24, 0x00, 0x00, 0x00}
+                : Color{0x28, 0xFF, 0xFF, 0xFF};
+
+        SolidColorBrush backgroundBrush{backgroundColor};
+        SolidColorBrush foregroundBrush{foregroundColor};
+        SolidColorBrush borderBrush{borderColor};
+
+        Border card;
+        card.Background(backgroundBrush);
+        card.BorderBrush(borderBrush);
+        card.BorderThickness(Thickness{1, 1, 1, 1});
+        card.CornerRadius(CornerRadius{8, 8, 8, 8});
+        card.Padding(Thickness{12, 7, 12, 7});
+        card.IsHitTestVisible(false);
+
+        TextBlock label;
+        label.Text(L"Drag to anchor this separator");
+        label.FontSize(12);
+        label.Foreground(foregroundBrush);
+        label.TextWrapping(TextWrapping::NoWrap);
+        label.IsHitTestVisible(false);
+        card.Child(label);
+
+        // A short stem visually ties the callout to the narrow separator slot.
+        Border stem;
+        stem.Width(2);
+        stem.Height(6);
+        stem.Background(backgroundBrush);
+        stem.HorizontalAlignment(HorizontalAlignment::Center);
+        stem.IsHitTestVisible(false);
+
+        callout.Children().Append(card);
+        callout.Children().Append(stem);
+        popup.Child(callout);
+
+        // Windows 11 Popup has a real PlacementTarget. Let XAML own the
+        // relationship instead of copying target coordinates into detached
+        // HorizontalOffset/VerticalOffset values. This makes the guide follow
+        // native drag transforms, virtual-desktop relayouts, animations and
+        // container movement automatically.
+        popup.PlacementTarget(element);
+        popup.DesiredPlacement(PopupPlacementMode::Top);
+
+        state.anchorHintPopup = popup;
+        state.anchorHintIdentity = identity;
+
+        popup.IsOpen(true);
+
+        Wh_Log(
+            L"[NATIVE-ADD] Showing persistent anchor guide identity='%s'",
+            identity.c_str());
+    } catch (...) {
+        state.anchorHintPopup = nullptr;
+        Wh_Log(
+            L"[NATIVE-ADD] Failed to show persistent anchor guide identity='%s'",
+            identity.c_str());
+    }
+}
+
+static void UpdateSeparatorAnchorHint(
+    SeparatorVisualState& state,
+    const FrameworkElement& element,
+    const SeparatorSetting& separator) {
+    if (!element ||
+        g_unloading ||
+        separator.targetIndex >= 0) {
+        CloseSeparatorAnchorHint(state);
+        return;
+    }
+
+    if ((state.anchorHintPopup || state.anchorHintQueued) &&
+        state.anchorHintIdentity != separator.identity) {
+        CloseSeparatorAnchorHint(state);
+    }
+
+    if (state.anchorHintPopup &&
+        state.anchorHintIdentity == separator.identity) {
+        try {
+            if (state.anchorHintPopup.IsOpen()) {
+                // PlacementTarget keeps the Popup attached to the live
+                // TaskListButton; no manual coordinate refresh is needed.
+                return;
+            }
+        } catch (...) {
+        }
+
+        CloseSeparatorAnchorHint(state);
+    }
+
+    if (state.anchorHintQueued &&
+        state.anchorHintIdentity == separator.identity) {
+        return;
+    }
+
+    // Never create/open the Popup from inside UpdateVisualStates itself.
+    // Constructing popup presentation while TaskListButton is still
+    // materializing can re-enter XAML/layout at a fragile point. Queue one
+    // low-priority dispatcher callback and revalidate identity/state there.
+    try {
+        auto dispatcher = element.Dispatcher();
+        if (!dispatcher) {
+            return;
+        }
+
+        state.anchorHintIdentity = separator.identity;
+        state.anchorHintQueued = true;
+
+        auto weakElement =
+            winrt::make_weak(element);
+        void* taskListButton =
+            state.taskListButton;
+        std::wstring identity =
+            separator.identity;
+
+        state.anchorHintAction =
+            dispatcher.RunAsync(
+                winrt::Windows::UI::Core::
+                    CoreDispatcherPriority::Low,
+                winrt::Windows::UI::Core::DispatchedHandler{
+                    [taskListButton,
+                     weakElement,
+                     identity = std::move(identity)]() mutable {
+                        ShowQueuedSeparatorAnchorHint(
+                            taskListButton,
+                            weakElement,
+                            std::move(identity));
+                    }});
+    } catch (...) {
+        state.anchorHintQueued = false;
+        state.anchorHintIdentity.clear();
+    }
 }
 
 static void ApplySeparatorMaxWidthOverride(
@@ -1947,7 +2338,8 @@ static void SuppressSeparatorHoverChrome(
             }
         }
 
-        // Clear XAML-attached tooltip content as a presentation-layer fallback.
+        // The persistent anchor guide is a separate Popup. Keep every ordinary
+        // taskbar tooltip silent so it never competes with that presentation.
         if (!state.taskListButtonToolTipCaptured) {
             state.originalTaskListButtonToolTipLocalValue =
                 taskListButton.ReadLocalValue(
@@ -1957,7 +2349,6 @@ static void SuppressSeparatorHoverChrome(
         }
 
         winrt::Windows::Foundation::IInspectable noToolTip{nullptr};
-
         winrt::Windows::UI::Xaml::Controls::ToolTipService::
             SetToolTip(
                 taskListButton,
@@ -1976,7 +2367,6 @@ static void SuppressSeparatorHoverChrome(
 }
 
 
-
 static void RestoreDependencyPropertyLocalValue(
     const DependencyObject& object,
     const DependencyProperty& property,
@@ -1991,6 +2381,8 @@ static void RestoreDependencyPropertyLocalValue(
 static void RestoreSeparatorVisualState(
     std::list<SeparatorVisualState>::iterator stateIt) {
     SeparatorVisualState& state = *stateIt;
+
+    CloseSeparatorAnchorHint(state);
 
     auto element = state.element.get();
 
@@ -2236,6 +2628,10 @@ static void WINAPI RefreshSeparatorVisualStatesOnCurrentThread(void*) {
             state,
             element,
             iconPanel);
+        UpdateSeparatorAnchorHint(
+            state,
+            element,
+            separator);
         }
 }
 
@@ -2706,6 +3102,7 @@ static void WINAPI TaskListButton_UpdateVisualStates_Hook(
         FindChildByName(element, L"IconPanel");
     CenterSeparatorIcon(state, iconPanel);
     SuppressSeparatorHoverChrome(state, element, iconPanel);
+    UpdateSeparatorAnchorHint(state, element, separator);
 }
 
 static HMODULE GetTaskbarViewModuleHandle() {
@@ -3225,6 +3622,7 @@ static HRESULT WINAPI TaskGroup_GetToolTipText_Hook(
         cchText);
 }
 
+
 using TaskListWnd_IsPinned_t =
     bool(WINAPI*)(void* pThis, void* taskGroup);
 static TaskListWnd_IsPinned_t
@@ -3241,6 +3639,11 @@ using TaskListWnd_TryMoveGroup_t =
     bool(WINAPI*)(void* pThis, void* taskGroup, unsigned int index);
 static TaskListWnd_TryMoveGroup_t
     g_taskListWndTryMoveGroupOriginal;
+
+using TaskListWnd_HandleWinNumHotKey_t =
+    HRESULT(WINAPI*)(void* pThis, short index, unsigned short flags);
+static TaskListWnd_HandleWinNumHotKey_t
+    g_taskListWndHandleWinNumHotKeyOriginal;
 
 using TaskListWndMulti_IsPinned_t =
     bool(WINAPI*)(void* pThis, void* taskGroup);
@@ -3307,6 +3710,101 @@ static void ApplyPinnedMoveToSnapshot(
     if (movedSeparator) {
         movedSeparator->targetIndex = newIndex;
     }
+}
+
+
+// -----------------------------------------------------------------------------
+// Win+number compensation.
+//
+// CTaskListWnd::HandleWinNumHotKey uses a zero-based taskbar-group index. The
+// stock implementation counts our genuine pinned separator groups, which makes
+// every app to the right of a separator shift by one Win+number slot. Translate
+// the requested logical app index to the corresponding physical taskbar-group
+// index by skipping every resolved separator position.
+//
+// targetIndex == -1 is intentionally ignored. It means the separator is
+// unanchored: PinManager leaves it at the native right edge until the user drags
+// it once. Since no existing taskbar app lies to the right of a freshly appended
+// unanchored slot, it must not shift any existing Win+number target. The first
+// native separator drag records a concrete targetIndex, after which normal
+// compensation applies automatically.
+// -----------------------------------------------------------------------------
+
+static short CompensateWinNumHotKeyIndex(short logicalIndex) {
+    // Win+1..Win+0 reaches this layer as zero-based 0..9. Leave any unexpected
+    // internal/special value alone rather than changing undocumented behavior.
+    if (logicalIndex < 0 || logicalIndex > 9 ||
+        g_unloading ||
+        g_internalCleanupInProgress.load(std::memory_order_acquire)) {
+        return logicalIndex;
+    }
+
+    // While the backend is creating/removing/recovering pins, desired state can
+    // briefly differ from the visible taskbar. Stock behavior is safer for that
+    // very short transition. Native user drags don't clear this latch: their
+    // new positions are mirrored synchronously by TryMoveGroup below, so Win+N
+    // compensation follows a completed drag immediately.
+    if (!g_backendHasConverged.load(std::memory_order_acquire)) {
+        return logicalIndex;
+    }
+
+    std::vector<int> separatorPositions;
+    {
+        std::shared_lock lock(g_settingsMutex);
+        separatorPositions.reserve(g_settings.separators.size());
+
+        for (const auto& separator : g_settings.separators) {
+            if (separator.targetIndex >= 0) {
+                separatorPositions.push_back(separator.targetIndex);
+            }
+        }
+    }
+
+    if (separatorPositions.empty()) {
+        return logicalIndex;
+    }
+
+    std::sort(
+        separatorPositions.begin(),
+        separatorPositions.end());
+
+    int physicalIndex = logicalIndex;
+    for (int separatorIndex : separatorPositions) {
+        if (separatorIndex <= physicalIndex) {
+            ++physicalIndex;
+        } else {
+            // Positions are sorted, so no later separator can affect this
+            // target unless an earlier one has already shifted it into range.
+            break;
+        }
+    }
+
+    if (physicalIndex > SHRT_MAX) {
+        return logicalIndex;
+    }
+
+    return static_cast<short>(physicalIndex);
+}
+
+static HRESULT WINAPI TaskListWnd_HandleWinNumHotKey_Hook(
+    void* pThis,
+    short index,
+    unsigned short flags) {
+    short compensatedIndex =
+        CompensateWinNumHotKeyIndex(index);
+
+    if (compensatedIndex != index) {
+        Wh_Log(
+            L"[WINNUM] logical=%d physical=%d flags=0x%04X",
+            static_cast<int>(index),
+            static_cast<int>(compensatedIndex),
+            static_cast<unsigned int>(flags));
+    }
+
+    return g_taskListWndHandleWinNumHotKeyOriginal(
+        pThis,
+        compensatedIndex,
+        flags);
 }
 
 
@@ -3669,6 +4167,14 @@ static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndGetRelativeTaskOrder,
             nullptr,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual long __cdecl CTaskListWnd::HandleWinNumHotKey(short,unsigned short))"
+            },
+            &g_taskListWndHandleWinNumHotKeyOriginal,
+            TaskListWnd_HandleWinNumHotKey_Hook,
             true,
         },
         {
@@ -4301,9 +4807,8 @@ static bool PositionSeparators(
             return false;
         }
 
-        // targetIndex=-1 is used by the native Add separator command. The
-        // PinManager append is already the desired final placement, so don't
-        // issue a MoveTaskbarPin until/unless the user later drags it.
+        // targetIndex=-1 is an intentional unanchored state. Leave the
+        // separator where Windows appended it until the user drags it once.
         if (separator.targetIndex < 0) {
             Wh_Log(
                 L"[MOVE] Separator #%d left at native appended position",
@@ -5141,8 +5646,8 @@ static void AddSeparatorFromTaskbarMenu() {
     updated.separators.push_back({
         .ordinal = sourceIndex + 1,
         .sourceIndex = sourceIndex,
-        // Let Windows keep the freshly pinned item at its native appended
-        // position. The first native drag gives it an explicit index.
+        // Explicitly unanchored. Windows appends it at the native end; the
+        // first user drag records the concrete position through TryMoveGroup.
         .targetIndex = -1,
         .width = updated.width,
         .stableId = stableId,
