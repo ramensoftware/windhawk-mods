@@ -112,7 +112,6 @@ que necesitan ese recurso para sí mismos.
 #include <windows.h>
 
 #include <commctrl.h>
-#include <commoncontrols.h>
 #include <dbt.h>
 #include <inspectable.h>
 #include <robuffer.h>
@@ -127,6 +126,7 @@ que necesitan ese recurso para sí mismos.
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -679,26 +679,6 @@ std::vector<ShellDriveIdentity> EnumerateThisPcDevices() {
     return candidates;
 }
 
-class UniqueIcon {
-  public:
-    explicit UniqueIcon(HICON icon = nullptr) : icon_(icon) {}
-    ~UniqueIcon() {
-        if (icon_) {
-            DestroyIcon(icon_);
-        }
-    }
-
-    UniqueIcon(UniqueIcon const&) = delete;
-    UniqueIcon& operator=(UniqueIcon const&) = delete;
-
-    HICON get() const {
-        return icon_;
-    }
-
-  private:
-    HICON icon_;
-};
-
 class UniqueBitmap {
   public:
     explicit UniqueBitmap(HBITMAP bitmap = nullptr) : bitmap_(bitmap) {}
@@ -912,7 +892,14 @@ bool DriveSnapshotsEqual(DriveSnapshot const& left,
             a.hasSpaceInformation != b.hasSpaceInformation ||
             a.canStartWinUiDrag != b.canStartWinUiDrag ||
             a.canAcceptDrop != b.canAcceptDrop ||
-            a.percentUsed != b.percentUsed) {
+            // Rounded to the nearest percentage point rather than compared
+            // exactly: percentUsed is a continuous value derived from free
+            // space in bytes, so during any real disk activity it's almost
+            // never bit-identical between snapshots, forcing a grid rebuild
+            // on essentially every debounce tick for a change too small to
+            // see on the progress bar. spaceDescription (the visible text)
+            // is still compared exactly above.
+            std::llround(a.percentUsed) != std::llround(b.percentUsed)) {
             return false;
         }
     }
@@ -1415,6 +1402,14 @@ struct CoTaskMemPidlDeleter {
 using UniqueAbsolutePidl =
     std::unique_ptr<ITEMIDLIST, CoTaskMemPidlDeleter>;
 
+struct MenuDeleter {
+    void operator()(HMENU__* menu) const {
+        DestroyMenu(reinterpret_cast<HMENU>(menu));
+    }
+};
+
+using UniqueMenu = std::unique_ptr<HMENU__, MenuDeleter>;
+
 bool ShowDriveContextMenu(HWND owner,
                           std::vector<std::wstring> const& rootPaths,
                           POINT screenPoint,
@@ -1473,7 +1468,7 @@ bool ShowDriveContextMenu(HWND owner,
         return false;
     }
 
-    HMENU menu = CreatePopupMenu();
+    UniqueMenu menu{CreatePopupMenu()};
     if (!menu) {
         return false;
     }
@@ -1489,10 +1484,9 @@ bool ShowDriveContextMenu(HWND owner,
         queryFlags |= CMF_EXTENDEDVERBS;
     }
 
-    result = contextMenu->QueryContextMenu(menu, 0, kFirstCommandId,
+    result = contextMenu->QueryContextMenu(menu.get(), 0, kFirstCommandId,
                                             kLastCommandId, queryFlags);
     if (FAILED(result)) {
-        DestroyMenu(menu);
         Wh_Log(L"Couldn't populate the drive context menu: %08X", result);
         return false;
     }
@@ -1511,7 +1505,7 @@ bool ShowDriveContextMenu(HWND owner,
             // DismissOpenContextMenus's WM_CANCELMODE can actually dismiss.
             OpenContextMenuScope openMenuScope;
             command = TrackPopupMenuEx(
-                menu,
+                menu.get(),
                 TPM_RETURNCMD | TPM_LEFTALIGN | TPM_LEFTBUTTON |
                     TPM_RIGHTBUTTON,
                 screenPoint.x, screenPoint.y, owner, nullptr);
@@ -1541,7 +1535,9 @@ bool ShowDriveContextMenu(HWND owner,
         }
     }
 
-    DestroyMenu(menu);
+    // menu (a UniqueMenu) stays alive past this point, through
+    // InvokeCommand below: some shell extensions expect the HMENU to still
+    // exist while their verb runs.
     if (commandToInvoke.empty()) {
         PostMessageW(owner, WM_NULL, 0, 0);
     } else if (!command) {
@@ -1815,8 +1811,17 @@ DriveCardEventState* FindDriveRenameState(muxc::TextBox const& renameBox) {
 muxc::GridViewItem FindFocusedDriveCard() {
     for (auto const& state : *g_driveCardEventStates) {
         auto item = state.item.get();
-        if (item && item.FocusState() != mux::FocusState::Unfocused) {
-            return item;
+        if (!item) {
+            continue;
+        }
+        // FocusState() reflects the item's own last-known focus state, which
+        // can go stale once focus moves outside this XamlRoot entirely (a
+        // different island, or a Win32 control in the frame). Checking the
+        // FocusManager ties this to what's actually focused right now.
+        if (auto xamlRoot = item.XamlRoot()) {
+            if (muxi::FocusManager::GetFocusedElement(xamlRoot) == item) {
+                return item;
+            }
         }
     }
     return nullptr;
@@ -1945,9 +1950,7 @@ void BeginDriveRename(muxc::GridViewItem const& item) {
         Wh_Log(L"Couldn't start drive rename: card state wasn't found");
         return;
     }
-    auto renameBox = state->renameBox;
-    auto title = state->title;
-    if (!renameBox || !title || g_unloading.load()) {
+    if (!state->renameBox || !state->title || g_unloading.load()) {
         Wh_Log(L"Couldn't start drive rename: editor elements weren't "
                L"available");
         return;
@@ -1960,7 +1963,27 @@ void BeginDriveRename(muxc::GridViewItem const& item) {
     CompleteOtherDriveRenames(item);
 
     auto rootPath = winrt::unbox_value<winrt::hstring>(item.Tag());
-    auto editingName = GetDriveEditingName(rootPath.c_str());
+    std::wstring editingName;
+    {
+        ShellUiCallScope shellUiScope;
+        editingName = GetDriveEditingName(rootPath.c_str());
+    }
+
+    // Re-resolve: CompleteOtherDriveRenames (RenameDriveWithShell can pump
+    // via a modal UAC/error dialog) and GetDriveEditingName (Shell/COM calls
+    // that dispatch sent messages on this STA) can both let something else
+    // run on this thread, including a reentrant teardown that erases this
+    // node.
+    state = FindDriveCardState(item);
+    if (!state || g_unloading.load()) {
+        return;
+    }
+    auto renameBox = state->renameBox;
+    auto title = state->title;
+    if (!renameBox || !title) {
+        return;
+    }
+
     renameBox.Text(editingName);
     renameBox.Tag(winrt::box_value(winrt::hstring{editingName}));
     state->renaming = true;
@@ -3419,6 +3442,15 @@ bool PopulateDevicesSectionIfEmpty(muxc::StackPanel const& panel) {
     return true;
 }
 
+bool IsHomePanelTracked(muxc::StackPanel const& panel) {
+    for (auto const& state : g_homePanels) {
+        if (state.panel.get() == panel) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool InsertDevicesSection(muxc::StackPanel const& panel) {
     auto children = panel.Children();
     uint32_t primaryContentIndex = UINT32_MAX;
@@ -3442,20 +3474,30 @@ bool InsertDevicesSection(muxc::StackPanel const& panel) {
         return false;
     }
 
+    // An existing WindhawkDevicesSection is only trusted if this mod
+    // instance already tracks the panel it's in. An untracked one may be a
+    // leftover from a previous, already-unloaded instance, whose handlers
+    // point into a freed image -- rebuilding it is cheap insurance.
+    bool trustExisting =
+        existingSectionIndex != UINT32_MAX && IsHomePanelTracked(panel);
+
     uint32_t desiredIndex = primaryContentIndex + 1;
-    if (existingSectionIndex == desiredIndex) {
+    if (existingSectionIndex == desiredIndex && trustExisting) {
         TrackHomePanel(panel);
         return true;
     }
 
     mux::UIElement section = nullptr;
     if (existingSectionIndex != UINT32_MAX) {
-        section = children.GetAt(existingSectionIndex);
+        if (trustExisting) {
+            section = children.GetAt(existingSectionIndex);
+        }
         children.RemoveAt(existingSectionIndex);
         if (existingSectionIndex < desiredIndex) {
             --desiredIndex;
         }
-    } else {
+    }
+    if (!section) {
         section = CreateDevicesSection();
     }
 
@@ -3526,10 +3568,33 @@ muxc::ScrollViewer FindHomeScrollViewer(
 // just real navigation. If this XamlRoot's panel already carries a live
 // devices section, skip the visual-tree BFS and the EnumWindows pass inside
 // TryInjectFromHomeScrollViewer entirely instead of redoing them every time.
+// Confirms a tracked panel is still reachable by walking up from it, rather
+// than trusting its XamlRoot property alone: if Explorer replaced the Home
+// panel with a fresh one (e.g. on a later navigation) while the old one's
+// weak_ref is still resolvable, both panels report the same XamlRoot even
+// though only the new one is actually in the tree.
+bool IsElementInXamlTree(mux::UIElement const& element,
+                         mux::UIElement const& root) {
+    mux::DependencyObject current = element;
+    while (current) {
+        if (current == root) {
+            return true;
+        }
+        current = muxm::VisualTreeHelper::GetParent(current);
+    }
+    return false;
+}
+
 bool XamlRootAlreadyHasDevicesSection(mux::XamlRoot const& xamlRoot) {
+    auto content = xamlRoot.Content();
+    if (!content) {
+        return false;
+    }
+
     for (auto const& state : g_homePanels) {
         auto panel = state.panel.get();
-        if (panel && panel.XamlRoot() == xamlRoot && FindDevicesGrid(panel)) {
+        if (panel && panel.XamlRoot() == xamlRoot && FindDevicesGrid(panel) &&
+            IsElementInXamlTree(panel, content)) {
             return true;
         }
     }
@@ -3710,7 +3775,10 @@ bool HookFileExplorerExtensionsIfLoaded(bool applyHooks) {
             break;
         case SymbolHookResult::ResolutionFailed:
         case SymbolHookResult::NoSymbolFound:
-            g_fileExplorerExtensionsSymbolsHooked.store(false);
+            // Left true (not reset): this is a definitive resolution
+            // failure against the loaded module, not a "not loaded yet"
+            // case, so a later LoadLibraryExW of the same DLL would only
+            // repeat the same failure.
             return false;
     }
 
@@ -3912,6 +3980,24 @@ bool IsDirectChildOfComputerFolder(PCIDLIST_ABSOLUTE pidl,
            ILIsParent(computerPidl, pidl, TRUE);
 }
 
+// FOLDERID_ComputerFolder's PIDL doesn't change for the life of the
+// process, so resolving it once here avoids a SHGetKnownFolderIDList
+// allocation on every delivered Shell notification.
+PCIDLIST_ABSOLUTE GetCachedComputerPidl() {
+    static std::once_flag once;
+    static UniqueAbsolutePidl cachedPidl;
+    std::call_once(once, [] {
+        PIDLIST_ABSOLUTE rawPidl = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_ComputerFolder,
+                                             KF_FLAG_DEFAULT, nullptr,
+                                             &rawPidl)) &&
+            rawPidl) {
+            cachedPidl.reset(rawPidl);
+        }
+    });
+    return cachedPidl.get();
+}
+
 bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
                                LONG* eventIdResult) {
     PIDLIST_ABSOLUTE* pidls = nullptr;
@@ -3938,15 +4024,10 @@ bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
             IsDriveRootPidl(pidls[0]) || IsDriveRootPidl(pidls[1]);
         relevant = isDriveRoot;
         if (!relevant) {
-            PIDLIST_ABSOLUTE computerPidl = nullptr;
-            HRESULT computerResult = SHGetKnownFolderIDList(
-                FOLDERID_ComputerFolder, KF_FLAG_DEFAULT, nullptr,
-                &computerPidl);
-            if (SUCCEEDED(computerResult) && computerPidl) {
+            if (PCIDLIST_ABSOLUTE computerPidl = GetCachedComputerPidl()) {
                 relevant =
                     IsDirectChildOfComputerFolder(pidls[0], computerPidl) ||
                     IsDirectChildOfComputerFolder(pidls[1], computerPidl);
-                CoTaskMemFree(computerPidl);
             }
         }
     }
@@ -4119,15 +4200,19 @@ bool RegisterShellNotificationsForWindow(HWND window) {
     }
     EnsureDriveKeyboardMessageHookForCurrentThread();
 
-    // Registered on FOLDERID_ComputerFolder (not Desktop), without
-    // SHCNRF_RecursiveInterrupt, to bound this to This PC's own subtree
-    // instead of the whole Desktop namespace: SHCNRF_RecursiveInterrupt only
-    // governs interrupt-level (raw file-system) recursion, and drive
-    // add/remove/rename are broadcast as shell-level notifications, which
-    // aren't gated by it. Portable/MTP device arrival is handled separately
-    // via WM_DEVICECHANGE since a connected device can surface here only as
-    // a generic SHCNE_UPDATEDIR anchored at the Desktop root, unreachable
-    // from a Computer-scoped registration either way.
+    // Registered on FOLDERID_ComputerFolder (not Desktop), non-recursive:
+    // a non-recursive registration still delivers events for the folder's
+    // direct children, which is exactly what IsRelevantShellDriveEvent
+    // accepts (a drive root, or a direct child of Computer) -- drive
+    // add/remove/media/free-space/rename are all delivered this way.
+    // fRecursive=TRUE would put every file on every drive back in scope.
+    // SHCNRF_InterruptLevel is dropped too: Computer is a virtual folder,
+    // not a real file-system directory, so there's no raw file-system
+    // driver source of notifications for it to receive. Portable/MTP
+    // device arrival is handled separately via WM_DEVICECHANGE since a
+    // connected device can surface here only as a generic SHCNE_UPDATEDIR
+    // anchored at the Desktop root, unreachable from a Computer-scoped
+    // registration either way.
     PIDLIST_ABSOLUTE computerPidl = nullptr;
     if (FAILED(SHGetKnownFolderIDList(FOLDERID_ComputerFolder,
                                       KF_FLAG_DEFAULT, nullptr,
@@ -4139,11 +4224,10 @@ bool RegisterShellNotificationsForWindow(HWND window) {
         return true;
     }
 
-    SHChangeNotifyEntry entry{computerPidl, TRUE};
+    SHChangeNotifyEntry entry{computerPidl, FALSE};
     ULONG registrationId = SHChangeNotifyRegister(
-        window,
-        SHCNRF_ShellLevel | SHCNRF_InterruptLevel | SHCNRF_NewDelivery,
-        kShellDriveEvents, GetShellChangeMessage(), 1, &entry);
+        window, SHCNRF_ShellLevel | SHCNRF_NewDelivery, kShellDriveEvents,
+        GetShellChangeMessage(), 1, &entry);
     CoTaskMemFree(computerPidl);
 
     if (!registrationId) {
