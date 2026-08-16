@@ -192,6 +192,10 @@ static std::atomic<bool> g_taskbarLifecycleHookInstalled = false;
 static std::atomic<bool> g_taskbarInteractionHooksInstalled = false;
 static std::atomic<bool> g_loadLibraryWatcherInstalled = false;
 static std::atomic<bool> g_unloading = false;
+// Closed at the start of Wh_ModBeforeUninit, before the broader unloading flag
+// is set. This prevents late module-load callbacks from installing hooks while
+// separator cleanup still deliberately keeps styling hooks operational.
+static std::atomic<bool> g_hookInstallationClosed = false;
 // True only while this mod intentionally tears down its own pins. User-facing
 // Add/Unpin callbacks must not mutate desired state during that window.
 static std::atomic<bool> g_internalCleanupInProgress = false;
@@ -2786,9 +2790,16 @@ static void StartBackendWorker();
 static bool InstallTaskbarViewHooks(
     HMODULE module,
     bool applyOperations) {
+    if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(g_lifecycleMutex);
 
-    if (g_unloading) {
+    // Re-check after taking the installation mutex. An unload can close the
+    // latch while this caller is waiting behind another installer.
+    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
+        g_unloading) {
         return false;
     }
 
@@ -2817,9 +2828,14 @@ static bool InstallTaskbarViewHooks(
 static bool InstallTaskbarLifecycleHook(
     HMODULE module,
     bool applyOperations) {
+    if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(g_lifecycleMutex);
 
-    if (g_unloading) {
+    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
+        g_unloading) {
         return false;
     }
 
@@ -2848,9 +2864,14 @@ static bool InstallTaskbarLifecycleHook(
 static bool InstallTaskbarInteractionHooks(
     HMODULE module,
     bool applyOperations) {
+    if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+        return false;
+    }
+
     std::lock_guard<std::mutex> lock(g_lifecycleMutex);
 
-    if (g_unloading) {
+    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
+        g_unloading) {
         return false;
     }
 
@@ -2886,7 +2907,9 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
             hFile,
             dwFlags);
 
-    if (!module || g_unloading) {
+    if (!module ||
+        g_hookInstallationClosed.load(std::memory_order_acquire) ||
+        g_unloading) {
         return module;
     }
 
@@ -5141,6 +5164,15 @@ void ExplorerModAfterInit() {
 }
 
 void ExplorerModBeforeUninit() {
+    // Hook APIs are legal only until this callback returns. Close every late
+    // installation path first, then use the same mutex as the installers as a
+    // drain barrier. Once the lock is acquired, any installer that entered
+    // before the latch closed has finished; later callers fail both checks.
+    g_hookInstallationClosed.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+    }
+
     // A completed native reorder should already have been persisted by
     // OnDragCompletedGesture. This is a final no-timer fallback for a missed
     // completion callback or a shutdown that lands mid-drag.
