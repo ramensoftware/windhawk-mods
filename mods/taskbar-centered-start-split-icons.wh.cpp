@@ -31,6 +31,14 @@ taskbar buttons are split into two groups that flank the Start button:
   they land on, `pinnedAppsAnchor` picks whether they sit at the far edge
   or right next to Start.
 
+![Window left of screen-center](https://raw.githubusercontent.com/rycalvo/w11tb_centerer/main/screenshots/leftside.png) \
+_The crosshair-marked window sits left of screen-center - its taskbar icon
+follows, landing left of Start._
+
+![Window right of screen-center](https://raw.githubusercontent.com/rycalvo/w11tb_centerer/main/screenshots/rightdefault.png) \
+_The same window moved right of screen-center - its icon moves with it,
+to the right of Start._
+
 When you drag a window across the center line of the screen, its taskbar
 button switches sides to follow it. Side-switching is driven by a global
 window-location-change listener and is best-effort: it happens shortly
@@ -45,8 +53,9 @@ right next to Start on whichever side you prefer.
 - **Primary monitor only.** Screen-center math and window-side classification
   use the primary monitor. Taskbars on secondary displays are not specially
   handled by this mod (their icons keep the default layout Windows gives
-  them) - the positioning hook explicitly checks which taskbar's XAML tree
-  an element belongs to and leaves anything outside the primary's alone.
+  them) - the mod's positioning plan is only ever computed on the primary
+  taskbar's own thread, so secondary-monitor elements are simply never
+  included in it and fall through to Windows' native positioning.
 - **Undocumented internals.** This mod hooks private, unversioned classes
   inside `taskbar.dll` and `Taskbar.View.dll` (via symbols resolved from
   Microsoft's public symbol server at runtime, not hardcoded offsets). A
@@ -64,6 +73,15 @@ right next to Start on whichever side you prefer.
   "show taskbar apps on" setting is anything other than "All taskbars",
   since that's when a window moving across monitors structurally adds/
   removes taskbar buttons rather than just repositioning them).
+- **Taskbar buttons can disappear when a display is deactivated** (via
+  Settings, unplugging, or a third-party display on/off tool) - if
+  "Taskbar behaviors > When using multiple displays, show my taskbar apps
+  on" isn't set to "All taskbars", Windows itself can drop a window's
+  taskbar button entirely until you switch to that window (e.g. via
+  Alt+Tab), rather than migrating it to the remaining taskbar. Reactivating
+  a display doesn't trigger this. This is native Explorer/taskbar.dll
+  behavior upstream of anything the mod hooks into, not something this mod
+  causes or can work around.
 
 ## Disclosures
 
