@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         0.5.42-p43
+// @version         1.0.0
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -17,24 +17,22 @@
 
 Create tracked icon separators with configurable padding on the taskbar.
 
-![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP.png)
+![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP2.png)
 _Example for creating separators on the taskbar_
 
-Another mod offers similar functionality, but this implementation takes a different approach.
+Another mod offers similar functionality; this implementation takes on a more native-first spin.
 
-This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and keeps activation/tooltip behavior inert. Separators remain genuine pinned slots, can be reordered with the native taskbar drag behavior, and can also be created from the empty-taskbar context menu.
+This mod uses private COM APIs to insert a genuine taskbar button, styles its width and centering, and keeps activation/tooltip behavior inert. 
+Separators remain genuine, can be manually reordered, and can also be created from the taskbar context menu.
 
 
-Note: The mod creates pinned shortcuts targeting the Windows `systray.exe` stub (with a hidden, immediately exiting `cmd.exe` fallback) and reorders the persisted taskbar pin list. Cleanup is best-effort; in the worst failure case, separators may require manual unpinning.
+Note: The mod creates pinned shortcuts targeting Windows `systray.exe` (with fallback) and reorders the persisted taskbar pin list. 
+Cleanup is best-effort; in the worst failure case, manual taskbar unpinning and reordering may be required.
 
-Separator instances and their taskbar positions are stored by the mod itself
+Separator properties are stored by the mod itself
 inside its Windhawk mod-storage directory. Windhawk settings expose only the
 global separator width. Native Add, drag/reorder, and Unpin operations update
-that mod-owned state directly.
-
-Separator right-click is handled entirely inside explorer.exe with a small
-WinRT XAML MenuFlyout containing the mod-owned Unpin command. No companion
-ShellExperienceHost injection or cross-process coordination is required.
+ are persisted directly.
 
 Windows 11 only.
 */
