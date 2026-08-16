@@ -2524,7 +2524,7 @@ static void ShowSeparatorContextMenu(
         menu.Placement(FlyoutPlacementMode::Top);
 
         MenuFlyoutItem unpin;
-        unpin.Text(L"Unpin from taskbar");
+        unpin.Text(L"Remove separator");
         unpin.Tag(
             winrt::box_value(
                 winrt::hstring{separator.identity}));
