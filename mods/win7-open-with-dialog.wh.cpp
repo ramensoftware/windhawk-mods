@@ -276,6 +276,7 @@ default. All other selections open the file once without changing the system def
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <deque>
 #include <unordered_map>
 #include <vector>
 
@@ -4427,13 +4428,10 @@ static std::atomic<HWND> g_currentWindow{nullptr};
 // screen in Explorer would not stop OpenWith.exe from putting a second
 // classic picker next to it. The window class name is fixed and unique to
 // this mod, so FindWindowW locates a live picker regardless of which
-// process owns it.
-static HWND FindExistingPickerWindow() {
-    if (HWND current = g_currentWindow.load(std::memory_order_acquire))
-        return current;
-    HWND foreign = FindWindowW(kWindowClass, nullptr);
-    return foreign && IsWindow(foreign) ? foreign : nullptr;
-}
+// process owns it. Callers distinguish g_currentWindow (this process's
+// own worker, whose requests can be queued) from a plain FindWindowW hit
+// (another process, which can only be raised - see QueuePicker /
+// QueuePickerAndWait).
 
 // Raises an existing picker, including one owned by another process.
 // Posting WM_SOW_ACTIVATE lets the owning thread call
@@ -6480,6 +6478,24 @@ static HRESULT CreateProcessFromCommandLine(const std::wstring& commandLine,
     }
 }
 
+// CreateProcessW fails with ERROR_ELEVATION_REQUIRED for any executable
+// whose manifest asks for elevation (installers, most admin/maintenance
+// tools) - Windows' own Open With shows the UAC prompt for those via
+// ShellExecuteEx. Falling back to ShellExecuteExW on the picked
+// executable (never the document, so no association is re-resolved)
+// covers that case; App Paths resolution and the shim engine come along
+// for free, and this cannot re-enter Open With since ShellExecuteExWHook
+// only intercepts the "openas" verb.
+static HRESULT LaunchElevatedFallback(const std::wstring& executable,
+                                      const std::wstring& quotedParameters) {
+    SHELLEXECUTEINFOW sei{sizeof(sei)};
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpFile = executable.c_str();
+    sei.lpParameters = quotedParameters.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&sei) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+}
+
 static HRESULT InvokeCommandTemplate(const std::wstring& commandTemplate,
                                      const std::wstring& path) {
     const std::wstring commandLine =
@@ -6488,7 +6504,11 @@ static HRESULT InvokeCommandTemplate(const std::wstring& commandTemplate,
     const std::wstring executable = ExecutableFromCommand(commandLine.c_str());
     if (IsOpenWithExecutable(executable))
         return HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION);
-    const HRESULT hr = CreateProcessFromCommandLine(commandLine);
+    HRESULT hr = CreateProcessFromCommandLine(commandLine);
+    if (hr == HRESULT_FROM_WIN32(ERROR_ELEVATION_REQUIRED)) {
+        hr = LaunchElevatedFallback(executable,
+                                    QuoteCommandLineArgument(path));
+    }
     Wh_Log(L"Standalone Open With: direct command launch command=%s "
            L"hr=0x%08X", commandLine.c_str(),
            static_cast<unsigned int>(hr));
@@ -6504,7 +6524,11 @@ static HRESULT InvokeExecutableWithFile(const std::wstring& executable,
     const std::wstring commandLine =
         QuoteCommandLineArgument(executable) + L" " +
         QuoteCommandLineArgument(path);
-    const HRESULT hr = CreateProcessFromCommandLine(commandLine);
+    HRESULT hr = CreateProcessFromCommandLine(commandLine);
+    if (hr == HRESULT_FROM_WIN32(ERROR_ELEVATION_REQUIRED)) {
+        hr = LaunchElevatedFallback(executable,
+                                    QuoteCommandLineArgument(path));
+    }
     Wh_Log(L"Standalone Open With: direct executable launch exe=%s file=%s "
            L"hr=0x%08X", executable.c_str(), path.c_str(),
            static_cast<unsigned int>(hr));
@@ -6703,7 +6727,13 @@ static WinHandle g_requestEvent;
 static WinHandle g_workerReadyEvent;
 static std::atomic<bool> g_workerReady{false};
 static std::mutex g_requestMutex;
-static std::optional<PickerRequest> g_pendingRequest;
+// A deque, not a single pending slot: a request that arrives while this
+// process's worker is already showing a picker used to be dropped (see
+// QueuePicker/QueuePickerAndWait), so a second "Open with" while the
+// first was up produced no window and no feedback for the second file.
+// Queued requests are drained one at a time in WorkerMain as soon as the
+// current picker closes.
+static std::deque<PickerRequest> g_requestQueue;
 #if defined(__clang__)
 [[clang::no_destroy]]
 #endif
@@ -6956,12 +6986,20 @@ static void WorkerMain() {
         const DWORD wait = MsgWaitForMultipleObjects(2, handles, FALSE, INFINITE, QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0) break;
         if (wait == WAIT_OBJECT_0 + 1) {
-            std::optional<PickerRequest> request;
-            {
-                std::lock_guard<std::mutex> lock(g_requestMutex);
-                request.swap(g_pendingRequest);
-            }
-            if (request) {
+            // Drain the whole queue, not just one entry: several requests
+            // may have piled up while the previous ShowPicker call was
+            // running its own message loop (that loop doesn't watch
+            // g_requestEvent), and g_requestEvent only wakes this wait
+            // once regardless of how many SetEvent calls coalesced into
+            // it.
+            for (;;) {
+                std::optional<PickerRequest> request;
+                {
+                    std::lock_guard<std::mutex> lock(g_requestMutex);
+                    if (g_requestQueue.empty()) break;
+                    request.emplace(std::move(g_requestQueue.front()));
+                    g_requestQueue.pop_front();
+                }
                 try { ShowPicker(std::move(*request)); }
                 catch (...) { Wh_Log(L"Standalone Open With: picker request failed"); }
             }
@@ -7069,33 +7107,42 @@ static bool QueuePicker(HWND owner, PCWSTR path,
         return false;
     }
 
-    // A picker is already on screen (or queued) - in this process or in
-    // any other process the mod is injected into. Returning false here
-    // would tell the caller "the mod declined", and every caller reacts
-    // to that by running the original API - putting the modern Windows
-    // picker on screen NEXT TO the classic one. The request is handled
-    // instead: the existing window is brought to the foreground, exactly
-    // like a second activation of a single-instance dialog.
-    if (HWND current = FindExistingPickerWindow()) {
-        ActivateExistingPicker(current);
-        return true;
+    // A picker owned by ANOTHER process can't be queued here - there is
+    // no shared request list across process boundaries - so the best
+    // this process can do is raise it, exactly like a second activation
+    // of a single-instance dialog. A picker owned by THIS process's
+    // worker (g_currentWindow) is queued instead of dropped: WorkerMain
+    // shows the new request as soon as the current one closes, so a
+    // second "Open with" while the first is up gets its own picker
+    // rather than being silently discarded.
+    if (!g_currentWindow.load(std::memory_order_acquire)) {
+        if (HWND foreign = FindWindowW(kWindowClass, nullptr)) {
+            if (IsWindow(foreign)) {
+                ActivateExistingPicker(foreign);
+                return true;
+            }
+        }
     }
 
     std::lock_guard<std::mutex> lock(g_requestMutex);
-    if (g_pendingRequest) {
-        return true;
-    }
-    if (HWND current = FindExistingPickerWindow()) {
-        ActivateExistingPicker(current);
-        return true;
+    // Re-check under the lock: a foreign picker may have appeared, or
+    // this process's own window may have just closed, since the check
+    // above.
+    if (!g_currentWindow.load(std::memory_order_acquire)) {
+        if (HWND foreign = FindWindowW(kWindowClass, nullptr)) {
+            if (IsWindow(foreign)) {
+                ActivateExistingPicker(foreign);
+                return true;
+            }
+        }
     }
     try {
-        g_pendingRequest.emplace(PickerRequest{std::move(copy), owner, nullptr,
-                                               setDefaultOnly, nullptr});
+        g_requestQueue.emplace_back(PickerRequest{std::move(copy), owner, nullptr,
+                                                   setDefaultOnly, nullptr});
     } catch (...) {
         return false;
     }
-    if (!SetEvent(g_requestEvent.get())) { g_pendingRequest.reset(); return false; }
+    if (!SetEvent(g_requestEvent.get())) { g_requestQueue.pop_back(); return false; }
     return true;
 }
 
@@ -7113,11 +7160,18 @@ static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
         return PickerOutcome::NotHandled;
     }
 
-    // Absorb the request before paying for a worker thread when a picker
-    // is already on screen, possibly in another injected process.
-    if (HWND existing = FindExistingPickerWindow()) {
-        ActivateExistingPicker(existing);
-        return PickerOutcome::Cancelled;
+    // Only a picker in ANOTHER process is absorbed here before paying for
+    // a worker thread - it can't be queued across the process boundary.
+    // A picker owned by this process's own worker is left to the queue
+    // below instead of being reported as Cancelled, so this request gets
+    // its own picker once the current one closes.
+    if (!g_currentWindow.load(std::memory_order_acquire)) {
+        if (HWND foreign = FindWindowW(kWindowClass, nullptr)) {
+            if (IsWindow(foreign)) {
+                ActivateExistingPicker(foreign);
+                return PickerOutcome::Cancelled;
+            }
+        }
     }
 
     if (!StartWorkerIfNeeded()) return PickerOutcome::NotHandled;
@@ -7137,28 +7191,27 @@ static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
     std::atomic<bool> accepted{false};
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
-        HWND existing = FindExistingPickerWindow();
-        if (g_pendingRequest || existing) {
-            // A picker is already up (or queued) - here or in another
-            // injected process. NotHandled would run the original API
-            // and stack the modern Windows picker next to the classic
-            // one, so the second request is absorbed instead: raise the
-            // existing dialog and report Cancelled - no program was
-            // launched for THIS request, which is exactly what
-            // ERROR_CANCELLED tells the caller, and unlike Accepted it
-            // doesn't trick callers into "a program ran" cleanup.
-            ActivateExistingPicker(existing);
-            return PickerOutcome::Cancelled;
+        // Re-check under the lock: only a foreign-process picker is
+        // absorbed (it cannot be queued); a picker owned by this
+        // process's own worker just means this request is queued behind
+        // it, same as every other request already waiting.
+        if (!g_currentWindow.load(std::memory_order_acquire)) {
+            if (HWND foreign = FindWindowW(kWindowClass, nullptr)) {
+                if (IsWindow(foreign)) {
+                    ActivateExistingPicker(foreign);
+                    return PickerOutcome::Cancelled;
+                }
+            }
         }
         try {
-            g_pendingRequest.emplace(
+            g_requestQueue.emplace_back(
                 PickerRequest{std::move(copy), owner, completion.get(),
                               setDefaultOnly, &accepted});
         } catch (...) {
             return PickerOutcome::NotHandled;
         }
         if (!SetEvent(g_requestEvent.get())) {
-            g_pendingRequest.reset();
+            g_requestQueue.pop_back();
             return PickerOutcome::NotHandled;
         }
     }
@@ -7258,7 +7311,16 @@ static std::wstring PathFromDataObject(IDataObject* dataObject) {
                                   reinterpret_cast<void**>(array.Put()))) &&
             array) {
             DWORD count = 0;
-            if (SUCCEEDED(array->GetCount(&count)) && count == 1) {
+            if (SUCCEEDED(array->GetCount(&count))) {
+                // The array gave a definitive answer: return now instead
+                // of falling through to the CF_HDROP fallback below. This
+                // runs on every IShellExtInit::Initialize of the Open
+                // With handler - i.e. every file context menu in
+                // Explorer - so falling through on a multi-selection used
+                // to materialize the whole selection a second time via
+                // IDataObject::GetData(CF_HDROP) on Explorer's UI thread
+                // just to throw it away.
+                if (count != 1) return {};
                 ComPtr<IShellItem> item;
                 if (SUCCEEDED(array->GetItemAt(0, item.Put())) && item) {
                     PWSTR raw = nullptr;
@@ -7268,6 +7330,8 @@ static std::wstring PathFromDataObject(IDataObject* dataObject) {
                     }
                     if (raw) CoTaskMemFree(raw);
                 }
+                // count == 1 but the item's display name couldn't be
+                // resolved: fall through to the CF_HDROP fallback below.
             }
         }
     }
@@ -8049,15 +8113,27 @@ static bool IsOpenAsVerb(PCWSTR verb) {
 static HRESULT WINAPI SHOpenWithDialogHook(HWND owner, const OPENASINFO* info) {
     HookCallGuard hookCallGuard;
     try {
-        if (info && (info->oaifInFlags & OAIF_EXEC) &&
+        if (info &&
             g_replaceSystemDialog.load(std::memory_order_acquire) &&
             info->pcszFile && IsSupportedFile(info->pcszFile)) {
+            // OAIF_EXEC means "open the file afterwards". Callers that
+            // only want the user to choose a default program - the same
+            // intent as this mod's setDefaultOnly mode - omit it, e.g.
+            // Properties -> Change. Requiring OAIF_EXEC sent those
+            // callers to Windows' modern picker while every other route
+            // got the classic one, which is exactly the inconsistency
+            // this mod exists to remove. IsSupportedFile already filters
+            // out the URL-protocol/URI callers, so honoring calls
+            // without OAIF_EXEC doesn't widen the hook to non-file
+            // requests.
+            const bool exec = (info->oaifInFlags & OAIF_EXEC) != 0;
             // Windows returns HRESULT_FROM_WIN32(ERROR_CANCELLED) when the
             // user dismisses the dialog. Callers branch on it - to retry,
             // to fall back to another handler, or to delete a temp file
             // they only keep when a program was actually chosen - so the
             // Cancel path must not be reported as S_OK.
-            switch (QueuePickerAndWait(owner, info->pcszFile)) {
+            switch (QueuePickerAndWait(owner, info->pcszFile,
+                                       /*setDefaultOnly=*/!exec)) {
                 case PickerOutcome::Accepted:
                     return S_OK;
                 case PickerOutcome::Cancelled:
@@ -8564,7 +8640,7 @@ void Wh_ModUninit() {
     DarkModeActivation::RestoreAppMode();
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
-        g_pendingRequest.reset();
+        g_requestQueue.clear();
     }
     {
         std::lock_guard<std::mutex> lock(g_openWithMenuStateMutex);
