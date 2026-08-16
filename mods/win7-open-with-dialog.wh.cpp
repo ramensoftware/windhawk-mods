@@ -12,86 +12,81 @@
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshell32 -lshlwapi -lversion -ladvapi32 -lcomctl32 -luxtheme -ldwmapi -luser32 -lgdi32 -luuid -lwinpthread
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
 # Windows 7 Open With Dialog Recreation
 
-This mod restores the classic Windows Vista/7 **Open with** dialog on Windows 10 and
-11, replacing (when the mod is active) the modern picker with an accurate recreation of the original Windows Vista/7 one while
-keeping the original file and application paths untouched.
+## About
 
-The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**. The public API and
-classic context-menu paths are designed to fail safely on unsupported builds.
+This mod restores the classic Windows Vista/7 **Open with** dialog on Windows 10 and
+11, replacing the modern picker with an accurate recreation of the original while
+keeping file and application paths completely untouched.
+
+The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**, the mod is designed
+ to work reliably and safely on both current and future Windows versions where possible.
+
 ## Screenshot
 
 ![openwith](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/openwith.PNG)
 
 ## Features
 
-- **Accurate Windows Vista/7-style dialog**: Recreates the classic layout with recommended and
-  other-program groups, Browse, Web search and the Always use checkbox.
-- **Open with context menu**: Redirects the canonical `openas` command through
-  the stable `CLSID_OpenWithMenu` context-menu contract.
-- **Unknown-file double click**: Hooks the real OpenWith.exe COM server methods
-  without substituting mod-owned COM objects.
-- **Properties → Change**: Recognizes association-only launcher requests and
-  selects a default without opening the file.
-- **Persistent defaults**: Uses `IAssocHandler::MakeDefault` and can open
-  Windows Default Apps if the protected system association rejects the change.
-- **Direct selected-program launch**: Uses the selected ProgID/class key or the
-  selected executable directly, avoiding recursive re-entry into Open With.
-- **Browse application registration**: Programs selected through Browse are
-  added to the current user's `Applications`, `SupportedTypes`, `OpenWithList`,
-  `MRUList` and `OpenWithProgids` keys and appear immediately in the dialog.
-- **Extensionless files**: Enumerates registered applications through a
-   `HKCR\Applications` fallback.
-- **Localized interface**: 120 languages (English, Italian, Spanish,
-  French, German, Portuguese, Russian, Chinese, Japanese, Korean, Turkish,
-  Dutch, Polish and 107 more), with automatic language detection.
-- **Short file display**: Shows `File: photo.png` instead of the full path. The
-  full path is retained internally for execution.
-- **Optional description box**: The "Type a description to use for this kind of
-  file" label and edit can be hidden from the settings (off by default), which
-  also shrinks the dialog by the space they used.
-- **Custom icon**: Uses the supplied document-and-magnifier artwork, embedded as
-  transparent 32×32 BGRA Base64.
-- **DPI aware**: Scales the window and controls for the owner monitor.
-- **Defensive lifetime management**: Uses RAII for COM pointers, registry keys,
-  handles, windows, icons, image lists, fonts and worker-owned dialogs, with
-  exception containment around hook boundaries.
+- **Accurate Vista/7-style dialog**: The mod accurately recreates the classic layout with
+  recommended and other-program groups, Browse button, Web search, and the Always
+  use checkbox.
+- **Open with context menu integration**: The mod works correctly with the right-click
+  "Open with" menu option.
+- **Unknown-file double-click support**: The mod handles double-clicks on files without
+  a known association, just like the original.
+- **Properties → Change handler**: The mod applies a new default program when the user clicks
+  "Change" from a file's Properties window, without opening the file.
+- **Persistent defaults**: When choosing "Always use", the selection is saved
+  as the new default. If Windows protects a specific association, the mod will
+  guide to the Default Apps settings.
+- **Direct program launch**: The mod opens the selected program immediately, avoiding
+  unnecessary extra steps.
+
+- **Extensionless file support**: Works with files that have no extension, offering
+  a selection of registered applications.
+- **Fully localized interface**: The mod is available in 120 languages (including English,
+  Italian, Spanish, French, German, Portuguese, Russian, Chinese, Japanese, Korean,
+  Turkish, Dutch, Polish and 107 more) with automatic system language detection.
+- **Concise file display**: For example, the mod shows `File: photo.png` instead of the full path for a
+ cleaner look, while keeping the complete path for actual execution like in Windows Vista/7.
+- **Optional description box**: The description field can be hidden via settings
+  (enabled by default), making the dialog more compact.
+- **DPI-aware**: The mod tries to support multiple DPIs where possible.
 
 ## Requirements
 
-- **Windows 10 or Windows 11 x64**
+- **Windows 10 or Windows 11 — x64 architecture**
 - **Windhawk** with injection enabled for `explorer.exe`, `OpenWith.exe` and
   `rundll32.exe`
-- The mod setting **Enable the Windows 7-style picker** must be enabled
+- The mod setting **Enable the Windows 7-style picker** must be turned on
 
 ## Note
 
-When the user explicitly selects **Always use**, the mod attempts to persist an
-association. All other Open With selections open the file once without changing
-the default.
+When explicitly selecting **Always use**, the mod saves the choice as the new
+default. All other selections open the file once without changing the system default.
 
 ## Known limitations
 
-- **One file at a time**: Multiple-selection Open With requests aren't handled.
-- **No default for extensionless files**: They can be opened, but there is no
-  extension to associate persistently.
-- **Composite extensions**: Windows normally associates `archive.tar.gz` by
-  `.gz`; the mod follows the same final-suffix behavior.
-- **Store/UWP handlers**: Some AppX handlers don't expose a filesystem
-  executable. They rely on their registered ProgID and may fail open if the
-  registration is incomplete.
-- **Protected associations**: Windows can reject changes to a protected
-  association; use Windows Default Apps when that happens.
+- **Single-file selection**: Opening multiple files at once with "Open with" is
+  not currently supported.
+- **No default for extensionless files**: Files without an extension can be opened,
+  but there is no extension to associate permanently.
+- **Composite extensions**: Windows treats `archive.tar.gz` as a `.gz` file; the
+  mod follows this same standard behavior.
+- **Store/UWP applications**: Some modern apps may not appear in the list or may
+  not open correctly if their registration is incomplete.
+- **Protected associations**: Windows may prevent changing certain file associations.
+  In these cases, please use the Windows Default Apps settings to make your changes.
 
 ## Credits
 
 - **ReactOS** — Inspiration
-- **aubymori** - Inspiration
-- **Image supplied by the user** — document-and-magnifier dialog icon.
+- **aubymori** — Inspiration
+*/
 */
 // ==/WindhawkModReadme==
 
@@ -99,29 +94,29 @@ the default.
 /*
 - replaceSystemDialog: true
   $name: Enable the Windows Vista/7-style picker
-  $description: When enabled, replace Open With through the stable CLSID_OpenWithMenu context-menu contract, SHOpenWithDialog, the exact openas ShellExecute verb, or detours on the real OpenWith.exe server. When disabled, requests are passed to Windows.
+  $description:  When this setting is enabled, the classic dialog appears for all "Open with" actions. When disabled, Windows shows its own picker instead.
 - darkMode: auto
   $name: Window appearance theme
-  $description: Visual theme for the dialog window.
+  $description: This setting is used to change the visual theme for the dialog window.
   $options:
     - auto: Follow the Windows app theme
     - light: Always light (classic Windows Vista/7 theme)
     - dark: Always dark
 - showWebLink: true
   $name: Show the Web search link
-  $description: Show the Windows 7-style Web link. Only the sanitized file extension is sent to the browser search.
-- hideDescriptionField: false
+  $description: This setting shows the Windows 7-style Web link. Only the sanitized file extension is sent to the browser search.
+- hideDescriptionField: true
   $name: Hide the description box
-  $description: Hide the "Type a description to use for this kind of file" label and its text box, and shrink the dialog by the space they used. The file type keeps its existing description when this is enabled.
+  $description: This setting hides the "Type a description to use for this kind of file" label and its text box, and shrink the dialog by the space they used. The file type keeps its existing description when this is enabled.
 - defaultAssociationBehavior: disabled
   $name: Always use checkbox behavior
-  $description: The checkbox now uses IAssocHandler::MakeDefault. This setting controls only the fallback used when Windows rejects the association request.
+  $description: This setting controls what happens when Windows refuses to save the association. Used only as a fallback.
   $options:
     - disabled: Don't open Settings on failure
     - openSettings: Open Windows Default Apps on failure
 - language: auto
   $name: Language
-  $description: Language used by the recreated picker.
+  $description: This setting changes the language used by the recreated picker.
   $options:
     - auto: Automatic
     - en: English
