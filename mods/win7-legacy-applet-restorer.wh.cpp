@@ -139,6 +139,7 @@ runs with stock applet ordering.
 #include <regex>
 #include <unordered_map>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 #include <atomic>
 #include <fstream>
@@ -245,22 +246,28 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path);
 
 // Tracks the "virtual path" behind every HKEY the mod cares about (both real
 // keys opened through the hooked Reg* APIs, and fully synthetic/fake keys we
-// hand back for injected CLSIDs). A single mutex guards all state so the
+// hand back for injected CLSIDs). A single lock guards all state so the
 // "is this fake?" check and the "what's its path?" lookup can never observe
 // two different snapshots of the data. Fake-handle memory is owned via
 // unique_ptr, so it is always freed exactly once, from exactly one place —
 // no manual new/delete pairing to get wrong.
+//
+// The lock is a shared_mutex, not a plain mutex: these hooks sit on every
+// registry call made by explorer.exe from many threads at once, and lookups
+// (GetPath/IsFake/IsFakeAndGetPath) outnumber mutations (Track/Untrack/
+// CreateFake/FreeFake) by orders of magnitude. An exclusive mutex here turned
+// the whole process's registry traffic into a single serialization point.
 class KeyTracker {
 public:
     std::wstring GetPath(HKEY hKey) const {
         if (std::wstring special = SpecialRootPath(hKey); !special.empty()) return special;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
         auto it = paths_.find(hKey);
         return it != paths_.end() ? it->second : std::wstring();
     }
 
     bool IsFake(HKEY hKey) const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
         return fakeOwners_.count(hKey) != 0;
     }
 
@@ -272,7 +279,7 @@ public:
             outPath = special;
             return false;
         }
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
         bool isFake = fakeOwners_.count(hKey) != 0;
         auto it = paths_.find(hKey);
         outPath = it != paths_.end() ? it->second : std::wstring();
@@ -282,13 +289,13 @@ public:
     void Track(HKEY hKey, const std::wstring& path) {
         if (!hKey || IsSpecialRoot(hKey)) return;
         if (!ContainsRelevantKeywordInsensitive(path)) return;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_[hKey] = path;
     }
 
     void Untrack(HKEY hKey) {
         if (!hKey || IsSpecialRoot(hKey)) return;
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_.erase(hKey);
     }
 
@@ -300,16 +307,19 @@ public:
         std::unique_ptr<int> owned(new (std::nothrow) int(1));
         if (!owned) return nullptr;
         HKEY fake = reinterpret_cast<HKEY>(owned.get());
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_[fake] = path;
         fakeOwners_[fake] = std::move(owned);
         return fake;
     }
 
-    void FreeFake(HKEY hKey) {
-        std::lock_guard<std::mutex> lock(mutex_);
+    // Returns true if the handle was one of ours (and has now been released),
+    // so callers don't need a separate IsFake() acquisition first.
+    bool FreeFake(HKEY hKey) {
+        std::unique_lock<std::shared_mutex> lock(mutex_);
+        if (fakeOwners_.erase(hKey) == 0) return false;  // unique_ptr frees the memory
         paths_.erase(hKey);
-        fakeOwners_.erase(hKey); // unique_ptr destructor frees the memory
+        return true;
     }
 
     // Called once from Wh_ModUninit. Deliberately does NOT delete the
@@ -320,7 +330,7 @@ public:
     // strictly safer than that use-after-free, so we only release ownership
     // (no delete) and drop our own bookkeeping.
     void ClearWithoutFreeing() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::shared_mutex> lock(mutex_);
         paths_.clear();
         for (auto& kv : fakeOwners_) {
             int* intentionallyLeakedHandle = kv.second.release();
@@ -345,7 +355,7 @@ private:
         }
     }
 
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
     std::unordered_map<HKEY, std::unique_ptr<int>> fakeOwners_;
 };
@@ -401,6 +411,10 @@ static const std::wstring kInfraredGuid             = L"{a0275511-0e86-4eca-97c2
 static const std::wstring kWorkFoldersGuid          = L"{ecdb0924-4208-451e-8ee0-373c0956de16}";
 static const std::wstring kBitLockerGuid            = L"{d9ef8727-cac2-4e60-809e-86f80a666c91}";
 static const std::wstring kTabletPcSettingsGuid     = L"{80f3f1d5-feca-45f3-bc32-752c152e456e}";
+// Documented canonical names for the two applets above; this is the form
+// IOpenControlPanel::GetPath resolves most reliably (see IsShownByControlPanel).
+static const std::wstring kBitLockerCanonicalName   = L"Microsoft.BitLockerDriveEncryption";
+static const std::wstring kTabletPcCanonicalName    = L"Microsoft.TabletPCSettings";
 // Own, made-up CLSIDs for the *virtual* Control Panel entries that mirror the
 // two real applets above. We don't inject the real GUIDs directly (Explorer's
 // Category View never asks about them at all on Win10/11 - confirmed by
@@ -487,19 +501,26 @@ bool IsListedInControlPanelNameSpace(const std::wstring& guid) {
 }
 
 // Asks the shell whether Control Panel actually displays this item, instead of
-// inferring it from the registry. IOpenControlPanel::GetPath resolves a
-// canonical name or GUID to the Control Panel path of the item and fails with
-// HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) when the item isn't part of the
-// current Control Panel item list - which is exactly the question this mod
-// needs answered. This is the case the registry check got wrong on LTSC 2021,
-// where the NameSpace key exists but the applet is not shown.
+// inferring it from the registry. IOpenControlPanel::GetPath resolves a Control
+// Panel item to its path and fails when the item is not part of the current
+// item list - which is exactly the question this mod needs answered. This is
+// the case the registry check got wrong on LTSC 2021, where the NameSpace key
+// exists but the applet is not shown.
 //
-// Returns:
-//   S_OK-ish  -> outListed = true/false, function returns true (answer usable)
-//   failure   -> returns false, caller falls back to the registry heuristic
-// Only ever called from Wh_ModInit, before this mod's hooks are installed, so
-// the shell's own registry reads here can't re-enter our own hooks.
-bool IsShownByControlPanel(const std::wstring& guid, bool& outListed) {
+// pszName is documented as "the item's canonical name or its GUID", but the
+// GUID form is the unreliable one: shell32 runs the string through
+// COpenControlPanel::_MapLegacyName and a canonical-name lookup, and namespace
+// items are addressed with the ::{GUID} moniker form rather than a bare
+// {GUID}. So each candidate spelling is tried in turn - canonical name first,
+// then ::{GUID}, then the bare GUID - and the first one the shell can parse
+// wins. If none of them parse, the probe reports "no answer" instead of
+// guessing, and the caller falls back to the registry hint.
+//
+// Returns true only when the shell gave a usable verdict, with outListed set.
+// Only ever called from Wh_ModInit / the cached-probe path, before this mod's
+// hooks are installed, so the shell's own registry reads can't re-enter them.
+bool IsShownByControlPanel(const std::wstring& canonicalName, const std::wstring& guid,
+                           bool& outListed) {
     // Defined locally rather than pulled from the SDK's CLSID_OpenControlPanel /
     // IID_IOpenControlPanel: those symbols live in uuid.lib, which Windhawk's
     // clang toolchain does not link by default, so referencing them fails at
@@ -511,9 +532,8 @@ bool IsShownByControlPanel(const std::wstring& guid, bool& outListed) {
     static const IID kIidOpenControlPanel =
         { 0xd11ad862, 0x66de, 0x4df4, { 0xbf, 0x6c, 0x1f, 0x56, 0x21, 0x99, 0x6a, 0xf1 } };
 
-    // The shell's Control Panel object is apartment-threaded; Wh_ModInit runs
-    // on a thread whose apartment we don't own, so initialize one for the
-    // duration of the probe and undo it only if we were the ones to create it.
+    // The shell's Control Panel object is apartment-threaded; initialize an STA
+    // for the duration of the probe and undo it only if we created it.
     const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (initHr == RPC_E_CHANGED_MODE) {
         Wh_Log(L"  COM already initialized in a different mode; skipping shell probe");
@@ -526,19 +546,37 @@ bool IsShownByControlPanel(const std::wstring& guid, bool& outListed) {
     HRESULT hr = CoCreateInstance(kClsidOpenControlPanel, nullptr, CLSCTX_INPROC_SERVER,
                                   kIidOpenControlPanel, (void**)&openControlPanel);
     if (SUCCEEDED(hr) && openControlPanel) {
-        wchar_t path[MAX_PATH] = {};
-        hr = openControlPanel->GetPath(guid.c_str(), path, ARRAYSIZE(path));
-        if (SUCCEEDED(hr)) {
-            outListed = true;
-            answered = true;
-            Wh_Log(L"  IOpenControlPanel::GetPath(%s) -> \"%s\" (item is shown)", guid.c_str(), path);
-        } else if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) || hr == E_INVALIDARG) {
-            outListed = false;
-            answered = true;
-            Wh_Log(L"  IOpenControlPanel::GetPath(%s) -> not found (item is not shown)", guid.c_str());
-        } else {
-            Wh_Log(L"  IOpenControlPanel::GetPath(%s) failed, hr=0x%08lX", guid.c_str(), (unsigned long)hr);
+        const std::wstring monikerForm = L"::" + guid;
+        const std::wstring* candidates[] = { &canonicalName, &monikerForm, &guid };
+
+        for (const std::wstring* candidate : candidates) {
+            if (candidate->empty()) continue;
+
+            wchar_t path[MAX_PATH] = {};
+            hr = openControlPanel->GetPath(candidate->c_str(), path, ARRAYSIZE(path));
+            if (SUCCEEDED(hr)) {
+                outListed = true;
+                answered = true;
+                Wh_Log(L"  GetPath(\"%s\") -> \"%s\" (item IS shown)", candidate->c_str(), path);
+                break;
+            }
+            if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
+                // The shell understood the name and says the item isn't there.
+                outListed = false;
+                answered = true;
+                Wh_Log(L"  GetPath(\"%s\") -> ERROR_FILE_NOT_FOUND (item is NOT shown)", candidate->c_str());
+                break;
+            }
+            // E_INVALIDARG and friends mean "shell couldn't parse this name",
+            // NOT "the item is absent" - never treat it as a verdict. Try the
+            // next spelling instead.
+            Wh_Log(L"  GetPath(\"%s\") not understood, hr=0x%08lX; trying next form",
+                candidate->c_str(), (unsigned long)hr);
         }
+
+        if (!answered)
+            Wh_Log(L"  No spelling of the item name was understood by the shell; no verdict");
+
         openControlPanel->Release();
     } else {
         Wh_Log(L"  CoCreateInstance(CLSID_OpenControlPanel) failed, hr=0x%08lX", (unsigned long)hr);
@@ -548,10 +586,38 @@ bool IsShownByControlPanel(const std::wstring& guid, bool& outListed) {
     return answered;
 }
 
-// A virtual applet is only worth injecting when the real applet can actually be
-// opened (CLSID registered) but Control Panel doesn't show it on its own.
-bool DetectVirtualAppletNeeded(const std::wstring& realGuid, const wchar_t* logName,
-                               std::atomic<bool>& outClsidRegistered) {
+// The verdict only changes when the machine's configuration changes (an edition
+// upgrade, a digitizer being attached), so it is persisted in the mod's local
+// storage and the shell probe is skipped entirely on subsequent starts. This
+// matters because Wh_ModInit runs on the target's main thread *before* the
+// process executes a single instruction of its own, and GetPath forces the
+// shell to build its whole Control Panel item list - a cost that would
+// otherwise be paid at every logon, every Explorer restart and every
+// control.exe launch.
+//
+// The cache is keyed by Windows build so a feature update re-probes once, and
+// stores a tri-state (unknown / not-shown / shown) plus the CLSID-registered
+// bit. Users who suspect a stale verdict have two escape hatches: the
+// "Always add"/"Never add" override, or simply saving the mod settings, which
+// discards the cache and re-probes once (see Wh_ModSettingsChanged). The cache
+// is deliberately NOT cleared in Wh_ModUninit, which also runs on every normal
+// process exit and would defeat the caching entirely.
+enum class CachedVerdict { Unknown = 0, NotShown = 1, Shown = 2 };
+
+std::wstring MakeVerdictValueName(const wchar_t* key) {
+    return std::wstring(L"appletVerdict_") + key;
+}
+std::wstring MakeVerdictBuildValueName(const wchar_t* key) {
+    return std::wstring(L"appletVerdictBuild_") + key;
+}
+
+// Runs the shell probe at most once per Windows build and remembers the answer.
+// Returns the "inject the virtual applet" verdict.
+bool DetectVirtualAppletNeededCached(const std::wstring& realGuid,
+                                     const std::wstring& canonicalName,
+                                     const wchar_t* storageKey, const wchar_t* logName,
+                                     std::atomic<bool>& outClsidRegistered) {
+    // Cheap and always current: a registry key existence check, no shell work.
     const bool registeredClsid = IsRegisteredClsid(realGuid);
     outClsidRegistered.store(registeredClsid);
     if (!registeredClsid) {
@@ -559,20 +625,35 @@ bool DetectVirtualAppletNeeded(const std::wstring& realGuid, const wchar_t* logN
         return false;
     }
 
+    const std::wstring verdictName = MakeVerdictValueName(storageKey);
+    const std::wstring buildName   = MakeVerdictBuildValueName(storageKey);
+
+    const int cachedVerdict = Wh_GetIntValue(verdictName.c_str(), (int)CachedVerdict::Unknown);
+    const int cachedBuild   = Wh_GetIntValue(buildName.c_str(), 0);
+    if (cachedVerdict != (int)CachedVerdict::Unknown && cachedBuild == (int)g_winBuild) {
+        const bool shown = (cachedVerdict == (int)CachedVerdict::Shown);
+        Wh_Log(L"%s: using cached verdict from build %d (applet is %s); shell not probed",
+            logName, cachedBuild, shown ? L"already shown" : L"not shown");
+        return !shown;
+    }
+
+    Wh_Log(L"%s: no cached verdict for build %u; probing the shell once", logName, g_winBuild);
+
     bool listed = false;
-    if (IsShownByControlPanel(realGuid, listed)) {
+    if (IsShownByControlPanel(canonicalName, realGuid, listed)) {
         Wh_Log(L"%s: shell reports the applet is %s", logName,
             listed ? L"already shown; virtual entry skipped to avoid a duplicate"
                    : L"not shown; virtual entry will be injected");
+        Wh_SetIntValue(verdictName.c_str(),
+            (int)(listed ? CachedVerdict::Shown : CachedVerdict::NotShown));
+        Wh_SetIntValue(buildName.c_str(), (int)g_winBuild);
         return !listed;
     }
 
-    // Fallback only: the ControlPanel\\NameSpace registration is what Control
-    // Panel enumerates CLSID items from, but its mere presence does not
-    // guarantee the item is displayed (LTSC 2021 does register BitLocker there
-    // without showing it). Treated as a weak hint when the shell can't answer.
+    // No verdict: fall back to the registry hint and deliberately do NOT cache
+    // it, so a later start can still get a real answer from the shell.
     const bool registered = IsListedInControlPanelNameSpace(realGuid);
-    Wh_Log(L"%s: shell probe unavailable, falling back to the registry hint (%s). "
+    Wh_Log(L"%s: shell gave no verdict, falling back to the registry hint (%s). "
            L"Use the \"Always add\"/\"Never add\" setting if this is wrong.",
         logName, registered ? L"registered, assuming already shown" : L"not registered, injecting");
     return !registered;
@@ -730,10 +811,19 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
             Wh_Log(L"  [%s] registry name unavailable, using resource fallback \"%s\"",
                 realGuid.c_str(), fallbackNameIndirect.c_str());
             name = ResolveIndirectString(fallbackNameIndirect);
-            if (icon.empty() && !fallbackIcon.empty()) {
-                icon = fallbackIcon;
-            }
         }
+    }
+
+    // Independent of how the name was obtained: ReadRealClsidNameAndIcon treats
+    // a missing DefaultIcon subkey as non-fatal (returns true with an empty
+    // icon), which is the common case for the Win10/11 stub CLSID keys. Nesting
+    // this inside the name-failure branch above meant that a CLSID with a
+    // LocalizedString but no DefaultIcon produced an entry with no icon at all,
+    // because TryProvideValue refuses to serve an empty DefaultIcon value.
+    if (icon.empty() && !fallbackIcon.empty()) {
+        Wh_Log(L"  [%s] no DefaultIcon in the registry, using resource fallback \"%s\"",
+            realGuid.c_str(), fallbackIcon.c_str());
+        icon = fallbackIcon;
     }
 
     if (name.empty()) {
@@ -1181,6 +1271,9 @@ bool EnsureClassicTaskLinksFile() {
 
 // Timestamp (GetTickCount64) of the last time the cached path was validated or
 // a (re)generation was attempted. Used to throttle the filesystem check below.
+// 0 is a sentinel meaning "never checked, or explicitly invalidated"; it always
+// forces a check, which matters in the first few seconds after boot when
+// GetTickCount64() is itself smaller than the recheck interval.
 static std::atomic<ULONGLONG> g_taskLinksLastCheckTick{ 0 };
 static constexpr ULONGLONG kTaskLinksRecheckIntervalMs = 5000;
 
@@ -1199,7 +1292,12 @@ std::wstring GetOrCreateClassicTaskLinksFilePath() {
 
     const ULONGLONG now = GetTickCount64();
     ULONGLONG last = g_taskLinksLastCheckTick.load(std::memory_order_relaxed);
-    if (!cached.empty() && now - last < kTaskLinksRecheckIntervalMs)
+    // Applies whether or not a path is cached. Skipping the throttle for an
+    // empty path meant that when the XML could not be written at all (%TEMP%
+    // not writable, a security product blocking it, disk full) every single
+    // Control-Panel-related registry query rebuilt the multi-KB template and
+    // re-attempted the file I/O, on Explorer's registry hot path.
+    if (last != 0 && now - last < kTaskLinksRecheckIntervalMs)
         return cached;
 
     // Only one thread per interval performs the check; the others keep using
@@ -1748,14 +1846,14 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
         return ERROR_FILE_NOT_FOUND;
     }
     if (HasActiveSuppression() && lpSubKey) {
-        std::wstring basePath = g_keyTracker.GetPath(hKey);
-        // Cheap bail-out: if the parent key isn't one we're tracking and the
-        // subkey text itself doesn't contain "clsid"/"controlpanel", this
-        // call cannot possibly be a suppressed namespace/CLSID key, so skip
-        // the concatenation, ToLower copy, and rfind entirely. This matters
-        // because HasActiveSuppression() is true out of the box, so every
+        // HasActiveSuppression() is true out of the box, so every
         // RegOpenKeyExW call in explorer.exe — not just shell32's — reaches
-        // this branch.
+        // this branch. The lookup can't be skipped (the parent path is needed
+        // both to decide relevance and to build the full path), but it now
+        // takes the tracker's *shared* lock, so these calls no longer
+        // serialize against each other; the string test still saves the
+        // concatenation, the ToLower copy and the rfind for the vast majority.
+        std::wstring basePath = g_keyTracker.GetPath(hKey);
         if (!basePath.empty() || ContainsRelevantKeywordInsensitive(lpSubKey)) {
             std::wstring fullPath = basePath;
             if (*lpSubKey) { if (!fullPath.empty()) fullPath += L"\\"; fullPath += lpSubKey; }
@@ -1800,10 +1898,9 @@ LSTATUS WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions,
 using RegCloseKey_t = decltype(&RegCloseKey);
 RegCloseKey_t RegCloseKeyOriginal;
 LSTATUS WINAPI RegCloseKeyHook(HKEY hKey) {
-    if (g_keyTracker.IsFake(hKey)) {
-        g_keyTracker.FreeFake(hKey);
-        return ERROR_SUCCESS;
-    }
+    // FreeFake reports whether the handle was ours, so this is one lock
+    // acquisition instead of IsFake() followed by FreeFake().
+    if (g_keyTracker.FreeFake(hKey)) return ERROR_SUCCESS;
     LSTATUS status = RegCloseKeyOriginal(hKey);
     g_keyTracker.Untrack(hKey);
     return status;
@@ -1824,14 +1921,17 @@ LSTATUS WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpRe
     // re-invoking the original here is safe and prevents a C++ exception
     // from unwinding into shell32/Explorer, which isn't exception-aware.
     try {
-        std::wstring path = g_keyTracker.GetPath(hKey);
+        // One lookup instead of GetPath() + IsFake(): both answers come from
+        // the same snapshot, and the shared lock is taken once per call.
+        std::wstring path;
+        const bool isFake = g_keyTracker.IsFakeAndGetPath(hKey, path);
         if (!path.empty()) {
             std::wstring valueName = lpValueName ? lpValueName : L"";
             LSTATUS outStatus;
             if (TryProvideValue(path, valueName, lpType, lpData, lpcbData, outStatus)) return outStatus;
         }
 
-        if (g_keyTracker.IsFake(hKey)) return ERROR_FILE_NOT_FOUND;
+        if (isFake) return ERROR_FILE_NOT_FOUND;
 
         return RegQueryValueExWOriginal(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
     } catch (...) {
@@ -1849,7 +1949,9 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
     // exception overwrites that buffer once with the real value instead of
     // duplicating any external side effect. Kept intentionally.
     try {
-        std::wstring path = g_keyTracker.GetPath(hkey);
+        // Single lookup for both "is it fake?" and "what's its path?".
+        std::wstring path;
+        const bool isFake = g_keyTracker.IsFakeAndGetPath(hkey, path);
         if (lpSubKey && *lpSubKey) { if (!path.empty()) path += L"\\"; path += lpSubKey; }
         if (!path.empty()) {
             std::wstring valueName = lpValue ? lpValue : L"";
@@ -1859,7 +1961,7 @@ LSTATUS WINAPI RegGetValueWHook(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
 
         // Only bail out with FILE_NOT_FOUND after TryProvideValue has had a
         // chance to serve a virtual value on this fake handle.
-        if (g_keyTracker.IsFake(hkey)) return ERROR_FILE_NOT_FOUND;
+        if (isFake) return ERROR_FILE_NOT_FOUND;
 
         return RegGetValueWOriginal(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
     } catch (...) {
@@ -1886,9 +1988,9 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
     // ShellExecuteExW, which have real external side effects to avoid
     // re-invoking).
     try {
-        if (g_keyTracker.IsFake(hKey)) {
-            std::wstring path = g_keyTracker.GetPath(hKey);
-            ClassifyResult cr = ClassifyPath(path);
+        std::wstring fakePath;
+        if (g_keyTracker.IsFakeAndGetPath(hKey, fakePath)) {
+            ClassifyResult cr = ClassifyPath(fakePath);
             std::wstring subName;
             if (!GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
             if (!lpcchName || !lpName) return ERROR_INVALID_PARAMETER;
@@ -1981,9 +2083,9 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
     // is the same call the caller would get without this mod, with no
     // external side effect duplicated — kept intentionally.
     try {
-        if (g_keyTracker.IsFake(hKey)) {
-            std::wstring path = g_keyTracker.GetPath(hKey);
-            ClassifyResult cr = ClassifyPath(path);
+        std::wstring fakePath;
+        if (g_keyTracker.IsFakeAndGetPath(hKey, fakePath)) {
+            ClassifyResult cr = ClassifyPath(fakePath);
             std::wstring subName;
             if (!GetVirtualSubKeyName(cr.node, dwIndex, subName)) return ERROR_NO_MORE_ITEMS;
             if (!lpName) return ERROR_INVALID_PARAMETER;
@@ -2350,6 +2452,13 @@ void InvalidateClassicTaskLinksFile() {
 
 void Wh_ModSettingsChanged() {
   try {
+    // Saving settings is the user's way of saying "look again": discard the
+    // cached shell verdicts so the next process start re-probes once. Cheap
+    // (two registry writes) and only happens on an explicit user action.
+    for (const wchar_t* key : { L"bitlocker", L"tabletpc" }) {
+        Wh_DeleteValue(MakeVerdictValueName(key).c_str());
+        Wh_DeleteValue(MakeVerdictBuildValueName(key).c_str());
+    }
     LoadSettings();
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
@@ -2380,10 +2489,12 @@ BOOL Wh_ModInit() {
     // detection asks the shell and is cached here; LoadSettings() then applies
     // the user's Auto/Always/Never override on top of it. See the comment next
     // to g_bitlockerAutoDetected.
-    g_bitlockerAutoDetected.store(DetectVirtualAppletNeeded(
-        kBitLockerGuid, L"BitLocker Drive Encryption", g_bitlockerClsidRegistered));
-    g_tabletPcAutoDetected.store(DetectVirtualAppletNeeded(
-        kTabletPcSettingsGuid, L"Tablet PC Settings", g_tabletPcClsidRegistered));
+    g_bitlockerAutoDetected.store(DetectVirtualAppletNeededCached(
+        kBitLockerGuid, kBitLockerCanonicalName, L"bitlocker",
+        L"BitLocker Drive Encryption", g_bitlockerClsidRegistered));
+    g_tabletPcAutoDetected.store(DetectVirtualAppletNeededCached(
+        kTabletPcSettingsGuid, kTabletPcCanonicalName, L"tabletpc",
+        L"Tablet PC Settings", g_tabletPcClsidRegistered));
     // Re-apply the overrides now that the auto verdicts are known (the earlier
     // LoadSettings() call ran before detection and resolved them against the
     // default-false cache).
