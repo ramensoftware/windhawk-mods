@@ -37,7 +37,8 @@ This mod restores the classic **Display** and **Screen Resolution** Control Pane
 - **Working classic DPI presets:** The 100/125/150/200% radio choices use the existing Apply button and the classic Please Wait transition.
 - **Classic Icon & Localized Text:** Uses the classic Display icon and localized strings for all supported languages.
 - **Optional Redirects:** Can redirect `desk.cpl`, related legacy commands, and even `ms-settings:display` to the restored classic page.
-- **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use.
+- **Offline Caching:** The required Microsoft Display component is downloaded once, verified against a pinned SHA‑256 hash, and cached for faster offline use. After the load, the module the loader actually mapped is confirmed to be the very same file object that passed verification (`GetFileInformationByHandleEx(FileIdInfo)`), and is unloaded and refused otherwise.
+- **No permanent background sweep:** the hosted Screen Resolution control is discovered only inside a short, bounded window armed by the page-construction hooks, so no window-tree enumeration runs while no Display page is open.
 - **Safe Fallback:** If any step fails, the mod falls back gracefully without forcing changes or crashing Explorer.
 - **Instant Toggle:** Disabling the mod immediately restores normal Windows behavior for newly opened pages.
 
@@ -169,6 +170,17 @@ These are useful as an alternative entry point if a Control Panel task link ever
 
 */
 // ==/WindhawkModSettings==
+// The mod targets Windows 10/11 and uses GetFileInformationByHandleEx with
+// FileIdInfo (FILE_ID_INFO) to prove that a loaded module maps the same file
+// object that was verified. Ensure the SDK version is high enough for that
+// struct. Guarded with #ifndef because the Windhawk build environment already
+// defines these (usually to a higher value) via its precompiled headers.
+#ifndef WINVER
+#define WINVER 0x0602
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#endif
 #include <windows.h>
 #include <shellscalingapi.h>
 #include <VersionHelpers.h>
@@ -902,6 +914,69 @@ static std::atomic<ULONGLONG> g_dpiApplyGeneration{0};
 static std::atomic<bool> g_dpiCommitInFlight{false};
 static constexpr DWORD kClassicDpiApplyDelayMs = 2500;
 
+// -----------------------------------------------------------------------------
+// Armed (not permanent) discovery of the hosted ResolutionControlClass window.
+//
+// A process-wide CreateWindowExW detour is still deliberately avoided (OpenGlass
+// and similar frame renderers own that API in explorer.exe), but the discovery
+// sweep must not run forever either: EnumWindows + EnumChildWindows +
+// GetClassNameW over the whole desktop window tree, once per second, for the
+// entire life of the shell process, is a permanent cost paid to catch a window
+// that only exists while one specific Control Panel page is open.
+//
+// Instead the scan is *armed* by the two hooks that fire exactly when the
+// restored Screen Resolution page is being constructed (the UIFILE 202 markup
+// parse in DUISetXMLFromResourceHook and the provider's SetSite), polls at a
+// short interval for a bounded window afterwards, and is disarmed as soon as
+// the subclass is attached (or when the control is destroyed). In the steady
+// state - no Display page open - the worker performs one atomic load per
+// second and touches no window at all.
+static constexpr DWORD kHostedScanWindowMs = 15000;   // bounded arm duration
+static constexpr DWORD kHostedScanPollMs = 125;       // poll rate while armed
+static constexpr DWORD kHostedScanIdleWaitMs = 1000;  // idle worker wait
+static std::atomic<ULONGLONG> g_hostedScanDeadline{0};
+
+// Called from the page-construction hooks: (re)start the bounded scan window.
+static void ArmHostedDisplayControlScan(const wchar_t* reason) {
+    if (g_shuttingDown.load(std::memory_order_acquire)) return;
+    // Same "the provider is in use" condition the applet contract uses: the
+    // setup pass succeeded, or the verified image is mapped and serving pages.
+    if (!g_dllVerifiedOk.load(std::memory_order_acquire) &&
+        !g_hDisplayDll.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (!g_resolutionPageCompatibility.load(std::memory_order_acquire)) return;
+    const ULONGLONG deadline = GetTickCount64() + kHostedScanWindowMs;
+    ULONGLONG previous = g_hostedScanDeadline.load(std::memory_order_acquire);
+    // Only ever extend the window; never shorten one armed by another hook.
+    while (previous < deadline &&
+           !g_hostedScanDeadline.compare_exchange_weak(
+               previous, deadline, std::memory_order_acq_rel,
+               std::memory_order_acquire)) {
+    }
+    Wh_Log(L"Display: hosted-control discovery armed for %u ms (%s)",
+           kHostedScanWindowMs, reason ? reason : L"page construction");
+}
+
+static void DisarmHostedDisplayControlScan() {
+    g_hostedScanDeadline.store(0, std::memory_order_release);
+}
+
+static bool IsHostedDisplayControlScanArmed() {
+    const ULONGLONG deadline =
+        g_hostedScanDeadline.load(std::memory_order_acquire);
+    if (!deadline) return false;
+    if (GetTickCount64() >= deadline) {
+        // Bounded window elapsed without a matching control: stop scanning
+        // until the next page construction arms it again.
+        ULONGLONG expected = deadline;
+        g_hostedScanDeadline.compare_exchange_strong(
+            expected, 0, std::memory_order_acq_rel, std::memory_order_relaxed);
+        return false;
+    }
+    return true;
+}
+
 // Pending orientation request consumed by the DPI/orientation worker thread.
 // The Screen Resolution hooks only post the request here (never apply on the
 // UI thread); the worker applies and shows the keep/revert confirmation on a
@@ -912,6 +987,33 @@ static std::wstring g_orientationRequestDevice;
 
 const std::wstring* CurrentDllPath() {
     return g_dllPath.load(std::memory_order_acquire);
+}
+
+// -----------------------------------------------------------------------------
+// Visibility of the Control Panel applet entry
+//
+// The virtual registry contract (namespace entry + CLSID values) used to be
+// gated on g_dllVerifiedOk alone. That flag means "the setup pass that runs at
+// enable time completed successfully", which is narrower than what the entry
+// should follow: the applet must be listed for as long as the mod is loaded and
+// the pinned provider is actually in use in this process. Because the provider
+// DLL is deliberately never unloaded (live COM objects and DirectUI pages may
+// still own its vtables), a transient failure or a later re-verification pass
+// clearing g_dllVerifiedOk would otherwise make the Display icon disappear from
+// the Control Panel while its pages are still perfectly functional.
+//
+// So the contract is published when the mod is alive (not tearing down) AND
+// either the setup pass succeeded, or the verified provider is mapped with a
+// known path - i.e. "the DLL is in use". Wh_ModUninit sets g_shuttingDown,
+// clears g_hDisplayDll and clears g_dllVerifiedOk, so disabling the mod removes
+// the entry immediately, exactly as before.
+static bool IsDisplayAppletContractPublished() {
+    if (g_shuttingDown.load(std::memory_order_acquire)) return false;
+    const std::wstring* dllPath = g_dllPath.load(std::memory_order_acquire);
+    if (!dllPath || dllPath->empty()) return false;
+    if (g_dllVerifiedOk.load(std::memory_order_acquire)) return true;
+    // The verified provider image is still mapped and serving pages.
+    return g_hDisplayDll.load(std::memory_order_acquire) != nullptr;
 }
 
 std::wstring ToLower(const std::wstring& s) {
@@ -1327,6 +1429,44 @@ static UniqueWinHandle PinDllForLoad(const std::wstring& path) {
         CreateFileW(path.c_str(), GENERIC_READ,
                     FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                     FILE_ATTRIBUTE_NORMAL, nullptr));
+}
+
+// True if `a` and `b` refer to the same file object (same volume + 128-bit
+// file id). Used to prove that a module LoadLibraryExW just loaded came from
+// the exact file the mod verified, rather than a file that replaced it at the
+// same path inside the verify -> load window.
+static bool SameFileObject(HANDLE a, HANDLE b) {
+    if (!a || a == INVALID_HANDLE_VALUE || !b || b == INVALID_HANDLE_VALUE)
+        return false;
+    FILE_ID_INFO ia{}, ib{};
+    if (!GetFileInformationByHandleEx(a, FileIdInfo, &ia, sizeof(ia)))
+        return false;
+    if (!GetFileInformationByHandleEx(b, FileIdInfo, &ib, sizeof(ib)))
+        return false;
+    return ia.VolumeSerialNumber == ib.VolumeSerialNumber &&
+           ia.FileId.Identifier[0] == ib.FileId.Identifier[0] &&
+           ia.FileId.Identifier[1] == ib.FileId.Identifier[1];
+}
+
+// After LoadLibraryExW(hModule), confirm that the loaded module is backed by
+// the same file object as the verified pin. The pin is opened with
+// FILE_SHARE_DELETE (the loader requires delete sharing), so the verified file
+// can be unlinked or renamed out from under it while the load still resolves
+// by path - the SHA-256 check alone therefore proves nothing about the bytes
+// that were actually mapped. Re-resolving the module path with
+// GetModuleFileNameW and comparing file ids closes that window: on a mismatch
+// the caller must FreeLibrary and refuse the module.
+static bool ConfirmLoadedModuleMatchesPin(HMODULE hModule, HANDLE pin) {
+    if (!hModule || !pin || pin == INVALID_HANDLE_VALUE) return false;
+    wchar_t modulePath[MAX_PATH]{};
+    const DWORD length =
+        GetModuleFileNameW(hModule, modulePath, ARRAYSIZE(modulePath));
+    if (length == 0 || length >= ARRAYSIZE(modulePath)) return false;
+    UniqueWinHandle loaded(CreateFileW(
+        modulePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (!loaded.IsValid()) return false;
+    return SameFileObject(pin, loaded.Get());
 }
 
 // Handles for the WinInet call currently in flight (if any), published under
@@ -6676,6 +6816,24 @@ static void RunSetup() {
             return;
         }
 
+        // The pin denies write sharing but, because the loader requires
+        // FILE_SHARE_DELETE, it cannot stop the verified file from being
+        // unlinked or renamed and replaced at the same path; LoadLibraryExW
+        // resolves by path, not by the open handle. Confirm the module the
+        // loader actually mapped is backed by the very same file object that
+        // passed the SHA-256 verification, and refuse it otherwise - without
+        // this check a writer to the mod storage folder could get its own
+        // bytes executed inside explorer.exe.
+        if (!pinnedDll.IsValid() ||
+            !ConfirmLoadedModuleMatchesPin(h, pinnedDll.Get())) {
+            if (tookNewReference) FreeLibrary(h);
+            g_dllVerifiedOk.store(false, std::memory_order_release);
+            Wh_Log(L"Display load rejected: the loaded module does not map the "
+                   L"verified file (it was replaced at the same path); "
+                   L"refusing to use it");
+            return;
+        }
+
         if (!VerifyLoadedDisplayCompatibility(h)) {
             if (tookNewReference) FreeLibrary(h);
             g_dllVerifiedOk.store(false, std::memory_order_release);
@@ -7207,7 +7365,8 @@ static bool TryProvideValueData(const std::wstring& path, const std::wstring& vn
                                 DWORD* type, std::wstring& strOut,
                                 DWORD& dwordOut, bool& isStr, LSTATUS& status) {
     const std::wstring* dllPath = CurrentDllPath();
-    if (!g_dllVerifiedOk.load() || !dllPath || dllPath->empty()) return false;
+    if (!IsDisplayAppletContractPublished() || !dllPath || dllPath->empty())
+        return false;
 
     // Registry value names are case-insensitive, just like key names.
     const auto valueIs = [&vn](const wchar_t* expected) {
@@ -7781,7 +7940,7 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY k, DWORD idx, LPWSTR name, LPDWORD lpcch,
             return ERROR_SUCCESS;
         }
         const std::wstring path = g_keyTracker.GetPath(k);
-        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+        if (!IsNamespaceParentKey(path) || !IsDisplayAppletContractPublished())
             return RegEnumKeyExWOriginal(k, idx, name, lpcch, r, cls, lpcCls, ft);
         // A new pass starts at index zero even when the real parent has
         // subkeys, so reset before delegating instead of waiting for EOF.
@@ -7831,7 +7990,7 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY k, DWORD idx, LPWSTR name, DWORD cch) {
             return ERROR_SUCCESS;
         }
         const std::wstring path = g_keyTracker.GetPath(k);
-        if (!IsNamespaceParentKey(path) || !g_dllVerifiedOk.load())
+        if (!IsNamespaceParentKey(path) || !IsDisplayAppletContractPublished())
             return RegEnumKeyWOriginal(k, idx, name, cch);
         if (idx == 0) ClearInjectedState(k);
         const LSTATUS st = RegEnumKeyWOriginal(k, idx, name, cch);
@@ -7959,7 +8118,7 @@ LSTATUS WINAPI RegQueryInfoKeyWHook(HKEY k, LPWSTR cls, LPDWORD lpcCls, LPDWORD 
         return ERROR_SUCCESS;
     }
     std::wstring path = g_keyTracker.GetPath(k);
-    if (IsNamespaceParentKey(path) && g_dllVerifiedOk.load()) {
+    if (IsNamespaceParentKey(path) && IsDisplayAppletContractPublished()) {
         LSTATUS st =
             RegQueryInfoKeyWOriginal(k, cls, lpcCls, r, cSubKeys, lpcMaxSub,
                                      lpcMaxCls, cValues, lpcMaxValName, lpcMaxValData,
@@ -8020,8 +8179,7 @@ LoadStringA_t LoadStringAOriginal = nullptr;
 // The Display module handle is resolved once and we compare pointers only,
 // which avoids a per-call GetModuleFileNameW on the hot path.
 static bool IsDisplayResourceModule(HINSTANCE instance) {
-    if (!instance ||
-        !g_dllVerifiedOk.load(std::memory_order_acquire)) {
+    if (!instance || !IsDisplayAppletContractPublished()) {
         return false;
     }
     const auto normalize = [](HMODULE value) {
@@ -9222,7 +9380,7 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
     if (!DUISetXMLFromResourceOriginal) return E_FAIL;
     if (!DUISetXML || g_inDisplayXmlPatch ||
         !IsDisplayUifileResource(resourceName, resourceType) ||
-        !g_dllVerifiedOk.load() ||
+        !IsDisplayAppletContractPublished() ||
         !IsDisplayResourceModule(
             reinterpret_cast<HINSTANCE>(resourceModule))) {
         return DUISetXMLFromResourceOriginal(parser, resourceName, resourceType,
@@ -9234,6 +9392,14 @@ static HRESULT PERF_DUI_THISCALL DUISetXMLFromResourceHook(
         std::wstring xml = LoadUifileXml(resourceModule, resourceName, resourceType);
         const UINT resourceId =
             static_cast<UINT>(reinterpret_cast<UINT_PTR>(resourceName));
+        if (resourceId == 202) {
+            // The Screen Resolution page's markup is being parsed right now,
+            // so ResolutionControlClass is about to be created: arm the
+            // bounded discovery sweep instead of polling the whole window tree
+            // forever. It disarms itself on attach, on WM_NCDESTROY, or when
+            // the window elapses.
+            ArmHostedDisplayControlScan(L"UIFILE 202 parse");
+        }
         bool patched = false;
         const wchar_t* patchDescription = L"";
         if (!xml.empty() && IsDisplayPageXml(xml)) {
@@ -10239,6 +10405,11 @@ static HRESULT __cdecl DisplayElementWithSiteSetSiteHook(
     if (!DisplayElementWithSiteSetSiteOriginal) return E_UNEXPECTED;
     const HRESULT hr = DisplayElementWithSiteSetSiteOriginal(self, site);
     if (SUCCEEDED(hr) && site) {
+        // Second arming point: the restored page's element is being sited, so
+        // the hosted control is being constructed. Covers the path where the
+        // UIFILE 202 hook did not run (adaptation disabled markup reuse,
+        // cached parser, provider-owned markup).
+        ArmHostedDisplayControlScan(L"provider SetSite");
         // Best effort only. Never replace the provider's SetSite result or let a
         // task-pane failure prevent the Display page from rendering. Also never
         // let a C++ exception from the publication path crash the shell.
@@ -10991,14 +11162,23 @@ static void ClassicDpiApplyWorker() {
                         g_notificationWakeEvent};
     constexpr DWORD kApplyWaitHandleCount = 3;  // exclude notifications
     while (!g_shuttingDown.load(std::memory_order_acquire)) {
+        // Idle (no Display page being constructed): wake once a second only to
+        // re-check the arm flag. While a restored page is being built, poll at
+        // kHostedScanPollMs so the control is caught promptly.
+        const bool scanArmed = IsHostedDisplayControlScanArmed();
+        const DWORD waitTimeout =
+            scanArmed ? kHostedScanPollMs : kHostedScanIdleWaitMs;
         const DWORD wait = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
-                                                  FALSE, 1000);
+                                                  FALSE, waitTimeout);
         if (wait == WAIT_TIMEOUT) {
             // Discover ResolutionControlClass without a process-wide
             // CreateWindowExW detour. OpenGlass and similar frame renderers
             // commonly own that API, and replacing their detour at mod enable
             // makes every glass frame turn opaque until they reload settings.
-            if (g_dllVerifiedOk.load(std::memory_order_acquire) &&
+            // The sweep is no longer permanent: it runs only inside the bounded
+            // window armed by the page-construction hooks, and stops as soon as
+            // the subclass is attached or the window elapses.
+            if (scanArmed &&
                 g_resolutionPageCompatibility.load(
                     std::memory_order_acquire)) {
                 ScanForHostedDisplayControls();
@@ -13339,6 +13519,10 @@ static LRESULT ResolutionControlSubclassProcBody(HWND hwnd, UINT msg,
                 ForgetHostedSubclass(hwnd);
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                     hwnd, ResolutionControlSubclassProc);
+                // The page is gone; make sure no scan window survives it. The
+                // next restored page arms discovery again from its own
+                // construction hooks.
+                DisarmHostedDisplayControlScan();
                 break;
             default:
                 break;
@@ -13404,6 +13588,9 @@ static void TryAttachResolutionControlSubclass(HWND hwnd) {
 
         RememberHostedSubclass(hwnd);
         tracked = true;
+        // The control this scan existed for is now subclassed: stop the
+        // bounded sweep immediately instead of burning the rest of its window.
+        DisarmHostedDisplayControlScan();
         // Warm the mode cache outside WM_PAINT. The cache validates its monitor
         // device name on every read, so attaching shortly after creation remains
         // safe even if the final monitor association settles a moment later.
@@ -13444,7 +13631,10 @@ static BOOL CALLBACK ScanHostedDisplayTopLevel(HWND hwnd, LPARAM /*parameter*/) 
     return TRUE;
 }
 
-// Runs at most once per second on the existing joined DPI/orientation worker.
+// Runs on the existing joined DPI/orientation worker, and ONLY inside the
+// bounded window armed by the page-construction hooks (UIFILE 202 parse and the
+// provider SetSite). It is disarmed as soon as the subclass is attached or the
+// hosted control is destroyed, so the shell never pays for a permanent sweep.
 // EnumWindows is filtered to this PID before descending, and the exact class
 // check makes the normal no-page path cheap and side-effect free.
 static void ScanForHostedDisplayControls() {
@@ -14148,7 +14338,7 @@ static HRESULT HandleCoCreateInstance(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
     if (isProvider || isFolder) {
         Wh_Log(L"Display COM activation requested (%s)",
                isProvider ? L"provider" : L"folder");
-        if (!g_dllVerifiedOk.load()) {
+        if (!IsDisplayAppletContractPublished()) {
             Wh_Log(L"Display COM activation deferred: DLL setup is not ready");
             return REGDB_E_CLASSNOTREG;
         }
@@ -14523,6 +14713,9 @@ if (!clsidRegistered || !controlExePresent) {
         g_dpiCommitInFlight.store(false, std::memory_order_release);
         g_pendingNotificationBits.store(0, std::memory_order_release);
         g_notificationWorkerReady.store(false, std::memory_order_release);
+        // Discovery starts disarmed: only a restored page being constructed
+        // may arm the bounded sweep.
+        DisarmHostedDisplayControlScan();
         g_displayTipDialogOpen.store(false, std::memory_order_release);
         g_dpiNotifyOpen.store(false, std::memory_order_release);
         g_informationNotificationWindow.store(nullptr,
