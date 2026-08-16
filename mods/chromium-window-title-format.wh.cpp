@@ -14,16 +14,6 @@
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
-// chrome.exe is back: the probe in poc/ finished and identified
-// TabStripModel::AddTab as the hook that seeds Chrome's structural proof. Keep
-// that probe DISABLED whenever this mod includes chrome.exe - two mods symbol-
-// hooking the same chrome.dll functions would confuse any measurement and, if
-// something went wrong, the blame.
-//
-// Note the metadata block above is entirely `//` lines, so an @include cannot
-// be "commented out" - it has to be deleted. Leaving it prefixed does nothing,
-// and prose inside that block fails windhawk-cli with exit 2.
-
 // ==WindhawkModReadme==
 /*
 # Chromium Window Title Format
@@ -81,10 +71,20 @@ Chrome, not a limitation of the mod, so `{extra}`, `{more}`, `{profile}` and
 `{private}` are always empty there and any `?( ... )` group containing only
 those tokens disappears. `{title}` and `{browser}` work on both.
 
-`{count}` is the exception. It is a property of the window rather than of the
-text, so with the optional symbol layer on it works on Chrome too - the count
-comes from the browser's own tab strip instead of being parsed out of the title.
-With that layer off, Chrome has no count to give and `{count}` is empty.
+**The optional symbol layer is offered on Edge only**, so `{count}` is empty on
+Chrome regardless of settings, and the favicon and named-window features are
+Edge-only too.
+
+That is a cost decision, not an oversight. The layer reads the browser's debug
+symbols. Edge publishes its PDB on the Microsoft public symbol server and it
+resolves in minutes. Chrome's is not on that server at all, and the file is
+enormous - the build this was developed against measured **5.18 GB** on disk,
+with another mod in this catalog documenting an attempt that pegged a CPU core
+for over four hours. Chrome also ships every few days, so that price would be
+paid again on each update. A checkbox that quietly costs a multi-gigabyte
+download and an afternoon of CPU is not worth having, so Chrome gets the
+parse-only mod - which is what the whole thing degrades to anyway, and which
+needs no symbols, no PDB and no network.
 
 ## Template syntax
 
@@ -185,18 +185,27 @@ Style short prefixes like `{count}`, not `{title}`.
   $name: Title parsing
 - Symbols:
     - Enabled: false
-      $name: Read tab counts from the browser (experimental)
+      $name: Read tab counts from the browser (experimental, Edge only)
       $description: >-
         Off by default, and everything above works without it. Turning it on
         lets the mod reformat windows you have named - which is otherwise
         impossible, because a named window's title is only the name, with no tab
         count, no page title and no profile in it anywhere.
         .
-        It works by resolving a few of the browser's internal function names
-        from its debug symbols, which are downloaded once per browser build (the
-        first run after an update can take a few minutes and needs the network).
-        If any of them cannot be resolved, this feature switches itself off and
-        the mod carries on normally.
+        EDGE ONLY. On Chrome this setting does nothing, by design: the layer
+        reads the browser's debug symbols, and Chrome's are not on the public
+        symbol server and run to several gigabytes - 5.18 GB for the build this
+        was tested against - which would be downloaded and processed again after
+        every Chrome update. Chrome keeps the title reformatting above, which
+        needs no symbols at all.
+        .
+        On Edge it resolves a few of the browser's internal function names from
+        its debug symbols, downloaded once per browser build (the first run
+        after an update takes a few minutes and needs the network). If any of
+        them cannot be resolved, this feature switches itself off and the mod
+        carries on normally. Expect that to happen occasionally after a browser
+        update, until the mod catches up - a missing tab count then means
+        "switched itself off", not "broken".
         .
         The mod never simply trusts what it reads. It first compares the tab
         count it gets from the browser against the count parsed out of ordinary
@@ -208,8 +217,8 @@ Style short prefixes like `{count}`, not `{title}`.
       $description: >-
         Replaces the browser's own icon in the taskbar and Alt+Tab with the
         favicon of the window's active tab. Needs the symbol layer above to be
-        on, since the icon comes from the browser rather than from the title.
-        The original icon is restored when the mod is turned off.
+        on, so this is Edge only for the same reason. The original icon is
+        restored as soon as you turn this off, and when the mod is turned off.
   $name: Advanced (experimental)
 - Advanced:
     - MaxTitleChars: 512
@@ -229,11 +238,21 @@ Style short prefixes like `{count}`, not `{title}`.
 #include <windhawk_utils.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+// Directly used, and previously reaching this file only through
+// windhawk_utils.h. A translation unit that compiles because of what its
+// dependencies happen to include is one compiler update away from not.
+#include <cstdint>   // uint32_t, uint64_t, intptr_t
+#include <cstdlib>   // _wtoi, _wgetenv
+#include <cstring>   // memcpy
+#include <cwchar>    // wcsrchr, _wcsnicmp, wcsncmp
+#include <cwctype>   // iswalnum, towupper, towlower
 
 
 // ---------------------------------------------------------------------------
@@ -999,8 +1018,19 @@ std::wstring ResolveToken(std::wstring_view spec, const Fields& f, bool* empty) 
 
 // Renders tpl[i..], stopping at ')' when inGroup. Reports whether any token
 // inside resolved to something non-empty, which is what drives ?( ) groups.
+// `depth` exists to bound the recursion below, not to do anything useful.
+//
+// Each `?(` recurses with a std::wstring local in the frame, and the template is
+// a settings field - so a pasted template of a few thousand nested `?(?(?(...`
+// exhausts the browser UI thread's stack and takes the browser down. Self-
+// inflicted, but "self" here means whoever the user copied the template from,
+// and a crash in someone's browser is not an acceptable answer to a malformed
+// setting. Past the cap the group is treated as literal text rather than
+// silently dropped, so the template still renders something recognisable.
+constexpr int kMaxGroupDepth = 32;
+
 size_t Render(const std::wstring& tpl, size_t i, bool inGroup, const Fields& f,
-              std::wstring* out, bool* anyNonEmpty) {
+              std::wstring* out, bool* anyNonEmpty, int depth = 0) {
     *anyNonEmpty = false;
     while (i < tpl.size()) {
         const wchar_t c = tpl[i];
@@ -1032,9 +1062,18 @@ size_t Render(const std::wstring& tpl, size_t i, bool inGroup, const Fields& f,
             continue;
         }
         if (c == L'?' && i + 1 < tpl.size() && tpl[i + 1] == L'(') {
+            if (depth >= kMaxGroupDepth) {
+                // Emit the delimiter literally and carry on iteratively. The
+                // stack is the resource being protected, so the answer cannot
+                // itself be another frame.
+                out->push_back(c);
+                ++i;
+                continue;
+            }
             std::wstring inner;
             bool         innerAny = false;
-            i = Render(tpl, i + 2, /*inGroup=*/true, f, &inner, &innerAny);
+            i = Render(tpl, i + 2, /*inGroup=*/true, f, &inner, &innerAny,
+                       depth + 1);
             if (innerAny) {
                 *out += inner;
                 *anyNonEmpty = true;
@@ -1113,6 +1152,26 @@ struct WindowState {
 };
 
 Settings g_settings;
+
+// Guards ONLY the std::wstring members of g_settings, and it has to be its own
+// lock rather than g_lock.
+//
+// The bug it closes: LoadSettings runs on whatever thread Wh_ModSettingsChanged
+// is called on and reassigns those strings, while ComposeFor - on a browser UI
+// thread, mid-title-write - used to bind a const reference to one and carry it
+// through Render. std::wstring::operator= frees the old buffer, so a settings
+// change concurrent with any title write is a use-after-free inside the
+// browser. Every read of a settings STRING now copies it under this lock.
+//
+// It cannot be g_lock: SetWindowTextW_Hook calls ComposeFor while already
+// holding g_lock exclusively, and SRW locks are not reentrant, so reusing it
+// here would deadlock the browser's UI thread on the first title write.
+//
+// The scalar members (bool/size_t) are deliberately still read without it. They
+// are independently meaningful, a stale value costs at most one composition
+// rendered with the previous setting, and threading a lock through the dozens of
+// g_settings.verbose reads would cost far more than it buys.
+SRWLOCK g_settingsLock = SRWLOCK_INIT;
 Grammar  g_grammar;
 SRWLOCK  g_lock = SRWLOCK_INIT;
 std::unordered_map<HWND, WindowState> g_states;
@@ -1285,11 +1344,18 @@ std::wstring ComposeFor(const std::wstring& source, void* controller) {
         f.hasCount = true;
     }
 
-    const std::wstring& tpl =
-        !parsed                       ? g_settings.named
-        : (g_isChrome && !g_settings.chromeOverride.empty())
-                                      ? g_settings.chromeOverride
-                                      : g_settings.normal;
+    // A COPY, not a reference. Binding a reference here and carrying it into
+    // Render is the use-after-free described at g_settingsLock: the settings
+    // thread can reassign the very string being rendered.
+    std::wstring tpl;
+    {
+        AcquireSRWLockShared(&g_settingsLock);
+        tpl = !parsed ? g_settings.named
+              : (g_isChrome && !g_settings.chromeOverride.empty())
+                  ? g_settings.chromeOverride
+                  : g_settings.normal;
+        ReleaseSRWLockShared(&g_settingsLock);
+    }
     if (tpl.empty()) {
         return source;
     }
@@ -1688,28 +1754,13 @@ bool StripIsKnown(void* strip) {
 // used. Factored out of RawTabCount so the name predicate can reuse it rather
 // than open a second, unproved route to the same window.
 
-// REMOVED: a second structural proof that asked the candidate strip for its
-// active tab's title and compared it with the correlated window's parsed title.
-// It CRASHED Edge - c0000409 subcode 0xa, FAST_FAIL_GUARD_ICALL_CHECK_FAILURE.
+// THE RULE THIS CHAIN OBEYS: a validator that must dereference the thing it is
+// validating is not a validator. The type has to be established from OUTSIDE the
+// object, which is what the AddTab and CloseWebContentsAt hooks do - the browser
+// hands them a TabStripModel as `this`, so nothing unproved is ever dereferenced.
 //
-// The reasoning was sound and the implementation was not. g_seenStrips exists
-// precisely so that a candidate is never TOUCHED before it is known to be a
-// TabStripModel; that check validated the candidate BY DEREFERENCING IT, which
-// is the one thing it must not do. `PlausiblePointer` proves memory is committed
-// and readable, never that it holds the type expected - so on the wrong
-// candidate, GetActiveWebContents read a garbage vtable pointer and Chromium's
-// Control Flow Guard killed the process on the indirect call.
-//
-// This is the v0.5 lesson in a new costume, and worth restating in the form it
-// took here: a validator that must dereference the thing it is validating is not
-// a validator. Any replacement has to establish the type from OUTSIDE the
-// object - which is exactly what the AddTab and CloseWebContentsAt hooks now do:
-// the browser hands them a TabStripModel as `this`, so no guess is involved and
-// nothing unproved is ever dereferenced.
-//
-// (SendDetachWebContentsNotifications would also have worked, but it has
-// internal linkage - no mangled name - and reaching it means resolving with
-// noUndecoratedSymbols off, measured at >14 min and 2.8 GB. See docs/.)
+// It is written down because breaking it crashed Edge outright. See
+// docs/development-log.md.
 
 // The tab strip for a BrowserWindowInterface we already hold.
 //
@@ -1728,34 +1779,21 @@ void* StripForInterface(void* bwi) {
 
     // BOTH candidates, with the structural gate deciding between them.
     //
-    // Review round 1 cut this to the adjusted candidate alone, on the argument
-    // that GetBrowserForMigrationOnly is provably the interface-to-complete-
-    // object thunk - verified by disassembly in both builds (Chrome
-    // `lea rax,[rcx-0x50]`, Edge `lea rax,[rcx-0x90]`) - so its result IS the
-    // Browser and a second guess can add nothing.
+    // Do not reduce this to the adjusted candidate alone on the reasoning that
+    // GetBrowserForMigrationOnly is provably the interface-to-complete-object
+    // thunk. That disassembly is correct and the conclusion does not follow:
+    // this iterator hands out the pointer GetTabStripModel already wants, so
+    // applying the thunk over-adjusts and reads a member off the wrong object.
+    // Tried, measured at 0 of 76 windows correlated, reverted - the details are
+    // in docs/development-log.md.
     //
-    // The disassembly is right. The conclusion was wrong, and it cost the
-    // favicon feature entirely. Measured on a live session after that change:
-    // correlation succeeded for 0 of 76 windows in one process and 0 of 6 in
-    // another - a total symbol-layer failure - with the adjusted candidate
-    // yielding a plausible pointer that sat 17 MB from the nearest address the
-    // browser had ever actually used as a TabStripModel. The adjustment is real;
-    // the premise that it applies HERE is not. The pointer this iterator hands
-    // out is already the `this` GetTabStripModel wants, so applying the thunk
-    // over-adjusts and reads a member off the wrong object.
-    //
-    // That is precisely the case the gate exists to catch, and it caught it:
-    // nothing wrong was ever trusted, the layer just went silent. Which is the
-    // argument for probing rather than reasoning - `StripIsKnown` accepts only a
-    // pointer the browser ITSELF has used as a TabStripModel, so trying both and
-    // keeping what proves out is a proof, not a guess.
-    //
-    // What was legitimate in the review's concern is kept. GetTabStripModel is a
-    // plain member load (Chrome `mov rax,[rcx+0x138]`, Edge `mov rax,[rcx+0x250]`),
-    // so a wrong `this` reads hundreds of bytes past an address we only know is
-    // readable somewhere. Each candidate's whole span is therefore validated
-    // BEFORE the accessor touches it - the check the old two-candidate version
-    // genuinely lacked.
+    // Probing beats reasoning here only because acceptance is a proof:
+    // StripIsKnown takes a pointer the browser ITSELF has used as a
+    // TabStripModel. And GetTabStripModel is a plain member load (Chrome
+    // `mov rax,[rcx+0x138]`, Edge `mov rax,[rcx+0x250]`), so a wrong `this`
+    // reads hundreds of bytes past an address known only to be readable
+    // somewhere - which is why each candidate's whole span is validated BEFORE
+    // the accessor touches it.
     constexpr size_t kMaxMemberOffset = 0x400;
     void* const      candidates[]     = {g_toBrowser(bwi), bwi};
 
@@ -1827,22 +1865,14 @@ int RawTabCount(void* controller) {
 // The named-window predicate
 //
 // THE PROBLEM. "The title did not parse" is not a predicate for "the user named
-// this window", and shipping as if it were put a fabricated tab count on an
-// extension window (`⁰¹ QuicKey`), on every undocked DevTools window, and on an
-// installed PWA (`⁰¹ YouTube - (1889) YouTube`). All three are Browser objects
-// with a metadata controller and a one-tab strip, so every condition the old
-// inference tested was satisfied.
+// this window". An extension window, an undocked DevTools window and an
+// installed PWA are all Browser objects with a metadata controller and a one-tab
+// strip, so every condition that inference tested was satisfied - and all three
+// got a fabricated tab count. The predicate must be able to REFUSE TO ANSWER
+// rather than guess, which is what the kUnknown case is for.
 //
-// AN APPROACH THAT WAS BUILT, MEASURED AND REMOVED. Chromium's title getter
-// takes an `include_app_name` flag that a user title short-circuits ahead of, so
-// comparing the two flag values looked like a free semantic test. Measured: on
-// the steady-state title path Chromium only ever calls it with the flag SET.
-// The other value arrives only during window construction, so for a window that
-// is named later the comparison would be between strings captured at different
-// times - which is not merely useless but WRONG, since a construction-time
-// "Untitled" against a post-naming "MyWindow" reads as "not named". It was
-// removed rather than patched with a generation counter, because the evidence it
-// needs does not exist on the path that matters.
+// An `include_app_name` comparison was built, measured and removed before this;
+// see docs/development-log.md for why the evidence it needs does not exist.
 //
 // WHAT IS USED INSTEAD. BrowserLiveTabContext::GetUserTitle() returns the user
 // title itself, out of line and callable. Emptiness is the whole answer, and
@@ -2480,37 +2510,90 @@ void ForgetWindow(HWND hWnd) {
     }
 }
 
-struct CorrSearch {
-    const std::wstring* want    = nullptr;
-    HWND                found   = nullptr;
-    int                 matches = 0;
+// One pass over the desktop's browser frames, reusable by every match in a
+// sweep.
+//
+// Both matchers below used to run their own EnumWindows, and the sweep calls one
+// of them PER UNCORRELATED WINDOW - so a sweep over N of them cost N desktop-wide
+// enumerations plus N x M title decompositions, on the browser UI thread, every
+// three seconds. It is not transient either: two windows showing the same page
+// can never disambiguate, by design, so those windows never correlate and pay
+// that cost for the life of the session.
+//
+// Building the candidate list once per sweep makes it one enumeration and one
+// decomposition per frame regardless of how many controllers are looking.
+struct FrameSnapshot {
+    HWND         hWnd      = nullptr;
+    std::wstring source;    // remembered original if known, else the live text
+    bool         fromState = false;
+    std::wstring pageTitle; // {title} decomposed from a remembered original
 };
 
-BOOL CALLBACK CorrEnumProc(HWND hWnd, LPARAM lp) {
-    auto* s = reinterpret_cast<CorrSearch*>(lp);
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid != GetCurrentProcessId() || !IsBrowserFrame(hWnd)) return TRUE;
+void BuildFrameSnapshot(std::vector<FrameSnapshot>* out, bool needPageTitles) {
+    struct Ctx {
+        std::vector<HWND> frames;
+    } ctx;
+    EnumWindows(
+        [](HWND h, LPARAM lp) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(h, &pid);
+            if (pid == GetCurrentProcessId() && IsBrowserFrame(h)) {
+                reinterpret_cast<Ctx*>(lp)->frames.push_back(h);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&ctx));
 
-    std::wstring src;
-    {
-        AcquireSRWLockShared(&g_lock);
-        const auto it = g_states.find(hWnd);
+    out->clear();
+    out->reserve(ctx.frames.size());
+
+    // One lock acquisition for the whole list rather than one per window.
+    AcquireSRWLockShared(&g_lock);
+    for (HWND h : ctx.frames) {
+        FrameSnapshot fs;
+        fs.hWnd = h;
+        const auto it = g_states.find(h);
         if (it != g_states.end() && !it->second.source.empty()) {
-            src = it->second.source;
+            fs.source    = it->second.source;
+            fs.fromState = true;
         }
-        ReleaseSRWLockShared(&g_lock);
+        out->push_back(std::move(fs));
     }
-    if (src.empty()) {
-        WCHAR buf[1024];
-        const int n = GetWindowTextW(hWnd, buf, ARRAYSIZE(buf));
-        if (n > 0) src.assign(buf, static_cast<size_t>(n));
+    ReleaseSRWLockShared(&g_lock);
+
+    // GetWindowTextW crosses to the window's thread and Decompose is pure work;
+    // neither belongs under the lock.
+    for (FrameSnapshot& fs : *out) {
+        if (!fs.fromState) {
+            WCHAR     buf[1024];
+            const int n = GetWindowTextW(fs.hWnd, buf, ARRAYSIZE(buf));
+            if (n > 0) fs.source.assign(buf, static_cast<size_t>(n));
+            continue;
+        }
+        // Only a REMEMBERED original is decomposed. What is on screen right now
+        // may be this mod's own output, and matching against that would compare
+        // a page title with a composed one.
+        if (needPageTitles) {
+            Fields f;
+            if (Decompose(fs.source, g_grammar, &f) && !f.title.empty()) {
+                fs.pageTitle = f.title;
+            }
+        }
     }
-    if (!src.empty() && src == *s->want) {
-        ++s->matches;
-        s->found = hWnd;
+}
+
+// Unique-match or nothing. Two windows sharing the key is a real situation and
+// picking either would put one window's tab count and favicon on the other.
+int MatchInSnapshot(const std::vector<FrameSnapshot>& snap,
+                    const std::wstring& want, bool byPageTitle, HWND* found) {
+    int matches = 0;
+    for (const FrameSnapshot& fs : snap) {
+        const std::wstring& key = byPageTitle ? fs.pageTitle : fs.source;
+        if (key.empty() || key != want) continue;
+        ++matches;
+        *found = fs.hWnd;
     }
-    return TRUE;
+    return matches;
 }
 
 // Same as TryCorrelate, but the key is the ACTIVE TAB's title rather than the
@@ -2518,50 +2601,26 @@ BOOL CALLBACK CorrEnumProc(HWND hWnd, LPARAM lp) {
 // first and its {title} field compared. Uniqueness is still required: two
 // windows showing the same page is entirely possible, and picking either would
 // put one window's tab count on the other.
-struct PageSearch {
-    const std::wstring* want    = nullptr;
-    HWND                found   = nullptr;
-    int                 matches = 0;
-};
-
-BOOL CALLBACK PageEnumProc(HWND hWnd, LPARAM lp) {
-    auto* s = reinterpret_cast<PageSearch*>(lp);
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid != GetCurrentProcessId() || !IsBrowserFrame(hWnd)) return TRUE;
-
-    std::wstring src;
-    {
-        AcquireSRWLockShared(&g_lock);
-        const auto it = g_states.find(hWnd);
-        if (it != g_states.end() && !it->second.source.empty()) {
-            src = it->second.source;
-        }
-        ReleaseSRWLockShared(&g_lock);
-    }
-    if (src.empty()) return TRUE;  // never seen; nothing trustworthy to compare
-
-    Fields f;
-    if (!Decompose(src, g_grammar, &f)) return TRUE;
-    if (!f.title.empty() && f.title == *s->want) {
-        ++s->matches;
-        s->found = hWnd;
-    }
-    return TRUE;
-}
-
-void TryCorrelateByPageTitle(void* controller, const std::wstring& pageTitle) {
+void TryCorrelateByPageTitle(void* controller, const std::wstring& pageTitle,
+                             const std::vector<FrameSnapshot>* snap = nullptr) {
     if (!controller || pageTitle.empty()) return;
     if (HwndForController(controller)) return;
     if (!InterlockedCompareExchange(&g_ready, 0, 0)) return;  // no grammar yet
 
-    PageSearch s;
-    s.want = &pageTitle;
-    EnumWindows(PageEnumProc, reinterpret_cast<LPARAM>(&s));
-    if (s.matches != 1) return;
+    // The sweep supplies a shared snapshot; the single-window callers do not and
+    // pay for their own, which is exactly what they cost before.
+    std::vector<FrameSnapshot> local;
+    if (!snap) {
+        BuildFrameSnapshot(&local, /*needPageTitles=*/true);
+        snap = &local;
+    }
+
+    HWND      found = nullptr;
+    const int matches = MatchInSnapshot(*snap, pageTitle, true, &found);
+    if (matches != 1) return;
 
     AcquireSRWLockExclusive(&g_corrLock);
-    if (g_ctrlHwnd.size() < 512) g_ctrlHwnd[controller] = s.found;
+    if (g_ctrlHwnd.size() < 512) g_ctrlHwnd[controller] = found;
     ReleaseSRWLockExclusive(&g_corrLock);
 
     if (g_settings.verbose) {
@@ -2571,14 +2630,15 @@ void TryCorrelateByPageTitle(void* controller, const std::wstring& pageTitle) {
     std::wstring source;
     {
         AcquireSRWLockShared(&g_lock);
-        const auto it = g_states.find(s.found);
+        const auto it = g_states.find(found);
         if (it != g_states.end()) source = it->second.source;
         ReleaseSRWLockShared(&g_lock);
     }
-    OnControllerCorrelated(s.found, controller, source);
+    OnControllerCorrelated(found, controller, source);
 }
 
-void TryCorrelate(void* controller, const std::wstring& delegateTitle) {
+void TryCorrelate(void* controller, const std::wstring& delegateTitle,
+                  const std::vector<FrameSnapshot>* snap = nullptr) {
     if (!controller || delegateTitle.empty()) return;
     if (HwndForController(controller)) return;
 
@@ -2595,27 +2655,34 @@ void TryCorrelate(void* controller, const std::wstring& delegateTitle) {
         if (tooSoon) return;
     }
 
-    CorrSearch s;
-    s.want = &delegateTitle;
-    EnumWindows(CorrEnumProc, reinterpret_cast<LPARAM>(&s));
-    if (s.matches != 1) {
-        if (g_settings.verbose && s.matches > 1) {
+    std::vector<FrameSnapshot> local;
+    if (!snap) {
+        // Page titles are not needed on this path, so they are not computed -
+        // that is the per-frame Decompose skipped.
+        BuildFrameSnapshot(&local, /*needPageTitles=*/false);
+        snap = &local;
+    }
+
+    HWND      found   = nullptr;
+    const int matches = MatchInSnapshot(*snap, delegateTitle, false, &found);
+    if (matches != 1) {
+        if (g_settings.verbose && matches > 1) {
             // Refusing is the correct outcome, but it is indistinguishable from
             // the feature not working unless it says so.
             Wh_Log(L"not matching a window: %d of them share the title '%s'",
-                   s.matches, delegateTitle.c_str());
+                   matches, delegateTitle.c_str());
         }
         return;
     }
 
     AcquireSRWLockExclusive(&g_corrLock);
-    if (g_ctrlHwnd.size() < 512) g_ctrlHwnd[controller] = s.found;
+    if (g_ctrlHwnd.size() < 512) g_ctrlHwnd[controller] = found;
     ReleaseSRWLockExclusive(&g_corrLock);
 
     if (g_settings.verbose) {
         Wh_Log(L"matched a window by its title: '%s'", delegateTitle.c_str());
     }
-    OnControllerCorrelated(s.found, controller, delegateTitle);
+    OnControllerCorrelated(found, controller, delegateTitle);
 }
 
 // Correlating the window that is updating is not enough: a window that was
@@ -2636,6 +2703,8 @@ ULONGLONG g_lastFullCorrelate = 0;
 
 struct NamedSweep {
     int correlated = 0;
+    // Built once for the whole sweep and shared by every window it visits.
+    std::vector<FrameSnapshot> frames;
 };
 
 // The active tab's page title for a strip we already have, read through a const
@@ -2668,7 +2737,7 @@ bool NamedSweepTrampoline(void* target, void* bwi) {
     // A named window matches on its name, which is also its window text.
     std::wstring name;
     if (QueryUserTitleForStrip(strip, &name) == Named::kYes && !name.empty()) {
-        TryCorrelate(controller, name);
+        TryCorrelate(controller, name, &sweep->frames);
         if (HwndForController(controller)) ++sweep->correlated;
         return true;
     }
@@ -2685,7 +2754,7 @@ bool NamedSweepTrampoline(void* target, void* bwi) {
     // never receive a tab count or a refreshed favicon.
     std::wstring page;
     if (!ActivePageTitleForStrip(strip, &page) || page.empty()) return true;
-    TryCorrelateByPageTitle(controller, page);
+    TryCorrelateByPageTitle(controller, page, &sweep->frames);
     if (HwndForController(controller)) ++sweep->correlated;
     return true;
 }
@@ -2700,6 +2769,10 @@ void CorrelateAllNamedWindows() {
     g_lastFullCorrelate = now;
 
     NamedSweep sweep;
+    // ONE enumeration and one decomposition per frame for the whole sweep,
+    // instead of one of each per uncorrelated window.
+    BuildFrameSnapshot(&sweep.frames, /*needPageTitles=*/true);
+
     FunctionRefAbi ref{&sweep, &NamedSweepTrampoline};
     g_forEachBwi(&ref);
     if (sweep.correlated && g_settings.verbose) {
@@ -2927,6 +3000,14 @@ bool Install(HMODULE mod) {
     // noUndecoratedSymbols matters enormously here: these modules carry ~1.5-1.9
     // million symbols, and skipping the undecorated forms roughly halves the work.
     WH_HOOK_SYMBOLS_OPTIONS options{};
+    // MANDATORY, and omitting it silently defeats the option below. The header
+    // says "Must be set to sizeof(WH_HOOK_SYMBOLS_OPTIONS)" - it is how the
+    // engine knows which fields this struct actually carries, so with it left
+    // zero the call is either rejected or read as carrying nothing, and
+    // noUndecoratedSymbols never takes effect. That is the one setting that
+    // roughly halves the work here, so the cost of forgetting it is a full
+    // enumeration of every symbol in the module.
+    options.optionsSize          = sizeof(options);
     options.noUndecoratedSymbols = TRUE;
 
     if (!WindhawkUtils::HookSymbols(mod, titleHooks,
@@ -2937,8 +3018,9 @@ bool Install(HMODULE mod) {
     // Log RESOLVED OFFSETS, not just "did it resolve". A symbol that resolves
     // to the wrong address is indistinguishable from a working one until it
     // returns nonsense, which is exactly what happened with the favicon chain.
-    // Expected (from the dumps): Chrome pageIcon=0943C9E0 asBitmap=01927440
-    // createHicon=0AC9F450 dtorImage=05277AD0 dtorBitmap=052CA9E0.
+    // The RVAs these produced on the builds this was developed against are in
+    // docs/development-log.md, for telling "resolved to the wrong place" apart
+    // from "resolved correctly and the callee changed".
     {
         const auto rva = [mod](void* p) -> uintptr_t {
             return p ? reinterpret_cast<uintptr_t>(p) -
@@ -3113,6 +3195,35 @@ void ApplyFavicon(HWND hWnd, void* controller) {
     HICON oldBig   = nullptr;
     {
         AcquireSRWLockExclusive(&g_lock);
+
+        // RE-CHECK THE SETTING HERE, under the same exclusive lock the
+        // favicon-off path uses to detach handles. Without this the two race,
+        // and the failure is subtle enough to be worth spelling out:
+        //
+        //   1. this thread passes the useFavicon check at entry and spends a
+        //      long time inside BuildFaviconIcon - two icon builds through
+        //      Chromium;
+        //   2. meanwhile the settings thread turns the favicon off, detaches
+        //      every handle and clears iconSaved/iconToken, but has not yet
+        //      sent the originals back;
+        //   3. this thread resumes. The identity guard fails because the token
+        //      was cleared, and needOriginals is true because iconSaved was
+        //      cleared - so WM_GETICON returns THE MOD'S OWN previous favicon
+        //      and it gets recorded as this window's "original";
+        //   4. the settings thread then destroys that handle.
+        //
+        // The window is left with a dangling originalSmall/originalBig, so the
+        // restore at uninstall hands it a destroyed HICON and it ends up blank
+        // instead of back to the browser icon. Bailing here - and destroying
+        // what was just built - makes the detach's lock a strict ordering point
+        // between the two paths.
+        if (!g_settings.useFavicon) {
+            ReleaseSRWLockExclusive(&g_lock);
+            if (small) DestroyIcon(small);
+            if (big)   DestroyIcon(big);
+            return;
+        }
+
         WindowState& st = g_states[hWnd];
         if (!st.iconSaved) {
             st.originalSmall = origSmall;
@@ -3555,7 +3666,58 @@ std::vector<std::wstring> LocaleCandidates() {
     return out;
 }
 
+// Drop state for windows that no longer exist.
+//
+// The WM_NCDESTROY handler cannot carry this on its own: it only runs for
+// windows the mod SUBCLASSED, and subclassing is only ever reached from the
+// symbol layer's correlation paths. In the default configuration - symbols off,
+// which is what most users run - no window is ever subclassed, so nothing was
+// ever pruned, while an entry with two title strings was created for every frame
+// swept and every title written. A long session accumulates one per window ever
+// opened, and a recycled HWND inherits the dead window's remembered original.
+//
+// Pruning here instead makes it independent of any optional feature. Icons owned
+// by a dead window are destroyed rather than restored - there is no window left
+// to restore them to.
+void PruneDeadWindows() {
+    std::vector<std::pair<HWND, WindowState>> dead;
+    {
+        AcquireSRWLockExclusive(&g_lock);
+        for (auto it = g_states.begin(); it != g_states.end();) {
+            if (!IsWindow(it->first)) {
+                dead.emplace_back(it->first, std::move(it->second));
+                it = g_states.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        ReleaseSRWLockExclusive(&g_lock);
+    }
+
+    // Purge the symbol layer's maps too, exactly as the WM_NCDESTROY handler
+    // does. Erasing only g_states was a half-prune: a window can be correlated
+    // and then fail to subclass, which leaves it with entries in the
+    // controller/strip maps and no WM_NCDESTROY handler to ever remove them -
+    // so the very leak this function exists to bound simply moved next door.
+    for (const auto& [hWnd, st] : dead) {
+        syms::ForgetWindow(hWnd);
+    }
+    // Outside the lock: DestroyIcon is a user32 call and holding a lock across
+    // it buys nothing.
+    size_t icons = 0;
+    for (auto& [hWnd, st] : dead) {
+        if (st.oursSmall) { DestroyIcon(st.oursSmall); ++icons; }
+        if (st.oursBig)   { DestroyIcon(st.oursBig);   ++icons; }
+    }
+    if (g_settings.verbose && !dead.empty()) {
+        Wh_Log(L"pruned %zu dead window(s), destroyed %zu icon(s)", dead.size(),
+               icons);
+    }
+}
+
 void SweepAllWindows() {
+    PruneDeadWindows();
+
     struct Ctx {
         std::vector<HWND> frames;
     } ctx;
@@ -3682,8 +3844,14 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         }
     }
 
-    if (!g_settings.suffixOverride.empty()) {
-        g.suffixes.insert(g.suffixes.begin(), g_settings.suffixOverride);
+    std::wstring suffixOverride;
+    {
+        AcquireSRWLockShared(&g_settingsLock);
+        suffixOverride = g_settings.suffixOverride;
+        ReleaseSRWLockShared(&g_settingsLock);
+    }
+    if (!suffixOverride.empty()) {
+        g.suffixes.insert(g.suffixes.begin(), suffixOverride);
         ok = true;
         Wh_Log(L"using suffix override");
     }
@@ -3714,7 +3882,28 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
     // earlier leaves every title untransformed for the whole duration - which
     // looks exactly like the mod being broken. The core feature must never wait
     // on an optional one.
-    if (g_settings.useSymbols && !StopRequested()) {
+    // NOT OFFERED ON CHROME, deliberately, and this is a measurement rather
+    // than a preference.
+    //
+    // The layer resolves against the browser's PDB. Edge's is published on the
+    // Microsoft public symbol server, which is what a NULL symbolServer asks
+    // for, and it resolves in minutes. Chrome's is not there at all, and the
+    // file itself is enormous: the copy this was developed against measured
+    // 5.18 GB on disk. Another catalog mod documents an attempt that pegged a
+    // core for over four hours with noUndecoratedSymbols set. Chrome also ships
+    // every few days, so that cost repeats per build.
+    //
+    // Every Chrome measurement in this mod's own notes was taken against a warm
+    // local cache and was therefore not the user-visible cost at all. Offering a
+    // checkbox whose real price is a multi-gigabyte download and an afternoon of
+    // CPU, per browser update, is not a feature - so Chrome gets the parse-only
+    // mod, which needs no symbols and is what it degrades to anyway.
+    if (g_settings.useSymbols && g_isChrome) {
+        Wh_Log(L"the symbol layer is not offered on Chrome - its debug symbols "
+               L"are a multi-gigabyte download that repeats on every browser "
+               L"update. Titles are still reformatted; {count} and the favicon "
+               L"are unavailable here.");
+    } else if (g_settings.useSymbols && !StopRequested()) {
         Wh_Log(L"resolving symbols (this can take a while on first run)...");
         if (syms::Install(chromium)) {
             InterlockedExchange(&syms::g_enabled, 1);
@@ -3755,6 +3944,7 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
                    InterlockedCompareExchange(&syms::g_enabled, 0, 0)));
     }
 
+    int pruneTick = 0;
     while (!StopRequested()) {
         // Responsive to teardown: many short waits rather than one long one, so
         // an uninstall never waits two seconds for this loop to notice.
@@ -3762,6 +3952,16 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
             Sleep(100);
         }
         if (StopRequested()) break;
+
+        // Prune here as well as on a settings change, and BEFORE any of the
+        // optional-feature guards below, so the default configuration - which
+        // reaches none of them - still bounds its own memory. Once a minute is
+        // ample for something whose only cost is unbounded growth, and it keeps
+        // the exclusive lock out of the way of title composition.
+        if (++pruneTick >= 30) {
+            pruneTick = 0;
+            PruneDeadWindows();
+        }
 
         // Kick the correlation sweep. Correlation is UI-thread-only and used to
         // run only from the title getter, so an IDLE browser correlated nothing
@@ -3855,32 +4055,41 @@ const wchar_t* TemplateForPreset(std::wstring_view id) {
     return nullptr;  // "custom", or an id from a newer version of the mod
 }
 
+// Builds the new settings into a local first, then publishes them under
+// g_settingsLock. Reading the settings themselves involves calls into the
+// engine, which must not happen with a lock held that a browser UI thread wants
+// on every title write; and assigning field by field would leave readers seeing
+// a half-updated set.
 void LoadSettings() {
+    Settings s;
+
     const std::wstring preset =
         WindhawkUtils::StringSetting::make(L"Format.Preset").get();
     if (const wchar_t* tpl = TemplateForPreset(preset); tpl) {
-        g_settings.normal = tpl;
+        s.normal = tpl;
     } else {
-        g_settings.normal =
-            WindhawkUtils::StringSetting::make(L"Format.Custom").get();
+        s.normal = WindhawkUtils::StringSetting::make(L"Format.Custom").get();
     }
-    g_settings.named =
-        WindhawkUtils::StringSetting::make(L"Format.Named").get();
-    g_settings.chromeOverride =
+    s.named  = WindhawkUtils::StringSetting::make(L"Format.Named").get();
+    s.chromeOverride =
         WindhawkUtils::StringSetting::make(L"Format.ChromeOverride").get();
-    g_settings.suffixOverride =
+    s.suffixOverride =
         WindhawkUtils::StringSetting::make(L"Parsing.BrowserSuffix").get();
-    g_settings.enabled = Wh_GetIntSetting(L"Parsing.Enabled") != 0;
-    g_settings.useSymbols = Wh_GetIntSetting(L"Symbols.Enabled") != 0;
-    g_settings.useFavicon = Wh_GetIntSetting(L"Symbols.Favicon") != 0;
-    g_settings.verbose = Wh_GetIntSetting(L"Advanced.VerboseLogging") != 0;
+    s.enabled    = Wh_GetIntSetting(L"Parsing.Enabled") != 0;
+    s.useSymbols = Wh_GetIntSetting(L"Symbols.Enabled") != 0;
+    s.useFavicon = Wh_GetIntSetting(L"Symbols.Favicon") != 0;
+    s.verbose    = Wh_GetIntSetting(L"Advanced.VerboseLogging") != 0;
 
     const int mx = Wh_GetIntSetting(L"Advanced.MaxTitleChars");
-    g_settings.maxChars = (mx > 16) ? static_cast<size_t>(mx) : 512;
+    s.maxChars = (mx > 16) ? static_cast<size_t>(mx) : 512;
 
-    if (g_settings.normal.empty()) {
-        g_settings.normal = L"{title}?( {more})?( - {profile})";
+    if (s.normal.empty()) {
+        s.normal = L"{title}?( {more})?( - {profile})";
     }
+
+    AcquireSRWLockExclusive(&g_settingsLock);
+    g_settings = std::move(s);
+    ReleaseSRWLockExclusive(&g_settingsLock);
 }
 
 }  // namespace
@@ -3948,12 +4157,85 @@ void Wh_ModAfterInit() {
     }
 }
 
-// The two-argument form must return BOOL. Returning FALSE (or declaring this
-// void) makes Windhawk fall back to reloading the whole mod on every settings
-// change, which would drop all per-window state and lose the original titles.
+// Handles a settings change in place, EXCEPT for the one switch that cannot be
+// honoured in place.
+//
+// `Symbols.Enabled` is read exactly once, by the worker, before it enters its
+// maintenance loop. Nothing re-reads it, so turning it ON used to do nothing
+// until the browser restarted; and turning it OFF disabled nothing at all,
+// because `Usable()` consults g_enabled/g_poisoned, which stay set - the hooks
+// remained live and tab counts kept being read. With the whole feature behind
+// that one checkbox, both directions read as "the setting is broken".
+//
+// So that one asks for a reload, which is clean here: Wh_ModUninit restores
+// every original title and icon, and the fresh instance re-sweeps and re-parses
+// from the browser's own text. Everything else is still applied in place,
+// because a reload drops per-window state and the remembered originals with it.
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    *bReload = FALSE;
+    const bool wasSymbols = g_settings.useSymbols;
+    const bool wasFavicon = g_settings.useFavicon;
+
     LoadSettings();
+
+    // Not on Chrome, where the switch genuinely does nothing - the layer is not
+    // offered there at all. Reloading would restore and recompose every title
+    // for no change in behaviour, which the user sees as a flicker, and the
+    // setting's own text tells them it does nothing here.
+    if (g_settings.useSymbols != wasSymbols && !g_isChrome) {
+        Wh_Log(L"Symbols.Enabled changed - reloading the mod so it takes effect");
+        *bReload = TRUE;
+        return TRUE;
+    }
+    *bReload = FALSE;
+
+    // Favicon turned off: hand every window its own icon back NOW.
+    //
+    // ApplyFavicon reads the setting live, so no NEW icons are applied - but
+    // RestoreIcon was only ever reached from Wh_ModUninit, so every window kept
+    // wearing the mod's icon until the mod was disabled or the browser
+    // restarted. The setting's own description promises the original is
+    // restored, so this looked like the option simply not working.
+    if (wasFavicon && !g_settings.useFavicon) {
+        // Detach every handle under the lock, then do the sends with no lock
+        // held. RestoreIcon is not reused here because it takes a reference INTO
+        // the map, and this path cannot hold the lock across its bounded sends -
+        // each one crosses to a browser UI thread, which is where composition
+        // wants the same lock. Detaching first is what makes both safe.
+        struct Pending {
+            HWND  hWnd;
+            HICON origSmall, origBig, oursSmall, oursBig;
+        };
+        std::vector<Pending> pending;
+        {
+            AcquireSRWLockExclusive(&g_lock);
+            for (auto& [hWnd, st] : g_states) {
+                if (!st.iconSaved) continue;
+                pending.push_back({hWnd, st.originalSmall, st.originalBig,
+                                   st.oursSmall, st.oursBig});
+                st.oursSmall = st.oursBig = nullptr;
+                st.iconSaved = false;
+                st.iconToken = 0;
+            }
+            ReleaseSRWLockExclusive(&g_lock);
+        }
+        for (const Pending& p : pending) {
+            if (IsWindow(p.hWnd)) {
+                DWORD_PTR unused = 0;
+                SendMessageTimeoutW(p.hWnd, WM_SETICON, ICON_SMALL,
+                                    reinterpret_cast<LPARAM>(p.origSmall),
+                                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
+                SendMessageTimeoutW(p.hWnd, WM_SETICON, ICON_BIG,
+                                    reinterpret_cast<LPARAM>(p.origBig),
+                                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
+            }
+            if (p.oursSmall) DestroyIcon(p.oursSmall);
+            if (p.oursBig)   DestroyIcon(p.oursBig);
+        }
+        if (!pending.empty()) {
+            Wh_Log(L"favicon turned off - restored %zu icon(s)", pending.size());
+        }
+    }
+
     if (InterlockedCompareExchange(&g_ready, 0, 0)) {
         SweepAllWindows();  // recomposes from cached `source`, not from screen
     }
