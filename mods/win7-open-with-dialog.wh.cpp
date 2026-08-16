@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-open-with-dialog
-// @name            Windows 7 Open With Dialog
-// @description     This mod restores the classic Windows 7 "Open with" dialog on Windows 10 and 11
+// @name            Windows Vista/7 Open With Dialog
+// @description     This mod restores the classic Windows Vista/7 "Open with" dialog on Windows 10 and 11
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -17,8 +17,8 @@
 /*
 # Windows 7 Open With Dialog Recreation
 
-This mod restores the classic Windows 7 **Open with** dialog on Windows 10 and
-11, replacing (when the mod is active) the modern picker with an accurate recreation of the original Windows 7 one while
+This mod restores the classic Windows Vista/7 **Open with** dialog on Windows 10 and
+11, replacing (when the mod is active) the modern picker with an accurate recreation of the original Windows Vista/7 one while
 keeping the original file and application paths untouched.
 
 The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**. The public API and
@@ -29,7 +29,7 @@ classic context-menu paths are designed to fail safely on unsupported builds.
 
 ## Features
 
-- **Windows 7-style dialog**: Recreates the classic layout with recommended and
+- **Accurate Windows Vista/7-style dialog**: Recreates the classic layout with recommended and
   other-program groups, Browse, Web search and the Always use checkbox.
 - **Open with context menu**: Redirects the canonical `openas` command through
   the stable `CLSID_OpenWithMenu` context-menu contract.
@@ -98,14 +98,14 @@ the default.
 // ==WindhawkModSettings==
 /*
 - replaceSystemDialog: true
-  $name: Enable the Windows 7-style picker
+  $name: Enable the Windows Vista/7-style picker
   $description: When enabled, replace Open With through the stable CLSID_OpenWithMenu context-menu contract, SHOpenWithDialog, the exact openas ShellExecute verb, or detours on the real OpenWith.exe server. When disabled, requests are passed to Windows.
 - darkMode: auto
   $name: Window appearance theme
   $description: Visual theme for the dialog window.
   $options:
     - auto: Follow the Windows app theme
-    - light: Always light (classic Windows 7)
+    - light: Always light (classic Windows Vista/7 theme)
     - dark: Always dark
 - showWebLink: true
   $name: Show the Web search link
@@ -3755,10 +3755,22 @@ static std::wstring ExecutableFromProgId(const std::wstring& progId) {
     return ExecutableFromCommand(command);
 }
 
+// The registry fallback path always holds a real executable path, which is
+// why its rows always managed to show a publisher on the second line. The
+// SHAssocEnumHandlers path only holds a name or a ProgID, so it has to earn
+// that path first. Both paths funnel through here so the two groups resolve
+// identically instead of drifting apart again.
+static std::wstring HandlerExecutablePath(const std::wstring& internalName,
+                                          const std::wstring& progId) {
+    std::wstring resolved = ResolveExecutablePath(internalName);
+    if (resolved.empty() && !progId.empty())
+        resolved = ExecutableFromProgId(progId);
+    return resolved;
+}
+
 static std::wstring ExecutableCompanyName(const std::wstring& internalName,
                                           const std::wstring& progId = L"") {
-    std::wstring resolved = ResolveExecutablePath(internalName);
-    if (resolved.empty() && !progId.empty()) resolved = ExecutableFromProgId(progId);
+    const std::wstring resolved = HandlerExecutablePath(internalName, progId);
     if (resolved.empty()) return {};
     return ExecutableVersionString(resolved, L"CompanyName");
 }
@@ -3871,10 +3883,58 @@ static bool EnumerateHandlers(PickerState& state) {
         if (!HandlerExecutableExists(entry.internalName, entry.progId))
             continue;
         entry.recommended = entry.handler->IsRecommended() == S_OK;
-entry.companyName = ExecutableCompanyName(entry.internalName);
+
+        // Give this entry the same footing the registry-enumerated rows
+        // start from: a real executable path. Without it the publisher
+        // lookup gave up immediately, which is why the recommended group
+        // was the only one drawing single-line rows.
+        std::wstring executable =
+            HandlerExecutablePath(entry.internalName, entry.progId);
+        if (executable.empty()) {
+            // Some handlers only ever name a binary through their icon.
+            // Restricted to .exe on purpose - handlers that borrow a glyph
+            // from a shared resource DLL (imageres.dll and friends) would
+            // otherwise be labelled with that DLL's publisher instead of
+            // their own.
+            PWSTR rawIcon = nullptr;
+            int iconIndex = 0;
+            if (SUCCEEDED(entry.handler->GetIconLocation(&rawIcon,
+                                                         &iconIndex)) &&
+                rawIcon) {
+                const std::wstring iconPath = TakeTaskString(rawIcon);
+                PCWSTR iconExtension = PathFindExtensionW(iconPath.c_str());
+                if (iconExtension && !_wcsicmp(iconExtension, L".exe"))
+                    executable = ResolveExecutablePath(iconPath);
+            } else if (rawIcon) {
+                CoTaskMemFree(rawIcon);
+            }
+        }
+
+        if (!executable.empty()) {
+            entry.companyName =
+                ExecutableVersionString(executable, L"CompanyName");
+            // GetUIName can hand back the bare ProgID for handlers with no
+            // FriendlyAppName. The registry path never shows one of those,
+            // so fall back to the same FriendlyAppName/FileDescription
+            // lookup it uses rather than printing an identifier.
+            if (entry.displayName.empty() ||
+                !_wcsicmp(entry.displayName.c_str(),
+                          entry.internalName.c_str())) {
+                RegKeyOwner applicationKey;
+                const std::wstring applicationProgId =
+                    ApplicationProgIdForExecutable(executable);
+                if (!applicationProgId.empty()) {
+                    RegOpenKeyExW(HKEY_CLASSES_ROOT, applicationProgId.c_str(),
+                                  0, KEY_READ, applicationKey.Put());
+                }
+                std::wstring friendly = ApplicationDisplayName(
+                    applicationKey.Get(),
+                    PathFindFileNameW(executable.c_str()), executable);
+                if (!friendly.empty()) entry.displayName = std::move(friendly);
+            }
+        }
         state.handlers.push_back(std::move(entry));
     }
-
 
     std::stable_sort(state.handlers.begin(), state.handlers.end(),
         [](const HandlerEntry& a, const HandlerEntry& b) {
@@ -4053,7 +4113,7 @@ static bool DecodeBase64(PCSTR encoded, std::vector<BYTE>& output) {
     return output.size() == 32u * 32u * 4u;
 }
 
-// Bilinear resampler for the embedded 32x32 BGRA artwork.
+// Bicubic (Catmull-Rom) resampler for the embedded 32x32 BGRA artwork.
 //
 // The header icon used to be handed to a 34x34 SS_REALSIZECONTROL static,
 // which made USER32 stretch a 32x32 icon by a fractional factor with
@@ -4061,6 +4121,76 @@ static bool DecodeBase64(PCSTR encoded, std::vector<BYTE>& output) {
 // and blurry, and it got dramatically worse at non-100% DPI. Producing the
 // icon at exactly the pixel size the control will use, with proper
 // filtering on premultiplied alpha, keeps every edge crisp instead.
+//
+// The filtering itself used to be bilinear, which for this artwork is an
+// upscale in nearly every case (32 native to 40 logical, more once DPI
+// scaling is applied). Bilinear blends only the 2x2 neighbourhood, so an
+// enlarged image loses the crispness of the magnifier's rim and the
+// document's edges. Catmull-Rom looks at 4x4 instead and its negative
+// lobes restore local contrast across an edge, which is the same
+// HighQualityBicubic result GDI+ would give without having to load
+// gdiplus.dll or start a process-wide GDI+ session inside explorer.exe.
+static float CatmullRomWeight(float x) {
+    x = fabsf(x);
+    if (x < 1.0f) return ((1.5f * x - 2.5f) * x) * x + 1.0f;
+    if (x < 2.0f) return ((-0.5f * x + 2.5f) * x - 4.0f) * x + 2.0f;
+    return 0.0f;
+}
+
+// Precomputed filter taps for one axis. The kernel is separable, so the
+// horizontal and vertical passes each reuse one of these for every line
+// instead of recomputing weights per pixel.
+struct ResampleAxis {
+    int taps = 0;
+    std::vector<int> offsets;
+    std::vector<float> weights;
+};
+
+static bool BuildResampleAxis(int sourceSize, int targetSize,
+                              ResampleAxis& axis) {
+    if (sourceSize <= 0 || targetSize <= 0) return false;
+    const float scale = static_cast<float>(sourceSize) / targetSize;
+    // When minifying, widen the kernel to the destination pixel footprint so
+    // the result is an average of everything that falls into it rather than
+    // a sparse sample of it. When magnifying the support stays at the
+    // kernel's natural radius of 2.
+    const float filterScale = scale > 1.0f ? scale : 1.0f;
+    const float support = 2.0f * filterScale;
+    const int taps = static_cast<int>(ceilf(support * 2.0f)) + 1;
+    try {
+        axis.offsets.assign(static_cast<size_t>(taps) * targetSize, 0);
+        axis.weights.assign(static_cast<size_t>(taps) * targetSize, 0.0f);
+    } catch (...) {
+        return false;
+    }
+    axis.taps = taps;
+
+    for (int i = 0; i < targetSize; ++i) {
+        // Sample at pixel centers so the result stays centered rather than
+        // drifting half a pixel toward the top-left corner.
+        const float center = (i + 0.5f) * scale - 0.5f;
+        const int first = static_cast<int>(ceilf(center - support));
+        float total = 0.0f;
+        for (int t = 0; t < taps; ++t) {
+            const int position = first + t;
+            const float weight =
+                CatmullRomWeight((position - center) / filterScale);
+            // Clamp to the edge pixel instead of skipping out-of-range taps,
+            // so the weights still sum to 1 at the border and the artwork
+            // doesn't fade out along its outer row and column.
+            axis.offsets[static_cast<size_t>(i) * taps + t] =
+                std::clamp(position, 0, sourceSize - 1);
+            axis.weights[static_cast<size_t>(i) * taps + t] = weight;
+            total += weight;
+        }
+        if (total != 0.0f) {
+            for (int t = 0; t < taps; ++t)
+                axis.weights[static_cast<size_t>(i) * taps + t] /= total;
+        }
+    }
+    return true;
+}
+
 static bool ResampleIconPixels(const std::vector<BYTE>& source, int sourceSize,
                                int targetSize, std::vector<BYTE>& target) {
     if (sourceSize <= 0 || targetSize <= 0) return false;
@@ -4082,10 +4212,21 @@ static bool ResampleIconPixels(const std::vector<BYTE>& source, int sourceSize,
     // BGRA bleeds the color of fully transparent pixels into the edges and
     // leaves a dark halo around the artwork.
     std::vector<float> premultiplied;
+    std::vector<float> horizontal;
+    ResampleAxis xAxis;
+    ResampleAxis yAxis;
     try {
         premultiplied.assign(
             static_cast<size_t>(sourceSize) * sourceSize * 4u, 0.0f);
+        // Intermediate buffer for the separable pass: resampled across x,
+        // still at the source height.
+        horizontal.assign(
+            static_cast<size_t>(sourceSize) * targetSize * 4u, 0.0f);
     } catch (...) {
+        return false;
+    }
+    if (!BuildResampleAxis(sourceSize, targetSize, xAxis) ||
+        !BuildResampleAxis(sourceSize, targetSize, yAxis)) {
         return false;
     }
     for (size_t i = 0; i < premultiplied.size(); i += 4) {
@@ -4096,45 +4237,73 @@ static bool ResampleIconPixels(const std::vector<BYTE>& source, int sourceSize,
         premultiplied[i + 3] = source[i + 3];
     }
 
-    const float scale = static_cast<float>(sourceSize) / targetSize;
-    for (int y = 0; y < targetSize; ++y) {
-        // Sample at pixel centers so the result stays centered rather than
-        // drifting half a pixel toward the top-left corner.
-        const float sourceY = (y + 0.5f) * scale - 0.5f;
-        int y0 = static_cast<int>(floorf(sourceY));
-        float weightY = sourceY - y0;
-        int y1 = y0 + 1;
-        y0 = std::clamp(y0, 0, sourceSize - 1);
-        y1 = std::clamp(y1, 0, sourceSize - 1);
+    // Horizontal pass: source rows, destination columns.
+    for (int y = 0; y < sourceSize; ++y) {
+        const size_t row = static_cast<size_t>(y) * sourceSize;
+        const size_t outRow = static_cast<size_t>(y) * targetSize;
         for (int x = 0; x < targetSize; ++x) {
-            const float sourceX = (x + 0.5f) * scale - 0.5f;
-            int x0 = static_cast<int>(floorf(sourceX));
-            float weightX = sourceX - x0;
-            int x1 = x0 + 1;
-            x0 = std::clamp(x0, 0, sourceSize - 1);
-            x1 = std::clamp(x1, 0, sourceSize - 1);
+            const size_t tapBase = static_cast<size_t>(x) * xAxis.taps;
+            float accumulator[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            for (int t = 0; t < xAxis.taps; ++t) {
+                const float weight = xAxis.weights[tapBase + t];
+                if (weight == 0.0f) continue;
+                const size_t sample =
+                    (row + xAxis.offsets[tapBase + t]) * 4u;
+                for (int channel = 0; channel < 4; ++channel) {
+                    accumulator[channel] +=
+                        premultiplied[sample + channel] * weight;
+                }
+            }
+            const size_t out = (outRow + x) * 4u;
+            for (int channel = 0; channel < 4; ++channel)
+                horizontal[out + channel] = accumulator[channel];
+        }
+    }
 
-            const size_t i00 =
-                (static_cast<size_t>(y0) * sourceSize + x0) * 4u;
-            const size_t i01 =
-                (static_cast<size_t>(y0) * sourceSize + x1) * 4u;
-            const size_t i10 =
-                (static_cast<size_t>(y1) * sourceSize + x0) * 4u;
-            const size_t i11 =
-                (static_cast<size_t>(y1) * sourceSize + x1) * 4u;
+    // Vertical pass, writing the final 8-bit pixels.
+    for (int y = 0; y < targetSize; ++y) {
+        const size_t tapBase = static_cast<size_t>(y) * yAxis.taps;
+        for (int x = 0; x < targetSize; ++x) {
+            float accumulator[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            for (int t = 0; t < yAxis.taps; ++t) {
+                const float weight = yAxis.weights[tapBase + t];
+                if (weight == 0.0f) continue;
+                const size_t sample =
+                    (static_cast<size_t>(yAxis.offsets[tapBase + t]) *
+                         targetSize + x) * 4u;
+                for (int channel = 0; channel < 4; ++channel) {
+                    accumulator[channel] +=
+                        horizontal[sample + channel] * weight;
+                }
+            }
             const size_t out =
                 (static_cast<size_t>(y) * targetSize + x) * 4u;
-            for (int channel = 0; channel < 4; ++channel) {
-                const float top =
-                    premultiplied[i00 + channel] * (1.0f - weightX) +
-                    premultiplied[i01 + channel] * weightX;
-                const float bottom =
-                    premultiplied[i10 + channel] * (1.0f - weightX) +
-                    premultiplied[i11 + channel] * weightX;
-                const float value =
-                    top * (1.0f - weightY) + bottom * weightY;
-                target[out + channel] = static_cast<BYTE>(
-                    std::clamp(value + 0.5f, 0.0f, 255.0f));
+            // Catmull-Rom overshoots by design - that is what sharpens an
+            // edge - so the result has to be clamped back into range.
+            const float alpha = std::clamp(accumulator[3], 0.0f, 255.0f);
+            target[out + 3] = static_cast<BYTE>(alpha + 0.5f);
+            // Undo the premultiplication. The embedded artwork is stored
+            // with straight alpha (it has pixels whose color exceeds their
+            // own alpha, such as white at alpha 1), CreateIconIndirect
+            // expects the icon bitmap in that same form, and the
+            // targetSize == sourceSize path returns the source untouched -
+            // so emitting premultiplied pixels here would have made the
+            // resampled sizes darker along every antialiased edge than the
+            // native one.
+            if (alpha > 0.0f) {
+                for (int channel = 0; channel < 3; ++channel) {
+                    const float value =
+                        std::clamp(accumulator[channel], 0.0f, alpha) *
+                        255.0f / alpha;
+                    target[out + channel] = static_cast<BYTE>(
+                        std::clamp(value, 0.0f, 255.0f) + 0.5f);
+                }
+            } else {
+                // Fully transparent: no color information survives, and
+                // leaving zeroes here matches how the source encodes it.
+                target[out + 0] = 0;
+                target[out + 1] = 0;
+                target[out + 2] = 0;
             }
         }
     }
@@ -4590,7 +4759,26 @@ static void InitializeList(PickerState& state) {
                                    ? (rcList.right - rcList.left)
                                    : DpiScale(532, dpi);
         const int gap = DpiScale(4, dpi);
-        const int tileWidth = (available - gap) / 2;
+
+        // Two tiles have to fit inside the client area together with
+        // comctl32's own margins and, as soon as the list overflows, a
+        // vertical scrollbar. Sizing them to (client - 4) / 2 left no room
+        // for either: it only ever produced two columns by accident, on
+        // lists long enough that the scrollbar was already up and had
+        // therefore already been subtracted from the client rect. A short
+        // list - the recommended group, typically three entries - got the
+        // full width instead, the pair no longer fit, and the tiles
+        // collapsed into a single stack. Reserve the scrollbar width
+        // whenever it isn't showing yet, so the usable width, and with it
+        // the tile size, is the same in both cases and the list doesn't
+        // re-flow the moment an item is added.
+        const bool scrollbarShown =
+            (GetWindowLongPtrW(state.list, GWL_STYLE) & WS_VSCROLL) != 0;
+        int scrollbarWidth = GetSystemMetrics(SM_CXVSCROLL);
+        if (scrollbarWidth <= 0) scrollbarWidth = DpiScale(17, dpi);
+        const int usable =
+            available - (scrollbarShown ? 0 : scrollbarWidth) - gap;
+        const int tileWidth = usable > 0 ? usable / 2 : available / 2;
 
         // Tile height is derived from what the row actually has to hold
         // rather than from a fixed 48 logical pixels. A hardcoded height
@@ -4798,7 +4986,7 @@ static void Browse(PickerState& state) {
     entry.browsed = true;
     entry.internalName = executable;
     entry.progId = ApplicationProgIdForExecutable(executable);
-entry.companyName = ExecutableCompanyName(executable, entry.progId);
+    entry.companyName = ExecutableCompanyName(executable, entry.progId);
     PCWSTR name = PathFindFileNameW(executable.c_str());
     entry.displayName = name && *name ? name : executable;
     if (entry.displayName.size() > 4 &&
