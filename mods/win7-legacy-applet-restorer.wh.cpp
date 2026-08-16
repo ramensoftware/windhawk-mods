@@ -1628,6 +1628,18 @@ LSTATUS ProvideDwordValue(LPBYTE lpData, LPDWORD lpcbData, DWORD value) {
     return ERROR_SUCCESS;
 }
 
+// restoreWin7CategoryTaskLinks and enableCategoryAppearanceLinks only affect
+// the *content* of the generated task-links XML; the XML itself is only ever
+// served when restoreClassicTaskLinks is on. Gate the four TasksFileUrl query
+// sites below on this instead of on restoreClassicTaskLinks alone, so turning
+// off just "Restore Classic Task Links" doesn't silently disable the other
+// two settings as well.
+static bool AnyTaskLinksEnabled() {
+    return g_settings.restoreClassicTaskLinks.load() ||
+           g_settings.restoreWin7CategoryTaskLinks.load() ||
+           g_settings.enableCategoryAppearanceLinks.load();
+}
+
 bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                      LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData, LSTATUS& outStatus) {
     ClassifyResult cr = ClassifyPath(path);
@@ -1642,7 +1654,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     if (cr.kind == ItemKind::RealCplTaskUrl) {
         Wh_Log(L"Providing value for: %s (value=%s)", path.c_str(), valueName.c_str());
         if (valueName == L"System.Software.TasksFileUrl" &&
-            g_settings.restoreClassicTaskLinks.load()) {
+            AnyTaskLinksEnabled()) {
             std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
             if (!taskLinksPath.empty()) {
                 if (lpType) *lpType = REG_SZ;
@@ -1673,7 +1685,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             return true;
         }
         if (valueName == L"System.Software.TasksFileUrl" &&
-            g_settings.restoreClassicTaskLinks.load()) {
+            AnyTaskLinksEnabled()) {
             std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
             if (!taskLinksPath.empty()) {
                 if (lpType) *lpType = REG_SZ;
@@ -1713,7 +1725,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 if (lpType) *lpType = REG_SZ;
                 std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
                 std::wstring taskFileUrl =
-                    (g_settings.restoreClassicTaskLinks.load() && !taskLinksPath.empty())
+                    (AnyTaskLinksEnabled() && !taskLinksPath.empty())
                         ? taskLinksPath
                         : std::wstring(L"Internal");
                 outStatus = ProvideStringValue(lpData, lpcbData, taskFileUrl);
@@ -1768,7 +1780,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             // displays the classic blue task links beneath it (same mechanism
             // as Personalization).
             if (cr.node == VNode::ClsidRoot && valueName == L"System.Software.TasksFileUrl" &&
-                g_settings.restoreClassicTaskLinks.load()) {
+                AnyTaskLinksEnabled()) {
                 std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
                 if (!taskLinksPath.empty()) {
                     if (lpType) *lpType = REG_SZ;
@@ -1794,6 +1806,20 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
     return false;
 }
 
+// g_injectBitlockerApplet / g_injectTabletPcApplet only say the setting wants
+// the applet; the applet's CLSID data (name, icon, etc.) is only actually
+// built by AddVirtualApplet() when it found a name to use, and it may have
+// failed to (see InitDisplayNames()). Enumerating the CLSID into
+// ControlPanel\NameSpace without the backing entry existing gives Explorer a
+// namespace item whose CLSID lookup falls through to the real registry and
+// fails - a nameless/iconless Control Panel entry. Check that the applet was
+// actually built before advertising it.
+static bool VirtualAppletPresent(const std::wstring& guidLower) {
+    for (const auto& a : g_virtualApplets)
+        if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load()) return true;
+    return false;
+}
+
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
     result.reserve(7);
@@ -1802,9 +1828,9 @@ std::vector<std::wstring> GetNamespaceClsids() {
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
     if (IsHomeGroupAvailable())                     result.push_back(kHomeGroupGuid);
-    if (g_injectBitlockerApplet.load())
+    if (g_injectBitlockerApplet.load() && VirtualAppletPresent(kBitLockerVirtualGuid))
         result.push_back(kBitLockerVirtualGuid);
-    if (g_injectTabletPcApplet.load())
+    if (g_injectTabletPcApplet.load() && VirtualAppletPresent(kTabletPcVirtualGuid))
         result.push_back(kTabletPcVirtualGuid);
     return result;
 }
@@ -2500,6 +2526,13 @@ BOOL Wh_ModInit() {
     // default-false cache).
     LoadSettings();
 
+    // Build display names / virtual applets first: EnsureClassicTaskLinksFile()
+    // generates the task links XML, and its virtual-applet task block depends
+    // on knowing which virtual applets actually got built (see
+    // VirtualAppletPresent()). InitDisplayNames() itself doesn't depend on the
+    // XML, so this ordering doesn't cost anything.
+    InitDisplayNames();
+
     // Generate task links file eagerly to avoid data races
     EnsureClassicTaskLinksFile();
 
@@ -2525,8 +2558,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to get one or more registry functions");
         return FALSE;
     }
-
-    InitDisplayNames();
 
     if (!WindhawkUtils::SetFunctionHook((RegOpenKeyExW_t)pRegOpenKeyExW,       RegOpenKeyExWHook,    &RegOpenKeyExWOriginal))    { Wh_Log(L"Failed to hook RegOpenKeyExW");    return FALSE; }
     if (!WindhawkUtils::SetFunctionHook((RegCloseKey_t)pRegCloseKey,           RegCloseKeyHook,      &RegCloseKeyOriginal))      { Wh_Log(L"Failed to hook RegCloseKey");      return FALSE; }
