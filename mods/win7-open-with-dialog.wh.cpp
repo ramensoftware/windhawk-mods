@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              win7-open-with-dialog
-// @name            Windows Vista/7 Open With Dialog
+// @name            Windows Vista/7 Open With Dialog Restorer
 // @description     This mod restores the classic Windows Vista/7 "Open with" dialog on Windows 10 and 11
 // @version         1.0.0
 // @author          babamohammed
@@ -22,12 +22,11 @@ This mod restores the classic Windows Vista/7 **Open with** dialog on Windows 10
 11, replacing the modern picker with an accurate recreation of the original while
 keeping file and application paths completely untouched.
 
-The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**, the mod is designed
- to work reliably and safely on both current and future Windows versions where possible.
+The mod has been tested primarily on **Windows 10 21H2** and **Windows 11 25H2**, the mod is designed to work reliably and safely on both current and future Windows versions where possible.
 
 ## Screenshot
 
-![openwith](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/openwith.PNG)
+![openwith](https://raw.githubusercontent.com/babamohammed2022/gta-1987-remastered-mod/main/openwith.PNG)
 
 ## Features
 
@@ -657,6 +656,31 @@ class ArgvOwner {
 
 static std::atomic<HWND> g_activeBrowseHwnd{nullptr};
 static std::atomic<bool> g_shuttingDown{false};
+// Thread id of the picker worker while it is running, so the unload path
+// can close any modal window living on that thread (a browse dialog whose
+// HWND wasn't captured yet) via EnumThreadWindows before joining it.
+static std::atomic<DWORD> g_workerThreadId{0};
+
+// Number of threads currently executing one of the mod's blocking hook
+// bodies. The picker hooks block for a user-controlled amount of time, so
+// Wh_ModBeforeUninit - which runs while the hooks are still installed and
+// the trampolines are still callable - signals shutdown and then waits for
+// this to drain. Without the drain, a thread released by g_stopEvent would
+// still be inside mod code (including calls through the original-function
+// trampolines) while Windhawk tears the hooks down and frees the module.
+static std::atomic<LONG> g_hookCallsInFlight{0};
+
+class HookCallGuard {
+   public:
+    HookCallGuard() {
+        g_hookCallsInFlight.fetch_add(1, std::memory_order_acq_rel);
+    }
+    ~HookCallGuard() {
+        g_hookCallsInFlight.fetch_sub(1, std::memory_order_acq_rel);
+    }
+    HookCallGuard(const HookCallGuard&) = delete;
+    HookCallGuard& operator=(const HookCallGuard&) = delete;
+};
 
 struct HandleDeleter {
     void operator()(HANDLE handle) const noexcept {
@@ -4395,6 +4419,30 @@ static constexpr UINT WM_SOW_SETTINGS_CHANGED = WM_APP + 0x218;
 static const wchar_t kWindowClass[] = L"WindhawkStandaloneWin7OpenWith";
 static std::atomic<HWND> g_currentWindow{nullptr};
 
+// The single-instance guard has to work ACROSS processes, not just inside
+// this one: the mod is injected into explorer.exe, OpenWith.exe and
+// rundll32.exe (and into several Explorer processes when "Launch folder
+// windows in a separate process" is on), and each instance has its own
+// g_currentWindow. Without a cross-process check, a picker already on
+// screen in Explorer would not stop OpenWith.exe from putting a second
+// classic picker next to it. The window class name is fixed and unique to
+// this mod, so FindWindowW locates a live picker regardless of which
+// process owns it.
+static HWND FindExistingPickerWindow() {
+    if (HWND current = g_currentWindow.load(std::memory_order_acquire))
+        return current;
+    HWND foreign = FindWindowW(kWindowClass, nullptr);
+    return foreign && IsWindow(foreign) ? foreign : nullptr;
+}
+
+// Raises an existing picker, including one owned by another process.
+// Posting WM_SOW_ACTIVATE lets the owning thread call
+// SetForegroundWindow on itself - calling it from here would be refused
+// by USER32 for a window of a different process.
+static void ActivateExistingPicker(HWND window) {
+    if (window) PostMessageW(window, WM_SOW_ACTIVATE, 0, 0);
+}
+
 static HINSTANCE ModInstance() {
     static HINSTANCE instance = [] {
         HMODULE module = nullptr;
@@ -6094,11 +6142,17 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                 if (index >= 0 && static_cast<size_t>(index) < state->handlers.size()) {
                     // Surface an unlaunchable selection while the dialog
                     // is still open instead of only beeping after it
-                    // closes.
+                    // closes. Shown inside the dialog (the same treatment
+                    // Browse uses for its own error) rather than with a
+                    // modal MessageBox: a nested modal loop here has no
+                    // escape hatch on unload, so StopWorker's join would
+                    // block until the user clicked the box away.
                     if (!SelectedHandlerLaunchable(
                             state->handlers[static_cast<size_t>(index)])) {
-                        MessageBoxW(window, LOC(STR_OPEN_FAILED),
-                                    LOC(STR_TITLE), MB_ICONERROR | MB_OK);
+                        SetWindowTextW(
+                            GetDlgItem(window, IDC_SOW_INSTRUCTION),
+                            LOC(STR_OPEN_FAILED));
+                        MessageBeep(MB_ICONERROR);
                         return 0;
                     }
                     state->chosenIndex = index;
@@ -6544,6 +6598,47 @@ static HRESULT InvokeBrowsed(const PickerState& state,
     return InvokeExecutableWithFile(executable, state.request.path);
 }
 
+// Locates a live IAssocHandler for a selection that was created without one
+// (a Browse pick, or a row from the registry-application fallback list).
+// SHAssocEnumHandlers is re-run for the extension and the handler whose
+// GetName() resolves to the same executable / ProgID is returned.
+// IAssocHandler::MakeDefault on that object is the same route the real
+// dialog takes, so protected-association handling, UserChoice and the
+// SHCNE_ASSOCCHANGED behavior all match a handler picked from the
+// original list.
+static ComPtr<StandaloneAssocHandler> FindAssocHandlerForSelection(
+    const std::wstring& extension, const HandlerEntry& selected) {
+    SHAssocEnumHandlers_t enumerate = ResolveHandlerEnumerator();
+    if (!enumerate || extension.empty() || selected.internalName.empty())
+        return {};
+    ComPtr<StandaloneEnumAssocHandlers> e;
+    if (FAILED(enumerate(extension.c_str(), 0, e.Put())) || !e) return {};
+    for (;;) {
+        StandaloneAssocHandler* raw = nullptr;
+        ULONG fetched = 0;
+        if (e->Next(1, &raw, &fetched) != S_OK || fetched != 1 || !raw) break;
+        ComPtr<StandaloneAssocHandler> handler(raw);
+        PWSTR value = nullptr;
+        std::wstring name;
+        if (SUCCEEDED(handler->GetName(&value)))
+            name = TakeTaskString(value);
+        else if (value)
+            CoTaskMemFree(value);
+        if (name.empty()) continue;
+        if (!_wcsicmp(name.c_str(), selected.internalName.c_str()))
+            return handler;
+        // Some handlers report a bare executable name or a ProgID rather
+        // than the full path; compare through the same normalization the
+        // picker rows use.
+        const std::wstring handlerProgId = ResolveHandlerProgId(name);
+        if (!selected.progId.empty() && !handlerProgId.empty() &&
+            !_wcsicmp(handlerProgId.c_str(), selected.progId.c_str())) {
+            return handler;
+        }
+    }
+    return {};
+}
+
 static HRESULT MakeSelectedDefault(PickerState& state,
                                    HandlerEntry& selected) {
     const std::wstring extension = ExtensionOf(state.request.path);
@@ -6551,22 +6646,46 @@ static HRESULT MakeSelectedDefault(PickerState& state,
 
     if (selected.progId.empty())
         selected.progId = ResolveHandlerProgId(selected.internalName);
-    if (selected.progId.empty() && IsSupportedFile(selected.internalName)) {
-        EnsureUserApplicationRegistration(selected.internalName, extension,
-                                          &selected.progId);
-    }
-    if (selected.progId.empty()) return E_FAIL;
+
+    PCWSTR description = !state.associationDescription.empty()
+        ? state.associationDescription.c_str()
+        : extension.c_str();
 
     HRESULT shellHr = E_NOTIMPL;
     if (selected.handler) {
-        PCWSTR description = !state.associationDescription.empty()
-            ? state.associationDescription.c_str()
-            : extension.c_str();
         shellHr = selected.handler->MakeDefault(description);
         Wh_Log(L"Standalone Open With: IAssocHandler::MakeDefault handler=%s "
                L"progId=%s hr=0x%08X", selected.displayName.c_str(),
                selected.progId.c_str(),
                static_cast<unsigned int>(shellHr));
+    } else {
+        // Browse picks and registry-fallback rows carry no live
+        // IAssocHandler, and only MakeDefault on a real handler applies a
+        // default the way the system dialog does. Recover one: register
+        // the executable under HKCU\Software\Classes\Applications first if
+        // the shell doesn't know it yet (the user explicitly asked for a
+        // persistent default here, so writing user-scope registry state is
+        // the point of this path), then re-enumerate the extension's
+        // handlers and pick the one that matches the selection.
+        ComPtr<StandaloneAssocHandler> handler =
+            FindAssocHandlerForSelection(extension, selected);
+        if (!handler && IsSupportedFile(selected.internalName)) {
+            EnsureUserApplicationRegistration(selected.internalName,
+                                              extension, &selected.progId);
+            handler = FindAssocHandlerForSelection(extension, selected);
+        }
+        if (handler) {
+            shellHr = handler->MakeDefault(description);
+            Wh_Log(L"Standalone Open With: re-enumerated "
+                   L"IAssocHandler::MakeDefault name=%s progId=%s hr=0x%08X",
+                   selected.internalName.c_str(), selected.progId.c_str(),
+                   static_cast<unsigned int>(shellHr));
+        } else {
+            shellHr = E_FAIL;
+            Wh_Log(L"Standalone Open With: no live handler found for "
+                   L"selection name=%s progId=%s",
+                   selected.internalName.c_str(), selected.progId.c_str());
+        }
     }
 
     Wh_Log(L"Standalone Open With: association result extension=%s "
@@ -6715,6 +6834,20 @@ static void ShowPicker(PickerRequest request) {
                                       request.acceptedOut);
     AppModeRestorer appModeRestorer;
     if (g_shuttingDown.load(std::memory_order_acquire) || !IsSupportedFile(request.path)) return;
+    // Last line of the single-instance defense: two processes can race
+    // past the queue-time checks in the same instant (each saw no picker
+    // because neither had created its window yet). The worker owns
+    // exactly one picker, so a foreign window found HERE means this
+    // process lost the race: raise the winner and report Cancelled
+    // through the completion signal's default instead of stacking a
+    // second classic dialog next to it.
+    if (HWND foreign = FindWindowW(kWindowClass, nullptr)) {
+        if (IsWindow(foreign) &&
+            foreign != g_currentWindow.load(std::memory_order_acquire)) {
+            ActivateExistingPicker(foreign);
+            return;
+        }
+    }
     PickerState state;
     state.request = std::move(request);
     RefreshPickerThemeResources(state);
@@ -6758,11 +6891,13 @@ static void ShowPicker(PickerRequest request) {
     HandlerEntry& selected =
         state.handlers[static_cast<size_t>(state.chosenIndex)];
 
-    if (selected.browsed) {
-        EnsureUserApplicationRegistration(selected.internalName,
-                                          ExtensionOf(state.request.path),
-                                          &selected.progId);
-    }
+    // Persistent HKCU state (Applications\<exe>, SupportedTypes, the
+    // OpenWithList MRU and OpenWithProgids) is only ever written on the
+    // explicit "Always use" path, inside MakeSelectedDefault. A one-off
+    // open of a browsed program needs none of it: InvokeBrowsed runs the
+    // executable directly with the file path, and a mod's effects should
+    // disappear when it is disabled unless the user explicitly asked for
+    // a persistent association.
 
     HRESULT defaultHr = S_OK;
     if (state.makeDefaultRequested)
@@ -6795,6 +6930,7 @@ static void ShowPicker(PickerRequest request) {
 }
 
 static void WorkerMain() {
+    g_workerThreadId.store(GetCurrentThreadId(), std::memory_order_release);
     ComApartment apartment(COINIT_APARTMENTTHREADED);
     if (!apartment.Ready()) {
         Wh_Log(L"Standalone Open With: worker COM initialization failed (0x%08X)",
@@ -6850,6 +6986,7 @@ static void WorkerMainNoexcept() {
         g_workerReady.store(false, std::memory_order_release);
         Wh_Log(L"Standalone Open With: worker exception contained");
     }
+    g_workerThreadId.store(0, std::memory_order_release);
     // Mark the thread as finished so StartWorkerIfNeeded can reap it and
     // try again. Without this a worker that failed to start up (COM,
     // common controls or the window class) would leave g_worker engaged
@@ -6932,18 +7069,25 @@ static bool QueuePicker(HWND owner, PCWSTR path,
         return false;
     }
 
-    if (HWND current = g_currentWindow.load(std::memory_order_acquire)) {
-        PostMessageW(current, WM_SOW_ACTIVATE, 0, 0);
-        return false;
+    // A picker is already on screen (or queued) - in this process or in
+    // any other process the mod is injected into. Returning false here
+    // would tell the caller "the mod declined", and every caller reacts
+    // to that by running the original API - putting the modern Windows
+    // picker on screen NEXT TO the classic one. The request is handled
+    // instead: the existing window is brought to the foreground, exactly
+    // like a second activation of a single-instance dialog.
+    if (HWND current = FindExistingPickerWindow()) {
+        ActivateExistingPicker(current);
+        return true;
     }
 
     std::lock_guard<std::mutex> lock(g_requestMutex);
     if (g_pendingRequest) {
-        return false;
+        return true;
     }
-    if (HWND current = g_currentWindow.load(std::memory_order_acquire)) {
-        PostMessageW(current, WM_SOW_ACTIVATE, 0, 0);
-        return false;
+    if (HWND current = FindExistingPickerWindow()) {
+        ActivateExistingPicker(current);
+        return true;
     }
     try {
         g_pendingRequest.emplace(PickerRequest{std::move(copy), owner, nullptr,
@@ -6965,10 +7109,18 @@ static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
                                         bool setDefaultOnly = false) {
     if (!path ||
         !g_replaceSystemDialog.load(std::memory_order_acquire) ||
-        g_shuttingDown.load(std::memory_order_acquire) ||
-        !StartWorkerIfNeeded()) {
+        g_shuttingDown.load(std::memory_order_acquire)) {
         return PickerOutcome::NotHandled;
     }
+
+    // Absorb the request before paying for a worker thread when a picker
+    // is already on screen, possibly in another injected process.
+    if (HWND existing = FindExistingPickerWindow()) {
+        ActivateExistingPicker(existing);
+        return PickerOutcome::Cancelled;
+    }
+
+    if (!StartWorkerIfNeeded()) return PickerOutcome::NotHandled;
 
     std::wstring copy;
     try {
@@ -6985,9 +7137,18 @@ static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
     std::atomic<bool> accepted{false};
     {
         std::lock_guard<std::mutex> lock(g_requestMutex);
-        if (g_pendingRequest ||
-            g_currentWindow.load(std::memory_order_acquire)) {
-            return PickerOutcome::NotHandled;
+        HWND existing = FindExistingPickerWindow();
+        if (g_pendingRequest || existing) {
+            // A picker is already up (or queued) - here or in another
+            // injected process. NotHandled would run the original API
+            // and stack the modern Windows picker next to the classic
+            // one, so the second request is absorbed instead: raise the
+            // existing dialog and report Cancelled - no program was
+            // launched for THIS request, which is exactly what
+            // ERROR_CANCELLED tells the caller, and unlike Accepted it
+            // doesn't trick callers into "a program ran" cleanup.
+            ActivateExistingPicker(existing);
+            return PickerOutcome::Cancelled;
         }
         try {
             g_pendingRequest.emplace(
@@ -7029,9 +7190,15 @@ static PickerOutcome QueuePickerAndWait(HWND owner, PCWSTR path,
             }
         }
     }
-    // completedIndex 1 is g_stopEvent: the mod is unloading, the picker
-    // never reached a decision, so let the original API handle it.
-    if (completedIndex != 0) return PickerOutcome::NotHandled;
+    // completedIndex 1 is g_stopEvent: the mod is unloading and the picker
+    // was torn down without reaching a decision. Report Cancelled, NOT
+    // NotHandled: NotHandled would send this thread into the original API
+    // - typically a modal system dialog that blocks for a user-controlled
+    // amount of time - while Wh_ModBeforeUninit is waiting for in-flight
+    // hook calls to drain before Windhawk removes the hooks and frees the
+    // module. Cancelled is also what the caller would have seen had the
+    // user closed the (already dismissed) picker themselves.
+    if (completedIndex != 0) return PickerOutcome::Cancelled;
     return accepted.load(std::memory_order_acquire) ? PickerOutcome::Accepted
                                                     : PickerOutcome::Cancelled;
 }
@@ -7259,6 +7426,7 @@ static bool InvocationUsesOpenAs(IContextMenu* self,
 
 static HRESULT STDMETHODCALLTYPE OpenWithMenuInvokeCommandHook(
     IContextMenu* self, LPCMINVOKECOMMANDINFO info) {
+    HookCallGuard hookCallGuard;
     try {
         std::wstring path;
         int openAsOffset = -1;
@@ -7593,6 +7761,7 @@ static HRESULT STDMETHODCALLTYPE ServerSetSiteHook(IObjectWithSite* self,
 }
 
 static HRESULT STDMETHODCALLTYPE ServerExecuteHook(IExecuteCommand* self) {
+    HookCallGuard hookCallGuard;
     try {
         ServerOpenWithState state = TakeServerState(ServerIdentity(self));
         if (!state.owner) state.owner = GetForegroundWindow();
@@ -7618,6 +7787,7 @@ static HRESULT STDMETHODCALLTYPE ServerExecuteHook(IExecuteCommand* self) {
 
 static HRESULT STDMETHODCALLTYPE ServerLauncherLaunchHook(
     StandaloneOpenWithLauncher* self, HWND owner, PCWSTR path, DWORD flags) {
+    HookCallGuard hookCallGuard;
     try {
         const bool setDefaultOnly = ShouldSetDefaultOnly(owner, flags);
         Wh_Log(L"Standalone Open With: server Launch path=%s owner=%p "
@@ -7778,6 +7948,7 @@ static ProcessEntryPoint_t OpenWithEntryPointOriginal = nullptr;
 static std::wstring g_directOpenWithPath;
 
 static void WINAPI OpenWithEntryPointHook() {
+    HookCallGuard hookCallGuard;
     Wh_Log(L"Standalone Open With: intercepted direct OpenWith.exe entry "
            L"path=%s", g_directOpenWithPath.c_str());
     bool handled = false;
@@ -7876,6 +8047,7 @@ static bool IsOpenAsVerb(PCWSTR verb) {
 }
 
 static HRESULT WINAPI SHOpenWithDialogHook(HWND owner, const OPENASINFO* info) {
+    HookCallGuard hookCallGuard;
     try {
         if (info && (info->oaifInFlags & OAIF_EXEC) &&
             g_replaceSystemDialog.load(std::memory_order_acquire) &&
@@ -7907,6 +8079,7 @@ static HRESULT WINAPI SHOpenWithDialogHook(HWND owner, const OPENASINFO* info) {
 }
 
 static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
+    HookCallGuard hookCallGuard;
     try {
         if (info && IsOpenAsVerb(info->lpVerb) &&
             g_replaceSystemDialog.load(std::memory_order_acquire) &&
@@ -7946,6 +8119,7 @@ static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
 static HINSTANCE WINAPI ShellExecuteWHook(HWND owner, LPCWSTR verb, LPCWSTR file,
                                           LPCWSTR parameters, LPCWSTR directory,
                                           INT show) {
+    HookCallGuard hookCallGuard;
     try {
         // Waiting form, like the two sibling hooks: ShellExecuteW is
         // synchronous for "openas" on Windows, so returning as soon as the
@@ -7987,6 +8161,53 @@ static HINSTANCE WINAPI ShellExecuteWHook(HWND owner, LPCWSTR verb, LPCWSTR file
 
 static std::atomic<bool> g_isExplorerProcess{false};
 
+// Posts WM_CLOSE to every window living on the worker thread. Covers the
+// gap the direct g_activeBrowseHwnd / g_currentWindow closes leave open: a
+// modal window the worker is nested in whose HWND was never captured (the
+// browse dialog before BrowseDialogEvents::CaptureWindow first fires, or
+// any other modal loop a shell extension might spin up). Without this the
+// join in StopWorker blocks until the user dismisses that window by hand.
+static BOOL CALLBACK CloseWorkerThreadWindow(HWND window, LPARAM) {
+    PostMessageW(window, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
+static void CloseWorkerThreadWindows() {
+    const DWORD threadId = g_workerThreadId.load(std::memory_order_acquire);
+    if (threadId) EnumThreadWindows(threadId, CloseWorkerThreadWindow, 0);
+}
+
+// Signals shutdown while the hooks are still installed and their
+// original-function trampolines still callable, then waits for every
+// in-flight hook call to leave the mod. Runs from Wh_ModBeforeUninit; the
+// join of the worker thread itself stays in StopWorker (Wh_ModUninit).
+static void DrainHookCalls() {
+    g_shuttingDown.store(true, std::memory_order_release);
+    if (g_stopEvent) SetEvent(g_stopEvent.get());
+    if (HWND browse = g_activeBrowseHwnd.load(std::memory_order_acquire))
+        PostMessageW(browse, WM_CLOSE, 0, 0);
+    if (HWND window = g_currentWindow.load(std::memory_order_acquire))
+        PostMessageW(window, WM_CLOSE, 0, 0);
+    CloseWorkerThreadWindows();
+
+    // The released hook threads return Cancelled straight out of
+    // QueuePickerAndWait (see the g_stopEvent branch there), so this
+    // normally drains in milliseconds. The deadline is a safety net for a
+    // hook thread wedged somewhere outside the mod's control; hanging
+    // Windhawk's unload forever would be worse than the residual risk.
+    const ULONGLONG deadline = GetTickCount64() + 10000;
+    while (g_hookCallsInFlight.load(std::memory_order_acquire) > 0) {
+        if (GetTickCount64() >= deadline) {
+            Wh_Log(L"Standalone Open With: %ld hook call(s) still in flight "
+                   L"at unload deadline",
+                   g_hookCallsInFlight.load(std::memory_order_acquire));
+            break;
+        }
+        CloseWorkerThreadWindows();
+        Sleep(10);
+    }
+}
+
 static void StopWorker() {
     g_shuttingDown.store(true, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent.get());
@@ -7994,9 +8215,29 @@ static void StopWorker() {
         PostMessageW(browse, WM_CLOSE, 0, 0);
     if (HWND window = g_currentWindow.load(std::memory_order_acquire))
         PostMessageW(window, WM_CLOSE, 0, 0);
+    // The worker may be parked in a nested modal loop (a browse dialog
+    // whose HWND wasn't captured yet); close every window on its thread
+    // so the join below cannot block on user input. Repeated because a
+    // modal loop can put a confirmation window up in response to the
+    // first WM_CLOSE; the sweep stops as soon as the worker reports exit.
+    CloseWorkerThreadWindows();
     {
         std::lock_guard<std::mutex> lock(g_workerStartMutex);
         if (g_worker) {
+            const ULONGLONG deadline = GetTickCount64() + 10000;
+            while (!g_workerExited.load(std::memory_order_acquire) &&
+                   GetTickCount64() < deadline) {
+                CloseWorkerThreadWindows();
+                Sleep(10);
+            }
+            if (!g_workerExited.load(std::memory_order_acquire)) {
+                // The join below will block until the thread ends. Every
+                // window on the thread has been closed repeatedly for 10
+                // seconds, so this only fires for a thread wedged outside
+                // the mod's own loops; leave a trace for the report.
+                Wh_Log(L"Standalone Open With: worker did not exit before "
+                       L"the unload deadline, joining anyway");
+            }
             if (g_worker->joinable()) g_worker->join();
             g_worker.reset();
         }
@@ -8107,15 +8348,33 @@ static bool VerifySystemBinariesExist() {
 // SHOpenWithDialog inside shell32.dll, so the SHOpenWithDialog export
 // hook installed by HookShell32Exports (including late loads via the
 // LoadLibraryExW hook) covers it without any rundll32-specific code.
-// Because that include also matches every unrelated rundll32 host,
-// those processes install SHOpenWithDialog and nothing else: the
-// ShellExecuteW/ShellExecuteExW detours are gated on Explorer or
-// OpenWith.exe (g_hookGeneralShellExecute), and the LoadLibraryExW
-// detour is skipped whenever shell32 is already loaded, which is the
-// normal case in rundll32.exe since it imports shell32 statically.
+// The include is kept deliberately: OpenAs_RunDLL is a documented,
+// decades-old entry point that third-party file managers, installers
+// and scripts still invoke to raise the Open With dialog, and if it is
+// not covered those flows get the modern picker while every other route
+// gets the classic one - an inconsistency this mod exists to remove.
+//
+// The broad match is defused in Wh_ModInit rather than paid for: a
+// rundll32 host whose command line does not reference OpenAs_RunDLL
+// returns FALSE before installing any hook, so Windhawk unloads the mod
+// from Control Panel applets, printer/device UI, Control_RunDLL and
+// every other unrelated rundll32 invocation immediately. The rare
+// genuine OpenAs_RunDLL host installs SHOpenWithDialog and nothing
+// else: the ShellExecuteW/ShellExecuteExW detours stay gated on
+// Explorer or OpenWith.exe (g_hookGeneralShellExecute), and the
+// LoadLibraryExW detour is skipped whenever shell32 is already loaded,
+// which is the normal case in rundll32.exe since it imports shell32
+// statically.
 // With @architecture x86-64 only the 64-bit rundll32 is covered: a
 // 64-bit caller's OpenAs_RunDLL uses the 64-bit rundll32, so that route
 // works; 32-bit callers fall outside this mod's architecture scope.
+static bool CommandLineTargetsOpenAsRunDll(LPCWSTR commandLine) {
+    // OpenAs_RunDLL exists only in shell32.dll, so matching the export
+    // name alone is enough and stays correct for every spelling of the
+    // module ("shell32.dll,OpenAs_RunDLL", a full path, quoted forms).
+    return commandLine && StrStrIW(commandLine, L"OpenAs_RunDLL");
+}
+
 BOOL Wh_ModInit() {
     try {
         if (!VerifySystemBinariesExist()) {
@@ -8131,7 +8390,26 @@ BOOL Wh_ModInit() {
             !_wcsicmp(processFileName, L"explorer.exe");
         const bool isOpenWith = processFileName &&
             !_wcsicmp(processFileName, L"OpenWith.exe");
+        const bool isRunDll32 = processFileName &&
+            !_wcsicmp(processFileName, L"rundll32.exe");
         g_isExplorerProcess.store(isExplorer, std::memory_order_release);
+
+        // Defensive narrowing of @include rundll32.exe: a rundll32 host
+        // that is not running shell32's OpenAs_RunDLL can never show an
+        // Open With dialog, so refuse to initialize there at all.
+        // Returning FALSE makes Windhawk unload the mod from that
+        // process immediately - Control Panel applets, printer and
+        // device UI, Control_RunDLL and every other rundll32 invocation
+        // carry zero hooks and zero mod state. Only the genuine
+        // "rundll32 shell32.dll,OpenAs_RunDLL <file>" host proceeds,
+        // and it takes nothing but the SHOpenWithDialog hook.
+        if (isRunDll32 &&
+            !CommandLineTargetsOpenAsRunDll(GetCommandLineW())) {
+            Wh_Log(L"Standalone Open With: rundll32 host without "
+                   L"OpenAs_RunDLL on the command line, skipping "
+                   L"initialization");
+            return FALSE;
+        }
 
         std::wstring directOpenWithPath;
         if (isOpenWith) {
@@ -8260,6 +8538,21 @@ void Wh_ModSettingsChanged() {
         }
     } catch (...) {
         Wh_Log(L"Standalone Open With: settings reload failed");
+    }
+}
+
+// Runs while the hooks are still installed and their trampolines still
+// callable. The picker hooks block for a user-controlled amount of time,
+// so the shutdown signal has to happen HERE and the in-flight calls have
+// to be drained HERE: by Wh_ModUninit the hooks are already removed, and
+// a thread released only then would keep executing mod code (including
+// original-function trampoline calls that no longer exist) while Windhawk
+// frees the module.
+void Wh_ModBeforeUninit() {
+    try {
+        DrainHookCalls();
+    } catch (...) {
+        Wh_Log(L"Standalone Open With: pre-uninit drain failed");
     }
 }
 
