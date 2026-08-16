@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id            wobbly-windows
 // @name          Wobbly Windows 
-// @description   Adds interactive wobbly physics when dragging or resizing windows
+// @description   Adds interactive wobbly physics when moving or resizing windows.
 // @version       1.0
 // @author        potassiumuncher
 // @github        https://github.com/Potassiumuncher
@@ -46,7 +46,7 @@ Added a setting to capture by Screen instead of printWindow so it is compatable 
   - veryJelly: Very jelly / elastic
   - softWobble: Soft wobble
   - balancedSmooth: Balanced smooth
-  - kdeDefault: KDE-like default
+  - kdeDefault: KDE Plasma-like default
   - verySoft: Very soft / floaty
 
 - corner_radius: 8
@@ -262,6 +262,13 @@ static void CaptureWindowForWobbly(HWND hwnd) {
     BITMAPINFO bmi = {{sizeof(BITMAPINFOHEADER), rawW, -rawH, 1, 32, BI_RGB}};
     void* rawBits = nullptr;
     HBITMAP hbmRaw = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &rawBits, NULL, 0);
+    if (!hbmRaw || !rawBits) {
+        Wh_Log(L"CreateDIBSection failed, skipping capture");
+        if (hbmRaw) DeleteObject(hbmRaw);
+        DeleteDC(hdcMem);
+        ReleaseDC(NULL, hdcScreen);
+        return;
+    }
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hbmRaw);
 
     if (g_captureTranslucentBackdrops.load(std::memory_order_relaxed)) {
@@ -708,22 +715,33 @@ static void ReleaseTimerPeriodIfRaised() {
     }
 }
 
-static void FinishWobblyTracking() {
+static void FinishWobblyTrackingLocalPart(HWND* mainHwndOut, LONG_PTR* oldExStyleOut) {
     g_isMoving = false;
     g_isSettling = false;
     if (g_overlayHwnd) {
         KillTimer(g_overlayHwnd, 1);
         ShowWindow(g_overlayHwnd, SW_HIDE);
     }
-    if (g_mainHwnd && IsWindow(g_mainHwnd)) {
-        SetLayeredWindowAttributes(g_mainHwnd, 0, 255, LWA_ALPHA);
-        if (!(g_oldExStyle & WS_EX_LAYERED)) {
-            SetWindowLongPtrW(g_mainHwnd, GWL_EXSTYLE, g_oldExStyle);
-        }
-    }
     CleanupWobblyD2D();
     ReleaseTimerPeriodIfRaised();
+    *mainHwndOut = g_mainHwnd;
+    *oldExStyleOut = g_oldExStyle;
     g_mainHwnd = NULL;
+}
+
+static void RestoreWindowAfterWobbly(HWND mainHwnd, LONG_PTR oldExStyle) {
+    if (mainHwnd && IsWindow(mainHwnd)) {
+        SetLayeredWindowAttributes(mainHwnd, 0, 255, LWA_ALPHA);
+        if (!(oldExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(mainHwnd, GWL_EXSTYLE, oldExStyle);
+        }
+    }
+}
+
+static void FinishWobblyTracking() {
+    HWND mainHwnd; LONG_PTR oldExStyle;
+    FinishWobblyTrackingLocalPart(&mainHwnd, &oldExStyle);
+    RestoreWindowAfterWobbly(mainHwnd, oldExStyle);
 }
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -731,12 +749,16 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(hwnd, 1);
         DestroyWindow(hwnd);
         return 0;
+    } else if (msg == WM_NCDESTROY) {
+
+        if (g_overlayHwnd == hwnd) g_overlayHwnd = NULL;
+        return DefWindowProc(hwnd, msg, wp, lp);
     } else if (msg == WM_TIMER) {
         if (g_isUnloading.load(std::memory_order_relaxed)) {
             KillTimer(hwnd, 1);
             return 0;
         }
-        std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+        std::unique_lock<std::recursive_mutex> lock(g_wobblyMutex);
         if (g_isMoving || g_isSettling) {
             if (!IsWindow(g_mainHwnd)) {
                 g_isMoving = false;
@@ -771,7 +793,11 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             DrawOverlayFrameD2D();
             
             if (g_isSettling && !g_wwi.wobblying) {
-                FinishWobblyTracking();
+                HWND mainHwnd; LONG_PTR oldExStyle;
+                FinishWobblyTrackingLocalPart(&mainHwnd, &oldExStyle);
+                lock.unlock();
+                RestoreWindowAfterWobbly(mainHwnd, oldExStyle);
+                return 0;
             }
         }
         return 0;
@@ -786,7 +812,10 @@ static void InitializeWobbly(void) {
     oc.lpfnWndProc = OverlayProc; 
     oc.hInstance = g_hInstance;
     oc.lpszClassName = "WobblyOverlayWindow";
-    RegisterClassA(&oc);
+    if (!RegisterClassA(&oc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        Wh_Log(L"RegisterClassA failed, error %u", GetLastError());
+        return;
+    }
     
     g_screenX = GetSystemMetrics(SM_XVIRTUALSCREEN); 
     g_screenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -827,15 +856,24 @@ static void OnEnterSizeMove(HWND hwnd) {
 
     if (!g_engineInitialized) {
         InitializeWobbly();
-        g_engineInitialized = true;
+
+        g_engineInitialized = (g_overlayHwnd != NULL);
     }
+
+    if (!g_overlayHwnd) return;
 
     g_mainHwnd = hwnd;
 
     if (!g_isSettling && !g_isMoving) {
+        g_oldExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if (g_oldExStyle & WS_EX_LAYERED) {
+
+            g_mainHwnd = NULL;
+            return;
+        }
+
         CaptureWindowForWobbly(hwnd);
         
-        g_oldExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_oldExStyle | WS_EX_LAYERED); 
         SetLayeredWindowAttributes(hwnd, 0, 1, LWA_ALPHA);
         
@@ -928,11 +966,30 @@ static void OnExitSizeMove(HWND hwnd) {
 
 LRESULT CALLBACK WobblySubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (msg == g_wmDetach) {
+
+        bool needsRestore = false;
+        LONG_PTR oldExStyle = 0;
+        {
+            std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
+            if (g_mainHwnd == hwnd && (g_isMoving || g_isSettling)) {
+                needsRestore = true;
+                oldExStyle = g_oldExStyle;
+                g_isMoving = false;
+                g_isSettling = false;
+                g_mainHwnd = NULL;
+            }
+        }
+        if (needsRestore) {
+            RestoreWindowAfterWobbly(hwnd, oldExStyle);
+        }
         RemoveWindowSubclass(hwnd, WobblySubclassProc, uIdSubclass);
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
     else if (msg == WM_ENTERSIZEMOVE) {
-        OnEnterSizeMove(hwnd);
+
+        if (!g_isUnloading.load(std::memory_order_relaxed)) {
+            OnEnterSizeMove(hwnd);
+        }
     }
     else if (msg == WM_SIZING || msg == WM_MOVING) {
         OnSizingMoving(hwnd, (LPRECT)lParam);
@@ -1080,8 +1137,13 @@ void Wh_ModUninit() {
 
     if (g_engineInitialized.exchange(false, std::memory_order_seq_cst)) {
         if (g_overlayHwnd) {
-            SendMessageTimeoutW(g_overlayHwnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, NULL);
-            g_overlayHwnd = NULL;
+            HWND overlayToClose = g_overlayHwnd;
+            SendMessageTimeoutW(overlayToClose, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 500, NULL);
+            if (IsWindow(overlayToClose)) {
+                Wh_Log(L"Overlay window did not close during unload; leaving it alive to avoid a dangling class");
+            } else {
+                g_overlayHwnd = NULL;
+            }
         }
 
         std::lock_guard<std::recursive_mutex> lock(g_wobblyMutex);
@@ -1094,7 +1156,13 @@ void Wh_ModUninit() {
     }
 
     if (g_hInstance) {
-        UnregisterClassA("WobblyOverlayWindow", g_hInstance);
+        if (!g_overlayHwnd) {
+            if (!UnregisterClassA("WobblyOverlayWindow", g_hInstance)) {
+                Wh_Log(L"UnregisterClassA failed, error %u", GetLastError());
+            }
+        } else {
+            Wh_Log(L"Skipping UnregisterClassA: overlay window is still alive");
+        }
         g_hInstance = NULL;
     }
 
