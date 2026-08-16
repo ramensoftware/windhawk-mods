@@ -2,7 +2,7 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Prevent Window Activation from Stealing Virtual Desktop
 // @description     Redirect cross-desktop window activation to the current desktop.
-// @version         0.3.13
+// @version         0.3.14
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @include         explorer.exe
@@ -20,10 +20,10 @@ Take back control over your virtual desktops!
 _Effect of redirecting window activation_
 
 Windows can switch you to another virtual desktop just because a window that was left open on that
-desktop is activated. 
+desktop is activated.
 
-Clicking a flashing taskbar button, following a notification, opening an app through its tray icon, 
-or launching something that insists on reusing an existing window can all unexpectedly pull you away 
+Clicking a flashing taskbar button, following a notification, opening an app through its tray icon,
+or launching something that insists on reusing an existing window can all unexpectedly pull you away
 from your current desktop. This mod keeps you where you are and brings the activated window to you instead.
 
 If you don't know what "virtual desktop stealing" is, try this small experiment:
@@ -133,6 +133,12 @@ struct IApplicationViewCollection : IUnknown {
 
 struct IVirtualDesktopManagerInternal : IUnknown {};
 
+// Windows 11 24H2 (build 26100) uses 14 total vtable slots for IID
+// B9E5E94D-233E-49AB-AF5C-2B4541C3AADE: IUnknown at slots 0-2, the
+// callbacks below at slots 3-13, CurrentVirtualDesktopChanged at slot 10,
+// VirtualDesktopSwitched at slot 12, and RemoteVirtualDesktopConnected at
+// slot 13. The older CD403E52-... monitor-aware interface has a different
+// layout, including VirtualDesktopIsPerMonitorChanged, and is not used here.
 struct IVirtualDesktopNotification : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE VirtualDesktopCreated(
         IVirtualDesktop* desktop) = 0;
@@ -193,6 +199,108 @@ template <typename T>
 static T GetVTableFunction(void* object, int index) {
     return reinterpret_cast<T>(
         (*reinterpret_cast<void***>(object))[index]);
+}
+
+enum class RuntimeStartOutcome {
+    Ready,
+    RetryableFailure,
+    Unsupported,
+    Cancelled,
+};
+
+struct RuntimeStartResult {
+    RuntimeStartOutcome outcome;
+    HRESULT hr;
+};
+
+struct RuntimeStartResultSlot {
+    std::atomic<RuntimeStartOutcome> outcome{
+        RuntimeStartOutcome::RetryableFailure};
+    std::atomic<HRESULT> hr{E_PENDING};
+};
+
+static HANDLE g_runtimeCancelEvent = nullptr;  // manual-reset, process lifetime
+
+static void ResetStartResult(RuntimeStartResultSlot* slot) {
+    slot->hr.store(E_PENDING, std::memory_order_relaxed);
+    slot->outcome.store(
+        RuntimeStartOutcome::RetryableFailure,
+        std::memory_order_release);
+}
+
+static void PublishStartResult(
+    RuntimeStartResultSlot* slot,
+    HANDLE readyEvent,
+    RuntimeStartResult result) {
+
+    slot->hr.store(result.hr, std::memory_order_relaxed);
+    slot->outcome.store(result.outcome, std::memory_order_release);
+    SetEvent(readyEvent);
+}
+
+static RuntimeStartResult LoadStartResult(
+    RuntimeStartResultSlot* slot) {
+
+    RuntimeStartOutcome outcome =
+        slot->outcome.load(std::memory_order_acquire);
+
+    return {
+        outcome,
+        slot->hr.load(std::memory_order_relaxed),
+    };
+}
+
+static bool RuntimeCancellationRequested() {
+    return g_runtimeCancelEvent &&
+        WaitForSingleObject(g_runtimeCancelEvent, 0) == WAIT_OBJECT_0;
+}
+
+static RuntimeStartResult RuntimeStartFailure(HRESULT hr) {
+    // ImmersiveShell activation can temporarily return REGDB_E_CLASSNOTREG
+    // during early Explorer startup. Only a caller that positively identified
+    // a missing required private interface may use RuntimeStartUnsupported.
+    return {
+        RuntimeStartOutcome::RetryableFailure,
+        hr,
+    };
+}
+
+static RuntimeStartResult RuntimeStartUnsupported(HRESULT hr) {
+    return {
+        RuntimeStartOutcome::Unsupported,
+        hr,
+    };
+}
+
+static RuntimeStartResult RuntimeStartCancelled() {
+    return {
+        RuntimeStartOutcome::Cancelled,
+        HRESULT_FROM_WIN32(ERROR_CANCELLED),
+    };
+}
+
+static DWORD GetWindowsBuildNumber() {
+    using RtlGetVersion_t = LONG (WINAPI*)(OSVERSIONINFOW* versionInfo);
+
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) {
+        return 0;
+    }
+
+    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+        GetProcAddress(ntdll, "RtlGetVersion"));
+    if (!rtlGetVersion) {
+        return 0;
+    }
+
+    OSVERSIONINFOW versionInfo = {};
+    versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
+
+    if (rtlGetVersion(&versionInfo) != 0) {
+        return 0;
+    }
+
+    return versionInfo.dwBuildNumber;
 }
 
 static bool GuidEqual(const GUID& a, const GUID& b) {
@@ -329,10 +437,9 @@ static thread_local int g_foregroundPolicyDepth = 0;
 
 // Exact window identity supplied by the active foreground-policy view.
 //
-// IApplicationView::GetThumbnailWindow is vtable slot 9 on the Windows 11
-// 24H2+ shell ABI used by this mod. Probing confirmed that calling this slot
-// synchronously from ForegroundViewChanged returns the HWND of the exact view
-// which is driving a cross-desktop activation.
+// The active IApplicationView is mapped to an HWND only through symbol-resolved
+// concrete implementations whose vtable identity is known. Probing confirmed
+// that this returns the HWND of the exact view driving cross-desktop activation.
 //
 // Keep only the plain HWND in TLS. Never carry the raw IApplicationView pointer
 // into the rescue worker apartment.
@@ -660,9 +767,29 @@ using ForegroundViewChanged_t =
 static ForegroundViewChanged_t
     g_foregroundViewChangedOriginal = nullptr;
 
+static void* g_win32ApplicationViewVtable = nullptr;
+static void* g_winRtApplicationViewVtable = nullptr;
+
+using ApplicationViewGetNativeWindow_t =
+    HRESULT (WINAPI*)(void* pThis, HWND* windowHandle);
+
+static ApplicationViewGetNativeWindow_t
+    g_win32ApplicationViewGetNativeWindow = nullptr;
+static ApplicationViewGetNativeWindow_t
+    g_winRtApplicationViewGetNativeWindow = nullptr;
+
+// Hook operations can be applied only after Wh_ModInit has returned. Keep the
+// detours inert until both COM runtimes are ready, and disable them before
+// teardown begins.
+static std::atomic<bool> g_interceptionEnabled{false};
+
 static HRESULT SwitchDesktop_Hook(
     void* pThis,
     IVirtualDesktop* desktop) {
+
+    if (!g_interceptionEnabled.load(std::memory_order_acquire)) {
+        return g_switchDesktopOriginal(pThis, desktop);
+    }
 
     ++g_explicitSwitchEntryDepth;
 
@@ -692,6 +819,10 @@ static HRESULT SwitchDesktop_Hook(
 static HRESULT SwitchDesktopWithAnimation_Hook(
     void* pThis,
     IVirtualDesktop* desktop) {
+
+    if (!g_interceptionEnabled.load(std::memory_order_acquire)) {
+        return g_switchDesktopWithAnimationOriginal(pThis, desktop);
+    }
 
     ++g_explicitSwitchEntryDepth;
 
@@ -725,31 +856,33 @@ static HWND GetForegroundPolicyViewHwnd(
         return nullptr;
     }
 
-    // IApplicationView::GetThumbnailWindow(HWND*) is slot 9 including the
-    // three IUnknown entries. Use the interface vtable so Win32/WinRT views
-    // dispatch to their own implementation.
-    using GetThumbnailWindow_t =
-        HRESULT (*)(IApplicationView*, HWND*);
+    void* vtable = *reinterpret_cast<void**>(view);
+    ApplicationViewGetNativeWindow_t getNativeWindow = nullptr;
 
-    auto getThumbnailWindow =
-        GetVTableFunction<GetThumbnailWindow_t>(
-            view,
-            9);
-
-    if (!getThumbnailWindow) {
+    if (vtable == g_win32ApplicationViewVtable &&
+        g_win32ApplicationViewGetNativeWindow) {
+        getNativeWindow = g_win32ApplicationViewGetNativeWindow;
+    } else if (vtable == g_winRtApplicationViewVtable &&
+               g_winRtApplicationViewGetNativeWindow) {
+        getNativeWindow = g_winRtApplicationViewGetNativeWindow;
+    } else {
+        Wh_Log(
+            L"ForegroundViewChanged: unknown IApplicationView vtable=%p; "
+            L"failing open",
+            vtable);
         return nullptr;
     }
 
     HWND hwnd = nullptr;
     HRESULT hr =
-        getThumbnailWindow(
+        getNativeWindow(
             view,
             &hwnd);
 
     if (FAILED(hr)) {
         Wh_Log(
             L"ForegroundViewChanged: "
-            L"GetThumbnailWindow failed hr=0x%08X",
+            L"v_GetNativeWindow failed hr=0x%08X",
             static_cast<unsigned int>(hr));
         return nullptr;
     }
@@ -762,6 +895,14 @@ static HRESULT ForegroundViewChanged_Hook(
     IVirtualDesktopManagerPrivate* manager,
     IVirtualDesktopSwitchAnimator* animator,
     IApplicationView* view) {
+
+    if (!g_interceptionEnabled.load(std::memory_order_acquire)) {
+        return g_foregroundViewChangedOriginal(
+            pThis,
+            manager,
+            animator,
+            view);
+    }
 
     HWND previousHwnd =
         g_foregroundPolicyHwnd;
@@ -795,7 +936,15 @@ static HRESULT ForegroundViewChanged_Hook(
 static HANDLE g_notificationThread = nullptr;
 static DWORD g_notificationThreadId = 0;
 static HANDLE g_notificationReadyEvent = nullptr;
+static HANDLE g_notificationStopEvent = nullptr;
 static std::atomic<bool> g_notificationReady = false;
+static RuntimeStartResultSlot g_notificationStartResult;
+
+static bool NotificationStopRequested() {
+    return RuntimeCancellationRequested() ||
+        (g_notificationStopEvent &&
+         WaitForSingleObject(g_notificationStopEvent, 0) == WAIT_OBJECT_0);
+}
 
 class VirtualDesktopNotificationListener final
     : public IVirtualDesktopNotification {
@@ -927,6 +1076,20 @@ private:
 };
 
 static DWORD WINAPI NotificationThreadProc(void*) {
+    // Create the thread message queue before doing anything that can block. If
+    // StopNotificationCache posted too early for PostThreadMessage to succeed,
+    // the durable stop event below still prevents entry into GetMessage.
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    if (NotificationStopRequested()) {
+        PublishStartResult(
+            &g_notificationStartResult,
+            g_notificationReadyEvent,
+            RuntimeStartCancelled());
+        return 0;
+    }
+
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     const bool shouldUninitialize = SUCCEEDED(coHr);
 
@@ -934,19 +1097,35 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         Wh_Log(
             L"Notification CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(coHr));
-        SetEvent(g_notificationReadyEvent);
+
+        PublishStartResult(
+            &g_notificationStartResult,
+            g_notificationReadyEvent,
+            NotificationStopRequested()
+                ? RuntimeStartCancelled()
+                : RuntimeStartFailure(coHr));
         return 0;
     }
 
-    // Ensure this STA owns a message queue before registration.
-    MSG msg = {};
-    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (NotificationStopRequested()) {
+        PublishStartResult(
+            &g_notificationStartResult,
+            g_notificationReadyEvent,
+            RuntimeStartCancelled());
+
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+
+        return 0;
+    }
 
     IServiceProvider* serviceProvider = nullptr;
     IVirtualDesktopManagerInternal* managerInternal = nullptr;
     IVirtualDesktopNotificationService* notificationService = nullptr;
     VirtualDesktopNotificationListener* listener = nullptr;
     DWORD cookie = 0;
+    bool unsupported = false;
 
     HRESULT hr = CoCreateInstance(
         kClsidImmersiveShell,
@@ -955,15 +1134,25 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         __uuidof(IServiceProvider),
         reinterpret_cast<void**>(&serviceProvider));
 
-    if (SUCCEEDED(hr) && serviceProvider) {
+    if (SUCCEEDED(hr) && !serviceProvider) {
+        hr = E_FAIL;
+    }
+
+    if (SUCCEEDED(hr) && !NotificationStopRequested()) {
         hr = serviceProvider->QueryService(
             kClsidVirtualDesktopManagerInternal,
             kIidVirtualDesktopManagerInternal24H2,
             reinterpret_cast<void**>(&managerInternal));
 
+        if (hr == E_NOINTERFACE) {
+            unsupported = true;
+        } else if (SUCCEEDED(hr) && !managerInternal) {
+            hr = E_NOINTERFACE;
+            unsupported = true;
+        }
     }
 
-    if (SUCCEEDED(hr) && managerInternal) {
+    if (SUCCEEDED(hr) && !NotificationStopRequested()) {
         auto getCurrentDesktop = GetVTableFunction<
             HRESULT(STDMETHODCALLTYPE*)(
                 void*,
@@ -977,23 +1166,39 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 
         if (SUCCEEDED(currentHr) && currentDesktop) {
             GUID id = {};
-            if (SUCCEEDED(currentDesktop->GetId(&id))) {
+            HRESULT idHr = currentDesktop->GetId(&id);
+            if (SUCCEEDED(idHr)) {
                 StoreCurrentDesktopId(id);
+            } else {
+                hr = idHr;
             }
             currentDesktop->Release();
+        } else {
+            hr = FAILED(currentHr) ? currentHr : E_FAIL;
         }
     }
 
-    if (SUCCEEDED(hr) && serviceProvider) {
+    if (SUCCEEDED(hr) && !NotificationStopRequested()) {
         hr = serviceProvider->QueryService(
             kServiceVirtualDesktopNotification,
             kIidVirtualDesktopNotificationService,
             reinterpret_cast<void**>(&notificationService));
+
+        if (hr == E_NOINTERFACE) {
+            unsupported = true;
+        } else if (SUCCEEDED(hr) && !notificationService) {
+            hr = E_NOINTERFACE;
+            unsupported = true;
+        }
     }
 
-    if (SUCCEEDED(hr) && notificationService) {
+    if (SUCCEEDED(hr) && !NotificationStopRequested()) {
         listener = new VirtualDesktopNotificationListener();
         hr = notificationService->Register(listener, &cookie);
+    }
+
+    if (SUCCEEDED(hr) && !cookie) {
+        hr = E_FAIL;
     }
 
     if (SUCCEEDED(hr) && cookie) {
@@ -1005,15 +1210,33 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         }
     }
 
+    RuntimeStartResult startResult;
+    if (NotificationStopRequested()) {
+        g_notificationReady.store(false, std::memory_order_release);
+        hr = HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        startResult = RuntimeStartCancelled();
+    } else if (g_notificationReady.load(std::memory_order_acquire)) {
+        startResult = {RuntimeStartOutcome::Ready, S_OK};
+    } else {
+        startResult = unsupported
+            ? RuntimeStartUnsupported(hr)
+            : RuntimeStartFailure(hr);
+    }
+
     Wh_Log(
-        L"Notification/cache init hr=0x%08X cookie=%lu ready=%d",
+        L"Notification/cache init hr=0x%08X cookie=%lu ready=%d outcome=%d",
         static_cast<unsigned int>(hr),
         cookie,
-        g_notificationReady.load());
+        g_notificationReady.load(),
+        static_cast<int>(startResult.outcome));
 
-    SetEvent(g_notificationReadyEvent);
+    PublishStartResult(
+        &g_notificationStartResult,
+        g_notificationReadyEvent,
+        startResult);
 
-    if (g_notificationReady.load()) {
+    if (g_notificationReady.load(std::memory_order_acquire) &&
+        !NotificationStopRequested()) {
         while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -1051,19 +1274,36 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     return 0;
 }
 
-static bool StartNotificationCache() {
+static RuntimeStartResult StartNotificationCache() {
     // Each start attempt owns its readiness result. Don't inherit a true value
     // from a previous notification thread that exited during startup retry.
     g_notificationReady.store(false, std::memory_order_release);
+    ResetStartResult(&g_notificationStartResult);
+
+    if (RuntimeCancellationRequested()) {
+        return RuntimeStartCancelled();
+    }
 
     g_notificationReadyEvent =
         CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     if (!g_notificationReadyEvent) {
+        DWORD error = GetLastError();
         Wh_Log(
             L"Create notification-ready event failed error=%lu",
-            GetLastError());
-        return false;
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
+    }
+
+    g_notificationStopEvent =
+        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+    if (!g_notificationStopEvent) {
+        DWORD error = GetLastError();
+        Wh_Log(
+            L"Create notification-stop event failed error=%lu",
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
     }
 
     g_notificationThread =
@@ -1076,38 +1316,77 @@ static bool StartNotificationCache() {
             &g_notificationThreadId);
 
     if (!g_notificationThread) {
+        DWORD error = GetLastError();
         Wh_Log(
             L"Notification CreateThread failed error=%lu",
-            GetLastError());
-        return false;
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
     }
 
-    DWORD waitResult =
-        WaitForSingleObject(g_notificationReadyEvent, 5000);
+    HANDLE waits[] = {
+        g_runtimeCancelEvent,
+        g_notificationReadyEvent,
+    };
 
-    if (waitResult != WAIT_OBJECT_0 ||
-        !g_notificationReady.load()) {
-        Wh_Log(
-            L"Notification/current-desktop cache unavailable "
-            L"(waitResult=%lu)",
-            waitResult);
-        return false;
+    DWORD waitResult = WaitForMultipleObjects(
+        ARRAYSIZE(waits),
+        waits,
+        FALSE,
+        5000);
+
+    if (waitResult == WAIT_OBJECT_0) {
+        return RuntimeStartCancelled();
     }
 
-    return true;
+    if (waitResult == WAIT_OBJECT_0 + 1) {
+        RuntimeStartResult result =
+            LoadStartResult(&g_notificationStartResult);
+
+        if (result.outcome == RuntimeStartOutcome::Ready &&
+            !g_notificationReady.load(std::memory_order_acquire)) {
+            return RuntimeStartFailure(E_FAIL);
+        }
+
+        return result;
+    }
+
+    HRESULT waitHr = waitResult == WAIT_TIMEOUT
+        ? HRESULT_FROM_WIN32(ERROR_TIMEOUT)
+        : HRESULT_FROM_WIN32(GetLastError());
+
+    Wh_Log(
+        L"Notification/current-desktop cache unavailable "
+        L"(waitResult=%lu hr=0x%08X)",
+        waitResult,
+        static_cast<unsigned int>(waitHr));
+
+    return RuntimeStartFailure(waitHr);
 }
 
 static void StopNotificationCache() {
     g_notificationReady.store(false, std::memory_order_release);
     ClearExplicitSwitchTransaction(L"notification cache stopping");
 
+    if (g_notificationStopEvent) {
+        SetEvent(g_notificationStopEvent);
+    }
+
     if (g_notificationThread) {
         if (g_notificationThreadId) {
-            PostThreadMessageW(
-                g_notificationThreadId,
-                WM_QUIT,
-                0,
-                0);
+            if (!PostThreadMessageW(
+                    g_notificationThreadId,
+                    WM_QUIT,
+                    0,
+                    0)) {
+                DWORD error = GetLastError();
+                // ERROR_INVALID_THREAD_ID is expected if the stop event won
+                // the race before the thread created its message queue.
+                if (error != ERROR_INVALID_THREAD_ID) {
+                    Wh_Log(
+                        L"Notification WM_QUIT post failed error=%lu",
+                        error);
+                }
+            }
         }
 
         WaitForSingleObject(g_notificationThread, INFINITE);
@@ -1119,6 +1398,11 @@ static void StopNotificationCache() {
     if (g_notificationReadyEvent) {
         CloseHandle(g_notificationReadyEvent);
         g_notificationReadyEvent = nullptr;
+    }
+
+    if (g_notificationStopEvent) {
+        CloseHandle(g_notificationStopEvent);
+        g_notificationStopEvent = nullptr;
     }
 
     ClearCurrentDesktopId();
@@ -1149,6 +1433,13 @@ static HANDLE g_stopEvent = nullptr;     // manual-reset
 static HANDLE g_workerThread = nullptr;
 static HANDLE g_workerReadyEvent = nullptr;
 static std::atomic<bool> g_workerReady = false;
+static RuntimeStartResultSlot g_workerStartResult;
+
+static bool WorkerStopRequested() {
+    return RuntimeCancellationRequested() ||
+        (g_stopEvent &&
+         WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0);
+}
 
 struct WorkerComState {
     IServiceProvider* serviceProvider = nullptr;
@@ -1183,7 +1474,12 @@ static void ReleaseWorkerComState(WorkerComState* state) {
     }
 }
 
-static bool InitializeWorkerComState(WorkerComState* state) {
+static HRESULT InitializeWorkerComState(
+    WorkerComState* state,
+    bool* unsupported) {
+
+    *unsupported = false;
+
     HRESULT hr = CoCreateInstance(
         kClsidImmersiveShell,
         nullptr,
@@ -1192,11 +1488,19 @@ static bool InitializeWorkerComState(WorkerComState* state) {
         reinterpret_cast<void**>(&state->serviceProvider));
 
     if (FAILED(hr) || !state->serviceProvider) {
+        if (SUCCEEDED(hr)) {
+            hr = E_FAIL;
+        }
+
         Wh_Log(
             L"Worker: CoCreateInstance(ImmersiveShell) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
-        return false;
+        return hr;
+    }
+
+    if (WorkerStopRequested()) {
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
     }
 
     hr = state->serviceProvider->QueryService(
@@ -1205,11 +1509,21 @@ static bool InitializeWorkerComState(WorkerComState* state) {
         reinterpret_cast<void**>(&state->managerInternal));
 
     if (FAILED(hr) || !state->managerInternal) {
+        if (SUCCEEDED(hr)) {
+            hr = E_NOINTERFACE;
+        }
+
+        *unsupported = hr == E_NOINTERFACE;
+
         Wh_Log(
             L"Worker: QueryService(managerInternal) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
-        return false;
+        return hr;
+    }
+
+    if (WorkerStopRequested()) {
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
     }
 
     hr = state->serviceProvider->QueryService(
@@ -1218,11 +1532,21 @@ static bool InitializeWorkerComState(WorkerComState* state) {
         reinterpret_cast<void**>(&state->viewCollection));
 
     if (FAILED(hr) || !state->viewCollection) {
+        if (SUCCEEDED(hr)) {
+            hr = E_NOINTERFACE;
+        }
+
+        *unsupported = hr == E_NOINTERFACE;
+
         Wh_Log(
             L"Worker: QueryService(viewCollection) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
-        return false;
+        return hr;
+    }
+
+    if (WorkerStopRequested()) {
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
     }
 
     hr = CoCreateInstance(
@@ -1232,14 +1556,20 @@ static bool InitializeWorkerComState(WorkerComState* state) {
         IID_PPV_ARGS(&state->publicManager));
 
     if (FAILED(hr) || !state->publicManager) {
+        if (SUCCEEDED(hr)) {
+            hr = E_FAIL;
+        }
+
         Wh_Log(
             L"Worker: CoCreateInstance(public manager) failed "
             L"hr=0x%08X",
             static_cast<unsigned int>(hr));
-        return false;
+        return hr;
     }
 
-    return true;
+    return WorkerStopRequested()
+        ? HRESULT_FROM_WIN32(ERROR_CANCELLED)
+        : S_OK;
 }
 
 // Older monitor-aware interface versions aren't queried because their method
@@ -1520,27 +1850,58 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             L"Worker: CoInitializeEx failed hr=0x%08X",
             static_cast<unsigned int>(coHr));
 
-        g_workerReady.store(false, std::memory_order_release);
-        SetEvent(g_workerReadyEvent);
+        PublishStartResult(
+            &g_workerStartResult,
+            g_workerReadyEvent,
+            WorkerStopRequested()
+                ? RuntimeStartCancelled()
+                : RuntimeStartFailure(coHr));
+        return 0;
+    }
+
+    if (WorkerStopRequested()) {
+        PublishStartResult(
+            &g_workerStartResult,
+            g_workerReadyEvent,
+            RuntimeStartCancelled());
+
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+
         return 0;
     }
 
     WorkerComState state;
+    bool initUnsupported = false;
+    HRESULT initHr =
+        InitializeWorkerComState(
+            &state,
+            &initUnsupported);
 
-    if (!InitializeWorkerComState(&state)) {
+    if (FAILED(initHr)) {
         ReleaseWorkerComState(&state);
 
         if (shouldUninitialize) {
             CoUninitialize();
         }
 
-        g_workerReady.store(false, std::memory_order_release);
-        SetEvent(g_workerReadyEvent);
+        PublishStartResult(
+            &g_workerStartResult,
+            g_workerReadyEvent,
+            WorkerStopRequested()
+                ? RuntimeStartCancelled()
+                : initUnsupported
+                    ? RuntimeStartUnsupported(initHr)
+                    : RuntimeStartFailure(initHr));
         return 0;
     }
 
-    g_workerReady.store(true);
-    SetEvent(g_workerReadyEvent);
+    g_workerReady.store(true, std::memory_order_release);
+    PublishStartResult(
+        &g_workerStartResult,
+        g_workerReadyEvent,
+        {RuntimeStartOutcome::Ready, S_OK});
 
     Wh_Log(L"Worker ready");
 
@@ -1638,6 +1999,12 @@ static bool QueueRescue(
 static HRESULT SwitchDesktopInternal_Hook(
     void* pThis,
     IVirtualDesktop* requestedDesktop) {
+
+    if (!g_interceptionEnabled.load(std::memory_order_acquire)) {
+        return g_switchDesktopInternalOriginal(
+            pThis,
+            requestedDesktop);
+    }
 
     if (!pThis || !requestedDesktop) {
         return g_switchDesktopInternalOriginal(
@@ -1809,10 +2176,15 @@ static HRESULT SwitchDesktopInternal_Hook(
 // Windhawk lifecycle.
 // -----------------------------------------------------------------------------
 
-static bool StartWorker() {
+static RuntimeStartResult StartWorker() {
     // Each start attempt owns its readiness result. A slow previous worker can
     // otherwise publish true after StopWorker already cleared the flag.
     g_workerReady.store(false, std::memory_order_release);
+    ResetStartResult(&g_workerStartResult);
+
+    if (RuntimeCancellationRequested()) {
+        return RuntimeStartCancelled();
+    }
 
     g_requestEvent =
         CreateEventW(
@@ -1821,12 +2193,28 @@ static bool StartWorker() {
             FALSE,
             nullptr);
 
+    if (!g_requestEvent) {
+        DWORD error = GetLastError();
+        Wh_Log(
+            L"Create worker-request event failed error=%lu",
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
+    }
+
     g_stopEvent =
         CreateEventW(
             nullptr,
             TRUE,
             FALSE,
             nullptr);
+
+    if (!g_stopEvent) {
+        DWORD error = GetLastError();
+        Wh_Log(
+            L"Create worker-stop event failed error=%lu",
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
+    }
 
     g_workerReadyEvent =
         CreateEventW(
@@ -1835,12 +2223,12 @@ static bool StartWorker() {
             FALSE,
             nullptr);
 
-    if (!g_requestEvent ||
-        !g_stopEvent ||
-        !g_workerReadyEvent) {
+    if (!g_workerReadyEvent) {
+        DWORD error = GetLastError();
         Wh_Log(
-            L"Failed to create worker events");
-        return false;
+            L"Create worker-ready event failed error=%lu",
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
     }
 
     g_workerThread =
@@ -1853,27 +2241,51 @@ static bool StartWorker() {
             nullptr);
 
     if (!g_workerThread) {
+        DWORD error = GetLastError();
         Wh_Log(
             L"CreateThread failed error=%lu",
-            GetLastError());
-        return false;
+            error);
+        return RuntimeStartFailure(HRESULT_FROM_WIN32(error));
     }
 
-    DWORD waitResult =
-        WaitForSingleObject(
-            g_workerReadyEvent,
-            5000);
+    HANDLE waits[] = {
+        g_runtimeCancelEvent,
+        g_workerReadyEvent,
+    };
 
-    if (waitResult != WAIT_OBJECT_0 ||
-        !g_workerReady.load()) {
-        Wh_Log(
-            L"Worker initialization failed "
-            L"(waitResult=%lu)",
-            waitResult);
-        return false;
+    DWORD waitResult = WaitForMultipleObjects(
+        ARRAYSIZE(waits),
+        waits,
+        FALSE,
+        5000);
+
+    if (waitResult == WAIT_OBJECT_0) {
+        return RuntimeStartCancelled();
     }
 
-    return true;
+    if (waitResult == WAIT_OBJECT_0 + 1) {
+        RuntimeStartResult result =
+            LoadStartResult(&g_workerStartResult);
+
+        if (result.outcome == RuntimeStartOutcome::Ready &&
+            !g_workerReady.load(std::memory_order_acquire)) {
+            return RuntimeStartFailure(E_FAIL);
+        }
+
+        return result;
+    }
+
+    HRESULT waitHr = waitResult == WAIT_TIMEOUT
+        ? HRESULT_FROM_WIN32(ERROR_TIMEOUT)
+        : HRESULT_FROM_WIN32(GetLastError());
+
+    Wh_Log(
+        L"Worker initialization failed "
+        L"(waitResult=%lu hr=0x%08X)",
+        waitResult,
+        static_cast<unsigned int>(waitHr));
+
+    return RuntimeStartFailure(waitHr);
 }
 
 static void StopWorker() {
@@ -1937,6 +2349,7 @@ enum class RuntimeState {
     Stopped,
     Initializing,
     Ready,
+    Unsupported,
 };
 
 static std::atomic<RuntimeState> g_runtimeState{RuntimeState::Stopped};
@@ -1987,6 +2400,10 @@ static bool InstallVirtualDesktopHooks() {
         return true;
     }
 
+    if (RuntimeCancellationRequested()) {
+        return false;
+    }
+
     HMODULE twinui = LoadLibraryExW(
         L"twinui.pcshell.dll",
         nullptr,
@@ -2000,8 +2417,40 @@ static bool InstallVirtualDesktopHooks() {
         return false;
     }
 
+    if (RuntimeCancellationRequested()) {
+        return false;
+    }
+
     // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
+        {
+            {
+                LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"
+            },
+            reinterpret_cast<void**>(
+                &g_win32ApplicationViewVtable)
+        },
+        {
+            {
+                LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"
+            },
+            reinterpret_cast<void**>(
+                &g_win32ApplicationViewGetNativeWindow)
+        },
+        {
+            {
+                LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"
+            },
+            reinterpret_cast<void**>(
+                &g_winRtApplicationViewVtable)
+        },
+        {
+            {
+                LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"
+            },
+            reinterpret_cast<void**>(
+                &g_winRtApplicationViewGetNativeWindow)
+        },
         {
             {
                 L"public: virtual long __cdecl "
@@ -2062,7 +2511,14 @@ static bool InstallVirtualDesktopHooks() {
 
     // These hooks are installed after Wh_ModInit, so explicitly apply the
     // pending hook operations now.
-    Wh_ApplyHookOperations();
+    SetLastError(ERROR_SUCCESS);
+    if (!Wh_ApplyHookOperations()) {
+        DWORD error = GetLastError();
+        Wh_Log(
+            L"Shell host: Wh_ApplyHookOperations failed error=%lu",
+            error);
+        return false;
+    }
 
     g_virtualDesktopHooksInstalled.store(
         true,
@@ -2071,55 +2527,84 @@ static bool InstallVirtualDesktopHooks() {
     Wh_Log(
         L"Shell host: virtual-desktop hooks installed");
 
-    return true;
+    return !RuntimeCancellationRequested();
 }
 
 static bool WaitForShellHostRetryDelay() {
     // Fresh Explorer startup can expose Shell_TrayWnd before the immersive-shell
     // virtual-desktop COM services are fully ready. Keep the retry interval
     // fixed and bounded, but give those services a generous startup window.
-    for (int i = 0; i < 10; ++i) {
-        if (g_unloading.load(std::memory_order_acquire)) {
-            return false;
-        }
+    DWORD waitResult =
+        WaitForSingleObject(g_runtimeCancelEvent, 500);
 
-        Sleep(50);
+    if (waitResult == WAIT_TIMEOUT) {
+        return !g_unloading.load(std::memory_order_acquire);
     }
 
-    return !g_unloading.load(std::memory_order_acquire);
+    if (waitResult == WAIT_FAILED) {
+        Wh_Log(
+            L"Shell-host retry wait failed error=%lu",
+            GetLastError());
+    }
+
+    return false;
 }
 
 static DWORD WINAPI ShellHostInitThreadProc(void*) {
     Wh_Log(
         L"Shell-host initialization begin");
 
-    if (g_unloading.load(std::memory_order_acquire)) {
+    if (g_unloading.load(std::memory_order_acquire) ||
+        RuntimeCancellationRequested()) {
         g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
-        return 0;
-    }
-
-    if (!InstallVirtualDesktopHooks()) {
-        g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
-
-        Wh_Log(
-            L"Shell-host initialization failed: "
-            L"VD hooks unavailable; remaining fail-open");
         return 0;
     }
 
     constexpr int kMaxRuntimeStartAttempts = 30;
 
     for (int attempt = 1; attempt <= kMaxRuntimeStartAttempts; ++attempt) {
-        bool workerStarted = StartWorker();
-        bool cacheStarted = false;
+        RuntimeStartResult workerResult = StartWorker();
+        RuntimeStartResult cacheResult = {
+            RuntimeStartOutcome::RetryableFailure,
+            E_PENDING,
+        };
 
-        if (workerStarted &&
-            !g_unloading.load(std::memory_order_acquire)) {
-            cacheStarted = StartNotificationCache();
+        if (workerResult.outcome == RuntimeStartOutcome::Ready &&
+            !RuntimeCancellationRequested()) {
+            cacheResult = StartNotificationCache();
+        } else if (RuntimeCancellationRequested()) {
+            cacheResult = RuntimeStartCancelled();
         }
 
-        if (workerStarted && cacheStarted &&
-            !g_unloading.load(std::memory_order_acquire)) {
+        if (workerResult.outcome == RuntimeStartOutcome::Ready &&
+            cacheResult.outcome == RuntimeStartOutcome::Ready &&
+            !RuntimeCancellationRequested()) {
+
+            if (!InstallVirtualDesktopHooks()) {
+                StopNotificationCache();
+                StopWorker();
+
+                RuntimeState state = RuntimeCancellationRequested()
+                    ? RuntimeState::Stopped
+                    : RuntimeState::Unsupported;
+                g_runtimeState.store(state, std::memory_order_release);
+
+                Wh_Log(
+                    L"Shell-host initialization failed: "
+                    L"VD hooks unavailable; remaining fail-open");
+                return 0;
+            }
+
+            if (RuntimeCancellationRequested()) {
+                StopNotificationCache();
+                StopWorker();
+                g_runtimeState.store(
+                    RuntimeState::Stopped,
+                    std::memory_order_release);
+                return 0;
+            }
+
+            g_interceptionEnabled.store(true, std::memory_order_release);
             g_runtimeState.store(RuntimeState::Ready, std::memory_order_release);
 
             Wh_Log(
@@ -2134,17 +2619,38 @@ static DWORD WINAPI ShellHostInitThreadProc(void*) {
         StopNotificationCache();
         StopWorker();
 
-        if (g_unloading.load(std::memory_order_acquire)) {
+        RuntimeStartResult failureResult =
+            workerResult.outcome != RuntimeStartOutcome::Ready
+                ? workerResult
+                : cacheResult;
+
+        if (g_unloading.load(std::memory_order_acquire) ||
+            RuntimeCancellationRequested() ||
+            failureResult.outcome == RuntimeStartOutcome::Cancelled) {
             g_runtimeState.store(
                 RuntimeState::Stopped,
                 std::memory_order_release);
             return 0;
         }
 
+        if (failureResult.outcome == RuntimeStartOutcome::Unsupported) {
+            g_runtimeState.store(
+                RuntimeState::Unsupported,
+                std::memory_order_release);
+
+            Wh_Log(
+                L"Shell-host runtime unsupported hr=0x%08X; "
+                L"remaining fail-open",
+                static_cast<unsigned int>(failureResult.hr));
+            return 0;
+        }
+
         if (attempt < kMaxRuntimeStartAttempts) {
             Wh_Log(
-                L"Shell-host runtime unavailable on attempt %d; retrying",
-                attempt);
+                L"Shell-host runtime unavailable on attempt %d "
+                L"hr=0x%08X; retrying",
+                attempt,
+                static_cast<unsigned int>(failureResult.hr));
 
             if (!WaitForShellHostRetryDelay()) {
                 g_runtimeState.store(
@@ -2174,8 +2680,10 @@ static void PromoteCurrentProcessToShellHost(
         true,
         std::memory_order_release);
 
-    if (g_runtimeState.load(std::memory_order_acquire) ==
-        RuntimeState::Ready) {
+    RuntimeState state =
+        g_runtimeState.load(std::memory_order_acquire);
+    if (state == RuntimeState::Ready ||
+        state == RuntimeState::Unsupported) {
         return;
     }
 
@@ -2269,10 +2777,13 @@ static HWND WINAPI CreateWindowExW_Hook(
     // Once the runtime is healthy, the observer becomes effectively free.
     // If initialization failed, keep watching for a recreated primary taskbar
     // so the same Explorer process gets a natural retry opportunity.
-    if (g_shellHostConfirmed.load(std::memory_order_acquire) &&
-        g_runtimeState.load(std::memory_order_acquire) ==
-            RuntimeState::Ready) {
-        return hwnd;
+    if (g_shellHostConfirmed.load(std::memory_order_acquire)) {
+        RuntimeState state =
+            g_runtimeState.load(std::memory_order_acquire);
+        if (state == RuntimeState::Ready ||
+            state == RuntimeState::Unsupported) {
+            return hwnd;
+        }
     }
 
     bool isPrimaryTaskbar = false;
@@ -2321,7 +2832,12 @@ static HWND WINAPI CreateWindowExW_Hook(
 }
 
 static void StopRuntimeBeforeUninit() {
+    g_interceptionEnabled.store(false, std::memory_order_release);
     g_unloading.store(true, std::memory_order_release);
+
+    if (g_runtimeCancelEvent) {
+        SetEvent(g_runtimeCancelEvent);
+    }
 
     HANDLE initThread = nullptr;
 
@@ -2339,12 +2855,39 @@ static void StopRuntimeBeforeUninit() {
 }
 
 static void StopRuntime() {
+    g_interceptionEnabled.store(false, std::memory_order_release);
     StopNotificationCache();
     StopWorker();
     g_runtimeState.store(RuntimeState::Stopped, std::memory_order_release);
 }
 
 BOOL Wh_ModInit() {
+    constexpr DWORD kMinimumSupportedBuild = 26100;
+
+    DWORD buildNumber = GetWindowsBuildNumber();
+    if (buildNumber && buildNumber < kMinimumSupportedBuild) {
+        Wh_Log(
+            L"Unsupported Windows build %lu; build %lu or newer is required",
+            buildNumber,
+            kMinimumSupportedBuild);
+        return FALSE;
+    }
+
+    if (!buildNumber) {
+        Wh_Log(
+            L"Couldn't determine the Windows build; continuing with the "
+            L"runtime compatibility probe");
+    }
+
+    g_runtimeCancelEvent =
+        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_runtimeCancelEvent) {
+        Wh_Log(
+            L"Failed to create runtime cancellation event error=%lu",
+            GetLastError());
+        return FALSE;
+    }
+
     Wh_Log(
         L"Init: installing lightweight "
         L"primary-taskbar observer");
@@ -2358,6 +2901,9 @@ BOOL Wh_ModInit() {
             &g_createWindowExWOriginal)) {
         Wh_Log(
             L"Failed to hook CreateWindowExW");
+
+        CloseHandle(g_runtimeCancelEvent);
+        g_runtimeCancelEvent = nullptr;
         return FALSE;
     }
 
@@ -2406,4 +2952,9 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
     StopRuntime();
+
+    if (g_runtimeCancelEvent) {
+        CloseHandle(g_runtimeCancelEvent);
+        g_runtimeCancelEvent = nullptr;
+    }
 }
