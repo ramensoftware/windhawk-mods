@@ -6955,6 +6955,12 @@ static void RunSetup() {
 // a final fail-closed boundary here even though the individual helpers normally
 // report failures through return values. Explorer must never be terminated by a
 // background setup failure.
+// Set just before RunSetupNoexcept returns, so callers elsewhere (e.g. a
+// settings-changed re-arm) can tell "the worker is done and safe to join"
+// apart from "the worker is still mid-retry-cycle", without blocking on a
+// join that could otherwise stall for minutes inside a synchronous callback.
+static std::atomic<bool> g_setupThreadFinished{false};
+
 static void RunSetupNoexcept()   {
     try {
         RunSetup();
@@ -6963,6 +6969,7 @@ static void RunSetupNoexcept()   {
         Wh_Log(L"Display is unavailable: unexpected failure in background setup; "
                L"Explorer was kept running");
     }
+    g_setupThreadFinished.store(true, std::memory_order_release);
 }
 
 // -----------------------------------------------------------------------------
@@ -7192,7 +7199,7 @@ public:
     // valid handle to unrelated memory. KEY_READ only, so unhooked write paths
     // fail with ERROR_ACCESS_DENIED instead of persisting anything.
     HKEY CreateFake(const std::wstring& p)   {
-        HKEY real = CreateVolatileRegistryKey();
+        HKEY real = OpenVolatileRegistryKeyHandle();
         if (!real) return nullptr;
         try {
             std::unique_lock<std::shared_mutex> l(mutex_);
@@ -7252,41 +7259,93 @@ private:
             default: return nullptr;
         }
     }
-    // Create a fresh, empty volatile (in-memory only) key under the mod's own
-    // HKCU subtree and return a KEY_READ handle to it. Nothing is ever written
-    // to disk; the leaf exists only while a caller keeps its handle. Keeping the
-    // fakes below Software\Windhawk avoids adding top-level keys beside the
-    // user's normal HKCU roots. Resolve the APIs directly instead of going
-    // through the mod's own hooks.
-    static HKEY CreateVolatileRegistryKey() {
+    // Single volatile (in-memory only) root key under the mod's own HKCU
+    // subtree. A single key directly under Software (not a Software\Windhawk
+    // parent - that key won't exist in a portable installation and shouldn't
+    // be created) keeps this to one entry beside the user's normal HKCU roots,
+    // and every virtualized open hands out its own KEY_READ handle to that
+    // *same* key instead of creating a fresh leaf per handle, so the subtree
+    // never grows no matter how many times Control Panel re-enumerates the
+    // namespace. Resolve the APIs directly instead of going through the mod's
+    // own hooks.
+    static constexpr wchar_t kRootKeyPath[] =
+        L"Software\\WindhawkDisplayControlPanelRestorer";
+    static decltype(&RegCreateKeyExW) ResolveRegCreateKeyExW() {
         HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-        auto create = kernelbase
-                          ? reinterpret_cast<decltype(&RegCreateKeyExW)>(
-                                GetProcAddress(kernelbase, "RegCreateKeyExW"))
-                          : nullptr;
-        if (!create) return nullptr;
-        static std::atomic<ULONGLONG> counter{0};
-        wchar_t name[160] = {};
-        swprintf_s(
-            name, ARRAYSIZE(name),
-            L"Software\\Windhawk\\DisplayControlPanelRestorer\\%lu_%llu",
-            static_cast<unsigned long>(GetCurrentProcessId()),
-            counter.fetch_add(1, std::memory_order_relaxed));
+        return kernelbase
+                   ? reinterpret_cast<decltype(&RegCreateKeyExW)>(
+                         GetProcAddress(kernelbase, "RegCreateKeyExW"))
+                   : nullptr;
+    }
+    static decltype(&RegOpenKeyExW) ResolveRegOpenKeyExW() {
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        return kernelbase
+                   ? reinterpret_cast<decltype(&RegOpenKeyExW)>(
+                         GetProcAddress(kernelbase, "RegOpenKeyExW"))
+                   : nullptr;
+    }
+    static decltype(&RegCloseKey) ResolveRegCloseKey() {
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        return kernelbase
+                   ? reinterpret_cast<decltype(&RegCloseKey)>(
+                         GetProcAddress(kernelbase, "RegCloseKey"))
+                   : nullptr;
+    }
+    // Creates the volatile root the first time it is needed and keeps its own
+    // handle open for the life of the mod (closed and deleted explicitly by
+    // ReleaseVirtualKeyRoot in Wh_ModUninit). Safe to call repeatedly.
+    static bool EnsureVirtualKeyRoot() {
+        if (g_rootKeyHandle.load(std::memory_order_acquire)) return true;
+        std::lock_guard<std::mutex> lock(g_rootMutex);
+        if (g_rootKeyHandle.load(std::memory_order_acquire)) return true;
+        auto create = ResolveRegCreateKeyExW();
+        if (!create) return false;
         HKEY h = nullptr;
         const LSTATUS status =
-            create(HKEY_CURRENT_USER, name, 0, nullptr, REG_OPTION_VOLATILE,
-                   KEY_READ, nullptr, &h, nullptr);
+            create(HKEY_CURRENT_USER, kRootKeyPath, 0, nullptr,
+                   REG_OPTION_VOLATILE, KEY_READ, nullptr, &h, nullptr);
+        if (status != ERROR_SUCCESS || !h) return false;
+        g_rootKeyHandle.store(h, std::memory_order_release);
+        return true;
+    }
+    // Returns a fresh KEY_READ handle to the shared root key (not a new leaf).
+    // Nothing is ever written to disk.
+    static HKEY OpenVolatileRegistryKeyHandle() {
+        if (!EnsureVirtualKeyRoot()) return nullptr;
+        auto open = ResolveRegOpenKeyExW();
+        if (!open) return nullptr;
+        HKEY h = nullptr;
+        const LSTATUS status =
+            open(HKEY_CURRENT_USER, kRootKeyPath, 0, KEY_READ, &h);
         return status == ERROR_SUCCESS ? h : nullptr;
     }
     static void CloseVolatileRegistryKey(HKEY k) {
         if (!k) return;
-        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
-        auto close = kernelbase
-                         ? reinterpret_cast<decltype(&RegCloseKey)>(
-                               GetProcAddress(kernelbase, "RegCloseKey"))
-                         : nullptr;
+        auto close = ResolveRegCloseKey();
         if (close) close(k);
     }
+public:
+    // Called once from Wh_ModUninit, after any per-handle fakes have been
+    // forgotten. Volatile keys under HKCU can persist for the whole session
+    // even with no open handles, so this closes the master handle and
+    // explicitly deletes the key so nothing remains after a normal disable -
+    // any handles still held by shell/COM callers stay individually valid
+    // until they close them, but the key itself is removed immediately.
+    static void ReleaseVirtualKeyRoot() {
+        std::lock_guard<std::mutex> lock(g_rootMutex);
+        HKEY h = g_rootKeyHandle.exchange(nullptr, std::memory_order_acq_rel);
+        if (h) CloseVolatileRegistryKey(h);
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+        auto del = kernelbase
+                       ? reinterpret_cast<decltype(&RegDeleteKeyW)>(
+                             GetProcAddress(kernelbase, "RegDeleteKeyW"))
+                       : nullptr;
+        if (del) del(HKEY_CURRENT_USER, kRootKeyPath);
+    }
+private:
+    static inline std::mutex g_rootMutex;
+    static inline std::atomic<HKEY> g_rootKeyHandle{nullptr};
+
     mutable std::shared_mutex mutex_;
     std::unordered_map<HKEY, std::wstring> paths_;
     std::unordered_set<HKEY> fakeKeys_;
@@ -14423,8 +14482,15 @@ static HRESULT HandleCoCreateInstance(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
         Wh_Log(L"Display COM activation requested (%s)",
                isProvider ? L"provider" : L"folder");
         if (!IsDisplayAppletContractPublished()) {
+            // Not ready yet does not mean "does not exist": falling through to
+            // the real CoCreateInstance lets a genuine system registration (on
+            // a build where the class still exists) or another mod's provider
+            // for the same CLSID (e.g. win7-legacy-applet-restorer, which
+            // shares this Control Panel namespace) answer instead. Returning
+            // REGDB_E_CLASSNOTREG here would otherwise make the class look
+            // absent to every caller in the process, not just this mod.
             Wh_Log(L"Display COM activation deferred: DLL setup is not ready");
-            return REGDB_E_CLASSNOTREG;
+            return original(rclsid, pUnkOuter, dwClsCtx, riid, ppv);
         }
         HMODULE h = nullptr;
         if (isProvider) {
@@ -14439,13 +14505,15 @@ static HRESULT HandleCoCreateInstance(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
         }
         if (!h) {
+            // Same fail-open reasoning as above: an unavailable module on our
+            // side is not proof the class is unregistered process-wide.
             Wh_Log(L"Display COM activation failed: module is unavailable");
-            return REGDB_E_CLASSNOTREG;
+            return original(rclsid, pUnkOuter, dwClsCtx, riid, ppv);
         }
         DllGetClassObject_t getClassObject = ResolveDllGetClassObject(h);
         if (!getClassObject) {
             Wh_Log(L"Display COM activation failed: DllGetClassObject is missing");
-            return REGDB_E_CLASSNOTREG;
+            return original(rclsid, pUnkOuter, dwClsCtx, riid, ppv);
         }
         IClassFactory* cf = nullptr;
         HRESULT hr = getClassObject(rclsid, IID_IClassFactory_GUID,
@@ -14886,6 +14954,32 @@ void Wh_ModSettingsChanged(void) {
             // file (or the "Internal" fallback) in place.
             BuildCategoryTasksXmlFile(StoreDir());
         }
+        // Explorer starts well before Wi-Fi/VPN/metered connections are
+        // usable on many machines, so the first-run download can still fail
+        // after all retry cycles are exhausted while the mod stays loaded for
+        // the rest of the session. A settings change (or any later re-check)
+        // is a convenient, already-existing trigger to re-arm the worker
+        // instead of leaving the user with no Display applet and no way to
+        // recover short of reloading the mod. RunSetup re-checks the cached
+        // file first, so this is a no-op once setup has already succeeded.
+        // Only join+relaunch once the previous run has actually finished
+        // (g_setupThreadFinished) - joinable() alone would be true for a
+        // worker that is still mid retry-cycle, and joining that here would
+        // block this synchronous callback for as long as that cycle runs.
+        if (!g_dllVerifiedOk.load(std::memory_order_acquire) &&
+            !g_shuttingDown.load(std::memory_order_acquire) &&
+            g_runSetupWorker.load(std::memory_order_acquire) &&
+            g_setupThread && g_setupThread->joinable() &&
+            g_setupThreadFinished.load(std::memory_order_acquire)) {
+            g_setupThread->join();
+            g_setupThread.reset();
+            if (!g_shuttingDown.load(std::memory_order_acquire)) {
+                g_setupThreadFinished.store(false, std::memory_order_release);
+                g_setupThread.emplace(RunSetupNoexcept);
+                Wh_Log(L"Display Restorer: re-arming provider setup after a "
+                       L"settings change");
+            }
+        }
     } catch (...) {
         // Reloading would just re-run the same code with the same inputs, so
         // there is no case where a reload helps; the void form is equivalent.
@@ -14997,6 +15091,9 @@ void Wh_ModUninit(void) {
         }
 
         g_keyTracker.ForgetAllWithoutClosing();
+        // Remove the shared volatile backing key so a disabled mod leaves
+        // nothing behind under HKCU until the next sign-out.
+        KeyTracker::ReleaseVirtualKeyRoot();
     } catch (...) {
     }
 }
