@@ -2,12 +2,12 @@
 // @id              taskbar-folder-hover-tray
 // @name            Taskbar Folder Hover Tray
 // @description     Adds folder shortcut buttons flush inside the Windows 11 taskbar app icons. Hovering one instantly opens a grid of the folder's contents that you can move into and click.
-// @version         1.44
+// @version         2.0
 // @author          Kiploom
 // @github          https://github.com/Kiploom
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -lcomctl32 -ldwmapi -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -lcomctl32 -ldwmapi -luser32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -49,10 +49,14 @@ Windows 11 only.
 **Folders are not configured on the settings page.** They live in the
 **Taskbar Folders** window instead, which you can open in either of two ways:
 
-- Right click any folder button already on the taskbar and choose
-  **Manage folders...**
-- Or, with nothing pinned yet, click the **➕** button the mod puts on the
-  taskbar — it is there only until the first folder is pinned.
+- **Right click a folder button on the taskbar** and choose **Manage folders...**.
+  The buttons are real taskbar items now, so that menu is Windows' own jump list —
+  the entry gets there through the folder's AppUserModelID rather than being drawn
+  by this mod. **Unpin from taskbar** sits on the same menu, for free.
+- Or right click any folder, file or the Desktop background, pick **Show more
+  options** if you get the short Windows 11 menu, then
+  **Taskbar Folders → Manage folders...**. This one works even when nothing is
+  pinned yet, so it is the way in from a standing start.
 
 The quickest way to add one in the first place is straight from Explorer:
 right click any folder in Explorer or on the Desktop, pick **Show more
@@ -74,14 +78,19 @@ context menus are left completely untouched.
 
 ### The Taskbar Folders window
 
-Every folder is listed with its icon and name. From there you can:
+Folders are listed under two headings — **On the taskbar** and **Not pinned** —
+and sorted by name within each. The window follows your Windows app theme, so it
+is dark when the rest of Windows is. From there you can:
 
 | Action | What it does |
 |--------|--------------|
 | **Add...** | Pick any folder and give it a name and icon |
-| **Edit...** | Change the name, folder or icon, and tick or untick **Pinned to the taskbar**. Unticking takes the button off the taskbar **without deleting anything** — the entry stays in the list with its name and icon, and can be pinned again any time |
+| **Edit...** | Change the name, folder or icon, and tick or untick **Pinned to the taskbar**. Double-clicking a row does the same |
 | **Remove** | Forget the entry entirely. The folder itself is never touched |
-| **Drag a row** | Drag it up or down the list to set the left-to-right order of the taskbar buttons |
+| **Pin** / **Unpin** | Moves the selected folder between the two sections. Unpinning takes the button off the taskbar **without deleting anything** — the entry keeps its name and icon and can be pinned again any time |
+
+The list is not reorderable, and does not need to be: **button order is set by
+dragging the buttons on the taskbar**, like any other pinned app.
 
 Each entry has three fields:
 
@@ -90,6 +99,9 @@ Each entry has three fields:
 | Name  | `Apps` | Shown as the title at the top of the hover grid |
 | Folder | `%USERPROFILE%\Desktop` | Environment variables are expanded. `shell:` targets that map to a **filesystem folder** also work (e.g. `shell:Desktop`, `shell:Downloads`). Virtual namespaces such as Control Panel, Recycle Bin, or This PC are not supported — use [Taskbar Folder Menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp) for those. |
 | Icon | an emoji, `C:\icons\apps.ico`, or `C:\Windows\explorer.exe,0` | Leave empty to use the folder's own icon |
+
+**Open** next to the folder box opens whatever path is currently typed, so a
+path can be checked before it is saved.
 
 A good setup is to make a folder somewhere, fill it with shortcuts to the apps
 you want grouped, and point a button at it.
@@ -139,20 +151,31 @@ settings page Windhawk already draws — hence **Taskbar Folders**.
 
 ## How it is positioned
 
-The Windows 11 taskbar app strip is a WinUI `ItemsRepeater` that refuses to lay out
-any child it did not create itself, so this mod cannot literally become a taskbar
-item. Instead it adds itself as an overlay to the taskbar's root grid and widens the
-margin of the neighbouring app icon to carve out a real gap in the strip, then keeps
-itself seated in that gap on every layout pass. The taskbar re-centers around the
-gap, so the result reads as flush.
+It isn't. Each folder button is a **real pinned taskbar item**, so Windows creates,
+positions and animates it exactly like any pinned app.
 
-Two consequences worth knowing:
+Under the hood each folder gets a shortcut in your Start Menu carrying its own
+AppUserModelID, and that shortcut is pinned with the shell's ordinary
+"pin to taskbar" verb. Everything else follows from the buttons being genuine:
 
-- The buttons cannot be dragged around on the taskbar itself the way real
-  taskbar items can. To change their order, open the **Taskbar Folders** window
-  (right click any folder button > **Manage folders...**) and drag the rows
-  into the order you want — top of the list is the leftmost button.
-- They do not collapse into the overflow button when the taskbar gets full.
+- **Drag them** to reorder, like any other taskbar item. The order is the
+  taskbar's, so it survives restarts and is not stored by this mod.
+- **Right click** gives the normal Windows menu, including
+  **Unpin from taskbar** and a **Manage folders...** entry this mod publishes to
+  the folder's own jump list. Unpinning keeps the entry in the Taskbar Folders
+  window as a draft, so its name and icon are not lost.
+- They collapse into the overflow button when the taskbar fills up.
+- Every animation is Windows' own.
+
+Earlier versions drew an overlay instead, seated in a gap carved by widening a
+neighbouring icon's margin. It could never be exactly right: taskbar positions are
+driven by compositor-thread animations that no other window can sample mid-flight,
+so an overlay is always at least a frame behind. That whole approach, and the
+~2,000 lines that chased it, is gone.
+
+One thing to know: a button's **icon comes from the shortcut**, which means it has
+to be a real icon file. `.ico` files, `app.exe,0` resource specs and a folder's own
+custom icon all work. An **emoji icon falls back** to the standard folder glyph.
 
 ## If you already use Taskbar Folder Menus
 
@@ -183,221 +206,200 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 
 // ==WindhawkModSettings==
 /*
-- openFolderOnClick: true
-  $name: 1. Behavior ▸ Click opens the folder
-  $description: Left clicking a taskbar button opens the folder in File Explorer.
+- behavior:
+  - openFolderOnClick: true
+    $name: Click opens the folder
+    $description: >-
+      Left clicking a folder button opens the folder in File Explorer. Turn this
+      off to make the buttons hover-only — the click is swallowed and the grid is
+      the only way in.
 
-- explorerMenu: true
-  $name: 1. Behavior ▸ Explorer right-click menu
-  $description: >-
-    Adds a "Taskbar Folders" submenu to the classic Explorer and Desktop
-    context menus — the ones behind "Show more options" / Shift+F10, not the
-    short Windows 11 menu, which is XAML and takes no items from a mod. Use it
-    to pin a folder straight to the taskbar, or to move, copy or make a
-    shortcut into a folder that already has a button. Turn this off to keep
-    the mod entirely on the taskbar side — with it off, Explorer's own context
-    menus are left completely alone. Changing this setting reloads the mod,
-    because the menu hook can only be installed or removed at startup.
+  - explorerMenu: true
+    $name: Explorer right-click menu
+    $description: >-
+      Adds a "Taskbar Folders" submenu to the classic Explorer and Desktop
+      context menus — the ones behind "Show more options" / Shift+F10, not the
+      short Windows 11 menu, which is XAML and takes no items from a mod. Use it
+      to pin a folder straight to the taskbar, or to move, copy or make a
+      shortcut into a folder that already has a button. Turn this off to keep
+      the mod entirely on the taskbar side — with it off, Explorer's own context
+      menus are left completely alone. Changing this setting reloads the mod,
+      because the menu hook can only be installed or removed at startup.
 
-- position: beforeApps
-  $name: 1. Behavior ▸ Position
-  $description: Which side of the app icons the buttons sit on.
-  $options:
-  - beforeApps: Before the app icons
-  - afterApps: After the app icons
+  - hoverDelayMs: 0
+    $name: Hover delay (ms)
+    $description: Delay before the grid appears. 0 is instant.
 
-- anchor: firstApp
-  $name: 1. Behavior ▸ Anchor
-  $description: >-
-    Which taskbar element the gap is carved next to. Change this if another mod is
-    fighting for the same anchor. Auto picks the outermost app icon.
-  $options:
-  - firstApp: Outermost App icon
-  - widgets: Widgets button
-  - taskView: Task View button
-  - start: Start button
+  - closeDelayMs: 250
+    $name: Close delay (ms)
+    $description: >-
+      How long the grid stays open after the mouse leaves the button and the grid.
+      Moving onto another taskbar icon counts as leaving.
+  $name: Behavior
+  $description: How the buttons respond to the mouse, and whether the mod touches Explorer at all.
 
-- hoverDelayMs: 0
-  $name: 1. Behavior ▸ Hover delay (ms)
-  $description: Delay before the grid appears. 0 is instant.
+- content:
+  - includeSubfolders: true
+    $name: Show subfolders
+    $description: Include subfolders as entries in the grid.
 
-- closeDelayMs: 250
-  $name: 1. Behavior ▸ Close delay (ms)
-  $description: >-
-    How long the grid stays open after the mouse leaves the button and the grid.
-    Moving onto another taskbar icon counts as leaving.
+  - maxFolderDepth: -1
+    $name: Maximum folder depth
+    $description: >-
+      How many levels of subfolder menus can cascade when you hover a subfolder.
+      -1 is unlimited, 0 means subfolders never open on hover, 1 allows one level
+      of subfolders, and so on. Turn off "Show subfolders" to hide them entirely.
 
-- includeSubfolders: true
-  $name: 2. Content ▸ Show subfolders
-  $description: Include subfolders as entries in the grid.
+  - submenuDelayMs: 150
+    $name: Subfolder open delay (ms)
+    $description: >-
+      How long to rest on a subfolder before its menu opens. A small delay stops
+      menus from firing off while you sweep across the grid. 0 is instant.
 
-- maxFolderDepth: -1
-  $name: 2. Content ▸ Maximum folder depth
-  $description: >-
-    How many levels of subfolder menus can cascade when you hover a subfolder.
-    -1 is unlimited, 0 means subfolders never open on hover, 1 allows one level
-    of subfolders, and so on. Turn off "Show subfolders" to hide them entirely.
+  - submenuCloseDelayMs: 300
+    $name: Subfolder close delay (ms)
+    $description: >-
+      How long a cascaded subfolder menu stays open after the mouse leaves the
+      cell that opened it. Gives you time to move diagonally into the submenu.
 
-- submenuDelayMs: 150
-  $name: 2. Content ▸ Subfolder open delay (ms)
-  $description: >-
-    How long to rest on a subfolder before its menu opens. A small delay stops
-    menus from firing off while you sweep across the grid. 0 is instant.
+  - showHidden: false
+    $name: Show hidden items
+    $description: Include hidden and system files.
 
-- submenuCloseDelayMs: 300
-  $name: 2. Content ▸ Subfolder close delay (ms)
-  $description: >-
-    How long a cascaded subfolder menu stays open after the mouse leaves the
-    cell that opened it. Gives you time to move diagonally into the submenu.
+  - showExtensions: false
+    $name: Show file extensions
+    $description: Shortcut (.lnk) extensions are always hidden.
 
-- showHidden: false
-  $name: 2. Content ▸ Show hidden items
-  $description: Include hidden and system files.
+  - sortBy: name
+    $name: Sort by
+    $description: >-
+      Folders always come first so the entries that cascade stay together at the
+      top. This orders the items within each group.
+    $options:
+    - name: Name
+    - modified: Date modified (newest first)
 
-- showExtensions: false
-  $name: 2. Content ▸ Show file extensions
-  $description: Shortcut (.lnk) extensions are always hidden.
+  - maxItems: 64
+    $name: Maximum items
+    $description: >-
+      Limit how many entries the grid shows and caches. The cache also caps to
+      roughly what can fit on screen (columns × rows, tighter for large icons)
+      and a ~64 MB bitmap budget, so very large maxItems values do not keep
+      hundreds of oversized icons resident. 0 uses that automatic on-screen cap.
 
-- sortBy: name
-  $name: 2. Content ▸ Sort by
-  $description: >-
-    Folders always come first so the entries that cascade stay together at the
-    top. This orders the items within each group.
-  $options:
-  - name: Name
-  - modified: Date modified (newest first)
+  - columns: 0
+    $name: Grid columns
+    $description: 0 chooses a square-ish grid automatically.
+  $name: Content
+  $description: What the hover grid lists, and how much of it.
 
-- maxItems: 60
-  $name: 2. Content ▸ Maximum items
-  $description: >-
-    Limit how many entries the grid shows and caches. The cache also caps to
-    roughly what can fit on screen (columns × rows, tighter for large icons)
-    and a ~64 MB bitmap budget, so very large maxItems values do not keep
-    hundreds of oversized icons resident. 0 uses that automatic on-screen cap.
+- appearance:
+  - itemSize: medium
+    $name: Item size
+    $description: >-
+      Preset size for each item's icon and grid cell. Every step scales both the
+      icon and the overall tray size.
+    $options:
+    - smallest: Smallest
+    - tiny: Tiny
+    - xsmall: Extra small
+    - small: Small
+    - medium: Medium
+    - large: Large
 
-- columns: 0
-  $name: 2. Content ▸ Grid columns
-  $description: 0 chooses a square-ish grid automatically.
+  - showLabels: true
+    $name: Show item labels
+    $description: >-
+      Turn off for an icons-only grid. Icons are centred in the cell when labels
+      are hidden.
 
-- itemSize: small
-  $name: 3. Appearance ▸ Item size
-  $description: >-
-    Preset size for each item's icon and grid cell. Every step scales both the
-    icon and the overall tray size.
-  $options:
-  - smallest: Smallest
-  - tiny: Tiny
-  - xsmall: Extra small
-  - small: Small
-  - medium: Medium
-  - large: Large
+  - fontSize: 13
+    $name: Item label size (px)
 
-- buttonIconSize: 0
-  $name: 3. Appearance ▸ Button icon size (px)
-  $description: 0 matches the size Windows uses for its own taskbar icons.
+  - itemFontWeight: regular
+    $name: Item label weight
+    $options:
+    - regular: Regular
+    - bold: Bold
 
-- showLabels: true
-  $name: 3. Appearance ▸ Show item labels
-  $description: >-
-    Turn off for an icons-only grid. Icons are centred in the cell when labels
-    are hidden.
+  - showTitle: true
+    $name: Show folder title
+    $description: >-
+      The folder name at the top of the main hover grid. Subfolder menus never
+      show one.
 
-- fontSize: 12
-  $name: 3. Appearance ▸ Item label size (px)
+  - titleFontSize: 14
+    $name: Folder title size (px)
+    $description: Size of the name shown at the top of the main hover grid.
 
-- itemFontWeight: bold
-  $name: 3. Appearance ▸ Item label weight
-  $options:
-  - regular: Regular
-  - bold: Bold
+  - titleFontWeight: bold
+    $name: Folder title weight
+    $options:
+    - regular: Regular
+    - bold: Bold
 
-- showTitle: true
-  $name: 3. Appearance ▸ Show folder title
-  $description: >-
-    The folder name at the top of the main hover grid. Subfolder menus never
-    show one.
+  - titleAlign: center
+    $name: Folder title position
+    $description: >-
+      Horizontal position of the folder name on the main hover grid. Subfolder
+      menus never show a title.
+    $options:
+    - left: Left
+    - center: Center
+    - right: Right
 
-- titleFontSize: 13
-  $name: 3. Appearance ▸ Folder title size (px)
-  $description: Size of the name shown at the top of the main hover grid.
+  - roundedCorners: true
+    $name: Rounded grid corners
+    $description: Rounds the corners of the hover grid. Turn off for square ones.
 
-- titleFontWeight: bold
-  $name: 3. Appearance ▸ Folder title weight
-  $options:
-  - regular: Regular
-  - bold: Bold
+  - popupTheme: system
+    $name: Grid theme
+    $description: >-
+      Background and text colours of the hover grid. Windows default follows the
+      system app theme.
+    $options:
+    - system: Windows default
+    - light: Light
+    - dark: Dark
 
-- titleAlign: center
-  $name: 3. Appearance ▸ Folder title position
-  $description: >-
-    Horizontal position of the folder name on the main hover grid. Subfolder
-    menus never show a title.
-  $options:
-  - left: Left
-  - center: Center
-  - right: Right
+  - panelOpacity: 10
+    $name: Grid opacity (%)
+    $description: >-
+      A contrasting outline is added behind the text as the background fades out.
+      At 0 the background is invisible - icons and labels float straight over the
+      desktop - but the grid still takes clicks rather than passing them through
+      to whatever is behind it.
 
-- cornerRadius: 8
-  $name: 3. Appearance ▸ Grid corner radius (px)
+  - blurType: acrylic
+    $name: Blur type
+    $description: >-
+      Gaussian captures the screen behind the grid and blurs it ourselves - a
+      real, adjustable blur radius, but it costs a screen capture and a resample
+      every ~32ms to track a moving background live. Acrylic uses Windows' own
+      GPU-composited blur-behind instead - much cheaper (no capture, no per-frame
+      resample, updates live for free) but the blur radius itself is fixed by
+      Windows, not adjustable; the strength setting below controls the tint's
+      opacity instead of the blur radius. None skips blur entirely - cheaper
+      than either, same as setting the strength below to 0.
+    $options:
+    - acrylic: Acrylic (fixed radius, cheaper)
+    - gaussian: Gaussian (adjustable, more expensive)
+    - none: None
 
-- popupTheme: system
-  $name: 3. Appearance ▸ Grid theme
-  $description: >-
-    Background and text colours of the hover grid. Windows default follows the
-    system app theme.
-  $options:
-  - system: Windows default
-  - light: Light
-  - dark: Dark
+  - blurStrength: 10
+    $name: Blur strength (%)
+    $description: >-
+      Transparent blur layered behind the grid, over whatever is on screen.
+      Independent of the grid opacity above. Ignored when blur type above is
+      None; 0 has the same effect. For Gaussian this is the blur radius; for
+      Acrylic (fixed blur radius) it is instead how opaque the tint over that
+      blur is.
 
-- panelOpacity: 85
-  $name: 3. Appearance ▸ Grid opacity (%)
-  $description: >-
-    A contrasting outline is added behind the text as the background fades out.
-    At 0 the background is invisible - icons and labels float straight over the
-    desktop - but the grid still takes clicks rather than passing them through
-    to whatever is behind it.
-
-- panelBorder: true
-  $name: 3. Appearance ▸ Grid border
-  $description: >-
-    Thin outline around the edge of the grid, plus the border Windows draws on
-    the rounded window. Turn off for a frameless look at low opacity.
-
-- blurType: acrylic
-  $name: 3. Appearance ▸ Blur type
-  $description: >-
-    Gaussian captures the screen behind the grid and blurs it ourselves - a
-    real, adjustable blur radius, but it costs a screen capture and a resample
-    every ~32ms to track a moving background live. Acrylic uses Windows' own
-    GPU-composited blur-behind instead - much cheaper (no capture, no per-frame
-    resample, updates live for free) but the blur radius itself is fixed by
-    Windows, not adjustable; the strength setting below controls the tint's
-    opacity instead of the blur radius. None skips blur entirely - cheaper
-    than either, same as setting the strength below to 0.
-  $options:
-  - acrylic: Acrylic (fixed radius, cheaper)
-  - gaussian: Gaussian (adjustable, more expensive)
-  - none: None
-
-- blurStrength: 40
-  $name: 3. Appearance ▸ Blur strength (%)
-  $description: >-
-    Transparent blur layered behind the grid, over whatever is on screen.
-    Independent of the grid opacity above. Ignored when blur type above is
-    None; 0 has the same effect. For Gaussian this is the blur radius; for
-    Acrylic (fixed blur radius) it is instead how opaque the tint over that
-    blur is.
-
-- gapAbove: 8
-  $name: 3. Appearance ▸ Gap above taskbar (px)
-  $description: Distance between the taskbar and the grid.
-
-- gapBefore: 0
-  $name: 3. Appearance ▸ Padding before buttons (px)
-
-- gapAfter: 0
-  $name: 3. Appearance ▸ Padding after buttons (px)
+  - gapAbove: 8
+    $name: Gap above taskbar (px)
+    $description: Distance between the taskbar and the grid.
+  $name: Appearance
+  $description: How the hover grid looks.
 */
 // ==/WindhawkModSettings==
 
@@ -405,6 +407,7 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 
 #include <windhawk_utils.h>
 
+#include <commctrl.h>
 #include <commoncontrols.h>
 #include <dwmapi.h>
 #include <shellapi.h>
@@ -422,6 +425,7 @@ Choose **this mod** for a hover-opened icon grid seated in the app icon strip.
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
@@ -520,19 +524,24 @@ struct FolderEntry {
     // (mod storage), false for folders configured in the Settings UI. Only
     // pinned folders can be removed with a taskbar right-click.
     bool pinned = false;
+    // Copied from the store. Ties this entry to its real taskbar item: the
+    // shortcut's AppUserModelID is built from it, so it is how a taskbar button
+    // is resolved back to the folder behind it.
+    std::wstring pinId;
 };
+
+// The one rounded radius, at 96 DPI; ScaleForPopup takes it from there.
+constexpr int kRoundedCornerRadius = 8;
 
 enum class SortMode { Name, Modified };
 enum class BlurType { None, Gaussian, Acrylic };
 
 struct Settings {
     std::vector<FolderEntry> folders;
-    std::wstring position = L"beforeApps";
-    std::wstring anchor = L"firstApp";
     int hoverDelayMs = 0;
     int closeDelayMs = 250;
     int columns = 0;
-    int maxItems = 60;
+    int maxItems = 64;
     bool includeSubfolders = true;
     int maxFolderDepth = -1;
     int submenuDelayMs = 150;
@@ -541,28 +550,27 @@ struct Settings {
     bool showExtensions = false;
     SortMode sortBy = SortMode::Name;
     // Derived from itemSize in LoadSettings(); not settings-bound directly.
-    int cellWidth = 76;
-    int cellHeight = 72;
-    int iconSize = 24;
+    int cellWidth = 92;
+    int cellHeight = 88;
+    int iconSize = 32;
     bool showLabels = true;
-    int fontSize = 12;
+    int fontSize = 13;
     // LOGFONT lfWeight values. See MakePopupFont.
-    int itemFontWeight = FW_BOLD;
+    int itemFontWeight = FW_NORMAL;
     bool showTitle = true;
-    int titleFontSize = 13;
+    int titleFontSize = 14;
     int titleFontWeight = FW_BOLD;
     std::wstring titleAlign = L"center";
-    int cornerRadius = 8;
+    // Kept as a pixel radius rather than a bool because three separate places
+    // need the number: the window region, the blur region and the painted
+    // background. The setting itself is just on or off.
+    int cornerRadius = kRoundedCornerRadius;
     // -1 follows the system app theme; 0 forces light, 1 forces dark.
     int popupThemeOverride = -1;
-    int panelOpacity = 85;
-    bool panelBorder = true;
+    int panelOpacity = 10;
     BlurType blurType = BlurType::Acrylic;
-    int blurStrength = 40;
+    int blurStrength = 10;
     int gapAbove = 8;
-    int gapBefore = 0;
-    int gapAfter = 0;
-    int buttonIconSize = 0;
     bool openFolderOnClick = true;
     // Read from an Explorer window thread inside the TrackPopupMenuEx hook
     // while LoadSettings may be writing it on another.
@@ -638,6 +646,7 @@ bool IsLikelyRemotePath(const std::wstring& p);
 bool IsShellFolderPath(const std::wstring& path);
 void ResolvePendingFolderEntries();
 void ReloadAndRefreshUI();
+void RequestReloadUI();
 
 // Non-zero while a reload is executing. Wh_ModUninit waits this out: a reload
 // parks the taskbar UI thread in a join that pumps sent messages, so uninit's
@@ -857,6 +866,18 @@ struct Entry {
     std::wstring icon;
     uint64_t fileId = 0;
     bool pinned = true;
+    // Stable per-entry identity for the real taskbar pin. Becomes the shortcut's
+    // AppUserModelID, which is what keeps the item from merging into the File
+    // Explorer group (every pin shortcut targets explorer.exe — see Pins) and is
+    // how a taskbar button is recognised as ours later. Generated once, on first
+    // write, and never reused: reusing one would let a deleted entry's pin be
+    // adopted by an unrelated folder.
+    std::wstring pinId;
+    // True once this entry's shortcut has actually been pinned. Without it the
+    // reconcile cannot tell "pinned=1 and not on the taskbar yet" from "pinned=1
+    // and the user just unpinned it from the taskbar" — the first wants pinning,
+    // the second must not be re-pinned or native Unpin would look broken.
+    bool pinApplied = false;
 };
 
 std::wstring GetString(PCWSTR format, int index) {
@@ -885,9 +906,13 @@ std::vector<Entry> Read() {
         std::wstring id = GetString(L"entry[%d].id", i);
         entry.fileId = id.empty() ? 0 : wcstoull(id.c_str(), nullptr, 16);
 
+        entry.pinId = GetString(L"entry[%d].pinId", i);
+
         WCHAR key[64];
         swprintf(key, ARRAYSIZE(key), L"entry[%d].pinned", i);
         entry.pinned = Wh_GetIntValue(key, 1) != 0;
+        swprintf(key, ARRAYSIZE(key), L"entry[%d].pinApplied", i);
+        entry.pinApplied = Wh_GetIntValue(key, 0) != 0;
         entries.push_back(std::move(entry));
     }
     return entries;
@@ -915,15 +940,21 @@ void Write(const std::vector<Entry>& entries) {
         swprintf(idBuf, ARRAYSIZE(idBuf), L"%llx",
                  (unsigned long long)entry.fileId);
         Wh_SetStringValue(key, idBuf);
+        swprintf(key, ARRAYSIZE(key), L"entry[%d].pinId", i);
+        Wh_SetStringValue(key, entry.pinId.c_str());
         swprintf(key, ARRAYSIZE(key), L"entry[%d].pinned", i);
         Wh_SetIntValue(key, entry.pinned ? 1 : 0);
+        swprintf(key, ARRAYSIZE(key), L"entry[%d].pinApplied", i);
+        Wh_SetIntValue(key, entry.pinApplied ? 1 : 0);
     }
 
     // The array shrank: drop the tail so a stale entry cannot reappear if it
     // later grows again.
     for (int i = count; i < previous && i < kMaxEntries; i++) {
         WCHAR key[64];
-        for (PCWSTR field : {L"path", L"name", L"icon", L"id", L"pinned"}) {
+        for (PCWSTR field :
+             {L"path", L"name", L"icon", L"id", L"pinId", L"pinned",
+              L"pinApplied"}) {
             swprintf(key, ARRAYSIZE(key), L"entry[%d].%s", i, field);
             Wh_DeleteValue(key);
         }
@@ -962,6 +993,1018 @@ int IndexOfPath(const std::vector<Entry>& entries, const std::wstring& path) {
 
 }  // namespace FolderStore
 
+////////////////////////////////////////////////////////////////////////////////
+// Real taskbar pins
+//
+// Each pinned folder is a genuine pinned taskbar item, not a drawn overlay. That
+// is what makes the animations exact and dragging work: Windows lays the button
+// out and animates it, so there is nothing to chase.
+//
+// The shape below is not the obvious one, and each part of it was forced by
+// measurement on 25H2 (build 26200) rather than chosen:
+//
+//   * The shortcut targets `explorer.exe <folder>`, never the folder itself. A
+//     .lnk pointing at a bare folder is not pinnable at all — the shell answers
+//     ERROR_NO_ASSOCIATION. Only the app-shaped form is accepted.
+//
+//   * Because every shortcut therefore points at explorer.exe, a unique
+//     AppUserModelID per entry is load-bearing, not decorative: without it the
+//     items collapse into the File Explorer group.
+//
+//   * Pinning goes through the documented shell verb (IContextMenu
+//     "taskbarpin"), not IPinnedList3. The undocumented interface is not needed,
+//     which removes a vtable whose slot order has shifted between Windows
+//     versions before.
+//
+//   * All of it runs on a private STA thread. It must be an STA (the pin COM
+//     class is ThreadingModel=Apartment with no marshaler), and it must not be a
+//     thread dispatching an input-synchronous call — so RunFromWindowThread, which
+//     arrives by SendMessage, cannot be used: every outgoing COM call from there
+//     fails with RPC_E_CANTCALLOUT_ININPUTSYNCCALL having done nothing, which
+//     looks exactly like a permissions refusal and is not one.
+
+namespace Pins {
+
+// Prefix shared by every AppUserModelID this mod creates. Recognising our own
+// taskbar buttons later is a prefix test on this.
+constexpr PCWSTR kAppIdPrefix = L"Kiploom.TaskbarFolderHoverTray.";
+constexpr PCWSTR kPinSubDir = L"Taskbar Folder Hover Tray";
+// Last-resort button icon: the standard Windows folder glyph.
+constexpr PCWSTR kDefaultIconFile = L"%SystemRoot%\\system32\\imageres.dll";
+constexpr int kDefaultIconIndex = 3;
+
+// PKEY_AppUserModel_ID, spelled out so the mod needs neither INITGUID nor a link
+// against propsys.
+const PROPERTYKEY kPKEY_AppUserModel_ID = {
+    {0x9F4C2855,
+     0x9F79,
+     0x4B39,
+     {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
+    5};
+
+std::wstring AppIdFor(const std::wstring& pinId) {
+    return std::wstring(kAppIdPrefix) + pinId;
+}
+
+bool IsOurAppId(const std::wstring& appId) {
+    return appId.compare(0, wcslen(kAppIdPrefix), kAppIdPrefix) == 0;
+}
+
+// Where our own shortcuts live. Start Menu\Programs is not cosmetic: the shell
+// builds shell:appsfolder from Start Menu shortcuts carrying an AUMID, and
+// FavoritesResolve prunes pins that no longer resolve to one.
+std::wstring SourceDir() {
+    PWSTR programs = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &programs)) ||
+        !programs) {
+        return L"";
+    }
+    std::wstring dir = programs;
+    CoTaskMemFree(programs);
+    return dir + L"\\" + kPinSubDir;
+}
+
+// Where the shell keeps a copy of every currently pinned item. Reading this is
+// how a native "Unpin from taskbar" is noticed — the shell removes the item
+// without telling the mod anything.
+std::wstring PinnedDir() {
+    PWSTR appData = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr,
+                                    &appData)) ||
+        !appData) {
+        return L"";
+    }
+    std::wstring dir = appData;
+    CoTaskMemFree(appData);
+    return dir +
+           L"\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar";
+}
+
+// A filename that cannot upset the shell, derived from the folder's display
+// name. The taskbar labels the button from the shortcut's file name, so this is
+// what the user sees in the tooltip — keep it clean and keep it stable.
+std::wstring SafeLeaf(const std::wstring& name) {
+    std::wstring out;
+    for (wchar_t c : name) {
+        if (wcschr(L"\\/:*?\"<>|", c) || c < 0x20) {
+            continue;
+        }
+        out += c;
+    }
+    out = Trim(out);
+    // Trailing dots and spaces are legal in the string but not in a filename.
+    while (!out.empty() && (out.back() == L'.' || out.back() == L' ')) {
+        out.pop_back();
+    }
+    if (out.empty()) {
+        out = L"Folder";
+    }
+    if (out.size() > 64) {
+        out.resize(64);
+    }
+    return out;
+}
+
+// `taken` is the leaf names already claimed in this reconcile pass. Two folders
+// may legitimately share a display name, and the shortcuts must not overwrite
+// one another — but the suffix only appears in the genuinely ambiguous case,
+// rather than being carried by every button.
+std::wstring LnkPathFor(const FolderStore::Entry& entry,
+                        std::vector<std::wstring>* taken) {
+    std::wstring dir = SourceDir();
+    if (dir.empty() || entry.pinId.empty()) {
+        return L"";
+    }
+    std::wstring leaf = SafeLeaf(entry.name);
+    std::wstring candidate = leaf;
+    for (int suffix = 2; suffix < 100; suffix++) {
+        bool clash = false;
+        for (const auto& used : *taken) {
+            if (_wcsicmp(used.c_str(), candidate.c_str()) == 0) {
+                clash = true;
+                break;
+            }
+        }
+        if (!clash) {
+            break;
+        }
+        candidate = leaf + L" (" + std::to_wstring(suffix) + L")";
+    }
+    taken->push_back(candidate);
+    return dir + L"\\" + candidate + L".lnk";
+}
+
+// Splits an icon spec ("C:\x\y.dll,3", or a bare path) into file and index.
+// Returns false when the file does not exist, so callers can fall through to the
+// next candidate rather than producing a blank button.
+bool ParseIconSpec(const std::wstring& spec, std::wstring* file, int* index) {
+    if (spec.empty()) {
+        return false;
+    }
+    std::wstring raw = ExpandEnv(Trim(spec));
+    *index = 0;
+    size_t comma = raw.find_last_of(L',');
+    // Guard against "C:,3" style nonsense and against splitting a drive colon.
+    if (comma != std::wstring::npos && comma > 2) {
+        std::wstring tail = Trim(raw.substr(comma + 1));
+        wchar_t* end = nullptr;
+        long parsed = wcstol(tail.c_str(), &end, 10);
+        if (end && *end == L'\0' && !tail.empty()) {
+            *index = (int)parsed;
+            raw = Trim(raw.substr(0, comma));
+        }
+    }
+    if (GetFileAttributesW(raw.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    *file = raw;
+    return true;
+}
+
+// A .lnk icon has to be a file on disk that the shell can load an icon resource
+// from, so only .ico/.exe/.dll-shaped specs can be used directly.
+//
+// ponytail: emoji and .png icons fall back to the default folder glyph. Giving
+// them real buttons means rendering to an .ico next to the shortcut - the mod
+// already builds these images for the hover grid (MakeButtonContent), so the
+// missing piece is only an HICON -> .ico writer.
+void ResolveIcon(const FolderStore::Entry& entry,
+                 const std::wstring& folderPath,
+                 std::wstring* file,
+                 int* index) {
+    if (ParseIconSpec(entry.icon, file, index)) {
+        return;
+    }
+    if (ParseIconSpec(ReadFolderCustomIcon(folderPath), file, index)) {
+        return;
+    }
+    *file = kDefaultIconFile;
+    *index = kDefaultIconIndex;
+}
+
+// Reads the AppUserModelID off an existing .lnk. Empty when it has none, which
+// is the normal case for shortcuts that are not ours.
+std::wstring ReadShortcutAppId(const std::wstring& lnkPath) {
+    IShellLinkW* link = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_IShellLinkW, (void**)&link)) ||
+        !link) {
+        return L"";
+    }
+
+    std::wstring appId;
+    IPersistFile* persist = nullptr;
+    if (SUCCEEDED(link->QueryInterface(IID_IPersistFile, (void**)&persist)) &&
+        persist) {
+        if (SUCCEEDED(persist->Load(lnkPath.c_str(), STGM_READ))) {
+            IPropertyStore* store = nullptr;
+            if (SUCCEEDED(link->QueryInterface(IID_IPropertyStore,
+                                               (void**)&store)) &&
+                store) {
+                PROPVARIANT pv;
+                PropVariantInit(&pv);
+                if (SUCCEEDED(store->GetValue(kPKEY_AppUserModel_ID, &pv)) &&
+                    pv.vt == VT_LPWSTR && pv.pwszVal) {
+                    appId = pv.pwszVal;
+                }
+                PropVariantClear(&pv);
+                store->Release();
+            }
+        }
+        persist->Release();
+    }
+    link->Release();
+    return appId;
+}
+
+// Writes (or rewrites) the shortcut behind one entry. Rewriting on every
+// reconcile is deliberate: it is how a renamed folder, a changed icon, or a
+// moved target reach an already-pinned button.
+bool WriteShortcut(const FolderStore::Entry& entry,
+                   const std::wstring& folderPath,
+                   const std::wstring& lnkPath) {
+    std::wstring dir = lnkPath.substr(0, lnkPath.find_last_of(L'\\'));
+    SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    if (GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        Wh_Log(L"Pins: could not create %s", dir.c_str());
+        return false;
+    }
+
+    IShellLinkW* link = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_IShellLinkW, (void**)&link);
+    if (FAILED(hr) || !link) {
+        Wh_Log(L"Pins: CoCreateInstance(ShellLink) failed: 0x%08X", hr);
+        return false;
+    }
+
+    WCHAR explorerPath[MAX_PATH];
+    GetWindowsDirectoryW(explorerPath, ARRAYSIZE(explorerPath));
+    wcscat_s(explorerPath, L"\\explorer.exe");
+    link->SetPath(explorerPath);
+    // Quoted: folder paths routinely contain spaces.
+    std::wstring args = L"\"" + folderPath + L"\"";
+    link->SetArguments(args.c_str());
+    link->SetDescription(entry.name.empty() ? L"Taskbar folder"
+                                            : entry.name.c_str());
+
+    std::wstring iconFile;
+    int iconIndex = 0;
+    ResolveIcon(entry, folderPath, &iconFile, &iconIndex);
+    link->SetIconLocation(iconFile.c_str(), iconIndex);
+
+    bool ok = false;
+    IPropertyStore* store = nullptr;
+    hr = link->QueryInterface(IID_IPropertyStore, (void**)&store);
+    if (SUCCEEDED(hr) && store) {
+        std::wstring appId = AppIdFor(entry.pinId);
+        PROPVARIANT pv;
+        PropVariantInit(&pv);
+        size_t bytes = (appId.size() + 1) * sizeof(WCHAR);
+        pv.pwszVal = (PWSTR)CoTaskMemAlloc(bytes);
+        if (pv.pwszVal) {
+            memcpy(pv.pwszVal, appId.c_str(), bytes);
+            pv.vt = VT_LPWSTR;
+            if (SUCCEEDED(store->SetValue(kPKEY_AppUserModel_ID, pv)) &&
+                SUCCEEDED(store->Commit())) {
+                ok = true;
+            }
+        }
+        PropVariantClear(&pv);
+        store->Release();
+    }
+    if (!ok) {
+        // Without the AUMID the item would merge into the File Explorer group,
+        // which is worse than having no button: it would look like the mod
+        // corrupted the user's existing File Explorer pin.
+        Wh_Log(L"Pins: could not stamp the AppUserModelID, refusing to write %s",
+               lnkPath.c_str());
+        link->Release();
+        return false;
+    }
+
+    IPersistFile* persist = nullptr;
+    hr = link->QueryInterface(IID_IPersistFile, (void**)&persist);
+    if (SUCCEEDED(hr) && persist) {
+        hr = persist->Save(lnkPath.c_str(), TRUE);
+        persist->Release();
+    }
+    link->Release();
+
+    if (FAILED(hr)) {
+        Wh_Log(L"Pins: saving %s failed: 0x%08X", lnkPath.c_str(), hr);
+        return false;
+    }
+    SHChangeNotify(SHCNE_CREATE, SHCNF_PATH | SHCNF_FLUSH, lnkPath.c_str(),
+                   nullptr);
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// "Manage folders..." on the button's own right-click menu
+//
+// That menu belongs to Windows now, and a mod cannot append to it. But it is a
+// jump list, and a jump list is keyed by AppUserModelID — which is ours. So the
+// entry goes on through the documented ICustomDestinationList route instead of
+// being drawn by this mod at all.
+//
+// A jump list task can only launch a command line, and the manager window lives
+// inside explorer.exe, so the task carries a sentinel token and the launch is
+// caught in-process (see the CreateProcessW hook). If that interception ever
+// stops working the task still runs, so it points at explorer.exe: the worst
+// case is a stray Explorer window rather than a dead menu item.
+
+constexpr PCWSTR kManageSentinel = L"--taskbar-folder-hover-tray-manage";
+
+// PKEY_Title, spelled out for the same reason as the AppUserModelID key.
+const PROPERTYKEY kPKEY_Title = {
+    {0xF29F85E0,
+     0x4FF9,
+     0x1068,
+     {0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9}},
+    2};
+
+// A jump list task: a shell link plus a title, which is what the menu shows.
+IShellLinkW* MakeManageTask() {
+    IShellLinkW* link = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_IShellLinkW, (void**)&link)) ||
+        !link) {
+        return nullptr;
+    }
+
+    WCHAR explorerPath[MAX_PATH];
+    GetWindowsDirectoryW(explorerPath, ARRAYSIZE(explorerPath));
+    wcscat_s(explorerPath, L"\\explorer.exe");
+    link->SetPath(explorerPath);
+    link->SetArguments(kManageSentinel);
+    link->SetIconLocation(L"%SystemRoot%\\system32\\imageres.dll", 3);
+
+    // Without a title the shell shows nothing for the task.
+    IPropertyStore* store = nullptr;
+    if (SUCCEEDED(link->QueryInterface(IID_IPropertyStore, (void**)&store)) &&
+        store) {
+        PROPVARIANT pv;
+        PropVariantInit(&pv);
+        PCWSTR title = L"Manage folders...";
+        size_t bytes = (wcslen(title) + 1) * sizeof(WCHAR);
+        pv.pwszVal = (PWSTR)CoTaskMemAlloc(bytes);
+        if (pv.pwszVal) {
+            memcpy(pv.pwszVal, title, bytes);
+            pv.vt = VT_LPWSTR;
+            store->SetValue(kPKEY_Title, pv);
+            store->Commit();
+        }
+        PropVariantClear(&pv);
+        store->Release();
+    }
+    return link;
+}
+
+// Publishes the jump list for one of our pinned items.
+void WriteJumpList(const std::wstring& appId) {
+    ICustomDestinationList* list = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_DestinationList, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_ICustomDestinationList, (void**)&list)) ||
+        !list) {
+        return;
+    }
+    list->SetAppID(appId.c_str());
+
+    UINT slots = 0;
+    IObjectArray* removed = nullptr;
+    HRESULT hr = list->BeginList(&slots, IID_IObjectArray, (void**)&removed);
+    if (removed) {
+        removed->Release();
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"Pins: BeginList for %s failed: 0x%08X", appId.c_str(), hr);
+        list->Release();
+        return;
+    }
+
+    IObjectCollection* tasks = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr,
+                                   CLSCTX_INPROC_SERVER,
+                                   IID_IObjectCollection, (void**)&tasks)) &&
+        tasks) {
+        if (IShellLinkW* task = MakeManageTask()) {
+            tasks->AddObject(task);
+            task->Release();
+        }
+        if (IObjectArray* array = nullptr;
+            SUCCEEDED(tasks->QueryInterface(IID_IObjectArray,
+                                            (void**)&array)) &&
+            array) {
+            hr = list->AddUserTasks(array);
+            array->Release();
+            if (FAILED(hr)) {
+                Wh_Log(L"Pins: AddUserTasks failed: 0x%08X", hr);
+            }
+        }
+        tasks->Release();
+    }
+
+    hr = list->CommitList();
+    if (FAILED(hr)) {
+        Wh_Log(L"Pins: CommitList for %s failed: 0x%08X", appId.c_str(), hr);
+    }
+    list->Release();
+}
+
+// Invokes a shell verb on a path. Pinning and unpinning are both just verbs, so
+// neither needs the undocumented IPinnedList3.
+bool InvokeVerb(const std::wstring& path, PCSTR verb) {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    HRESULT hr = SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr);
+    if (FAILED(hr) || !pidl) {
+        Wh_Log(L"Pins: SHParseDisplayName(%s) failed: 0x%08X", path.c_str(), hr);
+        return false;
+    }
+
+    IShellFolder* parent = nullptr;
+    PCUITEMID_CHILD child = nullptr;
+    hr = SHBindToParent(pidl, IID_IShellFolder, (void**)&parent, &child);
+    if (FAILED(hr) || !parent) {
+        Wh_Log(L"Pins: SHBindToParent failed: 0x%08X", hr);
+        ILFree(pidl);
+        return false;
+    }
+
+    bool ok = false;
+    IContextMenu* menu = nullptr;
+    hr = parent->GetUIObjectOf(nullptr, 1, &child, IID_IContextMenu, nullptr,
+                               (void**)&menu);
+    if (SUCCEEDED(hr) && menu) {
+        if (HMENU hMenu = CreatePopupMenu()) {
+            // Must run first: QueryContextMenu is what makes the handler
+            // enumerate and register its verbs. Without it InvokeCommand cannot
+            // find "taskbarpin" and returns ERROR_NO_ASSOCIATION.
+            menu->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL);
+
+            CMINVOKECOMMANDINFO info = {};
+            info.cbSize = sizeof(info);
+            info.lpVerb = verb;
+            info.nShow = SW_SHOWNORMAL;
+            hr = menu->InvokeCommand(&info);
+            ok = SUCCEEDED(hr);
+            if (!ok) {
+                Wh_Log(L"Pins: %S on %s returned 0x%08X", verb, path.c_str(),
+                       hr);
+            }
+            DestroyMenu(hMenu);
+        }
+        menu->Release();
+    } else {
+        Wh_Log(L"Pins: GetUIObjectOf(IContextMenu) failed: 0x%08X", hr);
+    }
+
+    parent->Release();
+    ILFree(pidl);
+    return ok;
+}
+
+// One of this mod's items as the shell currently holds it. `leaf` is the
+// shortcut's file name without the extension, which is exactly what the taskbar
+// labels the button with — and therefore the only reliable way to tie a XAML
+// button back to the entry behind it without hooking the shell's own group type.
+struct PinnedItem {
+    std::wstring leaf;
+    std::wstring appId;
+    std::wstring path;
+};
+
+// Everything currently pinned that belongs to this mod, read from the shell's
+// own copy of the pinned items rather than from anything the mod believes. This
+// is what makes a native "Unpin from taskbar" visible, and what keeps the button
+// labels honest when a shortcut has been renamed underneath a live pin.
+std::vector<PinnedItem> ReadPinnedItems() {
+    std::vector<PinnedItem> items;
+    std::wstring dir = PinnedDir();
+    if (dir.empty()) {
+        return items;
+    }
+
+    WIN32_FIND_DATAW find{};
+    HANDLE handle = FindFirstFileW((dir + L"\\*.lnk").c_str(), &find);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return items;
+    }
+    do {
+        if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            continue;
+        }
+        std::wstring path = dir + L"\\" + find.cFileName;
+        std::wstring appId = ReadShortcutAppId(path);
+        if (appId.empty() || !IsOurAppId(appId)) {
+            continue;
+        }
+        std::wstring leaf = find.cFileName;
+        if (size_t dot = leaf.find_last_of(L'.'); dot != std::wstring::npos) {
+            leaf.resize(dot);
+        }
+        items.push_back({std::move(leaf), std::move(appId), std::move(path)});
+    } while (FindNextFileW(handle, &find));
+    FindClose(handle);
+    return items;
+}
+
+std::vector<std::wstring> ReadPinnedAppIds() {
+    std::vector<std::wstring> appIds;
+    for (auto& item : ReadPinnedItems()) {
+        appIds.push_back(std::move(item.appId));
+    }
+    return appIds;
+}
+
+// Button label -> pin id, published for the taskbar UI thread.
+//
+// Built here rather than read on demand because the taskbar thread needs it
+// during layout, and rebuilding it means opening every pinned shortcut through
+// COM — far too expensive to do on a layout pass. The generation counter lets
+// that thread notice a change without holding the lock to compare.
+[[clang::no_destroy]] std::mutex g_labelMutex;
+[[clang::no_destroy]] std::vector<std::pair<std::wstring, std::wstring>>
+    g_labelToPinId;
+std::atomic<uint32_t> g_labelGeneration{0};
+
+void PublishLabels(const std::vector<PinnedItem>& items) {
+    std::vector<std::pair<std::wstring, std::wstring>> map;
+    for (const auto& item : items) {
+        std::wstring pinId = item.appId.substr(wcslen(kAppIdPrefix));
+        map.emplace_back(item.leaf, std::move(pinId));
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_labelMutex);
+        if (map == g_labelToPinId) {
+            return;
+        }
+        g_labelToPinId = std::move(map);
+    }
+    g_labelGeneration.fetch_add(1, std::memory_order_release);
+}
+
+// A taskbar button's accessible name is the item's label plus whatever state
+// the shell wants to announce — "Games pinned", "Brave - 1 running window
+// pinned", "Cursor - 1 running window". So the label is a prefix, not the whole
+// string, and the remainder has to be one of those recognised annotations.
+//
+// Checking the remainder rather than just taking a prefix match matters: a
+// folder called "Games" must not claim a button for an app called
+// "Games Launcher".
+bool LabelMatchesAccessibleName(const std::wstring& leaf,
+                                const std::wstring& name) {
+    if (leaf.empty() || name.size() < leaf.size()) {
+        return false;
+    }
+    if (_wcsnicmp(name.c_str(), leaf.c_str(), leaf.size()) != 0) {
+        return false;
+    }
+    std::wstring rest = name.substr(leaf.size());
+    if (rest.empty()) {
+        return true;
+    }
+    // "<label> pinned"
+    if (_wcsicmp(rest.c_str(), L" pinned") == 0) {
+        return true;
+    }
+    // "<label> - 1 running window", with or without a trailing " pinned".
+    if (rest.size() > 3 && _wcsnicmp(rest.c_str(), L" - ", 3) == 0) {
+        return true;
+    }
+    return false;
+}
+
+// Empty when this label is not one of ours.
+std::wstring PinIdForLabel(const std::wstring& accessibleName) {
+    std::lock_guard<std::mutex> lock(g_labelMutex);
+    for (const auto& [leaf, pinId] : g_labelToPinId) {
+        if (LabelMatchesAccessibleName(leaf, accessibleName)) {
+            return pinId;
+        }
+    }
+    return L"";
+}
+
+bool Contains(const std::vector<std::wstring>& list, const std::wstring& value) {
+    for (const auto& item : list) {
+        if (_wcsicmp(item.c_str(), value.c_str()) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Brings the real taskbar into line with the store: every pinned entry gets a
+// shortcut and a pin, everything else of ours is removed, and an entry the user
+// unpinned natively is written back to the store as a draft.
+//
+// Written as a reconcile rather than as pin/unpin calls threaded through the
+// eight or so places that mutate the store: it is idempotent, it is the only
+// thing that has to be correct, and it also repairs state after an explorer
+// crash or a manual edit, which per-site calls never would.
+void Reconcile() {
+    std::wstring sourceDir = SourceDir();
+    if (sourceDir.empty()) {
+        Wh_Log(L"Pins: no Start Menu Programs folder, skipping");
+        return;
+    }
+
+    struct Desired {
+        std::wstring appId;
+        std::wstring lnkPath;
+        // The label the taskbar should be showing for this item.
+        std::wstring leaf;
+    };
+    std::vector<Desired> desired;
+    std::vector<std::wstring> keepFiles;
+    std::vector<FolderStore::Entry> todo;
+    std::vector<std::wstring> takenLeaves;
+
+    bool unpinnedByUser = false;
+    bool generatedPinIds = false;
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        bool storeChanged = false;
+
+        // A pinned entry with no id yet is either new or predates this mod
+        // version; either way it needs one before it can have a shortcut. This
+        // is also the whole of the upgrade path for existing users.
+        for (auto& entry : stored) {
+            if (entry.pinned && entry.pinId.empty()) {
+                GUID guid{};
+                if (FAILED(CoCreateGuid(&guid))) {
+                    continue;
+                }
+                WCHAR buf[40];
+                swprintf(buf, ARRAYSIZE(buf), L"%08lx%04hx%04hx", guid.Data1,
+                         guid.Data2, guid.Data3);
+                entry.pinId = buf;
+                storeChanged = true;
+                generatedPinIds = true;
+            }
+        }
+
+        std::vector<std::wstring> live = ReadPinnedAppIds();
+        // The reverse sync below is only as good as this list. If a native
+        // unpin is not reflected here, the shell is flushing that folder later
+        // than it changes the taskbar, and pin state has to be read from
+        // somewhere else instead.
+        Wh_Log(L"Pins: reconcile - the shell reports %zu of our items pinned",
+               live.size());
+
+        for (auto& entry : stored) {
+            if (!entry.pinned || entry.pinId.empty()) {
+                continue;
+            }
+
+            // Reverse sync. The shell removes a natively-unpinned item without
+            // telling the mod, so "we pinned this once and it is gone now" is
+            // the only evidence that the user unpinned it. Demote it to a draft
+            // rather than re-pinning: re-pinning would make native Unpin look
+            // broken, and the entry keeps its name and icon either way.
+            if (entry.pinApplied && !Contains(live, AppIdFor(entry.pinId))) {
+                Wh_Log(L"Pins: '%s' was unpinned from the taskbar, keeping it "
+                       L"as a draft",
+                       entry.name.c_str());
+                entry.pinned = false;
+                entry.pinApplied = false;
+                storeChanged = true;
+                unpinnedByUser = true;
+                continue;
+            }
+            // Only a copy of what the slow work below needs. Resolving a path
+            // and writing a shortcut both touch the filesystem, and the folder
+            // may be a network share that blocks for the share's timeout — the
+            // store lock is held by the manager window and by the Explorer
+            // right-click pin, neither of which should wait on a dead share.
+            todo.push_back(entry);
+        }
+
+        if (storeChanged) {
+            FolderStore::Write(stored);
+        }
+    }
+
+    for (const auto& entry : todo) {
+        std::wstring folderPath = ResolveFolderPath(ExpandEnv(entry.path));
+        if (folderPath.empty()) {
+            folderPath = ExpandEnv(entry.path);
+        }
+        // A folder that no longer exists would be pruned by the shell anyway;
+        // leave the entry alone so the user can fix the path rather than
+        // silently losing it.
+        if (GetFileAttributesW(folderPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"Pins: '%s' does not exist, not pinning", folderPath.c_str());
+            continue;
+        }
+
+        std::wstring lnkPath = LnkPathFor(entry, &takenLeaves);
+        if (lnkPath.empty() || !WriteShortcut(entry, folderPath, lnkPath)) {
+            continue;
+        }
+        keepFiles.push_back(lnkPath);
+
+        std::wstring leaf = lnkPath.substr(lnkPath.find_last_of(L'\\') + 1);
+        leaf.resize(leaf.find_last_of(L'.'));
+        desired.push_back({AppIdFor(entry.pinId), lnkPath, leaf});
+    }
+
+    // Reconcile against the shell's own copies. Pinning copies the shortcut, so
+    // the pinned item keeps whatever name it had when it was pinned — renaming
+    // the source .lnk afterwards does not reach the taskbar, and the button
+    // would sit there labelled with a name the mod no longer uses.
+    for (const auto& item : ReadPinnedItems()) {
+        const Desired* match = nullptr;
+        for (const auto& want : desired) {
+            if (_wcsicmp(want.appId.c_str(), item.appId.c_str()) == 0) {
+                match = &want;
+                break;
+            }
+        }
+        if (!match) {
+            if (InvokeVerb(item.path, "taskbarunpin")) {
+                Wh_Log(L"Pins: unpinned %s", item.leaf.c_str());
+            }
+            continue;
+        }
+        // Same item, stale label: unpin so the loop below pins it afresh under
+        // the right name. Costs its place in the taskbar order, which is why it
+        // only happens when the name genuinely changed.
+        if (_wcsicmp(match->leaf.c_str(), item.leaf.c_str()) != 0) {
+            if (InvokeVerb(item.path, "taskbarunpin")) {
+                Wh_Log(L"Pins: '%s' is now called '%s', re-pinning",
+                       item.leaf.c_str(), match->leaf.c_str());
+            }
+        }
+    }
+
+    std::vector<std::wstring> live = ReadPinnedAppIds();
+
+    for (const auto& item : desired) {
+        if (Contains(live, item.appId)) {
+            continue;
+        }
+        if (InvokeVerb(item.lnkPath, "taskbarpin")) {
+            Wh_Log(L"Pins: pinned %s", item.lnkPath.c_str());
+        }
+    }
+
+    // Sweep our own shortcut directory: a renamed entry leaves its old .lnk
+    // behind, and those accumulate.
+    WIN32_FIND_DATAW find{};
+    HANDLE handle = FindFirstFileW((sourceDir + L"\\*.lnk").c_str(), &find);
+    if (handle != INVALID_HANDLE_VALUE) {
+        do {
+            if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                continue;
+            }
+            std::wstring path = sourceDir + L"\\" + find.cFileName;
+            if (!Contains(keepFiles, path)) {
+                DeleteFileW(path.c_str());
+                SHChangeNotify(SHCNE_DELETE, SHCNF_PATH | SHCNF_FLUSH,
+                               path.c_str(), nullptr);
+            }
+        } while (FindNextFileW(handle, &find));
+        FindClose(handle);
+    }
+
+    // Record what actually ended up on the taskbar. Done once at the end from
+    // the shell's own list rather than from the return value of each pin,
+    // because "the verb returned S_OK" and "there is a button" are not the same
+    // claim — and pinApplied is what the reverse sync above trusts next run.
+    std::vector<PinnedItem> finalItems = ReadPinnedItems();
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        std::vector<std::wstring> finalLive;
+        for (const auto& item : finalItems) {
+            finalLive.push_back(item.appId);
+        }
+        bool storeChanged = false;
+        for (auto& entry : stored) {
+            if (entry.pinId.empty()) {
+                continue;
+            }
+            bool applied =
+                entry.pinned && Contains(finalLive, AppIdFor(entry.pinId));
+            if (entry.pinApplied != applied) {
+                entry.pinApplied = applied;
+                storeChanged = true;
+            }
+        }
+        if (storeChanged) {
+            FolderStore::Write(stored);
+        }
+    }
+
+    // Hand the taskbar UI thread the label -> pin id map it needs to recognise
+    // our buttons. Built from what the shell actually holds, so it stays right
+    // even when a pinned copy's name has drifted from the source shortcut.
+    PublishLabels(finalItems);
+
+    // Put "Manage folders..." on each button's own right-click menu. Rewritten
+    // every reconcile rather than once: the jump list is stored per AppID by
+    // the shell, and an item that was unpinned and pinned again comes back
+    // without one.
+    for (const auto& item : finalItems) {
+        WriteJumpList(item.appId);
+    }
+
+    // Both of these mean the loaded folder list no longer matches the store.
+    //
+    // unpinnedByUser: the entry was demoted to a draft, so its button and its
+    // row in the manager window are stale.
+    //
+    // generatedPinIds: Wh_ModInit loads the folder list before this worker has
+    // ever run, so on the first load after an upgrade every entry in g_settings
+    // has an empty pin id — and the pin id is exactly what ties a real taskbar
+    // button back to its folder. Without this reload the buttons exist, the
+    // labels resolve, and nothing matches. Reloading re-reads the store now that
+    // the ids are persisted; the next reconcile generates none, so this does not
+    // recur.
+    if (unpinnedByUser || generatedPinIds) {
+        RequestReloadUI();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The STA worker
+//
+// Everything above must run here. See the note at the top of the namespace for
+// why it cannot be the taskbar UI thread.
+
+HANDLE g_thread = nullptr;
+HANDLE g_stopEvent = nullptr;  // manual-reset
+HANDLE g_kickEvent = nullptr;  // auto-reset
+
+// Unpinning from the taskbar's own right-click menu is completely silent: it
+// changes nothing the mod owns, so nothing calls RequestReconcile and the entry
+// stays "pinned" in the store until something else happens to trigger a reload
+// — in practice, the next Explorer restart. Watching the shell's own state is
+// the only way to hear about it.
+//
+// Two sources because they can be updated at different moments: the pinned-items
+// folder (which is what ReadPinnedAppIds reads) and the Taskband key the shell
+// keeps the order in. Either firing is treated as "something changed, go look".
+constexpr DWORD kPinWatchDebounceMs = 400;
+
+DWORD WINAPI ThreadProc(void*) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) {
+        Wh_Log(L"Pins: CoInitializeEx(STA) failed: 0x%08X", hr);
+        return 0;
+    }
+
+    HANDLE dirWatch = INVALID_HANDLE_VALUE;
+    if (std::wstring pinnedDir = PinnedDir(); !pinnedDir.empty()) {
+        dirWatch = FindFirstChangeNotificationW(
+            pinnedDir.c_str(), FALSE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
+        if (dirWatch == INVALID_HANDLE_VALUE) {
+            Wh_Log(L"Pins: cannot watch %s (%u); a native unpin will only be "
+                   L"noticed on the next reload",
+                   pinnedDir.c_str(), GetLastError());
+        }
+    }
+
+    HKEY taskbandKey = nullptr;
+    HANDLE regEvent = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer"
+                      L"\\Taskband",
+                      0, KEY_NOTIFY, &taskbandKey) == ERROR_SUCCESS) {
+        regEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    }
+    // Re-arms the registry watch. It is one-shot: every fire needs a new call or
+    // the second change is never heard.
+    auto armRegWatch = [&]() {
+        if (taskbandKey && regEvent) {
+            ResetEvent(regEvent);
+            RegNotifyChangeKeyValue(taskbandKey, TRUE,
+                                    REG_NOTIFY_CHANGE_LAST_SET |
+                                        REG_NOTIFY_CHANGE_NAME,
+                                    regEvent, TRUE);
+        }
+    };
+    armRegWatch();
+
+    HANDLE waits[4];
+    DWORD count = 0;
+    waits[count++] = g_stopEvent;
+    waits[count++] = g_kickEvent;
+    const DWORD dirIndex =
+        dirWatch != INVALID_HANDLE_VALUE ? count : 0xFFFFFFFF;
+    if (dirWatch != INVALID_HANDLE_VALUE) {
+        waits[count++] = dirWatch;
+    }
+    const DWORD regIndex = regEvent ? count : 0xFFFFFFFF;
+    if (regEvent) {
+        waits[count++] = regEvent;
+    }
+
+    // Re-arms whichever watch just fired, so the wait below stays live.
+    auto rearm = [&](DWORD signalled) {
+        if (signalled == dirIndex && dirWatch != INVALID_HANDLE_VALUE) {
+            FindNextChangeNotification(dirWatch);
+        } else if (signalled == regIndex) {
+            armRegWatch();
+        }
+    };
+
+    bool stopping = false;
+    while (!stopping) {
+        DWORD result = WaitForMultipleObjects(count, waits, FALSE, INFINITE);
+        if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) {
+            break;
+        }
+        rearm(result - WAIT_OBJECT_0);
+
+        // Coalesce the burst. One pin or unpin rewrites several files and the
+        // registry, and this mod's own reconcile writes to the same places, so
+        // reacting to each notification separately would mean several redundant
+        // passes per user action — and, worse, reconciling while the shell is
+        // still half way through writing.
+        for (;;) {
+            DWORD more = WaitForMultipleObjects(count, waits, FALSE,
+                                                kPinWatchDebounceMs);
+            if (more == WAIT_TIMEOUT) {
+                break;
+            }
+            if (more == WAIT_OBJECT_0 || more == WAIT_FAILED) {
+                stopping = true;
+                break;
+            }
+            rearm(more - WAIT_OBJECT_0);
+        }
+        if (stopping) {
+            break;
+        }
+
+        Reconcile();
+    }
+
+    if (dirWatch != INVALID_HANDLE_VALUE) {
+        FindCloseChangeNotification(dirWatch);
+    }
+    if (regEvent) {
+        CloseHandle(regEvent);
+    }
+    if (taskbandKey) {
+        RegCloseKey(taskbandKey);
+    }
+    CoUninitialize();
+    return 0;
+}
+
+void RequestReconcile() {
+    if (g_kickEvent) {
+        SetEvent(g_kickEvent);
+    }
+}
+
+void Start() {
+    if (g_thread) {
+        RequestReconcile();
+        return;
+    }
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_kickEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_kickEvent) {
+        return;
+    }
+    g_thread = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
+    if (g_thread) {
+        RequestReconcile();
+    }
+}
+
+void Stop() {
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+    if (g_thread) {
+        // Joined, not abandoned: the worker's return address is in this image,
+        // and Windhawk unmaps it as soon as uninit returns.
+        WaitForSingleObject(g_thread, INFINITE);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+    if (g_kickEvent) {
+        CloseHandle(g_kickEvent);
+        g_kickEvent = nullptr;
+    }
+}
+
+}  // namespace Pins
+
 // Fills in the derived fields (resolved path, remote flag) a stored entry
 // needs before the UI can use it, and follows an in-place rename via the
 // recorded NTFS file id. Returns false if `store` was updated and should be
@@ -972,6 +2015,7 @@ bool BuildFolderEntry(FolderStore::Entry* stored, FolderEntry* out) {
     out->icon = stored->icon;
     out->path = ExpandEnv(stored->path);
     out->pinned = stored->pinned;
+    out->pinId = stored->pinId;
 
     if (IsShellFolderPath(out->path)) {
         // shell: targets resolve later, on an STA.
@@ -1062,6 +2106,14 @@ void LoadFolders(std::vector<FolderEntry>* out) {
 
     Wh_Log(L"LoadFolders: %zu button(s) from %zu stored folder(s)",
            out->size(), storedCount);
+
+    // Every path that changes the folder list ends up here — init, a settings
+    // change, a pin or unpin from Explorer, any edit in the manager window — so
+    // this is the one place the real taskbar pins need to be brought back into
+    // line. Asking per mutation instead would mean instrumenting eight call
+    // sites and still missing the ones that only touch the store indirectly.
+    // Non-blocking: it kicks the STA worker and returns.
+    Pins::RequestReconcile();
 }
 
 // True if `path` already has a button on the taskbar. Used to hide the "Pin to
@@ -1124,41 +2176,32 @@ void RemovePinnedFolder(const std::wstring& path) {
 void LoadSettings() {
     LoadFolders(&g_settings.folders);
 
-    g_settings.position = GetStringSetting(L"position");
-    if (g_settings.position.empty()) {
-        g_settings.position = L"beforeApps";
-    }
-    g_settings.anchor = GetStringSetting(L"anchor");
-    if (g_settings.anchor.empty()) {
-        g_settings.anchor = L"firstApp";
-    }
-
     // "type" was the old folders-first option, which is now unconditional.
-    std::wstring sortBy = GetStringSetting(L"sortBy");
+    std::wstring sortBy = GetStringSetting(L"content.sortBy");
     g_settings.sortBy =
         sortBy == L"modified" ? SortMode::Modified : SortMode::Name;
 
     g_settings.hoverDelayMs =
-        std::clamp<int>(Wh_GetIntSetting(L"hoverDelayMs"), 0, 5000);
+        std::clamp<int>(Wh_GetIntSetting(L"behavior.hoverDelayMs"), 0, 5000);
     g_settings.closeDelayMs =
-        std::clamp<int>(Wh_GetIntSetting(L"closeDelayMs"), 0, 5000);
-    g_settings.columns = std::clamp<int>(Wh_GetIntSetting(L"columns"), 0, 24);
+        std::clamp<int>(Wh_GetIntSetting(L"behavior.closeDelayMs"), 0, 5000);
+    g_settings.columns = std::clamp<int>(Wh_GetIntSetting(L"content.columns"), 0, 24);
     g_settings.maxItems =
-        std::clamp<int>(Wh_GetIntSetting(L"maxItems"), 0, 400);
-    g_settings.includeSubfolders = Wh_GetIntSetting(L"includeSubfolders");
+        std::clamp<int>(Wh_GetIntSetting(L"content.maxItems"), 0, 400);
+    g_settings.includeSubfolders = Wh_GetIntSetting(L"content.includeSubfolders");
     g_settings.maxFolderDepth =
-        std::clamp<int>(Wh_GetIntSetting(L"maxFolderDepth"), -1, 32);
+        std::clamp<int>(Wh_GetIntSetting(L"content.maxFolderDepth"), -1, 32);
     g_settings.submenuDelayMs =
-        std::clamp<int>(Wh_GetIntSetting(L"submenuDelayMs"), 0, 5000);
+        std::clamp<int>(Wh_GetIntSetting(L"content.submenuDelayMs"), 0, 5000);
     g_settings.submenuCloseDelayMs =
-        std::clamp<int>(Wh_GetIntSetting(L"submenuCloseDelayMs"), 0, 5000);
-    g_settings.showHidden = Wh_GetIntSetting(L"showHidden");
-    g_settings.showExtensions = Wh_GetIntSetting(L"showExtensions");
+        std::clamp<int>(Wh_GetIntSetting(L"content.submenuCloseDelayMs"), 0, 5000);
+    g_settings.showHidden = Wh_GetIntSetting(L"content.showHidden");
+    g_settings.showExtensions = Wh_GetIntSetting(L"content.showExtensions");
     // Cell padding grows with the icon rather than staying fixed, so the label
     // keeps its room at the small end. The small/medium/large numbers are the
     // originals — the three steps below them were added later, so an existing
     // setting keeps the size it already had.
-    std::wstring itemSize = GetStringSetting(L"itemSize");
+    std::wstring itemSize = GetStringSetting(L"appearance.itemSize");
     if (itemSize == L"smallest") {
         g_settings.iconSize = 12;
         g_settings.cellWidth = 56;
@@ -1171,56 +2214,51 @@ void LoadSettings() {
         g_settings.iconSize = 20;
         g_settings.cellWidth = 70;
         g_settings.cellHeight = 66;
-    } else if (itemSize == L"medium") {
-        g_settings.iconSize = 32;
-        g_settings.cellWidth = 92;
-        g_settings.cellHeight = 88;
+    } else if (itemSize == L"small") {
+        g_settings.iconSize = 24;
+        g_settings.cellWidth = 76;
+        g_settings.cellHeight = 72;
     } else if (itemSize == L"large") {
         g_settings.iconSize = 48;
         g_settings.cellWidth = 120;
         g_settings.cellHeight = 112;
     } else {
-        g_settings.iconSize = 24;
-        g_settings.cellWidth = 76;
-        g_settings.cellHeight = 72;
+        // medium, and anything unrecognised
+        g_settings.iconSize = 32;
+        g_settings.cellWidth = 92;
+        g_settings.cellHeight = 88;
     }
-    g_settings.showLabels = Wh_GetIntSetting(L"showLabels");
-    g_settings.fontSize = std::clamp<int>(Wh_GetIntSetting(L"fontSize"), 6, 48);
-    g_settings.itemFontWeight =
-        ParseFontWeight(GetStringSetting(L"itemFontWeight"), FW_BOLD);
-    g_settings.showTitle = Wh_GetIntSetting(L"showTitle");
+    g_settings.showLabels = Wh_GetIntSetting(L"appearance.showLabels");
+    g_settings.fontSize = std::clamp<int>(Wh_GetIntSetting(L"appearance.fontSize"), 6, 48);
+    g_settings.itemFontWeight = ParseFontWeight(
+        GetStringSetting(L"appearance.itemFontWeight"), FW_NORMAL);
+    g_settings.showTitle = Wh_GetIntSetting(L"appearance.showTitle");
     g_settings.titleFontSize =
-        std::clamp<int>(Wh_GetIntSetting(L"titleFontSize"), 6, 48);
+        std::clamp<int>(Wh_GetIntSetting(L"appearance.titleFontSize"), 6, 48);
     g_settings.titleFontWeight =
-        ParseFontWeight(GetStringSetting(L"titleFontWeight"), FW_BOLD);
-    g_settings.titleAlign = GetStringSetting(L"titleAlign");
+        ParseFontWeight(GetStringSetting(L"appearance.titleFontWeight"), FW_BOLD);
+    g_settings.titleAlign = GetStringSetting(L"appearance.titleAlign");
     if (g_settings.titleAlign != L"left" && g_settings.titleAlign != L"right") {
         g_settings.titleAlign = L"center";
     }
-    g_settings.cornerRadius =
-        std::clamp<int>(Wh_GetIntSetting(L"cornerRadius"), 0, 32);
-    std::wstring popupTheme = GetStringSetting(L"popupTheme");
+    g_settings.cornerRadius = Wh_GetIntSetting(L"appearance.roundedCorners")
+                                  ? kRoundedCornerRadius
+                                  : 0;
+    std::wstring popupTheme = GetStringSetting(L"appearance.popupTheme");
     g_settings.popupThemeOverride =
         popupTheme == L"light" ? 0 : (popupTheme == L"dark" ? 1 : -1);
     g_settings.panelOpacity =
-        std::clamp<int>(Wh_GetIntSetting(L"panelOpacity"), 0, 100);
-    g_settings.panelBorder = Wh_GetIntSetting(L"panelBorder");
-    std::wstring blurType = GetStringSetting(L"blurType");
+        std::clamp<int>(Wh_GetIntSetting(L"appearance.panelOpacity"), 0, 100);
+    std::wstring blurType = GetStringSetting(L"appearance.blurType");
     g_settings.blurType = blurType == L"gaussian" ? BlurType::Gaussian
                           : blurType == L"none"   ? BlurType::None
                                                   : BlurType::Acrylic;
     g_settings.blurStrength =
-        std::clamp<int>(Wh_GetIntSetting(L"blurStrength"), 0, 100);
+        std::clamp<int>(Wh_GetIntSetting(L"appearance.blurStrength"), 0, 100);
     g_settings.gapAbove =
-        std::clamp<int>(Wh_GetIntSetting(L"gapAbove"), 0, 200);
-    g_settings.gapBefore =
-        std::clamp<int>(Wh_GetIntSetting(L"gapBefore"), 0, 200);
-    g_settings.gapAfter =
-        std::clamp<int>(Wh_GetIntSetting(L"gapAfter"), 0, 200);
-    g_settings.buttonIconSize =
-        std::clamp<int>(Wh_GetIntSetting(L"buttonIconSize"), 0, 128);
-    g_settings.openFolderOnClick = Wh_GetIntSetting(L"openFolderOnClick");
-    g_settings.explorerMenu = Wh_GetIntSetting(L"explorerMenu") != 0;
+        std::clamp<int>(Wh_GetIntSetting(L"appearance.gapAbove"), 0, 200);
+    g_settings.openFolderOnClick = Wh_GetIntSetting(L"behavior.openFolderOnClick");
+    g_settings.explorerMenu = Wh_GetIntSetting(L"behavior.explorerMenu") != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2398,17 +3436,9 @@ constexpr size_t kMaxCachedFolders = 32;
 // Soft ceiling on cached icon bitmaps across all folders (~64 MB).
 constexpr size_t kMaxCachedFolderBytes = 64ull * 1024 * 1024;
 
-enum class ScanRequestKind { Folder, ButtonIcon };
-
 struct ScanRequest {
-    ScanRequestKind kind = ScanRequestKind::Folder;
     std::wstring path;
     int iconPixelSize = 32;
-    // ButtonIcon: extract on the STA scan worker, deliver pixels on the UI thread.
-    int folderIndex = -1;
-    uint32_t iconGeneration = 0;
-    HWND taskbarWnd = nullptr;
-    bool resourceSpec = false;
 };
 
 // Keyed by resolved folder path so subfolders opened on hover share the same
@@ -2828,28 +3858,6 @@ void ScanFolderInto(const std::wstring& path,
 
 void StartScanThread();
 
-// Delivered from the scan STA to the taskbar UI thread (WriteableBitmap only).
-struct ButtonIconDelivery {
-    int folderIndex = -1;
-    uint32_t iconGeneration = 0;
-    int iconExtent = 0;
-    HWND taskbarWnd = nullptr;
-    std::shared_ptr<Gdiplus::Bitmap> bitmap;
-};
-
-void ApplyButtonIconOnUiThread(void* parameter);
-
-void DeliverButtonIconToUi(std::unique_ptr<ButtonIconDelivery> delivery) {
-    if (!delivery || !delivery->taskbarWnd || !delivery->bitmap) {
-        return;
-    }
-    HWND hwnd = delivery->taskbarWnd;
-    ButtonIconDelivery* raw = delivery.release();
-    if (!RunFromWindowThread(hwnd, ApplyButtonIconOnUiThread, raw)) {
-        delete raw;
-    }
-}
-
 void ScanThreadMain() {
     // Shell icon extractors (SHGetFileInfo / IExtractIcon) expect STA. MTA
     // causes many extractions to fail with the generic document icon.
@@ -2908,49 +3916,6 @@ void ScanThreadMain() {
             request.iconPixelSize = 32;
         }
 
-        if (request.kind == ScanRequestKind::ButtonIcon) {
-            std::shared_ptr<Gdiplus::Bitmap> bitmap;
-            if (!request.path.empty()) {
-                const std::wstring checkPath =
-                    request.resourceSpec ? IconSpecFilePart(request.path)
-                                         : request.path;
-                if (IsLikelyRemotePath(checkPath)) {
-                    Wh_Log(L"Skipping button icon for remote path %s",
-                           checkPath.c_str());
-                } else if (request.resourceSpec) {
-                    if (HICON hIcon = ExtractIconFromResourceSpec(
-                            request.path, request.iconPixelSize)) {
-                        bitmap = HIconToBitmap(hIcon, request.iconPixelSize);
-                        DestroyIcon(hIcon);
-                    }
-                } else {
-                    std::wstring resolved = ResolveFolderPath(request.path);
-                    if (!resolved.empty() && !IsLikelyRemotePath(resolved)) {
-                        if (HICON hIcon = GetShellIconForPath(
-                                resolved, request.iconPixelSize)) {
-                            bitmap =
-                                HIconToBitmap(hIcon, request.iconPixelSize);
-                            DestroyIcon(hIcon);
-                        }
-                    }
-                }
-                PumpScanThreadMessages();
-            }
-
-            if (bitmap && !g_unloading &&
-                !g_scanThreadStop.load(std::memory_order_relaxed)) {
-                auto delivery = std::make_unique<ButtonIconDelivery>();
-                delivery->folderIndex = request.folderIndex;
-                delivery->iconGeneration = request.iconGeneration;
-                // iconPixelSize is the extract size (display extent × 2).
-                delivery->iconExtent = std::max(8, request.iconPixelSize / 2);
-                delivery->taskbarWnd = request.taskbarWnd;
-                delivery->bitmap = std::move(bitmap);
-                DeliverButtonIconToUi(std::move(delivery));
-            }
-            continue;
-        }
-
         std::wstring scanPath = request.path;
         if (IsShellFolderPath(scanPath)) {
             scanPath = ResolveFolderPath(scanPath);
@@ -3001,66 +3966,14 @@ void RequestScan(const std::wstring& path, int iconPixelSize) {
         return;
     }
     for (const auto& queued : g_scanQueue) {
-        if (queued.kind == ScanRequestKind::Folder &&
-            queued.iconPixelSize == iconPixelSize &&
+        if (queued.iconPixelSize == iconPixelSize &&
             _wcsicmp(queued.path.c_str(), path.c_str()) == 0) {
             return;
         }
     }
     ScanRequest req;
-    req.kind = ScanRequestKind::Folder;
     req.path = path;
     req.iconPixelSize = iconPixelSize;
-    g_scanQueue.push_back(std::move(req));
-    if (g_scanWorkEvent) {
-        SetEvent(g_scanWorkEvent);
-    }
-}
-
-// Extract a taskbar button icon on the STA scan worker. The UI shows an emoji
-// fallback until ApplyButtonIconOnUiThread installs a WriteableBitmap.
-void RequestButtonIcon(const std::wstring& pathOrSpec,
-                       int iconPixelSize,
-                       int folderIndex,
-                       uint32_t iconGeneration,
-                       HWND taskbarWnd,
-                       bool resourceSpec) {
-    if (pathOrSpec.empty() || g_unloading || !taskbarWnd || folderIndex < 0) {
-        return;
-    }
-
-    const std::wstring checkPath =
-        resourceSpec ? IconSpecFilePart(pathOrSpec) : pathOrSpec;
-    if (IsLikelyRemotePath(checkPath)) {
-        Wh_Log(L"Skipping button icon request for remote path %s",
-               checkPath.c_str());
-        return;
-    }
-
-    StartScanThread();
-
-    std::lock_guard<std::mutex> lock(g_scanMutex);
-    if (g_unloading || g_scanThreadStop.load(std::memory_order_relaxed) ||
-        g_scanThreadJoining.load(std::memory_order_relaxed)) {
-        return;
-    }
-    for (const auto& queued : g_scanQueue) {
-        if (queued.kind == ScanRequestKind::ButtonIcon &&
-            queued.folderIndex == folderIndex &&
-            queued.iconGeneration == iconGeneration &&
-            queued.taskbarWnd == taskbarWnd &&
-            queued.iconPixelSize == iconPixelSize) {
-            return;
-        }
-    }
-    ScanRequest req;
-    req.kind = ScanRequestKind::ButtonIcon;
-    req.path = pathOrSpec;
-    req.iconPixelSize = iconPixelSize;
-    req.folderIndex = folderIndex;
-    req.iconGeneration = iconGeneration;
-    req.taskbarWnd = taskbarWnd;
-    req.resourceSpec = resourceSpec;
     g_scanQueue.push_back(std::move(req));
     if (g_scanWorkEvent) {
         SetEvent(g_scanWorkEvent);
@@ -3198,6 +4111,8 @@ constexpr UINT_PTR kOpenTimerId = 2;
 // Separate from kTickTimerId so the blur's refresh rate isn't tied to (or
 // capped by) the hover/close/submenu poll cadence.
 constexpr UINT_PTR kBlurTimerId = 3;
+constexpr UINT_PTR kItemTooltipTimerId = 4;
+constexpr UINT kItemTooltipDelayMs = 200;
 constexpr UINT kTickTimerMs = 16;
 // 32ms = ~30fps. Fixed rather than matched to the monitor: simpler, and this
 // is capture+resample cost paid on a timer, not a true frame rate - no need
@@ -3217,6 +4132,12 @@ struct PopupLevel {
     std::wstring title;
     std::vector<GridItem> items;
     std::vector<RECT> cellRects;
+    // Parallel to items: whether the label was long enough to lose text to
+    // the ellipsis at last paint. Drives ItemTooltip - see there.
+    std::vector<bool> labelTruncated;
+    // Cell kItemTooltipTimerId is currently counting down for, so the fire
+    // can be ignored if the hover has since moved to a different cell.
+    int tooltipPendingCell = -1;
     RECT rect{};
     RECT anchorRect{};
     int spawnerCell = -1;
@@ -3233,10 +4154,14 @@ struct PopupLevel {
     // Baked into cachedBase by RebuildLevelBase, not drawn separately - see
     // PresentLevel for when this is (re)captured.
     std::unique_ptr<Gdiplus::Bitmap> blurBackdrop;
-    // Size the rounded window region was last built for, so hover repaints do
-    // not rebuild it. See ApplyRoundedRegion.
+    // Size and radius the rounded window region was last built for, so hover
+    // repaints do not rebuild it. See ApplyRoundedRegion. The radius is part of
+    // the key because a settings change can alter it without the window
+    // resizing, which used to leave the old shape in place until the popup
+    // happened to open at a different size.
     int regionW = 0;
     int regionH = 0;
+    int regionRadius = -1;
 };
 
 // Created on the taskbar UI thread, read from the Windhawk engine thread, an
@@ -3339,6 +4264,7 @@ void OpenRootLevel(std::wstring path, RECT anchorRect, std::wstring title);
 void OpenSubLevel(int parentDepth, int cell);
 void CloseLevelsFrom(int depth);
 void CloseChain();
+void HideItemTooltip();
 void StartRetryThread();
 bool EnsurePopupClasses();
 HWND EnsureMenuOwnerWindow();
@@ -3373,18 +4299,15 @@ void ApplyBackdrop(HWND hWnd) {
     // of here - see SetOwnWindowsCaptureExcluded - so the window stays
     // screenshot/recording-visible the rest of the time.
 
-    int corner = DWMWCP_ROUND;
+    int corner = g_settings.cornerRadius > 0 ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner,
                           sizeof(corner));
 
     // DWM draws its own 1px border on a rounded window, independent of anything
-    // we paint. That is the outline that survived at opacity 0 - our own border
-    // pen was already skipped there, but this one is system chrome.
-    if (!g_settings.panelBorder) {
-        COLORREF border = DWMWA_COLOR_NONE;
-        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border,
-                              sizeof(border));
-    }
+    // we paint. That is the outline that survived at opacity 0 even with our
+    // own border pen gone, so it is suppressed here too.
+    COLORREF border = DWMWA_COLOR_NONE;
+    DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 
     if (auto setWindowCompositionAttribute = GetSetWindowCompositionAttribute()) {
         ACCENT_POLICY accent{};
@@ -3575,23 +4498,37 @@ bool CanExpand(int depth) {
 // Clips the window itself to the same rounded rect the panel is painted with.
 // The blur background and DWM's border are drawn against the window shape, not
 // against our alpha, so without this they kept square corners while the painted
-// background was round. Rebuilt only when the size changes - hover repaints run
-// through PaintLevel too.
+// background was round. Rebuilt only when the size or the radius changes - hover
+// repaints run through PaintLevel too.
+//
+// Two calls, because the window is layered and the acrylic is not ours:
+//
+//  * SetWindowRgn shapes the window, which is what clips our own painting, the
+//    hit testing and DWM's border.
+//  * DwmEnableBlurBehindWindow's hRgnBlur shapes the *blur*. DWM composites the
+//    acrylic as its own layer behind the layered surface, filling the window
+//    rect, and our per-pixel alpha is what lets it show through the corners we
+//    left transparent — so the window region alone never reached it. This is the
+//    documented way to say which part of a window the blur covers.
 void ApplyRoundedRegion(PopupLevel* level, int width, int height) {
     if (!level || !level->hwnd || width <= 0 || height <= 0) {
         return;
     }
-    if (level->regionW == width && level->regionH == height) {
+    int radius = ScaleForPopup(g_settings.cornerRadius);
+    if (level->regionW == width && level->regionH == height &&
+        level->regionRadius == radius) {
         return;
     }
 
-    int radius = ScaleForPopup(g_settings.cornerRadius);
     // CreateRoundRectRgn's ellipse size is the full diameter, and its right and
     // bottom edges are exclusive.
-    HRGN region =
-        radius > 0 ? CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2,
-                                        radius * 2)
-                   : CreateRectRgn(0, 0, width, height);
+    auto makeRegion = [&]() -> HRGN {
+        return radius > 0 ? CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                               radius * 2, radius * 2)
+                          : CreateRectRgn(0, 0, width, height);
+    };
+
+    HRGN region = makeRegion();
     if (!region) {
         return;
     }
@@ -3599,8 +4536,20 @@ void ApplyRoundedRegion(PopupLevel* level, int width, int height) {
     if (SetWindowRgn(level->hwnd, region, FALSE)) {
         level->regionW = width;
         level->regionH = height;
+        level->regionRadius = radius;
     } else {
         DeleteObject(region);
+    }
+
+    // A second, independent region: DwmEnableBlurBehindWindow copies it rather
+    // than taking ownership, so this one is ours to delete.
+    if (HRGN blurRegion = makeRegion()) {
+        DWM_BLURBEHIND blur{};
+        blur.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION;
+        blur.fEnable = TRUE;
+        blur.hRgnBlur = blurRegion;
+        DwmEnableBlurBehindWindow(level->hwnd, &blur);
+        DeleteObject(blurRegion);
     }
 }
 
@@ -3728,6 +4677,17 @@ void DrawCell(Gdiplus::Graphics& g,
     if (g_settings.showLabels && labelRect.Height > 0) {
         DrawStringWithShadow(g, item.displayName.c_str(), font, labelRect,
                              format, textColor, panelAlpha);
+
+        Gdiplus::RectF measuredBox;
+        INT codepointsFitted = 0;
+        INT linesFilled = 0;
+        g.MeasureString(item.displayName.c_str(), -1, &font, labelRect,
+                        &format, &measuredBox, &codepointsFitted,
+                        &linesFilled);
+        if (index < (int)level->labelTruncated.size()) {
+            level->labelTruncated[index] =
+                codepointsFitted < (INT)item.displayName.size();
+        }
     }
 }
 
@@ -3814,6 +4774,7 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
         return false;
     }
+    level->labelTruncated.assign(level->items.size(), false);
 
     Gdiplus::Graphics g(bitmap.get());
     g.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
@@ -3836,8 +4797,6 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     Gdiplus::Color panelColor = dark
                                     ? Gdiplus::Color(panelAlpha, 43, 43, 43)
                                     : Gdiplus::Color(panelAlpha, 249, 249, 249);
-    Gdiplus::Color borderColor =
-        dark ? Gdiplus::Color(40, 255, 255, 255) : Gdiplus::Color(28, 0, 0, 0);
     // White in both themes - the black outline carries the contrast, so the
     // light theme does not need dark text.
     Gdiplus::Color textColor(255, 255, 255, 255);
@@ -3860,8 +4819,8 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     // the final DIB every repaint instead of forcing a full RebuildLevelBase
     // (icon/badge/text redraws) on every blur tick.
     //
-    // The fill still runs at opacity 0 - see PanelAlpha() - but the border is
-    // optional so nothing of the panel need be left on screen.
+    // The fill still runs at opacity 0 - see PanelAlpha() - so nothing of the
+    // panel need be left on screen.
     //
     // SourceCopy, not the default SourceOver: this Graphics runs at
     // CompositingQualityHighQuality, which is GDI+'s gamma-corrected blend, and
@@ -3876,10 +4835,6 @@ bool RebuildLevelBase(PopupLevel* level, int width, int height) {
     g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
     g.FillPath(&panelBrush, &panelPath);
     g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
-    if (g_settings.panelBorder) {
-        Gdiplus::Pen borderPen(borderColor, 1.0f);
-        g.DrawPath(&borderPen, &panelPath);
-    }
 
     auto font = MakePopupFont(ScaleForPopup(g_settings.fontSize),
                               g_settings.itemFontWeight);
@@ -4190,6 +5145,7 @@ void CloseLevelsFrom(int depth) {
     while ((int)Levels().size() > depth) {
         auto& level = Levels().back();
         if (level->hwnd) {
+            KillTimer(level->hwnd, kItemTooltipTimerId);
             ShowWindow(level->hwnd, SW_HIDE);
         }
         Levels().pop_back();
@@ -4208,6 +5164,7 @@ void CloseChain() {
     }
     CloseLevelsFrom(0);
     g_outsideSinceTick = 0;
+    HideItemTooltip();
 }
 
 // The seam between two side-by-side cascade grids: just the strip of
@@ -4709,6 +5666,65 @@ void OnTick() {
     }
 }
 
+// One shared standard tooltip control, tracked to the cursor, for grid item
+// labels the ellipsis cut off. Lazily created and never destroyed - it costs
+// nothing sitting hidden, and every popup window uses the same one.
+HWND EnsureItemTooltip() {
+    static HWND tooltip = nullptr;
+    if (tooltip) {
+        return tooltip;
+    }
+    tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
+                              WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+                              CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                              CW_USEDEFAULT, nullptr, nullptr,
+                              GetCurrentModuleHandle(), nullptr);
+    if (!tooltip) {
+        return nullptr;
+    }
+    TOOLINFOW info{sizeof(info)};
+    info.uFlags = TTF_TRACK | TTF_ABSOLUTE;
+    info.hwnd = nullptr;
+    info.uId = 1;
+    info.lpszText = const_cast<LPWSTR>(L"");
+    SendMessageW(tooltip, TTM_ADDTOOL, 0, (LPARAM)&info);
+    return tooltip;
+}
+
+void HideItemTooltip() {
+    HWND tooltip = EnsureItemTooltip();
+    if (!tooltip) {
+        return;
+    }
+    TOOLINFOW info{sizeof(info)};
+    info.hwnd = nullptr;
+    info.uId = 1;
+    SendMessageW(tooltip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&info);
+}
+
+// screenPt is where the cursor is; the tooltip is offset below-right of it so
+// the pointer doesn't sit on top of its own tip.
+void ShowItemTooltip(const std::wstring& text, POINT screenPt) {
+    HWND tooltip = EnsureItemTooltip();
+    if (!tooltip) {
+        return;
+    }
+    bool dark = IsDarkPopupTheme();
+    SendMessageW(tooltip, TTM_SETTIPBKCOLOR, 0,
+                (LPARAM)(dark ? RGB(43, 43, 43) : RGB(249, 249, 249)));
+    SendMessageW(tooltip, TTM_SETTIPTEXTCOLOR, 0,
+                (LPARAM)(dark ? RGB(255, 255, 255) : RGB(0, 0, 0)));
+
+    TOOLINFOW info{sizeof(info)};
+    info.hwnd = nullptr;
+    info.uId = 1;
+    info.lpszText = const_cast<LPWSTR>(text.c_str());
+    SendMessageW(tooltip, TTM_UPDATETIPTEXT, 0, (LPARAM)&info);
+    SendMessageW(tooltip, TTM_TRACKPOSITION, 0,
+                (LPARAM)MAKELONG(screenPt.x + 16, screenPt.y + 20));
+    SendMessageW(tooltip, TTM_TRACKACTIVATE, TRUE, (LPARAM)&info);
+}
+
 LRESULT CALLBACK PopupWndProc(HWND hWnd,
                               UINT uMsg,
                               WPARAM wParam,
@@ -4761,6 +5777,11 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
 
     switch (uMsg) {
         case WM_MOUSEMOVE: {
+            TRACKMOUSEEVENT tme{sizeof(tme)};
+            tme.dwFlags = TME_LEAVE;
+            tme.hwndTrack = hWnd;
+            TrackMouseEvent(&tme);
+
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             int cell = CellFromClientPoint(level, pt);
             if (cell != level->hoverCell) {
@@ -4782,14 +5803,51 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
                     g_pendingSubCell = -1;
                 }
             }
+
+            bool truncated =
+                cell >= 0 && cell < (int)level->labelTruncated.size() &&
+                level->labelTruncated[cell];
+            if (cell != level->tooltipPendingCell) {
+                HideItemTooltip();
+                KillTimer(hWnd, kItemTooltipTimerId);
+                level->tooltipPendingCell = truncated ? cell : -1;
+                if (truncated) {
+                    SetTimer(hWnd, kItemTooltipTimerId, kItemTooltipDelayMs,
+                             nullptr);
+                }
+            }
+
             g_outsideSinceTick = 0;
             return 0;
         }
+
+        case WM_TIMER:
+            if (wParam == kItemTooltipTimerId) {
+                KillTimer(hWnd, kItemTooltipTimerId);
+                int cell = level->tooltipPendingCell;
+                if (cell == level->hoverCell && cell >= 0 &&
+                    cell < (int)level->items.size()) {
+                    POINT screenPt;
+                    GetCursorPos(&screenPt);
+                    ShowItemTooltip(level->items[cell].displayName, screenPt);
+                }
+                return 0;
+            }
+            break;
+
+        case WM_MOUSELEAVE:
+            HideItemTooltip();
+            KillTimer(hWnd, kItemTooltipTimerId);
+            level->tooltipPendingCell = -1;
+            return 0;
 
         case WM_LBUTTONDOWN: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             level->pressedCell = CellFromClientPoint(level, pt);
             PaintLevel(level);
+            HideItemTooltip();
+            KillTimer(hWnd, kItemTooltipTimerId);
+            level->tooltipPendingCell = -1;
             return 0;
         }
 
@@ -4825,6 +5883,7 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd,
             KillTimer(hWnd, kTickTimerId);
             KillTimer(hWnd, kOpenTimerId);
             KillTimer(hWnd, kBlurTimerId);
+            HideItemTooltip();
             return 0;
     }
 
@@ -5141,97 +6200,49 @@ void OpenSubLevel(int parentDepth, int cell) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // The taskbar buttons
+//
+// There are none any more, and that is the point. The folder buttons are real
+// pinned taskbar items now (see the Pins namespace), so Windows creates, lays
+// out and animates them. All this code has to do is notice which of the shell's
+// buttons are ours and attach hover to them.
+//
+// What used to be here was an overlay: a Grid appended to the taskbar's root,
+// with the neighbouring icon's margin widened to carve a gap, and roughly two
+// thousand lines keeping the overlay seated in that gap — anchor resolution, a
+// strip census, slide animations, settle holds, parked-anchor holds, drag
+// freezes. None of it could ever be exactly right. Taskbar item positions are
+// driven by implicit Windows.UI.Composition animations that interpolate on the
+// compositor thread, and no other HWND can sample an animation mid-flight, so
+// the overlay was always at least a frame behind and worse across inserts and
+// reorders. It was chasing a value it could only predict.
+//
+// Deleting it is what fixed the animations, and dragging came free with it.
 
-constexpr PCWSTR kHostGridName = L"FolderHoverTrayHost";
-constexpr double kFallbackButtonSize = 44.0;
-
-struct ButtonState {
-    Button button{nullptr};
-    // Content wrapper holding [highlightBorder, icon]. Async icon delivery
-    // must swap only the icon child here, not replace button.Content()
-    // wholesale — that would orphan highlightBorder and silently kill hover.
-    Grid contentGrid{nullptr};
-    // Inset visual behind the icon; the button itself stays full-size so the
-    // click/hover hitbox still matches the neighbouring app icon's slot.
-    Border highlightBorder{nullptr};
-    Brush highlightHoverBrush{nullptr};
-    Brush highlightPressedBrush{nullptr};
-    winrt::event_token clickToken{};
+// Hover attached to one genuine Taskbar.TaskListButton. Held per host because
+// the containers belong to that taskbar's repeater and must be released on the
+// thread that owns them.
+struct PinBinding {
+    FrameworkElement button{nullptr};
+    int folderIndex = -1;
     winrt::event_token enterToken{};
     winrt::event_token exitToken{};
-    winrt::event_token pressedToken{};
-    winrt::event_token releasedToken{};
-    winrt::event_token rightTapToken{};
-    int folderIndex = -1;
-    // Bumped when the button is rebuilt so late icon deliveries are ignored.
-    uint32_t iconGeneration = 0;
 };
 
-// One injected host per taskbar window (primary + each secondary monitor).
+// One per taskbar window (primary + each secondary monitor).
 struct TaskbarHost {
     HWND hwnd = nullptr;
-    Grid hostGrid{nullptr};
     Grid trackedRootGrid{nullptr};
-    FrameworkElement anchor{nullptr};
     FrameworkElement cachedRepeater{nullptr};
-    std::vector<ButtonState> buttonStates;
-    Thickness anchorOriginalMargin{};
-    bool hasAnchorOriginalMargin = false;
     winrt::event_token layoutUpdatedToken{};
-    double buttonWidth = kFallbackButtonSize;
-    double buttonHeight = kFallbackButtonSize;
-    ULONGLONG lastAnchorResolveTick = 0;
-    int lastRepeaterChildCount = -1;
-    ULONGLONG lastButtonSizeTick = 0;
-    // hostGrid is positioned by this RenderTransform rather than by Margin.
-    // Margin would feed rootGrid's column-0 measure, so every reposition
-    // changed the taskbar's measured content width, re-centered the app
-    // strip, moved the anchor, and produced a new target — a layout feedback
-    // loop that read as the overlay fighting its own animation. A render
-    // transform is invisible to layout, and TransformToVisual still includes
-    // it, so ComputeHoverAnchorRect keeps working unchanged.
-    TranslateTransform hostTranslate{nullptr};
-    Storyboard slideStoryboard{nullptr};
-    double currentLeft = 0.0;
-    // First placement after injection jumps straight to position; there is
-    // nothing to slide from, and animating it would fly the buttons in from
-    // the taskbar's left edge on every load and settings reload.
-    bool hasPlaced = false;
-    // When the current slide is scheduled to actually start moving, and when
-    // it's due to finish. slideCauseTick/IsClose freeze the open-vs-close
-    // delay for a pending gesture so layout retargets keep the remaining
-    // wait instead of restarting it.
-    ULONGLONG slideStartTick = 0;
-    ULONGLONG slideEndTick = 0;
-    ULONGLONG slideCauseTick = 0;
-    bool slideCauseIsClose = false;
-    // When the target last moved, used to tell a settled open/close (which has
-    // a real icon animation to sync with) from churn (which does not).
-    ULONGLONG lastRetargetTick = 0;
-    // Set when ResolveAnchor just swapped to a different button (the old
-    // anchor closed) rather than the usual smooth shrink/slide. Consumed by
-    // AnimateHostGridLeftTo to skip the open/close sync delay for that one
-    // retarget — see the anchor-changed comment in OnRootGridLayoutUpdated.
-    bool anchorSwapped = false;
-    // Where the anchor was sitting when it was adopted one full reserve-width
-    // clear of the rest of the strip, i.e. parked on the far side of our own
-    // gap. -1 when the anchor was adopted normally. Positioning is held until
-    // the button has actually moved off this spot - see OnRootGridLayoutUpdated.
-    double parkedAnchorX = -1.0;
-    // Consecutive passes held back by the above, capped so a parked anchor
-    // that never moves cannot wedge the overlay.
-    int reserveHolds = 0;
-    // Anchor X as of the previous layout pass, and the tick it last differed
-    // from the pass before that. Windows moves its own icons over ~250ms, and
-    // layout reports the anchor part-way through that move, so a reading that
-    // differs from last pass is a frame of an animation in flight rather than
-    // a resting place. Positioning waits for two passes to agree - see the
-    // settle hold in OnRootGridLayoutUpdated.
-    double lastAnchorX = -1.0;
-    ULONGLONG anchorMovingSince = 0;
-    // Whether positioning is currently frozen for a mouse drag; only used to
-    // log the transitions rather than every pass.
-    bool dragFrozen = false;
+    // Hover on the real pinned items. Rebuilt whenever the realized button set
+    // changes, since ItemsRepeater recycles containers between items.
+    std::vector<PinBinding> pinBindings;
+    int lastPinBindCount = -1;
+    // Identity of the realized children as of the last bind, so the common case
+    // (a layout pass that changed nothing) costs one comparison rather than a
+    // full detach/reattach.
+    std::vector<void*> lastRealizedChildren;
+    uint32_t lastLabelGeneration = 0;
 };
 
 [[clang::no_destroy]] std::optional<std::vector<std::unique_ptr<TaskbarHost>>>
@@ -5256,351 +6267,6 @@ HANDLE g_retryThread = nullptr;
 HANDLE g_retryStopEvent = nullptr;   // manual-reset
 HANDLE g_retryKickEvent = nullptr;   // auto-reset
 SRWLOCK g_retryLock = SRWLOCK_INIT;
-
-// WriteableBitmap's backing store is reachable only through this interop
-// interface, which the C++/WinRT projection does not declare for us.
-struct IBufferByteAccess : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE Buffer(BYTE** value) = 0;
-};
-
-constexpr GUID kIBufferByteAccessGuid = {
-    0x905a0fef,
-    0xbc53,
-    0x11df,
-    {0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda}};
-
-// WriteableBitmap must be created on the taskbar UI thread.
-// GDI+ Image getters are non-const in the MinGW headers Windhawk ships.
-ImageSource BitmapToImageSource(Gdiplus::Bitmap& bitmap) {
-    try {
-        const int width = (int)bitmap.GetWidth();
-        const int height = (int)bitmap.GetHeight();
-        if (width <= 0 || height <= 0) {
-            return nullptr;
-        }
-
-        Gdiplus::BitmapData bd{};
-        Gdiplus::Rect lockRect(0, 0, width, height);
-        // HIconToBitmap stores PARGB; WriteableBitmap also wants premultiplied
-        // BGRA.
-        if (bitmap.LockBits(&lockRect, Gdiplus::ImageLockModeRead,
-                            PixelFormat32bppPARGB, &bd) != Gdiplus::Ok) {
-            return nullptr;
-        }
-
-        try {
-            winrt::Windows::UI::Xaml::Media::Imaging::WriteableBitmap writeable(
-                width, height);
-            auto buffer = writeable.PixelBuffer();
-            IBufferByteAccess* byteAccess = nullptr;
-            auto* bufferUnknown = (IUnknown*)winrt::get_abi(buffer);
-            if (bufferUnknown &&
-                SUCCEEDED(bufferUnknown->QueryInterface(kIBufferByteAccessGuid,
-                                                        (void**)&byteAccess)) &&
-                byteAccess) {
-                BYTE* dest = nullptr;
-                if (SUCCEEDED(byteAccess->Buffer(&dest)) && dest) {
-                    for (int y = 0; y < height; y++) {
-                        memcpy(dest + (size_t)y * width * 4,
-                               (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride,
-                               (size_t)width * 4);
-                    }
-                }
-                byteAccess->Release();
-            }
-            bitmap.UnlockBits(&bd);
-            writeable.Invalidate();
-            return writeable;
-        } catch (...) {
-            bitmap.UnlockBits(&bd);
-            return nullptr;
-        }
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void ApplyButtonIconOnUiThread(void* parameter) {
-    std::unique_ptr<ButtonIconDelivery> delivery(
-        static_cast<ButtonIconDelivery*>(parameter));
-    if (g_unloading || !delivery || !delivery->bitmap || !g_taskbarHosts) {
-        return;
-    }
-
-    // Skip if the user switched this slot to a literal emoji icon.
-    if (delivery->folderIndex >= 0) {
-        std::wstring icon;
-        {
-            std::lock_guard<std::mutex> lock(g_foldersMutex);
-            if (delivery->folderIndex < (int)g_settings.folders.size()) {
-                icon = g_settings.folders[delivery->folderIndex].icon;
-            }
-        }
-        if (!icon.empty() && !IconSettingIsFile(icon)) {
-            return;
-        }
-    }
-
-    for (auto& host : *g_taskbarHosts) {
-        if (!host || host->hwnd != delivery->taskbarWnd) {
-            continue;
-        }
-        for (auto& state : host->buttonStates) {
-            if (state.folderIndex != delivery->folderIndex ||
-                state.iconGeneration != delivery->iconGeneration ||
-                !state.button) {
-                continue;
-            }
-            try {
-                auto source = BitmapToImageSource(*delivery->bitmap);
-                if (!source) {
-                    return;
-                }
-                Image image;
-                image.Width(delivery->iconExtent);
-                image.Height(delivery->iconExtent);
-                image.Stretch(Stretch::Uniform);
-                image.HorizontalAlignment(HorizontalAlignment::Center);
-                image.VerticalAlignment(VerticalAlignment::Center);
-                image.Source(source);
-                if (state.contentGrid) {
-                    // Swap just the icon (child 1); leave highlightBorder
-                    // (child 0) in place so the wired hover handlers keep
-                    // pointing at a live element.
-                    auto children = state.contentGrid.Children();
-                    if (children.Size() >= 2) {
-                        children.RemoveAt(1);
-                    }
-                    children.Append(image);
-                } else {
-                    state.button.Content(image);
-                }
-            } catch (...) {
-            }
-            return;
-        }
-    }
-}
-
-void SetButtonBrush(Button const& button, PCWSTR key, Brush const& brush) {
-    button.Resources().Insert(winrt::box_value(winrt::hstring(key)), brush);
-}
-
-Brush MakeBrush(BYTE a, BYTE r, BYTE g, BYTE b) {
-    return SolidColorBrush(
-        winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b));
-}
-
-// How far the highlight overlay sits inside the button's full (hitbox) rect,
-// horizontally. The vertical inset is whatever is left over after squaring:
-// a TaskListButton is taller than it is wide (its height spans the whole
-// taskbar row), so insetting uniformly left the highlight tall and narrow.
-constexpr double kHighlightInset = 2.0;
-constexpr double kHighlightCornerRadius = 4.0;
-
-// Square highlight sized off the button width, clamped so it can never grow
-// past the button's height and bleed out of the taskbar row.
-double HighlightExtent(double buttonWidth, double buttonHeight) {
-    double extent = buttonWidth - 2.0 * kHighlightInset;
-    extent = std::min(extent, buttonHeight - 2.0 * kHighlightInset);
-    return std::max(extent, 8.0);
-}
-// "Very quick" fade — out is slightly slower so the highlight doesn't snap
-// away while the pointer is still crossing between adjacent buttons.
-constexpr int kHighlightFadeInMs = 90;
-constexpr int kHighlightFadeOutMs = 130;
-
-// Matches the shell's own app-icon states: a flat translucent fill, white on
-// dark themes and black on light ones — no acrylic, no gradient. The taskbar's
-// own backdrop showing through this is what gives it the glassy read.
-//
-// Hover is measured off a screenshot of a real hovered taskbar button rather
-// than taken from the documented 10-18% range, which overshoots badly: a
-// hovered Settings button reads RGB(27,23,23) over an RGB(13,8,8) taskbar,
-// i.e. (27-13)/(255-13) = 5.8% white, not 12%. Press has no such measurement;
-// it keeps the same ~1.5x step over hover it had before.
-constexpr BYTE kHighlightHoverAlpha = 14;    // 0x0E ≈ 5.7%
-constexpr BYTE kHighlightPressedAlpha = 21;  // 0x15 ≈ 8.5%
-
-Brush MakeHighlightBrush(bool dark, bool pressed) {
-    BYTE alpha = pressed ? kHighlightPressedAlpha : kHighlightHoverAlpha;
-    BYTE channel = dark ? 255 : 0;
-    return MakeBrush(alpha, channel, channel, channel);
-}
-
-// Fades the highlight's composition Opacity. A single keyframe at 1.0 means
-// the animation starts from whatever opacity is on screen right now, so an
-// interrupted fade hands off mid-flight instead of snapping — important when
-// the pointer skims across several buttons in a row.
-//
-// This drives the composition visual, not FrameworkElement::Opacity; the two
-// multiply, so the XAML-side value must be left at 1.0 throughout.
-void FadeHighlight(UIElement const& element, float to, int ms) {
-    if (!element) {
-        return;
-    }
-    try {
-        auto visual = ElementCompositionPreview::GetElementVisual(element);
-        auto compositor = visual.Compositor();
-        auto easing =
-            compositor.CreateCubicBezierEasingFunction({0.3f, 0.0f},
-                                                       {0.2f, 1.0f});
-        auto anim = compositor.CreateScalarKeyFrameAnimation();
-        anim.InsertKeyFrame(1.0f, to, easing);
-        anim.Duration(std::chrono::milliseconds(ms));
-        visual.StartAnimation(L"Opacity", anim);
-    } catch (...) {
-        // No composition: jump straight to the target, no fade.
-        try {
-            element.Opacity(to);
-        } catch (...) {
-        }
-    }
-}
-
-void ApplyNativeButtonStyle(Button const& button) {
-    bool dark = IsDarkTheme();
-
-    // The template's own background spans the full button (edge-to-edge,
-    // wider than the icon). It stays fully transparent in every state; a
-    // smaller inset Border drawn in the content plays the hover/press
-    // highlight instead, so the visual shrinks without touching the hitbox.
-    for (PCWSTR key : {L"ButtonBackground", L"ButtonBackgroundPointerOver",
-                       L"ButtonBackgroundPressed", L"ButtonBackgroundDisabled"}) {
-        SetButtonBrush(button, key, MakeBrush(0, 0, 0, 0));
-    }
-
-    for (PCWSTR key : {L"ButtonBorderBrush", L"ButtonBorderBrushPointerOver",
-                       L"ButtonBorderBrushPressed"}) {
-        SetButtonBrush(button, key, MakeBrush(0, 0, 0, 0));
-    }
-
-    auto foreground =
-        dark ? MakeBrush(255, 255, 255, 255) : MakeBrush(255, 26, 26, 26);
-    for (PCWSTR key : {L"ButtonForeground", L"ButtonForegroundPointerOver",
-                       L"ButtonForegroundPressed"}) {
-        SetButtonBrush(button, key, foreground);
-    }
-    button.Foreground(foreground);
-
-    button.BorderThickness({0, 0, 0, 0});
-    button.Padding({0, 0, 0, 0});
-    button.MinWidth(0);
-    button.MinHeight(0);
-    button.CornerRadius({6, 6, 6, 6});
-    // Stretch, not Center: the content is a Grid holding the inset highlight
-    // Border plus the icon. Center-aligning would size that Grid down to the
-    // icon's own bounds, collapsing the highlight behind the opaque icon
-    // pixels. The icon centers itself via its own alignment already.
-    button.HorizontalContentAlignment(HorizontalAlignment::Stretch);
-    button.VerticalContentAlignment(VerticalAlignment::Stretch);
-    button.UseSystemFocusVisuals(false);
-}
-
-UIElement MakeFolderEmojiFallback(int iconExtent) {
-    TextBlock fallback;
-    fallback.Text(L"\U0001F4C1");
-    fallback.FontFamily(FontFamily(L"Segoe UI Emoji"));
-    fallback.FontSize(iconExtent * 0.92);
-    fallback.HorizontalAlignment(HorizontalAlignment::Center);
-    fallback.VerticalAlignment(VerticalAlignment::Center);
-    return fallback;
-}
-
-// Shell icon / resource extraction runs on the STA scan worker. Only XAML
-// BitmapImage (async decode) and emoji TextBlocks stay on the UI thread.
-UIElement MakeButtonContent(const FolderEntry& entry,
-                            double buttonSize,
-                            int folderIndex,
-                            HWND taskbarWnd,
-                            uint32_t iconGeneration) {
-    int iconExtent = g_settings.buttonIconSize > 0
-                         ? g_settings.buttonIconSize
-                         : (int)std::lround(buttonSize * 0.545);
-    iconExtent = std::clamp<int>(iconExtent, 8, 128);
-    const int extractSize = iconExtent * 2;
-
-    // Emoji or any other short literal text.
-    if (!entry.icon.empty() && !IconSettingIsFile(entry.icon)) {
-        TextBlock text;
-        text.Text(entry.icon);
-        text.FontFamily(FontFamily(L"Segoe UI Emoji"));
-        text.FontSize(iconExtent * 0.92);
-        text.HorizontalAlignment(HorizontalAlignment::Center);
-        text.VerticalAlignment(VerticalAlignment::Center);
-        text.TextAlignment(TextAlignment::Center);
-        text.IsTextSelectionEnabled(false);
-        return text;
-    }
-
-    if (!entry.icon.empty()) {
-        std::wstring icon = entry.icon;
-        bool isImageFile = false;
-        for (PCWSTR ext : {L".ico", L".png", L".jpg", L".jpeg", L".bmp",
-                           L".gif", L".tif", L".tiff"}) {
-            size_t len = wcslen(ext);
-            if (icon.size() > len &&
-                _wcsicmp(icon.c_str() + icon.size() - len, ext) == 0) {
-                isImageFile = true;
-                break;
-            }
-        }
-
-        if (isImageFile) {
-            // BitmapImage decodes off-thread; skip sync shell extraction.
-            if (!IsLikelyRemotePath(icon)) {
-                try {
-                    WCHAR url[2048];
-                    DWORD urlLen = ARRAYSIZE(url);
-                    // S_OK only: a real local path was converted to a file://
-                    // URL. UrlCreateFromPathW returns S_FALSE and copies the
-                    // input through unchanged when it is already a URL, so
-                    // SUCCEEDED() here would let an http(s) icon value reach
-                    // BitmapImage.UriSource and have XAML fetch it from a
-                    // remote server inside explorer.exe. The value is not
-                    // always the user's own either — ReadFolderCustomIcon
-                    // takes IconResource straight out of a folder's
-                    // desktop.ini when it is pinned from Explorer.
-                    if (UrlCreateFromPathW(icon.c_str(), url, &urlLen, 0) ==
-                        S_OK) {
-                        Image image;
-                        image.Width(iconExtent);
-                        image.Height(iconExtent);
-                        image.Stretch(Stretch::Uniform);
-                        image.HorizontalAlignment(HorizontalAlignment::Center);
-                        image.VerticalAlignment(VerticalAlignment::Center);
-                        winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage
-                            bitmap;
-                        bitmap.DecodePixelWidth(extractSize);
-                        bitmap.UriSource(winrt::Windows::Foundation::Uri(
-                            winrt::hstring(url)));
-                        image.Source(bitmap);
-                        return image;
-                    }
-                } catch (...) {
-                }
-            }
-            return MakeFolderEmojiFallback(iconExtent);
-        }
-
-        // app.exe,0 / .ico via SHDefExtractIcon — never on the UI thread.
-        RequestButtonIcon(icon, extractSize, folderIndex, iconGeneration,
-                          taskbarWnd, /*resourceSpec=*/true);
-        return MakeFolderEmojiFallback(iconExtent);
-    }
-
-    // No icon configured: folder shell icon on the scan worker. Never call
-    // GetShellIconForPath here. resolvedPath / likelyRemote are filled by
-    // ResolvePendingFolderEntries on this taskbar STA (or the scan STA).
-    if (!entry.path.empty() && !entry.likelyRemote) {
-        const std::wstring& iconPath =
-            !entry.resolvedPath.empty() ? entry.resolvedPath : entry.path;
-        // Unresolved shell: still OK — the scan worker ResolveFolderPath's it.
-        RequestButtonIcon(iconPath, extractSize, folderIndex, iconGeneration,
-                          taskbarWnd, /*resourceSpec=*/false);
-    }
-    return MakeFolderEmojiFallback(iconExtent);
-}
 
 RECT GetElementScreenRect(FrameworkElement const& element) {
     RECT rect{};
@@ -5638,451 +6304,11 @@ FrameworkElement FindTaskbarRepeater(Grid const& rootGrid) {
     return FindChildByName(rootGrid, L"TaskbarFrameRepeater", 6);
 }
 
-// Matching a live taskbar button means the folder buttons stay the right size
-// across taskbar-size changes, DPI changes, and the small-icons setting.
-void UpdateButtonSizeFromTaskbar(FrameworkElement const& repeater,
-                                 double* outWidth,
-                                 double* outHeight) {
-    std::vector<FrameworkElement> children;
-    EnumRepeaterChildren(repeater, &children);
-
-    double width = 0.0;
-    double height = 0.0;
-
-    for (const auto& child : children) {
-        auto className = winrt::get_class_name(child);
-        if (className != L"Taskbar.TaskListButton") {
-            continue;
-        }
-        if (child.ActualWidth() > 1.0 && child.ActualHeight() > 1.0) {
-            width = child.ActualWidth();
-            height = child.ActualHeight();
-            break;
-        }
-    }
-
-    if (width <= 1.0) {
-        for (const auto& child : children) {
-            auto className = winrt::get_class_name(child);
-            if (className != L"Taskbar.ExperienceToggleButton" &&
-                className != L"Taskbar.AugmentedEntryPointButton") {
-                continue;
-            }
-            if (child.ActualWidth() > 1.0 && child.ActualHeight() > 1.0) {
-                width = child.ActualWidth();
-                height = child.ActualHeight();
-                break;
-            }
-        }
-    }
-
-    if (width <= 1.0 || height <= 1.0) {
-        return;
-    }
-
-    if (outWidth) {
-        *outWidth = width;
-    }
-    if (outHeight) {
-        *outHeight = height;
-    }
-}
-
-FrameworkElement ResolveAnchor(FrameworkElement const& repeater,
-                               Grid const& rootGrid) {
-    std::vector<FrameworkElement> children;
-    EnumRepeaterChildren(repeater, &children);
-    if (children.empty()) {
-        return nullptr;
-    }
-
-    bool before = g_settings.position != L"afterApps";
-
-    auto findByClass = [&](PCWSTR className, int skip) -> FrameworkElement {
-        int seen = 0;
-        for (const auto& child : children) {
-            if (winrt::get_class_name(child) != className) {
-                continue;
-            }
-            if (seen++ < skip) {
-                continue;
-            }
-            return child;
-        }
-        return nullptr;
-    };
-
-    if (g_settings.anchor == L"widgets") {
-        if (auto found = findByClass(L"Taskbar.AugmentedEntryPointButton", 0)) {
-            return found;
-        }
-    } else if (g_settings.anchor == L"taskView") {
-        if (auto found = findByClass(L"Taskbar.ExperienceToggleButton", 1)) {
-            return found;
-        }
-    } else if (g_settings.anchor == L"start") {
-        if (auto found = findByClass(L"Taskbar.ExperienceToggleButton", 0)) {
-            return found;
-        }
-    }
-
-    // Auto: the outermost app button on the requested side. The repeater's
-    // realized children are not in layout order, so compare actual positions.
-    FrameworkElement best = nullptr;
-    double bestX = 0.0;
-    for (const auto& child : children) {
-        if (winrt::get_class_name(child) != L"Taskbar.TaskListButton") {
-            continue;
-        }
-        if (child.Visibility() != Visibility::Visible ||
-            child.ActualWidth() <= 1.0) {
-            continue;
-        }
-        try {
-            auto point =
-                child.TransformToVisual(rootGrid).TransformPoint({0, 0});
-            // A button mid-realization (window just opened/closed) reports
-            // ActualWidth before Arrange has placed it, landing at X == 0.
-            // That looks like the leftmost button and would get adopted as
-            // anchor, carving the gap at the wrong spot. Skip unplaced ones.
-            if (point.X <= 0.5) {
-                continue;
-            }
-            if (!best || (before ? point.X < bestX : point.X > bestX)) {
-                best = child;
-                bestX = point.X;
-            }
-        } catch (...) {
-        }
-    }
-    if (best) {
-        return best;
-    }
-
-    for (PCWSTR className : {L"Taskbar.AugmentedEntryPointButton",
-                             L"Taskbar.ExperienceToggleButton"}) {
-        if (auto found = findByClass(className, 0)) {
-            return found;
-        }
-    }
-
-    return nullptr;
-}
-
-// Counts the placed, visible app buttons and measures the strip's left/right
-// extent. The repeater's realized-child count cannot stand in for either:
-// ItemsRepeater recycles containers, so a window opening or closing leaves that
-// count unchanged while the strip visibly grows and shrinks. `exclude` leaves
-// out a button being adopted as the anchor, so the clearance check has the rest
-// of the strip - all of it settled - as its reference.
-int CensusAppStrip(FrameworkElement const& repeater, Grid const& rootGrid,
-                   double* stripLeft, double* stripRight,
-                   FrameworkElement const& exclude = nullptr) {
-    std::vector<FrameworkElement> children;
-    EnumRepeaterChildren(repeater, &children);
-    int count = 0;
-    double left = 0.0;
-    double right = 0.0;
-    for (const auto& child : children) {
-        try {
-            if (exclude && child == exclude) {
-                continue;
-            }
-            if (winrt::get_class_name(child) != L"Taskbar.TaskListButton" ||
-                child.Visibility() != Visibility::Visible ||
-                child.ActualWidth() <= 1.0) {
-                continue;
-            }
-            double x =
-                child.TransformToVisual(rootGrid).TransformPoint({0, 0}).X;
-            if (x <= 0.5) {
-                continue;
-            }
-            if (!count || x < left) {
-                left = x;
-            }
-            if (!count || x + child.ActualWidth() > right) {
-                right = x + child.ActualWidth();
-            }
-            count++;
-        } catch (...) {
-        }
-    }
-    *stripLeft = left;
-    *stripRight = right;
-    return count;
-}
-
-double DesiredHostWidth(TaskbarHost* host) {
-    if (!host || host->buttonStates.empty()) {
-        return 0.0;
-    }
-    return host->buttonWidth * (double)host->buttonStates.size();
-}
-
-// Windows 11's point-to-point shift — the profile its own app icons use when
-// they glide sideways to fill a freed slot or clear space for a new one.
-// 250ms on cubic-bezier(0.55, 0.55, 0, 1): holds initial speed through the
-// first half, then drops momentum just before landing.
-constexpr int kHostGridSlideMs = 250;
-constexpr float kSlideEaseCp1X = 0.55f;
-constexpr float kSlideEaseCp1Y = 0.55f;
-constexpr float kSlideEaseCp2X = 0.0f;
-constexpr float kSlideEaseCp2Y = 1.0f;
-
-// Layout reports the new target well before the taskbar's own icons visibly
-// start moving, so the slide has to be held back to fall in step with them.
-// Closing needs the longer wait (exit animation before survivors fill the
-// slot); opening barely needs any. Open vs close is inferred from which way
-// the gap moves on a centered strip — see AnimateHostGridLeftTo. Both delays
-// are tuned by eye against the real icons, so they are just knobs.
-constexpr int kSlideDelayOpenMs = 50;
-constexpr int kSlideDelayCloseMs = 350;
-
-// A retarget arriving within this long of the previous one means the strip is
-// churning rather than settling - windows opening and closing faster than the
-// slide itself. Comfortably longer than one slide, so a single open or close
-// still gets its full sync delay.
-constexpr ULONGLONG kChurnWindowMs = 400;
-
-// Smallest target change worth a slide. Anything under this is a sample of the
-// anchor taken part-way through Windows' own re-centre rather than a new
-// resting place, and re-aiming at it just restarts the storyboard. Well under
-// the half-button (~22px) that a real open or close moves the anchor by, so no
-// genuine move is swallowed.
-constexpr double kSlideNoiseFloor = 4.0;
-
-// Slides hostGrid to newLeft by animating its RenderTransform.
-//
-// Two earlier approaches failed here and are worth not repeating. A XAML
-// RepositionThemeTransition never fired reliably for a plain Margin set on a
-// standalone Grid outside a panel's own child-change pipeline. Animating the
-// element visual's composition Offset.X didn't survive either, because XAML
-// owns Visual.Offset and rewrites it on every arrange pass.
-//
-// The deeper problem was positioning by Margin at all: hostGrid is a child
-// of rootGrid's column 0, so its Margin fed that column's measure. Each
-// reposition therefore changed the taskbar's measured content width, which
-// re-centered the app strip, which moved the anchor, which yielded a new
-// target — a feedback loop that retargeted the animation every layout pass
-// and looked like the overlay resisting its own movement. Layout ignores a
-// RenderTransform completely, which breaks the loop, and TransformToVisual
-// still accounts for it so ComputeHoverAnchorRect needs no changes.
-//
-// Retargeting mid-slide is handled by pinning the transform's base value to
-// wherever the animation currently has it before starting the next one (a
-// bare Storyboard.Stop would snap back to the base value). The replacement
-// keyframe has no From, so XAML interpolates from that current value —
-// a seamless re-aim toward the new target rather than a restart — and the
-// start delay is skipped because the motion is already underway.
-//
-// Animating a TranslateTransform's X keeps this an *independent* animation:
-// XAML hands transform animations to the compositor, so they run off the UI
-// thread at the monitor's refresh tick and don't stutter when the taskbar
-// thread is busy.
-void AnimateHostGridLeftTo(TaskbarHost* host, double newLeft,
-                           double anchorX = -1.0) {
-    if (!host || !host->hostGrid || !host->hostTranslate) {
-        return;
-    }
-    double previousLeft = host->currentLeft;
-    // Noise floor, not a 1px epsilon. LayoutUpdated fires on every pass of
-    // Windows' own ~250ms re-centre, and the anchor is read mid-flight on each
-    // one, so consecutive targets land a few px apart with nothing having
-    // actually happened. At 1px each of those noise reads cleared the guard and
-    // restarted a full 250ms storyboard, which is most of what churn is.
-    if (std::abs(previousLeft - newLeft) < kSlideNoiseFloor) {
-        return;
-    }
-
-    ULONGLONG now = GetTickCount64();
-    // Still waiting on its BeginTime — visual hasn't started moving, so the
-    // remaining wait carries over rather than resetting to a fresh delay.
-    bool pending = host->slideStoryboard && now < host->slideStartTick;
-    // Already interpolating — re-aim live, no delay of its own.
-    bool animating =
-        host->slideStoryboard && !pending && now < host->slideEndTick;
-
-    // Child-count / width probes lag the layout target on both open and
-    // close, so classify from the move itself. Centered taskbar: opening
-    // grows the app cluster outward, closing shrinks it inward — which way
-    // that shoves our gap depends on beforeApps vs afterApps.
-    bool beforeApps = g_settings.position != L"afterApps";
-    bool isCloseMove =
-        beforeApps ? (newLeft < previousLeft) : (newLeft > previousLeft);
-
-    host->currentLeft = newLeft;
-
-    if (!host->hasPlaced) {
-        host->hasPlaced = true;
-        try {
-            host->hostTranslate.X(newLeft);
-        } catch (...) {
-        }
-        return;
-    }
-
-    // Windows only animates its icons for a settled open or close. Spamming
-    // produces a fresh layout every 100-200ms, so there is no icon slide left
-    // to fall in step with - and waiting out the close delay parks the folder
-    // block on top of icons that have already moved for the whole 350ms. If
-    // the last retarget was recent enough that we are still inside that
-    // window, chase immediately instead.
-    bool churning = host->lastRetargetTick &&
-                    now - host->lastRetargetTick < kChurnWindowMs;
-    // Only an actual retarget counts as churn. Stamping every call armed the
-    // window off a lone settled open too, and since kChurnWindowMs is longer
-    // than kSlideDelayCloseMs, the close that followed it always lost its whole
-    // sync delay - it chased early, landed on icons that hadn't moved yet, and
-    // retargeted again.
-    if (pending || animating) {
-        host->lastRetargetTick = now;
-    }
-
-    int delayMs = 0;
-    if (!animating && !churning) {
-        if (!pending) {
-            host->slideCauseTick = now;
-            host->slideCauseIsClose = isCloseMove;
-        }
-        int causeDelay = host->slideCauseIsClose ? kSlideDelayCloseMs
-                                                 : kSlideDelayOpenMs;
-        long long remain =
-            (long long)host->slideCauseTick + causeDelay - (long long)now;
-        delayMs = remain > 0 ? (int)remain : 0;
-    }
-
-    if (host->anchorSwapped) {
-        // The anchor teleported to a new button instead of sliding — chase
-        // it now instead of waiting out a sync delay for motion that isn't
-        // happening.
-        host->anchorSwapped = false;
-        delayMs = 0;
-    }
-
-    try {
-        if (host->slideStoryboard) {
-            // Only an actually-moving slide has left the base value behind;
-            // a still-pending one never touched it, so there's nothing to
-            // commit back — doing so anyway would read the frozen pre-delay
-            // value, which is already correct, so this is safe either way.
-            double live = host->hostTranslate.X();
-            host->slideStoryboard.Stop();
-            host->hostTranslate.X(live);
-            host->slideStoryboard = nullptr;
-        }
-
-        auto slideSpan = winrt::Windows::Foundation::TimeSpan{
-            std::chrono::milliseconds(kHostGridSlideMs)};
-
-        // CubicEase can't express an arbitrary bezier, so the curve comes
-        // from a KeySpline on a single spline keyframe instead.
-        KeySpline spline;
-        spline.ControlPoint1({kSlideEaseCp1X, kSlideEaseCp1Y});
-        spline.ControlPoint2({kSlideEaseCp2X, kSlideEaseCp2Y});
-
-        SplineDoubleKeyFrame frame;
-        frame.KeyTime(KeyTime{slideSpan});
-        frame.Value(newLeft);
-        frame.KeySpline(spline);
-
-        DoubleAnimationUsingKeyFrames anim;
-        anim.KeyFrames().Append(frame);
-        // Duration is a struct, not a TimeSpan, and its default type is
-        // Automatic (a flat 1s) — the type has to say TimeSpan for the
-        // value to be honoured.
-        anim.Duration(Duration{slideSpan, DurationType::TimeSpan});
-        if (delayMs > 0) {
-            anim.BeginTime(winrt::Windows::Foundation::TimeSpan{
-                std::chrono::milliseconds(delayMs)});
-        }
-
-        Storyboard sb;
-        sb.Children().Append(anim);
-        Storyboard::SetTarget(anim, host->hostTranslate);
-        Storyboard::SetTargetProperty(anim, L"X");
-        host->slideStoryboard = sb;
-        sb.Begin();
-
-        host->slideStartTick = now + delayMs;
-        host->slideEndTick = now + delayMs + kHostGridSlideMs;
-    } catch (...) {
-        // Animation unavailable for whatever reason — still get the element
-        // to the right place, just without the slide. Reads as a one-frame
-        // stutter rather than a wrong position.
-        try {
-            host->slideStoryboard = nullptr;
-            host->hostTranslate.X(newLeft);
-        } catch (...) {
-        }
-    }
-}
-
-void RestoreAnchorMargin(TaskbarHost* host) {
-    if (!host) {
-        return;
-    }
-    if (host->anchor && host->hasAnchorOriginalMargin) {
-        try {
-            // Paired with the reserve written onto the incoming anchor: both
-            // land in the same layout pass, so the strip is never left a pass
-            // either double-reserved or un-reserved.
-            host->anchor.Margin(host->anchorOriginalMargin);
-        } catch (...) {
-        }
-    }
-    host->anchor = nullptr;
-    host->hasAnchorOriginalMargin = false;
-}
-
-void AdoptAnchor(TaskbarHost* host, FrameworkElement const& anchor) {
-    if (!host) {
-        return;
-    }
-    if (host->anchor == anchor) {
-        return;
-    }
-    RestoreAnchorMargin(host);
-    host->anchor = anchor;
-    if (anchor) {
-        try {
-            host->anchorOriginalMargin = anchor.Margin();
-            host->hasAnchorOriginalMargin = true;
-        } catch (...) {
-            host->hasAnchorOriginalMargin = false;
-        }
-    }
-}
-
-TaskbarHost* FindTaskbarHost(HWND hwnd) {
-    if (!g_taskbarHosts) {
-        return nullptr;
-    }
-    for (auto& host : *g_taskbarHosts) {
-        if (host && host->hwnd == hwnd) {
-            return host.get();
-        }
-    }
-    return nullptr;
-}
-
-TaskbarHost* FindTaskbarHostByRootGrid(Grid const& rootGrid) {
-    if (!g_taskbarHosts) {
-        return nullptr;
-    }
-    for (auto& host : *g_taskbarHosts) {
-        if (host && host->trackedRootGrid == rootGrid) {
-            return host.get();
-        }
-    }
-    return nullptr;
-}
-
 // The vertical extent comes from the taskbar window rather than the button, so
 // the corridor covers the whole taskbar height under the button. Horizontally
 // the XAML transform is trusted only if it lands inside the taskbar; otherwise
 // the cursor position, which is definitely over the button, is used instead.
-RECT ComputeHoverAnchorRect(Button const& button) {
+RECT ComputeHoverAnchorRect(FrameworkElement const& button) {
     RECT taskbarRect{};
     if (!g_taskbarWnd || !GetWindowRect(g_taskbarWnd, &taskbarRect)) {
         return RECT{};
@@ -6136,8 +6362,13 @@ std::wstring FolderNameForButton(int folderIndex) {
     return g_settings.folders[folderIndex].name;
 }
 
+// `button` is either the mod's own overlay Button or a real Taskbar.TaskListButton
+// once hover is bound to the genuine pinned item, so it is taken as the common
+// base. ComputeHoverAnchorRect only needs TransformToVisual, which both provide —
+// and on the real button that transform is the one Windows is itself animating,
+// which is the whole point of the switch.
 void OnPointerEnteredButton(int folderIndex,
-                             Button const& button,
+                             FrameworkElement const& button,
                              HWND taskbarWnd) {
     if (g_unloading) {
         return;
@@ -6175,6 +6406,185 @@ void OnPointerEnteredButton(int folderIndex,
     SetTimer(hWnd, kOpenTimerId, (UINT)g_settings.hoverDelayMs, nullptr);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Hover on the real pinned buttons
+//
+// The genuine taskbar item is a Taskbar.TaskListButton that Windows creates,
+// lays out and animates. Attaching hover to it — rather than to a drawn stand-in
+// parked next to it — is what makes the grid open in exactly the right place
+// while the strip is mid-animation: TransformToVisual is read once, at open
+// time, from the element the compositor is actually moving.
+//
+// Matching resolves the button's label through the shell's own pinned copies to
+// an AppUserModelID, and from there to the folder entry. Comparing the label
+// straight against the name the mod would like to use does not work: pinning
+// copies the shortcut, so a pinned item keeps the name it had when it was
+// pinned even after the source is renamed, and the two drift apart.
+//
+// The label is still the only handle XAML gives us on a taskbar button without
+// hooking the shell's group type, but going through the pinned copy means the
+// comparison is against what is really there rather than what should be.
+
+std::wstring AutomationNameOf(FrameworkElement const& element) {
+    try {
+        auto name = winrt::Windows::UI::Xaml::Automation::AutomationProperties::
+            GetName(element);
+        return std::wstring(name);
+    } catch (...) {
+        return L"";
+    }
+}
+
+// -1 when this button is not one of ours.
+int FolderIndexForTaskListButton(FrameworkElement const& button) {
+    std::wstring label = AutomationNameOf(button);
+    if (label.empty()) {
+        return -1;
+    }
+    std::wstring pinId = Pins::PinIdForLabel(label);
+    if (pinId.empty()) {
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(g_foldersMutex);
+    for (size_t i = 0; i < g_settings.folders.size(); i++) {
+        if (_wcsicmp(g_settings.folders[i].pinId.c_str(), pinId.c_str()) == 0) {
+            return (int)i;
+        }
+    }
+    // The shell has a pin the loaded folder list knows nothing about. Normally
+    // means g_settings was built before the pin ids existed — see the reload
+    // Pins::Reconcile asks for when it generates them.
+    Wh_Log(L"Pins: '%s' resolves to pin %s, but no loaded folder claims it",
+           label.c_str(), pinId.c_str());
+    return -1;
+}
+
+void OnPointerExitedButton();
+
+// Drops every handler this host attached to a real taskbar button. Must run
+// before rebinding: ItemsRepeater recycles its containers, so the element that
+// was our button a moment ago may now be showing an unrelated app.
+void UnbindPinButtons(TaskbarHost* host) {
+    for (auto& binding : host->pinBindings) {
+        if (!binding.button) {
+            continue;
+        }
+        try {
+            if (binding.enterToken.value) {
+                binding.button.PointerEntered(binding.enterToken);
+            }
+            if (binding.exitToken.value) {
+                binding.button.PointerExited(binding.exitToken);
+            }
+        } catch (...) {
+            // The element can already be torn down; nothing to release then.
+        }
+    }
+    host->pinBindings.clear();
+}
+
+// Attaches hover to whichever realized taskbar buttons are ours right now.
+void RebindPinButtons(TaskbarHost* host) {
+    if (!host || !host->cachedRepeater || g_unloading) {
+        return;
+    }
+
+    std::vector<FrameworkElement> children;
+    EnumRepeaterChildren(host->cachedRepeater, &children);
+
+    // LayoutUpdated fires constantly — on every animation frame of every icon —
+    // and almost none of those passes change which containers exist. Rebinding
+    // each time would detach and reattach handlers dozens of times a second for
+    // no reason, so compare identities first and do nothing in the common case.
+    std::vector<void*> identities;
+    identities.reserve(children.size());
+    for (const auto& child : children) {
+        identities.push_back(winrt::get_abi(child));
+    }
+    // The map is published by the pin worker after a reconcile, which is a
+    // different thread and usually lands when the taskbar is otherwise idle. A
+    // pure identity check would then never rebind — the containers did not
+    // change, only our knowledge of what they mean did.
+    uint32_t labels = Pins::g_labelGeneration.load(std::memory_order_acquire);
+    if (identities == host->lastRealizedChildren &&
+        labels == host->lastLabelGeneration) {
+        return;
+    }
+    host->lastRealizedChildren = std::move(identities);
+    host->lastLabelGeneration = labels;
+
+    UnbindPinButtons(host);
+
+    HWND taskbarWnd = host->hwnd;
+    int matched = 0;
+    for (const auto& child : children) {
+        if (!child || winrt::get_class_name(child) !=
+                          L"Taskbar.TaskListButton") {
+            continue;
+        }
+        int folderIndex = FolderIndexForTaskListButton(child);
+        if (folderIndex < 0) {
+            continue;
+        }
+
+        // Explorer's own tooltip echoes the pinned label, which fights the
+        // grid we open on hover with a second, redundant popup naming the
+        // same folder. Suppress it for buttons we've claimed.
+        ToolTipService::SetToolTip(child, nullptr);
+
+        PinBinding binding;
+        binding.button = child;
+        binding.folderIndex = folderIndex;
+        binding.enterToken = child.PointerEntered(
+            [folderIndex, taskbarWnd](
+                winrt::Windows::Foundation::IInspectable const& sender,
+                winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) {
+                Wh_Log(L"Pins: pointer entered folder button %d", folderIndex);
+                if (auto element = sender.try_as<FrameworkElement>()) {
+                    OnPointerEnteredButton(folderIndex, element, taskbarWnd);
+                }
+            });
+        binding.exitToken = child.PointerExited(
+            [](winrt::Windows::Foundation::IInspectable const&,
+               winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const&) {
+                OnPointerExitedButton();
+            });
+        host->pinBindings.push_back(std::move(binding));
+        matched++;
+    }
+
+    size_t knownLabels = 0;
+    {
+        std::lock_guard<std::mutex> lock(Pins::g_labelMutex);
+        knownLabels = Pins::g_labelToPinId.size();
+    }
+
+    // Logged on every real rebind pass, not only when the count changes: a
+    // rebind that keeps failing is exactly the case worth seeing, and this only
+    // runs when the container set or the label map actually changed.
+    Wh_Log(L"Pins: hover bound to %d real taskbar button(s) of %zu realized, "
+           L"%zu label(s) known",
+           matched, children.size(), knownLabels);
+
+    // Say what was on the taskbar and what was being looked for — but only once
+    // the label map exists. Before the first reconcile finishes there is
+    // nothing to match against and the dump would be pure noise.
+    if (matched == 0 && knownLabels > 0) {
+        for (const auto& child : children) {
+            if (child &&
+                winrt::get_class_name(child) == L"Taskbar.TaskListButton") {
+                Wh_Log(L"  saw button named '%s'",
+                       AutomationNameOf(child).c_str());
+            }
+        }
+        std::lock_guard<std::mutex> lock(Pins::g_labelMutex);
+        for (const auto& [leaf, pinId] : Pins::g_labelToPinId) {
+            Wh_Log(L"  wanted '%s' (pin %s)", leaf.c_str(), pinId.c_str());
+        }
+    }
+    host->lastPinBindCount = matched;
+}
+
 // Leaving the button cancels a pending delayed open. Closing an already-open
 // cascade is left to OnTick so moving up into the grid does not dismiss it.
 void OnPointerExitedButton() {
@@ -6186,19 +6596,6 @@ void OnPointerExitedButton() {
     if (!g_levelWindows.empty() && g_levelWindows[0]) {
         KillTimer(g_levelWindows[0], kOpenTimerId);
     }
-}
-
-void OnButtonClicked(int folderIndex) {
-    if (!g_settings.openFolderOnClick) {
-        return;
-    }
-    ResolvePendingFolderEntries();
-    std::wstring path = FolderPathForButton(folderIndex);
-    if (path.empty()) {
-        return;
-    }
-    CloseChain();
-    LaunchPath(path);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6219,6 +6616,7 @@ constexpr int kIdList = 1001;
 constexpr int kIdAdd = 1002;
 constexpr int kIdEdit = 1003;
 constexpr int kIdRemove = 1004;
+constexpr int kIdTogglePin = 1005;
 constexpr int kIdClose = 1008;
 constexpr int kIdHint = 1009;
 
@@ -6239,6 +6637,7 @@ constexpr int kIdEditNameLabel = 1111;
 constexpr int kIdEditPathLabel = 1112;
 constexpr int kIdEditIconLabel = 1113;
 constexpr int kIdEditIconHint = 1114;
+constexpr int kIdEditOpenPath = 1115;
 
 // Every dimension in this window is written at 96 DPI and goes through
 // Scale()/ScaleFor(). explorer.exe is manifested Per-Monitor-DPI-Aware V2 and
@@ -6254,11 +6653,15 @@ constexpr int kTitleBottom = 21;  // Also the top of the path band.
 constexpr int kPathBottom = 3;    // Path band inset from the row bottom.
 constexpr int kPreviewIcon = 32;  // Edit-dialog icon preview.
 constexpr int kPreviewInset = 4;
+// Section caption band, drawn on top of the row that opens a section rather
+// than as a list item of its own — a header that is not an item cannot be
+// selected, arrowed onto, or counted in an index.
+constexpr int kSectionHeader = 24;
 
 // 96-DPI client size of each window, before AdjustWindowRect.
 constexpr int kMainWidth = 476;
 constexpr int kMainHeight = 400;
-constexpr int kEditWidth = 414;
+constexpr int kEditWidth = 470;
 constexpr int kEditHeight = 306;
 
 int Scale(int value, int dpi) {
@@ -6300,15 +6703,175 @@ std::atomic<bool> g_active{false};
 
 // 96-DPI layout of the main window's children.
 constexpr ChildRect kMainLayout[] = {
-    {kIdList, 12, 12, 452, 300},   {kIdAdd, 12, 324, 76, 26},
-    {kIdEdit, 94, 324, 76, 26},    {kIdRemove, 176, 324, 76, 26},
-    {kIdClose, 388, 324, 76, 26},  {kIdHint, 12, 360, 452, 32},
+    {kIdList, 12, 12, 452, 300},      {kIdAdd, 12, 324, 76, 26},
+    {kIdEdit, 94, 324, 76, 26},       {kIdRemove, 176, 324, 76, 26},
+    {kIdTogglePin, 258, 324, 76, 26}, {kIdClose, 388, 324, 76, 26},
+    {kIdHint, 12, 360, 452, 32},
 };
 
 // The store as last read, in listbox order. Manager-thread only.
 std::vector<FolderStore::Entry> g_rows;
 // One icon per row, parallel to g_rows, owned here and freed on rebuild.
 std::vector<HICON> g_rowIcons;
+
+// Defined with the rest of the row commands, below; PopulateList needs it.
+void UpdatePinButton(HWND hWnd);
+
+// True if this row opens a section. g_rows is sorted pinned-first, so the
+// boundary is wherever the flag changes — plus row 0, which opens the first
+// section whichever kind it is.
+bool StartsSection(size_t index) {
+    if (index >= g_rows.size()) {
+        return false;
+    }
+    return index == 0 || g_rows[index].pinned != g_rows[index - 1].pinned;
+}
+
+PCWSTR SectionCaption(bool pinned) {
+    return pinned ? L"On the taskbar" : L"Not pinned";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Dark mode
+//
+// Plain Win32 controls have no dark mode of their own. Three separate things
+// have to agree: DWM paints the caption, uxtheme paints the controls, and the
+// window paints its own background and owner-drawn rows. Miss any one and the
+// window comes out half-light.
+//
+// The theme is read from the same UISettings cache the hover grid uses, so the
+// manager follows the system app theme without a setting of its own.
+
+bool Dark() {
+    return IsDarkTheme();
+}
+
+COLORREF ClrWindow() {
+    return Dark() ? RGB(32, 32, 32) : GetSysColor(COLOR_WINDOW);
+}
+COLORREF ClrWindowText() {
+    return Dark() ? RGB(255, 255, 255) : GetSysColor(COLOR_WINDOWTEXT);
+}
+COLORREF ClrGrayText() {
+    return Dark() ? RGB(155, 155, 155) : GetSysColor(COLOR_GRAYTEXT);
+}
+COLORREF ClrFace() {
+    return Dark() ? RGB(43, 43, 43) : GetSysColor(COLOR_BTNFACE);
+}
+COLORREF ClrHighlight() {
+    return Dark() ? RGB(0, 90, 158) : GetSysColor(COLOR_HIGHLIGHT);
+}
+COLORREF ClrHighlightText() {
+    return Dark() ? RGB(255, 255, 255) : GetSysColor(COLOR_HIGHLIGHTTEXT);
+}
+COLORREF ClrSeparator() {
+    return Dark() ? RGB(64, 64, 64) : RGB(200, 200, 200);
+}
+COLORREF ClrFieldBorder() {
+    return Dark() ? RGB(72, 72, 72) : GetSysColor(COLOR_3DSHADOW);
+}
+
+// WS_EX_CLIENTEDGE is the classic sunken 3D border, drawn in the non-client
+// area from COLOR_3DHIGHLIGHT and friends. Those are light in both themes and
+// nothing in uxtheme repaints them, which is why the edit boxes and the list
+// kept a white ring on a dark window. In dark mode the style is dropped and the
+// border is painted by the parent instead — see DrawFieldBorders.
+DWORD FieldExStyle() {
+    return Dark() ? 0 : WS_EX_CLIENTEDGE;
+}
+
+// The 1px ring around each borderless field. Drawn by the parent because the
+// pixels sit just outside the child, in the parent's own client area — which
+// also means no subclassing and no WM_NCPAINT.
+void DrawFieldBorders(HWND hWnd, HDC dc, const int* ids, size_t count) {
+    HBRUSH brush = CreateSolidBrush(ClrFieldBorder());
+    if (!brush) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        HWND child = GetDlgItem(hWnd, ids[i]);
+        if (!child) {
+            continue;
+        }
+        RECT rc{};
+        GetWindowRect(child, &rc);
+        MapWindowPoints(nullptr, hWnd, (LPPOINT)&rc, 2);
+        InflateRect(&rc, 1, 1);
+        FrameRect(dc, &rc, brush);
+    }
+    DeleteObject(brush);
+}
+
+// Background brushes handed back from WM_CTLCOLOR*, which is called on every
+// paint — so they are cached rather than created per message. Freed in
+// Wh_ModUninit alongside g_fontCache; a brush left behind would leak into
+// Explorer on every disable/enable cycle.
+HBRUSH g_windowBrush = nullptr;
+HBRUSH g_faceBrush = nullptr;
+
+HBRUSH WindowBrush() {
+    if (!g_windowBrush) {
+        g_windowBrush = CreateSolidBrush(ClrWindow());
+    }
+    return g_windowBrush;
+}
+
+HBRUSH FaceBrush() {
+    if (!g_faceBrush) {
+        g_faceBrush = CreateSolidBrush(ClrFace());
+    }
+    return g_faceBrush;
+}
+
+// Dark rendering is per window and has to be asked for before the control
+// paints. AllowDarkModeForWindow is uxtheme ordinal 133 — undocumented, and the
+// same call every dark-mode Win32 app makes.
+//
+// ponytail: if a future build drops or renumbers the ordinal, GetProcAddress
+// returns null and the controls simply stay light. Nothing else breaks, so this
+// is not worth a version check.
+void AllowDarkModeForWindow(HWND hWnd, bool allow) {
+    using Fn = BOOL(WINAPI*)(HWND, BOOL);
+    static Fn fn = []() -> Fn {
+        HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
+        return uxtheme ? (Fn)GetProcAddress(uxtheme, MAKEINTRESOURCEA(133))
+                       : nullptr;
+    }();
+    if (fn) {
+        fn(hWnd, allow);
+    }
+}
+
+// Applied to the window and every child it already has, so it runs at the end
+// of WM_CREATE rather than before the controls exist.
+void ApplyTheme(HWND hWnd) {
+    BOOL dark = Dark();
+    AllowDarkModeForWindow(hWnd, dark != FALSE);
+    // DWMWA_USE_IMMERSIVE_DARK_MODE. Named rather than the literal 20 so the
+    // intent survives; the attribute is documented from Windows 11 on.
+    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
+                          sizeof(dark));
+    EnumChildWindows(
+        hWnd,
+        [](HWND child, LPARAM darkParam) -> BOOL {
+            BOOL childDark = (BOOL)darkParam;
+            AllowDarkModeForWindow(child, childDark != FALSE);
+            SetWindowTheme(child, childDark ? L"DarkMode_Explorer" : nullptr,
+                           nullptr);
+            return TRUE;
+        },
+        (LPARAM)dark);
+}
+
+// The one WM_CTLCOLOR* answer every control here wants: our text colours on our
+// background, and the matching brush so the control fills with it. `onFace` is
+// for the ones sitting on the window itself (labels, buttons) rather than in a
+// white field (edits, the listbox).
+LRESULT ThemedCtlColor(HDC dc, bool onFace) {
+    SetTextColor(dc, ClrWindowText());
+    SetBkColor(dc, onFace ? ClrFace() : ClrWindow());
+    return (LRESULT)(onFace ? FaceBrush() : WindowBrush());
+}
 
 // Registers one of the manager's window classes against the current DLL.
 // RegisterModClass handles a stale registration left by a previous load.
@@ -6384,6 +6947,42 @@ void ApplyUiFont(HWND parent, int dpi) {
         (LPARAM)UiFont(dpi));
 }
 
+// A single-line edit control centers its text within whatever height it is
+// given, but the fixed row heights in the layout tables are taller than the
+// UI font needs — the extra room lands below the text rather than split
+// evenly, since the control's own centering math is anchored to its internal
+// leading. Shrinking the control to the font's real line height and
+// recentering it in its original slot removes that slack instead of fighting
+// the control's own centering.
+void CenterSingleLineFields(HWND hWnd, int dpi, const int* ids, size_t count) {
+    HDC dc = GetDC(hWnd);
+    HFONT old = (HFONT)SelectObject(dc, UiFont(dpi));
+    TEXTMETRICW tm{};
+    GetTextMetricsW(dc, &tm);
+    SelectObject(dc, old);
+    ReleaseDC(hWnd, dc);
+
+    int desired = tm.tmHeight + Scale(6, dpi);
+    for (size_t i = 0; i < count; i++) {
+        HWND field = GetDlgItem(hWnd, ids[i]);
+        if (!field) {
+            continue;
+        }
+        RECT rc{};
+        GetWindowRect(field, &rc);
+        MapWindowPoints(nullptr, hWnd, (LPPOINT)&rc, 2);
+        int slot = rc.bottom - rc.top;
+        int height = std::min(desired, slot);
+        int top = rc.top + (slot - height) / 2;
+        MoveWindow(field, rc.left, top, rc.right - rc.left, height, TRUE);
+        // A single-line edit only recomputes where it vertically centers
+        // its text in response to WM_SETFONT, not to a plain resize — so
+        // without resending it here the control keeps centering against the
+        // slot's original, taller height.
+        SendMessageW(field, WM_SETFONT, (WPARAM)UiFont(dpi), TRUE);
+    }
+}
+
 // The icon a row should show: its configured icon spec if it has one that is
 // a file/resource, otherwise the folder's own shell icon. Emoji icons have no
 // HICON — those are drawn as text instead, so this returns null for them.
@@ -6427,11 +7026,33 @@ void PopulateList(HWND hWnd) {
         return;
     }
     int dpi = DpiOf(hWnd);
-    int selected = (int)SendMessageW(list, LB_GETCURSEL, 0, 0);
+    // Kept by path rather than by index: the rows are sorted by name, so an
+    // edit that renames a folder — or a pin toggle, once the row order is no
+    // longer the store's — can move the selected row somewhere else.
+    int previous = (int)SendMessageW(list, LB_GETCURSEL, 0, 0);
+    std::wstring previousPath;
+    if (previous >= 0 && previous < (int)g_rows.size()) {
+        previousPath = g_rows[previous].path;
+    }
 
     SendMessageW(list, LB_RESETCONTENT, 0, 0);
     FreeRowIcons();
     g_rows = FolderStore::Read();
+
+    // The taskbar owns button order now — it is set by dragging the buttons
+    // themselves — so store order says nothing a reader of this list would want.
+    // Pinned first so the two sections are contiguous, then by name within each
+    // so a folder is findable. StrCmpLogicalW rather than a plain compare, so
+    // "Folder 2" lands before "Folder 10" the way Explorer sorts.
+    std::sort(g_rows.begin(), g_rows.end(),
+              [](const FolderStore::Entry& a, const FolderStore::Entry& b) {
+                  if (a.pinned != b.pinned) {
+                      return a.pinned;
+                  }
+                  const std::wstring& an = a.name.empty() ? a.path : a.name;
+                  const std::wstring& bn = b.name.empty() ? b.path : b.name;
+                  return StrCmpLogicalW(an.c_str(), bn.c_str()) < 0;
+              });
 
     for (const auto& entry : g_rows) {
         g_rowIcons.push_back(IconForEntry(entry, Scale(kRowIconSize, dpi)));
@@ -6441,20 +7062,33 @@ void PopulateList(HWND hWnd) {
     }
 
     if (!g_rows.empty()) {
-        int last = (int)g_rows.size() - 1;
-        if (selected < 0) {
-            selected = 0;
+        int selected = -1;
+        if (!previousPath.empty()) {
+            for (size_t i = 0; i < g_rows.size(); i++) {
+                if (FolderStore::SamePath(g_rows[i].path, previousPath)) {
+                    selected = (int)i;
+                    break;
+                }
+            }
         }
-        SendMessageW(list, LB_SETCURSEL, selected < last ? selected : last, 0);
+        // Gone (removed, or its path was edited): fall back to wherever the
+        // selection was, clamped. Only when something was selected before -
+        // a deliberate click into empty space (previous < 0) stays cleared
+        // rather than snapping back to row 0.
+        if (selected < 0 && previous >= 0) {
+            int last = (int)g_rows.size() - 1;
+            selected = previous < last ? previous : last;
+        }
+        if (selected >= 0) {
+            SendMessageW(list, LB_SETCURSEL, selected, 0);
+        }
     }
 
     bool any = !g_rows.empty();
-    for (int id : {kIdEdit, kIdRemove}) {
-        EnableWindow(GetDlgItem(hWnd, id), any);
-    }
+    UpdatePinButton(hWnd);
     SetWindowTextW(GetDlgItem(hWnd, kIdHint),
-                   any ? L"Drag a row to reorder the taskbar buttons. "
-                         L"Double-click to open a folder."
+                   any ? L"Drag the buttons on the taskbar to reorder them. "
+                         L"Double-click a row to edit it."
                        : L"No folders yet. Add one here, or right-click any "
                          L"folder in Explorer and pick Taskbar Folders > Pin.");
     InvalidateRect(list, nullptr, TRUE);
@@ -6479,21 +7113,6 @@ void RefreshAfterStoreChange(HWND hWnd) {
     PopulateList(hWnd);
 }
 
-// True if the store still matches the rows on screen, one for one and in the
-// same order. A reorder commits by index, so it has to be abandoned if the
-// store moved underneath the window (an Explorer pin, a taskbar unpin).
-bool StoreMatchesRows(const std::vector<FolderStore::Entry>& stored) {
-    if (stored.size() != g_rows.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < stored.size(); i++) {
-        if (!FolderStore::SamePath(stored[i].path, g_rows[i].path)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void DrawRow(LPDRAWITEMSTRUCT dis) {
     if (dis->itemID == (UINT)-1 || dis->itemID >= g_rows.size()) {
         return;
@@ -6505,8 +7124,38 @@ void DrawRow(LPDRAWITEMSTRUCT dis) {
 
     HDC dc = dis->hDC;
     RECT rc = dis->rcItem;
-    FillRect(dc, &rc, GetSysColorBrush(selected ? COLOR_HIGHLIGHT
-                                                : COLOR_WINDOW));
+
+    // A section-opening row is measured one caption band taller than the rest.
+    // The caption is painted first, on the window background, and then the row
+    // proper is drawn in what is left — so the selection highlight stops at the
+    // caption instead of swallowing it.
+    if (StartsSection(dis->itemID)) {
+        RECT band{rc.left, rc.top, rc.right, rc.top + Scale(kSectionHeader, dpi)};
+        HBRUSH bg = CreateSolidBrush(ClrWindow());
+        FillRect(dc, &band, bg);
+        DeleteObject(bg);
+
+        RECT text{band.left + Scale(kIconLeft, dpi), band.top, band.right,
+                  band.bottom};
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, ClrGrayText());
+        DrawTextW(dc, SectionCaption(entry.pinned), -1, &text,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+        // Hairline under the caption, so the two groups read as separate lists
+        // rather than one list with a label floating in it.
+        RECT rule{band.left + Scale(kIconLeft, dpi), band.bottom - 1,
+                  band.right - Scale(kIconLeft, dpi), band.bottom};
+        HBRUSH line = CreateSolidBrush(ClrSeparator());
+        FillRect(dc, &rule, line);
+        DeleteObject(line);
+
+        rc.top = band.bottom;
+    }
+
+    HBRUSH rowBg = CreateSolidBrush(selected ? ClrHighlight() : ClrWindow());
+    FillRect(dc, &rc, rowBg);
+    DeleteObject(rowBg);
 
     int iconLeft = rc.left + Scale(kIconLeft, dpi);
 
@@ -6521,8 +7170,7 @@ void DrawRow(LPDRAWITEMSTRUCT dis) {
         RECT iconRect{iconLeft, iconTop, iconLeft + iconSize,
                       iconTop + iconSize};
         SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT
-                                              : COLOR_WINDOWTEXT));
+        SetTextColor(dc, selected ? ClrHighlightText() : ClrWindowText());
         DrawTextW(dc, entry.icon.c_str(), -1, &iconRect,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
@@ -6532,27 +7180,27 @@ void DrawRow(LPDRAWITEMSTRUCT dis) {
     int bandSplit = rc.top + Scale(kTitleBottom, dpi);
     SetBkMode(dc, TRANSPARENT);
 
+    // No "(not pinned)" suffix any more — the section the row sits in says it.
     std::wstring title = entry.name.empty() ? entry.path : entry.name;
-    if (!entry.pinned) {
-        title += L"   (not pinned)";
-    }
     RECT titleRect{textLeft, rc.top + Scale(kTitleTop, dpi), textRight,
                    bandSplit};
-    SetTextColor(dc, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT
-                                          : COLOR_WINDOWTEXT));
+    SetTextColor(dc, selected ? ClrHighlightText() : ClrWindowText());
     DrawTextW(dc, title.c_str(), -1, &titleRect,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
                   DT_NOPREFIX);
 
     RECT pathRect{textLeft, bandSplit, textRight,
                   rc.bottom - Scale(kPathBottom, dpi)};
-    SetTextColor(dc, GetSysColor(selected ? COLOR_HIGHLIGHTTEXT
-                                          : COLOR_GRAYTEXT));
+    SetTextColor(dc, selected ? ClrHighlightText() : ClrGrayText());
     DrawTextW(dc, entry.path.c_str(), -1, &pathRect,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS |
                   DT_NOPREFIX);
 
-    if (dis->itemState & ODS_FOCUS) {
+    // The listbox keeps a caret/focus index even after LB_SETCURSEL(-1)
+    // clears the selection, so ODS_FOCUS alone would leave a focus rect
+    // behind on a deliberately deselected row. Tying it to ODS_SELECTED too
+    // means the rect only ever appears on the actually-selected row.
+    if ((dis->itemState & ODS_FOCUS) && selected) {
         DrawFocusRect(dc, &rc);
     }
 }
@@ -6646,19 +7294,20 @@ struct EditContext {
 // can re-run the same table.
 constexpr ChildRect kEditLayout[] = {
     {kIdEditNameLabel, 14, 14, 300, 16},
-    {kIdEditName, 14, 32, 386, 24},
+    {kIdEditName, 14, 32, 442, 24},
     {kIdEditPathLabel, 14, 62, 300, 16},
-    {kIdEditPath, 14, 80, 300, 24},
-    {kIdEditBrowsePath, 322, 80, 78, 24},
+    {kIdEditPath, 14, 80, 286, 24},
+    {kIdEditBrowsePath, 308, 80, 70, 24},
+    {kIdEditOpenPath, 386, 80, 70, 24},
     {kIdEditIconLabel, 14, 110, 300, 16},
-    {kIdEditIcon, 14, 128, 300, 24},
-    {kIdEditBrowseIcon, 322, 128, 78, 24},
-    {kIdEditIconHint, 14, 158, 386, 32},
+    {kIdEditIcon, 14, 128, 286, 24},
+    {kIdEditBrowseIcon, 308, 128, 70, 24},
+    {kIdEditIconHint, 14, 158, 442, 32},
     {kIdEditPinned, 14, 198, 340, 22},
-    {kIdEditPinnedHint, 32, 222, 322, 32},
-    {kIdEditPreview, 360, 196, 40, 40},
-    {kIdEditOk, 222, 266, 86, 26},
-    {kIdEditCancel, 314, 266, 86, 26},
+    {kIdEditPinnedHint, 32, 222, 378, 32},
+    {kIdEditPreview, 416, 196, 40, 40},
+    {kIdEditOk, 278, 266, 86, 26},
+    {kIdEditCancel, 370, 266, 86, 26},
 };
 
 std::wstring GetControlText(HWND hWnd, int id) {
@@ -6704,16 +7353,18 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                 int id;
             };
             const Spec specs[] = {
-                {L"STATIC", L"Name", 0, 0, kIdEditNameLabel},
-                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE,
+                {L"STATIC", L"Name", SS_NOTIFY, 0, kIdEditNameLabel},
+                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, FieldExStyle(),
                  kIdEditName},
-                {L"STATIC", L"Folder", 0, 0, kIdEditPathLabel},
-                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE,
+                {L"STATIC", L"Folder", SS_NOTIFY, 0, kIdEditPathLabel},
+                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, FieldExStyle(),
                  kIdEditPath},
                 {L"BUTTON", L"Browse...", WS_TABSTOP | BS_PUSHBUTTON, 0,
                  kIdEditBrowsePath},
-                {L"STATIC", L"Icon", 0, 0, kIdEditIconLabel},
-                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE,
+                {L"BUTTON", L"Open", WS_TABSTOP | BS_PUSHBUTTON, 0,
+                 kIdEditOpenPath},
+                {L"STATIC", L"Icon", SS_NOTIFY, 0, kIdEditIconLabel},
+                {L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, FieldExStyle(),
                  kIdEditIcon},
                 {L"BUTTON", L"Browse...", WS_TABSTOP | BS_PUSHBUTTON, 0,
                  kIdEditBrowseIcon},
@@ -6721,7 +7372,7 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                  L"Emoji, an .ico / .png file, or a resource such as "
                  L"C:\\Windows\\explorer.exe,0. Leave empty to use the "
                  L"folder's own icon.",
-                 0, 0, kIdEditIconHint},
+                 SS_NOTIFY, 0, kIdEditIconHint},
                 // Pin state lives here rather than as a list button, so that
                 // what "unpinned" actually means — kept, not deleted — is
                 // spelled out right next to the switch.
@@ -6731,7 +7382,7 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                  L"Unticked keeps this folder in the list but takes its button "
                  L"off the taskbar. Nothing is deleted, and the folder still "
                  L"cannot be added twice.",
-                 0, 0, kIdEditPinnedHint},
+                 SS_NOTIFY, 0, kIdEditPinnedHint},
                 {L"STATIC", L"", SS_OWNERDRAW, 0, kIdEditPreview},
                 {L"BUTTON", L"Save", WS_TABSTOP | BS_DEFPUSHBUTTON, 0,
                  kIdEditOk},
@@ -6752,6 +7403,12 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
             CheckDlgButton(hWnd, kIdEditPinned,
                            ctx->entry.pinned ? BST_CHECKED : BST_UNCHECKED);
             ApplyUiFont(hWnd, DpiOf(hWnd));
+            static constexpr int kSingleLineFields[] = {kIdEditName,
+                                                         kIdEditPath,
+                                                         kIdEditIcon};
+            CenterSingleLineFields(hWnd, DpiOf(hWnd), kSingleLineFields,
+                                   ARRAYSIZE(kSingleLineFields));
+            ApplyTheme(hWnd);
             RefreshPreview(hWnd, ctx);
             return 0;
         }
@@ -6768,6 +7425,14 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
             int dpi = LOWORD(wParam);
             LayoutChildren(hWnd, kEditLayout, ARRAYSIZE(kEditLayout), dpi);
             ApplyUiFont(hWnd, dpi);
+            static constexpr int kSingleLineFields[] = {kIdEditName,
+                                                         kIdEditPath,
+                                                         kIdEditIcon};
+            CenterSingleLineFields(hWnd, dpi, kSingleLineFields,
+                                   ARRAYSIZE(kSingleLineFields));
+            // The field borders are painted around where the children were, so
+            // moving them leaves the old rings behind.
+            InvalidateRect(hWnd, nullptr, TRUE);
             if (ctx) {
                 RefreshPreview(hWnd, ctx);
             }
@@ -6777,8 +7442,7 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_DRAWITEM: {
             auto* dis = (LPDRAWITEMSTRUCT)lParam;
             if (dis->CtlID == kIdEditPreview) {
-                FillRect(dis->hDC, &dis->rcItem,
-                         GetSysColorBrush(COLOR_BTNFACE));
+                FillRect(dis->hDC, &dis->rcItem, FaceBrush());
                 if (ctx && ctx->preview) {
                     int dpi = DpiOf(hWnd);
                     int inset = Scale(kPreviewInset, dpi);
@@ -6790,6 +7454,7 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                     std::wstring icon = GetControlText(hWnd, kIdEditIcon);
                     if (!icon.empty()) {
                         SetBkMode(dis->hDC, TRANSPARENT);
+                        SetTextColor(dis->hDC, ClrWindowText());
                         DrawTextW(dis->hDC, icon.c_str(), -1, &dis->rcItem,
                                   DT_CENTER | DT_VCENTER | DT_SINGLELINE |
                                       DT_NOPREFIX);
@@ -6800,9 +7465,50 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
             break;
         }
 
+        case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLORBTN:
+            if (!Dark()) {
+                break;
+            }
+            return ThemedCtlColor((HDC)wParam, true);
+
+        case WM_CTLCOLOREDIT:
+            if (!Dark()) {
+                break;
+            }
+            return ThemedCtlColor((HDC)wParam, false);
+
+        case WM_ERASEBKGND: {
+            if (!Dark()) {
+                break;
+            }
+            RECT client{};
+            GetClientRect(hWnd, &client);
+            FillRect((HDC)wParam, &client, FaceBrush());
+            static constexpr int kFields[] = {kIdEditName, kIdEditPath,
+                                              kIdEditIcon};
+            DrawFieldBorders(hWnd, (HDC)wParam, kFields, ARRAYSIZE(kFields));
+            return TRUE;
+        }
+
+        // Clicking a label, hint or the preview swatch has nothing of its own
+        // to do, but it is the only way to click off a text box without
+        // hitting another control — labels don't take focus on their own, so
+        // this hands it to the dialog itself instead, which drops the edit
+        // box's selection highlight the same as WM_LBUTTONDOWN below does for
+        // the gaps between controls.
+        case WM_LBUTTONDOWN: {
+            SetFocus(hWnd);
+            return 0;
+        }
+
         case WM_COMMAND: {
             int id = LOWORD(wParam);
-            if (id == kIdEditBrowsePath) {
+            if (id == kIdEditNameLabel || id == kIdEditPathLabel ||
+                id == kIdEditIconLabel || id == kIdEditIconHint ||
+                id == kIdEditPinnedHint || id == kIdEditPreview) {
+                SetFocus(hWnd);
+            } else if (id == kIdEditBrowsePath) {
                 std::wstring start =
                     ExpandEnv(GetControlText(hWnd, kIdEditPath));
                 std::wstring picked = BrowseForFolder(hWnd, start);
@@ -6822,6 +7528,15 @@ LRESULT CALLBACK EditWndProc(HWND hWnd, UINT msg, WPARAM wParam,
                                         ReadFolderCustomIcon(picked).c_str());
                     }
                     RefreshPreview(hWnd, ctx);
+                }
+            } else if (id == kIdEditOpenPath) {
+                // Opens whatever is typed, not what was saved: the point is to
+                // check a path before committing to it.
+                std::wstring typed =
+                    ExpandEnv(GetControlText(hWnd, kIdEditPath));
+                if (!typed.empty()) {
+                    std::wstring target = ResolveFolderPath(typed);
+                    LaunchPath(target.empty() ? typed : target);
                 }
             } else if (id == kIdEditBrowseIcon) {
                 std::wstring picked = BrowseForIconFile(hWnd);
@@ -6951,6 +7666,52 @@ bool RunEditDialog(HWND owner, EditContext* ctx, PCWSTR title) {
     return ctx->accepted;
 }
 
+// Flips the pinned flag on the selected row. Same as the tick box in the edit
+// dialog, reachable in one click — and, like it, unpinning keeps the entry with
+// its name and icon rather than deleting anything.
+//
+// Committed by path for the same reason edit and remove are: the store is shared
+// with the taskbar UI thread and an Explorer window thread, so an index taken
+// before the read could point at a different folder by the time it is written.
+void TogglePinSelected(HWND hWnd) {
+    int index = SelectedIndex(hWnd);
+    if (index < 0 || g_unloading) {
+        return;
+    }
+    std::wstring path = g_rows[index].path;
+
+    bool gone = false;
+    {
+        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
+        auto stored = FolderStore::Read();
+        int at = FolderStore::IndexOfPath(stored, path);
+        if (at < 0) {
+            gone = true;
+        } else {
+            stored[at].pinned = !stored[at].pinned;
+            FolderStore::Write(stored);
+        }
+    }
+    if (gone) {
+        Wh_Log(L"Pin toggle: '%s' is no longer in the store", path.c_str());
+        PopulateList(hWnd);
+        return;
+    }
+    RefreshAfterStoreChange(hWnd);
+}
+
+// "Pin" or "Unpin", whichever the selected row is not. Disabled with nothing
+// selected, so the label it happens to be showing then does not matter.
+void UpdatePinButton(HWND hWnd) {
+    int index = SelectedIndex(hWnd);
+    bool selected = index >= 0;
+    for (int id : {kIdEdit, kIdRemove, kIdTogglePin}) {
+        EnableWindow(GetDlgItem(hWnd, id), selected);
+    }
+    bool pinned = selected && g_rows[index].pinned;
+    SetDlgItemTextW(hWnd, kIdTogglePin, pinned ? L"Unpin" : L"Pin");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Main window
 
@@ -7057,252 +7818,28 @@ void RemoveSelected(HWND hWnd) {
     RefreshAfterStoreChange(hWnd);
 }
 
-
-// Moves a row to a new position, taking the rest of the list with it, rather
-// than swapping the two ends — dragging row 0 to the bottom should slide
-// everything else up one, not trade places with the last row.
-void MoveRow(HWND hWnd, int from, int to) {
-    if (from < 0 || to < 0 || from >= (int)g_rows.size() ||
-        to >= (int)g_rows.size() || from == to || g_unloading) {
-        return;
-    }
-
-    // Unlike edit and remove, a reorder is about positions, so there is no
-    // path to re-find it by: if the store no longer matches the rows the drag
-    // started from, the move is meaningless and the list is just refreshed.
-    bool stale = false;
-    {
-        std::lock_guard<std::recursive_mutex> lock(FolderStore::g_mutex);
-        auto stored = FolderStore::Read();
-        if (!StoreMatchesRows(stored)) {
-            stale = true;
-        } else {
-            FolderStore::Entry moved = stored[from];
-            stored.erase(stored.begin() + from);
-            stored.insert(stored.begin() + to, std::move(moved));
-            FolderStore::Write(stored);
-        }
-    }
-    if (stale) {
-        Wh_Log(L"Reorder: the store changed under the window; refreshing");
-        PopulateList(hWnd);
-        return;
-    }
-    RefreshAfterStoreChange(hWnd);
-    SendMessageW(GetDlgItem(hWnd, kIdList), LB_SETCURSEL, to, 0);
-}
-
-void OpenSelected(HWND hWnd) {
-    int index = SelectedIndex(hWnd);
-    if (index < 0) {
-        return;
-    }
-    std::wstring target = ResolveFolderPath(ExpandEnv(g_rows[index].path));
-    LaunchPath(target.empty() ? ExpandEnv(g_rows[index].path) : target);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Drag to reorder
-//
-// A stock listbox has no reordering of its own, so the drag is tracked by
-// subclassing it: press picks up the row under the cursor, motion draws an
-// insertion line, release commits the move. Kept on the listbox rather than
-// the parent so the mouse capture and the hit testing share one coordinate
-// space.
-
-int g_dragFrom = -1;      // Row being dragged, -1 when not dragging.
-int g_dragTo = -1;        // Insertion point currently drawn.
-bool g_dragArmed = false; // Button down, but not yet past the drag threshold.
-POINT g_dragStart{};
-
-// Insertion index for a cursor position: the gap the row would drop into, so
-// the value can legitimately equal the row count (drop at the end).
-int InsertIndexAt(HWND list, POINT pt) {
-    int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
-    RECT client{};
-    GetClientRect(list, &client);
-    if (pt.y < 0) {
-        return top;
-    }
-    int rowHeight = Scale(kRowHeight, DpiOf(list));
-    int offset = (pt.y + rowHeight / 2) / rowHeight;
-    int index = top + offset;
-    int count = (int)g_rows.size();
-    return index < 0 ? 0 : (index > count ? count : index);
-}
-
-void DrawInsertionLine(HWND list, int index) {
-    if (index < 0) {
-        return;
-    }
-    int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
-    RECT client{};
-    GetClientRect(list, &client);
-    int y = (index - top) * Scale(kRowHeight, DpiOf(list));
-    if (y < 0) {
-        return;
-    }
-    // A drop at the very end can land a row-height past the last painted row;
-    // pull it back inside so it is still visible.
-    if (y > client.bottom - 2) {
-        y = client.bottom - 2;
-    }
-    HDC dc = GetDC(list);
-    // R2_NOT so the same call erases it again, no repaint needed.
-    int oldRop = SetROP2(dc, R2_NOT);
-    HPEN pen = CreatePen(PS_SOLID, 2, RGB(0, 0, 0));
-    HGDIOBJ oldPen = SelectObject(dc, pen);
-    MoveToEx(dc, client.left + 2, y, nullptr);
-    LineTo(dc, client.right - 2, y);
-    SelectObject(dc, oldPen);
-    DeleteObject(pen);
-    SetROP2(dc, oldRop);
-    ReleaseDC(list, dc);
-}
-
-void EndDrag(HWND list, bool commit) {
-    if (g_dragTo >= 0) {
-        DrawInsertionLine(list, g_dragTo);  // Erase.
-    }
-    int from = g_dragFrom;
-    int to = g_dragTo;
-    // Cleared before releasing capture: that sends WM_CAPTURECHANGED straight
-    // back here, and the -1 is what stops it recursing.
-    g_dragFrom = -1;
-    g_dragTo = -1;
-    g_dragArmed = false;
-    if (GetCapture() == list) {
-        ReleaseCapture();
-    }
-    if (!commit || from < 0 || to < 0) {
-        return;
-    }
-    // The insertion index counts gaps, so dropping below the dragged row
-    // shifts the target down by the row that is about to be removed.
-    if (to > from) {
-        to--;
-    }
-    if (to != from) {
-        MoveRow(GetParent(list), from, to);
-    }
-}
-
-LRESULT CALLBACK ListSubclassProc(HWND list,
-                                  UINT msg,
-                                  WPARAM wParam,
-                                  LPARAM lParam,
-                                  DWORD_PTR /*dwRefData*/) {
-    switch (msg) {
-        // Handled here in full, never forwarded. A stock listbox runs its own
-        // nested modal loop from WM_LBUTTONDOWN to track drag-selection, and
-        // that loop swallows every WM_MOUSEMOVE and WM_LBUTTONUP until the
-        // button comes back up — so a drag started below would never see
-        // another message. Selecting the row by hand costs little and keeps
-        // the message flow ours.
-        case WM_LBUTTONDOWN: {
-            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
-            int row = top + pt.y / Scale(kRowHeight, DpiOf(list));
-            if (pt.y < 0 || row < 0 || row >= (int)g_rows.size()) {
-                return 0;
-            }
-            SetFocus(list);
-            if ((int)SendMessageW(list, LB_GETCURSEL, 0, 0) != row) {
-                SendMessageW(list, LB_SETCURSEL, row, 0);
-                SendMessageW(GetParent(list), WM_COMMAND,
-                             MAKEWPARAM(kIdList, LBN_SELCHANGE),
-                             (LPARAM)list);
-            }
-            g_dragArmed = true;
-            g_dragStart = pt;
-            SetCapture(list);
+// A single-select listbox never lets go of its selection on its own — a click
+// below the last row just does nothing, and there is no other way to clear
+// it. LB_ITEMFROMPOINT's high word flags a point outside every row's client
+// area, which is what turns that click into an explicit deselect. Clicks
+// that land on a row are left to the default handling (including on the
+// already-selected row) so a click always does the one obvious thing instead
+// of alternating select/deselect on repeat clicks at the same spot.
+LRESULT CALLBACK ListSubclassProc(HWND hWnd, UINT msg, WPARAM wParam,
+                                  LPARAM lParam, UINT_PTR /*subclassId*/,
+                                  DWORD_PTR /*refData*/) {
+    if (msg == WM_LBUTTONDOWN) {
+        LRESULT hit = SendMessageW(hWnd, LB_ITEMFROMPOINT, 0, lParam);
+        if (HIWORD(hit) != 0) {
+            SendMessageW(hWnd, LB_SETCURSEL, (WPARAM)-1, 0);
+            HWND parent = GetParent(hWnd);
+            SendMessageW(parent, WM_COMMAND,
+                        MAKEWPARAM(GetDlgCtrlID(hWnd), LBN_SELCHANGE),
+                        (LPARAM)hWnd);
             return 0;
         }
-
-        // Also ours, for the same reason — and the parent still needs the
-        // notification to open the folder.
-        case WM_LBUTTONDBLCLK: {
-            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            int top = (int)SendMessageW(list, LB_GETTOPINDEX, 0, 0);
-            int row = top + pt.y / Scale(kRowHeight, DpiOf(list));
-            if (pt.y >= 0 && row >= 0 && row < (int)g_rows.size()) {
-                SendMessageW(list, LB_SETCURSEL, row, 0);
-                SendMessageW(GetParent(list), WM_COMMAND,
-                             MAKEWPARAM(kIdList, LBN_DBLCLK), (LPARAM)list);
-            }
-            return 0;
-        }
-
-        case WM_MOUSEMOVE: {
-            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            if (g_dragArmed && g_dragFrom < 0) {
-                // Only start a drag once the pointer has actually travelled,
-                // so an ordinary click still just selects. Capture is already
-                // held from WM_LBUTTONDOWN.
-                if (labs(pt.y - g_dragStart.y) >= GetSystemMetrics(SM_CYDRAG) ||
-                    labs(pt.x - g_dragStart.x) >= GetSystemMetrics(SM_CXDRAG)) {
-                    g_dragFrom =
-                        (int)SendMessageW(list, LB_GETCURSEL, 0, 0);
-                    if (g_dragFrom < 0 ||
-                        g_dragFrom >= (int)g_rows.size()) {
-                        g_dragFrom = -1;
-                        g_dragArmed = false;
-                    } else {
-                        SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
-                    }
-                }
-            }
-            if (g_dragFrom >= 0) {
-                int target = InsertIndexAt(list, pt);
-                if (target != g_dragTo) {
-                    if (g_dragTo >= 0) {
-                        DrawInsertionLine(list, g_dragTo);  // Erase old.
-                    }
-                    g_dragTo = target;
-                    DrawInsertionLine(list, g_dragTo);
-                }
-                SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
-                return 0;
-            }
-            break;
-        }
-
-        case WM_LBUTTONUP:
-            if (g_dragFrom >= 0) {
-                EndDrag(list, true);
-            } else {
-                // Armed but never dragged: an ordinary click, already handled
-                // on the way down. Just let the capture go.
-                g_dragArmed = false;
-                if (GetCapture() == list) {
-                    ReleaseCapture();
-                }
-            }
-            return 0;
-
-        // Losing capture (Alt+Tab, a message box) has to abandon the drag, or
-        // the insertion line is left painted with no way to clear it.
-        case WM_CAPTURECHANGED:
-            if (g_dragFrom >= 0) {
-                EndDrag(list, false);
-            }
-            g_dragArmed = false;
-            break;
-
-        case WM_KEYDOWN:
-            if (wParam == VK_ESCAPE && g_dragFrom >= 0) {
-                EndDrag(list, false);
-                return 0;
-            }
-            break;
-
-        case WM_DESTROY:
-            g_dragFrom = -1;
-            g_dragTo = -1;
-            g_dragArmed = false;
-            break;
     }
-    return DefSubclassProc(list, msg, wParam, lParam);
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -7310,12 +7847,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CREATE: {
             HINSTANCE instance = GetCurrentModuleHandle();
             HWND list = CreateWindowExW(
-                WS_EX_CLIENTEDGE, L"LISTBOX", nullptr,
+                FieldExStyle(), L"LISTBOX", nullptr,
                 WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | LBS_NOTIFY |
-                    LBS_OWNERDRAWFIXED,
+                    LBS_OWNERDRAWVARIABLE,
                 0, 0, 0, 0, hWnd, (HMENU)(INT_PTR)kIdList, instance, nullptr);
-            WindhawkUtils::SetWindowSubclassFromAnyThread(list,
-                                                          ListSubclassProc, 0);
+            SetWindowSubclass(list, ListSubclassProc, 0, 0);
 
             struct ButtonSpec {
                 int id;
@@ -7324,6 +7860,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             const ButtonSpec buttons[] = {{kIdAdd, L"Add..."},
                                           {kIdEdit, L"Edit..."},
                                           {kIdRemove, L"Remove"},
+                                          {kIdTogglePin, L"Pin"},
                                           {kIdClose, L"Close"}};
             for (const auto& b : buttons) {
                 CreateWindowExW(0, L"BUTTON", b.text,
@@ -7340,25 +7877,66 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             LayoutChildren(hWnd, kMainLayout, ARRAYSIZE(kMainLayout),
                            DpiOf(hWnd));
             ApplyUiFont(hWnd, DpiOf(hWnd));
+            ApplyTheme(hWnd);
             PopulateList(hWnd);
             return 0;
         }
 
+        // One message per item, sent as it is added — by which point g_rows is
+        // already filled, so the section boundary is known. A row that opens a
+        // section carries its caption band as extra height rather than the
+        // caption being a list item of its own.
+        //
+        // The parent's DPI, not the listbox's: this can arrive before the
+        // listbox has an HWND. Same monitor either way.
         case WM_MEASUREITEM: {
             auto* mis = (LPMEASUREITEMSTRUCT)lParam;
             if (mis->CtlID == kIdList) {
-                // Sent while the listbox is being created, before its own
-                // HWND exists — hence the parent's DPI, which is the same
-                // monitor.
-                mis->itemHeight = Scale(kRowHeight, DpiOf(hWnd));
+                int dpi = DpiOf(hWnd);
+                mis->itemHeight = Scale(kRowHeight, dpi);
+                if (StartsSection(mis->itemID)) {
+                    mis->itemHeight += Scale(kSectionHeader, dpi);
+                }
                 return TRUE;
             }
             break;
         }
 
-        // Dragged to a monitor at another scale. LB_SETITEMHEIGHT because
-        // WM_MEASUREITEM is not sent again for an existing owner-draw listbox,
-        // and PopulateList because the row icons were extracted at the old
+        // The listbox and the buttons paint themselves; these are the surfaces
+        // they ask the parent about. Without them a dark window still shows
+        // white label and edit backgrounds.
+        case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLORBTN:
+            if (!Dark()) {
+                break;
+            }
+            return ThemedCtlColor((HDC)wParam, true);
+
+        case WM_CTLCOLORLISTBOX:
+        case WM_CTLCOLOREDIT:
+            if (!Dark()) {
+                break;
+            }
+            return ThemedCtlColor((HDC)wParam, false);
+
+        // The class background brush is COLOR_BTNFACE, which is light. Painting
+        // it here rather than swapping the class brush keeps one window class
+        // working for both themes.
+        case WM_ERASEBKGND: {
+            if (!Dark()) {
+                break;
+            }
+            RECT client{};
+            GetClientRect(hWnd, &client);
+            FillRect((HDC)wParam, &client, FaceBrush());
+            static constexpr int kFields[] = {kIdList};
+            DrawFieldBorders(hWnd, (HDC)wParam, kFields, ARRAYSIZE(kFields));
+            return TRUE;
+        }
+
+        // Dragged to a monitor at another scale. PopulateList is what fixes the
+        // rows: it resets the list content, which makes the listbox ask for
+        // every item's height again, and it re-extracts the row icons at the new
         // pixel size.
         case WM_DPICHANGED: {
             const RECT* suggested = (const RECT*)lParam;
@@ -7369,10 +7947,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int dpi = LOWORD(wParam);
             LayoutChildren(hWnd, kMainLayout, ARRAYSIZE(kMainLayout), dpi);
             ApplyUiFont(hWnd, dpi);
-            if (HWND list = GetDlgItem(hWnd, kIdList)) {
-                SendMessageW(list, LB_SETITEMHEIGHT, 0,
-                             Scale(kRowHeight, dpi));
-            }
+            InvalidateRect(hWnd, nullptr, TRUE);
             PopulateList(hWnd);
             return 0;
         }
@@ -7395,10 +7970,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 EditSelected(hWnd);
             } else if (id == kIdRemove) {
                 RemoveSelected(hWnd);
+            } else if (id == kIdTogglePin) {
+                TogglePinSelected(hWnd);
             } else if (id == kIdClose) {
                 DestroyWindow(hWnd);
             } else if (id == kIdList && code == LBN_DBLCLK) {
-                OpenSelected(hWnd);
+                EditSelected(hWnd);
+            } else if (id == kIdList && code == LBN_SELCHANGE) {
+                // Pin/Unpin names the action, so it has to follow the
+                // selection rather than only the store.
+                UpdatePinButton(hWnd);
             }
             return 0;
         }
@@ -7413,12 +7994,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case WM_DESTROY:
-            // Unsubclass before the listbox goes away, so a reopened window
-            // does not chain onto a stale subclass entry.
-            if (HWND list = GetDlgItem(hWnd, kIdList)) {
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                    list, ListSubclassProc);
-            }
             FreeRowIcons();
             g_wnd = nullptr;
             PostQuitMessage(0);
@@ -7659,355 +8234,20 @@ void PlayPressBounce(UIElement const& element) {
     }
 }
 
-// The open right-click flyout, so teardown can close it before the lambdas
-// behind its items are unmapped.
-//
-// no_destroy: Wh_ModUninit does not run when Explorer terminates (sign-out,
-// restart, reboot) — only the CRT destructors of globals do, on the shutdown
-// thread, after every other thread has been killed. Releasing a strong XAML
-// reference there is exactly the UI-thread-affinity case that crashes. Cleared
-// with `g_buttonMenuFlyout = nullptr` in the Closed handler and in teardown,
-// which is what actually releases it.
-[[clang::no_destroy]] MenuFlyout g_buttonMenuFlyout{nullptr};
-
-FontIcon MakeMenuGlyph(const wchar_t* glyph) {
-    FontIcon icon;
-    icon.FontFamily(FontFamily(L"Segoe Fluent Icons"));
-    icon.FontSize(16);
-    icon.Glyph(glyph);
-    return icon;
+TaskbarHost* FindTaskbarHost(HWND taskbarWnd) {
+    if (!g_taskbarHosts) {
+        return nullptr;
+    }
+    for (auto& host : *g_taskbarHosts) {
+        if (host && host->hwnd == taskbarWnd) {
+            return host.get();
+        }
+    }
+    return nullptr;
 }
 
-// Right-click on a taskbar folder button: unpin it, or open the manager.
-// A XAML MenuFlyout rather than TrackPopupMenuEx, so the menu picks up the
-// system's Win11 menu styling (rounded, acrylic, icon column) instead of the
-// classic Win32 look.
-// Unpinning keeps the entry as a draft rather than deleting it, so its name
-// and icon survive and the folder can be pinned again later without being
-// set up from scratch. Deleting outright is a manager-window action.
-void OnButtonRightClicked(int folderIndex, Button const& button) {
-    if (g_unloading || !button) {
-        return;
-    }
-    std::wstring path = FolderPathForButton(folderIndex);
-    if (path.empty()) {
-        return;
-    }
-
-    // Right-click dismisses the hover tray, like right-clicking any other
-    // taskbar button closes its preview — including a delayed open that has
-    // not fired yet.
-    OnPointerExitedButton();
-    CloseChain();
-
-    if (auto content = button.Content().try_as<Panel>()) {
-        // Bounce the icon layer only; the hover highlight stays put.
-        if (content.Children().Size() > 1) {
-            PlayPressBounce(content.Children().GetAt(1));
-        }
-    }
-
-    try {
-        MenuFlyout flyout;
-        // The taskbar XAML island is only a taskbar tall — without this the
-        // menu is clipped to it instead of getting its own popup window.
-        flyout.ShouldConstrainToRootBounds(false);
-        flyout.Placement(Primitives::FlyoutPlacementMode::Top);
-
-        MenuFlyoutItem unpin;
-        unpin.Text(L"Unpin from taskbar");
-        unpin.Icon(MakeMenuGlyph(L""));  // unpin
-        unpin.Click([path](winrt::Windows::Foundation::IInspectable const&,
-                           RoutedEventArgs const&) {
-            if (g_unloading) {
-                return;
-            }
-            // Keeps the entry as a draft rather than forgetting it, so its
-            // name and icon survive and it can be pinned again from the
-            // manager.
-            RemovePinnedFolder(path);
-            // Deferred: the reload destroys this button and unhooks the
-            // handlers this lambda is running inside, and the flyout is
-            // anchored to it. The owner window lives on this same taskbar UI
-            // thread, so the post lands right after the flyout unwinds.
-            RequestReloadUI();
-        });
-
-        MenuFlyoutItem manage;
-        manage.Text(L"Manage folders...");
-        manage.Icon(MakeMenuGlyph(L""));  // folder
-        manage.Click([](winrt::Windows::Foundation::IInspectable const&,
-                        RoutedEventArgs const&) {
-            if (g_unloading) {
-                return;
-            }
-            FolderManager::Open();
-        });
-
-        flyout.Items().Append(unpin);
-        flyout.Items().Append(manage);
-        flyout.Closed([](winrt::Windows::Foundation::IInspectable const&,
-                         winrt::Windows::Foundation::IInspectable const&) {
-            g_buttonMenuFlyout = nullptr;
-        });
-
-        g_buttonMenuFlyout = flyout;
-        flyout.ShowAt(button);
-    } catch (...) {
-        g_buttonMenuFlyout = nullptr;
-    }
-}
-
-Grid BuildHostGrid(TaskbarHost* host) {
-    Grid hostGrid;
-    hostGrid.Name(kHostGridName);
-    hostGrid.HorizontalAlignment(HorizontalAlignment::Left);
-    hostGrid.VerticalAlignment(VerticalAlignment::Center);
-    hostGrid.Height(host->buttonHeight);
-
-    // Horizontal position lives here, not in Margin — see
-    // AnimateHostGridLeftTo for why Margin caused a layout feedback loop.
-    TranslateTransform translate;
-    hostGrid.RenderTransform(translate);
-    host->hostTranslate = translate;
-    host->slideStoryboard = nullptr;
-    host->currentLeft = 0.0;
-    host->slideStartTick = 0;
-    host->slideEndTick = 0;
-    host->hasPlaced = false;
-    host->slideCauseTick = 0;
-    host->slideCauseIsClose = false;
-    host->lastRetargetTick = 0;
-    host->parkedAnchorX = -1.0;
-    host->reserveHolds = 0;
-    host->lastAnchorX = -1.0;
-    host->anchorMovingSince = 0;
-    host->dragFrozen = false;
-
-    host->buttonStates.clear();
-
-    // Snapshot under the mutex — ResolvePendingFolderEntries / LoadFolders may
-    // mutate g_settings.folders from another thread while we build UI.
-    std::vector<FolderEntry> folders;
-    {
-        std::lock_guard<std::mutex> lock(g_foldersMutex);
-        folders = g_settings.folders;
-    }
-
-    // No buttons at all — a fresh install, or every folder unpinned — means
-    // nothing on the taskbar to right-click, and the Taskbar Folders window is
-    // only reachable from a button. Stand in a single "add a folder" button so
-    // there is always a way in. It is not in the store and has no entry of its
-    // own: an emoji icon and an empty path, which every index-taking path
-    // (hover, click, right-click) already treats as "nothing to open", since
-    // FolderPathForButton returns empty for it.
-    const bool placeholder = folders.empty();
-    if (placeholder) {
-        FolderEntry add;
-        add.name = L"Add a folder";
-        add.icon = L"➕";
-        folders.push_back(std::move(add));
-    }
-
-    for (size_t i = 0; i < folders.size(); i++) {
-        const auto& entry = folders[i];
-
-        ColumnDefinition column;
-        column.Width({1.0, GridUnitType::Auto});
-        hostGrid.ColumnDefinitions().Append(column);
-
-        Button button;
-        button.Name(L"FolderHoverTrayButton_" + winrt::to_hstring((int)i));
-        button.Width(host->buttonWidth);
-        button.Height(host->buttonHeight);
-        ApplyNativeButtonStyle(button);
-
-        ButtonState state;
-        state.button = button;
-        state.folderIndex = (int)i;
-        state.iconGeneration =
-            g_buttonIconGeneration.fetch_add(1, std::memory_order_relaxed);
-
-        bool dark = IsDarkTheme();
-        state.highlightHoverBrush = MakeHighlightBrush(dark, /*pressed=*/false);
-        state.highlightPressedBrush =
-            MakeHighlightBrush(dark, /*pressed=*/true);
-
-        Border highlight;
-        double highlightExtent =
-            HighlightExtent(host->buttonWidth, host->buttonHeight);
-        highlight.Width(highlightExtent);
-        highlight.Height(highlightExtent);
-        highlight.HorizontalAlignment(HorizontalAlignment::Center);
-        highlight.VerticalAlignment(VerticalAlignment::Center);
-        highlight.CornerRadius({kHighlightCornerRadius, kHighlightCornerRadius,
-                                 kHighlightCornerRadius, kHighlightCornerRadius});
-        // Fill only, no rim — the shell's own icon highlight has no stroke.
-        highlight.Background(state.highlightHoverBrush);
-        highlight.IsHitTestVisible(false);
-        // Hidden until hover. Set on the composition visual, not the XAML
-        // Opacity property, so FadeHighlight's animation isn't multiplied
-        // against a zero on the element itself.
-        try {
-            ElementCompositionPreview::GetElementVisual(highlight).Opacity(
-                0.0f);
-        } catch (...) {
-            highlight.Opacity(0.0);
-        }
-        state.highlightBorder = highlight;
-
-        Grid content;
-        content.Children().Append(highlight);
-        content.Children().Append(MakeButtonContent(
-            entry, host->buttonHeight, (int)i, host->hwnd,
-            state.iconGeneration));
-        button.Content(content);
-        state.contentGrid = content;
-
-        // No taskbar-button tooltip; the folder name is shown in the hover
-        // grid. The placeholder has no grid to show it in, so it says what it
-        // is on hover instead.
-        if (placeholder) {
-            ToolTipService::SetToolTip(
-                button, winrt::box_value(winrt::hstring(
-                            L"Add a folder to the taskbar")));
-        } else {
-            ToolTipService::SetToolTip(button, nullptr);
-        }
-
-        Grid::SetColumn(button, (int)i);
-        hostGrid.Children().Append(button);
-
-        int folderIndex = (int)i;
-        HWND taskbarWnd = host->hwnd;
-        state.clickToken = button.Click(
-            [folderIndex, placeholder](
-                winrt::Windows::Foundation::IInspectable const&,
-                RoutedEventArgs const&) {
-                if (placeholder) {
-                    if (!g_unloading) {
-                        FolderManager::Open();
-                    }
-                    return;
-                }
-                OnButtonClicked(folderIndex);
-            });
-        Border highlightRef = highlight;
-        Brush hoverBrushRef = state.highlightHoverBrush;
-        Brush pressedBrushRef = state.highlightPressedBrush;
-        state.enterToken = button.PointerEntered(
-            [folderIndex, taskbarWnd, highlightRef, hoverBrushRef](
-                winrt::Windows::Foundation::IInspectable const& sender,
-                winrt::Windows::UI::Xaml::Input::
-                    PointerRoutedEventArgs const&) {
-                try {
-                    highlightRef.Background(hoverBrushRef);
-                } catch (...) {
-                }
-                FadeHighlight(highlightRef, 1.0f, kHighlightFadeInMs);
-                if (auto button = sender.try_as<Button>()) {
-                    OnPointerEnteredButton(folderIndex, button, taskbarWnd);
-                }
-            });
-        state.exitToken = button.PointerExited(
-            [highlightRef](
-                winrt::Windows::Foundation::IInspectable const&,
-                winrt::Windows::UI::Xaml::Input::
-                    PointerRoutedEventArgs const&) {
-                FadeHighlight(highlightRef, 0.0f, kHighlightFadeOutMs);
-                OnPointerExitedButton();
-            });
-        // Press/release only re-tint; the highlight is already faded in.
-        state.pressedToken = button.PointerPressed(
-            [highlightRef, pressedBrushRef](
-                winrt::Windows::Foundation::IInspectable const&,
-                winrt::Windows::UI::Xaml::Input::
-                    PointerRoutedEventArgs const&) {
-                try {
-                    highlightRef.Background(pressedBrushRef);
-                } catch (...) {
-                }
-            });
-        state.releasedToken = button.PointerReleased(
-            [highlightRef, hoverBrushRef](
-                winrt::Windows::Foundation::IInspectable const&,
-                winrt::Windows::UI::Xaml::Input::
-                    PointerRoutedEventArgs const&) {
-                try {
-                    highlightRef.Background(hoverBrushRef);
-                } catch (...) {
-                }
-            });
-        state.rightTapToken = button.RightTapped(
-            [folderIndex, placeholder](
-                winrt::Windows::Foundation::IInspectable const& sender,
-                winrt::Windows::UI::Xaml::Input::RightTappedRoutedEventArgs const&
-                    args) {
-                // Unpin/hide is offered for every folder button now, regardless
-                // of whether it came from Settings or the Explorer pin action.
-                args.Handled(true);
-                // Nothing to unpin on the placeholder — either button opens the
-                // manager, which is the only thing it is there for.
-                if (placeholder) {
-                    if (!g_unloading) {
-                        FolderManager::Open();
-                    }
-                    return;
-                }
-                OnButtonRightClicked(folderIndex, sender.try_as<Button>());
-            });
-
-        host->buttonStates.push_back(std::move(state));
-    }
-
-    hostGrid.Width(DesiredHostWidth(host));
-    return hostGrid;
-}
-
-void ClearButtonState(TaskbarHost* host) {
-    if (!host) {
-        return;
-    }
-    // Its item handlers live in this DLL — never leave it open across a
-    // rebuild or an unload.
-    if (g_buttonMenuFlyout) {
-        try {
-            g_buttonMenuFlyout.Hide();
-        } catch (...) {
-        }
-        g_buttonMenuFlyout = nullptr;
-    }
-    for (auto& state : host->buttonStates) {
-        if (!state.button) {
-            continue;
-        }
-        try {
-            if (state.clickToken.value) {
-                state.button.Click(state.clickToken);
-            }
-            if (state.enterToken.value) {
-                state.button.PointerEntered(state.enterToken);
-            }
-            if (state.exitToken.value) {
-                state.button.PointerExited(state.exitToken);
-            }
-            if (state.pressedToken.value) {
-                state.button.PointerPressed(state.pressedToken);
-            }
-            if (state.releasedToken.value) {
-                state.button.PointerReleased(state.releasedToken);
-            }
-            if (state.rightTapToken.value) {
-                state.button.RightTapped(state.rightTapToken);
-            }
-            ToolTipService::SetToolTip(state.button, nullptr);
-            state.button.Content(nullptr);
-        } catch (...) {
-        }
-    }
-    host->buttonStates.clear();
-}
-
+// Releases everything this host attached to elements the taskbar owns. Nothing
+// of ours is in the visual tree any more, so this is only handlers.
 void RemoveHostGrid(TaskbarHost* host) {
     if (!host) {
         return;
@@ -8021,32 +8261,13 @@ void RemoveHostGrid(TaskbarHost* host) {
     }
     host->layoutUpdatedToken = {};
 
-    RestoreAnchorMargin(host);
-    ClearButtonState(host);
+    // The taskbar keeps its buttons after the mod is gone, so a handler left
+    // attached would outlive the image it lives in.
+    UnbindPinButtons(host);
+    host->lastRealizedChildren.clear();
+    host->lastPinBindCount = -1;
+    host->lastLabelGeneration = 0;
 
-    // Detach hostGrid from wherever it's actually parented right now, not
-    // from host->trackedRootGrid's children. If FindTaskbarRootGrid ever
-    // resolves a different (but still live) RootGrid object on a later pass
-    // than the one hostGrid was originally appended under, searching that
-    // mismatched trackedRootGrid finds nothing to remove and leaves the old
-    // hostGrid orphaned but still attached and rendering - a second, stuck
-    // copy of the folder buttons that nothing else catches, since it isn't
-    // moving or overlapping its own (correct) anchor.
-    if (host->hostGrid) {
-        try {
-            if (auto panel =
-                    VisualTreeHelper::GetParent(host->hostGrid).try_as<Panel>()) {
-                auto children = panel.Children();
-                uint32_t index;
-                if (children.IndexOf(host->hostGrid, index)) {
-                    children.RemoveAt(index);
-                }
-            }
-        } catch (...) {
-        }
-    }
-
-    host->hostGrid = nullptr;
     host->trackedRootGrid = nullptr;
     host->cachedRepeater = nullptr;
 }
@@ -8063,25 +8284,19 @@ void RemoveAllHostGrids() {
     g_injectionLive = false;
 }
 
-// Layout passes during an icon slide come every ~15ms, so this covers the
-// taskbar's own 250ms slide with room to spare while still guaranteeing the
-// overlay gives in and moves if a reserve-sized target is genuinely correct.
-constexpr int kMaxReserveHolds = 24;
-
-// How far the anchor has to move between two layout passes to count as still
-// in flight. Below this it is measurement jitter on a button that has stopped.
-constexpr double kAnchorSettleEpsilon = 0.5;
-// Ceiling on how long positioning will wait for the anchor to stop moving.
-// Comfortably past Windows' own ~250ms icon slide, so a real settle always
-// wins the race; it exists only so an anchor that somehow never stops (a
-// perpetual animation, a stuck arrange) cannot wedge the overlay in place.
-constexpr ULONGLONG kMaxAnchorSettleMs = 600;
-
+// Keeps hover attached to the real pinned buttons as the taskbar changes.
+//
+// This is all that is left of a function that used to be ~270 lines: anchor
+// resolution, a strip census, reserve holds, settle holds, drag freezes and a
+// slide animation, all of it trying to predict where Windows was about to put
+// an icon. None of that is needed once the button belongs to the shell.
 void OnRootGridLayoutUpdated(TaskbarHost* host) {
-    if (g_unloading || !host || !host->hostGrid || !host->trackedRootGrid) {
+    if (g_unloading || !host || !host->trackedRootGrid) {
         return;
     }
 
+    // Reached from a XAML delegate, so a WinRT failure must not unwind into the
+    // framework's own frame.
     try {
         FrameworkElement repeater = host->cachedRepeater;
         bool repeaterLooksDead = false;
@@ -8098,244 +8313,11 @@ void OnRootGridLayoutUpdated(TaskbarHost* host) {
             return;
         }
 
-        ULONGLONG now = GetTickCount64();
-
-        if (now - host->lastButtonSizeTick > 250) {
-            host->lastButtonSizeTick = now;
-            double previousWidth = host->buttonWidth;
-            double previousHeight = host->buttonHeight;
-            UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
-                                        &host->buttonHeight);
-
-            if (std::abs(previousWidth - host->buttonWidth) > 0.5 ||
-                std::abs(previousHeight - host->buttonHeight) > 0.5) {
-                double highlightExtent =
-                    HighlightExtent(host->buttonWidth, host->buttonHeight);
-                for (auto& state : host->buttonStates) {
-                    if (state.button) {
-                        state.button.Width(host->buttonWidth);
-                        state.button.Height(host->buttonHeight);
-                    }
-                    // The highlight is explicitly sized, so it does not
-                    // follow the button on its own.
-                    if (state.highlightBorder) {
-                        state.highlightBorder.Width(highlightExtent);
-                        state.highlightBorder.Height(highlightExtent);
-                    }
-                }
-                host->hostGrid.Height(host->buttonHeight);
-                host->hostGrid.Width(DesiredHostWidth(host));
-            }
-        }
-
-        // ActualWidth alone is a bad liveness check: Windows shrinks a
-        // closing button's width toward 0 as part of its own close
-        // animation, which isn't the anchor going away. Test detachment
-        // from the tree instead so a closing-but-still-present button
-        // doesn't trigger a needless re-resolve (and the churn/flicker
-        // that comes with it) on every window close.
-        // A new app button lands and settles at its final position within a
-        // tick or two — well inside the 250ms re-resolve throttle below.
-        // Left on the throttle alone, a newly-opened window can render past
-        // our still-stale reserved gap for up to 250ms, appearing to the
-        // right of hostGrid before the next re-resolve catches it and pulls
-        // hostGrid past it. React the moment the child count itself moves
-        // instead of waiting out the throttle.
-        int childCount = VisualTreeHelper::GetChildrenCount(repeater);
-        bool childCountChanged = childCount != host->lastRepeaterChildCount;
-        host->lastRepeaterChildCount = childCount;
-
-        bool anchorLooksDead = !host->anchor || !host->anchor.Parent();
-        if (anchorLooksDead || childCountChanged ||
-            now - host->lastAnchorResolveTick > 250) {
-            host->lastAnchorResolveTick = now;
-            if (auto resolved =
-                    ResolveAnchor(repeater, host->trackedRootGrid)) {
-                if (resolved != host->anchor) {
-                    // The anchor itself just closed and a different button
-                    // was promoted in its place — a discontinuous swap, not
-                    // a smooth shrink/slide. There's no icon animation left
-                    // to stay in sync with, so the open/close delay in
-                    // AnimateHostGridLeftTo (there to match Windows' own
-                    // icon-slide timing) would just leave hostGrid parked
-                    // over the new anchor's slot for a few hundred ms.
-                    host->anchorSwapped = true;
-                    double rx = -1.0;
-                    double rw = -1.0;
-                    try {
-                        rw = resolved.ActualWidth();
-                        rx = resolved.TransformToVisual(host->trackedRootGrid)
-                                 .TransformPoint({0, 0})
-                                 .X;
-                    } catch (...) {
-                    }
-
-                    // Our reserve is a Margin on the outgoing anchor, so a
-                    // button realized on its outer side is laid out exactly
-                    // one reserve-width clear of it - parked on the far side
-                    // of our own gap - and only closes up once the reserve has
-                    // migrated across and the taskbar has slid it home. That
-                    // separation is the reliable signal, measured directly
-                    // here. (Watching the retarget distance instead cannot
-                    // work: the target is anchorX + buttonWidth, so the move
-                    // is reserve + a button on the way out and reserve + the
-                    // re-centre on the way back - never the reserve itself.)
-                    // Clearance is measured against the rest of the strip, not
-                    // against the outgoing anchor: that anchor is frequently
-                    // still sliding home from the previous cycle, so the
-                    // distance to it reads anything (127 in one trace where
-                    // the real clearance was a full reserve). Everything
-                    // except the incoming button is settled, so its outer edge
-                    // is a stable reference. Tolerance stays a whole button -
-                    // the two cases are far apart anyway (a parked button sits
-                    // a reserve out, a normal adoption lands touching).
-                    double reserve = DesiredHostWidth(host) +
-                                     g_settings.gapBefore + g_settings.gapAfter;
-                    double slack = host->buttonWidth > 1.0 ? host->buttonWidth
-                                                           : kFallbackButtonSize;
-                    double stripLeft = 0.0;
-                    double stripRight = 0.0;
-                    int others = CensusAppStrip(repeater, host->trackedRootGrid,
-                                                &stripLeft, &stripRight,
-                                                resolved);
-                    host->parkedAnchorX = -1.0;
-                    if (others > 0 && rx > 0.5 && reserve > slack) {
-                        double clearance = (g_settings.position != L"afterApps")
-                                               ? stripLeft - (rx + rw)
-                                               : rx - stripRight;
-                        if (std::abs(clearance - reserve) <= slack) {
-                            host->parkedAnchorX = rx;
-                        }
-                    }
-                }
-                AdoptAnchor(host, resolved);
-            }
-        }
-
-        if (!host->anchor || !host->hasAnchorOriginalMargin) {
-            return;
-        }
-
-        bool before = g_settings.position != L"afterApps";
-        double desiredGap =
-            DesiredHostWidth(host) + g_settings.gapBefore + g_settings.gapAfter;
-
-        auto currentMargin = host->anchor.Margin();
-        auto target = host->anchorOriginalMargin;
-        bool marginChanged = false;
-        if (before) {
-            target.Left = host->anchorOriginalMargin.Left + desiredGap;
-            if (std::abs(currentMargin.Left - target.Left) > 1.0) {
-                host->anchor.Margin(target);
-                marginChanged = true;
-            }
-        } else {
-            target.Right = host->anchorOriginalMargin.Right + desiredGap;
-            if (std::abs(currentMargin.Right - target.Right) > 1.0) {
-                host->anchor.Margin(target);
-                marginChanged = true;
-            }
-        }
-
-        // TransformToVisual below still reads the pre-change position on
-        // this pass (the margin write hasn't been laid out yet), so
-        // computing hostGrid's position now would jump it a full gap-width
-        // onto the neighbouring icon for one frame. The margin write itself
-        // queues another LayoutUpdated; let that pass place hostGrid once
-        // the anchor has actually moved.
-        if (marginChanged) {
-            return;
-        }
-
-        // Dragging a taskbar button moves that button under the cursor - the
-        // element itself, no swap, no window opening or closing - so it can
-        // wander to the outer end of the strip and drag the folder block along
-        // with it (anchorX walking 1098 -> 1291 -> 1334 in a trace, with the
-        // block chasing). Rearranging apps should not move the overlay at all,
-        // so freeze positioning while the primary button is held and settle
-        // once on release. The margin above is still maintained, so the
-        // reserved gap does not collapse mid-drag.
-        bool dragging = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        host->dragFrozen = dragging;
-        if (dragging) {
-            return;
-        }
-
-        auto point = host->anchor.TransformToVisual(host->trackedRootGrid)
-                         .TransformPoint({0, 0});
-
-        // ItemsRepeater can recycle the container backing our anchor to
-        // represent a different, off-screen item (e.g. the closing-window
-        // placeholder parked at a large negative X) while it's still
-        // attached to the tree, so Parent() alone doesn't catch it. Same
-        // sentinel check ResolveAnchor uses when picking an anchor: bail
-        // and force an immediate re-resolve instead of animating to the
-        // bogus coordinate.
-        if (point.X <= 0.5) {
-            // hostGrid stays wherever it was until the re-resolve lands.
-            host->lastAnchorResolveTick = 0;
-            return;
-        }
-
-        // Windows slides its own icons over ~250ms and layout reports the
-        // anchor part-way through that slide, so a reading that differs from
-        // the previous pass is a frame of a move in flight, not a resting
-        // place. Committing to one parks the folder block at a coordinate the
-        // taskbar was only passing through - and if no further layout pass
-        // happens to land after the icons settle, it stays parked there for as
-        // long as it takes something else to disturb the tree (a full second
-        // in the traces, ending in a visible pop). Waiting for two consecutive
-        // passes to agree costs one pass (~15ms) on a genuine open or close and
-        // makes every intermediate frame a no-op, so the block simply stays put
-        // through the taskbar's animation and moves once, to the right place.
-        bool anchorSettled =
-            host->lastAnchorX >= 0.0 &&
-            std::abs(point.X - host->lastAnchorX) <= kAnchorSettleEpsilon;
-        if (!anchorSettled && host->anchorMovingSince == 0) {
-            host->anchorMovingSince = now;
-        }
-        bool settleTimedOut =
-            host->anchorMovingSince &&
-            now - host->anchorMovingSince > kMaxAnchorSettleMs;
-        host->lastAnchorX = point.X;
-        if (host->hasPlaced && !anchorSettled && !settleTimedOut) {
-            return;
-        }
-        host->anchorMovingSince = 0;
-
-        double left;
-        if (before) {
-            left = point.X - desiredGap + g_settings.gapBefore;
-        } else {
-            left = point.X + host->anchor.ActualWidth() + g_settings.gapBefore;
-        }
-
-        // Adopting a button parked past our own reserve is correct - it really
-        // is the new outermost one - but positioning off it while it is still
-        // out there throws the folder block a reserve-width sideways and back.
-        // Hold until the taskbar has started sliding it home, then track it
-        // in normally. Capped so a button that never moves cannot wedge us.
-        if (host->hasPlaced && host->parkedAnchorX >= 0.0 &&
-            host->reserveHolds < kMaxReserveHolds &&
-            std::abs(point.X - host->parkedAnchorX) < 4.0) {
-            host->reserveHolds++;
-            return;
-        }
-        host->parkedAnchorX = -1.0;
-        host->reserveHolds = 0;
-
-        AnimateHostGridLeftTo(host, left, point.X);
+        // Cheap: compares the realized container identities and the label map
+        // generation, and returns immediately unless something actually
+        // changed. LayoutUpdated fires on every animation frame.
+        RebindPinButtons(host);
     } catch (...) {
-        // A XAML call threw, most likely the anchor was recycled out from
-        // under us mid-access. cachedRepeater is the only thing actually
-        // stale here; drop just that and let the next pass re-resolve the
-        // repeater (and, if the anchor really is gone, ResolveAnchor will
-        // pick a new one on the anchorLooksDead branch above). Restoring
-        // the anchor's margin here would be racing an anchor that's still
-        // alive, and if that restore itself no-ops or throws, the next
-        // AdoptAnchor snapshots the still-widened margin as "original",
-        // doubling the gap permanently.
-        host->cachedRepeater = nullptr;
     }
 }
 
@@ -8367,13 +8349,12 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
         return false;
     }
 
-    // Leave a seated host alone on retry; only rebuild when the taskbar root
-    // was replaced (Explorer rebuild) or the host grid was detached.
+    // Leave a live host alone on retry; only rebuild when the taskbar root was
+    // replaced, which is what an Explorer rebuild looks like from here.
     if (auto* existing = FindTaskbarHost(taskbarWnd)) {
         bool stillLive = false;
         try {
-            stillLive = existing->trackedRootGrid == rootGrid &&
-                        existing->hostGrid && existing->hostGrid.Parent();
+            stillLive = existing->trackedRootGrid == rootGrid;
         } catch (...) {
             stillLive = false;
         }
@@ -8394,22 +8375,13 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
     auto host = std::make_unique<TaskbarHost>();
     host->hwnd = taskbarWnd;
     host->cachedRepeater = repeater;
-    host->lastButtonSizeTick = GetTickCount64();
-    UpdateButtonSizeFromTaskbar(repeater, &host->buttonWidth,
-                                &host->buttonHeight);
-
     host->trackedRootGrid = rootGrid;
-    host->hostGrid = BuildHostGrid(host.get());
 
-    Grid::SetColumn(host->hostGrid, 0);
-    Canvas::SetZIndex(host->hostGrid, 1000);
-    host->hostGrid.Margin({0, 0, 0, 0});
-    rootGrid.Children().Append(host->hostGrid);
-
-    if (auto anchor = ResolveAnchor(repeater, rootGrid)) {
-        AdoptAnchor(host.get(), anchor);
-    }
-    host->lastAnchorResolveTick = GetTickCount64();
+    // Nothing is added to the visual tree. The buttons are real pinned taskbar
+    // items that Windows already created; all that is attached here is hover on
+    // the ones that are ours, plus a layout hook to keep that attached as the
+    // repeater recycles its containers.
+    RebindPinButtons(host.get());
 
     TaskbarHost* raw = host.get();
     host->layoutUpdatedToken = rootGrid.LayoutUpdated(
@@ -8418,9 +8390,7 @@ bool InjectHostGridForTaskbar(HWND taskbarWnd) {
             OnRootGridLayoutUpdated(raw);
         });
 
-    Wh_Log(L"Injected %d folder button(s) on taskbar %p, size %.1fx%.1f",
-           (int)host->buttonStates.size(), taskbarWnd, host->buttonWidth,
-           host->buttonHeight);
+    Wh_Log(L"Watching taskbar %p for folder buttons", taskbarWnd);
 
     TaskbarHosts().push_back(std::move(host));
     return true;
@@ -8669,6 +8639,141 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     }
 }
 
+// Click interception.
+//
+// The shortcut behind a folder button targets `explorer.exe "<folder>"`, so a
+// left click opens the folder — which is exactly what `openFolderOnClick: true`
+// means, and it costs no hook at all. Only the false case needs anything: swallow
+// the activation so the button is hover-only, as it was before the buttons were
+// real.
+//
+// Right click does not come through here (it goes via _HandleShellContextMenu),
+// so the native jump list is unaffected. The eCLICKACTION value is logged rather
+// than filtered on: its members are not in the public PDB, and every action that
+// does reach this function is an activation we want swallowed.
+//
+// All three symbols are optional. If a future build renames one, the click falls
+// through and Explorer opens the folder — the same thing the true setting does,
+// which is a sane place to degrade to.
+using CTaskBtnGroup_GetGroup_t = void*(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup_Original;
+
+using CTaskGroup_GetAppID_t = PCWSTR(WINAPI*)(void* pThis);
+CTaskGroup_GetAppID_t CTaskGroup_GetAppID_Original;
+
+using CTaskListWnd__HandleClick_t = void(WINAPI*)(void* pThis,
+                                                 void* taskBtnGroup,
+                                                 int taskItemIndex,
+                                                 int clickAction,
+                                                 int a5,
+                                                 int a6);
+CTaskListWnd__HandleClick_t CTaskListWnd__HandleClick_Original;
+
+void WINAPI CTaskListWnd__HandleClick_Hook(void* pThis,
+                                           void* taskBtnGroup,
+                                           int taskItemIndex,
+                                           int clickAction,
+                                           int a5,
+                                           int a6) {
+    if (!g_unloading && !g_settings.openFolderOnClick && taskBtnGroup &&
+        CTaskBtnGroup_GetGroup_Original && CTaskGroup_GetAppID_Original) {
+        // GetAppID lives on CTaskGroup, which is the class behind ITaskGroup;
+        // the interface is its first base, so the pointer passes straight
+        // through. Same call the other taskbar mods make.
+        void* taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
+        PCWSTR appId = taskGroup ? CTaskGroup_GetAppID_Original(taskGroup)
+                                 : nullptr;
+        if (appId && Pins::IsOurAppId(appId)) {
+            Wh_Log(L"Swallowing click (action %d) on folder button %s",
+                   clickAction, appId);
+            return;
+        }
+    }
+
+    CTaskListWnd__HandleClick_Original(pThis, taskBtnGroup, taskItemIndex,
+                                       clickAction, a5, a6);
+}
+
+// Getting out of the shell's way.
+//
+// Two things the taskbar shows on its own overlap the hover grid, and neither
+// clears itself, because from the shell's point of view nothing has happened:
+//
+//  * The thumbnail preview of whatever app was hovered before. Moving from an
+//    app button onto a folder button leaves it up, floating over the grid that
+//    just opened. _SetHotItem is where the shell decides which button is hot, so
+//    it is the exact moment to tell it to drop the preview.
+//
+//  * The hover grid itself, when the folder button is right-clicked. The pointer
+//    never leaves the button, so PointerExited never fires and the grid sits
+//    under the jump list. _OnJumpViewShown fires whichever way the jump list was
+//    summoned.
+//
+// Both hooks are optional. Without them the two surfaces overlap, which is what
+// happens today — annoying, not broken.
+using CTaskListWnd_DismissAllSecondaryUI_t = void(WINAPI*)(void* pThis);
+CTaskListWnd_DismissAllSecondaryUI_t CTaskListWnd_DismissAllSecondaryUI_Original;
+
+using CTaskListWnd__SetHotItem_t = void(WINAPI*)(void* pThis,
+                                                void* taskBtnGroup,
+                                                int taskItemIndex,
+                                                int flags);
+CTaskListWnd__SetHotItem_t CTaskListWnd__SetHotItem_Original;
+
+using CTaskListWnd__OnJumpViewShown_t = void(WINAPI*)(void* pThis,
+                                                     void* appId);
+CTaskListWnd__OnJumpViewShown_t CTaskListWnd__OnJumpViewShown_Original;
+
+// True if this button group is one of ours. Null-safe on both hooks.
+bool TaskBtnGroupIsOurs(void* taskBtnGroup) {
+    if (!taskBtnGroup || !CTaskBtnGroup_GetGroup_Original ||
+        !CTaskGroup_GetAppID_Original) {
+        return false;
+    }
+    void* taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
+    PCWSTR appId =
+        taskGroup ? CTaskGroup_GetAppID_Original(taskGroup) : nullptr;
+    return appId && Pins::IsOurAppId(appId);
+}
+
+// The last group the shell made hot, so the dismiss fires once on arrival
+// rather than on every mouse move within the same button. Taskbar UI thread
+// only, and only ever compared for identity — never dereferenced, so a freed
+// group is harmless.
+void* g_lastHotGroup = nullptr;
+
+void WINAPI CTaskListWnd__SetHotItem_Hook(void* pThis,
+                                          void* taskBtnGroup,
+                                          int taskItemIndex,
+                                          int flags) {
+    bool arriving = taskBtnGroup && taskBtnGroup != g_lastHotGroup;
+    g_lastHotGroup = taskBtnGroup;
+
+    CTaskListWnd__SetHotItem_Original(pThis, taskBtnGroup, taskItemIndex, flags);
+
+    // After the original, so the shell has finished its own hot-item work
+    // before being asked to drop the preview — and only on arrival, or a right
+    // click that re-hots the same button would dismiss the jump list it just
+    // opened.
+    if (arriving && !g_unloading && CTaskListWnd_DismissAllSecondaryUI_Original &&
+        TaskBtnGroupIsOurs(taskBtnGroup)) {
+        CTaskListWnd_DismissAllSecondaryUI_Original(pThis);
+    }
+}
+
+void WINAPI CTaskListWnd__OnJumpViewShown_Hook(void* pThis, void* appId) {
+    CTaskListWnd__OnJumpViewShown_Original(pThis, appId);
+    if (g_unloading) {
+        return;
+    }
+    // Closed for any jump list, not only ours: the grid is a hover surface, and
+    // a menu opening anywhere on the taskbar means the user has moved on from
+    // it. Runs on the taskbar UI thread, which is what owns the grid windows.
+    Wh_Log(L"A jump list opened; closing the hover grid");
+    OnPointerExitedButton();
+    CloseChain();
+}
+
 bool HookTaskbarDllSymbols() {
     HMODULE module =
         LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -8707,6 +8812,42 @@ bool HookTaskbarDllSymbols() {
             &TrayUI_StartTaskbar_Original,
             TrayUI_StartTaskbar_Hook,
         },
+        {
+            {LR"(protected: void __cdecl CTaskListWnd::_HandleClick(struct ITaskBtnGroup *,int,enum CTaskListWnd::eCLICKACTION,int,int))"},
+            &CTaskListWnd__HandleClick_Original,
+            CTaskListWnd__HandleClick_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))"},
+            &CTaskBtnGroup_GetGroup_Original,
+            nullptr,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))"},
+            &CTaskGroup_GetAppID_Original,
+            nullptr,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual void __cdecl CTaskListWnd::DismissAllSecondaryUI(void))"},
+            &CTaskListWnd_DismissAllSecondaryUI_Original,
+            nullptr,
+            true,  // optional
+        },
+        {
+            {LR"(protected: void __cdecl CTaskListWnd::_SetHotItem(struct ITaskBtnGroup *,int,enum SetHotItemFlags))"},
+            &CTaskListWnd__SetHotItem_Original,
+            CTaskListWnd__SetHotItem_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(protected: void __cdecl CTaskListWnd::_OnJumpViewShown(struct HSTRING__ *))"},
+            &CTaskListWnd__OnJumpViewShown_Original,
+            CTaskListWnd__OnJumpViewShown_Hook,
+            true,  // optional
+        },
     };
 
     return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
@@ -8727,6 +8868,10 @@ bool HookTaskbarDllSymbols() {
 namespace AddToTaskbar {
 
 constexpr UINT kMinId = 0xC901;
+// Sits above every dynamic id (pin, then three folder-count-sized ranges for
+// move/copy/shortcut), so it cannot collide however many folders are configured
+// — FolderStore caps the list at 200.
+constexpr UINT kIdManage = kMinId + 1000;
 
 std::wstring LeafName(const std::wstring& path) {
     size_t pos = path.find_last_of(L"\\/");
@@ -9077,6 +9222,16 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
                     L"Copy as shortcut");
         anyItem = true;
     }
+    // Always offered, and the only remaining way in. The folder buttons are real
+    // taskbar items now, so their right-click menu belongs to the shell — it
+    // gives a native "Unpin from taskbar" for free, but there is nowhere on it
+    // to hang "Manage folders...". This entry is the replacement, and unlike the
+    // old one it is reachable when nothing is pinned at all.
+    if (anyItem) {
+        AppendMenuW(foldersMenu, MF_SEPARATOR, 0, nullptr);
+    }
+    AppendMenuW(foldersMenu, MF_STRING, kIdManage, L"Manage folders...");
+    anyItem = true;
     if (!anyItem) {
         DestroyMenu(foldersMenu);
     } else {
@@ -9173,6 +9328,11 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
         return result;
     }
 
+    if (result == kIdManage) {
+        FolderManager::Open();
+        return 0;
+    }
+
     if (canPin && result == kMinId) {
         AddPinnedFolder(path, LeafName(path));
         // Deferred: this is the UI thread of the Explorer window the user just
@@ -9212,10 +9372,56 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU hMenu,
 }  // namespace AddToTaskbar
 
 ////////////////////////////////////////////////////////////////////////////////
+// The jump list's "Manage folders..." task
+//
+// The shell launches a jump list task as an ordinary command line, and the
+// manager window lives in this process, so the launch is caught here instead of
+// being allowed to start anything. CreateProcessW is the choke point: whatever
+// the shell does above it — ShellExecute, link resolution, its own launcher —
+// it has to come through here to start a process.
+
+decltype(&CreateProcessW) CreateProcessW_Original;
+
+BOOL WINAPI CreateProcessW_Hook(LPCWSTR applicationName,
+                                LPWSTR commandLine,
+                                LPSECURITY_ATTRIBUTES processAttributes,
+                                LPSECURITY_ATTRIBUTES threadAttributes,
+                                BOOL inheritHandles,
+                                DWORD creationFlags,
+                                LPVOID environment,
+                                LPCWSTR currentDirectory,
+                                LPSTARTUPINFOW startupInfo,
+                                LPPROCESS_INFORMATION processInformation) {
+    // Deliberately the cheapest possible test, and first: explorer.exe starts a
+    // lot of processes and this hook is on all of them.
+    if (commandLine && wcsstr(commandLine, Pins::kManageSentinel)) {
+        Wh_Log(L"Opening the folder manager from the jump list");
+        FolderManager::Open();
+        // Nothing is launched. Reported as a cancelled launch rather than a
+        // failure so the shell treats it as the user backing out, which it does
+        // silently, instead of showing an error for a task that did exactly
+        // what it was asked to.
+        SetLastError(ERROR_CANCELLED);
+        return FALSE;
+    }
+
+    return CreateProcessW_Original(applicationName, commandLine,
+                                   processAttributes, threadAttributes,
+                                   inheritHandles, creationFlags, environment,
+                                   currentDirectory, startupInfo,
+                                   processInformation);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Mod entry points
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
+
+    // Before LoadSettings: LoadFolders ends with Pins::RequestReconcile, and the
+    // worker has to exist for that kick to land. Start() only creates the thread
+    // and signals; the reconcile itself runs on that thread.
+    Pins::Start();
 
     LoadSettings();
     ResetFolderData();
@@ -9256,6 +9462,17 @@ BOOL Wh_ModInit() {
         // integration.
         Wh_Log(L"Failed to hook TrackPopupMenuEx; Explorer right-click "
                L"integration will be unavailable");
+    }
+
+    // Catches the "Manage folders..." jump list task. Every launch path ends at
+    // CreateProcessW, whatever the shell does above it, so this is the one
+    // place that cannot be missed. Non-fatal: without it the task falls through
+    // and opens an Explorer window instead of the manager.
+    if (!Wh_SetFunctionHook((void*)CreateProcessW,
+                            (void*)CreateProcessW_Hook,
+                            (void**)&CreateProcessW_Original)) {
+        Wh_Log(L"Failed to hook CreateProcessW; the jump list's Manage "
+               L"folders task will not open the manager");
     }
 
     // Scan thread starts lazily on the first RequestScan (hover / inject).
@@ -9348,6 +9565,11 @@ void Wh_ModUninit() {
     FolderManager::CloseAndWait();
     StopRetryThread();
     StopScanThread();
+    // Joins its STA worker. Deliberately does not unpin anything: the pins are
+    // real taskbar items the user arranged, and disabling the mod for a moment
+    // must not throw that away. A reconcile on the next load fixes up whatever
+    // drifted meanwhile.
+    Pins::Stop();
 
     // DestroyWindow / XAML teardown must run on the creating UI thread. Prefer
     // a mod-owned window (level popup or menu owner) when the taskbar HWND is
@@ -9517,6 +9739,15 @@ void Wh_ModUninit() {
         DeleteObject(font);
     }
     FolderManager::g_fontCache.clear();
+
+    // Same reasoning for the dark-mode background brushes.
+    for (HBRUSH* brush :
+         {&FolderManager::g_windowBrush, &FolderManager::g_faceBrush}) {
+        if (*brush) {
+            DeleteObject(*brush);
+            *brush = nullptr;
+        }
+    }
 
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
