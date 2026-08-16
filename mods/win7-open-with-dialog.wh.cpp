@@ -46,9 +46,9 @@ classic context-menu paths are designed to fail safely on unsupported builds.
   `MRUList` and `OpenWithProgids` keys and appear immediately in the dialog.
 - **Extensionless files**: Enumerates registered applications through a
    `HKCR\Applications` fallback.
-- **Localized interface**: English, Italian, Spanish, French, Brazilian
-  Portuguese, Turkish, Russian, Simplified Chinese, Dutch and Polish, with
-  automatic language detection.
+- **Localized interface**: 120 languages (English, Italian, Spanish,
+  French, German, Portuguese, Russian, Chinese, Japanese, Korean, Turkish,
+  Dutch, Polish and 107 more), with automatic language detection.
 - **Short file display**: Shows `File: photo.png` instead of the full path. The
   full path is retained internally for execution.
 - **Custom icon**: Uses the supplied document-and-magnifier artwork, embedded as
@@ -97,10 +97,13 @@ the default.
 - replaceSystemDialog: true
   $name: Enable the Windows 7-style picker
   $description: When enabled, replace Open With through the stable CLSID_OpenWithMenu context-menu contract, SHOpenWithDialog, the exact openas ShellExecute verb, or detours on the real OpenWith.exe server. When disabled, requests are passed to Windows.
-# NOTE: the "darkMode" appearance setting has been temporarily removed.
-# The dark-theme implementation is still in the source, kept commented
-# out so it can be restored later without digging through git history
-# (see the long note above the DarkModeActivation block).
+- darkMode: auto
+  $name: Window appearance theme
+  $description: Visual theme for the dialog window.
+  $options:
+    - auto: Follow the Windows app theme
+    - light: Always light (classic Windows 7)
+    - dark: Always dark
 - showWebLink: true
   $name: Show the Web search link
   $description: Show the Windows 7-style Web link. Only the sanitized file extension is sent to the browser search.
@@ -145,6 +148,96 @@ the default.
     - sk: Slovenčina
     - hr: Hrvatski
     - id: Bahasa Indonesia
+    - af: Afrikaans
+    - sq: Shqip
+    - am: አማርኛ
+    - hy: Հայերեն
+    - as: অসমীয়া
+    - az: Azərbaycan dili
+    - ba: Башҡортса
+    - eu: Euskara
+    - be: Беларуская
+    - bn: বাংলা
+    - bs: Bosanski
+    - ca: Català
+    - chr: ᏣᎳᎩ
+    - prs: دری
+    - dv: ދިވެހި
+    - et: Eesti
+    - fil: Filipino
+    - fy: Frysk
+    - gl: Galego
+    - ka: ქართული
+    - gu: ગુજરાતી
+    - ha: Hausa
+    - hi: हिन्दी
+    - is: Íslenska
+    - ig: Igbo
+    - ga: Gaeilge
+    - xh: isiXhosa
+    - zu: isiZulu
+    - kn: ಕನ್ನಡ
+    - kk: Қазақ тілі
+    - km: ខ្មែរ
+    - rw: Kinyarwanda
+    - sw: Kiswahili
+    - kok: कोंकणी
+    - ky: Кыргызча
+    - lo: ລາວ
+    - lv: Latviešu
+    - lt: Lietuvių
+    - lb: Lëtzebuergesch
+    - mk: Македонски
+    - ms: Bahasa Melayu
+    - ml: മലയാളം
+    - mt: Malti
+    - mi: te reo Māori
+    - mr: मराठी
+    - mn: Монгол
+    - my: မြန်မာ
+    - ne: नेपाली
+    - nn: Norsk nynorsk
+    - or: ଓଡ଼ିଆ
+    - ps: پښتو
+    - fa: فارسی
+    - pa: ਪੰਜਾਬੀ
+    - quz: Runasimi
+    - gd: Gàidhlig
+    - sr-Latn: Srpski (latinica)
+    - sr-Cyrl: Српски (ћирилица)
+    - nso: Sesotho sa Leboa
+    - tn: Setswana
+    - si: සිංහල
+    - sl: Slovenščina
+    - tg: Тоҷикӣ
+    - ta: தமிழ்
+    - tt: Татарча
+    - te: తెలుగు
+    - th: ไทย
+    - ti: ትግርኛ
+    - tk: Türkmen dili
+    - ur: اردو
+    - ug: ئۇيغۇرچە
+    - uz: Oʻzbekcha
+    - vi: Tiếng Việt
+    - cy: Cymraeg
+    - wo: Wolof
+    - yo: Yorùbá
+    - iu: ᐃᓄᒃᑎᑐᑦ
+    - ckb: کوردیی ناوەندی
+    - sd: سنڌي
+    - ks: کٲشُر
+    - sa: संस्कृतम्
+    - bo: བོད་ཡིག
+    - wa: Walon
+    - sah: Саха тыла
+    - hsb: Hornjoserbšćina
+    - dsb: Dolnoserbšćina
+    - br: Brezhoneg
+    - oc: Occitan
+    - co: Corsu
+    - kl: Kalaallisut
+    - fo: Føroyskt
 */
 // ==/WindhawkModSettings==
 
@@ -163,53 +256,12 @@ the default.
 #include <uxtheme.h>
 #include <dwmapi.h>
 
-// -----------------------------------------------------------------------------
-// DARK THEME - TEMPORARILY DISABLED (SETTING REMOVED, CODE KEPT FOR FUTURE USE)
-// -----------------------------------------------------------------------------
-// The "darkMode" Windhawk setting has been removed for now, but the entire
-// dark-theme implementation is intentionally KEPT in this file, commented
-// out, instead of being deleted. Why?
-//
-// 1) Deleting it would be a waste of time. The feature is already written
-//    and working: throwing it away means that whoever re-adds it in the
-//    future has to re-write, re-understand and re-debug the same logic
-//    from scratch. Keeping it commented costs nothing and preserves all
-//    the decisions that went into it (colors, theming calls, control
-//    styles, checkbox/button handling).
-//
-// 2) Git history is not a substitute for the code itself. This project
-//    has many commits, and recovering the exact revision that contained
-//    the dark theme would mean digging through dozens of diffs and stale
-//    branches, then manually re-assembling the scattered pieces. Here the
-//    code stays in context, next to the very functions it belongs to, so
-//    restoring it is a matter of uncommenting blocks, not archaeology.
-//
-// 3) Commented code is still reviewable code. Anyone reading the source
-//    can see how the dark theme was implemented and can already suggest
-//    improvements (better contrast, cleaner owner-draw handling,
-//    different activation APIs) without having to hunt for an old commit
-//    first.
-//
-// Re-enabling the dark theme later requires:
-//   a) restoring the "darkMode" option in the ==WindhawkModSettings==
-//      block,
-//   b) uncommenting every block marked "DISABLED DARK THEME" below
-//      (the DWM defines, DarkModeActivation, ThemeMode/AppsUseDarkTheme,
-//      the dark branches in RefreshPickerThemeResources/ApplyPickerTheme,
-//      the EnsureAlwaysUseLabel/UpdateButtonHover helpers, the WM_DRAWITEM
-//      and hover handlers, and the WM_CTLCOLOR dark branches),
-//   c) restoring the original ResolveDarkMode() implementation (it
-//      currently returns false and keeps the dialog on the light theme at
-//      all times).
-//
-// Nothing was removed: every dark-mode line is preserved verbatim below.
-// -----------------------------------------------------------------------------
-// #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-// #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-// #endif
-// #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1
-// #define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
-// #endif
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1
+#define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
+#endif
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -236,57 +288,55 @@ the default.
 // colors, which is why those pieces stay light/illegible even though the
 // rest of the dialog is dark.
 // -----------------------------------------------------------------------------
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-// namespace DarkModeActivation {
-// enum class AppMode { Default, AllowDark, ForceDark, ForceLight, Max };
-// using SetPreferredAppMode_t = AppMode(WINAPI*)(AppMode);
-// using FlushMenuThemes_t = void(WINAPI*)();
-// using AllowDarkModeForWindow_t = bool(WINAPI*)(HWND, bool);
+namespace DarkModeActivation {
+enum class AppMode { Default, AllowDark, ForceDark, ForceLight, Max };
+using SetPreferredAppMode_t = AppMode(WINAPI*)(AppMode);
+using FlushMenuThemes_t = void(WINAPI*)();
+using AllowDarkModeForWindow_t = bool(WINAPI*)(HWND, bool);
 
-// static HMODULE g_hUxtheme = nullptr;
-// static SetPreferredAppMode_t pSetPreferredAppMode = nullptr;
-// static FlushMenuThemes_t pFlushMenuThemes = nullptr;
-// static AllowDarkModeForWindow_t pAllowDarkModeForWindow = nullptr;
-// static bool g_resolved = false;
+static HMODULE g_hUxtheme = nullptr;
+static SetPreferredAppMode_t pSetPreferredAppMode = nullptr;
+static FlushMenuThemes_t pFlushMenuThemes = nullptr;
+static AllowDarkModeForWindow_t pAllowDarkModeForWindow = nullptr;
+static bool g_resolved = false;
 
-// static void Resolve() {
-//     if (g_resolved) return;
-//     g_resolved = true;
-//     g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr,
-//                                 LOAD_LIBRARY_SEARCH_SYSTEM32);
-//     if (!g_hUxtheme) return;
-//     pSetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_t>(
-//         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135)));
-//     pFlushMenuThemes = reinterpret_cast<FlushMenuThemes_t>(
-//         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136)));
-//     pAllowDarkModeForWindow = reinterpret_cast<AllowDarkModeForWindow_t>(
-//         GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(133)));
-// }
+static void Resolve() {
+    if (g_resolved) return;
+    g_resolved = true;
+    g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr,
+                                LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!g_hUxtheme) return;
+    pSetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_t>(
+        GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135)));
+    pFlushMenuThemes = reinterpret_cast<FlushMenuThemes_t>(
+        GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136)));
+    pAllowDarkModeForWindow = reinterpret_cast<AllowDarkModeForWindow_t>(
+        GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(133)));
+}
 
 // Recursively opts a window and every descendant into (or out of) dark
 // rendering, then asks it to re-pull its theme. Safe to call repeatedly;
 // harmless if the ordinals weren't resolved (e.g. older/locked-down builds).
-// static void Apply(HWND window, bool dark) {
-//     Resolve();
-//     if (!window) return;
-//     if (pSetPreferredAppMode)
-//         pSetPreferredAppMode(dark ? AppMode::AllowDark : AppMode::Default);
-//     if (pAllowDarkModeForWindow) {
-//         pAllowDarkModeForWindow(window, dark);
-//         for (HWND child = GetWindow(window, GW_CHILD); child;
-//              child = GetWindow(child, GW_HWNDNEXT)) {
-//             pAllowDarkModeForWindow(child, dark);
-//         }
-//     }
-//     SendMessageW(window, WM_THEMECHANGED, 0, 0);
-//     for (HWND child = GetWindow(window, GW_CHILD); child;
-//          child = GetWindow(child, GW_HWNDNEXT)) {
-//         SendMessageW(child, WM_THEMECHANGED, 0, 0);
-//     }
-//     if (pFlushMenuThemes) pFlushMenuThemes();
-// }
-// }  // namespace DarkModeActivation
+static void Apply(HWND window, bool dark) {
+    Resolve();
+    if (!window) return;
+    if (pSetPreferredAppMode)
+        pSetPreferredAppMode(dark ? AppMode::AllowDark : AppMode::Default);
+    if (pAllowDarkModeForWindow) {
+        pAllowDarkModeForWindow(window, dark);
+        for (HWND child = GetWindow(window, GW_CHILD); child;
+             child = GetWindow(child, GW_HWNDNEXT)) {
+            pAllowDarkModeForWindow(child, dark);
+        }
+    }
+    SendMessageW(window, WM_THEMECHANGED, 0, 0);
+    for (HWND child = GetWindow(window, GW_CHILD); child;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+        SendMessageW(child, WM_THEMECHANGED, 0, 0);
+    }
+    if (pFlushMenuThemes) pFlushMenuThemes();
+}
+}  // namespace DarkModeActivation
 
 // -----------------------------------------------------------------------------
 // Move-only owners.
@@ -510,12 +560,6 @@ StandaloneEnumAssocHandlers : public IUnknown {
 using SHAssocEnumHandlers_t = HRESULT(WINAPI*)(
     PCWSTR extension, DWORD filter, StandaloneEnumAssocHandlers** result);
 
-/*static const GUID kBhidDataObject = {
-    0xB8C0BD9F,
-    0xED24,
-    0x455C,
-    {0x83, 0xE6, 0xD5, 0x39, 0x0C, 0x4F, 0xE8, 0xC4}};
-*/
 // -----------------------------------------------------------------------------
 // Settings and complete localization catalog.
 // -----------------------------------------------------------------------------
@@ -1086,6 +1130,1626 @@ static const LocalePack g_Locales[] = {
         L"Tidak ada program terdaftar yang dapat membuka jenis file ini.",
         L"Program yang dipilih tidak dapat membuka file.",
     }},
+    {0x0436, {  // Afrikaans
+        L"Maak oop met",
+        L"Kies die program wat u wil gebruik om hierdie lêer te open:",
+        L"Lêer:",
+        L"Aanbevole programme",
+        L"Ander programme",
+        L"Tik 'n beskrywing wat u vir hierdie soort lêer wil gebruik:",
+        L"&Gebruik altyd die geselekteerde program om hierdie soort lêer te open",
+        L"&Blaai...",
+        L"As die program wat u wil hê nie in die lys of op u rekenaar is nie, kan u <A ID=\"WebSearch\">op die web na die gepaste program soek</A>.",
+        L"Maak oop met...",
+        L"Programme",
+        L"Alle lêers",
+        L"OK",
+        L"Kanselleer",
+        L"Geen geregistreerde program kan hierdie soort lêer open nie.",
+        L"Die geselekteerde program kon nie die lêer open nie.",
+    }},
+    {0x041C, {  // Albanian
+        L"Hap me",
+        L"Zgjidhni programin që dëshironi të përdorni për të hapur këtë skedar:",
+        L"Skedar:",
+        L"Programe të rekomanduara",
+        L"Programe të tjera",
+        L"Shkruani një përshkrim që dëshironi të përdorni për këtë lloj skedari:",
+        L"&Përdor gjithmonë programin e zgjedhur për të hapur këtë lloj skedari",
+        L"&Shfleto...",
+        L"Nëse programi që dëshironi nuk është në listë ose në kompjuterin tuaj, mund të <A ID=\"WebSearch\">kërkoni programin e duhur në internet</A>.",
+        L"Hap me...",
+        L"Programe",
+        L"Të gjithë skedarët",
+        L"OK",
+        L"Anulo",
+        L"Asnjë program i regjistruar nuk mund ta hapë këtë lloj skedari.",
+        L"Programi i zgjedhur nuk mundi ta hapte skedarin.",
+    }},
+    {0x045E, {  // Amharic
+        L"በ... ክፈት",
+        L"ይህን ፋይል ለመክፈት መጠቀም የሚፈልጉትን ፕሮግራም ይምረጡ:",
+        L"ፋይል:",
+        L"የሚመከሩ ፕሮግራሞች",
+        L"ሌሎች ፕሮግራሞች",
+        L"ለዚህ ዓይነት ፋይል መጠቀም የሚፈልጉትን መግለጫ ይጻፉ:",
+        L"&የተመረጠውን ፕሮግራም ይህን ዓይነት ፋይል ለመክፈት ሁልጊዜ ተጠቀም",
+        L"&አስስ...",
+        L"የሚፈልጉት ፕሮግራም በዝርዝሩ ውስጥ ወይም በኮምፒውተርዎ ላይ ከሌለ፣ ተገቢውን ፕሮግራም <A ID=\"WebSearch\">በድር ላይ መፈለግ ይችላሉ</A>።",
+        L"በ... ክፈት...",
+        L"ፕሮግራሞች",
+        L"ሁሉም ፋይሎች",
+        L"እሺ",
+        L"ተወው",
+        L"ይህን ዓይነት ፋይል መክፈት የሚችል የተመዘገበ ፕሮግራም የለም።",
+        L"የተመረጠው ፕሮግራም ፋይሉን መክፈት አልቻለም።",
+    }},
+    {0x042B, {  // Armenian
+        L"Բացել հետ",
+        L"Ընտրեք ծրագիրը, որը ցանկանում եք օգտագործել այս ֆայլը բացելու համար.",
+        L"Ֆայլ՝",
+        L"Խորհուրդ տրվող ծրագրեր",
+        L"Այլ ծրագրեր",
+        L"Մուտքագրեք նկարագրություն, որը ցանկանում եք օգտագործել այս տեսակի ֆայլի համար.",
+        L"&Միշտ օգտագործել ընտրված ծրագիրը այս տեսակի ֆայլը բացելու համար",
+        L"&Թերթել...",
+        L"Եթե ցանկալի ծրագիրը ցանկում կամ ձեր համակարգչում չկա, կարող եք <A ID=\"WebSearch\">որոնել համապատասխան ծրագիրը համացանցում</A>։",
+        L"Բացել հետ...",
+        L"Ծրագրեր",
+        L"Բոլոր ֆայլերը",
+        L"Լավ",
+        L"Չեղարկել",
+        L"Ոչ մի գրանցված ծրագիր չի կարող բացել այս տեսակի ֆայլ։",
+        L"Ընտրված ծրագիրը չկարողացավ բացել ֆայլը։",
+    }},
+    {0x044D, {  // Assamese
+        L"সৈতে খোলক",
+        L"এই ফাইলটো খুলিবলৈ ব্যৱহাৰ কৰিব বিচৰা প্ৰগ্ৰামটো বাছক:",
+        L"ফাইল:",
+        L"পৰামৰ্শিত প্ৰগ্ৰামসমূহ",
+        L"অন্যান্য প্ৰগ্ৰামসমূহ",
+        L"এই ধৰণৰ ফাইলৰ বাবে ব্যৱহাৰ কৰিব বিচৰা বিৱৰণ টাইপ কৰক:",
+        L"&এই ধৰণৰ ফাইল খুলিবলৈ সদায় নিৰ্বাচিত প্ৰগ্ৰামটো ব্যৱহাৰ কৰক",
+        L"&ব্ৰাউজ...",
+        L"আপুনি বিচৰা প্ৰগ্ৰামটো তালিকাত বা আপোনাৰ কমপিউটাৰত নাথাকিলে, আপুনি <A ID=\"WebSearch\">ৱেবত উপযুক্ত প্ৰগ্ৰামটো বিচাৰিব পাৰে</A>।",
+        L"সৈতে খোলক...",
+        L"প্ৰগ্ৰামসমূহ",
+        L"সকলো ফাইল",
+        L"ঠিক আছে",
+        L"বাতিল",
+        L"এই ধৰণৰ ফাইল কোনো পঞ্জীয়নভুক্ত প্ৰগ্ৰামে খুলিব নোৱাৰে।",
+        L"নিৰ্বাচিত প্ৰগ্ৰামটোৱে ফাইলটো খুলিব নোৱাৰিলে।",
+    }},
+    {0x042C, {  // Azerbaijani
+        L"Birlikdə aç",
+        L"Bu faylı açmaq üçün istifadə etmək istədiyiniz proqramı seçin:",
+        L"Fayl:",
+        L"Tövsiyə olunan proqramlar",
+        L"Digər proqramlar",
+        L"Bu fayl növü üçün istifadə etmək istədiyiniz təsviri yazın:",
+        L"&Bu fayl növünü açmaq üçün həmişə seçilmiş proqramdan istifadə et",
+        L"&Gözdən keçir...",
+        L"İstədiyiniz proqram siyahıda və ya kompüterinizdə yoxdursa, <A ID=\"WebSearch\">internetdə uyğun proqram axtara bilərsiniz</A>.",
+        L"Birlikdə aç...",
+        L"Proqramlar",
+        L"Bütün fayllar",
+        L"OK",
+        L"Ləğv et",
+        L"Heç bir qeydiyyatlı proqram bu fayl növünü aça bilmir.",
+        L"Seçilmiş proqram faylı aça bilmədi.",
+    }},
+    {0x046D, {  // Bashkir
+        L"Менән асыу",
+        L"Был файлды асыу өсөн ҡулланырға теләгән программаны һайлағыҙ:",
+        L"Файл:",
+        L"Тәҡдим ителгән программалар",
+        L"Башҡа программалар",
+        L"Был файл төрө өсөн ҡулланырға теләгән тасуирламаны яҙығыҙ:",
+        L"&Был файл төрөн асыу өсөн һәр саҡ һайланған программаны ҡулланырға",
+        L"&Күҙәтеү...",
+        L"Теләгән программа исемлектә йәки компьютерҙа юҡ икән, <A ID=\"WebSearch\">Интернетта кәрәкле программаны эҙләй алаһығыҙ</A>.",
+        L"Менән асыу...",
+        L"Программалар",
+        L"Бөтә файлдар",
+        L"Ярай",
+        L"Кире алыу",
+        L"Был файл төрөн асырлыҡ теркәлгән программа юҡ.",
+        L"Һайланған программа файлды аса алманы.",
+    }},
+    {0x042D, {  // Basque
+        L"Ireki honekin",
+        L"Aukeratu fitxategi hau irekitzeko erabili nahi duzun programa:",
+        L"Fitxategia:",
+        L"Gomendatutako programak",
+        L"Beste programa batzuk",
+        L"Idatzi fitxategi mota honetarako erabili nahi duzun deskribapena:",
+        L"&Erabili beti hautatutako programa fitxategi mota hau irekitzeko",
+        L"&Arakatu...",
+        L"Nahi duzun programa zerrendan edo zure ordenagailuan ez badago, <A ID=\"WebSearch\">bilatu dezakezu programa egokia webean</A>.",
+        L"Ireki honekin...",
+        L"Programak",
+        L"Fitxategi guztiak",
+        L"Ados",
+        L"Utzi",
+        L"Erregistratutako programarik ezin du fitxategi mota hau ireki.",
+        L"Hautatutako programak ezin izan du fitxategia ireki.",
+    }},
+    {0x0423, {  // Belarusian
+        L"Адкрыць з дапамогай",
+        L"Выберыце праграму, якую хочаце выкарыстоўваць для адкрыцця гэтага файла:",
+        L"Файл:",
+        L"Рэкамендаваныя праграмы",
+        L"Іншыя праграмы",
+        L"Увядзіце апісанне, якое хочаце выкарыстоўваць для гэтага тыпу файлаў:",
+        L"&Заўсёды выкарыстоўваць выбраную праграму для адкрыцця гэтага тыпу файлаў",
+        L"&Агляд...",
+        L"Калі патрэбнай праграмы няма ў спісе або на вашым камп'ютары, вы можаце <A ID=\"WebSearch\">знайсці адпаведную праграму ў Інтэрнэце</A>.",
+        L"Адкрыць з дапамогай...",
+        L"Праграмы",
+        L"Усе файлы",
+        L"ОК",
+        L"Адмена",
+        L"Ніводная зарэгістраваная праграма не можа адкрыць гэты тып файлаў.",
+        L"Выбраная праграма не змагла адкрыць файл.",
+    }},
+    {0x0845, {  // Bengali
+        L"যা দিয়ে খুলুন",
+        L"এই ফাইলটি খুলতে আপনি যে প্রোগ্রামটি ব্যবহার করতে চান তা চয়ন করুন:",
+        L"ফাইল:",
+        L"প্রস্তাবিত প্রোগ্রাম",
+        L"অন্যান্য প্রোগ্রাম",
+        L"এই ধরনের ফাইলের জন্য আপনি যে বিবরণ ব্যবহার করতে চান তা টাইপ করুন:",
+        L"&এই ধরনের ফাইল খুলতে সর্বদা নির্বাচিত প্রোগ্রামটি ব্যবহার করুন",
+        L"&ব্রাউজ করুন...",
+        L"আপনার পছন্দের প্রোগ্রামটি তালিকায় বা আপনার কম্পিউটারে না থাকলে, আপনি <A ID=\"WebSearch\">ওয়েবে উপযুক্ত প্রোগ্রামটি খুঁজতে পারেন</A>।",
+        L"যা দিয়ে খুলুন...",
+        L"প্রোগ্রামসমূহ",
+        L"সব ফাইল",
+        L"ঠিক আছে",
+        L"বাতিল",
+        L"কোনো নিবন্ধিত প্রোগ্রাম এই ধরনের ফাইল খুলতে পারে না।",
+        L"নির্বাচিত প্রোগ্রামটি ফাইলটি খুলতে পারেনি।",
+    }},
+    {0x141A, {  // Bosnian
+        L"Otvori pomoću",
+        L"Odaberite program koji želite koristiti za otvaranje ove datoteke:",
+        L"Datoteka:",
+        L"Preporučeni programi",
+        L"Ostali programi",
+        L"Upišite opis koji želite koristiti za ovu vrstu datoteke:",
+        L"&Uvijek koristi odabrani program za otvaranje ove vrste datoteke",
+        L"&Pregledaj...",
+        L"Ako željeni program nije na listi ili na vašem računaru, možete <A ID=\"WebSearch\">potražiti odgovarajući program na webu</A>.",
+        L"Otvori pomoću...",
+        L"Programi",
+        L"Sve datoteke",
+        L"U redu",
+        L"Otkaži",
+        L"Nijedan registrovani program ne može otvoriti ovu vrstu datoteke.",
+        L"Odabrani program nije mogao otvoriti datoteku.",
+    }},
+    {0x0403, {  // Catalan
+        L"Obre amb",
+        L"Trieu el programa que voleu utilitzar per obrir aquest fitxer:",
+        L"Fitxer:",
+        L"Programes recomanats",
+        L"Altres programes",
+        L"Escriviu una descripció que vulgueu utilitzar per a aquest tipus de fitxer:",
+        L"&Utilitza sempre el programa seleccionat per obrir aquest tipus de fitxer",
+        L"&Navega...",
+        L"Si el programa que voleu no és a la llista ni a l'ordinador, podeu <A ID=\"WebSearch\">cercar el programa adequat al web</A>.",
+        L"Obre amb...",
+        L"Programes",
+        L"Tots els fitxers",
+        L"D'acord",
+        L"Cancel·la",
+        L"Cap programa registrat pot obrir aquest tipus de fitxer.",
+        L"El programa seleccionat no ha pogut obrir el fitxer.",
+    }},
+    {0x045C, {  // Cherokee
+        L"ᎠᏍᏚᎢᏍᏗ",
+        L"ᎪᏪᎵ ᎠᏍᏚᎢᏍᏗ ᎠᏍᏆᏗᏍᎩ ᏗᏑᏰᏍᏗ:",
+        L"ᎪᏪᎵ:",
+        L"ᎠᏟᏍᏗᏍᎬ ᎠᏍᏆᏗᏍᎩ",
+        L"ᏐᎢ ᎠᏍᏆᏗᏍᎩ",
+        L"ᎯᎠ ᏗᎧᏃᏗ ᏕᎭᏬᏪᎳᏁᏗ:",
+        L"&ᏂᎪᎯᎸ ᎯᎠ ᎠᏍᏆᏗᏍᎩ ᏧᏑᏰᏛ ᎪᏪᎵ ᎠᏍᏚᎢᏍᏗᏱ",
+        L"&ᎠᏑᏰᏍᏗ...",
+        L"ᎣᏍᏛ ᎠᏍᏆᏗᏍᎩ Ꮭ ᏱᎬᏩᏂᎸᏍᎦ, <A ID=\"WebSearch\">ᏫᏂᎦᏛᏗᏍᏗ</A>.",
+        L"ᎠᏍᏚᎢᏍᏗ...",
+        L"ᎠᏍᏆᏗᏍᎩ",
+        L"ᏂᎦᏛ ᎪᏪᎵ",
+        L"ᎰᏩ",
+        L"ᏫᎦᏅᏓᏗᏍᏗ",
+        L"ᎪᏪᎵ ᎯᎠ ᏗᎧᏃᏗ ᎠᏍᏚᎢᏍᏗᏱ ᎠᏍᏆᏗᏍᎩ Ꮭ ᏱᎨᏒ",
+        L"ᎯᎠ ᎠᏍᏆᏗᏍᎩ ᏧᏑᏰᏛ ᎪᏪᎵ ᎠᏍᏚᎢᏍᏗᏱ Ꮭ ᏱᎬᏩᎵᏍᏓᏁᎸᎦ",
+    }},
+    {0x048C, {  // Dari
+        L"باز کردن با",
+        L"برنامه‌ای را که می‌خواهید برای باز کردن این فایل استفاده کنید انتخاب کنید:",
+        L"فایل:",
+        L"برنامه‌های پیشنهادشده",
+        L"برنامه‌های دیگر",
+        L"توضیحی را که می‌خواهید برای این نوع فایل استفاده کنید تایپ کنید:",
+        L"&همیشه از برنامه انتخاب‌شده برای باز کردن این نوع فایل استفاده کن",
+        L"&مرور...",
+        L"اگر برنامه‌ای که می‌خواهید در فهرست یا در رایانه شما نیست، می‌توانید <A ID=\"WebSearch\">برنامه مناسب را در وب جستجو کنید</A>.",
+        L"باز کردن با...",
+        L"برنامه‌ها",
+        L"همه فایل‌ها",
+        L"تأیید",
+        L"لغو",
+        L"هیچ برنامه ثبت‌شده‌ای نمی‌تواند این نوع فایل را باز کند.",
+        L"برنامه انتخاب‌شده نتوانست فایل را باز کند.",
+    }},
+    {0x0465, {  // Divehi
+        L"ހުޅުވާލުން",
+        L"މި ފައިލް ހުޅުވުމަށް ބޭނުންވާ ޕްރޮގްރާމް އިޚްތިޔާރުކުރައްވާ:",
+        L"ފައިލް:",
+        L"ލަފާދޭ ޕްރޮގްރާމްތައް",
+        L"އެހެން ޕްރޮގްރާމްތައް",
+        L"މި ވައްތަރުގެ ފައިލަށް ބޭނުންކުރަން އެދޭ ތަފްސީލު ލިޔުއްވާ:",
+        L"&މި ވައްތަރުގެ ފައިލް ހުޅުވުމަށް އަބަދުވެސް އިޚްތިޔާރުކުރެވުނު ޕްރޮގްރާމް ބޭނުންކުރޭ",
+        L"&ބްރައުޒް...",
+        L"އެދޭ ޕްރޮގްރާމް ލިސްޓުގައި ނުވަތަ ކޮމްޕިއުޓަރުގައި ނެތްނަމަ، <A ID=\"WebSearch\">ވެބްގައި އެކަށޭނެ ޕްރޮގްރާމެއް ހޯދެވިދާނެ</A>ެވެ.",
+        L"ހުޅުވާލުން...",
+        L"ޕްރޮގްރާމްތައް",
+        L"ހުރިހާ ފައިލްތައް",
+        L"އޯކޭ",
+        L"ބާތިލުކުރޭ",
+        L"މި ވައްތަރުގެ ފައިލް ހުޅުވޭނެ ރަޖިސްޓްރީކޮށްފައިވާ ޕްރޮގްރާމެއް ނެތެވެ.",
+        L"އިޚްތިޔާރުކުރެވުނު ޕްރޮގްރާމަކަށް ފައިލް ހުޅުވޭގޮތެއް ނުވިއެވެ.",
+    }},
+    {0x0425, {  // Estonian
+        L"Ava rakendusega",
+        L"Valige programm, millega soovite selle faili avada:",
+        L"Fail:",
+        L"Soovitatavad programmid",
+        L"Muud programmid",
+        L"Tippige kirjeldus, mida soovite seda tüüpi faili puhul kasutada:",
+        L"&Kasuta alati valitud programmi seda tüüpi faili avamiseks",
+        L"&Sirvi...",
+        L"Kui soovitud programm ei ole loendis ega teie arvutis, saate <A ID=\"WebSearch\">otsida sobivat programmi veebist</A>.",
+        L"Ava rakendusega...",
+        L"Programmid",
+        L"Kõik failid",
+        L"OK",
+        L"Loobu",
+        L"Ükski registreeritud programm ei saa seda tüüpi faili avada.",
+        L"Valitud programm ei suutnud faili avada.",
+    }},
+    {0x0464, {  // Filipino
+        L"Buksan gamit",
+        L"Piliin ang program na gusto mong gamitin para buksan ang file na ito:",
+        L"File:",
+        L"Mga Inirerekomendang Program",
+        L"Iba Pang Mga Program",
+        L"I-type ang paglalarawang gusto mong gamitin para sa ganitong uri ng file:",
+        L"&Palaging gamitin ang napiling program para buksan ang ganitong uri ng file",
+        L"&Mag-browse...",
+        L"Kung wala sa listahan o sa iyong computer ang program na gusto mo, maaari kang <A ID=\"WebSearch\">maghanap sa Web ng angkop na program</A>.",
+        L"Buksan gamit...",
+        L"Mga Program",
+        L"Lahat ng File",
+        L"OK",
+        L"Kanselahin",
+        L"Walang nakarehistrong program na makakapagbukas ng ganitong uri ng file.",
+        L"Hindi mabuksan ng napiling program ang file.",
+    }},
+    {0x0462, {  // Western Frisian
+        L"Iepenet mei",
+        L"Kies it programma dat jo brûke wolle om dit bestân te iepenjen:",
+        L"Bestân:",
+        L"Oanrikkemandearre programma's",
+        L"Oare programma's",
+        L"Typ in beskriuwing dy't jo brûke wolle foar dit soarte bestân:",
+        L"&Brûk altyd it selektearre programma om dit soarte bestân te iepenjen",
+        L"&Blêdzje...",
+        L"As it winske programma net yn 'e list of op jo kompjûter stiet, kinne jo <A ID=\"WebSearch\">op it web sykje nei it passende programma</A>.",
+        L"Iepenet mei...",
+        L"Programma's",
+        L"Alle bestannen",
+        L"OK",
+        L"Annulearje",
+        L"Gjin registrearre programma kin dit soarte bestân iepenje.",
+        L"It selektearre programma koe it bestân net iepenje.",
+    }},
+    {0x0456, {  // Galician
+        L"Abrir con",
+        L"Escolla o programa que quere usar para abrir este ficheiro:",
+        L"Ficheiro:",
+        L"Programas recomendados",
+        L"Outros programas",
+        L"Escriba unha descrición que queira usar para este tipo de ficheiro:",
+        L"&Usar sempre o programa seleccionado para abrir este tipo de ficheiro",
+        L"&Examinar...",
+        L"Se o programa que quere non está na lista nin no seu computador, pode <A ID=\"WebSearch\">buscar o programa axeitado na web</A>.",
+        L"Abrir con...",
+        L"Programas",
+        L"Todos os ficheiros",
+        L"Aceptar",
+        L"Cancelar",
+        L"Ningún programa rexistrado pode abrir este tipo de ficheiro.",
+        L"O programa seleccionado non puido abrir o ficheiro.",
+    }},
+    {0x0437, {  // Georgian
+        L"გახსნა პროგრამით",
+        L"აირჩიეთ პროგრამა, რომლითაც გსურთ ამ ფაილის გახსნა:",
+        L"ფაილი:",
+        L"რეკომენდებული პროგრამები",
+        L"სხვა პროგრამები",
+        L"შეიყვანეთ აღწერა, რომლის გამოყენებაც გსურთ ამ ტიპის ფაილისთვის:",
+        L"&ყოველთვის გამოიყენე არჩეული პროგრამა ამ ტიპის ფაილის გასახსნელად",
+        L"&დათვალიერება...",
+        L"თუ სასურველი პროგრამა არ არის სიაში ან თქვენს კომპიუტერში, შეგიძლიათ <A ID=\"WebSearch\">მოძებნოთ შესაფერისი პროგრამა ინტერნეტში</A>.",
+        L"გახსნა პროგრამით...",
+        L"პროგრამები",
+        L"ყველა ფაილი",
+        L"კარგი",
+        L"გაუქმება",
+        L"ვერცერთი რეგისტრირებული პროგრამა ხსნის ამ ტიპის ფაილს.",
+        L"არჩეულმა პროგრამამ ვერ გახსნა ფაილი.",
+    }},
+    {0x0447, {  // Gujarati
+        L"આનાથી ખોલો",
+        L"આ ફાઇલ ખોલવા માટે તમે જે પ્રોગ્રામનો ઉપયોગ કરવા માંગો છો તે પસંદ કરો:",
+        L"ફાઇલ:",
+        L"ભલામણ કરેલા પ્રોગ્રામ્સ",
+        L"અન્ય પ્રોગ્રામ્સ",
+        L"આ પ્રકારની ફાઇલ માટે તમે જે વર્ણનનો ઉપયોગ કરવા માંગો છો તે લખો:",
+        L"&આ પ્રકારની ફાઇલ ખોલવા માટે હંમેશાં પસંદ કરેલા પ્રોગ્રામનો ઉપયોગ કરો",
+        L"&બ્રાઉઝ કરો...",
+        L"તમને જોઈતો પ્રોગ્રામ સૂચિમાં કે તમારા કમ્પ્યુટર પર ન હોય તો, તમે <A ID=\"WebSearch\">વેબ પર યોગ્ય પ્રોગ્રામ શોધી શકો છો</A>.",
+        L"આનાથી ખોલો...",
+        L"પ્રોગ્રામ્સ",
+        L"બધી ફાઇલો",
+        L"ઠીક છે",
+        L"રદ કરો",
+        L"કોઈ નોંધાયેલ પ્રોગ્રામ આ પ્રકારની ફાઇલ ખોલી શકતો નથી.",
+        L"પસંદ કરેલો પ્રોગ્રામ ફાઇલ ખોલી શક્યો નહીં.",
+    }},
+    {0x0468, {  // Hausa
+        L"Buɗe da",
+        L"Zaɓi shirin da kake so ka yi amfani da shi don buɗe wannan fayil:",
+        L"Fayil:",
+        L"Shirye-shiryen da aka ba da shawarar",
+        L"Sauran shirye-shirye",
+        L"Buga bayanin da kake so ka yi amfani da shi ga irin wannan fayil:",
+        L"&Kullum yi amfani da shirin da aka zaɓa don buɗe irin wannan fayil",
+        L"&Bincika...",
+        L"Idan shirin da kake so ba ya cikin jerin ko a kan kwamfutarka, za ka iya <A ID=\"WebSearch\">neman shirin da ya dace a yanar gizo</A>.",
+        L"Buɗe da...",
+        L"Shirye-shirye",
+        L"Duk fayiloli",
+        L"OK",
+        L"Soke",
+        L"Babu wani shiri mai rijista da zai iya buɗe irin wannan fayil.",
+        L"Shirin da aka zaɓa bai iya buɗe fayil ɗin ba.",
+    }},
+    {0x0439, {  // Hindi
+        L"इसके साथ खोलें",
+        L"इस फ़ाइल को खोलने के लिए आप जिस प्रोग्राम का उपयोग करना चाहते हैं उसे चुनें:",
+        L"फ़ाइल:",
+        L"अनुशंसित प्रोग्राम",
+        L"अन्य प्रोग्राम",
+        L"इस प्रकार की फ़ाइल के लिए आप जो विवरण उपयोग करना चाहते हैं उसे टाइप करें:",
+        L"&इस प्रकार की फ़ाइल खोलने के लिए हमेशा चयनित प्रोग्राम का उपयोग करें",
+        L"&ब्राउज़ करें...",
+        L"अगर आपका इच्छित प्रोग्राम सूची में या आपके कंप्यूटर पर नहीं है, तो आप <A ID=\"WebSearch\">वेब पर उपयुक्त प्रोग्राम खोज सकते हैं</A>।",
+        L"इसके साथ खोलें...",
+        L"प्रोग्राम",
+        L"सभी फ़ाइलें",
+        L"ठीक है",
+        L"रद्द करें",
+        L"कोई पंजीकृत प्रोग्राम इस प्रकार की फ़ाइल नहीं खोल सकता।",
+        L"चयनित प्रोग्राम फ़ाइल नहीं खोल सका।",
+    }},
+    {0x040F, {  // Icelandic
+        L"Opna með",
+        L"Veldu forritið sem þú vilt nota til að opna þessa skrá:",
+        L"Skrá:",
+        L"Mælt er með þessum forritum",
+        L"Önnur forrit",
+        L"Sláðu inn lýsingu sem þú vilt nota fyrir þessa tegund skráa:",
+        L"&Nota alltaf valið forrit til að opna þessa tegund skráa",
+        L"&Fletta...",
+        L"Ef forritið sem þú vilt er ekki á listanum eða í tölvunni þinni geturðu <A ID=\"WebSearch\">leitað að viðeigandi forriti á vefnum</A>.",
+        L"Opna með...",
+        L"Forrit",
+        L"Allar skrár",
+        L"Í lagi",
+        L"Hætta við",
+        L"Ekkert skráð forrit getur opnað þessa tegund skráa.",
+        L"Valið forrit gat ekki opnað skrána.",
+    }},
+    {0x0470, {  // Igbo
+        L"Jiri mepee",
+        L"Họrọ mmemme ị chọrọ iji mepee faịlụ a:",
+        L"Faịlụ:",
+        L"Mmemme ndị atụrụ aro",
+        L"Mmemme ndị ọzọ",
+        L"Dee nkọwa ị chọrọ iji maka ụdị faịlụ a:",
+        L"&Jiri mmemme ahọpụtara mepee ụdị faịlụ a mgbe niile",
+        L"&Chọgharịa...",
+        L"Ọ bụrụ na mmemme ị chọrọ anọghị na ndepụta ma ọ bụ na kọmputa gị, ị nwere ike <A ID=\"WebSearch\">chọọ mmemme kwesịrị ekwesị na Weebụ</A>.",
+        L"Jiri mepee...",
+        L"Mmemme",
+        L"Faịlụ niile",
+        L"Ọ dị mma",
+        L"Kagbuo",
+        L"Ọ dịghị mmemme edebanyere aha nwere ike imepe ụdị faịlụ a.",
+        L"Mmemme ahọpụtara enweghị ike imepe faịlụ ahụ.",
+    }},
+    {0x083C, {  // Irish
+        L"Oscail le",
+        L"Roghnaigh an clár is mian leat a úsáid chun an comhad seo a oscailt:",
+        L"Comhad:",
+        L"Cláir Mholta",
+        L"Cláir Eile",
+        L"Clóscríobh cur síos is mian leat a úsáid don chineál seo comhaid:",
+        L"&Úsáid an clár roghnaithe i gcónaí chun an cineál seo comhaid a oscailt",
+        L"&Brabhsáil...",
+        L"Mura bhfuil an clár atá uait ar an liosta nó ar do ríomhaire, is féidir leat <A ID=\"WebSearch\">cuardach a dhéanamh ar an nGréasán don chlár cuí</A>.",
+        L"Oscail le...",
+        L"Cláir",
+        L"Gach Comhad",
+        L"OK",
+        L"Cealaigh",
+        L"Ní féidir le haon chlár cláraithe an cineál seo comhaid a oscailt.",
+        L"Níorbh fhéidir leis an gclár roghnaithe an comhad a oscailt.",
+    }},
+    {0x0434, {  // Xhosa
+        L"Vula nge",
+        L"Khetha inkqubo ofuna ukuyisebenzisa ukuvula le fayile:",
+        L"Ifayile:",
+        L"Iinkqubo ezicetyiswayo",
+        L"Ezinye iinkqubo",
+        L"Chwetheza inkcazo ofuna ukuyisebenzisa kolu hlobo lwefayile:",
+        L"&Soloko usebenzisa inkqubo ekhethiweyo ukuvula olu hlobo lwefayile",
+        L"&Khangela...",
+        L"Ukuba inkqubo oyifunayo ayikho kuluhlu okanye kwikhompyutha yakho, unako <A ID=\"WebSearch\">ukukhangela inkqubo efanelekileyo kwiWebhu</A>.",
+        L"Vula nge...",
+        L"Iinkqubo",
+        L"Zonke iifayile",
+        L"Kulungile",
+        L"Rhoxisa",
+        L"Akukho nkqubo ibhalisiweyo inokuvula olu hlobo lwefayile.",
+        L"Inkqubo ekhethiweyo ayikwazanga ukuvula ifayile.",
+    }},
+    {0x0435, {  // Zulu
+        L"Vula nge",
+        L"Khetha uhlelo ofuna ukulusebenzisa ukuze uvule le fayela:",
+        L"Ifayela:",
+        L"Izinhlelo ezinconywayo",
+        L"Ezinye izinhlelo",
+        L"Thayipha incazelo ofuna ukuyisebenzisa kulolu hlobo lwefayela:",
+        L"&Sebenzisa njalo uhlelo olukhethiwe ukuze uvule lolu hlobo lwefayela",
+        L"&Phequlula...",
+        L"Uma uhlelo olufunayo lungekho ohlwini noma kukhompyutha yakho, ungakwazi <A ID=\"WebSearch\">ukufuna uhlelo olufanele kuwebhu</A>.",
+        L"Vula nge...",
+        L"Izinhlelo",
+        L"Wonke amafayela",
+        L"Kulungile",
+        L"Khansela",
+        L"Alukho uhlelo olubhalisiwe olungavula lolu hlobo lwefayela.",
+        L"Uhlelo olukhethiwe alukwazanga ukuvula ifayela.",
+    }},
+    {0x044B, {  // Kannada
+        L"ಇದರೊಂದಿಗೆ ತೆರೆಯಿರಿ",
+        L"ಈ ಫೈಲ್ ತೆರೆಯಲು ನೀವು ಬಳಸಲು ಬಯಸುವ ಪ್ರೋಗ್ರಾಂ ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ:",
+        L"ಫೈಲ್:",
+        L"ಶಿಫಾರಸು ಮಾಡಲಾದ ಪ್ರೋಗ್ರಾಂಗಳು",
+        L"ಇತರ ಪ್ರೋಗ್ರಾಂಗಳು",
+        L"ಈ ರೀತಿಯ ಫೈಲ್‌ಗಾಗಿ ನೀವು ಬಳಸಲು ಬಯಸುವ ವಿವರಣೆಯನ್ನು ಟೈಪ್ ಮಾಡಿ:",
+        L"&ಈ ರೀತಿಯ ಫೈಲ್ ತೆರೆಯಲು ಯಾವಾಗಲೂ ಆಯ್ಕೆಮಾಡಿದ ಪ್ರೋಗ್ರಾಂ ಬಳಸಿ",
+        L"&ಬ್ರೌಸ್ ಮಾಡಿ...",
+        L"ನಿಮಗೆ ಬೇಕಾದ ಪ್ರೋಗ್ರಾಂ ಪಟ್ಟಿಯಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ಇಲ್ಲದಿದ್ದರೆ, ನೀವು <A ID=\"WebSearch\">ವೆಬ್‌ನಲ್ಲಿ ಸೂಕ್ತ ಪ್ರೋಗ್ರಾಂ ಹುಡುಕಬಹುದು</A>.",
+        L"ಇದರೊಂದಿಗೆ ತೆರೆಯಿರಿ...",
+        L"ಪ್ರೋಗ್ರಾಂಗಳು",
+        L"ಎಲ್ಲಾ ಫೈಲ್‌ಗಳು",
+        L"ಸರಿ",
+        L"ರದ್ದುಮಾಡಿ",
+        L"ಯಾವುದೇ ನೋಂದಾಯಿತ ಪ್ರೋಗ್ರಾಂ ಈ ರೀತಿಯ ಫೈಲ್ ತೆರೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ.",
+        L"ಆಯ್ಕೆಮಾಡಿದ ಪ್ರೋಗ್ರಾಂ ಫೈಲ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    }},
+    {0x043F, {  // Kazakh
+        L"Көмегімен ашу",
+        L"Осы файлды ашу үшін пайдаланғыңыз келетін бағдарламаны таңдаңыз:",
+        L"Файл:",
+        L"Ұсынылатын бағдарламалар",
+        L"Басқа бағдарламалар",
+        L"Файлдың осы түрі үшін пайдаланғыңыз келетін сипаттаманы енгізіңіз:",
+        L"&Файлдың осы түрін ашу үшін әрқашан таңдалған бағдарламаны пайдалану",
+        L"&Шолу...",
+        L"Қалаған бағдарлама тізімде немесе компьютеріңізде болмаса, <A ID=\"WebSearch\">Интернеттен тиісті бағдарламаны іздей аласыз</A>.",
+        L"Көмегімен ашу...",
+        L"Бағдарламалар",
+        L"Барлық файлдар",
+        L"Жарайды",
+        L"Бас тарту",
+        L"Тіркелген ешбір бағдарлама файлдың осы түрін аша алмайды.",
+        L"Таңдалған бағдарлама файлды аша алмады.",
+    }},
+    {0x0453, {  // Khmer
+        L"បើកជាមួយ",
+        L"ជ្រើសរើសកម្មវិធីដែលអ្នកចង់ប្រើដើម្បីបើកឯកសារនេះ៖",
+        L"ឯកសារ៖",
+        L"កម្មវិធីដែលបានណែនាំ",
+        L"កម្មវិធីផ្សេងទៀត",
+        L"វាយបញ្ចូលការពិពណ៌នាដែលអ្នកចង់ប្រើសម្រាប់ឯកសារប្រភេទនេះ៖",
+        L"&តែងតែប្រើកម្មវិធីដែលបានជ្រើសរើសដើម្បីបើកឯកសារប្រភេទនេះ",
+        L"&រកមើល...",
+        L"ប្រសិនបើកម្មវិធីដែលអ្នកចង់បានមិននៅក្នុងបញ្ជី ឬនៅលើកុំព្យូទ័ររបស់អ្នក អ្នកអាច <A ID=\"WebSearch\">ស្វែងរកកម្មវិធីដែលសមរម្យនៅលើវេប</A>។",
+        L"បើកជាមួយ...",
+        L"កម្មវិធី",
+        L"ឯកសារទាំងអស់",
+        L"យល់ព្រម",
+        L"បោះបង់",
+        L"គ្មានកម្មវិធីដែលបានចុះឈ្មោះអាចបើកឯកសារប្រភេទនេះទេ។",
+        L"កម្មវិធីដែលបានជ្រើសរើសមិនអាចបើកឯកសារបានទេ។",
+    }},
+    {0x0487, {  // Kinyarwanda
+        L"Fungura ukoresheje",
+        L"Hitamo porogaramu ushaka gukoresha kugira ngo ufungure iyi dosiye:",
+        L"Dosiye:",
+        L"Porogaramu zasabwe",
+        L"Izindi porogaramu",
+        L"Andika ibisobanuro ushaka gukoresha kuri ubu bwoko bwa dosiye:",
+        L"&Ukoreshe buri gihe porogaramu wahisemo kugira ngo ufungure ubu bwoko bwa dosiye",
+        L"&Shakisha...",
+        L"Niba porogaramu ushaka itari ku rutonde cyangwa kuri mudasobwa yawe, ushobora <A ID=\"WebSearch\">gushaka porogaramu ikwiriye kuri interineti</A>.",
+        L"Fungura ukoresheje...",
+        L"Porogaramu",
+        L"Dosiye zose",
+        L"Sawa",
+        L"Hagarika",
+        L"Nta porogaramu yanditswe ishobora gufungura ubu bwoko bwa dosiye.",
+        L"Porogaramu wahisemo ntiyashoboye gufungura dosiye.",
+    }},
+    {0x0441, {  // Kiswahili
+        L"Fungua kwa",
+        L"Chagua programu unayotaka kutumia kufungua faili hii:",
+        L"Faili:",
+        L"Programu zinazopendekezwa",
+        L"Programu nyingine",
+        L"Andika maelezo unayotaka kutumia kwa aina hii ya faili:",
+        L"&Tumia kila wakati programu iliyochaguliwa kufungua aina hii ya faili",
+        L"&Vinjari...",
+        L"Ikiwa programu unayotaka haiko kwenye orodha au kwenye kompyuta yako, unaweza <A ID=\"WebSearch\">kutafuta programu sahihi kwenye wavuti</A>.",
+        L"Fungua kwa...",
+        L"Programu",
+        L"Faili zote",
+        L"Sawa",
+        L"Ghairi",
+        L"Hakuna programu iliyosajiliwa inayoweza kufungua aina hii ya faili.",
+        L"Programu iliyochaguliwa haikuweza kufungua faili.",
+    }},
+    {0x0457, {  // Konkani
+        L"हाचे सयत उगड",
+        L"ही फायल उगडपाक तुमकां जो प्रोग्राम वापरपाचो आसा तो वेंचात:",
+        L"फायल:",
+        L"शिफारस केल्ले प्रोग्राम",
+        L"हेर प्रोग्राम",
+        L"ह्या प्रकारचे फायले खातीर तुमकां वापरपाचें वर्णन बरयात:",
+        L"&ह्या प्रकारची फायल उगडपाक सदांच वेंचिल्लो प्रोग्राम वापरात",
+        L"&न्याळात...",
+        L"तुमकां जाय तो प्रोग्राम यादींत वा तुमच्या कॉम्प्युटराचेर ना जाल्यार, तुमी <A ID=\"WebSearch\">वेबाचेर योग्य प्रोग्राम सोदूंक शकतात</A>.",
+        L"हाचे सयत उगड...",
+        L"प्रोग्राम",
+        L"सगळ्यो फायली",
+        L"बरो",
+        L"रद्द करात",
+        L"ह्या प्रकारची फायल उगडपाक कोणोच नोंदणीकृत प्रोग्राम ना.",
+        L"वेंचिल्ल्या प्रोग्रामाक फायल उगडपाक जमलें ना.",
+    }},
+    {0x0440, {  // Kyrgyz
+        L"Менен ачуу",
+        L"Бул файлды ачуу үчүн колдонгуңуз келген программаны тандаңыз:",
+        L"Файл:",
+        L"Сунушталган программалар",
+        L"Башка программалар",
+        L"Файлдын бул түрү үчүн колдонгуңуз келген сүрөттөмөнү жазыңыз:",
+        L"&Файлдын бул түрүн ачуу үчүн ар дайым тандалган программаны колдонуу",
+        L"&Карап чыгуу...",
+        L"Каалаган программа тизмеде же компьютериңизде жок болсо, <A ID=\"WebSearch\">Интернеттен ылайыктуу программаны издей аласыз</A>.",
+        L"Менен ачуу...",
+        L"Программалар",
+        L"Бардык файлдар",
+        L"Макул",
+        L"Жокко чыгаруу",
+        L"Файлдын бул түрүн эч бир катталган программа ача албайт.",
+        L"Тандалган программа файлды ача алган жок.",
+    }},
+    {0x0454, {  // Lao
+        L"ເປີດດ້ວຍ",
+        L"ເລືອກໂປຣແກຣມທີ່ທ່ານຕ້ອງການໃຊ້ເພື່ອເປີດໄຟລ໌ນີ້:",
+        L"ໄຟລ໌:",
+        L"ໂປຣແກຣມທີ່ແນະນຳ",
+        L"ໂປຣແກຣມອື່ນໆ",
+        L"ພິມຄຳອະທິບາຍທີ່ທ່ານຕ້ອງການໃຊ້ສຳລັບໄຟລ໌ປະເພດນີ້:",
+        L"&ໃຊ້ໂປຣແກຣມທີ່ເລືອກໄວ້ສະເໝີເພື່ອເປີດໄຟລ໌ປະເພດນີ້",
+        L"&ຊອກຫາ...",
+        L"ຖ້າໂປຣແກຣມທີ່ທ່ານຕ້ອງການບໍ່ຢູ່ໃນລາຍຊື່ ຫຼື ຢູ່ໃນຄອມພິວເຕີຂອງທ່ານ, ທ່ານສາມາດ <A ID=\"WebSearch\">ຊອກຫາໂປຣແກຣມທີ່ເໝາະສົມໃນເວັບ</A> ໄດ້.",
+        L"ເປີດດ້ວຍ...",
+        L"ໂປຣແກຣມ",
+        L"ໄຟລ໌ທັງໝົດ",
+        L"ຕົກລົງ",
+        L"ຍົກເລີກ",
+        L"ບໍ່ມີໂປຣແກຣມທີ່ລົງທະບຽນໄວ້ສາມາດເປີດໄຟລ໌ປະເພດນີ້ໄດ້.",
+        L"ໂປຣແກຣມທີ່ເລືອກໄວ້ບໍ່ສາມາດເປີດໄຟລ໌ໄດ້.",
+    }},
+    {0x0426, {  // Latvian
+        L"Atvērt ar",
+        L"Izvēlieties programmu, kuru vēlaties izmantot, lai atvērtu šo failu:",
+        L"Fails:",
+        L"Ieteicamās programmas",
+        L"Citas programmas",
+        L"Ierakstiet aprakstu, kuru vēlaties izmantot šāda veida failam:",
+        L"&Vienmēr izmantot atlasīto programmu, lai atvērtu šāda veida failu",
+        L"&Pārlūkot...",
+        L"Ja vēlamā programma nav sarakstā vai datorā, varat <A ID=\"WebSearch\">meklēt piemērotu programmu tīmeklī</A>.",
+        L"Atvērt ar...",
+        L"Programmas",
+        L"Visi faili",
+        L"Labi",
+        L"Atcelt",
+        L"Neviena reģistrēta programma nevar atvērt šāda veida failu.",
+        L"Atlasītā programma nevarēja atvērt failu.",
+    }},
+    {0x0427, {  // Lithuanian
+        L"Atidaryti naudojant",
+        L"Pasirinkite programą, kurią norite naudoti šiam failui atidaryti:",
+        L"Failas:",
+        L"Rekomenduojamos programos",
+        L"Kitos programos",
+        L"Įveskite aprašą, kurį norite naudoti šio tipo failui:",
+        L"&Visada naudoti pasirinktą programą šio tipo failui atidaryti",
+        L"&Naršyti...",
+        L"Jei norimos programos nėra sąraše ar kompiuteryje, galite <A ID=\"WebSearch\">ieškoti tinkamos programos internete</A>.",
+        L"Atidaryti naudojant...",
+        L"Programos",
+        L"Visi failai",
+        L"Gerai",
+        L"Atšaukti",
+        L"Nė viena registruota programa negali atidaryti šio tipo failo.",
+        L"Pasirinkta programa negalėjo atidaryti failo.",
+    }},
+    {0x046E, {  // Luxembourgish
+        L"Oppe mat",
+        L"Wielt de Programm, deen Dir benotze wëllt, fir dëse Fichier opzemaachen:",
+        L"Fichier:",
+        L"Empfohlene Programmer",
+        L"Aner Programmer",
+        L"Gitt eng Beschreiwung an, déi Dir fir dës Zort Fichier benotze wëllt:",
+        L"&Benotzt ëmmer de gewielte Programm, fir dës Zort Fichier opzemaachen",
+        L"&Bliederen...",
+        L"Wann de gewënschte Programm net an der Lëscht oder op Ärem Computer ass, kënnt Dir <A ID=\"WebSearch\">um Web no dem passende Programm sichen</A>.",
+        L"Oppe mat...",
+        L"Programmer",
+        L"All Fichieren",
+        L"OK",
+        L"Ofbriechen",
+        L"Kee registréierte Programm kann dës Zort Fichier opmaachen.",
+        L"De gewielte Programm konnt de Fichier net opmaachen.",
+    }},
+    {0x042F, {  // Macedonian
+        L"Отвори со",
+        L"Изберете ја програмата што сакате да ја користите за да ја отворите оваа датотека:",
+        L"Датотека:",
+        L"Препорачани програми",
+        L"Други програми",
+        L"Внесете опис што сакате да го користите за овој вид датотека:",
+        L"&Секогаш користи ја избраната програма за отворање на овој вид датотека",
+        L"&Прегледај...",
+        L"Ако саканата програма не е во списокот или на вашиот компјутер, можете да <A ID=\"WebSearch\">ја побарате соодветната програма на интернет</A>.",
+        L"Отвори со...",
+        L"Програми",
+        L"Сите датотеки",
+        L"Во ред",
+        L"Откажи",
+        L"Ниту една регистрирана програма не може да го отвори овој вид датотека.",
+        L"Избраната програма не можеше да ја отвори датотеката.",
+    }},
+    {0x043E, {  // Malay
+        L"Buka dengan",
+        L"Pilih program yang anda mahu gunakan untuk membuka fail ini:",
+        L"Fail:",
+        L"Program Disyorkan",
+        L"Program Lain",
+        L"Taip perihalan yang anda mahu gunakan untuk jenis fail ini:",
+        L"&Sentiasa gunakan program yang dipilih untuk membuka jenis fail ini",
+        L"&Semak imbas...",
+        L"Jika program yang anda mahu tiada dalam senarai atau pada komputer anda, anda boleh <A ID=\"WebSearch\">mencari program yang sesuai di Web</A>.",
+        L"Buka dengan...",
+        L"Program",
+        L"Semua Fail",
+        L"OK",
+        L"Batal",
+        L"Tiada program berdaftar boleh membuka jenis fail ini.",
+        L"Program yang dipilih tidak dapat membuka fail.",
+    }},
+    {0x044C, {  // Malayalam
+        L"ഇതുപയോഗിച്ച് തുറക്കുക",
+        L"ഈ ഫയൽ തുറക്കാൻ ഉപയോഗിക്കേണ്ട പ്രോഗ്രാം തിരഞ്ഞെടുക്കുക:",
+        L"ഫയൽ:",
+        L"ശുപാർശ ചെയ്യുന്ന പ്രോഗ്രാമുകൾ",
+        L"മറ്റ് പ്രോഗ്രാമുകൾ",
+        L"ഇത്തരം ഫയലിനായി ഉപയോഗിക്കേണ്ട വിവരണം ടൈപ്പ് ചെയ്യുക:",
+        L"&ഇത്തരം ഫയൽ തുറക്കാൻ എല്ലായ്പ്പോഴും തിരഞ്ഞെടുത്ത പ്രോഗ്രാം ഉപയോഗിക്കുക",
+        L"&ബ്രൗസ് ചെയ്യുക...",
+        L"നിങ്ങൾക്ക് വേണ്ട പ്രോഗ്രാം പട്ടികയിലോ നിങ്ങളുടെ കമ്പ്യൂട്ടറിലോ ഇല്ലെങ്കിൽ, <A ID=\"WebSearch\">വെബിൽ അനുയോജ്യമായ പ്രോഗ്രാം തിരയാം</A>.",
+        L"ഇതുപയോഗിച്ച് തുറക്കുക...",
+        L"പ്രോഗ്രാമുകൾ",
+        L"എല്ലാ ഫയലുകളും",
+        L"ശരി",
+        L"റദ്ദാക്കുക",
+        L"ഇത്തരം ഫയൽ തുറക്കാൻ കഴിയുന്ന രജിസ്റ്റർ ചെയ്ത പ്രോഗ്രാമില്ല.",
+        L"തിരഞ്ഞെടുത്ത പ്രോഗ്രാമിന് ഫയൽ തുറക്കാൻ കഴിഞ്ഞില്ല.",
+    }},
+    {0x043A, {  // Maltese
+        L"Iftaħ ma'",
+        L"Agħżel il-programm li tixtieq tuża biex tiftaħ dan il-fajl:",
+        L"Fajl:",
+        L"Programmi Rakkomandati",
+        L"Programmi Oħra",
+        L"Ittajpja deskrizzjoni li tixtieq tuża għal dan it-tip ta' fajl:",
+        L"&Uża dejjem il-programm magħżul biex tiftaħ dan it-tip ta' fajl",
+        L"&Fittex...",
+        L"Jekk il-programm li tixtieq mhuwiex fil-lista jew fuq il-kompjuter tiegħek, tista' <A ID=\"WebSearch\">tfittex il-programm xieraq fuq il-Web</A>.",
+        L"Iftaħ ma'...",
+        L"Programmi",
+        L"Il-Fajls Kollha",
+        L"OK",
+        L"Ikkanċella",
+        L"Ebda programm irreġistrat ma jista' jiftaħ dan it-tip ta' fajl.",
+        L"Il-programm magħżul ma setax jiftaħ il-fajl.",
+    }},
+    {0x0481, {  // Maori
+        L"Huaki me",
+        L"Kōwhiria te papatono e hiahia ana koe ki te whakamahi hei huaki i tēnei kōnae:",
+        L"Kōnae:",
+        L"Ngā Papatono Tūtohutia",
+        L"Ētahi Atu Papatono",
+        L"Patohia he whakaahuatanga e hiahia ana koe mō tēnei momo kōnae:",
+        L"&Whakamahia tonutia te papatono kua kōwhiria hei huaki i tēnei momo kōnae",
+        L"&Tirotiro...",
+        L"Ki te kore te papatono e hiahiatia ana kei te rārangi, kei tō rorohiko rānei, ka taea e koe te <A ID=\"WebSearch\">rapu i te papatono tika i te Tukutuku</A>.",
+        L"Huaki me...",
+        L"Ngā Papatono",
+        L"Ngā Kōnae Katoa",
+        L"Āe",
+        L"Whakakore",
+        L"Kāore he papatono rēhita e taea te huaki i tēnei momo kōnae.",
+        L"Kīhai i taea e te papatono kua kōwhiria te kōnae te huaki.",
+    }},
+    {0x044E, {  // Marathi
+        L"याद्वारे उघडा",
+        L"ही फाईल उघडण्यासाठी तुम्हाला वापरायचा असलेला प्रोग्राम निवडा:",
+        L"फाईल:",
+        L"शिफारस केलेले प्रोग्राम",
+        L"इतर प्रोग्राम",
+        L"या प्रकारच्या फाईलसाठी तुम्हाला वापरायचे असलेले वर्णन टाइप करा:",
+        L"&या प्रकारची फाईल उघडण्यासाठी नेहमी निवडलेला प्रोग्राम वापरा",
+        L"&ब्राउझ करा...",
+        L"तुम्हाला हवा असलेला प्रोग्राम सूचीमध्ये किंवा तुमच्या संगणकावर नसल्यास, तुम्ही <A ID=\"WebSearch\">वेबवर योग्य प्रोग्राम शोधू शकता</A>.",
+        L"याद्वारे उघडा...",
+        L"प्रोग्राम",
+        L"सर्व फाईल्स",
+        L"ठीक आहे",
+        L"रद्द करा",
+        L"कोणताही नोंदणीकृत प्रोग्राम या प्रकारची फाईल उघडू शकत नाही.",
+        L"निवडलेला प्रोग्राम फाईल उघडू शकला नाही.",
+    }},
+    {0x0450, {  // Mongolian
+        L"Тусламжтайгаар нээх",
+        L"Энэ файлыг нээхийн тулд ашиглахыг хүсэж буй програмаа сонгоно уу:",
+        L"Файл:",
+        L"Санал болгосон програмууд",
+        L"Бусад програмууд",
+        L"Энэ төрлийн файлд ашиглахыг хүсэж буй тайлбараа бичнэ үү:",
+        L"&Энэ төрлийн файлыг нээхийн тулд сонгосон програмаа үргэлж ашиглах",
+        L"&Хайх...",
+        L"Хүссэн програм жагсаалтад эсвэл таны компьютерт байхгүй бол <A ID=\"WebSearch\">вэбээс тохирох програмыг хайж болно</A>.",
+        L"Тусламжтайгаар нээх...",
+        L"Програмууд",
+        L"Бүх файлууд",
+        L"За",
+        L"Цуцлах",
+        L"Энэ төрлийн файлыг нээж чадах бүртгэлтэй програм байхгүй.",
+        L"Сонгосон програм файлыг нээж чадсангүй.",
+    }},
+    {0x0455, {  // Burmese
+        L"ဖြင့်ဖွင့်ပါ",
+        L"ဤဖိုင်ကိုဖွင့်ရန် သင်အသုံးပြုလိုသော ပရိုဂရမ်ကို ရွေးပါ။",
+        L"ဖိုင်:",
+        L"အကြံပြုထားသော ပရိုဂရမ်များ",
+        L"အခြား ပရိုဂရမ်များ",
+        L"ဤဖိုင်အမျိုးအစားအတွက် သင်အသုံးပြုလိုသော ဖော်ပြချက်ကို ရိုက်ထည့်ပါ။",
+        L"&ဤဖိုင်အမျိုးအစားကိုဖွင့်ရန် ရွေးထားသော ပရိုဂရမ်ကို အမြဲသုံးပါ",
+        L"&ရှာဖွေပါ...",
+        L"သင်လိုချင်သော ပရိုဂရမ်သည် စာရင်းထဲ သို့မဟုတ် သင့်ကွန်ပျူတာတွင် မရှိပါက <A ID=\"WebSearch\">ဝဘ်ပေါ်တွင် သင့်လျော်သော ပရိုဂရမ်ကို ရှာဖွေနိုင်ပါသည်</A>။",
+        L"ဖြင့်ဖွင့်ပါ...",
+        L"ပရိုဂရမ်များ",
+        L"ဖိုင်အားလုံး",
+        L"အိုကေ",
+        L"မလုပ်တော့ပါ",
+        L"ဤဖိုင်အမျိုးအစားကို ဖွင့်နိုင်သော မှတ်ပုံတင်ထားသည့် ပရိုဂရမ် မရှိပါ။",
+        L"ရွေးထားသော ပရိုဂရမ်သည် ဖိုင်ကို မဖွင့်နိုင်ပါ။",
+    }},
+    {0x0461, {  // Nepali
+        L"यसद्वारा खोल्नुहोस्",
+        L"यो फाइल खोल्न तपाईंले प्रयोग गर्न चाहनुभएको प्रोग्राम छान्नुहोस्:",
+        L"फाइल:",
+        L"सिफारिस गरिएका प्रोग्रामहरू",
+        L"अन्य प्रोग्रामहरू",
+        L"यस प्रकारको फाइलका लागि तपाईंले प्रयोग गर्न चाहनुभएको विवरण टाइप गर्नुहोस्:",
+        L"&यस प्रकारको फाइल खोल्न सधैं चयन गरिएको प्रोग्राम प्रयोग गर्नुहोस्",
+        L"&ब्राउज गर्नुहोस्...",
+        L"तपाईंले चाहनुभएको प्रोग्राम सूचीमा वा तपाईंको कम्प्युटरमा छैन भने, तपाईंले <A ID=\"WebSearch\">वेबमा उपयुक्त प्रोग्राम खोज्न सक्नुहुन्छ</A>।",
+        L"यसद्वारा खोल्नुहोस्...",
+        L"प्रोग्रामहरू",
+        L"सबै फाइलहरू",
+        L"ठीक छ",
+        L"रद्द गर्नुहोस्",
+        L"कुनै पनि दर्ता गरिएको प्रोग्रामले यस प्रकारको फाइल खोल्न सक्दैन।",
+        L"चयन गरिएको प्रोग्रामले फाइल खोल्न सकेन।",
+    }},
+    {0x0814, {  // Norwegian Nynorsk
+        L"Opne med",
+        L"Vel programmet du vil bruke for å opne denne fila:",
+        L"Fil:",
+        L"Tilrådde program",
+        L"Andre program",
+        L"Skriv ei skildring du vil bruke for denne typen fil:",
+        L"&Bruk alltid det valde programmet til å opne denne typen fil",
+        L"&Bla gjennom...",
+        L"Dersom programmet du vil ha ikkje er i lista eller på datamaskina, kan du <A ID=\"WebSearch\">leite etter eit høveleg program på nettet</A>.",
+        L"Opne med...",
+        L"Program",
+        L"Alle filer",
+        L"OK",
+        L"Avbryt",
+        L"Ingen registrerte program kan opne denne typen fil.",
+        L"Det valde programmet kunne ikkje opne fila.",
+    }},
+    {0x0448, {  // Odia
+        L"ଏହାଦ୍ୱାରା ଖୋଲନ୍ତୁ",
+        L"ଏହି ଫାଇଲ୍ ଖୋଲିବା ପାଇଁ ଆପଣ ବ୍ୟବହାର କରିବାକୁ ଚାହୁଁଥିବା ପ୍ରୋଗ୍ରାମ୍ ବାଛନ୍ତୁ:",
+        L"ଫାଇଲ୍:",
+        L"ସୁପାରିଶ କରାଯାଇଥିବା ପ୍ରୋଗ୍ରାମ୍",
+        L"ଅନ୍ୟ ପ୍ରୋଗ୍ରାମ୍",
+        L"ଏହି ପ୍ରକାରର ଫାଇଲ୍ ପାଇଁ ଆପଣ ବ୍ୟବହାର କରିବାକୁ ଚାହୁଁଥିବା ବର୍ଣ୍ଣନା ଟାଇପ୍ କରନ୍ତୁ:",
+        L"&ଏହି ପ୍ରକାରର ଫାଇଲ୍ ଖୋଲିବା ପାଇଁ ସର୍ବଦା ବଛା ଯାଇଥିବା ପ୍ରୋଗ୍ରାମ୍ ବ୍ୟବହାର କରନ୍ତୁ",
+        L"&ବ୍ରାଉଜ୍ କରନ୍ତୁ...",
+        L"ଆପଣ ଚାହୁଁଥିବା ପ୍ରୋଗ୍ରାମ୍ ତାଲିକାରେ କିମ୍ବା ଆପଣଙ୍କ କମ୍ପ୍ୟୁଟରରେ ନ ଥିଲେ, ଆପଣ <A ID=\"WebSearch\">ୱେବ୍‌ରେ ଉପଯୁକ୍ତ ପ୍ରୋଗ୍ରାମ୍ ଖୋଜି ପାରିବେ</A>।",
+        L"ଏହାଦ୍ୱାରା ଖୋଲନ୍ତୁ...",
+        L"ପ୍ରୋଗ୍ରାମ୍",
+        L"ସମସ୍ତ ଫାଇଲ୍",
+        L"ଠିକ୍ ଅଛି",
+        L"ବାତିଲ୍ କରନ୍ତୁ",
+        L"ଏହି ପ୍ରକାରର ଫାଇଲ୍ ଖୋଲିପାରୁଥିବା କୌଣସି ପଞ୍ଜୀକୃତ ପ୍ରୋଗ୍ରାମ୍ ନାହିଁ।",
+        L"ବଛା ଯାଇଥିବା ପ୍ରୋଗ୍ରାମ୍ ଫାଇଲ୍ ଖୋଲିପାରିଲା ନାହିଁ।",
+    }},
+    {0x0463, {  // Pashto
+        L"په دې سره پرانیزئ",
+        L"د دې فایل د پرانیستلو لپاره هغه پروګرام وټاکئ چې کارول یې غواړئ:",
+        L"فایل:",
+        L"وړاندیز شوي پروګرامونه",
+        L"نور پروګرامونه",
+        L"هغه توضیح ولیکئ چې د دې ډول فایل لپاره یې کارول غواړئ:",
+        L"&د دې ډول فایل د پرانیستلو لپاره تل ټاکل شوی پروګرام وکاروئ",
+        L"&لټون...",
+        L"که هغه پروګرام چې غواړئ په نوملړ کې یا ستاسو په کمپیوټر کې نه وي، تاسو کولی شئ <A ID=\"WebSearch\">په وېب کې مناسب پروګرام ولټوئ</A>.",
+        L"په دې سره پرانیزئ...",
+        L"پروګرامونه",
+        L"ټول فایلونه",
+        L"ښه",
+        L"لغوه",
+        L"هېڅ ثبت شوی پروګرام نشي کولی دا ډول فایل پرانیزي.",
+        L"ټاکل شوي پروګرام ونه شو کولی فایل پرانیزي.",
+    }},
+    {0x0429, {  // Persian
+        L"باز کردن با",
+        L"برنامه‌ای را که می‌خواهید برای باز کردن این فایل استفاده کنید انتخاب کنید:",
+        L"فایل:",
+        L"برنامه‌های پیشنهادی",
+        L"برنامه‌های دیگر",
+        L"توضیحی را که می‌خواهید برای این نوع فایل استفاده کنید تایپ کنید:",
+        L"&همیشه از برنامه انتخاب‌شده برای باز کردن این نوع فایل استفاده کن",
+        L"&مرور...",
+        L"اگر برنامه مورد نظر در فهرست یا روی رایانه شما نیست، می‌توانید <A ID=\"WebSearch\">برنامه مناسب را در وب جستجو کنید</A>.",
+        L"باز کردن با...",
+        L"برنامه‌ها",
+        L"همه فایل‌ها",
+        L"تأیید",
+        L"لغو",
+        L"هیچ برنامه ثبت‌شده‌ای نمی‌تواند این نوع فایل را باز کند.",
+        L"برنامه انتخاب‌شده نتوانست فایل را باز کند.",
+    }},
+    {0x0446, {  // Punjabi
+        L"ਨਾਲ ਖੋਲ੍ਹੋ",
+        L"ਇਸ ਫ਼ਾਈਲ ਨੂੰ ਖੋਲ੍ਹਣ ਲਈ ਉਹ ਪ੍ਰੋਗਰਾਮ ਚੁਣੋ ਜੋ ਤੁਸੀਂ ਵਰਤਣਾ ਚਾਹੁੰਦੇ ਹੋ:",
+        L"ਫ਼ਾਈਲ:",
+        L"ਸਿਫ਼ਾਰਸ਼ ਕੀਤੇ ਪ੍ਰੋਗਰਾਮ",
+        L"ਹੋਰ ਪ੍ਰੋਗਰਾਮ",
+        L"ਇਸ ਕਿਸਮ ਦੀ ਫ਼ਾਈਲ ਲਈ ਉਹ ਵੇਰਵਾ ਟਾਈਪ ਕਰੋ ਜੋ ਤੁਸੀਂ ਵਰਤਣਾ ਚਾਹੁੰਦੇ ਹੋ:",
+        L"&ਇਸ ਕਿਸਮ ਦੀ ਫ਼ਾਈਲ ਖੋਲ੍ਹਣ ਲਈ ਹਮੇਸ਼ਾ ਚੁਣਿਆ ਪ੍ਰੋਗਰਾਮ ਵਰਤੋ",
+        L"&ਬ੍ਰਾਊਜ਼ ਕਰੋ...",
+        L"ਜੇ ਤੁਹਾਡਾ ਲੋੜੀਂਦਾ ਪ੍ਰੋਗਰਾਮ ਸੂਚੀ ਵਿੱਚ ਜਾਂ ਤੁਹਾਡੇ ਕੰਪਿਊਟਰ ਉੱਤੇ ਨਹੀਂ ਹੈ, ਤਾਂ ਤੁਸੀਂ <A ID=\"WebSearch\">ਵੈੱਬ ਉੱਤੇ ਢੁਕਵਾਂ ਪ੍ਰੋਗਰਾਮ ਲੱਭ ਸਕਦੇ ਹੋ</A>।",
+        L"ਨਾਲ ਖੋਲ੍ਹੋ...",
+        L"ਪ੍ਰੋਗਰਾਮ",
+        L"ਸਾਰੀਆਂ ਫ਼ਾਈਲਾਂ",
+        L"ਠੀਕ ਹੈ",
+        L"ਰੱਦ ਕਰੋ",
+        L"ਕੋਈ ਵੀ ਰਜਿਸਟਰਡ ਪ੍ਰੋਗਰਾਮ ਇਸ ਕਿਸਮ ਦੀ ਫ਼ਾਈਲ ਨਹੀਂ ਖੋਲ੍ਹ ਸਕਦਾ।",
+        L"ਚੁਣਿਆ ਪ੍ਰੋਗਰਾਮ ਫ਼ਾਈਲ ਨਹੀਂ ਖੋਲ੍ਹ ਸਕਿਆ।",
+    }},
+    {0x046B, {  // Quechua
+        L"Kaywan kichay",
+        L"Kay willañiqita kichanaykipaq llamk'achiyta munasqayki wakichita akllay:",
+        L"Willañiqi:",
+        L"Amañakusqa wakichikuna",
+        L"Huk wakichikuna",
+        L"Kay rikch'aq willañiqipaq llamk'achiyta munasqayki sut'inchayta qillqay:",
+        L"&Kay rikch'aq willañiqita kichanaykipaq akllasqa wakichita hayk'aqpas llamk'achiy",
+        L"&Maskay...",
+        L"Munasqayki wakichi sutisuyupi icha antañiqiqiykipi mana kaptinqa, <A ID=\"WebSearch\">Webpi kaqllaq wakichita maskayta atinki</A>.",
+        L"Kaywan kichay...",
+        L"Wakichikuna",
+        L"Llapam willañiqikuna",
+        L"Allinmi",
+        L"Tatichiy",
+        L"Manam mayqin qillqasqa wakichipas kay rikch'aq willañiqita kichayta atinchu.",
+        L"Akllasqa wakichi manam willañiqita kichayta atirqanchu.",
+    }},
+    {0x0491, {  // Scottish Gaelic
+        L"Fosgail le",
+        L"Tagh am prògram a tha thu airson a chleachdadh gus am faidhle seo fhosgladh:",
+        L"Faidhle:",
+        L"Prògraman air am moladh",
+        L"Prògraman eile",
+        L"Sgrìobh tuairisgeul a tha thu airson a chleachdadh airson an seòrsa faidhle seo:",
+        L"&Cleachd an-còmhnaidh am prògram a thagh thu gus an seòrsa faidhle seo fhosgladh",
+        L"&Brabhsaich...",
+        L"Mura bheil am prògram a tha thu ag iarraidh air an liosta no air a' choimpiutair agad, 's urrainn dhut <A ID=\"WebSearch\">coimhead airson prògram freagarrach air an lìon</A>.",
+        L"Fosgail le...",
+        L"Prògraman",
+        L"Gach faidhle",
+        L"Ceart ma-thà",
+        L"Sguir dheth",
+        L"Chan urrainn do phrògram clàraichte sam bith an seòrsa faidhle seo fhosgladh.",
+        L"Cha b' urrainn dhan phrògram a thagh thu am faidhle fhosgladh.",
+    }},
+    {0x241A, {  // Serbian (Latin)
+        L"Otvori pomoću",
+        L"Izaberite program koji želite da koristite za otvaranje ove datoteke:",
+        L"Datoteka:",
+        L"Preporučeni programi",
+        L"Ostali programi",
+        L"Unesite opis koji želite da koristite za ovu vrstu datoteke:",
+        L"&Uvek koristi izabrani program za otvaranje ove vrste datoteke",
+        L"&Pregledaj...",
+        L"Ako program koji želite nije na listi ili na računaru, možete da <A ID=\"WebSearch\">potražite odgovarajući program na vebu</A>.",
+        L"Otvori pomoću...",
+        L"Programi",
+        L"Sve datoteke",
+        L"U redu",
+        L"Otkaži",
+        L"Nijedan registrovani program ne može da otvori ovu vrstu datoteke.",
+        L"Izabrani program nije mogao da otvori datoteku.",
+    }},
+    {0x281A, {  // Serbian (Cyrillic)
+        L"Отвори помоћу",
+        L"Изаберите програм који желите да користите за отварање ове датотеке:",
+        L"Датотека:",
+        L"Препоручени програми",
+        L"Остали програми",
+        L"Унесите опис који желите да користите за ову врсту датотеке:",
+        L"&Увек користи изабрани програм за отварање ове врсте датотеке",
+        L"&Прегледај...",
+        L"Ако програм који желите није на листи или на рачунару, можете да <A ID=\"WebSearch\">потражите одговарајући програм на вебу</A>.",
+        L"Отвори помоћу...",
+        L"Програми",
+        L"Све датотеке",
+        L"У реду",
+        L"Откажи",
+        L"Ниједан регистровани програм не може да отвори ову врсту датотеке.",
+        L"Изабрани програм није могао да отвори датотеку.",
+    }},
+    {0x046C, {  // Northern Sotho
+        L"Bula ka",
+        L"Kgetha lenaneo leo o nyakago go le diriša go bula faele ye:",
+        L"Faele:",
+        L"Mananeo a eletšwago",
+        L"Mananeo a mangwe",
+        L"Ngwala tlhaloso yeo o nyakago go e diriša mohuta wo wa faele:",
+        L"&Diriša kamehla lenaneo leo le kgethilwego go bula mohuta wo wa faele",
+        L"&Sekaseka...",
+        L"Ge eba lenaneo leo o le nyakago le sego lenaneng goba khomphutheng ya gago, o ka kgona go <A ID=\"WebSearch\">nyaka lenaneo la maleba Webeng</A>.",
+        L"Bula ka...",
+        L"Mananeo",
+        L"Difaele ka moka",
+        L"Go lokile",
+        L"Khansela",
+        L"Ga go lenaneo le le ngwadišitšwego leo le ka bulago mohuta wo wa faele.",
+        L"Lenaneo leo le kgethilwego le paletšwe go bula faele.",
+    }},
+    {0x0432, {  // Tswana
+        L"Bula ka",
+        L"Tlhopha lenaneo le o batlang go le dirisa go bula faela eno:",
+        L"Faele:",
+        L"Mananeo a a atlanegisitsweng",
+        L"Mananeo a mangwe",
+        L"Kwala tlhaloso e o batlang go e dirisa mo mofuteng ono wa faela:",
+        L"&Nna o dirisa lenaneo le le tlhophilweng go bula mofuta ono wa faela",
+        L"&Batlisisa...",
+        L"Fa lenaneo le o le batlang le se mo lenaaneng kgotsa mo khomphiutheng ya gago, o ka kgona go <A ID=\"WebSearch\">batla lenaneo le le tshwanelang mo Webeng</A>.",
+        L"Bula ka...",
+        L"Mananeo",
+        L"Difaele tsotlhe",
+        L"Go siame",
+        L"Khansela",
+        L"Ga go na lenaneo le le kwadisitsweng le le ka bulang mofuta ono wa faela.",
+        L"Lenaneo le le tlhophilweng ga le a kgona go bula faela.",
+    }},
+    {0x045B, {  // Sinhala
+        L"සමඟ විවෘත කරන්න",
+        L"මෙම ගොනුව විවෘත කිරීමට ඔබට භාවිතා කිරීමට අවශ්‍ය වැඩසටහන තෝරන්න:",
+        L"ගොනුව:",
+        L"නිර්දේශිත වැඩසටහන්",
+        L"වෙනත් වැඩසටහන්",
+        L"මෙවැනි ගොනු සඳහා ඔබට භාවිතා කිරීමට අවශ්‍ය විස්තරය ටයිප් කරන්න:",
+        L"&මෙවැනි ගොනු විවෘත කිරීමට සැමවිටම තෝරාගත් වැඩසටහන භාවිතා කරන්න",
+        L"&බ්‍රවුස් කරන්න...",
+        L"ඔබට අවශ්‍ය වැඩසටහන ලැයිස්තුවේ හෝ ඔබේ පරිගණකයේ නොමැති නම්, ඔබට <A ID=\"WebSearch\">වෙබයේ සුදුසු වැඩසටහන සෙවිය හැක</A>.",
+        L"සමඟ විවෘත කරන්න...",
+        L"වැඩසටහන්",
+        L"සියලුම ගොනු",
+        L"හරි",
+        L"අවලංගු කරන්න",
+        L"මෙවැනි ගොනු විවෘත කළ හැකි ලියාපදිංචි වැඩසටහනක් නොමැත.",
+        L"තෝරාගත් වැඩසටහනට ගොනුව විවෘත කිරීමට නොහැකි විය.",
+    }},
+    {0x0424, {  // Slovenian
+        L"Odpri z",
+        L"Izberite program, ki ga želite uporabiti za odpiranje te datoteke:",
+        L"Datoteka:",
+        L"Priporočeni programi",
+        L"Drugi programi",
+        L"Vnesite opis, ki ga želite uporabiti za to vrsto datoteke:",
+        L"&Vedno uporabi izbrani program za odpiranje te vrste datoteke",
+        L"&Prebrskaj...",
+        L"Če programa, ki ga želite, ni na seznamu ali v računalniku, lahko <A ID=\"WebSearch\">na spletu poiščete ustrezen program</A>.",
+        L"Odpri z...",
+        L"Programi",
+        L"Vse datoteke",
+        L"V redu",
+        L"Prekliči",
+        L"Noben registriran program ne more odpreti te vrste datoteke.",
+        L"Izbrani program ni mogel odpreti datoteke.",
+    }},
+    {0x0428, {  // Tajik
+        L"Кушодан бо",
+        L"Барои кушодани ин файл барномаеро, ки мехоҳед истифода баред, интихоб кунед:",
+        L"Файл:",
+        L"Барномаҳои тавсияшуда",
+        L"Барномаҳои дигар",
+        L"Тавсиферо, ки барои ин намуди файл истифода кардан мехоҳед, ворид кунед:",
+        L"&Барои кушодани ин намуди файл ҳамеша барномаи интихобшударо истифода баред",
+        L"&Мурур...",
+        L"Агар барномаи дилхоҳ дар рӯйхат ё дар компютери шумо набошад, шумо метавонед <A ID=\"WebSearch\">барномаи муносибро дар интернет ҷустуҷӯ кунед</A>.",
+        L"Кушодан бо...",
+        L"Барномаҳо",
+        L"Ҳамаи файлҳо",
+        L"Хуб",
+        L"Бекор кардан",
+        L"Ягон барномаи сабтшуда ин намуди файлро кушода наметавонад.",
+        L"Барномаи интихобшуда файлро кушода натавонист.",
+    }},
+    {0x0449, {  // Tamil
+        L"இதனுடன் திற",
+        L"இந்தக் கோப்பைத் திறக்க நீங்கள் பயன்படுத்த விரும்பும் நிரலைத் தேர்ந்தெடுக்கவும்:",
+        L"கோப்பு:",
+        L"பரிந்துரைக்கப்பட்ட நிரல்கள்",
+        L"பிற நிரல்கள்",
+        L"இந்த வகையான கோப்பிற்கு நீங்கள் பயன்படுத்த விரும்பும் விளக்கத்தைத் தட்டச்சு செய்யவும்:",
+        L"&இந்த வகையான கோப்பைத் திறக்க எப்போதும் தேர்ந்தெடுத்த நிரலைப் பயன்படுத்து",
+        L"&உலாவு...",
+        L"நீங்கள் விரும்பும் நிரல் பட்டியலில் அல்லது உங்கள் கணினியில் இல்லை என்றால், <A ID=\"WebSearch\">வலையில் பொருத்தமான நிரலைத் தேடலாம்</A>.",
+        L"இதனுடன் திற...",
+        L"நிரல்கள்",
+        L"எல்லாக் கோப்புகளும்",
+        L"சரி",
+        L"ரத்து",
+        L"இந்த வகையான கோப்பைத் திறக்கக்கூடிய பதிவுசெய்யப்பட்ட நிரல் எதுவும் இல்லை.",
+        L"தேர்ந்தெடுத்த நிரலால் கோப்பைத் திறக்க முடியவில்லை.",
+    }},
+    {0x0444, {  // Tatar
+        L"Ярдәмендә ачу",
+        L"Бу файлны ачу өчен кулланырга теләгән программаны сайлагыз:",
+        L"Файл:",
+        L"Тәкъдим ителгән программалар",
+        L"Башка программалар",
+        L"Файлның бу төре өчен кулланырга теләгән тасвирламаны языгыз:",
+        L"&Файлның бу төрен ачу өчен һәрвакыт сайланган программаны кулланырга",
+        L"&Күзәтү...",
+        L"Теләгән программа исемлектә яки санагыгызда юк икән, <A ID=\"WebSearch\">Интернетта тиешле программаны эзли аласыз</A>.",
+        L"Ярдәмендә ачу...",
+        L"Программалар",
+        L"Барлык файллар",
+        L"Ярар",
+        L"Баш тарту",
+        L"Файлның бу төрен ача алырлык теркәлгән программа юк.",
+        L"Сайланган программа файлны ача алмады.",
+    }},
+    {0x044A, {  // Telugu
+        L"దీనితో తెరవండి",
+        L"ఈ ఫైల్‌ను తెరవడానికి మీరు ఉపయోగించాలనుకుంటున్న ప్రోగ్రామ్‌ను ఎంచుకోండి:",
+        L"ఫైల్:",
+        L"సిఫార్సు చేసిన ప్రోగ్రామ్‌లు",
+        L"ఇతర ప్రోగ్రామ్‌లు",
+        L"ఈ రకమైన ఫైల్ కోసం మీరు ఉపయోగించాలనుకుంటున్న వివరణను టైప్ చేయండి:",
+        L"&ఈ రకమైన ఫైల్ తెరవడానికి ఎల్లప్పుడూ ఎంచుకున్న ప్రోగ్రామ్‌ను ఉపయోగించు",
+        L"&బ్రౌజ్ చేయండి...",
+        L"మీకు కావలసిన ప్రోగ్రామ్ జాబితాలో లేదా మీ కంప్యూటర్‌లో లేకపోతే, మీరు <A ID=\"WebSearch\">వెబ్‌లో తగిన ప్రోగ్రామ్ కోసం వెతకవచ్చు</A>.",
+        L"దీనితో తెరవండి...",
+        L"ప్రోగ్రామ్‌లు",
+        L"అన్ని ఫైల్‌లు",
+        L"సరే",
+        L"రద్దు చేయి",
+        L"ఈ రకమైన ఫైల్‌ను తెరవగల నమోదిత ప్రోగ్రామ్ ఏదీ లేదు.",
+        L"ఎంచుకున్న ప్రోగ్రామ్ ఫైల్‌ను తెరవలేకపోయింది.",
+    }},
+    {0x041E, {  // Thai
+        L"เปิดด้วย",
+        L"เลือกโปรแกรมที่คุณต้องการใช้เปิดแฟ้มนี้:",
+        L"แฟ้ม:",
+        L"โปรแกรมที่แนะนำ",
+        L"โปรแกรมอื่นๆ",
+        L"พิมพ์คำอธิบายที่คุณต้องการใช้สำหรับแฟ้มชนิดนี้:",
+        L"&ใช้โปรแกรมที่เลือกไว้เปิดแฟ้มชนิดนี้เสมอ",
+        L"&เรียกดู...",
+        L"ถ้าโปรแกรมที่คุณต้องการไม่อยู่ในรายการหรือในคอมพิวเตอร์ของคุณ คุณสามารถ <A ID=\"WebSearch\">ค้นหาโปรแกรมที่เหมาะสมบนเว็บ</A> ได้",
+        L"เปิดด้วย...",
+        L"โปรแกรม",
+        L"แฟ้มทั้งหมด",
+        L"ตกลง",
+        L"ยกเลิก",
+        L"ไม่มีโปรแกรมที่ลงทะเบียนไว้สามารถเปิดแฟ้มชนิดนี้ได้",
+        L"โปรแกรมที่เลือกไว้ไม่สามารถเปิดแฟ้มได้",
+    }},
+    {0x0473, {  // Tigrinya
+        L"ኣብዚ ክፈት",
+        L"ነዚ ፋይል ንምኽፋት ክትጥቀመሉ እትደልዮ ፕሮግራም ምረጽ:",
+        L"ፋይል:",
+        L"ዝተመኽሩ ፕሮግራማት",
+        L"ካልኦት ፕሮግራማት",
+        L"ነዚ ዓይነት ፋይል ክትጥቀመሉ እትደልዮ መግለጺ ጽሓፍ:",
+        L"&ነዚ ዓይነት ፋይል ንምኽፋት ኵሉ ግዜ እቲ ዝተመረጸ ፕሮግራም ተጠቐም",
+        L"&ኣስስ...",
+        L"እቲ እትደልዮ ፕሮግራም ኣብ ዝርዝር ወይ ኣብ ኮምፒውተርካ እንተዘየለ፣ <A ID=\"WebSearch\">ኣብ ዌብ ግቡእ ፕሮግራም ክትደሊ ትኽእል</A>።",
+        L"ኣብዚ ክፈት...",
+        L"ፕሮግራማት",
+        L"ኵሎም ፋይላት",
+        L"ሕራይ",
+        L"ሰርዝ",
+        L"ነዚ ዓይነት ፋይል ክኸፍት ዝኽእል ዝተመዝገበ ፕሮግራም የለን።",
+        L"እቲ ዝተመረጸ ፕሮግራም ነቲ ፋይል ክኸፍቶ ኣይከኣለን።",
+    }},
+    {0x0442, {  // Turkmen
+        L"Bilen aç",
+        L"Bu faýly açmak üçin ulanmak isleýän programmaňyzy saýlaň:",
+        L"Faýl:",
+        L"Maslahat berilýän programmalar",
+        L"Beýleki programmalar",
+        L"Faýlyň bu görnüşi üçin ulanmak isleýän beýanyňyzy ýazyň:",
+        L"&Faýlyň bu görnüşini açmak üçin hemişe saýlanan programmany ulanyň",
+        L"&Gözden geçir...",
+        L"Isleýän programmaňyz sanawda ýa-da kompýuteriňizde ýok bolsa, <A ID=\"WebSearch\">Internetde laýyk programmany gözläp bilersiňiz</A>.",
+        L"Bilen aç...",
+        L"Programmalar",
+        L"Ähli faýllar",
+        L"Bolýar",
+        L"Ýatyr",
+        L"Faýlyň bu görnüşini açyp biljek bellige alnan programma ýok.",
+        L"Saýlanan programma faýly açyp bilmedi.",
+    }},
+    {0x0420, {  // Urdu
+        L"کے ساتھ کھولیں",
+        L"اس فائل کو کھولنے کے لیے جو پروگرام آپ استعمال کرنا چاہتے ہیں اسے منتخب کریں:",
+        L"فائل:",
+        L"تجویز کردہ پروگرام",
+        L"دیگر پروگرام",
+        L"اس قسم کی فائل کے لیے جو وضاحت آپ استعمال کرنا چاہتے ہیں وہ ٹائپ کریں:",
+        L"&اس قسم کی فائل کھولنے کے لیے ہمیشہ منتخب پروگرام استعمال کریں",
+        L"&براؤز کریں...",
+        L"اگر مطلوبہ پروگرام فہرست میں یا آپ کے کمپیوٹر پر نہیں ہے تو آپ <A ID=\"WebSearch\">ویب پر مناسب پروگرام تلاش کر سکتے ہیں</A>۔",
+        L"کے ساتھ کھولیں...",
+        L"پروگرامز",
+        L"تمام فائلیں",
+        L"ٹھیک ہے",
+        L"منسوخ کریں",
+        L"اس قسم کی فائل کوئی رجسٹرڈ پروگرام نہیں کھول سکتا۔",
+        L"منتخب پروگرام فائل نہیں کھول سکا۔",
+    }},
+    {0x0480, {  // Uyghur
+        L"بىلەن ئېچىش",
+        L"بۇ ھۆججەتنى ئېچىش ئۈچۈن ئىشلەتمەكچى بولغان پروگراممىنى تاللاڭ:",
+        L"ھۆججەت:",
+        L"تەۋسىيە قىلىنغان پروگراممىلار",
+        L"باشقا پروگراممىلار",
+        L"ھۆججەتنىڭ بۇ تۈرى ئۈچۈن ئىشلەتمەكچى بولغان چۈشەندۈرۈشنى يېزىڭ:",
+        L"&ھۆججەتنىڭ بۇ تۈرىنى ئېچىش ئۈچۈن ھەمىشە تاللانغان پروگراممىنى ئىشلىتىش",
+        L"&كۆرۈش...",
+        L"خالىغان پروگرامما تىزىملىكتە ياكى كومپيۇتېرىڭىزدا بولمىسا، <A ID=\"WebSearch\">تور بەتتە مۇناسىپ پروگراممىنى ئىزدەپ تاپالايسىز</A>.",
+        L"بىلەن ئېچىش...",
+        L"پروگراممىلار",
+        L"بارلىق ھۆججەتلەر",
+        L"جەزملە",
+        L"بىكار قىلىش",
+        L"ھۆججەتنىڭ بۇ تۈرىنى ئاچالايدىغان تىزىملاتقان پروگرامما يوق.",
+        L"تاللانغان پروگرامما ھۆججەتنى ئاچالمىدى.",
+    }},
+    {0x0443, {  // Uzbek
+        L"Yordamida ochish",
+        L"Ushbu faylni ochish uchun foydalanmoqchi bo'lgan dasturni tanlang:",
+        L"Fayl:",
+        L"Tavsiya etilgan dasturlar",
+        L"Boshqa dasturlar",
+        L"Faylning ushbu turi uchun foydalanmoqchi bo'lgan tavsifni kiriting:",
+        L"&Faylning ushbu turini ochish uchun har doim tanlangan dasturdan foydalanish",
+        L"&Ko'rib chiqish...",
+        L"Agar kerakli dastur ro'yxatda yoki kompyuteringizda bo'lmasa, <A ID=\"WebSearch\">internetdan mos dasturni izlashingiz mumkin</A>.",
+        L"Yordamida ochish...",
+        L"Dasturlar",
+        L"Barcha fayllar",
+        L"OK",
+        L"Bekor qilish",
+        L"Faylning ushbu turini ocha oladigan ro'yxatdan o'tgan dastur yo'q.",
+        L"Tanlangan dastur faylni ocha olmadi.",
+    }},
+    {0x042A, {  // Vietnamese
+        L"Mở bằng",
+        L"Chọn chương trình bạn muốn dùng để mở tệp này:",
+        L"Tệp:",
+        L"Chương trình được khuyến nghị",
+        L"Chương trình khác",
+        L"Nhập mô tả bạn muốn dùng cho loại tệp này:",
+        L"&Luôn dùng chương trình đã chọn để mở loại tệp này",
+        L"&Duyệt...",
+        L"Nếu chương trình bạn muốn không có trong danh sách hoặc trên máy tính, bạn có thể <A ID=\"WebSearch\">tìm chương trình phù hợp trên Web</A>.",
+        L"Mở bằng...",
+        L"Chương trình",
+        L"Tất cả tệp",
+        L"OK",
+        L"Hủy bỏ",
+        L"Không có chương trình đã đăng ký nào có thể mở loại tệp này.",
+        L"Chương trình đã chọn không thể mở tệp.",
+    }},
+    {0x0452, {  // Welsh
+        L"Agor gyda",
+        L"Dewiswch y rhaglen rydych chi am ei defnyddio i agor y ffeil hon:",
+        L"Ffeil:",
+        L"Rhaglenni a Argymhellir",
+        L"Rhaglenni Eraill",
+        L"Teipiwch ddisgrifiad rydych chi am ei ddefnyddio ar gyfer y math hwn o ffeil:",
+        L"&Defnyddiwch y rhaglen a ddewiswyd bob amser i agor y math hwn o ffeil",
+        L"&Pori...",
+        L"Os nad yw'r rhaglen rydych chi ei heisiau ar y rhestr nac ar eich cyfrifiadur, gallwch <A ID=\"WebSearch\">chwilio am y rhaglen briodol ar y We</A>.",
+        L"Agor gyda...",
+        L"Rhaglenni",
+        L"Pob Ffeil",
+        L"Iawn",
+        L"Canslo",
+        L"Ni all unrhyw raglen gofrestredig agor y math hwn o ffeil.",
+        L"Ni allai'r rhaglen a ddewiswyd agor y ffeil.",
+    }},
+    {0x0488, {  // Wolof
+        L"Ubbi ak",
+        L"Tànnul progaraam bi nga bëgg a jëfandikoo ngir ubbi bii dencukaay:",
+        L"Dencukaay:",
+        L"Progaraam yi ñu digal",
+        L"Progaraam yineen",
+        L"Bindal faramfàcce bu nga bëgg a jëfandikoo ngir wii xeet dencukaay:",
+        L"&Jëfandikoo bépp yoon progaraam bi ñu tànn ngir ubbi wii xeet dencukaay",
+        L"&Xoolal...",
+        L"Su progaraam bi nga bëgg nekkul ci limu bi wala ci nosukaay bi, mën nga <A ID=\"WebSearch\">seet progaraam bu wuute ci Web bi</A>.",
+        L"Ubbi ak...",
+        L"Progaraam yi",
+        L"Dencukaay yépp",
+        L"Baax na",
+        L"Faral",
+        L"Amul progaraam bu ñu nàndal mën a ubbi wii xeet dencukaay.",
+        L"Progaraam bi ñu tànn mënul a ubbi dencukaay bi.",
+    }},
+    {0x046A, {  // Yoruba
+        L"Ṣii pẹlu",
+        L"Yan eto ti o fẹ lo lati ṣii faili yii:",
+        L"Faili:",
+        L"Awọn Eto Ti A Ṣeduro",
+        L"Awọn Eto Miiran",
+        L"Tẹ àpèjúwe ti o fẹ lo fun iru faili yii:",
+        L"&Máa lo eto ti a yàn nigbagbogbo lati ṣii iru faili yii",
+        L"&Ṣàwárí...",
+        L"Ti eto ti o fẹ ko ba si ninu akojọ tabi lori kọmputa rẹ, o le <A ID=\"WebSearch\">wa eto ti o yẹ lori Ayélujára</A>.",
+        L"Ṣii pẹlu...",
+        L"Awọn Eto",
+        L"Gbogbo Faili",
+        L"O dara",
+        L"Fagilee",
+        L"Ko si eto ti a forukọsilẹ ti o le ṣii iru faili yii.",
+        L"Eto ti a yàn ko le ṣii faili naa.",
+    }},
+    {0x085D, {  // Inuktitut
+        L"Uijjaq",
+        L"Programmi toqqarlugu fili una uijjarlagu:",
+        L"Fili:",
+        L"Programmit atugaksarijaujut",
+        L"Programmit asingit",
+        L"Nalunaijaut allattuq filimut taassumunnga aturumajatsi:",
+        L"&Tamarmik programmi toqqakkak aturlugu fili taassuma uijjarniarlugu",
+        L"&Qiniq...",
+        L"Programmi pigumajait titiqqanut iluaniittuq imaluunniit qarasaujanniittuq, <A ID=\"WebSearch\">qaritaujakkut programmi naleqquttuq qiniqtuinnarusukkaluaq</A>.",
+        L"Uijjaq...",
+        L"Programmit",
+        L"Filit tamaita",
+        L"Ii",
+        L"Nungutaaq",
+        L"Programmi atiliurutausimajuq inngittuq fili taassuma uijjarniaqtuni.",
+        L"Programmi toqqakkak fili uijjarniaqtuq pijunnaanngittuq.",
+    }},
+    {0x0492, {  // Central Kurdish
+        L"پێی بکەرەوە",
+        L"ئەو پرۆگرامە هەڵبژێرە کە دەتەوێت بەکاربهێنیت بۆ کردنەوەی ئەم فایلە:",
+        L"فایل:",
+        L"پرۆگرامە پێشنیارکراوەکان",
+        L"پرۆگرامەکانی تر",
+        L"ئەو وەسفە بنووسە کە دەتەوێت بۆ ئەم جۆرە فایلە بەکاریبهێنیت:",
+        L"&هەمیشە پرۆگرامە هەڵبژێردراوەکە بەکاربهێنە بۆ کردنەوەی ئەم جۆرە فایلە",
+        L"&گەڕان...",
+        L"ئەگەر ئەو پرۆگرامەی دەتەوێت لە لیستەکە یان لە کۆمپیوتەرەکەتدا نییە، دەتوانیت <A ID=\"WebSearch\">لە وێبدا بەدوای پرۆگرامی گونجاودا بگەڕێیت</A>.",
+        L"پێی بکەرەوە...",
+        L"پرۆگرامەکان",
+        L"هەموو فایلەکان",
+        L"باشە",
+        L"هەڵوەشاندنەوە",
+        L"هیچ پرۆگرامێکی تۆمارکراو ناتوانێت ئەم جۆرە فایلە بکاتەوە.",
+        L"پرۆگرامە هەڵبژێردراوەکە نەیتوانی فایلەکە بکاتەوە.",
+    }},
+    {0x0459, {  // Sindhi
+        L"سان کوليو",
+        L"هن فائل کي کولڻ لاءِ جيڪو پروگرام استعمال ڪرڻ چاهيو ٿا سو چونڊيو:",
+        L"فائل:",
+        L"تجويز ڪيل پروگرام",
+        L"ٻيا پروگرام",
+        L"هن قسم جي فائل لاءِ جيڪا وضاحت استعمال ڪرڻ چاهيو ٿا سا ٽائيپ ڪريو:",
+        L"&هن قسم جي فائل کولڻ لاءِ هميشه چونڊيل پروگرام استعمال ڪريو",
+        L"&برائوز ڪريو...",
+        L"جيڪڏهن گهربل پروگرام فهرست ۾ يا توهان جي ڪمپيوٽر تي نه آهي ته توهان <A ID=\"WebSearch\">ويب تي مناسب پروگرام ڳولي سگهو ٿا</A>.",
+        L"سان کوليو...",
+        L"پروگرام",
+        L"سڀ فائلون",
+        L"ٺيڪ آهي",
+        L"رد ڪريو",
+        L"هن قسم جي فائل کي ڪو به رجسٽرڊ پروگرام نٿو کولي سگهي.",
+        L"چونڊيل پروگرام فائل نه کولي سگهيو.",
+    }},
+    {0x0860, {  // Kashmiri
+        L"سٟتؠ کھولٕو",
+        L"یہِ فایل کھولنہٕ خٲطرٕ تُہؠ یُس پروگرام اِستِمال کرُن یژھان چھِو سُہ ژٲرِو:",
+        L"فایل:",
+        L"تجویٖز کرنہٕ آمٕتؠ پروگرام",
+        L"بیٚیہِ پروگرام",
+        L"یہِ قٕسمٕچ فایلہٕ خٲطرٕ تُہؠ یُس وَضاحَتھ اِستِمال کرُن یژھان چھِو سُہ لیکھِو:",
+        L"&یہِ قٕسمٕچ فایل کھولنہٕ خٲطرٕ ہمیشہٕ مُنتخَب پروگرام اِستِمال کٔرِو",
+        L"&براؤز کٔرِو...",
+        L"اگر یژھان پروگرام فہرستَس منٛز یا تُہنٛدِس کمپیوٗٹرَس پؠٹھ چھُنہٕ، تیٚلہِ تُہؠ ہیٚکِو <A ID=\"WebSearch\">ویبَس پؠٹھ موزوں پروگرام ژھٲنٛڈِتھ</A>۔",
+        L"سٟتؠ کھولٕو...",
+        L"پروگرام",
+        L"سٲری فایلہٕ",
+        L"ٹھیٖکھ",
+        L"مُنسوٗخ کٔرِو",
+        L"یہِ قٕسمٕچ فایل کھولنہٕ خٲطرٕ کانٛہہ رجِسٹرڈ پروگرام چھُنہٕ۔",
+        L"مُنتخَب پروگرامَس فایل کھولنہٕ نہٕ آے۔",
+    }},
+    {0x044F, {  // Sanskrit
+        L"अनेन उद्घाटयतु",
+        L"एतत् सञ्चिकाम् उद्घाटयितुम् इच्छितं कार्यक्रमं चिनोतु:",
+        L"सञ्चिका:",
+        L"अनुशंसितानि कार्यक्रमाणि",
+        L"अन्यानि कार्यक्रमाणि",
+        L"एतादृशायै सञ्चिकायै इच्छितं वर्णनं लिखतु:",
+        L"&एतादृशीं सञ्चिकाम् उद्घाटयितुं सर्वदा चितं कार्यक्रमं प्रयुङ्क्ताम्",
+        L"&अन्वेषयतु...",
+        L"इच्छितं कार्यक्रमं सूच्यां वा भवतः सङ्गणके वा नास्ति चेत्, <A ID=\"WebSearch\">जालपुटे उपयुक्तं कार्यक्रमम् अन्वेष्टुं शक्नोति</A>।",
+        L"अनेन उद्घाटयतु...",
+        L"कार्यक्रमाणि",
+        L"सर्वाः सञ्चिकाः",
+        L"अस्तु",
+        L"निवर्तयतु",
+        L"एतादृशीं सञ्चिकाम् उद्घाटयितुं न कोऽपि पञ्जीकृतः कार्यक्रमः शक्नोति।",
+        L"चितं कार्यक्रमं सञ्चिकाम् उद्घाटयितुं नाशक्नोत्।",
+    }},
+    {0x0451, {  // Tibetan
+        L"འདིས་ཁ་ཕྱེ",
+        L"ཡིག་ཆ་འདི་ཁ་ཕྱེ་བར་བེད་སྤྱོད་བྱེད་འདོད་པའི་མཉེན་ཆས་འདེམས་རོགས་གནང་།",
+        L"ཡིག་ཆ།",
+        L"འོས་སྦྱོར་མཉེན་ཆས།",
+        L"མཉེན་ཆས་གཞན།",
+        L"ཡིག་ཆའི་རིགས་འདིར་བེད་སྤྱོད་བྱེད་འདོད་པའི་གསལ་བཤད་འབྲི་རོགས་གནང་།",
+        L"&ཡིག་ཆའི་རིགས་འདི་ཁ་ཕྱེ་བར་རྟག་པར་འདེམས་པའི་མཉེན་ཆས་བེད་སྤྱོད་བྱེད།",
+        L"&འཚོལ་ཞིབ།...",
+        L"གལ་ཏེ་ཁྱེད་ཀྱིས་འདོད་པའི་མཉེན་ཆས་ཐོ་ཡིག་ནང་དང་ཁྱེད་ཀྱི་རྩིས་འཁོར་ནང་མེད་ན། ཁྱེད་ཀྱིས་<A ID=\"WebSearch\">དྲ་བའི་ནང་དུ་འོས་འཚམས་ཀྱི་མཉེན་ཆས་འཚོལ་ཆོག</A>།",
+        L"འདིས་ཁ་ཕྱེ...",
+        L"མཉེན་ཆས།",
+        L"ཡིག་ཆ་ཡོངས།",
+        L"འགྲིག་འདུག",
+        L"ཕྱིར་འཐེན།",
+        L"ཡིག་ཆའི་རིགས་འདི་ཁ་ཕྱེ་ཐུབ་པའི་ཐོ་འགོད་བྱས་པའི་མཉེན་ཆས་མེད།",
+        L"འདེམས་པའི་མཉེན་ཆས་ཀྱིས་ཡིག་ཆ་དེ་ཁ་ཕྱེ་མ་ཐུབ།",
+    }},
+    {0x0490, {  // Walloon
+        L"Drovi avou",
+        L"Tchoezixhoz li programe ki vos vloz eployî po drovi ci fitchî ci:",
+        L"Fitchî:",
+        L"Programes ricmandés",
+        L"Ôtes programes",
+        L"Tapez ene discrijhaedje ki vos vloz eployî po cisse sôre di fitchî:",
+        L"&Eployî todi li programe tchoezi po drovi cisse sôre di fitchî",
+        L"&Foyter...",
+        L"Si l' programe ki vos vloz n' est nén dins l' djivêye ou so vosse copiutrece, vos ploz <A ID=\"WebSearch\">cweri après on programe ki convént sol Daegntoele</A>.",
+        L"Drovi avou...",
+        L"Programes",
+        L"Tos les fitchîs",
+        L"Oyi",
+        L"Rinoncî",
+        L"Nou programe eredjistré ni sait drovi cisse sôre di fitchî.",
+        L"Li programe tchoezi n' a savou drovi l' fitchî.",
+    }},
+    {0x0485, {  // Sakha
+        L"Көмөтүнэн ас",
+        L"Бу билэни аһарга туттуоххун баҕарар бырагыраамаҕын тал:",
+        L"Билэ:",
+        L"Сүбэлэнэр бырагыраамалар",
+        L"Атын бырагыраамалар",
+        L"Билэ бу көрүҥэр туттуоххун баҕарар быһаарыыгын суруй:",
+        L"&Билэ бу көрүҥүн аһарга куруук талбыт бырагыраамаҕын туттун",
+        L"&Көрүү...",
+        L"Баҕарар бырагыраамаҥ тиһиккэ эбэтэр көмпүүтэргэр суох буоллаҕына, <A ID=\"WebSearch\">Интэриниэккэ сөптөөх бырагырааманы көрдүөххүн сөп</A>.",
+        L"Көмөтүнэн ас...",
+        L"Бырагыраамалар",
+        L"Бары билэлэр",
+        L"Сөп",
+        L"Тохтот",
+        L"Билэ бу көрүҥүн аһар кыахтаах бэлиэтэммит бырагыраама суох.",
+        L"Талбыт бырагыраамаҥ билэни аспата.",
+    }},
+    {0x042E, {  // Upper Sorbian
+        L"Wočinić z",
+        L"Wubjerće program, kotryž chceće wužiwać, zo byšće tutu dataju wočinili:",
+        L"Dataja:",
+        L"Doporučene programy",
+        L"Druhe programy",
+        L"Zapisajće wopisanje, kotrež chceće za tutón typ dataje wužiwać:",
+        L"&Přeco wubrany program wužiwać, zo by so tutón typ dataje wočinił",
+        L"&Přehladać...",
+        L"Jeli požadany program njeje w lisćinje abo na wašim ličaku, móžeće <A ID=\"WebSearch\">w interneće za přihódnym programom pytać</A>.",
+        L"Wočinić z...",
+        L"Programy",
+        L"Wšě dataje",
+        L"W porjadku",
+        L"Přetorhnyć",
+        L"Žadyn registrowany program njemóže tutón typ dataje wočinić.",
+        L"Wubrany program njemóžeše dataju wočinić.",
+    }},
+    {0x082E, {  // Lower Sorbian
+        L"Wócyniś z",
+        L"Wubjeŕśo program, kótaryž cośo wužywaś, aby toś tu dataju wócynił:",
+        L"Dataja:",
+        L"Dopórucone programy",
+        L"Druge programy",
+        L"Zapišćo wopisanje, kótarež cośo za toś ten typ dataje wužywaś:",
+        L"&Pśecej wubrany program wužywaś, aby toś ten typ dataje wócynił",
+        L"&Pśeglědaś...",
+        L"Jolic požedany program njejo w lisćinje abo na wašom licaku, móžośo <A ID=\"WebSearch\">w interneśe za pśigódnym programom pytaś</A>.",
+        L"Wócyniś z...",
+        L"Programy",
+        L"Wšykne dataje",
+        L"W pórěźe",
+        L"Pśetergnuś",
+        L"Žeden registrěrowany program njamóžo toś ten typ dataje wócyniś.",
+        L"Wubrany program njamóžašo dataju wócyniś.",
+    }},
+    {0x047E, {  // Breton
+        L"Digeriñ gant",
+        L"Dibabit ar goulev a fell deoc'h implijout evit digeriñ ar restr-mañ:",
+        L"Restr:",
+        L"Goulevioù erbedet",
+        L"Goulevioù all",
+        L"Skrivit un deskrivadur a fell deoc'h implijout evit ar seurt restr-mañ:",
+        L"&Implijout bepred ar goulev dibabet evit digeriñ ar seurt restr-mañ",
+        L"&Furchal...",
+        L"Ma n'emañ ket ar goulev a fell deoc'h el listenn pe war hoc'h urzhiataer e c'hallit <A ID=\"WebSearch\">klask ur goulev dereat war ar Gwiad</A>.",
+        L"Digeriñ gant...",
+        L"Goulevioù",
+        L"An holl restroù",
+        L"Mat eo",
+        L"Nullañ",
+        L"N'eus goulev enrollet ebet a c'hall digeriñ ar seurt restr-mañ.",
+        L"N'eus ket deuet a-benn ar goulev dibabet da zigeriñ ar restr.",
+    }},
+    {0x0482, {  // Occitan
+        L"Dobrir amb",
+        L"Causissètz lo programa que volètz utilizar per dobrir aqueste fichièr:",
+        L"Fichièr:",
+        L"Programas recomandats",
+        L"Autres programas",
+        L"Picatz una descripcion que volètz utilizar per aqueste tipe de fichièr:",
+        L"&Utilizar totjorn lo programa causit per dobrir aqueste tipe de fichièr",
+        L"&Percórrer...",
+        L"Se lo programa que volètz es pas dins la lista ni sus vòstre ordenador, podètz <A ID=\"WebSearch\">cercar lo programa apropriat sul Web</A>.",
+        L"Dobrir amb...",
+        L"Programas",
+        L"Totes los fichièrs",
+        L"D'acòrdi",
+        L"Anullar",
+        L"Cap de programa enregistrat pòt pas dobrir aqueste tipe de fichièr.",
+        L"Lo programa causit a pas pogut dobrir lo fichièr.",
+    }},
+    {0x0483, {  // Corsican
+        L"Apre cù",
+        L"Sceglite u prugramma chì vulete usà per apre stu schedariu:",
+        L"Schedariu:",
+        L"Prugrammi cunsigliati",
+        L"Altri prugrammi",
+        L"Scrivite una discrizzione chì vulete usà per stu tipu di schedariu:",
+        L"&Usà sempre u prugramma sceltu per apre stu tipu di schedariu",
+        L"&Sfuglià...",
+        L"S'è u prugramma chì vulete ùn hè micca in a lista o nant'à u vostru urdinatore, pudete <A ID=\"WebSearch\">circà u prugramma adattu nant'à u Web</A>.",
+        L"Apre cù...",
+        L"Prugrammi",
+        L"Tutti i schedarii",
+        L"Và bè",
+        L"Annullà",
+        L"Nisun prugramma arregistratu pò apre stu tipu di schedariu.",
+        L"U prugramma sceltu ùn hà pussutu apre u schedariu.",
+    }},
+    {0x046F, {  // Greenlandic
+        L"Ammagaat",
+        L"Toqqaruk programmi atorumanerit fili una ammarniarlugu:",
+        L"Fili:",
+        L"Programmit innersuunneqartut",
+        L"Programmit allat",
+        L"Allaguk nassuiaat atorumanerit fili taama ittunut:",
+        L"&Tamatiinnarpiit programmi toqqakkak atoruk fili taama ittunut ammarniarlugit",
+        L"&Ujarlerit...",
+        L"Programmi pigumanerit allattorsimaffimmi imaluunniit qarasaatianni inngippat, <A ID=\"WebSearch\">Internettimi programmi naleqquttoq ujarlerisinnaavat</A>.",
+        L"Ammagaat...",
+        L"Programmit",
+        L"Filit tamaasa",
+        L"Aap",
+        L"Atorunnaarsiguk",
+        L"Programmi allattorsimasoq ataaseq inngilaq fili taama ittunik ammarniarsinnaasoq.",
+        L"Programmi toqqakkak fili ammarniarsinnaanngilai.",
+    }},
+    {0x0438, {  // Faroese
+        L"Lat upp við",
+        L"Vel forritið, sum tú vilt brúka at lata hesa fílu upp:",
+        L"Fíla:",
+        L"Tilmælt forrit",
+        L"Onnur forrit",
+        L"Skriva eina frágreiðing, sum tú vilt brúka til hesa fíluslag:",
+        L"&Brúka altíð valda forritið at lata hesa fíluslag upp",
+        L"&Kaga...",
+        L"Um forritið, sum tú vilt hava, ikki er á listanum ella á tínari teldu, kanst tú <A ID=\"WebSearch\">leita eftir hóskandi forriti á netinum</A>.",
+        L"Lat upp við...",
+        L"Forrit",
+        L"Allar fílur",
+        L"Í lagi",
+        L"Angra",
+        L"Einki skrásett forrit kann lata hesa fíluslag upp.",
+        L"Valda forritið kundi ikki lata fíluna upp.",
+    }},
 };
 
 static std::atomic<const LocalePack*> g_CurrentLocalePack{&g_Locales[0]};
@@ -1096,17 +2760,15 @@ enum class DefaultBehavior {
     OpenSettings,
 };
 
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-// enum class ThemeMode {
-//     Auto,
-//     Light,
-//     Dark,
-// };
+enum class ThemeMode {
+    Auto,
+    Light,
+    Dark,
+};
 
 static std::atomic<bool> g_replaceSystemDialog{true};
 static std::atomic<bool> g_showWebLink{true};
-// DISABLED DARK THEME: static std::atomic<ThemeMode> g_themeMode{ThemeMode::Auto};
+static std::atomic<ThemeMode> g_themeMode{ThemeMode::Auto};
 static std::atomic<DefaultBehavior> g_defaultBehavior{DefaultBehavior::Disabled};
 
 static const LocalePack* TryFindLocalePack(LANGID langId) {
@@ -1219,7 +2881,97 @@ static void DetermineLocale() {
             {L"bg", 0x0402}, {L"български", 0x0402}, {L"bulgarian", 0x0402},
             {L"sk", 0x041B}, {L"slovenčina", 0x041B}, {L"slovak", 0x041B},
             {L"hr", 0x041A}, {L"hrvatski", 0x041A}, {L"croatian", 0x041A},
-            {L"id", 0x0421}, {L"bahasa indonesia", 0x0421}, {L"indonesian", 0x0421}
+            {L"id", 0x0421}, {L"bahasa indonesia", 0x0421}, {L"indonesian", 0x0421},
+            {L"af", 0x0436}, {L"afrikaans", 0x0436},
+            {L"sq", 0x041C}, {L"albanian", 0x041C},
+            {L"am", 0x045E}, {L"amharic", 0x045E},
+            {L"hy", 0x042B}, {L"armenian", 0x042B},
+            {L"as", 0x044D}, {L"assamese", 0x044D},
+            {L"az", 0x042C}, {L"azerbaijani", 0x042C},
+            {L"ba", 0x046D}, {L"bashkir", 0x046D},
+            {L"eu", 0x042D}, {L"basque", 0x042D},
+            {L"be", 0x0423}, {L"belarusian", 0x0423},
+            {L"bn", 0x0845}, {L"bengali", 0x0845},
+            {L"bs", 0x141A}, {L"bosnian", 0x141A},
+            {L"ca", 0x0403}, {L"catalan", 0x0403},
+            {L"chr", 0x045C}, {L"cherokee", 0x045C},
+            {L"prs", 0x048C}, {L"dari", 0x048C},
+            {L"dv", 0x0465}, {L"divehi", 0x0465},
+            {L"et", 0x0425}, {L"estonian", 0x0425},
+            {L"fil", 0x0464}, {L"filipino", 0x0464},
+            {L"fy", 0x0462}, {L"western frisian", 0x0462},
+            {L"gl", 0x0456}, {L"galician", 0x0456},
+            {L"ka", 0x0437}, {L"georgian", 0x0437},
+            {L"gu", 0x0447}, {L"gujarati", 0x0447},
+            {L"ha", 0x0468}, {L"hausa", 0x0468},
+            {L"hi", 0x0439}, {L"hindi", 0x0439},
+            {L"is", 0x040F}, {L"icelandic", 0x040F},
+            {L"ig", 0x0470}, {L"igbo", 0x0470},
+            {L"ga", 0x083C}, {L"irish", 0x083C},
+            {L"xh", 0x0434}, {L"xhosa", 0x0434},
+            {L"zu", 0x0435}, {L"zulu", 0x0435},
+            {L"kn", 0x044B}, {L"kannada", 0x044B},
+            {L"kk", 0x043F}, {L"kazakh", 0x043F},
+            {L"km", 0x0453}, {L"khmer", 0x0453},
+            {L"rw", 0x0487}, {L"kinyarwanda", 0x0487},
+            {L"sw", 0x0441}, {L"kiswahili", 0x0441},
+            {L"kok", 0x0457}, {L"konkani", 0x0457},
+            {L"ky", 0x0440}, {L"kyrgyz", 0x0440},
+            {L"lo", 0x0454}, {L"lao", 0x0454},
+            {L"lv", 0x0426}, {L"latvian", 0x0426},
+            {L"lt", 0x0427}, {L"lithuanian", 0x0427},
+            {L"lb", 0x046E}, {L"luxembourgish", 0x046E},
+            {L"mk", 0x042F}, {L"macedonian", 0x042F},
+            {L"ms", 0x043E}, {L"malay", 0x043E},
+            {L"ml", 0x044C}, {L"malayalam", 0x044C},
+            {L"mt", 0x043A}, {L"maltese", 0x043A},
+            {L"mi", 0x0481}, {L"maori", 0x0481},
+            {L"mr", 0x044E}, {L"marathi", 0x044E},
+            {L"mn", 0x0450}, {L"mongolian", 0x0450},
+            {L"my", 0x0455}, {L"burmese", 0x0455},
+            {L"ne", 0x0461}, {L"nepali", 0x0461},
+            {L"nn", 0x0814}, {L"norwegian nynorsk", 0x0814},
+            {L"or", 0x0448}, {L"odia", 0x0448},
+            {L"ps", 0x0463}, {L"pashto", 0x0463},
+            {L"fa", 0x0429}, {L"persian", 0x0429},
+            {L"pa", 0x0446}, {L"punjabi", 0x0446},
+            {L"quz", 0x046B}, {L"quechua", 0x046B},
+            {L"gd", 0x0491}, {L"scottish gaelic", 0x0491},
+            {L"sr-Latn", 0x241A}, {L"serbian (latin)", 0x241A},
+            {L"sr-Cyrl", 0x281A}, {L"serbian (cyrillic)", 0x281A},
+            {L"nso", 0x046C}, {L"northern sotho", 0x046C},
+            {L"tn", 0x0432}, {L"tswana", 0x0432},
+            {L"si", 0x045B}, {L"sinhala", 0x045B},
+            {L"sl", 0x0424}, {L"slovenian", 0x0424},
+            {L"tg", 0x0428}, {L"tajik", 0x0428},
+            {L"ta", 0x0449}, {L"tamil", 0x0449},
+            {L"tt", 0x0444}, {L"tatar", 0x0444},
+            {L"te", 0x044A}, {L"telugu", 0x044A},
+            {L"th", 0x041E}, {L"thai", 0x041E},
+            {L"ti", 0x0473}, {L"tigrinya", 0x0473},
+            {L"tk", 0x0442}, {L"turkmen", 0x0442},
+            {L"ur", 0x0420}, {L"urdu", 0x0420},
+            {L"ug", 0x0480}, {L"uyghur", 0x0480},
+            {L"uz", 0x0443}, {L"uzbek", 0x0443},
+            {L"vi", 0x042A}, {L"vietnamese", 0x042A},
+            {L"cy", 0x0452}, {L"welsh", 0x0452},
+            {L"wo", 0x0488}, {L"wolof", 0x0488},
+            {L"yo", 0x046A}, {L"yoruba", 0x046A},
+            {L"iu", 0x085D}, {L"inuktitut", 0x085D},
+            {L"ckb", 0x0492}, {L"central kurdish", 0x0492},
+            {L"sd", 0x0459}, {L"sindhi", 0x0459},
+            {L"ks", 0x0860}, {L"kashmiri", 0x0860},
+            {L"sa", 0x044F}, {L"sanskrit", 0x044F},
+            {L"bo", 0x0451}, {L"tibetan", 0x0451},
+            {L"wa", 0x0490}, {L"walloon", 0x0490},
+            {L"sah", 0x0485}, {L"sakha", 0x0485},
+            {L"hsb", 0x042E}, {L"upper sorbian", 0x042E},
+            {L"dsb", 0x082E}, {L"lower sorbian", 0x082E},
+            {L"br", 0x047E}, {L"breton", 0x047E},
+            {L"oc", 0x0482}, {L"occitan", 0x0482},
+            {L"co", 0x0483}, {L"corsican", 0x0483},
+            {L"kl", 0x046F}, {L"greenlandic", 0x046F},
+            {L"fo", 0x0438}, {L"faroese", 0x0438},
         };
 
         for (const auto& entry : kMap) {
@@ -1246,32 +2998,27 @@ static void DetermineLocale() {
            requested.c_str(), selected->langId, GetUserDefaultUILanguage(), GetSystemDefaultUILanguage());
 }
 
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-// static bool AppsUseDarkTheme() {
-//     DWORD appsUseLightTheme = 1;
-//     DWORD bytes = sizeof(appsUseLightTheme);
-//     const LSTATUS status = RegGetValueW(
-//         HKEY_CURRENT_USER,
-//         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-//         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr,
-//         &appsUseLightTheme, &bytes);
-//     return status == ERROR_SUCCESS && appsUseLightTheme == 0;
-// }
+static bool AppsUseDarkTheme() {
+    DWORD appsUseLightTheme = 1;
+    DWORD bytes = sizeof(appsUseLightTheme);
+    const LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr,
+        &appsUseLightTheme, &bytes);
+    return status == ERROR_SUCCESS && appsUseLightTheme == 0;
+}
 
-// DISABLED DARK THEME - stub that keeps the dialog on the light theme.
-// The original implementation is preserved below, kept for future use.
 static bool ResolveDarkMode() {
-    return false;
-    // switch (g_themeMode.load(std::memory_order_acquire)) {
-    //     case ThemeMode::Dark:
-    //         return true;
-    //     case ThemeMode::Light:
-    //         return false;
-    //     case ThemeMode::Auto:
-    //     default:
-    //         return AppsUseDarkTheme();
-    // }
+    switch (g_themeMode.load(std::memory_order_acquire)) {
+        case ThemeMode::Dark:
+            return true;
+        case ThemeMode::Light:
+            return false;
+        case ThemeMode::Auto:
+        default:
+            return AppsUseDarkTheme();
+    }
 }
 
 static void LoadSettings() {
@@ -1286,16 +3033,14 @@ static void LoadSettings() {
             (language.get() && *language.get()) ? language.get() : L"auto";
     }
 
-    // DISABLED DARK THEME - the "darkMode" option was removed from the
-    // settings; this block is kept commented for future use:
-    // WindhawkUtils::StringSetting darkMode =
-    //     WindhawkUtils::StringSetting::make(L"darkMode");
-    // ThemeMode theme = ThemeMode::Auto;
-    // if (darkMode.get() && !_wcsicmp(darkMode.get(), L"dark")) {
-    //     theme = ThemeMode::Dark;
-    // } else if (darkMode.get() && !_wcsicmp(darkMode.get(), L"light")) {
-    //     theme = ThemeMode::Light;
-    // }
+    WindhawkUtils::StringSetting darkMode =
+        WindhawkUtils::StringSetting::make(L"darkMode");
+    ThemeMode theme = ThemeMode::Auto;
+    if (darkMode.get() && !_wcsicmp(darkMode.get(), L"dark")) {
+        theme = ThemeMode::Dark;
+    } else if (darkMode.get() && !_wcsicmp(darkMode.get(), L"light")) {
+        theme = ThemeMode::Light;
+    }
 
     WindhawkUtils::StringSetting defaultBehavior =
         WindhawkUtils::StringSetting::make(L"defaultAssociationBehavior");
@@ -1306,7 +3051,7 @@ static void LoadSettings() {
             : DefaultBehavior::Disabled;
 
     g_defaultBehavior.store(behavior, std::memory_order_release);
-    // g_themeMode.store(theme, std::memory_order_release);  // DISABLED DARK THEME
+    g_themeMode.store(theme, std::memory_order_release);
     g_showWebLink.store(web, std::memory_order_release);
     g_replaceSystemDialog.store(replace, std::memory_order_release);
     DetermineLocale();
@@ -1321,6 +3066,7 @@ struct HandlerEntry {
     std::wstring displayName;
     std::wstring internalName;
     std::wstring progId;
+    std::wstring companyName;
     bool recommended = false;
     bool browsed = false;
     int imageIndex = -1;
@@ -1341,17 +3087,21 @@ struct PickerState {
     ImageListOwner images;
     IconOwner headerIcon;
     FontOwner font;
-    // Dark background brushes (DISABLED DARK THEME - kept for future use):
-    // BrushOwner darkBgBrush;
-    // BrushOwner darkCardBrush;
+    BrushOwner darkBgBrush;
+    BrushOwner darkCardBrush;
     HWND window = nullptr;
     HWND list = nullptr;
     HWND description = nullptr;
     HWND alwaysUse = nullptr;
-    // Dark-mode checkbox label companion and owner-draw hover tracking
-    // (DISABLED DARK THEME - kept for future use):
-    // HWND alwaysUseLabel = nullptr;
-    // int hoverButton = 0;
+    // Dark mode runs the "Always use" checkbox as BS_OWNERDRAW, and an
+    // owner-drawn button does not keep a reliable BM_GETCHECK state, so
+    // the check state lives here. Light mode keeps using BM_GETCHECK on
+    // the untouched BS_AUTOCHECKBOX control.
+    bool alwaysUseChecked = false;
+    int hoverButton = 0;
+    // Index of the list row under the pointer, for the Windows 7 flyout
+    // style hover frame (dark theme only, -1 when nothing is hovered).
+    int hoverRow = -1;
     bool finished = false;
     bool accepted = false;
     bool makeDefaultRequested = false;
@@ -1359,7 +3109,6 @@ struct PickerState {
     bool openDefaultSettings = false;
     bool listUsesGroups = false;
     bool hasOtherGroup = false;
-    // Always false while the dark theme is disabled (see ResolveDarkMode).
     bool isDarkMode = false;
     int chosenIndex = -1;
 };
@@ -1696,6 +3445,92 @@ static std::wstring ApplicationDisplayName(HKEY applicationKey,
     return display;
 }
 
+// Resolves a possibly-bare executable reference (no directory, relying on
+// PATH lookup) to a real file path, the same way ExecutableFromCommand
+// does for registry command lines. Returns an empty string if the file
+// can't be found at all.
+static std::wstring ResolveExecutablePath(const std::wstring& executable) {
+    if (executable.empty()) return {};
+    if (GetFileAttributesW(executable.c_str()) != INVALID_FILE_ATTRIBUTES)
+        return executable;
+    wchar_t resolved[MAX_PATH] = {};
+    if (SearchPathW(nullptr, executable.c_str(), L".exe",
+                    ARRAYSIZE(resolved), resolved, nullptr)) {
+        return resolved;
+    }
+    return {};
+}
+
+// Reads a single string from the executable's VERSIONINFO resource
+// (\StringFileInfo\<lang><codepage>\<key>, using the file's first
+// translation block). Returns an empty string if the resource, the
+// translation table or the requested key is missing.
+static std::wstring ExecutableVersionString(const std::wstring& executable,
+                                            PCWSTR key) {
+    DWORD ignored = 0;
+    const DWORD versionBytes =
+        GetFileVersionInfoSizeW(executable.c_str(), &ignored);
+    if (!versionBytes || versionBytes >= 16 * 1024 * 1024) return {};
+    try {
+        std::vector<BYTE> version(versionBytes);
+        if (!GetFileVersionInfoW(executable.c_str(), 0, versionBytes,
+                                 version.data())) {
+            return {};
+        }
+        struct Translation { WORD language; WORD codePage; };
+        Translation* translations = nullptr;
+        UINT translationBytes = 0;
+        if (!VerQueryValueW(version.data(), L"\\VarFileInfo\\Translation",
+                            reinterpret_cast<void**>(&translations),
+                            &translationBytes) ||
+            translationBytes < sizeof(Translation)) {
+            return {};
+        }
+        wchar_t query[128] = {};
+        swprintf_s(query, L"\\StringFileInfo\\%04x%04x\\%s",
+                   translations[0].language, translations[0].codePage, key);
+        PWSTR value = nullptr;
+        UINT chars = 0;
+        if (VerQueryValueW(version.data(), query,
+                           reinterpret_cast<void**>(&value), &chars) &&
+            value && chars > 1) {
+            return std::wstring(value, chars - 1);
+        }
+    } catch (...) {
+    }
+    return {};
+}
+
+// Publisher/company subtitle shown under the program name, matching the
+// second line the real Windows 7 dialog draws under each tile (e.g.
+// "BitTorrent, Inc." under "uTorrent"). IAssocHandler::GetName() often
+// returns a bare name or an identifier rather than a full path (unlike
+// the registry-fallback path, which always has a real executable), so
+// this also falls back to resolving the ProgID's own shell\open\command
+// the same way HandlerExecutableExists validates it, before giving up.
+static std::wstring ExecutableFromProgId(const std::wstring& progId) {
+    if (progId.empty()) return {};
+    wchar_t subKey[512] = {};
+    if (swprintf_s(subKey, L"%s\\shell\\open\\command", progId.c_str()) <= 0)
+        return {};
+    wchar_t command[32768] = {};
+    DWORD bytes = sizeof(command);
+    if (RegGetValueW(HKEY_CLASSES_ROOT, subKey, nullptr,
+                     RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, command,
+                     &bytes) != ERROR_SUCCESS) {
+        return {};
+    }
+    return ExecutableFromCommand(command);
+}
+
+static std::wstring ExecutableCompanyName(const std::wstring& internalName,
+                                          const std::wstring& progId = L"") {
+    std::wstring resolved = ResolveExecutablePath(internalName);
+    if (resolved.empty() && !progId.empty()) resolved = ExecutableFromProgId(progId);
+    if (resolved.empty()) return {};
+    return ExecutableVersionString(resolved, L"CompanyName");
+}
+
 // ReactOS first enumerates HKCR\\Applications, then marks extension-specific
 // entries as recommended. This minimal fallback is especially important for a
 // file with no extension, for which SHAssocEnumHandlers can return no object.
@@ -1746,11 +3581,19 @@ static bool EnumerateRegistryApplications(PickerState& state) {
         }
         if (!duplicate && HandlerExecutableExists(executable, ApplicationProgIdForExecutable(executable))) {
             HandlerEntry entry;
-            entry.browsed = true;
+            // Registry-enumerated applications are NOT flagged browsed:
+            // they already have a registered ProgID with a command
+            // template, so they launch through InvokeSelectedHandler
+            // with their own template and arguments. Flagging them
+            // browsed would write HKCU\...\Applications keys the user
+            // never asked for and launch them as a bare
+            // "app.exe" "file" command line. Only entries the user
+            // picked through the Browse dialog carry browsed = true.
             entry.internalName = executable;
             entry.progId = ApplicationProgIdForExecutable(executable);
             entry.displayName = ApplicationDisplayName(
                 application.Get(), executableName, executable);
+            entry.companyName = ExecutableCompanyName(executable, entry.progId);
             if (!entry.displayName.empty())
                 state.handlers.push_back(std::move(entry));
         }
@@ -1796,8 +3639,10 @@ static bool EnumerateHandlers(PickerState& state) {
         if (!HandlerExecutableExists(entry.internalName, entry.progId))
             continue;
         entry.recommended = entry.handler->IsRecommended() == S_OK;
+entry.companyName = ExecutableCompanyName(entry.internalName);
         state.handlers.push_back(std::move(entry));
     }
+
 
     std::stable_sort(state.handlers.begin(), state.handlers.end(),
         [](const HandlerEntry& a, const HandlerEntry& b) {
@@ -1843,7 +3688,6 @@ static HICON EntryIcon(const HandlerEntry& entry) {
     }
     return DefaultAppIcon();
 }
-
 
 // 32x32 BGRA artwork derived from the user-supplied transparent PNG
 // (document + magnifier), Lanczos-resampled at build time and encoded as raw
@@ -2008,7 +3852,6 @@ enum : int {
     IDC_SOW_ALWAYS_USE,
     IDC_SOW_BROWSE,
     IDC_SOW_WEB,
-    // IDC_SOW_ALWAYS_USE_LABEL,  // DISABLED DARK THEME (checkbox label companion)
 };
 
 enum : int { GROUP_RECOMMENDED = 1, GROUP_OTHER = 2 };
@@ -2061,129 +3904,142 @@ static HWND Child(HWND parent, DWORD exStyle, PCWSTR cls, PCWSTR text,
     return window;
 }
 
-// DISABLED DARK THEME - the checkbox label helper is kept commented
-// below, together with its forward declaration:
-// static void EnsureAlwaysUseLabel(PickerState& state);
+// Forward declarations: used by the window procedure and by
+// ApplyPickerTheme before their definitions further down.
+static void EnsureAlwaysUseCheckbox(PickerState& state);
+static LRESULT CALLBACK PickerListSubclassProc(HWND window, UINT message,
+                                               WPARAM wParam, LPARAM lParam,
+                                               UINT_PTR idSubclass,
+                                               DWORD_PTR referenceData);
+static bool AlwaysUseChecked(PickerState& state);
+static void SetAlwaysUseChecked(PickerState& state, bool checked);
+static bool SelectedHandlerLaunchable(const HandlerEntry& entry);
 
 static void RefreshPickerThemeResources(PickerState& state) {
-    // ResolveDarkMode() always returns false while the dark theme is
-    // disabled (see its stub above); the dark brushes are kept commented
-    // for future use.
     state.isDarkMode = ResolveDarkMode();
-    // if (state.isDarkMode) {
-    //     if (!state.darkBgBrush)
-    //         state.darkBgBrush.Reset(CreateSolidBrush(RGB(32, 32, 32)));
-    //     if (!state.darkCardBrush)
-    //         state.darkCardBrush.Reset(CreateSolidBrush(RGB(45, 45, 45)));
-    // } else {
-    //     state.darkBgBrush.Reset();
-    //     state.darkCardBrush.Reset();
-    // }
+    if (state.isDarkMode) {
+        if (!state.darkBgBrush)
+            state.darkBgBrush.Reset(CreateSolidBrush(RGB(32, 32, 32)));
+        if (!state.darkCardBrush)
+            state.darkCardBrush.Reset(CreateSolidBrush(RGB(45, 45, 45)));
+    } else {
+        state.darkBgBrush.Reset();
+        state.darkCardBrush.Reset();
+    }
 }
 
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-// static void SetImmersiveDarkTitleBar(HWND window, bool enabled) {
-//     if (!window) return;
-//     BOOL useDark = enabled ? TRUE : FALSE;
-//     HRESULT hr = DwmSetWindowAttribute(
-//         window, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
-//     if (FAILED(hr) &&
-//         DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 !=
-//             DWMWA_USE_IMMERSIVE_DARK_MODE) {
-//         DwmSetWindowAttribute(
-//             window, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1,
-//             &useDark, sizeof(useDark));
-//     }
-// }
+static void SetImmersiveDarkTitleBar(HWND window, bool enabled) {
+    if (!window) return;
+    BOOL useDark = enabled ? TRUE : FALSE;
+    HRESULT hr = DwmSetWindowAttribute(
+        window, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
+    if (FAILED(hr) &&
+        DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 !=
+            DWMWA_USE_IMMERSIVE_DARK_MODE) {
+        DwmSetWindowAttribute(
+            window, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1,
+            &useDark, sizeof(useDark));
+    }
+}
 
 static void ApplyPickerTheme(PickerState& state) {
     RefreshPickerThemeResources(state);
-
-    // DISABLED DARK THEME - the dark reconfiguration below is kept
-    // commented for future use (see the long note above):
-    // SetImmersiveDarkTitleBar(state.window, state.isDarkMode);
-    // DarkModeActivation::Apply(state.window, state.isDarkMode);
-    // (the activation call used to run before the per-control theme calls
-    // so comctl32 switched its group-header/selection/client-edge/scrollbar
-    // palettes to the dark variants)
+    SetImmersiveDarkTitleBar(state.window, state.isDarkMode);
+    // Must run before the per-control SetWindowTheme calls below: without
+    // this, comctl32 never switches its internal group-header, selection,
+    // client-edge and scrollbar palettes to the dark variants, even though
+    // SetWindowTheme(..., L"DarkMode_Explorer", ...) is applied further down.
+    DarkModeActivation::Apply(state.window, state.isDarkMode);
 
     if (state.list) {
-        // Dark variant (DISABLED DARK THEME - kept for future use):
-        // if (state.isDarkMode) {
-        //     SetWindowTheme(state.list, L"DarkMode_Explorer", nullptr);
-        //     ListView_SetBkColor(state.list, RGB(32, 32, 32));
-        //     ListView_SetTextBkColor(state.list, RGB(32, 32, 32));
-        //     ListView_SetTextColor(state.list, RGB(240, 240, 240));
-        // } else {
-        SetWindowTheme(state.list, L"Explorer", nullptr);
-        ListView_SetBkColor(state.list, RGB(255, 255, 255));
-        ListView_SetTextBkColor(state.list, RGB(255, 255, 255));
-        ListView_SetTextColor(state.list, RGB(0, 0, 0));
-        // }
+        if (state.isDarkMode) {
+            SetWindowTheme(state.list, L"DarkMode_Explorer", nullptr);
+            ListView_SetBkColor(state.list, RGB(32, 32, 32));
+            ListView_SetTextBkColor(state.list, RGB(32, 32, 32));
+            ListView_SetTextColor(state.list, RGB(240, 240, 240));
+        } else {
+            SetWindowTheme(state.list, L"Explorer", nullptr);
+            ListView_SetBkColor(state.list, RGB(255, 255, 255));
+            ListView_SetTextBkColor(state.list, RGB(255, 255, 255));
+            ListView_SetTextColor(state.list, RGB(0, 0, 0));
+        }
     }
 
-    // DISABLED DARK THEME - the dark-only parts below are kept commented
-    // for future use:
-    //   - the "Always use" checkbox label was emptied and moved to a
-    //     companion static (IDC_SOW_ALWAYS_USE_LABEL) so the checkbox glyph
-    //     could take the DarkMode_Explorer theme while the label text stayed
-    //     light through WM_CTLCOLORSTATIC (network flyout approach);
-    //   - the three buttons became BS_OWNERDRAW and were painted by
-    //     WM_DRAWITEM with the network flyout dark palette;
-    //   - the description edit dropped its WS_EX_CLIENTEDGE border.
-    // Original code:
-    // const bool dark = state.isDarkMode;
-    // if (state.alwaysUse) {
-    //     SetWindowTextW(state.alwaysUse, dark ? L"" : LOC(STR_ALWAYS_USE));
-    //     SetWindowTheme(state.alwaysUse,
-    //                    dark ? L"DarkMode_Explorer" : nullptr, nullptr);
-    // }
-    // if (dark) EnsureAlwaysUseLabel(state);
-    // if (state.alwaysUseLabel) {
-    //     SetWindowTextW(state.alwaysUseLabel, LOC(STR_ALWAYS_USE));
-    //     ShowWindow(state.alwaysUseLabel, dark ? SW_SHOW : SW_HIDE);
-    //     EnableWindow(state.alwaysUseLabel,
-    //                  state.alwaysUse ? IsWindowEnabled(state.alwaysUse)
-    //                                  : TRUE);
-    // }
-    // static const int kOwnerDrawButtons[] = {IDOK, IDCANCEL, IDC_SOW_BROWSE};
-    // for (const int id : kOwnerDrawButtons) {
-    //     HWND button = GetDlgItem(state.window, id);
-    //     if (!button) continue;
-    //     LONG_PTR style = GetWindowLongPtrW(button, GWL_STYLE);
-    //     if (dark) {
-    //         style |= BS_OWNERDRAW;
-    //         SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
-    //     } else {
-    //         style &= ~BS_OWNERDRAW;
-    //         SetWindowTheme(button, nullptr, nullptr);
-    //     }
-    //     SetWindowLongPtrW(button, GWL_STYLE, style);
-    //     SetWindowPos(button, nullptr, 0, 0, 0, 0,
-    //                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-    //                      SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    // }
-    // if (state.description) {
-    //     LONG_PTR exStyle = GetWindowLongPtrW(state.description, GWL_EXSTYLE);
-    //     if (dark)
-    //         exStyle &= ~WS_EX_CLIENTEDGE;
-    //     else
-    //         exStyle |= WS_EX_CLIENTEDGE;
-    //     SetWindowLongPtrW(state.description, GWL_EXSTYLE, exStyle);
-    //     SetWindowPos(state.description, nullptr, 0, 0, 0, 0,
-    //                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-    //                      SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    // }
+    const bool dark = state.isDarkMode;
+
+    // "Always use" checkbox. Dark mode needs a BS_OWNERDRAW control so
+    // the glyph can be painted as a dark square with a gray border and
+    // an azure check (see WM_DRAWITEM), including its own label text:
+    // no companion static is used anymore, so nothing can repaint the
+    // text with a dark color while hovering. The button type style
+    // cannot be switched reliably after creation, so the control is
+    // recreated whenever the theme requires a different type. Light
+    // mode keeps the classic BS_AUTOCHECKBOX control untouched.
+    EnsureAlwaysUseCheckbox(state);
+
+    // Buttons: owner-drawn in dark mode with the network flyout dark
+    // palette (see WM_DRAWITEM); light mode keeps the standard button
+    // styles untouched.
+    static const int kOwnerDrawButtons[] = {IDOK, IDCANCEL, IDC_SOW_BROWSE};
+    for (const int id : kOwnerDrawButtons) {
+        HWND button = GetDlgItem(state.window, id);
+        if (!button) continue;
+        LONG_PTR style = GetWindowLongPtrW(button, GWL_STYLE);
+        if (dark) {
+            style |= BS_OWNERDRAW;
+            SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
+        } else {
+            style &= ~BS_OWNERDRAW;
+            SetWindowTheme(button, nullptr, nullptr);
+        }
+        SetWindowLongPtrW(button, GWL_STYLE, style);
+        SetWindowPos(button, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                         SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    // The description edit drops its light 3D client edge in dark mode:
+    // the sunken white border would otherwise stay visible against the
+    // dark background. WS_BORDER is not used because the non-client
+    // border is painted with the black COLOR_WINDOWFRAME, which is
+    // invisible on the dark background; instead the dialog paints a
+    // 1 pixel gray frame around the control in WM_PAINT (see
+    // PaintDarkControlFrames).
+    if (state.description) {
+        LONG_PTR exStyle = GetWindowLongPtrW(state.description, GWL_EXSTYLE);
+        LONG_PTR style = GetWindowLongPtrW(state.description, GWL_STYLE);
+        if (dark) {
+            exStyle &= ~WS_EX_CLIENTEDGE;
+            style &= ~WS_BORDER;
+        } else {
+            exStyle |= WS_EX_CLIENTEDGE;
+            style &= ~WS_BORDER;
+        }
+        SetWindowLongPtrW(state.description, GWL_EXSTYLE, exStyle);
+        SetWindowLongPtrW(state.description, GWL_STYLE, style);
+        SetWindowPos(state.description, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                         SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
 
     for (HWND child = state.window ? GetWindow(state.window, GW_CHILD) : nullptr;
          child; child = GetWindow(child, GW_HWNDNEXT)) {
-        // Dark mode gave every non-list child the DarkMode_Explorer theme,
-        // except the statics and the checkbox/label pair (DISABLED DARK
-        // THEME - kept for future use). Light mode leaves them unthemed.
-        if (child != state.list) {
-            SetWindowTheme(child, nullptr, nullptr);
+        if (child == state.list || child == state.alwaysUse) {
+            continue;
         }
+        wchar_t className[32] = {};
+        GetClassNameW(child, className, ARRAYSIZE(className));
+        // Static labels stay unthemed in dark mode so WM_CTLCOLORSTATIC
+        // can draw them with the light text color: themed statics paint
+        // their text with the theme's own color, ignoring SetTextColor(),
+        // which would leave dark text on the dark background. Light mode
+        // already left them unthemed, so nothing changes there.
+        if (_wcsicmp(className, WC_STATICW) == 0) {
+            SetWindowTheme(child, nullptr, nullptr);
+            continue;
+        }
+        SetWindowTheme(child, dark ? L"DarkMode_Explorer" : nullptr,
+                       nullptr);
     }
     if (state.window) {
         RedrawWindow(state.window, nullptr, nullptr,
@@ -2220,19 +4076,15 @@ static void UpdateSelectionUi(PickerState& state) {
 
     if (state.request.setDefaultOnly) {
         EnableWindow(state.alwaysUse, FALSE);
-        Button_SetCheck(state.alwaysUse, BST_CHECKED);
-        // DISABLED DARK THEME - label companion enable sync:
-        // if (state.alwaysUseLabel)
-        //     EnableWindow(state.alwaysUseLabel, FALSE);
+        SetAlwaysUseChecked(state, true);
     } else {
         const bool enableAssociation =
             handlerCanBeDefault && hasAssociableExtension;
         EnableWindow(state.alwaysUse, enableAssociation);
-        // if (state.alwaysUseLabel)
-        //     EnableWindow(state.alwaysUseLabel, enableAssociation);
-        if (!enableAssociation)
-            Button_SetCheck(state.alwaysUse, BST_UNCHECKED);
+        if (!enableAssociation) SetAlwaysUseChecked(state, false);
     }
+    if (state.isDarkMode && state.alwaysUse)
+        InvalidateRect(state.alwaysUse, nullptr, TRUE);
 }
 
 static void AddGroup(HWND list, int id, PCWSTR title, bool collapsed) {
@@ -2271,7 +4123,15 @@ static int AddListItem(PickerState& state, size_t index) {
     item.iGroupId = entry.recommended ? GROUP_RECOMMENDED : GROUP_OTHER;
     item.lParam = static_cast<LPARAM>(index);
     item.pszText = entry.displayName.data();
-    return ListView_InsertItem(state.list, &item);
+    const int inserted = ListView_InsertItem(state.list, &item);
+    // Publisher subtitle, shown as the tile's second line (subitem 1),
+    // matching the "Company, Inc." line under each program in the real
+    // Windows 7 dialog. Left unset (and so blank) when unknown.
+    if (inserted >= 0 && !entry.companyName.empty()) {
+        ListView_SetItemText(state.list, inserted, 1,
+                             entry.companyName.data());
+    }
+    return inserted;
 }
 
 static int FindListItemForHandler(PickerState& state, size_t handlerIndex) {
@@ -2317,11 +4177,70 @@ static void InitializeList(PickerState& state) {
     column.mask = LVCF_WIDTH;
     column.cx = 420;
     ListView_InsertColumn(state.list, 0, &column);
+    // Second column, shown as the tile's subtitle line (see cLines below
+    // and AddListItem's ListView_SetItemText(..., 1, ...) call).
+    LVCOLUMNW subtitleColumn{};
+    subtitleColumn.mask = LVCF_WIDTH;
+    subtitleColumn.cx = 420;
+    ListView_InsertColumn(state.list, 1, &subtitleColumn);
     for (size_t i = 0; i < state.handlers.size(); ++i) AddListItem(state, i);
     if (!state.handlers.empty()) {
         ListView_SetItemState(state.list, 0, LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
     }
+    {
+        // The real Windows 7 dialog lays its tiles out two per row.
+        // comctl32's tile view otherwise auto-sizes tiles to the widest
+        // label and packs as many as fit, which for this list's fixed
+        // width collapses to a single column; pin an explicit tile size
+        // instead so two columns always fit, matching the original. This
+        // has to run AFTER group view is enabled and the groups/columns/
+        // items are inserted above: those calls reset a tile size set
+        // any earlier back to comctl32's auto-sizing default, the same
+        // way they reset the custom colors re-applied below.
+        const UINT dpi = WindowDpi(state.window);
+        RECT rcList{};
+        GetClientRect(state.list, &rcList);
+        const int available = (rcList.right - rcList.left) > 0
+                                   ? (rcList.right - rcList.left)
+                                   : DpiScale(532, dpi);
+        const int gap = DpiScale(4, dpi);
+        const int tileWidth = (available - gap) / 2;
+        const int tileHeight = DpiScale(48, dpi);
+
+        LVTILEVIEWINFO tileInfo{};
+        tileInfo.cbSize = sizeof(tileInfo);
+        tileInfo.dwMask = LVTVIM_TILESIZE | LVTVIM_COLUMNS;
+        tileInfo.dwFlags = LVTVIF_FIXEDSIZE;
+        tileInfo.sizeTile.cx = tileWidth;
+        tileInfo.sizeTile.cy = tileHeight;
+        // One extra line for the publisher subtitle (subitem 1), under
+        // the program name.
+        tileInfo.cLines = 1;
+        SendMessageW(state.list, LVM_SETTILEVIEWINFO, 0,
+                    reinterpret_cast<LPARAM>(&tileInfo));
+    }
+    // Switching to tile view and inserting groups/items can reset the
+    // custom colors to theme defaults, which left the first (selected)
+    // tile with a white background in dark mode. Re-apply the palette
+    // after the view is fully built and repaint. The light values are
+    // identical to the ones set in ApplyPickerTheme, so light rendering
+    // is unchanged.
+    if (state.isDarkMode) {
+        ListView_SetBkColor(state.list, RGB(32, 32, 32));
+        ListView_SetTextBkColor(state.list, RGB(32, 32, 32));
+        ListView_SetTextColor(state.list, RGB(240, 240, 240));
+    } else {
+        ListView_SetBkColor(state.list, RGB(255, 255, 255));
+        ListView_SetTextBkColor(state.list, RGB(255, 255, 255));
+        ListView_SetTextColor(state.list, RGB(0, 0, 0));
+    }
+    // LVM_SETTILEVIEWINFO alone doesn't always re-flow items already in
+    // the list; force a relayout so the new tile size takes effect
+    // immediately instead of only after the next resize/scroll.
+    ListView_Arrange(state.list, LVA_DEFAULT);
+    RedrawWindow(state.list, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
     UpdateSelectionUi(state);
 }
 
@@ -2473,6 +4392,7 @@ static void Browse(PickerState& state) {
     entry.browsed = true;
     entry.internalName = executable;
     entry.progId = ApplicationProgIdForExecutable(executable);
+entry.companyName = ExecutableCompanyName(executable, entry.progId);
     PCWSTR name = PathFindFileNameW(executable.c_str());
     entry.displayName = name && *name ? name : executable;
     if (entry.displayName.size() > 4 &&
@@ -2538,14 +4458,11 @@ static void ApplyLocalizedText(PickerState& state) {
                    LOC(STR_FILE_LABEL));
     SetWindowTextW(GetDlgItem(state.window, IDC_SOW_DESCRIPTION_LABEL),
                    LOC(STR_DESCRIPTION));
+    // Both themes keep the label on the checkbox itself: in dark mode
+    // the owner-draw handler reads it back with GetWindowText and paints
+    // it with the light text color.
     SetWindowTextW(GetDlgItem(state.window, IDC_SOW_ALWAYS_USE),
                    LOC(STR_ALWAYS_USE));
-    // DISABLED DARK THEME - dark mode emptied the checkbox text and
-    // moved it to the companion static (kept for future use):
-    // SetWindowTextW(GetDlgItem(state.window, IDC_SOW_ALWAYS_USE),
-    //                state.isDarkMode ? L"" : LOC(STR_ALWAYS_USE));
-    // if (state.alwaysUseLabel && IsWindow(state.alwaysUseLabel))
-    //     SetWindowTextW(state.alwaysUseLabel, LOC(STR_ALWAYS_USE));
     SetWindowTextW(GetDlgItem(state.window, IDC_SOW_BROWSE), LOC(STR_BROWSE));
     HWND web = GetDlgItem(state.window, IDC_SOW_WEB);
     SetWindowTextW(web, LOC(STR_WEB_LINK));
@@ -2557,45 +4474,372 @@ static void ApplyLocalizedText(PickerState& state) {
     SetGroupTitle(state.list, GROUP_OTHER, LOC(STR_OTHER));
 }
 
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-// static void EnsureAlwaysUseLabel(PickerState& state) {
-//     if (state.alwaysUseLabel && IsWindow(state.alwaysUseLabel)) return;
-//     const UINT dpi = WindowDpi(state.window);
-//     HFONT font = state.font ? state.font.Get()
-//                             : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    // Dark-mode-only companion of the "Always use" checkbox: the
-    // checkbox itself keeps an empty label (network flyout trick) so its
-    // glyph can use the DarkMode_Explorer theme, while this static draws
-    // the label text through WM_CTLCOLORSTATIC, which does honor our
-    // light text color.
-//     state.alwaysUseLabel =
-//         Child(state.window, 0, WC_STATICW, LOC(STR_ALWAYS_USE),
-//               SS_LEFT | SS_NOTIFY | SS_CENTERIMAGE, 35, 354, 380, 22,
-//               IDC_SOW_ALWAYS_USE_LABEL, dpi, font);
-// }
+// Reading the "Always use" state: light mode asks the real
+// BS_AUTOCHECKBOX control (unchanged behavior), dark mode uses the state
+// mirror, because an owner-drawn button has no reliable check state.
+static bool AlwaysUseChecked(PickerState& state) {
+    if (!state.alwaysUse || !IsWindow(state.alwaysUse))
+        return state.alwaysUseChecked;
+    if (state.isDarkMode) return state.alwaysUseChecked;
+    return Button_GetCheck(state.alwaysUse) == BST_CHECKED;
+}
 
-// static void UpdateButtonHover(PickerState& state, POINT screenPoint) {
-//     int target = 0;
-//     static const int kOwnerDrawButtons[] = {IDOK, IDCANCEL, IDC_SOW_BROWSE};
-//     for (const int id : kOwnerDrawButtons) {
-//         HWND button = GetDlgItem(state.window, id);
-//         if (!button) continue;
-//         RECT rect{};
-//         if (GetWindowRect(button, &rect) && PtInRect(&rect, screenPoint)) {
-//             target = id;
-//             break;
-//         }
-//     }
-//     if (target == state.hoverButton) return;
-//     HWND previous =
-//         state.hoverButton ? GetDlgItem(state.window, state.hoverButton) : nullptr;
-//     state.hoverButton = target;
-//     if (previous) InvalidateRect(previous, nullptr, FALSE);
-//     if (target) InvalidateRect(GetDlgItem(state.window, target), nullptr, FALSE);
-//     TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.window, 0};
-//     TrackMouseEvent(&tme);
-// }
+static void SetAlwaysUseChecked(PickerState& state, bool checked) {
+    state.alwaysUseChecked = checked;
+    if (!state.alwaysUse || !IsWindow(state.alwaysUse)) return;
+    Button_SetCheck(state.alwaysUse, checked ? BST_CHECKED : BST_UNCHECKED);
+    if (state.isDarkMode) InvalidateRect(state.alwaysUse, nullptr, TRUE);
+}
+
+// Creates the "Always use" checkbox with the type style the current
+// theme needs, recreating it when the theme changed at runtime: the
+// button type (BS_AUTOCHECKBOX vs BS_OWNERDRAW) cannot be swapped
+// reliably through SetWindowLongPtr once the control exists, which is
+// why the dark glyph used to stay light. Light mode always ends up with
+// exactly the same BS_AUTOCHECKBOX control as before.
+static void EnsureAlwaysUseCheckbox(PickerState& state) {
+    if (!state.window || !IsWindow(state.window)) return;
+    const bool dark = state.isDarkMode;
+    const LONG_PTR wantedType = dark ? BS_OWNERDRAW : BS_AUTOCHECKBOX;
+
+    bool enabled = true;
+    if (state.alwaysUse && IsWindow(state.alwaysUse)) {
+        const LONG_PTR style = GetWindowLongPtrW(state.alwaysUse, GWL_STYLE);
+        enabled = IsWindowEnabled(state.alwaysUse) != FALSE;
+        if (!dark)
+            state.alwaysUseChecked =
+                Button_GetCheck(state.alwaysUse) == BST_CHECKED;
+        if ((style & BS_TYPEMASK) == wantedType) {
+            SetWindowTextW(state.alwaysUse, LOC(STR_ALWAYS_USE));
+            SetWindowTheme(state.alwaysUse, nullptr, nullptr);
+            if (dark) InvalidateRect(state.alwaysUse, nullptr, TRUE);
+            return;
+        }
+        DestroyWindow(state.alwaysUse);
+        state.alwaysUse = nullptr;
+    }
+
+    const UINT dpi = WindowDpi(state.window);
+    HFONT font = state.font ? state.font.Get()
+                            : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    state.alwaysUse = Child(state.window, 0, WC_BUTTONW, LOC(STR_ALWAYS_USE),
+                            WS_TABSTOP | static_cast<DWORD>(wantedType),
+                            14, 354, 405, 22, IDC_SOW_ALWAYS_USE, dpi, font);
+    if (!state.alwaysUse) return;
+    SetWindowTheme(state.alwaysUse, nullptr, nullptr);
+    // Keep the original tab order: a freshly created child lands at the
+    // end of the sibling chain, so move it right behind the description
+    // edit where it was created initially.
+    if (state.description && IsWindow(state.description)) {
+        SetWindowPos(state.alwaysUse, state.description, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    Button_SetCheck(state.alwaysUse,
+                    state.alwaysUseChecked ? BST_CHECKED : BST_UNCHECKED);
+    EnableWindow(state.alwaysUse, enabled);
+    InvalidateRect(state.alwaysUse, nullptr, TRUE);
+}
+
+// Windows 7 network flyout row palette (dark theme). Same values the
+// flyout mod uses for its network rows, so both dialogs feel identical:
+// a soft rounded rectangle with a slightly brighter border.
+static constexpr COLORREF kWin7RowSelectedBg = RGB(40, 40, 50);
+static constexpr COLORREF kWin7RowSelectedBorder = RGB(60, 80, 120);
+static constexpr COLORREF kWin7RowHoverBg = RGB(35, 35, 45);
+static constexpr COLORREF kWin7RowHoverBorder = RGB(50, 70, 100);
+
+// Paints one list row the way the Windows 7 network flyout paints its
+// rows: RoundRect with a 3 pixel corner radius, filled with the hover or
+// selection background and outlined with the matching border color.
+static void PaintWin7RowBackground(HDC hdc, const RECT& rc, bool selected) {
+    if (!hdc) return;
+    HBRUSH background = CreateSolidBrush(selected ? kWin7RowSelectedBg
+                                                  : kWin7RowHoverBg);
+    HPEN border = CreatePen(PS_SOLID, 1,
+                            selected ? kWin7RowSelectedBorder
+                                     : kWin7RowHoverBorder);
+    if (background && border) {
+        HGDIOBJ oldBrush = SelectObject(hdc, background);
+        HGDIOBJ oldPen = SelectObject(hdc, border);
+        RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, 3, 3);
+        SelectObject(hdc, oldPen);
+        SelectObject(hdc, oldBrush);
+    }
+    if (background) DeleteObject(background);
+    if (border) DeleteObject(border);
+}
+
+// Draws a complete program row the Windows 7 network flyout way:
+// rounded hover/selection frame, then the application icon and its name
+// with the light text color. Used only in dark mode, through
+// CDRF_SKIPDEFAULT, so the light theme keeps the stock Explorer
+// rendering.
+static void PaintWin7ListRow(PickerState& state,
+                             const NMLVCUSTOMDRAW& listDraw) {
+    HDC hdc = listDraw.nmcd.hdc;
+    HWND list = state.list;
+    const int row = static_cast<int>(listDraw.nmcd.dwItemSpec);
+    if (!hdc || !list || row < 0) return;
+
+    RECT rcBounds{};
+    if (!ListView_GetItemRect(list, row, &rcBounds, LVIR_BOUNDS)) return;
+    RECT rcIcon{};
+    const bool hasIconRect =
+        ListView_GetItemRect(list, row, &rcIcon, LVIR_ICON) != FALSE;
+    RECT rcLabel{};
+    const bool hasLabelRect =
+        ListView_GetItemRect(list, row, &rcLabel, LVIR_LABEL) != FALSE;
+
+    const UINT itemState =
+        ListView_GetItemState(list, row, LVIS_SELECTED | LVIS_FOCUSED);
+    const bool selected = (itemState & LVIS_SELECTED) != 0;
+    const bool focused = (itemState & LVIS_FOCUSED) != 0;
+    const bool hovered = row == state.hoverRow;
+
+    // Plain rows are erased with the list background first, so a frame
+    // left over from a previous hover never survives a partial repaint.
+    if (state.darkBgBrush) FillRect(hdc, &rcBounds, state.darkBgBrush.Get());
+    if (selected || hovered) {
+        RECT rcFrame = rcBounds;
+        // One pixel of breathing room, so adjacent rounded frames never
+        // touch each other, exactly like the flyout rows.
+        rcFrame.right -= 1;
+        rcFrame.bottom -= 1;
+        PaintWin7RowBackground(hdc, rcFrame, selected);
+    }
+
+    LVITEMW item{};
+    item.mask = LVIF_IMAGE;
+    item.iItem = row;
+    if (hasIconRect && state.images && ListView_GetItem(list, &item) &&
+        item.iImage >= 0) {
+        ImageList_Draw(state.images.Get(), item.iImage, hdc, rcIcon.left,
+                       rcIcon.top, ILD_TRANSPARENT);
+    }
+
+    if (hasLabelRect) {
+        wchar_t label[512] = {};
+        ListView_GetItemText(list, row, 0, label, ARRAYSIZE(label));
+        wchar_t subtitle[512] = {};
+        ListView_GetItemText(list, row, 1, subtitle, ARRAYSIZE(subtitle));
+        const bool hasSubtitle = subtitle[0] != L'\0';
+
+        SetBkMode(hdc, TRANSPARENT);
+        HFONT oldFont = static_cast<HFONT>(SelectObject(
+            hdc, reinterpret_cast<HFONT>(
+                     SendMessageW(list, WM_GETFONT, 0, 0))));
+
+        RECT rcText = rcLabel;
+        rcText.left += 2;
+
+        if (label[0]) {
+            SetTextColor(hdc, RGB(240, 240, 240));
+            RECT rcTitle = rcText;
+            if (hasSubtitle) {
+                // Two lines, title on top and publisher underneath,
+                // matching the real Windows 7 tile layout; a single
+                // label with no subtitle keeps the original vertically
+                // centered look.
+                rcTitle.bottom =
+                    rcTitle.top + (rcText.bottom - rcText.top) / 2;
+            }
+            DrawTextW(hdc, label, -1, &rcTitle,
+                      DT_LEFT | (hasSubtitle ? DT_TOP : DT_VCENTER) |
+                          DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
+        if (hasSubtitle) {
+            RECT rcSubtitle = rcText;
+            rcSubtitle.top += (rcText.bottom - rcText.top) / 2;
+            SetTextColor(hdc, RGB(150, 150, 165));
+            DrawTextW(hdc, subtitle, -1, &rcSubtitle,
+                      DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS |
+                          DT_NOPREFIX);
+        }
+        if (oldFont) SelectObject(hdc, oldFont);
+    }
+
+    // Keyboard focus marker, same dotted rectangle the flyout uses for
+    // its focused row.
+    if (focused && !selected && GetFocus() == list) {
+        RECT rcFocus = rcBounds;
+        rcFocus.right -= 1;
+        rcFocus.bottom -= 1;
+        SetTextColor(hdc, RGB(150, 150, 165));
+        DrawFocusRect(hdc, &rcFocus);
+    }
+}
+
+// The DarkMode_Explorer visual style paints group header labels itself
+// via UxTheme when the picker's group headers are drawn, and it ignores
+// NMLVCUSTOMDRAW::clrText entirely for that draw. The only way to give
+// just the "Other Programs" header a different color is to let the
+// native draw finish, then redraw its label text on top in the wanted
+// color, matching the native label's position closely enough that it
+// looks like a normal recolor rather than an overlay.
+static void RepaintOtherProgramsHeaderText(PickerState& state,
+                                           const NMLVCUSTOMDRAW& listDraw) {
+    HWND list = state.list;
+    HDC hdc = listDraw.nmcd.hdc;
+    if (!list || !hdc) return;
+
+    RECT rcHeader{};
+    rcHeader.top = LVGGR_HEADER;
+    if (!SendMessageW(list, LVM_GETGROUPRECT, static_cast<WPARAM>(GROUP_OTHER),
+                      reinterpret_cast<LPARAM>(&rcHeader))) {
+        return;
+    }
+
+    wchar_t header[256] = {};
+    LVGROUP group{};
+    group.cbSize = sizeof(group);
+    group.mask = LVGF_HEADER;
+    group.pszHeader = header;
+    group.cchHeader = ARRAYSIZE(header);
+    if (SendMessageW(list, LVM_GETGROUPINFO, static_cast<WPARAM>(GROUP_OTHER),
+                     reinterpret_cast<LPARAM>(&group)) == -1 ||
+        !header[0]) {
+        return;
+    }
+
+    HFONT font =
+        reinterpret_cast<HFONT>(SendMessageW(list, WM_GETFONT, 0, 0));
+    HFONT oldFont =
+        font ? static_cast<HFONT>(SelectObject(hdc, font)) : nullptr;
+
+    SIZE extent{};
+    GetTextExtentPoint32W(hdc, header, static_cast<int>(wcslen(header)),
+                          &extent);
+
+    // Same left indent the native header uses, vertically centered in
+    // the header band; a small margin keeps antialiased glyph edges from
+    // the native draw from bleeding through around the redrawn text.
+    RECT rcErase = rcHeader;
+    rcErase.left += 2;
+    rcErase.right = rcErase.left + extent.cx + 8;
+    const int centerY = (rcHeader.top + rcHeader.bottom) / 2;
+    rcErase.top = centerY - extent.cy / 2 - 2;
+    rcErase.bottom = centerY + extent.cy / 2 + 2;
+
+    if (state.darkBgBrush) FillRect(hdc, &rcErase, state.darkBgBrush.Get());
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(0, 146, 214));  // Azzurro Napoli.
+    RECT rcText = rcErase;
+    rcText.left += 4;
+    DrawTextW(hdc, header, -1, &rcText,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    if (oldFont) SelectObject(hdc, oldFont);
+}
+
+// Dark mode only: paints a 1 pixel gray frame around the controls that
+// lost their light 3D client edge, so the description bar keeps a
+// visible border on the dark background.
+static void PaintDarkControlFrames(PickerState& state, HDC hdc) {
+    if (!state.isDarkMode || !state.window || !hdc) return;
+    HWND targets[] = {state.description};
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(110, 110, 120));
+    if (!pen) return;
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    for (HWND target : targets) {
+        if (!target || !IsWindow(target) || !IsWindowVisible(target)) continue;
+        RECT rc{};
+        if (!GetWindowRect(target, &rc)) continue;
+        MapWindowPoints(nullptr, state.window,
+                        reinterpret_cast<LPPOINT>(&rc), 2);
+        InflateRect(&rc, 1, 1);
+        Rectangle(hdc, rc.left, rc.top, rc.right, rc.bottom);
+    }
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    DeleteObject(pen);
+}
+
+// Recomputes which list row is hovered and repaints the rows that
+// changed state. Dark theme only: the light theme keeps the standard
+// LVS_EX_TRACKSELECT-free Explorer behavior untouched.
+static void UpdateListHover(PickerState& state, POINT clientPoint) {
+    if (!state.isDarkMode || !state.list || !IsWindow(state.list)) return;
+    LVHITTESTINFO hit{};
+    hit.pt = clientPoint;
+    const int row = ListView_HitTest(state.list, &hit);
+    if (row == state.hoverRow) return;
+    const int previous = state.hoverRow;
+    state.hoverRow = row;
+    RECT rc{};
+    if (previous >= 0 &&
+        ListView_GetItemRect(state.list, previous, &rc, LVIR_BOUNDS)) {
+        InvalidateRect(state.list, &rc, FALSE);
+    }
+    if (row >= 0 && ListView_GetItemRect(state.list, row, &rc, LVIR_BOUNDS))
+        InvalidateRect(state.list, &rc, FALSE);
+    if (row >= 0) {
+        TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.list, 0};
+        TrackMouseEvent(&tme);
+    }
+}
+
+static void ClearListHover(PickerState& state) {
+    if (state.hoverRow < 0) return;
+    const int previous = state.hoverRow;
+    state.hoverRow = -1;
+    if (!state.list || !IsWindow(state.list)) return;
+    RECT rc{};
+    if (ListView_GetItemRect(state.list, previous, &rc, LVIR_BOUNDS))
+        InvalidateRect(state.list, &rc, FALSE);
+}
+
+// Subclass of the program list: the hover frame needs mouse messages
+// that the list would otherwise consume without notifying the dialog.
+// The subclass is installed in both themes but does nothing outside of
+// dark mode, so light rendering is unaffected.
+static LRESULT CALLBACK PickerListSubclassProc(HWND window, UINT message,
+                                               WPARAM wParam, LPARAM lParam,
+                                               UINT_PTR idSubclass,
+                                               DWORD_PTR referenceData) {
+    auto state = reinterpret_cast<PickerState*>(referenceData);
+    switch (message) {
+        case WM_MOUSEMOVE:
+            if (state && state->isDarkMode) {
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                UpdateListHover(*state, pt);
+            }
+            break;
+        case WM_MOUSELEAVE:
+        case WM_MOUSEWHEEL:
+            if (state && state->isDarkMode) ClearListHover(*state);
+            break;
+        case WM_NCDESTROY:
+            RemoveWindowSubclass(window, PickerListSubclassProc, idSubclass);
+            break;
+    }
+    return DefSubclassProc(window, message, wParam, lParam);
+}
+
+static void UpdateButtonHover(PickerState& state, POINT screenPoint) {
+    int target = 0;
+    // The checkbox is tracked too: its owner-drawn glyph has a hover
+    // state and needs the same enter/leave invalidation as the buttons.
+    static const int kHoverTracked[] = {IDOK, IDCANCEL, IDC_SOW_BROWSE,
+                                        IDC_SOW_ALWAYS_USE};
+    for (const int id : kHoverTracked) {
+        HWND button = GetDlgItem(state.window, id);
+        if (!button) continue;
+        RECT rect{};
+        if (GetWindowRect(button, &rect) && PtInRect(&rect, screenPoint)) {
+            target = id;
+            break;
+        }
+    }
+    if (target == state.hoverButton) return;
+    HWND previous =
+        state.hoverButton ? GetDlgItem(state.window, state.hoverButton) : nullptr;
+    state.hoverButton = target;
+    if (previous) InvalidateRect(previous, nullptr, FALSE);
+    if (target) InvalidateRect(GetDlgItem(state.window, target), nullptr, FALSE);
+    TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, state.window, 0};
+    TrackMouseEvent(&tme);
+}
 
 static void BuildPickerControls(PickerState& state) {
     const UINT dpi = WindowDpi(state.window);
@@ -2604,11 +4848,11 @@ static void BuildPickerControls(PickerState& state) {
         state.font.Reset(CreateFontIndirectW(&metrics.lfMessageFont));
     HFONT font = state.font ? state.font.Get() : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
 
-    // DISABLED DARK THEME - dark mode resolved its theme here before
-    // creating the controls so it could use owner-draw buttons and the
-    // checkbox label companion (kept for future use):
-    // state.isDarkMode = ResolveDarkMode();
-    // const bool dark = state.isDarkMode;
+    // The theme must be known before creating the controls: dark mode
+    // uses owner-draw buttons and an emptied checkbox with a companion
+    // label (network flyout approach); light mode is unchanged.
+    state.isDarkMode = ResolveDarkMode();
+    const bool dark = state.isDarkMode;
 
     HWND icon = Child(state.window, 0, WC_STATICW, L"", SS_ICON | SS_REALSIZECONTROL,
                       14, 14, 34, 34, IDC_SOW_ICON, dpi, font);
@@ -2626,39 +4870,36 @@ static void BuildPickerControls(PickerState& state) {
           WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS |
               LVS_SHAREIMAGELISTS | LVS_NOCOLUMNHEADER,
           14, 65, 532, 225, IDC_SOW_PROGRAMS, dpi, font);
+    if (state.list) {
+        SetWindowSubclass(state.list, PickerListSubclassProc, 1,
+                          reinterpret_cast<DWORD_PTR>(&state));
+    }
     Child(state.window, 0, WC_STATICW, LOC(STR_DESCRIPTION), SS_LEFT,
           14, 300, 532, 18, IDC_SOW_DESCRIPTION_LABEL, dpi, font);
-    // DISABLED DARK THEME - dark mode dropped WS_EX_CLIENTEDGE here
-    // (kept for future use). Light mode keeps the classic client edge.
-    state.description = Child(state.window, WS_EX_CLIENTEDGE, WC_EDITW, L"",
+    // Dark mode gets no 3D client edge: the dialog paints its own gray
+    // frame around this edit (see PaintDarkControlFrames).
+    state.description = Child(state.window,
+          static_cast<DWORD>(dark ? 0 : WS_EX_CLIENTEDGE), WC_EDITW, L"",
           WS_TABSTOP | ES_LEFT | ES_AUTOHSCROLL,
           14, 320, 520, 24, IDC_SOW_DESCRIPTION, dpi, font);
-    // DISABLED DARK THEME - dark mode created the checkbox with an
-    // empty label plus a companion static for the text (kept for
-    // future use):
-    // state.alwaysUse = Child(state.window, 0, WC_BUTTONW,
-    //       dark ? L"" : LOC(STR_ALWAYS_USE),
-    //       WS_TABSTOP | BS_AUTOCHECKBOX, 14, 354, 405, 22,
-    //       IDC_SOW_ALWAYS_USE, dpi, font);
-    // if (dark) EnsureAlwaysUseLabel(state);
+    // The checkbox is created directly with the type style the theme
+    // needs: BS_OWNERDRAW in dark mode (custom square glyph plus its own
+    // label text), plain BS_AUTOCHECKBOX in light mode.
     state.alwaysUse = Child(state.window, 0, WC_BUTTONW, LOC(STR_ALWAYS_USE),
-          WS_TABSTOP | BS_AUTOCHECKBOX, 14, 354, 405, 22,
-          IDC_SOW_ALWAYS_USE, dpi, font);
-    // DISABLED DARK THEME - dark mode made the buttons below owner-draw
-    // (BS_OWNERDRAW) and painted them in WM_DRAWITEM with the network
-    // flyout palette (kept for future use).
+          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_AUTOCHECKBOX),
+          14, 354, 405, 22, IDC_SOW_ALWAYS_USE, dpi, font);
     Child(state.window, 0, WC_BUTTONW, LOC(STR_BROWSE),
-          WS_TABSTOP | BS_PUSHBUTTON, 452, 350, 94, 27,
+          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_PUSHBUTTON), 452, 350, 94, 27,
           IDC_SOW_BROWSE, dpi, font);
     HWND web = Child(state.window, 0, WC_LINK, LOC(STR_WEB_LINK), WS_TABSTOP,
                      14, 386, 532, 38, IDC_SOW_WEB, dpi, font);
     ShowWindow(web, g_showWebLink.load(std::memory_order_acquire)
                         ? SW_SHOW : SW_HIDE);
     Child(state.window, 0, WC_BUTTONW, LOC(STR_OK),
-          WS_TABSTOP | WS_DISABLED | BS_DEFPUSHBUTTON,
+          WS_TABSTOP | WS_DISABLED | (dark ? BS_OWNERDRAW : BS_DEFPUSHBUTTON),
           392, 426, 74, 27, IDOK, dpi, font);
     Child(state.window, 0, WC_BUTTONW, LOC(STR_CANCEL),
-          WS_TABSTOP | BS_PUSHBUTTON, 472, 426, 74, 27,
+          WS_TABSTOP | (dark ? BS_OWNERDRAW : BS_PUSHBUTTON), 472, 426, 74, 27,
           IDCANCEL, dpi, font);
 
     state.headerIcon.Reset(LoadStandaloneIcon());
@@ -2673,7 +4914,7 @@ static void BuildPickerControls(PickerState& state) {
     InitializeList(state);
     ApplyLocalizedText(state);
     if (state.request.setDefaultOnly && state.alwaysUse) {
-        Button_SetCheck(state.alwaysUse, BST_CHECKED);
+        SetAlwaysUseChecked(state, true);
         EnableWindow(state.alwaysUse, FALSE);
     }
 }
@@ -2707,204 +4948,307 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
         case WM_ERASEBKGND: {
             RECT client{};
             GetClientRect(window, &client);
-            // DISABLED DARK THEME - dark mode filled the background with
-            // a RGB(32, 32, 32) brush (kept for future use):
-            // HBRUSH brush = state && state->isDarkMode && state->darkBgBrush
-            //                    ? state->darkBgBrush.Get()
-            //                    : GetSysColorBrush(COLOR_3DFACE);
-            HBRUSH brush = GetSysColorBrush(COLOR_3DFACE);
+            HBRUSH brush = state && state->isDarkMode && state->darkBgBrush
+                               ? state->darkBgBrush.Get()
+                               : GetSysColorBrush(COLOR_3DFACE);
             FillRect(reinterpret_cast<HDC>(wParam), &client, brush);
             return 1;
         }
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-//         case WM_DRAWITEM: {
-//             if (!state || !state->isDarkMode) break;
-//             auto item = reinterpret_cast<LPDRAWITEMSTRUCT>(lParam);
-//             if (!item) break;
-//             if (item->CtlID != IDOK && item->CtlID != IDCANCEL &&
-//                 item->CtlID != IDC_SOW_BROWSE) {
-//                 break;
-//             }
+        case WM_PAINT: {
+            if (!state || !state->isDarkMode) break;
+            PAINTSTRUCT ps{};
+            HDC hdc = BeginPaint(window, &ps);
+            // EndPaint must run even if the DC is unavailable, otherwise
+            // the update region stays invalid and WM_PAINT repeats.
+            if (hdc) PaintDarkControlFrames(*state, hdc);
+            EndPaint(window, &ps);
+            return 0;
+        }
+        case WM_DRAWITEM: {
+            if (!state || !state->isDarkMode) break;
+            auto item = reinterpret_cast<LPDRAWITEMSTRUCT>(lParam);
+            if (!item) break;
+            if (item->CtlID == IDC_SOW_ALWAYS_USE) {
+                // Dark-mode recreation of the checkbox: a square glyph
+                // with a gray border, a dark fill and an azure check
+                // mark, followed by the label text painted with the
+                // light text color. Everything (glyph plus text) is
+                // drawn by this control, so no sibling static can be
+                // repainted with a dark color while hovering. The light
+                // theme keeps the classic BS_AUTOCHECKBOX rendering
+                // untouched and never reaches this code.
+                const UINT dpi = WindowDpi(state->window);
+                RECT rc = item->rcItem;
+                const int glyphSize = DpiScale(14, dpi);
+                RECT glyph = rc;
+                glyph.top = rc.top + ((rc.bottom - rc.top) - glyphSize) / 2;
+                glyph.right = glyph.left + glyphSize;
+                glyph.bottom = glyph.top + glyphSize;
+                const bool checked = state->alwaysUseChecked;
+                const bool disabled =
+                    (item->itemState & ODS_DISABLED) != 0;
+                const bool focused = (item->itemState & ODS_FOCUS) != 0;
+                POINT cursor{};
+                GetCursorPos(&cursor);
+                RECT hotScreen = rc;
+                MapWindowPoints(item->hwndItem, nullptr,
+                                reinterpret_cast<LPPOINT>(&hotScreen), 2);
+                const bool hovering =
+                    !disabled && PtInRect(&hotScreen, cursor);
+                // Repaint the whole item rect with the dialog
+                // background: the owner-draw button erases itself with
+                // COLOR_BTNFACE before WM_DRAWITEM, which would leave a
+                // light patch behind the glyph and the text.
+                FillRect(item->hDC, &rc, state->darkBgBrush.Get());
+                HBRUSH glyphBrush = CreateSolidBrush(
+                    disabled ? RGB(38, 38, 42)
+                             : (hovering ? RGB(48, 48, 58) : RGB(32, 32, 32)));
+                if (glyphBrush) {
+                    FillRect(item->hDC, &glyph, glyphBrush);
+                    DeleteObject(glyphBrush);
+                }
+                HGDIOBJ oldBrush = SelectObject(
+                    item->hDC, GetStockObject(NULL_BRUSH));
+                COLORREF borderColor = disabled   ? RGB(70, 70, 75)
+                                       : hovering ? RGB(175, 175, 185)
+                                                  : RGB(130, 130, 140);
+                HPEN borderPen = CreatePen(PS_SOLID, 1, borderColor);
+                HGDIOBJ oldPen = SelectObject(item->hDC, borderPen);
+                Rectangle(item->hDC, glyph.left, glyph.top, glyph.right,
+                          glyph.bottom);
+                SelectObject(item->hDC, oldPen);
+                DeleteObject(borderPen);
+                SelectObject(item->hDC, oldBrush);
+                if (checked) {
+                    COLORREF checkColor =
+                        disabled ? RGB(90, 90, 100) : RGB(0, 168, 255);
+                    const int scaled = DpiScale(2, dpi);
+                    const int penWidth = scaled > 2 ? scaled : 2;
+                    HPEN checkPen = CreatePen(PS_SOLID, penWidth, checkColor);
+                    HGDIOBJ oldPen2 = SelectObject(item->hDC, checkPen);
+                    const int u = glyphSize;
+                    MoveToEx(item->hDC, glyph.left + u * 3 / 14,
+                             glyph.top + u * 7 / 14, nullptr);
+                    LineTo(item->hDC, glyph.left + u * 6 / 14,
+                           glyph.top + u * 10 / 14);
+                    LineTo(item->hDC, glyph.left + u * 11 / 14,
+                           glyph.top + u * 4 / 14);
+                    SelectObject(item->hDC, oldPen2);
+                    DeleteObject(checkPen);
+                }
+                // Label text: always painted with the light color, in
+                // every state (normal, hover, focus, pressed), which is
+                // what the removed companion static could not guarantee.
+                WCHAR label[256];
+                const int labelLen =
+                    GetWindowTextW(item->hwndItem, label, ARRAYSIZE(label));
+                RECT rcText = rc;
+                rcText.left = glyph.right + DpiScale(7, dpi);
+                if (labelLen > 0) {
+                    SetBkMode(item->hDC, TRANSPARENT);
+                    SetTextColor(item->hDC, disabled ? RGB(140, 140, 140)
+                                                     : RGB(240, 240, 240));
+                    HFONT oldLabelFont = static_cast<HFONT>(SelectObject(
+                        item->hDC,
+                        reinterpret_cast<HFONT>(
+                            SendMessageW(item->hwndItem, WM_GETFONT, 0, 0))));
+                    DrawTextW(item->hDC, label, labelLen, &rcText,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                    if (focused) {
+                        RECT rcFocus = rcText;
+                        DrawTextW(item->hDC, label, labelLen, &rcFocus,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE |
+                                      DT_CALCRECT);
+                        rcFocus.top = rc.top + 1;
+                        rcFocus.bottom = rc.bottom - 1;
+                        rcFocus.right += DpiScale(2, dpi);
+                        InflateRect(&rcFocus, 1, 0);
+                        SetTextColor(item->hDC, RGB(150, 150, 165));
+                        DrawFocusRect(item->hDC, &rcFocus);
+                    }
+                    if (oldLabelFont) SelectObject(item->hDC, oldLabelFont);
+                }
+                return TRUE;
+            }
+            if (item->CtlID != IDOK && item->CtlID != IDCANCEL &&
+                item->CtlID != IDC_SOW_BROWSE) {
+                break;
+            }
             // Same dark button painting as the network flyout mod.
-//             const bool pressed = (item->itemState & ODS_SELECTED) != 0;
-//             const bool disabled = (item->itemState & ODS_DISABLED) != 0;
-//             const bool focused = (item->itemState & ODS_FOCUS) != 0;
-//             const bool hovering =
-//                 state->hoverButton == static_cast<int>(item->CtlID) &&
-//                 !pressed && !disabled;
-//             HDC hdcReal = item->hDC;
-//             RECT rc = item->rcItem;
-//             const int w = rc.right - rc.left;
-//             const int h = rc.bottom - rc.top;
-//             if (w <= 0 || h <= 0) break;
-//             WCHAR text[128];
-//             const int textLen =
-//                 GetWindowTextW(item->hwndItem, text, ARRAYSIZE(text));
-//             COLORREF bgColor = disabled   ? RGB(50, 50, 58)
-//                                : pressed  ? RGB(35, 35, 45)
-//                                : hovering ? RGB(70, 70, 85)
-//                                           : RGB(60, 60, 72);
-//             COLORREF lightColor =
-//                 pressed ? RGB(25, 25, 32)
-//                         : (hovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
-//             COLORREF darkColor =
-//                 pressed ? RGB(60, 60, 72)
-//                         : (hovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
-//             COLORREF textColor =
-//                 disabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
-//             COLORREF hoverBorder = hovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
-//             HDC hdcMem = CreateCompatibleDC(hdcReal);
-//             HBITMAP bitmapMem = CreateCompatibleBitmap(hdcReal, w, h);
-//             HBITMAP oldBitmapMem =
-//                 static_cast<HBITMAP>(SelectObject(hdcMem, bitmapMem));
-//             RECT rcLocal{0, 0, w, h};
-//             HBRUSH bgBrush = CreateSolidBrush(bgColor);
-//             FillRect(hdcMem, &rcLocal, bgBrush);
-//             DeleteObject(bgBrush);
-//             HPEN penLight = CreatePen(PS_SOLID, 1, lightColor);
-//             HPEN penDark = CreatePen(PS_SOLID, 1, darkColor);
-//             HPEN penHover =
-//                 hovering ? CreatePen(PS_SOLID, 1, hoverBorder) : nullptr;
-//             HPEN oldPen = static_cast<HPEN>(SelectObject(hdcMem, penLight));
-//             MoveToEx(hdcMem, 0, h - 1, nullptr);
-//             LineTo(hdcMem, 0, 0);
-//             LineTo(hdcMem, w - 1, 0);
-//             SelectObject(hdcMem, penDark);
-//             MoveToEx(hdcMem, w - 1, 0, nullptr);
-//             LineTo(hdcMem, w - 1, h - 1);
-//             LineTo(hdcMem, 0, h - 1);
-//             if (hovering && penHover) {
-//                 SelectObject(hdcMem, penHover);
-//                 MoveToEx(hdcMem, 1, 1, nullptr);
-//                 LineTo(hdcMem, w - 2, 1);
-//                 LineTo(hdcMem, w - 2, h - 2);
-//                 LineTo(hdcMem, 1, h - 2);
-//                 LineTo(hdcMem, 1, 1);
-//                 DeleteObject(penHover);
-//             }
-//             SelectObject(hdcMem, oldPen);
-//             DeleteObject(penLight);
-//             DeleteObject(penDark);
-//             if (focused) {
-//                 RECT rcFocus = rcLocal;
-//                 InflateRect(&rcFocus, -3, -3);
-//                 HGDIOBJ oldBrush =
-//                     SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
-//                 SetTextColor(hdcMem, RGB(150, 150, 165));
-//                 DrawFocusRect(hdcMem, &rcFocus);
-//                 SelectObject(hdcMem, oldBrush);
-//             }
-//             SetBkMode(hdcMem, TRANSPARENT);
-//             SetTextColor(hdcMem, textColor);
-//             HFONT oldFont = static_cast<HFONT>(SelectObject(
-//                 hdcMem,
-//                 reinterpret_cast<HFONT>(SendMessageW(item->hwndItem, WM_GETFONT, 0, 0))));
-//             RECT rcText = rcLocal;
-//             if (pressed) {
-//                 rcText.left += 1;
-//                 rcText.top += 1;
-//             }
-//             DrawTextW(hdcMem, text, textLen, &rcText,
-//                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-//             SelectObject(hdcMem, oldFont);
-//             BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
-//             SelectObject(hdcMem, oldBitmapMem);
-//             DeleteObject(bitmapMem);
-//             DeleteDC(hdcMem);
-//             return TRUE;
-//         }
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-//         case WM_MOUSEMOVE: {
-//             if (!state || !state->isDarkMode) break;
-//             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-//             ClientToScreen(window, &pt);
-//             UpdateButtonHover(*state, pt);
-//             break;
-//         }
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-//         case WM_SETCURSOR: {
+            const bool pressed = (item->itemState & ODS_SELECTED) != 0;
+            const bool disabled = (item->itemState & ODS_DISABLED) != 0;
+            const bool focused = (item->itemState & ODS_FOCUS) != 0;
+            const bool hovering =
+                state->hoverButton == static_cast<int>(item->CtlID) &&
+                !pressed && !disabled;
+            HDC hdcReal = item->hDC;
+            RECT rc = item->rcItem;
+            const int w = rc.right - rc.left;
+            const int h = rc.bottom - rc.top;
+            if (w <= 0 || h <= 0) break;
+            WCHAR text[128];
+            const int textLen =
+                GetWindowTextW(item->hwndItem, text, ARRAYSIZE(text));
+            COLORREF bgColor = disabled   ? RGB(50, 50, 58)
+                               : pressed  ? RGB(35, 35, 45)
+                               : hovering ? RGB(70, 70, 85)
+                                          : RGB(60, 60, 72);
+            COLORREF lightColor =
+                pressed ? RGB(25, 25, 32)
+                        : (hovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
+            COLORREF darkColor =
+                pressed ? RGB(60, 60, 72)
+                        : (hovering ? RGB(35, 35, 45) : RGB(25, 25, 32));
+            COLORREF textColor =
+                disabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
+            COLORREF hoverBorder = hovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
+            HDC hdcMem = CreateCompatibleDC(hdcReal);
+            HBITMAP bitmapMem = CreateCompatibleBitmap(hdcReal, w, h);
+            HBITMAP oldBitmapMem =
+                static_cast<HBITMAP>(SelectObject(hdcMem, bitmapMem));
+            RECT rcLocal{0, 0, w, h};
+            HBRUSH bgBrush = CreateSolidBrush(bgColor);
+            FillRect(hdcMem, &rcLocal, bgBrush);
+            DeleteObject(bgBrush);
+            HPEN penLight = CreatePen(PS_SOLID, 1, lightColor);
+            HPEN penDark = CreatePen(PS_SOLID, 1, darkColor);
+            HPEN penHover =
+                hovering ? CreatePen(PS_SOLID, 1, hoverBorder) : nullptr;
+            HPEN oldPen = static_cast<HPEN>(SelectObject(hdcMem, penLight));
+            MoveToEx(hdcMem, 0, h - 1, nullptr);
+            LineTo(hdcMem, 0, 0);
+            LineTo(hdcMem, w - 1, 0);
+            SelectObject(hdcMem, penDark);
+            MoveToEx(hdcMem, w - 1, 0, nullptr);
+            LineTo(hdcMem, w - 1, h - 1);
+            LineTo(hdcMem, 0, h - 1);
+            if (hovering && penHover) {
+                SelectObject(hdcMem, penHover);
+                MoveToEx(hdcMem, 1, 1, nullptr);
+                LineTo(hdcMem, w - 2, 1);
+                LineTo(hdcMem, w - 2, h - 2);
+                LineTo(hdcMem, 1, h - 2);
+                LineTo(hdcMem, 1, 1);
+                DeleteObject(penHover);
+            }
+            SelectObject(hdcMem, oldPen);
+            DeleteObject(penLight);
+            DeleteObject(penDark);
+            if (focused) {
+                RECT rcFocus = rcLocal;
+                InflateRect(&rcFocus, -3, -3);
+                HGDIOBJ oldBrush =
+                    SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+                SetTextColor(hdcMem, RGB(150, 150, 165));
+                DrawFocusRect(hdcMem, &rcFocus);
+                SelectObject(hdcMem, oldBrush);
+            }
+            SetBkMode(hdcMem, TRANSPARENT);
+            SetTextColor(hdcMem, textColor);
+            HFONT oldFont = static_cast<HFONT>(SelectObject(
+                hdcMem,
+                reinterpret_cast<HFONT>(SendMessageW(item->hwndItem, WM_GETFONT, 0, 0))));
+            RECT rcText = rcLocal;
+            if (pressed) {
+                rcText.left += 1;
+                rcText.top += 1;
+            }
+            DrawTextW(hdcMem, text, textLen, &rcText,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdcMem, oldFont);
+            BitBlt(hdcReal, rc.left, rc.top, w, h, hdcMem, 0, 0, SRCCOPY);
+            SelectObject(hdcMem, oldBitmapMem);
+            DeleteObject(bitmapMem);
+            DeleteDC(hdcMem);
+            return TRUE;
+        }
+        case WM_MOUSEMOVE: {
+            if (!state || !state->isDarkMode) break;
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ClientToScreen(window, &pt);
+            UpdateButtonHover(*state, pt);
+            break;
+        }
+        case WM_SETCURSOR: {
             // Children that don't set their own cursor (the owner-draw
             // buttons) bubble WM_SETCURSOR up to the dialog, so hover
             // tracking keeps working while the pointer is over them.
-//             if (!state || !state->isDarkMode) break;
-//             POINT pt{};
-//             GetCursorPos(&pt);
-//             UpdateButtonHover(*state, pt);
-//             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
-//             return TRUE;
-//         }
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-//         case WM_MOUSELEAVE: {
-//             if (!state || !state->isDarkMode) break;
-//             if (state->hoverButton != 0) {
-//                 HWND button = GetDlgItem(window, state->hoverButton);
-//                 state->hoverButton = 0;
-//                 if (button) InvalidateRect(button, nullptr, FALSE);
-//             }
-//             break;
-//         }
+            if (!state || !state->isDarkMode) break;
+            POINT pt{};
+            GetCursorPos(&pt);
+            UpdateButtonHover(*state, pt);
+            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            return TRUE;
+        }
+        case WM_MOUSELEAVE: {
+            if (!state || !state->isDarkMode) break;
+            if (state->hoverButton != 0) {
+                HWND button = GetDlgItem(window, state->hoverButton);
+                state->hoverButton = 0;
+                if (button) InvalidateRect(button, nullptr, FALSE);
+            }
+            break;
+        }
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORLISTBOX: {
-            // DISABLED DARK THEME - dark mode recolored the edit/listbox
-            // background to RGB(45, 45, 45) with light text (kept for
-            // future use):
-            // if (state && state->isDarkMode && state->darkCardBrush) {
-            //     HDC hdc = reinterpret_cast<HDC>(wParam);
-            //     SetBkMode(hdc, OPAQUE);
-            //     SetBkColor(hdc, RGB(45, 45, 45));
-            //     SetTextColor(hdc, RGB(240, 240, 240));
-            //     return reinterpret_cast<LRESULT>(state->darkCardBrush.Get());
-            // }
+            if (state && state->isDarkMode && state->darkCardBrush) {
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                SetBkMode(hdc, OPAQUE);
+                SetBkColor(hdc, RGB(45, 45, 45));
+                SetTextColor(hdc, RGB(240, 240, 240));
+                return reinterpret_cast<LRESULT>(state->darkCardBrush.Get());
+            }
             break;
         }
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLORDLG: {
-            // DISABLED DARK THEME - dark mode drew statics with light
-            // text RGB(240, 240, 240) (kept for future use):
-            // if (state && state->isDarkMode && state->darkBgBrush) {
-            //     HDC hdc = reinterpret_cast<HDC>(wParam);
-            //     HWND control = reinterpret_cast<HWND>(lParam);
-            //     SetBkMode(hdc, TRANSPARENT);
-            //     const bool disabled =
-            //         control && !IsWindowEnabled(control);
-            //     SetTextColor(hdc, disabled ? RGB(140, 140, 140)
-            //                                 : RGB(240, 240, 240));
-            //     return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
-            // }
+            if (state && state->isDarkMode && state->darkBgBrush) {
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                HWND control = reinterpret_cast<HWND>(lParam);
+                SetBkMode(hdc, TRANSPARENT);
+                const bool disabled =
+                    control && !IsWindowEnabled(control);
+                SetTextColor(hdc, disabled ? RGB(140, 140, 140)
+                                            : RGB(240, 240, 240));
+                return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+            }
             break;
         }
-// DISABLED DARK THEME - kept commented for future use (see the long
-// note above the DarkModeActivation block).
-//         case WM_CTLCOLORBTN: {
-//             if (state && state->isDarkMode && state->darkBgBrush) {
-//                 HDC hdc = reinterpret_cast<HDC>(wParam);
-//                 HWND control = reinterpret_cast<HWND>(lParam);
-                // The themed DarkMode_Explorer checkbox glyph needs an
-                // opaque background matching the dialog (network flyout
-                // approach), otherwise it sits on a light patch.
-//                 if (control == state->alwaysUse) {
-//                     SetBkMode(hdc, OPAQUE);
-//                     SetBkColor(hdc, RGB(32, 32, 32));
-//                     return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
-//                 }
-//                 SetBkMode(hdc, TRANSPARENT);
-//                 const bool disabled =
-//                     control && !IsWindowEnabled(control);
-//                 SetTextColor(hdc, disabled ? RGB(140, 140, 140)
-//                                             : RGB(240, 240, 240));
-//                 return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
-//             }
-//             break;
-//         }
+        case WM_CTLCOLORBTN: {
+            if (state && state->isDarkMode && state->darkBgBrush) {
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                HWND control = reinterpret_cast<HWND>(lParam);
+                // The owner-drawn checkbox needs an opaque background
+                // matching the dialog, otherwise the button control
+                // erases itself with the light COLOR_BTNFACE.
+                if (control == state->alwaysUse) {
+                    SetBkMode(hdc, OPAQUE);
+                    SetBkColor(hdc, RGB(32, 32, 32));
+                    return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+                }
+                SetBkMode(hdc, TRANSPARENT);
+                const bool disabled =
+                    control && !IsWindowEnabled(control);
+                SetTextColor(hdc, disabled ? RGB(140, 140, 140)
+                                            : RGB(240, 240, 240));
+                return reinterpret_cast<LRESULT>(state->darkBgBrush.Get());
+            }
+            break;
+        }
         case WM_COMMAND:
             if (!state) break;
             if (LOWORD(wParam) == IDOK) {
                 const int index = SelectedIndex(*state);
                 if (index >= 0 && static_cast<size_t>(index) < state->handlers.size()) {
+                    // Surface an unlaunchable selection while the dialog
+                    // is still open instead of only beeping after it
+                    // closes.
+                    if (!SelectedHandlerLaunchable(
+                            state->handlers[static_cast<size_t>(index)])) {
+                        MessageBoxW(window, LOC(STR_OPEN_FAILED),
+                                    LOC(STR_TITLE), MB_ICONERROR | MB_OK);
+                        return 0;
+                    }
                     state->chosenIndex = index;
                     state->accepted = true;
                     const std::wstring extension =
@@ -2912,7 +5256,7 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                     state->makeDefaultRequested =
                         extension.size() > 1 && extension[0] == L'.' &&
                         (state->request.setDefaultOnly ||
-                         Button_GetCheck(state->alwaysUse) == BST_CHECKED);
+                         AlwaysUseChecked(*state));
                     if (state->description) {
                         const int chars =
                             GetWindowTextLengthW(state->description);
@@ -2936,20 +5280,73 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
             }
             if (LOWORD(wParam) == IDCANCEL) { DestroyWindow(window); return 0; }
             if (LOWORD(wParam) == IDC_SOW_BROWSE) { Browse(*state); return 0; }
-            // DISABLED DARK THEME - clicking the checkbox label static
-            // used to toggle the companion checkbox (kept for future use):
-            // if (LOWORD(wParam) == IDC_SOW_ALWAYS_USE_LABEL) {
-            //     const bool checked =
-            //         Button_GetCheck(state->alwaysUse) == BST_CHECKED;
-            //     Button_SetCheck(state->alwaysUse,
-            //                     checked ? BST_UNCHECKED : BST_CHECKED);
-            //     return 0;
-            // }
+            if (LOWORD(wParam) == IDC_SOW_ALWAYS_USE) {
+                // Dark mode runs the checkbox as owner-drawn: clicks do
+                // not auto-toggle, so toggle the mirrored state and
+                // repaint. Light mode keeps BS_AUTOCHECKBOX, which
+                // toggles on its own; only the mirror is refreshed.
+                if (state->isDarkMode) {
+                    SetAlwaysUseChecked(*state, !state->alwaysUseChecked);
+                } else {
+                    state->alwaysUseChecked =
+                        Button_GetCheck(state->alwaysUse) == BST_CHECKED;
+                }
+                return 0;
+            }
             break;
         case WM_NOTIFY: {
             if (!state) break;
             auto header = reinterpret_cast<NMHDR*>(lParam);
             if (header && header->idFrom == IDC_SOW_PROGRAMS) {
+                if (header->code == NM_CUSTOMDRAW) {
+                    if (!state->isDarkMode) break;
+                    // Dark mode paints the rows like the Windows 7
+                    // network flyout: a rounded rectangle with a soft
+                    // fill and a brighter border for the hovered and the
+                    // selected row, instead of the DarkMode_Explorer
+                    // highlight. This also fixes the first entry being
+                    // shown with a white background right after the
+                    // dialog opens, since no themed highlight is drawn
+                    // anymore. Light mode never reaches this code.
+                    auto listDraw = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
+                    if (!listDraw) break;
+                    if (listDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
+                        return CDRF_NOTIFYITEMDRAW;
+                    if (listDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                        // Group headers ("Recommended", "Other Programs")
+                        // are reported here too, with dwItemSpec holding
+                        // the group id rather than a row index. Only the
+                        // "Other Programs" header gets a custom color;
+                        // the themed draw ignores clrText for group
+                        // labels, so ask for a post-paint pass instead and
+                        // redraw the label there (see
+                        // RepaintOtherProgramsHeaderText). Everything
+                        // else, including the "Recommended" header, keeps
+                        // the plain themed draw.
+                        if (listDraw->dwItemType == LVCDI_GROUP) {
+                            if (static_cast<int>(listDraw->nmcd.dwItemSpec) ==
+                                GROUP_OTHER) {
+                                return CDRF_NOTIFYPOSTPAINT;
+                            }
+                            break;
+                        }
+                        // The row is drawn entirely here (background,
+                        // icon and label) and the default drawing is
+                        // skipped: letting comctl32 draw would repaint
+                        // the themed selection rectangle on top of the
+                        // Windows 7 frame and put a dark text box over
+                        // the hover fill.
+                        PaintWin7ListRow(*state, *listDraw);
+                        return CDRF_SKIPDEFAULT;
+                    }
+                    if (listDraw->nmcd.dwDrawStage == CDDS_ITEMPOSTPAINT &&
+                        listDraw->dwItemType == LVCDI_GROUP &&
+                        static_cast<int>(listDraw->nmcd.dwItemSpec) ==
+                            GROUP_OTHER) {
+                        RepaintOtherProgramsHeaderText(*state, *listDraw);
+                    }
+                    break;
+                }
                 if (header->code == LVN_ITEMCHANGED) UpdateSelectionUi(*state);
                 if (header->code == NM_DBLCLK && SelectedIndex(*state) >= 0)
                     SendMessageW(window, WM_COMMAND, IDOK, 0);
@@ -2966,9 +5363,12 @@ static LRESULT PickerWndProcBody(HWND window, UINT message, WPARAM wParam, LPARA
                 if (customDraw->dwDrawStage == CDDS_PREPAINT) {
                     // SysLink doesn't route through WM_CTLCOLORSTATIC, so its
                     // plain (non-hyperlink) text keeps the default color and
-                    // must be set explicitly. DISABLED DARK THEME - dark mode
-                    // used RGB(240, 240, 240) here (kept for future use).
-                    SetTextColor(customDraw->hdc, RGB(0, 0, 0));
+                    // looks inconsistent against a dark background unless we
+                    // recolor it here. The hyperlink portion itself keeps its
+                    // usual accent color, matching native Explorer dark mode.
+                    SetTextColor(customDraw->hdc,
+                                 state->isDarkMode ? RGB(240, 240, 240)
+                                                    : RGB(0, 0, 0));
                     return CDRF_DODEFAULT;
                 }
                 break;
@@ -3202,6 +5602,49 @@ static HRESULT InvokeExecutableWithFile(const std::wstring& executable,
     return hr;
 }
 
+// AppX / Store handlers carry only a DelegateExecute value in their
+// shell\open\command key: they have neither a usable command template nor a
+// direct executable path. Such handlers are launched through their own
+// IAssocHandler::Invoke - unlike generic association resolution, invoking
+// the specific handler the user picked does not re-resolve the association,
+// so it cannot re-enter Open With.
+static HRESULT InvokeHandlerWithDataObject(StandaloneAssocHandler* handler,
+                                           const std::wstring& path) {
+    if (!handler || !IsSupportedFile(path)) return E_INVALIDARG;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0,
+                                  nullptr)) ||
+        !pidl) {
+        return E_FAIL;
+    }
+    ComPtr<IDataObject> dataObject;
+    // SHCreateDataObject takes an array of const PIDLs.
+    LPCITEMIDLIST pidls[1] = {pidl};
+    const HRESULT createHr = SHCreateDataObject(
+        nullptr, 1, pidls, nullptr, IID_PPV_ARGS(dataObject.Put()));
+    ILFree(pidl);
+    if (FAILED(createHr) || !dataObject) return createHr;
+    const HRESULT invokeHr = handler->Invoke(dataObject.Get());
+    Wh_Log(L"Standalone Open With: handler invoker fallback hr=0x%08X",
+           static_cast<unsigned int>(invokeHr));
+    return invokeHr;
+}
+
+// Whether the given entry has at least one working launch route (direct
+// executable, command template or handler invoker). Used to surface an
+// unlaunchable selection while the dialog is still open instead of beeping
+// only after it has closed.
+static bool SelectedHandlerLaunchable(const HandlerEntry& entry) {
+    if (entry.handler) return true;
+    if (!entry.internalName.empty() && IsSupportedFile(entry.internalName))
+        return true;
+    if (!entry.progId.empty()) {
+        if (!CommandTemplateForProgId(entry.progId).empty()) return true;
+        if (!ExecutableForProgId(entry.progId).empty()) return true;
+    }
+    return false;
+}
+
 static HRESULT InvokeSelectedHandler(const PickerState& state,
                                      HandlerEntry& selected) {
     try {
@@ -3226,6 +5669,10 @@ static HRESULT InvokeSelectedHandler(const PickerState& state,
         if (FAILED(directHr)) {
             directHr = InvokeExecutableWithFile(executable,
                                                 state.request.path);
+        }
+        if (FAILED(directHr) && selected.handler) {
+            directHr = InvokeHandlerWithDataObject(selected.handler.Get(),
+                                                   state.request.path);
         }
         Wh_Log(L"Standalone Open With: selected handler direct result "
                L"progId=%s exe=%s hr=0x%08X",
@@ -3364,6 +5811,12 @@ static void ShowPicker(PickerRequest request) {
     WindowOwner windowOwner(window);
     ShowWindow(window, SW_SHOWNORMAL);
     ActivatePickerWindow(window);
+    // Dark mode only: give the list the focus so keyboard navigation
+    // starts on the pre-selected first entry, which is painted with the
+    // Windows 7 flyout selection frame. Light mode keeps its old
+    // behavior.
+    if (state.isDarkMode && state.list && IsWindow(state.list))
+        SetFocus(state.list);
 
     HANDLE stopHandle = g_stopEvent.get();
     while (!state.finished) {
@@ -3491,16 +5944,43 @@ static bool WaitForPickerWorker(DWORD timeoutMilliseconds) {
     return g_workerReady.load(std::memory_order_acquire);
 }
 
+// The worker thread (COM STA, common controls, picker window class and
+// message loop) is started lazily on the first picker request instead of
+// at injection time. @include rundll32.exe injects the mod into every
+// rundll32 process - Control Panel applets, printer/device UI,
+// shell32 Control_RunDLL and dozens of other hosts that never show an
+// Open With dialog - so those processes must not pay for the worker at
+// startup. The two QueuePicker entry points are the only users of the
+// worker, so the start lives here behind std::call_once.
+static std::once_flag g_workerStartOnce;
+static bool StartWorkerIfNeeded() {
+    std::call_once(g_workerStartOnce, [] {
+        if (!g_shuttingDown.load(std::memory_order_acquire)) {
+            try {
+                g_worker.emplace(WorkerMainNoexcept);
+            } catch (...) {
+                Wh_Log(L"Standalone Open With: worker thread creation failed");
+            }
+        }
+    });
+    return g_worker.has_value() && WaitForPickerWorker(3000);
+}
+
 static bool QueuePicker(HWND owner, PCWSTR path,
                         bool setDefaultOnly = false) {
     if (!g_replaceSystemDialog.load(std::memory_order_acquire) ||
-        !g_workerReady.load(std::memory_order_acquire) ||
         g_shuttingDown.load(std::memory_order_acquire) || !path) {
         Wh_Log(L"Standalone Open With: QueuePicker rejected early (replace=%d "
-               L"workerReady=%d shuttingDown=%d hasPath=%d)",
+               L"shuttingDown=%d hasPath=%d)",
                g_replaceSystemDialog.load(std::memory_order_acquire),
-               g_workerReady.load(std::memory_order_acquire),
                g_shuttingDown.load(std::memory_order_acquire), path ? 1 : 0);
+        return false;
+    }
+    // Start the worker lazily on the first request (see
+    // StartWorkerIfNeeded); hosts that never show a picker never pay
+    // for the thread.
+    if (!StartWorkerIfNeeded()) {
+        Wh_Log(L"Standalone Open With: QueuePicker rejected, worker unavailable");
         return false;
     }
     std::wstring copy;
@@ -3536,9 +6016,10 @@ static bool QueuePicker(HWND owner, PCWSTR path,
 
 static bool QueuePickerAndWait(HWND owner, PCWSTR path,
                                bool setDefaultOnly = false) {
-    if (!path || !WaitForPickerWorker(3000) ||
+    if (!path ||
         !g_replaceSystemDialog.load(std::memory_order_acquire) ||
-        g_shuttingDown.load(std::memory_order_acquire)) {
+        g_shuttingDown.load(std::memory_order_acquire) ||
+        !StartWorkerIfNeeded()) {
         return false;
     }
 
@@ -3577,9 +6058,26 @@ static bool QueuePickerAndWait(HWND owner, PCWSTR path,
         COWAIT_DISPATCH_CALLS | COWAIT_DISPATCH_WINDOW_MESSAGES,
         INFINITE, ARRAYSIZE(waits), waits, &completedIndex);
     if (FAILED(waitResult)) {
-        const DWORD wait = WaitForMultipleObjects(ARRAYSIZE(waits), waits,
-                                                   FALSE, INFINITE);
-        completedIndex = wait == WAIT_OBJECT_0 ? 0 : 1;
+        // The calling thread may not have COM initialized
+        // (CO_E_NOTINITIALIZED) or may be an MTA thread (no window-message
+        // dispatch). Blocking it on a bare WaitForMultipleObjects would
+        // freeze its windows ("Not Responding") and deadlock the worker:
+        // the picker is owned by a window of this thread, and USER32
+        // needs it to pump messages to deactivate/activate that owner.
+        // Fall back to a message-pumping wait instead.
+        for (;;) {
+            const DWORD wait = MsgWaitForMultipleObjects(
+                ARRAYSIZE(waits), waits, FALSE, INFINITE, QS_ALLINPUT);
+            if (wait == WAIT_OBJECT_0 || wait == WAIT_OBJECT_0 + 1) {
+                completedIndex = wait - WAIT_OBJECT_0;
+                break;
+            }
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
     }
     return completedIndex == 0;
 }
@@ -3860,7 +6358,7 @@ static bool InstallOpenWithMenuMethodHooks() {
     }
 
     bool result = false;
-    {
+    try {
         ComPtr<IUnknown> unknown;
         HRESULT hr = CoCreateInstance(
             kClsidOpenWithMenu, nullptr, CLSCTX_INPROC_SERVER, IID_IUnknown,
@@ -3875,6 +6373,12 @@ static bool InstallOpenWithMenuMethodHooks() {
         }
 
         if (contextMenu && shellExtInit) {
+            // InterfaceMethod dereferences the object's raw vtable at a
+            // fixed slot index. If the installed CLSID_OpenWithMenu
+            // implementation ever changes its vtable layout, these reads
+            // (or the SetFunctionHook calls below, which patch at that
+            // address) could fault; contain that in this probe instead of
+            // letting it take down the host process.
             auto initialize =
                 reinterpret_cast<OpenWithMenuInitialize_t>(
                     InterfaceMethod(shellExtInit.Get(), 3));
@@ -3907,6 +6411,10 @@ static bool InstallOpenWithMenuMethodHooks() {
                    static_cast<unsigned int>(hr), contextMenu ? 1 : 0,
                    shellExtInit ? 1 : 0);
         }
+    } catch (...) {
+        result = false;
+        Wh_Log(L"Standalone Open With: CLSID_OpenWithMenu vtable probe "
+               L"threw, hooks not installed");
     }
 
     if (uninitialize) CoUninitialize();
@@ -4337,31 +6845,37 @@ static bool InstallDirectOpenWithEntryHook(PCWSTR path) {
         return false;
     }
 
-    HMODULE executable = GetModuleHandleW(nullptr);
-    if (!executable) return false;
-    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(executable);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
-        reinterpret_cast<const BYTE*>(executable) + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE ||
-        !nt->OptionalHeader.AddressOfEntryPoint) {
+    // Walks the loaded module's own PE headers to locate its entry point.
+    // A malformed or unexpected image layout (e_lfanew pointing outside
+    // the mapped module, an unusual header size, etc.) would otherwise
+    // dereference bad memory and crash OpenWith.exe outright; treat any
+    // fault here as "can't hook this build" instead of taking the process
+    // down.
+    try {
+        HMODULE executable = GetModuleHandleW(nullptr);
+        if (!executable) return false;
+        auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(executable);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+        auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+            reinterpret_cast<const BYTE*>(executable) + dos->e_lfanew);
+        if (nt->Signature != IMAGE_NT_SIGNATURE ||
+            !nt->OptionalHeader.AddressOfEntryPoint) {
+            return false;
+        }
+        auto entry = reinterpret_cast<ProcessEntryPoint_t>(
+            reinterpret_cast<BYTE*>(executable) +
+            nt->OptionalHeader.AddressOfEntryPoint);
+        const bool hooked = WindhawkUtils::SetFunctionHook(
+            entry, OpenWithEntryPointHook, &OpenWithEntryPointOriginal);
+        Wh_Log(L"Standalone Open With: direct entry hook=%d entry=%p path=%s",
+               hooked, reinterpret_cast<void*>(entry), path);
+        return hooked;
+    } catch (...) {
+        Wh_Log(L"Standalone Open With: direct entry hook setup threw, "
+               L"falling back to Windows");
         return false;
     }
-    auto entry = reinterpret_cast<ProcessEntryPoint_t>(
-        reinterpret_cast<BYTE*>(executable) +
-        nt->OptionalHeader.AddressOfEntryPoint);
-    const bool hooked = WindhawkUtils::SetFunctionHook(
-        entry, OpenWithEntryPointHook, &OpenWithEntryPointOriginal);
-    Wh_Log(L"Standalone Open With: direct entry hook=%d entry=%p path=%s",
-           hooked, reinterpret_cast<void*>(entry), path);
-    return hooked;
 }
-
-using CreateProcessW_t = BOOL(WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
-                                       LPSECURITY_ATTRIBUTES, BOOL, DWORD,
-                                       LPVOID, LPCWSTR, LPSTARTUPINFOW,
-                                       LPPROCESS_INFORMATION);
-static CreateProcessW_t CreateProcessWOriginal = nullptr;
 
 // Extracts the file path argument from an "OpenWith.exe -c <path>"-style
 // command line. Returns an empty string if nothing usable is found.
@@ -4387,44 +6901,6 @@ static std::wstring ExtractOpenWithTargetPath(LPCWSTR commandLine) {
     }
     LocalFree(argv);
     return result;
-}
-
-static BOOL WINAPI CreateProcessWHook(
-    LPCWSTR applicationName, LPWSTR commandLine,
-    LPSECURITY_ATTRIBUTES processAttributes,
-    LPSECURITY_ATTRIBUTES threadAttributes, BOOL inheritHandles,
-    DWORD creationFlags, LPVOID environment, LPCWSTR currentDirectory,
-    LPSTARTUPINFOW startupInfo, LPPROCESS_INFORMATION processInformation) {
-    try {
-        const std::wstring exe = applicationName
-                                     ? applicationName
-                                     : ExecutableFromCommand(commandLine ? commandLine : L"");
-        const bool looksLikeOpenWith =
-            !exe.empty() && !_wcsicmp(PathFindFileNameW(exe.c_str()), L"OpenWith.exe");
-        if (looksLikeOpenWith &&
-            g_replaceSystemDialog.load(std::memory_order_acquire)) {
-            std::wstring path = ExtractOpenWithTargetPath(commandLine);
-            if (!path.empty() && QueuePicker(nullptr, path.c_str())) {
-                Wh_Log(L"Standalone Open With: blocked OpenWith.exe launch, "
-                       L"showing custom picker (path=%s)", path.c_str());
-                if (processInformation) {
-                    ZeroMemory(processInformation, sizeof(*processInformation));
-                }
-                SetLastError(ERROR_CANCELLED);
-                return FALSE;
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"Standalone Open With: CreateProcessW hook exception, "
-               L"falling back to original");
-    }
-    return CreateProcessWOriginal
-        ? CreateProcessWOriginal(applicationName, commandLine,
-                                 processAttributes, threadAttributes,
-                                 inheritHandles, creationFlags, environment,
-                                 currentDirectory, startupInfo,
-                                 processInformation)
-        : FALSE;
 }
 
 using SHOpenWithDialog_t = HRESULT(WINAPI*)(HWND, const OPENASINFO*);
@@ -4610,6 +7086,14 @@ static bool VerifySystemBinariesExist() {
     }
 }
 
+// @include rundll32.exe exists only for the legacy rundll32.exe
+// shell32.dll,OpenAs_RunDLL entry point: OpenAs_RunDLL calls
+// SHOpenWithDialog inside shell32.dll, so the SHOpenWithDialog export
+// hook installed by HookShell32Exports (including late loads via the
+// LoadLibraryExW hook) covers it without any rundll32-specific code.
+// With @architecture x86-64 only the 64-bit rundll32 is covered: a
+// 64-bit caller's OpenAs_RunDLL uses the 64-bit rundll32, so that route
+// works; 32-bit callers fall outside this mod's architecture scope.
 BOOL Wh_ModInit() {
     try {
         if (!VerifySystemBinariesExist()) {
@@ -4640,7 +7124,8 @@ BOOL Wh_ModInit() {
         g_workerReadyEvent.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
         if (!g_stopEvent || !g_requestEvent || !g_workerReadyEvent)
             return FALSE;
-        g_worker.emplace(WorkerMainNoexcept);
+        // The picker worker thread is started lazily on the first
+        // request (see StartWorkerIfNeeded below).
 
         bool hookedLoadLibrary = false;
         HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
@@ -4684,35 +7169,20 @@ BOOL Wh_ModInit() {
             }
         }
 
-        bool hookedCreateProcess = false;
-        if (isExplorer) {
-            HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-            auto createProcessW = kernel32
-                ? reinterpret_cast<CreateProcessW_t>(
-                      GetProcAddress(kernel32, "CreateProcessW"))
-                : nullptr;
-            if (createProcessW) {
-                hookedCreateProcess = WindhawkUtils::SetFunctionHook(
-                    createProcessW, CreateProcessWHook,
-                    &CreateProcessWOriginal);
-            }
-        }
-
         // The stable context-menu vtable probe is intentionally deferred to
         // Wh_ModAfterInit so Explorer's main thread is not forced to activate a
         // shell extension during process initialization.
         const bool anyHook = hookedLoadLibrary || hookedShellExports ||
                              hookedServerRegistration || hookedDirectEntry ||
-                             hookedCreateProcess || isExplorer;
+                             isExplorer;
         Wh_Log(L"Standalone Open With: init process=%s pid=%u shell32=%p "
                L"loadLibrary=%d shellExports=%d serverRegistration=%d "
-               L"directEntry=%d createProcess=%d deferredMenuProbe=%d",
+               L"directEntry=%d deferredMenuProbe=%d",
                moduleName, GetCurrentProcessId(), shell32,
                hookedLoadLibrary, hookedShellExports,
                hookedServerRegistration, hookedDirectEntry,
-               hookedCreateProcess, isExplorer);
+               isExplorer);
         if (!anyHook) {
-            Wh_Log(L"An error has been found! The mod will disable itself for security.\n");
             StopWorker();
             return FALSE;
         }
