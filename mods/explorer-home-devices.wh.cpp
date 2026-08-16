@@ -281,6 +281,11 @@ thread_local std::unordered_map<HWND, ULONG>
 thread_local HHOOK g_driveKeyboardMessageHook = nullptr;
 thread_local IContextMenu2* g_trackedContextMenu2 = nullptr;
 thread_local IContextMenu3* g_trackedContextMenu3 = nullptr;
+// Set for the duration of a drag that started on one of the mod's own drive
+// cards (DragStarting to DropCompleted), so the cards decline to be drop
+// targets for their own kind of drag -- dropping one drive card on another
+// would otherwise queue a whole-volume copy/move.
+thread_local bool g_driveCardDragInProgress = false;
 
 struct DriveCardEventState {
     winrt::weak_ref<muxc::GridViewItem> item;
@@ -295,6 +300,7 @@ struct DriveCardEventState {
     winrt::event_token dragEnterToken;
     winrt::event_token dragOverToken;
     winrt::event_token dropToken;
+    winrt::event_token dropCompletedToken;
     winrt::event_token pointerEnteredToken;
     winrt::event_token pointerExitedToken;
     winrt::event_token selectionCheckBoxClickToken;
@@ -303,6 +309,13 @@ struct DriveCardEventState {
     winrt::event_token renameLostFocusToken;
     IFileExplorerNavigationControllerAbi* navigationController = nullptr;
     bool renaming = false;
+    // Separate from renaming: renaming stays true for the whole edit
+    // (including while RenameDriveWithShell's Shell call is in flight, so
+    // IsDriveCardRenamingInGrid keeps reporting the card busy), while this
+    // one guards CompleteDriveRename itself against being re-entered while
+    // still on the stack -- e.g. a queued LostFocus dispatched by the
+    // pumping SetNameOf call.
+    bool renameCompleting = false;
     bool renameFocusPending = false;
     bool selectionCheckBoxesEnabled = false;
     bool pointerOver = false;
@@ -357,7 +370,7 @@ thread_local std::vector<HomeSelectionEventState>
 
 void RequestDriveRefresh(uint32_t refreshKinds = kDriveRefreshTopology);
 void RequestInitialDriveSnapshot();
-bool RefreshDevicesSectionsForCurrentThread();
+void RefreshDevicesSectionsForCurrentThread();
 void EnsureShellNotificationsForCurrentThread();
 std::vector<HWND> GetFileExplorerWindows();
 void ClearDriveCardEventHandlersForCurrentThread();
@@ -1830,9 +1843,16 @@ muxc::GridViewItem FindFocusedDriveCard() {
 void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
                          bool restoreCardFocus = true) {
     auto state = FindDriveRenameState(renameBox);
-    if (!state || !state->renaming) {
+    if (!state || !state->renaming || state->renameCompleting) {
         return;
     }
+    // Collapsing renameBox/moving focus below queues an asynchronous
+    // LostFocus that can be dispatched while RenameDriveWithShell's
+    // SetNameOf is still pumping (e.g. an elevation dialog) -- renaming
+    // alone can't guard against that reentrant call, since it deliberately
+    // stays true for that whole window. renameCompleting is cleared
+    // alongside it further down.
+    state->renameCompleting = true;
 
     // state->renaming is cleared further down, only after the Shell call
     // below returns. RenameDriveWithShell can pump messages, and
@@ -1884,6 +1904,7 @@ void CompleteDriveRename(muxc::TextBox const& renameBox, bool commit,
     state = FindDriveRenameState(renameBox);
     if (state) {
         state->renaming = false;
+        state->renameCompleting = false;
     }
 
     // A grid refresh arriving while this card was renaming was deferred (see
@@ -2231,10 +2252,12 @@ void DriveCard_DragStarting(
                 winrt::unbox_value<winrt::hstring>(item.Tag()));
         }
         g_pendingDragPreparations.fetch_add(1);
+        g_driveCardDragInProgress = true;
         try {
             PopulateDriveDragData(args, std::move(rootPaths));
         } catch (...) {
             FinishDriveDragPreparation();
+            g_driveCardDragInProgress = false;
             throw;
         }
     } catch (...) {
@@ -2242,6 +2265,12 @@ void DriveCard_DragStarting(
         Wh_Log(L"Couldn't start the WinUI drive drag: %08X",
                winrt::to_hresult().value);
     }
+}
+
+void DriveCard_DropCompleted(
+    winrt::Windows::Foundation::IInspectable const&,
+    mux::DropCompletedEventArgs const&) {
+    g_driveCardDragInProgress = false;
 }
 
 winrt::Windows::ApplicationModel::DataTransfer::DataPackageOperation
@@ -2301,7 +2330,11 @@ HRESULT TransferStorageItemsToDrive(
     UINT queuedItems = 0;
     for (auto const& storageItem : storageItems) {
         auto path = storageItem.Path();
-        if (path.empty()) {
+        // A volume root is never a valid copy/move source here -- every
+        // drive card is also a drop target, so without this a card dragged
+        // onto another card would queue the whole volume for
+        // IFileOperation::CopyItem/MoveItem.
+        if (path.empty() || PathIsRootW(path.c_str())) {
             continue;
         }
 
@@ -2350,7 +2383,7 @@ HRESULT TransferStorageItemsToDrive(
 void DriveCard_DragOver(
     winrt::Windows::Foundation::IInspectable const&,
     mux::DragEventArgs const& args) {
-    if (g_unloading.load()) {
+    if (g_unloading.load() || g_driveCardDragInProgress) {
         return;
     }
 
@@ -2514,6 +2547,7 @@ void ClearDriveCardEventHandlers(DriveCardEventState const& state) {
             item.DragEnter(state.dragEnterToken);
             item.DragOver(state.dragOverToken);
             item.Drop(state.dropToken);
+            item.DropCompleted(state.dropCompletedToken);
             item.PointerEntered(state.pointerEnteredToken);
             item.PointerExited(state.pointerExitedToken);
             item.UnregisterPropertyChangedCallback(
@@ -2604,13 +2638,32 @@ muxm::ImageSource CreateDriveImageSource(DriveInfo const& drive) {
     }
 }
 
+// AddHandler projects routed-event delegates as Object. Keep the boxed object
+// so RemoveHandler receives the exact same instance during unload.
+winrt::Windows::Foundation::IInspectable RetainRoutedEventHandler(
+    muxi::PointerEventHandler const& handler) {
+    return winrt::box_value(handler);
+}
+
+winrt::Windows::Foundation::IInspectable RetainRoutedEventHandler(
+    muxi::KeyEventHandler const& handler) {
+    return winrt::box_value(handler);
+}
+
 muxc::GridViewItem CreateDriveCard(
     DriveInfo const& drive,
     IFileExplorerNavigationControllerAbi* navigationController,
     bool selectionCheckBoxesEnabled) {
     muxc::GridViewItem card;
     card.Width(264);
-    card.Height(82);
+    // MinHeight, not a fixed Height: matches the native Quick access tile's
+    // own ContentGrid (fixed Width, MinHeight only, Height left at its
+    // default Auto), confirmed against a live UWPSpy tree dump of that
+    // control. Letting height grow from content is what keeps a taller
+    // BodyStrongTextBlockStyle/CaptionTextBlockStyle (system text-size
+    // accessibility setting turned up) from clipping instead of just
+    // overflowing the fixed box.
+    card.MinHeight(82);
     card.Margin(mux::Thickness{0, 0, 20, 3});
     card.Padding(mux::Thickness{10, 8, 12, 8});
     card.CornerRadius(mux::CornerRadius{8, 8, 8, 8});
@@ -2688,9 +2741,10 @@ muxc::GridViewItem CreateDriveCard(
     renameBox.Height(30);
     renameBox.MaxLength(32);
     renameBox.Padding(mux::Thickness{4, 0, 4, 0});
-    renameBox.FontFamily(muxm::FontFamily{L"Segoe UI Variable"});
-    renameBox.FontSize(14);
-    renameBox.FontWeight(wut::FontWeights::SemiBold());
+    // Matches title (the label it replaces while editing): otherwise, once
+    // BodyStrongTextBlockStyle resolves, the editor stops following the
+    // system text-size accessibility setting the label does.
+    ApplyBodyStrongTextStyle(renameBox);
     renameBox.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
     renameBox.VerticalAlignment(mux::VerticalAlignment::Center);
     renameBox.Visibility(mux::Visibility::Collapsed);
@@ -2739,14 +2793,15 @@ muxc::GridViewItem CreateDriveCard(
                                                : drive.fileSystemPath}));
 
     auto doubleTappedToken = card.DoubleTapped(DriveCard_DoubleTapped);
-    auto keyDownHandler = winrt::box_value(
-        muxi::KeyEventHandler{DriveCard_KeyDown});
+    auto keyDownHandler =
+        RetainRoutedEventHandler(muxi::KeyEventHandler{DriveCard_KeyDown});
     card.AddHandler(mux::UIElement::KeyDownEvent(), keyDownHandler, true);
     auto rightTappedToken = card.RightTapped(DriveCard_RightTapped);
     auto dragStartingToken = card.DragStarting(DriveCard_DragStarting);
     auto dragEnterToken = card.DragEnter(DriveCard_DragOver);
     auto dragOverToken = card.DragOver(DriveCard_DragOver);
     auto dropToken = card.Drop(DriveCard_Drop);
+    auto dropCompletedToken = card.DropCompleted(DriveCard_DropCompleted);
     auto pointerEnteredToken = card.PointerEntered(DriveCard_PointerEntered);
     auto pointerExitedToken = card.PointerExited(DriveCard_PointerExited);
     auto selectionCheckBoxClickToken =
@@ -2759,30 +2814,30 @@ muxc::GridViewItem CreateDriveCard(
     if (navigationController) {
         navigationController->AddRef();
     }
+    // Designated initializers: with 20+ positional fields, adding or
+    // reordering one would otherwise silently shift every field after it.
     g_driveCardEventStates->push_back({
-        winrt::make_weak(card),
-        title,
-        renameBox,
-        driveIcon,
-        selectionCheckBox,
-        doubleTappedToken,
-        keyDownHandler,
-        rightTappedToken,
-        dragStartingToken,
-        dragEnterToken,
-        dragOverToken,
-        dropToken,
-        pointerEnteredToken,
-        pointerExitedToken,
-        selectionCheckBoxClickToken,
-        selectedChangedToken,
-        renameKeyDownToken,
-        renameLostFocusToken,
-        navigationController,
-        false,
-        false,
-        selectionCheckBoxesEnabled,
-        false,
+        .item = winrt::make_weak(card),
+        .title = title,
+        .renameBox = renameBox,
+        .driveIcon = driveIcon,
+        .selectionCheckBox = selectionCheckBox,
+        .doubleTappedToken = doubleTappedToken,
+        .keyDownHandler = keyDownHandler,
+        .rightTappedToken = rightTappedToken,
+        .dragStartingToken = dragStartingToken,
+        .dragEnterToken = dragEnterToken,
+        .dragOverToken = dragOverToken,
+        .dropToken = dropToken,
+        .dropCompletedToken = dropCompletedToken,
+        .pointerEnteredToken = pointerEnteredToken,
+        .pointerExitedToken = pointerExitedToken,
+        .selectionCheckBoxClickToken = selectionCheckBoxClickToken,
+        .selectedChangedToken = selectedChangedToken,
+        .renameKeyDownToken = renameKeyDownToken,
+        .renameLostFocusToken = renameLostFocusToken,
+        .navigationController = navigationController,
+        .selectionCheckBoxesEnabled = selectionCheckBoxesEnabled,
     });
     UpdateDriveSelectionCheckBox(g_driveCardEventStates->back());
 
@@ -2949,13 +3004,6 @@ void ClearDevicesHeaderEventHandlersForCurrentThread() {
     g_devicesHeaderEventStates.clear();
 }
 
-// AddHandler projects routed-event delegates as Object. Keep the boxed object
-// so RemoveHandler receives the exact same instance during unload.
-winrt::Windows::Foundation::IInspectable RetainRoutedEventHandler(
-    muxi::PointerEventHandler const& handler) {
-    return winrt::box_value(handler);
-}
-
 bool IsTrackedDriveSource(mux::DependencyObject source,
                           muxc::Grid const& surface) {
     while (source && source != surface) {
@@ -3032,7 +3080,11 @@ void UpdateDriveMarqueeSelection(
     auto surface = state.surface.get();
     auto panel = state.panel.get();
     auto grid = panel ? FindDevicesGrid(panel) : nullptr;
-    if (!surface || !grid) {
+    // Collapsing the section collapses the GridView, not the individual
+    // cards, so with the section collapsed the cards are still Visible but
+    // with stale/zero layout bounds -- without this, a drag near the
+    // Home surface's top-left could flip their IsSelected.
+    if (!surface || !grid || grid.Visibility() != mux::Visibility::Visible) {
         return;
     }
 
@@ -3256,10 +3308,10 @@ void ClearHomeSelectionEventHandlersForCurrentThread() {
     g_homeSelectionEventStates.clear();
 }
 
-bool RefreshDevicesSectionsForCurrentThread() {
+void RefreshDevicesSectionsForCurrentThread() {
     auto snapshot = GetLatestDriveSnapshot();
     if (!snapshot || g_unloading.load()) {
-        return false;
+        return;
     }
 
     PruneExpiredDriveCardEventHandlersForCurrentThread();
@@ -3284,8 +3336,6 @@ bool RefreshDevicesSectionsForCurrentThread() {
         }
         ++it;
     }
-
-    return true;
 }
 
 muxc::StackPanel CreateDevicesSection() {
@@ -4139,9 +4189,13 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND window, UINT message,
     }
 
     if (message == GetShellChangeMessage()) {
+        // Called unconditionally, even while unloading: it's what runs
+        // SHChangeNotification_Lock/Unlock, which releases this delivery's
+        // SHCNRF_NewDelivery shared-memory entry regardless of whether the
+        // event ends up mattering. Only the resulting refresh is skipped.
         LONG eventId = 0;
-        if (!g_unloading.load() &&
-            IsRelevantShellDriveEvent(wParam, lParam, &eventId)) {
+        bool relevant = IsRelevantShellDriveEvent(wParam, lParam, &eventId);
+        if (relevant && !g_unloading.load()) {
             RequestDriveRefresh(
                 (eventId & ~SHCNE_FREESPACE) ? kDriveRefreshTopology
                                              : kDriveRefreshCapacity);
@@ -4402,8 +4456,7 @@ void Wh_ModUninit() {
     for (HWND window : GetFileExplorerWindows()) {
         if (!RunFromWindowThread(
                 window, RemoveDevicesSectionsForCurrentThreadProc, nullptr)) {
-            Wh_Log(L"Couldn't clean Explorer window %08X",
-                   static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(window)));
+            Wh_Log(L"Couldn't clean Explorer window %p", window);
         }
     }
 
