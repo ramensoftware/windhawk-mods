@@ -2,13 +2,13 @@
 // @id              win7-legacy-applet-restorer
 // @name            Windows 7 Legacy Applet Restorer
 // @description     This mod restores some classic Control Panel applets and localized Windows 7 task links using native components
-// @version         1.0.0
+// @version         2.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lcomctl32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,6 +21,8 @@ This mod restores classic Control Panel applets and classic task links in Catego
 * Network Connections
 * Printers and Faxes
 * HomeGroup (legacy, partially functional)
+* BitLocker Drive Encryption
+* Tablet PC Settings
 
 Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
@@ -62,6 +64,12 @@ Credits to m417z for the code review and enhancing the mod.
 - enableHomeGroup: true
   $name: HomeGroup
   $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied.
+- enableBitLocker: true
+  $name: BitLocker Drive Encryption
+  $description: This setting adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category), only when Windows still registers its CLSID
+- enableTabletPCSettings: true
+  $name: Tablet PC Settings
+  $description: This setting adds the "Tablet PC Settings" icon to the Control Panel (Hardware and Sound category), only when Windows still registers its CLSID (touch/pen-capable devices)
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
   $description: This setting restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
@@ -126,6 +134,7 @@ runs with stock applet ordering.
 #include <memory>
 #include <new>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
 
@@ -135,6 +144,8 @@ struct Settings {
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
     std::atomic<bool> enableHomeGroup;
+    std::atomic<bool> enableBitLocker;
+    std::atomic<bool> enableTabletPCSettings;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
@@ -173,6 +184,13 @@ std::wstring g_personalizationName;
 // projects without claiming that the removed networking service itself works. If
 // Windows no longer exposes the CLSID, no virtual replacement is made.
 static std::atomic<bool> g_homeGroupClsidAvailable{ false };
+// BitLocker and Tablet PC Settings are real, unmodified Windows CLSIDs; they
+// are simply not always *registered* (BitLocker needs Pro/Enterprise+TPM,
+// Tablet PC Settings needs a touch/pen-capable device). Same gating pattern
+// as HomeGroup above: only inject the category placement when the CLSID is
+// actually present, so the icon never appears as a dead end.
+static std::atomic<bool> g_bitlockerClsidAvailable{ false };
+static std::atomic<bool> g_tabletPcClsidAvailable{ false };
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
@@ -338,10 +356,25 @@ static const std::wstring kSuppressedGuid          = L"{98f2ab62-0e29-4e4c-8ee7-
 static const std::wstring kWindowsToGoGuid          = L"{8e0c279d-0bd1-43c3-9ebd-31c3dc5b8a77}";
 static const std::wstring kInfraredGuid             = L"{a0275511-0e86-4eca-97c2-ecd8f1221d08}";
 static const std::wstring kWorkFoldersGuid          = L"{ecdb0924-4208-451e-8ee0-373c0956de16}";
+static const std::wstring kBitLockerGuid            = L"{d9ef8727-cac2-4e60-809e-86f80a666c91}";
+static const std::wstring kTabletPcSettingsGuid     = L"{80f3f1d5-feca-45f3-bc32-752c152e456e}";
+// Own, made-up CLSIDs for the *virtual* Control Panel entries that mirror the
+// two real applets above. We don't inject the real GUIDs directly (Explorer's
+// Category View never asks about them at all on Win10/11 - confirmed by
+// tracing: no open/query hits either way, unlike Network Connections/Printers/
+// HomeGroup, whose real CLSIDs Explorer does probe for category data even
+// though it doesn't list them by default). So instead we register brand-new
+// CLSIDs, exactly like the Personalization entry above, whose name/icon are
+// copied at runtime from the real applet and whose command re-launches the
+// real applet via "explorer shell:::{realGuid}" - same command form already
+// used for the HomeGroup task links.
+static const std::wstring kBitLockerVirtualGuid     = L"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}";
+static const std::wstring kTabletPcVirtualGuid      = L"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}";
 
-static const DWORD kCategoryAppearance = 1;
-static const DWORD kCategoryHardware   = 2;
-static const DWORD kCategoryNetwork    = 3;
+static const DWORD kCategoryAppearance      = 1;
+static const DWORD kCategoryHardware        = 2;
+static const DWORD kCategoryNetwork         = 3;
+static const DWORD kCategorySystemSecurity  = 5; // Matches the id used by the System-and-Security task group further below
 
 std::wstring ToLower(const std::wstring& str) {
     std::wstring res = str;
@@ -354,17 +387,214 @@ bool EndsWith(const std::wstring& str, const std::wstring& suffix) {
     return str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+// Minimal RAII wrapper around HKEY: closes the key on scope exit no matter
+// how the scope is left (early return, thrown exception from a caller up the
+// stack, etc.), so callers never need a manual RegCloseKey to remember.
+class ScopedHKey {
+public:
+    ScopedHKey() = default;
+    explicit ScopedHKey(HKEY key) : key_(key) {}
+    ScopedHKey(const ScopedHKey&) = delete;
+    ScopedHKey& operator=(const ScopedHKey&) = delete;
+    ScopedHKey(ScopedHKey&& other) noexcept : key_(other.key_) { other.key_ = nullptr; }
+    ScopedHKey& operator=(ScopedHKey&& other) noexcept {
+        if (this != &other) { Close(); key_ = other.key_; other.key_ = nullptr; }
+        return *this;
+    }
+    ~ScopedHKey() { Close(); }
+
+    HKEY* AddressOf() { Close(); return &key_; }
+    // Returns the currently held HKEY WITHOUT closing it. AddressOf() closes
+    // the key first (it's meant for output parameters like RegOpenKeyExW), so
+    // using it to read an already-open handle would silently close that key
+    // and hand nullptr to the next registry call.
+    HKEY Get() const { return key_; }
+    explicit operator bool() const { return key_ != nullptr; }
+
+private:
+    void Close() { if (key_) { RegCloseKey(key_); key_ = nullptr; } }
+    HKEY key_ = nullptr;
+};
+
 bool IsRegisteredClsid(const std::wstring& guid) {
-    HKEY key = nullptr;
+    ScopedHKey key;
     const std::wstring path = L"CLSID\\" + guid;
-    const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, path.c_str(), 0, KEY_READ, &key);
-    if (status != ERROR_SUCCESS) return false;
-    RegCloseKey(key);
-    return true;
+    const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, path.c_str(), 0, KEY_READ, key.AddressOf());
+    return status == ERROR_SUCCESS && key;
 }
 
 bool IsHomeGroupAvailable() {
     return g_settings.enableHomeGroup.load() && g_homeGroupClsidAvailable.load();
+}
+
+// Reads a REG_SZ/REG_EXPAND_SZ value from an already-open key via the plain,
+// unhooked registry API (only ever called from InitDisplayNames, before this
+// mod's own hooks are installed - see call site).
+bool ReadStringValue(HKEY key, const wchar_t* valueName, std::wstring& out) {
+    DWORD type = 0, size = 0;
+    if (RegQueryValueExW(key, valueName, nullptr, &type, nullptr, &size) != ERROR_SUCCESS || size == 0)
+        return false;
+    if (type != REG_SZ && type != REG_EXPAND_SZ) return false;
+    std::wstring buffer(size / sizeof(wchar_t) + 1, L'\0');
+    if (RegQueryValueExW(key, valueName, nullptr, &type, (LPBYTE)buffer.data(), &size) != ERROR_SUCCESS)
+        return false;
+    buffer.resize(wcslen(buffer.c_str()));
+    out = std::move(buffer);
+    return true;
+}
+
+// Copies the display name and icon of a REAL, already-registered CLSID, so a
+// virtual entry mirroring it always matches whatever this Windows build
+// actually ships - no hardcoded resource indices to go stale between builds.
+// Name resolution follows the same "LocalizedString wins, indirect strings
+// get resolved, plain (Default) value is the fallback" rule Explorer itself
+// uses for CLSID display names.
+bool ReadRealClsidNameAndIcon(const std::wstring& realGuid, std::wstring& outName, std::wstring& outIcon) {
+    ScopedHKey clsidKey;
+    const std::wstring clsidPath = L"CLSID\\" + realGuid;
+    LSTATUS openStatus = RegOpenKeyExW(HKEY_CLASSES_ROOT, clsidPath.c_str(), 0, KEY_READ, clsidKey.AddressOf());
+    if (openStatus != ERROR_SUCCESS) {
+        Wh_Log(L"  [%s] RegOpenKeyExW failed, status=%ld", realGuid.c_str(), openStatus);
+        return false;
+    }
+
+    std::wstring rawName;
+    bool gotLocalized = ReadStringValue(clsidKey.Get(), L"LocalizedString", rawName);
+    Wh_Log(L"  [%s] LocalizedString: %s (raw=\"%s\")", realGuid.c_str(),
+        gotLocalized ? L"found" : L"absent", rawName.c_str());
+    if (!gotLocalized) {
+        bool gotDefault = ReadStringValue(clsidKey.Get(), nullptr, rawName);
+        Wh_Log(L"  [%s] (Default): %s (raw=\"%s\")", realGuid.c_str(),
+            gotDefault ? L"found" : L"absent", rawName.c_str());
+    }
+
+    if (rawName.empty()) {
+        Wh_Log(L"  [%s] No usable name value at all", realGuid.c_str());
+        return false;
+    }
+
+    if (rawName[0] == L'@') {
+        wchar_t resolved[512] = { 0 };
+        HRESULT hr = SHLoadIndirectString(rawName.c_str(), resolved, ARRAYSIZE(resolved), nullptr);
+        Wh_Log(L"  [%s] SHLoadIndirectString(\"%s\") -> hr=0x%08lX, result=\"%s\"",
+            realGuid.c_str(), rawName.c_str(), (unsigned long)hr, resolved);
+        if (SUCCEEDED(hr) && resolved[0]) {
+            outName = resolved;
+        } else {
+            return false;
+        }
+    } else {
+        outName = rawName;
+    }
+
+    ScopedHKey iconKey;
+    const std::wstring iconPath = clsidPath + L"\\DefaultIcon";
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, iconPath.c_str(), 0, KEY_READ, iconKey.AddressOf()) == ERROR_SUCCESS) {
+        bool gotIcon = ReadStringValue(iconKey.Get(), nullptr, outIcon);
+        Wh_Log(L"  [%s] DefaultIcon: %s (raw=\"%s\")", realGuid.c_str(),
+            gotIcon ? L"found" : L"absent", outIcon.c_str());
+    } else {
+        Wh_Log(L"  [%s] DefaultIcon subkey missing", realGuid.c_str());
+    }
+    return true;
+}
+
+// A Control Panel entry this mod registers from scratch under its own CLSID
+// (same technique as Personalization above), whose identity (name/icon) is
+// copied at runtime from a real applet and whose command re-launches that
+// real applet. Used for applets Explorer's Category View never queries on
+// its own (see the long comment by kBitLockerVirtualGuid).
+struct VirtualApplet {
+    std::wstring guidLower;
+    std::wstring clsidSuffix, defaultIconSuffix, shellSuffix, shellOpenSuffix, openCommandSuffix, nsSuffix;
+    std::wstring displayName;
+    std::wstring iconValue;
+    std::wstring infoTip;       // Indirect-string resource shown as the Win7-style description tooltip
+    std::wstring openCommand;
+    DWORD category = 0;
+    std::atomic<bool>* enabledSetting = nullptr;
+};
+
+static std::vector<VirtualApplet> g_virtualApplets;
+
+// Resolves an indirect-string resource reference ("@dll,-id") to its actual
+// localized text using the same API Explorer uses. Returns an empty string on
+// failure.
+std::wstring ResolveIndirectString(const std::wstring& indirect) {
+    if (indirect.empty() || indirect[0] != L'@') return indirect;
+    wchar_t resolved[512] = { 0 };
+    HRESULT hr = SHLoadIndirectString(indirect.c_str(), resolved, ARRAYSIZE(resolved), nullptr);
+    if (SUCCEEDED(hr) && resolved[0]) {
+        Wh_Log(L"  SHLoadIndirectString(\"%s\") -> \"%s\"", indirect.c_str(), resolved);
+        return resolved;
+    }
+    Wh_Log(L"  SHLoadIndirectString(\"%s\") failed, hr=0x%08lX", indirect.c_str(), (unsigned long)hr);
+    return L"";
+}
+
+// Builds one VirtualApplet entry by copying the real applet's name/icon.
+// On Windows 10/11 the legacy CLSID keys are often mere COM stubs: the key
+// exists (so IsRegisteredClsid succeeds) but carries no LocalizedString or
+// (Default) value, because Windows now resolves these applets through their
+// canonical name straight from the resource DLL. When the registry read comes
+// up empty, we fall back to the well-known resource references for that
+// applet (same technique Personalization already uses with themecpl.dll).
+// The infotip fallback is the resource reference Explorer shows as the
+// Win7-style description ("white text") under the applet link; Windows
+// localizes it automatically for every installed UI language.
+// Returns false only if both paths fail.
+bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realGuid,
+                      DWORD category, std::atomic<bool>* enabledSetting,
+                      const std::wstring& fallbackNameIndirect = L"",
+                      const std::wstring& fallbackIcon = L"",
+                      const std::wstring& fallbackInfoTip = L"") {
+    std::wstring name, icon;
+    bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
+    if (!gotFromRegistry || name.empty()) {
+        if (!fallbackNameIndirect.empty()) {
+            Wh_Log(L"  [%s] registry name unavailable, using resource fallback \"%s\"",
+                realGuid.c_str(), fallbackNameIndirect.c_str());
+            name = ResolveIndirectString(fallbackNameIndirect);
+            if (icon.empty() && !fallbackIcon.empty()) {
+                icon = fallbackIcon;
+            }
+        }
+    }
+
+    if (name.empty()) {
+        Wh_Log(L"  [%s] no usable name from registry or fallback", realGuid.c_str());
+        return false;
+    }
+
+    // InfoTip: the Win7-style description that appears below the applet name
+    // in Control Panel category view and in the hover tooltip. We pre-resolve
+    // the "@dll,-id" indirect string here so Explorer receives plain, already
+    // localized text regardless of whether it resolves indirect strings for
+    // synthetic CLSIDs. The original indirect reference is kept too as a
+    // secondary value (infoTipIndirect) for parity with real applets.
+    std::wstring infoTipResolved;
+    if (!fallbackInfoTip.empty()) {
+        infoTipResolved = ResolveIndirectString(fallbackInfoTip);
+        Wh_Log(L"  [%s] InfoTip resolved: \"%s\"", realGuid.c_str(),
+            infoTipResolved.empty() ? L"(empty)" : infoTipResolved.c_str());
+    }
+
+    VirtualApplet applet;
+    applet.guidLower = ToLower(virtualGuid);
+    applet.clsidSuffix       = L"clsid\\" + applet.guidLower;
+    applet.defaultIconSuffix = applet.clsidSuffix + L"\\defaulticon";
+    applet.shellSuffix       = applet.clsidSuffix + L"\\shell";
+    applet.shellOpenSuffix   = applet.shellSuffix + L"\\open";
+    applet.openCommandSuffix = applet.shellOpenSuffix + L"\\command";
+    applet.nsSuffix          = L"controlpanel\\namespace\\" + applet.guidLower;
+    applet.displayName = name;
+    applet.iconValue = icon;
+    applet.infoTip = infoTipResolved.empty() ? fallbackInfoTip : infoTipResolved;
+    applet.openCommand = L"explorer.exe shell:::" + realGuid;
+    applet.category = category;
+    applet.enabledSetting = enabledSetting;
+    g_virtualApplets.push_back(std::move(applet));
+    return true;
 }
 
 // Allocation-free case-insensitive check for the registry-hook hot path.
@@ -462,6 +692,9 @@ bool EnsureClassicTaskLinksFile() {
         const char* changeHomePage;
         const char* manageBrowserAddons;
         const char* deleteBrowsingHistory;
+        const char* bitlockerManage;
+        const char* tabletCalibrate;
+        const char* tabletPenTouch;
     };
 
     // Hard-coded localized Windows 7-style labels. The selected entry follows
@@ -470,36 +703,36 @@ bool EnsureClassicTaskLinksFile() {
     // MUI/resource dependency; English remains the fallback for other locales.
     // Review corrections can be made one row at a time without altering logic.
      static const TaskLinkTexts kTaskLinkTexts[] = {
-        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies" },
-        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie" },
-        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies" },
-        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies" },
-        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen" },
-        { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies" },
-        { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies" },
-        { L"nl", "Verander het thema", "Bureaubladachtergrond wijzigen", "Verander de kleuren van vensterglas", "Verander geluidseffecten", "Schermbeveiliging wijzigen", "Systeempictogrammen in- of uitschakelen", "Herstel het standaardpictogramgedrag", "Bekijk de netwerkstatus en taken", "Maak verbinding met een netwerk", "Bekijk netwerkcomputers en apparaten", "Voeg een draadloos apparaat toe aan het netwerk", "Voeg een printer toe", "Standaardprinters instellen", "Wijzig de printerinstellingen", "Bekijk apparaten en printers", "Kies thuisgroep- en deelopties", "Deel printers", "Pas de schermresolutie aan", "Controleer de status van uw computer", "Maak een back-up van uw computer", "Problemen vinden en oplossen", "Controleer de firewallstatus", "Een programma verwijderen", "Schakel Windows-functies in of uit", "Accountafbeelding wijzigen", "Gebruikersaccounts toevoegen of verwijderen", "Stel ouderlijk toezicht in voor elke gebruiker", "Wijzig de datum en tijd", "Wijzig invoermethoden", "Laat Windows instellingen voor u voorstellen", "Startpagina wijzigen", "Browser-invoegtoepassingen beheren", "Browsergeschiedenis en cookies verwijderen" },
-        { L"pl", "Zmień motyw", "Zmień tło pulpitu", "Zmień kolory szyb okiennych", "Zmień efekty dźwiękowe", "Zmień wygaszacz ekranu", "Włącz lub wyłącz ikony systemowe", "Przywróć domyślne zachowanie ikon", "Wyświetl stan sieci i zadania", "Połącz się z siecią", "Wyświetl komputery i urządzenia sieciowe", "Dodaj urządzenie bezprzewodowe do sieci", "Dodaj drukarkę", "Skonfiguruj drukarki domyślne", "Zmień ustawienia drukarki", "Wyświetl urządzenia i drukarki", "Wybierz grupę domową i opcje udostępniania", "Udostępnij drukarki", "Dostosuj rozdzielczość ekranu", "Sprawdź stan swojego komputera", "Utwórz kopię zapasową komputera", "Znajdź i rozwiąż problemy", "Sprawdź stan zapory", "Odinstaluj program", "Włącz lub wyłącz funkcje systemu Windows", "Zmień zdjęcie konta", "Dodaj lub usuń konta użytkowników", "Skonfiguruj kontrolę rodzicielską dla dowolnego użytkownika", "Zmień datę i godzinę", "Zmień metody wprowadzania", "Pozwól systemowi Windows zasugerować ustawienia", "Zmień stronę główną", "Zarządzaj dodatkami przeglądarki", "Usuń historię przeglądania i pliki cookie" },
-        { L"ru", "Изменить тему", "Изменить фон рабочего стола", "Изменить цвет оконного стекла", "Изменить звуковые эффекты", "Изменить заставку", "Включить или выключить системные значки", "Восстановить поведение значков по умолчанию", "Просмотреть состояние сети и задачи", "Подключиться к сети", "Просмотреть сетевые компьютеры и устройства", "Добавить беспроводное устройство в сеть", "Добавить принтер", "Настроить принтеры по умолчанию", "Изменить настройки принтера", "Просмотреть устройства и принтеры", "Выбрать домашнюю группу и параметры общего доступа", "Предоставить общий доступ к принтерам", "Настроить разрешение экрана", "Проверить состояние компьютера", "Создать резервную копию компьютера", "Найти и устранить проблемы", "Проверить состояние брандмауэра", "Удалить программу", "Включить или выключить компоненты Windows", "Изменить изображение аккаунта", "Добавить или удалить учетные записи пользователей", "Настроить родительский контроль для любого пользователя", "Изменить дату и время", "Изменить методы ввода", "Разрешить Windows предлагать параметры", "Изменить домашнюю страницу", "Управление надстройками браузера", "Удаление журнала браузера и файлов cookie" },
-        { L"uk", "Змінити тему", "Змінити фон робочого столу", "Змінити колір віконного скла", "Змінити звукові ефекти", "Змінити заставку", "Увімкнути або вимкнути системні значки", "Відновити поведінку піктограм за замовчуванням", "Переглянути стан мережі та завдання", "Підключитися до мережі", "Переглянути мережеві комп'ютери й пристрої", "Додати бездротовий пристрій до мережі", "Додати принтер", "Налаштувати принтери за замовчуванням", "Змінити налаштування принтера", "Переглянути пристрої та принтери", "Вибрати домашню групу та параметри спільного доступу", "Спільно використовувати принтери", "Налаштувати роздільну здатність екрана", "Перевірити стан комп'ютера", "Створити резервну копію комп'ютера", "Знайти й усунути проблеми", "Перевірити стан брандмауера", "Видалити програму", "Увімкнути або вимкнути компоненти Windows", "Змінити зображення облікового запису", "Додати або видалити облікові записи користувачів", "Налаштувати батьківський контроль для будь-якого користувача", "Змінити дату й час", "Змінити методи введення", "Дозволити Windows пропонувати параметри", "Змінити домашню сторінку", "Керування надбудовами браузера", "Видалити журнал браузера та файли cookie" },
-        { L"tr", "Temayı değiştir", "Masaüstü arka planını değiştir", "Pencere camı renklerini değiştirme", "Ses efektlerini değiştir", "Ekran koruyucuyu değiştir", "Sistem simgelerini açma veya kapatma", "Varsayılan simge davranışlarını geri yükle", "Ağ durumunu ve görevlerini görüntüleyin", "Bir ağa bağlanma", "Ağ bilgisayarlarını ve cihazlarını görüntüleyin", "Ağa kablosuz cihaz ekleme", "Yazıcı ekle", "Varsayılan yazıcıları ayarlama", "Yazıcı ayarlarını değiştirin", "Cihazları ve yazıcıları görüntüleyin", "Ev grubu ve paylaşım seçeneklerini seçin", "Yazıcıları paylaş", "Ekran çözünürlüğünü ayarlayın", "Bilgisayarınızın durumunu inceleyin", "Bilgisayarınızı yedekleyin", "Sorunları bulun ve düzeltin", "Güvenlik duvarı durumunu kontrol edin", "Bir programı kaldırma", "Windows özelliklerini açma veya kapatma", "Hesap resmini değiştir", "Kullanıcı hesaplarını ekleme veya kaldırma", "Herhangi bir kullanıcı için ebeveyn denetimlerini ayarlayın", "Tarihi ve saati değiştirme", "Giriş yöntemlerini değiştirin", "Windows'un sizin için ayarlar önermesine izin verin", "Giriş sayfasını değiştir", "Tarayıcı eklentilerini yönet", "Göz atma geçmişini ve tanımlama bilgilerini sil" },
-        { L"ar", "تغيير الموضوع", "تغيير خلفية سطح المكتب", "تغيير ألوان زجاج النوافذ", "تغيير المؤثرات الصوتية", "تغيير شاشة التوقف", "تشغيل أيقونات النظام أو إيقاف تشغيلها", "استعادة سلوكيات الأيقونة الافتراضية", "عرض حالة الشبكة والمهام", "الاتصال بالشبكة", "عرض أجهزة الكمبيوتر والأجهزة المتصلة بالشبكة", "إضافة جهاز لاسلكي إلى الشبكة", "إضافة طابعة", "إعداد الطابعات الافتراضية", "تغيير إعدادات الطابعة", "عرض الأجهزة والطابعات", "اختيار مجموعة المشاركة المنزلية وخيارات المشاركة", "مشاركة الطابعات", "ضبط دقة الشاشة", "مراجعة حالة الكمبيوتر", "إنشاء نسخة احتياطية للكمبيوتر", "البحث عن المشاكل وإصلاحها", "التحقق من حالة جدار الحماية", "إلغاء تثبيت برنامج", "تشغيل ميزات Windows أو إيقاف تشغيلها", "تغيير صورة الحساب", "إضافة أو إزالة حسابات المستخدمين", "إعداد الضوابط الأبوية لأي مستخدم", "تغيير التاريخ والوقت", "تغيير طرق الإدخال", "السماح لـ Windows باقتراح الإعدادات", "تغيير الصفحة الرئيسية", "إدارة الوظائف الإضافية للمتصفح", "حذف محفوظات الاستعراض وملفات تعريف الارتباط" },
-        { L"he", "שנה את הנושא", "שנה רקע שולחן העבודה", "שנה את צבעי זכוכית החלון", "שנה אפקטים קוליים", "שנה שומר מסך", "הפעל או כבה את סמלי המערכת", "שחזר את התנהגויות ברירת המחדל של סמלים", "הצג את מצב הרשת ומשימות", "התחבר לרשת", "הצג מחשבים והתקנים ברשת", "הוסף התקן אלחוטי לרשת", "הוסף מדפסת", "הגדר מדפסות ברירת מחדל", "שנה את הגדרות המדפסת", "הצג מכשירים ומדפסות", "בחר קבוצה ביתית ואפשרויות שיתוף", "שתף מדפסות", "התאם את רזולוציית המסך", "בדוק את מצב המחשב שלך", "גבה את המחשב שלך", "מצא ותקן בעיות", "בדוק את מצב חומת האש", "הסר התקנה של תוכנית", "הפעל או כבה את תכונות Windows", "שנה את תמונת החשבון", "הוסף או הסר חשבונות משתמש", "הגדר בקרת הורים עבור כל משתמש", "שנה את התאריך והשעה", "שנה שיטות קלט", "תן ל-Windows להציע עבורך הגדרות", "שנה דף בית", "נהל תוספות דפדפן", "מחק היסטוריית גלישה וקובצי Cookie" },
-        { L"ja", "テーマを変更する", "デスクトップの背景を変更する", "窓ガラスの色を変更する", "効果音を変更する", "スクリーンセーバーを変更する", "システムアイコンをオンまたはオフにする", "デフォルトのアイコン動作を復元する", "ネットワークのステータスとタスクを表示する", "ネットワークに接続する", "ネットワークのコンピュータとデバイスを表示する", "ワイヤレスデバイスをネットワークに追加する", "プリンターを追加する", "デフォルトのプリンターを設定する", "プリンターの設定を変更する", "デバイスとプリンターを表示する", "ホームグループと共有オプションを選択する", "プリンターを共有する", "画面解像度を調整する", "コンピュータのステータスを確認する", "コンピュータをバックアップする", "問題を見つけて解決する", "ファイアウォールのステータスを確認する", "プログラムをアンインストールする", "Windows の機能をオンまたはオフにする", "アカウントの写真を変更する", "ユーザーアカウントの追加または削除", "任意のユーザーに対してペアレントコントロールを設定する", "日付と時刻を変更する", "入力方法を変更する", "Windows が設定を提案してくれるようにする", "ホーム ページの変更", "ブラウザーのアドオンの管理", "閲覧の履歴と Cookie の削除" },
-        { L"ko", "테마 변경", "데스크탑 배경 변경", "창유리 색상 변경", "음향 효과 변경", "화면 보호기 변경", "시스템 아이콘 켜기 또는 끄기", "기본 아이콘 동작 복원", "네트워크 상태 및 작업 보기", "네트워크에 연결", "네트워크 컴퓨터 및 장치 보기", "네트워크에 무선 장치 추가", "프린터 추가", "기본 프린터 설정", "프린터 설정 변경", "장치 및 프린터 보기", "홈 그룹 및 공유 옵션 선택", "프린터 공유", "화면 해상도 조정", "컴퓨터 상태 검토", "컴퓨터 백업", "문제 찾기 및 수정", "방화벽 상태 확인", "프로그램 제거", "Windows 기능 켜기 또는 끄기", "계정 사진 변경", "사용자 계정 추가 또는 제거", "모든 사용자에 대해 자녀 보호 기능 설정", "날짜 및 시간 변경", "입력 방법 변경", "Windows에서 설정을 제안하도록 허용", "홈 페이지 변경", "브라우저 추가 기능 관리", "검색 기록 및 쿠키 삭제" },
-        { L"zh-CN", "更改主题", "更改桌面背景", "改变窗玻璃颜色", "改变音效", "更改屏幕保护程序", "打开或关闭系统图标", "恢复默认图标行为", "查看网络状态和任务", "连接到网络", "查看网络计算机和设备", "将无线设备添加到网络", "添加打印机", "设置默认打印机", "更改打印机设置", "查看设备和打印机", "选择家庭组和共享选项", "共享打印机", "调整屏幕分辨率", "查看计算机的状态", "备份您的计算机", "发现并解决问题", "检查防火墙状态", "卸载程序", "打开或关闭 Windows 功能", "更改账户图片", "添加或删除用户帐户", "为任何用户设置家长控制", "更改日期和时间", "更改输入法", "让 Windows 为您建议设置", "更改主页", "管理浏览器加载项", "删除浏览历史记录和 Cookie" },
-        { L"zh-TW", "更改主題", "更改桌面背景", "改變窗玻璃顏色", "改變音效", "更改螢幕保護程式", "開啟或關閉系統圖標", "恢復預設圖示行為", "查看網路狀態和任務", "連接網路", "查看網路電腦和設備", "將無線設備新增至網絡", "新增印表機", "設定預設印表機", "變更印表機設定", "查看設備和印表機", "選擇家庭群組和共享選項", "共用印表機", "調整螢幕解析度", "查看計算機的狀態", "備份您的計算機", "發現並解決問題", "檢查防火牆狀態", "解除安裝程式", "開啟或關閉 Windows 功能", "更改帳戶圖片", "新增或刪除使用者帳戶", "為任何使用者設定家長監護", "更改日期和時間", "更改輸入法", "讓 Windows 為您建議設定", "變更首頁", "管理瀏覽器附加元件", "刪除瀏覽歷程記錄和 Cookie" },
-        { L"cs", "Změnit téma", "Změnit pozadí plochy", "Změnit barvu okenního skla", "Změnit zvukové efekty", "Změnit spořič obrazovky", "Zapnout nebo vypnout systémové ikony", "Obnovit výchozí chování ikon", "Zobrazit stav sítě a úlohy", "Připojit se k síti", "Zobrazit síťové počítače a zařízení", "Přidat bezdrátové zařízení do sítě", "Přidat tiskárnu", "Nastavit výchozí tiskárny", "Změnit nastavení tiskárny", "Zobrazit zařízení a tiskárny", "Vybrat domácí skupinu a možnosti sdílení", "Sdílet tiskárny", "Upravit rozlišení obrazovky", "Zkontrolovat stav počítače", "Zálohovat počítač", "Najít a opravit problémy", "Zkontrolovat stav brány firewall", "Odinstalovat program", "Zapnout nebo vypnout funkce systému Windows", "Změnit obrázek účtu", "Přidat nebo odebrat uživatelské účty", "Nastavit rodičovskou kontrolu pro libovolného uživatele", "Změnit datum a čas", "Změnit metody zadávání", "Nechat Windows navrhnout nastavení", "Změnit domovskou stránku", "Spravovat doplňky prohlížeče", "Odstranit historii procházení a soubory cookie" },
-        { L"da", "Skift tema", "Skift skrivebordsbaggrund", "Skift vinduesglasfarver", "Skift lydeffekter", "Skift pauseskærm", "Slå systemikoner til eller fra", "Gendan standard ikonadfærd", "Se netværksstatus og opgaver", "Opret forbindelse til et netværk", "Se netværkscomputere og -enheder", "Tilføj en trådløs enhed til netværket", "Tilføj en printer", "Konfigurer standardprintere", "Skift printerindstillinger", "Se enheder og printere", "Vælg hjemmegruppe og delingsmuligheder", "Del printere", "Juster skærmopløsningen", "Gennemgå din computers status", "Sikkerhedskopier din computer", "Find og ret problemer", "Tjek firewall-status", "Afinstaller et program", "Slå Windows-funktioner til eller fra", "Skift kontobillede", "Tilføj eller fjern brugerkonti", "Konfigurer forældrekontrol for enhver bruger", "Skift dato og klokkeslæt", "Skift indtastningsmetoder", "Lad Windows foreslå indstillinger for dig", "Skift startside", "Administrer browser-tilføjelser", "Slet browserhistorik og cookies" },
-        { L"fi", "Vaihda teemaa", "Vaihda työpöydän tausta", "Vaihda ikkunalasien väriä", "Muuta äänitehosteita", "Vaihda näytönsäästäjä", "Ota järjestelmäkuvakkeet käyttöön tai poista ne käytöstä", "Palauta oletuskuvakkeiden toimintatavat", "Tarkastele verkon tilaa ja tehtäviä", "Yhdistä verkkoon", "Tarkastele verkon tietokoneita ja laitteita", "Lisää langaton laite verkkoon", "Lisää tulostin", "Aseta oletustulostimet", "Muuta tulostimen asetuksia", "Tarkastele laitteita ja tulostimia", "Valitse kotiryhmä- ja jakamisasetukset", "Jaa tulostimia", "Säädä näytön resoluutiota", "Tarkista tietokoneesi tila", "Varmuuskopioi tietokoneesi", "Etsi ja korjaa ongelmat", "Tarkista palomuurin tila", "Poista ohjelman asennus", "Ota Windowsin ominaisuudet käyttöön tai poista ne käytöstä", "Vaihda tilikuvaa", "Lisää tai poista käyttäjätilejä", "Määritä lapsilukko kaikille käyttäjille", "Muuta päivämäärää ja kellonaikaa", "Muuta syöttötapoja", "Anna Windowsin ehdottaa asetuksia puolestasi", "Vaihda aloitussivua", "Hallinnoi selaimen apuohjelmia", "Poista selaushistoria ja evästeet" },
-        { L"el", "Αλλαγή θέματος", "Αλλαγή φόντου επιφάνειας εργασίας", "Αλλαγή χρωμάτων τζαμιών παραθύρων", "Αλλαγή ηχητικών εφέ", "Αλλαγή προφύλαξης οθόνης", "Ενεργοποίηση ή απενεργοποίηση εικονιδίων συστήματος", "Επαναφορά προεπιλεγμένων συμπεριφορών εικονιδίων", "Προβολή κατάστασης και εργασιών δικτύου", "Σύνδεση σε δίκτυο", "Προβολή υπολογιστών και συσκευών δικτύου", "Προσθήκη ασύρματης συσκευής στο δίκτυο", "Προσθήκη εκτυπωτή", "Ρύθμιση προεπιλεγμένων εκτυπωτών", "Αλλαγή ρυθμίσεων εκτυπωτή", "Προβολή συσκευών και εκτυπωτών", "Επιλογή οικιακής ομάδας και επιλογών κοινής χρήσης", "Κοινή χρήση εκτυπωτών", "Προσαρμογή ανάλυσης οθόνης", "Έλεγχος κατάστασης υπολογιστή", "Δημιουργία αντιγράφου ασφαλείας υπολογιστή", "Εύρεση και επιδιόρθωση προβλημάτων", "Έλεγχος κατάστασης τείχους προστασίας", "Απεγκατάσταση προγράμματος", "Ενεργοποίηση ή απενεργοποίηση δυνατοτήτων των Windows", "Αλλαγή εικόνας λογαριασμού", "Προσθήκη ή κατάργηση λογαριασμών χρηστών", "Ρύθμιση γονικού ελέγχου για οποιονδήποτε χρήστη", "Αλλαγή ημερομηνίας και ώρας", "Αλλαγή μεθόδων εισαγωγής", "Να επιτρέπεται στα Windows να προτείνουν ρυθμίσεις", "Αλλαγή αρχικής σελίδας", "Διαχείριση προσθηκών προγράμματος περιήγησης", "Διαγραφή ιστορικού περιήγησης και cookies" },
-        { L"hu", "Változtasd meg a témát", "Az asztal hátterének módosítása", "Az ablaküveg színének megváltoztatása", "Hanghatások módosítása", "Képernyővédő módosítása", "A rendszerikonok be- és kikapcsolása", "Az alapértelmezett ikonviselkedés visszaállítása", "Megtekintheti a hálózat állapotát és a feladatokat", "Csatlakozzon egy hálózathoz", "Tekintse meg a hálózati számítógépeket és eszközöket", "Adjon hozzá egy vezeték nélküli eszközt a hálózathoz", "Nyomtató hozzáadása", "Állítsa be az alapértelmezett nyomtatókat", "A nyomtató beállításainak módosítása", "Eszközök és nyomtatók megtekintése", "Válassza ki az otthoni csoportot és a megosztási beállításokat", "Nyomtatók megosztása", "Állítsa be a képernyő felbontását", "Tekintse át számítógépe állapotát", "Készítsen biztonsági másolatot a számítógépről", "Keresse meg és javítsa ki a problémákat", "Ellenőrizze a tűzfal állapotát", "Távolítson el egy programot", "Kapcsolja be vagy ki a Windows szolgáltatásait", "Fiókkép módosítása", "Felhasználói fiókok hozzáadása vagy eltávolítása", "Szülői felügyelet beállítása bármely felhasználó számára", "Módosítsa a dátumot és az időt", "Beviteli módszerek módosítása", "Hagyja, hogy a Windows beállításokat javasoljon Önnek", "Kezdőlap módosítása", "Böngésző-bővítmények kezelése", "Böngészési előzmények és cookie-k törlése" },
-        { L"nb", "Endre tema", "Endre skrivebordsbakgrunn", "Endre fargene på vinduets glass", "Endre lydeffekter", "Bytt skjermsparer", "Slå systemikoner på eller av", "Gjenopprett standard ikonatferd", "Se nettverksstatus og oppgaver", "Koble til et nettverk", "Se nettverksdatamaskiner og enheter", "Legg til en trådløs enhet i nettverket", "Legg til en skriver", "Sett opp standardskrivere", "Endre skriverinnstillinger", "Se enheter og skrivere", "Velg hjemmegruppe og delingsalternativer", "Del skrivere", "Juster skjermoppløsningen", "Se gjennom datamaskinens status", "Sikkerhetskopier datamaskinen", "Finn og fiks problemer", "Sjekk brannmurstatus", "Avinstaller et program", "Slå Windows-funksjoner på eller av", "Endre kontobilde", "Legg til eller fjern brukerkontoer", "Sett opp foreldrekontroll for alle brukere", "Endre dato og klokkeslett", "Endre inndatametoder", "La Windows foreslå innstillinger for deg", "Endre startside", "Administrer nettlesertillegg", "Slett nettleserhistorikk og informasjonskapsler" },
-        { L"ro", "Schimbați tema", "Schimbați fundalul desktopului", "Schimbați culorile geamului", "Schimbați efectele sonore", "Schimbați economizorul de ecran", "Activați sau dezactivați pictogramele de sistem", "Restabiliți comportamentul implicit al pictogramelor", "Vizualizați starea rețelei și sarcinile", "Conectați-vă la o rețea", "Vizualizați computerele și dispozitivele din rețea", "Adăugați un dispozitiv fără fir în rețea", "Adăugați o imprimantă", "Configurați imprimante implicite", "Modificați setările imprimantei", "Vizualizați dispozitivele și imprimantele", "Alegeți grupul de acasă și opțiunile de partajare", "Partajați imprimante", "Reglați rezoluția ecranului", "Examinați starea computerului dvs", "Faceți o copie de rezervă a computerului", "Găsiți și rezolvați problemele", "Verificați starea firewallului", "Dezinstalează un program", "Activați sau dezactivați funcțiile Windows", "Schimbați imaginea contului", "Adăugați sau eliminați conturi de utilizator", "Configurați controale parentale pentru orice utilizator", "Schimbați data și ora", "Schimbați metodele de introducere", "Lăsați Windows să vă sugereze setări", "Modificare pagina de pornire", "Gestionați suplimentele browserului", "Ștergeți istoricul de navigare și modulele cookie" },
-        { L"sv", "Ändra temat", "Ändra skrivbordsbakgrund", "Ändra fönsterglasfärger", "Ändra ljudeffekter", "Byt skärmsläckare", "Slå på eller av systemikoner", "Återställ standardikonbeteenden", "Visa nätverksstatus och uppgifter", "Anslut till ett nätverk", "Visa nätverksdatorer och enheter", "Lägg till en trådlös enhet i nätverket", "Lägg till en skrivare", "Konfigurera standardskrivare", "Ändra skrivarinställningar", "Visa enheter och skrivare", "Välj hemgrupp och delningsalternativ", "Dela skrivare", "Justera skärmupplösningen", "Granska din dators status", "Säkerhetskopiera din dator", "Hitta och åtgärda problem", "Kontrollera brandväggens status", "Avinstallera ett program", "Slå på eller av Windows-funktioner", "Byt kontobild", "Lägg till eller ta bort användarkonton", "Ställ in föräldrakontroll för alla användare", "Ändra datum och tid", "Ändra inmatningsmetoder", "Låt Windows föreslå inställningar åt dig", "Ändra startsida", "Hantera webbläsartillägg", "Ta bort webbhistorik och cookies" },
-        { L"vi", "Thay đổi chủ đề", "Thay đổi hình nền máy tính", "Thay đổi màu kính cửa sổ", "Thay đổi hiệu ứng âm thanh", "Thay đổi trình bảo vệ màn hình", "Bật hoặc tắt biểu tượng hệ thống", "Khôi phục hành vi biểu tượng mặc định", "Xem trạng thái và nhiệm vụ mạng", "Kết nối với mạng", "Xem máy tính và thiết bị mạng", "Thêm thiết bị không dây vào mạng", "Thêm máy in", "Thiết lập máy in mặc định", "Thay đổi cài đặt máy in", "Xem thiết bị và máy in", "Chọn nhóm nhà và tùy chọn chia sẻ", "Chia sẻ máy in", "Điều chỉnh độ phân giải màn hình", "Xem lại trạng thái máy tính của bạn", "Sao lưu máy tính của bạn", "Tìm và khắc phục sự cố", "Kiểm tra trạng thái tường lửa", "Gỡ cài đặt một chương trình", "Bật hoặc tắt các tính năng của Windows", "Thay đổi ảnh tài khoản", "Thêm hoặc xóa tài khoản người dùng", "Thiết lập quyền kiểm soát của phụ huynh cho bất kỳ người dùng nào", "Thay đổi ngày và giờ", "Thay đổi phương thức nhập", "Hãy để Windows đề xuất cài đặt cho bạn", "Thay đổi trang chủ", "Quản lý tiện ích bổ sung của trình duyệt", "Xóa lịch sử duyệt web và cookie" },
-        { L"id", "Ubah temanya", "Ubah latar belakang desktop", "Mengubah warna kaca jendela", "Ubah efek suara", "Ubah screen saver", "Mengaktifkan atau menonaktifkan ikon sistem", "Pulihkan perilaku ikon default", "Lihat status dan tugas jaringan", "Hubungkan ke jaringan", "Lihat komputer dan perangkat jaringan", "Tambahkan perangkat nirkabel ke jaringan", "Tambahkan pencetak", "Siapkan printer default", "Ubah pengaturan pencetak", "Lihat perangkat dan printer", "Pilih homegroup dan opsi berbagi", "Bagikan printer", "Sesuaikan resolusi layar", "Tinjau status komputer Anda", "Cadangkan komputer Anda", "Temukan dan perbaiki masalah", "Periksa status firewall", "Copot pemasangan suatu program", "Mengaktifkan atau menonaktifkan fitur Windows", "Ubah gambar akun", "Menambah atau menghapus akun pengguna", "Siapkan kontrol orang tua untuk pengguna mana pun", "Ubah tanggal dan waktu", "Ubah metode masukan", "Biarkan Windows menyarankan pengaturan untuk Anda", "Ubah beranda", "Kelola pengaya browser", "Hapus riwayat penjelajahan dan cookie" },
-        { L"th", "เปลี่ยนธีม", "เปลี่ยนพื้นหลังเดสก์ท็อป", "เปลี่ยนสีกระจกหน้าต่าง", "เปลี่ยนเอฟเฟกต์เสียง", "เปลี่ยนภาพพักหน้าจอ", "เปิดหรือปิดไอคอนระบบ", "คืนค่าลักษณะการทำงานของไอคอนเริ่มต้น", "ดูสถานะเครือข่ายและงาน", "เชื่อมต่อกับเครือข่าย", "ดูคอมพิวเตอร์และอุปกรณ์เครือข่าย", "เพิ่มอุปกรณ์ไร้สายเข้ากับเครือข่าย", "เพิ่มเครื่องพิมพ์", "ตั้งค่าเครื่องพิมพ์เริ่มต้น", "เปลี่ยนการตั้งค่าเครื่องพิมพ์", "ดูอุปกรณ์และเครื่องพิมพ์", "เลือกโฮมกรุ๊ปและตัวเลือกการแชร์", "แบ่งปันเครื่องพิมพ์", "ปรับความละเอียดหน้าจอ", "ตรวจสอบสถานะของคอมพิวเตอร์ของคุณ", "สำรองข้อมูลคอมพิวเตอร์ของคุณ", "ค้นหาและแก้ไขปัญหา", "ตรวจสอบสถานะไฟร์วอลล์", "ถอนการติดตั้งโปรแกรม", "เปิดหรือปิดคุณสมบัติ Windows", "เปลี่ยนรูปบัญชี", "เพิ่มหรือลบบัญชีผู้ใช้", "ตั้งค่าการควบคุมโดยผู้ปกครองสำหรับผู้ใช้ทุกคน", "เปลี่ยนวันที่และเวลา", "เปลี่ยนวิธีการป้อนข้อมูล", "ให้ Windows แนะนำการตั้งค่าให้กับคุณ", "เปลี่ยนโฮมเพจ", "จัดการส่วนเสริมของเบราว์เซอร์", "ลบประวัติการเรียกดูและคุกกี้" },
-        { L"hi", "थीम बदलें", "डेस्कटॉप पृष्ठभूमि बदलें", "खिड़की के शीशे का रंग बदलें", "ध्वनि प्रभाव बदलें", "स्क्रीन सेवर बदलें", "सिस्टम आइकन चालू या बंद करें", "डिफ़ॉल्ट आइकन व्यवहार पुनर्स्थापित करें", "नेटवर्क स्थिति और कार्य देखें", "किसी नेटवर्क से कनेक्ट करें", "नेटवर्क कंप्यूटर और डिवाइस देखें", "नेटवर्क में एक वायरलेस डिवाइस जोड़ें", "एक प्रिंटर जोड़ें", "डिफ़ॉल्ट प्रिंटर सेट करें", "प्रिंटर सेटिंग बदलें", "डिवाइस और प्रिंटर देखें", "होमग्रुप और साझाकरण विकल्प चुनें", "प्रिंटर साझा करें", "स्क्रीन रिज़ॉल्यूशन समायोजित करें", "अपने कंप्यूटर की स्थिति की समीक्षा करें", "अपने कंप्यूटर का बैकअप लें", "समस्याएं ढूंढें और ठीक करें", "फ़ायरवॉल स्थिति जाँचें", "किसी प्रोग्राम को अनइंस्टॉल करें", "विंडोज़ सुविधाओं को चालू या बंद करें", "खाता चित्र बदलें", "उपयोगकर्ता खाते जोड़ें या हटाएँ", "किसी भी उपयोगकर्ता के लिए अभिभावकीय नियंत्रण सेट करें", "दिनांक और समय बदलें", "इनपुट पद्धतियाँ बदलें", "विंडोज़ को आपके लिए सेटिंग्स सुझाने दें", "मुख पृष्ठ बदलें", "ब्राउज़र ऐड-ऑन प्रबंधित करें", "ब्राउज़िंग इतिहास और कुकीज़ हटाएं" },
+        { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings" },
+        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco" },
+        { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil" },
+        { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile" },
+        { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen" },
+        { L"pt-BR", "Mude o tema", "Alterar plano de fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de tela", "Ativar ou desativar ícones do sistema", "Restaurar comportamentos padrão dos ícones", "Visualize o status e as tarefas da rede", "Conecte-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fio à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar configurações da impressora", "Ver dispositivos e impressoras", "Escolha opções de grupo doméstico e compartilhamento", "Compartilhar impressoras", "Ajustar a resolução da tela", "Revise o status do seu computador", "Faça backup do seu computador", "Encontre e corrija problemas", "Verifique o status do firewall", "Desinstalar um programa", "Ativar ou desativar recursos do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de usuário", "Configure o controle dos pais para qualquer usuário", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir configurações para você", "Alterar página inicial", "Gerenciar complementos do navegador", "Excluir histórico de navegação e cookies", "Gerenciar BitLocker", "Calibrar a tela para entrada por caneta ou toque", "Configurações de Caneta e Toque" },
+        { L"pt-PT", "Mude o tema", "Alterar o fundo da área de trabalho", "Alterar as cores dos vidros das janelas", "Alterar efeitos sonoros", "Alterar protetor de ecrã", "Ativar ou desativar os ícones do sistema", "Restaurar os comportamentos padrão dos ícones", "Visualize o estado e as tarefas da rede", "Ligue-se a uma rede", "Ver computadores e dispositivos de rede", "Adicione um dispositivo sem fios à rede", "Adicionar uma impressora", "Configurar impressoras padrão", "Alterar as definições da impressora", "Ver dispositivos e impressoras", "Escolha as opções de grupo doméstico e partilha", "Partilhar impressoras", "Ajustar a resolução do ecrã", "Reveja o estado do seu computador", "Faça cópias de segurança do seu computador", "Encontre e corrija problemas", "Verifique o estado do firewall", "Desinstalar um programa", "Ativar ou desativar funcionalidades do Windows", "Alterar imagem da conta", "Adicionar ou remover contas de utilizador", "Configure o controlo parental para qualquer utilizador", "Alterar a data e hora", "Alterar métodos de entrada", "Deixe o Windows sugerir-lhe definições", "Alterar página inicial", "Gerir suplementos do navegador", "Eliminar histórico de navegação e cookies", "Gerir o BitLocker", "Calibrar o ecrã para entrada de caneta ou toque", "Definições de Caneta e Toque" },
+        { L"nl", "Verander het thema", "Bureaubladachtergrond wijzigen", "Verander de kleuren van vensterglas", "Verander geluidseffecten", "Schermbeveiliging wijzigen", "Systeempictogrammen in- of uitschakelen", "Herstel het standaardpictogramgedrag", "Bekijk de netwerkstatus en taken", "Maak verbinding met een netwerk", "Bekijk netwerkcomputers en apparaten", "Voeg een draadloos apparaat toe aan het netwerk", "Voeg een printer toe", "Standaardprinters instellen", "Wijzig de printerinstellingen", "Bekijk apparaten en printers", "Kies thuisgroep- en deelopties", "Deel printers", "Pas de schermresolutie aan", "Controleer de status van uw computer", "Maak een back-up van uw computer", "Problemen vinden en oplossen", "Controleer de firewallstatus", "Een programma verwijderen", "Schakel Windows-functies in of uit", "Accountafbeelding wijzigen", "Gebruikersaccounts toevoegen of verwijderen", "Stel ouderlijk toezicht in voor elke gebruiker", "Wijzig de datum en tijd", "Wijzig invoermethoden", "Laat Windows instellingen voor u voorstellen", "Startpagina wijzigen", "Browser-invoegtoepassingen beheren", "Browsergeschiedenis en cookies verwijderen", "BitLocker beheren", "Scherm kalibreren voor pen- of aanraakinvoer", "Instellingen voor pen en aanraking" },
+        { L"pl", "Zmień motyw", "Zmień tło pulpitu", "Zmień kolory szyb okiennych", "Zmień efekty dźwiękowe", "Zmień wygaszacz ekranu", "Włącz lub wyłącz ikony systemowe", "Przywróć domyślne zachowanie ikon", "Wyświetl stan sieci i zadania", "Połącz się z siecią", "Wyświetl komputery i urządzenia sieciowe", "Dodaj urządzenie bezprzewodowe do sieci", "Dodaj drukarkę", "Skonfiguruj drukarki domyślne", "Zmień ustawienia drukarki", "Wyświetl urządzenia i drukarki", "Wybierz grupę domową i opcje udostępniania", "Udostępnij drukarki", "Dostosuj rozdzielczość ekranu", "Sprawdź stan swojego komputera", "Utwórz kopię zapasową komputera", "Znajdź i rozwiąż problemy", "Sprawdź stan zapory", "Odinstaluj program", "Włącz lub wyłącz funkcje systemu Windows", "Zmień zdjęcie konta", "Dodaj lub usuń konta użytkowników", "Skonfiguruj kontrolę rodzicielską dla dowolnego użytkownika", "Zmień datę i godzinę", "Zmień metody wprowadzania", "Pozwól systemowi Windows zasugerować ustawienia", "Zmień stronę główną", "Zarządzaj dodatkami przeglądarki", "Usuń historię przeglądania i pliki cookie", "Zarządzaj funkcją BitLocker", "Skalibruj ekran pod kątem wprowadzania piórem lub dotykiem", "Ustawienia pióra i dotyku" },
+        { L"ru", "Изменить тему", "Изменить фон рабочего стола", "Изменить цвет оконного стекла", "Изменить звуковые эффекты", "Изменить заставку", "Включить или выключить системные значки", "Восстановить поведение значков по умолчанию", "Просмотреть состояние сети и задачи", "Подключиться к сети", "Просмотреть сетевые компьютеры и устройства", "Добавить беспроводное устройство в сеть", "Добавить принтер", "Настроить принтеры по умолчанию", "Изменить настройки принтера", "Просмотреть устройства и принтеры", "Выбрать домашнюю группу и параметры общего доступа", "Предоставить общий доступ к принтерам", "Настроить разрешение экрана", "Проверить состояние компьютера", "Создать резервную копию компьютера", "Найти и устранить проблемы", "Проверить состояние брандмауэра", "Удалить программу", "Включить или выключить компоненты Windows", "Изменить изображение аккаунта", "Добавить или удалить учетные записи пользователей", "Настроить родительский контроль для любого пользователя", "Изменить дату и время", "Изменить методы ввода", "Разрешить Windows предлагать параметры", "Изменить домашнюю страницу", "Управление надстройками браузера", "Удаление журнала браузера и файлов cookie", "Управление BitLocker", "Калибровка экрана для пера или сенсорного ввода", "Параметры пера и сенсорного ввода" },
+        { L"uk", "Змінити тему", "Змінити фон робочого столу", "Змінити колір віконного скла", "Змінити звукові ефекти", "Змінити заставку", "Увімкнути або вимкнути системні значки", "Відновити поведінку піктограм за замовчуванням", "Переглянути стан мережі та завдання", "Підключитися до мережі", "Переглянути мережеві комп'ютери й пристрої", "Додати бездротовий пристрій до мережі", "Додати принтер", "Налаштувати принтери за замовчуванням", "Змінити налаштування принтера", "Переглянути пристрої та принтери", "Вибрати домашню групу та параметри спільного доступу", "Спільно використовувати принтери", "Налаштувати роздільну здатність екрана", "Перевірити стан комп'ютера", "Створити резервну копію комп'ютера", "Знайти й усунути проблеми", "Перевірити стан брандмауера", "Видалити програму", "Увімкнути або вимкнути компоненти Windows", "Змінити зображення облікового запису", "Додати або видалити облікові записи користувачів", "Налаштувати батьківський контроль для будь-якого користувача", "Змінити дату й час", "Змінити методи введення", "Дозволити Windows пропонувати параметри", "Змінити домашню сторінку", "Керування надбудовами браузера", "Видалити журнал браузера та файли cookie", "Керування BitLocker", "Калібрування екрана для пера або сенсорного введення", "Параметри пера та сенсорного введення" },
+        { L"tr", "Temayı değiştir", "Masaüstü arka planını değiştir", "Pencere camı renklerini değiştirme", "Ses efektlerini değiştir", "Ekran koruyucuyu değiştir", "Sistem simgelerini açma veya kapatma", "Varsayılan simge davranışlarını geri yükle", "Ağ durumunu ve görevlerini görüntüleyin", "Bir ağa bağlanma", "Ağ bilgisayarlarını ve cihazlarını görüntüleyin", "Ağa kablosuz cihaz ekleme", "Yazıcı ekle", "Varsayılan yazıcıları ayarlama", "Yazıcı ayarlarını değiştirin", "Cihazları ve yazıcıları görüntüleyin", "Ev grubu ve paylaşım seçeneklerini seçin", "Yazıcıları paylaş", "Ekran çözünürlüğünü ayarlayın", "Bilgisayarınızın durumunu inceleyin", "Bilgisayarınızı yedekleyin", "Sorunları bulun ve düzeltin", "Güvenlik duvarı durumunu kontrol edin", "Bir programı kaldırma", "Windows özelliklerini açma veya kapatma", "Hesap resmini değiştir", "Kullanıcı hesaplarını ekleme veya kaldırma", "Herhangi bir kullanıcı için ebeveyn denetimlerini ayarlayın", "Tarihi ve saati değiştirme", "Giriş yöntemlerini değiştirin", "Windows'un sizin için ayarlar önermesine izin verin", "Giriş sayfasını değiştir", "Tarayıcı eklentilerini yönet", "Göz atma geçmişini ve tanımlama bilgilerini sil", "BitLocker'ı Yönet", "Ekranı kalem veya dokunmatik giriş için kalibre et", "Kalem ve dokunmatik ayarları" },
+        { L"ar", "تغيير الموضوع", "تغيير خلفية سطح المكتب", "تغيير ألوان زجاج النوافذ", "تغيير المؤثرات الصوتية", "تغيير شاشة التوقف", "تشغيل أيقونات النظام أو إيقاف تشغيلها", "استعادة سلوكيات الأيقونة الافتراضية", "عرض حالة الشبكة والمهام", "الاتصال بالشبكة", "عرض أجهزة الكمبيوتر والأجهزة المتصلة بالشبكة", "إضافة جهاز لاسلكي إلى الشبكة", "إضافة طابعة", "إعداد الطابعات الافتراضية", "تغيير إعدادات الطابعة", "عرض الأجهزة والطابعات", "اختيار مجموعة المشاركة المنزلية وخيارات المشاركة", "مشاركة الطابعات", "ضبط دقة الشاشة", "مراجعة حالة الكمبيوتر", "إنشاء نسخة احتياطية للكمبيوتر", "البحث عن المشاكل وإصلاحها", "التحقق من حالة جدار الحماية", "إلغاء تثبيت برنامج", "تشغيل ميزات Windows أو إيقاف تشغيلها", "تغيير صورة الحساب", "إضافة أو إزالة حسابات المستخدمين", "إعداد الضوابط الأبوية لأي مستخدم", "تغيير التاريخ والوقت", "تغيير طرق الإدخال", "السماح لـ Windows باقتراح الإعدادات", "تغيير الصفحة الرئيسية", "إدارة الوظائف الإضافية للمتصفح", "حذف محفوظات الاستعراض وملفات تعريف الارتباط", "إدارة BitLocker", "معايرة الشاشة لإدخال القلم أو اللمس", "إعدادات القلم واللمس" },
+        { L"he", "שנה את הנושא", "שנה רקע שולחן העבודה", "שנה את צבעי זכוכית החלון", "שנה אפקטים קוליים", "שנה שומר מסך", "הפעל או כבה את סמלי המערכת", "שחזר את התנהגויות ברירת המחדל של סמלים", "הצג את מצב הרשת ומשימות", "התחבר לרשת", "הצג מחשבים והתקנים ברשת", "הוסף התקן אלחוטי לרשת", "הוסף מדפסת", "הגדר מדפסות ברירת מחדל", "שנה את הגדרות המדפסת", "הצג מכשירים ומדפסות", "בחר קבוצה ביתית ואפשרויות שיתוף", "שתף מדפסות", "התאם את רזולוציית המסך", "בדוק את מצב המחשב שלך", "גבה את המחשב שלך", "מצא ותקן בעיות", "בדוק את מצב חומת האש", "הסר התקנה של תוכנית", "הפעל או כבה את תכונות Windows", "שנה את תמונת החשבון", "הוסף או הסר חשבונות משתמש", "הגדר בקרת הורים עבור כל משתמש", "שנה את התאריך והשעה", "שנה שיטות קלט", "תן ל-Windows להציע עבורך הגדרות", "שנה דף בית", "נהל תוספות דפדפן", "מחק היסטוריית גלישה וקובצי Cookie", "נהל את BitLocker", "כייל את המסך עבור קלט עט או מגע", "הגדרות עט ומגע" },
+        { L"ja", "テーマを変更する", "デスクトップの背景を変更する", "窓ガラスの色を変更する", "効果音を変更する", "スクリーンセーバーを変更する", "システムアイコンをオンまたはオフにする", "デフォルトのアイコン動作を復元する", "ネットワークのステータスとタスクを表示する", "ネットワークに接続する", "ネットワークのコンピュータとデバイスを表示する", "ワイヤレスデバイスをネットワークに追加する", "プリンターを追加する", "デフォルトのプリンターを設定する", "プリンターの設定を変更する", "デバイスとプリンターを表示する", "ホームグループと共有オプションを選択する", "プリンターを共有する", "画面解像度を調整する", "コンピュータのステータスを確認する", "コンピュータをバックアップする", "問題を見つけて解決する", "ファイアウォールのステータスを確認する", "プログラムをアンインストールする", "Windows の機能をオンまたはオフにする", "アカウントの写真を変更する", "ユーザーアカウントの追加または削除", "任意のユーザーに対してペアレントコントロールを設定する", "日付と時刻を変更する", "入力方法を変更する", "Windows が設定を提案してくれるようにする", "ホーム ページの変更", "ブラウザーのアドオンの管理", "閲覧の履歴と Cookie の削除", "BitLocker の管理", "ペンまたはタッチ入力用に画面を調整する", "ペンとタッチの設定" },
+        { L"ko", "테마 변경", "데스크탑 배경 변경", "창유리 색상 변경", "음향 효과 변경", "화면 보호기 변경", "시스템 아이콘 켜기 또는 끄기", "기본 아이콘 동작 복원", "네트워크 상태 및 작업 보기", "네트워크에 연결", "네트워크 컴퓨터 및 장치 보기", "네트워크에 무선 장치 추가", "프린터 추가", "기본 프린터 설정", "프린터 설정 변경", "장치 및 프린터 보기", "홈 그룹 및 공유 옵션 선택", "프린터 공유", "화면 해상도 조정", "컴퓨터 상태 검토", "컴퓨터 백업", "문제 찾기 및 수정", "방화벽 상태 확인", "프로그램 제거", "Windows 기능 켜기 또는 끄기", "계정 사진 변경", "사용자 계정 추가 또는 제거", "모든 사용자에 대해 자녀 보호 기능 설정", "날짜 및 시간 변경", "입력 방법 변경", "Windows에서 설정을 제안하도록 허용", "홈 페이지 변경", "브라우저 추가 기능 관리", "검색 기록 및 쿠키 삭제", "BitLocker 관리", "펜 또는 터치 입력용 화면 보정", "펜 및 터치 설정" },
+        { L"zh-CN", "更改主题", "更改桌面背景", "改变窗玻璃颜色", "改变音效", "更改屏幕保护程序", "打开或关闭系统图标", "恢复默认图标行为", "查看网络状态和任务", "连接到网络", "查看网络计算机和设备", "将无线设备添加到网络", "添加打印机", "设置默认打印机", "更改打印机设置", "查看设备和打印机", "选择家庭组和共享选项", "共享打印机", "调整屏幕分辨率", "查看计算机的状态", "备份您的计算机", "发现并解决问题", "检查防火墙状态", "卸载程序", "打开或关闭 Windows 功能", "更改账户图片", "添加或删除用户帐户", "为任何用户设置家长控制", "更改日期和时间", "更改输入法", "让 Windows 为您建议设置", "更改主页", "管理浏览器加载项", "删除浏览历史记录和 Cookie", "管理 BitLocker", "校准笔和触摸输入的屏幕", "笔和触摸设置" },
+        { L"zh-TW", "更改主題", "更改桌面背景", "改變窗玻璃顏色", "改變音效", "更改螢幕保護程式", "開啟或關閉系統圖標", "恢復預設圖示行為", "查看網路狀態和任務", "連接網路", "查看網路電腦和設備", "將無線設備新增至網絡", "新增印表機", "設定預設印表機", "變更印表機設定", "查看設備和印表機", "選擇家庭群組和共享選項", "共用印表機", "調整螢幕解析度", "查看計算機的狀態", "備份您的計算機", "發現並解決問題", "檢查防火牆狀態", "解除安裝程式", "開啟或關閉 Windows 功能", "更改帳戶圖片", "新增或刪除使用者帳戶", "為任何使用者設定家長監護", "更改日期和時間", "更改輸入法", "讓 Windows 為您建議設定", "變更首頁", "管理瀏覽器附加元件", "刪除瀏覽歷程記錄和 Cookie", "管理 BitLocker", "校正手寫筆或觸控輸入的畫面", "手寫筆與觸控設定" },
+        { L"cs", "Změnit téma", "Změnit pozadí plochy", "Změnit barvu okenního skla", "Změnit zvukové efekty", "Změnit spořič obrazovky", "Zapnout nebo vypnout systémové ikony", "Obnovit výchozí chování ikon", "Zobrazit stav sítě a úlohy", "Připojit se k síti", "Zobrazit síťové počítače a zařízení", "Přidat bezdrátové zařízení do sítě", "Přidat tiskárnu", "Nastavit výchozí tiskárny", "Změnit nastavení tiskárny", "Zobrazit zařízení a tiskárny", "Vybrat domácí skupinu a možnosti sdílení", "Sdílet tiskárny", "Upravit rozlišení obrazovky", "Zkontrolovat stav počítače", "Zálohovat počítač", "Najít a opravit problémy", "Zkontrolovat stav brány firewall", "Odinstalovat program", "Zapnout nebo vypnout funkce systému Windows", "Změnit obrázek účtu", "Přidat nebo odebrat uživatelské účty", "Nastavit rodičovskou kontrolu pro libovolného uživatele", "Změnit datum a čas", "Změnit metody zadávání", "Nechat Windows navrhnout nastavení", "Změnit domovskou stránku", "Spravovat doplňky prohlížeče", "Odstranit historii procházení a soubory cookie", "Spravovat BitLocker", "Kalibrovat obrazovku pro pero nebo dotykové zadávání", "Nastavení pera a dotyku" },
+        { L"da", "Skift tema", "Skift skrivebordsbaggrund", "Skift vinduesglasfarver", "Skift lydeffekter", "Skift pauseskærm", "Slå systemikoner til eller fra", "Gendan standard ikonadfærd", "Se netværksstatus og opgaver", "Opret forbindelse til et netværk", "Se netværkscomputere og -enheder", "Tilføj en trådløs enhed til netværket", "Tilføj en printer", "Konfigurer standardprintere", "Skift printerindstillinger", "Se enheder og printere", "Vælg hjemmegruppe og delingsmuligheder", "Del printere", "Juster skærmopløsningen", "Gennemgå din computers status", "Sikkerhedskopier din computer", "Find og ret problemer", "Tjek firewall-status", "Afinstaller et program", "Slå Windows-funktioner til eller fra", "Skift kontobillede", "Tilføj eller fjern brugerkonti", "Konfigurer forældrekontrol for enhver bruger", "Skift dato og klokkeslæt", "Skift indtastningsmetoder", "Lad Windows foreslå indstillinger for dig", "Skift startside", "Administrer browser-tilføjelser", "Slet browserhistorik og cookies", "Administrer BitLocker", "Kalibrér skærmen til pen- eller trykindtastning", "Indstillinger for pen og tryk" },
+        { L"fi", "Vaihda teemaa", "Vaihda työpöydän tausta", "Vaihda ikkunalasien väriä", "Muuta äänitehosteita", "Vaihda näytönsäästäjä", "Ota järjestelmäkuvakkeet käyttöön tai poista ne käytöstä", "Palauta oletuskuvakkeiden toimintatavat", "Tarkastele verkon tilaa ja tehtäviä", "Yhdistä verkkoon", "Tarkastele verkon tietokoneita ja laitteita", "Lisää langaton laite verkkoon", "Lisää tulostin", "Aseta oletustulostimet", "Muuta tulostimen asetuksia", "Tarkastele laitteita ja tulostimia", "Valitse kotiryhmä- ja jakamisasetukset", "Jaa tulostimia", "Säädä näytön resoluutiota", "Tarkista tietokoneesi tila", "Varmuuskopioi tietokoneesi", "Etsi ja korjaa ongelmat", "Tarkista palomuurin tila", "Poista ohjelman asennus", "Ota Windowsin ominaisuudet käyttöön tai poista ne käytöstä", "Vaihda tilikuvaa", "Lisää tai poista käyttäjätilejä", "Määritä lapsilukko kaikille käyttäjille", "Muuta päivämäärää ja kellonaikaa", "Muuta syöttötapoja", "Anna Windowsin ehdottaa asetuksia puolestasi", "Vaihda aloitussivua", "Hallinnoi selaimen apuohjelmia", "Poista selaushistoria ja evästeet", "Hallitse BitLockeria", "Kalibroi näyttö kynä- tai kosketussyöttöä varten", "Kynä- ja kosketusasetukset" },
+        { L"el", "Αλλαγή θέματος", "Αλλαγή φόντου επιφάνειας εργασίας", "Αλλαγή χρωμάτων τζαμιών παραθύρων", "Αλλαγή ηχητικών εφέ", "Αλλαγή προφύλαξης οθόνης", "Ενεργοποίηση ή απενεργοποίηση εικονιδίων συστήματος", "Επαναφορά προεπιλεγμένων συμπεριφορών εικονιδίων", "Προβολή κατάστασης και εργασιών δικτύου", "Σύνδεση σε δίκτυο", "Προβολή υπολογιστών και συσκευών δικτύου", "Προσθήκη ασύρματης συσκευής στο δίκτυο", "Προσθήκη εκτυπωτή", "Ρύθμιση προεπιλεγμένων εκτυπωτών", "Αλλαγή ρυθμίσεων εκτυπωτή", "Προβολή συσκευών και εκτυπωτών", "Επιλογή οικιακής ομάδας και επιλογών κοινής χρήσης", "Κοινή χρήση εκτυπωτών", "Προσαρμογή ανάλυσης οθόνης", "Έλεγχος κατάστασης υπολογιστή", "Δημιουργία αντιγράφου ασφαλείας υπολογιστή", "Εύρεση και επιδιόρθωση προβλημάτων", "Έλεγχος κατάστασης τείχους προστασίας", "Απεγκατάσταση προγράμματος", "Ενεργοποίηση ή απενεργοποίηση δυνατοτήτων των Windows", "Αλλαγή εικόνας λογαριασμού", "Προσθήκη ή κατάργηση λογαριασμών χρηστών", "Ρύθμιση γονικού ελέγχου για οποιονδήποτε χρήστη", "Αλλαγή ημερομηνίας και ώρας", "Αλλαγή μεθόδων εισαγωγής", "Να επιτρέπεται στα Windows να προτείνουν ρυθμίσεις", "Αλλαγή αρχικής σελίδας", "Διαχείριση προσθηκών προγράμματος περιήγησης", "Διαγραφή ιστορικού περιήγησης και cookies", "Διαχείριση BitLocker", "Βαθμονόμηση της οθόνης για είσοδο με πένα ή αφή", "Ρυθμίσεις πένας και αφής" },
+        { L"hu", "Változtasd meg a témát", "Az asztal hátterének módosítása", "Az ablaküveg színének megváltoztatása", "Hanghatások módosítása", "Képernyővédő módosítása", "A rendszerikonok be- és kikapcsolása", "Az alapértelmezett ikonviselkedés visszaállítása", "Megtekintheti a hálózat állapotát és a feladatokat", "Csatlakozzon egy hálózathoz", "Tekintse meg a hálózati számítógépeket és eszközöket", "Adjon hozzá egy vezeték nélküli eszközt a hálózathoz", "Nyomtató hozzáadása", "Állítsa be az alapértelmezett nyomtatókat", "A nyomtató beállításainak módosítása", "Eszközök és nyomtatók megtekintése", "Válassza ki az otthoni csoportot és a megosztási beállításokat", "Nyomtatók megosztása", "Állítsa be a képernyő felbontását", "Tekintse át számítógépe állapotát", "Készítsen biztonsági másolatot a számítógépről", "Keresse meg és javítsa ki a problémákat", "Ellenőrizze a tűzfal állapotát", "Távolítson el egy programot", "Kapcsolja be vagy ki a Windows szolgáltatásait", "Fiókkép módosítása", "Felhasználói fiókok hozzáadása vagy eltávolítása", "Szülői felügyelet beállítása bármely felhasználó számára", "Módosítsa a dátumot és az időt", "Beviteli módszerek módosítása", "Hagyja, hogy a Windows beállításokat javasoljon Önnek", "Kezdőlap módosítása", "Böngésző-bővítmények kezelése", "Böngészési előzmények és cookie-k törlése", "BitLocker kezelése", "A képernyő kalibrálása toll- vagy érintéses bevitelhez", "Toll- és érintésbeállítások" },
+        { L"nb", "Endre tema", "Endre skrivebordsbakgrunn", "Endre fargene på vinduets glass", "Endre lydeffekter", "Bytt skjermsparer", "Slå systemikoner på eller av", "Gjenopprett standard ikonatferd", "Se nettverksstatus og oppgaver", "Koble til et nettverk", "Se nettverksdatamaskiner og enheter", "Legg til en trådløs enhet i nettverket", "Legg til en skriver", "Sett opp standardskrivere", "Endre skriverinnstillinger", "Se enheter og skrivere", "Velg hjemmegruppe og delingsalternativer", "Del skrivere", "Juster skjermoppløsningen", "Se gjennom datamaskinens status", "Sikkerhetskopier datamaskinen", "Finn og fiks problemer", "Sjekk brannmurstatus", "Avinstaller et program", "Slå Windows-funksjoner på eller av", "Endre kontobilde", "Legg til eller fjern brukerkontoer", "Sett opp foreldrekontroll for alle brukere", "Endre dato og klokkeslett", "Endre inndatametoder", "La Windows foreslå innstillinger for deg", "Endre startside", "Administrer nettlesertillegg", "Slett nettleserhistorikk og informasjonskapsler", "Behandle BitLocker", "Kalibrer skjermen for penn- eller berøringsinndata", "Innstillinger for penn og berøring" },
+        { L"ro", "Schimbați tema", "Schimbați fundalul desktopului", "Schimbați culorile geamului", "Schimbați efectele sonore", "Schimbați economizorul de ecran", "Activați sau dezactivați pictogramele de sistem", "Restabiliți comportamentul implicit al pictogramelor", "Vizualizați starea rețelei și sarcinile", "Conectați-vă la o rețea", "Vizualizați computerele și dispozitivele din rețea", "Adăugați un dispozitiv fără fir în rețea", "Adăugați o imprimantă", "Configurați imprimante implicite", "Modificați setările imprimantei", "Vizualizați dispozitivele și imprimantele", "Alegeți grupul de acasă și opțiunile de partajare", "Partajați imprimante", "Reglați rezoluția ecranului", "Examinați starea computerului dvs", "Faceți o copie de rezervă a computerului", "Găsiți și rezolvați problemele", "Verificați starea firewallului", "Dezinstalează un program", "Activați sau dezactivați funcțiile Windows", "Schimbați imaginea contului", "Adăugați sau eliminați conturi de utilizator", "Configurați controale parentale pentru orice utilizator", "Schimbați data și ora", "Schimbați metodele de introducere", "Lăsați Windows să vă sugereze setări", "Modificare pagina de pornire", "Gestionați suplimentele browserului", "Ștergeți istoricul de navigare și modulele cookie", "Gestionați BitLocker", "Calibrați ecranul pentru introducerea cu stiloul sau atingerea", "Setări pentru stilou și atingere" },
+        { L"sv", "Ändra temat", "Ändra skrivbordsbakgrund", "Ändra fönsterglasfärger", "Ändra ljudeffekter", "Byt skärmsläckare", "Slå på eller av systemikoner", "Återställ standardikonbeteenden", "Visa nätverksstatus och uppgifter", "Anslut till ett nätverk", "Visa nätverksdatorer och enheter", "Lägg till en trådlös enhet i nätverket", "Lägg till en skrivare", "Konfigurera standardskrivare", "Ändra skrivarinställningar", "Visa enheter och skrivare", "Välj hemgrupp och delningsalternativ", "Dela skrivare", "Justera skärmupplösningen", "Granska din dators status", "Säkerhetskopiera din dator", "Hitta och åtgärda problem", "Kontrollera brandväggens status", "Avinstallera ett program", "Slå på eller av Windows-funktioner", "Byt kontobild", "Lägg till eller ta bort användarkonton", "Ställ in föräldrakontroll för alla användare", "Ändra datum och tid", "Ändra inmatningsmetoder", "Låt Windows föreslå inställningar åt dig", "Ändra startsida", "Hantera webbläsartillägg", "Ta bort webbhistorik och cookies", "Hantera BitLocker", "Kalibrera skärmen för penn- eller pekindata", "Inställningar för penna och pekning" },
+        { L"vi", "Thay đổi chủ đề", "Thay đổi hình nền máy tính", "Thay đổi màu kính cửa sổ", "Thay đổi hiệu ứng âm thanh", "Thay đổi trình bảo vệ màn hình", "Bật hoặc tắt biểu tượng hệ thống", "Khôi phục hành vi biểu tượng mặc định", "Xem trạng thái và nhiệm vụ mạng", "Kết nối với mạng", "Xem máy tính và thiết bị mạng", "Thêm thiết bị không dây vào mạng", "Thêm máy in", "Thiết lập máy in mặc định", "Thay đổi cài đặt máy in", "Xem thiết bị và máy in", "Chọn nhóm nhà và tùy chọn chia sẻ", "Chia sẻ máy in", "Điều chỉnh độ phân giải màn hình", "Xem lại trạng thái máy tính của bạn", "Sao lưu máy tính của bạn", "Tìm và khắc phục sự cố", "Kiểm tra trạng thái tường lửa", "Gỡ cài đặt một chương trình", "Bật hoặc tắt các tính năng của Windows", "Thay đổi ảnh tài khoản", "Thêm hoặc xóa tài khoản người dùng", "Thiết lập quyền kiểm soát của phụ huynh cho bất kỳ người dùng nào", "Thay đổi ngày và giờ", "Thay đổi phương thức nhập", "Hãy để Windows đề xuất cài đặt cho bạn", "Thay đổi trang chủ", "Quản lý tiện ích bổ sung của trình duyệt", "Xóa lịch sử duyệt web và cookie", "Quản lý BitLocker", "Hiệu chỉnh màn hình cho nhập bằng bút hoặc cảm ứng", "Cài đặt bút và cảm ứng" },
+        { L"id", "Ubah temanya", "Ubah latar belakang desktop", "Mengubah warna kaca jendela", "Ubah efek suara", "Ubah screen saver", "Mengaktifkan atau menonaktifkan ikon sistem", "Pulihkan perilaku ikon default", "Lihat status dan tugas jaringan", "Hubungkan ke jaringan", "Lihat komputer dan perangkat jaringan", "Tambahkan perangkat nirkabel ke jaringan", "Tambahkan pencetak", "Siapkan printer default", "Ubah pengaturan pencetak", "Lihat perangkat dan printer", "Pilih homegroup dan opsi berbagi", "Bagikan printer", "Sesuaikan resolusi layar", "Tinjau status komputer Anda", "Cadangkan komputer Anda", "Temukan dan perbaiki masalah", "Periksa status firewall", "Copot pemasangan suatu program", "Mengaktifkan atau menonaktifkan fitur Windows", "Ubah gambar akun", "Menambah atau menghapus akun pengguna", "Siapkan kontrol orang tua untuk pengguna mana pun", "Ubah tanggal dan waktu", "Ubah metode masukan", "Biarkan Windows menyarankan pengaturan untuk Anda", "Ubah beranda", "Kelola pengaya browser", "Hapus riwayat penjelajahan dan cookie", "Kelola BitLocker", "Kalibrasi layar untuk input pena atau sentuhan", "Pengaturan pena dan sentuhan" },
+        { L"th", "เปลี่ยนธีม", "เปลี่ยนพื้นหลังเดสก์ท็อป", "เปลี่ยนสีกระจกหน้าต่าง", "เปลี่ยนเอฟเฟกต์เสียง", "เปลี่ยนภาพพักหน้าจอ", "เปิดหรือปิดไอคอนระบบ", "คืนค่าลักษณะการทำงานของไอคอนเริ่มต้น", "ดูสถานะเครือข่ายและงาน", "เชื่อมต่อกับเครือข่าย", "ดูคอมพิวเตอร์และอุปกรณ์เครือข่าย", "เพิ่มอุปกรณ์ไร้สายเข้ากับเครือข่าย", "เพิ่มเครื่องพิมพ์", "ตั้งค่าเครื่องพิมพ์เริ่มต้น", "เปลี่ยนการตั้งค่าเครื่องพิมพ์", "ดูอุปกรณ์และเครื่องพิมพ์", "เลือกโฮมกรุ๊ปและตัวเลือกการแชร์", "แบ่งปันเครื่องพิมพ์", "ปรับความละเอียดหน้าจอ", "ตรวจสอบสถานะของคอมพิวเตอร์ของคุณ", "สำรองข้อมูลคอมพิวเตอร์ของคุณ", "ค้นหาและแก้ไขปัญหา", "ตรวจสอบสถานะไฟร์วอลล์", "ถอนการติดตั้งโปรแกรม", "เปิดหรือปิดคุณสมบัติ Windows", "เปลี่ยนรูปบัญชี", "เพิ่มหรือลบบัญชีผู้ใช้", "ตั้งค่าการควบคุมโดยผู้ปกครองสำหรับผู้ใช้ทุกคน", "เปลี่ยนวันที่และเวลา", "เปลี่ยนวิธีการป้อนข้อมูล", "ให้ Windows แนะนำการตั้งค่าให้กับคุณ", "เปลี่ยนโฮมเพจ", "จัดการส่วนเสริมของเบราว์เซอร์", "ลบประวัติการเรียกดูและคุกกี้", "จัดการ BitLocker", "ปรับเทียบหน้าจอสำหรับการป้อนด้วยปากกาหรือการสัมผัส", "การตั้งค่าปากกาและการสัมผัส" },
+        { L"hi", "थीम बदलें", "डेस्कटॉप पृष्ठभूमि बदलें", "खिड़की के शीशे का रंग बदलें", "ध्वनि प्रभाव बदलें", "स्क्रीन सेवर बदलें", "सिस्टम आइकन चालू या बंद करें", "डिफ़ॉल्ट आइकन व्यवहार पुनर्स्थापित करें", "नेटवर्क स्थिति और कार्य देखें", "किसी नेटवर्क से कनेक्ट करें", "नेटवर्क कंप्यूटर और डिवाइस देखें", "नेटवर्क में एक वायरलेस डिवाइस जोड़ें", "एक प्रिंटर जोड़ें", "डिफ़ॉल्ट प्रिंटर सेट करें", "प्रिंटर सेटिंग बदलें", "डिवाइस और प्रिंटर देखें", "होमग्रुप और साझाकरण विकल्प चुनें", "प्रिंटर साझा करें", "स्क्रीन रिज़ॉल्यूशन समायोजित करें", "अपने कंप्यूटर की स्थिति की समीक्षा करें", "अपने कंप्यूटर का बैकअप लें", "समस्याएं ढूंढें और ठीक करें", "फ़ायरवॉल स्थिति जाँचें", "किसी प्रोग्राम को अनइंस्टॉल करें", "विंडोज़ सुविधाओं को चालू या बंद करें", "खाता चित्र बदलें", "उपयोगकर्ता खाते जोड़ें या हटाएँ", "किसी भी उपयोगकर्ता के लिए अभिभावकीय नियंत्रण सेट करें", "दिनांक और समय बदलें", "इनपुट पद्धतियाँ बदलें", "विंडोज़ को आपके लिए सेटिंग्स सुझाने दें", "मुख पृष्ठ बदलें", "ब्राउज़र ऐड-ऑन प्रबंधित करें", "ब्राउज़िंग इतिहास और कुकीज़ हटाएं", "BitLocker प्रबंधित करें", "पेन या स्पर्श इनपुट के लिए स्क्रीन कैलिब्रेट करें", "पेन और स्पर्श सेटिंग्स" },
     };
 
     wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
@@ -567,6 +800,7 @@ bool EnsureClassicTaskLinksFile() {
   </application>
 {CATEGORY_TASK_LINKS_BLOCK}
 {DISPLAY_APPLICATION_BLOCK}
+{VIRTUAL_APPLET_TASKS_BLOCK}
 </applications>
 )xml";
 
@@ -652,6 +886,40 @@ bool EnsureClassicTaskLinksFile() {
         replaceAll("{CATEGORY_TASK_LINKS_BLOCK}", "");
     }
 
+    // Classic Win7 "blue task links" for the two virtual applets. The block is
+    // only emitted when the corresponding applet is both available on this
+    // machine and enabled in settings, mirroring how GetNamespaceClsids()
+    // gates the icon itself. Application ids are the virtual CLSIDs, so the
+    // tasks attach to exactly the entries this mod injects.
+    std::string virtualTaskBlock;
+    if (g_settings.restoreClassicTaskLinks.load()) {
+        if (g_bitlockerClsidAvailable.load() && g_settings.enableBitLocker.load()) {
+            virtualTaskBlock +=
+                "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
+                "  <application id=\"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}\">\n"
+                "    <sh:task id=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"><sh:name>{BITLOCKERMANAGE}</sh:name>"
+                "<sh:keywords>bitlocker;encryption</sh:keywords>"
+                "<sh:command>explorer.exe shell:::{D9EF8727-CAC2-4E60-809E-86F80A666C91}</sh:command></sh:task>\n"
+                "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
+                "  </application>\n";
+        }
+        if (g_tabletPcClsidAvailable.load() && g_settings.enableTabletPCSettings.load()) {
+            virtualTaskBlock +=
+                "  <!-- Tablet PC Settings (Hardware and Sound, Category 2) -->\n"
+                "  <application id=\"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}\">\n"
+                "    <sh:task id=\"{D4F4A011-0D35-4CB6-A21F-BC1661200011}\"><sh:name>{TABLETCALIBRATE}</sh:name>"
+                "<sh:keywords>tablet;calibrate;touch;pen</sh:keywords>"
+                "<sh:command>explorer.exe shell:::{80F3F1D5-FECA-45F3-BC32-752C152E456E}</sh:command></sh:task>\n"
+                "    <sh:task id=\"{D4F4A012-0D35-4CB6-A21F-BC1661200012}\"><sh:name>{TABLETPENTOUCH}</sh:name>"
+                "<sh:keywords>pen;touch;tablet</sh:keywords>"
+                "<sh:command>explorer.exe shell:::{F82DF8F7-8B9F-442E-A48C-818EA735FF9B}</sh:command></sh:task>\n"
+                "    <category id=\"2\"><sh:task idref=\"{D4F4A011-0D35-4CB6-A21F-BC1661200011}\"/>"
+                "<sh:task idref=\"{D4F4A012-0D35-4CB6-A21F-BC1661200012}\"/></category>\n"
+                "  </application>\n";
+        }
+    }
+    replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
+
     if (g_settings.enableCategoryAppearanceLinks.load()) {
         replaceAll("{DISPLAY_APPLICATION_BLOCK}", 
             "  <application id=\"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}\">\n"
@@ -705,6 +973,9 @@ bool EnsureClassicTaskLinksFile() {
     replaceAll("{CHANGEHOMEPAGE}", texts->changeHomePage);
     replaceAll("{MANAGEBROWSERADDONS}", texts->manageBrowserAddons);
     replaceAll("{DELETEBROWSINGHISTORY}", texts->deleteBrowsingHistory);
+    replaceAll("{BITLOCKERMANAGE}", texts->bitlockerManage);
+    replaceAll("{TABLETCALIBRATE}", texts->tabletCalibrate);
+    replaceAll("{TABLETPENTOUCH}", texts->tabletPenTouch);
 
 
     const std::wstring targetPath = g_classicTaskLinksFilePath;
@@ -738,6 +1009,8 @@ void LoadSettings() {
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
+    g_settings.enableBitLocker.store(Wh_GetIntSetting(L"enableBitLocker"));
+    g_settings.enableTabletPCSettings.store(Wh_GetIntSetting(L"enableTabletPCSettings"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
@@ -800,6 +1073,32 @@ void InitDisplayNames() {
     g_networkConnectionsClsidSuffix = L"clsid\\" + g_networkConnectionsGuidLower;
     g_printersAndFaxesClsidSuffix   = L"clsid\\" + g_printersAndFaxesGuidLower;
     g_homeGroupClsidSuffix          = L"clsid\\" + g_homeGroupGuidLower;
+
+    g_virtualApplets.clear();
+    if (g_bitlockerClsidAvailable.load()) {
+        // On Win10 19044 the CLSID key is a stub; fall back to the well-known
+        // fvecpl.dll resources that carry the "BitLocker Drive Encryption"
+        // localized name, icon and description (InfoTip, string id -2). The
+        // "@dll,-id" references are resolved and localized by Explorer itself
+        // for every installed UI language.
+        if (!AddVirtualApplet(kBitLockerVirtualGuid, kBitLockerGuid, kCategorySystemSecurity,
+                              &g_settings.enableBitLocker,
+                              L"@%SystemRoot%\\System32\\fvecpl.dll,-1",
+                              L"%SystemRoot%\\System32\\fvecpl.dll,-1",
+                              L"@%SystemRoot%\\System32\\fvecpl.dll,-2"))
+            Wh_Log(L"Could not read BitLocker's real name/icon; virtual entry not created");
+    }
+    if (g_tabletPcClsidAvailable.load()) {
+        // Tablet PC Settings name/infotip/icon live in tabletpc.cpl as string
+        // resources 10100 (name), 10102 (infotip) and icon group 10200.
+        if (!AddVirtualApplet(kTabletPcVirtualGuid, kTabletPcSettingsGuid, kCategoryHardware,
+                              &g_settings.enableTabletPCSettings,
+                              L"@%SystemRoot%\\System32\\tabletpc.cpl,-10100",
+                              L"%SystemRoot%\\System32\\tabletpc.cpl,-10200",
+                              L"@%SystemRoot%\\System32\\tabletpc.cpl,-10102"))
+            Wh_Log(L"Could not read Tablet PC Settings' real name/icon; virtual entry not created");
+    }
+    Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
 
 // GetTrackedPath/TrackKey/UntrackKey/CreateFakeHandle/FreeFakeHandle now live
@@ -813,12 +1112,13 @@ enum class VNode {
     Suppressed
 };
 
-enum class ItemKind { None, Personalization, CategoryOnly, Suppressed, RealCplTaskUrl };
+enum class ItemKind { None, Personalization, CategoryOnly, Suppressed, RealCplTaskUrl, VirtualApplet };
 
 struct ClassifyResult {
     VNode    node;
     ItemKind kind;
     DWORD    category;
+    int      virtualIndex = -1;
 };
 
 bool IsSuppressedGuid(const std::wstring& guidLower) {
@@ -868,6 +1168,20 @@ ClassifyResult ClassifyPersonalizationVirtual(const std::wstring& lower) {
     return { VNode::None, ItemKind::None, 0 };
 }
 
+ClassifyResult ClassifyVirtualApplets(const std::wstring& lower) {
+    for (size_t i = 0; i < g_virtualApplets.size(); ++i) {
+        const VirtualApplet& a = g_virtualApplets[i];
+        if (!a.enabledSetting->load()) continue;
+        if (EndsWith(lower, a.clsidSuffix))       return { VNode::ClsidRoot,     ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.defaultIconSuffix)) return { VNode::DefaultIcon,   ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.shellSuffix))       return { VNode::Shell,        ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.shellOpenSuffix))   return { VNode::ShellOpen,    ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.openCommandSuffix)) return { VNode::OpenCommand,  ItemKind::VirtualApplet, a.category, (int)i };
+        if (EndsWith(lower, a.nsSuffix))          return { VNode::NameSpaceEntry, ItemKind::VirtualApplet, a.category, (int)i };
+    }
+    return { VNode::None, ItemKind::None, 0 };
+}
+
 ClassifyResult ClassifyPath(const std::wstring& path) {
     // Early out before allocating/copying a lowercase path. This function runs
     // for many unrelated registry calls in Explorer.
@@ -893,21 +1207,30 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
         if (cr.node != VNode::None) return cr;
     }
 
+    if (!g_virtualApplets.empty()) {
+        auto cr = ClassifyVirtualApplets(lower);
+        if (cr.node != VNode::None) return cr;
+    }
+
     if (g_settings.enableCategoryAppearanceLinks.load()) {
         if (EndsWith(lower, g_realPersonalizationClsidSuffix) ||
             EndsWith(lower, g_displayClsidSuffix)) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, 0 };
         }
     }
-    struct { std::atomic<bool>* enabled; const std::wstring* clsidSuffix; DWORD cat; bool isHomeGroup; } categoryItems[] = {
-        { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                false }, // Keep it outside category view; search still exposes its tasks
-        { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,  false },
-        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware, false },
-        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,  true  },
+    // availability is nullptr for items that are always considered present
+    // (they're stock CLSIDs on every supported build); it points at a
+    // per-item atomic for items this mod only injects when Windows itself
+    // still registers the real CLSID (HomeGroup, BitLocker, Tablet PC).
+    struct { std::atomic<bool>* enabled; const std::wstring* clsidSuffix; DWORD cat; std::atomic<bool>* availability; } categoryItems[] = {
+        { &g_settings.enableNotificationIcons,  &g_notificationIconsClsidSuffix,  0,                       nullptr },  // Keep it outside category view; search still exposes its tasks
+        { &g_settings.enableNetworkConnections, &g_networkConnectionsClsidSuffix, kCategoryNetwork,        nullptr },
+        { &g_settings.enablePrintersAndFaxes,   &g_printersAndFaxesClsidSuffix,   kCategoryHardware,       nullptr },
+        { &g_settings.enableHomeGroup,          &g_homeGroupClsidSuffix,          kCategoryNetwork,        &g_homeGroupClsidAvailable },
     };
     for (auto& item : categoryItems) {
         if (!item.enabled->load()) continue;
-        if (item.isHomeGroup && !g_homeGroupClsidAvailable.load()) continue;
+        if (item.availability && !item.availability->load()) continue;
         if (EndsWith(lower, *item.clsidSuffix))
             return { VNode::ClsidRootCategoryOnly, ItemKind::CategoryOnly, item.cat };
     }
@@ -1071,17 +1394,75 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             }
         }
     }
+
+    if (cr.kind == ItemKind::VirtualApplet) {
+        if (cr.virtualIndex < 0 || (size_t)cr.virtualIndex >= g_virtualApplets.size()) return false;
+        const VirtualApplet& a = g_virtualApplets[cr.virtualIndex];
+        Wh_Log(L"Providing value for: %s (value=%s, node=%d, applet=%s)", path.c_str(), valueName.c_str(), (int)cr.node, a.displayName.c_str());
+
+        if (cr.node == VNode::ClsidRoot || cr.node == VNode::NameSpaceEntry) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.displayName);
+                return true;
+            }
+            // InfoTip (Win7-style description under the link). Served on BOTH
+            // the CLSID root and the ControlPanel\\NameSpace entry because
+            // Explorer's property store has been observed to query it from
+            // either path. REG_SZ matches how real applets (e.g. Personalization)
+            // expose it; the text is already localized by the time we reach here.
+            if (valueName == L"InfoTip" && !a.infoTip.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.infoTip);
+                return true;
+            }
+            if (cr.node == VNode::ClsidRoot && valueName == L"System.ControlPanel.Category") {
+                if (lpType) *lpType = REG_DWORD;
+                outStatus = ProvideDwordValue(lpData, lpcbData, a.category);
+                return true;
+            }
+            // Point the virtual applet at the generated tasks XML so Explorer
+            // displays the classic blue task links beneath it (same mechanism
+            // as Personalization).
+            if (cr.node == VNode::ClsidRoot && valueName == L"System.Software.TasksFileUrl" &&
+                g_settings.restoreClassicTaskLinks.load()) {
+                std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+                if (!taskLinksPath.empty()) {
+                    if (lpType) *lpType = REG_SZ;
+                    outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
+                    return true;
+                }
+            }
+        } else if (cr.node == VNode::DefaultIcon) {
+            if (valueName.empty() && !a.iconValue.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.iconValue);
+                return true;
+            }
+        } else if (cr.node == VNode::OpenCommand) {
+            if (valueName.empty()) {
+                if (lpType) *lpType = REG_SZ;
+                outStatus = ProvideStringValue(lpData, lpcbData, a.openCommand);
+                return true;
+            }
+        }
+        return false;
+    }
     return false;
 }
 
 std::vector<std::wstring> GetNamespaceClsids() {
     std::vector<std::wstring> result;
-    result.reserve(5);
+    result.reserve(7);
     if (g_settings.enablePersonalization.load())    result.push_back(kPersonalizationGuid);
     if (g_settings.enableNotificationIcons.load())  result.push_back(kNotificationIconsGuid);
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
     if (IsHomeGroupAvailable())                     result.push_back(kHomeGroupGuid);
+    if (g_bitlockerClsidAvailable.load() && g_settings.enableBitLocker.load())
+        result.push_back(kBitLockerVirtualGuid);
+    if (g_tabletPcClsidAvailable.load() && g_settings.enableTabletPCSettings.load())
+        result.push_back(kTabletPcVirtualGuid);
     return result;
 }
 
@@ -1723,10 +2104,11 @@ void Wh_ModSettingsChanged() {
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
+        g_settings.enableHomeGroup.load(), g_settings.enableBitLocker.load(), g_settings.enableTabletPCSettings.load(),
+        g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
         g_settings.restoreWin7CategoryTaskLinks.load());
@@ -1743,15 +2125,22 @@ BOOL Wh_ModInit() {
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
     Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
+    g_bitlockerClsidAvailable.store(IsRegisteredClsid(kBitLockerGuid));
+    Wh_Log(L"BitLocker CLSID %s", g_bitlockerClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent on this edition/device; applet will not be injected");
+
+    g_tabletPcClsidAvailable.store(IsRegisteredClsid(kTabletPcSettingsGuid));
+    Wh_Log(L"Tablet PC Settings CLSID %s", g_tabletPcClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent on this device; applet will not be injected");
+
     // Generate task links file eagerly to avoid data races
     EnsureClassicTaskLinksFile();
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableHomeGroup.load(), g_settings.enableCategoryAppearanceLinks.load(),
+        g_settings.enableHomeGroup.load(), g_settings.enableBitLocker.load(), g_settings.enableTabletPCSettings.load(),
+        g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
         g_settings.restoreWin7CategoryTaskLinks.load());
 
