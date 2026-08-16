@@ -4,7 +4,7 @@
 // @description   wobbly wibbly windows
 // @version       1.0
 // @author        potassiumuncher
-// @github        https://github.com/potassiumuncher
+// @github        https://github.com/Potassiumuncher
 // @include       *
 // @exclude       explorer.exe
 // @compilerOptions -ldwmapi -lgdi32 -ld2d1 -luser32 -lcomctl32 -lwinmm
