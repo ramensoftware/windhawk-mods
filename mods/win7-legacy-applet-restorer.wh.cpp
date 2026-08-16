@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @include         control.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lshlwapi
+// @compilerOptions -lcomctl32 -lshlwapi -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,14 +27,19 @@ This mod restores classic Control Panel applets and classic task links in Catego
 Additionally, the mod can suppress legacy Control Panel items that are broken or no longer functional on Windows 10/11 such as "Company Settings Sync", Windows To Go, Infrared and Work Folders when the corresponding settings are enabled.
 The optional "Restore Classic Task Links" setting restores localized, classic task links for these sections in Category View.
 ## Screenshot of the Restored Applets
-![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/RestoredApplets.png)
+
+![Restored Voices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredvoices.png)
 
 ## Screenshot (for the HomeGroup and Network Connections applets with the corresponding task links)
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
 
 ## Notes
-The mod has been tested on Windows 10 1809.
+The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2.
+
+BitLocker Drive Encryption and Tablet PC Settings default to **Automatic**: they are only added when the applet exists on the machine *and* Control Panel does not already show it, so no duplicate entries appear on editions and devices where Windows lists them by itself (e.g. Pro/Enterprise with a TPM, or a pen/touch-capable device). Whether the applet is already shown is asked of the shell itself (`IOpenControlPanel::GetPath`), because the `ControlPanel\NameSpace` registry key alone is not reliable — on Windows 10 LTSC 2021 it is present even though the applet is not displayed.
+
+If the automatic detection is wrong on your edition, each of the two applets has an **Always add** / **Never add** override in the settings. "Always add" still does nothing when the applet is genuinely not installed (e.g. Windows Home), since the entry would have no name, icon or target.
 
 **⚠️ Do not enable this mod together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject the same CLSIDs into the Control Panel, potentially conflicting with each other.
 
@@ -64,12 +69,20 @@ Credits to m417z for the code review and enhancing the mod.
 - enableHomeGroup: true
   $name: HomeGroup
   $description: This setting restores navigation to the HomeGroup page only when Windows still registers its legacy CLSID. For this mod, successful page availability satisfies the feature goal and preserves compatibility with present or future external HomeGroup-restoration projects; networking functionality is not implied.
-- enableBitLocker: true
+- bitLockerMode: auto
   $name: BitLocker Drive Encryption
-  $description: This setting adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category), only when Windows still registers its CLSID
-- enableTabletPCSettings: true
+  $description: Adds the "BitLocker Drive Encryption" icon to the Control Panel (System and Security category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your edition, force it with "Always add" or "Never add".
+  $options:
+  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - always: Always add
+  - never: Never add
+- tabletPcMode: auto
   $name: Tablet PC Settings
-  $description: This setting adds the "Tablet PC Settings" icon to the Control Panel (Hardware and Sound category), only when Windows still registers its CLSID (touch/pen-capable devices)
+  $description: Adds the "Tablet PC Settings" icon to the Control Panel (Hardware and Sound category). "Automatic" adds it only when the applet exists on this machine and Control Panel does not already show it, so no duplicate entry appears. If the detection gets it wrong on your device, force it with "Always add" or "Never add".
+  $options:
+  - auto: Automatic (add it only if Control Panel doesn't already show it)
+  - always: Always add
+  - never: Never add
 - enableCategoryAppearanceLinks: true
   $name: Restore Category Appearance Links
   $description: This setting restores the classic "Change the theme", "Change desktop background", and "Adjust screen resolution" links directly under the Appearance and Personalization category on the main Control Panel home page.
@@ -134,6 +147,7 @@ runs with stock applet ordering.
 #include <memory>
 #include <new>
 #include <shellapi.h>
+#include <shobjidl.h>   // IOpenControlPanel, CLSID_OpenControlPanel
 #include <shlwapi.h>
 #include <commctrl.h>
 #include <windhawk_utils.h>
@@ -144,8 +158,11 @@ struct Settings {
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
     std::atomic<bool> enableHomeGroup;
-    std::atomic<bool> enableBitLocker;
-    std::atomic<bool> enableTabletPCSettings;
+    // Tri-state (AppletMode): the user can override the automatic detection in
+    // both directions, because "does Control Panel already show this applet?"
+    // cannot be answered with total confidence on every edition.
+    std::atomic<int> bitLockerMode;
+    std::atomic<int> tabletPcMode;
     std::atomic<bool> enableCategoryAppearanceLinks;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
@@ -186,11 +203,37 @@ std::wstring g_personalizationName;
 static std::atomic<bool> g_homeGroupClsidAvailable{ false };
 // BitLocker and Tablet PC Settings are real, unmodified Windows CLSIDs; they
 // are simply not always *registered* (BitLocker needs Pro/Enterprise+TPM,
-// Tablet PC Settings needs a touch/pen-capable device). Same gating pattern
-// as HomeGroup above: only inject the category placement when the CLSID is
-// actually present, so the icon never appears as a dead end.
-static std::atomic<bool> g_bitlockerClsidAvailable{ false };
-static std::atomic<bool> g_tabletPcClsidAvailable{ false };
+// Tablet PC Settings needs a touch/pen-capable device). Unlike HomeGroup,
+// these two are injected through a *virtual* CLSID that mirrors the real
+// applet, so "the CLSID is registered" is not a sufficient condition: on the
+// machines where Windows lists the applet itself (BitLocker under System and
+// Security on Pro/Enterprise, Tablet PC Settings under Hardware and Sound on
+// pen/touch devices), a virtual twin would show up as a second,
+// identical-looking entry in the same category.
+//
+// Detecting "Control Panel already shows this" purely from the registry turned
+// out to be wrong in practice: on Windows 10 LTSC 2021 (Enterprise) the
+// ControlPanel\\NameSpace registration for BitLocker is present while the
+// applet is not displayed anywhere, so a registry-only check silently dropped
+// an applet the user did want. The authoritative answer comes from the shell
+// itself (IOpenControlPanel::GetPath), with the registry only as a fallback -
+// and the user can override the verdict in either direction, see AppletMode.
+enum class AppletMode { Auto = 0, Always = 1, Never = 2 };
+
+// Result of the automatic detection, computed once in Wh_ModInit: "the applet
+// is launchable here AND Control Panel doesn't already show it".
+static std::atomic<bool> g_bitlockerAutoDetected{ false };
+static std::atomic<bool> g_tabletPcAutoDetected{ false };
+// Whether the real applet exists at all on this machine. Even "Always add"
+// cannot conjure an applet that isn't installed - the entry would open nothing
+// and its name/icon couldn't be copied - so this gates the override too.
+static std::atomic<bool> g_bitlockerClsidRegistered{ false };
+static std::atomic<bool> g_tabletPcClsidRegistered{ false };
+// Effective verdict (auto detection combined with the user's override). This
+// is what every injection site gates on, and it is recomputed whenever the
+// settings change.
+static std::atomic<bool> g_injectBitlockerApplet{ false };
+static std::atomic<bool> g_injectTabletPcApplet{ false };
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
@@ -423,6 +466,138 @@ bool IsRegisteredClsid(const std::wstring& guid) {
     return status == ERROR_SUCCESS && key;
 }
 
+// True when Windows itself already lists this CLSID as a Control Panel item.
+// Control Panel enumerates CLSID-based items from
+// ...\\Explorer\\ControlPanel\\NameSpace (HKLM for machine-wide items, HKCU for
+// per-user ones), which is exactly the registration that makes BitLocker Drive
+// Encryption or Tablet PC Settings appear on their supported configurations.
+// If the entry is there, this mod must NOT inject a virtual twin for it, or the
+// user ends up with two identical entries in the same category.
+bool IsListedInControlPanelNameSpace(const std::wstring& guid) {
+    static const wchar_t kNameSpacePrefix[] =
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\";
+    const std::wstring subKey = std::wstring(kNameSpacePrefix) + guid;
+    for (HKEY root : { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER }) {
+        ScopedHKey key;
+        // This mod is x86-64 only, so there is no WOW64 view to worry about.
+        if (RegOpenKeyExW(root, subKey.c_str(), 0, KEY_READ, key.AddressOf()) == ERROR_SUCCESS)
+            return true;
+    }
+    return false;
+}
+
+// Asks the shell whether Control Panel actually displays this item, instead of
+// inferring it from the registry. IOpenControlPanel::GetPath resolves a
+// canonical name or GUID to the Control Panel path of the item and fails with
+// HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) when the item isn't part of the
+// current Control Panel item list - which is exactly the question this mod
+// needs answered. This is the case the registry check got wrong on LTSC 2021,
+// where the NameSpace key exists but the applet is not shown.
+//
+// Returns:
+//   S_OK-ish  -> outListed = true/false, function returns true (answer usable)
+//   failure   -> returns false, caller falls back to the registry heuristic
+// Only ever called from Wh_ModInit, before this mod's hooks are installed, so
+// the shell's own registry reads here can't re-enter our own hooks.
+bool IsShownByControlPanel(const std::wstring& guid, bool& outListed) {
+    // Defined locally rather than pulled from the SDK's CLSID_OpenControlPanel /
+    // IID_IOpenControlPanel: those symbols live in uuid.lib, which Windhawk's
+    // clang toolchain does not link by default, so referencing them fails at
+    // link time with "undefined symbol: CLSID_OpenControlPanel". The values are
+    // fixed, documented interface identifiers, so defining them here costs
+    // nothing and avoids adding a library dependency just for two GUIDs.
+    static const CLSID kClsidOpenControlPanel =
+        { 0x06622d85, 0x6856, 0x4460, { 0x8d, 0xe1, 0xa8, 0x19, 0x21, 0xb4, 0x1c, 0x4b } };
+    static const IID kIidOpenControlPanel =
+        { 0xd11ad862, 0x66de, 0x4df4, { 0xbf, 0x6c, 0x1f, 0x56, 0x21, 0x99, 0x6a, 0xf1 } };
+
+    // The shell's Control Panel object is apartment-threaded; Wh_ModInit runs
+    // on a thread whose apartment we don't own, so initialize one for the
+    // duration of the probe and undo it only if we were the ones to create it.
+    const HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (initHr == RPC_E_CHANGED_MODE) {
+        Wh_Log(L"  COM already initialized in a different mode; skipping shell probe");
+        return false;
+    }
+    const bool weInitialized = SUCCEEDED(initHr);
+
+    bool answered = false;
+    IOpenControlPanel* openControlPanel = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidOpenControlPanel, nullptr, CLSCTX_INPROC_SERVER,
+                                  kIidOpenControlPanel, (void**)&openControlPanel);
+    if (SUCCEEDED(hr) && openControlPanel) {
+        wchar_t path[MAX_PATH] = {};
+        hr = openControlPanel->GetPath(guid.c_str(), path, ARRAYSIZE(path));
+        if (SUCCEEDED(hr)) {
+            outListed = true;
+            answered = true;
+            Wh_Log(L"  IOpenControlPanel::GetPath(%s) -> \"%s\" (item is shown)", guid.c_str(), path);
+        } else if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) || hr == E_INVALIDARG) {
+            outListed = false;
+            answered = true;
+            Wh_Log(L"  IOpenControlPanel::GetPath(%s) -> not found (item is not shown)", guid.c_str());
+        } else {
+            Wh_Log(L"  IOpenControlPanel::GetPath(%s) failed, hr=0x%08lX", guid.c_str(), (unsigned long)hr);
+        }
+        openControlPanel->Release();
+    } else {
+        Wh_Log(L"  CoCreateInstance(CLSID_OpenControlPanel) failed, hr=0x%08lX", (unsigned long)hr);
+    }
+
+    if (weInitialized) CoUninitialize();
+    return answered;
+}
+
+// A virtual applet is only worth injecting when the real applet can actually be
+// opened (CLSID registered) but Control Panel doesn't show it on its own.
+bool DetectVirtualAppletNeeded(const std::wstring& realGuid, const wchar_t* logName,
+                               std::atomic<bool>& outClsidRegistered) {
+    const bool registeredClsid = IsRegisteredClsid(realGuid);
+    outClsidRegistered.store(registeredClsid);
+    if (!registeredClsid) {
+        Wh_Log(L"%s: CLSID is absent on this edition/device; applet will not be injected", logName);
+        return false;
+    }
+
+    bool listed = false;
+    if (IsShownByControlPanel(realGuid, listed)) {
+        Wh_Log(L"%s: shell reports the applet is %s", logName,
+            listed ? L"already shown; virtual entry skipped to avoid a duplicate"
+                   : L"not shown; virtual entry will be injected");
+        return !listed;
+    }
+
+    // Fallback only: the ControlPanel\\NameSpace registration is what Control
+    // Panel enumerates CLSID items from, but its mere presence does not
+    // guarantee the item is displayed (LTSC 2021 does register BitLocker there
+    // without showing it). Treated as a weak hint when the shell can't answer.
+    const bool registered = IsListedInControlPanelNameSpace(realGuid);
+    Wh_Log(L"%s: shell probe unavailable, falling back to the registry hint (%s). "
+           L"Use the \"Always add\"/\"Never add\" setting if this is wrong.",
+        logName, registered ? L"registered, assuming already shown" : L"not registered, injecting");
+    return !registered;
+}
+
+// Combines the automatic detection with the user's explicit override.
+bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered,
+                            const wchar_t* logName) {
+    switch (mode) {
+        case AppletMode::Always:
+            if (!clsidRegistered) {
+                Wh_Log(L"%s: \"Always add\" requested, but the applet is not installed here; ignoring", logName);
+                return false;
+            }
+            Wh_Log(L"%s: forced ON by settings (auto detection said %d)", logName, (int)autoDetected);
+            return true;
+        case AppletMode::Never:
+            Wh_Log(L"%s: forced OFF by settings", logName);
+            return false;
+        case AppletMode::Auto:
+        default:
+            return autoDetected;
+    }
+}
+
 bool IsHomeGroupAvailable() {
     return g_settings.enableHomeGroup.load() && g_homeGroupClsidAvailable.load();
 }
@@ -622,12 +797,13 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
     return false;
 }
 
-// Guards g_classicTaskLinksFilePath. EnsureClassicTaskLinksFile() is normally
-// only called once, eagerly, from Wh_ModInit before any hook is installed —
-// but TryProvideValue() also calls it lazily as a fallback, and that runs
-// from the registry hooks on arbitrary explorer.exe threads. Without this
-// lock, two threads could race on the check-then-write below, or one thread
-// could read a half-written path while another is (re)generating the file.
+// Guards g_classicTaskLinksFilePath. EnsureClassicTaskLinksFile() is called
+// eagerly from Wh_ModInit (before any hook is installed) and from
+// Wh_ModSettingsChanged, but also lazily from the registry hooks by way of
+// GetOrCreateClassicTaskLinksFilePath(), i.e. on arbitrary explorer.exe
+// threads. Without this lock, two threads could race on the check-then-write
+// below, or one thread could read a half-written path while another is
+// (re)generating the file.
 static std::mutex g_taskLinksMutex;
 
 // Thread-safe accessor for readers (TryProvideValue and friends) that just
@@ -893,7 +1069,7 @@ bool EnsureClassicTaskLinksFile() {
     // tasks attach to exactly the entries this mod injects.
     std::string virtualTaskBlock;
     if (g_settings.restoreClassicTaskLinks.load()) {
-        if (g_bitlockerClsidAvailable.load() && g_settings.enableBitLocker.load()) {
+        if (g_injectBitlockerApplet.load()) {
             virtualTaskBlock +=
                 "  <!-- BitLocker Drive Encryption (System and Security, Category 5) -->\n"
                 "  <application id=\"{c62d8e9b-1f6a-4a6b-9a4c-8e6a7b2df301}\">\n"
@@ -903,7 +1079,7 @@ bool EnsureClassicTaskLinksFile() {
                 "    <category id=\"5\"><sh:task idref=\"{D4F4A010-0D35-4CB6-A21F-BC1661200010}\"/></category>\n"
                 "  </application>\n";
         }
-        if (g_tabletPcClsidAvailable.load() && g_settings.enableTabletPCSettings.load()) {
+        if (g_injectTabletPcApplet.load()) {
             virtualTaskBlock +=
                 "  <!-- Tablet PC Settings (Hardware and Sound, Category 2) -->\n"
                 "  <application id=\"{f3a91d47-6b52-4c9e-9d0a-1c7e5f2b6a84}\">\n"
@@ -1003,14 +1179,79 @@ bool EnsureClassicTaskLinksFile() {
     return ok;
 }
 
+// Timestamp (GetTickCount64) of the last time the cached path was validated or
+// a (re)generation was attempted. Used to throttle the filesystem check below.
+static std::atomic<ULONGLONG> g_taskLinksLastCheckTick{ 0 };
+static constexpr ULONGLONG kTaskLinksRecheckIntervalMs = 5000;
+
+// Accessor used by the registry hooks. Unlike GetClassicTaskLinksFilePath(),
+// this one heals two failure modes instead of silently serving nothing:
+//   * the initial write failed (path cleared, feature dead for the process);
+//   * the XML was deleted under us while Explorer was running (Disk Cleanup,
+//     Storage Sense, a temp cleaner), which would make every classic task link
+//     disappear until a settings change or an Explorer restart.
+// It runs on Explorer's registry hot path, so the filesystem is touched at most
+// once every kTaskLinksRecheckIntervalMs; in between, the cached path is
+// returned with no syscall at all. A missing path is always retried, but the
+// same throttle keeps a permanently failing regeneration from being hammered.
+std::wstring GetOrCreateClassicTaskLinksFilePath() {
+    std::wstring cached = GetClassicTaskLinksFilePath();
+
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG last = g_taskLinksLastCheckTick.load(std::memory_order_relaxed);
+    if (!cached.empty() && now - last < kTaskLinksRecheckIntervalMs)
+        return cached;
+
+    // Only one thread per interval performs the check; the others keep using
+    // the cached value (or an empty string, retried on the next interval).
+    if (!g_taskLinksLastCheckTick.compare_exchange_strong(last, now, std::memory_order_relaxed))
+        return cached;
+
+    if (!cached.empty()) {
+        const DWORD attributes = GetFileAttributesW(cached.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return cached;
+        Wh_Log(L"Task links file missing (%s); regenerating", cached.c_str());
+    }
+
+    // EnsureClassicTaskLinksFile() takes g_taskLinksMutex itself, so it must be
+    // called without holding it here; it re-checks the cached path under the
+    // lock, so a concurrent regeneration costs nothing but the lock.
+    if (!EnsureClassicTaskLinksFile()) {
+        Wh_Log(L"Task links file could not be (re)generated; will retry later");
+        return std::wstring();
+    }
+    return GetClassicTaskLinksFilePath();
+}
+
+// Reads a tri-state applet setting. Unknown/missing values fall back to Auto,
+// which is the documented default.
+AppletMode ReadAppletMode(const wchar_t* settingName) {
+    AppletMode mode = AppletMode::Auto;
+    if (PCWSTR value = Wh_GetStringSetting(settingName)) {
+        if (wcscmp(value, L"always") == 0)     mode = AppletMode::Always;
+        else if (wcscmp(value, L"never") == 0) mode = AppletMode::Never;
+        Wh_FreeStringSetting(value);
+    }
+    return mode;
+}
+
 void LoadSettings() {
     g_settings.enablePersonalization.store(Wh_GetIntSetting(L"enablePersonalization"));
     g_settings.enableNotificationIcons.store(Wh_GetIntSetting(L"enableNotificationIcons"));
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
-    g_settings.enableBitLocker.store(Wh_GetIntSetting(L"enableBitLocker"));
-    g_settings.enableTabletPCSettings.store(Wh_GetIntSetting(L"enableTabletPCSettings"));
+    g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
+    g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
+    // The effective verdicts depend on both the (fixed) auto detection and the
+    // (changeable) override, so they are refreshed on every settings load.
+    g_injectBitlockerApplet.store(ResolveAppletInjection(
+        (AppletMode)g_settings.bitLockerMode.load(), g_bitlockerAutoDetected.load(),
+        g_bitlockerClsidRegistered.load(), L"BitLocker Drive Encryption"));
+    g_injectTabletPcApplet.store(ResolveAppletInjection(
+        (AppletMode)g_settings.tabletPcMode.load(), g_tabletPcAutoDetected.load(),
+        g_tabletPcClsidRegistered.load(), L"Tablet PC Settings"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
@@ -1075,24 +1316,28 @@ void InitDisplayNames() {
     g_homeGroupClsidSuffix          = L"clsid\\" + g_homeGroupGuidLower;
 
     g_virtualApplets.clear();
-    if (g_bitlockerClsidAvailable.load()) {
+    // Built whenever the real applet exists, not only when it is currently
+    // being injected: the entry's visibility is gated per query through
+    // enabledSetting below, so flipping the Auto/Always/Never setting takes
+    // effect without restarting Explorer.
+    if (g_bitlockerClsidRegistered.load()) {
         // On Win10 19044 the CLSID key is a stub; fall back to the well-known
         // fvecpl.dll resources that carry the "BitLocker Drive Encryption"
         // localized name, icon and description (InfoTip, string id -2). The
         // "@dll,-id" references are resolved and localized by Explorer itself
         // for every installed UI language.
         if (!AddVirtualApplet(kBitLockerVirtualGuid, kBitLockerGuid, kCategorySystemSecurity,
-                              &g_settings.enableBitLocker,
+                              &g_injectBitlockerApplet,
                               L"@%SystemRoot%\\System32\\fvecpl.dll,-1",
                               L"%SystemRoot%\\System32\\fvecpl.dll,-1",
                               L"@%SystemRoot%\\System32\\fvecpl.dll,-2"))
             Wh_Log(L"Could not read BitLocker's real name/icon; virtual entry not created");
     }
-    if (g_tabletPcClsidAvailable.load()) {
+    if (g_tabletPcClsidRegistered.load()) {
         // Tablet PC Settings name/infotip/icon live in tabletpc.cpl as string
         // resources 10100 (name), 10102 (infotip) and icon group 10200.
         if (!AddVirtualApplet(kTabletPcVirtualGuid, kTabletPcSettingsGuid, kCategoryHardware,
-                              &g_settings.enableTabletPCSettings,
+                              &g_injectTabletPcApplet,
                               L"@%SystemRoot%\\System32\\tabletpc.cpl,-10100",
                               L"%SystemRoot%\\System32\\tabletpc.cpl,-10200",
                               L"@%SystemRoot%\\System32\\tabletpc.cpl,-10102"))
@@ -1300,7 +1545,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
         Wh_Log(L"Providing value for: %s (value=%s)", path.c_str(), valueName.c_str());
         if (valueName == L"System.Software.TasksFileUrl" &&
             g_settings.restoreClassicTaskLinks.load()) {
-            std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+            std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
             if (!taskLinksPath.empty()) {
                 if (lpType) *lpType = REG_SZ;
                 outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
@@ -1331,7 +1576,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
         }
         if (valueName == L"System.Software.TasksFileUrl" &&
             g_settings.restoreClassicTaskLinks.load()) {
-            std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+            std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
             if (!taskLinksPath.empty()) {
                 if (lpType) *lpType = REG_SZ;
                 outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
@@ -1368,7 +1613,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 return true;
             } else if (valueName == L"System.Software.TasksFileUrl") {
                 if (lpType) *lpType = REG_SZ;
-                std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+                std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
                 std::wstring taskFileUrl =
                     (g_settings.restoreClassicTaskLinks.load() && !taskLinksPath.empty())
                         ? taskLinksPath
@@ -1426,7 +1671,7 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
             // as Personalization).
             if (cr.node == VNode::ClsidRoot && valueName == L"System.Software.TasksFileUrl" &&
                 g_settings.restoreClassicTaskLinks.load()) {
-                std::wstring taskLinksPath = GetClassicTaskLinksFilePath();
+                std::wstring taskLinksPath = GetOrCreateClassicTaskLinksFilePath();
                 if (!taskLinksPath.empty()) {
                     if (lpType) *lpType = REG_SZ;
                     outStatus = ProvideStringValue(lpData, lpcbData, taskLinksPath);
@@ -1459,9 +1704,9 @@ std::vector<std::wstring> GetNamespaceClsids() {
     if (g_settings.enableNetworkConnections.load()) result.push_back(kNetworkConnectionsGuid);
     if (g_settings.enablePrintersAndFaxes.load())   result.push_back(kPrintersAndFaxesGuid);
     if (IsHomeGroupAvailable())                     result.push_back(kHomeGroupGuid);
-    if (g_bitlockerClsidAvailable.load() && g_settings.enableBitLocker.load())
+    if (g_injectBitlockerApplet.load())
         result.push_back(kBitLockerVirtualGuid);
-    if (g_tabletPcClsidAvailable.load() && g_settings.enableTabletPCSettings.load())
+    if (g_injectTabletPcApplet.load())
         result.push_back(kTabletPcVirtualGuid);
     return result;
 }
@@ -2094,8 +2339,13 @@ void* GetRegFunc(const char* name) {
 }
 
 void InvalidateClassicTaskLinksFile() {
-    std::lock_guard<std::mutex> lock(g_taskLinksMutex);
-    g_classicTaskLinksFilePath.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_taskLinksMutex);
+        g_classicTaskLinksFilePath.clear();
+    }
+    // Let the next hook-side lookup regenerate immediately instead of waiting
+    // out the throttle interval in GetOrCreateClassicTaskLinksFilePath().
+    g_taskLinksLastCheckTick.store(0, std::memory_order_relaxed);
 }
 
 void Wh_ModSettingsChanged() {
@@ -2107,7 +2357,7 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableHomeGroup.load(), g_settings.enableBitLocker.load(), g_settings.enableTabletPCSettings.load(),
+        g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
@@ -2125,11 +2375,19 @@ BOOL Wh_ModInit() {
     g_homeGroupClsidAvailable.store(IsRegisteredClsid(kHomeGroupGuid));
     Wh_Log(L"Legacy CLSID %s", g_homeGroupClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent; applet will not be injected");
 
-    g_bitlockerClsidAvailable.store(IsRegisteredClsid(kBitLockerGuid));
-    Wh_Log(L"BitLocker CLSID %s", g_bitlockerClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent on this edition/device; applet will not be injected");
-
-    g_tabletPcClsidAvailable.store(IsRegisteredClsid(kTabletPcSettingsGuid));
-    Wh_Log(L"Tablet PC Settings CLSID %s", g_tabletPcClsidAvailable.load() ? L"is registered; applet enabled when selected" : L"is absent on this device; applet will not be injected");
+    // Not just "is the CLSID registered": on machines where Windows already
+    // shows these applets, the virtual entries would duplicate them. The
+    // detection asks the shell and is cached here; LoadSettings() then applies
+    // the user's Auto/Always/Never override on top of it. See the comment next
+    // to g_bitlockerAutoDetected.
+    g_bitlockerAutoDetected.store(DetectVirtualAppletNeeded(
+        kBitLockerGuid, L"BitLocker Drive Encryption", g_bitlockerClsidRegistered));
+    g_tabletPcAutoDetected.store(DetectVirtualAppletNeeded(
+        kTabletPcSettingsGuid, L"Tablet PC Settings", g_tabletPcClsidRegistered));
+    // Re-apply the overrides now that the auto verdicts are known (the earlier
+    // LoadSettings() call ran before detection and resolved them against the
+    // default-false cache).
+    LoadSettings();
 
     // Generate task links file eagerly to avoid data races
     EnsureClassicTaskLinksFile();
@@ -2139,7 +2397,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
-        g_settings.enableHomeGroup.load(), g_settings.enableBitLocker.load(), g_settings.enableTabletPCSettings.load(),
+        g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
         g_settings.restoreWin7CategoryTaskLinks.load());
