@@ -3580,7 +3580,30 @@ void Wh_ModBeforeUninit() {
     // flag is also what makes the worker abandon an in-progress sweep, so it
     // has to be set BEFORE the join or the join can time out.
     InterlockedExchange(&g_passthrough, 1);
-    WindhawkUtils::RemoveAllWindowSubclasses();
+
+    // Unsubclass by hand rather than with WindhawkUtils::RemoveAllWindowSubclasses(),
+    // which exists only on Windhawk 2.x. The catalog compiles every mod against
+    // 1.6.1 and 1.7.3 as well, and this mod failed both on exactly that call -
+    // the one API in it that was not portable. We know which windows we
+    // subclassed, so removing them individually costs nothing and works
+    // everywhere.
+    //
+    // The list is copied out under the lock and the removals done outside it:
+    // RemoveWindowSubclassFromAnyThread marshals to each window's own thread,
+    // and holding a lock across that is how a teardown deadlocks.
+    {
+        std::vector<HWND> subclassed;
+        AcquireSRWLockShared(&g_lock);
+        subclassed.reserve(g_states.size());
+        for (const auto& [hWnd, st] : g_states) {
+            if (st.subclassed) subclassed.push_back(hWnd);
+        }
+        ReleaseSRWLockShared(&g_lock);
+        for (HWND hWnd : subclassed) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
+                                                             FrameSubclassProc);
+        }
+    }
 
     if (g_worker) {
         // The worker checks the stop flag every window, so it should exit
