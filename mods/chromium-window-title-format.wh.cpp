@@ -137,15 +137,22 @@ Style short prefixes like `{count}`, not `{title}`.
         - bracket: "[17] Inbox"
         - bold: "𝟭𝟳 Inbox   (bold digits)"
         - sup: "¹⁷ Inbox   (superscript digits)"
-        - sup_pad: "⁰⁶ Inbox   (superscript, always two digits)"
-        - sup_pad_profile: "⁰⁶ Inbox — 𝘗𝘦𝘳𝘴𝘰𝘯𝘢𝘭   (superscript count, italic profile)"
+        - sup_pad: "⁰⁶ Inbox   (superscript, zero-padded to two digits)"
+        - sup_pad_profile: "⁰⁶ Inbox — 𝘗𝘦𝘳𝘴𝘰𝘯𝘢𝘭   (padded count, italic profile)"
         - title_only: "Inbox   (page title only)"
         - custom: "Custom - use the template below"
       $description: >-
-        Each option shows how a 17-tab window in the Personal profile would look.
+        Samples use a 17-tab window in the Personal profile, except the two
+        zero-padded options, which show a 6-tab one - at 17 tabs the padding
+        makes no difference and they would look identical to the plain
+        superscript option.
+        .
+        A window with a single tab shows no count at all in every count-bearing
+        option, rather than "1".
+        .
         The tab count and profile exist only on Edge, so on Chrome every option
         collapses to the page title. Pick Custom to write your own.
-    - Custom: "?({count:pad2:sup} ){title}"
+    - Custom: "?({count:min2:pad2:sup} ){title}"
       $name: Custom template
       $description: >-
         Used only when the format above is set to Custom. Tokens: {title} {more}
@@ -153,13 +160,16 @@ Style short prefixes like `{count}`, not `{title}`.
         ?( ... ) so the whole group vanishes when every token inside is empty.
         Modifiers chain with a colon, e.g. {count:pad2:sup} or {profile:italic}.
         Escapes: \{ \} \? \( \) \\ and \uXXXX.
-    - Named: "?({count:pad2:sup} ){name}"
+    - Named: "?({count:min2:pad2:sup} ){name}"
       $name: Windows you have named
       $description: >-
         Used only for windows named with the browser's own naming command, and
         only when the optional symbol layer below is on and has verified itself.
         {name} is the name you gave the window; {count} is its live tab count.
         With the layer off this is ignored and named windows are left untouched.
+        .
+        `min2` matches the presets: a window with one tab shows no count rather
+        than "01", because the count here is known to be 1 rather than unknown.
     - ChromeOverride: ""
       $name: Chrome template override
       $description: >-
@@ -238,7 +248,6 @@ Style short prefixes like `{count}`, not `{title}`.
 #include <windhawk_utils.h>
 
 #include <algorithm>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -253,6 +262,7 @@ Style short prefixes like `{count}`, not `{title}`.
 #include <cstring>   // memcpy
 #include <cwchar>    // wcsrchr, _wcsnicmp, wcsncmp
 #include <cwctype>   // iswalnum, towupper, towlower
+#include <utility>   // std::pair, std::move
 
 
 // ---------------------------------------------------------------------------
@@ -1227,6 +1237,7 @@ void  RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
                          bool settled);
 HWND  HwndForController(void* controller);
 void  ForgetWindow(HWND hWnd);
+void  ReportCapOnce(const wchar_t* which, bool evicts);
 }  // namespace syms
 
 // Defined below the symbol layer, called from the title hook above it.
@@ -1239,6 +1250,8 @@ void ApplyFavicon(HWND hWnd, void* controller);
 void OnControllerCorrelated(HWND hWnd, void* controller,
                             const std::wstring& delegateTitle);
 void EnsureSubclassed(HWND hWnd);
+// Defined below the subclass proc that dispatches to it.
+void RestoreIconNow(HWND hWnd);
 
 // Ask a window to recompose its own title on its own UI thread. Safe to call
 // from anywhere, including from inside a tab-strip mutation.
@@ -1491,13 +1504,18 @@ static_assert(alignof(FunctionRefAbi) == alignof(void*),
 // reproduce it.
 using ForEachBwi_t = void(*)(FunctionRefAbi* onBrowserWindow);
 
-// BrowserView::GetWindowTitle is the WidgetDelegate override that
-// Widget::UpdateWindowTitle calls BEFORE comparing the result with the current
-// title. That timing is the whole point of hooking it: it fires on every update
-// attempt, including the ones that change nothing - which is exactly the case
-// for a window whose title is a fixed user-given name. SetWindowTextW, by
-// contrast, is only reached when the title actually changed, so a window named
-// before the mod loaded would otherwise never be seen at all.
+// WHY A TITLE GETTER IS HOOKED AT ALL, given the mod already hooks the write.
+//
+// The getter - WindowMetadataController::GetWindowTitleForCurrentTab, see
+// titleHooks - runs BEFORE the result is compared against the current title, so
+// it fires on every update ATTEMPT, including the ones that change nothing.
+// That is exactly the case for a window whose title is a fixed user-given name.
+// SetWindowTextW is only reached when the title actually changed, so a window
+// named before the mod loaded would otherwise never be seen at all.
+//
+// (An earlier version hooked BrowserView::GetWindowTitle for the same reason.
+// The timing argument is what carried over; the symbol did not.)
+
 // ---- favicon-as-window-icon -------------------------------------------------
 //
 // Chromium hands out the active tab's icon as a gfx::Image and will convert an
@@ -1596,17 +1614,16 @@ volatile LONG g_numericPossible = 0;  // grammar yields a tab count to check aga
 SRWLOCK g_stripLock = SRWLOCK_INIT;
 std::unordered_set<void*> g_seenStrips;
 
-// ---- diagnostic event census (dev build only) ------------------------------
-// Answers by OBSERVATION, not by reading upstream source: for each user action,
-// which of the three observation points actually fires -
-//   (a) the delegate getter, (b) TabStripModel::count() returning a new value,
-//   (c) the native SetWindowTextW write.
-// The gap between (a)/(b) and (c) is the whole named-window problem:
-// HWNDMessageHandler::SetTitle compares against its OWN cached title, so once
-// the mod has rewritten the native text the browser has no reason to write
-// again and a "<count> <name>" title would freeze.
 // Last tab count seen per strip, so a change can be detected and the owning
 // window asked to recompose. Bounded; a browser has tens of these.
+//
+// THIS MAP IS WHY THE MOD WATCHES TAB COUNTS AT ALL, rather than waiting for the
+// browser to rewrite the title. HWNDMessageHandler::SetTitle compares against
+// its OWN cached title, so once the mod has rewritten the native text the
+// browser has no reason to write again - and a "<count> <name>" title would
+// freeze at whatever count it was composed with. Establishing that was a matter
+// of observing which of the three points actually fires for each user action:
+// the delegate getter, count() returning a new value, or the native write.
 SRWLOCK g_countLock = SRWLOCK_INIT;
 std::unordered_map<void*, int> g_lastCount;
 
@@ -2046,8 +2063,14 @@ void RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
     const Named v = QueryUserTitleForStrip(StripForController(controller));
 
     AcquireSRWLockExclusive(&g_verdictLock);
+    // Note the shape: `|| count(controller)` means an ALREADY TRACKED controller
+    // keeps being updated at the cap. Only new ones are refused, so this
+    // degrades rather than collapsing - unlike the throttle map, whose cap used
+    // to stop refreshing existing entries and thereby switch itself off.
     if (g_verdicts.size() < 512 || g_verdicts.count(controller)) {
         g_verdicts[controller] = NameVerdict{delegateTitle, v};
+    } else {
+        ReportCapOnce(L"g_verdicts", /*evicts=*/false);
     }
     ReleaseSRWLockExclusive(&g_verdictLock);
 }
@@ -2080,6 +2103,8 @@ int Count_hook(void* tabStripModel) {
         // stops a pathological case from growing without limit.
         if (g_seenStrips.size() < 4096) {
             g_seenStrips.insert(tabStripModel);
+        } else {
+            ReportCapOnce(L"g_seenStrips", /*evicts=*/false);
         }
         ReleaseSRWLockExclusive(&g_stripLock);
     }
@@ -2102,6 +2127,8 @@ int Count_hook(void* tabStripModel) {
         if (it == g_lastCount.end()) {
             if (g_lastCount.size() < 512) {
                 g_lastCount.emplace(tabStripModel, n);
+            } else {
+                ReportCapOnce(L"g_lastCount", /*evicts=*/false);
             }
         } else if (it->second != n) {
             it->second = n;
@@ -2126,6 +2153,8 @@ void NoteStripAndRefresh(void* strip, const wchar_t* why) {
     AcquireSRWLockExclusive(&g_stripLock);
     if (g_seenStrips.size() < 4096) {
         g_seenStrips.insert(strip);
+    } else {
+        ReportCapOnce(L"g_seenStrips", /*evicts=*/false);
     }
     ReleaseSRWLockExclusive(&g_stripLock);
     if (g_settings.verbose) {
@@ -2430,6 +2459,37 @@ std::unordered_map<void*, HWND>      g_ctrlHwnd;   // controller -> its window
 std::unordered_map<void*, ULONGLONG> g_corrTried;  // controller -> last attempt
 std::unordered_map<void*, HWND>      g_stripHwnd;  // TabStripModel -> its window
 
+// Every fixed cap in this layer degrades SILENTLY, and each one differently: a
+// full verdict map means named windows are quietly left alone, a full strip set
+// means new windows never get a count, a full count map means changes stop being
+// noticed. Nothing said so, which is the part that makes them hard to diagnose -
+// the feature simply stops for new objects while continuing for old ones.
+//
+// One line the first time each one fills, and never again.
+//
+// `evicts` is not decoration. The two behaviours at capacity are opposite, and a
+// message that describes the wrong one is worse than none: a refusing map keeps
+// working for what it already holds and ignores everything new, while an
+// evicting one keeps accepting new entries and silently forgets an old one.
+void ReportCapOnce(const wchar_t* which, bool evicts) {
+    static std::unordered_set<std::wstring> reported;
+    static SRWLOCK                          lock = SRWLOCK_INIT;
+    AcquireSRWLockExclusive(&lock);
+    const bool first = reported.insert(which).second;
+    ReleaseSRWLockExclusive(&lock);
+    if (!first) return;
+    if (evicts) {
+        Wh_Log(L"%s reached its cap - it now forgets an older entry for every "
+               L"new one, so a window may occasionally redo work it had already "
+               L"done",
+               which);
+    } else {
+        Wh_Log(L"%s reached its cap - it will stop tracking NEW objects while "
+               L"continuing to work for the ones it already knows",
+               which);
+    }
+}
+
 HWND HwndForController(void* controller) {
     AcquireSRWLockShared(&g_corrLock);
     const auto it = g_ctrlHwnd.find(controller);
@@ -2441,7 +2501,11 @@ HWND HwndForController(void* controller) {
 void NoteStripHwnd(void* strip, HWND hWnd) {
     if (!strip || !hWnd) return;
     AcquireSRWLockExclusive(&g_corrLock);
-    if (g_stripHwnd.size() < 512) g_stripHwnd[strip] = hWnd;
+    if (g_stripHwnd.size() < 512) {
+        g_stripHwnd[strip] = hWnd;
+    } else {
+        ReportCapOnce(L"g_stripHwnd", /*evicts=*/false);
+    }
     ReleaseSRWLockExclusive(&g_corrLock);
 }
 
@@ -2620,7 +2684,14 @@ void TryCorrelateByPageTitle(void* controller, const std::wstring& pageTitle,
     if (matches != 1) return;
 
     AcquireSRWLockExclusive(&g_corrLock);
-    if (g_ctrlHwnd.size() < 512) g_ctrlHwnd[controller] = found;
+    if (g_ctrlHwnd.size() < 512) {
+        g_ctrlHwnd[controller] = found;
+    } else {
+        // The worst of the caps to lose silently: correlation still proceeds
+        // below, so the window is treated as correlated while the mapping that
+        // records WHICH window it is has been dropped.
+        ReportCapOnce(L"g_ctrlHwnd", /*evicts=*/false);
+    }
     ReleaseSRWLockExclusive(&g_corrLock);
 
     if (g_settings.verbose) {
@@ -2645,12 +2716,34 @@ void TryCorrelate(void* controller, const std::wstring& delegateTitle,
     // Throttled: this enumerates every top-level window, and the getter can fire
     // several times per event. A retry every half second is far more often than
     // a window's identity can change.
+    //
+    // THE CAP MUST NOT BE ABLE TO DISABLE THE THROTTLE, which is what
+    // `size() < 512` gating the write did. At the cap, existing entries stopped
+    // receiving fresh timestamps, so every one of them aged past 500 ms and
+    // `tooSoon` became permanently false - turning the throttle off exactly when
+    // there was most to throttle, and putting a desktop-wide enumeration on
+    // EVERY title update attempt. Refusing the insert for NEW controllers has
+    // the same effect on them, so a bound and a find-based throttle cannot
+    // coexist: the bound has to be enforced by replacement, not refusal.
+    //
+    // Evicting an arbitrary entry costs that controller one extra snapshot
+    // build. Failing to throttle costs one per title write, forever.
     const ULONGLONG now = GetTickCount64();
     {
         AcquireSRWLockExclusive(&g_corrLock);
-        const auto it = g_corrTried.find(controller);
+        const auto it      = g_corrTried.find(controller);
         const bool tooSoon = it != g_corrTried.end() && (now - it->second) < 500;
-        if (!tooSoon && g_corrTried.size() < 512) g_corrTried[controller] = now;
+        if (!tooSoon) {
+            if (it != g_corrTried.end()) {
+                it->second = now;  // always refresh what is already tracked
+            } else {
+                if (g_corrTried.size() >= 512) {
+                    ReportCapOnce(L"g_corrTried", /*evicts=*/true);
+                    g_corrTried.erase(g_corrTried.begin());
+                }
+                g_corrTried[controller] = now;
+            }
+        }
         ReleaseSRWLockExclusive(&g_corrLock);
         if (tooSoon) return;
     }
@@ -2676,7 +2769,14 @@ void TryCorrelate(void* controller, const std::wstring& delegateTitle,
     }
 
     AcquireSRWLockExclusive(&g_corrLock);
-    if (g_ctrlHwnd.size() < 512) g_ctrlHwnd[controller] = found;
+    if (g_ctrlHwnd.size() < 512) {
+        g_ctrlHwnd[controller] = found;
+    } else {
+        // The worst of the caps to lose silently: correlation still proceeds
+        // below, so the window is treated as correlated while the mapping that
+        // records WHICH window it is has been dropped.
+        ReportCapOnce(L"g_ctrlHwnd", /*evicts=*/false);
+    }
     ReleaseSRWLockExclusive(&g_corrLock);
 
     if (g_settings.verbose) {
@@ -3153,8 +3253,17 @@ void ApplyFavicon(HWND hWnd, void* controller) {
     // These are physical pixels for a per-monitor-DPI-aware process, so at 150%
     // they come back 24 and 48 - handing over 16px for both is precisely what
     // forced the shell to upscale.
-    int smallPx = GetSystemMetrics(SM_CXSMICON);
-    int bigPx   = GetSystemMetrics(SM_CXICON);
+    // Per-MONITOR sizes, not per-process. GetSystemMetrics answers for the
+    // process/primary-monitor DPI, but Chromium is per-monitor-DPI-aware, so a
+    // window on a differently scaled display was handed an icon built for the
+    // wrong size and the shell rescaled it - which is precisely the softness the
+    // resampling work below exists to avoid. This runs on the window's own
+    // thread with its HWND in hand, so the per-window answer is available.
+    const UINT dpi = GetDpiForWindow(hWnd);
+    int smallPx = dpi ? GetSystemMetricsForDpi(SM_CXSMICON, dpi)
+                      : GetSystemMetrics(SM_CXSMICON);
+    int bigPx   = dpi ? GetSystemMetricsForDpi(SM_CXICON, dpi)
+                      : GetSystemMetrics(SM_CXICON);
     if (smallPx <= 0) smallPx = 16;
     if (bigPx   <= 0) bigPx   = 32;
 
@@ -3217,7 +3326,16 @@ void ApplyFavicon(HWND hWnd, void* controller) {
         // instead of back to the browser icon. Bailing here - and destroying
         // what was just built - makes the detach's lock a strict ordering point
         // between the two paths.
-        if (!g_settings.useFavicon) {
+        // The SETTING and the LAYER'S OWN STATE, not just the setting.
+        //
+        // Poison is not a setting, so checking useFavicon alone let this branch
+        // through after the layer had disabled itself: the restore had already
+        // detached and cleared iconSaved, and this would then publish a freshly
+        // built favicon over a window that had just been handed its original
+        // back. FaviconAvailable() consults the poison flags, which are set
+        // before any restore is posted and are never cleared - so anything that
+        // reaches this lock after a poison must observe it.
+        if (!g_settings.useFavicon || !syms::FaviconAvailable()) {
             ReleaseSRWLockExclusive(&g_lock);
             if (small) DestroyIcon(small);
             if (big)   DestroyIcon(big);
@@ -3291,6 +3409,9 @@ UINT g_applyTitleMsg = 0;
 // this instead. Any managed frame will do - the sweep covers every window.
 UINT g_correlateMsg = 0;
 
+// Hand a window its own icon back, on its own thread. See the handler.
+UINT g_restoreIconMsg = 0;
+
 void PostTitleRefresh(HWND hWnd) {
     if (hWnd && g_applyTitleMsg &&
         !InterlockedCompareExchange(&g_passthrough, 0, 0)) {
@@ -3323,7 +3444,25 @@ void ApplyTitleNow(HWND hWnd) {
     t_inHook = true;
     out = ComposeFor(source, controller);
     t_inHook = false;
-    if (out.empty() || out == source) return;
+
+    // `out == source` IS a legitimate result and must be written.
+    //
+    // It used to return here, on the reasoning that composing to the source
+    // means there is nothing to do. That is wrong whenever the window is
+    // currently showing something else - which is exactly the case this refresh
+    // exists to repair. Turn transformation off, or set the named template to
+    // plain `{name}`, and the correct new text IS the bare source; returning
+    // early left the window displaying the PREVIOUS template's output forever.
+    //
+    // It also blocks the restoration this mod needs when the symbol layer
+    // switches itself off: a named window's correct text is then its bare name,
+    // and a count-bearing template that drops to one tab under `min2` composes
+    // to the source too - which would otherwise freeze a stale count on screen.
+    //
+    // Nothing is lost by removing it: the screen comparison immediately below is
+    // the real "is there anything to do" test, and it is the accurate one
+    // because it asks the window rather than inferring.
+    if (out.empty()) return;
 
     WCHAR cur[1024];
     const int n = GetWindowTextW(hWnd, cur, ARRAYSIZE(cur));
@@ -3388,6 +3527,21 @@ LRESULT CALLBACK FrameSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
         if (controller) {
             ApplyFavicon(hWnd, controller);
         }
+        return 0;
+    }
+    // Restoring an icon runs HERE, on the window's own thread, for the same
+    // reason applying one does.
+    //
+    // Doing it from the worker - which is what the first version of the
+    // favicon-off path did - leaves a window where ApplyFavicon has published
+    // its new handles under the lock, released it, and not yet sent WM_SETICON.
+    // The worker can detach and destroy those handles in between, and the send
+    // then installs a destroyed icon. Both operations happening on this thread
+    // makes them strictly ordered against each other, which no amount of locking
+    // around the state alone can achieve, because the SEND is deliberately
+    // outside the lock.
+    if (g_restoreIconMsg && uMsg == g_restoreIconMsg) {
+        RestoreIconNow(hWnd);
         return 0;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -3508,6 +3662,46 @@ void RestoreIcon(HWND hWnd, WindowState& st) {
     st.oursSmall = st.oursBig = nullptr;
 }
 
+// The same thing, but self-contained and run on the window's OWN thread, which
+// is what makes it safe against a concurrent ApplyFavicon. Detach under the
+// lock, send outside it - and because both this and ApplyFavicon run here, the
+// send can no longer be overtaken by a detach.
+void RestoreIconNow(HWND hWnd) {
+    HICON origSmall = nullptr, origBig = nullptr;
+    HICON oursSmall = nullptr, oursBig = nullptr;
+    bool  had = false;
+    {
+        AcquireSRWLockExclusive(&g_lock);
+        if (const auto it = g_states.find(hWnd); it != g_states.end()) {
+            WindowState& st = it->second;
+            if (st.iconSaved) {
+                had          = true;
+                origSmall    = st.originalSmall;
+                origBig      = st.originalBig;
+                oursSmall    = st.oursSmall;
+                oursBig      = st.oursBig;
+                st.oursSmall = st.oursBig = nullptr;
+                st.iconSaved = false;
+                st.iconToken = 0;
+            }
+        }
+        ReleaseSRWLockExclusive(&g_lock);
+    }
+    if (!had) return;
+
+    if (IsWindow(hWnd)) {
+        // Plain sends: this IS the window's thread, so there is nothing to time
+        // out against and nothing to deadlock on.
+        SendMessageW(hWnd, WM_SETICON, ICON_SMALL,
+                     reinterpret_cast<LPARAM>(origSmall));
+        SendMessageW(hWnd, WM_SETICON, ICON_BIG,
+                     reinterpret_cast<LPARAM>(origBig));
+    }
+    // Ours to destroy; the originals belong to the browser.
+    if (oursSmall) DestroyIcon(oursSmall);
+    if (oursBig)   DestroyIcon(oursBig);
+}
+
 
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     // Consume the pairing left by the title getter earlier in this same
@@ -3570,12 +3764,21 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     t_inHook = true;
     std::wstring out;
     bool         changed = false;
+    // Icons owned by the discarded state, destroyed after the lock is released.
+    HICON        staleSmall = nullptr;
+    HICON        staleBig   = nullptr;
     {
         AcquireSRWLockExclusive(&g_lock);
         WindowState& st = g_states[hWnd];
         const DWORD  tid = GetWindowThreadProcessId(hWnd, nullptr);
         if (st.tid && st.tid != tid) {
-            st = WindowState{};  // HWND was recycled; discard stale state
+            // HWND was recycled; discard stale state. Take the icons WE made
+            // with us - resetting the struct would otherwise drop the only
+            // handles to them. Not originalSmall/originalBig: those are the
+            // browser's own, borrowed, and belong to a window that is gone.
+            staleSmall = st.oursSmall;
+            staleBig   = st.oursBig;
+            st = WindowState{};
         }
         st.tid = tid;
 
@@ -3584,6 +3787,8 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
             // settings change can still recompose from the original.
             ReleaseSRWLockExclusive(&g_lock);
             t_inHook = false;
+            if (staleSmall) DestroyIcon(staleSmall);
+            if (staleBig)   DestroyIcon(staleBig);
             return SetWindowTextW_Original(hWnd, lpString);
         }
         if (controller) {
@@ -3597,6 +3802,8 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         ReleaseSRWLockExclusive(&g_lock);
     }
     t_inHook = false;
+    if (staleSmall) DestroyIcon(staleSmall);
+    if (staleBig)   DestroyIcon(staleBig);
 
     // After the title, and only ever with the HWND we were handed.
     if (controller) {
@@ -3664,6 +3871,73 @@ std::vector<std::wstring> LocaleCandidates() {
     if (GetUserDefaultLocaleName(loc, ARRAYSIZE(loc))) add(loc);
     add(L"en-US");
     return out;
+}
+
+// Ask every window that is wearing one of our icons to hand it back, on its own
+// thread. Returns how many were actually asked.
+size_t PostIconRestoreToAll() {
+    if (!g_restoreIconMsg) return 0;
+    std::vector<HWND> targets;
+    {
+        AcquireSRWLockShared(&g_lock);
+        for (const auto& [hWnd, st] : g_states) {
+            // Subclass state is NOT part of the filter. A window can be wearing
+            // one of our icons without being subclassed - the title hook applies
+            // a favicon whether or not EnsureSubclassed succeeded - and
+            // selecting only subclassed ones left exactly those windows holding
+            // a stale icon until the mod was unloaded. Try to subclass it below
+            // instead; the message needs a handler, so that is what has to be
+            // repaired, not what the window is excluded for.
+            if (st.iconSaved) targets.push_back(hWnd);
+        }
+        ReleaseSRWLockShared(&g_lock);
+    }
+    size_t asked = 0;
+    for (HWND h : targets) {
+        if (!IsWindow(h)) continue;
+        EnsureSubclassed(h);
+        bool handled = false;
+        {
+            AcquireSRWLockShared(&g_lock);
+            if (const auto it = g_states.find(h); it != g_states.end()) {
+                handled = it->second.subclassed;
+            }
+            ReleaseSRWLockShared(&g_lock);
+        }
+        if (handled) {
+            PostMessageW(h, g_restoreIconMsg, 0, 0);
+            ++asked;
+        } else if (g_settings.verbose) {
+            // Not silent: this window keeps our icon until the mod unloads, and
+            // that is worth one line rather than a mystery.
+            Wh_Log(L"cannot restore an icon: window %p could not be subclassed",
+                   (void*)h);
+        }
+    }
+    return asked;
+}
+
+// Ask every subclassed window to recompose. Used when the symbol layer switches
+// itself off: a named window's correct text becomes its bare name again, and a
+// count that came from the browser has to stop being displayed rather than
+// silently going stale.
+size_t PostTitleRefreshToAll() {
+    if (!g_applyTitleMsg) return 0;
+    std::vector<HWND> targets;
+    {
+        AcquireSRWLockShared(&g_lock);
+        for (const auto& [hWnd, st] : g_states) {
+            if (st.subclassed) targets.push_back(hWnd);
+        }
+        ReleaseSRWLockShared(&g_lock);
+    }
+    size_t asked = 0;
+    for (HWND h : targets) {
+        if (!IsWindow(h)) continue;
+        PostMessageW(h, g_applyTitleMsg, 0, 0);
+        ++asked;  // what was actually posted, not what was considered
+    }
+    return asked;
 }
 
 // Drop state for windows that no longer exist.
@@ -3759,21 +4033,85 @@ void SweepAllWindows() {
                       : cur;
             ReleaseSRWLockShared(&g_lock);
         }
-        // No controller here: a sweep runs outside Chromium's title-composition
-        // call stack, so named windows are simply left alone until Chromium
-        // next updates them itself.
-        const std::wstring out = ComposeFor(src, nullptr);
+        // A WINDOW WITH A CONTROLLER IS NEVER COMPOSED HERE.
+        //
+        // This runs on the worker, outside Chromium's title-composition stack,
+        // so it has no controller to pass. The old comment said named windows
+        // were therefore "left alone" - they were not. ComposeFor with a null
+        // controller cannot reach IsNamedWindow, returns the bare source, and
+        // the write below then put the bare name on screen over the composed
+        // title. Since Wh_ModSettingsChanged sweeps on EVERY settings change,
+        // touching any setting stripped the count off every named window - and
+        // it did not heal, because the recompose is only posted from the tab
+        // hooks, which an idle window never reaches. The same applied to any
+        // window whose count came from the browser rather than its title.
+        //
+        // The window's own thread has the controller, so ask it instead.
+        void* known = nullptr;
         {
-            AcquireSRWLockExclusive(&g_lock);
-            WindowState& st = g_states[h];
-            st.source  = src;
-            st.applied = out;
-            st.tid     = GetWindowThreadProcessId(h, nullptr);
-            ReleaseSRWLockExclusive(&g_lock);
+            AcquireSRWLockShared(&g_lock);
+            if (const auto it = g_states.find(h); it != g_states.end()) {
+                known = it->second.controller;
+            }
+            ReleaseSRWLockShared(&g_lock);
         }
-        if (out != cur) {
-            WriteTitleFromOtherThread(h, out);
-            ++changed;
+        if (known) {
+            // Subclass first: the refresh message is handled in the subclass
+            // proc, and DefWindowProc would silently drop it. If subclassing
+            // fails the window keeps its current title - stale, but composed,
+            // which is strictly better than correct-looking and wrong.
+            EnsureSubclassed(h);
+            if (g_applyTitleMsg) PostMessageW(h, g_applyTitleMsg, 0, 0);
+            // Deliberately NOT `continue` - the icon refresh below still applies
+            // to exactly these windows.
+        } else {
+            const std::wstring out = ComposeFor(src, nullptr);
+            bool commit = true;
+            {
+                // Re-check under the exclusive lock before committing. Between
+                // the read above and here, the window's own thread can have
+                // correlated a controller and written a composed title; without
+                // this, the sweep would overwrite that with a result computed
+                // when there was no controller to consult.
+                AcquireSRWLockExclusive(&g_lock);
+                WindowState& st = g_states[h];
+                if (st.controller) {
+                    commit = false;
+                } else {
+                    st.source  = src;
+                    st.applied = out;
+                    st.tid     = GetWindowThreadProcessId(h, nullptr);
+                }
+                ReleaseSRWLockExclusive(&g_lock);
+            }
+            if (!commit) {
+                EnsureSubclassed(h);
+                if (g_applyTitleMsg) PostMessageW(h, g_applyTitleMsg, 0, 0);
+            } else if (out != cur) {
+                WriteTitleFromOtherThread(h, out);
+                ++changed;
+                // And once more AFTER the write. The commit check closes the
+                // window between reading the controller and updating the state,
+                // but not the one between updating it and the write actually
+                // landing: correlation can complete in between, its posted
+                // refresh can run first, and this write then puts the
+                // null-controller result back on top of the correct one. Asking
+                // again costs one message and cannot loop, because the second
+                // pass has the controller and composes the same text the screen
+                // already shows.
+                bool nowCorrelated = false;
+                {
+                    AcquireSRWLockShared(&g_lock);
+                    if (const auto it = g_states.find(h); it != g_states.end()) {
+                        nowCorrelated = it->second.controller != nullptr;
+                    }
+                    ReleaseSRWLockShared(&g_lock);
+                }
+                if (nowCorrelated) {
+                    EnsureSubclassed(h);
+                    if (g_applyTitleMsg) PostMessageW(h, g_applyTitleMsg, 0, 0);
+                }
+            }
         }
         // Icons are refreshed by the window itself; posting is safe from here,
         // calling into Chromium from this thread would not be.
@@ -3963,6 +4301,94 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
             PruneDeadWindows();
         }
 
+        // THE LAYER SWITCHING ITSELF OFF HAS TO BE VISIBLE, not just logged.
+        //
+        // A cross-check disagreement poisons the layer at any moment. Nothing
+        // then applies a new icon or recomputes a count - but everything already
+        // on screen stayed, so windows kept a favicon and a tab count that
+        // quietly went stale as the user browsed. The log said the layer had
+        // disabled itself while the screen said otherwise.
+        //
+        // Observed HERE rather than at the poison site, and this is not a
+        // preference: CrossCheck is reached from ComposeFor, which
+        // SetWindowTextW_Hook calls while holding g_lock EXCLUSIVELY. Restoring
+        // needs that same lock, and SRW locks are not reentrant - so restoring
+        // inline would deadlock the browser's UI thread on the first
+        // disagreement. Poison is monotonic, so a plain worker-local flag is
+        // enough to catch the transition, and it must be tested before the
+        // favicon guards below because poison arrives while the setting is on.
+        // ONE LATCH PER FLAG. They are independent, and a single shared latch
+        // reintroduced exactly the bug this block exists to fix:
+        //
+        //   * FaviconAvailable() consults only g_poisoned. So a NAME-only poison
+        //     under a shared latch restored icons that the still-healthy poll
+        //     immediately re-applied - a pointless flicker - and then consumed
+        //     the latch, so when the chain poisoned later nothing restored and
+        //     every window kept a stale favicon until unload.
+        //   * The reverse order was just as bad: the chain poisoning first
+        //     consumed the latch, so a later name poison refreshed no titles and
+        //     idle named windows kept a count that had stopped being maintained.
+        //
+        // Hence icons on the chain flag only - it is the one that stops icons -
+        // and titles on either, because both stop a count from being maintained.
+        {
+            static bool didIcons  = false;
+            static bool didTitles = false;
+            const bool  chainDead =
+                InterlockedCompareExchange(&syms::g_poisoned, 0, 0) != 0;
+            const bool nameDead =
+                InterlockedCompareExchange(&syms::g_namePoisoned, 0, 0) != 0;
+
+            if (chainDead && !didIcons) {
+                didIcons = true;
+                Wh_Log(L"symbol layer disabled itself - asked %zu window(s) to "
+                       L"restore their original icon",
+                       PostIconRestoreToAll());
+            }
+            if ((chainDead || nameDead) && !didTitles) {
+                didTitles = true;
+                Wh_Log(L"symbol layer disabled itself - asked %zu window(s) to "
+                       L"recompose their title without it",
+                       PostTitleRefreshToAll());
+            }
+        }
+
+        // Repair windows that hold a controller but never got subclassed.
+        //
+        // EnsureSubclassed can fail, and both the sweep and the poison restore
+        // reach such a window through a POSTED message that its ordinary window
+        // procedure then discards - so a settings change never applied, and an
+        // icon was never handed back. Retrying here makes both self-healing
+        // within a couple of seconds instead of never, and costs nothing when
+        // there is nothing to repair.
+        if (InterlockedCompareExchange(&syms::g_enabled, 0, 0)) {
+            std::vector<HWND> unsubclassed;
+            {
+                AcquireSRWLockShared(&g_lock);
+                for (const auto& [hWnd, st] : g_states) {
+                    if (st.controller && !st.subclassed) {
+                        unsubclassed.push_back(hWnd);
+                    }
+                }
+                ReleaseSRWLockShared(&g_lock);
+            }
+            for (HWND h : unsubclassed) {
+                if (!IsWindow(h)) continue;
+                EnsureSubclassed(h);
+                bool ok = false;
+                {
+                    AcquireSRWLockShared(&g_lock);
+                    if (const auto it = g_states.find(h); it != g_states.end()) {
+                        ok = it->second.subclassed;
+                    }
+                    ReleaseSRWLockShared(&g_lock);
+                }
+                if (ok && g_applyTitleMsg) {
+                    PostMessageW(h, g_applyTitleMsg, 0, 0);
+                }
+            }
+        }
+
         // Kick the correlation sweep. Correlation is UI-thread-only and used to
         // run only from the title getter, so an IDLE browser correlated nothing
         // and the whole symbol layer sat dormant - no counts, no icons - until
@@ -4133,6 +4559,8 @@ BOOL Wh_ModInit() {
         RegisterWindowMessageW(L"WindhawkChromiumWindowTitleFormat.ApplyTitle");
     g_correlateMsg =
         RegisterWindowMessageW(L"WindhawkChromiumWindowTitleFormat.Correlate");
+    g_restoreIconMsg =
+        RegisterWindowMessageW(L"WindhawkChromiumWindowTitleFormat.RestoreIcon");
 
     if (!WindhawkUtils::SetFunctionHook(SetWindowTextW, SetWindowTextW_Hook,
                                         &SetWindowTextW_Original)) {
@@ -4196,44 +4624,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     // restarted. The setting's own description promises the original is
     // restored, so this looked like the option simply not working.
     if (wasFavicon && !g_settings.useFavicon) {
-        // Detach every handle under the lock, then do the sends with no lock
-        // held. RestoreIcon is not reused here because it takes a reference INTO
-        // the map, and this path cannot hold the lock across its bounded sends -
-        // each one crosses to a browser UI thread, which is where composition
-        // wants the same lock. Detaching first is what makes both safe.
-        struct Pending {
-            HWND  hWnd;
-            HICON origSmall, origBig, oursSmall, oursBig;
-        };
-        std::vector<Pending> pending;
-        {
-            AcquireSRWLockExclusive(&g_lock);
-            for (auto& [hWnd, st] : g_states) {
-                if (!st.iconSaved) continue;
-                pending.push_back({hWnd, st.originalSmall, st.originalBig,
-                                   st.oursSmall, st.oursBig});
-                st.oursSmall = st.oursBig = nullptr;
-                st.iconSaved = false;
-                st.iconToken = 0;
-            }
-            ReleaseSRWLockExclusive(&g_lock);
-        }
-        for (const Pending& p : pending) {
-            if (IsWindow(p.hWnd)) {
-                DWORD_PTR unused = 0;
-                SendMessageTimeoutW(p.hWnd, WM_SETICON, ICON_SMALL,
-                                    reinterpret_cast<LPARAM>(p.origSmall),
-                                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
-                SendMessageTimeoutW(p.hWnd, WM_SETICON, ICON_BIG,
-                                    reinterpret_cast<LPARAM>(p.origBig),
-                                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 250, &unused);
-            }
-            if (p.oursSmall) DestroyIcon(p.oursSmall);
-            if (p.oursBig)   DestroyIcon(p.oursBig);
-        }
-        if (!pending.empty()) {
-            Wh_Log(L"favicon turned off - restored %zu icon(s)", pending.size());
-        }
+        const size_t n = PostIconRestoreToAll();
+        if (n) Wh_Log(L"favicon turned off - asked %zu window(s) to restore", n);
     }
 
     if (InterlockedCompareExchange(&g_ready, 0, 0)) {
