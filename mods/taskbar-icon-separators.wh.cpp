@@ -2,7 +2,7 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.0
+// @version         1.0.1
 // @author          meteoni
 // @github          https://github.com/Meteony
 // @license         GPL-3.0
@@ -181,26 +181,26 @@ static std::wstring g_storagePath;
 static std::wstring g_iconPath;
 static std::wstring g_separatorStatePath;
 
-// True after native reordering changes the in-memory taskbar layout and until
-// the drag-completion boundary persists the current separator state.
+// True after native state changes in memory and until the backend worker has
+// durably written the matching separator-state snapshot.
 static bool g_separatorStateDirty = false;  // guarded by g_settingsMutationMutex
 
 static std::atomic<bool> g_taskbarViewDllHooked = false;
-static std::atomic<bool> g_taskbarLifecycleHookInstalled = false;
-static std::atomic<bool> g_taskbarInteractionHooksInstalled = false;
+static std::atomic<bool> g_taskbarDllHooked = false;
+static std::atomic<bool> g_taskbarViewHookInstallationClaimed = false;
+static std::atomic<bool> g_taskbarDllHookInstallationClaimed = false;
+static std::atomic<unsigned int> g_hookInstallersInFlight = 0;
 static std::atomic<bool> g_loadLibraryWatcherInstalled = false;
 static std::atomic<bool> g_unloading = false;
 // Closed at the start of Wh_ModBeforeUninit, before the broader unloading flag
-// is set. This prevents late module-load callbacks from installing hooks while
-// separator cleanup still deliberately keeps styling hooks operational.
+// is set. This prevents late module-load callbacks from claiming new hook work.
 static std::atomic<bool> g_hookInstallationClosed = false;
 // True only while this mod intentionally tears down its own pins. User-facing
 // Add/Unpin callbacks must not mutate desired state during that window.
 static std::atomic<bool> g_internalCleanupInProgress = false;
+// This mutex protects only backend worker handles/lifetime. Hook installation
+// deliberately never takes it, especially from LoadLibraryExW_Hook.
 static std::mutex g_lifecycleMutex;
-static bool g_taskbarViewHookInstallationAttempted = false;
-static bool g_taskbarLifecycleHookInstallationAttempted = false;
-static bool g_taskbarInteractionHookInstallationAttempted = false;
 static bool g_backendStopped = false;
 static std::atomic<bool> g_backendHasConverged = false;
 static HANDLE g_backendThread = nullptr;
@@ -1563,7 +1563,8 @@ using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 static TaskListButton_UpdateVisualStates_t
     g_taskListButtonUpdateVisualStatesOriginal;
 
-static void PersistPendingSeparatorState();
+static void QueueBackendWork();
+static void FlushPendingSeparatorStateSynchronously();
 
 using TaskListButton_OnDragCompletedGesture_t =
     void(WINAPI*)(void* pThis);
@@ -1576,7 +1577,18 @@ static void WINAPI TaskListButton_OnDragCompletedGesture_Hook(
         pThis);
 
     if (!g_unloading) {
-        PersistPendingSeparatorState();
+        bool stateDirty = false;
+        {
+            std::lock_guard<std::mutex> mutationLock(
+                g_settingsMutationMutex);
+            stateDirty = g_separatorStateDirty;
+        }
+
+        if (stateDirty) {
+            // The taskbar UI thread only signals work. The backend worker owns
+            // the durable write so drag completion never blocks on disk I/O.
+            QueueBackendWork();
+        }
     }
 }
 
@@ -2780,36 +2792,77 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t g_loadLibraryExWOriginal;
 
-static bool HookTaskbarLifecycleSymbols(HMODULE taskbarDll);
-static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll);
+static bool HookTaskbarDllSymbols(HMODULE taskbarDll);
 static HWND FindCurrentProcessTaskbarWnd();
 static void StartBackendWorker();
+
+class HookInstallerScope {
+public:
+    HookInstallerScope() {
+        if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        g_hookInstallersInFlight.fetch_add(
+            1,
+            std::memory_order_acq_rel);
+
+        // Close the race where unload begins between the first closed check and
+        // publishing this installer as in-flight.
+        if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+            g_hookInstallersInFlight.fetch_sub(
+                1,
+                std::memory_order_acq_rel);
+            return;
+        }
+
+        active_ = true;
+    }
+
+    ~HookInstallerScope() {
+        if (active_) {
+            g_hookInstallersInFlight.fetch_sub(
+                1,
+                std::memory_order_acq_rel);
+        }
+    }
+
+    explicit operator bool() const {
+        return active_;
+    }
+
+private:
+    bool active_ = false;
+};
+
+static void DrainHookInstallers() {
+    while (g_hookInstallersInFlight.load(
+               std::memory_order_acquire) != 0) {
+        SwitchToThread();
+    }
+}
 
 static bool InstallTaskbarViewHooks(
     HMODULE module,
     bool applyOperations) {
-    if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+    HookInstallerScope installer;
+    if (!installer || g_unloading) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
-
-    // Re-check after taking the installation mutex. An unload can close the
-    // latch while this caller is waiting behind another installer.
-    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
-        g_unloading) {
-        return false;
-    }
-
-    if (g_taskbarViewDllHooked) {
+    if (g_taskbarViewDllHooked.load(std::memory_order_acquire)) {
         return true;
     }
 
-    if (g_taskbarViewHookInstallationAttempted) {
-        return false;
+    bool expected = false;
+    if (!g_taskbarViewHookInstallationClaimed.compare_exchange_strong(
+            expected,
+            true,
+            std::memory_order_acq_rel)) {
+        return g_taskbarViewDllHooked.load(std::memory_order_acquire);
     }
 
-    g_taskbarViewHookInstallationAttempted = true;
+    // No mod mutex is held while entering the Windhawk symbol/hook engine.
     if (!HookTaskbarViewDllSymbols(module)) {
         return false;
     }
@@ -2819,79 +2872,42 @@ static bool InstallTaskbarViewHooks(
         return false;
     }
 
-    g_taskbarViewDllHooked = true;
+    g_taskbarViewDllHooked.store(true, std::memory_order_release);
     return true;
 }
 
-static bool InstallTaskbarLifecycleHook(
+static bool InstallTaskbarDllHooks(
     HMODULE module,
     bool applyOperations) {
-    if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
+    HookInstallerScope installer;
+    if (!installer || g_unloading) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
-
-    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
-        g_unloading) {
-        return false;
-    }
-
-    if (g_taskbarLifecycleHookInstalled) {
+    if (g_taskbarDllHooked.load(std::memory_order_acquire)) {
         return true;
     }
 
-    if (g_taskbarLifecycleHookInstallationAttempted) {
-        return false;
+    bool expected = false;
+    if (!g_taskbarDllHookInstallationClaimed.compare_exchange_strong(
+            expected,
+            true,
+            std::memory_order_acq_rel)) {
+        return g_taskbarDllHooked.load(std::memory_order_acquire);
     }
 
-    g_taskbarLifecycleHookInstallationAttempted = true;
-    if (!HookTaskbarLifecycleSymbols(module)) {
+    // Resolve every taskbar.dll symbol in one HookSymbols call. Besides being
+    // faster, this avoids invalidating WindhawkUtils' per-module symbol cache.
+    if (!HookTaskbarDllSymbols(module)) {
         return false;
     }
 
     if (applyOperations && !Wh_ApplyHookOperations()) {
-        Wh_Log(L"[LIFECYCLE] Wh_ApplyHookOperations failed");
+        Wh_Log(L"[TASKBAR] Wh_ApplyHookOperations failed");
         return false;
     }
 
-    g_taskbarLifecycleHookInstalled = true;
-    return true;
-}
-
-static bool InstallTaskbarInteractionHooks(
-    HMODULE module,
-    bool applyOperations) {
-    if (g_hookInstallationClosed.load(std::memory_order_acquire)) {
-        return false;
-    }
-
-    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
-
-    if (g_hookInstallationClosed.load(std::memory_order_acquire) ||
-        g_unloading) {
-        return false;
-    }
-
-    if (g_taskbarInteractionHooksInstalled) {
-        return true;
-    }
-
-    if (g_taskbarInteractionHookInstallationAttempted) {
-        return false;
-    }
-
-    g_taskbarInteractionHookInstallationAttempted = true;
-    if (!HookTaskbarInteractionSymbols(module)) {
-        return false;
-    }
-
-    if (applyOperations && !Wh_ApplyHookOperations()) {
-        Wh_Log(L"[INPUT] Wh_ApplyHookOperations failed");
-        return false;
-    }
-
-    g_taskbarInteractionHooksInstalled = true;
+    g_taskbarDllHooked.store(true, std::memory_order_release);
     return true;
 }
 
@@ -2920,23 +2936,15 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
         InstallTaskbarViewHooks(module, true);
     }
 
-    if (GetModuleHandleW(L"taskbar.dll") == module) {
-        if (!g_taskbarLifecycleHookInstalled) {
-            Wh_Log(
-                L"[LIFECYCLE] taskbar.dll loaded; installing startup hook");
-            InstallTaskbarLifecycleHook(module, true);
-        }
+    if (!g_taskbarDllHooked.load(std::memory_order_acquire) &&
+        GetModuleHandleW(L"taskbar.dll") == module) {
+        Wh_Log(
+            L"[TASKBAR] taskbar.dll loaded; installing taskbar hooks");
+        InstallTaskbarDllHooks(module, true);
 
-        if (!g_taskbarInteractionHooksInstalled) {
-            Wh_Log(L"[INPUT] taskbar.dll loaded; installing interaction hooks");
-            InstallTaskbarInteractionHooks(module, true);
-        }
-
-        // Close the late-load race if the taskbar was created before the
-        // TrayUI::StartTaskbar hook became active.
-        if (FindCurrentProcessTaskbarWnd()) {
-            StartBackendWorker();
-        }
+        // Do not scan windows or create the backend worker from inside a
+        // LoadLibraryExW hook. TrayUI::StartTaskbar and Wh_ModAfterInit own
+        // backend readiness/startup outside the loader-lock-sensitive path.
     }
 
     return module;
@@ -3269,29 +3277,29 @@ static void ApplyPinnedMoveToSnapshot(
 // same state file directly.
 // -----------------------------------------------------------------------------
 
-static void PersistPendingSeparatorState() {
-    std::lock_guard<std::mutex> mutationLock(
-        g_settingsMutationMutex);
-
-    if (!g_separatorStateDirty ||
-        g_unloading) {
-        return;
-    }
-
+static void FlushPendingSeparatorStateSynchronously() {
     Settings snapshot;
-    {
-        std::shared_lock lock(g_settingsMutex);
-        snapshot = g_settings;
-    }
 
-    if (SaveSeparatorStateFile(snapshot)) {
-        g_separatorStateDirty = false;
-        Wh_Log(
-            L"[STATE] Persisted native taskbar reorder");
-    } else {
-        Wh_Log(
-            L"[STATE] Failed to persist native taskbar reorder; "
-            L"will retry on the next commit/unload");
+    {
+        std::lock_guard<std::mutex> mutationLock(
+            g_settingsMutationMutex);
+
+        if (!g_separatorStateDirty) {
+            return;
+        }
+
+        {
+            std::shared_lock lock(g_settingsMutex);
+            snapshot = g_settings;
+        }
+
+        // Teardown-only fallback. Live taskbar paths never call this function.
+        if (SaveSeparatorStateFile(snapshot)) {
+            g_separatorStateDirty = false;
+            Wh_Log(L"[STATE] Persisted pending separator state during teardown");
+        } else {
+            Wh_Log(L"[STATE] Failed to persist pending separator state during teardown");
+        }
     }
 }
 
@@ -3547,22 +3555,16 @@ static void RemoveSeparatorFromContextMenu(
             identity,
             removedIndex);
 
-        // State is authoritative. Persist the user's intent before touching the
-        // live pin list; a failed write leaves both desired and actual state
-        // unchanged.
-        if (!SaveSeparatorStateFile(updated)) {
-            Wh_Log(
-                L"[NATIVE-UNPIN] State write failed; separator kept identity='%s'",
-                identity.c_str());
-            return;
-        }
-
         {
             std::unique_lock lock(g_settingsMutex);
             g_settings = updated;
             g_backendHasConverged = false;
-            g_separatorStateDirty = false;
         }
+
+        // The backend worker persists this snapshot before it is allowed to
+        // unpin anything, preserving persist-before-mutate without blocking
+        // the taskbar UI thread on FlushFileBuffers/MoveFileEx.
+        g_separatorStateDirty = true;
     }
 
     Wh_Log(
@@ -3573,7 +3575,7 @@ static void RemoveSeparatorFromContextMenu(
     // Keep the old applied/stored snapshots until the backend has actually
     // unpinned the shortcut. That keeps the still-visible button recognized,
     // styled, and inert during the short convergence window.
-    RequestBackendReconcile();
+    QueueBackendWork();
 }
 
 using TrayUI_StartTaskbar_t =
@@ -3593,9 +3595,8 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     StartBackendWorker();
 }
 
-static bool HookTaskbarLifecycleSymbols(HMODULE taskbarDll) {
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarLifecycleHooks[] = {
+static bool HookTaskbarDllSymbols(HMODULE taskbarDll) {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {
                 LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"
@@ -3603,28 +3604,13 @@ static bool HookTaskbarLifecycleSymbols(HMODULE taskbarDll) {
             &g_trayUIStartTaskbarOriginal,
             TrayUI_StartTaskbar_Hook,
         },
-    };
-
-    if (!WindhawkUtils::HookSymbols(
-            taskbarDll,
-            taskbarLifecycleHooks,
-            ARRAYSIZE(taskbarLifecycleHooks))) {
-        Wh_Log(L"[LIFECYCLE] HookSymbols(TrayUI::StartTaskbar) failed");
-        return false;
-    }
-
-    Wh_Log(L"[LIFECYCLE] Taskbar startup hook installed");
-    return true;
-}
-
-static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {
                 LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))"
             },
             &g_taskGroupGetAppIdAddress,
             nullptr,
+            true,
         },
         {
             {
@@ -3632,6 +3618,7 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndIsPinned,
             nullptr,
+            true,
         },
         {
             {
@@ -3639,6 +3626,7 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndGetRelativeTaskOrder,
             nullptr,
+            true,
         },
         {
             {
@@ -3646,6 +3634,7 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndTryMoveGroupOriginal,
             TaskListWnd_TryMoveGroup_Hook,
+            true,
         },
         {
             {
@@ -3693,6 +3682,7 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndHandleClickOriginal,
             TaskListWnd_HandleClick_Hook,
+            true,
         },
         {
             {
@@ -3700,6 +3690,7 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             },
             &g_taskListWndOnContextMenuOriginal,
             TaskListWnd_OnContextMenu_Hook,
+            true,
         },
         {
             {
@@ -3715,13 +3706,11 @@ static bool HookTaskbarInteractionSymbols(HMODULE taskbarDll) {
             taskbarDll,
             taskbarDllHooks,
             ARRAYSIZE(taskbarDllHooks))) {
-        Wh_Log(
-            L"[INPUT] HookSymbols(taskbar.dll) failed");
+        Wh_Log(L"[TASKBAR] HookSymbols(taskbar.dll) failed");
         return false;
     }
 
-    Wh_Log(L"[INPUT] Taskbar interaction hooks installed");
-
+    Wh_Log(L"[TASKBAR] taskbar.dll hooks installed in one symbol pass");
     return true;
 }
 
@@ -4123,24 +4112,13 @@ static bool PrepareSeparatorFiles(
     return true;
 }
 
-static bool InitializeTaskbarLifecycleHook() {
+static bool InitializeTaskbarDllHooks() {
     if (HMODULE taskbarDll = GetModuleHandleW(L"taskbar.dll")) {
-        return InstallTaskbarLifecycleHook(taskbarDll, false);
+        return InstallTaskbarDllHooks(taskbarDll, false);
     }
 
     Wh_Log(
-        L"[LIFECYCLE] taskbar.dll isn't loaded yet; "
-        L"installing LoadLibraryExW watcher");
-    return InstallLoadLibraryWatcher();
-}
-
-static bool InitializeTaskbarInteractionHooks() {
-    if (HMODULE taskbarDll = GetModuleHandleW(L"taskbar.dll")) {
-        return InstallTaskbarInteractionHooks(taskbarDll, false);
-    }
-
-    Wh_Log(
-        L"[INPUT] taskbar.dll isn't loaded yet; "
+        L"[TASKBAR] taskbar.dll isn't loaded yet; "
         L"installing LoadLibraryExW watcher");
     return InstallLoadLibraryWatcher();
 }
@@ -4632,55 +4610,124 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
     }
 
     for (;;) {
-        // A settings notification that arrived before this iteration is
-        // already represented by the snapshot we are about to take.
+        // A request that arrived before this iteration is represented by the
+        // snapshot we are about to take. A newer request arriving afterwards
+        // re-signals the manual-reset event and supersedes this pass.
         ResetEvent(wakeEvent);
 
         Settings settings;
         Settings appliedSettings;
         SeparatorSetting refreshPulse;
+        bool stateDirty = false;
 
         {
+            // Keep the established mutation->settings lock order, but only for
+            // the cheap in-memory snapshot. Disk I/O happens after both locks
+            // have been released.
+            std::lock_guard<std::mutex> mutationLock(
+                g_settingsMutationMutex);
             std::shared_lock lock(g_settingsMutex);
             settings = g_settings;
             appliedSettings = g_appliedSettings;
             refreshPulse = g_refreshPulseSetting;
+            stateDirty = g_separatorStateDirty;
         }
 
-        bool success =
-            ConvergeSeparatorPins(
-                settings,
-                appliedSettings,
-                refreshPulse);
+        bool stateReady = true;
+        if (stateDirty) {
+            stateReady = SaveSeparatorStateFile(settings);
 
-        if (success) {
-            {
-                std::unique_lock lock(g_settingsMutex);
-
-                // Record what the pin backend actually converged to. If only
-                // presentation/logging metadata changed while the backend was
-                // working, adopt the newer snapshot too because no additional
-                // PinManager work is required.
-                g_appliedSettings = settings;
-
-                if (!SettingsRequireBackendReconcile(
-                        settings,
-                        g_settings)) {
-                    g_appliedSettings = g_settings;
-                    g_backendHasConverged = true;
-                } else {
-                    g_backendHasConverged = false;
+            if (stateReady) {
+                bool snapshotStillCurrent = false;
+                {
+                    std::lock_guard<std::mutex> mutationLock(
+                        g_settingsMutationMutex);
+                    std::shared_lock lock(g_settingsMutex);
+                    snapshotStillCurrent =
+                        SettingsSnapshotsEqual(
+                            settings,
+                            g_settings);
+                    if (snapshotStillCurrent) {
+                        g_separatorStateDirty = false;
+                    }
                 }
-            }
 
-            RefreshStoredSeparatorSettings();
-        } else if (!IsBackendStopRequested()) {
-            g_backendHasConverged = false;
+                if (!snapshotStillCurrent) {
+                    Wh_Log(
+                        L"[STATE] Persisted snapshot was superseded; "
+                        L"writing the newer state next");
+                    continue;
+                }
+
+                Wh_Log(L"[STATE] Persisted separator state on backend worker");
+            } else if (!IsBackendStopRequested()) {
+                Wh_Log(
+                    L"[STATE] Failed to persist separator state; "
+                    L"PinManager convergence deferred");
+            }
+        }
+
+        if (IsBackendStopRequested()) {
+            break;
+        }
+
+        bool needsReconcile =
+            !g_backendHasConverged.load(std::memory_order_acquire) ||
+            SettingsRequireBackendReconcile(
+                appliedSettings,
+                settings);
+
+        bool success = stateReady;
+        if (stateReady && needsReconcile) {
+            success =
+                ConvergeSeparatorPins(
+                    settings,
+                    appliedSettings,
+                    refreshPulse);
+
+            if (success) {
+                {
+                    std::unique_lock lock(g_settingsMutex);
+
+                    // Record what the pin backend actually converged to. If
+                    // only presentation/logging metadata changed while it was
+                    // working, adopt the newer snapshot too because no further
+                    // PinManager work is required.
+                    g_appliedSettings = settings;
+
+                    if (!SettingsRequireBackendReconcile(
+                            settings,
+                            g_settings)) {
+                        g_appliedSettings = g_settings;
+                        g_backendHasConverged.store(
+                            true,
+                            std::memory_order_release);
+                    } else {
+                        g_backendHasConverged.store(
+                            false,
+                            std::memory_order_release);
+                    }
+                }
+
+                // Directory enumeration belongs to the worker as well. No
+                // taskbar UI callback scans mod storage anymore.
+                RefreshStoredSeparatorSettings();
+            }
+        }
+
+        if (!success && !IsBackendStopRequested()) {
+            g_backendHasConverged.store(
+                false,
+                std::memory_order_release);
 
             if (!IsBackendReconcileRequested()) {
-                Wh_Log(
-                    L"[SYNC] One or more separator operations failed; "
-                    L"waiting for another settings/retry request");
+                if (stateReady) {
+                    Wh_Log(L"[SYNC] One or more separator operations failed; "
+                          L"waiting for another settings/retry request");
+                } else {
+                    Wh_Log(L"[STATE] Waiting 1 second before retrying state persistence");
+                }
+            
             }
         }
 
@@ -4693,15 +4740,22 @@ static DWORD WINAPI BackendThreadProc(void* parameter) {
             wakeEvent,
         };
 
+        // Persistence failures get a bounded retry without spinning. Normal
+        // converged operation stays asleep until explicitly woken.
+        DWORD timeout = stateReady ? INFINITE : 1000;
         DWORD waitResult =
             WaitForMultipleObjects(
                 ARRAYSIZE(events),
                 events,
                 FALSE,
-                INFINITE);
+                timeout);
 
         if (waitResult == WAIT_OBJECT_0) {
             break;
+        }
+
+        if (waitResult == WAIT_TIMEOUT && !stateReady) {
+            continue;
         }
 
         if (waitResult != WAIT_OBJECT_0 + 1) {
@@ -4942,6 +4996,32 @@ static void RequestBackendReconcile() {
 }
 
 
+static bool SignalBackendWorker() {
+    std::lock_guard<std::mutex> lock(g_lifecycleMutex);
+
+    if (g_unloading || g_backendStopped ||
+        !g_backendThread || !g_backendWakeEvent) {
+        return false;
+    }
+
+    if (WaitForSingleObject(
+            g_backendThread,
+            0) != WAIT_TIMEOUT) {
+        return false;
+    }
+
+    return SetEvent(g_backendWakeEvent) != FALSE;
+}
+
+static void QueueBackendWork() {
+    // Native taskbar callbacks normally arrive after TrayUI::StartTaskbar, so
+    // the hot path is a single SetEvent. Fall back to the existing worker
+    // readiness logic only if the worker is unexpectedly absent.
+    if (!SignalBackendWorker()) {
+        RequestBackendReconcile();
+    }
+}
+
 static void AddSeparatorFromTaskbarMenu() {
     if (g_unloading ||
         g_internalCleanupInProgress.load()) {
@@ -4990,27 +5070,21 @@ static void AddSeparatorFromTaskbarMenu() {
             stableId),
     });
 
-    // Persist before publishing the desired state. If storage fails, no pin is
-    // created and the taskbar remains unchanged.
-    if (!SaveSeparatorStateFile(updated)) {
-        Wh_Log(
-            L"[NATIVE-ADD] State write failed; separator not added");
-        return;
-    }
-
     {
         std::unique_lock lock(g_settingsMutex);
         g_settings = updated;
         g_backendHasConverged = false;
-        g_separatorStateDirty = false;
     }
+
+    // Publish the desired state immediately, but let the backend worker make
+    // it durable before PinManager is allowed to create the new pin.
+    g_separatorStateDirty = true;
 
     Wh_Log(
         L"[NATIVE-ADD] Added separator identity='%s' at native end",
         updated.separators.back().identity.c_str());
 
-    RefreshStoredSeparatorSettings();
-    RequestBackendReconcile();
+    QueueBackendWork();
 }
 
 static void StopBackendWorker() {
@@ -5108,21 +5182,14 @@ BOOL ExplorerModInit() {
         return FALSE;
     }
 
-    RefreshStoredSeparatorSettings();
-
     if (!InitializeTaskbarStylingHooks()) {
         Wh_Log(
             L"[INIT] TaskListButton styling hooks unavailable");
     }
 
-    if (!InitializeTaskbarLifecycleHook()) {
+    if (!InitializeTaskbarDllHooks()) {
         Wh_Log(
-            L"[INIT] Taskbar startup hook unavailable");
-    }
-
-    if (!InitializeTaskbarInteractionHooks()) {
-        Wh_Log(
-            L"[INIT] Taskbar interaction hooks unavailable");
+            L"[INIT] taskbar.dll hooks unavailable");
     }
 
     // Hook operations installed during Wh_ModInit are applied automatically
@@ -5140,15 +5207,9 @@ void ExplorerModAfterInit() {
         }
     }
 
-    // Lifecycle and interaction hooks are independent. A symbol change in one
-    // family must not gate the other or the PinManager backend.
-    if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
-        if (!g_taskbarLifecycleHookInstalled) {
-            InstallTaskbarLifecycleHook(module, true);
-        }
-
-        if (!g_taskbarInteractionHooksInstalled) {
-            InstallTaskbarInteractionHooks(module, true);
+    if (!g_taskbarDllHooked.load(std::memory_order_acquire)) {
+        if (HMODULE module = GetModuleHandleW(L"taskbar.dll")) {
+            InstallTaskbarDllHooks(module, true);
         }
     }
 
@@ -5164,22 +5225,19 @@ void ExplorerModAfterInit() {
 
 void ExplorerModBeforeUninit() {
     // Hook APIs are legal only until this callback returns. Close every late
-    // installation path first, then use the same mutex as the installers as a
-    // drain barrier. Once the lock is acquired, any installer that entered
-    // before the latch closed has finished; later callers fail both checks.
+    // installation path first, then wait only for installers that had already
+    // entered the Windhawk hook engine. No mod mutex participates in that path.
     g_hookInstallationClosed.store(true, std::memory_order_release);
-    {
-        std::lock_guard<std::mutex> lock(g_lifecycleMutex);
-    }
+    DrainHookInstallers();
 
-    // A completed native reorder should already have been persisted by
-    // OnDragCompletedGesture. This is a final no-timer fallback for a missed
-    // completion callback or a shutdown that lands mid-drag.
-    PersistPendingSeparatorState();
-
-    // Join the worker first, then remove pins while the styling and input
-    // hooks can still keep a transient recovery pin styled and inert.
+    // Join the worker first so there can be no concurrent state-file writer.
+    // Then perform one teardown-only synchronous durability fallback for a
+    // missed drag-completion signal or an in-flight native mutation.
     StopBackendWorker();
+    FlushPendingSeparatorStateSynchronously();
+
+    // Remove pins while the styling and input hooks can still keep a transient
+    // recovery pin styled and inert.
     g_internalCleanupInProgress = true;
     CleanupSeparatorArtifacts(true);
 
@@ -5196,9 +5254,9 @@ void ExplorerModUninit() {
     Wh_Log(L"[UNINIT] Taskbar Icon Separators unloading");
 
     // Defensive in case an older Windhawk build skips Wh_ModBeforeUninit.
-    PersistPendingSeparatorState();
     g_unloading = true;
     StopBackendWorker();
+    FlushPendingSeparatorStateSynchronously();
 
     // Defensive fallback for Windhawk builds that skip Wh_ModBeforeUninit.
     // Hooks may already be gone here, so never recover an absent pin by
