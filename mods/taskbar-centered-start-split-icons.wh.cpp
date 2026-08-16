@@ -153,6 +153,7 @@ community.
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cwctype>
@@ -306,8 +307,8 @@ PinnedAppsAnchor ParsePinnedAppsAnchor(PCWSTR value) {
 // The distance-from-center order key for a pinned-but-not-running app (one
 // with no window to measure a real distance from). Made -infinity instead
 // of the default +infinity when pinnedAppsAnchor is AdjacentToStart, since
-// ComputeTaskListButtonX's byDistance sort treats a smaller orderKey as
-// closer to Start - nothing can beat -infinity, so these always end up
+// PlanTaskListButtons' distance-from-center sort treats a smaller orderKey
+// as closer to Start - nothing can beat -infinity, so these always end up
 // innermost rather than outermost.
 double PinnedAppOrderKey() {
     return g_settings.pinnedAppsAnchor == PinnedAppsAnchor::AdjacentToStart
@@ -484,37 +485,6 @@ std::vector<FrameworkElement> GetRepeaterChildElements(
     return result;
 }
 
-// Returns `element`'s sibling FrameworkElements (element excluded), in
-// visual-tree order. Works whether the parent is an ItemsRepeater (uses the
-// data-bound realized items, same as GetRepeaterChildElements) or a plain
-// panel (falls back to raw VisualTreeHelper enumeration). Task list buttons'
-// exact parent container isn't confirmed to be the same repeater that hosts
-// the Start button, so this is deliberately hierarchy-agnostic rather than
-// assuming ItemsRepeater everywhere.
-std::vector<FrameworkElement> GetSiblingElements(FrameworkElement element) {
-    std::vector<FrameworkElement> result;
-
-    auto parent =
-        Media::VisualTreeHelper::GetParent(element).try_as<FrameworkElement>();
-    if (!parent) {
-        return result;
-    }
-
-    if (parent.try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>()) {
-        return GetRepeaterChildElements(parent);
-    }
-
-    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(parent);
-    for (int i = 0; i < childrenCount; i++) {
-        auto child =
-            Media::VisualTreeHelper::GetChild(parent, i).try_as<FrameworkElement>();
-        if (child) {
-            result.push_back(child);
-        }
-    }
-
-    return result;
-}
 
 using RunFromWindowThreadProc_t = std::function<void()>;
 
@@ -577,6 +547,19 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
+    // The shared_ptr's ref-count block (taskbarHostSharedPtr[1]) must be
+    // released on every path below, not just the one at the end of a
+    // fully successful call - every early return past this point used to
+    // leak a reference. That's worse than it looks now that
+    // RecomputeLayoutPlan calls this on every single ArrangeOverride
+    // pass: one leaked reference per pass, for the life of the process,
+    // on any Windows build where the prologue pattern below stops
+    // matching.
+    struct DecrefGuard {
+        void* ptr;
+        ~DecrefGuard() { std__Ref_count_base__Decref_Original(ptr); }
+    } decrefGuard{taskbarHostSharedPtr[1]};
+
     // The offset of the XAML element pointer inside TaskbarHost isn't
     // exposed by any symbol, so it's read out of the prologue of a
     // neighboring function that's known to access it at a fixed offset.
@@ -625,11 +608,7 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                             winrt::put_abi(taskbarElement));
 
-    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-
-    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-
-    return result;
+    return taskbarElement ? taskbarElement.XamlRoot() : nullptr;
 }
 
 XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
@@ -947,26 +926,30 @@ HWND ResolveHwndFromTaskListButton(FrameworkElement element) {
 // pass (confirmed via g_resolveStats climbing into the hundreds within a
 // couple of seconds for just one such button).
 //
-// consecutiveFailures caps that retry, rather than letting it run forever
-// at the TTL's cadence: the resolution chain ends with a synthetic
-// ReportClicked call against the taskbar's real internal click handler
-// (intercepted before it acts on it - see CTaskListWnd_HandleClick_Hook),
-// and for a button that can genuinely never resolve (the common case,
-// exactly the one this negative cache exists for) that was firing roughly
-// once every 2s, indefinitely, for as long as explorer runs. The
-// interception is what keeps that inert today, but there's no reason to
-// keep invoking taskbar-internal click machinery on a timer forever for a
-// button that's already told us three times in a row that it has nothing
-// to resolve to. A live element that's simply slow to resolve (e.g. the
-// window it belongs to hasn't finished appearing yet) still gets the fresh
-// retries above, since the counter only advances on an actual failure and
-// resets to 0 on the first success.
+// consecutiveFailures drives a capped exponential backoff (2s, 4s, 8s,
+// 16s, then holding at 32s) instead of retrying at a fixed 2s interval
+// forever: the resolution chain ends with a synthetic ReportClicked call
+// against the taskbar's real internal click handler (intercepted before
+// it acts on it - see CTaskListWnd_HandleClick_Hook), and a button that
+// can genuinely never resolve (the common case, exactly the one this
+// negative cache exists for) would otherwise hammer that at a fixed 2s
+// cadence indefinitely. A hard stop after a few failures was tried first,
+// but ItemsRepeater typically recycles the same realized element (and so
+// the same cache entry) for a given index rather than creating a new one
+// - so a pinned-but-not-running app that fails a few times and is *then*
+// actually launched would never get its HWND resolved for as long as
+// that element stays realized, silently breaking the mod's own headline
+// feature (side-following) for that button. Backing off instead of
+// stopping keeps retrying, just less often, so a later launch is still
+// picked up (worst case within 32s) without hammering the click handler
+// at a fixed rate forever. A live element that's simply slow to resolve
+// still gets the fast early retries, since the counter only advances on
+// an actual failure and resets to 0 on the first success.
 struct ButtonHwndCacheEntry {
     HWND hwnd = nullptr;
     ULONGLONG lastAttempt = 0;
     int consecutiveFailures = 0;
 };
-constexpr int kMaxConsecutiveResolveFailures = 3;
 std::unordered_map<void*, ButtonHwndCacheEntry> g_buttonHwndCache;
 
 // Actually runs the resolution chain and updates the cache. Returns
@@ -1294,7 +1277,7 @@ double ComputeSystemButtonX(FrameworkElement repeater,
 
 // Updated whenever the Start button's own Arrange runs. Read by task list
 // button arrangement so it doesn't need to assume Start lives in the same
-// container as the task buttons (unconfirmed - see GetSiblingElements).
+// container as the task buttons.
 double g_lastStartWidth = 48;
 
 // Diagnostics only, for RecomputeLayoutPlan's once-per-pass traversal.
@@ -1312,61 +1295,53 @@ struct LayoutPlanStats {
 // (unrelated struct, same underlying risk).
 thread_local LayoutPlanStats g_planStats;
 
-double ComputeTaskListButtonX(FrameworkElement target,
-                               double startCenterX) {
-    ButtonClassification targetInfo = ClassifyTaskListButton(target);
-    if (targetInfo.hwndResolved) {
-        g_planStats.taskListHwndResolved++;
-    }
-    if (targetInfo.side == Side::Left) {
-        g_planStats.taskListLeft++;
-    } else {
-        g_planStats.taskListRight++;
-    }
+struct TaskListPlanEntry {
+    FrameworkElement element;
+    ButtonClassification info;
+    double width;
+    int index;  // Position within `children`, i.e. taskbar order.
+};
 
-    void* targetAbi = winrt::get_abi(target);
-    bool byDistance =
-        g_settings.taskListOrder == TaskListOrder::DistanceFromCenter;
-
-    double sameSideWidthBefore = 0;
-    if (byDistance) {
-        // Rank by distance from screen-center rather than taskbar order, so
-        // the icon nearest Start corresponds to the window nearest center.
-        // Pointer-value tiebreak keeps ties stable frame to frame.
-        for (auto& child : GetSiblingElements(target)) {
-            if (!IsTaskListButton(child) || winrt::get_abi(child) == targetAbi) {
-                continue;
-            }
-            ButtonClassification childInfo = ClassifyTaskListButton(child);
-            if (childInfo.side != targetInfo.side) {
-                continue;
-            }
-            bool closer =
-                childInfo.orderKey < targetInfo.orderKey ||
-                (childInfo.orderKey == targetInfo.orderKey &&
-                 winrt::get_abi(child) < targetAbi);
-            if (closer) {
-                sameSideWidthBefore += FullFootprintWidth(child);
-            }
-        }
-    } else {
-        for (auto& child : GetSiblingElements(target)) {
-            if (winrt::get_abi(child) == targetAbi) {
-                break;
-            }
-            if (!IsTaskListButton(child)) {
-                continue;
-            }
-            if (ClassifyTaskListButton(child).side == targetInfo.side) {
-                sameSideWidthBefore += FullFootprintWidth(child);
-            }
+// Computes every task list button's target X in a single O(n) pass over
+// the repeater's already-enumerated children, classifying each button
+// exactly once. The previous version (ComputeTaskListButtonX, called once
+// per button from RecomputeLayoutPlan's loop) re-walked and re-classified
+// every sibling for every single button it placed - an O(n^2) pass over
+// the whole task list on every ArrangeOverride pass (~1600 classifications
+// at 40 icons), on the shell's layout critical path during a drag. It also
+// re-derived each target's sibling list via VisualTreeHelper::GetParent
+// instead of reusing `children`, so it re-walked the repeater itself once
+// per button too. This also closes a subtle consistency gap the O(n^2)
+// version had: a button classified while being visited as someone else's
+// *sibling* could in principle disagree with its own classification when
+// later visited as the *target* (e.g. its HWND resolving mid-pass), which
+// could produce two buttons at the same X or a gap - classifying once up
+// front removes that possibility entirely.
+void PlanTaskListButtons(const std::vector<FrameworkElement>& children,
+                         double startCenterX,
+                         std::unordered_map<void*, double>& outPlan) {
+    std::vector<TaskListPlanEntry> entries;
+    for (int i = 0; i < (int)children.size(); i++) {
+        if (IsTaskListButton(children[i])) {
+            entries.push_back({children[i], ClassifyTaskListButton(children[i]),
+                               FullFootprintWidth(children[i]), i});
         }
     }
 
-    double width = FullFootprintWidth(target);
+    g_planStats.taskListTotal = (int)entries.size();
+    for (auto& entry : entries) {
+        if (entry.info.hwndResolved) {
+            g_planStats.taskListHwndResolved++;
+        }
+        if (entry.info.side == Side::Left) {
+            g_planStats.taskListLeft++;
+        } else {
+            g_planStats.taskListRight++;
+        }
+    }
+
     double gap = g_settings.gapPx;
     double startWidth = g_lastStartWidth;
-
     bool adjacent =
         g_settings.systemButtonsPlacement == SystemButtonsPlacement::AdjacentStart;
     double leftExtra = (adjacent && g_settings.systemButtonsAdjacentSide == Side::Left)
@@ -1376,13 +1351,60 @@ double ComputeTaskListButtonX(FrameworkElement target,
                              ? (g_lastRightSystemClusterWidth + gap)
                              : 0;
 
-    if (targetInfo.side == Side::Left) {
-        return startCenterX - startWidth / 2.0 - gap - leftExtra -
-               sameSideWidthBefore - width;
-    }
+    if (g_settings.taskListOrder == TaskListOrder::DistanceFromCenter) {
+        // Innermost (closest to Start) first on each side. Ties - e.g.
+        // multiple pinned/overridden buttons, which all share the same
+        // +/-infinity orderKey - now break on taskbar index instead of
+        // the previous ABI-pointer value: equally stable frame to frame,
+        // but a predictable order instead of an arbitrary one.
+        std::vector<TaskListPlanEntry*> left, right;
+        for (auto& entry : entries) {
+            (entry.info.side == Side::Left ? left : right).push_back(&entry);
+        }
+        auto byOrderKey = [](const TaskListPlanEntry* a,
+                             const TaskListPlanEntry* b) {
+            if (a->info.orderKey != b->info.orderKey) {
+                return a->info.orderKey < b->info.orderKey;
+            }
+            return a->index < b->index;
+        };
+        std::sort(left.begin(), left.end(), byOrderKey);
+        std::sort(right.begin(), right.end(), byOrderKey);
 
-    return startCenterX + startWidth / 2.0 + gap + rightExtra +
-           sameSideWidthBefore;
+        double widthBefore = 0;
+        for (auto* entry : left) {
+            outPlan[winrt::get_abi(entry->element)] =
+                startCenterX - startWidth / 2.0 - gap - leftExtra -
+                widthBefore - entry->width;
+            widthBefore += entry->width;
+        }
+        widthBefore = 0;
+        for (auto* entry : right) {
+            outPlan[winrt::get_abi(entry->element)] = startCenterX +
+                startWidth / 2.0 + gap + rightExtra + widthBefore;
+            widthBefore += entry->width;
+        }
+    } else {
+        // Preserve taskbar order: walk `entries` in original (taskbar)
+        // order, accumulating each side's width independently. Unchanged
+        // from before this rewrite: the left side ends up mirrored rather
+        // than laid out outward-from-Start - a pre-existing ordering
+        // quirk (tracked separately in the review) that this efficiency
+        // rewrite deliberately preserves rather than also fixing.
+        double leftWidthBefore = 0, rightWidthBefore = 0;
+        for (auto& entry : entries) {
+            if (entry.info.side == Side::Left) {
+                outPlan[winrt::get_abi(entry.element)] =
+                    startCenterX - startWidth / 2.0 - gap - leftExtra -
+                    leftWidthBefore - entry.width;
+                leftWidthBefore += entry.width;
+            } else {
+                outPlan[winrt::get_abi(entry.element)] = startCenterX +
+                    startWidth / 2.0 + gap + rightExtra + rightWidthBefore;
+                rightWidthBefore += entry.width;
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -1489,12 +1511,13 @@ void ResolvePendingButtonHwnds() {
         auto it = g_buttonHwndCache.find(key);
         bool needsResolve = it == g_buttonHwndCache.end();
         if (!needsResolve) {
-            needsResolve =
-                it->second.hwnd
-                    ? !IsWindow(it->second.hwnd)
-                    : (it->second.consecutiveFailures <
-                           kMaxConsecutiveResolveFailures &&
-                       now - it->second.lastAttempt >= 2000);
+            if (it->second.hwnd) {
+                needsResolve = !IsWindow(it->second.hwnd);
+            } else {
+                int shift = std::min(it->second.consecutiveFailures, 4);
+                ULONGLONG backoffMs = 2000ULL << shift;  // 2s..32s
+                needsResolve = now - it->second.lastAttempt >= backoffMs;
+            }
         }
 
         if (needsResolve && ResolveAndCacheButtonHwnd(child)) {
@@ -1635,20 +1658,27 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
 // independently by the HWND-resolve timer - see ResolvePendingButtonHwnds
 // for why those still need explicit pruning).
 //
-// MUST only run when confirmed to be on the primary taskbar's own thread:
+// MUST only run when confirmed to be on g_hTaskbarWnd's own thread:
 // GetTaskbarXamlRoot(g_hTaskbarWnd) reaches across to the PRIMARY's XAML
 // object specifically, which is an unsafe unmarshaled cross-apartment
-// WinRT call from any other thread. This hook is process-wide (also fires
-// for secondary-monitor taskbars, on their own threads), so without this
-// check a secondary-monitor pass calling this function would be exactly
-// the same crash class fixed elsewhere in this file by marshaling through
-// RunFromWindowThread - except Arrange can't marshal (it needs a
-// synchronous answer), so the only safe option is to skip the attempt
-// entirely on the wrong thread. That's fine here: this function is only
-// ever useful for the primary's own passes anyway (see g_lastArrangedX's
-// comment on why secondary-monitor elements are never meant to get an
-// entry), and it naturally gets called again on the primary's own next
-// pass with no special retry logic needed.
+// WinRT call from any other thread.
+//
+// Note this check does NOT scope the (relatively expensive) rebuild to
+// primary-monitor passes only, despite an earlier version of this comment
+// claiming that - Shell_TrayWnd and Shell_SecondaryTrayWnd both run on
+// the SAME Explorer UI thread (the established pattern other taskbar mods
+// use to reach every monitor's taskbar is a single EnumThreadWindows on
+// that one thread), so this check passes for secondary-monitor
+// ArrangeOverride passes too, and the whole plan gets rebuilt redundantly
+// for each of them. It's still *correct* either way - secondary-monitor
+// elements never end up in g_lastArrangedX regardless of how many times
+// this runs, since it only ever walks the primary's own repeater - just
+// not free. This check exists purely as the apartment-safety guard
+// described above, not as a monitor-scoping mechanism. A real
+// scoping/caching optimization (skip the rebuild when nothing relevant
+// changed) is a separate, larger change left for its own review round
+// given how much this exact function's correctness properties have
+// already been fought for across several crash-debugging sessions.
 void RecomputeLayoutPlan() {
     if (!g_hTaskbarWnd) {
         return;
@@ -1675,7 +1705,7 @@ void RecomputeLayoutPlan() {
         double startCenterX = GetMonitorCenterXLocal();
         std::unordered_map<void*, double> newPlan;
 
-        // Start first: ComputeSystemButtonX/ComputeTaskListButtonX below
+        // Start first: ComputeSystemButtonX/PlanTaskListButtons below
         // both read g_lastStartWidth, so it needs to already reflect this
         // pass by the time they run, not the previous one. Inlined rather
         // than calling ComputeStartButtonX (same formula) purely to reuse
@@ -1691,7 +1721,7 @@ void RecomputeLayoutPlan() {
             }
         }
 
-        // Search/TaskView/Widgets next: ComputeTaskListButtonX reads
+        // Search/TaskView/Widgets next: PlanTaskListButtons reads
         // g_lastLeftSystemClusterWidth/g_lastRightSystemClusterWidth
         // (updated inside ComputeSystemButtonX), so these need to run
         // before any task list button below for the same reason.
@@ -1704,20 +1734,10 @@ void RecomputeLayoutPlan() {
                 repeater, child, sb, startCenterX, g_lastStartWidth);
         }
 
-        // Task list buttons last. ComputeTaskListButtonX still does its
-        // own O(n) walk of sibling buttons per button it's called for (an
-        // O(n^2) pass overall) - left as-is here since this change is
-        // scoped to fixing WHERE that traversal happens (never nested
-        // inside Arrange anymore), not also rewriting its algorithmic
-        // cost in the same pass.
-        for (auto& child : children) {
-            if (!IsTaskListButton(child)) {
-                continue;
-            }
-            g_planStats.taskListTotal++;
-            newPlan[winrt::get_abi(child)] =
-                ComputeTaskListButtonX(child, startCenterX);
-        }
+        // Task list buttons last - see PlanTaskListButtons' own comment
+        // for why this is a single O(n) pass over `children` rather than
+        // calling a per-button compute function in a loop here.
+        PlanTaskListButtons(children, startCenterX, newPlan);
 
         g_lastArrangedX = std::move(newPlan);
     } catch (...) {
@@ -2175,6 +2195,30 @@ void StartWinEventHook() {
     });
 }
 
+// RunFromWindowThread can only fail two ways: the taskbar's thread is
+// already gone (GetWindowThreadProcessId returns 0 - in which case the
+// OS already tore down any timer/hook that thread owned, so there's
+// nothing left to clean up), or its own internal SetWindowsHookEx call
+// failed (rare, e.g. transient resource exhaustion) while the thread is
+// still very much alive. That second case is the dangerous one: nothing
+// under mod control runs on the taskbar thread to unregister the real
+// WinEventHook/timer, Wh_ModUninit returns anyway, Windhawk unmaps this
+// module's code, and the still-alive thread's next tick calls into
+// unmapped memory. A few retries gives that transient failure a chance to
+// clear without risking an unbounded stall if the thread really is gone.
+bool RunFromWindowThreadWithRetry(HWND hWnd, RunFromWindowThreadProc_t proc) {
+    for (int attempt = 0; attempt < 3; attempt++) {
+        if (RunFromWindowThread(hWnd, proc)) {
+            return true;
+        }
+        if (GetWindowThreadProcessId(hWnd, nullptr) == 0) {
+            break;
+        }
+        Sleep(20);
+    }
+    return false;
+}
+
 void StopWinEventHook() {
     if (!g_locationChangeHook) {
         return;
@@ -2184,12 +2228,12 @@ void StopWinEventHook() {
     g_locationChangeHook = nullptr;
 
     if (g_hTaskbarWnd) {
-        // If this fails to marshal (the taskbar window is somehow already
-        // gone), the hook is leaked rather than left dangling into
-        // unmapped memory after this module unloads - UnhookWinEvent from
-        // the wrong thread is documented as unsafe, so falling back to
-        // calling it inline here would trade one crash class for another.
-        if (!RunFromWindowThread(g_hTaskbarWnd, [hook] { UnhookWinEvent(hook); })) {
+        // See RunFromWindowThreadWithRetry's comment for why a bounded
+        // retry, rather than falling back to an inline UnhookWinEvent
+        // here - that's documented as unsafe from the wrong thread, so
+        // it would just trade one crash class for another.
+        if (!RunFromWindowThreadWithRetry(g_hTaskbarWnd,
+                                          [hook] { UnhookWinEvent(hook); })) {
             Wh_Log(L"StopWinEventHook: RunFromWindowThread failed, "
                    L"location-change hook left registered");
         }
@@ -2238,7 +2282,7 @@ void StopButtonHwndResolveTimer() {
 
     // See StopWinEventHook's comment - same reasoning against an inline
     // fallback call applies to KillTimer from the wrong thread.
-    if (!RunFromWindowThread(g_hTaskbarWnd, [] {
+    if (!RunFromWindowThreadWithRetry(g_hTaskbarWnd, [] {
             KillTimer(g_hTaskbarWnd, kButtonHwndResolveTimerId);
         })) {
         Wh_Log(L"StopButtonHwndResolveTimer: RunFromWindowThread failed, "
@@ -2314,7 +2358,15 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    LoadSettings();
+    // LoadSettings() reassigns g_settings.leftApps/rightApps
+    // (std::vector<std::wstring>) - marshaled onto the taskbar's own
+    // thread so a concurrent ContainsAnyFragment call during a layout
+    // pass on that thread can't read a vector mid-reassignment.
+    if (g_hTaskbarWnd) {
+        RunFromWindowThread(g_hTaskbarWnd, [] { LoadSettings(); });
+    } else {
+        LoadSettings();
+    }
 
     InvalidateTaskbarLayout();
 }
