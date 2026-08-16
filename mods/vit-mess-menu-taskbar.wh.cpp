@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lruntimeobject -luser32 -lwindowsapp -lwinhttp
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -45,7 +45,9 @@ up to date. There is nothing to import and no files to manage.
 
 ## Meal timings
 
-These are the VIT Vellore timings and are built into the mod:
+These are the defaults, and they are the VIT Vellore timings. All five windows
+are editable in the settings, so a mess that shifts a slot does not need a new
+version of the mod:
 
 | Meal | Mon-Fri | Sat & Sun |
 | --- | --- | --- |
@@ -70,24 +72,29 @@ deletes when the mod is removed — so the mod leaves nothing behind.
 Requires Windows 11 (22H2 or newer) — it hooks the XAML taskbar, which does not
 exist on Windows 10.
 
-The button is added to the primary taskbar only. On a multi-monitor setup with
-taskbars on every display, it appears on the primary one.
+On a multi-monitor setup, "Show on" chooses between the primary taskbar only
+(the default) and every taskbar. Opening the flyout from a secondary taskbar
+anchors it to that monitor.
 
 The menu data comes from `messit.vinnovateit.com`, a third-party site this mod
 does not control. If that site changes its data format or goes away, the mod
 will report that no menu is available.
 
-## Credits
+## Credits and licence
 
-The taskbar plumbing follows two existing mods closely, both MIT licensed:
+This mod is published under the GNU General Public License v3.0, because its
+backdrop blur is derived from GPL-3.0 code.
 
-- **Taskbar AI Quota** and **Taskbar Fluent Media Player** — reaching the
-  taskbar's XAML root through `CTaskBand::GetTaskbarHost` and the
+- **Windows 11 Taskbar Styler** (GPL-3.0), whose `XamlBlurBrush` is itself
+  derived from **TranslucentTB** (GPL-3.0) — the Composition backdrop-blur
+  brush: the `IGraphicsEffectD2D1Interop` declaration, the effect object that
+  describes a D2D Gaussian blur, and `CreateBackdropBrush` →
+  `CreateEffectFactory` → `SetSourceParameter` behind a
+  `XamlCompositionBrushBase`. This is the part that sets the licence above.
+- **Taskbar AI Quota** and **Taskbar Fluent Media Player** (both MIT) — reaching
+  the taskbar's XAML root through `CTaskBand::GetTaskbarHost` and the
   `TaskbarHost::FrameHeight` prologue, the system-tray column insert/remove, and
   the `RunFromWindowThread` helper.
-- **Windows 11 Taskbar Styler** — the Composition backdrop-blur brush
-  (`CreateBackdropBrush` into a D2D Gaussian blur, exposed as a
-  `XamlCompositionBrushBase`).
 */
 // ==/WindhawkModReadme==
 
@@ -125,8 +132,14 @@ The taskbar plumbing follows two existing mods closely, both MIT licensed:
   $name: Button spacing (right)
   $description: Gap in pixels to the right of the button.
 - reserveTaskbarSpace: true
-  $name: Push the taskbar icons aside
-  $description: Left edge position only. Reserves the button's width plus its spacing before the taskbar icons, so they move out of the way instead of sitting underneath. Turn this off if another mod already manages that space.
+  $name: 'Push the taskbar icons aside (only with "Left edge of the taskbar")'
+  $description: Reserves the button's width plus its spacing before the taskbar icons, so they move out of the way instead of sitting underneath. Has no effect in the system-tray positions, where the tray lays the button out for us. Turn this off if another mod already manages that space.
+- taskbarScope: primary
+  $name: Show on
+  $description: Which taskbars get the button on a multi-monitor setup.
+  $options:
+  - primary: The primary taskbar only
+  - all: Every taskbar
 - maxLabelWidth: 180
   $name: Maximum label width
   $description: Longer text is truncated with an ellipsis. Pixels.
@@ -153,6 +166,17 @@ The taskbar plumbing follows two existing mods closely, both MIT licensed:
 - autoUpdate: true
   $name: Check for new menus automatically
   $description: When off, the menu is only downloaded when you press the reload button in the flyout.
+- timeBreakfast: "07:00-09:00"
+  $name: Breakfast (Mon-Fri)
+  $description: "Serving window as HH:MM-HH:MM, on a 24-hour clock. This drives the countdown and which card is highlighted, so correct it here if your mess changes a slot. The defaults are the VIT Vellore timings."
+- timeBreakfastWeekend: "07:30-09:30"
+  $name: Breakfast (Sat & Sun)
+- timeLunch: "12:30-14:30"
+  $name: Lunch
+- timeSnacks: "16:30-18:00"
+  $name: Snacks
+- timeDinner: "19:00-21:00"
+  $name: Dinner
 
 */
 // ==/WindhawkModSettings==
@@ -230,11 +254,38 @@ enum class ButtonPosition {
     ClockRight,
 };
 
+enum class TaskbarScope {
+    Primary,
+    All,
+};
+
+// A serving window, in seconds since local midnight.
+struct MealWindow {
+    int startSec;
+    int endSec;
+};
+
+static constexpr int Hm(int hour, int minute) {
+    return hour * 3600 + minute * 60;
+}
+
 struct ModSettings {
     int  hostel          = 1;       // 1 = men's, 2 = women's
     int  mess            = 2;       // 1 = special, 2 = veg, 3 = non-veg
     bool compact         = false;
     ButtonPosition position = ButtonPosition::TrayLeft;
+    TaskbarScope taskbarScope = TaskbarScope::Primary;
+
+    // Indexed by Meal. Defaults are the VIT Vellore windows; Breakfast has its
+    // own weekend variant because that is the only one that shifts.
+    MealWindow mealWeekday[4] = {
+        {Hm(7, 0), Hm(9, 0)},      // Breakfast
+        {Hm(12, 30), Hm(14, 30)},  // Lunch
+        {Hm(16, 30), Hm(18, 0)},   // Snacks
+        {Hm(19, 0), Hm(21, 0)},    // Dinner
+    };
+    MealWindow breakfastWeekend = {Hm(7, 30), Hm(9, 30)};
+
     int  buttonPaddingLeft  = 4;
     int  buttonPaddingRight = 4;
     bool reserveTaskbarSpace = true;
@@ -305,6 +356,80 @@ static bool ParseHexColor(const std::wstring& text, BYTE& a, BYTE& r, BYTE& g,
     return true;
 }
 
+// One "HH:MM" clock reading out of text[begin, end), tolerating spaces.
+static bool ParseClock(const std::wstring& text, size_t begin, size_t end,
+                       int& seconds) {
+    while (begin < end && text[begin] == L' ') {
+        begin++;
+    }
+    while (end > begin && text[end - 1] == L' ') {
+        end--;
+    }
+
+    size_t colon = text.find(L':', begin);
+    if (colon == std::wstring::npos || colon >= end || colon == begin ||
+        colon + 1 == end) {
+        return false;
+    }
+
+    int hours = 0;
+    for (size_t i = begin; i < colon; i++) {
+        if (!iswdigit(text[i])) {
+            return false;
+        }
+        hours = hours * 10 + (text[i] - L'0');
+        if (hours > 23) {
+            return false;
+        }
+    }
+
+    int minutes = 0;
+    for (size_t i = colon + 1; i < end; i++) {
+        if (!iswdigit(text[i])) {
+            return false;
+        }
+        minutes = minutes * 10 + (text[i] - L'0');
+        if (minutes > 59) {
+            return false;
+        }
+    }
+
+    seconds = hours * 3600 + minutes * 60;
+    return true;
+}
+
+// "HH:MM-HH:MM". Rejects anything malformed, and anything that does not run
+// forwards within one day -- the state machine assumes windows do not wrap past
+// midnight, so a reversed range would silently never match.
+static bool ParseTimeRange(const std::wstring& text, MealWindow& out) {
+    size_t dash = text.find(L'-');
+    if (dash == std::wstring::npos) {
+        return false;
+    }
+
+    MealWindow parsed{};
+    if (!ParseClock(text, 0, dash, parsed.startSec) ||
+        !ParseClock(text, dash + 1, text.size(), parsed.endSec)) {
+        return false;
+    }
+    if (parsed.endSec <= parsed.startSec) {
+        return false;
+    }
+
+    out = parsed;
+    return true;
+}
+
+static void LoadMealWindow(PCWSTR key, PCWSTR fallback, MealWindow& target) {
+    std::wstring text = GetStringSetting(key, fallback);
+    if (ParseTimeRange(text, target)) {
+        return;
+    }
+    Wh_Log(L"LoadSettings: could not parse %s \"%s\", using the default", key,
+           text.c_str());
+    ParseTimeRange(fallback, target);
+}
+
 static void LoadSettings() {
     g_settings.hostel = (GetStringSetting(L"hostel", L"mens") == L"womens") ? 2 : 1;
 
@@ -349,6 +474,18 @@ static void LoadSettings() {
 
     g_settings.blurAmount = std::clamp(Wh_GetIntSetting(L"blurAmount"), 0, 100);
     g_settings.autoUpdate = Wh_GetIntSetting(L"autoUpdate") != 0;
+
+    g_settings.taskbarScope =
+        (GetStringSetting(L"taskbarScope", L"primary") == L"all")
+            ? TaskbarScope::All
+            : TaskbarScope::Primary;
+
+    LoadMealWindow(L"timeBreakfast", L"07:00-09:00", g_settings.mealWeekday[0]);
+    LoadMealWindow(L"timeBreakfastWeekend", L"07:30-09:30",
+                   g_settings.breakfastWeekend);
+    LoadMealWindow(L"timeLunch", L"12:30-14:30", g_settings.mealWeekday[1]);
+    LoadMealWindow(L"timeSnacks", L"16:30-18:00", g_settings.mealWeekday[2]);
+    LoadMealWindow(L"timeDinner", L"19:00-21:00", g_settings.mealWeekday[3]);
 }
 
 // ---------------------------------------------------------------------------
@@ -485,28 +622,14 @@ static std::wstring FormatLongDate(int dayKey) {
 // VIT Vellore timings, deliberately hard-coded: this mod targets one campus.
 // ---------------------------------------------------------------------------
 
-struct MealWindow {
-    int startSec;
-    int endSec;
-};
-
-static constexpr int Hm(int hour, int minute) {
-    return hour * 3600 + minute * 60;
-}
+static_assert(kMealCount == 4,
+              "ModSettings::mealWeekday is sized for four meals");
 
 static MealWindow GetMealWindow(Meal meal, bool weekend) {
-    switch (meal) {
-        case Meal::Breakfast:
-            return weekend ? MealWindow{Hm(7, 30), Hm(9, 30)}
-                           : MealWindow{Hm(7, 0), Hm(9, 0)};
-        case Meal::Lunch:
-            return MealWindow{Hm(12, 30), Hm(14, 30)};
-        case Meal::Snacks:
-            return MealWindow{Hm(16, 30), Hm(18, 0)};
-        case Meal::Dinner:
-        default:
-            return MealWindow{Hm(19, 0), Hm(21, 0)};
+    if (meal == Meal::Breakfast && weekend) {
+        return g_settings.breakfastWeekend;
     }
+    return g_settings.mealWeekday[(int)meal];
 }
 
 // "Show the Snacks card" hides a card; it does not change when snacks are
@@ -1011,8 +1134,13 @@ static bool HttpGetJson(const std::wstring& path, std::string& out,
 
     g_activeRequest.store(request);
 
+    // The handle only becomes cancellable once it is published above, so an
+    // unload that lands in the gap would otherwise have to wait out the WinHTTP
+    // timeouts. Re-check now that it is visible.
     bool success = false;
-    if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+    if (g_unloading) {
+        error = L"Cancelled";
+    } else if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                             WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
         error = L"The request could not be sent";
     } else if (!WinHttpReceiveResponse(request, nullptr)) {
@@ -1211,6 +1339,11 @@ static LRESULT CALLBACK RunFromWindowThreadHookProc(int code, WPARAM wParam,
                 auto it = g_runPayloads.find((UINT_PTR)message->lParam);
                 if (it != g_runPayloads.end()) {
                     payload = it->second;
+                    // Claimed under the lock, so the payload runs exactly once.
+                    // Two overlapping calls install two hooks on the same
+                    // thread and each hook proc sees both messages; without
+                    // this, the second one would run the payload again.
+                    g_runPayloads.erase(it);
                 }
             }
             // Released the lock first: proc may call back in.
@@ -1342,11 +1475,8 @@ static FrameworkElement FindChildByClassName(FrameworkElement const& root,
 // Section 11: taskbar XAML root (via taskbar.dll internals)
 // ---------------------------------------------------------------------------
 
-// Only the primary taskbar (Shell_TrayWnd) is targeted, so the CSecondaryTaskBand
-// symbols are deliberately not resolved: they are non-optional entries in the
-// hook array, and failing to resolve them would take the whole mod down for a
-// code path that cannot run.
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
 using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
 using Std_Ref_Decref_t = void(WINAPI*)(void*);
 
@@ -1354,6 +1484,14 @@ static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
 static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+
+// Secondary taskbars need their own band type. These two are resolved as
+// optional symbols: if a Windows build ever drops or renames them, only
+// "Show on: Every taskbar" degrades to the primary taskbar rather than the
+// whole mod failing to load.
+static CSecondaryTaskBand_GetTaskbarHost_t
+    CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
+static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 
 // Written from the taskbar thread, read from the network worker.
 static std::atomic<HWND> g_taskbarWnd{nullptr};
@@ -1377,8 +1515,44 @@ static HWND FindCurrentProcessTaskbarWnd() {
     return taskbarWnd;
 }
 
+static BOOL CALLBACK CollectTaskbarWndsProc(HWND hWnd, LPARAM lParam) {
+    DWORD processId = 0;
+    WCHAR className[32];
+    if (!GetWindowThreadProcessId(hWnd, &processId) ||
+        processId != GetCurrentProcessId() ||
+        !GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return TRUE;
+    }
+
+    auto* found = reinterpret_cast<std::vector<HWND>*>(lParam);
+    if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        // The primary always leads, so callers that want only one taskbar can
+        // take the front.
+        found->insert(found->begin(), hWnd);
+    } else if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+        found->push_back(hWnd);
+    }
+    return TRUE;
+}
+
+// Every taskbar in this process: the primary first, then one per extra monitor.
+static std::vector<HWND> EnumerateTaskbarWnds() {
+    std::vector<HWND> found;
+    EnumWindows(CollectTaskbarWndsProc, reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    WCHAR className[32] = {};
+    GetClassNameW(hTaskbarWnd, className, ARRAYSIZE(className));
+    const bool isSecondary =
+        _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
+
+    // A secondary taskbar hosts its band in a child WorkerW rather than
+    // publishing it as a window property.
+    HWND hTaskSwWnd =
+        isSecondary ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
+                    : (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
     if (!hTaskSwWnd) {
         Wh_Log(L"GetTaskbarXamlRoot: taskband window not found");
         return nullptr;
@@ -1390,10 +1564,15 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         return nullptr;
     }
 
-    void* expectedVftable = CTaskBand_ITaskListWndSite_vftable;
-    auto getTaskbarHost = CTaskBand_GetTaskbarHost_Original;
+    void* expectedVftable = isSecondary
+                                ? CSecondaryTaskBand_ITaskListWndSite_vftable
+                                : CTaskBand_ITaskListWndSite_vftable;
+    auto getTaskbarHost = isSecondary
+                              ? CSecondaryTaskBand_GetTaskbarHost_Original
+                              : CTaskBand_GetTaskbarHost_Original;
     if (!expectedVftable || !getTaskbarHost) {
-        Wh_Log(L"GetTaskbarXamlRoot: symbols not resolved");
+        Wh_Log(L"GetTaskbarXamlRoot: %s symbols not resolved",
+               isSecondary ? L"CSecondaryTaskBand" : L"CTaskBand");
         return nullptr;
     }
 
@@ -1941,17 +2120,37 @@ static Style GetTaskbarButtonStyle(bool light) {
 // destructors alone on the shutdown thread, releasing UI-thread-affine XAML
 // objects after the XAML core is gone.
 // https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
-[[clang::no_destroy]] static Button g_taskbarButton{nullptr};
-[[clang::no_destroy]] static TextBlock g_taskbarLabel{nullptr};
-[[clang::no_destroy]] static Grid g_injectionParent{nullptr};
-// -1 means we appended without adding a column (taskbar-area positions).
-static int g_injectedColumn = -1;
-// The taskbar's icon strip, when we are holding space open in front of it.
-[[clang::no_destroy]] static FrameworkElement g_reservedElement{nullptr};
-static Thickness g_reservedOriginalMargin{};
-static bool g_hasReservedOriginalMargin = false;
-static winrt::event_token g_buttonSizeToken{};
-static winrt::event_token g_buttonThemeToken{};
+// One record per taskbar we have injected into: just the primary, or every
+// taskbar, depending on the "Show on" setting. Secondary taskbars live on the
+// same Explorer UI thread as the primary, so this needs no synchronisation.
+struct TaskbarEntry {
+    HWND taskbarWnd = nullptr;
+    Button button{nullptr};
+    TextBlock label{nullptr};
+    Grid injectionParent{nullptr};
+    // -1 means we appended without adding a column (taskbar-area positions).
+    int injectedColumn = -1;
+    // The taskbar's icon strip, when we are holding space open in front of it.
+    FrameworkElement reservedElement{nullptr};
+    Thickness reservedOriginalMargin{};
+    bool hasReservedOriginalMargin = false;
+    winrt::event_token sizeToken{};
+    winrt::event_token themeToken{};
+};
+
+[[clang::no_destroy]] static std::optional<std::vector<TaskbarEntry>>
+    g_taskbars{std::in_place};
+
+// The taskbar the open flyout belongs to, so its anchor maths use the right
+// monitor rather than always the primary one.
+static HWND g_flyoutTaskbarWnd = nullptr;
+[[clang::no_destroy]] static Button g_flyoutAnchorButton{nullptr};
+
+// The taskbar the flyout is being opened from, which on a multi-monitor setup
+// is not necessarily the primary one.
+static HWND FlyoutTaskbarWnd() {
+    return g_flyoutTaskbarWnd ? g_flyoutTaskbarWnd : g_taskbarWnd.load();
+}
 
 [[clang::no_destroy]] static Flyout g_flyout{nullptr};
 [[clang::no_destroy]] static Border g_flyoutRoot{nullptr};
@@ -1970,8 +2169,6 @@ static winrt::event_token g_buttonThemeToken{};
 // releases it while the mod is still mapped.
 [[clang::no_destroy]] static std::optional<std::vector<TextBlock>>
     g_cardCountdowns{std::in_place};
-[[clang::no_destroy]] static std::optional<std::vector<Border>> g_cardBorders{
-    std::in_place};
 // Plain ints, so no [[clang::no_destroy]] needed -- only the two vectors above
 // hold XAML objects.
 static std::vector<int> g_cardMeals;
@@ -2116,8 +2313,27 @@ static std::wstring ComputeButtonLabel(const MealState& state) {
     return L"No menu";
 }
 
+// The entry whose button is `element`, or null. Handlers look themselves up
+// this way rather than capturing a pointer, because the vector reallocates as
+// taskbars come and go.
+static TaskbarEntry* FindEntryForButton(FrameworkElement const& element) {
+    if (!g_taskbars || !element) {
+        return nullptr;
+    }
+    auto button = element.try_as<Button>();
+    if (!button) {
+        return nullptr;
+    }
+    for (auto& entry : *g_taskbars) {
+        if (entry.button == button) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
 static void UpdateTaskbarLabel() {
-    if (!g_taskbarButton) {
+    if (!g_taskbars || g_taskbars->empty()) {
         return;
     }
     try {
@@ -2148,16 +2364,22 @@ static void UpdateTaskbarLabel() {
         }
         g_lastLabelText = text;
 
-        // In compact mode there is no label, but the tooltip still carries the
-        // full text -- that is the whole point of compact mode.
-        if (g_taskbarLabel) {
-            g_taskbarLabel.Text(text);
-        }
-
+        // The text is the same on every taskbar, so it is computed once above
+        // and only applied per entry here.
         std::wstring tooltip = text + L"\n" + HostelDisplayName() + L" • " +
                                MessDisplayName();
-        ToolTipService::SetToolTip(g_taskbarButton,
-                                   winrt::box_value(winrt::hstring{tooltip}));
+        auto boxedTooltip = winrt::box_value(winrt::hstring{tooltip});
+
+        for (auto& entry : *g_taskbars) {
+            // In compact mode there is no label, but the tooltip still carries
+            // the full text -- that is the whole point of compact mode.
+            if (entry.label) {
+                entry.label.Text(text);
+            }
+            if (entry.button) {
+                ToolTipService::SetToolTip(entry.button, boxedTooltip);
+            }
+        }
     } catch (...) {
         Wh_Log(L"UpdateTaskbarLabel: exception");
     }
@@ -2165,7 +2387,9 @@ static void UpdateTaskbarLabel() {
 
 static void ShowMessFlyout(FrameworkElement const& target);
 
-static Button BuildTaskbarButton(bool light) {
+// Fills entry.button and entry.label. The entry must already be in g_taskbars,
+// so the handlers below can find it again.
+static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
     Button button;
     if (auto style = GetTaskbarButtonStyle(light)) {
         button.Style(style);
@@ -2202,9 +2426,9 @@ static Button BuildTaskbarButton(bool light) {
         label.TextTrimming(TextTrimming::CharacterEllipsis);
         label.MaxWidth((double)g_settings.maxLabelWidth);
         panel.Children().Append(label);
-        g_taskbarLabel = label;
+        entry.label = label;
     } else {
-        g_taskbarLabel = nullptr;
+        entry.label = nullptr;
     }
 
     button.Content(panel);
@@ -2223,27 +2447,31 @@ static Button BuildTaskbarButton(bool light) {
     // colours, and the button outlives a theme switch -- without this, going
     // dark -> light leaves white text on a light taskbar, i.e. invisible. The
     // flyout is already fine because it is rebuilt on every open.
-    g_buttonThemeToken = button.ActualThemeChanged(
+    entry.button = button;
+    entry.themeToken = button.ActualThemeChanged(
         [](FrameworkElement const& sender,
            winrt::Windows::Foundation::IInspectable const&) {
             try {
                 if (g_unloading) {
                     return;
                 }
-                const bool nowLight = IsLightTheme();
+                // The event already carries the new theme, so there is no need
+                // to go back to the registry for it.
+                const bool nowLight =
+                    sender.ActualTheme() == ElementTheme::Light;
                 if (auto style = GetTaskbarButtonStyle(nowLight)) {
                     sender.as<Control>().Style(style);
                 }
-                if (g_taskbarLabel) {
-                    g_taskbarLabel.Foreground(
-                        MakeBrush(TextPrimaryColor(nowLight)));
+                if (auto* entry = FindEntryForButton(sender)) {
+                    if (entry->label) {
+                        entry->label.Foreground(
+                            MakeBrush(TextPrimaryColor(nowLight)));
+                    }
                 }
             } catch (...) {
                 Wh_Log(L"ActualThemeChanged: exception");
             }
         });
-
-    return button;
 }
 
 // Column of the direct child of `grid` that contains an element named `name`.
@@ -2291,24 +2519,24 @@ static bool IsTaskbarAreaPosition() {
 // stay centred and simply never reach far enough left to collide; with
 // left-aligned icons it pushes them right. Driven by the button's SizeChanged,
 // so it keeps up as the label text changes width.
-static void UpdateReservedSpace() {
-    if (!g_reservedElement || !g_taskbarButton || !g_hasReservedOriginalMargin ||
-        g_unloading) {
+static void UpdateReservedSpace(TaskbarEntry& entry) {
+    if (!entry.reservedElement || !entry.button ||
+        !entry.hasReservedOriginalMargin || g_unloading) {
         return;
     }
     try {
-        double width = g_taskbarButton.ActualWidth();
+        double width = entry.button.ActualWidth();
         if (width <= 0.0) {
             return;
         }
-        double wanted = g_reservedOriginalMargin.Left + width +
+        double wanted = entry.reservedOriginalMargin.Left + width +
                         (double)g_settings.buttonPaddingLeft +
                         (double)g_settings.buttonPaddingRight;
 
-        auto margin = g_reservedElement.Margin();
+        auto margin = entry.reservedElement.Margin();
         if (std::abs(margin.Left - wanted) > 1.0) {
             margin.Left = wanted;
-            g_reservedElement.Margin(margin);
+            entry.reservedElement.Margin(margin);
         }
     } catch (...) {
     }
@@ -2328,55 +2556,56 @@ static Grid FindTaskbarRootGrid(FrameworkElement const& root) {
     return rootGrid ? rootGrid.try_as<Grid>() : nullptr;
 }
 
-static void RemoveTaskbarButton() {
+static void RemoveTaskbarButtonFrom(TaskbarEntry& entry) {
     // Give the taskbar its own layout back before anything else, so an
     // exception later cannot leave the icons permanently shoved aside.
     try {
-        if (g_taskbarButton && g_buttonSizeToken.value) {
-            g_taskbarButton.SizeChanged(g_buttonSizeToken);
+        if (entry.button && entry.sizeToken.value) {
+            entry.button.SizeChanged(entry.sizeToken);
         }
     } catch (...) {
     }
-    g_buttonSizeToken = {};
+    entry.sizeToken = {};
 
     try {
-        if (g_taskbarButton && g_buttonThemeToken.value) {
-            g_taskbarButton.ActualThemeChanged(g_buttonThemeToken);
+        if (entry.button && entry.themeToken.value) {
+            entry.button.ActualThemeChanged(entry.themeToken);
         }
     } catch (...) {
     }
-    g_buttonThemeToken = {};
+    entry.themeToken = {};
 
     try {
-        if (g_reservedElement && g_hasReservedOriginalMargin) {
-            g_reservedElement.Margin(g_reservedOriginalMargin);
+        if (entry.reservedElement && entry.hasReservedOriginalMargin) {
+            entry.reservedElement.Margin(entry.reservedOriginalMargin);
         }
     } catch (...) {
         Wh_Log(L"RemoveTaskbarButton: could not restore the icon strip margin");
     }
-    g_reservedElement = nullptr;
-    g_hasReservedOriginalMargin = false;
+    entry.reservedElement = nullptr;
+    entry.hasReservedOriginalMargin = false;
 
     try {
-        if (g_injectionParent && g_taskbarButton) {
+        if (entry.injectionParent && entry.button) {
             uint32_t index = 0;
-            if (g_injectionParent.Children().IndexOf(g_taskbarButton, index)) {
-                g_injectionParent.Children().RemoveAt(index);
+            if (entry.injectionParent.Children().IndexOf(entry.button, index)) {
+                entry.injectionParent.Children().RemoveAt(index);
             }
-            if (g_injectedColumn >= 0 &&
-                g_injectedColumn <
-                    (int)g_injectionParent.ColumnDefinitions().Size()) {
-                g_injectionParent.ColumnDefinitions().RemoveAt(
-                    (uint32_t)g_injectedColumn);
-                uint32_t count = g_injectionParent.Children().Size();
+            if (entry.injectedColumn >= 0 &&
+                entry.injectedColumn <
+                    (int)entry.injectionParent.ColumnDefinitions().Size()) {
+                entry.injectionParent.ColumnDefinitions().RemoveAt(
+                    (uint32_t)entry.injectedColumn);
+                uint32_t count = entry.injectionParent.Children().Size();
                 for (uint32_t i = 0; i < count; i++) {
-                    auto child =
-                        g_injectionParent.Children().GetAt(i).try_as<FrameworkElement>();
+                    auto child = entry.injectionParent.Children()
+                                     .GetAt(i)
+                                     .try_as<FrameworkElement>();
                     if (!child) {
                         continue;
                     }
                     int column = Grid::GetColumn(child);
-                    if (column > g_injectedColumn) {
+                    if (column > entry.injectedColumn) {
                         Grid::SetColumn(child, column - 1);
                     }
                 }
@@ -2386,21 +2615,28 @@ static void RemoveTaskbarButton() {
         Wh_Log(L"RemoveTaskbarButton: exception");
     }
 
-    g_taskbarButton = nullptr;
-    g_taskbarLabel = nullptr;
-    g_injectionParent = nullptr;
-    g_injectedColumn = -1;
+    entry.button = nullptr;
+    entry.label = nullptr;
+    entry.injectionParent = nullptr;
+    entry.injectedColumn = -1;
+}
+
+static void RemoveTaskbarButton() {
+    if (!g_taskbars) {
+        return;
+    }
+    for (auto& entry : *g_taskbars) {
+        RemoveTaskbarButtonFrom(entry);
+    }
+    g_taskbars->clear();
     InvalidateLabelCache();
 }
 
-static bool InjectTaskbarButton() {
-    HWND hWnd = g_taskbarWnd.load() ? g_taskbarWnd.load()
-                                    : FindCurrentProcessTaskbarWnd();
-    if (!hWnd) {
-        Wh_Log(L"InjectTaskbarButton: taskbar window not found");
+// Injects into one taskbar, appending its record to g_taskbars on success.
+static bool InjectTaskbarButtonInto(HWND hWnd) {
+    if (!hWnd || !g_taskbars) {
         return false;
     }
-    g_taskbarWnd.store(hWnd);
 
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
@@ -2422,14 +2658,23 @@ static bool InjectTaskbarButton() {
             return false;
         }
 
+        // Pushed before the button is built so the handlers, which look
+        // themselves up by button, can find their own record.
+        g_taskbars->push_back(TaskbarEntry{});
+        TaskbarEntry& entry = g_taskbars->back();
+        entry.taskbarWnd = hWnd;
+
         const bool light = IsLightTheme();
-        Button button = BuildTaskbarButton(light);
+        BuildTaskbarButton(light, entry);
+        Button button = entry.button;
 
         // --- taskbar-area positions: sit in the taskbar's own grid ----------
         if (IsTaskbarAreaPosition()) {
             auto rootGrid = FindTaskbarRootGrid(root);
             if (!rootGrid) {
                 Wh_Log(L"InjectTaskbarButton: taskbar RootGrid not found");
+                RemoveTaskbarButtonFrom(entry);
+                g_taskbars->pop_back();
                 return false;
             }
 
@@ -2445,9 +2690,8 @@ static bool InjectTaskbarButton() {
 
             rootGrid.Children().Append(button);
 
-            g_taskbarButton = button;
-            g_injectionParent = rootGrid;
-            g_injectedColumn = -1;
+            entry.injectionParent = rootGrid;
+            entry.injectedColumn = -1;
 
             // Nothing lets us see where another mod has parked itself, so the
             // spacing settings stay the manual escape hatch. What we can do is
@@ -2455,15 +2699,18 @@ static bool InjectTaskbarButton() {
             if (g_settings.reserveTaskbarSpace) {
                 auto repeater = FindChildByName(rootGrid, L"TaskbarFrameRepeater");
                 if (repeater) {
-                    g_reservedElement = repeater;
-                    g_reservedOriginalMargin = repeater.Margin();
-                    g_hasReservedOriginalMargin = true;
-                    g_buttonSizeToken = button.SizeChanged(
-                        [](winrt::Windows::Foundation::IInspectable const&,
+                    entry.reservedElement = repeater;
+                    entry.reservedOriginalMargin = repeater.Margin();
+                    entry.hasReservedOriginalMargin = true;
+                    entry.sizeToken = button.SizeChanged(
+                        [](winrt::Windows::Foundation::IInspectable const& sender,
                            SizeChangedEventArgs const&) {
-                            UpdateReservedSpace();
+                            if (auto* self = FindEntryForButton(
+                                    sender.try_as<FrameworkElement>())) {
+                                UpdateReservedSpace(*self);
+                            }
                         });
-                    UpdateReservedSpace();
+                    UpdateReservedSpace(entry);
                 } else {
                     Wh_Log(L"InjectTaskbarButton: TaskbarFrameRepeater not "
                            L"found, cannot reserve space");
@@ -2501,20 +2748,73 @@ static bool InjectTaskbarButton() {
         Grid::SetColumn(button, insertColumn);
         trayGrid.Children().Append(button);
 
-        g_taskbarButton = button;
-        g_injectionParent = trayGrid;
-        g_injectedColumn = insertColumn;
+        entry.injectionParent = trayGrid;
+        entry.injectedColumn = insertColumn;
 
         InvalidateLabelCache();
         UpdateTaskbarLabel();
         return true;
     } catch (...) {
         Wh_Log(L"InjectTaskbarButton: exception");
-        g_taskbarButton = nullptr;
-        g_injectionParent = nullptr;
-        g_injectedColumn = -1;
+        // The half-built record must not linger: its button may already carry
+        // handlers pointing into this image.
+        if (g_taskbars && !g_taskbars->empty()) {
+            TaskbarEntry& last = g_taskbars->back();
+            if (last.taskbarWnd == hWnd && !last.injectionParent) {
+                RemoveTaskbarButtonFrom(last);
+                g_taskbars->pop_back();
+            }
+        }
         return false;
     }
+}
+
+// The taskbars this configuration should own a button on. The primary comes
+// first, so a failure to enumerate secondaries still leaves it working.
+static std::vector<HWND> TargetTaskbarWnds() {
+    std::vector<HWND> all = EnumerateTaskbarWnds();
+    if (g_settings.taskbarScope == TaskbarScope::All) {
+        return all;
+    }
+    std::vector<HWND> primaryOnly;
+    if (!all.empty()) {
+        primaryOnly.push_back(all.front());
+    }
+    return primaryOnly;
+}
+
+// Injects into every taskbar that should have a button and does not yet.
+// Returns true when they all have one.
+static bool InjectTaskbarButton() {
+    if (!g_taskbars) {
+        return false;
+    }
+
+    std::vector<HWND> targets = TargetTaskbarWnds();
+    if (targets.empty()) {
+        Wh_Log(L"InjectTaskbarButton: no taskbar window found");
+        return false;
+    }
+
+    g_taskbarWnd.store(targets.front());
+
+    bool allInjected = true;
+    for (HWND hWnd : targets) {
+        bool present = false;
+        for (auto& entry : *g_taskbars) {
+            if (entry.taskbarWnd == hWnd && entry.button) {
+                present = true;
+                break;
+            }
+        }
+        if (present) {
+            continue;
+        }
+        if (!InjectTaskbarButtonInto(hWnd)) {
+            allInjected = false;
+        }
+    }
+    return allInjected;
 }
 
 // ---------------------------------------------------------------------------
@@ -2655,7 +2955,6 @@ static Border BuildMealCard(Meal meal, const DayMenu& day, bool light,
 
     card.Child(content);
 
-    g_cardBorders->push_back(card);
     g_cardCountdowns->push_back(countdown);
     g_cardMeals.push_back((int)meal);
     return card;
@@ -2707,7 +3006,6 @@ static void RenderFlyoutPage() {
         g_headerDate.Text(FormatLongDate(dayKey));
 
         g_cardsPanel.Children().Clear();
-        g_cardBorders->clear();
         g_cardCountdowns->clear();
         g_cardMeals.clear();
 
@@ -2936,15 +3234,15 @@ static Border BuildFlyoutContent() {
     double maxHeight = 520.0;
     try {
         HMONITOR monitor =
-            MonitorFromWindow(g_taskbarWnd.load(), MONITOR_DEFAULTTONEAREST);
+            MonitorFromWindow(FlyoutTaskbarWnd(), MONITOR_DEFAULTTONEAREST);
         MONITORINFO info{};
         info.cbSize = sizeof(info);
         if (monitor && GetMonitorInfo(monitor, &info)) {
             // g_flyoutRoot is not assigned until this function returns, so ask
             // the taskbar button -- it is already in the tree.
             double scale = 1.0;
-            if (g_taskbarButton) {
-                if (auto xamlRoot = g_taskbarButton.XamlRoot()) {
+            if (g_flyoutAnchorButton) {
+                if (auto xamlRoot = g_flyoutAnchorButton.XamlRoot()) {
                     scale = xamlRoot.RasterizationScale();
                 }
             }
@@ -3047,14 +3345,15 @@ static Border BuildFlyoutContent() {
 static constexpr double kTaskbarGap = 12.0;
 
 static bool IsTaskbarAtTop() {
-    if (!g_taskbarWnd.load()) {
+    HWND hWnd = FlyoutTaskbarWnd();
+    if (!hWnd) {
         return false;
     }
     RECT taskbarRect{};
-    if (!GetWindowRect(g_taskbarWnd.load(), &taskbarRect)) {
+    if (!GetWindowRect(hWnd, &taskbarRect)) {
         return false;
     }
-    HMONITOR monitor = MonitorFromWindow(g_taskbarWnd.load(), MONITOR_DEFAULTTONEAREST);
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     if (!monitor || !GetMonitorInfo(monitor, &info)) {
@@ -3066,7 +3365,7 @@ static bool IsTaskbarAtTop() {
 }
 
 static void ClearFlyoutRefs() {
-    if (!g_cardBorders) {
+    if (!g_cardCountdowns) {
         return;  // already reset by Wh_ModUninit
     }
     g_flyoutRoot = nullptr;
@@ -3078,7 +3377,6 @@ static void ClearFlyoutRefs() {
     g_reloadButton = nullptr;
     g_reloadIcon = nullptr;
     g_reloadRing = nullptr;
-    g_cardBorders->clear();
     g_cardCountdowns->clear();
     g_cardMeals.clear();
 }
@@ -3137,6 +3435,8 @@ static void TearDownFlyout() {
     g_flyout = nullptr;
     g_flyoutOpen = false;
     g_flyoutClosingAnimStarted.store(false);
+    g_flyoutTaskbarWnd = nullptr;
+    g_flyoutAnchorButton = nullptr;
     ClearFlyoutRefs();
 }
 
@@ -3149,6 +3449,23 @@ static void ShowMessFlyout(FrameworkElement const& target) {
         if (g_flyoutOpen && g_flyout) {
             g_flyout.Hide();
             return;
+        }
+
+        // Release the previous flyout deterministically. Closed() clears the
+        // child refs but not g_flyout itself, so without this the old Flyout --
+        // and the clipHost -> content -> Background -> MessBlurBrush chain it
+        // still owns -- would be dropped only by the assignment below, leaving
+        // its release to whenever XAML lets go.
+        TearDownFlyout();
+
+        // Remember which taskbar this came from before anything measures a
+        // monitor: on a multi-monitor setup the flyout must follow the button
+        // that was clicked, not the primary taskbar.
+        g_flyoutAnchorButton = target.try_as<Button>();
+        if (auto* entry = FindEntryForButton(target)) {
+            g_flyoutTaskbarWnd = entry->taskbarWnd;
+        } else {
+            g_flyoutTaskbarWnd = g_taskbarWnd.load();
         }
 
         g_dayOffset = 0;
@@ -3437,13 +3754,13 @@ static void ShowMessFlyout(FrameworkElement const& target) {
 
                     double workLeft = 0.0;
                     double workRight = (double)rootContent.ActualWidth();
-                    HMONITOR monitor =
-                        MonitorFromWindow(g_taskbarWnd.load(), MONITOR_DEFAULTTONEAREST);
+                    HMONITOR monitor = MonitorFromWindow(
+                        FlyoutTaskbarWnd(), MONITOR_DEFAULTTONEAREST);
                     MONITORINFO monitorInfo{};
                     monitorInfo.cbSize = sizeof(monitorInfo);
                     POINT origin{0, 0};
                     if (monitor && GetMonitorInfo(monitor, &monitorInfo) &&
-                        ClientToScreen(g_taskbarWnd.load(), &origin)) {
+                        ClientToScreen(FlyoutTaskbarWnd(), &origin)) {
                         double scale = xamlRoot.RasterizationScale();
                         if (scale <= 0.0) {
                             scale = 1.0;
@@ -3907,27 +4224,26 @@ static void StopNetThread() {
 // a dead tree.
 static int g_injectGeneration = 0;
 
-static void InjectWithRetry(FrameworkElement rootContent, int generation,
-                            int attempt = 0) {
+// Retries until every targeted taskbar has a button. InjectTaskbarButton skips
+// the ones already done, so a slow secondary taskbar never costs the primary
+// its button -- which a remove-and-retry-everything loop would have made
+// visibly flicker for up to five seconds.
+static void InjectWithRetry(int generation, int attempt = 0) {
     static constexpr int kMaxAttempts = 50;
 
     if (g_unloading || generation != g_injectGeneration) {
         return;
     }
 
-    auto trayFrame = rootContent
-                         ? FindChildByClassName(rootContent,
-                                                L"SystemTray.SystemTrayFrame")
-                         : nullptr;
-    if (trayFrame && FindChildByName(trayFrame, L"SystemTrayFrameGrid")) {
-        RemoveTaskbarButton();
-        InjectTaskbarButton();
+    if (InjectTaskbarButton()) {
         StartUiTimer();
         return;
     }
 
     if (attempt >= kMaxAttempts) {
-        Wh_Log(L"InjectWithRetry: system tray never appeared");
+        Wh_Log(L"InjectWithRetry: gave up waiting for a taskbar's system tray");
+        // Whatever did inject still needs its label kept current.
+        StartUiTimer();
         return;
     }
 
@@ -3937,7 +4253,7 @@ static void InjectWithRetry(FrameworkElement rootContent, int generation,
             winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(100)});
         auto token = std::make_shared<winrt::event_token>();
         *token = timer.Tick(
-            [timer, token, rootContent, generation, attempt](
+            [timer, token, generation, attempt](
                 winrt::Windows::Foundation::IInspectable const&,
                 winrt::Windows::Foundation::IInspectable const&) mutable {
                 try {
@@ -3946,7 +4262,7 @@ static void InjectWithRetry(FrameworkElement rootContent, int generation,
                     UntrackTimer(timer);
                 } catch (...) {
                 }
-                InjectWithRetry(rootContent, generation, attempt + 1);
+                InjectWithRetry(generation, attempt + 1);
             });
         TrackTimer(timer, *token);
         timer.Start();
@@ -3978,25 +4294,19 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         StopAllTimers();
         StopUiTimer();
         TearDownFlyout();
-        g_taskbarButton = nullptr;
-        g_taskbarLabel = nullptr;
-        g_injectionParent = nullptr;
-        g_injectedColumn = -1;
+        // RemoveTaskbarButton rather than nulling the globals by hand: the
+        // button carries SizeChanged and ActualThemeChanged registrations whose
+        // code lives in this image, and dropping the reference without revoking
+        // them leaks a registration on every taskbar restart. It is safe
+        // against the dead tree -- every step is inside its own try/catch.
+        RemoveTaskbarButton();
 
         g_taskbarWnd.store(hWnd);
 
         // If the taskbar only appeared now, this is where the worker starts.
         StartNetThread();
 
-        auto xamlRoot = GetTaskbarXamlRoot(hWnd);
-        if (!xamlRoot) {
-            return;
-        }
-        auto rootContent = xamlRoot.Content().try_as<FrameworkElement>();
-        if (!rootContent) {
-            return;
-        }
-        InjectWithRetry(rootContent, g_injectGeneration);
+        InjectWithRetry(g_injectGeneration);
     } catch (...) {
         Wh_Log(L"TrayUI_StartTaskbar_Hook: exception");
     }
@@ -4015,6 +4325,12 @@ static bool HookTaskbarSymbols() {
          &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
          &CTaskBand_GetTaskbarHost_Original},
+        // Optional: only "Show on: Every taskbar" needs these, so a build that
+        // lacks them should lose secondary taskbars, not the whole mod.
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable, nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original, nullptr, true},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
          &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
@@ -4097,6 +4413,10 @@ void Wh_ModSettingsChanged() {
                 try {
                     RemoveTaskbarButton();
                     InjectTaskbarButton();
+                    // Idempotent, and needed in case the first injection failed
+                    // and the timer was never created -- otherwise the label
+                    // would sit frozen even once the button is back.
+                    StartUiTimer();
                 } catch (...) {
                     Wh_Log(L"Wh_ModSettingsChanged: exception during re-inject");
                 }
@@ -4172,10 +4492,8 @@ void Wh_ModUninit() {
     g_flyoutRoot = nullptr;
     g_revealTarget = nullptr;
     g_closingStoryboard = nullptr;
-    g_taskbarButton = nullptr;
-    g_taskbarLabel = nullptr;
-    g_injectionParent = nullptr;
-    g_reservedElement = nullptr;
+    g_flyoutAnchorButton = nullptr;
+    g_flyoutTaskbarWnd = nullptr;
     g_timer = nullptr;
     g_subtleButtonStyle = nullptr;
     g_taskbarButtonStyle = nullptr;
@@ -4184,5 +4502,5 @@ void Wh_ModUninit() {
     // These carry [[clang::no_destroy]], so release their buffers by hand.
     g_liveTimers.reset();
     g_cardCountdowns.reset();
-    g_cardBorders.reset();
+    g_taskbars.reset();
 }
