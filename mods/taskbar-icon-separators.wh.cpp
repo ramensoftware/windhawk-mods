@@ -1273,10 +1273,13 @@ static bool MigrateLegacySeparatorState(
 
 static bool LoadSettingsFromStorage(
     Settings* settingsOut,
-    SeparatorSetting* refreshPulseOut) {
-    if (!settingsOut || !refreshPulseOut) {
+    SeparatorSetting* refreshPulseOut,
+    bool* stateNeedsSaveOut) {
+    if (!settingsOut || !refreshPulseOut || !stateNeedsSaveOut) {
         return false;
     }
+
+    *stateNeedsSaveOut = false;
 
     double width =
         LoadSeparatorWidthSetting();
@@ -1288,7 +1291,48 @@ static bool LoadSettingsFromStorage(
             width,
             &settings,
             &stateExists)) {
-        return false;
+        Settings recovered;
+        recovered.identifierPrefix =
+            kSeparatorIdentifierPrefix;
+        recovered.width = width;
+
+        if (!AdoptLegacySeparatorShortcuts(&recovered)) {
+            Wh_Log(
+                L"[STATE] State recovery couldn't adopt every owned shortcut");
+            return false;
+        }
+
+        DWORD attributes =
+            GetFileAttributesW(g_separatorStatePath.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES &&
+            !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            std::wstring backupPath =
+                g_separatorStatePath +
+                L".invalid-" +
+                std::to_wstring(GetTickCount64());
+
+            if (MoveFileExW(
+                    g_separatorStatePath.c_str(),
+                    backupPath.c_str(),
+                    MOVEFILE_WRITE_THROUGH)) {
+                Wh_Log(
+                    L"[STATE] Moved unreadable state file aside as '%s'",
+                    backupPath.c_str());
+            } else {
+                Wh_Log(
+                    L"[STATE] Couldn't move unreadable state file aside "
+                    L"error=%u; recovery will retry persistence in place",
+                    GetLastError());
+            }
+        }
+
+        settings = std::move(recovered);
+        stateExists = true;
+        *stateNeedsSaveOut = true;
+
+        Wh_Log(
+            L"[STATE] Recovered %zu separator(s) from owned shortcuts",
+            settings.separators.size());
     }
 
     if (!stateExists &&
@@ -1578,10 +1622,12 @@ static bool WriteBinaryFile(
 static bool LoadSettings() {
     Settings settings;
     SeparatorSetting refreshPulse;
+    bool stateNeedsSave = false;
 
     if (!LoadSettingsFromStorage(
             &settings,
-            &refreshPulse)) {
+            &refreshPulse,
+            &stateNeedsSave)) {
         Wh_Log(L"[STATE] Failed to load separator state");
         return false;
     }
@@ -1592,7 +1638,7 @@ static bool LoadSettings() {
     g_refreshPulseSetting =
         std::move(refreshPulse);
     g_storedSeparatorSettings.clear();
-    g_separatorStateDirty = false;
+    g_separatorStateDirty = stateNeedsSave;
     return true;
 }
 
@@ -1715,14 +1761,11 @@ static void WINAPI TaskListButton_OnDragCompletedGesture_Hook(
         }
 
         if (stateDirty) {
-            // Refresh presentation only after the native drag has completely
-            // unwound. This closes an unanchored separator's persistent guide
-            // as soon as TryMoveGroup has assigned its first concrete index.
+            // Persistence was already queued by TryMoveGroup. This optional
+            // completion callback only refreshes presentation after the native
+            // drag has completely unwound, closing an unanchored separator's
+            // guide once it has its first concrete index.
             RefreshTrackedSeparatorVisualStates();
-
-            // The taskbar UI thread only signals work. The backend worker owns
-            // the durable write so drag completion never blocks on disk I/O.
-            QueueBackendWork();
         }
 
     }
@@ -2537,7 +2580,75 @@ static bool RunFromWindowThread(
     return parameters.executed;
 }
 
+// XAML owns menu items and their delegates beyond the hook invocation that
+// creates them. Retain the exact objects/tokens on their taskbar UI thread so
+// teardown can unregister every mod-owned delegate before the DLL is unmapped.
+static thread_local winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem
+    g_injectedAddSeparatorMenuItem{nullptr};
+static thread_local winrt::event_token
+    g_injectedAddSeparatorClickToken{};
+static thread_local winrt::Windows::UI::Xaml::Controls::MenuFlyout
+    g_openSeparatorContextMenu{nullptr};
+static thread_local winrt::Windows::UI::Xaml::Controls::MenuFlyoutItem
+    g_openSeparatorContextMenuItem{nullptr};
+static thread_local winrt::event_token
+    g_openSeparatorContextMenuClickToken{};
+static thread_local winrt::event_token
+    g_openSeparatorContextMenuClosedToken{};
+static std::atomic<bool> g_separatorContextMenuOpen = false;
+
+static void DetachInjectedAddSeparatorMenuHandler() {
+    try {
+        if (g_injectedAddSeparatorMenuItem) {
+            g_injectedAddSeparatorMenuItem.Click(
+                g_injectedAddSeparatorClickToken);
+        }
+    } catch (...) {
+        Wh_Log(L"[CTX] Failed to detach Add separator menu handler");
+    }
+    g_injectedAddSeparatorMenuItem = nullptr;
+    g_injectedAddSeparatorClickToken = {};
+}
+
+static void CloseSeparatorContextMenuOnCurrentThread(bool hide) {
+    try {
+        if (g_openSeparatorContextMenuItem) {
+            g_openSeparatorContextMenuItem.Click(
+                g_openSeparatorContextMenuClickToken);
+        }
+    } catch (...) {
+        Wh_Log(L"[CTX] Failed to detach separator menu command");
+    }
+
+    try {
+        if (g_openSeparatorContextMenu) {
+            g_openSeparatorContextMenu.Closed(
+                g_openSeparatorContextMenuClosedToken);
+        }
+    } catch (...) {
+        Wh_Log(L"[CTX] Failed to detach separator menu close handler");
+    }
+
+    if (hide) {
+        try {
+            if (g_openSeparatorContextMenu) {
+                g_openSeparatorContextMenu.Hide();
+            }
+        } catch (...) {
+            Wh_Log(L"[CTX] Failed to hide separator context menu");
+        }
+    }
+    g_openSeparatorContextMenuItem = nullptr;
+    g_openSeparatorContextMenu = nullptr;
+    g_openSeparatorContextMenuClickToken = {};
+    g_openSeparatorContextMenuClosedToken = {};
+}
+
 static void WINAPI RestoreSeparatorVisualStatesOnCurrentThread(void*) {
+    DetachInjectedAddSeparatorMenuHandler();
+    CloseSeparatorContextMenuOnCurrentThread(true);
+    g_separatorContextMenuOpen = false;
+
     g_updatingSeparatorVisualStates = true;
     SeparatorVisualStateUpdateGuard updateGuard;
     PruneExpiredSeparatorVisualStates();
@@ -2740,6 +2851,10 @@ static MenuFlyoutItemBaseVector_Append_t
 static void AppendAddSeparatorMenuItems(void* vectorThis) {
     using namespace winrt::Windows::UI::Xaml::Controls;
 
+    // A newer taskbar-menu build supersedes the previous injected item on this
+    // UI thread. Detach its callback before replacing our retained reference.
+    DetachInjectedAddSeparatorMenuHandler();
+
     MenuFlyoutItem item;
     item.Name(kAddSeparatorMenuName);
     item.Tag(winrt::box_value(winrt::hstring{kAddSeparatorMenuName}));
@@ -2752,7 +2867,9 @@ static void AppendAddSeparatorMenuItems(void* vectorThis) {
     icon.Glyph(L"\xE710");
     icon.FontSize(16);
     item.Icon(icon);
-    item.Click(RoutedEventHandler{&OnAddSeparatorMenuClick});
+    winrt::event_token clickToken =
+        item.Click(
+            RoutedEventHandler{&OnAddSeparatorMenuClick});
 
     MenuFlyoutSeparator divider;
     divider.Name(kAddSeparatorMenuDividerName);
@@ -2761,6 +2878,8 @@ static void AppendAddSeparatorMenuItems(void* vectorThis) {
             winrt::hstring{kAddSeparatorMenuDividerName}));
 
     g_menuFlyoutItemBaseVectorAppendOriginal(vectorThis, item);
+    g_injectedAddSeparatorMenuItem = item;
+    g_injectedAddSeparatorClickToken = clickToken;
     g_menuFlyoutItemBaseVectorAppendOriginal(vectorThis, divider);
 
     g_taskbarSettingsMenuInjected = true;
@@ -2861,14 +2980,13 @@ using TaskbarResources_OnTaskListButtonContextRequested_t =
 static TaskbarResources_OnTaskListButtonContextRequested_t
     g_taskbarResourcesOnTaskListButtonContextRequestedOriginal;
 
-static std::atomic<bool> g_separatorContextMenuOpen = false;
-
 static void RemoveSeparatorFromContextMenu(
     std::wstring identity);
 
 static void OnSeparatorContextMenuClosed(
     winrt::Windows::Foundation::IInspectable const&,
     winrt::Windows::Foundation::IInspectable const&) {
+    CloseSeparatorContextMenuOnCurrentThread(false);
     g_separatorContextMenuOpen = false;
 }
 
@@ -2926,6 +3044,11 @@ static void ShowSeparatorContextMenu(
         return;
     }
 
+    // The click callback releases the process-wide gate before XAML always
+    // delivers Closed. If this UI thread still owns that older menu, retire it
+    // before publishing a replacement.
+    CloseSeparatorContextMenuOnCurrentThread(true);
+
     try {
         using namespace winrt::Windows::UI::Xaml::Controls;
         using namespace winrt::Windows::UI::Xaml::Controls::Primitives;
@@ -2947,21 +3070,31 @@ static void ShowSeparatorContextMenu(
         icon.Glyph(L"\xE738");
         icon.FontSize(16);
         unpin.Icon(icon);
-        unpin.Click(
-            RoutedEventHandler{
-                &OnSeparatorUnpinMenuClick});
+        winrt::event_token clickToken =
+            unpin.Click(
+                RoutedEventHandler{
+                    &OnSeparatorUnpinMenuClick});
 
         menu.Items().Append(unpin);
-        menu.Closed(
-            winrt::Windows::Foundation::
-                EventHandler<winrt::Windows::Foundation::IInspectable>{
-                    &OnSeparatorContextMenuClosed});
+        winrt::event_token closedToken =
+            menu.Closed(
+                winrt::Windows::Foundation::
+                    EventHandler<winrt::Windows::Foundation::IInspectable>{
+                        &OnSeparatorContextMenuClosed});
+
+        // Publish ownership before ShowAt: if XAML partially opens the flyout
+        // and then throws, the catch path can still detach both delegates.
+        g_openSeparatorContextMenu = menu;
+        g_openSeparatorContextMenuItem = unpin;
+        g_openSeparatorContextMenuClickToken = clickToken;
+        g_openSeparatorContextMenuClosedToken = closedToken;
 
         menu.ShowAt(target);
         Wh_Log(
             L"[CTX] Opened separator context menu identity='%s'",
             separator.identity.c_str());
     } catch (...) {
+        CloseSeparatorContextMenuOnCurrentThread(true);
         g_separatorContextMenuOpen = false;
         Wh_Log(L"[CTX] Failed to show separator context menu");
     }
@@ -3124,7 +3257,6 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_contextMenusShowTaskbarSettingsContextMenuOriginal,
             ContextMenus_ShowTaskbarSettingsContextMenu_Hook,
-            true,
         },
         {
             {
@@ -3132,7 +3264,6 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &g_menuFlyoutItemBaseVectorAppendOriginal,
             MenuFlyoutItemBaseVector_Append_Hook,
-            true,
         },
         {
             {
@@ -3180,6 +3311,13 @@ static bool HookTaskbarViewDllSymbols(HMODULE module) {
             taskbarViewHooks,
             ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"[STYLE] HookSymbols(Taskbar view) failed");
+        return false;
+    }
+
+    if (!g_contextMenusShowTaskbarSettingsContextMenuOriginal ||
+        !g_menuFlyoutItemBaseVectorAppendOriginal) {
+        Wh_Log(
+            L"[STYLE] Add-separator taskbar menu route unavailable");
         return false;
     }
 
@@ -3812,10 +3950,11 @@ static HRESULT WINAPI TaskListWnd_HandleWinNumHotKey_Hook(
 // Native taskbar mutation persistence.
 //
 // Windhawk no longer owns separator position/list configuration. TryMoveGroup
-// mirrors native reorder operations into the in-memory separator state. The
-// Taskbar.View drag-completion hook queues one backend persistence pass when
-// the drag ends. Add and Unpin have their own discrete commit points and queue
-// the same worker; live taskbar UI callbacks never perform synchronous disk I/O.
+// mirrors native reorder operations into the in-memory separator state and
+// immediately queues the backend persistence pass. The optional Taskbar.View
+// drag-completion hook only refreshes presentation. Add and Remove have their
+// own discrete commit points and queue the same worker; live taskbar UI
+// callbacks never perform synchronous disk I/O.
 // -----------------------------------------------------------------------------
 
 static void FlushPendingSeparatorStateSynchronously() {
@@ -3854,13 +3993,12 @@ static void RecordNativePinnedMove(
         return;
     }
 
-    std::lock_guard<std::mutex> mutationLock(
-        g_settingsMutationMutex);
-
     bool touchesSeparator = false;
 
     {
-        std::unique_lock lock(g_settingsMutex);
+        std::lock_guard<std::mutex> mutationLock(
+            g_settingsMutationMutex);
+        std::unique_lock settingsLock(g_settingsMutex);
 
         Settings before = g_settings;
 
@@ -3919,6 +4057,10 @@ static void RecordNativePinnedMove(
         std::wstring(movedAppId).c_str(),
         oldIndex,
         newIndex);
+
+    // Persist through the long-lived worker even if the optional
+    // OnDragCompletedGesture presentation callback isn't available.
+    QueueBackendWork();
 }
 
 static bool RunTryMoveGroupObserver(
