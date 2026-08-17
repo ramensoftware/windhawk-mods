@@ -600,9 +600,21 @@ struct Grammar {
 
 std::wstring TrimCopy(std::wstring_view s) {
     size_t b = 0, e = s.size();
+    // The bidi marks belong here, and leaving them out had teeth. IsFormatEffector
+    // already treats U+200E/U+200F as invisible, but this did not - so a plural
+    // branch in an RTL locale that opens with a bidi mark failed the parser's
+    // "must start with {0}" test, the whole message was rejected, no count forms
+    // were discovered, and the symbol layer then had no numeric cross-check to
+    // validate itself against on exactly the build whose grammar it had just
+    // failed to read.
+    //
+    // Ends only. Interior marks are deliberately kept: Edge's composed titles
+    // carry them too, and the right-anchored matching compares against the
+    // literals discovered here, so stripping them throughout would stop those
+    // comparisons matching at all.
     auto sp = [](wchar_t c) {
         return c == L' ' || c == L'\t' || c == L'\n' || c == L'\r' ||
-               c == 0x00A0 || c == kZwsp;
+               c == 0x00A0 || c == kZwsp || c == 0x200E || c == 0x200F;
     };
     while (b < e && sp(s[b])) ++b;
     while (e > b && sp(s[e - 1])) --e;
@@ -850,9 +862,24 @@ bool Decompose(const std::wstring& in, const Grammar& g, Fields* out) {
     std::wstring r2 = r1;
     for (const std::wstring& m : g.markerTails) {
         if (EndsWith(r1, m)) {
-            out->profile = TrimCopy(m);
-            size_t lb = m.find(L'[');
-            size_t rb = m.rfind(L']');
+            // FROM THE BRACKET, not the whole tail. The discovered marker
+            // carries its own leading separator - the resource is "$1 - [In
+            // Private]", so the tail stored is " - [InPrivate]" - and assigning
+            // that straight to {profile} put the separator INSIDE the field.
+            // The default preset supplies its own, so every InPrivate and Guest
+            // window rendered "Page and 3 more pages - - [InPrivate]".
+            //
+            // Do NOT reuse the browser-suffix branch's strip-leading-non-
+            // alphanumeric loop instead: '[' is not alphanumeric, so that eats
+            // the bracket too and yields "InPrivate]".
+            //
+            // Ordinary named profiles are unaffected - they are matched by the
+            // separator loop further down, which already stores only what
+            // follows the separator.
+            const size_t lb = m.find(L'[');
+            const size_t rb = m.rfind(L']');
+            out->profile =
+                TrimCopy(lb != std::wstring::npos ? m.substr(lb) : m);
             if (lb != std::wstring::npos && rb != std::wstring::npos && rb > lb) {
                 out->priv = m.substr(lb + 1, rb - lb - 1);
             }
@@ -1146,6 +1173,11 @@ struct WindowState {
     // The favicon path refuses to run until this is >= 2 - see ApplyFavicon.
     unsigned     titleWrites   = 0;
     bool         subclassed    = false;
+    // Bumped on every reset and every new source. A composition runs without the
+    // lock held, so the commit has to prove it is still committing to the state
+    // it read - `tid` cannot do that, since every browser frame shares one UI
+    // thread and a recycled HWND keeps the same one.
+    unsigned     generation    = 0;
     // Independently established as a fully-constructed frame, by having been
     // found through EnumWindows as a VISIBLE top-level browser window with a
     // real title. That is evidence the `titleWrites >= 2` gate exists to obtain,
@@ -1233,8 +1265,11 @@ bool  Proved();
 int   RawTabCount(void* controller);
 Named IsNamedWindow(void* controller);
 void  CheckPredicateAgainstParsed(void* controller);
+// `knownStrip`, when supplied, is a strip the caller has ALREADY resolved and
+// proved. Passing it is not an optimisation: a caller running inside Chromium's
+// own window-list iterator must not make this re-enter that iterator.
 void  RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
-                         bool settled);
+                         bool settled, void* knownStrip = nullptr);
 HWND  HwndForController(void* controller);
 void  ForgetWindow(HWND hWnd);
 void  ReportCapOnce(const wchar_t* which, bool evicts);
@@ -1248,7 +1283,8 @@ void ApplyFavicon(HWND hWnd, void* controller);
 // applying a title has to be posted to the window rather than done from inside
 // Chromium's own title composition.
 void OnControllerCorrelated(HWND hWnd, void* controller,
-                            const std::wstring& delegateTitle);
+                            const std::wstring& delegateTitle,
+                            void* knownStrip = nullptr);
 void EnsureSubclassed(HWND hWnd);
 // Defined below the subclass proc that dispatches to it.
 void RestoreIconNow(HWND hWnd);
@@ -1402,7 +1438,34 @@ void WriteTitleFromOtherThread(HWND hWnd, const std::wstring& text) {
 }
 
 bool StopRequested() {
+    // DELIBERATELY still the flag, not the event.
+    //
+    // Reading the event here instead looks tidier and is a trap: Wh_ModBeforeUninit
+    // joins this worker with an INFINITE wait, so if CreateEventW had failed and
+    // the handle were null, WaitForSingleObject would return WAIT_FAILED, this
+    // would never report a stop, the worker would never exit, and Windhawk would
+    // hang on uninstall with no way out. The flag cannot fail.
     return InterlockedCompareExchange(&g_passthrough, 0, 0) != 0;
+}
+
+// Manual-reset, signalled once at teardown. Purely a waker for the sleeps below:
+// it exists so the worker stops sleeping in 100 ms slices just to notice a flag.
+// A null handle is survivable - the waits fall back to plain Sleep.
+HANDLE g_stopEvent = nullptr;
+
+// Sleep, unless teardown starts first. Returns true if we should stop.
+bool SleepOrStop(DWORD ms) {
+    if (StopRequested()) return true;
+    if (g_stopEvent) {
+        const DWORD r = WaitForSingleObject(g_stopEvent, ms);
+        if (r == WAIT_OBJECT_0) return true;
+        // WAIT_FAILED must not spin: fall back to sleeping so a broken handle
+        // costs latency rather than a busy loop on a browser's worker thread.
+        if (r == WAIT_FAILED) Sleep(ms);
+    } else {
+        Sleep(ms);
+    }
+    return StopRequested();
 }
 
 // ---------------------------------------------------------------------------
@@ -2048,7 +2111,7 @@ Named IsNamedWindow(void* controller) {
 // favicon path uses: this walks out of a Browser object, which is exactly the
 // shape that crashed v0.5 on a window still under construction.
 void RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
-                        bool settled) {
+                        bool settled, void* knownStrip) {
     if (!controller || !settled) return;
     if (InterlockedCompareExchange(&g_namePoisoned, 0, 0)) return;
 
@@ -2060,7 +2123,8 @@ void RefreshNameVerdict(void* controller, const std::wstring& delegateTitle,
         if (fresh) return;
     }
 
-    const Named v = QueryUserTitleForStrip(StripForController(controller));
+    const Named v = QueryUserTitleForStrip(
+        knownStrip ? knownStrip : StripForController(controller));
 
     AcquireSRWLockExclusive(&g_verdictLock);
     // Note the shape: `|| count(controller)` means an ALREADY TRACKED controller
@@ -2203,23 +2267,26 @@ void CrossCheck(void* controller, int parsed) {
     }
 }
 
-// Two proof regimes, because the evidence available differs by browser:
+// ONE proof regime: the derived count must have agreed with a count the title
+// already carried, several times running.
 //
-//   Edge   - titles carry a tab count, so the chain is checked against a number
-//            that is already known. Strongest available evidence; require it.
-//   Chrome - titles carry no count at all, so no such number exists. The
-//            structural proof inside RawTabCount (the resolved pointer must be
-//            one the browser itself has used as a TabStripModel) carries the
-//            whole weight there.
+// There used to be a second, weaker regime that accepted the structural proof
+// alone when the grammar yielded no count to check against. That existed for
+// Chrome, whose titles carry no count anywhere - requiring the numeric proof
+// there would have meant the layer could never activate at all.
 //
-// Requiring the numeric proof unconditionally would mean the layer could never
-// activate on Chrome, which is where it is most useful - Chrome's titles lack
-// the count for named and unnamed windows alike.
+// Chrome no longer reaches this layer, and that left the weak regime reachable
+// on exactly one configuration: an EDGE install where the count clause was not
+// discovered. That is the worst possible place to relax the requirement - it is
+// precisely the build where the grammar assumptions have already failed once -
+// and it silently contradicted what the settings text promises the user, which
+// is that the count is cross-checked against titles before it is trusted.
+//
+// It fails closed now. On an install whose plural grammar cannot be parsed,
+// named-window counts are simply unavailable, which is the honest outcome: no
+// title there carries a count either, so nothing could ever have validated it.
 bool Proved() {
     if (!Usable()) return false;
-    if (!InterlockedCompareExchange(&g_numericPossible, 0, 0)) {
-        return true;  // structural proof only; RawTabCount still enforces it
-    }
     return InterlockedCompareExchange(&g_proofs, 0, 0) >= kProofsRequired;
 }
 
@@ -2666,7 +2733,8 @@ int MatchInSnapshot(const std::vector<FrameSnapshot>& snap,
 // windows showing the same page is entirely possible, and picking either would
 // put one window's tab count on the other.
 void TryCorrelateByPageTitle(void* controller, const std::wstring& pageTitle,
-                             const std::vector<FrameSnapshot>* snap = nullptr) {
+                             const std::vector<FrameSnapshot>* snap = nullptr,
+                             void* knownStrip = nullptr) {
     if (!controller || pageTitle.empty()) return;
     if (HwndForController(controller)) return;
     if (!InterlockedCompareExchange(&g_ready, 0, 0)) return;  // no grammar yet
@@ -2705,11 +2773,12 @@ void TryCorrelateByPageTitle(void* controller, const std::wstring& pageTitle,
         if (it != g_states.end()) source = it->second.source;
         ReleaseSRWLockShared(&g_lock);
     }
-    OnControllerCorrelated(found, controller, source);
+    OnControllerCorrelated(found, controller, source, knownStrip);
 }
 
 void TryCorrelate(void* controller, const std::wstring& delegateTitle,
-                  const std::vector<FrameSnapshot>* snap = nullptr) {
+                  const std::vector<FrameSnapshot>* snap = nullptr,
+                  void* knownStrip = nullptr) {
     if (!controller || delegateTitle.empty()) return;
     if (HwndForController(controller)) return;
 
@@ -2782,7 +2851,7 @@ void TryCorrelate(void* controller, const std::wstring& delegateTitle,
     if (g_settings.verbose) {
         Wh_Log(L"matched a window by its title: '%s'", delegateTitle.c_str());
     }
-    OnControllerCorrelated(found, controller, delegateTitle);
+    OnControllerCorrelated(found, controller, delegateTitle, knownStrip);
 }
 
 // Correlating the window that is updating is not enough: a window that was
@@ -2837,7 +2906,7 @@ bool NamedSweepTrampoline(void* target, void* bwi) {
     // A named window matches on its name, which is also its window text.
     std::wstring name;
     if (QueryUserTitleForStrip(strip, &name) == Named::kYes && !name.empty()) {
-        TryCorrelate(controller, name, &sweep->frames);
+        TryCorrelate(controller, name, &sweep->frames, strip);
         if (HwndForController(controller)) ++sweep->correlated;
         return true;
     }
@@ -2854,7 +2923,7 @@ bool NamedSweepTrampoline(void* target, void* bwi) {
     // never receive a tab count or a refreshed favicon.
     std::wstring page;
     if (!ActivePageTitleForStrip(strip, &page) || page.empty()) return true;
-    TryCorrelateByPageTitle(controller, page, &sweep->frames);
+    TryCorrelateByPageTitle(controller, page, &sweep->frames, strip);
     if (HwndForController(controller)) ++sweep->correlated;
     return true;
 }
@@ -2931,7 +3000,16 @@ void* GetTitle_hook(void* pThis, void* sret, bool includeAppName) {
 // The same symbol set is resolved against whichever browser DLL is loaded, so
 // the target cannot be encoded in the array's name - hence the comment form.
 bool Install(HMODULE mod) {
-    // msedge.dll, chrome.dll
+    // Edge only, and the declaration below says so because it is now the truth:
+    // Install() is unreachable on Chrome - the caller diverts there before it -
+    // so this array is never resolved against chrome.dll. Naming a module that
+    // is never hooked also made the catalog's validator warn about a file name
+    // Windows does not have, for a hook that does not exist.
+    //
+    // The module line must stay IMMEDIATELY above the array: the validator reads
+    // exactly one line back, so a prose line in between reads as no declaration
+    // at all.
+    // msedge.dll
     WindhawkUtils::SYMBOL_HOOK titleHooks[] = {
         {
             {
@@ -3554,7 +3632,8 @@ LRESULT CALLBACK FrameSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 // never wrote its title has nothing cached otherwise. The strip is recorded too,
 // so a later tab-count change can find its way back to this window.
 void OnControllerCorrelated(HWND hWnd, void* controller,
-                            const std::wstring& delegateTitle) {
+                            const std::wstring& delegateTitle,
+                            void* knownStrip) {
     if (!hWnd || !controller) return;
     {
         AcquireSRWLockExclusive(&g_lock);
@@ -3567,7 +3646,19 @@ void OnControllerCorrelated(HWND hWnd, void* controller,
     }
     EnsureSubclassed(hWnd);
 
-    if (void* strip = syms::StripForController(controller); strip) {
+    // Use the strip the caller already holds when there is one. The sweep
+    // reaches here from INSIDE Chromium's own window-list iterator, and
+    // StripForController walks that same list again - so re-deriving it here
+    // re-entered the iterator from within its own callback, twice for every
+    // window that correlated. The round-2 fix removed exactly that shape from
+    // the sweep's other path; this is the one it missed.
+    //
+    // The value is identical: the caller's controller came from g_from(bwi), so
+    // looking it back up returns the same interface and the same strip - and
+    // that strip has already been through StripIsKnown.
+    void* const strip =
+        knownStrip ? knownStrip : syms::StripForController(controller);
+    if (strip) {
         syms::NoteStripHwnd(strip, hWnd);
     }
 
@@ -3581,7 +3672,8 @@ void OnControllerCorrelated(HWND hWnd, void* controller,
     // window under construction is none of those things, so this is at least as
     // strong as the "two completed title transforms" evidence the write path
     // uses - and unlike that one, it is obtainable here.
-    syms::RefreshNameVerdict(controller, delegateTitle, /*settled=*/true);
+    syms::RefreshNameVerdict(controller, delegateTitle, /*settled=*/true,
+                             strip);
 
     // Feed the proof counter from here too.
     //
@@ -3764,6 +3856,8 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     t_inHook = true;
     std::wstring out;
     bool         changed = false;
+    unsigned     gen        = 0;
+    void*        composeFor = nullptr;
     // Icons owned by the discarded state, destroyed after the lock is released.
     HICON        staleSmall = nullptr;
     HICON        staleBig   = nullptr;
@@ -3778,7 +3872,9 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
             // browser's own, borrowed, and belong to a window that is gone.
             staleSmall = st.oursSmall;
             staleBig   = st.oursBig;
+            const unsigned prevGen = st.generation;
             st = WindowState{};
+            st.generation = prevGen + 1;
         }
         st.tid = tid;
 
@@ -3796,9 +3892,46 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
         }
         ++st.titleWrites;
         st.source = lpString;
-        out = ComposeFor(st.source, st.controller);
-        st.applied = out;
-        changed = (out != lpString);
+        gen        = ++st.generation;
+        composeFor = st.controller;
+        ReleaseSRWLockExclusive(&g_lock);
+    }
+
+    // COMPOSE WITHOUT THE LOCK.
+    //
+    // ComposeFor calls into Chromium - the window-list iterator, GetTabStripModel,
+    // count(). Holding g_lock across that armed a deadlock: if any of those ever
+    // reaches the hooked title getter on this thread, GetTitle_hook takes g_lock
+    // again, and SRW locks are not reentrant, so the browser's UI thread would
+    // stop forever with no recovery but killing it. It is not reachable on the
+    // builds tested here - those are member loads and a list walk - but it is one
+    // Chromium change away, and the mod already contorts around this constraint
+    // elsewhere (g_settingsLock exists for it; the poison restore had to move to
+    // the worker because CrossCheck runs under this lock).
+    //
+    // Nothing is lost by releasing. The actual SetWindowTextW_Original call was
+    // ALREADY outside the lock, so "applied recorded" and "text on screen" were
+    // never atomic; ApplyTitleNow has always had exactly this shape. What the
+    // generation check below adds is the guarantee the old code got from the
+    // lock and the naive rewrite would have dropped: that this result is still
+    // being committed against the state it was computed from.
+    out     = ComposeFor(lpString, composeFor);
+    changed = (out != lpString);
+
+    {
+        AcquireSRWLockExclusive(&g_lock);
+        const auto it = g_states.find(hWnd);
+        if (it == g_states.end() || it->second.generation != gen) {
+            // The entry was reset, pruned, or overtaken while composing. Its
+            // newer owner will write its own title; ours is stale, so pass the
+            // browser's own string through untouched rather than fight it.
+            ReleaseSRWLockExclusive(&g_lock);
+            t_inHook = false;
+            if (staleSmall) DestroyIcon(staleSmall);
+            if (staleBig)   DestroyIcon(staleBig);
+            return SetWindowTextW_Original(hWnd, lpString);
+        }
+        it->second.applied = out;
         ReleaseSRWLockExclusive(&g_lock);
     }
     t_inHook = false;
@@ -4137,10 +4270,10 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
     // than concluding it is absent. Bounded: a process that never loads it is
     // not a browser process we care about.
     HMODULE chromium = nullptr;
-    for (int i = 0; i < 60 && !StopRequested(); ++i) {
+    for (int i = 0; i < 60; ++i) {
         chromium = GetModuleHandleW(browserDll);
         if (chromium) break;
-        Sleep(500);
+        if (SleepOrStop(500)) break;
     }
     if (!chromium) {
         Wh_Log(L"%s never loaded; nothing to do in this process", browserDll);
@@ -4199,9 +4332,16 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
         return 0;
     }
 
-    // Whether titles here carry a tab count decides which proof regime the
-    // symbol layer can use: Edge discovers count forms, Chrome discovers none.
+    // Kept as a DIAGNOSTIC only - it no longer selects a proof regime, because
+    // there is only one. Without count forms the layer can never earn its proof,
+    // so saying so at discovery time is the difference between "named-window
+    // counts never appeared" being a mystery and being explained.
     InterlockedExchange(&syms::g_numericPossible, g.countForms.empty() ? 0 : 1);
+    if (g.countForms.empty() && g_settings.useSymbols && !g_isChrome) {
+        Wh_Log(L"no page-count wording was discovered for this locale, so the "
+               L"symbol layer has nothing to cross-check itself against and "
+               L"named-window tab counts will stay unavailable");
+    }
 
     AcquireSRWLockExclusive(&g_lock);
     g_grammar = std::move(g);
@@ -4284,19 +4424,33 @@ DWORD WINAPI DiscoveryThread(LPVOID) {
 
     int pruneTick = 0;
     while (!StopRequested()) {
-        // Responsive to teardown: many short waits rather than one long one, so
-        // an uninstall never waits two seconds for this loop to notice.
-        for (int i = 0; i < 20 && !StopRequested(); ++i) {
-            Sleep(100);
-        }
-        if (StopRequested()) break;
+        // ONE interruptible wait, not twenty polls.
+        //
+        // The 100 ms slicing existed only so teardown was noticed quickly; the
+        // cost was a browser process waking ten times a second for the life of
+        // the session, in every configuration, to look at a flag. The event
+        // gives the same instant teardown with a single wake per period.
+        //
+        // The period reflects whether there is anything to do. Everything on the
+        // 2 s cadence belongs to the symbol layer - the correlation kick and the
+        // icon poll - and Symbols.Enabled forces a reload when it changes, so
+        // the choice is fixed for the life of an instance. With the layer off,
+        // the loop's only remaining job is the once-a-minute prune.
+        const DWORD periodMs =
+            InterlockedCompareExchange(&syms::g_enabled, 0, 0) ? 2000 : 60000;
+        if (SleepOrStop(periodMs)) break;
 
         // Prune here as well as on a settings change, and BEFORE any of the
         // optional-feature guards below, so the default configuration - which
         // reaches none of them - still bounds its own memory. Once a minute is
         // ample for something whose only cost is unbounded growth, and it keeps
         // the exclusive lock out of the way of title composition.
-        if (++pruneTick >= 30) {
+        //
+        // Counted in PERIODS, not iterations, because the period is no longer
+        // fixed - a hardcoded 30 would have become half an hour once the loop
+        // started waiting a minute at a time with the symbol layer off.
+        const int prunePeriods = (periodMs >= 60000) ? 1 : 30;
+        if (++pruneTick >= prunePeriods) {
             pruneTick = 0;
             PruneDeadWindows();
         }
@@ -4508,6 +4662,13 @@ void LoadSettings() {
 
     const int mx = Wh_GetIntSetting(L"Advanced.MaxTitleChars");
     s.maxChars = (mx > 16) ? static_cast<size_t>(mx) : 512;
+    if (mx <= 16) {
+        // Say so. Silently substituting 512 for a deliberate 10 looks like the
+        // setting being ignored, which is exactly what it is - just not
+        // arbitrarily.
+        Wh_Log(L"maximum title length %d is below the minimum of 17; using 512",
+               mx);
+    }
 
     if (s.normal.empty()) {
         s.normal = L"{title}?( {more})?( - {profile})";
@@ -4561,6 +4722,15 @@ BOOL Wh_ModInit() {
         RegisterWindowMessageW(L"WindhawkChromiumWindowTitleFormat.Correlate");
     g_restoreIconMsg =
         RegisterWindowMessageW(L"WindhawkChromiumWindowTitleFormat.RestoreIcon");
+
+    // Manual-reset: once teardown starts it must stay signalled, so every wait
+    // in the worker returns immediately rather than one of them consuming it.
+    // Failure is not fatal - SleepOrStop falls back to a plain Sleep.
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"could not create the stop event; teardown will be up to two "
+               L"seconds slower");
+    }
 
     if (!WindhawkUtils::SetFunctionHook(SetWindowTextW, SetWindowTextW_Hook,
                                         &SetWindowTextW_Original)) {
@@ -4639,6 +4809,10 @@ void Wh_ModBeforeUninit() {
     // flag is also what makes the worker abandon an in-progress sweep, and what
     // makes EnsureSubclassed refuse, so it has to be set first.
     InterlockedExchange(&g_passthrough, 1);
+    // Flag first, THEN wake. The flag is what the worker believes; the event
+    // only stops it sleeping. Signalling first would let it wake, re-read a flag
+    // that was not yet set, and go back to sleep for a whole period.
+    if (g_stopEvent) SetEvent(g_stopEvent);
 
     if (g_worker) {
         // WAIT UNCONDITIONALLY. This used to give up after 10 s and leak the
@@ -4713,6 +4887,14 @@ void Wh_ModUninit() {
         ++restored;
     }
     Wh_Log(L"restored %d title(s)", restored);
+
+    // Last, and only here. Wh_ModBeforeUninit has already joined the worker, so
+    // nothing can still be waiting on this handle - closing it while a wait was
+    // outstanding is undefined.
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
 }
 
 
