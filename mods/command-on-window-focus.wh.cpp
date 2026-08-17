@@ -15,7 +15,7 @@
 # Command On Window Focus
 This mod observes a window focus and will run any command on window focus. 
 This mod has a filter which lets you specify which windows will be allowed to have focus based on the path of the executable
-running them. There is also the option of alternate commands which will only run if none of the filters match. Filters are regexes (ECMAScript).
+running them. There is also the option of alternate commands which will only run if none of the filters match. Filters are regexes (ECMAScript) so providing a window title or something like "steam" will not work. 
 An example use case for me personally is running a script that sets the scroll wheel on my mouse to a different scroll type every time 
 I focus a game (and the alternate command will reset it to the original type). 
 */
@@ -42,6 +42,7 @@ I focus a game (and the alternate command will reset it to the original type).
 #include <regex>
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 using namespace Gdiplus;
 
@@ -65,7 +66,12 @@ void LoadSettings() {
     while( ( current = Wh_GetStringSetting(L"filters[%d]", i++))[0] != L'\0') {
         pattern_obj current_pattern;
         current_pattern.filter = current;
-        current_pattern.regex = std::wregex(current);
+		try { 
+			current_pattern.regex = std::wregex(current);
+		} catch (const std::regex_error&) {
+            Wh_Log(L"Invalid Regex: %s", settings.pathFilters[i].filter.c_str());
+            throw std::runtime_error("Invalid Regex Found");
+        }
         settings.pathFilters.push_back(current_pattern);
         Wh_FreeStringSetting(current);
     
@@ -156,12 +162,11 @@ void CALLBACK WinEventProc(
     }
     bool match = false;
     
-    std::wregex pattern;
+
     Wh_Log(L"Found %d regexes to try", settings.pathFilters.size());
     for (int i =0; i < settings.pathFilters.size(); i++) {
         Wh_Log(L"Trying %s, iterator %d", settings.pathFilters[i].filter.c_str(), i);
-        try {
-            pattern = settings.pathFilters[i].regex;
+            const std::wregex& pattern = settings.pathFilters[i].regex;
             PCWSTR exePathStr = exePath;
             if (std::regex_match(exePathStr, pattern)) {
                 match = true;
@@ -169,10 +174,7 @@ void CALLBACK WinEventProc(
             } else {
                 Wh_Log(L"%s and %s: NO MATCH", exePathStr, settings.pathFilters[i].filter.c_str() );
             }  
-        } catch (const std::regex_error&) {
-            Wh_Log(L"Invalid Regex: %s", settings.pathFilters[i].filter.c_str());
-           continue;
-        }
+
  
     }
     
